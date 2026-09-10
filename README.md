@@ -2,8 +2,6 @@
 
 <img src="docs/assets/synth-logo-monochrome.png" alt="Synth" width="520">
 
-# Synth
-
 ### Design circuit boards as code.
 
 Turn text-based circuit designs into KiCad schematics, PCB layouts, and bills of materials.
