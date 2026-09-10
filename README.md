@@ -1,6 +1,6 @@
 <div align="center">
 
-<img src="docs/assets/synth-logo-monochrome.png" alt="Synth" width="360">
+<img src="docs/assets/synth-logo-monochrome.svg" alt="Synth" width="360">
 
 ### Design circuit boards as code.
 
