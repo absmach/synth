@@ -1,0 +1,10 @@
+board "connect_star" {
+  layers 4
+  component U1: mcu "rp2350"
+  component U2: secure_element "atecc608"
+  component U3: secure_element "atecc608"
+  component U4: secure_element "atecc608"
+  connect U1.gp0 -> U2.sda
+  connect U1.gp0 -> U3.sda
+  connect U1.gp0 -> U4.sda
+}

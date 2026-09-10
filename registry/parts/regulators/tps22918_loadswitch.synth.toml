@@ -1,0 +1,44 @@
+id = "tps22918_loadswitch"
+kind = "regulator"
+description = "TI TPS22918 2A load switch with quick output discharge"
+kicad_footprint = "Package_TO_SOT_SMD:SOT-23-6"
+
+[footprint_dimensions]
+width_mm = 5.0
+height_mm = 5.0
+courtyard_margin_mm = 0.25
+
+[operating_conditions]
+min_voltage_v = 3.5
+max_voltage_v = 15.0
+max_current_ma = 800.0
+
+[[pins]]
+name = "vin"
+number = "1"
+electrical_type = "power_input"
+required = true
+
+[[pins]]
+name = "gnd"
+number = "2"
+electrical_type = "power_input"
+required = true
+
+[[pins]]
+name = "on"
+number = "3"
+electrical_type = "input"
+required = true
+
+[[pins]]
+name = "ct"
+number = "4"
+electrical_type = "passive"
+
+[[pins]]
+name = "vout"
+number = "5"
+electrical_type = "power_output"
+required = true
+

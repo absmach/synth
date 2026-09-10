@@ -1,0 +1,46 @@
+id = "bh1750_lux"
+kind = "sensor"
+description = "Rohm BH1750FVI ambient light sensor, I²C"
+kicad_footprint = "Package_DFN_QFN:WSOFI-6_3.0x1.6mm_P0.5mm"
+
+[footprint_dimensions]
+width_mm = 3.0
+height_mm = 1.6
+courtyard_margin_mm = 0.25
+
+[operating_conditions]
+min_voltage_v = 1.8
+max_voltage_v = 5.0
+max_current_ma = 100.0
+
+[[pins]]
+name = "vdd"
+number = "1"
+electrical_type = "power_input"
+required = true
+
+[[pins]]
+name = "gnd"
+number = "2"
+electrical_type = "power_input"
+required = true
+
+[[pins]]
+name = "sda"
+number = "3"
+electrical_type = "bidirectional"
+capabilities = ["i2c_sda"]
+required = true
+
+[[pins]]
+name = "scl"
+number = "4"
+electrical_type = "bidirectional"
+capabilities = ["i2c_scl"]
+required = true
+
+[[required_decoupling]]
+net = "vdd"
+value = "100nf"
+count = 1
+

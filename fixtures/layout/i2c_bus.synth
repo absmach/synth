@@ -1,0 +1,27 @@
+// I2cBus pattern: two I2C-capable pins (sda/scl) each carrying a
+// pullup resistor to a common rail. BMP280 exposes `sda`/`scl`
+// pins tagged `i2c_sda`/`i2c_scl` (see
+// registry/parts/sensors/bmp280_pressure.synth.toml) and also
+// declares `required_decoupling` on `vdd`, which qualifies it as
+// an IC-block anchor for `build_clusters` pass 3. R1/R2 sit on the
+// sda/scl nets with their far pin tied to U1.vdd (a power-rail
+// pin name), so the pull-up/pull-down half of pass 3 claims both
+// as members of U1's cluster — the mechanism the implementation
+// plan calls out for the I2C-bus motif.
+board "i2c_bus" {
+  layers 2
+  manufacturer "jlcpcb"
+
+  component U1: sensor    "bmp280_pressure"
+  component C1: capacitor "c_generic_0603" // vdd decoupling
+  component R1: resistor  "r_generic_0603" // SDA pullup
+  component R2: resistor  "r_generic_0603" // SCL pullup
+
+  connect U1.vdd -> C1.p1
+  connect U1.gnd -> C1.p2
+
+  connect U1.sda -> R1.p1
+  connect R1.p2   -> U1.vdd
+  connect U1.scl -> R2.p1
+  connect R2.p2   -> U1.vdd
+}

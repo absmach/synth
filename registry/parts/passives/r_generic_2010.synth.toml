@@ -1,0 +1,24 @@
+id = "r_generic_2010"
+kind = "resistor"
+description = "Generic 2010 thick-film resistor, any value"
+kicad_symbol = "Device:R_US"
+kicad_footprint = "Resistor_SMD:R_2010_5025Metric"
+
+[footprint_dimensions]
+width_mm = 6.36
+height_mm = 3.16
+courtyard_margin_mm = 0.25
+
+[operating_conditions]
+max_voltage_v = 50.0
+
+[[pins]]
+name = "p1"
+number = "1"
+electrical_type = "passive"
+
+[[pins]]
+name = "p2"
+number = "2"
+electrical_type = "passive"
+

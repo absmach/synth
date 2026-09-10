@@ -1,0 +1,19 @@
+board "test_rst_001" {
+  layers 2
+  component U1: ic "w5500_ethernet"
+  component J1: connector "header_1x4"
+  component C1: capacitor "c_generic_0603"
+  component C2: capacitor "c_generic_0603"
+
+  connect U1.vcc -> J1.p1
+  connect U1.gnd -> J1.p2
+  connect U1.scs_n -> J1.p3
+  connect U1.sclk -> J1.p4
+  connect U1.miso -> J1.p3
+  connect U1.mosi -> J1.p4
+
+  connect U1.vcc -> C1.p1
+  connect U1.gnd -> C1.p2
+  connect U1.vcc -> C2.p1
+  connect U1.gnd -> C2.p2
+}

@@ -1,0 +1,59 @@
+id = "txs0108e"
+kind = "level_shifter"
+description = "TI TXS0108E 8-bit bidirectional voltage level translator"
+mpn = "TXS0108EPWR"
+lcsc_pn = "C19187"
+kicad_symbol = "Logic_LevelTranslator:TXS0108E"
+kicad_footprint = "Package_SO:TSSOP-20_4.4x6.5mm_P0.65mm"
+
+[footprint_dimensions]
+width_mm = 6.5
+height_mm = 4.4
+courtyard_margin_mm = 0.25
+
+[operating_conditions]
+min_voltage_v = 1.2
+max_voltage_v = 5.5
+max_current_ma = 50.0
+
+[[pins]]
+name = "vcca"
+number = "1"
+electrical_type = "power_input"
+required = false
+
+[[pins]]
+name = "a1"
+number = "2"
+electrical_type = "bidirectional"
+required = false
+
+[[pins]]
+name = "a2"
+number = "3"
+electrical_type = "bidirectional"
+required = false
+
+[[pins]]
+name = "gnd"
+number = "11"
+electrical_type = "power_input"
+required = false
+
+[[pins]]
+name = "b1"
+number = "19"
+electrical_type = "bidirectional"
+required = false
+
+[[pins]]
+name = "b2"
+number = "18"
+electrical_type = "bidirectional"
+required = false
+
+[[pins]]
+name = "vccb"
+number = "20"
+electrical_type = "power_input"
+required = false

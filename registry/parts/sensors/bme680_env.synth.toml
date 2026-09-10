@@ -1,0 +1,59 @@
+id = "bme680_env"
+kind = "sensor"
+description = "Bosch BME680 environmental sensor: T/RH/P/VOC, I²C"
+kicad_symbol = "Sensor:BME680"
+kicad_footprint = "Package_LGA:Bosch_LGA-8_2.5x2.5mm_P0.65mm_ClockwisePinNumbering"
+
+[footprint_dimensions]
+width_mm = 2.5
+height_mm = 2.5
+courtyard_margin_mm = 0.25
+
+[operating_conditions]
+min_voltage_v = 1.8
+max_voltage_v = 5.0
+max_current_ma = 100.0
+
+[[pins]]
+name = "vdd"
+number = "8"
+electrical_type = "power_input"
+required = true
+
+[[pins]]
+name = "gnd"
+number = "1"
+electrical_type = "power_input"
+required = true
+
+[[pins]]
+name = "sda"
+number = "3"
+electrical_type = "bidirectional"
+capabilities = ["i2c_sda"]
+required = true
+
+[[pins]]
+name = "scl"
+number = "4"
+electrical_type = "bidirectional"
+capabilities = ["i2c_scl"]
+required = true
+
+[[pins]]
+name = "csb"
+number = "2"
+electrical_type = "input"
+required = true
+
+[[pins]]
+name = "sdo"
+number = "5"
+electrical_type = "input"
+required = true
+
+[[required_decoupling]]
+net = "vdd"
+value = "100nf"
+count = 1
+

@@ -1,0 +1,3 @@
+board "name with \"quotes\" inside" {
+  layers 2
+}

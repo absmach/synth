@@ -1,0 +1,66 @@
+id = "stm32g030"
+kind = "mcu"
+description = "STMicro STM32G030F6 ARM Cortex-M0+ @ 64MHz, low-cost, TSSOP-20"
+mpn = "STM32G030C8T6"
+lcsc_pn = "C5165977"
+kicad_symbol = "MCU_ST_STM32G0:STM32G030K8Tx"
+kicad_footprint = "Package_QFP:LQFP-32_7x7mm_P0.8mm"
+
+[footprint_dimensions]
+width_mm = 9.85
+height_mm = 9.85
+courtyard_margin_mm = 0.25
+
+[operating_conditions]
+min_voltage_v = 1.8
+max_voltage_v = 3.6
+max_current_ma = 150.0
+
+[[pins]]
+name = "vdd"
+number = "5"
+electrical_type = "power_input"
+required = true
+
+[[pins]]
+name = "vss"
+number = "16"
+electrical_type = "power_input"
+required = true
+
+[[pins]]
+name = "pa2"
+number = "8"
+electrical_type = "bidirectional"
+capabilities = ["gpio", "uart_tx"]
+
+[[pins]]
+name = "pa3"
+number = "9"
+electrical_type = "bidirectional"
+capabilities = ["gpio", "uart_rx"]
+
+[[pins]]
+name = "pa9"
+number = "17"
+electrical_type = "bidirectional"
+capabilities = ["gpio", "i2c_scl"]
+
+[[pins]]
+name = "pa10"
+number = "18"
+electrical_type = "bidirectional"
+capabilities = ["gpio", "i2c_sda"]
+
+[[pins]]
+name = "nrst"
+number = "4"
+electrical_type = "input"
+capabilities = ["reset"]
+required = true
+
+[[required_decoupling]]
+net = "vdd"
+value = "100nf"
+count = 1
+

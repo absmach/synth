@@ -1,0 +1,15 @@
+// Decoupling pattern: an MCU declares `required_decoupling` on its
+// `vcc` net (see registry/parts/mcus/atmega328p.synth.toml), and a
+// single 0.1uF cap sits on that net. `build_clusters` pass 3 in
+// synth-layout should claim C1 as a decoupling member of U1's
+// cluster.
+board "decoupling" {
+  layers 2
+  manufacturer "jlcpcb"
+
+  component U1: mcu       "atmega328p"
+  component C1: capacitor "c_generic_0603"
+
+  connect U1.vcc -> C1.p1
+  connect U1.gnd -> C1.p2
+}

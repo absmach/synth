@@ -1,0 +1,16 @@
+// SPI MOSI connected to a UART RX pin (no SPI capability).
+board "mosi_to_uart" {
+  layers 2
+
+  component U1: memory "w25q128_flash"
+  component U2: ic "lm555_timer"
+
+  connect U1.vcc -> U2.vcc
+  connect U1.gnd -> U2.gnd
+  // Bug: SPI MOSI of the flash wired to the 555 trigger input.
+  connect U1.mosi -> U2.trig
+  connect U1.miso -> U2.out
+  connect U1.sck -> U2.rst
+  connect U1.cs -> U2.thr
+}
+

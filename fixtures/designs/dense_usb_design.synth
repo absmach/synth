@@ -1,0 +1,24 @@
+// USB peripheral design with security
+board "dense_usb_design" {
+  layers 4
+  manufacturer "jlcpcb"
+
+  component U1: mcu "rp2350"
+  component U2: secure_element "atecc608"
+  component C1: capacitor "c_generic_0402"
+  component C2: capacitor "c_generic_0402"
+  component C3: capacitor "c_generic_0402"
+
+  connect U1.gp0 -> U2.sda
+  connect U1.gp1 -> U2.scl
+  connect U1.vdd_io -> C1.p1
+  connect U1.gnd -> C1.p2
+
+  diff_pair USB_DP USB_DN {
+    impedance 90ohm
+  }
+
+  keepout antenna_zone {
+    radius 15mm
+  }
+}

@@ -1,0 +1,48 @@
+---
+source: crates/synth-parser/tests/fixtures.rs
+expression: ast
+---
+{
+  "imports": [],
+  "board": {
+    "name": "diff_pair_decimal",
+    "statements": [
+      {
+        "stmt": "layers",
+        "count": 4,
+        "span": {
+          "byte_start": 30,
+          "byte_end": 38
+        }
+      },
+      {
+        "stmt": "diff_pair",
+        "pos": "USB_DP",
+        "neg": "USB_DN",
+        "attrs": [
+          {
+            "kind": "impedance",
+            "literal": "90.5",
+            "unit": "ohm",
+            "span": {
+              "byte_start": 81,
+              "byte_end": 88
+            }
+          }
+        ],
+        "span": {
+          "byte_start": 41,
+          "byte_end": 92
+        }
+      }
+    ],
+    "span": {
+      "byte_start": 0,
+      "byte_end": 94
+    }
+  },
+  "span": {
+    "byte_start": 0,
+    "byte_end": 94
+  }
+}

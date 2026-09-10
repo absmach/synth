@@ -1,0 +1,20 @@
+// Two clock_output pins shorted on one net.
+board "two_oscillators" {
+  layers 2
+
+  component Y1: crystal "osc_smd_25mhz"
+  component Y2: crystal "osc_smd_25mhz"
+  component C1: capacitor "c_generic_0603"
+  component C2: capacitor "c_generic_0603"
+
+  connect Y1.vcc -> Y2.vcc
+  connect Y1.gnd -> Y2.gnd
+  connect Y1.vcc -> C1.p1
+  connect Y1.gnd -> C1.p2
+  connect Y2.vcc -> C2.p1
+  connect Y2.gnd -> C2.p2
+  connect Y1.ne -> Y2.ne
+  // Two oscillators driving the same net — clock collision.
+  connect Y1.out -> Y2.out
+}
+

@@ -1,0 +1,3 @@
+board "test_noconverge_board_002" {
+  layers 2
+}

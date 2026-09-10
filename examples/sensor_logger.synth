@@ -1,0 +1,126 @@
+// Sensor-logger dev board:
+//   USB-C in -> AMS1117 3V3 regulator -> ATmega328P MCU.
+//   I2C bus with two environmental sensors + pullups.
+//   SPI flash for log storage.
+//   Reset button, status LEDs (red/green/blue), decoupling.
+//
+// Exercises ~12 different part types and ~30 nets, which is enough
+// to stress the schematic layout/labeling logic without being a
+// production-grade design.
+board "sensor_logger" {
+  layers 4
+  manufacturer "jlcpcb"
+
+  // ---- Power chain --------------------------------------------------------
+  component J1: connector  "usb_c_receptacle"
+  component D1: diode      "esd_usb"
+  component D2: diode      "esd_usb"
+  component U1: regulator  "ams1117_3v3"
+  component C1: capacitor  "c_generic_0805"   // bulk on VBUS (5V)
+  component C2: capacitor  "c_generic_0805"   // input cap on regulator
+  component C3: capacitor  "c_generic_0805"   // output cap on regulator
+  component C4: capacitor  "c_generic_0603"   // 3V3 decoupling
+
+  connect J1.vbus -> C1.p1
+  connect J1.gnd  -> C1.p2
+  connect J1.vbus -> U1.vin
+  connect J1.gnd  -> U1.gnd
+  connect U1.vin  -> C2.p1
+  connect U1.gnd  -> C2.p2
+  connect U1.vout -> C3.p1
+  connect U1.gnd  -> C3.p2
+  connect U1.vout -> C4.p1
+  connect U1.gnd  -> C4.p2
+
+  // ESD protection on USB DP/DN.
+  connect J1.dp  -> D1.io
+  connect J1.gnd -> D1.gnd
+  connect J1.dn  -> D2.io
+  connect J1.gnd -> D2.gnd
+
+  // ---- MCU + reset --------------------------------------------------------
+  component U2: mcu        "atmega328p"
+  component C5: capacitor  "c_generic_0603" { placement_hint { near: "U2" priority: hard } } // MCU decoupling
+  component R1: resistor   "r_generic_0603"  // reset pullup
+  component SW1: switch    "spst_tactile"
+  component C6: capacitor  "c_generic_0603"  // reset cap
+
+  connect U1.vout -> U2.vcc
+  connect U1.gnd  -> U2.gnd
+  connect U2.vcc  -> C5.p1
+  connect U2.gnd  -> C5.p2
+  connect U2.vcc  -> R1.p1
+  connect R1.p2   -> U2.reset
+  connect U2.reset -> SW1.p1
+  connect SW1.p2  -> U2.gnd
+  connect U2.reset -> C6.p1
+  connect U2.gnd  -> C6.p2
+
+  // ---- I2C bus + sensors + pullups ----------------------------------------
+  component U3: sensor     "bmp280_pressure"
+  component U4: sensor     "bme680_env"
+  component C7: capacitor  "c_generic_0603" { placement_hint { near: "U3" priority: hard } }
+  component C8: capacitor  "c_generic_0603" { placement_hint { near: "U4" priority: hard } }
+  component R2: resistor   "r_generic_0603"  // SDA pullup
+  component R3: resistor   "r_generic_0603"  // SCL pullup
+
+  connect U1.vout -> U3.vdd
+  connect U1.gnd  -> U3.gnd
+  connect U1.vout -> U4.vdd
+  connect U1.gnd  -> U4.gnd
+  connect U3.vdd  -> C7.p1
+  connect U3.gnd  -> C7.p2
+  connect U4.vdd  -> C8.p1
+  connect U4.gnd  -> C8.p2
+
+  connect U2.pc4_sda -> U3.sda
+  connect U2.pc4_sda -> U4.sda
+  connect U2.pc5_scl -> U3.scl
+  connect U2.pc5_scl -> U4.scl
+  // BME680 interface mode select: CSB=VDD selects I2C; SDO=GND selects addr 0x76
+  connect U4.vdd -> U4.csb
+  connect U4.gnd -> U4.sdo
+  connect U2.pc4_sda -> R2.p1
+  connect R2.p2      -> U2.vcc
+  connect U2.pc5_scl -> R3.p1
+  connect R3.p2      -> U2.vcc
+
+  // ---- SPI flash ----------------------------------------------------------
+  component U5: memory     "w25q128_flash"
+  component C9: capacitor  "c_generic_0603" { placement_hint { near: "U5" priority: hard } }
+
+  connect U1.vout    -> U5.vcc
+  connect U1.gnd     -> U5.gnd
+  connect U5.vcc     -> C9.p1
+  connect U5.gnd     -> C9.p2
+  connect U2.pb3_mosi -> U5.mosi
+  connect U2.pb4_miso -> U5.miso
+  connect U2.pb5_sck  -> U5.sck
+  connect U2.pb2_ss   -> U5.cs
+  connect U5.wp       -> U5.vcc
+  connect U5.hold     -> U5.vcc
+
+  // ---- Status LEDs (red / green / blue) ----------------------------------
+  component R4: resistor  "r_generic_0603" { placement_hint { near: "U2" side: left } }
+  component D3: diode     "led_red_0603" { placement_hint { near: "R4" } }
+  component R5: resistor  "r_generic_0603" { placement_hint { near: "U2" side: left } }
+  component D4: diode     "led_green_0603" { placement_hint { near: "R5" } }
+  component R6: resistor  "r_generic_0603" { placement_hint { near: "U2" side: left } }
+  component D5: diode     "led_blue_0603" { placement_hint { near: "R6" } }
+
+  connect U2.pd0_rx -> R4.p1
+  connect R4.p2     -> D3.anode
+  connect D3.cathode -> U2.gnd
+
+  connect U2.pd1_tx -> R5.p1
+  connect R5.p2     -> D4.anode
+  connect D4.cathode -> U2.gnd
+
+  connect U2.reset  -> R6.p1
+  connect R6.p2     -> D5.anode
+  connect D5.cathode -> U2.gnd
+
+  // ---- USB differential pair (removed: ATmega328P has no native USB;
+  // J1.dp / J1.dn nets are auto-named and cannot be referenced by a diff_pair
+  // block. Re-add when a design uses a USB-capable MCU and labels these nets.) --
+}

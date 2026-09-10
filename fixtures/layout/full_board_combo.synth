@@ -1,0 +1,93 @@
+// Full-board combo #2: the complete ten-design reference set's
+// capstone. Where `multi_pattern_combo.synth` stacks four motifs
+// (USB+ESD, LDO, MCU, I2C sensor, LED), this fixture exercises
+// seven of the eight cataloged motifs on one sheet — USB+ESD
+// (esd_usb, distinct from d_tvs_5v), LDO block (ams1117_3v3,
+// distinct from lp5907_3v3), MCU + decoupling + reset network
+// (atmega328p, distinct from stm32f103c8), crystal + load caps,
+// battery voltage divider (jst_ph_2pin fed, per divider.synth),
+// I2C bus with pullups onto the newly stock-mapped TMP117
+// (Sensor_Temperature:TMP117xxDRV), and a status LED. Per
+// fixtures/layout/mcu.synth no registry MCU exposes XTAL pins, so
+// the crystal motif stays standalone, as in crystal.synth.
+board "env_node_full" {
+  layers 4
+  manufacturer "jlcpcb"
+
+  // ---- USB-C power in + ESD ----------------------------------------------
+  component J1: connector "usb_c_receptacle"
+  component D1: diode     "esd_usb"
+  component D2: diode     "esd_usb"
+
+  connect J1.dp  -> D1.io
+  connect J1.gnd -> D1.gnd
+  connect J1.dn  -> D2.io
+  connect J1.gnd -> D2.gnd
+
+  // ---- LDO block (AMS1117-3.3) --------------------------------------------
+  component U1: regulator "ams1117_3v3"
+  component C1: capacitor "c_generic_0805" // vin decoupling
+  component C2: capacitor "c_generic_0805" // vout decoupling
+
+  connect J1.vbus -> U1.vin
+  connect J1.gnd  -> U1.gnd
+  connect U1.vin  -> C1.p1
+  connect U1.gnd  -> C1.p2
+  connect U1.vout -> C2.p1
+  connect U1.gnd  -> C2.p2
+
+  // ---- MCU + decoupling + reset network ------------------------------------
+  component U2: mcu       "atmega328p"
+  component C3: capacitor "c_generic_0603" // vcc decoupling
+  component R1: resistor  "r_generic_0603" // reset pullup
+  component SW1: switch   "spst_tactile"
+
+  connect U1.vout -> U2.vcc
+  connect U1.gnd  -> U2.gnd
+  connect U2.vcc  -> C3.p1
+  connect U2.gnd  -> C3.p2
+  connect U2.vcc  -> R1.p1
+  connect R1.p2   -> U2.reset
+  connect U2.reset -> SW1.p1
+  connect SW1.p2  -> U2.gnd
+
+  // ---- Crystal + load caps (standalone motif; see header) ------------------
+  component X1: crystal   "xtal_8mhz"
+  component C4: capacitor "c_generic_0603" // load cap 1
+  component C5: capacitor "c_generic_0603" // load cap 2
+
+  connect X1.p1 -> C4.p1
+  connect X1.p2 -> C5.p1
+  connect C4.p2 -> C5.p2
+
+  // ---- I2C bus: TMP117 temperature sensor + pullups ------------------------
+  component U3: sensor   "tmp117_temperature"
+  component R2: resistor "r_generic_0603" // SDA pullup
+  component R3: resistor "r_generic_0603" // SCL pullup
+
+  connect U1.vout   -> U3.vdd
+  connect U1.gnd    -> U3.gnd
+  connect U2.pc4_sda -> U3.sda
+  connect U2.pc5_scl -> U3.scl
+  connect U2.pc4_sda -> R2.p1
+  connect R2.p2     -> U2.vcc
+  connect U2.pc5_scl -> R3.p1
+  connect R3.p2     -> U2.vcc
+
+  // ---- Battery voltage divider (pure motif, per divider.synth) -------------
+  component J2: connector "jst_ph_2pin" // battery: p1 = rail, p2 = gnd
+  component R4: resistor  "r_generic_0603"
+  component R5: resistor  "r_generic_0603"
+
+  connect J2.p1 -> R4.p1
+  connect R4.p2 -> R5.p1
+  connect J2.p2 -> R5.p2
+
+  // ---- Status LED -----------------------------------------------------------
+  component D3: diode    "led_green_0603"
+  component R6: resistor "r_generic_0603"
+
+  connect U2.pd1_tx    -> R6.p1
+  connect R6.p2        -> D3.anode
+  connect D3.cathode   -> U2.gnd
+}

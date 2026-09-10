@@ -1,0 +1,16 @@
+# SPDX-License-Identifier: Apache-2.0
+
+[package]
+name = "synth-knowledge"
+version = "0.0.1"
+edition = "2021"
+license = "Apache-2.0"
+description = "Circuit-design knowledge graph: declarative support-circuit templates (decoupling, debounce, pull-ups, flyback, ESD) that drive production-grade schematic generation and checking"
+
+[dependencies]
+include_dir = { workspace = true }
+serde = { workspace = true }
+toml = { workspace = true }
+synth-diagnostics = { workspace = true }
+synth-ir = { workspace = true }
+synth-registry = { workspace = true }

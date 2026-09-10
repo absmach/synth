@@ -1,0 +1,3 @@
+board "x" {
+  manufacturer 42
+}

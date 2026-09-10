@@ -1,0 +1,38 @@
+---
+source: crates/synth-parser/tests/fixtures.rs
+expression: ast
+---
+{
+  "imports": [],
+  "board": {
+    "name": "component_regulator",
+    "statements": [
+      {
+        "stmt": "layers",
+        "count": 2,
+        "span": {
+          "byte_start": 32,
+          "byte_end": 40
+        }
+      },
+      {
+        "stmt": "component",
+        "refdes": "U1",
+        "kind": "regulator",
+        "part": "tps62085",
+        "span": {
+          "byte_start": 43,
+          "byte_end": 77
+        }
+      }
+    ],
+    "span": {
+      "byte_start": 0,
+      "byte_end": 79
+    }
+  },
+  "span": {
+    "byte_start": 0,
+    "byte_end": 79
+  }
+}

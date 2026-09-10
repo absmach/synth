@@ -1,0 +1,23 @@
+id = "ant_helical_433mhz"
+kind = "antenna"
+description = "Helical 433MHz antenna, through-hole"
+kicad_symbol = "Device:Antenna"
+kicad_footprint = "RF_Antenna:Pulse_W3011"
+
+[footprint_dimensions]
+width_mm = 5.0
+height_mm = 5.0
+courtyard_margin_mm = 0.25
+
+[operating_conditions]
+min_voltage_v = 1.8
+max_voltage_v = 5.0
+max_current_ma = 100.0
+
+[[pins]]
+name = "feed"
+number = "1"
+electrical_type = "rf"
+capabilities = ["rf_feed"]
+required = true
+

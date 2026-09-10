@@ -1,0 +1,3 @@
+board "x" {
+  layers 2mm
+}

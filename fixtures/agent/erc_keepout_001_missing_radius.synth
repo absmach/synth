@@ -1,0 +1,9 @@
+board "test_ko_001" {
+  layers 2
+  component R1: resistor "r_generic_0603"
+  component R2: resistor "r_generic_0603"
+  connect R1.p1 -> R2.p1
+  connect R1.p2 -> R2.p2
+  keepout antenna {
+  }
+}

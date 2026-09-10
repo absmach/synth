@@ -1,0 +1,13 @@
+board "ten_caps" {
+  layers 2
+  component C1: capacitor "c_generic_0402"
+  component C2: capacitor "c_generic_0402"
+  component C3: capacitor "c_generic_0402"
+  component C4: capacitor "c_generic_0402"
+  component C5: capacitor "c_generic_0402"
+  component C6: capacitor "c_generic_0402"
+  component C7: capacitor "c_generic_0402"
+  component C8: capacitor "c_generic_0402"
+  component C9: capacitor "c_generic_0402"
+  component C10: capacitor "c_generic_0402"
+}

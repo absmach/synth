@@ -1,0 +1,22 @@
+// Twin: U1.usb_dp is connected to a plain GPIO on the other side.
+// The mate pin does not carry the usb_dp capability, so
+// E-SYNTH-USB-001 fires.
+board "usb_dp_to_gpio" {
+  layers 4
+
+  component U1: mcu "rp2350"
+  component U2: mcu "rp2350"
+  component C1: capacitor "c_generic_0402"
+
+  connect U1.vdd_io -> C1.p1
+  connect U1.vdd_core -> C1.p1
+  connect U1.gnd -> C1.p2
+  connect U1.run -> C1.p2
+  connect U2.vdd_io -> C1.p1
+  connect U2.vdd_core -> C1.p1
+  connect U2.gnd -> C1.p2
+  connect U2.run -> C1.p2
+
+  // Bug: USB DP from U1 goes to a plain GPIO on U2.
+  connect U1.usb_dp -> U2.gp0
+}

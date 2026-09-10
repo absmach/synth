@@ -1,0 +1,46 @@
+---
+source: crates/synth-parser/tests/fixtures.rs
+expression: ast
+---
+{
+  "imports": [],
+  "board": {
+    "name": "single_component",
+    "statements": [
+      {
+        "stmt": "layers",
+        "count": 2,
+        "span": {
+          "byte_start": 29,
+          "byte_end": 37
+        }
+      },
+      {
+        "stmt": "manufacturer",
+        "name": "jlcpcb",
+        "span": {
+          "byte_start": 40,
+          "byte_end": 61
+        }
+      },
+      {
+        "stmt": "component",
+        "refdes": "U1",
+        "kind": "mcu",
+        "part": "rp2350",
+        "span": {
+          "byte_start": 64,
+          "byte_end": 90
+        }
+      }
+    ],
+    "span": {
+      "byte_start": 0,
+      "byte_end": 92
+    }
+  },
+  "span": {
+    "byte_start": 0,
+    "byte_end": 92
+  }
+}

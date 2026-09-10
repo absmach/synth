@@ -1,0 +1,26 @@
+id = "xtal_8mhz"
+kind = "crystal"
+description = "8MHz quartz crystal, HC-49S/SMD"
+kicad_symbol = "Device:Crystal"
+kicad_footprint = "Crystal:Crystal_SMD_3225-4Pin_3.2x2.5mm"
+
+[footprint_dimensions]
+width_mm = 4.2
+height_mm = 3.5
+courtyard_margin_mm = 0.25
+
+[operating_conditions]
+min_voltage_v = 1.8
+max_voltage_v = 5.0
+max_current_ma = 100.0
+
+[[pins]]
+name = "p1"
+number = "1"
+electrical_type = "passive"
+
+[[pins]]
+name = "p2"
+number = "2"
+electrical_type = "passive"
+

@@ -1,0 +1,3 @@
+board "snake_case_name_here" {
+  layers 2
+}

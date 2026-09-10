@@ -1,0 +1,17 @@
+// Crystal pattern: a crystal with two load caps returning to a
+// shared ground node (C1.p2 <-> C2.p2). Recognized by the
+// `Crystal` pass in crates/synth-layout/src/patterns/crystal.rs
+// (wired into `build_clusters` since Phase 5.7), so X1 anchors a
+// labelled cluster with C1/C2 claimed as members.
+board "crystal" {
+  layers 2
+  manufacturer "jlcpcb"
+
+  component X1: crystal   "xtal_8mhz"
+  component C1: capacitor "c_generic_0603" // load cap 1
+  component C2: capacitor "c_generic_0603" // load cap 2
+
+  connect X1.p1 -> C1.p1
+  connect X1.p2 -> C2.p1
+  connect C1.p2 -> C2.p2
+}

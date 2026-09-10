@@ -1,0 +1,8 @@
+board "gen_boot_floating_2" {
+  layers 2
+  component U2: ic "esp32_wroom_32"
+  component J1: connector "header_1x4"
+
+  connect U2.tx -> J1.p1
+  connect U2.gnd -> J1.p2
+}

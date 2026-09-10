@@ -1,0 +1,72 @@
+id = "esp32_c3_mini"
+kind = "mcu"
+description = "Espressif ESP32-C3 RISC-V module with Wi-Fi/BT 5.0"
+mpn = "ESP32-C3-MINI-1-N4"
+lcsc_pn = "C2834457"
+kicad_symbol = "RF_Module:ESP32-C3-MINI-1"
+kicad_footprint = "RF_Module:ESP32-C3-MINI-1"
+
+[footprint_dimensions]
+width_mm = 5.0
+height_mm = 5.0
+courtyard_margin_mm = 0.25
+
+[operating_conditions]
+min_voltage_v = 1.8
+max_voltage_v = 3.6
+max_current_ma = 150.0
+
+[[pins]]
+name = "gnd"
+number = "1"
+electrical_type = "power_input"
+required = true
+
+[[pins]]
+name = "vdd"
+number = "2"
+electrical_type = "power_input"
+required = true
+
+[[pins]]
+name = "en"
+number = "3"
+electrical_type = "input"
+capabilities = ["reset"]
+required = true
+
+[[pins]]
+name = "io9"
+number = "9"
+electrical_type = "bidirectional"
+capabilities = ["gpio", "boot_mode"]
+
+[[pins]]
+name = "io18"
+number = "18"
+electrical_type = "bidirectional"
+capabilities = ["gpio"]
+
+[[pins]]
+name = "io19"
+number = "19"
+electrical_type = "bidirectional"
+capabilities = ["gpio"]
+
+[[pins]]
+name = "dn"
+number = "20"
+electrical_type = "differential_negative"
+capabilities = ["usb_dn"]
+
+[[pins]]
+name = "dp"
+number = "21"
+electrical_type = "differential_positive"
+capabilities = ["usb_dp"]
+
+[[required_decoupling]]
+net = "vdd"
+value = "10uf"
+count = 1
+

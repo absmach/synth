@@ -1,0 +1,35 @@
+id = "balun_2g4"
+kind = "filter"
+description = "2.4 GHz balun + matching network, integrated SMD"
+kicad_footprint = "RF_Converter:Johanson_0805"
+
+[footprint_dimensions]
+width_mm = 5.0
+height_mm = 5.0
+courtyard_margin_mm = 0.25
+
+[operating_conditions]
+min_voltage_v = 1.8
+max_voltage_v = 5.0
+max_current_ma = 100.0
+
+[[pins]]
+name = "unbal"
+number = "1"
+electrical_type = "rf"
+
+[[pins]]
+name = "bal_a"
+number = "2"
+electrical_type = "passive"
+
+[[pins]]
+name = "bal_b"
+number = "3"
+electrical_type = "passive"
+
+[[pins]]
+name = "gnd"
+number = "4"
+electrical_type = "passive"
+

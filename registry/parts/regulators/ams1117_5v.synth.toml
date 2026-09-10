@@ -1,0 +1,47 @@
+id = "ams1117_5v"
+kind = "regulator"
+description = "AMS1117-5.0 fixed 5V LDO regulator, SOT-223"
+mpn = "AMS1117-5.0"
+lcsc_pn = "C6187"
+kicad_symbol = "Regulator_Linear:AMS1117-5.0"
+kicad_footprint = "Package_TO_SOT_SMD:SOT-223-3_TabPin2"
+
+[footprint_dimensions]
+width_mm = 8.3
+height_mm = 6.1
+courtyard_margin_mm = 0.25
+
+[operating_conditions]
+min_voltage_v = 4.75
+max_voltage_v = 15.0
+max_current_ma = 1000.0
+
+[[pins]]
+name = "gnd"
+number = "1"
+electrical_type = "power_input"
+required = true
+
+[[pins]]
+name = "vout"
+number = "2"
+electrical_type = "power_output"
+voltage_nominal_v = 5.0
+required = true
+
+[[pins]]
+name = "vin"
+number = "3"
+electrical_type = "power_input"
+required = true
+
+[[required_decoupling]]
+net = "vin"
+value = "22uf"
+count = 1
+
+[[required_decoupling]]
+net = "vout"
+value = "22uf"
+count = 1
+

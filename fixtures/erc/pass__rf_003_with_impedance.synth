@@ -1,0 +1,15 @@
+board "rf_pass" {
+  layers 2
+  component U1: antenna "ant_chip_2g4"
+  component R1: resistor "r_generic_0603"
+
+  connect U1.feed -> R1.p1
+
+  diff_pair u1_feed r1_p1 {
+    impedance 50ohm
+  }
+
+  keepout antenna {
+    radius 10mm
+  }
+}

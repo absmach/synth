@@ -1,0 +1,13 @@
+board "gen_diff_pair_4" {
+  layers 2
+  component R1: resistor "r_generic_0603"
+  component R2: resistor "r_generic_0603"
+  component R3: resistor "r_generic_0603"
+  component R4: resistor "r_generic_0603"
+
+  connect R1.p1 -> R2.p1
+  connect R3.p1 -> R4.p1
+
+  diff_pair r1_p1 r3_p1 {
+  }
+}

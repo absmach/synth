@@ -1,0 +1,5 @@
+board "x" {
+  layers 2
+  component R1: resistor "r_generic_0603"
+}
+random words here that do not parse

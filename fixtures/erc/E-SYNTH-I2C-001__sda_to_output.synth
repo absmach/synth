@@ -1,0 +1,16 @@
+// I²C SDA (dedicated sensor pin) connected to a digital output of a
+// shift register, which carries no I²C capability — endpoint
+// mismatch.
+board "sda_to_output" {
+  layers 2
+
+  component U1: sensor "bmp280_pressure"
+  component U2: ic "sn74hc595_shift"
+
+  connect U1.vdd -> U2.vcc
+  connect U1.gnd -> U2.gnd
+  // Bug: SDA wired to a plain output pin.
+  connect U1.sda -> U2.qa
+  connect U1.scl -> U2.qb
+}
+

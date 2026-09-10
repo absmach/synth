@@ -1,0 +1,47 @@
+id = "m24m02_eeprom"
+kind = "memory"
+description = "STM M24M02 256KB I²C EEPROM"
+kicad_symbol = "Memory_EEPROM:M24M02-DR"
+kicad_footprint = "Package_SO:SOIC-8_3.9x4.9mm_P1.27mm"
+
+[footprint_dimensions]
+width_mm = 6.9
+height_mm = 4.41
+courtyard_margin_mm = 0.25
+
+[operating_conditions]
+min_voltage_v = 1.8
+max_voltage_v = 3.6
+max_current_ma = 50.0
+
+[[pins]]
+name = "vdd"
+number = "1"
+electrical_type = "power_input"
+required = true
+
+[[pins]]
+name = "gnd"
+number = "2"
+electrical_type = "power_input"
+required = true
+
+[[pins]]
+name = "sda"
+number = "3"
+electrical_type = "bidirectional"
+capabilities = ["i2c_sda"]
+required = true
+
+[[pins]]
+name = "scl"
+number = "4"
+electrical_type = "bidirectional"
+capabilities = ["i2c_scl"]
+required = true
+
+[[required_decoupling]]
+net = "vdd"
+value = "100nf"
+count = 1
+

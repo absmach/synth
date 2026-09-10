@@ -1,0 +1,36 @@
+id = "header_1x4"
+kind = "connector"
+description = "1x4 through-hole pin header, 2.54mm pitch"
+kicad_symbol = "Connector_Generic:Conn_01x04"
+kicad_footprint = "Connector_PinHeader_2.54mm:PinHeader_1x04_P2.54mm_Vertical"
+
+[footprint_dimensions]
+width_mm = 3.54
+height_mm = 11.16
+courtyard_margin_mm = 0.25
+
+[operating_conditions]
+min_voltage_v = 1.8
+max_voltage_v = 5.0
+max_current_ma = 100.0
+
+[[pins]]
+name = "p1"
+number = "1"
+electrical_type = "passive"
+
+[[pins]]
+name = "p2"
+number = "2"
+electrical_type = "passive"
+
+[[pins]]
+name = "p3"
+number = "3"
+electrical_type = "passive"
+
+[[pins]]
+name = "p4"
+number = "4"
+electrical_type = "passive"
+

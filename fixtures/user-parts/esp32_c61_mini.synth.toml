@@ -1,0 +1,47 @@
+id = "esp32_c61_mini"
+kind = "mcu"
+description = "User-imported ESP32-C61 Wi-Fi 6 & BLE 5 RISC-V microcontroller module"
+kicad_footprint = "RF_Module:ESP32-C61-MINI-1"
+
+[footprint_dimensions]
+width_mm = 13.2
+height_mm = 16.6
+
+[provenance]
+source = "imported"
+reviewed_by = "test_user"
+
+[[pins]]
+name = "gnd"
+number = "1"
+electrical_type = "power_input"
+capabilities = []
+required = true
+
+[[pins]]
+name = "3v3"
+number = "2"
+electrical_type = "power_input"
+capabilities = []
+required = true
+
+[[pins]]
+name = "io0"
+number = "3"
+electrical_type = "bidirectional"
+capabilities = ["gpio", "uart_rx"]
+required = false
+
+[[pins]]
+name = "io1"
+number = "4"
+electrical_type = "bidirectional"
+capabilities = ["gpio", "uart_tx"]
+required = false
+
+[[pins]]
+name = "en"
+number = "5"
+electrical_type = "input"
+capabilities = ["reset"]
+required = true

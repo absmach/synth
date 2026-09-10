@@ -1,0 +1,22 @@
+{
+  "imports": [],
+  "board": {
+    "name": "name_test3",
+    "statements": [
+      {
+        "stmt": "layers",
+        "count": 2,
+        "span": { "byte_start": 0, "byte_end": 10 }
+      },
+      {
+        "stmt": "component",
+        "refdes": "1U",
+        "kind": "mcu",
+        "part": "rp2350",
+        "span": { "byte_start": 12, "byte_end": 40 }
+      }
+    ],
+    "span": { "byte_start": 0, "byte_end": 45 }
+  },
+  "span": { "byte_start": 0, "byte_end": 45 }
+}

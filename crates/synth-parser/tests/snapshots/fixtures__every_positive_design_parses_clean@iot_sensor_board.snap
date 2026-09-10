@@ -1,0 +1,1477 @@
+---
+source: crates/synth-parser/tests/fixtures.rs
+expression: ast
+---
+{
+  "imports": [],
+  "board": {
+    "name": "iot_sensor_board",
+    "statements": [
+      {
+        "stmt": "layers",
+        "count": 4,
+        "span": {
+          "byte_start": 29,
+          "byte_end": 37
+        }
+      },
+      {
+        "stmt": "manufacturer",
+        "name": "jlcpcb",
+        "span": {
+          "byte_start": 40,
+          "byte_end": 61
+        }
+      },
+      {
+        "stmt": "component",
+        "refdes": "J1",
+        "kind": "connector",
+        "part": "usb_c_receptacle",
+        "span": {
+          "byte_start": 220,
+          "byte_end": 263
+        }
+      },
+      {
+        "stmt": "component",
+        "refdes": "U5",
+        "kind": "regulator",
+        "part": "ams1117_3v3",
+        "span": {
+          "byte_start": 266,
+          "byte_end": 304
+        }
+      },
+      {
+        "stmt": "component",
+        "refdes": "C1",
+        "kind": "capacitor",
+        "part": "c_generic_0805",
+        "span": {
+          "byte_start": 307,
+          "byte_end": 348
+        }
+      },
+      {
+        "stmt": "component",
+        "refdes": "C2",
+        "kind": "capacitor",
+        "part": "c_generic_0805",
+        "span": {
+          "byte_start": 366,
+          "byte_end": 407
+        }
+      },
+      {
+        "stmt": "component",
+        "refdes": "C3",
+        "kind": "capacitor",
+        "part": "c_generic_0805",
+        "span": {
+          "byte_start": 433,
+          "byte_end": 474
+        }
+      },
+      {
+        "stmt": "connection",
+        "from": {
+          "component": "J1",
+          "pin": "vbus",
+          "span": {
+            "byte_start": 510,
+            "byte_end": 517
+          }
+        },
+        "to": {
+          "component": "C1",
+          "pin": "p1",
+          "span": {
+            "byte_start": 521,
+            "byte_end": 526
+          }
+        },
+        "span": {
+          "byte_start": 502,
+          "byte_end": 526
+        }
+      },
+      {
+        "stmt": "connection",
+        "from": {
+          "component": "J1",
+          "pin": "gnd",
+          "span": {
+            "byte_start": 537,
+            "byte_end": 543
+          }
+        },
+        "to": {
+          "component": "C1",
+          "pin": "p2",
+          "span": {
+            "byte_start": 548,
+            "byte_end": 553
+          }
+        },
+        "span": {
+          "byte_start": 529,
+          "byte_end": 553
+        }
+      },
+      {
+        "stmt": "connection",
+        "from": {
+          "component": "J1",
+          "pin": "vbus",
+          "span": {
+            "byte_start": 564,
+            "byte_end": 571
+          }
+        },
+        "to": {
+          "component": "U4",
+          "pin": "in",
+          "span": {
+            "byte_start": 575,
+            "byte_end": 580
+          }
+        },
+        "span": {
+          "byte_start": 556,
+          "byte_end": 580
+        }
+      },
+      {
+        "stmt": "connection",
+        "from": {
+          "component": "J1",
+          "pin": "gnd",
+          "span": {
+            "byte_start": 591,
+            "byte_end": 597
+          }
+        },
+        "to": {
+          "component": "U4",
+          "pin": "vss",
+          "span": {
+            "byte_start": 602,
+            "byte_end": 608
+          }
+        },
+        "span": {
+          "byte_start": 583,
+          "byte_end": 608
+        }
+      },
+      {
+        "stmt": "connection",
+        "from": {
+          "component": "U4",
+          "pin": "out",
+          "span": {
+            "byte_start": 619,
+            "byte_end": 625
+          }
+        },
+        "to": {
+          "component": "U5",
+          "pin": "vin",
+          "span": {
+            "byte_start": 630,
+            "byte_end": 636
+          }
+        },
+        "span": {
+          "byte_start": 611,
+          "byte_end": 636
+        }
+      },
+      {
+        "stmt": "connection",
+        "from": {
+          "component": "J1",
+          "pin": "gnd",
+          "span": {
+            "byte_start": 647,
+            "byte_end": 653
+          }
+        },
+        "to": {
+          "component": "U5",
+          "pin": "gnd",
+          "span": {
+            "byte_start": 658,
+            "byte_end": 664
+          }
+        },
+        "span": {
+          "byte_start": 639,
+          "byte_end": 664
+        }
+      },
+      {
+        "stmt": "connection",
+        "from": {
+          "component": "U5",
+          "pin": "vin",
+          "span": {
+            "byte_start": 675,
+            "byte_end": 681
+          }
+        },
+        "to": {
+          "component": "C2",
+          "pin": "p1",
+          "span": {
+            "byte_start": 686,
+            "byte_end": 691
+          }
+        },
+        "span": {
+          "byte_start": 667,
+          "byte_end": 691
+        }
+      },
+      {
+        "stmt": "connection",
+        "from": {
+          "component": "J1",
+          "pin": "gnd",
+          "span": {
+            "byte_start": 702,
+            "byte_end": 708
+          }
+        },
+        "to": {
+          "component": "C2",
+          "pin": "p2",
+          "span": {
+            "byte_start": 713,
+            "byte_end": 718
+          }
+        },
+        "span": {
+          "byte_start": 694,
+          "byte_end": 718
+        }
+      },
+      {
+        "stmt": "connection",
+        "from": {
+          "component": "U5",
+          "pin": "vout",
+          "span": {
+            "byte_start": 729,
+            "byte_end": 736
+          }
+        },
+        "to": {
+          "component": "C3",
+          "pin": "p1",
+          "span": {
+            "byte_start": 740,
+            "byte_end": 745
+          }
+        },
+        "span": {
+          "byte_start": 721,
+          "byte_end": 745
+        }
+      },
+      {
+        "stmt": "connection",
+        "from": {
+          "component": "J1",
+          "pin": "gnd",
+          "span": {
+            "byte_start": 756,
+            "byte_end": 762
+          }
+        },
+        "to": {
+          "component": "C3",
+          "pin": "p2",
+          "span": {
+            "byte_start": 767,
+            "byte_end": 772
+          }
+        },
+        "span": {
+          "byte_start": 748,
+          "byte_end": 772
+        }
+      },
+      {
+        "stmt": "component",
+        "refdes": "U4",
+        "kind": "charger",
+        "part": "bq24074",
+        "span": {
+          "byte_start": 855,
+          "byte_end": 886
+        }
+      },
+      {
+        "stmt": "component",
+        "refdes": "C4",
+        "kind": "capacitor",
+        "part": "c_generic_0805",
+        "span": {
+          "byte_start": 889,
+          "byte_end": 929
+        }
+      },
+      {
+        "stmt": "component",
+        "refdes": "R7",
+        "kind": "resistor",
+        "part": "r_generic_0603",
+        "span": {
+          "byte_start": 954,
+          "byte_end": 994
+        }
+      },
+      {
+        "stmt": "component",
+        "refdes": "R8",
+        "kind": "resistor",
+        "part": "r_generic_0603",
+        "span": {
+          "byte_start": 1016,
+          "byte_end": 1056
+        }
+      },
+      {
+        "stmt": "connection",
+        "from": {
+          "component": "U4",
+          "pin": "bat",
+          "span": {
+            "byte_start": 1087,
+            "byte_end": 1093
+          }
+        },
+        "to": {
+          "component": "C4",
+          "pin": "p1",
+          "span": {
+            "byte_start": 1098,
+            "byte_end": 1103
+          }
+        },
+        "span": {
+          "byte_start": 1079,
+          "byte_end": 1103
+        }
+      },
+      {
+        "stmt": "connection",
+        "from": {
+          "component": "J1",
+          "pin": "gnd",
+          "span": {
+            "byte_start": 1114,
+            "byte_end": 1120
+          }
+        },
+        "to": {
+          "component": "C4",
+          "pin": "p2",
+          "span": {
+            "byte_start": 1125,
+            "byte_end": 1130
+          }
+        },
+        "span": {
+          "byte_start": 1106,
+          "byte_end": 1130
+        }
+      },
+      {
+        "stmt": "connection",
+        "from": {
+          "component": "U4",
+          "pin": "iset",
+          "span": {
+            "byte_start": 1141,
+            "byte_end": 1148
+          }
+        },
+        "to": {
+          "component": "R7",
+          "pin": "p1",
+          "span": {
+            "byte_start": 1152,
+            "byte_end": 1157
+          }
+        },
+        "span": {
+          "byte_start": 1133,
+          "byte_end": 1157
+        }
+      },
+      {
+        "stmt": "connection",
+        "from": {
+          "component": "J1",
+          "pin": "gnd",
+          "span": {
+            "byte_start": 1168,
+            "byte_end": 1174
+          }
+        },
+        "to": {
+          "component": "R7",
+          "pin": "p2",
+          "span": {
+            "byte_start": 1179,
+            "byte_end": 1184
+          }
+        },
+        "span": {
+          "byte_start": 1160,
+          "byte_end": 1184
+        }
+      },
+      {
+        "stmt": "connection",
+        "from": {
+          "component": "U4",
+          "pin": "ilim",
+          "span": {
+            "byte_start": 1195,
+            "byte_end": 1202
+          }
+        },
+        "to": {
+          "component": "R8",
+          "pin": "p1",
+          "span": {
+            "byte_start": 1206,
+            "byte_end": 1211
+          }
+        },
+        "span": {
+          "byte_start": 1187,
+          "byte_end": 1211
+        }
+      },
+      {
+        "stmt": "connection",
+        "from": {
+          "component": "J1",
+          "pin": "gnd",
+          "span": {
+            "byte_start": 1222,
+            "byte_end": 1228
+          }
+        },
+        "to": {
+          "component": "R8",
+          "pin": "p2",
+          "span": {
+            "byte_start": 1233,
+            "byte_end": 1238
+          }
+        },
+        "span": {
+          "byte_start": 1214,
+          "byte_end": 1238
+        }
+      },
+      {
+        "stmt": "component",
+        "refdes": "U1",
+        "kind": "mcu",
+        "part": "rp2350",
+        "span": {
+          "byte_start": 1369,
+          "byte_end": 1395
+        }
+      },
+      {
+        "stmt": "component",
+        "refdes": "C5",
+        "kind": "capacitor",
+        "part": "c_generic_0603",
+        "span": {
+          "byte_start": 1398,
+          "byte_end": 1438
+        }
+      },
+      {
+        "stmt": "component",
+        "refdes": "C6",
+        "kind": "capacitor",
+        "part": "c_generic_0603",
+        "span": {
+          "byte_start": 1464,
+          "byte_end": 1504
+        }
+      },
+      {
+        "stmt": "component",
+        "refdes": "R1",
+        "kind": "resistor",
+        "part": "r_generic_0603",
+        "span": {
+          "byte_start": 1532,
+          "byte_end": 1572
+        }
+      },
+      {
+        "stmt": "connection",
+        "from": {
+          "component": "U5",
+          "pin": "vout",
+          "span": {
+            "byte_start": 1621,
+            "byte_end": 1628
+          }
+        },
+        "to": {
+          "component": "U1",
+          "pin": "vdd_io",
+          "span": {
+            "byte_start": 1632,
+            "byte_end": 1641
+          }
+        },
+        "span": {
+          "byte_start": 1613,
+          "byte_end": 1641
+        }
+      },
+      {
+        "stmt": "connection",
+        "from": {
+          "component": "U5",
+          "pin": "vout",
+          "span": {
+            "byte_start": 1652,
+            "byte_end": 1659
+          }
+        },
+        "to": {
+          "component": "U1",
+          "pin": "vdd_core",
+          "span": {
+            "byte_start": 1663,
+            "byte_end": 1674
+          }
+        },
+        "span": {
+          "byte_start": 1644,
+          "byte_end": 1674
+        }
+      },
+      {
+        "stmt": "connection",
+        "from": {
+          "component": "J1",
+          "pin": "gnd",
+          "span": {
+            "byte_start": 1685,
+            "byte_end": 1691
+          }
+        },
+        "to": {
+          "component": "U1",
+          "pin": "gnd",
+          "span": {
+            "byte_start": 1696,
+            "byte_end": 1702
+          }
+        },
+        "span": {
+          "byte_start": 1677,
+          "byte_end": 1702
+        }
+      },
+      {
+        "stmt": "connection",
+        "from": {
+          "component": "U1",
+          "pin": "vdd_io",
+          "span": {
+            "byte_start": 1713,
+            "byte_end": 1722
+          }
+        },
+        "to": {
+          "component": "C5",
+          "pin": "p1",
+          "span": {
+            "byte_start": 1727,
+            "byte_end": 1732
+          }
+        },
+        "span": {
+          "byte_start": 1705,
+          "byte_end": 1732
+        }
+      },
+      {
+        "stmt": "connection",
+        "from": {
+          "component": "J1",
+          "pin": "gnd",
+          "span": {
+            "byte_start": 1743,
+            "byte_end": 1749
+          }
+        },
+        "to": {
+          "component": "C5",
+          "pin": "p2",
+          "span": {
+            "byte_start": 1757,
+            "byte_end": 1762
+          }
+        },
+        "span": {
+          "byte_start": 1735,
+          "byte_end": 1762
+        }
+      },
+      {
+        "stmt": "connection",
+        "from": {
+          "component": "U1",
+          "pin": "vdd_core",
+          "span": {
+            "byte_start": 1773,
+            "byte_end": 1784
+          }
+        },
+        "to": {
+          "component": "C6",
+          "pin": "p1",
+          "span": {
+            "byte_start": 1788,
+            "byte_end": 1793
+          }
+        },
+        "span": {
+          "byte_start": 1765,
+          "byte_end": 1793
+        }
+      },
+      {
+        "stmt": "connection",
+        "from": {
+          "component": "J1",
+          "pin": "gnd",
+          "span": {
+            "byte_start": 1804,
+            "byte_end": 1810
+          }
+        },
+        "to": {
+          "component": "C6",
+          "pin": "p2",
+          "span": {
+            "byte_start": 1819,
+            "byte_end": 1824
+          }
+        },
+        "span": {
+          "byte_start": 1796,
+          "byte_end": 1824
+        }
+      },
+      {
+        "stmt": "connection",
+        "from": {
+          "component": "U1",
+          "pin": "vdd_io",
+          "span": {
+            "byte_start": 1835,
+            "byte_end": 1844
+          }
+        },
+        "to": {
+          "component": "R1",
+          "pin": "p1",
+          "span": {
+            "byte_start": 1848,
+            "byte_end": 1853
+          }
+        },
+        "span": {
+          "byte_start": 1827,
+          "byte_end": 1853
+        }
+      },
+      {
+        "stmt": "connection",
+        "from": {
+          "component": "R1",
+          "pin": "p2",
+          "span": {
+            "byte_start": 1864,
+            "byte_end": 1869
+          }
+        },
+        "to": {
+          "component": "U1",
+          "pin": "run",
+          "span": {
+            "byte_start": 1877,
+            "byte_end": 1883
+          }
+        },
+        "span": {
+          "byte_start": 1856,
+          "byte_end": 1883
+        }
+      },
+      {
+        "stmt": "component",
+        "refdes": "U2",
+        "kind": "secure_element",
+        "part": "atecc608",
+        "span": {
+          "byte_start": 2006,
+          "byte_end": 2045
+        }
+      },
+      {
+        "stmt": "component",
+        "refdes": "C7",
+        "kind": "capacitor",
+        "part": "c_generic_0603",
+        "span": {
+          "byte_start": 2048,
+          "byte_end": 2088
+        }
+      },
+      {
+        "stmt": "component",
+        "refdes": "R2",
+        "kind": "resistor",
+        "part": "r_generic_0603",
+        "span": {
+          "byte_start": 2113,
+          "byte_end": 2153
+        }
+      },
+      {
+        "stmt": "component",
+        "refdes": "R3",
+        "kind": "resistor",
+        "part": "r_generic_0603",
+        "span": {
+          "byte_start": 2172,
+          "byte_end": 2212
+        }
+      },
+      {
+        "stmt": "connection",
+        "from": {
+          "component": "U5",
+          "pin": "vout",
+          "span": {
+            "byte_start": 2240,
+            "byte_end": 2247
+          }
+        },
+        "to": {
+          "component": "U2",
+          "pin": "vcc",
+          "span": {
+            "byte_start": 2251,
+            "byte_end": 2257
+          }
+        },
+        "span": {
+          "byte_start": 2232,
+          "byte_end": 2257
+        }
+      },
+      {
+        "stmt": "connection",
+        "from": {
+          "component": "J1",
+          "pin": "gnd",
+          "span": {
+            "byte_start": 2268,
+            "byte_end": 2274
+          }
+        },
+        "to": {
+          "component": "U2",
+          "pin": "gnd",
+          "span": {
+            "byte_start": 2279,
+            "byte_end": 2285
+          }
+        },
+        "span": {
+          "byte_start": 2260,
+          "byte_end": 2285
+        }
+      },
+      {
+        "stmt": "connection",
+        "from": {
+          "component": "U2",
+          "pin": "vcc",
+          "span": {
+            "byte_start": 2296,
+            "byte_end": 2302
+          }
+        },
+        "to": {
+          "component": "C7",
+          "pin": "p1",
+          "span": {
+            "byte_start": 2307,
+            "byte_end": 2312
+          }
+        },
+        "span": {
+          "byte_start": 2288,
+          "byte_end": 2312
+        }
+      },
+      {
+        "stmt": "connection",
+        "from": {
+          "component": "J1",
+          "pin": "gnd",
+          "span": {
+            "byte_start": 2323,
+            "byte_end": 2329
+          }
+        },
+        "to": {
+          "component": "C7",
+          "pin": "p2",
+          "span": {
+            "byte_start": 2334,
+            "byte_end": 2339
+          }
+        },
+        "span": {
+          "byte_start": 2315,
+          "byte_end": 2339
+        }
+      },
+      {
+        "stmt": "connection",
+        "from": {
+          "component": "U1",
+          "pin": "gp0",
+          "span": {
+            "byte_start": 2350,
+            "byte_end": 2356
+          }
+        },
+        "to": {
+          "component": "U2",
+          "pin": "sda",
+          "span": {
+            "byte_start": 2361,
+            "byte_end": 2367
+          }
+        },
+        "span": {
+          "byte_start": 2342,
+          "byte_end": 2367
+        }
+      },
+      {
+        "stmt": "connection",
+        "from": {
+          "component": "U1",
+          "pin": "gp1",
+          "span": {
+            "byte_start": 2378,
+            "byte_end": 2384
+          }
+        },
+        "to": {
+          "component": "U2",
+          "pin": "scl",
+          "span": {
+            "byte_start": 2389,
+            "byte_end": 2395
+          }
+        },
+        "span": {
+          "byte_start": 2370,
+          "byte_end": 2395
+        }
+      },
+      {
+        "stmt": "connection",
+        "from": {
+          "component": "U1",
+          "pin": "vdd_io",
+          "span": {
+            "byte_start": 2406,
+            "byte_end": 2415
+          }
+        },
+        "to": {
+          "component": "R2",
+          "pin": "p1",
+          "span": {
+            "byte_start": 2419,
+            "byte_end": 2424
+          }
+        },
+        "span": {
+          "byte_start": 2398,
+          "byte_end": 2424
+        }
+      },
+      {
+        "stmt": "connection",
+        "from": {
+          "component": "R2",
+          "pin": "p2",
+          "span": {
+            "byte_start": 2435,
+            "byte_end": 2440
+          }
+        },
+        "to": {
+          "component": "U1",
+          "pin": "gp0",
+          "span": {
+            "byte_start": 2448,
+            "byte_end": 2454
+          }
+        },
+        "span": {
+          "byte_start": 2427,
+          "byte_end": 2454
+        }
+      },
+      {
+        "stmt": "connection",
+        "from": {
+          "component": "U1",
+          "pin": "vdd_io",
+          "span": {
+            "byte_start": 2465,
+            "byte_end": 2474
+          }
+        },
+        "to": {
+          "component": "R3",
+          "pin": "p1",
+          "span": {
+            "byte_start": 2478,
+            "byte_end": 2483
+          }
+        },
+        "span": {
+          "byte_start": 2457,
+          "byte_end": 2483
+        }
+      },
+      {
+        "stmt": "connection",
+        "from": {
+          "component": "R3",
+          "pin": "p2",
+          "span": {
+            "byte_start": 2494,
+            "byte_end": 2499
+          }
+        },
+        "to": {
+          "component": "U1",
+          "pin": "gp1",
+          "span": {
+            "byte_start": 2507,
+            "byte_end": 2513
+          }
+        },
+        "span": {
+          "byte_start": 2486,
+          "byte_end": 2513
+        }
+      },
+      {
+        "stmt": "component",
+        "refdes": "U3",
+        "kind": "modem",
+        "part": "bg95",
+        "span": {
+          "byte_start": 2644,
+          "byte_end": 2670
+        }
+      },
+      {
+        "stmt": "component",
+        "refdes": "BAL1",
+        "kind": "balun",
+        "part": "balun_2g4",
+        "span": {
+          "byte_start": 2673,
+          "byte_end": 2706
+        }
+      },
+      {
+        "stmt": "component",
+        "refdes": "C8",
+        "kind": "capacitor",
+        "part": "c_generic_0805",
+        "span": {
+          "byte_start": 2763,
+          "byte_end": 2803
+        }
+      },
+      {
+        "stmt": "component",
+        "refdes": "R4",
+        "kind": "resistor",
+        "part": "r_generic_0603",
+        "span": {
+          "byte_start": 2826,
+          "byte_end": 2866
+        }
+      },
+      {
+        "stmt": "component",
+        "refdes": "R5",
+        "kind": "resistor",
+        "part": "r_generic_0603",
+        "span": {
+          "byte_start": 2891,
+          "byte_end": 2931
+        }
+      },
+      {
+        "stmt": "component",
+        "refdes": "R6",
+        "kind": "resistor",
+        "part": "r_generic_0603",
+        "span": {
+          "byte_start": 2955,
+          "byte_end": 2995
+        }
+      },
+      {
+        "stmt": "connection",
+        "from": {
+          "component": "U4",
+          "pin": "bat",
+          "span": {
+            "byte_start": 3041,
+            "byte_end": 3047
+          }
+        },
+        "to": {
+          "component": "U3",
+          "pin": "vbatt",
+          "span": {
+            "byte_start": 3053,
+            "byte_end": 3061
+          }
+        },
+        "span": {
+          "byte_start": 3033,
+          "byte_end": 3061
+        }
+      },
+      {
+        "stmt": "connection",
+        "from": {
+          "component": "J1",
+          "pin": "gnd",
+          "span": {
+            "byte_start": 3117,
+            "byte_end": 3123
+          }
+        },
+        "to": {
+          "component": "U3",
+          "pin": "gnd",
+          "span": {
+            "byte_start": 3129,
+            "byte_end": 3135
+          }
+        },
+        "span": {
+          "byte_start": 3109,
+          "byte_end": 3135
+        }
+      },
+      {
+        "stmt": "connection",
+        "from": {
+          "component": "U3",
+          "pin": "vbatt",
+          "span": {
+            "byte_start": 3146,
+            "byte_end": 3154
+          }
+        },
+        "to": {
+          "component": "C8",
+          "pin": "p1",
+          "span": {
+            "byte_start": 3158,
+            "byte_end": 3163
+          }
+        },
+        "span": {
+          "byte_start": 3138,
+          "byte_end": 3163
+        }
+      },
+      {
+        "stmt": "connection",
+        "from": {
+          "component": "J1",
+          "pin": "gnd",
+          "span": {
+            "byte_start": 3174,
+            "byte_end": 3180
+          }
+        },
+        "to": {
+          "component": "C8",
+          "pin": "p2",
+          "span": {
+            "byte_start": 3186,
+            "byte_end": 3191
+          }
+        },
+        "span": {
+          "byte_start": 3166,
+          "byte_end": 3191
+        }
+      },
+      {
+        "stmt": "connection",
+        "from": {
+          "component": "U1",
+          "pin": "gp2",
+          "span": {
+            "byte_start": 3202,
+            "byte_end": 3208
+          }
+        },
+        "to": {
+          "component": "U3",
+          "pin": "pwrkey",
+          "span": {
+            "byte_start": 3214,
+            "byte_end": 3223
+          }
+        },
+        "span": {
+          "byte_start": 3194,
+          "byte_end": 3223
+        }
+      },
+      {
+        "stmt": "connection",
+        "from": {
+          "component": "U1",
+          "pin": "gp3",
+          "span": {
+            "byte_start": 3266,
+            "byte_end": 3272
+          }
+        },
+        "to": {
+          "component": "U3",
+          "pin": "rx",
+          "span": {
+            "byte_start": 3278,
+            "byte_end": 3283
+          }
+        },
+        "span": {
+          "byte_start": 3258,
+          "byte_end": 3283
+        }
+      },
+      {
+        "stmt": "connection",
+        "from": {
+          "component": "U3",
+          "pin": "tx",
+          "span": {
+            "byte_start": 3328,
+            "byte_end": 3333
+          }
+        },
+        "to": {
+          "component": "U1",
+          "pin": "gp3",
+          "span": {
+            "byte_start": 3340,
+            "byte_end": 3346
+          }
+        },
+        "span": {
+          "byte_start": 3320,
+          "byte_end": 3346
+        }
+      },
+      {
+        "stmt": "connection",
+        "from": {
+          "component": "BAL1",
+          "pin": "unbal",
+          "span": {
+            "byte_start": 3412,
+            "byte_end": 3422
+          }
+        },
+        "to": {
+          "component": "BAL1",
+          "pin": "bal_b",
+          "span": {
+            "byte_start": 3426,
+            "byte_end": 3436
+          }
+        },
+        "span": {
+          "byte_start": 3404,
+          "byte_end": 3436
+        }
+      },
+      {
+        "stmt": "connection",
+        "from": {
+          "component": "U3",
+          "pin": "main_ant",
+          "span": {
+            "byte_start": 3509,
+            "byte_end": 3520
+          }
+        },
+        "to": {
+          "component": "BAL1",
+          "pin": "bal_a",
+          "span": {
+            "byte_start": 3524,
+            "byte_end": 3534
+          }
+        },
+        "span": {
+          "byte_start": 3501,
+          "byte_end": 3534
+        }
+      },
+      {
+        "stmt": "connection",
+        "from": {
+          "component": "BAL1",
+          "pin": "gnd",
+          "span": {
+            "byte_start": 3594,
+            "byte_end": 3602
+          }
+        },
+        "to": {
+          "component": "J1",
+          "pin": "gnd",
+          "span": {
+            "byte_start": 3609,
+            "byte_end": 3615
+          }
+        },
+        "span": {
+          "byte_start": 3586,
+          "byte_end": 3615
+        }
+      },
+      {
+        "stmt": "connection",
+        "from": {
+          "component": "U5",
+          "pin": "vout",
+          "span": {
+            "byte_start": 3626,
+            "byte_end": 3633
+          }
+        },
+        "to": {
+          "component": "R5",
+          "pin": "p1",
+          "span": {
+            "byte_start": 3640,
+            "byte_end": 3645
+          }
+        },
+        "span": {
+          "byte_start": 3618,
+          "byte_end": 3645
+        }
+      },
+      {
+        "stmt": "connection",
+        "from": {
+          "component": "R5",
+          "pin": "p2",
+          "span": {
+            "byte_start": 3656,
+            "byte_end": 3661
+          }
+        },
+        "to": {
+          "component": "U3",
+          "pin": "reset_n",
+          "span": {
+            "byte_start": 3670,
+            "byte_end": 3680
+          }
+        },
+        "span": {
+          "byte_start": 3648,
+          "byte_end": 3680
+        }
+      },
+      {
+        "stmt": "connection",
+        "from": {
+          "component": "U3",
+          "pin": "pwrkey",
+          "span": {
+            "byte_start": 3734,
+            "byte_end": 3743
+          }
+        },
+        "to": {
+          "component": "R4",
+          "pin": "p1",
+          "span": {
+            "byte_start": 3748,
+            "byte_end": 3753
+          }
+        },
+        "span": {
+          "byte_start": 3726,
+          "byte_end": 3753
+        }
+      },
+      {
+        "stmt": "connection",
+        "from": {
+          "component": "J1",
+          "pin": "gnd",
+          "span": {
+            "byte_start": 3764,
+            "byte_end": 3770
+          }
+        },
+        "to": {
+          "component": "R4",
+          "pin": "p2",
+          "span": {
+            "byte_start": 3778,
+            "byte_end": 3783
+          }
+        },
+        "span": {
+          "byte_start": 3756,
+          "byte_end": 3783
+        }
+      },
+      {
+        "stmt": "connection",
+        "from": {
+          "component": "J1",
+          "pin": "dp",
+          "span": {
+            "byte_start": 3874,
+            "byte_end": 3879
+          }
+        },
+        "to": {
+          "component": "U1",
+          "pin": "usb_dp",
+          "span": {
+            "byte_start": 3883,
+            "byte_end": 3892
+          }
+        },
+        "span": {
+          "byte_start": 3866,
+          "byte_end": 3892
+        }
+      },
+      {
+        "stmt": "connection",
+        "from": {
+          "component": "J1",
+          "pin": "dn",
+          "span": {
+            "byte_start": 3903,
+            "byte_end": 3908
+          }
+        },
+        "to": {
+          "component": "U1",
+          "pin": "usb_dn",
+          "span": {
+            "byte_start": 3912,
+            "byte_end": 3921
+          }
+        },
+        "span": {
+          "byte_start": 3895,
+          "byte_end": 3921
+        }
+      },
+      {
+        "stmt": "keepout",
+        "name": "antenna",
+        "attrs": [
+          {
+            "kind": "radius",
+            "literal": "20",
+            "unit": "mm",
+            "span": {
+              "byte_start": 4032,
+              "byte_end": 4036
+            }
+          }
+        ],
+        "span": {
+          "byte_start": 4004,
+          "byte_end": 4038
+        }
+      },
+      {
+        "stmt": "keepout",
+        "name": "rf_section",
+        "attrs": [
+          {
+            "kind": "radius",
+            "literal": "5",
+            "unit": "mm",
+            "span": {
+              "byte_start": 4069,
+              "byte_end": 4072
+            }
+          }
+        ],
+        "span": {
+          "byte_start": 4041,
+          "byte_end": 4074
+        }
+      }
+    ],
+    "span": {
+      "byte_start": 0,
+      "byte_end": 4076
+    }
+  },
+  "span": {
+    "byte_start": 0,
+    "byte_end": 4076
+  }
+}

@@ -1,0 +1,32 @@
+[package]
+name = "synth-kicad"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+description = "KiCad 8 schematic and project exporter for the Synth EDA compiler."
+
+[lints]
+workspace = true
+
+[dependencies]
+synth-diagnostics = { workspace = true }
+synth-ir = { workspace = true }
+synth-geometry = { workspace = true }
+synth-layout = { workspace = true }
+synth-place = { workspace = true }
+synth-route = { workspace = true }
+synth-registry = { workspace = true }
+sha2 = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+uuid = { workspace = true }
+thiserror = { workspace = true }
+
+[dev-dependencies]
+synth-parser = { workspace = true }
+synth-ast = { workspace = true }
+insta = { workspace = true }
+tempfile = "3"

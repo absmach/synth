@@ -1,0 +1,3 @@
+board "x" {
+  "stray string"
+}

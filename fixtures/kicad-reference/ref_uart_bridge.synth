@@ -1,0 +1,53 @@
+board "ref_uart_bridge" {
+  layers 2
+  manufacturer "jlcpcb"
+
+  component U1: mcu "rp2350"
+  component U2: modem "bg95"
+  component U3: regulator "ams1117_3v3"
+  component J1: connector "header_1x4"
+
+  component R1: resistor "r_generic_0603"
+  component R2: resistor "r_generic_0603"
+
+  component C1: capacitor "c_generic_0603"
+  component C2: capacitor "c_generic_0603"
+  component C3: capacitor "c_generic_0805"
+
+  connect J1.p1 -> U3.vin
+  connect J1.p2 -> U3.gnd
+
+  connect U3.vout -> U1.vdd_io
+  connect U3.vout -> U1.vdd_core
+  connect U3.vout -> U2.vbatt
+  connect U3.gnd -> U1.gnd
+  connect U3.gnd -> U2.gnd
+
+  connect U1.gp2 -> U2.rx
+  connect U1.gp3 -> U2.tx
+
+  connect U2.main_ant -> J1.p4
+
+  connect U1.run -> R1.p1
+  connect U3.vout -> R1.p2
+
+  connect U2.reset_n -> R2.p1
+  connect U3.vout -> R2.p2
+
+  connect U3.vin -> C1.p1
+  connect U3.gnd -> C1.p2
+
+  connect U3.vout -> C2.p1
+  connect U3.gnd -> C2.p2
+
+  connect U2.vbatt -> C3.p1
+  connect U3.gnd -> C3.p2
+
+  diff_pair u2_main_ant j1_p4 {
+    impedance 50ohm
+  }
+
+  keepout antenna {
+    radius 20mm
+  }
+}

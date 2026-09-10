@@ -1,0 +1,6 @@
+board "test_ko_002" {
+  layers 2
+  keepout antenna {
+    radius 0mm
+  }
+}

@@ -1,0 +1,27 @@
+id = "led_red_0603"
+kind = "led"
+description = "Red LED, 0603 package, ~2.0V Vf"
+mpn = "0603-RED"
+lcsc_pn = "C2286"
+kicad_symbol = "Device:LED"
+kicad_footprint = "LED_SMD:LED_0603_1608Metric"
+
+[footprint_dimensions]
+width_mm = 2.96
+height_mm = 1.46
+courtyard_margin_mm = 0.25
+
+[operating_conditions]
+min_voltage_v = 1.8
+max_voltage_v = 3.3
+max_current_ma = 20.0
+
+[[pins]]
+name = "anode"
+number = "1"
+electrical_type = "passive"
+
+[[pins]]
+name = "cathode"
+number = "2"
+electrical_type = "passive"

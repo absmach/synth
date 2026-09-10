@@ -1,0 +1,7 @@
+board "four_components" {
+  layers 4
+  component U1: mcu "rp2350"
+  component U2: secure_element "atecc608"
+  component C1: capacitor "c_generic_0402"
+  component C2: capacitor "c_generic_0402"
+}

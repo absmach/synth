@@ -1,0 +1,24 @@
+[package]
+name = "synth-ir"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+description = "Canonical semantic IR for the Synth EDA compiler."
+
+[lints]
+workspace = true
+
+[dependencies]
+synth-ast = { workspace = true }
+synth-diagnostics = { workspace = true }
+synth-parser = { workspace = true }
+synth-registry = { workspace = true }
+serde = { workspace = true }
+
+[dev-dependencies]
+serde_json = { workspace = true }
+insta = { workspace = true }
+proptest = { workspace = true }

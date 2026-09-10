@@ -1,0 +1,58 @@
+---
+source: crates/synth-parser/tests/fixtures.rs
+expression: ast
+---
+{
+  "imports": [],
+  "board": {
+    "name": "refdes_two_digit",
+    "statements": [
+      {
+        "stmt": "layers",
+        "count": 2,
+        "span": {
+          "byte_start": 29,
+          "byte_end": 37
+        }
+      },
+      {
+        "stmt": "component",
+        "refdes": "U10",
+        "kind": "mcu",
+        "part": "rp2350",
+        "span": {
+          "byte_start": 40,
+          "byte_end": 67
+        }
+      },
+      {
+        "stmt": "component",
+        "refdes": "U99",
+        "kind": "secure_element",
+        "part": "atecc608",
+        "span": {
+          "byte_start": 70,
+          "byte_end": 110
+        }
+      },
+      {
+        "stmt": "component",
+        "refdes": "C100",
+        "kind": "capacitor",
+        "part": "c_generic_0402",
+        "span": {
+          "byte_start": 113,
+          "byte_end": 155
+        }
+      }
+    ],
+    "span": {
+      "byte_start": 0,
+      "byte_end": 157
+    }
+  },
+  "span": {
+    "byte_start": 0,
+    "byte_end": 157
+  }
+}

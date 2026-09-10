@@ -1,0 +1,13 @@
+// MCU is wired in isolation: its vdd has no power_output anywhere.
+board "no_power_source" {
+  layers 2
+
+  component U1: mcu "stm32g030"
+  component U2: mcu "stm32g030"
+
+  connect U1.vdd -> U2.vdd
+  connect U1.vss -> U2.vss
+  connect U1.pa2 -> U2.pa3
+  connect U1.nrst -> U2.nrst
+}
+

@@ -1,0 +1,6 @@
+board "test_diff_003" {
+  layers 2
+  diff_pair DP_P DP_N {
+    impedance 90ohm
+  }
+}

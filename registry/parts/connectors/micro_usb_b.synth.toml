@@ -1,0 +1,46 @@
+id = "micro_usb_b"
+kind = "connector"
+description = "Micro-USB Type B receptacle, 5-pin SMD"
+mpn = "MICRO-USB-5P"
+lcsc_pn = "C10418"
+kicad_symbol = "Connector:USB_B_Micro"
+kicad_footprint = "Connector_USB:USB_Micro-B_Molex-105017-0001"
+
+[footprint_dimensions]
+width_mm = 7.6
+height_mm = 4.375
+courtyard_margin_mm = 0.25
+
+[operating_conditions]
+min_voltage_v = 1.8
+max_voltage_v = 5.0
+max_current_ma = 100.0
+
+[[pins]]
+name = "vbus"
+number = "1"
+electrical_type = "power_input"
+capabilities = ["usb_vbus"]
+
+[[pins]]
+name = "dn"
+number = "2"
+electrical_type = "differential_negative"
+capabilities = ["usb_dn"]
+
+[[pins]]
+name = "dp"
+number = "3"
+electrical_type = "differential_positive"
+capabilities = ["usb_dp"]
+
+[[pins]]
+name = "id"
+number = "4"
+electrical_type = "bidirectional"
+
+[[pins]]
+name = "gnd"
+number = "5"
+electrical_type = "power_input"
+

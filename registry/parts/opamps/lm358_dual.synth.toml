@@ -1,0 +1,75 @@
+id = "lm358_dual"
+kind = "opamp"
+description = "TI LM358 dual op-amp, SOIC-8"
+kicad_symbol = "Amplifier_Operational:LM358"
+kicad_footprint = "Package_DIP:DIP-8_W7.62mm"
+
+[footprint_dimensions]
+width_mm = 9.73
+height_mm = 10.66
+courtyard_margin_mm = 0.25
+
+[operating_conditions]
+min_voltage_v = 3.0
+max_voltage_v = 32.0
+max_current_ma = 50.0
+
+[[pins]]
+name = "out_a"
+number = "1"
+electrical_type = "output"
+required = true
+unit = "A"
+
+[[pins]]
+name = "in_a_neg"
+number = "2"
+electrical_type = "input"
+required = true
+unit = "A"
+
+[[pins]]
+name = "in_a_pos"
+number = "3"
+electrical_type = "input"
+required = true
+unit = "A"
+
+[[pins]]
+name = "vcc_neg"
+number = "4"
+electrical_type = "power_input"
+required = true
+
+[[pins]]
+name = "in_b_pos"
+number = "5"
+electrical_type = "input"
+required = true
+unit = "B"
+
+[[pins]]
+name = "in_b_neg"
+number = "6"
+electrical_type = "input"
+required = true
+unit = "B"
+
+[[pins]]
+name = "out_b"
+number = "7"
+electrical_type = "output"
+required = true
+unit = "B"
+
+[[pins]]
+name = "vcc_pos"
+number = "8"
+electrical_type = "power_input"
+required = true
+
+[[required_decoupling]]
+net = "vcc_pos"
+value = "100nf"
+count = 1
+

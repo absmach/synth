@@ -1,0 +1,47 @@
+id = "mcp23017_gpio"
+kind = "ic"
+description = "Microchip MCP23017 16-bit I²C GPIO expander"
+kicad_symbol = "Interface_Expansion:MCP23017_SO"
+kicad_footprint = "Package_SO:SOIC-28W_7.5x17.9mm_P1.27mm"
+
+[footprint_dimensions]
+width_mm = 11.35
+height_mm = 17.11
+courtyard_margin_mm = 0.25
+
+[operating_conditions]
+min_voltage_v = 1.8
+max_voltage_v = 5.0
+max_current_ma = 100.0
+
+[[pins]]
+name = "vdd"
+number = "1"
+electrical_type = "power_input"
+required = true
+
+[[pins]]
+name = "gnd"
+number = "2"
+electrical_type = "power_input"
+required = true
+
+[[pins]]
+name = "sda"
+number = "3"
+electrical_type = "bidirectional"
+capabilities = ["i2c_sda"]
+required = true
+
+[[pins]]
+name = "scl"
+number = "4"
+electrical_type = "bidirectional"
+capabilities = ["i2c_scl"]
+required = true
+
+[[required_decoupling]]
+net = "vdd"
+value = "100nf"
+count = 1
+

@@ -1,0 +1,20 @@
+board "decoupling_heavy" {
+  layers 4
+  manufacturer "jlcpcb"
+
+  component U1: mcu "rp2350"
+  // Six decoupling caps per VDD pin recommendation
+  component C1: capacitor "c_generic_0402"
+  component C2: capacitor "c_generic_0402"
+  component C3: capacitor "c_generic_0402"
+  component C4: capacitor "c_generic_0402"
+  component C5: capacitor "c_generic_0402"
+  component C6: capacitor "c_generic_0402"
+
+  connect U1.vdd_io -> C1.p1
+  connect U1.vdd_io -> C2.p1
+  connect U1.vdd_io -> C3.p1
+  connect U1.vdd_io -> C4.p1
+  connect U1.vdd_core -> C5.p1
+  connect U1.vdd_core -> C6.p1
+}

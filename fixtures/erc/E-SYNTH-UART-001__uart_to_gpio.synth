@@ -1,0 +1,7 @@
+board "uart_test" {
+  layers 2
+  component U1: ic "ch340g"
+  component U2: mcu "esp32_wroom_32"
+
+  connect U1.txd -> U2.en
+}

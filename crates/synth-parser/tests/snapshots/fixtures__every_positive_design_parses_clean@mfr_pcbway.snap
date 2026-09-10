@@ -1,0 +1,28 @@
+---
+source: crates/synth-parser/tests/fixtures.rs
+expression: ast
+---
+{
+  "imports": [],
+  "board": {
+    "name": "mfr_pcbway",
+    "statements": [
+      {
+        "stmt": "manufacturer",
+        "name": "pcbway",
+        "span": {
+          "byte_start": 23,
+          "byte_end": 44
+        }
+      }
+    ],
+    "span": {
+      "byte_start": 0,
+      "byte_end": 46
+    }
+  },
+  "span": {
+    "byte_start": 0,
+    "byte_end": 46
+  }
+}

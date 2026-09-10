@@ -1,0 +1,9 @@
+/*
+ * Multi-line block comment.
+ * Multiple lines explaining the design.
+ */
+board "comment_multiline_block" {
+  layers 4
+  /* and a
+     multi-line comment inside the body */
+}

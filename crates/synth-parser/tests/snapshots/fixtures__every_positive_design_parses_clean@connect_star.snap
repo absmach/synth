@@ -1,0 +1,137 @@
+---
+source: crates/synth-parser/tests/fixtures.rs
+expression: ast
+---
+{
+  "imports": [],
+  "board": {
+    "name": "connect_star",
+    "statements": [
+      {
+        "stmt": "layers",
+        "count": 4,
+        "span": {
+          "byte_start": 25,
+          "byte_end": 33
+        }
+      },
+      {
+        "stmt": "component",
+        "refdes": "U1",
+        "kind": "mcu",
+        "part": "rp2350",
+        "span": {
+          "byte_start": 36,
+          "byte_end": 62
+        }
+      },
+      {
+        "stmt": "component",
+        "refdes": "U2",
+        "kind": "secure_element",
+        "part": "atecc608",
+        "span": {
+          "byte_start": 65,
+          "byte_end": 104
+        }
+      },
+      {
+        "stmt": "component",
+        "refdes": "U3",
+        "kind": "secure_element",
+        "part": "atecc608",
+        "span": {
+          "byte_start": 107,
+          "byte_end": 146
+        }
+      },
+      {
+        "stmt": "component",
+        "refdes": "U4",
+        "kind": "secure_element",
+        "part": "atecc608",
+        "span": {
+          "byte_start": 149,
+          "byte_end": 188
+        }
+      },
+      {
+        "stmt": "connection",
+        "from": {
+          "component": "U1",
+          "pin": "gp0",
+          "span": {
+            "byte_start": 199,
+            "byte_end": 205
+          }
+        },
+        "to": {
+          "component": "U2",
+          "pin": "sda",
+          "span": {
+            "byte_start": 209,
+            "byte_end": 215
+          }
+        },
+        "span": {
+          "byte_start": 191,
+          "byte_end": 215
+        }
+      },
+      {
+        "stmt": "connection",
+        "from": {
+          "component": "U1",
+          "pin": "gp0",
+          "span": {
+            "byte_start": 226,
+            "byte_end": 232
+          }
+        },
+        "to": {
+          "component": "U3",
+          "pin": "sda",
+          "span": {
+            "byte_start": 236,
+            "byte_end": 242
+          }
+        },
+        "span": {
+          "byte_start": 218,
+          "byte_end": 242
+        }
+      },
+      {
+        "stmt": "connection",
+        "from": {
+          "component": "U1",
+          "pin": "gp0",
+          "span": {
+            "byte_start": 253,
+            "byte_end": 259
+          }
+        },
+        "to": {
+          "component": "U4",
+          "pin": "sda",
+          "span": {
+            "byte_start": 263,
+            "byte_end": 269
+          }
+        },
+        "span": {
+          "byte_start": 245,
+          "byte_end": 269
+        }
+      }
+    ],
+    "span": {
+      "byte_start": 0,
+      "byte_end": 271
+    }
+  },
+  "span": {
+    "byte_start": 0,
+    "byte_end": 271
+  }
+}

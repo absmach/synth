@@ -1,0 +1,19 @@
+---
+source: crates/synth-parser/tests/fixtures.rs
+expression: ast
+---
+{
+  "imports": [],
+  "board": {
+    "name": "empty_after_brace",
+    "statements": [],
+    "span": {
+      "byte_start": 0,
+      "byte_end": 29
+    }
+  },
+  "span": {
+    "byte_start": 0,
+    "byte_end": 29
+  }
+}

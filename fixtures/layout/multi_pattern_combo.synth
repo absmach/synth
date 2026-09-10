@@ -1,0 +1,77 @@
+// Multi-pattern combo: USB-C power-in with ESD protection, an LDO
+// (decoupling on both rails), an MCU (decoupling + reset network),
+// an I2C sensor with SDA/SCL pullups, and a status LED — four of
+// the eight cataloged motifs on one board. Distinct from
+// examples/sensor_logger.synth: different regulator
+// (lp5907_3v3 vs. ams1117_3v3), different MCU (stm32f103c8 vs.
+// atmega328p), different ESD diode (d_tvs_5v vs. esd_usb), and a
+// single status LED instead of three.
+board "power_indicator_hub" {
+  layers 4
+  manufacturer "jlcpcb"
+
+  // ---- USB-C power in + ESD -------------------------------------------
+  component J1: connector "usb_c_receptacle"
+  component D1: diode     "d_tvs_5v"
+  component D2: diode     "d_tvs_5v"
+
+  connect J1.dp  -> D1.anode
+  connect J1.gnd -> D1.cathode
+  connect J1.dn  -> D2.anode
+  connect J1.gnd -> D2.cathode
+
+  // ---- LDO block --------------------------------------------------------
+  component U1: regulator "lp5907_3v3"
+  component C1: capacitor "c_generic_0805" // vin decoupling
+  component C2: capacitor "c_generic_0805" // vout decoupling
+
+  connect J1.vbus -> U1.vin
+  connect J1.gnd  -> U1.gnd
+  connect U1.vin  -> C1.p1
+  connect U1.gnd  -> C1.p2
+  connect U1.vout -> C2.p1
+  connect U1.gnd  -> C2.p2
+  connect U1.en   -> U1.vin // enable tied high
+
+  // ---- MCU + decoupling + reset network ----------------------------------
+  component U2: mcu       "stm32f103c8"
+  component C3: capacitor "c_generic_0603" // vdd decoupling
+  component R1: resistor  "r_generic_0603" // reset pullup
+  component SW1: switch   "spst_tactile"
+
+  connect U1.vout -> U2.vdd
+  connect U1.gnd  -> U2.vss
+  connect U2.vdd  -> C3.p1
+  connect U2.vss  -> C3.p2
+  connect U2.vdd  -> R1.p1
+  connect R1.p2   -> U2.nrst
+  connect U2.nrst -> SW1.p1
+  connect SW1.p2  -> U2.vss
+
+  // ---- I2C bus + sensor + pullups -----------------------------------------
+  component U3: sensor    "bmp280_pressure"
+  component R2: resistor  "r_generic_0603" // SDA pullup
+  component R3: resistor  "r_generic_0603" // SCL pullup
+
+  connect U1.vout -> U3.vdd
+  connect U1.gnd  -> U3.gnd
+  connect U2.pb7  -> U3.sda
+  connect U2.pb6  -> U3.scl
+  connect U2.pb7  -> R2.p1
+  connect R2.p2   -> U2.vdd
+  connect U2.pb6  -> R3.p1
+  connect R3.p2   -> U2.vdd
+
+  // ---- Status LED ---------------------------------------------------------
+  component D3: diode    "led_blue_0603"
+  component R4: resistor "r_generic_0603"
+
+  connect U2.pa0     -> R4.p1
+  connect R4.p2       -> D3.anode
+  connect D3.cathode  -> U2.vss
+
+  // ---- USB differential pair constraint ------------------------------------
+  diff_pair USB_DP USB_DN {
+    impedance 90ohm
+  }
+}

@@ -1,0 +1,100 @@
+id = "bq24074"
+kind = "charger"
+version = 0
+lifecycle = "active"
+description = "TI BQ24074 1.5A USB Li-Ion battery charger with System Power-Path Management, QFN-16"
+kicad_symbol = "Battery_Management:BQ24074RGT"
+kicad_footprint = "Package_DFN_QFN:VQFN-16-1EP_3x3mm_P0.5mm_EP1.68x1.68mm"
+
+[footprint_dimensions]
+width_mm = 3.0
+height_mm = 3.0
+courtyard_margin_mm = 0.25
+
+[operating_conditions]
+min_voltage_v = 3.5
+max_voltage_v = 15.0
+max_current_ma = 800.0
+
+[[pins]]
+name = "ts"
+number = "1"
+electrical_type = "passive"
+
+[[pins]]
+name = "bat"
+number = "2"
+electrical_type = "power_output"
+required = true
+
+[[pins]]
+name = "ce"
+number = "4"
+electrical_type = "input"
+
+[[pins]]
+name = "en2"
+number = "5"
+electrical_type = "input"
+
+[[pins]]
+name = "en1"
+number = "6"
+electrical_type = "input"
+
+[[pins]]
+name = "pgood"
+number = "7"
+electrical_type = "output"
+
+[[pins]]
+name = "vss"
+number = "8"
+electrical_type = "power_input"
+required = true
+
+[[pins]]
+name = "chg"
+number = "9"
+electrical_type = "output"
+
+[[pins]]
+name = "out"
+number = "10"
+electrical_type = "power_output"
+required = true
+
+[[pins]]
+name = "ilim"
+number = "12"
+electrical_type = "passive"
+
+[[pins]]
+name = "in"
+number = "13"
+electrical_type = "power_input"
+required = true
+
+[[pins]]
+name = "tmr"
+number = "14"
+electrical_type = "input"
+
+[[pins]]
+name = "iterm"
+number = "15"
+electrical_type = "input"
+
+[[pins]]
+name = "iset"
+number = "16"
+electrical_type = "passive"
+
+[[required_decoupling]]
+net = "vin"
+value = "1uf"
+count = 1
+[[required_decoupling]]
+net = "vout"
+value = "4.7uf"
+count = 1

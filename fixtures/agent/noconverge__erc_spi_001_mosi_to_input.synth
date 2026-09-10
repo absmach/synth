@@ -1,0 +1,7 @@
+board "test_noconverge_spi_001" {
+  layers 2
+  component U1: memory "w25q128_flash"
+  component U2: ic "lm555_timer"
+
+  connect U1.mosi -> U2.trig
+}

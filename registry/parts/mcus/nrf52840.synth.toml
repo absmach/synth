@@ -1,0 +1,70 @@
+id = "nrf52840"
+kind = "mcu"
+description = "Nordic nRF52840 ARM Cortex-M4F with BLE 5/Thread/Zigbee, QFN-73"
+kicad_symbol = "RF_Module:NRF52840-QIAA"
+kicad_footprint = "Package_DFN_QFN:QFN-73-1EP_7x7mm_P0.5mm_EP4.5x4.5mm"
+
+[footprint_dimensions]
+width_mm = 7.0
+height_mm = 7.0
+courtyard_margin_mm = 0.25
+
+[operating_conditions]
+min_voltage_v = 1.8
+max_voltage_v = 3.6
+max_current_ma = 150.0
+
+[[pins]]
+name = "vdd"
+number = "47"
+electrical_type = "power_input"
+required = true
+
+[[pins]]
+name = "vss"
+number = "1"
+electrical_type = "power_input"
+required = true
+
+[[pins]]
+name = "p0_06"
+number = "14"
+electrical_type = "bidirectional"
+capabilities = ["gpio", "uart_tx"]
+
+[[pins]]
+name = "p0_08"
+number = "16"
+electrical_type = "bidirectional"
+capabilities = ["gpio", "uart_rx"]
+
+[[pins]]
+name = "p0_26"
+number = "11"
+electrical_type = "bidirectional"
+capabilities = ["gpio", "i2c_sda"]
+
+[[pins]]
+name = "p0_27"
+number = "12"
+electrical_type = "bidirectional"
+capabilities = ["gpio", "i2c_scl"]
+
+[[pins]]
+name = "ant"
+number = "23"
+electrical_type = "rf"
+capabilities = ["rf_feed"]
+
+[[pins]]
+name = "reset"
+number = "32"
+electrical_type = "input"
+capabilities = ["reset"]
+required = true
+
+[[required_decoupling]]
+net = "vdd"
+value = "100nf"
+count = 2
+

@@ -1,0 +1,26 @@
+// UsbDiffPair pattern: a USB-C connector carrying UsbDp/UsbDn pin
+// capabilities, with ESD diodes on those nets — the structural
+// rule `build_clusters` pass 2 recognizes (connector-kind part
+// with UsbDp/UsbDn-tagged pins, diode-kind parts on those nets).
+// The `diff_pair` declaration mirrors the D+/D- constraint used in
+// examples/sensor_logger.synth; per synth-ir's lowering, the two
+// names are free-form labels (not resolved to a NetId in V1), so
+// this is the canonical way to express the constraint even though
+// it isn't structurally bound to J1.dp/J1.dn.
+board "usb_diff_pair" {
+  layers 4
+  manufacturer "jlcpcb"
+
+  component J1: connector "usb_c_receptacle"
+  component D1: diode     "esd_usb"
+  component D2: diode     "esd_usb"
+
+  connect J1.dp  -> D1.io
+  connect J1.gnd -> D1.gnd
+  connect J1.dn  -> D2.io
+  connect J1.gnd -> D2.gnd
+
+  diff_pair USB_DP USB_DN {
+    impedance 90ohm
+  }
+}

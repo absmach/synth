@@ -1,0 +1,14 @@
+// Twin of pass__mcu_to_secure_element: U2 references a part id
+// that does not exist in the registry.
+board "mcu_to_secure_element_unknown_part" {
+  layers 4
+
+  component U1: mcu "rp2350"
+  component U2: secure_element "atecc999_typo"
+  component C1: capacitor "c_generic_0402"
+
+  connect U1.vdd_io -> C1.p1
+  connect U1.vdd_core -> C1.p2
+  connect U1.gnd -> C1.p1
+  connect U1.run -> C1.p2
+}

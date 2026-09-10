@@ -1,0 +1,125 @@
+# Raspberry Pi RP2350 — dual-core ARM Cortex-M33 / RISC-V MCU.
+#
+# Phase 3 V1: only a representative subset of pins is modelled.
+# Capability metadata is hand-curated from the RP2350 datasheet
+# (function table). Adding remaining GPIOs is mechanical.
+#
+# The "kind" string corresponds to the SynthSpec component kind:
+#   component U1: mcu "rp2350"
+
+id = "rp2350"
+kind = "mcu"
+description = "Raspberry Pi RP2350 dual-core MCU, QFN-60"
+kicad_symbol = "MCU_RaspberryPi:RP2040"
+kicad_footprint = "Package_DFN_QFN:QFN-56-1EP_7x7mm_P0.4mm_EP3.2x3.2mm"
+lcsc_pn = "C14663"
+mpn = "RP2350A"
+
+
+# --- Power ---
+
+[footprint_dimensions]
+width_mm = 7.75
+height_mm = 7.75
+courtyard_margin_mm = 0.25
+
+[operating_conditions]
+min_voltage_v = 1.8
+max_voltage_v = 3.6
+max_current_ma = 150.0
+
+[[pins]]
+name = "vdd_io"
+number = "1"
+electrical_type = "power_input"
+required = true
+
+[[pins]]
+name = "vdd_core"
+number = "23"
+electrical_type = "power_input"
+required = true
+
+[[pins]]
+name = "gnd"
+number = "57"
+electrical_type = "power_input"
+required = true
+
+# --- USB ---
+
+[[pins]]
+name = "usb_dp"
+number = "47"
+electrical_type = "differential_positive"
+capabilities = ["usb_dp"]
+
+[[pins]]
+name = "usb_dn"
+number = "46"
+electrical_type = "differential_negative"
+capabilities = ["usb_dn"]
+
+# --- General-purpose IO with peripheral capabilities ---
+# GP0..GP3 sample subset for ERC testing. The RP2350 GPIO mux is much
+# richer than what is recorded here; expanding is mechanical.
+# NOTE: these numbers match the referenced `MCU_RaspberryPi:RP2040`
+# symbol's physical pins (GPIO0..GPIO3 = pins 2..5). The part id and
+# mpn describe the RP2350, but the symbol+footprint are RP2040.
+
+[[pins]]
+name = "gp0"
+number = "2"
+electrical_type = "bidirectional"
+capabilities = ["gpio", "spi_mosi", "uart_tx", "i2c_sda"]
+
+[[pins]]
+name = "gp1"
+number = "3"
+electrical_type = "bidirectional"
+capabilities = ["gpio", "spi_cs", "uart_rx", "i2c_scl"]
+
+[[pins]]
+name = "gp2"
+number = "4"
+electrical_type = "bidirectional"
+capabilities = ["gpio", "spi_sck", "uart_tx"]
+
+[[pins]]
+name = "gp3"
+number = "5"
+electrical_type = "bidirectional"
+capabilities = ["gpio", "spi_miso", "uart_rx"]
+
+[[pins]]
+name = "gp4"
+number = "6"
+electrical_type = "bidirectional"
+capabilities = ["gpio"]
+
+# --- Control ---
+
+[[pins]]
+name = "run"
+number = "26"
+electrical_type = "input"
+capabilities = ["reset"]
+required = true
+
+[[pins]]
+name = "xin"
+number = "20"
+electrical_type = "clock"
+capabilities = ["clock_input"]
+
+# --- Decoupling expectations ---
+
+[[required_decoupling]]
+net = "vdd_io"
+value = "100nf"
+count = 4
+
+[[required_decoupling]]
+net = "vdd_core"
+value = "100nf"
+count = 2

@@ -1,0 +1,14 @@
+board "unusual_graph_anomaly" {
+  layers 1
+
+  component U1: mcu "rp2350"
+  component U2: mcu "rp2350"
+  component U3: mcu "rp2350"
+  component U4: mcu "rp2350"
+  component U5: mcu "rp2350"
+
+  connect U1.vdd_io -> U2.vdd_io
+  connect U2.vdd_io -> U3.vdd_io
+  connect U3.vdd_io -> U4.vdd_io
+  connect U4.vdd_io -> U5.vdd_io
+}

@@ -1,0 +1,7 @@
+board "test_noconverge_analog_001" {
+  layers 2
+  component U1: adc "ads1115"
+  component U2: ic "ch340g"
+
+  connect U1.ain0 -> U2.tx
+}

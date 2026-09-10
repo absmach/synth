@@ -1,0 +1,12 @@
+board "name_001_many" {
+  layers 2
+
+  component R1: resistor "r_generic_0603"
+  component R2: resistor "r_generic_0603"
+  component C1: capacitor "c_generic_0603"
+
+  connect R1.p1 -> R2.p1
+  connect R1.p2 -> R2.p2
+  connect R1.p1 -> C1.p1
+  connect R1.p2 -> C1.p2
+}

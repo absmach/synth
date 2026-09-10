@@ -1,0 +1,18 @@
+board "analog_test" {
+  layers 2
+  component U1: ic "ch340g"
+  component U2: opamp "mcp6022_dual"
+  component J1: connector "header_1x4"
+  component C1: capacitor "c_generic_0603"
+
+  connect U1.vcc -> J1.p1
+  connect U1.gnd -> J1.p2
+  connect U1.v3 -> J1.p3
+  connect U2.vdd -> J1.p1
+  connect U2.vss -> J1.p2
+
+  connect U1.vcc -> C1.p1
+  connect U1.gnd -> C1.p2
+
+  connect U2.out_a -> U1.txd
+}

@@ -1,0 +1,39 @@
+[package]
+name = "synth-validate"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+description = "ERC engine for the Synth EDA compiler. Consumes the IR; emits machine-readable diagnostics."
+
+[lints]
+workspace = true
+
+[dependencies]
+synth-diagnostics = { workspace = true }
+synth-geometry = { workspace = true }
+synth-knowledge = { workspace = true }
+synth-ir = { workspace = true }
+synth-layout = { workspace = true }
+synth-place = { workspace = true }
+synth-registry = { workspace = true }
+synth-connectivity = { workspace = true }
+synth-supply = { workspace = true }
+synth-parser = { workspace = true }
+synth-route = { workspace = true }
+synth-drc = { workspace = true }
+synth-kicad = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+anyhow = { workspace = true }
+sha2 = { workspace = true }
+chrono = { workspace = true }
+
+
+[dev-dependencies]
+synth-parser = { workspace = true }
+insta = { workspace = true }
+serde_json = { workspace = true }
+chrono = "0.4"

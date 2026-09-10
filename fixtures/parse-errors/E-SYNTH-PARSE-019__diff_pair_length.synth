@@ -1,0 +1,5 @@
+board "x" {
+  diff_pair A B {
+    length 100mm
+  }
+}

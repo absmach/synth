@@ -1,0 +1,14 @@
+// Two inputs share a net — nothing drives it.
+board "only_inputs" {
+  layers 2
+
+  component U1: ic "sn74hc165_pload"
+  component U2: ic "sn74hc165_pload"
+
+  connect U1.gnd -> U2.gnd
+  connect U1.vcc -> U2.vcc
+  connect U1.shld -> U2.shld
+  connect U1.clk -> U2.clk
+  connect U1.e -> U2.f
+}
+

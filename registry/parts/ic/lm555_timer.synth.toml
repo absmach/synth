@@ -1,0 +1,68 @@
+id = "lm555_timer"
+kind = "ic"
+description = "Classic 555 timer, DIP-8 / SOIC-8"
+kicad_symbol = "Timer:LM555xN"
+kicad_footprint = "Package_DIP:DIP-8_W7.62mm"
+
+[footprint_dimensions]
+width_mm = 9.73
+height_mm = 10.66
+courtyard_margin_mm = 0.25
+
+[operating_conditions]
+min_voltage_v = 1.8
+max_voltage_v = 5.0
+max_current_ma = 100.0
+
+[[pins]]
+name = "gnd"
+number = "1"
+electrical_type = "power_input"
+required = true
+
+[[pins]]
+name = "trig"
+number = "2"
+electrical_type = "input"
+required = true
+
+[[pins]]
+name = "out"
+number = "3"
+electrical_type = "output"
+required = true
+
+[[pins]]
+name = "rst"
+number = "4"
+electrical_type = "input"
+required = true
+
+[[pins]]
+name = "ctrl"
+number = "5"
+electrical_type = "input"
+
+[[pins]]
+name = "thr"
+number = "6"
+electrical_type = "input"
+required = true
+
+[[pins]]
+name = "disch"
+number = "7"
+electrical_type = "open_drain_low"
+required = true
+
+[[pins]]
+name = "vcc"
+number = "8"
+electrical_type = "power_input"
+required = true
+
+[[required_decoupling]]
+net = "vcc"
+value = "100nf"
+count = 1
+

@@ -1,0 +1,35 @@
+id = "d_bridge_rectifier"
+kind = "diode"
+description = "1A bridge rectifier, DB107, 4-pin SIP — AC-to-DC"
+kicad_symbol = "Device:D_Bridge_+AA-"
+kicad_footprint = "Diode_THT:Diode_Bridge_DIP-4_W7.62mm"
+
+[footprint_dimensions]
+width_mm = 5.0
+height_mm = 5.0
+courtyard_margin_mm = 0.25
+
+[operating_conditions]
+max_voltage_v = 100.0
+max_current_ma = 1000.0
+
+[[pins]]
+name = "ac1"
+number = "1"
+electrical_type = "passive"
+
+[[pins]]
+name = "neg"
+number = "2"
+electrical_type = "passive"
+
+[[pins]]
+name = "ac2"
+number = "3"
+electrical_type = "passive"
+
+[[pins]]
+name = "pos"
+number = "4"
+electrical_type = "passive"
+

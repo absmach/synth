@@ -1,0 +1,41 @@
+board "ref_led_driver" {
+  layers 2
+  manufacturer "jlcpcb"
+
+  component U1: mcu "rp2350"
+  component U2: regulator "ams1117_3v3"
+  component D1: led "led_red_0603"
+  component D2: led "led_green_0603"
+  component J1: connector "header_1x4"
+
+  component R1: resistor "r_generic_0603"
+  component R2: resistor "r_generic_0603"
+  component R3: resistor "r_generic_0603"
+
+  component C1: capacitor "c_generic_0603"
+  component C2: capacitor "c_generic_0603"
+
+  connect J1.p1 -> U2.vin
+  connect J1.p2 -> U2.gnd
+
+  connect U2.vout -> U1.vdd_io
+  connect U2.vout -> U1.vdd_core
+  connect U2.gnd -> U1.gnd
+
+  connect U1.gp0 -> R1.p1
+  connect R1.p2 -> D1.anode
+  connect D1.cathode -> U2.gnd
+
+  connect U1.gp1 -> R2.p1
+  connect R2.p2 -> D2.anode
+  connect D2.cathode -> U2.gnd
+
+  connect U1.run -> R3.p1
+  connect U2.vout -> R3.p2
+
+  connect U2.vin -> C1.p1
+  connect U2.gnd -> C1.p2
+
+  connect U2.vout -> C2.p1
+  connect U2.gnd -> C2.p2
+}

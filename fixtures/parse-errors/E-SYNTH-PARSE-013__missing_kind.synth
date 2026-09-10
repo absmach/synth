@@ -1,0 +1,3 @@
+board "x" {
+  component U1: "rp2350"
+}

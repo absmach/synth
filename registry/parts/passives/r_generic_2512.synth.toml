@@ -1,0 +1,24 @@
+id = "r_generic_2512"
+kind = "resistor"
+description = "Generic 2512 thick-film resistor, any value"
+kicad_symbol = "Device:R_US"
+kicad_footprint = "Resistor_SMD:R_2512_6332Metric"
+
+[footprint_dimensions]
+width_mm = 7.66
+height_mm = 3.86
+courtyard_margin_mm = 0.25
+
+[operating_conditions]
+max_voltage_v = 50.0
+
+[[pins]]
+name = "p1"
+number = "1"
+electrical_type = "passive"
+
+[[pins]]
+name = "p2"
+number = "2"
+electrical_type = "passive"
+

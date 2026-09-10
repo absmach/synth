@@ -1,0 +1,6 @@
+board "diff_pair_50ohm" {
+  layers 4
+  diff_pair SDIO_DAT_P SDIO_DAT_N {
+    impedance 50ohm
+  }
+}

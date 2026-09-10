@@ -1,0 +1,11 @@
+board "rf_imp_test" {
+  layers 2
+  component U1: antenna "ant_chip_2g4"
+  component U2: mcu "nrf52840"
+
+  connect U1.feed -> U2.ant
+
+  keepout antenna {
+    radius 10mm
+  }
+}

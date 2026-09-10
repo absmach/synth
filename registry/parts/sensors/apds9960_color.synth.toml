@@ -1,0 +1,47 @@
+id = "apds9960_color"
+kind = "sensor"
+description = "Broadcom APDS-9960 RGB+gesture+proximity sensor, I²C"
+kicad_symbol = "Sensor:APDS-9960"
+kicad_footprint = "Package_LCC:PLCC-8_EA_3.94x3.94mm"
+
+[footprint_dimensions]
+width_mm = 3.94
+height_mm = 3.94
+courtyard_margin_mm = 0.25
+
+[operating_conditions]
+min_voltage_v = 1.8
+max_voltage_v = 5.0
+max_current_ma = 100.0
+
+[[pins]]
+name = "vdd"
+number = "8"
+electrical_type = "power_input"
+required = true
+
+[[pins]]
+name = "gnd"
+number = "6"
+electrical_type = "power_input"
+required = true
+
+[[pins]]
+name = "sda"
+number = "1"
+electrical_type = "bidirectional"
+capabilities = ["i2c_sda"]
+required = true
+
+[[pins]]
+name = "scl"
+number = "7"
+electrical_type = "bidirectional"
+capabilities = ["i2c_scl"]
+required = true
+
+[[required_decoupling]]
+net = "vdd"
+value = "100nf"
+count = 1
+

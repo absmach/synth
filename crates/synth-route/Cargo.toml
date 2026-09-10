@@ -1,0 +1,28 @@
+[package]
+name = "synth-route"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+description = "Deterministic PCB router for the Synth EDA compiler."
+
+[lints]
+workspace = true
+
+[dependencies]
+serde = { workspace = true }
+serde_json = { workspace = true }
+anyhow = { workspace = true }
+thiserror = { workspace = true }
+synth-diagnostics = { workspace = true }
+synth-geometry = { workspace = true }
+synth-ir = { workspace = true }
+synth-registry = { workspace = true }
+synth-layout = { workspace = true }
+synth-place = { workspace = true }
+
+[dev-dependencies]
+insta = { workspace = true }
+synth-parser = { workspace = true }

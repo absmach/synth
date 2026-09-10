@@ -1,0 +1,28 @@
+id = "ant_chip_2g4"
+kind = "antenna"
+description = "Chip antenna, 2.4 GHz, SMD"
+kicad_symbol = "Device:Antenna_Chip"
+kicad_footprint = "RF_Antenna:Johanson_2450AT43B100"
+
+[footprint_dimensions]
+width_mm = 5.0
+height_mm = 5.0
+courtyard_margin_mm = 0.25
+
+[operating_conditions]
+min_voltage_v = 1.8
+max_voltage_v = 5.0
+max_current_ma = 100.0
+
+[[pins]]
+name = "feed"
+number = "1"
+electrical_type = "rf"
+capabilities = ["rf_feed"]
+required = true
+
+[[pins]]
+name = "gnd"
+number = "2"
+electrical_type = "passive"
+

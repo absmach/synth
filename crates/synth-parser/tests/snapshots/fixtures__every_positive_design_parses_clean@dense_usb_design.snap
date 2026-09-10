@@ -1,0 +1,217 @@
+---
+source: crates/synth-parser/tests/fixtures.rs
+expression: ast
+---
+{
+  "imports": [],
+  "board": {
+    "name": "dense_usb_design",
+    "statements": [
+      {
+        "stmt": "layers",
+        "count": 4,
+        "span": {
+          "byte_start": 68,
+          "byte_end": 76
+        }
+      },
+      {
+        "stmt": "manufacturer",
+        "name": "jlcpcb",
+        "span": {
+          "byte_start": 79,
+          "byte_end": 100
+        }
+      },
+      {
+        "stmt": "component",
+        "refdes": "U1",
+        "kind": "mcu",
+        "part": "rp2350",
+        "span": {
+          "byte_start": 104,
+          "byte_end": 130
+        }
+      },
+      {
+        "stmt": "component",
+        "refdes": "U2",
+        "kind": "secure_element",
+        "part": "atecc608",
+        "span": {
+          "byte_start": 133,
+          "byte_end": 172
+        }
+      },
+      {
+        "stmt": "component",
+        "refdes": "C1",
+        "kind": "capacitor",
+        "part": "c_generic_0402",
+        "span": {
+          "byte_start": 175,
+          "byte_end": 215
+        }
+      },
+      {
+        "stmt": "component",
+        "refdes": "C2",
+        "kind": "capacitor",
+        "part": "c_generic_0402",
+        "span": {
+          "byte_start": 218,
+          "byte_end": 258
+        }
+      },
+      {
+        "stmt": "component",
+        "refdes": "C3",
+        "kind": "capacitor",
+        "part": "c_generic_0402",
+        "span": {
+          "byte_start": 261,
+          "byte_end": 301
+        }
+      },
+      {
+        "stmt": "connection",
+        "from": {
+          "component": "U1",
+          "pin": "gp0",
+          "span": {
+            "byte_start": 313,
+            "byte_end": 319
+          }
+        },
+        "to": {
+          "component": "U2",
+          "pin": "sda",
+          "span": {
+            "byte_start": 323,
+            "byte_end": 329
+          }
+        },
+        "span": {
+          "byte_start": 305,
+          "byte_end": 329
+        }
+      },
+      {
+        "stmt": "connection",
+        "from": {
+          "component": "U1",
+          "pin": "gp1",
+          "span": {
+            "byte_start": 340,
+            "byte_end": 346
+          }
+        },
+        "to": {
+          "component": "U2",
+          "pin": "scl",
+          "span": {
+            "byte_start": 350,
+            "byte_end": 356
+          }
+        },
+        "span": {
+          "byte_start": 332,
+          "byte_end": 356
+        }
+      },
+      {
+        "stmt": "connection",
+        "from": {
+          "component": "U1",
+          "pin": "vdd_io",
+          "span": {
+            "byte_start": 367,
+            "byte_end": 376
+          }
+        },
+        "to": {
+          "component": "C1",
+          "pin": "p1",
+          "span": {
+            "byte_start": 380,
+            "byte_end": 385
+          }
+        },
+        "span": {
+          "byte_start": 359,
+          "byte_end": 385
+        }
+      },
+      {
+        "stmt": "connection",
+        "from": {
+          "component": "U1",
+          "pin": "gnd",
+          "span": {
+            "byte_start": 396,
+            "byte_end": 402
+          }
+        },
+        "to": {
+          "component": "C1",
+          "pin": "p2",
+          "span": {
+            "byte_start": 406,
+            "byte_end": 411
+          }
+        },
+        "span": {
+          "byte_start": 388,
+          "byte_end": 411
+        }
+      },
+      {
+        "stmt": "diff_pair",
+        "pos": "USB_DP",
+        "neg": "USB_DN",
+        "attrs": [
+          {
+            "kind": "impedance",
+            "literal": "90",
+            "unit": "ohm",
+            "span": {
+              "byte_start": 455,
+              "byte_end": 460
+            }
+          }
+        ],
+        "span": {
+          "byte_start": 415,
+          "byte_end": 464
+        }
+      },
+      {
+        "stmt": "keepout",
+        "name": "antenna_zone",
+        "attrs": [
+          {
+            "kind": "radius",
+            "literal": "15",
+            "unit": "mm",
+            "span": {
+              "byte_start": 502,
+              "byte_end": 506
+            }
+          }
+        ],
+        "span": {
+          "byte_start": 468,
+          "byte_end": 510
+        }
+      }
+    ],
+    "span": {
+      "byte_start": 39,
+      "byte_end": 512
+    }
+  },
+  "span": {
+    "byte_start": 39,
+    "byte_end": 512
+  }
+}

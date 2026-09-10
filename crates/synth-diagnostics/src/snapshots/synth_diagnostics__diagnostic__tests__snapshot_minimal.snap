@@ -1,0 +1,21 @@
+---
+source: crates/synth-diagnostics/src/diagnostic.rs
+assertion_line: 347
+expression: d
+---
+{
+  "schema_version": "1.3",
+  "code": "E-SYNTH-PARSE-001",
+  "severity": "error",
+  "title": "unexpected token",
+  "message": "expected `}` at end of board",
+  "location": {
+    "file": "hello.synth",
+    "byte_start": 12,
+    "byte_end": 13,
+    "line_start": 2,
+    "col_start": 1,
+    "line_end": 2,
+    "col_end": 2
+  }
+}

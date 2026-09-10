@@ -1,0 +1,6 @@
+board "diff_pair_kohm" {
+  layers 4
+  diff_pair HIGH_Z_P HIGH_Z_N {
+    impedance 1kohm
+  }
+}

@@ -1,0 +1,13 @@
+board "diff_no_impedance" {
+  layers 4
+
+  component J1: connector "usb_c_receptacle"
+
+  connect J1.vbus -> J1.cc1
+  connect J1.gnd -> J1.cc2
+  connect J1.dp -> J1.dp
+  connect J1.dn -> J1.dn
+
+  diff_pair dp dn {}
+}
+

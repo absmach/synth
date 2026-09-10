@@ -1,0 +1,23 @@
+---
+source: crates/synth-kicad/tests/golden.rs
+expression: project
+---
+{
+  "board": {},
+  "boards": [],
+  "meta": {
+    "filename": "two_components_with_net.kicad_pro",
+    "uuid": "83c52932-3393-502e-bde7-57703b47fe82",
+    "version": 1
+  },
+  "schematic": {
+    "annotate_start_num": 0,
+    "drawing": {}
+  },
+  "sheets": [
+    [
+      "46fdcca2-23db-5698-8720-efaf60334fee",
+      ""
+    ]
+  ]
+}

@@ -1,0 +1,118 @@
+# Synth circuit-design knowledge graph — support-circuit templates.
+#
+# Each [[template]] declares a production support circuit: when it is
+# required (applies_to_kinds + condition), what it consists of
+# (components), how severe its absence is, and whether this crate's
+# checker enforces it (empty `enforced_by`) or an existing ERC rule /
+# layout cluster / human review already does (in which case the graph
+# is the catalog and the checker skips it).
+#
+# `condition` values are built-in predicates implemented in
+# src/lib.rs — they are deliberately a small closed set, not an
+# expression language. Add a predicate in code when adding a template
+# that needs one.
+
+[[template]]
+id = "switch_debounce_rc"
+description = "RC debounce network on a mechanical switch driving an IC input"
+rationale = "Contact bounce generates multiple edges per press; without an RC filter (or a Schmitt input plus firmware delay) the MCU sees phantom presses, double-toggles, and spurious interrupts. Production inputs debounce in hardware."
+severity = "error"
+applies_to_kinds = ["switch"]
+condition = "signal_to_ic_without_rc"
+enforced_by = ""
+patch_hint = "insert series resistor + shunt capacitor to ground"
+
+[[template]]
+id = "switch_pull_up"
+description = "Pull-up resistor on a switch-to-ground input"
+rationale = "A switch that shorts its input to ground leaves the input floating when open. The line needs a defined logic level: a pull-up resistor to the IC's supply rail (the debounce capacitor, when present, does not define the level)."
+severity = "error"
+applies_to_kinds = ["switch"]
+condition = "switch_to_gnd_without_pullup"
+enforced_by = ""
+patch_hint = "insert pull-up resistor to supply rail"
+
+[[template]]
+id = "led_current_limit"
+description = "Series current-limiting resistor on every LED"
+rationale = "An LED without a series resistor is a short circuit once forward-biased: it overcurrents the driving pin or rail, drifts out of spec over temperature, and burns out. Production designs limit LED current with a series resistor sized for the rail and desired brightness."
+severity = "error"
+applies_to_kinds = ["led"]
+condition = "series_path_without_resistor"
+enforced_by = ""
+patch_hint = "insert series current-limit resistor"
+
+[[template]]
+id = "relay_flyback_diode"
+description = "Flyback diode across every relay coil"
+rationale = "A relay coil is an inductor: opening the drive path collapses its field and produces a voltage spike that destroys driver transistors and radiates into nearby traces. Production designs place a diode (or TVS) antiparallel across the coil to recirculate the current."
+severity = "error"
+applies_to_kinds = ["relay"]
+condition = "coil_without_flyback_diode"
+enforced_by = "review: no relay part in the seed registry yet; checker activates with the first relay part"
+
+[[template]]
+id = "ic_decoupling"
+description = "Local decoupling capacitance on every IC power pin"
+rationale = "Every switching IC draws current in bursts; supply inductance turns those bursts into rail droop and ground bounce. Production designs put a 100 nF capacitor at each IC's power pin (plus bulk where the manifest requires). Parts that declare required_decoupling in their manifest are enforced by E-SYNTH-POWER-001 and skipped here to avoid double-flagging."
+severity = "warning"
+applies_to_kinds = ["ic"]
+condition = "ic_without_decoupling"
+enforced_by = ""
+
+[[template]]
+id = "i2c_pullups"
+description = "Pull-up resistors on I2C SDA/SCL"
+rationale = "I2C is open-drain: without pull-ups the bus can never rise and communication fails. Standard value 4.7 kOhm at 100/400 kHz."
+severity = "error"
+applies_to_kinds = ["bus"]
+condition = "always"
+enforced_by = "E-SYNTH-I2C-001"
+
+[[template]]
+id = "crystal_load_caps"
+description = "Two load capacitors to ground on every crystal"
+rationale = "A crystal oscillates at its specified frequency only with the load capacitance the datasheet states; missing or mismatched load caps pull the frequency out of spec or prevent oscillation."
+severity = "error"
+applies_to_kinds = ["crystal"]
+condition = "always"
+enforced_by = "layout:Crystal cluster + E-SYNTH-CRYSTAL-001"
+
+[[template]]
+id = "usb_esd"
+description = "ESD protection on USB data lines"
+rationale = "USB connectors are user-touchable; the data lines need transient suppression (ESD array to ground) to survive handling and cable discharge events."
+severity = "warning"
+applies_to_kinds = ["connector"]
+condition = "always"
+enforced_by = "layout:UsbEsd cluster"
+
+[[template]]
+id = "reset_rc"
+description = "Defined reset level on MCU reset pins"
+rationale = "An un-biased reset pin floats through the threshold during power-up and can leave the MCU in partial reset or cause erratic start-up. Production designs give reset a defined level (pull-up, RC, or supervisor)."
+severity = "error"
+applies_to_kinds = ["ic"]
+condition = "always"
+enforced_by = "layout:IcBlock cluster + E-SYNTH-RESET-001"
+
+
+[[template]]
+id = "polarized_cap_miswired"
+description = "Polarised capacitor installed with reversed bias"
+rationale = "An electrolytic or tantalum capacitor with its positive terminal at the lower potential fails — venting, catching fire, or exploding. Sierra Circuits' schematic checklist item 2 ('conduct a polarity check for all polarized components'). The checker keys on the KiCad convention (C_Polarized: pin 1 = plus) and flags polarised caps whose ground-side pin is the plus terminal."
+severity = "error"
+applies_to_kinds = ["capacitor"]
+condition = "polarized_cap_ground_on_plus"
+enforced_by = ""
+patch_hint = "diagnostic only — swap the two connect statements in the .synth source"
+
+[[template]]
+id = "rail_test_points"
+description = "Test points on critical rails and key signals"
+rationale = "Production and bring-up debugging needs probeable access to supply rails and key signals; diagnostics guides (Sierra Circuits, AIVON) recommend annotating expected voltages at test points near the net in question. The seed registry has no test-point part yet, so this is a catalog entry — it activates once a test-point part and a placement-aware predicate exist."
+severity = "warning"
+applies_to_kinds = ["ic", "connector"]
+condition = "always"
+enforced_by = "review: seed registry has no test-point part yet; checker activates with the first test-point part"
+

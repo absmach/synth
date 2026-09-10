@@ -1,0 +1,27 @@
+id = "led_green_0603"
+kind = "led"
+description = "Green LED, 0603 package, ~2.2V Vf"
+mpn = "0603-GREEN"
+lcsc_pn = "C72043"
+kicad_symbol = "Device:LED"
+kicad_footprint = "LED_SMD:LED_0603_1608Metric"
+
+[footprint_dimensions]
+width_mm = 2.96
+height_mm = 1.46
+courtyard_margin_mm = 0.25
+
+[operating_conditions]
+min_voltage_v = 1.8
+max_voltage_v = 3.3
+max_current_ma = 20.0
+
+[[pins]]
+name = "anode"
+number = "1"
+electrical_type = "passive"
+
+[[pins]]
+name = "cathode"
+number = "2"
+electrical_type = "passive"

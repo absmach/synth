@@ -1,0 +1,25 @@
+[package]
+name = "synth-parser"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+description = "Lexer and parser for SynthSpec."
+
+[lints]
+workspace = true
+
+[dependencies]
+synth-ast = { workspace = true }
+synth-diagnostics = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+
+[dev-dependencies]
+insta = { workspace = true }
+serde_json = { workspace = true }
+proptest = { workspace = true }
+synth-ir = { workspace = true }
+synth-registry = { workspace = true }

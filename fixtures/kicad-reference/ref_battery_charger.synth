@@ -1,0 +1,32 @@
+board "ref_battery_charger" {
+  layers 2
+  manufacturer "jlcpcb"
+
+  component J1: connector "usb_c_receptacle"
+  component U1: charger "bq24074"
+  component J2: connector "jst_ph_2pin"
+
+  component R1: resistor "r_generic_0603"
+  component R2: resistor "r_generic_0603"
+
+  component C1: capacitor "c_generic_0603"
+  component C2: capacitor "c_generic_0603"
+
+  connect J1.vbus -> U1.in
+  connect J1.gnd -> U1.vss
+
+  connect J2.p1 -> U1.bat
+  connect J2.p2 -> U1.vss
+
+  connect J1.cc1 -> R1.p1
+  connect U1.vss -> R1.p2
+
+  connect J1.cc2 -> R2.p1
+  connect U1.vss -> R2.p2
+
+  connect U1.in -> C1.p1
+  connect U1.vss -> C1.p2
+
+  connect U1.out -> C2.p1
+  connect U1.vss -> C2.p2
+}

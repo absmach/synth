@@ -1,0 +1,36 @@
+id = "conn_custom_header"
+kind = "connector"
+description = "Custom 4-pin debug header"
+kicad_footprint = "Connector_PinHeader_2.54mm:PinHeader_1x04_P2.54mm_Vertical"
+
+[footprint_dimensions]
+width_mm = 2.54
+height_mm = 10.16
+
+[provenance]
+source = "imported"
+reviewed_by = "test_user"
+
+[[pins]]
+name = "pin1"
+number = "1"
+electrical_type = "passive"
+capabilities = []
+
+[[pins]]
+name = "pin2"
+number = "2"
+electrical_type = "passive"
+capabilities = ["gpio", "uart_tx"]
+
+[[pins]]
+name = "pin3"
+number = "3"
+electrical_type = "passive"
+capabilities = ["gpio", "uart_rx"]
+
+[[pins]]
+name = "pin4"
+number = "4"
+electrical_type = "passive"
+capabilities = []

@@ -1,0 +1,26 @@
+// Two output pins driving the same net — guaranteed contention.
+board "output_collision" {
+  layers 2
+
+  component U1: ic "sn74hc595_shift"
+  component U2: ic "sn74hc595_shift"
+  component U3: ic "sn74hc165_pload"
+
+  connect U1.gnd -> U2.gnd
+  connect U1.gnd -> U3.gnd
+  connect U1.vcc -> U2.vcc
+  connect U1.vcc -> U3.vcc
+  connect U1.srclr -> U2.srclr
+  connect U1.srclk -> U2.srclk
+  connect U1.rclk -> U2.rclk
+  connect U1.oe -> U2.oe
+  connect U1.ser -> U2.ser
+  connect U3.shld -> U2.srclr
+  connect U3.clk -> U2.srclk
+  connect U3.e -> U2.rclk
+  connect U3.f -> U2.oe
+  connect U3.g -> U2.ser
+  // The bug: two outputs shorted on one net.
+  connect U1.qa -> U2.qa
+}
+

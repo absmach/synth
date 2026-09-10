@@ -1,0 +1,24 @@
+id = "c_tantalum_47uf"
+kind = "capacitor"
+description = "47µF 16V tantalum capacitor, polarised, 3528 case"
+kicad_symbol = "Device:C_Polarized"
+kicad_footprint = "Capacitor_Tantalum_SMD:CP_EIA-3528-21_Kemet-B"
+
+[footprint_dimensions]
+width_mm = 4.92
+height_mm = 3.3
+courtyard_margin_mm = 0.25
+
+[operating_conditions]
+max_voltage_v = 25.0
+
+[[pins]]
+name = "p1"
+number = "1"
+electrical_type = "passive"
+
+[[pins]]
+name = "p2"
+number = "2"
+electrical_type = "passive"
+

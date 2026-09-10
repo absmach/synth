@@ -1,0 +1,45 @@
+board "ref_spi_flash" {
+  layers 2
+  manufacturer "jlcpcb"
+
+  component U1: mcu "rp2350"
+  component U2: memory "w25q128_flash"
+  component U3: regulator "ams1117_3v3"
+  component J1: connector "header_1x4"
+
+  component R1: resistor "r_generic_0603"
+  component R2: resistor "r_generic_0603"
+
+  component C1: capacitor "c_generic_0603"
+  component C2: capacitor "c_generic_0603"
+  component C3: capacitor "c_generic_0603"
+
+  connect J1.p1 -> U3.vin
+  connect J1.p2 -> U3.gnd
+
+  connect U3.vout -> U1.vdd_io
+  connect U3.vout -> U1.vdd_core
+  connect U3.vout -> U2.vcc
+  connect U3.gnd -> U1.gnd
+  connect U3.gnd -> U2.gnd
+
+  connect U1.gp0 -> U2.mosi
+  connect U1.gp1 -> U2.cs
+  connect U1.gp2 -> U2.sck
+  connect U1.gp3 -> U2.miso
+
+  connect U2.cs -> R1.p1
+  connect U3.vout -> R1.p2
+
+  connect U1.run -> R2.p1
+  connect U3.vout -> R2.p2
+
+  connect U3.vin -> C1.p1
+  connect U3.gnd -> C1.p2
+
+  connect U3.vout -> C2.p1
+  connect U3.gnd -> C2.p2
+
+  connect U2.vcc -> C3.p1
+  connect U3.gnd -> C3.p2
+}

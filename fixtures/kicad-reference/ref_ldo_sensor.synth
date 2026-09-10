@@ -1,0 +1,35 @@
+board "ref_ldo_sensor" {
+  layers 2
+  manufacturer "jlcpcb"
+
+  component U1: regulator "ams1117_3v3"
+  component U2: sensor "bmp280_pressure"
+  component J1: connector "header_1x4"
+
+  component R1: resistor "r_generic_0603"
+  component R2: resistor "r_generic_0603"
+
+  component C1: capacitor "c_generic_0603"
+  component C2: capacitor "c_generic_0603"
+
+  connect J1.p1 -> U1.vin
+  connect J1.p2 -> U1.gnd
+
+  connect U1.vout -> U2.vdd
+  connect U1.gnd -> U2.gnd
+
+  connect J1.p3 -> U2.sda
+  connect J1.p4 -> U2.scl
+
+  connect U2.sda -> R1.p1
+  connect U1.vout -> R1.p2
+
+  connect U2.scl -> R2.p1
+  connect U1.vout -> R2.p2
+
+  connect U1.vin -> C1.p1
+  connect U1.gnd -> C1.p2
+
+  connect U1.vout -> C2.p1
+  connect U1.gnd -> C2.p2
+}

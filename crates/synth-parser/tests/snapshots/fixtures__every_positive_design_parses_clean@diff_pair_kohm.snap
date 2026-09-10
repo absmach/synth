@@ -1,0 +1,48 @@
+---
+source: crates/synth-parser/tests/fixtures.rs
+expression: ast
+---
+{
+  "imports": [],
+  "board": {
+    "name": "diff_pair_kohm",
+    "statements": [
+      {
+        "stmt": "layers",
+        "count": 4,
+        "span": {
+          "byte_start": 27,
+          "byte_end": 35
+        }
+      },
+      {
+        "stmt": "diff_pair",
+        "pos": "HIGH_Z_P",
+        "neg": "HIGH_Z_N",
+        "attrs": [
+          {
+            "kind": "impedance",
+            "literal": "1",
+            "unit": "kohm",
+            "span": {
+              "byte_start": 82,
+              "byte_end": 87
+            }
+          }
+        ],
+        "span": {
+          "byte_start": 38,
+          "byte_end": 91
+        }
+      }
+    ],
+    "span": {
+      "byte_start": 0,
+      "byte_end": 93
+    }
+  },
+  "span": {
+    "byte_start": 0,
+    "byte_end": 93
+  }
+}

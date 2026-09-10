@@ -1,0 +1,32 @@
+id = "jst_ph_3pin"
+kind = "connector"
+description = "JST PH-series 3-pin wire-to-board connector, 2.0mm pitch"
+kicad_symbol = "Connector_Generic:Conn_01x03"
+kicad_footprint = "Connector_JST:JST_PH_S3B-PH-K_1x03_P2.00mm_Horizontal"
+
+[footprint_dimensions]
+width_mm = 1.0
+height_mm = 1.6
+courtyard_margin_mm = 0.25
+
+[operating_conditions]
+min_voltage_v = 1.8
+max_voltage_v = 5.0
+max_current_ma = 100.0
+
+[[pins]]
+name = "p1"
+number = "1"
+electrical_type = "passive"
+
+[[pins]]
+name = "p2"
+number = "2"
+electrical_type = "passive"
+
+[[pins]]
+name = "p3"
+number = "3"
+electrical_type = "passive"
+
+

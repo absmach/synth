@@ -1,0 +1,6 @@
+---
+source: crates/synth-kicad/tests/golden.rs
+expression: bom
+---
+refdes,value,kind,description,kicad_symbol,kicad_footprint,lcsc_pn,mpn
+U1,rp2350,mcu,"Raspberry Pi RP2350 dual-core MCU, QFN-60",MCU_RaspberryPi:RP2040,Package_DFN_QFN:QFN-56-1EP_7x7mm_P0.4mm_EP3.2x3.2mm,C14663,RP2350A

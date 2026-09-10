@@ -1,0 +1,12 @@
+board "multiple_keepouts" {
+  layers 4
+  keepout antenna1 {
+    radius 10mm
+  }
+  keepout antenna2 {
+    radius 15mm
+  }
+  keepout switching_supply {
+    radius 5mm
+  }
+}

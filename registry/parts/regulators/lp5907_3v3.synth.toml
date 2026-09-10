@@ -1,0 +1,57 @@
+id = "lp5907_3v3"
+kind = "regulator"
+description = "TI LP5907 3.3V low-noise LDO, 250mA, SOT-23-5"
+mpn = "LP5907MFX-3.3"
+lcsc_pn = "C83437"
+kicad_symbol = "Regulator_Linear:LP5907MFX-3.3"
+kicad_footprint = "Package_TO_SOT_SMD:SOT-23-5"
+
+[footprint_dimensions]
+width_mm = 3.6
+height_mm = 2.5
+courtyard_margin_mm = 0.25
+
+[operating_conditions]
+min_voltage_v = 3.5
+max_voltage_v = 15.0
+max_current_ma = 800.0
+
+[[pins]]
+name = "vin"
+number = "1"
+electrical_type = "power_input"
+required = true
+
+[[pins]]
+name = "gnd"
+number = "2"
+electrical_type = "power_input"
+required = true
+
+[[pins]]
+name = "en"
+number = "3"
+electrical_type = "input"
+required = true
+
+[[pins]]
+name = "nc"
+number = "4"
+electrical_type = "do_not_connect"
+
+[[pins]]
+name = "vout"
+number = "5"
+electrical_type = "power_output"
+required = true
+
+[[required_decoupling]]
+net = "vin"
+value = "1uf"
+count = 1
+
+[[required_decoupling]]
+net = "vout"
+value = "1uf"
+count = 1
+

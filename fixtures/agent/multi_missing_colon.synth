@@ -1,0 +1,5 @@
+board "x" {
+  layers 2
+  component R1 resistor "r_generic_0603"
+  component R2 resistor "r_generic_0603"
+}

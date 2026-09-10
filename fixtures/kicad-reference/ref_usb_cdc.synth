@@ -1,0 +1,58 @@
+board "ref_usb_cdc" {
+  layers 2
+  manufacturer "jlcpcb"
+
+  component U1: mcu "rp2350"
+  component U2: regulator "ams1117_3v3"
+  component J1: connector "usb_c_receptacle"
+
+  component R1: resistor "r_generic_0603"
+  component R2: resistor "r_generic_0603"
+  component R3: resistor "r_generic_0603"
+
+  component C1: capacitor "c_generic_0603"
+  component C2: capacitor "c_generic_0603"
+  component C3: capacitor "c_generic_0603"
+  component C4: capacitor "c_generic_0603"
+  component C5: capacitor "c_generic_0603"
+  component C6: capacitor "c_generic_0603"
+
+  connect J1.vbus -> U2.vin
+  connect J1.gnd -> U2.gnd
+
+  connect U2.vout -> U1.vdd_io
+  connect U2.vout -> U1.vdd_core
+  connect U2.gnd -> U1.gnd
+
+  connect U1.usb_dp -> J1.dp
+  connect U1.usb_dn -> J1.dn
+
+  connect J1.cc1 -> R1.p1
+  connect U2.gnd -> R1.p2
+
+  connect J1.cc2 -> R2.p1
+  connect U2.gnd -> R2.p2
+
+  connect U1.run -> R3.p1
+  connect U2.vout -> R3.p2
+
+  connect U2.vin -> C1.p1
+  connect U2.gnd -> C1.p2
+
+  connect U2.vout -> C2.p1
+  connect U2.gnd -> C2.p2
+
+  connect U1.vdd_io -> C3.p1
+  connect U2.gnd -> C3.p2
+  connect U1.vdd_io -> C4.p1
+  connect U2.gnd -> C4.p2
+
+  connect U1.vdd_core -> C5.p1
+  connect U2.gnd -> C5.p2
+  connect U1.vdd_core -> C6.p1
+  connect U2.gnd -> C6.p2
+
+  diff_pair u1_usb_dp u1_usb_dn {
+    impedance 90ohm
+  }
+}

@@ -1,0 +1,107 @@
+id = "darlington_uln2803"
+kind = "ic"
+description = "ULN2803 8-channel Darlington array, DIP-18 / SOIC-18"
+kicad_symbol = "Driver_Motor:ULN2803A"
+kicad_footprint = "Package_DIP:DIP-18_W7.62mm"
+
+[footprint_dimensions]
+width_mm = 9.73
+height_mm = 23.36
+courtyard_margin_mm = 0.25
+
+[operating_conditions]
+min_voltage_v = 1.8
+max_voltage_v = 5.0
+max_current_ma = 100.0
+
+[[pins]]
+name = "in1"
+number = "1"
+electrical_type = "input"
+
+[[pins]]
+name = "in2"
+number = "2"
+electrical_type = "input"
+
+[[pins]]
+name = "in3"
+number = "3"
+electrical_type = "input"
+
+[[pins]]
+name = "in4"
+number = "4"
+electrical_type = "input"
+
+[[pins]]
+name = "in5"
+number = "5"
+electrical_type = "input"
+
+[[pins]]
+name = "in6"
+number = "6"
+electrical_type = "input"
+
+[[pins]]
+name = "in7"
+number = "7"
+electrical_type = "input"
+
+[[pins]]
+name = "in8"
+number = "8"
+electrical_type = "input"
+
+[[pins]]
+name = "gnd"
+number = "9"
+electrical_type = "power_input"
+required = true
+
+[[pins]]
+name = "com"
+number = "10"
+electrical_type = "power_input"
+
+[[pins]]
+name = "out8"
+number = "11"
+electrical_type = "open_drain_low"
+
+[[pins]]
+name = "out7"
+number = "12"
+electrical_type = "open_drain_low"
+
+[[pins]]
+name = "out6"
+number = "13"
+electrical_type = "open_drain_low"
+
+[[pins]]
+name = "out5"
+number = "14"
+electrical_type = "open_drain_low"
+
+[[pins]]
+name = "out4"
+number = "15"
+electrical_type = "open_drain_low"
+
+[[pins]]
+name = "out3"
+number = "16"
+electrical_type = "open_drain_low"
+
+[[pins]]
+name = "out2"
+number = "17"
+electrical_type = "open_drain_low"
+
+[[pins]]
+name = "out1"
+number = "18"
+electrical_type = "open_drain_low"
+

@@ -1,0 +1,12 @@
+board "self_referencing" {
+  layers 4
+
+  component J1: connector "usb_c_receptacle"
+
+  connect J1.vbus -> J1.cc1
+  connect J1.gnd -> J1.cc2
+  connect J1.dp -> J1.dp
+
+  diff_pair dp dp { impedance 90ohm }
+}
+

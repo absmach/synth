@@ -1,0 +1,108 @@
+id = "sn74hc165_pload"
+kind = "ic"
+description = "TI SN74HC165 8-bit parallel-load shift register"
+mpn = "SN74HC165DR"
+lcsc_pn = "C5946"
+kicad_symbol = "74xx:74HC165"
+kicad_footprint = "Package_DIP:DIP-16_W7.62mm"
+
+[footprint_dimensions]
+width_mm = 9.73
+height_mm = 20.82
+courtyard_margin_mm = 0.25
+
+[operating_conditions]
+min_voltage_v = 1.8
+max_voltage_v = 5.0
+max_current_ma = 100.0
+
+[[pins]]
+name = "shld"
+number = "1"
+electrical_type = "input"
+required = true
+
+[[pins]]
+name = "clk"
+number = "2"
+electrical_type = "clock"
+capabilities = ["clock_input"]
+required = true
+
+[[pins]]
+name = "e"
+number = "3"
+electrical_type = "input"
+
+[[pins]]
+name = "f"
+number = "4"
+electrical_type = "input"
+
+[[pins]]
+name = "g"
+number = "5"
+electrical_type = "input"
+
+[[pins]]
+name = "h"
+number = "6"
+electrical_type = "input"
+
+[[pins]]
+name = "qh_n"
+number = "7"
+electrical_type = "output"
+
+[[pins]]
+name = "gnd"
+number = "8"
+electrical_type = "power_input"
+required = true
+
+[[pins]]
+name = "qh"
+number = "9"
+electrical_type = "output"
+
+[[pins]]
+name = "ser"
+number = "10"
+electrical_type = "input"
+
+[[pins]]
+name = "a"
+number = "11"
+electrical_type = "input"
+
+[[pins]]
+name = "b"
+number = "12"
+electrical_type = "input"
+
+[[pins]]
+name = "c"
+number = "13"
+electrical_type = "input"
+
+[[pins]]
+name = "d"
+number = "14"
+electrical_type = "input"
+
+[[pins]]
+name = "clk_inh"
+number = "15"
+electrical_type = "input"
+
+[[pins]]
+name = "vcc"
+number = "16"
+electrical_type = "power_input"
+required = true
+
+[[required_decoupling]]
+net = "vcc"
+value = "100nf"
+count = 1
+

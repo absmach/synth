@@ -1,0 +1,23 @@
+# E-SYNTH-PARSE-008 — expected `->` between endpoints
+
+**Severity:** error
+**Stage:** parse
+
+## What this means
+
+A `connect` statement is written as `connect <endpoint> -> <endpoint>`.
+The parser found a different token between the two endpoints.
+
+## Minimal reproduction
+
+```synth
+board "x" {
+  component U1: mcu "rp2350"
+  component U2: secure_element "atecc608"
+  connect U1.spi0 U2.spi
+}
+```
+
+## Suggested fix
+
+Insert ` -> ` between the endpoints.

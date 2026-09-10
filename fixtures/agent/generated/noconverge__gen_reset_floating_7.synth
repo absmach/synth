@@ -1,0 +1,7 @@
+board "gen_reset_floating_7" {
+  layers 2
+  component MCU7: ic "stm32f401"
+  component J7: connector "header_1x4"
+
+  connect MCU7.pa0 -> J7.p1
+}

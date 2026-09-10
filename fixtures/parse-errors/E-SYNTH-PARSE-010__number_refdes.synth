@@ -1,0 +1,3 @@
+board "x" {
+  component 1: mcu "rp2350"
+}

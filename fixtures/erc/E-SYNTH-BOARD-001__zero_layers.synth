@@ -1,0 +1,8 @@
+board "zero_layers" {
+  layers 0
+
+  component R1: resistor "r_generic_0603"
+
+  connect R1.p1 -> R1.p2
+}
+

@@ -1,0 +1,4 @@
+board "x"
+  layers 4
+  component R1: resistor "r_generic_0603"
+}

@@ -1,0 +1,13 @@
+// A wire that only touches one pin — the other end is implied to
+// dangle. CONNECT-002 warns on these because they are almost always
+// a typo.
+board "single_endpoint" {
+  layers 2
+
+  component R1: resistor "r_generic_0603"
+  component R2: resistor "r_generic_0603"
+
+  connect R1.p1 -> R2.p1
+  connect R1.p2 -> R1.p2
+}
+

@@ -1,0 +1,6 @@
+// Top-level line comment
+board "comment_line_only" { // trailing comment
+  layers 2 // another trailing comment
+  // standalone in body
+}
+// final line comment

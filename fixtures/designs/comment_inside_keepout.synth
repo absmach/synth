@@ -1,0 +1,7 @@
+board "comment_inside_keepout" {
+  layers 4
+  keepout antenna {
+    // radius comment
+    radius 20mm
+  }
+}

@@ -1,0 +1,17 @@
+// LedIndicator pattern: a diode whose registry id starts with
+// `led_` (kind = diode; see is_led() in
+// crates/synth-layout/src/lib.rs) plus a current-limit resistor on
+// its anode net. `build_clusters` pass 1 claims R1 as a member of
+// D1's cluster and renders the pair as a vertical R-over-LED chain.
+board "led_indicator" {
+  layers 2
+  manufacturer "jlcpcb"
+
+  component J1: connector "jst_ph_2pin" // power in: p1 = rail, p2 = gnd
+  component D1: diode     "led_red_0603"
+  component R1: resistor  "r_generic_0603"
+
+  connect J1.p1      -> R1.p1
+  connect R1.p2       -> D1.anode
+  connect D1.cathode  -> J1.p2
+}

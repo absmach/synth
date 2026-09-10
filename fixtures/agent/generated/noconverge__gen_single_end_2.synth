@@ -1,0 +1,9 @@
+board "gen_single_end_2" {
+  layers 2
+  component U2: ic "ch340g"
+  component J1: connector "header_1x4"
+
+  connect U2.tx -> J1.p1
+  connect U2.rx -> J1.p2
+  connect U2.cts -> J1.p3
+}

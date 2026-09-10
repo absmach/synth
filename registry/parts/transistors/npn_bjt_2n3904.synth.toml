@@ -1,0 +1,32 @@
+id = "npn_bjt_2n3904"
+kind = "transistor"
+description = "2N3904 NPN BJT, general-purpose, TO-92"
+mpn = "2N3904"
+lcsc_pn = "C20505"
+kicad_symbol = "Transistor_BJT:2N3904"
+kicad_footprint = "Package_TO_SOT_THT:TO-92_Inline"
+
+[footprint_dimensions]
+width_mm = 3.59
+height_mm = 1.5
+courtyard_margin_mm = 0.25
+
+[operating_conditions]
+min_voltage_v = 1.8
+max_voltage_v = 5.0
+max_current_ma = 100.0
+
+[[pins]]
+name = "emitter"
+number = "1"
+electrical_type = "passive"
+
+[[pins]]
+name = "base"
+number = "2"
+electrical_type = "input"
+
+[[pins]]
+name = "collector"
+number = "3"
+electrical_type = "passive"

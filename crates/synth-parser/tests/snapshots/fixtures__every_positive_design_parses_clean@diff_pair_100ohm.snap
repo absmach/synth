@@ -1,0 +1,48 @@
+---
+source: crates/synth-parser/tests/fixtures.rs
+expression: ast
+---
+{
+  "imports": [],
+  "board": {
+    "name": "diff_pair_100ohm",
+    "statements": [
+      {
+        "stmt": "layers",
+        "count": 4,
+        "span": {
+          "byte_start": 29,
+          "byte_end": 37
+        }
+      },
+      {
+        "stmt": "diff_pair",
+        "pos": "PCIE_TX_P",
+        "neg": "PCIE_TX_N",
+        "attrs": [
+          {
+            "kind": "impedance",
+            "literal": "100",
+            "unit": "ohm",
+            "span": {
+              "byte_start": 86,
+              "byte_end": 92
+            }
+          }
+        ],
+        "span": {
+          "byte_start": 40,
+          "byte_end": 96
+        }
+      }
+    ],
+    "span": {
+      "byte_start": 0,
+      "byte_end": 98
+    }
+  },
+  "span": {
+    "byte_start": 0,
+    "byte_end": 98
+  }
+}

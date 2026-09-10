@@ -1,0 +1,6 @@
+board "refdes_two_digit" {
+  layers 2
+  component U10: mcu "rp2350"
+  component U99: secure_element "atecc608"
+  component C100: capacitor "c_generic_0402"
+}

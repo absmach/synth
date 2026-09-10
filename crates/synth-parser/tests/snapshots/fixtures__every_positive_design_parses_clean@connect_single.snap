@@ -1,0 +1,71 @@
+---
+source: crates/synth-parser/tests/fixtures.rs
+expression: ast
+---
+{
+  "imports": [],
+  "board": {
+    "name": "connect_single",
+    "statements": [
+      {
+        "stmt": "layers",
+        "count": 2,
+        "span": {
+          "byte_start": 27,
+          "byte_end": 35
+        }
+      },
+      {
+        "stmt": "component",
+        "refdes": "U1",
+        "kind": "mcu",
+        "part": "rp2350",
+        "span": {
+          "byte_start": 38,
+          "byte_end": 64
+        }
+      },
+      {
+        "stmt": "component",
+        "refdes": "U2",
+        "kind": "secure_element",
+        "part": "atecc608",
+        "span": {
+          "byte_start": 67,
+          "byte_end": 106
+        }
+      },
+      {
+        "stmt": "connection",
+        "from": {
+          "component": "U1",
+          "pin": "gp0",
+          "span": {
+            "byte_start": 117,
+            "byte_end": 123
+          }
+        },
+        "to": {
+          "component": "U2",
+          "pin": "sda",
+          "span": {
+            "byte_start": 127,
+            "byte_end": 133
+          }
+        },
+        "span": {
+          "byte_start": 109,
+          "byte_end": 133
+        }
+      }
+    ],
+    "span": {
+      "byte_start": 0,
+      "byte_end": 135
+    }
+  },
+  "span": {
+    "byte_start": 0,
+    "byte_end": 135
+  }
+}

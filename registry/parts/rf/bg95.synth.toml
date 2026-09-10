@@ -1,0 +1,72 @@
+id = "bg95"
+kind = "modem"
+version = 0
+lifecycle = "active"
+description = "Quectel BG95-M3 LTE Cat M1/NB2/EGPRS modem with integrated GNSS, LGA-102"
+kicad_symbol = "RF_GSM:BG95-MF"
+kicad_footprint = "RF_Module:Quectel_BG95-M3"
+
+[footprint_dimensions]
+width_mm = 5.0
+height_mm = 5.0
+courtyard_margin_mm = 0.25
+
+[operating_conditions]
+min_voltage_v = 1.8
+max_voltage_v = 5.0
+max_current_ma = 100.0
+
+[[pins]]
+name = "vbatt"
+number = "32"
+electrical_type = "power_input"
+required = true
+
+[[pins]]
+name = "gnd"
+number = "3"
+electrical_type = "power_input"
+required = true
+
+[[pins]]
+name = "tx"
+number = "35"
+electrical_type = "output"
+capabilities = ["uart_tx"]
+required = true
+
+[[pins]]
+name = "rx"
+number = "34"
+electrical_type = "input"
+capabilities = ["uart_rx"]
+required = true
+
+[[pins]]
+name = "main_ant"
+number = "60"
+electrical_type = "rf"
+capabilities = ["rf_feed"]
+required = true
+
+[[pins]]
+name = "gnss_ant"
+number = "49"
+electrical_type = "rf"
+capabilities = ["rf_feed"]
+
+[[pins]]
+name = "pwrkey"
+number = "15"
+electrical_type = "input"
+
+[[pins]]
+name = "reset_n"
+number = "17"
+electrical_type = "input"
+capabilities = ["reset"]
+
+[[required_decoupling]]
+net = "vbatt"
+value = "100uf"
+count = 1

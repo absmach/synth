@@ -1,0 +1,12 @@
+board "keepout_blocked_01" {
+  layers 2
+  component U1: mcu "rp2350"
+  component U2: regulator "ams1117_3v3"
+  component J1: connector "usb_c_receptacle"
+  component ANT1: antenna "ant_chip_2g4"
+  keepout board_blocker {
+    radius 350mm
+  }
+  connect J1.vbus -> U2.vin
+  connect U2.vout -> U1.vdd_io
+}

@@ -1,0 +1,4 @@
+board "component_charger" {
+  layers 4
+  component U1: charger "bq24074"
+}

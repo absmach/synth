@@ -1,0 +1,48 @@
+/target/
+/Cargo.lock.local
+**/*.rs.bk
+*.swp
+.DS_Store
+
+# IDE
+/.idea/
+/.vscode/
+*.iml
+
+# Coverage
+/coverage/
+*.profraw
+*.profdata
+
+# Fuzz corpora (committed corpora live under fuzz/corpus/, not here)
+/crates-internal/synth-fuzz/artifacts/
+/crates-internal/synth-fuzz/corpus/
+/crates/synth-web/dist/
+
+# Compiler-generated outputs. KiCad exports from `synth export-kicad`
+# land in `<source>_kicad/` next to the .synth file; they are pure
+# build products. Reference KiCad files (for round-trip testing,
+# say) should live elsewhere — not in `*_kicad/`.
+/examples/*_kicad/
+
+# Generated export outputs
+/output/
+/exports/
+/out/
+/data/
+
+# Generated ML datasets & mutation artifacts
+/fixtures/erc-generated/
+/fixtures/designs-generated/
+/data/topology_profiles.jsonl
+__pycache__/
+*.pyc
+
+# Qualification & benchmark run evidence artifacts
+/qualification/evidence/
+/evidence/
+*.snap.new
+
+# Environment & API keys
+.env
+*.env

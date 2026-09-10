@@ -1,0 +1,6 @@
+board "keepout" {
+  layers 4
+  keepout antenna {
+    radius 20mm
+  }
+}

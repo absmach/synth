@@ -1,0 +1,36 @@
+---
+source: crates/synth-ir/tests/lowering.rs
+expression: board
+---
+{
+  "name": "diff_pair_with_keepout",
+  "layers": 4,
+  "manufacturer": null,
+  "components": [],
+  "nets": [],
+  "diff_pairs": [
+    {
+      "positive": "USB_DP",
+      "negative": "USB_DN",
+      "impedance": 90000,
+      "source_span": {
+        "byte_start": 116,
+        "byte_end": 165
+      }
+    }
+  ],
+  "keepouts": [
+    {
+      "name": "antenna",
+      "radius": 20000000,
+      "source_span": {
+        "byte_start": 169,
+        "byte_end": 206
+      }
+    }
+  ],
+  "source_span": {
+    "byte_start": 69,
+    "byte_end": 208
+  }
+}

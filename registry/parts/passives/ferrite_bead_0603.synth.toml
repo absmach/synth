@@ -1,0 +1,24 @@
+id = "ferrite_bead_0603"
+kind = "inductor"
+description = "0603 ferrite bead, 600Ω @ 100MHz — EMI suppression"
+kicad_symbol = "Device:Ferrite_Bead"
+kicad_footprint = "Inductor_SMD:L_0603_1608Metric"
+
+[footprint_dimensions]
+width_mm = 2.96
+height_mm = 1.46
+courtyard_margin_mm = 0.25
+
+[operating_conditions]
+max_voltage_v = 50.0
+
+[[pins]]
+name = "p1"
+number = "1"
+electrical_type = "passive"
+
+[[pins]]
+name = "p2"
+number = "2"
+electrical_type = "passive"
+

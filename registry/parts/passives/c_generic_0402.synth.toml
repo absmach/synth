@@ -1,0 +1,29 @@
+# Generic 0402 ceramic capacitor.
+# Two passive terminals, no polarity, no capabilities.
+# A specific capacitance value is selected by the user; the part
+# definition only describes the *footprint and electrical character*
+# of the device.
+
+id = "c_generic_0402"
+kind = "capacitor"
+description = "Generic 0402 MLCC, X7R/X5R, any value"
+kicad_symbol = "Device:C"
+kicad_footprint = "Capacitor_SMD:C_0402_1005Metric"
+
+[footprint_dimensions]
+width_mm = 1.82
+height_mm = 0.92
+courtyard_margin_mm = 0.25
+
+[operating_conditions]
+max_voltage_v = 50.0
+
+[[pins]]
+name = "p1"
+number = "1"
+electrical_type = "passive"
+
+[[pins]]
+name = "p2"
+number = "2"
+electrical_type = "passive"

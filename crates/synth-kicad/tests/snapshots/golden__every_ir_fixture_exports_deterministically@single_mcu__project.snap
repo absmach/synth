@@ -1,0 +1,23 @@
+---
+source: crates/synth-kicad/tests/golden.rs
+expression: project
+---
+{
+  "board": {},
+  "boards": [],
+  "meta": {
+    "filename": "single_mcu.kicad_pro",
+    "uuid": "145ebac4-376d-5d33-9b19-9919a7480054",
+    "version": 1
+  },
+  "schematic": {
+    "annotate_start_num": 0,
+    "drawing": {}
+  },
+  "sheets": [
+    [
+      "e9752c9b-d806-561d-b400-c5c45c3ecc44",
+      ""
+    ]
+  ]
+}

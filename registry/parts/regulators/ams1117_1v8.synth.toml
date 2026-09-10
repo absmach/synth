@@ -1,0 +1,46 @@
+id = "ams1117_1v8"
+kind = "regulator"
+description = "AMS1117-1.8 fixed 1.8V LDO regulator, SOT-223"
+mpn = "AMS1117-1.8"
+lcsc_pn = "C6188"
+kicad_symbol = "Regulator_Linear:AMS1117-1.8"
+kicad_footprint = "Package_TO_SOT_SMD:SOT-223-3_TabPin2"
+
+[footprint_dimensions]
+width_mm = 8.3
+height_mm = 6.1
+courtyard_margin_mm = 0.25
+
+[operating_conditions]
+min_voltage_v = 2.5
+max_voltage_v = 6.0
+max_current_ma = 500.0
+
+[[pins]]
+name = "gnd"
+number = "1"
+electrical_type = "power_input"
+required = true
+
+[[pins]]
+name = "vout"
+number = "2"
+electrical_type = "power_output"
+required = true
+
+[[pins]]
+name = "vin"
+number = "3"
+electrical_type = "power_input"
+required = true
+
+[[required_decoupling]]
+net = "vin"
+value = "10uf"
+count = 1
+
+[[required_decoupling]]
+net = "vout"
+value = "10uf"
+count = 1
+

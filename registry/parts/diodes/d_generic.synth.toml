@@ -1,0 +1,24 @@
+id = "d_generic"
+kind = "diode"
+description = "Generic small-signal silicon diode (1N4148-class)"
+kicad_symbol = "Device:D"
+kicad_footprint = "Diode_SMD:D_SOD-123"
+
+[footprint_dimensions]
+width_mm = 4.2
+height_mm = 1.2
+courtyard_margin_mm = 0.25
+
+[operating_conditions]
+max_voltage_v = 100.0
+max_current_ma = 1000.0
+
+[[pins]]
+name = "anode"
+number = "1"
+electrical_type = "passive"
+
+[[pins]]
+name = "cathode"
+number = "2"
+electrical_type = "passive"

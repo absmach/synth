@@ -1,0 +1,24 @@
+id = "l_generic_0402"
+kind = "inductor"
+description = "Generic 0402 wirewound inductor, any value"
+kicad_symbol = "Device:L"
+kicad_footprint = "Inductor_SMD:L_0402_1005Metric"
+
+[footprint_dimensions]
+width_mm = 1.86
+height_mm = 0.94
+courtyard_margin_mm = 0.25
+
+[operating_conditions]
+max_voltage_v = 50.0
+
+[[pins]]
+name = "p1"
+number = "1"
+electrical_type = "passive"
+
+[[pins]]
+name = "p2"
+number = "2"
+electrical_type = "passive"
+

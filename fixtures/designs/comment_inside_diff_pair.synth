@@ -1,0 +1,8 @@
+board "comment_inside_diff_pair" {
+  layers 4
+  diff_pair USB_DP USB_DN {
+    // pin comment
+    impedance 90ohm
+    /* block in body */
+  }
+}

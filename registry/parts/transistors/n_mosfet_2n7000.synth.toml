@@ -1,0 +1,30 @@
+id = "n_mosfet_2n7000"
+kind = "transistor"
+description = "2N7000 N-channel MOSFET, TO-92"
+kicad_symbol = "Transistor_FET:2N7000"
+kicad_footprint = "Package_TO_SOT_THT:TO-92_Inline"
+
+[footprint_dimensions]
+width_mm = 3.59
+height_mm = 1.5
+courtyard_margin_mm = 0.25
+
+[operating_conditions]
+min_voltage_v = 1.8
+max_voltage_v = 5.0
+max_current_ma = 100.0
+
+[[pins]]
+name = "source"
+number = "1"
+electrical_type = "passive"
+
+[[pins]]
+name = "gate"
+number = "2"
+electrical_type = "input"
+
+[[pins]]
+name = "drain"
+number = "3"
+electrical_type = "passive"

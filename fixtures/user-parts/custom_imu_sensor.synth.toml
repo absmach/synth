@@ -1,0 +1,47 @@
+id = "custom_imu_sensor"
+kind = "sensor"
+description = "Custom 6-axis IMU accelerometer and gyroscope test fixture"
+kicad_footprint = "Package_LGA:LGA-14_2.5x3mm_P0.5mm"
+
+[footprint_dimensions]
+width_mm = 2.5
+height_mm = 3.0
+
+[provenance]
+source = "imported"
+reviewed_by = "test_user"
+
+[[pins]]
+name = "vdd"
+number = "1"
+electrical_type = "power_input"
+capabilities = []
+required = true
+
+[[pins]]
+name = "gnd"
+number = "2"
+electrical_type = "power_input"
+capabilities = []
+required = true
+
+[[pins]]
+name = "sda"
+number = "3"
+electrical_type = "bidirectional"
+capabilities = ["i2c_sda"]
+required = true
+
+[[pins]]
+name = "scl"
+number = "4"
+electrical_type = "input"
+capabilities = ["i2c_scl"]
+required = true
+
+[[pins]]
+name = "int1"
+number = "5"
+electrical_type = "output"
+capabilities = ["gpio"]
+required = false

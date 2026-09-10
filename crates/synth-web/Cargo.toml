@@ -1,0 +1,47 @@
+[package]
+name = "synth-web"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+description = "Leptos + WASM browser viewer for the Synth EDA compiler. Read-only schematic + diagnostics; source-of-truth is the .synth file in the user's IDE."
+
+[lints]
+workspace = true
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+synth-ir = { workspace = true }
+synth-layout = { workspace = true }
+synth-diagnostics = { workspace = true }
+synth-registry = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+leptos = { version = "0.8", features = ["csr"] }
+wasm-bindgen = "0.2"
+web-sys = { version = "0.3", features = [
+  "EventSource",
+  "MessageEvent",
+  "Window",
+  "Document",
+  "Element",
+  "HtmlElement",
+  "DomRect",
+  "PointerEvent",
+  "WheelEvent",
+  "SvgsvgElement",
+  "SvgElement",
+  "SvgGraphicsElement",
+  "Event",
+  "EventTarget",
+  "console",
+  "Request",
+  "RequestInit",
+  "RequestMode",
+  "Headers",
+] }
+console_error_panic_hook = "0.1"

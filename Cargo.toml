@@ -1,0 +1,115 @@
+[workspace]
+resolver = "2"
+members = [
+  "crates/synth-cli",
+  "crates/synth-diagnostics",
+  "crates/synth-ast",
+  "crates/synth-parser",
+  "crates/synth-ir",
+  "crates/synth-geometry",
+  "crates/synth-layout",
+  "crates/synth-registry",
+  "crates/synth-knowledge",
+  "crates/synth-validate",
+  "crates/synth-kicad",
+  "crates/synth-place",
+  "crates/synth-route",
+  "crates/synth-drc",
+  "crates/synth-web",
+  "crates/synth-mcp",
+  "crates/synth-smt",
+  "crates/synth-connectivity",
+  "crates/synth-supply",
+]
+
+[workspace.package]
+version = "0.0.1"
+edition = "2021"
+rust-version = "1.85"
+license = "Apache-2.0"
+repository = "https://github.com/synth-eda/synth"
+authors = ["The Synth Authors"]
+
+[workspace.lints.rust]
+unsafe_code = "forbid"
+missing_debug_implementations = "warn"
+rust_2018_idioms = { level = "warn", priority = -1 }
+
+[workspace.lints.clippy]
+pedantic = { level = "warn", priority = -1 }
+# Carve-outs: these pedantic lints conflict with deliberate design choices.
+module_name_repetitions = "allow"
+must_use_candidate = "allow"
+missing_errors_doc = "allow"
+# Spans are intentionally u32 (file size capped at 1 MB).
+# usize→u32 casts are bounded by precondition, not a truncation risk.
+cast_possible_truncation = "allow"
+# Builder pattern is the workspace convention; #[must_use] on every
+# fluent method is noise.
+return_self_not_must_use = "allow"
+# Exact float equality is required in serde round-trip and snapshot tests.
+float_cmp = "allow"
+# Product/proper nouns (SynthSpec, KiCad, ...) are intentionally not
+# backticked in prose documentation.
+doc_markdown = "allow"
+
+[workspace.dependencies]
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+chrono = "0.4"
+sha2 = "0.10"
+thiserror = "2.0"
+anyhow = "1.0"
+
+clap = { version = "4.5", features = ["derive"] }
+insta = { version = "1.41", features = ["json", "yaml"] }
+proptest = "1.5"
+toml = "0.8"
+uuid = { version = "1", features = ["v5"] }
+zip = { version = "7.2", default-features = false }
+tokio = { version = "1", features = [
+  "rt-multi-thread",
+  "macros",
+  "sync",
+  "signal",
+  "time",
+  "io-std",
+  "io-util",
+] }
+axum = "0.8"
+tower-http = { version = "0.6", features = ["fs", "trace", "set-header"] }
+notify-debouncer-mini = { version = "0.6", default-features = false }
+futures = "0.3"
+include_dir = "0.7"
+schemars = "0.8"
+
+# Workspace crates referenced by path
+synth-diagnostics = { path = "crates/synth-diagnostics", version = "0.0.1" }
+synth-ast = { path = "crates/synth-ast", version = "0.0.1" }
+synth-parser = { path = "crates/synth-parser", version = "0.0.1" }
+synth-ir = { path = "crates/synth-ir", version = "0.0.1" }
+synth-geometry = { path = "crates/synth-geometry", version = "0.0.1" }
+synth-layout = { path = "crates/synth-layout", version = "0.0.1" }
+synth-registry = { path = "crates/synth-registry", version = "0.0.1" }
+synth-knowledge = { path = "crates/synth-knowledge", version = "0.0.1" }
+synth-validate = { path = "crates/synth-validate", version = "0.0.1" }
+synth-kicad = { path = "crates/synth-kicad", version = "0.0.1" }
+synth-place = { path = "crates/synth-place", version = "0.0.1" }
+synth-route = { path = "crates/synth-route", version = "0.0.1" }
+synth-drc = { path = "crates/synth-drc", version = "0.0.1" }
+synth-web = { path = "crates/synth-web", version = "0.0.1" }
+synth-mcp = { path = "crates/synth-mcp", version = "0.0.1" }
+synth-smt = { path = "crates/synth-smt", version = "0.0.1" }
+synth-connectivity = { path = "crates/synth-connectivity", version = "0.0.1" }
+synth-supply = { path = "crates/synth-supply", version = "0.0.1" }
+
+[profile.release]
+lto = "thin"
+codegen-units = 1
+
+# Optimize the test profile: the golden/export suites drive the closed-loop
+# place+route repair engine over many boards, which is 5-15x slower at
+# opt-level 0. opt-level 1 keeps debug assertions on (correctness checks
+# intact) while collapsing test wall-clock — the single biggest CI lever.
+[profile.test]
+opt-level = 1

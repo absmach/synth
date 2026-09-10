@@ -1,0 +1,112 @@
+id = "usb_c_receptacle"
+kind = "connector"
+description = "USB-C receptacle, 24-pin SMD. Modelled here with primary and mirrored power/ground/data pins for full pad coverage."
+mpn = "TYPE-C-31-M-12"
+lcsc_pn = "C165948"
+kicad_symbol = "Connector:USB_C_Receptacle"
+kicad_footprint = "Connector_USB:USB_C_Receptacle_HRO_TYPE-C-31-M-12"
+
+[footprint_dimensions]
+width_mm = 9.64
+height_mm = 6.62
+courtyard_margin_mm = 0.25
+
+[operating_conditions]
+min_voltage_v = 1.8
+max_voltage_v = 5.0
+max_current_ma = 100.0
+
+[[pins]]
+name = "vbus"
+number = "A4"
+electrical_type = "power_input"
+capabilities = ["usb_vbus"]
+
+[[pins]]
+name = "gnd"
+number = "A1"
+electrical_type = "power_input"
+
+[[pins]]
+name = "dp"
+number = "A6"
+electrical_type = "differential_positive"
+capabilities = ["usb_dp"]
+
+[[pins]]
+name = "dn"
+number = "A7"
+electrical_type = "differential_negative"
+capabilities = ["usb_dn"]
+
+[[pins]]
+name = "cc1"
+number = "A5"
+electrical_type = "bidirectional"
+capabilities = ["usb_cc"]
+
+[[pins]]
+name = "cc2"
+number = "B5"
+electrical_type = "bidirectional"
+capabilities = ["usb_cc"]
+
+[[pins]]
+name = "gnd_b12"
+number = "B12"
+electrical_type = "power_input"
+
+[[pins]]
+name = "gnd_a12"
+number = "A12"
+electrical_type = "power_input"
+
+[[pins]]
+name = "gnd_b1"
+number = "B1"
+electrical_type = "power_input"
+
+[[pins]]
+name = "vbus_b4"
+number = "B4"
+electrical_type = "power_input"
+capabilities = ["usb_vbus"]
+
+[[pins]]
+name = "vbus_a9"
+number = "A9"
+electrical_type = "power_input"
+capabilities = ["usb_vbus"]
+
+[[pins]]
+name = "vbus_b9"
+number = "B9"
+electrical_type = "power_input"
+capabilities = ["usb_vbus"]
+
+[[pins]]
+name = "dp_b6"
+number = "B6"
+electrical_type = "differential_positive"
+capabilities = ["usb_dp"]
+
+[[pins]]
+name = "dn_b7"
+number = "B7"
+electrical_type = "differential_negative"
+capabilities = ["usb_dn"]
+
+[[pins]]
+name = "shld"
+number = "SH"
+electrical_type = "passive"
+
+[[pins]]
+name = "sbu1"
+number = "A8"
+electrical_type = "passive"
+
+[[pins]]
+name = "sbu2"
+number = "B8"
+electrical_type = "passive"

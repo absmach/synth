@@ -1,0 +1,10 @@
+board "keepout_no_radius" {
+  layers 2
+
+  component R1: resistor "r_generic_0603"
+
+  connect R1.p1 -> R1.p2
+
+  keepout antenna_zone {}
+}
+

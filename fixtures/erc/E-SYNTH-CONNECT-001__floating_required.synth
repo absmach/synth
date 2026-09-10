@@ -1,0 +1,19 @@
+// Twin: U2.vcc (declared `required = true` in the registry) is left
+// floating, so E-SYNTH-CONNECT-001 should fire on U2.
+board "mcu_to_secure_element_floating_vcc" {
+  layers 4
+
+  component U1: mcu "rp2350"
+  component U2: secure_element "atecc608"
+  component C1: capacitor "c_generic_0402"
+
+  connect U1.vdd_io -> C1.p1
+  connect U1.vdd_core -> C1.p2
+  connect U1.gnd -> C1.p1
+  connect U1.run -> C1.p2
+  // NOTE: U2.vcc intentionally not connected.
+  connect U2.gnd -> C1.p2
+
+  connect U1.gp0 -> U2.sda
+  connect U1.gp1 -> U2.scl
+}

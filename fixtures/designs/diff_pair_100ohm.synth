@@ -1,0 +1,6 @@
+board "diff_pair_100ohm" {
+  layers 4
+  diff_pair PCIE_TX_P PCIE_TX_N {
+    impedance 100ohm
+  }
+}

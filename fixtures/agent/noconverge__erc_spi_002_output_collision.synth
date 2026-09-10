@@ -1,0 +1,7 @@
+board "test_noconverge_spi_002" {
+  layers 2
+  component U1: memory "w25q128_flash"
+  component U2: memory "w25q128_flash"
+
+  connect U1.miso -> U2.miso
+}

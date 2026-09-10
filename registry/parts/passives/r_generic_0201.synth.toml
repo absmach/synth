@@ -1,0 +1,24 @@
+id = "r_generic_0201"
+kind = "resistor"
+description = "Generic 0201 thick-film resistor, any value"
+kicad_symbol = "Device:R_US"
+kicad_footprint = "Resistor_SMD:R_0201_0603Metric"
+
+[footprint_dimensions]
+width_mm = 1.4
+height_mm = 0.7
+courtyard_margin_mm = 0.25
+
+[operating_conditions]
+max_voltage_v = 50.0
+
+[[pins]]
+name = "p1"
+number = "1"
+electrical_type = "passive"
+
+[[pins]]
+name = "p2"
+number = "2"
+electrical_type = "passive"
+

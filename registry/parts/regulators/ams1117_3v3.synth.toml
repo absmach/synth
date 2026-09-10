@@ -1,0 +1,47 @@
+id = "ams1117_3v3"
+kind = "regulator"
+description = "AMS1117-3.3 fixed 3.3V LDO regulator, SOT-223 — common JLC stock"
+kicad_symbol = "Regulator_Linear:AMS1117-3.3"
+kicad_footprint = "Package_TO_SOT_SMD:SOT-223-3_TabPin2"
+lcsc_pn = "C6186"
+mpn = "AMS1117-3.3"
+
+
+[footprint_dimensions]
+width_mm = 8.3
+height_mm = 6.1
+courtyard_margin_mm = 0.25
+
+[operating_conditions]
+min_voltage_v = 3.5
+max_voltage_v = 15.0
+max_current_ma = 800.0
+
+[[pins]]
+name = "gnd"
+number = "1"
+electrical_type = "power_input"
+required = true
+
+[[pins]]
+name = "vout"
+number = "2"
+electrical_type = "power_output"
+voltage_nominal_v = 3.3
+required = true
+
+[[pins]]
+name = "vin"
+number = "3"
+electrical_type = "power_input"
+required = true
+
+[[required_decoupling]]
+net = "vin"
+value = "10uf"
+count = 2
+
+[[required_decoupling]]
+net = "vout"
+value = "10uf"
+count = 2

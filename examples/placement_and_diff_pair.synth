@@ -1,0 +1,38 @@
+// Compact demo of features the other two example boards don't use:
+// a hard placement_hint, a differential pair with impedance, and a
+// keepout zone.
+board "placement_and_diff_pair" {
+  layers 4
+  manufacturer "jlcpcb"
+
+  // Pin the MCU into the top-left corner and keep it there even if
+  // the placer would otherwise prefer a different spot.
+  component U1: mcu "rp2350" {
+    placement_hint { region: top_left priority: hard }
+  }
+  component J1: connector "usb_c_receptacle"
+  component C1: capacitor "c_generic_0805"
+
+  connect J1.vbus -> C1.p1
+  connect J1.gnd  -> C1.p2
+  connect J1.gnd  -> U1.gnd
+  connect J1.vbus -> U1.vdd_io
+  connect J1.vbus -> U1.vdd_core
+  connect J1.vbus -> U1.run
+
+  // USB D+/D- run from the connector straight to the MCU's native
+  // USB pins, so the pair's endpoint on U1 fully identifies the net.
+  connect J1.dp -> U1.usb_dp
+  connect J1.dn -> U1.usb_dn
+
+  // diff_pair has no separate net-naming syntax in V1: each leg is
+  // written as <REFDES>_<pin>, matched against any net that has that
+  // component/pin as one of its endpoints.
+  diff_pair U1_usb_dp U1_usb_dn {
+    impedance 90ohm
+  }
+
+  keepout usb_connector_zone {
+    radius 8mm
+  }
+}

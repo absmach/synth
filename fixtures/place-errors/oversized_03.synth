@@ -1,0 +1,22 @@
+board "oversized_03" {
+  layers 2
+  component U1: mcu "rp2350"
+  component ANT1: antenna "ant_chip_2g4"
+  component MCU_BLOCK1: mcu "rp2350"
+  component MCU_BLOCK2: mcu "rp2350"
+  component MCU_BLOCK3: mcu "rp2350"
+  component MCU_BLOCK4: mcu "rp2350"
+  component MCU_BLOCK5: mcu "rp2350"
+  component MCU_BLOCK6: mcu "rp2350"
+  component MCU_BLOCK7: mcu "rp2350"
+  component MCU_BLOCK8: mcu "rp2350"
+  component MCU_BLOCK9: mcu "rp2350"
+  component MCU_BLOCK10: mcu "rp2350"
+  component MCU_BLOCK11: mcu "rp2350"
+  component MCU_BLOCK12: mcu "rp2350"
+  component MCU_BLOCK13: mcu "rp2350"
+  component MCU_BLOCK14: mcu "rp2350"
+  keepout ant_huge {
+    radius 800mm
+  }
+}

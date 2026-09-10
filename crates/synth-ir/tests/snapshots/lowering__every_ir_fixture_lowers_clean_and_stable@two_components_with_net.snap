@@ -1,0 +1,355 @@
+---
+source: crates/synth-ir/tests/lowering.rs
+assertion_line: 71
+expression: board
+---
+{
+  "name": "two_components_with_net",
+  "layers": 2,
+  "manufacturer": null,
+  "components": [
+    {
+      "id": 0,
+      "refdes": "U1",
+      "kind": "mcu",
+      "part": {
+        "id": "rp2350",
+        "kind": "mcu",
+        "description": "Raspberry Pi RP2350 dual-core MCU, QFN-60",
+        "version": 0,
+        "lifecycle": "active",
+        "signed_by": [],
+        "substitutes": [],
+        "mpn": "RP2350A",
+        "lcsc_pn": "C14663",
+        "pins": [
+          {
+            "name": "vdd_io",
+            "number": "1",
+            "electrical_type": "power_input",
+            "capabilities": [],
+            "required": true,
+            "unit": null,
+            "voltage_max_v": null
+          },
+          {
+            "name": "vdd_core",
+            "number": "23",
+            "electrical_type": "power_input",
+            "capabilities": [],
+            "required": true,
+            "unit": null,
+            "voltage_max_v": null
+          },
+          {
+            "name": "gnd",
+            "number": "57",
+            "electrical_type": "power_input",
+            "capabilities": [],
+            "required": true,
+            "unit": null,
+            "voltage_max_v": null
+          },
+          {
+            "name": "usb_dp",
+            "number": "47",
+            "electrical_type": "differential_positive",
+            "capabilities": [
+              "usb_dp"
+            ],
+            "required": false,
+            "unit": null,
+            "voltage_max_v": null
+          },
+          {
+            "name": "usb_dn",
+            "number": "46",
+            "electrical_type": "differential_negative",
+            "capabilities": [
+              "usb_dn"
+            ],
+            "required": false,
+            "unit": null,
+            "voltage_max_v": null
+          },
+          {
+            "name": "gp0",
+            "number": "2",
+            "electrical_type": "bidirectional",
+            "capabilities": [
+              "gpio",
+              "spi_mosi",
+              "uart_tx",
+              "i2c_sda"
+            ],
+            "required": false,
+            "unit": null,
+            "voltage_max_v": null
+          },
+          {
+            "name": "gp1",
+            "number": "3",
+            "electrical_type": "bidirectional",
+            "capabilities": [
+              "gpio",
+              "spi_cs",
+              "uart_rx",
+              "i2c_scl"
+            ],
+            "required": false,
+            "unit": null,
+            "voltage_max_v": null
+          },
+          {
+            "name": "gp2",
+            "number": "4",
+            "electrical_type": "bidirectional",
+            "capabilities": [
+              "gpio",
+              "spi_sck",
+              "uart_tx"
+            ],
+            "required": false,
+            "unit": null,
+            "voltage_max_v": null
+          },
+          {
+            "name": "gp3",
+            "number": "5",
+            "electrical_type": "bidirectional",
+            "capabilities": [
+              "gpio",
+              "spi_miso",
+              "uart_rx"
+            ],
+            "required": false,
+            "unit": null,
+            "voltage_max_v": null
+          },
+          {
+            "name": "run",
+            "number": "26",
+            "electrical_type": "input",
+            "capabilities": [
+              "reset"
+            ],
+            "required": true,
+            "unit": null,
+            "voltage_max_v": null
+          },
+          {
+            "name": "xin",
+            "number": "20",
+            "electrical_type": "clock",
+            "capabilities": [
+              "clock_input"
+            ],
+            "required": false,
+            "unit": null,
+            "voltage_max_v": null
+          }
+        ],
+        "required_decoupling": [
+          {
+            "net": "vdd_io",
+            "value": "100nf",
+            "count": 4,
+            "max_distance_mm": null
+          },
+          {
+            "net": "vdd_core",
+            "value": "100nf",
+            "count": 2,
+            "max_distance_mm": null
+          }
+        ],
+        "kicad_symbol": "MCU_RaspberryPi:RP2040",
+        "kicad_footprint": "Package_DFN_QFN:QFN-56-1EP_7x7mm_P0.4mm_EP3.2x3.2mm",
+        "footprint_dimensions": {
+          "width_mm": 7.75,
+          "height_mm": 7.75,
+          "courtyard_margin_mm": 0.25
+        },
+        "operating_conditions": {
+          "min_voltage_v": 1.8,
+          "max_voltage_v": 3.6,
+          "max_current_ma": 150.0
+        }
+      },
+      "source_span": {
+        "byte_start": 158,
+        "byte_end": 184
+      }
+    },
+    {
+      "id": 1,
+      "refdes": "U2",
+      "kind": "secure_element",
+      "part": {
+        "id": "atecc608",
+        "kind": "secure_element",
+        "description": "Microchip ATECC608 crypto authentication IC, UDFN-8",
+        "version": 0,
+        "lifecycle": "active",
+        "signed_by": [],
+        "substitutes": [],
+        "mpn": null,
+        "lcsc_pn": null,
+        "pins": [
+          {
+            "name": "vcc",
+            "number": "8",
+            "electrical_type": "power_input",
+            "capabilities": [],
+            "required": true,
+            "unit": null,
+            "voltage_max_v": null
+          },
+          {
+            "name": "gnd",
+            "number": "4",
+            "electrical_type": "power_input",
+            "capabilities": [],
+            "required": true,
+            "unit": null,
+            "voltage_max_v": null
+          },
+          {
+            "name": "sda",
+            "number": "5",
+            "electrical_type": "open_drain_low",
+            "capabilities": [
+              "i2c_sda"
+            ],
+            "required": true,
+            "unit": null,
+            "voltage_max_v": null
+          },
+          {
+            "name": "scl",
+            "number": "6",
+            "electrical_type": "open_drain_low",
+            "capabilities": [
+              "i2c_scl"
+            ],
+            "required": true,
+            "unit": null,
+            "voltage_max_v": null
+          },
+          {
+            "name": "nc1",
+            "number": "1",
+            "electrical_type": "do_not_connect",
+            "capabilities": [],
+            "required": false,
+            "unit": null,
+            "voltage_max_v": null
+          },
+          {
+            "name": "nc2",
+            "number": "2",
+            "electrical_type": "do_not_connect",
+            "capabilities": [],
+            "required": false,
+            "unit": null,
+            "voltage_max_v": null
+          },
+          {
+            "name": "nc3",
+            "number": "3",
+            "electrical_type": "do_not_connect",
+            "capabilities": [],
+            "required": false,
+            "unit": null,
+            "voltage_max_v": null
+          },
+          {
+            "name": "nc7",
+            "number": "7",
+            "electrical_type": "do_not_connect",
+            "capabilities": [],
+            "required": false,
+            "unit": null,
+            "voltage_max_v": null
+          }
+        ],
+        "required_decoupling": [
+          {
+            "net": "vcc",
+            "value": "100nf",
+            "count": 1,
+            "max_distance_mm": null
+          }
+        ],
+        "kicad_symbol": "Security:ATECC608A-SSH",
+        "kicad_footprint": "Package_SO:SOIC-8_3.9x4.9mm_P1.27mm",
+        "footprint_dimensions": {
+          "width_mm": 6.9,
+          "height_mm": 4.41,
+          "courtyard_margin_mm": 0.25
+        },
+        "operating_conditions": {
+          "min_voltage_v": 1.8,
+          "max_voltage_v": 3.6,
+          "max_current_ma": 50.0
+        }
+      },
+      "source_span": {
+        "byte_start": 187,
+        "byte_end": 226
+      }
+    }
+  ],
+  "nets": [
+    {
+      "id": 0,
+      "name": "net_0",
+      "endpoints": [
+        {
+          "component": 0,
+          "pin": 5,
+          "source_span": {
+            "byte_start": 238,
+            "byte_end": 244
+          }
+        },
+        {
+          "component": 1,
+          "pin": 2,
+          "source_span": {
+            "byte_start": 248,
+            "byte_end": 254
+          }
+        }
+      ]
+    },
+    {
+      "id": 1,
+      "name": "net_1",
+      "endpoints": [
+        {
+          "component": 0,
+          "pin": 6,
+          "source_span": {
+            "byte_start": 265,
+            "byte_end": 271
+          }
+        },
+        {
+          "component": 1,
+          "pin": 3,
+          "source_span": {
+            "byte_start": 275,
+            "byte_end": 281
+          }
+        }
+      ]
+    }
+  ],
+  "diff_pairs": [],
+  "keepouts": [],
+  "source_span": {
+    "byte_start": 110,
+    "byte_end": 283
+  }
+}

@@ -1,0 +1,8 @@
+board "test_conn_006" {
+  layers 2
+  component R1: resistor "r_generic_0603"
+  component R2: resistor "r_generic_0603"
+  component R3: resistor "r_generic_0603"
+
+  connect R1.p1 -> R2.p1
+}

@@ -1,0 +1,6 @@
+board "keepout_mil" {
+  layers 4
+  keepout via_zone {
+    radius 200mil
+  }
+}

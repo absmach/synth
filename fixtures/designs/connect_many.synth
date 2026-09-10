@@ -1,0 +1,13 @@
+board "connect_many" {
+  layers 4
+  component U1: mcu "rp2350"
+  component U2: secure_element "atecc608"
+  connect U1.gp0 -> U2.sda
+  connect U1.gp1 -> U2.scl
+  connect U1.gp2 -> U2.gnd
+  connect U1.gp3 -> U2.vcc
+  connect U1.vdd_io -> U2.vcc
+  connect U1.gnd -> U2.gnd
+  connect U1.run -> U2.sda
+  connect U1.usb_dp -> U2.scl
+}

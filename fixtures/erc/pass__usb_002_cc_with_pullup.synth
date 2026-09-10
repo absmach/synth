@@ -1,0 +1,7 @@
+board "usb_cc_pass" {
+  layers 2
+  component J1: connector "usb_c_receptacle"
+  component R1: resistor "r_generic_0603"
+
+  connect J1.cc1 -> R1.p1
+}

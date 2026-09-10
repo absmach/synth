@@ -1,0 +1,7 @@
+board "bga_ddr_unsupported" {
+  layers 6
+  manufacturer "jlcpcb"
+
+  // Explicit negative fixture: BGA package footprint + DDR memory component
+  component U1: memory "ddr4_bga_sdram"
+}

@@ -1,0 +1,46 @@
+---
+source: crates/synth-parser/tests/fixtures.rs
+expression: ast
+---
+{
+  "imports": [],
+  "board": {
+    "name": "linux_soc_unsupported",
+    "statements": [
+      {
+        "stmt": "layers",
+        "count": 8,
+        "span": {
+          "byte_start": 34,
+          "byte_end": 42
+        }
+      },
+      {
+        "stmt": "manufacturer",
+        "name": "jlcpcb",
+        "span": {
+          "byte_start": 45,
+          "byte_end": 66
+        }
+      },
+      {
+        "stmt": "component",
+        "refdes": "U1",
+        "kind": "mcu",
+        "part": "linux_soc_bga",
+        "span": {
+          "byte_start": 146,
+          "byte_end": 179
+        }
+      }
+    ],
+    "span": {
+      "byte_start": 0,
+      "byte_end": 181
+    }
+  },
+  "span": {
+    "byte_start": 0,
+    "byte_end": 181
+  }
+}

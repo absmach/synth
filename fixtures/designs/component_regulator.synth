@@ -1,0 +1,4 @@
+board "component_regulator" {
+  layers 2
+  component U1: regulator "tps62085"
+}

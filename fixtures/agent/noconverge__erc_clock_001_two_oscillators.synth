@@ -1,0 +1,7 @@
+board "test_noconverge_clock_001" {
+  layers 2
+  component Y1: crystal "osc_smd_25mhz"
+  component Y2: crystal "osc_smd_25mhz"
+
+  connect Y1.out -> Y2.out
+}

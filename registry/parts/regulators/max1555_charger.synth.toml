@@ -1,0 +1,42 @@
+id = "max1555_charger"
+kind = "regulator"
+description = "Maxim MAX1555 single-cell Li-Ion charger, SOT-23-5"
+kicad_footprint = "Package_TO_SOT_SMD:SOT-23-5"
+
+[footprint_dimensions]
+width_mm = 5.0
+height_mm = 5.0
+courtyard_margin_mm = 0.25
+
+[operating_conditions]
+min_voltage_v = 3.5
+max_voltage_v = 15.0
+max_current_ma = 800.0
+
+[[pins]]
+name = "dc"
+number = "1"
+electrical_type = "power_input"
+
+[[pins]]
+name = "gnd"
+number = "2"
+electrical_type = "power_input"
+required = true
+
+[[pins]]
+name = "chg"
+number = "3"
+electrical_type = "open_drain_low"
+
+[[pins]]
+name = "bat"
+number = "4"
+electrical_type = "power_output"
+required = true
+
+[[pins]]
+name = "usb"
+number = "5"
+electrical_type = "power_input"
+

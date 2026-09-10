@@ -1,0 +1,6 @@
+board "diff_pair_decimal" {
+  layers 4
+  diff_pair USB_DP USB_DN {
+    impedance 90.5ohm
+  }
+}

@@ -1,0 +1,7 @@
+board "test_noconverge_power_002" {
+  layers 2
+  component U1: regulator "ams1117_3v3"
+  component U2: regulator "ams1117_3v3"
+
+  connect U1.vout -> U2.vout
+}

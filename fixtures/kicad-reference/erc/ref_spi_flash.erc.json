@@ -1,0 +1,3010 @@
+{
+    "$schema": "https://schemas.kicad.org/erc.v1.json",
+    "coordinate_units": "mm",
+    "date": "2026-08-11T11:23:32",
+    "ignored_checks": [
+        {
+            "description": "Global label only appears once in the schematic",
+            "key": "single_global_label"
+        },
+        {
+            "description": "Four connection points are joined together",
+            "key": "four_way_junction"
+        },
+        {
+            "description": "SPICE model issue",
+            "key": "simulation_model_issue"
+        },
+        {
+            "description": "Assigned footprint doesn't match footprint filters",
+            "key": "footprint_filter"
+        }
+    ],
+    "included_severities": [
+        "error",
+        "warning",
+        "exclusion"
+    ],
+    "kicad_version": "10.0.5",
+    "sheets": [
+        {
+            "path": "/",
+            "uuid_path": "/18642a7a-ff91-5e2d-9ab8-2096d9235b34",
+            "violations": [
+                {
+                    "description": "Pin not connected",
+                    "items": [
+                        {
+                            "description": "Symbol U? Pin 1 [Power input, Line]",
+                            "pos": {
+                                "x": 0.4484,
+                                "y": 0.7191
+                            },
+                            "uuid": "43949c30-111b-40e4-8266-819694d6e8d9"
+                        }
+                    ],
+                    "severity": "error",
+                    "type": "pin_not_connected"
+                },
+                {
+                    "description": "Pin not connected",
+                    "items": [
+                        {
+                            "description": "Symbol U? Pin 1 [Power input, Line]",
+                            "pos": {
+                                "x": 0.4484,
+                                "y": 0.7445
+                            },
+                            "uuid": "ac8fee04-4508-4edd-8b88-f15b39462156"
+                        }
+                    ],
+                    "severity": "error",
+                    "type": "pin_not_connected"
+                },
+                {
+                    "description": "Pin not connected",
+                    "items": [
+                        {
+                            "description": "Symbol U? Pin 1 [Power input, Line]",
+                            "pos": {
+                                "x": 0.4484,
+                                "y": 1.7557
+                            },
+                            "uuid": "3e9d433e-930d-4d7b-9f43-5ead79feb1f7"
+                        }
+                    ],
+                    "severity": "error",
+                    "type": "pin_not_connected"
+                },
+                {
+                    "description": "Pin not connected",
+                    "items": [
+                        {
+                            "description": "Symbol U? Pin 1 [Power input, Line]",
+                            "pos": {
+                                "x": 0.4484,
+                                "y": 1.8573
+                            },
+                            "uuid": "5136fff9-4d36-4232-8cc9-bfea033f91c4"
+                        }
+                    ],
+                    "severity": "error",
+                    "type": "pin_not_connected"
+                },
+                {
+                    "description": "Pin not connected",
+                    "items": [
+                        {
+                            "description": "Symbol J1 Pin 1 [Pin_1, Passive, Line]",
+                            "pos": {
+                                "x": 0.4992,
+                                "y": 0.6937
+                            },
+                            "uuid": "8261982a-23aa-4839-a1bb-fd4647f978e0"
+                        }
+                    ],
+                    "severity": "error",
+                    "type": "pin_not_connected"
+                },
+                {
+                    "description": "Pin not connected",
+                    "items": [
+                        {
+                            "description": "Symbol J1 Pin 2 [Pin_2, Passive, Line]",
+                            "pos": {
+                                "x": 0.4992,
+                                "y": 0.7191
+                            },
+                            "uuid": "cde5b07f-0c59-4280-8655-56ab27a3f342"
+                        }
+                    ],
+                    "severity": "error",
+                    "type": "pin_not_connected"
+                },
+                {
+                    "description": "Pin not connected",
+                    "items": [
+                        {
+                            "description": "Symbol J1 Pin 3 [Pin_3, Passive, Line]",
+                            "pos": {
+                                "x": 0.4992,
+                                "y": 0.7445
+                            },
+                            "uuid": "8f2b340f-4df3-4836-b07c-0f817adc2438"
+                        }
+                    ],
+                    "severity": "error",
+                    "type": "pin_not_connected"
+                },
+                {
+                    "description": "Pin not connected",
+                    "items": [
+                        {
+                            "description": "Symbol J1 Pin 4 [Pin_4, Passive, Line]",
+                            "pos": {
+                                "x": 0.4992,
+                                "y": 0.7699
+                            },
+                            "uuid": "14259618-863a-4ed8-a2e9-e23dd4997341"
+                        }
+                    ],
+                    "severity": "error",
+                    "type": "pin_not_connected"
+                },
+                {
+                    "description": "Pin not connected",
+                    "items": [
+                        {
+                            "description": "Symbol U? Pin 1 [Power input, Line]",
+                            "pos": {
+                                "x": 1.1548,
+                                "y": 0.854025
+                            },
+                            "uuid": "103c8650-30c6-41c2-badf-2a9bb457d7bf"
+                        }
+                    ],
+                    "severity": "error",
+                    "type": "pin_not_connected"
+                },
+                {
+                    "description": "Pin not connected",
+                    "items": [
+                        {
+                            "description": "Symbol U? Pin 1 [Power input, Line]",
+                            "pos": {
+                                "x": 1.1548,
+                                "y": 0.879425
+                            },
+                            "uuid": "94c3571d-f39b-4e5a-aaa0-38f04831a349"
+                        }
+                    ],
+                    "severity": "error",
+                    "type": "pin_not_connected"
+                },
+                {
+                    "description": "Pin not connected",
+                    "items": [
+                        {
+                            "description": "Symbol U? Pin 1 [Power input, Line]",
+                            "pos": {
+                                "x": 1.1802,
+                                "y": 0.6937
+                            },
+                            "uuid": "706b4ad9-74f1-440a-b441-bdecaf3d9ea8"
+                        }
+                    ],
+                    "severity": "error",
+                    "type": "pin_not_connected"
+                },
+                {
+                    "description": "Pin not connected",
+                    "items": [
+                        {
+                            "description": "Symbol U? Pin 1 [Power input, Line]",
+                            "pos": {
+                                "x": 1.1802,
+                                "y": 0.7191
+                            },
+                            "uuid": "40b6a3a8-0123-4636-8a3c-93f6e2e68464"
+                        }
+                    ],
+                    "severity": "error",
+                    "type": "pin_not_connected"
+                },
+                {
+                    "description": "Pin not connected",
+                    "items": [
+                        {
+                            "description": "Symbol U? Pin 1 [Power input, Line]",
+                            "pos": {
+                                "x": 1.1802,
+                                "y": 0.7445
+                            },
+                            "uuid": "c19f8895-810c-48a4-822f-d9442677aa8d"
+                        }
+                    ],
+                    "severity": "error",
+                    "type": "pin_not_connected"
+                },
+                {
+                    "description": "Pin not connected",
+                    "items": [
+                        {
+                            "description": "Symbol C1 Pin 1 [Passive, Line]",
+                            "pos": {
+                                "x": 1.2564,
+                                "y": 0.815925
+                            },
+                            "uuid": "eeff9921-8050-45b8-9330-cb1aa1d45c7e"
+                        }
+                    ],
+                    "severity": "error",
+                    "type": "pin_not_connected"
+                },
+                {
+                    "description": "Pin not connected",
+                    "items": [
+                        {
+                            "description": "Symbol C1 Pin 2 [Passive, Line]",
+                            "pos": {
+                                "x": 1.2564,
+                                "y": 0.892125
+                            },
+                            "uuid": "6920a085-6e21-47bc-9647-d4fd964979ff"
+                        }
+                    ],
+                    "severity": "error",
+                    "type": "pin_not_connected"
+                },
+                {
+                    "description": "Pin not connected",
+                    "items": [
+                        {
+                            "description": "Symbol U1 Pin 19 [TESTEN, Input, Line]",
+                            "pos": {
+                                "x": 1.7596,
+                                "y": 0.4143
+                            },
+                            "uuid": "28996cff-a8e9-44c4-a9fb-31ceecee9b52"
+                        }
+                    ],
+                    "severity": "error",
+                    "type": "pin_not_connected"
+                },
+                {
+                    "description": "Input pin not driven by any Output pins",
+                    "items": [
+                        {
+                            "description": "Symbol U1 Pin 19 [TESTEN, Input, Line]",
+                            "pos": {
+                                "x": 1.7596,
+                                "y": 0.4143
+                            },
+                            "uuid": "28996cff-a8e9-44c4-a9fb-31ceecee9b52"
+                        }
+                    ],
+                    "severity": "error",
+                    "type": "pin_not_driven"
+                },
+                {
+                    "description": "Pin not connected",
+                    "items": [
+                        {
+                            "description": "Symbol U1 Pin 26 [RUN, Input, Line]",
+                            "pos": {
+                                "x": 1.7596,
+                                "y": 0.4905
+                            },
+                            "uuid": "e9cc9693-13a7-4e97-aebe-98d61e9db0b2"
+                        }
+                    ],
+                    "severity": "error",
+                    "type": "pin_not_connected"
+                },
+                {
+                    "description": "Input pin not driven by any Output pins",
+                    "items": [
+                        {
+                            "description": "Symbol U1 Pin 26 [RUN, Input, Line]",
+                            "pos": {
+                                "x": 1.7596,
+                                "y": 0.4905
+                            },
+                            "uuid": "e9cc9693-13a7-4e97-aebe-98d61e9db0b2"
+                        }
+                    ],
+                    "severity": "error",
+                    "type": "pin_not_driven"
+                },
+                {
+                    "description": "Pin not connected",
+                    "items": [
+                        {
+                            "description": "Symbol U1 Pin 46 [USB_DM, Bidirectional, Line]",
+                            "pos": {
+                                "x": 1.7596,
+                                "y": 0.5667
+                            },
+                            "uuid": "3a26f3f2-74a6-4e4e-a4dc-ab9d34395f50"
+                        }
+                    ],
+                    "severity": "error",
+                    "type": "pin_not_connected"
+                },
+                {
+                    "description": "Pin not connected",
+                    "items": [
+                        {
+                            "description": "Symbol U1 Pin 47 [USB_DP, Bidirectional, Line]",
+                            "pos": {
+                                "x": 1.7596,
+                                "y": 0.5921
+                            },
+                            "uuid": "e5c09e21-87c0-46f8-82e9-c5b8c5a977b8"
+                        }
+                    ],
+                    "severity": "error",
+                    "type": "pin_not_connected"
+                },
+                {
+                    "description": "Pin not connected",
+                    "items": [
+                        {
+                            "description": "Symbol U1 Pin 56 [~{QSPI_SS}, Output, Line]",
+                            "pos": {
+                                "x": 1.7596,
+                                "y": 0.6683
+                            },
+                            "uuid": "d4548a59-56a7-409c-9273-2041a8f975a9"
+                        }
+                    ],
+                    "severity": "error",
+                    "type": "pin_not_connected"
+                },
+                {
+                    "description": "Pin not connected",
+                    "items": [
+                        {
+                            "description": "Symbol U1 Pin 52 [QSPI_SCLK, Output, Line]",
+                            "pos": {
+                                "x": 1.7596,
+                                "y": 0.6937
+                            },
+                            "uuid": "ca0d1197-5a82-49f4-a4da-20b2e0a5bc00"
+                        }
+                    ],
+                    "severity": "error",
+                    "type": "pin_not_connected"
+                },
+                {
+                    "description": "Pin not connected",
+                    "items": [
+                        {
+                            "description": "Symbol U1 Pin 53 [QSPI_SD0, Bidirectional, Line]",
+                            "pos": {
+                                "x": 1.7596,
+                                "y": 0.7191
+                            },
+                            "uuid": "e7c6ab41-aadc-49b6-be49-671cb5215d80"
+                        }
+                    ],
+                    "severity": "error",
+                    "type": "pin_not_connected"
+                },
+                {
+                    "description": "Pin not connected",
+                    "items": [
+                        {
+                            "description": "Symbol U1 Pin 55 [QSPI_SD1, Bidirectional, Line]",
+                            "pos": {
+                                "x": 1.7596,
+                                "y": 0.7445
+                            },
+                            "uuid": "0ee14c58-5e9b-4222-b7eb-4687ed91b211"
+                        }
+                    ],
+                    "severity": "error",
+                    "type": "pin_not_connected"
+                },
+                {
+                    "description": "Pin not connected",
+                    "items": [
+                        {
+                            "description": "Symbol U1 Pin 54 [QSPI_SD2, Bidirectional, Line]",
+                            "pos": {
+                                "x": 1.7596,
+                                "y": 0.7699
+                            },
+                            "uuid": "0a0c9729-b921-4420-8f63-77c6749d7b3a"
+                        }
+                    ],
+                    "severity": "error",
+                    "type": "pin_not_connected"
+                },
+                {
+                    "description": "Pin not connected",
+                    "items": [
+                        {
+                            "description": "Symbol U1 Pin 51 [QSPI_SD3, Bidirectional, Line]",
+                            "pos": {
+                                "x": 1.7596,
+                                "y": 0.7953
+                            },
+                            "uuid": "62522b24-9591-486d-9e15-9f0bda069643"
+                        }
+                    ],
+                    "severity": "error",
+                    "type": "pin_not_connected"
+                },
+                {
+                    "description": "Pin not connected",
+                    "items": [
+                        {
+                            "description": "Symbol U1 Pin 20 [XIN, Input, Line]",
+                            "pos": {
+                                "x": 1.7596,
+                                "y": 0.8715
+                            },
+                            "uuid": "d9037bcc-2ccd-49bd-8419-0c99aab4f7f5"
+                        }
+                    ],
+                    "severity": "error",
+                    "type": "pin_not_connected"
+                },
+                {
+                    "description": "Input pin not driven by any Output pins",
+                    "items": [
+                        {
+                            "description": "Symbol U1 Pin 20 [XIN, Input, Line]",
+                            "pos": {
+                                "x": 1.7596,
+                                "y": 0.8715
+                            },
+                            "uuid": "d9037bcc-2ccd-49bd-8419-0c99aab4f7f5"
+                        }
+                    ],
+                    "severity": "error",
+                    "type": "pin_not_driven"
+                },
+                {
+                    "description": "Pin not connected",
+                    "items": [
+                        {
+                            "description": "Symbol U1 Pin 21 [XOUT, Output, Line]",
+                            "pos": {
+                                "x": 1.7596,
+                                "y": 0.9731
+                            },
+                            "uuid": "a52219fa-7370-40c7-984e-3caee2389bb9"
+                        }
+                    ],
+                    "severity": "error",
+                    "type": "pin_not_connected"
+                },
+                {
+                    "description": "Pin not connected",
+                    "items": [
+                        {
+                            "description": "Symbol U1 Pin 24 [SWCLK, Input, Line]",
+                            "pos": {
+                                "x": 1.7596,
+                                "y": 1.0493
+                            },
+                            "uuid": "da2bcbfe-c07a-4523-957a-6eecc554d4f3"
+                        }
+                    ],
+                    "severity": "error",
+                    "type": "pin_not_connected"
+                },
+                {
+                    "description": "Input pin not driven by any Output pins",
+                    "items": [
+                        {
+                            "description": "Symbol U1 Pin 24 [SWCLK, Input, Line]",
+                            "pos": {
+                                "x": 1.7596,
+                                "y": 1.0493
+                            },
+                            "uuid": "da2bcbfe-c07a-4523-957a-6eecc554d4f3"
+                        }
+                    ],
+                    "severity": "error",
+                    "type": "pin_not_driven"
+                },
+                {
+                    "description": "Pin not connected",
+                    "items": [
+                        {
+                            "description": "Symbol U1 Pin 25 [SWDIO, Bidirectional, Line]",
+                            "pos": {
+                                "x": 1.7596,
+                                "y": 1.0747
+                            },
+                            "uuid": "b500ef46-fa56-48fe-a115-a2084b4808aa"
+                        }
+                    ],
+                    "severity": "error",
+                    "type": "pin_not_connected"
+                },
+                {
+                    "description": "Pin not connected",
+                    "items": [
+                        {
+                            "description": "Symbol U? Pin 1 [Power input, Line]",
+                            "pos": {
+                                "x": 1.8612,
+                                "y": 1.2382
+                            },
+                            "uuid": "7d020e91-09a8-41d8-8a47-200cf2b5fb88"
+                        }
+                    ],
+                    "severity": "error",
+                    "type": "pin_not_connected"
+                },
+                {
+                    "description": "Pin not connected",
+                    "items": [
+                        {
+                            "description": "Symbol U? Pin 1 [Power input, Line]",
+                            "pos": {
+                                "x": 1.8612,
+                                "y": 1.2636
+                            },
+                            "uuid": "08044089-e2ff-4a65-9049-e6cf04b8db23"
+                        }
+                    ],
+                    "severity": "error",
+                    "type": "pin_not_connected"
+                },
+                {
+                    "description": "Pin not connected",
+                    "items": [
+                        {
+                            "description": "Symbol U1 Pin 48 [USB_VDD, Power input, Line]",
+                            "pos": {
+                                "x": 1.8866,
+                                "y": 0.2619
+                            },
+                            "uuid": "7e15ebae-85ea-4a4c-b194-aa34f46f59dd"
+                        }
+                    ],
+                    "severity": "error",
+                    "type": "pin_not_connected"
+                },
+                {
+                    "description": "Input Power pin not driven by any Output Power pins",
+                    "items": [
+                        {
+                            "description": "Symbol U1 Pin 48 [USB_VDD, Power input, Line]",
+                            "pos": {
+                                "x": 1.8866,
+                                "y": 0.2619
+                            },
+                            "uuid": "7e15ebae-85ea-4a4c-b194-aa34f46f59dd"
+                        }
+                    ],
+                    "severity": "error",
+                    "type": "power_pin_not_driven"
+                },
+                {
+                    "description": "Pin not connected",
+                    "items": [
+                        {
+                            "description": "Symbol U? Pin 1 [Power input, Line]",
+                            "pos": {
+                                "x": 1.912,
+                                "y": 0.2
+                            },
+                            "uuid": "d828ac6b-a3cd-4223-aafd-f6ff96969c96"
+                        }
+                    ],
+                    "severity": "error",
+                    "type": "pin_not_connected"
+                },
+                {
+                    "description": "Pin not connected",
+                    "items": [
+                        {
+                            "description": "Symbol U1 Pin 43 [ADC_AVDD, Power input, Line]",
+                            "pos": {
+                                "x": 1.912,
+                                "y": 0.2619
+                            },
+                            "uuid": "92dd9e69-862c-423a-9eb7-5754da3a9095"
+                        }
+                    ],
+                    "severity": "error",
+                    "type": "pin_not_connected"
+                },
+                {
+                    "description": "Input Power pin not driven by any Output Power pins",
+                    "items": [
+                        {
+                            "description": "Symbol U1 Pin 43 [ADC_AVDD, Power input, Line]",
+                            "pos": {
+                                "x": 1.912,
+                                "y": 0.2619
+                            },
+                            "uuid": "92dd9e69-862c-423a-9eb7-5754da3a9095"
+                        }
+                    ],
+                    "severity": "error",
+                    "type": "power_pin_not_driven"
+                },
+                {
+                    "description": "Wires not connected to anything",
+                    "items": [
+                        {
+                            "description": "Horizontal Wire, length 0.0200 mm",
+                            "pos": {
+                                "x": 1.912,
+                                "y": 0.7191
+                            },
+                            "uuid": "00d7010a-4cf2-5f38-8f76-a13511903ee5"
+                        },
+                        {
+                            "description": "Vertical Wire, length 0.1500 mm",
+                            "pos": {
+                                "x": 1.892,
+                                "y": 0.7191
+                            },
+                            "uuid": "ab153ceb-11bc-5d3b-b575-b8da1bb64246"
+                        }
+                    ],
+                    "severity": "error",
+                    "type": "wire_dangling"
+                },
+                {
+                    "description": "Wires not connected to anything",
+                    "items": [
+                        {
+                            "description": "Horizontal Wire, length 0.0300 mm",
+                            "pos": {
+                                "x": 1.912,
+                                "y": 0.7445
+                            },
+                            "uuid": "9d9178b7-0ed8-5069-be0c-384d7f533771"
+                        },
+                        {
+                            "description": "Vertical Wire, length 0.1500 mm",
+                            "pos": {
+                                "x": 1.882,
+                                "y": 0.7445
+                            },
+                            "uuid": "5900cf7c-1697-5fa4-a42b-06b18aa7aac8"
+                        }
+                    ],
+                    "severity": "error",
+                    "type": "wire_dangling"
+                },
+                {
+                    "description": "Wires not connected to anything",
+                    "items": [
+                        {
+                            "description": "Horizontal Wire, length 0.0400 mm",
+                            "pos": {
+                                "x": 1.912,
+                                "y": 0.7699
+                            },
+                            "uuid": "f1f95d66-17df-5414-8806-77fe9bf52290"
+                        },
+                        {
+                            "description": "Vertical Wire, length 0.1500 mm",
+                            "pos": {
+                                "x": 1.872,
+                                "y": 0.7699
+                            },
+                            "uuid": "381364d2-be06-5af5-8aa2-227e7c349db7"
+                        }
+                    ],
+                    "severity": "error",
+                    "type": "wire_dangling"
+                },
+                {
+                    "description": "Pin not connected",
+                    "items": [
+                        {
+                            "description": "Symbol U? Pin 1 [Power input, Line]",
+                            "pos": {
+                                "x": 1.912,
+                                "y": 0.7826
+                            },
+                            "uuid": "d5b6bedb-3008-4831-819c-c2d9a4e60b43"
+                        }
+                    ],
+                    "severity": "error",
+                    "type": "pin_not_connected"
+                },
+                {
+                    "description": "Input Power pin not driven by any Output Power pins",
+                    "items": [
+                        {
+                            "description": "Symbol U? Pin 1 [Power input, Line]",
+                            "pos": {
+                                "x": 1.912,
+                                "y": 0.7826
+                            },
+                            "uuid": "d5b6bedb-3008-4831-819c-c2d9a4e60b43"
+                        }
+                    ],
+                    "severity": "error",
+                    "type": "power_pin_not_driven"
+                },
+                {
+                    "description": "Pin not connected",
+                    "items": [
+                        {
+                            "description": "Symbol U? Pin 1 [Power input, Line]",
+                            "pos": {
+                                "x": 1.912,
+                                "y": 0.808
+                            },
+                            "uuid": "bdcf4233-0f28-4ae4-99d2-d93410f2601f"
+                        }
+                    ],
+                    "severity": "error",
+                    "type": "pin_not_connected"
+                },
+                {
+                    "description": "Pin not connected",
+                    "items": [
+                        {
+                            "description": "Symbol U? Pin 1 [Power input, Line]",
+                            "pos": {
+                                "x": 1.912,
+                                "y": 0.8334
+                            },
+                            "uuid": "84adaa0c-f765-4f20-b1fd-0d0038e9281d"
+                        }
+                    ],
+                    "severity": "error",
+                    "type": "pin_not_connected"
+                },
+                {
+                    "description": "Pin not connected",
+                    "items": [
+                        {
+                            "description": "Symbol C2 Pin 1 [Passive, Line]",
+                            "pos": {
+                                "x": 1.9628,
+                                "y": 1.2001
+                            },
+                            "uuid": "4031a19b-040f-4d80-9a8a-4906574e082b"
+                        }
+                    ],
+                    "severity": "error",
+                    "type": "pin_not_connected"
+                },
+                {
+                    "description": "Pin not connected",
+                    "items": [
+                        {
+                            "description": "Symbol C2 Pin 2 [Passive, Line]",
+                            "pos": {
+                                "x": 1.9628,
+                                "y": 1.2763
+                            },
+                            "uuid": "c575b693-c0b2-4f30-9042-1dbf6d82ab63"
+                        }
+                    ],
+                    "severity": "error",
+                    "type": "pin_not_connected"
+                },
+                {
+                    "description": "Pin not connected",
+                    "items": [
+                        {
+                            "description": "Symbol U? Pin 1 [Power input, Line]",
+                            "pos": {
+                                "x": 1.982,
+                                "y": 1.2382
+                            },
+                            "uuid": "daa60106-ceed-4ec5-ace4-c4634eb1526f"
+                        }
+                    ],
+                    "severity": "error",
+                    "type": "pin_not_connected"
+                },
+                {
+                    "description": "Pin not connected",
+                    "items": [
+                        {
+                            "description": "Symbol U? Pin 1 [Power input, Line]",
+                            "pos": {
+                                "x": 1.982,
+                                "y": 1.2636
+                            },
+                            "uuid": "e89205e1-47c5-4dd3-9865-14d10eac0ea9"
+                        }
+                    ],
+                    "severity": "error",
+                    "type": "pin_not_connected"
+                },
+                {
+                    "description": "Pin not connected",
+                    "items": [
+                        {
+                            "description": "Symbol U1 Pin 1 [IOVDD, Power input, Line]",
+                            "pos": {
+                                "x": 1.9882,
+                                "y": 0.2619
+                            },
+                            "uuid": "1903abde-10a2-483e-97c0-7512790bb0cc"
+                        }
+                    ],
+                    "severity": "error",
+                    "type": "pin_not_connected"
+                },
+                {
+                    "description": "Input Power pin not driven by any Output Power pins",
+                    "items": [
+                        {
+                            "description": "Symbol U1 Pin 1 [IOVDD, Power input, Line]",
+                            "pos": {
+                                "x": 1.9882,
+                                "y": 0.2619
+                            },
+                            "uuid": "1903abde-10a2-483e-97c0-7512790bb0cc"
+                        }
+                    ],
+                    "severity": "error",
+                    "type": "power_pin_not_driven"
+                },
+                {
+                    "description": "Pin not connected",
+                    "items": [
+                        {
+                            "description": "Symbol R1 Pin 2 [Passive, Line]",
+                            "pos": {
+                                "x": 2.0136,
+                                "y": 0.1619
+                            },
+                            "uuid": "4f81bbad-6c9a-42f5-923d-6cf980b15783"
+                        }
+                    ],
+                    "severity": "error",
+                    "type": "pin_not_connected"
+                },
+                {
+                    "description": "Pin not connected",
+                    "items": [
+                        {
+                            "description": "Symbol R1 Pin 1 [Passive, Line]",
+                            "pos": {
+                                "x": 2.0136,
+                                "y": 0.2381
+                            },
+                            "uuid": "e1d1ce70-5134-46b7-bc17-48127c8682c8"
+                        }
+                    ],
+                    "severity": "error",
+                    "type": "pin_not_connected"
+                },
+                {
+                    "description": "Pin not connected",
+                    "items": [
+                        {
+                            "description": "Symbol U1 Pin 57 [GND, Power input, Line]",
+                            "pos": {
+                                "x": 2.0136,
+                                "y": 1.1763
+                            },
+                            "uuid": "209b5529-b6e5-4b05-976e-b88660ddc320"
+                        }
+                    ],
+                    "severity": "error",
+                    "type": "pin_not_connected"
+                },
+                {
+                    "description": "Input Power pin not driven by any Output Power pins",
+                    "items": [
+                        {
+                            "description": "Symbol U1 Pin 57 [GND, Power input, Line]",
+                            "pos": {
+                                "x": 2.0136,
+                                "y": 1.1763
+                            },
+                            "uuid": "209b5529-b6e5-4b05-976e-b88660ddc320"
+                        }
+                    ],
+                    "severity": "error",
+                    "type": "power_pin_not_driven"
+                },
+                {
+                    "description": "Pin not connected",
+                    "items": [
+                        {
+                            "description": "Symbol U1 Pin 44 [VREG_VIN, Power input, Line]",
+                            "pos": {
+                                "x": 2.039,
+                                "y": 0.2619
+                            },
+                            "uuid": "e3ba9b37-a261-4d53-bba7-031bac0ab67f"
+                        }
+                    ],
+                    "severity": "error",
+                    "type": "pin_not_connected"
+                },
+                {
+                    "description": "Input Power pin not driven by any Output Power pins",
+                    "items": [
+                        {
+                            "description": "Symbol U1 Pin 44 [VREG_VIN, Power input, Line]",
+                            "pos": {
+                                "x": 2.039,
+                                "y": 0.2619
+                            },
+                            "uuid": "e3ba9b37-a261-4d53-bba7-031bac0ab67f"
+                        }
+                    ],
+                    "severity": "error",
+                    "type": "power_pin_not_driven"
+                },
+                {
+                    "description": "Pin not connected",
+                    "items": [
+                        {
+                            "description": "Symbol C3 Pin 1 [Passive, Line]",
+                            "pos": {
+                                "x": 2.0836,
+                                "y": 1.2001
+                            },
+                            "uuid": "95034eb6-39f6-4a03-ad3a-cf2bc7eb361a"
+                        }
+                    ],
+                    "severity": "error",
+                    "type": "pin_not_connected"
+                },
+                {
+                    "description": "Pin not connected",
+                    "items": [
+                        {
+                            "description": "Symbol C3 Pin 2 [Passive, Line]",
+                            "pos": {
+                                "x": 2.0836,
+                                "y": 1.2763
+                            },
+                            "uuid": "65a0541f-bfe0-4e8b-9250-e8cd73ec3b68"
+                        }
+                    ],
+                    "severity": "error",
+                    "type": "pin_not_connected"
+                },
+                {
+                    "description": "Pin not connected",
+                    "items": [
+                        {
+                            "description": "Symbol U1 Pin 45 [VREG_VOUT, Power output, Line]",
+                            "pos": {
+                                "x": 2.0898,
+                                "y": 0.2619
+                            },
+                            "uuid": "e74fe582-fdd3-4782-aa7e-a565798b9171"
+                        }
+                    ],
+                    "severity": "error",
+                    "type": "pin_not_connected"
+                },
+                {
+                    "description": "Wires not connected to anything",
+                    "items": [
+                        {
+                            "description": "Horizontal Wire, length 0.0500 mm",
+                            "pos": {
+                                "x": 2.1152,
+                                "y": 0.6429
+                            },
+                            "uuid": "8fa48275-886e-5804-93f3-85775ef9c0a9"
+                        },
+                        {
+                            "description": "Vertical Wire, length 0.1897 mm",
+                            "pos": {
+                                "x": 2.1652,
+                                "y": 0.6429
+                            },
+                            "uuid": "f4dc5b79-b81c-5e24-bfb7-69663ae3fdfd"
+                        }
+                    ],
+                    "severity": "error",
+                    "type": "wire_dangling"
+                },
+                {
+                    "description": "Pin not connected",
+                    "items": [
+                        {
+                            "description": "Symbol U1 Pin 23 [DVDD, Power input, Line]",
+                            "pos": {
+                                "x": 2.1406,
+                                "y": 0.2619
+                            },
+                            "uuid": "0abfb8ce-2458-41fa-9206-4db7f5fb6dfd"
+                        }
+                    ],
+                    "severity": "error",
+                    "type": "pin_not_connected"
+                },
+                {
+                    "description": "Input Power pin not driven by any Output Power pins",
+                    "items": [
+                        {
+                            "description": "Symbol U1 Pin 23 [DVDD, Power input, Line]",
+                            "pos": {
+                                "x": 2.1406,
+                                "y": 0.2619
+                            },
+                            "uuid": "0abfb8ce-2458-41fa-9206-4db7f5fb6dfd"
+                        }
+                    ],
+                    "severity": "error",
+                    "type": "power_pin_not_driven"
+                },
+                {
+                    "description": "Pin not connected",
+                    "items": [
+                        {
+                            "description": "Symbol U? Pin 1 [Power input, Line]",
+                            "pos": {
+                                "x": 2.2279,
+                                "y": 0.7191
+                            },
+                            "uuid": "9599239a-7862-4184-9e72-73dc75c628b0"
+                        }
+                    ],
+                    "severity": "error",
+                    "type": "pin_not_connected"
+                },
+                {
+                    "description": "Pin not connected",
+                    "items": [
+                        {
+                            "description": "Symbol U1 Pin 2 [GPIO0, Bidirectional, Line]",
+                            "pos": {
+                                "x": 2.2676,
+                                "y": 0.3381
+                            },
+                            "uuid": "19e202c5-be0f-4a49-af57-0e7155d5b81f"
+                        }
+                    ],
+                    "severity": "error",
+                    "type": "pin_not_connected"
+                },
+                {
+                    "description": "Pin not connected",
+                    "items": [
+                        {
+                            "description": "Symbol U1 Pin 3 [GPIO1, Bidirectional, Line]",
+                            "pos": {
+                                "x": 2.2676,
+                                "y": 0.3635
+                            },
+                            "uuid": "605fcf56-a0d2-4033-a1c0-009d80b6afa2"
+                        }
+                    ],
+                    "severity": "error",
+                    "type": "pin_not_connected"
+                },
+                {
+                    "description": "Pin not connected",
+                    "items": [
+                        {
+                            "description": "Symbol U1 Pin 4 [GPIO2, Bidirectional, Line]",
+                            "pos": {
+                                "x": 2.2676,
+                                "y": 0.3889
+                            },
+                            "uuid": "52e88e70-6c20-4ddc-996d-1fd073a470c9"
+                        }
+                    ],
+                    "severity": "error",
+                    "type": "pin_not_connected"
+                },
+                {
+                    "description": "Pin not connected",
+                    "items": [
+                        {
+                            "description": "Symbol U1 Pin 5 [GPIO3, Bidirectional, Line]",
+                            "pos": {
+                                "x": 2.2676,
+                                "y": 0.4143
+                            },
+                            "uuid": "e7dbe19b-e45e-4a0e-8e91-59867f0162db"
+                        }
+                    ],
+                    "severity": "error",
+                    "type": "pin_not_connected"
+                },
+                {
+                    "description": "Pin not connected",
+                    "items": [
+                        {
+                            "description": "Symbol U1 Pin 6 [GPIO4, Bidirectional, Line]",
+                            "pos": {
+                                "x": 2.2676,
+                                "y": 0.4397
+                            },
+                            "uuid": "889a4c01-e331-41bb-ab9a-ae2c18e01424"
+                        }
+                    ],
+                    "severity": "error",
+                    "type": "pin_not_connected"
+                },
+                {
+                    "description": "Pin not connected",
+                    "items": [
+                        {
+                            "description": "Symbol U1 Pin 7 [GPIO5, Bidirectional, Line]",
+                            "pos": {
+                                "x": 2.2676,
+                                "y": 0.4651
+                            },
+                            "uuid": "cd76a0ad-a9d2-4314-9ec4-6e90c57cc9fb"
+                        }
+                    ],
+                    "severity": "error",
+                    "type": "pin_not_connected"
+                },
+                {
+                    "description": "Pin not connected",
+                    "items": [
+                        {
+                            "description": "Symbol U1 Pin 8 [GPIO6, Bidirectional, Line]",
+                            "pos": {
+                                "x": 2.2676,
+                                "y": 0.4905
+                            },
+                            "uuid": "e0c9244b-79bc-4b8a-afb7-bb85180208ae"
+                        }
+                    ],
+                    "severity": "error",
+                    "type": "pin_not_connected"
+                },
+                {
+                    "description": "Pin not connected",
+                    "items": [
+                        {
+                            "description": "Symbol U1 Pin 9 [GPIO7, Bidirectional, Line]",
+                            "pos": {
+                                "x": 2.2676,
+                                "y": 0.5159
+                            },
+                            "uuid": "bbf37f95-a204-4d02-9c52-d2275cf8e7a1"
+                        }
+                    ],
+                    "severity": "error",
+                    "type": "pin_not_connected"
+                },
+                {
+                    "description": "Pin not connected",
+                    "items": [
+                        {
+                            "description": "Symbol U1 Pin 11 [GPIO8, Bidirectional, Line]",
+                            "pos": {
+                                "x": 2.2676,
+                                "y": 0.5413
+                            },
+                            "uuid": "714e94a5-b983-4109-87cb-2b1770371d58"
+                        }
+                    ],
+                    "severity": "error",
+                    "type": "pin_not_connected"
+                },
+                {
+                    "description": "Pin not connected",
+                    "items": [
+                        {
+                            "description": "Symbol U1 Pin 12 [GPIO9, Bidirectional, Line]",
+                            "pos": {
+                                "x": 2.2676,
+                                "y": 0.5667
+                            },
+                            "uuid": "ec430558-177c-456e-b969-3b9526faa449"
+                        }
+                    ],
+                    "severity": "error",
+                    "type": "pin_not_connected"
+                },
+                {
+                    "description": "Pin not connected",
+                    "items": [
+                        {
+                            "description": "Symbol U1 Pin 13 [GPIO10, Bidirectional, Line]",
+                            "pos": {
+                                "x": 2.2676,
+                                "y": 0.5921
+                            },
+                            "uuid": "ea979852-228d-4e2a-8abc-fd369a358696"
+                        }
+                    ],
+                    "severity": "error",
+                    "type": "pin_not_connected"
+                },
+                {
+                    "description": "Pin not connected",
+                    "items": [
+                        {
+                            "description": "Symbol U1 Pin 14 [GPIO11, Bidirectional, Line]",
+                            "pos": {
+                                "x": 2.2676,
+                                "y": 0.6175
+                            },
+                            "uuid": "1dfd25fa-07f3-4968-9895-820a804c1252"
+                        }
+                    ],
+                    "severity": "error",
+                    "type": "pin_not_connected"
+                },
+                {
+                    "description": "Pin not connected",
+                    "items": [
+                        {
+                            "description": "Symbol U1 Pin 15 [GPIO12, Bidirectional, Line]",
+                            "pos": {
+                                "x": 2.2676,
+                                "y": 0.6429
+                            },
+                            "uuid": "69898b4d-c4b5-44e4-8d27-be6e4e03ab7e"
+                        }
+                    ],
+                    "severity": "error",
+                    "type": "pin_not_connected"
+                },
+                {
+                    "description": "Pin not connected",
+                    "items": [
+                        {
+                            "description": "Symbol U1 Pin 16 [GPIO13, Bidirectional, Line]",
+                            "pos": {
+                                "x": 2.2676,
+                                "y": 0.6683
+                            },
+                            "uuid": "bce0043f-bff1-407b-8698-5c7fdb3e4617"
+                        }
+                    ],
+                    "severity": "error",
+                    "type": "pin_not_connected"
+                },
+                {
+                    "description": "Pin not connected",
+                    "items": [
+                        {
+                            "description": "Symbol U1 Pin 17 [GPIO14, Bidirectional, Line]",
+                            "pos": {
+                                "x": 2.2676,
+                                "y": 0.6937
+                            },
+                            "uuid": "74f9a134-9fd5-43c8-8eef-19516d3348c3"
+                        }
+                    ],
+                    "severity": "error",
+                    "type": "pin_not_connected"
+                },
+                {
+                    "description": "Pin not connected",
+                    "items": [
+                        {
+                            "description": "Symbol U1 Pin 18 [GPIO15, Bidirectional, Line]",
+                            "pos": {
+                                "x": 2.2676,
+                                "y": 0.7191
+                            },
+                            "uuid": "8ff3576d-8423-4dec-814b-b14d0f890e25"
+                        }
+                    ],
+                    "severity": "error",
+                    "type": "pin_not_connected"
+                },
+                {
+                    "description": "Pin not connected",
+                    "items": [
+                        {
+                            "description": "Symbol U1 Pin 27 [GPIO16, Bidirectional, Line]",
+                            "pos": {
+                                "x": 2.2676,
+                                "y": 0.7445
+                            },
+                            "uuid": "63954462-ad46-44df-9012-d5bd3c269d51"
+                        }
+                    ],
+                    "severity": "error",
+                    "type": "pin_not_connected"
+                },
+                {
+                    "description": "Pin not connected",
+                    "items": [
+                        {
+                            "description": "Symbol U1 Pin 28 [GPIO17, Bidirectional, Line]",
+                            "pos": {
+                                "x": 2.2676,
+                                "y": 0.7699
+                            },
+                            "uuid": "3c3af385-f8d5-433e-87f7-ebf630b9f8f3"
+                        }
+                    ],
+                    "severity": "error",
+                    "type": "pin_not_connected"
+                },
+                {
+                    "description": "Pin not connected",
+                    "items": [
+                        {
+                            "description": "Symbol U1 Pin 29 [GPIO18, Bidirectional, Line]",
+                            "pos": {
+                                "x": 2.2676,
+                                "y": 0.7953
+                            },
+                            "uuid": "ef429af1-5983-44e4-8e1f-4a870678ff75"
+                        }
+                    ],
+                    "severity": "error",
+                    "type": "pin_not_connected"
+                },
+                {
+                    "description": "Pin not connected",
+                    "items": [
+                        {
+                            "description": "Symbol U1 Pin 30 [GPIO19, Bidirectional, Line]",
+                            "pos": {
+                                "x": 2.2676,
+                                "y": 0.8207
+                            },
+                            "uuid": "770345c8-9041-444d-a99a-72ac9865f202"
+                        }
+                    ],
+                    "severity": "error",
+                    "type": "pin_not_connected"
+                },
+                {
+                    "description": "Pin not connected",
+                    "items": [
+                        {
+                            "description": "Symbol U1 Pin 31 [GPIO20, Bidirectional, Line]",
+                            "pos": {
+                                "x": 2.2676,
+                                "y": 0.8461
+                            },
+                            "uuid": "4eff37cd-efdd-409f-8195-9740c047d4e1"
+                        }
+                    ],
+                    "severity": "error",
+                    "type": "pin_not_connected"
+                },
+                {
+                    "description": "Pin not connected",
+                    "items": [
+                        {
+                            "description": "Symbol U1 Pin 32 [GPIO21, Bidirectional, Line]",
+                            "pos": {
+                                "x": 2.2676,
+                                "y": 0.8715
+                            },
+                            "uuid": "073e4709-7512-4fa9-948e-2a0f5e21fe1d"
+                        }
+                    ],
+                    "severity": "error",
+                    "type": "pin_not_connected"
+                },
+                {
+                    "description": "Pin not connected",
+                    "items": [
+                        {
+                            "description": "Symbol U1 Pin 34 [GPIO22, Bidirectional, Line]",
+                            "pos": {
+                                "x": 2.2676,
+                                "y": 0.8969
+                            },
+                            "uuid": "da3286a7-2481-48c1-8dcc-7648f964c9db"
+                        }
+                    ],
+                    "severity": "error",
+                    "type": "pin_not_connected"
+                },
+                {
+                    "description": "Pin not connected",
+                    "items": [
+                        {
+                            "description": "Symbol U1 Pin 35 [GPIO23, Bidirectional, Line]",
+                            "pos": {
+                                "x": 2.2676,
+                                "y": 0.9223
+                            },
+                            "uuid": "73c22d1e-8c16-4168-aadf-e65d97ef4f30"
+                        }
+                    ],
+                    "severity": "error",
+                    "type": "pin_not_connected"
+                },
+                {
+                    "description": "Pin not connected",
+                    "items": [
+                        {
+                            "description": "Symbol U1 Pin 36 [GPIO24, Bidirectional, Line]",
+                            "pos": {
+                                "x": 2.2676,
+                                "y": 0.9477
+                            },
+                            "uuid": "7d8f8993-79aa-48f9-bc47-4da0691d497c"
+                        }
+                    ],
+                    "severity": "error",
+                    "type": "pin_not_connected"
+                },
+                {
+                    "description": "Pin not connected",
+                    "items": [
+                        {
+                            "description": "Symbol U1 Pin 37 [GPIO25, Bidirectional, Line]",
+                            "pos": {
+                                "x": 2.2676,
+                                "y": 0.9731
+                            },
+                            "uuid": "230c79c4-887c-43c9-b065-16bbac04bd72"
+                        }
+                    ],
+                    "severity": "error",
+                    "type": "pin_not_connected"
+                },
+                {
+                    "description": "Pin not connected",
+                    "items": [
+                        {
+                            "description": "Symbol U1 Pin 38 [GPIO26/ADC0, Bidirectional, Line]",
+                            "pos": {
+                                "x": 2.2676,
+                                "y": 1.0239
+                            },
+                            "uuid": "59294004-21e2-4382-a3ea-bdc29732695a"
+                        }
+                    ],
+                    "severity": "error",
+                    "type": "pin_not_connected"
+                },
+                {
+                    "description": "Pin not connected",
+                    "items": [
+                        {
+                            "description": "Symbol U1 Pin 39 [GPIO27/ADC1, Bidirectional, Line]",
+                            "pos": {
+                                "x": 2.2676,
+                                "y": 1.0493
+                            },
+                            "uuid": "2eb387a1-3702-46e2-abd0-4c15b516e100"
+                        }
+                    ],
+                    "severity": "error",
+                    "type": "pin_not_connected"
+                },
+                {
+                    "description": "Pin not connected",
+                    "items": [
+                        {
+                            "description": "Symbol U1 Pin 40 [GPIO28/ADC2, Bidirectional, Line]",
+                            "pos": {
+                                "x": 2.2676,
+                                "y": 1.0747
+                            },
+                            "uuid": "4bf16a8c-16b5-4e6c-95ba-c62e8efb101d"
+                        }
+                    ],
+                    "severity": "error",
+                    "type": "pin_not_connected"
+                },
+                {
+                    "description": "Pin not connected",
+                    "items": [
+                        {
+                            "description": "Symbol U1 Pin 41 [GPIO29/ADC3, Bidirectional, Line]",
+                            "pos": {
+                                "x": 2.2676,
+                                "y": 1.1001
+                            },
+                            "uuid": "eae15a58-fa56-4650-b6f6-4c0b5cac6b42"
+                        }
+                    ],
+                    "severity": "error",
+                    "type": "pin_not_connected"
+                },
+                {
+                    "description": "Pin not connected",
+                    "items": [
+                        {
+                            "description": "Symbol R2 Pin 2 [Passive, Line]",
+                            "pos": {
+                                "x": 2.3295,
+                                "y": 0.681
+                            },
+                            "uuid": "1272a97a-7342-466f-93ca-1e20cbb27b0c"
+                        }
+                    ],
+                    "severity": "error",
+                    "type": "pin_not_connected"
+                },
+                {
+                    "description": "Pin not connected",
+                    "items": [
+                        {
+                            "description": "Symbol R2 Pin 1 [Passive, Line]",
+                            "pos": {
+                                "x": 2.3295,
+                                "y": 0.7572
+                            },
+                            "uuid": "8e5d3021-d789-431b-ba6b-80db3320ac9e"
+                        }
+                    ],
+                    "severity": "error",
+                    "type": "pin_not_connected"
+                },
+                {
+                    "description": "Symbol pin or wire end off connection grid",
+                    "items": [
+                        {
+                            "description": "Vertical Wire, length 1.3136 mm",
+                            "pos": {
+                                "x": 0.3984,
+                                "y": 0.5437
+                            },
+                            "uuid": "4869a4a2-ad3c-5c33-9bd3-504456751bd2"
+                        }
+                    ],
+                    "severity": "warning",
+                    "type": "endpoint_off_grid"
+                },
+                {
+                    "description": "Symbol pin or wire end off connection grid",
+                    "items": [
+                        {
+                            "description": "Horizontal Wire, length 0.0500 mm",
+                            "pos": {
+                                "x": 0.3984,
+                                "y": 1.8573
+                            },
+                            "uuid": "2f8432b3-0a16-5345-ad81-01b464956a26"
+                        }
+                    ],
+                    "severity": "warning",
+                    "type": "endpoint_off_grid"
+                },
+                {
+                    "description": "Symbol pin or wire end off connection grid",
+                    "items": [
+                        {
+                            "description": "Vertical Wire, length 1.1866 mm",
+                            "pos": {
+                                "x": 0.4084,
+                                "y": 0.6199
+                            },
+                            "uuid": "b8cf5e4e-49dc-5de4-b28f-22485f5fc45f"
+                        }
+                    ],
+                    "severity": "warning",
+                    "type": "endpoint_off_grid"
+                },
+                {
+                    "description": "Symbol pin or wire end off connection grid",
+                    "items": [
+                        {
+                            "description": "Horizontal Wire, length 0.0400 mm",
+                            "pos": {
+                                "x": 0.4084,
+                                "y": 1.8065
+                            },
+                            "uuid": "866837ad-b330-555c-8d74-4394266df961"
+                        }
+                    ],
+                    "severity": "warning",
+                    "type": "endpoint_off_grid"
+                },
+                {
+                    "description": "Symbol pin or wire end off connection grid",
+                    "items": [
+                        {
+                            "description": "Vertical Wire, length 1.2882 mm",
+                            "pos": {
+                                "x": 0.4184,
+                                "y": 0.5945
+                            },
+                            "uuid": "b34b88a8-2049-5673-bc68-b41e91df7d10"
+                        }
+                    ],
+                    "severity": "warning",
+                    "type": "endpoint_off_grid"
+                },
+                {
+                    "description": "Symbol pin or wire end off connection grid",
+                    "items": [
+                        {
+                            "description": "Horizontal Wire, length 0.0300 mm",
+                            "pos": {
+                                "x": 0.4184,
+                                "y": 1.8827
+                            },
+                            "uuid": "fdacca3f-bbaf-59a3-885d-05afaddec0a5"
+                        }
+                    ],
+                    "severity": "warning",
+                    "type": "endpoint_off_grid"
+                },
+                {
+                    "description": "Symbol pin or wire end off connection grid",
+                    "items": [
+                        {
+                            "description": "Vertical Wire, length 1.2120 mm",
+                            "pos": {
+                                "x": 0.4284,
+                                "y": 0.5691
+                            },
+                            "uuid": "0e31062a-023c-518e-8095-02319a80f853"
+                        }
+                    ],
+                    "severity": "warning",
+                    "type": "endpoint_off_grid"
+                },
+                {
+                    "description": "Symbol pin or wire end off connection grid",
+                    "items": [
+                        {
+                            "description": "Horizontal Wire, length 0.0200 mm",
+                            "pos": {
+                                "x": 0.4284,
+                                "y": 1.7811
+                            },
+                            "uuid": "c5533a0f-e6ef-5ed8-a898-9454511b94bc"
+                        }
+                    ],
+                    "severity": "warning",
+                    "type": "endpoint_off_grid"
+                },
+                {
+                    "description": "Symbol pin or wire end off connection grid",
+                    "items": [
+                        {
+                            "description": "Symbol U? Pin 1 [Power input, Line]",
+                            "pos": {
+                                "x": 0.4484,
+                                "y": 0.7191
+                            },
+                            "uuid": "43949c30-111b-40e4-8266-819694d6e8d9"
+                        }
+                    ],
+                    "severity": "warning",
+                    "type": "endpoint_off_grid"
+                },
+                {
+                    "description": "The current configuration does not include the symbol library 'synth'",
+                    "items": [
+                        {
+                            "description": "Symbol U? [GND]",
+                            "pos": {
+                                "x": 0.4484,
+                                "y": 0.7191
+                            },
+                            "uuid": "695e522c-b0b6-5d01-8416-8cb2c034a630"
+                        }
+                    ],
+                    "severity": "warning",
+                    "type": "lib_symbol_issues"
+                },
+                {
+                    "description": "Symbol pin or wire end off connection grid",
+                    "items": [
+                        {
+                            "description": "Symbol U? Pin 1 [Power input, Line]",
+                            "pos": {
+                                "x": 0.4484,
+                                "y": 0.7445
+                            },
+                            "uuid": "ac8fee04-4508-4edd-8b88-f15b39462156"
+                        }
+                    ],
+                    "severity": "warning",
+                    "type": "endpoint_off_grid"
+                },
+                {
+                    "description": "The current configuration does not include the symbol library 'synth'",
+                    "items": [
+                        {
+                            "description": "Symbol U? [VIN]",
+                            "pos": {
+                                "x": 0.4484,
+                                "y": 0.7445
+                            },
+                            "uuid": "c04d33f0-bb5a-5f48-8a55-e08e65256f04"
+                        }
+                    ],
+                    "severity": "warning",
+                    "type": "lib_symbol_issues"
+                },
+                {
+                    "description": "Symbol pin or wire end off connection grid",
+                    "items": [
+                        {
+                            "description": "Symbol U? Pin 1 [Power input, Line]",
+                            "pos": {
+                                "x": 0.4484,
+                                "y": 1.7557
+                            },
+                            "uuid": "3e9d433e-930d-4d7b-9f43-5ead79feb1f7"
+                        }
+                    ],
+                    "severity": "warning",
+                    "type": "endpoint_off_grid"
+                },
+                {
+                    "description": "The current configuration does not include the symbol library 'synth'",
+                    "items": [
+                        {
+                            "description": "Symbol U? [VOUT]",
+                            "pos": {
+                                "x": 0.4484,
+                                "y": 1.7557
+                            },
+                            "uuid": "fe7ff1f6-a0c1-5a05-b3ac-8dc9434cf758"
+                        }
+                    ],
+                    "severity": "warning",
+                    "type": "lib_symbol_issues"
+                },
+                {
+                    "description": "Unconnected wire endpoint",
+                    "items": [
+                        {
+                            "description": "Horizontal Wire, length 0.0200 mm",
+                            "pos": {
+                                "x": 0.4284,
+                                "y": 1.7811
+                            },
+                            "uuid": "c5533a0f-e6ef-5ed8-a898-9454511b94bc"
+                        }
+                    ],
+                    "severity": "warning",
+                    "type": "unconnected_wire_endpoint"
+                },
+                {
+                    "description": "Unconnected wire endpoint",
+                    "items": [
+                        {
+                            "description": "Horizontal Wire, length 0.0400 mm",
+                            "pos": {
+                                "x": 0.4084,
+                                "y": 1.8065
+                            },
+                            "uuid": "866837ad-b330-555c-8d74-4394266df961"
+                        }
+                    ],
+                    "severity": "warning",
+                    "type": "unconnected_wire_endpoint"
+                },
+                {
+                    "description": "Symbol pin or wire end off connection grid",
+                    "items": [
+                        {
+                            "description": "Symbol U? Pin 1 [Power input, Line]",
+                            "pos": {
+                                "x": 0.4484,
+                                "y": 1.8573
+                            },
+                            "uuid": "5136fff9-4d36-4232-8cc9-bfea033f91c4"
+                        }
+                    ],
+                    "severity": "warning",
+                    "type": "endpoint_off_grid"
+                },
+                {
+                    "description": "The current configuration does not include the symbol library 'synth'",
+                    "items": [
+                        {
+                            "description": "Symbol U? [GND]",
+                            "pos": {
+                                "x": 0.4484,
+                                "y": 1.8573
+                            },
+                            "uuid": "21e072f2-0ca6-5143-b4e4-a72482ecd9c3"
+                        }
+                    ],
+                    "severity": "warning",
+                    "type": "lib_symbol_issues"
+                },
+                {
+                    "description": "Unconnected wire endpoint",
+                    "items": [
+                        {
+                            "description": "Horizontal Wire, length 0.0300 mm",
+                            "pos": {
+                                "x": 0.4184,
+                                "y": 1.8827
+                            },
+                            "uuid": "fdacca3f-bbaf-59a3-885d-05afaddec0a5"
+                        }
+                    ],
+                    "severity": "warning",
+                    "type": "unconnected_wire_endpoint"
+                },
+                {
+                    "description": "Symbol pin or wire end off connection grid",
+                    "items": [
+                        {
+                            "description": "Symbol J1 Pin 1 [Pin_1, Passive, Line]",
+                            "pos": {
+                                "x": 0.4992,
+                                "y": 0.6937
+                            },
+                            "uuid": "8261982a-23aa-4839-a1bb-fd4647f978e0"
+                        }
+                    ],
+                    "severity": "warning",
+                    "type": "endpoint_off_grid"
+                },
+                {
+                    "description": "The current configuration does not include the footprint library 'Connector_PinHeader_2.54mm'",
+                    "items": [
+                        {
+                            "description": "Symbol J1 [Conn_01x04]",
+                            "pos": {
+                                "x": 0.55,
+                                "y": 0.7191
+                            },
+                            "uuid": "0012992e-a286-5720-b49e-125aadceb1b1"
+                        }
+                    ],
+                    "severity": "warning",
+                    "type": "footprint_link_issues"
+                },
+                {
+                    "description": "The current configuration does not include the symbol library 'Connector_Generic'",
+                    "items": [
+                        {
+                            "description": "Symbol J1 [Conn_01x04]",
+                            "pos": {
+                                "x": 0.55,
+                                "y": 0.7191
+                            },
+                            "uuid": "0012992e-a286-5720-b49e-125aadceb1b1"
+                        }
+                    ],
+                    "severity": "warning",
+                    "type": "lib_symbol_issues"
+                },
+                {
+                    "description": "The current configuration does not include the footprint library 'Package_SO'",
+                    "items": [
+                        {
+                            "description": "Symbol U2 [W25Q128JVS]",
+                            "pos": {
+                                "x": 0.55,
+                                "y": 1.8573
+                            },
+                            "uuid": "b10fa8c9-0384-5344-94c3-18fea596cb74"
+                        }
+                    ],
+                    "severity": "warning",
+                    "type": "footprint_link_issues"
+                },
+                {
+                    "description": "The current configuration does not include the symbol library 'Memory_Flash'",
+                    "items": [
+                        {
+                            "description": "Symbol U2 [W25Q128JVS]",
+                            "pos": {
+                                "x": 0.55,
+                                "y": 1.8573
+                            },
+                            "uuid": "b10fa8c9-0384-5344-94c3-18fea596cb74"
+                        }
+                    ],
+                    "severity": "warning",
+                    "type": "lib_symbol_issues"
+                },
+                {
+                    "description": "Symbol pin or wire end off connection grid",
+                    "items": [
+                        {
+                            "description": "Symbol U? Pin 1 [Power input, Line]",
+                            "pos": {
+                                "x": 1.1548,
+                                "y": 0.854025
+                            },
+                            "uuid": "103c8650-30c6-41c2-badf-2a9bb457d7bf"
+                        }
+                    ],
+                    "severity": "warning",
+                    "type": "endpoint_off_grid"
+                },
+                {
+                    "description": "The current configuration does not include the symbol library 'synth'",
+                    "items": [
+                        {
+                            "description": "Symbol U? [GND]",
+                            "pos": {
+                                "x": 1.1548,
+                                "y": 0.854025
+                            },
+                            "uuid": "584b31b9-b8c9-590c-a1bf-75ee0d58f361"
+                        }
+                    ],
+                    "severity": "warning",
+                    "type": "lib_symbol_issues"
+                },
+                {
+                    "description": "Symbol pin or wire end off connection grid",
+                    "items": [
+                        {
+                            "description": "Symbol U? Pin 1 [Power input, Line]",
+                            "pos": {
+                                "x": 1.1548,
+                                "y": 0.879425
+                            },
+                            "uuid": "94c3571d-f39b-4e5a-aaa0-38f04831a349"
+                        }
+                    ],
+                    "severity": "warning",
+                    "type": "endpoint_off_grid"
+                },
+                {
+                    "description": "The current configuration does not include the symbol library 'synth'",
+                    "items": [
+                        {
+                            "description": "Symbol U? [VIN]",
+                            "pos": {
+                                "x": 1.1548,
+                                "y": 0.879425
+                            },
+                            "uuid": "f829c14d-05ae-580f-a9db-de6ecdcfd8aa"
+                        }
+                    ],
+                    "severity": "warning",
+                    "type": "lib_symbol_issues"
+                },
+                {
+                    "description": "Symbol pin or wire end off connection grid",
+                    "items": [
+                        {
+                            "description": "Symbol U? Pin 1 [Power input, Line]",
+                            "pos": {
+                                "x": 1.1802,
+                                "y": 0.6937
+                            },
+                            "uuid": "706b4ad9-74f1-440a-b441-bdecaf3d9ea8"
+                        }
+                    ],
+                    "severity": "warning",
+                    "type": "endpoint_off_grid"
+                },
+                {
+                    "description": "The current configuration does not include the symbol library 'synth'",
+                    "items": [
+                        {
+                            "description": "Symbol U? [VIN]",
+                            "pos": {
+                                "x": 1.1802,
+                                "y": 0.6937
+                            },
+                            "uuid": "9caa0894-f51f-590f-9922-f6c4c7f91525"
+                        }
+                    ],
+                    "severity": "warning",
+                    "type": "lib_symbol_issues"
+                },
+                {
+                    "description": "Symbol pin or wire end off connection grid",
+                    "items": [
+                        {
+                            "description": "Symbol U? Pin 1 [Power input, Line]",
+                            "pos": {
+                                "x": 1.1802,
+                                "y": 0.7191
+                            },
+                            "uuid": "40b6a3a8-0123-4636-8a3c-93f6e2e68464"
+                        }
+                    ],
+                    "severity": "warning",
+                    "type": "endpoint_off_grid"
+                },
+                {
+                    "description": "The current configuration does not include the symbol library 'synth'",
+                    "items": [
+                        {
+                            "description": "Symbol U? [VOUT]",
+                            "pos": {
+                                "x": 1.1802,
+                                "y": 0.7191
+                            },
+                            "uuid": "611e2456-537b-5327-beb4-9679e69024cc"
+                        }
+                    ],
+                    "severity": "warning",
+                    "type": "lib_symbol_issues"
+                },
+                {
+                    "description": "Symbol pin or wire end off connection grid",
+                    "items": [
+                        {
+                            "description": "Symbol U? Pin 1 [Power input, Line]",
+                            "pos": {
+                                "x": 1.1802,
+                                "y": 0.7445
+                            },
+                            "uuid": "c19f8895-810c-48a4-822f-d9442677aa8d"
+                        }
+                    ],
+                    "severity": "warning",
+                    "type": "endpoint_off_grid"
+                },
+                {
+                    "description": "The current configuration does not include the symbol library 'synth'",
+                    "items": [
+                        {
+                            "description": "Symbol U? [GND]",
+                            "pos": {
+                                "x": 1.1802,
+                                "y": 0.7445
+                            },
+                            "uuid": "5ebd4c74-1e92-5613-8342-c6e1a78283ad"
+                        }
+                    ],
+                    "severity": "warning",
+                    "type": "lib_symbol_issues"
+                },
+                {
+                    "description": "Symbol pin or wire end off connection grid",
+                    "items": [
+                        {
+                            "description": "Symbol C1 Pin 1 [Passive, Line]",
+                            "pos": {
+                                "x": 1.2564,
+                                "y": 0.815925
+                            },
+                            "uuid": "eeff9921-8050-45b8-9330-cb1aa1d45c7e"
+                        }
+                    ],
+                    "severity": "warning",
+                    "type": "endpoint_off_grid"
+                },
+                {
+                    "description": "The current configuration does not include the footprint library 'Capacitor_SMD'",
+                    "items": [
+                        {
+                            "description": "Symbol C1 [C]",
+                            "pos": {
+                                "x": 1.2564,
+                                "y": 0.854025
+                            },
+                            "uuid": "37c136b9-b33c-5958-9c09-1b9214389756"
+                        }
+                    ],
+                    "severity": "warning",
+                    "type": "footprint_link_issues"
+                },
+                {
+                    "description": "The current configuration does not include the symbol library 'Device'",
+                    "items": [
+                        {
+                            "description": "Symbol C1 [C]",
+                            "pos": {
+                                "x": 1.2564,
+                                "y": 0.854025
+                            },
+                            "uuid": "37c136b9-b33c-5958-9c09-1b9214389756"
+                        }
+                    ],
+                    "severity": "warning",
+                    "type": "lib_symbol_issues"
+                },
+                {
+                    "description": "The current configuration does not include the footprint library 'Package_TO_SOT_SMD'",
+                    "items": [
+                        {
+                            "description": "Symbol U3 [AMS1117-3.3]",
+                            "pos": {
+                                "x": 1.2818,
+                                "y": 0.7191
+                            },
+                            "uuid": "2b872be7-1285-5656-8a67-de98947eaaec"
+                        }
+                    ],
+                    "severity": "warning",
+                    "type": "footprint_link_issues"
+                },
+                {
+                    "description": "The current configuration does not include the symbol library 'Regulator_Linear'",
+                    "items": [
+                        {
+                            "description": "Symbol U3 [AMS1117-3.3]",
+                            "pos": {
+                                "x": 1.2818,
+                                "y": 0.7191
+                            },
+                            "uuid": "2b872be7-1285-5656-8a67-de98947eaaec"
+                        }
+                    ],
+                    "severity": "warning",
+                    "type": "lib_symbol_issues"
+                },
+                {
+                    "description": "Symbol pin or wire end off connection grid",
+                    "items": [
+                        {
+                            "description": "Symbol U? Pin 1 [Power input, Line]",
+                            "pos": {
+                                "x": 1.8612,
+                                "y": 1.2382
+                            },
+                            "uuid": "7d020e91-09a8-41d8-8a47-200cf2b5fb88"
+                        }
+                    ],
+                    "severity": "warning",
+                    "type": "endpoint_off_grid"
+                },
+                {
+                    "description": "The current configuration does not include the symbol library 'synth'",
+                    "items": [
+                        {
+                            "description": "Symbol U? [GND]",
+                            "pos": {
+                                "x": 1.8612,
+                                "y": 1.2382
+                            },
+                            "uuid": "d6be5232-dd5c-52aa-b410-f09729b6fc7e"
+                        }
+                    ],
+                    "severity": "warning",
+                    "type": "lib_symbol_issues"
+                },
+                {
+                    "description": "Symbol pin or wire end off connection grid",
+                    "items": [
+                        {
+                            "description": "Symbol U? Pin 1 [Power input, Line]",
+                            "pos": {
+                                "x": 1.8612,
+                                "y": 1.2636
+                            },
+                            "uuid": "08044089-e2ff-4a65-9049-e6cf04b8db23"
+                        }
+                    ],
+                    "severity": "warning",
+                    "type": "endpoint_off_grid"
+                },
+                {
+                    "description": "The current configuration does not include the symbol library 'synth'",
+                    "items": [
+                        {
+                            "description": "Symbol U? [VOUT]",
+                            "pos": {
+                                "x": 1.8612,
+                                "y": 1.2636
+                            },
+                            "uuid": "23f34ee3-ab7b-5200-8eec-14df23b97505"
+                        }
+                    ],
+                    "severity": "warning",
+                    "type": "lib_symbol_issues"
+                },
+                {
+                    "description": "Symbol pin or wire end off connection grid",
+                    "items": [
+                        {
+                            "description": "Horizontal Wire, length 1.4636 mm",
+                            "pos": {
+                                "x": 1.862,
+                                "y": 0.5437
+                            },
+                            "uuid": "25ed650e-8e4d-5796-b782-a9e709937993"
+                        }
+                    ],
+                    "severity": "warning",
+                    "type": "endpoint_off_grid"
+                },
+                {
+                    "description": "Symbol pin or wire end off connection grid",
+                    "items": [
+                        {
+                            "description": "Vertical Wire, length 0.1500 mm",
+                            "pos": {
+                                "x": 1.862,
+                                "y": 0.6937
+                            },
+                            "uuid": "b7856806-c521-5a13-9782-ff4104a6a23f"
+                        }
+                    ],
+                    "severity": "warning",
+                    "type": "endpoint_off_grid"
+                },
+                {
+                    "description": "Symbol pin or wire end off connection grid",
+                    "items": [
+                        {
+                            "description": "Horizontal Wire, length 1.4636 mm",
+                            "pos": {
+                                "x": 1.872,
+                                "y": 0.6199
+                            },
+                            "uuid": "13921067-d194-5711-a445-e96b0ccd60a9"
+                        }
+                    ],
+                    "severity": "warning",
+                    "type": "endpoint_off_grid"
+                },
+                {
+                    "description": "Symbol pin or wire end off connection grid",
+                    "items": [
+                        {
+                            "description": "Vertical Wire, length 0.1500 mm",
+                            "pos": {
+                                "x": 1.872,
+                                "y": 0.7699
+                            },
+                            "uuid": "381364d2-be06-5af5-8aa2-227e7c349db7"
+                        }
+                    ],
+                    "severity": "warning",
+                    "type": "endpoint_off_grid"
+                },
+                {
+                    "description": "Symbol pin or wire end off connection grid",
+                    "items": [
+                        {
+                            "description": "Horizontal Wire, length 1.4636 mm",
+                            "pos": {
+                                "x": 1.882,
+                                "y": 0.5945
+                            },
+                            "uuid": "0023fc45-d2d7-533f-bf38-358e6fdc2416"
+                        }
+                    ],
+                    "severity": "warning",
+                    "type": "endpoint_off_grid"
+                },
+                {
+                    "description": "Symbol pin or wire end off connection grid",
+                    "items": [
+                        {
+                            "description": "Vertical Wire, length 0.1500 mm",
+                            "pos": {
+                                "x": 1.882,
+                                "y": 0.7445
+                            },
+                            "uuid": "5900cf7c-1697-5fa4-a42b-06b18aa7aac8"
+                        }
+                    ],
+                    "severity": "warning",
+                    "type": "endpoint_off_grid"
+                },
+                {
+                    "description": "Symbol pin or wire end off connection grid",
+                    "items": [
+                        {
+                            "description": "Horizontal Wire, length 0.1216 mm",
+                            "pos": {
+                                "x": 1.892,
+                                "y": 0.2835
+                            },
+                            "uuid": "8de123d8-0374-597a-92a9-2e35315bb773"
+                        }
+                    ],
+                    "severity": "warning",
+                    "type": "endpoint_off_grid"
+                },
+                {
+                    "description": "Symbol pin or wire end off connection grid",
+                    "items": [
+                        {
+                            "description": "Horizontal Wire, length 1.4636 mm",
+                            "pos": {
+                                "x": 1.892,
+                                "y": 0.5691
+                            },
+                            "uuid": "e5003260-1894-5d59-833a-22fa1759d5dd"
+                        }
+                    ],
+                    "severity": "warning",
+                    "type": "endpoint_off_grid"
+                },
+                {
+                    "description": "Symbol pin or wire end off connection grid",
+                    "items": [
+                        {
+                            "description": "Vertical Wire, length 0.4356 mm",
+                            "pos": {
+                                "x": 1.892,
+                                "y": 0.7191
+                            },
+                            "uuid": "1b136ba2-a686-51d5-990c-842d4e54298b"
+                        }
+                    ],
+                    "severity": "warning",
+                    "type": "endpoint_off_grid"
+                },
+                {
+                    "description": "Symbol pin or wire end off connection grid",
+                    "items": [
+                        {
+                            "description": "Vertical Wire, length 0.1500 mm",
+                            "pos": {
+                                "x": 1.892,
+                                "y": 0.7191
+                            },
+                            "uuid": "ab153ceb-11bc-5d3b-b575-b8da1bb64246"
+                        }
+                    ],
+                    "severity": "warning",
+                    "type": "endpoint_off_grid"
+                },
+                {
+                    "description": "Symbol pin or wire end off connection grid",
+                    "items": [
+                        {
+                            "description": "Symbol U? Pin 1 [Power input, Line]",
+                            "pos": {
+                                "x": 1.912,
+                                "y": 0.2
+                            },
+                            "uuid": "d828ac6b-a3cd-4223-aafd-f6ff96969c96"
+                        }
+                    ],
+                    "severity": "warning",
+                    "type": "endpoint_off_grid"
+                },
+                {
+                    "description": "The current configuration does not include the symbol library 'synth'",
+                    "items": [
+                        {
+                            "description": "Symbol U? [VOUT]",
+                            "pos": {
+                                "x": 1.912,
+                                "y": 0.2
+                            },
+                            "uuid": "0f5abf82-ceed-5f92-bc2e-2a464e693344"
+                        }
+                    ],
+                    "severity": "warning",
+                    "type": "lib_symbol_issues"
+                },
+                {
+                    "description": "Symbol pin or wire end off connection grid",
+                    "items": [
+                        {
+                            "description": "Horizontal Wire, length 0.0500 mm",
+                            "pos": {
+                                "x": 1.912,
+                                "y": 0.6937
+                            },
+                            "uuid": "9dee4586-8f60-56be-9ca0-58010b55248a"
+                        }
+                    ],
+                    "severity": "warning",
+                    "type": "endpoint_off_grid"
+                },
+                {
+                    "description": "Unconnected wire endpoint",
+                    "items": [
+                        {
+                            "description": "Horizontal Wire, length 0.0500 mm",
+                            "pos": {
+                                "x": 1.912,
+                                "y": 0.6937
+                            },
+                            "uuid": "9dee4586-8f60-56be-9ca0-58010b55248a"
+                        }
+                    ],
+                    "severity": "warning",
+                    "type": "unconnected_wire_endpoint"
+                },
+                {
+                    "description": "Symbol pin or wire end off connection grid",
+                    "items": [
+                        {
+                            "description": "Horizontal Wire, length 0.0200 mm",
+                            "pos": {
+                                "x": 1.912,
+                                "y": 0.7191
+                            },
+                            "uuid": "00d7010a-4cf2-5f38-8f76-a13511903ee5"
+                        }
+                    ],
+                    "severity": "warning",
+                    "type": "endpoint_off_grid"
+                },
+                {
+                    "description": "Symbol pin or wire end off connection grid",
+                    "items": [
+                        {
+                            "description": "Horizontal Wire, length 0.0200 mm",
+                            "pos": {
+                                "x": 1.912,
+                                "y": 0.7191
+                            },
+                            "uuid": "a43ed215-58be-5035-8611-96a1e38ca3ca"
+                        }
+                    ],
+                    "severity": "warning",
+                    "type": "endpoint_off_grid"
+                },
+                {
+                    "description": "Symbol pin or wire end off connection grid",
+                    "items": [
+                        {
+                            "description": "Horizontal Wire, length 0.0300 mm",
+                            "pos": {
+                                "x": 1.912,
+                                "y": 0.7445
+                            },
+                            "uuid": "9d9178b7-0ed8-5069-be0c-384d7f533771"
+                        }
+                    ],
+                    "severity": "warning",
+                    "type": "endpoint_off_grid"
+                },
+                {
+                    "description": "Unconnected wire endpoint",
+                    "items": [
+                        {
+                            "description": "Horizontal Wire, length 0.0300 mm",
+                            "pos": {
+                                "x": 1.912,
+                                "y": 0.7445
+                            },
+                            "uuid": "9d9178b7-0ed8-5069-be0c-384d7f533771"
+                        }
+                    ],
+                    "severity": "warning",
+                    "type": "unconnected_wire_endpoint"
+                },
+                {
+                    "description": "Symbol pin or wire end off connection grid",
+                    "items": [
+                        {
+                            "description": "Horizontal Wire, length 0.0400 mm",
+                            "pos": {
+                                "x": 1.912,
+                                "y": 0.7699
+                            },
+                            "uuid": "f1f95d66-17df-5414-8806-77fe9bf52290"
+                        }
+                    ],
+                    "severity": "warning",
+                    "type": "endpoint_off_grid"
+                },
+                {
+                    "description": "Unconnected wire endpoint",
+                    "items": [
+                        {
+                            "description": "Horizontal Wire, length 0.0400 mm",
+                            "pos": {
+                                "x": 1.912,
+                                "y": 0.7699
+                            },
+                            "uuid": "f1f95d66-17df-5414-8806-77fe9bf52290"
+                        }
+                    ],
+                    "severity": "warning",
+                    "type": "unconnected_wire_endpoint"
+                },
+                {
+                    "description": "Symbol pin or wire end off connection grid",
+                    "items": [
+                        {
+                            "description": "Symbol U? Pin 1 [Power input, Line]",
+                            "pos": {
+                                "x": 1.912,
+                                "y": 0.7826
+                            },
+                            "uuid": "d5b6bedb-3008-4831-819c-c2d9a4e60b43"
+                        }
+                    ],
+                    "severity": "warning",
+                    "type": "endpoint_off_grid"
+                },
+                {
+                    "description": "The current configuration does not include the symbol library 'synth'",
+                    "items": [
+                        {
+                            "description": "Symbol U? [GND]",
+                            "pos": {
+                                "x": 1.912,
+                                "y": 0.7826
+                            },
+                            "uuid": "120a23da-1b16-5d1a-bf32-f6dfd0def497"
+                        }
+                    ],
+                    "severity": "warning",
+                    "type": "lib_symbol_issues"
+                },
+                {
+                    "description": "Symbol pin or wire end off connection grid",
+                    "items": [
+                        {
+                            "description": "Symbol U? Pin 1 [Power input, Line]",
+                            "pos": {
+                                "x": 1.912,
+                                "y": 0.808
+                            },
+                            "uuid": "bdcf4233-0f28-4ae4-99d2-d93410f2601f"
+                        }
+                    ],
+                    "severity": "warning",
+                    "type": "endpoint_off_grid"
+                },
+                {
+                    "description": "The current configuration does not include the symbol library 'synth'",
+                    "items": [
+                        {
+                            "description": "Symbol U? [VOUT]",
+                            "pos": {
+                                "x": 1.912,
+                                "y": 0.808
+                            },
+                            "uuid": "90e388a4-df99-5549-8946-377604575340"
+                        }
+                    ],
+                    "severity": "warning",
+                    "type": "lib_symbol_issues"
+                },
+                {
+                    "description": "Symbol pin or wire end off connection grid",
+                    "items": [
+                        {
+                            "description": "Symbol U? Pin 1 [Power input, Line]",
+                            "pos": {
+                                "x": 1.912,
+                                "y": 0.8334
+                            },
+                            "uuid": "84adaa0c-f765-4f20-b1fd-0d0038e9281d"
+                        }
+                    ],
+                    "severity": "warning",
+                    "type": "endpoint_off_grid"
+                },
+                {
+                    "description": "The current configuration does not include the symbol library 'synth'",
+                    "items": [
+                        {
+                            "description": "Symbol U? [VOUT]",
+                            "pos": {
+                                "x": 1.912,
+                                "y": 0.8334
+                            },
+                            "uuid": "b3d17765-f16b-5936-bca6-530be5ea535e"
+                        }
+                    ],
+                    "severity": "warning",
+                    "type": "lib_symbol_issues"
+                },
+                {
+                    "description": "Symbol pin or wire end off connection grid",
+                    "items": [
+                        {
+                            "description": "Symbol C2 Pin 1 [Passive, Line]",
+                            "pos": {
+                                "x": 1.9628,
+                                "y": 1.2001
+                            },
+                            "uuid": "4031a19b-040f-4d80-9a8a-4906574e082b"
+                        }
+                    ],
+                    "severity": "warning",
+                    "type": "endpoint_off_grid"
+                },
+                {
+                    "description": "The current configuration does not include the footprint library 'Capacitor_SMD'",
+                    "items": [
+                        {
+                            "description": "Symbol C2 [C]",
+                            "pos": {
+                                "x": 1.9628,
+                                "y": 1.2382
+                            },
+                            "uuid": "59e1b7b5-aceb-51f1-acde-eaab9e4eed34"
+                        }
+                    ],
+                    "severity": "warning",
+                    "type": "footprint_link_issues"
+                },
+                {
+                    "description": "The current configuration does not include the symbol library 'Device'",
+                    "items": [
+                        {
+                            "description": "Symbol C2 [C]",
+                            "pos": {
+                                "x": 1.9628,
+                                "y": 1.2382
+                            },
+                            "uuid": "59e1b7b5-aceb-51f1-acde-eaab9e4eed34"
+                        }
+                    ],
+                    "severity": "warning",
+                    "type": "lib_symbol_issues"
+                },
+                {
+                    "description": "Symbol pin or wire end off connection grid",
+                    "items": [
+                        {
+                            "description": "Symbol U? Pin 1 [Power input, Line]",
+                            "pos": {
+                                "x": 1.982,
+                                "y": 1.2382
+                            },
+                            "uuid": "daa60106-ceed-4ec5-ace4-c4634eb1526f"
+                        }
+                    ],
+                    "severity": "warning",
+                    "type": "endpoint_off_grid"
+                },
+                {
+                    "description": "The current configuration does not include the symbol library 'synth'",
+                    "items": [
+                        {
+                            "description": "Symbol U? [GND]",
+                            "pos": {
+                                "x": 1.982,
+                                "y": 1.2382
+                            },
+                            "uuid": "cc5d5e6e-e36b-5405-ab97-2895085b8fb1"
+                        }
+                    ],
+                    "severity": "warning",
+                    "type": "lib_symbol_issues"
+                },
+                {
+                    "description": "Symbol pin or wire end off connection grid",
+                    "items": [
+                        {
+                            "description": "Symbol U? Pin 1 [Power input, Line]",
+                            "pos": {
+                                "x": 1.982,
+                                "y": 1.2636
+                            },
+                            "uuid": "e89205e1-47c5-4dd3-9865-14d10eac0ea9"
+                        }
+                    ],
+                    "severity": "warning",
+                    "type": "endpoint_off_grid"
+                },
+                {
+                    "description": "The current configuration does not include the symbol library 'synth'",
+                    "items": [
+                        {
+                            "description": "Symbol U? [VOUT]",
+                            "pos": {
+                                "x": 1.982,
+                                "y": 1.2636
+                            },
+                            "uuid": "2e7fab39-fd94-5af2-9264-5ab74f01ef19"
+                        }
+                    ],
+                    "severity": "warning",
+                    "type": "lib_symbol_issues"
+                },
+                {
+                    "description": "Symbol pin or wire end off connection grid",
+                    "items": [
+                        {
+                            "description": "Symbol U1 Pin 1 [IOVDD, Power input, Line]",
+                            "pos": {
+                                "x": 1.9882,
+                                "y": 0.2619
+                            },
+                            "uuid": "1903abde-10a2-483e-97c0-7512790bb0cc"
+                        }
+                    ],
+                    "severity": "warning",
+                    "type": "endpoint_off_grid"
+                },
+                {
+                    "description": "The current configuration does not include the footprint library 'Resistor_SMD'",
+                    "items": [
+                        {
+                            "description": "Symbol R1 [R_US]",
+                            "pos": {
+                                "x": 2.0136,
+                                "y": 0.2
+                            },
+                            "uuid": "0dd9b051-270d-50a6-9993-dd5669f6b898"
+                        }
+                    ],
+                    "severity": "warning",
+                    "type": "footprint_link_issues"
+                },
+                {
+                    "description": "The current configuration does not include the symbol library 'Device'",
+                    "items": [
+                        {
+                            "description": "Symbol R1 [R_US]",
+                            "pos": {
+                                "x": 2.0136,
+                                "y": 0.2
+                            },
+                            "uuid": "0dd9b051-270d-50a6-9993-dd5669f6b898"
+                        }
+                    ],
+                    "severity": "warning",
+                    "type": "lib_symbol_issues"
+                },
+                {
+                    "description": "Symbol pin or wire end off connection grid",
+                    "items": [
+                        {
+                            "description": "Symbol R1 Pin 1 [Passive, Line]",
+                            "pos": {
+                                "x": 2.0136,
+                                "y": 0.2381
+                            },
+                            "uuid": "e1d1ce70-5134-46b7-bc17-48127c8682c8"
+                        }
+                    ],
+                    "severity": "warning",
+                    "type": "endpoint_off_grid"
+                },
+                {
+                    "description": "Unconnected wire endpoint",
+                    "items": [
+                        {
+                            "description": "Vertical Wire, length 0.0200 mm",
+                            "pos": {
+                                "x": 2.0136,
+                                "y": 0.2835
+                            },
+                            "uuid": "e1c630b6-8476-50e8-9eb1-85cc417eacdb"
+                        }
+                    ],
+                    "severity": "warning",
+                    "type": "unconnected_wire_endpoint"
+                },
+                {
+                    "description": "Symbol pin or wire end off connection grid",
+                    "items": [
+                        {
+                            "description": "Vertical Wire, length 0.0200 mm",
+                            "pos": {
+                                "x": 2.0136,
+                                "y": 0.2835
+                            },
+                            "uuid": "e1c630b6-8476-50e8-9eb1-85cc417eacdb"
+                        }
+                    ],
+                    "severity": "warning",
+                    "type": "endpoint_off_grid"
+                },
+                {
+                    "description": "The current configuration does not include the footprint library 'Package_DFN_QFN'",
+                    "items": [
+                        {
+                            "description": "Symbol U1 [RP2040]",
+                            "pos": {
+                                "x": 2.0136,
+                                "y": 0.7191
+                            },
+                            "uuid": "2ffc0891-9df3-5ee7-affa-a55560772c36"
+                        }
+                    ],
+                    "severity": "warning",
+                    "type": "footprint_link_issues"
+                },
+                {
+                    "description": "The current configuration does not include the symbol library 'MCU_RaspberryPi'",
+                    "items": [
+                        {
+                            "description": "Symbol U1 [RP2040]",
+                            "pos": {
+                                "x": 2.0136,
+                                "y": 0.7191
+                            },
+                            "uuid": "2ffc0891-9df3-5ee7-affa-a55560772c36"
+                        }
+                    ],
+                    "severity": "warning",
+                    "type": "lib_symbol_issues"
+                },
+                {
+                    "description": "Symbol pin or wire end off connection grid",
+                    "items": [
+                        {
+                            "description": "Symbol C3 Pin 1 [Passive, Line]",
+                            "pos": {
+                                "x": 2.0836,
+                                "y": 1.2001
+                            },
+                            "uuid": "95034eb6-39f6-4a03-ad3a-cf2bc7eb361a"
+                        }
+                    ],
+                    "severity": "warning",
+                    "type": "endpoint_off_grid"
+                },
+                {
+                    "description": "The current configuration does not include the footprint library 'Capacitor_SMD'",
+                    "items": [
+                        {
+                            "description": "Symbol C3 [C]",
+                            "pos": {
+                                "x": 2.0836,
+                                "y": 1.2382
+                            },
+                            "uuid": "80b64e68-7247-5a8b-848b-3e018b5bc8fe"
+                        }
+                    ],
+                    "severity": "warning",
+                    "type": "footprint_link_issues"
+                },
+                {
+                    "description": "The current configuration does not include the symbol library 'Device'",
+                    "items": [
+                        {
+                            "description": "Symbol C3 [C]",
+                            "pos": {
+                                "x": 2.0836,
+                                "y": 1.2382
+                            },
+                            "uuid": "80b64e68-7247-5a8b-848b-3e018b5bc8fe"
+                        }
+                    ],
+                    "severity": "warning",
+                    "type": "lib_symbol_issues"
+                },
+                {
+                    "description": "Symbol pin or wire end off connection grid",
+                    "items": [
+                        {
+                            "description": "Horizontal Wire, length 0.0500 mm",
+                            "pos": {
+                                "x": 2.1152,
+                                "y": 0.6429
+                            },
+                            "uuid": "8fa48275-886e-5804-93f3-85775ef9c0a9"
+                        }
+                    ],
+                    "severity": "warning",
+                    "type": "endpoint_off_grid"
+                },
+                {
+                    "description": "Unconnected wire endpoint",
+                    "items": [
+                        {
+                            "description": "Horizontal Wire, length 0.0500 mm",
+                            "pos": {
+                                "x": 2.1152,
+                                "y": 0.6429
+                            },
+                            "uuid": "8fa48275-886e-5804-93f3-85775ef9c0a9"
+                        }
+                    ],
+                    "severity": "warning",
+                    "type": "unconnected_wire_endpoint"
+                },
+                {
+                    "description": "Symbol pin or wire end off connection grid",
+                    "items": [
+                        {
+                            "description": "Vertical Wire, length 0.1897 mm",
+                            "pos": {
+                                "x": 2.1652,
+                                "y": 0.6429
+                            },
+                            "uuid": "f4dc5b79-b81c-5e24-bfb7-69663ae3fdfd"
+                        }
+                    ],
+                    "severity": "warning",
+                    "type": "endpoint_off_grid"
+                },
+                {
+                    "description": "Symbol pin or wire end off connection grid",
+                    "items": [
+                        {
+                            "description": "Horizontal Wire, length 0.1643 mm",
+                            "pos": {
+                                "x": 2.1652,
+                                "y": 0.8326
+                            },
+                            "uuid": "3397d073-b7df-5e14-a375-51a58c73e5e2"
+                        }
+                    ],
+                    "severity": "warning",
+                    "type": "endpoint_off_grid"
+                },
+                {
+                    "description": "Symbol pin or wire end off connection grid",
+                    "items": [
+                        {
+                            "description": "Symbol U? Pin 1 [Power input, Line]",
+                            "pos": {
+                                "x": 2.2279,
+                                "y": 0.7191
+                            },
+                            "uuid": "9599239a-7862-4184-9e72-73dc75c628b0"
+                        }
+                    ],
+                    "severity": "warning",
+                    "type": "endpoint_off_grid"
+                },
+                {
+                    "description": "The current configuration does not include the symbol library 'synth'",
+                    "items": [
+                        {
+                            "description": "Symbol U? [VOUT]",
+                            "pos": {
+                                "x": 2.2279,
+                                "y": 0.7191
+                            },
+                            "uuid": "8de89063-b6c5-54e9-bd69-3d0aaee0ae56"
+                        }
+                    ],
+                    "severity": "warning",
+                    "type": "lib_symbol_issues"
+                },
+                {
+                    "description": "The current configuration does not include the footprint library 'Resistor_SMD'",
+                    "items": [
+                        {
+                            "description": "Symbol R2 [R_US]",
+                            "pos": {
+                                "x": 2.3295,
+                                "y": 0.7191
+                            },
+                            "uuid": "0292c405-7d1f-5ffd-afbc-8140c45c5370"
+                        }
+                    ],
+                    "severity": "warning",
+                    "type": "footprint_link_issues"
+                },
+                {
+                    "description": "The current configuration does not include the symbol library 'Device'",
+                    "items": [
+                        {
+                            "description": "Symbol R2 [R_US]",
+                            "pos": {
+                                "x": 2.3295,
+                                "y": 0.7191
+                            },
+                            "uuid": "0292c405-7d1f-5ffd-afbc-8140c45c5370"
+                        }
+                    ],
+                    "severity": "warning",
+                    "type": "lib_symbol_issues"
+                },
+                {
+                    "description": "Symbol pin or wire end off connection grid",
+                    "items": [
+                        {
+                            "description": "Symbol R2 Pin 1 [Passive, Line]",
+                            "pos": {
+                                "x": 2.3295,
+                                "y": 0.7572
+                            },
+                            "uuid": "8e5d3021-d789-431b-ba6b-80db3320ac9e"
+                        }
+                    ],
+                    "severity": "warning",
+                    "type": "endpoint_off_grid"
+                },
+                {
+                    "description": "Unconnected wire endpoint",
+                    "items": [
+                        {
+                            "description": "Vertical Wire, length 0.0500 mm",
+                            "pos": {
+                                "x": 2.3295,
+                                "y": 0.8326
+                            },
+                            "uuid": "2cf97db5-31d4-5e0f-95f3-91987805fe41"
+                        }
+                    ],
+                    "severity": "warning",
+                    "type": "unconnected_wire_endpoint"
+                },
+                {
+                    "description": "Symbol pin or wire end off connection grid",
+                    "items": [
+                        {
+                            "description": "Vertical Wire, length 0.0500 mm",
+                            "pos": {
+                                "x": 2.3295,
+                                "y": 0.8326
+                            },
+                            "uuid": "2cf97db5-31d4-5e0f-95f3-91987805fe41"
+                        }
+                    ],
+                    "severity": "warning",
+                    "type": "endpoint_off_grid"
+                }
+            ]
+        }
+    ],
+    "source": "ref_spi_flash.kicad_sch"
+}

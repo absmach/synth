@@ -1,0 +1,11 @@
+board "gen_keepout_3" {
+  layers 2
+  component U3: ic "esp32_wroom_32"
+  component J1: connector "header_1x4"
+
+  connect U3.tx -> J1.p1
+  connect U3.rx -> J1.p2
+
+  keepout antenna {
+  }
+}

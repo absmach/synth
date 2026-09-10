@@ -1,0 +1,136 @@
+// Reference design for a secure LTE/GNSS tracking device.
+// Exercises MCU, secure element, LTE modem, battery charger, USB-C,
+// antennas, clocking, pull-ups/pull-downs, and decoupling.
+
+board "secure_tracker" {
+  layers 4
+  manufacturer "jlcpcb"
+
+  // Primary active components
+  component U1: mcu "rp2350"
+  component U2: secure_element "atecc608"
+  component U3: modem "bg95"
+  component U4: charger "bq24074"
+
+  // Connectors
+  component J1: connector "usb_c_receptacle"
+  component J2: connector "jst_ph_2pin"
+  component J3: connector "header_1x4"
+
+  // Clock
+  component Y1: crystal "osc_smd_25mhz"
+
+  // Resistors
+  component R1: resistor "r_generic_0603"
+  component R2: resistor "r_generic_0603"
+  component R3: resistor "r_generic_0603"
+  component R4: resistor "r_generic_0603"
+  component R5: resistor "r_generic_0603"
+  component R6: resistor "r_generic_0603"
+
+  // Decoupling Capacitors
+  component C1: capacitor "c_generic_0603"
+  component C2: capacitor "c_generic_0603"
+  component C3: capacitor "c_generic_0603"
+  component C4: capacitor "c_generic_0603"
+  component C5: capacitor "c_generic_0603"
+  component C6: capacitor "c_generic_0603"
+  component C7: capacitor "c_generic_0603"
+  component C8: capacitor "c_generic_0805"
+  component C9: capacitor "c_generic_0603"
+  component C10: capacitor "c_generic_0603"
+  component C11: capacitor "c_generic_0603"
+
+  // Power Connections & Charging
+  connect J1.vbus -> U4.in
+  connect J1.gnd -> U4.vss
+  connect J2.p1 -> U4.bat
+  connect J2.p2 -> U4.vss
+
+  connect U4.out -> U1.vdd_io
+  connect U4.out -> U1.vdd_core
+  connect U4.out -> U2.vcc
+  connect U4.out -> U3.vbatt
+  connect U4.out -> Y1.vcc
+
+  connect U4.vss -> U1.gnd
+  connect U4.vss -> U2.gnd
+  connect U4.vss -> U3.gnd
+  connect U4.vss -> Y1.gnd
+  connect U4.vss -> J3.p2
+
+  // USB Data & CC Pull-downs
+  connect U1.usb_dp -> J1.dp
+  connect U1.usb_dn -> J1.dn
+  connect J1.cc1 -> R1.p1
+  connect R1.p2 -> U4.vss
+  connect J1.cc2 -> R2.p1
+  connect R2.p2 -> U4.vss
+
+  // I²C (MCU <-> ATECC608) with Pull-ups
+  connect U1.gp0 -> U2.sda
+  connect U1.gp1 -> U2.scl
+  connect U1.gp0 -> R3.p1
+  connect U4.out -> R3.p2
+  connect U1.gp1 -> R4.p1
+  connect U4.out -> R4.p2
+
+  // UART (MCU <-> BG95 Modem)
+  connect U1.gp2 -> U3.rx
+  connect U1.gp3 -> U3.tx
+
+  // Reset Control
+  connect U1.run -> R5.p1
+  connect U4.out -> R5.p2
+  connect U3.reset_n -> R6.p1
+  connect U4.out -> R6.p2
+
+  // Clock
+  connect Y1.out -> U1.xin
+
+  // RF Antenna Feed
+  connect U3.main_ant -> J3.p1
+
+  // Decoupling connections
+  connect U1.vdd_io -> C1.p1
+  connect U4.vss -> C1.p2
+  connect U1.vdd_io -> C2.p1
+  connect U4.vss -> C2.p2
+  connect U1.vdd_io -> C3.p1
+  connect U4.vss -> C3.p2
+  connect U1.vdd_io -> C4.p1
+  connect U4.vss -> C4.p2
+
+  connect U1.vdd_core -> C5.p1
+  connect U4.vss -> C5.p2
+  connect U1.vdd_core -> C6.p1
+  connect U4.vss -> C6.p2
+
+  connect U2.vcc -> C7.p1
+  connect U4.vss -> C7.p2
+
+  connect U3.vbatt -> C8.p1
+  connect U4.vss -> C8.p2
+
+  connect U4.in -> C9.p1
+  connect U4.vss -> C9.p2
+
+  connect U4.out -> C10.p1
+  connect U4.vss -> C10.p2
+
+  connect Y1.vcc -> C11.p1
+  connect U4.vss -> C11.p2
+
+  // Differential & RF Constraints
+  diff_pair u1_usb_dp u1_usb_dn {
+    impedance 90ohm
+  }
+
+  diff_pair u3_main_ant j3_p1 {
+    impedance 50ohm
+  }
+
+  keepout antenna {
+    radius 20mm
+  }
+}

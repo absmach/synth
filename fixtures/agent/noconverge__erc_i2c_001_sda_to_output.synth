@@ -1,0 +1,7 @@
+board "test_noconverge_i2c_001" {
+  layers 2
+  component U1: sensor "mpu6050"
+  component U2: ic "ch340g"
+
+  connect U1.sda -> U2.tx
+}

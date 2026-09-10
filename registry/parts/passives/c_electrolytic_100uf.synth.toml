@@ -1,0 +1,24 @@
+id = "c_electrolytic_100uf"
+kind = "capacitor"
+description = "100µF 25V aluminium electrolytic, radial through-hole, polarised"
+kicad_symbol = "Device:C_Polarized"
+kicad_footprint = "Capacitor_THT:CP_Radial_D6.3mm_P2.50mm"
+
+[footprint_dimensions]
+width_mm = 4.1
+height_mm = 1.6
+courtyard_margin_mm = 0.25
+
+[operating_conditions]
+max_voltage_v = 25.0
+
+[[pins]]
+name = "p1"
+number = "1"
+electrical_type = "passive"
+
+[[pins]]
+name = "p2"
+number = "2"
+electrical_type = "passive"
+

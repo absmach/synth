@@ -1,0 +1,5 @@
+import "stdlib.synth"
+import "common.synth"
+board "just_imports" {
+  layers 2
+}

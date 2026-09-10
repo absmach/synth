@@ -1,0 +1,14 @@
+board "spi_pass" {
+  layers 2
+  component U1: ic "ch340g"
+  component J1: connector "header_1x4"
+  component C1: capacitor "c_generic_0603"
+
+  connect U1.vcc -> J1.p1
+  connect U1.gnd -> J1.p2
+  connect U1.v3 -> J1.p3
+  connect U1.vcc -> C1.p1
+  connect U1.gnd -> C1.p2
+
+  connect U1.txd -> J1.p4
+}

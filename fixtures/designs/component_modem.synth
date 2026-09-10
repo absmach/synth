@@ -1,0 +1,4 @@
+board "component_modem" {
+  layers 4
+  component U1: modem "bg95"
+}

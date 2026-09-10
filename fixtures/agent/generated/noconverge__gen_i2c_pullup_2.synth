@@ -1,0 +1,8 @@
+board "gen_i2c_pullup_2" {
+  layers 2
+  component MCU2: ic "stm32f401"
+  component SENSOR2: sensor "mpu6050"
+
+  connect MCU2.scl -> SENSOR2.scl
+  connect MCU2.sda -> SENSOR2.sda
+}

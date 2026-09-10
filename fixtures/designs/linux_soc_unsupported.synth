@@ -1,0 +1,7 @@
+board "linux_soc_unsupported" {
+  layers 8
+  manufacturer "jlcpcb"
+
+  // Explicit negative fixture: Raspberry Pi class Linux SoC compute module
+  component U1: mcu "linux_soc_bga"
+}

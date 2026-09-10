@@ -1,0 +1,13 @@
+// I²C between two dedicated peripherals, but no resistor in sight.
+board "no_pullup" {
+  layers 2
+
+  component U1: sensor "bmp280_pressure"
+  component U2: sensor "bme680_env"
+
+  connect U1.vdd -> U2.vdd
+  connect U1.gnd -> U2.gnd
+  connect U1.sda -> U2.sda
+  connect U1.scl -> U2.scl
+}
+

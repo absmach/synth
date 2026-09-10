@@ -1,0 +1,36 @@
+---
+source: crates/synth-parser/tests/fixtures.rs
+expression: ast
+---
+{
+  "imports": [],
+  "board": {
+    "name": "oneliner",
+    "statements": [
+      {
+        "stmt": "layers",
+        "count": 2,
+        "span": {
+          "byte_start": 19,
+          "byte_end": 27
+        }
+      },
+      {
+        "stmt": "manufacturer",
+        "name": "jlcpcb",
+        "span": {
+          "byte_start": 28,
+          "byte_end": 49
+        }
+      }
+    ],
+    "span": {
+      "byte_start": 0,
+      "byte_end": 51
+    }
+  },
+  "span": {
+    "byte_start": 0,
+    "byte_end": 51
+  }
+}

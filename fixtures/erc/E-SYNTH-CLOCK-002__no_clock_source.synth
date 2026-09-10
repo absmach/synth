@@ -1,0 +1,16 @@
+// Shift register clk inputs tied to nothing but another input.
+board "no_clock_source" {
+  layers 2
+
+  component U1: ic "sn74hc595_shift"
+  component U2: ic "sn74hc165_pload"
+
+  connect U1.vcc -> U2.vcc
+  connect U1.gnd -> U2.gnd
+  connect U1.srclk -> U2.clk
+  connect U1.rclk -> U2.shld
+  connect U1.oe -> U2.f
+  connect U1.ser -> U2.g
+  connect U1.srclr -> U2.e
+}
+

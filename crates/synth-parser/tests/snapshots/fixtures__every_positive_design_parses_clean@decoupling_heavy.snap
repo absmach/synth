@@ -1,0 +1,244 @@
+---
+source: crates/synth-parser/tests/fixtures.rs
+expression: ast
+---
+{
+  "imports": [],
+  "board": {
+    "name": "decoupling_heavy",
+    "statements": [
+      {
+        "stmt": "layers",
+        "count": 4,
+        "span": {
+          "byte_start": 29,
+          "byte_end": 37
+        }
+      },
+      {
+        "stmt": "manufacturer",
+        "name": "jlcpcb",
+        "span": {
+          "byte_start": 40,
+          "byte_end": 61
+        }
+      },
+      {
+        "stmt": "component",
+        "refdes": "U1",
+        "kind": "mcu",
+        "part": "rp2350",
+        "span": {
+          "byte_start": 65,
+          "byte_end": 91
+        }
+      },
+      {
+        "stmt": "component",
+        "refdes": "C1",
+        "kind": "capacitor",
+        "part": "c_generic_0402",
+        "span": {
+          "byte_start": 146,
+          "byte_end": 186
+        }
+      },
+      {
+        "stmt": "component",
+        "refdes": "C2",
+        "kind": "capacitor",
+        "part": "c_generic_0402",
+        "span": {
+          "byte_start": 189,
+          "byte_end": 229
+        }
+      },
+      {
+        "stmt": "component",
+        "refdes": "C3",
+        "kind": "capacitor",
+        "part": "c_generic_0402",
+        "span": {
+          "byte_start": 232,
+          "byte_end": 272
+        }
+      },
+      {
+        "stmt": "component",
+        "refdes": "C4",
+        "kind": "capacitor",
+        "part": "c_generic_0402",
+        "span": {
+          "byte_start": 275,
+          "byte_end": 315
+        }
+      },
+      {
+        "stmt": "component",
+        "refdes": "C5",
+        "kind": "capacitor",
+        "part": "c_generic_0402",
+        "span": {
+          "byte_start": 318,
+          "byte_end": 358
+        }
+      },
+      {
+        "stmt": "component",
+        "refdes": "C6",
+        "kind": "capacitor",
+        "part": "c_generic_0402",
+        "span": {
+          "byte_start": 361,
+          "byte_end": 401
+        }
+      },
+      {
+        "stmt": "connection",
+        "from": {
+          "component": "U1",
+          "pin": "vdd_io",
+          "span": {
+            "byte_start": 413,
+            "byte_end": 422
+          }
+        },
+        "to": {
+          "component": "C1",
+          "pin": "p1",
+          "span": {
+            "byte_start": 426,
+            "byte_end": 431
+          }
+        },
+        "span": {
+          "byte_start": 405,
+          "byte_end": 431
+        }
+      },
+      {
+        "stmt": "connection",
+        "from": {
+          "component": "U1",
+          "pin": "vdd_io",
+          "span": {
+            "byte_start": 442,
+            "byte_end": 451
+          }
+        },
+        "to": {
+          "component": "C2",
+          "pin": "p1",
+          "span": {
+            "byte_start": 455,
+            "byte_end": 460
+          }
+        },
+        "span": {
+          "byte_start": 434,
+          "byte_end": 460
+        }
+      },
+      {
+        "stmt": "connection",
+        "from": {
+          "component": "U1",
+          "pin": "vdd_io",
+          "span": {
+            "byte_start": 471,
+            "byte_end": 480
+          }
+        },
+        "to": {
+          "component": "C3",
+          "pin": "p1",
+          "span": {
+            "byte_start": 484,
+            "byte_end": 489
+          }
+        },
+        "span": {
+          "byte_start": 463,
+          "byte_end": 489
+        }
+      },
+      {
+        "stmt": "connection",
+        "from": {
+          "component": "U1",
+          "pin": "vdd_io",
+          "span": {
+            "byte_start": 500,
+            "byte_end": 509
+          }
+        },
+        "to": {
+          "component": "C4",
+          "pin": "p1",
+          "span": {
+            "byte_start": 513,
+            "byte_end": 518
+          }
+        },
+        "span": {
+          "byte_start": 492,
+          "byte_end": 518
+        }
+      },
+      {
+        "stmt": "connection",
+        "from": {
+          "component": "U1",
+          "pin": "vdd_core",
+          "span": {
+            "byte_start": 529,
+            "byte_end": 540
+          }
+        },
+        "to": {
+          "component": "C5",
+          "pin": "p1",
+          "span": {
+            "byte_start": 544,
+            "byte_end": 549
+          }
+        },
+        "span": {
+          "byte_start": 521,
+          "byte_end": 549
+        }
+      },
+      {
+        "stmt": "connection",
+        "from": {
+          "component": "U1",
+          "pin": "vdd_core",
+          "span": {
+            "byte_start": 560,
+            "byte_end": 571
+          }
+        },
+        "to": {
+          "component": "C6",
+          "pin": "p1",
+          "span": {
+            "byte_start": 575,
+            "byte_end": 580
+          }
+        },
+        "span": {
+          "byte_start": 552,
+          "byte_end": 580
+        }
+      }
+    ],
+    "span": {
+      "byte_start": 0,
+      "byte_end": 582
+    }
+  },
+  "span": {
+    "byte_start": 0,
+    "byte_end": 582
+  }
+}

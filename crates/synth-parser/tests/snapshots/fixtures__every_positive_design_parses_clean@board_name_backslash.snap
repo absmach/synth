@@ -1,0 +1,28 @@
+---
+source: crates/synth-parser/tests/fixtures.rs
+expression: ast
+---
+{
+  "imports": [],
+  "board": {
+    "name": "path\\with\\backslash",
+    "statements": [
+      {
+        "stmt": "layers",
+        "count": 2,
+        "span": {
+          "byte_start": 34,
+          "byte_end": 42
+        }
+      }
+    ],
+    "span": {
+      "byte_start": 0,
+      "byte_end": 44
+    }
+  },
+  "span": {
+    "byte_start": 0,
+    "byte_end": 44
+  }
+}

@@ -1,0 +1,23 @@
+id = "c_generic_0603"
+kind = "capacitor"
+description = "Generic 0603 MLCC, X7R/X5R, any value"
+kicad_symbol = "Device:C"
+kicad_footprint = "Capacitor_SMD:C_0603_1608Metric"
+
+[footprint_dimensions]
+width_mm = 2.96
+height_mm = 1.46
+courtyard_margin_mm = 0.25
+
+[operating_conditions]
+max_voltage_v = 50.0
+
+[[pins]]
+name = "p1"
+number = "1"
+electrical_type = "passive"
+
+[[pins]]
+name = "p2"
+number = "2"
+electrical_type = "passive"

@@ -1,0 +1,26 @@
+id = "d_zener_5v1"
+kind = "diode"
+description = "5.1V Zener diode, SOD-123"
+kicad_symbol = "Device:D_Zener"
+kicad_footprint = "Diode_SMD:D_SOD-123"
+
+[footprint_dimensions]
+width_mm = 4.2
+height_mm = 1.2
+courtyard_margin_mm = 0.25
+
+[operating_conditions]
+min_voltage_v = 4.8
+max_voltage_v = 5.4
+max_current_ma = 100.0
+
+[[pins]]
+name = "anode"
+number = "1"
+electrical_type = "passive"
+
+[[pins]]
+name = "cathode"
+number = "2"
+electrical_type = "passive"
+

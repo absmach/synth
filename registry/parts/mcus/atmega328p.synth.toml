@@ -1,0 +1,90 @@
+id = "atmega328p"
+kind = "mcu"
+description = "Microchip ATmega328P AVR @ 20MHz, 32KB flash — the Arduino Uno MCU"
+mpn = "ATMEGA328P-AU"
+lcsc_pn = "C14877"
+kicad_symbol = "MCU_Microchip_ATmega:ATmega328P-P"
+kicad_footprint = "Package_DIP:DIP-28_W7.62mm"
+
+[footprint_dimensions]
+width_mm = 9.73
+height_mm = 36.08
+courtyard_margin_mm = 0.25
+
+[operating_conditions]
+min_voltage_v = 1.8
+max_voltage_v = 5.5
+max_current_ma = 200.0
+
+[[pins]]
+name = "vcc"
+number = "7"
+electrical_type = "power_input"
+required = true
+
+[[pins]]
+name = "gnd"
+number = "8"
+electrical_type = "power_input"
+required = true
+
+[[pins]]
+name = "pd0_rx"
+number = "2"
+electrical_type = "bidirectional"
+capabilities = ["gpio", "uart_rx"]
+
+[[pins]]
+name = "pd1_tx"
+number = "3"
+electrical_type = "bidirectional"
+capabilities = ["gpio", "uart_tx"]
+
+[[pins]]
+name = "pc4_sda"
+number = "27"
+electrical_type = "bidirectional"
+capabilities = ["gpio", "i2c_sda"]
+
+[[pins]]
+name = "pc5_scl"
+number = "28"
+electrical_type = "bidirectional"
+capabilities = ["gpio", "i2c_scl"]
+
+[[pins]]
+name = "pb3_mosi"
+number = "17"
+electrical_type = "bidirectional"
+capabilities = ["gpio", "spi_mosi"]
+
+[[pins]]
+name = "pb4_miso"
+number = "18"
+electrical_type = "bidirectional"
+capabilities = ["gpio", "spi_miso"]
+
+[[pins]]
+name = "pb5_sck"
+number = "19"
+electrical_type = "bidirectional"
+capabilities = ["gpio", "spi_sck"]
+
+[[pins]]
+name = "pb2_ss"
+number = "16"
+electrical_type = "bidirectional"
+capabilities = ["gpio", "spi_cs"]
+
+[[pins]]
+name = "reset"
+number = "1"
+electrical_type = "input"
+capabilities = ["reset"]
+required = true
+
+[[required_decoupling]]
+net = "vcc"
+value = "100nf"
+count = 1
+

@@ -1,0 +1,90 @@
+id = "stm32f103c8"
+kind = "mcu"
+description = "STM32F103C8T6 ARM Cortex-M3 @ 72MHz, 64KB flash, LQFP-48 — the bluepill MCU"
+mpn = "STM32F103C8T6"
+lcsc_pn = "C8734"
+kicad_symbol = "MCU_ST_STM32F1:STM32F103C8Tx"
+kicad_footprint = "Package_QFP:LQFP-48_7x7mm_P0.5mm"
+
+[footprint_dimensions]
+width_mm = 9.8
+height_mm = 9.8
+courtyard_margin_mm = 0.25
+
+[operating_conditions]
+min_voltage_v = 1.8
+max_voltage_v = 3.6
+max_current_ma = 150.0
+
+[[pins]]
+name = "vbat"
+number = "1"
+electrical_type = "power_input"
+required = true
+
+[[pins]]
+name = "pa0"
+number = "10"
+electrical_type = "bidirectional"
+capabilities = ["gpio", "uart_tx"]
+
+[[pins]]
+name = "pa1"
+number = "11"
+electrical_type = "bidirectional"
+capabilities = ["gpio", "uart_rx"]
+
+[[pins]]
+name = "pa9"
+number = "30"
+electrical_type = "bidirectional"
+capabilities = ["gpio", "uart_tx"]
+
+[[pins]]
+name = "pa10"
+number = "31"
+electrical_type = "bidirectional"
+capabilities = ["gpio", "uart_rx"]
+
+[[pins]]
+name = "pb6"
+number = "42"
+electrical_type = "bidirectional"
+capabilities = ["gpio", "i2c_scl"]
+
+[[pins]]
+name = "pb7"
+number = "43"
+electrical_type = "bidirectional"
+capabilities = ["gpio", "i2c_sda"]
+
+[[pins]]
+name = "vss"
+number = "47"
+electrical_type = "power_input"
+required = true
+
+[[pins]]
+name = "vdd"
+number = "48"
+electrical_type = "power_input"
+required = true
+
+[[pins]]
+name = "nrst"
+number = "7"
+electrical_type = "input"
+capabilities = ["reset"]
+required = true
+
+[[pins]]
+name = "boot0"
+number = "44"
+electrical_type = "input"
+required = true
+
+[[required_decoupling]]
+net = "vdd"
+value = "100nf"
+count = 1
+

@@ -1,0 +1,43 @@
+[package]
+name = "synth-cli"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+description = "Command-line interface for the Synth EDA compiler."
+
+[lints]
+workspace = true
+
+[[bin]]
+name = "synth"
+path = "src/main.rs"
+
+[dependencies]
+synth-diagnostics = { workspace = true }
+synth-parser = { workspace = true }
+synth-ir = { workspace = true }
+synth-registry = { workspace = true }
+synth-validate = { workspace = true }
+synth-layout = { workspace = true }
+synth-kicad = { workspace = true }
+synth-place = { workspace = true }
+synth-route = { workspace = true }
+synth-drc = { workspace = true }
+synth-mcp = { workspace = true }
+synth-smt = { workspace = true }
+synth-supply = { workspace = true }
+clap = { workspace = true }
+serde_json = { workspace = true }
+sha2 = { workspace = true }
+reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
+serde = { workspace = true }
+anyhow = { workspace = true }
+tokio = { workspace = true }
+axum = { workspace = true }
+tower-http = { workspace = true }
+notify-debouncer-mini = { workspace = true }
+futures = { workspace = true }
+include_dir = { workspace = true }

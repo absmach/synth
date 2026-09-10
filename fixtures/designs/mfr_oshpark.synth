@@ -1,0 +1,3 @@
+board "mfr_oshpark" {
+  manufacturer "oshpark"
+}

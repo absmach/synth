@@ -1,0 +1,15 @@
+board "compound_05" {
+  layers 2
+  component MCU: ic "stm32f401"
+  component SENSOR: sensor "mpu6050"
+  component R1: resistor "r_generic_0603"
+  component R2: resistor "r_generic_0603"
+
+  connect MCU.scl -> SENSOR.scl
+  connect MCU.sda -> SENSOR.sda
+  connect R1.p1 -> R2.p1
+  connect R1.p2 -> R2.p2
+
+  diff_pair r1_p1 r1_p2 {
+  }
+}

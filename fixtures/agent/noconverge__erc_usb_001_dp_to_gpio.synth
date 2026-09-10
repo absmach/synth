@@ -1,0 +1,7 @@
+board "test_noconverge_usb_001" {
+  layers 2
+  component U1: connector "usb_c_receptacle"
+  component U2: ic "lm555_timer"
+
+  connect U1.dp -> U2.trig
+}

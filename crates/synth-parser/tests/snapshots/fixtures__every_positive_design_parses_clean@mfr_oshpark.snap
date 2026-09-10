@@ -1,0 +1,28 @@
+---
+source: crates/synth-parser/tests/fixtures.rs
+expression: ast
+---
+{
+  "imports": [],
+  "board": {
+    "name": "mfr_oshpark",
+    "statements": [
+      {
+        "stmt": "manufacturer",
+        "name": "oshpark",
+        "span": {
+          "byte_start": 24,
+          "byte_end": 46
+        }
+      }
+    ],
+    "span": {
+      "byte_start": 0,
+      "byte_end": 48
+    }
+  },
+  "span": {
+    "byte_start": 0,
+    "byte_end": 48
+  }
+}

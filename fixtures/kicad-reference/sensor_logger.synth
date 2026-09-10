@@ -1,0 +1,73 @@
+// Reference design for an environmental sensor logger.
+// Exercises MCU, sensor, LDO, connector, pull-ups, reset, and decoupling.
+
+board "sensor_logger" {
+  layers 2
+  manufacturer "jlcpcb"
+
+  // Active Components
+  component U1: mcu "stm32f103c8"
+  component U2: sensor "bme680_env"
+  component U3: regulator "ams1117_3v3"
+
+  // Connectors
+  component J1: connector "micro_usb_b"
+
+  // Resistors
+  component R1: resistor "r_generic_0603"
+  component R2: resistor "r_generic_0603"
+  component R3: resistor "r_generic_0603"
+
+  // Decoupling Capacitors
+  component C1: capacitor "c_generic_0603"
+  component C2: capacitor "c_generic_0603"
+  component C3: capacitor "c_generic_0603"
+  component C4: capacitor "c_generic_0603"
+  component C5: capacitor "c_generic_0603"
+  component C6: capacitor "c_generic_0603"
+
+  // Power Distribution
+  connect J1.vbus -> U3.vin
+  connect J1.gnd -> U3.gnd
+
+  connect U3.vout -> U1.vdd
+  connect U3.vout -> U1.vbat
+  connect U3.vout -> U2.vdd
+
+  connect U3.gnd -> U1.vss
+  connect U3.gnd -> U2.gnd
+
+  // I²C Sensor Interface (STM32 PB6/PB7 <-> BME680) with Pull-ups
+  connect U1.pb7 -> U2.sda
+  connect U1.pb6 -> U2.scl
+
+  connect U1.pb7 -> R1.p1
+  connect U3.vout -> R1.p2
+
+  connect U1.pb6 -> R2.p1
+  connect U3.vout -> R2.p2
+
+  // Reset Pull-up
+  connect U1.nrst -> R3.p1
+  connect U3.vout -> R3.p2
+
+  // Decoupling Connections
+  // AMS1117 regulator: bulk (C1/C2) + 100nF ceramic (C5/C6) on each rail.
+  connect U3.vin -> C1.p1
+  connect U3.gnd -> C1.p2
+
+  connect U3.vout -> C2.p1
+  connect U3.gnd -> C2.p2
+
+  connect U3.vin -> C5.p1
+  connect U3.gnd -> C5.p2
+
+  connect U3.vout -> C6.p1
+  connect U3.gnd -> C6.p2
+
+  connect U1.vdd -> C3.p1
+  connect U3.gnd -> C3.p2
+
+  connect U2.vdd -> C4.p1
+  connect U3.gnd -> C4.p2
+}

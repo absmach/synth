@@ -1,0 +1,49 @@
+id = "mpu6050_imu"
+kind = "sensor"
+description = "InvenSense MPU-6050 6-axis IMU (accel+gyro), I²C"
+mpn = "MPU-6050"
+lcsc_pn = "C24116"
+kicad_symbol = "Sensor_Motion:MPU-6050"
+kicad_footprint = "Package_DFN_QFN:QFN-24-1EP_4x4mm_P0.5mm_EP2.7x2.7mm"
+
+[footprint_dimensions]
+width_mm = 4.0
+height_mm = 4.0
+courtyard_margin_mm = 0.25
+
+[operating_conditions]
+min_voltage_v = 1.8
+max_voltage_v = 5.0
+max_current_ma = 100.0
+
+[[pins]]
+name = "vdd"
+number = "13"
+electrical_type = "power_input"
+required = true
+
+[[pins]]
+name = "gnd"
+number = "18"
+electrical_type = "power_input"
+required = true
+
+[[pins]]
+name = "sda"
+number = "24"
+electrical_type = "bidirectional"
+capabilities = ["i2c_sda"]
+required = true
+
+[[pins]]
+name = "scl"
+number = "23"
+electrical_type = "bidirectional"
+capabilities = ["i2c_scl"]
+required = true
+
+[[required_decoupling]]
+net = "vdd"
+value = "100nf"
+count = 1
+

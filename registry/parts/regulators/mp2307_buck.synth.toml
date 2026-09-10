@@ -1,0 +1,65 @@
+id = "mp2307_buck"
+kind = "regulator"
+description = "MPS MP2307 3A step-down switching regulator, SO-8"
+kicad_footprint = "Package_SO:SOIC-8-1EP_3.9x4.9mm_P1.27mm_EP2.4x3.4mm"
+
+[footprint_dimensions]
+width_mm = 5.0
+height_mm = 5.0
+courtyard_margin_mm = 0.25
+
+[operating_conditions]
+min_voltage_v = 3.5
+max_voltage_v = 15.0
+max_current_ma = 800.0
+
+[[pins]]
+name = "bs"
+number = "1"
+electrical_type = "passive"
+
+[[pins]]
+name = "in"
+number = "2"
+electrical_type = "power_input"
+required = true
+
+[[pins]]
+name = "sw"
+number = "3"
+electrical_type = "passive"
+required = true
+
+[[pins]]
+name = "gnd"
+number = "4"
+electrical_type = "power_input"
+required = true
+
+[[pins]]
+name = "fb"
+number = "5"
+electrical_type = "input"
+required = true
+
+[[pins]]
+name = "comp"
+number = "6"
+electrical_type = "passive"
+
+[[pins]]
+name = "en"
+number = "7"
+electrical_type = "input"
+required = true
+
+[[pins]]
+name = "ss"
+number = "8"
+electrical_type = "passive"
+
+[[required_decoupling]]
+net = "in"
+value = "22uf"
+count = 1
+

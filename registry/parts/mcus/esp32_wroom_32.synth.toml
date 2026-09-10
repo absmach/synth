@@ -1,0 +1,72 @@
+id = "esp32_wroom_32"
+kind = "mcu"
+description = "Espressif ESP32-WROOM-32 module — dual-core Xtensa LX6 with Wi-Fi/BT"
+mpn = "ESP32-WROOM-32"
+lcsc_pn = "C82899"
+kicad_symbol = "RF_Module:ESP32-WROOM-32"
+kicad_footprint = "RF_Module:ESP32-WROOM-32"
+
+[footprint_dimensions]
+width_mm = 19.0
+height_mm = 17.41
+courtyard_margin_mm = 0.25
+
+[operating_conditions]
+min_voltage_v = 1.8
+max_voltage_v = 3.6
+max_current_ma = 150.0
+
+[[pins]]
+name = "gnd"
+number = "1"
+electrical_type = "power_input"
+required = true
+
+[[pins]]
+name = "vdd"
+number = "2"
+electrical_type = "power_input"
+required = true
+
+[[pins]]
+name = "en"
+number = "3"
+electrical_type = "input"
+capabilities = ["reset"]
+required = true
+
+[[pins]]
+name = "io0"
+number = "25"
+electrical_type = "bidirectional"
+capabilities = ["gpio", "boot_mode"]
+
+[[pins]]
+name = "io1_tx"
+number = "35"
+electrical_type = "bidirectional"
+capabilities = ["gpio", "uart_tx"]
+
+[[pins]]
+name = "io3_rx"
+number = "34"
+electrical_type = "bidirectional"
+capabilities = ["gpio", "uart_rx"]
+
+[[pins]]
+name = "io21_sda"
+number = "33"
+electrical_type = "bidirectional"
+capabilities = ["gpio", "i2c_sda"]
+
+[[pins]]
+name = "io22_scl"
+number = "36"
+electrical_type = "bidirectional"
+capabilities = ["gpio", "i2c_scl"]
+
+[[required_decoupling]]
+net = "vdd"
+value = "10uf"
+count = 1
+

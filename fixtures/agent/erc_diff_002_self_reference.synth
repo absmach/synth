@@ -1,0 +1,6 @@
+board "test_diff_002" {
+  layers 2
+  diff_pair SIG_P SIG_P {
+    impedance 90ohm
+  }
+}

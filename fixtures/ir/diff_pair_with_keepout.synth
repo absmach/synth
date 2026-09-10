@@ -1,0 +1,12 @@
+// Exercises unit normalization for impedance (ohm) and length (mm).
+board "diff_pair_with_keepout" {
+  layers 4
+
+  diff_pair USB_DP USB_DN {
+    impedance 90ohm
+  }
+
+  keepout antenna {
+    radius 20mm
+  }
+}

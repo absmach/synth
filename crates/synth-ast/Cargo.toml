@@ -1,0 +1,19 @@
+[package]
+name = "synth-ast"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+description = "Abstract syntax tree types for SynthSpec."
+
+[lints]
+workspace = true
+
+[dependencies]
+synth-diagnostics = { workspace = true }
+serde = { workspace = true }
+
+[dev-dependencies]
+serde_json = { workspace = true }

@@ -1,0 +1,10 @@
+board "compound_03" {
+  layers 2
+  component U1: ic "esp32_wroom_32"
+  component ANT1: antenna "antenna_2_4ghz"
+  component J1: connector "header_1x4"
+
+  connect U1.rf_feed -> ANT1.rf_in
+  connect U1.vcc -> J1.p1
+  connect U1.gnd -> J1.p2
+}

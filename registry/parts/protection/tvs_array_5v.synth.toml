@@ -1,0 +1,47 @@
+id = "tvs_array_5v"
+kind = "diode"
+description = "TVS diode array, 5V, 4 channels, SOIC-8"
+kicad_footprint = "Package_TO_SOT_SMD:SOT-363_SC-70-6"
+# kicad_symbol intentionally unmapped: the registry pin model
+# (pins 1-5 + 8) doesn't match any KiCad stock TVS-array symbol.
+# Falls back to a synthesized rectangle. Track in V1.1 cleanup.
+
+[footprint_dimensions]
+width_mm = 5.0
+height_mm = 5.0
+courtyard_margin_mm = 0.25
+
+[operating_conditions]
+max_voltage_v = 100.0
+max_current_ma = 1000.0
+
+[[pins]]
+name = "ch1"
+number = "1"
+electrical_type = "passive"
+
+[[pins]]
+name = "ch2"
+number = "2"
+electrical_type = "passive"
+
+[[pins]]
+name = "ch3"
+number = "3"
+electrical_type = "passive"
+
+[[pins]]
+name = "ch4"
+number = "5"
+electrical_type = "passive"
+
+[[pins]]
+name = "gnd"
+number = "4"
+electrical_type = "passive"
+
+[[pins]]
+name = "vcc"
+number = "8"
+electrical_type = "passive"
+

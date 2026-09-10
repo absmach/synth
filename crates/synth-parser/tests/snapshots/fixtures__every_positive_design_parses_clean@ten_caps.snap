@@ -1,0 +1,128 @@
+---
+source: crates/synth-parser/tests/fixtures.rs
+expression: ast
+---
+{
+  "imports": [],
+  "board": {
+    "name": "ten_caps",
+    "statements": [
+      {
+        "stmt": "layers",
+        "count": 2,
+        "span": {
+          "byte_start": 21,
+          "byte_end": 29
+        }
+      },
+      {
+        "stmt": "component",
+        "refdes": "C1",
+        "kind": "capacitor",
+        "part": "c_generic_0402",
+        "span": {
+          "byte_start": 32,
+          "byte_end": 72
+        }
+      },
+      {
+        "stmt": "component",
+        "refdes": "C2",
+        "kind": "capacitor",
+        "part": "c_generic_0402",
+        "span": {
+          "byte_start": 75,
+          "byte_end": 115
+        }
+      },
+      {
+        "stmt": "component",
+        "refdes": "C3",
+        "kind": "capacitor",
+        "part": "c_generic_0402",
+        "span": {
+          "byte_start": 118,
+          "byte_end": 158
+        }
+      },
+      {
+        "stmt": "component",
+        "refdes": "C4",
+        "kind": "capacitor",
+        "part": "c_generic_0402",
+        "span": {
+          "byte_start": 161,
+          "byte_end": 201
+        }
+      },
+      {
+        "stmt": "component",
+        "refdes": "C5",
+        "kind": "capacitor",
+        "part": "c_generic_0402",
+        "span": {
+          "byte_start": 204,
+          "byte_end": 244
+        }
+      },
+      {
+        "stmt": "component",
+        "refdes": "C6",
+        "kind": "capacitor",
+        "part": "c_generic_0402",
+        "span": {
+          "byte_start": 247,
+          "byte_end": 287
+        }
+      },
+      {
+        "stmt": "component",
+        "refdes": "C7",
+        "kind": "capacitor",
+        "part": "c_generic_0402",
+        "span": {
+          "byte_start": 290,
+          "byte_end": 330
+        }
+      },
+      {
+        "stmt": "component",
+        "refdes": "C8",
+        "kind": "capacitor",
+        "part": "c_generic_0402",
+        "span": {
+          "byte_start": 333,
+          "byte_end": 373
+        }
+      },
+      {
+        "stmt": "component",
+        "refdes": "C9",
+        "kind": "capacitor",
+        "part": "c_generic_0402",
+        "span": {
+          "byte_start": 376,
+          "byte_end": 416
+        }
+      },
+      {
+        "stmt": "component",
+        "refdes": "C10",
+        "kind": "capacitor",
+        "part": "c_generic_0402",
+        "span": {
+          "byte_start": 419,
+          "byte_end": 460
+        }
+      }
+    ],
+    "span": {
+      "byte_start": 0,
+      "byte_end": 462
+    }
+  },
+  "span": {
+    "byte_start": 0,
+    "byte_end": 462
+  }
+}

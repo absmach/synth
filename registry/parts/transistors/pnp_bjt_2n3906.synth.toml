@@ -1,0 +1,36 @@
+id = "pnp_bjt_2n3906"
+kind = "transistor"
+description = "PNP general-purpose BJT, TO-92"
+mpn = "2N3906"
+lcsc_pn = "C20507"
+kicad_symbol = "Transistor_BJT:2N3906"
+kicad_footprint = "Package_TO_SOT_THT:TO-92_Inline"
+
+[footprint_dimensions]
+width_mm = 3.59
+height_mm = 1.5
+courtyard_margin_mm = 0.25
+
+[operating_conditions]
+min_voltage_v = 1.8
+max_voltage_v = 5.0
+max_current_ma = 100.0
+
+[[pins]]
+name = "e"
+number = "1"
+electrical_type = "passive"
+required = true
+
+[[pins]]
+name = "b"
+number = "2"
+electrical_type = "input"
+required = true
+
+[[pins]]
+name = "c"
+number = "3"
+electrical_type = "passive"
+required = true
+

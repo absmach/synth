@@ -1,0 +1,104 @@
+---
+source: crates/synth-parser/tests/fixtures.rs
+expression: ast
+---
+{
+  "imports": [],
+  "board": {
+    "name": "connect_daisy_chain",
+    "statements": [
+      {
+        "stmt": "layers",
+        "count": 2,
+        "span": {
+          "byte_start": 32,
+          "byte_end": 40
+        }
+      },
+      {
+        "stmt": "component",
+        "refdes": "U1",
+        "kind": "mcu",
+        "part": "rp2350",
+        "span": {
+          "byte_start": 43,
+          "byte_end": 69
+        }
+      },
+      {
+        "stmt": "component",
+        "refdes": "U2",
+        "kind": "secure_element",
+        "part": "atecc608",
+        "span": {
+          "byte_start": 72,
+          "byte_end": 111
+        }
+      },
+      {
+        "stmt": "component",
+        "refdes": "U3",
+        "kind": "secure_element",
+        "part": "atecc608",
+        "span": {
+          "byte_start": 114,
+          "byte_end": 153
+        }
+      },
+      {
+        "stmt": "connection",
+        "from": {
+          "component": "U1",
+          "pin": "gp0",
+          "span": {
+            "byte_start": 164,
+            "byte_end": 170
+          }
+        },
+        "to": {
+          "component": "U2",
+          "pin": "sda",
+          "span": {
+            "byte_start": 174,
+            "byte_end": 180
+          }
+        },
+        "span": {
+          "byte_start": 156,
+          "byte_end": 180
+        }
+      },
+      {
+        "stmt": "connection",
+        "from": {
+          "component": "U2",
+          "pin": "sda",
+          "span": {
+            "byte_start": 191,
+            "byte_end": 197
+          }
+        },
+        "to": {
+          "component": "U3",
+          "pin": "sda",
+          "span": {
+            "byte_start": 201,
+            "byte_end": 207
+          }
+        },
+        "span": {
+          "byte_start": 183,
+          "byte_end": 207
+        }
+      }
+    ],
+    "span": {
+      "byte_start": 0,
+      "byte_end": 209
+    }
+  },
+  "span": {
+    "byte_start": 0,
+    "byte_end": 209
+  }
+}

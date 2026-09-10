@@ -1,0 +1,11 @@
+/*
+ * Reference design with line and block comments.
+ * Exercises the comment handling path of the lexer.
+ */
+board "with_comments" {
+  // 4-layer board for routing flexibility
+  layers 4
+  manufacturer "jlcpcb"  // also try "pcbway" for prototypes
+
+  component U1: mcu "rp2350"   // RP2350 dual-core
+}

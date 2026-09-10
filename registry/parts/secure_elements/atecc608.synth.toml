@@ -1,0 +1,75 @@
+# Microchip ATECC608 — secure element / crypto coprocessor.
+# UDFN-8 package; I²C and single-wire interfaces.
+
+id = "atecc608"
+kind = "secure_element"
+description = "Microchip ATECC608 crypto authentication IC, UDFN-8"
+kicad_symbol = "Security:ATECC608A-SSH"
+kicad_footprint = "Package_SO:SOIC-8_3.9x4.9mm_P1.27mm"
+
+# --- Power ---
+
+[footprint_dimensions]
+width_mm = 6.9
+height_mm = 4.41
+courtyard_margin_mm = 0.25
+
+[operating_conditions]
+min_voltage_v = 1.8
+max_voltage_v = 3.6
+max_current_ma = 50.0
+
+[[pins]]
+name = "vcc"
+number = "8"
+electrical_type = "power_input"
+required = true
+
+[[pins]]
+name = "gnd"
+number = "4"
+electrical_type = "power_input"
+required = true
+
+# --- Communication (I²C in default mode) ---
+
+[[pins]]
+name = "sda"
+number = "5"
+electrical_type = "open_drain_low"
+capabilities = ["i2c_sda"]
+required = true
+
+[[pins]]
+name = "scl"
+number = "6"
+electrical_type = "open_drain_low"
+capabilities = ["i2c_scl"]
+required = true
+
+# --- Unused ---
+
+[[pins]]
+name = "nc1"
+number = "1"
+electrical_type = "do_not_connect"
+
+[[pins]]
+name = "nc2"
+number = "2"
+electrical_type = "do_not_connect"
+
+[[pins]]
+name = "nc3"
+number = "3"
+electrical_type = "do_not_connect"
+
+[[pins]]
+name = "nc7"
+number = "7"
+electrical_type = "do_not_connect"
+
+[[required_decoupling]]
+net = "vcc"
+value = "100nf"
+count = 1

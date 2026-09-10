@@ -1,0 +1,3 @@
+board "x" {
+  keepout antenna { radius 2in }
+}

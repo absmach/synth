@@ -1,0 +1,62 @@
+board "no_position_02" {
+  layers 2
+  component U1: mcu "rp2350"
+  component ANT1: antenna "ant_chip_2g4"
+  component C1: capacitor "c_generic_0603"
+  connect U1.vdd_io -> C1.p1
+  connect U1.gnd -> C1.p2
+  component C2: capacitor "c_generic_0603"
+  connect U1.vdd_io -> C2.p1
+  connect U1.gnd -> C2.p2
+  component C3: capacitor "c_generic_0603"
+  connect U1.vdd_io -> C3.p1
+  connect U1.gnd -> C3.p2
+  component C4: capacitor "c_generic_0603"
+  connect U1.vdd_io -> C4.p1
+  connect U1.gnd -> C4.p2
+  component C5: capacitor "c_generic_0603"
+  connect U1.vdd_io -> C5.p1
+  connect U1.gnd -> C5.p2
+  component C6: capacitor "c_generic_0603"
+  connect U1.vdd_io -> C6.p1
+  connect U1.gnd -> C6.p2
+  component C7: capacitor "c_generic_0603"
+  connect U1.vdd_io -> C7.p1
+  connect U1.gnd -> C7.p2
+  component C8: capacitor "c_generic_0603"
+  connect U1.vdd_io -> C8.p1
+  connect U1.gnd -> C8.p2
+  component C9: capacitor "c_generic_0603"
+  connect U1.vdd_io -> C9.p1
+  connect U1.gnd -> C9.p2
+  component C10: capacitor "c_generic_0603"
+  connect U1.vdd_io -> C10.p1
+  connect U1.gnd -> C10.p2
+  component C11: capacitor "c_generic_0603"
+  connect U1.vdd_io -> C11.p1
+  connect U1.gnd -> C11.p2
+  component C12: capacitor "c_generic_0603"
+  connect U1.vdd_io -> C12.p1
+  connect U1.gnd -> C12.p2
+  component C13: capacitor "c_generic_0603"
+  connect U1.vdd_io -> C13.p1
+  connect U1.gnd -> C13.p2
+  component C14: capacitor "c_generic_0603"
+  connect U1.vdd_io -> C14.p1
+  connect U1.gnd -> C14.p2
+  component C15: capacitor "c_generic_0603"
+  connect U1.vdd_io -> C15.p1
+  connect U1.gnd -> C15.p2
+  component C16: capacitor "c_generic_0603"
+  connect U1.vdd_io -> C16.p1
+  connect U1.gnd -> C16.p2
+  component C17: capacitor "c_generic_0603"
+  connect U1.vdd_io -> C17.p1
+  connect U1.gnd -> C17.p2
+  component C18: capacitor "c_generic_0603"
+  connect U1.vdd_io -> C18.p1
+  connect U1.gnd -> C18.p2
+  keepout ant {
+    radius 120mm
+  }
+}

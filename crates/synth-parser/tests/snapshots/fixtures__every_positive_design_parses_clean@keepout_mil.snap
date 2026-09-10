@@ -1,0 +1,47 @@
+---
+source: crates/synth-parser/tests/fixtures.rs
+expression: ast
+---
+{
+  "imports": [],
+  "board": {
+    "name": "keepout_mil",
+    "statements": [
+      {
+        "stmt": "layers",
+        "count": 4,
+        "span": {
+          "byte_start": 24,
+          "byte_end": 32
+        }
+      },
+      {
+        "stmt": "keepout",
+        "name": "via_zone",
+        "attrs": [
+          {
+            "kind": "radius",
+            "literal": "200",
+            "unit": "mil",
+            "span": {
+              "byte_start": 65,
+              "byte_end": 71
+            }
+          }
+        ],
+        "span": {
+          "byte_start": 35,
+          "byte_end": 75
+        }
+      }
+    ],
+    "span": {
+      "byte_start": 0,
+      "byte_end": 77
+    }
+  },
+  "span": {
+    "byte_start": 0,
+    "byte_end": 77
+  }
+}

@@ -1,0 +1,528 @@
+/* synth · preview — minimal V1 styling
+ *
+ * Layout: vertical topbar + two-pane grid (schematic | diagnostics).
+ * Color palette intentionally restrained — the schematic is the
+ * content, the chrome should not compete with it.
+ */
+
+:root {
+  --bg: #f7f5f0;
+  --pane-bg: #ffffff;
+  --border: #d8d3c8;
+  --text: #1c1c1c;
+  --muted: #6a675f;
+  --accent: #1e4e8c;
+  --severity-error: #b1322e;
+  --severity-warning: #b07a1f;
+  --severity-info: #1e4e8c;
+  --severity-fatal: #6a1e1c;
+
+  /* KiCad-inspired schematic theme. */
+  --kicad-bg: #f2f0e8;
+  --kicad-grid: #cdcdc4;
+  /* Wires between components. Lighter, screen-rendered KiCad green
+     rather than CSS-spec #008000 (which is too dark/saturated). */
+  --kicad-wire: #1aaa4a;
+  --kicad-junction: #1aaa4a;
+  /* Component body fill + outline + pin stubs + pin numbers + refdes/value
+     all share the same maroon — that's KiCad's symbol-graphics color. */
+  --kicad-maroon: #840000;
+  --kicad-body-fill: #ffffc2;
+  /* Pin names (inside body) are a separate cyan/teal — KiCad's
+     default pin-name color. */
+  --kicad-pin-name: #008484;
+  /* KiCad uses a default sans-serif (Newstroke); a system sans is the
+     closest cross-platform approximation. */
+  --kicad-font: "Arial", "Liberation Sans", "Helvetica Neue", sans-serif;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html, body {
+  margin: 0;
+  padding: 0;
+  height: 100%;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Inter",
+    "Helvetica Neue", Arial, sans-serif;
+  font-size: 14px;
+  background: var(--bg);
+  color: var(--text);
+}
+
+body {
+  display: grid;
+  grid-template-rows: auto 1fr;
+  height: 100vh;
+}
+
+.topbar {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  padding: 0.5rem 1rem;
+  background: var(--pane-bg);
+  border-bottom: 1px solid var(--border);
+}
+
+.brand {
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+
+.title-block {
+  flex: 1;
+  min-width: 0;
+  margin-left: 1.5rem;
+  padding-left: 1.5rem;
+  border-left: 1px solid var(--border);
+}
+.title-block .board-name {
+  font-weight: 600;
+  font-size: 1rem;
+  color: var(--text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.title-block .source-path {
+  font-family: ui-monospace, SFMono-Regular, "Menlo", monospace;
+  font-size: 0.75rem;
+  color: var(--muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.topbar-tools {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+}
+.topbar-tools button {
+  border: 1px solid var(--border);
+  background: var(--pane-bg);
+  color: var(--text);
+  padding: 0.2rem 0.55rem;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 0.95rem;
+  line-height: 1;
+}
+.topbar-tools button:hover {
+  background: #efeae0;
+}
+.topbar-tools .zoom-label {
+  font-family: ui-monospace, SFMono-Regular, "Menlo", monospace;
+  font-size: 0.8rem;
+  color: var(--muted);
+  min-width: 3rem;
+  text-align: center;
+}
+.topbar-tools .reset-btn {
+  margin-left: 0.25rem;
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.connection-badge {
+  font-size: 0.85rem;
+  padding: 0.15rem 0.5rem;
+  border-radius: 999px;
+  background: #efeae0;
+  color: var(--muted);
+}
+.connection-badge.connected   { background: #e8f3ec; color: #1f6a3a; }
+.connection-badge.disconnected { background: #f4dadb; color: #802222; }
+
+.grid {
+  display: grid;
+  grid-template-columns: 2fr 1fr;
+  gap: 0.5rem;
+  padding: 0.5rem;
+  height: 100%;
+  min-height: 0;
+  transition: grid-template-columns 0.18s ease;
+}
+
+.grid.diagnostics-collapsed {
+  grid-template-columns: 1fr auto;
+}
+
+.pane {
+  display: flex;
+  flex-direction: column;
+  background: var(--pane-bg);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.pane h2 {
+  margin: 0;
+  padding: 0.5rem 0.75rem;
+  font-size: 0.85rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--muted);
+  border-bottom: 1px solid var(--border);
+}
+
+.pane .pane-header {
+  display: flex;
+  align-items: stretch;
+  border-bottom: 1px solid var(--border);
+}
+.pane .pane-header h2 {
+  flex: 1;
+  border-bottom: none;
+  padding: 0.5rem 0.75rem;
+  display: flex;
+  align-items: baseline;
+  gap: 0.25rem;
+}
+.pane .pane-header .diag-count {
+  font-size: 0.72rem;
+  font-weight: 500;
+  color: var(--muted);
+  text-transform: none;
+  letter-spacing: 0;
+}
+.pane .pane-header .diag-count.nonzero {
+  color: var(--severity-error);
+}
+.pane .pane-toggle {
+  border: none;
+  border-right: 1px solid var(--border);
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+  padding: 0 0.55rem;
+  font-size: 1rem;
+  line-height: 1;
+}
+.pane .pane-toggle:hover {
+  background: #efeae0;
+  color: var(--text);
+}
+
+/* Collapsed diagnostics: shrink to a narrow strip showing only the
+ * toggle and a rotated "Diagnostics" label. */
+.pane.diagnostics.collapsed {
+  width: 2.25rem;
+}
+.pane.diagnostics.collapsed .pane-header {
+  flex-direction: column;
+  border-bottom: none;
+}
+.pane.diagnostics.collapsed .pane-toggle {
+  border-right: none;
+  border-bottom: 1px solid var(--border);
+  padding: 0.4rem 0;
+}
+.pane.diagnostics.collapsed h2 {
+  writing-mode: vertical-rl;
+  transform: rotate(180deg);
+  text-align: center;
+  padding: 0.5rem 0;
+  white-space: nowrap;
+}
+
+.empty {
+  padding: 1rem;
+  color: var(--muted);
+  font-style: italic;
+}
+
+/* ---------- Schematic ---------- */
+
+.schematic-wrap {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+}
+
+.schematic-svg {
+  flex: 1;
+  width: 100%;
+  height: 100%;
+}
+
+.schematic-svg .page {
+  fill: var(--kicad-bg);
+  stroke: var(--border);
+  stroke-width: 0.2;
+}
+
+.schematic-svg .grid-dot {
+  fill: var(--kicad-grid);
+  /* Snap dots should be barely visible — KiCad's are very subtle. */
+  opacity: 0.55;
+}
+
+.schematic-svg .component {
+  cursor: grab;
+  touch-action: none; /* let pointermove fire without page scrolling */
+}
+.schematic-svg .component:active {
+  cursor: grabbing;
+}
+
+.schematic-svg .body {
+  fill: var(--kicad-body-fill);
+  stroke: var(--kicad-maroon);
+  /* KiCad's default symbol outline is 6 mil = 0.1524mm. */
+  stroke-width: 0.152;
+}
+
+/* 2-pin schematic symbols (resistor, capacitor, diode, ...).
+ * No default fill — CSS would otherwise override the SVG `fill="none"`
+ * attribute (presentation attributes lose to CSS) and SVG would
+ * helpfully fill the interior of the resistor zigzag with maroon
+ * "triangles". Each shape that *does* need fill sets it inline. */
+.schematic-svg .symbol {
+  color: var(--kicad-maroon);
+  stroke: var(--kicad-maroon);
+  stroke-width: 0.18;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.schematic-svg .hit-target {
+  /* Invisible draggable bbox. `fill="transparent"` from markup so the
+     element still receives pointer events but renders nothing. */
+  cursor: grab;
+}
+.schematic-svg .hit-target:active { cursor: grabbing; }
+
+.schematic-svg .pin-stub {
+  /* The pin stub line belongs to the symbol graphics, NOT the wire —
+     so it's maroon (matching the body outline), not green. The
+     external wires (rendered separately) are what's green. */
+  stroke: var(--kicad-maroon);
+  stroke-width: 0.152;
+}
+
+.schematic-svg .pin-name {
+  font-size: 1.27px;
+  fill: var(--kicad-pin-name);
+  font-family: var(--kicad-font);
+  font-weight: 400;
+}
+
+.schematic-svg .pin-num {
+  font-size: 1.0px;
+  fill: var(--kicad-maroon);
+  font-family: var(--kicad-font);
+  font-weight: 400;
+}
+
+.schematic-svg .junction {
+  fill: var(--kicad-junction);
+  stroke: none;
+}
+
+.schematic-svg .refdes {
+  font-size: 1.5px;
+  font-weight: 500;
+  fill: var(--kicad-maroon);
+  font-family: var(--kicad-font);
+}
+
+.schematic-svg .value {
+  font-size: 1.4px;
+  fill: var(--kicad-maroon);
+  font-family: var(--kicad-font);
+  font-weight: 400;
+}
+
+.schematic-svg .wire {
+  stroke: var(--kicad-wire);
+  /* Match KiCad's default wire width = 6 mil = 0.1524mm. */
+  stroke-width: 0.152;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  fill: none;
+}
+
+/* ---------- Power / GND flags ---------- */
+
+.schematic-svg .power-flag .flag-stub {
+  stroke: var(--kicad-wire);
+  stroke-width: 0.18;
+  fill: none;
+}
+.schematic-svg .power-flag.vcc polygon {
+  fill: var(--kicad-wire);
+  stroke: var(--kicad-wire);
+  stroke-width: 0.18;
+  stroke-linejoin: round;
+}
+.schematic-svg .power-flag.gnd .gnd-bar {
+  stroke: var(--kicad-wire);
+  stroke-width: 0.2;
+  stroke-linecap: round;
+}
+.schematic-svg .power-flag .flag-label {
+  font-family: var(--kicad-font);
+  font-size: 1.2px;
+  fill: var(--kicad-wire);
+  font-weight: 500;
+}
+
+.schematic-svg .net-label .net-label-text {
+  font-family: var(--kicad-font);
+  font-size: 1.3px;
+  fill: var(--kicad-maroon);
+  font-weight: 500;
+}
+
+/* ---------- Sheet frame & title block ---------- */
+
+.schematic-svg .sheet-frame rect {
+  stroke: #2a2a2a;
+  stroke-width: 0.35;
+  fill: none;
+}
+
+.schematic-svg .title-block .tb-frame {
+  fill: var(--kicad-body-fill);
+  stroke: #2a2a2a;
+  stroke-width: 0.3;
+}
+.schematic-svg .title-block .tb-rule {
+  stroke: #2a2a2a;
+  stroke-width: 0.18;
+}
+.schematic-svg .title-block .tb-label {
+  font-family: var(--kicad-font);
+  font-size: 1.5px;
+  fill: #2a2a2a;
+}
+.schematic-svg .title-block .tb-label-strong {
+  font-family: var(--kicad-font);
+  font-size: 1.4px;
+  fill: #6a675f;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+.schematic-svg .title-block .tb-title {
+  font-family: var(--kicad-font);
+  font-size: 3.0px;
+  fill: var(--kicad-maroon);
+  font-weight: 600;
+}
+.schematic-svg .title-block .tb-footer {
+  font-family: var(--kicad-font);
+  font-size: 1.2px;
+  fill: #6a675f;
+}
+
+.schematic-svg {
+  cursor: grab;
+}
+.schematic-svg:active {
+  cursor: grabbing;
+}
+
+/* ---------- Diagnostics ---------- */
+
+.diagnostics-wrap {
+  overflow-y: auto;
+  flex: 1;
+}
+
+.diagnostics {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.diagnostic {
+  border-bottom: 1px solid var(--border);
+  font-size: 0.85rem;
+}
+
+.diagnostic details {
+  padding: 0.4rem 0.75rem;
+}
+.diagnostic details > summary {
+  cursor: pointer;
+  list-style: none;
+  display: flex;
+  gap: 0.5rem;
+  align-items: baseline;
+  user-select: none;
+}
+.diagnostic details > summary::before {
+  content: "▸";
+  display: inline-block;
+  width: 0.75rem;
+  font-size: 0.7rem;
+  color: var(--muted);
+  transition: transform 0.15s ease;
+  flex-shrink: 0;
+}
+.diagnostic details[open] > summary::before {
+  transform: rotate(90deg);
+}
+.diagnostic details > summary::-webkit-details-marker {
+  display: none;
+}
+.diagnostic details[open] > summary {
+  margin-bottom: 0.25rem;
+}
+.diagnostic .diag-body {
+  padding-left: 0.75rem;
+  margin-top: 0.15rem;
+  border-left: 2px solid var(--border);
+}
+.diagnostic:hover {
+  background: rgba(0, 0, 0, 0.015);
+}
+
+.diag-header {
+  display: flex;
+  gap: 0.5rem;
+  align-items: baseline;
+}
+
+.severity {
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  padding: 0.05rem 0.4rem;
+  border-radius: 3px;
+  color: white;
+}
+.diagnostic-error   .severity { background: var(--severity-error); }
+.diagnostic-warning .severity { background: var(--severity-warning); }
+.diagnostic-info    .severity { background: var(--severity-info); }
+.diagnostic-fatal   .severity { background: var(--severity-fatal); }
+
+.code {
+  font-family: ui-monospace, SFMono-Regular, "Menlo", monospace;
+  font-size: 0.75rem;
+  color: var(--muted);
+}
+
+.title {
+  font-weight: 600;
+}
+
+.message,
+.exp-found,
+.location {
+  margin-top: 0.2rem;
+  color: var(--muted);
+  font-family: ui-monospace, SFMono-Regular, "Menlo", monospace;
+  font-size: 0.78rem;
+}
+
+.exp-found .expected { color: #1f6a3a; }
+.exp-found .found    { color: #802222; }

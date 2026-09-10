@@ -1,0 +1,86 @@
+---
+source: crates/synth-parser/tests/fixtures.rs
+expression: ast
+---
+{
+  "imports": [],
+  "board": {
+    "name": "five_components_diverse",
+    "statements": [
+      {
+        "stmt": "layers",
+        "count": 4,
+        "span": {
+          "byte_start": 36,
+          "byte_end": 44
+        }
+      },
+      {
+        "stmt": "manufacturer",
+        "name": "jlcpcb",
+        "span": {
+          "byte_start": 47,
+          "byte_end": 68
+        }
+      },
+      {
+        "stmt": "component",
+        "refdes": "U1",
+        "kind": "mcu",
+        "part": "rp2350",
+        "span": {
+          "byte_start": 71,
+          "byte_end": 97
+        }
+      },
+      {
+        "stmt": "component",
+        "refdes": "U2",
+        "kind": "secure_element",
+        "part": "atecc608",
+        "span": {
+          "byte_start": 100,
+          "byte_end": 139
+        }
+      },
+      {
+        "stmt": "component",
+        "refdes": "U3",
+        "kind": "modem",
+        "part": "bg95",
+        "span": {
+          "byte_start": 142,
+          "byte_end": 168
+        }
+      },
+      {
+        "stmt": "component",
+        "refdes": "C1",
+        "kind": "capacitor",
+        "part": "c_generic_0402",
+        "span": {
+          "byte_start": 171,
+          "byte_end": 211
+        }
+      },
+      {
+        "stmt": "component",
+        "refdes": "R1",
+        "kind": "resistor",
+        "part": "r_generic_0402",
+        "span": {
+          "byte_start": 214,
+          "byte_end": 253
+        }
+      }
+    ],
+    "span": {
+      "byte_start": 0,
+      "byte_end": 255
+    }
+  },
+  "span": {
+    "byte_start": 0,
+    "byte_end": 255
+  }
+}

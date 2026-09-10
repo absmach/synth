@@ -1,0 +1,9 @@
+board "five_components_diverse" {
+  layers 4
+  manufacturer "jlcpcb"
+  component U1: mcu "rp2350"
+  component U2: secure_element "atecc608"
+  component U3: modem "bg95"
+  component C1: capacitor "c_generic_0402"
+  component R1: resistor "r_generic_0402"
+}

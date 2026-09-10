@@ -1,0 +1,31 @@
+id = "spdt_slide"
+kind = "switch"
+description = "SPDT slide switch, through-hole"
+kicad_symbol = "Switch:SW_SPDT"
+kicad_footprint = "Button_Switch_SMD:SW_SPDT_PCM12"
+
+[footprint_dimensions]
+width_mm = 8.3
+height_mm = 4.01
+courtyard_margin_mm = 0.25
+
+[operating_conditions]
+min_voltage_v = 1.8
+max_voltage_v = 5.0
+max_current_ma = 100.0
+
+[[pins]]
+name = "p1"
+number = "1"
+electrical_type = "passive"
+
+[[pins]]
+name = "p2"
+number = "2"
+electrical_type = "passive"
+
+[[pins]]
+name = "p3"
+number = "3"
+electrical_type = "passive"
+

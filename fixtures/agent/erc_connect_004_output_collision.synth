@@ -1,0 +1,20 @@
+board "test_conn_004" {
+  layers 2
+  component U1: ic "ch340g"
+  component U2: ic "ch340g"
+  component J1: connector "header_1x4"
+  component C1: capacitor "c_generic_0603"
+  component C2: capacitor "c_generic_0603"
+
+  connect U1.vcc -> J1.p1
+  connect U1.gnd -> J1.p2
+  connect U2.vcc -> J1.p1
+  connect U2.gnd -> J1.p2
+
+  connect U1.vcc -> C1.p1
+  connect U1.gnd -> C1.p2
+  connect U2.vcc -> C2.p1
+  connect U2.gnd -> C2.p2
+
+  connect U1.txd -> U2.txd
+}

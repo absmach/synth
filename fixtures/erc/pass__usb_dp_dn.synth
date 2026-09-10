@@ -1,0 +1,25 @@
+// Passing baseline: USB DP/DN connected pin-to-pin to themselves on
+// a hypothetical second RP2350. (Not electrically realistic — a
+// production design would use a USB-C connector — but enough to
+// exercise the capability rule.)
+board "usb_dp_dn_pass" {
+  layers 4
+
+  component U1: mcu "rp2350"
+  component U2: mcu "rp2350"
+  component C1: capacitor "c_generic_0402"
+
+  // Power up both MCUs minimally.
+  connect U1.vdd_io -> C1.p1
+  connect U1.vdd_core -> C1.p1
+  connect U1.gnd -> C1.p2
+  connect U1.run -> C1.p2
+  connect U2.vdd_io -> C1.p1
+  connect U2.vdd_core -> C1.p1
+  connect U2.gnd -> C1.p2
+  connect U2.run -> C1.p2
+
+  // USB DP↔DP, DN↔DN: both endpoints carry the right capability.
+  connect U1.usb_dp -> U2.usb_dp
+  connect U1.usb_dn -> U2.usb_dn
+}

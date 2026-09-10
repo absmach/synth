@@ -1,0 +1,20 @@
+[package]
+name = "synth-connectivity"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+description = "Authoritative connectivity derivation and netlist for Synth EDA compiler"
+
+[dependencies]
+synth-ir = { path = "../synth-ir" }
+synth-registry = { path = "../synth-registry" }
+synth-diagnostics = { path = "../synth-diagnostics" }
+synth-layout = { path = "../synth-layout" }
+thiserror = "1.0"
+uuid = { version = "1.0", features = ["v4", "serde"] }
+serde = { version = "1.0", features = ["derive"] }
+indexmap = "2.0"
+smallvec = "1.0"

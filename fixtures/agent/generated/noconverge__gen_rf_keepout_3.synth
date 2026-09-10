@@ -1,0 +1,7 @@
+board "gen_rf_keepout_3" {
+  layers 2
+  component U3: ic "esp32_wroom_32"
+  component ANT3: antenna "antenna_2_4ghz"
+
+  connect U3.rf_feed -> ANT3.rf_in
+}

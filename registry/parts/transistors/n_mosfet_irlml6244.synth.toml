@@ -1,0 +1,34 @@
+id = "n_mosfet_irlml6244"
+kind = "transistor"
+description = "IR IRLML6244 logic-level N-channel MOSFET, SOT-23"
+kicad_symbol = "Transistor_FET:IRLML6244"
+kicad_footprint = "Package_TO_SOT_SMD:SOT-23"
+
+[footprint_dimensions]
+width_mm = 3.35
+height_mm = 2.5
+courtyard_margin_mm = 0.25
+
+[operating_conditions]
+min_voltage_v = 1.8
+max_voltage_v = 5.0
+max_current_ma = 100.0
+
+[[pins]]
+name = "g"
+number = "1"
+electrical_type = "input"
+required = true
+
+[[pins]]
+name = "s"
+number = "2"
+electrical_type = "passive"
+required = true
+
+[[pins]]
+name = "d"
+number = "3"
+electrical_type = "passive"
+required = true
+

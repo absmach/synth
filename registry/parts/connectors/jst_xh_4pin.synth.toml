@@ -1,0 +1,37 @@
+id = "jst_xh_4pin"
+kind = "connector"
+description = "JST XH-series 4-pin wire-to-board connector, 2.0mm pitch"
+kicad_symbol = "Connector_Generic:Conn_01x04"
+kicad_footprint = "Connector_JST:JST_XH_S4B-XH-A-1_1x04_P2.50mm_Horizontal"
+
+[footprint_dimensions]
+width_mm = 0.5
+height_mm = 5.5
+courtyard_margin_mm = 0.25
+
+[operating_conditions]
+min_voltage_v = 1.8
+max_voltage_v = 5.0
+max_current_ma = 100.0
+
+[[pins]]
+name = "p1"
+number = "1"
+electrical_type = "passive"
+
+[[pins]]
+name = "p2"
+number = "2"
+electrical_type = "passive"
+
+[[pins]]
+name = "p3"
+number = "3"
+electrical_type = "passive"
+
+[[pins]]
+name = "p4"
+number = "4"
+electrical_type = "passive"
+
+

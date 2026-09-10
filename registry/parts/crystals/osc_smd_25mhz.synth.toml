@@ -1,0 +1,45 @@
+id = "osc_smd_25mhz"
+kind = "crystal"
+description = "25MHz SMD oscillator, 4-pad, 3.3V"
+kicad_symbol = "Oscillator:SiT8008B"
+kicad_footprint = "Oscillator:Oscillator_SMD_SiTime_SiT8008-4Pin_5.0x3.2mm"
+
+[footprint_dimensions]
+width_mm = 5.0
+height_mm = 5.0
+courtyard_margin_mm = 0.25
+
+[operating_conditions]
+min_voltage_v = 1.8
+max_voltage_v = 5.0
+max_current_ma = 100.0
+
+[[pins]]
+name = "ne"
+number = "1"
+electrical_type = "input"
+
+[[pins]]
+name = "gnd"
+number = "2"
+electrical_type = "power_input"
+required = true
+
+[[pins]]
+name = "out"
+number = "3"
+electrical_type = "clock"
+capabilities = ["clock_output"]
+required = true
+
+[[pins]]
+name = "vcc"
+number = "4"
+electrical_type = "power_input"
+required = true
+
+[[required_decoupling]]
+net = "vcc"
+value = "100nf"
+count = 1
+

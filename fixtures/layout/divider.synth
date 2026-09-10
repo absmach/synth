@@ -1,0 +1,19 @@
+// Divider pattern: two resistors forming a voltage divider
+// (rail -> R1 -> mid -> R2 -> gnd), fed from a 2-pin power
+// connector rather than an IC pin so the divider stays a pure,
+// standalone motif. Recognized by the `Divider` pass in
+// crates/synth-layout/src/patterns/divider.rs (wired into
+// `build_clusters` since Phase 5.7); the "mid" net must have
+// exactly two resistor endpoints for the pattern to fire.
+board "divider" {
+  layers 2
+  manufacturer "jlcpcb"
+
+  component J1: connector "jst_ph_2pin" // power in: p1 = rail, p2 = gnd
+  component R1: resistor  "r_generic_0603"
+  component R2: resistor  "r_generic_0603"
+
+  connect J1.p1 -> R1.p1
+  connect R1.p2 -> R2.p1
+  connect J1.p2 -> R2.p2
+}

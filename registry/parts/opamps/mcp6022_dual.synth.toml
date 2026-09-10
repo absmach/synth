@@ -1,0 +1,75 @@
+id = "mcp6022_dual"
+kind = "opamp"
+description = "Microchip MCP6022 dual rail-to-rail op-amp, SOIC-8"
+kicad_symbol = "Amplifier_Operational:MCP6022-x_DIP"
+kicad_footprint = "Package_DIP:DIP-8_W7.62mm"
+
+[footprint_dimensions]
+width_mm = 9.73
+height_mm = 10.66
+courtyard_margin_mm = 0.25
+
+[operating_conditions]
+min_voltage_v = 3.0
+max_voltage_v = 32.0
+max_current_ma = 50.0
+
+[[pins]]
+name = "out_a"
+number = "1"
+electrical_type = "analog"
+capabilities = ["analog_output"]
+unit = "A"
+
+[[pins]]
+name = "in_a_neg"
+number = "2"
+electrical_type = "analog"
+capabilities = ["analog_input"]
+unit = "A"
+
+[[pins]]
+name = "in_a_pos"
+number = "3"
+electrical_type = "analog"
+capabilities = ["analog_input"]
+unit = "A"
+
+[[pins]]
+name = "vss"
+number = "4"
+electrical_type = "power_input"
+required = true
+
+[[pins]]
+name = "in_b_pos"
+number = "5"
+electrical_type = "analog"
+capabilities = ["analog_input"]
+unit = "B"
+
+[[pins]]
+name = "in_b_neg"
+number = "6"
+electrical_type = "analog"
+capabilities = ["analog_input"]
+unit = "B"
+
+[[pins]]
+name = "out_b"
+number = "7"
+electrical_type = "analog"
+capabilities = ["analog_output"]
+unit = "B"
+
+[[pins]]
+name = "vdd"
+number = "8"
+electrical_type = "power_input"
+required = true
+
+[[required_decoupling]]
+net = "vdd"
+value = "100nf"
+count = 1
+

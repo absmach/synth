@@ -1,0 +1,38 @@
+---
+source: crates/synth-parser/tests/fixtures.rs
+expression: ast
+---
+{
+  "imports": [],
+  "board": {
+    "name": "component_charger",
+    "statements": [
+      {
+        "stmt": "layers",
+        "count": 4,
+        "span": {
+          "byte_start": 30,
+          "byte_end": 38
+        }
+      },
+      {
+        "stmt": "component",
+        "refdes": "U1",
+        "kind": "charger",
+        "part": "bq24074",
+        "span": {
+          "byte_start": 41,
+          "byte_end": 72
+        }
+      }
+    ],
+    "span": {
+      "byte_start": 0,
+      "byte_end": 74
+    }
+  },
+  "span": {
+    "byte_start": 0,
+    "byte_end": 74
+  }
+}

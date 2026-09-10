@@ -1,0 +1,13 @@
+# Trunk build configuration for the synth-web Leptos SPA.
+#
+# Run from this crate's directory:
+#
+#   trunk build --release       produce dist/ for embedding in synth-cli
+#   trunk serve --open          live-reload dev server against a mock /events
+#
+# The CLI's `synth preview` command serves the compiled `dist/`
+# bundle plus the actual /events SSE stream from the file watcher.
+
+[build]
+target = "index.html"
+dist = "dist"

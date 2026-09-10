@@ -1,0 +1,4 @@
+board "component_cap_only" {
+  layers 2
+  component C1: capacitor "c_generic_0402"
+}

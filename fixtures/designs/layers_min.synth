@@ -1,0 +1,3 @@
+board "layers_min" {
+  layers 1
+}

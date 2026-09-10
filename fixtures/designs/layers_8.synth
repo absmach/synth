@@ -1,0 +1,3 @@
+board "layers_8" {
+  layers 8
+}

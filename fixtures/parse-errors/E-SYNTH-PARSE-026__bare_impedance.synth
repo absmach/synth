@@ -1,0 +1,3 @@
+board "x" {
+  diff_pair A B { impedance 90 }
+}

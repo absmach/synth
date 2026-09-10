@@ -1,0 +1,4 @@
+"x" {
+  layers 2
+  component R1: resistor "r_generic_0603"
+}

@@ -1,0 +1,109 @@
+// 2-Layer USB-C Environmental Sensor Logger Board
+//   USB-C Input (5V) -> AMS1117 3V3 Regulator -> STM32F103 MCU & BME680 Sensor
+//   Features:
+//     - USB-C connector (VBUS 5V input) with 5.1k CC1/CC2 pull-down resistors for USB-C PD 5V negotiation
+//     - AMS1117-3.3 LDO regulator with input, output bulk, and MLCC decoupling capacitors
+//     - STM32F103C8 ARM Cortex-M3 microcontroller with dedicated VDD/VBAT decoupling and 10k BOOT0 pull-down
+//     - 4-pin UART/Debug header (3V3, TX, RX, GND)
+//     - Bosch BME680 Environmental Sensor (Temp, Humidity, Pressure, Gas/VOC) with CSB tied high (I2C mode) and SDO tied low (addr 0x76)
+//     - I2C bus (PB6 SCL, PB7 SDA) with dual 4.7k pull-up resistors
+//     - Hardware Reset circuit (push button, 10k pull-up resistor, 100nF filter capacitor)
+
+board "env_logger" {
+  layers 2
+  manufacturer "jlcpcb"
+
+  // ---- Power Chain (USB-C 5V to 3.3V LDO) --------------------------------
+  component J1: connector  "usb_c_receptacle"
+  component R_CC1: resistor "r_generic_0603"   // 5.1k CC1 pull-down to GND
+  component R_CC2: resistor "r_generic_0603"   // 5.1k CC2 pull-down to GND
+  component U1: regulator  "ams1117_3v3"
+  component C1: capacitor  "c_generic_0805"   // VBUS 5V bulk capacitor
+  component C2: capacitor  "c_generic_0805"   // AMS1117 input capacitor (22uF)
+  component C3: capacitor  "c_generic_0805"   // AMS1117 output capacitor (22uF)
+  component C7: capacitor  "c_generic_0603"   // AMS1117 output 100nF decoupling
+
+  connect J1.vbus -> C1.p1
+  connect J1.gnd  -> C1.p2
+
+  // USB-C CC pin 5.1k pull-down resistors for 5V VBUS power negotiation
+  connect J1.cc1   -> R_CC1.p1
+  connect J1.gnd   -> R_CC1.p2
+  connect J1.cc2   -> R_CC2.p1
+  connect J1.gnd   -> R_CC2.p2
+
+  connect J1.vbus -> U1.vin
+  connect J1.gnd  -> U1.gnd
+
+  connect U1.vin  -> C2.p1
+  connect U1.gnd  -> C2.p2
+
+  connect U1.vout -> C3.p1
+  connect U1.gnd  -> C3.p2
+
+  connect U1.vout -> C7.p1
+  connect U1.gnd  -> C7.p2
+
+  // ---- MCU + Reset & Debug Circuit ----------------------------------------
+  component U2: mcu        "stm32f103c8"
+  component J2: connector  "header_1x4"       // 4-pin Debug Header (3V3, TX, RX, GND)
+  component C4: capacitor  "c_generic_0603" { placement_hint { near: "U2" priority: hard } }   // STM32 VDD decoupling capacitor (100nF)
+  component C8: capacitor  "c_generic_0603" { placement_hint { near: "U2" priority: hard } }   // STM32 VBAT decoupling capacitor (100nF)
+  component R1: resistor   "r_generic_0603" { placement_hint { near: "U2" priority: hard } }   // NRST pull-up resistor (10k)
+  component R_BOOT0: resistor "r_generic_0603" { placement_hint { near: "U2" priority: hard } } // BOOT0 pull-down resistor (10k)
+  component SW1: switch    "spst_tactile"     // Tactile reset button
+  component C5: capacitor  "c_generic_0603" { placement_hint { near: "U2" priority: hard } }   // Reset pin filter capacitor (100nF)
+
+  connect U1.vout -> U2.vdd
+  connect U1.vout -> U2.vbat
+  connect U1.gnd  -> U2.vss
+
+  connect U2.vdd  -> C4.p1
+  connect U2.vss  -> C4.p2
+
+  connect U2.vbat -> C8.p1
+  connect U2.vss  -> C8.p2
+
+  connect U1.vout -> R1.p1
+  connect R1.p2   -> U2.nrst
+
+  connect U2.boot0   -> R_BOOT0.p1
+  connect J1.gnd     -> R_BOOT0.p2
+
+  connect U2.nrst -> SW1.p1
+  connect SW1.p2  -> U2.vss
+
+  connect U2.nrst -> C5.p1
+  connect U2.vss  -> C5.p2
+
+  // Debug Header connections (Pin 1: 3V3, Pin 2: PA9 TX, Pin 3: PA10 RX, Pin 4: GND)
+  connect U1.vout -> J2.p1
+  connect U2.pa9  -> J2.p2
+  connect U2.pa10 -> J2.p3
+  connect U1.gnd  -> J2.p4
+
+  // ---- BME680 Environmental Sensor & I2C Bus -----------------------------
+  component U3: sensor     "bme680_env"
+  component C6: capacitor  "c_generic_0603"   // BME680 VDD decoupling capacitor (100nF)
+  component R2: resistor   "r_generic_0603"   // I2C SDA pull-up resistor (4.7k)
+  component R3: resistor   "r_generic_0603"   // I2C SCL pull-up resistor (4.7k)
+
+  connect U1.vout -> U3.vdd
+  connect U1.gnd  -> U3.gnd
+
+  // BME680 I2C protocol mode selection (CSB -> 3V3) & fixed I2C address 0x76 (SDO -> GND)
+  connect U3.csb  -> U1.vout
+  connect U3.sdo  -> U1.gnd
+
+  connect U3.vdd  -> C6.p1
+  connect U3.gnd  -> C6.p2
+
+  connect U2.pb7  -> U3.sda
+  connect U2.pb6  -> U3.scl
+
+  connect U2.pb7  -> R2.p1
+  connect R2.p2   -> U1.vout
+
+  connect U2.pb6  -> R3.p1
+  connect R3.p2   -> U1.vout
+}

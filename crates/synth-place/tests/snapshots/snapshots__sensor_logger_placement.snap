@@ -1,0 +1,33 @@
+---
+source: crates/synth-place/tests/snapshots.rs
+expression: snapshot
+---
+board_outline_mm: 75.69 x 81.21
+
+  J1  (   6.07,    4.71) mm  rot=Zero layer=Top
+  U1  (   6.15,   22.91) mm  rot=Zero layer=Top
+  U2  (  27.61,   34.35) mm  rot=Zero layer=Top
+  C5  (  40.73,   34.54) mm  rot=OneEighty layer=Top
+  U3  (  50.16,   22.85) mm  rot=Zero layer=Top
+  U4  (  50.16,   35.85) mm  rot=Zero layer=Top
+  C7  (  55.73,   22.54) mm  rot=OneEighty layer=Top
+  C8  (  55.73,   35.54) mm  rot=OneEighty layer=Top
+  U5  (  54.45,   52.01) mm  rot=Zero layer=Top
+  C9  (  61.73,   51.54) mm  rot=OneEighty layer=Top
+  R4  (  18.73,   34.54) mm  rot=Zero layer=Top
+  D3  (  18.73,   30.54) mm  rot=Zero layer=Top
+  R5  (  18.73,   38.54) mm  rot=Zero layer=Top
+  D4  (  18.73,   42.54) mm  rot=Zero layer=Top
+  R6  (  12.73,   34.54) mm  rot=Zero layer=Top
+  D5  (  18.73,   26.54) mm  rot=Zero layer=Top
+ SW1  (  54.24,   12.93) mm  rot=Zero layer=Top
+  C1  (  38.77,   23.90) mm  rot=Zero layer=Top
+  C2  (  47.41,   43.27) mm  rot=Zero layer=Top
+  C3  (  41.25,   49.99) mm  rot=Zero layer=Top
+  D1  (  16.64,   51.09) mm  rot=Zero layer=Top
+  D2  (  35.24,   10.57) mm  rot=Zero layer=Top
+  C4  (  40.39,   17.64) mm  rot=Zero layer=Top
+  R1  (  63.29,   36.09) mm  rot=Zero layer=Top
+  C6  (  37.19,   71.73) mm  rot=Zero layer=Top
+  R2  (  65.46,   17.87) mm  rot=Zero layer=Top
+  R3  (  55.57,   43.73) mm  rot=Zero layer=Top

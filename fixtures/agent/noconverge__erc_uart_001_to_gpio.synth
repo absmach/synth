@@ -1,0 +1,7 @@
+board "test_noconverge_uart_001" {
+  layers 2
+  component U1: ic "ch340g"
+  component U2: ic "lm555_timer"
+
+  connect U1.tx -> U2.trig
+}

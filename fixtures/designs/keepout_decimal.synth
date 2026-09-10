@@ -1,0 +1,6 @@
+board "keepout_decimal" {
+  layers 4
+  keepout antenna {
+    radius 0.5mm
+  }
+}

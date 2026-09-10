@@ -1,0 +1,47 @@
+---
+source: crates/synth-parser/tests/fixtures.rs
+expression: ast
+---
+{
+  "imports": [],
+  "board": {
+    "name": "keepout",
+    "statements": [
+      {
+        "stmt": "layers",
+        "count": 4,
+        "span": {
+          "byte_start": 20,
+          "byte_end": 28
+        }
+      },
+      {
+        "stmt": "keepout",
+        "name": "antenna",
+        "attrs": [
+          {
+            "kind": "radius",
+            "literal": "20",
+            "unit": "mm",
+            "span": {
+              "byte_start": 60,
+              "byte_end": 64
+            }
+          }
+        ],
+        "span": {
+          "byte_start": 31,
+          "byte_end": 68
+        }
+      }
+    ],
+    "span": {
+      "byte_start": 0,
+      "byte_end": 70
+    }
+  },
+  "span": {
+    "byte_start": 0,
+    "byte_end": 70
+  }
+}

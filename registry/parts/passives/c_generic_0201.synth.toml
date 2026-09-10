@@ -1,0 +1,24 @@
+id = "c_generic_0201"
+kind = "capacitor"
+description = "Generic 0201 ceramic capacitor, any value"
+kicad_symbol = "Device:C"
+kicad_footprint = "Capacitor_SMD:C_0201_0603Metric"
+
+[footprint_dimensions]
+width_mm = 1.4
+height_mm = 0.7
+courtyard_margin_mm = 0.25
+
+[operating_conditions]
+max_voltage_v = 50.0
+
+[[pins]]
+name = "p1"
+number = "1"
+electrical_type = "passive"
+
+[[pins]]
+name = "p2"
+number = "2"
+electrical_type = "passive"
+

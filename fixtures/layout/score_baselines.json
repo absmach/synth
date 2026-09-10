@@ -1,0 +1,65 @@
+{
+  "fixtures": {
+    "crystal": {
+      "crossing_count": 1,
+      "total_wire_length_mm": 104.14,
+      "label_stub_count": 0,
+      "aesthetic_violations": []
+    },
+    "decoupling": {
+      "crossing_count": 0,
+      "total_wire_length_mm": 0.0,
+      "label_stub_count": 0,
+      "aesthetic_violations": []
+    },
+    "divider": {
+      "crossing_count": 0,
+      "total_wire_length_mm": 163.83,
+      "label_stub_count": 2,
+      "aesthetic_violations": []
+    },
+    "full_board_combo": {
+      "crossing_count": 1,
+      "total_wire_length_mm": 370.84,
+      "label_stub_count": 17,
+      "aesthetic_violations": []
+    },
+    "i2c_bus": {
+      "crossing_count": 0,
+      "total_wire_length_mm": 115.57000000000001,
+      "label_stub_count": 2,
+      "aesthetic_violations": []
+    },
+    "ldo_block": {
+      "crossing_count": 0,
+      "total_wire_length_mm": 0.0,
+      "label_stub_count": 0,
+      "aesthetic_violations": []
+    },
+    "led_indicator": {
+      "crossing_count": 0,
+      "total_wire_length_mm": 198.12,
+      "label_stub_count": 2,
+      "aesthetic_violations": []
+    },
+    "mcu": {
+      "crossing_count": 0,
+      "total_wire_length_mm": 0.0,
+      "label_stub_count": 4,
+      "aesthetic_violations": []
+    },
+    "multi_pattern_combo": {
+      "crossing_count": 0,
+      "total_wire_length_mm": 231.14,
+      "label_stub_count": 13,
+      "aesthetic_violations": []
+    },
+    "usb_diff_pair": {
+      "crossing_count": 0,
+      "total_wire_length_mm": 0.0,
+      "label_stub_count": 4,
+      "aesthetic_violations": []
+    }
+  },
+  "total_crossing_count": 2
+}

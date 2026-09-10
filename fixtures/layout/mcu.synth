@@ -1,0 +1,31 @@
+// Mcu pattern: an IC with both a decoupling cap and a reset
+// network (pullup resistor + button + debounce cap), the two
+// halves of `build_clusters` pass 3 exercised on the same anchor —
+// mirrors the U2 block in examples/sensor_logger.synth. No
+// registry MCU (atmega328p, esp32_c3_mini, esp32_wroom_32,
+// nrf52840, rp2350, stm32f103c8, stm32g030) exposes dedicated
+// XTAL1/XTAL2 oscillator pins, so the "and a crystal" half of the
+// Mcu motif in synth_implementation_plan.md 7.5.4 can't be
+// triggered without inventing a new registry entry; see
+// fixtures/layout/crystal.synth for the closest standalone
+// approximation of that half.
+board "mcu" {
+  layers 2
+  manufacturer "jlcpcb"
+
+  component U1: mcu       "atmega328p"
+  component C1: capacitor "c_generic_0603" // vcc decoupling
+  component R1: resistor  "r_generic_0603" // reset pullup
+  component SW1: switch   "spst_tactile"
+  component C2: capacitor "c_generic_0603" // reset debounce cap
+
+  connect U1.vcc -> C1.p1
+  connect U1.gnd -> C1.p2
+
+  connect U1.vcc   -> R1.p1
+  connect R1.p2    -> U1.reset
+  connect U1.reset -> SW1.p1
+  connect SW1.p2   -> U1.gnd
+  connect U1.reset -> C2.p1
+  connect U1.gnd   -> C2.p2
+}

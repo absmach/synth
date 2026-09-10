@@ -1,0 +1,24 @@
+// Two regulator outputs (3V3 and 5V) wired together — guaranteed
+// contention.
+board "regulator_short" {
+  layers 2
+
+  component U1: regulator "ams1117_3v3"
+  component U2: regulator "ams1117_5v"
+  component C1: capacitor "c_generic_0805"
+  component C2: capacitor "c_generic_0805"
+  component C3: capacitor "c_generic_0805"
+  component C4: capacitor "c_generic_0805"
+
+  connect U1.vin -> C1.p1
+  connect U1.gnd -> C1.p2
+  connect U2.vin -> C3.p1
+  connect U2.gnd -> C3.p2
+  connect U1.vout -> C2.p1
+  connect U1.gnd -> C2.p2
+  connect U2.vout -> C4.p1
+  connect U2.gnd -> C4.p2
+  // Bug: 3V3 output shorted to 5V output.
+  connect U1.vout -> U2.vout
+}
+

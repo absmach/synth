@@ -1,0 +1,73 @@
+id = "w25q128_flash"
+kind = "memory"
+description = "Winbond W25Q128JV 128Mbit SPI NOR flash, SOIC-8"
+mpn = "W25Q128JVSIQ"
+lcsc_pn = "C97521"
+kicad_symbol = "Memory_Flash:W25Q128JVS"
+kicad_footprint = "Package_SO:SOIC-8_3.9x4.9mm_P1.27mm"
+
+[footprint_dimensions]
+width_mm = 6.9
+height_mm = 4.41
+courtyard_margin_mm = 0.25
+
+[operating_conditions]
+min_voltage_v = 1.8
+max_voltage_v = 3.6
+max_current_ma = 50.0
+
+[[pins]]
+name = "cs"
+number = "1"
+electrical_type = "input"
+capabilities = ["spi_cs"]
+required = true
+
+[[pins]]
+name = "miso"
+number = "2"
+electrical_type = "output"
+capabilities = ["spi_miso"]
+required = true
+
+[[pins]]
+name = "wp"
+number = "3"
+electrical_type = "input"
+
+[[pins]]
+name = "gnd"
+number = "4"
+electrical_type = "power_input"
+required = true
+
+[[pins]]
+name = "mosi"
+number = "5"
+electrical_type = "input"
+capabilities = ["spi_mosi"]
+required = true
+
+[[pins]]
+name = "sck"
+number = "6"
+electrical_type = "input"
+capabilities = ["spi_sck"]
+required = true
+
+[[pins]]
+name = "hold"
+number = "7"
+electrical_type = "input"
+
+[[pins]]
+name = "vcc"
+number = "8"
+electrical_type = "power_input"
+required = true
+
+[[required_decoupling]]
+net = "vcc"
+value = "100nf"
+count = 1
+

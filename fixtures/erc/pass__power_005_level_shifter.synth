@@ -1,0 +1,10 @@
+board "level_shifter_clean" {
+  layers 2
+
+  component U1: level_shifter "txs0108e"
+  component U2: level_shifter "txs0108e"
+  component C1: capacitor "c_generic_0402"
+
+  connect U1.a1 -> U2.b1
+  connect U1.a2 -> C1.p1
+}

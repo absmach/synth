@@ -1,0 +1,7 @@
+/* top-level block comment */
+board "comment_block_only" {
+  /* in body */
+  layers 4
+  /* between statements */
+  manufacturer "jlcpcb"
+}

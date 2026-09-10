@@ -1,0 +1,38 @@
+---
+source: crates/synth-parser/tests/fixtures.rs
+expression: ast
+---
+{
+  "imports": [],
+  "board": {
+    "name": "component_cap_only",
+    "statements": [
+      {
+        "stmt": "layers",
+        "count": 2,
+        "span": {
+          "byte_start": 31,
+          "byte_end": 39
+        }
+      },
+      {
+        "stmt": "component",
+        "refdes": "C1",
+        "kind": "capacitor",
+        "part": "c_generic_0402",
+        "span": {
+          "byte_start": 42,
+          "byte_end": 82
+        }
+      }
+    ],
+    "span": {
+      "byte_start": 0,
+      "byte_end": 84
+    }
+  },
+  "span": {
+    "byte_start": 0,
+    "byte_end": 84
+  }
+}

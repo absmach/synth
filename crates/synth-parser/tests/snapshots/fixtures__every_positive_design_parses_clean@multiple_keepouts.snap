@@ -1,0 +1,85 @@
+---
+source: crates/synth-parser/tests/fixtures.rs
+expression: ast
+---
+{
+  "imports": [],
+  "board": {
+    "name": "multiple_keepouts",
+    "statements": [
+      {
+        "stmt": "layers",
+        "count": 4,
+        "span": {
+          "byte_start": 30,
+          "byte_end": 38
+        }
+      },
+      {
+        "stmt": "keepout",
+        "name": "antenna1",
+        "attrs": [
+          {
+            "kind": "radius",
+            "literal": "10",
+            "unit": "mm",
+            "span": {
+              "byte_start": 71,
+              "byte_end": 75
+            }
+          }
+        ],
+        "span": {
+          "byte_start": 41,
+          "byte_end": 79
+        }
+      },
+      {
+        "stmt": "keepout",
+        "name": "antenna2",
+        "attrs": [
+          {
+            "kind": "radius",
+            "literal": "15",
+            "unit": "mm",
+            "span": {
+              "byte_start": 112,
+              "byte_end": 116
+            }
+          }
+        ],
+        "span": {
+          "byte_start": 82,
+          "byte_end": 120
+        }
+      },
+      {
+        "stmt": "keepout",
+        "name": "switching_supply",
+        "attrs": [
+          {
+            "kind": "radius",
+            "literal": "5",
+            "unit": "mm",
+            "span": {
+              "byte_start": 161,
+              "byte_end": 164
+            }
+          }
+        ],
+        "span": {
+          "byte_start": 123,
+          "byte_end": 168
+        }
+      }
+    ],
+    "span": {
+      "byte_start": 0,
+      "byte_end": 170
+    }
+  },
+  "span": {
+    "byte_start": 0,
+    "byte_end": 170
+  }
+}

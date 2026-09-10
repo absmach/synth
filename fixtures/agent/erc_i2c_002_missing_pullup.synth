@@ -1,0 +1,40 @@
+board "test_i2c_002" {
+  layers 2
+  component U1: mcu "rp2350"
+  component U2: sensor "bme680_env"
+  component C1: capacitor "c_generic_0603"
+  component C2: capacitor "c_generic_0603"
+  component C3: capacitor "c_generic_0603"
+  component C4: capacitor "c_generic_0603"
+  component C5: capacitor "c_generic_0603"
+  component C6: capacitor "c_generic_0603"
+  component C7: capacitor "c_generic_0603"
+  component R1: resistor "r_generic_0603"
+  component J1: connector "header_1x4"
+
+  connect U1.vdd_io -> J1.p1
+  connect U1.vdd_core -> J1.p1
+  connect U2.vdd -> J1.p1
+  connect U1.gnd -> J1.p2
+  connect U2.gnd -> J1.p2
+  connect U1.run -> R1.p1
+  connect J1.p1 -> R1.p2
+
+  connect U1.vdd_io -> C1.p1
+  connect J1.p2 -> C1.p2
+  connect U1.vdd_io -> C2.p1
+  connect J1.p2 -> C2.p2
+  connect U1.vdd_io -> C3.p1
+  connect J1.p2 -> C3.p2
+  connect U1.vdd_io -> C4.p1
+  connect J1.p2 -> C4.p2
+  connect U1.vdd_core -> C5.p1
+  connect J1.p2 -> C5.p2
+  connect U1.vdd_core -> C6.p1
+  connect J1.p2 -> C6.p2
+  connect U2.vdd -> C7.p1
+  connect J1.p2 -> C7.p2
+
+  connect U1.gp0 -> U2.sda
+  connect U1.gp1 -> U2.scl
+}

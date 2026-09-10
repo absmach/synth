@@ -1,0 +1,18 @@
+board "test_rf_001" {
+  layers 2
+  component U1: modem "bg95"
+  component ANT1: antenna "ant_chip_2g4"
+  component J1: connector "header_1x4"
+  component C1: capacitor "c_generic_0805"
+
+  connect U1.vbatt -> J1.p1
+  connect U1.vcc_io -> J1.p1
+  connect U1.gnd -> J1.p2
+  connect U1.rst -> J1.p3
+  connect U1.tx -> J1.p3
+  connect U1.rx -> J1.p4
+  connect U1.vbatt -> C1.p1
+  connect U1.gnd -> C1.p2
+
+  connect U1.main_ant -> ANT1.feed
+}

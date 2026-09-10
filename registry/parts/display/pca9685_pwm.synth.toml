@@ -1,0 +1,47 @@
+id = "pca9685_pwm"
+kind = "ic"
+description = "NXP PCA9685 16-channel I²C PWM driver"
+kicad_symbol = "Driver_LED:PCA9685PW"
+kicad_footprint = "Package_SO:TSSOP-28_4.4x9.7mm_P0.65mm"
+
+[footprint_dimensions]
+width_mm = 7.2
+height_mm = 8.85
+courtyard_margin_mm = 0.25
+
+[operating_conditions]
+min_voltage_v = 1.8
+max_voltage_v = 5.0
+max_current_ma = 100.0
+
+[[pins]]
+name = "vdd"
+number = "1"
+electrical_type = "power_input"
+required = true
+
+[[pins]]
+name = "gnd"
+number = "2"
+electrical_type = "power_input"
+required = true
+
+[[pins]]
+name = "sda"
+number = "3"
+electrical_type = "bidirectional"
+capabilities = ["i2c_sda"]
+required = true
+
+[[pins]]
+name = "scl"
+number = "4"
+electrical_type = "bidirectional"
+capabilities = ["i2c_scl"]
+required = true
+
+[[required_decoupling]]
+net = "vdd"
+value = "100nf"
+count = 1
+

@@ -1,0 +1,43 @@
+[package]
+name = "synth-mcp"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+description = "Synth Model Context Protocol (MCP) Server for AI hardware design tooling."
+
+[lints]
+workspace = true
+
+[dependencies]
+serde = { workspace = true }
+serde_json = { workspace = true }
+chrono = { workspace = true }
+thiserror = { workspace = true }
+anyhow = { workspace = true }
+tokio = { workspace = true }
+schemars = { workspace = true }
+axum = { workspace = true }
+tower-http = { workspace = true }
+synth-diagnostics = { workspace = true }
+synth-geometry = { workspace = true }
+synth-ast = { workspace = true }
+synth-parser = { workspace = true }
+synth-ir = { workspace = true }
+synth-registry = { workspace = true }
+synth-validate = { workspace = true }
+synth-knowledge = { workspace = true }
+synth-layout = { workspace = true }
+synth-place = { workspace = true }
+synth-route = { workspace = true }
+synth-drc = { workspace = true }
+synth-kicad = { workspace = true }
+synth-supply = { workspace = true }
+toml = { workspace = true }
+
+[dev-dependencies]
+insta = { workspace = true }
+tempfile = "3"
+zip = { workspace = true, default-features = false, features = ["deflate-flate2-zlib-rs"] }

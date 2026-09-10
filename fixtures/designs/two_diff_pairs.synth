@@ -1,0 +1,9 @@
+board "two_diff_pairs" {
+  layers 4
+  diff_pair USB1_DP USB1_DN {
+    impedance 90ohm
+  }
+  diff_pair USB2_DP USB2_DN {
+    impedance 90ohm
+  }
+}

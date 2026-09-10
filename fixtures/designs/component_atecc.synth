@@ -1,0 +1,4 @@
+board "component_atecc" {
+  layers 2
+  component U1: secure_element "atecc608"
+}

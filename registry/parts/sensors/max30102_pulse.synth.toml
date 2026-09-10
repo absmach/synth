@@ -1,0 +1,47 @@
+id = "max30102_pulse"
+kind = "sensor"
+description = "Maxim MAX30102 pulse oximeter / heart-rate sensor, I²C"
+kicad_symbol = "Sensor:MAX30102"
+kicad_footprint = "Package_OLGA:OLGA-14_3.3x5.6mm_P0.8mm"
+
+[footprint_dimensions]
+width_mm = 3.3
+height_mm = 5.6
+courtyard_margin_mm = 0.25
+
+[operating_conditions]
+min_voltage_v = 1.8
+max_voltage_v = 5.0
+max_current_ma = 100.0
+
+[[pins]]
+name = "vdd"
+number = "11"
+electrical_type = "power_input"
+required = true
+
+[[pins]]
+name = "gnd"
+number = "12"
+electrical_type = "power_input"
+required = true
+
+[[pins]]
+name = "sda"
+number = "3"
+electrical_type = "bidirectional"
+capabilities = ["i2c_sda"]
+required = true
+
+[[pins]]
+name = "scl"
+number = "2"
+electrical_type = "bidirectional"
+capabilities = ["i2c_scl"]
+required = true
+
+[[required_decoupling]]
+net = "vdd"
+value = "100nf"
+count = 1
+

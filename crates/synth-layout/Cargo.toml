@@ -1,0 +1,31 @@
+[package]
+name = "synth-layout"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+description = "Schematic placement and wire routing for the Synth EDA compiler. Both the browser preview and the KiCad export consume this crate so they agree on placements."
+
+[lints]
+workspace = true
+
+[dependencies]
+serde = { workspace = true }
+toml = { workspace = true }
+synth-ir = { workspace = true }
+synth-registry = { workspace = true }
+# Read-only, pure-Rust DEFLATE decoder — the near-universal compression
+# method zip tools (including browser "Download ZIP" and SnapEDA/
+# UltraLibrarian exports) use. No zopfli (write-only optimizer),
+# encryption, or the other exotic codecs (bzip2/lzma/zstd/ppmd) `zip`'s
+# default features pull in — this crate only ever reads.
+zip = { workspace = true, default-features = false, features = ["deflate-flate2-zlib-rs"] }
+
+[dev-dependencies]
+synth-parser = { workspace = true }
+synth-diagnostics = { workspace = true }
+proptest = { workspace = true }
+insta = { workspace = true }
+serde_json = { workspace = true }

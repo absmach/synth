@@ -1,0 +1,25 @@
+id = "spst_tactile"
+kind = "switch"
+description = "Generic SPST tactile button"
+kicad_symbol = "Switch:SW_Push"
+kicad_footprint = "Button_Switch_SMD:SW_SPST_PTS645Sx43SMTR92"
+
+[footprint_dimensions]
+width_mm = 5.0
+height_mm = 5.0
+courtyard_margin_mm = 0.25
+
+[operating_conditions]
+min_voltage_v = 1.8
+max_voltage_v = 5.0
+max_current_ma = 100.0
+
+[[pins]]
+name = "p1"
+number = "1"
+electrical_type = "passive"
+
+[[pins]]
+name = "p2"
+number = "2"
+electrical_type = "passive"

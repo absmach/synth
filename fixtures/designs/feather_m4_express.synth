@@ -1,0 +1,281 @@
+// Reference design for an Adafruit Feather M4 Express-style 4-layer board.
+// Exercises 59 components (MCU, regulator, Flash, EEPROM, Secure Element,
+// multiple I2C sensors, USB-C, battery input, STEMMA QT, headers, ESD diodes,
+// crystal, tactile buttons, status LEDs, and extensive decoupling).
+
+board "feather_m4_express" {
+  layers 4
+  manufacturer "jlcpcb"
+
+  // Primary active components
+  component U1: mcu "rp2350"
+  component U2: regulator "ams1117_3v3"
+  component U3: memory "w25q128_flash"
+  component U4: memory "24lc256_eeprom"
+  component U5: secure_element "atecc608"
+
+  // Sensors
+  component U6: sensor "bme680_env"
+  component U7: sensor "bmp280_pressure"
+  component U8: sensor "bh1750_lux"
+  component U9: sensor "tmp117_temperature"
+
+  // Connectors & Headers
+  component J1: connector "usb_c_receptacle"
+  component J2: connector "jst_ph_2pin"
+  component J3: connector "jst_ph_4pin"
+  component J4: connector "header_1x4"
+  component J5: connector "header_1x4"
+
+  // Clock
+  component Y1: crystal "osc_smd_25mhz"
+
+  // Protection & User Controls
+  component D1: diode "esd_usb"
+  component D2: diode "esd_usb"
+  component SW1: switch "spst_tactile"
+  component SW2: switch "spst_tactile"
+
+  // LEDs
+  component D3: diode "led_red_0603"
+  component D4: diode "led_green_0603"
+  component D5: diode "led_blue_0603"
+  component D6: diode "led_amber_0603"
+  component D7: diode "led_white_0603"
+
+  // Resistors (18 total)
+  component R1: resistor "r_generic_0603"
+  component R2: resistor "r_generic_0603"
+  component R3: resistor "r_generic_0603"
+  component R4: resistor "r_generic_0603"
+  component R5: resistor "r_generic_0603"
+  component R6: resistor "r_generic_0603"
+  component R7: resistor "r_generic_0603"
+  component R8: resistor "r_generic_0603"
+  component R9: resistor "r_generic_0603"
+  component R10: resistor "r_generic_0603"
+  component R11: resistor "r_generic_0603"
+  component R12: resistor "r_generic_0603"
+  component R13: resistor "r_generic_0603"
+  component R14: resistor "r_generic_0603"
+  component R15: resistor "r_generic_0603"
+  component R16: resistor "r_generic_0603"
+  component R17: resistor "r_generic_0603"
+  component R18: resistor "r_generic_0603"
+
+  // Capacitors (20 total)
+  component C1: capacitor "c_generic_0805"
+  component C2: capacitor "c_generic_0805"
+  component C3: capacitor "c_generic_0805"
+  component C4: capacitor "c_generic_0603"
+  component C5: capacitor "c_generic_0603"
+  component C6: capacitor "c_generic_0603"
+  component C7: capacitor "c_generic_0603"
+  component C8: capacitor "c_generic_0603"
+  component C9: capacitor "c_generic_0603"
+  component C10: capacitor "c_generic_0603"
+  component C11: capacitor "c_generic_0603"
+  component C12: capacitor "c_generic_0603"
+  component C13: capacitor "c_generic_0603"
+  component C14: capacitor "c_generic_0603"
+  component C15: capacitor "c_generic_0603"
+  component C16: capacitor "c_generic_0603"
+  component C17: capacitor "c_generic_0603"
+  component C18: capacitor "c_generic_0603"
+  component C19: capacitor "c_generic_0603"
+  component C20: capacitor "c_generic_0603"
+
+  // ---- Power distribution ------------------------------------------------
+  connect J1.vbus -> C1.p1
+  connect J1.gnd -> C1.p2
+  connect J1.vbus -> U2.vin
+  connect J1.gnd -> U2.gnd
+  connect U2.vin -> C2.p1
+  connect U2.gnd -> C2.p2
+  connect U2.vout -> C3.p1
+  connect U2.gnd -> C3.p2
+
+  // MCU Power Rails
+  connect U2.vout -> U1.vdd_io
+  connect U2.vout -> U1.vdd_core
+  connect U2.gnd -> U1.gnd
+
+  // Decoupling MCU VDD_IO (4 caps)
+  connect U1.vdd_io -> C4.p1
+  connect U2.gnd -> C4.p2
+  connect U1.vdd_io -> C5.p1
+  connect U2.gnd -> C5.p2
+  connect U1.vdd_io -> C6.p1
+  connect U2.gnd -> C6.p2
+  connect U1.vdd_io -> C7.p1
+  connect U2.gnd -> C7.p2
+
+  // Decoupling MCU VDD_CORE (2 caps)
+  connect U1.vdd_core -> C8.p1
+  connect U2.gnd -> C8.p2
+  connect U1.vdd_core -> C9.p1
+  connect U2.gnd -> C9.p2
+
+  // Battery Connector to power bus
+  connect J2.p1 -> U2.vin
+  connect J2.p2 -> U2.gnd
+
+  // ---- USB Data, ESD & CC Pull-downs ------------------------------------
+  connect U1.usb_dp -> J1.dp
+  connect U1.usb_dn -> J1.dn
+  connect J1.dp -> D1.io
+  connect J1.gnd -> D1.gnd
+  connect J1.dn -> D2.io
+  connect J1.gnd -> D2.gnd
+
+  connect J1.cc1 -> R1.p1
+  connect R1.p2 -> U2.gnd
+  connect J1.cc2 -> R2.p1
+  connect R2.p2 -> U2.gnd
+
+  // ---- I2C Bus (MCU, Sensors, EEPROM, STEMMA QT) -----------------------
+  connect U1.gp0 -> U4.sda
+  connect U1.gp1 -> U4.scl
+  connect U1.gp0 -> U5.sda
+  connect U1.gp1 -> U5.scl
+  connect U1.gp0 -> U6.sda
+  connect U1.gp1 -> U6.scl
+  connect U1.gp0 -> U7.sda
+  connect U1.gp1 -> U7.scl
+  connect U1.gp0 -> U8.sda
+  connect U1.gp1 -> U8.scl
+  connect U1.gp0 -> U9.sda
+  connect U1.gp1 -> U9.scl
+
+  // I2C STEMMA QT connector
+  connect U2.vout -> J3.p1
+  connect U2.gnd -> J3.p2
+  connect U1.gp0 -> J3.p3
+  connect U1.gp1 -> J3.p4
+
+  // I2C Pull-ups
+  connect U1.gp0 -> R3.p1
+  connect U2.vout -> R3.p2
+  connect U1.gp1 -> R4.p1
+  connect U2.vout -> R4.p2
+
+  // Sensor & Memory Power Decoupling
+  connect U2.vout -> U4.vcc
+  connect U2.gnd -> U4.gnd
+  connect U4.vcc -> C12.p1
+  connect U4.gnd -> C12.p2
+
+  connect U2.vout -> U5.vcc
+  connect U2.gnd -> U5.gnd
+  connect U5.vcc -> C13.p1
+  connect U5.gnd -> C13.p2
+
+  connect U2.vout -> U6.vdd
+  connect U2.gnd -> U6.gnd
+  connect U6.vdd -> C14.p1
+  connect U6.gnd -> C14.p2
+
+  connect U2.vout -> U7.vdd
+  connect U2.gnd -> U7.gnd
+  connect U7.vdd -> C15.p1
+  connect U7.gnd -> C15.p2
+
+  connect U2.vout -> U8.vcc
+  connect U2.gnd -> U8.gnd
+  connect U8.vcc -> C16.p1
+  connect U8.gnd -> C16.p2
+
+  connect U2.vout -> U9.vcc
+  connect U2.gnd -> U9.gnd
+  connect U9.vcc -> C17.p1
+  connect U9.gnd -> C17.p2
+
+  // Sensor address / WP pull-downs
+  connect U8.addr -> R12.p1
+  connect U2.gnd -> R12.p2
+  connect U9.add0 -> R13.p1
+  connect U2.gnd -> R13.p2
+  connect U4.wp -> R14.p1
+  connect U2.gnd -> R14.p2
+  connect U4.a0 -> R16.p1
+  connect U2.gnd -> R16.p2
+  connect U4.a1 -> R17.p1
+  connect U2.gnd -> R17.p2
+  connect U4.a2 -> R18.p1
+  connect U2.gnd -> R18.p2
+
+  // ---- SPI Flash ---------------------------------------------------------
+  connect U2.vout -> U3.vcc
+  connect U2.gnd -> U3.gnd
+  connect U3.vcc -> C11.p1
+  connect U3.gnd -> C11.p2
+
+  connect U1.gp2 -> U3.sck
+  connect U1.gp3 -> U3.miso
+  connect U1.gp0 -> U3.mosi
+  connect U1.gp1 -> U3.cs
+  connect U3.wp -> U3.vcc
+  connect U3.hold -> R15.p1
+  connect U2.vout -> R15.p2
+
+  // ---- Clocking ----------------------------------------------------------
+  connect Y1.out -> U1.xin
+  connect U2.vout -> Y1.vcc
+  connect U2.gnd -> Y1.gnd
+  connect Y1.vcc -> C18.p1
+  connect Y1.gnd -> C18.p2
+
+  // ---- Buttons & Reset ---------------------------------------------------
+  connect U1.run -> R5.p1
+  connect U2.vout -> R5.p2
+  connect U1.run -> SW1.p1
+  connect SW1.p2 -> U2.gnd
+  connect U1.run -> C10.p1
+  connect U2.gnd -> C10.p2
+
+  connect U1.gp3 -> R6.p1
+  connect U2.vout -> R6.p2
+  connect U1.gp3 -> SW2.p1
+  connect SW2.p2 -> U2.gnd
+
+  // ---- Status LEDs -------------------------------------------------------
+  connect U1.gp0 -> R7.p1
+  connect R7.p2 -> D3.anode
+  connect D3.cathode -> U2.gnd
+
+  connect U1.gp1 -> R8.p1
+  connect R8.p2 -> D4.anode
+  connect D4.cathode -> U2.gnd
+
+  connect U1.gp2 -> R9.p1
+  connect R9.p2 -> D5.anode
+  connect D5.cathode -> U2.gnd
+
+  connect U1.gp3 -> R10.p1
+  connect R10.p2 -> D6.anode
+  connect D6.cathode -> U2.gnd
+
+  connect J1.vbus -> R11.p1
+  connect R11.p2 -> D7.anode
+  connect D7.cathode -> U2.gnd
+
+  // ---- Headers / Expansion -----------------------------------------------
+  connect J4.p1 -> U2.vout
+  connect J4.p2 -> U2.gnd
+  connect J4.p3 -> U1.gp2
+  connect J4.p4 -> U1.gp3
+  connect U2.vout -> C19.p1
+  connect U2.gnd -> C19.p2
+
+  connect J5.p1 -> U2.vout
+  connect J5.p2 -> U2.gnd
+  connect J5.p3 -> U1.gp0
+  connect J5.p4 -> U1.gp1
+  connect U2.vout -> C20.p1
+  connect U2.gnd -> C20.p2
+
+  // ---- Differential Pair Constraints ------------------------------------
+  diff_pair USB_DP USB_DN {
+    impedance 90ohm
+  }
+}

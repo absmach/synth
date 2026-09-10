@@ -1,0 +1,3 @@
+board "layers_max" {
+  layers 64
+}

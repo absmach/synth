@@ -1,0 +1,7 @@
+board "test_noconverge_usb_002" {
+  layers 2
+  component U1: connector "usb_c_receptacle"
+  component J1: connector "header_1x4"
+
+  connect U1.cc1 -> J1.p1
+}

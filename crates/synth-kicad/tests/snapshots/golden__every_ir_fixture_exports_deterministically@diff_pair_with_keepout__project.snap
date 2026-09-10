@@ -1,0 +1,23 @@
+---
+source: crates/synth-kicad/tests/golden.rs
+expression: project
+---
+{
+  "board": {},
+  "boards": [],
+  "meta": {
+    "filename": "diff_pair_with_keepout.kicad_pro",
+    "uuid": "a6b427fb-c03a-5b28-84c0-74279af90d04",
+    "version": 1
+  },
+  "schematic": {
+    "annotate_start_num": 0,
+    "drawing": {}
+  },
+  "sheets": [
+    [
+      "3a51ad90-e246-56fc-bda6-b628457a2c3e",
+      ""
+    ]
+  ]
+}

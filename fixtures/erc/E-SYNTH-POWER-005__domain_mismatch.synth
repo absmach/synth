@@ -1,0 +1,8 @@
+board "domain_clash" {
+  layers 2
+
+  component U1: regulator "ams1117_5v"
+  component U2: regulator "ams1117_3v3"
+
+  connect U1.vout -> U2.vout
+}

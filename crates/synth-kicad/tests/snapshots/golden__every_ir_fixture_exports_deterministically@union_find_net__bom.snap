@@ -1,0 +1,8 @@
+---
+source: crates/synth-kicad/tests/golden.rs
+expression: bom
+---
+refdes,value,kind,description,kicad_symbol,kicad_footprint,lcsc_pn,mpn
+C1,c_generic_0402,capacitor,"Generic 0402 MLCC, X7R/X5R, any value",Device:C,Capacitor_SMD:C_0402_1005Metric,,
+U1,rp2350,mcu,"Raspberry Pi RP2350 dual-core MCU, QFN-60",MCU_RaspberryPi:RP2040,Package_DFN_QFN:QFN-56-1EP_7x7mm_P0.4mm_EP3.2x3.2mm,C14663,RP2350A
+U2,atecc608,secure_element,"Microchip ATECC608 crypto authentication IC, UDFN-8",Security:ATECC608A-SSH,Package_SO:SOIC-8_3.9x4.9mm_P1.27mm,,

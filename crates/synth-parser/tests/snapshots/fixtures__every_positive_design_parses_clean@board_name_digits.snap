@@ -1,0 +1,28 @@
+---
+source: crates/synth-parser/tests/fixtures.rs
+expression: ast
+---
+{
+  "imports": [],
+  "board": {
+    "name": "v2_revision_3",
+    "statements": [
+      {
+        "stmt": "layers",
+        "count": 2,
+        "span": {
+          "byte_start": 26,
+          "byte_end": 34
+        }
+      }
+    ],
+    "span": {
+      "byte_start": 0,
+      "byte_end": 36
+    }
+  },
+  "span": {
+    "byte_start": 0,
+    "byte_end": 36
+  }
+}

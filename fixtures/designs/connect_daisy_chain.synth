@@ -1,0 +1,8 @@
+board "connect_daisy_chain" {
+  layers 2
+  component U1: mcu "rp2350"
+  component U2: secure_element "atecc608"
+  component U3: secure_element "atecc608"
+  connect U1.gp0 -> U2.sda
+  connect U2.sda -> U3.sda
+}

@@ -1,0 +1,112 @@
+id = "sn74hc595_shift"
+kind = "ic"
+description = "TI SN74HC595 8-bit serial-in / parallel-out shift register"
+mpn = "SN74HC595DR"
+lcsc_pn = "C5948"
+kicad_symbol = "74xx:74HC595"
+kicad_footprint = "Package_DIP:DIP-16_W7.62mm"
+
+[footprint_dimensions]
+width_mm = 9.73
+height_mm = 20.82
+courtyard_margin_mm = 0.25
+
+[operating_conditions]
+min_voltage_v = 1.8
+max_voltage_v = 5.0
+max_current_ma = 100.0
+
+[[pins]]
+name = "qb"
+number = "1"
+electrical_type = "output"
+
+[[pins]]
+name = "qc"
+number = "2"
+electrical_type = "output"
+
+[[pins]]
+name = "qd"
+number = "3"
+electrical_type = "output"
+
+[[pins]]
+name = "qe"
+number = "4"
+electrical_type = "output"
+
+[[pins]]
+name = "qf"
+number = "5"
+electrical_type = "output"
+
+[[pins]]
+name = "qg"
+number = "6"
+electrical_type = "output"
+
+[[pins]]
+name = "qh"
+number = "7"
+electrical_type = "output"
+
+[[pins]]
+name = "gnd"
+number = "8"
+electrical_type = "power_input"
+required = true
+
+[[pins]]
+name = "qh_prime"
+number = "9"
+electrical_type = "output"
+
+[[pins]]
+name = "srclr"
+number = "10"
+electrical_type = "input"
+required = true
+
+[[pins]]
+name = "srclk"
+number = "11"
+electrical_type = "clock"
+capabilities = ["clock_input"]
+required = true
+
+[[pins]]
+name = "rclk"
+number = "12"
+electrical_type = "clock"
+capabilities = ["clock_input"]
+required = true
+
+[[pins]]
+name = "oe"
+number = "13"
+electrical_type = "input"
+required = true
+
+[[pins]]
+name = "ser"
+number = "14"
+electrical_type = "input"
+required = true
+
+[[pins]]
+name = "qa"
+number = "15"
+electrical_type = "output"
+
+[[pins]]
+name = "vcc"
+number = "16"
+electrical_type = "power_input"
+required = true
+
+[[required_decoupling]]
+net = "vcc"
+value = "100nf"
+count = 1
+

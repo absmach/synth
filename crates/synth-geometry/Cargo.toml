@@ -1,0 +1,17 @@
+[package]
+name = "synth-geometry"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+description = "Integer-nanometer geometry primitives for the Synth EDA placer and router."
+
+[lints]
+workspace = true
+
+[dependencies]
+serde = { workspace = true }
+synth-ir = { workspace = true }
+
