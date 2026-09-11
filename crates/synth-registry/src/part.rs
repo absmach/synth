@@ -174,6 +174,24 @@ pub struct FootprintDimensions {
     pub height_mm: f64,
     #[serde(default)]
     pub courtyard_margin_mm: Option<f64>,
+    /// Direction the connector's mating opening faces in the footprint's
+    /// unrotated KiCad coordinate frame. This is intentionally separate from
+    /// the footprint bbox: a bbox cannot tell an agent whether a connector is
+    /// physically accessible from an edge.
+    #[serde(default)]
+    pub mating_face: Option<MatingFace>,
+}
+
+/// Cardinal direction of a connector's mating opening before placement
+/// rotation. Coordinates use the same screen convention as KiCad footprints:
+/// `Top` is negative Y and `Bottom` is positive Y.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum MatingFace {
+    Top,
+    Right,
+    Bottom,
+    Left,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]

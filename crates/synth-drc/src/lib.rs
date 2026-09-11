@@ -150,6 +150,7 @@ pub fn check(
     violations.extend(rules::check_min_annular_ring(routing, profile));
     violations.extend(rules::check_min_drill_to_copper(routing, profile));
     violations.extend(rules::check_courtyard_overlap(board, placement));
+    violations.extend(rules::check_connector_orientation(board, placement));
     violations.extend(rules::check_silkscreen_overlap(board, placement));
     violations.extend(rules::check_soldermask_sliver(routing, profile));
     violations.extend(geometry::check_copper_to_component_clearance(

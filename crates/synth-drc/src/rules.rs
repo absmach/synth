@@ -18,6 +18,42 @@ use synth_route::{Routing, Segment, Via};
 use crate::profile::ManufacturerProfile;
 use crate::Violation;
 
+/// Connector accessibility/orientation. Courtyard legality alone cannot tell
+/// whether a USB-C receptacle can be mated from outside the board.
+#[must_use]
+pub fn check_connector_orientation(
+    board: &synth_ir::Board,
+    placement: &Placement,
+) -> Vec<Violation> {
+    synth_place::floorplan::connector_orientation_issues(
+        board,
+        placement.board_outline,
+        &placement.components,
+    )
+    .into_iter()
+    .map(|issue| {
+        let refdes = issue.refdes.clone();
+        Violation {
+            code: "E-SYNTH-DRC-011".to_string(),
+            message: format!(
+            "connector {} faces {:?}, but its mating face must point out of the {:?} board edge",
+            refdes, issue.actual, issue.edge
+        ),
+            witness: Vec::new(),
+            nets: Vec::new(),
+            components: vec![refdes.clone()],
+            pos_mm: None,
+            suggested_override: Some(crate::SuggestedOverride {
+                refdes,
+                delta_x_mm: 0.0,
+                delta_y_mm: 0.0,
+                rotation_deg: issue.expected.degrees() as u32,
+            }),
+        }
+    })
+    .collect()
+}
+
 /// Minimum trace width — every emitted segment's `width_nm`
 /// must be ≥ profile's `min_trace_width_nm`. Code:
 /// `E-SYNTH-DRC-001`.

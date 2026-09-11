@@ -10,6 +10,10 @@ kicad_footprint = "Connector_USB:USB_C_Receptacle_HRO_TYPE-C-31-M-12"
 width_mm = 9.64
 height_mm = 6.62
 courtyard_margin_mm = 0.25
+# In the unrotated KiCad footprint the receptacle opening points toward +Y.
+# The placer maps this physical face to the selected board edge; it must not
+# infer orientation from the courtyard rectangle alone.
+mating_face = "bottom"
 
 [operating_conditions]
 min_voltage_v = 1.8
