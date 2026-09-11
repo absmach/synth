@@ -11,12 +11,108 @@
 use std::collections::HashMap;
 use synth_geometry::{Point, Rect, Rotation};
 use synth_ir::{Board, ComponentId};
+use synth_registry::MatingFace;
 
 /// Target initial floorplan position and orientation for a component.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct FloorplanTarget {
     pub point: Point,
     pub rotation: Rotation,
+}
+
+/// Board edge used when mapping a connector's physical mating face.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum BoardEdge {
+    Top,
+    Right,
+    Bottom,
+    Left,
+}
+
+/// Return the rotation that makes a footprint-local mating face point out of
+/// the requested board edge. Keeping this mapping in one place prevents the
+/// USB-C rule and agent validation from silently developing different angle
+/// conventions.
+#[must_use]
+pub fn rotation_for_mating_edge(face: MatingFace, edge: BoardEdge) -> Rotation {
+    let local = match face {
+        MatingFace::Top => (0_i8, -1_i8),
+        MatingFace::Right => (1, 0),
+        MatingFace::Bottom => (0, 1),
+        MatingFace::Left => (-1, 0),
+    };
+    let desired = match edge {
+        BoardEdge::Top => (0, -1),
+        BoardEdge::Right => (1, 0),
+        BoardEdge::Bottom => (0, 1),
+        BoardEdge::Left => (-1, 0),
+    };
+    match (local, desired) {
+        ((x, y), (dx, dy)) if (x, y) == (dx, dy) => Rotation::Zero,
+        ((x, y), (dx, dy)) if (y, -x) == (dx, dy) => Rotation::Ninety,
+        ((x, y), (dx, dy)) if (-x, -y) == (dx, dy) => Rotation::OneEighty,
+        _ => Rotation::TwoSeventy,
+    }
+}
+
+/// A connector whose declared mating face does not point away from the
+/// nearest board edge. This is kept in the placement crate so DRC, the agent
+/// transition oracle, and preview/export consumers share one interpretation.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ConnectorOrientationIssue {
+    pub refdes: String,
+    pub edge: BoardEdge,
+    pub expected: Rotation,
+    pub actual: Rotation,
+}
+
+/// Check edge-mounted connectors against their physical mating-face metadata.
+/// Connectors are considered edge-mounted when their centre is within 8 mm of
+/// an outline edge. The tolerance covers normal courtyard depth while avoiding
+/// false positives for ordinary interior connectors.
+#[must_use]
+pub fn connector_orientation_issues(
+    board: &Board,
+    outline: Rect,
+    placements: &[crate::ComponentPlacement],
+) -> Vec<ConnectorOrientationIssue> {
+    let mut issues = Vec::new();
+    let edge_tolerance = synth_geometry::mm_to_nm(8.0);
+    for placement in placements {
+        let Some(component) = board.component(placement.id) else {
+            continue;
+        };
+        let Some(face) = component
+            .part
+            .as_ref()
+            .and_then(|part| part.footprint_dimensions.as_ref())
+            .and_then(|dimensions| dimensions.mating_face)
+        else {
+            continue;
+        };
+        let distances = [
+            (placement.center.y_nm - outline.min.y_nm, BoardEdge::Top),
+            (outline.max.x_nm - placement.center.x_nm, BoardEdge::Right),
+            (outline.max.y_nm - placement.center.y_nm, BoardEdge::Bottom),
+            (placement.center.x_nm - outline.min.x_nm, BoardEdge::Left),
+        ];
+        let Some(&(distance, edge)) = distances.iter().min_by_key(|(distance, _)| *distance) else {
+            continue;
+        };
+        if distance < 0 || distance > edge_tolerance {
+            continue;
+        }
+        let expected = rotation_for_mating_edge(face, edge);
+        if placement.rotation != expected {
+            issues.push(ConnectorOrientationIssue {
+                refdes: component.refdes.clone(),
+                edge,
+                expected,
+                actual: placement.rotation,
+            });
+        }
+    }
+    issues
 }
 
 /// Compute target floorplan positions and rotations for connectors and macro ICs.
@@ -58,27 +154,27 @@ pub fn compute_floorplan_targets(
             || kind_lower.contains("usb");
 
         if is_usb {
-            // USB-C connector anchored to the Top Edge, left-aligned.
-            //
-            // Rotation::OneEighty: the footprint origin is inside the board body.
-            // With 180° rotation, the pads (which sit at y_local = -4.045 mm in the
-            // unrotated footprint) are flipped to y_local = +4.045 mm — facing the
-            // board interior. The receptacle opening (the physical port the cable
-            // enters) is therefore at the negative-Y side of the rotated footprint,
-            // pointing OUTWARD toward the top Edge.Cuts. That is the only orientation
-            // that makes cable insertion physically possible when the board is mounted
-            // with the top edge facing the user.
+            // USB-C connector anchored to the Top Edge, left-aligned. The
+            // rotation comes from physical footprint metadata, not a magic
+            // angle, so a replacement USB footprint can declare a different
+            // unrotated opening direction safely.
             //
             // NOTE: The pre-shift Y here is intentionally left at min_y + half_h; the
             // definitive edge-flush snap is applied deterministically AFTER the global
             // Y-shift in place_with_outline() using closed-form geometry.
             let x = min_x + width_nm / 4 + (usb_count * synth_geometry::mm_to_nm(15.0));
             let y = min_y + half_h;
+            let mating_face = comp
+                .part
+                .as_ref()
+                .and_then(|p| p.footprint_dimensions.as_ref())
+                .and_then(|d| d.mating_face)
+                .unwrap_or(MatingFace::Bottom);
             targets.insert(
                 comp.id,
                 FloorplanTarget {
                     point: Point::new(x, y),
-                    rotation: Rotation::OneEighty,
+                    rotation: rotation_for_mating_edge(mating_face, BoardEdge::Top),
                 },
             );
             usb_count += 1;
@@ -200,4 +296,30 @@ pub fn compute_floorplan_targets(
     }
 
     targets
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn maps_usb_c_bottom_opening_to_top_edge() {
+        assert_eq!(
+            rotation_for_mating_edge(MatingFace::Bottom, BoardEdge::Top),
+            Rotation::OneEighty
+        );
+    }
+
+    #[test]
+    fn maps_each_local_face_to_each_edge() {
+        let faces = [
+            (MatingFace::Top, BoardEdge::Top),
+            (MatingFace::Right, BoardEdge::Right),
+            (MatingFace::Bottom, BoardEdge::Bottom),
+            (MatingFace::Left, BoardEdge::Left),
+        ];
+        for (face, edge) in faces {
+            assert_eq!(rotation_for_mating_edge(face, edge), Rotation::Zero);
+        }
+    }
 }

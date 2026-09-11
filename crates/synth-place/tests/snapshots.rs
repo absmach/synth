@@ -87,3 +87,42 @@ fn feather_m4_express_placement_snapshot() {
     let snapshot = render_placement_snapshot(&board, &placement);
     insta::assert_snapshot!("feather_m4_express_placement", snapshot);
 }
+
+#[test]
+fn usb_c_orientation_is_derived_and_wrong_override_is_detected() {
+    let board = load_board("fixtures/designs/iot_sensor_board.synth");
+    let placement = synth_place::place(&board).expect("place");
+    let usb = board
+        .components
+        .iter()
+        .find(|component| component.refdes == "J1")
+        .expect("USB-C component");
+    let usb_placement = placement
+        .components
+        .iter()
+        .find(|component| component.id == usb.id)
+        .expect("USB-C placement");
+    assert_eq!(usb_placement.rotation, synth_geometry::Rotation::OneEighty);
+    assert!(synth_place::floorplan::connector_orientation_issues(
+        &board,
+        placement.board_outline,
+        &placement.components,
+    )
+    .is_empty());
+
+    let mut incorrect = placement.clone();
+    incorrect
+        .components
+        .iter_mut()
+        .find(|component| component.id == usb.id)
+        .expect("USB-C placement")
+        .rotation = synth_geometry::Rotation::Zero;
+    let issues = synth_place::floorplan::connector_orientation_issues(
+        &board,
+        incorrect.board_outline,
+        &incorrect.components,
+    );
+    assert_eq!(issues.len(), 1);
+    assert_eq!(issues[0].refdes, "J1");
+    assert_eq!(issues[0].expected, synth_geometry::Rotation::OneEighty);
+}
