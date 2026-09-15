@@ -78,3 +78,21 @@ fn failure_corpus_emits_structured_placement_errors() {
         "expected at least 20 failure fixtures, found {tested_count}"
     );
 }
+
+#[test]
+fn explicit_dimensions_are_used_and_reject_an_infeasible_outline() {
+    let board = load_board(&workspace_root().join("examples/sensor_logger.synth"));
+
+    let placement = synth_place::place_with_dimensions(&board, 160.0, 120.0)
+        .expect("the reference design fits in the explicit outline");
+    assert_eq!(
+        placement.board_outline.width_nm(),
+        synth_geometry::mm_to_nm(160.0)
+    );
+    assert_eq!(
+        placement.board_outline.height_nm(),
+        synth_geometry::mm_to_nm(120.0)
+    );
+
+    assert!(synth_place::place_with_dimensions(&board, 20.0, 20.0).is_err());
+}

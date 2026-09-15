@@ -196,6 +196,12 @@ enum Command {
         input: PathBuf,
         #[arg(long, value_name = "DIR")]
         registry: Option<PathBuf>,
+        /// Explicit board width in millimetres. Must be supplied with height.
+        #[arg(long)]
+        width: Option<f64>,
+        /// Explicit board height in millimetres. Must be supplied with width.
+        #[arg(long)]
+        height: Option<f64>,
         #[arg(long)]
         pretty: bool,
     },
@@ -592,8 +598,10 @@ fn main() -> ExitCode {
         Command::Place {
             input,
             registry,
+            width,
+            height,
             pretty,
-        } => dump_place(&input, registry.as_deref(), pretty),
+        } => dump_place(&input, registry.as_deref(), width, height, pretty),
         Command::Route {
             input,
             registry,
@@ -1914,7 +1922,13 @@ fn dump_layout(
     })
 }
 
-fn dump_place(input: &PathBuf, registry_dir: Option<&Path>, pretty: bool) -> anyhow::Result<u8> {
+fn dump_place(
+    input: &PathBuf,
+    registry_dir: Option<&Path>,
+    width: Option<f64>,
+    height: Option<f64>,
+    pretty: bool,
+) -> anyhow::Result<u8> {
     let (source, file) = read_source(input)?;
     let parse = synth_parser::parse(&source, file.clone());
     write_diagnostics_to_stderr(&parse.diagnostics)?;
@@ -1943,22 +1957,38 @@ fn dump_place(input: &PathBuf, registry_dir: Option<&Path>, pretty: bool) -> any
             }
             // Surface placement failures as structured
             // `E-SYNTH-PLACE-*` diagnostics (slice 5).
-            lowered.board.as_ref().map(|b| match synth_place::place(b) {
-                Ok(p) => Some(p),
-                Err(e) => {
-                    let diags = e.to_diagnostics(b, &file);
-                    let _ = write_diagnostics_to_stderr(&diags);
-                    has_errors = true;
-                    None
+            let requested_dimensions = match (width, height) {
+                (Some(w), Some(h)) => Some((w, h)),
+                (None, None) => None,
+                _ => {
+                    anyhow::bail!("--width and --height must be supplied together")
                 }
-            })
+            };
+            lowered
+                .board
+                .as_ref()
+                .map(|b| {
+                    let result = match requested_dimensions {
+                        Some((w, h)) => synth_place::place_with_dimensions(b, w, h),
+                        None => synth_place::place(b),
+                    };
+                    match result {
+                        Ok(p) => Some(p),
+                        Err(e) => {
+                            let diags = e.to_diagnostics(b, &file);
+                            let _ = write_diagnostics_to_stderr(&diags);
+                            has_errors = true;
+                            None
+                        }
+                    }
+                })
+                .flatten()
         } else {
             None
         }
     } else {
         None
-    }
-    .flatten();
+    };
 
     let stdout = std::io::stdout();
     let mut out = stdout.lock();

@@ -335,6 +335,72 @@ pub fn place(board: &Board) -> Result<Placement, PlaceError> {
     place_with_tuning(board, 1.5, &std::collections::HashMap::new())
 }
 
+/// Place a board inside an explicit rectangular outline in millimetres.
+///
+/// This is the compiler-owned sizing seam used by agents and integrations.
+/// Unlike the automatic placer, it never silently falls back to a larger
+/// outline: an infeasible request returns the normal structured placement
+/// diagnostic.
+pub fn place_with_dimensions(
+    board: &Board,
+    width_mm: f64,
+    height_mm: f64,
+) -> Result<Placement, PlaceError> {
+    if !width_mm.is_finite() || !height_mm.is_finite() || width_mm <= 0.0 || height_mm <= 0.0 {
+        return Err(PlaceError::AreaInsufficient {
+            placed_mm2: 0.0,
+            board_mm2: 0.0,
+        });
+    }
+
+    use synth_layout::pcb_courtyard_geometry_for_part;
+    let courtyards_mm: Vec<(ComponentId, (f64, f64), (f64, f64))> = board
+        .components
+        .iter()
+        .map(|c| {
+            let ((cx, cy), (w, h)) = c.part.as_ref().map_or_else(
+                || ((0.0, 0.0), fallback_courtyard(&c.kind)),
+                pcb_courtyard_geometry_for_part,
+            );
+            (c.id, (cx, cy), (w + 1.5, h + 1.5))
+        })
+        .collect();
+
+    let outline = Rect::new(
+        Point::new(0, 0),
+        Point::new(mm_to_nm(width_mm), mm_to_nm(height_mm)),
+    );
+    let placement = place_with_outline(
+        board,
+        outline,
+        &courtyards_mm,
+        &std::collections::HashMap::new(),
+    )?;
+
+    // `place_with_outline` tightens automatic outlines after solving. For an
+    // explicit request, retain the requested rectangle only when the solved
+    // geometry actually fits inside it; otherwise return a normal placement
+    // diagnostic rather than silently accepting a larger board.
+    let solved_width = synth_geometry::nm_to_mm(placement.board_outline.width_nm());
+    let solved_height = synth_geometry::nm_to_mm(placement.board_outline.height_nm());
+    if solved_width > width_mm || solved_height > height_mm {
+        return Err(PlaceError::NoLegalPosition {
+            refdes: board
+                .components
+                .first()
+                .map_or_else(|| "board".to_string(), |component| component.refdes.clone()),
+            board_w_mm: width_mm,
+            board_h_mm: height_mm,
+            tried: board.components.len(),
+        });
+    }
+
+    Ok(Placement {
+        board_outline: outline,
+        components: placement.components,
+    })
+}
+
 /// Closed-loop placement generator with support for iteration hints (rotation & margin tuning).
 #[allow(clippy::too_many_lines)]
 pub fn place_with_tuning<S: ::std::hash::BuildHasher>(
