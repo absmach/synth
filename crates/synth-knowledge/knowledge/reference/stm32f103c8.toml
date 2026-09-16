@@ -1,0 +1,50 @@
+# STM32F103C8 minimal support circuit.
+#
+# Schema documented in reference/ams1117_3v3.toml. Pin names below are
+# the registry pin names for part `stm32f103c8`; `connect` pairs name
+# the IC pin first and the rail second.
+
+[[circuit]]
+part_id = "stm32f103c8"
+title = "STM32F103C8 minimal power, reset, and boot support"
+source = "STM32F103 datasheet + AN2586 hardware development guide"
+notes = [
+  "One 100 nF ceramic per supply pin (vdd, vbat), placed adjacent to the pin.",
+  "NRST is active-low with an internal weak pull-up; the external 10k pull-up plus 100 nF filter gives a clean power-on reset and a usable push-button node.",
+  "BOOT0 low selects main flash boot; do not leave floating.",
+]
+
+[[circuit.support]]
+designator = "C_VDD"
+kind = "capacitor"
+value = "100n"
+placement = "adjacent to vdd"
+connect = ["vdd", "vss"]
+
+[[circuit.support]]
+designator = "C_VBAT"
+kind = "capacitor"
+value = "100n"
+placement = "adjacent to vbat"
+connect = ["vbat", "vss"]
+
+[[circuit.support]]
+designator = "R_NRST"
+kind = "resistor"
+value = "10k"
+placement = "near nrst"
+connect = ["nrst", "vdd"]
+
+[[circuit.support]]
+designator = "C_NRST"
+kind = "capacitor"
+value = "100n"
+placement = "near nrst"
+connect = ["nrst", "vss"]
+
+[[circuit.support]]
+designator = "R_BOOT0"
+kind = "resistor"
+value = "10k"
+placement = "near boot0"
+connect = ["boot0", "vss"]

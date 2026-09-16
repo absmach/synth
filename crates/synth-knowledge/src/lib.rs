@@ -26,6 +26,9 @@ use synth_diagnostics::{Patch, PatchKind, Severity};
 use synth_ir::{Board, Component, ComponentId, Net, PinId};
 use synth_registry::ElectricalType;
 
+pub mod reference;
+pub use reference::{ReferenceCircuit, ReferenceLib, SupportRef};
+
 // ---------------------------------------------------------------------------
 // Data model
 // ---------------------------------------------------------------------------
