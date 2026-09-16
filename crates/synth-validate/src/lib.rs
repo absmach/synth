@@ -137,6 +137,7 @@ fn all_rules() -> Vec<Box<dyn ErcRule>> {
         Box::new(SchematicLongWireRule),
         Box::new(PowerDomainMismatchRule),
         Box::new(SupplyChainRule),
+        Box::new(SourcingIdentityRule),
         Box::new(UnverifiedPartRule),
         Box::new(DividerRatioRule),
     ]
@@ -2897,6 +2898,74 @@ impl ErcRule for SupplyChainRule {
 }
 
 // -----------------------------------------------------------------------------
+// W-SYNTH-SUPPLY-002 — part has no distributor identity
+// -----------------------------------------------------------------------------
+
+/// `W-SYNTH-SUPPLY-001` reasons about cached stock/lifecycle for a
+/// known part number; this rule fires one step earlier, when the
+/// part has *no* number to look up. The exporter stamps hidden
+/// `MPN`/`LCSC` fields and the fab BOM plugins read exactly those
+/// spellings — a part with neither `mpn` nor `lcsc_pn` cannot be
+/// quoted, checked for stock, or substituted at release. Generic
+/// passives (`r_generic_0603`) are exempt: their value field plus
+/// the generic footprint is orderable without a part number.
+struct SourcingIdentityRule;
+
+impl ErcRule for SourcingIdentityRule {
+    fn code(&self) -> &'static str {
+        "W-SYNTH-SUPPLY-002"
+    }
+
+    fn category(&self) -> ErcCategory {
+        ErcCategory::Board
+    }
+
+    fn check(&self, board: &Board, file: &str) -> Vec<Diagnostic> {
+        let mut out = Vec::new();
+        for component in &board.components {
+            let Some(part) = component.part.as_ref() else {
+                continue;
+            };
+            if part.mpn.is_some() || part.lcsc_pn.is_some() {
+                continue;
+            }
+            if part.id.as_str().starts_with("r_generic")
+                || part.id.as_str().starts_with("c_generic")
+            {
+                continue;
+            }
+            out.push(
+                DiagnosticBuilder::new(
+                    self.code(),
+                    Severity::Warning,
+                    "part has no distributor identity",
+                )
+                .location(Location::from_span(file.to_string(), component.source_span))
+                .primary_entity(EntityRef::Component {
+                    id: component.refdes.clone(),
+                })
+                .expected(format!(
+                    "part `{}` carries an `mpn` and/or `lcsc_pn` so the BOM is quotable",
+                    part.id
+                ))
+                .found(format!(
+                    "`{}` ({}) has neither `mpn` nor `lcsc_pn` — stock, pricing, and \
+                     substitution checks (W-SYNTH-SUPPLY-001) cannot run for it",
+                    component.refdes, part.id,
+                ))
+                .message(format!(
+                    "add mpn/lcsc_pn to `registry/parts/**/{}.synth.toml` (or a Tier-2 overlay)",
+                    part.id
+                ))
+                .explanation_url(format!("synth.docs/diagnostics/{}", self.code()))
+                .build(),
+            );
+        }
+        out
+    }
+}
+
+// -----------------------------------------------------------------------------
 // W-SYNTH-PART-UNVERIFIED — component uses a part without review
 // -----------------------------------------------------------------------------
 
@@ -3296,6 +3365,7 @@ mod tests {
                     value: None,
                     placement_hint: None,
                     group: None,
+                    sheet: None,
                     source_span: Span::new(0, 0),
                 },
                 Component {
@@ -3306,6 +3376,7 @@ mod tests {
                     value: cap_value.map(str::to_string),
                     placement_hint: None,
                     group: None,
+                    sheet: None,
                     source_span: Span::new(0, 0),
                 },
             ],
@@ -3323,6 +3394,64 @@ mod tests {
             ],
             diff_pairs: vec![],
             keepouts: vec![],
+            netclasses: vec![],
+            source_span: Span::new(0, 0),
+        }
+    }
+
+    fn identity_test_part(
+        id: &str,
+        mpn: Option<&str>,
+        lcsc: Option<&str>,
+    ) -> synth_registry::Part {
+        use synth_registry::{Lifecycle, Part, PartId};
+        Part {
+            id: PartId(id.into()),
+            kind: "sensor".into(),
+            description: None,
+            version: 0,
+            lifecycle: Lifecycle::default(),
+            signed_by: vec![],
+            substitutes: vec![],
+            mpn: mpn.map(str::to_string),
+            lcsc_pn: lcsc.map(str::to_string),
+            pins: vec![],
+            required_decoupling: vec![],
+            kicad_symbol: None,
+            kicad_footprint: None,
+            footprint_dimensions: None,
+            operating_conditions: None,
+            provenance: None,
+        }
+    }
+
+    fn identity_test_board(parts: Vec<(synth_registry::Part, &str)>) -> Board {
+        use synth_diagnostics::Span;
+        Board {
+            name: "b".into(),
+            layers: 2,
+            manufacturer: None,
+            revision: None,
+            company: None,
+            components: parts
+                .into_iter()
+                .enumerate()
+                .map(|(i, (part, refdes))| Component {
+                    id: ComponentId(i as u32),
+                    refdes: refdes.into(),
+                    kind: part.kind.clone(),
+                    part: Some(part),
+                    value: None,
+                    placement_hint: None,
+                    group: None,
+                    sheet: None,
+                    source_span: Span::new(0, 0),
+                })
+                .collect(),
+            nets: vec![],
+            diff_pairs: vec![],
+            keepouts: vec![],
+            netclasses: vec![],
             source_span: Span::new(0, 0),
         }
     }
@@ -3359,6 +3488,24 @@ mod tests {
     }
 
     #[test]
+    fn part_without_identity_warns_supply_002() {
+        let board = identity_test_board(vec![(identity_test_part("bme680_env", None, None), "U3")]);
+        let diags = SourcingIdentityRule.check(&board, "test.synth");
+        assert_eq!(diags.len(), 1, "{diags:?}");
+        assert_eq!(diags[0].code, "W-SYNTH-SUPPLY-002");
+    }
+
+    #[test]
+    fn part_with_mpn_or_lcsc_is_clean() {
+        let board = identity_test_board(vec![
+            (identity_test_part("stm32f103c8", Some("STM32F103C8T6"), Some("C8734")), "U2"),
+            (identity_test_part("ams1117_3v3", Some("AMS1117-3.3"), None), "U1"),
+        ]);
+        let diags = SourcingIdentityRule.check(&board, "test.synth");
+        assert!(diags.is_empty(), "{diags:?}");
+    }
+
+    #[test]
     fn unparseable_divider_value_skips_check() {
         let board = divider_test_board(Some("10k"), None);
         let diags = DividerRatioRule.check(&board, "test.synth");
@@ -3372,6 +3519,16 @@ mod tests {
             let diags = DecouplingValueRule.check(&board, "test.synth");
             assert!(diags.is_empty(), "{cap_value:?}: {diags:?}");
         }
+    }
+
+    #[test]
+    fn generic_passives_are_exempt_from_identity() {
+        let board = identity_test_board(vec![
+            (identity_test_part("r_generic_0603", None, None), "R1"),
+            (identity_test_part("c_generic_0805", None, None), "C1"),
+        ]);
+        let diags = SourcingIdentityRule.check(&board, "test.synth");
+        assert!(diags.is_empty(), "{diags:?}");
     }
 
     #[test]
