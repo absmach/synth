@@ -644,7 +644,7 @@ fn negotiate(
 /// and second pad clusters as the witness pad positions
 /// (deterministic via cluster id order).
 fn build_unrouted_nets(
-    _board: &Board,
+    board: &Board,
     ordered: &[&synth_ir::Net],
     segments: &[Segment],
     base_grid: &Grid,
@@ -653,7 +653,7 @@ fn build_unrouted_nets(
     let routed_ids: HashSet<NetId> = segments.iter().map(|s| s.net).collect();
     let mut out = Vec::new();
     for net in ordered {
-        if net.endpoints.len() < 2 || is_plane_net(net, _board) {
+        if net.endpoints.len() < 2 || is_plane_net(net, board) {
             continue;
         }
         if routed_ids.contains(&net.id) {
