@@ -99,6 +99,7 @@ fn all_rules() -> Vec<Box<dyn ErcRule>> {
         Box::new(OrphanComponentRule),
         Box::new(PowerOutputShortRule),
         Box::new(MissingDecouplingRule),
+        Box::new(DecouplingValueRule),
         Box::new(KnowledgeSupportRule),
         Box::new(PowerInputWithoutSourceRule),
         Box::new(UsbDifferentialCapabilityRule),
@@ -598,6 +599,112 @@ impl ErcRule for MissingDecouplingRule {
                         });
                     }
                     out.push(builder.build());
+                }
+            }
+        }
+        out
+    }
+}
+
+// -----------------------------------------------------------------------------
+// E-SYNTH-POWER-006 — decoupling capacitance below required value
+// -----------------------------------------------------------------------------
+
+/// POWER-001 counts capacitors; this rule weighs them. A part whose
+/// manifest requires e.g. `10uF` on `vin` is not decoupled by a lone
+/// `100nF` cap even though the count is satisfied. The rule sums the
+/// parseable capacitance on the net and warns when the total is below
+/// the manifest value. Nets with any unparseable or missing cap value
+/// are skipped (topology-only judgement would false-positive on e.g.
+/// `4k7`-style strings the value parser rejects); POWER-001 still
+/// owns the count check, so nothing is double-flagged.
+struct DecouplingValueRule;
+
+impl ErcRule for DecouplingValueRule {
+    fn code(&self) -> &'static str {
+        "E-SYNTH-POWER-006"
+    }
+
+    fn category(&self) -> ErcCategory {
+        ErcCategory::Power
+    }
+
+    fn check(&self, board: &Board, file: &str) -> Vec<Diagnostic> {
+        let mut out = Vec::new();
+        for component in &board.components {
+            let Some(part) = component.part.as_ref() else {
+                continue;
+            };
+            for decoupling in &part.required_decoupling {
+                let Some(required_f) = parse_capacitance(&decoupling.value) else {
+                    continue;
+                };
+                let Some(pin_idx) = part.pins.iter().position(|p| p.name == decoupling.net)
+                else {
+                    continue;
+                };
+                let pid = PinId(pin_idx as u32);
+                let Some((_, net)) = board.nets_containing(component.id, pid).next() else {
+                    // Pin floating — E-SYNTH-CONNECT-001 owns that.
+                    continue;
+                };
+                let caps: Vec<&Component> = net
+                    .endpoints
+                    .iter()
+                    .filter_map(|e| board.component(e.component))
+                    .filter(|c| {
+                        c.part
+                            .as_ref()
+                            .is_some_and(|p| p.kind == "capacitor")
+                    })
+                    .collect();
+                if caps.is_empty() {
+                    // No caps at all — POWER-001 owns the count check.
+                    continue;
+                }
+                // Any cap whose value cannot be weighed vetoes the
+                // judgement for this net: guessing would false-positive.
+                let mut total_f = 0.0;
+                let mut all_parseable = true;
+                for cap in &caps {
+                    match cap.value.as_deref().and_then(parse_capacitance) {
+                        Some(f) => total_f += f,
+                        None => {
+                            all_parseable = false;
+                            break;
+                        }
+                    }
+                }
+                if !all_parseable {
+                    continue;
+                }
+                if total_f < required_f {
+                    out.push(
+                        DiagnosticBuilder::new(
+                            self.code(),
+                            Severity::Warning,
+                            "decoupling capacitance below required value",
+                        )
+                        .location(Location::from_span(
+                            file.to_string(),
+                            component.source_span,
+                        ))
+                        .expected(format!(
+                            "at least {} of decoupling on the net carrying `{}.{}`",
+                            decoupling.value, component.refdes, decoupling.net,
+                        ))
+                        .found(format!(
+                            "{} capacitor(s) totalling {:.3}µF on net `{}`",
+                            caps.len(),
+                            total_f * 1e6,
+                            net.name,
+                        ))
+                        .explanation_url(format!("synth.docs/diagnostics/{}", self.code()))
+                        .smt_constraint(format!(
+                            "(assert (>= decoupling_capacitance {required_f:.9}))"
+                        ))
+                        .build(),
+                    );
                 }
             }
         }
@@ -3019,6 +3126,7 @@ impl ErcRule for DividerRatioRule {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use synth_registry::{ElectricalType, Lifecycle, Part, PartId, Pin, PinNumber};
 
     #[test]
     fn test_residual_energy_anomaly_rule_code() {
@@ -3034,45 +3142,45 @@ mod tests {
         assert_eq!(rule.category(), ErcCategory::Analog);
     }
 
+    fn pin(name: &str, t: ElectricalType) -> Pin {
+        Pin {
+            name: name.into(),
+            number: PinNumber(name.into()),
+            electrical_type: t,
+            capabilities: vec![],
+            required: false,
+            unit: None,
+            voltage_max_v: None,
+            voltage_min_v: None,
+            voltage_nominal_v: None,
+        }
+    }
+
+    fn part(id: &str, kind: &str, pins: Vec<Pin>) -> Part {
+        Part {
+            id: PartId(id.into()),
+            kind: kind.into(),
+            description: None,
+            version: 0,
+            lifecycle: Lifecycle::default(),
+            signed_by: vec![],
+            substitutes: vec![],
+            mpn: None,
+            lcsc_pn: None,
+            pins,
+            required_decoupling: vec![],
+            kicad_symbol: None,
+            kicad_footprint: None,
+            footprint_dimensions: None,
+            operating_conditions: None,
+            provenance: None,
+        }
+    }
+
     fn divider_test_board(r1_value: Option<&str>, r2_value: Option<&str>) -> Board {
         use synth_diagnostics::Span;
         use synth_ir::{Net, NetEndpoint, NetId};
-        use synth_registry::{ElectricalType, Lifecycle, Part, PartId, Pin, PinNumber};
-
-        fn pin(name: &str, t: ElectricalType) -> Pin {
-            Pin {
-                name: name.into(),
-                number: PinNumber(name.into()),
-                electrical_type: t,
-                capabilities: vec![],
-                required: false,
-                unit: None,
-                voltage_max_v: None,
-                voltage_min_v: None,
-                voltage_nominal_v: None,
-            }
-        }
-
-        fn part(id: &str, kind: &str, pins: Vec<Pin>) -> Part {
-            Part {
-                id: PartId(id.into()),
-                kind: kind.into(),
-                description: None,
-                version: 0,
-                lifecycle: Lifecycle::default(),
-                signed_by: vec![],
-                substitutes: vec![],
-                mpn: None,
-                lcsc_pn: None,
-                pins,
-                required_decoupling: vec![],
-                kicad_symbol: None,
-                kicad_footprint: None,
-                footprint_dimensions: None,
-                operating_conditions: None,
-                provenance: None,
-            }
-        }
+        use synth_registry::{ElectricalType, Part, Pin};
 
         let reg = part(
             "reg",
@@ -3110,6 +3218,7 @@ mod tests {
             layers: 2,
             manufacturer: None,
             revision: None,
+            company: None,
             components: vec![
                 comp(0, "U1", "regulator", reg, None),
                 comp(1, "R1", "resistor", r(rpins()), r1_value),
@@ -3138,6 +3247,84 @@ mod tests {
         }
     }
 
+    fn decoupling_test_board(cap_value: Option<&str>) -> Board {
+        use synth_diagnostics::Span;
+        use synth_ir::{Net, NetEndpoint, NetId};
+        use synth_registry::RequiredDecoupling;
+        let mut reg = part(
+            "reg",
+            "regulator",
+            vec![
+                pin("vin", ElectricalType::PowerInput),
+                pin("gnd", ElectricalType::PowerInput),
+                pin("vout", ElectricalType::PowerOutput),
+            ],
+        );
+        reg.required_decoupling = vec![RequiredDecoupling {
+            net: "vin".into(),
+            value: "10u".into(),
+            count: 1,
+            max_distance_mm: None,
+        }];
+        let cap = part(
+            "c",
+            "capacitor",
+            vec![
+                pin("p1", ElectricalType::Passive),
+                pin("p2", ElectricalType::Passive),
+            ],
+        );
+        let ep = |c: u32, p: u32| NetEndpoint {
+            component: ComponentId(c),
+            pin: PinId(p),
+            source_span: Span::new(0, 0),
+        };
+        Board {
+            name: "b".into(),
+            layers: 2,
+            manufacturer: None,
+            revision: None,
+            company: None,
+            components: vec![
+                Component {
+                    id: ComponentId(0),
+                    refdes: "U1".into(),
+                    kind: "regulator".into(),
+                    part: Some(reg),
+                    value: None,
+                    placement_hint: None,
+                    group: None,
+                    source_span: Span::new(0, 0),
+                },
+                Component {
+                    id: ComponentId(1),
+                    refdes: "C1".into(),
+                    kind: "capacitor".into(),
+                    part: Some(cap),
+                    value: cap_value.map(str::to_string),
+                    placement_hint: None,
+                    group: None,
+                    source_span: Span::new(0, 0),
+                },
+            ],
+            nets: vec![
+                Net {
+                    id: NetId(0),
+                    name: "vin_net".into(),
+                    endpoints: vec![ep(0, 0), ep(1, 0)],
+                },
+                Net {
+                    id: NetId(1),
+                    name: "gnd".into(),
+                    endpoints: vec![ep(0, 1), ep(1, 1)],
+                },
+            ],
+            diff_pairs: vec![],
+            keepouts: vec![],
+            source_span: Span::new(0, 0),
+        }
+    }
+
     #[test]
     fn degenerate_divider_ratio_warns() {
         // mid at ~0.1% of rail — almost certainly swapped or mistyped.
@@ -3155,10 +3342,34 @@ mod tests {
     }
 
     #[test]
+    fn undervalued_bulk_cap_warns_power_006() {
+        let board = decoupling_test_board(Some("100n"));
+        let diags = DecouplingValueRule.check(&board, "test.synth");
+        assert_eq!(diags.len(), 1, "{diags:?}");
+        assert_eq!(diags[0].code, "E-SYNTH-POWER-006");
+    }
+
+    #[test]
+    fn sufficient_bulk_cap_is_clean() {
+        let board = decoupling_test_board(Some("22u"));
+        let diags = DecouplingValueRule.check(&board, "test.synth");
+        assert!(diags.is_empty(), "{diags:?}");
+    }
+
+    #[test]
     fn unparseable_divider_value_skips_check() {
         let board = divider_test_board(Some("10k"), None);
         let diags = DividerRatioRule.check(&board, "test.synth");
         assert!(diags.is_empty(), "{diags:?}");
+    }
+
+    #[test]
+    fn unparseable_cap_value_skips_power_006() {
+        for cap_value in [None, Some("4k7")] {
+            let board = decoupling_test_board(cap_value);
+            let diags = DecouplingValueRule.check(&board, "test.synth");
+            assert!(diags.is_empty(), "{cap_value:?}: {diags:?}");
+        }
     }
 
     #[test]
