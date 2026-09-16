@@ -1967,7 +1967,7 @@ fn dump_place(
             lowered
                 .board
                 .as_ref()
-                .map(|b| {
+                .and_then(|b| {
                     let result = match requested_dimensions {
                         Some((w, h)) => synth_place::place_with_dimensions(b, w, h),
                         None => synth_place::place(b),
@@ -1982,7 +1982,6 @@ fn dump_place(
                         }
                     }
                 })
-                .flatten()
         } else {
             None
         }
