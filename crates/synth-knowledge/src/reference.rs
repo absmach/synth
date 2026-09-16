@@ -66,14 +66,10 @@ impl ReferenceLib {
         static EMBEDDED: std::sync::OnceLock<ReferenceLib> = std::sync::OnceLock::new();
         EMBEDDED
             .get_or_init(|| {
-                let dir =
-                    include_dir::include_dir!("$CARGO_MANIFEST_DIR/knowledge/reference");
+                let dir = include_dir::include_dir!("$CARGO_MANIFEST_DIR/knowledge/reference");
                 let mut circuits = Vec::new();
                 for file in dir.files() {
-                    let is_toml = file
-                        .path()
-                        .extension()
-                        .is_some_and(|ext| ext == "toml");
+                    let is_toml = file.path().extension().is_some_and(|ext| ext == "toml");
                     if !is_toml {
                         continue;
                     }

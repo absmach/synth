@@ -346,6 +346,8 @@ pub fn place_with_dimensions(
     width_mm: f64,
     height_mm: f64,
 ) -> Result<Placement, PlaceError> {
+    use synth_layout::pcb_courtyard_geometry_for_part;
+
     if !width_mm.is_finite() || !height_mm.is_finite() || width_mm <= 0.0 || height_mm <= 0.0 {
         return Err(PlaceError::AreaInsufficient {
             placed_mm2: 0.0,
@@ -353,7 +355,6 @@ pub fn place_with_dimensions(
         });
     }
 
-    use synth_layout::pcb_courtyard_geometry_for_part;
     let courtyards_mm: Vec<(ComponentId, (f64, f64), (f64, f64))> = board
         .components
         .iter()

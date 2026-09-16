@@ -1964,25 +1964,21 @@ fn dump_place(
                     anyhow::bail!("--width and --height must be supplied together")
                 }
             };
-            lowered
-                .board
-                .as_ref()
-                .map(|b| {
-                    let result = match requested_dimensions {
-                        Some((w, h)) => synth_place::place_with_dimensions(b, w, h),
-                        None => synth_place::place(b),
-                    };
-                    match result {
-                        Ok(p) => Some(p),
-                        Err(e) => {
-                            let diags = e.to_diagnostics(b, &file);
-                            let _ = write_diagnostics_to_stderr(&diags);
-                            has_errors = true;
-                            None
-                        }
+            lowered.board.as_ref().and_then(|b| {
+                let result = match requested_dimensions {
+                    Some((w, h)) => synth_place::place_with_dimensions(b, w, h),
+                    None => synth_place::place(b),
+                };
+                match result {
+                    Ok(p) => Some(p),
+                    Err(e) => {
+                        let diags = e.to_diagnostics(b, &file);
+                        let _ = write_diagnostics_to_stderr(&diags);
+                        has_errors = true;
+                        None
                     }
-                })
-                .flatten()
+                }
+            })
         } else {
             None
         }

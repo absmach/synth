@@ -13,10 +13,10 @@
 //! at most one diagnostic per statement.
 
 use synth_ast::{
-    BoardAst, CompanyStmt, ComponentDeclAst, ConnectionAst, DiffPairAttr, DiffPairStmt, EndpointAst,
-    GroupStmt, ImportAst, KeepoutAttr, KeepoutStmt, LayersStmt, ManufacturerStmt, NetclassAttr,
-    NetclassStmt, PlacementHintAst, PlacementHintAttr, ProgramAst, RevisionStmt, SheetStmt,
-    StatementAst, ValueWithUnit,
+    BoardAst, CompanyStmt, ComponentDeclAst, ConnectionAst, DiffPairAttr, DiffPairStmt,
+    EndpointAst, GroupStmt, ImportAst, KeepoutAttr, KeepoutStmt, LayersStmt, ManufacturerStmt,
+    NetclassAttr, NetclassStmt, PlacementHintAst, PlacementHintAttr, ProgramAst, RevisionStmt,
+    SheetStmt, StatementAst, ValueWithUnit,
 };
 use synth_diagnostics::{
     Diagnostic, DiagnosticBuilder, Location, Patch, PatchKind, Severity, Span,
@@ -370,10 +370,8 @@ impl Parser {
     fn parse_company(&mut self) -> Option<CompanyStmt> {
         let start = self.peek().span.byte_start;
         self.bump();
-        let name = self.expect_string(
-            "E-SYNTH-PARSE-015",
-            "expected company name (quoted string)",
-        )?;
+        let name =
+            self.expect_string("E-SYNTH-PARSE-015", "expected company name (quoted string)")?;
         let end = self.last_offset();
         Some(CompanyStmt {
             name,
@@ -674,8 +672,10 @@ impl Parser {
     fn parse_netclass(&mut self) -> Option<NetclassStmt> {
         let start = self.peek().span.byte_start;
         self.bump(); // consume `netclass`
-        let name =
-            self.expect_string("E-SYNTH-PARSE-002", "expected netclass name (quoted string)")?;
+        let name = self.expect_string(
+            "E-SYNTH-PARSE-002",
+            "expected netclass name (quoted string)",
+        )?;
         if !matches!(self.peek_kind(), TokenKind::LBrace) {
             self.emit(
                 self.peek().span,
