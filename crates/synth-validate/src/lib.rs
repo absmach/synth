@@ -640,8 +640,7 @@ impl ErcRule for DecouplingValueRule {
                 let Some(required_f) = parse_capacitance(&decoupling.value) else {
                     continue;
                 };
-                let Some(pin_idx) = part.pins.iter().position(|p| p.name == decoupling.net)
-                else {
+                let Some(pin_idx) = part.pins.iter().position(|p| p.name == decoupling.net) else {
                     continue;
                 };
                 let pid = PinId(pin_idx as u32);
@@ -653,11 +652,7 @@ impl ErcRule for DecouplingValueRule {
                     .endpoints
                     .iter()
                     .filter_map(|e| board.component(e.component))
-                    .filter(|c| {
-                        c.part
-                            .as_ref()
-                            .is_some_and(|p| p.kind == "capacitor")
-                    })
+                    .filter(|c| c.part.as_ref().is_some_and(|p| p.kind == "capacitor"))
                     .collect();
                 if caps.is_empty() {
                     // No caps at all — POWER-001 owns the count check.
@@ -686,10 +681,7 @@ impl ErcRule for DecouplingValueRule {
                             Severity::Warning,
                             "decoupling capacitance below required value",
                         )
-                        .location(Location::from_span(
-                            file.to_string(),
-                            component.source_span,
-                        ))
+                        .location(Location::from_span(file.to_string(), component.source_span))
                         .expected(format!(
                             "at least {} of decoupling on the net carrying `{}.{}`",
                             decoupling.value, component.refdes, decoupling.net,
@@ -3076,7 +3068,9 @@ fn net_has_ground_pin(board: &Board, net: &synth_ir::Net) -> bool {
 
 fn is_two_pin_resistor(board: &Board, id: ComponentId) -> bool {
     board.component(id).is_some_and(|c| {
-        c.part.as_ref().is_some_and(|p| p.kind == "resistor" && p.pins.len() == 2)
+        c.part
+            .as_ref()
+            .is_some_and(|p| p.kind == "resistor" && p.pins.len() == 2)
     })
 }
 
@@ -3109,10 +3103,7 @@ impl ErcRule for DividerRatioRule {
                 if mid_net.endpoints.len() != 2 {
                     continue;
                 }
-                let Some(partner_ep) = mid_net
-                    .endpoints
-                    .iter()
-                    .find(|e| e.component != r1.id)
+                let Some(partner_ep) = mid_net.endpoints.iter().find(|e| e.component != r1.id)
                 else {
                     continue;
                 };
@@ -3399,11 +3390,7 @@ mod tests {
         }
     }
 
-    fn identity_test_part(
-        id: &str,
-        mpn: Option<&str>,
-        lcsc: Option<&str>,
-    ) -> synth_registry::Part {
+    fn identity_test_part(id: &str, mpn: Option<&str>, lcsc: Option<&str>) -> synth_registry::Part {
         use synth_registry::{Lifecycle, Part, PartId};
         Part {
             id: PartId(id.into()),
@@ -3498,8 +3485,14 @@ mod tests {
     #[test]
     fn part_with_mpn_or_lcsc_is_clean() {
         let board = identity_test_board(vec![
-            (identity_test_part("stm32f103c8", Some("STM32F103C8T6"), Some("C8734")), "U2"),
-            (identity_test_part("ams1117_3v3", Some("AMS1117-3.3"), None), "U1"),
+            (
+                identity_test_part("stm32f103c8", Some("STM32F103C8T6"), Some("C8734")),
+                "U2",
+            ),
+            (
+                identity_test_part("ams1117_3v3", Some("AMS1117-3.3"), None),
+                "U1",
+            ),
         ]);
         let diags = SourcingIdentityRule.check(&board, "test.synth");
         assert!(diags.is_empty(), "{diags:?}");
