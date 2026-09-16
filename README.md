@@ -8,7 +8,7 @@ Turn text-based circuit designs into KiCad schematics, PCB layouts, and bills of
 
 Open source. Built for engineers and AI agents.
 
-[Quick Start](#quick-start) · [Features](#features) · [Examples](#examples) · [Documentation]([#documentation](https://absmach.eu/docs/synth/user-guide/quick-start/)) · [Contributing](#contributing)
+[Quick Start](#quick-start) · [Features](#features) · [Examples](#examples) · [Documentation](https://absmach.eu/docs/synth/user-guide/quick-start/) · [Contributing](#contributing)
 
 </div>
 
