@@ -3091,10 +3091,7 @@ impl ErcRule for DividerRatioRule {
             // Try each pin as the mid-side pin; the other is the rail side.
             for mid_idx in [0u32, 1u32] {
                 let rail_idx = 1 - mid_idx;
-                let Some((_, mid_net)) = board
-                    .nets_containing(r1.id, PinId(mid_idx))
-                    .next()
-                else {
+                let Some((_, mid_net)) = board.nets_containing(r1.id, PinId(mid_idx)).next() else {
                     continue;
                 };
                 // Mid net: exactly this resistor plus its partner.
