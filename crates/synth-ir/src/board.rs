@@ -78,6 +78,13 @@ pub struct Component {
     /// remain board-unique across groups.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub group: Option<String>,
+    /// Name of the `sheet` block this component was declared inside —
+    /// the future hierarchical-sheet boundary. `None` for components
+    /// declared directly in the board body. Like [`Self::group`],
+    /// purely an annotation: it never affects connectivity, and
+    /// refdes remain board-unique across sheets.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub sheet: Option<String>,
     pub source_span: Span,
 }
 

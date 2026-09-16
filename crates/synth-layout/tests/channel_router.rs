@@ -64,6 +64,7 @@ fn resistor(id: ComponentId, refdes: &str) -> Component {
         value: None,
         placement_hint: None,
         group: None,
+        sheet: None,
         source_span: synth_diagnostics::Span::new(0, 0),
     }
 }

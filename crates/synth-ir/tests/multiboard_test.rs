@@ -14,6 +14,7 @@ fn create_dummy_board(name: &str, connector_refdes: &str) -> Board {
         value: None,
         placement_hint: None,
         group: None,
+        sheet: None,
         source_span: Span::new(0, 0),
     };
 

@@ -15,8 +15,8 @@
 use synth_ast::{
     BoardAst, CompanyStmt, ComponentDeclAst, ConnectionAst, DiffPairAttr, DiffPairStmt, EndpointAst,
     GroupStmt, ImportAst, KeepoutAttr, KeepoutStmt, LayersStmt, ManufacturerStmt, NetclassAttr,
-    NetclassStmt, PlacementHintAst, PlacementHintAttr, ProgramAst, RevisionStmt, StatementAst,
-    ValueWithUnit,
+    NetclassStmt, PlacementHintAst, PlacementHintAttr, ProgramAst, RevisionStmt, SheetStmt,
+    StatementAst, ValueWithUnit,
 };
 use synth_diagnostics::{
     Diagnostic, DiagnosticBuilder, Location, Patch, PatchKind, Severity, Span,
@@ -292,12 +292,13 @@ impl Parser {
             TokenKind::KwNetclass => self.parse_netclass().map(StatementAst::Netclass),
             TokenKind::KwKeepout => self.parse_keepout().map(StatementAst::Keepout),
             TokenKind::KwGroup => self.parse_group().map(StatementAst::Group),
+            TokenKind::KwSheet => self.parse_sheet().map(StatementAst::Sheet),
             _ => {
                 self.emit(
                     self.peek().span,
                     "E-SYNTH-PARSE-011",
                     "expected statement keyword",
-                    "one of: layers, manufacturer, revision, company, component, connect, diff_pair, netclass, keepout, group",
+                    "one of: layers, manufacturer, revision, company, component, connect, diff_pair, netclass, keepout, group, sheet",
                     self.describe_current(),
                     None,
                 );
@@ -803,6 +804,76 @@ impl Parser {
         })
     }
 
+    fn parse_sheet(&mut self) -> Option<SheetStmt> {
+        let start = self.peek().span.byte_start;
+        self.bump(); // consume `sheet`
+        let name =
+            self.expect_string("E-SYNTH-PARSE-002", "expected sheet name (quoted string)")?;
+        if !matches!(self.peek_kind(), TokenKind::LBrace) {
+            self.emit(
+                self.peek().span,
+                "E-SYNTH-PARSE-003",
+                "expected `{` to open sheet body",
+                "`{`",
+                self.describe_current(),
+                Some(Patch {
+                    confidence: 0.6,
+                    rationale: Some("open the sheet body".into()),
+                    patch_consequence_preview: None,
+                    kind: PatchKind::InsertAt {
+                        at: self.peek().span.byte_start,
+                        text: "{".into(),
+                    },
+                }),
+            );
+            return None;
+        }
+        self.bump();
+
+        let mut statements = Vec::new();
+        loop {
+            self.skip_error_tokens();
+            match self.peek_kind() {
+                TokenKind::RBrace | TokenKind::Eof => break,
+                _ => {
+                    if let Some(stmt) = self.parse_statement() {
+                        statements.push(stmt);
+                    } else {
+                        self.synchronize();
+                    }
+                }
+            }
+        }
+
+        if matches!(self.peek_kind(), TokenKind::RBrace) {
+            self.bump();
+        } else {
+            self.emit(
+                self.peek().span,
+                "E-SYNTH-PARSE-004",
+                "expected `}` to close sheet body",
+                "`}`",
+                self.describe_current(),
+                Some(Patch {
+                    confidence: 0.4,
+                    rationale: Some("close the sheet body".into()),
+                    patch_consequence_preview: None,
+                    kind: PatchKind::InsertAt {
+                        at: self.peek().span.byte_start,
+                        text: "}".into(),
+                    },
+                }),
+            );
+        }
+
+        let end = self.last_offset();
+        Some(SheetStmt {
+            name,
+            statements,
+            span: Span::new(start, end),
+        })
+    }
+
     fn parse_keepout(&mut self) -> Option<KeepoutStmt> {
         let start = self.peek().span.byte_start;
         self.bump(); // consume `keepout`
@@ -933,6 +1004,7 @@ impl Parser {
                 | TokenKind::KwNetclass
                 | TokenKind::KwKeepout
                 | TokenKind::KwGroup
+                | TokenKind::KwSheet
                 | TokenKind::KwPlacementHint => return,
                 _ => {
                     self.bump();
@@ -968,6 +1040,7 @@ impl Parser {
             TokenKind::KwNetclass => "`netclass`".to_string(),
             TokenKind::KwKeepout => "`keepout`".to_string(),
             TokenKind::KwGroup => "`group`".to_string(),
+            TokenKind::KwSheet => "`sheet`".to_string(),
             TokenKind::KwImpedance => "`impedance`".to_string(),
             TokenKind::KwTraceWidth => "`trace_width`".to_string(),
             TokenKind::KwClearance => "`clearance`".to_string(),
@@ -1173,5 +1246,28 @@ mod tests {
         };
         assert_eq!(n.name, "PWR");
         assert_eq!(n.attrs.len(), 2);
+    }
+
+    #[test]
+    fn parse_sheet_statement() {
+        let src = r#"board "b" {
+            sheet "Power" {
+                component C1: capacitor "c_generic_0603"
+            }
+        }"#;
+        let tokens = lex(src);
+        let res = parse(tokens, "test.synth".into());
+        assert!(
+            res.diagnostics.is_empty(),
+            "Diagnostics should be empty: {:?}",
+            res.diagnostics
+        );
+        let ast = res.ast.unwrap();
+        let stmt = &ast.board.statements[0];
+        let StatementAst::Sheet(s) = stmt else {
+            panic!("Expected sheet statement")
+        };
+        assert_eq!(s.name, "Power");
+        assert_eq!(s.statements.len(), 1);
     }
 }

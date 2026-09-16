@@ -813,6 +813,7 @@ fn next_two_free_refdes(board: &Board, a: &str, b: &str) -> (String, String) {
         value: None,
         placement_hint: None,
         group: None,
+        sheet: None,
         source_span: synth_diagnostics::Span::new(0, 0),
     });
     (first, next_free_refdes(&bumped, b))
@@ -993,6 +994,7 @@ mod tests {
             value: None,
             placement_hint: None,
             group: None,
+            sheet: None,
             source_span: synth_diagnostics::Span::new(10, 20),
         }
     }

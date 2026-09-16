@@ -16,6 +16,7 @@ fn create_test_board() -> Board {
         value: Some("RP2350".to_string()),
         placement_hint: None,
         group: None,
+        sheet: None,
         source_span: dummy_span,
     };
     let c2 = Component {
@@ -26,6 +27,7 @@ fn create_test_board() -> Board {
         value: Some("USB-C".to_string()),
         placement_hint: None,
         group: None,
+        sheet: None,
         source_span: dummy_span,
     };
     let c3 = Component {
@@ -36,6 +38,7 @@ fn create_test_board() -> Board {
         value: Some("LDO".to_string()),
         placement_hint: None,
         group: None,
+        sheet: None,
         source_span: dummy_span,
     };
 

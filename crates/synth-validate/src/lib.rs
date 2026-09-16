@@ -3103,6 +3103,7 @@ mod tests {
             value: value.map(str::to_string),
             placement_hint: None,
             group: None,
+            sheet: None,
             source_span: Span::new(0, 0),
         };
         Board {
@@ -3219,6 +3220,7 @@ mod tests {
                 value: None,
                 placement_hint: None,
                 group: None,
+                sheet: None,
                 source_span: Span::new(0, 0),
             }],
             nets: vec![],

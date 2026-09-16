@@ -35,6 +35,7 @@ pub enum TokenKind {
     KwNetclass,
     KwKeepout,
     KwGroup,
+    KwSheet,
     KwImpedance,
     KwTraceWidth,
     KwClearance,
@@ -373,6 +374,7 @@ impl<'a> Lexer<'a> {
             "netclass" => TokenKind::KwNetclass,
             "keepout" => TokenKind::KwKeepout,
             "group" => TokenKind::KwGroup,
+            "sheet" => TokenKind::KwSheet,
             "impedance" => TokenKind::KwImpedance,
             "trace_width" => TokenKind::KwTraceWidth,
             "clearance" => TokenKind::KwClearance,
@@ -417,7 +419,7 @@ mod tests {
     #[test]
     fn keywords_recognized() {
         let ks = kinds(
-            "board import layers manufacturer revision company component connect diff_pair netclass keepout group impedance trace_width clearance radius value",
+            "board import layers manufacturer revision company component connect diff_pair netclass keepout group sheet impedance trace_width clearance radius value",
         );
         assert_eq!(
             ks,
@@ -434,6 +436,7 @@ mod tests {
                 TokenKind::KwNetclass,
                 TokenKind::KwKeepout,
                 TokenKind::KwGroup,
+                TokenKind::KwSheet,
                 TokenKind::KwImpedance,
                 TokenKind::KwTraceWidth,
                 TokenKind::KwClearance,

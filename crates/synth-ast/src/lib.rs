@@ -53,6 +53,7 @@ pub enum StatementAst {
     Netclass(NetclassStmt),
     Keepout(KeepoutStmt),
     Group(GroupStmt),
+    Sheet(SheetStmt),
 }
 
 impl StatementAst {
@@ -68,6 +69,7 @@ impl StatementAst {
             StatementAst::Netclass(s) => s.span,
             StatementAst::Keepout(s) => s.span,
             StatementAst::Group(s) => s.span,
+            StatementAst::Sheet(s) => s.span,
         }
     }
 }
@@ -82,6 +84,25 @@ impl StatementAst {
 /// inter-sheet labels once a design is split.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct GroupStmt {
+    pub name: String,
+    pub statements: Vec<StatementAst>,
+    pub span: Span,
+}
+
+/// A hierarchical sheet block: `sheet "Power" { ... }`.
+///
+/// V1 lowering treats a sheet exactly like a [`GroupStmt`]: the
+/// statements are flattened into the board and each lowered component
+/// records the innermost enclosing sheet name (alongside its group).
+/// Refdes stay board-unique; a `connect` inside a sheet may name any
+/// component on the board.
+/// The sheet name is the future hierarchical-sheet boundary: the
+/// exporter will one day emit one KiCad sheet per name, with
+/// cross-sheet nets carried on hierarchical labels. Until then the
+/// annotation already lets layout cluster per sheet and lets reviewers
+/// read the intended sheet split.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct SheetStmt {
     pub name: String,
     pub statements: Vec<StatementAst>,
     pub span: Span,
