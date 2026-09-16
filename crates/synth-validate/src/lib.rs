@@ -457,26 +457,20 @@ impl ErcRule for NoConnectMismatchRule {
 
 struct MissingDecouplingRule;
 
-/// Next free refdes for `prefix` (e.g. `"C"` → `"C7"`), scanning the
-/// board's existing refdeses so an auto-inserted part never collides.
-fn next_free_refdes(board: &Board, prefix: &str) -> String {
-    let mut max: i64 = 0;
-    for c in &board.components {
-        if let Some(num) = c
-            .refdes
-            .strip_prefix(prefix)
-            .and_then(|s| s.parse::<i64>().ok())
-        {
-            max = max.max(num);
-        }
-    }
-    format!("{prefix}{}", max + 1)
+fn next_free_refdes_number(board: &Board, prefix: &str) -> i64 {
+    board
+        .components
+        .iter()
+        .filter_map(|component| component.refdes.strip_prefix(prefix)?.parse::<i64>().ok())
+        .max()
+        .unwrap_or(0)
+        + 1
 }
 
-/// Find the ground net connected to `component` — a `PowerInput` pin
-/// named gnd/vss/... Returns the net's name, or `None` if the component
+/// Find the ground pin connected to `component` — a `PowerInput` pin
+/// named gnd/vss/... Returns the pin's name, or `None` if the component
 /// has no connected ground pin (then the cap cannot be completed).
-fn ground_net_for(board: &Board, component: &Component) -> Option<String> {
+fn ground_pin_for(board: &Board, component: &Component) -> Option<String> {
     let part = component.part.as_ref()?;
     for (idx, pin) in part.pins.iter().enumerate() {
         if pin.electrical_type != ElectricalType::PowerInput {
@@ -488,8 +482,8 @@ fn ground_net_for(board: &Board, component: &Component) -> Option<String> {
             "gnd" | "vss" | "vssa" | "vee" | "agnd" | "dgnd" | "vneg"
         ) {
             let pid = PinId(idx as u32);
-            if let Some((_, net)) = board.nets_containing(component.id, pid).next() {
-                return Some(net.name.clone());
+            if let Some((_, _net)) = board.nets_containing(component.id, pid).next() {
+                return Some(pin.name.clone());
             }
         }
     }
@@ -500,22 +494,23 @@ fn ground_net_for(board: &Board, component: &Component) -> Option<String> {
 /// their two connects each, right after `component`'s declaration, so
 /// the source becomes fixable with a single byte-range patch.
 fn decoupling_cap_patch(
-    board: &Board,
     component: &Component,
     net: &str,
-    gnd_net: &str,
+    gnd_pin: &str,
     count: usize,
+    next_cap_number: &mut i64,
 ) -> PatchKind {
     use std::fmt::Write as _;
     let mut text = String::new();
     for _ in 0..count {
-        let cap = next_free_refdes(board, "C");
+        let cap = format!("C{}", *next_cap_number);
+        *next_cap_number += 1;
         let _ = writeln!(
             text,
             "\n  component {cap}: capacitor \"c_generic_0603\" // auto-inserted decoupling"
         );
         let _ = writeln!(text, "  connect {}.{net} -> {cap}.p1", component.refdes);
-        let _ = writeln!(text, "  connect {}.{gnd_net} -> {cap}.p2", component.refdes);
+        let _ = writeln!(text, "  connect {}.{gnd_pin} -> {cap}.p2", component.refdes);
     }
     PatchKind::InsertAt {
         at: component.source_span.byte_end,
@@ -534,6 +529,7 @@ impl ErcRule for MissingDecouplingRule {
 
     fn check(&self, board: &Board, file: &str) -> Vec<Diagnostic> {
         let mut out = Vec::new();
+        let mut next_cap_number = next_free_refdes_number(board, "C");
         for component in &board.components {
             let Some(part) = component.part.as_ref() else {
                 continue;
@@ -581,7 +577,7 @@ impl ErcRule for MissingDecouplingRule {
 
                     // Auto-insert the missing cap(s) into the source
                     // when a ground net is available to complete them.
-                    if let Some(gnd_net) = ground_net_for(board, component) {
+                    if let Some(gnd_pin) = ground_pin_for(board, component) {
                         let shortfall = required - cap_count;
                         builder = builder.suggested_fix(synth_diagnostics::Patch {
                             confidence: 0.9,
@@ -591,11 +587,11 @@ impl ErcRule for MissingDecouplingRule {
                             )),
                             patch_consequence_preview: None,
                             kind: decoupling_cap_patch(
-                                board,
                                 component,
                                 &decoupling.net,
-                                &gnd_net,
+                                &gnd_pin,
                                 shortfall,
+                                &mut next_cap_number,
                             ),
                         });
                     }
@@ -3273,6 +3269,7 @@ mod tests {
             name: "b".into(),
             layers: 2,
             manufacturer: None,
+            company: None,
             revision: None,
             company: None,
             components: vec![
