@@ -926,44 +926,11 @@ fn place_with_outline<S: ::std::hash::BuildHasher>(
         max_y_nm = max_y_nm.max(court_center_y + rot_half_h);
     }
 
-    // Connector Edge-Docking Anchor: If the left-most component is a connector/jack,
-    // dock its mating face directly on the board outline edge x=0.
-    let has_left_connector = placements.iter().any(|p| {
-        let comp_kind = board.component(p.id).map_or("", |c| c.kind.as_str());
-        (comp_kind == "connector" || comp_kind == "jack") && {
-            let (w_mm, _) = courtyard_lookup[&p.id];
-            let (off_x_mm, _) = courtyard_offset_lookup
-                .get(&p.id)
-                .copied()
-                .unwrap_or((0.0, 0.0));
-            let (rot_cx, _) = p.rotation.rotate_offset(mm_to_nm(off_x_mm), 0);
-            let court_min_x = p.center.x_nm + rot_cx - mm_to_nm(w_mm) / 2;
-            (court_min_x - min_x_nm).abs() < mm_to_nm(2.0)
-        }
-    });
-
-    // Connector Edge-Docking Anchor: If the top-most component is a connector/jack,
-    // dock its mating face directly on the board outline edge y=0 (top edge).
-    // This makes USB-C connectors placed on the top edge physically accessible.
-    let has_top_connector = placements.iter().any(|p| {
-        let comp_kind = board.component(p.id).map_or("", |c| c.kind.as_str());
-        (comp_kind == "connector" || comp_kind == "jack") && {
-            let (_, h_mm) = courtyard_lookup[&p.id];
-            let (_, off_y_mm) = courtyard_offset_lookup
-                .get(&p.id)
-                .copied()
-                .unwrap_or((0.0, 0.0));
-            let (_, rot_cy) = p.rotation.rotate_offset(0, mm_to_nm(off_y_mm));
-            let court_min_y = p.center.y_nm + rot_cy - mm_to_nm(h_mm) / 2;
-            (court_min_y - min_y_nm).abs() < mm_to_nm(2.0)
-        }
-    });
-
-    let target_left_margin = if has_left_connector {
-        0
-    } else {
-        edge_margin_nm
-    };
+    // Keep every courtyard inside a real board-edge margin. Connectors may be
+    // edge-oriented, but their copper pads and plated holes still need
+    // clearance from Edge.Cuts. The old edge-docking path placed connector
+    // courtyards at x=0/y=0 and caused otherwise valid boards to fail KiCad DRC.
+    let target_left_margin = edge_margin_nm;
 
     // When a top-edge connector is present, the board's y=0 is the mating face.
     // To keep all OTHER components below the connector's courtyard (and preserve
@@ -971,42 +938,7 @@ fn place_with_outline<S: ::std::hash::BuildHasher>(
     // courtyard-top of NON-connector components so they land at `edge_margin_nm`.
     // The connector itself was placed at y = min_y + half_h so its courtyard
     // top (= min_y_nm) lands exactly at y=0 after the shift.
-    let shift_y_nm = if has_top_connector {
-        let min_y_others = placements
-            .iter()
-            .filter_map(|p| {
-                let comp_kind = board.component(p.id).map_or("", |c| c.kind.as_str());
-                if comp_kind == "connector" || comp_kind == "jack" {
-                    return None;
-                }
-                let (_, h_mm) = courtyard_lookup[&p.id];
-                let (_, off_y_mm) = courtyard_offset_lookup
-                    .get(&p.id)
-                    .copied()
-                    .unwrap_or((0.0, 0.0));
-                let (_, rot_cy) = p.rotation.rotate_offset(0, mm_to_nm(off_y_mm));
-                let court_min_y = p.center.y_nm + rot_cy - mm_to_nm(h_mm) / 2;
-                Some(court_min_y)
-            })
-            .min();
-
-        if let Some(_other_min_y) = min_y_others {
-            // Shift so non-connector components get the full edge_margin at top,
-            // and the connector's courtyard top (min_y_nm) ends up at y=0.
-            // We want: other_min_y + shift_y = edge_margin_nm
-            //          min_y_nm + shift_y = 0
-            // The second equation gives: shift_y = -min_y_nm
-            // The first equation gives: shift_y = edge_margin_nm - other_min_y
-            // Use the connector constraint (flush to edge) and accept that other
-            // components will shift accordingly.
-            -min_y_nm
-        } else {
-            // Only connectors in design, flush the mating face to y=0.
-            -min_y_nm
-        }
-    } else {
-        edge_margin_nm - min_y_nm
-    };
+    let shift_y_nm = edge_margin_nm - min_y_nm;
 
     let shift_x_nm = target_left_margin - min_x_nm;
 
@@ -1015,54 +947,8 @@ fn place_with_outline<S: ::std::hash::BuildHasher>(
         p.center.y_nm += shift_y_nm;
     }
 
-    // ── Deterministic top-connector edge-flush snap ───────────────────────────
-    // After the global Y-shift, the connector center may be off by the board
-    // margin (BOARD_MARGIN_MM) because the floorplan target is expressed
-    // relative to `usable.min.y_nm` (which includes the margin) while
-    // shift_y_nm maps the courtyard minimum to y=0, not the usable minimum.
-    //
-    // Closed-form fix: for every top-edge USB connector, force
-    //   courtyard_min_y = center.y + rotated_offset_y - half_h = 0.
-    //
-    // This is a mechanical identity derived entirely from the footprint
-    // courtyard dimensions. DO NOT replace with an agent heuristic.
-    if has_top_connector {
-        for p in &mut placements {
-            let comp_kind = board.component(p.id).map_or("", |c| c.kind.as_str());
-            let is_usb = board.component(p.id).is_some_and(|c| {
-                let rl = c.refdes.to_lowercase();
-                let kl = c.kind.to_lowercase();
-                rl.contains("usb")
-                    || kl.contains("usb")
-                    || c.part
-                        .as_ref()
-                        .is_some_and(|pt| pt.id.as_str().contains("usb"))
-            });
-            if (comp_kind != "connector" && comp_kind != "jack") || !is_usb {
-                continue;
-            }
-            let (_, h_mm) = courtyard_lookup[&p.id];
-            let (_, off_y_mm) = courtyard_offset_lookup
-                .get(&p.id)
-                .copied()
-                .unwrap_or((0.0, 0.0));
-            let half_h_nm = mm_to_nm(h_mm) / 2;
-            // For Rotation::OneEighty the y-component of the courtyard offset
-            // is negated by the rotation.
-            let rot_off_y_nm = match p.rotation {
-                Rotation::OneEighty | Rotation::TwoSeventy => -mm_to_nm(off_y_mm),
-                _ => mm_to_nm(off_y_mm),
-            };
-            p.center.y_nm = half_h_nm - rot_off_y_nm;
-        }
-    }
-
-    // The edge-docking transforms above are intentionally applied after the
-    // normal legalization pass.  They can therefore re-introduce courtyard
-    // collisions (most visibly when two USB connectors share an edge).  Run a
-    // final legalization pass in the coordinates that will actually be
-    // exported.  Do not rely on the pre-transform result: the PCB exporter
-    // consumes these final placements verbatim.
+    // Run a final legalization pass in the coordinates that will actually be
+    // exported. The exporter consumes these final placements verbatim.
     let mut final_legalization_changed = false;
     for _ in 0..32 {
         let mut changed = false;

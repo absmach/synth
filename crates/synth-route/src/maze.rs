@@ -727,10 +727,14 @@ fn count_routable(nets: &[&synth_ir::Net], board: &Board) -> usize {
         .count()
 }
 
-/// Ground copper is emitted as a continuous plane by the KiCad exporter.
+/// Ground copper is emitted as a KiCad plane. Small ground nets are also
+/// explicitly routed so the exported PCB has a direct connectivity witness;
+/// large ground nets keep plane treatment because routing every return pad
+/// through the maze is needlessly expensive and the native zone refill is the
+/// appropriate connectivity mechanism for them.
 fn is_plane_net(net: &synth_ir::Net, board: &Board) -> bool {
     let name = net.name.to_ascii_lowercase();
-    name.contains("gnd")
+    let is_ground = name.contains("gnd")
         || name.contains("vss")
         || name == "0v"
         || net.endpoints.iter().any(|ep| {
@@ -742,7 +746,9 @@ fn is_plane_net(net: &synth_ir::Net, board: &Board) -> bool {
                     let pin_name = pin.name.to_ascii_lowercase();
                     pin_name.contains("gnd") || pin_name.contains("vss") || pin_name == "0v"
                 })
-        })
+        });
+
+    is_ground && net.endpoints.len() > 8
 }
 
 /// Route a single net using A* expansion. Returns `true` on
