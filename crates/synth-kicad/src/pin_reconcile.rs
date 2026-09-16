@@ -323,6 +323,15 @@ fn reconcile_component(board: &Board, component: &synth_ir::Component) -> Reconc
         if netlisted.contains(&pin.number) {
             continue;
         }
+        // RP2040/RP2350's stock symbol contains a hidden passive DVDD pin
+        // (pin 50) outside the visible symbol body. KiCad's ERC treats a
+        // no-connect marker on that hidden pin as connected to an unrelated
+        // power-symbol anchor. It is not a usable registry pin, so leave it
+        // unannotated; hidden passive pins do not produce a floating-pin ERC
+        // diagnostic and must not receive a graphical no-connect marker.
+        if pin.number == "50" && pin.name.eq_ignore_ascii_case("DVDD") {
+            continue;
+        }
         // Only *input* power legs are fan-out candidates. An
         // undeclared power_output leg (e.g. an RP2350's VREG_LX/
         // VREG_VOUT, which drive a buck) must NOT be tied onto the

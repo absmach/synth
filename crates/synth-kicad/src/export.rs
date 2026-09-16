@@ -92,7 +92,20 @@ pub fn export_with_sidecar(
     // rest on first open; the deterministic root keeps diffs stable.
     let project_namespace = uuid_v5::project_namespace(&board.name);
     let project_doc = json!({
-        "board": {},
+        // Keep the project-level defaults explicit. KiCad 10 may discard
+        // legacy setup minima when it first saves a generated board, and an
+        // empty `board` object then silently restores its own 0.2 mm
+        // clearance. These values match the router's 0.2 mm signal width
+        // and the 0.127 mm clearance supported by the default manufacturer
+        // profile, so native DRC sees the same contract as Synth.
+        "board": {
+            "design_settings": {
+                "defaults": {
+                    "min_clearance": 0.127,
+                    "min_track_width": 0.127,
+                }
+            }
+        },
         "boards": [],
         "meta": {
             "filename": format!("{stem}.kicad_pro"),
@@ -215,7 +228,7 @@ pub fn export_with_sidecar(
     // runs placement and routing with up to 5 repair iterations.
     // The sidecar (manual drags) rides along with every placement
     // attempt so routing sees the overridden positions.
-    let (placement, routing) = place_and_route_with_repair(board, 5, sidecar)
+    let (placement, routing) = place_and_route_with_repair(board, 8, sidecar)
         .map_err(|source| ExportError::Placement { source })?;
     let pcb_text =
         pcb::build_pcb(board, &placement, &routing, &project_namespace).to_string_pretty();
@@ -283,51 +296,100 @@ fn place_and_route_with_repair(
 ) -> Result<(synth_place::Placement, synth_route::Routing), synth_place::PlaceError> {
     let mut margin = 1.0_f64;
     let mut rotation_overrides = std::collections::HashMap::new();
+    let profile = synth_drc::ManufacturerProfile::jlc_standard();
     let mut best_placement = synth_place::place_with_sidecar(board, sidecar)?;
     let mut best_routing = synth_route::route(board, &best_placement);
+    let mut best_score = physical_score(board, &best_placement, &best_routing, &profile);
 
-    // Stagnation guard: when a design's nets are (locally) unroutable,
-    // re-placement never reduces the unrouted count, and every iteration
-    // pays a full place+route cycle for nothing. Track consecutive
-    // no-improvement attempts and bail once re-placement stops helping —
-    // the best routing found is still kept. Two attempts (rather than
-    // one) still allow rotation-cascade recovery that unlocks on a later
-    // iteration.
+    // Stagnation guard: a candidate can be fully routed yet remain DRC
+    // invalid, so track the complete physical score rather than only the
+    // unrouted count. The best candidate is always retained.
     let mut stagnant_attempts = 0_usize;
     for _iter in 0..max_iterations {
-        if best_routing.unrouted_nets.is_empty() {
+        if best_score == (0, 0) {
             break;
         }
 
-        // Identify unrouted components and rotate them
+        // Target the components implicated by both router and independent
+        // DRC evidence. A routed net can still fail fabrication clearance,
+        // courtyard, connector-orientation, or silkscreen rules, so an
+        // unrouted-only retry loop can converge on a board KiCad rejects.
+        let drc = if best_routing.unrouted_nets.is_empty() {
+            synth_drc::check(board, &best_placement, &best_routing, &profile)
+        } else {
+            synth_drc::DrcReport {
+                violations: Vec::new(),
+                profile_name: profile.name.clone(),
+            }
+        };
+        let mut implicated = std::collections::BTreeSet::new();
+        let mut exact_rotations = std::collections::BTreeSet::new();
         for unrouted in &best_routing.unrouted_nets {
             if let Some(net) = board.net(unrouted.net) {
                 for endpoint in &net.endpoints {
-                    let current_rot = rotation_overrides
-                        .get(&endpoint.component)
-                        .copied()
-                        .unwrap_or(synth_geometry::Rotation::Zero);
-                    let next_rot = match current_rot {
-                        synth_geometry::Rotation::Zero => synth_geometry::Rotation::Ninety,
-                        synth_geometry::Rotation::Ninety => synth_geometry::Rotation::OneEighty,
-                        synth_geometry::Rotation::OneEighty => synth_geometry::Rotation::TwoSeventy,
-                        synth_geometry::Rotation::TwoSeventy => synth_geometry::Rotation::Zero,
-                    };
-                    rotation_overrides.insert(endpoint.component, next_rot);
+                    implicated.insert(endpoint.component);
+                }
+            }
+        }
+        for violation in &drc.violations {
+            if let Some(suggestion) = &violation.suggested_override {
+                if let Some(component) = board
+                    .components
+                    .iter()
+                    .find(|c| c.refdes == suggestion.refdes)
+                {
+                    implicated.insert(component.id);
+                    // A rule may know the exact orientation required (for
+                    // example, a connector mating edge). Honor that advice
+                    // directly; the fallback rotation below is reserved for
+                    // violations that only identify a witness component.
+                    if let Some(rotation) = rotation_from_degrees(suggestion.rotation_deg) {
+                        rotation_overrides.insert(component.id, rotation);
+                        exact_rotations.insert(component.id);
+                    }
+                }
+            }
+            for refdes in &violation.components {
+                if let Some(component) = board.components.iter().find(|c| &c.refdes == refdes) {
+                    implicated.insert(component.id);
                 }
             }
         }
 
-        margin += 0.5;
+        // Rotate implicated footprints in a deterministic sequence. The
+        // placer remains responsible for legal positions; the agent is not
+        // allowed to invent arbitrary coordinates in this physical phase.
+        for component in implicated {
+            if exact_rotations.contains(&component) {
+                continue;
+            }
+            let current_rot = rotation_overrides
+                .get(&component)
+                .copied()
+                .unwrap_or(synth_geometry::Rotation::Zero);
+            let next_rot = match current_rot {
+                synth_geometry::Rotation::Zero => synth_geometry::Rotation::Ninety,
+                synth_geometry::Rotation::Ninety => synth_geometry::Rotation::OneEighty,
+                synth_geometry::Rotation::OneEighty => synth_geometry::Rotation::TwoSeventy,
+                synth_geometry::Rotation::TwoSeventy => synth_geometry::Rotation::Zero,
+            };
+            rotation_overrides.insert(component, next_rot);
+        }
+
+        // Search progressively roomier deterministic floorplans. A dense
+        // placement can make the maze router fail before DRC is relevant;
+        // increasing the margin gives pin escapes and component corridors
+        // physical room without asking the model to guess coordinates.
+        margin += 1.0;
         if let Ok(p) =
             synth_place::place_with_tuning_and_sidecar(board, margin, &rotation_overrides, sidecar)
         {
             let r = synth_route::route(board, &p);
-            if r.unrouted_nets.len() < best_routing.unrouted_nets.len()
-                || r.unrouted_nets.is_empty()
-            {
+            let score = physical_score(board, &p, &r, &profile);
+            if score < best_score {
                 best_placement = p;
                 best_routing = r;
+                best_score = score;
                 stagnant_attempts = 0;
             } else {
                 stagnant_attempts += 1;
@@ -344,6 +406,41 @@ fn place_and_route_with_repair(
     }
 
     Ok((best_placement, best_routing))
+}
+
+fn rotation_from_degrees(degrees: u32) -> Option<synth_geometry::Rotation> {
+    match degrees % 360 {
+        0 => Some(synth_geometry::Rotation::Zero),
+        90 => Some(synth_geometry::Rotation::Ninety),
+        180 => Some(synth_geometry::Rotation::OneEighty),
+        270 => Some(synth_geometry::Rotation::TwoSeventy),
+        _ => None,
+    }
+}
+
+/// Score a physical candidate by the two properties that matter at export:
+/// all nets must be connected and the independent manufacturer DRC must be
+/// clean. This deliberately does not use the router's internal clearance
+/// bookkeeping, so a router regression cannot make its own candidate appear
+/// valid.
+fn physical_score(
+    board: &Board,
+    placement: &synth_place::Placement,
+    routing: &synth_route::Routing,
+    profile: &synth_drc::ManufacturerProfile,
+) -> (usize, usize) {
+    // Routing completeness is the primary gate. Avoid running the more
+    // expensive independent geometry checks for candidates that have not
+    // connected every routable net yet.
+    if !routing.unrouted_nets.is_empty() {
+        return (routing.unrouted_nets.len(), usize::MAX);
+    }
+    (
+        0,
+        synth_drc::check(board, placement, routing, profile)
+            .violations
+            .len(),
+    )
 }
 
 #[cfg(test)]

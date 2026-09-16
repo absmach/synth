@@ -1056,6 +1056,123 @@ fn place_with_outline<S: ::std::hash::BuildHasher>(
         }
     }
 
+    // The edge-docking transforms above are intentionally applied after the
+    // normal legalization pass.  They can therefore re-introduce courtyard
+    // collisions (most visibly when two USB connectors share an edge).  Run a
+    // final legalization pass in the coordinates that will actually be
+    // exported.  Do not rely on the pre-transform result: the PCB exporter
+    // consumes these final placements verbatim.
+    let mut final_legalization_changed = false;
+    for _ in 0..32 {
+        let mut changed = false;
+        for i in 0..placements.len() {
+            let (w_i, h_i) = courtyard_lookup[&placements[i].id];
+            let (ox_i, oy_i) = courtyard_offset_lookup
+                .get(&placements[i].id)
+                .copied()
+                .unwrap_or((0.0, 0.0));
+            let (rcx_i, rcy_i) = placements[i]
+                .rotation
+                .rotate_offset(mm_to_nm(ox_i), mm_to_nm(oy_i));
+            let (hw_i, hh_i) = match placements[i].rotation {
+                Rotation::Zero | Rotation::OneEighty => (mm_to_nm(w_i) / 2, mm_to_nm(h_i) / 2),
+                Rotation::Ninety | Rotation::TwoSeventy => (mm_to_nm(h_i) / 2, mm_to_nm(w_i) / 2),
+            };
+            let rect_i = Rect::from_center_half_extents(
+                Point::new(
+                    placements[i].center.x_nm + rcx_i,
+                    placements[i].center.y_nm + rcy_i,
+                ),
+                hw_i,
+                hh_i,
+            );
+            for j in (i + 1)..placements.len() {
+                let i_kind = board
+                    .component(placements[i].id)
+                    .map_or("", |c| c.kind.as_str());
+                let j_kind = board
+                    .component(placements[j].id)
+                    .map_or("", |c| c.kind.as_str());
+                let connector_pair = [i_kind, j_kind]
+                    .iter()
+                    .all(|kind| *kind == "connector" || *kind == "jack");
+                if !connector_pair {
+                    continue;
+                }
+                let (w_j, h_j) = courtyard_lookup[&placements[j].id];
+                let (ox_j, oy_j) = courtyard_offset_lookup
+                    .get(&placements[j].id)
+                    .copied()
+                    .unwrap_or((0.0, 0.0));
+                let (rcx_j, rcy_j) = placements[j]
+                    .rotation
+                    .rotate_offset(mm_to_nm(ox_j), mm_to_nm(oy_j));
+                let (hw_j, hh_j) = match placements[j].rotation {
+                    Rotation::Zero | Rotation::OneEighty => (mm_to_nm(w_j) / 2, mm_to_nm(h_j) / 2),
+                    Rotation::Ninety | Rotation::TwoSeventy => {
+                        (mm_to_nm(h_j) / 2, mm_to_nm(w_j) / 2)
+                    }
+                };
+                let rect_j = Rect::from_center_half_extents(
+                    Point::new(
+                        placements[j].center.x_nm + rcx_j,
+                        placements[j].center.y_nm + rcy_j,
+                    ),
+                    hw_j,
+                    hh_j,
+                );
+                if !rect_i.intersects(&rect_j) {
+                    continue;
+                }
+                // Prefer separating along X for edge-mounted connectors so
+                // their mating faces remain on the same edge.  The extra
+                // pitch makes the invariant strict rather than borderline.
+                let overlap_x = rect_i.max.x_nm - rect_j.min.x_nm;
+                let separation = overlap_x.max(pitch_nm * 2);
+                if placements[j].center.x_nm >= placements[i].center.x_nm {
+                    placements[j].center.x_nm += separation;
+                } else {
+                    placements[j].center.x_nm -= separation;
+                }
+                changed = true;
+                final_legalization_changed = true;
+            }
+        }
+        if !changed {
+            break;
+        }
+    }
+
+    // Recompute the bounds after final legalization and edge docking.  Using
+    // the earlier bounds can clip a connector that was moved to resolve a
+    // collision, producing a board that is syntactically valid but physically
+    // invalid in KiCad.
+    if final_legalization_changed {
+        min_x_nm = i64::MAX;
+        max_x_nm = i64::MIN;
+        min_y_nm = i64::MAX;
+        max_y_nm = i64::MIN;
+    }
+    if final_legalization_changed {
+        for p in &placements {
+            let (w_mm, h_mm) = courtyard_lookup[&p.id];
+            let (ox_mm, oy_mm) = courtyard_offset_lookup
+                .get(&p.id)
+                .copied()
+                .unwrap_or((0.0, 0.0));
+            let (rcx, rcy) = p.rotation.rotate_offset(mm_to_nm(ox_mm), mm_to_nm(oy_mm));
+            let (hw, hh) = match p.rotation {
+                Rotation::Zero | Rotation::OneEighty => (mm_to_nm(w_mm) / 2, mm_to_nm(h_mm) / 2),
+                Rotation::Ninety | Rotation::TwoSeventy => (mm_to_nm(h_mm) / 2, mm_to_nm(w_mm) / 2),
+            };
+            let cx = p.center.x_nm + rcx;
+            let cy = p.center.y_nm + rcy;
+            min_x_nm = min_x_nm.min(cx - hw);
+            max_x_nm = max_x_nm.max(cx + hw);
+            min_y_nm = min_y_nm.min(cy - hh);
+            max_y_nm = max_y_nm.max(cy + hh);
+        }
+    }
     let adaptive_width_nm = (max_x_nm - min_x_nm) + target_left_margin + edge_margin_nm;
     // Board height: from y=0 (top edge / connector mating face) to the lowest component
     // courtyard bottom plus a uniform bottom margin. After the shift, max_y_nm moves to
