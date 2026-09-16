@@ -1,0 +1,31 @@
+# AMS1117-3.3 basic application circuit.
+#
+# Each [[circuit]] names a registry part and lists the support
+# components its datasheet's typical-application circuit requires,
+# with roles (not refdeses), values, placement guidance, and the two
+# nets each support component spans. Agents drafting `.synth` source
+# read this before writing connects; future validation will diff a
+# board against its parts' reference circuits.
+
+[[circuit]]
+part_id = "ams1117_3v3"
+title = "AMS1117-3.3 fixed LDO basic application"
+source = "AMS1117 datasheet, typical application circuit"
+notes = [
+  "Ceramic output caps are acceptable on AMS1117 (unlike older LM1117 lots sensitive to ultra-low ESR); keep ESR below ~1 ohm equivalent by avoiding huge parallel ceramic banks without bulk.",
+  "Place both caps within 10 mm of the regulator pins with short ground return.",
+]
+
+[[circuit.support]]
+designator = "C_IN"
+kind = "capacitor"
+value = "10u"
+placement = "within 10 mm of vin"
+connect = ["vin", "gnd"]
+
+[[circuit.support]]
+designator = "C_OUT"
+kind = "capacitor"
+value = "10u"
+placement = "within 10 mm of vout"
+connect = ["vout", "gnd"]
