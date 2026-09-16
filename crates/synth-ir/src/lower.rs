@@ -56,7 +56,8 @@ use crate::units::{ConversionError, Impedance, Length};
 type BlockFrame<'a> = (&'a [StatementAst], usize, Option<&'a str>, Option<&'a str>);
 
 #[derive(Debug)]
-pub struct LowerResult {    pub board: Option<Board>,
+pub struct LowerResult {
+    pub board: Option<Board>,
     pub diagnostics: Vec<Diagnostic>,
 }
 
