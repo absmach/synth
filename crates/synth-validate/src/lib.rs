@@ -663,12 +663,11 @@ impl ErcRule for DecouplingValueRule {
                 let mut total_f = 0.0;
                 let mut all_parseable = true;
                 for cap in &caps {
-                    match cap.value.as_deref().and_then(parse_capacitance) {
-                        Some(f) => total_f += f,
-                        None => {
-                            all_parseable = false;
-                            break;
-                        }
+                    if let Some(f) = cap.value.as_deref().and_then(parse_capacitance) {
+                        total_f += f;
+                    } else {
+                        all_parseable = false;
+                        break;
                     }
                 }
                 if !all_parseable {
@@ -3095,7 +3094,6 @@ impl ErcRule for DividerRatioRule {
                 let Some((_, mid_net)) = board
                     .nets_containing(r1.id, PinId(mid_idx))
                     .next()
-                    .map(|(id, n)| (id, n))
                 else {
                     continue;
                 };
@@ -3150,7 +3148,7 @@ impl ErcRule for DividerRatioRule {
                     continue;
                 }
                 let ratio = r2_ohms / (r1_ohms + r2_ohms);
-                if ratio < 0.05 || ratio > 0.95 {
+                if !(0.05..=0.95).contains(&ratio) {
                     out.push(
                         DiagnosticBuilder::new(
                             self.code(),

@@ -47,7 +47,7 @@ pub fn check_connector_orientation(
                 refdes,
                 delta_x_mm: 0.0,
                 delta_y_mm: 0.0,
-                rotation_deg: issue.expected.degrees() as u32,
+                rotation_deg: u32::try_from(issue.expected.degrees()).unwrap_or(0),
             }),
         }
     })
