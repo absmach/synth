@@ -137,6 +137,7 @@ fn all_rules() -> Vec<Box<dyn ErcRule>> {
         Box::new(PowerDomainMismatchRule),
         Box::new(SupplyChainRule),
         Box::new(UnverifiedPartRule),
+        Box::new(DividerRatioRule),
     ]
 }
 
@@ -2855,6 +2856,166 @@ impl ErcRule for UnverifiedPartRule {
     }
 }
 
+// -----------------------------------------------------------------------------
+// W-SYNTH-DIVIDER-001 — degenerate resistor-divider ratio
+// -----------------------------------------------------------------------------
+
+/// Value-based check on rail→R1→mid→R2→gnd dividers (the topology
+/// `synth-layout` recognises as its `Divider` cluster). The compiler
+/// cannot know the intended output voltage, but a divider whose
+/// mid-point sits below 5% or above 95% of the rail is almost never
+/// intended: the usual causes are R1/R2 swapped in placement or an
+/// order-of-magnitude value typo (`10k` vs `100k`). Either resistor
+/// with a missing or unparseable `value` vetoes the judgement;
+/// non-rail-anchored resistor pairs (ladders, feedback networks)
+/// never match, because the rail side must carry a power-output pin
+/// and the foot side a ground pin.
+struct DividerRatioRule;
+
+fn net_has_power_output(board: &Board, net: &synth_ir::Net) -> bool {
+    net.endpoints.iter().any(|e| {
+        board
+            .pin(e.component, e.pin)
+            .is_some_and(|p| p.electrical_type == ElectricalType::PowerOutput)
+    })
+}
+
+fn net_has_ground_pin(board: &Board, net: &synth_ir::Net) -> bool {
+    net.endpoints.iter().any(|e| {
+        board.pin(e.component, e.pin).is_some_and(|p| {
+            matches!(
+                p.electrical_type,
+                ElectricalType::PowerInput | ElectricalType::GroundReference
+            ) && {
+                let n = p.name.to_lowercase();
+                matches!(
+                    n.as_str(),
+                    "gnd" | "vss" | "vssa" | "vee" | "agnd" | "dgnd" | "vneg" | "ground"
+                ) || n.starts_with("gnd")
+                    || n.starts_with("vss")
+            }
+        })
+    })
+}
+
+fn is_two_pin_resistor(board: &Board, id: ComponentId) -> bool {
+    board.component(id).is_some_and(|c| {
+        c.part.as_ref().is_some_and(|p| p.kind == "resistor" && p.pins.len() == 2)
+    })
+}
+
+impl ErcRule for DividerRatioRule {
+    fn code(&self) -> &'static str {
+        "W-SYNTH-DIVIDER-001"
+    }
+
+    fn category(&self) -> ErcCategory {
+        ErcCategory::Analog
+    }
+
+    fn check(&self, board: &Board, file: &str) -> Vec<Diagnostic> {
+        let mut out = Vec::new();
+        for r1 in &board.components {
+            if !is_two_pin_resistor(board, r1.id) {
+                continue;
+            }
+            // Try each pin as the mid-side pin; the other is the rail side.
+            for mid_idx in [0u32, 1u32] {
+                let rail_idx = 1 - mid_idx;
+                let Some((_, mid_net)) = board
+                    .nets_containing(r1.id, PinId(mid_idx))
+                    .next()
+                    .map(|(id, n)| (id, n))
+                else {
+                    continue;
+                };
+                // Mid net: exactly this resistor plus its partner.
+                if mid_net.endpoints.len() != 2 {
+                    continue;
+                }
+                let Some(partner_ep) = mid_net
+                    .endpoints
+                    .iter()
+                    .find(|e| e.component != r1.id)
+                else {
+                    continue;
+                };
+                if !is_two_pin_resistor(board, partner_ep.component) {
+                    continue;
+                }
+                let Some(r2) = board.component(partner_ep.component) else {
+                    continue;
+                };
+                // Rail side must be a driven rail; foot side ground.
+                let rail_ok = board
+                    .nets_containing(r1.id, PinId(rail_idx))
+                    .next()
+                    .is_some_and(|(_, n)| net_has_power_output(board, n));
+                if !rail_ok {
+                    continue;
+                }
+                let r2_other: Vec<PinId> = r2
+                    .part
+                    .as_ref()
+                    .map(|p| {
+                        (0..p.pins.len())
+                            .map(|i| PinId(i as u32))
+                            .filter(|pid| *pid != partner_ep.pin)
+                            .collect()
+                    })
+                    .unwrap_or_default();
+                let gnd_ok = r2_other.into_iter().any(|pid| {
+                    board
+                        .nets_containing(r2.id, pid)
+                        .next()
+                        .is_some_and(|(_, n)| net_has_ground_pin(board, n))
+                });
+                if !gnd_ok {
+                    continue;
+                }
+                let (Some(r1_ohms), Some(r2_ohms)) = (
+                    r1.value.as_deref().and_then(parse_resistance),
+                    r2.value.as_deref().and_then(parse_resistance),
+                ) else {
+                    continue;
+                };
+                if r1_ohms <= 0.0 || r2_ohms <= 0.0 {
+                    continue;
+                }
+                let ratio = r2_ohms / (r1_ohms + r2_ohms);
+                if ratio < 0.05 || ratio > 0.95 {
+                    out.push(
+                        DiagnosticBuilder::new(
+                            self.code(),
+                            Severity::Warning,
+                            "degenerate resistor-divider ratio",
+                        )
+                        .location(Location::from_span(file.to_string(), r1.source_span))
+                        .expected(
+                            "divider mid-point between 5% and 95% of the rail \
+                             (check R1/R2 placement and value magnitudes)",
+                        )
+                        .found(format!(
+                            "`{}`/`{}` ratio gives mid at {:.1}% of rail",
+                            r1.refdes,
+                            r2.refdes,
+                            ratio * 100.0,
+                        ))
+                        .explanation_url(format!("synth.docs/diagnostics/{}", self.code()))
+                        .build(),
+                    );
+                }
+                // One judgement per divider: the partner resistor
+                // would otherwise re-derive the same net from its
+                // side only when it is also rail-driven, which the
+                // power-output anchor above excludes.
+                break;
+            }
+        }
+        out
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -2871,6 +3032,133 @@ mod tests {
         let rule = CrystalLoadCapBalanceRule;
         assert_eq!(rule.code(), "E-SYNTH-CRYSTAL-001");
         assert_eq!(rule.category(), ErcCategory::Analog);
+    }
+
+    fn divider_test_board(r1_value: Option<&str>, r2_value: Option<&str>) -> Board {
+        use synth_diagnostics::Span;
+        use synth_ir::{Net, NetEndpoint, NetId};
+        use synth_registry::{ElectricalType, Lifecycle, Part, PartId, Pin, PinNumber};
+
+        fn pin(name: &str, t: ElectricalType) -> Pin {
+            Pin {
+                name: name.into(),
+                number: PinNumber(name.into()),
+                electrical_type: t,
+                capabilities: vec![],
+                required: false,
+                unit: None,
+                voltage_max_v: None,
+                voltage_min_v: None,
+                voltage_nominal_v: None,
+            }
+        }
+
+        fn part(id: &str, kind: &str, pins: Vec<Pin>) -> Part {
+            Part {
+                id: PartId(id.into()),
+                kind: kind.into(),
+                description: None,
+                version: 0,
+                lifecycle: Lifecycle::default(),
+                signed_by: vec![],
+                substitutes: vec![],
+                mpn: None,
+                lcsc_pn: None,
+                pins,
+                required_decoupling: vec![],
+                kicad_symbol: None,
+                kicad_footprint: None,
+                footprint_dimensions: None,
+                operating_conditions: None,
+                provenance: None,
+            }
+        }
+
+        let reg = part(
+            "reg",
+            "regulator",
+            vec![
+                pin("vin", ElectricalType::PowerInput),
+                pin("gnd", ElectricalType::PowerInput),
+                pin("vout", ElectricalType::PowerOutput),
+            ],
+        );
+        let r = |pins: Vec<Pin>| part("r", "resistor", pins);
+        let rpins = || {
+            vec![
+                pin("p1", ElectricalType::Passive),
+                pin("p2", ElectricalType::Passive),
+            ]
+        };
+        let ep = |c: u32, p: u32| NetEndpoint {
+            component: ComponentId(c),
+            pin: PinId(p),
+            source_span: Span::new(0, 0),
+        };
+        let comp = |i: u32, refdes: &str, kind: &str, p: Part, value: Option<&str>| Component {
+            id: ComponentId(i),
+            refdes: refdes.into(),
+            kind: kind.into(),
+            part: Some(p),
+            value: value.map(str::to_string),
+            placement_hint: None,
+            group: None,
+            source_span: Span::new(0, 0),
+        };
+        Board {
+            name: "b".into(),
+            layers: 2,
+            manufacturer: None,
+            revision: None,
+            components: vec![
+                comp(0, "U1", "regulator", reg, None),
+                comp(1, "R1", "resistor", r(rpins()), r1_value),
+                comp(2, "R2", "resistor", r(rpins()), r2_value),
+            ],
+            nets: vec![
+                Net {
+                    id: NetId(0),
+                    name: "rail".into(),
+                    endpoints: vec![ep(0, 2), ep(1, 0)],
+                },
+                Net {
+                    id: NetId(1),
+                    name: "mid".into(),
+                    endpoints: vec![ep(1, 1), ep(2, 0)],
+                },
+                Net {
+                    id: NetId(2),
+                    name: "gnd".into(),
+                    endpoints: vec![ep(0, 1), ep(2, 1)],
+                },
+            ],
+            diff_pairs: vec![],
+            keepouts: vec![],
+            source_span: Span::new(0, 0),
+        }
+    }
+
+    #[test]
+    fn degenerate_divider_ratio_warns() {
+        // mid at ~0.1% of rail — almost certainly swapped or mistyped.
+        let board = divider_test_board(Some("1M"), Some("1k"));
+        let diags = DividerRatioRule.check(&board, "test.synth");
+        assert_eq!(diags.len(), 1, "{diags:?}");
+        assert_eq!(diags[0].code, "W-SYNTH-DIVIDER-001");
+    }
+
+    #[test]
+    fn balanced_divider_is_clean() {
+        let board = divider_test_board(Some("10k"), Some("10k"));
+        let diags = DividerRatioRule.check(&board, "test.synth");
+        assert!(diags.is_empty(), "{diags:?}");
+    }
+
+    #[test]
+    fn unparseable_divider_value_skips_check() {
+        let board = divider_test_board(Some("10k"), None);
+        let diags = DividerRatioRule.check(&board, "test.synth");
+        assert!(diags.is_empty(), "{diags:?}");
     }
 
     #[test]
