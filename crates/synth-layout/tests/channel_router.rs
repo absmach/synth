@@ -130,6 +130,7 @@ fn two_row_board_and_layout() -> (Board, Layout) {
         ],
         diff_pairs: Vec::new(),
         keepouts: Vec::new(),
+        netclasses: vec![],
         source_span: synth_diagnostics::Span::new(0, 0),
     };
     let layout = Layout {

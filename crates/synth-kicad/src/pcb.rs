@@ -1293,6 +1293,7 @@ mod tests {
             ],
             diff_pairs: vec![],
             keepouts: vec![],
+            netclasses: vec![],
             source_span: Span::new(0, 0),
         };
         let net_table = vec![
@@ -1331,6 +1332,7 @@ mod tests {
             nets: vec![],
             diff_pairs: vec![],
             keepouts: vec![],
+            netclasses: vec![],
             source_span: Span::new(0, 0),
         };
         let placement = Placement {

@@ -14,8 +14,9 @@
 
 use synth_ast::{
     BoardAst, CompanyStmt, ComponentDeclAst, ConnectionAst, DiffPairAttr, DiffPairStmt, EndpointAst,
-    GroupStmt, ImportAst, KeepoutAttr, KeepoutStmt, LayersStmt, ManufacturerStmt, PlacementHintAst,
-    PlacementHintAttr, ProgramAst, RevisionStmt, StatementAst, ValueWithUnit,
+    GroupStmt, ImportAst, KeepoutAttr, KeepoutStmt, LayersStmt, ManufacturerStmt, NetclassAttr,
+    NetclassStmt, PlacementHintAst, PlacementHintAttr, ProgramAst, RevisionStmt, StatementAst,
+    ValueWithUnit,
 };
 use synth_diagnostics::{
     Diagnostic, DiagnosticBuilder, Location, Patch, PatchKind, Severity, Span,
@@ -288,6 +289,7 @@ impl Parser {
             TokenKind::KwComponent => self.parse_component().map(StatementAst::Component),
             TokenKind::KwConnect => self.parse_connection().map(StatementAst::Connection),
             TokenKind::KwDiffPair => self.parse_diff_pair().map(StatementAst::DiffPair),
+            TokenKind::KwNetclass => self.parse_netclass().map(StatementAst::Netclass),
             TokenKind::KwKeepout => self.parse_keepout().map(StatementAst::Keepout),
             TokenKind::KwGroup => self.parse_group().map(StatementAst::Group),
             _ => {
@@ -295,7 +297,7 @@ impl Parser {
                     self.peek().span,
                     "E-SYNTH-PARSE-011",
                     "expected statement keyword",
-                    "one of: layers, manufacturer, revision, company, component, connect, diff_pair, keepout, group",
+                    "one of: layers, manufacturer, revision, company, component, connect, diff_pair, netclass, keepout, group",
                     self.describe_current(),
                     None,
                 );
@@ -668,6 +670,64 @@ impl Parser {
         })
     }
 
+    fn parse_netclass(&mut self) -> Option<NetclassStmt> {
+        let start = self.peek().span.byte_start;
+        self.bump(); // consume `netclass`
+        let name =
+            self.expect_string("E-SYNTH-PARSE-002", "expected netclass name (quoted string)")?;
+        if !matches!(self.peek_kind(), TokenKind::LBrace) {
+            self.emit(
+                self.peek().span,
+                "E-SYNTH-PARSE-003",
+                "expected `{` to open netclass body",
+                "`{`",
+                self.describe_current(),
+                None,
+            );
+            return None;
+        }
+        self.bump();
+        let mut attrs = Vec::new();
+        loop {
+            self.skip_error_tokens();
+            match self.peek_kind() {
+                TokenKind::RBrace | TokenKind::Eof => break,
+                TokenKind::KwTraceWidth => {
+                    self.bump();
+                    if let Some(v) = self.expect_value() {
+                        attrs.push(NetclassAttr::TraceWidth(v));
+                    }
+                }
+                TokenKind::KwClearance => {
+                    self.bump();
+                    if let Some(v) = self.expect_value() {
+                        attrs.push(NetclassAttr::Clearance(v));
+                    }
+                }
+                _ => {
+                    self.emit(
+                        self.peek().span,
+                        "E-SYNTH-PARSE-019",
+                        "unexpected attribute inside netclass",
+                        "`trace_width <value><unit>` or `clearance <value><unit>`",
+                        self.describe_current(),
+                        None,
+                    );
+                    self.bump();
+                }
+            }
+        }
+        if matches!(self.peek_kind(), TokenKind::RBrace) {
+            self.bump();
+        }
+        let end = self.last_offset();
+        Some(NetclassStmt {
+            name,
+            attrs,
+            span: Span::new(start, end),
+        })
+    }
+
     /// `group "<name>" { <statement>* }` — a named sub-circuit.
     ///
     /// The body accepts the same statements a board body does, parsed
@@ -870,6 +930,7 @@ impl Parser {
                 | TokenKind::KwComponent
                 | TokenKind::KwConnect
                 | TokenKind::KwDiffPair
+                | TokenKind::KwNetclass
                 | TokenKind::KwKeepout
                 | TokenKind::KwGroup
                 | TokenKind::KwPlacementHint => return,
@@ -904,9 +965,12 @@ impl Parser {
             TokenKind::KwComponent => "`component`".to_string(),
             TokenKind::KwConnect => "`connect`".to_string(),
             TokenKind::KwDiffPair => "`diff_pair`".to_string(),
+            TokenKind::KwNetclass => "`netclass`".to_string(),
             TokenKind::KwKeepout => "`keepout`".to_string(),
             TokenKind::KwGroup => "`group`".to_string(),
             TokenKind::KwImpedance => "`impedance`".to_string(),
+            TokenKind::KwTraceWidth => "`trace_width`".to_string(),
+            TokenKind::KwClearance => "`clearance`".to_string(),
             TokenKind::KwRadius => "`radius`".to_string(),
             TokenKind::KwValue => "`value`".to_string(),
             TokenKind::KwPlacementHint => "`placement_hint`".to_string(),
@@ -1085,5 +1149,29 @@ mod tests {
             panic!("Expected company statement")
         };
         assert_eq!(c.name, "Absmach");
+    }
+
+    #[test]
+    fn parse_netclass_statement() {
+        let src = r#"board "b" {
+            netclass "PWR" {
+                trace_width 0.5mm
+                clearance 0.2mm
+            }
+        }"#;
+        let tokens = lex(src);
+        let res = parse(tokens, "test.synth".into());
+        assert!(
+            res.diagnostics.is_empty(),
+            "Diagnostics should be empty: {:?}",
+            res.diagnostics
+        );
+        let ast = res.ast.unwrap();
+        let stmt = &ast.board.statements[0];
+        let StatementAst::Netclass(n) = stmt else {
+            panic!("Expected netclass statement")
+        };
+        assert_eq!(n.name, "PWR");
+        assert_eq!(n.attrs.len(), 2);
     }
 }

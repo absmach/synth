@@ -3387,6 +3387,7 @@ mod barycenter_tests {
             nets,
             diff_pairs: Vec::new(),
             keepouts: Vec::new(),
+            netclasses: vec![],
             source_span: Span::new(0, 0),
         }
     }
@@ -3584,6 +3585,7 @@ mod semantic_weights_tests {
             nets,
             diff_pairs: Vec::new(),
             keepouts: Vec::new(),
+            netclasses: vec![],
             source_span: Span::new(0, 0),
         }
     }
@@ -3901,6 +3903,7 @@ mod soft_pin_swap_tests {
             nets,
             diff_pairs: Vec::new(),
             keepouts: Vec::new(),
+            netclasses: vec![],
             source_span: Span::new(0, 0),
         }
     }
@@ -4130,6 +4133,7 @@ mod patterns_tests {
             nets,
             diff_pairs: Vec::new(),
             keepouts: Vec::new(),
+            netclasses: vec![],
             source_span: Span::new(0, 0),
         }
     }
@@ -4674,6 +4678,7 @@ mod naming_tests {
             nets,
             diff_pairs: Vec::new(),
             keepouts: Vec::new(),
+            netclasses: vec![],
             source_span: Span::new(0, 0),
         }
     }
