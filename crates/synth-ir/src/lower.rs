@@ -36,7 +36,7 @@ use std::collections::HashMap;
 
 use synth_ast::{
     ComponentDeclAst, DiffPairAttr, DiffPairStmt, EndpointAst, KeepoutAttr, KeepoutStmt,
-    ProgramAst, StatementAst,
+    NetclassStmt, ProgramAst, StatementAst,
 };
 use synth_diagnostics::{
     Diagnostic, DiagnosticBuilder, Location, Patch, PatchKind, Severity, SuggestedAction,
@@ -44,7 +44,7 @@ use synth_diagnostics::{
 use synth_registry::{Part, Registry};
 
 use crate::board::{
-    Board, Component, ComponentId, DiffPair, Keepout, Net, NetEndpoint, NetId, PinId,
+    Board, Component, ComponentId, DiffPair, Keepout, Net, NetClass, NetEndpoint, NetId, PinId,
     PlacementEdge, PlacementRegion, PlacementSide,
 };
 use crate::units::{ConversionError, Impedance, Length};
@@ -71,6 +71,7 @@ pub fn lower(ast: &ProgramAst, registry: &Registry, file: &str) -> LowerResult {
     let mut connections: Vec<(EndpointAst, EndpointAst, synth_diagnostics::Span)> = Vec::new();
     let mut diff_pairs: Vec<DiffPair> = Vec::new();
     let mut keepouts: Vec<Keepout> = Vec::new();
+    let mut netclasses: Vec<NetClass> = Vec::new();
     let mut layers: u32 = 0;
     let mut manufacturer: Option<String> = None;
     let mut revision: Option<String> = None;
@@ -107,6 +108,7 @@ pub fn lower(ast: &ProgramAst, registry: &Registry, file: &str) -> LowerResult {
             }
             StatementAst::DiffPair(d) => diff_pairs.push(ctx.lower_diff_pair(d)),
             StatementAst::Keepout(k) => keepouts.push(ctx.lower_keepout(k)),
+            StatementAst::Netclass(n) => netclasses.push(ctx.lower_netclass(n)),
             StatementAst::Group(g) => {
                 stack.push((&g.statements, 0, Some(g.name.as_str())));
             }
@@ -130,6 +132,7 @@ pub fn lower(ast: &ProgramAst, registry: &Registry, file: &str) -> LowerResult {
         nets,
         diff_pairs,
         keepouts,
+        netclasses,
         source_span: ast.board.span,
     };
 
@@ -220,6 +223,33 @@ impl<'a> LowerCtx<'a> {
             placement_hint,
             group: group.map(str::to_string),
             source_span: decl.span,
+        }
+    }
+
+    fn lower_netclass(&mut self, n: &NetclassStmt) -> NetClass {
+        use synth_ast::NetclassAttr;
+        let mut trace_width: Option<Length> = None;
+        let mut clearance: Option<Length> = None;
+        for attr in &n.attrs {
+            match attr {
+                NetclassAttr::TraceWidth(v) => match Length::try_from(v) {
+                    Ok(l) => trace_width = Some(l),
+                    Err(e) => self.emit_unit_error(&e, "netclass trace_width"),
+                },
+                NetclassAttr::Clearance(v) => match Length::try_from(v) {
+                    Ok(l) => clearance = Some(l),
+                    Err(e) => self.emit_unit_error(&e, "netclass clearance"),
+                },
+                // Non-exhaustive enum: future attrs reach here as a
+                // no-op until lowering learns about them.
+                _ => {}
+            }
+        }
+        NetClass {
+            name: n.name.clone(),
+            trace_width,
+            clearance,
+            source_span: n.span,
         }
     }
 
@@ -673,5 +703,35 @@ mod tests {
         let lower_res = lower(&ast, &registry, "test.synth");
         let board = lower_res.board.unwrap();
         assert_eq!(board.revision.as_deref(), Some("B"));
+    }
+
+    #[test]
+    fn test_lower_netclass_statement() {
+        let src = r#"board "b" {
+            netclass "PWR" {
+                trace_width 0.5mm
+                clearance 0.2mm
+            }
+        }"#;
+        let parse_res = parse(src, "test.synth");
+        assert!(
+            parse_res.diagnostics.is_empty(),
+            "{:?}",
+            parse_res.diagnostics
+        );
+        let ast = parse_res.ast.unwrap();
+        let registry = Registry::default();
+        let lower_res = lower(&ast, &registry, "test.synth");
+        assert!(
+            lower_res.diagnostics.is_empty(),
+            "{:?}",
+            lower_res.diagnostics
+        );
+        let board = lower_res.board.unwrap();
+        assert_eq!(board.netclasses.len(), 1);
+        let nc = &board.netclasses[0];
+        assert_eq!(nc.name, "PWR");
+        assert_eq!(nc.trace_width, Some(Length::from_mm(0.5)));
+        assert_eq!(nc.clearance, Some(Length::from_mm(0.2)));
     }
 }

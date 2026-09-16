@@ -154,6 +154,7 @@ mod tests {
             nets: vec![net1, net2],
             diff_pairs: vec![],
             keepouts: vec![],
+            netclasses: vec![],
             source_span: Span::new(0, 0),
         }
     }

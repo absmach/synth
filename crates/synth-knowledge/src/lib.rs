@@ -1023,6 +1023,7 @@ mod tests {
             nets,
             diff_pairs: vec![],
             keepouts: vec![],
+            netclasses: vec![],
             source_span: synth_diagnostics::Span::new(0, 100),
         }
     }

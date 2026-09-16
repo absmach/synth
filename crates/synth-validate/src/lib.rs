@@ -3110,6 +3110,7 @@ mod tests {
             layers: 2,
             manufacturer: None,
             revision: None,
+            company: None,
             components: vec![
                 comp(0, "U1", "regulator", reg, None),
                 comp(1, "R1", "resistor", r(rpins()), r1_value),
@@ -3134,6 +3135,7 @@ mod tests {
             ],
             diff_pairs: vec![],
             keepouts: vec![],
+            netclasses: vec![],
             source_span: Span::new(0, 0),
         }
     }
@@ -3222,6 +3224,7 @@ mod tests {
             nets: vec![],
             diff_pairs: vec![],
             keepouts: vec![],
+            netclasses: vec![],
             source_span: Span::new(0, 0),
         };
 

@@ -95,6 +95,7 @@ fn board(components: Vec<Component>, nets: Vec<Net>) -> synth_ir::Board {
         nets,
         diff_pairs: Vec::new(),
         keepouts: Vec::new(),
+        netclasses: vec![],
         source_span: Span::new(0, 0),
     }
 }

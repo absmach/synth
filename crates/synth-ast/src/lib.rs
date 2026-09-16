@@ -50,6 +50,7 @@ pub enum StatementAst {
     Component(ComponentDeclAst),
     Connection(ConnectionAst),
     DiffPair(DiffPairStmt),
+    Netclass(NetclassStmt),
     Keepout(KeepoutStmt),
     Group(GroupStmt),
 }
@@ -64,6 +65,7 @@ impl StatementAst {
             StatementAst::Component(s) => s.span,
             StatementAst::Connection(s) => s.span,
             StatementAst::DiffPair(s) => s.span,
+            StatementAst::Netclass(s) => s.span,
             StatementAst::Keepout(s) => s.span,
             StatementAst::Group(s) => s.span,
         }
@@ -175,6 +177,29 @@ pub struct DiffPairStmt {
 #[non_exhaustive]
 pub enum DiffPairAttr {
     Impedance(ValueWithUnit),
+}
+
+/// A named routing-constraint class: `netclass "PWR" { trace_width 0.5mm clearance 0.2mm }`.
+///
+/// V1 records the class and its rules; net-to-class assignment syntax
+/// (`connect … via class` / `net … in class`) and KiCad `net_class`
+/// export land in the follow-up. Declaring the classes first keeps
+/// the grammar extension reviewable and lets validation reference
+/// them (e.g. unknown-class diagnostics) before any geometry depends
+/// on them.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct NetclassStmt {
+    pub name: String,
+    pub attrs: Vec<NetclassAttr>,
+    pub span: Span,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(tag = "kind", rename_all = "snake_case")]
+#[non_exhaustive]
+pub enum NetclassAttr {
+    TraceWidth(ValueWithUnit),
+    Clearance(ValueWithUnit),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

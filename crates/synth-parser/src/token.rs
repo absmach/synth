@@ -32,9 +32,12 @@ pub enum TokenKind {
     KwComponent,
     KwConnect,
     KwDiffPair,
+    KwNetclass,
     KwKeepout,
     KwGroup,
     KwImpedance,
+    KwTraceWidth,
+    KwClearance,
     KwRadius,
     KwValue,
     KwPlacementHint,
@@ -367,9 +370,12 @@ impl<'a> Lexer<'a> {
             "component" => TokenKind::KwComponent,
             "connect" => TokenKind::KwConnect,
             "diff_pair" => TokenKind::KwDiffPair,
+            "netclass" => TokenKind::KwNetclass,
             "keepout" => TokenKind::KwKeepout,
             "group" => TokenKind::KwGroup,
             "impedance" => TokenKind::KwImpedance,
+            "trace_width" => TokenKind::KwTraceWidth,
+            "clearance" => TokenKind::KwClearance,
             "radius" => TokenKind::KwRadius,
             "value" => TokenKind::KwValue,
             "placement_hint" => TokenKind::KwPlacementHint,
@@ -411,7 +417,7 @@ mod tests {
     #[test]
     fn keywords_recognized() {
         let ks = kinds(
-            "board import layers manufacturer revision company component connect diff_pair keepout group impedance radius value",
+            "board import layers manufacturer revision company component connect diff_pair netclass keepout group impedance trace_width clearance radius value",
         );
         assert_eq!(
             ks,
@@ -425,9 +431,12 @@ mod tests {
                 TokenKind::KwComponent,
                 TokenKind::KwConnect,
                 TokenKind::KwDiffPair,
+                TokenKind::KwNetclass,
                 TokenKind::KwKeepout,
                 TokenKind::KwGroup,
                 TokenKind::KwImpedance,
+                TokenKind::KwTraceWidth,
+                TokenKind::KwClearance,
                 TokenKind::KwRadius,
                 TokenKind::KwValue,
                 TokenKind::Eof,

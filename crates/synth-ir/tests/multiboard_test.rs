@@ -27,6 +27,7 @@ fn create_dummy_board(name: &str, connector_refdes: &str) -> Board {
         nets: Vec::new(),
         diff_pairs: Vec::new(),
         keepouts: Vec::new(),
+        netclasses: vec![],
         source_span: Span::new(0, 0),
     }
 }

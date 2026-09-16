@@ -45,6 +45,10 @@ pub struct Board {
     pub nets: Vec<Net>,
     pub diff_pairs: Vec<DiffPair>,
     pub keepouts: Vec<Keepout>,
+    /// Declared routing-constraint classes (`netclass "PWR" { … }`).
+    /// V1 records the class rules; net-to-class assignment and
+    /// KiCad `net_class` export arrive in the follow-up.
+    pub netclasses: Vec<NetClass>,
     pub source_span: Span,
 }
 
@@ -171,6 +175,16 @@ pub struct DiffPair {
 pub struct Keepout {
     pub name: String,
     pub radius: Option<Length>,
+    pub source_span: Span,
+}
+
+/// A named routing-constraint class with optional default trace
+/// width and clearance rules, in integer base units.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct NetClass {
+    pub name: String,
+    pub trace_width: Option<Length>,
+    pub clearance: Option<Length>,
     pub source_span: Span,
 }
 

@@ -66,6 +66,7 @@ fn create_test_board() -> Board {
         nets: vec![net1],
         diff_pairs: vec![],
         keepouts: vec![],
+        netclasses: vec![],
         source_span: dummy_span,
     }
 }
