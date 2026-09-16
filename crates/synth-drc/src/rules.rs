@@ -567,6 +567,8 @@ pub fn run_kicad_cli_drc(kicad_pcb_path: &std::path::Path) -> Result<Vec<Violati
         .args([
             "pcb",
             "drc",
+            "--refill-zones",
+            "--save-board",
             "--output",
             report_file.to_str().unwrap(),
             "--format",

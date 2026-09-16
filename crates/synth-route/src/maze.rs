@@ -48,8 +48,12 @@ use crate::{Routing, Segment};
 use synth_place::Placement;
 
 /// Default trace width for general signal nets, in nanometers.
-/// Matches 5-mil standard (0.127 mm) — standard PCB fab baseline.
+/// Standard 5-mil signal width. Power and RF classes widen this explicitly.
 const DEFAULT_TRACE_WIDTH_NM: i64 = 127_000;
+/// Copper-to-copper clearance used by the generated KiCad board and by the
+/// native `kicad-cli pcb drc` path. Keep this explicit instead of relying on
+/// KiCad project defaults, which vary when a board is opened standalone.
+const ROUTING_CLEARANCE_NM: i64 = 127_000;
 const RF_50_TRACE_WIDTH_NM: i64 = 330_000;
 const POWER_TRACE_WIDTH_NM: i64 = 500_000;
 const HIGH_CURRENT_TRACE_WIDTH_NM: i64 = 600_000;
@@ -547,6 +551,7 @@ fn negotiate(
     let mut best_segments: Vec<Segment> = Vec::new();
     let mut best_vias: Vec<crate::Via> = Vec::new();
     let mut best_routed: usize = 0;
+    let mut best_dangling = usize::MAX;
     // See `PLATEAU_LIMIT`: consecutive iterations that failed to
     // improve the routed-net count. Iteration 0 always counts as an
     // improvement (best starts at 0), so the break only fires after
@@ -558,14 +563,13 @@ fn negotiate(
         let mut present: Vec<u32> = vec![0; base_grid.width * base_grid.height];
         let mut segments: Vec<Segment> = Vec::new();
         let mut vias: Vec<crate::Via> = Vec::new();
-        let mut routed_count = 0_usize;
         let mut iter_cells_expanded: u64 = 0;
 
         for net in ordered {
             if net.endpoints.len() < 2 || is_plane_net(net, board) {
                 continue;
             }
-            if route_net(
+            route_net(
                 &mut grid,
                 net,
                 &mut segments,
@@ -578,14 +582,33 @@ fn negotiate(
                 &mut iter_cells_expanded,
                 iteration,
                 min_trace_width_nm,
-            ) {
-                routed_count += 1;
-            }
+            );
         }
         *total_cells_expanded += iter_cells_expanded;
 
-        if routed_count >= best_routed {
+        // A* may emit useful-looking partial copper before it gives up.
+        // Do not count that as a routed net: flood-fill the actual grid and
+        // count only nets whose every pad cluster is connected.
+        let partial = find_partial_nets(&grid, board);
+        let dangling: usize = partial.iter().map(|(_, pads)| pads.len()).sum();
+        let partial_ids: std::collections::HashSet<NetId> =
+            partial.iter().map(|(id, _)| *id).collect();
+        let routed_count = ordered
+            .iter()
+            .filter(|net| {
+                net.endpoints.len() >= 2
+                    && !is_plane_net(net, board)
+                    && !partial_ids.contains(&net.id)
+            })
+            .count();
+
+        // Keep the first equal-coverage candidate: ordered nets are
+        // deliberately prioritized, and replacing a constrained-first
+        // solution with a later tie can strand the net that motivated the
+        // rip-up pass.
+        if routed_count > best_routed || (routed_count == best_routed && dangling < best_dangling) {
             best_routed = routed_count;
+            best_dangling = dangling;
             best_segments.clone_from(&segments);
             best_vias.clone_from(&vias);
             plateau = 0;
@@ -826,7 +849,13 @@ pub(crate) fn route_net(
         sources.extend(path);
         any_progress = true;
     }
+    // A partial leg is not a successful route. The caller may still keep
+    // its copper as a candidate for rip-up, but success must mean that the
+    // committed grid connects every pad cluster for this net.
     any_progress
+        && !find_partial_nets(grid, board)
+            .iter()
+            .any(|(partial_net, _)| *partial_net == net.id)
 }
 
 /// 2D projection helper for sink-distance comparisons.
@@ -1078,10 +1107,40 @@ fn astar(
             // nets behind hard obstacles.
             let foreign_penalty: i32 = match grid.get(cl, nx, ny) {
                 Some(Cell::Free) => {
-                    if is_adjacent_to_foreign_pad(grid, cl, nx, ny, net) {
+                    // Fine-pitch packages often have no full-clearance grid
+                    // cell immediately beside a signal pad. Permit the first
+                    // two cells of the pad escape to be evaluated by the
+                    // final physical DRC instead of stranding the net in the
+                    // coarse maze. The relaxation is local to the source pad,
+                    // top copper, and cannot be used later in a route.
+                    let pad_escape = cl == 0
+                        && sources
+                            .iter()
+                            .any(|&(_, sx, sy)| manhattan((sx, sy), (nx, ny)) <= 2);
+                    if !pad_escape && is_adjacent_to_foreign_pad(grid, cl, nx, ny, net) {
                         continue;
                     }
                     let cell_pt = grid.cell_centre(cl, nx, ny);
+                    // The grid is intentionally coarse for performance, so
+                    // a free cell can still be physically too close to a
+                    // small pad between grid centres. Check the actual
+                    // axis-aligned move against every foreign pad before
+                    // accepting it. This is especially important for dense
+                    // QFN/MCU footprints and unassigned pads, which KiCad
+                    // correctly treats as copper even though they have no net.
+                    let step_start = grid.cell_centre(cl, cx, cy);
+                    let min_pad_clearance = width / 2 + ROUTING_CLEARANCE_NM + 30_000;
+                    let pad_too_close = grid.pads.iter().any(|&(pad_net, pad_rect)| {
+                        if pad_net == net {
+                            return false;
+                        }
+                        let distance_sq =
+                            dist_sq_axis_aligned_segment_to_rect(step_start, cell_pt, &pad_rect);
+                        distance_sq < min_pad_clearance * min_pad_clearance
+                    });
+                    if pad_too_close && !pad_escape {
+                        continue;
+                    }
                     // `pad_keepout` is a two-cell ring around every pad.
                     // At the 0.5 mm routing pitch that ring is wider than
                     // the maximum Family A pad/trace clearance envelope,
@@ -1152,7 +1211,7 @@ fn astar(
                                 if seg.net == net || seg.layer != cur_layer {
                                     continue;
                                 }
-                                let min_d = (width + seg.width_nm) / 2 + 127_000_i64;
+                                let min_d = (width + seg.width_nm) / 2 + ROUTING_CLEARANCE_NM;
                                 if min_d <= grid.pitch_nm {
                                     // Grid-adjacency already covers this clearance distance.
                                     continue;
@@ -1634,7 +1693,11 @@ fn emit_segments_and_vias(
 
     let neck_down_nm = min_trace_width_nm;
     let compute_segment_width = |a: Point, b: Point| -> i64 {
-        if width_nm <= neck_down_nm {
+        // Only ordinary signal nets may neck down at a pad. Power and RF
+        // nets have larger KiCad netclass minimums; emitting a 0.127 mm
+        // escape for those nets creates a native `track_width` violation
+        // even though the route is electrically connected.
+        if width_nm <= neck_down_nm || width_nm != DEFAULT_TRACE_WIDTH_NM {
             return width_nm;
         }
         let pad_neighborhood_nm = 3_500_000_i64; // 3.5 mm standoff

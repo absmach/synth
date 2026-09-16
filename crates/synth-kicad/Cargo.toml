@@ -18,6 +18,7 @@ synth-geometry = { workspace = true }
 synth-layout = { workspace = true }
 synth-place = { workspace = true }
 synth-route = { workspace = true }
+synth-drc = { workspace = true }
 synth-registry = { workspace = true }
 sha2 = { workspace = true }
 serde = { workspace = true }

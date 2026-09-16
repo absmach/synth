@@ -232,10 +232,16 @@ fn build_gnd_zone(
     project: &Uuid,
 ) -> Sexp {
     let r = placement.board_outline;
-    let min_x = nm_to_mm(r.min.x_nm);
-    let min_y = nm_to_mm(r.min.y_nm);
-    let max_x = nm_to_mm(r.max.x_nm);
-    let max_y = nm_to_mm(r.max.y_nm);
+    // Keep the zone just inside Edge.Cuts.  A polygon whose vertices lie
+    // exactly on the board boundary can be entirely removed by KiCad's edge
+    // clearance during refill, leaving every ground pad reported as
+    // unconnected.  The inset is smaller than the normal board margin and
+    // still covers all ordinary ground pads, including edge connectors.
+    let inset = 0.5;
+    let min_x = nm_to_mm(r.min.x_nm) + inset;
+    let min_y = nm_to_mm(r.min.y_nm) + inset;
+    let max_x = nm_to_mm(r.max.x_nm) - inset;
+    let max_y = nm_to_mm(r.max.y_nm) - inset;
     let zone_uuid = derive_entity_uuid(project, "zone", layer_name);
 
     let pts = vec![
@@ -473,7 +479,11 @@ fn build_setup() -> Sexp {
                 "allow_soldermask_bridges_in_footprints",
                 vec![Sexp::atom("yes")],
             ),
+            // Keep these minima aligned with the router's default signal
+            // width and the KiCad board defaults used during native DRC.
             Sexp::list("trace_min", vec![num(0.127)]),
+            // 0.127 mm is the default profile's copper clearance; the
+            // router enforces this same value when choosing grid moves.
             Sexp::list("clearance_min", vec![num(0.127)]),
             Sexp::list("via_min_size", vec![num(0.60)]),
             Sexp::list("via_min_drill", vec![num(0.30)]),
@@ -569,7 +579,7 @@ fn build_netclasses(net_table: &[(u32, String)], board: &Board) -> Vec<Sexp> {
         let mut power_args = vec![
             Sexp::str("Power"),
             Sexp::str("Power delivery network"),
-            Sexp::list("clearance", vec![num(0.127)]),
+            Sexp::list("clearance", vec![num(0.2)]),
             Sexp::list("trace_width", vec![num(0.50)]),
             Sexp::list("via_dia", vec![num(0.80)]),
             Sexp::list("via_drill", vec![num(0.40)]),
@@ -585,7 +595,7 @@ fn build_netclasses(net_table: &[(u32, String)], board: &Board) -> Vec<Sexp> {
         let mut rf_args = vec![
             Sexp::str("RF_50"),
             Sexp::str("Controlled 50 ohm RF"),
-            Sexp::list("clearance", vec![num(0.127)]),
+            Sexp::list("clearance", vec![num(0.2)]),
             Sexp::list("trace_width", vec![num(0.33)]),
             Sexp::list("via_dia", vec![num(0.60)]),
             Sexp::list("via_drill", vec![num(0.30)]),

@@ -137,7 +137,7 @@ pub fn import_project(
         net_classes: vec!["Default".to_string(), "Power".to_string()],
         constraints: HashMap::from([
             ("min_trace_width_mm".to_string(), "0.127".to_string()),
-            ("min_clearance_mm".to_string(), "0.20".to_string()),
+            ("min_clearance_mm".to_string(), "0.127".to_string()),
         ]),
         native_erc_warning_count: 0,
         native_drc_warning_count: 0,

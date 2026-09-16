@@ -182,21 +182,6 @@ impl ErcRule for RequiredPinsConnectedRule {
                         ))
                         .found(format!("`{}.{}` is floating", component.refdes, pin.name))
                         .explanation_url(format!("synth.docs/diagnostics/{}", self.code()))
-                        .suggested_fix(synth_diagnostics::Patch {
-                            confidence: 0.7,
-                            rationale: Some(format!(
-                                "wire required pin `{}.{}` to connector",
-                                component.refdes, pin.name
-                            )),
-                            patch_consequence_preview: None,
-                            kind: synth_diagnostics::PatchKind::InsertAt {
-                                at: board.source_span.byte_end.saturating_sub(1),
-                                text: format!(
-                                    "  connect {}.{} -> J1.p1\n",
-                                    component.refdes, pin.name
-                                ),
-                            },
-                        })
                         .build(),
                     );
                 }
@@ -387,7 +372,7 @@ impl ErcRule for SingleEndpointNetRule {
                 out.push(
                     DiagnosticBuilder::new(
                         self.code(),
-                        Severity::Error,
+                        Severity::Warning,
                         "net has only one endpoint",
                     )
                     .location(Location::from_span(file.to_string(), endpoint.source_span))
@@ -810,7 +795,7 @@ impl ErcRule for I2cPullupMissingRule {
                         net.endpoints[0].source_span,
                     ))
                     .expected(format!(
-                        "at least one resistor on net `{}` (SDA/SCL require external pullups)",
+                        "a verified resistor must connect `{}` to a verified power rail; add one pullup on each SDA/SCL net",
                         net.name,
                     ))
                     .found("no resistor component endpoints on this net".to_string())
