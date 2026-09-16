@@ -109,6 +109,7 @@ fn two_row_board_and_layout() -> (Board, Layout) {
         layers: 2,
         manufacturer: None,
         revision: None,
+        company: None,
         components: vec![
             resistor(ComponentId(0), "R1"),
             resistor(ComponentId(1), "R2"),

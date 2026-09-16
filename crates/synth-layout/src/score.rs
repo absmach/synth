@@ -141,6 +141,7 @@ mod tests {
             layers: 2,
             manufacturer: None,
             revision: None,
+            company: None,
             components: Vec::new(),
             nets: Vec::new(),
             diff_pairs: Vec::new(),

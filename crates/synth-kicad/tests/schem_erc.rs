@@ -21,6 +21,7 @@ fn empty_board() -> Board {
         layers: 2,
         manufacturer: None,
         revision: None,
+        company: None,
         components: Vec::new(),
         nets: Vec::new(),
         diff_pairs: Vec::new(),
@@ -195,6 +196,7 @@ fn decoupling_board() -> Board {
         layers: 2,
         manufacturer: None,
         revision: None,
+        company: None,
         components: vec![
             Component {
                 id: ComponentId(0),

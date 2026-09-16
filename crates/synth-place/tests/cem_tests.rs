@@ -61,6 +61,7 @@ fn create_test_board() -> Board {
         layers: 2,
         manufacturer: None,
         revision: None,
+        company: None,
         components: vec![c1, c2, c3],
         nets: vec![net1],
         diff_pairs: vec![],

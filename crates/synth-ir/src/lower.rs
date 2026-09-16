@@ -74,6 +74,7 @@ pub fn lower(ast: &ProgramAst, registry: &Registry, file: &str) -> LowerResult {
     let mut layers: u32 = 0;
     let mut manufacturer: Option<String> = None;
     let mut revision: Option<String> = None;
+    let mut company: Option<String> = None;
 
     // Groups are flattened here, not represented in the IR as a tree:
     // a group names its components and nothing more (see `GroupStmt`),
@@ -91,6 +92,7 @@ pub fn lower(ast: &ProgramAst, registry: &Registry, file: &str) -> LowerResult {
             StatementAst::Layers(l) => layers = l.count,
             StatementAst::Manufacturer(m) => manufacturer = Some(m.name.clone()),
             StatementAst::Revision(r) => revision = Some(r.rev.clone()),
+            StatementAst::Company(c) => company = Some(c.name.clone()),
             StatementAst::Component(c) => {
                 let comp = ctx.lower_component(c, registry, components.len(), group);
                 if refdes_index.contains_key(&comp.refdes) {
@@ -123,6 +125,7 @@ pub fn lower(ast: &ProgramAst, registry: &Registry, file: &str) -> LowerResult {
         layers,
         manufacturer,
         revision,
+        company,
         components,
         nets,
         diff_pairs,

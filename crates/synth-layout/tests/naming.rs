@@ -90,6 +90,7 @@ fn board(components: Vec<Component>, nets: Vec<Net>) -> synth_ir::Board {
         layers: 2,
         manufacturer: None,
         revision: None,
+        company: None,
         components,
         nets,
         diff_pairs: Vec::new(),

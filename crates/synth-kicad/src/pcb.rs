@@ -1267,6 +1267,7 @@ mod tests {
             layers: 2,
             manufacturer: None,
             revision: None,
+            company: None,
             components: vec![],
             nets: vec![
                 synth_ir::Net {
@@ -1325,6 +1326,7 @@ mod tests {
             layers: 4,
             manufacturer: Some("jlcpcb".to_string()),
             revision: Some("A".to_string()),
+            company: None,
             components: vec![],
             nets: vec![],
             diff_pairs: vec![],

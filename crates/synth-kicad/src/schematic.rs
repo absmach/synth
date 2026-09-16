@@ -128,8 +128,9 @@ pub(crate) fn build_schematic_from_layout(
     // Professional drawings document who builds the board; KiCad
     // renders this inside the title block as note 3. Omitted entirely
     // when no fab is declared (no empty comment clutter). The
-    // design-authority "company" field is deliberately left blank —
-    // the fab is not the design company.
+    // design-authority "company" field below comes from the
+    // `company "…"` board statement — the fab is not the design
+    // company.
     let fab_comment = board.manufacturer.as_deref().map(|fab| {
         Sexp::list(
             "comment",
@@ -167,7 +168,10 @@ pub(crate) fn build_schematic_from_layout(
                     "rev",
                     vec![Sexp::str(board.revision.as_deref().unwrap_or(""))],
                 ),
-                Sexp::list("company", vec![Sexp::str("")]),
+                Sexp::list(
+                    "company",
+                    vec![Sexp::str(board.company.as_deref().unwrap_or(""))],
+                ),
                 // Design notes (ProtoExpress "Schematic Design Rules":
                 // "Provide all the required notes related to the
                 // schematic"). KiCad renders `comment` entries inside
@@ -1316,6 +1320,33 @@ mod tests {
         assert!(
             flat.contains("(rev \"C\")"),
             "title block must carry the board revision when declared"
+        );
+    }
+
+    #[test]
+    fn title_block_company_flows_from_board_company() {
+        let (mut board, _sexp, _text) = build_reference("sensor_logger");
+        board.company = Some("Absmach".to_string());
+        let sexp = build_schematic(&board, &crate::uuid_v5::project_namespace(&board.name));
+        let text = sexp.to_string_pretty();
+        let flat: String = text.split_whitespace().collect::<Vec<_>>().join(" ");
+        assert!(
+            flat.contains("(company \"Absmach\")"),
+            "title block must carry the design-authority company when declared"
+        );
+    }
+
+    #[test]
+    fn title_block_company_blank_when_undeclared() {
+        let (board, _sexp, text) = build_reference("sensor_logger");
+        assert!(
+            board.company.is_none(),
+            "sensor_logger fixture declares no company"
+        );
+        let flat: String = text.split_whitespace().collect::<Vec<_>>().join(" ");
+        assert!(
+            flat.contains("(company \"\")"),
+            "title block company must be blank (not omitted) when undeclared"
         );
     }
 

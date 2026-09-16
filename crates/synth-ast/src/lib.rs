@@ -46,6 +46,7 @@ pub enum StatementAst {
     Layers(LayersStmt),
     Manufacturer(ManufacturerStmt),
     Revision(RevisionStmt),
+    Company(CompanyStmt),
     Component(ComponentDeclAst),
     Connection(ConnectionAst),
     DiffPair(DiffPairStmt),
@@ -59,6 +60,7 @@ impl StatementAst {
             StatementAst::Layers(s) => s.span,
             StatementAst::Manufacturer(s) => s.span,
             StatementAst::Revision(s) => s.span,
+            StatementAst::Company(s) => s.span,
             StatementAst::Component(s) => s.span,
             StatementAst::Connection(s) => s.span,
             StatementAst::DiffPair(s) => s.span,
@@ -101,6 +103,17 @@ pub struct ManufacturerStmt {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct RevisionStmt {
     pub rev: String,
+    pub span: Span,
+}
+
+/// Design-authority company name, carried into the schematic title
+/// block's Company field (Sierra Circuits "Schematic Design Rules":
+/// the title block should display the Company). Unlike
+/// `ManufacturerStmt` (who *builds* the board), this names who
+/// *designed* it.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct CompanyStmt {
+    pub name: String,
     pub span: Span,
 }
 
