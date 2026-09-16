@@ -49,9 +49,14 @@ use crate::board::{
 };
 use crate::units::{ConversionError, Impedance, Length};
 
+/// One frame of the block-flattening walk in [`lower`]: the statement
+/// slice, the next index into it, and the enclosing group/sheet
+/// names. Aliased because the bare 4-tuple trips
+/// `clippy::type_complexity`.
+type BlockFrame<'a> = (&'a [StatementAst], usize, Option<&'a str>, Option<&'a str>);
+
 #[derive(Debug)]
-pub struct LowerResult {
-    pub board: Option<Board>,
+pub struct LowerResult {    pub board: Option<Board>,
     pub diagnostics: Vec<Diagnostic>,
 }
 
@@ -85,8 +90,7 @@ pub fn lower(ast: &ProgramAst, registry: &Registry, file: &str) -> LowerResult {
     // before. `stack` is the enclosing block chain; nested blocks
     // take the innermost name, and sheets nest independently of
     // groups (a component may carry both).
-    let mut stack: Vec<(&[StatementAst], usize, Option<&str>, Option<&str>)> =
-        vec![(&ast.board.statements, 0, None, None)];
+    let mut stack: Vec<BlockFrame<'_>> = vec![(&ast.board.statements, 0, None, None)];
     while let Some((statements, index, group, sheet)) = stack.pop() {
         let Some(stmt) = statements.get(index) else {
             continue;
