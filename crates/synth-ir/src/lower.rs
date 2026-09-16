@@ -77,25 +77,28 @@ pub fn lower(ast: &ProgramAst, registry: &Registry, file: &str) -> LowerResult {
     let mut revision: Option<String> = None;
     let mut company: Option<String> = None;
 
-    // Groups are flattened here, not represented in the IR as a tree:
-    // a group names its components and nothing more (see `GroupStmt`),
-    // so lowering walks into one carrying the name down and leaves the
-    // board a flat component list exactly as before. `stack` is the
-    // enclosing group chain; nested groups take the innermost name.
-    let mut stack: Vec<(&[StatementAst], usize, Option<&str>)> =
-        vec![(&ast.board.statements, 0, None)];
-    while let Some((statements, index, group)) = stack.pop() {
+    // Groups and sheets are flattened here, not represented in the
+    // IR as a tree: a group names its components and a sheet names
+    // its future hierarchical-sheet boundary (see `GroupStmt` /
+    // `SheetStmt`), so lowering walks into each carrying the names
+    // down and leaves the board a flat component list exactly as
+    // before. `stack` is the enclosing block chain; nested blocks
+    // take the innermost name, and sheets nest independently of
+    // groups (a component may carry both).
+    let mut stack: Vec<(&[StatementAst], usize, Option<&str>, Option<&str>)> =
+        vec![(&ast.board.statements, 0, None, None)];
+    while let Some((statements, index, group, sheet)) = stack.pop() {
         let Some(stmt) = statements.get(index) else {
             continue;
         };
-        stack.push((statements, index + 1, group));
+        stack.push((statements, index + 1, group, sheet));
         match stmt {
             StatementAst::Layers(l) => layers = l.count,
             StatementAst::Manufacturer(m) => manufacturer = Some(m.name.clone()),
             StatementAst::Revision(r) => revision = Some(r.rev.clone()),
             StatementAst::Company(c) => company = Some(c.name.clone()),
             StatementAst::Component(c) => {
-                let comp = ctx.lower_component(c, registry, components.len(), group);
+                let comp = ctx.lower_component(c, registry, components.len(), group, sheet);
                 if refdes_index.contains_key(&comp.refdes) {
                     ctx.emit_duplicate_refdes(&comp.refdes, comp.source_span);
                 } else {
@@ -110,7 +113,10 @@ pub fn lower(ast: &ProgramAst, registry: &Registry, file: &str) -> LowerResult {
             StatementAst::Keepout(k) => keepouts.push(ctx.lower_keepout(k)),
             StatementAst::Netclass(n) => netclasses.push(ctx.lower_netclass(n)),
             StatementAst::Group(g) => {
-                stack.push((&g.statements, 0, Some(g.name.as_str())));
+                stack.push((&g.statements, 0, Some(g.name.as_str()), sheet));
+            }
+            StatementAst::Sheet(s) => {
+                stack.push((&s.statements, 0, group, Some(s.name.as_str())));
             }
             // StatementAst is #[non_exhaustive]; future statement
             // kinds reach here until lowering is taught about them.
@@ -161,6 +167,7 @@ impl<'a> LowerCtx<'a> {
         registry: &Registry,
         next_index: usize,
         group: Option<&str>,
+        sheet: Option<&str>,
     ) -> Component {
         let part_id = decl.part.as_deref().unwrap_or("");
         let part = registry.lookup(part_id).cloned();
@@ -222,6 +229,7 @@ impl<'a> LowerCtx<'a> {
             value: decl.value.clone(),
             placement_hint,
             group: group.map(str::to_string),
+            sheet: sheet.map(str::to_string),
             source_span: decl.span,
         }
     }
@@ -733,5 +741,42 @@ mod tests {
         assert_eq!(nc.name, "PWR");
         assert_eq!(nc.trace_width, Some(Length::from_mm(0.5)));
         assert_eq!(nc.clearance, Some(Length::from_mm(0.2)));
+    }
+
+    #[test]
+    fn test_lower_sheet_annotation() {
+        let src = r#"board "b" {
+            sheet "Power" {
+                component C1: capacitor "c_generic_0603"
+            }
+            component R1: resistor "r_generic_0603"
+        }"#;
+        let parse_res = parse(src, "test.synth");
+        let ast = parse_res.ast.unwrap();
+        let registry = Registry::default();
+        let lower_res = lower(&ast, &registry, "test.synth");
+        let board = lower_res.board.unwrap();
+        assert_eq!(board.components.len(), 2);
+        assert_eq!(board.components[0].sheet.as_deref(), Some("Power"));
+        assert_eq!(board.components[1].sheet, None);
+    }
+
+    #[test]
+    fn test_lower_sheet_and_group_nest() {
+        let src = r#"board "b" {
+            sheet "Power" {
+                group "LDO input" {
+                    component C1: capacitor "c_generic_0603"
+                }
+            }
+        }"#;
+        let parse_res = parse(src, "test.synth");
+        let ast = parse_res.ast.unwrap();
+        let registry = Registry::default();
+        let lower_res = lower(&ast, &registry, "test.synth");
+        let board = lower_res.board.unwrap();
+        let comp = &board.components[0];
+        assert_eq!(comp.sheet.as_deref(), Some("Power"));
+        assert_eq!(comp.group.as_deref(), Some("LDO input"));
     }
 }

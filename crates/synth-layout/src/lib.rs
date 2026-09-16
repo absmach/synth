@@ -3357,6 +3357,7 @@ mod barycenter_tests {
             value: None,
             placement_hint: None,
             group: None,
+            sheet: None,
             source_span: Span::new(0, 0),
         }
     }
@@ -3555,6 +3556,7 @@ mod semantic_weights_tests {
             value: None,
             placement_hint: None,
             group: None,
+            sheet: None,
             source_span: Span::new(0, 0),
         }
     }
@@ -3873,6 +3875,7 @@ mod soft_pin_swap_tests {
             value: None,
             placement_hint: None,
             group: None,
+            sheet: None,
             source_span: Span::new(0, 0),
         }
     }
@@ -4103,6 +4106,7 @@ mod patterns_tests {
             value: None,
             placement_hint: None,
             group: None,
+            sheet: None,
             source_span: Span::new(0, 0),
         }
     }
@@ -4439,6 +4443,7 @@ mod text_width_tests {
             value: value.map(str::to_string),
             placement_hint: None,
             group: None,
+            sheet: None,
             source_span: Span::new(0, 0),
         }
     }
@@ -4648,6 +4653,7 @@ mod naming_tests {
             value: None,
             placement_hint: None,
             group: None,
+            sheet: None,
             source_span: Span::new(0, 0),
         }
     }

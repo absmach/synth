@@ -1151,6 +1151,7 @@ mod tests {
             value: None,
             placement_hint: None,
             group: None,
+            sheet: None,
             source_span: Span::new(0, 0),
         };
         let placement = ComponentPlacement {

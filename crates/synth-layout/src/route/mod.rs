@@ -2205,6 +2205,7 @@ mod cleanup_tests {
                 value: None,
                 placement_hint: None,
                 group: None,
+                sheet: None,
                 source_span: synth_diagnostics::Span::new(0, 0),
             });
         }
@@ -2360,6 +2361,7 @@ mod channel_router_tests {
             value: None,
             placement_hint: None,
             group: None,
+            sheet: None,
             source_span: synth_diagnostics::Span::new(0, 0),
         }
     }
@@ -2631,6 +2633,7 @@ mod drc_tests {
             value: None,
             placement_hint: None,
             group: None,
+            sheet: None,
             source_span: synth_diagnostics::Span::new(0, 0),
         }
     }
@@ -2851,6 +2854,7 @@ mod net_termination_tests {
                     value: None,
                     placement_hint: None,
                     group: None,
+                    sheet: None,
                     source_span: synth_diagnostics::Span::new(0, 0),
                 },
                 synth_ir::Component {
@@ -2861,6 +2865,7 @@ mod net_termination_tests {
                     value: None,
                     placement_hint: None,
                     group: None,
+                    sheet: None,
                     source_span: synth_diagnostics::Span::new(0, 0),
                 },
             ],

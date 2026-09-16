@@ -68,6 +68,7 @@ fn component(id: u32, refdes: &str, p: Part) -> Component {
         value: None,
         placement_hint: None,
         group: None,
+        sheet: None,
         source_span: synth_diagnostics::Span::new(0, 0),
     }
 }

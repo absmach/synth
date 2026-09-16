@@ -207,6 +207,7 @@ fn decoupling_board() -> Board {
                 value: None,
                 placement_hint: None,
                 group: None,
+                sheet: None,
                 source_span: Span::new(0, 0),
             },
             Component {
@@ -217,6 +218,7 @@ fn decoupling_board() -> Board {
                 value: None,
                 placement_hint: None,
                 group: None,
+                sheet: None,
                 source_span: Span::new(0, 0),
             },
         ],
