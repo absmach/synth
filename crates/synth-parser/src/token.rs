@@ -28,6 +28,7 @@ pub enum TokenKind {
     KwLayers,
     KwManufacturer,
     KwRevision,
+    KwCompany,
     KwComponent,
     KwConnect,
     KwDiffPair,
@@ -362,6 +363,7 @@ impl<'a> Lexer<'a> {
             "layers" => TokenKind::KwLayers,
             "manufacturer" => TokenKind::KwManufacturer,
             "revision" => TokenKind::KwRevision,
+            "company" => TokenKind::KwCompany,
             "component" => TokenKind::KwComponent,
             "connect" => TokenKind::KwConnect,
             "diff_pair" => TokenKind::KwDiffPair,
@@ -409,7 +411,7 @@ mod tests {
     #[test]
     fn keywords_recognized() {
         let ks = kinds(
-            "board import layers manufacturer revision component connect diff_pair keepout group impedance radius value",
+            "board import layers manufacturer revision company component connect diff_pair keepout group impedance radius value",
         );
         assert_eq!(
             ks,
@@ -419,6 +421,7 @@ mod tests {
                 TokenKind::KwLayers,
                 TokenKind::KwManufacturer,
                 TokenKind::KwRevision,
+                TokenKind::KwCompany,
                 TokenKind::KwComponent,
                 TokenKind::KwConnect,
                 TokenKind::KwDiffPair,

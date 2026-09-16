@@ -1018,6 +1018,7 @@ mod tests {
             layers: 2,
             manufacturer: None,
             revision: None,
+            company: None,
             components,
             nets,
             diff_pairs: vec![],

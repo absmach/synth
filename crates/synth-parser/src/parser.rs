@@ -13,8 +13,8 @@
 //! at most one diagnostic per statement.
 
 use synth_ast::{
-    BoardAst, ComponentDeclAst, ConnectionAst, DiffPairAttr, DiffPairStmt, EndpointAst, GroupStmt,
-    ImportAst, KeepoutAttr, KeepoutStmt, LayersStmt, ManufacturerStmt, PlacementHintAst,
+    BoardAst, CompanyStmt, ComponentDeclAst, ConnectionAst, DiffPairAttr, DiffPairStmt, EndpointAst,
+    GroupStmt, ImportAst, KeepoutAttr, KeepoutStmt, LayersStmt, ManufacturerStmt, PlacementHintAst,
     PlacementHintAttr, ProgramAst, RevisionStmt, StatementAst, ValueWithUnit,
 };
 use synth_diagnostics::{
@@ -284,6 +284,7 @@ impl Parser {
             TokenKind::KwLayers => self.parse_layers().map(StatementAst::Layers),
             TokenKind::KwManufacturer => self.parse_manufacturer().map(StatementAst::Manufacturer),
             TokenKind::KwRevision => self.parse_revision().map(StatementAst::Revision),
+            TokenKind::KwCompany => self.parse_company().map(StatementAst::Company),
             TokenKind::KwComponent => self.parse_component().map(StatementAst::Component),
             TokenKind::KwConnect => self.parse_connection().map(StatementAst::Connection),
             TokenKind::KwDiffPair => self.parse_diff_pair().map(StatementAst::DiffPair),
@@ -294,7 +295,7 @@ impl Parser {
                     self.peek().span,
                     "E-SYNTH-PARSE-011",
                     "expected statement keyword",
-                    "one of: layers, manufacturer, revision, component, connect, diff_pair, keepout, group",
+                    "one of: layers, manufacturer, revision, company, component, connect, diff_pair, keepout, group",
                     self.describe_current(),
                     None,
                 );
@@ -359,6 +360,20 @@ impl Parser {
         let end = self.last_offset();
         Some(RevisionStmt {
             rev,
+            span: Span::new(start, end),
+        })
+    }
+
+    fn parse_company(&mut self) -> Option<CompanyStmt> {
+        let start = self.peek().span.byte_start;
+        self.bump();
+        let name = self.expect_string(
+            "E-SYNTH-PARSE-015",
+            "expected company name (quoted string)",
+        )?;
+        let end = self.last_offset();
+        Some(CompanyStmt {
+            name,
             span: Span::new(start, end),
         })
     }
@@ -885,6 +900,7 @@ impl Parser {
             TokenKind::KwLayers => "`layers`".to_string(),
             TokenKind::KwManufacturer => "`manufacturer`".to_string(),
             TokenKind::KwRevision => "`revision`".to_string(),
+            TokenKind::KwCompany => "`company`".to_string(),
             TokenKind::KwComponent => "`component`".to_string(),
             TokenKind::KwConnect => "`connect`".to_string(),
             TokenKind::KwDiffPair => "`diff_pair`".to_string(),
@@ -1049,5 +1065,25 @@ mod tests {
             panic!("Expected revision statement")
         };
         assert_eq!(r.rev, "A");
+    }
+
+    #[test]
+    fn parse_company_statement() {
+        let src = r#"board "b" {
+            company "Absmach"
+        }"#;
+        let tokens = lex(src);
+        let res = parse(tokens, "test.synth".into());
+        assert!(
+            res.diagnostics.is_empty(),
+            "Diagnostics should be empty: {:?}",
+            res.diagnostics
+        );
+        let ast = res.ast.unwrap();
+        let stmt = &ast.board.statements[0];
+        let StatementAst::Company(c) = stmt else {
+            panic!("Expected company statement")
+        };
+        assert_eq!(c.name, "Absmach");
     }
 }

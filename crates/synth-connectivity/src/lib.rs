@@ -149,6 +149,7 @@ mod tests {
             layers: 2,
             manufacturer: None,
             revision: None,
+            company: None,
             components: vec![],
             nets: vec![net1, net2],
             diff_pairs: vec![],

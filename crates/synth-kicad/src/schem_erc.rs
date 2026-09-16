@@ -1003,6 +1003,7 @@ mod tests {
             layers: 2,
             manufacturer: None,
             revision: None,
+            company: None,
             components: vec![
                 Component {
                     id: ComponentId(0),
@@ -1067,6 +1068,7 @@ mod tests {
             layers: 2,
             manufacturer: None,
             revision: None,
+            company: None,
             components: vec![
                 Component {
                     id: ComponentId(0),
@@ -1433,6 +1435,7 @@ mod tests {
             layers: 2,
             manufacturer: None,
             revision: None,
+            company: None,
             components: vec![
                 Component {
                     id: ComponentId(0),

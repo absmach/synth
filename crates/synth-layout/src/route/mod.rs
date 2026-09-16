@@ -2025,6 +2025,7 @@ mod cleanup_tests {
             layers: 2,
             manufacturer: None,
             revision: None,
+            company: None,
             components: Vec::new(),
             nets: Vec::new(),
             diff_pairs: Vec::new(),
@@ -2526,6 +2527,7 @@ mod channel_router_tests {
             layers: 2,
             manufacturer: None,
             revision: None,
+            company: None,
             components: vec![
                 component_with_part(ComponentId(0), "R1"),
                 component_with_part(ComponentId(1), "R2"),
@@ -2672,6 +2674,7 @@ mod drc_tests {
             layers: 2,
             manufacturer: None,
             revision: None,
+            company: None,
             components: vec![
                 component_with_part(ComponentId(0), "R1"),
                 component_with_part(ComponentId(1), "R2"),
@@ -2835,6 +2838,7 @@ mod net_termination_tests {
             layers: 2,
             manufacturer: None,
             revision: None,
+            company: None,
             components: vec![
                 synth_ir::Component {
                     id: ComponentId(0),

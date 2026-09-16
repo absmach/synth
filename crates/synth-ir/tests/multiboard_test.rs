@@ -22,6 +22,7 @@ fn create_dummy_board(name: &str, connector_refdes: &str) -> Board {
         layers: 2,
         manufacturer: None,
         revision: None,
+        company: None,
         components: vec![comp],
         nets: Vec::new(),
         diff_pairs: Vec::new(),

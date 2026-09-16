@@ -36,6 +36,11 @@ pub struct Board {
     /// display the Revision).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub revision: Option<String>,
+    /// Design-authority company (`company "…"`), carried into the
+    /// schematic title block's Company field. Distinct from
+    /// `manufacturer` (who builds the board).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub company: Option<String>,
     pub components: Vec<Component>,
     pub nets: Vec<Net>,
     pub diff_pairs: Vec<DiffPair>,

@@ -94,6 +94,7 @@ fn board(components: Vec<Component>, nets: Vec<Net>) -> Board {
         layers: 2,
         manufacturer: None,
         revision: None,
+        company: None,
         components,
         nets,
         diff_pairs: Vec::new(),
