@@ -32,6 +32,14 @@ const EXIT_USAGE: u8 = 2;
     long_about = None,
 )]
 struct Cli {
+    /// Worker threads for the parallel compiler stages (the
+    /// placer-router repair search). Defaults to the number of
+    /// available cores; `RAYON_NUM_THREADS` is honoured when this is
+    /// not given. Thread count never changes the generated artifacts,
+    /// only how long they take.
+    #[arg(long, global = true, value_name = "N")]
+    jobs: Option<usize>,
+
     #[command(subcommand)]
     command: Command,
 }
@@ -531,6 +539,30 @@ enum SchemaKind {
 
 fn main() -> ExitCode {
     let cli = Cli::parse();
+    let jobs = match cli.jobs {
+        Some(0) => {
+            // A zero-thread pool is a usage error, not a request for the
+            // default: silently running on every core would hide the typo.
+            eprintln!("error: --jobs must be at least 1");
+            return ExitCode::from(EXIT_USAGE);
+        }
+        Some(n) => {
+            if let Err(err) = rayon::ThreadPoolBuilder::new()
+                .num_threads(n)
+                .build_global()
+            {
+                eprintln!("error: could not configure {n} worker threads: {err}");
+                return ExitCode::from(EXIT_USAGE);
+            }
+            n
+        }
+        // Default: Rayon's own default, i.e. the available parallelism.
+        None => std::thread::available_parallelism().map_or(4, std::num::NonZeroUsize::get),
+    };
+    // Size the repair waves identically to the pool so every core gets a
+    // distinct candidate instead of queueing (or idling).
+    synth_kicad::set_worker_threads(jobs);
+    eprintln!("synth: using {jobs} worker threads");
     let result = match cli.command {
         Command::Validate {
             input,

@@ -30,6 +30,7 @@ synth-mcp = { workspace = true }
 synth-smt = { workspace = true }
 synth-supply = { workspace = true }
 clap = { workspace = true }
+rayon = { workspace = true }
 serde_json = { workspace = true }
 sha2 = { workspace = true }
 reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }

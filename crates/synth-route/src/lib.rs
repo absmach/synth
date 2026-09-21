@@ -252,6 +252,23 @@ pub fn route(board: &Board, placement: &Placement) -> Routing {
     routing
 }
 
+/// Route with a deterministic net-order variant (ensemble search).
+/// Seed 0 is the canonical order (identical to [`route`]); non-zero seeds
+/// explore different congestion resolutions. Same seed → identical output.
+#[must_use]
+pub fn route_with_order_seed(board: &Board, placement: &Placement, order_seed: u64) -> Routing {
+    let mut routing = maze::route_all_with_order_seed(
+        board,
+        placement,
+        &advisor::DefaultCongestionAdvisor,
+        maze::DEFAULT_TRACE_WIDTH_NM,
+        synth_geometry::mm_to_nm(0.127),
+        order_seed,
+    );
+    generate_rf_via_fence(board, placement, &mut routing);
+    routing
+}
+
 /// Route every net in `board` against `placement` using custom trace width and clearance limits.
 #[must_use]
 pub fn route_with_profile(

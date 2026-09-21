@@ -49,7 +49,7 @@ use synth_place::Placement;
 
 /// Default trace width for general signal nets, in nanometers.
 /// Standard 5-mil signal width. Power and RF classes widen this explicitly.
-const DEFAULT_TRACE_WIDTH_NM: i64 = 127_000;
+pub(crate) const DEFAULT_TRACE_WIDTH_NM: i64 = 127_000;
 /// Copper-to-copper clearance used by the generated KiCad board and by the
 /// native `kicad-cli pcb drc` path. Keep this explicit instead of relying on
 /// KiCad project defaults, which vary when a board is opened standalone.
@@ -351,6 +351,47 @@ fn rip_up_reroute(
     }
 }
 
+/// Deterministically rotate nets within equal-priority runs.
+///
+/// SplitMix64-style mixing of `(order_seed, run_index)` picks the rotation;
+/// no RNG state, no `HashMap` iteration, so the result is identical on every
+/// run and every thread count. Seed 0 never reaches here (canonical order).
+fn diversify_net_order(
+    ordered: &mut [&synth_ir::Net],
+    diff_pair_ids: &std::collections::HashSet<NetId>,
+    board: &Board,
+    order_seed: u64,
+) {
+    let prio_of = |n: &synth_ir::Net| -> u8 {
+        if diff_pair_ids.contains(&n.id) {
+            1
+        } else {
+            priority_class_for(n, board)
+        }
+    };
+    let mut run_start = 0_usize;
+    let mut run_idx: u64 = 0;
+    while run_start < ordered.len() {
+        let prio = prio_of(ordered[run_start]);
+        let mut run_end = run_start + 1;
+        while run_end < ordered.len() && prio_of(ordered[run_end]) == prio {
+            run_end += 1;
+        }
+        let len = run_end - run_start;
+        if len > 1 {
+            let mut z = order_seed
+                .wrapping_add(run_idx.wrapping_mul(0xBF58_476D_1CE4_E5B9))
+                .wrapping_add(0x9E37_79B9_7F4A_7C15);
+            z = (z ^ (z >> 30)).wrapping_mul(0xBF58_476D_1CE4_E5B9);
+            z = (z ^ (z >> 27)).wrapping_mul(0x94D0_49BB_1331_11EB);
+            z ^= z >> 31;
+            ordered[run_start..run_end].rotate_left((z % len as u64) as usize);
+        }
+        run_start = run_end;
+        run_idx += 1;
+    }
+}
+
 pub fn route_all(
     board: &Board,
     placement: &Placement,
@@ -372,6 +413,31 @@ pub fn route_all_with_profile(
     min_trace_width_nm: i64,
     min_clearance_nm: i64,
 ) -> Routing {
+    route_all_with_order_seed(
+        board,
+        placement,
+        advisor,
+        min_trace_width_nm,
+        min_clearance_nm,
+        0,
+    )
+}
+
+/// Route with a deterministic net-order variant.
+///
+/// `order_seed == 0` is the canonical priority order. Non-zero seeds rotate
+/// nets within equal-priority groups so parallel ensemble candidates explore
+/// different congestion resolutions; the winner is still picked by score.
+/// Pure function of `(board, placement, seed)`: same seed → identical routes
+/// on any thread count.
+pub fn route_all_with_order_seed(
+    board: &Board,
+    placement: &Placement,
+    advisor: &dyn crate::advisor::CongestionAdvisor,
+    min_trace_width_nm: i64,
+    min_clearance_nm: i64,
+    order_seed: u64,
+) -> Routing {
     let base_grid = build_grid_with_clearance(board, placement, min_clearance_nm);
     let pad_keepout = build_pad_keepout(&base_grid);
 
@@ -392,8 +458,27 @@ pub fn route_all_with_profile(
         };
         (prio, n.endpoints.len(), n.id.0)
     });
+    if order_seed != 0 {
+        diversify_net_order(&mut ordered, &diff_pair_ids, board, order_seed);
+    }
 
     let mut total_cells_expanded: u64 = 0;
+
+    // Exploratory order variants (seed != 0) run a reduced rip-up budget:
+    // they exist to give idle cores distinct work, not to out-route the
+    // canonical attempt. Seed 0 keeps the full budget, so canonical output
+    // (and every golden snapshot) is unchanged.
+    let exploratory = order_seed != 0;
+    let priority_rounds = if exploratory {
+        1
+    } else {
+        PRIORITY_RIPUP_ROUNDS
+    };
+    let priority_iters = if exploratory {
+        2
+    } else {
+        MAX_PRIORITY_NEGOTIATION_ITERATIONS
+    };
 
     // Main negotiated-congestion pass.
     let (mut best_segments, mut best_vias, mut best_routed) = negotiate(
@@ -414,7 +499,7 @@ pub fn route_all_with_profile(
     // rounds converge on a higher-coverage solution — the essence of
     // rip-up-reroute without a full PathFinder re-solver.
     let mut priority_unrouted: std::collections::HashSet<NetId> = std::collections::HashSet::new();
-    for _round in 0..PRIORITY_RIPUP_ROUNDS {
+    for _round in 0..priority_rounds {
         let routed_ids: std::collections::HashSet<NetId> =
             best_segments.iter().map(|s| s.net).collect();
         let unrouted: Vec<NetId> = ordered
@@ -448,7 +533,7 @@ pub fn route_all_with_profile(
             board,
             &mut total_cells_expanded,
             min_trace_width_nm,
-            MAX_PRIORITY_NEGOTIATION_ITERATIONS,
+            priority_iters,
         );
         let new_routed_ids: std::collections::HashSet<NetId> = segs.iter().map(|s| s.net).collect();
         let new_unrouted: Vec<NetId> = ordered
@@ -1024,6 +1109,269 @@ fn is_adjacent_to_foreign_via(grid: &Grid, x: usize, y: usize, net: NetId, max_d
     false
 }
 
+/// Grid-bucketed index over the pads a net does not own.
+///
+/// The A* neighbour test asks "is this step too close to a foreign pad?"
+/// for every cell it expands, and answering it by scanning `grid.pads`
+/// costs O(pads) per neighbour. Bucketing the pads by grid cell makes it
+/// O(pads near that cell), which on a real board is almost always zero.
+///
+/// Buckets are deliberately conservative: a pad is filed under every cell
+/// within `reach_nm` of its rectangle, where `reach_nm` covers the
+/// clearance radius, one routing pitch (the step segment's length) and
+/// the largest offset between a cell's nominal centre and a pad
+/// centroid. A lookup therefore returns a *superset* of the pads the
+/// exact test could reject, the exact test still runs on each of them,
+/// and the routing result is unchanged.
+struct ForeignPadIndex {
+    /// CSR row offsets, one per cell plus a trailing end marker.
+    offsets: Vec<u32>,
+    /// Indices into `grid.pads`, grouped by cell.
+    entries: Vec<u32>,
+}
+
+impl ForeignPadIndex {
+    fn build(grid: &Grid, net: NetId, clearance_nm: i64) -> Self {
+        // A cell's centre is its nominal grid point unless a pad centroid
+        // overrides it, and a centroid can sit well off-pitch on a large
+        // pad. Measure the worst offset rather than assuming a bound.
+        let mut centroid_slack_nm = 0_i64;
+        for (&(_, x, y), centre) in &grid.pad_centres {
+            let nominal_x = grid.origin_nm.x_nm + (x as i64) * grid.pitch_nm;
+            let nominal_y = grid.origin_nm.y_nm + (y as i64) * grid.pitch_nm;
+            centroid_slack_nm = centroid_slack_nm
+                .max((centre.x_nm - nominal_x).abs())
+                .max((centre.y_nm - nominal_y).abs());
+        }
+        // Worst case: the exact test measures from a segment whose far end
+        // is one pitch plus two centroid slacks away, and the bucket is
+        // keyed on the nominal point, one more slack off.
+        let reach_nm = clearance_nm + grid.pitch_nm + 3 * centroid_slack_nm;
+
+        let cells = grid.width * grid.height;
+        let mut offsets = vec![0_u32; cells + 1];
+
+        let cell_range = |lo_nm: i64, hi_nm: i64, origin_nm: i64, limit: usize| {
+            let first = (lo_nm - reach_nm - origin_nm).div_euclid(grid.pitch_nm);
+            let last = (hi_nm + reach_nm - origin_nm).div_euclid(grid.pitch_nm) + 1;
+            let first = first.clamp(0, limit as i64) as usize;
+            let last = last.clamp(0, limit as i64) as usize;
+            first..last
+        };
+
+        let foreign = |idx: usize| grid.pads[idx].0 != net;
+
+        // Counting pass, then prefix sum, then fill: one flat allocation
+        // instead of a `Vec` per cell.
+        for idx in 0..grid.pads.len() {
+            if !foreign(idx) {
+                continue;
+            }
+            let rect = grid.pads[idx].1;
+            for y in cell_range(
+                rect.min.y_nm,
+                rect.max.y_nm,
+                grid.origin_nm.y_nm,
+                grid.height,
+            ) {
+                for x in cell_range(
+                    rect.min.x_nm,
+                    rect.max.x_nm,
+                    grid.origin_nm.x_nm,
+                    grid.width,
+                ) {
+                    offsets[y * grid.width + x + 1] += 1;
+                }
+            }
+        }
+        for i in 1..offsets.len() {
+            offsets[i] += offsets[i - 1];
+        }
+
+        let mut entries = vec![0_u32; offsets[cells] as usize];
+        let mut cursor = offsets.clone();
+        for idx in 0..grid.pads.len() {
+            if !foreign(idx) {
+                continue;
+            }
+            let rect = grid.pads[idx].1;
+            for y in cell_range(
+                rect.min.y_nm,
+                rect.max.y_nm,
+                grid.origin_nm.y_nm,
+                grid.height,
+            ) {
+                for x in cell_range(
+                    rect.min.x_nm,
+                    rect.max.x_nm,
+                    grid.origin_nm.x_nm,
+                    grid.width,
+                ) {
+                    let cell = y * grid.width + x;
+                    entries[cursor[cell] as usize] = idx as u32;
+                    cursor[cell] += 1;
+                }
+            }
+        }
+
+        Self { offsets, entries }
+    }
+
+    /// Pads that could be within the clearance radius of a step ending in
+    /// `cell` (a `y * width + x` index).
+    fn near(&self, cell: usize) -> &[u32] {
+        let start = self.offsets[cell] as usize;
+        let end = self.offsets[cell + 1] as usize;
+        &self.entries[start..end]
+    }
+}
+
+/// Sentinel for a via-memo column that has not been scanned yet. Halo
+/// costs are sums of `VIA_CLEARANCE_PENALTY`, so they are non-negative
+/// and can never collide with either sentinel.
+const VIA_MEMO_UNKNOWN: i32 = -1;
+/// Sentinel for a column where no via may be placed.
+const VIA_MEMO_ILLEGAL: i32 = -2;
+
+/// Hard cap on A* cell expansions per leg. A dense board can otherwise
+/// burn hours proving an unroutable leg unroutable cell-by-cell; failing
+/// fast lets the repair search try a roomier floorplan instead. The cap
+/// is ~100x the full 3D grid so any routable leg still completes; it
+/// only bounds truly pathological legs that would otherwise burn hours
+/// proving unroutability cell-by-cell.
+const MAX_ASTAR_EXPANSIONS: u64 = 25_000_000;
+
+/// Bucket radius (in grid cells) for the committed-copper spatial indexes
+/// below. Worst-case via/segment clearance (~760um) spans 3 cells on the
+/// fine 0.254mm pitch; one extra cell covers pad-centroid slack. Buckets
+/// are conservative: the exact distance test still runs on every hit, so
+/// results are unchanged, only faster.
+const COPPER_INDEX_RADIUS: i32 = 4;
+
+/// Grid-bucketed index over already-committed vias.
+///
+/// The A* neighbour test asks "is this step too close to a foreign via?"
+/// and the via-legality scan asks "is there a via nearby?" for every cell
+/// expanded. Answering either by scanning `vias` costs O(vias) per cell;
+/// bucketing makes it O(vias near that cell).
+struct CommittedViaIndex {
+    width: usize,
+    buckets: Vec<Vec<u32>>,
+}
+
+impl CommittedViaIndex {
+    fn build(grid: &Grid, vias: &[crate::Via]) -> Self {
+        let w = grid.width;
+        let h = grid.height;
+        let radius = COPPER_INDEX_RADIUS;
+        let mut buckets: Vec<Vec<u32>> = vec![Vec::new(); w * h];
+        for (idx, v) in vias.iter().enumerate() {
+            let (cx, cy) = grid.cell_of_point(v.at);
+            let x0 = (cx as i32 - radius).max(0) as usize;
+            let x1 = ((cx as i32 + radius).min(w as i32 - 1)).max(0) as usize;
+            let y0 = (cy as i32 - radius).max(0) as usize;
+            let y1 = ((cy as i32 + radius).min(h as i32 - 1)).max(0) as usize;
+            for y in y0..=y1 {
+                for x in x0..=x1 {
+                    buckets[y * w + x].push(idx as u32);
+                }
+            }
+        }
+        Self { width: w, buckets }
+    }
+
+    fn near(&self, x: usize, y: usize) -> &[u32] {
+        &self.buckets[y * self.width + x]
+    }
+}
+
+/// Grid-bucketed index over already-committed segments.
+///
+/// Same motivation as [`CommittedViaIndex`]: the via-legality scan and the
+/// width-aware segment clearance check both scanned every segment per
+/// expanded cell. Segments are axis-aligned; each is filed under every
+/// cell within [`COPPER_INDEX_RADIUS`] of its bbox, and the exact
+/// point-to-segment test still decides.
+struct CommittedSegmentIndex {
+    width: usize,
+    buckets: Vec<Vec<u32>>,
+}
+
+impl CommittedSegmentIndex {
+    fn build(grid: &Grid, segments: &[Segment]) -> Self {
+        let w = grid.width;
+        let h = grid.height;
+        let radius = COPPER_INDEX_RADIUS;
+        let mut buckets: Vec<Vec<u32>> = vec![Vec::new(); w * h];
+        for (idx, s) in segments.iter().enumerate() {
+            let (x0c, y0c) = grid.cell_of_point(s.start);
+            let (x1c, y1c) = grid.cell_of_point(s.end);
+            let (lox, hix) = if x0c < x1c { (x0c, x1c) } else { (x1c, x0c) };
+            let (loy, hiy) = if y0c < y1c { (y0c, y1c) } else { (y1c, y0c) };
+            let x0 = (lox as i32 - radius).max(0) as usize;
+            let x1 = ((hix as i32 + radius).min(w as i32 - 1)).max(0) as usize;
+            let y0 = (loy as i32 - radius).max(0) as usize;
+            let y1 = ((hiy as i32 + radius).min(h as i32 - 1)).max(0) as usize;
+            for y in y0..=y1 {
+                for x in x0..=x1 {
+                    buckets[y * w + x].push(idx as u32);
+                }
+            }
+        }
+        Self { width: w, buckets }
+    }
+
+    fn near(&self, x: usize, y: usize) -> &[u32] {
+        &self.buckets[y * self.width + x]
+    }
+}
+
+/// Precomputed proximity of every 2D cell to the search endpoints.
+///
+/// The hot path tested `sources.iter().any(manhattan <= R)` per expanded
+/// cell — O(sources) per expansion, with sources growing to dozens of pad
+/// cells on wide nets. These bitsets cost one bounded fill up front and
+/// O(1) per expansion afterwards.
+struct ProximityMasks {
+    /// True within 2 cells of any source (pad-escape relaxation zone).
+    escape: Vec<bool>,
+    /// True within 14 cells of the target or any source (endpoint zone
+    /// where width-aware clearance checks are skipped).
+    endpoint: Vec<bool>,
+}
+
+impl ProximityMasks {
+    fn build(
+        width: usize,
+        height: usize,
+        sources_2d: &[(usize, usize)],
+        target: &(usize, usize),
+    ) -> Self {
+        let mut escape = vec![false; width * height];
+        let mut endpoint = vec![false; width * height];
+        let paint = |mask: &mut [bool], cx: usize, cy: usize, r: i32| {
+            let x0 = (cx as i32 - r).max(0) as usize;
+            let x1 = ((cx as i32 + r).min(width as i32 - 1)).max(0) as usize;
+            let y0 = (cy as i32 - r).max(0) as usize;
+            let y1 = ((cy as i32 + r).min(height as i32 - 1)).max(0) as usize;
+            for y in y0..=y1 {
+                for x in x0..=x1 {
+                    let d = (x as i32 - cx as i32).abs() + (y as i32 - cy as i32).abs();
+                    if d <= r {
+                        mask[y * width + x] = true;
+                    }
+                }
+            }
+        };
+        for &(sx, sy) in sources_2d {
+            paint(&mut escape, sx, sy, 2);
+            paint(&mut endpoint, sx, sy, 14);
+        }
+        paint(&mut endpoint, target.0, target.1, 14);
+        Self { escape, endpoint }
+    }
+}
+
 /// 3D A* search on the 2-layer grid (Top F.Cu & Bottom B.Cu).
 /// Returns path as sequence of `(layer, x, y)` 3D cells.
 ///
@@ -1056,6 +1404,38 @@ fn astar(
     let stride_layer = grid.width * grid.height;
     let cell_idx = |l: usize, x: usize, y: usize| l * stride_layer + y * stride_y + x;
 
+    // Per-net trace widths, resolved once per search. The via-halo scan
+    // below consults them for every foreign track cell in a 7x7x(layers)
+    // neighbourhood, and `trace_width_for` lowercases the net name and
+    // every endpoint pin name into a fresh `Vec<String>` on each call.
+    let net_widths: std::collections::HashMap<NetId, i64> = board
+        .nets
+        .iter()
+        .map(|n| (n.id, trace_width_for(n, board, DEFAULT_TRACE_WIDTH_NM)))
+        .collect();
+
+    // Clearance radius for the foreign-pad test below. Fixed for the whole
+    // search: it depends only on this net's trace width. The via-legality
+    // scan needs a wider radius (427um), so build one index at the max of
+    // the two and reuse it for both — the exact test still decides.
+    let min_pad_clearance = width / 2 + ROUTING_CLEARANCE_NM + 30_000;
+    let foreign_pads = ForeignPadIndex::build(grid, net, min_pad_clearance.max(427_000));
+    // Committed-copper indexes: `segments`/`vias` are immutable for the
+    // whole search, so bucket them once instead of scanning per cell.
+    let via_index = CommittedViaIndex::build(grid, vias);
+    let seg_index = CommittedSegmentIndex::build(grid, segments);
+    // Endpoint proximity masks: one bounded fill replaces the per-cell
+    // `sources.iter().any(manhattan <= R)` scans in the hot path.
+    let sources_2d_all: Vec<(usize, usize)> = sources.iter().map(|&(_, x, y)| (x, y)).collect();
+    let proximity = ProximityMasks::build(grid.width, grid.height, &sources_2d_all, target);
+
+    // Via legality/halo memo, one slot per `(x, y)` column. The scan it
+    // caches reads only `grid`, `segments` and `vias`, all immutable for
+    // the whole search, so a column's answer never changes mid-search —
+    // and A* pops the same column repeatedly, once per improving `g` on
+    // any layer.
+    let mut via_memo: Vec<i32> = vec![VIA_MEMO_UNKNOWN; grid.width * grid.height];
+
     let mut g_score: Vec<i32> = vec![i32::MAX; layers * grid.width * grid.height];
     let mut came_from: Vec<Option<(u8, u16, u16)>> = vec![None; layers * grid.width * grid.height];
     let mut heap: BinaryHeap<Reverse<(i32, u32, u8, u16, u16)>> = BinaryHeap::new();
@@ -1072,8 +1452,13 @@ fn astar(
         tie += 1;
     }
 
+    let mut expansions: u64 = 0;
     while let Some(Reverse((_, _, cl_u, cx_u, cy_u))) = heap.pop() {
         *cells_expanded += 1;
+        expansions += 1;
+        if expansions > MAX_ASTAR_EXPANSIONS {
+            return None;
+        }
         let cl = cl_u as usize;
         let cx = cx_u as usize;
         let cy = cy_u as usize;
@@ -1119,10 +1504,7 @@ fn astar(
                     // final physical DRC instead of stranding the net in the
                     // coarse maze. The relaxation is local to the source pad,
                     // top copper, and cannot be used later in a route.
-                    let pad_escape = cl == 0
-                        && sources
-                            .iter()
-                            .any(|&(_, sx, sy)| manhattan((sx, sy), (nx, ny)) <= 2);
+                    let pad_escape = cl == 0 && proximity.escape[ny * stride_y + nx];
                     if !pad_escape && is_adjacent_to_foreign_pad(grid, cl, nx, ny, net) {
                         continue;
                     }
@@ -1135,11 +1517,10 @@ fn astar(
                     // QFN/MCU footprints and unassigned pads, which KiCad
                     // correctly treats as copper even though they have no net.
                     let step_start = grid.cell_centre(cl, cx, cy);
-                    let min_pad_clearance = width / 2 + ROUTING_CLEARANCE_NM + 30_000;
-                    let pad_too_close = grid.pads.iter().any(|&(pad_net, pad_rect)| {
-                        if pad_net == net {
-                            return false;
-                        }
+                    // The index already excludes pads this net owns and
+                    // pads too far away to matter; the exact test decides.
+                    let pad_too_close = foreign_pads.near(ny * stride_y + nx).iter().any(|&pad| {
+                        let pad_rect = grid.pads[pad as usize].1;
                         let distance_sq =
                             dist_sq_axis_aligned_segment_to_rect(step_start, cell_pt, &pad_rect);
                         distance_sq < min_pad_clearance * min_pad_clearance
@@ -1153,19 +1534,17 @@ fn astar(
                     // so the exact rectangle scan is redundant here.
                     // Keep the per-cell lookup below as the single hot
                     // path check instead of scanning every pad rectangle.
-                    let mut near_via = false;
-                    for v in vias {
-                        if v.net != net {
-                            let dx = cell_pt.x_nm - v.at.x_nm;
-                            let dy = cell_pt.y_nm - v.at.y_nm;
-                            let d_sq = dx * dx + dy * dy;
-                            let min_d = 300_000 + width / 2 + 127_000 + 30_000;
-                            if d_sq < min_d * min_d {
-                                near_via = true;
-                                break;
-                            }
+                    let via_min_d = 300_000 + width / 2 + 127_000 + 30_000;
+                    let via_min_d_sq = via_min_d * via_min_d;
+                    let near_via = via_index.near(nx, ny).iter().any(|&vi| {
+                        let v = &vias[vi as usize];
+                        if v.net == net {
+                            return false;
                         }
-                    }
+                        let dx = cell_pt.x_nm - v.at.x_nm;
+                        let dy = cell_pt.y_nm - v.at.y_nm;
+                        dx * dx + dy * dy < via_min_d_sq
+                    });
                     if near_via {
                         continue;
                     }
@@ -1186,10 +1565,7 @@ fn astar(
                     // clearance against every committed foreign segment on the same layer.
                     // `min_d <= grid.pitch_nm` short-circuits for signal traces and coarse
                     // grids where the adjacency check is already sufficient.
-                    let is_near_endpoint = manhattan((nx, ny), *target) <= 14
-                        || sources
-                            .iter()
-                            .any(|s| manhattan((nx, ny), (s.1, s.2)) <= 14);
+                    let is_near_endpoint = proximity.endpoint[ny * stride_y + nx];
                     if !is_near_endpoint {
                         let cell_pt_seg = grid.cell_centre(cl, nx, ny);
                         let cur_layer = layer_enum(cl, grid.layers);
@@ -1213,7 +1589,8 @@ fn astar(
                             })
                         });
                         if nearby_foreign_track {
-                            for seg in segments {
+                            for &si in seg_index.near(nx, ny) {
+                                let seg = &segments[si as usize];
                                 if seg.net == net || seg.layer != cur_layer {
                                     continue;
                                 }
@@ -1348,9 +1725,14 @@ fn astar(
         }
 
         // 2. Layer transition (Via insertion)
-        let other_layers: Vec<usize> = (0..layers).filter(|&l| l != cl).collect();
-
-        'layer_loop: for &other_layer in &other_layers {
+        // Whether a via may sit at `(cx, cy)`, and what halo cost it
+        // carries, depends only on that cell: none of the legality,
+        // pad, NPTH, board-edge, segment, via or neighbourhood scans
+        // below read the destination layer. Resolving it once and
+        // reusing the answer for every destination layer does the work
+        // the loop used to repeat `layers - 1` times per expanded cell.
+        let via_column = cy * stride_y + cx;
+        let via_scan = || -> Option<i32> {
             let mut legal = true;
             for vl in 0..grid.layers {
                 match grid.get(vl, cx, cy) {
@@ -1363,7 +1745,7 @@ fn astar(
                 }
             }
             if !legal {
-                continue;
+                return None;
             }
 
             let via_pt = grid.cell_centre(0, cx, cy);
@@ -1373,22 +1755,17 @@ fn astar(
             // and 0.250 mm hole clearance. For foreign pads: min distance from via center
             // to pad rectangle must be >= max(300+127, 150+250) = 427 µm; with margin: 450 µm.
             // For same-net pads: via cannot sit inside or touch the SMD pad: 350 µm.
-            let mut near_pad = false;
-            for &(pad_net, pad_rect) in &grid.pads {
-                if pad_net != net {
-                    let px = via_pt.x_nm.clamp(pad_rect.min.x_nm, pad_rect.max.x_nm);
-                    let py = via_pt.y_nm.clamp(pad_rect.min.y_nm, pad_rect.max.y_nm);
-                    let dx = via_pt.x_nm - px;
-                    let dy = via_pt.y_nm - py;
-                    let min_d = 427_000_i64;
-                    if dx * dx + dy * dy < min_d * min_d {
-                        near_pad = true;
-                        break;
-                    }
-                }
-            }
+            let near_pad = foreign_pads.near(via_column).iter().any(|&pi| {
+                let pad_rect = grid.pads[pi as usize].1;
+                let px = via_pt.x_nm.clamp(pad_rect.min.x_nm, pad_rect.max.x_nm);
+                let py = via_pt.y_nm.clamp(pad_rect.min.y_nm, pad_rect.max.y_nm);
+                let dx = via_pt.x_nm - px;
+                let dy = via_pt.y_nm - py;
+                let min_d = 427_000_i64;
+                dx * dx + dy * dy < min_d * min_d
+            });
             if near_pad {
-                continue 'layer_loop;
+                return None;
             }
 
             let mut near_npth = false;
@@ -1403,7 +1780,7 @@ fn astar(
                 }
             }
             if near_npth {
-                continue 'layer_loop;
+                return None;
             }
 
             // Via-to-board-edge clearance: via pad diameter 0.6 mm (radius 300 µm).
@@ -1415,40 +1792,35 @@ fn astar(
                 || via_pt.y_nm - grid.board_outline.min.y_nm < min_edge_d
                 || grid.board_outline.max.y_nm - via_pt.y_nm < min_edge_d
             {
-                continue 'layer_loop;
+                return None;
             }
 
-            let mut near_seg = false;
-            for s in segments {
-                if s.net != net {
-                    let closest = closest_point_on_segment(s.start, s.end, via_pt);
-                    let dx = closest.x_nm - via_pt.x_nm;
-                    let dy = closest.y_nm - via_pt.y_nm;
-                    let d_sq = dx * dx + dy * dy;
-                    let min_d = 300_000 + s.width_nm / 2 + 127_000 + 30_000;
-                    if d_sq < min_d * min_d {
-                        near_seg = true;
-                        break;
-                    }
+            let near_seg = seg_index.near(cx, cy).iter().any(|&si| {
+                let s = &segments[si as usize];
+                if s.net == net {
+                    return false;
                 }
-            }
+                let closest = closest_point_on_segment(s.start, s.end, via_pt);
+                let dx = closest.x_nm - via_pt.x_nm;
+                let dy = closest.y_nm - via_pt.y_nm;
+                let d_sq = dx * dx + dy * dy;
+                let min_d = 300_000 + s.width_nm / 2 + 127_000 + 30_000;
+                d_sq < min_d * min_d
+            });
             if near_seg {
-                continue 'layer_loop;
+                return None;
             }
 
-            let mut near_existing_via = false;
-            for v in vias {
+            let near_existing_via = via_index.near(cx, cy).iter().any(|&vi| {
+                let v = &vias[vi as usize];
                 let dx = via_pt.x_nm - v.at.x_nm;
                 let dy = via_pt.y_nm - v.at.y_nm;
                 let d_sq = dx * dx + dy * dy;
                 let min_via_d = if v.net == net { 550_000 } else { 727_000 };
-                if d_sq < min_via_d * min_via_d {
-                    near_existing_via = true;
-                    break;
-                }
-            }
+                d_sq < min_via_d * min_via_d
+            });
             if near_existing_via {
-                continue 'layer_loop;
+                return None;
             }
 
             // A via's annular ring (0.6mm diameter) extends into neighbouring cells.
@@ -1472,26 +1844,23 @@ fn astar(
                                     && grid.get(1, ax as usize, ay as usize)
                                         == Some(Cell::Track(n));
                                 if is_via && d_sq <= 4 {
-                                    continue 'layer_loop;
+                                    return None;
                                 }
-                                let track_w = board
-                                    .nets
-                                    .iter()
-                                    .find(|bn| bn.id == n)
-                                    .map_or(DEFAULT_TRACE_WIDTH_NM, |bn| {
-                                        trace_width_for(bn, board, DEFAULT_TRACE_WIDTH_NM)
-                                    });
+                                let track_w = net_widths
+                                    .get(&n)
+                                    .copied()
+                                    .unwrap_or(DEFAULT_TRACE_WIDTH_NM);
                                 if track_w > DEFAULT_TRACE_WIDTH_NM && d_sq <= 5 {
-                                    continue 'layer_loop;
+                                    return None;
                                 }
                                 if d_sq <= 2 {
-                                    continue 'layer_loop;
+                                    return None;
                                 }
                                 via_halo += VIA_CLEARANCE_PENALTY as i32;
                             }
                             Some(Cell::Pad(n)) if n != net => {
                                 if d_sq <= 2 {
-                                    continue 'layer_loop;
+                                    return None;
                                 }
                                 via_halo += VIA_CLEARANCE_PENALTY as i32;
                             }
@@ -1500,15 +1869,34 @@ fn astar(
                     }
                 }
             }
-            let via_idx = cell_idx(other_layer, cx, cy);
-            let via_cost = 15; // Via transition penalty
-            let tentative_g = cur_g + via_cost + via_halo;
-            if tentative_g < g_score[via_idx] {
-                g_score[via_idx] = tentative_g;
-                came_from[via_idx] = Some((cl as u8, cx as u16, cy as u16));
-                let f = tentative_g + h((cx, cy));
-                heap.push(Reverse((f, tie, other_layer as u8, cx as u16, cy as u16)));
-                tie += 1;
+            Some(via_halo)
+        };
+
+        let via_halo_here = match via_memo[via_column] {
+            VIA_MEMO_UNKNOWN => {
+                let scanned = via_scan();
+                via_memo[via_column] = scanned.unwrap_or(VIA_MEMO_ILLEGAL);
+                scanned
+            }
+            VIA_MEMO_ILLEGAL => None,
+            cached => Some(cached),
+        };
+
+        // Destination layers are still visited in ascending order, so the
+        // `tie` sequence (and therefore the heap's tie-breaking) is
+        // unchanged from the per-layer version.
+        if let Some(via_halo) = via_halo_here {
+            for other_layer in (0..layers).filter(|&l| l != cl) {
+                let via_idx = cell_idx(other_layer, cx, cy);
+                let via_cost = 15; // Via transition penalty
+                let tentative_g = cur_g + via_cost + via_halo;
+                if tentative_g < g_score[via_idx] {
+                    g_score[via_idx] = tentative_g;
+                    came_from[via_idx] = Some((cl as u8, cx as u16, cy as u16));
+                    let f = tentative_g + h((cx, cy));
+                    heap.push(Reverse((f, tie, other_layer as u8, cx as u16, cy as u16)));
+                    tie += 1;
+                }
             }
         }
     }

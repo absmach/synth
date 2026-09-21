@@ -94,48 +94,57 @@ pub fn check_min_copper_clearance(
     routing: &Routing,
     profile: &ManufacturerProfile,
 ) -> Vec<Violation> {
+    use rayon::prelude::*;
     let clearance = profile.min_copper_clearance_nm;
-    let mut violations = Vec::new();
     let segs = &routing.segments;
-    for i in 0..segs.len() {
-        for j in (i + 1)..segs.len() {
-            let a = &segs[i];
-            let b = &segs[j];
-            if a.net == b.net || a.layer != b.layer {
-                continue;
+    // Pairwise O(n^2) check, parallel over the outer index. Each pair is
+    // independent; the final sort restores deterministic order regardless
+    // of thread count or scheduling.
+    let mut violations: Vec<Violation> = (0..segs.len())
+        .into_par_iter()
+        .flat_map(|i| {
+            let mut local = Vec::new();
+            for j in (i + 1)..segs.len() {
+                let a = &segs[i];
+                let b = &segs[j];
+                if a.net == b.net || a.layer != b.layer {
+                    continue;
+                }
+                let pad_a = (a.width_nm + clearance) / 2 + 1;
+                let pad_b = (b.width_nm + clearance) / 2 + 1;
+                let inflated_pad = pad_a + pad_b;
+                if !bboxes_overlap(a, b, inflated_pad) {
+                    continue;
+                }
+                // Bounding boxes overlap → potential clearance
+                // violation. For slice 1A precision we check the
+                // actual segment-to-segment distance for the
+                // common case (one horizontal + one vertical, or
+                // parallel pairs).
+                let d = segment_distance_nm(a, b);
+                let min_allowed = (a.width_nm + b.width_nm) / 2 + clearance;
+                if d < min_allowed {
+                    local.push(Violation {
+                        code: "E-SYNTH-DRC-002".to_string(),
+                        message: format!(
+                            "nets {} and {} segments {:.3} mm apart (< {:.3} mm required)",
+                            a.net.0,
+                            b.net.0,
+                            nm_to_mm(d),
+                            nm_to_mm(min_allowed),
+                        ),
+                        witness: vec![a.start, a.end, b.start, b.end],
+                        nets: vec![a.net, b.net],
+                        components: Vec::new(),
+                        pos_mm: Some((nm_to_mm(a.start.x_nm), nm_to_mm(a.start.y_nm))),
+                        suggested_override: None,
+                    });
+                }
             }
-            let pad_a = (a.width_nm + clearance) / 2 + 1;
-            let pad_b = (b.width_nm + clearance) / 2 + 1;
-            let inflated_pad = pad_a + pad_b;
-            if !bboxes_overlap(a, b, inflated_pad) {
-                continue;
-            }
-            // Bounding boxes overlap → potential clearance
-            // violation. For slice 1A precision we check the
-            // actual segment-to-segment distance for the
-            // common case (one horizontal + one vertical, or
-            // parallel pairs).
-            let d = segment_distance_nm(a, b);
-            let min_allowed = (a.width_nm + b.width_nm) / 2 + clearance;
-            if d < min_allowed {
-                violations.push(Violation {
-                    code: "E-SYNTH-DRC-002".to_string(),
-                    message: format!(
-                        "nets {} and {} segments {:.3} mm apart (< {:.3} mm required)",
-                        a.net.0,
-                        b.net.0,
-                        nm_to_mm(d),
-                        nm_to_mm(min_allowed),
-                    ),
-                    witness: vec![a.start, a.end, b.start, b.end],
-                    nets: vec![a.net, b.net],
-                    components: Vec::new(),
-                    pos_mm: Some((nm_to_mm(a.start.x_nm), nm_to_mm(a.start.y_nm))),
-                    suggested_override: None,
-                });
-            }
-        }
-    }
+            local
+        })
+        .collect();
+    violations.sort_by(|a, b| a.message.cmp(&b.message).then(a.code.cmp(&b.code)));
     violations
 }
 

@@ -86,48 +86,55 @@ pub fn check_copper_to_component_clearance(
     routing: &Routing,
     profile: &ManufacturerProfile,
 ) -> Vec<Violation> {
+    use rayon::prelude::*;
     let clearance = profile.min_copper_clearance_nm;
     let obstacles = collect_obstacles(board, placement);
-    let mut violations = Vec::new();
-    for s in &routing.segments {
-        let capsule = segment_capsule(s);
-        for obstacle in &obstacles {
-            if !obstacle.layer.matches(s.layer) {
-                continue;
-            }
-            if obstacle.net == Some(s.net) || obstacle.component_nets.contains(&s.net) {
-                continue;
-            }
-            let d = rect_gap_nm(&capsule, &obstacle.rect);
-            if d < clearance {
-                violations.push(Violation {
-                    code: "E-SYNTH-DRC-007".to_string(),
-                    message: format!(
-                        "net {} trace is {:.3} mm from {} (< {:.3} mm required)",
-                        s.net.0,
-                        nm_to_mm(d),
-                        obstacle.net.map_or_else(
-                            || "a component courtyard".to_string(),
-                            |n| format!("net {}'s pad", n.0)
+    let mut violations: Vec<Violation> = routing
+        .segments
+        .par_iter()
+        .flat_map(|s| {
+            let capsule = segment_capsule(s);
+            let mut local = Vec::new();
+            for obstacle in &obstacles {
+                if !obstacle.layer.matches(s.layer) {
+                    continue;
+                }
+                if obstacle.net == Some(s.net) || obstacle.component_nets.contains(&s.net) {
+                    continue;
+                }
+                let d = rect_gap_nm(&capsule, &obstacle.rect);
+                if d < clearance {
+                    local.push(Violation {
+                        code: "E-SYNTH-DRC-007".to_string(),
+                        message: format!(
+                            "net {} trace is {:.3} mm from {} (< {:.3} mm required)",
+                            s.net.0,
+                            nm_to_mm(d),
+                            obstacle.net.map_or_else(
+                                || "a component courtyard".to_string(),
+                                |n| format!("net {}'s pad", n.0)
+                            ),
+                            nm_to_mm(clearance),
                         ),
-                        nm_to_mm(clearance),
-                    ),
-                    witness: vec![s.start, s.end],
-                    nets: match obstacle.net {
-                        Some(n) => vec![s.net, n],
-                        None => vec![s.net],
-                    },
-                    components: obstacle
-                        .component_id
-                        .map(|c| c.0.to_string())
-                        .into_iter()
-                        .collect(),
-                    pos_mm: Some((nm_to_mm(s.start.x_nm), nm_to_mm(s.start.y_nm))),
-                    suggested_override: None,
-                });
+                        witness: vec![s.start, s.end],
+                        nets: match obstacle.net {
+                            Some(n) => vec![s.net, n],
+                            None => vec![s.net],
+                        },
+                        components: obstacle
+                            .component_id
+                            .map(|c| c.0.to_string())
+                            .into_iter()
+                            .collect(),
+                        pos_mm: Some((nm_to_mm(s.start.x_nm), nm_to_mm(s.start.y_nm))),
+                        suggested_override: None,
+                    });
+                }
             }
-        }
-    }
+            local
+        })
+        .collect();
+    violations.sort_by(|a, b| a.message.cmp(&b.message).then(a.code.cmp(&b.code)));
     violations
 }
 
@@ -138,39 +145,46 @@ pub fn check_copper_to_component_clearance(
 /// be fabbed as one.
 #[must_use]
 pub fn check_shorts(board: &Board, placement: &Placement, routing: &Routing) -> Vec<Violation> {
+    use rayon::prelude::*;
     let obstacles = collect_obstacles(board, placement);
-    let mut violations = Vec::new();
-    for s in &routing.segments {
-        let capsule = segment_capsule(s);
-        for obstacle in &obstacles {
-            if !obstacle.layer.matches(s.layer) {
-                continue;
+    let mut violations: Vec<Violation> = routing
+        .segments
+        .par_iter()
+        .flat_map(|s| {
+            let capsule = segment_capsule(s);
+            let mut local = Vec::new();
+            for obstacle in &obstacles {
+                if !obstacle.layer.matches(s.layer) {
+                    continue;
+                }
+                // Same net connection is the intended pad-to-trace join.
+                if obstacle.net == Some(s.net) {
+                    continue;
+                }
+                // Only copper pads (net != None) short; courtyards
+                // (net None) are covered by the clearance rule.
+                let Some(other_net) = obstacle.net else {
+                    continue;
+                };
+                if capsule.intersects(&obstacle.rect) {
+                    local.push(Violation {
+                        code: "E-SYNTH-DRC-008".to_string(),
+                        message: format!(
+                            "net {} trace short-circuits into net {}'s pad",
+                            s.net.0, other_net.0
+                        ),
+                        witness: vec![s.start, s.end],
+                        nets: vec![s.net, other_net],
+                        components: Vec::new(),
+                        pos_mm: Some((nm_to_mm(s.start.x_nm), nm_to_mm(s.start.y_nm))),
+                        suggested_override: None,
+                    });
+                }
             }
-            // Same net connection is the intended pad-to-trace join.
-            if obstacle.net == Some(s.net) {
-                continue;
-            }
-            // Only copper pads (net != None) short; courtyards
-            // (net None) are covered by the clearance rule.
-            let Some(other_net) = obstacle.net else {
-                continue;
-            };
-            if capsule.intersects(&obstacle.rect) {
-                violations.push(Violation {
-                    code: "E-SYNTH-DRC-008".to_string(),
-                    message: format!(
-                        "net {} trace short-circuits into net {}'s pad",
-                        s.net.0, other_net.0
-                    ),
-                    witness: vec![s.start, s.end],
-                    nets: vec![s.net, other_net],
-                    components: Vec::new(),
-                    pos_mm: Some((nm_to_mm(s.start.x_nm), nm_to_mm(s.start.y_nm))),
-                    suggested_override: None,
-                });
-            }
-        }
-    }
+            local
+        })
+        .collect();
+    violations.sort_by(|a, b| a.message.cmp(&b.message).then(a.code.cmp(&b.code)));
     violations
 }
 

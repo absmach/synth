@@ -2,8 +2,6 @@
 
 //! Integration tests for `synth-mcp`.
 
-use std::path::PathBuf;
-
 use serde_json::json;
 use synth_mcp::{handle_jsonrpc_request, list_tools, SERVER_INSTRUCTIONS};
 
