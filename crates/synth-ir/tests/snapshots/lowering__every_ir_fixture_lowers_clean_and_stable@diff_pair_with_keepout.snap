@@ -29,6 +29,7 @@ expression: board
       }
     }
   ],
+  "netclasses": [],
   "source_span": {
     "byte_start": 69,
     "byte_end": 208

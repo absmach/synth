@@ -2042,10 +2042,6 @@ expression: schematic
 		(uuid "87403703-4efb-58c7-85dd-6f77745de462")
 	)
 	(no_connect
-		(at 71.12 33.02)
-		(uuid "f3b896c9-c13f-5bba-a7dd-eb1a42157e71")
-	)
-	(no_connect
 		(at 33.02 86.36)
 		(uuid "077b60ad-2f3d-55a1-a40f-0345e0661e15")
 	)

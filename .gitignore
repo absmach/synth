@@ -46,3 +46,7 @@ __pycache__/
 # Environment & API keys
 .env
 *.env
+
+# Temporary test logs and reports
+audit.jsonl
+*.rpt

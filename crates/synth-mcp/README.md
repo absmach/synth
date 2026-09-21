@@ -90,10 +90,17 @@ An agent grows the component library without leaving the tool surface:
 2. synth_import_part           → LCSC JSON, KiCad symbol, or a SnapEDA/
                                   UltraLibrarian export zip → Tier-2 .synth.toml
         (or) synth_author_part → persist a hand-authored .synth.toml
-3. synth_validate / registry doctor → confirm the part parses & pins are sane
+3. synth_validate / registry doctor → confirm the part parses, pins and
+                                  physical assets are sane
 4. synth_fix                   → apply any suggested patches
 5. repeat until the board lowers clean, then synth_export
 ```
+
+An unknown part is a recoverable dependency event. The agent may continue
+after adding a Tier-2 draft, but the draft must carry provenance and remain
+clearly unverified until its datasheet pinout, package, symbol and footprint
+have been checked. A final export still requires zero blocking diagnostics;
+the presence of generated KiCad files is not a successful gate.
 
 ### Example: import an ESP32 module from its KiCad symbol
 
@@ -141,4 +148,3 @@ An agent grows the component library without leaving the tool surface:
 When the network is unreachable the same call returns
 `"source": "local_registry"` with the matching local parts instead of an
 error.
-

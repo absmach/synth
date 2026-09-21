@@ -3271,7 +3271,6 @@ mod tests {
             manufacturer: None,
             company: None,
             revision: None,
-            company: None,
             components: vec![
                 comp(0, "U1", "regulator", reg, None),
                 comp(1, "R1", "resistor", r(rpins()), r1_value),

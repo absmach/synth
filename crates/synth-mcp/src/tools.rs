@@ -174,7 +174,7 @@ pub fn list_tools() -> Vec<McpToolInfo> {
         },
         McpToolInfo {
             name: "synth_export".into(),
-            description: "Export a validated SynthSpec design to KiCad schematic (.kicad_sch), PCB (.kicad_pcb), BOM CSV, or Gerber files.".into(),
+            description: "Export a validated SynthSpec design to KiCad schematic (.kicad_sch), PCB (.kicad_pcb), BOM CSV, or Gerber files. By default this is a release export and rejects incomplete routing or DRC violations. Set allow_incomplete=true only to create explicitly draft artifacts for review/manual routing; draft artifacts are never release-ready.".into(),
             input_schema: serde_json::json!({
                 "type": "object",
                 "properties": {
@@ -182,6 +182,7 @@ pub fn list_tools() -> Vec<McpToolInfo> {
                     "file_path": { "type": "string", "description": "Path to source file" },
                     "out_dir": { "type": "string", "description": "Output directory path (accepts 'out' or 'out_dir')" },
                     "out": { "type": "string", "description": "Alias for out_dir" },
+                    "allow_incomplete": { "type": "boolean", "description": "Export a clearly labelled draft even when routing is incomplete or DRC has violations. Defaults to false; never use this output for fabrication." },
                     "registry_path": { "type": "string", "description": "Optional custom component registry path" },
                     "workspace_root": { "type": "string", "description": "Optional workspace root path for auto-resolving registry" }
                 }
@@ -421,7 +422,9 @@ pub fn list_tools() -> Vec<McpToolInfo> {
             input_schema: serde_json::json!({
                 "type": "object",
                 "properties": {
-                    "query": { "type": "string", "description": "Keyword or part number to search, e.g. 'AMS1117' or 'C2040'" }
+                    "query": { "type": "string", "description": "Keyword or part number to search, e.g. 'AMS1117' or 'C2040'" },
+                    "registry_path": { "type": "string", "description": "Optional custom component registry path for offline fallback" },
+                    "workspace_root": { "type": "string", "description": "Optional workspace root for offline registry fallback" }
                 }
             }),
         },
@@ -775,8 +778,8 @@ fn execute_validate(args: &Value, default_registry: Option<&Path>) -> Result<Val
             let registry_dir = resolve_registry(args, default_registry);
             diagnostics.push(
                 synth_diagnostics::DiagnosticBuilder::new(
-                    "W-SYNTH-REGISTRY-001",
-                    synth_diagnostics::Severity::Warning,
+                    "E-SYNTH-REGISTRY-001",
+                    synth_diagnostics::Severity::Error,
                     format!(
                         "Component registry not found at path '{}'",
                         registry_dir.display()
@@ -805,7 +808,8 @@ fn execute_erc_report(args: &Value, default_registry: Option<&Path>) -> Result<V
         return Ok(serde_json::json!({
             "erc_clean": false,
             "error": "Parse phase produced blocking errors",
-            "diagnostics": parse.diagnostics
+            "violations": parse.diagnostics,
+            "diagnostics": parse.diagnostics.clone()
         }));
     }
 
@@ -820,16 +824,35 @@ fn execute_erc_report(args: &Value, default_registry: Option<&Path>) -> Result<V
         load_registry_tiered(args, default_registry).map_err(|e| format!("Registry error: {e}"))?;
 
     let lowered = synth_ir::lower(&resolved.program, &registry, file_name);
+    let mut diagnostics = resolved.diagnostics;
+    diagnostics.extend(lowered.diagnostics);
+    if diagnostics.iter().any(|d| d.severity.is_blocking()) {
+        return Ok(serde_json::json!({
+            "erc_clean": false,
+            "error": "Compilation produced blocking diagnostics; ERC was not run",
+            "violations": diagnostics,
+            "diagnostics": diagnostics.clone()
+        }));
+    }
     let board = lowered.board.ok_or("Lowering failed")?;
 
     let erc_diagnostics = synth_validate::run_erc(&board, file_name);
     let erc_clean = !erc_diagnostics.iter().any(|d| d.severity.is_blocking());
 
+    let error_count = erc_diagnostics
+        .iter()
+        .filter(|d| d.severity.is_blocking())
+        .count();
+    let warning_count = erc_diagnostics
+        .iter()
+        .filter(|d| d.severity == synth_diagnostics::Severity::Warning)
+        .count();
     Ok(serde_json::json!({
         "erc_clean": erc_clean,
         "violations": erc_diagnostics,
-        "error_count": erc_diagnostics.iter().filter(|d| d.severity.is_blocking()).count(),
-        "warning_count": erc_diagnostics.iter().filter(|d| d.severity == synth_diagnostics::Severity::Warning).count()
+        "diagnostics": erc_diagnostics.clone(),
+        "error_count": error_count,
+        "warning_count": warning_count
     }))
 }
 
@@ -936,17 +959,33 @@ fn execute_drc_report(args: &Value, default_registry: Option<&Path>) -> Result<V
         .map_or_else(|| PathBuf::from("."), Path::to_path_buf);
     let loader = synth_ir::FsImportLoader { root: import_root };
     let resolved = synth_ir::resolve_imports(&ast, &loader, file_name);
+    if resolved
+        .diagnostics
+        .iter()
+        .any(|d| d.severity.is_blocking())
+    {
+        return Err("Compilation failed during import resolution; DRC aborted".into());
+    }
     let registry =
         load_registry_tiered(args, default_registry).map_err(|e| format!("Registry error: {e}"))?;
     let lowered = synth_ir::lower(&resolved.program, &registry, file_name);
+    if lowered.diagnostics.iter().any(|d| d.severity.is_blocking()) {
+        return Err("Compilation produced blocking diagnostics; DRC aborted".into());
+    }
     let board = lowered.board.ok_or("Lowering failed")?;
 
     let placement = synth_place::place(&board).map_err(|e| format!("Placement failed: {e:?}"))?;
     let routing = synth_route::route(&board, &placement);
     let report = synth_drc::check(&board, &placement, &routing, &profile);
 
+    let route_complete = routing.unrouted_nets.is_empty();
+    let drc_clean = report.is_clean() && route_complete;
+
     Ok(serde_json::json!({
-        "drc_clean": report.is_clean(),
+        "status": if drc_clean { "ok" } else { "blocked" },
+        "route_complete": route_complete,
+        "unrouted_nets": routing.unrouted_nets,
+        "drc_clean": drc_clean,
         "violations": report.violations,
         "violation_count": report.violations.len()
     }))
@@ -1269,10 +1308,47 @@ fn execute_export(args: &Value, default_registry: Option<&Path>) -> Result<Value
         root: PathBuf::from("."),
     };
     let resolved = synth_ir::resolve_imports(&ast, &loader, file_name);
+    if resolved
+        .diagnostics
+        .iter()
+        .any(|d| d.severity.is_blocking())
+    {
+        return Err("Compilation failed during import resolution; export aborted".into());
+    }
     let registry =
         load_registry_tiered(args, default_registry).map_err(|e| format!("Registry error: {e}"))?;
     let lowered = synth_ir::lower(&resolved.program, &registry, file_name);
+    if lowered.diagnostics.iter().any(|d| d.severity.is_blocking()) {
+        return Err("Compilation produced blocking diagnostics; export aborted".into());
+    }
     let board = lowered.board.ok_or("Lowering failed")?;
+
+    // Recompute placement, routing and DRC from the exact board being exported.
+    // A partial route may be exported only as an explicitly requested draft;
+    // the default remains a release gate.
+    let allow_incomplete = args["allow_incomplete"].as_bool().unwrap_or(false);
+    let placement = synth_place::place(&board).map_err(|e| format!("Placement failed: {e}"))?;
+    let routing = synth_route::route(&board, &placement);
+    let route_complete = routing.unrouted_nets.is_empty();
+    if !route_complete && !allow_incomplete {
+        return Err(format!(
+            "Routing produced {} unrouted net(s); export aborted",
+            routing.unrouted_nets.len()
+        ));
+    }
+    let drc = synth_drc::check(
+        &board,
+        &placement,
+        &routing,
+        &synth_drc::ManufacturerProfile::jlc_standard(),
+    );
+    let drc_clean = drc.is_clean() && route_complete;
+    if !drc.is_clean() && !allow_incomplete {
+        return Err(format!(
+            "DRC produced {} violation(s); export aborted",
+            drc.violations.len()
+        ));
+    }
 
     let res = synth_kicad::export(&board, &out_dir).map_err(|e| format!("Export failed: {e}"))?;
 
@@ -1288,7 +1364,12 @@ fn execute_export(args: &Value, default_registry: Option<&Path>) -> Result<Value
     };
 
     Ok(serde_json::json!({
-        "status": "success",
+        "status": if drc_clean { "success" } else { "draft_incomplete" },
+        "release_ready": drc_clean,
+        "route_complete": route_complete,
+        "unrouted_nets": routing.unrouted_nets,
+        "drc_clean": drc_clean,
+        "warning": if drc_clean { serde_json::Value::Null } else { serde_json::json!("DRAFT ONLY: routing and/or DRC is incomplete. Review and manually complete the PCB before any fabrication use.") },
         "capability_tier": "engineer-review-required",
         "compiler_version": "0.0.1",
         "registry_version": "0.0.1",
@@ -1489,6 +1570,27 @@ fn execute_place_with_hints(
                 {
                     synth_place::apply_sidecar_overrides(&board, &mut placement, &sidecar);
                 }
+            }
+
+            // Placement is an independently useful stage. Routing and DRC
+            // can be expensive and are exposed through their own gates; do
+            // not make a placement request synchronously run the full router
+            // unless the caller explicitly asks for the combined check.
+            if !args["run_routing"].as_bool().unwrap_or(false) {
+                #[allow(clippy::cast_precision_loss)]
+                let board_w_mm = (placement.board_outline.width_nm() as f64) / 1_000_000.0;
+                #[allow(clippy::cast_precision_loss)]
+                let board_h_mm = (placement.board_outline.height_nm() as f64) / 1_000_000.0;
+                return Ok(serde_json::json!({
+                    "status": "placed",
+                    "board_size_mm": [board_w_mm, board_h_mm],
+                    "component_placements": placement.components,
+                    "hint_satisfaction": report,
+                    "routing_status": "not_run",
+                    "drc_status": "not_run",
+                    "drc_clean": null,
+                    "unrouted_nets": null
+                }));
             }
 
             #[allow(clippy::cast_precision_loss)]
@@ -1983,7 +2085,7 @@ fn import_part_kicad(args: &Value, user_dir: &Path) -> Result<Value, String> {
     let lib_id = args["lib_id"]
         .as_str()
         .ok_or("kicad import requires 'lib_id'")?;
-    let pins = synth_layout::kicad_lib_loader::physical_pins(lib_id).ok_or_else(|| {
+    let (resolved_lib_id, pins) = resolve_kicad_symbol(lib_id).ok_or_else(|| {
         format!("could not read physical pins for '{lib_id}'; is KiCad installed and on the symbol path?")
     })?;
 
@@ -1993,29 +2095,42 @@ fn import_part_kicad(args: &Value, user_dir: &Path) -> Result<Value, String> {
         .to_lowercase()
         .replace([' ', '-', '.', '/'], "_");
     let part_id = args["id"].as_str().map_or(default_id, str::to_string);
-    let kind = infer_kind(lib_id);
-    let footprint = args["footprint"]
-        .as_str()
-        .map_or_else(|| lib_id.to_string(), str::to_string);
+    let kind = infer_kind(&resolved_lib_id);
+    let footprint = args["footprint"].as_str().map(str::to_string);
 
     let mut out = String::new();
     let _ = writeln!(out, "id = \"{part_id}\"");
     let _ = writeln!(out, "kind = \"{kind}\"");
     out.push_str("description = \"Imported from KiCad stock symbol\"\n");
-    let _ = writeln!(out, "kicad_symbol = \"{lib_id}\"");
-    let _ = writeln!(out, "kicad_footprint = \"{footprint}\"");
+    let _ = writeln!(out, "kicad_symbol = \"{resolved_lib_id}\"");
+    if let Some(footprint) = &footprint {
+        let _ = writeln!(out, "kicad_footprint = \"{footprint}\"");
+    }
     out.push_str("\n[provenance]\n");
     out.push_str("source = \"imported\"\n");
     out.push_str("reviewed_by = \"\"\n");
     out.push_str("\n[[pins]]\n");
-    for p in &pins {
-        let _ = writeln!(out, "name = \"{}\"", p.name);
+    let names = unique_imported_pin_names(&pins);
+    for (p, name) in pins.iter().zip(&names) {
+        let _ = writeln!(out, "name = \"{name}\"");
         let _ = writeln!(out, "number = \"{}\"", p.number);
         let _ = writeln!(
             out,
             "electrical_type = \"{}\"",
-            map_kicad_electrical_type(&p.electrical_type)
+            imported_electrical_type(&p.name, &p.electrical_type)
         );
+        let capabilities = inferred_imported_pin_capabilities(&p.name);
+        if !capabilities.is_empty() {
+            let _ = writeln!(
+                out,
+                "capabilities = [{}]",
+                capabilities
+                    .iter()
+                    .map(|c| format!("\"{c}\""))
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            );
+        }
         out.push_str("\n[[pins]]\n");
     }
     if !pins.is_empty() {
@@ -2027,11 +2142,14 @@ fn import_part_kicad(args: &Value, user_dir: &Path) -> Result<Value, String> {
 
     let pins_json: Vec<serde_json::Value> = pins
         .iter()
-        .map(|p| {
+        .zip(&names)
+        .map(|(p, name)| {
             serde_json::json!({
-                "name": p.name,
+                "name": name,
+                "original_name": p.name,
                 "number": p.number,
-                "electrical_type": map_kicad_electrical_type(&p.electrical_type)
+                "electrical_type": imported_electrical_type(&p.name, &p.electrical_type),
+                "capabilities": inferred_imported_pin_capabilities(&p.name)
             })
         })
         .collect();
@@ -2042,9 +2160,126 @@ fn import_part_kicad(args: &Value, user_dir: &Path) -> Result<Value, String> {
         "part_id": part_id,
         "part_path": part_path.display().to_string(),
         "kind": kind,
+        "kicad_symbol": resolved_lib_id,
         "pin_count": pins.len(),
+        "footprint_supplied": footprint.is_some(),
+        "warning": footprint.is_none().then_some(
+            "No footprint was supplied; verify one before fabrication"
+        ),
         "pins": pins_json
     }))
+}
+
+/// KiCad's stock connector library uses zero-padded unit names, while agents
+/// commonly request the human spelling (`Conn_01x3`). Resolve that harmless
+/// spelling variation before declaring an import unavailable.
+fn resolve_kicad_symbol(
+    lib_id: &str,
+) -> Option<(String, Vec<synth_layout::kicad_lib_loader::PhysicalPin>)> {
+    let mut candidates = vec![lib_id.to_string()];
+    if let Some((library, symbol)) = lib_id.split_once(':') {
+        let mut aliases = Vec::new();
+        if let Some(x_pos) = symbol.rfind('x') {
+            let (prefix, count) = symbol.split_at(x_pos + 1);
+            if count.len() == 1 && count.chars().all(|c| c.is_ascii_digit()) {
+                aliases.push(format!("{library}:{prefix}0{count}"));
+            }
+        }
+        candidates.extend(aliases);
+    }
+    candidates.into_iter().find_map(|candidate| {
+        synth_layout::kicad_lib_loader::physical_pins(&candidate).map(|pins| (candidate, pins))
+    })
+}
+
+fn canonical_imported_pin_name(name: &str, number: &str) -> String {
+    let mut result: String = name
+        .chars()
+        .map(|c| {
+            if c.is_ascii_alphanumeric() || c == '_' {
+                c
+            } else {
+                '_'
+            }
+        })
+        .collect();
+    while result.starts_with('_') {
+        result.remove(0);
+    }
+    while result.ends_with('_') {
+        result.pop();
+    }
+    if result.is_empty() {
+        result = format!("pin_{number}");
+    }
+    if result.chars().next().is_some_and(|c| c.is_ascii_digit()) {
+        result = format!("pin_{result}");
+    }
+    result
+}
+
+fn unique_imported_pin_names(pins: &[synth_layout::kicad_lib_loader::PhysicalPin]) -> Vec<String> {
+    let mut used = std::collections::HashSet::new();
+    pins.iter()
+        .map(|pin| {
+            let base = canonical_imported_pin_name(&pin.name, &pin.number);
+            let mut candidate = base.clone();
+            if !used.insert(candidate.clone()) {
+                let suffix = canonical_imported_pin_name("", &pin.number);
+                candidate = format!("{base}_{suffix}");
+                let mut index = 2;
+                while !used.insert(candidate.clone()) {
+                    candidate = format!("{base}_{suffix}_{index}");
+                    index += 1;
+                }
+            }
+            candidate
+        })
+        .collect()
+}
+
+/// Infer only unambiguous Synth protocol capabilities from standard KiCad
+/// signal names. KiCad symbols carry electrical direction but commonly omit
+/// the semantic tags consumed by Synth ERC.
+fn inferred_imported_pin_capabilities(name: &str) -> Vec<&'static str> {
+    let upper = name.to_ascii_uppercase();
+    let mut caps = Vec::new();
+    if upper.contains("USB_DP") || upper == "D+" {
+        caps.push("usb_dp");
+    }
+    if upper.contains("USB_DM") || upper == "D-" {
+        caps.push("usb_dn");
+    }
+    if upper.contains("QSPI_SS") || upper.ends_with("_CS") || upper == "CS" {
+        caps.push("spi_cs");
+    }
+    if upper.contains("QSPI_SCLK") || upper.ends_with("_SCK") || upper == "SCK" {
+        caps.push("spi_sck");
+    }
+    if upper.contains("QSPI_SD0") || upper.ends_with("_MOSI") || upper == "MOSI" {
+        caps.push("spi_mosi");
+    }
+    if upper.contains("QSPI_SD1") || upper.ends_with("_MISO") || upper == "MISO" {
+        caps.push("spi_miso");
+    }
+    if upper.starts_with("GPIO") {
+        caps.push("gpio");
+    }
+    if upper == "RUN" || upper.contains("RESET") {
+        caps.push("reset");
+    }
+    caps
+}
+
+fn imported_electrical_type(name: &str, raw: &str) -> String {
+    let upper = name.to_ascii_uppercase();
+    if upper.contains("USB_DP") {
+        "differential_positive".into()
+    } else if upper.contains("USB_DM") {
+        "differential_negative".into()
+    } else {
+        map_kicad_electrical_type(raw)
+    }
 }
 
 /// Import a part from a SnapEDA/UltraLibrarian "Export to KiCad" zip
@@ -2090,28 +2325,39 @@ fn import_part_kicad_zip(args: &Value, user_dir: &Path) -> Result<Value, String>
     }
     let _ = writeln!(out);
 
-    let mut name_counts: std::collections::HashMap<&str, usize> = std::collections::HashMap::new();
-    for pin in &import.pins {
-        if !pin.name.is_empty() {
-            *name_counts.entry(pin.name.as_str()).or_insert(0) += 1;
-        }
-    }
-    for pin in &import.pins {
-        let name = if pin.name.is_empty() {
-            pin.number.clone()
-        } else if name_counts.get(pin.name.as_str()).copied().unwrap_or(0) > 1 {
-            format!("{}_{}", pin.name, pin.number)
-        } else {
-            pin.name.clone()
-        };
+    let zip_pins: Vec<synth_layout::kicad_lib_loader::PhysicalPin> = import
+        .pins
+        .iter()
+        .map(|pin| synth_layout::kicad_lib_loader::PhysicalPin {
+            number: pin.number.clone(),
+            name: pin.name.clone(),
+            electrical_type: pin.electrical_type.clone(),
+            x: pin.x,
+            y: pin.y,
+        })
+        .collect();
+    let names = unique_imported_pin_names(&zip_pins);
+    for (pin, name) in import.pins.iter().zip(&names) {
         let _ = writeln!(out, "[[pins]]");
         let _ = writeln!(out, "name = \"{name}\"");
         let _ = writeln!(out, "number = \"{}\"", pin.number);
         let _ = writeln!(
             out,
             "electrical_type = \"{}\"",
-            map_kicad_electrical_type(&pin.electrical_type)
+            imported_electrical_type(&pin.name, &pin.electrical_type)
         );
+        let capabilities = inferred_imported_pin_capabilities(&pin.name);
+        if !capabilities.is_empty() {
+            let _ = writeln!(
+                out,
+                "capabilities = [{}]",
+                capabilities
+                    .iter()
+                    .map(|c| format!("\"{c}\""))
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            );
+        }
         let _ = writeln!(out, "required = false");
     }
     out.push_str("\n[provenance]\n");
@@ -2125,11 +2371,14 @@ fn import_part_kicad_zip(args: &Value, user_dir: &Path) -> Result<Value, String>
     let pins_json: Vec<serde_json::Value> = import
         .pins
         .iter()
-        .map(|p| {
+        .zip(&names)
+        .map(|(p, name)| {
             serde_json::json!({
-                "name": p.name,
+                "name": name,
+                "original_name": p.name,
                 "number": p.number,
-                "electrical_type": map_kicad_electrical_type(&p.electrical_type)
+                "electrical_type": imported_electrical_type(&p.name, &p.electrical_type),
+                "capabilities": inferred_imported_pin_capabilities(&p.name)
             })
         })
         .collect();
@@ -2151,7 +2400,7 @@ fn execute_author_part(args: &Value, _default_registry: Option<&Path>) -> Result
     let toml_src = args["part_toml"]
         .as_str()
         .ok_or("author_part requires 'part_toml' (TOML string)")?;
-    let part: synth_registry::Part =
+    let mut part: synth_registry::Part =
         toml::from_str(toml_src).map_err(|e| format!("invalid part TOML: {e}"))?;
 
     if part.id.as_str().is_empty() {
@@ -2164,6 +2413,17 @@ fn execute_author_part(args: &Value, _default_registry: Option<&Path>) -> Result
         if p.name.is_empty() || p.number.0.is_empty() {
             return Err("each pin must have a non-empty name and number".into());
         }
+    }
+    if let Some(provenance) = &part.provenance {
+        if provenance.source == synth_registry::ProvenanceSource::Seed {
+            return Err("authored parts cannot claim seed provenance".into());
+        }
+    } else {
+        part.provenance = Some(synth_registry::Provenance {
+            source: synth_registry::ProvenanceSource::Authored,
+            generator: Some("synth_author_part".into()),
+            ..Default::default()
+        });
     }
 
     let user_dir = resolve_user_registry(args)?;
@@ -2193,14 +2453,19 @@ fn execute_search_registry_web(
         return Err("search requires a non-empty 'query'".into());
     }
 
-    let network: Result<Option<synth_supply::types::SupplyStatus>, String> = (|| {
-        let rt = tokio::runtime::Builder::new_current_thread()
-            .enable_all()
-            .build()
-            .map_err(|e| e.to_string())?;
-        let dist = synth_supply::lcsc::LcscDistributor::new();
-        rt.block_on(dist.query(query)).map_err(|e| e.to_string())
-    })();
+    let network: Result<Option<synth_supply::types::SupplyStatus>, String> =
+        std::panic::catch_unwind(std::panic::AssertUnwindSafe(
+            || -> Result<Option<synth_supply::types::SupplyStatus>, String> {
+                let rt = tokio::runtime::Builder::new_current_thread()
+                    .enable_all()
+                    .build()
+                    .map_err(|e| e.to_string())?;
+                let dist = synth_supply::lcsc::LcscDistributor::new();
+                rt.block_on(dist.query(query)).map_err(|e| e.to_string())
+            },
+        ))
+        .map_err(|_| "LCSC search panicked; using local registry fallback".to_string())
+        .and_then(std::convert::identity);
 
     let mut network_error: Option<String> = None;
     let mut network_result: Option<synth_supply::types::SupplyStatus> = None;
@@ -2316,6 +2581,65 @@ mod import_tool_tests {
     }
 
     #[test]
+    fn validation_rejects_unavailable_registry() {
+        let source = r#"board "registry_failure" {
+  layers 2
+  component U1: mcu "definitely_missing_mcu"
+}
+"#;
+        let result = call_tool(
+            "synth_validate",
+            &json!({
+                "source": source,
+                "registry_path": "/path/that/does/not/exist"
+            }),
+            None,
+        )
+        .expect("validation should return structured diagnostics");
+        assert_eq!(result["status"], "error");
+        assert_eq!(result["error_count"], 1);
+        assert_eq!(result["diagnostics"][0]["code"], "E-SYNTH-REGISTRY-001");
+    }
+
+    #[test]
+    fn erc_does_not_report_clean_for_unresolved_parts() {
+        let source = r#"board "unresolved_part" {
+  layers 2
+  component U1: mcu "definitely_missing_mcu"
+}
+"#;
+        let result = call_tool("synth_erc_report", &json!({ "source": source }), None)
+            .expect("ERC should return a structured failure");
+        assert_eq!(result["erc_clean"], false);
+        assert!(result["violations"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|d| d["code"] == "E-SYNTH-COMP-001"));
+    }
+
+    #[test]
+    fn export_rejects_unresolved_parts_before_writing() {
+        let dir = scratch("export_unresolved");
+        let source = r#"board "unresolved_export" {
+  layers 2
+  component U1: mcu "definitely_missing_mcu"
+}
+"#;
+        let result = call_tool(
+            "synth_export",
+            &json!({
+                "source": source,
+                "out_dir": dir.to_str().unwrap()
+            }),
+            None,
+        );
+        assert!(result.is_err(), "export must reject unresolved parts");
+        assert!(!dir.join("unresolved_export.kicad_pcb").exists());
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
     fn author_part_writes_to_user_registry() {
         let dir = scratch("author");
         let toml_src = r#"
@@ -2340,6 +2664,8 @@ electrical_type = "passive"
         assert_eq!(res["status"], "authored");
         assert_eq!(res["part_id"], "test_res_1k");
         assert!(dir.join("test_res_1k.synth.toml").exists());
+        let written = std::fs::read_to_string(dir.join("test_res_1k.synth.toml")).unwrap();
+        assert!(written.contains("source = \"authored\""));
         let _ = std::fs::remove_dir_all(&dir);
     }
 

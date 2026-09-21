@@ -42,7 +42,7 @@ def generate_power_decoupling_variants():
   connect U1.gnd -> J1.p2
 }}
 """
-        (OUTPUT_DIR / f"gen_power_dec_{pins}.synth").write_text(content)
+        (OUTPUT_DIR / f"noconverge__gen_power_dec_{pins}.synth").write_text(content)
 
 def generate_single_endpoint_variants():
     for i in range(1, 8):
@@ -72,7 +72,7 @@ def generate_keepout_variants():
   }}
 }}
 """
-        (OUTPUT_DIR / f"gen_keepout_{i}.synth").write_text(content)
+        (OUTPUT_DIR / f"noconverge__gen_keepout_{i}.synth").write_text(content)
 
 def generate_boot_floating_variants():
     for i in range(1, 8):
@@ -85,7 +85,7 @@ def generate_boot_floating_variants():
   connect U{i}.gnd -> J1.p2
 }}
 """
-        (OUTPUT_DIR / f"gen_boot_floating_{i}.synth").write_text(content)
+        (OUTPUT_DIR / f"noconverge__gen_boot_floating_{i}.synth").write_text(content)
 
 def generate_rf_keepout_variants():
     for i in range(1, 8):

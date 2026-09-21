@@ -205,7 +205,15 @@ pub fn compute_floorplan_targets(
             } else {
                 (
                     max_x - half_w - synth_geometry::mm_to_nm(1.0),
-                    Rotation::Zero,
+                    // Reverse only explicitly MCU-clustered headers so
+                    // ordinary boards retain the legacy header orientation.
+                    if comp.placement_hint.as_ref().is_some_and(|hint| {
+                        hint.near.is_some() && hint.priority == synth_ir::PlacementPriority::Hard
+                    }) {
+                        Rotation::OneEighty
+                    } else {
+                        Rotation::Zero
+                    },
                 )
             };
             let y = min_y + height_nm / 4 + ((header_count / 2) * synth_geometry::mm_to_nm(15.0));
