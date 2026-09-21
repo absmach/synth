@@ -126,6 +126,17 @@ expression: board
             "voltage_max_v": null
           },
           {
+            "name": "gp4",
+            "number": "6",
+            "electrical_type": "bidirectional",
+            "capabilities": [
+              "gpio"
+            ],
+            "required": false,
+            "unit": null,
+            "voltage_max_v": null
+          },
+          {
             "name": "run",
             "number": "26",
             "electrical_type": "input",
@@ -167,7 +178,8 @@ expression: board
         "footprint_dimensions": {
           "width_mm": 7.75,
           "height_mm": 7.75,
-          "courtyard_margin_mm": 0.25
+          "courtyard_margin_mm": 0.25,
+          "mating_face": null
         },
         "operating_conditions": {
           "min_voltage_v": 1.8,
@@ -184,6 +196,7 @@ expression: board
   "nets": [],
   "diff_pairs": [],
   "keepouts": [],
+  "netclasses": [],
   "source_span": {
     "byte_start": 0,
     "byte_end": 86

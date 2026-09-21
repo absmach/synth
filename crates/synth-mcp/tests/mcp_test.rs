@@ -2,8 +2,6 @@
 
 //! Integration tests for `synth-mcp`.
 
-use std::path::PathBuf;
-
 use serde_json::json;
 use synth_mcp::{handle_jsonrpc_request, list_tools, SERVER_INSTRUCTIONS};
 
@@ -229,11 +227,10 @@ fn test_mcp_call_synth_place_with_hints() {
     let resp = handle_jsonrpc_request(req, None);
     assert_eq!(resp["id"], 30);
     let content_text = resp["result"]["content"][0]["text"].as_str().unwrap();
-    assert!(content_text.contains("\"status\": \"ok\""));
+    assert!(content_text.contains("\"status\": \"placed\""));
     assert!(content_text.contains("hint_satisfaction"));
-    assert!(content_text.contains("drc_clean"));
-    assert!(content_text.contains("violations"));
-    assert!(content_text.contains("unrouted_nets"));
+    assert!(content_text.contains("\"routing_status\": \"not_run\""));
+    assert!(content_text.contains("\"drc_status\": \"not_run\""));
 }
 
 #[test]

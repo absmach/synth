@@ -3,7 +3,14 @@ source: crates/synth-kicad/tests/golden.rs
 expression: project
 ---
 {
-  "board": {},
+  "board": {
+    "design_settings": {
+      "defaults": {
+        "min_clearance": 0.127,
+        "min_track_width": 0.127
+      }
+    }
+  },
   "boards": [],
   "meta": {
     "filename": "diff_pair_with_keepout.kicad_pro",

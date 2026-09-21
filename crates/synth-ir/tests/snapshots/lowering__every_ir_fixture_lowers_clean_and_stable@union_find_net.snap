@@ -1,6 +1,5 @@
 ---
 source: crates/synth-ir/tests/lowering.rs
-assertion_line: 71
 expression: board
 ---
 {
@@ -127,6 +126,17 @@ expression: board
             "voltage_max_v": null
           },
           {
+            "name": "gp4",
+            "number": "6",
+            "electrical_type": "bidirectional",
+            "capabilities": [
+              "gpio"
+            ],
+            "required": false,
+            "unit": null,
+            "voltage_max_v": null
+          },
+          {
             "name": "run",
             "number": "26",
             "electrical_type": "input",
@@ -168,7 +178,8 @@ expression: board
         "footprint_dimensions": {
           "width_mm": 7.75,
           "height_mm": 7.75,
-          "courtyard_margin_mm": 0.25
+          "courtyard_margin_mm": 0.25,
+          "mating_face": null
         },
         "operating_conditions": {
           "min_voltage_v": 1.8,
@@ -286,7 +297,8 @@ expression: board
         "footprint_dimensions": {
           "width_mm": 6.9,
           "height_mm": 4.41,
-          "courtyard_margin_mm": 0.25
+          "courtyard_margin_mm": 0.25,
+          "mating_face": null
         },
         "operating_conditions": {
           "min_voltage_v": 1.8,
@@ -339,7 +351,8 @@ expression: board
         "footprint_dimensions": {
           "width_mm": 1.82,
           "height_mm": 0.92,
-          "courtyard_margin_mm": 0.25
+          "courtyard_margin_mm": 0.25,
+          "mating_face": null
         },
         "operating_conditions": {
           "min_voltage_v": null,
@@ -387,6 +400,7 @@ expression: board
   ],
   "diff_pairs": [],
   "keepouts": [],
+  "netclasses": [],
   "source_span": {
     "byte_start": 119,
     "byte_end": 325

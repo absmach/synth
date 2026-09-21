@@ -88,6 +88,11 @@ const PRIORITY_RIPUP_ROUNDS: usize = 4;
 /// the zero-segment priority pass; these rounds rip the net (and the
 /// competitor tracks blocking its escape corridor) and re-route it.
 const MAX_RIPUP_REROUTE_ROUNDS: usize = 2;
+/// Hard safety budget for the complete routing request. A maze search that
+/// cannot make progress must return a bounded partial result instead of
+/// holding an MCP worker forever. The budget is deliberately expressed in
+/// cell expansions so it is deterministic across identical inputs.
+const MAX_TOTAL_ASTAR_EXPANSIONS: u64 = 500_000;
 
 /// History-cost increment applied to every contested cell at
 /// the end of each negotiation iteration.
@@ -1073,6 +1078,9 @@ fn astar(
     }
 
     while let Some(Reverse((_, _, cl_u, cx_u, cy_u))) = heap.pop() {
+        if *cells_expanded >= MAX_TOTAL_ASTAR_EXPANSIONS {
+            return None;
+        }
         *cells_expanded += 1;
         let cl = cl_u as usize;
         let cx = cx_u as usize;
