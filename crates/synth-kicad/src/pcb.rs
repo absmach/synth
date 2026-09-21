@@ -36,6 +36,7 @@
 //! ```
 
 use std::collections::HashMap;
+use std::fmt::Write as _;
 
 use synth_geometry::{mm_to_nm, nm_to_mm, Layer, Rotation};
 use synth_ir::{Board, ComponentId};
@@ -721,6 +722,57 @@ fn build_footprint_instance(
         _ => "B.Fab",
     };
 
+    // Deterministic UUIDs for the Reference/Value text fields. Without
+    // them, KiCad's `--save-board` DRC gate fills in random v4 UUIDs on
+    // every export, breaking byte-identical re-exports (plan §6.2).
+    let ref_prop_uuid = derive_entity_uuid(
+        project,
+        "fp_property",
+        &format!("{}:Reference", component.refdes),
+    );
+    let val_prop_uuid = derive_entity_uuid(
+        project,
+        "fp_property",
+        &format!("{}:Value", component.refdes),
+    );
+    // Empty Datasheet/Description slots, mirroring exactly what KiCad's
+    // `--save-board` backfills for instances that lack them (empty value,
+    // `(at 0 0 0)`, fab layer, hidden, 1.27 mm font). Without these, the
+    // gate fills them with fresh random v4 UUIDs on every export and the
+    // plan §6.2 byte-identical guarantee breaks. The native
+    // `lib_footprint_mismatch` check tolerates them: it already tolerates
+    // the identical blocks KiCad itself backfills (the gate is clean).
+    let datasheet_prop_uuid = derive_entity_uuid(
+        project,
+        "fp_property",
+        &format!("{}:Datasheet", component.refdes),
+    );
+    let description_prop_uuid = derive_entity_uuid(
+        project,
+        "fp_property",
+        &format!("{}:Description", component.refdes),
+    );
+    let doc_property = |name: &str, uuid: &Uuid| {
+        Sexp::list(
+            "property",
+            vec![
+                Sexp::str(name),
+                Sexp::str(""),
+                Sexp::list("at", vec![num(0.0), num(0.0), num(0.0)]),
+                Sexp::list("layer", vec![Sexp::str(fab_layer)]),
+                Sexp::list("hide", vec![Sexp::atom("yes")]),
+                str_pair("uuid", uuid.to_string()),
+                Sexp::list(
+                    "effects",
+                    vec![Sexp::list(
+                        "font",
+                        vec![Sexp::list("size", vec![num(1.27), num(1.27)])],
+                    )],
+                ),
+            ],
+        )
+    };
+
     let mut children = vec![
         Sexp::list("layer", vec![Sexp::str(layer_name)]),
         str_pair("uuid", fp_uuid.to_string()),
@@ -735,6 +787,7 @@ fn build_footprint_instance(
                     vec![num(ref_local_x), num(ref_local_y), num(ref_text_angle)],
                 ),
                 Sexp::list("layer", vec![Sexp::str(silk_layer)]),
+                str_pair("uuid", ref_prop_uuid.to_string()),
                 Sexp::list(
                     "effects",
                     vec![Sexp::list(
@@ -754,6 +807,7 @@ fn build_footprint_instance(
                     vec![num(val_local_x), num(val_local_y), num(val_text_angle)],
                 ),
                 Sexp::list("layer", vec![Sexp::str(fab_layer)]),
+                str_pair("uuid", val_prop_uuid.to_string()),
                 Sexp::list("hide", vec![Sexp::atom("yes")]),
                 Sexp::list(
                     "effects",
@@ -764,6 +818,8 @@ fn build_footprint_instance(
                 ),
             ],
         ),
+        doc_property("Datasheet", &datasheet_prop_uuid),
+        doc_property("Description", &description_prop_uuid),
     ];
 
     let has_model = if let Some(body) = inlined_body.as_deref() {
@@ -774,6 +830,7 @@ fn build_footprint_instance(
         // project's fp-lib-table and produces a spurious DRC error.
         let body = strip_footprint_head(body);
         let body_with_nets = inject_pad_nets(&body, component.id, pad_net_lookup);
+        let body_with_nets = ensure_body_uuids(&body_with_nets, project, lib_id);
         let has_model = body_with_nets.contains("(model ");
         children.push(Sexp::Raw(body_with_nets));
         has_model
@@ -789,6 +846,14 @@ fn build_footprint_instance(
                 if let Some((net_id, net_name)) =
                     pad_net_lookup.get(&(component.id, pad.number.clone()))
                 {
+                    // Deterministic pad UUID (see `ensure_body_uuids`):
+                    // without it KiCad's `--save-board` gate fills a random
+                    // v4 UUID per export.
+                    let pad_uuid = derive_entity_uuid(
+                        project,
+                        "pad",
+                        &format!("{}:{}", component.refdes, pad.number),
+                    );
                     children.push(Sexp::list(
                         "pad",
                         vec![
@@ -805,6 +870,7 @@ fn build_footprint_instance(
                                 "net",
                                 vec![Sexp::atom(net_id.to_string()), Sexp::str(net_name)],
                             ),
+                            str_pair("uuid", pad_uuid.to_string()),
                         ],
                     ));
                 }
@@ -922,6 +988,257 @@ fn build_3d_model_sexp(lib_id: &str) -> Option<Sexp> {
 /// Return the interior of a KiCad `(footprint "name" …)` s-expression with the
 /// outer `(footprint "name"` head removed, so it can be embedded directly under
 /// a `(module …)` without leaving a dangling library reference.
+/// Footprint-body children that carry a `(uuid ...)` in KiCad 10.
+/// Anything else (e.g. `model`, `attr`, `descr`) must NOT gain one.
+const BODY_UUID_HEADS: &[&str] = &[
+    "pad",
+    "property",
+    "fp_text",
+    "fp_line",
+    "fp_rect",
+    "fp_circle",
+    "fp_arc",
+    "fp_poly",
+    "fp_curve",
+];
+
+/// Fill in deterministic UUIDs for inlined footprint-body blocks that
+/// lack them (stock-library drawing primitives, pads and properties
+/// predate mandatory UUIDs).
+///
+/// Without this, KiCad's `--save-board` DRC gate assigns a fresh random v4
+/// UUID to every such block on each export, so two exports of the same
+/// board differ and the plan §6.2 byte-identical guarantee breaks. UUIDs
+/// are v5 over `(project, "fp_body:{lib_id}:{kind}:{key}#{n}")`, hence
+/// stable across runs, thread counts, and machines. Blocks that already
+/// carry `(uuid ...)` are left untouched.
+fn ensure_body_uuids(body: &str, project: &Uuid, lib_id: &str) -> String {
+    let mut seen: std::collections::HashMap<String, usize> = std::collections::HashMap::new();
+    ensure_level(body, project, lib_id, "", &mut seen, false)
+}
+
+/// One level of [`ensure_body_uuids`]: walk the top-level blocks of `text`,
+/// add deterministic UUIDs where missing, and recurse into each block's
+/// children (footprint `fp_text` nests a `(point ...)` designator lock that
+/// KiCad fills the same way). `path` is the `/`-joined ancestor chain so
+/// nested names cannot collide with top-level ones; `seen` counts each
+/// full path for duplicate siblings.
+///
+/// Nested levels only ever gain UUIDs on `point`: pad-nested `(property
+/// pad_prop_mechanical)` must stay exactly as the stock library ships it —
+/// KiCad 10.0's pad parser rejects anything else there.
+fn ensure_level(
+    text: &str,
+    project: &Uuid,
+    lib_id: &str,
+    path: &str,
+    seen: &mut std::collections::HashMap<String, usize>,
+    nested: bool,
+) -> String {
+    // `point` blocks only ever occur nested (fp_text designator locks).
+    const NESTED_UUID_HEADS: &[&str] = &["point"];
+    let bytes = text.as_bytes();
+    let mut out = String::with_capacity(text.len() + 256);
+    let mut i = 0;
+    // Byte-slices are copied verbatim (never char-split), so non-ASCII in
+    // values passes through untouched; `(` inside string literals does not
+    // start a block.
+    let mut seg_start = 0;
+    while i < bytes.len() {
+        if bytes[i] == b'"' {
+            i = skip_string(bytes, i);
+            continue;
+        }
+        if bytes[i] != b'(' {
+            i += 1;
+            continue;
+        }
+        let Some(end) = matching_close_quoted(text, i + 1) else {
+            break;
+        };
+        let block = &text[i..=end];
+        let head = block
+            .trim_start_matches('(')
+            .split(|c: char| c.is_ascii_whitespace() || c == '(' || c == ')')
+            .next()
+            .unwrap_or("");
+        let key = first_quoted_after(block, head).unwrap_or("").to_string();
+        let full_path = format!("{path}/{head}:{key}");
+        let mut block = block.to_string();
+        // NB: only a *direct* `(uuid ...)` child counts — a nested one
+        // (e.g. an fp_text whose `point` child already has one) must not
+        // suppress the parent's own UUID.
+        let whitelisted =
+            (!nested && BODY_UUID_HEADS.contains(&head)) || NESTED_UUID_HEADS.contains(&head);
+        if whitelisted && !has_direct_uuid(&block) {
+            let counter = seen.entry(full_path.clone()).or_insert(0);
+            let uuid = derive_entity_uuid(
+                project,
+                "fp_body",
+                &format!("{lib_id}:{full_path}#{counter}"),
+            );
+            *counter += 1;
+            block.pop();
+            let _ = write!(block, " (uuid \"{uuid}\")");
+            block.push(')');
+        }
+        // Recurse into children: everything between the `(head ...args`
+        // opener and the final `)`. Leaf blocks (no inner `(`) come back
+        // unchanged.
+        if let Some(range) = inner_range(&block) {
+            let fixed = ensure_level(
+                &block[range.clone()],
+                project,
+                lib_id,
+                &full_path,
+                seen,
+                true,
+            );
+            block.replace_range(range, &fixed);
+        }
+        out.push_str(&text[seg_start..i]);
+        out.push_str(&block);
+        i = end + 1;
+        seg_start = i;
+    }
+    out.push_str(&text[seg_start..]);
+    out
+}
+
+/// True when `block`'s direct children include a `(uuid ...)` node.
+/// (A plain substring search would false-positive on a *nested* UUID, e.g.
+/// an fp_text whose `point` child already has one while it does not.)
+fn has_direct_uuid(block: &str) -> bool {
+    let Some(range) = inner_range(block) else {
+        return false;
+    };
+    let inner = &block[range];
+    let bytes = inner.as_bytes();
+    let mut i = 0;
+    while i < bytes.len() {
+        if bytes[i] == b'"' {
+            i = skip_string(bytes, i);
+            continue;
+        }
+        if bytes[i] != b'(' {
+            i += 1;
+            continue;
+        }
+        let Some(end) = matching_close_quoted(inner, i + 1) else {
+            return false;
+        };
+        let head = inner[i + 1..=end]
+            .split(|c: char| c.is_ascii_whitespace() || c == '(' || c == ')')
+            .next()
+            .unwrap_or("");
+        if head == "uuid" {
+            return true;
+        }
+        i = end + 1;
+    }
+    false
+}
+
+/// Byte index just past the string literal opening at `i` (which must be
+/// a `"` byte): handles `\\` and `\"` escapes.
+fn skip_string(bytes: &[u8], i: usize) -> usize {
+    let mut j = i + 1;
+    while j < bytes.len() {
+        match bytes[j] {
+            b'\\' => j += 2,
+            b'"' => return j + 1,
+            _ => j += 1,
+        }
+    }
+    j
+}
+
+/// Byte range of a block's children: the text between the head + inline
+/// args and the closing paren, or `None` for leaf blocks. Quote-aware so
+/// `")"` inside a string cannot fake a boundary.
+fn inner_range(block: &str) -> Option<std::ops::Range<usize>> {
+    let bytes = block.as_bytes();
+    // End of the `(head` opener.
+    let mut k = 1;
+    while k < bytes.len() && !bytes[k].is_ascii_whitespace() && bytes[k] != b'(' && bytes[k] != b')'
+    {
+        k += 1;
+    }
+    // First nested `(` outside of strings starts the children.
+    let mut in_string = false;
+    let mut j = k;
+    while j < bytes.len() {
+        let b = bytes[j];
+        if in_string {
+            if b == b'\\' {
+                j += 2;
+                continue;
+            }
+            if b == b'"' {
+                in_string = false;
+            }
+            j += 1;
+            continue;
+        }
+        match b {
+            b'"' => in_string = true,
+            b'(' => return Some(k..block.len() - 1),
+            b')' => return None,
+            _ => {}
+        }
+        j += 1;
+    }
+    None
+}
+
+/// Quote-aware paren matcher: byte index of the `)` closing the list
+/// opened just before `from`. String literals (`"..."`, with `\\` and
+/// `\"` escapes) never affect depth, so values containing parens
+/// (e.g. a Description) cannot corrupt the scan.
+fn matching_close_quoted(text: &str, from: usize) -> Option<usize> {
+    let bytes = text.as_bytes();
+    let mut depth = 1_i32;
+    let mut in_string = false;
+    let mut j = from;
+    while j < bytes.len() {
+        let b = bytes[j];
+        if in_string {
+            if b == b'\\' {
+                j += 2;
+                continue;
+            }
+            if b == b'"' {
+                in_string = false;
+            }
+            j += 1;
+            continue;
+        }
+        match b {
+            b'"' => in_string = true,
+            b'(' => depth += 1,
+            b')' => {
+                depth -= 1;
+                if depth == 0 {
+                    return Some(j);
+                }
+            }
+            _ => {}
+        }
+        j += 1;
+    }
+    None
+}
+
+/// First `"quoted"` value appearing after the `(head ` opener of `block`
+/// (the pad number for `(pad ...)`, the name for `(property ...)`).
+fn first_quoted_after<'a>(block: &'a str, head: &str) -> Option<&'a str> {
+    let after = block.get(1 + head.len()..)?;
+    let q1 = after.find('"')?;
+    let rest = &after[q1 + 1..];
+    let q2 = rest.find('"')?;
+    Some(&rest[..q2])
+}
+
 fn strip_footprint_head(body: &str) -> String {
     let s = body.trim();
     if !s.starts_with('(') {
@@ -1121,6 +1438,28 @@ mod tests {
         assert_eq!(pad_count, 2);
         assert!(rendered.starts_with("(footprint"));
         assert!(rendered.contains("\"synth:nofp\""));
+    }
+
+    /// Regression test for the KiCad `--save-board` determinism hole:
+    /// every uuid-bearing footprint-body block must carry a deterministic
+    /// UUID before KiCad sees the file, or the gate fills random v4 UUIDs
+    /// and re-exports stop being byte-identical (plan §6.2).
+    #[test]
+    fn inlined_body_blocks_carry_deterministic_uuids() {
+        let body = "(property \"Datasheet\" \"\" (at 0 0 0) (layer \"F.Fab\") (hide yes) (effects (font (size 1.27 1.27)))) (pad \"1\" smd rect (at 0 0) (size 1 1) (layers \"F.Cu\")) (fp_line (start 0 0) (end 1 1) (stroke (width 0.1)) (layer \"F.SilkS\")) (fp_text user \"REF\" (at 0 0) (layer \"F.SilkS\") (effects (font (size 1 1))) (point (at 0 0) (size 1) (layer \"F.SilkS\")))";
+        let project = Uuid::nil();
+        let once = super::ensure_body_uuids(body, &project, "lib:part");
+        assert_eq!(
+            once.matches("(uuid \"").count(),
+            5,
+            "one uuid per block: {once}"
+        );
+        // Idempotent and deterministic: a second pass changes nothing, and
+        // pre-uuid'd blocks are preserved verbatim.
+        let twice = super::ensure_body_uuids(&once, &project, "lib:part");
+        assert_eq!(once, twice, "uuid pass must be idempotent");
+        let again = super::ensure_body_uuids(body, &project, "lib:part");
+        assert_eq!(once, again, "uuid pass must be deterministic");
     }
 
     /// Regression test for the `lib_footprint_mismatch` DRC violation:

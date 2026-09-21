@@ -22,6 +22,7 @@ synth-ir = { workspace = true }
 synth-layout = { workspace = true }
 synth-place = { workspace = true }
 synth-route = { workspace = true }
+rayon = { workspace = true }
 
 [dev-dependencies]
 synth-parser = { workspace = true }
