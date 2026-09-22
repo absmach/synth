@@ -16,6 +16,7 @@ mod preview;
 
 use std::io::Write;
 use std::path::{Path, PathBuf};
+use std::process::Command as ProcessCommand;
 use std::process::ExitCode;
 
 use clap::{Parser, Subcommand, ValueEnum};
@@ -142,6 +143,17 @@ enum Command {
         /// Promote user-part shadowing of shipped parts to a load error.
         #[arg(long)]
         strict_registry: bool,
+        /// Run the optional FreeRouting post-router on the exported PCB.
+        /// The Synth partial route is preserved as `<name>.synth.kicad_pcb`.
+        #[arg(long)]
+        autoroute: bool,
+        /// FreeRouting JAR. Defaults to tools/freerouting/freerouting-2.4.1.jar.
+        #[arg(long, value_name = "JAR")]
+        freerouting_jar: Option<PathBuf>,
+        /// Java executable used for FreeRouting. Defaults to the bundled
+        /// tools/jre25/bin/java when present, otherwise `java`.
+        #[arg(long, value_name = "JAVA")]
+        freerouting_java: Option<PathBuf>,
     },
 
     /// Apply the highest-confidence `suggested_fix` from every
@@ -226,6 +238,9 @@ enum Command {
         /// Path to directory for logging routing outcome pairs (Dataset 6).
         #[arg(long = "log-routing-outcomes", value_name = "DIR")]
         log_routing_outcomes: Option<PathBuf>,
+        /// Comma-separated net names to prioritize on a recovery route.
+        #[arg(long = "routing-order", value_delimiter = ',')]
+        routing_order: Vec<String>,
         #[arg(long)]
         pretty: bool,
     },
@@ -599,6 +614,9 @@ fn main() -> ExitCode {
             allow_unverified_parts,
             user_registry,
             strict_registry,
+            autoroute,
+            freerouting_jar,
+            freerouting_java,
         } => export_kicad(
             &input,
             registry.as_deref(),
@@ -613,6 +631,9 @@ fn main() -> ExitCode {
             validate_erc,
             force,
             allow_unverified_parts,
+            autoroute,
+            freerouting_jar.as_deref(),
+            freerouting_java.as_deref(),
         ),
         Command::Fix {
             input,
@@ -638,11 +659,13 @@ fn main() -> ExitCode {
             input,
             registry,
             log_routing_outcomes,
+            routing_order,
             pretty,
         } => dump_route(
             &input,
             registry.as_deref(),
             log_routing_outcomes.as_deref(),
+            &routing_order,
             pretty,
         ),
         Command::Drc {
@@ -1671,29 +1694,69 @@ fn load_registry_strict(
         .map(PathBuf::from)
         .or_else(synth_registry::user_registry_dir);
     match resolve_tier1(registry_dir) {
-        Tier1Source::Dir(dir) => match user {
-            Some(u) if u.exists() => match synth_registry::load_tiered(&dir, &u, strict) {
-                Ok(res) => {
-                    emit_registry_warnings(&res.warnings);
-                    Some(res.registry)
-                }
-                Err(e) => {
-                    eprintln!("synth: registry load failed (strict): {e}");
-                    eprintln!(
-                        "synth: hint: check --registry, set SYNTH_REGISTRY, or run from a \
+        Tier1Source::Dir(dir) => {
+            // Agent harnesses historically passed the flat Tier-2 directory
+            // through `--registry`. Treat that shape as a user overlay over
+            // the embedded seed rather than replacing the shipped registry;
+            // otherwise ordinary parts such as USB-C and passives become
+            // unexpected hard errors even though the agent registered only
+            // the design-specific parts.
+            let flat_user_registry = is_flat_user_registry(&dir);
+            if flat_user_registry {
+                let base = match synth_registry::load_user_overlay(
+                    synth_registry::embedded_registry().clone(),
+                    &dir,
+                    strict,
+                ) {
+                    Ok(res) => {
+                        emit_registry_warnings(&res.warnings);
+                        res.registry
+                    }
+                    Err(e) => {
+                        eprintln!("synth: registry load failed (strict): {e}");
+                        return None;
+                    }
+                };
+                return match user {
+                    Some(u) if u.exists() && u != dir => {
+                        match synth_registry::load_user_overlay(base, &u, strict) {
+                            Ok(res) => {
+                                emit_registry_warnings(&res.warnings);
+                                Some(res.registry)
+                            }
+                            Err(e) => {
+                                eprintln!("synth: registry load failed (strict): {e}");
+                                None
+                            }
+                        }
+                    }
+                    _ => Some(base),
+                };
+            }
+            match user {
+                Some(u) if u.exists() => match synth_registry::load_tiered(&dir, &u, strict) {
+                    Ok(res) => {
+                        emit_registry_warnings(&res.warnings);
+                        Some(res.registry)
+                    }
+                    Err(e) => {
+                        eprintln!("synth: registry load failed (strict): {e}");
+                        eprintln!(
+                            "synth: hint: check --registry, set SYNTH_REGISTRY, or run from a \
                          synth checkout"
-                    );
-                    None
-                }
-            },
-            _ => match synth_registry::load_dir(&dir) {
-                Ok(r) => Some(r),
-                Err(e) => {
-                    eprintln!("synth: could not load registry from {}: {e}", dir.display());
-                    None
-                }
-            },
-        },
+                        );
+                        None
+                    }
+                },
+                _ => match synth_registry::load_dir(&dir) {
+                    Ok(r) => Some(r),
+                    Err(e) => {
+                        eprintln!("synth: could not load registry from {}: {e}", dir.display());
+                        None
+                    }
+                },
+            }
+        }
         Tier1Source::Embedded => {
             eprintln!(
                 "synth: no registry/parts found — using the embedded seed registry \
@@ -1721,6 +1784,23 @@ fn load_registry_strict(
             }
         }
     }
+}
+
+fn is_flat_user_registry(dir: &Path) -> bool {
+    let Ok(entries) = std::fs::read_dir(dir) else {
+        return false;
+    };
+    let mut has_toml = false;
+    let mut has_subdirectory = false;
+    for entry in entries.flatten() {
+        let path = entry.path();
+        if path.is_dir() {
+            has_subdirectory = true;
+        } else if path.extension().is_some_and(|ext| ext == "toml") {
+            has_toml = true;
+        }
+    }
+    has_toml && !has_subdirectory
 }
 
 fn validate(
@@ -2038,6 +2118,7 @@ fn dump_route(
     input: &PathBuf,
     registry_dir: Option<&Path>,
     log_routing_outcomes: Option<&Path>,
+    routing_order: &[String],
     pretty: bool,
 ) -> anyhow::Result<u8> {
     let (source, file) = read_source(input)?;
@@ -2071,7 +2152,11 @@ fn dump_route(
                 .as_ref()
                 .and_then(|b| match synth_place::place(b) {
                     Ok(p) => {
-                        let r = synth_route::route(b, &p);
+                        let r = if routing_order.is_empty() {
+                            synth_route::route(b, &p)
+                        } else {
+                            synth_route::route_with_order(b, &p, routing_order)
+                        };
                         if let Some(log_dir) = log_routing_outcomes {
                             if let Err(e) = synth_route::log_routing_outcome(b, &p, &r, log_dir) {
                                 eprintln!("synth route: failed to log routing outcome: {e}");
@@ -2242,6 +2327,9 @@ fn export_kicad(
     validate_erc: bool,
     force: bool,
     allow_unverified_parts: bool,
+    autoroute: bool,
+    freerouting_jar: Option<&Path>,
+    freerouting_java: Option<&Path>,
 ) -> anyhow::Result<u8> {
     let (source, file) = read_source(input)?;
     let parse = synth_parser::parse(&source, file.clone());
@@ -2317,6 +2405,10 @@ fn export_kicad(
 
     let result = synth_kicad::export_with_sidecar(board, out_dir, sidecar)
         .map_err(|e| anyhow::anyhow!("kicad export failed: {e}"))?;
+
+    if autoroute {
+        run_freerouting_postpass(&result.pcb_path, freerouting_jar, freerouting_java)?;
+    }
 
     eprintln!("wrote {}", result.project_path.display());
     eprintln!("wrote {}", result.schematic_path.display());
@@ -2410,6 +2502,84 @@ fn export_kicad(
     } else {
         EXIT_SUCCESS
     })
+}
+
+fn run_freerouting_postpass(
+    pcb_path: &Path,
+    jar_arg: Option<&Path>,
+    java_arg: Option<&Path>,
+) -> anyhow::Result<()> {
+    let repo_root = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .parent()
+        .and_then(Path::parent)
+        .ok_or_else(|| anyhow::anyhow!("cannot locate Synth repository root"))?;
+    let script = repo_root.join("tools/freeroute_autoroute.py");
+    if !script.is_file() {
+        anyhow::bail!("FreeRouting helper not found: {}", script.display());
+    }
+
+    let default_tools = [repo_root.join("tools"), repo_root.join("..").join("tools")];
+    let jar = jar_arg.map(Path::to_path_buf).unwrap_or_else(|| {
+        default_tools
+            .iter()
+            .map(|tools| tools.join("freerouting/freerouting-2.4.1.jar"))
+            .find(|candidate| candidate.is_file())
+            .unwrap_or_else(|| default_tools[0].join("freerouting/freerouting-2.4.1.jar"))
+    });
+    if !jar.is_file() {
+        anyhow::bail!(
+            "FreeRouting JAR not found: {} (pass --freerouting-jar)",
+            jar.display()
+        );
+    }
+    let java = java_arg.map(Path::to_path_buf).unwrap_or_else(|| {
+        default_tools
+            .iter()
+            .map(|tools| tools.join("jre25/bin/java"))
+            .find(|candidate| candidate.is_file())
+            .unwrap_or_else(|| PathBuf::from("java"))
+    });
+    let java = if java.is_file() {
+        java
+    } else {
+        PathBuf::from("java")
+    };
+
+    let stem = pcb_path
+        .file_stem()
+        .and_then(|name| name.to_str())
+        .unwrap_or("board");
+    let partial = pcb_path.with_file_name(format!("{stem}.synth.kicad_pcb"));
+    std::fs::copy(pcb_path, &partial).map_err(|error| {
+        anyhow::anyhow!(
+            "could not preserve Synth partial board at {}: {error}",
+            partial.display()
+        )
+    })?;
+    let routed = pcb_path.with_file_name(format!("{stem}.freerouting.kicad_pcb"));
+
+    eprintln!("running FreeRouting post-pass on {}", pcb_path.display());
+    let status = ProcessCommand::new("python3")
+        .arg(&script)
+        .arg(&partial)
+        .arg(&routed)
+        .arg("--jar")
+        .arg(&jar)
+        .arg("--java")
+        .arg(&java)
+        .status()
+        .map_err(|error| anyhow::anyhow!("could not start FreeRouting helper: {error}"))?;
+    if !status.success() {
+        anyhow::bail!("FreeRouting post-pass failed with status {status}");
+    }
+    std::fs::rename(&routed, pcb_path).map_err(|error| {
+        anyhow::anyhow!(
+            "could not install FreeRouting board {}: {error}",
+            pcb_path.display()
+        )
+    })?;
+    eprintln!("FreeRouting result installed at {}", pcb_path.display());
+    Ok(())
 }
 
 /// Run the full validate pipeline and return every diagnostic.

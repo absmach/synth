@@ -286,6 +286,44 @@ pub fn route_with_profile(
     )
 }
 
+/// Route with an optional agent-provided net order. Names listed in
+/// `routing_order` are attempted first; all other nets retain the deterministic
+/// electrical-priority order. This is an advisory override, not a way to
+/// bypass clearance or DRC checks.
+#[must_use]
+pub fn route_with_order(board: &Board, placement: &Placement, routing_order: &[String]) -> Routing {
+    route_with_profile_and_order(
+        board,
+        placement,
+        127_000,
+        synth_geometry::mm_to_nm(0.127),
+        routing_order,
+    )
+}
+
+/// Route with an agent-provided order and explicit manufacturing profile.
+/// This keeps ordered recovery available when the constraints tool selects a
+/// non-default trace width or clearance.
+#[must_use]
+pub fn route_with_profile_and_order(
+    board: &Board,
+    placement: &Placement,
+    min_trace_width_nm: i64,
+    min_clearance_nm: i64,
+    routing_order: &[String],
+) -> Routing {
+    let mut routing = maze::route_all_with_profile_and_order(
+        board,
+        placement,
+        &advisor::DefaultCongestionAdvisor,
+        min_trace_width_nm,
+        min_clearance_nm,
+        Some(routing_order),
+    );
+    generate_rf_via_fence(board, placement, &mut routing);
+    routing
+}
+
 /// Route every net in `board` against `placement` guided by a congestion advisor.
 #[must_use]
 pub fn route_with_advisor(

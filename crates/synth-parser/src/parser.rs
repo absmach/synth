@@ -234,6 +234,34 @@ impl Parser {
             self.skip_error_tokens();
             match self.peek_kind() {
                 TokenKind::RBrace | TokenKind::Eof => break,
+                TokenKind::KwPlacementHint => {
+                    // Agents commonly emit named hints at board scope after
+                    // the component declarations. Attach them to the matching
+                    // component so placement constraints are not silently
+                    // discarded by the parser.
+                    if let Some(hint) = self.parse_placement_hint() {
+                        if let Some(refdes) = hint.component.as_deref() {
+                            if let Some(StatementAst::Component(component)) = statements.iter_mut().find(|stmt| {
+                                matches!(stmt, StatementAst::Component(c) if c.refdes.eq_ignore_ascii_case(refdes))
+                            }) {
+                                component.placement_hint = Some(PlacementHintAst {
+                                    component: None,
+                                    attrs: hint.attrs,
+                                    span: hint.span,
+                                });
+                            } else {
+                                self.emit(
+                                    hint.span,
+                                    "E-SYNTH-PARSE-031",
+                                    "placement_hint names an unknown component",
+                                    "a declared component reference designator",
+                                    refdes.to_string(),
+                                    None,
+                                );
+                            }
+                        }
+                    }
+                }
                 _ => {
                     if let Some(stmt) = self.parse_statement() {
                         statements.push(stmt);
@@ -241,6 +269,41 @@ impl Parser {
                         self.synchronize();
                     }
                 }
+            }
+        }
+
+        // A board-level named hint immediately following the final component
+        // can be consumed by the component parser as if it were inline. Move
+        // any such deferred hints to their actual target now.
+        let deferred_hints: Vec<(String, PlacementHintAst)> = statements
+            .iter_mut()
+            .filter_map(|stmt| {
+                let StatementAst::Component(component) = stmt else {
+                    return None;
+                };
+                if !matches!(
+                    component.placement_hint.as_ref(),
+                    Some(hint) if hint.component.is_some()
+                ) {
+                    return None;
+                }
+                let hint = component.placement_hint.take()?;
+                let target = hint.component.clone()?;
+                Some((
+                    target,
+                    PlacementHintAst {
+                        component: None,
+                        attrs: hint.attrs,
+                        span: hint.span,
+                    },
+                ))
+            })
+            .collect();
+        for (target, hint) in deferred_hints {
+            if let Some(StatementAst::Component(component)) = statements.iter_mut().find(|stmt| {
+                matches!(stmt, StatementAst::Component(c) if c.refdes.eq_ignore_ascii_case(&target))
+            }) {
+                component.placement_hint = Some(hint);
             }
         }
 
@@ -477,6 +540,7 @@ impl Parser {
             return None;
         }
         self.bump(); // consume `{`
+        let mut component = None;
         let mut attrs = Vec::new();
         loop {
             self.skip_error_tokens();
@@ -486,6 +550,22 @@ impl Parser {
                     if let Some((v, sp)) = self.parse_placement_ident_attr("region") {
                         attrs.push(PlacementHintAttr::Region(v, sp));
                     }
+                }
+                TokenKind::KwComponent => {
+                    self.bump();
+                    if matches!(self.peek_kind(), TokenKind::Colon) {
+                        self.bump();
+                    }
+                    component = match self.peek_kind() {
+                        TokenKind::StringLit(_) => self.expect_string(
+                            "E-SYNTH-PARSE-028",
+                            "expected component reference designator",
+                        ),
+                        _ => self.expect_ident(
+                            "E-SYNTH-PARSE-028",
+                            "expected component reference designator",
+                        ),
+                    };
                 }
                 TokenKind::KwEdge => {
                     if let Some((v, sp)) = self.parse_placement_ident_attr("edge") {
@@ -540,6 +620,7 @@ impl Parser {
         }
         let end = self.last_offset();
         Some(PlacementHintAst {
+            component,
             attrs,
             span: Span::new(start, end),
         })
@@ -1182,6 +1263,29 @@ mod tests {
         assert!(c.placement_hint.is_some());
         let hint = c.placement_hint.as_ref().unwrap();
         assert_eq!(hint.attrs.len(), 2);
+    }
+
+    #[test]
+    fn parse_board_level_named_placement_hint() {
+        let src = r#"board "b" {
+            component J2: connector "header_1x20"
+            placement_hint { component: "J2" edge: right priority: hard }
+        }"#;
+        let res = parse(lex(src), "test.synth".into());
+        assert!(res.diagnostics.is_empty(), "{:?}", res.diagnostics);
+        let ast = res.ast.unwrap();
+        let StatementAst::Component(component) = &ast.board.statements[0] else {
+            panic!("expected component statement")
+        };
+        let hint = component
+            .placement_hint
+            .as_ref()
+            .expect("named hint attached");
+        assert!(hint.component.is_none());
+        assert!(hint
+            .attrs
+            .iter()
+            .any(|attr| matches!(attr, PlacementHintAttr::Edge(edge, _) if edge == "right")));
     }
 
     #[test]

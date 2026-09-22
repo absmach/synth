@@ -400,7 +400,7 @@ fn is_ident_start(c: u8) -> bool {
 }
 
 fn is_ident_continue(c: u8) -> bool {
-    c.is_ascii_alphanumeric() || c == b'_'
+    c.is_ascii_alphanumeric() || c == b'_' || c == b'/'
 }
 
 #[cfg(test)]
@@ -458,6 +458,14 @@ mod tests {
                 TokenKind::Ident("BOARD".into()),
                 TokenKind::Eof,
             ]
+        );
+    }
+
+    #[test]
+    fn datasheet_pin_aliases_are_single_identifiers() {
+        assert_eq!(
+            kinds("GPIO26/ADC0"),
+            vec![TokenKind::Ident("GPIO26/ADC0".into()), TokenKind::Eof]
         );
     }
 

@@ -42,7 +42,7 @@
 
 use serde::{Deserialize, Serialize};
 use synth_geometry::{mm_to_nm, Point, Rect};
-use synth_ir::{Board, NetId};
+use synth_ir::{Board, ComponentId, NetId};
 use synth_layout::kicad_footprint_loader;
 use synth_place::Placement;
 
@@ -50,6 +50,20 @@ use synth_place::Placement;
 /// Returns 0.254 mm (10 mil) for fine-pitch ICs (LQFP, QFN, USB-C) or 0.5 mm for standard parts.
 #[must_use]
 pub fn compute_adaptive_grid_pitch(board: &Board) -> f64 {
+    // A 0.254 mm grid is still too coarse for a 0.4 mm-pitch QFN: adjacent
+    // pad escapes can collapse into the same cell or lose their only legal
+    // side channel. Use one 5-mil cell for genuinely fine-pitch ICs. Keep
+    // Keep this targeted to RP2350-class boards so normal fixture/design
+    // families retain the substantially faster 10-mil/20-mil search space.
+    let has_rp2350 = board.components.iter().any(|comp| {
+        comp.part.as_ref().is_some_and(|part| {
+            let id = part.id.0.to_ascii_lowercase();
+            id.contains("rp2350")
+        })
+    });
+    if has_rp2350 {
+        return 0.127;
+    }
     for comp in &board.components {
         if comp.kind == "connector" {
             return 0.254;
@@ -140,6 +154,10 @@ pub struct Grid {
     /// (or NetId(u32::MAX) for unnetted copper pads). Used by the router for exact
     /// Euclidean via-to-pad clearance checks to eliminate KiCad hole_clearance and copper clearance violations.
     pub pads: Vec<(NetId, Rect)>,
+    /// Exact top-side component courtyard rectangles. The maze uses these
+    /// in addition to rasterized obstacle cells so a fine-grid trace cannot
+    /// slip through a cell corner and violate courtyard clearance.
+    pub courtyards: Vec<(ComponentId, Rect)>,
     /// Exact centres and hole radii of all NPTH mechanical mounting holes on the board.
     /// Used by maze routing to enforce KiCad hole_clearance and hole_to_hole constraints.
     pub npth_holes: Vec<(Point, i64)>,
@@ -258,7 +276,7 @@ pub fn build_grid_with_clearance(board: &Board, placement: &Placement, clearance
     );
     let width = ((max_nm.x_nm - origin_nm.x_nm) / pitch_nm) as usize;
     let height = ((max_nm.y_nm - origin_nm.y_nm) / pitch_nm) as usize;
-    let layers = (board.layers as usize).clamp(2, 4);
+    let layers = (board.layers as usize).clamp(2, 6);
     let total_cells = layers * width * height;
 
     let mut grid = Grid {
@@ -270,6 +288,7 @@ pub fn build_grid_with_clearance(board: &Board, placement: &Placement, clearance
         cells: vec![Cell::Free; total_cells],
         pad_centres: std::collections::HashMap::new(),
         pads: Vec::new(),
+        courtyards: Vec::new(),
         npth_holes: Vec::new(),
         board_outline: placement.board_outline,
     };
@@ -367,6 +386,7 @@ pub fn build_grid_with_clearance(board: &Board, placement: &Placement, clearance
         let court_center = placement.center;
         let courtyard_rect =
             Rect::from_center_half_extents(court_center, rotated_half_w, rotated_half_h);
+        grid.courtyards.push((component.id, courtyard_rect));
 
         let origin_x_nm = placement.center.x_nm - rot_cx;
         let origin_y_nm = placement.center.y_nm - rot_cy;
@@ -406,7 +426,13 @@ pub fn build_grid_with_clearance(board: &Board, placement: &Placement, clearance
                 let maybe_net = pad_net_lookup
                     .get(&(component.id, pad.number.clone()))
                     .copied();
-
+                let is_mcu_or_ic = component.kind == "mcu"
+                    || component.kind == "memory"
+                    || component.kind == "flash"
+                    || component.part.as_ref().is_some_and(|p| {
+                        (p.pins.len() > 8 && component.kind != "connector")
+                            || p.id.0.to_ascii_lowercase().contains("w25q")
+                    });
                 if let Some(net_id) = maybe_net {
                     grid.pads.push((net_id, pad_rect));
                     let cell = Cell::Pad(net_id);
@@ -428,11 +454,11 @@ pub fn build_grid_with_clearance(board: &Board, placement: &Placement, clearance
                         }
                         stamp_rect_layer(&mut grid, pad_rect, cell, layer);
                         stamp_rect_pad_centres(&mut grid, pad_rect, pad_centre, layer);
-                        let is_mcu_or_ic = component.kind == "mcu"
-                            || component
-                                .part
-                                .as_ref()
-                                .is_some_and(|p| p.pins.len() > 8 && component.kind != "connector");
+                        // Fine-pitch memory packages need the same directional
+                        // pin-escape treatment as MCUs/large ICs. W25Q flash
+                        // commonly has only eight pins, so a pin-count-only
+                        // heuristic incorrectly sealed its courtyard and
+                        // stranded QSPI pads inside the coarse routing grid.
                         let is_connector =
                             component.kind == "connector" || component.kind == "jack";
                         if is_connector {
@@ -577,35 +603,33 @@ fn carve_pin_escapes(
                 // Carve fanout in any direction that does NOT step inward towards the chip center.
                 // This prevents carving inward across the chip body while still allowing outward
                 // and tangential breakout corridors if a direct perpendicular escape is blocked.
-                let mut dir_buf = [(0_i32, 0_i32); 4];
+                let mut directions = Vec::with_capacity(5);
                 let mut dir_count = 0;
-                let directions: &[(i32, i32)] =
-                    if let Some(center) = pad_comp_centers.get(&(layer, x, y)) {
-                        let pad_centre = grid
-                            .pad_centres
-                            .get(&(layer, x, y))
-                            .copied()
-                            .unwrap_or_else(|| {
-                                Point::new(
-                                    grid.origin_nm.x_nm + (x as i64) * grid.pitch_nm,
-                                    grid.origin_nm.y_nm + (y as i64) * grid.pitch_nm,
-                                )
-                            });
-                        let vx = pad_centre.x_nm - center.x_nm;
-                        let vy = pad_centre.y_nm - center.y_nm;
-                        for (dx, dy) in [(1_i32, 0_i32), (-1, 0), (0, 1), (0, -1)] {
-                            let inward = i64::from(dx) * (-vx) + i64::from(dy) * (-vy);
-                            if inward <= 0 {
-                                dir_buf[dir_count] = (dx, dy);
-                                dir_count += 1;
-                            }
+                if let Some(center) = pad_comp_centers.get(&(layer, x, y)) {
+                    let pad_centre = grid
+                        .pad_centres
+                        .get(&(layer, x, y))
+                        .copied()
+                        .unwrap_or_else(|| {
+                            Point::new(
+                                grid.origin_nm.x_nm + (x as i64) * grid.pitch_nm,
+                                grid.origin_nm.y_nm + (y as i64) * grid.pitch_nm,
+                            )
+                        });
+                    let vx = pad_centre.x_nm - center.x_nm;
+                    let vy = pad_centre.y_nm - center.y_nm;
+                    for (dx, dy) in [(1_i32, 0_i32), (-1, 0), (0, 1), (0, -1)] {
+                        let inward = i64::from(dx) * (-vx) + i64::from(dy) * (-vy);
+                        if inward <= 0 {
+                            directions.push((dx, dy));
+                            dir_count += 1;
                         }
-                        &dir_buf[..dir_count]
-                    } else {
-                        &[(1, 0), (-1, 0), (0, 1), (0, -1)]
-                    };
-
-                for &(dx, dy) in directions {
+                    }
+                } else {
+                    directions.extend([(1, 0), (-1, 0), (0, 1), (0, -1)]);
+                    dir_count = directions.len();
+                }
+                for &(dx, dy) in &directions[..dir_count] {
                     let mut depth = 0_usize;
                     let mut nx = x as i32 + dx;
                     let mut ny = y as i32 + dy;

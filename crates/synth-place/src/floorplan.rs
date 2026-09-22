@@ -126,6 +126,7 @@ pub fn compute_floorplan_targets(
     let min_x = usable.min.x_nm;
     let min_y = usable.min.y_nm;
     let max_x = usable.max.x_nm;
+    let max_y = usable.max.y_nm;
     let width_nm = usable.width_nm();
     let height_nm = usable.height_nm();
 
@@ -133,7 +134,6 @@ pub fn compute_floorplan_targets(
     let mut jst_count = 0_i64;
     let mut header_count = 0_i64;
     let mut sensor_count = 0_i64;
-
     for comp in &board.components {
         let (w_mm, h_mm) = courtyard_lookup
             .get(&comp.id)
@@ -154,27 +154,40 @@ pub fn compute_floorplan_targets(
             || kind_lower.contains("usb");
 
         if is_usb {
-            // USB-C connector anchored to the Top Edge, left-aligned. The
-            // rotation comes from physical footprint metadata, not a magic
-            // angle, so a replacement USB footprint can declare a different
-            // unrotated opening direction safely.
+            // USB-C connector anchored to its requested edge. The rotation
+            // comes from physical footprint metadata, not a magic angle, so
+            // a replacement USB footprint can declare a different unrotated
+            // opening direction safely.
             //
             // NOTE: The pre-shift Y here is intentionally left at min_y + half_h; the
             // definitive edge-flush snap is applied deterministically AFTER the global
             // Y-shift in place_with_outline() using closed-form geometry.
-            let x = min_x + width_nm / 4 + (usb_count * synth_geometry::mm_to_nm(15.0));
-            let y = min_y + half_h;
-            let mating_face = comp
+            let requested_edge = comp
+                .placement_hint
+                .as_ref()
+                .and_then(|hint| hint.edge.clone())
+                .unwrap_or(synth_ir::PlacementEdge::Top);
+            let board_edge = match requested_edge {
+                synth_ir::PlacementEdge::Top => BoardEdge::Top,
+                synth_ir::PlacementEdge::Right => BoardEdge::Right,
+                synth_ir::PlacementEdge::Bottom => BoardEdge::Bottom,
+                synth_ir::PlacementEdge::Left => BoardEdge::Left,
+            };
+            let rotation = comp
                 .part
                 .as_ref()
-                .and_then(|p| p.footprint_dimensions.as_ref())
-                .and_then(|d| d.mating_face)
-                .unwrap_or(MatingFace::Bottom);
+                .and_then(|part| part.footprint_dimensions.as_ref())
+                .and_then(|dimensions| dimensions.mating_face)
+                .map_or(Rotation::Zero, |face| {
+                    rotation_for_mating_edge(face, board_edge)
+                });
+            let x = min_x + width_nm / 4 + (usb_count * synth_geometry::mm_to_nm(15.0));
+            let y = min_y + half_h;
             targets.insert(
                 comp.id,
                 FloorplanTarget {
                     point: Point::new(x, y),
-                    rotation: rotation_for_mating_edge(mating_face, BoardEdge::Top),
+                    rotation,
                 },
             );
             usb_count += 1;
@@ -196,27 +209,49 @@ pub fn compute_floorplan_targets(
             );
             jst_count += 1;
         } else if comp.kind.as_str() == "connector" {
-            // General pin header on Left or Right edge
-            let (x, rot) = if header_count % 2 == 0 {
-                (
+            // Honor an explicitly requested edge. The previous alternating
+            // fallback ignored `edge: left/right`, so the order of components
+            // in the source could silently put a header on the opposite side
+            // of the board and turn a clean breakout into crossing fanout.
+            let requested_edge = comp
+                .placement_hint
+                .as_ref()
+                .and_then(|hint| hint.edge.clone());
+            let (x, y, rot) = match requested_edge {
+                Some(synth_ir::PlacementEdge::Left) => (
                     min_x + half_w + synth_geometry::mm_to_nm(1.0),
+                    min_y + height_nm / 2,
                     Rotation::Zero,
-                )
-            } else {
-                (
+                ),
+                Some(synth_ir::PlacementEdge::Right) => (
                     max_x - half_w - synth_geometry::mm_to_nm(1.0),
-                    // Reverse only explicitly MCU-clustered headers so
-                    // ordinary boards retain the legacy header orientation.
-                    if comp.placement_hint.as_ref().is_some_and(|hint| {
-                        hint.near.is_some() && hint.priority == synth_ir::PlacementPriority::Hard
-                    }) {
-                        Rotation::OneEighty
-                    } else {
-                        Rotation::Zero
-                    },
-                )
+                    min_y + height_nm / 2,
+                    // Reverse the right-hand row so its pin order follows
+                    // the RP2350's lower/right QFN GPIO sequence instead of
+                    // forcing the breakout across the MCU.
+                    Rotation::OneEighty,
+                ),
+                Some(synth_ir::PlacementEdge::Top) => (
+                    min_x + width_nm / 2,
+                    min_y + half_h + synth_geometry::mm_to_nm(1.0),
+                    Rotation::Ninety,
+                ),
+                Some(synth_ir::PlacementEdge::Bottom) => (
+                    min_x + width_nm / 2,
+                    max_y - half_h - synth_geometry::mm_to_nm(1.0),
+                    Rotation::Ninety,
+                ),
+                None if header_count % 2 == 0 => (
+                    min_x + half_w + synth_geometry::mm_to_nm(1.0),
+                    min_y + height_nm / 2,
+                    Rotation::Zero,
+                ),
+                None => (
+                    max_x - half_w - synth_geometry::mm_to_nm(1.0),
+                    min_y + height_nm / 2,
+                    Rotation::Zero,
+                ),
             };
-            let y = min_y + height_nm / 4 + ((header_count / 2) * synth_geometry::mm_to_nm(15.0));
             targets.insert(
                 comp.id,
                 FloorplanTarget {
@@ -227,10 +262,14 @@ pub fn compute_floorplan_targets(
             header_count += 1;
         } else if kind_lower == "mcu"
             || kind_lower == "processor"
-            || refdes_lower.starts_with("u2")
+            || comp
+                .part
+                .as_ref()
+                .is_some_and(|part| part.id.as_str().to_ascii_lowercase().contains("rp2350"))
+            || (refdes_lower.starts_with("u2") && kind_lower != "regulator")
             || refdes_lower.contains("328p")
         {
-            // Main MCU centered in core interior
+            // Main MCU centered in core interior.
             let x = min_x + width_nm / 2;
             let y = min_y + height_nm / 2;
             targets.insert(
@@ -286,6 +325,12 @@ pub fn compute_floorplan_targets(
                 comp.id,
                 FloorplanTarget {
                     point: Point::new(x, y),
+                    // Keep the stock SOIC footprint in its native orientation.
+                    // Rotating the inline footprint at the instance level
+                    // changes the pad-axis interpretation in KiCad and can
+                    // make adjacent 1.27 mm-pitch pads overlap. QSPI
+                    // adjacency is handled by placement proximity, not by
+                    // risking an invalid footprint orientation.
                     rotation: Rotation::Zero,
                 },
             );

@@ -59,7 +59,9 @@ mod symbol_lib;
 mod uuid_v5;
 
 pub use erc_validate::{run_kicad_erc, ErcRunError, KicadErcItem, KicadErcViolation};
-pub use export::{export, export_with_sidecar, set_worker_threads, ExportError, ExportResult};
+pub use export::{
+    export, export_with_sidecar, export_with_sidecar_and_routing_order, ExportError, ExportResult,
+};
 pub use fab::{run as run_fab, FabArtifacts, FabError, FabRequest};
 pub use import::{import_project, ImportError, NormalisedRecord, IMPORTER_VERSION};
 pub use pin_reconcile::physical_terminal;

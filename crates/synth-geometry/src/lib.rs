@@ -260,6 +260,8 @@ pub enum Layer {
     Top,
     Inner1,
     Inner2,
+    Inner3,
+    Inner4,
     Bottom,
 }
 
@@ -271,12 +273,21 @@ impl Layer {
                 Self::Top => 0,
                 _ => 1,
             }
+        } else if total_layers == 4 {
+            match self {
+                Self::Top => 0,
+                Self::Inner1 => 1,
+                Self::Inner2 => 2,
+                Self::Inner3 | Self::Inner4 | Self::Bottom => 3,
+            }
         } else {
             match self {
                 Self::Top => 0,
                 Self::Inner1 => 1,
                 Self::Inner2 => 2,
-                Self::Bottom => 3,
+                Self::Inner3 => 3,
+                Self::Inner4 => 4,
+                Self::Bottom => total_layers.saturating_sub(1),
             }
         }
     }
@@ -288,11 +299,20 @@ impl Layer {
                 0 => Self::Top,
                 _ => Self::Bottom,
             }
+        } else if total_layers == 4 {
+            match idx {
+                0 => Self::Top,
+                1 => Self::Inner1,
+                2 => Self::Inner2,
+                _ => Self::Bottom,
+            }
         } else {
             match idx {
                 0 => Self::Top,
                 1 => Self::Inner1,
                 2 => Self::Inner2,
+                3 => Self::Inner3,
+                4 => Self::Inner4,
                 _ => Self::Bottom,
             }
         }
@@ -304,6 +324,8 @@ impl Layer {
             Self::Top => "F.Cu",
             Self::Inner1 => "In1.Cu",
             Self::Inner2 => "In2.Cu",
+            Self::Inner3 => "In3.Cu",
+            Self::Inner4 => "In4.Cu",
             Self::Bottom => "B.Cu",
         }
     }
@@ -398,5 +420,17 @@ mod tests {
         assert_eq!(Rotation::Ninety.degrees(), 90);
         assert_eq!(Rotation::OneEighty.degrees(), 180);
         assert_eq!(Rotation::TwoSeventy.degrees(), 270);
+    }
+
+    #[test]
+    fn four_layer_stack_maps_last_copper_layer_to_bottom() {
+        assert_eq!(Layer::from_index(0, 4), Layer::Top);
+        assert_eq!(Layer::from_index(1, 4), Layer::Inner1);
+        assert_eq!(Layer::from_index(2, 4), Layer::Inner2);
+        assert_eq!(Layer::from_index(3, 4), Layer::Bottom);
+        assert_eq!(Layer::Bottom.index(4), 3);
+        assert_eq!(Layer::Inner3.index(4), 3);
+        assert_eq!(Layer::Inner4.index(4), 3);
+        assert_eq!(Layer::from_index(3, 4).name_for_stackup(4), "B.Cu");
     }
 }

@@ -120,6 +120,9 @@ async fn layout_save_handler(
                         source: synth_layout::sidecar::OverrideSource::HumanDrag,
                         priority: synth_layout::sidecar::OverridePriority::Hard,
                         timestamp: None,
+                        relative_to: None,
+                        dx: 0.0,
+                        dy: 0.0,
                     },
                 )
             })
@@ -334,6 +337,9 @@ mod tests {
                     source: synth_layout::sidecar::OverrideSource::HumanDrag,
                     priority: synth_layout::sidecar::OverridePriority::Hard,
                     timestamp: None,
+                    relative_to: None,
+                    dx: 0.0,
+                    dy: 0.0,
                 },
             )]),
             ..Default::default()

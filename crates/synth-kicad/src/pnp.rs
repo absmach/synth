@@ -43,7 +43,9 @@ pub fn build_pnp_csv(board: &Board, placement: &Placement) -> String {
         let rot = placement.rotation.degrees();
         let layer_str = match placement.layer {
             Layer::Top => "Top",
-            Layer::Bottom | Layer::Inner1 | Layer::Inner2 => "Bottom",
+            Layer::Bottom | Layer::Inner1 | Layer::Inner2 | Layer::Inner3 | Layer::Inner4 => {
+                "Bottom"
+            }
         };
 
         let _ = writeln!(

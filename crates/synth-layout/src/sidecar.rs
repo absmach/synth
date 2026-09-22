@@ -40,7 +40,9 @@ pub struct SidecarLayout {
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct SidecarPlacement {
+    #[serde(default)]
     pub x: f64,
+    #[serde(default)]
     pub y: f64,
     #[serde(default)]
     pub rotation: u32,
@@ -50,6 +52,13 @@ pub struct SidecarPlacement {
     pub priority: OverridePriority,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub timestamp: Option<String>,
+    /// Optional anchor. When set, position is anchor center plus dx/dy in mm.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub relative_to: Option<String>,
+    #[serde(default)]
+    pub dx: f64,
+    #[serde(default)]
+    pub dy: f64,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
@@ -101,7 +110,12 @@ impl SidecarLayout {
         layout: &mut Layout,
         refdes_to_id: &HashMap<String, ComponentId>,
     ) {
-        for (refdes, override_pos) in &self.components {
+        // Resolve absolute entries first; TOML map order is not significant.
+        for (refdes, override_pos) in self
+            .components
+            .iter()
+            .filter(|(_, p)| p.relative_to.is_none())
+        {
             if let Some(&comp_id) = refdes_to_id.get(refdes) {
                 if let Some(placement) = layout.components.iter_mut().find(|p| p.id == comp_id) {
                     placement.center_mm = (override_pos.x, override_pos.y);
@@ -112,6 +126,54 @@ impl SidecarLayout {
                         _ => Rotation::Zero,
                     };
                 }
+            }
+        }
+
+        // Then resolve relative entries. The bounded pass supports chains and
+        // leaves cyclic or missing anchors at the automatic placement.
+        for _ in 0..self.components.len() {
+            let mut changed = false;
+            for (refdes, override_pos) in self
+                .components
+                .iter()
+                .filter(|(_, p)| p.relative_to.is_some())
+            {
+                let Some(anchor) = override_pos.relative_to.as_ref() else {
+                    continue;
+                };
+                let Some(&comp_id) = refdes_to_id.get(refdes) else {
+                    continue;
+                };
+                let Some(&anchor_id) = refdes_to_id.get(anchor) else {
+                    continue;
+                };
+                let Some(anchor_center) = layout
+                    .components
+                    .iter()
+                    .find(|p| p.id == anchor_id)
+                    .map(|p| p.center_mm)
+                else {
+                    continue;
+                };
+                if let Some(placement) = layout.components.iter_mut().find(|p| p.id == comp_id) {
+                    let center = (
+                        anchor_center.0 + override_pos.dx,
+                        anchor_center.1 + override_pos.dy,
+                    );
+                    if placement.center_mm != center {
+                        changed = true;
+                    }
+                    placement.center_mm = center;
+                    placement.rotation = match override_pos.rotation {
+                        90 => Rotation::Ninety,
+                        180 => Rotation::OneEighty,
+                        270 => Rotation::TwoSeventy,
+                        _ => Rotation::Zero,
+                    };
+                }
+            }
+            if !changed {
+                break;
             }
         }
     }
@@ -133,6 +195,9 @@ mod tests {
                 source: OverrideSource::HumanDrag,
                 priority: OverridePriority::Hard,
                 timestamp: None,
+                relative_to: None,
+                dx: 0.0,
+                dy: 0.0,
             },
         );
         sidecar.merge_override(
@@ -144,6 +209,9 @@ mod tests {
                 source: OverrideSource::Agent,
                 priority: OverridePriority::Hard,
                 timestamp: None,
+                relative_to: None,
+                dx: 0.0,
+                dy: 0.0,
             },
         );
         assert_eq!(sidecar.components["U1"].x, 18.0);
@@ -162,6 +230,9 @@ mod tests {
                 source: OverrideSource::Agent,
                 priority: OverridePriority::Soft,
                 timestamp: None,
+                relative_to: None,
+                dx: 0.0,
+                dy: 0.0,
             },
         );
         assert_eq!(sidecar.components["C1"].x, 12.0);
@@ -176,5 +247,21 @@ rotation = 0
 ";
         let sidecar: SidecarLayout = toml::from_str(toml).unwrap();
         assert_eq!(sidecar.components["U1"].source, OverrideSource::HumanDrag);
+    }
+
+    #[test]
+    fn relative_sidecar_entry_loads_without_absolute_coordinates() {
+        let toml = r#"[components.C1]
+relative_to = "U1"
+dx = 2.5
+dy = -1.0
+rotation = 90
+source = "agent"
+priority = "hard"
+"#;
+        let sidecar: SidecarLayout = toml::from_str(toml).unwrap();
+        let c1 = &sidecar.components["C1"];
+        assert_eq!(c1.relative_to.as_deref(), Some("U1"));
+        assert_eq!((c1.x, c1.y, c1.dx, c1.dy), (0.0, 0.0, 2.5, -1.0));
     }
 }

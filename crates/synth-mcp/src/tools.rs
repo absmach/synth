@@ -84,12 +84,14 @@ pub fn list_tools() -> Vec<McpToolInfo> {
         },
         McpToolInfo {
             name: "synth_drc_report".into(),
-            description: "Run Physical Design Rule Checking (DRC) on a placed and routed PCB design. Validates trace clearances, widths, drill sizes, and courtyard overlaps against manufacturer profile.".into(),
+            description: "Run Physical Design Rule Checking (DRC) on a placed and routed PCB design. It first checks the sidecar-adjusted placement review and returns placement_requires_revision without rerouting an invalid layout; set allow_placement_warnings=true only for deliberate manual/debug validation. Validates trace clearances, widths, drill sizes, and courtyard overlaps against manufacturer profile.".into(),
             input_schema: serde_json::json!({
                 "type": "object",
                 "properties": {
                     "source": { "type": "string", "description": "SynthSpec source code string" },
                     "file_path": { "type": "string", "description": "Optional path to .synth source file on disk" },
+                    "layout_file_path": { "type": "string", "description": "Optional agent or human placement sidecar" },
+                    "allow_placement_warnings": { "type": "boolean", "description": "Allow DRC routing despite visual-review findings; use only for deliberate manual/debug validation (default false)" },
                     "profile": { "type": "string", "description": "Manufacturer profile name ('jlcpcb_standard', 'jlcpcb_advanced') or path to custom .toml profile" },
                     "registry_path": { "type": "string", "description": "Optional custom component registry path" },
                     "workspace_root": { "type": "string", "description": "Optional workspace root path for auto-resolving registry" }
@@ -129,12 +131,15 @@ pub fn list_tools() -> Vec<McpToolInfo> {
         },
         McpToolInfo {
             name: "synth_route".into(),
-            description: "Run deterministic PCB track routing on a SynthSpec design. Returns routed segments, through-hole vias, unrouted net diagnostics, and total wire length stats.".into(),
+            description: "Run deterministic PCB track routing on a SynthSpec design. It first checks the sidecar-adjusted placement visual review and returns placement_requires_revision without entering the expensive router when the layout is structurally poor. Set allow_placement_warnings=true only for intentional manual/debug routing. Agents may provide routing_order as an advisory list of net names to attempt first after inspecting congestion diagnostics; omitted nets retain the deterministic electrical-priority order. Returns routed segments, through-hole vias, unrouted net diagnostics, and total wire length stats.".into(),
             input_schema: serde_json::json!({
                 "type": "object",
                 "properties": {
                     "source": { "type": "string", "description": "SynthSpec source code string" },
                     "file_path": { "type": "string", "description": "Optional path to .synth source file on disk" },
+                    "layout_file_path": { "type": "string", "description": "Optional agent or human placement sidecar" },
+                    "allow_placement_warnings": { "type": "boolean", "description": "Allow routing despite visual-review findings; use only for deliberate manual/debug routing (default false)" },
+                    "routing_order": { "type": "array", "items": { "type": "string" }, "description": "Optional advisory net-name order, e.g. [\"net_14\", \"net_20\"]. Listed nets are attempted first; DRC and placement rules still apply." },
                     "log_routing_outcomes": { "type": "string", "description": "Optional directory path for logging Dataset 6 routing outcome pairs" },
                     "registry_path": { "type": "string", "description": "Optional custom component registry path" },
                     "workspace_root": { "type": "string", "description": "Optional workspace root path for auto-resolving registry" }
@@ -182,7 +187,9 @@ pub fn list_tools() -> Vec<McpToolInfo> {
                     "file_path": { "type": "string", "description": "Path to source file" },
                     "out_dir": { "type": "string", "description": "Output directory path (accepts 'out' or 'out_dir')" },
                     "out": { "type": "string", "description": "Alias for out_dir" },
+                    "layout_file_path": { "type": "string", "description": "Optional agent or human placement sidecar; exact component positions and rotations are applied to routing and export" },
                     "allow_incomplete": { "type": "boolean", "description": "Export a clearly labelled draft even when routing is incomplete or DRC has violations. Defaults to false; never use this output for fabrication." },
+                    "routing_order": { "type": "array", "items": { "type": "string" }, "description": "Optional net order from synth_route routing_feedback; preserves the ordered recovery route during export." },
                     "registry_path": { "type": "string", "description": "Optional custom component registry path" },
                     "workspace_root": { "type": "string", "description": "Optional workspace root path for auto-resolving registry" }
                 }
@@ -233,7 +240,7 @@ pub fn list_tools() -> Vec<McpToolInfo> {
         },
         McpToolInfo {
             name: "synth_place_with_hints".into(),
-            description: "Run the PCB placer with explicit semantic placement hints (region, edge, near/side) for one or more components. Does not modify the source file. Returns placement positions, hint satisfaction, unrouted net count, and full DRC violation reports.".into(),
+            description: "Run the PCB placer with explicit semantic placement hints (region, edge, near/side) for one or more components. Does not modify the source file. Returns placement positions, hint satisfaction, structural visual-review findings, functional-cluster warnings, compactness warnings, unrouted net count, and full DRC violation reports. Call with run_routing=false first; if placement_quality.visual_review.requires_revision is true, revise the hints or sidecar before routing. A combined run also stops before the router when review requires revision; use synth_route with allow_placement_warnings=true only for deliberate manual/debug routing. For production layouts, keep MCU/flash/decouplers and interface passives close, keep connectors edge-oriented, then use a sidecar for relative or exact refinements.".into(),
             input_schema: serde_json::json!({
                 "type": "object",
                 "properties": {
@@ -241,6 +248,7 @@ pub fn list_tools() -> Vec<McpToolInfo> {
                     "file_path":        { "type": "string", "description": "Optional path to .synth source file on disk" },
                     "layout_file_path": { "type": "string", "description": "Optional path to .layout.toml sidecar overrides file" },
                     "profile":          { "type": "string", "description": "Optional manufacturer DRC profile ('jlcpcb_standard' or path to toml)" },
+                    "allow_placement_warnings": { "type": "boolean", "description": "Allow combined routing despite visual-review findings; use only for deliberate manual/debug routing (default false)" },
                     "registry_path":    { "type": "string", "description": "Optional custom component registry path" },
                     "workspace_root":   { "type": "string", "description": "Optional workspace root path" },
                     "hints": {
@@ -264,12 +272,13 @@ pub fn list_tools() -> Vec<McpToolInfo> {
         },
         McpToolInfo {
             name: "synth_describe_placement".into(),
-            description: "Get a human-readable semantic summary of the current PCB placement — which functional clusters are in which board regions, density warnings, and DRC status. Enables LLMs to reason about layout quality.".into(),
+            description: "Get a human-readable semantic summary of the current PCB placement — which functional clusters are in which board regions, density warnings, structural visual-review findings, and DRC status. Pass layout_file_path so the review evaluates the agent/human sidecar arrangement rather than only the automatic placement.".into(),
             input_schema: serde_json::json!({
                 "type": "object",
                 "properties": {
                     "source":        { "type": "string", "description": "SynthSpec source code string" },
                     "file_path":     { "type": "string", "description": "Optional path to .synth source file on disk" },
+                    "layout_file_path": { "type": "string", "description": "Optional placement sidecar; review the overridden arrangement when provided" },
                     "registry_path": { "type": "string", "description": "Optional custom component registry path" },
                     "workspace_root":{ "type": "string", "description": "Optional workspace root path" }
                 }
@@ -288,31 +297,36 @@ pub fn list_tools() -> Vec<McpToolInfo> {
         },
         McpToolInfo {
             name: "synth_write_layout_override".into(),
-            description: "Write or update a component placement override or forced net label in sidecar file (<design>.synth.layout.toml). Preserves existing overrides.".into(),
+            description: "Write or update a component placement override or forced net label in sidecar file (<design>.synth.layout.toml). Preserves existing overrides. Prefer relative_to with dx_mm/dy_mm for agent revisions so the arrangement remains robust when the board is resized; rerun synth_place_with_hints or synth_describe_placement afterward.".into(),
             input_schema: serde_json::json!({
                 "type": "object",
                 "properties": {
                     "layout_file_path": { "type": "string", "description": "Path to sidecar TOML file" },
                     "refdes":           { "type": "string", "description": "Component refdes e.g. 'U1'" },
-                    "x_mm":             { "type": "number", "description": "Component X position in mm" },
-                    "y_mm":             { "type": "number", "description": "Component Y position in mm" },
+                    "x_mm":             { "type": "number", "description": "Absolute X position in mm; omit when using relative_to" },
+                    "y_mm":             { "type": "number", "description": "Absolute Y position in mm; omit when using relative_to" },
+                    "relative_to":     { "type": "string", "description": "Optional anchor refdes; position becomes anchor center plus dx_mm/dy_mm" },
+                    "dx_mm":            { "type": "number", "description": "Relative X offset from relative_to in mm" },
+                    "dy_mm":            { "type": "number", "description": "Relative Y offset from relative_to in mm" },
                     "rotation":         { "type": "integer", "description": "Rotation in degrees (0, 90, 180, 270)" },
                     "source":           { "type": "string", "enum": ["human_drag", "agent"], "description": "Provenance tag" },
                     "priority":         { "type": "string", "enum": ["soft", "hard"], "description": "Override priority" }
                 },
-                "required": ["layout_file_path", "refdes", "x_mm", "y_mm"]
+                "required": ["layout_file_path", "refdes"]
             }),
         },
         McpToolInfo {
             name: "synth_route_with_constraints".into(),
-            description: "Run the PCB autorouter with explicit per-net routing constraints (trace width, clearance, preferred layer, differential pair) and optional layout sidecar overrides. Evaluates DRC and returns segments, vias, unrouted nets, and DRC violation reports.".into(),
+            description: "Run the PCB autorouter with explicit per-net routing constraints (trace width, clearance, preferred layer, differential pair) and optional layout sidecar overrides. It applies the same placement visual gate as synth_route before starting the expensive router; set allow_placement_warnings=true only for intentional manual/debug routing. Evaluates DRC and returns segments, vias, unrouted nets, and DRC violation reports.".into(),
             input_schema: serde_json::json!({
                 "type": "object",
                 "properties": {
                     "source":           { "type": "string", "description": "SynthSpec source code string" },
                     "file_path":        { "type": "string", "description": "Optional path to .synth source file on disk" },
                     "layout_file_path": { "type": "string", "description": "Optional path to .layout.toml sidecar overrides file" },
+                    "allow_placement_warnings": { "type": "boolean", "description": "Allow routing despite visual-review findings; use only for deliberate manual/debug routing (default false)" },
                     "profile":          { "type": "string", "description": "Optional manufacturer DRC profile ('jlcpcb_standard' or path to toml)" },
+                    "routing_order":    { "type": "array", "items": { "type": "string" }, "description": "Optional net order from routing feedback; preserved with the requested width/clearance profile." },
                     "registry_path":    { "type": "string", "description": "Optional custom component registry path" },
                     "workspace_root":   { "type": "string", "description": "Optional workspace root path" },
                     "net_constraints": {
@@ -974,7 +988,35 @@ fn execute_drc_report(args: &Value, default_registry: Option<&Path>) -> Result<V
     }
     let board = lowered.board.ok_or("Lowering failed")?;
 
-    let placement = synth_place::place(&board).map_err(|e| format!("Placement failed: {e:?}"))?;
+    let sidecar_opt: Option<PathBuf> = args
+        .get("layout_file_path")
+        .and_then(|v| v.as_str())
+        .map(PathBuf::from)
+        .or_else(|| {
+            let candidate = PathBuf::from(format!("{file_name}.layout.toml"));
+            candidate.exists().then_some(candidate)
+        });
+    let placement = synth_place::place_with_sidecar(&board, sidecar_opt.as_deref())
+        .map_err(|e| format!("Placement failed: {e:?}"))?;
+
+    let placement_description = synth_place::describe_placement(&board, &placement);
+    if placement_description.visual_review.requires_revision
+        && !args["allow_placement_warnings"].as_bool().unwrap_or(false)
+    {
+        return Ok(serde_json::json!({
+            "status": "placement_requires_revision",
+            "routing_status": "not_run",
+            "drc_status": "not_run",
+            "reason": "Placement visual review requires revision before DRC",
+            "placement_quality": {
+                "visual_review": placement_description.visual_review,
+                "functional_warnings": placement_description.functional_warnings,
+                "dense_regions": placement_description.dense_regions
+            },
+            "hint": "Revise the placement sidecar or hints, rerun placement review, then retry DRC. Use allow_placement_warnings only for deliberate debug validation."
+        }));
+    }
+
     let routing = synth_route::route(&board, &placement);
     let report = synth_drc::check(&board, &placement, &routing, &profile);
 
@@ -1008,8 +1050,49 @@ fn execute_route(args: &Value, default_registry: Option<&Path>) -> Result<Value,
     let lowered = synth_ir::lower(&resolved.program, &registry, file_name);
     let board = lowered.board.ok_or("Lowering failed")?;
 
-    let placement = synth_place::place(&board).map_err(|e| format!("Placement failed: {e:?}"))?;
-    let routing = synth_route::route(&board, &placement);
+    let sidecar_opt: Option<PathBuf> = args
+        .get("layout_file_path")
+        .and_then(|v| v.as_str())
+        .map(PathBuf::from)
+        .or_else(|| {
+            let candidate = PathBuf::from(format!("{file_name}.layout.toml"));
+            candidate.exists().then_some(candidate)
+        });
+    let placement = synth_place::place_with_sidecar(&board, sidecar_opt.as_deref())
+        .map_err(|e| format!("Placement failed: {e:?}"))?;
+
+    let placement_description = synth_place::describe_placement(&board, &placement);
+    if placement_description.visual_review.requires_revision
+        && !args["allow_placement_warnings"].as_bool().unwrap_or(false)
+    {
+        return Ok(serde_json::json!({
+            "status": "placement_requires_revision",
+            "routing_status": "not_run",
+            "reason": "Placement visual review requires revision before routing",
+            "placement_quality": {
+                "visual_review": placement_description.visual_review,
+                "functional_warnings": placement_description.functional_warnings,
+                "dense_regions": placement_description.dense_regions
+            },
+            "hint": "Revise the SynthSpec placement_hint or layout sidecar using relative_to/dx_mm/dy_mm, then rerun synth_place_with_hints or synth_describe_placement."
+        }));
+    }
+    let routing_order: Vec<String> = args
+        .get("routing_order")
+        .and_then(Value::as_array)
+        .map(|values| {
+            values
+                .iter()
+                .filter_map(Value::as_str)
+                .map(str::to_string)
+                .collect()
+        })
+        .unwrap_or_default();
+    let routing = if routing_order.is_empty() {
+        synth_route::route(&board, &placement)
+    } else {
+        synth_route::route_with_order(&board, &placement, &routing_order)
+    };
 
     if let Some(log_dir_str) = args["log_routing_outcomes"].as_str() {
         let log_dir = PathBuf::from(log_dir_str);
@@ -1026,6 +1109,12 @@ fn execute_route(args: &Value, default_registry: Option<&Path>) -> Result<Value,
         .sum();
     #[allow(clippy::cast_precision_loss)]
     let total_wire_length_mm = (total_wire_length_nm as f64) / 1_000_000.0;
+    let recommended_routing_order: Vec<String> = routing
+        .unrouted_nets
+        .iter()
+        .take(8)
+        .map(|net| net.net_name.clone())
+        .collect();
 
     Ok(serde_json::json!({
         "status": if routing.unrouted_nets.is_empty() { "ok" } else { "unrouted_nets" },
@@ -1033,6 +1122,14 @@ fn execute_route(args: &Value, default_registry: Option<&Path>) -> Result<Value,
         "vias_count": routing.vias.len(),
         "unrouted_nets_count": routing.unrouted_nets.len(),
         "total_wire_length_mm": total_wire_length_mm,
+        "routing_feedback": if recommended_routing_order.is_empty() {
+            serde_json::Value::Null
+        } else {
+            serde_json::json!({
+                "recommended_routing_order": recommended_routing_order,
+                "reason": "Retry at most this bounded set first; preserve the electrical priority classes and inspect the result before expanding the order."
+            })
+        },
         "routing": routing,
         "diagnostics": diags
     }))
@@ -1327,8 +1424,32 @@ fn execute_export(args: &Value, default_registry: Option<&Path>) -> Result<Value
     // A partial route may be exported only as an explicitly requested draft;
     // the default remains a release gate.
     let allow_incomplete = args["allow_incomplete"].as_bool().unwrap_or(false);
-    let placement = synth_place::place(&board).map_err(|e| format!("Placement failed: {e}"))?;
-    let routing = synth_route::route(&board, &placement);
+    let routing_order: Vec<String> = args
+        .get("routing_order")
+        .and_then(Value::as_array)
+        .map(|values| {
+            values
+                .iter()
+                .filter_map(Value::as_str)
+                .map(str::to_string)
+                .collect()
+        })
+        .unwrap_or_default();
+    let sidecar_opt: Option<PathBuf> = args
+        .get("layout_file_path")
+        .and_then(|v| v.as_str())
+        .map(PathBuf::from)
+        .or_else(|| {
+            let candidate = PathBuf::from(format!("{file_name}.layout.toml"));
+            candidate.exists().then_some(candidate)
+        });
+    let placement = synth_place::place_with_sidecar(&board, sidecar_opt.as_deref())
+        .map_err(|e| format!("Placement failed: {e}"))?;
+    let routing = if routing_order.is_empty() {
+        synth_route::route(&board, &placement)
+    } else {
+        synth_route::route_with_order(&board, &placement, &routing_order)
+    };
     let route_complete = routing.unrouted_nets.is_empty();
     if !route_complete && !allow_incomplete {
         return Err(format!(
@@ -1350,7 +1471,13 @@ fn execute_export(args: &Value, default_registry: Option<&Path>) -> Result<Value
         ));
     }
 
-    let res = synth_kicad::export(&board, &out_dir).map_err(|e| format!("Export failed: {e}"))?;
+    let res = synth_kicad::export_with_sidecar_and_routing_order(
+        &board,
+        &out_dir,
+        sidecar_opt.as_deref(),
+        (!routing_order.is_empty()).then_some(routing_order.as_slice()),
+    )
+    .map_err(|e| format!("Export failed: {e}"))?;
 
     // Aesthetic schematic ERC over the same layout the exporter used:
     // surfaced to the agent so it can repair readability regressions
@@ -1571,6 +1698,7 @@ fn execute_place_with_hints(
                     synth_place::apply_sidecar_overrides(&board, &mut placement, &sidecar);
                 }
             }
+            let placement_description = synth_place::describe_placement(&board, &placement);
 
             // Placement is an independently useful stage. Routing and DRC
             // can be expensive and are exposed through their own gates; do
@@ -1586,6 +1714,11 @@ fn execute_place_with_hints(
                     "board_size_mm": [board_w_mm, board_h_mm],
                     "component_placements": placement.components,
                     "hint_satisfaction": report,
+                    "placement_quality": {
+                        "functional_warnings": placement_description.functional_warnings,
+                        "dense_regions": placement_description.dense_regions,
+                        "visual_review": placement_description.visual_review
+                    },
                     "routing_status": "not_run",
                     "drc_status": "not_run",
                     "drc_clean": null,
@@ -1597,6 +1730,25 @@ fn execute_place_with_hints(
             let board_w_mm = (placement.board_outline.width_nm() as f64) / 1_000_000.0;
             #[allow(clippy::cast_precision_loss)]
             let board_h_mm = (placement.board_outline.height_nm() as f64) / 1_000_000.0;
+
+            if placement_description.visual_review.requires_revision
+                && !args["allow_placement_warnings"].as_bool().unwrap_or(false)
+            {
+                return Ok(serde_json::json!({
+                    "status": "placement_requires_revision",
+                    "board_size_mm": [board_w_mm, board_h_mm],
+                    "component_placements": placement.components,
+                    "hint_satisfaction": report,
+                    "placement_quality": {
+                        "functional_warnings": placement_description.functional_warnings,
+                        "dense_regions": placement_description.dense_regions,
+                        "visual_review": placement_description.visual_review
+                    },
+                    "routing_status": "not_run",
+                    "drc_status": "not_run",
+                    "reason": "Placement visual review requires revision before combined routing"
+                }));
+            }
 
             let routing = synth_route::route(&board, &placement);
             let profile_str = args["profile"].as_str().unwrap_or("jlcpcb_standard");
@@ -1614,6 +1766,11 @@ fn execute_place_with_hints(
                 "board_size_mm": [board_w_mm, board_h_mm],
                 "component_placements": placement.components,
                 "hint_satisfaction": report,
+                "placement_quality": {
+                    "functional_warnings": placement_description.functional_warnings,
+                    "dense_regions": placement_description.dense_regions,
+                    "visual_review": placement_description.visual_review
+                },
                 "drc_clean": drc_report.is_clean(),
                 "violations": drc_report.violations,
                 "violation_count": drc_report.violations.len(),
@@ -1657,7 +1814,9 @@ fn execute_describe_placement(
     let lowered = synth_ir::lower(&resolved.program, &registry, file_name);
     let board = lowered.board.ok_or("Lowering failed")?;
 
-    let placement = synth_place::place(&board).map_err(|e| format!("Placement failed: {e}"))?;
+    let sidecar_path = args["layout_file_path"].as_str().map(Path::new);
+    let placement = synth_place::place_with_sidecar(&board, sidecar_path)
+        .map_err(|e| format!("Placement failed: {e}"))?;
 
     let desc = synth_place::describe_placement(&board, &placement);
     serde_json::to_value(desc).map_err(|e| format!("Serialization error: {e}"))
@@ -1694,12 +1853,15 @@ fn execute_write_layout_override(args: &Value) -> Result<Value, String> {
         .as_str()
         .ok_or("Missing required 'refdes'")?
         .to_string();
-    let x_mm = args["x_mm"]
-        .as_f64()
-        .ok_or("Missing required numeric 'x_mm'")?;
-    let y_mm = args["y_mm"]
-        .as_f64()
-        .ok_or("Missing required numeric 'y_mm'")?;
+    let relative_to = args["relative_to"].as_str().map(str::to_string);
+    let x_mm = args["x_mm"].as_f64().unwrap_or(0.0);
+    let y_mm = args["y_mm"].as_f64().unwrap_or(0.0);
+    if relative_to.is_none() && (!args["x_mm"].is_number() || !args["y_mm"].is_number()) {
+        return Err(
+            "Provide x_mm/y_mm for an absolute override, or relative_to for a relative override"
+                .into(),
+        );
+    }
     let rotation = args["rotation"].as_u64().unwrap_or(0) as u32;
 
     let source = match args["source"].as_str() {
@@ -1725,6 +1887,9 @@ fn execute_write_layout_override(args: &Value) -> Result<Value, String> {
         source,
         priority,
         timestamp: None,
+        relative_to,
+        dx: args["dx_mm"].as_f64().unwrap_or(0.0),
+        dy: args["dy_mm"].as_f64().unwrap_or(0.0),
     };
 
     sidecar.merge_override(refdes.clone(), placement);
@@ -1835,11 +2000,51 @@ fn execute_route_with_constraints(
         }
     }
 
-    let routing = match (min_width_nm, min_clearance_nm) {
-        (Some(w), Some(c)) => synth_route::route_with_profile(&board, &placement, w, c),
-        (Some(w), None) => synth_route::route_with_profile(&board, &placement, w, 127_000),
-        (None, Some(c)) => synth_route::route_with_profile(&board, &placement, 127_000, c),
-        (None, None) => synth_route::route(&board, &placement),
+    let placement_description = synth_place::describe_placement(&board, &placement);
+    if placement_description.visual_review.requires_revision
+        && !args["allow_placement_warnings"].as_bool().unwrap_or(false)
+    {
+        return Ok(serde_json::json!({
+            "status": "placement_requires_revision",
+            "routing_status": "not_run",
+            "reason": "Placement visual review requires revision before constrained routing",
+            "placement_quality": {
+                "visual_review": placement_description.visual_review,
+                "functional_warnings": placement_description.functional_warnings,
+                "dense_regions": placement_description.dense_regions
+            },
+            "hint": "Revise the SynthSpec placement_hint or layout sidecar, rerun placement review, then retry constrained routing."
+        }));
+    }
+
+    let routing_order: Vec<String> = args
+        .get("routing_order")
+        .and_then(Value::as_array)
+        .map(|values| {
+            values
+                .iter()
+                .filter_map(Value::as_str)
+                .map(str::to_string)
+                .collect()
+        })
+        .unwrap_or_default();
+    let width_nm = min_width_nm.unwrap_or(127_000);
+    let clearance_nm = min_clearance_nm.unwrap_or(127_000);
+    let routing = if routing_order.is_empty() {
+        match (min_width_nm, min_clearance_nm) {
+            (Some(w), Some(c)) => synth_route::route_with_profile(&board, &placement, w, c),
+            (Some(w), None) => synth_route::route_with_profile(&board, &placement, w, 127_000),
+            (None, Some(c)) => synth_route::route_with_profile(&board, &placement, 127_000, c),
+            (None, None) => synth_route::route(&board, &placement),
+        }
+    } else {
+        synth_route::route_with_profile_and_order(
+            &board,
+            &placement,
+            width_nm,
+            clearance_nm,
+            &routing_order,
+        )
     };
 
     let total_trace_length_mm: f64 = routing

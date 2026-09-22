@@ -1,0 +1,110 @@
+id = "header_1x20"
+kind = "connector"
+description = "1x20 through-hole pin header, 2.54mm pitch"
+kicad_symbol = "Connector_Generic:Conn_01x20"
+kicad_footprint = "Connector_PinHeader_2.54mm:PinHeader_1x20_P2.54mm_Vertical"
+
+[footprint_dimensions]
+width_mm = 3.54
+height_mm = 49.26
+courtyard_margin_mm = 0.25
+
+[[pins]]
+name = "p1"
+number = "1"
+electrical_type = "passive"
+
+[[pins]]
+name = "p2"
+number = "2"
+electrical_type = "passive"
+
+[[pins]]
+name = "p3"
+number = "3"
+electrical_type = "passive"
+
+[[pins]]
+name = "p4"
+number = "4"
+electrical_type = "passive"
+
+[[pins]]
+name = "p5"
+number = "5"
+electrical_type = "passive"
+
+[[pins]]
+name = "p6"
+number = "6"
+electrical_type = "passive"
+
+[[pins]]
+name = "p7"
+number = "7"
+electrical_type = "passive"
+
+[[pins]]
+name = "p8"
+number = "8"
+electrical_type = "passive"
+
+[[pins]]
+name = "p9"
+number = "9"
+electrical_type = "passive"
+
+[[pins]]
+name = "p10"
+number = "10"
+electrical_type = "passive"
+
+[[pins]]
+name = "p11"
+number = "11"
+electrical_type = "passive"
+
+[[pins]]
+name = "p12"
+number = "12"
+electrical_type = "passive"
+
+[[pins]]
+name = "p13"
+number = "13"
+electrical_type = "passive"
+
+[[pins]]
+name = "p14"
+number = "14"
+electrical_type = "passive"
+
+[[pins]]
+name = "p15"
+number = "15"
+electrical_type = "passive"
+
+[[pins]]
+name = "p16"
+number = "16"
+electrical_type = "passive"
+
+[[pins]]
+name = "p17"
+number = "17"
+electrical_type = "passive"
+
+[[pins]]
+name = "p18"
+number = "18"
+electrical_type = "passive"
+
+[[pins]]
+name = "p19"
+number = "19"
+electrical_type = "passive"
+
+[[pins]]
+name = "p20"
+number = "20"
+electrical_type = "passive"
