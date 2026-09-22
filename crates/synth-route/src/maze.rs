@@ -49,7 +49,7 @@ use synth_place::Placement;
 
 /// Default trace width for general signal nets, in nanometers.
 /// Standard 5-mil signal width. Power and RF classes widen this explicitly.
-const DEFAULT_TRACE_WIDTH_NM: i64 = 127_000;
+pub(crate) const DEFAULT_TRACE_WIDTH_NM: i64 = 127_000;
 /// Signal copper-to-copper clearance. Wide power/RF traces use the stricter
 /// 0.200 mm class through `clearance_for_trace`; vias remain conservative at
 /// 0.200 mm because they span all copper layers.
@@ -441,6 +441,28 @@ pub fn route_all_with_profile(
     advisor: &dyn crate::advisor::CongestionAdvisor,
     min_trace_width_nm: i64,
     min_clearance_nm: i64,
+) -> Routing {
+    route_all_with_profile_and_order(
+        board,
+        placement,
+        advisor,
+        min_trace_width_nm,
+        min_clearance_nm,
+        None,
+    )
+}
+
+/// Compatibility entry point retained for callers from the parallel route
+/// ensemble API on `main`. The RP2350 router now uses explicit agent-provided
+/// net ordering; the seed form falls back to the canonical deterministic
+/// order rather than silently selecting a different physical candidate.
+pub fn route_all_with_order_seed(
+    board: &Board,
+    placement: &Placement,
+    advisor: &dyn crate::advisor::CongestionAdvisor,
+    min_trace_width_nm: i64,
+    min_clearance_nm: i64,
+    _order_seed: u64,
 ) -> Routing {
     route_all_with_profile_and_order(
         board,
