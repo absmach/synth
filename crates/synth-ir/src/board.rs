@@ -199,7 +199,16 @@ impl Component {
     /// Look up a pin by name on the resolved part.
     pub fn find_pin(&self, name: &str) -> Option<(PinId, &synth_registry::Pin)> {
         let part = self.part.as_ref()?;
-        let idx = part.pins.iter().position(|p| p.name == name)?;
+        // Datasheet-style pin names are often written as aliases such as
+        // `GPIO26/ADC0`.  The registry stores the canonical primary name,
+        // so accept the first slash-separated alias while preserving the
+        // original source spelling for diagnostics and round-tripping.
+        let canonical = name.split('/').next().unwrap_or(name);
+        let registry_alias = name.replace('/', "_");
+        let idx = part
+            .pins
+            .iter()
+            .position(|p| p.name == name || p.name == canonical || p.name == registry_alias)?;
         // u32 cast is bounded: parts cannot exceed registry-validated pin counts.
         Some((PinId(idx as u32), &part.pins[idx]))
     }

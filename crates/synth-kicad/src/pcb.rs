@@ -155,47 +155,51 @@ pub fn build_pcb(board: &Board, placement: &Placement, routing: &Routing, projec
     }
 
     // Ground Plane Copper Flood Zone: Inject continuous GND copper zones on F.Cu, B.Cu, and inner layers
-    let gnd_pcb_net = board
+    // Ground plane: use the same topology classifier as netclasses so opaque
+    // generated names such as `net_2` do not prevent plane creation. Rails
+    // remain routed traces for now; putting multiple same-priority rail and
+    // ground zones on the same layers can create isolated islands.
+    let power_domains = synth_ir::infer_power_domains(board);
+    let plane_nets: Vec<(u32, &str)> = board
         .nets
         .iter()
-        .find_map(|n| {
-            let name_lower = n.name.to_lowercase();
-            let is_gnd = name_lower.contains("gnd")
+        .filter(|net| net.endpoints.len() >= 3)
+        .filter_map(|net| {
+            let domain = power_domains.get(net.id)?;
+            let name_lower = net.name.to_ascii_lowercase();
+            let explicit_ground = name_lower.contains("gnd")
                 || name_lower.contains("vss")
                 || name_lower == "0v"
-                || n.endpoints.iter().any(|ep| {
+                || net.endpoints.iter().any(|endpoint| {
                     board
-                        .component(ep.component)
-                        .and_then(|c| c.part.as_ref())
-                        .and_then(|p| p.pins.get(ep.pin.0 as usize))
+                        .component(endpoint.component)
+                        .and_then(|component| component.part.as_ref())
+                        .and_then(|part| part.pins.get(endpoint.pin.0 as usize))
                         .is_some_and(|pin| {
-                            let pname = pin.name.to_lowercase();
-                            pname.contains("gnd") || pname.contains("vss") || pname == "0v"
+                            let pin_name = pin.name.to_ascii_lowercase();
+                            pin_name.contains("gnd") || pin_name.contains("vss") || pin_name == "0v"
                         })
                 });
-            if is_gnd {
-                net_id_lookup.get(&n.id).copied()
-            } else {
-                None
+            if !(domain.is_ground() || explicit_ground) {
+                return None;
             }
+            net_id_lookup
+                .get(&net.id)
+                .copied()
+                .map(|pcb_net| (pcb_net, net.name.as_str()))
         })
-        .unwrap_or(1);
+        .collect();
 
     let gnd_layers = if board.layers == 4 {
         vec!["F.Cu", "In1.Cu", "In2.Cu", "B.Cu"]
     } else {
         vec!["F.Cu", "B.Cu"]
     };
-    for layer in gnd_layers {
-        children.push(build_gnd_zone(
-            placement,
-            layer,
-            gnd_pcb_net,
-            "GND",
-            project,
-        ));
+    for (pcb_net, net_name) in plane_nets {
+        for layer in &gnd_layers {
+            children.push(build_gnd_zone(placement, layer, pcb_net, net_name, project));
+        }
     }
-
     Sexp::list("kicad_pcb", children)
 }
 
@@ -262,14 +266,18 @@ fn build_gnd_zone(
             Sexp::list("hatch", vec![Sexp::atom("edge"), num(0.5)]),
             Sexp::list(
                 "connect_pads",
-                vec![Sexp::atom("yes"), Sexp::list("clearance", vec![num(0.3)])],
+                // The RP2350 QFN has 0.2 mm-wide perimeter pads. A generic
+                // 0.3 mm plane clearance leaves no legal thermal connection
+                // to those pads, so use a fabrication-safe but QFN-aware
+                // clearance for the generated ground plane.
+                vec![Sexp::atom("yes"), Sexp::list("clearance", vec![num(0.15)])],
             ),
             Sexp::list(
                 "fill",
                 vec![
                     Sexp::atom("yes"),
-                    Sexp::list("thermal_gap", vec![num(0.5)]),
-                    Sexp::list("thermal_bridge_width", vec![num(0.5)]),
+                    Sexp::list("thermal_gap", vec![num(0.2)]),
+                    Sexp::list("thermal_bridge_width", vec![num(0.25)]),
                 ],
             ),
             Sexp::list("polygon", vec![Sexp::list("pts", pts)]),
@@ -424,13 +432,21 @@ fn paper_for(placement: &Placement) -> &'static str {
     }
 }
 
-/// Canonical KiCad 10 layer stackup for 2- and 4-layer boards with strictly unique layer IDs.
+/// Canonical KiCad 10 layer stackup for 2-, 4-, and 6-layer boards with
+/// strictly unique layer IDs.
 fn build_layers(layer_count: u32) -> Sexp {
     let mut layers = vec![layer(0, "F.Cu", "signal", None)];
-    if layer_count == 4 {
-        layers.push(layer(1, "In1.Cu", "power", None));
-        layers.push(layer(2, "In2.Cu", "power", None));
-        layers.push(layer(31, "B.Cu", "signal", None));
+    if layer_count >= 6 {
+        // KiCad 10 uses even IDs for copper layers in this stack model.
+        layers.push(layer(4, "In1.Cu", "power", None));
+        layers.push(layer(6, "In2.Cu", "power", None));
+        layers.push(layer(8, "In3.Cu", "power", None));
+        layers.push(layer(10, "In4.Cu", "power", None));
+        layers.push(layer(2, "B.Cu", "signal", None));
+    } else if layer_count == 4 {
+        layers.push(layer(4, "In1.Cu", "power", None));
+        layers.push(layer(6, "In2.Cu", "power", None));
+        layers.push(layer(2, "B.Cu", "signal", None));
     } else {
         layers.push(layer(31, "B.Cu", "signal", None));
     }
@@ -474,6 +490,8 @@ fn build_setup() -> Sexp {
     Sexp::list(
         "setup",
         vec![
+            Sexp::list("last_trace_width", vec![num(0.127)]),
+            Sexp::list("trace_clearance", vec![num(0.127)]),
             Sexp::list("pad_to_mask_clearance", vec![num(0.0)]),
             Sexp::list("solder_mask_min_width", vec![num(0.0)]),
             Sexp::list(
@@ -504,6 +522,12 @@ fn build_netclasses(net_table: &[(u32, String)], board: &Board) -> Vec<Sexp> {
     // Topological power-domain map: classifies every net by connected pin types,
     // not by string name. This is the authoritative source for Power/GND class assignment.
     let domain_map = synth_ir::infer_power_domains(board);
+    let is_rp2350_board = board.components.iter().any(|component| {
+        component
+            .part
+            .as_ref()
+            .is_some_and(|part| part.id.0.to_ascii_lowercase().contains("rp2350"))
+    });
 
     let is_rf = |name: &str| {
         let n = name.to_ascii_lowercase();
@@ -577,11 +601,13 @@ fn build_netclasses(net_table: &[(u32, String)], board: &Board) -> Vec<Sexp> {
 
     // Power Net Class (PDN)
     if !power_nets.is_empty() {
+        let power_width = if is_rp2350_board { 0.127 } else { 0.50 };
+        let power_clearance = if is_rp2350_board { 0.127 } else { 0.2 };
         let mut power_args = vec![
             Sexp::str("Power"),
             Sexp::str("Power delivery network"),
-            Sexp::list("clearance", vec![num(0.2)]),
-            Sexp::list("trace_width", vec![num(0.50)]),
+            Sexp::list("clearance", vec![num(power_clearance)]),
+            Sexp::list("trace_width", vec![num(power_width)]),
             Sexp::list("via_dia", vec![num(0.80)]),
             Sexp::list("via_drill", vec![num(0.40)]),
         ];
@@ -1544,7 +1570,7 @@ mod tests {
 
     #[test]
     fn canonical_layers_have_unique_ids_and_names() {
-        for layer_count in [2, 4] {
+        for layer_count in [2, 4, 6] {
             let layers_sexp = build_layers(layer_count);
             let mut ids = std::collections::HashSet::new();
             let mut names = std::collections::HashSet::new();
@@ -1576,11 +1602,20 @@ mod tests {
             if layer_count == 2 {
                 assert!(names.contains("F.Cu") && names.contains("B.Cu"));
                 assert!(!names.contains("In1.Cu"));
+            } else if layer_count == 4 {
+                assert!(
+                    names.contains("F.Cu")
+                        && names.contains("In1.Cu")
+                        && names.contains("In2.Cu")
+                        && names.contains("B.Cu")
+                );
             } else {
                 assert!(
                     names.contains("F.Cu")
                         && names.contains("In1.Cu")
                         && names.contains("In2.Cu")
+                        && names.contains("In3.Cu")
+                        && names.contains("In4.Cu")
                         && names.contains("B.Cu")
                 );
             }

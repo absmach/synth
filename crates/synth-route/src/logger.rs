@@ -110,6 +110,8 @@ pub fn log_routing_outcome(
         synth_geometry::Layer::Top,
         synth_geometry::Layer::Inner1,
         synth_geometry::Layer::Inner2,
+        synth_geometry::Layer::Inner3,
+        synth_geometry::Layer::Inner4,
         synth_geometry::Layer::Bottom,
     ];
     for (layer_idx, layer_val) in layer_vals.iter().enumerate() {

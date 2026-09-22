@@ -170,7 +170,22 @@ fn load_from_sources(sources: &[(PathBuf, String)]) -> Result<Registry, LoadErro
         }
         registry.insert(part);
     }
+    add_compatibility_aliases(&mut registry);
     Ok(registry)
+}
+
+/// Keep common agent/vendor spellings usable when the canonical registry part
+/// already exists. The alias receives the complete canonical pin model and
+/// footprint, so it is not an unverified bounding-box fallback.
+fn add_compatibility_aliases(registry: &mut Registry) {
+    for (alias, canonical) in [("rp2350a", "rp2350"), ("w25q128_qspi", "w25q128_flash")] {
+        if registry.lookup(alias).is_none() {
+            if let Some(mut part) = registry.lookup(canonical).cloned() {
+                part.id = PartId(alias.to_string());
+                registry.insert(part);
+            }
+        }
+    }
 }
 
 /// A non-fatal condition observed while loading a tiered registry

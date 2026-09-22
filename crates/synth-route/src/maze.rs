@@ -50,10 +50,26 @@ use synth_place::Placement;
 /// Default trace width for general signal nets, in nanometers.
 /// Standard 5-mil signal width. Power and RF classes widen this explicitly.
 pub(crate) const DEFAULT_TRACE_WIDTH_NM: i64 = 127_000;
-/// Copper-to-copper clearance used by the generated KiCad board and by the
-/// native `kicad-cli pcb drc` path. Keep this explicit instead of relying on
-/// KiCad project defaults, which vary when a board is opened standalone.
+/// Signal copper-to-copper clearance. Wide power/RF traces use the stricter
+/// 0.200 mm class through `clearance_for_trace`; vias remain conservative at
+/// 0.200 mm because they span all copper layers.
 const ROUTING_CLEARANCE_NM: i64 = 127_000;
+const POWER_CLEARANCE_NM: i64 = 200_000;
+// Leave a small rounding/tessellation cushion beyond the nominal KiCad
+// clearance when a routed trace terminates near a foreign pad. Without this
+// cushion, nanometre-grid geometry can export a few micrometres below the
+// manufacturer's rule after KiCad rounds coordinates.
+const PAD_SAFETY_MARGIN_NM: i64 = 30_000;
+const EMITTED_PAD_SAFETY_MARGIN_NM: i64 = 70_000;
+const RP2350_EMITTED_PAD_SAFETY_MARGIN_NM: i64 = 60_000;
+
+fn clearance_for_trace(width_nm: i64) -> i64 {
+    if width_nm > DEFAULT_TRACE_WIDTH_NM {
+        POWER_CLEARANCE_NM
+    } else {
+        ROUTING_CLEARANCE_NM
+    }
+}
 const RF_50_TRACE_WIDTH_NM: i64 = 330_000;
 const POWER_TRACE_WIDTH_NM: i64 = 500_000;
 const HIGH_CURRENT_TRACE_WIDTH_NM: i64 = 600_000;
@@ -88,11 +104,27 @@ const PRIORITY_RIPUP_ROUNDS: usize = 4;
 /// the zero-segment priority pass; these rounds rip the net (and the
 /// competitor tracks blocking its escape corridor) and re-route it.
 const MAX_RIPUP_REROUTE_ROUNDS: usize = 2;
-/// Hard safety budget for the complete routing request. A maze search that
-/// cannot make progress must return a bounded partial result instead of
-/// holding an MCP worker forever. The budget is deliberately expressed in
-/// cell expansions so it is deterministic across identical inputs.
-const MAX_TOTAL_ASTAR_EXPANSIONS: u64 = 500_000;
+/// Hard safety budget for each negotiated maze pass. A search that cannot
+/// make progress must return a bounded partial result instead of holding an
+/// MCP worker forever. RP2350 uses a 0.127 mm grid, so the previous 500k
+/// ceiling routinely stopped long before the QFN-to-peripheral search space
+/// was explored; 1M remains finite while giving dense fine-grid routes a
+/// meaningful search budget.
+const MAX_TOTAL_ASTAR_EXPANSIONS: u64 = 1_000_000;
+/// Cumulative ceiling across the main negotiation and priority retries.
+/// Without this, each retry can independently consume the per-pass budget.
+const NORMAL_ROUTE_EXPANSION_LIMIT: u64 = 3_000_000;
+const RECOVERY_ROUTE_EXPANSION_LIMIT: u64 = 12_000_000;
+const NORMAL_FINE_GRID_NET_ASTAR_EXPANSIONS: u64 = 250_000;
+/// Fair-share cap for one net within a negotiated pass. Without this second
+/// limit, one trapped QFN escape can consume the entire pass budget and starve
+/// every other net from being reconsidered.
+/// Recovery budget used when an agent supplies a bounded routing order after
+/// inspecting the first route result. This is deliberately opt-in: applying
+/// it to every default route makes small fixture boards spend tens of seconds
+/// exploring paths that will still be rejected by the same congestion.
+const RECOVERY_FINE_GRID_TOTAL_ASTAR_EXPANSIONS: u64 = 4_000_000;
+const RECOVERY_FINE_GRID_NET_ASTAR_EXPANSIONS: u64 = 750_000;
 
 /// History-cost increment applied to every contested cell at
 /// the end of each negotiation iteration.
@@ -277,11 +309,20 @@ fn rip_up_reroute(
     vias: &mut Vec<crate::Via>,
     cells_expanded: &mut u64,
     min_trace_width_nm: i64,
+    recovery_search: bool,
 ) {
     let mut grid = base_grid.clone();
     rasterize_segments(&mut grid, segments, vias);
     let cap = grid.width * grid.height;
     let pad_keepout = build_pad_keepout(base_grid);
+    let mut best_segments = segments.clone();
+    let mut best_vias = vias.clone();
+    let mut best_routed = board
+        .nets
+        .iter()
+        .filter(|net| net.endpoints.len() >= 2 && !is_plane_net(net, board))
+        .count()
+        .saturating_sub(find_partial_nets(&grid, board).len());
     for _round in 0..MAX_RIPUP_REROUTE_ROUNDS {
         let partial = find_partial_nets(&grid, board);
         if partial.is_empty() {
@@ -320,6 +361,7 @@ fn rip_up_reroute(
                 cells_expanded,
                 MAX_NEGOTIATION_ITERATIONS - 1,
                 min_trace_width_nm,
+                recovery_search,
             );
             // Re-route *every* other net (most-constrained first) around
             // the now-committed stuck net. Routing the stuck net on the
@@ -350,51 +392,33 @@ fn rip_up_reroute(
                     cells_expanded,
                     MAX_NEGOTIATION_ITERATIONS - 1,
                     min_trace_width_nm,
+                    recovery_search,
                 );
+            }
+
+            // Rip-up is exploratory. Never let a candidate with worse
+            // coverage replace the best route produced before or during this
+            // recovery pass; otherwise one failed reroute can erase every
+            // previously valid segment from the final result.
+            let candidate_partial = find_partial_nets(&grid, board);
+            let candidate_routed = board
+                .nets
+                .iter()
+                .filter(|candidate| {
+                    candidate.endpoints.len() >= 2
+                        && !is_plane_net(candidate, board)
+                        && !candidate_partial.iter().any(|(id, _)| *id == candidate.id)
+                })
+                .count();
+            if candidate_routed > best_routed {
+                best_routed = candidate_routed;
+                best_segments = segments.clone();
+                best_vias = vias.clone();
             }
         }
     }
-}
-
-/// Deterministically rotate nets within equal-priority runs.
-///
-/// SplitMix64-style mixing of `(order_seed, run_index)` picks the rotation;
-/// no RNG state, no `HashMap` iteration, so the result is identical on every
-/// run and every thread count. Seed 0 never reaches here (canonical order).
-fn diversify_net_order(
-    ordered: &mut [&synth_ir::Net],
-    diff_pair_ids: &std::collections::HashSet<NetId>,
-    board: &Board,
-    order_seed: u64,
-) {
-    let prio_of = |n: &synth_ir::Net| -> u8 {
-        if diff_pair_ids.contains(&n.id) {
-            1
-        } else {
-            priority_class_for(n, board)
-        }
-    };
-    let mut run_start = 0_usize;
-    let mut run_idx: u64 = 0;
-    while run_start < ordered.len() {
-        let prio = prio_of(ordered[run_start]);
-        let mut run_end = run_start + 1;
-        while run_end < ordered.len() && prio_of(ordered[run_end]) == prio {
-            run_end += 1;
-        }
-        let len = run_end - run_start;
-        if len > 1 {
-            let mut z = order_seed
-                .wrapping_add(run_idx.wrapping_mul(0xBF58_476D_1CE4_E5B9))
-                .wrapping_add(0x9E37_79B9_7F4A_7C15);
-            z = (z ^ (z >> 30)).wrapping_mul(0xBF58_476D_1CE4_E5B9);
-            z = (z ^ (z >> 27)).wrapping_mul(0x94D0_49BB_1331_11EB);
-            z ^= z >> 31;
-            ordered[run_start..run_end].rotate_left((z % len as u64) as usize);
-        }
-        run_start = run_end;
-        run_idx += 1;
-    }
+    segments.clone_from(&best_segments);
+    vias.clone_from(&best_vias);
 }
 
 pub fn route_all(
@@ -418,30 +442,45 @@ pub fn route_all_with_profile(
     min_trace_width_nm: i64,
     min_clearance_nm: i64,
 ) -> Routing {
-    route_all_with_order_seed(
+    route_all_with_profile_and_order(
         board,
         placement,
         advisor,
         min_trace_width_nm,
         min_clearance_nm,
-        0,
+        None,
     )
 }
 
-/// Route with a deterministic net-order variant.
-///
-/// `order_seed == 0` is the canonical priority order. Non-zero seeds rotate
-/// nets within equal-priority groups so parallel ensemble candidates explore
-/// different congestion resolutions; the winner is still picked by score.
-/// Pure function of `(board, placement, seed)`: same seed → identical routes
-/// on any thread count.
+/// Compatibility entry point retained for callers from the parallel route
+/// ensemble API on `main`. The RP2350 router now uses explicit agent-provided
+/// net ordering; the seed form falls back to the canonical deterministic
+/// order rather than silently selecting a different physical candidate.
 pub fn route_all_with_order_seed(
     board: &Board,
     placement: &Placement,
     advisor: &dyn crate::advisor::CongestionAdvisor,
     min_trace_width_nm: i64,
     min_clearance_nm: i64,
-    order_seed: u64,
+    _order_seed: u64,
+) -> Routing {
+    route_all_with_profile_and_order(
+        board,
+        placement,
+        advisor,
+        min_trace_width_nm,
+        min_clearance_nm,
+        None,
+    )
+}
+
+pub fn route_all_with_profile_and_order(
+    board: &Board,
+    placement: &Placement,
+    advisor: &dyn crate::advisor::CongestionAdvisor,
+    min_trace_width_nm: i64,
+    min_clearance_nm: i64,
+    routing_order: Option<&[String]>,
 ) -> Routing {
     let base_grid = build_grid_with_clearance(board, placement, min_clearance_nm);
     let pad_keepout = build_pad_keepout(&base_grid);
@@ -454,6 +493,60 @@ pub fn route_all_with_order_seed(
     let pair_nets = diff_pair::resolve_pair_nets(board);
     let diff_pair_ids = diff_pair::pair_net_ids(&pair_nets);
 
+    let route_order_rank: std::collections::HashMap<&str, usize> = routing_order
+        .unwrap_or(&[])
+        .iter()
+        .enumerate()
+        .map(|(rank, name)| (name.as_str(), rank))
+        .collect();
+    // The first route is a bounded diagnostic pass for ordinary boards. An
+    // explicit order is an agent decision to retry with the larger search
+    // budget after reviewing congestion feedback. Very dense boards also
+    // opt into that budget automatically: otherwise a large fanout design
+    // can be incorrectly classified as a quick diagnostic and return almost
+    // no useful copper. The 40-net threshold keeps small fixtures bounded
+    // while covering the RP2350-class case.
+    let recovery_search = routing_order.is_some_and(|order| !order.is_empty())
+        || board
+            .nets
+            .iter()
+            .filter(|net| net.endpoints.len() >= 2 && !is_plane_net(net, board))
+            .count()
+            >= 40;
+    let route_expansion_limit = if recovery_search {
+        RECOVERY_ROUTE_EXPANSION_LIMIT
+    } else {
+        NORMAL_ROUTE_EXPANSION_LIMIT
+    };
+    let is_rp2350_board = board.components.iter().any(|component| {
+        component
+            .part
+            .as_ref()
+            .is_some_and(|part| part.id.0.to_ascii_lowercase().contains("rp2350"))
+    });
+    let is_dense_header = |component_id: synth_ir::ComponentId| {
+        board.component(component_id).is_some_and(|component| {
+            matches!(component.kind.as_str(), "connector" | "jack")
+                && component
+                    .part
+                    .as_ref()
+                    .is_some_and(|part| part.pins.len() >= 8)
+        })
+    };
+    let is_header_fanout = |net: &synth_ir::Net| {
+        is_rp2350_board
+            && net.endpoints.iter().any(|ep| is_dense_header(ep.component))
+            && net.endpoints.iter().any(|ep| {
+                board.component(ep.component).is_some_and(|component| {
+                    component.kind == "mcu"
+                        || component.kind == "processor"
+                        || component
+                            .part
+                            .as_ref()
+                            .is_some_and(|part| part.id.0.to_ascii_lowercase().contains("rp2350"))
+                })
+            })
+    };
     let mut ordered: Vec<&synth_ir::Net> = board.nets.iter().collect();
     ordered.sort_by_key(|n| {
         let prio = if diff_pair_ids.contains(&n.id) {
@@ -461,29 +554,28 @@ pub fn route_all_with_order_seed(
         } else {
             priority_class_for(n, board)
         };
-        (prio, n.endpoints.len(), n.id.0)
+        // Within a functional priority class, reserve the long RP2350 header
+        // escapes first. Short local nets otherwise consume the same QFN
+        // breakout channels and leave the far header pads stranded.
+        let span = net_endpoint_span(n, placement);
+        let fanout_span_key = if is_header_fanout(n) {
+            span.saturating_neg()
+        } else {
+            span
+        };
+        (
+            prio,
+            route_order_rank
+                .get(n.name.as_str())
+                .copied()
+                .unwrap_or(usize::MAX),
+            n.endpoints.len(),
+            fanout_span_key,
+            n.id.0,
+        )
     });
-    if order_seed != 0 {
-        diversify_net_order(&mut ordered, &diff_pair_ids, board, order_seed);
-    }
 
     let mut total_cells_expanded: u64 = 0;
-
-    // Exploratory order variants (seed != 0) run a reduced rip-up budget:
-    // they exist to give idle cores distinct work, not to out-route the
-    // canonical attempt. Seed 0 keeps the full budget, so canonical output
-    // (and every golden snapshot) is unchanged.
-    let exploratory = order_seed != 0;
-    let priority_rounds = if exploratory {
-        1
-    } else {
-        PRIORITY_RIPUP_ROUNDS
-    };
-    let priority_iters = if exploratory {
-        2
-    } else {
-        MAX_PRIORITY_NEGOTIATION_ITERATIONS
-    };
 
     // Main negotiated-congestion pass.
     let (mut best_segments, mut best_vias, mut best_routed) = negotiate(
@@ -495,6 +587,8 @@ pub fn route_all_with_order_seed(
         &mut total_cells_expanded,
         min_trace_width_nm,
         MAX_NEGOTIATION_ITERATIONS,
+        recovery_search,
+        route_expansion_limit,
     );
 
     // Priority rip-up (slice 5): any net that couldn't complete is
@@ -504,7 +598,7 @@ pub fn route_all_with_order_seed(
     // rounds converge on a higher-coverage solution — the essence of
     // rip-up-reroute without a full PathFinder re-solver.
     let mut priority_unrouted: std::collections::HashSet<NetId> = std::collections::HashSet::new();
-    for _round in 0..priority_rounds {
+    for _round in 0..PRIORITY_RIPUP_ROUNDS {
         let routed_ids: std::collections::HashSet<NetId> =
             best_segments.iter().map(|s| s.net).collect();
         let unrouted: Vec<NetId> = ordered
@@ -528,7 +622,17 @@ pub fn route_all_with_order_seed(
             } else {
                 priority_class_for(n, board)
             };
-            (u8::from(!is_un), prio, n.endpoints.len(), n.id.0)
+            let requested_rank = route_order_rank
+                .get(n.name.as_str())
+                .copied()
+                .unwrap_or(usize::MAX);
+            (
+                u8::from(!is_un),
+                prio,
+                requested_rank,
+                n.endpoints.len(),
+                n.id.0,
+            )
         });
         let (segs, vias, count) = negotiate(
             &priority_ordered,
@@ -538,7 +642,9 @@ pub fn route_all_with_order_seed(
             board,
             &mut total_cells_expanded,
             min_trace_width_nm,
-            priority_iters,
+            MAX_PRIORITY_NEGOTIATION_ITERATIONS,
+            recovery_search,
+            route_expansion_limit,
         );
         let new_routed_ids: std::collections::HashSet<NetId> = segs.iter().map(|s| s.net).collect();
         let new_unrouted: Vec<NetId> = ordered
@@ -593,12 +699,13 @@ pub fn route_all_with_order_seed(
     // Rip-up-reroute for partially-connected nets (dangling pads). The
     // priority pass above only rescues nets with zero segments; this
     // handles the nets that routed *mostly* but left a pin stranded.
-    // Opt-in (SYNTH_ENABLE_RIPUP): it can recover competitor-blocked
-    // pads but also perturbs already-clean nets, so it is off by
-    // default. The remaining dangling pads on dense boards are enclosed
-    // by component courtyards and require a placement change, not
-    // routing.
-    if std::env::var("SYNTH_ENABLE_RIPUP").is_ok() {
+    // Partial-net recovery is opt-in for ordinary boards because it can
+    // perturb an otherwise clean route. RP2350-class boards are the one
+    // deliberate exception: their fine-pitch QFN fanout routinely produces
+    // dangling header segments, and leaving those fragments in the export
+    // creates many native KiCad unconnected items. Keep the environment flag
+    // for explicit recovery on other boards.
+    if is_rp2350_board || std::env::var("SYNTH_ENABLE_RIPUP").is_ok() {
         rip_up_reroute(
             &base_grid,
             board,
@@ -607,6 +714,7 @@ pub fn route_all_with_order_seed(
             &mut best_vias,
             &mut total_cells_expanded,
             min_trace_width_nm,
+            recovery_search,
         );
     }
 
@@ -617,6 +725,35 @@ pub fn route_all_with_order_seed(
         diff_pair_reports: reports,
         unrouted_nets: unrouted,
         cells_expanded: total_cells_expanded,
+    }
+}
+
+/// Manhattan span between the component centres touched by a net. This is a
+/// cheap placement-level proxy for route difficulty used only to break ties
+/// between nets with the same functional priority and endpoint count.
+fn net_endpoint_span(net: &synth_ir::Net, placement: &Placement) -> i64 {
+    let mut min_x = i64::MAX;
+    let mut max_x = i64::MIN;
+    let mut min_y = i64::MAX;
+    let mut max_y = i64::MIN;
+    let mut found = false;
+    for endpoint in &net.endpoints {
+        if let Some(component) = placement
+            .components
+            .iter()
+            .find(|p| p.id == endpoint.component)
+        {
+            min_x = min_x.min(component.center.x_nm);
+            max_x = max_x.max(component.center.x_nm);
+            min_y = min_y.min(component.center.y_nm);
+            max_y = max_y.max(component.center.y_nm);
+            found = true;
+        }
+    }
+    if found {
+        max_x.saturating_sub(min_x) + max_y.saturating_sub(min_y)
+    } else {
+        i64::MAX
     }
 }
 
@@ -636,6 +773,8 @@ fn negotiate(
     total_cells_expanded: &mut u64,
     min_trace_width_nm: i64,
     max_iterations: usize,
+    recovery_search: bool,
+    total_expansion_limit: u64,
 ) -> (Vec<Segment>, Vec<crate::Via>, usize) {
     let mut history: Vec<u32> = vec![0; base_grid.width * base_grid.height];
     let mut best_segments: Vec<Segment> = Vec::new();
@@ -649,6 +788,9 @@ fn negotiate(
     let mut plateau = 0_usize;
 
     for iteration in 0..max_iterations {
+        if *total_cells_expanded >= total_expansion_limit {
+            break;
+        }
         let mut grid = base_grid.clone();
         let mut present: Vec<u32> = vec![0; base_grid.width * base_grid.height];
         let mut segments: Vec<Segment> = Vec::new();
@@ -672,6 +814,7 @@ fn negotiate(
                 &mut iter_cells_expanded,
                 iteration,
                 min_trace_width_nm,
+                recovery_search,
             );
         }
         *total_cells_expanded += iter_cells_expanded;
@@ -869,6 +1012,7 @@ pub(crate) fn route_net(
     cells_expanded: &mut u64,
     iteration: usize,
     min_trace_width_nm: i64,
+    recovery_search: bool,
 ) -> bool {
     let width = trace_width_for(net, board, min_trace_width_nm);
 
@@ -890,7 +1034,44 @@ pub(crate) fn route_net(
         }
     }
     let mut any_progress = false;
+    let fair_share_budget = grid.pitch_nm <= synth_geometry::mm_to_nm(0.127);
+    let mut net_cells_expanded = 0_u64;
+    // A rejected terminal escape is evidence that this net's current source
+    // cluster has no physically valid breakout under the present congestion
+    // state. Bound retries so a bad escape cannot make every negotiation
+    // round repeatedly spend millions of expansions on the same net.
+    let mut rejected_geometry_paths = 0_u8;
     while let Some(target) = pop_closest_sink(&sources_2d(&sources), &mut sinks) {
+        let total_expansion_budget = if fair_share_budget && recovery_search {
+            RECOVERY_FINE_GRID_TOTAL_ASTAR_EXPANSIONS
+        } else {
+            MAX_TOTAL_ASTAR_EXPANSIONS
+        };
+        let net_expansion_budget = if fair_share_budget {
+            if recovery_search {
+                RECOVERY_FINE_GRID_NET_ASTAR_EXPANSIONS
+            } else {
+                NORMAL_FINE_GRID_NET_ASTAR_EXPANSIONS
+            }
+        } else {
+            MAX_TOTAL_ASTAR_EXPANSIONS
+        };
+        if *cells_expanded >= total_expansion_budget
+            || (fair_share_budget && net_cells_expanded >= net_expansion_budget)
+        {
+            break;
+        }
+        let net_expanded_before = net_cells_expanded;
+        let expansion_counter: &mut u64 = if fair_share_budget {
+            &mut net_cells_expanded
+        } else {
+            cells_expanded
+        };
+        let expansion_budget = if fair_share_budget {
+            net_expansion_budget
+        } else {
+            total_expansion_budget
+        };
         // Every cell of the sink cluster is a valid termination
         // point (they all belong to same-net copper).
         let target_cluster = cluster_of(grid, net.id, &source_cells, target);
@@ -905,17 +1086,35 @@ pub(crate) fn route_net(
             advisor,
             board,
             pad_keepout,
-            cells_expanded,
+            expansion_counter,
             iteration,
             width,
             segments,
             vias,
+            expansion_budget,
         );
+        if fair_share_budget {
+            *cells_expanded = (*cells_expanded)
+                .saturating_add(net_cells_expanded.saturating_sub(net_expanded_before));
+        }
         let Some(path) = res else {
             continue;
         };
         let (new_segments, new_vias) =
             emit_segments_and_vias(grid, &path, net.id, width, min_trace_width_nm);
+        // A* reasons about routing cells, while endpoint escapes are emitted
+        // from exact pad centroids and can therefore leave the cell model.
+        // Never commit a path whose final physical geometry is too close to
+        // another pad.  Treat it as unrouted so a later negotiation/recovery
+        // pass can try a different escape rather than exporting a native DRC
+        // short.
+        if !emitted_geometry_is_pad_safe(grid, net.id, &new_segments, &new_vias) {
+            rejected_geometry_paths = rejected_geometry_paths.saturating_add(1);
+            if rejected_geometry_paths >= 8 {
+                break;
+            }
+            continue;
+        }
         segments.extend(new_segments);
         vias.extend(new_vias);
 
@@ -1114,269 +1313,6 @@ fn is_adjacent_to_foreign_via(grid: &Grid, x: usize, y: usize, net: NetId, max_d
     false
 }
 
-/// Grid-bucketed index over the pads a net does not own.
-///
-/// The A* neighbour test asks "is this step too close to a foreign pad?"
-/// for every cell it expands, and answering it by scanning `grid.pads`
-/// costs O(pads) per neighbour. Bucketing the pads by grid cell makes it
-/// O(pads near that cell), which on a real board is almost always zero.
-///
-/// Buckets are deliberately conservative: a pad is filed under every cell
-/// within `reach_nm` of its rectangle, where `reach_nm` covers the
-/// clearance radius, one routing pitch (the step segment's length) and
-/// the largest offset between a cell's nominal centre and a pad
-/// centroid. A lookup therefore returns a *superset* of the pads the
-/// exact test could reject, the exact test still runs on each of them,
-/// and the routing result is unchanged.
-struct ForeignPadIndex {
-    /// CSR row offsets, one per cell plus a trailing end marker.
-    offsets: Vec<u32>,
-    /// Indices into `grid.pads`, grouped by cell.
-    entries: Vec<u32>,
-}
-
-impl ForeignPadIndex {
-    fn build(grid: &Grid, net: NetId, clearance_nm: i64) -> Self {
-        // A cell's centre is its nominal grid point unless a pad centroid
-        // overrides it, and a centroid can sit well off-pitch on a large
-        // pad. Measure the worst offset rather than assuming a bound.
-        let mut centroid_slack_nm = 0_i64;
-        for (&(_, x, y), centre) in &grid.pad_centres {
-            let nominal_x = grid.origin_nm.x_nm + (x as i64) * grid.pitch_nm;
-            let nominal_y = grid.origin_nm.y_nm + (y as i64) * grid.pitch_nm;
-            centroid_slack_nm = centroid_slack_nm
-                .max((centre.x_nm - nominal_x).abs())
-                .max((centre.y_nm - nominal_y).abs());
-        }
-        // Worst case: the exact test measures from a segment whose far end
-        // is one pitch plus two centroid slacks away, and the bucket is
-        // keyed on the nominal point, one more slack off.
-        let reach_nm = clearance_nm + grid.pitch_nm + 3 * centroid_slack_nm;
-
-        let cells = grid.width * grid.height;
-        let mut offsets = vec![0_u32; cells + 1];
-
-        let cell_range = |lo_nm: i64, hi_nm: i64, origin_nm: i64, limit: usize| {
-            let first = (lo_nm - reach_nm - origin_nm).div_euclid(grid.pitch_nm);
-            let last = (hi_nm + reach_nm - origin_nm).div_euclid(grid.pitch_nm) + 1;
-            let first = first.clamp(0, limit as i64) as usize;
-            let last = last.clamp(0, limit as i64) as usize;
-            first..last
-        };
-
-        let foreign = |idx: usize| grid.pads[idx].0 != net;
-
-        // Counting pass, then prefix sum, then fill: one flat allocation
-        // instead of a `Vec` per cell.
-        for idx in 0..grid.pads.len() {
-            if !foreign(idx) {
-                continue;
-            }
-            let rect = grid.pads[idx].1;
-            for y in cell_range(
-                rect.min.y_nm,
-                rect.max.y_nm,
-                grid.origin_nm.y_nm,
-                grid.height,
-            ) {
-                for x in cell_range(
-                    rect.min.x_nm,
-                    rect.max.x_nm,
-                    grid.origin_nm.x_nm,
-                    grid.width,
-                ) {
-                    offsets[y * grid.width + x + 1] += 1;
-                }
-            }
-        }
-        for i in 1..offsets.len() {
-            offsets[i] += offsets[i - 1];
-        }
-
-        let mut entries = vec![0_u32; offsets[cells] as usize];
-        let mut cursor = offsets.clone();
-        for idx in 0..grid.pads.len() {
-            if !foreign(idx) {
-                continue;
-            }
-            let rect = grid.pads[idx].1;
-            for y in cell_range(
-                rect.min.y_nm,
-                rect.max.y_nm,
-                grid.origin_nm.y_nm,
-                grid.height,
-            ) {
-                for x in cell_range(
-                    rect.min.x_nm,
-                    rect.max.x_nm,
-                    grid.origin_nm.x_nm,
-                    grid.width,
-                ) {
-                    let cell = y * grid.width + x;
-                    entries[cursor[cell] as usize] = idx as u32;
-                    cursor[cell] += 1;
-                }
-            }
-        }
-
-        Self { offsets, entries }
-    }
-
-    /// Pads that could be within the clearance radius of a step ending in
-    /// `cell` (a `y * width + x` index).
-    fn near(&self, cell: usize) -> &[u32] {
-        let start = self.offsets[cell] as usize;
-        let end = self.offsets[cell + 1] as usize;
-        &self.entries[start..end]
-    }
-}
-
-/// Sentinel for a via-memo column that has not been scanned yet. Halo
-/// costs are sums of `VIA_CLEARANCE_PENALTY`, so they are non-negative
-/// and can never collide with either sentinel.
-const VIA_MEMO_UNKNOWN: i32 = -1;
-/// Sentinel for a column where no via may be placed.
-const VIA_MEMO_ILLEGAL: i32 = -2;
-
-/// Hard cap on A* cell expansions per leg. A dense board can otherwise
-/// burn hours proving an unroutable leg unroutable cell-by-cell; failing
-/// fast lets the repair search try a roomier floorplan instead. The cap
-/// is ~100x the full 3D grid so any routable leg still completes; it
-/// only bounds truly pathological legs that would otherwise burn hours
-/// proving unroutability cell-by-cell.
-const MAX_ASTAR_EXPANSIONS: u64 = 25_000_000;
-
-/// Bucket radius (in grid cells) for the committed-copper spatial indexes
-/// below. Worst-case via/segment clearance (~760um) spans 3 cells on the
-/// fine 0.254mm pitch; one extra cell covers pad-centroid slack. Buckets
-/// are conservative: the exact distance test still runs on every hit, so
-/// results are unchanged, only faster.
-const COPPER_INDEX_RADIUS: i32 = 4;
-
-/// Grid-bucketed index over already-committed vias.
-///
-/// The A* neighbour test asks "is this step too close to a foreign via?"
-/// and the via-legality scan asks "is there a via nearby?" for every cell
-/// expanded. Answering either by scanning `vias` costs O(vias) per cell;
-/// bucketing makes it O(vias near that cell).
-struct CommittedViaIndex {
-    width: usize,
-    buckets: Vec<Vec<u32>>,
-}
-
-impl CommittedViaIndex {
-    fn build(grid: &Grid, vias: &[crate::Via]) -> Self {
-        let w = grid.width;
-        let h = grid.height;
-        let radius = COPPER_INDEX_RADIUS;
-        let mut buckets: Vec<Vec<u32>> = vec![Vec::new(); w * h];
-        for (idx, v) in vias.iter().enumerate() {
-            let (cx, cy) = grid.cell_of_point(v.at);
-            let x0 = (cx as i32 - radius).max(0) as usize;
-            let x1 = ((cx as i32 + radius).min(w as i32 - 1)).max(0) as usize;
-            let y0 = (cy as i32 - radius).max(0) as usize;
-            let y1 = ((cy as i32 + radius).min(h as i32 - 1)).max(0) as usize;
-            for y in y0..=y1 {
-                for x in x0..=x1 {
-                    buckets[y * w + x].push(idx as u32);
-                }
-            }
-        }
-        Self { width: w, buckets }
-    }
-
-    fn near(&self, x: usize, y: usize) -> &[u32] {
-        &self.buckets[y * self.width + x]
-    }
-}
-
-/// Grid-bucketed index over already-committed segments.
-///
-/// Same motivation as [`CommittedViaIndex`]: the via-legality scan and the
-/// width-aware segment clearance check both scanned every segment per
-/// expanded cell. Segments are axis-aligned; each is filed under every
-/// cell within [`COPPER_INDEX_RADIUS`] of its bbox, and the exact
-/// point-to-segment test still decides.
-struct CommittedSegmentIndex {
-    width: usize,
-    buckets: Vec<Vec<u32>>,
-}
-
-impl CommittedSegmentIndex {
-    fn build(grid: &Grid, segments: &[Segment]) -> Self {
-        let w = grid.width;
-        let h = grid.height;
-        let radius = COPPER_INDEX_RADIUS;
-        let mut buckets: Vec<Vec<u32>> = vec![Vec::new(); w * h];
-        for (idx, s) in segments.iter().enumerate() {
-            let (x0c, y0c) = grid.cell_of_point(s.start);
-            let (x1c, y1c) = grid.cell_of_point(s.end);
-            let (lox, hix) = if x0c < x1c { (x0c, x1c) } else { (x1c, x0c) };
-            let (loy, hiy) = if y0c < y1c { (y0c, y1c) } else { (y1c, y0c) };
-            let x0 = (lox as i32 - radius).max(0) as usize;
-            let x1 = ((hix as i32 + radius).min(w as i32 - 1)).max(0) as usize;
-            let y0 = (loy as i32 - radius).max(0) as usize;
-            let y1 = ((hiy as i32 + radius).min(h as i32 - 1)).max(0) as usize;
-            for y in y0..=y1 {
-                for x in x0..=x1 {
-                    buckets[y * w + x].push(idx as u32);
-                }
-            }
-        }
-        Self { width: w, buckets }
-    }
-
-    fn near(&self, x: usize, y: usize) -> &[u32] {
-        &self.buckets[y * self.width + x]
-    }
-}
-
-/// Precomputed proximity of every 2D cell to the search endpoints.
-///
-/// The hot path tested `sources.iter().any(manhattan <= R)` per expanded
-/// cell — O(sources) per expansion, with sources growing to dozens of pad
-/// cells on wide nets. These bitsets cost one bounded fill up front and
-/// O(1) per expansion afterwards.
-struct ProximityMasks {
-    /// True within 2 cells of any source (pad-escape relaxation zone).
-    escape: Vec<bool>,
-    /// True within 14 cells of the target or any source (endpoint zone
-    /// where width-aware clearance checks are skipped).
-    endpoint: Vec<bool>,
-}
-
-impl ProximityMasks {
-    fn build(
-        width: usize,
-        height: usize,
-        sources_2d: &[(usize, usize)],
-        target: &(usize, usize),
-    ) -> Self {
-        let mut escape = vec![false; width * height];
-        let mut endpoint = vec![false; width * height];
-        let paint = |mask: &mut [bool], cx: usize, cy: usize, r: i32| {
-            let x0 = (cx as i32 - r).max(0) as usize;
-            let x1 = ((cx as i32 + r).min(width as i32 - 1)).max(0) as usize;
-            let y0 = (cy as i32 - r).max(0) as usize;
-            let y1 = ((cy as i32 + r).min(height as i32 - 1)).max(0) as usize;
-            for y in y0..=y1 {
-                for x in x0..=x1 {
-                    let d = (x as i32 - cx as i32).abs() + (y as i32 - cy as i32).abs();
-                    if d <= r {
-                        mask[y * width + x] = true;
-                    }
-                }
-            }
-        };
-        for &(sx, sy) in sources_2d {
-            paint(&mut escape, sx, sy, 2);
-            paint(&mut endpoint, sx, sy, 14);
-        }
-        paint(&mut endpoint, target.0, target.1, 14);
-        Self { escape, endpoint }
-    }
-}
-
 /// 3D A* search on the 2-layer grid (Top F.Cu & Bottom B.Cu).
 /// Returns path as sequence of `(layer, x, y)` 3D cells.
 ///
@@ -1403,50 +1339,24 @@ fn astar(
     width: i64,
     segments: &[Segment],
     vias: &[crate::Via],
+    expansion_budget: u64,
 ) -> Option<Vec<(usize, usize, usize)>> {
     let layers = grid.layers;
     let stride_y = grid.width;
     let stride_layer = grid.width * grid.height;
     let cell_idx = |l: usize, x: usize, y: usize| l * stride_layer + y * stride_y + x;
 
-    // Per-net trace widths, resolved once per search. The via-halo scan
-    // below consults them for every foreign track cell in a 7x7x(layers)
-    // neighbourhood, and `trace_width_for` lowercases the net name and
-    // every endpoint pin name into a fresh `Vec<String>` on each call.
-    let net_widths: std::collections::HashMap<NetId, i64> = board
-        .nets
-        .iter()
-        .map(|n| (n.id, trace_width_for(n, board, DEFAULT_TRACE_WIDTH_NM)))
-        .collect();
-
-    // Clearance radius for the foreign-pad test below. Fixed for the whole
-    // search: it depends only on this net's trace width. The via-legality
-    // scan needs a wider radius (427um), so build one index at the max of
-    // the two and reuse it for both — the exact test still decides.
-    let min_pad_clearance = width / 2 + ROUTING_CLEARANCE_NM + 30_000;
-    let foreign_pads = ForeignPadIndex::build(grid, net, min_pad_clearance.max(427_000));
-    // Committed-copper indexes: `segments`/`vias` are immutable for the
-    // whole search, so bucket them once instead of scanning per cell.
-    let via_index = CommittedViaIndex::build(grid, vias);
-    let seg_index = CommittedSegmentIndex::build(grid, segments);
-    // Endpoint proximity masks: one bounded fill replaces the per-cell
-    // `sources.iter().any(manhattan <= R)` scans in the hot path.
-    let sources_2d_all: Vec<(usize, usize)> = sources.iter().map(|&(_, x, y)| (x, y)).collect();
-    let proximity = ProximityMasks::build(grid.width, grid.height, &sources_2d_all, target);
-
-    // Via legality/halo memo, one slot per `(x, y)` column. The scan it
-    // caches reads only `grid`, `segments` and `vias`, all immutable for
-    // the whole search, so a column's answer never changes mid-search —
-    // and A* pops the same column repeatedly, once per improving `g` on
-    // any layer.
-    let mut via_memo: Vec<i32> = vec![VIA_MEMO_UNKNOWN; grid.width * grid.height];
-
     let mut g_score: Vec<i32> = vec![i32::MAX; layers * grid.width * grid.height];
     let mut came_from: Vec<Option<(u8, u16, u16)>> = vec![None; layers * grid.width * grid.height];
     let mut heap: BinaryHeap<Reverse<(i32, u32, u8, u16, u16)>> = BinaryHeap::new();
 
     let h = |c: (usize, usize)| -> i32 { manhattan(c, *target) as i32 };
-
+    let endpoint_components: std::collections::HashSet<synth_ir::ComponentId> = board
+        .nets
+        .iter()
+        .find(|candidate| candidate.id == net)
+        .map(|candidate| candidate.endpoints.iter().map(|ep| ep.component).collect())
+        .unwrap_or_default();
     let mut tie = 0_u32;
     for &(sl, sx, sy) in sources {
         if g_score[cell_idx(sl, sx, sy)] == 0 {
@@ -1457,16 +1367,11 @@ fn astar(
         tie += 1;
     }
 
-    let mut expansions: u64 = 0;
     while let Some(Reverse((_, _, cl_u, cx_u, cy_u))) = heap.pop() {
-        if *cells_expanded >= MAX_TOTAL_ASTAR_EXPANSIONS {
+        if *cells_expanded >= expansion_budget {
             return None;
         }
         *cells_expanded += 1;
-        expansions += 1;
-        if expansions > MAX_ASTAR_EXPANSIONS {
-            return None;
-        }
         let cl = cl_u as usize;
         let cx = cx_u as usize;
         let cy = cy_u as usize;
@@ -1512,7 +1417,19 @@ fn astar(
                     // final physical DRC instead of stranding the net in the
                     // coarse maze. The relaxation is local to the source pad,
                     // top copper, and cannot be used later in a route.
-                    let pad_escape = cl == 0 && proximity.escape[ny * stride_y + nx];
+                    // Fine-pitch escapes need a narrow approach corridor at
+                    // both ends. Source pads already had this local
+                    // relaxation; without the matching sink-side corridor,
+                    // adjacent QFN pads can block the final two grid cells
+                    // even when the emitted neck-down trace is DRC-valid.
+                    let source_escape = sources
+                        .iter()
+                        .any(|&(_, sx, sy)| manhattan((sx, sy), (nx, ny)) <= 2)
+                        || (grid.pitch_nm <= synth_geometry::mm_to_nm(0.127)
+                            && target_cluster
+                                .iter()
+                                .any(|&(tx, ty)| manhattan((tx, ty), (nx, ny)) <= 2));
+                    let pad_escape = cl == 0 && source_escape;
                     if !pad_escape && is_adjacent_to_foreign_pad(grid, cl, nx, ny, net) {
                         continue;
                     }
@@ -1525,16 +1442,45 @@ fn astar(
                     // QFN/MCU footprints and unassigned pads, which KiCad
                     // correctly treats as copper even though they have no net.
                     let step_start = grid.cell_centre(cl, cx, cy);
-                    // The index already excludes pads this net owns and
-                    // pads too far away to matter; the exact test decides.
-                    let pad_too_close = foreign_pads.near(ny * stride_y + nx).iter().any(|&pad| {
-                        let pad_rect = grid.pads[pad as usize].1;
+                    let min_pad_clearance =
+                        width / 2 + clearance_for_trace(width) + PAD_SAFETY_MARGIN_NM;
+                    let pad_too_close = grid.pads.iter().any(|&(pad_net, pad_rect)| {
+                        if pad_net == net {
+                            return false;
+                        }
                         let distance_sq =
                             dist_sq_axis_aligned_segment_to_rect(step_start, cell_pt, &pad_rect);
                         distance_sq < min_pad_clearance * min_pad_clearance
                     });
-                    if pad_too_close && !pad_escape {
+                    // Endpoint escape may relax the coarse adjacent-cell
+                    // heuristic above, but never the exact foreign-pad
+                    // geometry check. The latter is the authoritative
+                    // clearance envelope used by the emitted trace.
+                    if pad_too_close
+                        && (grid.pitch_nm <= synth_geometry::mm_to_nm(0.127) || !pad_escape)
+                    {
                         continue;
+                    }
+                    // Courtyard rasterization is cell-based. Check the
+                    // exact rectangle too, so a fine-grid segment cannot
+                    // slip through a cell corner and violate courtyard
+                    // clearance. Endpoint escape remains available for the
+                    // narrow breakout from the connected component; other
+                    // courtyard edges are hard obstacles.
+                    if !pad_escape && grid.pitch_nm <= synth_geometry::mm_to_nm(0.127) {
+                        let courtyard_clearance = width / 2 + clearance_for_trace(width);
+                        let courtyard_too_close =
+                            grid.courtyards.iter().any(|&(component_id, courtyard)| {
+                                if endpoint_components.contains(&component_id) {
+                                    return false;
+                                }
+                                dist_sq_axis_aligned_segment_to_rect(
+                                    step_start, cell_pt, &courtyard,
+                                ) < courtyard_clearance * courtyard_clearance
+                            });
+                        if courtyard_too_close {
+                            continue;
+                        }
                     }
                     // `pad_keepout` is a two-cell ring around every pad.
                     // At the 0.5 mm routing pitch that ring is wider than
@@ -1542,17 +1488,20 @@ fn astar(
                     // so the exact rectangle scan is redundant here.
                     // Keep the per-cell lookup below as the single hot
                     // path check instead of scanning every pad rectangle.
-                    let via_min_d = 300_000 + width / 2 + 127_000 + 30_000;
-                    let via_min_d_sq = via_min_d * via_min_d;
-                    let near_via = via_index.near(nx, ny).iter().any(|&vi| {
-                        let v = &vias[vi as usize];
-                        if v.net == net {
-                            return false;
+                    let mut near_via = false;
+                    for v in vias {
+                        if v.net != net {
+                            let dx = cell_pt.x_nm - v.at.x_nm;
+                            let dy = cell_pt.y_nm - v.at.y_nm;
+                            let d_sq = dx * dx + dy * dy;
+                            let min_d =
+                                300_000 + width / 2 + POWER_CLEARANCE_NM + PAD_SAFETY_MARGIN_NM;
+                            if d_sq < min_d * min_d {
+                                near_via = true;
+                                break;
+                            }
                         }
-                        let dx = cell_pt.x_nm - v.at.x_nm;
-                        let dy = cell_pt.y_nm - v.at.y_nm;
-                        dx * dx + dy * dy < via_min_d_sq
-                    });
+                    }
                     if near_via {
                         continue;
                     }
@@ -1573,7 +1522,15 @@ fn astar(
                     // clearance against every committed foreign segment on the same layer.
                     // `min_d <= grid.pitch_nm` short-circuits for signal traces and coarse
                     // grids where the adjacency check is already sufficient.
-                    let is_near_endpoint = proximity.endpoint[ny * stride_y + nx];
+                    // Fine-pitch MCU breakouts must still honor exact
+                    // foreign-track clearance right up to the pad escape.
+                    // The old endpoint exemption hid the final QFN jogs
+                    // from this check and produced native KiCad misses.
+                    let is_near_endpoint = grid.pitch_nm > synth_geometry::mm_to_nm(0.127)
+                        && (manhattan((nx, ny), *target) <= 14
+                            || sources
+                                .iter()
+                                .any(|s| manhattan((nx, ny), (s.1, s.2)) <= 14));
                     if !is_near_endpoint {
                         let cell_pt_seg = grid.cell_centre(cl, nx, ny);
                         let cur_layer = layer_enum(cl, grid.layers);
@@ -1597,12 +1554,13 @@ fn astar(
                             })
                         });
                         if nearby_foreign_track {
-                            for &si in seg_index.near(nx, ny) {
-                                let seg = &segments[si as usize];
+                            for seg in segments {
                                 if seg.net == net || seg.layer != cur_layer {
                                     continue;
                                 }
-                                let min_d = (width + seg.width_nm) / 2 + ROUTING_CLEARANCE_NM;
+                                let min_d = (width + seg.width_nm) / 2
+                                    + clearance_for_trace(width)
+                                        .max(clearance_for_trace(seg.width_nm));
                                 if min_d <= grid.pitch_nm {
                                     // Grid-adjacency already covers this clearance distance.
                                     continue;
@@ -1701,7 +1659,6 @@ fn astar(
             } else {
                 3
             };
-
             // Advisor cost modulation: evaluates predicted cell congestion cost
             let cell_pt = grid.cell_centre(cl, nx, ny);
             let cong = advisor.evaluate_cell_cost(board, cell_pt, cl);
@@ -1709,12 +1666,16 @@ fn astar(
             let cong_cost =
                 (cong.penalty as i32) + ((cong.cost_multiplier - 1.0) * dir_cost as f32) as i32;
 
-            // Pad clearance keep-out: avoid routing a track inside the
-            // 2-cell ring of a *foreign* pad. The net's own pad is exempt so it can still connect.
-            let keepout_penalty: i32 = match pad_keepout.get(&(cl, nx, ny)) {
-                Some(&owner) if owner != net => PAD_KEEPOUT_PENALTY as i32,
-                _ => 0,
-            };
+            // On the RP2350 fine grid, a foreign pad's ring is a hard
+            // exclusion; on legacy grids retain the negotiated soft cost
+            // so existing board families keep their established coverage.
+            let mut keepout_penalty = 0_i32;
+            if matches!(pad_keepout.get(&(cl, nx, ny)), Some(&owner) if owner != net) {
+                if grid.pitch_nm <= synth_geometry::mm_to_nm(0.127) {
+                    continue;
+                }
+                keepout_penalty = PAD_KEEPOUT_PENALTY as i32;
+            }
 
             let tentative_g = cur_g
                 + dir_cost
@@ -1733,14 +1694,9 @@ fn astar(
         }
 
         // 2. Layer transition (Via insertion)
-        // Whether a via may sit at `(cx, cy)`, and what halo cost it
-        // carries, depends only on that cell: none of the legality,
-        // pad, NPTH, board-edge, segment, via or neighbourhood scans
-        // below read the destination layer. Resolving it once and
-        // reusing the answer for every destination layer does the work
-        // the loop used to repeat `layers - 1` times per expanded cell.
-        let via_column = cy * stride_y + cx;
-        let via_scan = || -> Option<i32> {
+        let other_layers: Vec<usize> = (0..layers).filter(|&l| l != cl).collect();
+
+        'layer_loop: for &other_layer in &other_layers {
             let mut legal = true;
             for vl in 0..grid.layers {
                 match grid.get(vl, cx, cy) {
@@ -1753,7 +1709,7 @@ fn astar(
                 }
             }
             if !legal {
-                return None;
+                continue;
             }
 
             let via_pt = grid.cell_centre(0, cx, cy);
@@ -1763,17 +1719,22 @@ fn astar(
             // and 0.250 mm hole clearance. For foreign pads: min distance from via center
             // to pad rectangle must be >= max(300+127, 150+250) = 427 µm; with margin: 450 µm.
             // For same-net pads: via cannot sit inside or touch the SMD pad: 350 µm.
-            let near_pad = foreign_pads.near(via_column).iter().any(|&pi| {
-                let pad_rect = grid.pads[pi as usize].1;
-                let px = via_pt.x_nm.clamp(pad_rect.min.x_nm, pad_rect.max.x_nm);
-                let py = via_pt.y_nm.clamp(pad_rect.min.y_nm, pad_rect.max.y_nm);
-                let dx = via_pt.x_nm - px;
-                let dy = via_pt.y_nm - py;
-                let min_d = 427_000_i64;
-                dx * dx + dy * dy < min_d * min_d
-            });
+            let mut near_pad = false;
+            for &(pad_net, pad_rect) in &grid.pads {
+                if pad_net != net {
+                    let px = via_pt.x_nm.clamp(pad_rect.min.x_nm, pad_rect.max.x_nm);
+                    let py = via_pt.y_nm.clamp(pad_rect.min.y_nm, pad_rect.max.y_nm);
+                    let dx = via_pt.x_nm - px;
+                    let dy = via_pt.y_nm - py;
+                    let min_d = 427_000_i64;
+                    if dx * dx + dy * dy < min_d * min_d {
+                        near_pad = true;
+                        break;
+                    }
+                }
+            }
             if near_pad {
-                return None;
+                continue 'layer_loop;
             }
 
             let mut near_npth = false;
@@ -1788,7 +1749,7 @@ fn astar(
                 }
             }
             if near_npth {
-                return None;
+                continue 'layer_loop;
             }
 
             // Via-to-board-edge clearance: via pad diameter 0.6 mm (radius 300 µm).
@@ -1800,35 +1761,41 @@ fn astar(
                 || via_pt.y_nm - grid.board_outline.min.y_nm < min_edge_d
                 || grid.board_outline.max.y_nm - via_pt.y_nm < min_edge_d
             {
-                return None;
+                continue 'layer_loop;
             }
 
-            let near_seg = seg_index.near(cx, cy).iter().any(|&si| {
-                let s = &segments[si as usize];
-                if s.net == net {
-                    return false;
+            let mut near_seg = false;
+            for s in segments {
+                if s.net != net {
+                    let closest = closest_point_on_segment(s.start, s.end, via_pt);
+                    let dx = closest.x_nm - via_pt.x_nm;
+                    let dy = closest.y_nm - via_pt.y_nm;
+                    let d_sq = dx * dx + dy * dy;
+                    let min_d =
+                        300_000 + s.width_nm / 2 + POWER_CLEARANCE_NM + PAD_SAFETY_MARGIN_NM;
+                    if d_sq < min_d * min_d {
+                        near_seg = true;
+                        break;
+                    }
                 }
-                let closest = closest_point_on_segment(s.start, s.end, via_pt);
-                let dx = closest.x_nm - via_pt.x_nm;
-                let dy = closest.y_nm - via_pt.y_nm;
-                let d_sq = dx * dx + dy * dy;
-                let min_d = 300_000 + s.width_nm / 2 + 127_000 + 30_000;
-                d_sq < min_d * min_d
-            });
+            }
             if near_seg {
-                return None;
+                continue 'layer_loop;
             }
 
-            let near_existing_via = via_index.near(cx, cy).iter().any(|&vi| {
-                let v = &vias[vi as usize];
+            let mut near_existing_via = false;
+            for v in vias {
                 let dx = via_pt.x_nm - v.at.x_nm;
                 let dy = via_pt.y_nm - v.at.y_nm;
                 let d_sq = dx * dx + dy * dy;
                 let min_via_d = if v.net == net { 550_000 } else { 727_000 };
-                d_sq < min_via_d * min_via_d
-            });
+                if d_sq < min_via_d * min_via_d {
+                    near_existing_via = true;
+                    break;
+                }
+            }
             if near_existing_via {
-                return None;
+                continue 'layer_loop;
             }
 
             // A via's annular ring (0.6mm diameter) extends into neighbouring cells.
@@ -1852,23 +1819,26 @@ fn astar(
                                     && grid.get(1, ax as usize, ay as usize)
                                         == Some(Cell::Track(n));
                                 if is_via && d_sq <= 4 {
-                                    return None;
+                                    continue 'layer_loop;
                                 }
-                                let track_w = net_widths
-                                    .get(&n)
-                                    .copied()
-                                    .unwrap_or(DEFAULT_TRACE_WIDTH_NM);
+                                let track_w = board
+                                    .nets
+                                    .iter()
+                                    .find(|bn| bn.id == n)
+                                    .map_or(DEFAULT_TRACE_WIDTH_NM, |bn| {
+                                        trace_width_for(bn, board, DEFAULT_TRACE_WIDTH_NM)
+                                    });
                                 if track_w > DEFAULT_TRACE_WIDTH_NM && d_sq <= 5 {
-                                    return None;
+                                    continue 'layer_loop;
                                 }
                                 if d_sq <= 2 {
-                                    return None;
+                                    continue 'layer_loop;
                                 }
                                 via_halo += VIA_CLEARANCE_PENALTY as i32;
                             }
                             Some(Cell::Pad(n)) if n != net => {
                                 if d_sq <= 2 {
-                                    return None;
+                                    continue 'layer_loop;
                                 }
                                 via_halo += VIA_CLEARANCE_PENALTY as i32;
                             }
@@ -1877,34 +1847,15 @@ fn astar(
                     }
                 }
             }
-            Some(via_halo)
-        };
-
-        let via_halo_here = match via_memo[via_column] {
-            VIA_MEMO_UNKNOWN => {
-                let scanned = via_scan();
-                via_memo[via_column] = scanned.unwrap_or(VIA_MEMO_ILLEGAL);
-                scanned
-            }
-            VIA_MEMO_ILLEGAL => None,
-            cached => Some(cached),
-        };
-
-        // Destination layers are still visited in ascending order, so the
-        // `tie` sequence (and therefore the heap's tie-breaking) is
-        // unchanged from the per-layer version.
-        if let Some(via_halo) = via_halo_here {
-            for other_layer in (0..layers).filter(|&l| l != cl) {
-                let via_idx = cell_idx(other_layer, cx, cy);
-                let via_cost = 15; // Via transition penalty
-                let tentative_g = cur_g + via_cost + via_halo;
-                if tentative_g < g_score[via_idx] {
-                    g_score[via_idx] = tentative_g;
-                    came_from[via_idx] = Some((cl as u8, cx as u16, cy as u16));
-                    let f = tentative_g + h((cx, cy));
-                    heap.push(Reverse((f, tie, other_layer as u8, cx as u16, cy as u16)));
-                    tie += 1;
-                }
+            let via_idx = cell_idx(other_layer, cx, cy);
+            let via_cost = 15; // Via transition penalty
+            let tentative_g = cur_g + via_cost + via_halo;
+            if tentative_g < g_score[via_idx] {
+                g_score[via_idx] = tentative_g;
+                came_from[via_idx] = Some((cl as u8, cx as u16, cy as u16));
+                let f = tentative_g + h((cx, cy));
+                heap.push(Reverse((f, tie, other_layer as u8, cx as u16, cy as u16)));
+                tie += 1;
             }
         }
     }
@@ -1933,6 +1884,98 @@ fn dist_sq_axis_aligned_segment_to_rect(s: Point, e: Point, rect: &Rect) -> i64 
     };
 
     dx * dx + dy * dy
+}
+
+/// Return whether emitted copper clears every foreign pad on the layer(s)
+/// where that pad actually has copper.  The maze uses a discrete cell model,
+/// but pad-centre snapping makes terminal escapes exact physical geometry;
+/// this check closes that representation gap before a route is committed.
+fn emitted_geometry_is_pad_safe(
+    grid: &Grid,
+    net: NetId,
+    segments: &[Segment],
+    vias: &[crate::Via],
+) -> bool {
+    // Build a compact layer-aware view once. `Grid::pads` intentionally stores
+    // geometry without a layer, while the cell map records whether that
+    // geometry is copper on each layer (SMD pads on F.Cu; through-hole pads on
+    // every copper layer). The bounded cell scan is cheap for normal pad
+    // rectangles and avoids rescanning every pad-centre entry per segment.
+    let mut layer_pads: Vec<(usize, NetId, Rect)> = Vec::new();
+    for &(pad_net, rect) in &grid.pads {
+        for layer in 0..grid.layers {
+            let (min_x, min_y) = grid.cell_of_point(rect.min);
+            let (max_x, max_y) = grid.cell_of_point(rect.max);
+            let present = (min_x..=max_x).any(|x| {
+                (min_y..=max_y).any(|y| grid.get(layer, x, y) == Some(Cell::Pad(pad_net)))
+            });
+            if present {
+                layer_pads.push((layer, pad_net, rect));
+            }
+        }
+    }
+    // F.Cu is the authoritative escape layer: retain every physical pad
+    // there, including unnetted pads whose raster classification may have
+    // been overwritten while stamping a courtyard. Other layers use only
+    // pads confirmed by their copper-layer cells.
+    let mut checked_pads: Vec<(usize, NetId, Rect)> = grid
+        .pads
+        .iter()
+        .map(|&(pad_net, rect)| (0, pad_net, rect))
+        .collect();
+    checked_pads.extend(
+        layer_pads
+            .iter()
+            .copied()
+            .filter(|(layer, _, _)| *layer != 0),
+    );
+
+    for segment in segments {
+        let layer_index = segment.layer.index(grid.layers);
+        for &(pad_layer, pad_net, rect) in &checked_pads {
+            // All generated SMD footprints are top-mounted. On F.Cu use the
+            // authoritative geometry list directly, even for a pad whose
+            // raster cell was later overwritten by another obstacle stamp;
+            // this prevents a top-side escape from slipping through a missed
+            // cell-layer classification. Inner/back layers retain the
+            // layer-aware filter so they can pass beneath SMD pads.
+            if pad_net == net || pad_layer != layer_index {
+                continue;
+            }
+            let emitted_margin = if grid.pitch_nm <= synth_geometry::mm_to_nm(0.127) {
+                RP2350_EMITTED_PAD_SAFETY_MARGIN_NM
+            } else {
+                EMITTED_PAD_SAFETY_MARGIN_NM
+            };
+            let min_clearance =
+                segment.width_nm / 2 + clearance_for_trace(segment.width_nm) + emitted_margin;
+            if dist_sq_axis_aligned_segment_to_rect(segment.start, segment.end, &rect)
+                < min_clearance * min_clearance
+            {
+                return false;
+            }
+        }
+    }
+
+    // Vias are through-hole copper on every routing layer, so their annular
+    // ring must clear foreign pads regardless of the pad's mounting side.
+    for via in vias {
+        for &(pad_net, rect) in &grid.pads {
+            if pad_net == net {
+                continue;
+            }
+            let px = via.at.x_nm.clamp(rect.min.x_nm, rect.max.x_nm);
+            let py = via.at.y_nm.clamp(rect.min.y_nm, rect.max.y_nm);
+            let dx = via.at.x_nm - px;
+            let dy = via.at.y_nm - py;
+            let min_clearance = via.pad_diameter_nm / 2 + POWER_CLEARANCE_NM + PAD_SAFETY_MARGIN_NM;
+            if dx * dx + dy * dy < min_clearance * min_clearance {
+                return false;
+            }
+        }
+    }
+
+    true
 }
 
 /// Walk a 3D cell path, grouping same-layer same-direction steps into `Segment`s
@@ -2284,6 +2327,20 @@ fn trace_width_for(net: &synth_ir::Net, board: &Board, min_trace_width_nm: i64) 
             .any(|n| keywords.iter().any(|&k| n.contains(k)))
     };
 
+    // QSPI data/clock lines leave a 0.4 mm-pitch QFN. Use the configured
+    // manufacturer minimum for this short/high-density interface so the
+    // maze clearance model permits the same neck-down that the emitter uses
+    // at fine-pitch pads. Ordinary signals retain the wider default width.
+    let is_rp2350_board = board.components.iter().any(|component| {
+        component
+            .part
+            .as_ref()
+            .is_some_and(|part| part.id.0.to_ascii_lowercase().contains("rp2350"))
+    });
+    if is_rp2350_board && matches_any(&["qspi", "sclk", "sck"]) {
+        return min_trace_width_nm;
+    }
+
     // RF / antenna nets: controlled 50Ω impedance, must use narrower microstrip width.
     // Matches: main_ant, rf_feed, bal_*, unbal, *_ant, rf*
     if matches_any(&["main_ant", "rf_feed", "bal_", "unbal", "_ant", "rf_"]) {
@@ -2323,9 +2380,17 @@ fn priority_class_for(net: &synth_ir::Net, board: &Board) -> u8 {
             .any(|n| keywords.iter().any(|&k| n.contains(k)))
     };
 
-    if any(&["ant", "rf_", "balun", "unbal", "_dp", "_dn", "diff"]) {
+    let is_rp2350_board = board.components.iter().any(|component| {
+        component
+            .part
+            .as_ref()
+            .is_some_and(|part| part.id.0.to_ascii_lowercase().contains("rp2350"))
+    });
+    if any(&["ant", "rf_", "balun", "unbal", "_dp", "_dn", "diff"])
+        || (is_rp2350_board && any(&["sck", "sclk", "qspi"]))
+    {
         0 // RF feed, antenna, balun, diff pairs
-    } else if any(&["clk", "osc", "xtal"]) {
+    } else if any(&["clk", "osc", "xtal"]) || (is_rp2350_board && any(&["sck", "sclk", "qspi"])) {
         1 // Sensitive clocks
     } else if any(&["nrst", "reset", "boot0", "pwrkey", "sw1"]) {
         2 // MCU escapes, reset & debug
@@ -2409,6 +2474,7 @@ mod tests {
             cells: vec![Cell::Free; 2 * w * h],
             pad_centres: HashMap::new(),
             pads: Vec::new(),
+            courtyards: Vec::new(),
             npth_holes: Vec::new(),
             board_outline: Rect::new(
                 Point::new(0, 0),

@@ -11,12 +11,36 @@
 //! enough that single-threaded execution stays under the
 //! 1-second budget for a sensor_logger-class design).
 
-use synth_geometry::{nm_to_mm, Point};
+use synth_geometry::{mm_to_nm, nm_to_mm, Point, Rect, Rotation};
 use synth_place::Placement;
 use synth_route::{Routing, Segment, Via};
 
 use crate::profile::ManufacturerProfile;
 use crate::Violation;
+
+fn courtyard_rect(
+    component: &synth_ir::Component,
+    placement: &synth_place::ComponentPlacement,
+) -> Option<Rect> {
+    let part = component.part.as_ref()?;
+    let ((offset_x, offset_y), (width, height)) =
+        synth_layout::pcb_courtyard_geometry_for_part(part);
+    let (rotated_width, rotated_height) = match placement.rotation {
+        Rotation::Zero | Rotation::OneEighty => (width, height),
+        Rotation::Ninety | Rotation::TwoSeventy => (height, width),
+    };
+    let (rotated_offset_x, rotated_offset_y) = placement
+        .rotation
+        .rotate_offset(mm_to_nm(offset_x), mm_to_nm(offset_y));
+    Some(Rect::from_center_half_extents(
+        Point::new(
+            placement.center.x_nm + rotated_offset_x,
+            placement.center.y_nm + rotated_offset_y,
+        ),
+        mm_to_nm(rotated_width) / 2,
+        mm_to_nm(rotated_height) / 2,
+    ))
+}
 
 /// Connector accessibility/orientation. Courtyard legality alone cannot tell
 /// whether a USB-C receptacle can be mated from outside the board.
@@ -308,28 +332,26 @@ pub fn check_courtyard_overlap(board: &synth_ir::Board, placement: &Placement) -
         for j in (i + 1)..placement.components.len() {
             let cp_i = &placement.components[i];
             let cp_j = &placement.components[j];
-            let comp_i = board.component(cp_i.id);
-            let comp_j = board.component(cp_j.id);
-            let (ref_i, part_i) = match (comp_i, comp_i.and_then(|c| c.part.as_ref())) {
-                (Some(c), Some(p)) => (&c.refdes, p),
-                _ => continue,
+            let Some(comp_i) = board.component(cp_i.id) else {
+                continue;
             };
-            let (ref_j, part_j) = match (comp_j, comp_j.and_then(|c| c.part.as_ref())) {
-                (Some(c), Some(p)) => (&c.refdes, p),
-                _ => continue,
+            let Some(comp_j) = board.component(cp_j.id) else {
+                continue;
             };
-            let (w_i, h_i) = synth_layout::pcb_courtyard_for_part(part_i);
-            let (w_j, h_j) = synth_layout::pcb_courtyard_for_part(part_j);
-            let rect_i = synth_geometry::Rect::from_center_half_extents(
-                cp_i.center,
-                synth_geometry::mm_to_nm(w_i) / 2,
-                synth_geometry::mm_to_nm(h_i) / 2,
-            );
-            let rect_j = synth_geometry::Rect::from_center_half_extents(
-                cp_j.center,
-                synth_geometry::mm_to_nm(w_j) / 2,
-                synth_geometry::mm_to_nm(h_j) / 2,
-            );
+            let Some(part_i) = comp_i.part.as_ref() else {
+                continue;
+            };
+            let Some(part_j) = comp_j.part.as_ref() else {
+                continue;
+            };
+            let ref_i = &comp_i.refdes;
+            let ref_j = &comp_j.refdes;
+            let Some(rect_i) = courtyard_rect(comp_i, cp_i) else {
+                continue;
+            };
+            let Some(rect_j) = courtyard_rect(comp_j, cp_j) else {
+                continue;
+            };
             if rect_i.intersects(&rect_j) {
                 violations.push(Violation {
                     code: "E-SYNTH-DRC-008".to_string(),
@@ -570,8 +592,12 @@ fn sort_pair(a: i64, b: i64) -> (i64, i64) {
 #[allow(dead_code)]
 pub fn run_kicad_cli_drc(kicad_pcb_path: &std::path::Path) -> Result<Vec<Violation>, String> {
     use std::process::Command;
-    let report_file =
-        std::env::temp_dir().join(format!("synth_drc_report_{}.json", std::process::id()));
+    let temp_root = std::env::temp_dir();
+    let report_file = temp_root.join(format!("synth_drc_report_{}.json", std::process::id()));
+    let analysis_board =
+        temp_root.join(format!("synth_drc_board_{}.kicad_pcb", std::process::id()));
+    std::fs::copy(kicad_pcb_path, &analysis_board)
+        .map_err(|e| format!("Failed to stage PCB for kicad-cli DRC: {e}"))?;
     let output = Command::new("kicad-cli")
         .args([
             "pcb",
@@ -582,10 +608,16 @@ pub fn run_kicad_cli_drc(kicad_pcb_path: &std::path::Path) -> Result<Vec<Violati
             report_file.to_str().unwrap(),
             "--format",
             "json",
-            kicad_pcb_path.to_str().unwrap(),
+            analysis_board.to_str().unwrap(),
         ])
         .output()
         .map_err(|e| format!("Failed to execute kicad-cli: {e}"))?;
+
+    // DRC uses --save-board so zones are refilled in the analysis copy, but
+    // never rewrites the user's generated PCB. This keeps the delivered
+    // artifact's netclass/setup metadata and lets an incomplete route remain
+    // reviewable and manually editable.
+    let _ = std::fs::remove_file(&analysis_board);
 
     if !report_file.exists() {
         return Err(format!(

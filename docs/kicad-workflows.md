@@ -57,6 +57,20 @@ Store gates 1–5 in a project `build.sh` (or Makefile) and re-run the
 whole chain after every source change — determinism makes this cheap
 and re-runs diff-stable.
 
+### Optional external post-router
+
+For designs that benefit from an external post-router, add `--autoroute` to
+the export command. Synth preserves its own partial route as
+`<name>.synth.kicad_pcb`, then runs the project-local FreeRouting installation
+and installs the imported result as the main PCB. Always run native KiCad DRC
+afterwards; an autorouter completion message is not a substitute for DRC.
+
+```text
+synth export-kicad board.synth --out output/board --autoroute
+kicad-cli pcb drc --refill-zones --output output/board/drc.rpt \
+  output/board/board.kicad_pcb
+```
+
 ### Professional review checklist (per sheet)
 
 - Every pin either connected or explicitly no-connect (Synth's pin

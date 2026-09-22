@@ -76,6 +76,20 @@ pub fn export_with_sidecar(
     out_dir: &Path,
     sidecar: Option<&Path>,
 ) -> Result<ExportResult, ExportError> {
+    export_with_sidecar_and_routing_order(board, out_dir, sidecar, None)
+}
+
+/// Export while preserving an optional agent-selected routing order.
+///
+/// The route used for export must be the same route that the MCP gate
+/// inspected; silently recomputing with the default order can discard a
+/// successful recovery pass and produce a different PCB artifact.
+pub fn export_with_sidecar_and_routing_order(
+    board: &Board,
+    out_dir: &Path,
+    sidecar: Option<&Path>,
+    routing_order: Option<&[String]>,
+) -> Result<ExportResult, ExportError> {
     std::fs::create_dir_all(out_dir).map_err(|source| ExportError::CreateDir {
         path: out_dir.to_path_buf(),
         source,
@@ -99,12 +113,16 @@ pub fn export_with_sidecar(
         // and the 0.127 mm clearance supported by the default manufacturer
         // profile, so native DRC sees the same contract as Synth.
         "board": {
-            "design_settings": {
-                "defaults": {
-                    "min_clearance": 0.127,
-                    "min_track_width": 0.127,
-                }
+          "design_settings": {
+            "defaults": {
+              "min_clearance": 0.127,
+              "min_track_width": 0.127,
+            },
+            "rules": {
+              "min_clearance": 0.127,
+              "min_track_width": 0.127,
             }
+          }
         },
         "boards": [],
         "meta": {
@@ -224,11 +242,13 @@ pub fn export_with_sidecar(
         .to_string_pretty();
     write_file(&schematic_path, &schematic_text)?;
 
-    // PCB file (.kicad_pcb). Closed-loop repair engine (Phase 13.5):
-    // runs placement and routing with up to 5 repair iterations.
-    // The sidecar (manual drags) rides along with every placement
-    // attempt so routing sees the overridden positions.
-    let (placement, routing) = place_and_route_with_repair(board, sidecar)
+    // PCB file (.kicad_pcb). Export must serialize the same deterministic
+    // placement/routing candidate that the route and DRC tools inspect.
+    // Additional export-only repair iterations used to silently select a
+    // different placement, making routing feedback and the delivered PCB
+    // disagree. Repair/retry belongs to the agent loop; export is a
+    // serialization boundary.
+    let (placement, routing) = place_and_route_with_repair(board, 0, sidecar, routing_order)
         .map_err(|source| ExportError::Placement { source })?;
     let pcb_text =
         pcb::build_pcb(board, &placement, &routing, &project_namespace).to_string_pretty();
@@ -278,418 +298,205 @@ fn sanitize_filename(name: &str) -> String {
     }
 }
 
-/// Extra courtyard margin used by the baseline placement
-/// (`synth_place::place_with_sidecar`). The repair sweep starts above
-/// it so no candidate duplicates the baseline.
-const BASELINE_MARGIN_MM: f64 = 1.5;
-
-/// Worker-thread count for sizing the repair waves. Set once from the
-/// CLI's `--jobs` flag (which sizes the Rayon pool identically); 0 means
-/// "not set", in which case the wave width falls back to the machine's
-/// available parallelism (the Rayon default pool size).
-static WORKER_THREADS: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
-
-/// Record the worker-thread count `--jobs` (or its default) resolved to.
-/// Idempotent: the first call wins, so tests calling [`export`] directly
-/// keep the fallback.
-pub fn set_worker_threads(n: usize) {
-    let _ = WORKER_THREADS.compare_exchange(
-        0,
-        n.max(1),
-        std::sync::atomic::Ordering::Relaxed,
-        std::sync::atomic::Ordering::Relaxed,
-    );
-}
-
-/// How many candidates a repair wave evaluates concurrently.
+/// Closed-loop iterative placer-router repair loop.
 ///
-/// Measured on a 16-core box (`sensor_logger`, release): width 4 → 45 s,
-/// width 8 → 65 s, width 16 → 89 s. The maze router is memory-bandwidth
-/// bound and a wave waits for its slowest candidate, so concurrency past
-/// a handful buys search coverage at a wall-clock cost — it never speeds
-/// the wave up. Default is therefore min(threads, 8): enough distinct
-/// margin × rotation × order-seed candidates to keep a typical machine
-/// busy and to let the perfect-score short-circuit skip later waves,
-/// without the contention collapse of full-machine width. `SYNTH_WAVE_WIDTH`
-/// overrides (wider search, `--jobs` scales the pool to match); `--jobs 4`
-/// or less is the fastest wall-clock for this workload.
-fn wave_width() -> usize {
-    if let Ok(raw) = std::env::var("SYNTH_WAVE_WIDTH") {
-        if let Ok(n) = raw.parse::<usize>() {
-            return n.clamp(1, 32);
-        }
-    }
-    let configured = WORKER_THREADS.load(std::sync::atomic::Ordering::Relaxed);
-    let threads = if configured != 0 {
-        configured
-    } else {
-        std::thread::available_parallelism().map_or(4, std::num::NonZeroUsize::get)
-    };
-    threads.clamp(1, 8)
-}
-
-/// One point in the repair search space: how much extra courtyard
-/// margin the placer gets, which footprints are pre-rotated, and which
-/// deterministic net-order variant the router runs.
-#[derive(Debug)]
-struct RepairCandidate {
-    margin_mm: f64,
-    rotations: std::collections::HashMap<synth_ir::ComponentId, synth_geometry::Rotation>,
-    /// Deterministic router order variant (0 = canonical). Non-zero seeds
-    /// explore different congestion resolutions in parallel; same seed →
-    /// identical routes on any thread count.
-    order_seed: u64,
-    /// Pre-computed placement, when the caller already has one (the
-    /// baseline). `None` means this candidate places itself.
-    placement: Option<synth_place::Placement>,
-}
-
-/// A candidate that survived placement, with its physical score.
-#[derive(Debug)]
-struct ScoredCandidate {
-    index: usize,
-    placement: synth_place::Placement,
-    routing: synth_route::Routing,
-    score: (usize, usize),
-}
-
-/// Place, route, and score one candidate. Pure: reads `board` and the
-/// sidecar file, touches no shared state, so a whole wave of candidates
-/// evaluates concurrently.
-fn evaluate_candidate(
-    board: &Board,
-    index: usize,
-    candidate: &RepairCandidate,
-    sidecar: Option<&Path>,
-    profile: &synth_drc::ManufacturerProfile,
-) -> Option<ScoredCandidate> {
-    let placement = match &candidate.placement {
-        Some(p) => p.clone(),
-        None => synth_place::place_with_tuning_and_sidecar(
-            board,
-            candidate.margin_mm,
-            &candidate.rotations,
-            sidecar,
-        )
-        .ok()?,
-    };
-    let routing = synth_route::route_with_order_seed(board, &placement, candidate.order_seed);
-    let score = physical_score(board, &placement, &routing, profile);
-    Some(ScoredCandidate {
-        index,
-        placement,
-        routing,
-        score,
-    })
-}
-
-/// Evaluate a wave of independent candidates across the Rayon pool and
-/// return the winner: lowest [`physical_score`], ties broken by
-/// candidate index.
-///
-/// Determinism is preserved despite the parallelism. Every candidate is
-/// a pure function of `(board, candidate, sidecar)`, the candidate list
-/// is built deterministically, and the winner is chosen by
-/// `(score, index)` rather than by completion order — so the result does
-/// not depend on the thread count or on scheduling.
-///
-/// `perfect_index` is the short-circuit: `(0, 0)` is the minimum possible
-/// score, so once a candidate reaches it every *higher-indexed* candidate
-/// is already beaten on the tie-break and can be abandoned before it
-/// pays for a placement and a route. Lower-indexed candidates always run,
-/// which is what keeps the tie-break honest.
-fn evaluate_wave(
-    board: &Board,
-    candidates: &[RepairCandidate],
-    sidecar: Option<&Path>,
-    profile: &synth_drc::ManufacturerProfile,
-) -> Option<ScoredCandidate> {
-    use rayon::prelude::*;
-    use std::sync::atomic::{AtomicUsize, Ordering};
-
-    let perfect_index = AtomicUsize::new(usize::MAX);
-
-    candidates
-        .par_iter()
-        .enumerate()
-        .filter_map(|(index, candidate)| {
-            if index > perfect_index.load(Ordering::Relaxed) {
-                return None;
-            }
-            let scored = evaluate_candidate(board, index, candidate, sidecar, profile)?;
-            if scored.score == (0, 0) {
-                perfect_index.fetch_min(index, Ordering::Relaxed);
-            }
-            Some(scored)
-        })
-        .min_by_key(|scored| (scored.score, scored.index))
-}
-
-/// Components that the router or the independent DRC engine implicates
-/// in a failure, plus the exact orientations DRC rules asked for.
-///
-/// A routed net can still fail fabrication clearance, courtyard,
-/// connector-orientation, or silkscreen rules, so an unrouted-only retry
-/// loop can converge on a board KiCad rejects — both evidence sources
-/// feed the rotation sweep.
-fn implicated_components(
-    board: &Board,
-    placement: &synth_place::Placement,
-    routing: &synth_route::Routing,
-    profile: &synth_drc::ManufacturerProfile,
-) -> (
-    std::collections::BTreeSet<synth_ir::ComponentId>,
-    std::collections::HashMap<synth_ir::ComponentId, synth_geometry::Rotation>,
-) {
-    // Avoid the more expensive independent geometry checks for a
-    // candidate that has not connected every routable net yet.
-    let drc = if routing.unrouted_nets.is_empty() {
-        synth_drc::check(board, placement, routing, profile)
-    } else {
-        synth_drc::DrcReport {
-            violations: Vec::new(),
-            profile_name: profile.name.clone(),
-        }
-    };
-
-    let mut implicated = std::collections::BTreeSet::new();
-    let mut exact_rotations = std::collections::HashMap::new();
-
-    for unrouted in &routing.unrouted_nets {
-        if let Some(net) = board.net(unrouted.net) {
-            for endpoint in &net.endpoints {
-                implicated.insert(endpoint.component);
-            }
-        }
-    }
-    for violation in &drc.violations {
-        if let Some(suggestion) = &violation.suggested_override {
-            if let Some(component) = board
-                .components
-                .iter()
-                .find(|c| c.refdes == suggestion.refdes)
-            {
-                implicated.insert(component.id);
-                // A rule may know the exact orientation required (for
-                // example, a connector mating edge). Honor that advice
-                // directly; the stepped rotation below is reserved for
-                // violations that only identify a witness component.
-                if let Some(rotation) = rotation_from_degrees(suggestion.rotation_deg) {
-                    exact_rotations.insert(component.id, rotation);
-                }
-            }
-        }
-        for refdes in &violation.components {
-            if let Some(component) = board.components.iter().find(|c| &c.refdes == refdes) {
-                implicated.insert(component.id);
-            }
-        }
-    }
-
-    (implicated, exact_rotations)
-}
-
-/// Advance a footprint `steps` quarter-turns from its default orientation.
-fn rotation_after_steps(steps: usize) -> synth_geometry::Rotation {
-    match steps % 4 {
-        0 => synth_geometry::Rotation::Zero,
-        1 => synth_geometry::Rotation::Ninety,
-        2 => synth_geometry::Rotation::OneEighty,
-        _ => synth_geometry::Rotation::TwoSeventy,
-    }
-}
-
-/// Extra courtyard margins, in millimetres, tried by the first two
-/// repair waves. A dense placement can make the maze router fail before
-/// DRC is even relevant; more margin buys pin escapes and component
-/// corridors physical room.
-const MARGIN_SWEEP_MM: [f64; 3] = [2.0, 3.0, 4.0];
-
-/// Full margin ladder cycled by the thread-scaled wave-1 sweep (and the
-/// rotation sweep). Starts with [`MARGIN_SWEEP_MM`] in order so the first
-/// candidates — and therefore historic tie-breaks — are unchanged.
-const SWEEP_MARGINS_MM: [f64; 8] = [2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0];
-
-/// Extra courtyard margins for the last-resort wave: open the floorplan
-/// up far wider, for boards the first two waves could not resolve.
-const WIDE_MARGIN_SWEEP_MM: [f64; 4] = [6.0, 7.0, 8.0, 9.0];
-
-/// Closed-loop placer-router repair search.
-///
-/// Placement and routing are attempted against a deterministic set of
-/// candidate configurations in up to three escalating waves:
-///
-/// 1. the baseline placement plus a thread-scaled margin × order-seed
-///    sweep over [`MARGIN_SWEEP_MM`] and roomier margins;
-/// 2. those same margins with the footprints that router and DRC
-///    evidence implicate rotated through a quarter-turn sequence;
-/// 3. the much roomier [`WIDE_MARGIN_SWEEP_MM`] floorplans.
-///
-/// Each wave stops the search as soon as a candidate scores a clean
-/// `(0, 0)`, so the cheap common case never pays for the later ones. The
-/// placer stays responsible for legal positions; nothing here invents
-/// coordinates.
-///
-/// The candidates within a wave are independent, so a wave is evaluated
-/// in parallel across the Rayon pool (sized by `--jobs` /
-/// `RAYON_NUM_THREADS`, all cores by default) rather than one candidate
-/// per sequential repair iteration. Because the winner is picked by
-/// `(score, candidate index)` and every candidate is a pure function of
-/// its inputs, the chosen board does not depend on the thread count or on
-/// scheduling.
-///
-/// Wave widths are deliberately near the sweet spot rather than as wide
-/// as the machine allows: a wave costs as long as its slowest candidate,
-/// and the router is memory-bandwidth bound, so candidates past a handful
-/// slow each other down more than they add coverage.
+/// Iteratively attempts placement and routing. If routing encounters unroutable pin tangles
+/// or clearance conflicts around specific components, executes targeted rotation tuning
+/// and courtyard margin expansion up to `max_iterations`.
 ///
 /// `sidecar` (when present) is applied to every placement attempt
-/// *before* routing so manual drags survive the repair search and the
+/// *before* routing so manual drags survive the repair loop and the
 /// router plans traces against the overridden footprint positions.
 /// DSL `placement_hint`s need no explicit handling here: the placer
 /// reads them from the IR board directly.
-fn place_and_route_with_repair(
+fn route_with_optional_order(
     board: &Board,
-    sidecar: Option<&Path>,
-) -> Result<(synth_place::Placement, synth_route::Routing), synth_place::PlaceError> {
-    let profile = synth_drc::ManufacturerProfile::jlc_standard();
-
-    // The baseline placement is the one attempt whose failure is fatal:
-    // if the board cannot be placed at all, no margin sweep will help.
-    // Placement is cheap next to routing, so doing it up front to keep
-    // that error contract costs nothing.
-    let baseline = synth_place::place_with_sidecar(board, sidecar)?;
-
-    // ── Wave 1 — baseline first, then margin sweep ───────────────────
-    // The common case is a clean baseline: route it alone before paying
-    // for the margin sweep. `evaluate_candidate` is pure, so this is the
-    // same winner wave 1 would pick — without burning 3 parallel routes
-    // on boards that never needed them.
-    let baseline_candidate = RepairCandidate {
-        margin_mm: BASELINE_MARGIN_MM,
-        rotations: std::collections::HashMap::new(),
-        order_seed: 0,
-        placement: Some(baseline),
-    };
-    let baseline_scored = evaluate_candidate(board, 0, &baseline_candidate, sidecar, &profile)
-        .expect("baseline candidate is pre-placed, so it always scores");
-    if baseline_scored.score == (0, 0) {
-        return Ok((baseline_scored.placement, baseline_scored.routing));
+    placement: &synth_place::Placement,
+    routing_order: Option<&[String]>,
+) -> synth_route::Routing {
+    match routing_order {
+        Some(order) if !order.is_empty() => synth_route::route_with_order(board, placement, order),
+        _ => synth_route::route(board, placement),
     }
-    // Thread-scaled sweep: one candidate per worker thread, cycling the
-    // margin ladder and then the order seeds. The first three are exactly
-    // the old (2, 3, 4 mm × canonical order) set in order, so ties still
-    // break toward the historic winner regardless of thread count.
-    let width = wave_width();
-    eprintln!("synth: wave 1: routing {width} margin/order candidates on {width} threads");
-    let sweep: Vec<RepairCandidate> = (0..width)
-        .map(|i| RepairCandidate {
-            margin_mm: SWEEP_MARGINS_MM[i % SWEEP_MARGINS_MM.len()],
-            rotations: std::collections::HashMap::new(),
-            order_seed: (i / SWEEP_MARGINS_MM.len()) as u64,
-            placement: None,
-        })
-        .collect();
-    let baseline_score = baseline_scored.score;
-    let mut best = baseline_scored;
-    let mut knob_helped = false;
-    if let Some(candidate) = evaluate_wave(board, &sweep, sidecar, &profile) {
-        // Strict improvement only: the baseline wins ties, so the sweep
-        // must strictly beat it to displace it.
-        if candidate.score < baseline_score {
-            best = candidate;
-            knob_helped = true;
-        }
-    }
-    if best.score == (0, 0) {
-        return Ok((best.placement, best.routing));
-    }
-
-    // Stagnation guard, in the same spirit as the sequential loop this
-    // replaces: a wave that beat the baseline is evidence its knob is the
-    // right lever, and only then is the expensive escalation worth its
-    // wall-clock.
-
-    // ── Wave 2 — the same margins, implicated footprints rotated ───────
-    let (implicated, exact_rotations) =
-        implicated_components(board, &best.placement, &best.routing, &profile);
-
-    if !implicated.is_empty() {
-        // First three are the old (2, 3, 4 mm × steps 1, 2, 3) set, so
-        // historic tie-breaks are preserved; extras vary margin, step,
-        // and order seed to keep every core on distinct work.
-        eprintln!("synth: wave 2: routing {width} rotation candidates on {width} threads");
-        let rotated: Vec<RepairCandidate> = (0..width)
-            .map(|i| RepairCandidate {
-                margin_mm: SWEEP_MARGINS_MM[i % MARGIN_SWEEP_MM.len()],
-                rotations: rotation_overrides(&implicated, &exact_rotations, (i % 3) + 1),
-                order_seed: (i / (MARGIN_SWEEP_MM.len() * 3)) as u64,
-                placement: None,
-            })
-            .collect();
-
-        if let Some(candidate) = evaluate_wave(board, &rotated, sidecar, &profile) {
-            // Strict improvement only: the earlier wave's winner is kept
-            // on a tie, so a rotation sweep never displaces an equally
-            // good un-rotated board.
-            if candidate.score < best.score {
-                best = candidate;
-                knob_helped = true;
-            }
-        }
-        if best.score == (0, 0) {
-            return Ok((best.placement, best.routing));
-        }
-    }
-
-    // Neither more room nor a rotation moved the score off the baseline,
-    // so the board is not margin-limited and a far roomier floorplan will
-    // not help either. Stop rather than burn another wave on it.
-    if !knob_helped {
-        return Ok((best.placement, best.routing));
-    }
-
-    // ── Wave 3 — last resort: a much roomier floorplan ─────────────────
-    // Rotations a DRC rule named exactly (a connector mating edge, say)
-    // ride along; the speculative quarter-turns do not, since wave 2
-    // already ruled them out at these implicated components.
-    eprintln!("synth: wave 3: routing {width} wide-floorplan candidates on {width} threads");
-    let wide: Vec<RepairCandidate> = (0..width)
-        .map(|i| RepairCandidate {
-            margin_mm: WIDE_MARGIN_SWEEP_MM[i % WIDE_MARGIN_SWEEP_MM.len()],
-            rotations: exact_rotations.clone(),
-            order_seed: (i / WIDE_MARGIN_SWEEP_MM.len()) as u64,
-            placement: None,
-        })
-        .collect();
-
-    if let Some(candidate) = evaluate_wave(board, &wide, sidecar, &profile) {
-        if candidate.score < best.score {
-            best = candidate;
-        }
-    }
-
-    Ok((best.placement, best.routing))
 }
 
-/// Build the rotation map for a wave-2 candidate: every implicated
-/// footprint turned `steps` quarter-turns, except those a DRC rule pinned
-/// to an exact orientation.
-fn rotation_overrides(
-    implicated: &std::collections::BTreeSet<synth_ir::ComponentId>,
-    exact_rotations: &std::collections::HashMap<synth_ir::ComponentId, synth_geometry::Rotation>,
-    steps: usize,
-) -> std::collections::HashMap<synth_ir::ComponentId, synth_geometry::Rotation> {
-    implicated
-        .iter()
-        .map(|component| {
-            let rotation = exact_rotations
-                .get(component)
+fn place_and_route_with_repair(
+    board: &Board,
+    max_iterations: usize,
+    sidecar: Option<&Path>,
+    routing_order: Option<&[String]>,
+) -> Result<(synth_place::Placement, synth_route::Routing), synth_place::PlaceError> {
+    // Match synth-place::place() and the MCP route/DRC gates. Starting the
+    // export repair loop with a different courtyard margin can select a
+    // different legal placement, causing the exported PCB to disagree with
+    // the placement that routing and DRC just evaluated.
+    let mut margin = 1.5_f64;
+    let mut rotation_overrides = std::collections::HashMap::new();
+    // Keep the export-side closed loop consistent with the normal placer.
+    // Flash packages are oriented so their QSPI edge faces the MCU; if this
+    // override is omitted here, export silently reruns placement with a
+    // different orientation than synth_route/synth_place::place().
+    let has_rp2350 = board.components.iter().any(|component| {
+        component
+            .part
+            .as_ref()
+            .is_some_and(|part| part.id.0.to_ascii_lowercase().contains("rp2350"))
+    });
+    for component in &board.components {
+        let is_flash = has_rp2350
+            && component
+                .part
+                .as_ref()
+                .is_some_and(|part| part.id.0.to_ascii_lowercase().contains("w25q"));
+        if is_flash {
+            rotation_overrides.insert(component.id, synth_geometry::Rotation::Zero);
+        }
+    }
+    let profile = synth_drc::ManufacturerProfile::jlc_standard();
+    let mut best_placement =
+        synth_place::place_with_tuning_and_sidecar(board, margin, &rotation_overrides, sidecar)?;
+    let mut best_routing = route_with_optional_order(board, &best_placement, routing_order);
+    let mut best_score = physical_score(board, &best_placement, &best_routing, &profile);
+
+    // Agent placement hints are valuable design intent, but a hard hint can
+    // create a routing dead-end when several connectors compete for the same
+    // edge or when a region constraint cuts across a dense fanout. Evaluate a
+    // relaxed candidate once at the same margin and keep it when the physical
+    // score is better. This gives the agent authority to guide placement
+    // without allowing an unrouteable hinted floorplan to win silently.
+    if !has_rp2350
+        && board
+            .components
+            .iter()
+            .any(|component| component.placement_hint.is_some())
+    {
+        let mut relaxed_board = board.clone();
+        for component in &mut relaxed_board.components {
+            component.placement_hint = None;
+        }
+        if let Ok(relaxed_placement) = synth_place::place_with_tuning_and_sidecar(
+            &relaxed_board,
+            margin,
+            &rotation_overrides,
+            sidecar,
+        ) {
+            let relaxed_routing =
+                route_with_optional_order(board, &relaxed_placement, routing_order);
+            let relaxed_score =
+                physical_score(board, &relaxed_placement, &relaxed_routing, &profile);
+            if relaxed_score < best_score {
+                best_placement = relaxed_placement;
+                best_routing = relaxed_routing;
+                best_score = relaxed_score;
+            }
+        }
+    }
+
+    // Stagnation guard: a candidate can be fully routed yet remain DRC
+    // invalid, so track the complete physical score rather than only the
+    // unrouted count. The best candidate is always retained.
+    let mut stagnant_attempts = 0_usize;
+    for _iter in 0..max_iterations {
+        if best_score == (0, 0) {
+            break;
+        }
+
+        // Target the components implicated by both router and independent
+        // DRC evidence. A routed net can still fail fabrication clearance,
+        // courtyard, connector-orientation, or silkscreen rules, so an
+        // unrouted-only retry loop can converge on a board KiCad rejects.
+        let drc = if best_routing.unrouted_nets.is_empty() {
+            synth_drc::check(board, &best_placement, &best_routing, &profile)
+        } else {
+            synth_drc::DrcReport {
+                violations: Vec::new(),
+                profile_name: profile.name.clone(),
+            }
+        };
+        let mut implicated = std::collections::BTreeSet::new();
+        let mut exact_rotations = std::collections::BTreeSet::new();
+        for unrouted in &best_routing.unrouted_nets {
+            if let Some(net) = board.net(unrouted.net) {
+                for endpoint in &net.endpoints {
+                    implicated.insert(endpoint.component);
+                }
+            }
+        }
+        for violation in &drc.violations {
+            if let Some(suggestion) = &violation.suggested_override {
+                if let Some(component) = board
+                    .components
+                    .iter()
+                    .find(|c| c.refdes == suggestion.refdes)
+                {
+                    implicated.insert(component.id);
+                    // A rule may know the exact orientation required (for
+                    // example, a connector mating edge). Honor that advice
+                    // directly; the fallback rotation below is reserved for
+                    // violations that only identify a witness component.
+                    if let Some(rotation) = rotation_from_degrees(suggestion.rotation_deg) {
+                        rotation_overrides.insert(component.id, rotation);
+                        exact_rotations.insert(component.id);
+                    }
+                }
+            }
+            for refdes in &violation.components {
+                if let Some(component) = board.components.iter().find(|c| &c.refdes == refdes) {
+                    implicated.insert(component.id);
+                }
+            }
+        }
+
+        // Rotate implicated footprints in a deterministic sequence. The
+        // placer remains responsible for legal positions; the agent is not
+        // allowed to invent arbitrary coordinates in this physical phase.
+        for component in implicated {
+            if exact_rotations.contains(&component) {
+                continue;
+            }
+            let current_rot = rotation_overrides
+                .get(&component)
                 .copied()
-                .unwrap_or_else(|| rotation_after_steps(steps));
-            (*component, rotation)
-        })
-        .collect()
+                .unwrap_or(synth_geometry::Rotation::Zero);
+            let next_rot = match current_rot {
+                synth_geometry::Rotation::Zero => synth_geometry::Rotation::Ninety,
+                synth_geometry::Rotation::Ninety => synth_geometry::Rotation::OneEighty,
+                synth_geometry::Rotation::OneEighty => synth_geometry::Rotation::TwoSeventy,
+                synth_geometry::Rotation::TwoSeventy => synth_geometry::Rotation::Zero,
+            };
+            rotation_overrides.insert(component, next_rot);
+        }
+
+        // Search progressively roomier deterministic floorplans. A dense
+        // placement can make the maze router fail before DRC is relevant;
+        // increasing the margin gives pin escapes and component corridors
+        // physical room without asking the model to guess coordinates.
+        margin += 1.0;
+        if let Ok(p) =
+            synth_place::place_with_tuning_and_sidecar(board, margin, &rotation_overrides, sidecar)
+        {
+            let r = route_with_optional_order(board, &p, routing_order);
+            let score = physical_score(board, &p, &r, &profile);
+            if score < best_score {
+                best_placement = p;
+                best_routing = r;
+                best_score = score;
+                stagnant_attempts = 0;
+            } else {
+                stagnant_attempts += 1;
+                if stagnant_attempts >= 2 {
+                    break;
+                }
+            }
+        } else {
+            stagnant_attempts += 1;
+            if stagnant_attempts >= 2 {
+                break;
+            }
+        }
+    }
+
+    Ok((best_placement, best_routing))
 }
 
 fn rotation_from_degrees(degrees: u32) -> Option<synth_geometry::Rotation> {
@@ -713,18 +520,15 @@ fn physical_score(
     routing: &synth_route::Routing,
     profile: &synth_drc::ManufacturerProfile,
 ) -> (usize, usize) {
-    // Routing completeness is the primary gate. Avoid running the more
-    // expensive independent geometry checks for candidates that have not
-    // connected every routable net yet.
-    if !routing.unrouted_nets.is_empty() {
-        return (routing.unrouted_nets.len(), usize::MAX);
-    }
-    (
-        0,
-        synth_drc::check(board, placement, routing, profile)
-            .violations
-            .len(),
-    )
+    // Routing completeness remains primary, but incomplete candidates also
+    // need a geometry tie-breaker. Otherwise a candidate with fewer unrouted
+    // nets can win while introducing dangling/obstructed copper that native
+    // KiCad later reports as many more unconnected items.
+    let unrouted = routing.unrouted_nets.len();
+    let synth_violations = synth_drc::check(board, placement, routing, profile)
+        .violations
+        .len();
+    (unrouted, synth_violations)
 }
 
 #[cfg(test)]

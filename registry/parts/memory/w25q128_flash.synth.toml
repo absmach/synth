@@ -24,16 +24,17 @@ capabilities = ["spi_cs"]
 required = true
 
 [[pins]]
-name = "miso"
+name = "io1"
 number = "2"
 electrical_type = "output"
-capabilities = ["spi_miso"]
+capabilities = ["spi_miso", "spi_mosi"]
 required = true
 
 [[pins]]
-name = "wp"
+name = "io2"
 number = "3"
-electrical_type = "input"
+electrical_type = "bidirectional"
+capabilities = ["spi_miso", "spi_mosi"]
 
 [[pins]]
 name = "gnd"
@@ -42,23 +43,24 @@ electrical_type = "power_input"
 required = true
 
 [[pins]]
-name = "mosi"
+name = "io0"
 number = "5"
 electrical_type = "input"
-capabilities = ["spi_mosi"]
+capabilities = ["spi_miso", "spi_mosi"]
 required = true
 
 [[pins]]
-name = "sck"
+name = "clk"
 number = "6"
 electrical_type = "input"
 capabilities = ["spi_sck"]
 required = true
 
 [[pins]]
-name = "hold"
+name = "io3"
 number = "7"
-electrical_type = "input"
+electrical_type = "bidirectional"
+capabilities = ["spi_miso", "spi_mosi"]
 
 [[pins]]
 name = "vcc"
@@ -70,4 +72,3 @@ required = true
 net = "vcc"
 value = "100nf"
 count = 1
-

@@ -158,6 +158,10 @@ pub struct ComponentDeclAst {
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct PlacementHintAst {
+    /// Optional component reference designator for a board-level hint.
+    /// Component-local hints leave this unset.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub component: Option<String>,
     pub attrs: Vec<PlacementHintAttr>,
     pub span: Span,
 }
