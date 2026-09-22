@@ -112,9 +112,24 @@ Agents can retrieve the SynthSpec language reference, search the registry, valid
 
 Additional language and validation cases live in [fixtures](fixtures/designs/README.md). Part definitions live in the [component registry](registry/README.md).
 
+### RP2350 development-board agent workflow
+
+The repository includes the placement and FreeRouting workflow used to develop
+an RP2350-class board, including clean-netlist routing, zone refill, layer
+normalization, and compact-outline support. See the [RP2350 agent workflow](docs/rp2350-agent-workflow.md)
+for setup instructions, prompts, review commands, and the pre-generated review
+artifact in [examples/rp2350](examples/rp2350/).
+
+![Rendered RP2350 routed example](examples/rp2350/rp2350_devboard_freerouting_clean.png)
+
+*Pre-generated compact RP2350 routed review artifact; open the [KiCad board](examples/rp2350/rp2350_devboard_freerouting_clean.kicad_pcb)
+for an interactive review. Re-run the workflow before treating it as a
+reproducibility or production result.*
+
 ## Documentation
 
 - [KiCad workflows](docs/kicad-workflows.md) — exported projects, validation, BOMs, and fabrication outputs.
+- [RP2350 agent workflow](docs/rp2350-agent-workflow.md) — clean-netlist FreeRouting, compact outlines, agent setup, and review prompts.
 - [Schematic procedures](docs/schematic-procedures.md) — schematic generation and review.
 - [Diagnostic reference](docs/diagnostics/README.md) — diagnostic codes and repair guidance.
 - [Diagnostic protocol](docs/protocol-v1.0.md) — the machine-readable diagnostic format.
