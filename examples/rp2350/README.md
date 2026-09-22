@@ -1,5 +1,21 @@
 # RP2350 routed example
 
+## Latest regenerated run
+
+The full-board reconstruction routes with the installed FreeRouting pipeline
+on six layers. Local generated artifacts are under
+`reproductions/rp2350-reconstructed/generated/`:
+
+- `rp2350_devboard_reconstructed.synth` — reconstructed Synth source
+- `rp2350_devboard_reconstructed.layout.toml` — recovered placement sidecar
+- `rp2350_devboard_freerouted_6layer.kicad_pcb` — routed KiCad board
+- `rp2350_devboard_freerouted_6layer.png` — rendered review image
+- `freerouted-6layer-drc.rpt` — native KiCad DRC report
+
+FreeRouting completed with **0 unrouted signal nets**. The DRC report still
+contains 14 ground-zone island items and two footprint-library warnings; this
+is not production sign-off until those items are reviewed.
+
 `rp2350_devboard_freerouting_clean.kicad_pcb` is a pre-generated compact KiCad
 review artifact associated with the workflow in
 [`docs/rp2350-agent-workflow.md`](../../docs/rp2350-agent-workflow.md). 

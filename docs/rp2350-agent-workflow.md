@@ -46,7 +46,7 @@ Use a prompt like this as the design brief:
 > functional clusters. Use relative placement constraints and edge/rotation
 > rules where possible; do not scatter components on a large canvas.
 >
-> Use a 4-layer JLCPCB-capable stackup with continuous GND coverage and use
+> Use a 6-layer JLCPCB-capable stackup with continuous GND coverage and use
 > all available signal layers intentionally. Route from the clean placed
 > netlist with FreeRouting rather than preserving a poor partial maze. Route
 > power and clock/USB-critical connections first, then local decoupling and
@@ -90,6 +90,21 @@ imports the SES geometry through a text-safe converter, refills zones,
 restores netclass constraints, and adds only the validated adjacent-header
 bridge. It avoids the KiCad SES importer crash encountered on this board.
 
+The successful reconstructed full-board run used the installed tools explicitly:
+
+```bash
+python3 tools/freeroute_clean_pipeline.py \
+  /tmp/rp2350-reconstructed/export6/rp2350_devboard_reconstructed.kicad_pcb \
+  /tmp/rp2350-reconstructed/rp2350_devboard_freerouted_6layer.kicad_pcb \
+  --jar /home/sammyk/Documents/synth-eu/tools/freerouting/freerouting-2.4.1.jar \
+  --java /home/sammyk/Documents/synth-eu/tools/jre25/bin/java \
+  --passes 60 --threads 4 --bottom 73.0
+```
+
+That run used 58 components and the recovered
+`rp2350_devboard_reconstructed.layout.toml` placement sidecar. Synth export
+took about 1–2 minutes; FreeRouting took about 5 minutes 25 seconds.
+
 ## 4. Review gates
 
 Run native DRC and render the board before accepting the result:
@@ -119,5 +134,10 @@ the current `.synth` source reproduces successfully. The checked-in report is
 not clean: KiCad currently reports 80 DRC violations and 18 unconnected
 zone-island items. Always rerun export, FreeRouting, and DRC for a new design
 revision.
-It is a routing and review fixture, not a production approval; it still carries
-ground-zone island and silkscreen/library warnings documented by its DRC run.
+
+The latest reconstructed six-layer run is stored locally under
+`reproductions/rp2350-reconstructed/generated/`. FreeRouting reached **0
+unrouted signal nets**. Native KiCad DRC still reports 14 ground-zone island
+items and two footprint-library warnings, so this is a successful routing
+reproduction and review artifact, not production sign-off. Resolve or approve
+those remaining warnings before fabrication.
