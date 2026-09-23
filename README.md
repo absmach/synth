@@ -123,8 +123,7 @@ artifact in [examples/rp2350](examples/rp2350/).
 ![Rendered RP2350 routed example](examples/rp2350/rp2350_devboard_freerouting_clean.png)
 
 *Pre-generated compact RP2350 routed review artifact; open the [KiCad board](examples/rp2350/rp2350_devboard_freerouting_clean.kicad_pcb)
-for an interactive review. Re-run the workflow before treating it as a
-reproducibility or production result.*
+for an interactive review.*
 
 ## Documentation
 
