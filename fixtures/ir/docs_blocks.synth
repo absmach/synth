@@ -1,0 +1,26 @@
+// Phase 2 documentation items: DNP flag, notes blocks (grouped and
+// board-level), and a group caption source.
+board "docs_blocks" {
+  layers 2
+
+  component J1: connector "header_1x4"
+  component R1: resistor "r_generic_0603"
+  component R2: resistor "r_generic_0603" dnp
+
+  group "Input" {
+    component C1: capacitor "c_generic_0603"
+    notes "Input notes" {
+      "Keep leads short."
+    }
+  }
+
+  notes "Build" {
+    "Assemble at JLCPCB."
+  }
+
+  connect J1.p1 -> R1.p1
+  connect R1.p2 -> C1.p1
+  connect J1.p2 -> C1.p2
+  connect J1.p3 -> R2.p1
+  connect R2.p2 -> J1.p4
+}

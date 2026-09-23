@@ -73,6 +73,11 @@ struct LayoutSavePlacement {
     y: f64,
     #[serde(default)]
     rotation: u32,
+    /// Sheet the component was dragged on (§P26). Recorded so a
+    /// later sheet move invalidates the stale override instead of
+    /// misplacing the part.
+    #[serde(default)]
+    sheet: Option<String>,
 }
 
 /// `<source>.synth.layout.toml` next to the `.synth` file (§7.7.6).
@@ -119,6 +124,7 @@ async fn layout_save_handler(
                         rotation: p.rotation,
                         source: synth_layout::sidecar::OverrideSource::HumanDrag,
                         priority: synth_layout::sidecar::OverridePriority::Hard,
+                        sheet: p.sheet,
                         timestamp: None,
                         relative_to: None,
                         dx: 0.0,
@@ -336,6 +342,7 @@ mod tests {
                     rotation,
                     source: synth_layout::sidecar::OverrideSource::HumanDrag,
                     priority: synth_layout::sidecar::OverridePriority::Hard,
+                    sheet: None,
                     timestamp: None,
                     relative_to: None,
                     dx: 0.0,

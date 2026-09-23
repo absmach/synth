@@ -58,6 +58,7 @@ mod patterns;
 pub mod placer;
 pub mod route;
 pub mod score;
+pub mod sheets;
 
 pub use placer::{default_placer, NativeSemanticPlacer, Placer};
 
@@ -175,6 +176,22 @@ pub struct NetLabel {
     pub label: String,
 }
 
+/// A cross-sheet signal net stub (§P26 multi-sheet).
+///
+/// Same identity as a [`NetLabel`] — one per in-sheet endpoint of a
+/// net that continues on another sheet — but rendered as a KiCad
+/// hierarchical label (paired with a pin on the parent sheet
+/// instance) instead of a local label. Power nets never need one:
+/// power symbols already connect globally by value.
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub struct HierarchicalLabel {
+    pub net: NetId,
+    pub component: ComponentId,
+    pub pin: PinId,
+    /// Net name, identical on every sheet the net touches.
+    pub label: String,
+}
+
 /// The complete layout output. Stable shape across slices — later
 /// slices fill in `wires`, may reshape `sheet_size`, but never
 /// rename or remove fields.
@@ -188,11 +205,20 @@ pub struct Layout {
     pub junctions: Vec<(f64, f64)>,
     pub power_flags: Vec<PowerFlag>,
     pub net_labels: Vec<NetLabel>,
-    /// Free text drawn on the sheet — sub-circuit captions today,
-    /// design notes and generated pin legends later (§21.1). Placement
-    /// owns where prose lands; consumers render it verbatim.
+    /// Cross-sheet signal stubs, one per in-sheet endpoint of a net
+    /// that continues on another sheet. Empty on single-sheet
+    /// layouts; populated by the §P26 split.
+    #[serde(default)]
+    pub hierarchical_labels: Vec<HierarchicalLabel>,
+    /// Free text drawn on the sheet — sub-circuit captions, design
+    /// notes (§21.1 `notes` blocks), and generated connector pin
+    /// legends. Placement owns where prose lands; consumers render
+    /// it verbatim.
     #[serde(default)]
     pub annotations: Vec<TextAnnotation>,
+    /// Titled outline boxes, one per declared `group` (§21.1).
+    #[serde(default)]
+    pub group_boxes: Vec<GroupBox>,
     pub sheet_size: SheetSize,
 }
 
@@ -204,6 +230,18 @@ pub struct TextAnnotation {
     pub at_mm: (f64, f64),
     /// Glyph height in mm. KiCad's schematic default is 1.27.
     pub size_mm: f64,
+}
+
+/// A titled outline box drawn around one declared `group` (§21.1).
+///
+/// The caption names the sub-circuit; the box shows where it is.
+/// Coordinates are mm page space, top-left `min_mm` to bottom-right
+/// `max_mm` (KiCad y grows downward).
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct GroupBox {
+    pub group: String,
+    pub min_mm: (f64, f64),
+    pub max_mm: (f64, f64),
 }
 
 impl Layout {
@@ -290,6 +328,20 @@ const PAGE_MARGIN: f64 = 20.0;
 /// heading rather than as another component label.
 const GROUP_CAPTION_SIZE: f64 = 2.0;
 const GROUP_CAPTION_DY: f64 = 12.7;
+/// Padding between a group's outline box (§21.1) and its contents —
+/// caption included, so the box top clears the caption baseline.
+const GROUP_BOX_PAD: f64 = 5.0;
+/// Title and line sizes for design notes (§21.1 `notes` blocks) and
+/// generated connector pin legends.
+const NOTE_TITLE_SIZE: f64 = 2.0;
+const NOTE_LINE_SIZE: f64 = 1.27;
+/// Baseline step between note/legend lines, and the gap between a
+/// title baseline and its first line.
+const NOTE_LINE_PITCH: f64 = 2.54;
+const NOTE_TITLE_GAP: f64 = 4.0;
+/// Gap below a group box, connector body, or content bottom before a
+/// notes block or pin legend starts.
+const BELOW_GAP: f64 = 8.0;
 
 /// Fallback body extents when a component has no part info.
 const BODY_FALLBACK_W: f64 = 15.0;
@@ -654,6 +706,8 @@ pub fn layout_with_overrides(
     overlay(&mut layout);
     route_and_label(board, &mut layout);
     annotate_groups(board, &mut layout);
+    place_connector_legends(board, &mut layout);
+    place_design_notes(board, &mut layout);
     grow_sheet_to_fit(board, &mut layout);
     clamp_annotations_to_sheet(&mut layout);
     layout
@@ -679,28 +733,53 @@ fn clamp_annotations_to_sheet(layout: &mut Layout) {
     }
 }
 
-/// Caption every declared `group` on the sheet.
+/// Caption every declared `group` on the sheet, and draw its titled
+/// outline box (§21.1).
 ///
 /// One text run per group, sitting above the top-left corner of the
 /// bounding box of that group's components — the device the SIM7080G
 /// reference schematic uses ("VBAT DECOUPLING + ESD", "NANO SIM (1.8V
 /// only) + ESD"): a sub-circuit is named where it is drawn, so a
 /// reader can see what a cluster of parts is *for* without tracing
-/// nets. Groups are declaration-order, and a board that declares none
-/// gets no captions.
+/// nets. The box pads the component bounds (caption included) so the
+/// eye groups the parts even before reading the title. Groups are
+/// declaration-order, and a board that declares none gets no captions
+/// and no boxes.
 ///
 /// Runs after routing so captions sit above the final positions, and
 /// before `grow_sheet_to_fit` so a caption pushed near an edge grows
 /// the page like any other content.
 fn annotate_groups(board: &Board, layout: &mut Layout) {
-    let mut order: Vec<&str> = Vec::new();
-    let mut bounds: std::collections::HashMap<&str, (f64, f64, f64, f64)> =
+    for (group, min_x, max_x, min_y, max_y) in group_bounds(board, layout) {
+        let caption_y = (min_y - GROUP_CAPTION_DY).max(0.0);
+        layout.annotations.push(TextAnnotation {
+            text: group.clone(),
+            // Clear of the tallest symbol's Reference text, which
+            // already sits above its body.
+            at_mm: (min_x, caption_y),
+            size_mm: GROUP_CAPTION_SIZE,
+        });
+        layout.group_boxes.push(GroupBox {
+            group,
+            min_mm: (
+                min_x - GROUP_BOX_PAD,
+                caption_y - GROUP_CAPTION_SIZE - GROUP_BOX_PAD,
+            ),
+            max_mm: (max_x + GROUP_BOX_PAD, max_y + GROUP_BOX_PAD),
+        });
+    }
+}
+
+/// Bounding box of each declared `group`'s component bodies, in
+/// first-seen placement order: `(group, min_x, max_x, min_y, max_y)`.
+/// Shared by captions, boxes, and group-placed design notes so the
+/// three can never disagree about where a group is.
+fn group_bounds(board: &Board, layout: &Layout) -> Vec<(String, f64, f64, f64, f64)> {
+    let mut order: Vec<String> = Vec::new();
+    let mut bounds: std::collections::HashMap<String, (f64, f64, f64, f64)> =
         std::collections::HashMap::new();
     for placement in &layout.components {
-        let Some(group) = board
-            .component(placement.id)
-            .and_then(|c| c.group.as_deref())
-        else {
+        let Some(group) = board.component(placement.id).and_then(|c| c.group.clone()) else {
             continue;
         };
         let (cx, cy) = placement.center_mm;
@@ -708,7 +787,7 @@ fn annotate_groups(board: &Board, layout: &mut Layout) {
             .component(placement.id)
             .and_then(|c| c.part.as_ref())
             .map_or((BODY_FALLBACK_W, BODY_FALLBACK_H), body_size_for_part);
-        let entry = bounds.entry(group).or_insert_with(|| {
+        let entry = bounds.entry(group.clone()).or_insert_with(|| {
             order.push(group);
             (
                 f64::INFINITY,
@@ -722,16 +801,144 @@ fn annotate_groups(board: &Board, layout: &mut Layout) {
         entry.2 = entry.2.min(cy - bh / 2.0);
         entry.3 = entry.3.max(cy + bh / 2.0);
     }
+    order
+        .into_iter()
+        .map(|group| {
+            let (min_x, max_x, min_y, max_y) = bounds[&group];
+            (group, min_x, max_x, min_y, max_y)
+        })
+        .collect()
+}
 
-    for group in order {
-        let (min_x, _max_x, min_y, _max_y) = bounds[group];
+/// Pin legend for every connector, generated from the netlist (§21.1).
+///
+/// One titled block per connector — `{refdes} pinout` plus one
+/// `pin: net` line per pin in part order (`NC` when the pin joins no
+/// net) — sitting below the connector's body. A reader checking a
+/// harness against the schematic reads the mating list where the
+/// connector is drawn instead of tracing each stub. Runs after
+/// routing (positions are final) and before `grow_sheet_to_fit` so a
+/// tall legend grows the page like any other content.
+fn place_connector_legends(board: &Board, layout: &mut Layout) {
+    for placement in &layout.components {
+        let Some(component) = board.component(placement.id) else {
+            continue;
+        };
+        let Some(part) = component.part.as_ref() else {
+            continue;
+        };
+        if part.kind != "connector" {
+            continue;
+        }
+        let (cx, cy) = placement.center_mm;
+        let (bw, bh) = body_size_for_part(part);
+        let x = cx - bw / 2.0;
+        let mut y = cy + bh / 2.0 + BELOW_GAP;
         layout.annotations.push(TextAnnotation {
-            text: group.to_string(),
-            // Clear of the tallest symbol's Reference text, which
-            // already sits above its body.
-            at_mm: (min_x, (min_y - GROUP_CAPTION_DY).max(0.0)),
-            size_mm: GROUP_CAPTION_SIZE,
+            text: format!("{} pinout", component.refdes),
+            at_mm: (x, y),
+            size_mm: NOTE_TITLE_SIZE,
         });
+        y += NOTE_TITLE_GAP;
+        for (index, pin) in part.pins.iter().enumerate() {
+            // u32 cast is bounded: parts cannot exceed pin counts the
+            // layouter already indexed.
+            let net = board
+                .nets_containing(component.id, PinId(index as u32))
+                .next()
+                .map_or("NC", |(_, net)| net.name.as_str());
+            layout.annotations.push(TextAnnotation {
+                text: format!("{}: {net}", pin.name),
+                at_mm: (x, y),
+                size_mm: NOTE_LINE_SIZE,
+            });
+            y += NOTE_LINE_PITCH;
+        }
+    }
+}
+
+/// Render `notes` blocks as titled text (§21.1).
+///
+/// A note inside a `group` sits beneath that group's outline box;
+/// top-level notes stack at the bottom-left below all content. Each
+/// block is its title (caption size) plus one run per line. Runs
+/// before `grow_sheet_to_fit` so notes near an edge grow the page,
+/// and before `clamp_annotations_to_sheet` so wide lines slide
+/// on-page like captions.
+fn place_design_notes(board: &Board, layout: &mut Layout) {
+    if board.notes.is_empty() {
+        return;
+    }
+    let boxes: std::collections::HashMap<&str, &GroupBox> = layout
+        .group_boxes
+        .iter()
+        .map(|b| (b.group.as_str(), b))
+        .collect();
+    // Next free baseline per group, and one for board-level notes.
+    let mut group_cursor: std::collections::HashMap<&str, f64> = std::collections::HashMap::new();
+    let mut board_cursor = content_bottom(board, layout) + BELOW_GAP;
+    for note in &board.notes {
+        let (x, y) = if let Some(group) = note.group.as_deref() {
+            let y = group_cursor.get(group).copied().unwrap_or_else(|| {
+                boxes
+                    .get(group)
+                    .map_or(board_cursor, |b| b.max_mm.1 + BELOW_GAP)
+            });
+            let x = boxes.get(group).map_or(PAGE_MARGIN, |b| b.min_mm.0);
+            group_cursor.insert(
+                group,
+                y + NOTE_TITLE_GAP + note.lines.len() as f64 * NOTE_LINE_PITCH,
+            );
+            (x, y)
+        } else {
+            let y = board_cursor;
+            board_cursor += NOTE_TITLE_GAP + note.lines.len() as f64 * NOTE_LINE_PITCH;
+            (PAGE_MARGIN, y)
+        };
+        layout.annotations.push(TextAnnotation {
+            text: note.title.clone(),
+            at_mm: (x, y),
+            size_mm: NOTE_TITLE_SIZE,
+        });
+        let mut line_y = y + NOTE_TITLE_GAP;
+        for line in &note.lines {
+            layout.annotations.push(TextAnnotation {
+                text: line.clone(),
+                at_mm: (x, line_y),
+                size_mm: NOTE_LINE_SIZE,
+            });
+            line_y += NOTE_LINE_PITCH;
+        }
+    }
+}
+
+/// Lowest content baseline on the sheet: component bodies, wire
+/// points, annotations, and group boxes. Board-level design notes
+/// start below this.
+fn content_bottom(board: &Board, layout: &Layout) -> f64 {
+    let mut bottom = f64::NEG_INFINITY;
+    for placement in &layout.components {
+        let bh = board
+            .component(placement.id)
+            .and_then(|c| c.part.as_ref())
+            .map_or(BODY_FALLBACK_H, |part| body_size_for_part(part).1);
+        bottom = bottom.max(placement.center_mm.1 + bh / 2.0);
+    }
+    for wire in &layout.wires {
+        for &(_, y) in &wire.points {
+            bottom = bottom.max(y);
+        }
+    }
+    for text in &layout.annotations {
+        bottom = bottom.max(text.at_mm.1);
+    }
+    for box_ in &layout.group_boxes {
+        bottom = bottom.max(box_.max_mm.1);
+    }
+    if bottom.is_finite() {
+        bottom
+    } else {
+        PAGE_MARGIN
     }
 }
 
@@ -783,6 +990,12 @@ fn grow_sheet_to_fit(board: &Board, layout: &mut Layout) {
         max_x = max_x.max(x + width);
         min_y = min_y.min(y - text.size_mm);
         max_y = max_y.max(y);
+    }
+    for box_ in &layout.group_boxes {
+        min_x = min_x.min(box_.min_mm.0);
+        max_x = max_x.max(box_.max_mm.0);
+        min_y = min_y.min(box_.min_mm.1);
+        max_y = max_y.max(box_.max_mm.1);
     }
     if !min_x.is_finite() {
         return;
@@ -872,7 +1085,7 @@ pub fn layout_with_sidecar(board: &Board, sidecar_path: Option<&std::path::Path>
         .map(|c| (c.refdes.clone(), c.id))
         .collect();
     layout_with_overrides(board, &default_placer(), &move |l| {
-        sidecar.apply_to_layout(l, &refdes_to_id);
+        sidecar.apply_to_layout(board, l, &refdes_to_id);
     })
 }
 
@@ -2450,8 +2663,8 @@ fn place_clusters(board: &Board, clusters: &[Cluster]) -> Layout {
     // should stay on the smallest page that holds it, and a stack one
     // row taller often drops a board from A2 back to A3. Ties keep the
     // earliest (most aspect-balanced) attempt. If nothing fits — only
-    // possible past A2, where sheets stop growing (§7.5.11 multi-sheet
-    // is future work) — keep whichever overflowed least, so the ERC
+    // possible past A2, where sheets stop growing (the §P26 multi-sheet
+    // split handles it) — keep whichever overflowed least, so the ERC
     // diagnostic reports the smallest violation.
     let rows_start = rows_aspect.min(max_rows_for_sheet(SheetSize::A4)).max(1);
     let rows_cap = max_rows_for_sheet(SheetSize::A2)
@@ -2511,6 +2724,8 @@ fn place_clusters(board: &Board, clusters: &[Cluster]) -> Layout {
         power_flags: Vec::new(),
         net_labels: Vec::new(),
         annotations: Vec::new(),
+        hierarchical_labels: Vec::new(),
+        group_boxes: Vec::new(),
         sheet_size,
     }
 }
@@ -3121,9 +3336,8 @@ fn layer_for(component: &synth_ir::Component) -> u32 {
 /// to x≈565 mm against 297 mm). For that case we escalate to the
 /// smallest ISO size whose landscape dims contain `(w, h)`, ceiling
 /// at A2; beyond A2 the declared size stops growing and the
-/// pre-existing overflow behaviour applies until multi-sheet support
-/// (§21.2) lands. `w`/`h` are the caller-computed content bounds
-/// including page margins.
+/// multi-sheet split (§P26) takes over. `w`/`h` are the
+/// caller-computed content bounds including page margins.
 fn sheet_size_for(w: f64, h: f64) -> SheetSize {
     const SIZES: [(SheetSize, f64, f64); 3] = [
         (SheetSize::A4, 297.0, 210.0),
@@ -3136,6 +3350,14 @@ fn sheet_size_for(w: f64, h: f64) -> SheetSize {
         }
     }
     SheetSize::A2
+}
+
+/// Smallest standard sheet fitting the given content bounds, in mm
+/// page coordinates. Used by the §P26 multi-sheet exporter to size
+/// the root sheet around placed sheet instances.
+pub fn fit_sheet_size(min_x: f64, max_x: f64, min_y: f64, max_y: f64) -> SheetSize {
+    let (need_w, need_h) = sheet_needs(min_x, max_x, min_y, max_y);
+    sheet_size_for(need_w, need_h)
 }
 
 // ----- Human-like schematic alignment helpers --------------------------------
@@ -3364,6 +3586,7 @@ mod barycenter_tests {
             kind: "test".to_string(),
             part: None,
             value: None,
+            dnp: false,
             placement_hint: None,
             group: None,
             sheet: None,
@@ -3398,6 +3621,7 @@ mod barycenter_tests {
             components,
             nets,
             diff_pairs: Vec::new(),
+            notes: vec![],
             keepouts: Vec::new(),
             netclasses: vec![],
             source_span: Span::new(0, 0),
@@ -3565,6 +3789,7 @@ mod semantic_weights_tests {
             kind: p.kind.clone(),
             part: Some(p),
             value: None,
+            dnp: false,
             placement_hint: None,
             group: None,
             sheet: None,
@@ -3599,6 +3824,7 @@ mod semantic_weights_tests {
             components,
             nets,
             diff_pairs: Vec::new(),
+            notes: vec![],
             keepouts: Vec::new(),
             netclasses: vec![],
             source_span: Span::new(0, 0),
@@ -3886,6 +4112,7 @@ mod soft_pin_swap_tests {
             kind: p.kind.clone(),
             part: Some(p),
             value: None,
+            dnp: false,
             placement_hint: None,
             group: None,
             sheet: None,
@@ -3920,6 +4147,7 @@ mod soft_pin_swap_tests {
             components,
             nets,
             diff_pairs: Vec::new(),
+            notes: vec![],
             keepouts: Vec::new(),
             netclasses: vec![],
             source_span: Span::new(0, 0),
@@ -3941,6 +4169,8 @@ mod soft_pin_swap_tests {
             power_flags: Vec::new(),
             net_labels: Vec::new(),
             annotations: Vec::new(),
+            hierarchical_labels: Vec::new(),
+            group_boxes: Vec::new(),
             sheet_size: SheetSize::A4,
         }
     }
@@ -4119,6 +4349,7 @@ mod patterns_tests {
             kind: p.kind.clone(),
             part: Some(p),
             value: None,
+            dnp: false,
             placement_hint: None,
             group: None,
             sheet: None,
@@ -4153,6 +4384,7 @@ mod patterns_tests {
             components,
             nets,
             diff_pairs: Vec::new(),
+            notes: vec![],
             keepouts: Vec::new(),
             netclasses: vec![],
             source_span: Span::new(0, 0),
@@ -4458,6 +4690,7 @@ mod text_width_tests {
             kind: part.kind.clone(),
             part: Some(part),
             value: value.map(str::to_string),
+            dnp: false,
             placement_hint: None,
             group: None,
             sheet: None,
@@ -4668,6 +4901,7 @@ mod naming_tests {
             kind: p.kind.clone(),
             part: Some(p),
             value: None,
+            dnp: false,
             placement_hint: None,
             group: None,
             sheet: None,
@@ -4702,6 +4936,7 @@ mod naming_tests {
             components,
             nets,
             diff_pairs: Vec::new(),
+            notes: vec![],
             keepouts: Vec::new(),
             netclasses: vec![],
             source_span: Span::new(0, 0),
@@ -4902,5 +5137,261 @@ mod naming_tests {
             vec![net(0, "lone", &[(0, 0)]), net(1, "sig", &[(0, 1), (1, 1)])],
         );
         assert!(classify_power_flags(&b).is_empty());
+    }
+}
+
+/// §21.1 documentation pass: group boxes, design notes, connector
+/// pin legends.
+#[cfg(test)]
+mod documentation_tests {
+    use synth_diagnostics::Span;
+    use synth_ir::{Component, ComponentId, Net, NetEndpoint, NetId, Note, PinId};
+    use synth_registry::{ElectricalType, Lifecycle, Part, PartId, Pin as RegPin, PinNumber};
+
+    use super::*;
+
+    fn pin(name: &str) -> RegPin {
+        RegPin {
+            name: name.to_string(),
+            number: PinNumber(name.to_string()),
+            electrical_type: ElectricalType::Passive,
+            capabilities: Vec::new(),
+            required: false,
+            unit: None,
+            voltage_max_v: None,
+            voltage_min_v: None,
+            voltage_nominal_v: None,
+        }
+    }
+
+    fn part(kind: &str, pins: Vec<RegPin>) -> Part {
+        Part {
+            id: PartId(kind.to_string()),
+            kind: kind.to_string(),
+            description: None,
+            version: 0,
+            lifecycle: Lifecycle::Active,
+            signed_by: Vec::new(),
+            substitutes: Vec::new(),
+            mpn: None,
+            lcsc_pn: None,
+            provenance: None,
+            pins,
+            required_decoupling: Vec::new(),
+            kicad_symbol: None,
+            kicad_footprint: None,
+            footprint_dimensions: None,
+            operating_conditions: None,
+        }
+    }
+
+    fn component(id: u32, refdes: &str, p: Part, group: Option<&str>) -> Component {
+        Component {
+            id: ComponentId(id),
+            refdes: refdes.to_string(),
+            kind: p.kind.clone(),
+            part: Some(p),
+            value: None,
+            dnp: false,
+            placement_hint: None,
+            group: group.map(str::to_string),
+            sheet: None,
+            source_span: Span::new(0, 0),
+        }
+    }
+
+    fn net(id: u32, name: &str, endpoints: &[(u32, u32)]) -> Net {
+        Net {
+            id: NetId(id),
+            name: name.to_string(),
+            endpoints: endpoints
+                .iter()
+                .map(|&(c, p)| NetEndpoint {
+                    component: ComponentId(c),
+                    pin: PinId(p),
+                    source_span: Span::new(0, 0),
+                })
+                .collect(),
+            netclass: None,
+            voltage: None,
+        }
+    }
+
+    fn board_with_notes(components: Vec<Component>, nets: Vec<Net>, notes: Vec<Note>) -> Board {
+        Board {
+            name: "test".to_string(),
+            layers: 2,
+            manufacturer: None,
+            revision: None,
+            company: None,
+            components,
+            nets,
+            diff_pairs: Vec::new(),
+            notes,
+            keepouts: Vec::new(),
+            netclasses: vec![],
+            source_span: Span::new(0, 0),
+        }
+    }
+
+    fn texts(layout: &Layout) -> Vec<&str> {
+        layout.annotations.iter().map(|a| a.text.as_str()).collect()
+    }
+
+    #[test]
+    fn group_box_frames_caption_and_parts() {
+        let r = || part("resistor", vec![pin("p1"), pin("p2")]);
+        let b = board_with_notes(
+            vec![
+                component(0, "R1", r(), Some("Input")),
+                component(1, "R2", r(), Some("Input")),
+                component(2, "R3", r(), None),
+            ],
+            vec![net(0, "sig", &[(0, 0), (1, 0), (2, 0)])],
+            vec![],
+        );
+        let layout = layout(&b);
+        assert_eq!(texts(&layout).iter().filter(|t| **t == "Input").count(), 1);
+        assert_eq!(layout.group_boxes.len(), 1);
+        let box_ = &layout.group_boxes[0];
+        assert_eq!(box_.group, "Input");
+        assert!(box_.min_mm.0 < box_.max_mm.0 && box_.min_mm.1 < box_.max_mm.1);
+        // The box top clears the caption baseline above it.
+        let caption_y = layout
+            .annotations
+            .iter()
+            .find(|a| a.text == "Input")
+            .expect("caption")
+            .at_mm
+            .1;
+        assert!(box_.min_mm.1 < caption_y);
+        // Every grouped part sits inside the box.
+        for placement in &layout.components[0..2] {
+            let (x, y) = placement.center_mm;
+            assert!(x > box_.min_mm.0 && x < box_.max_mm.0, "{x}");
+            assert!(y > box_.min_mm.1 && y < box_.max_mm.1, "{y}");
+        }
+    }
+
+    #[test]
+    fn ungrouped_board_has_no_boxes() {
+        let b = board_with_notes(
+            vec![component(
+                0,
+                "R1",
+                part("resistor", vec![pin("p1"), pin("p2")]),
+                None,
+            )],
+            vec![net(0, "sig", &[(0, 0)])],
+            vec![],
+        );
+        let layout = layout(&b);
+        assert!(layout.group_boxes.is_empty());
+    }
+
+    #[test]
+    fn design_notes_render_below_content() {
+        let b = board_with_notes(
+            vec![component(
+                0,
+                "R1",
+                part("resistor", vec![pin("p1"), pin("p2")]),
+                None,
+            )],
+            vec![net(0, "sig", &[(0, 0)])],
+            vec![Note {
+                title: "Build".to_string(),
+                lines: vec!["Assemble at JLCPCB.".to_string()],
+                group: None,
+                sheet: None,
+                source_span: Span::new(0, 0),
+            }],
+        );
+        let layout = layout(&b);
+        let labels = texts(&layout);
+        assert!(labels.contains(&"Build"));
+        assert!(labels.contains(&"Assemble at JLCPCB."));
+        let comp_bottom = layout.components[0].center_mm.1;
+        let title_y = layout
+            .annotations
+            .iter()
+            .find(|a| a.text == "Build")
+            .expect("note title")
+            .at_mm
+            .1;
+        assert!(title_y > comp_bottom);
+    }
+
+    #[test]
+    fn group_notes_render_under_their_box() {
+        let r = || part("resistor", vec![pin("p1"), pin("p2")]);
+        let b = board_with_notes(
+            vec![
+                component(0, "R1", r(), Some("Input")),
+                component(1, "R2", r(), Some("Input")),
+            ],
+            vec![net(0, "sig", &[(0, 0), (1, 0)])],
+            vec![Note {
+                title: "Input notes".to_string(),
+                lines: vec!["Keep leads short.".to_string()],
+                group: Some("Input".to_string()),
+                sheet: None,
+                source_span: Span::new(0, 0),
+            }],
+        );
+        let layout = layout(&b);
+        let box_ = &layout.group_boxes[0];
+        let title_y = layout
+            .annotations
+            .iter()
+            .find(|a| a.text == "Input notes")
+            .expect("group note title")
+            .at_mm
+            .1;
+        assert!(title_y > box_.max_mm.1);
+    }
+
+    #[test]
+    fn connector_legend_lists_pin_nets() {
+        let j = component(
+            0,
+            "J1",
+            part("connector", vec![pin("p1"), pin("p2"), pin("p3")]),
+            None,
+        );
+        let r = component(1, "R1", part("resistor", vec![pin("p1"), pin("p2")]), None);
+        let b = board_with_notes(vec![j, r], vec![net(0, "SIG", &[(0, 0), (1, 0)])], vec![]);
+        let layout = layout(&b);
+        let labels = texts(&layout);
+        assert!(labels.contains(&"J1 pinout"));
+        assert!(labels.contains(&"p1: SIG"));
+        assert!(labels.contains(&"p2: NC"));
+        assert!(labels.contains(&"p3: NC"));
+        // Legend sits below the connector body.
+        let j_center = layout.components[0].center_mm.1;
+        let title_y = layout
+            .annotations
+            .iter()
+            .find(|a| a.text == "J1 pinout")
+            .expect("legend title")
+            .at_mm
+            .1;
+        assert!(title_y > j_center);
+    }
+
+    #[test]
+    fn non_connector_gets_no_legend() {
+        let b = board_with_notes(
+            vec![component(
+                0,
+                "R1",
+                part("resistor", vec![pin("p1"), pin("p2")]),
+                None,
+            )],
+            vec![net(0, "sig", &[(0, 0)])],
+            vec![],
+        );
+        let layout = layout(&b);
+        assert!(!texts(&layout).iter().any(|t| t.contains("pinout")));
     }
 }

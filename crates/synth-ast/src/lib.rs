@@ -51,6 +51,7 @@ pub enum StatementAst {
     Connection(ConnectionAst),
     Net(NetDeclAst),
     Power(PowerDeclAst),
+    Notes(NotesDeclAst),
     DiffPair(DiffPairStmt),
     Netclass(NetclassStmt),
     Keepout(KeepoutStmt),
@@ -69,6 +70,7 @@ impl StatementAst {
             StatementAst::Connection(s) => s.span,
             StatementAst::Net(s) => s.span,
             StatementAst::Power(s) => s.span,
+            StatementAst::Notes(s) => s.span,
             StatementAst::DiffPair(s) => s.span,
             StatementAst::Netclass(s) => s.span,
             StatementAst::Keepout(s) => s.span,
@@ -95,16 +97,21 @@ pub struct GroupStmt {
 
 /// A hierarchical sheet block: `sheet "Power" { ... }`.
 ///
-/// V1 lowering treats a sheet exactly like a [`GroupStmt`]: the
-/// statements are flattened into the board and each lowered component
+/// Lowering flattens a sheet's statements into the board exactly like
+/// a [`GroupStmt`]: refdes stay board-unique and a `connect` inside a
+/// sheet may name any component on the board. Each lowered component
 /// records the innermost enclosing sheet name (alongside its group).
-/// Refdes stay board-unique; a `connect` inside a sheet may name any
-/// component on the board.
-/// The sheet name is the future hierarchical-sheet boundary: the
-/// exporter will one day emit one KiCad sheet per name, with
-/// cross-sheet nets carried on hierarchical labels. Until then the
-/// annotation already lets layout cluster per sheet and lets reviewers
-/// read the intended sheet split.
+///
+/// The sheet name is a **split boundary** (§P26): a board whose
+/// single-sheet content overflows A2 and whose components span two or
+/// more sheets exports as a KiCad hierarchy — one `.kicad_sch` per
+/// sheet plus a root carrying sheet instances — with cross-sheet
+/// signal nets carried on hierarchical labels. Small boards stay a
+/// single sheet, so the annotation also just lets layout cluster per
+/// sheet and reviewers read the intended split.
+///
+/// `import` files are implicit boundaries too: an imported file's
+/// statements arrive wrapped in a sheet named after the file stem.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct SheetStmt {
     pub name: String,
@@ -155,8 +162,27 @@ pub struct ComponentDeclAst {
     /// Used for the schematic `Value` property and the BOM when present.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub value: Option<String>,
+    /// Do-not-populate (`component R7: resistor "r_generic_0603" dnp`).
+    /// Exports `(dnp yes)` on the KiCad symbol and leaves the part
+    /// out of the BOM and pick-and-place; ERC still checks it.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub dnp: bool,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub placement_hint: Option<PlacementHintAst>,
+    pub span: Span,
+}
+
+/// A free-text design note: `notes "Title" { "line one" "line two" }`.
+///
+/// Rendered on the schematic as a titled text block (§21.1): the
+/// title at caption size, one run per line below it. A `notes` block
+/// inside a `group` carries that group's name and renders beneath
+/// the group; top-level notes stack at the sheet's bottom-left.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct NotesDeclAst {
+    pub title: String,
+    #[serde(default)]
+    pub lines: Vec<String>,
     pub span: Span,
 }
 
@@ -455,6 +481,7 @@ mod tests {
             kind: "mcu".into(),
             part: Some("rp2350".into()),
             value: Some("10k".into()),
+            dnp: false,
             placement_hint: None,
             span: Span::new(0, 0),
         });

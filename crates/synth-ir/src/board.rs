@@ -44,6 +44,10 @@ pub struct Board {
     pub components: Vec<Component>,
     pub nets: Vec<Net>,
     pub diff_pairs: Vec<DiffPair>,
+    /// Free-text design notes (`notes "Title" { … }`), in source
+    /// order. Rendered on the schematic as titled text blocks.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub notes: Vec<Note>,
     pub keepouts: Vec<Keepout>,
     /// Declared routing-constraint classes (`netclass "PWR" { … }`).
     /// Nets join a class via `class "PWR"` on their `net`, `power`,
@@ -69,6 +73,11 @@ pub struct Component {
     /// the schematic emitter and BOM. Falls back to the part's MPN or
     /// id when absent.
     pub value: Option<String>,
+    /// Do-not-populate: exports `(dnp yes)` on the KiCad symbol and
+    /// leaves the part out of the BOM and pick-and-place. ERC still
+    /// checks the part exactly like a populated one.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub dnp: bool,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub placement_hint: Option<PlacementConstraint>,
     /// Name of the `group` this component was declared inside — the
@@ -80,10 +89,11 @@ pub struct Component {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub group: Option<String>,
     /// Name of the `sheet` block this component was declared inside —
-    /// the future hierarchical-sheet boundary. `None` for components
+    /// the hierarchical-sheet boundary (§P26). `None` for components
     /// declared directly in the board body. Like [`Self::group`],
     /// purely an annotation: it never affects connectivity, and
-    /// refdes remain board-unique across sheets.
+    /// refdes remain board-unique across sheets. A board large enough
+    /// to overflow A2 splits on these boundaries at export.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub sheet: Option<String>,
     pub source_span: Span,
@@ -198,6 +208,21 @@ pub struct DiffPair {
     pub source_span: Span,
 }
 
+/// A free-text design note (`notes "Title" { "line" … }`) with the
+/// `group` it was declared inside, if any, and the `sheet` block it
+/// was declared inside, if any (for per-sheet placement).
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct Note {
+    pub title: String,
+    #[serde(default)]
+    pub lines: Vec<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub group: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub sheet: Option<String>,
+    pub source_span: Span,
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Keepout {
     pub name: String,
@@ -232,6 +257,27 @@ impl Component {
         // u32 cast is bounded: parts cannot exceed registry-validated pin counts.
         Some((PinId(idx as u32), &part.pins[idx]))
     }
+
+    /// This component's refdes for diagnostic messages: `` `U1` ``,
+    /// or `` `U1` (group "Power") `` when declared inside a group, so
+    /// a reader can locate the part's sub-circuit without tracing.
+    pub fn describe(&self) -> String {
+        match self.group.as_deref() {
+            Some(group) => format!("`{}` (group \"{group}\")", self.refdes),
+            None => format!("`{}`", self.refdes),
+        }
+    }
+
+    /// One `refdes.pin` endpoint for diagnostic messages:
+    /// `` `U1.vout` ``, or `` `U1.vout` (group "Power") `` when
+    /// grouped. Prefer this over hand-formatting `` `{}.{}` `` so
+    /// group context can never be silently dropped.
+    pub fn describe_pin(&self, pin_name: &str) -> String {
+        match self.group.as_deref() {
+            Some(group) => format!("`{}.{pin_name}` (group \"{group}\")", self.refdes),
+            None => format!("`{}.{pin_name}`", self.refdes),
+        }
+    }
 }
 
 impl Board {
@@ -245,6 +291,16 @@ impl Board {
 
     pub fn pin(&self, c: ComponentId, p: PinId) -> Option<&synth_registry::Pin> {
         self.component(c)?.part.as_ref()?.pins.get(p.0 as usize)
+    }
+
+    /// A refdes for diagnostic messages looked up by name:
+    /// `` `U1` ``, or `` `U1` (group "Power") `` when grouped. Falls
+    /// back to the bare refdes when it names no declared component.
+    pub fn describe_refdes(&self, refdes: &str) -> String {
+        match self.components.iter().find(|c| c.refdes == refdes) {
+            Some(component) => component.describe(),
+            None => format!("`{refdes}`"),
+        }
     }
 
     /// Returns an iterator over `(NetId, &Net)` pairs that include a

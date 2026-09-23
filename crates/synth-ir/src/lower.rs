@@ -44,8 +44,8 @@ use synth_diagnostics::{
 use synth_registry::{Part, Registry};
 
 use crate::board::{
-    Board, Component, ComponentId, DiffPair, Keepout, Net, NetClass, NetEndpoint, NetId, PinId,
-    PlacementEdge, PlacementRegion, PlacementSide,
+    Board, Component, ComponentId, DiffPair, Keepout, Net, NetClass, NetEndpoint, NetId, Note,
+    PinId, PlacementEdge, PlacementRegion, PlacementSide,
 };
 use crate::units::{ConversionError, Impedance, Length, Voltage};
 
@@ -142,6 +142,7 @@ pub fn lower(ast: &ProgramAst, registry: &Registry, file: &str) -> LowerResult {
     let mut net_decls: Vec<NetDeclRecord> = Vec::new();
     let mut power_decls: Vec<PowerDeclRecord> = Vec::new();
     let mut diff_pair_stmts: Vec<DiffPairStmt> = Vec::new();
+    let mut notes: Vec<Note> = Vec::new();
     let mut keepouts: Vec<Keepout> = Vec::new();
     let mut netclasses: Vec<NetClass> = Vec::new();
     let mut layers: u32 = 0;
@@ -177,35 +178,22 @@ pub fn lower(ast: &ProgramAst, registry: &Registry, file: &str) -> LowerResult {
                 }
                 components.push(comp);
             }
-            StatementAst::Connection(c) => {
-                let mut tos = vec![c.to.clone()];
-                tos.extend(c.additional.iter().cloned());
-                connections.push(ConnectionRecord {
-                    from: c.from.clone(),
-                    tos,
-                    span: c.span,
-                    net_name: c.net_name.clone(),
-                    netclass: c.netclass.clone(),
-                });
+            StatementAst::Connection(_)
+            | StatementAst::Net(_)
+            | StatementAst::Power(_)
+            | StatementAst::Notes(_)
+            | StatementAst::DiffPair(_) => {
+                push_statement_records(
+                    stmt,
+                    group,
+                    sheet,
+                    &mut connections,
+                    &mut net_decls,
+                    &mut power_decls,
+                    &mut diff_pair_stmts,
+                    &mut notes,
+                );
             }
-            StatementAst::Net(n) => {
-                net_decls.push(NetDeclRecord {
-                    name: n.name.clone(),
-                    netclass: n.netclass.clone(),
-                    endpoints: n.endpoints.clone(),
-                    span: n.span,
-                });
-            }
-            StatementAst::Power(p) => {
-                power_decls.push(PowerDeclRecord {
-                    name: p.name.clone(),
-                    voltage: p.voltage.clone(),
-                    netclass: p.netclass.clone(),
-                    endpoints: p.endpoints.clone(),
-                    span: p.span,
-                });
-            }
-            StatementAst::DiffPair(d) => diff_pair_stmts.push(d.clone()),
             StatementAst::Keepout(k) => keepouts.push(ctx.lower_keepout(k)),
             StatementAst::Netclass(n) => netclasses.push(ctx.lower_netclass(n)),
             StatementAst::Group(g) => {
@@ -244,6 +232,7 @@ pub fn lower(ast: &ProgramAst, registry: &Registry, file: &str) -> LowerResult {
         components,
         nets,
         diff_pairs,
+        notes,
         keepouts,
         netclasses,
         source_span: ast.board.span,
@@ -283,7 +272,10 @@ impl<'a> LowerCtx<'a> {
             let mut b = DiagnosticBuilder::new("E-SYNTH-COMP-001", Severity::Error, "unknown part")
                 .location(Location::from_span(self.file.to_string(), decl.span))
                 .expected("a part id present in the registry")
-                .found(format!("`{part_id}` not found in registry"))
+                .found(format!(
+                    "`{part_id}` not found in registry (for {})",
+                    describe_decl(&decl.refdes, group)
+                ))
                 .message(format!(
                     "`{part_id}` is not in the registry. Author it instead of guessing pins: \
                      `synth part stub {part_id} --pins <N>` writes a skeleton into the Tier-2 \
@@ -334,6 +326,7 @@ impl<'a> LowerCtx<'a> {
             kind: decl.kind.clone(),
             part,
             value: decl.value.clone(),
+            dnp: decl.dnp,
             placement_hint,
             group: group.map(str::to_string),
             sheet: sheet.map(str::to_string),
@@ -967,8 +960,9 @@ impl<'a> LowerCtx<'a> {
                         |p| format!("a pin defined on part `{}`", p.id),
                     ))
                     .found(format!(
-                        "`{}.{}` — part has no pin named `{}`",
-                        ep.component, ep.pin, ep.pin,
+                        "{} — part has no pin named `{}`",
+                        comp.describe_pin(&ep.pin),
+                        ep.pin,
                     ))
                     .explanation_url("synth.docs/diagnostics/E-SYNTH-COMP-002");
             if let Some(part) = comp.part.as_ref() {
@@ -1170,6 +1164,77 @@ fn union_endpoint_sets(
     }
     ordered.sort_by_key(|g| g[0]);
     ordered
+}
+
+/// A component refdes for lowering-time diagnostics, before the
+/// [`Component`] exists: `` `U1` ``, or `` `U1` (group "Power") ``
+/// when the declaration sits inside a group.
+fn describe_decl(refdes: &str, group: Option<&str>) -> String {
+    match group {
+        Some(group) => format!("`{refdes}` (group \"{group}\")"),
+        None => format!("`{refdes}`"),
+    }
+}
+
+/// Record the net/notes statements of one flattened board position
+/// into their lowering buffers. Pure cloning — resolution happens in
+/// [`LowerCtx::collect_assertions`]. `group` is the innermost
+/// enclosing group, recorded on `notes` for placement.
+#[allow(clippy::too_many_arguments)]
+fn push_statement_records(
+    stmt: &StatementAst,
+    group: Option<&str>,
+    sheet: Option<&str>,
+    connections: &mut Vec<ConnectionRecord>,
+    net_decls: &mut Vec<NetDeclRecord>,
+    power_decls: &mut Vec<PowerDeclRecord>,
+    diff_pair_stmts: &mut Vec<DiffPairStmt>,
+    notes: &mut Vec<Note>,
+) {
+    match stmt {
+        StatementAst::Connection(c) => {
+            let mut tos = vec![c.to.clone()];
+            tos.extend(c.additional.iter().cloned());
+            connections.push(ConnectionRecord {
+                from: c.from.clone(),
+                tos,
+                span: c.span,
+                net_name: c.net_name.clone(),
+                netclass: c.netclass.clone(),
+            });
+        }
+        StatementAst::Net(n) => {
+            net_decls.push(NetDeclRecord {
+                name: n.name.clone(),
+                netclass: n.netclass.clone(),
+                endpoints: n.endpoints.clone(),
+                span: n.span,
+            });
+        }
+        StatementAst::Power(p) => {
+            power_decls.push(PowerDeclRecord {
+                name: p.name.clone(),
+                voltage: p.voltage.clone(),
+                netclass: p.netclass.clone(),
+                endpoints: p.endpoints.clone(),
+                span: p.span,
+            });
+        }
+        StatementAst::Notes(n) => {
+            notes.push(Note {
+                title: n.title.clone(),
+                lines: n.lines.clone(),
+                group: group.map(str::to_string),
+                sheet: sheet.map(str::to_string),
+                source_span: n.span,
+            });
+        }
+        StatementAst::DiffPair(d) => diff_pair_stmts.push(d.clone()),
+        // Components, metadata, keepouts, netclasses, and blocks are
+        // handled by the caller; future statement kinds are ignored
+        // here until lowering learns about them.
+        _ => {}
+    }
 }
 
 fn suggest_similar_parts(needle: &str, registry: &Registry) -> Vec<String> {
@@ -1623,5 +1688,65 @@ mod tests {
         assert_eq!(board.nets[0].name, "net_0");
         assert_eq!(board.nets[0].netclass, None);
         assert_eq!(board.nets[0].voltage, None);
+    }
+
+    #[test]
+    fn test_dnp_flag_lowered() {
+        let board = lower_ok(
+            r#"board "b" {
+                component U1: regulator "ams1117_3v3"
+                component R7: resistor "r_generic_0603" dnp
+                connect U1.vout -> R7.p1
+                connect U1.gnd -> R7.p2
+            }"#,
+        );
+        assert_eq!(board.components.len(), 2);
+        assert!(!board.components[0].dnp);
+        assert!(board.components[1].dnp);
+        // DNP parts still join the net graph — ERC checks them.
+        assert_eq!(board.nets.len(), 2);
+    }
+
+    #[test]
+    fn test_dnp_still_checked_by_erc() {
+        // A DNP part with an undefined pin still fails lowering like
+        // any other part: the flag never silences checks.
+        let res = lower_with_diags(
+            r#"board "b" {
+                component R7: resistor "r_generic_0603" dnp
+                component R8: resistor "r_generic_0603"
+                connect R7.nope -> R8.p1
+            }"#,
+        );
+        assert!(res.has_errors());
+        assert!(
+            res.diagnostics.iter().any(|d| d.code == "E-SYNTH-COMP-002"),
+            "expected E-SYNTH-COMP-002, got {:?}",
+            res.diagnostics.iter().map(|d| &d.code).collect::<Vec<_>>()
+        );
+    }
+
+    #[test]
+    fn test_notes_lower_with_group() {
+        let board = lower_ok(
+            r#"board "b" {
+                component U1: regulator "ams1117_3v3"
+                group "Power" {
+                    component C1: capacitor "c_generic_0603"
+                    notes "Power notes" {
+                        "Keep bulk caps close."
+                    }
+                }
+                notes "General" {
+                    "Assemble at JLCPCB."
+                }
+            }"#,
+        );
+        assert_eq!(board.notes.len(), 2);
+        assert_eq!(board.notes[0].title, "Power notes");
+        assert_eq!(board.notes[0].lines, vec!["Keep bulk caps close."]);
+        assert_eq!(board.notes[0].group.as_deref(), Some("Power"));
+        assert_eq!(board.notes[1].title, "General");
+        assert_eq!(board.notes[1].group, None);
     }
 }

@@ -145,6 +145,7 @@ mod tests {
             components: Vec::new(),
             nets: Vec::new(),
             diff_pairs: Vec::new(),
+            notes: vec![],
             keepouts: Vec::new(),
             netclasses: vec![],
             source_span: Span::new(0, 0),
@@ -159,6 +160,8 @@ mod tests {
             power_flags: Vec::new(),
             net_labels: Vec::new(),
             annotations: Vec::new(),
+            hierarchical_labels: Vec::new(),
+            group_boxes: Vec::new(),
             sheet_size: SheetSize::A4,
         }
     }

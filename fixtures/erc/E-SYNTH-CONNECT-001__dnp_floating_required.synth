@@ -1,0 +1,12 @@
+// A do-not-populate part is still checked by ERC: U1.vin is a
+// required pin with no connection, so E-SYNTH-CONNECT-001 fires even
+// though U1 is DNP.
+board "dnp_floating_required" {
+  layers 2
+
+  component U1: regulator "ams1117_3v3" dnp
+  component C1: capacitor "c_generic_0805"
+
+  connect U1.vout -> C1.p1
+  connect U1.gnd -> C1.p2
+}

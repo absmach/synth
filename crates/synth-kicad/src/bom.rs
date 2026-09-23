@@ -5,6 +5,10 @@
 //! Columns: `refdes,value,kind,description`. Fields containing
 //! commas, quotes, or newlines are RFC-4180 quoted. Output is
 //! sorted by refdes for diff stability.
+//!
+//! Do-not-populate parts are left out: a DNP line in the BOM would
+//! order a part the build must not place. (ERC still checks DNP
+//! parts; the KiCad schematic still draws them with `(dnp yes)`.)
 
 use std::fmt::Write as _;
 
@@ -24,6 +28,7 @@ pub fn build_bom_csv(board: &Board) -> String {
     )> = board
         .components
         .iter()
+        .filter(|c| !c.dnp)
         .map(|c| {
             let value = c
                 .value
@@ -135,5 +140,33 @@ mod tests {
         let mut s = String::new();
         write_field(&mut s, "a,b");
         assert_eq!(s, "\"a,b\"");
+    }
+
+    #[test]
+    fn dnp_parts_are_excluded() {
+        use std::path::Path;
+        let root = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("..")
+            .join("..")
+            .canonicalize()
+            .unwrap();
+        let registry = synth_registry::load_dir(&root.join("registry").join("parts")).unwrap();
+        let src = r#"board "b" {
+            component R1: resistor "r_generic_0603"
+            component R2: resistor "r_generic_0603" dnp
+            connect R1.p1 -> R2.p1
+            connect R1.p2 -> R2.p2
+        }"#;
+        let parsed = synth_parser::parse(src, "inline.synth");
+        assert!(!parsed.has_errors(), "{:?}", parsed.diagnostics);
+        let board = synth_ir::lower(&parsed.ast.unwrap(), &registry, "inline.synth")
+            .board
+            .unwrap();
+        let csv = build_bom_csv(&board);
+        assert!(csv.contains("R1"), "populated part must be listed");
+        assert!(
+            !csv.lines().any(|line| line.starts_with("R2,")),
+            "DNP part must be left out:\n{csv}"
+        );
     }
 }

@@ -309,6 +309,7 @@ pub fn list_tools() -> Vec<McpToolInfo> {
                     "dx_mm":            { "type": "number", "description": "Relative X offset from relative_to in mm" },
                     "dy_mm":            { "type": "number", "description": "Relative Y offset from relative_to in mm" },
                     "rotation":         { "type": "integer", "description": "Rotation in degrees (0, 90, 180, 270)" },
+                    "sheet":            { "type": "string", "description": "Optional sheet the component was placed on; recorded so a later sheet move invalidates the stale override" },
                     "source":           { "type": "string", "enum": ["human_drag", "agent"], "description": "Provenance tag" },
                     "priority":         { "type": "string", "enum": ["soft", "hard"], "description": "Override priority" }
                 },
@@ -1485,10 +1486,12 @@ fn execute_export(args: &Value, default_registry: Option<&Path>) -> Result<Value
 
     // Aesthetic schematic ERC over the same layout the exporter used:
     // surfaced to the agent so it can repair readability regressions
-    // in the same closed loop as electrical ERC findings.
+    // in the same closed loop as electrical ERC findings. Per-sheet
+    // on §P26 split boards.
     let aesthetic = {
-        let layout = synth_layout::layout(&board);
-        synth_kicad::check_schem_erc(&layout, &board)
+        let global = synth_layout::layout(&board);
+        let sheets = synth_layout::sheets::layout_sheets(&board, global);
+        synth_kicad::check_schem_erc_sheets(&board, &sheets)
             .into_iter()
             .map(|d| serde_json::json!({ "code": d.code, "title": d.title }))
             .collect::<Vec<_>>()
@@ -1869,6 +1872,7 @@ fn execute_write_layout_override(args: &Value) -> Result<Value, String> {
         );
     }
     let rotation = args["rotation"].as_u64().unwrap_or(0) as u32;
+    let sheet = args["sheet"].as_str().map(str::to_string);
 
     let source = match args["source"].as_str() {
         Some("human_drag") => synth_layout::sidecar::OverrideSource::HumanDrag,
@@ -1890,6 +1894,7 @@ fn execute_write_layout_override(args: &Value) -> Result<Value, String> {
         x: x_mm,
         y: y_mm,
         rotation,
+        sheet,
         source,
         priority,
         timestamp: None,

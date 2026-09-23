@@ -15,8 +15,8 @@
 use synth_ast::{
     BoardAst, CompanyStmt, ComponentDeclAst, ConnectionAst, DiffPairAttr, DiffPairStmt,
     EndpointAst, GroupStmt, ImportAst, KeepoutAttr, KeepoutStmt, LayersStmt, ManufacturerStmt,
-    NetDeclAst, NetclassAttr, NetclassStmt, PlacementHintAst, PlacementHintAttr, PowerDeclAst,
-    ProgramAst, RevisionStmt, SheetStmt, StatementAst, ValueWithUnit,
+    NetDeclAst, NetclassAttr, NetclassStmt, NotesDeclAst, PlacementHintAst, PlacementHintAttr,
+    PowerDeclAst, ProgramAst, RevisionStmt, SheetStmt, StatementAst, ValueWithUnit,
 };
 use synth_diagnostics::{
     Diagnostic, DiagnosticBuilder, Location, Patch, PatchKind, Severity, Span,
@@ -298,6 +298,7 @@ impl Parser {
             TokenKind::KwConnect => self.parse_connection().map(StatementAst::Connection),
             TokenKind::KwNet => self.parse_net().map(StatementAst::Net),
             TokenKind::KwPower => self.parse_power().map(StatementAst::Power),
+            TokenKind::KwNotes => self.parse_notes().map(StatementAst::Notes),
             TokenKind::KwDiffPair => self.parse_diff_pair().map(StatementAst::DiffPair),
             TokenKind::KwNetclass => self.parse_netclass().map(StatementAst::Netclass),
             TokenKind::KwKeepout => self.parse_keepout().map(StatementAst::Keepout),
@@ -308,7 +309,7 @@ impl Parser {
                     self.peek().span,
                     "E-SYNTH-PARSE-011",
                     "expected statement keyword",
-                    "one of: layers, manufacturer, revision, company, component, connect, net, power, diff_pair, netclass, keepout, group, sheet",
+                    "one of: layers, manufacturer, revision, company, component, connect, net, power, notes, diff_pair, netclass, keepout, group, sheet",
                     self.describe_current(),
                     None,
                 );
@@ -460,6 +461,14 @@ impl Parser {
         } else {
             None
         };
+        // Do-not-populate flag: `component R7: resistor "r_generic_0603"
+        // dnp`. Accepted before the body block, after it, or both
+        // (redundant repetition is harmless).
+        let mut dnp = false;
+        if matches!(self.peek_kind(), TokenKind::KwDnp) {
+            self.bump(); // consume `dnp`
+            dnp = true;
+        }
         let placement_hint = if matches!(self.peek_kind(), TokenKind::KwPlacementHint) {
             self.parse_placement_hint()
         } else if matches!(self.peek_kind(), TokenKind::LBrace) {
@@ -492,12 +501,17 @@ impl Parser {
         } else {
             None
         };
+        if matches!(self.peek_kind(), TokenKind::KwDnp) {
+            self.bump(); // consume trailing `dnp`
+            dnp = true;
+        }
         let end = self.last_offset();
         Some(ComponentDeclAst {
             refdes,
             kind,
             part: Some(part),
             value,
+            dnp,
             placement_hint,
             span: Span::new(start, end),
         })
@@ -830,6 +844,64 @@ impl Parser {
                 }
             }
         }
+    }
+
+    /// `notes "Title" { "line one" "line two" }`.
+    ///
+    /// Free-text design notes rendered on the schematic as a titled
+    /// block (§21.1). Each quoted string is one line; an empty body
+    /// renders the title alone.
+    fn parse_notes(&mut self) -> Option<NotesDeclAst> {
+        let start = self.peek().span.byte_start;
+        self.bump(); // consume `notes`
+        let title =
+            self.expect_string("E-SYNTH-PARSE-002", "expected notes title (quoted string)")?;
+        if !matches!(self.peek_kind(), TokenKind::LBrace) {
+            self.emit(
+                self.peek().span,
+                "E-SYNTH-PARSE-003",
+                "expected `{` to open notes body",
+                "`{`",
+                self.describe_current(),
+                None,
+            );
+            return None;
+        }
+        self.bump(); // consume `{`
+        let mut lines = Vec::new();
+        loop {
+            self.skip_error_tokens();
+            match self.peek_kind() {
+                TokenKind::RBrace | TokenKind::Eof => break,
+                TokenKind::StringLit(_) => {
+                    if let Some(line) = self
+                        .expect_string("E-SYNTH-PARSE-002", "expected note line (quoted string)")
+                    {
+                        lines.push(line);
+                    }
+                }
+                _ => {
+                    self.emit(
+                        self.peek().span,
+                        "E-SYNTH-PARSE-019",
+                        "unexpected entry inside notes",
+                        "a quoted string (one line of note text)",
+                        self.describe_current(),
+                        None,
+                    );
+                    self.bump();
+                }
+            }
+        }
+        if matches!(self.peek_kind(), TokenKind::RBrace) {
+            self.bump();
+        }
+        let end = self.last_offset();
+        Some(NotesDeclAst {
+            title,
+            lines,
+            span: Span::new(start, end),
+        })
     }
     fn parse_endpoint(&mut self) -> Option<EndpointAst> {
         let start = self.peek().span.byte_start;
@@ -1267,6 +1339,7 @@ impl Parser {
                 | TokenKind::KwConnect
                 | TokenKind::KwNet
                 | TokenKind::KwPower
+                | TokenKind::KwNotes
                 | TokenKind::KwDiffPair
                 | TokenKind::KwNetclass
                 | TokenKind::KwKeepout
@@ -1305,6 +1378,8 @@ impl Parser {
             TokenKind::KwConnect => "`connect`".to_string(),
             TokenKind::KwNet => "`net`".to_string(),
             TokenKind::KwPower => "`power`".to_string(),
+            TokenKind::KwNotes => "`notes`".to_string(),
+            TokenKind::KwDnp => "`dnp`".to_string(),
             TokenKind::KwAs => "`as`".to_string(),
             TokenKind::KwClass => "`class`".to_string(),
             TokenKind::KwDiffPair => "`diff_pair`".to_string(),
@@ -1570,6 +1645,55 @@ mod tests {
         };
         assert_eq!(d.pos, "USB_DP");
         assert_eq!(d.neg, "USB_DN");
+    }
+
+    #[test]
+    fn parse_component_with_dnp() {
+        for src in [
+            r#"board "b" { component R7: resistor "r_generic_0603" dnp }"#,
+            r#"board "b" { component R7: resistor "r_generic_0603" value "10k" dnp }"#,
+            r#"board "b" { component R7: resistor "r_generic_0603" { placement_hint { near: "U1" } } dnp }"#,
+        ] {
+            let res = parse(lex(src), "test.synth".into());
+            assert!(res.diagnostics.is_empty(), "{src}: {:?}", res.diagnostics);
+            let ast = res.ast.unwrap();
+            let StatementAst::Component(c) = &ast.board.statements[0] else {
+                panic!("Expected component statement")
+            };
+            assert!(c.dnp, "{src}");
+        }
+        // Absence of the flag lowers to false (and serializes away).
+        let res = parse(
+            lex(r#"board "b" { component R7: resistor "r_generic_0603" }"#),
+            "test.synth".into(),
+        );
+        assert!(res.diagnostics.is_empty(), "{:?}", res.diagnostics);
+        let ast = res.ast.unwrap();
+        let StatementAst::Component(c) = &ast.board.statements[0] else {
+            panic!("Expected component statement")
+        };
+        assert!(!c.dnp);
+        let v = serde_json::to_value(&ast).unwrap();
+        assert!(v["board"]["statements"][0].get("dnp").is_none());
+    }
+
+    #[test]
+    fn parse_notes_block() {
+        let src = r#"board "b" {
+            notes "Power" {
+                "3V3 rail powers the MCU."
+                "Keep bulk caps close to U1."
+            }
+        }"#;
+        let res = parse(lex(src), "test.synth".into());
+        assert!(res.diagnostics.is_empty(), "{:?}", res.diagnostics);
+        let ast = res.ast.unwrap();
+        let StatementAst::Notes(n) = &ast.board.statements[0] else {
+            panic!("Expected notes statement")
+        };
+        assert_eq!(n.title, "Power");
+        assert_eq!(n.lines.len(), 2);
+        assert_eq!(n.lines[0], "3V3 rail powers the MCU.");
     }
 
     #[test]

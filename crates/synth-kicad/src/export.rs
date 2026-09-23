@@ -102,9 +102,32 @@ pub fn export_with_sidecar_and_routing_order(
     let pcb_path = out_dir.join(format!("{stem}.kicad_pcb"));
     let bom_path = out_dir.join("bom.csv");
 
+    // Layout first: the sheet plan (§P26) decides whether the
+    // schematic exports as one file (small boards, byte-identical to
+    // before) or one file per sheet boundary (large boards only).
+    // The project file below lists every sheet, so it comes after.
+    let global_layout = synth_layout::layout_with_sidecar(board, sidecar);
+    let sheets = synth_layout::sheets::layout_sheets(board, global_layout);
+    let project_namespace = uuid_v5::project_namespace(&board.name);
     // Project file (.kicad_pro): minimal JSON. KiCad fills in the
     // rest on first open; the deterministic root keeps diffs stable.
-    let project_namespace = uuid_v5::project_namespace(&board.name);
+    // Multi-sheet exports list every sub-sheet (uuid + file) after
+    // the root entry; single-sheet keeps the historic one-entry list
+    // byte for byte.
+    let mut sheet_entries = vec![vec![
+        uuid_v5::derive_entity_uuid(&project_namespace, "sheet", "root").to_string(),
+        String::new(),
+    ]];
+    if sheets.len() > 1 {
+        for sheet in &sheets {
+            if let Some(name) = sheet.name.as_deref() {
+                sheet_entries.push(vec![
+                    crate::multisheet::sheet_uuid(&project_namespace, name).to_string(),
+                    crate::multisheet::sheet_filename(&stem, name),
+                ]);
+            }
+        }
+    }
     let project_doc = json!({
         // Keep the project-level defaults explicit. KiCad 10 may discard
         // legacy setup minima when it first saves a generated board, and an
@@ -134,12 +157,7 @@ pub fn export_with_sidecar_and_routing_order(
             "annotate_start_num": 0,
             "drawing": {},
         },
-        "sheets": [
-            [
-                uuid_v5::derive_entity_uuid(&project_namespace, "sheet", "root").to_string(),
-                "",
-            ]
-        ],
+        "sheets": sheet_entries,
     });
     let project_text = serde_json::to_string_pretty(&project_doc)
         .map_err(|source| ExportError::SerializeProject { source })?;
@@ -232,15 +250,21 @@ pub fn export_with_sidecar_and_routing_order(
         write_file(&fp_table_path, &fp_table)?;
     }
 
-    // Schematic file (.kicad_sch). The symbol library is built from
-    // the same override-aware layout the schematic consumes so both
-    // files agree on positions and power-flag label sets.
-    let layout = synth_layout::layout_with_sidecar(board, sidecar);
-    let library_text = symbol_lib::build_library(board, &layout).to_string_pretty();
+    // Schematic file(s). The symbol library is built from the same
+    // override-aware layout the schematic consumes so both files
+    // agree on positions and power-flag label sets. One `.kicad_sch`
+    // for small boards (§P26 splits large splittable boards only, so
+    // this path stays byte-identical); one file per sheet otherwise.
+    let library_text = symbol_lib::build_library(board, &sheets[0].layout).to_string_pretty();
     write_file(&library_path, &library_text)?;
-    let schematic_text = schematic::build_schematic_from_layout(board, &project_namespace, &layout)
-        .to_string_pretty();
-    write_file(&schematic_path, &schematic_text)?;
+    if sheets.len() == 1 {
+        let schematic_text =
+            schematic::build_schematic_from_layout(board, &project_namespace, &sheets[0].layout)
+                .to_string_pretty();
+        write_file(&schematic_path, &schematic_text)?;
+    } else {
+        crate::multisheet::export_sheets(board, out_dir, &stem, &project_namespace, sheets)?;
+    }
 
     // PCB file (.kicad_pcb). Export must serialize the same deterministic
     // placement/routing candidate that the route and DRC tools inspect.
@@ -273,7 +297,7 @@ pub fn export_with_sidecar_and_routing_order(
     })
 }
 
-fn write_file(path: &Path, contents: &str) -> Result<(), ExportError> {
+pub(crate) fn write_file(path: &Path, contents: &str) -> Result<(), ExportError> {
     std::fs::write(path, contents).map_err(|source| ExportError::Write {
         path: path.to_path_buf(),
         source,
@@ -282,7 +306,7 @@ fn write_file(path: &Path, contents: &str) -> Result<(), ExportError> {
 
 /// Map an arbitrary board name to a filesystem-safe filename stem.
 /// Replaces any character outside `[A-Za-z0-9_-]` with `_`.
-fn sanitize_filename(name: &str) -> String {
+pub(crate) fn sanitize_filename(name: &str) -> String {
     let mut out = String::with_capacity(name.len());
     for c in name.chars() {
         if c.is_ascii_alphanumeric() || c == '_' || c == '-' {

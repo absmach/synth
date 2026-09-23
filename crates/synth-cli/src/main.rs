@@ -1919,8 +1919,12 @@ fn validate(
                     diagnostics.extend(synth_validate::run_erc(board, &file));
                     // Aesthetic schematic ERC (E-SYNTH-SCHEM-*): advisory
                     // warnings over the auto-layout; never blocking.
-                    let layout = synth_layout::layout(board);
-                    diagnostics.extend(synth_kicad::check_schem_erc(&layout, board));
+                    // Per-sheet on §P26 split boards so findings
+                    // attribute to their page (and the split itself
+                    // clears the single-sheet overflow).
+                    let global = synth_layout::layout(board);
+                    let sheets = synth_layout::sheets::layout_sheets(board, global);
+                    diagnostics.extend(synth_kicad::check_schem_erc_sheets(board, &sheets));
                 }
             }
         }
@@ -2513,7 +2517,7 @@ fn export_kicad(
                     krt_fab_overrides,
                     krt_same_net_pad_clearance,
                     krt_allow_via_in_pad,
-                )?
+                )?;
             }
         }
     }
@@ -2722,9 +2726,7 @@ fn run_kicad_routing_tools_postpass(
             repo.display()
         );
     }
-    let python = python_arg
-        .map(Path::to_path_buf)
-        .unwrap_or_else(|| PathBuf::from("python3"));
+    let python = python_arg.map_or_else(|| PathBuf::from("python3"), Path::to_path_buf);
     let repo_root = Path::new(env!("CARGO_MANIFEST_DIR"))
         .parent()
         .and_then(Path::parent)

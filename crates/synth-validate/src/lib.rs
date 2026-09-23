@@ -179,11 +179,12 @@ impl ErcRule for RequiredPinsConnectedRule {
                         )
                         .location(Location::from_span(file.to_string(), component.source_span))
                         .expected(format!(
-                            "pin `{}.{}` is marked required by part `{}` and must be \
+                            "pin {} is marked required by part `{}` and must be \
                              connected",
-                            component.refdes, pin.name, part.id,
+                            component.describe_pin(&pin.name),
+                            part.id,
                         ))
-                        .found(format!("`{}.{}` is floating", component.refdes, pin.name))
+                        .found(format!("{} is floating", component.describe_pin(&pin.name)))
                         .explanation_url(format!("synth.docs/diagnostics/{}", self.code()))
                         .build(),
                     );
@@ -325,8 +326,9 @@ fn check_capability_consistency(
                     needed.join(", "),
                 ))
                 .found(format!(
-                    "`{}.{}` on net `{}` carries none of those capabilities",
-                    component.refdes, pin.name, net.name,
+                    "{} on net `{}` carries none of those capabilities",
+                    component.describe_pin(&pin.name),
+                    net.name,
                 ))
                 .explanation_url(format!("synth.docs/diagnostics/{code}"))
                 .build(),
@@ -381,8 +383,9 @@ impl ErcRule for SingleEndpointNetRule {
                     .location(Location::from_span(file.to_string(), endpoint.source_span))
                     .expected("at least two endpoints (a wire must connect something to something)")
                     .found(format!(
-                        "net `{}` has only `{}.{}`",
-                        net.name, component.refdes, pin.name,
+                        "net `{}` has only {}",
+                        net.name,
+                        component.describe_pin(&pin.name),
                     ))
                     .explanation_url(format!("synth.docs/diagnostics/{}", self.code()))
                     .suggested_fix(synth_diagnostics::Patch {
@@ -436,9 +439,8 @@ impl ErcRule for NoConnectMismatchRule {
                         .location(Location::from_span(file.to_string(), endpoint.source_span))
                         .expected("no-connect pins must not be connected to any net")
                         .found(format!(
-                            "`{}.{}` is declared no_connect on part `{}` but is on net `{}`",
-                            component.refdes,
-                            pin.name,
+                            "{} is declared no_connect on part `{}` but is on net `{}`",
+                            component.describe_pin(&pin.name),
                             component.part.as_ref().map_or("?", |p| p.id.as_str()),
                             net.name,
                         ))
@@ -565,8 +567,8 @@ impl ErcRule for MissingDecouplingRule {
                     )
                     .location(Location::from_span(file.to_string(), component.source_span))
                     .expected(format!(
-                        "{required} capacitor(s) on the net carrying `{}.{}`",
-                        component.refdes, decoupling.net,
+                        "{required} capacitor(s) on the net carrying {}",
+                        component.describe_pin(&decoupling.net),
                     ))
                     .found(format!(
                         "{cap_count} capacitor(s) found on net `{}`",
@@ -582,8 +584,8 @@ impl ErcRule for MissingDecouplingRule {
                         builder = builder.suggested_fix(synth_diagnostics::Patch {
                             confidence: 0.9,
                             rationale: Some(format!(
-                                "auto-insert {shortfall} 100nF decoupling cap(s) on `{}.{}`",
-                                component.refdes, decoupling.net,
+                                "auto-insert {shortfall} 100nF decoupling cap(s) on {}",
+                                component.describe_pin(&decoupling.net),
                             )),
                             patch_consequence_preview: None,
                             kind: decoupling_cap_patch(
@@ -678,8 +680,9 @@ impl ErcRule for DecouplingValueRule {
                         )
                         .location(Location::from_span(file.to_string(), component.source_span))
                         .expected(format!(
-                            "at least {} of decoupling on the net carrying `{}.{}`",
-                            decoupling.value, component.refdes, decoupling.net,
+                            "at least {} of decoupling on the net carrying {}",
+                            decoupling.value,
+                            component.describe_pin(&decoupling.net),
                         ))
                         .found(format!(
                             "{} capacitor(s) totalling {:.3}µF on net `{}`",
@@ -816,8 +819,10 @@ impl ErcRule for PowerOutputShortRule {
                 .location(Location::from_span(file.to_string(), span2))
                 .expected("at most one power_output pin per net")
                 .found(format!(
-                    "net `{}` carries `{}.{}` and `{}.{}`, both power outputs",
-                    net.name, comp1.refdes, pin1.name, comp2.refdes, pin2.name,
+                    "net `{}` carries {} and {}, both power outputs",
+                    net.name,
+                    comp1.describe_pin(&pin1.name),
+                    comp2.describe_pin(&pin2.name),
                 ))
                 .explanation_url(format!("synth.docs/diagnostics/{}", self.code()))
                 .build(),
@@ -1096,8 +1101,8 @@ impl ErcRule for RfFeedKeepoutRule {
                 .location(Location::from_span(file.to_string(), component.source_span))
                 .expected("at least one `keepout` declaration in the board")
                 .found(format!(
-                    "pin `{}.{}` is declared rf_feed but no keepouts exist",
-                    component.refdes, pin.name,
+                    "pin {} is declared rf_feed but no keepouts exist",
+                    component.describe_pin(&pin.name),
                 ))
                 .explanation_url(format!("synth.docs/diagnostics/{}", self.code()))
                 .suggested_fix(synth_diagnostics::Patch {
@@ -1163,9 +1168,8 @@ impl ErcRule for OutputCollisionRule {
                     net.name,
                 ))
                 .found(format!(
-                    "`{}.{}` is the {}th output pin on net `{}`",
-                    comp.refdes,
-                    pin.name,
+                    "{} is the {}th output pin on net `{}`",
+                    comp.describe_pin(&pin.name),
                     outputs.len(),
                     net.name,
                 ))
@@ -1229,11 +1233,10 @@ impl ErcRule for NoDriverRule {
                         net.name,
                     ))
                     .found(format!(
-                        "all {} endpoints on net `{}` are input-only (e.g. `{}.{}`)",
+                        "all {} endpoints on net `{}` are input-only (e.g. {})",
                         net.endpoints.len(),
                         net.name,
-                        comp.refdes,
-                        pin.name,
+                        comp.describe_pin(&pin.name),
                     ))
                     .explanation_url(format!("synth.docs/diagnostics/{}", self.code()))
                     .suggested_fix(synth_diagnostics::Patch {
@@ -1288,8 +1291,8 @@ impl ErcRule for OrphanComponentRule {
                     )
                     .location(Location::from_span(file.to_string(), component.source_span))
                     .expected(format!(
-                        "component `{}` to participate in at least one `connect` statement",
-                        component.refdes,
+                        "component {} to participate in at least one `connect` statement",
+                        component.describe(),
                     ))
                     .found("zero pins on this component are wired".to_string())
                     .explanation_url(format!("synth.docs/diagnostics/{}", self.code()))
@@ -1352,8 +1355,9 @@ impl ErcRule for PowerInputWithoutSourceRule {
                         net.name,
                     ))
                     .found(format!(
-                        "net `{}` carries power_input pin `{}.{}` but no power source",
-                        net.name, comp.refdes, pin.name,
+                        "net `{}` carries power_input pin {} but no power source",
+                        net.name,
+                        comp.describe_pin(&pin.name),
                     ))
                     .explanation_url(format!("synth.docs/diagnostics/{}", self.code()))
                     .suggested_fix(synth_diagnostics::Patch {
@@ -1464,9 +1468,8 @@ impl ErcRule for RfFeedCollisionRule {
                     net.name,
                 ))
                 .found(format!(
-                    "`{}.{}` is the {}th rf_feed pin on this net",
-                    comp.refdes,
-                    pin.name,
+                    "{} is the {}th rf_feed pin on this net",
+                    comp.describe_pin(&pin.name),
                     feeds.len(),
                 ))
                 .explanation_url(format!("synth.docs/diagnostics/{}", self.code()))
@@ -1525,9 +1528,8 @@ impl ErcRule for ClockSourceCollisionRule {
                     net.name,
                 ))
                 .found(format!(
-                    "`{}.{}` is the {}th clock_output pin on net `{}`",
-                    comp.refdes,
-                    pin.name,
+                    "{} is the {}th clock_output pin on net `{}`",
+                    comp.describe_pin(&pin.name),
                     outputs.len(),
                     net.name,
                 ))
@@ -1590,8 +1592,9 @@ impl ErcRule for ClockInputNoSourceRule {
                         net.name,
                     ))
                     .found(format!(
-                        "net `{}` carries clock_input `{}.{}` but no clock source",
-                        net.name, comp.refdes, pin.name,
+                        "net `{}` carries clock_input {} but no clock source",
+                        net.name,
+                        comp.describe_pin(&pin.name),
                     ))
                     .explanation_url(format!("synth.docs/diagnostics/{}", self.code()))
                     .build(),
@@ -1641,14 +1644,14 @@ impl ErcRule for ResetCapabilityFloatingRule {
                         )
                         .location(Location::from_span(file.to_string(), component.source_span))
                         .expected(format!(
-                            "pin `{}.{}` (reset capability) to be connected to a pull-up or reset button",
-                            component.refdes, pin.name,
+                            "pin {} (reset capability) to be connected to a pull-up or reset button",
+                            component.describe_pin(&pin.name),
                         ))
-                        .found(format!("`{}.{}` is floating", component.refdes, pin.name))
+                        .found(format!("{} is floating", component.describe_pin(&pin.name)))
                         .explanation_url(format!("synth.docs/diagnostics/{}", self.code()))
                         .suggested_fix(synth_diagnostics::Patch {
                             confidence: 0.7,
-                            rationale: Some(format!("wire reset pin `{}.{}` to connector", component.refdes, pin.name)),
+                            rationale: Some(format!("wire reset pin {} to connector", component.describe_pin(&pin.name))),
                             patch_consequence_preview: None,
                             kind: synth_diagnostics::PatchKind::InsertAt {
                                 at: board.source_span.byte_end.saturating_sub(1),
@@ -1703,10 +1706,10 @@ impl ErcRule for BootModeFloatingRule {
                         )
                         .location(Location::from_span(file.to_string(), component.source_span))
                         .expected(format!(
-                            "pin `{}.{}` (boot_mode capability) to be strapped high or low",
-                            component.refdes, pin.name,
+                            "pin {} (boot_mode capability) to be strapped high or low",
+                            component.describe_pin(&pin.name),
                         ))
-                        .found(format!("`{}.{}` is floating", component.refdes, pin.name))
+                        .found(format!("{} is floating", component.describe_pin(&pin.name)))
                         .explanation_url(format!("synth.docs/diagnostics/{}", self.code()))
                         .build(),
                     );
@@ -1759,12 +1762,14 @@ impl ErcRule for AnalogDigitalMixingRule {
                     )
                     .location(Location::from_span(file.to_string(), analog.source_span))
                     .expected(format!(
-                        "analog pin `{}.{}` to connect to an analog signal, not a digital output",
-                        a_comp.refdes, a_pin.name,
+                        "analog pin {} to connect to an analog signal, not a digital output",
+                        a_comp.describe_pin(&a_pin.name),
                     ))
                     .found(format!(
-                        "`{}.{}` (analog) shares net `{}` with `{}.{}` (digital output)",
-                        a_comp.refdes, a_pin.name, net.name, d_comp.refdes, d_pin.name,
+                        "{} (analog) shares net `{}` with {} (digital output)",
+                        a_comp.describe_pin(&a_pin.name),
+                        net.name,
+                        d_comp.describe_pin(&d_pin.name),
                     ))
                     .explanation_url(format!("synth.docs/diagnostics/{}", self.code()))
                     .build(),
@@ -1897,7 +1902,10 @@ impl ErcRule for DuplicateRefdesRule {
         let mut seen: HashMap<&str, &str> = HashMap::new();
         let mut out = Vec::new();
         for component in &board.components {
-            if let Some(prev) = seen.insert(component.refdes.as_str(), component.refdes.as_str()) {
+            if seen
+                .insert(component.refdes.as_str(), component.refdes.as_str())
+                .is_some()
+            {
                 out.push(
                     DiagnosticBuilder::new(
                         self.code(),
@@ -1906,7 +1914,10 @@ impl ErcRule for DuplicateRefdesRule {
                     )
                     .location(Location::from_span(file.to_string(), component.source_span))
                     .expected("each refdes to appear at most once")
-                    .found(format!("`{prev}` was already used by another component"))
+                    .found(format!(
+                        "{} was already used by another component",
+                        component.describe()
+                    ))
                     .explanation_url(format!("synth.docs/diagnostics/{}", self.code()))
                     .build(),
                 );
@@ -1993,8 +2004,9 @@ impl ErcRule for RefdesPrefixRule {
                         .join(", "),
                 ))
                 .found(format!(
-                    "`{}` declared as kind `{}`",
-                    component.refdes, component.kind
+                    "{} declared as kind `{}`",
+                    component.describe(),
+                    component.kind
                 ))
                 .explanation_url(format!("synth.docs/diagnostics/{}", self.code()))
                 .build(),
@@ -2069,7 +2081,7 @@ impl ErcRule for RefdesFormatRule {
                     )
                     .location(Location::from_span(file.to_string(), component.source_span))
                     .expected("refdes to begin with an ASCII letter (`U1`, `R3`, ...)")
-                    .found(format!("`{}` starts with a non-letter", component.refdes))
+                    .found(format!("{} starts with a non-letter", component.describe()))
                     .explanation_url(format!("synth.docs/diagnostics/{}", self.code()))
                     .build(),
                 );
@@ -2427,8 +2439,9 @@ impl ErcRule for RfFeedImpedanceRule {
                         )
                         .location(Location::from_span(file.to_string(), component.source_span))
                         .expected(format!(
-                            "controlled impedance constraint for RF feed pin `{}.{}` on net `{}`",
-                            component.refdes, pin.name, net.name
+                            "controlled impedance constraint for RF feed pin {} on net `{}`",
+                            component.describe_pin(&pin.name),
+                            net.name
                         ))
                         .found("no impedance constraint specified for this net".to_string())
                         .explanation_url(format!("synth.docs/diagnostics/{}", self.code()))
@@ -2613,12 +2626,12 @@ impl ErcRule for CrystalLoadCapBalanceRule {
                     .location(Location::from_span(file.to_string(), component.source_span))
                     .expected(format!(
                         "load capacitors on {} within {:.0}% of each other",
-                        component.refdes,
+                        component.describe(),
                         BALANCE_TOLERANCE * 100.0
                     ))
                     .found(format!(
-                        "crystal `{}` load caps differ by {:.0}% ({} vs {})",
-                        component.refdes,
+                        "crystal {} load caps differ by {:.0}% ({} vs {})",
+                        component.describe(),
                         (1.0 - smaller / larger) * 100.0,
                         fmt_farad(v0),
                         fmt_farad(v1)
@@ -2755,12 +2768,17 @@ impl ErcRule for PowerDomainMismatchRule {
                                 )
                                 .location(Location::from_span(file.to_string(), endpoint.source_span))
                                 .expected(format!(
-                                    "endpoint `{}.{}` max safe voltage ({:.1}V) to tolerate driven voltage ({:.1}V)",
-                                    component.refdes, pin.name, v_max, v_driver
+                                    "endpoint {} max safe voltage ({:.1}V) to tolerate driven voltage ({:.1}V)",
+                                    component.describe_pin(&pin.name),
+                                    v_max,
+                                    v_driver
                                 ))
                                 .found(format!(
-                                    "`{}.{}` on net `{}` operates at {:.1}V domain, exceeding max safe voltage ({:.1}V)",
-                                    component.refdes, pin.name, net.name, v_driver, v_max
+                                    "{} on net `{}` operates at {:.1}V domain, exceeding max safe voltage ({:.1}V)",
+                                    component.describe_pin(&pin.name),
+                                    net.name,
+                                    v_driver,
+                                    v_max
                                 ))
                                 .explanation_url(format!("synth.docs/diagnostics/{}", self.code()))
                                 .smt_constraint(format!("(assert (<= voltage_driver {v_max:.1}))"))
@@ -2800,8 +2818,12 @@ impl ErcRule for PowerDomainMismatchRule {
                             .location(Location::from_span(file.to_string(), *span2))
                             .expected("power outputs connected to the same net to operate at identical nominal voltages")
                             .found(format!(
-                                "net `{}` connects `{}.{}` ({:.1}V) and `{}.{}` ({:.1}V)",
-                                net.name, c1.refdes, p1.name, v1, c2.refdes, p2.name, v2
+                                "net `{}` connects {} ({:.1}V) and {} ({:.1}V)",
+                                net.name,
+                                c1.describe_pin(&p1.name),
+                                v1,
+                                c2.describe_pin(&p2.name),
+                                v2
                             ))
                             .explanation_url(format!("synth.docs/diagnostics/{}", self.code()))
                             .build(),
@@ -2950,9 +2972,10 @@ impl ErcRule for SourcingIdentityRule {
                     part.id
                 ))
                 .found(format!(
-                    "`{}` ({}) has neither `mpn` nor `lcsc_pn` — stock, pricing, and \
+                    "{} ({}) has neither `mpn` nor `lcsc_pn` — stock, pricing, and \
                      substitution checks (W-SYNTH-SUPPLY-001) cannot run for it",
-                    component.refdes, part.id,
+                    component.describe(),
+                    part.id,
                 ))
                 .message(format!(
                     "add mpn/lcsc_pn to `registry/parts/**/{}.synth.toml` (or a Tier-2 overlay)",
@@ -3168,9 +3191,9 @@ impl ErcRule for DividerRatioRule {
                              (check R1/R2 placement and value magnitudes)",
                         )
                         .found(format!(
-                            "`{}`/`{}` ratio gives mid at {:.1}% of rail",
-                            r1.refdes,
-                            r2.refdes,
+                            "{}/{} ratio gives mid at {:.1}% of rail",
+                            r1.describe(),
+                            r2.describe(),
                             ratio * 100.0,
                         ))
                         .explanation_url(format!("synth.docs/diagnostics/{}", self.code()))
@@ -3274,6 +3297,7 @@ mod tests {
             kind: kind.into(),
             part: Some(p),
             value: value.map(str::to_string),
+            dnp: false,
             placement_hint: None,
             group: None,
             sheet: None,
@@ -3314,6 +3338,7 @@ mod tests {
                 },
             ],
             diff_pairs: vec![],
+            notes: vec![],
             keepouts: vec![],
             netclasses: vec![],
             source_span: Span::new(0, 0),
@@ -3365,6 +3390,7 @@ mod tests {
                     kind: "regulator".into(),
                     part: Some(reg),
                     value: None,
+                    dnp: false,
                     placement_hint: None,
                     group: None,
                     sheet: None,
@@ -3376,6 +3402,7 @@ mod tests {
                     kind: "capacitor".into(),
                     part: Some(cap),
                     value: cap_value.map(str::to_string),
+                    dnp: false,
                     placement_hint: None,
                     group: None,
                     sheet: None,
@@ -3399,6 +3426,7 @@ mod tests {
                 },
             ],
             diff_pairs: vec![],
+            notes: vec![],
             keepouts: vec![],
             netclasses: vec![],
             source_span: Span::new(0, 0),
@@ -3444,6 +3472,7 @@ mod tests {
                     kind: part.kind.clone(),
                     part: Some(part),
                     value: None,
+                    dnp: false,
                     placement_hint: None,
                     group: None,
                     sheet: None,
@@ -3452,6 +3481,7 @@ mod tests {
                 .collect(),
             nets: vec![],
             diff_pairs: vec![],
+            notes: vec![],
             keepouts: vec![],
             netclasses: vec![],
             source_span: Span::new(0, 0),
@@ -3593,6 +3623,7 @@ mod tests {
                 kind: "ic".into(),
                 part: Some(part),
                 value: None,
+                dnp: false,
                 placement_hint: None,
                 group: None,
                 sheet: None,
@@ -3600,6 +3631,7 @@ mod tests {
             }],
             nets: vec![],
             diff_pairs: vec![],
+            notes: vec![],
             keepouts: vec![],
             netclasses: vec![],
             source_span: Span::new(0, 0),
@@ -3611,5 +3643,65 @@ mod tests {
             .filter(|d| d.code == "W-SYNTH-PART-UNVERIFIED")
             .count();
         assert_eq!(unverified, 1, "exactly one unverified-part warning");
+    }
+
+    #[test]
+    fn grouped_pin_mentions_group_in_message() {
+        use synth_diagnostics::Span;
+        use synth_ir::Component;
+        use synth_registry::{ElectricalType, Pin};
+
+        let part = part(
+            "u",
+            "mcu",
+            vec![Pin {
+                name: "VDD".into(),
+                number: PinNumber("1".into()),
+                electrical_type: ElectricalType::PowerInput,
+                capabilities: vec![],
+                required: true,
+                unit: None,
+                voltage_max_v: None,
+                voltage_min_v: None,
+                voltage_nominal_v: None,
+            }],
+        );
+        let board = Board {
+            name: "b".into(),
+            layers: 2,
+            manufacturer: None,
+            company: None,
+            revision: None,
+            components: vec![Component {
+                id: ComponentId(0),
+                refdes: "U1".into(),
+                kind: "mcu".into(),
+                part: Some(part),
+                value: None,
+                dnp: false,
+                placement_hint: None,
+                group: Some("Power".into()),
+                sheet: None,
+                source_span: Span::new(0, 0),
+            }],
+            nets: vec![],
+            diff_pairs: vec![],
+            notes: vec![],
+            keepouts: vec![],
+            netclasses: vec![],
+            source_span: Span::new(0, 0),
+        };
+        let diags = run_erc(&board, "test.synth");
+        let diag = diags
+            .iter()
+            .find(|d| d.code == "E-SYNTH-CONNECT-001")
+            .expect("floating required pin must error");
+        for field in [&diag.expected, &diag.found] {
+            let text = field.as_deref().unwrap_or("");
+            assert!(
+                text.contains("(group \"Power\")"),
+                "group must appear in the message, got: {text}"
+            );
+        }
     }
 }

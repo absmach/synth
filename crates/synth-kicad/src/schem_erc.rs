@@ -131,6 +131,35 @@ pub fn check(layout: &Layout, board: &Board) -> Vec<Diagnostic> {
     check_with_config(layout, board, SchemErcConfig::default())
 }
 
+/// Run every aesthetic ERC rule over every sheet of a (§P26 split)
+/// board and return the concatenated violations, sheet by sheet in
+/// export order (root first).
+///
+/// Single-sheet input behaves exactly like [`check`]. On multi-sheet
+/// input each diagnostic's title gains a `[sheet]` prefix so findings
+/// attribute to the page that carries them — the underlying rule
+/// thresholds and ordering are unchanged per sheet. Running the
+/// single-sheet [`check`] on a split board's global layout instead
+/// would false-positive page overflow and cross-sheet wire crossings
+/// that no longer exist once sheets separate.
+pub fn check_sheets(
+    board: &Board,
+    sheets: &[synth_layout::sheets::SheetLayout],
+) -> Vec<Diagnostic> {
+    if sheets.len() == 1 {
+        return check(&sheets[0].layout, board);
+    }
+    let mut out = Vec::new();
+    for sheet in sheets {
+        let name = sheet.name.as_deref().unwrap_or("root");
+        for mut diagnostic in check(&sheet.layout, board) {
+            diagnostic.title = format!("[{name}] {}", diagnostic.title);
+            out.push(diagnostic);
+        }
+    }
+    out
+}
+
 /// Run every aesthetic ERC rule over `layout`/`board` with explicit
 /// thresholds. See [`check`].
 pub fn check_with_config(
@@ -419,10 +448,10 @@ fn check_decoupling_distance(board: &Board, layout: &Layout, max_mm: f64) -> Vec
                             "decoupling capacitor separation",
                         )
                         .message(format!(
-                            "decoupling capacitor {cap} is {dist:.1} mm from its target IC {ic} \
+                            "decoupling capacitor {} is {dist:.1} mm from its target IC {} \
                              (net \"{net_name}\"), exceeding the {max_mm} mm limit",
-                            cap = cap.refdes,
-                            ic = ic.refdes,
+                            cap.describe(),
+                            ic.describe(),
                             net_name = req.net,
                         ))
                         .entity(EntityRef::Component {
@@ -658,10 +687,11 @@ const PAGE_OVERFLOW_EPSILON_MM: f64 = 0.01;
 ///
 /// Sierra Circuits: "Select the [page] size based on the size of your
 /// circuit design." The placer escalates A4 → A3 → A2 from the content
-/// bounding box; past A2 it stops growing (multi-sheet is §21.2
-/// future work) and silently overflows. This rule makes that overflow
-/// visible: any component placement or wire point beyond the sheet's
-/// landscape dimensions is flagged.
+/// bounding box; past A2 it stops growing and the §P26 split takes
+/// over (§MULTI-SHEET). This rule makes any residual overflow
+/// visible: a component placement or wire point beyond the sheet's
+/// landscape dimensions is flagged. Multi-sheet boards run this per
+/// sheet (`check_sheets`), so a split board no longer trips it.
 fn check_page_overflow(layout: &Layout) -> Vec<Diagnostic> {
     let (w, h) = layout.sheet_size.dims_mm();
     let max_x = w + PAGE_OVERFLOW_EPSILON_MM;
@@ -827,6 +857,8 @@ mod tests {
             power_flags,
             net_labels,
             annotations: Vec::new(),
+            hierarchical_labels: Vec::new(),
+            group_boxes: Vec::new(),
             sheet_size: SheetSize::A4,
         }
     }
@@ -1011,6 +1043,7 @@ mod tests {
                     kind: "mcu".to_string(),
                     part: Some(part_with_decoupling()),
                     value: None,
+                    dnp: false,
                     placement_hint: None,
                     group: None,
                     sheet: None,
@@ -1022,6 +1055,7 @@ mod tests {
                     kind: "capacitor".to_string(),
                     part: Some(cap_part()),
                     value: None,
+                    dnp: false,
                     placement_hint: None,
                     group: None,
                     sheet: None,
@@ -1047,6 +1081,7 @@ mod tests {
                 voltage: None,
             }],
             diff_pairs: Vec::new(),
+            notes: vec![],
             keepouts: Vec::new(),
             netclasses: vec![],
             source_span: Span::new(0, 0),
@@ -1081,6 +1116,7 @@ mod tests {
                     kind: "mcu".to_string(),
                     part: Some(part_with_decoupling()),
                     value: None,
+                    dnp: false,
                     placement_hint: None,
                     group: None,
                     sheet: None,
@@ -1092,6 +1128,7 @@ mod tests {
                     kind: "capacitor".to_string(),
                     part: Some(cap_part()),
                     value: None,
+                    dnp: false,
                     placement_hint: None,
                     group: None,
                     sheet: None,
@@ -1117,6 +1154,7 @@ mod tests {
                 voltage: None,
             }],
             diff_pairs: Vec::new(),
+            notes: vec![],
             keepouts: Vec::new(),
             netclasses: vec![],
             source_span: Span::new(0, 0),
@@ -1453,6 +1491,7 @@ mod tests {
                     kind: "mcu".to_string(),
                     part: Some(part_with_decoupling()),
                     value: None,
+                    dnp: false,
                     placement_hint: None,
                     group: None,
                     sheet: None,
@@ -1464,6 +1503,7 @@ mod tests {
                     kind: "capacitor".to_string(),
                     part: Some(cap_part()),
                     value: None,
+                    dnp: false,
                     placement_hint: None,
                     group: None,
                     sheet: None,
@@ -1475,6 +1515,7 @@ mod tests {
                     kind: "mcu".to_string(),
                     part: Some(cap_part()),
                     value: None,
+                    dnp: false,
                     placement_hint: None,
                     group: None,
                     sheet: None,
@@ -1500,6 +1541,7 @@ mod tests {
                 voltage: None,
             }],
             diff_pairs: Vec::new(),
+            notes: vec![],
             keepouts: Vec::new(),
             netclasses: vec![],
             source_span: Span::new(0, 0),
@@ -1566,5 +1608,76 @@ mod tests {
                 "E-SYNTH-SCHEM-010",
             ]
         );
+    }
+
+    #[test]
+    fn check_sheets_delegates_for_single_sheet_and_prefixes_multi() {
+        use synth_layout::sheets::SheetLayout;
+        // A VCC rail with no explicit voltage name trips SCHEM-010
+        // wherever it is rendered — a stable diagnostic to attribute.
+        let b = Board {
+            name: "b".to_string(),
+            layers: 2,
+            manufacturer: None,
+            revision: None,
+            company: None,
+            components: vec![],
+            nets: vec![Net {
+                id: NetId(0),
+                name: "VCC".to_string(),
+                endpoints: vec![
+                    NetEndpoint {
+                        component: ComponentId(0),
+                        pin: PinId(0),
+                        source_span: Span::new(0, 0),
+                    },
+                    NetEndpoint {
+                        component: ComponentId(1),
+                        pin: PinId(0),
+                        source_span: Span::new(0, 0),
+                    },
+                ],
+                netclass: None,
+                voltage: None,
+            }],
+            diff_pairs: Vec::new(),
+            notes: Vec::new(),
+            keepouts: Vec::new(),
+            netclasses: vec![],
+            source_span: Span::new(0, 0),
+        };
+        let l = layout(
+            vec![
+                placement(ComponentId(0), 10.0, 10.0, Rotation::Zero),
+                placement(ComponentId(1), 20.0, 10.0, Rotation::Zero),
+            ],
+            Vec::new(),
+            Vec::new(),
+            vec![net_label(NetId(0), ComponentId(0), "VCC")],
+        );
+        let single = check_sheets(
+            &b,
+            &[SheetLayout {
+                name: None,
+                layout: l.clone(),
+            }],
+        );
+        assert_eq!(single.len(), check(&l, &b).len(), "single sheet delegates");
+
+        let multi = check_sheets(
+            &b,
+            &[
+                SheetLayout {
+                    name: None,
+                    layout: l.clone(),
+                },
+                SheetLayout {
+                    name: Some("Power".to_string()),
+                    layout: l,
+                },
+            ],
+        );
+        assert!(multi.iter().any(|d| d.title.starts_with("[root] ")));
+        assert!(multi.iter().any(|d| d.title.starts_with("[Power] ")));
     }
 }

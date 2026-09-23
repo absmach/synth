@@ -21,12 +21,13 @@
 //! import      = "import" string ;
 //! board       = "board" string "{" stmt* "}" ;
 //! stmt        = layers | manufacturer | component | connection | net_decl
-//!             | power_decl | diff_pair | keepout ;
-//! component   = "component" ident ":" ident string [ "value" string ] ;   // concrete only in P1
+//!             | power_decl | notes | diff_pair | keepout ;
+//! component   = "component" ident ":" ident string [ "value" string ] ["dnp"] ;
 //! connection  = "connect" endpoint "->" endpoint ("," endpoint)*
 //!               ["as" string] ["class" string] ;
 //! net_decl    = "net" string ["class" string] "{" [endpoint ("," endpoint)*] ["class" string]* "}" ;
 //! power_decl  = "power" string value ["class" string] ["{" [endpoint ("," endpoint)*] ["class" string]* "}"] ;
+//! notes       = "notes" string "{" [string*] "}" ;
 //! diff_pair   = "diff_pair" net_ref net_ref "{" impedance? "}" ;
 //! net_ref     = ident | string ;
 //! keepout     = "keepout" ident "{" radius? "}" ;
