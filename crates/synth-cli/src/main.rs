@@ -147,6 +147,10 @@ enum Command {
         /// The Synth partial route is preserved as `<name>.synth.kicad_pcb`.
         #[arg(long)]
         autoroute: bool,
+        /// External post-router to use when `--autoroute` is enabled.
+        /// FreeRouting remains the default for compatibility.
+        #[arg(long, value_enum, default_value_t = ExternalRouter::FreeRouting)]
+        router: ExternalRouter,
         /// FreeRouting JAR. Defaults to tools/freerouting/freerouting-2.4.1.jar.
         #[arg(long, value_name = "JAR")]
         freerouting_jar: Option<PathBuf>,
@@ -154,6 +158,29 @@ enum Command {
         /// tools/jre25/bin/java when present, otherwise `java`.
         #[arg(long, value_name = "JAVA")]
         freerouting_java: Option<PathBuf>,
+        /// KiCadRoutingTools checkout, required with `--router kicad-routing-tools`.
+        #[arg(long, value_name = "DIR")]
+        kicad_routing_tools_repo: Option<PathBuf>,
+        /// Python interpreter containing KiCadRoutingTools dependencies.
+        #[arg(long, value_name = "PYTHON")]
+        kicad_routing_tools_python: Option<PathBuf>,
+        /// KiCadRoutingTools rule-relaxation policy. `board` preserves the
+        /// board's declared minimums; `fab` may use the selected fab floor.
+        #[arg(long, value_enum, default_value_t = KrtEscalation::Board)]
+        krt_escalation: KrtEscalation,
+        /// KiCadRoutingTools fabrication capability floor.
+        #[arg(long, value_enum, default_value_t = KrtFabTier::Auto)]
+        krt_fab_tier: KrtFabTier,
+        /// Optional KRT fab-floor override file (`key = value` lines).
+        #[arg(long, value_name = "FILE")]
+        krt_fab_overrides: Option<PathBuf>,
+        /// Minimum same-net pad clearance for KRT vias, in millimetres.
+        /// The default keeps vias out of SMD pads and paste openings.
+        #[arg(long, default_value_t = 0.1, value_name = "MM")]
+        krt_same_net_pad_clearance: f64,
+        /// Permit via-in-pad in the KRT production gate.
+        #[arg(long)]
+        krt_allow_via_in_pad: bool,
     },
 
     /// Apply the highest-confidence `suggested_fix` from every
@@ -532,6 +559,46 @@ enum Format {
     Json,
 }
 
+#[derive(Debug, Copy, Clone, ValueEnum, PartialEq, Eq)]
+enum ExternalRouter {
+    FreeRouting,
+    KicadRoutingTools,
+}
+
+#[derive(Debug, Copy, Clone, ValueEnum)]
+enum KrtEscalation {
+    Off,
+    Board,
+    Fab,
+}
+
+impl KrtEscalation {
+    fn as_str(self) -> &'static str {
+        match self {
+            Self::Off => "off",
+            Self::Board => "board",
+            Self::Fab => "fab",
+        }
+    }
+}
+
+#[derive(Debug, Copy, Clone, ValueEnum)]
+enum KrtFabTier {
+    Standard,
+    Advanced,
+    Auto,
+}
+
+impl KrtFabTier {
+    fn as_str(self) -> &'static str {
+        match self {
+            Self::Standard => "standard",
+            Self::Advanced => "advanced",
+            Self::Auto => "auto",
+        }
+    }
+}
+
 #[derive(Debug, Copy, Clone, ValueEnum)]
 enum RenderQuality {
     Basic,
@@ -615,8 +682,16 @@ fn main() -> ExitCode {
             user_registry,
             strict_registry,
             autoroute,
+            router,
             freerouting_jar,
             freerouting_java,
+            kicad_routing_tools_repo,
+            kicad_routing_tools_python,
+            krt_escalation,
+            krt_fab_tier,
+            krt_fab_overrides,
+            krt_same_net_pad_clearance,
+            krt_allow_via_in_pad,
         } => export_kicad(
             &input,
             registry.as_deref(),
@@ -632,8 +707,16 @@ fn main() -> ExitCode {
             force,
             allow_unverified_parts,
             autoroute,
+            router,
             freerouting_jar.as_deref(),
             freerouting_java.as_deref(),
+            kicad_routing_tools_repo.as_deref(),
+            kicad_routing_tools_python.as_deref(),
+            krt_escalation,
+            krt_fab_tier,
+            krt_fab_overrides.as_deref(),
+            krt_same_net_pad_clearance,
+            krt_allow_via_in_pad,
         ),
         Command::Fix {
             input,
@@ -2328,8 +2411,16 @@ fn export_kicad(
     force: bool,
     allow_unverified_parts: bool,
     autoroute: bool,
+    router: ExternalRouter,
     freerouting_jar: Option<&Path>,
     freerouting_java: Option<&Path>,
+    kicad_routing_tools_repo: Option<&Path>,
+    kicad_routing_tools_python: Option<&Path>,
+    krt_escalation: KrtEscalation,
+    krt_fab_tier: KrtFabTier,
+    krt_fab_overrides: Option<&Path>,
+    krt_same_net_pad_clearance: f64,
+    krt_allow_via_in_pad: bool,
 ) -> anyhow::Result<u8> {
     let (source, file) = read_source(input)?;
     let parse = synth_parser::parse(&source, file.clone());
@@ -2406,8 +2497,25 @@ fn export_kicad(
     let result = synth_kicad::export_with_sidecar(board, out_dir, sidecar)
         .map_err(|e| anyhow::anyhow!("kicad export failed: {e}"))?;
 
-    if autoroute {
-        run_freerouting_postpass(&result.pcb_path, freerouting_jar, freerouting_java)?;
+    let mut external_router_clean = true;
+    if autoroute || router != ExternalRouter::FreeRouting {
+        match router {
+            ExternalRouter::FreeRouting => {
+                run_freerouting_postpass(&result.pcb_path, freerouting_jar, freerouting_java)?;
+            }
+            ExternalRouter::KicadRoutingTools => {
+                external_router_clean = run_kicad_routing_tools_postpass(
+                    &result.pcb_path,
+                    kicad_routing_tools_repo,
+                    kicad_routing_tools_python,
+                    krt_escalation,
+                    krt_fab_tier,
+                    krt_fab_overrides,
+                    krt_same_net_pad_clearance,
+                    krt_allow_via_in_pad,
+                )?
+            }
+        }
     }
 
     eprintln!("wrote {}", result.project_path.display());
@@ -2496,7 +2604,8 @@ fn export_kicad(
         || lowered.has_errors()
         || (has_erc_errors && !force)
         || (has_kicad_drc_errors && !force)
-        || has_kicad_erc_errs;
+        || has_kicad_erc_errs
+        || !external_router_clean;
     Ok(if has_errors {
         EXIT_VALIDATION_ERRORS
     } else {
@@ -2580,6 +2689,118 @@ fn run_freerouting_postpass(
     })?;
     eprintln!("FreeRouting result installed at {}", pcb_path.display());
     Ok(())
+}
+
+fn run_kicad_routing_tools_postpass(
+    pcb_path: &Path,
+    repo_arg: Option<&Path>,
+    python_arg: Option<&Path>,
+    escalation: KrtEscalation,
+    fab_tier: KrtFabTier,
+    fab_overrides: Option<&Path>,
+    same_net_pad_clearance: f64,
+    allow_via_in_pad: bool,
+) -> anyhow::Result<bool> {
+    let repo = repo_arg
+        .map(Path::to_path_buf)
+        .or_else(|| std::env::var_os("KICAD_ROUTING_TOOLS_REPO").map(PathBuf::from))
+        .ok_or_else(|| {
+            anyhow::anyhow!(
+                "KiCadRoutingTools selected but no checkout was provided; pass \
+                 --kicad-routing-tools-repo or set KICAD_ROUTING_TOOLS_REPO"
+            )
+        })?;
+    if !repo.join("py_router/route.py").is_file() {
+        anyhow::bail!(
+            "KiCadRoutingTools route.py not found under {}",
+            repo.display()
+        );
+    }
+    let python = python_arg
+        .map(Path::to_path_buf)
+        .unwrap_or_else(|| PathBuf::from("python3"));
+    let repo_root = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .parent()
+        .and_then(Path::parent)
+        .ok_or_else(|| anyhow::anyhow!("cannot locate Synth repository root"))?;
+    let script = repo_root.join("tools/kicad_routing_tools_route.py");
+    if !script.is_file() {
+        anyhow::bail!("KiCadRoutingTools helper not found: {}", script.display());
+    }
+    let partial = pcb_path.with_file_name(format!(
+        "{}.synth.kicad_pcb",
+        pcb_path
+            .file_stem()
+            .and_then(|name| name.to_str())
+            .unwrap_or("board")
+    ));
+    std::fs::copy(pcb_path, &partial).map_err(|error| {
+        anyhow::anyhow!(
+            "could not preserve Synth partial board at {}: {error}",
+            partial.display()
+        )
+    })?;
+    let routed = pcb_path.with_file_name(format!(
+        "{}.kicadroutingtools.kicad_pcb",
+        pcb_path
+            .file_stem()
+            .and_then(|name| name.to_str())
+            .unwrap_or("board")
+    ));
+    eprintln!(
+        "running KiCadRoutingTools post-pass on {}",
+        pcb_path.display()
+    );
+    let status = ProcessCommand::new(&python)
+        .arg(&script)
+        .arg(&partial)
+        .arg(&routed)
+        .arg("--repo")
+        .arg(&repo)
+        .arg("--python")
+        .arg(&python)
+        .arg("--escalation")
+        .arg(escalation.as_str())
+        .arg("--fab-tier")
+        .arg(fab_tier.as_str())
+        .args(
+            fab_overrides
+                .map(|path| {
+                    vec![
+                        "--fab-overrides".to_string(),
+                        path.to_string_lossy().into_owned(),
+                    ]
+                })
+                .unwrap_or_default(),
+        )
+        .arg("--same-net-pad-clearance")
+        .arg(same_net_pad_clearance.to_string())
+        .arg("--strict-sizes")
+        .args(allow_via_in_pad.then_some("--allow-via-in-pad"))
+        .status()
+        .map_err(|error| anyhow::anyhow!("could not start KiCadRoutingTools helper: {error}"))?;
+    if !routed.is_file() {
+        anyhow::bail!(
+            "KiCadRoutingTools produced no output board (status {status}); Synth partial board is at {}",
+            partial.display()
+        );
+    }
+    std::fs::rename(&routed, pcb_path).map_err(|error| {
+        anyhow::anyhow!(
+            "could not install KiCadRoutingTools board {}: {error}",
+            pcb_path.display()
+        )
+    })?;
+    eprintln!(
+        "KiCadRoutingTools result installed at {}",
+        pcb_path.display()
+    );
+    if !status.success() {
+        eprintln!(
+            "warning: KiCadRoutingTools did not satisfy the selected policy; installed board is review-only"
+        );
+    }
+    Ok(status.success())
 }
 
 /// Run the full validate pipeline and return every diagnostic.

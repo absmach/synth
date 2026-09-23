@@ -71,6 +71,71 @@ kicad-cli pcb drc --refill-zones --output output/board/drc.rpt \
   output/board/board.kicad_pcb
 ```
 
+#### KiCadRoutingTools comparison router
+
+[KiCadRoutingTools](https://github.com/drandyhaas/KiCadRoutingTools) is an
+optional external Rust-accelerated A* router with rip-up/reroute, multi-layer
+routing, plane handling, and connectivity checkers. Synth does not vendor it;
+install it in a separate checkout and Python environment, then use the adapter
+in `tools/kicad_routing_tools_route.py`:
+
+```text
+git clone https://github.com/drandyhaas/KiCadRoutingTools.git /tmp/KiCadRoutingTools
+python3 -m venv /tmp/krt-venv
+/tmp/krt-venv/bin/pip install -r /tmp/KiCadRoutingTools/requirements.txt
+/tmp/krt-venv/bin/python /tmp/KiCadRoutingTools/build_router.py
+
+python3 tools/kicad_routing_tools_route.py \
+  output/board/board.synth.kicad_pcb \
+  output/board/board.kicad_routingtools.kicad_pcb \
+  --repo /tmp/KiCadRoutingTools \
+  --python /tmp/krt-venv/bin/python
+```
+
+The same path is available directly from Synth. `--autoroute` keeps
+FreeRouting as the default; selecting KiCadRoutingTools requires its checkout
+and dependency-aware Python interpreter:
+
+```text
+synth export-kicad board.synth --out output/board --autoroute \
+  --router kicad-routing-tools \
+  --kicad-routing-tools-repo /tmp/KiCadRoutingTools \
+  --kicad-routing-tools-python /tmp/krt-venv/bin/python
+```
+
+Synth runs KRT in conservative production-review mode by default: it uses
+`--escalation board --strict-sizes`, keeps vias 0.1 mm away from same-net SMD
+pads and paste openings, and runs KRT's independent connectivity checker. The
+export still installs the routed board when routing is incomplete, but returns
+validation status 1 and labels the result review-only. The report is written
+next to the board as `<name>.krt-stats.json`.
+
+Use `--krt-escalation fab` only when the selected fabrication process has been
+explicitly approved to relax the board's declared rules. Use
+`--krt-allow-via-in-pad` only when filled-and-capped via-in-pad is part of the
+fabrication specification. The production gate rejects open connection groups,
+delivered dimensions below the board floor, and unapproved via-in-pad sites.
+`--krt-fab-tier standard|advanced|auto` and `--krt-fab-overrides FILE` expose
+KRT's fabrication capability floor when a manufacturer-specific override is
+needed.
+
+Compare both outputs using the same independent KiCad check:
+
+```text
+kicad-cli pcb drc --output output/board/freerouting-drc.rpt \
+  output/board/board.freerouting.kicad_pcb
+kicad-cli pcb drc --output output/board/krt-drc.rpt \
+  output/board/board.kicad_routingtools.kicad_pcb
+/tmp/krt-venv/bin/python /tmp/KiCadRoutingTools/py_router/check_connected.py \
+  output/board/board.kicad_routingtools.kicad_pcb
+```
+
+Compare signal connectivity, KiCad DRC violations, zone-island reports,
+runtime, via count, minimum clearance, and via-in-pad usage. KRT may adapt to
+fabrication floors and may write project DRC settings; review those changes
+explicitly rather than treating a zero-unconnected result as automatic
+production approval.
+
 ### Professional review checklist (per sheet)
 
 - Every pin either connected or explicitly no-connect (Synth's pin
