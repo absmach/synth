@@ -2870,6 +2870,15 @@ pub(crate) fn pick_net_label_with_source(
     net: &synth_ir::Net,
 ) -> Option<(String, ComponentId)> {
     use synth_registry::PinCapability;
+    // NOTE: signal-net labels stay pin-derived (capability tokens
+    // like `SDA`, else the active-IC pin name) even when the net
+    // carries a user-declared name: the declared name already shows
+    // in the netlist, the PCB, and (for rails) the power-flag
+    // labels, while schematic local labels keep the hand-drawn
+    // semantic tokens this function exists to produce. Power rails
+    // are the exception — see `declared_rail_name`, which prefers
+    // the declared name so `power "+3V3"` renders `+3V3`, never a
+    // guessed `VCC`.
     let active_kinds: &[&str] = &[
         "mcu",
         "ic",
@@ -3374,6 +3383,8 @@ mod barycenter_tests {
                     source_span: Span::new(0, 0),
                 })
                 .collect(),
+            netclass: None,
+            voltage: None,
         }
     }
 
@@ -3573,6 +3584,8 @@ mod semantic_weights_tests {
                     source_span: Span::new(0, 0),
                 })
                 .collect(),
+            netclass: None,
+            voltage: None,
         }
     }
 
@@ -3892,6 +3905,8 @@ mod soft_pin_swap_tests {
                     source_span: Span::new(0, 0),
                 })
                 .collect(),
+            netclass: None,
+            voltage: None,
         }
     }
 
@@ -4123,6 +4138,8 @@ mod patterns_tests {
                     source_span: Span::new(0, 0),
                 })
                 .collect(),
+            netclass: None,
+            voltage: None,
         }
     }
 
@@ -4670,6 +4687,8 @@ mod naming_tests {
                     source_span: Span::new(0, 0),
                 })
                 .collect(),
+            netclass: None,
+            voltage: None,
         }
     }
 

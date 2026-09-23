@@ -1014,6 +1014,8 @@ mod tests {
                     source_span: synth_diagnostics::Span::new(0, 0),
                 })
                 .collect(),
+            netclass: None,
+            voltage: None,
         }
     }
 

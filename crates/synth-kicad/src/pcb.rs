@@ -512,12 +512,29 @@ fn build_setup() -> Sexp {
 
 /// Top-level `(net_class ...)` definitions conforming to KiCad 10 grammar.
 ///
+/// Declared classes (`netclass "PWR" { … }` in source) are emitted
+/// verbatim — one `net_class` per declaration, carrying the nets
+/// joined to it via `class "PWR"` — so the width/clearance contract
+/// the designer wrote is what KiCad DRC enforces. Nets without a
+/// join fall back to the heuristic `Default` / `Power` / `RF_50`
+/// buckets; a heuristic bucket whose name matches a declared class
+/// merges into it instead of emitting a duplicate.
+///
 /// Power nets are identified by topological inference via [`synth_ir::infer_power_domains`]
 /// — this correctly handles nets whose names are opaque (`net_0`, `net_1`, …) but whose
 /// connected pins carry `PowerOutput` / `GroundReference` electrical types.
 ///
 /// RF nets fall back to name-based detection (RF nets carry semantic names when declared
 /// via `diff_pair` or registry annotation, e.g. `ant`, `rf`, `bal_`).
+/// One declared `netclass` with its KiCad rules and joined nets,
+/// in source declaration order.
+struct DeclaredGroup {
+    name: String,
+    trace_width_mm: f64,
+    clearance_mm: f64,
+    nets: Vec<String>,
+}
+
 fn build_netclasses(net_table: &[(u32, String)], board: &Board) -> Vec<Sexp> {
     // Topological power-domain map: classifies every net by connected pin types,
     // not by string name. This is the authoritative source for Power/GND class assignment.
@@ -562,45 +579,107 @@ fn build_netclasses(net_table: &[(u32, String)], board: &Board) -> Vec<Sexp> {
     let mut power_nets = Vec::new();
     let mut rf_nets = Vec::new();
 
+    // Declared classes in source order. A join naming an undeclared
+    // class cannot arrive here through lowering (it is
+    // `E-SYNTH-NAME-006` and lowers to no join), but a hand-built
+    // board may carry one — those nets fall back to the heuristic
+    // buckets below.
+    let mut declared: Vec<DeclaredGroup> = board
+        .netclasses
+        .iter()
+        .map(|nc| DeclaredGroup {
+            name: nc.name.clone(),
+            trace_width_mm: nc.trace_width.map_or(0.127, synth_ir::Length::to_mm),
+            clearance_mm: nc.clearance.map_or(0.127, synth_ir::Length::to_mm),
+            nets: Vec::new(),
+        })
+        .collect();
+
     for (pcb_net_id, name) in net_table {
         if name.is_empty() {
             continue;
         }
         // pcb_net_id is 1-indexed; IR NetId is 0-indexed.
         let ir_net_idx = pcb_net_id.saturating_sub(1);
+        // Explicit join first: the designer stated the class.
+        if let Some(class) = board
+            .net(synth_ir::NetId(ir_net_idx))
+            .and_then(|n| n.netclass.as_deref())
+        {
+            if let Some(group) = declared.iter_mut().find(|g| g.name == class) {
+                group.nets.push(name.clone());
+                continue;
+            }
+            // Undeclared join on a hand-built board: heuristic fallback.
+        }
         // Primary: topological inference via power domain map (works with opaque net names).
         // Fallback: name-based heuristic (works for boards with semantic names but missing pins).
         let is_power_net = domain_map
             .get(synth_ir::NetId(ir_net_idx))
             .map_or_else(|| is_power_name(name), |d| d.is_rail() || d.is_ground());
 
+        // A heuristic bucket whose name matches a declared class
+        // merges into it so KiCad never sees two classes with one name.
+        let mut push_heuristic = |bucket: &str, net: &String| -> bool {
+            if let Some(group) = declared.iter_mut().find(|g| g.name == bucket) {
+                group.nets.push(net.clone());
+                false
+            } else {
+                true
+            }
+        };
         if is_rf(name) {
-            rf_nets.push(name.clone());
+            if push_heuristic("RF_50", name) {
+                rf_nets.push(name.clone());
+            }
         } else if is_power_net {
-            power_nets.push(name.clone());
-        } else {
+            if push_heuristic("Power", name) {
+                power_nets.push(name.clone());
+            }
+        } else if push_heuristic("Default", name) {
             default_nets.push(name.clone());
         }
     }
 
     let mut classes = Vec::new();
 
-    // Default Net Class (signals)
-    let mut default_args = vec![
-        Sexp::str("Default"),
-        Sexp::str("Default net class"),
-        Sexp::list("clearance", vec![num(0.127)]),
-        Sexp::list("trace_width", vec![num(0.127)]),
-        Sexp::list("via_dia", vec![num(0.60)]),
-        Sexp::list("via_drill", vec![num(0.30)]),
-    ];
-    for name in default_nets {
-        default_args.push(Sexp::list("add_net", vec![Sexp::str(&name)]));
+    // Default Net Class (signals). Skipped when the designer declared
+    // their own "Default" — its heuristic members already joined it.
+    if !declared.iter().any(|g| g.name == "Default") {
+        let mut default_args = vec![
+            Sexp::str("Default"),
+            Sexp::str("Default net class"),
+            Sexp::list("clearance", vec![num(0.127)]),
+            Sexp::list("trace_width", vec![num(0.127)]),
+            Sexp::list("via_dia", vec![num(0.60)]),
+            Sexp::list("via_drill", vec![num(0.30)]),
+        ];
+        for name in default_nets {
+            default_args.push(Sexp::list("add_net", vec![Sexp::str(&name)]));
+        }
+        classes.push(Sexp::list("net_class", default_args));
     }
-    classes.push(Sexp::list("net_class", default_args));
 
-    // Power Net Class (PDN)
-    if !power_nets.is_empty() {
+    // Declared classes, in source order (even empty ones — the
+    // declaration itself is design intent KiCad should show).
+    for group in &declared {
+        let mut args = vec![
+            Sexp::str(&group.name),
+            Sexp::str(format!("Synth netclass {}", group.name)),
+            Sexp::list("clearance", vec![num(group.clearance_mm)]),
+            Sexp::list("trace_width", vec![num(group.trace_width_mm)]),
+            Sexp::list("via_dia", vec![num(0.60)]),
+            Sexp::list("via_drill", vec![num(0.30)]),
+        ];
+        for name in &group.nets {
+            args.push(Sexp::list("add_net", vec![Sexp::str(name)]));
+        }
+        classes.push(Sexp::list("net_class", args));
+    }
+
+    // Power Net Class (PDN). Skipped when "Power" was declared —
+    // same merge as Default above.
+    if !power_nets.is_empty() && !declared.iter().any(|g| g.name == "Power") {
         let power_width = if is_rp2350_board { 0.127 } else { 0.50 };
         let power_clearance = if is_rp2350_board { 0.127 } else { 0.2 };
         let mut power_args = vec![
@@ -617,8 +696,8 @@ fn build_netclasses(net_table: &[(u32, String)], board: &Board) -> Vec<Sexp> {
         classes.push(Sexp::list("net_class", power_args));
     }
 
-    // RF Net Class (Controlled 50 ohm impedance)
-    if !rf_nets.is_empty() {
+    // RF Net Class (Controlled 50 ohm impedance). Same merge rule.
+    if !rf_nets.is_empty() && !declared.iter().any(|g| g.name == "RF_50") {
         let mut rf_args = vec![
             Sexp::str("RF_50"),
             Sexp::str("Controlled 50 ohm RF"),
@@ -1649,21 +1728,29 @@ mod tests {
                     id: synth_ir::NetId(0),
                     name: "VCC".to_string(),
                     endpoints: vec![],
+                    netclass: None,
+                    voltage: None,
                 },
                 synth_ir::Net {
                     id: synth_ir::NetId(1),
                     name: "GND".to_string(),
                     endpoints: vec![],
+                    netclass: None,
+                    voltage: None,
                 },
                 synth_ir::Net {
                     id: synth_ir::NetId(2),
                     name: "SIG1".to_string(),
                     endpoints: vec![],
+                    netclass: None,
+                    voltage: None,
                 },
                 synth_ir::Net {
                     id: synth_ir::NetId(3),
                     name: "MAIN_ANT".to_string(),
                     endpoints: vec![],
+                    netclass: None,
+                    voltage: None,
                 },
             ],
             diff_pairs: vec![],
@@ -1693,6 +1780,65 @@ mod tests {
         assert!(nc_str.contains("(add_net \"VCC\")"));
         assert!(nc_str.contains("(add_net \"GND\")"));
         assert!(nc_str.contains("(add_net \"MAIN_ANT\")"));
+    }
+
+    #[test]
+    fn declared_netclass_emitted_with_joined_nets() {
+        use synth_ir::Length;
+        let board = Board {
+            name: "test_declared_netclass".to_string(),
+            layers: 2,
+            manufacturer: None,
+            revision: None,
+            company: None,
+            components: vec![],
+            nets: vec![
+                synth_ir::Net {
+                    id: synth_ir::NetId(0),
+                    name: "+3V3".to_string(),
+                    endpoints: vec![],
+                    netclass: Some("PWR".to_string()),
+                    voltage: None,
+                },
+                synth_ir::Net {
+                    id: synth_ir::NetId(1),
+                    name: "SIG".to_string(),
+                    endpoints: vec![],
+                    netclass: None,
+                    voltage: None,
+                },
+            ],
+            diff_pairs: vec![],
+            keepouts: vec![],
+            netclasses: vec![synth_ir::NetClass {
+                name: "PWR".to_string(),
+                trace_width: Some(Length::from_mm(0.5)),
+                clearance: Some(Length::from_mm(0.2)),
+                source_span: Span::new(0, 0),
+            }],
+            source_span: Span::new(0, 0),
+        };
+        let net_table = vec![(1_u32, "+3V3".to_string()), (2_u32, "SIG".to_string())];
+        let ncs = build_netclasses(&net_table, &board);
+        let nc_str = ncs
+            .iter()
+            .map(super::super::sexp::Sexp::to_string_pretty)
+            .collect::<Vec<_>>()
+            .join("\n");
+        // Declared class renders under its own name with its own
+        // rules and the joined net; nothing duplicates into the
+        // heuristic Power bucket.
+        assert!(nc_str.contains("\"PWR\""));
+        assert!(nc_str.contains("\"Synth netclass PWR\""));
+        assert!(nc_str.contains("(trace_width 0.5)"));
+        assert!(nc_str.contains("(clearance 0.2)"));
+        assert!(nc_str.contains("(add_net \"+3V3\")"));
+        assert!(
+            !nc_str.contains("\"Power\""),
+            "heuristic Power must not duplicate PWR"
+        );
+        // The unjoined signal net still lands in Default.
+        assert!(nc_str.contains("(add_net \"SIG\")"));
     }
 
     #[test]

@@ -49,6 +49,8 @@ pub enum StatementAst {
     Company(CompanyStmt),
     Component(ComponentDeclAst),
     Connection(ConnectionAst),
+    Net(NetDeclAst),
+    Power(PowerDeclAst),
     DiffPair(DiffPairStmt),
     Netclass(NetclassStmt),
     Keepout(KeepoutStmt),
@@ -65,6 +67,8 @@ impl StatementAst {
             StatementAst::Company(s) => s.span,
             StatementAst::Component(s) => s.span,
             StatementAst::Connection(s) => s.span,
+            StatementAst::Net(s) => s.span,
+            StatementAst::Power(s) => s.span,
             StatementAst::DiffPair(s) => s.span,
             StatementAst::Netclass(s) => s.span,
             StatementAst::Keepout(s) => s.span,
@@ -179,6 +183,18 @@ pub enum PlacementHintAttr {
 pub struct ConnectionAst {
     pub from: EndpointAst,
     pub to: EndpointAst,
+    /// Extra `->`-targets for one-to-many fanout
+    /// (`connect U1.vout -> C3.p1, U2.vdd`), empty for a plain pair.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub additional: Vec<EndpointAst>,
+    /// Explicit net name from `as "NAME"`. All endpoints of this
+    /// statement (and every other statement naming the same string)
+    /// merge into one named net.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub net_name: Option<String>,
+    /// Netclass join from `class "NAME"` on the connect line.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub netclass: Option<String>,
     pub span: Span,
 }
 
@@ -186,6 +202,43 @@ pub struct ConnectionAst {
 pub struct EndpointAst {
     pub component: String,
     pub pin: String,
+    pub span: Span,
+}
+
+/// A named net: `net "+3V3" { U1.vout, C3.p1, U2.vdd }`.
+///
+/// All listed endpoints merge into one net carrying `name`. The same
+/// name may appear on several `net` blocks and `connect … as "NAME"`
+/// lines — they all merge. An optional `class "PWR"` (either after
+/// the name or as a line inside the body) joins the net to a
+/// declared netclass.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct NetDeclAst {
+    pub name: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub netclass: Option<String>,
+    #[serde(default)]
+    pub endpoints: Vec<EndpointAst>,
+    pub span: Span,
+}
+
+/// A power rail with a declared voltage: `power "+3V3" 3.3v`.
+///
+/// A power declaration is a named net with a nominal voltage. It may
+/// carry an optional endpoint body (`power "+3V3" 3.3v { U1.vout }`)
+/// and an optional `class "PWR"` join, exactly like [`NetDeclAst`].
+/// A bare declaration (no endpoints) still materializes the named
+/// net so later `connect … as "+3V3"` lines join it and power-domain
+/// inference sees the declared voltage instead of guessing from pin
+/// names.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct PowerDeclAst {
+    pub name: String,
+    pub voltage: ValueWithUnit,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub netclass: Option<String>,
+    #[serde(default)]
+    pub endpoints: Vec<EndpointAst>,
     pub span: Span,
 }
 
@@ -206,12 +259,9 @@ pub enum DiffPairAttr {
 
 /// A named routing-constraint class: `netclass "PWR" { trace_width 0.5mm clearance 0.2mm }`.
 ///
-/// V1 records the class and its rules; net-to-class assignment syntax
-/// (`connect … via class` / `net … in class`) and KiCad `net_class`
-/// export land in the follow-up. Declaring the classes first keeps
-/// the grammar extension reviewable and lets validation reference
-/// them (e.g. unknown-class diagnostics) before any geometry depends
-/// on them.
+/// Nets join the class with `class "PWR"` on a `net`, `power`, or
+/// `connect` statement, and the PCB exporter emits one KiCad
+/// `net_class` per declared class carrying its member nets.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct NetclassStmt {
     pub name: String,

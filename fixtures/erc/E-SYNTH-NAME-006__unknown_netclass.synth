@@ -1,0 +1,10 @@
+// The net joins netclass "NOPE", which is never declared with a
+// `netclass` statement.
+board "unknown_netclass" {
+  layers 2
+
+  component R1: resistor "r_generic_0603"
+  component R2: resistor "r_generic_0603"
+
+  net "SIG" class "NOPE" { R1.p1, R2.p1 }
+}

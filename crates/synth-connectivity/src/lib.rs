@@ -126,6 +126,8 @@ mod tests {
                     source_span: Span::new(0, 0),
                 },
             ],
+            netclass: None,
+            voltage: None,
         };
         let net2 = Net {
             id: NetId(2),
@@ -142,6 +144,8 @@ mod tests {
                     source_span: Span::new(0, 0),
                 },
             ],
+            netclass: None,
+            voltage: None,
         };
 
         Board {

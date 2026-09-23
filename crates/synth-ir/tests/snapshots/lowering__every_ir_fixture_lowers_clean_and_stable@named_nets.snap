@@ -1,0 +1,436 @@
+---
+source: crates/synth-ir/tests/lowering.rs
+assertion_line: 71
+expression: board
+---
+{
+  "name": "named_nets",
+  "layers": 2,
+  "manufacturer": null,
+  "components": [
+    {
+      "id": 0,
+      "refdes": "U1",
+      "kind": "regulator",
+      "part": {
+        "id": "ams1117_3v3",
+        "kind": "regulator",
+        "description": "AMS1117-3.3 fixed 3.3V LDO regulator, SOT-223 — common JLC stock",
+        "version": 0,
+        "lifecycle": "active",
+        "signed_by": [],
+        "substitutes": [],
+        "mpn": "AMS1117-3.3",
+        "lcsc_pn": "C6186",
+        "pins": [
+          {
+            "name": "gnd",
+            "number": "1",
+            "electrical_type": "power_input",
+            "capabilities": [],
+            "required": true,
+            "unit": null,
+            "voltage_max_v": null
+          },
+          {
+            "name": "vout",
+            "number": "2",
+            "electrical_type": "power_output",
+            "capabilities": [],
+            "required": true,
+            "unit": null,
+            "voltage_max_v": null,
+            "voltage_nominal_v": 3.3
+          },
+          {
+            "name": "vin",
+            "number": "3",
+            "electrical_type": "power_input",
+            "capabilities": [],
+            "required": true,
+            "unit": null,
+            "voltage_max_v": null
+          }
+        ],
+        "required_decoupling": [
+          {
+            "net": "vin",
+            "value": "10uf",
+            "count": 2,
+            "max_distance_mm": null
+          },
+          {
+            "net": "vout",
+            "value": "10uf",
+            "count": 2,
+            "max_distance_mm": null
+          }
+        ],
+        "kicad_symbol": "Regulator_Linear:AMS1117-3.3",
+        "kicad_footprint": "Package_TO_SOT_SMD:SOT-223-3_TabPin2",
+        "footprint_dimensions": {
+          "width_mm": 8.3,
+          "height_mm": 6.1,
+          "courtyard_margin_mm": 0.25,
+          "mating_face": null
+        },
+        "operating_conditions": {
+          "min_voltage_v": 3.5,
+          "max_voltage_v": 15.0,
+          "max_current_ma": 800.0
+        }
+      },
+      "source_span": {
+        "byte_start": 283,
+        "byte_end": 320
+      }
+    },
+    {
+      "id": 1,
+      "refdes": "C1",
+      "kind": "capacitor",
+      "part": {
+        "id": "c_generic_0805",
+        "kind": "capacitor",
+        "description": "Generic 0805 MLCC, X7R/X5R, any value",
+        "version": 0,
+        "lifecycle": "active",
+        "signed_by": [],
+        "substitutes": [],
+        "mpn": null,
+        "lcsc_pn": null,
+        "pins": [
+          {
+            "name": "p1",
+            "number": "1",
+            "electrical_type": "passive",
+            "capabilities": [],
+            "required": false,
+            "unit": null,
+            "voltage_max_v": null
+          },
+          {
+            "name": "p2",
+            "number": "2",
+            "electrical_type": "passive",
+            "capabilities": [],
+            "required": false,
+            "unit": null,
+            "voltage_max_v": null
+          }
+        ],
+        "required_decoupling": [],
+        "kicad_symbol": "Device:C",
+        "kicad_footprint": "Capacitor_SMD:C_0805_2012Metric",
+        "footprint_dimensions": {
+          "width_mm": 3.4,
+          "height_mm": 1.96,
+          "courtyard_margin_mm": 0.25,
+          "mating_face": null
+        },
+        "operating_conditions": {
+          "min_voltage_v": null,
+          "max_voltage_v": 50.0,
+          "max_current_ma": null
+        }
+      },
+      "value": "10u",
+      "source_span": {
+        "byte_start": 323,
+        "byte_end": 375
+      }
+    },
+    {
+      "id": 2,
+      "refdes": "C2",
+      "kind": "capacitor",
+      "part": {
+        "id": "c_generic_0805",
+        "kind": "capacitor",
+        "description": "Generic 0805 MLCC, X7R/X5R, any value",
+        "version": 0,
+        "lifecycle": "active",
+        "signed_by": [],
+        "substitutes": [],
+        "mpn": null,
+        "lcsc_pn": null,
+        "pins": [
+          {
+            "name": "p1",
+            "number": "1",
+            "electrical_type": "passive",
+            "capabilities": [],
+            "required": false,
+            "unit": null,
+            "voltage_max_v": null
+          },
+          {
+            "name": "p2",
+            "number": "2",
+            "electrical_type": "passive",
+            "capabilities": [],
+            "required": false,
+            "unit": null,
+            "voltage_max_v": null
+          }
+        ],
+        "required_decoupling": [],
+        "kicad_symbol": "Device:C",
+        "kicad_footprint": "Capacitor_SMD:C_0805_2012Metric",
+        "footprint_dimensions": {
+          "width_mm": 3.4,
+          "height_mm": 1.96,
+          "courtyard_margin_mm": 0.25,
+          "mating_face": null
+        },
+        "operating_conditions": {
+          "min_voltage_v": null,
+          "max_voltage_v": 50.0,
+          "max_current_ma": null
+        }
+      },
+      "value": "10u",
+      "source_span": {
+        "byte_start": 378,
+        "byte_end": 430
+      }
+    },
+    {
+      "id": 3,
+      "refdes": "C3",
+      "kind": "capacitor",
+      "part": {
+        "id": "c_generic_0805",
+        "kind": "capacitor",
+        "description": "Generic 0805 MLCC, X7R/X5R, any value",
+        "version": 0,
+        "lifecycle": "active",
+        "signed_by": [],
+        "substitutes": [],
+        "mpn": null,
+        "lcsc_pn": null,
+        "pins": [
+          {
+            "name": "p1",
+            "number": "1",
+            "electrical_type": "passive",
+            "capabilities": [],
+            "required": false,
+            "unit": null,
+            "voltage_max_v": null
+          },
+          {
+            "name": "p2",
+            "number": "2",
+            "electrical_type": "passive",
+            "capabilities": [],
+            "required": false,
+            "unit": null,
+            "voltage_max_v": null
+          }
+        ],
+        "required_decoupling": [],
+        "kicad_symbol": "Device:C",
+        "kicad_footprint": "Capacitor_SMD:C_0805_2012Metric",
+        "footprint_dimensions": {
+          "width_mm": 3.4,
+          "height_mm": 1.96,
+          "courtyard_margin_mm": 0.25,
+          "mating_face": null
+        },
+        "operating_conditions": {
+          "min_voltage_v": null,
+          "max_voltage_v": 50.0,
+          "max_current_ma": null
+        }
+      },
+      "value": "10u",
+      "source_span": {
+        "byte_start": 433,
+        "byte_end": 485
+      }
+    },
+    {
+      "id": 4,
+      "refdes": "C4",
+      "kind": "capacitor",
+      "part": {
+        "id": "c_generic_0805",
+        "kind": "capacitor",
+        "description": "Generic 0805 MLCC, X7R/X5R, any value",
+        "version": 0,
+        "lifecycle": "active",
+        "signed_by": [],
+        "substitutes": [],
+        "mpn": null,
+        "lcsc_pn": null,
+        "pins": [
+          {
+            "name": "p1",
+            "number": "1",
+            "electrical_type": "passive",
+            "capabilities": [],
+            "required": false,
+            "unit": null,
+            "voltage_max_v": null
+          },
+          {
+            "name": "p2",
+            "number": "2",
+            "electrical_type": "passive",
+            "capabilities": [],
+            "required": false,
+            "unit": null,
+            "voltage_max_v": null
+          }
+        ],
+        "required_decoupling": [],
+        "kicad_symbol": "Device:C",
+        "kicad_footprint": "Capacitor_SMD:C_0805_2012Metric",
+        "footprint_dimensions": {
+          "width_mm": 3.4,
+          "height_mm": 1.96,
+          "courtyard_margin_mm": 0.25,
+          "mating_face": null
+        },
+        "operating_conditions": {
+          "min_voltage_v": null,
+          "max_voltage_v": 50.0,
+          "max_current_ma": null
+        }
+      },
+      "value": "10u",
+      "source_span": {
+        "byte_start": 488,
+        "byte_end": 540
+      }
+    }
+  ],
+  "nets": [
+    {
+      "id": 0,
+      "name": "+3V3",
+      "endpoints": [
+        {
+          "component": 0,
+          "pin": 1,
+          "source_span": {
+            "byte_start": 616,
+            "byte_end": 623
+          }
+        },
+        {
+          "component": 2,
+          "pin": 0,
+          "source_span": {
+            "byte_start": 627,
+            "byte_end": 632
+          }
+        },
+        {
+          "component": 1,
+          "pin": 0,
+          "source_span": {
+            "byte_start": 598,
+            "byte_end": 603
+          }
+        }
+      ],
+      "netclass": "PWR",
+      "voltage": 3300000
+    },
+    {
+      "id": 1,
+      "name": "net_1",
+      "endpoints": [
+        {
+          "component": 0,
+          "pin": 0,
+          "source_span": {
+            "byte_start": 653,
+            "byte_end": 659
+          }
+        },
+        {
+          "component": 1,
+          "pin": 1,
+          "source_span": {
+            "byte_start": 663,
+            "byte_end": 668
+          }
+        },
+        {
+          "component": 2,
+          "pin": 1,
+          "source_span": {
+            "byte_start": 689,
+            "byte_end": 694
+          }
+        },
+        {
+          "component": 3,
+          "pin": 1,
+          "source_span": {
+            "byte_start": 781,
+            "byte_end": 786
+          }
+        },
+        {
+          "component": 4,
+          "pin": 1,
+          "source_span": {
+            "byte_start": 807,
+            "byte_end": 812
+          }
+        }
+      ]
+    },
+    {
+      "id": 2,
+      "name": "VIN",
+      "endpoints": [
+        {
+          "component": 0,
+          "pin": 2,
+          "source_span": {
+            "byte_start": 736,
+            "byte_end": 742
+          }
+        },
+        {
+          "component": 4,
+          "pin": 0,
+          "source_span": {
+            "byte_start": 746,
+            "byte_end": 751
+          }
+        },
+        {
+          "component": 3,
+          "pin": 0,
+          "source_span": {
+            "byte_start": 718,
+            "byte_end": 723
+          }
+        }
+      ]
+    }
+  ],
+  "diff_pairs": [],
+  "keepouts": [],
+  "netclasses": [
+    {
+      "name": "PWR",
+      "trace_width": 500000,
+      "clearance": 200000,
+      "source_span": {
+        "byte_start": 217,
+        "byte_end": 279
+      }
+    }
+  ],
+  "source_span": {
+    "byte_start": 182,
+    "byte_end": 814
+  }
+}

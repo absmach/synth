@@ -2225,6 +2225,8 @@ mod cleanup_tests {
                         source_span: synth_diagnostics::Span::new(0, 0),
                     },
                 ],
+                netclass: None,
+                voltage: None,
             });
         }
         board
@@ -2700,6 +2702,8 @@ mod drc_tests {
                             source_span: synth_diagnostics::Span::new(0, 0),
                         },
                     ],
+                    netclass: None,
+                    voltage: None,
                 },
                 synth_ir::Net {
                     id: NetId(1),
@@ -2709,6 +2713,8 @@ mod drc_tests {
                         pin: PinId(1),
                         source_span: synth_diagnostics::Span::new(0, 0),
                     }],
+                    netclass: None,
+                    voltage: None,
                 },
             ],
             diff_pairs: Vec::new(),
@@ -2884,6 +2890,8 @@ mod net_termination_tests {
                         source_span: synth_diagnostics::Span::new(0, 0),
                     },
                 ],
+                netclass: None,
+                voltage: None,
             }],
             diff_pairs: Vec::new(),
             keepouts: Vec::new(),
