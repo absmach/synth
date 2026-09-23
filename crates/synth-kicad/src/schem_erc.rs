@@ -419,10 +419,10 @@ fn check_decoupling_distance(board: &Board, layout: &Layout, max_mm: f64) -> Vec
                             "decoupling capacitor separation",
                         )
                         .message(format!(
-                            "decoupling capacitor {cap} is {dist:.1} mm from its target IC {ic} \
+                            "decoupling capacitor {} is {dist:.1} mm from its target IC {} \
                              (net \"{net_name}\"), exceeding the {max_mm} mm limit",
-                            cap = cap.refdes,
-                            ic = ic.refdes,
+                            cap.describe(),
+                            ic.describe(),
                             net_name = req.net,
                         ))
                         .entity(EntityRef::Component {
@@ -827,6 +827,7 @@ mod tests {
             power_flags,
             net_labels,
             annotations: Vec::new(),
+            group_boxes: Vec::new(),
             sheet_size: SheetSize::A4,
         }
     }
@@ -1011,6 +1012,7 @@ mod tests {
                     kind: "mcu".to_string(),
                     part: Some(part_with_decoupling()),
                     value: None,
+                    dnp: false,
                     placement_hint: None,
                     group: None,
                     sheet: None,
@@ -1022,6 +1024,7 @@ mod tests {
                     kind: "capacitor".to_string(),
                     part: Some(cap_part()),
                     value: None,
+                    dnp: false,
                     placement_hint: None,
                     group: None,
                     sheet: None,
@@ -1047,6 +1050,7 @@ mod tests {
                 voltage: None,
             }],
             diff_pairs: Vec::new(),
+            notes: vec![],
             keepouts: Vec::new(),
             netclasses: vec![],
             source_span: Span::new(0, 0),
@@ -1081,6 +1085,7 @@ mod tests {
                     kind: "mcu".to_string(),
                     part: Some(part_with_decoupling()),
                     value: None,
+                    dnp: false,
                     placement_hint: None,
                     group: None,
                     sheet: None,
@@ -1092,6 +1097,7 @@ mod tests {
                     kind: "capacitor".to_string(),
                     part: Some(cap_part()),
                     value: None,
+                    dnp: false,
                     placement_hint: None,
                     group: None,
                     sheet: None,
@@ -1117,6 +1123,7 @@ mod tests {
                 voltage: None,
             }],
             diff_pairs: Vec::new(),
+            notes: vec![],
             keepouts: Vec::new(),
             netclasses: vec![],
             source_span: Span::new(0, 0),
@@ -1453,6 +1460,7 @@ mod tests {
                     kind: "mcu".to_string(),
                     part: Some(part_with_decoupling()),
                     value: None,
+                    dnp: false,
                     placement_hint: None,
                     group: None,
                     sheet: None,
@@ -1464,6 +1472,7 @@ mod tests {
                     kind: "capacitor".to_string(),
                     part: Some(cap_part()),
                     value: None,
+                    dnp: false,
                     placement_hint: None,
                     group: None,
                     sheet: None,
@@ -1475,6 +1484,7 @@ mod tests {
                     kind: "mcu".to_string(),
                     part: Some(cap_part()),
                     value: None,
+                    dnp: false,
                     placement_hint: None,
                     group: None,
                     sheet: None,
@@ -1500,6 +1510,7 @@ mod tests {
                 voltage: None,
             }],
             diff_pairs: Vec::new(),
+            notes: vec![],
             keepouts: Vec::new(),
             netclasses: vec![],
             source_span: Span::new(0, 0),

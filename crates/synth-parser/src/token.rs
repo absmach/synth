@@ -33,6 +33,8 @@ pub enum TokenKind {
     KwConnect,
     KwNet,
     KwPower,
+    KwNotes,
+    KwDnp,
     KwAs,
     KwClass,
     KwDiffPair,
@@ -394,6 +396,8 @@ impl<'a> Lexer<'a> {
             "connect" => TokenKind::KwConnect,
             "net" => TokenKind::KwNet,
             "power" => TokenKind::KwPower,
+            "notes" => TokenKind::KwNotes,
+            "dnp" => TokenKind::KwDnp,
             "as" => TokenKind::KwAs,
             "class" => TokenKind::KwClass,
             "diff_pair" => TokenKind::KwDiffPair,
@@ -445,7 +449,7 @@ mod tests {
     #[test]
     fn keywords_recognized() {
         let ks = kinds(
-            "board import layers manufacturer revision company component connect net power as class diff_pair netclass keepout group sheet impedance trace_width clearance radius value",
+            "board import layers manufacturer revision company component connect net power notes dnp as class diff_pair netclass keepout group sheet impedance trace_width clearance radius value",
         );
         assert_eq!(
             ks,
@@ -460,6 +464,8 @@ mod tests {
                 TokenKind::KwConnect,
                 TokenKind::KwNet,
                 TokenKind::KwPower,
+                TokenKind::KwNotes,
+                TokenKind::KwDnp,
                 TokenKind::KwAs,
                 TokenKind::KwClass,
                 TokenKind::KwDiffPair,

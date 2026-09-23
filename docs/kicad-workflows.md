@@ -189,6 +189,19 @@ Designator, MPN, LCSC, DNP, …). Generate them from the exported
 --format-preset CSV` (see §5). Treat the fab BOM as a build output:
 regenerate, don't maintain.
 
+### Schematic documentation source
+
+Design documentation lives in the `.synth` source, not in KiCad:
+
+- `component R7: resistor "r_generic_0603" dnp` marks do-not-populate:
+  the symbol exports `(dnp yes)`, the part is left out of `bom.csv`
+  and `pnp.csv`, and ERC still checks it like any other part.
+- `notes "Title" { "line one" … }` renders a titled text block —
+  under the group's outline box when written inside a `group`, else
+  stacked at the sheet's bottom-left.
+- Every `group` gets a caption plus an outline box, and every
+  connector gets a `pin: net` legend generated from the netlist.
+
 ---
 
 ## 3. Symbols and footprints

@@ -51,6 +51,7 @@ pub enum StatementAst {
     Connection(ConnectionAst),
     Net(NetDeclAst),
     Power(PowerDeclAst),
+    Notes(NotesDeclAst),
     DiffPair(DiffPairStmt),
     Netclass(NetclassStmt),
     Keepout(KeepoutStmt),
@@ -69,6 +70,7 @@ impl StatementAst {
             StatementAst::Connection(s) => s.span,
             StatementAst::Net(s) => s.span,
             StatementAst::Power(s) => s.span,
+            StatementAst::Notes(s) => s.span,
             StatementAst::DiffPair(s) => s.span,
             StatementAst::Netclass(s) => s.span,
             StatementAst::Keepout(s) => s.span,
@@ -155,8 +157,27 @@ pub struct ComponentDeclAst {
     /// Used for the schematic `Value` property and the BOM when present.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub value: Option<String>,
+    /// Do-not-populate (`component R7: resistor "r_generic_0603" dnp`).
+    /// Exports `(dnp yes)` on the KiCad symbol and leaves the part
+    /// out of the BOM and pick-and-place; ERC still checks it.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub dnp: bool,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub placement_hint: Option<PlacementHintAst>,
+    pub span: Span,
+}
+
+/// A free-text design note: `notes "Title" { "line one" "line two" }`.
+///
+/// Rendered on the schematic as a titled text block (§21.1): the
+/// title at caption size, one run per line below it. A `notes` block
+/// inside a `group` carries that group's name and renders beneath
+/// the group; top-level notes stack at the sheet's bottom-left.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct NotesDeclAst {
+    pub title: String,
+    #[serde(default)]
+    pub lines: Vec<String>,
     pub span: Span,
 }
 
@@ -455,6 +476,7 @@ mod tests {
             kind: "mcu".into(),
             part: Some("rp2350".into()),
             value: Some("10k".into()),
+            dnp: false,
             placement_hint: None,
             span: Span::new(0, 0),
         });

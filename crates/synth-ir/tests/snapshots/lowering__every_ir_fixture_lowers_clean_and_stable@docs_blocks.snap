@@ -1,0 +1,390 @@
+---
+source: crates/synth-ir/tests/lowering.rs
+assertion_line: 71
+expression: board
+---
+{
+  "name": "docs_blocks",
+  "layers": 2,
+  "manufacturer": null,
+  "components": [
+    {
+      "id": 0,
+      "refdes": "J1",
+      "kind": "connector",
+      "part": {
+        "id": "header_1x4",
+        "kind": "connector",
+        "description": "1x4 through-hole pin header, 2.54mm pitch",
+        "version": 0,
+        "lifecycle": "active",
+        "signed_by": [],
+        "substitutes": [],
+        "mpn": null,
+        "lcsc_pn": null,
+        "pins": [
+          {
+            "name": "p1",
+            "number": "1",
+            "electrical_type": "passive",
+            "capabilities": [],
+            "required": false,
+            "unit": null,
+            "voltage_max_v": null
+          },
+          {
+            "name": "p2",
+            "number": "2",
+            "electrical_type": "passive",
+            "capabilities": [],
+            "required": false,
+            "unit": null,
+            "voltage_max_v": null
+          },
+          {
+            "name": "p3",
+            "number": "3",
+            "electrical_type": "passive",
+            "capabilities": [],
+            "required": false,
+            "unit": null,
+            "voltage_max_v": null
+          },
+          {
+            "name": "p4",
+            "number": "4",
+            "electrical_type": "passive",
+            "capabilities": [],
+            "required": false,
+            "unit": null,
+            "voltage_max_v": null
+          }
+        ],
+        "required_decoupling": [],
+        "kicad_symbol": "Connector_Generic:Conn_01x04",
+        "kicad_footprint": "Connector_PinHeader_2.54mm:PinHeader_1x04_P2.54mm_Vertical",
+        "footprint_dimensions": {
+          "width_mm": 3.54,
+          "height_mm": 11.16,
+          "courtyard_margin_mm": 0.25,
+          "mating_face": null
+        },
+        "operating_conditions": {
+          "min_voltage_v": 1.8,
+          "max_voltage_v": 5.0,
+          "max_current_ma": 100.0
+        }
+      },
+      "source_span": {
+        "byte_start": 149,
+        "byte_end": 185
+      }
+    },
+    {
+      "id": 1,
+      "refdes": "R1",
+      "kind": "resistor",
+      "part": {
+        "id": "r_generic_0603",
+        "kind": "resistor",
+        "description": "Generic 0603 thick-film resistor, any value",
+        "version": 0,
+        "lifecycle": "active",
+        "signed_by": [],
+        "substitutes": [],
+        "mpn": null,
+        "lcsc_pn": null,
+        "pins": [
+          {
+            "name": "p1",
+            "number": "1",
+            "electrical_type": "passive",
+            "capabilities": [],
+            "required": false,
+            "unit": null,
+            "voltage_max_v": null
+          },
+          {
+            "name": "p2",
+            "number": "2",
+            "electrical_type": "passive",
+            "capabilities": [],
+            "required": false,
+            "unit": null,
+            "voltage_max_v": null
+          }
+        ],
+        "required_decoupling": [],
+        "kicad_symbol": "Device:R_US",
+        "kicad_footprint": "Resistor_SMD:R_0603_1608Metric",
+        "footprint_dimensions": {
+          "width_mm": 2.96,
+          "height_mm": 1.46,
+          "courtyard_margin_mm": 0.25,
+          "mating_face": null
+        },
+        "operating_conditions": {
+          "min_voltage_v": null,
+          "max_voltage_v": 50.0,
+          "max_current_ma": null
+        }
+      },
+      "source_span": {
+        "byte_start": 188,
+        "byte_end": 227
+      }
+    },
+    {
+      "id": 2,
+      "refdes": "R2",
+      "kind": "resistor",
+      "part": {
+        "id": "r_generic_0603",
+        "kind": "resistor",
+        "description": "Generic 0603 thick-film resistor, any value",
+        "version": 0,
+        "lifecycle": "active",
+        "signed_by": [],
+        "substitutes": [],
+        "mpn": null,
+        "lcsc_pn": null,
+        "pins": [
+          {
+            "name": "p1",
+            "number": "1",
+            "electrical_type": "passive",
+            "capabilities": [],
+            "required": false,
+            "unit": null,
+            "voltage_max_v": null
+          },
+          {
+            "name": "p2",
+            "number": "2",
+            "electrical_type": "passive",
+            "capabilities": [],
+            "required": false,
+            "unit": null,
+            "voltage_max_v": null
+          }
+        ],
+        "required_decoupling": [],
+        "kicad_symbol": "Device:R_US",
+        "kicad_footprint": "Resistor_SMD:R_0603_1608Metric",
+        "footprint_dimensions": {
+          "width_mm": 2.96,
+          "height_mm": 1.46,
+          "courtyard_margin_mm": 0.25,
+          "mating_face": null
+        },
+        "operating_conditions": {
+          "min_voltage_v": null,
+          "max_voltage_v": 50.0,
+          "max_current_ma": null
+        }
+      },
+      "dnp": true,
+      "source_span": {
+        "byte_start": 230,
+        "byte_end": 273
+      }
+    },
+    {
+      "id": 3,
+      "refdes": "C1",
+      "kind": "capacitor",
+      "part": {
+        "id": "c_generic_0603",
+        "kind": "capacitor",
+        "description": "Generic 0603 MLCC, X7R/X5R, any value",
+        "version": 0,
+        "lifecycle": "active",
+        "signed_by": [],
+        "substitutes": [],
+        "mpn": null,
+        "lcsc_pn": null,
+        "pins": [
+          {
+            "name": "p1",
+            "number": "1",
+            "electrical_type": "passive",
+            "capabilities": [],
+            "required": false,
+            "unit": null,
+            "voltage_max_v": null
+          },
+          {
+            "name": "p2",
+            "number": "2",
+            "electrical_type": "passive",
+            "capabilities": [],
+            "required": false,
+            "unit": null,
+            "voltage_max_v": null
+          }
+        ],
+        "required_decoupling": [],
+        "kicad_symbol": "Device:C",
+        "kicad_footprint": "Capacitor_SMD:C_0603_1608Metric",
+        "footprint_dimensions": {
+          "width_mm": 2.96,
+          "height_mm": 1.46,
+          "courtyard_margin_mm": 0.25,
+          "mating_face": null
+        },
+        "operating_conditions": {
+          "min_voltage_v": null,
+          "max_voltage_v": 50.0,
+          "max_current_ma": null
+        }
+      },
+      "group": "Input",
+      "source_span": {
+        "byte_start": 297,
+        "byte_end": 337
+      }
+    }
+  ],
+  "nets": [
+    {
+      "id": 0,
+      "name": "net_0",
+      "endpoints": [
+        {
+          "component": 0,
+          "pin": 0,
+          "source_span": {
+            "byte_start": 460,
+            "byte_end": 465
+          }
+        },
+        {
+          "component": 1,
+          "pin": 0,
+          "source_span": {
+            "byte_start": 469,
+            "byte_end": 474
+          }
+        }
+      ]
+    },
+    {
+      "id": 1,
+      "name": "net_1",
+      "endpoints": [
+        {
+          "component": 1,
+          "pin": 1,
+          "source_span": {
+            "byte_start": 485,
+            "byte_end": 490
+          }
+        },
+        {
+          "component": 3,
+          "pin": 0,
+          "source_span": {
+            "byte_start": 494,
+            "byte_end": 499
+          }
+        }
+      ]
+    },
+    {
+      "id": 2,
+      "name": "net_2",
+      "endpoints": [
+        {
+          "component": 0,
+          "pin": 1,
+          "source_span": {
+            "byte_start": 510,
+            "byte_end": 515
+          }
+        },
+        {
+          "component": 3,
+          "pin": 1,
+          "source_span": {
+            "byte_start": 519,
+            "byte_end": 524
+          }
+        }
+      ]
+    },
+    {
+      "id": 3,
+      "name": "net_3",
+      "endpoints": [
+        {
+          "component": 0,
+          "pin": 2,
+          "source_span": {
+            "byte_start": 535,
+            "byte_end": 540
+          }
+        },
+        {
+          "component": 2,
+          "pin": 0,
+          "source_span": {
+            "byte_start": 544,
+            "byte_end": 549
+          }
+        }
+      ]
+    },
+    {
+      "id": 4,
+      "name": "net_4",
+      "endpoints": [
+        {
+          "component": 2,
+          "pin": 1,
+          "source_span": {
+            "byte_start": 560,
+            "byte_end": 565
+          }
+        },
+        {
+          "component": 0,
+          "pin": 3,
+          "source_span": {
+            "byte_start": 569,
+            "byte_end": 574
+          }
+        }
+      ]
+    }
+  ],
+  "diff_pairs": [],
+  "notes": [
+    {
+      "title": "Input notes",
+      "lines": [
+        "Keep leads short."
+      ],
+      "group": "Input",
+      "source_span": {
+        "byte_start": 342,
+        "byte_end": 395
+      }
+    },
+    {
+      "title": "Build",
+      "lines": [
+        "Assemble at JLCPCB."
+      ],
+      "source_span": {
+        "byte_start": 403,
+        "byte_end": 448
+      }
+    }
+  ],
+  "keepouts": [],
+  "netclasses": [],
+  "source_span": {
+    "byte_start": 113,
+    "byte_end": 576
+  }
+}

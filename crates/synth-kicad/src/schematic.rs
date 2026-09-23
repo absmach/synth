@@ -336,6 +336,39 @@ pub(crate) fn build_schematic_from_layout(
         ));
     }
 
+    // Titled outline boxes: one `(rectangle ...)` per declared `group`
+    // (§21.1), framing the caption and its parts. Same graphic
+    // status as captions — no electrical meaning, never trips ERC.
+    // Shape grammar mirrors the embedded symbol library
+    // (`(rectangle … (stroke … (type default)) (fill (type none)))`),
+    // which is what `kicad-cli sch erc` accepts at top level — a bare
+    // `(rect … (fill none))` fails to load.
+    for group_box in &layout.group_boxes {
+        let uuid = derive_entity_uuid(project, "group_box", &group_box.group);
+        children.push(Sexp::list(
+            "rectangle",
+            vec![
+                Sexp::list(
+                    "start",
+                    vec![num(group_box.min_mm.0), num(group_box.min_mm.1)],
+                ),
+                Sexp::list(
+                    "end",
+                    vec![num(group_box.max_mm.0), num(group_box.max_mm.1)],
+                ),
+                Sexp::list(
+                    "stroke",
+                    vec![
+                        Sexp::list("width", vec![num(0.254)]),
+                        Sexp::list("type", vec![Sexp::atom("default")]),
+                    ],
+                ),
+                Sexp::list("fill", vec![Sexp::list("type", vec![Sexp::atom("none")])]),
+                str_pair("uuid", uuid.to_string()),
+            ],
+        ));
+    }
+
     // Physical-pin reconciliation: the registry declares *logical*
     // pins, but the referenced KiCad symbol carries every physical
     // pin. Fan the rails out to the undeclared power legs (VDD/VDDA/
@@ -1135,89 +1168,94 @@ fn build_symbol_instance(
     };
     let angle = ((logical_deg + natural_offset_deg) as i32).rem_euclid(360) as f64;
 
-    Some(Sexp::list(
-        "symbol",
+    let mut fields = vec![
+        str_pair("lib_id", lib_id),
+        Sexp::list("at", vec![num(x), num(y), num(angle)]),
+        pair("unit", Sexp::atom("1")),
+        pair("in_bom", Sexp::atom("yes")),
+        pair("on_board", Sexp::atom("yes")),
+        str_pair("uuid", comp_uuid.to_string()),
+    ];
+    // Do-not-populate: KiCad renders the symbol crossed out and
+    // excludes it from BOM/PnP tooling. Emitted only when set so
+    // populated parts keep byte-identical output.
+    if component.dnp {
+        fields.push(Sexp::list("dnp", vec![Sexp::atom("yes")]));
+    }
+    fields.push(Sexp::list(
+        "property",
         vec![
-            str_pair("lib_id", lib_id),
-            Sexp::list("at", vec![num(x), num(y), num(angle)]),
-            pair("unit", Sexp::atom("1")),
-            pair("in_bom", Sexp::atom("yes")),
-            pair("on_board", Sexp::atom("yes")),
-            str_pair("uuid", comp_uuid.to_string()),
-            Sexp::list(
-                "property",
-                vec![
-                    Sexp::str("Reference"),
-                    Sexp::str(&component.refdes),
-                    Sexp::list("at", vec![num(ref_pos.0), num(ref_pos.1), num(0.0)]),
-                    field_effects(ref_justify),
-                ],
-            ),
-            Sexp::list(
-                "property",
-                vec![
-                    Sexp::str("Value"),
-                    Sexp::str(display_value),
-                    Sexp::list("at", vec![num(value_pos.0), num(value_pos.1), num(0.0)]),
-                    field_effects(value_justify),
-                ],
-            ),
-            Sexp::list(
-                "property",
-                vec![
-                    Sexp::str("Footprint"),
-                    Sexp::str(part.kicad_footprint.as_deref().unwrap_or("")),
-                    Sexp::list("at", vec![num(x), num(y), num(0.0)]),
-                    hidden_field_effects(),
-                ],
-            ),
-            Sexp::list(
-                "property",
-                vec![
-                    Sexp::str("Datasheet"),
-                    // Populated from the registry provenance so the
-                    // datasheet link survives into the placed instance
-                    // (the library symbol already carries it; the
-                    // instance must not blank it back to ""). Hidden,
-                    // as KiCad convention dictates. StackExchange
-                    // #28251: "Annotate liberally — put the datasheet
-                    // reference on the schematic."
-                    Sexp::str(
-                        part.provenance
-                            .as_ref()
-                            .and_then(|p| p.datasheet_url.as_deref())
-                            .unwrap_or(""),
-                    ),
-                    Sexp::list("at", vec![num(x), num(y), num(0.0)]),
-                    hidden_field_effects(),
-                ],
-            ),
-            // Sourcing fields (hidden, KiCad convention). KiCad's BOM
-            // tooling and the JLCPCB/DigiKey plugin ecosystem read
-            // `MPN`/`LCSC` from the *schematic instance*, not from a
-            // sidecar CSV — emitting them here makes the exported
-            // project self-sufficient for sourcing workflows (the
-            // bom.csv carries the same data for direct ordering).
-            Sexp::list(
-                "property",
-                vec![
-                    Sexp::str("MPN"),
-                    Sexp::str(part.mpn.as_deref().unwrap_or("")),
-                    Sexp::list("at", vec![num(x), num(y), num(0.0)]),
-                    hidden_field_effects(),
-                ],
-            ),
-            Sexp::list(
-                "property",
-                vec![
-                    Sexp::str("LCSC"),
-                    Sexp::str(part.lcsc_pn.as_deref().unwrap_or("")),
-                    Sexp::list("at", vec![num(x), num(y), num(0.0)]),
-                    hidden_field_effects(),
-                ],
-            ),
+            Sexp::str("Reference"),
+            Sexp::str(&component.refdes),
+            Sexp::list("at", vec![num(ref_pos.0), num(ref_pos.1), num(0.0)]),
+            field_effects(ref_justify),
         ],
-    ))
+    ));
+    fields.push(Sexp::list(
+        "property",
+        vec![
+            Sexp::str("Value"),
+            Sexp::str(display_value),
+            Sexp::list("at", vec![num(value_pos.0), num(value_pos.1), num(0.0)]),
+            field_effects(value_justify),
+        ],
+    ));
+    fields.push(Sexp::list(
+        "property",
+        vec![
+            Sexp::str("Footprint"),
+            Sexp::str(part.kicad_footprint.as_deref().unwrap_or("")),
+            Sexp::list("at", vec![num(x), num(y), num(0.0)]),
+            hidden_field_effects(),
+        ],
+    ));
+    fields.push(Sexp::list(
+        "property",
+        vec![
+            Sexp::str("Datasheet"),
+            // Populated from the registry provenance so the
+            // datasheet link survives into the placed instance
+            // (the library symbol already carries it; the
+            // instance must not blank it back to ""). Hidden,
+            // as KiCad convention dictates. StackExchange
+            // #28251: "Annotate liberally — put the datasheet
+            // reference on the schematic."
+            Sexp::str(
+                part.provenance
+                    .as_ref()
+                    .and_then(|p| p.datasheet_url.as_deref())
+                    .unwrap_or(""),
+            ),
+            Sexp::list("at", vec![num(x), num(y), num(0.0)]),
+            hidden_field_effects(),
+        ],
+    ));
+    // Sourcing fields (hidden, KiCad convention). KiCad's BOM
+    // tooling and the JLCPCB/DigiKey plugin ecosystem read
+    // `MPN`/`LCSC` from the *schematic instance*, not from a
+    // sidecar CSV — emitting them here makes the exported
+    // project self-sufficient for sourcing workflows (the
+    // bom.csv carries the same data for direct ordering).
+    fields.push(Sexp::list(
+        "property",
+        vec![
+            Sexp::str("MPN"),
+            Sexp::str(part.mpn.as_deref().unwrap_or("")),
+            Sexp::list("at", vec![num(x), num(y), num(0.0)]),
+            hidden_field_effects(),
+        ],
+    ));
+    fields.push(Sexp::list(
+        "property",
+        vec![
+            Sexp::str("LCSC"),
+            Sexp::str(part.lcsc_pn.as_deref().unwrap_or("")),
+            Sexp::list("at", vec![num(x), num(y), num(0.0)]),
+            hidden_field_effects(),
+        ],
+    ));
+
+    Some(Sexp::list("symbol", fields))
 }
 
 #[cfg(test)]
@@ -1234,7 +1272,6 @@ mod tests {
             .canonicalize()
             .unwrap()
     }
-
     #[test]
     fn schematic_for_single_mcu_is_deterministic() {
         let registry = load_dir(&workspace_root().join("registry").join("parts")).unwrap();
@@ -1252,6 +1289,82 @@ mod tests {
         let a = build_schematic(&board, &project).to_string_pretty();
         let b = build_schematic(&board, &project).to_string_pretty();
         assert_eq!(a, b, "schematic generation must be deterministic");
+    }
+
+    fn lower_inline(src: &str) -> synth_ir::Board {
+        let registry = load_dir(&workspace_root().join("registry").join("parts")).unwrap();
+        let parsed = synth_parser::parse(src, "inline.synth");
+        assert!(
+            !parsed.has_errors(),
+            "parse diagnostics: {:?}",
+            parsed.diagnostics
+        );
+        let lowered = lower(&parsed.ast.unwrap(), &registry, "inline.synth");
+        assert!(
+            !lowered.has_errors(),
+            "lower diagnostics: {:?}",
+            lowered.diagnostics
+        );
+        lowered.board.unwrap()
+    }
+
+    #[test]
+    fn dnp_component_exports_dnp_flag_only() {
+        let board = lower_inline(
+            r#"board "b" {
+                component R1: resistor "r_generic_0603"
+                component R2: resistor "r_generic_0603" dnp
+                connect R1.p1 -> R2.p1
+                connect R1.p2 -> R2.p2
+            }"#,
+        );
+        let project = crate::uuid_v5::project_namespace(&board.name);
+        let text = build_schematic(&board, &project).to_string_pretty();
+        assert_eq!(
+            text.matches("(dnp yes)").count(),
+            1,
+            "exactly the DNP part carries the flag"
+        );
+    }
+
+    #[test]
+    fn group_box_exports_rectangle() {
+        let board = lower_inline(
+            r#"board "b" {
+                component R1: resistor "r_generic_0603"
+                group "Input" {
+                    component C1: capacitor "c_generic_0603"
+                }
+                connect R1.p1 -> C1.p1
+                connect R1.p2 -> C1.p2
+            }"#,
+        );
+        let project = crate::uuid_v5::project_namespace(&board.name);
+        let text = build_schematic(&board, &project).to_string_pretty();
+        assert!(text.contains("(rectangle"), "group outline box must render");
+        assert!(text.contains("\"Input\""), "group caption must render");
+    }
+
+    #[test]
+    fn notes_block_exports_text() {
+        let board = lower_inline(
+            r#"board "b" {
+                component R1: resistor "r_generic_0603"
+                component R2: resistor "r_generic_0603"
+                connect R1.p1 -> R2.p1
+                connect R1.p2 -> R2.p2
+                notes "Build" {
+                    "Assemble at JLCPCB."
+                }
+            }"#,
+        );
+        let project = crate::uuid_v5::project_namespace(&board.name);
+        let text = build_schematic(&board, &project).to_string_pretty();
+        assert!(text.contains("\"Build\""), "notes title must render");
+        assert!(
+            text.contains("\"Assemble at JLCPCB.\""),
+            "notes line must render"
+        );
     }
 
     #[test]

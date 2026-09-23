@@ -62,6 +62,7 @@ fn resistor(id: ComponentId, refdes: &str) -> Component {
         kind: "resistor".to_string(),
         part: Some(two_pin_part()),
         value: None,
+        dnp: false,
         placement_hint: None,
         group: None,
         sheet: None,
@@ -134,6 +135,7 @@ fn two_row_board_and_layout() -> (Board, Layout) {
             },
         ],
         diff_pairs: Vec::new(),
+        notes: vec![],
         keepouts: Vec::new(),
         netclasses: vec![],
         source_span: synth_diagnostics::Span::new(0, 0),
@@ -150,6 +152,7 @@ fn two_row_board_and_layout() -> (Board, Layout) {
         power_flags: Vec::new(),
         net_labels: Vec::new(),
         annotations: Vec::new(),
+        group_boxes: Vec::new(),
         sheet_size: SheetSize::A4,
     };
     (board, layout)

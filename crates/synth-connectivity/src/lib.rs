@@ -157,6 +157,7 @@ mod tests {
             components: vec![],
             nets: vec![net1, net2],
             diff_pairs: vec![],
+            notes: vec![],
             keepouts: vec![],
             netclasses: vec![],
             source_span: Span::new(0, 0),
