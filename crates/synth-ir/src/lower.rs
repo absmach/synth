@@ -186,6 +186,7 @@ pub fn lower(ast: &ProgramAst, registry: &Registry, file: &str) -> LowerResult {
                 push_statement_records(
                     stmt,
                     group,
+                    sheet,
                     &mut connections,
                     &mut net_decls,
                     &mut power_decls,
@@ -1183,6 +1184,7 @@ fn describe_decl(refdes: &str, group: Option<&str>) -> String {
 fn push_statement_records(
     stmt: &StatementAst,
     group: Option<&str>,
+    sheet: Option<&str>,
     connections: &mut Vec<ConnectionRecord>,
     net_decls: &mut Vec<NetDeclRecord>,
     power_decls: &mut Vec<PowerDeclRecord>,
@@ -1223,6 +1225,7 @@ fn push_statement_records(
                 title: n.title.clone(),
                 lines: n.lines.clone(),
                 group: group.map(str::to_string),
+                sheet: sheet.map(str::to_string),
                 source_span: n.span,
             });
         }

@@ -29,10 +29,19 @@ Board (nets / components / diff-pairs)
    │  synth-layout::layout       thematic auto-layout (§2)
    ▼
 Layout (placements, rotations, wires, junctions, net labels, power flags)
+   ├──> synth-layout::sheets::layout_sheets   split on sheet/import
+   │                                          boundaries, large boards only (§3.1)
    ├──> synth-web (live preview, drag-and-drop)          (§5)
    ├──> synth-kicad::export      .kicad_sch/.kicad_sym/.kicad_pcb/bom (§3)
    └──> ERC / DRC validation                             (§4)
 ```
+
+`layout_sheets` returns exactly one entry for the common case (the
+board's single-sheet content fits A2, or it is not splittable), so the
+preview, the exporter, and the checks all keep working off the same
+single `Layout` unchanged. Only a *large splittable* board — content
+past A2 **and** two or more `sheet`/import boundaries — becomes a
+hierarchy, described in §6.
 
 All coordinates are millimetres in the sheet's local coordinate system
 with `(0, 0)` at the top-left of the page rect.
@@ -158,6 +167,35 @@ project into `out_dir`:
 - **deterministic UUID v5** for every entity
   (`derive_entity_uuid(project, kind, name)`), so unchanged input
   re-exports byte-identically for stable diffs.
+
+### 3.1 Multi-sheet export (`sheets.rs`, `multisheet.rs`)
+
+`sheet "…" { … }` blocks are split boundaries, and so is every
+`import`ed file (it lowers to a sheet named after the file stem).
+`synth-layout::sheets::layout_sheets` splits only when the board is
+**large** (single-sheet content overflows A2) *and* **splittable**
+(two or more boundaries carry components); otherwise it returns the
+single `Layout` unchanged and this path is never taken.
+
+When it does split, `synth-kicad::multisheet` writes:
+
+- one `<board>_<sheet>.kicad_sch` per boundary, and the root
+  `<board>.kicad_sch` with the components declared outside any sheet;
+- one `(sheet …)` instance per sub-sheet, with a pin per cross-sheet
+  net, its `(instances (project (path … (page …))))` block, and the
+  `.kicad_pro` sheet list updated to match;
+- **cross-sheet signal nets** as hierarchical labels in the
+  sub-sheets joined by root wires between same-net pins;
+  **cross-sheet power nets** need no pins — power symbols connect
+  globally by value. `pin_reconcile` runs board-wide and each sheet
+  emits only its own members, with one `PWR_FLAG` per undriven rail
+  project-wide.
+
+`check_sheets` runs the aesthetic rules per sheet and prefixes each
+finding with `[<sheet>]`, so page overflow and wire crossings are
+judged page-locally instead of against the stale global layout.
+Component and net ids are never remapped, so ERC, power inference, and
+the PCB flow stay sheet-agnostic.
 
 ---
 

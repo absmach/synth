@@ -53,7 +53,7 @@ fn wire_segment_uuid(project: &Uuid, net_name: &str, a: (i64, i64), b: (i64, i64
 /// conflict keeps output deterministic (emission order is
 /// deterministic) while making duplicates structurally impossible.
 #[derive(Default)]
-struct PowerRefAllocator {
+pub(crate) struct PowerRefAllocator {
     taken: HashSet<String>,
 }
 
@@ -108,6 +108,93 @@ pub(crate) fn build_schematic_from_layout(
     project: &Uuid,
     layout: &synth_layout::Layout,
 ) -> Sexp {
+    let root_uuid = derive_entity_uuid(project, "sheet", "root");
+    let mut power_refs = PowerRefAllocator::default();
+    build_sheet_schematic(
+        board,
+        project,
+        layout,
+        &SheetRender {
+            name: None,
+            uuid: root_uuid,
+            project_name: &board.name,
+            symbol_path: None,
+            members: None,
+            power_drivers: None,
+            root_furniture: None,
+        },
+        &mut power_refs,
+    )
+}
+
+/// Which sheet is being rendered, and the cross-sheet furniture it
+/// needs. Single-sheet export renders the root with no furniture and
+/// behaves exactly as before; the §P26 multi-sheet path renders one
+/// sub-sheet per entry plus a root carrying sheet instances.
+#[derive(Debug)]
+pub struct SheetRender<'a> {
+    /// Sub-sheet name, or `None` for the root sheet.
+    pub name: Option<&'a str>,
+    /// File uuid: the root uuid for the root sheet, the sheet uuid
+    /// for sub-sheets (matched by the root's sheet instances and the
+    /// `.kicad_pro` sheet list).
+    pub uuid: Uuid,
+    /// Project stem for `(instances (project …))` blocks.
+    pub project_name: &'a str,
+    /// Sheet instance path for symbols on this sheet
+    /// (`/root-uuid/sheet-uuid`), or `None` on the root sheet (flat
+    /// symbols carry no instances block, as before).
+    pub symbol_path: Option<String>,
+    /// Component membership for reconcile filtering, or `None` for
+    /// the whole board (single-sheet path).
+    pub members: Option<&'a HashSet<ComponentId>>,
+    /// Precomputed power-flag drivers, or `None` to derive from this
+    /// sheet's placements (single-sheet path). Multi-sheet callers
+    /// precompute per sheet and dedup by net so one flag drives the
+    /// merged hierarchical net project-wide.
+    pub power_drivers: Option<&'a [crate::pin_reconcile::PowerDriver]>,
+    /// Sheet instances plus inter-pin wires; `Some` only on the root
+    /// sheet of a multi-sheet export.
+    pub root_furniture: Option<&'a RootFurniture>,
+}
+
+/// Sheet instances and the root wires joining same-net pins, placed
+/// by the multi-sheet exporter below the root content.
+#[derive(Debug, Clone, PartialEq)]
+pub struct RootFurniture {
+    pub instances: Vec<PlacedSheetInstance>,
+    pub wires: Vec<RootWire>,
+    pub junctions: Vec<(f64, f64)>,
+}
+
+/// One sub-sheet instance box on the root sheet.
+#[derive(Debug, Clone, PartialEq)]
+pub struct PlacedSheetInstance {
+    pub name: String,
+    pub file: String,
+    pub uuid: Uuid,
+    pub at_mm: (f64, f64),
+    pub size_mm: (f64, f64),
+    /// `(net name, position, uuid)` pins along the box bottom edge.
+    pub pins: Vec<(String, (f64, f64), Uuid)>,
+}
+
+/// One 2-point root wire segment joining same-net sheet pins.
+#[derive(Debug, Clone, PartialEq)]
+pub struct RootWire {
+    pub net: String,
+    pub a_mm: (f64, f64),
+    pub b_mm: (f64, f64),
+}
+
+#[allow(clippy::too_many_lines)]
+pub(crate) fn build_sheet_schematic(
+    board: &Board,
+    project: &Uuid,
+    layout: &synth_layout::Layout,
+    render: &SheetRender<'_>,
+    power_refs: &mut PowerRefAllocator,
+) -> Sexp {
     let placements: HashMap<ComponentId, &ComponentPlacement> =
         layout.components.iter().map(|p| (p.id, p)).collect();
     // Single source of truth for which nets need a `power:PWR_FLAG`
@@ -115,7 +202,14 @@ pub(crate) fn build_schematic_from_layout(
     // (below) and the instance emission loop (bottom of this
     // function). Keeping these on one computation guarantees the
     // embedded definition set exactly matches the emitted instances.
-    let power_drivers = crate::pin_reconcile::undriven_power_nets(board, &placements);
+    let computed_drivers;
+    let power_drivers: &[crate::pin_reconcile::PowerDriver] =
+        if let Some(drivers) = render.power_drivers {
+            drivers
+        } else {
+            computed_drivers = crate::pin_reconcile::undriven_power_nets(board, &placements);
+            &computed_drivers
+        };
     let paper = match layout.sheet_size {
         synth_layout::SheetSize::A4 => "A4",
         synth_layout::SheetSize::A3 => "A3",
@@ -142,10 +236,7 @@ pub(crate) fn build_schematic_from_layout(
         pair("version", Sexp::atom("20260306")),
         str_pair("generator", "synth-eda"),
         str_pair("generator_version", "10.0"),
-        str_pair(
-            "uuid",
-            derive_entity_uuid(project, "sheet", "root").to_string(),
-        ),
+        str_pair("uuid", render.uuid.to_string()),
         Sexp::list("paper", vec![Sexp::str(paper)]),
         // Title block from board metadata. Deliberately NO date:
         // embedding today's date would break the byte-identical
@@ -158,7 +249,13 @@ pub(crate) fn build_schematic_from_layout(
         Sexp::list(
             "title_block",
             vec![
-                Sexp::list("title", vec![Sexp::str(&board.name)]),
+                Sexp::list(
+                    "title",
+                    vec![Sexp::str(match render.name {
+                        Some(sheet) => format!("{} — {sheet}", board.name),
+                        None => board.name.clone(),
+                    })],
+                ),
                 Sexp::list("date", vec![Sexp::str("")]),
                 // Revision from the `revision "…"` board statement, or
                 // blank when unset (Sierra Circuits "Schematic Design
@@ -198,14 +295,43 @@ pub(crate) fn build_schematic_from_layout(
             .chain(fab_comment)
             .collect::<Vec<_>>(),
         ),
-        embed_library(board, layout, &power_drivers),
+        embed_library(board, layout, power_drivers),
     ];
 
-    // Symbol instances.
+    // Symbol instances. On sub-sheets every symbol carries its
+    // `(instances (project … (path …)))` block so KiCad maps the
+    // reference to the sheet path (dev-docs symbol section: every
+    // symbol has at least one instance); root symbols stay bare as
+    // before.
     for component in &board.components {
         if let Some(placement) = placements.get(&component.id) {
             if let Some(s) = build_symbol_instance(component, placement, project) {
-                children.push(s);
+                children.push(match (&render.symbol_path, s) {
+                    (Some(path), Sexp::List { head, mut children }) => {
+                        children.push(Sexp::list(
+                            "instances",
+                            vec![Sexp::list(
+                                "project",
+                                vec![
+                                    Sexp::str(render.project_name),
+                                    Sexp::list(
+                                        "path",
+                                        vec![
+                                            Sexp::str(path),
+                                            Sexp::list(
+                                                "reference",
+                                                vec![Sexp::str(&component.refdes)],
+                                            ),
+                                            Sexp::list("unit", vec![Sexp::atom("1")]),
+                                        ],
+                                    ),
+                                ],
+                            )],
+                        ));
+                        Sexp::List { head, children }
+                    }
+                    (_, s) => s,
+                });
             }
         }
     }
@@ -280,10 +406,9 @@ pub(crate) fn build_schematic_from_layout(
     }
 
     // KiCad power symbols at every power-flag pin (wire stub + symbol).
-    let mut power_refs = PowerRefAllocator::default();
     for flag in &layout.power_flags {
         if let Some(mut sexps) =
-            build_power_symbol(board, flag, &placements, project, &mut power_refs)
+            build_power_symbol(board, flag, &placements, project, &mut *power_refs)
         {
             children.append(&mut sexps);
         }
@@ -299,6 +424,19 @@ pub(crate) fn build_schematic_from_layout(
     for label in &layout.net_labels {
         if let Some(sexps) = build_net_label(board, label, &placements, project) {
             children.extend(sexps);
+        }
+    }
+
+    // Cross-sheet stubs (§P26): one hierarchical label per in-sheet
+    // endpoint of a net that continues elsewhere. Empty on
+    // single-sheet layouts. The parent sheet instance carries the
+    // matching pin; power nets never appear here (global symbols).
+    if let Some(sheet) = render.name {
+        for label in &layout.hierarchical_labels {
+            if let Some(sexps) = build_hierarchical_label(board, label, &placements, project, sheet)
+            {
+                children.extend(sexps);
+            }
         }
     }
 
@@ -388,6 +526,14 @@ pub(crate) fn build_schematic_from_layout(
     };
     for reconciled in crate::pin_reconcile::reconcile_all(board) {
         for leg in &reconciled.power_legs {
+            // Multi-sheet: reconcile runs board-wide, but each sheet
+            // emits only its own members' legs.
+            if render
+                .members
+                .is_some_and(|members| !members.contains(&leg.component))
+            {
+                continue;
+            }
             if let Some(label) = rail_label(leg.net) {
                 if let Some(sexps) = build_fanned_power_symbol(
                     board,
@@ -395,13 +541,19 @@ pub(crate) fn build_schematic_from_layout(
                     label,
                     &placements,
                     project,
-                    &mut power_refs,
+                    &mut *power_refs,
                 ) {
                     children.extend(sexps);
                 }
             }
         }
         for pin in &reconciled.no_connects {
+            if render
+                .members
+                .is_some_and(|members| !members.contains(&pin.component))
+            {
+                continue;
+            }
             if let Some(sexp) = build_no_connect(board, pin, &placements, project) {
                 children.push(sexp);
             }
@@ -415,9 +567,41 @@ pub(crate) fn build_schematic_from_layout(
     // `power:PWR_FLAG` (electrical type `power_out`) on every such
     // net so ERC treats the incoming rail as driven, exactly as the
     // KiCad demos place `#FLG` symbols at board power entry points.
-    for driver in &power_drivers {
-        if let Some(sexp) = build_power_flag_driver(board, driver, project, &mut power_refs) {
+    for driver in power_drivers {
+        if let Some(sexp) = build_power_flag_driver(board, driver, project, &mut *power_refs) {
             children.push(sexp);
+        }
+    }
+
+    // Root furniture (§P26 multi-sheet only): sub-sheet instance
+    // boxes with one pin per cross-sheet net, plus the root wires
+    // joining same-net pins and their junction dots.
+    if let Some(furniture) = render.root_furniture {
+        for (index, instance) in furniture.instances.iter().enumerate() {
+            children.push(build_sheet_instance(
+                instance,
+                render.project_name,
+                &render.uuid,
+                (index + 2) as u32,
+            ));
+        }
+        for wire in &furniture.wires {
+            children.push(build_root_wire(wire, project));
+        }
+        for (jx, jy) in &furniture.junctions {
+            let key = format!("root_junction_{jx}_{jy}");
+            children.push(Sexp::list(
+                "junction",
+                vec![
+                    Sexp::list("at", vec![num(*jx), num(*jy)]),
+                    Sexp::list("diameter", vec![num(0.0)]),
+                    Sexp::list("color", vec![num(0.0), num(0.0), num(0.0), num(0.0)]),
+                    str_pair(
+                        "uuid",
+                        derive_entity_uuid(project, "junction", &key).to_string(),
+                    ),
+                ],
+            ));
         }
     }
 
@@ -749,6 +933,192 @@ fn build_net_label(
     );
 
     Some(vec![wire_sexp, label_sexp])
+}
+
+/// Cross-sheet stub for one in-sheet endpoint of a net that continues
+/// on another sheet (§P26): a short stub wire plus a hierarchical
+/// label carrying the shared net name. Positioned exactly like a
+/// local net label (pin terminal plus stub); the parent sheet
+/// instance carries the matching pin, and the root sheet wires
+/// same-named pins together.
+fn build_hierarchical_label(
+    board: &Board,
+    label: &synth_layout::HierarchicalLabel,
+    placements: &HashMap<ComponentId, &ComponentPlacement>,
+    project: &Uuid,
+    sheet: &str,
+) -> Option<Vec<Sexp>> {
+    let component = board.component(label.component)?;
+    let (x, y, dx, _dy) = pin_terminal_xy(board, label.component, label.pin, placements)?;
+    let stub_len = 5.08;
+    let (stub_x, angle) = if dx >= -0.1 {
+        (x + stub_len, 0.0)
+    } else {
+        (x - stub_len, 180.0)
+    };
+
+    // Sheet-scoped uuid keys: the same endpoint renders once per
+    // sheet, and each rendering needs its own identity.
+    let key = format!("hier_label_{sheet}_{}_{}", component.refdes, label.pin.0);
+    let wire_uuid = derive_entity_uuid(project, "hier_label_wire", &key);
+    let label_uuid = derive_entity_uuid(project, "hier_label", &key);
+
+    let wire_sexp = Sexp::list(
+        "wire",
+        vec![
+            Sexp::list(
+                "pts",
+                vec![
+                    Sexp::list("xy", vec![num(x), num(y)]),
+                    Sexp::list("xy", vec![num(stub_x), num(y)]),
+                ],
+            ),
+            Sexp::list(
+                "stroke",
+                vec![
+                    Sexp::list("width", vec![num(0.0)]),
+                    Sexp::list("type", vec![Sexp::atom("default")]),
+                ],
+            ),
+            str_pair("uuid", wire_uuid.to_string()),
+        ],
+    );
+
+    let label_sexp = Sexp::list(
+        "hierarchical_label",
+        vec![
+            Sexp::str(&label.label),
+            Sexp::list("shape", vec![Sexp::atom("bidirectional")]),
+            Sexp::list("at", vec![num(stub_x), num(y), num(angle)]),
+            Sexp::list(
+                "effects",
+                vec![
+                    Sexp::list("font", vec![Sexp::list("size", vec![num(1.27), num(1.27)])]),
+                    Sexp::list(
+                        "justify",
+                        vec![Sexp::atom(if angle == 0.0 { "left" } else { "right" })],
+                    ),
+                ],
+            ),
+            str_pair("uuid", label_uuid.to_string()),
+        ],
+    );
+
+    Some(vec![wire_sexp, label_sexp])
+}
+
+/// One sub-sheet instance box on the root sheet: the box, its
+/// sheetname/sheetfile properties, one pin per cross-sheet net, and
+/// the sheet instance path block. Pins are bidirectional — every
+/// cross-sheet signal net enters and leaves through matching
+/// hierarchical labels. Shape follows dev-docs KiCad schematic
+/// format (sheet section: stroke + fill are mandatory, pins carry a
+/// type/effects/angle, instances map the project path to a page).
+fn build_sheet_instance(
+    instance: &PlacedSheetInstance,
+    project_name: &str,
+    root_uuid: &Uuid,
+    page: u32,
+) -> Sexp {
+    let (x, y) = instance.at_mm;
+    let (w, h) = instance.size_mm;
+    let mut children = vec![
+        Sexp::list("at", vec![num(x), num(y)]),
+        Sexp::list("size", vec![num(w), num(h)]),
+        Sexp::list(
+            "stroke",
+            vec![
+                Sexp::list("width", vec![num(0.254)]),
+                Sexp::list("type", vec![Sexp::atom("default")]),
+            ],
+        ),
+        Sexp::list("fill", vec![Sexp::list("type", vec![Sexp::atom("none")])]),
+        str_pair("uuid", instance.uuid.to_string()),
+        Sexp::list(
+            "property",
+            vec![
+                Sexp::str("Sheetname"),
+                Sexp::str(&instance.name),
+                Sexp::list("at", vec![num(x), num(y - 2.54), num(0.0)]),
+                field_effects(Some("left")),
+            ],
+        ),
+        Sexp::list(
+            "property",
+            vec![
+                Sexp::str("Sheetfile"),
+                Sexp::str(&instance.file),
+                Sexp::list("at", vec![num(x), num(y - 2.54), num(0.0)]),
+                hidden_field_effects(),
+            ],
+        ),
+    ];
+    for (net, (px, py), pin_uuid) in &instance.pins {
+        children.push(Sexp::list(
+            "pin",
+            vec![
+                Sexp::str(net),
+                Sexp::atom("bidirectional"),
+                Sexp::list("at", vec![num(*px), num(*py), num(270.0)]),
+                Sexp::list(
+                    "effects",
+                    vec![Sexp::list(
+                        "font",
+                        vec![Sexp::list("size", vec![num(1.27), num(1.27)])],
+                    )],
+                ),
+                Sexp::list("uuid", vec![Sexp::str(pin_uuid.to_string())]),
+            ],
+        ));
+    }
+    children.push(Sexp::list(
+        "instances",
+        vec![Sexp::list(
+            "project",
+            vec![
+                Sexp::str(project_name),
+                Sexp::list(
+                    "path",
+                    vec![
+                        Sexp::str(format!("/{root_uuid}/{}", instance.uuid)),
+                        Sexp::list("page", vec![Sexp::str(page.to_string())]),
+                    ],
+                ),
+            ],
+        )],
+    ));
+    Sexp::list("sheet", children)
+}
+
+/// One root wire segment joining same-net sheet pins.
+fn build_root_wire(wire: &RootWire, project: &Uuid) -> Sexp {
+    let key = format!(
+        "root_wire_{}_{}_{}_{}",
+        wire.a_mm.0, wire.a_mm.1, wire.b_mm.0, wire.b_mm.1
+    );
+    Sexp::list(
+        "wire",
+        vec![
+            Sexp::list(
+                "pts",
+                vec![
+                    Sexp::list("xy", vec![num(wire.a_mm.0), num(wire.a_mm.1)]),
+                    Sexp::list("xy", vec![num(wire.b_mm.0), num(wire.b_mm.1)]),
+                ],
+            ),
+            Sexp::list(
+                "stroke",
+                vec![
+                    Sexp::list("width", vec![num(0.0)]),
+                    Sexp::list("type", vec![Sexp::atom("default")]),
+                ],
+            ),
+            str_pair(
+                "uuid",
+                derive_entity_uuid(project, "wire", &key).to_string(),
+            ),
+        ],
+    )
 }
 
 /// Resolve a power-flag label to a KiCad lib_id, preferring the

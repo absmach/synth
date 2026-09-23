@@ -45,6 +45,7 @@ fn layout(
         power_flags,
         net_labels,
         annotations: Vec::new(),
+        hierarchical_labels: Vec::new(),
         group_boxes: Vec::new(),
         sheet_size: SheetSize::A4,
     }

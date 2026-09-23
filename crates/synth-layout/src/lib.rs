@@ -58,6 +58,7 @@ mod patterns;
 pub mod placer;
 pub mod route;
 pub mod score;
+pub mod sheets;
 
 pub use placer::{default_placer, NativeSemanticPlacer, Placer};
 
@@ -175,6 +176,22 @@ pub struct NetLabel {
     pub label: String,
 }
 
+/// A cross-sheet signal net stub (§P26 multi-sheet).
+///
+/// Same identity as a [`NetLabel`] — one per in-sheet endpoint of a
+/// net that continues on another sheet — but rendered as a KiCad
+/// hierarchical label (paired with a pin on the parent sheet
+/// instance) instead of a local label. Power nets never need one:
+/// power symbols already connect globally by value.
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub struct HierarchicalLabel {
+    pub net: NetId,
+    pub component: ComponentId,
+    pub pin: PinId,
+    /// Net name, identical on every sheet the net touches.
+    pub label: String,
+}
+
 /// The complete layout output. Stable shape across slices — later
 /// slices fill in `wires`, may reshape `sheet_size`, but never
 /// rename or remove fields.
@@ -188,6 +205,11 @@ pub struct Layout {
     pub junctions: Vec<(f64, f64)>,
     pub power_flags: Vec<PowerFlag>,
     pub net_labels: Vec<NetLabel>,
+    /// Cross-sheet signal stubs, one per in-sheet endpoint of a net
+    /// that continues on another sheet. Empty on single-sheet
+    /// layouts; populated by the §P26 split.
+    #[serde(default)]
+    pub hierarchical_labels: Vec<HierarchicalLabel>,
     /// Free text drawn on the sheet — sub-circuit captions, design
     /// notes (§21.1 `notes` blocks), and generated connector pin
     /// legends. Placement owns where prose lands; consumers render
@@ -1063,7 +1085,7 @@ pub fn layout_with_sidecar(board: &Board, sidecar_path: Option<&std::path::Path>
         .map(|c| (c.refdes.clone(), c.id))
         .collect();
     layout_with_overrides(board, &default_placer(), &move |l| {
-        sidecar.apply_to_layout(l, &refdes_to_id);
+        sidecar.apply_to_layout(board, l, &refdes_to_id);
     })
 }
 
@@ -2641,8 +2663,8 @@ fn place_clusters(board: &Board, clusters: &[Cluster]) -> Layout {
     // should stay on the smallest page that holds it, and a stack one
     // row taller often drops a board from A2 back to A3. Ties keep the
     // earliest (most aspect-balanced) attempt. If nothing fits — only
-    // possible past A2, where sheets stop growing (§7.5.11 multi-sheet
-    // is future work) — keep whichever overflowed least, so the ERC
+    // possible past A2, where sheets stop growing (the §P26 multi-sheet
+    // split handles it) — keep whichever overflowed least, so the ERC
     // diagnostic reports the smallest violation.
     let rows_start = rows_aspect.min(max_rows_for_sheet(SheetSize::A4)).max(1);
     let rows_cap = max_rows_for_sheet(SheetSize::A2)
@@ -2702,6 +2724,7 @@ fn place_clusters(board: &Board, clusters: &[Cluster]) -> Layout {
         power_flags: Vec::new(),
         net_labels: Vec::new(),
         annotations: Vec::new(),
+        hierarchical_labels: Vec::new(),
         group_boxes: Vec::new(),
         sheet_size,
     }
@@ -3313,9 +3336,8 @@ fn layer_for(component: &synth_ir::Component) -> u32 {
 /// to x≈565 mm against 297 mm). For that case we escalate to the
 /// smallest ISO size whose landscape dims contain `(w, h)`, ceiling
 /// at A2; beyond A2 the declared size stops growing and the
-/// pre-existing overflow behaviour applies until multi-sheet support
-/// (§21.2) lands. `w`/`h` are the caller-computed content bounds
-/// including page margins.
+/// multi-sheet split (§P26) takes over. `w`/`h` are the
+/// caller-computed content bounds including page margins.
 fn sheet_size_for(w: f64, h: f64) -> SheetSize {
     const SIZES: [(SheetSize, f64, f64); 3] = [
         (SheetSize::A4, 297.0, 210.0),
@@ -3328,6 +3350,14 @@ fn sheet_size_for(w: f64, h: f64) -> SheetSize {
         }
     }
     SheetSize::A2
+}
+
+/// Smallest standard sheet fitting the given content bounds, in mm
+/// page coordinates. Used by the §P26 multi-sheet exporter to size
+/// the root sheet around placed sheet instances.
+pub fn fit_sheet_size(min_x: f64, max_x: f64, min_y: f64, max_y: f64) -> SheetSize {
+    let (need_w, need_h) = sheet_needs(min_x, max_x, min_y, max_y);
+    sheet_size_for(need_w, need_h)
 }
 
 // ----- Human-like schematic alignment helpers --------------------------------
@@ -4139,6 +4169,7 @@ mod soft_pin_swap_tests {
             power_flags: Vec::new(),
             net_labels: Vec::new(),
             annotations: Vec::new(),
+            hierarchical_labels: Vec::new(),
             group_boxes: Vec::new(),
             sheet_size: SheetSize::A4,
         }
@@ -5272,6 +5303,7 @@ mod documentation_tests {
                 title: "Build".to_string(),
                 lines: vec!["Assemble at JLCPCB.".to_string()],
                 group: None,
+                sheet: None,
                 source_span: Span::new(0, 0),
             }],
         );
@@ -5303,6 +5335,7 @@ mod documentation_tests {
                 title: "Input notes".to_string(),
                 lines: vec!["Keep leads short.".to_string()],
                 group: Some("Input".to_string()),
+                sheet: None,
                 source_span: Span::new(0, 0),
             }],
         );

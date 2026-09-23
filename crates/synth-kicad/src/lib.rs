@@ -49,6 +49,7 @@ mod erc_validate;
 mod export;
 mod fab;
 pub mod import;
+pub mod multisheet;
 mod pcb;
 pub mod pin_reconcile;
 mod pnp;
@@ -74,6 +75,7 @@ pub use import::{import_project, ImportError, NormalisedRecord, IMPORTER_VERSION
 pub use pin_reconcile::physical_terminal;
 pub use pnp::build_pnp_csv;
 pub use schem_erc::{
-    check as check_schem_erc, check_with_config as check_schem_erc_with_config, SchemErcConfig,
+    check as check_schem_erc, check_sheets as check_schem_erc_sheets,
+    check_with_config as check_schem_erc_with_config, SchemErcConfig,
 };
 pub use symbol_lib::build_pwr_flag_fallback;

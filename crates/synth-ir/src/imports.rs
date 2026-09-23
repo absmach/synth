@@ -320,9 +320,32 @@ fn load_one_import(
         diagnostics,
     );
     active.remove(&path);
-    emitted.insert(path);
+    emitted.insert(path.clone());
 
-    Some(resolved_inner.board.statements)
+    // Import boundary as an implicit sheet: every file is a split
+    // boundary (§P26). Components declared in the imported file land
+    // on a sheet named after the file stem, so a large board splits
+    // along file lines exactly like it splits along `sheet` blocks.
+    // Explicit `sheet` blocks inside the file keep their own names
+    // (lowering prefers the innermost sheet), and files contributing
+    // no statements produce no sheet. Small boards never split, so
+    // for them this is annotation-only and layout/export are
+    // byte-identical to the pre-boundary behavior.
+    let stmts = resolved_inner.board.statements;
+    if stmts.is_empty() {
+        return Some(stmts);
+    }
+    let sheet_name = Path::new(&path)
+        .file_stem()
+        .and_then(|s| s.to_str())
+        .unwrap_or(&path)
+        .to_string();
+    let wrapper = synth_ast::StatementAst::Sheet(synth_ast::SheetStmt {
+        name: sheet_name,
+        statements: stmts,
+        span: import.span,
+    });
+    Some(vec![wrapper])
 }
 
 fn sandbox_violation(path: &str) -> Option<&'static str> {
@@ -379,12 +402,17 @@ mod tests {
         loader.insert("lib.synth", r#"board "lib" { manufacturer "jlcpcb" }"#);
         let r = resolve(&p, &loader, "main.synth");
         assert!(r.diagnostics.is_empty(), "{:?}", r.diagnostics);
-        // imported manufacturer + own layers = 2 statements
+        // imported manufacturer + own layers = 2 statements; the
+        // import arrives wrapped in its file-boundary sheet.
         assert_eq!(r.program.board.statements.len(), 2);
         assert!(r.program.imports.is_empty());
         // Imported statements first, then own statements.
+        let synth_ast::StatementAst::Sheet(sheet) = &r.program.board.statements[0] else {
+            panic!("import must arrive in its file-boundary sheet");
+        };
+        assert_eq!(sheet.name, "lib");
         assert!(matches!(
-            r.program.board.statements[0],
+            sheet.statements[0],
             synth_ast::StatementAst::Manufacturer(_)
         ));
         assert!(matches!(
@@ -470,6 +498,18 @@ mod tests {
         assert!(r.diagnostics.iter().any(|d| d.code == "E-SYNTH-IMPORT-005"));
     }
 
+    fn count_layers(stmts: &[synth_ast::StatementAst]) -> usize {
+        stmts
+            .iter()
+            .map(|s| match s {
+                synth_ast::StatementAst::Layers(_) => 1,
+                synth_ast::StatementAst::Sheet(sheet) => count_layers(&sheet.statements),
+                synth_ast::StatementAst::Group(group) => count_layers(&group.statements),
+                _ => 0,
+            })
+            .sum()
+    }
+
     #[test]
     fn diamond_import_loads_once() {
         // a imports lib, b imports lib, main imports a and b.
@@ -499,15 +539,9 @@ mod tests {
         loader.insert("lib.synth", r#"board "lib" { layers 4 }"#);
         let r = resolve(&p, &loader, "main.synth");
         assert!(r.diagnostics.is_empty(), "{:?}", r.diagnostics);
-        let layers_count = r
-            .program
-            .board
-            .statements
-            .iter()
-            .filter(|s| matches!(s, synth_ast::StatementAst::Layers(_)))
-            .count();
         // Diamond import: the lib's `layers 4` should appear once,
-        // not twice. The cache absorbs the second resolution.
-        assert_eq!(layers_count, 1);
+        // not twice. The cache absorbs the second resolution (inside
+        // its file-boundary sheet).
+        assert_eq!(count_layers(&r.program.board.statements), 1);
     }
 }

@@ -97,16 +97,21 @@ pub struct GroupStmt {
 
 /// A hierarchical sheet block: `sheet "Power" { ... }`.
 ///
-/// V1 lowering treats a sheet exactly like a [`GroupStmt`]: the
-/// statements are flattened into the board and each lowered component
+/// Lowering flattens a sheet's statements into the board exactly like
+/// a [`GroupStmt`]: refdes stay board-unique and a `connect` inside a
+/// sheet may name any component on the board. Each lowered component
 /// records the innermost enclosing sheet name (alongside its group).
-/// Refdes stay board-unique; a `connect` inside a sheet may name any
-/// component on the board.
-/// The sheet name is the future hierarchical-sheet boundary: the
-/// exporter will one day emit one KiCad sheet per name, with
-/// cross-sheet nets carried on hierarchical labels. Until then the
-/// annotation already lets layout cluster per sheet and lets reviewers
-/// read the intended sheet split.
+///
+/// The sheet name is a **split boundary** (§P26): a board whose
+/// single-sheet content overflows A2 and whose components span two or
+/// more sheets exports as a KiCad hierarchy — one `.kicad_sch` per
+/// sheet plus a root carrying sheet instances — with cross-sheet
+/// signal nets carried on hierarchical labels. Small boards stay a
+/// single sheet, so the annotation also just lets layout cluster per
+/// sheet and reviewers read the intended split.
+///
+/// `import` files are implicit boundaries too: an imported file's
+/// statements arrive wrapped in a sheet named after the file stem.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct SheetStmt {
     pub name: String,

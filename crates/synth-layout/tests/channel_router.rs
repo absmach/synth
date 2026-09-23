@@ -152,6 +152,7 @@ fn two_row_board_and_layout() -> (Board, Layout) {
         power_flags: Vec::new(),
         net_labels: Vec::new(),
         annotations: Vec::new(),
+        hierarchical_labels: Vec::new(),
         group_boxes: Vec::new(),
         sheet_size: SheetSize::A4,
     };

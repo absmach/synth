@@ -89,10 +89,11 @@ pub struct Component {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub group: Option<String>,
     /// Name of the `sheet` block this component was declared inside —
-    /// the future hierarchical-sheet boundary. `None` for components
+    /// the hierarchical-sheet boundary (§P26). `None` for components
     /// declared directly in the board body. Like [`Self::group`],
     /// purely an annotation: it never affects connectivity, and
-    /// refdes remain board-unique across sheets.
+    /// refdes remain board-unique across sheets. A board large enough
+    /// to overflow A2 splits on these boundaries at export.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub sheet: Option<String>,
     pub source_span: Span,
@@ -208,7 +209,8 @@ pub struct DiffPair {
 }
 
 /// A free-text design note (`notes "Title" { "line" … }`) with the
-/// `group` it was declared inside, if any.
+/// `group` it was declared inside, if any, and the `sheet` block it
+/// was declared inside, if any (for per-sheet placement).
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Note {
     pub title: String,
@@ -216,6 +218,8 @@ pub struct Note {
     pub lines: Vec<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub group: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub sheet: Option<String>,
     pub source_span: Span,
 }
 

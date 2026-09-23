@@ -202,6 +202,28 @@ Design documentation lives in the `.synth` source, not in KiCad:
 - Every `group` gets a caption plus an outline box, and every
   connector gets a `pin: net` legend generated from the netlist.
 
+### Multi-sheet export (`sheet` blocks)
+
+`sheet "Power" { … }` blocks (and `import`ed files, which lower to a
+sheet named after the file stem) are split boundaries. A board whose
+single-sheet content still fits A2 exports as one `.kicad_sch`,
+byte-identical to before — the split is a large-board repair, not a
+restructuring of small ones. Past A2, with two or more boundaries, the
+export becomes a hierarchy:
+
+- one `<board>_<sheet>.kicad_sch` per boundary, plus the root
+  `<board>.kicad_sch` carrying the components declared outside any
+  sheet and one sheet instance per sub-sheet;
+- cross-sheet **signal** nets join through hierarchical labels (and
+  matching sheet pins + root wires); cross-sheet **power** nets need
+  no pins — power symbols connect globally by value;
+- a dragged component's sidecar override records the sheet it was
+  placed on, so moving it to another sheet invalidates the stale
+  (sheet-local) coordinates instead of misplacing it.
+
+Verify with `kicad-cli sch erc <board>.kicad_sch` on the root: the
+whole hierarchy resolves from there.
+
 ---
 
 ## 3. Symbols and footprints
@@ -405,11 +427,13 @@ and IPC-2221/IPC-2612-1 they cite.
 | Decoupling on all ICs (Sierra checklist 9)                     | `E-SYNTH-POWER-001` (manifest) + KG `ic_decoupling` (undeclared)                                                    |
 | Test points + expected voltages (AIVON advanced tips)          | KG `rail_test_points` — catalog entry until a test-point part exists                                                |
 
-Not yet applicable (single-sheet V1): alphabetical page names,
-revision-history page, table of contents, off-page connectors, block
-diagram sheet (Sierra 2/6/7/8/9). These arrive with hierarchical
-sheets — the current compact single-sheet design is documented in
-[`schematic-procedures.md`](schematic-procedures.md).
+Not yet applicable: revision-history page, table of contents, block
+diagram sheet (Sierra 2/6/7/8/9). Hierarchical sheets **are** emitted
+(§P26): a board whose single-sheet content overflows A2 and whose
+components span two or more `sheet` blocks (or imported files) exports
+as one `.kicad_sch` per sheet plus a root carrying sheet instances, with
+cross-sheet signal nets on hierarchical labels. Small boards stay a
+single sheet.
 
 ---
 
