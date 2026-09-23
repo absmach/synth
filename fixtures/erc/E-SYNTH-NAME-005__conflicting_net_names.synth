@@ -1,0 +1,12 @@
+// Two different explicit net names shorted by the shared R2.p1
+// endpoint: one rail must win, so this is an error.
+board "conflicting_net_names" {
+  layers 2
+
+  component R1: resistor "r_generic_0603"
+  component R2: resistor "r_generic_0603"
+  component R3: resistor "r_generic_0603"
+
+  connect R1.p1 -> R2.p1 as "+3V3"
+  connect R2.p1 -> R3.p1 as "+5V"
+}

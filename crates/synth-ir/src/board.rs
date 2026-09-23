@@ -8,7 +8,7 @@ use serde::{Deserialize, Serialize};
 use synth_diagnostics::Span;
 use synth_registry::Part;
 
-use crate::units::{Impedance, Length};
+use crate::units::{Impedance, Length, Voltage};
 
 /// Stable identifier for a component within a single board.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
@@ -46,8 +46,9 @@ pub struct Board {
     pub diff_pairs: Vec<DiffPair>,
     pub keepouts: Vec<Keepout>,
     /// Declared routing-constraint classes (`netclass "PWR" { … }`).
-    /// V1 records the class rules; net-to-class assignment and
-    /// KiCad `net_class` export arrive in the follow-up.
+    /// Nets join a class via `class "PWR"` on their `net`, `power`,
+    /// or `connect` statement; the PCB exporter emits one KiCad
+    /// `net_class` per declared class with its member nets.
     pub netclasses: Vec<NetClass>,
     pub source_span: Span,
 }
@@ -154,8 +155,22 @@ pub struct Net {
     /// User-declared name if available; otherwise auto-generated
     /// (`net_0`, `net_1`, ...) for traceability in diagnostics and
     /// the SynthJSON projection.
+    ///
+    /// Declared via `net "NAME" { … }`, `power "NAME" …`, or
+    /// `connect … as "NAME"`.
     pub name: String,
     pub endpoints: Vec<NetEndpoint>,
+    /// Netclass this net is joined to (`class "PWR"` on the `net`,
+    /// `power`, or `connect` statement). Must name a declared
+    /// `netclass`; unknown names are reported at lowering
+    /// (`E-SYNTH-NAME-006`).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub netclass: Option<String>,
+    /// Declared nominal rail voltage (`power "NAME" <voltage>`), in
+    /// integer microvolts. Power-domain inference prefers this over
+    /// pin-name heuristics.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub voltage: Option<Voltage>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -166,14 +181,19 @@ pub struct NetEndpoint {
 }
 
 /// Differential pair declaration. The `positive`/`negative` strings
-/// are the net *names* as written in source; Phase 2 does not yet
-/// resolve them to [`NetId`]s (the V1 grammar provides no way to
-/// name nets at the connection site). Resolution will land alongside
-/// explicit net-naming syntax.
+/// are the net *names* as written in source. When those names match
+/// declared nets (`net "USB_DP" { … }`, `connect … as "USB_DP"`),
+/// lowering resolves them to [`NetId`]s in `positive_net` /
+/// `negative_net`; legacy designs without named nets leave them
+/// `None` and validation falls back to endpoint-name matching.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct DiffPair {
     pub positive: String,
     pub negative: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub positive_net: Option<NetId>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub negative_net: Option<NetId>,
     pub impedance: Option<Impedance>,
     pub source_span: Span,
 }

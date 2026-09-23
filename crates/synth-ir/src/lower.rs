@@ -36,10 +36,10 @@ use std::collections::HashMap;
 
 use synth_ast::{
     ComponentDeclAst, DiffPairAttr, DiffPairStmt, EndpointAst, KeepoutAttr, KeepoutStmt,
-    NetclassStmt, ProgramAst, StatementAst,
+    NetclassStmt, ProgramAst, StatementAst, ValueWithUnit,
 };
 use synth_diagnostics::{
-    Diagnostic, DiagnosticBuilder, Location, Patch, PatchKind, Severity, SuggestedAction,
+    Diagnostic, DiagnosticBuilder, Location, Patch, PatchKind, Severity, Span, SuggestedAction,
 };
 use synth_registry::{Part, Registry};
 
@@ -47,7 +47,71 @@ use crate::board::{
     Board, Component, ComponentId, DiffPair, Keepout, Net, NetClass, NetEndpoint, NetId, PinId,
     PlacementEdge, PlacementRegion, PlacementSide,
 };
-use crate::units::{ConversionError, Impedance, Length};
+use crate::units::{ConversionError, Impedance, Length, Voltage};
+
+/// One `connect` statement after flattening: a source, one or more
+/// targets (one-to-many fanout), and the optional `as "NET"` /
+/// `class "CLASS"` join clauses.
+struct ConnectionRecord {
+    from: EndpointAst,
+    tos: Vec<EndpointAst>,
+    span: Span,
+    net_name: Option<String>,
+    netclass: Option<String>,
+}
+
+/// One `net "NAME" { … }` block after flattening.
+struct NetDeclRecord {
+    name: String,
+    netclass: Option<String>,
+    endpoints: Vec<EndpointAst>,
+    span: Span,
+}
+
+/// One `power "NAME" <voltage> { … }` block after flattening.
+struct PowerDeclRecord {
+    name: String,
+    voltage: ValueWithUnit,
+    netclass: Option<String>,
+    endpoints: Vec<EndpointAst>,
+    span: Span,
+}
+
+/// Name/class/voltage assertions one statement contributes to the
+/// union-find in [`LowerCtx::build_named_nets`]: the member endpoint
+/// indices it joins plus the explicit names it declares.
+struct Assertion {
+    members: Vec<usize>,
+    names: Vec<String>,
+    classes: Vec<String>,
+    voltages: Vec<Voltage>,
+    span: Span,
+}
+
+/// One union-find group's accumulated assertions, keyed by root.
+struct GroupInfo {
+    members: Vec<usize>,
+    names: Vec<(String, Span)>,
+    classes: Vec<(String, Span)>,
+    voltages: Vec<(Voltage, Span)>,
+}
+
+/// A declared name with no populated net to join (bare
+/// `power "X" 3.3v`, or a block whose endpoints all failed
+/// resolution): materialized as an empty named net.
+struct OrphanDecl {
+    name: String,
+    classes: Vec<(String, Span)>,
+    voltages: Vec<(Voltage, Span)>,
+}
+
+/// Resolved endpoints, joins, and per-statement assertions feeding
+/// the union-find in [`LowerCtx::build_named_nets`].
+struct EndpointSet {
+    endpoints: Vec<(ComponentId, PinId, Span)>,
+    joins: Vec<(usize, usize)>,
+    assertions: Vec<Assertion>,
+}
 
 /// One frame of the block-flattening walk in [`lower`]: the statement
 /// slice, the next index into it, and the enclosing group/sheet
@@ -74,8 +138,10 @@ pub fn lower(ast: &ProgramAst, registry: &Registry, file: &str) -> LowerResult {
     let mut ctx = LowerCtx::new(file);
     let mut components: Vec<Component> = Vec::new();
     let mut refdes_index: HashMap<String, ComponentId> = HashMap::new();
-    let mut connections: Vec<(EndpointAst, EndpointAst, synth_diagnostics::Span)> = Vec::new();
-    let mut diff_pairs: Vec<DiffPair> = Vec::new();
+    let mut connections: Vec<ConnectionRecord> = Vec::new();
+    let mut net_decls: Vec<NetDeclRecord> = Vec::new();
+    let mut power_decls: Vec<PowerDeclRecord> = Vec::new();
+    let mut diff_pair_stmts: Vec<DiffPairStmt> = Vec::new();
     let mut keepouts: Vec<Keepout> = Vec::new();
     let mut netclasses: Vec<NetClass> = Vec::new();
     let mut layers: u32 = 0;
@@ -112,9 +178,34 @@ pub fn lower(ast: &ProgramAst, registry: &Registry, file: &str) -> LowerResult {
                 components.push(comp);
             }
             StatementAst::Connection(c) => {
-                connections.push((c.from.clone(), c.to.clone(), c.span));
+                let mut tos = vec![c.to.clone()];
+                tos.extend(c.additional.iter().cloned());
+                connections.push(ConnectionRecord {
+                    from: c.from.clone(),
+                    tos,
+                    span: c.span,
+                    net_name: c.net_name.clone(),
+                    netclass: c.netclass.clone(),
+                });
             }
-            StatementAst::DiffPair(d) => diff_pairs.push(ctx.lower_diff_pair(d)),
+            StatementAst::Net(n) => {
+                net_decls.push(NetDeclRecord {
+                    name: n.name.clone(),
+                    netclass: n.netclass.clone(),
+                    endpoints: n.endpoints.clone(),
+                    span: n.span,
+                });
+            }
+            StatementAst::Power(p) => {
+                power_decls.push(PowerDeclRecord {
+                    name: p.name.clone(),
+                    voltage: p.voltage.clone(),
+                    netclass: p.netclass.clone(),
+                    endpoints: p.endpoints.clone(),
+                    span: p.span,
+                });
+            }
+            StatementAst::DiffPair(d) => diff_pair_stmts.push(d.clone()),
             StatementAst::Keepout(k) => keepouts.push(ctx.lower_keepout(k)),
             StatementAst::Netclass(n) => netclasses.push(ctx.lower_netclass(n)),
             StatementAst::Group(g) => {
@@ -129,9 +220,20 @@ pub fn lower(ast: &ProgramAst, registry: &Registry, file: &str) -> LowerResult {
         }
     }
 
-    // Build nets by union-find over resolved endpoints. Each successful
-    // connect contributes two endpoints that join the same set.
-    let nets = ctx.build_nets(&connections, &components, &refdes_index);
+    // Build nets by union-find over resolved endpoints. Each
+    // successful `connect` joins its source with every target, each
+    // `net`/`power` block joins its listed endpoints, and every
+    // statement naming the same explicit net merges into one net.
+    let nets = ctx.build_named_nets(
+        &connections,
+        &net_decls,
+        &power_decls,
+        &components,
+        &refdes_index,
+        &netclasses,
+    );
+
+    let diff_pairs = ctx.lower_diff_pairs(&diff_pair_stmts, &nets);
 
     let board = Board {
         name: ast.board.name.clone(),
@@ -354,6 +456,24 @@ impl<'a> LowerCtx<'a> {
         );
     }
 
+    /// Lower `diff_pair` statements and resolve each leg to its
+    /// real net when the leg names a declared net (`net "USB_DP"` /
+    /// `connect … as "USB_DP"`). Unresolved legs keep `None` and
+    /// validation falls back to endpoint-name matching for legacy
+    /// designs without named nets.
+    fn lower_diff_pairs(&mut self, stmts: &[DiffPairStmt], nets: &[Net]) -> Vec<DiffPair> {
+        let name_to_id: HashMap<&str, NetId> =
+            nets.iter().map(|n| (n.name.as_str(), n.id)).collect();
+        let mut out = Vec::with_capacity(stmts.len());
+        for d in stmts {
+            let mut dp = self.lower_diff_pair(d);
+            dp.positive_net = name_to_id.get(d.pos.as_str()).copied();
+            dp.negative_net = name_to_id.get(d.neg.as_str()).copied();
+            out.push(dp);
+        }
+        out
+    }
+
     fn lower_diff_pair(&mut self, d: &DiffPairStmt) -> DiffPair {
         let mut impedance: Option<Impedance> = None;
         for attr in &d.attrs {
@@ -369,6 +489,10 @@ impl<'a> LowerCtx<'a> {
         DiffPair {
             positive: d.pos.clone(),
             negative: d.neg.clone(),
+            // Resolved to real nets by the caller (`lower`) once the
+            // net table exists; `None` until then.
+            positive_net: None,
+            negative_net: None,
             impedance,
             source_span: d.span,
         }
@@ -391,89 +515,420 @@ impl<'a> LowerCtx<'a> {
         }
     }
 
-    fn build_nets(
+    /// Build nets by union-find over resolved endpoints, honouring
+    /// explicit net names, netclass joins, and declared rail voltages.
+    ///
+    /// - Every `connect` joins its source with each target; every
+    ///   `net`/`power` block joins its listed endpoints.
+    /// - Statements naming the same net (`net "X"`, `power "X"`,
+    ///   `connect … as "X"`) merge into one net even when they share
+    ///   no endpoint.
+    /// - Two *different* explicit names shorted together is an error
+    ///   (`E-SYNTH-NAME-005`); the first-seen name wins.
+    /// - `class "C"` must name a declared netclass
+    ///   (`E-SYNTH-NAME-006`); conflicting joins on one net are also
+    ///   `E-SYNTH-NAME-006`. The first known class wins.
+    /// - Conflicting declared voltages on one net are
+    ///   `E-SYNTH-POWER-007`; the first wins.
+    /// - Declared names with no endpoints (bare `power "X" 3.3v`)
+    ///   still materialize an (empty) named net so later joins and
+    ///   power-domain inference see the rail.
+    #[allow(clippy::too_many_arguments)]
+    fn build_named_nets(
         &mut self,
-        connections: &[(EndpointAst, EndpointAst, synth_diagnostics::Span)],
+        connections: &[ConnectionRecord],
+        net_decls: &[NetDeclRecord],
+        power_decls: &[PowerDeclRecord],
         components: &[Component],
         refdes_index: &HashMap<String, ComponentId>,
+        netclasses: &[NetClass],
     ) -> Vec<Net> {
-        // Each endpoint is keyed by (ComponentId, PinId). Endpoints
-        // that fail resolution are dropped (with a diagnostic) and
-        // do not participate in net construction.
-        let mut endpoints: Vec<(ComponentId, PinId, synth_diagnostics::Span)> = Vec::new();
+        let EndpointSet {
+            endpoints,
+            joins,
+            assertions,
+        } = self.collect_assertions(
+            connections,
+            net_decls,
+            power_decls,
+            components,
+            refdes_index,
+        );
+
+        // Union-find with path compression, then merge members that
+        // share an explicit net name even when they share no endpoint
+        // (two `net "X"` blocks, or `as "X"` on disjoint connects).
+        // Returns member lists in deterministic order (by minimum
+        // endpoint index) so output is stable.
+        let ordered_groups = union_endpoint_sets(endpoints.len(), &joins, &assertions);
+
+        // Per-group assertions in statement order. Groups are keyed
+        // by position in `ordered_groups`; `member_to_root` maps each
+        // endpoint index back to its group.
+        let mut group_info: HashMap<usize, GroupInfo> = HashMap::new();
+        let mut member_to_root: HashMap<usize, usize> = HashMap::new();
+        for (gi, members) in ordered_groups.iter().enumerate() {
+            for m in members {
+                member_to_root.insert(*m, gi);
+            }
+            group_info.insert(
+                gi,
+                GroupInfo {
+                    members: members.clone(),
+                    names: Vec::new(),
+                    classes: Vec::new(),
+                    voltages: Vec::new(),
+                },
+            );
+        }
+        // Name → root for bare declarations (no resolved endpoints)
+        // to join, and orphan names (no group at all) to materialize
+        // as empty nets, both in statement order.
+        let mut name_to_root: HashMap<String, usize> = HashMap::new();
+        let mut orphans: Vec<OrphanDecl> = Vec::new();
+        let mut orphan_index: HashMap<String, usize> = HashMap::new();
+        distribute_assertions(
+            &assertions,
+            &member_to_root,
+            &mut group_info,
+            &mut name_to_root,
+            &mut orphans,
+            &mut orphan_index,
+        );
+
+        // Materialize nets in `ordered_groups` order (already
+        // deterministic: by minimum endpoint index).
+        let known_classes: HashMap<&str, &NetClass> =
+            netclasses.iter().map(|nc| (nc.name.as_str(), nc)).collect();
+
+        let mut nets: Vec<Net> = Vec::new();
+
+        for (idx, members) in ordered_groups.iter().enumerate() {
+            let info = group_info
+                .get(&member_to_root[&members[0]])
+                .expect("group exists");
+            nets.push(self.materialize_group(info, idx, &endpoints, &known_classes));
+        }
+
+        // Orphan names — declared (`power "X" 3.3v`, or blocks whose
+        // endpoints all failed resolution) but with no populated net
+        // to join — materialize as empty named nets in first-seen
+        // order, with the same join diagnostics as populated nets.
+        for orphan in &orphans {
+            let (netclass, voltage) = self.resolve_joins(
+                &orphan.name,
+                &orphan.classes,
+                &orphan.voltages,
+                &known_classes,
+            );
+            let id = NetId(nets.len() as u32);
+            nets.push(Net {
+                id,
+                name: orphan.name.clone(),
+                endpoints: Vec::new(),
+                netclass,
+                voltage,
+            });
+        }
+
+        nets
+    }
+
+    /// Materialize one union-find group as a [`Net`]: emit the
+    /// conflicting-names error (`E-SYNTH-NAME-005`) when distinct
+    /// explicit names were shorted together (first-seen wins), then
+    /// resolve the class/voltage joins. Unnamed groups keep the
+    /// legacy `net_<idx>` auto-name.
+    fn materialize_group(
+        &mut self,
+        info: &GroupInfo,
+        idx: usize,
+        endpoints: &[(ComponentId, PinId, Span)],
+        known_classes: &HashMap<&str, &NetClass>,
+    ) -> Net {
+        let mut distinct_names: Vec<(String, Span)> = Vec::new();
+        for (n, s) in &info.names {
+            if !distinct_names.iter().any(|(m, _)| m == n) {
+                distinct_names.push((n.clone(), *s));
+            }
+        }
+        if distinct_names.len() > 1 {
+            let first = &distinct_names[0].0;
+            for (other, span) in distinct_names.iter().skip(1) {
+                self.diagnostics.push(
+                    DiagnosticBuilder::new(
+                        "E-SYNTH-NAME-005",
+                        Severity::Error,
+                        "conflicting net names shorted together",
+                    )
+                    .location(Location::from_span(self.file.to_string(), *span))
+                    .expected(format!("endpoints of net `{first}` only"))
+                    .found(format!("net `{other}` shorted to net `{first}`"))
+                    .message(format!(
+                        "net `{other}` is shorted to net `{first}` by shared endpoints; give \
+                         the connection one name (rename one side) or split the nets"
+                    ))
+                    .explanation_url("synth.docs/diagnostics/E-SYNTH-NAME-005")
+                    .build(),
+                );
+            }
+        }
+        let name = distinct_names
+            .first()
+            .map_or_else(|| format!("net_{idx}"), |(n, _)| n.clone());
+
+        let (netclass, voltage) =
+            self.resolve_joins(&name, &info.classes, &info.voltages, known_classes);
+
+        let id = NetId(idx as u32);
+        let ir_endpoints = info
+            .members
+            .iter()
+            .map(|i| {
+                let (c, p, span) = endpoints[*i];
+                NetEndpoint {
+                    component: c,
+                    pin: p,
+                    source_span: span,
+                }
+            })
+            .collect();
+        Net {
+            id,
+            name,
+            endpoints: ir_endpoints,
+            netclass,
+            voltage,
+        }
+    }
+
+    /// Resolve every endpoint of every `connect` / `net` / `power`
+    /// statement to `(ComponentId, PinId)`, intern them, and record
+    /// the joins plus the per-statement name/class/voltage
+    /// assertions. Endpoints that fail resolution are dropped (with
+    /// a diagnostic) and do not participate in net construction.
+    fn collect_assertions(
+        &mut self,
+        connections: &[ConnectionRecord],
+        net_decls: &[NetDeclRecord],
+        power_decls: &[PowerDeclRecord],
+        components: &[Component],
+        refdes_index: &HashMap<String, ComponentId>,
+    ) -> EndpointSet {
+        // Each endpoint is keyed by (ComponentId, PinId).
+        let mut endpoints: Vec<(ComponentId, PinId, Span)> = Vec::new();
         let mut endpoint_index: HashMap<(ComponentId, PinId), usize> = HashMap::new();
         let mut joins: Vec<(usize, usize)> = Vec::new();
 
-        for (from_ast, to_ast, _span) in connections {
-            let f = self.resolve_endpoint(from_ast, components, refdes_index);
-            let t = self.resolve_endpoint(to_ast, components, refdes_index);
-            let (Some(f), Some(t)) = (f, t) else { continue };
+        // Per-statement name/class/voltage assertions, in statement
+        // order (see [`Assertion`]).
+        let mut assertions: Vec<Assertion> = Vec::new();
 
-            let fi = *endpoint_index
-                .entry((f.component, f.pin))
+        let intern = |ep: &NetEndpoint,
+                      endpoints: &mut Vec<(ComponentId, PinId, Span)>,
+                      endpoint_index: &mut HashMap<(ComponentId, PinId), usize>|
+         -> usize {
+            *endpoint_index
+                .entry((ep.component, ep.pin))
                 .or_insert_with(|| {
                     let i = endpoints.len();
-                    endpoints.push((f.component, f.pin, f.source_span));
+                    endpoints.push((ep.component, ep.pin, ep.source_span));
                     i
-                });
-            let ti = *endpoint_index
-                .entry((t.component, t.pin))
-                .or_insert_with(|| {
-                    let i = endpoints.len();
-                    endpoints.push((t.component, t.pin, t.source_span));
-                    i
-                });
-            joins.push((fi, ti));
+                })
+        };
+
+        for c in connections {
+            let Some(f) = self.resolve_endpoint(&c.from, components, refdes_index) else {
+                // Still resolve the targets so their own typos are
+                // reported rather than masked by the failed source.
+                for t_ast in &c.tos {
+                    let _ = self.resolve_endpoint(t_ast, components, refdes_index);
+                }
+                continue;
+            };
+            let fi = intern(&f, &mut endpoints, &mut endpoint_index);
+            let mut members = vec![fi];
+            for t_ast in &c.tos {
+                let Some(t) = self.resolve_endpoint(t_ast, components, refdes_index) else {
+                    continue;
+                };
+                let ti = intern(&t, &mut endpoints, &mut endpoint_index);
+                joins.push((fi, ti));
+                members.push(ti);
+            }
+            assertions.push(Assertion {
+                members,
+                names: c.net_name.clone().into_iter().collect(),
+                classes: c.netclass.clone().into_iter().collect(),
+                voltages: Vec::new(),
+                span: c.span,
+            });
         }
 
-        // Union-find with path compression.
-        let mut parent: Vec<usize> = (0..endpoints.len()).collect();
-        for (a, b) in joins {
-            let ra = find(&mut parent, a);
-            let rb = find(&mut parent, b);
-            if ra != rb {
-                parent[ra] = rb;
+        for n in net_decls {
+            let mut members = Vec::new();
+            for (i, ep_ast) in n.endpoints.iter().enumerate() {
+                let Some(ep) = self.resolve_endpoint(ep_ast, components, refdes_index) else {
+                    continue;
+                };
+                let idx = intern(&ep, &mut endpoints, &mut endpoint_index);
+                if i > 0 {
+                    joins.push((members[0], idx));
+                }
+                members.push(idx);
+            }
+            assertions.push(Assertion {
+                members,
+                names: vec![n.name.clone()],
+                classes: n.netclass.clone().into_iter().collect(),
+                voltages: Vec::new(),
+                span: n.span,
+            });
+        }
+
+        for p in power_decls {
+            let voltage = match Voltage::try_from(&p.voltage) {
+                Ok(v) => Some(v),
+                Err(e) => {
+                    self.emit_unit_error(&e, "power voltage");
+                    None
+                }
+            };
+            let mut members = Vec::new();
+            for (i, ep_ast) in p.endpoints.iter().enumerate() {
+                let Some(ep) = self.resolve_endpoint(ep_ast, components, refdes_index) else {
+                    continue;
+                };
+                let idx = intern(&ep, &mut endpoints, &mut endpoint_index);
+                if i > 0 {
+                    joins.push((members[0], idx));
+                }
+                members.push(idx);
+            }
+            assertions.push(Assertion {
+                members,
+                names: vec![p.name.clone()],
+                classes: p.netclass.clone().into_iter().collect(),
+                voltages: voltage.into_iter().collect(),
+                span: p.span,
+            });
+        }
+
+        EndpointSet {
+            endpoints,
+            joins,
+            assertions,
+        }
+    }
+
+    /// Shared netclass/voltage join resolution for one net: emit
+    /// unknown-class (`E-SYNTH-NAME-006`), conflicting-class
+    /// (`E-SYNTH-NAME-006`), and conflicting-voltage
+    /// (`E-SYNTH-POWER-007`) diagnostics, and return the winning
+    /// (netclass, voltage). Used for both populated nets and empty
+    /// orphan rails so the two paths cannot drift apart.
+    fn resolve_joins(
+        &mut self,
+        net_name: &str,
+        classes: &[(String, Span)],
+        voltages: &[(Voltage, Span)],
+        known_classes: &HashMap<&str, &NetClass>,
+    ) -> (Option<String>, Option<Voltage>) {
+        let mut distinct_classes: Vec<(String, Span)> = Vec::new();
+        for (c, s) in classes {
+            if !distinct_classes.iter().any(|(m, _)| m == c) {
+                distinct_classes.push((c.clone(), *s));
             }
         }
-
-        // Group endpoints by root.
-        let mut groups: HashMap<usize, Vec<usize>> = HashMap::new();
-        for i in 0..endpoints.len() {
-            let r = find(&mut parent, i);
-            groups.entry(r).or_default().push(i);
+        for (class, span) in &distinct_classes {
+            if !known_classes.contains_key(class.as_str()) {
+                self.diagnostics.push(
+                    DiagnosticBuilder::new(
+                        "E-SYNTH-NAME-006",
+                        Severity::Error,
+                        "net joined to unknown netclass",
+                    )
+                    .location(Location::from_span(self.file.to_string(), *span))
+                    .expected("a netclass declared with `netclass \"NAME\" { … }`")
+                    .found(format!("netclass `{class}` not declared"))
+                    .message(format!(
+                        "net `{net_name}` joins netclass `{class}`, which is not declared; declare \
+                         it with `netclass \"{class}\" {{ … }}` or fix the spelling"
+                    ))
+                    .explanation_url("synth.docs/diagnostics/E-SYNTH-NAME-006")
+                    .build(),
+                );
+            }
         }
-
-        // Materialize nets in deterministic order: sort groups by the
-        // minimum endpoint index they contain so output is stable.
-        let mut ordered: Vec<Vec<usize>> = groups.into_values().collect();
-        for g in &mut ordered {
-            g.sort_unstable();
-        }
-        ordered.sort_by_key(|g| g[0]);
-
-        ordered
-            .into_iter()
-            .enumerate()
-            .map(|(idx, members)| {
-                let id = NetId(idx as u32);
-                let endpoints = members
-                    .into_iter()
-                    .map(|i| {
-                        let (c, p, span) = endpoints[i];
-                        NetEndpoint {
-                            component: c,
-                            pin: p,
-                            source_span: span,
-                        }
-                    })
-                    .collect();
-                Net {
-                    id,
-                    name: format!("net_{idx}"),
-                    endpoints,
+        if distinct_classes
+            .iter()
+            .filter(|(c, _)| known_classes.contains_key(c.as_str()))
+            .count()
+            > 1
+        {
+            let first = distinct_classes
+                .iter()
+                .find(|(c, _)| known_classes.contains_key(c.as_str()))
+                .expect("a known class");
+            for (other, span) in &distinct_classes {
+                if other == &first.0 || !known_classes.contains_key(other.as_str()) {
+                    continue;
                 }
-            })
-            .collect()
+                self.diagnostics.push(
+                    DiagnosticBuilder::new(
+                        "E-SYNTH-NAME-006",
+                        Severity::Error,
+                        "net joined to conflicting netclasses",
+                    )
+                    .location(Location::from_span(self.file.to_string(), *span))
+                    .expected(format!("net `{net_name}` in a single netclass"))
+                    .found(format!(
+                        "netclasses `{}` and `{other}` both joined",
+                        first.0
+                    ))
+                    .message(format!(
+                        "net `{net_name}` joins both netclass `{}` and netclass `{other}`; keep \
+                         one `class` clause",
+                        first.0
+                    ))
+                    .explanation_url("synth.docs/diagnostics/E-SYNTH-NAME-006")
+                    .build(),
+                );
+            }
+        }
+        let netclass = distinct_classes
+            .iter()
+            .find(|(c, _)| known_classes.contains_key(c.as_str()))
+            .map(|(c, _)| c.clone());
+
+        if voltages.len() > 1 {
+            let first = voltages[0].0;
+            for (other, span) in voltages.iter().skip(1) {
+                self.diagnostics.push(
+                    DiagnosticBuilder::new(
+                        "E-SYNTH-POWER-007",
+                        Severity::Error,
+                        "conflicting rail voltages shorted together",
+                    )
+                    .location(Location::from_span(self.file.to_string(), *span))
+                    .expected(format!(
+                        "a single nominal voltage on net `{net_name}` ({} V)",
+                        first.to_v()
+                    ))
+                    .found(format!("{} V shorted to {} V", other.to_v(), first.to_v()))
+                    .message(format!(
+                        "net `{net_name}` declares both {} V and {} V; rails at different \
+                         voltages must not be shorted",
+                        first.to_v(),
+                        other.to_v()
+                    ))
+                    .explanation_url("synth.docs/diagnostics/E-SYNTH-POWER-007")
+                    .build(),
+                );
+            }
+        }
+        let voltage = voltages.first().map(|(v, _)| *v);
+        (netclass, voltage)
     }
 
     fn resolve_endpoint(
@@ -586,6 +1041,135 @@ impl<'a> LowerCtx<'a> {
                 .build(),
         );
     }
+}
+
+/// Distribute per-statement assertions into their union-find
+/// groups. Two passes so a bare `power "X" 3.3v` joins the named net
+/// no matter whether it is written before or after the statements
+/// that populate it: first every assertion with members (building
+/// name → root), then the bare ones (joining by name, else becoming
+/// orphans for empty-net materialization).
+#[allow(clippy::too_many_arguments)]
+fn distribute_assertions(
+    assertions: &[Assertion],
+    member_to_root: &HashMap<usize, usize>,
+    group_info: &mut HashMap<usize, GroupInfo>,
+    name_to_root: &mut HashMap<String, usize>,
+    orphans: &mut Vec<OrphanDecl>,
+    orphan_index: &mut HashMap<String, usize>,
+) {
+    for a in assertions.iter().filter(|a| !a.members.is_empty()) {
+        let r = member_to_root[&a.members[0]];
+        let info = group_info.get_mut(&r).expect("group exists");
+        for name in &a.names {
+            if !info.names.iter().any(|(n, _)| n == name) {
+                info.names.push((name.clone(), a.span));
+            }
+            name_to_root.entry(name.clone()).or_insert(r);
+        }
+        for class in &a.classes {
+            if !info.classes.iter().any(|(c, _)| c == class) {
+                info.classes.push((class.clone(), a.span));
+            }
+        }
+        for v in &a.voltages {
+            if !info.voltages.iter().any(|(w, _)| w == v) {
+                info.voltages.push((*v, a.span));
+            }
+        }
+    }
+    for a in assertions.iter().filter(|a| a.members.is_empty()) {
+        for name in &a.names {
+            if let Some(&r) = name_to_root.get(name) {
+                let info = group_info.get_mut(&r).expect("group exists");
+                for class in &a.classes {
+                    if !info.classes.iter().any(|(c, _)| c == class) {
+                        info.classes.push((class.clone(), a.span));
+                    }
+                }
+                for v in &a.voltages {
+                    if !info.voltages.iter().any(|(w, _)| w == v) {
+                        info.voltages.push((*v, a.span));
+                    }
+                }
+            } else if let Some(&oi) = orphan_index.get(name) {
+                let orphan = &mut orphans[oi];
+                for class in &a.classes {
+                    if !orphan.classes.iter().any(|(c, _)| c == class) {
+                        orphan.classes.push((class.clone(), a.span));
+                    }
+                }
+                for v in &a.voltages {
+                    if !orphan.voltages.iter().any(|(w, _)| w == v) {
+                        orphan.voltages.push((*v, a.span));
+                    }
+                }
+            } else {
+                orphan_index.insert(name.clone(), orphans.len());
+                orphans.push(OrphanDecl {
+                    name: name.clone(),
+                    classes: a.classes.iter().map(|c| (c.clone(), a.span)).collect(),
+                    voltages: a.voltages.iter().map(|v| (*v, a.span)).collect(),
+                });
+            }
+        }
+    }
+}
+
+/// Union-find over endpoint indices plus merging of members that
+/// share an explicit net name even when they share no endpoint (two
+/// `net "X"` blocks, or `as "X"` on disjoint connects). Returns the
+/// member lists in deterministic order (by minimum endpoint index)
+/// so net output is stable.
+fn union_endpoint_sets(
+    count: usize,
+    joins: &[(usize, usize)],
+    assertions: &[Assertion],
+) -> Vec<Vec<usize>> {
+    // Union-find with path compression.
+    let mut parent: Vec<usize> = (0..count).collect();
+    for (a, b) in joins {
+        let ra = find(&mut parent, *a);
+        let rb = find(&mut parent, *b);
+        if ra != rb {
+            parent[ra] = rb;
+        }
+    }
+    // Merge members sharing an explicit name. Stable iteration:
+    // assertions are already in statement order and member lists in
+    // endpoint order.
+    let mut name_root: HashMap<&str, usize> = HashMap::new();
+    for a in assertions {
+        for name in &a.names {
+            for m in &a.members {
+                if let Some(&first) = name_root.get(name.as_str()) {
+                    let rm = find(&mut parent, *m);
+                    let rf = find(&mut parent, first);
+                    if rm != rf {
+                        parent[rm] = rf;
+                    }
+                } else {
+                    name_root.insert(name.as_str(), *m);
+                }
+            }
+        }
+    }
+
+    // Group endpoints by root.
+    let mut groups: HashMap<usize, Vec<usize>> = HashMap::new();
+    for i in 0..count {
+        let r = find(&mut parent, i);
+        groups.entry(r).or_default().push(i);
+    }
+
+    // Deterministic order: sort groups by the minimum endpoint index
+    // they contain.
+    let mut ordered: Vec<Vec<usize>> = groups.into_values().collect();
+    for g in &mut ordered {
+        g.sort_unstable();
+    }
+    ordered.sort_by_key(|g| g[0]);
+    ordered
 }
 
 fn suggest_similar_parts(needle: &str, registry: &Registry) -> Vec<String> {
@@ -783,5 +1367,261 @@ mod tests {
         let comp = &board.components[0];
         assert_eq!(comp.sheet.as_deref(), Some("Power"));
         assert_eq!(comp.group.as_deref(), Some("LDO input"));
+    }
+
+    fn seed_registry() -> Registry {
+        let dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../registry/parts");
+        synth_registry::load_dir(&dir).expect("seed registry must load")
+    }
+
+    fn lower_ok(src: &str) -> Board {
+        let parse_res = parse(src, "test.synth");
+        assert!(
+            !parse_res.has_errors(),
+            "parse diagnostics: {:?}",
+            parse_res.diagnostics
+        );
+        let ast = parse_res.ast.expect("ast present");
+        let registry = seed_registry();
+        let lower_res = lower(&ast, &registry, "test.synth");
+        assert!(
+            !lower_res.has_errors(),
+            "lower diagnostics: {:?}",
+            lower_res
+                .diagnostics
+                .iter()
+                .map(|d| (&d.code, &d.title))
+                .collect::<Vec<_>>()
+        );
+        lower_res.board.expect("board present")
+    }
+
+    fn lower_with_diags(src: &str) -> LowerResult {
+        let parse_res = parse(src, "test.synth");
+        assert!(
+            !parse_res.has_errors(),
+            "parse diagnostics: {:?}",
+            parse_res.diagnostics
+        );
+        let ast = parse_res.ast.expect("ast present");
+        lower(&ast, &seed_registry(), "test.synth")
+    }
+
+    #[test]
+    fn test_named_net_block_merges_endpoints() {
+        let board = lower_ok(
+            r#"board "b" {
+                component U1: regulator "ams1117_3v3"
+                component C3: capacitor "c_generic_0603"
+                net "+3V3" {
+                    U1.vout, C3.p1
+                }
+            }"#,
+        );
+        assert_eq!(board.nets.len(), 1);
+        let net = &board.nets[0];
+        assert_eq!(net.name, "+3V3");
+        assert_eq!(net.endpoints.len(), 2);
+        assert_eq!(net.netclass, None);
+        assert_eq!(net.voltage, None);
+    }
+
+    #[test]
+    fn test_connect_as_names_net_with_fanout() {
+        let board = lower_ok(
+            r#"board "b" {
+                component U1: regulator "ams1117_3v3"
+                component C3: capacitor "c_generic_0603"
+                component C4: capacitor "c_generic_0603"
+                connect U1.vout -> C3.p1, C4.p1 as "+3V3"
+            }"#,
+        );
+        assert_eq!(board.nets.len(), 1);
+        let net = &board.nets[0];
+        assert_eq!(net.name, "+3V3");
+        assert_eq!(net.endpoints.len(), 3);
+    }
+
+    #[test]
+    fn test_same_name_disjoint_statements_merge() {
+        let board = lower_ok(
+            r#"board "b" {
+                component U1: regulator "ams1117_3v3"
+                component C3: capacitor "c_generic_0603"
+                component C4: capacitor "c_generic_0603"
+                component C5: capacitor "c_generic_0603"
+                net "+3V3" { U1.vout }
+                connect C3.p1 -> C4.p1 as "+3V3"
+                connect C4.p1 -> C5.p1
+            }"#,
+        );
+        assert_eq!(board.nets.len(), 1);
+        let net = &board.nets[0];
+        assert_eq!(net.name, "+3V3");
+        assert_eq!(net.endpoints.len(), 4);
+    }
+
+    #[test]
+    fn test_bare_power_declares_voltage_and_joins() {
+        let board = lower_ok(
+            r#"board "b" {
+                component U1: regulator "ams1117_3v3"
+                component C3: capacitor "c_generic_0603"
+                power "+3V3" 3.3v
+                connect U1.vout -> C3.p1 as "+3V3"
+            }"#,
+        );
+        assert_eq!(board.nets.len(), 1);
+        let net = &board.nets[0];
+        assert_eq!(net.name, "+3V3");
+        assert_eq!(net.endpoints.len(), 2);
+        assert_eq!(net.voltage, Some(crate::units::Voltage::from_v(3.3)));
+    }
+
+    #[test]
+    fn test_power_with_body_and_class() {
+        let board = lower_ok(
+            r#"board "b" {
+                component U1: regulator "ams1117_3v3"
+                component C3: capacitor "c_generic_0603"
+                netclass "PWR" { trace_width 0.5mm }
+                power "+3V3" 3.3v class "PWR" {
+                    U1.vout, C3.p1
+                }
+            }"#,
+        );
+        assert_eq!(board.nets.len(), 1);
+        let net = &board.nets[0];
+        assert_eq!(net.name, "+3V3");
+        assert_eq!(net.netclass.as_deref(), Some("PWR"));
+        assert_eq!(net.voltage, Some(crate::units::Voltage::from_v(3.3)));
+    }
+
+    #[test]
+    fn test_net_joins_netclass() {
+        let board = lower_ok(
+            r#"board "b" {
+                component U1: regulator "ams1117_3v3"
+                component C3: capacitor "c_generic_0603"
+                netclass "PWR" { trace_width 0.5mm }
+                net "+3V3" class "PWR" { U1.vout, C3.p1 }
+            }"#,
+        );
+        assert_eq!(board.nets.len(), 1);
+        assert_eq!(board.nets[0].netclass.as_deref(), Some("PWR"));
+    }
+
+    #[test]
+    fn test_unknown_netclass_errors() {
+        let res = lower_with_diags(
+            r#"board "b" {
+                component U1: regulator "ams1117_3v3"
+                component C3: capacitor "c_generic_0603"
+                connect U1.vout -> C3.p1 as "+3V3" class "NOPE"
+            }"#,
+        );
+        assert!(res.has_errors());
+        assert!(
+            res.diagnostics.iter().any(|d| d.code == "E-SYNTH-NAME-006"),
+            "expected E-SYNTH-NAME-006, got {:?}",
+            res.diagnostics.iter().map(|d| &d.code).collect::<Vec<_>>()
+        );
+        let board = res.board.expect("board present");
+        assert_eq!(board.nets[0].netclass, None);
+    }
+
+    #[test]
+    fn test_conflicting_net_names_error() {
+        let res = lower_with_diags(
+            r#"board "b" {
+                component U1: regulator "ams1117_3v3"
+                component C3: capacitor "c_generic_0603"
+                component C4: capacitor "c_generic_0603"
+                connect U1.vout -> C3.p1 as "+3V3"
+                connect C3.p1 -> C4.p1 as "+5V"
+            }"#,
+        );
+        assert!(res.has_errors());
+        assert!(
+            res.diagnostics.iter().any(|d| d.code == "E-SYNTH-NAME-005"),
+            "expected E-SYNTH-NAME-005, got {:?}",
+            res.diagnostics.iter().map(|d| &d.code).collect::<Vec<_>>()
+        );
+        // First-seen name wins; all three endpoints still merge.
+        let board = res.board.expect("board present");
+        assert_eq!(board.nets.len(), 1);
+        assert_eq!(board.nets[0].name, "+3V3");
+        assert_eq!(board.nets[0].endpoints.len(), 3);
+    }
+
+    #[test]
+    fn test_conflicting_rail_voltages_error() {
+        let res = lower_with_diags(
+            r#"board "b" {
+                component U1: regulator "ams1117_3v3"
+                component C3: capacitor "c_generic_0603"
+                power "+3V3" 3.3v
+                power "+3V3" 5v
+                connect U1.vout -> C3.p1 as "+3V3"
+            }"#,
+        );
+        assert!(res.has_errors());
+        assert!(
+            res.diagnostics
+                .iter()
+                .any(|d| d.code == "E-SYNTH-POWER-007"),
+            "expected E-SYNTH-POWER-007, got {:?}",
+            res.diagnostics.iter().map(|d| &d.code).collect::<Vec<_>>()
+        );
+        let board = res.board.expect("board present");
+        assert_eq!(
+            board.nets[0].voltage,
+            Some(crate::units::Voltage::from_v(3.3))
+        );
+    }
+
+    #[test]
+    fn test_diff_pair_resolves_to_named_nets() {
+        let board = lower_ok(
+            r#"board "b" {
+                component U1: regulator "ams1117_3v3"
+                component C3: capacitor "c_generic_0603"
+                component C4: capacitor "c_generic_0603"
+                component C5: capacitor "c_generic_0603"
+                net "DP" { U1.vout, C3.p1 }
+                net "DN" { U1.vin, C4.p1 }
+                connect C3.p2 -> C5.p1
+                diff_pair DP DN {
+                    impedance 90ohm
+                }
+            }"#,
+        );
+        assert_eq!(board.diff_pairs.len(), 1);
+        let dp = &board.diff_pairs[0];
+        let by_name = |n: &str| {
+            board
+                .nets
+                .iter()
+                .find(|x| x.name == n)
+                .expect("net exists")
+                .id
+        };
+        assert_eq!(dp.positive_net, Some(by_name("DP")));
+        assert_eq!(dp.negative_net, Some(by_name("DN")));
+    }
+
+    #[test]
+    fn test_legacy_auto_names_unchanged() {
+        let board = lower_ok(
+            r#"board "b" {
+                component U1: regulator "ams1117_3v3"
+                component C3: capacitor "c_generic_0603"
+                connect U1.vout -> C3.p1
+            }"#,
+        );
+        assert_eq!(board.nets.len(), 1);
+        assert_eq!(board.nets[0].name, "net_0");
+        assert_eq!(board.nets[0].netclass, None);
+        assert_eq!(board.nets[0].voltage, None);
     }
 }

@@ -13,17 +13,22 @@
 //!   Recovers to statement boundaries on errors so one mistake produces
 //!   at most one cascade diagnostic per statement.
 //!
-//! Phase 1 grammar covers the PRD Chapter 25 core:
+//! Phase 1 grammar covers the PRD Chapter 25 core plus Phase 1
+//! named nets:
 //!
 //! ```text
 //! program     = import* board ;
 //! import      = "import" string ;
 //! board       = "board" string "{" stmt* "}" ;
-//! stmt        = layers | manufacturer | component | connection
-//!             | diff_pair | keepout ;
+//! stmt        = layers | manufacturer | component | connection | net_decl
+//!             | power_decl | diff_pair | keepout ;
 //! component   = "component" ident ":" ident string [ "value" string ] ;   // concrete only in P1
-//! connection  = "connect" endpoint "->" endpoint ;
-//! diff_pair   = "diff_pair" ident ident "{" impedance? "}" ;
+//! connection  = "connect" endpoint "->" endpoint ("," endpoint)*
+//!               ["as" string] ["class" string] ;
+//! net_decl    = "net" string ["class" string] "{" [endpoint ("," endpoint)*] ["class" string]* "}" ;
+//! power_decl  = "power" string value ["class" string] ["{" [endpoint ("," endpoint)*] ["class" string]* "}"] ;
+//! diff_pair   = "diff_pair" net_ref net_ref "{" impedance? "}" ;
+//! net_ref     = ident | string ;
 //! keepout     = "keepout" ident "{" radius? "}" ;
 //! ```
 //!

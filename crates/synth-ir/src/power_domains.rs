@@ -7,6 +7,7 @@
 //! and propagating nominal operating voltages along connected nets and component pins.
 
 use crate::board::{Board, NetId, PinId};
+use crate::units::Voltage;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use synth_registry::ElectricalType;
@@ -68,7 +69,12 @@ pub fn infer_power_domains(board: &Board) -> PowerDomainMap {
 
     // Pass 1: Identify power output rails & ground reference nets
     for net in &board.nets {
-        let mut inferred_rail: Option<f64> = None;
+        // A declared rail voltage (`power "+3V3" 3.3v`) is the
+        // strongest signal — it states the voltage instead of
+        // leaving it to name heuristics or pin-type guessing, and
+        // neither may override it below.
+        let declared_rail: Option<f64> = net.voltage.map(Voltage::to_v);
+        let mut inferred_rail: Option<f64> = declared_rail;
         let mut is_gnd = false;
 
         // Check net name heuristics
@@ -78,8 +84,10 @@ pub fn infer_power_domains(board: &Board) -> PowerDomainMap {
             "gnd" | "vss" | "vssa" | "vee" | "agnd" | "dgnd" | "vneg"
         ) {
             is_gnd = true;
-        } else if let Some(v) = parse_voltage_from_name(&name_lower) {
-            inferred_rail = Some(v);
+        } else if declared_rail.is_none() {
+            if let Some(v) = parse_voltage_from_name(&name_lower) {
+                inferred_rail = Some(v);
+            }
         }
 
         // Check connected pin definitions
@@ -87,7 +95,9 @@ pub fn infer_power_domains(board: &Board) -> PowerDomainMap {
             if let Some(pin) = board.pin(endpoint.component, endpoint.pin) {
                 if pin.electrical_type == ElectricalType::GroundReference {
                     is_gnd = true;
-                } else if pin.electrical_type == ElectricalType::PowerOutput {
+                } else if pin.electrical_type == ElectricalType::PowerOutput
+                    && declared_rail.is_none()
+                {
                     if let Some(v) = pin.nominal_voltage_v() {
                         inferred_rail = Some(v);
                     }

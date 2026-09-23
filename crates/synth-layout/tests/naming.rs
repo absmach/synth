@@ -82,6 +82,8 @@ fn net(id: u32, name: &str, endpoints: &[(u32, u32)]) -> Net {
                 source_span: Span::new(0, 0),
             })
             .collect(),
+        netclass: None,
+        voltage: None,
     }
 }
 

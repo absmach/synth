@@ -15,8 +15,8 @@
 use synth_ast::{
     BoardAst, CompanyStmt, ComponentDeclAst, ConnectionAst, DiffPairAttr, DiffPairStmt,
     EndpointAst, GroupStmt, ImportAst, KeepoutAttr, KeepoutStmt, LayersStmt, ManufacturerStmt,
-    NetclassAttr, NetclassStmt, PlacementHintAst, PlacementHintAttr, ProgramAst, RevisionStmt,
-    SheetStmt, StatementAst, ValueWithUnit,
+    NetDeclAst, NetclassAttr, NetclassStmt, PlacementHintAst, PlacementHintAttr, PowerDeclAst,
+    ProgramAst, RevisionStmt, SheetStmt, StatementAst, ValueWithUnit,
 };
 use synth_diagnostics::{
     Diagnostic, DiagnosticBuilder, Location, Patch, PatchKind, Severity, Span,
@@ -235,32 +235,7 @@ impl Parser {
             match self.peek_kind() {
                 TokenKind::RBrace | TokenKind::Eof => break,
                 TokenKind::KwPlacementHint => {
-                    // Agents commonly emit named hints at board scope after
-                    // the component declarations. Attach them to the matching
-                    // component so placement constraints are not silently
-                    // discarded by the parser.
-                    if let Some(hint) = self.parse_placement_hint() {
-                        if let Some(refdes) = hint.component.as_deref() {
-                            if let Some(StatementAst::Component(component)) = statements.iter_mut().find(|stmt| {
-                                matches!(stmt, StatementAst::Component(c) if c.refdes.eq_ignore_ascii_case(refdes))
-                            }) {
-                                component.placement_hint = Some(PlacementHintAst {
-                                    component: None,
-                                    attrs: hint.attrs,
-                                    span: hint.span,
-                                });
-                            } else {
-                                self.emit(
-                                    hint.span,
-                                    "E-SYNTH-PARSE-031",
-                                    "placement_hint names an unknown component",
-                                    "a declared component reference designator",
-                                    refdes.to_string(),
-                                    None,
-                                );
-                            }
-                        }
-                    }
+                    self.attach_board_hint(&mut statements);
                 }
                 _ => {
                     if let Some(stmt) = self.parse_statement() {
@@ -275,37 +250,7 @@ impl Parser {
         // A board-level named hint immediately following the final component
         // can be consumed by the component parser as if it were inline. Move
         // any such deferred hints to their actual target now.
-        let deferred_hints: Vec<(String, PlacementHintAst)> = statements
-            .iter_mut()
-            .filter_map(|stmt| {
-                let StatementAst::Component(component) = stmt else {
-                    return None;
-                };
-                if !matches!(
-                    component.placement_hint.as_ref(),
-                    Some(hint) if hint.component.is_some()
-                ) {
-                    return None;
-                }
-                let hint = component.placement_hint.take()?;
-                let target = hint.component.clone()?;
-                Some((
-                    target,
-                    PlacementHintAst {
-                        component: None,
-                        attrs: hint.attrs,
-                        span: hint.span,
-                    },
-                ))
-            })
-            .collect();
-        for (target, hint) in deferred_hints {
-            if let Some(StatementAst::Component(component)) = statements.iter_mut().find(|stmt| {
-                matches!(stmt, StatementAst::Component(c) if c.refdes.eq_ignore_ascii_case(&target))
-            }) {
-                component.placement_hint = Some(hint);
-            }
-        }
+        rehome_deferred_hints(&mut statements);
 
         // `}`.
         let close_span = self.peek().span;
@@ -351,6 +296,8 @@ impl Parser {
             TokenKind::KwCompany => self.parse_company().map(StatementAst::Company),
             TokenKind::KwComponent => self.parse_component().map(StatementAst::Component),
             TokenKind::KwConnect => self.parse_connection().map(StatementAst::Connection),
+            TokenKind::KwNet => self.parse_net().map(StatementAst::Net),
+            TokenKind::KwPower => self.parse_power().map(StatementAst::Power),
             TokenKind::KwDiffPair => self.parse_diff_pair().map(StatementAst::DiffPair),
             TokenKind::KwNetclass => self.parse_netclass().map(StatementAst::Netclass),
             TokenKind::KwKeepout => self.parse_keepout().map(StatementAst::Keepout),
@@ -361,12 +308,44 @@ impl Parser {
                     self.peek().span,
                     "E-SYNTH-PARSE-011",
                     "expected statement keyword",
-                    "one of: layers, manufacturer, revision, company, component, connect, diff_pair, netclass, keepout, group, sheet",
+                    "one of: layers, manufacturer, revision, company, component, connect, net, power, diff_pair, netclass, keepout, group, sheet",
                     self.describe_current(),
                     None,
                 );
                 None
             }
+        }
+    }
+
+    /// Attach a board-scope `placement_hint { component: "U1" … }`
+    /// to its named component. Agents commonly emit named hints at
+    /// board scope after the component declarations; attaching them
+    /// keeps placement constraints from being silently discarded.
+    /// Emits `E-SYNTH-PARSE-031` when no declared component matches.
+    fn attach_board_hint(&mut self, statements: &mut [StatementAst]) {
+        let Some(hint) = self.parse_placement_hint() else {
+            return;
+        };
+        let Some(refdes) = hint.component.as_deref() else {
+            return;
+        };
+        if let Some(StatementAst::Component(component)) = statements.iter_mut().find(|stmt| {
+            matches!(stmt, StatementAst::Component(c) if c.refdes.eq_ignore_ascii_case(refdes))
+        }) {
+            component.placement_hint = Some(PlacementHintAst {
+                component: None,
+                attrs: hint.attrs,
+                span: hint.span,
+            });
+        } else {
+            self.emit(
+                hint.span,
+                "E-SYNTH-PARSE-031",
+                "placement_hint names an unknown component",
+                "a declared component reference designator",
+                refdes.to_string(),
+                None,
+            );
         }
     }
 
@@ -665,14 +644,193 @@ impl Parser {
         }
         self.bump();
         let to = self.parse_endpoint()?;
+        // One-to-many fanout: `connect U1.vout -> C3.p1, U2.vdd, C4.p1`.
+        let mut additional = Vec::new();
+        while matches!(self.peek_kind(), TokenKind::Comma) {
+            self.bump(); // consume `,`
+                         // Allow a trailing comma before `as` / `class` / EOL.
+            if matches!(
+                self.peek_kind(),
+                TokenKind::KwAs | TokenKind::KwClass | TokenKind::RBrace | TokenKind::Eof
+            ) {
+                break;
+            }
+            additional.push(self.parse_endpoint()?);
+        }
+        // Optional `as "NET"` naming and `class "CLASS"` join, in
+        // either order (`as` then `class` is the documented form).
+        let mut net_name = None;
+        let mut netclass = None;
+        for _ in 0..2 {
+            match self.peek_kind() {
+                TokenKind::KwAs if net_name.is_none() => {
+                    self.bump(); // consume `as`
+                    net_name = Some(self.expect_string(
+                        "E-SYNTH-PARSE-002",
+                        "expected net name (quoted string) after `as`",
+                    )?);
+                }
+                TokenKind::KwClass if netclass.is_none() => {
+                    self.bump(); // consume `class`
+                    netclass = Some(self.expect_string(
+                        "E-SYNTH-PARSE-002",
+                        "expected netclass name (quoted string) after `class`",
+                    )?);
+                }
+                _ => break,
+            }
+        }
         let end = self.last_offset();
         Some(ConnectionAst {
             from,
             to,
+            additional,
+            net_name,
+            netclass,
             span: Span::new(start, end),
         })
     }
 
+    /// `net "+3V3" [class "PWR"] { U1.vout, C3.p1, ... }`.
+    ///
+    /// The name is a quoted string so rails like `+3V3` stay spellable.
+    /// An optional `class "NAME"` may appear after the name and/or as
+    /// a line inside the body; endpoints are comma-separated (a
+    /// trailing comma is tolerated).
+    fn parse_net(&mut self) -> Option<NetDeclAst> {
+        let start = self.peek().span.byte_start;
+        self.bump(); // consume `net`
+        let name = self.expect_string("E-SYNTH-PARSE-002", "expected net name (quoted string)")?;
+        let mut netclass = None;
+        if matches!(self.peek_kind(), TokenKind::KwClass) {
+            self.bump(); // consume `class`
+            netclass = Some(self.expect_string(
+                "E-SYNTH-PARSE-002",
+                "expected netclass name (quoted string) after `class`",
+            )?);
+        }
+        if !matches!(self.peek_kind(), TokenKind::LBrace) {
+            self.emit(
+                self.peek().span,
+                "E-SYNTH-PARSE-003",
+                "expected `{` to open net body",
+                "`{`",
+                self.describe_current(),
+                None,
+            );
+            return None;
+        }
+        self.bump(); // consume `{`
+        let mut endpoints = Vec::new();
+        loop {
+            self.skip_error_tokens();
+            match self.peek_kind() {
+                TokenKind::RBrace | TokenKind::Eof => break,
+                TokenKind::Comma => {
+                    self.bump();
+                }
+                TokenKind::KwClass => {
+                    self.bump(); // consume `class`
+                    netclass = Some(self.expect_string(
+                        "E-SYNTH-PARSE-002",
+                        "expected netclass name (quoted string) after `class`",
+                    )?);
+                }
+                _ => match self.parse_endpoint() {
+                    Some(ep) => endpoints.push(ep),
+                    None => {
+                        self.synchronize_net_body();
+                    }
+                },
+            }
+        }
+        if matches!(self.peek_kind(), TokenKind::RBrace) {
+            self.bump();
+        }
+        let end = self.last_offset();
+        Some(NetDeclAst {
+            name,
+            netclass,
+            endpoints,
+            span: Span::new(start, end),
+        })
+    }
+
+    /// `power "+3V3" 3.3v [class "PWR"] [{ endpoints }]`.
+    ///
+    /// A named net with a declared nominal voltage. The endpoint body
+    /// is optional: a bare declaration still materializes the rail so
+    /// later `connect … as "+3V3"` lines join it.
+    fn parse_power(&mut self) -> Option<PowerDeclAst> {
+        let start = self.peek().span.byte_start;
+        self.bump(); // consume `power`
+        let name = self.expect_string(
+            "E-SYNTH-PARSE-002",
+            "expected power rail name (quoted string)",
+        )?;
+        let voltage = self.expect_value()?;
+        let mut netclass = None;
+        if matches!(self.peek_kind(), TokenKind::KwClass) {
+            self.bump(); // consume `class`
+            netclass = Some(self.expect_string(
+                "E-SYNTH-PARSE-002",
+                "expected netclass name (quoted string) after `class`",
+            )?);
+        }
+        let mut endpoints = Vec::new();
+        if matches!(self.peek_kind(), TokenKind::LBrace) {
+            self.bump(); // consume `{`
+            loop {
+                self.skip_error_tokens();
+                match self.peek_kind() {
+                    TokenKind::RBrace | TokenKind::Eof => break,
+                    TokenKind::Comma => {
+                        self.bump();
+                    }
+                    TokenKind::KwClass => {
+                        self.bump(); // consume `class`
+                        netclass = Some(self.expect_string(
+                            "E-SYNTH-PARSE-002",
+                            "expected netclass name (quoted string) after `class`",
+                        )?);
+                    }
+                    _ => match self.parse_endpoint() {
+                        Some(ep) => endpoints.push(ep),
+                        None => {
+                            self.synchronize_net_body();
+                        }
+                    },
+                }
+            }
+            if matches!(self.peek_kind(), TokenKind::RBrace) {
+                self.bump();
+            }
+        }
+        let end = self.last_offset();
+        Some(PowerDeclAst {
+            name,
+            voltage,
+            netclass,
+            endpoints,
+            span: Span::new(start, end),
+        })
+    }
+
+    /// Skip to the next endpoint, `class` attr, comma, or `}` inside
+    /// a `net`/`power` body so one bad entry does not poison the rest.
+    fn synchronize_net_body(&mut self) {
+        self.bump();
+        while !self.at_eof() {
+            match self.peek_kind() {
+                TokenKind::RBrace | TokenKind::Comma | TokenKind::KwClass | TokenKind::Ident(_) => {
+                    return
+                }
+                _ => {
+                    self.bump();
+                }
+            }
+        }
+    }
     fn parse_endpoint(&mut self) -> Option<EndpointAst> {
         let start = self.peek().span.byte_start;
         let component = self.expect_ident("E-SYNTH-PARSE-010", "expected component identifier")?;
@@ -700,8 +858,11 @@ impl Parser {
     fn parse_diff_pair(&mut self) -> Option<DiffPairStmt> {
         let start = self.peek().span.byte_start;
         self.bump(); // consume `diff_pair`
-        let pos = self.expect_ident("E-SYNTH-PARSE-010", "expected positive net identifier")?;
-        let neg = self.expect_ident("E-SYNTH-PARSE-010", "expected negative net identifier")?;
+                     // Legs reference named nets, so accept both bare idents
+                     // (`diff_pair USB_DP USB_DN`) and quoted names
+                     // (`diff_pair "USB_DP" "USB_DN"`) for rails like `+3V3`.
+        let pos = self.expect_net_ref("expected positive net identifier")?;
+        let neg = self.expect_net_ref("expected negative net identifier")?;
         if !matches!(self.peek_kind(), TokenKind::LBrace) {
             self.emit(
                 self.peek().span,
@@ -1026,6 +1187,29 @@ impl Parser {
         }
     }
 
+    /// A diff_pair leg: either a bare ident (`USB_DP`) or a quoted
+    /// net name (`"+3V3"`). Accepts both so legs can name any
+    /// declared net.
+    fn expect_net_ref(&mut self, title: &str) -> Option<String> {
+        match self.peek_kind() {
+            TokenKind::Ident(_) => self.expect_ident("E-SYNTH-PARSE-010", title),
+            TokenKind::StringLit(_) => self.expect_string("E-SYNTH-PARSE-002", title),
+            _ => {
+                let span = self.peek().span;
+                let found = self.describe_current();
+                self.emit(
+                    span,
+                    "E-SYNTH-PARSE-010",
+                    title,
+                    "a net identifier or quoted net name",
+                    found,
+                    None,
+                );
+                None
+            }
+        }
+    }
+
     fn expect_string(&mut self, code: &str, title: &str) -> Option<String> {
         let span = self.peek().span;
         if let TokenKind::StringLit(_) = self.peek_kind() {
@@ -1081,6 +1265,8 @@ impl Parser {
                 | TokenKind::KwManufacturer
                 | TokenKind::KwComponent
                 | TokenKind::KwConnect
+                | TokenKind::KwNet
+                | TokenKind::KwPower
                 | TokenKind::KwDiffPair
                 | TokenKind::KwNetclass
                 | TokenKind::KwKeepout
@@ -1117,6 +1303,10 @@ impl Parser {
             TokenKind::KwCompany => "`company`".to_string(),
             TokenKind::KwComponent => "`component`".to_string(),
             TokenKind::KwConnect => "`connect`".to_string(),
+            TokenKind::KwNet => "`net`".to_string(),
+            TokenKind::KwPower => "`power`".to_string(),
+            TokenKind::KwAs => "`as`".to_string(),
+            TokenKind::KwClass => "`class`".to_string(),
             TokenKind::KwDiffPair => "`diff_pair`".to_string(),
             TokenKind::KwNetclass => "`netclass`".to_string(),
             TokenKind::KwKeepout => "`keepout`".to_string(),
@@ -1134,6 +1324,7 @@ impl Parser {
             TokenKind::KwSide => "`side`".to_string(),
             TokenKind::KwPriority => "`priority`".to_string(),
             TokenKind::Ident(s) => format!("identifier `{s}`"),
+            TokenKind::Comma => "`,`".to_string(),
             TokenKind::StringLit(_) => "a string literal".to_string(),
             TokenKind::IntLit(n) => format!("integer `{n}`"),
             TokenKind::Value { literal, unit } => format!("`{literal}{}`", unit.as_str()),
@@ -1231,10 +1422,155 @@ impl Parser {
     }
 }
 
+/// Move deferred board-level named hints to their target component.
+///
+/// A `placement_hint { component: "U1" … }` immediately following the
+/// final component can be consumed by the component parser as if it
+/// were inline; this pass re-homes any such hint to the component it
+/// names. Pure statement reshuffling — no diagnostics.
+fn rehome_deferred_hints(statements: &mut [StatementAst]) {
+    let deferred_hints: Vec<(String, PlacementHintAst)> = statements
+        .iter_mut()
+        .filter_map(|stmt| {
+            let StatementAst::Component(component) = stmt else {
+                return None;
+            };
+            if !matches!(
+                component.placement_hint.as_ref(),
+                Some(hint) if hint.component.is_some()
+            ) {
+                return None;
+            }
+            let hint = component.placement_hint.take()?;
+            let target = hint.component.clone()?;
+            Some((
+                target,
+                PlacementHintAst {
+                    component: None,
+                    attrs: hint.attrs,
+                    span: hint.span,
+                },
+            ))
+        })
+        .collect();
+    for (target, hint) in deferred_hints {
+        if let Some(StatementAst::Component(component)) = statements.iter_mut().find(|stmt| {
+            matches!(stmt, StatementAst::Component(c) if c.refdes.eq_ignore_ascii_case(&target))
+        }) {
+            component.placement_hint = Some(hint);
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::token::lex;
+
+    #[test]
+    fn parse_net_declaration() {
+        let src = r#"board "b" {
+            net "+3V3" {
+                U1.vout, C3.p1, U2.vdd
+            }
+        }"#;
+        let res = parse(lex(src), "test.synth".into());
+        assert!(res.diagnostics.is_empty(), "{:?}", res.diagnostics);
+        let ast = res.ast.unwrap();
+        let StatementAst::Net(n) = &ast.board.statements[0] else {
+            panic!("Expected net statement")
+        };
+        assert_eq!(n.name, "+3V3");
+        assert_eq!(n.endpoints.len(), 3);
+        assert_eq!(n.endpoints[0].component, "U1");
+        assert_eq!(n.endpoints[0].pin, "vout");
+    }
+
+    #[test]
+    fn parse_net_with_class() {
+        let src = r#"board "b" {
+            net "+3V3" class "PWR" {
+                U1.vout
+                class "PWR"
+            }
+        }"#;
+        let res = parse(lex(src), "test.synth".into());
+        assert!(res.diagnostics.is_empty(), "{:?}", res.diagnostics);
+        let ast = res.ast.unwrap();
+        let StatementAst::Net(n) = &ast.board.statements[0] else {
+            panic!("Expected net statement")
+        };
+        assert_eq!(n.netclass.as_deref(), Some("PWR"));
+        assert_eq!(n.endpoints.len(), 1);
+    }
+
+    #[test]
+    fn parse_power_declaration() {
+        let src = r#"board "b" {
+            power "+3V3" 3.3v
+        }"#;
+        let res = parse(lex(src), "test.synth".into());
+        assert!(res.diagnostics.is_empty(), "{:?}", res.diagnostics);
+        let ast = res.ast.unwrap();
+        let StatementAst::Power(p) = &ast.board.statements[0] else {
+            panic!("Expected power statement")
+        };
+        assert_eq!(p.name, "+3V3");
+        assert_eq!(p.voltage.literal, "3.3");
+        assert!(p.endpoints.is_empty());
+    }
+
+    #[test]
+    fn parse_power_with_body_and_class() {
+        let src = r#"board "b" {
+            power "+3V3" 3.3v class "PWR" {
+                U1.vout, C3.p1
+            }
+        }"#;
+        let res = parse(lex(src), "test.synth".into());
+        assert!(res.diagnostics.is_empty(), "{:?}", res.diagnostics);
+        let ast = res.ast.unwrap();
+        let StatementAst::Power(p) = &ast.board.statements[0] else {
+            panic!("Expected power statement")
+        };
+        assert_eq!(p.netclass.as_deref(), Some("PWR"));
+        assert_eq!(p.endpoints.len(), 2);
+    }
+
+    #[test]
+    fn parse_connect_one_to_many_with_name() {
+        let src = r#"board "b" {
+            connect U1.vout -> C3.p1, U2.vdd as "+3V3"
+        }"#;
+        let res = parse(lex(src), "test.synth".into());
+        assert!(res.diagnostics.is_empty(), "{:?}", res.diagnostics);
+        let ast = res.ast.unwrap();
+        let StatementAst::Connection(c) = &ast.board.statements[0] else {
+            panic!("Expected connection statement")
+        };
+        assert_eq!(c.from.component, "U1");
+        assert_eq!(c.to.pin, "p1");
+        assert_eq!(c.additional.len(), 1);
+        assert_eq!(c.additional[0].component, "U2");
+        assert_eq!(c.net_name.as_deref(), Some("+3V3"));
+    }
+
+    #[test]
+    fn parse_diff_pair_quoted_names() {
+        let src = r#"board "b" {
+            diff_pair "USB_DP" "USB_DN" {
+                impedance 90ohm
+            }
+        }"#;
+        let res = parse(lex(src), "test.synth".into());
+        assert!(res.diagnostics.is_empty(), "{:?}", res.diagnostics);
+        let ast = res.ast.unwrap();
+        let StatementAst::DiffPair(d) = &ast.board.statements[0] else {
+            panic!("Expected diff_pair statement")
+        };
+        assert_eq!(d.pos, "USB_DP");
+        assert_eq!(d.neg, "USB_DN");
+    }
 
     #[test]
     fn parse_component_with_placement_hint() {

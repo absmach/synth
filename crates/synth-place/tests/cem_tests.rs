@@ -57,6 +57,8 @@ fn create_test_board() -> Board {
                 source_span: dummy_span,
             },
         ],
+        netclass: None,
+        voltage: None,
     };
 
     Board {

@@ -1,0 +1,12 @@
+// Two power declarations state different nominal voltages for one
+// rail: the nets cannot both be right.
+board "conflicting_voltages" {
+  layers 2
+
+  component R1: resistor "r_generic_0603"
+  component R2: resistor "r_generic_0603"
+
+  power "RAIL" 3.3v
+  power "RAIL" 5v
+  connect R1.p1 -> R2.p1 as "RAIL"
+}

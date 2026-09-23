@@ -2305,16 +2305,30 @@ impl ErcRule for DiffPairBothLegsConnectedRule {
     fn check(&self, board: &Board, file: &str) -> Vec<Diagnostic> {
         let mut out = Vec::new();
         for dp in &board.diff_pairs {
-            let pos_len = board
-                .nets
-                .iter()
-                .find(|n| net_matches_name(board, n, &dp.positive))
-                .map_or(0, |n| n.endpoints.len());
-            let neg_len = board
-                .nets
-                .iter()
-                .find(|n| net_matches_name(board, n, &dp.negative))
-                .map_or(0, |n| n.endpoints.len());
+            // Named nets resolve at lowering (`net "USB_DP" { … }`
+            // joined with `diff_pair USB_DP USB_DN`): count the
+            // resolved nets directly. Unresolved legs (legacy designs
+            // without named nets) fall back to endpoint-name matching.
+            let pos_len = dp.positive_net.map_or_else(
+                || {
+                    board
+                        .nets
+                        .iter()
+                        .find(|n| net_matches_name(board, n, &dp.positive))
+                        .map_or(0, |n| n.endpoints.len())
+                },
+                |id| board.net(id).map_or(0, |n| n.endpoints.len()),
+            );
+            let neg_len = dp.negative_net.map_or_else(
+                || {
+                    board
+                        .nets
+                        .iter()
+                        .find(|n| net_matches_name(board, n, &dp.negative))
+                        .map_or(0, |n| n.endpoints.len())
+                },
+                |id| board.net(id).map_or(0, |n| n.endpoints.len()),
+            );
 
             if pos_len < 2 || neg_len < 2 {
                 out.push(
@@ -3281,16 +3295,22 @@ mod tests {
                     id: NetId(0),
                     name: "rail".into(),
                     endpoints: vec![ep(0, 2), ep(1, 0)],
+                    netclass: None,
+                    voltage: None,
                 },
                 Net {
                     id: NetId(1),
                     name: "mid".into(),
                     endpoints: vec![ep(1, 1), ep(2, 0)],
+                    netclass: None,
+                    voltage: None,
                 },
                 Net {
                     id: NetId(2),
                     name: "gnd".into(),
                     endpoints: vec![ep(0, 1), ep(2, 1)],
+                    netclass: None,
+                    voltage: None,
                 },
             ],
             diff_pairs: vec![],
@@ -3367,11 +3387,15 @@ mod tests {
                     id: NetId(0),
                     name: "vin_net".into(),
                     endpoints: vec![ep(0, 0), ep(1, 0)],
+                    netclass: None,
+                    voltage: None,
                 },
                 Net {
                     id: NetId(1),
                     name: "gnd".into(),
                     endpoints: vec![ep(0, 1), ep(1, 1)],
+                    netclass: None,
+                    voltage: None,
                 },
             ],
             diff_pairs: vec![],

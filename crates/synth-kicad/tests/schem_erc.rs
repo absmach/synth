@@ -237,6 +237,8 @@ fn decoupling_board() -> Board {
                     source_span: Span::new(0, 0),
                 },
             ],
+            netclass: None,
+            voltage: None,
         }],
         diff_pairs: Vec::new(),
         keepouts: Vec::new(),

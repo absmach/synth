@@ -31,6 +31,10 @@ pub enum TokenKind {
     KwCompany,
     KwComponent,
     KwConnect,
+    KwNet,
+    KwPower,
+    KwAs,
+    KwClass,
     KwDiffPair,
     KwNetclass,
     KwKeepout,
@@ -54,6 +58,7 @@ pub enum TokenKind {
     Colon,  // :
     Dot,    // .
     Arrow,  // ->
+    Comma,  // ,
 
     // Literals
     Ident(String),
@@ -108,19 +113,10 @@ impl<'a> Lexer<'a> {
         self.pos as u32
     }
 
-    fn peek(&self) -> Option<u8> {
-        self.src.get(self.pos).copied()
-    }
-
-    fn peek_at(&self, n: usize) -> Option<u8> {
-        self.src.get(self.pos + n).copied()
-    }
-
-    fn at_eof(&self) -> bool {
-        self.pos >= self.src.len()
-    }
-
-    fn next_token(&mut self) -> Token {
+    /// Skip whitespace and comments (`// line` and `/* block */`).
+    /// Returns an error token for an unterminated block comment;
+    /// otherwise `None` once the next real token is in reach.
+    fn skip_trivia(&mut self) -> Option<Token> {
         loop {
             // Skip whitespace.
             while let Some(c) = self.peek() {
@@ -147,10 +143,10 @@ impl<'a> Lexer<'a> {
                 loop {
                     match (self.peek(), self.peek_at(1)) {
                         (None, _) => {
-                            return Token {
+                            return Some(Token {
                                 kind: TokenKind::Error(LexError::UnterminatedBlockComment),
                                 span: Span::new(start, self.offset()),
-                            };
+                            });
                         }
                         (Some(b'*'), Some(b'/')) => {
                             self.pos += 2;
@@ -162,6 +158,25 @@ impl<'a> Lexer<'a> {
                 continue;
             }
             break;
+        }
+        None
+    }
+
+    fn peek(&self) -> Option<u8> {
+        self.src.get(self.pos).copied()
+    }
+
+    fn peek_at(&self, n: usize) -> Option<u8> {
+        self.src.get(self.pos + n).copied()
+    }
+
+    fn at_eof(&self) -> bool {
+        self.pos >= self.src.len()
+    }
+
+    fn next_token(&mut self) -> Token {
+        if let Some(err) = self.skip_trivia() {
+            return err;
         }
 
         if self.at_eof() {
@@ -201,6 +216,13 @@ impl<'a> Lexer<'a> {
                 self.pos += 1;
                 return Token {
                     kind: TokenKind::Dot,
+                    span: Span::new(start, self.offset()),
+                };
+            }
+            b',' => {
+                self.pos += 1;
+                return Token {
+                    kind: TokenKind::Comma,
                     span: Span::new(start, self.offset()),
                 };
             }
@@ -370,6 +392,10 @@ impl<'a> Lexer<'a> {
             "company" => TokenKind::KwCompany,
             "component" => TokenKind::KwComponent,
             "connect" => TokenKind::KwConnect,
+            "net" => TokenKind::KwNet,
+            "power" => TokenKind::KwPower,
+            "as" => TokenKind::KwAs,
+            "class" => TokenKind::KwClass,
             "diff_pair" => TokenKind::KwDiffPair,
             "netclass" => TokenKind::KwNetclass,
             "keepout" => TokenKind::KwKeepout,
@@ -419,7 +445,7 @@ mod tests {
     #[test]
     fn keywords_recognized() {
         let ks = kinds(
-            "board import layers manufacturer revision company component connect diff_pair netclass keepout group sheet impedance trace_width clearance radius value",
+            "board import layers manufacturer revision company component connect net power as class diff_pair netclass keepout group sheet impedance trace_width clearance radius value",
         );
         assert_eq!(
             ks,
@@ -432,6 +458,10 @@ mod tests {
                 TokenKind::KwCompany,
                 TokenKind::KwComponent,
                 TokenKind::KwConnect,
+                TokenKind::KwNet,
+                TokenKind::KwPower,
+                TokenKind::KwAs,
+                TokenKind::KwClass,
                 TokenKind::KwDiffPair,
                 TokenKind::KwNetclass,
                 TokenKind::KwKeepout,
@@ -542,13 +572,14 @@ mod tests {
     #[test]
     fn punctuation() {
         assert_eq!(
-            kinds("{}:.->"),
+            kinds("{}:.->,"),
             vec![
                 TokenKind::LBrace,
                 TokenKind::RBrace,
                 TokenKind::Colon,
                 TokenKind::Dot,
                 TokenKind::Arrow,
+                TokenKind::Comma,
                 TokenKind::Eof,
             ]
         );

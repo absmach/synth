@@ -1,0 +1,28 @@
+// Named-rail feature end-to-end: a declared power rail joined by a
+// net block and an `as` connect, all in a declared netclass, plus a
+// second named net for the regulator input.
+board "named_rail" {
+  layers 2
+
+  netclass "PWR" {
+    trace_width 0.5mm
+    clearance 0.2mm
+  }
+
+  component U1: regulator "ams1117_3v3"
+  component C1: capacitor "c_generic_0805" value "10u"
+  component C2: capacitor "c_generic_0805" value "10u"
+  component C3: capacitor "c_generic_0805" value "10u"
+  component C4: capacitor "c_generic_0805" value "10u"
+
+  power "+3V3" 3.3v class "PWR"
+  net "+3V3" { U1.vout, C1.p1 }
+  connect U1.vout -> C2.p1 as "+3V3"
+  connect U1.gnd -> C1.p2
+  connect U1.gnd -> C2.p2
+
+  net "VIN" { U1.vin, C3.p1 }
+  connect U1.vin -> C4.p1 as "VIN"
+  connect U1.gnd -> C3.p2
+  connect U1.gnd -> C4.p2
+}

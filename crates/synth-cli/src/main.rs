@@ -2628,26 +2628,32 @@ fn run_freerouting_postpass(
     }
 
     let default_tools = [repo_root.join("tools"), repo_root.join("..").join("tools")];
-    let jar = jar_arg.map(Path::to_path_buf).unwrap_or_else(|| {
-        default_tools
-            .iter()
-            .map(|tools| tools.join("freerouting/freerouting-2.4.1.jar"))
-            .find(|candidate| candidate.is_file())
-            .unwrap_or_else(|| default_tools[0].join("freerouting/freerouting-2.4.1.jar"))
-    });
+    let jar = jar_arg.map_or_else(
+        || {
+            default_tools
+                .iter()
+                .map(|tools| tools.join("freerouting/freerouting-2.4.1.jar"))
+                .find(|candidate| candidate.is_file())
+                .unwrap_or_else(|| default_tools[0].join("freerouting/freerouting-2.4.1.jar"))
+        },
+        Path::to_path_buf,
+    );
     if !jar.is_file() {
         anyhow::bail!(
             "FreeRouting JAR not found: {} (pass --freerouting-jar)",
             jar.display()
         );
     }
-    let java = java_arg.map(Path::to_path_buf).unwrap_or_else(|| {
-        default_tools
-            .iter()
-            .map(|tools| tools.join("jre25/bin/java"))
-            .find(|candidate| candidate.is_file())
-            .unwrap_or_else(|| PathBuf::from("java"))
-    });
+    let java = java_arg.map_or_else(
+        || {
+            default_tools
+                .iter()
+                .map(|tools| tools.join("jre25/bin/java"))
+                .find(|candidate| candidate.is_file())
+                .unwrap_or_else(|| PathBuf::from("java"))
+        },
+        Path::to_path_buf,
+    );
     let java = if java.is_file() {
         java
     } else {

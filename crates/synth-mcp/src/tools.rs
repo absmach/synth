@@ -1391,6 +1391,10 @@ fn execute_mutate_layout(args: &Value, default_registry: Option<&Path>) -> Resul
 }
 
 fn execute_export(args: &Value, default_registry: Option<&Path>) -> Result<Value, String> {
+    // Long by design: one linear arg-parse + compile + export
+    // pipeline per tool keeps the MCP surface reviewable in one
+    // place (same rationale as `list_tools` below).
+    #![allow(clippy::too_many_lines)]
     let source = get_source_from_args(args)?;
     let file_name = args["file_path"].as_str().unwrap_or("board.synth");
     let out_dir_str = args["out_dir"]
@@ -1647,6 +1651,8 @@ fn execute_place_with_hints(
     args: &Value,
     default_registry: Option<&Path>,
 ) -> Result<Value, String> {
+    // Long by design: see `execute_export`.
+    #![allow(clippy::too_many_lines)]
     let source = get_source_from_args(args)?;
     let file_name = args["file_path"].as_str().unwrap_or("board.synth");
 
@@ -1953,6 +1959,8 @@ fn execute_route_with_constraints(
     args: &Value,
     default_registry: Option<&Path>,
 ) -> Result<Value, String> {
+    // Long by design: see `execute_export`.
+    #![allow(clippy::too_many_lines)]
     let source = get_source_from_args(args)?;
     let file_name = args["file_path"].as_str().unwrap_or("board.synth");
 
