@@ -248,6 +248,8 @@ pub fn list_tools() -> Vec<McpToolInfo> {
                     "file_path":        { "type": "string", "description": "Optional path to .synth source file on disk" },
                     "layout_file_path": { "type": "string", "description": "Optional path to .layout.toml sidecar overrides file" },
                     "profile":          { "type": "string", "description": "Optional manufacturer DRC profile ('jlcpcb_standard' or path to toml)" },
+                    "board_width_mm":   { "type": "number", "description": "Optional explicit board width in millimetres; must be provided with board_height_mm" },
+                    "board_height_mm":  { "type": "number", "description": "Optional explicit board height in millimetres; must be provided with board_width_mm" },
                     "allow_placement_warnings": { "type": "boolean", "description": "Allow combined routing despite visual-review findings; use only for deliberate manual/debug routing (default false)" },
                     "registry_path":    { "type": "string", "description": "Optional custom component registry path" },
                     "workspace_root":   { "type": "string", "description": "Optional workspace root path" },
@@ -1687,7 +1689,27 @@ fn execute_place_with_hints(
         Vec::new()
     };
 
-    match synth_place::place_with_hints(&board, &hints) {
+    let requested_dimensions = match (
+        args.get("board_width_mm").and_then(Value::as_f64),
+        args.get("board_height_mm").and_then(Value::as_f64),
+    ) {
+        (Some(width), Some(height)) => Some((width, height)),
+        (None, None) => None,
+        _ => {
+            return Ok(serde_json::json!({
+                "status": "error",
+                "error": "board_width_mm and board_height_mm must be supplied together"
+            }));
+        }
+    };
+
+    let placement_result = requested_dimensions
+        .map(|(width, height)| {
+            synth_place::place_with_hints_and_dimensions(&board, &hints, width, height)
+        })
+        .unwrap_or_else(|| synth_place::place_with_hints(&board, &hints));
+
+    match placement_result {
         Ok((mut placement, report)) => {
             let sidecar_opt: Option<PathBuf> = args
                 .get("layout_file_path")

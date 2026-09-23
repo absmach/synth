@@ -635,6 +635,7 @@ pub fn place_with_dimensions(
         outline,
         &courtyards_mm,
         &std::collections::HashMap::new(),
+        false,
     )?;
 
     // `place_with_outline` tightens automatic outlines after solving. For an
@@ -708,7 +709,13 @@ pub fn place_with_tuning<S: ::std::hash::BuildHasher>(
             Point::new(0, 0),
             Point::new(mm_to_nm(board_w_mm), mm_to_nm(board_h_mm)),
         );
-        match place_with_outline(board, board_outline, &courtyards_mm, rotation_overrides) {
+        match place_with_outline(
+            board,
+            board_outline,
+            &courtyards_mm,
+            rotation_overrides,
+            true,
+        ) {
             Ok(p) => return Ok(p),
             Err(e) => last_err = Some(e),
         }
@@ -724,6 +731,7 @@ fn place_with_outline<S: ::std::hash::BuildHasher>(
     board_outline: Rect,
     courtyards_mm: &[(ComponentId, (f64, f64), (f64, f64))],
     rotation_overrides: &std::collections::HashMap<ComponentId, synth_geometry::Rotation, S>,
+    tighten_outline: bool,
 ) -> Result<Placement, PlaceError> {
     use synth_geometry::nm_to_mm;
     let mut resolved_rotation_overrides: std::collections::HashMap<
@@ -1485,15 +1493,16 @@ fn place_with_outline<S: ::std::hash::BuildHasher>(
         });
     }
 
-    // Keep a practical assembly/Edge.Cuts margin without letting the
-    // automatic outline grow around large empty perimeter bands. RP2350
-    // development boards use 4 mm; legacy boards retain their established
-    // 8 mm margin until their placement baselines are intentionally revised.
-    let edge_margin_nm = if is_rp2350_board {
-        mm_to_nm(4.0)
-    } else {
-        mm_to_nm(8.0)
-    };
+    // Explicit board dimensions are a user/agent constraint. Preserve that
+    // rectangle after solving; only automatic sizing should compact the
+    // outline around the component envelope.
+    if !tighten_outline {
+        return Ok(Placement {
+            board_outline,
+            components: placements,
+        });
+    }
+
     let mut min_x_nm = i64::MAX;
     let mut max_x_nm = i64::MIN;
     let mut min_y_nm = i64::MAX;
@@ -1522,6 +1531,13 @@ fn place_with_outline<S: ::std::hash::BuildHasher>(
         min_y_nm = min_y_nm.min(court_center_y - rot_half_h);
         max_y_nm = max_y_nm.max(court_center_y + rot_half_h);
     }
+
+    // Keep a practical assembly/Edge.Cuts margin without letting the
+    // automatic outline grow around large empty perimeter bands. Small
+    // boards need a proportionate margin; larger boards retain 4 mm. Explicit
+    // board dimensions remain authoritative above and do not enter this path.
+    let component_span_mm = nm_to_mm((max_x_nm - min_x_nm).max(max_y_nm - min_y_nm));
+    let edge_margin_nm = mm_to_nm(if component_span_mm < 30.0 { 2.0 } else { 4.0 });
 
     // Keep every courtyard inside a real board-edge margin. Connectors may be
     // edge-oriented, but their copper pads and plated holes still need
@@ -2881,8 +2897,33 @@ pub fn place_with_hints(
     board: &Board,
     external_hints: &[ExternalHint],
 ) -> Result<(Placement, HintSatisfactionReport), PlaceError> {
-    let mut modified_board = board.clone();
+    let modified_board = board_with_external_hints(board, external_hints);
+    let placement = place(&modified_board)?;
+    Ok((
+        placement.clone(),
+        hint_satisfaction(&modified_board, &placement),
+    ))
+}
 
+/// Place with semantic hints inside a caller-requested board outline. This is
+/// intentionally a placement-only seam: it does not route or relax visual
+/// review, and an infeasible outline returns the normal structured error.
+pub fn place_with_hints_and_dimensions(
+    board: &Board,
+    external_hints: &[ExternalHint],
+    width_mm: f64,
+    height_mm: f64,
+) -> Result<(Placement, HintSatisfactionReport), PlaceError> {
+    let modified_board = board_with_external_hints(board, external_hints);
+    let placement = place_with_dimensions(&modified_board, width_mm, height_mm)?;
+    Ok((
+        placement.clone(),
+        hint_satisfaction(&modified_board, &placement),
+    ))
+}
+
+fn board_with_external_hints(board: &Board, external_hints: &[ExternalHint]) -> Board {
+    let mut modified_board = board.clone();
     for hint in external_hints {
         let mut target_refdes = Vec::new();
         if let Some(r) = &hint.component {
@@ -2911,9 +2952,10 @@ pub fn place_with_hints(
             }
         }
     }
+    modified_board
+}
 
-    let placement = place(&modified_board)?;
-
+fn hint_satisfaction(board: &Board, placement: &Placement) -> HintSatisfactionReport {
     let mut outcomes = Vec::new();
     let margin_nm = mm_to_nm(BOARD_MARGIN_MM);
     let usable = Rect::new(
@@ -2927,7 +2969,7 @@ pub fn place_with_hints(
         ),
     );
 
-    for comp in &modified_board.components {
+    for comp in &board.components {
         if let Some(hint) = &comp.placement_hint {
             if let Some(placed_comp) = placement.components.iter().find(|p| p.id == comp.id) {
                 let actual_region = classify_region_name(placed_comp.center, usable);
@@ -2986,7 +3028,7 @@ pub fn place_with_hints(
         }
     }
 
-    Ok((placement, HintSatisfactionReport { hints: outcomes }))
+    HintSatisfactionReport { hints: outcomes }
 }
 
 #[allow(dead_code)]
