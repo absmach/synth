@@ -1,0 +1,15 @@
+board "led" {
+  layers 2
+  component U1: regulator "ams1117_5v"
+  component D1: led "led_red_0603"
+  component R1: resistor "r_generic_0603" value "33"
+  component C1: capacitor "c_generic_0805" value "10u"
+  component C2: capacitor "c_generic_0805" value "10u"
+  connect U1.vout -> R1.p2
+  connect R1.p1 -> D1.anode
+  connect D1.cathode -> U1.gnd
+  connect U1.vout -> C1.p1
+  connect U1.gnd -> C1.p2
+  connect U1.vout -> C2.p1
+  connect U1.gnd -> C2.p2
+}

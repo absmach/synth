@@ -1,0 +1,18 @@
+board "n9" {
+  layers 2
+  component U1: regulator "ams1117_3v3"
+  component U2: sensor "bmp280_pressure"
+  component C1: capacitor "c_generic_0805" value "10u"
+  component C2: capacitor "c_generic_0805" value "10u"
+  component C3: capacitor "c_generic_0805" value "10u"
+  component C4: capacitor "c_generic_0805" value "10u"
+  connect U1.vout -> U2.gnd
+  connect U1.vout -> C1.p1
+  connect U1.gnd -> C1.p2
+  connect U1.vout -> C2.p1
+  connect U1.gnd -> C2.p2
+  connect U1.vout -> C3.p1
+  connect U1.gnd -> C3.p2
+  connect U1.vout -> C4.p1
+  connect U1.gnd -> C4.p2
+}

@@ -1,0 +1,20 @@
+board "p9" {
+  layers 2
+  component U1: regulator "ams1117_3v3"
+  component J1: connector "header_1x4"
+  component C1: capacitor "c_generic_0805" value "10u"
+  component C2: capacitor "c_generic_0805" value "10u"
+  component C3: capacitor "c_generic_0805" value "10u"
+  component C4: capacitor "c_generic_0805" value "10u"
+  power "VIN33" 3.3v
+  connect J1.p1 -> U1.vin as "VIN33"
+  connect J1.p2 -> U1.gnd
+  connect U1.vin -> C1.p1
+  connect U1.gnd -> C1.p2
+  connect U1.vin -> C2.p1
+  connect U1.gnd -> C2.p2
+  connect U1.vout -> C3.p1
+  connect U1.gnd -> C3.p2
+  connect U1.vout -> C4.p1
+  connect U1.gnd -> C4.p2
+}

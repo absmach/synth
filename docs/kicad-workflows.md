@@ -25,16 +25,20 @@ board.synth.layout.toml   ← optional visual drag offsets (sidecar)
    re-exports; any manual edit is silently destroyed on the next
    export and breaks the stable-diff guarantee. Connectivity, values,
    part numbers, DNP decisions: change the `.synth` source.
-2. **Visual tuning goes through the sidecar.** Drag positions in the
+2. **Electrical-rule tuning goes through the ERC sidecar.** Add
+   `board.synth.erc.toml` beside the design to override the pin-type
+   conflict table and the deeper-check thresholds; leave it absent for
+   the defaults.
+3. **Visual tuning goes through the sidecar.** Drag positions in the
    `synth preview` browser, or edit `<design>.synth.layout.toml`
    directly — never nudge symbol coordinates inside the `.kicad_sch`.
-3. **Sourcing data lives in the registry**, not in the drawing. Each
+4. **Sourcing data lives in the registry**, not in the drawing. Each
    `registry/parts/*.synth.toml` carries `mpn`, `lcsc_pn`, footprint,
    and provenance; the exporter stamps hidden `MPN` / `LCSC` fields
    onto every schematic instance and mirrors them into `bom.csv`.
    Fix a part number in the registry (or the `value` statement), not
    on the symbol.
-4. **The compiler's ERC is the first gate, KiCad's ERC is the second.**
+5. **The compiler's ERC is the first gate, KiCad's ERC is the second.**
    Synth's 80+ `E-SYNTH-*` rules run before export; `kicad-cli sch
 erc` validates the exported artifact after. Both must be clean
    before anything ships (see §1).

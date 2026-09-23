@@ -1916,7 +1916,17 @@ fn validate(
                 let lowered = synth_ir::lower(&resolved.program, &registry, &file);
                 diagnostics.extend(lowered.diagnostics);
                 if let Some(board) = lowered.board.as_ref() {
-                    diagnostics.extend(synth_validate::run_erc(board, &file));
+                    // Per-design ERC config (`<design>.synth.erc.toml`),
+                    // when present, overrides the pin-conflict table and
+                    // the deeper-check thresholds.
+                    let erc_config = synth_validate::ErcConfig::load_for_design(input)
+                        .map_err(|e| anyhow::anyhow!("ERC config: {e}"))?
+                        .unwrap_or_default();
+                    diagnostics.extend(synth_validate::run_erc_with_config(
+                        board,
+                        &file,
+                        &erc_config,
+                    ));
                     // Aesthetic schematic ERC (E-SYNTH-SCHEM-*): advisory
                     // warnings over the auto-layout; never blocking.
                     // Per-sheet on §P26 split boards so findings

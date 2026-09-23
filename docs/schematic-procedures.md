@@ -201,6 +201,41 @@ the PCB flow stay sheet-agnostic.
 
 ## 4. Validation: ERC, aesthetic ERC, and DRC
 
+### 4.1 Configurable ERC (`<design>.synth.erc.toml`)
+
+`synth validate` auto-loads a sidecar next to the design
+(`board.synth` → `board.synth.erc.toml`) and hands it to
+`run_erc_with_config`. A malformed sidecar is a hard error, not a silent
+fallback; an absent one leaves the defaults in place. See
+`E-SYNTH-CONNECT-007` for the `[pin_conflicts]` grammar.
+
+### 4.2 Rule families
+
+Beyond the per-protocol rules, the engine carries three deeper families:
+
+- **Pin-type conflicts** (`E-SYNTH-CONNECT-007`) — a configurable
+  severity table modelled on KiCad's ERC matrix. Pairs already owned by
+  a dedicated rule (`output`/`output`, `power_output`/`power_output`,
+  anything/`do_not_connect`) are deliberately excluded to avoid duplicate
+  findings.
+- **Voltage domains** — a pull-up above a device's own supply
+  (`E-SYNTH-POWER-008`), a regulator fed outside its declared input range
+  (`E-SYNTH-POWER-009`), and summed rail load against the regulator's
+  current limit (`E-SYNTH-POWER-010`). All three read the registry's
+  `operating_conditions` and the declared/deferred rail voltages.
+- **Protection and hygiene** — floating CMOS inputs
+  (`E-SYNTH-CONNECT-008`), open-drain without a pull-up outside I²C
+  (`E-SYNTH-CONNECT-009`), unprotected external connectors
+  (`E-SYNTH-ESD-001`), LED current/dissipation (`E-SYNTH-LED-001`),
+  case-only net collisions (`E-SYNTH-NAME-007`), single-use declared
+  labels (`E-SYNTH-NAME-008`), a ground pin on a non-ground net
+  (`E-SYNTH-NAME-009`), and multi-unit parts split across rails
+  (`E-SYNTH-NAME-010`).
+
+Where a rule needs a quantity the design does not state (an LED `Vf`, a
+rail voltage, a part's current limit), it declines to fire rather than
+guessing.
+
 | Check               | Where                                            | What it finds                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
 | ------------------- | ------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | **Rule-based ERC**  | `synth-validate::run_erc`                        | `E-SYNTH-*` rules: connectivity, I²C pullups, power output shorts, clock/reset/boot, decoupling counts, etc. `E-SYNTH-POWER-001` auto-inserts missing decoupling caps as a patch                                                                                                                                                                                                                                                                                                                                                                                                                                                                      |

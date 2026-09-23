@@ -49,7 +49,10 @@ pub trait ErcRule {
 /// concatenated diagnostics. Ordering is part of the agent-facing
 /// contract.
 pub mod anomaly;
+pub mod config;
+pub mod deep_erc;
 pub use anomaly::{extract_features, BoardFeatureVec, GraphAnomalyDetectorRule};
+pub use config::{ErcConfig, PinConflictTable};
 
 pub mod value;
 pub use value::{parse_capacitance, parse_resistance};
@@ -61,8 +64,14 @@ pub mod placement;
 pub use placement::validate_placement;
 
 pub fn run_erc(board: &Board, file: &str) -> Vec<Diagnostic> {
+    run_erc_with_config(board, file, &ErcConfig::default())
+}
+
+/// [`run_erc`] with an explicit [`ErcConfig`]: the pin-type conflict
+/// table and the thresholds the deeper checks use.
+pub fn run_erc_with_config(board: &Board, file: &str, config: &ErcConfig) -> Vec<Diagnostic> {
     let mut out = Vec::new();
-    for rule in all_rules() {
+    for rule in all_rules(config) {
         out.extend(rule.check(board, file));
     }
 
@@ -89,7 +98,7 @@ pub fn run_erc(board: &Board, file: &str) -> Vec<Diagnostic> {
     out
 }
 
-fn all_rules() -> Vec<Box<dyn ErcRule>> {
+fn all_rules(config: &ErcConfig) -> Vec<Box<dyn ErcRule>> {
     vec![
         Box::new(RequiredPinsConnectedRule),
         Box::new(SingleEndpointNetRule),
@@ -140,6 +149,19 @@ fn all_rules() -> Vec<Box<dyn ErcRule>> {
         Box::new(SourcingIdentityRule),
         Box::new(UnverifiedPartRule),
         Box::new(DividerRatioRule),
+        // Phase 6 — deeper ERC.
+        Box::new(deep_erc::PinConflictRule::new(config)),
+        Box::new(deep_erc::PullupRailMismatchRule::new(config)),
+        Box::new(deep_erc::RegulatorInputRangeRule),
+        Box::new(deep_erc::PowerBudgetRule::new(config)),
+        Box::new(deep_erc::FloatingCmosInputRule),
+        Box::new(deep_erc::OpenDrainPullupRule::new(config)),
+        Box::new(deep_erc::ConnectorProtectionRule::new(config)),
+        Box::new(deep_erc::LedCurrentRule::new(config)),
+        Box::new(deep_erc::CaseOnlyNetCollisionRule),
+        Box::new(deep_erc::SingleUseLabelRule),
+        Box::new(deep_erc::GroundPinOffGroundNetRule),
+        Box::new(deep_erc::MultiUnitRailSplitRule),
     ]
 }
 
@@ -336,7 +358,7 @@ fn check_capability_consistency(
     }
 }
 
-fn endpoint_has_any_capability(
+pub(crate) fn endpoint_has_any_capability(
     board: &Board,
     c: ComponentId,
     p: PinId,
@@ -366,7 +388,11 @@ impl ErcRule for SingleEndpointNetRule {
     fn check(&self, board: &Board, file: &str) -> Vec<Diagnostic> {
         let mut out = Vec::new();
         for net in &board.nets {
-            if net.endpoints.len() == 1 {
+            // A *declared* name that joins one endpoint is
+            // `E-SYNTH-NAME-008`'s case (a label used only once); this
+            // rule owns the unnamed auto-net case so exactly one of the
+            // two fires.
+            if net.name.starts_with("net_") && net.endpoints.len() == 1 {
                 let endpoint = &net.endpoints[0];
                 let Some(component) = board.component(endpoint.component) else {
                     continue;
