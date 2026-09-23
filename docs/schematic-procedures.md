@@ -185,9 +185,9 @@ When it does split, `synth-kicad::multisheet` writes:
   net, its `(instances (project (path … (page …))))` block, and the
   `.kicad_pro` sheet list updated to match;
 - **cross-sheet signal nets** as hierarchical labels in the
-  sub-sheets joined by root wires between same-net pins;
-  **cross-sheet power nets** need no pins — power symbols connect
-  globally by value. `pin_reconcile` runs board-wide and each sheet
+  sub-sheets, joined on the root by same-named local labels (one per
+  sheet pin and per root endpoint); **cross-sheet power nets** need
+  no labels — power symbols connect globally by value. `pin_reconcile` runs board-wide and each sheet
   emits only its own members, with one `PWR_FLAG` per undriven rail
   project-wide.
 

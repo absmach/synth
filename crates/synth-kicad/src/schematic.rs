@@ -158,13 +158,17 @@ pub struct SheetRender<'a> {
     pub root_furniture: Option<&'a RootFurniture>,
 }
 
-/// Sheet instances and the root wires joining same-net pins, placed
-/// by the multi-sheet exporter below the root content.
+/// Sheet instances, their pin stubs, and the same-named local
+/// labels joining those pins to the root's cross-sheet endpoints.
+/// Placed by the multi-sheet exporter below the root content.
 #[derive(Debug, Clone, PartialEq)]
 pub struct RootFurniture {
     pub instances: Vec<PlacedSheetInstance>,
     pub wires: Vec<RootWire>,
     pub junctions: Vec<(f64, f64)>,
+    /// One `(net name, stub end)` per sheet pin: the local label that
+    /// joins that pin to the root's same-named cross-sheet net.
+    pub pin_labels: Vec<(String, (f64, f64))>,
 }
 
 /// One sub-sheet instance box on the root sheet.
@@ -427,16 +431,26 @@ pub(crate) fn build_sheet_schematic(
         }
     }
 
-    // Cross-sheet stubs (§P26): one hierarchical label per in-sheet
-    // endpoint of a net that continues elsewhere. Empty on
-    // single-sheet layouts. The parent sheet instance carries the
-    // matching pin; power nets never appear here (global symbols).
-    if let Some(sheet) = render.name {
-        for label in &layout.hierarchical_labels {
-            if let Some(sexps) = build_hierarchical_label(board, label, &placements, project, sheet)
-            {
-                children.extend(sexps);
-            }
+    // Cross-sheet stubs (§P26): one stub per in-sheet endpoint of a
+    // net that continues elsewhere. Empty on single-sheet layouts.
+    // On a sub-sheet the stub carries a hierarchical label, which the
+    // parent sheet instance's matching pin joins. On the *root* sheet
+    // the same net is instead carried by a local label: root endpoints
+    // (and the labelled stubs on each sheet pin, below) connect by
+    // name within the root sheet, which is what links a root
+    // endpoint to the sheet pins. Power nets never appear here (their
+    // symbols are global).
+    //
+    // Emitting nothing on root was a bug: a cross-sheet signal net
+    // with a root endpoint left that pin and the sheet pins dangling
+    // (`pin_not_connected`).
+    for label in &layout.hierarchical_labels {
+        let doc = match render.name {
+            Some(sheet) => build_hierarchical_label(board, label, &placements, project, sheet),
+            None => build_root_cross_label(board, label, &placements, project),
+        };
+        if let Some(sexps) = doc {
+            children.extend(sexps);
         }
     }
 
@@ -574,8 +588,9 @@ pub(crate) fn build_sheet_schematic(
     }
 
     // Root furniture (§P26 multi-sheet only): sub-sheet instance
-    // boxes with one pin per cross-sheet net, plus the root wires
-    // joining same-net pins and their junction dots.
+    // boxes with one pin per cross-sheet net, a stub + same-named
+    // local label on each pin (so it joins the root endpoints labelled
+    // above), and their junction dots.
     if let Some(furniture) = render.root_furniture {
         for (index, instance) in furniture.instances.iter().enumerate() {
             children.push(build_sheet_instance(
@@ -587,6 +602,14 @@ pub(crate) fn build_sheet_schematic(
         }
         for wire in &furniture.wires {
             children.push(build_root_wire(wire, project));
+        }
+        for (net, at) in &furniture.pin_labels {
+            let key = format!("pin_label_{net}_{}_{}", at.0, at.1);
+            children.push(build_local_label(
+                net,
+                *at,
+                derive_entity_uuid(project, "pin_label", &key),
+            ));
         }
         for (jx, jy) in &furniture.junctions {
             let key = format!("root_junction_{jx}_{jy}");
@@ -1088,6 +1111,75 @@ fn build_sheet_instance(
         )],
     ));
     Sexp::list("sheet", children)
+}
+
+/// A local label at `at_mm`, text anchored left. Same-named local
+/// labels on one sheet are electrically connected, which is how the
+/// root joins its cross-sheet endpoints to the labelled sheet-pin
+/// stubs (and to each other).
+fn build_local_label(net: &str, at_mm: (f64, f64), uuid: Uuid) -> Sexp {
+    Sexp::list(
+        "label",
+        vec![
+            Sexp::str(net),
+            Sexp::list("at", vec![num(at_mm.0), num(at_mm.1), num(0.0)]),
+            Sexp::list(
+                "effects",
+                vec![
+                    Sexp::list("font", vec![Sexp::list("size", vec![num(1.27), num(1.27)])]),
+                    Sexp::list("justify", vec![Sexp::atom("left")]),
+                ],
+            ),
+            str_pair("uuid", uuid.to_string()),
+        ],
+    )
+}
+
+/// Root-side cross-sheet stub: a short stub wire plus a local label
+/// carrying the shared net name. Root has no parent sheet pin to
+/// attach a hierarchical label to, so it uses the local-label form
+/// (same-named local labels are one net on a sheet).
+fn build_root_cross_label(
+    board: &Board,
+    label: &synth_layout::HierarchicalLabel,
+    placements: &HashMap<ComponentId, &ComponentPlacement>,
+    project: &Uuid,
+) -> Option<Vec<Sexp>> {
+    let component = board.component(label.component)?;
+    let (x, y, dx, _dy) = pin_terminal_xy(board, label.component, label.pin, placements)?;
+    let stub_len = 5.08;
+    let (stub_x, _angle) = if dx >= -0.1 {
+        (x + stub_len, 0.0)
+    } else {
+        (x - stub_len, 180.0)
+    };
+    let key = format!("root_cross_{}_{}", component.refdes, label.pin.0);
+    let wire_uuid = derive_entity_uuid(project, "root_cross_wire", &key);
+    let label_uuid = derive_entity_uuid(project, "root_cross_label", &key);
+    let wire_sexp = Sexp::list(
+        "wire",
+        vec![
+            Sexp::list(
+                "pts",
+                vec![
+                    Sexp::list("xy", vec![num(x), num(y)]),
+                    Sexp::list("xy", vec![num(stub_x), num(y)]),
+                ],
+            ),
+            Sexp::list(
+                "stroke",
+                vec![
+                    Sexp::list("width", vec![num(0.0)]),
+                    Sexp::list("type", vec![Sexp::atom("default")]),
+                ],
+            ),
+            str_pair("uuid", wire_uuid.to_string()),
+        ],
+    );
+    Some(vec![
+        wire_sexp,
+        build_local_label(&label.label, (stub_x, y), label_uuid),
+    ])
 }
 
 /// One root wire segment joining same-net sheet pins.

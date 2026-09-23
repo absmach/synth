@@ -214,9 +214,10 @@ export becomes a hierarchy:
 - one `<board>_<sheet>.kicad_sch` per boundary, plus the root
   `<board>.kicad_sch` carrying the components declared outside any
   sheet and one sheet instance per sub-sheet;
-- cross-sheet **signal** nets join through hierarchical labels (and
-  matching sheet pins + root wires); cross-sheet **power** nets need
-  no pins — power symbols connect globally by value;
+- cross-sheet **signal** nets join through hierarchical labels on
+  sub-sheets and same-named local labels on the root (one per sheet
+  pin and per root endpoint); cross-sheet **power** nets need no
+  labels at all — power symbols connect globally by value;
 - a dragged component's sidecar override records the sheet it was
   placed on, so moving it to another sheet invalidates the stale
   (sheet-local) coordinates instead of misplacing it.
