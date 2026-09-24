@@ -162,6 +162,7 @@ fn all_rules(config: &ErcConfig) -> Vec<Box<dyn ErcRule>> {
         Box::new(deep_erc::SingleUseLabelRule),
         Box::new(deep_erc::GroundPinOffGroundNetRule),
         Box::new(deep_erc::MultiUnitRailSplitRule),
+        Box::new(deep_erc::PinFunctionSupportRule),
     ]
 }
 

@@ -725,3 +725,106 @@ fn default_config_is_the_kicad_shaped_table() {
     );
     assert_eq!(PinConflictTable::kicad_default(), config.pin_conflicts);
 }
+
+// ---------------------------------------------------------------------------
+// E-SYNTH-PINMUX-001 — one pin asked to carry two functions
+// ---------------------------------------------------------------------------
+
+#[test]
+fn pin_mux_conflict_fires_for_two_functions_on_one_pin() {
+    // Both connects share `U1.gp0`, so the two function nets merge onto
+    // one pin: I²C SCL and UART TX cannot both live there.
+    let diags = validate(
+        r#"board "t" {
+  layers 2
+  component U1: mcu "rp2350"
+  connect U1.gp0 -> "I2C1_SCL"
+  connect U1.gp0 -> "UART1_TX"
+}"#,
+    );
+    let hits = codes(&diags, "E-SYNTH-PINMUX-001");
+    assert_eq!(hits.len(), 1, "{hits:?}");
+    assert_eq!(hits[0].severity, Severity::Error);
+    // The mux rule owns the function-name case, so the generic
+    // conflicting-names rule must stay quiet (no duplicate finding).
+    assert!(
+        codes(&diags, "E-SYNTH-NAME-005").is_empty(),
+        "NAME-005 must not double-report a function conflict"
+    );
+}
+
+#[test]
+fn non_function_name_conflict_still_reports_name_005() {
+    // Power rails are not functions: the generic rule keeps owning them.
+    let diags = validate(
+        r#"board "t" {
+  layers 2
+  component U1: regulator "ams1117_3v3"
+  component C3: capacitor "c_generic_0603"
+  component C4: capacitor "c_generic_0603"
+  connect U1.vout -> C3.p1 as "+3V3"
+  connect C3.p1 -> C4.p1 as "+5V"
+}"#,
+    );
+    assert!(!codes(&diags, "E-SYNTH-NAME-005").is_empty());
+    assert!(codes(&diags, "E-SYNTH-PINMUX-001").is_empty());
+}
+
+// ---------------------------------------------------------------------------
+// E-SYNTH-PINMUX-002 — a function routed to a pin that cannot carry it
+// ---------------------------------------------------------------------------
+
+#[test]
+fn pin_function_support_flags_incapable_muxed_pin() {
+    // Both pins are muxable (no dedicated I²C peripheral), so the
+    // capability-consistency rule cannot see the mistake; the net name
+    // says I²C SCL, and gp0 does not list `i2c_scl`.
+    let diags = validate(
+        r#"board "t" {
+  layers 2
+  component U1: mcu "rp2350"
+  connect U1.gp0 -> "I2C1_SCL"
+  connect U1.gp1 -> "I2C1_SCL"
+}"#,
+    );
+    let hits = codes(&diags, "E-SYNTH-PINMUX-002");
+    assert_eq!(hits.len(), 1, "{hits:?}");
+    assert_eq!(hits[0].severity, Severity::Error);
+    // A dedicated-peer net is the protocol rule's case, not ours.
+    assert!(
+        codes(&diags, "E-SYNTH-I2C-001").is_empty(),
+        "I2C-001 must not fire without a dedicated peripheral pin"
+    );
+}
+
+#[test]
+fn pin_function_support_is_quiet_when_the_pin_can_carry_it() {
+    // Both pins list `i2c_scl`, so the net is fine.
+    let diags = validate(
+        r#"board "t" {
+  layers 2
+  component U1: mcu "rp2350"
+  component U2: mcu "rp2350"
+  connect U1.gp1 -> "I2C1_SCL"
+  connect U2.gp1 -> "I2C1_SCL"
+}"#,
+    );
+    assert!(codes(&diags, "E-SYNTH-PINMUX-002").is_empty(), "{diags:?}");
+}
+
+#[test]
+fn pin_function_support_ignores_passives_and_unrelated_names() {
+    // A pull-up resistor has no capabilities and must not be judged; a
+    // net whose name implies no function is never checked.
+    let diags = validate(
+        r#"board "t" {
+  layers 2
+  component U1: mcu "rp2350"
+  component R1: resistor "r_generic_0603"
+  connect U1.gp1 -> "I2C1_SCL"
+  connect R1.p1 -> "I2C1_SCL"
+  connect U1.gp2 -> "STATUS_LED"
+}"#,
+    );
+    assert!(codes(&diags, "E-SYNTH-PINMUX-002").is_empty(), "{diags:?}");
+}

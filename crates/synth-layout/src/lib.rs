@@ -1441,7 +1441,11 @@ fn max_body_extent(board: &Board) -> (f64, f64) {
 pub fn body_size_for_part(part: &synth_registry::Part) -> (f64, f64) {
     if let Some(lib_id) = part.kicad_symbol.as_deref() {
         if let Some(bbox) = kicad_lib_loader::body_bbox(lib_id) {
-            return bbox;
+            // A multi-unit symbol is drawn as a stack anchored at one
+            // placement, so its reserved box is taller than one unit.
+            let units = kicad_lib_loader::symbol_units(lib_id).map_or(1, |(_, count)| count);
+            let h = bbox.1 + f64::from(units.saturating_sub(1)) * kicad_lib_loader::UNIT_PITCH_MM;
+            return (bbox.0, h);
         }
     }
     // Fallback synthesis (mirrors synth-kicad's rectangle sizing).
@@ -3482,7 +3486,11 @@ fn compute_anchor_pin_offset(part: &synth_registry::Part, pin_idx: usize) -> (f6
                     } else {
                         PinSide::Top
                     };
-                    return (px, -py, side);
+                    // A multi-unit symbol draws its units as a stack;
+                    // the pin belongs to unit `u`, so its offset is the
+                    // unit-local position shifted by that unit's slot.
+                    let (ux, uy) = kicad_lib_loader::pin_unit_offset(lib_id, &pin.number.0);
+                    return (px + ux, -py + uy, side);
                 }
             }
         }

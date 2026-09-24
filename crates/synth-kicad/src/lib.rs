@@ -44,6 +44,7 @@
 // KiCad file format.
 #![allow(clippy::too_many_lines)]
 
+mod alternates;
 mod bom;
 mod erc_validate;
 mod export;

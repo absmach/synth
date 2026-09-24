@@ -180,8 +180,12 @@ pub fn pin_terminal_xy(
                 let rot_x = px * rad.cos() - py * rad.sin();
                 let rot_y = px * rad.sin() + py * rad.cos();
 
+                // Multi-unit symbols are drawn as a vertical stack; a
+                // pin of unit 2..N is shifted down by its unit slot,
+                // in sheet space (the stack does not rotate).
+                let (_, unit_dy) = crate::kicad_lib_loader::pin_unit_offset(lib_id, &pin.number.0);
                 let term_x = cx + rot_x;
-                let term_y = cy - rot_y;
+                let term_y = cy - rot_y + unit_dy;
 
                 // KiCad's pin `angle` points INWARD (terminal →
                 // body); the outward stub direction is angle+180°.

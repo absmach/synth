@@ -20,7 +20,7 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use synth_diagnostics::{Diagnostic, DiagnosticBuilder, Location, Severity};
 use synth_ir::{Board, ComponentId, NetId, PinId};
-use synth_registry::{ElectricalType, Part};
+use synth_registry::{ElectricalType, Part, PinCapability};
 
 use crate::config::{ErcConfig, PinConflictTable};
 use crate::{endpoint_has_any_capability, ErcCategory, ErcRule};
@@ -1659,6 +1659,136 @@ impl ErcRule for MultiUnitRailSplitRule {
             );
         }
         out
+    }
+}
+
+// -----------------------------------------------------------------------------
+// E-SYNTH-PINMUX-002 — a named function routed to a pin that cannot carry it
+// -----------------------------------------------------------------------------
+
+/// A net whose *name* names a function (`I2C1_SCL`, `UART0_TX`,
+/// `USB_DP`) must only reach pins that declare that function. The
+/// capability-consistency rules (`E-SYNTH-I2C-001`, `-SPI-001`,
+/// `-UART-001`, `-USB-001`) already cover a net that carries a
+/// *dedicated* peripheral pin; this rule covers the remaining case — a
+/// net named for a function whose endpoints are all muxable pins, so no
+/// dedicated peer exists to demand the protocol. A pin that declares no
+/// capabilities at all (a resistor, a capacitor) is never judged: it
+/// legitimately sits on the net.
+pub(crate) struct PinFunctionSupportRule;
+
+impl ErcRule for PinFunctionSupportRule {
+    fn code(&self) -> &'static str {
+        "E-SYNTH-PINMUX-002"
+    }
+
+    fn category(&self) -> ErcCategory {
+        ErcCategory::Protocol
+    }
+
+    fn check(&self, board: &Board, file: &str) -> Vec<Diagnostic> {
+        let mut out = Vec::new();
+        for net in &board.nets {
+            let Some(func) = PinCapability::from_net_name(&net.name) else {
+                continue;
+            };
+            // If a dedicated peripheral pin for this family is present,
+            // the protocol-consistency rule already owns the net.
+            if net
+                .endpoints
+                .iter()
+                .any(|e| is_dedicated_for(board, e.component, e.pin, func))
+            {
+                continue;
+            }
+            for endpoint in &net.endpoints {
+                let Some(pin) = board.pin(endpoint.component, endpoint.pin) else {
+                    continue;
+                };
+                if pin.capabilities.is_empty() || pin.capabilities.contains(&func) {
+                    continue;
+                }
+                let Some(component) = board.component(endpoint.component) else {
+                    continue;
+                };
+                out.push(
+                    DiagnosticBuilder::new(
+                        self.code(),
+                        Severity::Error,
+                        "function routed to a pin that does not support it",
+                    )
+                    .location(Location::from_span(file.to_string(), endpoint.source_span))
+                    .expected(format!(
+                        "every pin on net `{}` to declare `{}`",
+                        net.name,
+                        crate::cap_name(func)
+                    ))
+                    .found(format!(
+                        "{} has no `{}` capability",
+                        component.describe_pin(&pin.name),
+                        crate::cap_name(func)
+                    ))
+                    .message(format!(
+                        "net `{}` names the `{}` function, but {} cannot carry it; move the net to \
+                         a pin that lists `{}`, or rename the net if it is not that function",
+                        net.name,
+                        crate::cap_name(func),
+                        component.describe_pin(&pin.name),
+                        crate::cap_name(func),
+                    ))
+                    .explanation_url(format!("synth.docs/diagnostics/{}", self.code()))
+                    .build(),
+                );
+            }
+        }
+        out
+    }
+}
+
+/// True when the pin is a *dedicated* peer for `func`'s protocol family:
+/// it declares a capability from that family and none from a competing
+/// family. Muxable MCU pins (many families at once) are not dedicated.
+fn is_dedicated_for(board: &Board, c: ComponentId, p: PinId, func: PinCapability) -> bool {
+    let Some((family, competing)) = protocol_family(func) else {
+        return false;
+    };
+    endpoint_has_any_capability(board, c, p, family)
+        && !endpoint_has_any_capability(board, c, p, competing)
+}
+
+/// The capability family `func` belongs to, paired with the families it
+/// competes with on a muxable pin. `None` for a capability that is not
+/// a muxed protocol function, so the mux rules never judge it.
+#[allow(clippy::too_many_lines)]
+fn protocol_family(
+    func: PinCapability,
+) -> Option<(&'static [PinCapability], &'static [PinCapability])> {
+    use PinCapability::{
+        Gpio, I2cScl, I2cSda, SpiCs, SpiMiso, SpiMosi, SpiSck, UartRx, UartTx, UsbCc, UsbDn, UsbDp,
+        UsbVbus,
+    };
+    const I2C: &[PinCapability] = &[I2cSda, I2cScl];
+    const SPI: &[PinCapability] = &[SpiMosi, SpiMiso, SpiSck, SpiCs];
+    const UART: &[PinCapability] = &[UartTx, UartRx];
+    const USB: &[PinCapability] = &[UsbDp, UsbDn, UsbVbus, UsbCc];
+    const I2C_RIVALS: &[PinCapability] = &[
+        Gpio, SpiMosi, SpiMiso, SpiSck, SpiCs, UartTx, UartRx, UsbDp, UsbDn, UsbVbus, UsbCc,
+    ];
+    const SPI_RIVALS: &[PinCapability] = &[
+        Gpio, I2cSda, I2cScl, UartTx, UartRx, UsbDp, UsbDn, UsbVbus, UsbCc,
+    ];
+    const UART_RIVALS: &[PinCapability] = &[
+        Gpio, I2cSda, I2cScl, SpiMosi, SpiMiso, SpiSck, SpiCs, UsbDp, UsbDn, UsbVbus, UsbCc,
+    ];
+    const USB_RIVALS: &[PinCapability] = &[
+        Gpio, I2cSda, I2cScl, SpiMosi, SpiMiso, SpiSck, SpiCs, UartTx, UartRx,
+    ];
+    match func {
+        I2cSda | I2cScl => Some((I2C, I2C_RIVALS)),
+        SpiMosi | SpiMiso | SpiSck | SpiCs => Some((SPI, SPI_RIVALS)),
+        UartTx | UartRx => Some((UART, UART_RIVALS)),
+        UsbDp | UsbDn | UsbVbus | UsbCc => Some((USB, USB_RIVALS)),
+        _ => None,
     }
 }
 

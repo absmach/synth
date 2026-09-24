@@ -350,7 +350,7 @@ pub(crate) fn build_sheet_schematic(
     // before.
     for component in &board.components {
         if let Some(placement) = placements.get(&component.id) {
-            if let Some(s) = build_symbol_instance(component, placement, project) {
+            for s in build_symbol_instance(component, placement, project, board) {
                 children.push(match (&render.symbol_path, s) {
                     (Some(path), Sexp::List { head, mut children }) => {
                         children.push(Sexp::list(
@@ -1583,18 +1583,72 @@ fn hidden_field_effects() -> Sexp {
     )
 }
 
-#[allow(clippy::too_many_lines)]
+/// One placed symbol per *unit*. A single-unit part yields one symbol
+/// (byte-identical to the pre-multi-unit output); a part whose stock
+/// symbol declares several units (a dual op-amp, a quad gate) yields
+/// one placed symbol per unit, stacked downward, each with its own
+/// `(unit N)` — otherwise KiCad reports the unplaced units and their
+/// pins never reach the netlist.
 fn build_symbol_instance(
     component: &Component,
     placement: &ComponentPlacement,
     project: &Uuid,
-) -> Option<Sexp> {
-    let part = component.part.as_ref()?;
+    board: &Board,
+) -> Vec<Sexp> {
+    let Some(part) = component.part.as_ref() else {
+        return Vec::new();
+    };
+    let units = part
+        .kicad_symbol
+        .as_deref()
+        .and_then(synth_layout::kicad_lib_loader::symbol_units);
+    let count = units.as_ref().map_or(1, |(_, count)| *count);
+    let mut out = Vec::with_capacity(count as usize);
+    for unit in 1..=count {
+        let dy = if count > 1 {
+            synth_layout::kicad_lib_loader::unit_offset_mm(unit).1
+        } else {
+            0.0
+        };
+        let uuid_key = if count > 1 {
+            format!("{}_u{unit}", component.refdes)
+        } else {
+            component.refdes.clone()
+        };
+        out.push(build_symbol_unit(
+            component,
+            placement,
+            project,
+            board,
+            unit,
+            dy,
+            &uuid_key,
+            units.as_ref().map(|(map, _)| map),
+        ));
+    }
+    out
+}
+
+#[allow(clippy::too_many_lines, clippy::too_many_arguments)]
+fn build_symbol_unit(
+    component: &Component,
+    placement: &ComponentPlacement,
+    project: &Uuid,
+    board: &Board,
+    unit: u32,
+    dy: f64,
+    uuid_key: &str,
+    units: Option<&std::collections::BTreeMap<String, u32>>,
+) -> Sexp {
+    let part = component
+        .part
+        .as_ref()
+        .expect("caller checked the part resolves");
     let (x, y) = (
         snap_grid_127(placement.center_mm.0),
-        snap_grid_127(placement.center_mm.1),
+        snap_grid_127(placement.center_mm.1) + dy,
     );
-    let comp_uuid = derive_entity_uuid(project, "symbol", &component.refdes);
+    let comp_uuid = derive_entity_uuid(project, "symbol", uuid_key);
 
     let part_id = part.id.as_str();
     // Prefer the registry's `kicad_symbol` reference (resolves to
@@ -1674,7 +1728,7 @@ fn build_symbol_instance(
     let mut fields = vec![
         str_pair("lib_id", lib_id),
         Sexp::list("at", vec![num(x), num(y), num(angle)]),
-        pair("unit", Sexp::atom("1")),
+        pair("unit", Sexp::atom(unit.to_string())),
         pair("in_bom", Sexp::atom("yes")),
         pair("on_board", Sexp::atom("yes")),
         str_pair("uuid", comp_uuid.to_string()),
@@ -1758,7 +1812,34 @@ fn build_symbol_instance(
         ],
     ));
 
-    Some(Sexp::list("symbol", fields))
+    // Pin functions: select the design's function name on each pin that
+    // carries one, so the schematic reads `I2C1_SCL` rather than `PB6`.
+    // The name is a subset of what `build_library` declared on the
+    // symbol (both derive from `alternates::pin_function_alternates`),
+    // so KiCad always finds the alternate.
+    for (number, name) in crate::alternates::pin_function_alternates(board, component) {
+        // Only this unit's pins are drawn on this symbol.
+        if let Some(map) = units {
+            if map.get(&number).copied().unwrap_or(1) != unit {
+                continue;
+            }
+        }
+        let pin_uuid = derive_entity_uuid(
+            project,
+            "symbol_pin",
+            &format!("{}_{number}", component.refdes),
+        );
+        fields.push(Sexp::list(
+            "pin",
+            vec![
+                Sexp::str(&number),
+                Sexp::list("alternate", vec![Sexp::str(&name)]),
+                str_pair("uuid", pin_uuid.to_string()),
+            ],
+        ));
+    }
+
+    Sexp::list("symbol", fields)
 }
 
 #[cfg(test)]
@@ -1809,6 +1890,93 @@ mod tests {
             lowered.diagnostics
         );
         lowered.board.unwrap()
+    }
+
+    /// Lower without insisting on a clean ERC (the alternates test uses
+    /// a deliberately incomplete board).
+    fn lower_lenient(src: &str) -> synth_ir::Board {
+        let registry = load_dir(&workspace_root().join("registry").join("parts")).unwrap();
+        let parsed = synth_parser::parse(src, "inline.synth");
+        assert!(!parsed.has_errors(), "{:?}", parsed.diagnostics);
+        lower(&parsed.ast.unwrap(), &registry, "inline.synth")
+            .board
+            .unwrap()
+    }
+
+    #[test]
+    fn pin_function_alternates_are_declared_and_selected() {
+        let board = lower_lenient(
+            r#"board "b" {
+                component U1: mcu "rp2350"
+                component U2: sensor "bmp280_pressure"
+                connect U1.gp1 -> "I2C1_SCL"
+                connect U2.scl -> "I2C1_SCL"
+                connect U1.gp0 -> "I2C1_SDA"
+                connect U2.sda -> "I2C1_SDA"
+            }"#,
+        );
+        let project = crate::uuid_v5::project_namespace(&board.name);
+        let text = build_schematic(&board, &project).to_string_pretty();
+        // The library symbol declares the design's function names as
+        // alternates (injected into the embedded stock symbol)…
+        assert!(
+            text.contains("(alternate \"I2C1_SCL\" "),
+            "library must declare the SCL alternate"
+        );
+        assert!(
+            text.contains("(alternate \"I2C1_SDA\" "),
+            "library must declare the SDA alternate"
+        );
+        // …and each placed instance selects it, so the pin reads the
+        // function rather than the package name.
+        assert!(
+            text.contains("(alternate \"I2C1_SCL\")"),
+            "instance must select the SCL alternate"
+        );
+        assert!(
+            text.contains("(alternate \"I2C1_SDA\")"),
+            "instance must select the SDA alternate"
+        );
+    }
+
+    #[test]
+    fn multi_unit_part_exports_one_symbol_per_unit() {
+        // The LM358 is a 3-unit symbol (two amplifiers + a power unit).
+        // Emitting a single `(unit 1)` would leave units 2 and 3
+        // unplaced — KiCad reports `missing_unit` and their pins never
+        // reach the netlist.
+        let board = lower_lenient(
+            r#"board "b" {
+                component U1: opamp "lm358_dual"
+                component R1: resistor "r_generic_0603"
+                component R2: resistor "r_generic_0603"
+                component C1: capacitor "c_generic_0603"
+                component C2: capacitor "c_generic_0603"
+                connect U1.out_a -> U1.in_a_neg
+                connect U1.in_a_pos -> R1.p1
+                connect R1.p2 -> U1.vcc_pos
+                connect U1.out_b -> U1.in_b_neg
+                connect U1.in_b_pos -> R2.p1
+                connect R2.p2 -> U1.vcc_pos
+                connect U1.vcc_pos -> "VCC"
+                connect C1.p1 -> "VCC"
+                connect C2.p1 -> "VCC"
+                connect U1.vcc_neg -> "GND"
+                connect C1.p2 -> "GND"
+                connect C2.p2 -> "GND"
+            }"#,
+        );
+        let project = crate::uuid_v5::project_namespace(&board.name);
+        let text = build_schematic(&board, &project).to_string_pretty();
+        assert!(text.contains("(unit 1)"));
+        assert!(
+            text.contains("(unit 2)"),
+            "unit 2 must be placed, not left missing"
+        );
+        assert!(
+            text.contains("(unit 3)"),
+            "the power unit must be placed too"
+        );
     }
 
     #[test]

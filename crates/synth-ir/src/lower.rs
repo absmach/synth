@@ -41,7 +41,7 @@ use synth_ast::{
 use synth_diagnostics::{
     Diagnostic, DiagnosticBuilder, Location, Patch, PatchKind, Severity, Span, SuggestedAction,
 };
-use synth_registry::{Part, Registry};
+use synth_registry::{Part, PinCapability, Registry};
 
 use crate::board::{
     Board, Component, ComponentId, DiffPair, Keepout, Net, NetClass, NetEndpoint, NetId, Note,
@@ -657,24 +657,67 @@ impl<'a> LowerCtx<'a> {
             }
         }
         if distinct_names.len() > 1 {
-            let first = &distinct_names[0].0;
-            for (other, span) in distinct_names.iter().skip(1) {
+            // A pin can only serve one peripheral function at a time.
+            // When the shorted names are *function* names from different
+            // protocols (`I2C1_SCL` and `UART1_TX`), that is the pin-mux
+            // mistake — report it at the shared pin, and leave
+            // `E-SYNTH-NAME-005` for the non-function case so exactly
+            // one of the two fires.
+            let mut functions: Vec<PinCapability> = Vec::new();
+            for (n, _) in &distinct_names {
+                if let Some(f) = PinCapability::from_net_name(n) {
+                    if !functions.contains(&f) {
+                        functions.push(f);
+                    }
+                }
+            }
+            if functions.len() > 1 {
+                let fn_list = functions
+                    .iter()
+                    .map(|f| format!("`{}`", f.canonical_name()))
+                    .collect::<Vec<_>>()
+                    .join(" and ");
+                let pin_span = info
+                    .members
+                    .first()
+                    .map_or(distinct_names[1].1, |m| endpoints[*m].2);
                 self.diagnostics.push(
                     DiagnosticBuilder::new(
-                        "E-SYNTH-NAME-005",
+                        "E-SYNTH-PINMUX-001",
                         Severity::Error,
-                        "conflicting net names shorted together",
+                        "one pin asked to carry two functions",
                     )
-                    .location(Location::from_span(self.file.to_string(), *span))
-                    .expected(format!("endpoints of net `{first}` only"))
-                    .found(format!("net `{other}` shorted to net `{first}`"))
+                    .location(Location::from_span(self.file.to_string(), pin_span))
+                    .expected("the pin to carry a single peripheral function")
+                    .found(format!("{fn_list} shorted onto the same pin"))
                     .message(format!(
-                        "net `{other}` is shorted to net `{first}` by shared endpoints; give \
-                         the connection one name (rename one side) or split the nets"
+                        "this pin is shared by two function nets ({fn_list}); a pin can only \
+                         serve one peripheral function at a time — route one of them to a \
+                         different pin, or split the nets"
                     ))
-                    .explanation_url("synth.docs/diagnostics/E-SYNTH-NAME-005")
+                    .explanation_url("synth.docs/diagnostics/E-SYNTH-PINMUX-001")
                     .build(),
                 );
+            } else {
+                let first = &distinct_names[0].0;
+                for (other, span) in distinct_names.iter().skip(1) {
+                    self.diagnostics.push(
+                        DiagnosticBuilder::new(
+                            "E-SYNTH-NAME-005",
+                            Severity::Error,
+                            "conflicting net names shorted together",
+                        )
+                        .location(Location::from_span(self.file.to_string(), *span))
+                        .expected(format!("endpoints of net `{first}` only"))
+                        .found(format!("net `{other}` shorted to net `{first}`"))
+                        .message(format!(
+                            "net `{other}` is shorted to net `{first}` by shared endpoints; give \
+                             the connection one name (rename one side) or split the nets"
+                        ))
+                        .explanation_url("synth.docs/diagnostics/E-SYNTH-NAME-005")
+                        .build(),
+                    );
+                }
             }
         }
         let name = distinct_names

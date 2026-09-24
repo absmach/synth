@@ -166,6 +166,162 @@ fn extract_balanced_sub_block(text: &str) -> Option<String> {
     None
 }
 
+/// Vertical pitch between the units of one multi-unit symbol, in mm.
+/// The placer keeps one placement per package, so the units are drawn
+/// as a stack anchored at that placement; the router and the schematic
+/// exporter must agree on this offset or the wires miss the pins.
+pub const UNIT_PITCH_MM: f64 = 12.7;
+
+/// Offset of unit `unit` (1-based) from the package anchor, in KiCad
+/// sheet coordinates (y grows downward, so units stack downward).
+#[must_use]
+pub fn unit_offset_mm(unit: u32) -> (f64, f64) {
+    (0.0, f64::from(unit.saturating_sub(1)) * UNIT_PITCH_MM)
+}
+
+/// Sheet-space offset of the unit a pin belongs to, or `(0, 0)` for a
+/// single-unit symbol (or a pin with no declared unit). The router and
+/// the schematic exporter must both apply this or the wires miss the
+/// pins of units 2..N.
+#[must_use]
+pub fn pin_unit_offset(lib_id: &str, number: &str) -> (f64, f64) {
+    symbol_units(lib_id)
+        .and_then(|(map, count)| {
+            if count > 1 {
+                map.get(number).copied()
+            } else {
+                None
+            }
+        })
+        .map_or((0.0, 0.0), unit_offset_mm)
+}
+
+/// Physical pin number -> KiCad unit number (1-based) for a stock
+/// symbol, plus the number of units it declares. A single-unit symbol
+/// yields an empty map and a count of 1; `None` when the symbol can't
+/// be found.
+///
+/// KiCad declares units as sub-symbols named `<Symbol>_<unit>_<style>`
+/// (`LM2904_1_1`, `LM2904_2_1`, `LM2904_3_1`). Unit `0` is common to
+/// every unit; its pins are attributed to unit 1 here, which is where
+/// the router draws them.
+pub fn symbol_units(lib_id: &str) -> Option<(std::collections::BTreeMap<String, u32>, u32)> {
+    /// Pin number -> unit, plus the unit count, for one `lib_id`.
+    type Units = (std::collections::BTreeMap<String, u32>, u32);
+    static CACHE: OnceLock<std::sync::Mutex<std::collections::HashMap<String, Option<Units>>>> =
+        OnceLock::new();
+    let cache = CACHE.get_or_init(|| std::sync::Mutex::new(std::collections::HashMap::new()));
+    let mut guard = cache
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
+    if let Some(hit) = guard.get(lib_id) {
+        return hit.clone();
+    }
+    let computed = symbol_units_uncached(lib_id);
+    guard.insert(lib_id.to_string(), computed.clone());
+    computed
+}
+
+fn symbol_units_uncached(lib_id: &str) -> Option<(std::collections::BTreeMap<String, u32>, u32)> {
+    let (lib_name, sym_name) = lib_id.split_once(':')?;
+    let dir = bundled_dir()?;
+    let text = std::fs::read_to_string(dir.join(format!("{lib_name}.kicad_sym"))).ok()?;
+    symbol_units_from_source(&text, sym_name)
+}
+
+/// [`symbol_units`] against already-loaded library text, following
+/// `(extends …)` chains within it.
+#[must_use]
+pub fn symbol_units_from_source(
+    text: &str,
+    sym_name: &str,
+) -> Option<(std::collections::BTreeMap<String, u32>, u32)> {
+    let mut chain = Vec::new();
+    let mut curr = sym_name.to_string();
+    let mut visited = HashSet::new();
+    while visited.insert(curr.clone()) {
+        let Some(block) = extract_symbol(text, &curr) else {
+            break;
+        };
+        let target = extends_target(&block);
+        chain.push(block);
+        match target {
+            Some(t) => curr = t,
+            None => break,
+        }
+    }
+    if chain.is_empty() {
+        return None;
+    }
+    let mut map = std::collections::BTreeMap::new();
+    let mut seen = HashSet::new();
+    let mut max_unit = 0_u32;
+    // Subclass first: its unit assignment for a shared pin number wins.
+    for block in &chain {
+        collect_unit_pins(block, &mut map, &mut seen, &mut max_unit);
+    }
+    Some((map, max_unit.max(1)))
+}
+
+fn collect_unit_pins(
+    block: &str,
+    map: &mut std::collections::BTreeMap<String, u32>,
+    seen: &mut HashSet<String>,
+    max_unit: &mut u32,
+) {
+    let mut pos = 0;
+    while let Some(idx) = block[pos..].find("(symbol \"") {
+        let abs = pos + idx;
+        let Some(name) = find_quoted_value(&block[abs..], "(symbol \"") else {
+            pos = abs + 9;
+            continue;
+        };
+        let Some(unit) = unit_of_sub_symbol(&name) else {
+            pos = abs + 9;
+            continue;
+        };
+        let Some(sub) = extract_balanced_sub_block(&block[abs..]) else {
+            pos = abs + 9;
+            continue;
+        };
+        let len = sub.len();
+        if unit > 0 {
+            *max_unit = (*max_unit).max(unit);
+        }
+        let draw_unit = if unit == 0 { 1 } else { unit };
+        for number in pin_numbers(&sub) {
+            if seen.insert(number.clone()) {
+                map.insert(number, draw_unit);
+            }
+        }
+        pos = abs + len;
+    }
+}
+
+/// The `<unit>` in a sub-symbol name `<Symbol>_<unit>_<style>`.
+fn unit_of_sub_symbol(name: &str) -> Option<u32> {
+    let mut parts = name.rsplitn(3, '_');
+    let style = parts.next()?;
+    let unit = parts.next()?;
+    if style.is_empty() || !style.chars().all(|c| c.is_ascii_digit()) {
+        return None;
+    }
+    unit.parse::<u32>().ok()
+}
+
+fn pin_numbers(block: &str) -> Vec<String> {
+    let mut out = Vec::new();
+    let mut pos = 0;
+    while let Some(idx) = block[pos..].find("(number \"") {
+        let abs = pos + idx;
+        if let Some(n) = find_quoted_value(&block[abs..], "(number \"") {
+            out.push(n);
+        }
+        pos = abs + 9;
+    }
+    out
+}
+
 /// Return map of pin number (and pin name) -> (local_x_mm, local_y_mm, angle_deg)
 /// for a stock KiCad symbol. Follows `(extends ...)` chains.
 ///
@@ -614,5 +770,74 @@ mod tests {
         // Inner property value is the second `"R"` and must be
         // untouched.
         assert!(rewritten.contains("\"Value\" \"R\""));
+    }
+}
+
+#[cfg(test)]
+mod unit_tests {
+    use super::*;
+
+    #[test]
+    fn parses_units_from_a_dual_opamp() {
+        let text = r#"
+    (symbol "LM2904"
+        (extends "Opamp_Dual")
+        (symbol "LM2904_1_1"
+            (pin output line (at 7.62 0 180) (length 2.54)
+                (name "~" (effects (font (size 1.27 1.27))))
+                (number "1" (effects (font (size 1.27 1.27)))))
+        )
+        (symbol "LM2904_2_1"
+            (pin output line (at 7.62 0 180) (length 2.54)
+                (name "~" (effects (font (size 1.27 1.27))))
+                (number "7" (effects (font (size 1.27 1.27)))))
+        )
+        (symbol "LM2904_3_1"
+            (pin power_in line (at 0 -7.62 90) (length 3.81)
+                (name "V+" (effects (font (size 1.27 1.27))))
+                (number "8" (effects (font (size 1.27 1.27)))))
+        )
+    )
+"#;
+        let (map, count) = symbol_units_from_source(text, "LM2904").expect("units");
+        assert_eq!(count, 3);
+        assert_eq!(map.get("1"), Some(&1));
+        assert_eq!(map.get("7"), Some(&2));
+        assert_eq!(map.get("8"), Some(&3));
+    }
+
+    #[test]
+    fn single_unit_symbol_reports_one_unit() {
+        let text = r#"
+    (symbol "R"
+        (symbol "R_0_1" (rectangle (start -1 1) (end 1 -1)))
+        (symbol "R_1_1"
+            (pin passive line (at 0 2.54 270) (length 1.27)
+                (name "~" (effects (font (size 1.27 1.27))))
+                (number "1" (effects (font (size 1.27 1.27)))))
+        )
+    )
+"#;
+        let (map, count) = symbol_units_from_source(text, "R").expect("units");
+        assert_eq!(count, 1);
+        assert_eq!(map.get("1"), Some(&1));
+    }
+
+    #[test]
+    fn real_lm358_is_a_three_unit_symbol() {
+        // Skipped when KiCad's bundled libraries aren't installed.
+        let Some((map, count)) = symbol_units("Amplifier_Operational:LM358") else {
+            return;
+        };
+        assert_eq!(count, 3, "LM358 has two amplifier units plus a power unit");
+        assert_eq!(map.get("1"), Some(&1), "OUT_A");
+        assert_eq!(map.get("7"), Some(&2), "OUT_B");
+        assert_eq!(map.get("8"), Some(&3), "V+ power unit");
+    }
+
+    #[test]
+    fn unit_offset_stacks_downward() {
+        assert_eq!(unit_offset_mm(1), (0.0, 0.0));
+        assert_eq!(unit_offset_mm(2), (0.0, UNIT_PITCH_MM));
     }
 }

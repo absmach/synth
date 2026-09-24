@@ -145,6 +145,14 @@ project into `out_dir`:
 `schematic.rs` emits:
 
 - **symbol instances** positioned from the shared `Layout`
+- **one placed symbol per unit** for a multi-unit package (a dual
+  op-amp, a quad gate), each with its own `(unit N)`, stacked at the
+  package's single placement (`symbol_units` + `unit_offset_mm`); the
+  PCB keeps one footprint per package
+- **pin functions as KiCad alternates** (`alternates.rs`): the design's
+  function name for a pin (`I2C1_SCL`) is declared on the library
+  symbol and selected on the instance, so the pin reads the function
+  rather than its package name (`PB6`)
 - **Reference/Value field auto-placement** away from pins
   (`side_pin_counts` / `choose_field_sides` / `field_anchor`)
 - **hidden sourcing fields** on every instance — `MPN` and `LCSC`
@@ -231,6 +239,12 @@ Beyond the per-protocol rules, the engine carries three deeper families:
   labels (`E-SYNTH-NAME-008`), a ground pin on a non-ground net
   (`E-SYNTH-NAME-009`), and multi-unit parts split across rails
   (`E-SYNTH-NAME-010`).
+- **Pin muxing** — one pin asked to carry two peripheral functions
+  (`E-SYNTH-PINMUX-001`, reported at lowering where both net names are
+  still visible), and a named function routed to a pin that does not
+  declare it (`E-SYNTH-PINMUX-002`). The function of a net is inferred
+  from its name with the same vocabulary the exporter uses to show pin
+  alternates — see `docs/multi-unit-and-pin-functions.md`.
 
 Where a rule needs a quantity the design does not state (an LED `Vf`, a
 rail voltage, a part's current limit), it declines to fire rather than
@@ -288,6 +302,9 @@ guessing.
 | Layout engine, clusters, routing, DRC                    | `crates/synth-layout` (`lib.rs`, `patterns/`, `route/`, `ops.rs`, `score.rs`, `sidecar.rs`) |
 | KiCad .kicad_sch / .kicad_sym / export                   | `crates/synth-kicad` (`schematic.rs`, `symbol_lib.rs`, `export.rs`, `sexp.rs`)              |
 | Pin reconciliation & PWR_FLAG                            | `crates/synth-kicad/src/pin_reconcile.rs`                                                   |
+| Pin functions (alternates)                               | `crates/synth-kicad/src/alternates.rs`                                                      |
+| Multi-unit symbols                                       | `crates/synth-layout/src/kicad_lib_loader.rs` (`symbol_units`), `symbol_lib.rs`, `schematic.rs` |
+| Pin-mux ERC                                              | `crates/synth-validate/src/lib.rs` + `deep_erc.rs` (`E-SYNTH-PINMUX-00x`)                    |
 | Aesthetic + KiCad ERC                                    | `crates/synth-kicad/src/schem_erc.rs`, `erc_validate.rs`                                    |
 | Rule-based ERC / decoupling auto-insert                  | `crates/synth-validate`                                                                     |
 | Value parsing + `E-SYNTH-CRYSTAL-001`                    | `crates/synth-validate/src/value.rs`, `crates/synth-validate/src/lib.rs`                    |
