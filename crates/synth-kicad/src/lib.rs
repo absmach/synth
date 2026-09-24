@@ -58,7 +58,7 @@ pub mod schem_erc;
 pub mod schematic;
 pub mod sexp;
 mod symbol_lib;
-mod uuid_v5;
+pub mod uuid_v5;
 
 pub use erc_validate::{run_kicad_erc, ErcRunError, KicadErcItem, KicadErcViolation};
 pub use export::{

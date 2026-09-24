@@ -800,7 +800,11 @@ pub const MOUNTING_REGION: &str = "MOUNTING";
 /// The region a component belongs to: its declared `group`, else the
 /// implicit [`MOUNTING_REGION`] for a mechanical/test part, else
 /// `None` (the trailing ungrouped region).
-fn effective_group(board: &Board, id: ComponentId) -> Option<&str> {
+///
+/// Public so consumers that reason about regions (the
+/// `E-SYNTH-SCHEM-013` contiguity check) resolve a component to its
+/// region exactly as placement does.
+pub fn effective_group(board: &Board, id: ComponentId) -> Option<&str> {
     let component = board.component(id)?;
     if let Some(group) = component.group.as_deref() {
         return Some(group);

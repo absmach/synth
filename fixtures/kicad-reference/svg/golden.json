@@ -1,0 +1,72 @@
+{
+  "ref_battery_charger": {
+    "sha256": "6460413ff4b3fe7cd91e9258dead95086f9520ec85464753369e76f8d58ed679",
+    "width": "419.9890mm",
+    "height": "297.0022mm",
+    "paths": 6228,
+    "texts": 201
+  },
+  "ref_crystal_mcu": {
+    "sha256": "2f54040cbc9cf27c4d597c67066b2c5c7b96211e00799f3356d7fbabfe211ef1",
+    "width": "297.0022mm",
+    "height": "210.0072mm",
+    "paths": 13223,
+    "texts": 313
+  },
+  "ref_ldo_sensor": {
+    "sha256": "4b59ccb22a75b94a10ef32237833764daeb6ee5f2652cad0e3362429fc2c42e0",
+    "width": "297.0022mm",
+    "height": "210.0072mm",
+    "paths": 3973,
+    "texts": 109
+  },
+  "ref_led_driver": {
+    "sha256": "982f67e3db0a5158b5e120016bf500f8e235a5203a0227c29d4a180eb66a61c3",
+    "width": "419.9890mm",
+    "height": "297.0022mm",
+    "paths": 13313,
+    "texts": 311
+  },
+  "ref_secure_element": {
+    "sha256": "92ae3d86deaeb6951105dbc3e5cec08bf29e3dc05bde554c519745d9ab816f5a",
+    "width": "297.0022mm",
+    "height": "210.0072mm",
+    "paths": 14363,
+    "texts": 341
+  },
+  "ref_spi_flash": {
+    "sha256": "103d63d05528dc0209627c9a437e5283fd7799134e41328e2b09c611d0faf80a",
+    "width": "297.0022mm",
+    "height": "210.0072mm",
+    "paths": 13668,
+    "texts": 316
+  },
+  "ref_uart_bridge": {
+    "sha256": "b09b84eb018b11355c3588219c71c676b58d1d76d673ee4a8a6243ca8e21b16a",
+    "width": "297.0022mm",
+    "height": "210.0072mm",
+    "paths": 22310,
+    "texts": 525
+  },
+  "ref_usb_cdc": {
+    "sha256": "dd2aa7743ee06ca48f507766657150199e3050e3a8f026956a62df05aedef2e1",
+    "width": "594.0044mm",
+    "height": "419.9890mm",
+    "paths": 15617,
+    "texts": 395
+  },
+  "secure_tracker": {
+    "sha256": "8e580fecaac28fe809186be68d165647bf91e6dc205a52e1d3ebc97c05fe313b",
+    "width": "594.0044mm",
+    "height": "419.9890mm",
+    "paths": 30400,
+    "texts": 787
+  },
+  "sensor_logger": {
+    "sha256": "aae53acedfbba5a2ba66a51544968ecf68ffe1e6a844d207df9aaf114531d382",
+    "width": "297.0022mm",
+    "height": "210.0072mm",
+    "paths": 7619,
+    "texts": 209
+  }
+}

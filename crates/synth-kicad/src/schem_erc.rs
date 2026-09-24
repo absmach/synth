@@ -65,8 +65,13 @@
 //! * **E-SYNTH-SCHEM-012** — Sheet fill ratio below threshold: content
 //!   covers less than [`SchemErcConfig::min_sheet_fill_ratio`] of the
 //!   chosen sheet (info).
+//! * **E-SYNTH-SCHEM-013** — Group regions overlap, or a component
+//!   from one group falls inside another group's box: the region
+//!   placement (Phase C1) failed to keep groups contiguous.
 //! * **E-SYNTH-SCHEM-014** — Auto-named net (`net_N`) rendered on the
 //!   sheet as a label, suggesting a name from its endpoint pin.
+//! * **E-SYNTH-SCHEM-015** — A declared `group` carries no `notes`
+//!   block (info): the reference sheet's regions each explain intent.
 
 use std::collections::{HashMap, HashSet};
 
@@ -205,6 +210,8 @@ pub fn check_with_config(
     violations.extend(check_text_overlaps(layout));
     violations.extend(check_sheet_fill(board, layout, config.min_sheet_fill_ratio));
     violations.extend(check_auto_named_nets(board, layout));
+    violations.extend(check_group_regions(board, layout));
+    violations.extend(check_group_notes(board));
     violations
 }
 
@@ -1019,7 +1026,141 @@ fn check_sheet_fill(board: &Board, layout: &Layout, min_ratio: f64) -> Vec<Diagn
     .build()]
 }
 
-// ----- E-SYNTH-SCHEM-014: auto-named net rendered on the sheet ---------------
+// ----- E-SYNTH-SCHEM-013: group regions overlap ------------------------------
+
+/// `E-SYNTH-SCHEM-013`: the region placement (Phase C1) failed to keep
+/// groups apart. Two failure modes, both reported as warnings:
+///
+/// - two group boxes overlap — a caption would title another region's
+///   parts;
+/// - a component whose declared group differs from a box's group lies
+///   inside that box — the regions interleave even if the boxes
+///   themselves only touch.
+///
+/// Boards with no declared groups have one implicit region and can
+/// never fire. One diagnostic per offending pair, in box order.
+fn check_group_regions(board: &Board, layout: &Layout) -> Vec<Diagnostic> {
+    let mut out = Vec::new();
+    let boxes = &layout.group_boxes;
+    // Box-vs-box overlap.
+    for i in 0..boxes.len() {
+        for j in (i + 1)..boxes.len() {
+            let a = &boxes[i];
+            let b = &boxes[j];
+            let disjoint = a.max_mm.0 <= b.min_mm.0
+                || b.max_mm.0 <= a.min_mm.0
+                || a.max_mm.1 <= b.min_mm.1
+                || b.max_mm.1 <= a.min_mm.1;
+            if disjoint {
+                continue;
+            }
+            out.push(
+                DiagnosticBuilder::new(
+                    "E-SYNTH-SCHEM-013",
+                    Severity::Warning,
+                    "group regions overlap",
+                )
+                .message(format!(
+                    "region boxes \"{}\" and \"{}\" overlap; a caption would title \
+                     another region's parts — check the region placement",
+                    a.group, b.group,
+                ))
+                .expected("disjoint group regions")
+                .found(format!("\"{}\" overlaps \"{}\"", a.group, b.group))
+                .explanation_url("synth.docs/diagnostics/E-SYNTH-SCHEM-013")
+                .build(),
+            );
+        }
+    }
+    // A component outside its own group's box (or inside another's).
+    // The component's region is resolved through the layout helper, so
+    // the implicit `MOUNTING` region of a mechanical part counts as
+    // its own region, exactly as placement treats it.
+    for placement in &layout.components {
+        let Some(component) = board.component(placement.id) else {
+            continue;
+        };
+        let Some(part) = component.part.as_ref() else {
+            continue;
+        };
+        let (bw, bh) = synth_layout::body_size_for_part(part);
+        let (cx, cy) = placement.center_mm;
+        let (x0, x1) = (cx - bw / 2.0, cx + bw / 2.0);
+        let (y0, y1) = (cy - bh / 2.0, cy + bh / 2.0);
+        for box_ in boxes {
+            // Inside this box?
+            let inside = x0 >= box_.min_mm.0
+                && x1 <= box_.max_mm.0
+                && y0 >= box_.min_mm.1
+                && y1 <= box_.max_mm.1;
+            if !inside {
+                continue;
+            }
+            // Its own region, or a nested declaration (a component may
+            // only belong to one group; a mismatch is the interleave).
+            if synth_layout::effective_group(board, placement.id) == Some(box_.group.as_str()) {
+                break;
+            }
+            out.push(
+                DiagnosticBuilder::new(
+                    "E-SYNTH-SCHEM-013",
+                    Severity::Warning,
+                    "component outside its group region",
+                )
+                .message(format!(
+                    "component {} sits inside region \"{}\" but declares a different \
+                     group; the regions are not contiguous",
+                    component.describe(),
+                    box_.group,
+                ))
+                .entity(EntityRef::Component {
+                    id: component.refdes.clone(),
+                })
+                .expected("every component inside its own group's region")
+                .found(format!("inside \"{}\"", box_.group))
+                .explanation_url("synth.docs/diagnostics/E-SYNTH-SCHEM-013")
+                .build(),
+            );
+            break;
+        }
+    }
+    out
+}
+
+// ----- E-SYNTH-SCHEM-015: group has no notes ---------------------------------
+
+/// `E-SYNTH-SCHEM-015`: a declared `group` carries no `notes` block
+/// (schematic-quality plan §2 mechanism 3, info).
+///
+/// The reference sheet's every region explains its intent in prose
+/// (*"VIN = 3.3 – 5.5 V, EN tied to VIN (always on)"*) — text the
+/// netlist cannot carry. Advisory, never blocking: a group without
+/// notes is under-documented, not wrong. One diagnostic per group, in
+/// declaration order.
+fn check_group_notes(board: &Board) -> Vec<Diagnostic> {
+    board
+        .groups
+        .iter()
+        .filter(|group| {
+            !board
+                .notes
+                .iter()
+                .any(|note| note.group.as_deref() == Some(group.name.as_str()))
+        })
+        .map(|group| {
+            DiagnosticBuilder::new("E-SYNTH-SCHEM-015", Severity::Info, "group has no notes")
+                .message(format!(
+                    "group \"{}\" carries no `notes` block; add one so the region explains \
+                 intent the netlist cannot (e.g. voltage range, always-on tie-off)",
+                    group.name,
+                ))
+                .expected("a `notes` block inside the group")
+                .found("no notes")
+                .explanation_url("synth.docs/diagnostics/E-SYNTH-SCHEM-015")
+                .build()
+        })
+        .collect()
+}
 
 /// Whether a rendered net name is an auto-generated placeholder
 /// (`net_3`, `NET_3`) rather than a human name.
@@ -1029,6 +1170,8 @@ fn is_auto_net_label(label: &str) -> bool {
         .strip_prefix("net_")
         .is_some_and(|rest| !rest.is_empty() && rest.bytes().all(|b| b.is_ascii_digit()))
 }
+
+// ----- E-SYNTH-SCHEM-014: auto-named net rendered on the sheet ---------------
 
 /// `E-SYNTH-SCHEM-014`: an auto-named net (`net_N`) reaching the sheet
 /// as a rendered label (schematic-quality plan Phase D3).
@@ -1933,8 +2076,142 @@ mod tests {
         assert!(check_auto_named_nets(&board, &layout).is_empty());
     }
 
-    // ----- aggregate entry point ------------------------------------------
+    // ----- E-SYNTH-SCHEM-013 / 015 ----------------------------------------
 
+    fn group_box(name: &str, x0: f64, y0: f64, x1: f64, y1: f64) -> synth_layout::GroupBox {
+        synth_layout::GroupBox {
+            group: name.to_string(),
+            min_mm: (x0, y0),
+            max_mm: (x1, y1),
+            color: [0, 0, 0],
+            caption_inside: true,
+        }
+    }
+
+    #[test]
+    fn overlapping_group_boxes_are_flagged() {
+        let board = board_with_nets(Vec::new());
+        let mut layout = layout(Vec::new(), Vec::new(), Vec::new(), Vec::new());
+        layout.group_boxes = vec![
+            group_box("A", 0.0, 0.0, 100.0, 100.0),
+            group_box("B", 50.0, 50.0, 150.0, 150.0),
+        ];
+        let violations = check_group_regions(&board, &layout);
+        assert_eq!(violations.len(), 1);
+        assert_eq!(violations[0].code, "E-SYNTH-SCHEM-013");
+    }
+
+    #[test]
+    fn disjoint_group_boxes_are_silent() {
+        let board = board_with_nets(Vec::new());
+        let mut layout = layout(Vec::new(), Vec::new(), Vec::new(), Vec::new());
+        layout.group_boxes = vec![
+            group_box("A", 0.0, 0.0, 40.0, 40.0),
+            group_box("B", 60.0, 0.0, 100.0, 40.0),
+        ];
+        assert!(check_group_regions(&board, &layout).is_empty());
+    }
+
+    #[test]
+    fn foreign_component_inside_a_region_is_flagged() {
+        let mut board = board_with_nets(Vec::new());
+        // Two grouped components: one in A, one in B.
+        for (i, (refdes, group)) in [("R1", "A"), ("R2", "B")].iter().enumerate() {
+            board.components.push(Component {
+                id: ComponentId(i as u32),
+                refdes: refdes.to_string(),
+                kind: "resistor".to_string(),
+                part: Some(single_pin_part("p1")),
+                value: None,
+                dnp: false,
+                properties: std::collections::BTreeMap::new(),
+                placement_hint: None,
+                group: Some(group.to_string()),
+                sheet: None,
+                source_span: Span::new(0, 0),
+            });
+        }
+        let mut layout = layout(
+            vec![
+                placement(ComponentId(0), 10.0, 10.0, Rotation::Zero),
+                // R2 (group B) physically inside A's box.
+                placement(ComponentId(1), 12.0, 12.0, Rotation::Zero),
+            ],
+            Vec::new(),
+            Vec::new(),
+            Vec::new(),
+        );
+        layout.group_boxes = vec![group_box("A", 0.0, 0.0, 40.0, 40.0)];
+        let violations = check_group_regions(&board, &layout);
+        assert_eq!(violations.len(), 1, "{violations:?}");
+        assert_eq!(violations[0].code, "E-SYNTH-SCHEM-013");
+    }
+
+    #[test]
+    fn mechanical_component_in_mounting_region_is_silent() {
+        // Regression: the implicit MOUNTING region is not a declared
+        // `group` on the component, so a naive group comparison fired
+        // 013 on every mechanical part. Resolving through the layout's
+        // `effective_group` fixes it.
+        let mut board = board_with_nets(Vec::new());
+        let mut hole = single_pin_part("1");
+        hole.kind = "mounting_hole".to_string();
+        board.components.push(Component {
+            id: ComponentId(0),
+            refdes: "H1".to_string(),
+            kind: "mounting_hole".to_string(),
+            part: Some(hole),
+            value: None,
+            dnp: false,
+            properties: std::collections::BTreeMap::new(),
+            placement_hint: None,
+            group: None,
+            sheet: None,
+            source_span: Span::new(0, 0),
+        });
+        let mut layout = layout(
+            vec![placement(ComponentId(0), 10.0, 10.0, Rotation::Zero)],
+            Vec::new(),
+            Vec::new(),
+            Vec::new(),
+        );
+        layout.group_boxes = vec![group_box(
+            synth_layout::MOUNTING_REGION,
+            0.0,
+            0.0,
+            40.0,
+            40.0,
+        )];
+        assert!(check_group_regions(&board, &layout).is_empty());
+    }
+
+    #[test]
+    fn group_without_notes_is_info() {
+        use synth_ir::Group;
+        let mut board = board_with_nets(Vec::new());
+        board.groups = vec![Group {
+            name: "Power".to_string(),
+            title: None,
+            color: None,
+            region: None,
+            source_span: Span::new(0, 0),
+        }];
+        let violations = check_group_notes(&board);
+        assert_eq!(violations.len(), 1);
+        assert_eq!(violations[0].code, "E-SYNTH-SCHEM-015");
+        assert_eq!(violations[0].severity, Severity::Info);
+        // A matching notes block silences it.
+        board.notes.push(synth_ir::Note {
+            title: "Power notes".to_string(),
+            lines: vec!["VIN = 3.3 - 5.5 V".to_string()],
+            group: Some("Power".to_string()),
+            sheet: None,
+            source_span: Span::new(0, 0),
+        });
+        assert!(check_group_notes(&board).is_empty());
+    }
+
+    // ----- aggregate entry point ------------------------------------------
     #[test]
     fn aggregate_check_returns_warnings_in_rule_order() {
         let board = Board {
