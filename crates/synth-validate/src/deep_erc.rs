@@ -1663,6 +1663,131 @@ impl ErcRule for MultiUnitRailSplitRule {
 }
 
 // -----------------------------------------------------------------------------
+// E-SYNTH-UNIT-002 — registry unit tags disagree with the symbol's units
+// -----------------------------------------------------------------------------
+
+/// A part whose registry `unit` tags promise more units than its KiCad
+/// symbol declares, or a multi-unit-tagged part with no stock symbol
+/// mapping at all.
+///
+/// The exporter stacks one placed symbol per unit from the *symbol's*
+/// unit inventory (`symbol_<unit>_<style>` sub-symbols); the registry
+/// tags are only grouping metadata for `E-SYNTH-NAME-010`. When the two
+/// disagree the schematic and the rail-split check reason about
+/// different packages, so the mismatch is an error. A tagged part with
+/// no `kicad_symbol` mapping (a synthesized rectangle) exports as a
+/// single unit today — that limitation is a warning, not a block.
+///
+/// Declines (never guesses) when the symbol library is unavailable:
+/// `symbol_units` returns `None` both for a missing mapping and for an
+/// uninstallable library, and only the former is actionable here.
+pub(crate) struct UnitTagMismatchRule;
+
+impl ErcRule for UnitTagMismatchRule {
+    fn code(&self) -> &'static str {
+        "E-SYNTH-UNIT-002"
+    }
+
+    fn category(&self) -> ErcCategory {
+        ErcCategory::Naming
+    }
+
+    fn check(&self, board: &Board, file: &str) -> Vec<Diagnostic> {
+        let mut out = Vec::new();
+        for component in &board.components {
+            let Some(part) = component.part.as_ref() else {
+                continue;
+            };
+            let tags: BTreeSet<&str> = part
+                .pins
+                .iter()
+                .filter_map(|p| p.unit.as_deref())
+                .filter(|u| !u.is_empty())
+                .collect();
+            if tags.len() < 2 {
+                continue;
+            }
+            match part
+                .kicad_symbol
+                .as_deref()
+                .and_then(synth_layout::kicad_lib_loader::symbol_units)
+            {
+                Some((_, count)) => {
+                    if (tags.len() as u32) > count {
+                        let tag_list = tags.iter().copied().collect::<Vec<_>>().join(", ");
+                        out.push(
+                            DiagnosticBuilder::new(
+                                self.code(),
+                                Severity::Error,
+                                "registry unit tags exceed the symbol's units",
+                            )
+                            .location(Location::from_span(
+                                file.to_string(),
+                                component.source_span,
+                            ))
+                            .expected(format!(
+                                "at most {count} unit tags on {} (the symbol declares {count} units)",
+                                component.describe()
+                            ))
+                            .found(format!(
+                                "{} declares {} units ({tag_list})",
+                                component.describe(),
+                                tags.len()
+                            ))
+                            .message(format!(
+                                "{} tags pins with {} distinct units ({tag_list}) but its symbol \
+                                 declares only {count}; fix the registry unit tags or point the \
+                                 part at the correct multi-unit symbol",
+                                component.describe(),
+                                tags.len()
+                            ))
+                            .explanation_url(format!("synth.docs/diagnostics/{}", self.code()))
+                            .build(),
+                        );
+                    }
+                }
+                None => {
+                    // No mapping at all: the exporter draws one unit, so
+                    // per-unit ERC grouping has no schematic counterpart.
+                    if part.kicad_symbol.is_none() {
+                        let tag_list = tags.iter().copied().collect::<Vec<_>>().join(", ");
+                        out.push(
+                            DiagnosticBuilder::new(
+                                self.code(),
+                                Severity::Warning,
+                                "multi-unit tags without a multi-unit symbol",
+                            )
+                            .location(Location::from_span(
+                                file.to_string(),
+                                component.source_span,
+                            ))
+                            .expected(format!(
+                                "{} to map to a multi-unit KiCad symbol",
+                                component.describe()
+                            ))
+                            .found(format!(
+                                "{} declares {} units ({tag_list}) but has no stock symbol mapping, \
+                                 so it exports as a single unit",
+                                component.describe(),
+                                tags.len()
+                            ))
+                            .message(format!(
+                                "give {} a multi-unit `kicad_symbol` or drop the unit tags; until \
+                                 then every pin shares one schematic body",
+                                component.describe()
+                            ))
+                            .explanation_url(format!("synth.docs/diagnostics/{}", self.code()))
+                            .build(),
+                        );
+                    }
+                }
+            }
+        }
+        out
+    }
+}
+
+// -----------------------------------------------------------------------------
 // E-SYNTH-PINMUX-002 — a named function routed to a pin that cannot carry it
 // -----------------------------------------------------------------------------
 

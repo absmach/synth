@@ -53,6 +53,13 @@ pub enum RailFamily {
 impl RailFamily {
     /// Classify a physical pin by its KiCad electrical type and name.
     /// Pins that aren't power return `None`.
+    ///
+    /// This stays name+type based by design: it classifies the
+    /// *physical symbol* pin (KiCad reality — `VDDA`, `VSS`, …), where
+    /// there is no declared voltage to consult. The *net* side instead
+    /// goes through [`net_family`], which prefers the declared
+    /// `power "NAME" V` voltage and the inferred power domains and only
+    /// falls back to name heuristics.
     pub fn for_pin(electrical_type: &str, name: &str) -> Option<Self> {
         let lower = name.to_ascii_lowercase();
         let is_gnd = matches!(
@@ -125,6 +132,61 @@ pub struct PowerDriver {
 pub struct ReconciledPins {
     pub power_legs: Vec<PowerLeg>,
     pub no_connects: Vec<NoConnectPin>,
+}
+
+/// Net-side rail family: the declared `power "NAME" V` voltage wins
+/// (a `0V` declaration means ground), then the inferred power domains,
+/// then the same name heuristics [`RailFamily::for_pin`] uses. A signal
+/// net with no voltage, no rail/ground domain, and no rail-like name
+/// returns `None`.
+///
+/// This is what lets fan-out follow real rail declarations instead of
+/// guessing from the registry pin names: a regulator `vout` leg on a
+/// declared `+3V3` net records a positive rail even when the pin name
+/// itself is not in any hardcoded list.
+fn net_family(net: &synth_ir::Net, domains: &synth_ir::PowerDomainMap) -> Option<RailFamily> {
+    if let Some(v) = net.voltage.map(synth_ir::Voltage::to_v) {
+        return Some(if v == 0.0 {
+            RailFamily::Ground
+        } else {
+            RailFamily::Positive
+        });
+    }
+    if let Some(kind) = domains.get(net.id) {
+        if kind.is_ground() {
+            return Some(RailFamily::Ground);
+        }
+        if kind.is_rail() {
+            return Some(RailFamily::Positive);
+        }
+    }
+    let lower = net.name.to_ascii_lowercase();
+    let is_gnd = matches!(
+        lower.as_str(),
+        "gnd" | "vss" | "vssa" | "vsss" | "vgnd" | "gnda" | "agnd" | "ground" | "0v"
+    ) || lower.starts_with("gnd")
+        || lower.starts_with("vss");
+    if is_gnd {
+        return Some(RailFamily::Ground);
+    }
+    let is_rail = matches!(
+        lower.as_str(),
+        "vbus" | "vbus1" | "vbus2" | "vin" | "vcc" | "vdd" | "3v3" | "5v" | "+3v3" | "+5v"
+    ) || lower.starts_with("vbus")
+        || lower.starts_with('+');
+    if is_rail {
+        return Some(RailFamily::Positive);
+    }
+    None
+}
+
+/// Normalise a net/pin name for affinity matching: lowercase alnum
+/// only, so `+3V3`, `3v3`, and `3V3` compare equal.
+fn normalize_rail_name(name: &str) -> String {
+    name.chars()
+        .filter(char::is_ascii_alphanumeric)
+        .map(|c| c.to_ascii_lowercase())
+        .collect()
 }
 
 /// Reconcile every component in `board`: returns the fan-out power
@@ -253,6 +315,35 @@ pub fn undriven_power_nets<S: ::std::hash::BuildHasher>(
     out
 }
 
+/// Pick one rail net for a physical pin from the same-family
+/// candidates (board-net order). An exact normalized name match wins
+/// (`VDDA` joins the `VDDA` net, not the `VDD` one when a part touches
+/// both); otherwise a net with a declared `power "NAME" V` voltage wins
+/// over a purely heuristic one; otherwise the first candidate wins.
+/// Deterministic: candidates arrive in board-net order and the tiebreak
+/// never depends on hash order.
+fn pick_rail_net(board: &Board, candidates: &[NetId], pin_name: &str) -> Option<NetId> {
+    if candidates.len() == 1 {
+        return Some(candidates[0]);
+    }
+    let want = normalize_rail_name(pin_name);
+    for id in candidates {
+        if let Some(net) = board.net(*id) {
+            if normalize_rail_name(&net.name) == want {
+                return Some(*id);
+            }
+        }
+    }
+    for id in candidates {
+        if let Some(net) = board.net(*id) {
+            if net.voltage.is_some() {
+                return Some(*id);
+            }
+        }
+    }
+    candidates.first().copied()
+}
+
 fn reconcile_component(board: &Board, component: &synth_ir::Component) -> ReconciledPins {
     let mut out = ReconciledPins::default();
     let Some(part) = component.part.as_ref() else {
@@ -293,8 +384,15 @@ fn reconcile_component(board: &Board, component: &synth_ir::Component) -> Reconc
 
     // Which physical pin numbers does the netlist already reach?
     let mut netlisted: HashSet<String> = HashSet::new();
-    // Rail nets this component touches, keyed by family.
-    let mut rail_nets: HashMap<RailFamily, NetId> = HashMap::new();
+    // Rail nets this component touches, keyed by family, in board-net
+    // order. The net side prefers the declared `power "NAME" V`
+    // voltage and the inferred power domains; the pin side keeps the
+    // name+type heuristic (there is no declared voltage on a physical
+    // symbol pin). A net is recorded when *either* side classifies it,
+    // so a regulator `vout` leg on a declared `+3V3` net counts as a
+    // positive rail even though `vout` matches no hardcoded name.
+    let domains = synth_ir::infer_power_domains(board);
+    let mut rail_nets: HashMap<RailFamily, Vec<NetId>> = HashMap::new();
 
     for net in &board.nets {
         for endpoint in &net.endpoints {
@@ -305,7 +403,7 @@ fn reconcile_component(board: &Board, component: &synth_ir::Component) -> Reconc
                 continue;
             };
             netlisted.insert(pin.number.0.clone());
-            if let Some(family) = RailFamily::for_pin(
+            let pin_family = RailFamily::for_pin(
                 match pin.electrical_type {
                     synth_registry::ElectricalType::PowerOutput => "power_out",
                     synth_registry::ElectricalType::PowerInput
@@ -313,10 +411,27 @@ fn reconcile_component(board: &Board, component: &synth_ir::Component) -> Reconc
                     _ => "non_power",
                 },
                 &pin.name,
-            ) {
-                rail_nets.entry(family).or_insert(net.id);
+            );
+            let net_side = net_family(net, &domains);
+            // Declared voltage is authoritative: when the net carries
+            // one, the net side wins over a disagreeing pin heuristic
+            // (a short between two named rails is ERC's story, not a
+            // reason to fan out onto the wrong one).
+            let family = if net.voltage.is_some() {
+                net_side.or(pin_family)
+            } else {
+                pin_family.or(net_side)
+            };
+            if let Some(family) = family {
+                rail_nets.entry(family).or_default().push(net.id);
             }
         }
+    }
+    // Deduplicate while keeping board-net order (a net with several
+    // endpoints of this component must not outvote the others).
+    for nets in rail_nets.values_mut() {
+        let mut seen = HashSet::new();
+        nets.retain(|id| seen.insert(*id));
     }
 
     for pin in &physical {
@@ -345,16 +460,18 @@ fn reconcile_component(board: &Board, component: &synth_ir::Component) -> Reconc
         );
         if is_connectable_power {
             if let Some(family) = RailFamily::for_pin(&pin.electrical_type, &pin.name) {
-                if let Some(net) = rail_nets.get(&family) {
-                    out.power_legs.push(PowerLeg {
-                        component: component.id,
-                        pin_number: pin.number.clone(),
-                        pin_name: pin.name.clone(),
-                        electrical_type: pin.electrical_type.clone(),
-                        net: *net,
-                        family,
-                    });
-                    continue;
+                if let Some(candidates) = rail_nets.get(&family) {
+                    if let Some(net) = pick_rail_net(board, candidates, &pin.name) {
+                        out.power_legs.push(PowerLeg {
+                            component: component.id,
+                            pin_number: pin.number.clone(),
+                            pin_name: pin.name.clone(),
+                            electrical_type: pin.electrical_type.clone(),
+                            net,
+                            family,
+                        });
+                        continue;
+                    }
                 }
             }
         }
