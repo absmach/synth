@@ -425,6 +425,7 @@ impl<'a> LowerCtx<'a> {
         use synth_ast::NetclassAttr;
         let mut trace_width: Option<Length> = None;
         let mut clearance: Option<Length> = None;
+        let mut color: Option<[u8; 3]> = None;
         for attr in &n.attrs {
             match attr {
                 NetclassAttr::TraceWidth(v) => match Length::try_from(v) {
@@ -435,6 +436,26 @@ impl<'a> LowerCtx<'a> {
                     Ok(l) => clearance = Some(l),
                     Err(e) => self.emit_unit_error(&e, "netclass clearance"),
                 },
+                NetclassAttr::Color(hex) => match parse_hex_color(hex) {
+                    Some(rgb) => color = Some(rgb),
+                    None => self.diagnostics.push(
+                        DiagnosticBuilder::new(
+                            "E-SYNTH-NAME-011",
+                            Severity::Warning,
+                            "invalid netclass color",
+                        )
+                        .location(Location::from_span(self.file.to_string(), n.span))
+                        .expected("a six-digit hex colour, e.g. \"#c2410c\"")
+                        .found(format!("\"{hex}\""))
+                        .message(format!(
+                            "netclass `{}` colour `{hex}` is not `#rrggbb`; the class \
+                             keeps its default palette hue",
+                            n.name
+                        ))
+                        .explanation_url("synth.docs/diagnostics/E-SYNTH-NAME-011")
+                        .build(),
+                    ),
+                },
                 // Non-exhaustive enum: future attrs reach here as a
                 // no-op until lowering learns about them.
                 _ => {}
@@ -444,6 +465,7 @@ impl<'a> LowerCtx<'a> {
             name: n.name.clone(),
             trace_width,
             clearance,
+            color,
             source_span: n.span,
         }
     }
@@ -1549,6 +1571,18 @@ fn parse_side(s: &str) -> Option<PlacementSide> {
     }
 }
 
+/// Parse a `#rrggbb` (or bare `rrggbb`) hex colour into RGB. Returns
+/// `None` for anything else — the caller reports `E-SYNTH-NAME-011`
+/// and keeps the default palette hue.
+fn parse_hex_color(s: &str) -> Option<[u8; 3]> {
+    let hex = s.strip_prefix('#').unwrap_or(s);
+    if hex.len() != 6 || !hex.bytes().all(|b| b.is_ascii_hexdigit()) {
+        return None;
+    }
+    let byte = |i: usize| u8::from_str_radix(&hex[i..i + 2], 16).ok();
+    Some([byte(0)?, byte(2)?, byte(4)?])
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1616,6 +1650,44 @@ mod tests {
         assert_eq!(nc.name, "PWR");
         assert_eq!(nc.trace_width, Some(Length::from_mm(0.5)));
         assert_eq!(nc.clearance, Some(Length::from_mm(0.2)));
+        assert_eq!(nc.color, None, "no colour attribute → default palette");
+    }
+
+    #[test]
+    fn test_lower_netclass_color() {
+        let src = r##"board "b" {
+            netclass "PWR" {
+                color "#c2410c"
+            }
+        }"##;
+        let ast = parse(src, "test.synth").ast.unwrap();
+        let res = lower(&ast, &Registry::default(), "test.synth");
+        assert!(res.diagnostics.is_empty(), "{:?}", res.diagnostics);
+        assert_eq!(
+            res.board.unwrap().netclasses[0].color,
+            Some([0xc2, 0x41, 0x0c])
+        );
+    }
+
+    #[test]
+    fn test_lower_netclass_bad_color_warns_and_keeps_default() {
+        let src = r#"board "b" {
+            netclass "PWR" {
+                color "not-a-colour"
+            }
+        }"#;
+        let ast = parse(src, "test.synth").ast.unwrap();
+        let res = lower(&ast, &Registry::default(), "test.synth");
+        assert!(
+            res.diagnostics.iter().any(|d| d.code == "E-SYNTH-NAME-011"),
+            "{:?}",
+            res.diagnostics
+        );
+        assert_eq!(
+            res.board.unwrap().netclasses[0].color,
+            None,
+            "bad colour keeps the default palette hue"
+        );
     }
 
     #[test]

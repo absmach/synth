@@ -513,6 +513,10 @@ pub struct NetclassStmt {
 pub enum NetclassAttr {
     TraceWidth(ValueWithUnit),
     Clearance(ValueWithUnit),
+    /// Explicit hue for the class (`color "#c2410c"`), applied to the
+    /// schematic `net_settings` colour. Six-digit `#rrggbb` (the
+    /// leading `#` optional).
+    Color(String),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

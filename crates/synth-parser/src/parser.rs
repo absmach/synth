@@ -1207,12 +1207,24 @@ impl Parser {
                         attrs.push(NetclassAttr::Clearance(v));
                     }
                 }
+                // `color` is parsed contextually (an identifier, not a
+                // reserved keyword) so existing designs that use the
+                // word as a name keep parsing.
+                TokenKind::Ident(name) if name == "color" => {
+                    self.bump();
+                    if let Some(hex) = self.expect_string(
+                        "E-SYNTH-PARSE-002",
+                        "expected colour hex string (e.g. \"#c2410c\")",
+                    ) {
+                        attrs.push(NetclassAttr::Color(hex));
+                    }
+                }
                 _ => {
                     self.emit(
                         self.peek().span,
                         "E-SYNTH-PARSE-019",
                         "unexpected attribute inside netclass",
-                        "`trace_width <value><unit>` or `clearance <value><unit>`",
+                        "`trace_width <value><unit>`, `clearance <value><unit>`, or `color \"#rrggbb\"`",
                         self.describe_current(),
                         None,
                     );
@@ -2612,6 +2624,34 @@ mod tests {
         };
         assert_eq!(n.name, "PWR");
         assert_eq!(n.attrs.len(), 2);
+    }
+
+    #[test]
+    fn parse_netclass_color_attribute() {
+        let src = r##"board "b" {
+            netclass "PWR" {
+                trace_width 0.5mm
+                color "#c2410c"
+            }
+        }"##;
+        let tokens = lex(src);
+        let res = parse(tokens, "test.synth".into());
+        assert!(
+            res.diagnostics.is_empty(),
+            "Diagnostics should be empty: {:?}",
+            res.diagnostics
+        );
+        let ast = res.ast.unwrap();
+        let StatementAst::Netclass(n) = &ast.board.statements[0] else {
+            panic!("Expected netclass statement")
+        };
+        assert!(
+            n.attrs
+                .iter()
+                .any(|a| matches!(a, NetclassAttr::Color(c) if c == "#c2410c")),
+            "colour attr must parse: {:?}",
+            n.attrs
+        );
     }
 
     #[test]

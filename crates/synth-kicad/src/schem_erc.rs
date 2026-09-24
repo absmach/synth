@@ -1726,6 +1726,7 @@ mod tests {
             text: text.to_string(),
             at_mm: (x, y),
             size_mm,
+            kind: synth_layout::TextKind::NoteLine,
         }
     }
 

@@ -277,6 +277,10 @@ pub struct NetClass {
     pub name: String,
     pub trace_width: Option<Length>,
     pub clearance: Option<Length>,
+    /// Explicit schematic hue (`color "#c2410c"`), as RGB. `None`
+    /// falls back to the fixed palette / hashed hue.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub color: Option<[u8; 3]>,
     pub source_span: Span,
 }
 

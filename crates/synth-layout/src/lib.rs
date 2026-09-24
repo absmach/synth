@@ -53,6 +53,7 @@ use synth_ir::{Board, ComponentId, NetId, PinId};
 pub mod kicad_footprint_loader;
 pub mod kicad_lib_loader;
 pub mod kicad_zip;
+pub mod netclass;
 pub mod ops;
 mod patterns;
 pub mod placer;
@@ -230,6 +231,30 @@ pub struct TextAnnotation {
     pub at_mm: (f64, f64),
     /// Glyph height in mm. KiCad's schematic default is 1.27.
     pub size_mm: f64,
+    /// What the run is. The exporter renders captions bold (the top
+    /// of the Phase B typography hierarchy); every other kind renders
+    /// plain at its authored size.
+    #[serde(default)]
+    pub kind: TextKind,
+}
+
+/// The role of a [`TextAnnotation`] run. Determines exporter styling
+/// (bold captions) and documents the resolve pass's priority order
+/// (caption > note > legend, larger glyphs first).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum TextKind {
+    /// A declared `group`'s title: bold, group-hued box, inside top-left.
+    Caption,
+    /// A `notes` block title.
+    NoteTitle,
+    /// One line of a `notes` block.
+    #[default]
+    NoteLine,
+    /// A generated `{refdes} pinout` legend title.
+    LegendTitle,
+    /// One `pin: net` legend line (or its `…` truncation marker).
+    LegendLine,
 }
 
 /// A titled outline box drawn around one declared `group` (§21.1).
@@ -242,6 +267,16 @@ pub struct GroupBox {
     pub group: String,
     pub min_mm: (f64, f64),
     pub max_mm: (f64, f64),
+    /// Outline + tint hue, assigned deterministically from the group
+    /// name ([`group_color`]). The schematic exporter strokes the box
+    /// dashed in this hue with a translucent fill of the same hue.
+    #[serde(default = "default_group_color")]
+    pub color: [u8; 3],
+    /// The caption sits inside the box at the top-left (Phase B2).
+    /// Always true; carried so other consumers (preview renderer)
+    /// place captions without re-deriving the convention.
+    #[serde(default = "default_caption_inside")]
+    pub caption_inside: bool,
 }
 
 impl Layout {
@@ -322,19 +357,24 @@ const MEMBER_CLEARANCE: f64 = 17.78;
 /// component. KiCad's stock title-block leaves ~10–15 mm on each
 /// side; 20 mm covers most variants.
 const PAGE_MARGIN: f64 = 20.0;
-/// Height of a group caption's glyphs, and its clearance above the
-/// group's topmost body edge. Captions are set larger than a
-/// Reference/Value field (1.27 mm) so a sub-circuit name reads as a
-/// heading rather than as another component label.
+/// Height of a group caption's glyphs. Captions render bold at this
+/// size (Phase B typography: captions 2.0 bold, refdes/value 1.27,
+/// note/legend lines 1.0) so a sub-circuit name reads as a heading
+/// rather than as another component label.
 const GROUP_CAPTION_SIZE: f64 = 2.0;
-const GROUP_CAPTION_DY: f64 = 12.7;
+/// Gap between the box's top edge and the caption baseline, in mm:
+/// one glyph height plus this gap keeps the caption fully inside the
+/// box while clearing the edge stroke.
+const GROUP_CAPTION_INSET: f64 = 1.0;
 /// Padding between a group's outline box (§21.1) and its contents —
 /// caption included, so the box top clears the caption baseline.
 const GROUP_BOX_PAD: f64 = 5.0;
 /// Title and line sizes for design notes (§21.1 `notes` blocks) and
-/// generated connector pin legends.
+/// generated connector pin legends. Phase B typography: titles stay
+/// at 2.0 mm, lines drop to 1.0 mm so prose reads subordinate to
+/// component labels (1.27 mm) and captions (2.0 mm bold).
 const NOTE_TITLE_SIZE: f64 = 2.0;
-const NOTE_LINE_SIZE: f64 = 1.27;
+const NOTE_LINE_SIZE: f64 = 1.0;
 /// Baseline step between note/legend lines, and the gap between a
 /// title baseline and its first line.
 const NOTE_LINE_PITCH: f64 = 2.54;
@@ -342,6 +382,10 @@ const NOTE_TITLE_GAP: f64 = 4.0;
 /// Gap below a group box, connector body, or content bottom before a
 /// notes block or pin legend starts.
 const BELOW_GAP: f64 = 8.0;
+/// Gap between a group box's bottom edge and its first in-box note
+/// title baseline's top (Phase B3): the title clears the edge stroke
+/// before the box grows to enclose the strip.
+const NOTE_STRIP_GAP: f64 = 1.0;
 /// A connector earns a generated pin legend only with at least this
 /// many pins joining *named* nets (Phase A3): fewer means an internal
 /// header, not a board-edge interface.
@@ -745,38 +789,86 @@ fn clamp_annotations_to_sheet(layout: &mut Layout) {
 /// Caption every declared `group` on the sheet, and draw its titled
 /// outline box (§21.1).
 ///
-/// One text run per group, sitting above the top-left corner of the
-/// bounding box of that group's components — the device the SIM7080G
-/// reference schematic uses ("VBAT DECOUPLING + ESD", "NANO SIM (1.8V
-/// only) + ESD"): a sub-circuit is named where it is drawn, so a
-/// reader can see what a cluster of parts is *for* without tracing
-/// nets. The box pads the component bounds (caption included) so the
-/// eye groups the parts even before reading the title. Groups are
-/// declaration-order, and a board that declares none gets no captions
-/// and no boxes.
+/// One text run per group, sitting inside the box at the top-left —
+/// the device the SIM7080G reference schematic uses ("VBAT
+/// DECOUPLING + ESD", "NANO SIM (1.8V only) + ESD"): a sub-circuit
+/// is named where it is drawn, so a reader can see what a cluster of
+/// parts is *for* without tracing nets. The box pads the component
+/// bounds so the eye groups the parts even before reading the title.
+/// Groups are declaration-order, and a board that declares none gets
+/// no captions and no boxes.
+///
+/// The box carries a deterministic hue ([`group_color`], dark band
+/// distinct from the net-class brights); the exporter strokes it
+/// dashed in that hue with a translucent fill. Per-text color is not
+/// expressible in KiCad's schematic grammar (verified against
+/// `kicad-cli`: `(color …)` inside text effects fails to load), so
+/// the caption itself renders bold monochrome — containment in the
+/// hued box is what ties it to the sub-circuit.
 ///
 /// Runs after routing so captions sit above the final positions, and
 /// before `grow_sheet_to_fit` so a caption pushed near an edge grows
 /// the page like any other content.
 fn annotate_groups(board: &Board, layout: &mut Layout) {
     for (group, min_x, max_x, min_y, max_y) in group_bounds(board, layout) {
-        let caption_y = (min_y - GROUP_CAPTION_DY).max(0.0);
+        let caption_y = (min_y - GROUP_BOX_PAD + GROUP_CAPTION_SIZE + GROUP_CAPTION_INSET)
+            .max(GROUP_CAPTION_SIZE);
+        let color = group_color(&group);
         layout.annotations.push(TextAnnotation {
             text: group.clone(),
-            // Clear of the tallest symbol's Reference text, which
-            // already sits above its body.
+            // Inside the box at the top-left, one glyph plus an
+            // inset below the top edge stroke.
             at_mm: (min_x, caption_y),
             size_mm: GROUP_CAPTION_SIZE,
+            kind: TextKind::Caption,
         });
         layout.group_boxes.push(GroupBox {
             group,
-            min_mm: (
-                min_x - GROUP_BOX_PAD,
-                caption_y - GROUP_CAPTION_SIZE - GROUP_BOX_PAD,
-            ),
+            min_mm: (min_x - GROUP_BOX_PAD, min_y - GROUP_BOX_PAD),
             max_mm: (max_x + GROUP_BOX_PAD, max_y + GROUP_BOX_PAD),
+            color,
+            caption_inside: true,
         });
     }
+}
+
+/// Dark-band hues for group boxes, distinct from the net-class
+/// brights (`synth_kicad::netclass_colors`): boxes are large areas,
+/// so they take muted tones with a translucent fill while nets take
+/// saturated signal colors.
+const GROUP_PALETTE: [[u8; 3]; 8] = [
+    [0x8B, 0x00, 0x00], // dark red
+    [0x00, 0x64, 0x00], // dark green
+    [0x00, 0x00, 0x8B], // dark blue
+    [0x8B, 0x45, 0x13], // saddle brown
+    [0x8B, 0x00, 0x8B], // dark magenta
+    [0x00, 0x80, 0x80], // teal
+    [0x80, 0x80, 0x00], // olive
+    [0x4B, 0x00, 0x82], // indigo
+];
+
+/// Deterministic hue for a group name: FNV-1a into
+/// [`GROUP_PALETTE`]. Same name, same hue, every export —
+/// `DefaultHasher` would not promise that across processes.
+pub fn group_color(name: &str) -> [u8; 3] {
+    let mut hash: u64 = 0xcbf2_9ce4_8422_2325;
+    for byte in name.bytes() {
+        hash ^= u64::from(byte);
+        hash = hash.wrapping_mul(0x0100_0000_01b3);
+    }
+    GROUP_PALETTE[(hash % GROUP_PALETTE.len() as u64) as usize]
+}
+
+/// Serde default for [`GroupBox::color`]: the hue of the empty name,
+/// so hand-built boxes without a color still land in the palette.
+fn default_group_color() -> [u8; 3] {
+    group_color("")
+}
+
+/// Serde default for [`GroupBox::caption_inside`]: captions live
+/// inside their box (Phase B2).
+fn default_caption_inside() -> bool {
+    true
 }
 
 /// Bounding box of each declared `group`'s component bodies, in
@@ -881,6 +973,7 @@ fn place_connector_legends(board: &Board, layout: &mut Layout) {
             text: format!("{} pinout", component.refdes),
             at_mm: (x, y),
             size_mm: NOTE_TITLE_SIZE,
+            kind: TextKind::LegendTitle,
         });
         y += NOTE_TITLE_GAP;
         for (pin_name, net_name) in lines.iter().take(LEGEND_MAX_LINES) {
@@ -888,6 +981,7 @@ fn place_connector_legends(board: &Board, layout: &mut Layout) {
                 text: format!("{pin_name}: {net_name}"),
                 at_mm: (x, y),
                 size_mm: NOTE_LINE_SIZE,
+                kind: TextKind::LegendLine,
             });
             y += NOTE_LINE_PITCH;
         }
@@ -896,6 +990,7 @@ fn place_connector_legends(board: &Board, layout: &mut Layout) {
                 text: "…".to_string(),
                 at_mm: (x, y),
                 size_mm: NOTE_LINE_SIZE,
+                kind: TextKind::LegendLine,
             });
         }
     }
@@ -910,56 +1005,63 @@ fn is_auto_net_name(name: &str) -> bool {
 
 /// Render `notes` blocks as titled text (§21.1).
 ///
-/// A note inside a `group` sits beneath that group's outline box;
-/// top-level notes stack at the bottom-left below all content. Each
-/// block is its title (caption size) plus one run per line. Runs
-/// before `grow_sheet_to_fit` so notes near an edge grow the page,
-/// and before `clamp_annotations_to_sheet` so wide lines slide
-/// on-page like captions.
+/// A note inside a `group` sits in a strip at the bottom *inside*
+/// that group's outline box (reference mechanism 3: intent lives
+/// where the sub-circuit is drawn); the box grows to fit. Top-level
+/// notes stack at the bottom-left below all content. Each block is
+/// its title (caption size) plus one run per line. Runs before
+/// `grow_sheet_to_fit` so notes near an edge grow the page, and
+/// before `clamp_annotations_to_sheet` so wide lines slide on-page
+/// like captions.
 fn place_design_notes(board: &Board, layout: &mut Layout) {
     if board.notes.is_empty() {
         return;
     }
-    let boxes: std::collections::HashMap<&str, &GroupBox> = layout
-        .group_boxes
-        .iter()
-        .map(|b| (b.group.as_str(), b))
-        .collect();
-    // Next free baseline per group, and one for board-level notes.
-    let mut group_cursor: std::collections::HashMap<&str, f64> = std::collections::HashMap::new();
     let mut board_cursor = content_bottom(board, layout) + BELOW_GAP;
     for note in &board.notes {
-        let (x, y) = if let Some(group) = note.group.as_deref() {
-            let y = group_cursor.get(group).copied().unwrap_or_else(|| {
-                boxes
-                    .get(group)
-                    .map_or(board_cursor, |b| b.max_mm.1 + BELOW_GAP)
-            });
-            let x = boxes.get(group).map_or(PAGE_MARGIN, |b| b.min_mm.0);
-            group_cursor.insert(
-                group,
-                y + NOTE_TITLE_GAP + note.lines.len() as f64 * NOTE_LINE_PITCH,
-            );
-            (x, y)
+        if let Some(group) = note.group.as_deref() {
+            // Index — not a reference: the box grows as notes land.
+            let Some(box_idx) = layout.group_boxes.iter().position(|b| b.group == group) else {
+                let y = board_cursor;
+                board_cursor += NOTE_TITLE_GAP + note.lines.len() as f64 * NOTE_LINE_PITCH;
+                push_note_runs(layout, note, PAGE_MARGIN, y);
+                continue;
+            };
+            // Strip below the current box bottom edge, inside the
+            // grown box: title first, lines beneath it.
+            let title_y = layout.group_boxes[box_idx].max_mm.1 + NOTE_STRIP_GAP + NOTE_TITLE_SIZE;
+            let x = layout.group_boxes[box_idx].min_mm.0 + GROUP_BOX_PAD;
+            push_note_runs(layout, note, x, title_y);
+            let last_y = title_y
+                + NOTE_TITLE_GAP
+                + note.lines.len().saturating_sub(1) as f64 * NOTE_LINE_PITCH;
+            layout.group_boxes[box_idx].max_mm.1 = last_y + GROUP_BOX_PAD;
         } else {
             let y = board_cursor;
             board_cursor += NOTE_TITLE_GAP + note.lines.len() as f64 * NOTE_LINE_PITCH;
-            (PAGE_MARGIN, y)
-        };
-        layout.annotations.push(TextAnnotation {
-            text: note.title.clone(),
-            at_mm: (x, y),
-            size_mm: NOTE_TITLE_SIZE,
-        });
-        let mut line_y = y + NOTE_TITLE_GAP;
-        for line in &note.lines {
-            layout.annotations.push(TextAnnotation {
-                text: line.clone(),
-                at_mm: (x, line_y),
-                size_mm: NOTE_LINE_SIZE,
-            });
-            line_y += NOTE_LINE_PITCH;
+            push_note_runs(layout, note, PAGE_MARGIN, y);
         }
+    }
+}
+
+/// Push one titled note block's runs: the title at `(x, y)`, one run
+/// per line beneath it.
+fn push_note_runs(layout: &mut Layout, note: &synth_ir::Note, x: f64, y: f64) {
+    layout.annotations.push(TextAnnotation {
+        text: note.title.clone(),
+        at_mm: (x, y),
+        size_mm: NOTE_TITLE_SIZE,
+        kind: TextKind::NoteTitle,
+    });
+    let mut line_y = y + NOTE_TITLE_GAP;
+    for line in &note.lines {
+        layout.annotations.push(TextAnnotation {
+            text: line.clone(),
+            at_mm: (x, line_y),
+            size_mm: NOTE_LINE_SIZE,
+            kind: TextKind::NoteLine,
+        });
+        line_y += NOTE_LINE_PITCH;
     }
 }
 
@@ -997,9 +1099,9 @@ const TEXT_NUDGE_STEP: f64 = 1.27;
 /// (then shrinks, then drops — see below).
 const TEXT_MAX_NUDGES: usize = 16;
 /// Shrunk glyph height for line runs that cannot be nudged clear.
-/// Titles and captions are never shrunk — only nudged or left for
-/// `E-SYNTH-SCHEM-011` to report.
-const TEXT_SHRUNK_SIZE: f64 = 1.0;
+/// Titles and captions (2.0 mm) are never shrunk — only nudged or
+/// left for `E-SYNTH-SCHEM-011` to report.
+const TEXT_SHRUNK_SIZE: f64 = 0.8;
 
 /// Resolve overlapping free-text runs (schematic-quality plan Phase
 /// A4, defect D5).
@@ -3069,7 +3171,6 @@ fn sanitize_rail_label(raw: &str) -> Option<String> {
 }
 
 fn classify_power_flags(board: &Board) -> Vec<PowerFlag> {
-    use synth_registry::ElectricalType;
     let mut flags = Vec::new();
     // Label uniqueness guard: two distinct nets sharing one flag
     // label would merge into a single global net inside KiCad
@@ -3078,74 +3179,7 @@ fn classify_power_flags(board: &Board) -> Vec<PowerFlag> {
     let mut seen_labels: std::collections::HashMap<String, NetId> =
         std::collections::HashMap::new();
     for net in &board.nets {
-        if net.endpoints.len() < 2 {
-            continue;
-        }
-        let mut has_power_output = false;
-        let mut power_input_count = 0_usize;
-        let mut gnd_pin_count = 0_usize;
-        let mut output_label: Option<String> = None;
-        let mut input_label: Option<String> = None;
-
-        for endpoint in &net.endpoints {
-            let Some(pin) = board.pin(endpoint.component, endpoint.pin) else {
-                continue;
-            };
-            match pin.electrical_type {
-                ElectricalType::PowerOutput => {
-                    has_power_output = true;
-                    if output_label.is_none() {
-                        output_label = Some(
-                            board
-                                .component(endpoint.component)
-                                .and_then(|c| c.part.as_ref())
-                                .filter(|p| p.kind == "regulator")
-                                .and_then(regulator_rail_label)
-                                .unwrap_or_else(|| pin.name.to_ascii_uppercase()),
-                        );
-                    }
-                }
-                ElectricalType::PowerInput => {
-                    power_input_count += 1;
-                    let lower = pin.name.to_ascii_lowercase();
-                    if matches!(
-                        lower.as_str(),
-                        "gnd" | "vss" | "vssa" | "gnda" | "gnd_a" | "ground"
-                    ) {
-                        gnd_pin_count += 1;
-                    } else {
-                        input_label.get_or_insert_with(|| pin.name.to_ascii_uppercase());
-                    }
-                }
-                _ => {}
-            }
-        }
-
-        let declared = declared_rail_name(&net.name);
-        let (kind, label) = if gnd_pin_count >= 1 {
-            // Any net touching a gnd-named power pin is ground.
-            // One endpoint is enough — even a 2-endpoint
-            // `U1.gnd → C2.p2` net should fly a GND symbol.
-            // A declared name (AGND, DGND, ...) wins so separate
-            // grounds stay separate; unnamed nets keep the classic
-            // global `GND`.
-            let l = declared.unwrap_or_else(|| "GND".to_string());
-            (PowerFlagKind::Gnd, l)
-        } else if has_power_output {
-            let l = declared
-                .or(output_label)
-                .unwrap_or_else(|| "VCC".to_string());
-            (PowerFlagKind::Vcc, l)
-        } else if power_input_count >= 1 {
-            // A `power_input` pin without a matching ground name
-            // (e.g. `vin`, `vcc`, `vdd`, `vbus`) anchors a positive
-            // rail. One endpoint is enough — see the comment above
-            // GND for why.
-            let l = declared
-                .or(input_label)
-                .unwrap_or_else(|| "VCC".to_string());
-            (PowerFlagKind::Vcc, l)
-        } else {
+        let Some((kind, label)) = classify_power_net(board, net) else {
             continue;
         };
         // Cross-net collision guard (see `seen_labels` above): if a
@@ -3173,6 +3207,97 @@ fn classify_power_flags(board: &Board) -> Vec<PowerFlag> {
         }
     }
     flags
+}
+
+/// Classify a single net as a positive rail or ground, using exactly
+/// the rule the schematic power flags use, or `None` for a signal net.
+///
+/// Shared with [`crate::netclass`] so the drawn power symbol and the
+/// net-class colour can never disagree about what is a rail. The
+/// returned label is the pre-collision suggestion; callers that emit
+/// symbols apply their own uniqueness guard.
+///
+/// - Ground: any endpoint pin is a `power_input` named `gnd`/`vss`/…
+///   A declared name (`AGND`, `DGND`, …) wins so separate grounds stay
+///   separate; unnamed nets keep the classic global `GND`.
+/// - Rail: a `power_output` pin, or any `power_input` pin with a
+///   non-ground name (`vin`, `vcc`, `vdd`, `vbus`).
+pub(crate) fn classify_power_net(
+    board: &Board,
+    net: &synth_ir::Net,
+) -> Option<(PowerFlagKind, String)> {
+    use synth_registry::ElectricalType;
+    if net.endpoints.len() < 2 {
+        return None;
+    }
+    let mut has_power_output = false;
+    let mut power_input_count = 0_usize;
+    let mut gnd_pin_count = 0_usize;
+    let mut output_label: Option<String> = None;
+    let mut input_label: Option<String> = None;
+
+    for endpoint in &net.endpoints {
+        let Some(pin) = board.pin(endpoint.component, endpoint.pin) else {
+            continue;
+        };
+        match pin.electrical_type {
+            ElectricalType::PowerOutput => {
+                has_power_output = true;
+                if output_label.is_none() {
+                    output_label = Some(
+                        board
+                            .component(endpoint.component)
+                            .and_then(|c| c.part.as_ref())
+                            .filter(|p| p.kind == "regulator")
+                            .and_then(regulator_rail_label)
+                            .unwrap_or_else(|| pin.name.to_ascii_uppercase()),
+                    );
+                }
+            }
+            ElectricalType::PowerInput => {
+                power_input_count += 1;
+                let lower = pin.name.to_ascii_lowercase();
+                if matches!(
+                    lower.as_str(),
+                    "gnd" | "vss" | "vssa" | "gnda" | "gnd_a" | "ground"
+                ) {
+                    gnd_pin_count += 1;
+                } else {
+                    input_label.get_or_insert_with(|| pin.name.to_ascii_uppercase());
+                }
+            }
+            _ => {}
+        }
+    }
+
+    let declared = declared_rail_name(&net.name);
+    if gnd_pin_count >= 1 {
+        // Any net touching a gnd-named power pin is ground. One
+        // endpoint is enough — even a 2-endpoint `U1.gnd → C2.p2` net
+        // should fly a GND symbol.
+        Some((
+            PowerFlagKind::Gnd,
+            declared.unwrap_or_else(|| "GND".to_string()),
+        ))
+    } else if has_power_output {
+        Some((
+            PowerFlagKind::Vcc,
+            declared
+                .or(output_label)
+                .unwrap_or_else(|| "VCC".to_string()),
+        ))
+    } else if power_input_count >= 1 {
+        // A `power_input` pin without a matching ground name (e.g.
+        // `vin`, `vcc`, `vdd`, `vbus`) anchors a positive rail.
+        Some((
+            PowerFlagKind::Vcc,
+            declared
+                .or(input_label)
+                .unwrap_or_else(|| "VCC".to_string()),
+        ))
+    } else {
+        None
+    }
 }
 
 /// Derive a human rail label for a fixed-voltage regulator part.
@@ -5113,6 +5238,7 @@ mod text_overlap_tests {
             text: text.to_string(),
             at_mm: (x, y),
             size_mm,
+            kind: TextKind::NoteLine,
         }
     }
 
@@ -5805,7 +5931,7 @@ mod documentation_tests {
     }
 
     #[test]
-    fn group_notes_render_under_their_box() {
+    fn group_notes_render_inside_their_box() {
         let r = || part("resistor", vec![pin("p1"), pin("p2")]);
         let b = board_with_notes(
             vec![
@@ -5830,25 +5956,58 @@ mod documentation_tests {
             .expect("group note title")
             .at_mm
             .1;
-        assert!(title_y > box_.max_mm.1);
+        let line_y = layout
+            .annotations
+            .iter()
+            .find(|a| a.text == "Keep leads short.")
+            .expect("group note line")
+            .at_mm
+            .1;
+        // Phase B3: the note strip lives inside the box, and the box
+        // grew to enclose it.
+        assert!(title_y > box_.min_mm.1, "title inside box top: {title_y}");
+        assert!(title_y < box_.max_mm.1, "title above box bottom: {title_y}");
+        assert!(line_y < box_.max_mm.1, "line inside box: {line_y}");
     }
 
     #[test]
-    fn connector_legend_lists_pin_nets() {
+    fn connector_legend_lists_named_pins_when_opted_in() {
+        // Phase A3: legends are opt-in and require ≥4 named pins.
         let j = component(
             0,
             "J1",
-            part("connector", vec![pin("p1"), pin("p2"), pin("p3")]),
+            part(
+                "connector",
+                vec![pin("p1"), pin("p2"), pin("p3"), pin("p4")],
+            ),
             None,
         );
-        let r = component(1, "R1", part("resistor", vec![pin("p1"), pin("p2")]), None);
-        let b = board_with_notes(vec![j, r], vec![net(0, "SIG", &[(0, 0), (1, 0)])], vec![]);
-        let layout = layout(&b);
+        let r = || part("resistor", vec![pin("p1"), pin("p2")]);
+        let b = board_with_notes(
+            vec![
+                j,
+                component(1, "R1", r(), None),
+                component(2, "R2", r(), None),
+            ],
+            vec![
+                net(0, "SIG", &[(0, 0), (1, 0)]),
+                net(1, "CLK", &[(0, 1), (1, 1)]),
+                net(2, "RST", &[(0, 2), (2, 0)]),
+                net(3, "EN", &[(0, 3), (2, 1)]),
+            ],
+            vec![],
+        );
+        // Legends are off by default: no pinout block.
+        let off = layout(&b);
+        assert!(!texts(&off).iter().any(|t| t.contains("pinout")));
+        // Opt in and the named pins render; NC lines never appear.
+        let mut on = b.clone();
+        on.legends = true;
+        let layout = layout(&on);
         let labels = texts(&layout);
-        assert!(labels.contains(&"J1 pinout"));
-        assert!(labels.contains(&"p1: SIG"));
-        assert!(labels.contains(&"p2: NC"));
-        assert!(labels.contains(&"p3: NC"));
+        assert!(labels.contains(&"J1 pinout"), "{labels:?}");
+        assert!(labels.contains(&"p1: SIG"), "{labels:?}");
+        assert!(!labels.iter().any(|t| t.contains("NC")), "{labels:?}");
         // Legend sits below the connector body.
         let j_center = layout.components[0].center_mm.1;
         let title_y = layout

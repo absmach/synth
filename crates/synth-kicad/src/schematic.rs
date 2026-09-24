@@ -516,9 +516,14 @@ pub(crate) fn build_sheet_schematic(
     }
 
     // Sub-circuit captions: one text run per declared `group`, drawn
-    // above the parts it names. These are pure annotation — KiCad
-    // treats `(text)` as a graphic with no electrical meaning, so a
-    // caption can never join a net or trip ERC.
+    // inside the group's box at the top-left. These are pure
+    // annotation — KiCad treats `(text)` as a graphic with no
+    // electrical meaning, so a caption can never join a net or trip
+    // ERC. Captions render bold (Phase B4 typography hierarchy: bold
+    // 2.0 mm caption, 1.27 mm refdes/value, 1.0 mm note/legend line);
+    // every other kind renders plain. Per-text color is not part of
+    // KiCad's grammar — `kicad-cli` rejects `(color …)` inside text
+    // effects — so hue lives on the box and on net classes only.
     for (index, annotation) in layout.annotations.iter().enumerate() {
         let (x, y) = annotation.at_mm;
         let uuid = derive_entity_uuid(
@@ -526,6 +531,13 @@ pub(crate) fn build_sheet_schematic(
             "annotation",
             &format!("{index}_{}", annotation.text),
         );
+        let mut font = vec![Sexp::list(
+            "size",
+            vec![num(annotation.size_mm), num(annotation.size_mm)],
+        )];
+        if annotation.kind == synth_layout::TextKind::Caption {
+            font.push(Sexp::atom("bold"));
+        }
         children.push(Sexp::list(
             "text",
             vec![
@@ -534,13 +546,7 @@ pub(crate) fn build_sheet_schematic(
                 Sexp::list(
                     "effects",
                     vec![
-                        Sexp::list(
-                            "font",
-                            vec![Sexp::list(
-                                "size",
-                                vec![num(annotation.size_mm), num(annotation.size_mm)],
-                            )],
-                        ),
+                        Sexp::list("font", font),
                         Sexp::list("justify", vec![Sexp::atom("left"), Sexp::atom("bottom")]),
                     ],
                 ),
@@ -553,11 +559,19 @@ pub(crate) fn build_sheet_schematic(
     // (§21.1), framing the caption and its parts. Same graphic
     // status as captions — no electrical meaning, never trips ERC.
     // Shape grammar mirrors the embedded symbol library
-    // (`(rectangle … (stroke … (type default)) (fill (type none)))`),
-    // which is what `kicad-cli sch erc` accepts at top level — a bare
+    // (`(rectangle … (stroke …) (fill …))`), which is what
+    // `kicad-cli sch erc` accepts at top level — a bare
     // `(rect … (fill none))` fails to load.
+    //
+    // Phase B2 styling: a dashed stroke in the group's deterministic
+    // hue ([`synth_layout::group_color`]) plus a translucent fill of
+    // the same hue, so each region reads as its own block (reference
+    // mechanism 2). The grammar was verified against `kicad-cli 10`:
+    // `(stroke (type dash) (color r g b 1))` and
+    // `(fill (type color) (color r g b 0.08))` both load.
     for group_box in &layout.group_boxes {
         let uuid = derive_entity_uuid(project, "group_box", &group_box.group);
+        let [r, g, b] = group_box.color;
         children.push(Sexp::list(
             "rectangle",
             vec![
@@ -573,10 +587,33 @@ pub(crate) fn build_sheet_schematic(
                     "stroke",
                     vec![
                         Sexp::list("width", vec![num(0.254)]),
-                        Sexp::list("type", vec![Sexp::atom("default")]),
+                        Sexp::list("type", vec![Sexp::atom("dash")]),
+                        Sexp::list(
+                            "color",
+                            vec![
+                                Sexp::atom(r.to_string()),
+                                Sexp::atom(g.to_string()),
+                                Sexp::atom(b.to_string()),
+                                num(1.0),
+                            ],
+                        ),
                     ],
                 ),
-                Sexp::list("fill", vec![Sexp::list("type", vec![Sexp::atom("none")])]),
+                Sexp::list(
+                    "fill",
+                    vec![
+                        Sexp::list("type", vec![Sexp::atom("color")]),
+                        Sexp::list(
+                            "color",
+                            vec![
+                                Sexp::atom(r.to_string()),
+                                Sexp::atom(g.to_string()),
+                                Sexp::atom(b.to_string()),
+                                num(0.08),
+                            ],
+                        ),
+                    ],
+                ),
                 str_pair("uuid", uuid.to_string()),
             ],
         ));
@@ -2103,6 +2140,48 @@ mod tests {
         );
     }
 
+    /// Schematic-quality plan B2: the styled group rectangle (dashed
+    /// stroke, `(color …)`, `(fill (type color) …)`) and the bold
+    /// caption must both load in `kicad-cli` — the shape grammar is
+    /// sensitive (a bare `(fill none)` fails). Skips when KiCad is not
+    /// installed.
+    #[test]
+    fn styled_group_box_and_bold_caption_load_in_kicad() {
+        let board = lower_inline(
+            r#"board "b" {
+                component R1: resistor "r_generic_0603" value "10k"
+                group "Input" {
+                    component C1: capacitor "c_generic_0603" value "100nF"
+                    notes "Input notes" {
+                        "Keep leads short."
+                    }
+                }
+                connect R1.p1 -> C1.p1
+                connect R1.p2 -> C1.p2
+            }"#,
+        );
+        let project = crate::uuid_v5::project_namespace(&board.name);
+        let text = build_schematic(&board, &project).to_string_pretty();
+        // Sanity: the styled forms are present before we ask KiCad.
+        assert!(text.contains("(type dash)"), "dashed stroke");
+        assert!(text.contains("(type color)"), "colour fill");
+        assert!(text.contains("bold"), "bold caption");
+        assert!(text.contains("Keep leads short."), "in-box note line");
+
+        let dir = std::env::temp_dir().join(format!("synth-b2-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("b.kicad_sch");
+        std::fs::write(&path, &text).unwrap();
+        match crate::run_kicad_erc(&path) {
+            Ok(_) => {}
+            Err(crate::ErcRunError::NotInstalled { .. }) => {
+                eprintln!("kicad-cli not installed; skipping styled-box load test");
+            }
+            Err(e) => panic!("styled group box must load in kicad-cli: {e}"),
+        }
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
     #[test]
     fn group_box_exports_rectangle() {
         let board = lower_inline(
@@ -2119,6 +2198,18 @@ mod tests {
         let text = build_schematic(&board, &project).to_string_pretty();
         assert!(text.contains("(rectangle"), "group outline box must render");
         assert!(text.contains("\"Input\""), "group caption must render");
+        // Phase B2: dashed stroke in the group hue plus a translucent
+        // fill of the same hue.
+        assert!(text.contains("(type dash)"), "box stroke must be dashed");
+        assert!(
+            text.contains("(fill") && text.contains("(type color)"),
+            "box must carry a colour fill"
+        );
+        // Phase B4: the caption renders bold.
+        assert!(
+            text.contains("bold"),
+            "group caption must render bold: {text}"
+        );
     }
 
     #[test]
