@@ -401,14 +401,32 @@ const BODY_FALLBACK_H: f64 = 10.0;
 /// an anchor. A vertical cap with two power flags occupies ~10 mm
 /// horizontally; 14 mm keeps neighbouring caps readable.
 const MEMBER_DX: f64 = 14.0;
+/// Most shelves the fitting loop will fold a column band onto
+/// (schematic-quality plan Phase A5/C3). Four is enough to turn any
+/// band that fits A2 at all into a roughly page-shaped block; more
+/// only costs fitting attempts.
+const MAX_SHELVES: usize = 4;
+/// Gap (mm) between two packed regions' *body* bounds.
+///
+/// Each region already draws its own padded, captioned box, so the
+/// full inter-cluster pitch on top of that is dead space: at
+/// `BASE_CLUSTER_DX` a three-region board spent ~80 mm on gaps and
+/// tipped from A3 onto A2 with two thirds of the page blank. Eight
+/// grid steps still clears both boxes' padding and captions — the
+/// margin `E-SYNTH-SCHEM-013` checks — while reading as a deliberate
+/// separation rather than a void.
+const REGION_GAP: f64 = 20.32;
+/// Candidate shelf widths (mm) for region packing, one per sheet the
+/// exporter can declare (A4/A3/A2 content width). The fitting loop
+/// tries each and keeps whichever lands on the smallest page.
+const REGION_SHELF_WIDTHS: [f64; 3] = [
+    297.0 - 2.0 * PAGE_MARGIN,
+    420.0 - 2.0 * PAGE_MARGIN,
+    594.0 - 2.0 * PAGE_MARGIN,
+];
 /// Target sheet aspect ratio (width/height) for cluster packing.
 /// 1.4 ≈ A4 landscape.
 const TARGET_ASPECT: f64 = 1.4;
-/// Usable content width of an A4 landscape sheet (297 mm minus both
-/// page margins). Region packing (Phase C3) targets this width so
-/// regions spread across the default sheet like the reference sheet's
-/// grid of blocks, rather than stacking into a tall narrow strip.
-const A4_CONTENT_WIDTH_MM: f64 = 297.0 - 2.0 * PAGE_MARGIN;
 /// Height (mm, measured up from the page's bottom edge) of the band
 /// KiCad's default title block occupies. KiCad draws this itself
 /// (fixed 108×32 mm rect anchored to the page's bottom-right corner —
@@ -418,6 +436,49 @@ const A4_CONTENT_WIDTH_MM: f64 = 297.0 - 2.0 * PAGE_MARGIN;
 /// colliding with the title block. The band is sheet-relative: it is
 /// the same 34 mm on A4, A3 and A2.
 const TITLE_BLOCK_H: f64 = 34.0;
+
+/// Clearance from the anchor's body edge to a member's *centre*,
+/// sized to the member instead of to the largest part on the board
+/// (schematic-quality plan Phase A2).
+///
+/// [`MEMBER_CLEARANCE`] is a single constant tuned for a large member
+/// — enough room for its body, its Reference/Value text and a routing
+/// channel. Applying it to an 0603 decoupling cap put the cap's
+/// centre 17.78 mm below the IC's edge, a ~15 mm body gap, which read
+/// as "floating near the IC" rather than "decoupling it" and tripped
+/// `E-SYNTH-SCHEM-003` no matter how well the cluster was formed.
+///
+/// A member only needs its own half-extent, its text margin and one
+/// grid step of channel. Clamped to [`MEMBER_CLEARANCE`] at the top
+/// so nothing ever moves *further* out than before, and to five grid
+/// steps at the bottom so the router keeps a usable channel.
+fn member_clearance(board: &Board, id: ComponentId, vertical: bool) -> f64 {
+    const MIN_CLEARANCE: f64 = 12.7;
+    let (w, h) = board
+        .component(id)
+        .and_then(|c| c.part.as_ref())
+        .map_or((BODY_FALLBACK_W, BODY_FALLBACK_H), body_size_for_part);
+    let half = if vertical { h / 2.0 } else { w / 2.0 };
+    snap_grid((half + TEXT_MARGIN_Y + 2.54).clamp(MIN_CLEARANCE, MEMBER_CLEARANCE))
+}
+
+/// Clearance for the row below an anchor: the largest its members
+/// need, so one oversized member never overlaps a tightly-placed
+/// neighbour.
+///
+/// Only the *Below* row uses this. The Above row (bus pull-ups) and
+/// the side columns (reset networks) keep the fixed
+/// [`MEMBER_CLEARANCE`]: pulling those in crowds the anchor's own pin
+/// stubs, and the pin-aware router responds by abandoning the route
+/// and degrading the net to a label — a strictly worse drawing than
+/// the few millimetres it saved.
+fn row_clearance(board: &Board, members: &[ComponentId], vertical: bool) -> f64 {
+    members
+        .iter()
+        .map(|&id| member_clearance(board, id, vertical))
+        .fold(0.0_f64, f64::max)
+        .max(12.7)
+}
 
 fn compute_dynamic_member_dx(board: &Board, members: &[ComponentId]) -> f64 {
     let mut max_label_len = 0_usize;
@@ -864,6 +925,26 @@ fn annotate_groups(board: &Board, layout: &mut Layout) {
         });
     }
 }
+/// Height (mm) a group's box adds above and below its members'
+/// bodies: `(above, below)`.
+///
+/// Above is the box padding — the caption is drawn *inside* the box,
+/// so it costs nothing extra. Below is the padding plus the note
+/// block, which `place_design_notes` puts inside the box and grows
+/// the box to hold. Region packing needs both or boxes overlap.
+fn group_box_overhang(board: &Board, group: Option<&str>) -> (f64, f64) {
+    let Some(group) = group else {
+        return (0.0, 0.0);
+    };
+    let notes: f64 = board
+        .notes
+        .iter()
+        .filter(|n| n.group.as_deref() == Some(group))
+        .map(|n| NOTE_TITLE_GAP + n.lines.len() as f64 * NOTE_LINE_PITCH)
+        .sum();
+    (GROUP_BOX_PAD, GROUP_BOX_PAD + notes)
+}
+
 /// Dark-band hues for group boxes, distinct from the net-class
 /// brights (`synth_kicad::netclass_colors`): boxes are large areas,
 /// so they take muted tones with a translucent fill while nets take
@@ -1807,11 +1888,61 @@ pub fn build_clusters(board: &Board) -> Vec<Cluster> {
     clusters.extend(patterns::ic_block::IcBlock::recognize(board, &mut claimed));
     clusters.extend(patterns::i2c_bus::I2cBus::recognize(board, &mut claimed));
     clusters.extend(patterns::divider::Divider::recognize(board, &mut claimed));
+    // Second sweep before `Singleton` mops up (schematic-quality plan
+    // Phase A2): a decoupling cap on a *shared* rail is reachable
+    // from no single anchor's `required_decoupling`, so it used to
+    // fall through to `Singleton` and get placed by power-flow layer
+    // — 150+ mm from the part it decouples. Running here, after every
+    // structural pass, lets it attach to whichever cluster actually
+    // draws from its rail, `LdoBlock` and `Crystal` included.
+    patterns::ic_block::attach_orphan_rail_caps(board, &mut claimed, &mut clusters);
+    evict_cross_group_members(board, &mut clusters);
     clusters.extend(patterns::singleton::Singleton::recognize(
         board,
         &mut claimed,
     ));
     clusters
+}
+
+/// A declared `group` bounds cluster membership: drop any member whose
+/// group differs from its anchor's, leaving it to `Singleton`.
+///
+/// The pattern passes match on topology alone, so an I²C pull-up
+/// declared inside the sensor's group can be claimed by the MCU's
+/// `IcBlock` two groups away. Placement then puts it in the *anchor's*
+/// region while `group_bounds` still measures it as part of its own —
+/// stretching that group's box across the whole sheet, overlapping
+/// every other box (`E-SYNTH-SCHEM-013`) and pushing the page from A4
+/// to A2. Ungrouped boards are unaffected: every component's group is
+/// `None`, so nothing is ever evicted.
+fn evict_cross_group_members(board: &Board, clusters: &mut Vec<Cluster>) {
+    let group_of = |id: ComponentId| -> Option<String> {
+        board.component(id).and_then(|c| c.group.clone())
+    };
+    let mut evicted: Vec<ComponentId> = Vec::new();
+    for cluster in clusters.iter_mut() {
+        let anchor_group = group_of(cluster.anchor);
+        cluster.members.retain(|m| {
+            if group_of(m.id) == anchor_group {
+                true
+            } else {
+                evicted.push(m.id);
+                false
+            }
+        });
+    }
+    // Evicted members become their own single-component clusters, in
+    // id order so the result stays deterministic.
+    evicted.sort_by_key(|id| id.0);
+    evicted.dedup();
+    for id in evicted {
+        clusters.push(Cluster {
+            kind: ClusterKind::Singleton,
+            anchor: id,
+            anchor_vertical: false,
+            members: Vec::new(),
+        });
+    }
 }
 
 /// Largest body width and height across every part in the board.
@@ -2557,6 +2688,9 @@ fn place_clusters(board: &Board, clusters: &[Cluster]) -> Layout {
     // closure so the fitting loop below can retry with a taller column
     // when the content runs off the page.
     let place_for_rows = |rows: usize,
+                          shelves_hint: usize,
+                          pitch_floor: f64,
+                          region_target_w: f64,
                           fallback_key: &[(u32, u32, u32)],
                           fallback_order: &[usize]|
      -> (Vec<ComponentPlacement>, (f64, f64, f64, f64)) {
@@ -2666,7 +2800,7 @@ fn place_clusters(board: &Board, clusters: &[Cluster]) -> Layout {
         let mut col_x_local: Vec<f64> = vec![0.0; col_groups.len()];
         for &(band, start, end) in &region_runs {
             let floor = if band == u32::MAX {
-                BASE_CLUSTER_DX
+                pitch_floor
             } else {
                 INTRA_GROUP_CLUSTER_DX
             };
@@ -2682,23 +2816,14 @@ fn place_clusters(board: &Board, clusters: &[Cluster]) -> Layout {
             }
         }
 
-        // Vertical extent of the whole BK coordinate set, used only by
-        // the single-region path to centre a lone region in the
-        // `rows`-tall band exactly as the pre-region code did.
-        let (bk_min, bk_max) = if bk_units.is_empty() {
-            (0.0, 0.0)
+        // Lowest BK unit, subtracted so each region's vertical
+        // ordering starts at zero in its own local frame.
+        let bk_min = if bk_units.is_empty() {
+            0.0
         } else {
-            (
-                bk_units.iter().copied().fold(f64::INFINITY, f64::min),
-                bk_units.iter().copied().fold(f64::NEG_INFINITY, f64::max),
-            )
+            bk_units.iter().copied().fold(f64::INFINITY, f64::min)
         };
 
-        // Grid-based vertical centring, the single-region path's
-        // historic origin. Kept verbatim so ungrouped boards are
-        // byte-identical.
-        let bk_content_h = (bk_max - bk_min) * grid_h + grid_h;
-        let bk_origin_y = origin_y + ((rows as f64 * grid_h - bk_content_h).max(0.0)) / 2.0;
 
         let mut placements: Vec<ComponentPlacement> = Vec::with_capacity(board.components.len());
         if region_runs.len() <= 1 {
@@ -2709,20 +2834,93 @@ fn place_clusters(board: &Board, clusters: &[Cluster]) -> Layout {
             // design that declares no groups.
             let mut occupied: std::collections::HashSet<(i64, i64)> =
                 std::collections::HashSet::new();
-            for (col, group) in col_groups.iter().enumerate() {
-                for &cluster_idx in group {
-                    let anchor_x = snap_grid(origin_x + col_x_local[col]);
-                    let anchor_y =
-                        snap_grid(bk_origin_y + (bk_units[cluster_idx] - bk_min) * grid_h);
-                    place_cluster_into(
-                        board,
-                        &clusters[cluster_idx],
-                        anchor_x,
-                        anchor_y,
-                        grid_w,
-                        &mut placements,
-                        &mut occupied,
-                    );
+            // Shelf-wrap a band that is too wide for the page shape
+            // (schematic-quality plan Phase A5/C3).
+            //
+            // Layers are columns, so a board with many distinct layers
+            // lays every column side by side in one band. Wrapping only
+            // ever kicked in *within* a populous layer (`chunks(rows)`),
+            // never across layers, so a board with a dozen one-cluster
+            // layers spread 290 mm wide and 118 mm tall across a
+            // 420 x 297 mm page: 27 % fill, the bottom two thirds empty,
+            // and every inter-layer net long enough to degrade into a
+            // label. Folding the column sequence onto successive shelves
+            // trades width for height until the content is roughly
+            // page-shaped. A band already within `TARGET_ASPECT` is left
+            // exactly as it was, so balanced boards do not move.
+            let band_w = col_x_local.iter().copied().fold(0.0_f64, f64::max) + grid_w;
+            // The shelf count is swept by the fitting loop, not guessed
+            // here: how many shelves land on the smallest page depends
+            // on the sheet's usable aspect (which the title block eats
+            // into asymmetrically), so it can only be judged against a
+            // concrete candidate sheet. One shelf reproduces the
+            // historic single band exactly.
+            let shelves = shelves_hint.max(1).min(col_groups.len().max(1));
+            {
+                // Cut the column sequence into shelves of roughly equal
+                // width, keeping reading order: a shelf break never
+                // reorders columns, so power still flows left-to-right
+                // along each shelf and top-to-bottom between them.
+                let shelf_target = band_w / shelves as f64;
+                let mut shelf_of: Vec<usize> = Vec::with_capacity(col_groups.len());
+                let mut shelf = 0_usize;
+                let mut shelf_start_x = 0.0_f64;
+                for (col, &x) in col_x_local.iter().enumerate().take(col_groups.len()) {
+                    if col > 0 && x - shelf_start_x > shelf_target {
+                        shelf += 1;
+                        shelf_start_x = x;
+                    }
+                    shelf_of.push(shelf);
+                }
+                // Place each shelf in its own local frame, measure what
+                // it actually occupies, then stack the shelves. Measuring
+                // beats predicting: members hang above and below their
+                // anchors by amounts only `place_cluster_into` knows.
+                let mut shelf_y = PAGE_MARGIN;
+                for shelf_idx in 0..=shelf {
+                    let mut local: Vec<ComponentPlacement> = Vec::new();
+                    let mut local_occupied: std::collections::HashSet<(i64, i64)> =
+                        std::collections::HashSet::new();
+                    let base_x = col_groups
+                        .iter()
+                        .enumerate()
+                        .filter(|(col, _)| shelf_of[*col] == shelf_idx)
+                        .map(|(col, _)| col_x_local[col])
+                        .fold(f64::INFINITY, f64::min);
+                    for (col, group) in col_groups.iter().enumerate() {
+                        if shelf_of[col] != shelf_idx {
+                            continue;
+                        }
+                        for &cluster_idx in group {
+                            let anchor_x = snap_grid(col_x_local[col] - base_x);
+                            let anchor_y =
+                                snap_grid((bk_units[cluster_idx] - bk_min) * grid_h);
+                            place_cluster_into(
+                                board,
+                                &clusters[cluster_idx],
+                                anchor_x,
+                                anchor_y,
+                                grid_w,
+                                &mut local,
+                                &mut local_occupied,
+                            );
+                        }
+                    }
+                    let (local_min_x, _, local_min_y, local_max_y) = body_bbox_of(board, &local)
+                        .unwrap_or((origin_x, origin_x + grid_w, 0.0, grid_h));
+                    let dy = snap_grid(shelf_y - local_min_y);
+                    let dx = snap_grid(PAGE_MARGIN - local_min_x);
+                    for mut place in local {
+                        place.center_mm.0 += dx;
+                        place.center_mm.1 += dy;
+                        let key = (
+                            (place.center_mm.0 * 10.0).round() as i64,
+                            (place.center_mm.1 * 10.0).round() as i64,
+                        );
+                        occupied.insert(key);
+                        placements.push(place);
+                    }
+                    shelf_y += (local_max_y - local_min_y) + WIRE_MARGIN;
                 }
             }
         } else {
@@ -2733,7 +2931,7 @@ fn place_clusters(board: &Board, clusters: &[Cluster]) -> Layout {
             // every region's cell height), which is what tipped a
             // grouped board off A2 in the first cut of this pass.
             let mut region_layouts: Vec<RegionLayout> = Vec::with_capacity(region_runs.len());
-            for &(_, start, end) in &region_runs {
+            for &(band, start, end) in &region_runs {
                 let mut local: Vec<ComponentPlacement> = Vec::new();
                 let mut occupied: std::collections::HashSet<(i64, i64)> =
                     std::collections::HashSet::new();
@@ -2754,9 +2952,14 @@ fn place_clusters(board: &Board, clusters: &[Cluster]) -> Layout {
                 }
                 local.sort_by_key(|p| p.id.0);
                 let bbox = body_bbox_of(board, &local).unwrap_or((0.0, grid_w, 0.0, grid_h));
+                let group_name = usize::try_from(band)
+                    .ok()
+                    .and_then(|b| group_bands.get(b))
+                    .copied();
                 region_layouts.push(RegionLayout {
                     placements: local,
                     bbox,
+                    box_overhang: group_box_overhang(board, group_name),
                 });
             }
 
@@ -2768,7 +2971,7 @@ fn place_clusters(board: &Board, clusters: &[Cluster]) -> Layout {
             // width balances total region area to the sheet aspect,
             // floored at the widest region so one wide region never
             // overflows its own shelf.
-            let region_gap = snap_grid(BASE_CLUSTER_DX);
+            let region_gap = REGION_GAP;
             let total_area: f64 = region_layouts
                 .iter()
                 .map(|r| (r.bbox.1 - r.bbox.0) * (r.bbox.3 - r.bbox.2))
@@ -2777,18 +2980,33 @@ fn place_clusters(board: &Board, clusters: &[Cluster]) -> Layout {
                 .iter()
                 .map(|r| r.bbox.1 - r.bbox.0)
                 .fold(0.0_f64, f64::max);
-            let target_w = (total_area * TARGET_ASPECT)
-                .sqrt()
+            // Shelf width is swept by the fitting loop (`region_target_w`)
+            // rather than fixed at A4's content width. Which regions
+            // share a shelf decides the stack's height, and only a
+            // concrete candidate sheet can say whether a wider, shorter
+            // arrangement or a narrower, taller one lands on the smaller
+            // page: a three-region board packs 150+110 on one shelf and
+            // drops from A2 to A3, which the A4-width target could never
+            // find. Floored at the widest region so one wide region
+            // never overflows its own shelf.
+            let target_w = region_target_w
                 .max(widest)
-                .max(A4_CONTENT_WIDTH_MM);
+                .min((total_area * TARGET_ASPECT).sqrt().max(widest).max(region_target_w));
             let mut region_offset: Vec<(f64, f64)> = vec![(0.0, 0.0); region_layouts.len()];
             {
                 let mut cx = 0.0;
                 let mut cy = 0.0;
                 let mut shelf_h = 0.0;
                 for (i, region) in region_layouts.iter().enumerate() {
-                    let w = region.bbox.1 - region.bbox.0;
-                    let h = region.bbox.3 - region.bbox.2;
+                    let w = region.bbox.1 - region.bbox.0 + 2.0 * GROUP_BOX_PAD;
+                    // Pack against what is *drawn* — the box — not the
+                    // bodies inside it. The box reaches above the bodies
+                    // for its caption and below them for its note block,
+                    // so packing on body bounds alone let two boxes
+                    // overlap (`E-SYNTH-SCHEM-013`) even with a generous
+                    // gap between the parts themselves.
+                    let h =
+                        region.bbox.3 - region.bbox.2 + region.box_overhang.0 + region.box_overhang.1;
                     if cx > 0.0 && cx + w > target_w {
                         cy += shelf_h + region_gap;
                         cx = 0.0;
@@ -2803,9 +3021,15 @@ fn place_clusters(board: &Board, clusters: &[Cluster]) -> Layout {
             // Phase C: translate each region's local placements to its
             // slot, normalising the region's own top-left to the slot
             // origin.
+            // Hug the page margin rather than the grid origin: the
+            // per-region bbox already reserves whatever its members
+            // need above and left of their anchors, so `origin_x`/
+            // `origin_y`'s guard band is pure waste here — ~55 mm of it,
+            // enough to cost a sheet size on its own.
             for (ri, region) in region_layouts.iter().enumerate() {
-                let dx = origin_x + region_offset[ri].0 - region.bbox.0;
-                let dy = origin_y + region_offset[ri].1 - region.bbox.2;
+                let dx = PAGE_MARGIN + GROUP_BOX_PAD + region_offset[ri].0 - region.bbox.0;
+                let dy =
+                    PAGE_MARGIN + region.box_overhang.0 + region_offset[ri].1 - region.bbox.2;
                 for placement in &region.placements {
                     placements.push(ComponentPlacement {
                         id: placement.id,
@@ -2879,28 +3103,78 @@ fn place_clusters(board: &Board, clusters: &[Cluster]) -> Layout {
     // so they simply place once.
     let bandings: [Bandings<'_>; 2] = [(&grouped_key, &grouped_order), (&flat_key, &flat_order)];
 
-    let mut fitted: Option<(f64, Vec<ComponentPlacement>, SheetSize)> = None;
+    // Selection key: smallest sheet first, then the attempt whose
+    // content shape best matches that sheet's (schematic-quality plan
+    // Phase A5/C3).
+    //
+    // Area alone was not enough. Every attempt that lands on the same
+    // sheet ties on area, so the first — the most aspect-balanced
+    // `rows_start`, which is also the *shortest* column stack and
+    // therefore the widest content — always won. On A3 that left a
+    // 290 x 118 mm band across the top of a 420 x 297 mm page: 27 %
+    // fill, the lower two thirds empty, and every net long enough to
+    // degrade into a label (`E-SYNTH-SCHEM-012`, and the reason the
+    // reference sheet's "wires inside a block" reads so much better).
+    // Ranking ties by how close the content's aspect is to the page's
+    // picks the squarer stack instead, which uses the page the way a
+    // drawn-by-hand sheet does.
+    let mut fitted: Option<(f64, usize, usize, f64, Vec<ComponentPlacement>, SheetSize)> = None;
     let mut closest: Option<(f64, Vec<ComponentPlacement>, SheetSize)> = None;
     for (fallback_key, fallback_order) in bandings {
         if fitted.is_some() {
             break;
         }
-        for rows in rows_start..=rows_cap {
-            let (placements, (min_x, max_x, min_y, max_y)) =
-                place_for_rows(rows, fallback_key, fallback_order);
+        // `BASE_CLUSTER_DX` is a generous default gap between unrelated
+        // columns. It is tried first, so a board that already fits its
+        // page keeps the airier spacing; the tighter floor is only
+        // reached for a board that would otherwise need a larger sheet,
+        // where a denser page beats a sparser bigger one.
+        for (rows, shelves, pitch_floor, region_w) in (rows_start..=rows_cap).flat_map(|r| {
+            (1..=MAX_SHELVES).flat_map(move |sh| {
+                [BASE_CLUSTER_DX, INTRA_GROUP_CLUSTER_DX]
+                    .into_iter()
+                    .flat_map(move |p| REGION_SHELF_WIDTHS.map(move |w| (r, sh, p, w)))
+            })
+        }) {
+            let (placements, (min_x, max_x, min_y, max_y)) = place_for_rows(
+                rows,
+                shelves,
+                pitch_floor,
+                region_w,
+                fallback_key,
+                fallback_order,
+            );
             let (need_w, need_h) = sheet_needs(min_x, max_x, min_y, max_y);
             let sheet_size = sheet_size_for(need_w, need_h);
             let (sheet_w, sheet_h) = sheet_size.dims_mm();
             if need_w <= sheet_w && need_h <= sheet_h {
                 let area = sheet_w * sheet_h;
-                let improves = fitted.as_ref().is_none_or(|(best, _, _)| area < *best);
+                let mismatch = if need_h > 0.0 && sheet_h > 0.0 {
+                    (need_w / need_h - sheet_w / sheet_h).abs()
+                } else {
+                    f64::INFINITY
+                };
+                // Rank: smallest sheet, then fewest shelves, then the
+                // airier column pitch, then the best aspect match.
+                //
+                // Both shelf-wrapping and pitch-tightening are spent
+                // only on *saving a sheet size*, never on a page that
+                // already fits. Wrapping costs the left-to-right
+                // power-flow reading order — a shelf break continues
+                // on the next line, so a late-layer passive can sit
+                // left of an early-layer connector — and tightening
+                // pushes nets past the span threshold until they
+                // degrade into labels. Both are worth it to drop A3 to
+                // A4; neither is worth it otherwise.
+                let pitch_rank = usize::from(pitch_floor < BASE_CLUSTER_DX);
+                let key = (area, shelves, pitch_rank, mismatch);
+                let improves = fitted.as_ref().is_none_or(
+                    |(best_area, best_shelves, best_pitch, best_mismatch, _, _)| {
+                        key < (*best_area, *best_shelves, *best_pitch, *best_mismatch)
+                    },
+                );
                 if improves {
-                    let smallest = sheet_size == SheetSize::A4;
-                    fitted = Some((area, placements, sheet_size));
-                    // Nothing can beat the smallest sheet we ever declare.
-                    if smallest {
-                        break;
-                    }
+                    fitted = Some((area, shelves, pitch_rank, mismatch, placements, sheet_size));
                 }
                 continue;
             }
@@ -2910,6 +3184,7 @@ fn place_clusters(board: &Board, clusters: &[Cluster]) -> Layout {
             }
         }
     }
+    let fitted = fitted.map(|(_, _, _, _, placements, sheet)| (0.0, placements, sheet));
     let (components, sheet_size) = fitted
         .or(closest)
         .map_or((Vec::new(), SheetSize::A4), |(_, placements, sheet)| {
@@ -2934,6 +3209,9 @@ fn place_clusters(board: &Board, clusters: &[Cluster]) -> Layout {
 struct RegionLayout {
     placements: Vec<ComponentPlacement>,
     bbox: (f64, f64, f64, f64),
+    /// Extra height its group box needs beyond the body bounds:
+    /// padding above, plus padding and the note block below.
+    box_overhang: (f64, f64),
 }
 
 /// Body bounding box of a set of placements, in the same frame as
@@ -3032,7 +3310,7 @@ fn place_cluster_into(
     // horizontally aligned with their connected pins where possible.
     if !below.is_empty() {
         let member_dx = compute_dynamic_member_dx(board, &below);
-        let row_y = snap_grid(anchor_y + anchor_half_h + MEMBER_CLEARANCE);
+        let row_y = snap_grid(anchor_y + anchor_half_h + row_clearance(board, &below, true));
         let total_width = (below.len().saturating_sub(1)) as f64 * member_dx;
         let row_start_x = snap_grid(anchor_x - total_width / 2.0);
         let mut last_x: Option<f64> = None;

@@ -82,10 +82,17 @@ use synth_layout::{Layout, PinSide, PowerFlagKind, Rotation, WirePath};
 /// Default wire-crossing budget on a single sheet before
 /// `E-SYNTH-SCHEM-002` fires. Plan §7.7.7: "> 5 crossings".
 const DEFAULT_MAX_CROSSINGS: usize = 5;
-/// Default schematic distance (mm) a decoupling capacitor may sit from
-/// its target IC before `E-SYNTH-SCHEM-003` fires. Plan §7.7.7:
-/// "> 15 mm".
-const DEFAULT_DECOUPLING_MAX_MM: f64 = 15.0;
+/// Default empty space (mm) between a decoupling capacitor's symbol
+/// body and its target IC's before `E-SYNTH-SCHEM-003` fires.
+///
+/// Plan §7.7.7 says "> 15 mm", but measured centre to centre — which
+/// is incoherent across part sizes: 15 mm centres allowed a ~5 mm gap
+/// beside a small AMS1117 and was unsatisfiable beside an LQFP-48,
+/// whose half-diagonal alone exceeds it. The metric is now the gap
+/// between bodies, so the budget is restated for it: 25 mm is about
+/// ten grid steps, the distance at which a reader stops seeing the
+/// cap as belonging to the IC. The two numbers are not comparable.
+const DEFAULT_DECOUPLING_MAX_MM: f64 = 25.0;
 /// Default per-net span (mm) before `E-SYNTH-SCHEM-004` fires. Plan
 /// §7.7.7: "> 100 mm".
 const DEFAULT_LONG_NET_MAX_MM: f64 = 100.0;
@@ -144,6 +151,56 @@ impl Default for SchemErcConfig {
             max_junction_degree: DEFAULT_MAX_JUNCTION_DEGREE,
             max_net_label_len: DEFAULT_MAX_NET_LABEL_LEN,
             min_sheet_fill_ratio: DEFAULT_MIN_SHEET_FILL_RATIO,
+        }
+    }
+}
+
+/// Fill in each diagnostic's source location from the entity it names.
+///
+/// The aesthetic rules run over a *layout*, which has no source spans
+/// — so every finding printed as `(?)` and a sheet with seventeen
+/// identical decoupling warnings gave the reader no way to tell which
+/// capacitor each meant. Every rule already attaches the component or
+/// net it is about; this resolves that back to the declaration's span
+/// so the CLI can print `file:start-end` like any other diagnostic.
+///
+/// Diagnostics naming no locatable entity (page overflow, wire-crossing
+/// density — properties of the sheet, not of one part) are left
+/// without a location, which is honest.
+pub fn attach_locations(diagnostics: &mut [Diagnostic], board: &Board, file: &str) {
+    for diagnostic in diagnostics {
+        if diagnostic.location.is_some() {
+            continue;
+        }
+        let span = diagnostic
+            .entities
+            .iter()
+            .chain(diagnostic.peer_entities.iter())
+            .find_map(|entity| match entity {
+                EntityRef::Component { id } => board
+                    .components
+                    .iter()
+                    .find(|c| c.refdes == *id)
+                    .map(|c| c.source_span),
+                EntityRef::Pin { component, .. } => board
+                    .components
+                    .iter()
+                    .find(|c| c.refdes == *component)
+                    .map(|c| c.source_span),
+                EntityRef::Net { name } => board
+                    .nets
+                    .iter()
+                    .find(|n| n.name == *name)
+                    .and_then(|n| n.endpoints.first())
+                    .and_then(|ep| board.component(ep.component))
+                    .map(|c| c.source_span),
+                _ => None,
+            });
+        if let Some(span) = span {
+            diagnostic.location = Some(synth_diagnostics::Location::from_span(
+                file.to_string(),
+                span,
+            ));
         }
     }
 }
@@ -418,6 +475,71 @@ fn check_wire_crossings(layout: &Layout, max_crossings: usize) -> Vec<Diagnostic
 
 // ----- E-SYNTH-SCHEM-003: decoupling capacitor separation --------------------
 
+/// Empty space (mm) between two placed components' symbol bodies,
+/// zero when they overlap. `None` when either is unplaced or has no
+/// resolved part.
+fn body_gap_mm(
+    board: &Board,
+    layout: &Layout,
+    a: synth_ir::ComponentId,
+    b: synth_ir::ComponentId,
+) -> Option<f64> {
+    let half = |id: synth_ir::ComponentId| -> Option<((f64, f64), (f64, f64))> {
+        let place = layout.placement(id)?;
+        let part = board.component(id)?.part.as_ref()?;
+        let (w, h) = synth_layout::body_size_for_part(part);
+        // A rotated symbol presents its other axis to the gap.
+        let (w, h) = match place.rotation {
+            synth_layout::Rotation::Zero | synth_layout::Rotation::OneEighty => (w, h),
+            synth_layout::Rotation::Ninety | synth_layout::Rotation::TwoSeventy => (h, w),
+        };
+        Some((place.center_mm, (w / 2.0, h / 2.0)))
+    };
+    let ((ax, ay), (ahw, ahh)) = half(a)?;
+    let ((bx, by), (bhw, bhh)) = half(b)?;
+    let dx = ((ax - bx).abs() - (ahw + bhw)).max(0.0);
+    let dy = ((ay - by).abs() - (ahh + bhh)).max(0.0);
+    Some(dx.hypot(dy))
+}
+
+/// Whether `ic` is the closest decoupling-capable part to `cap` among
+/// everything sharing `rail`.
+///
+/// Ownership mirrors how the layouter assigns an orphan rail cap to a
+/// cluster (`patterns::ic_block::attach_orphan_rail_caps`), so the
+/// rule judges the same pairing the placer built.
+fn is_nearest_ic_on_rail(
+    board: &Board,
+    layout: &Layout,
+    rail: &synth_ir::Net,
+    cap: ComponentId,
+    ic: ComponentId,
+) -> bool {
+    let Some(own) = body_gap_mm(board, layout, ic, cap) else {
+        return true;
+    };
+    for ep in &rail.endpoints {
+        if ep.component == cap || ep.component == ic {
+            continue;
+        }
+        let Some(other) = board.component(ep.component) else {
+            continue;
+        };
+        let Some(part) = other.part.as_ref() else {
+            continue;
+        };
+        // Only parts that declare decoupling compete for ownership;
+        // another cap or a pull-up on the rail is not a candidate.
+        if part.required_decoupling.is_empty() {
+            continue;
+        }
+        if body_gap_mm(board, layout, ep.component, cap).is_some_and(|d| d < own) {
+            return false;
+        }
+    }
+    true
+}
+
 /// `E-SYNTH-SCHEM-003`: a decoupling capacitor connected to one of an
 /// IC's `required_decoupling` power nets sits further than
 /// `max_mm` (schematic distance) from the IC.
@@ -488,14 +610,37 @@ fn check_decoupling_distance(board: &Board, layout: &Layout, max_mm: f64) -> Vec
                     if !seen.insert((ic.id, ep.component)) {
                         continue;
                     }
+                    // A shared rail reaches every IC on the board, so
+                    // a naive sweep reported each cap against all of
+                    // them — one misplaced cap became N findings, and
+                    // no placement could satisfy them all at once. A
+                    // cap decouples exactly one part: the one it sits
+                    // nearest. Only that pair is judged; for the rest
+                    // this cap is simply not their decoupling.
+                    if !is_nearest_ic_on_rail(board, layout, net, ep.component, ic.id) {
+                        continue;
+                    }
                     let Some(cap_center) = layout.placement(ep.component).map(|p| p.center_mm)
                     else {
                         continue;
                     };
-                    let dist = ((ic_center.0 - cap_center.0).powi(2)
-                        + (ic_center.1 - cap_center.1).powi(2))
-                    .sqrt();
-                    if dist <= max_mm {
+                    // Gap between the two symbol bodies, not centre to
+                    // centre: a stock LQFP-48 symbol is ~25 x 55 mm, so
+                    // its half-diagonal alone exceeds the budget and a
+                    // centre measure could never be satisfied however
+                    // tightly the cap is placed. The budget is empty
+                    // space between the parts, which is what "too far"
+                    // means to a reader.
+                    let dist = body_gap_mm(board, layout, ic.id, ep.component)
+                        .unwrap_or_else(|| {
+                            ((ic_center.0 - cap_center.0).powi(2)
+                                + (ic_center.1 - cap_center.1).powi(2))
+                            .sqrt()
+                        });
+                    // Epsilon: both sides are 2.54 mm-grid sums, so a
+                    // gap that lands exactly on the budget must pass
+                    // rather than fail on the last float bit.
+                    if dist <= max_mm + 1e-6 {
                         continue;
                     }
                     out.push(

@@ -221,6 +221,66 @@ pub fn class_names(board: &Board, assignments: &[NetClassAssignment]) -> Vec<Str
     names
 }
 
+/// Colour of every net, keyed by id — the same hues
+/// [`classify_nets`] resolves, in a form the schematic emitter can
+/// look up per wire.
+///
+/// The exporter strokes each wire and label in its net's class hue
+/// directly, *in addition to* writing `net_settings`. The project
+/// block alone is not enough: KiCad applies a class colour by net
+/// *name*, and a short local net that carries neither a power symbol
+/// nor a label is auto-named (`Net-(U2-BOOT0)`) at load time, so no
+/// assignment written ahead of time can reach it. An explicit stroke
+/// reaches every net, including those.
+#[must_use]
+pub fn net_colors(board: &Board) -> BTreeMap<NetId, [u8; 3]> {
+    classify_nets(board)
+        .into_iter()
+        .filter(|a| a.class != "Default")
+        .map(|a| (a.net, a.color))
+        .collect()
+}
+
+/// The names KiCad will know a net by, for `netclass_assignments`.
+///
+/// KiCad derives net names from the drawing, not from our IR, so the
+/// IR name (`net_7`) never matches. The visible name comes from:
+///
+/// * a **power symbol** — a global net named by the symbol's value
+///   (`+3V3`, `GND`, `VBUS`), with no sheet-path prefix; or
+/// * a **local label** — the label text prefixed by the sheet path,
+///   so `SDA` on the root sheet becomes `/SDA`.
+///
+/// Both spellings are returned for a labelled net (bare and
+/// root-prefixed) because a net that is later moved onto a sub-sheet
+/// keeps the bare form as a prefix match; deeper paths are covered by
+/// the glob pattern the exporter emits alongside.
+///
+/// A net with neither a flag nor a label is auto-named by KiCad from
+/// one of its pins and is deliberately absent here — [`net_colors`]
+/// is what colours those.
+#[must_use]
+pub fn kicad_net_names(layout: &crate::Layout) -> BTreeMap<NetId, Vec<String>> {
+    let mut out: BTreeMap<NetId, Vec<String>> = BTreeMap::new();
+    // Power symbols win: a flagged net is global under the rail name
+    // whatever else is drawn on it.
+    for flag in &layout.power_flags {
+        out.entry(flag.net).or_default().push(flag.label.clone());
+    }
+    for label in &layout.net_labels {
+        if out.contains_key(&label.net) {
+            continue;
+        }
+        out.entry(label.net)
+            .or_insert_with(|| vec![format!("/{}", label.label), label.label.clone()]);
+    }
+    for names in out.values_mut() {
+        names.sort();
+        names.dedup();
+    }
+    out
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

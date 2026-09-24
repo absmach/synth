@@ -1960,7 +1960,9 @@ fn validate(
                     // clears the single-sheet overflow).
                     let global = synth_layout::layout(board);
                     let sheets = synth_layout::sheets::layout_sheets(board, global);
-                    diagnostics.extend(synth_kicad::check_schem_erc_sheets(board, &sheets));
+                    let mut schem = synth_kicad::check_schem_erc_sheets(board, &sheets);
+                    synth_kicad::attach_schem_erc_locations(&mut schem, board, &file);
+                    diagnostics.extend(schem);
                 }
             }
         }
@@ -2526,8 +2528,9 @@ fn export_kicad(
     // Thresholds come from the design's `<design>.synth.erc.toml`
     // `[schematic]` section when present (Phase E), else the defaults.
     let pre_layout = synth_layout::layout(board);
-    let schem_diags =
+    let mut schem_diags =
         synth_kicad::check_schem_erc_with_config(&pre_layout, board, schem_erc_config_for(input));
+    synth_kicad::attach_schem_erc_locations(&mut schem_diags, board, &input.display().to_string());
     write_diagnostics_to_stderr(&schem_diags)?;
 
     // Honour manual tuning: if a sidecar sits beside the source

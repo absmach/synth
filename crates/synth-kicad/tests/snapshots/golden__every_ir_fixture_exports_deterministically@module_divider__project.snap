@@ -17,8 +17,8 @@ expression: project
   },
   "boards": [],
   "meta": {
-    "filename": "single_mcu.kicad_pro",
-    "uuid": "145ebac4-376d-5d33-9b19-9919a7480054",
+    "filename": "module_divider.kicad_pro",
+    "uuid": "c71344eb-9e04-5540-bc3c-923f5b68b08e",
     "version": 1
   },
   "net_settings": {
@@ -56,7 +56,7 @@ expression: project
   },
   "sheets": [
     [
-      "e9752c9b-d806-561d-b400-c5c45c3ecc44",
+      "b4e8a3c2-dca2-5ded-9ad5-f4ef5f5f0372",
       ""
     ]
   ]

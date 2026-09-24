@@ -85,6 +85,38 @@ use synth_layout::route::{
 /// Build the entire `.kicad_sch` s-expression for `board`.
 /// `project` is the per-project UUID namespace.
 #[allow(clippy::too_many_lines)]
+/// A wire `(stroke …)`, tinted with the net's class hue when it has
+/// one (schematic-quality plan Phase B1).
+///
+/// `net_settings` in the `.kicad_pro` carries the same hue per class,
+/// but KiCad matches those by net *name*, which it derives from the
+/// drawing at load time — an unlabelled local net is auto-named
+/// `Net-(U2-BOOT0)` and no pre-written assignment can reach it. The
+/// explicit stroke reaches every net and is what the SVG plot shows.
+fn wire_stroke(color: Option<[u8; 3]>) -> Sexp {
+    let mut parts = vec![
+        Sexp::list("width", vec![num(0.0)]),
+        Sexp::list("type", vec![Sexp::atom("default")]),
+    ];
+    if let Some(rgb) = color {
+        parts.push(rgb_color(rgb));
+    }
+    Sexp::list("stroke", parts)
+}
+
+/// `(color r g b a)` — KiCad wants the alpha as a float.
+fn rgb_color(rgb: [u8; 3]) -> Sexp {
+    Sexp::list(
+        "color",
+        vec![
+            num(f64::from(rgb[0])),
+            num(f64::from(rgb[1])),
+            num(f64::from(rgb[2])),
+            num(1.0),
+        ],
+    )
+}
+
 pub fn build_schematic(board: &Board, project: &Uuid) -> Sexp {
     build_schematic_from_layout(board, project, &synth_layout::layout(board))
 }
@@ -408,6 +440,7 @@ pub(crate) fn build_sheet_schematic(
     // and emit one `(wire ...)` per segment.
     let mut emitted: HashSet<EmittedSegment> = HashSet::new();
     let quant = |v: f64| (v * 100.0).round() as i64;
+    let net_colors = synth_layout::netclass::net_colors(board);
     for wire in &layout.wires {
         let net_name = board
             .net(wire.net)
@@ -439,13 +472,7 @@ pub(crate) fn build_sheet_schematic(
                             Sexp::list("xy", vec![num(p2.0), num(p2.1)]),
                         ],
                     ),
-                    Sexp::list(
-                        "stroke",
-                        vec![
-                            Sexp::list("width", vec![num(0.0)]),
-                            Sexp::list("type", vec![Sexp::atom("default")]),
-                        ],
-                    ),
+                    wire_stroke(net_colors.get(&wire.net).copied()),
                     str_pair("uuid", wire_uuid.to_string()),
                 ],
             ));
@@ -487,7 +514,8 @@ pub(crate) fn build_sheet_schematic(
     // were merged into `layout.net_labels` by `synth_layout::layout`,
     // so this loop covers the routing-fallback labels too.
     for label in &layout.net_labels {
-        if let Some(sexps) = build_net_label(board, label, &placements, project) {
+        let color = net_colors.get(&label.net).copied();
+        if let Some(sexps) = build_net_label(board, label, &placements, project, color) {
             children.extend(sexps);
         }
     }
@@ -1002,6 +1030,7 @@ fn build_net_label(
     label: &synth_layout::NetLabel,
     placements: &HashMap<ComponentId, &ComponentPlacement>,
     project: &Uuid,
+    color: Option<[u8; 3]>,
 ) -> Option<Vec<Sexp>> {
     let component = board.component(label.component)?;
     let (x, y, dx, _dy) = pin_terminal_xy(board, label.component, label.pin, placements)?;
@@ -1026,29 +1055,24 @@ fn build_net_label(
                     Sexp::list("xy", vec![num(stub_x), num(y)]),
                 ],
             ),
-            Sexp::list(
-                "stroke",
-                vec![
-                    Sexp::list("width", vec![num(0.0)]),
-                    Sexp::list("type", vec![Sexp::atom("default")]),
-                ],
-            ),
+            wire_stroke(color),
             str_pair("uuid", wire_uuid.to_string()),
         ],
     );
 
+    // The label text carries the same hue as its wire, so a name and
+    // the line it names read as one object (reference sheet
+    // mechanism 4).
+    let mut font = vec![Sexp::list("size", vec![num(1.27), num(1.27)])];
+    if let Some(rgb) = color {
+        font.push(rgb_color(rgb));
+    }
     let label_sexp = Sexp::list(
         "label",
         vec![
             Sexp::str(&label.label),
             Sexp::list("at", vec![num(stub_x), num(y), num(angle)]),
-            Sexp::list(
-                "effects",
-                vec![Sexp::list(
-                    "font",
-                    vec![Sexp::list("size", vec![num(1.27), num(1.27)])],
-                )],
-            ),
+            Sexp::list("effects", vec![Sexp::list("font", font)]),
             str_pair("uuid", label_uuid.to_string()),
         ],
     );
@@ -1754,6 +1778,20 @@ fn build_symbol_unit(
         // VCC lands up, ESD diodes, LED current-limit resistors) are
         // drawn tall-and-thin, not wide-and-short — swap the extents
         // so `field_anchor` below measures the true on-sheet body.
+        if matches!(placement.rotation, Rotation::Ninety | Rotation::TwoSeventy) {
+            (h, w)
+        } else {
+            (w, h)
+        }
+    } else if part.kicad_symbol.is_some() {
+        // A part mapped to a stock KiCad symbol is drawn with *that*
+        // symbol's geometry, which the pin-count synthesis below does
+        // not predict — a USB-C receptacle is ~50 mm tall where the
+        // synthesis guessed ~30, so the Value field landed 8 mm inside
+        // the body, on top of the pin names. `body_size_for_part` is
+        // the same measurement the layouter places against, so fields
+        // and placement now agree on where the body ends.
+        let (w, h) = synth_layout::body_size_for_part(part);
         if matches!(placement.rotation, Rotation::Ninety | Rotation::TwoSeventy) {
             (h, w)
         } else {

@@ -1,0 +1,10 @@
+---
+source: crates/synth-kicad/tests/golden.rs
+expression: bom
+---
+refdes,value,kind,description,kicad_symbol,kicad_footprint,lcsc_pn,mpn
+D1_R1,10kohm,resistor,"Generic 0603 thick-film resistor, any value",Device:R_US,Resistor_SMD:R_0603_1608Metric,,
+D1_R2,4.7kohm,resistor,"Generic 0603 thick-film resistor, any value",Device:R_US,Resistor_SMD:R_0603_1608Metric,,
+D2_R1,22kohm,resistor,"Generic 0603 thick-film resistor, any value",Device:R_US,Resistor_SMD:R_0603_1608Metric,,
+D2_R2,4.7kohm,resistor,"Generic 0603 thick-film resistor, any value",Device:R_US,Resistor_SMD:R_0603_1608Metric,,
+J1,(no value),connector,"JST PH-series 2-pin wire-to-board connector, 2.0mm pitch",Connector_Generic:Conn_01x02,Connector_JST:JST_PH_S2B-PH-K_1x02_P2.00mm_Horizontal,,

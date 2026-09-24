@@ -200,7 +200,6 @@ impl Pattern for IcBlock {
                 members,
             });
         }
-        attach_orphan_rail_caps(board, claimed, &mut clusters, &anchor_index);
         clusters
     }
 }
@@ -254,12 +253,29 @@ fn net_is_ground(board: &Board, net: &synth_ir::Net) -> bool {
 /// net (the part drawing most from that rail), tie-broken by
 /// declaration adjacency, which is how authors already express
 /// intent (`C4` sits next to `U2` in the source).
-fn attach_orphan_rail_caps(
+pub(crate) fn attach_orphan_rail_caps(
     board: &Board,
     claimed: &mut HashSet<ComponentId>,
     clusters: &mut [Cluster],
-    anchor_index: &HashMap<ComponentId, usize>,
 ) {
+    // Any already-formed cluster may adopt an orphan — an LDO's bulk
+    // and output caps hang off an `LdoBlock`, not an `IcBlock`.
+    // Passive-anchored clusters (a divider's resistor, an LED's
+    // series R) are excluded: they consume no rail and would drag
+    // caps away from the part that does.
+    let anchor_index: HashMap<ComponentId, usize> = clusters
+        .iter()
+        .enumerate()
+        .filter(|(_, c)| {
+            board
+                .component(c.anchor)
+                .and_then(|comp| comp.part.as_ref())
+                .is_some_and(|part| {
+                    !matches!(part.kind.as_str(), "capacitor" | "resistor" | "inductor")
+                })
+        })
+        .map(|(idx, c)| (c.anchor, idx))
+        .collect();
     for component in &board.components {
         if claimed.contains(&component.id) {
             continue;
@@ -292,8 +308,15 @@ fn attach_orphan_rail_caps(
         // Heaviest consumer wins; declaration adjacency breaks ties
         // (lower adjacency distance = nearer in source = preferred).
         let mut best: Option<(usize, usize, usize)> = None;
-        for (&anchor, &cluster_idx) in anchor_index {
+        for (&anchor, &cluster_idx) in &anchor_index {
             if anchor == component.id {
+                continue;
+            }
+            // A declared `group` is a hard boundary: adopting across
+            // one would place the cap in another group's region.
+            if board.component(anchor).and_then(|c| c.group.as_deref())
+                != component.group.as_deref()
+            {
                 continue;
             }
             let pins_on_rail = rail

@@ -88,17 +88,24 @@ board "sensor_logger" {
   // ---- SPI flash ----------------------------------------------------------
   component U5: memory     "w25q128_flash"
   component C9: capacitor  "c_generic_0603" value "100nF" { placement_hint { near: "U5" priority: hard } }
+  component R7: resistor   "r_generic_0603" value "10k"   // /WP pull-up
+  component R8: resistor   "r_generic_0603" value "10k"   // /HOLD pull-up
 
   connect U1.vout    -> U5.vcc
   connect U1.gnd     -> U5.gnd
   connect U5.vcc     -> C9.p1
   connect U5.gnd     -> C9.p2
-  connect U2.pb3_mosi -> U5.mosi
-  connect U2.pb4_miso -> U5.miso
-  connect U2.pb5_sck  -> U5.sck
+  connect U2.pb3_mosi -> U5.io0   // IO0 = DI in single-SPI mode
+  connect U2.pb4_miso -> U5.io1   // IO1 = DO in single-SPI mode
+  connect U2.pb5_sck  -> U5.clk
   connect U2.pb2_ss   -> U5.cs
-  connect U5.wp       -> U5.vcc
-  connect U5.hold     -> U5.vcc
+  // /WP and /HOLD pulled high through 10k rather than strapped to the
+  // rail: both are bidirectional IO lines in quad mode, so a hard tie
+  // to VOUT is a driver conflict if the part is ever run quad.
+  connect U5.io2      -> R7.p1
+  connect R7.p2       -> U5.vcc
+  connect U5.io3      -> R8.p1
+  connect R8.p2       -> U5.vcc
 
   // ---- Status LEDs (red / green / blue) ----------------------------------
   component R4: resistor  "r_generic_0603" value "1k" { placement_hint { near: "U2" side: left } }

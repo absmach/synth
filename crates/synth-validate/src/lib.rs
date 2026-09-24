@@ -306,6 +306,22 @@ impl ErcRule for I2cPeerCapabilityRule {
 /// listing `spi_mosi`, `uart_tx`, `i2c_sda` all at once — are not
 /// dedicated and therefore do not on their own demand a protocol.
 #[allow(clippy::too_many_arguments)]
+/// Whether a net is a supply rail or ground: some endpoint drives it
+/// as power, or it joins a pin declared as a power/ground reference.
+fn net_is_power_rail(board: &Board, net: &synth_ir::Net) -> bool {
+    use synth_registry::ElectricalType;
+    net.endpoints.iter().any(|e| {
+        board.pin(e.component, e.pin).is_some_and(|p| {
+            matches!(
+                p.electrical_type,
+                ElectricalType::PowerOutput
+                    | ElectricalType::PowerInput
+                    | ElectricalType::GroundReference
+            )
+        })
+    })
+}
+
 fn check_capability_consistency(
     board: &Board,
     net_id: NetId,
@@ -317,6 +333,15 @@ fn check_capability_consistency(
     out: &mut Vec<Diagnostic>,
 ) {
     let Some(net) = board.net(net_id) else { return };
+    // A power rail is never a protocol bus. Multifunction pins are
+    // routinely strapped to a rail to select a mode — a quad-SPI
+    // flash's `/WP` and `/HOLD` (IO2/IO3, both SPI-capable) tie high
+    // for single-SPI operation — which used to make the whole 3V3 net
+    // look like an SPI bus and fault every regulator and VDD pin on
+    // it. Strapping is configuration, not signalling.
+    if net_is_power_rail(board, net) {
+        return;
+    }
     let has_dedicated = net.endpoints.iter().any(|e| {
         endpoint_has_any_capability(board, e.component, e.pin, capabilities)
             && !endpoint_has_any_capability(board, e.component, e.pin, competing)

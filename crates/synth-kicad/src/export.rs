@@ -147,7 +147,9 @@ pub fn export_with_sidecar_and_routing_order(
     // `net_settings` and colours wires *and* labels by class
     // automatically, so the encoding survives user edits and shows in
     // the netlist UI — unlike per-wire `(stroke (color …))`.
-    let net_settings = build_net_settings(board);
+    // Across every sheet: a net's power symbol or label may live on
+    // any page, and the project file is board-wide.
+    let net_settings = build_net_settings(board, sheets.iter().map(|s| &s.layout));
     let project_doc = json!({
         // Keep the project-level defaults explicit. KiCad 10 may discard
         // legacy setup minima when it first saves a generated board, and an
@@ -382,7 +384,10 @@ fn route_with_optional_order(
 /// deterministic palette, plus `netclass_assignments` mapping every
 /// non-Default net to its class. KiCad then colours wires and labels
 /// automatically and preserves the encoding across edits.
-fn build_net_settings(board: &Board) -> serde_json::Value {
+fn build_net_settings<'a>(
+    board: &Board,
+    layouts: impl Iterator<Item = &'a synth_layout::Layout>,
+) -> serde_json::Value {
     use std::collections::BTreeMap;
 
     let assignments = synth_layout::netclass::classify_nets(board);
@@ -448,12 +453,39 @@ fn build_net_settings(board: &Board) -> serde_json::Value {
             "wire_width": 6,
         }));
     }
-    // Every non-Default net is assigned explicitly; KiCad treats an
-    // unlisted net as Default, so listing those would only add noise.
+    // Assignments are keyed on the name *KiCad* will know the net by,
+    // not our IR name: KiCad derives net names from the drawing at
+    // load time, so an assignment written against `net_7` matches
+    // nothing. `kicad_net_names` maps a net to its power-symbol value
+    // (`+3V3`) or its label spellings (`/SDA`, `SDA`); a glob pattern
+    // covers the same label on a deeper sheet path. Nets with neither
+    // are auto-named by KiCad and unreachable this way — the explicit
+    // per-wire stroke in `schematic.rs` is what colours those.
+    let mut visible: BTreeMap<synth_ir::NetId, Vec<String>> = BTreeMap::new();
+    for layout in layouts {
+        for (net, names) in synth_layout::netclass::kicad_net_names(layout) {
+            let entry = visible.entry(net).or_default();
+            entry.extend(names);
+        }
+    }
+    for names in visible.values_mut() {
+        names.sort();
+        names.dedup();
+    }
     let mut assignments_json = serde_json::Map::new();
+    let mut patterns = Vec::new();
     for a in &assignments {
-        if a.class != "Default" {
-            assignments_json.insert(a.net_name.clone(), json!(a.class));
+        if a.class == "Default" {
+            continue;
+        }
+        let Some(names) = visible.get(&a.net) else {
+            continue;
+        };
+        for name in names {
+            assignments_json.insert(name.clone(), json!(a.class));
+            if let Some(bare) = name.strip_prefix('/') {
+                patterns.push(json!({ "netclass": a.class, "pattern": format!("/*/{bare}") }));
+            }
         }
     }
     let netclass_assignments = if assignments_json.is_empty() {
@@ -466,7 +498,7 @@ fn build_net_settings(board: &Board) -> serde_json::Value {
         "meta": { "version": 4 },
         "net_colors": serde_json::Value::Null,
         "netclass_assignments": netclass_assignments,
-        "netclass_patterns": [],
+        "netclass_patterns": patterns,
     })
 }
 
@@ -726,7 +758,7 @@ mod tests {
                 connect U1.vss -> U2.gnd
             }"#,
         );
-        let settings = build_net_settings(&board);
+        let settings = build_net_settings(&board, std::iter::once(&synth_layout::layout(&board)));
         let classes = settings["classes"].as_array().unwrap();
         let names: Vec<&str> = classes
             .iter()
@@ -780,7 +812,7 @@ mod tests {
         let pro = serde_json::to_string_pretty(&json!({
             "meta": { "filename": format!("{stem}.kicad_pro"), "version": 1,
                       "uuid": project.to_string() },
-            "net_settings": build_net_settings(&board),
+            "net_settings": build_net_settings(&board, std::iter::once(&synth_layout::layout(&board))),
             "sheets": [],
         }))
         .unwrap();
@@ -814,7 +846,7 @@ mod tests {
                 connect U1.gnd -> C2.p2
             }"##,
         );
-        let settings = build_net_settings(&board);
+        let settings = build_net_settings(&board, std::iter::once(&synth_layout::layout(&board)));
         let classes = settings["classes"].as_array().unwrap();
         let pwr = classes
             .iter()

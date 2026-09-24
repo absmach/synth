@@ -29,7 +29,7 @@
 //! # aesthetic schematic ERC thresholds (`E-SYNTH-SCHEM-*`)
 //! [schematic]
 //! min_sheet_fill_ratio = 0.45
-//! decoupling_max_mm = 15.0
+//! decoupling_max_mm = 25.0
 //! ```
 //!
 //! The table is *symmetric*: `"output:output"` and its reverse are the
@@ -85,8 +85,9 @@ pub struct ErcConfig {
 pub struct SchematicSettings {
     /// `E-SYNTH-SCHEM-002`: max different-net wire crossings on a sheet.
     pub max_crossings: usize,
-    /// `E-SYNTH-SCHEM-003`: max distance (mm) a decoupling cap may sit
-    /// from its target IC.
+    /// `E-SYNTH-SCHEM-003`: max empty space (mm) between a decoupling
+    /// cap's symbol body and its target IC's. Measured body-to-body,
+    /// not centre-to-centre — see `synth_kicad::schem_erc`.
     pub decoupling_max_mm: f64,
     /// `E-SYNTH-SCHEM-004`: max span (mm) of an explicitly drawn net.
     pub long_net_max_mm: f64,
@@ -102,7 +103,7 @@ impl Default for SchematicSettings {
     fn default() -> Self {
         Self {
             max_crossings: 5,
-            decoupling_max_mm: 15.0,
+            decoupling_max_mm: 25.0,
             long_net_max_mm: 100.0,
             max_junction_degree: 3,
             max_net_label_len: 16,
@@ -539,7 +540,7 @@ mod tests {
         assert!((cfg.schematic.min_sheet_fill_ratio - 0.7).abs() < f64::EPSILON);
         assert_eq!(cfg.schematic.max_crossings, 2);
         // Untouched fields keep the built-in defaults.
-        assert!((cfg.schematic.decoupling_max_mm - 15.0).abs() < f64::EPSILON);
+        assert!((cfg.schematic.decoupling_max_mm - 25.0).abs() < f64::EPSILON);
         // An absent section is the default.
         assert_eq!(
             ErcConfig::from_toml_str("led_max_current_ma = 5.0\n")

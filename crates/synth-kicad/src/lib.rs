@@ -76,7 +76,8 @@ pub use import::{import_project, ImportError, NormalisedRecord, IMPORTER_VERSION
 pub use pin_reconcile::physical_terminal;
 pub use pnp::build_pnp_csv;
 pub use schem_erc::{
-    check as check_schem_erc, check_sheets as check_schem_erc_sheets,
-    check_with_config as check_schem_erc_with_config, SchemErcConfig,
+    attach_locations as attach_schem_erc_locations, check as check_schem_erc,
+    check_sheets as check_schem_erc_sheets, check_with_config as check_schem_erc_with_config,
+    SchemErcConfig,
 };
 pub use symbol_lib::build_pwr_flag_fallback;
