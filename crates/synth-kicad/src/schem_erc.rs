@@ -1044,6 +1044,7 @@ mod tests {
                     part: Some(part_with_decoupling()),
                     value: None,
                     dnp: false,
+                    properties: std::collections::BTreeMap::new(),
                     placement_hint: None,
                     group: None,
                     sheet: None,
@@ -1056,6 +1057,7 @@ mod tests {
                     part: Some(cap_part()),
                     value: None,
                     dnp: false,
+                    properties: std::collections::BTreeMap::new(),
                     placement_hint: None,
                     group: None,
                     sheet: None,
@@ -1086,6 +1088,7 @@ mod tests {
             netclasses: vec![],
             buses: vec![],
             modules: vec![],
+            variants: vec![],
             source_span: Span::new(0, 0),
         };
         let layout = layout(
@@ -1119,6 +1122,7 @@ mod tests {
                     part: Some(part_with_decoupling()),
                     value: None,
                     dnp: false,
+                    properties: std::collections::BTreeMap::new(),
                     placement_hint: None,
                     group: None,
                     sheet: None,
@@ -1131,6 +1135,7 @@ mod tests {
                     part: Some(cap_part()),
                     value: None,
                     dnp: false,
+                    properties: std::collections::BTreeMap::new(),
                     placement_hint: None,
                     group: None,
                     sheet: None,
@@ -1161,6 +1166,7 @@ mod tests {
             netclasses: vec![],
             buses: vec![],
             modules: vec![],
+            variants: vec![],
             source_span: Span::new(0, 0),
         };
         let layout = layout(
@@ -1496,6 +1502,7 @@ mod tests {
                     part: Some(part_with_decoupling()),
                     value: None,
                     dnp: false,
+                    properties: std::collections::BTreeMap::new(),
                     placement_hint: None,
                     group: None,
                     sheet: None,
@@ -1508,6 +1515,7 @@ mod tests {
                     part: Some(cap_part()),
                     value: None,
                     dnp: false,
+                    properties: std::collections::BTreeMap::new(),
                     placement_hint: None,
                     group: None,
                     sheet: None,
@@ -1520,6 +1528,7 @@ mod tests {
                     part: Some(cap_part()),
                     value: None,
                     dnp: false,
+                    properties: std::collections::BTreeMap::new(),
                     placement_hint: None,
                     group: None,
                     sheet: None,
@@ -1550,6 +1559,7 @@ mod tests {
             netclasses: vec![],
             buses: vec![],
             modules: vec![],
+            variants: vec![],
             source_span: Span::new(0, 0),
         };
         let mut layout = layout(
@@ -1652,6 +1662,7 @@ mod tests {
             netclasses: vec![],
             buses: vec![],
             modules: vec![],
+            variants: vec![],
             source_span: Span::new(0, 0),
         };
         let l = layout(

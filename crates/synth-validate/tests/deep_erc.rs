@@ -661,6 +661,7 @@ fn multi_unit_rails_split_is_an_error() {
             part: Some(part),
             value: None,
             dnp: false,
+            properties: std::collections::BTreeMap::new(),
             placement_hint: None,
             group: None,
             sheet: None,
@@ -696,6 +697,7 @@ fn multi_unit_rails_split_is_an_error() {
         netclasses: vec![],
         buses: vec![],
         modules: vec![],
+        variants: vec![],
         source_span: Span::new(0, 0),
     };
     let diags = synth_validate::run_erc(&board, "t.synth");
@@ -827,4 +829,90 @@ fn pin_function_support_ignores_passives_and_unrelated_names() {
 }"#,
     );
     assert!(codes(&diags, "E-SYNTH-PINMUX-002").is_empty(), "{diags:?}");
+}
+
+// ---------------------------------------------------------------------------
+// Phase 7 — variants and structured values
+// ---------------------------------------------------------------------------
+
+#[test]
+fn variant_with_unknown_refdes_is_reported() {
+    let diags = validate(
+        r#"board "t" {
+  layers 2
+  component U1: mcu "rp2350"
+  variant "lite" { dnp U9 }
+}"#,
+    );
+    assert_eq!(codes(&diags, "E-SYNTH-VARIANT-002").len(), 1, "{diags:?}");
+}
+
+#[test]
+fn duplicate_variant_name_is_reported() {
+    let diags = validate(
+        r#"board "t" {
+  layers 2
+  component U1: mcu "rp2350"
+  variant "lite" { dnp U1 }
+  variant "lite" { dnp U1 }
+}"#,
+    );
+    assert_eq!(codes(&diags, "E-SYNTH-VARIANT-001").len(), 1, "{diags:?}");
+}
+
+#[test]
+fn class_two_ceramic_at_high_bias_warns() {
+    let diags = validate(
+        r#"board "t" {
+  layers 2
+  component U1: regulator "ams1117_3v3"
+  component C1: capacitor "c_generic_0603" dielectric "X7R" voltage "6.3V"
+  power "+5V" 5v
+  connect U1.vout -> C1.p1 as "+5V"
+  connect C1.p2 -> "GND"
+  connect U1.gnd -> "GND"
+  connect U1.vin -> "VIN"
+}"#,
+    );
+    let hits = codes(&diags, "E-SYNTH-CAP-001");
+    assert_eq!(hits.len(), 1, "{diags:?}");
+    assert_eq!(hits[0].severity, Severity::Warning);
+}
+
+#[test]
+fn class_one_ceramic_and_low_bias_stay_quiet() {
+    let diags = validate(
+        r#"board "t" {
+  layers 2
+  component U1: regulator "ams1117_3v3"
+  component C1: capacitor "c_generic_0603" dielectric "C0G" voltage "6.3V"
+  component C2: capacitor "c_generic_0603" dielectric "X7R" voltage "50V"
+  power "+5V" 5v
+  connect U1.vout -> C1.p1 as "+5V"
+  connect C1.p2 -> "GND"
+  connect U1.vout -> C2.p1 as "+5V"
+  connect C2.p2 -> "GND"
+  connect U1.gnd -> "GND"
+  connect U1.vin -> "VIN"
+}"#,
+    );
+    assert!(codes(&diags, "E-SYNTH-CAP-001").is_empty(), "{diags:?}");
+}
+
+#[test]
+fn derating_needs_both_dielectric_and_rating() {
+    // Without the structured values the rule declines rather than guessing.
+    let diags = validate(
+        r#"board "t" {
+  layers 2
+  component U1: regulator "ams1117_3v3"
+  component C1: capacitor "c_generic_0603"
+  power "+5V" 5v
+  connect U1.vout -> C1.p1 as "+5V"
+  connect C1.p2 -> "GND"
+  connect U1.gnd -> "GND"
+  connect U1.vin -> "VIN"
+}"#,
+    );
+    assert!(codes(&diags, "E-SYNTH-CAP-001").is_empty(), "{diags:?}");
 }

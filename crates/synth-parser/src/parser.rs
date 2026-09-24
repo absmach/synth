@@ -12,13 +12,16 @@
 //! This keeps cascading errors bounded: one underlying mistake produces
 //! at most one diagnostic per statement.
 
+use std::collections::BTreeMap;
 use synth_ast::{
     BindStmt, BoardAst, BusDeclStmt, CompanyStmt, ComponentDeclAst, ConnectionAst, DiffPairAttr,
     DiffPairStmt, EndpointAst, GroupStmt, ImportAst, InterfaceDeclStmt, KeepoutAttr, KeepoutStmt,
     LayersStmt, ManufacturerStmt, ModuleDeclStmt, NetDeclAst, NetclassAttr, NetclassStmt,
     NotesDeclAst, ParamDeclAst, PlacementHintAst, PlacementHintAttr, PortBindingAst, PortDeclAst,
     PowerDeclAst, ProgramAst, RevisionStmt, SheetStmt, StatementAst, UseStmt, ValueWithUnit,
+    VariantDeclStmt,
 };
+
 use synth_diagnostics::{
     Diagnostic, DiagnosticBuilder, Location, Patch, PatchKind, Severity, Span,
 };
@@ -302,6 +305,7 @@ impl Parser {
             TokenKind::KwRevision => self.parse_revision().map(StatementAst::Revision),
             TokenKind::KwCompany => self.parse_company().map(StatementAst::Company),
             TokenKind::KwComponent => self.parse_component().map(StatementAst::Component),
+            TokenKind::KwVariant => self.parse_variant().map(StatementAst::Variant),
             TokenKind::KwConnect => self.parse_connection().map(StatementAst::Connection),
             TokenKind::KwNet => self.parse_net().map(StatementAst::Net),
             TokenKind::KwPower => self.parse_power().map(StatementAst::Power),
@@ -321,7 +325,7 @@ impl Parser {
                     self.peek().span,
                     "E-SYNTH-PARSE-011",
                     "expected statement keyword",
-                    "one of: layers, manufacturer, revision, company, component, connect, net, power, notes, module, interface, bus, use, bind, diff_pair, netclass, keepout, group, sheet",
+                    "one of: layers, manufacturer, revision, company, component, variant, connect, net, power, notes, module, interface, bus, use, bind, diff_pair, netclass, keepout, group, sheet",
                     self.describe_current(),
                     None,
                 );
@@ -464,68 +468,57 @@ impl Parser {
             "E-SYNTH-PARSE-016",
             "expected part identifier (quoted string)",
         )?;
-        let value = if matches!(self.peek_kind(), TokenKind::KwValue) {
-            self.bump(); // consume `value`
-                         // A quoted string is a literal; `$name` is a parameter
-                         // reference resolved when a module is instantiated. Stored
-                         // with the `$` retained so the two never collide.
-            if matches!(self.peek_kind(), TokenKind::Dollar) {
-                self.bump();
-                let name =
-                    self.expect_ident("E-SYNTH-PARSE-027", "expected parameter name after `$`")?;
-                Some(format!("${name}"))
-            } else {
-                Some(self.expect_string(
-                    "E-SYNTH-PARSE-027",
-                    "expected component value after `value`",
-                )?)
-            }
-        } else {
-            None
-        };
-        // Do-not-populate flag: `component R7: resistor "r_generic_0603"
-        // dnp`. Accepted before the body block, after it, or both
-        // (redundant repetition is harmless).
+        // Trailing attributes may appear in any order, before and/or
+        // after a `{ … }` body: `value`, the structured-value fields
+        // (`tolerance`, `voltage`, `power`, `dielectric`), `dnp`, and
+        // `placement_hint`. Redundant repetition is harmless.
+        let mut value = None;
+        let mut properties: BTreeMap<String, String> = BTreeMap::new();
         let mut dnp = false;
-        if matches!(self.peek_kind(), TokenKind::KwDnp) {
-            self.bump(); // consume `dnp`
-            dnp = true;
-        }
-        let placement_hint = if matches!(self.peek_kind(), TokenKind::KwPlacementHint) {
-            self.parse_placement_hint()
-        } else if matches!(self.peek_kind(), TokenKind::LBrace) {
-            self.bump(); // consume `{`
-            let mut hint = None;
-            loop {
-                self.skip_error_tokens();
-                match self.peek_kind() {
-                    TokenKind::RBrace | TokenKind::Eof => break,
-                    TokenKind::KwPlacementHint => {
-                        hint = self.parse_placement_hint();
+        let mut placement_hint = None;
+        loop {
+            if self.parse_component_attribute(&mut value, &mut properties, &mut dnp) {
+                continue;
+            }
+            match self.peek_kind() {
+                TokenKind::KwPlacementHint => {
+                    placement_hint = self.parse_placement_hint();
+                }
+                TokenKind::LBrace => {
+                    self.bump(); // consume `{`
+                    loop {
+                        self.skip_error_tokens();
+                        match self.peek_kind() {
+                            TokenKind::RBrace | TokenKind::Eof => break,
+                            TokenKind::KwPlacementHint => {
+                                placement_hint = self.parse_placement_hint();
+                            }
+                            _ => {
+                                if !self.parse_component_attribute(
+                                    &mut value,
+                                    &mut properties,
+                                    &mut dnp,
+                                ) {
+                                    self.emit(
+                                        self.peek().span,
+                                        "E-SYNTH-PARSE-029",
+                                        "unexpected keyword inside component body",
+                                        "`placement_hint`, `tolerance`, `voltage`, `power_rating`, \
+                                         `dielectric`, or `dnp`",
+                                        self.describe_current(),
+                                        None,
+                                    );
+                                    self.bump();
+                                }
+                            }
+                        }
                     }
-                    _ => {
-                        self.emit(
-                            self.peek().span,
-                            "E-SYNTH-PARSE-029",
-                            "unexpected keyword inside component body",
-                            "`placement_hint`",
-                            self.describe_current(),
-                            None,
-                        );
+                    if matches!(self.peek_kind(), TokenKind::RBrace) {
                         self.bump();
                     }
                 }
+                _ => break,
             }
-            if matches!(self.peek_kind(), TokenKind::RBrace) {
-                self.bump();
-            }
-            hint
-        } else {
-            None
-        };
-        if matches!(self.peek_kind(), TokenKind::KwDnp) {
-            self.bump(); // consume trailing `dnp`
-            dnp = true;
         }
         let end = self.last_offset();
         Some(ComponentDeclAst {
@@ -534,9 +527,57 @@ impl Parser {
             part: Some(part),
             value,
             dnp,
+            properties,
             placement_hint,
             span: Span::new(start, end),
         })
+    }
+
+    /// Consume one component attribute (`value`, a structured-value
+    /// field, or `dnp`). Returns `false` when the current token is not
+    /// one of them, leaving the cursor untouched.
+    fn parse_component_attribute(
+        &mut self,
+        value: &mut Option<String>,
+        properties: &mut BTreeMap<String, String>,
+        dnp: &mut bool,
+    ) -> bool {
+        // A quoted string is a literal; `$name` is a parameter
+        // reference resolved when a module is instantiated. Stored with
+        // the `$` retained so the two never collide.
+        if matches!(self.peek_kind(), TokenKind::KwValue) {
+            self.bump(); // consume `value`
+            if matches!(self.peek_kind(), TokenKind::Dollar) {
+                self.bump();
+                if let Some(name) =
+                    self.expect_ident("E-SYNTH-PARSE-027", "expected parameter name after `$`")
+                {
+                    *value = Some(format!("${name}"));
+                }
+            } else if let Some(s) = self.expect_string(
+                "E-SYNTH-PARSE-027",
+                "expected component value after `value`",
+            ) {
+                *value = Some(s);
+            }
+            return true;
+        }
+        if let Some(field) = structured_field(self.peek_kind()) {
+            self.bump(); // consume the field keyword
+            if let Some(s) = self.expect_string(
+                "E-SYNTH-PARSE-002",
+                "expected a quoted value after the field keyword",
+            ) {
+                properties.insert(field.to_string(), s);
+            }
+            return true;
+        }
+        if matches!(self.peek_kind(), TokenKind::KwDnp) {
+            self.bump(); // consume `dnp`
+            *dnp = true;
+            return true;
+        }
+        false
     }
 
     #[allow(clippy::too_many_lines)]
@@ -928,6 +969,77 @@ impl Parser {
             span: Span::new(start, end),
         })
     }
+    /// `variant "lite" [description "…"] { dnp U3 U5 }`.
+    ///
+    /// A variant lists the refdes left unpopulated in it; the export
+    /// maps that onto KiCad's native design variants.
+    fn parse_variant(&mut self) -> Option<VariantDeclStmt> {
+        let start = self.peek().span.byte_start;
+        self.bump(); // consume `variant`
+        let name =
+            self.expect_string("E-SYNTH-PARSE-002", "expected variant name (quoted string)")?;
+        let description = if matches!(self.peek_kind(), TokenKind::KwDescription) {
+            self.bump(); // consume `description`
+            self.expect_string(
+                "E-SYNTH-PARSE-002",
+                "expected variant description (quoted string)",
+            )
+        } else {
+            None
+        };
+        if !matches!(self.peek_kind(), TokenKind::LBrace) {
+            self.emit(
+                self.peek().span,
+                "E-SYNTH-PARSE-003",
+                "expected `{` to open variant body",
+                "`{`",
+                self.describe_current(),
+                None,
+            );
+            return None;
+        }
+        self.bump(); // consume `{`
+        let mut dnp = Vec::new();
+        loop {
+            self.skip_error_tokens();
+            match self.peek_kind() {
+                TokenKind::RBrace | TokenKind::Eof => break,
+                TokenKind::KwDnp => {
+                    self.bump(); // consume `dnp`
+                                 // One or more refdes until the body closes.
+                    while let TokenKind::Ident(_) = self.peek_kind() {
+                        if let Some(refdes) =
+                            self.expect_ident("E-SYNTH-PARSE-010", "expected component refdes")
+                        {
+                            dnp.push(refdes);
+                        }
+                    }
+                }
+                _ => {
+                    self.emit(
+                        self.peek().span,
+                        "E-SYNTH-PARSE-032",
+                        "unexpected keyword inside variant body",
+                        "`dnp` followed by one or more component refdes",
+                        self.describe_current(),
+                        None,
+                    );
+                    self.bump();
+                }
+            }
+        }
+        if matches!(self.peek_kind(), TokenKind::RBrace) {
+            self.bump();
+        }
+        let end = self.last_offset();
+        Some(VariantDeclStmt {
+            name,
+            description,
+            dnp,
+            span: Span::new(start, end),
+        })
+    }
+
     /// One endpoint: `C.pin`, a quoted net name (`"I2C0.sda"`), or — only
     /// where a port can be declared (`allow_port`, i.e. inside a module)
     /// — a bare port identifier.
@@ -1880,6 +1992,12 @@ impl Parser {
             TokenKind::KwClearance => "`clearance`".to_string(),
             TokenKind::KwRadius => "`radius`".to_string(),
             TokenKind::KwValue => "`value`".to_string(),
+            TokenKind::KwTolerance => "`tolerance`".to_string(),
+            TokenKind::KwVoltage => "`voltage`".to_string(),
+            TokenKind::KwPowerRating => "`power_rating`".to_string(),
+            TokenKind::KwDielectric => "`dielectric`".to_string(),
+            TokenKind::KwVariant => "`variant`".to_string(),
+            TokenKind::KwDescription => "`description`".to_string(),
             TokenKind::KwPlacementHint => "`placement_hint`".to_string(),
             TokenKind::KwRegion => "`region`".to_string(),
             TokenKind::KwEdge => "`edge`".to_string(),
@@ -2026,6 +2144,18 @@ fn rehome_deferred_hints(statements: &mut [StatementAst]) {
         }) {
             component.placement_hint = Some(hint);
         }
+    }
+}
+
+/// Canonical KiCad field name for a structured-value keyword, or `None`
+/// when the token is not one.
+fn structured_field(kind: &TokenKind) -> Option<&'static str> {
+    match kind {
+        TokenKind::KwTolerance => Some("Tolerance"),
+        TokenKind::KwVoltage => Some("Voltage"),
+        TokenKind::KwPowerRating => Some("Power"),
+        TokenKind::KwDielectric => Some("Dielectric"),
+        _ => None,
     }
 }
 
@@ -2194,6 +2324,51 @@ mod tests {
             "a bare endpoint at board level is not a port: {:?}",
             res.diagnostics
         );
+    }
+
+    #[test]
+    fn parse_component_structured_values() {
+        let res = parse(
+            lex(
+                r#"board "b" { component C1: capacitor "c_generic_0603" value "100nF" tolerance "10%" voltage "25V" power_rating "0.1W" dielectric "X7R" }"#,
+            ),
+            "test.synth".into(),
+        );
+        assert!(res.diagnostics.is_empty(), "{:?}", res.diagnostics);
+        let ast = res.ast.unwrap();
+        let StatementAst::Component(c) = &ast.board.statements[0] else {
+            panic!("Expected component statement")
+        };
+        assert_eq!(c.value.as_deref(), Some("100nF"));
+        assert_eq!(
+            c.properties.get("Tolerance").map(String::as_str),
+            Some("10%")
+        );
+        assert_eq!(c.properties.get("Voltage").map(String::as_str), Some("25V"));
+        assert_eq!(c.properties.get("Power").map(String::as_str), Some("0.1W"));
+        assert_eq!(
+            c.properties.get("Dielectric").map(String::as_str),
+            Some("X7R")
+        );
+    }
+
+    #[test]
+    fn parse_variant_block() {
+        let res = parse(
+            lex(r#"board "b" {
+                component U3: sensor "bmp280_pressure"
+                variant "lite" description "no extras" { dnp U3 U5 }
+            }"#),
+            "test.synth".into(),
+        );
+        assert!(res.diagnostics.is_empty(), "{:?}", res.diagnostics);
+        let ast = res.ast.unwrap();
+        let StatementAst::Variant(v) = &ast.board.statements[1] else {
+            panic!("Expected variant statement")
+        };
+        assert_eq!(v.name, "lite");
+        assert_eq!(v.description.as_deref(), Some("no extras"));
+        assert_eq!(v.dnp, vec!["U3", "U5"]);
     }
 
     #[test]

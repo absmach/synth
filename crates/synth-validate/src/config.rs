@@ -63,6 +63,9 @@ pub struct ErcConfig {
     /// `E-SYNTH-ESD-001`: require ESD/reverse-polarity protection on
     /// external connector nets.
     pub require_connector_protection: bool,
+    /// `E-SYNTH-CAP-001`: fraction of a Class-II ceramic capacitor's
+    /// rated voltage above which DC-bias derating is warned about.
+    pub ceramic_dc_bias_threshold: f64,
 }
 
 impl Default for ErcConfig {
@@ -74,6 +77,7 @@ impl Default for ErcConfig {
             power_budget_headroom_pct: 0.0,
             open_drain_no_pullup: Severity::Warning,
             require_connector_protection: true,
+            ceramic_dc_bias_threshold: 0.5,
         }
     }
 }

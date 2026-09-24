@@ -174,7 +174,10 @@ production approval.
 - **Ceramic capacitors:** derate for applied DC bias (an X7R "10 µF"
   at 80 % rated bias may deliver a fraction of nominal); check the
   dielectric temperature spec; respect the package size the design
-  assumed; avoid microphonic dielectrics in audio paths.
+  assumed; avoid microphonic dielectrics in audio paths. This is
+  checked automatically when the capacitor carries `dielectric` and
+  `voltage` structured values — see `E-SYNTH-CAP-001` and
+  [`variants-and-bom.md`](variants-and-bom.md).
 - **Resistors:** verify power rating against dissipated power with
   margin; prefer thin-film for low-noise/sensitive analog nodes.
 - **Inductors:** non-standard packages are the risk — prefer parts

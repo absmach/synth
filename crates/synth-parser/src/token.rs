@@ -54,6 +54,12 @@ pub enum TokenKind {
     KwClearance,
     KwRadius,
     KwValue,
+    KwTolerance,
+    KwVoltage,
+    KwPowerRating,
+    KwDielectric,
+    KwVariant,
+    KwDescription,
     KwPlacementHint,
     KwRegion,
     KwEdge,
@@ -456,6 +462,12 @@ impl<'a> Lexer<'a> {
             "clearance" => TokenKind::KwClearance,
             "radius" => TokenKind::KwRadius,
             "value" => TokenKind::KwValue,
+            "tolerance" => TokenKind::KwTolerance,
+            "voltage" => TokenKind::KwVoltage,
+            "power_rating" => TokenKind::KwPowerRating,
+            "dielectric" => TokenKind::KwDielectric,
+            "variant" => TokenKind::KwVariant,
+            "description" => TokenKind::KwDescription,
             "placement_hint" => TokenKind::KwPlacementHint,
             "region" => TokenKind::KwRegion,
             "edge" => TokenKind::KwEdge,
@@ -495,7 +507,7 @@ mod tests {
     #[test]
     fn keywords_recognized() {
         let ks = kinds(
-            "board import layers manufacturer revision company component connect net power notes dnp module interface bus use bind prefix param as class diff_pair netclass keepout group sheet impedance trace_width clearance radius value",
+            "board import layers manufacturer revision company component connect net power notes dnp module interface bus use bind prefix param as class diff_pair netclass keepout group sheet impedance trace_width clearance radius value tolerance voltage power_rating dielectric variant description",
         );
         assert_eq!(
             ks,
@@ -531,6 +543,12 @@ mod tests {
                 TokenKind::KwClearance,
                 TokenKind::KwRadius,
                 TokenKind::KwValue,
+                TokenKind::KwTolerance,
+                TokenKind::KwVoltage,
+                TokenKind::KwPowerRating,
+                TokenKind::KwDielectric,
+                TokenKind::KwVariant,
+                TokenKind::KwDescription,
                 TokenKind::Eof,
             ]
         );

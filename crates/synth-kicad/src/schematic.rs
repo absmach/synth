@@ -345,37 +345,57 @@ pub(crate) fn build_sheet_schematic(
 
     // Symbol instances. On sub-sheets every symbol carries its
     // `(instances (project … (path …)))` block so KiCad maps the
-    // reference to the sheet path (dev-docs symbol section: every
-    // symbol has at least one instance); root symbols stay bare as
-    // before.
+    // reference to the sheet path; root symbols stay bare — *unless* a
+    // design variant overrides the symbol, which also lives in that
+    // block. A design with no variants keeps byte-identical output.
+    let variant_dnp = variant_dnp_by_refdes(board);
     for component in &board.components {
         if let Some(placement) = placements.get(&component.id) {
+            let overrides = variant_dnp.get(component.refdes.as_str());
             for s in build_symbol_instance(component, placement, project, board) {
-                children.push(match (&render.symbol_path, s) {
-                    (Some(path), Sexp::List { head, mut children }) => {
-                        children.push(Sexp::list(
-                            "instances",
-                            vec![Sexp::list(
-                                "project",
-                                vec![
-                                    Sexp::str(render.project_name),
-                                    Sexp::list(
-                                        "path",
-                                        vec![
-                                            Sexp::str(path),
-                                            Sexp::list(
-                                                "reference",
-                                                vec![Sexp::str(&component.refdes)],
-                                            ),
-                                            Sexp::list("unit", vec![Sexp::atom("1")]),
-                                        ],
-                                    ),
-                                ],
-                            )],
+                let path = render
+                    .symbol_path
+                    .clone()
+                    .or_else(|| overrides.map(|_| format!("/{}", render.uuid)));
+                let Some(path) = path else {
+                    children.push(s);
+                    continue;
+                };
+                let mut path_children = vec![
+                    Sexp::str(&path),
+                    Sexp::list("reference", vec![Sexp::str(&component.refdes)]),
+                    Sexp::list("unit", vec![Sexp::atom(symbol_unit_number(&s).to_string())]),
+                ];
+                if let Some(names) = overrides {
+                    for name in names {
+                        path_children.push(Sexp::list(
+                            "variant",
+                            vec![
+                                Sexp::list("name", vec![Sexp::str(*name)]),
+                                Sexp::list("dnp", vec![Sexp::atom("yes")]),
+                            ],
                         ));
-                        Sexp::List { head, children }
                     }
-                    (_, s) => s,
+                }
+                let instances = Sexp::list(
+                    "instances",
+                    vec![Sexp::list(
+                        "project",
+                        vec![
+                            Sexp::str(render.project_name),
+                            Sexp::list("path", path_children),
+                        ],
+                    )],
+                );
+                children.push(match s {
+                    Sexp::List {
+                        head,
+                        children: mut sc,
+                    } => {
+                        sc.push(instances);
+                        Sexp::List { head, children: sc }
+                    }
+                    other => other,
                 });
             }
         }
@@ -1583,6 +1603,35 @@ fn hidden_field_effects() -> Sexp {
     )
 }
 
+/// Which variants mark each refdes do-not-populate, keyed by refdes and
+/// listing the variant names in declaration order. Empty when the board
+/// declares no variants.
+fn variant_dnp_by_refdes(board: &Board) -> std::collections::BTreeMap<&str, Vec<&str>> {
+    let mut out: std::collections::BTreeMap<&str, Vec<&str>> = std::collections::BTreeMap::new();
+    for variant in &board.variants {
+        for refdes in &variant.dnp {
+            out.entry(refdes.as_str()).or_default().push(&variant.name);
+        }
+    }
+    out
+}
+
+/// The `(unit N)` a placed symbol was emitted with, defaulting to 1.
+fn symbol_unit_number(sym: &Sexp) -> u32 {
+    if let Sexp::List { children, .. } = sym {
+        for child in children {
+            if let Sexp::List { head, children } = child {
+                if head == "unit" {
+                    if let Some(Sexp::Atom(a)) = children.first() {
+                        return a.parse().unwrap_or(1);
+                    }
+                }
+            }
+        }
+    }
+    1
+}
+
 /// One placed symbol per *unit*. A single-unit part yields one symbol
 /// (byte-identical to the pre-multi-unit output); a part whose stock
 /// symbol declares several units (a dual op-amp, a quad gate) yields
@@ -1812,6 +1861,22 @@ fn build_symbol_unit(
         ],
     ));
 
+    // Structured component data (tolerance, voltage/power rating,
+    // dielectric) as hidden symbol fields, so KiCad BOM tooling and the
+    // derating checks read them from the schematic. Same convention as
+    // the MPN/LCSC fields above.
+    for (name, value) in &component.properties {
+        fields.push(Sexp::list(
+            "property",
+            vec![
+                Sexp::str(name),
+                Sexp::str(value),
+                Sexp::list("at", vec![num(x), num(y), num(0.0)]),
+                hidden_field_effects(),
+            ],
+        ));
+    }
+
     // Pin functions: select the design's function name on each pin that
     // carries one, so the schematic reads `I2C1_SCL` rather than `PB6`.
     // The name is a subset of what `build_library` declared on the
@@ -1977,6 +2042,42 @@ mod tests {
             text.contains("(unit 3)"),
             "the power unit must be placed too"
         );
+    }
+
+    #[test]
+    fn variant_and_structured_values_are_exported() {
+        let board = lower_lenient(
+            r#"board "b" {
+                component U1: mcu "rp2350"
+                component U2: sensor "bmp280_pressure"
+                component C1: capacitor "c_generic_0603" value "100nF" dielectric "X7R" voltage "25V"
+                connect U1.gp0 -> U2.sda
+                connect U1.gp1 -> U2.scl
+                variant "lite" description "no sensor" { dnp U2 }
+            }"#,
+        );
+        let project = crate::uuid_v5::project_namespace(&board.name);
+        let text = build_schematic(&board, &project).to_string_pretty();
+        // The variant override lives in the symbol's instances block.
+        assert!(text.contains("(name \"lite\")"), "variant name");
+        assert!(text.contains("(dnp yes)"), "variant dnp override");
+        // Structured values are hidden symbol fields.
+        assert!(text.contains("\"Dielectric\""), "dielectric field");
+        assert!(text.contains("\"Voltage\""), "voltage field");
+    }
+
+    #[test]
+    fn design_without_variants_has_no_variant_blocks() {
+        let board = lower_lenient(
+            r#"board "b" {
+                component R1: resistor "r_generic_0603"
+                component R2: resistor "r_generic_0603"
+                connect R1.p1 -> R2.p1
+            }"#,
+        );
+        let project = crate::uuid_v5::project_namespace(&board.name);
+        let text = build_schematic(&board, &project).to_string_pretty();
+        assert!(!text.contains("(variant"), "no variant block expected");
     }
 
     #[test]

@@ -14,6 +14,8 @@
 
 #![forbid(unsafe_code)]
 
+use std::collections::BTreeMap;
+
 use serde::{Deserialize, Serialize};
 use synth_diagnostics::Span;
 
@@ -48,6 +50,7 @@ pub enum StatementAst {
     Revision(RevisionStmt),
     Company(CompanyStmt),
     Component(ComponentDeclAst),
+    Variant(VariantDeclStmt),
     Connection(ConnectionAst),
     Net(NetDeclAst),
     Power(PowerDeclAst),
@@ -72,6 +75,7 @@ impl StatementAst {
             StatementAst::Revision(s) => s.span,
             StatementAst::Company(s) => s.span,
             StatementAst::Component(s) => s.span,
+            StatementAst::Variant(s) => s.span,
             StatementAst::Connection(s) => s.span,
             StatementAst::Net(s) => s.span,
             StatementAst::Power(s) => s.span,
@@ -177,8 +181,32 @@ pub struct ComponentDeclAst {
     /// out of the BOM and pick-and-place; ERC still checks it.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub dnp: bool,
+    /// Structured component data beyond the display `value`, keyed by
+    /// the canonical KiCad field name (`Tolerance`, `Voltage`,
+    /// `Power`, `Dielectric`). Exported as hidden symbol properties so
+    /// KiCad BOM tooling and the derating checks can read them.
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub properties: BTreeMap<String, String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub placement_hint: Option<PlacementHintAst>,
+    pub span: Span,
+}
+
+/// A named design variant: `variant "lite" { dnp U3 }`.
+///
+/// Variants share one schematic and layout but differ in what is
+/// populated. Exported to KiCad's native design variants: the project
+/// file lists the name/description, and each affected symbol carries a
+/// `(variant …)` block inside its `(instances …)`.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct VariantDeclStmt {
+    pub name: String,
+    /// Optional human description (`variant "lite" description "…"`).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub description: Option<String>,
+    /// Refdes left unpopulated in this variant, in declaration order.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub dnp: Vec<String>,
     pub span: Span,
 }
 
@@ -654,6 +682,7 @@ mod tests {
             part: Some("rp2350".into()),
             value: Some("10k".into()),
             dnp: false,
+            properties: BTreeMap::new(),
             placement_hint: None,
             span: Span::new(0, 0),
         });

@@ -15,6 +15,7 @@ fn create_test_board() -> Board {
         part: None,
         value: Some("RP2350".to_string()),
         dnp: false,
+        properties: std::collections::BTreeMap::new(),
         placement_hint: None,
         group: None,
         sheet: None,
@@ -27,6 +28,7 @@ fn create_test_board() -> Board {
         part: None,
         value: Some("USB-C".to_string()),
         dnp: false,
+        properties: std::collections::BTreeMap::new(),
         placement_hint: None,
         group: None,
         sheet: None,
@@ -39,6 +41,7 @@ fn create_test_board() -> Board {
         part: None,
         value: Some("LDO".to_string()),
         dnp: false,
+        properties: std::collections::BTreeMap::new(),
         placement_hint: None,
         group: None,
         sheet: None,
@@ -78,6 +81,7 @@ fn create_test_board() -> Board {
         netclasses: vec![],
         buses: vec![],
         modules: vec![],
+        variants: vec![],
         source_span: dummy_span,
     }
 }

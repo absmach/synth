@@ -128,6 +128,21 @@ pub fn export_with_sidecar_and_routing_order(
             }
         }
     }
+    // Design variants (KiCad 10): the project file carries the variant
+    // *names* (with optional descriptions); the per-symbol population
+    // overrides live in the schematic's `(variant …)` blocks. KiCad
+    // always writes the array, empty when there are no variants.
+    let variant_entries: Vec<serde_json::Value> = board
+        .variants
+        .iter()
+        .map(|v| {
+            let mut entry = json!({ "name": v.name });
+            if let Some(desc) = &v.description {
+                entry["description"] = json!(desc);
+            }
+            entry
+        })
+        .collect();
     let project_doc = json!({
         // Keep the project-level defaults explicit. KiCad 10 may discard
         // legacy setup minima when it first saves a generated board, and an
@@ -156,6 +171,7 @@ pub fn export_with_sidecar_and_routing_order(
         "schematic": {
             "annotate_start_num": 0,
             "drawing": {},
+            "variants": variant_entries,
         },
         "sheets": sheet_entries,
     });
@@ -281,6 +297,13 @@ pub fn export_with_sidecar_and_routing_order(
     // BOM CSV.
     let bom_text = bom::build_bom_csv(board);
     write_file(&bom_path, &bom_text)?;
+    // One BOM per declared variant: same columns, with the variant's
+    // do-not-populate overrides applied. `bom.csv` stays the base build.
+    for variant in &board.variants {
+        let variant_path = out_dir.join(format!("bom.{}.csv", sanitize_filename(&variant.name)));
+        let variant_text = bom::build_bom_csv_for_variant(board, variant);
+        write_file(&variant_path, &variant_text)?;
+    }
 
     // Pick-and-Place (PnP) CSV.
     let pnp_path = out_dir.join("pnp.csv");

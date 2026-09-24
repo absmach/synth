@@ -67,6 +67,7 @@ fn component(id: u32, refdes: &str, p: Part) -> Component {
         part: Some(p),
         value: None,
         dnp: false,
+        properties: std::collections::BTreeMap::new(),
         placement_hint: None,
         group: None,
         sheet: None,
@@ -107,6 +108,7 @@ fn board(components: Vec<Component>, nets: Vec<Net>) -> Board {
         netclasses: vec![],
         buses: vec![],
         modules: vec![],
+        variants: vec![],
         source_span: synth_diagnostics::Span::new(0, 0),
     }
 }

@@ -815,6 +815,7 @@ fn next_two_free_refdes(board: &Board, a: &str, b: &str) -> (String, String) {
         part: None,
         value: None,
         dnp: false,
+        properties: std::collections::BTreeMap::new(),
         placement_hint: None,
         group: None,
         sheet: None,
@@ -997,6 +998,7 @@ mod tests {
             part: Some(part),
             value: None,
             dnp: false,
+            properties: std::collections::BTreeMap::new(),
             placement_hint: None,
             group: None,
             sheet: None,
@@ -1036,6 +1038,7 @@ mod tests {
             netclasses: vec![],
             buses: vec![],
             modules: vec![],
+            variants: vec![],
             source_span: synth_diagnostics::Span::new(0, 100),
         }
     }

@@ -1,0 +1,20 @@
+// Phase 7 end-to-end: structured component values and a design variant
+// that marks a part do-not-populate. Must validate clean.
+board "variants_and_values" {
+  layers 2
+
+  component J1: connector "header_1x4"
+  component R1: resistor "r_generic_0603" value "10k" tolerance "1%" power_rating "0.1W"
+  component R2: resistor "r_generic_0603" value "4.7k"
+  component C1: capacitor "c_generic_0603" value "100nF" tolerance "10%" voltage "50V" dielectric "X7R"
+
+  variant "lite" description "no pull-down" {
+    dnp R2
+  }
+
+  connect J1.p1 -> R1.p1
+  connect R1.p2 -> C1.p1
+  connect J1.p2 -> C1.p2
+  connect J1.p3 -> R2.p1
+  connect R2.p2 -> J1.p4
+}

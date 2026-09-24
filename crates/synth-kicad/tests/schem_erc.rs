@@ -30,6 +30,7 @@ fn empty_board() -> Board {
         netclasses: vec![],
         buses: vec![],
         modules: vec![],
+        variants: vec![],
         source_span: Span::new(0, 0),
     }
 }
@@ -211,6 +212,7 @@ fn decoupling_board() -> Board {
                 part: Some(ic_part),
                 value: None,
                 dnp: false,
+                properties: std::collections::BTreeMap::new(),
                 placement_hint: None,
                 group: None,
                 sheet: None,
@@ -223,6 +225,7 @@ fn decoupling_board() -> Board {
                 part: Some(cap_part),
                 value: None,
                 dnp: false,
+                properties: std::collections::BTreeMap::new(),
                 placement_hint: None,
                 group: None,
                 sheet: None,
@@ -253,6 +256,7 @@ fn decoupling_board() -> Board {
         netclasses: vec![],
         buses: vec![],
         modules: vec![],
+        variants: vec![],
         source_span: Span::new(0, 0),
     }
 }

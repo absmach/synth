@@ -4,6 +4,8 @@
 //! ids that downstream stages (ERC, placement, routing, export) use
 //! as the addressable model.
 
+use std::collections::BTreeMap;
+
 use serde::{Deserialize, Serialize};
 use synth_diagnostics::Span;
 use synth_registry::Part;
@@ -63,7 +65,24 @@ pub struct Board {
     /// resolved during lowering; nothing downstream needs the bodies.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub modules: Vec<ModuleDesc>,
+    /// Declared design variants (`variant "lite" { dnp U3 }`), in
+    /// declaration order. Exported to KiCad's native design variants.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub variants: Vec<Variant>,
     pub source_span: Span,
+}
+
+/// A named design variant: the refdes left unpopulated in it, plus an
+/// optional description. The schematic and layout are shared; only the
+/// population differs.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Variant {
+    pub name: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub description: Option<String>,
+    /// Refdes marked do-not-populate in this variant, in source order.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub dnp: Vec<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -87,6 +106,11 @@ pub struct Component {
     /// checks the part exactly like a populated one.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub dnp: bool,
+    /// Structured component data beyond the display `value`, keyed by
+    /// the canonical KiCad field name (`Tolerance`, `Voltage`,
+    /// `Power`, `Dielectric`). Exported as hidden symbol properties.
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub properties: BTreeMap<String, String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub placement_hint: Option<PlacementConstraint>,
     /// Name of the `group` this component was declared inside — the

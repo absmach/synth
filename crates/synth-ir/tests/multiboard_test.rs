@@ -13,6 +13,7 @@ fn create_dummy_board(name: &str, connector_refdes: &str) -> Board {
         part: None,
         value: None,
         dnp: false,
+        properties: std::collections::BTreeMap::new(),
         placement_hint: None,
         group: None,
         sheet: None,
@@ -33,6 +34,7 @@ fn create_dummy_board(name: &str, connector_refdes: &str) -> Board {
         netclasses: vec![],
         buses: vec![],
         modules: vec![],
+        variants: vec![],
         source_span: Span::new(0, 0),
     }
 }

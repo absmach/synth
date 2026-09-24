@@ -45,7 +45,7 @@ use synth_registry::{Part, PinCapability, Registry};
 
 use crate::board::{
     Board, Component, ComponentId, DiffPair, Keepout, Net, NetClass, NetEndpoint, NetId, Note,
-    PinId, PlacementEdge, PlacementRegion, PlacementSide,
+    PinId, PlacementEdge, PlacementRegion, PlacementSide, Variant,
 };
 use crate::units::{ConversionError, Impedance, Length, Voltage};
 
@@ -232,6 +232,10 @@ pub fn lower(ast: &ProgramAst, registry: &Registry, file: &str) -> LowerResult {
 
     let diff_pairs = ctx.lower_diff_pairs(&diff_pair_stmts, &nets);
 
+    // Design variants (§Phase 7): gathered after the walk so a variant's
+    // refdes can be checked against the final component set.
+    let variants = ctx.lower_variants(&root_statements, &refdes_index);
+
     let board = Board {
         name: ast.board.name.clone(),
         layers,
@@ -246,6 +250,7 @@ pub fn lower(ast: &ProgramAst, registry: &Registry, file: &str) -> LowerResult {
         netclasses,
         buses,
         modules,
+        variants,
         source_span: ast.board.span,
     };
 
@@ -338,11 +343,77 @@ impl<'a> LowerCtx<'a> {
             part,
             value: decl.value.clone(),
             dnp: decl.dnp,
+            properties: decl.properties.clone(),
             placement_hint,
             group: group.map(str::to_string),
             sheet: sheet.map(str::to_string),
             source_span: decl.span,
         }
+    }
+
+    /// Collect the board's design variants, checking each listed refdes
+    /// against the final component set. Duplicate variant names
+    /// (`E-SYNTH-VARIANT-001`) and unknown refdes
+    /// (`E-SYNTH-VARIANT-002`) are reported; a variant with no valid
+    /// override is dropped so it never reaches the export.
+    fn lower_variants(
+        &mut self,
+        statements: &[StatementAst],
+        refdes_index: &HashMap<String, ComponentId>,
+    ) -> Vec<Variant> {
+        let mut decls = Vec::new();
+        collect_variant_decls(statements, &mut decls);
+        let mut out = Vec::new();
+        let mut seen: std::collections::HashSet<&str> = std::collections::HashSet::new();
+        for decl in decls {
+            if !seen.insert(decl.name.as_str()) {
+                self.diagnostics.push(
+                    DiagnosticBuilder::new(
+                        "E-SYNTH-VARIANT-001",
+                        Severity::Error,
+                        "duplicate variant name",
+                    )
+                    .location(Location::from_span(self.file.to_string(), decl.span))
+                    .expected("each variant to have a unique name")
+                    .found(format!("variant `{}` declared more than once", decl.name))
+                    .explanation_url("synth.docs/diagnostics/E-SYNTH-VARIANT-001")
+                    .build(),
+                );
+                continue;
+            }
+            let mut dnp: Vec<String> = Vec::new();
+            for refdes in &decl.dnp {
+                if !refdes_index.contains_key(refdes.as_str()) {
+                    self.diagnostics.push(
+                        DiagnosticBuilder::new(
+                            "E-SYNTH-VARIANT-002",
+                            Severity::Error,
+                            "variant names an unknown component",
+                        )
+                        .location(Location::from_span(self.file.to_string(), decl.span))
+                        .expected(format!(
+                            "`{refdes}` to be declared with a `component` statement"
+                        ))
+                        .found(format!(
+                            "variant `{}` marks undeclared refdes `{refdes}` do-not-populate",
+                            decl.name
+                        ))
+                        .explanation_url("synth.docs/diagnostics/E-SYNTH-VARIANT-002")
+                        .build(),
+                    );
+                    continue;
+                }
+                if !dnp.contains(refdes) {
+                    dnp.push(refdes.clone());
+                }
+            }
+            out.push(Variant {
+                name: decl.name.clone(),
+                description: decl.description.clone(),
+                dnp,
+            });
+        }
+        out
     }
 
     fn lower_netclass(&mut self, n: &NetclassStmt) -> NetClass {
@@ -1286,6 +1357,22 @@ fn intern_endpoint(
             endpoints.push((ep.component, ep.pin, ep.source_span));
             i
         })
+}
+
+/// Gather every `variant` declaration in the statement tree, in source
+/// order (a variant may sit inside a group or sheet).
+fn collect_variant_decls<'a>(
+    statements: &'a [StatementAst],
+    out: &mut Vec<&'a synth_ast::VariantDeclStmt>,
+) {
+    for stmt in statements {
+        match stmt {
+            StatementAst::Variant(v) => out.push(v),
+            StatementAst::Group(g) => collect_variant_decls(&g.statements, out),
+            StatementAst::Sheet(s) => collect_variant_decls(&s.statements, out),
+            _ => {}
+        }
+    }
 }
 
 /// The net name of a `"NAME"` endpoint reference, or `None` for a

@@ -1594,6 +1594,7 @@ mod tests {
             part: Some(part.clone()),
             value: None,
             dnp: false,
+            properties: std::collections::BTreeMap::new(),
             placement_hint: None,
             group: None,
             sheet: None,
@@ -1760,6 +1761,7 @@ mod tests {
             netclasses: vec![],
             buses: vec![],
             modules: vec![],
+            variants: vec![],
             source_span: Span::new(0, 0),
         };
         let net_table = vec![
@@ -1823,6 +1825,7 @@ mod tests {
             }],
             buses: vec![],
             modules: vec![],
+            variants: vec![],
             source_span: Span::new(0, 0),
         };
         let net_table = vec![(1_u32, "+3V3".to_string()), (2_u32, "SIG".to_string())];
@@ -1864,6 +1867,7 @@ mod tests {
             netclasses: vec![],
             buses: vec![],
             modules: vec![],
+            variants: vec![],
             source_span: Span::new(0, 0),
         };
         let placement = Placement {

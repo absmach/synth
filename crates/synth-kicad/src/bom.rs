@@ -10,12 +10,26 @@
 //! order a part the build must not place. (ERC still checks DNP
 //! parts; the KiCad schematic still draws them with `(dnp yes)`.)
 
+use std::collections::BTreeSet;
 use std::fmt::Write as _;
 
-use synth_ir::Board;
+use synth_ir::{Board, Variant};
+
+/// Base BOM: every component that is not do-not-populate.
+pub fn build_bom_csv(board: &Board) -> String {
+    build_bom_csv_filtered(board, &BTreeSet::new())
+}
+
+/// BOM for one design variant: the base BOM with the variant's
+/// do-not-populate overrides applied on top of the component `dnp`
+/// flags.
+pub fn build_bom_csv_for_variant(board: &Board, variant: &Variant) -> String {
+    let extra: BTreeSet<&str> = variant.dnp.iter().map(String::as_str).collect();
+    build_bom_csv_filtered(board, &extra)
+}
 
 #[allow(clippy::type_complexity)]
-pub fn build_bom_csv(board: &Board) -> String {
+fn build_bom_csv_filtered(board: &Board, extra_dnp: &BTreeSet<&str>) -> String {
     let mut rows: Vec<(
         String,
         String,
@@ -28,7 +42,7 @@ pub fn build_bom_csv(board: &Board) -> String {
     )> = board
         .components
         .iter()
-        .filter(|c| !c.dnp)
+        .filter(|c| !c.dnp && !extra_dnp.contains(c.refdes.as_str()))
         .map(|c| {
             let value = c
                 .value
@@ -120,6 +134,52 @@ fn write_field(out: &mut String, s: &str) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn variant_bom_applies_dnp_overrides() {
+        use synth_ir::{Component, ComponentId, Variant};
+        let mk = |refdes: &str, dnp: bool| Component {
+            id: ComponentId(0),
+            refdes: refdes.to_string(),
+            kind: "resistor".to_string(),
+            part: None,
+            value: None,
+            dnp,
+            properties: std::collections::BTreeMap::new(),
+            placement_hint: None,
+            group: None,
+            sheet: None,
+            source_span: synth_diagnostics::Span::new(0, 0),
+        };
+        let board = Board {
+            name: "b".to_string(),
+            layers: 2,
+            manufacturer: None,
+            revision: None,
+            company: None,
+            components: vec![mk("R1", false), mk("R2", false), mk("R3", true)],
+            nets: vec![],
+            diff_pairs: vec![],
+            notes: vec![],
+            keepouts: vec![],
+            netclasses: vec![],
+            buses: vec![],
+            modules: vec![],
+            variants: vec![],
+            source_span: synth_diagnostics::Span::new(0, 0),
+        };
+        // Base BOM drops the component-level dnp part.
+        let base = build_bom_csv(&board);
+        assert!(base.contains("R1") && base.contains("R2") && !base.contains("R3"));
+        // The variant drops its own override on top.
+        let variant = Variant {
+            name: "lite".to_string(),
+            description: None,
+            dnp: vec!["R2".to_string()],
+        };
+        let lite = build_bom_csv_for_variant(&board, &variant);
+        assert!(lite.contains("R1") && !lite.contains("R2") && !lite.contains("R3"));
+    }
 
     #[test]
     fn quoting_doubles_internal_quotes() {

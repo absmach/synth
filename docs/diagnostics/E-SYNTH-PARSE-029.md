@@ -5,7 +5,7 @@
 
 ## What this means
 
-An unexpected statement or keyword was found inside a component declaration block `{ ... }`. Component blocks currently only contain `placement_hint { ... }` definitions.
+An unexpected statement or keyword was found inside a component declaration block `{ ... }`. Component blocks accept `placement_hint { ... }`, the structured-value fields (`tolerance`, `voltage`, `power_rating`, `dielectric`), and `dnp`.
 
 ## Minimal reproduction
 
@@ -19,4 +19,4 @@ board "broken" {
 
 ## Suggested fix
 
-Remove the unrecognized keyword or place `placement_hint` statements inside the component block.
+Remove the unrecognized keyword, or use one of `placement_hint`, `tolerance`, `voltage`, `power_rating`, `dielectric`, `dnp`.

@@ -2038,6 +2038,7 @@ mod cleanup_tests {
             netclasses: vec![],
             buses: vec![],
             modules: vec![],
+            variants: vec![],
             source_span: synth_diagnostics::Span::new(0, 0),
         }
     }
@@ -2211,6 +2212,7 @@ mod cleanup_tests {
                 part: None,
                 value: None,
                 dnp: false,
+                properties: std::collections::BTreeMap::new(),
                 placement_hint: None,
                 group: None,
                 sheet: None,
@@ -2370,6 +2372,7 @@ mod channel_router_tests {
             part: Some(two_pin_part()),
             value: None,
             dnp: false,
+            properties: std::collections::BTreeMap::new(),
             placement_hint: None,
             group: None,
             sheet: None,
@@ -2553,6 +2556,7 @@ mod channel_router_tests {
             netclasses: vec![],
             buses: vec![],
             modules: vec![],
+            variants: vec![],
             source_span: synth_diagnostics::Span::new(0, 0),
         };
         let layout = Layout {
@@ -2648,6 +2652,7 @@ mod drc_tests {
             part: Some(two_pin_part()),
             value: None,
             dnp: false,
+            properties: std::collections::BTreeMap::new(),
             placement_hint: None,
             group: None,
             sheet: None,
@@ -2740,6 +2745,7 @@ mod drc_tests {
             netclasses: vec![],
             buses: vec![],
             modules: vec![],
+            variants: vec![],
             source_span: synth_diagnostics::Span::new(0, 0),
         };
         let placements: HashMap<ComponentId, ComponentPlacement> = [
@@ -2879,6 +2885,7 @@ mod net_termination_tests {
                     part: Some(two_pin_part()),
                     value: None,
                     dnp: false,
+                    properties: std::collections::BTreeMap::new(),
                     placement_hint: None,
                     group: None,
                     sheet: None,
@@ -2891,6 +2898,7 @@ mod net_termination_tests {
                     part: Some(two_pin_part()),
                     value: None,
                     dnp: false,
+                    properties: std::collections::BTreeMap::new(),
                     placement_hint: None,
                     group: None,
                     sheet: None,
@@ -2921,6 +2929,7 @@ mod net_termination_tests {
             netclasses: vec![],
             buses: vec![],
             modules: vec![],
+            variants: vec![],
             source_span: synth_diagnostics::Span::new(0, 0),
         }
     }

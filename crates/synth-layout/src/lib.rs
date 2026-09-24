@@ -3626,6 +3626,7 @@ mod barycenter_tests {
             part: None,
             value: None,
             dnp: false,
+            properties: std::collections::BTreeMap::new(),
             placement_hint: None,
             group: None,
             sheet: None,
@@ -3665,6 +3666,7 @@ mod barycenter_tests {
             netclasses: vec![],
             buses: vec![],
             modules: vec![],
+            variants: vec![],
             source_span: Span::new(0, 0),
         }
     }
@@ -3831,6 +3833,7 @@ mod semantic_weights_tests {
             part: Some(p),
             value: None,
             dnp: false,
+            properties: std::collections::BTreeMap::new(),
             placement_hint: None,
             group: None,
             sheet: None,
@@ -3870,6 +3873,7 @@ mod semantic_weights_tests {
             netclasses: vec![],
             buses: vec![],
             modules: vec![],
+            variants: vec![],
             source_span: Span::new(0, 0),
         }
     }
@@ -4156,6 +4160,7 @@ mod soft_pin_swap_tests {
             part: Some(p),
             value: None,
             dnp: false,
+            properties: std::collections::BTreeMap::new(),
             placement_hint: None,
             group: None,
             sheet: None,
@@ -4195,6 +4200,7 @@ mod soft_pin_swap_tests {
             netclasses: vec![],
             buses: vec![],
             modules: vec![],
+            variants: vec![],
             source_span: Span::new(0, 0),
         }
     }
@@ -4395,6 +4401,7 @@ mod patterns_tests {
             part: Some(p),
             value: None,
             dnp: false,
+            properties: std::collections::BTreeMap::new(),
             placement_hint: None,
             group: None,
             sheet: None,
@@ -4434,6 +4441,7 @@ mod patterns_tests {
             netclasses: vec![],
             buses: vec![],
             modules: vec![],
+            variants: vec![],
             source_span: Span::new(0, 0),
         }
     }
@@ -4738,6 +4746,7 @@ mod text_width_tests {
             part: Some(part),
             value: value.map(str::to_string),
             dnp: false,
+            properties: std::collections::BTreeMap::new(),
             placement_hint: None,
             group: None,
             sheet: None,
@@ -4949,6 +4958,7 @@ mod naming_tests {
             part: Some(p),
             value: None,
             dnp: false,
+            properties: std::collections::BTreeMap::new(),
             placement_hint: None,
             group: None,
             sheet: None,
@@ -4988,6 +4998,7 @@ mod naming_tests {
             netclasses: vec![],
             buses: vec![],
             modules: vec![],
+            variants: vec![],
             source_span: Span::new(0, 0),
         }
     }
@@ -5242,6 +5253,7 @@ mod documentation_tests {
             part: Some(p),
             value: None,
             dnp: false,
+            properties: std::collections::BTreeMap::new(),
             placement_hint: None,
             group: group.map(str::to_string),
             sheet: None,
@@ -5281,6 +5293,7 @@ mod documentation_tests {
             netclasses: vec![],
             buses: vec![],
             modules: vec![],
+            variants: vec![],
             source_span: Span::new(0, 0),
         }
     }

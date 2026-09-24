@@ -1,0 +1,10 @@
+// A variant marks a refdes no component declares.
+board "unknown_refdes" {
+  layers 2
+  component R1: resistor "r_generic_0603"
+  variant "lite" {
+    dnp R9
+  }
+  connect R1.p1 -> "A"
+  connect R1.p2 -> "B"
+}

@@ -1792,6 +1792,129 @@ fn protocol_family(
     }
 }
 
+// -----------------------------------------------------------------------------
+// E-SYNTH-CAP-001 — Class-II ceramic at a high DC bias
+// -----------------------------------------------------------------------------
+
+/// A Class-II ceramic capacitor (X5R/X7R/X7S/Y5V/Z5U) sitting on a rail
+/// at a large fraction of its rated voltage. Class-II dielectrics lose
+/// effective capacitance under DC bias — an X7R "10 µF" at 80 % of its
+/// rating can deliver a small fraction of nominal — so a design that
+/// trusts the nominal value is under-decoupled. The rule needs the
+/// dielectric and voltage rating (Phase 7 structured values) *and* a
+/// known rail voltage; if any is missing it declines rather than
+/// guessing.
+pub(crate) struct CeramicDcBiasDeratingRule {
+    threshold: f64,
+}
+
+impl CeramicDcBiasDeratingRule {
+    pub(crate) fn new(config: &ErcConfig) -> Self {
+        Self {
+            threshold: config.ceramic_dc_bias_threshold,
+        }
+    }
+}
+
+impl ErcRule for CeramicDcBiasDeratingRule {
+    fn code(&self) -> &'static str {
+        "E-SYNTH-CAP-001"
+    }
+
+    fn category(&self) -> ErcCategory {
+        ErcCategory::Power
+    }
+
+    fn check(&self, board: &Board, file: &str) -> Vec<Diagnostic> {
+        let domains = domains(board);
+        let mut out = Vec::new();
+        for component in &board.components {
+            let Some(part) = component.part.as_ref() else {
+                continue;
+            };
+            if part.kind != "capacitor" {
+                continue;
+            }
+            let Some(dielectric) = component.properties.get("Dielectric") else {
+                continue;
+            };
+            if !is_class_two_ceramic(dielectric) {
+                continue;
+            }
+            let Some(rated_v) = component
+                .properties
+                .get("Voltage")
+                .and_then(|v| crate::parse_voltage(v))
+            else {
+                continue;
+            };
+            if rated_v <= 0.0 {
+                continue;
+            }
+            // The highest rail voltage the capacitor bridges.
+            let mut bias: Option<(f64, &str)> = None;
+            for idx in 0..part.pins.len() {
+                for (net_id, net) in board.nets_containing(component.id, PinId(idx as u32)) {
+                    let Some(v) = net_voltage(&domains, net_id) else {
+                        continue;
+                    };
+                    if v > bias.map_or(f64::NEG_INFINITY, |(bv, _)| bv) {
+                        bias = Some((v, net.name.as_str()));
+                    }
+                }
+            }
+            let Some((bias_v, rail)) = bias else {
+                continue;
+            };
+            if bias_v <= 0.0 {
+                continue;
+            }
+            let ratio = bias_v / rated_v;
+            if ratio <= self.threshold {
+                continue;
+            }
+            out.push(
+                DiagnosticBuilder::new(
+                    self.code(),
+                    Severity::Warning,
+                    "Class-II ceramic used at a high DC bias",
+                )
+                .location(Location::from_span(file.to_string(), component.source_span))
+                .expected(format!(
+                    "a Class-II ceramic to run at or below {:.0}% of its rated voltage, or a \
+                     higher-rated / Class-I (C0G/NP0) part",
+                    self.threshold * 100.0
+                ))
+                .found(format!(
+                    "{} ({dielectric}, {rated_v:.0} V) sits on `{rail}` at {bias_v:.1} V ({:.0}% of rating)",
+                    component.describe(),
+                    ratio * 100.0
+                ))
+                .message(format!(
+                    "{} is a Class-II ceramic at {:.0}% of its rated voltage; DC bias can cut its \
+                     effective capacitance well below nominal — derate it in the design or use a \
+                     higher-voltage / C0G part",
+                    component.describe(),
+                    ratio * 100.0
+                ))
+                .explanation_url(format!("synth.docs/diagnostics/{}", self.code()))
+                .build(),
+            );
+        }
+        out
+    }
+}
+
+/// Class-II and Class-III ceramic dielectrics: the ones whose effective
+/// capacitance falls under DC bias. Class-I (C0G/NP0) is stable and
+/// never flagged.
+fn is_class_two_ceramic(dielectric: &str) -> bool {
+    matches!(
+        dielectric.trim().to_ascii_uppercase().as_str(),
+        "X5R" | "X7R" | "X7S" | "X7T" | "X6S" | "Y5V" | "Z5U"
+    )
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

@@ -55,7 +55,7 @@ pub use anomaly::{extract_features, BoardFeatureVec, GraphAnomalyDetectorRule};
 pub use config::{ErcConfig, PinConflictTable};
 
 pub mod value;
-pub use value::{parse_capacitance, parse_resistance};
+pub use value::{parse_capacitance, parse_resistance, parse_voltage};
 
 pub mod patch_mlp;
 pub use patch_mlp::PatchMlp;
@@ -163,6 +163,7 @@ fn all_rules(config: &ErcConfig) -> Vec<Box<dyn ErcRule>> {
         Box::new(deep_erc::GroundPinOffGroundNetRule),
         Box::new(deep_erc::MultiUnitRailSplitRule),
         Box::new(deep_erc::PinFunctionSupportRule),
+        Box::new(deep_erc::CeramicDcBiasDeratingRule::new(config)),
     ]
 }
 
@@ -3325,6 +3326,7 @@ mod tests {
             part: Some(p),
             value: value.map(str::to_string),
             dnp: false,
+            properties: std::collections::BTreeMap::new(),
             placement_hint: None,
             group: None,
             sheet: None,
@@ -3370,6 +3372,7 @@ mod tests {
             netclasses: vec![],
             buses: vec![],
             modules: vec![],
+            variants: vec![],
             source_span: Span::new(0, 0),
         }
     }
@@ -3420,6 +3423,7 @@ mod tests {
                     part: Some(reg),
                     value: None,
                     dnp: false,
+                    properties: std::collections::BTreeMap::new(),
                     placement_hint: None,
                     group: None,
                     sheet: None,
@@ -3432,6 +3436,7 @@ mod tests {
                     part: Some(cap),
                     value: cap_value.map(str::to_string),
                     dnp: false,
+                    properties: std::collections::BTreeMap::new(),
                     placement_hint: None,
                     group: None,
                     sheet: None,
@@ -3460,6 +3465,7 @@ mod tests {
             netclasses: vec![],
             buses: vec![],
             modules: vec![],
+            variants: vec![],
             source_span: Span::new(0, 0),
         }
     }
@@ -3504,6 +3510,7 @@ mod tests {
                     part: Some(part),
                     value: None,
                     dnp: false,
+                    properties: std::collections::BTreeMap::new(),
                     placement_hint: None,
                     group: None,
                     sheet: None,
@@ -3517,6 +3524,7 @@ mod tests {
             netclasses: vec![],
             buses: vec![],
             modules: vec![],
+            variants: vec![],
             source_span: Span::new(0, 0),
         }
     }
@@ -3657,6 +3665,7 @@ mod tests {
                 part: Some(part),
                 value: None,
                 dnp: false,
+                properties: std::collections::BTreeMap::new(),
                 placement_hint: None,
                 group: None,
                 sheet: None,
@@ -3669,6 +3678,7 @@ mod tests {
             netclasses: vec![],
             buses: vec![],
             modules: vec![],
+            variants: vec![],
             source_span: Span::new(0, 0),
         };
 
@@ -3714,6 +3724,7 @@ mod tests {
                 part: Some(part),
                 value: None,
                 dnp: false,
+                properties: std::collections::BTreeMap::new(),
                 placement_hint: None,
                 group: Some("Power".into()),
                 sheet: None,
@@ -3726,6 +3737,7 @@ mod tests {
             netclasses: vec![],
             buses: vec![],
             modules: vec![],
+            variants: vec![],
             source_span: Span::new(0, 0),
         };
         let diags = run_erc(&board, "test.synth");
