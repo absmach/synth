@@ -1441,7 +1441,11 @@ fn max_body_extent(board: &Board) -> (f64, f64) {
 pub fn body_size_for_part(part: &synth_registry::Part) -> (f64, f64) {
     if let Some(lib_id) = part.kicad_symbol.as_deref() {
         if let Some(bbox) = kicad_lib_loader::body_bbox(lib_id) {
-            return bbox;
+            // A multi-unit symbol is drawn as a stack anchored at one
+            // placement, so its reserved box is taller than one unit.
+            let units = kicad_lib_loader::symbol_units(lib_id).map_or(1, |(_, count)| count);
+            let h = bbox.1 + f64::from(units.saturating_sub(1)) * kicad_lib_loader::UNIT_PITCH_MM;
+            return (bbox.0, h);
         }
     }
     // Fallback synthesis (mirrors synth-kicad's rectangle sizing).
@@ -3085,6 +3089,18 @@ pub(crate) fn pick_net_label_with_source(
     net: &synth_ir::Net,
 ) -> Option<(String, ComponentId)> {
     use synth_registry::PinCapability;
+    // A net that is a member of a declared bus renders its full
+    // `<bus>.<member>` name. This is the second exception to the
+    // pin-derived-token policy (the first is `declared_rail_name`):
+    // the name is what the exporter's `bus_alias` associates with, and
+    // what a hand-drawn bus schematic shows, so a guessed `SDA` would
+    // both hide the bus and collide across two buses with the same
+    // member names.
+    if let Some(label) = declared_bus_member_label(board, &net.name) {
+        if let Some(ep) = net.endpoints.first() {
+            return Some((label, ep.component));
+        }
+    }
     // NOTE: signal-net labels stay pin-derived (capability tokens
     // like `SDA`, else the active-IC pin name) even when the net
     // carries a user-declared name: the declared name already shows
@@ -3150,6 +3166,25 @@ pub(crate) fn pick_net_label_with_source(
     let part = component.part.as_ref()?;
     let pin = part.pins.get(ep.pin.0 as usize)?;
     Some((pin.name.to_ascii_uppercase(), ep.component))
+}
+
+/// The full `<bus>.<member>` name when `net_name` is a member of a
+/// declared bus, else `None`. Mirrors [`declared_rail_name`]: a
+/// declared name beats the pin-derived heuristic so the schematic
+/// label matches the bus the design actually declared.
+fn declared_bus_member_label(board: &Board, net_name: &str) -> Option<String> {
+    for bus in &board.buses {
+        let Some(member) = net_name
+            .strip_prefix(bus.name.as_str())
+            .and_then(|rest| rest.strip_prefix('.'))
+        else {
+            continue;
+        };
+        if bus.members.iter().any(|m| m == member) {
+            return Some(net_name.to_string());
+        }
+    }
+    None
 }
 
 /// Refdes of the component that supplied `expected` as `net`'s label
@@ -3451,7 +3486,11 @@ fn compute_anchor_pin_offset(part: &synth_registry::Part, pin_idx: usize) -> (f6
                     } else {
                         PinSide::Top
                     };
-                    return (px, -py, side);
+                    // A multi-unit symbol draws its units as a stack;
+                    // the pin belongs to unit `u`, so its offset is the
+                    // unit-local position shifted by that unit's slot.
+                    let (ux, uy) = kicad_lib_loader::pin_unit_offset(lib_id, &pin.number.0);
+                    return (px + ux, -py + uy, side);
                 }
             }
         }
@@ -3587,6 +3626,7 @@ mod barycenter_tests {
             part: None,
             value: None,
             dnp: false,
+            properties: std::collections::BTreeMap::new(),
             placement_hint: None,
             group: None,
             sheet: None,
@@ -3624,6 +3664,9 @@ mod barycenter_tests {
             notes: vec![],
             keepouts: Vec::new(),
             netclasses: vec![],
+            buses: vec![],
+            modules: vec![],
+            variants: vec![],
             source_span: Span::new(0, 0),
         }
     }
@@ -3790,6 +3833,7 @@ mod semantic_weights_tests {
             part: Some(p),
             value: None,
             dnp: false,
+            properties: std::collections::BTreeMap::new(),
             placement_hint: None,
             group: None,
             sheet: None,
@@ -3827,6 +3871,9 @@ mod semantic_weights_tests {
             notes: vec![],
             keepouts: Vec::new(),
             netclasses: vec![],
+            buses: vec![],
+            modules: vec![],
+            variants: vec![],
             source_span: Span::new(0, 0),
         }
     }
@@ -4113,6 +4160,7 @@ mod soft_pin_swap_tests {
             part: Some(p),
             value: None,
             dnp: false,
+            properties: std::collections::BTreeMap::new(),
             placement_hint: None,
             group: None,
             sheet: None,
@@ -4150,6 +4198,9 @@ mod soft_pin_swap_tests {
             notes: vec![],
             keepouts: Vec::new(),
             netclasses: vec![],
+            buses: vec![],
+            modules: vec![],
+            variants: vec![],
             source_span: Span::new(0, 0),
         }
     }
@@ -4350,6 +4401,7 @@ mod patterns_tests {
             part: Some(p),
             value: None,
             dnp: false,
+            properties: std::collections::BTreeMap::new(),
             placement_hint: None,
             group: None,
             sheet: None,
@@ -4387,6 +4439,9 @@ mod patterns_tests {
             notes: vec![],
             keepouts: Vec::new(),
             netclasses: vec![],
+            buses: vec![],
+            modules: vec![],
+            variants: vec![],
             source_span: Span::new(0, 0),
         }
     }
@@ -4691,6 +4746,7 @@ mod text_width_tests {
             part: Some(part),
             value: value.map(str::to_string),
             dnp: false,
+            properties: std::collections::BTreeMap::new(),
             placement_hint: None,
             group: None,
             sheet: None,
@@ -4902,6 +4958,7 @@ mod naming_tests {
             part: Some(p),
             value: None,
             dnp: false,
+            properties: std::collections::BTreeMap::new(),
             placement_hint: None,
             group: None,
             sheet: None,
@@ -4939,6 +4996,9 @@ mod naming_tests {
             notes: vec![],
             keepouts: Vec::new(),
             netclasses: vec![],
+            buses: vec![],
+            modules: vec![],
+            variants: vec![],
             source_span: Span::new(0, 0),
         }
     }
@@ -5193,6 +5253,7 @@ mod documentation_tests {
             part: Some(p),
             value: None,
             dnp: false,
+            properties: std::collections::BTreeMap::new(),
             placement_hint: None,
             group: group.map(str::to_string),
             sheet: None,
@@ -5230,6 +5291,9 @@ mod documentation_tests {
             notes,
             keepouts: Vec::new(),
             netclasses: vec![],
+            buses: vec![],
+            modules: vec![],
+            variants: vec![],
             source_span: Span::new(0, 0),
         }
     }

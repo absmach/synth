@@ -17,8 +17,9 @@
 //! keeps the unassigned components plus one `(sheet …)` instance per
 //! sub-sheet. Cross-sheet *signal* nets join through hierarchical
 //! labels (one per in-sheet endpoint), matching `(pin …)`s on the
-//! parent instance, and root wires between same-net pins. Cross-sheet
-//! *power* nets need no pins at all — power symbols already connect
+//! parent instance, and same-named local labels on the root (one per
+//! sheet pin, plus one per root endpoint of the same net). Cross-sheet
+//! *power* nets need no labels at all — power symbols already connect
 //! globally by value. One `power:PWR_FLAG` drives each undriven rail
 //! project-wide (on its anchor's sheet), exactly like the
 //! single-sheet path.
@@ -51,7 +52,9 @@ const INSTANCE_MIN_W: f64 = 80.0;
 /// Pin spacing granularity along the box bottom edge, and channel
 /// pitch for root inter-pin wires.
 const PIN_PITCH: f64 = 12.0;
-const CHANNEL_PITCH: f64 = 8.0;
+/// Stub length from a sheet pin down to its local label (4 grid
+/// units, so the label anchor stays on the connection grid).
+const PIN_STUB: f64 = 5.08;
 
 /// A sub-sheet ready to write: its file name, uuid, and member set.
 #[derive(Debug)]
@@ -93,7 +96,7 @@ pub fn sheet_uuid(project: &Uuid, sheet: &str) -> Uuid {
 /// Write one `.kicad_sch` per sheet: the root file plus one file
 /// per sub-sheet. Power-symbol references share one allocator across
 /// all files so `#PWR…` refdes stay unique project-wide. The root
-/// file additionally carries the sheet instances and root wires from
+/// file additionally carries the sheet instances and pin labels from
 /// [`plan_multisheet`], and grows to fit them.
 pub(crate) fn export_sheets(
     board: &Board,
@@ -337,41 +340,25 @@ pub fn plan_multisheet(
     // Root wires: one channel per net below the boxes, vertical stubs
     // from each pin plus a horizontal span. Channels never collide
     // (distinct y) and clear all content (below everything).
-    let boxes_bottom = pin_y;
+    // Each sheet pin gets a short stub plus a local label carrying the
+    // net name. Same-named local labels on the root sheet are one net,
+    // so a pin joins both the root's own cross-sheet endpoints (which
+    // the schematic emits as local labels) and every other pin of the
+    // same net. This replaces an earlier wire-channel scheme that
+    // silently dropped nets with fewer than two sheet pins — i.e. any
+    // signal crossing between the root and a single sub-sheet.
     let mut wires = Vec::new();
-    let mut junctions = Vec::new();
-    for (ni, net) in cross_nets.iter().enumerate() {
-        let channel_y = snap_grid_127(boxes_bottom + INSTANCE_GAP + ni as f64 * CHANNEL_PITCH);
-        let mut xs = Vec::new();
-        for instance in &instances {
-            for (pin_net, (px, py), _) in &instance.pins {
-                if pin_net == net {
-                    xs.push((*px, *py));
-                }
-            }
-        }
-        if xs.len() < 2 {
-            continue;
-        }
-        let (min_x, max_x) = xs
-            .iter()
-            .map(|(x, _)| *x)
-            .fold((f64::INFINITY, f64::NEG_INFINITY), |(a, b), x| {
-                (a.min(x), b.max(x))
-            });
-        for (px, py) in &xs {
+    let mut pin_labels = Vec::new();
+    for instance in &instances {
+        for (pin_net, (px, py), _) in &instance.pins {
+            let stub_end = snap_grid_127(py + PIN_STUB);
             wires.push(RootWire {
-                net: net.clone(),
+                net: pin_net.clone(),
                 a_mm: (*px, *py),
-                b_mm: (*px, channel_y),
+                b_mm: (*px, stub_end),
             });
-            junctions.push((*px, channel_y));
+            pin_labels.push((pin_net.clone(), (*px, stub_end)));
         }
-        wires.push(RootWire {
-            net: net.clone(),
-            a_mm: (min_x, channel_y),
-            b_mm: (max_x, channel_y),
-        });
     }
 
     // One project-wide undriven-rail pass per sheet, deduped by net
@@ -396,7 +383,8 @@ pub fn plan_multisheet(
         furniture: RootFurniture {
             instances,
             wires,
-            junctions,
+            junctions: Vec::new(),
+            pin_labels,
         },
         drivers_per_sheet,
     }
@@ -454,6 +442,7 @@ mod tests {
             part: Some(part(vec![pin("p1"), pin("p2")])),
             value: None,
             dnp: false,
+            properties: std::collections::BTreeMap::new(),
             placement_hint: None,
             group: None,
             sheet: sheet.map(str::to_string),
@@ -474,6 +463,9 @@ mod tests {
             notes: Vec::new(),
             keepouts: Vec::new(),
             netclasses: vec![],
+            buses: vec![],
+            modules: vec![],
+            variants: vec![],
             source_span: Span::new(0, 0),
         }
     }
@@ -607,8 +599,8 @@ mod tests {
         // It deliberately mixes every multi-sheet feature: root
         // components (a regulator + its decoupling), a declared power
         // rail consumed on a sub-sheet (cross-sheet power, no pins),
-        // and cross-sheet *signal* links (hierarchical labels + pins
-        // + root wires).
+        // and cross-sheet *signal* links (hierarchical labels on
+        // sub-sheets, local labels on the root).
         let mut src = String::from("board \"multisheet\" {\n  layers 2\n");
         src.push_str("  component U1: regulator \"ams1117_3v3\"\n");
         src.push_str("  component C1: capacitor \"c_generic_0805\" value \"10u\"\n");
@@ -618,6 +610,12 @@ mod tests {
         src.push_str("  connect U1.vin -> C2.p1\n");
         src.push_str("  connect U1.gnd -> C1.p2\n");
         src.push_str("  connect U1.gnd -> C2.p2\n");
+        // A root component whose two pins cross into a sub-sheet on
+        // *signal* (not power) nets: the case that used to leave the
+        // root pins and their sheet pins dangling.
+        src.push_str("  component R900: resistor \"r_generic_0603\"\n");
+        src.push_str("  connect R900.p1 -> R20.p2\n");
+        src.push_str("  connect R900.p2 -> R21.p2\n");
         for sheet in 0..4 {
             let _ = writeln!(src, "  sheet \"S{sheet}\" {{");
             for i in 0..45 {
@@ -749,5 +747,77 @@ mod tests {
         let single = crate::schematic::build_schematic(&b, &project).to_string_pretty();
         assert_eq!(single.matches("(instances").count(), 0);
         let _ = Span::new(0, 0);
+    }
+
+    /// A cross-sheet **signal** net with a root endpoint must be
+    /// labelled on the root too. Regression guard: the root used to
+    /// get no label (hierarchical labels were emitted for sub-sheets
+    /// only), leaving the root pin and the sub-sheet's sheet pin
+    /// `pin_not_connected`.
+    #[test]
+    fn root_cross_signal_nets_get_root_labels() {
+        use synth_diagnostics::Span;
+        use synth_ir::{Net, NetEndpoint, NetId, PinId};
+
+        let mut r0 = component(0, None);
+        r0.refdes = "R0".to_string();
+        let mut r1 = component(1, Some("A"));
+        r1.refdes = "R1".to_string();
+        let b = board(
+            vec![r0, r1],
+            vec![Net {
+                id: NetId(0),
+                name: "SIG".to_string(),
+                endpoints: vec![
+                    NetEndpoint {
+                        component: ComponentId(0),
+                        pin: PinId(0),
+                        source_span: Span::new(0, 0),
+                    },
+                    NetEndpoint {
+                        component: ComponentId(1),
+                        pin: PinId(0),
+                        source_span: Span::new(0, 0),
+                    },
+                ],
+                netclass: None,
+                voltage: None,
+            }],
+        );
+        // A root layout carrying the cross-sheet label for R0.
+        let mut root = layout_at(&[(0, 40.0, 40.0)]);
+        root.hierarchical_labels = vec![synth_layout::HierarchicalLabel {
+            net: NetId(0),
+            component: ComponentId(0),
+            pin: PinId(0),
+            label: "SIG".to_string(),
+        }];
+        let project = crate::uuid_v5::project_namespace(&b.name);
+        let text = crate::schematic::build_sheet_schematic(
+            &b,
+            &project,
+            &root,
+            &crate::schematic::SheetRender {
+                name: None,
+                uuid: derive_entity_uuid(&project, "sheet", "root"),
+                project_name: &b.name,
+                symbol_path: None,
+                members: None,
+                power_drivers: None,
+                root_furniture: None,
+            },
+            &mut crate::schematic::PowerRefAllocator::default(),
+        )
+        .to_string_pretty();
+        assert!(
+            text.contains("(label"),
+            "root cross-sheet endpoint must carry a local label:\n{text}"
+        );
+        assert!(text.contains("\"SIG\""));
+        assert_eq!(
+            text.matches("hierarchical_label").count(),
+            0,
+            "root has no parent sheet pin, so it uses a local label"
+        );
     }
 }

@@ -181,7 +181,7 @@ pub fn check_with_config(
     violations.extend(check_page_overflow(layout));
     violations.extend(check_net_label_case(layout));
     violations.extend(check_net_label_length(layout, config.max_net_label_len));
-    violations.extend(check_ambiguous_power_rails(layout));
+    violations.extend(check_ambiguous_power_rails(layout, board));
     violations
 }
 
@@ -811,10 +811,20 @@ fn check_net_label_length(layout: &Layout, max_len: usize) -> Vec<Diagnostic> {
 /// are ambiguous. Make a new symbol for explicitly declaring what the
 /// voltage is"). One diagnostic per offending rail label, deduped —
 /// every endpoint of the same rail shares the label.
-fn check_ambiguous_power_rails(layout: &Layout) -> Vec<Diagnostic> {
+///
+/// A rail carrying a declared voltage (`power "VCC" 3.3v`) is exempt:
+/// the voltage declaration is exactly the explicitness the rule asks
+/// for, even though the name itself is generic.
+fn check_ambiguous_power_rails(layout: &Layout, board: &Board) -> Vec<Diagnostic> {
     rendered_net_names(layout)
         .into_iter()
         .filter(|name| AMBIGUOUS_RAIL_LABELS.contains(name))
+        .filter(|name| {
+            !board
+                .nets
+                .iter()
+                .any(|net| net.name == *name && net.voltage.is_some())
+        })
         .map(|name| {
             DiagnosticBuilder::new(
                 "E-SYNTH-SCHEM-010",
@@ -1044,6 +1054,7 @@ mod tests {
                     part: Some(part_with_decoupling()),
                     value: None,
                     dnp: false,
+                    properties: std::collections::BTreeMap::new(),
                     placement_hint: None,
                     group: None,
                     sheet: None,
@@ -1056,6 +1067,7 @@ mod tests {
                     part: Some(cap_part()),
                     value: None,
                     dnp: false,
+                    properties: std::collections::BTreeMap::new(),
                     placement_hint: None,
                     group: None,
                     sheet: None,
@@ -1084,6 +1096,9 @@ mod tests {
             notes: vec![],
             keepouts: Vec::new(),
             netclasses: vec![],
+            buses: vec![],
+            modules: vec![],
+            variants: vec![],
             source_span: Span::new(0, 0),
         };
         let layout = layout(
@@ -1117,6 +1132,7 @@ mod tests {
                     part: Some(part_with_decoupling()),
                     value: None,
                     dnp: false,
+                    properties: std::collections::BTreeMap::new(),
                     placement_hint: None,
                     group: None,
                     sheet: None,
@@ -1129,6 +1145,7 @@ mod tests {
                     part: Some(cap_part()),
                     value: None,
                     dnp: false,
+                    properties: std::collections::BTreeMap::new(),
                     placement_hint: None,
                     group: None,
                     sheet: None,
@@ -1157,6 +1174,9 @@ mod tests {
             notes: vec![],
             keepouts: Vec::new(),
             netclasses: vec![],
+            buses: vec![],
+            modules: vec![],
+            variants: vec![],
             source_span: Span::new(0, 0),
         };
         let layout = layout(
@@ -1443,6 +1463,36 @@ mod tests {
 
     // ----- E-SYNTH-SCHEM-010 ----------------------------------------------
 
+    fn board_with_nets(nets: Vec<Net>) -> Board {
+        Board {
+            name: "b".to_string(),
+            layers: 2,
+            manufacturer: None,
+            revision: None,
+            company: None,
+            components: Vec::new(),
+            nets,
+            diff_pairs: Vec::new(),
+            notes: vec![],
+            keepouts: Vec::new(),
+            netclasses: vec![],
+            buses: vec![],
+            modules: vec![],
+            variants: vec![],
+            source_span: Span::new(0, 0),
+        }
+    }
+
+    fn undeclared_net(name: &str) -> Net {
+        Net {
+            id: NetId(0),
+            name: name.to_string(),
+            endpoints: Vec::new(),
+            netclass: None,
+            voltage: None,
+        }
+    }
+
     #[test]
     fn ambiguous_vcc_rail_is_flagged() {
         let layout = layout(
@@ -1454,7 +1504,8 @@ mod tests {
             ],
             Vec::new(),
         );
-        let violations = check_ambiguous_power_rails(&layout);
+        let board = board_with_nets(vec![undeclared_net("VCC")]);
+        let violations = check_ambiguous_power_rails(&layout, &board);
         // Two flags, one rail label — deduped to one diagnostic.
         assert_eq!(violations.len(), 1);
         assert_eq!(violations[0].code, "E-SYNTH-SCHEM-010");
@@ -1471,7 +1522,28 @@ mod tests {
             ],
             Vec::new(),
         );
-        assert!(check_ambiguous_power_rails(&layout).is_empty());
+        let board = board_with_nets(Vec::new());
+        assert!(check_ambiguous_power_rails(&layout, &board).is_empty());
+    }
+
+    #[test]
+    fn declared_voltage_vcc_is_silent() {
+        // `power "VCC" 3.3v` states the voltage explicitly — the name
+        // alone is no longer ambiguous.
+        let layout = layout(
+            Vec::new(),
+            Vec::new(),
+            vec![flag(ComponentId(0), PinId(0), PowerFlagKind::Vcc, "VCC")],
+            Vec::new(),
+        );
+        let board = board_with_nets(vec![Net {
+            id: NetId(0),
+            name: "VCC".to_string(),
+            endpoints: Vec::new(),
+            netclass: None,
+            voltage: Some(synth_ir::Voltage::from_v(3.3)),
+        }]);
+        assert!(check_ambiguous_power_rails(&layout, &board).is_empty());
     }
 
     // ----- aggregate entry point ------------------------------------------
@@ -1492,6 +1564,7 @@ mod tests {
                     part: Some(part_with_decoupling()),
                     value: None,
                     dnp: false,
+                    properties: std::collections::BTreeMap::new(),
                     placement_hint: None,
                     group: None,
                     sheet: None,
@@ -1504,6 +1577,7 @@ mod tests {
                     part: Some(cap_part()),
                     value: None,
                     dnp: false,
+                    properties: std::collections::BTreeMap::new(),
                     placement_hint: None,
                     group: None,
                     sheet: None,
@@ -1516,6 +1590,7 @@ mod tests {
                     part: Some(cap_part()),
                     value: None,
                     dnp: false,
+                    properties: std::collections::BTreeMap::new(),
                     placement_hint: None,
                     group: None,
                     sheet: None,
@@ -1544,6 +1619,9 @@ mod tests {
             notes: vec![],
             keepouts: Vec::new(),
             netclasses: vec![],
+            buses: vec![],
+            modules: vec![],
+            variants: vec![],
             source_span: Span::new(0, 0),
         };
         let mut layout = layout(
@@ -1644,6 +1722,9 @@ mod tests {
             notes: Vec::new(),
             keepouts: Vec::new(),
             netclasses: vec![],
+            buses: vec![],
+            modules: vec![],
+            variants: vec![],
             source_span: Span::new(0, 0),
         };
         let l = layout(

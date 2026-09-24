@@ -158,13 +158,17 @@ pub struct SheetRender<'a> {
     pub root_furniture: Option<&'a RootFurniture>,
 }
 
-/// Sheet instances and the root wires joining same-net pins, placed
-/// by the multi-sheet exporter below the root content.
+/// Sheet instances, their pin stubs, and the same-named local
+/// labels joining those pins to the root's cross-sheet endpoints.
+/// Placed by the multi-sheet exporter below the root content.
 #[derive(Debug, Clone, PartialEq)]
 pub struct RootFurniture {
     pub instances: Vec<PlacedSheetInstance>,
     pub wires: Vec<RootWire>,
     pub junctions: Vec<(f64, f64)>,
+    /// One `(net name, stub end)` per sheet pin: the local label that
+    /// joins that pin to the root's same-named cross-sheet net.
+    pub pin_labels: Vec<(String, (f64, f64))>,
 }
 
 /// One sub-sheet instance box on the root sheet.
@@ -298,39 +302,100 @@ pub(crate) fn build_sheet_schematic(
         embed_library(board, layout, power_drivers),
     ];
 
+    // Declared buses (`bus "I2C0" (sda, scl)`) export as KiCad bus
+    // aliases on every sheet that carries one of their members. A
+    // member is carried by a per-pin label named `<bus>.<member>`;
+    // KiCad resolves that label to the bus member by name, so no bus
+    // graphic is drawn — the exporter is label-driven for nets too
+    // (see `layout.net_labels`). The alias teaches KiCad's bus tools
+    // the member set without adding a floating bus wire that ERC
+    // would flag.
+    {
+        let mut bus_labels: Vec<&str> = board
+            .nets
+            .iter()
+            .map(|n| n.name.as_str())
+            .chain(layout.net_labels.iter().map(|l| l.label.as_str()))
+            .chain(layout.hierarchical_labels.iter().map(|l| l.label.as_str()))
+            .collect();
+        bus_labels.sort_unstable();
+        bus_labels.dedup();
+        for bus in &board.buses {
+            let used = bus_labels.iter().any(|label| {
+                label
+                    .strip_prefix(bus.name.as_str())
+                    .and_then(|rest| rest.strip_prefix('.'))
+                    .is_some_and(|member| bus.members.iter().any(|m| m == member))
+            });
+            if !used {
+                continue;
+            }
+            children.push(Sexp::list(
+                "bus_alias",
+                vec![
+                    Sexp::str(bus.name.clone()),
+                    Sexp::list(
+                        "members",
+                        bus.members.iter().map(|m| Sexp::str(m.clone())).collect(),
+                    ),
+                ],
+            ));
+        }
+    }
+
     // Symbol instances. On sub-sheets every symbol carries its
     // `(instances (project … (path …)))` block so KiCad maps the
-    // reference to the sheet path (dev-docs symbol section: every
-    // symbol has at least one instance); root symbols stay bare as
-    // before.
+    // reference to the sheet path; root symbols stay bare — *unless* a
+    // design variant overrides the symbol, which also lives in that
+    // block. A design with no variants keeps byte-identical output.
+    let variant_dnp = variant_dnp_by_refdes(board);
     for component in &board.components {
         if let Some(placement) = placements.get(&component.id) {
-            if let Some(s) = build_symbol_instance(component, placement, project) {
-                children.push(match (&render.symbol_path, s) {
-                    (Some(path), Sexp::List { head, mut children }) => {
-                        children.push(Sexp::list(
-                            "instances",
-                            vec![Sexp::list(
-                                "project",
-                                vec![
-                                    Sexp::str(render.project_name),
-                                    Sexp::list(
-                                        "path",
-                                        vec![
-                                            Sexp::str(path),
-                                            Sexp::list(
-                                                "reference",
-                                                vec![Sexp::str(&component.refdes)],
-                                            ),
-                                            Sexp::list("unit", vec![Sexp::atom("1")]),
-                                        ],
-                                    ),
-                                ],
-                            )],
+            let overrides = variant_dnp.get(component.refdes.as_str());
+            for s in build_symbol_instance(component, placement, project, board) {
+                let path = render
+                    .symbol_path
+                    .clone()
+                    .or_else(|| overrides.map(|_| format!("/{}", render.uuid)));
+                let Some(path) = path else {
+                    children.push(s);
+                    continue;
+                };
+                let mut path_children = vec![
+                    Sexp::str(&path),
+                    Sexp::list("reference", vec![Sexp::str(&component.refdes)]),
+                    Sexp::list("unit", vec![Sexp::atom(symbol_unit_number(&s).to_string())]),
+                ];
+                if let Some(names) = overrides {
+                    for name in names {
+                        path_children.push(Sexp::list(
+                            "variant",
+                            vec![
+                                Sexp::list("name", vec![Sexp::str(*name)]),
+                                Sexp::list("dnp", vec![Sexp::atom("yes")]),
+                            ],
                         ));
-                        Sexp::List { head, children }
                     }
-                    (_, s) => s,
+                }
+                let instances = Sexp::list(
+                    "instances",
+                    vec![Sexp::list(
+                        "project",
+                        vec![
+                            Sexp::str(render.project_name),
+                            Sexp::list("path", path_children),
+                        ],
+                    )],
+                );
+                children.push(match s {
+                    Sexp::List {
+                        head,
+                        children: mut sc,
+                    } => {
+                        sc.push(instances);
+                        Sexp::List { head, children: sc }
+                    }
+                    other => other,
                 });
             }
         }
@@ -427,16 +492,26 @@ pub(crate) fn build_sheet_schematic(
         }
     }
 
-    // Cross-sheet stubs (§P26): one hierarchical label per in-sheet
-    // endpoint of a net that continues elsewhere. Empty on
-    // single-sheet layouts. The parent sheet instance carries the
-    // matching pin; power nets never appear here (global symbols).
-    if let Some(sheet) = render.name {
-        for label in &layout.hierarchical_labels {
-            if let Some(sexps) = build_hierarchical_label(board, label, &placements, project, sheet)
-            {
-                children.extend(sexps);
-            }
+    // Cross-sheet stubs (§P26): one stub per in-sheet endpoint of a
+    // net that continues elsewhere. Empty on single-sheet layouts.
+    // On a sub-sheet the stub carries a hierarchical label, which the
+    // parent sheet instance's matching pin joins. On the *root* sheet
+    // the same net is instead carried by a local label: root endpoints
+    // (and the labelled stubs on each sheet pin, below) connect by
+    // name within the root sheet, which is what links a root
+    // endpoint to the sheet pins. Power nets never appear here (their
+    // symbols are global).
+    //
+    // Emitting nothing on root was a bug: a cross-sheet signal net
+    // with a root endpoint left that pin and the sheet pins dangling
+    // (`pin_not_connected`).
+    for label in &layout.hierarchical_labels {
+        let doc = match render.name {
+            Some(sheet) => build_hierarchical_label(board, label, &placements, project, sheet),
+            None => build_root_cross_label(board, label, &placements, project),
+        };
+        if let Some(sexps) = doc {
+            children.extend(sexps);
         }
     }
 
@@ -574,8 +649,9 @@ pub(crate) fn build_sheet_schematic(
     }
 
     // Root furniture (§P26 multi-sheet only): sub-sheet instance
-    // boxes with one pin per cross-sheet net, plus the root wires
-    // joining same-net pins and their junction dots.
+    // boxes with one pin per cross-sheet net, a stub + same-named
+    // local label on each pin (so it joins the root endpoints labelled
+    // above), and their junction dots.
     if let Some(furniture) = render.root_furniture {
         for (index, instance) in furniture.instances.iter().enumerate() {
             children.push(build_sheet_instance(
@@ -587,6 +663,14 @@ pub(crate) fn build_sheet_schematic(
         }
         for wire in &furniture.wires {
             children.push(build_root_wire(wire, project));
+        }
+        for (net, at) in &furniture.pin_labels {
+            let key = format!("pin_label_{net}_{}_{}", at.0, at.1);
+            children.push(build_local_label(
+                net,
+                *at,
+                derive_entity_uuid(project, "pin_label", &key),
+            ));
         }
         for (jx, jy) in &furniture.junctions {
             let key = format!("root_junction_{jx}_{jy}");
@@ -1090,6 +1174,75 @@ fn build_sheet_instance(
     Sexp::list("sheet", children)
 }
 
+/// A local label at `at_mm`, text anchored left. Same-named local
+/// labels on one sheet are electrically connected, which is how the
+/// root joins its cross-sheet endpoints to the labelled sheet-pin
+/// stubs (and to each other).
+fn build_local_label(net: &str, at_mm: (f64, f64), uuid: Uuid) -> Sexp {
+    Sexp::list(
+        "label",
+        vec![
+            Sexp::str(net),
+            Sexp::list("at", vec![num(at_mm.0), num(at_mm.1), num(0.0)]),
+            Sexp::list(
+                "effects",
+                vec![
+                    Sexp::list("font", vec![Sexp::list("size", vec![num(1.27), num(1.27)])]),
+                    Sexp::list("justify", vec![Sexp::atom("left")]),
+                ],
+            ),
+            str_pair("uuid", uuid.to_string()),
+        ],
+    )
+}
+
+/// Root-side cross-sheet stub: a short stub wire plus a local label
+/// carrying the shared net name. Root has no parent sheet pin to
+/// attach a hierarchical label to, so it uses the local-label form
+/// (same-named local labels are one net on a sheet).
+fn build_root_cross_label(
+    board: &Board,
+    label: &synth_layout::HierarchicalLabel,
+    placements: &HashMap<ComponentId, &ComponentPlacement>,
+    project: &Uuid,
+) -> Option<Vec<Sexp>> {
+    let component = board.component(label.component)?;
+    let (x, y, dx, _dy) = pin_terminal_xy(board, label.component, label.pin, placements)?;
+    let stub_len = 5.08;
+    let (stub_x, _angle) = if dx >= -0.1 {
+        (x + stub_len, 0.0)
+    } else {
+        (x - stub_len, 180.0)
+    };
+    let key = format!("root_cross_{}_{}", component.refdes, label.pin.0);
+    let wire_uuid = derive_entity_uuid(project, "root_cross_wire", &key);
+    let label_uuid = derive_entity_uuid(project, "root_cross_label", &key);
+    let wire_sexp = Sexp::list(
+        "wire",
+        vec![
+            Sexp::list(
+                "pts",
+                vec![
+                    Sexp::list("xy", vec![num(x), num(y)]),
+                    Sexp::list("xy", vec![num(stub_x), num(y)]),
+                ],
+            ),
+            Sexp::list(
+                "stroke",
+                vec![
+                    Sexp::list("width", vec![num(0.0)]),
+                    Sexp::list("type", vec![Sexp::atom("default")]),
+                ],
+            ),
+            str_pair("uuid", wire_uuid.to_string()),
+        ],
+    );
+    Some(vec![
+        wire_sexp,
+        build_local_label(&label.label, (stub_x, y), label_uuid),
+    ])
+}
+
 /// One root wire segment joining same-net sheet pins.
 fn build_root_wire(wire: &RootWire, project: &Uuid) -> Sexp {
     let key = format!(
@@ -1450,18 +1603,101 @@ fn hidden_field_effects() -> Sexp {
     )
 }
 
-#[allow(clippy::too_many_lines)]
+/// Which variants mark each refdes do-not-populate, keyed by refdes and
+/// listing the variant names in declaration order. Empty when the board
+/// declares no variants.
+fn variant_dnp_by_refdes(board: &Board) -> std::collections::BTreeMap<&str, Vec<&str>> {
+    let mut out: std::collections::BTreeMap<&str, Vec<&str>> = std::collections::BTreeMap::new();
+    for variant in &board.variants {
+        for refdes in &variant.dnp {
+            out.entry(refdes.as_str()).or_default().push(&variant.name);
+        }
+    }
+    out
+}
+
+/// The `(unit N)` a placed symbol was emitted with, defaulting to 1.
+fn symbol_unit_number(sym: &Sexp) -> u32 {
+    if let Sexp::List { children, .. } = sym {
+        for child in children {
+            if let Sexp::List { head, children } = child {
+                if head == "unit" {
+                    if let Some(Sexp::Atom(a)) = children.first() {
+                        return a.parse().unwrap_or(1);
+                    }
+                }
+            }
+        }
+    }
+    1
+}
+
+/// One placed symbol per *unit*. A single-unit part yields one symbol
+/// (byte-identical to the pre-multi-unit output); a part whose stock
+/// symbol declares several units (a dual op-amp, a quad gate) yields
+/// one placed symbol per unit, stacked downward, each with its own
+/// `(unit N)` — otherwise KiCad reports the unplaced units and their
+/// pins never reach the netlist.
 fn build_symbol_instance(
     component: &Component,
     placement: &ComponentPlacement,
     project: &Uuid,
-) -> Option<Sexp> {
-    let part = component.part.as_ref()?;
+    board: &Board,
+) -> Vec<Sexp> {
+    let Some(part) = component.part.as_ref() else {
+        return Vec::new();
+    };
+    let units = part
+        .kicad_symbol
+        .as_deref()
+        .and_then(synth_layout::kicad_lib_loader::symbol_units);
+    let count = units.as_ref().map_or(1, |(_, count)| *count);
+    let mut out = Vec::with_capacity(count as usize);
+    for unit in 1..=count {
+        let dy = if count > 1 {
+            synth_layout::kicad_lib_loader::unit_offset_mm(unit).1
+        } else {
+            0.0
+        };
+        let uuid_key = if count > 1 {
+            format!("{}_u{unit}", component.refdes)
+        } else {
+            component.refdes.clone()
+        };
+        out.push(build_symbol_unit(
+            component,
+            placement,
+            project,
+            board,
+            unit,
+            dy,
+            &uuid_key,
+            units.as_ref().map(|(map, _)| map),
+        ));
+    }
+    out
+}
+
+#[allow(clippy::too_many_lines, clippy::too_many_arguments)]
+fn build_symbol_unit(
+    component: &Component,
+    placement: &ComponentPlacement,
+    project: &Uuid,
+    board: &Board,
+    unit: u32,
+    dy: f64,
+    uuid_key: &str,
+    units: Option<&std::collections::BTreeMap<String, u32>>,
+) -> Sexp {
+    let part = component
+        .part
+        .as_ref()
+        .expect("caller checked the part resolves");
     let (x, y) = (
         snap_grid_127(placement.center_mm.0),
-        snap_grid_127(placement.center_mm.1),
+        snap_grid_127(placement.center_mm.1) + dy,
     );
-    let comp_uuid = derive_entity_uuid(project, "symbol", &component.refdes);
+    let comp_uuid = derive_entity_uuid(project, "symbol", uuid_key);
 
     let part_id = part.id.as_str();
     // Prefer the registry's `kicad_symbol` reference (resolves to
@@ -1541,7 +1777,7 @@ fn build_symbol_instance(
     let mut fields = vec![
         str_pair("lib_id", lib_id),
         Sexp::list("at", vec![num(x), num(y), num(angle)]),
-        pair("unit", Sexp::atom("1")),
+        pair("unit", Sexp::atom(unit.to_string())),
         pair("in_bom", Sexp::atom("yes")),
         pair("on_board", Sexp::atom("yes")),
         str_pair("uuid", comp_uuid.to_string()),
@@ -1625,7 +1861,50 @@ fn build_symbol_instance(
         ],
     ));
 
-    Some(Sexp::list("symbol", fields))
+    // Structured component data (tolerance, voltage/power rating,
+    // dielectric) as hidden symbol fields, so KiCad BOM tooling and the
+    // derating checks read them from the schematic. Same convention as
+    // the MPN/LCSC fields above.
+    for (name, value) in &component.properties {
+        fields.push(Sexp::list(
+            "property",
+            vec![
+                Sexp::str(name),
+                Sexp::str(value),
+                Sexp::list("at", vec![num(x), num(y), num(0.0)]),
+                hidden_field_effects(),
+            ],
+        ));
+    }
+
+    // Pin functions: select the design's function name on each pin that
+    // carries one, so the schematic reads `I2C1_SCL` rather than `PB6`.
+    // The name is a subset of what `build_library` declared on the
+    // symbol (both derive from `alternates::pin_function_alternates`),
+    // so KiCad always finds the alternate.
+    for (number, name) in crate::alternates::pin_function_alternates(board, component) {
+        // Only this unit's pins are drawn on this symbol.
+        if let Some(map) = units {
+            if map.get(&number).copied().unwrap_or(1) != unit {
+                continue;
+            }
+        }
+        let pin_uuid = derive_entity_uuid(
+            project,
+            "symbol_pin",
+            &format!("{}_{number}", component.refdes),
+        );
+        fields.push(Sexp::list(
+            "pin",
+            vec![
+                Sexp::str(&number),
+                Sexp::list("alternate", vec![Sexp::str(&name)]),
+                str_pair("uuid", pin_uuid.to_string()),
+            ],
+        ));
+    }
+
+    Sexp::list("symbol", fields)
 }
 
 #[cfg(test)]
@@ -1676,6 +1955,129 @@ mod tests {
             lowered.diagnostics
         );
         lowered.board.unwrap()
+    }
+
+    /// Lower without insisting on a clean ERC (the alternates test uses
+    /// a deliberately incomplete board).
+    fn lower_lenient(src: &str) -> synth_ir::Board {
+        let registry = load_dir(&workspace_root().join("registry").join("parts")).unwrap();
+        let parsed = synth_parser::parse(src, "inline.synth");
+        assert!(!parsed.has_errors(), "{:?}", parsed.diagnostics);
+        lower(&parsed.ast.unwrap(), &registry, "inline.synth")
+            .board
+            .unwrap()
+    }
+
+    #[test]
+    fn pin_function_alternates_are_declared_and_selected() {
+        let board = lower_lenient(
+            r#"board "b" {
+                component U1: mcu "rp2350"
+                component U2: sensor "bmp280_pressure"
+                connect U1.gp1 -> "I2C1_SCL"
+                connect U2.scl -> "I2C1_SCL"
+                connect U1.gp0 -> "I2C1_SDA"
+                connect U2.sda -> "I2C1_SDA"
+            }"#,
+        );
+        let project = crate::uuid_v5::project_namespace(&board.name);
+        let text = build_schematic(&board, &project).to_string_pretty();
+        // The library symbol declares the design's function names as
+        // alternates (injected into the embedded stock symbol)…
+        assert!(
+            text.contains("(alternate \"I2C1_SCL\" "),
+            "library must declare the SCL alternate"
+        );
+        assert!(
+            text.contains("(alternate \"I2C1_SDA\" "),
+            "library must declare the SDA alternate"
+        );
+        // …and each placed instance selects it, so the pin reads the
+        // function rather than the package name.
+        assert!(
+            text.contains("(alternate \"I2C1_SCL\")"),
+            "instance must select the SCL alternate"
+        );
+        assert!(
+            text.contains("(alternate \"I2C1_SDA\")"),
+            "instance must select the SDA alternate"
+        );
+    }
+
+    #[test]
+    fn multi_unit_part_exports_one_symbol_per_unit() {
+        // The LM358 is a 3-unit symbol (two amplifiers + a power unit).
+        // Emitting a single `(unit 1)` would leave units 2 and 3
+        // unplaced — KiCad reports `missing_unit` and their pins never
+        // reach the netlist.
+        let board = lower_lenient(
+            r#"board "b" {
+                component U1: opamp "lm358_dual"
+                component R1: resistor "r_generic_0603"
+                component R2: resistor "r_generic_0603"
+                component C1: capacitor "c_generic_0603"
+                component C2: capacitor "c_generic_0603"
+                connect U1.out_a -> U1.in_a_neg
+                connect U1.in_a_pos -> R1.p1
+                connect R1.p2 -> U1.vcc_pos
+                connect U1.out_b -> U1.in_b_neg
+                connect U1.in_b_pos -> R2.p1
+                connect R2.p2 -> U1.vcc_pos
+                connect U1.vcc_pos -> "VCC"
+                connect C1.p1 -> "VCC"
+                connect C2.p1 -> "VCC"
+                connect U1.vcc_neg -> "GND"
+                connect C1.p2 -> "GND"
+                connect C2.p2 -> "GND"
+            }"#,
+        );
+        let project = crate::uuid_v5::project_namespace(&board.name);
+        let text = build_schematic(&board, &project).to_string_pretty();
+        assert!(text.contains("(unit 1)"));
+        assert!(
+            text.contains("(unit 2)"),
+            "unit 2 must be placed, not left missing"
+        );
+        assert!(
+            text.contains("(unit 3)"),
+            "the power unit must be placed too"
+        );
+    }
+
+    #[test]
+    fn variant_and_structured_values_are_exported() {
+        let board = lower_lenient(
+            r#"board "b" {
+                component U1: mcu "rp2350"
+                component U2: sensor "bmp280_pressure"
+                component C1: capacitor "c_generic_0603" value "100nF" dielectric "X7R" voltage "25V"
+                connect U1.gp0 -> U2.sda
+                connect U1.gp1 -> U2.scl
+                variant "lite" description "no sensor" { dnp U2 }
+            }"#,
+        );
+        let project = crate::uuid_v5::project_namespace(&board.name);
+        let text = build_schematic(&board, &project).to_string_pretty();
+        // The variant override lives in the symbol's instances block.
+        assert!(text.contains("(name \"lite\")"), "variant name");
+        assert!(text.contains("(dnp yes)"), "variant dnp override");
+        // Structured values are hidden symbol fields.
+        assert!(text.contains("\"Dielectric\""), "dielectric field");
+        assert!(text.contains("\"Voltage\""), "voltage field");
+    }
+
+    #[test]
+    fn design_without_variants_has_no_variant_blocks() {
+        let board = lower_lenient(
+            r#"board "b" {
+                component R1: resistor "r_generic_0603"
+                component R2: resistor "r_generic_0603"
+                connect R1.p1 -> R2.p1
+            }"#,
+        );
+        let project = crate::uuid_v5::project_namespace(&board.name);
+        let text = build_schematic(&board, &project).to_string_pretty();
+        assert!(!text.contains("(variant"), "no variant block expected");
     }
 
     #[test]

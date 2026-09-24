@@ -22,7 +22,7 @@
 // counts and column indices.
 #![allow(clippy::cast_precision_loss, clippy::cast_lossless)]
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 
 use synth_ir::Board;
 use synth_layout::PinSide;
@@ -71,6 +71,10 @@ pub fn load_stock_symbol(lib_id: &str) -> Option<String> {
 
 pub fn build_library(board: &Board, layout: &synth_layout::Layout) -> Sexp {
     let unique = unique_parts(board);
+    // Function names the design drives through each part's pins, keyed
+    // by part id then pin number. Every name must be declared by the
+    // embedded symbol so the placed instances can select it.
+    let alternates = crate::alternates::part_pin_alternates(board);
     let mut children = vec![
         pair("version", Sexp::atom("20251024")),
         str_pair("generator", "synth-eda"),
@@ -90,13 +94,21 @@ pub fn build_library(board: &Board, layout: &synth_layout::Layout) -> Sexp {
                 // Loaded from the user's KiCad install when present;
                 // otherwise (CI / no KiCad) fall back to a
                 // synthesized rectangle so the export still opens.
+                let part_alts = alternates.get(part.id.as_str());
                 if let Some(text) = kicad_lib_loader::load_symbol(lib_id) {
+                    // Declare the design's pin functions on the stock
+                    // artwork so an instance can select them as pin
+                    // alternates.
+                    let text = match part_alts {
+                        Some(a) => crate::alternates::inject_alternates(&text, a),
+                        None => text,
+                    };
                     children.push(Sexp::Raw(text));
                 } else {
-                    children.push(build_symbol_for_lib_id(part, lib_id));
+                    children.push(build_symbol_for_lib_id(part, lib_id, part_alts));
                 }
             }
-            None => children.push(build_symbol(part)),
+            None => children.push(build_symbol(part, alternates.get(part.id.as_str()))),
         }
     }
     // Embedded power-flag symbols. Prefer stock KiCad `power:`
@@ -139,8 +151,12 @@ pub fn build_library(board: &Board, layout: &synth_layout::Layout) -> Sexp {
 /// as `synth:<part_id>` would leave every part an unresolved `?`
 /// placeholder.
 #[must_use]
-pub fn build_symbol_for_lib_id(part: &Part, lib_id: &str) -> Sexp {
-    let mut sym = build_symbol(part);
+pub fn build_symbol_for_lib_id(
+    part: &Part,
+    lib_id: &str,
+    alternates: Option<&BTreeMap<String, BTreeSet<String>>>,
+) -> Sexp {
+    let mut sym = build_symbol(part, alternates);
     rename_symbol_outer(&mut sym, lib_id);
     sym
 }
@@ -428,7 +444,7 @@ fn classify_ic_pin(pin: &synth_registry::Pin) -> PinSide {
     PinSide::Left
 }
 
-fn build_symbol(part: &Part) -> Sexp {
+fn build_symbol(part: &Part, alternates: Option<&BTreeMap<String, BTreeSet<String>>>) -> Sexp {
     let pin_count = part.pins.len();
     let part_id = part.id.as_str();
 
@@ -524,7 +540,7 @@ fn build_symbol(part: &Part) -> Sexp {
             ],
         ),
         // Pins sub-symbol.
-        build_pins_subsymbol(part_id, &part.pins, body_w, body_h, is_two_pin),
+        build_pins_subsymbol(part_id, &part.pins, body_w, body_h, is_two_pin, alternates),
     ];
 
     // KiCad expects the outer (symbol "lib:id" ...) form where the
@@ -545,6 +561,7 @@ fn build_pins_subsymbol(
     body_w: f64,
     body_h: f64,
     is_two_pin: bool,
+    alternates: Option<&BTreeMap<String, BTreeSet<String>>>,
 ) -> Sexp {
     let mut children = vec![Sexp::str(format!("{part_id}_1_1"))];
 
@@ -555,42 +572,7 @@ fn build_pins_subsymbol(
             } else {
                 (TWOPIN_HALF_W + PIN_LENGTH, 0.0, 180)
             };
-            let kicad_type = map_electrical_type(pin.electrical_type);
-            children.push(Sexp::list(
-                "pin",
-                vec![
-                    Sexp::atom(kicad_type),
-                    Sexp::atom("line"),
-                    Sexp::list("at", vec![num(x), num(y), num(angle as f64)]),
-                    Sexp::list("length", vec![num(PIN_LENGTH)]),
-                    Sexp::list(
-                        "name",
-                        vec![
-                            Sexp::str(&pin.name),
-                            Sexp::list(
-                                "effects",
-                                vec![Sexp::list(
-                                    "font",
-                                    vec![Sexp::list("size", vec![num(1.27), num(1.27)])],
-                                )],
-                            ),
-                        ],
-                    ),
-                    Sexp::list(
-                        "number",
-                        vec![
-                            Sexp::str(&pin.number.0),
-                            Sexp::list(
-                                "effects",
-                                vec![Sexp::list(
-                                    "font",
-                                    vec![Sexp::list("size", vec![num(1.27), num(1.27)])],
-                                )],
-                            ),
-                        ],
-                    ),
-                ],
-            ));
+            children.push(pin_sexp(pin, x, y, angle as f64, alternates));
         }
     } else {
         let sides: Vec<PinSide> = pins.iter().map(classify_ic_pin).collect();
@@ -640,45 +622,48 @@ fn build_pins_subsymbol(
                 }
             };
 
-            let kicad_type = map_electrical_type(pin.electrical_type);
-            children.push(Sexp::list(
-                "pin",
-                vec![
-                    Sexp::atom(kicad_type),
-                    Sexp::atom("line"),
-                    Sexp::list("at", vec![num(x), num(y), num(angle as f64)]),
-                    Sexp::list("length", vec![num(PIN_LENGTH)]),
-                    Sexp::list(
-                        "name",
-                        vec![
-                            Sexp::str(&pin.name),
-                            Sexp::list(
-                                "effects",
-                                vec![Sexp::list(
-                                    "font",
-                                    vec![Sexp::list("size", vec![num(1.27), num(1.27)])],
-                                )],
-                            ),
-                        ],
-                    ),
-                    Sexp::list(
-                        "number",
-                        vec![
-                            Sexp::str(&pin.number.0),
-                            Sexp::list(
-                                "effects",
-                                vec![Sexp::list(
-                                    "font",
-                                    vec![Sexp::list("size", vec![num(1.27), num(1.27)])],
-                                )],
-                            ),
-                        ],
-                    ),
-                ],
-            ));
+            children.push(pin_sexp(pin, x, y, angle as f64, alternates));
         }
     }
     Sexp::list("symbol", children)
+}
+
+/// One `(pin …)` entry, with the design's function names declared as
+/// KiCad pin *alternates* so a placed instance can select one.
+fn pin_sexp(
+    pin: &synth_registry::Pin,
+    x: f64,
+    y: f64,
+    angle: f64,
+    alternates: Option<&BTreeMap<String, BTreeSet<String>>>,
+) -> Sexp {
+    let kicad_type = map_electrical_type(pin.electrical_type);
+    let effects = || {
+        Sexp::list(
+            "effects",
+            vec![Sexp::list(
+                "font",
+                vec![Sexp::list("size", vec![num(1.27), num(1.27)])],
+            )],
+        )
+    };
+    let mut children = vec![
+        Sexp::atom(kicad_type),
+        Sexp::atom("line"),
+        Sexp::list("at", vec![num(x), num(y), num(angle)]),
+        Sexp::list("length", vec![num(PIN_LENGTH)]),
+        Sexp::list("name", vec![Sexp::str(&pin.name), effects()]),
+        Sexp::list("number", vec![Sexp::str(&pin.number.0), effects()]),
+    ];
+    if let Some(names) = alternates.and_then(|a| a.get(&pin.number.0)) {
+        for name in names {
+            children.push(Sexp::list(
+                "alternate",
+                vec![Sexp::str(name), Sexp::atom(kicad_type), Sexp::atom("line")],
+            ));
+        }
+    }
+    Sexp::list("pin", children)
 }
 
 fn property(name: &str, value: &str, x: f64, y: f64, hide: bool) -> Sexp {
@@ -859,7 +844,7 @@ mod tests {
 
     #[test]
     fn build_symbol_contains_correct_pin_count() {
-        let s = build_symbol(&make_part());
+        let s = build_symbol(&make_part(), None);
         let rendered = s.to_string_pretty();
         // Count `(pin ` openings rather than full lines, because the
         // s-exp printer may render pins on one or several lines

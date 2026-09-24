@@ -27,6 +27,7 @@ synth-drc = { workspace = true }
 synth-kicad = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
+toml = { workspace = true }
 anyhow = { workspace = true }
 sha2 = { workspace = true }
 chrono = { workspace = true }

@@ -3008,6 +3008,7 @@ dependencies = [
  "synth-registry",
  "synth-route",
  "synth-supply",
+ "toml 0.8.23",
 ]
 
 [[package]]

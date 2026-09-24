@@ -213,6 +213,105 @@ impl PinCapability {
             None => true, // No strict requirement
         }
     }
+
+    /// The canonical, datasheet-style name for this function, used as
+    /// the KiCad *pin alternate* label (e.g. `I2C_SDA`, `SPI_MOSI`).
+    /// Uppercase ASCII with `_` separators so it is a legal KiCad pin
+    /// name and reads like a peripheral function table.
+    pub fn canonical_name(self) -> &'static str {
+        match self {
+            PinCapability::Gpio => "GPIO",
+            PinCapability::UsbDp => "USB_DP",
+            PinCapability::UsbDn => "USB_DN",
+            PinCapability::UsbVbus => "USB_VBUS",
+            PinCapability::UsbCc => "USB_CC",
+            PinCapability::SpiMosi => "SPI_MOSI",
+            PinCapability::SpiMiso => "SPI_MISO",
+            PinCapability::SpiSck => "SPI_SCK",
+            PinCapability::SpiCs => "SPI_CS",
+            PinCapability::I2cSda => "I2C_SDA",
+            PinCapability::I2cScl => "I2C_SCL",
+            PinCapability::UartTx => "UART_TX",
+            PinCapability::UartRx => "UART_RX",
+            PinCapability::AnalogInput => "ANALOG_IN",
+            PinCapability::AnalogOutput => "ANALOG_OUT",
+            PinCapability::ClockInput => "CLK_IN",
+            PinCapability::ClockOutput => "CLK_OUT",
+            PinCapability::Reset => "RESET",
+            PinCapability::BootMode => "BOOT",
+            PinCapability::RfFeed => "RF",
+            PinCapability::DiffPairPositive => "DIFF_P",
+            PinCapability::DiffPairNegative => "DIFF_N",
+        }
+    }
+
+    /// Infer the function a **net name** denotes, e.g. `I2C1_SCL` →
+    /// [`PinCapability::I2cScl`], `UART0_TX` → `UartTx`,
+    /// `USB_DP` → `UsbDp`, `SPI1_MOSI` → `SpiMosi`.
+    ///
+    /// Deliberately conservative, in the codebase's "decline rather
+    /// than guess" style: `SCL`/`SDA`/`MOSI`/`MISO`/`SCK` are unique to
+    /// one protocol and stand alone, but `TX`/`RX`/`CS`/`DP` are far
+    /// too common, so they only resolve when the name also carries a
+    /// protocol word (`UART`, `SPI`, `USB`). Anything else returns
+    /// `None` — an unrecognised name must not invent a requirement.
+    #[must_use]
+    pub fn from_net_name(name: &str) -> Option<PinCapability> {
+        let upper = name.to_ascii_uppercase();
+        // `D+` / `D-` are the one role KiCad spells with punctuation,
+        // so check the raw string before the token split eats it.
+        let has_token = |needle: &str| {
+            upper
+                .split(|c: char| !c.is_ascii_alphanumeric())
+                .any(|t| t == needle)
+        };
+        let has_prefix = |prefix: &str| {
+            upper
+                .split(|c: char| !c.is_ascii_alphanumeric())
+                .any(|t| t.starts_with(prefix))
+        };
+
+        let is_spi = has_prefix("SPI");
+        let is_uart = has_prefix("UART") || has_prefix("USART") || has_token("SERIAL");
+        let is_usb = has_prefix("USB");
+
+        // Unambiguous single-protocol roles.
+        if has_token("SCL") {
+            return Some(PinCapability::I2cScl);
+        }
+        if has_token("SDA") {
+            return Some(PinCapability::I2cSda);
+        }
+        if has_token("MOSI") {
+            return Some(PinCapability::SpiMosi);
+        }
+        if has_token("MISO") {
+            return Some(PinCapability::SpiMiso);
+        }
+        if has_token("SCK") || has_token("SCLK") {
+            return Some(PinCapability::SpiSck);
+        }
+        // Context-dependent roles.
+        if has_token("NSS") || (is_spi && (has_token("CS") || has_token("SS"))) {
+            return Some(PinCapability::SpiCs);
+        }
+        if is_uart && (has_token("TX") || has_token("TXD")) {
+            return Some(PinCapability::UartTx);
+        }
+        if is_uart && (has_token("RX") || has_token("RXD")) {
+            return Some(PinCapability::UartRx);
+        }
+        if is_usb && has_token("VBUS") {
+            return Some(PinCapability::UsbVbus);
+        }
+        if upper.contains("D+") || (is_usb && has_token("DP")) {
+            return Some(PinCapability::UsbDp);
+        }
+        if upper.contains("D-") || (is_usb && has_token("DM")) {
+            return Some(PinCapability::UsbDn);
+        }
+        None
+    }
 }
 
 #[cfg(test)]
@@ -249,5 +348,77 @@ mod tests {
             PinCapability::DiffPairPositive.compatible_with(ElectricalType::DifferentialPositive)
         );
         assert!(!PinCapability::DiffPairPositive.compatible_with(ElectricalType::Output));
+    }
+
+    #[test]
+    fn canonical_names_are_uppercase_identifiers() {
+        assert_eq!(PinCapability::I2cScl.canonical_name(), "I2C_SCL");
+        assert_eq!(PinCapability::SpiMosi.canonical_name(), "SPI_MOSI");
+        assert_eq!(PinCapability::UsbDp.canonical_name(), "USB_DP");
+        assert_eq!(PinCapability::UartTx.canonical_name(), "UART_TX");
+    }
+
+    #[test]
+    fn net_name_function_inference() {
+        // Unambiguous single-protocol roles, with and without prefix.
+        assert_eq!(
+            PinCapability::from_net_name("I2C1_SCL"),
+            Some(PinCapability::I2cScl)
+        );
+        assert_eq!(
+            PinCapability::from_net_name("scl"),
+            Some(PinCapability::I2cScl)
+        );
+        assert_eq!(
+            PinCapability::from_net_name("SDA"),
+            Some(PinCapability::I2cSda)
+        );
+        assert_eq!(
+            PinCapability::from_net_name("I2C0.sda"),
+            Some(PinCapability::I2cSda)
+        );
+        assert_eq!(
+            PinCapability::from_net_name("SPI1_MOSI"),
+            Some(PinCapability::SpiMosi)
+        );
+        assert_eq!(
+            PinCapability::from_net_name("SPI_SCK"),
+            Some(PinCapability::SpiSck)
+        );
+        assert_eq!(
+            PinCapability::from_net_name("USB_DP"),
+            Some(PinCapability::UsbDp)
+        );
+        assert_eq!(
+            PinCapability::from_net_name("USB_D-"),
+            Some(PinCapability::UsbDn)
+        );
+        assert_eq!(
+            PinCapability::from_net_name("USB_VBUS"),
+            Some(PinCapability::UsbVbus)
+        );
+        // Context-dependent roles need their protocol word.
+        assert_eq!(
+            PinCapability::from_net_name("UART0_TX"),
+            Some(PinCapability::UartTx)
+        );
+        assert_eq!(
+            PinCapability::from_net_name("UART0_RXD"),
+            Some(PinCapability::UartRx)
+        );
+        assert_eq!(
+            PinCapability::from_net_name("SPI1_CS"),
+            Some(PinCapability::SpiCs)
+        );
+        // Bare TX/RX/CS/DP must not invent a requirement.
+        assert_eq!(PinCapability::from_net_name("TX"), None);
+        assert_eq!(PinCapability::from_net_name("RX"), None);
+        assert_eq!(PinCapability::from_net_name("CS"), None);
+        assert_eq!(PinCapability::from_net_name("DP"), None);
+        // Unrelated names stay unrecognised.
+        assert_eq!(PinCapability::from_net_name("3V3"), None);
+        assert_eq!(PinCapability::from_net_name("RESET"), None);
+        assert_eq!(PinCapability::from_net_name("net_4"), None);
+        assert_eq!(PinCapability::from_net_name("ALERT_1"), None);
     }
 }

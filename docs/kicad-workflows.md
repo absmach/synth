@@ -25,16 +25,20 @@ board.synth.layout.toml   ← optional visual drag offsets (sidecar)
    re-exports; any manual edit is silently destroyed on the next
    export and breaks the stable-diff guarantee. Connectivity, values,
    part numbers, DNP decisions: change the `.synth` source.
-2. **Visual tuning goes through the sidecar.** Drag positions in the
+2. **Electrical-rule tuning goes through the ERC sidecar.** Add
+   `board.synth.erc.toml` beside the design to override the pin-type
+   conflict table and the deeper-check thresholds; leave it absent for
+   the defaults.
+3. **Visual tuning goes through the sidecar.** Drag positions in the
    `synth preview` browser, or edit `<design>.synth.layout.toml`
    directly — never nudge symbol coordinates inside the `.kicad_sch`.
-3. **Sourcing data lives in the registry**, not in the drawing. Each
+4. **Sourcing data lives in the registry**, not in the drawing. Each
    `registry/parts/*.synth.toml` carries `mpn`, `lcsc_pn`, footprint,
    and provenance; the exporter stamps hidden `MPN` / `LCSC` fields
    onto every schematic instance and mirrors them into `bom.csv`.
    Fix a part number in the registry (or the `value` statement), not
    on the symbol.
-4. **The compiler's ERC is the first gate, KiCad's ERC is the second.**
+5. **The compiler's ERC is the first gate, KiCad's ERC is the second.**
    Synth's 80+ `E-SYNTH-*` rules run before export; `kicad-cli sch
 erc` validates the exported artifact after. Both must be clean
    before anything ships (see §1).
@@ -170,7 +174,10 @@ production approval.
 - **Ceramic capacitors:** derate for applied DC bias (an X7R "10 µF"
   at 80 % rated bias may deliver a fraction of nominal); check the
   dielectric temperature spec; respect the package size the design
-  assumed; avoid microphonic dielectrics in audio paths.
+  assumed; avoid microphonic dielectrics in audio paths. This is
+  checked automatically when the capacitor carries `dielectric` and
+  `voltage` structured values — see `E-SYNTH-CAP-001` and
+  [`variants-and-bom.md`](variants-and-bom.md).
 - **Resistors:** verify power rating against dissipated power with
   margin; prefer thin-film for low-noise/sensitive analog nodes.
 - **Inductors:** non-standard packages are the risk — prefer parts
@@ -214,9 +221,10 @@ export becomes a hierarchy:
 - one `<board>_<sheet>.kicad_sch` per boundary, plus the root
   `<board>.kicad_sch` carrying the components declared outside any
   sheet and one sheet instance per sub-sheet;
-- cross-sheet **signal** nets join through hierarchical labels (and
-  matching sheet pins + root wires); cross-sheet **power** nets need
-  no pins — power symbols connect globally by value;
+- cross-sheet **signal** nets join through hierarchical labels on
+  sub-sheets and same-named local labels on the root (one per sheet
+  pin and per root endpoint); cross-sheet **power** nets need no
+  labels at all — power symbols connect globally by value;
 - a dragged component's sidecar override records the sheet it was
   placed on, so moving it to another sheet invalidates the stale
   (sheet-local) coordinates instead of misplacing it.

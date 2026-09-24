@@ -1,0 +1,15 @@
+board "p8" {
+  layers 2
+  component U1: regulator "ams1117_3v3"
+  component U2: regulator "ams1117_5v"
+  component U3: sensor "bmp280_pressure"
+  component R1: resistor "r_generic_0603" value "4.7k"
+  component C1: capacitor "c_generic_0805" value "10u"
+  component C2: capacitor "c_generic_0805" value "10u"
+  component C3: capacitor "c_generic_0805" value "10u"
+  component C4: capacitor "c_generic_0805" value "10u"
+  connect U1.vout -> U3.vdd
+  connect U3.sda -> R1.p1
+  connect R1.p2 -> U2.vout
+  connect U1.vout -> U3.scl
+}

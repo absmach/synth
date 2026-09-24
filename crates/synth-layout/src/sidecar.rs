@@ -312,6 +312,7 @@ priority = "hard"
                     part: None,
                     value: None,
                     dnp: false,
+                    properties: std::collections::BTreeMap::new(),
                     placement_hint: None,
                     group: None,
                     sheet: sheet.map(str::to_string),
@@ -323,6 +324,9 @@ priority = "hard"
             notes: Vec::new(),
             keepouts: Vec::new(),
             netclasses: vec![],
+            buses: vec![],
+            modules: vec![],
+            variants: vec![],
             source_span: Span::new(0, 0),
         }
     }

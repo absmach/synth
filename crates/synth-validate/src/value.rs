@@ -35,6 +35,12 @@ pub fn parse_capacitance(input: &str) -> Option<f64> {
     parse_quantity(input, &["F"])
 }
 
+/// Parse a voltage value, returning volts, or `None` if the string is
+/// not a recognisable SI quantity (`"25V"`, `"6.3V"`, `"250mV"`).
+pub fn parse_voltage(input: &str) -> Option<f64> {
+    parse_quantity(input, &["V"])
+}
+
 /// Shared SI-quantity parser.
 ///
 /// Splits the numeric head from a trailing `<prefix>[unit]` tail,

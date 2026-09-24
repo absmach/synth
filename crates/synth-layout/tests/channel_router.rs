@@ -63,6 +63,7 @@ fn resistor(id: ComponentId, refdes: &str) -> Component {
         part: Some(two_pin_part()),
         value: None,
         dnp: false,
+        properties: std::collections::BTreeMap::new(),
         placement_hint: None,
         group: None,
         sheet: None,
@@ -138,6 +139,9 @@ fn two_row_board_and_layout() -> (Board, Layout) {
         notes: vec![],
         keepouts: Vec::new(),
         netclasses: vec![],
+        buses: vec![],
+        modules: vec![],
+        variants: vec![],
         source_span: synth_diagnostics::Span::new(0, 0),
     };
     let layout = Layout {

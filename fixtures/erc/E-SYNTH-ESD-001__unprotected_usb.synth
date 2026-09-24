@@ -1,0 +1,7 @@
+board "esd" {
+  layers 2
+  component J1: connector "usb_c_receptacle"
+  component R1: resistor "r_generic_0603" value "1k"
+  connect J1.dp -> R1.p1
+  connect R1.p2 -> J1.gnd
+}

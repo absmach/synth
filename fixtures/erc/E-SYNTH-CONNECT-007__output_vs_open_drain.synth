@@ -1,0 +1,12 @@
+board "c7" {
+  layers 2
+  component U1: ic "lm555_timer"
+  component C1: capacitor "c_generic_0603"
+  connect U1.out -> U1.disch
+  connect U1.vcc -> C1.p1
+  connect U1.gnd -> C1.p2
+  connect U1.trig -> C1.p1
+  connect U1.rst -> C1.p1
+  connect U1.thr -> C1.p1
+  connect U1.ctrl -> C1.p2
+}

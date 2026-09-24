@@ -180,8 +180,12 @@ pub fn pin_terminal_xy(
                 let rot_x = px * rad.cos() - py * rad.sin();
                 let rot_y = px * rad.sin() + py * rad.cos();
 
+                // Multi-unit symbols are drawn as a vertical stack; a
+                // pin of unit 2..N is shifted down by its unit slot,
+                // in sheet space (the stack does not rotate).
+                let (_, unit_dy) = crate::kicad_lib_loader::pin_unit_offset(lib_id, &pin.number.0);
                 let term_x = cx + rot_x;
-                let term_y = cy - rot_y;
+                let term_y = cy - rot_y + unit_dy;
 
                 // KiCad's pin `angle` points INWARD (terminal →
                 // body); the outward stub direction is angle+180°.
@@ -2032,6 +2036,9 @@ mod cleanup_tests {
             notes: vec![],
             keepouts: Vec::new(),
             netclasses: vec![],
+            buses: vec![],
+            modules: vec![],
+            variants: vec![],
             source_span: synth_diagnostics::Span::new(0, 0),
         }
     }
@@ -2205,6 +2212,7 @@ mod cleanup_tests {
                 part: None,
                 value: None,
                 dnp: false,
+                properties: std::collections::BTreeMap::new(),
                 placement_hint: None,
                 group: None,
                 sheet: None,
@@ -2364,6 +2372,7 @@ mod channel_router_tests {
             part: Some(two_pin_part()),
             value: None,
             dnp: false,
+            properties: std::collections::BTreeMap::new(),
             placement_hint: None,
             group: None,
             sheet: None,
@@ -2545,6 +2554,9 @@ mod channel_router_tests {
             notes: vec![],
             keepouts: Vec::new(),
             netclasses: vec![],
+            buses: vec![],
+            modules: vec![],
+            variants: vec![],
             source_span: synth_diagnostics::Span::new(0, 0),
         };
         let layout = Layout {
@@ -2640,6 +2652,7 @@ mod drc_tests {
             part: Some(two_pin_part()),
             value: None,
             dnp: false,
+            properties: std::collections::BTreeMap::new(),
             placement_hint: None,
             group: None,
             sheet: None,
@@ -2730,6 +2743,9 @@ mod drc_tests {
             notes: vec![],
             keepouts: Vec::new(),
             netclasses: vec![],
+            buses: vec![],
+            modules: vec![],
+            variants: vec![],
             source_span: synth_diagnostics::Span::new(0, 0),
         };
         let placements: HashMap<ComponentId, ComponentPlacement> = [
@@ -2869,6 +2885,7 @@ mod net_termination_tests {
                     part: Some(two_pin_part()),
                     value: None,
                     dnp: false,
+                    properties: std::collections::BTreeMap::new(),
                     placement_hint: None,
                     group: None,
                     sheet: None,
@@ -2881,6 +2898,7 @@ mod net_termination_tests {
                     part: Some(two_pin_part()),
                     value: None,
                     dnp: false,
+                    properties: std::collections::BTreeMap::new(),
                     placement_hint: None,
                     group: None,
                     sheet: None,
@@ -2909,6 +2927,9 @@ mod net_termination_tests {
             notes: vec![],
             keepouts: Vec::new(),
             netclasses: vec![],
+            buses: vec![],
+            modules: vec![],
+            variants: vec![],
             source_span: synth_diagnostics::Span::new(0, 0),
         }
     }

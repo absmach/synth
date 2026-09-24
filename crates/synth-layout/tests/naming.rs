@@ -64,6 +64,7 @@ fn component(id: u32, refdes: &str, p: Part) -> Component {
         part: Some(p),
         value: None,
         dnp: false,
+        properties: std::collections::BTreeMap::new(),
         placement_hint: None,
         group: None,
         sheet: None,
@@ -101,6 +102,9 @@ fn board(components: Vec<Component>, nets: Vec<Net>) -> synth_ir::Board {
         notes: vec![],
         keepouts: Vec::new(),
         netclasses: vec![],
+        buses: vec![],
+        modules: vec![],
+        variants: vec![],
         source_span: Span::new(0, 0),
     }
 }

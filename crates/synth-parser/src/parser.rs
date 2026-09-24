@@ -12,12 +12,16 @@
 //! This keeps cascading errors bounded: one underlying mistake produces
 //! at most one diagnostic per statement.
 
+use std::collections::BTreeMap;
 use synth_ast::{
-    BoardAst, CompanyStmt, ComponentDeclAst, ConnectionAst, DiffPairAttr, DiffPairStmt,
-    EndpointAst, GroupStmt, ImportAst, KeepoutAttr, KeepoutStmt, LayersStmt, ManufacturerStmt,
-    NetDeclAst, NetclassAttr, NetclassStmt, NotesDeclAst, PlacementHintAst, PlacementHintAttr,
-    PowerDeclAst, ProgramAst, RevisionStmt, SheetStmt, StatementAst, ValueWithUnit,
+    BindStmt, BoardAst, BusDeclStmt, CompanyStmt, ComponentDeclAst, ConnectionAst, DiffPairAttr,
+    DiffPairStmt, EndpointAst, GroupStmt, ImportAst, InterfaceDeclStmt, KeepoutAttr, KeepoutStmt,
+    LayersStmt, ManufacturerStmt, ModuleDeclStmt, NetDeclAst, NetclassAttr, NetclassStmt,
+    NotesDeclAst, ParamDeclAst, PlacementHintAst, PlacementHintAttr, PortBindingAst, PortDeclAst,
+    PowerDeclAst, ProgramAst, RevisionStmt, SheetStmt, StatementAst, UseStmt, ValueWithUnit,
+    VariantDeclStmt,
 };
+
 use synth_diagnostics::{
     Diagnostic, DiagnosticBuilder, Location, Patch, PatchKind, Severity, Span,
 };
@@ -53,6 +57,7 @@ pub fn parse(tokens: Vec<Token>, file: String) -> ParseResult {
         pos: 0,
         file,
         diagnostics: Vec::new(),
+        module_depth: 0,
     };
     p.surface_lexer_errors();
     let ast = p.parse_program();
@@ -67,6 +72,11 @@ struct Parser {
     pos: usize,
     file: String,
     diagnostics: Vec<Diagnostic>,
+    /// Nesting depth of `module` bodies. Bare-identifier endpoints are
+    /// port references only inside a module, where a port is declared;
+    /// at board level a bare identifier stays the `E-SYNTH-PARSE-007`
+    /// error it has always been.
+    module_depth: usize,
 }
 
 impl Parser {
@@ -295,10 +305,16 @@ impl Parser {
             TokenKind::KwRevision => self.parse_revision().map(StatementAst::Revision),
             TokenKind::KwCompany => self.parse_company().map(StatementAst::Company),
             TokenKind::KwComponent => self.parse_component().map(StatementAst::Component),
+            TokenKind::KwVariant => self.parse_variant().map(StatementAst::Variant),
             TokenKind::KwConnect => self.parse_connection().map(StatementAst::Connection),
             TokenKind::KwNet => self.parse_net().map(StatementAst::Net),
             TokenKind::KwPower => self.parse_power().map(StatementAst::Power),
             TokenKind::KwNotes => self.parse_notes().map(StatementAst::Notes),
+            TokenKind::KwModule => self.parse_module().map(StatementAst::Module),
+            TokenKind::KwInterface => self.parse_interface().map(StatementAst::Interface),
+            TokenKind::KwBus => self.parse_bus().map(StatementAst::Bus),
+            TokenKind::KwUse => self.parse_use().map(StatementAst::Use),
+            TokenKind::KwBind => self.parse_bind().map(StatementAst::Bind),
             TokenKind::KwDiffPair => self.parse_diff_pair().map(StatementAst::DiffPair),
             TokenKind::KwNetclass => self.parse_netclass().map(StatementAst::Netclass),
             TokenKind::KwKeepout => self.parse_keepout().map(StatementAst::Keepout),
@@ -309,7 +325,7 @@ impl Parser {
                     self.peek().span,
                     "E-SYNTH-PARSE-011",
                     "expected statement keyword",
-                    "one of: layers, manufacturer, revision, company, component, connect, net, power, notes, diff_pair, netclass, keepout, group, sheet",
+                    "one of: layers, manufacturer, revision, company, component, variant, connect, net, power, notes, module, interface, bus, use, bind, diff_pair, netclass, keepout, group, sheet",
                     self.describe_current(),
                     None,
                 );
@@ -452,58 +468,57 @@ impl Parser {
             "E-SYNTH-PARSE-016",
             "expected part identifier (quoted string)",
         )?;
-        let value = if matches!(self.peek_kind(), TokenKind::KwValue) {
-            self.bump(); // consume `value`
-            Some(self.expect_string(
-                "E-SYNTH-PARSE-027",
-                "expected component value after `value`",
-            )?)
-        } else {
-            None
-        };
-        // Do-not-populate flag: `component R7: resistor "r_generic_0603"
-        // dnp`. Accepted before the body block, after it, or both
-        // (redundant repetition is harmless).
+        // Trailing attributes may appear in any order, before and/or
+        // after a `{ … }` body: `value`, the structured-value fields
+        // (`tolerance`, `voltage`, `power`, `dielectric`), `dnp`, and
+        // `placement_hint`. Redundant repetition is harmless.
+        let mut value = None;
+        let mut properties: BTreeMap<String, String> = BTreeMap::new();
         let mut dnp = false;
-        if matches!(self.peek_kind(), TokenKind::KwDnp) {
-            self.bump(); // consume `dnp`
-            dnp = true;
-        }
-        let placement_hint = if matches!(self.peek_kind(), TokenKind::KwPlacementHint) {
-            self.parse_placement_hint()
-        } else if matches!(self.peek_kind(), TokenKind::LBrace) {
-            self.bump(); // consume `{`
-            let mut hint = None;
-            loop {
-                self.skip_error_tokens();
-                match self.peek_kind() {
-                    TokenKind::RBrace | TokenKind::Eof => break,
-                    TokenKind::KwPlacementHint => {
-                        hint = self.parse_placement_hint();
+        let mut placement_hint = None;
+        loop {
+            if self.parse_component_attribute(&mut value, &mut properties, &mut dnp) {
+                continue;
+            }
+            match self.peek_kind() {
+                TokenKind::KwPlacementHint => {
+                    placement_hint = self.parse_placement_hint();
+                }
+                TokenKind::LBrace => {
+                    self.bump(); // consume `{`
+                    loop {
+                        self.skip_error_tokens();
+                        match self.peek_kind() {
+                            TokenKind::RBrace | TokenKind::Eof => break,
+                            TokenKind::KwPlacementHint => {
+                                placement_hint = self.parse_placement_hint();
+                            }
+                            _ => {
+                                if !self.parse_component_attribute(
+                                    &mut value,
+                                    &mut properties,
+                                    &mut dnp,
+                                ) {
+                                    self.emit(
+                                        self.peek().span,
+                                        "E-SYNTH-PARSE-029",
+                                        "unexpected keyword inside component body",
+                                        "`placement_hint`, `tolerance`, `voltage`, `power_rating`, \
+                                         `dielectric`, or `dnp`",
+                                        self.describe_current(),
+                                        None,
+                                    );
+                                    self.bump();
+                                }
+                            }
+                        }
                     }
-                    _ => {
-                        self.emit(
-                            self.peek().span,
-                            "E-SYNTH-PARSE-029",
-                            "unexpected keyword inside component body",
-                            "`placement_hint`",
-                            self.describe_current(),
-                            None,
-                        );
+                    if matches!(self.peek_kind(), TokenKind::RBrace) {
                         self.bump();
                     }
                 }
+                _ => break,
             }
-            if matches!(self.peek_kind(), TokenKind::RBrace) {
-                self.bump();
-            }
-            hint
-        } else {
-            None
-        };
-        if matches!(self.peek_kind(), TokenKind::KwDnp) {
-            self.bump(); // consume trailing `dnp`
-            dnp = true;
         }
         let end = self.last_offset();
         Some(ComponentDeclAst {
@@ -512,9 +527,57 @@ impl Parser {
             part: Some(part),
             value,
             dnp,
+            properties,
             placement_hint,
             span: Span::new(start, end),
         })
+    }
+
+    /// Consume one component attribute (`value`, a structured-value
+    /// field, or `dnp`). Returns `false` when the current token is not
+    /// one of them, leaving the cursor untouched.
+    fn parse_component_attribute(
+        &mut self,
+        value: &mut Option<String>,
+        properties: &mut BTreeMap<String, String>,
+        dnp: &mut bool,
+    ) -> bool {
+        // A quoted string is a literal; `$name` is a parameter
+        // reference resolved when a module is instantiated. Stored with
+        // the `$` retained so the two never collide.
+        if matches!(self.peek_kind(), TokenKind::KwValue) {
+            self.bump(); // consume `value`
+            if matches!(self.peek_kind(), TokenKind::Dollar) {
+                self.bump();
+                if let Some(name) =
+                    self.expect_ident("E-SYNTH-PARSE-027", "expected parameter name after `$`")
+                {
+                    *value = Some(format!("${name}"));
+                }
+            } else if let Some(s) = self.expect_string(
+                "E-SYNTH-PARSE-027",
+                "expected component value after `value`",
+            ) {
+                *value = Some(s);
+            }
+            return true;
+        }
+        if let Some(field) = structured_field(self.peek_kind()) {
+            self.bump(); // consume the field keyword
+            if let Some(s) = self.expect_string(
+                "E-SYNTH-PARSE-002",
+                "expected a quoted value after the field keyword",
+            ) {
+                properties.insert(field.to_string(), s);
+            }
+            return true;
+        }
+        if matches!(self.peek_kind(), TokenKind::KwDnp) {
+            self.bump(); // consume `dnp`
+            *dnp = true;
+            return true;
+        }
+        false
     }
 
     #[allow(clippy::too_many_lines)]
@@ -636,7 +699,8 @@ impl Parser {
     fn parse_connection(&mut self) -> Option<ConnectionAst> {
         let start = self.peek().span.byte_start;
         self.bump(); // consume `connect`
-        let from = self.parse_endpoint()?;
+        let allow_port = self.module_depth > 0;
+        let from = self.parse_endpoint(allow_port)?;
         if !matches!(self.peek_kind(), TokenKind::Arrow) {
             self.emit(
                 self.peek().span,
@@ -657,7 +721,7 @@ impl Parser {
             return None;
         }
         self.bump();
-        let to = self.parse_endpoint()?;
+        let to = self.parse_endpoint(allow_port)?;
         // One-to-many fanout: `connect U1.vout -> C3.p1, U2.vdd, C4.p1`.
         let mut additional = Vec::new();
         while matches!(self.peek_kind(), TokenKind::Comma) {
@@ -669,7 +733,7 @@ impl Parser {
             ) {
                 break;
             }
-            additional.push(self.parse_endpoint()?);
+            additional.push(self.parse_endpoint(allow_port)?);
         }
         // Optional `as "NET"` naming and `class "CLASS"` join, in
         // either order (`as` then `class` is the documented form).
@@ -712,6 +776,7 @@ impl Parser {
     /// a line inside the body; endpoints are comma-separated (a
     /// trailing comma is tolerated).
     fn parse_net(&mut self) -> Option<NetDeclAst> {
+        let allow_port = self.module_depth > 0;
         let start = self.peek().span.byte_start;
         self.bump(); // consume `net`
         let name = self.expect_string("E-SYNTH-PARSE-002", "expected net name (quoted string)")?;
@@ -750,7 +815,7 @@ impl Parser {
                         "expected netclass name (quoted string) after `class`",
                     )?);
                 }
-                _ => match self.parse_endpoint() {
+                _ => match self.parse_endpoint(allow_port) {
                     Some(ep) => endpoints.push(ep),
                     None => {
                         self.synchronize_net_body();
@@ -776,6 +841,7 @@ impl Parser {
     /// is optional: a bare declaration still materializes the rail so
     /// later `connect … as "+3V3"` lines join it.
     fn parse_power(&mut self) -> Option<PowerDeclAst> {
+        let allow_port = self.module_depth > 0;
         let start = self.peek().span.byte_start;
         self.bump(); // consume `power`
         let name = self.expect_string(
@@ -808,7 +874,7 @@ impl Parser {
                             "expected netclass name (quoted string) after `class`",
                         )?);
                     }
-                    _ => match self.parse_endpoint() {
+                    _ => match self.parse_endpoint(allow_port) {
                         Some(ep) => endpoints.push(ep),
                         None => {
                             self.synchronize_net_body();
@@ -903,9 +969,93 @@ impl Parser {
             span: Span::new(start, end),
         })
     }
-    fn parse_endpoint(&mut self) -> Option<EndpointAst> {
+    /// `variant "lite" [description "…"] { dnp U3 U5 }`.
+    ///
+    /// A variant lists the refdes left unpopulated in it; the export
+    /// maps that onto KiCad's native design variants.
+    fn parse_variant(&mut self) -> Option<VariantDeclStmt> {
         let start = self.peek().span.byte_start;
+        self.bump(); // consume `variant`
+        let name =
+            self.expect_string("E-SYNTH-PARSE-002", "expected variant name (quoted string)")?;
+        let description = if matches!(self.peek_kind(), TokenKind::KwDescription) {
+            self.bump(); // consume `description`
+            self.expect_string(
+                "E-SYNTH-PARSE-002",
+                "expected variant description (quoted string)",
+            )
+        } else {
+            None
+        };
+        if !matches!(self.peek_kind(), TokenKind::LBrace) {
+            self.emit(
+                self.peek().span,
+                "E-SYNTH-PARSE-003",
+                "expected `{` to open variant body",
+                "`{`",
+                self.describe_current(),
+                None,
+            );
+            return None;
+        }
+        self.bump(); // consume `{`
+        let mut dnp = Vec::new();
+        loop {
+            self.skip_error_tokens();
+            match self.peek_kind() {
+                TokenKind::RBrace | TokenKind::Eof => break,
+                TokenKind::KwDnp => {
+                    self.bump(); // consume `dnp`
+                                 // One or more refdes until the body closes.
+                    while let TokenKind::Ident(_) = self.peek_kind() {
+                        if let Some(refdes) =
+                            self.expect_ident("E-SYNTH-PARSE-010", "expected component refdes")
+                        {
+                            dnp.push(refdes);
+                        }
+                    }
+                }
+                _ => {
+                    self.emit(
+                        self.peek().span,
+                        "E-SYNTH-PARSE-032",
+                        "unexpected keyword inside variant body",
+                        "`dnp` followed by one or more component refdes",
+                        self.describe_current(),
+                        None,
+                    );
+                    self.bump();
+                }
+            }
+        }
+        if matches!(self.peek_kind(), TokenKind::RBrace) {
+            self.bump();
+        }
+        let end = self.last_offset();
+        Some(VariantDeclStmt {
+            name,
+            description,
+            dnp,
+            span: Span::new(start, end),
+        })
+    }
+
+    /// One endpoint: `C.pin`, a quoted net name (`"I2C0.sda"`), or — only
+    /// where a port can be declared (`allow_port`, i.e. inside a module)
+    /// — a bare port identifier.
+    fn parse_endpoint(&mut self, allow_port: bool) -> Option<EndpointAst> {
+        let start = self.peek().span.byte_start;
+        if let TokenKind::StringLit(_) = self.peek_kind() {
+            let name =
+                self.expect_string("E-SYNTH-PARSE-002", "expected net name (quoted string)")?;
+            let end = self.last_offset();
+            return Some(EndpointAst::net(name, Span::new(start, end)));
+        }
         let component = self.expect_ident("E-SYNTH-PARSE-010", "expected component identifier")?;
+        if !matches!(self.peek_kind(), TokenKind::Dot) && allow_port {
+            let end = self.last_offset();
+            return Some(EndpointAst::port(component, Span::new(start, end)));
+        }
         if !matches!(self.peek_kind(), TokenKind::Dot) {
             self.emit(
                 self.peek().span,
@@ -920,11 +1070,7 @@ impl Parser {
         self.bump();
         let pin = self.expect_ident("E-SYNTH-PARSE-010", "expected pin identifier")?;
         let end = self.last_offset();
-        Some(EndpointAst {
-            component,
-            pin,
-            span: Span::new(start, end),
-        })
+        Some(EndpointAst::pin(component, pin, Span::new(start, end)))
     }
 
     fn parse_diff_pair(&mut self) -> Option<DiffPairStmt> {
@@ -1239,6 +1385,448 @@ impl Parser {
         })
     }
 
+    /// `module "N" (port: type, …) { param …; <statement>* }`.
+    fn parse_module(&mut self) -> Option<ModuleDeclStmt> {
+        let start = self.peek().span.byte_start;
+        self.bump(); // consume `module`
+        let name =
+            self.expect_string("E-SYNTH-PARSE-002", "expected module name (quoted string)")?;
+        let ports = self.parse_port_list()?;
+        if !matches!(self.peek_kind(), TokenKind::LBrace) {
+            self.emit(
+                self.peek().span,
+                "E-SYNTH-PARSE-003",
+                "expected `{` to open module body",
+                "`{`",
+                self.describe_current(),
+                None,
+            );
+            return None;
+        }
+        self.bump();
+        self.module_depth += 1;
+        let mut params = Vec::new();
+        let mut statements = Vec::new();
+        loop {
+            self.skip_error_tokens();
+            match self.peek_kind() {
+                TokenKind::RBrace | TokenKind::Eof => break,
+                TokenKind::KwParam => {
+                    if let Some(param) = self.parse_param() {
+                        params.push(param);
+                    }
+                }
+                _ => {
+                    if let Some(stmt) = self.parse_statement() {
+                        statements.push(stmt);
+                    } else {
+                        self.synchronize();
+                    }
+                }
+            }
+        }
+        self.module_depth -= 1;
+        if matches!(self.peek_kind(), TokenKind::RBrace) {
+            self.bump();
+        } else {
+            self.emit(
+                self.peek().span,
+                "E-SYNTH-PARSE-004",
+                "expected `}` to close module body",
+                "`}`",
+                self.describe_current(),
+                None,
+            );
+        }
+        let end = self.last_offset();
+        Some(ModuleDeclStmt {
+            name,
+            ports,
+            params,
+            statements,
+            span: Span::new(start, end),
+        })
+    }
+
+    /// `interface "N" (member: type, …)`.
+    fn parse_interface(&mut self) -> Option<InterfaceDeclStmt> {
+        let start = self.peek().span.byte_start;
+        self.bump(); // consume `interface`
+        let name = self.expect_string(
+            "E-SYNTH-PARSE-002",
+            "expected interface name (quoted string)",
+        )?;
+        let members = self.parse_port_list()?;
+        let end = self.last_offset();
+        Some(InterfaceDeclStmt {
+            name,
+            members,
+            span: Span::new(start, end),
+        })
+    }
+
+    /// `bus "N" (member, member, …)`.
+    fn parse_bus(&mut self) -> Option<BusDeclStmt> {
+        let start = self.peek().span.byte_start;
+        self.bump(); // consume `bus`
+        let name = self.expect_string("E-SYNTH-PARSE-002", "expected bus name (quoted string)")?;
+        if !matches!(self.peek_kind(), TokenKind::LParen) {
+            self.emit(
+                self.peek().span,
+                "E-SYNTH-PARSE-003",
+                "expected `(` to open bus member list",
+                "`(`",
+                self.describe_current(),
+                None,
+            );
+            return None;
+        }
+        self.bump();
+        let mut members = Vec::new();
+        loop {
+            self.skip_error_tokens();
+            match self.peek_kind() {
+                TokenKind::RParen | TokenKind::Eof => break,
+                TokenKind::Comma => {
+                    self.bump();
+                }
+                _ => {
+                    if let Some(m) =
+                        self.expect_ident("E-SYNTH-PARSE-010", "expected bus member name")
+                    {
+                        members.push(m);
+                    }
+                }
+            }
+        }
+        if matches!(self.peek_kind(), TokenKind::RParen) {
+            self.bump();
+        }
+        let end = self.last_offset();
+        Some(BusDeclStmt {
+            name,
+            members,
+            span: Span::new(start, end),
+        })
+    }
+
+    /// `use "Module" as Label (prefix "P", param = value) { port -> target }`.
+    fn parse_use(&mut self) -> Option<UseStmt> {
+        let start = self.peek().span.byte_start;
+        self.bump(); // consume `use`
+        let module =
+            self.expect_string("E-SYNTH-PARSE-002", "expected module name (quoted string)")?;
+        if !matches!(self.peek_kind(), TokenKind::KwAs) {
+            self.emit(
+                self.peek().span,
+                "E-SYNTH-PARSE-011",
+                "expected `as` after the module name",
+                "`as <label>`",
+                self.describe_current(),
+                None,
+            );
+            return None;
+        }
+        self.bump(); // consume `as`
+        let label = self.expect_ident("E-SYNTH-PARSE-010", "expected instance label")?;
+        // Optional `( prefix "…", param = value )`.
+        let mut prefix = None;
+        let mut params = Vec::new();
+        if matches!(self.peek_kind(), TokenKind::LParen) {
+            self.bump();
+            loop {
+                self.skip_error_tokens();
+                match self.peek_kind() {
+                    TokenKind::RParen | TokenKind::Eof => break,
+                    TokenKind::Comma => {
+                        self.bump();
+                    }
+                    TokenKind::KwPrefix => {
+                        self.bump();
+                        prefix = Some(self.expect_string(
+                            "E-SYNTH-PARSE-002",
+                            "expected refdes prefix (quoted string after `prefix`)",
+                        )?);
+                    }
+                    _ => {
+                        let span = self.peek().span;
+                        let Some(name) =
+                            self.expect_ident("E-SYNTH-PARSE-010", "expected parameter name")
+                        else {
+                            self.bump();
+                            continue;
+                        };
+                        if !matches!(self.peek_kind(), TokenKind::Eq) {
+                            self.emit(
+                                span,
+                                "E-SYNTH-PARSE-008",
+                                "expected `=` after the parameter name",
+                                "`=`",
+                                self.describe_current(),
+                                None,
+                            );
+                            continue;
+                        }
+                        self.bump();
+                        if let Some(v) = self.expect_value() {
+                            params.push((name, v));
+                        }
+                    }
+                }
+            }
+            if matches!(self.peek_kind(), TokenKind::RParen) {
+                self.bump();
+            }
+        }
+        // Binding body.
+        let mut bindings = Vec::new();
+        if matches!(self.peek_kind(), TokenKind::LBrace) {
+            self.bump();
+            loop {
+                self.skip_error_tokens();
+                match self.peek_kind() {
+                    TokenKind::RBrace | TokenKind::Eof => break,
+                    TokenKind::Comma => {
+                        self.bump();
+                    }
+                    _ => match self.parse_port_binding() {
+                        Some(b) => bindings.push(b),
+                        None => self.synchronize_binding_body(),
+                    },
+                }
+            }
+            if matches!(self.peek_kind(), TokenKind::RBrace) {
+                self.bump();
+            }
+        }
+        let end = self.last_offset();
+        Some(UseStmt {
+            module,
+            label,
+            prefix,
+            params,
+            bindings,
+            span: Span::new(start, end),
+        })
+    }
+
+    /// `bind "Bus" [: Interface] { member -> endpoint, … }`.
+    fn parse_bind(&mut self) -> Option<BindStmt> {
+        let start = self.peek().span.byte_start;
+        self.bump(); // consume `bind`
+        let bus = self.expect_string("E-SYNTH-PARSE-002", "expected bus name (quoted string)")?;
+        let mut interface = None;
+        if matches!(self.peek_kind(), TokenKind::Colon) {
+            self.bump();
+            interface =
+                Some(self.expect_ident("E-SYNTH-PARSE-010", "expected interface type name")?);
+        }
+        if !matches!(self.peek_kind(), TokenKind::LBrace) {
+            self.emit(
+                self.peek().span,
+                "E-SYNTH-PARSE-003",
+                "expected `{` to open bind body",
+                "`{`",
+                self.describe_current(),
+                None,
+            );
+            return None;
+        }
+        self.bump();
+        let mut connections = Vec::new();
+        loop {
+            self.skip_error_tokens();
+            match self.peek_kind() {
+                TokenKind::RBrace | TokenKind::Eof => break,
+                TokenKind::Comma => {
+                    self.bump();
+                }
+                _ => match self.parse_port_binding() {
+                    Some(b) => connections.push(b),
+                    None => self.synchronize_binding_body(),
+                },
+            }
+        }
+        if matches!(self.peek_kind(), TokenKind::RBrace) {
+            self.bump();
+        }
+        let end = self.last_offset();
+        Some(BindStmt {
+            bus,
+            interface,
+            connections,
+            span: Span::new(start, end),
+        })
+    }
+
+    /// `( name: type, … )` — shared by `module` and `interface`.
+    fn parse_port_list(&mut self) -> Option<Vec<PortDeclAst>> {
+        if !matches!(self.peek_kind(), TokenKind::LParen) {
+            self.emit(
+                self.peek().span,
+                "E-SYNTH-PARSE-003",
+                "expected `(` to open the port list",
+                "`(`",
+                self.describe_current(),
+                None,
+            );
+            return None;
+        }
+        self.bump();
+        let mut ports = Vec::new();
+        loop {
+            self.skip_error_tokens();
+            match self.peek_kind() {
+                TokenKind::RParen | TokenKind::Eof => break,
+                TokenKind::Comma => {
+                    self.bump();
+                }
+                _ => {
+                    let span = self.peek().span;
+                    let Some(name) = self.expect_ident("E-SYNTH-PARSE-010", "expected port name")
+                    else {
+                        self.bump();
+                        continue;
+                    };
+                    if !matches!(self.peek_kind(), TokenKind::Colon) {
+                        self.emit(
+                            span,
+                            "E-SYNTH-PARSE-012",
+                            "expected `:` between the port name and its type",
+                            "`:`",
+                            self.describe_current(),
+                            None,
+                        );
+                        continue;
+                    }
+                    self.bump();
+                    // A type is an identifier; an interface name is an
+                    // identifier too, so both spell the same way. A few
+                    // direction words (`power`) are lexer keywords, so
+                    // those are accepted by keyword as well.
+                    let ty = match self.peek_kind() {
+                        TokenKind::KwPower => {
+                            self.bump();
+                            "power".to_string()
+                        }
+                        _ => match self.expect_ident("E-SYNTH-PARSE-010", "expected port type") {
+                            Some(t) => t,
+                            None => continue,
+                        },
+                    };
+                    ports.push(PortDeclAst {
+                        name,
+                        ty,
+                        span: Span::new(span.byte_start, self.last_offset()),
+                    });
+                }
+            }
+        }
+        if matches!(self.peek_kind(), TokenKind::RParen) {
+            self.bump();
+        }
+        Some(ports)
+    }
+
+    /// `param name[: type] = value`.
+    fn parse_param(&mut self) -> Option<ParamDeclAst> {
+        let start = self.peek().span.byte_start;
+        self.bump(); // consume `param`
+        let name = self.expect_ident("E-SYNTH-PARSE-010", "expected parameter name")?;
+        let mut ty = None;
+        if matches!(self.peek_kind(), TokenKind::Colon) {
+            self.bump();
+            ty = self.expect_ident("E-SYNTH-PARSE-010", "expected parameter type");
+        }
+        let mut default = None;
+        if matches!(self.peek_kind(), TokenKind::Eq) {
+            self.bump();
+            default = self.expect_value();
+        }
+        let end = self.last_offset();
+        Some(ParamDeclAst {
+            name,
+            ty,
+            default,
+            span: Span::new(start, end),
+        })
+    }
+
+    /// `port[.member] -> target`, where the target is a quoted net name,
+    /// a bare net name, or a `component.pin`.
+    fn parse_port_binding(&mut self) -> Option<PortBindingAst> {
+        let start = self.peek().span.byte_start;
+        let head = self.expect_ident("E-SYNTH-PARSE-010", "expected port or member name")?;
+        let mut port = head;
+        if matches!(self.peek_kind(), TokenKind::Dot) {
+            self.bump();
+            let member =
+                self.expect_ident("E-SYNTH-PARSE-010", "expected interface member name")?;
+            port = format!("{port}.{member}");
+        }
+        if !matches!(self.peek_kind(), TokenKind::Arrow) {
+            self.emit(
+                self.peek().span,
+                "E-SYNTH-PARSE-008",
+                "expected `->` in the binding",
+                "`->`",
+                self.describe_current(),
+                None,
+            );
+            return None;
+        }
+        self.bump();
+        // Target: quoted net, `component.pin`, or a bare net name.
+        let target_span = self.peek().span;
+        let target = match self.peek_kind() {
+            TokenKind::StringLit(_) => {
+                let name =
+                    self.expect_string("E-SYNTH-PARSE-002", "expected net name (quoted string)")?;
+                EndpointAst::net(name, target_span)
+            }
+            TokenKind::Ident(_) => {
+                let first = self.expect_ident("E-SYNTH-PARSE-010", "expected target")?;
+                if matches!(self.peek_kind(), TokenKind::Dot) {
+                    self.bump();
+                    let pin = self.expect_ident("E-SYNTH-PARSE-010", "expected pin name")?;
+                    EndpointAst::pin(first, pin, target_span)
+                } else {
+                    // A bare name on the right is a net name.
+                    EndpointAst::net(first, target_span)
+                }
+            }
+            _ => {
+                self.emit(
+                    target_span,
+                    "E-SYNTH-PARSE-010",
+                    "expected a binding target",
+                    "a net name or `component.pin`",
+                    self.describe_current(),
+                    None,
+                );
+                return None;
+            }
+        };
+        Some(PortBindingAst {
+            port,
+            target,
+            span: Span::new(start, self.last_offset()),
+        })
+    }
+
+    /// Skip to the next binding entry after a malformed one.
+    fn synchronize_binding_body(&mut self) {
+        self.bump();
+        while !self.at_eof() {
+            match self.peek_kind() {
+                TokenKind::RBrace | TokenKind::Ident(_) => return,
+                _ => {
+                    self.bump();
+                }
+            }
+        }
+    }
+
     fn expect_ident(&mut self, code: &str, title: &str) -> Option<String> {
         let span = self.peek().span;
         if let TokenKind::Ident(_) = self.peek_kind() {
@@ -1340,6 +1928,11 @@ impl Parser {
                 | TokenKind::KwNet
                 | TokenKind::KwPower
                 | TokenKind::KwNotes
+                | TokenKind::KwModule
+                | TokenKind::KwInterface
+                | TokenKind::KwBus
+                | TokenKind::KwUse
+                | TokenKind::KwBind
                 | TokenKind::KwDiffPair
                 | TokenKind::KwNetclass
                 | TokenKind::KwKeepout
@@ -1380,6 +1973,13 @@ impl Parser {
             TokenKind::KwPower => "`power`".to_string(),
             TokenKind::KwNotes => "`notes`".to_string(),
             TokenKind::KwDnp => "`dnp`".to_string(),
+            TokenKind::KwModule => "`module`".to_string(),
+            TokenKind::KwInterface => "`interface`".to_string(),
+            TokenKind::KwBus => "`bus`".to_string(),
+            TokenKind::KwUse => "`use`".to_string(),
+            TokenKind::KwBind => "`bind`".to_string(),
+            TokenKind::KwPrefix => "`prefix`".to_string(),
+            TokenKind::KwParam => "`param`".to_string(),
             TokenKind::KwAs => "`as`".to_string(),
             TokenKind::KwClass => "`class`".to_string(),
             TokenKind::KwDiffPair => "`diff_pair`".to_string(),
@@ -1392,6 +1992,12 @@ impl Parser {
             TokenKind::KwClearance => "`clearance`".to_string(),
             TokenKind::KwRadius => "`radius`".to_string(),
             TokenKind::KwValue => "`value`".to_string(),
+            TokenKind::KwTolerance => "`tolerance`".to_string(),
+            TokenKind::KwVoltage => "`voltage`".to_string(),
+            TokenKind::KwPowerRating => "`power_rating`".to_string(),
+            TokenKind::KwDielectric => "`dielectric`".to_string(),
+            TokenKind::KwVariant => "`variant`".to_string(),
+            TokenKind::KwDescription => "`description`".to_string(),
             TokenKind::KwPlacementHint => "`placement_hint`".to_string(),
             TokenKind::KwRegion => "`region`".to_string(),
             TokenKind::KwEdge => "`edge`".to_string(),
@@ -1400,6 +2006,10 @@ impl Parser {
             TokenKind::KwPriority => "`priority`".to_string(),
             TokenKind::Ident(s) => format!("identifier `{s}`"),
             TokenKind::Comma => "`,`".to_string(),
+            TokenKind::LParen => "`(`".to_string(),
+            TokenKind::RParen => "`)`".to_string(),
+            TokenKind::Eq => "`=`".to_string(),
+            TokenKind::Dollar => "`$`".to_string(),
             TokenKind::StringLit(_) => "a string literal".to_string(),
             TokenKind::IntLit(n) => format!("integer `{n}`"),
             TokenKind::Value { literal, unit } => format!("`{literal}{}`", unit.as_str()),
@@ -1537,6 +2147,18 @@ fn rehome_deferred_hints(statements: &mut [StatementAst]) {
     }
 }
 
+/// Canonical KiCad field name for a structured-value keyword, or `None`
+/// when the token is not one.
+fn structured_field(kind: &TokenKind) -> Option<&'static str> {
+    match kind {
+        TokenKind::KwTolerance => Some("Tolerance"),
+        TokenKind::KwVoltage => Some("Voltage"),
+        TokenKind::KwPowerRating => Some("Power"),
+        TokenKind::KwDielectric => Some("Dielectric"),
+        _ => None,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1645,6 +2267,108 @@ mod tests {
         };
         assert_eq!(d.pos, "USB_DP");
         assert_eq!(d.neg, "USB_DN");
+    }
+
+    #[test]
+    fn parse_module_and_use() {
+        let src = r#"board "b" {
+            module "Sensor" (vdd: power, gnd: ground, i2c: I2C, alert: output) {
+                param r_pull: resistance = 4.7kohm
+                component U1: sensor "bmp280_pressure"
+                component R1: resistor "r_generic_0603" value $r_pull
+                connect U1.vdd -> vdd
+                connect U1.sda -> i2c.sda
+                connect U1.int -> alert
+                connect U1.sda -> R1.p1
+            }
+            interface "I2C" (sda: i2c_sda, scl: i2c_scl)
+            bus "I2C0" (sda, scl)
+            use "Sensor" as CH1 (prefix "CH1_") {
+                vdd -> "3V3"
+                i2c -> "I2C0"
+                alert -> "ALERT_1"
+            }
+        }"#;
+        let res = parse(lex(src), "test.synth".into());
+        assert!(res.diagnostics.is_empty(), "{:?}", res.diagnostics);
+        let ast = res.ast.unwrap();
+        let StatementAst::Module(m) = &ast.board.statements[0] else {
+            panic!("expected module")
+        };
+        assert_eq!(m.name, "Sensor");
+        assert_eq!(m.ports.len(), 4);
+        assert_eq!(m.params.len(), 1);
+        assert_eq!(m.statements.len(), 6, "2 components + 4 connects");
+        let StatementAst::Use(u) = &ast.board.statements[3] else {
+            panic!("expected use")
+        };
+        assert_eq!(u.module, "Sensor");
+        assert_eq!(u.label, "CH1");
+        assert_eq!(u.prefix.as_deref(), Some("CH1_"));
+        assert_eq!(u.bindings.len(), 3);
+        assert_eq!(u.bindings[1].port, "i2c");
+    }
+
+    #[test]
+    fn bare_endpoint_is_still_an_error_at_board_level() {
+        let src = r#"board "b" {
+            component U1: mcu "rp2350"
+            component U2: mcu "rp2350"
+            connect U1.gp0 -> U2
+        }"#;
+        let res = parse(lex(src), "test.synth".into());
+        assert!(
+            res.diagnostics
+                .iter()
+                .any(|d| d.code == "E-SYNTH-PARSE-007"),
+            "a bare endpoint at board level is not a port: {:?}",
+            res.diagnostics
+        );
+    }
+
+    #[test]
+    fn parse_component_structured_values() {
+        let res = parse(
+            lex(
+                r#"board "b" { component C1: capacitor "c_generic_0603" value "100nF" tolerance "10%" voltage "25V" power_rating "0.1W" dielectric "X7R" }"#,
+            ),
+            "test.synth".into(),
+        );
+        assert!(res.diagnostics.is_empty(), "{:?}", res.diagnostics);
+        let ast = res.ast.unwrap();
+        let StatementAst::Component(c) = &ast.board.statements[0] else {
+            panic!("Expected component statement")
+        };
+        assert_eq!(c.value.as_deref(), Some("100nF"));
+        assert_eq!(
+            c.properties.get("Tolerance").map(String::as_str),
+            Some("10%")
+        );
+        assert_eq!(c.properties.get("Voltage").map(String::as_str), Some("25V"));
+        assert_eq!(c.properties.get("Power").map(String::as_str), Some("0.1W"));
+        assert_eq!(
+            c.properties.get("Dielectric").map(String::as_str),
+            Some("X7R")
+        );
+    }
+
+    #[test]
+    fn parse_variant_block() {
+        let res = parse(
+            lex(r#"board "b" {
+                component U3: sensor "bmp280_pressure"
+                variant "lite" description "no extras" { dnp U3 U5 }
+            }"#),
+            "test.synth".into(),
+        );
+        assert!(res.diagnostics.is_empty(), "{:?}", res.diagnostics);
+        let ast = res.ast.unwrap();
+        let StatementAst::Variant(v) = &ast.board.statements[1] else {
+            panic!("Expected variant statement")
+        };
+        assert_eq!(v.name, "lite");
+        assert_eq!(v.description.as_deref(), Some("no extras"));
+        assert_eq!(v.dnp, vec!["U3", "U5"]);
     }
 
     #[test]
