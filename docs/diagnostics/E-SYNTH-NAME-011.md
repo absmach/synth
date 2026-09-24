@@ -1,18 +1,19 @@
-# E-SYNTH-NAME-011 — invalid netclass colour
+# E-SYNTH-NAME-011 — invalid colour
 
 **Severity:** warning
 **Stage:** lower
 
 ## What this means
 
-A `netclass "…"` block's `color` attribute is not a six-digit hex colour. The class keeps its deterministic default palette hue, so the schematic still exports — only the requested hue is dropped.
+A `color` attribute on a `netclass` or `group` block is not a six-digit hex colour. The class/region keeps its deterministic default palette hue, so the schematic still exports — only the requested hue is dropped.
 
 ## Minimal reproduction
 
 ```synth
 board "x" {
-  netclass "PWR" {
-    color "not-a-colour"
+  netclass "PWR" { color "not-a-colour" }
+  group "Power" color "red" {
+    component U1: regulator "ams1117_3v3"
   }
 }
 ```

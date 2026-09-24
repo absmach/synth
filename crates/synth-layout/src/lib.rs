@@ -791,6 +791,24 @@ fn clamp_annotations_to_sheet(layout: &mut Layout) {
     }
 }
 
+/// Implicit region for mechanical and test parts that declare no
+/// `group` (Phase D2): mounting holes, test points, and fiducials get
+/// their own titled block, matching the reference sheet's `MOUNTING`
+/// region, instead of trailing loose in the ungrouped region.
+pub const MOUNTING_REGION: &str = "MOUNTING";
+
+/// The region a component belongs to: its declared `group`, else the
+/// implicit [`MOUNTING_REGION`] for a mechanical/test part, else
+/// `None` (the trailing ungrouped region).
+fn effective_group(board: &Board, id: ComponentId) -> Option<&str> {
+    let component = board.component(id)?;
+    if let Some(group) = component.group.as_deref() {
+        return Some(group);
+    }
+    let kind = component.part.as_ref().map(|p| p.kind.as_str())?;
+    matches!(kind, "mounting_hole" | "testpoint" | "fiducial").then_some(MOUNTING_REGION)
+}
+
 /// Caption every declared `group` on the sheet, and draw its titled
 /// outline box (§21.1).
 ///
@@ -818,9 +836,15 @@ fn annotate_groups(board: &Board, layout: &mut Layout) {
     for (group, min_x, max_x, min_y, max_y) in group_bounds(board, layout) {
         let caption_y = (min_y - GROUP_BOX_PAD + GROUP_CAPTION_SIZE + GROUP_CAPTION_INSET)
             .max(GROUP_CAPTION_SIZE);
-        let color = group_color(&group);
+        // Header attributes (Phase D1): the display title when set,
+        // and an explicit hue in place of the deterministic palette one.
+        let declared = board.group(&group);
+        let caption = declared.map_or_else(|| group.clone(), |g| g.display_title().to_string());
+        let color = declared
+            .and_then(|g| g.color)
+            .unwrap_or_else(|| group_color(&group));
         layout.annotations.push(TextAnnotation {
-            text: group.clone(),
+            text: caption,
             // Inside the box at the top-left, one glyph plus an
             // inset below the top edge stroke.
             at_mm: (min_x, caption_y),
@@ -836,7 +860,6 @@ fn annotate_groups(board: &Board, layout: &mut Layout) {
         });
     }
 }
-
 /// Dark-band hues for group boxes, distinct from the net-class
 /// brights (`synth_kicad::netclass_colors`): boxes are large areas,
 /// so they take muted tones with a translucent fill while nets take
@@ -851,6 +874,29 @@ const GROUP_PALETTE: [[u8; 3]; 8] = [
     [0x80, 0x80, 0x00], // olive
     [0x4B, 0x00, 0x82], // indigo
 ];
+
+/// Neutral packing key for a region with no `region` hint: unhinted
+/// groups sit in the middle of the shelf order, keeping declaration
+/// order among themselves.
+const QUADRANT_NEUTRAL: u8 = 4;
+
+/// Packing key for a pinned page quadrant (Phase D1). Lower sorts
+/// earlier in the shelf flow, so `top_left` packs first and
+/// `bottom_right` last.
+fn quadrant_key(region: &synth_ir::PlacementRegion) -> u8 {
+    use synth_ir::PlacementRegion as R;
+    match region {
+        R::TopLeft => 0,
+        R::TopEdge => 1,
+        R::TopRight => 2,
+        R::LeftEdge => 3,
+        R::Centre => QUADRANT_NEUTRAL,
+        R::RightEdge => 5,
+        R::BottomLeft => 6,
+        R::BottomEdge => 7,
+        R::BottomRight => 8,
+    }
+}
 
 /// Deterministic hue for a group name: FNV-1a into
 /// [`GROUP_PALETTE`]. Same name, same hue, every export —
@@ -885,7 +931,7 @@ fn group_bounds(board: &Board, layout: &Layout) -> Vec<(String, f64, f64, f64, f
     let mut bounds: std::collections::HashMap<String, (f64, f64, f64, f64)> =
         std::collections::HashMap::new();
     for placement in &layout.components {
-        let Some(group) = board.component(placement.id).and_then(|c| c.group.clone()) else {
+        let Some(group) = effective_group(board, placement.id).map(str::to_string) else {
             continue;
         };
         let (cx, cy) = placement.center_mm;
@@ -2383,7 +2429,7 @@ fn place_clusters(board: &Board, clusters: &[Cluster]) -> Layout {
     // declare no groups get one band and the order they always had.
     let mut group_bands: Vec<&str> = Vec::new();
     for component in &board.components {
-        if let Some(group) = component.group.as_deref() {
+        if let Some(group) = effective_group(board, component.id) {
             if !group_bands.contains(&group) {
                 group_bands.push(group);
             }
@@ -2392,9 +2438,7 @@ fn place_clusters(board: &Board, clusters: &[Cluster]) -> Layout {
     // Ungrouped clusters trail the named ones rather than interleaving:
     // they have no caption, so they cannot break one.
     let band_of = |anchor: ComponentId| -> u32 {
-        board
-            .component(anchor)
-            .and_then(|c| c.group.as_deref())
+        effective_group(board, anchor)
             .and_then(|g| group_bands.iter().position(|b| *b == g))
             .map_or(u32::MAX, |idx| idx as u32)
     };
@@ -2594,6 +2638,21 @@ fn place_clusters(board: &Board, clusters: &[Cluster]) -> Layout {
                 _ => region_runs.push((band, col, col + 1)),
             }
         }
+        // A declared `region` hint (Phase D1) reorders the regions so a
+        // `top_left` group packs first and a `bottom_right` one last;
+        // unhinted groups keep declaration order in the neutral middle
+        // band. A stable sort means hints can never reorder two
+        // unhinted groups relative to each other, and packing (which
+        // follows this order) can never produce overlapping boxes.
+        region_runs.sort_by_key(|&(band, _, _)| {
+            let hinted = usize::try_from(band)
+                .ok()
+                .and_then(|b| group_bands.get(b))
+                .and_then(|name| board.group(name))
+                .and_then(|g| g.region.as_ref())
+                .map(quadrant_key);
+            hinted.unwrap_or(QUADRANT_NEUTRAL)
+        });
 
         // Local x offsets *within* a region, reset at each region
         // boundary. Inside a declared group columns may sit closer
@@ -3554,8 +3613,7 @@ fn classify_net_labels(board: &Board, layout: &Layout) -> Vec<NetLabel> {
     // Whether the board declares any region at all. Only then does the
     // region-crossing test apply; an ungrouped board has one implicit
     // region and must keep its historic labelling.
-    let region_of =
-        |id: ComponentId| -> Option<&str> { board.component(id).and_then(|c| c.group.as_deref()) };
+    let region_of = |id: ComponentId| -> Option<&str> { effective_group(board, id) };
     let has_regions = board.components.iter().any(|c| c.group.is_some());
     let mut labels = Vec::new();
     for net in &board.nets {
@@ -4196,6 +4254,7 @@ mod barycenter_tests {
 
     fn board_with(components: Vec<Component>, nets: Vec<Net>) -> Board {
         Board {
+            groups: Vec::new(),
             legends: false,
             name: "test".to_string(),
             layers: 2,
@@ -4404,6 +4463,7 @@ mod semantic_weights_tests {
 
     fn board(components: Vec<Component>, nets: Vec<Net>) -> Board {
         Board {
+            groups: Vec::new(),
             legends: false,
             name: "test".to_string(),
             layers: 2,
@@ -4732,6 +4792,7 @@ mod soft_pin_swap_tests {
 
     fn board(components: Vec<Component>, nets: Vec<Net>) -> Board {
         Board {
+            groups: Vec::new(),
             legends: false,
             name: "test".to_string(),
             layers: 2,
@@ -4974,6 +5035,7 @@ mod patterns_tests {
 
     fn board(components: Vec<Component>, nets: Vec<Net>) -> Board {
         Board {
+            groups: Vec::new(),
             legends: false,
             name: "test".to_string(),
             layers: 2,
@@ -5368,6 +5430,7 @@ mod text_overlap_tests {
 
     fn empty_board() -> Board {
         Board {
+            groups: Vec::new(),
             legends: false,
             name: "b".to_string(),
             layers: 2,
@@ -5695,6 +5758,7 @@ mod naming_tests {
 
     fn board(components: Vec<Component>, nets: Vec<Net>) -> Board {
         Board {
+            groups: Vec::new(),
             legends: false,
             name: "test".to_string(),
             layers: 2,
@@ -5991,6 +6055,7 @@ mod documentation_tests {
 
     fn board_with_notes(components: Vec<Component>, nets: Vec<Net>, notes: Vec<Note>) -> Board {
         Board {
+            groups: Vec::new(),
             legends: false,
             name: "test".to_string(),
             layers: 2,

@@ -65,6 +65,8 @@
 //! * **E-SYNTH-SCHEM-012** — Sheet fill ratio below threshold: content
 //!   covers less than [`SchemErcConfig::min_sheet_fill_ratio`] of the
 //!   chosen sheet (info).
+//! * **E-SYNTH-SCHEM-014** — Auto-named net (`net_N`) rendered on the
+//!   sheet as a label, suggesting a name from its endpoint pin.
 
 use std::collections::{HashMap, HashSet};
 
@@ -202,6 +204,7 @@ pub fn check_with_config(
     violations.extend(check_ambiguous_power_rails(layout, board));
     violations.extend(check_text_overlaps(layout));
     violations.extend(check_sheet_fill(board, layout, config.min_sheet_fill_ratio));
+    violations.extend(check_auto_named_nets(board, layout));
     violations
 }
 
@@ -968,7 +971,6 @@ fn check_text_overlaps(layout: &Layout) -> Vec<Diagnostic> {
 }
 
 // ----- E-SYNTH-SCHEM-012: sheet fill ratio -----------------------------------
-
 /// `E-SYNTH-SCHEM-012`: the content bounding box covers less than
 /// `min_ratio` of the chosen sheet's area (schematic-quality plan
 /// Phase A5, defect D6 — content in the top 40 % of an A3 page while
@@ -1015,6 +1017,73 @@ fn check_sheet_fill(board: &Board, layout: &Layout, min_ratio: f64) -> Vec<Diagn
     .found(format!("{:.0}% covered", ratio * 100.0))
     .explanation_url("synth.docs/diagnostics/E-SYNTH-SCHEM-012")
     .build()]
+}
+
+// ----- E-SYNTH-SCHEM-014: auto-named net rendered on the sheet ---------------
+
+/// Whether a rendered net name is an auto-generated placeholder
+/// (`net_3`, `NET_3`) rather than a human name.
+fn is_auto_net_label(label: &str) -> bool {
+    let lower = label.to_ascii_lowercase();
+    lower
+        .strip_prefix("net_")
+        .is_some_and(|rest| !rest.is_empty() && rest.bytes().all(|b| b.is_ascii_digit()))
+}
+
+/// `E-SYNTH-SCHEM-014`: an auto-named net (`net_N`) reaching the sheet
+/// as a rendered label (schematic-quality plan Phase D3).
+///
+/// A placeholder name carries no intent — the reference sheet names
+/// every net it draws (`SCL`, `SDA`, `VIN`). The diagnostic suggests a
+/// name derived from the net's first endpoint pin, which is exactly
+/// the vocabulary `synth_layout::pick_net_label` uses, so an author
+/// can name the net at its source.
+///
+/// Nets drawn only as wires are *not* rendered by name and never fire;
+/// power rails get derived labels (`GND`, `VCC`), not placeholders.
+/// One diagnostic per offending net, in label order.
+fn check_auto_named_nets(board: &Board, layout: &Layout) -> Vec<Diagnostic> {
+    let mut seen: HashSet<NetId> = HashSet::new();
+    let mut out = Vec::new();
+    for label in &layout.net_labels {
+        if !is_auto_net_label(&label.label) || !seen.insert(label.net) {
+            continue;
+        }
+        let net = board.net(label.net);
+        // Suggest the first endpoint pin's name, uppercased — the same
+        // token `pick_net_label` would fall back to.
+        let suggestion = net
+            .and_then(|n| n.endpoints.first())
+            .and_then(|ep| board.pin(ep.component, ep.pin))
+            .map(|p| p.name.to_ascii_uppercase());
+        let message = match &suggestion {
+            Some(name) => format!(
+                "net rendered as \"{}\" is auto-named; give it a real name at its \
+                 source (`net \"{name}\" {{ … }}` or `connect … as \"{name}\"`)",
+                label.label,
+            ),
+            None => format!(
+                "net rendered as \"{}\" is auto-named; give it a real name at its source",
+                label.label,
+            ),
+        };
+        out.push(
+            DiagnosticBuilder::new(
+                "E-SYNTH-SCHEM-014",
+                Severity::Warning,
+                "auto-named net rendered on the sheet",
+            )
+            .message(message)
+            .entity(EntityRef::Net {
+                name: label.label.clone(),
+            })
+            .expected("a declared net name (e.g. SDA, VIN)")
+            .found(label.label.clone())
+            .explanation_url("synth.docs/diagnostics/E-SYNTH-SCHEM-014")
+            .build(),
+        );
+    }
+    out
 }
 
 #[cfg(test)]
@@ -1206,11 +1275,29 @@ mod tests {
         part
     }
 
+    /// A one-pin part, so the SCHEM-014 suggestion can name a pin.
+    fn single_pin_part(pin_name: &str) -> synth_registry::Part {
+        let mut part = cap_part();
+        part.pins = vec![synth_registry::Pin {
+            name: pin_name.to_string(),
+            number: synth_registry::PinNumber("1".to_string()),
+            electrical_type: synth_registry::ElectricalType::Bidirectional,
+            capabilities: Vec::new(),
+            required: false,
+            unit: None,
+            voltage_max_v: None,
+            voltage_min_v: None,
+            voltage_nominal_v: None,
+        }];
+        part
+    }
+
     #[test]
     fn decoupling_cap_far_from_ic_is_flagged() {
         // IC at (10, 10); a VCC net connecting IC pin 0 and cap C1 at
         // (100, 10) — 90 mm apart, beyond the 15 mm default.
         let board = Board {
+            groups: Vec::new(),
             legends: false,
             name: "b".to_string(),
             layers: 2,
@@ -1290,6 +1377,7 @@ mod tests {
     #[test]
     fn decoupling_cap_near_ic_is_silent() {
         let board = Board {
+            groups: Vec::new(),
             legends: false,
             name: "b".to_string(),
             layers: 2,
@@ -1637,6 +1725,7 @@ mod tests {
 
     fn board_with_nets(nets: Vec<Net>) -> Board {
         Board {
+            groups: Vec::new(),
             legends: false,
             name: "b".to_string(),
             layers: 2,
@@ -1787,11 +1876,69 @@ mod tests {
         assert!(check_sheet_fill(&board, &layout, 0.45).is_empty());
     }
 
+    // ----- E-SYNTH-SCHEM-014 ----------------------------------------------
+
+    #[test]
+    fn auto_named_rendered_net_is_flagged_with_a_suggestion() {
+        let mut board = board_with_nets(Vec::new());
+        board.components.push(Component {
+            id: ComponentId(0),
+            refdes: "U1".to_string(),
+            kind: "mcu".to_string(),
+            part: Some(single_pin_part("sda")),
+            value: None,
+            dnp: false,
+            properties: std::collections::BTreeMap::new(),
+            placement_hint: None,
+            group: None,
+            sheet: None,
+            source_span: Span::new(0, 0),
+        });
+        board.nets.push(Net {
+            id: NetId(0),
+            name: "net_3".to_string(),
+            endpoints: vec![NetEndpoint {
+                component: ComponentId(0),
+                pin: PinId(0),
+                source_span: Span::new(0, 0),
+            }],
+            netclass: None,
+            voltage: None,
+        });
+        let layout = layout(
+            Vec::new(),
+            Vec::new(),
+            Vec::new(),
+            vec![net_label(NetId(0), ComponentId(0), "NET_3")],
+        );
+        let violations = check_auto_named_nets(&board, &layout);
+        assert_eq!(violations.len(), 1);
+        assert_eq!(violations[0].code, "E-SYNTH-SCHEM-014");
+        assert!(
+            violations[0].message.as_deref().unwrap().contains("SDA"),
+            "suggestion should name the endpoint pin: {:?}",
+            violations[0].message
+        );
+    }
+
+    #[test]
+    fn named_net_is_silent_for_014() {
+        let board = board_with_nets(Vec::new());
+        let layout = layout(
+            Vec::new(),
+            Vec::new(),
+            Vec::new(),
+            vec![net_label(NetId(0), ComponentId(0), "SDA")],
+        );
+        assert!(check_auto_named_nets(&board, &layout).is_empty());
+    }
+
     // ----- aggregate entry point ------------------------------------------
 
     #[test]
     fn aggregate_check_returns_warnings_in_rule_order() {
         let board = Board {
+            groups: Vec::new(),
             legends: false,
             name: "b".to_string(),
             layers: 2,
@@ -1938,6 +2085,7 @@ mod tests {
         // A VCC rail with no explicit voltage name trips SCHEM-010
         // wherever it is rendered — a stable diagnostic to attribute.
         let b = Board {
+            groups: Vec::new(),
             legends: false,
             name: "b".to_string(),
             layers: 2,

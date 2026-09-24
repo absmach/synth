@@ -72,6 +72,12 @@ pub struct Board {
     /// resolved during lowering; nothing downstream needs the bodies.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub modules: Vec<ModuleDesc>,
+    /// Declared `group` regions, in first-declaration order, with their
+    /// optional header attributes (Phase D1): display `title`, box
+    /// `color`, and pinned `region`. Components reference these by name
+    /// via [`Component::group`].
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub groups: Vec<Group>,
     /// Declared design variants (`variant "lite" { dnp U3 }`), in
     /// declaration order. Exported to KiCad's native design variants.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
@@ -270,6 +276,33 @@ pub struct Keepout {
     pub source_span: Span,
 }
 
+/// A declared `group` region and its optional header attributes
+/// (schematic-quality plan Phase D1).
+///
+/// The name is the identifier components reference; `title` is what a
+/// reader sees when the two differ. `color` overrides the schematic
+/// box hue, and `region` pins the region to a page quadrant.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct Group {
+    pub name: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub title: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub color: Option<[u8; 3]>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub region: Option<PlacementRegion>,
+    pub source_span: Span,
+}
+
+impl Group {
+    /// The text a caption should show: the title when set, else the
+    /// identifier.
+    #[must_use]
+    pub fn display_title(&self) -> &str {
+        self.title.as_deref().unwrap_or(&self.name)
+    }
+}
+
 /// A named routing-constraint class with optional default trace
 /// width and clearance rules, in integer base units.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -335,6 +368,12 @@ impl Board {
 
     pub fn pin(&self, c: ComponentId, p: PinId) -> Option<&synth_registry::Pin> {
         self.component(c)?.part.as_ref()?.pins.get(p.0 as usize)
+    }
+
+    /// A declared `group` by name, for header attributes (title,
+    /// colour, pinned region).
+    pub fn group(&self, name: &str) -> Option<&Group> {
+        self.groups.iter().find(|g| g.name == name)
     }
 
     /// A refdes for diagnostic messages looked up by name:

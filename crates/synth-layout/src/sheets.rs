@@ -344,6 +344,7 @@ fn split_layout(board: &Board, global: &Layout, partitions: &[SheetPartition]) -
 /// but scoped to a partition instead of the whole board.
 fn place_sheet_notes(board: &Board, layout: &mut Layout, sheet: Option<&str>) {
     let scoped = Board {
+        groups: Vec::new(),
         legends: board.legends,
         name: board.name.clone(),
         layers: board.layers,
@@ -497,6 +498,7 @@ mod tests {
 
     fn board(components: Vec<Component>, nets: Vec<Net>) -> Board {
         Board {
+            groups: Vec::new(),
             legends: false,
             name: "b".to_string(),
             layers: 2,

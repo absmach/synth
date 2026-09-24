@@ -15,11 +15,11 @@
 use std::collections::BTreeMap;
 use synth_ast::{
     BindStmt, BoardAst, BusDeclStmt, CompanyStmt, ComponentDeclAst, ConnectionAst, DiffPairAttr,
-    DiffPairStmt, EndpointAst, GroupStmt, ImportAst, InterfaceDeclStmt, KeepoutAttr, KeepoutStmt,
-    LayersStmt, LegendsStmt, ManufacturerStmt, ModuleDeclStmt, NetDeclAst, NetclassAttr,
-    NetclassStmt, NotesDeclAst, ParamDeclAst, PlacementHintAst, PlacementHintAttr, PortBindingAst,
-    PortDeclAst, PowerDeclAst, ProgramAst, RevisionStmt, SheetStmt, StatementAst, UseStmt,
-    ValueWithUnit, VariantDeclStmt,
+    DiffPairStmt, EndpointAst, GroupAttr, GroupStmt, ImportAst, InterfaceDeclStmt, KeepoutAttr,
+    KeepoutStmt, LayersStmt, LegendsStmt, ManufacturerStmt, ModuleDeclStmt, NetDeclAst,
+    NetclassAttr, NetclassStmt, NotesDeclAst, ParamDeclAst, PlacementHintAst, PlacementHintAttr,
+    PortBindingAst, PortDeclAst, PowerDeclAst, ProgramAst, RevisionStmt, SheetStmt, StatementAst,
+    UseStmt, ValueWithUnit, VariantDeclStmt,
 };
 
 use synth_diagnostics::{
@@ -596,11 +596,31 @@ impl Parser {
                 {
                     *value = Some(format!("${name}"));
                 }
-            } else if let Some(s) = self.expect_string(
-                "E-SYNTH-PARSE-027",
-                "expected component value after `value`",
-            ) {
-                *value = Some(s);
+            } else if matches!(self.peek_kind(), TokenKind::StringLit(_)) {
+                if let Some(s) = self.expect_string(
+                    "E-SYNTH-PARSE-027",
+                    "expected component value after `value`",
+                ) {
+                    *value = Some(s);
+                }
+            } else if matches!(self.peek_kind(), TokenKind::Value { .. }) {
+                // Phase D4 (syntax half): a parametric literal
+                // (`value 10kohm`, `value 100nF`) is normalised to the
+                // display string KiCad and the BOM render. Resolving it
+                // against the registry to pick a concrete E-series part
+                // is the remaining work.
+                if let Some(v) = self.expect_value() {
+                    *value = Some(format!("{}{}", v.literal, v.unit.as_str()));
+                }
+            } else {
+                self.emit(
+                    self.peek().span,
+                    "E-SYNTH-PARSE-027",
+                    "expected component value after `value`",
+                    "a quoted string (`value \"10k\"`) or a unit literal (`value 10kohm`)",
+                    self.describe_current(),
+                    None,
+                );
             }
             return true;
         }
@@ -1253,6 +1273,9 @@ impl Parser {
         self.bump(); // consume `group`
         let name =
             self.expect_string("E-SYNTH-PARSE-002", "expected group name (quoted string)")?;
+        // Optional header attributes before the body (Phase D1):
+        // `color "#rrggbb"`, `region <quadrant>`, `title "…"`.
+        let attrs = self.parse_group_attrs();
         if !matches!(self.peek_kind(), TokenKind::LBrace) {
             self.emit(
                 self.peek().span,
@@ -1313,9 +1336,49 @@ impl Parser {
         let end = self.last_offset();
         Some(GroupStmt {
             name,
+            attrs,
             statements,
             span: Span::new(start, end),
         })
+    }
+
+    /// Parse the optional `color` / `region` / `title` attributes of a
+    /// `group` header (Phase D1), stopping at `{` or anything
+    /// unrecognised. `color` and `title` are contextual identifiers so
+    /// they stay usable as ordinary names elsewhere; `region` is
+    /// already a keyword.
+    fn parse_group_attrs(&mut self) -> Vec<GroupAttr> {
+        let mut attrs = Vec::new();
+        loop {
+            match self.peek_kind() {
+                TokenKind::KwRegion => {
+                    self.bump();
+                    if let Some(v) = self.expect_ident("E-SYNTH-PARSE-034", "expected region name")
+                    {
+                        attrs.push(GroupAttr::Region(v));
+                    }
+                }
+                TokenKind::Ident(word) if word == "color" => {
+                    self.bump();
+                    if let Some(hex) = self.expect_string(
+                        "E-SYNTH-PARSE-034",
+                        "expected colour hex string (e.g. \"#c2410c\")",
+                    ) {
+                        attrs.push(GroupAttr::Color(hex));
+                    }
+                }
+                TokenKind::Ident(word) if word == "title" => {
+                    self.bump();
+                    if let Some(title) =
+                        self.expect_string("E-SYNTH-PARSE-034", "expected group title string")
+                    {
+                        attrs.push(GroupAttr::Title(title));
+                    }
+                }
+                _ => break,
+            }
+        }
+        attrs
     }
 
     fn parse_sheet(&mut self) -> Option<SheetStmt> {
@@ -2408,6 +2471,30 @@ mod tests {
     }
 
     #[test]
+    fn parse_component_unit_literal_value() {
+        // Phase D4 (syntax half): `value 10kohm` / `value 100nF`
+        // normalise to the display string, and units are
+        // case-insensitive.
+        let res = parse(
+            lex(r#"board "b" {
+                    component R1: resistor "r_generic_0603" value 10kohm
+                    component C1: capacitor "c_generic_0603" value 100nF
+                }"#),
+            "test.synth".into(),
+        );
+        assert!(res.diagnostics.is_empty(), "{:?}", res.diagnostics);
+        let ast = res.ast.unwrap();
+        let StatementAst::Component(r) = &ast.board.statements[0] else {
+            panic!("Expected component statement")
+        };
+        assert_eq!(r.value.as_deref(), Some("10kohm"));
+        let StatementAst::Component(c) = &ast.board.statements[1] else {
+            panic!("Expected component statement")
+        };
+        assert_eq!(c.value.as_deref(), Some("100nf"));
+    }
+
+    #[test]
     fn parse_variant_block() {
         let res = parse(
             lex(r#"board "b" {
@@ -2675,5 +2762,62 @@ mod tests {
         };
         assert_eq!(s.name, "Power");
         assert_eq!(s.statements.len(), 1);
+    }
+
+    #[test]
+    fn parse_group_with_header_attributes() {
+        let src = r##"board "b" {
+            group "3.3V LDO" color "#c2410c" region top_left title "3.3 V regulator" {
+                component U1: regulator "ams1117_3v3"
+            }
+        }"##;
+        let tokens = lex(src);
+        let res = parse(tokens, "test.synth".into());
+        assert!(
+            res.diagnostics.is_empty(),
+            "Diagnostics should be empty: {:?}",
+            res.diagnostics
+        );
+        let ast = res.ast.unwrap();
+        let StatementAst::Group(g) = &ast.board.statements[0] else {
+            panic!("Expected group statement");
+        };
+        assert_eq!(g.name, "3.3V LDO");
+        assert_eq!(g.statements.len(), 1);
+        assert!(
+            g.attrs
+                .iter()
+                .any(|a| matches!(a, GroupAttr::Color(c) if c == "#c2410c")),
+            "{:?}",
+            g.attrs
+        );
+        assert!(
+            g.attrs
+                .iter()
+                .any(|a| matches!(a, GroupAttr::Region(r) if r == "top_left")),
+            "{:?}",
+            g.attrs
+        );
+        assert!(
+            g.attrs
+                .iter()
+                .any(|a| matches!(a, GroupAttr::Title(t) if t == "3.3 V regulator")),
+            "{:?}",
+            g.attrs
+        );
+    }
+
+    #[test]
+    fn bare_group_has_no_attributes() {
+        let src = r#"board "b" {
+            group "Input" {
+                component R1: resistor "r_generic_0603"
+            }
+        }"#;
+        let ast = parse(lex(src), "test.synth".into()).ast.unwrap();
+        let StatementAst::Group(g) = &ast.board.statements[0] else {
+            panic!("Expected group statement");
+        };
+        assert!(g.attrs.is_empty(), "{:?}", g.attrs);
     }
 }

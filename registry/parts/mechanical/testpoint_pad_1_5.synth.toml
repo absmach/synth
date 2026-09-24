@@ -1,0 +1,15 @@
+id = "testpoint_pad_1_5"
+kind = "testpoint"
+description = "SMD test point pad, 1.5 mm — probe point for a net"
+kicad_symbol = "Connector:TestPoint"
+kicad_footprint = "TestPoint:TestPoint_Pad_D1.5mm"
+
+[footprint_dimensions]
+width_mm = 1.5
+height_mm = 1.5
+courtyard_margin_mm = 0.25
+
+[[pins]]
+name = "p1"
+number = "1"
+electrical_type = "passive"

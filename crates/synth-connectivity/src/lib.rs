@@ -149,6 +149,7 @@ mod tests {
         };
 
         Board {
+            groups: Vec::new(),
             legends: false,
             name: "test".into(),
             layers: 2,

@@ -325,9 +325,109 @@ board "grouped" {
     }
 }
 
-/// Phase C2: on a grouped board, a net whose endpoints sit in different
-/// regions becomes a label, while a net wholly inside one region is
-/// drawn as a wire.
+/// Phase D1: a `group` header's `title`, `color`, and `region` drive
+/// the caption text, the box hue, and the packing order.
+#[test]
+fn group_header_attributes_drive_caption_colour_and_order() {
+    let source = r##"
+board "attrs" {
+  layers 2
+  group "B" region bottom_right title "Second" color "#c2410c" {
+    component R1: resistor "r_generic_0603" value "10k"
+  }
+  group "A" region top_left title "First" color "#0072b2" {
+    component R2: resistor "r_generic_0603" value "10k"
+  }
+  connect R1.p1 -> R2.p1
+}
+"##;
+    let board = board_from_source("attrs.synth", source);
+    assert_eq!(board.groups.len(), 2);
+    let a = board.group("A").expect("group A");
+    assert_eq!(a.display_title(), "First");
+    assert_eq!(a.color, Some([0x00, 0x72, 0xb2]));
+    assert_eq!(a.region, Some(synth_ir::PlacementRegion::TopLeft));
+
+    let layout = synth_layout::layout(&board);
+    let captions: Vec<&str> = layout.annotations.iter().map(|a| a.text.as_str()).collect();
+    assert!(captions.contains(&"First"), "{captions:?}");
+    assert!(captions.contains(&"Second"), "{captions:?}");
+    let box_a = layout
+        .group_boxes
+        .iter()
+        .find(|b| b.group == "A")
+        .expect("box A");
+    assert_eq!(box_a.color, [0x00, 0x72, 0xb2]);
+    let box_b = layout
+        .group_boxes
+        .iter()
+        .find(|b| b.group == "B")
+        .expect("box B");
+    assert_eq!(box_b.color, [0xc2, 0x41, 0x0c]);
+    assert!(
+        box_a.min_mm.0 <= box_b.min_mm.0,
+        "region hint must reorder packing: A {:?} vs B {:?}",
+        box_a.min_mm,
+        box_b.min_mm
+    );
+    let disjoint = box_a.max_mm.0 <= box_b.min_mm.0
+        || box_b.max_mm.0 <= box_a.min_mm.0
+        || box_a.max_mm.1 <= box_b.min_mm.1
+        || box_b.max_mm.1 <= box_a.min_mm.1;
+    assert!(disjoint, "hinted regions must not overlap");
+}
+
+/// Phase D2: mechanical parts with no `group` land in their own
+/// implicit `MOUNTING` region, drawn as a box like any declared group.
+#[test]
+fn mechanical_parts_get_their_own_region() {
+    let source = r#"
+board "mech" {
+  layers 2
+  group "Power" {
+    component U1: regulator "ams1117_3v3"
+    component C1: capacitor "c_generic_0805" value "10uF"
+    component C2: capacitor "c_generic_0805" value "10uF"
+    connect U1.vout -> C1.p1
+    connect U1.gnd -> C1.p2
+    connect U1.vout -> C2.p1
+    connect U1.gnd -> C2.p2
+  }
+  component H1: mounting_hole "mounting_hole_m2_5"
+  component H2: mounting_hole "mounting_hole_m2_5"
+  component FID1: fiducial "fiducial_1mm"
+}
+"#;
+    let board = board_from_source("mech.synth", source);
+    let layout = synth_layout::layout(&board);
+    let groups: Vec<&str> = layout
+        .group_boxes
+        .iter()
+        .map(|b| b.group.as_str())
+        .collect();
+    assert!(groups.contains(&"Power"), "{groups:?}");
+    assert!(
+        groups.contains(&synth_layout::MOUNTING_REGION),
+        "mechanical parts must get a MOUNTING region: {groups:?}"
+    );
+    // The two regions never overlap.
+    let power = layout
+        .group_boxes
+        .iter()
+        .find(|b| b.group == "Power")
+        .unwrap();
+    let mounting = layout
+        .group_boxes
+        .iter()
+        .find(|b| b.group == synth_layout::MOUNTING_REGION)
+        .unwrap();
+    let disjoint = power.max_mm.0 <= mounting.min_mm.0
+        || mounting.max_mm.0 <= power.min_mm.0
+        || power.max_mm.1 <= mounting.min_mm.1
+        || mounting.max_mm.1 <= power.min_mm.1;
+    assert!(disjoint, "Power and MOUNTING regions must not overlap");
+}
+
 #[test]
 fn wires_inside_a_region_labels_between_regions() {
     let source = r#"

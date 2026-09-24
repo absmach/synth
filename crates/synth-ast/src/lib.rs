@@ -107,8 +107,27 @@ impl StatementAst {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct GroupStmt {
     pub name: String,
+    /// Optional attributes between the name and the body:
+    /// `group "3.3V LDO" color "#c2410c" title "3.3 V regulator" { … }`.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub attrs: Vec<GroupAttr>,
     pub statements: Vec<StatementAst>,
     pub span: Span,
+}
+
+/// A `group` header attribute (schematic-quality plan Phase D1).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(tag = "kind", rename_all = "snake_case")]
+#[non_exhaustive]
+pub enum GroupAttr {
+    /// Explicit box hue (`color "#c2410c"`), overriding the
+    /// deterministic palette colour.
+    Color(String),
+    /// Pin the region to a page quadrant (`region top_left`), reusing
+    /// the placement-region vocabulary.
+    Region(String),
+    /// Display title when it should differ from the identifier.
+    Title(String),
 }
 
 /// A hierarchical sheet block: `sheet "Power" { ... }`.

@@ -156,6 +156,7 @@ mod tests {
             source_span: synth_diagnostics::Span::new(0, 0),
         };
         let board = Board {
+            groups: Vec::new(),
             legends: false,
             name: "b".to_string(),
             layers: 2,

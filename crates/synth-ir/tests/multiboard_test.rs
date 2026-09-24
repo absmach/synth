@@ -21,6 +21,7 @@ fn create_dummy_board(name: &str, connector_refdes: &str) -> Board {
     };
 
     Board {
+        groups: Vec::new(),
         legends: false,
         name: name.to_string(),
         layers: 2,

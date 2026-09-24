@@ -134,6 +134,11 @@ impl LowerResult {
 /// Lower an AST to an IR `Board`. `file` is used as the diagnostic
 /// location anchor; pass the same file string used at parse time so
 /// agents can correlate diagnostics across stages.
+// `lower` is a single linear walk over the statement tree — board
+// metadata, then components, then the net/group/variant passes. Each
+// step is a couple of lines; splitting them would scatter the order
+// that is the whole point of the function.
+#[allow(clippy::too_many_lines)]
 pub fn lower(ast: &ProgramAst, registry: &Registry, file: &str) -> LowerResult {
     let mut ctx = LowerCtx::new(file);
     // Reusable blocks first: every `use` becomes concrete, refdes-prefixed
@@ -154,6 +159,9 @@ pub fn lower(ast: &ProgramAst, registry: &Registry, file: &str) -> LowerResult {
     let mut notes: Vec<Note> = Vec::new();
     let mut keepouts: Vec<Keepout> = Vec::new();
     let mut netclasses: Vec<NetClass> = Vec::new();
+    // Declared `group` regions with their header attributes (Phase D1),
+    // in first-declaration order.
+    let mut groups: Vec<crate::board::Group> = Vec::new();
     let mut layers: u32 = 0;
     let mut manufacturer: Option<String> = None;
     let mut revision: Option<String> = None;
@@ -210,6 +218,9 @@ pub fn lower(ast: &ProgramAst, registry: &Registry, file: &str) -> LowerResult {
             StatementAst::Keepout(k) => keepouts.push(ctx.lower_keepout(k)),
             StatementAst::Netclass(n) => netclasses.push(ctx.lower_netclass(n)),
             StatementAst::Group(g) => {
+                if !groups.iter().any(|existing| existing.name == g.name) {
+                    groups.push(ctx.lower_group(g));
+                }
                 stack.push((&g.statements, 0, Some(g.name.as_str()), sheet));
             }
             StatementAst::Sheet(s) => {
@@ -255,6 +266,7 @@ pub fn lower(ast: &ProgramAst, registry: &Registry, file: &str) -> LowerResult {
         netclasses,
         buses,
         modules,
+        groups,
         variants,
         source_span: ast.board.span,
     };
@@ -419,6 +431,71 @@ impl<'a> LowerCtx<'a> {
             });
         }
         out
+    }
+
+    /// Lower a `group` header into its region record (Phase D1):
+    /// display title, box colour, and pinned page quadrant.
+    fn lower_group(&mut self, g: &synth_ast::GroupStmt) -> crate::board::Group {
+        use synth_ast::GroupAttr;
+        let mut title: Option<String> = None;
+        let mut color: Option<[u8; 3]> = None;
+        let mut region: Option<PlacementRegion> = None;
+        for attr in &g.attrs {
+            match attr {
+                GroupAttr::Title(t) => title = Some(t.clone()),
+                GroupAttr::Color(hex) => match parse_hex_color(hex) {
+                    Some(rgb) => color = Some(rgb),
+                    None => self.diagnostics.push(
+                        DiagnosticBuilder::new(
+                            "E-SYNTH-NAME-011",
+                            Severity::Warning,
+                            "invalid group color",
+                        )
+                        .location(Location::from_span(self.file.to_string(), g.span))
+                        .expected("a six-digit hex colour, e.g. \"#c2410c\"")
+                        .found(format!("\"{hex}\""))
+                        .message(format!(
+                            "group `{}` colour `{hex}` is not `#rrggbb`; the region \
+                             keeps its default palette hue",
+                            g.name
+                        ))
+                        .explanation_url("synth.docs/diagnostics/E-SYNTH-NAME-011")
+                        .build(),
+                    ),
+                },
+                GroupAttr::Region(name) => match parse_region(name) {
+                    Some(r) => region = Some(r),
+                    None => self.diagnostics.push(
+                        DiagnosticBuilder::new(
+                            "W-SYNTH-HINT-001",
+                            Severity::Warning,
+                            "unknown placement region",
+                        )
+                        .location(Location::from_span(self.file.to_string(), g.span))
+                        .expected(
+                            "one of: top_left, top_right, bottom_left, bottom_right, centre, \
+                             top_edge, bottom_edge, left_edge, right_edge",
+                        )
+                        .found(format!("`{name}`"))
+                        .message(format!(
+                            "group `{}` pins to unknown region `{name}`; the region keeps \
+                             its natural packing position",
+                            g.name
+                        ))
+                        .explanation_url("synth.docs/diagnostics/W-SYNTH-HINT-001")
+                        .build(),
+                    ),
+                },
+                _ => {}
+            }
+        }
+        crate::board::Group {
+            name: g.name.clone(),
+            title,
+            color,
+            region,
+            source_span: g.span,
+        }
     }
 
     fn lower_netclass(&mut self, n: &NetclassStmt) -> NetClass {

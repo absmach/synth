@@ -17,6 +17,7 @@ use synth_registry::{Lifecycle, Part, PartId, Pin, PinNumber, RequiredDecoupling
 
 fn empty_board() -> Board {
     Board {
+        groups: Vec::new(),
         legends: false,
         name: "test".to_string(),
         layers: 2,
@@ -211,6 +212,7 @@ fn decoupling_board() -> Board {
     cap_part.required_decoupling = Vec::new();
 
     Board {
+        groups: Vec::new(),
         legends: false,
         name: "dec".to_string(),
         layers: 2,

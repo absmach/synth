@@ -406,7 +406,13 @@ impl<'a> Lexer<'a> {
             };
         }
 
-        let Ok(unit) = unit_str.parse::<Unit>() else {
+        // Case-insensitive fallback: `100nF` and `100nf` are the same
+        // unit, and EE notation mixes the two freely. Exact case still
+        // wins so existing spellings are untouched.
+        let unit = unit_str
+            .parse::<Unit>()
+            .or_else(|_| unit_str.to_ascii_lowercase().parse::<Unit>());
+        let Ok(unit) = unit else {
             return Token {
                 kind: TokenKind::Error(LexError::UnknownUnit(unit_str.to_string())),
                 span: Span::new(start, self.offset()),

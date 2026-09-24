@@ -1311,6 +1311,11 @@ impl ErcRule for OrphanComponentRule {
     fn check(&self, board: &Board, file: &str) -> Vec<Diagnostic> {
         let mut out = Vec::new();
         for component in &board.components {
+            // Mechanical parts (mounting holes, fiducials) have no
+            // electrical pins by design — never orphaned (Phase D2).
+            if is_non_electrical_kind(&component.kind) {
+                continue;
+            }
             let has_any_connection = board.nets.iter().any(|net| {
                 net.endpoints
                     .iter()
@@ -1988,8 +1993,19 @@ fn accepted_refdes_prefixes(kind: &str) -> Option<&'static [&'static str]> {
         // IC-family kinds: any package-level "U" convention.
         "ic" | "mcu" | "sensor" | "regulator" | "opamp" | "memory" | "modem" | "charger"
         | "secure_element" | "display" | "level_shifter" => &["U"][..],
+        // Mechanical / test parts (Phase D2).
+        "mounting_hole" => &["H", "MH"][..],
+        "testpoint" => &["TP"][..],
+        "fiducial" => &["FID"][..],
         _ => return None,
     })
+}
+
+/// Kinds that carry no electrical connectivity by design (Phase D2):
+/// mechanical and test parts. They are exempt from the connectivity
+/// rules that assume a part must be wired (orphan, no-driver, …).
+fn is_non_electrical_kind(kind: &str) -> bool {
+    matches!(kind, "mounting_hole" | "fiducial")
 }
 
 struct RefdesPrefixRule;
@@ -3534,6 +3550,7 @@ mod tests {
             source_span: Span::new(0, 0),
         };
         Board {
+            groups: Vec::new(),
             legends: false,
             name: "b".into(),
             layers: 2,
@@ -3612,6 +3629,7 @@ mod tests {
             source_span: Span::new(0, 0),
         };
         Board {
+            groups: Vec::new(),
             legends: false,
             name: "b".into(),
             layers: 2,
@@ -3698,6 +3716,7 @@ mod tests {
     fn identity_test_board(parts: Vec<(synth_registry::Part, &str)>) -> Board {
         use synth_diagnostics::Span;
         Board {
+            groups: Vec::new(),
             legends: false,
             name: "b".into(),
             layers: 2,
@@ -3823,6 +3842,7 @@ mod tests {
             source_span: Span::new(0, 0),
         };
         Board {
+            groups: Vec::new(),
             legends: false,
             name: "b".into(),
             layers: 2,
@@ -3967,6 +3987,7 @@ mod tests {
             }),
         };
         let board = Board {
+            groups: Vec::new(),
             legends: false,
             name: "b".into(),
             layers: 2,
@@ -4027,6 +4048,7 @@ mod tests {
             }],
         );
         let board = Board {
+            groups: Vec::new(),
             legends: false,
             name: "b".into(),
             layers: 2,
