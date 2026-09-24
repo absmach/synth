@@ -3085,6 +3085,18 @@ pub(crate) fn pick_net_label_with_source(
     net: &synth_ir::Net,
 ) -> Option<(String, ComponentId)> {
     use synth_registry::PinCapability;
+    // A net that is a member of a declared bus renders its full
+    // `<bus>.<member>` name. This is the second exception to the
+    // pin-derived-token policy (the first is `declared_rail_name`):
+    // the name is what the exporter's `bus_alias` associates with, and
+    // what a hand-drawn bus schematic shows, so a guessed `SDA` would
+    // both hide the bus and collide across two buses with the same
+    // member names.
+    if let Some(label) = declared_bus_member_label(board, &net.name) {
+        if let Some(ep) = net.endpoints.first() {
+            return Some((label, ep.component));
+        }
+    }
     // NOTE: signal-net labels stay pin-derived (capability tokens
     // like `SDA`, else the active-IC pin name) even when the net
     // carries a user-declared name: the declared name already shows
@@ -3150,6 +3162,25 @@ pub(crate) fn pick_net_label_with_source(
     let part = component.part.as_ref()?;
     let pin = part.pins.get(ep.pin.0 as usize)?;
     Some((pin.name.to_ascii_uppercase(), ep.component))
+}
+
+/// The full `<bus>.<member>` name when `net_name` is a member of a
+/// declared bus, else `None`. Mirrors [`declared_rail_name`]: a
+/// declared name beats the pin-derived heuristic so the schematic
+/// label matches the bus the design actually declared.
+fn declared_bus_member_label(board: &Board, net_name: &str) -> Option<String> {
+    for bus in &board.buses {
+        let Some(member) = net_name
+            .strip_prefix(bus.name.as_str())
+            .and_then(|rest| rest.strip_prefix('.'))
+        else {
+            continue;
+        };
+        if bus.members.iter().any(|m| m == member) {
+            return Some(net_name.to_string());
+        }
+    }
+    None
 }
 
 /// Refdes of the component that supplied `expected` as `net`'s label
@@ -3624,6 +3655,8 @@ mod barycenter_tests {
             notes: vec![],
             keepouts: Vec::new(),
             netclasses: vec![],
+            buses: vec![],
+            modules: vec![],
             source_span: Span::new(0, 0),
         }
     }
@@ -3827,6 +3860,8 @@ mod semantic_weights_tests {
             notes: vec![],
             keepouts: Vec::new(),
             netclasses: vec![],
+            buses: vec![],
+            modules: vec![],
             source_span: Span::new(0, 0),
         }
     }
@@ -4150,6 +4185,8 @@ mod soft_pin_swap_tests {
             notes: vec![],
             keepouts: Vec::new(),
             netclasses: vec![],
+            buses: vec![],
+            modules: vec![],
             source_span: Span::new(0, 0),
         }
     }
@@ -4387,6 +4424,8 @@ mod patterns_tests {
             notes: vec![],
             keepouts: Vec::new(),
             netclasses: vec![],
+            buses: vec![],
+            modules: vec![],
             source_span: Span::new(0, 0),
         }
     }
@@ -4939,6 +4978,8 @@ mod naming_tests {
             notes: vec![],
             keepouts: Vec::new(),
             netclasses: vec![],
+            buses: vec![],
+            modules: vec![],
             source_span: Span::new(0, 0),
         }
     }
@@ -5230,6 +5271,8 @@ mod documentation_tests {
             notes,
             keepouts: Vec::new(),
             netclasses: vec![],
+            buses: vec![],
+            modules: vec![],
             source_span: Span::new(0, 0),
         }
     }

@@ -1,0 +1,27 @@
+board "module_divider" {
+  layers 2
+  module "Divider" (vin: input, vout: output, ret: passive) {
+    param r_top: resistance = 10kohm
+    param r_bot: resistance = 4.7kohm
+    component R1: resistor "r_generic_0603" value $r_top
+    component R2: resistor "r_generic_0603" value $r_bot
+    connect vin -> R1.p1
+    connect R1.p2 -> vout
+    connect R1.p2 -> R2.p1
+    connect R2.p2 -> ret
+  }
+  interface "Bus2" (a: input, b: output)
+  bus "LINK0" (a, b)
+  component J1: connector "jst_ph_2pin"
+  use "Divider" as D1 {
+    vin -> "VIN"
+    vout -> "SENSE_1"
+    ret -> "RTN"
+  }
+  use "Divider" as D2 (r_top = 22kohm) {
+    vin -> "VIN"
+    vout -> "SENSE_2"
+    ret -> "RTN"
+  }
+  bind "LINK0" : Bus2 { a -> J1.p1, b -> J1.p2 }
+}

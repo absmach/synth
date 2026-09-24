@@ -302,6 +302,47 @@ pub(crate) fn build_sheet_schematic(
         embed_library(board, layout, power_drivers),
     ];
 
+    // Declared buses (`bus "I2C0" (sda, scl)`) export as KiCad bus
+    // aliases on every sheet that carries one of their members. A
+    // member is carried by a per-pin label named `<bus>.<member>`;
+    // KiCad resolves that label to the bus member by name, so no bus
+    // graphic is drawn — the exporter is label-driven for nets too
+    // (see `layout.net_labels`). The alias teaches KiCad's bus tools
+    // the member set without adding a floating bus wire that ERC
+    // would flag.
+    {
+        let mut bus_labels: Vec<&str> = board
+            .nets
+            .iter()
+            .map(|n| n.name.as_str())
+            .chain(layout.net_labels.iter().map(|l| l.label.as_str()))
+            .chain(layout.hierarchical_labels.iter().map(|l| l.label.as_str()))
+            .collect();
+        bus_labels.sort_unstable();
+        bus_labels.dedup();
+        for bus in &board.buses {
+            let used = bus_labels.iter().any(|label| {
+                label
+                    .strip_prefix(bus.name.as_str())
+                    .and_then(|rest| rest.strip_prefix('.'))
+                    .is_some_and(|member| bus.members.iter().any(|m| m == member))
+            });
+            if !used {
+                continue;
+            }
+            children.push(Sexp::list(
+                "bus_alias",
+                vec![
+                    Sexp::str(bus.name.clone()),
+                    Sexp::list(
+                        "members",
+                        bus.members.iter().map(|m| Sexp::str(m.clone())).collect(),
+                    ),
+                ],
+            ));
+        }
+    }
+
     // Symbol instances. On sub-sheets every symbol carries its
     // `(instances (project … (path …)))` block so KiCad maps the
     // reference to the sheet path (dev-docs symbol section: every

@@ -105,6 +105,8 @@ fn board(components: Vec<Component>, nets: Vec<Net>) -> Board {
         notes: vec![],
         keepouts: Vec::new(),
         netclasses: vec![],
+        buses: vec![],
+        modules: vec![],
         source_span: synth_diagnostics::Span::new(0, 0),
     }
 }

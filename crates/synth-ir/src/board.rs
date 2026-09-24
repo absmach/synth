@@ -8,6 +8,7 @@ use serde::{Deserialize, Serialize};
 use synth_diagnostics::Span;
 use synth_registry::Part;
 
+use crate::modules::{BusBundle, ModuleDesc};
 use crate::units::{Impedance, Length, Voltage};
 
 /// Stable identifier for a component within a single board.
@@ -54,6 +55,14 @@ pub struct Board {
     /// or `connect` statement; the PCB exporter emits one KiCad
     /// `net_class` per declared class with its member nets.
     pub netclasses: Vec<NetClass>,
+    /// Declared buses (`bus "I2C0" (sda, scl)`), in declaration order.
+    /// Exported to KiCad as buses plus `bus_alias` entries.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub buses: Vec<BusBundle>,
+    /// Declared modules, kept for tooling/inspection. Instantiation is
+    /// resolved during lowering; nothing downstream needs the bodies.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub modules: Vec<ModuleDesc>,
     pub source_span: Span,
 }
 

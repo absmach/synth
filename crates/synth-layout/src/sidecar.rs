@@ -323,6 +323,8 @@ priority = "hard"
             notes: Vec::new(),
             keepouts: Vec::new(),
             netclasses: vec![],
+            buses: vec![],
+            modules: vec![],
             source_span: Span::new(0, 0),
         }
     }

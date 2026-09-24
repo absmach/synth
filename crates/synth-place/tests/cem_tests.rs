@@ -76,6 +76,8 @@ fn create_test_board() -> Board {
         notes: vec![],
         keepouts: vec![],
         netclasses: vec![],
+        buses: vec![],
+        modules: vec![],
         source_span: dummy_span,
     }
 }

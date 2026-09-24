@@ -35,8 +35,8 @@
 use std::collections::HashMap;
 
 use synth_ast::{
-    ComponentDeclAst, DiffPairAttr, DiffPairStmt, EndpointAst, KeepoutAttr, KeepoutStmt,
-    NetclassStmt, ProgramAst, StatementAst, ValueWithUnit,
+    ComponentDeclAst, DiffPairAttr, DiffPairStmt, EndpointAst, EndpointRefKind, KeepoutAttr,
+    KeepoutStmt, NetclassStmt, ProgramAst, StatementAst, ValueWithUnit,
 };
 use synth_diagnostics::{
     Diagnostic, DiagnosticBuilder, Location, Patch, PatchKind, Severity, Span, SuggestedAction,
@@ -136,6 +136,15 @@ impl LowerResult {
 /// agents can correlate diagnostics across stages.
 pub fn lower(ast: &ProgramAst, registry: &Registry, file: &str) -> LowerResult {
     let mut ctx = LowerCtx::new(file);
+    // Reusable blocks first: every `use` becomes concrete, refdes-prefixed
+    // components and connections (see `modules.rs` and `docs/modules.md`),
+    // and `bind` becomes plain connections. Declarations are lifted out as
+    // board metadata; lowering then walks the expanded statements.
+    let expansion = crate::modules::expand(&ast.board.statements, file);
+    ctx.diagnostics.extend(expansion.diagnostics);
+    let buses = expansion.buses;
+    let modules = expansion.modules;
+    let root_statements = expansion.statements;
     let mut components: Vec<Component> = Vec::new();
     let mut refdes_index: HashMap<String, ComponentId> = HashMap::new();
     let mut connections: Vec<ConnectionRecord> = Vec::new();
@@ -158,7 +167,7 @@ pub fn lower(ast: &ProgramAst, registry: &Registry, file: &str) -> LowerResult {
     // before. `stack` is the enclosing block chain; nested blocks
     // take the innermost name, and sheets nest independently of
     // groups (a component may carry both).
-    let mut stack: Vec<BlockFrame<'_>> = vec![(&ast.board.statements, 0, None, None)];
+    let mut stack: Vec<BlockFrame<'_>> = vec![(&root_statements, 0, None, None)];
     while let Some((statements, index, group, sheet)) = stack.pop() {
         let Some(stmt) = statements.get(index) else {
             continue;
@@ -235,6 +244,8 @@ pub fn lower(ast: &ProgramAst, registry: &Registry, file: &str) -> LowerResult {
         notes,
         keepouts,
         netclasses,
+        buses,
+        modules,
         source_span: ast.board.span,
     };
 
@@ -717,41 +728,49 @@ impl<'a> LowerCtx<'a> {
         // order (see [`Assertion`]).
         let mut assertions: Vec<Assertion> = Vec::new();
 
-        let intern = |ep: &NetEndpoint,
-                      endpoints: &mut Vec<(ComponentId, PinId, Span)>,
-                      endpoint_index: &mut HashMap<(ComponentId, PinId), usize>|
-         -> usize {
-            *endpoint_index
-                .entry((ep.component, ep.pin))
-                .or_insert_with(|| {
-                    let i = endpoints.len();
-                    endpoints.push((ep.component, ep.pin, ep.source_span));
-                    i
-                })
-        };
-
         for c in connections {
-            let Some(f) = self.resolve_endpoint(&c.from, components, refdes_index) else {
-                // Still resolve the targets so their own typos are
-                // reported rather than masked by the failed source.
-                for t_ast in &c.tos {
-                    let _ = self.resolve_endpoint(t_ast, components, refdes_index);
+            // A `"NAME"` endpoint (module-port/bus bindings lowered by
+            // `modules.rs`) is a reference to a *named* net, not a pin:
+            // it contributes a name that merges this statement's group
+            // with every other group of the same name (see
+            // `union_endpoint_sets`), exactly like `as "NAME"`.
+            let mut names: Vec<String> = c.net_name.clone().into_iter().collect();
+            let mut members: Vec<usize> = Vec::new();
+            let mut from_failed = false;
+            if let Some(name) = net_endpoint_name(&c.from) {
+                names.push(name);
+            } else {
+                match self.resolve_endpoint(&c.from, components, refdes_index) {
+                    Some(f) => {
+                        members.push(intern_endpoint(&f, &mut endpoints, &mut endpoint_index));
+                    }
+                    None => from_failed = true,
                 }
+            }
+            // Targets join the source (or, when the source is a bare net
+            // name, the first resolved target) and any `"NAME"` targets
+            // contribute their name.
+            let chain_root = members.first().copied();
+            let targets = self.resolve_endpoint_list(
+                &c.tos,
+                chain_root,
+                &mut names,
+                components,
+                refdes_index,
+                &mut endpoints,
+                &mut endpoint_index,
+                &mut joins,
+            );
+            members.extend(targets);
+            // Nothing resolved and no name to anchor: the source already
+            // reported its own error, and the targets above were still
+            // visited so their typos are not masked.
+            if from_failed && members.is_empty() && names.is_empty() {
                 continue;
-            };
-            let fi = intern(&f, &mut endpoints, &mut endpoint_index);
-            let mut members = vec![fi];
-            for t_ast in &c.tos {
-                let Some(t) = self.resolve_endpoint(t_ast, components, refdes_index) else {
-                    continue;
-                };
-                let ti = intern(&t, &mut endpoints, &mut endpoint_index);
-                joins.push((fi, ti));
-                members.push(ti);
             }
             assertions.push(Assertion {
                 members,
-                names: c.net_name.clone().into_iter().collect(),
+                names,
                 classes: c.netclass.clone().into_iter().collect(),
                 voltages: Vec::new(),
                 span: c.span,
@@ -759,20 +778,20 @@ impl<'a> LowerCtx<'a> {
         }
 
         for n in net_decls {
-            let mut members = Vec::new();
-            for (i, ep_ast) in n.endpoints.iter().enumerate() {
-                let Some(ep) = self.resolve_endpoint(ep_ast, components, refdes_index) else {
-                    continue;
-                };
-                let idx = intern(&ep, &mut endpoints, &mut endpoint_index);
-                if i > 0 {
-                    joins.push((members[0], idx));
-                }
-                members.push(idx);
-            }
+            let mut names = vec![n.name.clone()];
+            let members = self.resolve_endpoint_list(
+                &n.endpoints,
+                None,
+                &mut names,
+                components,
+                refdes_index,
+                &mut endpoints,
+                &mut endpoint_index,
+                &mut joins,
+            );
             assertions.push(Assertion {
                 members,
-                names: vec![n.name.clone()],
+                names,
                 classes: n.netclass.clone().into_iter().collect(),
                 voltages: Vec::new(),
                 span: n.span,
@@ -787,20 +806,20 @@ impl<'a> LowerCtx<'a> {
                     None
                 }
             };
-            let mut members = Vec::new();
-            for (i, ep_ast) in p.endpoints.iter().enumerate() {
-                let Some(ep) = self.resolve_endpoint(ep_ast, components, refdes_index) else {
-                    continue;
-                };
-                let idx = intern(&ep, &mut endpoints, &mut endpoint_index);
-                if i > 0 {
-                    joins.push((members[0], idx));
-                }
-                members.push(idx);
-            }
+            let mut names = vec![p.name.clone()];
+            let members = self.resolve_endpoint_list(
+                &p.endpoints,
+                None,
+                &mut names,
+                components,
+                refdes_index,
+                &mut endpoints,
+                &mut endpoint_index,
+                &mut joins,
+            );
             assertions.push(Assertion {
                 members,
-                names: vec![p.name.clone()],
+                names,
                 classes: p.netclass.clone().into_iter().collect(),
                 voltages: voltage.into_iter().collect(),
                 span: p.span,
@@ -924,12 +943,56 @@ impl<'a> LowerCtx<'a> {
         (netclass, voltage)
     }
 
+    /// Resolve a run of endpoints into member indices, appending any
+    /// `"NAME"` references to `names`. Each resolved member joins
+    /// `chain_root` when given (so a statement's targets all attach to
+    /// its source), otherwise the first resolved member becomes the
+    /// root and the rest join it. Unresolvable endpoints are skipped
+    /// after `resolve_endpoint` has reported them.
+    #[allow(clippy::too_many_arguments)]
+    fn resolve_endpoint_list(
+        &mut self,
+        endpoints_ast: &[EndpointAst],
+        chain_root: Option<usize>,
+        names: &mut Vec<String>,
+        components: &[Component],
+        refdes_index: &HashMap<String, ComponentId>,
+        endpoints: &mut Vec<(ComponentId, PinId, Span)>,
+        endpoint_index: &mut HashMap<(ComponentId, PinId), usize>,
+        joins: &mut Vec<(usize, usize)>,
+    ) -> Vec<usize> {
+        let mut members = Vec::new();
+        let mut root = chain_root;
+        for ep_ast in endpoints_ast {
+            if let Some(name) = net_endpoint_name(ep_ast) {
+                names.push(name);
+                continue;
+            }
+            let Some(ep) = self.resolve_endpoint(ep_ast, components, refdes_index) else {
+                continue;
+            };
+            let idx = intern_endpoint(&ep, endpoints, endpoint_index);
+            if let Some(r) = root {
+                joins.push((r, idx));
+            }
+            root = Some(idx);
+            members.push(idx);
+        }
+        members
+    }
+
     fn resolve_endpoint(
         &mut self,
         ep: &EndpointAst,
         components: &[Component],
         refdes_index: &HashMap<String, ComponentId>,
     ) -> Option<NetEndpoint> {
+        // A `"NAME"` endpoint is a reference to a named net, not a pin.
+        // It is handled by the caller (it contributes a net *name*), so
+        // there is nothing to resolve here.
+        if ep.ref_kind == EndpointRefKind::Net {
+            return None;
+        }
         let Some(&cid) = refdes_index.get(&ep.component) else {
             self.diagnostics.push(
                 DiagnosticBuilder::new(
@@ -1164,6 +1227,29 @@ fn union_endpoint_sets(
     }
     ordered.sort_by_key(|g| g[0]);
     ordered
+}
+
+/// Intern one resolved endpoint to its stable index, reusing the
+/// index of an identical `(component, pin)` seen before.
+fn intern_endpoint(
+    ep: &NetEndpoint,
+    endpoints: &mut Vec<(ComponentId, PinId, Span)>,
+    endpoint_index: &mut HashMap<(ComponentId, PinId), usize>,
+) -> usize {
+    *endpoint_index
+        .entry((ep.component, ep.pin))
+        .or_insert_with(|| {
+            let i = endpoints.len();
+            endpoints.push((ep.component, ep.pin, ep.source_span));
+            i
+        })
+}
+
+/// The net name of a `"NAME"` endpoint reference, or `None` for a
+/// component-pin endpoint. Module/bus expansion emits these instead of
+/// synthesizing per-instance copies of a shared net.
+fn net_endpoint_name(ep: &EndpointAst) -> Option<String> {
+    (ep.ref_kind == EndpointRefKind::Net).then(|| ep.component.clone())
 }
 
 /// A component refdes for lowering-time diagnostics, before the

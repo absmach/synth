@@ -21,6 +21,7 @@
 pub mod board;
 pub mod imports;
 pub mod lower;
+pub mod modules;
 pub mod multiboard;
 pub mod power_domains;
 pub mod units;
@@ -34,6 +35,7 @@ pub use imports::{
     ResolveResult as ImportResolveResult, MAX_IMPORT_DEPTH, MAX_IMPORT_SIZE,
 };
 pub use lower::{lower, LowerResult};
+pub use modules::{expand as expand_modules, BusBundle, ModuleDesc};
 pub use multiboard::{InterBoardPinMapping, MultiBoardProject, MultiBoardValidationResult};
 pub use power_domains::{infer_power_domains, PowerDomainKind, PowerDomainMap};
 /// Re-export of the registry's `Pin` type so consumers of the IR

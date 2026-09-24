@@ -348,6 +348,8 @@ fn place_sheet_notes(board: &Board, layout: &mut Layout, sheet: Option<&str>) {
             .collect(),
         keepouts: board.keepouts.clone(),
         netclasses: board.netclasses.clone(),
+        buses: vec![],
+        modules: vec![],
         source_span: board.source_span,
     };
     // Group boxes were recomputed for this subset already, so group
@@ -485,6 +487,8 @@ mod tests {
             notes: Vec::new(),
             keepouts: Vec::new(),
             netclasses: vec![],
+            buses: vec![],
+            modules: vec![],
             source_span: Span::new(0, 0),
         }
     }

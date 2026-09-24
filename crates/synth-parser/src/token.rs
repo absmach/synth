@@ -35,6 +35,13 @@ pub enum TokenKind {
     KwPower,
     KwNotes,
     KwDnp,
+    KwModule,
+    KwInterface,
+    KwBus,
+    KwUse,
+    KwBind,
+    KwPrefix,
+    KwParam,
     KwAs,
     KwClass,
     KwDiffPair,
@@ -61,6 +68,10 @@ pub enum TokenKind {
     Dot,    // .
     Arrow,  // ->
     Comma,  // ,
+    LParen, // (
+    RParen, // )
+    Eq,     // =
+    Dollar, // $
 
     // Literals
     Ident(String),
@@ -225,6 +236,34 @@ impl<'a> Lexer<'a> {
                 self.pos += 1;
                 return Token {
                     kind: TokenKind::Comma,
+                    span: Span::new(start, self.offset()),
+                };
+            }
+            b'(' => {
+                self.pos += 1;
+                return Token {
+                    kind: TokenKind::LParen,
+                    span: Span::new(start, self.offset()),
+                };
+            }
+            b')' => {
+                self.pos += 1;
+                return Token {
+                    kind: TokenKind::RParen,
+                    span: Span::new(start, self.offset()),
+                };
+            }
+            b'=' => {
+                self.pos += 1;
+                return Token {
+                    kind: TokenKind::Eq,
+                    span: Span::new(start, self.offset()),
+                };
+            }
+            b'$' => {
+                self.pos += 1;
+                return Token {
+                    kind: TokenKind::Dollar,
                     span: Span::new(start, self.offset()),
                 };
             }
@@ -398,6 +437,13 @@ impl<'a> Lexer<'a> {
             "power" => TokenKind::KwPower,
             "notes" => TokenKind::KwNotes,
             "dnp" => TokenKind::KwDnp,
+            "module" => TokenKind::KwModule,
+            "interface" => TokenKind::KwInterface,
+            "bus" => TokenKind::KwBus,
+            "use" => TokenKind::KwUse,
+            "bind" => TokenKind::KwBind,
+            "prefix" => TokenKind::KwPrefix,
+            "param" => TokenKind::KwParam,
             "as" => TokenKind::KwAs,
             "class" => TokenKind::KwClass,
             "diff_pair" => TokenKind::KwDiffPair,
@@ -449,7 +495,7 @@ mod tests {
     #[test]
     fn keywords_recognized() {
         let ks = kinds(
-            "board import layers manufacturer revision company component connect net power notes dnp as class diff_pair netclass keepout group sheet impedance trace_width clearance radius value",
+            "board import layers manufacturer revision company component connect net power notes dnp module interface bus use bind prefix param as class diff_pair netclass keepout group sheet impedance trace_width clearance radius value",
         );
         assert_eq!(
             ks,
@@ -466,6 +512,13 @@ mod tests {
                 TokenKind::KwPower,
                 TokenKind::KwNotes,
                 TokenKind::KwDnp,
+                TokenKind::KwModule,
+                TokenKind::KwInterface,
+                TokenKind::KwBus,
+                TokenKind::KwUse,
+                TokenKind::KwBind,
+                TokenKind::KwPrefix,
+                TokenKind::KwParam,
                 TokenKind::KwAs,
                 TokenKind::KwClass,
                 TokenKind::KwDiffPair,

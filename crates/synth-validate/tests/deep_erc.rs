@@ -694,6 +694,8 @@ fn multi_unit_rails_split_is_an_error() {
         notes: Vec::new(),
         keepouts: Vec::new(),
         netclasses: vec![],
+        buses: vec![],
+        modules: vec![],
         source_span: Span::new(0, 0),
     };
     let diags = synth_validate::run_erc(&board, "t.synth");

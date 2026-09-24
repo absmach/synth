@@ -1,0 +1,452 @@
+---
+source: crates/synth-ir/tests/lowering.rs
+expression: board
+---
+{
+  "name": "module_divider",
+  "layers": 2,
+  "manufacturer": null,
+  "components": [
+    {
+      "id": 0,
+      "refdes": "J1",
+      "kind": "connector",
+      "part": {
+        "id": "jst_ph_2pin",
+        "kind": "connector",
+        "description": "JST PH-series 2-pin wire-to-board connector, 2.0mm pitch",
+        "version": 0,
+        "lifecycle": "active",
+        "signed_by": [],
+        "substitutes": [],
+        "mpn": null,
+        "lcsc_pn": null,
+        "pins": [
+          {
+            "name": "p1",
+            "number": "1",
+            "electrical_type": "passive",
+            "capabilities": [],
+            "required": false,
+            "unit": null,
+            "voltage_max_v": null
+          },
+          {
+            "name": "p2",
+            "number": "2",
+            "electrical_type": "passive",
+            "capabilities": [],
+            "required": false,
+            "unit": null,
+            "voltage_max_v": null
+          }
+        ],
+        "required_decoupling": [],
+        "kicad_symbol": "Connector_Generic:Conn_01x02",
+        "kicad_footprint": "Connector_JST:JST_PH_S2B-PH-K_1x02_P2.00mm_Horizontal",
+        "footprint_dimensions": {
+          "width_mm": 1.0,
+          "height_mm": 1.6,
+          "courtyard_margin_mm": 0.25,
+          "mating_face": null
+        },
+        "operating_conditions": {
+          "min_voltage_v": 1.8,
+          "max_voltage_v": 5.0,
+          "max_current_ma": 100.0
+        }
+      },
+      "source_span": {
+        "byte_start": 458,
+        "byte_end": 495
+      }
+    },
+    {
+      "id": 1,
+      "refdes": "D1_R1",
+      "kind": "resistor",
+      "part": {
+        "id": "r_generic_0603",
+        "kind": "resistor",
+        "description": "Generic 0603 thick-film resistor, any value",
+        "version": 0,
+        "lifecycle": "active",
+        "signed_by": [],
+        "substitutes": [],
+        "mpn": null,
+        "lcsc_pn": null,
+        "pins": [
+          {
+            "name": "p1",
+            "number": "1",
+            "electrical_type": "passive",
+            "capabilities": [],
+            "required": false,
+            "unit": null,
+            "voltage_max_v": null
+          },
+          {
+            "name": "p2",
+            "number": "2",
+            "electrical_type": "passive",
+            "capabilities": [],
+            "required": false,
+            "unit": null,
+            "voltage_max_v": null
+          }
+        ],
+        "required_decoupling": [],
+        "kicad_symbol": "Device:R_US",
+        "kicad_footprint": "Resistor_SMD:R_0603_1608Metric",
+        "footprint_dimensions": {
+          "width_mm": 2.96,
+          "height_mm": 1.46,
+          "courtyard_margin_mm": 0.25,
+          "mating_face": null
+        },
+        "operating_conditions": {
+          "min_voltage_v": null,
+          "max_voltage_v": 50.0,
+          "max_current_ma": null
+        }
+      },
+      "value": "10kohm",
+      "sheet": "D1",
+      "source_span": {
+        "byte_start": 177,
+        "byte_end": 229
+      }
+    },
+    {
+      "id": 2,
+      "refdes": "D1_R2",
+      "kind": "resistor",
+      "part": {
+        "id": "r_generic_0603",
+        "kind": "resistor",
+        "description": "Generic 0603 thick-film resistor, any value",
+        "version": 0,
+        "lifecycle": "active",
+        "signed_by": [],
+        "substitutes": [],
+        "mpn": null,
+        "lcsc_pn": null,
+        "pins": [
+          {
+            "name": "p1",
+            "number": "1",
+            "electrical_type": "passive",
+            "capabilities": [],
+            "required": false,
+            "unit": null,
+            "voltage_max_v": null
+          },
+          {
+            "name": "p2",
+            "number": "2",
+            "electrical_type": "passive",
+            "capabilities": [],
+            "required": false,
+            "unit": null,
+            "voltage_max_v": null
+          }
+        ],
+        "required_decoupling": [],
+        "kicad_symbol": "Device:R_US",
+        "kicad_footprint": "Resistor_SMD:R_0603_1608Metric",
+        "footprint_dimensions": {
+          "width_mm": 2.96,
+          "height_mm": 1.46,
+          "courtyard_margin_mm": 0.25,
+          "mating_face": null
+        },
+        "operating_conditions": {
+          "min_voltage_v": null,
+          "max_voltage_v": 50.0,
+          "max_current_ma": null
+        }
+      },
+      "value": "4.7kohm",
+      "sheet": "D1",
+      "source_span": {
+        "byte_start": 234,
+        "byte_end": 286
+      }
+    },
+    {
+      "id": 3,
+      "refdes": "D2_R1",
+      "kind": "resistor",
+      "part": {
+        "id": "r_generic_0603",
+        "kind": "resistor",
+        "description": "Generic 0603 thick-film resistor, any value",
+        "version": 0,
+        "lifecycle": "active",
+        "signed_by": [],
+        "substitutes": [],
+        "mpn": null,
+        "lcsc_pn": null,
+        "pins": [
+          {
+            "name": "p1",
+            "number": "1",
+            "electrical_type": "passive",
+            "capabilities": [],
+            "required": false,
+            "unit": null,
+            "voltage_max_v": null
+          },
+          {
+            "name": "p2",
+            "number": "2",
+            "electrical_type": "passive",
+            "capabilities": [],
+            "required": false,
+            "unit": null,
+            "voltage_max_v": null
+          }
+        ],
+        "required_decoupling": [],
+        "kicad_symbol": "Device:R_US",
+        "kicad_footprint": "Resistor_SMD:R_0603_1608Metric",
+        "footprint_dimensions": {
+          "width_mm": 2.96,
+          "height_mm": 1.46,
+          "courtyard_margin_mm": 0.25,
+          "mating_face": null
+        },
+        "operating_conditions": {
+          "min_voltage_v": null,
+          "max_voltage_v": 50.0,
+          "max_current_ma": null
+        }
+      },
+      "value": "22kohm",
+      "sheet": "D2",
+      "source_span": {
+        "byte_start": 177,
+        "byte_end": 229
+      }
+    },
+    {
+      "id": 4,
+      "refdes": "D2_R2",
+      "kind": "resistor",
+      "part": {
+        "id": "r_generic_0603",
+        "kind": "resistor",
+        "description": "Generic 0603 thick-film resistor, any value",
+        "version": 0,
+        "lifecycle": "active",
+        "signed_by": [],
+        "substitutes": [],
+        "mpn": null,
+        "lcsc_pn": null,
+        "pins": [
+          {
+            "name": "p1",
+            "number": "1",
+            "electrical_type": "passive",
+            "capabilities": [],
+            "required": false,
+            "unit": null,
+            "voltage_max_v": null
+          },
+          {
+            "name": "p2",
+            "number": "2",
+            "electrical_type": "passive",
+            "capabilities": [],
+            "required": false,
+            "unit": null,
+            "voltage_max_v": null
+          }
+        ],
+        "required_decoupling": [],
+        "kicad_symbol": "Device:R_US",
+        "kicad_footprint": "Resistor_SMD:R_0603_1608Metric",
+        "footprint_dimensions": {
+          "width_mm": 2.96,
+          "height_mm": 1.46,
+          "courtyard_margin_mm": 0.25,
+          "mating_face": null
+        },
+        "operating_conditions": {
+          "min_voltage_v": null,
+          "max_voltage_v": 50.0,
+          "max_current_ma": null
+        }
+      },
+      "value": "4.7kohm",
+      "sheet": "D2",
+      "source_span": {
+        "byte_start": 234,
+        "byte_end": 286
+      }
+    }
+  ],
+  "nets": [
+    {
+      "id": 0,
+      "name": "VIN",
+      "endpoints": [
+        {
+          "component": 1,
+          "pin": 0,
+          "source_span": {
+            "byte_start": 306,
+            "byte_end": 311
+          }
+        },
+        {
+          "component": 3,
+          "pin": 0,
+          "source_span": {
+            "byte_start": 306,
+            "byte_end": 311
+          }
+        }
+      ]
+    },
+    {
+      "id": 1,
+      "name": "SENSE_1",
+      "endpoints": [
+        {
+          "component": 1,
+          "pin": 1,
+          "source_span": {
+            "byte_start": 324,
+            "byte_end": 329
+          }
+        },
+        {
+          "component": 2,
+          "pin": 0,
+          "source_span": {
+            "byte_start": 359,
+            "byte_end": 364
+          }
+        }
+      ]
+    },
+    {
+      "id": 2,
+      "name": "RTN",
+      "endpoints": [
+        {
+          "component": 2,
+          "pin": 1,
+          "source_span": {
+            "byte_start": 377,
+            "byte_end": 382
+          }
+        },
+        {
+          "component": 4,
+          "pin": 1,
+          "source_span": {
+            "byte_start": 377,
+            "byte_end": 382
+          }
+        }
+      ]
+    },
+    {
+      "id": 3,
+      "name": "SENSE_2",
+      "endpoints": [
+        {
+          "component": 3,
+          "pin": 1,
+          "source_span": {
+            "byte_start": 324,
+            "byte_end": 329
+          }
+        },
+        {
+          "component": 4,
+          "pin": 0,
+          "source_span": {
+            "byte_start": 359,
+            "byte_end": 364
+          }
+        }
+      ]
+    },
+    {
+      "id": 4,
+      "name": "LINK0.a",
+      "endpoints": [
+        {
+          "component": 0,
+          "pin": 0,
+          "source_span": {
+            "byte_start": 710,
+            "byte_end": 712
+          }
+        }
+      ]
+    },
+    {
+      "id": 5,
+      "name": "LINK0.b",
+      "endpoints": [
+        {
+          "component": 0,
+          "pin": 1,
+          "source_span": {
+            "byte_start": 722,
+            "byte_end": 724
+          }
+        }
+      ]
+    }
+  ],
+  "diff_pairs": [],
+  "keepouts": [],
+  "netclasses": [],
+  "buses": [
+    {
+      "name": "LINK0",
+      "members": [
+        "a",
+        "b"
+      ]
+    }
+  ],
+  "modules": [
+    {
+      "name": "Divider",
+      "ports": [
+        [
+          "vin",
+          "input"
+        ],
+        [
+          "vout",
+          "output"
+        ],
+        [
+          "ret",
+          "passive"
+        ]
+      ],
+      "params": [
+        [
+          "r_top",
+          "10kohm"
+        ],
+        [
+          "r_bot",
+          "4.7kohm"
+        ]
+      ]
+    }
+  ],
+  "source_span": {
+    "byte_start": 0,
+    "byte_end": 731
+  }
+}

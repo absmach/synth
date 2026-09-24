@@ -1034,6 +1034,8 @@ mod tests {
             notes: vec![],
             keepouts: vec![],
             netclasses: vec![],
+            buses: vec![],
+            modules: vec![],
             source_span: synth_diagnostics::Span::new(0, 100),
         }
     }

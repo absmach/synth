@@ -52,6 +52,11 @@ pub enum StatementAst {
     Net(NetDeclAst),
     Power(PowerDeclAst),
     Notes(NotesDeclAst),
+    Module(ModuleDeclStmt),
+    Interface(InterfaceDeclStmt),
+    Bus(BusDeclStmt),
+    Use(UseStmt),
+    Bind(BindStmt),
     DiffPair(DiffPairStmt),
     Netclass(NetclassStmt),
     Keepout(KeepoutStmt),
@@ -71,6 +76,11 @@ impl StatementAst {
             StatementAst::Net(s) => s.span,
             StatementAst::Power(s) => s.span,
             StatementAst::Notes(s) => s.span,
+            StatementAst::Module(s) => s.span,
+            StatementAst::Interface(s) => s.span,
+            StatementAst::Bus(s) => s.span,
+            StatementAst::Use(s) => s.span,
+            StatementAst::Bind(s) => s.span,
             StatementAst::DiffPair(s) => s.span,
             StatementAst::Netclass(s) => s.span,
             StatementAst::Keepout(s) => s.span,
@@ -224,10 +234,172 @@ pub struct ConnectionAst {
     pub span: Span,
 }
 
+/// What an [`EndpointAst`] names.
+///
+/// `Pin` is the classic `U1.vout`. `Port` is a bare identifier naming a
+/// module port (`-> vdd`); `Net` is a quoted net name (`-> "+3V3"`,
+/// `-> "I2C0.sda"`), which is how a bus member is referenced.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum EndpointRefKind {
+    #[default]
+    Pin,
+    Port,
+    Net,
+}
+
+impl EndpointRefKind {
+    /// Serde helper: keep the field out of existing JSON when it is the
+    /// classic `Pin` form, so pre-module snapshots are byte-identical.
+    #[must_use]
+    pub fn is_pin(&self) -> bool {
+        matches!(self, Self::Pin)
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct EndpointAst {
+    /// Component refdes (`Pin`), port name (`Port`), or net name
+    /// (`Net`), depending on `ref_kind`.
     pub component: String,
+    /// Pin name (`Pin`), the port name again (`Port`), or empty (`Net`).
     pub pin: String,
+    #[serde(default, skip_serializing_if = "EndpointRefKind::is_pin")]
+    pub ref_kind: EndpointRefKind,
+    pub span: Span,
+}
+
+impl EndpointAst {
+    /// A classic `component.pin` endpoint.
+    #[must_use]
+    pub fn pin(component: impl Into<String>, pin: impl Into<String>, span: Span) -> Self {
+        Self {
+            component: component.into(),
+            pin: pin.into(),
+            ref_kind: EndpointRefKind::Pin,
+            span,
+        }
+    }
+
+    /// A bare module-port reference (`-> vdd`).
+    #[must_use]
+    pub fn port(name: impl Into<String>, span: Span) -> Self {
+        let name = name.into();
+        Self {
+            pin: name.clone(),
+            component: name,
+            ref_kind: EndpointRefKind::Port,
+            span,
+        }
+    }
+
+    /// A quoted net reference (`-> "I2C0.sda"`).
+    #[must_use]
+    pub fn net(name: impl Into<String>, span: Span) -> Self {
+        Self {
+            component: name.into(),
+            pin: String::new(),
+            ref_kind: EndpointRefKind::Net,
+            span,
+        }
+    }
+}
+
+/// A reusable, parameterised block: `module "N" (port: type, …) { … }`.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ModuleDeclStmt {
+    pub name: String,
+    pub ports: Vec<PortDeclAst>,
+    pub params: Vec<ParamDeclAst>,
+    pub statements: Vec<StatementAst>,
+    pub span: Span,
+}
+
+/// One module/interface port: `vdd: power`, `i2c: I2C`, `alert: output`.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct PortDeclAst {
+    pub name: String,
+    /// Declared type: a direction keyword (`input`, `output`,
+    /// `power`, `ground`, `bidirectional`) or an interface name.
+    pub ty: String,
+    pub span: Span,
+}
+
+/// One module parameter: `param r_pull: resistance = 4.7kohm`.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ParamDeclAst {
+    pub name: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub ty: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub default: Option<ValueWithUnit>,
+    pub span: Span,
+}
+
+/// An interface bundle type: `interface "I2C" (sda: i2c_sda, scl: i2c_scl)`.
+///
+/// Declaring a bus (`bus "I2C0" (sda, scl)`) gives the bundle a concrete
+/// set of nets; binding an interface to that bus in one clause connects
+/// every member by name.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct InterfaceDeclStmt {
+    pub name: String,
+    pub members: Vec<PortDeclAst>,
+    pub span: Span,
+}
+
+/// A named group of nets: `bus "I2C0" (sda, scl)`.
+///
+/// Members are addressed as `<bus>.<member>` (for example `I2C0.sda`) and
+/// exported to KiCad as a bus with a matching `bus_alias`.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct BusDeclStmt {
+    pub name: String,
+    pub members: Vec<String>,
+    pub span: Span,
+}
+
+/// One port binding inside a `use` block (`vdd -> "3V3"`) or one
+/// member binding inside a `bind` block (`sda -> U9.gpio0`).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct PortBindingAst {
+    /// Port/member name, optionally qualified for an interface member
+    /// (`i2c` or `i2c.sda`).
+    pub port: String,
+    /// Where the port goes. A `Net` target names a net (a bus name means
+    /// "bind each member of the bundle to `<bus>.<member>`"); a `Pin`
+    /// target wires the port straight to a component pin.
+    pub target: EndpointAst,
+    pub span: Span,
+}
+
+/// Instantiate a module: `use "Sensor" as CH1 (prefix "CH1_") { … }`.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct UseStmt {
+    pub module: String,
+    /// Instance label; also the default refdes prefix and the emitted
+    /// sheet name.
+    pub label: String,
+    /// Explicit refdes prefix; defaults to `<label>_`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub prefix: Option<String>,
+    /// Parameter overrides (`name = value`).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub params: Vec<(String, ValueWithUnit)>,
+    pub bindings: Vec<PortBindingAst>,
+    pub span: Span,
+}
+
+/// Connect a bus's members to endpoints in one clause:
+/// `bind "I2C0" : I2C { sda -> U9.gpio0 }`.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct BindStmt {
+    /// Bus being bound (must be declared).
+    pub bus: String,
+    /// Optional interface type name to check membership against.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub interface: Option<String>,
+    pub connections: Vec<PortBindingAst>,
     pub span: Span,
 }
 

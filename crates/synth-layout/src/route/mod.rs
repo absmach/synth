@@ -2032,6 +2032,8 @@ mod cleanup_tests {
             notes: vec![],
             keepouts: Vec::new(),
             netclasses: vec![],
+            buses: vec![],
+            modules: vec![],
             source_span: synth_diagnostics::Span::new(0, 0),
         }
     }
@@ -2545,6 +2547,8 @@ mod channel_router_tests {
             notes: vec![],
             keepouts: Vec::new(),
             netclasses: vec![],
+            buses: vec![],
+            modules: vec![],
             source_span: synth_diagnostics::Span::new(0, 0),
         };
         let layout = Layout {
@@ -2730,6 +2734,8 @@ mod drc_tests {
             notes: vec![],
             keepouts: Vec::new(),
             netclasses: vec![],
+            buses: vec![],
+            modules: vec![],
             source_span: synth_diagnostics::Span::new(0, 0),
         };
         let placements: HashMap<ComponentId, ComponentPlacement> = [
@@ -2909,6 +2915,8 @@ mod net_termination_tests {
             notes: vec![],
             keepouts: Vec::new(),
             netclasses: vec![],
+            buses: vec![],
+            modules: vec![],
             source_span: synth_diagnostics::Span::new(0, 0),
         }
     }

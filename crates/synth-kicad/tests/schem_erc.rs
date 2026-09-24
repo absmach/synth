@@ -28,6 +28,8 @@ fn empty_board() -> Board {
         notes: vec![],
         keepouts: Vec::new(),
         netclasses: vec![],
+        buses: vec![],
+        modules: vec![],
         source_span: Span::new(0, 0),
     }
 }
@@ -249,6 +251,8 @@ fn decoupling_board() -> Board {
         notes: vec![],
         keepouts: Vec::new(),
         netclasses: vec![],
+        buses: vec![],
+        modules: vec![],
         source_span: Span::new(0, 0),
     }
 }
