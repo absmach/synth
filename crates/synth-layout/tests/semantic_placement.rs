@@ -95,6 +95,7 @@ fn net(id: u32, name: &str, endpoints: &[(u32, u32)]) -> Net {
 
 fn board(components: Vec<Component>, nets: Vec<Net>) -> Board {
     Board {
+        legends: false,
         name: "semantic".to_string(),
         layers: 2,
         manufacturer: None,

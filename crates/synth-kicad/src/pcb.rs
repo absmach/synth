@@ -906,7 +906,16 @@ fn build_footprint_instance(
             "property",
             vec![
                 Sexp::str("Value"),
-                Sexp::str(part.id.as_str()),
+                // Schematic-quality plan Phase A1: same `value` → `mpn` →
+                // `(no value)` chain as the schematic emitter, never the
+                // registry part id.
+                Sexp::str(
+                    component
+                        .value
+                        .as_deref()
+                        .or_else(|| component.part.as_ref().and_then(|p| p.mpn.as_deref()))
+                        .unwrap_or("(no value)"),
+                ),
                 Sexp::list(
                     "at",
                     vec![num(val_local_x), num(val_local_y), num(val_text_angle)],
@@ -1719,6 +1728,7 @@ mod tests {
         // Build a minimal Board whose nets have semantic names so the power-domain
         // engine classifies them correctly (GND → Ground, VCC → Rail via name heuristic).
         let board = Board {
+            legends: false,
             name: "test_netclass".to_string(),
             layers: 2,
             manufacturer: None,
@@ -1792,6 +1802,7 @@ mod tests {
     fn declared_netclass_emitted_with_joined_nets() {
         use synth_ir::Length;
         let board = Board {
+            legends: false,
             name: "test_declared_netclass".to_string(),
             layers: 2,
             manufacturer: None,
@@ -1854,6 +1865,7 @@ mod tests {
     #[test]
     fn test_kicad_cli_roundtrip_valid_board() {
         let board = Board {
+            legends: false,
             name: "test_roundtrip".to_string(),
             layers: 4,
             manufacturer: Some("jlcpcb".to_string()),

@@ -649,6 +649,7 @@ fn multi_unit_rails_split_is_an_error() {
         provenance: None,
     };
     let board = Board {
+        legends: false,
         name: "t".into(),
         layers: 2,
         manufacturer: None,

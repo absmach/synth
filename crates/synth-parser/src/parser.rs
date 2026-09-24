@@ -16,10 +16,10 @@ use std::collections::BTreeMap;
 use synth_ast::{
     BindStmt, BoardAst, BusDeclStmt, CompanyStmt, ComponentDeclAst, ConnectionAst, DiffPairAttr,
     DiffPairStmt, EndpointAst, GroupStmt, ImportAst, InterfaceDeclStmt, KeepoutAttr, KeepoutStmt,
-    LayersStmt, ManufacturerStmt, ModuleDeclStmt, NetDeclAst, NetclassAttr, NetclassStmt,
-    NotesDeclAst, ParamDeclAst, PlacementHintAst, PlacementHintAttr, PortBindingAst, PortDeclAst,
-    PowerDeclAst, ProgramAst, RevisionStmt, SheetStmt, StatementAst, UseStmt, ValueWithUnit,
-    VariantDeclStmt,
+    LayersStmt, LegendsStmt, ManufacturerStmt, ModuleDeclStmt, NetDeclAst, NetclassAttr,
+    NetclassStmt, NotesDeclAst, ParamDeclAst, PlacementHintAst, PlacementHintAttr, PortBindingAst,
+    PortDeclAst, PowerDeclAst, ProgramAst, RevisionStmt, SheetStmt, StatementAst, UseStmt,
+    ValueWithUnit, VariantDeclStmt,
 };
 
 use synth_diagnostics::{
@@ -304,6 +304,7 @@ impl Parser {
             TokenKind::KwManufacturer => self.parse_manufacturer().map(StatementAst::Manufacturer),
             TokenKind::KwRevision => self.parse_revision().map(StatementAst::Revision),
             TokenKind::KwCompany => self.parse_company().map(StatementAst::Company),
+            TokenKind::KwLegends => self.parse_legends().map(StatementAst::Legends),
             TokenKind::KwComponent => self.parse_component().map(StatementAst::Component),
             TokenKind::KwVariant => self.parse_variant().map(StatementAst::Variant),
             TokenKind::KwConnect => self.parse_connection().map(StatementAst::Connection),
@@ -325,7 +326,7 @@ impl Parser {
                     self.peek().span,
                     "E-SYNTH-PARSE-011",
                     "expected statement keyword",
-                    "one of: layers, manufacturer, revision, company, component, variant, connect, net, power, notes, module, interface, bus, use, bind, diff_pair, netclass, keepout, group, sheet",
+                    "one of: layers, manufacturer, revision, company, legends, component, variant, connect, net, power, notes, module, interface, bus, use, bind, diff_pair, netclass, keepout, group, sheet",
                     self.describe_current(),
                     None,
                 );
@@ -434,6 +435,47 @@ impl Parser {
         let end = self.last_offset();
         Some(CompanyStmt {
             name,
+            span: Span::new(start, end),
+        })
+    }
+
+    /// Parse a `legends on|off` board statement (schematic-quality
+    /// plan Phase A3). Anything but the bare identifiers `on`/`off`
+    /// is `E-SYNTH-PARSE-033` with a patch inserting the valid form.
+    fn parse_legends(&mut self) -> Option<LegendsStmt> {
+        let start = self.peek().span.byte_start;
+        self.bump(); // consume `legends`
+        let val_span = self.peek().span;
+        let word = self.expect_ident(
+            "E-SYNTH-PARSE-033",
+            "expected `on` or `off` after `legends`",
+        )?;
+        let enabled = match word.as_str() {
+            "on" => true,
+            "off" => false,
+            _ => {
+                self.emit(
+                    val_span,
+                    "E-SYNTH-PARSE-033",
+                    "expected `on` or `off` after `legends`",
+                    "`on` or `off`",
+                    word,
+                    Some(Patch {
+                        confidence: 0.8,
+                        rationale: Some("legends takes only `on` or `off`".into()),
+                        patch_consequence_preview: None,
+                        kind: PatchKind::ReplaceRange {
+                            range: val_span,
+                            replacement: "off".into(),
+                        },
+                    }),
+                );
+                return None;
+            }
+        };
+        let end = self.last_offset();
+        Some(LegendsStmt {
+            enabled,
             span: Span::new(start, end),
         })
     }
@@ -1967,6 +2009,7 @@ impl Parser {
             TokenKind::KwManufacturer => "`manufacturer`".to_string(),
             TokenKind::KwRevision => "`revision`".to_string(),
             TokenKind::KwCompany => "`company`".to_string(),
+            TokenKind::KwLegends => "`legends`".to_string(),
             TokenKind::KwComponent => "`component`".to_string(),
             TokenKind::KwConnect => "`connect`".to_string(),
             TokenKind::KwNet => "`net`".to_string(),
@@ -2510,6 +2553,41 @@ mod tests {
             panic!("Expected company statement")
         };
         assert_eq!(c.name, "Absmach");
+    }
+
+    #[test]
+    fn parse_legends_on_and_off() {
+        for (word, enabled) in [("on", true), ("off", false)] {
+            let src = format!("board \"b\" {{\n legends {word}\n}}");
+            let tokens = lex(&src);
+            let res = parse(tokens, "test.synth".into());
+            assert!(
+                res.diagnostics.is_empty(),
+                "Diagnostics should be empty: {:?}",
+                res.diagnostics
+            );
+            let ast = res.ast.unwrap();
+            let StatementAst::Legends(l) = &ast.board.statements[0] else {
+                panic!("Expected legends statement");
+            };
+            assert_eq!(l.enabled, enabled);
+        }
+    }
+
+    #[test]
+    fn parse_legends_rejects_other_words() {
+        let src = r#"board "b" {
+            legends maybe
+        }"#;
+        let tokens = lex(src);
+        let res = parse(tokens, "test.synth".into());
+        assert!(
+            res.diagnostics
+                .iter()
+                .any(|d| d.code == "E-SYNTH-PARSE-033"),
+            "expected E-SYNTH-PARSE-033, got {:?}",
+            res.diagnostics
+        );
     }
 
     #[test]

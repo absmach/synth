@@ -68,6 +68,7 @@ fn create_test_board() -> Board {
     };
 
     Board {
+        legends: false,
         name: "cem_test_board".to_string(),
         layers: 2,
         manufacturer: None,

@@ -3,8 +3,8 @@ board "power_anomaly_pass" {
   component U1: ic "ch340g"
   component U2: ic "ch340g"
   component J1: connector "header_1x4"
-  component C1: capacitor "c_generic_0603"
-  component C2: capacitor "c_generic_0603"
+  component C1: capacitor "c_generic_0603" value "100nF"
+  component C2: capacitor "c_generic_0603" value "100nF"
 
   connect J1.p1 -> U1.vcc
   connect J1.p1 -> U2.vcc

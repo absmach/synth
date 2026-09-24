@@ -859,11 +859,11 @@ fn debounce_patch(
     let mut text = String::new();
     let _ = writeln!(
         text,
-        "\n  component {r}: resistor \"r_generic_0603\" // auto-inserted debounce {res_what}"
+        "\n  component {r}: resistor \"r_generic_0603\" value \"10k\" // auto-inserted debounce {res_what}"
     );
     let _ = writeln!(
         text,
-        "  component {c}: capacitor \"c_generic_0603\" // auto-inserted debounce filter"
+        "  component {c}: capacitor \"c_generic_0603\" value \"100nF\" // auto-inserted debounce filter"
     );
     let _ = writeln!(text, "  connect {}.{} -> {r}.p1", sw.refdes, wiper_pin);
     let _ = writeln!(text, "  connect {}.{} -> {c}.p1", sw.refdes, wiper_pin);
@@ -921,7 +921,7 @@ fn pullup_patch(
     let mut text = String::new();
     let _ = writeln!(
         text,
-        "\n  component {r}: resistor \"r_generic_0603\" // auto-inserted pull-up"
+        "\n  component {r}: resistor \"r_generic_0603\" value \"10k\" // auto-inserted pull-up"
     );
     let _ = writeln!(
         text,
@@ -1025,6 +1025,7 @@ mod tests {
 
     fn board(components: Vec<Component>, nets: Vec<Net>) -> Board {
         Board {
+            legends: false,
             name: "kg_test".to_string(),
             layers: 2,
             manufacturer: None,

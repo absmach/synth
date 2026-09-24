@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 
-//! In-house schematic aesthetic ERC rule engine (`E-SYNTH-SCHEM-001..010`).
+//! In-house schematic aesthetic ERC rule engine (`E-SYNTH-SCHEM-001..012`).
 //!
 //! Pure, deterministic rules over a [`synth_layout::Layout`] (plus the
 //! [`synth_ir::Board`] where connectivity context is needed). This is
@@ -11,8 +11,10 @@
 //!
 //! The rules are advisory aesthetic checks per §7.7.7 of the
 //! implementation plan, reported at [`Severity::Warning`] (they must
-//! never block compilation). Implemented here, mapped onto the
-//! `E-SYNTH-SCHEM-001..010` code range:
+//! never block compilation), plus the schematic-quality plan's
+//! legibility rules (011–012, and the `E-SYNTH-VALUE-001` error owned
+//! by `synth-validate`). Implemented here, mapped onto the
+//! `E-SYNTH-SCHEM-001..012` code range:
 //!
 //! * **E-SYNTH-SCHEM-001** — Inverted power symbol (GND pointing up or
 //!   VCC pointing down).
@@ -54,6 +56,15 @@
 //!   the generic `VCC`/`VDD`/`VPP` symbol instead of an explicit
 //!   voltage ("DO NOT USE VDD or VCC as they are ambiguous. Make a
 //!   new symbol for explicitly declaring what the voltage is").
+//!
+//! The schematic-quality plan's legibility rules continue the range:
+//!
+//! * **E-SYNTH-SCHEM-011** — Overlapping text runs: two free-text
+//!   runs (captions, note lines, legend lines) still overlapping
+//!   after the layout `resolve_text_overlaps` pass.
+//! * **E-SYNTH-SCHEM-012** — Sheet fill ratio below threshold: content
+//!   covers less than [`SchemErcConfig::min_sheet_fill_ratio`] of the
+//!   chosen sheet (info).
 
 use std::collections::{HashMap, HashSet};
 
@@ -80,6 +91,9 @@ const DEFAULT_MAX_JUNCTION_DEGREE: usize = 3;
 /// fires. StackExchange #28251: "Keep names reasonably short — no
 /// names is no information, but lots of long names are clutter."
 const DEFAULT_MAX_NET_LABEL_LEN: usize = 16;
+/// Default sheet-fill ratio (content bbox area over sheet area)
+/// below which `E-SYNTH-SCHEM-012` fires. Plan §A5: 45 %.
+const DEFAULT_MIN_SHEET_FILL_RATIO: f64 = 0.45;
 /// Power-rail labels too generic to be useful, flagged by
 /// `E-SYNTH-SCHEM-010`. StackExchange #28251: "DO NOT USE VDD or VCC
 /// as they are ambiguous. Make a new symbol for explicitly declaring
@@ -109,6 +123,9 @@ pub struct SchemErcConfig {
     /// `E-SYNTH-SCHEM-009`: a rendered net name longer than this many
     /// characters is flagged.
     pub max_net_label_len: usize,
+    /// `E-SYNTH-SCHEM-012`: content covering less than this fraction
+    /// of the sheet area is flagged (info).
+    pub min_sheet_fill_ratio: f64,
 }
 
 impl Default for SchemErcConfig {
@@ -119,6 +136,7 @@ impl Default for SchemErcConfig {
             long_net_max_mm: DEFAULT_LONG_NET_MAX_MM,
             max_junction_degree: DEFAULT_MAX_JUNCTION_DEGREE,
             max_net_label_len: DEFAULT_MAX_NET_LABEL_LEN,
+            min_sheet_fill_ratio: DEFAULT_MIN_SHEET_FILL_RATIO,
         }
     }
 }
@@ -126,7 +144,7 @@ impl Default for SchemErcConfig {
 /// Run every aesthetic ERC rule over `layout`/`board` and return the
 /// violations, using the §7.7.7 default thresholds.
 ///
-/// Order is deterministic and rule-stable: 001 → 002 → … → 010.
+/// Order is deterministic and rule-stable: 001 → 002 → … → 012.
 pub fn check(layout: &Layout, board: &Board) -> Vec<Diagnostic> {
     check_with_config(layout, board, SchemErcConfig::default())
 }
@@ -182,6 +200,8 @@ pub fn check_with_config(
     violations.extend(check_net_label_case(layout));
     violations.extend(check_net_label_length(layout, config.max_net_label_len));
     violations.extend(check_ambiguous_power_rails(layout, board));
+    violations.extend(check_text_overlaps(layout));
+    violations.extend(check_sheet_fill(board, layout, config.min_sheet_fill_ratio));
     violations
 }
 
@@ -398,6 +418,12 @@ fn check_wire_crossings(layout: &Layout, max_crossings: usize) -> Vec<Diagnostic
 /// without pulling in KiCad symbol-pin geometry. Cap-to-IC pairs are
 /// deduplicated so a cap shared across multiple required nets only
 /// yields one diagnostic.
+///
+/// Schematic-quality plan Phase A2: the rail net is resolved through
+/// the IC's power *pin*, not by net-name equality. Merged rails keep
+/// one global net whose name rarely equals the manifest key, and
+/// power-flag-mediated nets are nets all the same — matching by name
+/// silently passed every shared-rail decoupling cap.
 fn check_decoupling_distance(board: &Board, layout: &Layout, max_mm: f64) -> Vec<Diagnostic> {
     let mut out = Vec::new();
     let mut seen: HashSet<(ComponentId, ComponentId)> = HashSet::new();
@@ -414,10 +440,31 @@ fn check_decoupling_distance(board: &Board, layout: &Layout, max_mm: f64) -> Vec
         };
 
         for req in &part.required_decoupling {
-            for net in &board.nets {
-                if net.name != req.net || !net.endpoints.iter().any(|e| e.component == ic.id) {
-                    continue;
-                }
+            // The rail net carrying the IC's power pin. Resolved
+            // through the pin (not by net-name equality): merged rails
+            // keep one global net whose name rarely equals the manifest
+            // key, and power-flag-mediated nets are nets all the same.
+            // When the part declares no such pin (synthetic boards),
+            // fall back to the legacy name match so the rule still fires.
+            // u32 cast is bounded: the index comes from the part's own pin list.
+            let rail_nets: Vec<&synth_ir::Net> =
+                match part.pins.iter().position(|p| p.name == req.net) {
+                    Some(pin_idx) => board
+                        .nets_containing(ic.id, PinId(pin_idx as u32))
+                        .map(|(_, net)| net)
+                        .next()
+                        .into_iter()
+                        .collect(),
+                    None => board
+                        .nets
+                        .iter()
+                        .filter(|net| {
+                            net.name == req.net
+                                && net.endpoints.iter().any(|e| e.component == ic.id)
+                        })
+                        .collect(),
+                };
+            for net in rail_nets {
                 for ep in &net.endpoints {
                     if ep.component == ic.id {
                         continue;
@@ -449,10 +496,10 @@ fn check_decoupling_distance(board: &Board, layout: &Layout, max_mm: f64) -> Vec
                         )
                         .message(format!(
                             "decoupling capacitor {} is {dist:.1} mm from its target IC {} \
-                             (net \"{net_name}\"), exceeding the {max_mm} mm limit",
+                         (rail net \"{}\"), exceeding the {max_mm} mm limit",
                             cap.describe(),
                             ic.describe(),
-                            net_name = req.net,
+                            net.name,
                         ))
                         .entity(EntityRef::Component {
                             id: ic.refdes.clone(),
@@ -847,6 +894,129 @@ fn check_ambiguous_power_rails(layout: &Layout, board: &Board) -> Vec<Diagnostic
         .collect()
 }
 
+// ----- E-SYNTH-SCHEM-011: overlapping text runs ------------------------------
+
+/// Slack (mm) below which two text runs count as merely touching —
+/// far below any glyph size, only absorbing float noise.
+const TEXT_OVERLAP_EPSILON_MM: f64 = 1e-6;
+
+/// Axis-aligned box of a free-text run, mirroring
+/// `synth_layout`'s overlap pass: `(x0, y0, x1, y1)` with `y` the
+/// baseline anchor and KiCad's ~0.72 em stroke-font advance.
+fn annotation_rect(text: &synth_layout::TextAnnotation) -> (f64, f64, f64, f64) {
+    let (x, y) = text.at_mm;
+    // u32 cast is bounded: annotation strings are far shorter than u32::MAX chars.
+    let chars = u32::try_from(text.text.chars().count()).unwrap_or(u32::MAX);
+    (
+        x,
+        y - text.size_mm,
+        x + f64::from(chars) * text.size_mm * 0.72,
+        y,
+    )
+}
+
+/// Shorten a run for messages: first `max` chars plus `…` when cut.
+fn ellipsize(text: &str, max: usize) -> String {
+    if text.chars().count() <= max {
+        return text.to_string();
+    }
+    format!("{}…", text.chars().take(max).collect::<String>())
+}
+
+/// `E-SYNTH-SCHEM-011`: two free-text runs (captions, note lines,
+/// legend lines) still overlapping after the layout
+/// `resolve_text_overlaps` pass (schematic-quality plan Phase A4).
+/// One diagnostic per overlapping pair, in annotation order — the
+/// measurement that keeps the resolve pass honest.
+fn check_text_overlaps(layout: &Layout) -> Vec<Diagnostic> {
+    let mut out = Vec::new();
+    for (i, a) in layout.annotations.iter().enumerate() {
+        let ra = annotation_rect(a);
+        for b in layout.annotations.iter().skip(i + 1) {
+            let rb = annotation_rect(b);
+            let overlaps = ra.0 < rb.2 - TEXT_OVERLAP_EPSILON_MM
+                && rb.0 < ra.2 - TEXT_OVERLAP_EPSILON_MM
+                && ra.1 < rb.3 - TEXT_OVERLAP_EPSILON_MM
+                && rb.1 < ra.3 - TEXT_OVERLAP_EPSILON_MM;
+            if !overlaps {
+                continue;
+            }
+            out.push(
+                DiagnosticBuilder::new(
+                    "E-SYNTH-SCHEM-011",
+                    Severity::Warning,
+                    "overlapping text runs",
+                )
+                .message(format!(
+                    "text runs \"{}\" and \"{}\" still overlap after the resolve pass; \
+                     move one of them or shorten the text",
+                    ellipsize(&a.text, 32),
+                    ellipsize(&b.text, 32),
+                ))
+                .expected("disjoint text runs")
+                .found(format!(
+                    "\"{}\" overlaps \"{}\"",
+                    ellipsize(&a.text, 32),
+                    ellipsize(&b.text, 32),
+                ))
+                .explanation_url("synth.docs/diagnostics/E-SYNTH-SCHEM-011")
+                .build(),
+            );
+        }
+    }
+    out
+}
+
+// ----- E-SYNTH-SCHEM-012: sheet fill ratio -----------------------------------
+
+/// `E-SYNTH-SCHEM-012`: the content bounding box covers less than
+/// `min_ratio` of the chosen sheet's area (schematic-quality plan
+/// Phase A5, defect D6 — content in the top 40 % of an A3 page while
+/// the bottom half sits empty). Info, never blocking: a roomy sheet
+/// is wasteful, not wrong. Names the smaller standard sheet that
+/// would fit when one exists.
+fn check_sheet_fill(board: &Board, layout: &Layout, min_ratio: f64) -> Vec<Diagnostic> {
+    let Some((min_x, max_x, min_y, max_y)) = synth_layout::content_bounds(board, layout) else {
+        return Vec::new();
+    };
+    let (sheet_w, sheet_h) = layout.sheet_size.dims_mm();
+    if sheet_w <= 0.0 || sheet_h <= 0.0 {
+        return Vec::new();
+    }
+    let content_w = (max_x - min_x).max(0.0);
+    let content_h = (max_y - min_y).max(0.0);
+    let ratio = content_w * content_h / (sheet_w * sheet_h);
+    if ratio >= min_ratio {
+        return Vec::new();
+    }
+    let smaller = synth_layout::fit_sheet_size(min_x, max_x, min_y, max_y);
+    let (smaller_w, smaller_h) = smaller.dims_mm();
+    let smaller_hint = if smaller_w < sheet_w && smaller_h < sheet_h {
+        format!(" — content would fit {smaller:?}")
+    } else {
+        String::new()
+    };
+    vec![DiagnosticBuilder::new(
+        "E-SYNTH-SCHEM-012",
+        Severity::Info,
+        "sheet fill ratio below threshold",
+    )
+    .message(format!(
+        "content ({content_w:.0} × {content_h:.0} mm) covers only {:.0}% of the \
+         {sheet_w:.0} × {sheet_h:.0} mm sheet, below the {:.0}% threshold{smaller_hint}; \
+         compact the layout or move to a smaller sheet",
+        ratio * 100.0,
+        min_ratio * 100.0,
+    ))
+    .expected(format!(
+        "at least {:.0}% of the sheet covered",
+        min_ratio * 100.0
+    ))
+    .found(format!("{:.0}% covered", ratio * 100.0))
+    .explanation_url("synth.docs/diagnostics/E-SYNTH-SCHEM-012")
+    .build()]
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1041,6 +1211,7 @@ mod tests {
         // IC at (10, 10); a VCC net connecting IC pin 0 and cap C1 at
         // (100, 10) — 90 mm apart, beyond the 15 mm default.
         let board = Board {
+            legends: false,
             name: "b".to_string(),
             layers: 2,
             manufacturer: None,
@@ -1119,6 +1290,7 @@ mod tests {
     #[test]
     fn decoupling_cap_near_ic_is_silent() {
         let board = Board {
+            legends: false,
             name: "b".to_string(),
             layers: 2,
             manufacturer: None,
@@ -1465,6 +1637,7 @@ mod tests {
 
     fn board_with_nets(nets: Vec<Net>) -> Board {
         Board {
+            legends: false,
             name: "b".to_string(),
             layers: 2,
             manufacturer: None,
@@ -1546,11 +1719,79 @@ mod tests {
         assert!(check_ambiguous_power_rails(&layout, &board).is_empty());
     }
 
+    // ----- E-SYNTH-SCHEM-011 ----------------------------------------------
+
+    fn annotation(text: &str, size_mm: f64, x: f64, y: f64) -> synth_layout::TextAnnotation {
+        synth_layout::TextAnnotation {
+            text: text.to_string(),
+            at_mm: (x, y),
+            size_mm,
+        }
+    }
+
+    #[test]
+    fn overlapping_annotations_are_flagged() {
+        let mut layout = layout(Vec::new(), Vec::new(), Vec::new(), Vec::new());
+        layout.annotations = vec![
+            annotation("J1 pinout", 2.0, 20.0, 100.0),
+            annotation("J1 pinout", 2.0, 20.0, 100.0),
+        ];
+        let violations = check_text_overlaps(&layout);
+        assert_eq!(violations.len(), 1);
+        assert_eq!(violations[0].code, "E-SYNTH-SCHEM-011");
+        assert_eq!(violations[0].severity, Severity::Warning);
+    }
+
+    #[test]
+    fn disjoint_annotations_are_silent() {
+        let mut layout = layout(Vec::new(), Vec::new(), Vec::new(), Vec::new());
+        layout.annotations = vec![
+            annotation("Input", 2.0, 20.0, 100.0),
+            annotation("Output", 2.0, 20.0, 120.0),
+        ];
+        assert!(check_text_overlaps(&layout).is_empty());
+    }
+
+    // ----- E-SYNTH-SCHEM-012 ----------------------------------------------
+
+    #[test]
+    fn roomy_sheet_is_info() {
+        let board = board_with_nets(Vec::new());
+        let mut layout = layout(
+            vec![placement(ComponentId(0), 30.0, 30.0, Rotation::Zero)],
+            Vec::new(),
+            Vec::new(),
+            Vec::new(),
+        );
+        layout.sheet_size = SheetSize::A3;
+        let violations = check_sheet_fill(&board, &layout, 0.45);
+        assert_eq!(violations.len(), 1);
+        assert_eq!(violations[0].code, "E-SYNTH-SCHEM-012");
+        assert_eq!(violations[0].severity, Severity::Info);
+    }
+
+    #[test]
+    fn full_sheet_is_silent() {
+        let board = board_with_nets(Vec::new());
+        // Content spanning most of A4: well above the 45 % bar.
+        let layout = layout(
+            vec![
+                placement(ComponentId(0), 30.0, 30.0, Rotation::Zero),
+                placement(ComponentId(1), 260.0, 180.0, Rotation::Zero),
+            ],
+            Vec::new(),
+            Vec::new(),
+            Vec::new(),
+        );
+        assert!(check_sheet_fill(&board, &layout, 0.45).is_empty());
+    }
+
     // ----- aggregate entry point ------------------------------------------
 
     #[test]
     fn aggregate_check_returns_warnings_in_rule_order() {
         let board = Board {
+            legends: false,
             name: "b".to_string(),
             layers: 2,
             manufacturer: None,
@@ -1671,7 +1912,8 @@ mod tests {
         // Expect 002 (6 crossings), 003 (90 mm cap), 004 (150 mm net),
         // 005 (4-line node), 006 (foreign wire through the node),
         // 007 (placement past the sheet edge), 008 (lowercase name),
-        // 009 (long name), 010 (ambiguous VCC rail).
+        // 009 (long name), 010 (ambiguous VCC rail), 012 (roomy A4
+        // sheet — no annotations, so 011 stays silent).
         assert_eq!(
             codes,
             vec![
@@ -1684,6 +1926,7 @@ mod tests {
                 "E-SYNTH-SCHEM-008",
                 "E-SYNTH-SCHEM-009",
                 "E-SYNTH-SCHEM-010",
+                "E-SYNTH-SCHEM-012",
             ]
         );
     }
@@ -1694,6 +1937,7 @@ mod tests {
         // A VCC rail with no explicit voltage name trips SCHEM-010
         // wherever it is rendered — a stable diagnostic to attribute.
         let b = Board {
+            legends: false,
             name: "b".to_string(),
             layers: 2,
             manufacturer: None,

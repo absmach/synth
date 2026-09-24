@@ -342,6 +342,13 @@ const NOTE_TITLE_GAP: f64 = 4.0;
 /// Gap below a group box, connector body, or content bottom before a
 /// notes block or pin legend starts.
 const BELOW_GAP: f64 = 8.0;
+/// A connector earns a generated pin legend only with at least this
+/// many pins joining *named* nets (Phase A3): fewer means an internal
+/// header, not a board-edge interface.
+const LEGEND_MIN_NAMED_PINS: usize = 4;
+/// Maximum `pin: net` lines in one connector legend before an
+/// ellipsis (Phase A3).
+const LEGEND_MAX_LINES: usize = 8;
 
 /// Fallback body extents when a component has no part info.
 const BODY_FALLBACK_W: f64 = 15.0;
@@ -439,7 +446,7 @@ fn component_text_inclusive_half_width(board: &Board, id: ComponentId) -> f64 {
 /// `part.id` alone underestimates the rendered width whenever the
 /// component carries a longer custom `value`, so the precedence below
 /// mirrors `synth_kicad::schematic`'s `display_value` exactly
-/// (`component.value` → `part.mpn` → `part.id`).
+/// (`component.value` → `part.mpn` → `(no value)` sentinel).
 pub(crate) fn text_inclusive_half_width(
     component: &synth_ir::Component,
     part: &synth_registry::Part,
@@ -450,7 +457,7 @@ pub(crate) fn text_inclusive_half_width(
         .value
         .as_deref()
         .or(part.mpn.as_deref())
-        .unwrap_or(part.id.as_str());
+        .unwrap_or("(no value)");
     let val_w = (display_value.len() as f64) * 1.27 * 0.85 + 2.54;
     (body_w / 2.0).max(refdes_w / 2.0).max(val_w / 2.0)
 }
@@ -708,7 +715,9 @@ pub fn layout_with_overrides(
     annotate_groups(board, &mut layout);
     place_connector_legends(board, &mut layout);
     place_design_notes(board, &mut layout);
+    resolve_text_overlaps(board, &mut layout);
     grow_sheet_to_fit(board, &mut layout);
+    compact_sheet_to_fit(board, &mut layout);
     clamp_annotations_to_sheet(&mut layout);
     layout
 }
@@ -810,16 +819,35 @@ fn group_bounds(board: &Board, layout: &Layout) -> Vec<(String, f64, f64, f64, f
         .collect()
 }
 
-/// Pin legend for every connector, generated from the netlist (§21.1).
+/// Pin legend for opt-in board-edge connectors (schematic-quality
+/// plan Phase A3, §21.1).
 ///
-/// One titled block per connector — `{refdes} pinout` plus one
-/// `pin: net` line per pin in part order (`NC` when the pin joins no
-/// net) — sitting below the connector's body. A reader checking a
+/// One titled block per qualifying connector — `{refdes} pinout` plus
+/// one `pin: net` line per pin on a *named* net, capped at
+/// [`LEGEND_MAX_LINES`] lines with an ellipsis. A reader checking a
 /// harness against the schematic reads the mating list where the
-/// connector is drawn instead of tracing each stub. Runs after
-/// routing (positions are final) and before `grow_sheet_to_fit` so a
-/// tall legend grows the page like any other content.
+/// connector is drawn instead of tracing each stub.
+///
+/// Three filters keep the legend from becoming the sheet's largest
+/// text block (defect D4):
+///
+/// - Opt-in: nothing is emitted unless the board declares
+///   `legends on` (default off). The reference sheet carries a
+///   one-line prose note (*"Silk order: VIN 3Vo GND SCL SDA"*) instead
+///   — that is what `notes` is for.
+/// - Board-edge only: the connector must have at least
+///   [`LEGEND_MIN_NAMED_PINS`] pins joining *named* nets. An internal
+///   header on auto-named nets gets no legend.
+/// - Compact: `NC` lines are dropped entirely (a no-connect cross on
+///   the pin already says it), and long pinouts truncate with `…`.
+///
+/// Runs after routing (positions are final) and before
+/// `grow_sheet_to_fit` so a legend grows the page like any other
+/// content.
 fn place_connector_legends(board: &Board, layout: &mut Layout) {
+    if !board.legends {
+        return;
+    }
     for placement in &layout.components {
         let Some(component) = board.component(placement.id) else {
             continue;
@@ -828,6 +856,21 @@ fn place_connector_legends(board: &Board, layout: &mut Layout) {
             continue;
         };
         if part.kind != "connector" {
+            continue;
+        }
+        let mut lines: Vec<(String, String)> = Vec::new();
+        for (index, pin) in part.pins.iter().enumerate() {
+            // u32 cast is bounded: the index comes from the part's own pin list.
+            let pid = PinId(index as u32);
+            let Some((_, net)) = board.nets_containing(component.id, pid).next() else {
+                continue;
+            };
+            if is_auto_net_name(&net.name) {
+                continue;
+            }
+            lines.push((pin.name.clone(), net.name.clone()));
+        }
+        if lines.len() < LEGEND_MIN_NAMED_PINS {
             continue;
         }
         let (cx, cy) = placement.center_mm;
@@ -840,21 +883,29 @@ fn place_connector_legends(board: &Board, layout: &mut Layout) {
             size_mm: NOTE_TITLE_SIZE,
         });
         y += NOTE_TITLE_GAP;
-        for (index, pin) in part.pins.iter().enumerate() {
-            // u32 cast is bounded: parts cannot exceed pin counts the
-            // layouter already indexed.
-            let net = board
-                .nets_containing(component.id, PinId(index as u32))
-                .next()
-                .map_or("NC", |(_, net)| net.name.as_str());
+        for (pin_name, net_name) in lines.iter().take(LEGEND_MAX_LINES) {
             layout.annotations.push(TextAnnotation {
-                text: format!("{}: {net}", pin.name),
+                text: format!("{pin_name}: {net_name}"),
                 at_mm: (x, y),
                 size_mm: NOTE_LINE_SIZE,
             });
             y += NOTE_LINE_PITCH;
         }
+        if lines.len() > LEGEND_MAX_LINES {
+            layout.annotations.push(TextAnnotation {
+                text: "…".to_string(),
+                at_mm: (x, y),
+                size_mm: NOTE_LINE_SIZE,
+            });
+        }
     }
+}
+
+/// Whether a net name is an auto-generated `net_<idx>` placeholder
+/// rather than a human name. Legends only list named nets.
+fn is_auto_net_name(name: &str) -> bool {
+    name.strip_prefix("net_")
+        .is_some_and(|rest| !rest.is_empty() && rest.bytes().all(|b| b.is_ascii_digit()))
 }
 
 /// Render `notes` blocks as titled text (§21.1).
@@ -912,6 +963,156 @@ fn place_design_notes(board: &Board, layout: &mut Layout) {
     }
 }
 
+/// Advance width of a text run in mm. KiCad's stroke font is about
+/// 0.72 em — shared by [`grow_sheet_to_fit`] and the overlap pass so
+/// placement and page sizing agree on how wide a run is.
+fn text_run_width(text: &str, size_mm: f64) -> f64 {
+    text.chars().count() as f64 * size_mm * 0.72
+}
+
+/// Axis-aligned box of a text run: `(x0, y0, x1, y1)` with `y` the
+/// baseline anchor (the box spans one glyph height above it).
+fn text_run_rect(text: &TextAnnotation) -> (f64, f64, f64, f64) {
+    let (x, y) = text.at_mm;
+    (
+        x,
+        y - text.size_mm,
+        x + text_run_width(&text.text, text.size_mm),
+        y,
+    )
+}
+
+/// True when two rects overlap with more than float noise in common.
+/// Touching edges do not count — adjacent note lines at
+/// [`NOTE_LINE_PITCH`] must never flag.
+fn rects_overlap(a: (f64, f64, f64, f64), b: (f64, f64, f64, f64)) -> bool {
+    const EPS: f64 = 1e-6;
+    a.0 < b.2 - EPS && b.0 < a.2 - EPS && a.1 < b.3 - EPS && b.1 < a.3 - EPS
+}
+
+/// Vertical nudge step for overlap resolution: half the schematic
+/// grid so runs land back on grid after an even number of steps.
+const TEXT_NUDGE_STEP: f64 = 1.27;
+/// How far one run moves before the pass gives up on nudging it
+/// (then shrinks, then drops — see below).
+const TEXT_MAX_NUDGES: usize = 16;
+/// Shrunk glyph height for line runs that cannot be nudged clear.
+/// Titles and captions are never shrunk — only nudged or left for
+/// `E-SYNTH-SCHEM-011` to report.
+const TEXT_SHRUNK_SIZE: f64 = 1.0;
+
+/// Resolve overlapping free-text runs (schematic-quality plan Phase
+/// A4, defect D5).
+///
+/// Builds axis-aligned boxes for every annotation (captions, note
+/// lines, legend lines) plus component bodies as fixed obstacles,
+/// then places runs largest-first (captions and titles before body
+/// text — the plan's priority with refdes/value/net-label kinds owned
+/// by the exporter, which places those after layout): each run keeps
+/// its authored position when free, otherwise nudges down along the
+/// free axis; a line run that still overlaps after
+/// [`TEXT_MAX_NUDGES`] steps shrinks one glyph step and retries; a
+/// line run that still overlaps is dropped. Title-size runs are never
+/// shrunk or dropped — if one cannot be placed clear it stays where
+/// it was authored and `E-SYNTH-SCHEM-011` reports the residue.
+///
+/// Runs after `place_design_notes` (every run exists) and before
+/// `grow_sheet_to_fit` (nudged runs grow the page like any content).
+/// Deterministic: input order breaks all ties.
+fn resolve_text_overlaps(board: &Board, layout: &mut Layout) {
+    if layout.annotations.is_empty() {
+        return;
+    }
+    // Fixed obstacles: component bodies including their Reference /
+    // Value text margin, so a nudged run never lands on a part.
+    let mut placed: Vec<(f64, f64, f64, f64)> = layout
+        .components
+        .iter()
+        .map(|p| {
+            let (cx, cy) = p.center_mm;
+            let (bw, bh) = board
+                .component(p.id)
+                .and_then(|c| c.part.as_ref())
+                .map_or((BODY_FALLBACK_W, BODY_FALLBACK_H), body_size_for_part);
+            (
+                cx - bw / 2.0,
+                cy - bh / 2.0 - TEXT_MARGIN_Y,
+                cx + bw / 2.0,
+                cy + bh / 2.0 + TEXT_MARGIN_Y,
+            )
+        })
+        .collect();
+    // Largest glyphs first; authored order breaks ties (stable sort).
+    let mut order: Vec<usize> = (0..layout.annotations.len()).collect();
+    order.sort_by(|&a, &b| {
+        layout.annotations[b]
+            .size_mm
+            .total_cmp(&layout.annotations[a].size_mm)
+    });
+    let mut drop: Vec<bool> = vec![false; layout.annotations.len()];
+    for &idx in &order {
+        let origin = layout.annotations[idx].clone();
+        let mut size = origin.size_mm;
+        let mut shrunk = false;
+        let droppable = size < NOTE_TITLE_SIZE;
+        loop {
+            let mut y = origin.at_mm.1;
+            let mut nudges = 0_usize;
+            while nudges < TEXT_MAX_NUDGES
+                && placed.iter().any(|&r| {
+                    rects_overlap(
+                        (
+                            origin.at_mm.0,
+                            y - size,
+                            origin.at_mm.0 + text_run_width(&origin.text, size),
+                            y,
+                        ),
+                        r,
+                    )
+                })
+            {
+                y += TEXT_NUDGE_STEP;
+                nudges += 1;
+            }
+            let rect = (
+                origin.at_mm.0,
+                y - size,
+                origin.at_mm.0 + text_run_width(&origin.text, size),
+                y,
+            );
+            if !placed.iter().any(|&r| rects_overlap(rect, r)) {
+                layout.annotations[idx].at_mm.1 = y;
+                layout.annotations[idx].size_mm = size;
+                placed.push(rect);
+                break;
+            }
+            if !shrunk && droppable {
+                size = TEXT_SHRUNK_SIZE;
+                shrunk = true;
+                continue;
+            }
+            if droppable {
+                drop[idx] = true;
+            } else {
+                // Title-size runs are never shrunk or dropped: keep
+                // the authored position so the caption still names its
+                // group, but reserve it so smaller runs stay clear.
+                placed.push(text_run_rect(&origin));
+            }
+            break;
+        }
+    }
+    if drop.iter().any(|&d| d) {
+        let mut kept = Vec::with_capacity(layout.annotations.len());
+        for (i, run) in layout.annotations.drain(..).enumerate() {
+            if !drop[i] {
+                kept.push(run);
+            }
+        }
+        layout.annotations = kept;
+    }
+}
+
 /// Lowest content baseline on the sheet: component bodies, wire
 /// points, annotations, and group boxes. Board-level design notes
 /// start below this.
@@ -942,23 +1143,14 @@ fn content_bottom(board: &Board, layout: &Layout) -> f64 {
     }
 }
 
-/// Grow `layout.sheet_size` if anything ended up past the edge of the
-/// page the placer chose.
-///
-/// The placer sizes the sheet from the positions *it* assigns, but
-/// three later stages can move content: grid alignment and the
-/// rotation passes nudge components, `overlay` can drop one anywhere
-/// the user dragged it, and routing adds wire points of its own. A
-/// sidecar override in particular is unbounded — nothing stops a
-/// dragged component from landing past the right edge — and without
-/// this pass the page stayed whatever the placer picked, so the
-/// component simply rendered off-sheet (`E-SYNTH-SCHEM-007`).
-///
-/// Only ever grows, never shrinks: a page that shrank under a manual
-/// arrangement would move everything the user had just positioned by
-/// hand relative to the frame. A layout that is merely roomier than it
-/// needs to be is fine; one whose content hangs off the page is not.
-fn grow_sheet_to_fit(board: &Board, layout: &mut Layout) {
+/// Bounding box of everything drawn on the sheet — component
+/// bodies, wire points, text runs, and group boxes — as
+/// `(min_x, max_x, min_y, max_y)` in mm page coordinates, or `None`
+/// for an empty layout. Shared by [`grow_sheet_to_fit`],
+/// [`compact_sheet_to_fit`], and the `E-SYNTH-SCHEM-012` fill rule so
+/// page sizing and the fill measurement can never disagree about
+/// where the content is.
+pub fn content_bounds(board: &Board, layout: &Layout) -> Option<(f64, f64, f64, f64)> {
     let mut min_x = f64::INFINITY;
     let mut max_x = f64::NEG_INFINITY;
     let mut min_y = f64::INFINITY;
@@ -985,7 +1177,7 @@ fn grow_sheet_to_fit(board: &Board, layout: &mut Layout) {
     for text in &layout.annotations {
         let (x, y) = text.at_mm;
         // Rough advance width: KiCad's stroke font is about 0.72 em.
-        let width = text.text.chars().count() as f64 * text.size_mm * 0.72;
+        let width = text_run_width(&text.text, text.size_mm);
         min_x = min_x.min(x);
         max_x = max_x.max(x + width);
         min_y = min_y.min(y - text.size_mm);
@@ -998,14 +1190,72 @@ fn grow_sheet_to_fit(board: &Board, layout: &mut Layout) {
         max_y = max_y.max(box_.max_mm.1);
     }
     if !min_x.is_finite() {
-        return;
+        return None;
     }
+    Some((min_x, max_x, min_y, max_y))
+}
+
+/// Grow `layout.sheet_size` if anything ended up past the edge of the
+/// page the placer chose.
+///
+/// The placer sizes the sheet from the positions *it* assigns, but
+/// three later stages can move content: grid alignment and the
+/// rotation passes nudge components, `overlay` can drop one anywhere
+/// the user dragged it, and routing adds wire points of its own. A
+/// sidecar override in particular is unbounded — nothing stops a
+/// dragged component from landing past the right edge — and without
+/// this pass the page stayed whatever the placer picked, so the
+/// component simply rendered off-sheet (`E-SYNTH-SCHEM-007`).
+///
+/// Only ever grows, never shrinks: a page that shrank under a manual
+/// arrangement would move everything the user had just positioned by
+/// hand relative to the frame. A layout that is merely roomier than it
+/// needs to be is fine; one whose content hangs off the page is not.
+/// (The Phase A5 companion [`compact_sheet_to_fit`] shrinks only to a
+/// sheet the content provably fits, so the two never fight.)
+fn grow_sheet_to_fit(board: &Board, layout: &mut Layout) {
+    let Some((min_x, max_x, min_y, max_y)) = content_bounds(board, layout) else {
+        return;
+    };
     let (need_w, need_h) = sheet_needs(min_x, max_x, min_y, max_y);
     let required = sheet_size_for(need_w, need_h);
     let (have_w, have_h) = layout.sheet_size.dims_mm();
     let (want_w, want_h) = required.dims_mm();
     if want_w > have_w || want_h > have_h {
         layout.sheet_size = required;
+    }
+}
+
+/// Shrink `layout.sheet_size` to the smallest standard sheet the
+/// content provably fits (schematic-quality plan Phase A5, defect
+/// D6: content occupying the top 40 % of an A3 page while the bottom
+/// half sits empty).
+///
+/// Runs after [`grow_sheet_to_fit`], so the sheet first covers the
+/// content and then compacts onto it. Shrinking only re-declares the
+/// frame — component positions are absolute from the top-left, so
+/// nothing moves — and only happens when [`sheet_needs`] (which
+/// already reserves the page margin and the title-block band) fits
+/// the smaller sheet, so compacted content can neither overflow the
+/// page nor slide under the title block. Sidecar-dragged components
+/// are content like any other: if they fit a smaller sheet the sheet
+/// shrinks around them; if not, it stays.
+fn compact_sheet_to_fit(board: &Board, layout: &mut Layout) {
+    let Some((min_x, max_x, min_y, max_y)) = content_bounds(board, layout) else {
+        return;
+    };
+    let (need_w, need_h) = sheet_needs(min_x, max_x, min_y, max_y);
+    let smallest = sheet_size_for(need_w, need_h);
+    // `sheet_size_for` ceilings at A2: beyond that the "smallest"
+    // does not actually contain the content, so check the fit
+    // explicitly instead of trusting the name.
+    let (want_w, want_h) = smallest.dims_mm();
+    if need_w > want_w || need_h > want_h {
+        return;
+    }
+    let (have_w, have_h) = layout.sheet_size.dims_mm();
+    if want_w < have_w && want_h < have_h {
+        layout.sheet_size = smallest;
     }
 }
 
@@ -3653,6 +3903,7 @@ mod barycenter_tests {
 
     fn board_with(components: Vec<Component>, nets: Vec<Net>) -> Board {
         Board {
+            legends: false,
             name: "test".to_string(),
             layers: 2,
             manufacturer: None,
@@ -3860,6 +4111,7 @@ mod semantic_weights_tests {
 
     fn board(components: Vec<Component>, nets: Vec<Net>) -> Board {
         Board {
+            legends: false,
             name: "test".to_string(),
             layers: 2,
             manufacturer: None,
@@ -4187,6 +4439,7 @@ mod soft_pin_swap_tests {
 
     fn board(components: Vec<Component>, nets: Vec<Net>) -> Board {
         Board {
+            legends: false,
             name: "test".to_string(),
             layers: 2,
             manufacturer: None,
@@ -4428,6 +4681,7 @@ mod patterns_tests {
 
     fn board(components: Vec<Component>, nets: Vec<Net>) -> Board {
         Board {
+            legends: false,
             name: "test".to_string(),
             layers: 2,
             manufacturer: None,
@@ -4759,7 +5013,7 @@ mod text_width_tests {
             .value
             .as_deref()
             .or(component.part.as_ref().and_then(|p| p.mpn.as_deref()))
-            .unwrap_or(component.part.as_ref().map_or("", |p| p.id.as_str()));
+            .unwrap_or("(no value)");
         (val_text.len() as f64) * 1.27 * 0.85 + 2.54
     }
 
@@ -4787,11 +5041,12 @@ mod text_width_tests {
         let half = text_inclusive_half_width(&c, p);
         assert!(half >= long("AC0603FR-0710KL") / 2.0);
 
-        // Neither: falls back to the part id.
+        // Neither: falls back to the `(no value)` sentinel (Phase A1:
+        // the part id must never render as a value).
         let c = component("R1", None, two_pin_part("resistor_10k", None));
         let p = c.part.as_ref().unwrap();
         let half = text_inclusive_half_width(&c, p);
-        assert!(half >= long("resistor_10k") / 2.0);
+        assert!(half >= long("(no value)") / 2.0);
     }
 
     #[test]
@@ -4808,6 +5063,167 @@ mod text_width_tests {
         let half = text_inclusive_half_width(&c, p);
         assert!(half > 7.62, "body half-width must not dominate");
         assert!(half >= text_width(&c) / 2.0 - 1e-9);
+    }
+}
+
+#[cfg(test)]
+mod text_overlap_tests {
+    use synth_diagnostics::Span;
+    use synth_ir::Board;
+
+    use super::*;
+
+    fn empty_board() -> Board {
+        Board {
+            legends: false,
+            name: "b".to_string(),
+            layers: 2,
+            manufacturer: None,
+            revision: None,
+            company: None,
+            components: Vec::new(),
+            nets: Vec::new(),
+            diff_pairs: Vec::new(),
+            notes: Vec::new(),
+            keepouts: Vec::new(),
+            netclasses: Vec::new(),
+            buses: Vec::new(),
+            modules: Vec::new(),
+            variants: Vec::new(),
+            source_span: Span::new(0, 0),
+        }
+    }
+
+    fn empty_layout(annotations: Vec<TextAnnotation>, sheet_size: SheetSize) -> Layout {
+        Layout {
+            components: Vec::new(),
+            wires: Vec::new(),
+            junctions: Vec::new(),
+            power_flags: Vec::new(),
+            net_labels: Vec::new(),
+            hierarchical_labels: Vec::new(),
+            annotations,
+            group_boxes: Vec::new(),
+            sheet_size,
+        }
+    }
+
+    fn run(text: &str, size_mm: f64, x: f64, y: f64) -> TextAnnotation {
+        TextAnnotation {
+            text: text.to_string(),
+            at_mm: (x, y),
+            size_mm,
+        }
+    }
+
+    fn overlaps(layout: &Layout) -> bool {
+        for (i, a) in layout.annotations.iter().enumerate() {
+            let ra = text_run_rect(a);
+            for b in layout.annotations.iter().skip(i + 1) {
+                if rects_overlap(ra, text_run_rect(b)) {
+                    return true;
+                }
+            }
+        }
+        false
+    }
+
+    #[test]
+    fn overlapping_annotations_are_nudged_apart() {
+        let board = empty_board();
+        let mut layout = empty_layout(
+            vec![
+                run("J1 pinout", 2.0, 20.0, 100.0),
+                run("J1 pinout", 2.0, 20.0, 100.0),
+                run("vbus: VBUS", 1.27, 20.0, 104.0),
+            ],
+            SheetSize::A4,
+        );
+        resolve_text_overlaps(&board, &mut layout);
+        assert_eq!(layout.annotations.len(), 3, "nothing dropped: {layout:?}");
+        assert!(!overlaps(&layout), "runs must separate: {layout:?}");
+    }
+
+    #[test]
+    fn titles_are_never_shrunk_or_dropped() {
+        let board = empty_board();
+        let mut layout = empty_layout(
+            vec![
+                run("Input", 2.0, 20.0, 100.0),
+                run("Input", 2.0, 20.0, 100.0),
+            ],
+            SheetSize::A4,
+        );
+        resolve_text_overlaps(&board, &mut layout);
+        assert_eq!(layout.annotations.len(), 2);
+        assert!(
+            layout.annotations.iter().all(|a| a.size_mm == 2.0),
+            "titles keep their size: {layout:?}"
+        );
+    }
+
+    #[test]
+    fn unplaceable_line_is_dropped() {
+        // A line run under a continuous wall of bodies: 16 nudges
+        // plus one shrink step cannot clear it, so it is dropped
+        // rather than left overlapping.
+        let mut board = empty_board();
+        board.components = vec![synth_ir::Component {
+            id: ComponentId(0),
+            refdes: "U1".to_string(),
+            kind: "mcu".to_string(),
+            part: None,
+            value: None,
+            dnp: false,
+            properties: std::collections::BTreeMap::new(),
+            placement_hint: None,
+            group: None,
+            sheet: None,
+            source_span: Span::new(0, 0),
+        }];
+        let mut layout = empty_layout(vec![run("buried note", 1.27, 95.0, 100.0)], SheetSize::A4);
+        // Fallback body (15 × 10) plus text margins covers ±11.35 mm
+        // vertically; bodies every 12 mm form a continuous wall the
+        // run cannot nudge past within its step budget.
+        for y in [100.0, 112.0, 124.0, 136.0, 148.0] {
+            layout.components.push(ComponentPlacement {
+                id: ComponentId(0),
+                center_mm: (100.0, y),
+                rotation: Rotation::Zero,
+            });
+        }
+        resolve_text_overlaps(&board, &mut layout);
+        assert!(
+            layout.annotations.is_empty(),
+            "unplaceable line must drop: {layout:?}"
+        );
+    }
+
+    #[test]
+    fn compact_sheet_shrinks_to_smallest_fitting_sheet() {
+        let board = empty_board();
+        let mut layout = empty_layout(vec![run("tiny", 1.27, 20.0, 30.0)], SheetSize::A3);
+        layout.components.push(ComponentPlacement {
+            id: ComponentId(0),
+            center_mm: (30.0, 30.0),
+            rotation: Rotation::Zero,
+        });
+        compact_sheet_to_fit(&board, &mut layout);
+        assert_eq!(layout.sheet_size, SheetSize::A4);
+    }
+
+    #[test]
+    fn compact_sheet_never_shrinks_past_content() {
+        let board = empty_board();
+        let mut layout = empty_layout(vec![], SheetSize::A4);
+        // Content near the A4 right edge: A4 must stay.
+        layout.components.push(ComponentPlacement {
+            id: ComponentId(0),
+            center_mm: (280.0, 30.0),
+            rotation: Rotation::Zero,
+        });
+        compact_sheet_to_fit(&board, &mut layout);
+        assert_eq!(layout.sheet_size, SheetSize::A4);
     }
 }
 
@@ -4985,6 +5401,7 @@ mod naming_tests {
 
     fn board(components: Vec<Component>, nets: Vec<Net>) -> Board {
         Board {
+            legends: false,
             name: "test".to_string(),
             layers: 2,
             manufacturer: None,
@@ -5280,6 +5697,7 @@ mod documentation_tests {
 
     fn board_with_notes(components: Vec<Component>, nets: Vec<Net>, notes: Vec<Note>) -> Board {
         Board {
+            legends: false,
             name: "test".to_string(),
             layers: 2,
             manufacturer: None,

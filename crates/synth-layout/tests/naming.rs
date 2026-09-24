@@ -91,6 +91,7 @@ fn net(id: u32, name: &str, endpoints: &[(u32, u32)]) -> Net {
 
 fn board(components: Vec<Component>, nets: Vec<Net>) -> synth_ir::Board {
     synth_ir::Board {
+        legends: false,
         name: "test".to_string(),
         layers: 2,
         manufacturer: None,

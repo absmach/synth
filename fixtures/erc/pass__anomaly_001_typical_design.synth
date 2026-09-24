@@ -1,9 +1,9 @@
 board "pass_anomaly_typical" {
   layers 2
 
-  component R1: resistor "r_generic_0603"
-  component R2: resistor "r_generic_0603"
-  component C1: capacitor "c_generic_0603"
+  component R1: resistor "r_generic_0603" value "10k"
+  component R2: resistor "r_generic_0603" value "10k"
+  component C1: capacitor "c_generic_0603" value "100nF"
   component J1: connector "header_1x4"
 
   connect J1.p1 -> R1.p1

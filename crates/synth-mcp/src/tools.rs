@@ -1703,11 +1703,12 @@ fn execute_place_with_hints(
         }
     };
 
-    let placement_result = requested_dimensions
-        .map(|(width, height)| {
+    let placement_result = requested_dimensions.map_or_else(
+        || synth_place::place_with_hints(&board, &hints),
+        |(width, height)| {
             synth_place::place_with_hints_and_dimensions(&board, &hints, width, height)
-        })
-        .unwrap_or_else(|| synth_place::place_with_hints(&board, &hints));
+        },
+    );
 
     match placement_result {
         Ok((mut placement, report)) => {

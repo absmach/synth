@@ -899,4 +899,93 @@ mod tests {
         p.kind = "resistor".into();
         assert_eq!(default_reference_prefix(&p), "R");
     }
+
+    /// Positions of every `(pin … (at x y _) …)` in a pin sub-symbol.
+    fn pin_positions(sexp: &Sexp) -> Vec<(f64, f64)> {
+        fn num(s: &Sexp) -> Option<f64> {
+            match s {
+                Sexp::Atom(v) | Sexp::Str(v) => v.parse::<f64>().ok(),
+                Sexp::List { .. } | Sexp::Raw(_) => None,
+            }
+        }
+        let mut out = Vec::new();
+        if let Sexp::List { head, children } = sexp {
+            if head == "pin" {
+                for child in children {
+                    if let Sexp::List {
+                        head: h,
+                        children: c,
+                    } = child
+                    {
+                        if h == "at" && c.len() >= 2 {
+                            if let (Some(x), Some(y)) = (num(&c[0]), num(&c[1])) {
+                                out.push((x, y));
+                            }
+                        }
+                    }
+                }
+            } else {
+                for child in children {
+                    out.extend(pin_positions(child));
+                }
+            }
+        }
+        out
+    }
+
+    #[test]
+    fn stacked_power_pins_keep_minimum_pitch() {
+        // Schematic-quality plan Phase A4 (defect D10): stacked pin
+        // numbers on one symbol edge must keep a minimum 1.27 mm
+        // pitch, or the numbers collide with each other and the body.
+        let mut part = make_part();
+        part.kind = "mcu".into();
+        let power = |name: &str| Pin {
+            name: name.into(),
+            number: PinNumber(name.into()),
+            electrical_type: ElectricalType::PowerInput,
+            capabilities: vec![],
+            required: true,
+            unit: None,
+            voltage_max_v: None,
+            voltage_min_v: None,
+            voltage_nominal_v: None,
+        };
+        part.pins = vec![
+            power("vdd"),
+            power("vdda"),
+            power("vbat"),
+            power("vss"),
+            power("vssa"),
+            pin("pa0", ElectricalType::Input, vec![]),
+            pin("pa1", ElectricalType::Input, vec![]),
+        ];
+        let sub = build_pins_subsymbol(part.id.as_str(), &part.pins, 30.0, 30.0, false, None);
+        let positions = pin_positions(&sub);
+        assert_eq!(positions.len(), part.pins.len());
+        // Group positions by the side the pin was stacked on; the
+        // stacking axis must keep pitch, the other axis is constant.
+        let mut by_side: std::collections::HashMap<PinSide, Vec<(f64, f64)>> =
+            std::collections::HashMap::new();
+        for (pin_def, pos) in part.pins.iter().zip(positions) {
+            by_side
+                .entry(classify_ic_pin(pin_def))
+                .or_default()
+                .push(pos);
+        }
+        for (side, points) in &by_side {
+            for (i, a) in points.iter().enumerate() {
+                for b in points.iter().skip(i + 1) {
+                    let gap = match side {
+                        PinSide::Top | PinSide::Bottom => (a.0 - b.0).abs(),
+                        PinSide::Left | PinSide::Right => (a.1 - b.1).abs(),
+                    };
+                    assert!(
+                        gap >= 1.27 - 1e-6,
+                        "pins on {side:?} overlap: {a:?} vs {b:?}"
+                    );
+                }
+            }
+        }
+    }
 }

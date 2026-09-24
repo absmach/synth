@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 //! Pass 6: IC + decoupling caps + reset network passives + pull-up/down resistors.
 
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use synth_ir::{Board, ComponentId};
 
 use super::Pattern;
@@ -15,6 +15,7 @@ pub(crate) struct IcBlock;
 impl Pattern for IcBlock {
     fn recognize(board: &Board, claimed: &mut HashSet<ComponentId>) -> Vec<Cluster> {
         let mut clusters: Vec<Cluster> = Vec::new();
+        let mut anchor_index: HashMap<ComponentId, usize> = HashMap::new();
         for component in &board.components {
             if claimed.contains(&component.id) {
                 continue;
@@ -191,6 +192,7 @@ impl Pattern for IcBlock {
 
             claimed.insert(component.id);
             members.sort_by_key(|m| m.id.0);
+            anchor_index.insert(component.id, clusters.len());
             clusters.push(Cluster {
                 kind: ClusterKind::IcBlock,
                 anchor: component.id,
@@ -198,6 +200,126 @@ impl Pattern for IcBlock {
                 members,
             });
         }
+        attach_orphan_rail_caps(board, claimed, &mut clusters, &anchor_index);
         clusters
+    }
+}
+
+/// Whether a pin name denotes a ground reference (`gnd`, `vss`, …).
+fn is_ground_pin_name(name: &str) -> bool {
+    let lower = name.to_ascii_lowercase();
+    matches!(
+        lower.as_str(),
+        "gnd" | "vss" | "vssa" | "gnda" | "gnd_a" | "vee" | "vneg" | "agnd" | "dgnd" | "ground"
+    ) || lower.starts_with("gnd")
+        || lower.starts_with("vss")
+}
+
+/// Whether a net is a supply rail: it carries a power-output pin, or a
+/// non-ground power-input pin (a regulator input, an MCU `vdd`).
+fn net_is_rail(board: &Board, net: &synth_ir::Net) -> bool {
+    use synth_registry::ElectricalType;
+    net.endpoints.iter().any(|ep| {
+        board.pin(ep.component, ep.pin).is_some_and(|p| {
+            matches!(p.electrical_type, ElectricalType::PowerOutput)
+                || (matches!(p.electrical_type, ElectricalType::PowerInput)
+                    && !is_ground_pin_name(&p.name))
+        })
+    })
+}
+
+/// Whether a net is a ground: it touches a ground-named power pin.
+fn net_is_ground(board: &Board, net: &synth_ir::Net) -> bool {
+    use synth_registry::ElectricalType;
+    net.endpoints.iter().any(|ep| {
+        board.pin(ep.component, ep.pin).is_some_and(|p| {
+            matches!(
+                p.electrical_type,
+                ElectricalType::PowerInput | ElectricalType::GroundReference
+            ) && is_ground_pin_name(&p.name)
+        })
+    })
+}
+
+/// Second sweep (schematic-quality plan Phase A2): a two-pin capacitor
+/// whose pins join a rail and a ground, but which no earlier pass
+/// claimed, belongs to its heaviest rail consumer's `IcBlock`.
+///
+/// The claim rule above only reaches caps through the anchor's own
+/// `required_decoupling` nets with a per-pin count cap. On a shared
+/// rail (one merged net feeding the regulator, the MCU and the
+/// sensor) the leftover caps fell through to `Singleton` and were
+/// placed by power-flow layer — 150+ mm from the IC they decouple.
+/// Here each orphan claims the anchor with the most pins on its rail
+/// net (the part drawing most from that rail), tie-broken by
+/// declaration adjacency, which is how authors already express
+/// intent (`C4` sits next to `U2` in the source).
+fn attach_orphan_rail_caps(
+    board: &Board,
+    claimed: &mut HashSet<ComponentId>,
+    clusters: &mut [Cluster],
+    anchor_index: &HashMap<ComponentId, usize>,
+) {
+    for component in &board.components {
+        if claimed.contains(&component.id) {
+            continue;
+        }
+        let Some(part) = component.part.as_ref() else {
+            continue;
+        };
+        if part.kind != "capacitor" || part.pins.len() != 2 {
+            continue;
+        }
+        let nets: Vec<&synth_ir::Net> = (0..2)
+            .filter_map(|i| {
+                board
+                    // u32 cast is bounded: two-pin parts have indexes 0 and 1.
+                    .nets_containing(component.id, synth_ir::PinId(i as u32))
+                    .map(|(_, net)| net)
+                    .next()
+            })
+            .collect();
+        if nets.len() != 2 || nets[0].id == nets[1].id {
+            continue;
+        }
+        let rail = if net_is_rail(board, nets[0]) && net_is_ground(board, nets[1]) {
+            nets[0]
+        } else if net_is_rail(board, nets[1]) && net_is_ground(board, nets[0]) {
+            nets[1]
+        } else {
+            continue;
+        };
+        // Heaviest consumer wins; declaration adjacency breaks ties
+        // (lower adjacency distance = nearer in source = preferred).
+        let mut best: Option<(usize, usize, usize)> = None;
+        for (&anchor, &cluster_idx) in anchor_index {
+            if anchor == component.id {
+                continue;
+            }
+            let pins_on_rail = rail
+                .endpoints
+                .iter()
+                .filter(|ep| ep.component == anchor)
+                .count();
+            if pins_on_rail == 0 {
+                continue;
+            }
+            let adjacency = (anchor.0 as i64 - component.id.0 as i64).unsigned_abs() as usize;
+            // Compare by (pins desc, adjacency asc): store adjacency
+            // negated via MAX-minus so tuple comparison works.
+            let key = (pins_on_rail, usize::MAX - adjacency);
+            if best.is_none_or(|(best_pins, best_adj, _)| key > (best_pins, best_adj)) {
+                best = Some((pins_on_rail, usize::MAX - adjacency, cluster_idx));
+            }
+        }
+        let Some((_, _, cluster_idx)) = best else {
+            continue;
+        };
+        clusters[cluster_idx].members.push(ClusterMember {
+            id: component.id,
+            side: MemberSide::Below,
+        });
+        clusters[cluster_idx].members.sort_by_key(|m| m.id.0);
+        claimed.insert(component.id);
     }
 }

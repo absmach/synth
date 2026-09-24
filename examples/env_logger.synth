@@ -15,13 +15,13 @@ board "env_logger" {
 
   // ---- Power Chain (USB-C 5V to 3.3V LDO) --------------------------------
   component J1: connector  "usb_c_receptacle"
-  component R_CC1: resistor "r_generic_0603"   // 5.1k CC1 pull-down to GND
-  component R_CC2: resistor "r_generic_0603"   // 5.1k CC2 pull-down to GND
+  component R_CC1: resistor "r_generic_0603" value "5.1k"   // 5.1k CC1 pull-down to GND
+  component R_CC2: resistor "r_generic_0603" value "5.1k"   // 5.1k CC2 pull-down to GND
   component U1: regulator  "ams1117_3v3"
-  component C1: capacitor  "c_generic_0805"   // VBUS 5V bulk capacitor
-  component C2: capacitor  "c_generic_0805"   // AMS1117 input capacitor (22uF)
-  component C3: capacitor  "c_generic_0805"   // AMS1117 output capacitor (22uF)
-  component C7: capacitor  "c_generic_0603"   // AMS1117 output 100nF decoupling
+  component C1: capacitor  "c_generic_0805" value "10uF"   // VBUS 5V bulk capacitor
+  component C2: capacitor  "c_generic_0805" value "22uF"   // AMS1117 input capacitor (22uF)
+  component C3: capacitor  "c_generic_0805" value "22uF"   // AMS1117 output capacitor (22uF)
+  component C7: capacitor  "c_generic_0603" value "100nF"   // AMS1117 output 100nF decoupling
 
   connect J1.vbus -> C1.p1
   connect J1.gnd  -> C1.p2
@@ -47,12 +47,12 @@ board "env_logger" {
   // ---- MCU + Reset & Debug Circuit ----------------------------------------
   component U2: mcu        "stm32f103c8"
   component J2: connector  "header_1x4"       // 4-pin Debug Header (3V3, TX, RX, GND)
-  component C4: capacitor  "c_generic_0603" { placement_hint { near: "U2" priority: hard } }   // STM32 VDD decoupling capacitor (100nF)
-  component C8: capacitor  "c_generic_0603" { placement_hint { near: "U2" priority: hard } }   // STM32 VBAT decoupling capacitor (100nF)
-  component R1: resistor   "r_generic_0603" { placement_hint { near: "U2" priority: hard } }   // NRST pull-up resistor (10k)
-  component R_BOOT0: resistor "r_generic_0603" { placement_hint { near: "U2" priority: hard } } // BOOT0 pull-down resistor (10k)
+  component C4: capacitor  "c_generic_0603" value "100nF" { placement_hint { near: "U2" priority: hard } }   // STM32 VDD decoupling capacitor (100nF)
+  component C8: capacitor  "c_generic_0603" value "100nF" { placement_hint { near: "U2" priority: hard } }   // STM32 VBAT decoupling capacitor (100nF)
+  component R1: resistor   "r_generic_0603" value "10k" { placement_hint { near: "U2" priority: hard } }   // NRST pull-up resistor (10k)
+  component R_BOOT0: resistor "r_generic_0603" value "10k" { placement_hint { near: "U2" priority: hard } } // BOOT0 pull-down resistor (10k)
   component SW1: switch    "spst_tactile"     // Tactile reset button
-  component C5: capacitor  "c_generic_0603" { placement_hint { near: "U2" priority: hard } }   // Reset pin filter capacitor (100nF)
+  component C5: capacitor  "c_generic_0603" value "100nF" { placement_hint { near: "U2" priority: hard } }   // Reset pin filter capacitor (100nF)
 
   connect U1.vout -> U2.vdd
   connect U1.vout -> U2.vbat
@@ -84,9 +84,9 @@ board "env_logger" {
 
   // ---- BME680 Environmental Sensor & I2C Bus -----------------------------
   component U3: sensor     "bme680_env"
-  component C6: capacitor  "c_generic_0603"   // BME680 VDD decoupling capacitor (100nF)
-  component R2: resistor   "r_generic_0603"   // I2C SDA pull-up resistor (4.7k)
-  component R3: resistor   "r_generic_0603"   // I2C SCL pull-up resistor (4.7k)
+  component C6: capacitor  "c_generic_0603" value "100nF"   // BME680 VDD decoupling capacitor (100nF)
+  component R2: resistor   "r_generic_0603" value "4.7k"   // I2C SDA pull-up resistor (4.7k)
+  component R3: resistor   "r_generic_0603" value "4.7k"   // I2C SCL pull-up resistor (4.7k)
 
   connect U1.vout -> U3.vdd
   connect U1.gnd  -> U3.gnd

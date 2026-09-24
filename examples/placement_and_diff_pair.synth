@@ -11,7 +11,7 @@ board "placement_and_diff_pair" {
     placement_hint { region: top_left priority: hard }
   }
   component J1: connector "usb_c_receptacle"
-  component C1: capacitor "c_generic_0805"
+  component C1: capacitor "c_generic_0805" value "10uF"
 
   connect J1.vbus -> C1.p1
   connect J1.gnd  -> C1.p2

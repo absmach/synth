@@ -297,6 +297,7 @@ priority = "hard"
         use synth_diagnostics::Span;
         use synth_ir::{Board, Component, ComponentId};
         Board {
+            legends: false,
             name: "t".to_string(),
             layers: 2,
             manufacturer: None,

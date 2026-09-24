@@ -51,6 +51,13 @@ pub struct Board {
     /// order. Rendered on the schematic as titled text blocks.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub notes: Vec<Note>,
+    /// Connector pin legends (`legends on|off`, default off): when
+    /// true, board-edge connectors get a compact generated pinout
+    /// legend on the schematic. Schematic-quality plan Phase A3 —
+    /// the reference sheet carries a one-line prose note instead of
+    /// a per-pin dump, so legends are opt-in.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub legends: bool,
     pub keepouts: Vec<Keepout>,
     /// Declared routing-constraint classes (`netclass "PWR" { … }`).
     /// Nets join a class via `class "PWR"` on their `net`, `power`,

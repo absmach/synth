@@ -158,6 +158,9 @@ pub fn lower(ast: &ProgramAst, registry: &Registry, file: &str) -> LowerResult {
     let mut manufacturer: Option<String> = None;
     let mut revision: Option<String> = None;
     let mut company: Option<String> = None;
+    // Schematic-quality plan Phase A3: connector pin legends are
+    // opt-in (`legends on`), default off.
+    let mut legends: bool = false;
 
     // Groups and sheets are flattened here, not represented in the
     // IR as a tree: a group names its components and a sheet names
@@ -178,6 +181,7 @@ pub fn lower(ast: &ProgramAst, registry: &Registry, file: &str) -> LowerResult {
             StatementAst::Manufacturer(m) => manufacturer = Some(m.name.clone()),
             StatementAst::Revision(r) => revision = Some(r.rev.clone()),
             StatementAst::Company(c) => company = Some(c.name.clone()),
+            StatementAst::Legends(l) => legends = l.enabled,
             StatementAst::Component(c) => {
                 let comp = ctx.lower_component(c, registry, components.len(), group, sheet);
                 if refdes_index.contains_key(&comp.refdes) {
@@ -237,6 +241,7 @@ pub fn lower(ast: &ProgramAst, registry: &Registry, file: &str) -> LowerResult {
     let variants = ctx.lower_variants(&root_statements, &refdes_index);
 
     let board = Board {
+        legends,
         name: ast.board.name.clone(),
         layers,
         manufacturer,
@@ -1904,6 +1909,23 @@ mod tests {
         assert_eq!(board.nets[0].name, "net_0");
         assert_eq!(board.nets[0].netclass, None);
         assert_eq!(board.nets[0].voltage, None);
+    }
+
+    #[test]
+    fn test_legends_flag_lowered_default_off() {
+        let board = lower_ok(
+            r#"board "b" {
+                component U1: regulator "ams1117_3v3"
+            }"#,
+        );
+        assert!(!board.legends, "legends default off");
+        let board = lower_ok(
+            r#"board "b" {
+                legends on
+                component U1: regulator "ams1117_3v3"
+            }"#,
+        );
+        assert!(board.legends, "legends on lowers to true");
     }
 
     #[test]

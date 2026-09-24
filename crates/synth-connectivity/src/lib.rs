@@ -149,6 +149,7 @@ mod tests {
         };
 
         Board {
+            legends: false,
             name: "test".into(),
             layers: 2,
             manufacturer: None,

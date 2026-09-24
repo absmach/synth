@@ -23,9 +23,9 @@ use std::collections::{HashMap, HashSet};
 use synth_ir::{Board, ComponentId, NetId};
 
 use crate::{
-    annotate_groups, body_size_for_part, clamp_annotations_to_sheet, grow_sheet_to_fit,
-    place_connector_legends, place_design_notes, HierarchicalLabel, Layout, SheetSize,
-    BODY_FALLBACK_H, BODY_FALLBACK_W, PAGE_MARGIN,
+    annotate_groups, body_size_for_part, clamp_annotations_to_sheet, compact_sheet_to_fit,
+    grow_sheet_to_fit, place_connector_legends, place_design_notes, resolve_text_overlaps,
+    HierarchicalLabel, Layout, SheetSize, BODY_FALLBACK_H, BODY_FALLBACK_W, PAGE_MARGIN,
 };
 
 /// One sheet's share of a board: `None` is the root sheet, `Some`
@@ -316,7 +316,9 @@ fn split_layout(board: &Board, global: &Layout, partitions: &[SheetPartition]) -
             annotate_groups(board, &mut layout);
             place_connector_legends(board, &mut layout);
             place_sheet_notes(board, &mut layout, partition.name.as_deref());
+            resolve_text_overlaps(board, &mut layout);
             grow_sheet_to_fit(board, &mut layout);
+            compact_sheet_to_fit(board, &mut layout);
             clamp_annotations_to_sheet(&mut layout);
             SheetLayout {
                 name: partition.name.clone(),
@@ -332,6 +334,7 @@ fn split_layout(board: &Board, global: &Layout, partitions: &[SheetPartition]) -
 /// but scoped to a partition instead of the whole board.
 fn place_sheet_notes(board: &Board, layout: &mut Layout, sheet: Option<&str>) {
     let scoped = Board {
+        legends: board.legends,
         name: board.name.clone(),
         layers: board.layers,
         manufacturer: board.manufacturer.clone(),
@@ -478,6 +481,7 @@ mod tests {
 
     fn board(components: Vec<Component>, nets: Vec<Net>) -> Board {
         Board {
+            legends: false,
             name: "b".to_string(),
             layers: 2,
             manufacturer: None,

@@ -1752,7 +1752,11 @@ fn build_symbol_unit(
         .value
         .as_deref()
         .or(part.mpn.as_deref())
-        .unwrap_or(part_id);
+        // Schematic-quality plan Phase A1: `value` → part `mpn` →
+        // `(no value)` sentinel, never the registry part id. An
+        // unorderable value must look unorderable (`E-SYNTH-VALUE-001`
+        // fires for the generic case).
+        .unwrap_or("(no value)");
     let display_value = if display_value_raw.starts_with("c_generic_") {
         "C"
     } else if display_value_raw.starts_with("r_generic_") {

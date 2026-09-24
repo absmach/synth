@@ -49,6 +49,7 @@ pub enum StatementAst {
     Manufacturer(ManufacturerStmt),
     Revision(RevisionStmt),
     Company(CompanyStmt),
+    Legends(LegendsStmt),
     Component(ComponentDeclAst),
     Variant(VariantDeclStmt),
     Connection(ConnectionAst),
@@ -74,6 +75,7 @@ impl StatementAst {
             StatementAst::Manufacturer(s) => s.span,
             StatementAst::Revision(s) => s.span,
             StatementAst::Company(s) => s.span,
+            StatementAst::Legends(s) => s.span,
             StatementAst::Component(s) => s.span,
             StatementAst::Variant(s) => s.span,
             StatementAst::Connection(s) => s.span,
@@ -162,6 +164,16 @@ pub struct RevisionStmt {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct CompanyStmt {
     pub name: String,
+    pub span: Span,
+}
+
+/// Connector pin legends (`legends on|off`, default off).
+/// Schematic-quality plan Phase A3: generated per-pin connector
+/// legends are opt-in — the reference sheet carries a one-line prose
+/// note instead of a pin dump.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct LegendsStmt {
+    pub enabled: bool,
     pub span: Span,
 }
 

@@ -108,6 +108,7 @@ fn horizontal_y_segments(pts: &[(f64, f64)]) -> Vec<f64> {
 /// packing MUST put them on separate track levels.
 fn two_row_board_and_layout() -> (Board, Layout) {
     let board = Board {
+        legends: false,
         name: "channel".to_string(),
         layers: 2,
         manufacturer: None,
