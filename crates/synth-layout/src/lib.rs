@@ -404,6 +404,11 @@ const MEMBER_DX: f64 = 14.0;
 /// Target sheet aspect ratio (width/height) for cluster packing.
 /// 1.4 ≈ A4 landscape.
 const TARGET_ASPECT: f64 = 1.4;
+/// Usable content width of an A4 landscape sheet (297 mm minus both
+/// page margins). Region packing (Phase C3) targets this width so
+/// regions spread across the default sheet like the reference sheet's
+/// grid of blocks, rather than stacking into a tall narrow strip.
+const A4_CONTENT_WIDTH_MM: f64 = 297.0 - 2.0 * PAGE_MARGIN;
 /// Height (mm, measured up from the page's bottom edge) of the band
 /// KiCad's default title block occupies. KiCad draws this itself
 /// (fixed 108×32 mm rect anchored to the page's bottom-right corner —
@@ -2353,6 +2358,17 @@ fn horizontal_compaction(
 /// and members fan out into a single horizontal row beneath the
 /// anchor — so a cluster with 4 caps looks like an IC sitting on top
 /// of a 4-cap "shelf", not a 5-component column.
+///
+/// **Region packing (Phase C1).** A board that declares `group`s does
+/// not lay out as one long horizontal strip. Instead each group's
+/// columns are laid out independently in a local frame, their true
+/// content rectangles measured, and the rectangles shelf-packed onto
+/// the sheet (ordered by declaration, which follows power/signal
+/// flow). A group's parts therefore stay inside one rectangle, the
+/// drawn boxes never overlap, and the page reads as the reference
+/// sheet's grid of titled regions. A board with no groups (or all
+/// components in one group) takes the historic single-region path
+/// unchanged, so ungrouped output is byte-identical.
 fn place_clusters(board: &Board, clusters: &[Cluster]) -> Layout {
     // Fallback order — also the initial, pre-barycenter row order:
     // by declared sub-circuit first, then power-flow layer (sources
@@ -2555,408 +2571,187 @@ fn place_clusters(board: &Board, clusters: &[Cluster]) -> Layout {
         // needs a bigger gap than either column's own width alone would
         // suggest, or the wide anchor's Reference/Value text reaches
         // left into the column before it.
-        let col_x_offset: Vec<f64> = {
-            // Which band (declared group, or layer for an ungrouped
-            // board) each column belongs to, so consecutive columns
-            // *inside* one sub-circuit can sit closer than the boundary
-            // between two.
-            let col_band: Vec<u32> = col_groups
-                .iter()
-                .map(|group| group.first().map_or(u32::MAX, |&idx| fallback_key[idx].0))
-                .collect();
-            let mut offsets = Vec::with_capacity(col_groups.len());
-            let mut cum = 0.0;
-            offsets.push(cum);
-            for i in 1..col_groups.len() {
-                // A column of 0603 passives needs nothing like the full
-                // `BASE_CLUSTER_DX` to clear its neighbour — that floor
-                // buys routing room between unrelated blocks, and two
-                // columns of one declared sub-circuit are not unrelated.
-                // Charging them the full pitch is what pushed a
-                // six-group board off A2 (measured: 604 mm against a
-                // 594 mm page), forcing it back to ungrouped placement.
-                // The text-inclusive requirement below still applies;
-                // only the floor relaxes, and only within one group.
-                let same_group = col_band[i] == col_band[i - 1] && col_band[i] != u32::MAX;
-                let floor = if same_group {
-                    INTRA_GROUP_CLUSTER_DX
-                } else {
-                    BASE_CLUSTER_DX
-                };
-                let gap =
-                    snap_grid(floor.max(col_max_half_w[i - 1] + col_max_half_w[i] + WIRE_MARGIN));
-                cum += gap;
-                offsets.push(cum);
-            }
-            offsets
-        };
+        // Which declared group (or the implicit trailing region,
+        // `u32::MAX`) each column belongs to.
+        let col_band: Vec<u32> = col_groups
+            .iter()
+            .map(|group| group.first().map_or(u32::MAX, |&idx| fallback_key[idx].0))
+            .collect();
 
-        // Vertically centre each column's stack of clusters around the
-        // sheet's mid-height instead of hanging them all off the origin
-        // — "MCU should be at the centre... let's use the page real
-        // estate" (team review, 2026-08-17). A column with fewer
-        // clusters than the tallest column starts further down so its
-        // content is centred, not top-aligned.
-
-        // Brandes–Köpf coordinate assignment (§7.5.5 step 3 / §7.7.4 step
-        // 3): replaces the former uniform "sequential rows per column"
-        // with straight vertical alignment of aligned (connected) nodes.
-        // `bk_units` holds a unit y-offset per cluster; it is scaled by
-        // `grid_h` and snapped to the 2.54 mm grid below, keeping the
-        // grid-snapping invariant intact.
+        // Brandes–Köpf y coordinates across the whole cluster set. Each
+        // region below takes its own slice relative to its own minimum,
+        // so regions keep their internal vertical ordering without
+        // inheriting a global offset.
         let bk_units = bk_y_coordinates(&col_groups, &adjacency);
+
+        // Contiguous runs of columns sharing one band = one placement
+        // region (Phase C1). `place_for_rows` already refuses to put two
+        // bands in one column, so a run is exactly one group's columns.
+        let mut region_runs: Vec<(u32, usize, usize)> = Vec::new(); // (band, start, end)
+        for (col, &band) in col_band.iter().enumerate() {
+            match region_runs.last_mut() {
+                Some((b, _, end)) if *b == band => *end = col + 1,
+                _ => region_runs.push((band, col, col + 1)),
+            }
+        }
+
+        // Local x offsets *within* a region, reset at each region
+        // boundary. Inside a declared group columns may sit closer
+        // (`INTRA_GROUP_CLUSTER_DX`) than between unrelated regions; the
+        // ungrouped region keeps the historic full pitch so ungrouped
+        // boards stay byte-identical.
+        let mut col_x_local: Vec<f64> = vec![0.0; col_groups.len()];
+        for &(band, start, end) in &region_runs {
+            let floor = if band == u32::MAX {
+                BASE_CLUSTER_DX
+            } else {
+                INTRA_GROUP_CLUSTER_DX
+            };
+            let mut cum = 0.0;
+            for col in start..end {
+                if col > start {
+                    let gap = snap_grid(
+                        floor.max(col_max_half_w[col - 1] + col_max_half_w[col] + WIRE_MARGIN),
+                    );
+                    cum += gap;
+                }
+                col_x_local[col] = cum;
+            }
+        }
+
+        // Vertical extent of the whole BK coordinate set, used only by
+        // the single-region path to centre a lone region in the
+        // `rows`-tall band exactly as the pre-region code did.
         let (bk_min, bk_max) = if bk_units.is_empty() {
             (0.0, 0.0)
         } else {
-            let lo = bk_units.iter().copied().fold(f64::INFINITY, f64::min);
-            let hi = bk_units.iter().copied().fold(f64::NEG_INFINITY, f64::max);
-            (lo, hi)
+            (
+                bk_units.iter().copied().fold(f64::INFINITY, f64::min),
+                bk_units.iter().copied().fold(f64::NEG_INFINITY, f64::max),
+            )
         };
-        // Centre the BK content vertically within the `rows`-tall column
-        // band the same way the old row-centring did.
+
+        // Grid-based vertical centring, the single-region path's
+        // historic origin. Kept verbatim so ungrouped boards are
+        // byte-identical.
         let bk_content_h = (bk_max - bk_min) * grid_h + grid_h;
         let bk_origin_y = origin_y + ((rows as f64 * grid_h - bk_content_h).max(0.0)) / 2.0;
 
-        let placement_order: Vec<(usize, usize, &Cluster)> = col_groups
-            .iter()
-            .enumerate()
-            .flat_map(|(col, group)| {
-                group
-                    .iter()
-                    .map(move |&cluster_idx| (col, cluster_idx, &clusters[cluster_idx]))
-            })
-            .collect();
-
         let mut placements: Vec<ComponentPlacement> = Vec::with_capacity(board.components.len());
-        let mut occupied: std::collections::HashSet<(i64, i64)> = std::collections::HashSet::new();
-
-        for (col, cluster_idx, cluster) in placement_order {
-            let anchor_x = snap_grid(origin_x + col_x_offset[col]);
-            let anchor_y = snap_grid(bk_origin_y + (bk_units[cluster_idx] - bk_min) * grid_h);
-
-            // Anchor body half-extents so member placement clears the
-            // actual rendered footprint regardless of how big the
-            // KiCad symbol is. Fixed `MEMBER_DX/MEMBER_DY` constants
-            // assume a small generic rectangle; an ATmega328P-P DIP
-            // (~50 mm tall) or a USB-C receptacle (~50 mm tall × 15 mm
-            // wide) needs more headroom than that.
-            let (anchor_body_w, anchor_body_h) = board
-                .component(cluster.anchor)
-                .and_then(|c| c.part.as_ref())
-                .map_or((BODY_FALLBACK_W, BODY_FALLBACK_H), body_size_for_part);
-            let anchor_half_w = anchor_body_w / 2.0;
-            let anchor_half_h = anchor_body_h / 2.0;
-
-            let anchor_key = (
-                (anchor_x * 10.0).round() as i64,
-                (anchor_y * 10.0).round() as i64,
-            );
-            occupied.insert(anchor_key);
-
-            placements.push(ComponentPlacement {
-                id: cluster.anchor,
-                center_mm: (anchor_x, anchor_y),
-                rotation: Rotation::Zero,
-            });
-
-            // Bucket members by side.
-            let below: Vec<ComponentId> = cluster
-                .members
-                .iter()
-                .filter(|m| m.side == MemberSide::Below)
-                .map(|m| m.id)
-                .collect();
-            let right: Vec<ComponentId> = cluster
-                .members
-                .iter()
-                .filter(|m| m.side == MemberSide::Right)
-                .map(|m| m.id)
-                .collect();
-            let above: Vec<ComponentId> = cluster
-                .members
-                .iter()
-                .filter(|m| m.side == MemberSide::Above)
-                .map(|m| m.id)
-                .collect();
-            let left: Vec<ComponentId> = cluster
-                .members
-                .iter()
-                .filter(|m| m.side == MemberSide::Left)
-                .map(|m| m.id)
-                .collect();
-
-            // Below: members fan out in a single row beneath the anchor,
-            // horizontally aligned with their connected pins where possible.
-            if !below.is_empty() {
-                let member_dx = compute_dynamic_member_dx(board, &below);
-                let row_y = snap_grid(anchor_y + anchor_half_h + MEMBER_CLEARANCE);
-                let total_width = (below.len().saturating_sub(1)) as f64 * member_dx;
-                let row_start_x = snap_grid(anchor_x - total_width / 2.0);
-                let mut last_x: Option<f64> = None;
-                for (i, id) in below.iter().enumerate() {
-                    let mut placed_x = snap_grid(row_start_x + i as f64 * member_dx);
-                    if let Some(lx) = last_x {
-                        placed_x = placed_x.max(snap_grid(lx + member_dx));
-                    }
-                    if let Some(pin_idx) = find_connecting_active_pin(board, cluster.anchor, *id) {
-                        if let Some(anchor) = board.component(cluster.anchor) {
-                            if let Some(part) = anchor.part.as_ref() {
-                                let (px, _py, _side) = compute_anchor_pin_offset(part, pin_idx);
-                                let target_x = snap_grid(anchor_x + px);
-                                let coord_key = (
-                                    (target_x * 10.0).round() as i64,
-                                    (row_y * 10.0).round() as i64,
-                                );
-                                let remains_local = (target_x - anchor_x).abs() <= grid_w / 3.0;
-                                let clears_neighbour = placements.iter().all(|placed| {
-                                    (placed.center_mm.1 - row_y).abs() > 0.1
-                                        || (placed.center_mm.0 - target_x).abs() >= member_dx * 0.8
-                                });
-                                let clears_last =
-                                    last_x.is_none_or(|lx| target_x >= lx + member_dx * 0.8);
-                                if remains_local
-                                    && clears_neighbour
-                                    && clears_last
-                                    && !occupied.contains(&coord_key)
-                                {
-                                    placed_x = target_x;
-                                }
-                            }
-                        }
-                    }
-                    if let Some(lx) = last_x {
-                        placed_x = placed_x.max(snap_grid(lx + member_dx));
-                    }
-                    last_x = Some(placed_x);
-                    let coord_key = (
-                        (placed_x * 10.0).round() as i64,
-                        (row_y * 10.0).round() as i64,
+        if region_runs.len() <= 1 {
+            // Single region (an ungrouped board, or every component in
+            // one group): the pre-region path exactly — absolute
+            // anchors, one `place_cluster_into` per cluster. No packing,
+            // no translation, so the output is unchanged for every
+            // design that declares no groups.
+            let mut occupied: std::collections::HashSet<(i64, i64)> =
+                std::collections::HashSet::new();
+            for (col, group) in col_groups.iter().enumerate() {
+                for &cluster_idx in group {
+                    let anchor_x = snap_grid(origin_x + col_x_local[col]);
+                    let anchor_y =
+                        snap_grid(bk_origin_y + (bk_units[cluster_idx] - bk_min) * grid_h);
+                    place_cluster_into(
+                        board,
+                        &clusters[cluster_idx],
+                        anchor_x,
+                        anchor_y,
+                        grid_w,
+                        &mut placements,
+                        &mut occupied,
                     );
-                    occupied.insert(coord_key);
+                }
+            }
+        } else {
+            // Phase A (C1): lay out each region independently in its own
+            // local frame — origin at (0,0) — so its *true* content
+            // rectangle is known before packing. Using the grid cell
+            // instead over-counts badly (one tall USB-C symbol inflates
+            // every region's cell height), which is what tipped a
+            // grouped board off A2 in the first cut of this pass.
+            let mut region_layouts: Vec<RegionLayout> = Vec::with_capacity(region_runs.len());
+            for &(_, start, end) in &region_runs {
+                let mut local: Vec<ComponentPlacement> = Vec::new();
+                let mut occupied: std::collections::HashSet<(i64, i64)> =
+                    std::collections::HashSet::new();
+                for col in start..end {
+                    for &cluster_idx in &col_groups[col] {
+                        let anchor_x = snap_grid(col_x_local[col]);
+                        let anchor_y = snap_grid((bk_units[cluster_idx] - bk_min) * grid_h);
+                        place_cluster_into(
+                            board,
+                            &clusters[cluster_idx],
+                            anchor_x,
+                            anchor_y,
+                            grid_w,
+                            &mut local,
+                            &mut occupied,
+                        );
+                    }
+                }
+                local.sort_by_key(|p| p.id.0);
+                let bbox = body_bbox_of(board, &local).unwrap_or((0.0, grid_w, 0.0, grid_h));
+                region_layouts.push(RegionLayout {
+                    placements: local,
+                    bbox,
+                });
+            }
 
-                    placements.push(ComponentPlacement {
-                        id: *id,
-                        center_mm: (placed_x, row_y),
-                        rotation: Rotation::Zero,
-                    });
+            // Phase B: shelf-pack the *measured* region rectangles
+            // left-to-right, wrapping to a new shelf when the running
+            // width passes the target, so regions tile the page in two
+            // dimensions instead of one long horizontal strip (reference
+            // mechanism 1: the page is a grid of titled regions). Target
+            // width balances total region area to the sheet aspect,
+            // floored at the widest region so one wide region never
+            // overflows its own shelf.
+            let region_gap = snap_grid(BASE_CLUSTER_DX);
+            let total_area: f64 = region_layouts
+                .iter()
+                .map(|r| (r.bbox.1 - r.bbox.0) * (r.bbox.3 - r.bbox.2))
+                .sum();
+            let widest = region_layouts
+                .iter()
+                .map(|r| r.bbox.1 - r.bbox.0)
+                .fold(0.0_f64, f64::max);
+            let target_w = (total_area * TARGET_ASPECT)
+                .sqrt()
+                .max(widest)
+                .max(A4_CONTENT_WIDTH_MM);
+            let mut region_offset: Vec<(f64, f64)> = vec![(0.0, 0.0); region_layouts.len()];
+            {
+                let mut cx = 0.0;
+                let mut cy = 0.0;
+                let mut shelf_h = 0.0;
+                for (i, region) in region_layouts.iter().enumerate() {
+                    let w = region.bbox.1 - region.bbox.0;
+                    let h = region.bbox.3 - region.bbox.2;
+                    if cx > 0.0 && cx + w > target_w {
+                        cy += shelf_h + region_gap;
+                        cx = 0.0;
+                        shelf_h = 0.0;
+                    }
+                    region_offset[i] = (cx, cy);
+                    cx += w + region_gap;
+                    shelf_h = shelf_h.max(h);
                 }
             }
 
-            // Right: members stack in a vertical column to the right of
-            // the anchor, vertically aligned with their connected pins
-            // where possible. Spacing between consecutive members is
-            // dynamic (`min_member_dy`, text-inclusive) rather than the
-            // fixed `MEMBER_DX`, and pin-alignment nudges are clamped
-            // against it — a fixed constant or an unclamped pin-aligned
-            // position can both leave less room than a member's own
-            // Reference/Value text needs, overlapping its neighbour.
-            if !right.is_empty() {
-                let default_col_x = snap_grid(anchor_x + anchor_half_w + MEMBER_CLEARANCE);
-                let total_height: f64 = right
-                    .windows(2)
-                    .map(|pair| min_member_dy(board, pair[0], pair[1]))
-                    .sum();
-                let col_start_y = snap_grid(anchor_y - total_height / 2.0);
-                let mut prev: Option<(ComponentId, f64)> = None;
-                for (i, id) in right.iter().enumerate() {
-                    let mut col_x = default_col_x;
-                    let mut placed_y = if i == 0 {
-                        col_start_y
-                    } else {
-                        let (prev_id, prev_y) = prev.unwrap();
-                        snap_grid(prev_y + min_member_dy(board, prev_id, *id))
-                    };
-                    // Pin-Y alignment is only safe for a single member —
-                    // with more than one, distinct members can each
-                    // align to a different anchor pin that happens to
-                    // sit within a couple mm of another (e.g. a reset
-                    // network's pullup/button/debounce-cap all landing
-                    // near VCC/RESET/GND pins on a real KiCad symbol),
-                    // collapsing their text-inclusive extents on top of
-                    // each other. Mirrors the identical guard already on
-                    // the Left column below.
-                    if right.len() == 1 {
-                        if let Some(pin_idx) =
-                            find_connecting_active_pin(board, cluster.anchor, *id)
-                        {
-                            if let Some(anchor) = board.component(cluster.anchor) {
-                                if let Some(part) = anchor.part.as_ref() {
-                                    let (px, py, side) = compute_anchor_pin_offset(part, pin_idx);
-                                    // Only honour pin-Y alignment when the
-                                    // connecting pin actually sits on the
-                                    // Right side of the anchor. Otherwise
-                                    // (e.g. a reset pull-up whose other end
-                                    // hits VCC on Top), `find_connecting_*`
-                                    // would pick that wrong pin and yank
-                                    // the member up-and-inside the body.
-                                    if side == PinSide::Right {
-                                        col_x = snap_grid(anchor_x + px + MEMBER_CLEARANCE);
-                                        let target_y = snap_grid(anchor_y + py);
-                                        let coord_key = (
-                                            (col_x * 10.0).round() as i64,
-                                            (target_y * 10.0).round() as i64,
-                                        );
-                                        if !occupied.contains(&coord_key) {
-                                            placed_y = target_y;
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    } else if let Some((prev_id, prev_y)) = prev {
-                        // Multi-member column, default spacing already
-                        // applied above — still clamp in case a future
-                        // change reintroduces per-member pin alignment
-                        // here without threading it through this check.
-                        placed_y =
-                            placed_y.max(snap_grid(prev_y + min_member_dy(board, prev_id, *id)));
-                    }
-                    let coord_key = (
-                        (col_x * 10.0).round() as i64,
-                        (placed_y * 10.0).round() as i64,
-                    );
-                    occupied.insert(coord_key);
-
+            // Phase C: translate each region's local placements to its
+            // slot, normalising the region's own top-left to the slot
+            // origin.
+            for (ri, region) in region_layouts.iter().enumerate() {
+                let dx = origin_x + region_offset[ri].0 - region.bbox.0;
+                let dy = origin_y + region_offset[ri].1 - region.bbox.2;
+                for placement in &region.placements {
                     placements.push(ComponentPlacement {
-                        id: *id,
-                        center_mm: (col_x, placed_y),
-                        rotation: Rotation::Zero,
+                        id: placement.id,
+                        center_mm: (
+                            snap_grid(placement.center_mm.0 + dx),
+                            snap_grid(placement.center_mm.1 + dy),
+                        ),
+                        rotation: placement.rotation,
                     });
-                    prev = Some((*id, placed_y));
-                }
-            }
-
-            // Above: LED limit resistors remain in a vertical chain.
-            // Pull-ups for an IC fan into a horizontal row above it,
-            // which is the usual readable bus-pull-up arrangement.
-            if !above.is_empty() {
-                let member_dx = compute_dynamic_member_dx(board, &above);
-                let horizontal_row_y = snap_grid(anchor_y - anchor_half_h - MEMBER_CLEARANCE);
-                let horizontal_width = (above.len().saturating_sub(1)) as f64 * member_dx;
-                let horizontal_start_x = snap_grid(anchor_x - horizontal_width / 2.0);
-                let mut last_x: Option<f64> = None;
-                for (i, id) in above.iter().enumerate() {
-                    let mut placed_x = if cluster.anchor_vertical {
-                        anchor_x
-                    } else {
-                        snap_grid(horizontal_start_x + i as f64 * member_dx)
-                    };
-                    let target_y = if cluster.anchor_vertical {
-                        snap_grid(
-                            anchor_y - anchor_half_h - MEMBER_CLEARANCE - (i as f64) * MEMBER_DX,
-                        )
-                    } else {
-                        horizontal_row_y
-                    };
-                    if !cluster.anchor_vertical {
-                        if let Some(lx) = last_x {
-                            placed_x = placed_x.max(snap_grid(lx + member_dx));
-                        }
-                    }
-                    if let Some(pin_idx) = find_connecting_active_pin(board, cluster.anchor, *id) {
-                        if let Some(anchor) = board.component(cluster.anchor) {
-                            if let Some(part) = anchor.part.as_ref() {
-                                let (px, _py, _side) = compute_anchor_pin_offset(part, pin_idx);
-                                let target_x = snap_grid(anchor_x + px);
-                                let coord_key = (
-                                    (target_x * 10.0).round() as i64,
-                                    (target_y * 10.0).round() as i64,
-                                );
-                                let remains_local = (target_x - anchor_x).abs() <= grid_w / 3.0;
-                                let clears_neighbour = placements.iter().all(|placed| {
-                                    (placed.center_mm.1 - target_y).abs() > 0.1
-                                        || (placed.center_mm.0 - target_x).abs() >= member_dx * 0.8
-                                });
-                                let clears_last =
-                                    last_x.is_none_or(|lx| target_x >= lx + member_dx * 0.8);
-                                if remains_local
-                                    && clears_neighbour
-                                    && clears_last
-                                    && !occupied.contains(&coord_key)
-                                {
-                                    placed_x = target_x;
-                                }
-                            }
-                        }
-                    }
-                    if !cluster.anchor_vertical {
-                        if let Some(lx) = last_x {
-                            placed_x = placed_x.max(snap_grid(lx + member_dx));
-                        }
-                        last_x = Some(placed_x);
-                    }
-                    let coord_key = (
-                        (placed_x * 10.0).round() as i64,
-                        (target_y * 10.0).round() as i64,
-                    );
-                    occupied.insert(coord_key);
-
-                    placements.push(ComponentPlacement {
-                        id: *id,
-                        center_mm: (placed_x, target_y),
-                        rotation: Rotation::Zero,
-                    });
-                }
-            }
-
-            // Left: members stack vertically just outside the anchor's
-            // left edge. Dynamic (`min_member_dy`, text-inclusive)
-            // spacing so members are visually distinct — pin-Y alignment
-            // would collapse them on top of each other when the anchor's
-            // pins are 2.54mm apart (e.g. USB connector D+/D- adjacency).
-            // A single Left member has no such adjacency, so it y-aligns
-            // with its connecting pin for a straight-across wire.
-            if !left.is_empty() {
-                let col_x = snap_grid(anchor_x - anchor_half_w - MEMBER_CLEARANCE);
-                let total_height: f64 = left
-                    .windows(2)
-                    .map(|pair| min_member_dy(board, pair[0], pair[1]))
-                    .sum();
-                let col_start_y = snap_grid(anchor_y - total_height / 2.0);
-                let mut prev: Option<(ComponentId, f64)> = None;
-                for (i, id) in left.iter().enumerate() {
-                    let mut placed_y = if i == 0 {
-                        col_start_y
-                    } else {
-                        let (prev_id, prev_y) = prev.unwrap();
-                        snap_grid(prev_y + min_member_dy(board, prev_id, *id))
-                    };
-                    if left.len() == 1 {
-                        if let Some(pin_idx) =
-                            find_connecting_active_pin(board, cluster.anchor, *id)
-                        {
-                            if let Some(anchor) = board.component(cluster.anchor) {
-                                if let Some(part) = anchor.part.as_ref() {
-                                    let (_px, py, side) = compute_anchor_pin_offset(part, pin_idx);
-                                    if side == PinSide::Left {
-                                        let target_y = snap_grid(anchor_y + py);
-                                        let coord_key = (
-                                            (col_x * 10.0).round() as i64,
-                                            (target_y * 10.0).round() as i64,
-                                        );
-                                        if !occupied.contains(&coord_key) {
-                                            placed_y = target_y;
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    } else if let Some((prev_id, prev_y)) = prev {
-                        placed_y =
-                            placed_y.max(snap_grid(prev_y + min_member_dy(board, prev_id, *id)));
-                    }
-                    let coord_key = (
-                        (col_x * 10.0).round() as i64,
-                        (placed_y * 10.0).round() as i64,
-                    );
-                    occupied.insert(coord_key);
-
-                    placements.push(ComponentPlacement {
-                        id: *id,
-                        center_mm: (col_x, placed_y),
-                        rotation: Rotation::OneEighty,
-                    });
-                    prev = Some((*id, placed_y));
                 }
             }
         }
@@ -2972,27 +2767,12 @@ fn place_clusters(board: &Board, clusters: &[Cluster]) -> Layout {
         // small parts is only as big as the parts actually drawn. The
         // reference designs (e.g. a sensor logger with a 76 mm-tall STM32
         // symbol) land in A4/A3 this way instead of blowing out to A2.
-        let mut min_x = f64::INFINITY;
-        let mut max_x = f64::NEG_INFINITY;
-        let mut min_y = f64::INFINITY;
-        let mut max_y = f64::NEG_INFINITY;
-        for placement in &placements {
-            let (cx, cy) = placement.center_mm;
-            let (bw, bh) = board
-                .component(placement.id)
-                .and_then(|c| c.part.as_ref())
-                .map_or((BODY_FALLBACK_W, BODY_FALLBACK_H), body_size_for_part);
-            min_x = min_x.min(cx - bw / 2.0);
-            max_x = max_x.max(cx + bw / 2.0);
-            min_y = min_y.min(cy - bh / 2.0);
-            max_y = max_y.max(cy + bh / 2.0);
-        }
-        if !min_x.is_finite() {
-            min_x = origin_x;
-            max_x = origin_x + col_groups.len().max(1) as f64 * grid_w;
-            min_y = origin_y;
-            max_y = origin_y + rows as f64 * grid_h;
-        }
+        let (min_x, max_x, min_y, max_y) = body_bbox_of(board, &placements).unwrap_or((
+            origin_x,
+            origin_x + col_groups.len().max(1) as f64 * grid_w,
+            origin_y,
+            origin_y + rows as f64 * grid_h,
+        ));
         (placements, (min_x, max_x, min_y, max_y))
     };
 
@@ -3083,6 +2863,371 @@ fn place_clusters(board: &Board, clusters: &[Cluster]) -> Layout {
         hierarchical_labels: Vec::new(),
         group_boxes: Vec::new(),
         sheet_size,
+    }
+}
+
+/// One region's independently-laid-out content and its measured
+/// rectangle, in the region's own local frame (Phase C1).
+struct RegionLayout {
+    placements: Vec<ComponentPlacement>,
+    bbox: (f64, f64, f64, f64),
+}
+
+/// Body bounding box of a set of placements, in the same frame as
+/// their centres: `(min_x, max_x, min_y, max_y)`, or `None` when
+/// empty. Shared by the per-region measurement (Phase C1) and the
+/// final content box so region packing and sheet fitting agree on how
+/// big the drawn content actually is.
+fn body_bbox_of(board: &Board, placements: &[ComponentPlacement]) -> Option<(f64, f64, f64, f64)> {
+    let mut min_x = f64::INFINITY;
+    let mut max_x = f64::NEG_INFINITY;
+    let mut min_y = f64::INFINITY;
+    let mut max_y = f64::NEG_INFINITY;
+    for placement in placements {
+        let (cx, cy) = placement.center_mm;
+        let (bw, bh) = board
+            .component(placement.id)
+            .and_then(|c| c.part.as_ref())
+            .map_or((BODY_FALLBACK_W, BODY_FALLBACK_H), body_size_for_part);
+        min_x = min_x.min(cx - bw / 2.0);
+        max_x = max_x.max(cx + bw / 2.0);
+        min_y = min_y.min(cy - bh / 2.0);
+        max_y = max_y.max(cy + bh / 2.0);
+    }
+    min_x.is_finite().then_some((min_x, max_x, min_y, max_y))
+}
+
+/// Place one cluster's anchor and members into `placements`, updating
+/// `occupied` so later clusters avoid the same grid points.
+///
+/// `anchor_x`/`anchor_y` are the anchor's centre in whatever frame the
+/// caller lays the cluster out in — absolute for a single ungrouped
+/// region, region-local for the packed path (Phase C1) — so the same
+/// member geometry serves both and can never diverge between them.
+#[allow(clippy::too_many_arguments)]
+fn place_cluster_into(
+    board: &Board,
+    cluster: &Cluster,
+    anchor_x: f64,
+    anchor_y: f64,
+    grid_w: f64,
+    placements: &mut Vec<ComponentPlacement>,
+    occupied: &mut std::collections::HashSet<(i64, i64)>,
+) {
+    // Anchor body half-extents so member placement clears the
+    // actual rendered footprint regardless of how big the
+    // KiCad symbol is. Fixed `MEMBER_DX/MEMBER_DY` constants
+    // assume a small generic rectangle; an ATmega328P-P DIP
+    // (~50 mm tall) or a USB-C receptacle (~50 mm tall × 15 mm
+    // wide) needs more headroom than that.
+    let (anchor_body_w, anchor_body_h) = board
+        .component(cluster.anchor)
+        .and_then(|c| c.part.as_ref())
+        .map_or((BODY_FALLBACK_W, BODY_FALLBACK_H), body_size_for_part);
+    let anchor_half_w = anchor_body_w / 2.0;
+    let anchor_half_h = anchor_body_h / 2.0;
+
+    let anchor_key = (
+        (anchor_x * 10.0).round() as i64,
+        (anchor_y * 10.0).round() as i64,
+    );
+    occupied.insert(anchor_key);
+
+    placements.push(ComponentPlacement {
+        id: cluster.anchor,
+        center_mm: (anchor_x, anchor_y),
+        rotation: Rotation::Zero,
+    });
+
+    // Bucket members by side.
+    let below: Vec<ComponentId> = cluster
+        .members
+        .iter()
+        .filter(|m| m.side == MemberSide::Below)
+        .map(|m| m.id)
+        .collect();
+    let right: Vec<ComponentId> = cluster
+        .members
+        .iter()
+        .filter(|m| m.side == MemberSide::Right)
+        .map(|m| m.id)
+        .collect();
+    let above: Vec<ComponentId> = cluster
+        .members
+        .iter()
+        .filter(|m| m.side == MemberSide::Above)
+        .map(|m| m.id)
+        .collect();
+    let left: Vec<ComponentId> = cluster
+        .members
+        .iter()
+        .filter(|m| m.side == MemberSide::Left)
+        .map(|m| m.id)
+        .collect();
+
+    // Below: members fan out in a single row beneath the anchor,
+    // horizontally aligned with their connected pins where possible.
+    if !below.is_empty() {
+        let member_dx = compute_dynamic_member_dx(board, &below);
+        let row_y = snap_grid(anchor_y + anchor_half_h + MEMBER_CLEARANCE);
+        let total_width = (below.len().saturating_sub(1)) as f64 * member_dx;
+        let row_start_x = snap_grid(anchor_x - total_width / 2.0);
+        let mut last_x: Option<f64> = None;
+        for (i, id) in below.iter().enumerate() {
+            let mut placed_x = snap_grid(row_start_x + i as f64 * member_dx);
+            if let Some(lx) = last_x {
+                placed_x = placed_x.max(snap_grid(lx + member_dx));
+            }
+            if let Some(pin_idx) = find_connecting_active_pin(board, cluster.anchor, *id) {
+                if let Some(anchor) = board.component(cluster.anchor) {
+                    if let Some(part) = anchor.part.as_ref() {
+                        let (px, _py, _side) = compute_anchor_pin_offset(part, pin_idx);
+                        let target_x = snap_grid(anchor_x + px);
+                        let coord_key = (
+                            (target_x * 10.0).round() as i64,
+                            (row_y * 10.0).round() as i64,
+                        );
+                        let remains_local = (target_x - anchor_x).abs() <= grid_w / 3.0;
+                        let clears_neighbour = placements.iter().all(|placed| {
+                            (placed.center_mm.1 - row_y).abs() > 0.1
+                                || (placed.center_mm.0 - target_x).abs() >= member_dx * 0.8
+                        });
+                        let clears_last = last_x.is_none_or(|lx| target_x >= lx + member_dx * 0.8);
+                        if remains_local
+                            && clears_neighbour
+                            && clears_last
+                            && !occupied.contains(&coord_key)
+                        {
+                            placed_x = target_x;
+                        }
+                    }
+                }
+            }
+            if let Some(lx) = last_x {
+                placed_x = placed_x.max(snap_grid(lx + member_dx));
+            }
+            last_x = Some(placed_x);
+            let coord_key = (
+                (placed_x * 10.0).round() as i64,
+                (row_y * 10.0).round() as i64,
+            );
+            occupied.insert(coord_key);
+
+            placements.push(ComponentPlacement {
+                id: *id,
+                center_mm: (placed_x, row_y),
+                rotation: Rotation::Zero,
+            });
+        }
+    }
+
+    // Right: members stack in a vertical column to the right of
+    // the anchor, vertically aligned with their connected pins
+    // where possible. Spacing between consecutive members is
+    // dynamic (`min_member_dy`, text-inclusive) rather than the
+    // fixed `MEMBER_DX`, and pin-alignment nudges are clamped
+    // against it — a fixed constant or an unclamped pin-aligned
+    // position can both leave less room than a member's own
+    // Reference/Value text needs, overlapping its neighbour.
+    if !right.is_empty() {
+        let default_col_x = snap_grid(anchor_x + anchor_half_w + MEMBER_CLEARANCE);
+        let total_height: f64 = right
+            .windows(2)
+            .map(|pair| min_member_dy(board, pair[0], pair[1]))
+            .sum();
+        let col_start_y = snap_grid(anchor_y - total_height / 2.0);
+        let mut prev: Option<(ComponentId, f64)> = None;
+        for (i, id) in right.iter().enumerate() {
+            let mut col_x = default_col_x;
+            let mut placed_y = if i == 0 {
+                col_start_y
+            } else {
+                let (prev_id, prev_y) = prev.unwrap();
+                snap_grid(prev_y + min_member_dy(board, prev_id, *id))
+            };
+            // Pin-Y alignment is only safe for a single member —
+            // with more than one, distinct members can each
+            // align to a different anchor pin that happens to
+            // sit within a couple mm of another (e.g. a reset
+            // network's pullup/button/debounce-cap all landing
+            // near VCC/RESET/GND pins on a real KiCad symbol),
+            // collapsing their text-inclusive extents on top of
+            // each other. Mirrors the identical guard already on
+            // the Left column below.
+            if right.len() == 1 {
+                if let Some(pin_idx) = find_connecting_active_pin(board, cluster.anchor, *id) {
+                    if let Some(anchor) = board.component(cluster.anchor) {
+                        if let Some(part) = anchor.part.as_ref() {
+                            let (px, py, side) = compute_anchor_pin_offset(part, pin_idx);
+                            // Only honour pin-Y alignment when the
+                            // connecting pin actually sits on the
+                            // Right side of the anchor. Otherwise
+                            // (e.g. a reset pull-up whose other end
+                            // hits VCC on Top), `find_connecting_*`
+                            // would pick that wrong pin and yank
+                            // the member up-and-inside the body.
+                            if side == PinSide::Right {
+                                col_x = snap_grid(anchor_x + px + MEMBER_CLEARANCE);
+                                let target_y = snap_grid(anchor_y + py);
+                                let coord_key = (
+                                    (col_x * 10.0).round() as i64,
+                                    (target_y * 10.0).round() as i64,
+                                );
+                                if !occupied.contains(&coord_key) {
+                                    placed_y = target_y;
+                                }
+                            }
+                        }
+                    }
+                }
+            } else if let Some((prev_id, prev_y)) = prev {
+                // Multi-member column, default spacing already
+                // applied above — still clamp in case a future
+                // change reintroduces per-member pin alignment
+                // here without threading it through this check.
+                placed_y = placed_y.max(snap_grid(prev_y + min_member_dy(board, prev_id, *id)));
+            }
+            let coord_key = (
+                (col_x * 10.0).round() as i64,
+                (placed_y * 10.0).round() as i64,
+            );
+            occupied.insert(coord_key);
+
+            placements.push(ComponentPlacement {
+                id: *id,
+                center_mm: (col_x, placed_y),
+                rotation: Rotation::Zero,
+            });
+            prev = Some((*id, placed_y));
+        }
+    }
+
+    // Above: LED limit resistors remain in a vertical chain.
+    // Pull-ups for an IC fan into a horizontal row above it,
+    // which is the usual readable bus-pull-up arrangement.
+    if !above.is_empty() {
+        let member_dx = compute_dynamic_member_dx(board, &above);
+        let horizontal_row_y = snap_grid(anchor_y - anchor_half_h - MEMBER_CLEARANCE);
+        let horizontal_width = (above.len().saturating_sub(1)) as f64 * member_dx;
+        let horizontal_start_x = snap_grid(anchor_x - horizontal_width / 2.0);
+        let mut last_x: Option<f64> = None;
+        for (i, id) in above.iter().enumerate() {
+            let mut placed_x = if cluster.anchor_vertical {
+                anchor_x
+            } else {
+                snap_grid(horizontal_start_x + i as f64 * member_dx)
+            };
+            let target_y = if cluster.anchor_vertical {
+                snap_grid(anchor_y - anchor_half_h - MEMBER_CLEARANCE - (i as f64) * MEMBER_DX)
+            } else {
+                horizontal_row_y
+            };
+            if !cluster.anchor_vertical {
+                if let Some(lx) = last_x {
+                    placed_x = placed_x.max(snap_grid(lx + member_dx));
+                }
+            }
+            if let Some(pin_idx) = find_connecting_active_pin(board, cluster.anchor, *id) {
+                if let Some(anchor) = board.component(cluster.anchor) {
+                    if let Some(part) = anchor.part.as_ref() {
+                        let (px, _py, _side) = compute_anchor_pin_offset(part, pin_idx);
+                        let target_x = snap_grid(anchor_x + px);
+                        let coord_key = (
+                            (target_x * 10.0).round() as i64,
+                            (target_y * 10.0).round() as i64,
+                        );
+                        let remains_local = (target_x - anchor_x).abs() <= grid_w / 3.0;
+                        let clears_neighbour = placements.iter().all(|placed| {
+                            (placed.center_mm.1 - target_y).abs() > 0.1
+                                || (placed.center_mm.0 - target_x).abs() >= member_dx * 0.8
+                        });
+                        let clears_last = last_x.is_none_or(|lx| target_x >= lx + member_dx * 0.8);
+                        if remains_local
+                            && clears_neighbour
+                            && clears_last
+                            && !occupied.contains(&coord_key)
+                        {
+                            placed_x = target_x;
+                        }
+                    }
+                }
+            }
+            if !cluster.anchor_vertical {
+                if let Some(lx) = last_x {
+                    placed_x = placed_x.max(snap_grid(lx + member_dx));
+                }
+                last_x = Some(placed_x);
+            }
+            let coord_key = (
+                (placed_x * 10.0).round() as i64,
+                (target_y * 10.0).round() as i64,
+            );
+            occupied.insert(coord_key);
+
+            placements.push(ComponentPlacement {
+                id: *id,
+                center_mm: (placed_x, target_y),
+                rotation: Rotation::Zero,
+            });
+        }
+    }
+
+    // Left: members stack vertically just outside the anchor's
+    // left edge. Dynamic (`min_member_dy`, text-inclusive)
+    // spacing so members are visually distinct — pin-Y alignment
+    // would collapse them on top of each other when the anchor's
+    // pins are 2.54mm apart (e.g. USB connector D+/D- adjacency).
+    // A single Left member has no such adjacency, so it y-aligns
+    // with its connecting pin for a straight-across wire.
+    if !left.is_empty() {
+        let col_x = snap_grid(anchor_x - anchor_half_w - MEMBER_CLEARANCE);
+        let total_height: f64 = left
+            .windows(2)
+            .map(|pair| min_member_dy(board, pair[0], pair[1]))
+            .sum();
+        let col_start_y = snap_grid(anchor_y - total_height / 2.0);
+        let mut prev: Option<(ComponentId, f64)> = None;
+        for (i, id) in left.iter().enumerate() {
+            let mut placed_y = if i == 0 {
+                col_start_y
+            } else {
+                let (prev_id, prev_y) = prev.unwrap();
+                snap_grid(prev_y + min_member_dy(board, prev_id, *id))
+            };
+            if left.len() == 1 {
+                if let Some(pin_idx) = find_connecting_active_pin(board, cluster.anchor, *id) {
+                    if let Some(anchor) = board.component(cluster.anchor) {
+                        if let Some(part) = anchor.part.as_ref() {
+                            let (_px, py, side) = compute_anchor_pin_offset(part, pin_idx);
+                            if side == PinSide::Left {
+                                let target_y = snap_grid(anchor_y + py);
+                                let coord_key = (
+                                    (col_x * 10.0).round() as i64,
+                                    (target_y * 10.0).round() as i64,
+                                );
+                                if !occupied.contains(&coord_key) {
+                                    placed_y = target_y;
+                                }
+                            }
+                        }
+                    }
+                }
+            } else if let Some((prev_id, prev_y)) = prev {
+                placed_y = placed_y.max(snap_grid(prev_y + min_member_dy(board, prev_id, *id)));
+            }
+            let coord_key = (
+                (col_x * 10.0).round() as i64,
+                (placed_y * 10.0).round() as i64,
+            );
+            occupied.insert(coord_key);
+
+            placements.push(ComponentPlacement {
+                id: *id,
+                center_mm: (col_x, placed_y),
+                rotation: Rotation::OneEighty,
+            });
+            prev = Some((*id, placed_y));
+        }
     }
 }
 
@@ -3389,11 +3534,16 @@ const LABEL_MIN_ENDPOINTS_MULTIDROP: usize = 3;
 ///
 /// - It is NOT already a power net (those use `PowerFlag` instead).
 /// - It has ≥2 endpoints (1-endpoint nets are warnings, not wires).
-/// - It is a multi-drop net with ≥3 endpoints, OR the bounding box
-///   of all endpoint positions spans more than
-///   [`LABEL_SPAN_THRESHOLD_MM`] in either x or y. Nets that fit
-///   within a single cluster stay as wires; nets that reach across
-///   the page get labelled.
+/// - **Region crossing (Phase C2):** on a board that declares `group`s,
+///   a net whose endpoints live in different regions becomes a label —
+///   *"wires inside a region, labels between regions"*, the mechanism
+///   that makes the reference sheet readable. A net entirely inside one
+///   region is drawn. The distance threshold below stays as a secondary
+///   guard for a large single region.
+/// - **Ungrouped boards** keep the historic rule verbatim: a multi-drop
+///   net (≥3 endpoints) or one spanning more than
+///   [`LABEL_SPAN_THRESHOLD_MM`] gets labelled, so their output is
+///   byte-identical.
 fn classify_net_labels(board: &Board, layout: &Layout) -> Vec<NetLabel> {
     let centres: std::collections::HashMap<ComponentId, (f64, f64)> = layout
         .components
@@ -3401,6 +3551,12 @@ fn classify_net_labels(board: &Board, layout: &Layout) -> Vec<NetLabel> {
         .map(|p| (p.id, p.center_mm))
         .collect();
     let power_nets = layout.power_net_ids();
+    // Whether the board declares any region at all. Only then does the
+    // region-crossing test apply; an ungrouped board has one implicit
+    // region and must keep its historic labelling.
+    let region_of =
+        |id: ComponentId| -> Option<&str> { board.component(id).and_then(|c| c.group.as_deref()) };
+    let has_regions = board.components.iter().any(|c| c.group.is_some());
     let mut labels = Vec::new();
     for net in &board.nets {
         if power_nets.contains(&net.id) || net.endpoints.len() < 2 {
@@ -3421,8 +3577,20 @@ fn classify_net_labels(board: &Board, layout: &Layout) -> Vec<NetLabel> {
         }
         let span_x = max_x - min_x;
         let span_y = max_y - min_y;
-        let is_multidrop = net.endpoints.len() >= LABEL_MIN_ENDPOINTS_MULTIDROP;
-        if !(is_multidrop || span_x > LABEL_SPAN_THRESHOLD_MM || span_y > LABEL_SPAN_THRESHOLD_MM) {
+        let spans_far = span_x > LABEL_SPAN_THRESHOLD_MM || span_y > LABEL_SPAN_THRESHOLD_MM;
+        let label_it = if has_regions {
+            // Region crossing is the primary test; the span guard is a
+            // secondary backstop for one very large region.
+            let first = region_of(net.endpoints[0].component);
+            let crosses = net
+                .endpoints
+                .iter()
+                .any(|ep| region_of(ep.component) != first);
+            crosses || spans_far
+        } else {
+            net.endpoints.len() >= LABEL_MIN_ENDPOINTS_MULTIDROP || spans_far
+        };
+        if !label_it {
             continue;
         }
         let label = pick_net_label(board, net).unwrap_or_else(|| format!("NET_{}", net.id.0));

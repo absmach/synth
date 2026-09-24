@@ -275,34 +275,39 @@ board "grouped" {
     assert_eq!(group_of("J2").as_deref(), Some("Output"));
 
     let layout = synth_layout::layout(&board);
+    eprintln!("DBG sheet={:?}", layout.sheet_size);
+    for pl in &layout.components {
+        let c = board.component(pl.id).unwrap();
+        eprintln!("DBG {} {:?} center={:?}", c.refdes, c.group, pl.center_mm);
+    }
+    for b in &layout.group_boxes {
+        eprintln!("DBGBOX {} {:?}..{:?}", b.group, b.min_mm, b.max_mm);
+    }
 
     let captions: Vec<&str> = layout.annotations.iter().map(|a| a.text.as_str()).collect();
     assert_eq!(captions, vec!["Input", "Regulation", "Output"]);
 
-    // Each group occupies its own horizontal band, in declaration order.
-    let mut spans: Vec<(String, f64, f64)> = Vec::new();
-    for placement in &layout.components {
-        let Some(group) = board.component(placement.id).and_then(|c| c.group.clone()) else {
-            continue;
-        };
-        let x = placement.center_mm.0;
-        match spans.iter_mut().find(|(g, _, _)| *g == group) {
-            Some(entry) => {
-                entry.1 = entry.1.min(x);
-                entry.2 = entry.2.max(x);
-            }
-            None => spans.push((group, x, x)),
+    // Each group occupies its own placement region (Phase C1): the
+    // groups are laid out independently and shelf-packed, so the drawn
+    // region boxes never overlap — the load-bearing invariant of the
+    // reference sheet, and what E-SYNTH-SCHEM-013 guards. (Before C1
+    // this was a strictly horizontal-band assertion; regions may now
+    // stack vertically as well.)
+    assert_eq!(layout.group_boxes.len(), 3, "one box per declared group");
+    for i in 0..layout.group_boxes.len() {
+        for j in (i + 1)..layout.group_boxes.len() {
+            let a = &layout.group_boxes[i];
+            let b = &layout.group_boxes[j];
+            let disjoint = a.max_mm.0 <= b.min_mm.0
+                || b.max_mm.0 <= a.min_mm.0
+                || a.max_mm.1 <= b.min_mm.1
+                || b.max_mm.1 <= a.min_mm.1;
+            assert!(
+                disjoint,
+                "group boxes {:?} {:?}..{:?} and {:?} {:?}..{:?} overlap",
+                a.group, a.min_mm, a.max_mm, b.group, b.min_mm, b.max_mm
+            );
         }
-    }
-    spans.sort_by(|a, b| a.1.total_cmp(&b.1));
-    for pair in spans.windows(2) {
-        let (ref left, _, left_max) = pair[0];
-        let (ref right, right_min, _) = pair[1];
-        assert!(
-            left_max < right_min,
-            "groups {left:?} and {right:?} overlap horizontally \
-             ({left_max} >= {right_min}); a caption would title the wrong parts"
-        );
     }
 
     // Captions stay on the page they are drawn on.
@@ -318,4 +323,78 @@ board "grouped" {
             annotation.text
         );
     }
+}
+
+/// Phase C2: on a grouped board, a net whose endpoints sit in different
+/// regions becomes a label, while a net wholly inside one region is
+/// drawn as a wire.
+#[test]
+fn wires_inside_a_region_labels_between_regions() {
+    let source = r#"
+board "regions" {
+  layers 2
+  group "A" {
+    component R1: resistor "r_generic_0603" value "10k"
+    component R2: resistor "r_generic_0603" value "10k"
+    connect R1.p1 -> R2.p1
+  }
+  group "B" {
+    component R3: resistor "r_generic_0603" value "10k"
+    connect R2.p2 -> R3.p1
+  }
+}
+"#;
+    let board = board_from_source("regions.synth", source);
+    let layout = synth_layout::layout(&board);
+
+    let pin = |refdes: &str, name: &str| -> synth_ir::PinId {
+        board
+            .components
+            .iter()
+            .find(|c| c.refdes == refdes)
+            .and_then(|c| c.find_pin(name))
+            .map_or_else(|| panic!("{refdes}.{name} must resolve"), |(p, _)| p)
+    };
+    let net_with = |a: (&str, &str), b: (&str, &str)| -> synth_ir::NetId {
+        let (ca, pa) = (
+            board
+                .components
+                .iter()
+                .find(|c| c.refdes == a.0)
+                .unwrap()
+                .id,
+            pin(a.0, a.1),
+        );
+        let (cb, pb) = (
+            board
+                .components
+                .iter()
+                .find(|c| c.refdes == b.0)
+                .unwrap()
+                .id,
+            pin(b.0, b.1),
+        );
+        board
+            .nets
+            .iter()
+            .find(|n| {
+                n.endpoints.iter().any(|e| e.component == ca && e.pin == pa)
+                    && n.endpoints.iter().any(|e| e.component == cb && e.pin == pb)
+            })
+            .map_or_else(|| panic!("net {a:?}..{b:?} must exist"), |n| n.id)
+    };
+    let labelled = |net: synth_ir::NetId| layout.net_labels.iter().any(|l| l.net == net);
+
+    // R1.p1–R2.p1 is internal to region A: drawn, not labelled.
+    let internal = net_with(("R1", "p1"), ("R2", "p1"));
+    assert!(
+        !labelled(internal),
+        "an intra-region net must be drawn as a wire, not labelled"
+    );
+    // R2.p2–R3.p1 crosses A → B: labelled at each endpoint.
+    let crossing = net_with(("R2", "p2"), ("R3", "p1"));
+    assert!(
+        labelled(crossing),
+        "a net crossing a region boundary must be labelled"
+    );
 }
