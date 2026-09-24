@@ -234,6 +234,33 @@ fn test_mcp_call_synth_place_with_hints() {
 }
 
 #[test]
+fn test_mcp_call_synth_place_with_explicit_dimensions() {
+    let req = json!({
+        "jsonrpc": "2.0",
+        "id": 32,
+        "method": "tools/call",
+        "params": {
+            "name": "synth_place_with_hints",
+            "arguments": {
+                "source": LED_INDICATOR_SOURCE,
+                "board_width_mm": 60.0,
+                "board_height_mm": 42.0,
+                "hints": [
+                    { "component": "D1", "region": "centre", "priority": "soft" }
+                ]
+            }
+        }
+    });
+    let resp = handle_jsonrpc_request(req, None);
+    assert_eq!(resp["id"], 32);
+    let content_text = resp["result"]["content"][0]["text"].as_str().unwrap();
+    assert!(content_text.contains("\"status\": \"placed\""));
+    let placement: serde_json::Value = serde_json::from_str(content_text).unwrap();
+    assert_eq!(placement["board_size_mm"], json!([60.0, 42.0]));
+    assert!(content_text.contains("hint_satisfaction"));
+}
+
+#[test]
 fn test_mcp_call_synth_describe_placement() {
     let req = json!({
         "jsonrpc": "2.0",
