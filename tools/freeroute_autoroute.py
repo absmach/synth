@@ -114,7 +114,16 @@ def main() -> int:
             # borrowed wrappers on newer KiCad builds.  Remove owned Python
             # objects from `GetTracks()` instead; this works with KiCad 9/10
             # and avoids the `SwigPyObject.thisown` failure.
+            ground_net_codes = {
+                zone.GetNetCode() for zone in export_board.Zones()
+            }
             for track in list(export_board.GetTracks()):
+                # Ground stitching vias are part of the board's plane
+                # topology, not FreeRouting's candidate geometry. Keep them
+                # in the clean netlist so the six-layer planes remain
+                # electrically joined after SES import.
+                if track.GetClass() == "PCB_VIA" and track.GetNetCode() in ground_net_codes:
+                    continue
                 export_board.Remove(track)
             print("routing a clean duplicate netlist", flush=True)
         # KiCad's SES importer can discard named netclasses. Keep the source
