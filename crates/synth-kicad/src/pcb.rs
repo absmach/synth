@@ -190,14 +190,42 @@ pub fn build_pcb(board: &Board, placement: &Placement, routing: &Routing, projec
         })
         .collect();
 
-    let gnd_layers = if board.layers == 4 {
+    let gnd_layers = if board.layers >= 6 {
+        vec!["F.Cu", "In1.Cu", "In2.Cu", "In3.Cu", "In4.Cu", "B.Cu"]
+    } else if board.layers == 4 {
         vec!["F.Cu", "In1.Cu", "In2.Cu", "B.Cu"]
     } else {
         vec!["F.Cu", "B.Cu"]
     };
-    for (pcb_net, net_name) in plane_nets {
+    for (plane_index, (pcb_net, net_name)) in plane_nets.iter().enumerate() {
         for layer in &gnd_layers {
-            children.push(build_gnd_zone(placement, layer, pcb_net, net_name, project));
+            children.push(build_gnd_zone(
+                placement, layer, *pcb_net, net_name, project,
+            ));
+        }
+        // A zone on each copper layer is only a plane, not an electrical
+        // connection between planes.  Add a small, deterministic fence of
+        // through vias so the planes form one physical ground network. The
+        // external routers preserve these source vias while replacing their
+        // own routed segments and vias.
+        if board.layers >= 4 && plane_index == 0 {
+            let outline = placement.board_outline;
+            let inset = mm_to_nm(1.5);
+            let points = [
+                (outline.min.x_nm + inset, outline.min.y_nm + inset),
+                (outline.max.x_nm - inset, outline.min.y_nm + inset),
+                (outline.max.x_nm - inset, outline.max.y_nm - inset),
+                (outline.min.x_nm + inset, outline.max.y_nm - inset),
+            ];
+            for (stitch_index, (x_nm, y_nm)) in points.into_iter().enumerate() {
+                children.push(build_ground_stitch_via(
+                    x_nm,
+                    y_nm,
+                    *pcb_net,
+                    project,
+                    plane_index * 4 + stitch_index,
+                ));
+            }
         }
     }
     Sexp::list("kicad_pcb", children)
@@ -221,6 +249,22 @@ fn build_via(
             ),
             Sexp::list("size", vec![num(nm_to_mm(via.pad_diameter_nm))]),
             Sexp::list("drill", vec![num(nm_to_mm(via.drill_nm))]),
+            Sexp::list("layers", vec![Sexp::str("F.Cu"), Sexp::str("B.Cu")]),
+            Sexp::list("net", vec![Sexp::atom(pcb_net.to_string())]),
+            str_pair("uuid", via_uuid.to_string()),
+        ],
+    )
+}
+
+/// Emit a through via that electrically joins the generated ground planes.
+fn build_ground_stitch_via(x_nm: i64, y_nm: i64, pcb_net: u32, project: &Uuid, idx: usize) -> Sexp {
+    let via_uuid = derive_entity_uuid(project, "ground-stitch-via", &idx.to_string());
+    Sexp::list(
+        "via",
+        vec![
+            Sexp::list("at", vec![num(nm_to_mm(x_nm)), num(nm_to_mm(y_nm))]),
+            Sexp::list("size", vec![num(0.6)]),
+            Sexp::list("drill", vec![num(0.3)]),
             Sexp::list("layers", vec![Sexp::str("F.Cu"), Sexp::str("B.Cu")]),
             Sexp::list("net", vec![Sexp::atom(pcb_net.to_string())]),
             str_pair("uuid", via_uuid.to_string()),

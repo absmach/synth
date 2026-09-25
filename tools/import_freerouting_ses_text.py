@@ -112,6 +112,11 @@ def board_net_codes(text: str) -> dict[str, str]:
     }
 
 
+def ground_net_codes(text: str) -> set[str]:
+    """Return net codes attached to the board's generated ground zones."""
+    return set(re.findall(r'\(zone\s+\(net\s+(\d+)\)', text))
+
+
 def route_records(ses_text: str, net_codes: dict[str, str]):
     root = parse(ses_text)
     routes = next(x for x in root if isinstance(x, list) and x and x[0] == "routes")
@@ -160,14 +165,19 @@ def main() -> int:
 
     board = Path(args.input_board).read_text()
     net_codes = board_net_codes(board)
+    ground_codes = ground_net_codes(board)
     records = route_records(Path(args.input_ses).read_text(), net_codes)
     spans = list(top_level_blocks(board))
     kept = []
     insert_at = None
     for start, end, block in spans:
         first = block.lstrip()[1:].lstrip().split(None, 1)[0]
-        if first in {"segment", "via"}:
+        if first == "segment":
             continue
+        if first == "via":
+            net = re.search(r'\(net\s+(\d+)\)', block)
+            if not net or net.group(1) not in ground_codes:
+                continue
         if insert_at is None and first == "zone":
             insert_at = start
         kept.append((start, end, block))
