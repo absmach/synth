@@ -693,8 +693,9 @@ mod tests {
         let stdout = String::from_utf8_lossy(&output.stdout);
         assert!(
             stdout.contains("Found 0 violations"),
-            "multi-sheet export must be ERC-clean:\n{stdout}\n{}",
-            String::from_utf8_lossy(&output.stderr)
+            "multi-sheet export must be ERC-clean:\n{stdout}\n{}\nERC report:\n{}",
+            String::from_utf8_lossy(&output.stderr),
+            std::fs::read_to_string(dir.join("erc.json")).unwrap_or_default()
         );
         let _ = std::fs::remove_dir_all(&dir);
     }
