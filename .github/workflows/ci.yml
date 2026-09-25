@@ -37,16 +37,30 @@ jobs:
       - name: Cache Cargo
         uses: Swatinem/rust-cache@v2
 
-      - name: Install kicad-cli and the symbol library
+      - name: Install kicad-cli and the stock symbol/footprint libraries
         run: |
           sudo add-apt-repository --yes ppa:kicad/kicad-10.0-releases
           sudo apt-get update
-          sudo apt-get install --no-install-recommends -y kicad kicad-symbols
+          sudo apt-get install --no-install-recommends -y \
+            kicad kicad-symbols kicad-footprints
           kicad-cli version
           test -d /usr/share/kicad/symbols || {
             echo "::error::/usr/share/kicad/symbols is missing; the exporter cannot resolve stock symbols"
             exit 1
           }
+          test -d /usr/share/kicad/footprints || {
+            echo "::error::/usr/share/kicad/footprints is missing; ERC cannot resolve footprint nicknames"
+            exit 1
+          }
+          # ERC resolves library *nicknames* (`Device`, `power`, `Capacitor_SMD`)
+          # against the global sym-lib-table / fp-lib-table. KiCad seeds those
+          # from the shipped templates on first launch, which never happens on a
+          # headless runner, so every stock nickname would otherwise be reported
+          # as "configuration does not include the library". Copy them in the
+          # same way the first-run wizard does.
+          mkdir -p "$HOME/.config/kicad/10.0"
+          cp /usr/share/kicad/template/sym-lib-table "$HOME/.config/kicad/10.0/sym-lib-table"
+          cp /usr/share/kicad/template/fp-lib-table "$HOME/.config/kicad/10.0/fp-lib-table"
           ls /usr/share/kicad/symbols | wc -l
 
       - name: Check formatting
