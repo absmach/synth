@@ -1916,9 +1916,8 @@ pub fn build_clusters(board: &Board) -> Vec<Cluster> {
 /// to A2. Ungrouped boards are unaffected: every component's group is
 /// `None`, so nothing is ever evicted.
 fn evict_cross_group_members(board: &Board, clusters: &mut Vec<Cluster>) {
-    let group_of = |id: ComponentId| -> Option<String> {
-        board.component(id).and_then(|c| c.group.clone())
-    };
+    let group_of =
+        |id: ComponentId| -> Option<String> { board.component(id).and_then(|c| c.group.clone()) };
     let mut evicted: Vec<ComponentId> = Vec::new();
     for cluster in clusters.iter_mut() {
         let anchor_group = group_of(cluster.anchor);
@@ -2824,7 +2823,6 @@ fn place_clusters(board: &Board, clusters: &[Cluster]) -> Layout {
             bk_units.iter().copied().fold(f64::INFINITY, f64::min)
         };
 
-
         let mut placements: Vec<ComponentPlacement> = Vec::with_capacity(board.components.len());
         if region_runs.len() <= 1 {
             // Single region (an ungrouped board, or every component in
@@ -2893,8 +2891,7 @@ fn place_clusters(board: &Board, clusters: &[Cluster]) -> Layout {
                         }
                         for &cluster_idx in group {
                             let anchor_x = snap_grid(col_x_local[col] - base_x);
-                            let anchor_y =
-                                snap_grid((bk_units[cluster_idx] - bk_min) * grid_h);
+                            let anchor_y = snap_grid((bk_units[cluster_idx] - bk_min) * grid_h);
                             place_cluster_into(
                                 board,
                                 &clusters[cluster_idx],
@@ -2989,9 +2986,12 @@ fn place_clusters(board: &Board, clusters: &[Cluster]) -> Layout {
             // drops from A2 to A3, which the A4-width target could never
             // find. Floored at the widest region so one wide region
             // never overflows its own shelf.
-            let target_w = region_target_w
-                .max(widest)
-                .min((total_area * TARGET_ASPECT).sqrt().max(widest).max(region_target_w));
+            let target_w = region_target_w.max(widest).min(
+                (total_area * TARGET_ASPECT)
+                    .sqrt()
+                    .max(widest)
+                    .max(region_target_w),
+            );
             let mut region_offset: Vec<(f64, f64)> = vec![(0.0, 0.0); region_layouts.len()];
             {
                 let mut cx = 0.0;
@@ -3005,8 +3005,9 @@ fn place_clusters(board: &Board, clusters: &[Cluster]) -> Layout {
                     // so packing on body bounds alone let two boxes
                     // overlap (`E-SYNTH-SCHEM-013`) even with a generous
                     // gap between the parts themselves.
-                    let h =
-                        region.bbox.3 - region.bbox.2 + region.box_overhang.0 + region.box_overhang.1;
+                    let h = region.bbox.3 - region.bbox.2
+                        + region.box_overhang.0
+                        + region.box_overhang.1;
                     if cx > 0.0 && cx + w > target_w {
                         cy += shelf_h + region_gap;
                         cx = 0.0;
@@ -3028,8 +3029,7 @@ fn place_clusters(board: &Board, clusters: &[Cluster]) -> Layout {
             // enough to cost a sheet size on its own.
             for (ri, region) in region_layouts.iter().enumerate() {
                 let dx = PAGE_MARGIN + GROUP_BOX_PAD + region_offset[ri].0 - region.bbox.0;
-                let dy =
-                    PAGE_MARGIN + region.box_overhang.0 + region_offset[ri].1 - region.bbox.2;
+                let dy = PAGE_MARGIN + region.box_overhang.0 + region_offset[ri].1 - region.bbox.2;
                 for placement in &region.placements {
                     placements.push(ComponentPlacement {
                         id: placement.id,

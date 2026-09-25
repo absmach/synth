@@ -631,8 +631,8 @@ fn check_decoupling_distance(board: &Board, layout: &Layout, max_mm: f64) -> Vec
                     // tightly the cap is placed. The budget is empty
                     // space between the parts, which is what "too far"
                     // means to a reader.
-                    let dist = body_gap_mm(board, layout, ic.id, ep.component)
-                        .unwrap_or_else(|| {
+                    let dist =
+                        body_gap_mm(board, layout, ic.id, ep.component).unwrap_or_else(|| {
                             ((ic_center.0 - cap_center.0).powi(2)
                                 + (ic_center.1 - cap_center.1).powi(2))
                             .sqrt()

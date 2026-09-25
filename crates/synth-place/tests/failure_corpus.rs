@@ -9,6 +9,9 @@
 
 use std::fs;
 use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::Mutex;
+
 use synth_ir::Board;
 
 fn workspace_root() -> PathBuf {
@@ -34,48 +37,78 @@ fn load_board(path: &Path) -> Board {
     lowered.board.expect("board lowered")
 }
 
+/// Place one intentionally-unsatisfiable fixture and verify it fails with a
+/// structured `E-SYNTH-PLACE-*` diagnostic. Returns a message on regression so
+/// the caller can aggregate failures instead of aborting the whole run.
+fn check_placement_failure(path: &Path) -> Result<(), String> {
+    let board = load_board(path);
+    let file_str = path.display().to_string();
+
+    let res = synth_place::place(&board);
+    let Err(err) = res else {
+        return Err(format!(
+            "fixture {file_str} should have failed placement, but returned Ok"
+        ));
+    };
+
+    let diagnostics = err.to_diagnostics(&board, &file_str);
+    if diagnostics.is_empty() {
+        return Err(format!("fixture {file_str} produced empty diagnostic list"));
+    }
+    let code = &diagnostics[0].code;
+    if !code.starts_with("E-SYNTH-PLACE-") {
+        return Err(format!(
+            "fixture {file_str} diagnostic code {code} should start with E-SYNTH-PLACE-"
+        ));
+    }
+    Ok(())
+}
+
 #[test]
 fn failure_corpus_emits_structured_placement_errors() {
     let corpus_dir = workspace_root().join("fixtures").join("place-errors");
-    let entries = fs::read_dir(&corpus_dir).expect("read place-errors dir");
-
-    let mut tested_count = 0;
-    for entry in entries {
-        let entry = entry.expect("dir entry");
-        let path = entry.path();
-        if path.extension().is_some_and(|ext| ext == "synth") {
-            tested_count += 1;
-            let board = load_board(&path);
-            let file_str = path.display().to_string();
-
-            let res = synth_place::place(&board);
-            assert!(
-                res.is_err(),
-                "fixture {} should have failed placement, but returned Ok",
-                path.display()
-            );
-
-            let err = res.unwrap_err();
-            let diagnostics = err.to_diagnostics(&board, &file_str);
-            assert!(
-                !diagnostics.is_empty(),
-                "fixture {} produced empty diagnostic list",
-                path.display()
-            );
-
-            let code = &diagnostics[0].code;
-            assert!(
-                code.starts_with("E-SYNTH-PLACE-"),
-                "fixture {} diagnostic code {} should start with E-SYNTH-PLACE-",
-                path.display(),
-                code
-            );
-        }
-    }
+    let mut paths: Vec<PathBuf> = fs::read_dir(&corpus_dir)
+        .expect("read place-errors dir")
+        .filter_map(Result::ok)
+        .map(|entry| entry.path())
+        .filter(|path| path.extension().is_some_and(|ext| ext == "synth"))
+        .collect();
+    paths.sort();
 
     assert!(
-        tested_count >= 20,
-        "expected at least 20 failure fixtures, found {tested_count}"
+        paths.len() >= 20,
+        "expected at least 20 failure fixtures, found {}",
+        paths.len()
+    );
+
+    // Placement of the overflow/oversized fixtures is the dominant cost and
+    // each fixture is independent, so fan the corpus out across threads and
+    // aggregate regressions instead of serialising the whole corpus.
+    let failures: Mutex<Vec<String>> = Mutex::new(Vec::new());
+    let next = AtomicUsize::new(0);
+    let workers = std::thread::available_parallelism()
+        .map_or(4, std::num::NonZeroUsize::get)
+        .min(paths.len());
+
+    std::thread::scope(|scope| {
+        for _ in 0..workers {
+            scope.spawn(|| loop {
+                let index = next.fetch_add(1, Ordering::Relaxed);
+                let Some(path) = paths.get(index) else {
+                    break;
+                };
+                if let Err(message) = check_placement_failure(path) {
+                    failures.lock().expect("failure list").push(message);
+                }
+            });
+        }
+    });
+
+    let failures = failures.into_inner().expect("failure list");
+    assert!(
+        failures.is_empty(),
+        "placement failure corpus regressions:\n{}",
+        failures.join("\n")
     );
 }
 

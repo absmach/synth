@@ -61,7 +61,7 @@ expression: board
             "voltage_max_v": null
           },
           {
-            "name": "usb_dm",
+            "name": "usb_dn",
             "number": "51",
             "electrical_type": "differential_negative",
             "capabilities": [

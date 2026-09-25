@@ -322,6 +322,7 @@ fn net_is_power_rail(board: &Board, net: &synth_ir::Net) -> bool {
     })
 }
 
+#[allow(clippy::too_many_arguments)]
 fn check_capability_consistency(
     board: &Board,
     net_id: NetId,

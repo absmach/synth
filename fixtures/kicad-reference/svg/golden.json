@@ -49,18 +49,18 @@
     "texts": 415
   },
   "ref_usb_cdc": {
-    "sha256": "32f77bd99311ae8da2abbb74edbc0c7523e4a7ec52d654ad2db78f4525483574",
+    "sha256": "64f93c4daf59b339d6f3f0cf0f3a1e286f239b934a667d6f52b35dd8d2e06336",
     "width": "297.0022mm",
     "height": "210.0072mm",
     "paths": 10529,
     "texts": 267
   },
   "secure_tracker": {
-    "sha256": "a156ff2e51c4a70272d1a1a96e4218b8cbb870423bb28e70f2a2359da487cfe5",
+    "sha256": "599a72a5595f582ba343fcd73d14def553879d15aeee5900051e65d31ee5a1fa",
     "width": "594.0044mm",
     "height": "419.9890mm",
-    "paths": 25254,
-    "texts": 671
+    "paths": 25280,
+    "texts": 673
   },
   "sensor_logger": {
     "sha256": "81974d4d024fb5c69a8f6a3c461a84c2bc8a9b3536fbf882d75bf286a63aefc0",

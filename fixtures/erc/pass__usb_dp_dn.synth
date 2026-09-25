@@ -10,12 +10,12 @@ board "usb_dp_dn_pass" {
   component C1: capacitor "c_generic_0402" value "100nF"
 
   // Power up both MCUs minimally.
-  connect U1.vdd_io -> C1.p1
-  connect U1.vdd_core -> C1.p1
+  connect U1.iovdd -> C1.p1
+  connect U1.dvdd3 -> C1.p1
   connect U1.gnd -> C1.p2
   connect U1.run -> C1.p2
-  connect U2.vdd_io -> C1.p1
-  connect U2.vdd_core -> C1.p1
+  connect U2.iovdd -> C1.p1
+  connect U2.dvdd3 -> C1.p1
   connect U2.gnd -> C1.p2
   connect U2.run -> C1.p2
 

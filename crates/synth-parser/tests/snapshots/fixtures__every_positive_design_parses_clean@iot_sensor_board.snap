@@ -58,9 +58,35 @@ expression: ast
         "refdes": "C2",
         "kind": "capacitor",
         "part": "c_generic_0805",
+        "placement_hint": {
+          "attrs": [
+            {
+              "Near": [
+                "U5",
+                {
+                  "byte_start": 433,
+                  "byte_end": 437
+                }
+              ]
+            },
+            {
+              "Priority": [
+                "hard",
+                {
+                  "byte_start": 448,
+                  "byte_end": 452
+                }
+              ]
+            }
+          ],
+          "span": {
+            "byte_start": 410,
+            "byte_end": 454
+          }
+        },
         "span": {
           "byte_start": 366,
-          "byte_end": 407
+          "byte_end": 456
         }
       },
       {
@@ -68,9 +94,143 @@ expression: ast
         "refdes": "C3",
         "kind": "capacitor",
         "part": "c_generic_0805",
+        "placement_hint": {
+          "attrs": [
+            {
+              "Near": [
+                "U5",
+                {
+                  "byte_start": 549,
+                  "byte_end": 553
+                }
+              ]
+            },
+            {
+              "Priority": [
+                "hard",
+                {
+                  "byte_start": 564,
+                  "byte_end": 568
+                }
+              ]
+            }
+          ],
+          "span": {
+            "byte_start": 526,
+            "byte_end": 570
+          }
+        },
         "span": {
-          "byte_start": 433,
-          "byte_end": 474
+          "byte_start": 482,
+          "byte_end": 572
+        }
+      },
+      {
+        "stmt": "component",
+        "refdes": "C9",
+        "kind": "capacitor",
+        "part": "c_generic_0603",
+        "placement_hint": {
+          "attrs": [
+            {
+              "Near": [
+                "U5",
+                {
+                  "byte_start": 666,
+                  "byte_end": 670
+                }
+              ]
+            },
+            {
+              "Priority": [
+                "hard",
+                {
+                  "byte_start": 681,
+                  "byte_end": 685
+                }
+              ]
+            }
+          ],
+          "span": {
+            "byte_start": 643,
+            "byte_end": 687
+          }
+        },
+        "span": {
+          "byte_start": 599,
+          "byte_end": 689
+        }
+      },
+      {
+        "stmt": "component",
+        "refdes": "R_CC1",
+        "kind": "resistor",
+        "part": "r_generic_0603",
+        "placement_hint": {
+          "attrs": [
+            {
+              "Near": [
+                "J1",
+                {
+                  "byte_start": 790,
+                  "byte_end": 794
+                }
+              ]
+            },
+            {
+              "Priority": [
+                "hard",
+                {
+                  "byte_start": 805,
+                  "byte_end": 809
+                }
+              ]
+            }
+          ],
+          "span": {
+            "byte_start": 767,
+            "byte_end": 811
+          }
+        },
+        "span": {
+          "byte_start": 722,
+          "byte_end": 813
+        }
+      },
+      {
+        "stmt": "component",
+        "refdes": "R_CC2",
+        "kind": "resistor",
+        "part": "r_generic_0603",
+        "placement_hint": {
+          "attrs": [
+            {
+              "Near": [
+                "J1",
+                {
+                  "byte_start": 914,
+                  "byte_end": 918
+                }
+              ]
+            },
+            {
+              "Priority": [
+                "hard",
+                {
+                  "byte_start": 929,
+                  "byte_end": 933
+                }
+              ]
+            }
+          ],
+          "span": {
+            "byte_start": 891,
+            "byte_end": 935
+          }
+        },
+        "span": {
+          "byte_start": 846,
+          "byte_end": 937
         }
       },
       {
@@ -79,21 +239,21 @@ expression: ast
           "component": "J1",
           "pin": "vbus",
           "span": {
-            "byte_start": 510,
-            "byte_end": 517
+            "byte_start": 979,
+            "byte_end": 986
           }
         },
         "to": {
           "component": "C1",
           "pin": "p1",
           "span": {
-            "byte_start": 521,
-            "byte_end": 526
+            "byte_start": 990,
+            "byte_end": 995
           }
         },
         "span": {
-          "byte_start": 502,
-          "byte_end": 526
+          "byte_start": 971,
+          "byte_end": 995
         }
       },
       {
@@ -102,21 +262,113 @@ expression: ast
           "component": "J1",
           "pin": "gnd",
           "span": {
-            "byte_start": 537,
-            "byte_end": 543
+            "byte_start": 1006,
+            "byte_end": 1012
           }
         },
         "to": {
           "component": "C1",
           "pin": "p2",
           "span": {
-            "byte_start": 548,
-            "byte_end": 553
+            "byte_start": 1017,
+            "byte_end": 1022
           }
         },
         "span": {
-          "byte_start": 529,
-          "byte_end": 553
+          "byte_start": 998,
+          "byte_end": 1022
+        }
+      },
+      {
+        "stmt": "connection",
+        "from": {
+          "component": "J1",
+          "pin": "cc1",
+          "span": {
+            "byte_start": 1033,
+            "byte_end": 1039
+          }
+        },
+        "to": {
+          "component": "R_CC1",
+          "pin": "p1",
+          "span": {
+            "byte_start": 1044,
+            "byte_end": 1052
+          }
+        },
+        "span": {
+          "byte_start": 1025,
+          "byte_end": 1052
+        }
+      },
+      {
+        "stmt": "connection",
+        "from": {
+          "component": "J1",
+          "pin": "gnd",
+          "span": {
+            "byte_start": 1063,
+            "byte_end": 1069
+          }
+        },
+        "to": {
+          "component": "R_CC1",
+          "pin": "p2",
+          "span": {
+            "byte_start": 1074,
+            "byte_end": 1082
+          }
+        },
+        "span": {
+          "byte_start": 1055,
+          "byte_end": 1082
+        }
+      },
+      {
+        "stmt": "connection",
+        "from": {
+          "component": "J1",
+          "pin": "cc2",
+          "span": {
+            "byte_start": 1093,
+            "byte_end": 1099
+          }
+        },
+        "to": {
+          "component": "R_CC2",
+          "pin": "p1",
+          "span": {
+            "byte_start": 1104,
+            "byte_end": 1112
+          }
+        },
+        "span": {
+          "byte_start": 1085,
+          "byte_end": 1112
+        }
+      },
+      {
+        "stmt": "connection",
+        "from": {
+          "component": "J1",
+          "pin": "gnd",
+          "span": {
+            "byte_start": 1123,
+            "byte_end": 1129
+          }
+        },
+        "to": {
+          "component": "R_CC2",
+          "pin": "p2",
+          "span": {
+            "byte_start": 1134,
+            "byte_end": 1142
+          }
+        },
+        "span": {
+          "byte_start": 1115,
+          "byte_end": 1142
         }
       },
       {
@@ -125,21 +377,21 @@ expression: ast
           "component": "J1",
           "pin": "vbus",
           "span": {
-            "byte_start": 564,
-            "byte_end": 571
+            "byte_start": 1153,
+            "byte_end": 1160
           }
         },
         "to": {
           "component": "U4",
           "pin": "in",
           "span": {
-            "byte_start": 575,
-            "byte_end": 580
+            "byte_start": 1164,
+            "byte_end": 1169
           }
         },
         "span": {
-          "byte_start": 556,
-          "byte_end": 580
+          "byte_start": 1145,
+          "byte_end": 1169
         }
       },
       {
@@ -148,21 +400,21 @@ expression: ast
           "component": "J1",
           "pin": "gnd",
           "span": {
-            "byte_start": 591,
-            "byte_end": 597
+            "byte_start": 1180,
+            "byte_end": 1186
           }
         },
         "to": {
           "component": "U4",
           "pin": "vss",
           "span": {
-            "byte_start": 602,
-            "byte_end": 608
+            "byte_start": 1191,
+            "byte_end": 1197
           }
         },
         "span": {
-          "byte_start": 583,
-          "byte_end": 608
+          "byte_start": 1172,
+          "byte_end": 1197
         }
       },
       {
@@ -171,21 +423,21 @@ expression: ast
           "component": "U4",
           "pin": "out",
           "span": {
-            "byte_start": 619,
-            "byte_end": 625
+            "byte_start": 1208,
+            "byte_end": 1214
           }
         },
         "to": {
           "component": "U5",
           "pin": "vin",
           "span": {
-            "byte_start": 630,
-            "byte_end": 636
+            "byte_start": 1219,
+            "byte_end": 1225
           }
         },
         "span": {
-          "byte_start": 611,
-          "byte_end": 636
+          "byte_start": 1200,
+          "byte_end": 1225
         }
       },
       {
@@ -194,21 +446,21 @@ expression: ast
           "component": "J1",
           "pin": "gnd",
           "span": {
-            "byte_start": 647,
-            "byte_end": 653
+            "byte_start": 1236,
+            "byte_end": 1242
           }
         },
         "to": {
           "component": "U5",
           "pin": "gnd",
           "span": {
-            "byte_start": 658,
-            "byte_end": 664
+            "byte_start": 1247,
+            "byte_end": 1253
           }
         },
         "span": {
-          "byte_start": 639,
-          "byte_end": 664
+          "byte_start": 1228,
+          "byte_end": 1253
         }
       },
       {
@@ -217,21 +469,21 @@ expression: ast
           "component": "U5",
           "pin": "vin",
           "span": {
-            "byte_start": 675,
-            "byte_end": 681
+            "byte_start": 1264,
+            "byte_end": 1270
           }
         },
         "to": {
           "component": "C2",
           "pin": "p1",
           "span": {
-            "byte_start": 686,
-            "byte_end": 691
+            "byte_start": 1275,
+            "byte_end": 1280
           }
         },
         "span": {
-          "byte_start": 667,
-          "byte_end": 691
+          "byte_start": 1256,
+          "byte_end": 1280
         }
       },
       {
@@ -240,21 +492,67 @@ expression: ast
           "component": "J1",
           "pin": "gnd",
           "span": {
-            "byte_start": 702,
-            "byte_end": 708
+            "byte_start": 1291,
+            "byte_end": 1297
           }
         },
         "to": {
           "component": "C2",
           "pin": "p2",
           "span": {
-            "byte_start": 713,
-            "byte_end": 718
+            "byte_start": 1302,
+            "byte_end": 1307
           }
         },
         "span": {
-          "byte_start": 694,
-          "byte_end": 718
+          "byte_start": 1283,
+          "byte_end": 1307
+        }
+      },
+      {
+        "stmt": "connection",
+        "from": {
+          "component": "U5",
+          "pin": "vin",
+          "span": {
+            "byte_start": 1318,
+            "byte_end": 1324
+          }
+        },
+        "to": {
+          "component": "C9",
+          "pin": "p1",
+          "span": {
+            "byte_start": 1329,
+            "byte_end": 1334
+          }
+        },
+        "span": {
+          "byte_start": 1310,
+          "byte_end": 1334
+        }
+      },
+      {
+        "stmt": "connection",
+        "from": {
+          "component": "J1",
+          "pin": "gnd",
+          "span": {
+            "byte_start": 1345,
+            "byte_end": 1351
+          }
+        },
+        "to": {
+          "component": "C9",
+          "pin": "p2",
+          "span": {
+            "byte_start": 1356,
+            "byte_end": 1361
+          }
+        },
+        "span": {
+          "byte_start": 1337,
+          "byte_end": 1361
         }
       },
       {
@@ -263,21 +561,21 @@ expression: ast
           "component": "U5",
           "pin": "vout",
           "span": {
-            "byte_start": 729,
-            "byte_end": 736
+            "byte_start": 1372,
+            "byte_end": 1379
           }
         },
         "to": {
           "component": "C3",
           "pin": "p1",
           "span": {
-            "byte_start": 740,
-            "byte_end": 745
+            "byte_start": 1383,
+            "byte_end": 1388
           }
         },
         "span": {
-          "byte_start": 721,
-          "byte_end": 745
+          "byte_start": 1364,
+          "byte_end": 1388
         }
       },
       {
@@ -286,21 +584,21 @@ expression: ast
           "component": "J1",
           "pin": "gnd",
           "span": {
-            "byte_start": 756,
-            "byte_end": 762
+            "byte_start": 1399,
+            "byte_end": 1405
           }
         },
         "to": {
           "component": "C3",
           "pin": "p2",
           "span": {
-            "byte_start": 767,
-            "byte_end": 772
+            "byte_start": 1410,
+            "byte_end": 1415
           }
         },
         "span": {
-          "byte_start": 748,
-          "byte_end": 772
+          "byte_start": 1391,
+          "byte_end": 1415
         }
       },
       {
@@ -309,8 +607,8 @@ expression: ast
         "kind": "charger",
         "part": "bq24074",
         "span": {
-          "byte_start": 855,
-          "byte_end": 886
+          "byte_start": 1498,
+          "byte_end": 1529
         }
       },
       {
@@ -318,9 +616,26 @@ expression: ast
         "refdes": "C4",
         "kind": "capacitor",
         "part": "c_generic_0805",
+        "placement_hint": {
+          "attrs": [
+            {
+              "Near": [
+                "U4",
+                {
+                  "byte_start": 1598,
+                  "byte_end": 1602
+                }
+              ]
+            }
+          ],
+          "span": {
+            "byte_start": 1575,
+            "byte_end": 1604
+          }
+        },
         "span": {
-          "byte_start": 889,
-          "byte_end": 929
+          "byte_start": 1532,
+          "byte_end": 1606
         }
       },
       {
@@ -328,9 +643,26 @@ expression: ast
         "refdes": "R7",
         "kind": "resistor",
         "part": "r_generic_0603",
+        "placement_hint": {
+          "attrs": [
+            {
+              "Near": [
+                "U4",
+                {
+                  "byte_start": 1697,
+                  "byte_end": 1701
+                }
+              ]
+            }
+          ],
+          "span": {
+            "byte_start": 1674,
+            "byte_end": 1703
+          }
+        },
         "span": {
-          "byte_start": 954,
-          "byte_end": 994
+          "byte_start": 1631,
+          "byte_end": 1705
         }
       },
       {
@@ -338,9 +670,26 @@ expression: ast
         "refdes": "R8",
         "kind": "resistor",
         "part": "r_generic_0603",
+        "placement_hint": {
+          "attrs": [
+            {
+              "Near": [
+                "U4",
+                {
+                  "byte_start": 1793,
+                  "byte_end": 1797
+                }
+              ]
+            }
+          ],
+          "span": {
+            "byte_start": 1770,
+            "byte_end": 1799
+          }
+        },
         "span": {
-          "byte_start": 1016,
-          "byte_end": 1056
+          "byte_start": 1727,
+          "byte_end": 1801
         }
       },
       {
@@ -349,21 +698,21 @@ expression: ast
           "component": "U4",
           "pin": "bat",
           "span": {
-            "byte_start": 1087,
-            "byte_end": 1093
+            "byte_start": 1832,
+            "byte_end": 1838
           }
         },
         "to": {
           "component": "C4",
           "pin": "p1",
           "span": {
-            "byte_start": 1098,
-            "byte_end": 1103
+            "byte_start": 1843,
+            "byte_end": 1848
           }
         },
         "span": {
-          "byte_start": 1079,
-          "byte_end": 1103
+          "byte_start": 1824,
+          "byte_end": 1848
         }
       },
       {
@@ -372,21 +721,21 @@ expression: ast
           "component": "J1",
           "pin": "gnd",
           "span": {
-            "byte_start": 1114,
-            "byte_end": 1120
+            "byte_start": 1859,
+            "byte_end": 1865
           }
         },
         "to": {
           "component": "C4",
           "pin": "p2",
           "span": {
-            "byte_start": 1125,
-            "byte_end": 1130
+            "byte_start": 1870,
+            "byte_end": 1875
           }
         },
         "span": {
-          "byte_start": 1106,
-          "byte_end": 1130
+          "byte_start": 1851,
+          "byte_end": 1875
         }
       },
       {
@@ -395,21 +744,21 @@ expression: ast
           "component": "U4",
           "pin": "iset",
           "span": {
-            "byte_start": 1141,
-            "byte_end": 1148
+            "byte_start": 1886,
+            "byte_end": 1893
           }
         },
         "to": {
           "component": "R7",
           "pin": "p1",
           "span": {
-            "byte_start": 1152,
-            "byte_end": 1157
+            "byte_start": 1897,
+            "byte_end": 1902
           }
         },
         "span": {
-          "byte_start": 1133,
-          "byte_end": 1157
+          "byte_start": 1878,
+          "byte_end": 1902
         }
       },
       {
@@ -418,21 +767,21 @@ expression: ast
           "component": "J1",
           "pin": "gnd",
           "span": {
-            "byte_start": 1168,
-            "byte_end": 1174
+            "byte_start": 1913,
+            "byte_end": 1919
           }
         },
         "to": {
           "component": "R7",
           "pin": "p2",
           "span": {
-            "byte_start": 1179,
-            "byte_end": 1184
+            "byte_start": 1924,
+            "byte_end": 1929
           }
         },
         "span": {
-          "byte_start": 1160,
-          "byte_end": 1184
+          "byte_start": 1905,
+          "byte_end": 1929
         }
       },
       {
@@ -441,21 +790,21 @@ expression: ast
           "component": "U4",
           "pin": "ilim",
           "span": {
-            "byte_start": 1195,
-            "byte_end": 1202
+            "byte_start": 1940,
+            "byte_end": 1947
           }
         },
         "to": {
           "component": "R8",
           "pin": "p1",
           "span": {
-            "byte_start": 1206,
-            "byte_end": 1211
+            "byte_start": 1951,
+            "byte_end": 1956
           }
         },
         "span": {
-          "byte_start": 1187,
-          "byte_end": 1211
+          "byte_start": 1932,
+          "byte_end": 1956
         }
       },
       {
@@ -464,21 +813,21 @@ expression: ast
           "component": "J1",
           "pin": "gnd",
           "span": {
-            "byte_start": 1222,
-            "byte_end": 1228
+            "byte_start": 1967,
+            "byte_end": 1973
           }
         },
         "to": {
           "component": "R8",
           "pin": "p2",
           "span": {
-            "byte_start": 1233,
-            "byte_end": 1238
+            "byte_start": 1978,
+            "byte_end": 1983
           }
         },
         "span": {
-          "byte_start": 1214,
-          "byte_end": 1238
+          "byte_start": 1959,
+          "byte_end": 1983
         }
       },
       {
@@ -487,8 +836,8 @@ expression: ast
         "kind": "mcu",
         "part": "rp2350",
         "span": {
-          "byte_start": 1369,
-          "byte_end": 1395
+          "byte_start": 2114,
+          "byte_end": 2140
         }
       },
       {
@@ -496,9 +845,35 @@ expression: ast
         "refdes": "C5",
         "kind": "capacitor",
         "part": "c_generic_0603",
+        "placement_hint": {
+          "attrs": [
+            {
+              "Near": [
+                "U1",
+                {
+                  "byte_start": 2209,
+                  "byte_end": 2213
+                }
+              ]
+            },
+            {
+              "Priority": [
+                "hard",
+                {
+                  "byte_start": 2224,
+                  "byte_end": 2228
+                }
+              ]
+            }
+          ],
+          "span": {
+            "byte_start": 2186,
+            "byte_end": 2230
+          }
+        },
         "span": {
-          "byte_start": 1398,
-          "byte_end": 1438
+          "byte_start": 2143,
+          "byte_end": 2232
         }
       },
       {
@@ -506,9 +881,35 @@ expression: ast
         "refdes": "C6",
         "kind": "capacitor",
         "part": "c_generic_0603",
+        "placement_hint": {
+          "attrs": [
+            {
+              "Near": [
+                "U1",
+                {
+                  "byte_start": 2324,
+                  "byte_end": 2328
+                }
+              ]
+            },
+            {
+              "Priority": [
+                "hard",
+                {
+                  "byte_start": 2339,
+                  "byte_end": 2343
+                }
+              ]
+            }
+          ],
+          "span": {
+            "byte_start": 2301,
+            "byte_end": 2345
+          }
+        },
         "span": {
-          "byte_start": 1464,
-          "byte_end": 1504
+          "byte_start": 2258,
+          "byte_end": 2347
         }
       },
       {
@@ -516,9 +917,35 @@ expression: ast
         "refdes": "R1",
         "kind": "resistor",
         "part": "r_generic_0603",
+        "placement_hint": {
+          "attrs": [
+            {
+              "Near": [
+                "U1",
+                {
+                  "byte_start": 2441,
+                  "byte_end": 2445
+                }
+              ]
+            },
+            {
+              "Priority": [
+                "hard",
+                {
+                  "byte_start": 2456,
+                  "byte_end": 2460
+                }
+              ]
+            }
+          ],
+          "span": {
+            "byte_start": 2418,
+            "byte_end": 2462
+          }
+        },
         "span": {
-          "byte_start": 1532,
-          "byte_end": 1572
+          "byte_start": 2375,
+          "byte_end": 2464
         }
       },
       {
@@ -527,21 +954,21 @@ expression: ast
           "component": "U5",
           "pin": "vout",
           "span": {
-            "byte_start": 1621,
-            "byte_end": 1628
+            "byte_start": 2513,
+            "byte_end": 2520
           }
         },
         "to": {
           "component": "U1",
           "pin": "vdd_io",
           "span": {
-            "byte_start": 1632,
-            "byte_end": 1641
+            "byte_start": 2524,
+            "byte_end": 2533
           }
         },
         "span": {
-          "byte_start": 1613,
-          "byte_end": 1641
+          "byte_start": 2505,
+          "byte_end": 2533
         }
       },
       {
@@ -550,21 +977,21 @@ expression: ast
           "component": "U5",
           "pin": "vout",
           "span": {
-            "byte_start": 1652,
-            "byte_end": 1659
+            "byte_start": 2544,
+            "byte_end": 2551
           }
         },
         "to": {
           "component": "U1",
           "pin": "vdd_core",
           "span": {
-            "byte_start": 1663,
-            "byte_end": 1674
+            "byte_start": 2555,
+            "byte_end": 2566
           }
         },
         "span": {
-          "byte_start": 1644,
-          "byte_end": 1674
+          "byte_start": 2536,
+          "byte_end": 2566
         }
       },
       {
@@ -573,21 +1000,21 @@ expression: ast
           "component": "J1",
           "pin": "gnd",
           "span": {
-            "byte_start": 1685,
-            "byte_end": 1691
+            "byte_start": 2577,
+            "byte_end": 2583
           }
         },
         "to": {
           "component": "U1",
           "pin": "gnd",
           "span": {
-            "byte_start": 1696,
-            "byte_end": 1702
+            "byte_start": 2588,
+            "byte_end": 2594
           }
         },
         "span": {
-          "byte_start": 1677,
-          "byte_end": 1702
+          "byte_start": 2569,
+          "byte_end": 2594
         }
       },
       {
@@ -596,21 +1023,21 @@ expression: ast
           "component": "U1",
           "pin": "vdd_io",
           "span": {
-            "byte_start": 1713,
-            "byte_end": 1722
+            "byte_start": 2605,
+            "byte_end": 2614
           }
         },
         "to": {
           "component": "C5",
           "pin": "p1",
           "span": {
-            "byte_start": 1727,
-            "byte_end": 1732
+            "byte_start": 2619,
+            "byte_end": 2624
           }
         },
         "span": {
-          "byte_start": 1705,
-          "byte_end": 1732
+          "byte_start": 2597,
+          "byte_end": 2624
         }
       },
       {
@@ -619,21 +1046,21 @@ expression: ast
           "component": "J1",
           "pin": "gnd",
           "span": {
-            "byte_start": 1743,
-            "byte_end": 1749
+            "byte_start": 2635,
+            "byte_end": 2641
           }
         },
         "to": {
           "component": "C5",
           "pin": "p2",
           "span": {
-            "byte_start": 1757,
-            "byte_end": 1762
+            "byte_start": 2649,
+            "byte_end": 2654
           }
         },
         "span": {
-          "byte_start": 1735,
-          "byte_end": 1762
+          "byte_start": 2627,
+          "byte_end": 2654
         }
       },
       {
@@ -642,21 +1069,21 @@ expression: ast
           "component": "U1",
           "pin": "vdd_core",
           "span": {
-            "byte_start": 1773,
-            "byte_end": 1784
+            "byte_start": 2665,
+            "byte_end": 2676
           }
         },
         "to": {
           "component": "C6",
           "pin": "p1",
           "span": {
-            "byte_start": 1788,
-            "byte_end": 1793
+            "byte_start": 2680,
+            "byte_end": 2685
           }
         },
         "span": {
-          "byte_start": 1765,
-          "byte_end": 1793
+          "byte_start": 2657,
+          "byte_end": 2685
         }
       },
       {
@@ -665,21 +1092,21 @@ expression: ast
           "component": "J1",
           "pin": "gnd",
           "span": {
-            "byte_start": 1804,
-            "byte_end": 1810
+            "byte_start": 2696,
+            "byte_end": 2702
           }
         },
         "to": {
           "component": "C6",
           "pin": "p2",
           "span": {
-            "byte_start": 1819,
-            "byte_end": 1824
+            "byte_start": 2711,
+            "byte_end": 2716
           }
         },
         "span": {
-          "byte_start": 1796,
-          "byte_end": 1824
+          "byte_start": 2688,
+          "byte_end": 2716
         }
       },
       {
@@ -688,21 +1115,21 @@ expression: ast
           "component": "U1",
           "pin": "vdd_io",
           "span": {
-            "byte_start": 1835,
-            "byte_end": 1844
+            "byte_start": 2727,
+            "byte_end": 2736
           }
         },
         "to": {
           "component": "R1",
           "pin": "p1",
           "span": {
-            "byte_start": 1848,
-            "byte_end": 1853
+            "byte_start": 2740,
+            "byte_end": 2745
           }
         },
         "span": {
-          "byte_start": 1827,
-          "byte_end": 1853
+          "byte_start": 2719,
+          "byte_end": 2745
         }
       },
       {
@@ -711,21 +1138,21 @@ expression: ast
           "component": "R1",
           "pin": "p2",
           "span": {
-            "byte_start": 1864,
-            "byte_end": 1869
+            "byte_start": 2756,
+            "byte_end": 2761
           }
         },
         "to": {
           "component": "U1",
           "pin": "run",
           "span": {
-            "byte_start": 1877,
-            "byte_end": 1883
+            "byte_start": 2769,
+            "byte_end": 2775
           }
         },
         "span": {
-          "byte_start": 1856,
-          "byte_end": 1883
+          "byte_start": 2748,
+          "byte_end": 2775
         }
       },
       {
@@ -734,8 +1161,8 @@ expression: ast
         "kind": "secure_element",
         "part": "atecc608",
         "span": {
-          "byte_start": 2006,
-          "byte_end": 2045
+          "byte_start": 2898,
+          "byte_end": 2937
         }
       },
       {
@@ -743,9 +1170,26 @@ expression: ast
         "refdes": "C7",
         "kind": "capacitor",
         "part": "c_generic_0603",
+        "placement_hint": {
+          "attrs": [
+            {
+              "Near": [
+                "U2",
+                {
+                  "byte_start": 3006,
+                  "byte_end": 3010
+                }
+              ]
+            }
+          ],
+          "span": {
+            "byte_start": 2983,
+            "byte_end": 3012
+          }
+        },
         "span": {
-          "byte_start": 2048,
-          "byte_end": 2088
+          "byte_start": 2940,
+          "byte_end": 3014
         }
       },
       {
@@ -753,9 +1197,26 @@ expression: ast
         "refdes": "R2",
         "kind": "resistor",
         "part": "r_generic_0603",
+        "placement_hint": {
+          "attrs": [
+            {
+              "Near": [
+                "U2",
+                {
+                  "byte_start": 3105,
+                  "byte_end": 3109
+                }
+              ]
+            }
+          ],
+          "span": {
+            "byte_start": 3082,
+            "byte_end": 3111
+          }
+        },
         "span": {
-          "byte_start": 2113,
-          "byte_end": 2153
+          "byte_start": 3039,
+          "byte_end": 3113
         }
       },
       {
@@ -763,9 +1224,26 @@ expression: ast
         "refdes": "R3",
         "kind": "resistor",
         "part": "r_generic_0603",
+        "placement_hint": {
+          "attrs": [
+            {
+              "Near": [
+                "U2",
+                {
+                  "byte_start": 3198,
+                  "byte_end": 3202
+                }
+              ]
+            }
+          ],
+          "span": {
+            "byte_start": 3175,
+            "byte_end": 3204
+          }
+        },
         "span": {
-          "byte_start": 2172,
-          "byte_end": 2212
+          "byte_start": 3132,
+          "byte_end": 3206
         }
       },
       {
@@ -774,21 +1252,21 @@ expression: ast
           "component": "U5",
           "pin": "vout",
           "span": {
-            "byte_start": 2240,
-            "byte_end": 2247
+            "byte_start": 3234,
+            "byte_end": 3241
           }
         },
         "to": {
           "component": "U2",
           "pin": "vcc",
           "span": {
-            "byte_start": 2251,
-            "byte_end": 2257
+            "byte_start": 3245,
+            "byte_end": 3251
           }
         },
         "span": {
-          "byte_start": 2232,
-          "byte_end": 2257
+          "byte_start": 3226,
+          "byte_end": 3251
         }
       },
       {
@@ -797,21 +1275,21 @@ expression: ast
           "component": "J1",
           "pin": "gnd",
           "span": {
-            "byte_start": 2268,
-            "byte_end": 2274
+            "byte_start": 3262,
+            "byte_end": 3268
           }
         },
         "to": {
           "component": "U2",
           "pin": "gnd",
           "span": {
-            "byte_start": 2279,
-            "byte_end": 2285
+            "byte_start": 3273,
+            "byte_end": 3279
           }
         },
         "span": {
-          "byte_start": 2260,
-          "byte_end": 2285
+          "byte_start": 3254,
+          "byte_end": 3279
         }
       },
       {
@@ -820,21 +1298,21 @@ expression: ast
           "component": "U2",
           "pin": "vcc",
           "span": {
-            "byte_start": 2296,
-            "byte_end": 2302
+            "byte_start": 3290,
+            "byte_end": 3296
           }
         },
         "to": {
           "component": "C7",
           "pin": "p1",
           "span": {
-            "byte_start": 2307,
-            "byte_end": 2312
+            "byte_start": 3301,
+            "byte_end": 3306
           }
         },
         "span": {
-          "byte_start": 2288,
-          "byte_end": 2312
+          "byte_start": 3282,
+          "byte_end": 3306
         }
       },
       {
@@ -843,21 +1321,21 @@ expression: ast
           "component": "J1",
           "pin": "gnd",
           "span": {
-            "byte_start": 2323,
-            "byte_end": 2329
+            "byte_start": 3317,
+            "byte_end": 3323
           }
         },
         "to": {
           "component": "C7",
           "pin": "p2",
           "span": {
-            "byte_start": 2334,
-            "byte_end": 2339
+            "byte_start": 3328,
+            "byte_end": 3333
           }
         },
         "span": {
-          "byte_start": 2315,
-          "byte_end": 2339
+          "byte_start": 3309,
+          "byte_end": 3333
         }
       },
       {
@@ -866,21 +1344,21 @@ expression: ast
           "component": "U1",
           "pin": "gp0",
           "span": {
-            "byte_start": 2350,
-            "byte_end": 2356
+            "byte_start": 3344,
+            "byte_end": 3350
           }
         },
         "to": {
           "component": "U2",
           "pin": "sda",
           "span": {
-            "byte_start": 2361,
-            "byte_end": 2367
+            "byte_start": 3355,
+            "byte_end": 3361
           }
         },
         "span": {
-          "byte_start": 2342,
-          "byte_end": 2367
+          "byte_start": 3336,
+          "byte_end": 3361
         }
       },
       {
@@ -889,21 +1367,21 @@ expression: ast
           "component": "U1",
           "pin": "gp1",
           "span": {
-            "byte_start": 2378,
-            "byte_end": 2384
+            "byte_start": 3372,
+            "byte_end": 3378
           }
         },
         "to": {
           "component": "U2",
           "pin": "scl",
           "span": {
-            "byte_start": 2389,
-            "byte_end": 2395
+            "byte_start": 3383,
+            "byte_end": 3389
           }
         },
         "span": {
-          "byte_start": 2370,
-          "byte_end": 2395
+          "byte_start": 3364,
+          "byte_end": 3389
         }
       },
       {
@@ -912,21 +1390,21 @@ expression: ast
           "component": "U1",
           "pin": "vdd_io",
           "span": {
-            "byte_start": 2406,
-            "byte_end": 2415
+            "byte_start": 3400,
+            "byte_end": 3409
           }
         },
         "to": {
           "component": "R2",
           "pin": "p1",
           "span": {
-            "byte_start": 2419,
-            "byte_end": 2424
+            "byte_start": 3413,
+            "byte_end": 3418
           }
         },
         "span": {
-          "byte_start": 2398,
-          "byte_end": 2424
+          "byte_start": 3392,
+          "byte_end": 3418
         }
       },
       {
@@ -935,21 +1413,21 @@ expression: ast
           "component": "R2",
           "pin": "p2",
           "span": {
-            "byte_start": 2435,
-            "byte_end": 2440
+            "byte_start": 3429,
+            "byte_end": 3434
           }
         },
         "to": {
           "component": "U1",
           "pin": "gp0",
           "span": {
-            "byte_start": 2448,
-            "byte_end": 2454
+            "byte_start": 3442,
+            "byte_end": 3448
           }
         },
         "span": {
-          "byte_start": 2427,
-          "byte_end": 2454
+          "byte_start": 3421,
+          "byte_end": 3448
         }
       },
       {
@@ -958,21 +1436,21 @@ expression: ast
           "component": "U1",
           "pin": "vdd_io",
           "span": {
-            "byte_start": 2465,
-            "byte_end": 2474
+            "byte_start": 3459,
+            "byte_end": 3468
           }
         },
         "to": {
           "component": "R3",
           "pin": "p1",
           "span": {
-            "byte_start": 2478,
-            "byte_end": 2483
+            "byte_start": 3472,
+            "byte_end": 3477
           }
         },
         "span": {
-          "byte_start": 2457,
-          "byte_end": 2483
+          "byte_start": 3451,
+          "byte_end": 3477
         }
       },
       {
@@ -981,21 +1459,21 @@ expression: ast
           "component": "R3",
           "pin": "p2",
           "span": {
-            "byte_start": 2494,
-            "byte_end": 2499
+            "byte_start": 3488,
+            "byte_end": 3493
           }
         },
         "to": {
           "component": "U1",
           "pin": "gp1",
           "span": {
-            "byte_start": 2507,
-            "byte_end": 2513
+            "byte_start": 3501,
+            "byte_end": 3507
           }
         },
         "span": {
-          "byte_start": 2486,
-          "byte_end": 2513
+          "byte_start": 3480,
+          "byte_end": 3507
         }
       },
       {
@@ -1004,8 +1482,8 @@ expression: ast
         "kind": "modem",
         "part": "bg95",
         "span": {
-          "byte_start": 2644,
-          "byte_end": 2670
+          "byte_start": 3638,
+          "byte_end": 3664
         }
       },
       {
@@ -1013,9 +1491,35 @@ expression: ast
         "refdes": "BAL1",
         "kind": "balun",
         "part": "balun_2g4",
+        "placement_hint": {
+          "attrs": [
+            {
+              "Near": [
+                "U3",
+                {
+                  "byte_start": 3726,
+                  "byte_end": 3730
+                }
+              ]
+            },
+            {
+              "Priority": [
+                "hard",
+                {
+                  "byte_start": 3741,
+                  "byte_end": 3745
+                }
+              ]
+            }
+          ],
+          "span": {
+            "byte_start": 3703,
+            "byte_end": 3747
+          }
+        },
         "span": {
-          "byte_start": 2673,
-          "byte_end": 2706
+          "byte_start": 3667,
+          "byte_end": 3749
         }
       },
       {
@@ -1023,9 +1527,35 @@ expression: ast
         "refdes": "C8",
         "kind": "capacitor",
         "part": "c_generic_0805",
+        "placement_hint": {
+          "attrs": [
+            {
+              "Near": [
+                "U3",
+                {
+                  "byte_start": 3872,
+                  "byte_end": 3876
+                }
+              ]
+            },
+            {
+              "Priority": [
+                "hard",
+                {
+                  "byte_start": 3887,
+                  "byte_end": 3891
+                }
+              ]
+            }
+          ],
+          "span": {
+            "byte_start": 3849,
+            "byte_end": 3893
+          }
+        },
         "span": {
-          "byte_start": 2763,
-          "byte_end": 2803
+          "byte_start": 3806,
+          "byte_end": 3895
         }
       },
       {
@@ -1034,8 +1564,8 @@ expression: ast
         "kind": "resistor",
         "part": "r_generic_0603",
         "span": {
-          "byte_start": 2826,
-          "byte_end": 2866
+          "byte_start": 3918,
+          "byte_end": 3958
         }
       },
       {
@@ -1044,8 +1574,8 @@ expression: ast
         "kind": "resistor",
         "part": "r_generic_0603",
         "span": {
-          "byte_start": 2891,
-          "byte_end": 2931
+          "byte_start": 3983,
+          "byte_end": 4023
         }
       },
       {
@@ -1053,9 +1583,35 @@ expression: ast
         "refdes": "R6",
         "kind": "resistor",
         "part": "r_generic_0603",
+        "placement_hint": {
+          "attrs": [
+            {
+              "Near": [
+                "BAL1",
+                {
+                  "byte_start": 4113,
+                  "byte_end": 4119
+                }
+              ]
+            },
+            {
+              "Priority": [
+                "hard",
+                {
+                  "byte_start": 4130,
+                  "byte_end": 4134
+                }
+              ]
+            }
+          ],
+          "span": {
+            "byte_start": 4090,
+            "byte_end": 4136
+          }
+        },
         "span": {
-          "byte_start": 2955,
-          "byte_end": 2995
+          "byte_start": 4047,
+          "byte_end": 4138
         }
       },
       {
@@ -1064,21 +1620,21 @@ expression: ast
           "component": "U4",
           "pin": "bat",
           "span": {
-            "byte_start": 3041,
-            "byte_end": 3047
+            "byte_start": 4184,
+            "byte_end": 4190
           }
         },
         "to": {
           "component": "U3",
           "pin": "vbatt",
           "span": {
-            "byte_start": 3053,
-            "byte_end": 3061
+            "byte_start": 4196,
+            "byte_end": 4204
           }
         },
         "span": {
-          "byte_start": 3033,
-          "byte_end": 3061
+          "byte_start": 4176,
+          "byte_end": 4204
         }
       },
       {
@@ -1087,21 +1643,21 @@ expression: ast
           "component": "J1",
           "pin": "gnd",
           "span": {
-            "byte_start": 3117,
-            "byte_end": 3123
+            "byte_start": 4260,
+            "byte_end": 4266
           }
         },
         "to": {
           "component": "U3",
           "pin": "gnd",
           "span": {
-            "byte_start": 3129,
-            "byte_end": 3135
+            "byte_start": 4272,
+            "byte_end": 4278
           }
         },
         "span": {
-          "byte_start": 3109,
-          "byte_end": 3135
+          "byte_start": 4252,
+          "byte_end": 4278
         }
       },
       {
@@ -1110,21 +1666,21 @@ expression: ast
           "component": "U3",
           "pin": "vbatt",
           "span": {
-            "byte_start": 3146,
-            "byte_end": 3154
+            "byte_start": 4289,
+            "byte_end": 4297
           }
         },
         "to": {
           "component": "C8",
           "pin": "p1",
           "span": {
-            "byte_start": 3158,
-            "byte_end": 3163
+            "byte_start": 4301,
+            "byte_end": 4306
           }
         },
         "span": {
-          "byte_start": 3138,
-          "byte_end": 3163
+          "byte_start": 4281,
+          "byte_end": 4306
         }
       },
       {
@@ -1133,21 +1689,44 @@ expression: ast
           "component": "J1",
           "pin": "gnd",
           "span": {
-            "byte_start": 3174,
-            "byte_end": 3180
+            "byte_start": 4317,
+            "byte_end": 4323
           }
         },
         "to": {
           "component": "C8",
           "pin": "p2",
           "span": {
-            "byte_start": 3186,
-            "byte_end": 3191
+            "byte_start": 4329,
+            "byte_end": 4334
           }
         },
         "span": {
-          "byte_start": 3166,
-          "byte_end": 3191
+          "byte_start": 4309,
+          "byte_end": 4334
+        }
+      },
+      {
+        "stmt": "connection",
+        "from": {
+          "component": "U1",
+          "pin": "gp4",
+          "span": {
+            "byte_start": 4345,
+            "byte_end": 4351
+          }
+        },
+        "to": {
+          "component": "U3",
+          "pin": "pwrkey",
+          "span": {
+            "byte_start": 4357,
+            "byte_end": 4366
+          }
+        },
+        "span": {
+          "byte_start": 4337,
+          "byte_end": 4366
         }
       },
       {
@@ -1156,44 +1735,21 @@ expression: ast
           "component": "U1",
           "pin": "gp2",
           "span": {
-            "byte_start": 3202,
-            "byte_end": 3208
-          }
-        },
-        "to": {
-          "component": "U3",
-          "pin": "pwrkey",
-          "span": {
-            "byte_start": 3214,
-            "byte_end": 3223
-          }
-        },
-        "span": {
-          "byte_start": 3194,
-          "byte_end": 3223
-        }
-      },
-      {
-        "stmt": "connection",
-        "from": {
-          "component": "U1",
-          "pin": "gp3",
-          "span": {
-            "byte_start": 3266,
-            "byte_end": 3272
+            "byte_start": 4415,
+            "byte_end": 4421
           }
         },
         "to": {
           "component": "U3",
           "pin": "rx",
           "span": {
-            "byte_start": 3278,
-            "byte_end": 3283
+            "byte_start": 4427,
+            "byte_end": 4432
           }
         },
         "span": {
-          "byte_start": 3258,
-          "byte_end": 3283
+          "byte_start": 4407,
+          "byte_end": 4432
         }
       },
       {
@@ -1202,44 +1758,21 @@ expression: ast
           "component": "U3",
           "pin": "tx",
           "span": {
-            "byte_start": 3328,
-            "byte_end": 3333
+            "byte_start": 4477,
+            "byte_end": 4482
           }
         },
         "to": {
           "component": "U1",
           "pin": "gp3",
           "span": {
-            "byte_start": 3340,
-            "byte_end": 3346
+            "byte_start": 4489,
+            "byte_end": 4495
           }
         },
         "span": {
-          "byte_start": 3320,
-          "byte_end": 3346
-        }
-      },
-      {
-        "stmt": "connection",
-        "from": {
-          "component": "BAL1",
-          "pin": "unbal",
-          "span": {
-            "byte_start": 3412,
-            "byte_end": 3422
-          }
-        },
-        "to": {
-          "component": "BAL1",
-          "pin": "bal_b",
-          "span": {
-            "byte_start": 3426,
-            "byte_end": 3436
-          }
-        },
-        "span": {
-          "byte_start": 3404,
-          "byte_end": 3436
+          "byte_start": 4469,
+          "byte_end": 4495
         }
       },
       {
@@ -1248,21 +1781,67 @@ expression: ast
           "component": "U3",
           "pin": "main_ant",
           "span": {
-            "byte_start": 3509,
-            "byte_end": 3520
+            "byte_start": 4539,
+            "byte_end": 4550
           }
         },
         "to": {
           "component": "BAL1",
-          "pin": "bal_a",
+          "pin": "unbal",
           "span": {
-            "byte_start": 3524,
-            "byte_end": 3534
+            "byte_start": 4554,
+            "byte_end": 4564
           }
         },
         "span": {
-          "byte_start": 3501,
-          "byte_end": 3534
+          "byte_start": 4531,
+          "byte_end": 4564
+        }
+      },
+      {
+        "stmt": "connection",
+        "from": {
+          "component": "BAL1",
+          "pin": "bal_a",
+          "span": {
+            "byte_start": 4575,
+            "byte_end": 4585
+          }
+        },
+        "to": {
+          "component": "R6",
+          "pin": "p1",
+          "span": {
+            "byte_start": 4590,
+            "byte_end": 4595
+          }
+        },
+        "span": {
+          "byte_start": 4567,
+          "byte_end": 4595
+        }
+      },
+      {
+        "stmt": "connection",
+        "from": {
+          "component": "BAL1",
+          "pin": "bal_b",
+          "span": {
+            "byte_start": 4606,
+            "byte_end": 4616
+          }
+        },
+        "to": {
+          "component": "R6",
+          "pin": "p2",
+          "span": {
+            "byte_start": 4621,
+            "byte_end": 4626
+          }
+        },
+        "span": {
+          "byte_start": 4598,
+          "byte_end": 4626
         }
       },
       {
@@ -1271,21 +1850,21 @@ expression: ast
           "component": "BAL1",
           "pin": "gnd",
           "span": {
-            "byte_start": 3594,
-            "byte_end": 3602
+            "byte_start": 4637,
+            "byte_end": 4645
           }
         },
         "to": {
           "component": "J1",
           "pin": "gnd",
           "span": {
-            "byte_start": 3609,
-            "byte_end": 3615
+            "byte_start": 4652,
+            "byte_end": 4658
           }
         },
         "span": {
-          "byte_start": 3586,
-          "byte_end": 3615
+          "byte_start": 4629,
+          "byte_end": 4658
         }
       },
       {
@@ -1294,21 +1873,21 @@ expression: ast
           "component": "U5",
           "pin": "vout",
           "span": {
-            "byte_start": 3626,
-            "byte_end": 3633
+            "byte_start": 4669,
+            "byte_end": 4676
           }
         },
         "to": {
           "component": "R5",
           "pin": "p1",
           "span": {
-            "byte_start": 3640,
-            "byte_end": 3645
+            "byte_start": 4683,
+            "byte_end": 4688
           }
         },
         "span": {
-          "byte_start": 3618,
-          "byte_end": 3645
+          "byte_start": 4661,
+          "byte_end": 4688
         }
       },
       {
@@ -1317,21 +1896,21 @@ expression: ast
           "component": "R5",
           "pin": "p2",
           "span": {
-            "byte_start": 3656,
-            "byte_end": 3661
+            "byte_start": 4699,
+            "byte_end": 4704
           }
         },
         "to": {
           "component": "U3",
           "pin": "reset_n",
           "span": {
-            "byte_start": 3670,
-            "byte_end": 3680
+            "byte_start": 4713,
+            "byte_end": 4723
           }
         },
         "span": {
-          "byte_start": 3648,
-          "byte_end": 3680
+          "byte_start": 4691,
+          "byte_end": 4723
         }
       },
       {
@@ -1340,21 +1919,21 @@ expression: ast
           "component": "U3",
           "pin": "pwrkey",
           "span": {
-            "byte_start": 3734,
-            "byte_end": 3743
+            "byte_start": 4777,
+            "byte_end": 4786
           }
         },
         "to": {
           "component": "R4",
           "pin": "p1",
           "span": {
-            "byte_start": 3748,
-            "byte_end": 3753
+            "byte_start": 4791,
+            "byte_end": 4796
           }
         },
         "span": {
-          "byte_start": 3726,
-          "byte_end": 3753
+          "byte_start": 4769,
+          "byte_end": 4796
         }
       },
       {
@@ -1363,21 +1942,41 @@ expression: ast
           "component": "J1",
           "pin": "gnd",
           "span": {
-            "byte_start": 3764,
-            "byte_end": 3770
+            "byte_start": 4807,
+            "byte_end": 4813
           }
         },
         "to": {
           "component": "R4",
           "pin": "p2",
           "span": {
-            "byte_start": 3778,
-            "byte_end": 3783
+            "byte_start": 4821,
+            "byte_end": 4826
           }
         },
         "span": {
-          "byte_start": 3756,
-          "byte_end": 3783
+          "byte_start": 4799,
+          "byte_end": 4826
+        }
+      },
+      {
+        "stmt": "diff_pair",
+        "pos": "u3_main_ant",
+        "neg": "bal1_unbal",
+        "attrs": [
+          {
+            "kind": "impedance",
+            "literal": "50",
+            "unit": "ohm",
+            "span": {
+              "byte_start": 4879,
+              "byte_end": 4884
+            }
+          }
+        ],
+        "span": {
+          "byte_start": 4830,
+          "byte_end": 4888
         }
       },
       {
@@ -1386,21 +1985,21 @@ expression: ast
           "component": "J1",
           "pin": "dp",
           "span": {
-            "byte_start": 3874,
-            "byte_end": 3879
+            "byte_start": 4979,
+            "byte_end": 4984
           }
         },
         "to": {
           "component": "U1",
           "pin": "usb_dp",
           "span": {
-            "byte_start": 3883,
-            "byte_end": 3892
+            "byte_start": 4988,
+            "byte_end": 4997
           }
         },
         "span": {
-          "byte_start": 3866,
-          "byte_end": 3892
+          "byte_start": 4971,
+          "byte_end": 4997
         }
       },
       {
@@ -1409,21 +2008,21 @@ expression: ast
           "component": "J1",
           "pin": "dn",
           "span": {
-            "byte_start": 3903,
-            "byte_end": 3908
+            "byte_start": 5008,
+            "byte_end": 5013
           }
         },
         "to": {
           "component": "U1",
           "pin": "usb_dn",
           "span": {
-            "byte_start": 3912,
-            "byte_end": 3921
+            "byte_start": 5017,
+            "byte_end": 5026
           }
         },
         "span": {
-          "byte_start": 3895,
-          "byte_end": 3921
+          "byte_start": 5000,
+          "byte_end": 5026
         }
       },
       {
@@ -1435,14 +2034,14 @@ expression: ast
             "literal": "20",
             "unit": "mm",
             "span": {
-              "byte_start": 4032,
-              "byte_end": 4036
+              "byte_start": 5137,
+              "byte_end": 5141
             }
           }
         ],
         "span": {
-          "byte_start": 4004,
-          "byte_end": 4038
+          "byte_start": 5109,
+          "byte_end": 5143
         }
       },
       {
@@ -1454,24 +2053,24 @@ expression: ast
             "literal": "5",
             "unit": "mm",
             "span": {
-              "byte_start": 4069,
-              "byte_end": 4072
+              "byte_start": 5174,
+              "byte_end": 5177
             }
           }
         ],
         "span": {
-          "byte_start": 4041,
-          "byte_end": 4074
+          "byte_start": 5146,
+          "byte_end": 5179
         }
       }
     ],
     "span": {
       "byte_start": 0,
-      "byte_end": 4076
+      "byte_end": 5181
     }
   },
   "span": {
     "byte_start": 0,
-    "byte_end": 4076
+    "byte_end": 5181
   }
 }

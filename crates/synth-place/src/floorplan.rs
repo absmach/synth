@@ -67,9 +67,15 @@ pub struct ConnectorOrientationIssue {
 }
 
 /// Check edge-mounted connectors against their physical mating-face metadata.
-/// Connectors are considered edge-mounted when their centre is within 8 mm of
-/// an outline edge. The tolerance covers normal courtyard depth while avoiding
-/// false positives for ordinary interior connectors.
+///
+/// A connector is treated as edge-mounted when its centre lies within its own
+/// courtyard half-extent (rotation aware) plus a short slack of an outline
+/// edge. The slack absorbs the placer's own board-edge margin — edge-anchored
+/// parts are inset by that margin on top of their courtyard depth — while
+/// still excluding ordinary interior connectors. A fixed centre-distance
+/// threshold cannot do this: a USB-C receptacle's courtyard half-depth
+/// (~4.7 mm) plus the 4 mm edge margin already exceeds the old 8 mm constant,
+/// so genuinely edge-mounted receptacles were silently skipped.
 #[must_use]
 pub fn connector_orientation_issues(
     board: &Board,
@@ -77,7 +83,7 @@ pub fn connector_orientation_issues(
     placements: &[crate::ComponentPlacement],
 ) -> Vec<ConnectorOrientationIssue> {
     let mut issues = Vec::new();
-    let edge_tolerance = synth_geometry::mm_to_nm(8.0);
+    let edge_slack = synth_geometry::mm_to_nm(6.0);
     for placement in placements {
         let Some(component) = board.component(placement.id) else {
             continue;
@@ -90,16 +96,51 @@ pub fn connector_orientation_issues(
         else {
             continue;
         };
-        let distances = [
-            (placement.center.y_nm - outline.min.y_nm, BoardEdge::Top),
-            (outline.max.x_nm - placement.center.x_nm, BoardEdge::Right),
-            (outline.max.y_nm - placement.center.y_nm, BoardEdge::Bottom),
-            (placement.center.x_nm - outline.min.x_nm, BoardEdge::Left),
+        let ((_, _), (footprint_w, footprint_h)) = component.part.as_ref().map_or(
+            ((0.0, 0.0), (10.0, 10.0)),
+            synth_layout::pcb_courtyard_geometry_for_part,
+        );
+        let (half_x, half_y) = match placement.rotation {
+            Rotation::Ninety | Rotation::TwoSeventy => (
+                synth_geometry::mm_to_nm(footprint_h) / 2,
+                synth_geometry::mm_to_nm(footprint_w) / 2,
+            ),
+            Rotation::Zero | Rotation::OneEighty => (
+                synth_geometry::mm_to_nm(footprint_w) / 2,
+                synth_geometry::mm_to_nm(footprint_h) / 2,
+            ),
+        };
+        // Excess = how far the centre sits beyond the courtyard edge plus slack.
+        // The nearest edge is the one with the smallest (signed) excess.
+        let candidates = [
+            (
+                placement.center.y_nm - outline.min.y_nm,
+                half_y + edge_slack,
+                BoardEdge::Top,
+            ),
+            (
+                outline.max.x_nm - placement.center.x_nm,
+                half_x + edge_slack,
+                BoardEdge::Right,
+            ),
+            (
+                outline.max.y_nm - placement.center.y_nm,
+                half_y + edge_slack,
+                BoardEdge::Bottom,
+            ),
+            (
+                placement.center.x_nm - outline.min.x_nm,
+                half_x + edge_slack,
+                BoardEdge::Left,
+            ),
         ];
-        let Some(&(distance, edge)) = distances.iter().min_by_key(|(distance, _)| *distance) else {
+        let Some(&(distance, tolerance, edge)) = candidates
+            .iter()
+            .min_by_key(|(distance, tolerance, _)| distance - tolerance)
+        else {
             continue;
         };
-        if distance < 0 || distance > edge_tolerance {
+        if distance < 0 || distance > tolerance {
             continue;
         }
         let expected = rotation_for_mating_edge(face, edge);

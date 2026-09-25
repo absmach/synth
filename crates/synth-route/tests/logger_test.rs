@@ -16,7 +16,12 @@ fn workspace_root() -> PathBuf {
 #[test]
 fn routing_outcome_logger_writes_and_deserializes() {
     let root = workspace_root();
-    let example_path = root.join("examples").join("sensor_logger.synth");
+    // A tiny two-net fixture is enough to exercise the logger contract; the
+    // full sensor_logger determinism check lives in the route lib tests.
+    let example_path = root
+        .join("fixtures")
+        .join("ir")
+        .join("two_components_with_net.synth");
     let source = std::fs::read_to_string(&example_path).expect("read example");
     let file = example_path.to_string_lossy().to_string();
 
@@ -53,7 +58,12 @@ fn routing_outcome_logger_writes_and_deserializes() {
 #[test]
 fn logger_determinism() {
     let root = workspace_root();
-    let example_path = root.join("examples").join("sensor_logger.synth");
+    // A tiny two-net fixture is enough to exercise the logger contract; the
+    // full sensor_logger determinism check lives in the route lib tests.
+    let example_path = root
+        .join("fixtures")
+        .join("ir")
+        .join("two_components_with_net.synth");
     let source = std::fs::read_to_string(&example_path).expect("read example");
     let file = example_path.to_string_lossy().to_string();
 

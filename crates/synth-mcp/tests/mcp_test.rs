@@ -335,6 +335,7 @@ fn test_mcp_call_synth_route_with_constraints_emits_warning_for_unknown_net() {
             "name": "synth_route_with_constraints",
             "arguments": {
                 "source": LED_INDICATOR_SOURCE,
+                "allow_placement_warnings": true,
                 "net_constraints": [
                     { "net": "NONEXISTENT_RAIL", "width_mm": 0.5 }
                 ]
@@ -358,7 +359,8 @@ fn test_mcp_call_synth_route_with_constraints_returns_drc_and_trace_info() {
         "params": {
             "name": "synth_route_with_constraints",
             "arguments": {
-                "source": LED_INDICATOR_SOURCE
+                "source": LED_INDICATOR_SOURCE,
+                "allow_placement_warnings": true
             }
         }
     });

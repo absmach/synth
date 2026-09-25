@@ -112,5 +112,12 @@ codegen-units = 1
 # place+route repair engine over many boards, which is 5-15x slower at
 # opt-level 0. opt-level 1 keeps debug assertions on (correctness checks
 # intact) while collapsing test wall-clock — the single biggest CI lever.
+#
+# incremental = false is required, not just cosmetic: incremental codegen
+# intermittently emits LLVM `anon.*.llvm.*` symbols with hidden visibility,
+# which rust-lld then reports as "undefined hidden symbol" when linking the
+# test binaries. That breaks the suite non-deterministically, so tests build
+# without incremental state.
 [profile.test]
 opt-level = 1
+incremental = false
