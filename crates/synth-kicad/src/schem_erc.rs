@@ -27,17 +27,16 @@
 //!   net-label truncation.
 //!
 //! The remaining `E-SYNTH-SCHEM-005..010` codes cover the connection
-//! and page conventions from Sierra Circuits' "Schematic Design
-//! Rules" knowledge base (protoexpress.com/kb/schematic-design-rules/):
+//! and page conventions that standard schematic design-rule practice
+//! agrees on:
 //!
 //! * **E-SYNTH-SCHEM-005** — Junction fan-out: more than
 //!   [`SchemErcConfig::max_junction_degree`] wire lines meeting at a
-//!   node ("It is always a good practice to have only 3 lines
-//!   connected to a node").
+//!   node — three is the readable limit, a fourth makes the
+//!   connection ambiguous.
 //! * **E-SYNTH-SCHEM-006** — Cross-net junction: a node dot placed at
-//!   a point a *different* net's wire touches ("Lines that intersect
-//!   with each other are not connected unless there is a node present
-//!   at the point of intersection" — so a node must never sit on a
+//!   a point a *different* net's wire touches. Crossing lines are
+//!   connected only where a node is drawn, so a node must never sit on a
 //!   foreign net's geometry, or KiCad reads it as a designed-in short).
 //! * **E-SYNTH-SCHEM-007** — Page overflow: content outside the
 //!   selected sheet size ("Select the `page` size based on the size of
@@ -97,9 +96,8 @@ const DEFAULT_DECOUPLING_MAX_MM: f64 = 25.0;
 /// §7.7.7: "> 100 mm".
 const DEFAULT_LONG_NET_MAX_MM: f64 = 100.0;
 /// Default number of wire lines a node may carry before
-/// `E-SYNTH-SCHEM-005` fires. Sierra Circuits "Schematic Design
-/// Rules": "It is always a good practice to have only 3 lines
-/// connected to a node".
+/// `E-SYNTH-SCHEM-005` fires. Three lines at a node is the readable
+/// limit; a fourth makes the connection ambiguous.
 const DEFAULT_MAX_JUNCTION_DEGREE: usize = 3;
 /// Default rendered-net-name budget (chars) before `E-SYNTH-SCHEM-009`
 /// fires. StackExchange #28251: "Keep names reasonably short — no
@@ -764,8 +762,8 @@ fn junction_degree(wires: &[WirePath], p: (i64, i64)) -> usize {
 }
 
 /// `E-SYNTH-SCHEM-005`: a node carrying more than `max_degree` wire
-/// lines (Sierra Circuits: "It is always a good practice to have only
-/// 3 lines connected to a node"). A 4-way node is unreadable — split
+/// lines. Three lines at a node is the readable limit, and a 4-way
+/// node is unreadable — split
 /// it into two staggered T junctions or truncate the net to labels.
 fn check_junction_fanout(layout: &Layout, max_degree: usize) -> Vec<Diagnostic> {
     let mut out = Vec::new();
@@ -827,9 +825,8 @@ fn point_touches_wire(p: (i64, i64), wire: &WirePath) -> bool {
 /// `E-SYNTH-SCHEM-006`: a junction dot placed where a *different*
 /// net's wire touches the same point.
 ///
-/// Sierra Circuits: "Lines that intersect with each other are not
-/// connected unless there is a node present at the point of
-/// intersection" — inverse corollary: where a node *is* present,
+/// Crossing lines are connected only where a node is drawn —
+/// inverse corollary: where a node *is* present,
 /// everything touching it is connected. The canonical router scopes
 /// junction detection per net so foreign wires crossing a same-net
 /// junction get no dot; if a dot ever lands on foreign geometry
@@ -887,8 +884,8 @@ const PAGE_OVERFLOW_EPSILON_MM: f64 = 0.01;
 
 /// `E-SYNTH-SCHEM-007`: content placed outside the selected sheet.
 ///
-/// Sierra Circuits: "Select the [page] size based on the size of your
-/// circuit design." The placer escalates A4 → A3 → A2 from the content
+/// The page size should follow the size of the circuit. The placer
+/// escalates A4 → A3 → A2 from the content
 /// bounding box; past A2 it stops growing and the §P26 split takes
 /// over (§MULTI-SHEET). This rule makes any residual overflow
 /// visible: a component placement or wire point beyond the sheet's

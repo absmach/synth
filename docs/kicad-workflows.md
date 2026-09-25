@@ -404,39 +404,35 @@ Before declaring any Synth-exported design "ready":
 ## 10. Standards coverage map
 
 Where the published schematic guidelines land in Synth — so a
-reviewer can check coverage, not folklore. Sources: Sierra Circuits,
-"How to Draw and Design a PCB Schematic"
-(protoexpress.com/blog/how-to-draw-design-pcb-schematic/, 17
-guidelines + checklist) and AIVON, "Decoding PCB Schematics"
-(aivon.com/blog/pcb-design/decoding-pcb-schematics-a-guide-for-\
-effective-diagnostics/), plus the underlying IEEE refdes conventions
-and IPC-2221/IPC-2612-1 they cite.
+reviewer can check coverage, not folklore. The guidelines below are
+the ones common to standard schematic design-rule practice, resting
+on IEEE reference-designator conventions and IPC-2221/IPC-2612-1.
 
-| Guideline (source)                                             | Synth mechanism                                                                                                     |
-| -------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------- |
-| Page size by complexity (Sierra 1)                             | auto sheet-size selection (`synth-layout`)                                                                          |
-| Grid system (Sierra 3)                                         | 1.27 mm pin grid snap + 2.54 mm placement grid                                                                      |
-| Title block (Sierra 4)                                         | emitted: name, revision, notes, fab target                                                                          |
-| Notes on schematic (Sierra 5)                                  | title-block comments 1–3                                                                                            |
-| Standard refdes letters (Sierra 10)                            | `E-SYNTH-NAME-004` (IEEE table)                                                                                     |
-| Refdes uniqueness / letter start                               | `E-SYNTH-NAME-001/002/003`                                                                                          |
-| Stock-library symbols, inputs left / power top (Sierra 11)     | registry `kicad_symbol` + KiCad stock symbols; KLC rules for new parts                                              |
-| Polarized-component polarity (Sierra checklist 2)              | KG `polarized_cap_miswired` (`E-SYNTH-KG-001`)                                                                      |
-| Junction dots (Sierra 12)                                      | router collects junctions; crossing rules `E-SYNTH-SCHEM-005/006`                                                   |
-| Net labels uppercase (Sierra 12)                               | `E-SYNTH-SCHEM-008`                                                                                                 |
-| Short net names (Sierra 12: "preferably ≤ 4 letters")          | `E-SYNTH-SCHEM-009` — **deliberately 16 chars**: semantic names (`I2C_SCL`) beat brevity for agent-generated sheets |
-| Remove open nets (Sierra 12)                                   | `E-SYNTH-CONNECT-*` + no-connect reconciliation                                                                     |
-| Signal flow left→right, power top, ground bottom (Sierra 12)   | layered placement + power-symbol orientation passes                                                                 |
-| Readability of parallel connections (Sierra 13)                | `E-SYNTH-SCHEM-002/004/005` + cluster alignment                                                                     |
-| Crystal proximity (Sierra 14)                                  | `Crystal` cluster + `E-SYNTH-SCHEM-003` (decoupling distance)                                                       |
-| ERC (Sierra 15)                                                | rule-based + value-based + KiCad ERC (§1 gates)                                                                     |
-| Netlist verification (Sierra 16)                               | pin reconciliation + KiCad `--schematic-parity` DRC                                                                 |
-| Complete BOM: MPN, package, vendor (Sierra 17, checklist 6/10) | registry-carried `mpn`/`lcsc_pn`, hidden `MPN`/`LCSC` instance fields, `bom.csv`, supply-chain validation           |
-| Decoupling on all ICs (Sierra checklist 9)                     | `E-SYNTH-POWER-001` (manifest) + KG `ic_decoupling` (undeclared)                                                    |
-| Test points + expected voltages (AIVON advanced tips)          | KG `rail_test_points` — catalog entry until a test-point part exists                                                |
+| Guideline                                           | Synth mechanism                                                                                                     |
+| --------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------- |
+| Page size by complexity                             | auto sheet-size selection (`synth-layout`)                                                                          |
+| Grid system                                         | 1.27 mm pin grid snap + 2.54 mm placement grid                                                                      |
+| Title block                                         | emitted: name, revision, notes, fab target                                                                          |
+| Notes on schematic                                  | title-block comments 1–3                                                                                            |
+| Standard refdes letters                             | `E-SYNTH-NAME-004` (IEEE table)                                                                                     |
+| Refdes uniqueness / letter start                    | `E-SYNTH-NAME-001/002/003`                                                                                          |
+| Stock-library symbols, inputs left / power top      | registry `kicad_symbol` + KiCad stock symbols; KLC rules for new parts                                              |
+| Polarized-component polarity                        | KG `polarized_cap_miswired` (`E-SYNTH-KG-001`)                                                                      |
+| Junction dots                                       | router collects junctions; crossing rules `E-SYNTH-SCHEM-005/006`                                                   |
+| Net labels uppercase                                | `E-SYNTH-SCHEM-008`                                                                                                 |
+| Short net names (preferably ≤ 4 letters)            | `E-SYNTH-SCHEM-009` — **deliberately 16 chars**: semantic names (`I2C_SCL`) beat brevity for agent-generated sheets |
+| Remove open nets                                    | `E-SYNTH-CONNECT-*` + no-connect reconciliation                                                                     |
+| Signal flow left→right, power top, ground bottom    | layered placement + power-symbol orientation passes                                                                 |
+| Readability of parallel connections                 | `E-SYNTH-SCHEM-002/004/005` + cluster alignment                                                                     |
+| Crystal proximity                                   | `Crystal` cluster + `E-SYNTH-SCHEM-003` (decoupling distance)                                                       |
+| ERC                                                 | rule-based + value-based + KiCad ERC (§1 gates)                                                                     |
+| Netlist verification                                | pin reconciliation + KiCad `--schematic-parity` DRC                                                                 |
+| Complete BOM: MPN, package, vendor                  | registry-carried `mpn`/`lcsc_pn`, hidden `MPN`/`LCSC` instance fields, `bom.csv`, supply-chain validation           |
+| Decoupling on all ICs                               | `E-SYNTH-POWER-001` (manifest) + KG `ic_decoupling` (undeclared)                                                    |
+| Test points + expected voltages (advanced practice) | KG `rail_test_points` — catalog entry until a test-point part exists                                                |
 
 Not yet applicable: revision-history page, table of contents, block
-diagram sheet (Sierra 2/6/7/8/9). Hierarchical sheets **are** emitted
+diagram sheet. Hierarchical sheets **are** emitted
 (§P26): a board whose single-sheet content overflows A2 and whose
 components span two or more `sheet` blocks (or imported files) exports
 as one `.kicad_sch` per sheet plus a root carrying sheet instances, with

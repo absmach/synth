@@ -1996,8 +1996,7 @@ impl ErcRule for DuplicateRefdesRule {
 // E-SYNTH-NAME-004 — refdes letter does not match the component kind
 // -----------------------------------------------------------------------------
 
-/// IEEE / industry reference-designator letters (Sierra Circuits
-/// "How to Draw and Design a PCB Schematic", guideline 10). Only
+/// IEEE / industry reference-designator letters. Only
 /// kinds with a well-known letter are listed; unknown kinds are
 /// never flagged (no false positives on new taxonomies).
 fn accepted_refdes_prefixes(kind: &str) -> Option<&'static [&'static str]> {

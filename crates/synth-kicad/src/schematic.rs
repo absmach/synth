@@ -294,9 +294,8 @@ pub(crate) fn build_sheet_schematic(
                 ),
                 Sexp::list("date", vec![Sexp::str("")]),
                 // Revision from the `revision "…"` board statement, or
-                // blank when unset (Sierra Circuits "Schematic Design
-                // Rules": the title block should display the
-                // Revision).
+                // blank when unset; the title block displays the
+                // revision by convention.
                 Sexp::list(
                     "rev",
                     vec![Sexp::str(board.revision.as_deref().unwrap_or(""))],
@@ -305,9 +304,8 @@ pub(crate) fn build_sheet_schematic(
                     "company",
                     vec![Sexp::str(board.company.as_deref().unwrap_or(""))],
                 ),
-                // Design notes (ProtoExpress "Schematic Design Rules":
-                // "Provide all the required notes related to the
-                // schematic"). KiCad renders `comment` entries inside
+                // Design notes: a schematic should carry the notes a
+                // reader needs. KiCad renders `comment` entries inside
                 // its own title block, so they can never collide with
                 // placed symbols. Deterministic content only — no
                 // timestamps (byte-identical re-export guarantee).

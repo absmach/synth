@@ -100,7 +100,7 @@ enforced_by = "layout:IcBlock cluster + E-SYNTH-RESET-001"
 [[template]]
 id = "polarized_cap_miswired"
 description = "Polarised capacitor installed with reversed bias"
-rationale = "An electrolytic or tantalum capacitor with its positive terminal at the lower potential fails — venting, catching fire, or exploding. Sierra Circuits' schematic checklist item 2 ('conduct a polarity check for all polarized components'). The checker keys on the KiCad convention (C_Polarized: pin 1 = plus) and flags polarised caps whose ground-side pin is the plus terminal."
+rationale = "An electrolytic or tantalum capacitor with its positive terminal at the lower potential fails — venting, catching fire, or exploding. Standard schematic checklists call for a polarity check on every polarized component. The checker keys on the KiCad convention (C_Polarized: pin 1 = plus) and flags polarised caps whose ground-side pin is the plus terminal."
 severity = "error"
 applies_to_kinds = ["capacitor"]
 condition = "polarized_cap_ground_on_plus"
@@ -110,7 +110,7 @@ patch_hint = "diagnostic only — swap the two connect statements in the .synth 
 [[template]]
 id = "rail_test_points"
 description = "Test points on critical rails and key signals"
-rationale = "Production and bring-up debugging needs probeable access to supply rails and key signals; diagnostics guides (Sierra Circuits, AIVON) recommend annotating expected voltages at test points near the net in question. The seed registry has no test-point part yet, so this is a catalog entry — it activates once a test-point part and a placement-aware predicate exist."
+rationale = "Production and bring-up debugging needs probeable access to supply rails and key signals; diagnostics practice recommends annotating expected voltages at test points near the net in question. The seed registry has no test-point part yet, so this is a catalog entry — it activates once a test-point part and a placement-aware predicate exist."
 severity = "warning"
 applies_to_kinds = ["ic", "connector"]
 condition = "always"

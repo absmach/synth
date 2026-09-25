@@ -35,8 +35,8 @@ pub struct Board {
     pub layers: u32,
     pub manufacturer: Option<String>,
     /// Optional revision tag (`revision "A"`), carried into the
-    /// schematic title block (Sierra Circuits: the title block should
-    /// display the Revision).
+    /// schematic title block, which by convention displays the
+    /// revision.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub revision: Option<String>,
     /// Design-authority company (`company "…"`), carried into the

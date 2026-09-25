@@ -92,8 +92,8 @@ pub fn natural_rotation_offset(part: &Part) -> f64 {
 /// computed from this classifier while the drawn pins come from that
 /// one, and a disagreement would leave wires landing on a body edge
 /// with no pin. Both copies implement the same schematic convention
-/// (ProtoExpress "Schematic Design Rules": inputs on the left,
-/// outputs on the right, power up, ground down); unifying them into
+/// (inputs on the left, outputs on the right, power up, ground
+/// down); unifying them into
 /// one shared function is still a known follow-up.
 pub fn classify_ic_pin(pin: &Pin) -> PinSide {
     let lower = pin.name.to_ascii_lowercase();

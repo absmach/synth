@@ -167,8 +167,7 @@ pub struct ManufacturerStmt {
 }
 
 /// Board revision tag, carried into the schematic title block
-/// (Sierra Circuits "Schematic Design Rules": the title block should
-/// display the Revision).
+/// which by convention displays the revision.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct RevisionStmt {
     pub rev: String,
@@ -176,8 +175,8 @@ pub struct RevisionStmt {
 }
 
 /// Design-authority company name, carried into the schematic title
-/// block's Company field (Sierra Circuits "Schematic Design Rules":
-/// the title block should display the Company). Unlike
+/// block's Company field, which by convention names the design
+/// authority. Unlike
 /// `ManufacturerStmt` (who *builds* the board), this names who
 /// *designed* it.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

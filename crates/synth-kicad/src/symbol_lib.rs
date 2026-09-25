@@ -404,8 +404,8 @@ fn is_two_pin_symbol_kind(kind: &str) -> bool {
 /// `synth_layout::classify_ic_pin_layout` — those copies drive wire
 /// terminal placement and body sizing, so a disagreement would leave
 /// wires landing on a body edge with no drawn pin. All three
-/// implement the same schematic convention (ProtoExpress "Schematic
-/// Design Rules": inputs on the left, outputs on the right). Deduping
+/// implement the same schematic convention (inputs on the left,
+/// outputs on the right). Deduping
 /// them into one shared function is tracked as follow-up cleanup.
 fn classify_ic_pin(pin: &synth_registry::Pin) -> PinSide {
     use synth_registry::{ElectricalType, PinCapability};
@@ -481,9 +481,8 @@ fn build_symbol(part: &Part, alternates: Option<&BTreeMap<String, BTreeSet<Strin
     };
 
     // Pin numbers stay visible: KiCad draws them outside the symbol
-    // graphic at the pin's outer end (the standard convention —
-    // ProtoExpress "Schematic Design Rules" requires pin numbers on
-    // the outside of the symbol graphic). Power-flag symbols keep
+    // graphic at the pin's outer end (the standard convention puts
+    // pin numbers outside the symbol graphic). Power-flag symbols keep
     // theirs hidden in `build_power_symbol_def`.
     let mut children = vec![
         Sexp::list("pin_names", vec![Sexp::list("offset", vec![num(0.508)])]),
