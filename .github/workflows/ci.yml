@@ -41,7 +41,7 @@ jobs:
         run: |
           sudo add-apt-repository --yes ppa:kicad/kicad-10.0-releases
           sudo apt-get update
-          sudo apt-get install --no-install-recommends -y kicad kicad-libraries
+          sudo apt-get install --no-install-recommends -y kicad kicad-symbols
           kicad-cli version
           test -d /usr/share/kicad/symbols || {
             echo "::error::/usr/share/kicad/symbols is missing; the exporter cannot resolve stock symbols"
