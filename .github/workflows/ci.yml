@@ -76,12 +76,25 @@ jobs:
       - name: Run linter
         run: cargo clippy --workspace --all-targets --locked -- -D warnings
 
-      # `cargo check` is deliberately absent: clippy above already
-      # type-checks every target, and `cargo test` compiles the same crates
-      # for real. A separate check pass only recompiles the workspace.
+      - name: Install cargo-nextest
+        uses: taiki-e/install-action@nextest
 
+      # `cargo check` is deliberately absent: clippy above already
+      # type-checks every target, and the test run compiles the same crates
+      # for real. A separate check pass only recompiles the workspace.
+      #
+      # nextest runs test *binaries* concurrently, unlike `cargo test`, which
+      # runs them one after another. Two suites here dominate the wall clock
+      # (the reference-design ERC golden and the schematic golden, ~230s and
+      # ~180s) and previously could never overlap; nextest lets them share
+      # the runner's cores.
       - name: Run tests
-        run: cargo test --workspace --locked
+        run: cargo nextest run --workspace --locked
+
+      # nextest intentionally does not run doctests, so keep them here.
+      # Cargo has no way to ask nextest for them.
+      - name: Run doctests
+        run: cargo test --workspace --locked --doc
 
       # The release profile (lto + a single codegen unit) is the slowest
       # build in the job and nothing on a PR consumes its output; CD builds
