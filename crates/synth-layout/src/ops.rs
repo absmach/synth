@@ -45,7 +45,7 @@
 use serde::{Deserialize, Serialize};
 use synth_ir::{Board, ComponentId, NetId};
 
-use crate::{route_and_label, snap_grid, Layout, NetLabel, Rotation};
+use crate::{route_and_label, snap_grid, Layout, Rotation};
 
 /// A single structured edit to an existing [`Layout`]. See the
 /// module docs for what each variant is for.
@@ -195,23 +195,8 @@ pub fn apply_op(layout: &mut Layout, board: &Board, op: LayoutOp) -> Result<(), 
             route_and_label(board, layout);
         }
         LayoutOp::ReplaceWireWithLabel { net } => {
-            let net_ir = board.net(net).ok_or(LayoutOpError::UnknownNet(net))?;
-            layout.wires.retain(|w| w.net != net);
-            layout.net_labels.retain(|l| l.net != net);
-            let text =
-                crate::pick_net_label(board, net_ir).unwrap_or_else(|| format!("NET_{}", net.0));
-            for ep in &net_ir.endpoints {
-                layout.net_labels.push(NetLabel {
-                    net,
-                    component: ep.component,
-                    pin: ep.pin,
-                    label: text.clone(),
-                });
-            }
-            // A hand-forced label can collide with labels the last
-            // routing pass produced; re-run the uniqueness pass so
-            // the sheet-wide guarantee still holds.
-            crate::uniquify_net_labels(board, &mut layout.net_labels);
+            require_net(board, net)?;
+            crate::force_net_label(board, layout, net);
         }
         LayoutOp::RerouteNet { net } => {
             // `route_and_label` recomputes wires/labels for the

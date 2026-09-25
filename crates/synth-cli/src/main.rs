@@ -1694,6 +1694,14 @@ fn read_source(input: &PathBuf) -> anyhow::Result<(String, String)> {
 /// `[schematic]` section of `<design>.synth.erc.toml` when it exists
 /// and parses, else the built-in defaults. A malformed sidecar is
 /// reported but never blocks — the defaults are always safe.
+/// The `<design>.synth.layout.toml` sidecar convention, as every other
+/// consumer resolves it (`synth-web`, `synth-kicad::export`).
+fn sidecar_path_for(design: &Path) -> Option<PathBuf> {
+    let name = design.file_name()?.to_string_lossy();
+    let candidate = design.with_file_name(format!("{name}.layout.toml"));
+    candidate.exists().then_some(candidate)
+}
+
 fn schem_erc_config_for(design: &Path) -> synth_kicad::SchemErcConfig {
     let settings = match synth_validate::ErcConfig::load_for_design(design) {
         Ok(Some(config)) => config.schematic,
@@ -2114,7 +2122,11 @@ fn dump_layout(
                 has_errors = true;
             }
             lowered.board.as_ref().map(|board| {
-                let layout = synth_layout::layout(board);
+                // Honour `<design>.synth.layout.toml` like every other
+                // consumer (preview, export) — `synth layout` is what an
+                // agent inspects, so it must reflect persisted refinements.
+                let layout =
+                    synth_layout::layout_with_sidecar(board, sidecar_path_for(input).as_deref());
                 let layout_score = score.then(|| {
                     let mut s = synth_layout::score::score(&layout, board);
                     s.aesthetic_violations = synth_kicad::check_schem_erc_with_config(

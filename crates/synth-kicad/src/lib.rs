@@ -54,6 +54,7 @@ pub mod multisheet;
 mod pcb;
 pub mod pin_reconcile;
 mod pnp;
+mod sch_svg;
 pub mod schem_erc;
 pub mod schematic;
 pub mod sexp;
@@ -62,8 +63,10 @@ pub mod uuid_v5;
 
 pub use erc_validate::{run_kicad_erc, ErcRunError, KicadErcItem, KicadErcViolation};
 pub use export::{
-    export, export_with_sidecar, export_with_sidecar_and_routing_order, ExportError, ExportResult,
+    export, export_schematic_only, export_with_sidecar, export_with_sidecar_and_routing_order,
+    ExportError, ExportResult, SchematicExportResult,
 };
+pub use sch_svg::{run_kicad_svg_export, SvgExportError};
 
 /// Configure exporter worker-count compatibility for the CLI's shared jobs
 /// option. The RP2350 repair loop is intentionally deterministic and performs

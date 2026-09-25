@@ -17,6 +17,7 @@ members = [
   "crates/synth-drc",
   "crates/synth-web",
   "crates/synth-mcp",
+  "crates/synth-render",
   "crates/synth-smt",
   "crates/synth-connectivity",
   "crates/synth-supply",
@@ -62,6 +63,13 @@ thiserror = "2.0"
 anyhow = "1.0"
 rayon = "1.10"
 
+# Deterministic rasterization for the schematic visual-feedback loop
+# (synth-render). Pinned exactly: a resvg bump that moves one antialiased
+# edge would read as visual drift in a stored baseline.
+resvg = "=0.48.1"
+image = { version = "0.25", default-features = false, features = ["png"] }
+base64 = "0.22"
+
 clap = { version = "4.5", features = ["derive"] }
 insta = { version = "1.41", features = ["json", "yaml"] }
 proptest = "1.5"
@@ -100,6 +108,7 @@ synth-route = { path = "crates/synth-route", version = "0.0.1" }
 synth-drc = { path = "crates/synth-drc", version = "0.0.1" }
 synth-web = { path = "crates/synth-web", version = "0.0.1" }
 synth-mcp = { path = "crates/synth-mcp", version = "0.0.1" }
+synth-render = { path = "crates/synth-render", version = "0.0.1" }
 synth-smt = { path = "crates/synth-smt", version = "0.0.1" }
 synth-connectivity = { path = "crates/synth-connectivity", version = "0.0.1" }
 synth-supply = { path = "crates/synth-supply", version = "0.0.1" }

@@ -1572,9 +1572,41 @@ pub fn layout_with_sidecar(board: &Board, sidecar_path: Option<&std::path::Path>
         .iter()
         .map(|c| (c.refdes.clone(), c.id))
         .collect();
-    layout_with_overrides(board, &default_placer(), &move |l| {
+    let mut l = layout_with_overrides(board, &default_placer(), &|l| {
         sidecar.apply_to_layout(board, l, &refdes_to_id);
-    })
+    });
+    // Forced net labels are applied *after* routing, because
+    // `route_and_label` recomputes wires and labels for the whole board. Doing
+    // it here is what lets a net an agent pinned to a label survive a later
+    // structural op (see `ops` module docs).
+    sidecar.apply_forced_labels(board, &mut l);
+    l
+}
+
+/// Force `net` to render as per-endpoint net-label stubs instead of a wire,
+/// regardless of span or crossing count.
+///
+/// Shared by [`ops::LayoutOp::ReplaceWireWithLabel`] and sidecar persistence,
+/// so a manually forced net cannot silently revert to the automatic
+/// distance/crossing heuristic on the next structural edit.
+pub fn force_net_label(board: &Board, layout: &mut Layout, net: NetId) {
+    let Some(net_ir) = board.net(net) else {
+        return;
+    };
+    layout.wires.retain(|w| w.net != net);
+    layout.net_labels.retain(|l| l.net != net);
+    let text = pick_net_label(board, net_ir).unwrap_or_else(|| format!("NET_{}", net.0));
+    for ep in &net_ir.endpoints {
+        layout.net_labels.push(NetLabel {
+            net,
+            component: ep.component,
+            pin: ep.pin,
+            label: text.clone(),
+        });
+    }
+    // A hand-forced label can collide with labels the last routing pass
+    // produced; re-run the uniqueness pass so the sheet-wide guarantee holds.
+    uniquify_net_labels(board, &mut layout.net_labels);
 }
 
 /// USB ESD diodes sit in a column to the LEFT of the USB

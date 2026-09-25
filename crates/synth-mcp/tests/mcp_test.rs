@@ -532,3 +532,290 @@ fn test_mcp_query_knowledge_catalog_and_check() {
         "bare switch must violate the debounce template: {violations:?}"
     );
 }
+
+/// The three visual-feedback tools must be discoverable via `tools/list`.
+#[test]
+fn test_mcp_list_tools_includes_schematic_visual_loop() {
+    let tools = list_tools();
+    for name in [
+        "synth_render_schematic",
+        "synth_schematic_baseline",
+        "synth_review_schematic",
+    ] {
+        assert!(tools.iter().any(|t| t.name == name), "missing tool {name}");
+    }
+}
+
+/// `kicad-cli` is an external prerequisite for rendering; skip cleanly
+/// (rather than fail) when it is not installed, since CI without KiCad
+/// still needs to build and test the rest of the crate.
+fn kicad_cli_available() -> bool {
+    std::process::Command::new("kicad-cli")
+        .arg("version")
+        .output()
+        .is_ok_and(|o| o.status.success())
+}
+
+#[test]
+fn test_mcp_render_schematic_returns_inline_png_image_block() {
+    if !kicad_cli_available() {
+        eprintln!("skipping: kicad-cli not installed");
+        return;
+    }
+    let dir = tempfile::tempdir().unwrap();
+    let src = dir.path().join("led_indicator.synth");
+    std::fs::write(&src, LED_INDICATOR_SOURCE).unwrap();
+
+    let req = json!({
+        "jsonrpc": "2.0",
+        "id": 40,
+        "method": "tools/call",
+        "params": {
+            "name": "synth_render_schematic",
+            "arguments": { "file_path": src.to_str().unwrap(), "width_px": 800, "inline": true }
+        }
+    });
+    let resp = handle_jsonrpc_request(req, None);
+    assert_eq!(resp["id"], 40);
+    let content = resp["result"]["content"].as_array().unwrap();
+
+    // First block is the JSON summary, second is the actual PNG image.
+    let payload: serde_json::Value =
+        serde_json::from_str(content[0]["text"].as_str().unwrap()).unwrap();
+    assert_eq!(payload["status"], "ok");
+    assert_eq!(payload["width_px"], 800);
+    assert!(payload["sheets"][0]["height_px"].as_u64().unwrap() > 0);
+    // The base64 payload is promoted out of the text into an image block.
+    assert!(payload["sheets"][0].get("png_base64").is_none());
+
+    assert_eq!(content[1]["type"], "image");
+    assert_eq!(content[1]["mimeType"], "image/png");
+    let data = content[1]["data"].as_str().unwrap();
+    assert!(data.starts_with("iVBORw0KGgo"), "PNG magic missing");
+
+    // A real, non-empty PNG was also written beside the design.
+    let png_path = payload["sheets"][0]["png_path"].as_str().unwrap();
+    assert!(std::path::Path::new(png_path).exists());
+}
+
+#[test]
+fn test_mcp_render_schematic_rejects_bad_width() {
+    let req = json!({
+        "jsonrpc": "2.0",
+        "id": 41,
+        "method": "tools/call",
+        "params": {
+            "name": "synth_render_schematic",
+            "arguments": { "source": LED_INDICATOR_SOURCE, "width_px": 99999 }
+        }
+    });
+    let resp = handle_jsonrpc_request(req, None);
+    let message = resp["error"]["message"].as_str().unwrap();
+    assert!(message.contains("width_px"), "got: {message}");
+}
+
+#[test]
+fn test_mcp_baseline_set_compare_and_clear() {
+    if !kicad_cli_available() {
+        eprintln!("skipping: kicad-cli not installed");
+        return;
+    }
+    let dir = tempfile::tempdir().unwrap();
+    let src = dir.path().join("led_indicator.synth");
+    std::fs::write(&src, LED_INDICATOR_SOURCE).unwrap();
+    let file = src.to_str().unwrap();
+
+    let call = |id: u64, action: &str| {
+        let req = json!({
+            "jsonrpc": "2.0",
+            "id": id,
+            "method": "tools/call",
+            "params": {
+                "name": "synth_schematic_baseline",
+                "arguments": { "file_path": file, "action": action, "width_px": 600 }
+            }
+        });
+        handle_jsonrpc_request(req, None)
+    };
+
+    // compare before any baseline exists is a normal result, not an error.
+    let before = call(50, "compare");
+    let payload: serde_json::Value =
+        serde_json::from_str(before["result"]["content"][0]["text"].as_str().unwrap()).unwrap();
+    assert_eq!(payload["status"], "no_baseline");
+
+    let set = call(51, "set");
+    let payload: serde_json::Value =
+        serde_json::from_str(set["result"]["content"][0]["text"].as_str().unwrap()).unwrap();
+    assert_eq!(payload["status"], "stored");
+    assert!(std::path::Path::new(payload["baseline_png"].as_str().unwrap()).exists());
+    assert!(std::path::Path::new(payload["baseline_meta"].as_str().unwrap()).exists());
+
+    // Re-rendering the unchanged design must not report drift.
+    let after = call(52, "compare");
+    let payload: serde_json::Value =
+        serde_json::from_str(after["result"]["content"][0]["text"].as_str().unwrap()).unwrap();
+    assert_eq!(payload["status"], "pass", "unchanged design drifted");
+    assert_eq!(payload["changed_pixels"], 0);
+    assert_eq!(payload["renderer_matches"], true);
+
+    let cleared = call(53, "clear");
+    let payload: serde_json::Value =
+        serde_json::from_str(cleared["result"]["content"][0]["text"].as_str().unwrap()).unwrap();
+    assert_eq!(payload["status"], "cleared");
+    assert_eq!(payload["removed_png"], true);
+}
+
+#[test]
+fn test_mcp_review_schematic_packet() {
+    if !kicad_cli_available() {
+        eprintln!("skipping: kicad-cli not installed");
+        return;
+    }
+    // A board with a declared value (E-SYNTH-VALUE-001 is an error otherwise),
+    // so a clean design can be asserted clean.
+    let source = LED_INDICATOR_SOURCE.replace(
+        "component R1: resistor  \"r_generic_0603\"",
+        "component R1: resistor  \"r_generic_0603\" value \"330\"",
+    );
+    let req = json!({
+        "jsonrpc": "2.0",
+        "id": 60,
+        "method": "tools/call",
+        "params": {
+            "name": "synth_review_schematic",
+            "arguments": { "source": source, "width_px": 600, "inline": false }
+        }
+    });
+    let resp = handle_jsonrpc_request(req, None);
+    assert_eq!(resp["id"], 60);
+    let payload: serde_json::Value =
+        serde_json::from_str(resp["result"]["content"][0]["text"].as_str().unwrap()).unwrap();
+
+    assert_eq!(
+        payload["error_count"], 0,
+        "design should be clean: {payload}"
+    );
+    assert!(payload["is_clean"].as_bool().unwrap());
+    assert!(payload["diagnostics"].is_array());
+    assert_eq!(payload["layout"]["components"], 3);
+    assert!(
+        payload["render"]["sheets"][0]["height_px"]
+            .as_u64()
+            .unwrap()
+            > 0
+    );
+    // inline=false: no image block beyond the JSON summary.
+    assert_eq!(resp["result"]["content"].as_array().unwrap().len(), 1);
+}
+
+/// `persist=true` must write the op's effect through to the sidecar so a
+/// later render/export honours it — the whole point of Phase-2 persistence.
+#[test]
+fn test_mcp_mutate_layout_persist_writes_sidecar() {
+    let dir = tempfile::tempdir().unwrap();
+    let src = dir.path().join("led_indicator.synth");
+    std::fs::write(&src, LED_INDICATOR_SOURCE).unwrap();
+    let sidecar = dir.path().join("led_indicator.synth.layout.toml");
+
+    let req = json!({
+        "jsonrpc": "2.0",
+        "id": 70,
+        "method": "tools/call",
+        "params": {
+            "name": "synth_mutate_layout",
+            "arguments": {
+                "source": LED_INDICATOR_SOURCE,
+                "file_path": src.to_str().unwrap(),
+                "persist": true,
+                "layout_file_path": sidecar.to_str().unwrap(),
+                "op": { "kind": "move_component", "id": 0, "x_mm": 99.06, "y_mm": 50.8 }
+            }
+        }
+    });
+    let resp = handle_jsonrpc_request(req, None);
+    let payload: serde_json::Value =
+        serde_json::from_str(resp["result"]["content"][0]["text"].as_str().unwrap()).unwrap();
+    assert_eq!(
+        payload["persisted"]["saved_path"],
+        sidecar.to_str().unwrap()
+    );
+
+    let written = std::fs::read_to_string(&sidecar).unwrap();
+    assert!(
+        written.contains("99.06"),
+        "sidecar did not record x: {written}"
+    );
+    assert!(written.contains("source = \"agent\""));
+
+    // Reloading with the sidecar must actually move the component.
+    let reload = synth_layout::layout_with_sidecar(&compile_led_board(), Some(sidecar.as_path()));
+    let moved = reload
+        .components
+        .iter()
+        .find(|p| p.id.0 == 0)
+        .expect("component 0 present");
+    assert_eq!(moved.center_mm, (99.06, 50.8));
+}
+
+/// `ReplaceWireWithLabel` persisted to the sidecar must survive a *later*
+/// structural op — the regression the `forced_net_labels` field exists for.
+/// The re-application mechanism itself is covered by unit tests in
+/// `synth-layout::sidecar`; here we pin the MCP persistence contract.
+#[test]
+fn test_mcp_persisted_forced_label_is_recorded_and_reloads() {
+    let dir = tempfile::tempdir().unwrap();
+    let sidecar = dir.path().join("d.synth.layout.toml");
+
+    let req = json!({
+        "jsonrpc": "2.0",
+        "id": 71,
+        "method": "tools/call",
+        "params": {
+            "name": "synth_mutate_layout",
+            "arguments": {
+                "source": LED_INDICATOR_SOURCE,
+                "file_path": sidecar.with_file_name("d.synth").to_str().unwrap(),
+                "persist": true,
+                "layout_file_path": sidecar.to_str().unwrap(),
+                "op": { "kind": "replace_wire_with_label", "net": 0 }
+            }
+        }
+    });
+    let resp = handle_jsonrpc_request(req, None);
+    assert!(
+        resp["result"].is_object(),
+        "op failed: {}",
+        resp["error"]["message"]
+    );
+    let payload: serde_json::Value =
+        serde_json::from_str(resp["result"]["content"][0]["text"].as_str().unwrap()).unwrap();
+    assert_eq!(payload["persisted"]["forced_net_labels"], json!(["net_0"]));
+
+    let written = std::fs::read_to_string(&sidecar).unwrap();
+    assert!(
+        written.contains("forced_net_labels") && written.contains("net_0"),
+        "forced label not persisted: {written}"
+    );
+
+    // A reload must apply the sidecar without error and leave the design
+    // otherwise intact.
+    let board = compile_led_board();
+    let lay = synth_layout::layout_with_sidecar(&board, Some(sidecar.as_path()));
+    assert_eq!(
+        lay.components.len(),
+        3,
+        "reload must still place every part"
+    );
+}
+
+/// Lower `LED_INDICATOR_SOURCE` through the same registry the MCP tools use.
+fn compile_led_board() -> synth_ir::Board {
+    let parse = synth_parser::parse(LED_INDICATOR_SOURCE, "led_indicator.synth".to_string());
+    let ast = parse.ast.expect("led source must parse");
+    let registry = synth_registry::load_dir(std::path::Path::new(env!("CARGO_MANIFEST_DIR")))
+        .or_else(|_| synth_registry::load_dir(std::path::Path::new("registry/parts")))
+        .expect("registry must load");
+    let lowered = synth_ir::lower(&ast, &registry, "led_indicator.synth");
+    lowered.board.expect("led source must lower")
+}

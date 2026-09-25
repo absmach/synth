@@ -383,12 +383,30 @@ guessing.
 | `synth dump-ast` / `dump-ir`  | inspect the AST / IR                                                                                              |
 | `synth export-kicad <file>`   | run auto-layout + export the full KiCad project (§3)                                                              |
 | `synth fix <file>`            | apply highest-confidence suggested patches (incl. auto-inserted decoupling)                                       |
-| `synth layout <file>`         | print the auto-layout JSON (placements, wires, labels, flags)                                                     |
+| `synth layout <file>`         | print the auto-layout JSON, honouring `<design>.synth.layout.toml` (placements, wires, labels, flags)             |
 | `synth place` / `synth route` | PCB placement / routing stages                                                                                    |
 | `synth drc <file>`            | design-rule check                                                                                                 |
 | `synth schema <kind>`         | emit a JSON schema for a protocol artifact                                                                        |
 | `synth preview <file>`        | live browser viewer (§5)                                                                                          |
 | `synth mcp`                   | stdio/SSE MCP server exposing `synth_validate`, `synth_apply_patch`, `synth_preview_schematic`, `synth_export`, … |
+
+### 6.1 Agent visual-feedback loop (MCP)
+
+The MCP server exposes the closed loop an agent runs to make a schematic
+*readable*, not just electrically correct. See
+[`schematic-visual-loop.md`](schematic-visual-loop.md) for the full
+workflow; the tools are:
+
+| Tool                       | Purpose                                                                                                 |
+| -------------------------- | ------------------------------------------------------------------------------------------------------- |
+| `synth_render_schematic`   | Export the sheet, plot it with `kicad-cli sch export svg`, rasterize with the pinned renderer, and return each sheet as an MCP **image** content block so the model can look at it |
+| `synth_review_schematic`   | One-pass packet: diagnostics + readability rules + layout summary + render (+ optional baseline diff)    |
+| `synth_schematic_baseline` | `set` / `compare` / `clear` a stored visual baseline (content-pixel drift, bounding box)                 |
+| `synth_mutate_layout`      | Apply one structured layout op; `persist=true` writes it through to the sidecar                          |
+
+The gate order for a handoff is: `synth_validate` (zero blocking) →
+placement review → **render inspection** → `synth_export` →
+`kicad-cli sch erc` (zero errors).
 
 ---
 
@@ -398,6 +416,9 @@ guessing.
 | -------------------------------------------------------- | ------------------------------------------------------------------------------------------- |
 | Layout engine, clusters, routing, DRC                    | `crates/synth-layout` (`lib.rs`, `patterns/`, `route/`, `ops.rs`, `score.rs`, `sidecar.rs`) |
 | KiCad .kicad_sch / .kicad_sym / export                   | `crates/synth-kicad` (`schematic.rs`, `symbol_lib.rs`, `export.rs`, `sexp.rs`)              |
+| Schematic-only export + `kicad-cli sch export svg`       | `crates/synth-kicad` (`export::export_schematic_only`, `sch_svg.rs`)                        |
+| Deterministic SVG rasterization + pixel diff             | `crates/synth-render` (`svg_to_png`, `diff_pngs`, `RENDERER_ID`)                            |
+| Render / baseline / review MCP tools                     | `crates/synth-mcp` (`tools.rs`, `server.rs` image-content promotion)                        |
 | Pin reconciliation & PWR_FLAG                            | `crates/synth-kicad/src/pin_reconcile.rs`                                                   |
 | Pin functions (alternates)                               | `crates/synth-kicad/src/alternates.rs`                                                      |
 | Multi-unit symbols                                       | `crates/synth-layout/src/kicad_lib_loader.rs` (`symbol_units`), `symbol_lib.rs`, `schematic.rs` |

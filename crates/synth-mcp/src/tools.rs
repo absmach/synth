@@ -161,7 +161,7 @@ pub fn list_tools() -> Vec<McpToolInfo> {
         },
         McpToolInfo {
             name: "synth_mutate_layout".into(),
-            description: "Apply one structured edit to a SynthSpec design's auto-generated schematic layout — move or rotate a component, group several components into a tidy column beside an anchor, force a net to render as a label instead of a wire, or re-route a net. Never changes connectivity, only visual placement. Returns the updated layout as JSON, or a structured error if the op references an unknown component/net id.".into(),
+            description: "Apply one structured edit to a SynthSpec design's auto-generated schematic layout — move or rotate a component, group several components into a tidy column beside an anchor, force a net to render as a label instead of a wire, or re-route a net. Never changes connectivity, only visual placement. Returns the updated layout as JSON, or a structured error if the op references an unknown component/net id. Set persist=true (or pass layout_file_path) to write the effect through to the <design>.synth.layout.toml sidecar so it survives a recompile and is honoured by rendering and export.".into(),
             input_schema: serde_json::json!({
                 "type": "object",
                 "properties": {
@@ -169,6 +169,8 @@ pub fn list_tools() -> Vec<McpToolInfo> {
                     "file_path": { "type": "string", "description": "Path to source file" },
                     "registry_path": { "type": "string", "description": "Optional custom component registry path" },
                     "workspace_root": { "type": "string", "description": "Optional workspace root path for auto-resolving registry" },
+                    "layout_file_path": { "type": "string", "description": "Sidecar TOML to persist into (implies persist=true)" },
+                    "persist": { "type": "boolean", "description": "Write the op's effect through to the sidecar (default false unless layout_file_path is given)" },
                     "op": {
                         "type": "object",
                         "description": "Layout edit operation: move_component, rotate_component, group_components, set_net_style, or reroute_net"
@@ -190,6 +192,58 @@ pub fn list_tools() -> Vec<McpToolInfo> {
                     "layout_file_path": { "type": "string", "description": "Optional agent or human placement sidecar; exact component positions and rotations are applied to routing and export" },
                     "allow_incomplete": { "type": "boolean", "description": "Export a clearly labelled draft even when routing is incomplete or DRC has violations. Defaults to false; never use this output for fabrication." },
                     "routing_order": { "type": "array", "items": { "type": "string" }, "description": "Optional net order from synth_route routing_feedback; preserves the ordered recovery route during export." },
+                    "registry_path": { "type": "string", "description": "Optional custom component registry path" },
+                    "workspace_root": { "type": "string", "description": "Optional workspace root path for auto-resolving registry" }
+                }
+            }),
+        },
+        McpToolInfo {
+            name: "synth_render_schematic".into(),
+            description: "Render the generated schematic to PNG so you can inspect your own output. Compiles the design, applies the layout sidecar, exports the sheet with synth_kicad::export_schematic_only, plots it with `kicad-cli sch export svg`, and rasterizes with the pinned deterministic renderer. Returns per-sheet pixel dimensions and file paths; with inline=true (default) each sheet's PNG is returned as an MCP image content block so the model can actually look at the sheet. Use set_visual_baseline/compare via synth_schematic_baseline to detect drift, and fix what connectivity checks cannot: overlapping labels, confusing wire crossings, components outside their group box, content past the page edge.".into(),
+            input_schema: serde_json::json!({
+                "type": "object",
+                "properties": {
+                    "source": { "type": "string", "description": "SynthSpec source code string" },
+                    "file_path": { "type": "string", "description": "Path to source file on disk (also determines the default PNG output location)" },
+                    "layout_file_path": { "type": "string", "description": "Optional layout sidecar whose placement overrides are applied before rendering" },
+                    "width_px": { "type": "integer", "description": "Rendered image width in pixels (default 1600, range 1..=8192)" },
+                    "inline": { "type": "boolean", "description": "Return each sheet as an MCP image content block (default true)" },
+                    "out_dir": { "type": "string", "description": "Optional directory to write the PNG files into (default: alongside file_path)" },
+                    "registry_path": { "type": "string", "description": "Optional custom component registry path" },
+                    "workspace_root": { "type": "string", "description": "Optional workspace root path for auto-resolving registry" }
+                }
+            }),
+        },
+        McpToolInfo {
+            name: "synth_schematic_baseline".into(),
+            description: "Store or compare a visual baseline for the generated schematic. action=set captures the current render (PNG + source/layout hash + renderer identity) next to the design; action=compare re-renders and reports PASS or DRIFT against the stored baseline with the changed region's bounding box; action=clear removes it. Compares drift against the drawing (content pixels), not the blank page, so a small real change is not diluted to nothing. 'no_baseline' is a normal result, not an error.".into(),
+            input_schema: serde_json::json!({
+                "type": "object",
+                "properties": {
+                    "action": { "type": "string", "enum": ["set", "compare", "clear"], "description": "Baseline operation (default 'set')" },
+                    "source": { "type": "string", "description": "SynthSpec source code string" },
+                    "file_path": { "type": "string", "description": "Path to source file on disk (baseline is stored beside it)" },
+                    "layout_file_path": { "type": "string", "description": "Optional layout sidecar applied before rendering" },
+                    "baseline_path": { "type": "string", "description": "Optional explicit baseline PNG path (required when file_path is absent)" },
+                    "width_px": { "type": "integer", "description": "Rendered image width in pixels (default 1600, range 1..=8192)" },
+                    "inline_diff": { "type": "boolean", "description": "For compare: also return the current render as an MCP image content block" },
+                    "registry_path": { "type": "string", "description": "Optional custom component registry path" },
+                    "workspace_root": { "type": "string", "description": "Optional workspace root path for auto-resolving registry" }
+                }
+            }),
+        },
+        McpToolInfo {
+            name: "synth_review_schematic".into(),
+            description: "One-pass schematic review packet: compile, run ERC and the readability rules (E-SYNTH-SCHEM-*), render the sheet, summarize the layout (sheet size, component/wire/label/flag counts, group boxes), and optionally compare against the stored visual baseline. Returns diagnostics with counts plus the render so the model can evaluate grouping, label overlap, signal flow and page fit in a single call instead of N round-trips. Feed the diagnostics back through synth_fix or edit the .synth source, then call this again.".into(),
+            input_schema: serde_json::json!({
+                "type": "object",
+                "properties": {
+                    "source": { "type": "string", "description": "SynthSpec source code string" },
+                    "file_path": { "type": "string", "description": "Path to source file on disk" },
+                    "layout_file_path": { "type": "string", "description": "Optional layout sidecar applied before review" },
+                    "width_px": { "type": "integer", "description": "Rendered image width in pixels (default 1600, range 1..=8192)" },
+                    "inline": { "type": "boolean", "description": "Return each sheet as an MCP image content block (default true)" },
+                    "compare_baseline": { "type": "boolean", "description": "Also diff against the stored visual baseline if one exists (default false)" },
                     "registry_path": { "type": "string", "description": "Optional custom component registry path" },
                     "workspace_root": { "type": "string", "description": "Optional workspace root path for auto-resolving registry" }
                 }
@@ -466,6 +520,9 @@ pub fn call_tool(
         "synth_route" => execute_route(args, default_registry),
         "synth_preview_schematic" => execute_preview_schematic(args, default_registry),
         "synth_mutate_layout" => execute_mutate_layout(args, default_registry),
+        "synth_render_schematic" => execute_render_schematic(args, default_registry),
+        "synth_schematic_baseline" => execute_schematic_baseline(args, default_registry),
+        "synth_review_schematic" => execute_review_schematic(args, default_registry),
         "synth_export" => execute_export(args, default_registry),
         "synth_predict_patch_consequence" => {
             execute_predict_patch_consequence(args, default_registry)
@@ -1439,6 +1496,10 @@ fn execute_preview_schematic(
 /// and return the mutated layout as JSON. See
 /// `synth_layout::ops::LayoutOp` for the op contract and
 /// `crates/synth-layout/tests/ops.rs` for the exact wire shape.
+///
+/// With `persist=true` (or an explicit `layout_file_path`) the op's effect
+/// is written through to the `<design>.synth.layout.toml` sidecar so it
+/// survives a recompile and is honoured by rendering and export.
 fn execute_mutate_layout(args: &Value, default_registry: Option<&Path>) -> Result<Value, String> {
     let op: synth_layout::ops::LayoutOp =
         serde_json::from_value(args["op"].clone()).map_err(|e| format!("Invalid 'op': {e}"))?;
@@ -1460,10 +1521,595 @@ fn execute_mutate_layout(args: &Value, default_registry: Option<&Path>) -> Resul
         .ok_or("Could not generate layout: board lowering failed")?;
 
     let mut layout = synth_layout::layout(&board);
-    synth_layout::ops::apply_op(&mut layout, &board, op)
+    synth_layout::ops::apply_op(&mut layout, &board, op.clone())
         .map_err(|e| format!("Could not apply layout op: {e}"))?;
 
-    serde_json::to_value(&layout).map_err(|e| e.to_string())
+    let persisted = persist_layout_op(args, &board, &layout, &op, file_name)?;
+
+    let mut response = serde_json::to_value(&layout).map_err(|e| e.to_string())?;
+    response["persisted"] = persisted.unwrap_or(Value::Null);
+    Ok(response)
+}
+
+/// Write a layout op's *effect* through to the sidecar. Returns `None` when
+/// persistence was not requested.
+///
+/// Component ops persist the resulting absolute x/y/rotation; a
+/// `ReplaceWireWithLabel` op persists the net name. `RerouteNet` has no
+/// persistent form (routing is derived), so it persists nothing.
+fn persist_layout_op(
+    args: &Value,
+    board: &synth_ir::Board,
+    layout: &synth_layout::Layout,
+    op: &synth_layout::ops::LayoutOp,
+    file_name: &str,
+) -> Result<Option<Value>, String> {
+    use synth_layout::ops::LayoutOp;
+    use synth_layout::sidecar::{
+        ForcedNetLabel, OverridePriority, OverrideSource, SidecarLayout, SidecarPlacement,
+    };
+
+    let explicit = args.get("layout_file_path").and_then(Value::as_str);
+    let persist = args
+        .get("persist")
+        .and_then(Value::as_bool)
+        .unwrap_or(false)
+        || explicit.is_some();
+    if !persist {
+        return Ok(None);
+    }
+
+    let path = explicit.map_or_else(
+        || PathBuf::from(format!("{file_name}.layout.toml")),
+        PathBuf::from,
+    );
+    let mut sidecar = if path.exists() {
+        SidecarLayout::load_from_file(&path).unwrap_or_default()
+    } else {
+        SidecarLayout::default()
+    };
+
+    let ids: Vec<synth_ir::ComponentId> = match op {
+        LayoutOp::MoveComponent { id, .. } | LayoutOp::Rotate { id, .. } => vec![*id],
+        LayoutOp::GroupBlock { ids, anchor } => {
+            let mut v = ids.clone();
+            if !v.contains(anchor) {
+                v.push(*anchor);
+            }
+            v
+        }
+        _ => Vec::new(),
+    };
+
+    let now = chrono::Utc::now().to_rfc3339();
+    let mut updated_components: Vec<String> = Vec::new();
+    for id in ids {
+        let Some(comp) = board.component(id) else {
+            continue;
+        };
+        let Some(placement) = layout.components.iter().find(|p| p.id == id) else {
+            continue;
+        };
+        sidecar.merge_override(
+            comp.refdes.clone(),
+            SidecarPlacement {
+                x: placement.center_mm.0,
+                y: placement.center_mm.1,
+                rotation: rotation_degrees(placement.rotation),
+                sheet: comp.sheet.clone(),
+                source: OverrideSource::Agent,
+                priority: OverridePriority::Soft,
+                timestamp: Some(now.clone()),
+                relative_to: None,
+                dx: 0.0,
+                dy: 0.0,
+            },
+        );
+        updated_components.push(comp.refdes.clone());
+    }
+
+    let mut forced_net_labels: Vec<String> = Vec::new();
+    if let LayoutOp::ReplaceWireWithLabel { net } = op {
+        if let Some(n) = board.net(*net) {
+            if !sidecar.forced_net_labels.iter().any(|f| f.net == n.name) {
+                sidecar.forced_net_labels.push(ForcedNetLabel {
+                    net: n.name.clone(),
+                    source: OverrideSource::Agent,
+                });
+            }
+            forced_net_labels.push(n.name.clone());
+        }
+    }
+
+    sidecar
+        .save_to_file(&path)
+        .map_err(|e| format!("Failed to save sidecar TOML: {e}"))?;
+
+    Ok(Some(serde_json::json!({
+        "saved_path": path.display().to_string(),
+        "updated_components": updated_components,
+        "forced_net_labels": forced_net_labels,
+    })))
+}
+
+fn rotation_degrees(rotation: synth_layout::Rotation) -> u32 {
+    match rotation {
+        synth_layout::Rotation::Zero => 0,
+        synth_layout::Rotation::Ninety => 90,
+        synth_layout::Rotation::OneEighty => 180,
+        synth_layout::Rotation::TwoSeventy => 270,
+    }
+}
+
+/// A lowered design plus every non-ERC diagnostic produced on the way.
+struct CompiledDesign {
+    board: synth_ir::Board,
+    file_name: String,
+    diagnostics: Vec<synth_diagnostics::Diagnostic>,
+}
+
+/// Shared compile step for the schematic review tools: parse, resolve
+/// imports, lower, and collect diagnostics. Unlike `execute_export`, this
+/// does *not* reject on blocking diagnostics — the caller decides, so a
+/// render can still explain what failed.
+fn compile_design(args: &Value, default_registry: Option<&Path>) -> Result<CompiledDesign, String> {
+    let source = get_source_from_args(args)?;
+    let file_name = args["file_path"]
+        .as_str()
+        .unwrap_or("board.synth")
+        .to_string();
+    let parse = synth_parser::parse(&source, file_name.clone());
+    let mut diagnostics = parse.diagnostics;
+    let ast = parse.ast.ok_or("Parse failed; no AST to lay out")?;
+
+    let import_root = Path::new(&file_name)
+        .parent()
+        .map_or_else(|| PathBuf::from("."), Path::to_path_buf);
+    let loader = synth_ir::FsImportLoader { root: import_root };
+    let resolved = synth_ir::resolve_imports(&ast, &loader, &file_name);
+    diagnostics.extend(resolved.diagnostics.clone());
+
+    let registry = load_registry_tiered(args, default_registry)
+        .map_err(|e| format!("Could not load registry: {e}"))?;
+    let lowered = synth_ir::lower(&resolved.program, &registry, &file_name);
+    diagnostics.extend(lowered.diagnostics);
+
+    let board = lowered.board.ok_or("Board lowering failed")?;
+    Ok(CompiledDesign {
+        board,
+        file_name,
+        diagnostics,
+    })
+}
+
+/// Resolve the layout sidecar from an explicit path or the
+/// `<file_name>.layout.toml` convention.
+fn resolve_sidecar(args: &Value, file_name: &str) -> Option<PathBuf> {
+    if let Some(p) = args.get("layout_file_path").and_then(Value::as_str) {
+        return Some(PathBuf::from(p));
+    }
+    let candidate = PathBuf::from(format!("{file_name}.layout.toml"));
+    candidate.exists().then_some(candidate)
+}
+
+/// Validate the render width, defaulting to 1600 px.
+fn parse_width_px(args: &Value) -> Result<u32, String> {
+    match args.get("width_px") {
+        None => Ok(1600),
+        Some(v) => v
+            .as_u64()
+            .filter(|w| (1..=8192).contains(w))
+            .map(|w| w as u32)
+            .ok_or_else(|| "width_px must be an integer in 1..=8192".to_string()),
+    }
+}
+
+/// Where PNGs are written. `out_dir` wins; otherwise a real `file_path`
+/// puts them beside the design. A source-only call writes no files and
+/// relies on the inline image.
+fn render_out_dir(args: &Value, file_name: &str) -> Option<PathBuf> {
+    if let Some(d) = args.get("out_dir").and_then(Value::as_str) {
+        return Some(PathBuf::from(d));
+    }
+    args.get("file_path").and_then(Value::as_str)?;
+    let parent = Path::new(file_name)
+        .parent()
+        .filter(|p| !p.as_os_str().is_empty());
+    Some(parent.unwrap_or_else(|| Path::new(".")).to_path_buf())
+}
+
+/// One rasterized schematic sheet.
+struct RenderedSheet {
+    name: String,
+    width_px: u32,
+    height_px: u32,
+    png: Vec<u8>,
+    png_path: Option<PathBuf>,
+    visible_text: usize,
+}
+
+/// Export the schematic, plot it with `kicad-cli`, and rasterize every
+/// sheet with the pinned deterministic renderer.
+fn render_schematic(
+    board: &synth_ir::Board,
+    sidecar: Option<&Path>,
+    width_px: u32,
+    out_dir: Option<&Path>,
+) -> Result<Vec<RenderedSheet>, String> {
+    let export_dir = tempfile::tempdir().map_err(|e| format!("Could not create temp dir: {e}"))?;
+    let svg_dir = tempfile::tempdir().map_err(|e| format!("Could not create temp dir: {e}"))?;
+
+    let export = synth_kicad::export_schematic_only(board, export_dir.path(), sidecar)
+        .map_err(|e| format!("Schematic export failed: {e}"))?;
+    let svgs = synth_kicad::run_kicad_svg_export(&export.schematic_path, svg_dir.path())
+        .map_err(|e| format!("{e}"))?;
+
+    let mut sheets = Vec::with_capacity(svgs.len());
+    for svg_path in svgs {
+        let svg_bytes =
+            std::fs::read(&svg_path).map_err(|e| format!("Could not read plotted SVG: {e}"))?;
+        let rendered = synth_render::svg_to_png(&svg_bytes, width_px)
+            .map_err(|e| format!("Rasterization failed: {e}"))?;
+        let name = svg_path
+            .file_stem()
+            .map_or_else(|| "root".to_string(), |s| s.to_string_lossy().into_owned());
+        let png_path = out_dir.and_then(|dir| {
+            std::fs::create_dir_all(dir).ok()?;
+            let p = dir.join(format!("{name}.schematic.png"));
+            std::fs::write(&p, &rendered.png).ok()?;
+            Some(p)
+        });
+        sheets.push(RenderedSheet {
+            name,
+            width_px: rendered.width_px,
+            height_px: rendered.height_px,
+            png: rendered.png,
+            png_path,
+            visible_text: synth_render::visible_text_count(&svg_bytes),
+        });
+    }
+    Ok(sheets)
+}
+
+/// Serialize rendered sheets. With `inline`, each carries its PNG as base64;
+/// `server.rs` promotes those into real MCP image content blocks.
+fn sheets_to_json(sheets: &[RenderedSheet], inline: bool) -> Vec<Value> {
+    use base64::Engine as _;
+    sheets
+        .iter()
+        .map(|s| {
+            let mut v = serde_json::json!({
+                "name": s.name,
+                "width_px": s.width_px,
+                "height_px": s.height_px,
+                "png_bytes": s.png.len(),
+                "png_path": s.png_path.as_ref().map(|p| p.display().to_string()),
+            });
+            if inline {
+                v["png_base64"] =
+                    serde_json::json!(base64::engine::general_purpose::STANDARD.encode(&s.png));
+            }
+            v
+        })
+        .collect()
+}
+
+fn render_warnings(sheets: &[RenderedSheet]) -> Vec<String> {
+    let omitted: usize = sheets.iter().map(|s| s.visible_text).sum();
+    if omitted == 0 {
+        Vec::new()
+    } else {
+        vec![format!(
+            "{omitted} visible <text> element(s) were omitted: the renderer consults no fonts, \
+             and KiCad draws schematic text as stroke-font paths, so this usually means a \
+             non-KiCad element."
+        )]
+    }
+}
+
+fn is_blocking(d: &synth_diagnostics::Diagnostic) -> bool {
+    d.severity.is_blocking()
+}
+
+fn execute_render_schematic(
+    args: &Value,
+    default_registry: Option<&Path>,
+) -> Result<Value, String> {
+    let compiled = compile_design(args, default_registry)?;
+    if let Some(d) = compiled.diagnostics.iter().find(|d| is_blocking(d)) {
+        return Err(format!(
+            "Cannot render: blocking diagnostic {} — {}",
+            d.code,
+            d.message.as_deref().unwrap_or("(no message)")
+        ));
+    }
+
+    let width_px = parse_width_px(args)?;
+    let sidecar = resolve_sidecar(args, &compiled.file_name);
+    let out_dir = render_out_dir(args, &compiled.file_name);
+    let sheets = render_schematic(
+        &compiled.board,
+        sidecar.as_deref(),
+        width_px,
+        out_dir.as_deref(),
+    )?;
+    let inline = args.get("inline").and_then(Value::as_bool).unwrap_or(true);
+
+    Ok(serde_json::json!({
+        "status": "ok",
+        "renderer": synth_render::RENDERER_ID,
+        "width_px": width_px,
+        "sheets": sheets_to_json(&sheets, inline),
+        "warnings": render_warnings(&sheets),
+    }))
+}
+
+/// Baseline PNG + sidecar-JSON paths: an explicit `baseline_path`, else
+/// `<design>.schematic-baseline.{png,json}` beside the design.
+fn baseline_paths(args: &Value, file_name: &str) -> Result<(PathBuf, PathBuf), String> {
+    if let Some(p) = args.get("baseline_path").and_then(Value::as_str) {
+        let png = PathBuf::from(p);
+        let json = png.with_extension("json");
+        return Ok((png, json));
+    }
+    if args.get("file_path").and_then(Value::as_str).is_none() {
+        return Err(
+            "Provide 'baseline_path' (or 'file_path') so the baseline has a location".into(),
+        );
+    }
+    let dir = Path::new(file_name)
+        .parent()
+        .filter(|p| !p.as_os_str().is_empty())
+        .map_or_else(|| PathBuf::from("."), Path::to_path_buf);
+    let stem = Path::new(file_name)
+        .file_stem()
+        .map_or_else(|| "board".to_string(), |s| s.to_string_lossy().into_owned());
+    Ok((
+        dir.join(format!("{stem}.schematic-baseline.png")),
+        dir.join(format!("{stem}.schematic-baseline.json")),
+    ))
+}
+
+/// Drift above this percentage of changed *content* pixels is reported as
+/// DRIFT. Comparing against content (the drawing) rather than the page keeps
+/// a small real change from being diluted by blank paper.
+const BASELINE_DRIFT_PCT: f64 = 2.0;
+
+fn layout_fingerprint(board: &synth_ir::Board, sidecar: Option<&Path>) -> String {
+    use sha2::Digest as _;
+    let layout = synth_layout::layout_with_sidecar(board, sidecar);
+    let bytes = serde_json::to_vec(&layout).unwrap_or_default();
+    format!("{:x}", sha2::Sha256::digest(&bytes))
+}
+
+fn source_fingerprint(source: &str) -> String {
+    use sha2::Digest as _;
+    format!("{:x}", sha2::Sha256::digest(source.as_bytes()))
+}
+
+/// Compare the first rendered sheet against a stored baseline. Returns a
+/// structured value in every case; "no_baseline" is a normal result.
+fn compare_baseline(
+    sheets: &[RenderedSheet],
+    png_path: &Path,
+    json_path: &Path,
+) -> Result<Value, String> {
+    if !png_path.exists() || !json_path.exists() {
+        return Ok(serde_json::json!({
+            "status": "no_baseline",
+            "detail": "No stored baseline for this design; call synth_schematic_baseline with action=set first.",
+        }));
+    }
+    let Some(current) = sheets.first() else {
+        return Err("No rendered sheet to compare".into());
+    };
+    let before = std::fs::read(png_path)
+        .map_err(|e| format!("Could not read baseline PNG '{}': {e}", png_path.display()))?;
+    let meta: Value = std::fs::read_to_string(json_path)
+        .ok()
+        .and_then(|t| serde_json::from_str(&t).ok())
+        .unwrap_or(Value::Null);
+
+    let diff = synth_render::diff_pngs(&before, &current.png)
+        .map_err(|e| format!("Baseline diff failed: {e}"))?;
+    let drift = diff.changed_pct_of_content > BASELINE_DRIFT_PCT;
+
+    let baseline_renderer = meta["renderer"].as_str().unwrap_or("");
+    let renderer_matches =
+        baseline_renderer.is_empty() || baseline_renderer == synth_render::RENDERER_ID;
+
+    Ok(serde_json::json!({
+        "status": if drift { "drift" } else { "pass" },
+        "changed_pct": diff.changed_pct,
+        "changed_pct_of_content": diff.changed_pct_of_content,
+        "changed_pixels": diff.changed_pixels,
+        "content_pixels": diff.content_pixels,
+        "changed_bbox": diff.changed_bbox,
+        "threshold_pct_of_content": BASELINE_DRIFT_PCT,
+        "baseline_png": png_path.display().to_string(),
+        "baseline_renderer": baseline_renderer,
+        "current_renderer": synth_render::RENDERER_ID,
+        "renderer_matches": renderer_matches,
+        "baseline_layout_fingerprint": meta["layout_fingerprint"].as_str(),
+        "baseline_captured_at": meta["captured_at"].as_str(),
+    }))
+}
+
+fn execute_schematic_baseline(
+    args: &Value,
+    default_registry: Option<&Path>,
+) -> Result<Value, String> {
+    let action = args.get("action").and_then(Value::as_str).unwrap_or("set");
+    let compiled = compile_design(args, default_registry)?;
+    let (png_path, json_path) = baseline_paths(args, &compiled.file_name)?;
+
+    if action == "clear" {
+        let removed_png = std::fs::remove_file(&png_path).is_ok();
+        let removed_json = std::fs::remove_file(&json_path).is_ok();
+        return Ok(serde_json::json!({
+            "status": "cleared",
+            "removed_png": removed_png,
+            "removed_json": removed_json,
+        }));
+    }
+
+    if let Some(d) = compiled.diagnostics.iter().find(|d| is_blocking(d)) {
+        return Err(format!(
+            "Cannot baseline: blocking diagnostic {} — {}",
+            d.code,
+            d.message.as_deref().unwrap_or("(no message)")
+        ));
+    }
+
+    let width_px = parse_width_px(args)?;
+    let sidecar = resolve_sidecar(args, &compiled.file_name);
+    let sheets = render_schematic(&compiled.board, sidecar.as_deref(), width_px, None)?;
+    let source = get_source_from_args(args)?;
+
+    match action {
+        "set" => {
+            let Some(first) = sheets.first() else {
+                return Err("No rendered sheet to store".into());
+            };
+            if let Some(parent) = png_path.parent() {
+                std::fs::create_dir_all(parent)
+                    .map_err(|e| format!("Could not create baseline dir: {e}"))?;
+            }
+            std::fs::write(&png_path, &first.png)
+                .map_err(|e| format!("Could not write baseline PNG: {e}"))?;
+            let meta = serde_json::json!({
+                "schema_version": 1,
+                "renderer": synth_render::RENDERER_ID,
+                "width_px": first.width_px,
+                "height_px": first.height_px,
+                "sheet_name": first.name,
+                "sheet_count": sheets.len(),
+                "layout_fingerprint": layout_fingerprint(&compiled.board, sidecar.as_deref()),
+                "source_fingerprint": source_fingerprint(&source),
+                "captured_at": chrono::Utc::now().to_rfc3339(),
+            });
+            std::fs::write(
+                &json_path,
+                format!(
+                    "{}\n",
+                    serde_json::to_string_pretty(&meta).unwrap_or_default()
+                ),
+            )
+            .map_err(|e| format!("Could not write baseline metadata: {e}"))?;
+            let mut response = serde_json::json!({
+                "status": "stored",
+                "baseline_png": png_path.display().to_string(),
+                "baseline_meta": json_path.display().to_string(),
+                "width_px": first.width_px,
+                "height_px": first.height_px,
+                "sheet_count": sheets.len(),
+                "warnings": render_warnings(&sheets),
+            });
+            if sheets.len() > 1 {
+                response["note"] = serde_json::json!(
+                    "Baseline stored for the first sheet only; multi-sheet baselines are not tracked per sheet yet."
+                );
+            }
+            Ok(response)
+        }
+        "compare" => {
+            let mut result = compare_baseline(&sheets, &png_path, &json_path)?;
+            if args
+                .get("inline_diff")
+                .and_then(Value::as_bool)
+                .unwrap_or(false)
+            {
+                if let Some(first) = sheets.first() {
+                    use base64::Engine as _;
+                    result["png_base64"] = serde_json::json!(
+                        base64::engine::general_purpose::STANDARD.encode(&first.png)
+                    );
+                }
+            }
+            Ok(result)
+        }
+        other => Err(format!(
+            "Unknown baseline action '{other}'; expected 'set', 'compare', or 'clear'"
+        )),
+    }
+}
+
+fn execute_review_schematic(
+    args: &Value,
+    default_registry: Option<&Path>,
+) -> Result<Value, String> {
+    let compiled = compile_design(args, default_registry)?;
+    let file_name = compiled.file_name.clone();
+
+    let mut diagnostics = compiled.diagnostics;
+    diagnostics.extend(synth_validate::run_erc(&compiled.board, &file_name));
+
+    let layout = synth_layout::layout_with_sidecar(
+        &compiled.board,
+        resolve_sidecar(args, &file_name).as_deref(),
+    );
+    let sheets_layout = synth_layout::sheets::layout_sheets(&compiled.board, layout.clone());
+    let mut schem = synth_kicad::check_schem_erc_sheets(&compiled.board, &sheets_layout);
+    synth_kicad::attach_schem_erc_locations(&mut schem, &compiled.board, &file_name);
+    diagnostics.extend(schem);
+
+    let error_count = diagnostics.iter().filter(|d| is_blocking(d)).count();
+    let warning_count = diagnostics
+        .iter()
+        .filter(|d| d.severity == synth_diagnostics::Severity::Warning)
+        .count();
+    let readability: Vec<&synth_diagnostics::Diagnostic> = diagnostics
+        .iter()
+        .filter(|d| d.code.starts_with("E-SYNTH-SCHEM-"))
+        .collect();
+
+    let width_px = parse_width_px(args)?;
+    let sidecar = resolve_sidecar(args, &file_name);
+    let out_dir = render_out_dir(args, &file_name);
+    let inline = args.get("inline").and_then(Value::as_bool).unwrap_or(true);
+    let sheets = render_schematic(
+        &compiled.board,
+        sidecar.as_deref(),
+        width_px,
+        out_dir.as_deref(),
+    )?;
+
+    let baseline = if args
+        .get("compare_baseline")
+        .and_then(Value::as_bool)
+        .unwrap_or(false)
+    {
+        let (png_path, json_path) = baseline_paths(args, &file_name)?;
+        Some(compare_baseline(&sheets, &png_path, &json_path)?)
+    } else {
+        None
+    };
+
+    Ok(serde_json::json!({
+        "status": if error_count == 0 { "ok" } else { "error" },
+        "is_clean": error_count == 0,
+        "error_count": error_count,
+        "warning_count": warning_count,
+        "readability_findings": readability,
+        "diagnostics": diagnostics,
+        "layout": {
+            "sheet_size": format!("{:?}", layout.sheet_size),
+            "sheet_dims_mm": layout.sheet_size.dims_mm(),
+            "components": layout.components.len(),
+            "wires": layout.wires.len(),
+            "net_labels": layout.net_labels.len(),
+            "power_flags": layout.power_flags.len(),
+            "junctions": layout.junctions.len(),
+            "groups": layout.group_boxes.iter().map(|g| g.group.clone()).collect::<Vec<_>>(),
+        },
+        "render": {
+            "renderer": synth_render::RENDERER_ID,
+            "width_px": width_px,
+            "sheets": sheets_to_json(&sheets, inline),
+            "warnings": render_warnings(&sheets),
+        },
+        "baseline": baseline,
+    }))
 }
 
 fn execute_export(args: &Value, default_registry: Option<&Path>) -> Result<Value, String> {

@@ -328,6 +328,133 @@ pub fn export_with_sidecar_and_routing_order(
     })
 }
 
+/// Paths written by [`export_schematic_only`].
+#[derive(Debug, Clone)]
+pub struct SchematicExportResult {
+    pub out_dir: PathBuf,
+    pub project_path: PathBuf,
+    pub schematic_path: PathBuf,
+    pub library_path: PathBuf,
+    /// Number of schematic sheets written: 1 unless a large splittable board
+    /// took the §P26 multi-sheet path.
+    pub sheet_count: usize,
+}
+
+/// Write only the schematic-side artifacts — project, symbol library,
+/// `sym-lib-table`, and the `.kicad_sch` (or per-sheet files) — without
+/// placing, routing, or emitting the PCB.
+///
+/// This exists for the visual-feedback loop: `kicad-cli sch export svg` needs
+/// a real `.kicad_sch`, but a schematic review has no use for a routed board,
+/// and running the PCB placer/router on every render would make the loop
+/// needlessly slow. The output is byte-identical to the schematic-side files
+/// [`export_with_sidecar_and_routing_order`] writes for the same board; a
+/// test pins the two together.
+///
+/// # Errors
+/// Same I/O and placement-file errors as [`export`].
+pub fn export_schematic_only(
+    board: &Board,
+    out_dir: &Path,
+    sidecar: Option<&Path>,
+) -> Result<SchematicExportResult, ExportError> {
+    std::fs::create_dir_all(out_dir).map_err(|source| ExportError::CreateDir {
+        path: out_dir.to_path_buf(),
+        source,
+    })?;
+
+    let stem = sanitize_filename(&board.name);
+    let project_path = out_dir.join(format!("{stem}.kicad_pro"));
+    let schematic_path = out_dir.join(format!("{stem}.kicad_sch"));
+    let library_path = out_dir.join(format!("{stem}.kicad_sym"));
+
+    let global_layout = synth_layout::layout_with_sidecar(board, sidecar);
+    let sheets = synth_layout::sheets::layout_sheets(board, global_layout);
+    let project_namespace = uuid_v5::project_namespace(&board.name);
+
+    let mut sheet_entries = vec![vec![
+        uuid_v5::derive_entity_uuid(&project_namespace, "sheet", "root").to_string(),
+        String::new(),
+    ]];
+    if sheets.len() > 1 {
+        for sheet in &sheets {
+            if let Some(name) = sheet.name.as_deref() {
+                sheet_entries.push(vec![
+                    crate::multisheet::sheet_uuid(&project_namespace, name).to_string(),
+                    crate::multisheet::sheet_filename(&stem, name),
+                ]);
+            }
+        }
+    }
+    let variant_entries: Vec<serde_json::Value> = board
+        .variants
+        .iter()
+        .map(|v| {
+            let mut entry = json!({ "name": v.name });
+            if let Some(desc) = &v.description {
+                entry["description"] = json!(desc);
+            }
+            entry
+        })
+        .collect();
+    let net_settings = build_net_settings(board, sheets.iter().map(|s| &s.layout));
+    let project_doc = json!({
+        "board": {
+          "design_settings": {
+            "defaults": {
+              "min_clearance": 0.127,
+              "min_track_width": 0.127,
+            },
+            "rules": {
+              "min_clearance": 0.127,
+              "min_track_width": 0.127,
+            }
+          }
+        },
+        "boards": [],
+        "meta": {
+            "filename": format!("{stem}.kicad_pro"),
+            "version": 1,
+            "uuid": project_namespace.to_string(),
+        },
+        "net_settings": net_settings,
+        "schematic": {
+            "annotate_start_num": 0,
+            "drawing": {},
+            "variants": variant_entries,
+        },
+        "sheets": sheet_entries,
+    });
+    let project_text = serde_json::to_string_pretty(&project_doc)
+        .map_err(|source| ExportError::SerializeProject { source })?;
+    write_file(&project_path, &project_text)?;
+
+    let sym_table = format!(
+        "(sym_lib_table\n  (version 7)\n  (lib\n    (name \"synth\")\n    (uri \"${{KIPRJMOD}}/{stem}.kicad_sym\")\n    (type \"KiCad\")\n    (options \"\")\n    (descr \"Synth synthesized symbol library\")\n  )\n)\n"
+    );
+    write_file(&out_dir.join("sym-lib-table"), &sym_table)?;
+
+    let library_text = symbol_lib::build_library(board, &sheets[0].layout).to_string_pretty();
+    write_file(&library_path, &library_text)?;
+    let sheet_count = sheets.len();
+    if sheet_count == 1 {
+        let schematic_text =
+            schematic::build_schematic_from_layout(board, &project_namespace, &sheets[0].layout)
+                .to_string_pretty();
+        write_file(&schematic_path, &schematic_text)?;
+    } else {
+        crate::multisheet::export_sheets(board, out_dir, &stem, &project_namespace, sheets)?;
+    }
+
+    Ok(SchematicExportResult {
+        out_dir: out_dir.to_path_buf(),
+        project_path,
+        schematic_path,
+        library_path,
+        sheet_count,
+    })
+}
+
 pub(crate) fn write_file(path: &Path, contents: &str) -> Result<(), ExportError> {
     std::fs::write(path, contents).map_err(|source| ExportError::Write {
         path: path.to_path_buf(),

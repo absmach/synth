@@ -20,7 +20,52 @@ use crate::tools::{call_tool, list_tools};
 /// `docs/kicad-workflows.md` in four rules an agent must never
 /// violate, plus the gate order and a pointer to the full knowledge
 /// base.
-pub const SERVER_INSTRUCTIONS: &str = "Synth compiles .synth design sources into deterministic KiCad projects. Standing rules: (1) .synth sources are the only editable design files; generated .kicad_sch/.kicad_sym/.kicad_pro/.kicad_pcb and bom.csv are build artifacts — never hand-edit them, a re-export will silently destroy the edit. (2) Visual placement tuning goes through <design>.synth.layout.toml (or drag-and-drop in synth preview), never through schematic coordinates. Before routing, call synth_place_with_hints with run_routing=false and inspect placement_quality.visual_review; if requires_revision is true, revise connector edge placement, orientation, breakout corridors, component grouping, or board compactness and rerun the review. This is a structural visual gate, not a rendered-image inspection. (3) For difficult routing, inspect the unrouted net diagnostics and retry synth_route with routing_order listing the most constrained net names first; this is advisory and does not bypass DRC. (4) Part sourcing data (mpn/lcsc_pn) lives in registry part entries; the exporter stamps hidden MPN/LCSC fields onto every schematic instance — change parts at the source, never in BOM outputs. (5) A missing part is recoverable: search the registry, import or author a datasheet-backed Tier-2 part, confirm its pins and physical assets, then revalidate; never replace it with guessed pins or a different package silently. (6) Gate order before any handoff: synth_validate with zero blocking diagnostics, placement visual review, then synth_export, then 'kicad-cli sch erc' with zero errors. Export rejects unresolved compilation diagnostics; generated artifacts from failed attempts are not release evidence. Full review workflow, fabrication exports, Gerber review, panelization, and product-render guidance: docs/kicad-workflows.md.";
+pub const SERVER_INSTRUCTIONS: &str = "Synth compiles .synth design sources into deterministic KiCad projects. Standing rules: (1) .synth sources are the only editable design files; generated .kicad_sch/.kicad_sym/.kicad_pro/.kicad_pcb and bom.csv are build artifacts — never hand-edit them, a re-export will silently destroy the edit. (2) Visual placement tuning goes through <design>.synth.layout.toml (or drag-and-drop in synth preview), never through schematic coordinates. Before routing, call synth_place_with_hints with run_routing=false and inspect placement_quality.visual_review; if requires_revision is true, revise connector edge placement, orientation, breakout corridors, component grouping, or board compactness and rerun the review. This is a structural visual gate. (3) Schematic readability is reviewed on the rendered sheet, not inferred: call synth_render_schematic (or synth_review_schematic for a one-pass diagnostics+render packet) and actually look at the returned image. Fix what connectivity checks cannot — overlapping labels, confusing crossings, a component outside its group box, content past the page edge. Persist refinements with synth_mutate_layout persist=true (or synth_write_layout_override), never by editing schematic coordinates. Use synth_schematic_baseline to detect drift across revisions. (4) For difficult routing, inspect the unrouted net diagnostics and retry synth_route with routing_order listing the most constrained net names first; this is advisory and does not bypass DRC. (5) Part sourcing data (mpn/lcsc_pn) lives in registry part entries; the exporter stamps hidden MPN/LCSC fields onto every schematic instance — change parts at the source, never in BOM outputs. (6) A missing part is recoverable: search the registry, import or author a datasheet-backed Tier-2 part, confirm its pins and physical assets, then revalidate; never replace it with guessed pins or a different package silently. (7) Gate order before any handoff: synth_validate with zero blocking diagnostics, placement visual review, schematic render inspection, then synth_export, then 'kicad-cli sch erc' with zero errors. Export rejects unresolved compilation diagnostics; generated artifacts from failed attempts are not release evidence. Full review workflow, fabrication exports, Gerber review, panelization, and product-render guidance: docs/kicad-workflows.md.";
+
+/// Promote any embedded `png_base64` payloads in a tool result into MCP
+/// image content blocks, returning the pruned text value.
+///
+/// Recognises the shapes the schematic-review tools emit:
+/// `synth_render_schematic`/`synth_review_schematic` put them under
+/// `sheets[]` (and `render.sheets[]`), and `synth_schematic_baseline`
+/// puts one at the top level for `inline_diff`. Promoting them means an
+/// MCP host renders the sheet as an image instead of the model having to
+/// decode base64 out of a JSON string.
+fn extract_image_content(mut result: Value) -> (Value, Vec<String>) {
+    fn take(map: &mut serde_json::Map<String, Value>, images: &mut Vec<String>) {
+        if let Some(data) = map
+            .remove("png_base64")
+            .and_then(|v| v.as_str().map(str::to_string))
+        {
+            images.push(data);
+        }
+    }
+
+    let mut images = Vec::new();
+
+    if let Some(obj) = result.as_object_mut() {
+        take(obj, &mut images);
+    }
+    if let Some(sheets) = result.get_mut("sheets").and_then(Value::as_array_mut) {
+        for sheet in sheets {
+            if let Some(obj) = sheet.as_object_mut() {
+                take(obj, &mut images);
+            }
+        }
+    }
+    if let Some(sheets) = result
+        .get_mut("render")
+        .and_then(|r| r.get_mut("sheets"))
+        .and_then(Value::as_array_mut)
+    {
+        for sheet in sheets {
+            if let Some(obj) = sheet.as_object_mut() {
+                take(obj, &mut images);
+            }
+        }
+    }
+    (result, images)
+}
 
 /// Handle an incoming MCP JSON-RPC request payload.
 #[allow(clippy::needless_pass_by_value)]
@@ -67,18 +112,25 @@ pub fn handle_jsonrpc_request(req: Value, default_registry: Option<&Path>) -> Va
             let arguments = params["arguments"].clone();
 
             match call_tool(name, &arguments, default_registry) {
-                Ok(result_val) => serde_json::json!({
-                    "jsonrpc": jsonrpc,
-                    "id": id,
-                    "result": {
-                        "content": [
-                            {
-                                "type": "text",
-                                "text": serde_json::to_string_pretty(&result_val).unwrap_or_default()
-                            }
-                        ]
+                Ok(result_val) => {
+                    let (text_val, images) = extract_image_content(result_val);
+                    let mut content = vec![serde_json::json!({
+                        "type": "text",
+                        "text": serde_json::to_string_pretty(&text_val).unwrap_or_default()
+                    })];
+                    for data in images {
+                        content.push(serde_json::json!({
+                            "type": "image",
+                            "mimeType": "image/png",
+                            "data": data
+                        }));
                     }
-                }),
+                    serde_json::json!({
+                        "jsonrpc": jsonrpc,
+                        "id": id,
+                        "result": { "content": content }
+                    })
+                }
                 Err(err_msg) => serde_json::json!({
                     "jsonrpc": jsonrpc,
                     "id": id,
