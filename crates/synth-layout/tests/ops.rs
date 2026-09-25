@@ -571,3 +571,69 @@ fn fit_sheet_size_any_keeps_standard_ladder_for_large_content() {
         "large content must not get a custom page, got {any:?}"
     );
 }
+
+#[test]
+fn fit_sheet_centres_the_drawing_on_the_page() {
+    let board = board_for("fixtures/layout/led_indicator.synth");
+    let mut layout = synth_layout::layout(&board);
+
+    apply_op(&mut layout, &board, LayoutOp::FitSheet { grow: false }).unwrap();
+
+    let (sheet_w, sheet_h) = layout.sheet_size.dims_mm();
+    let (min_x, max_x, min_y, max_y) =
+        synth_layout::drawing_bounds(&board, &layout).expect("drawing bounds");
+    // Horizontal slack is split evenly (to within the 2.54 mm grid snap).
+    let left = min_x;
+    let right = sheet_w - max_x;
+    assert!(
+        (left - right).abs() <= 2.54,
+        "drawing must be centred horizontally: left gap {left:.2}, right gap {right:.2}"
+    );
+    // Vertically it centres in the area above the 34 mm title-block band.
+    let top = min_y;
+    let bottom = sheet_h - 34.0 - max_y;
+    assert!(
+        (top - bottom).abs() <= 2.54,
+        "drawing must be centred above the title block: top gap {top:.2}, bottom gap {bottom:.2}"
+    );
+    assert!(left >= 10.0 && top >= 10.0, "drawing must clear the frame");
+}
+
+#[test]
+fn fit_sheet_page_is_never_narrower_than_the_title_block() {
+    let board = board_for("fixtures/layout/led_indicator.synth");
+    let mut layout = synth_layout::layout(&board);
+    apply_op(&mut layout, &board, LayoutOp::FitSheet { grow: false }).unwrap();
+    // KiCad's title block is 110 mm wide inside a 10 mm frame.
+    assert!(layout.sheet_size.dims_mm().0 >= 130.0);
+}
+
+#[test]
+fn fit_sheet_centring_keeps_wires_attached() {
+    let board = board_for("fixtures/layout/led_indicator.synth");
+    let base = synth_layout::layout(&board);
+    let mut fitted = base.clone();
+    apply_op(&mut fitted, &board, LayoutOp::FitSheet { grow: false }).unwrap();
+
+    // Centring is one rigid, grid-snapped translation of everything.
+    let (bx, by) = base.components[0].center_mm;
+    let (fx, fy) = fitted.components[0].center_mm;
+    let (dx, dy) = (fx - bx, fy - by);
+    assert!(
+        ((dx / 2.54).round() * 2.54 - dx).abs() < 1e-9,
+        "dx off grid: {dx}"
+    );
+    assert!(
+        ((dy / 2.54).round() * 2.54 - dy).abs() < 1e-9,
+        "dy off grid: {dy}"
+    );
+    for (b, f) in base.components.iter().zip(&fitted.components) {
+        assert!((f.center_mm.0 - b.center_mm.0 - dx).abs() < 1e-9);
+        assert!((f.center_mm.1 - b.center_mm.1 - dy).abs() < 1e-9);
+    }
+    for (bw, fw) in base.wires.iter().zip(&fitted.wires) {
+        for (bp, fp) in bw.points.iter().zip(&fw.points) {
+            assert!((fp.0 - bp.0 - dx).abs() < 1e-9 && (fp.1 - bp.1 - dy).abs() < 1e-9);
+        }
+    }
+}

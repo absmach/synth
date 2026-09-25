@@ -1127,26 +1127,34 @@ fn check_text_overlaps(layout: &Layout) -> Vec<Diagnostic> {
 /// is wasteful, not wrong. Names the smaller standard sheet that
 /// would fit when one exists.
 fn check_sheet_fill(board: &Board, layout: &Layout, min_ratio: f64) -> Vec<Diagnostic> {
-    let Some((min_x, max_x, min_y, max_y)) = synth_layout::content_bounds(board, layout) else {
+    let Some((min_x, max_x, min_y, max_y)) = synth_layout::drawing_bounds(board, layout) else {
         return Vec::new();
     };
     let (sheet_w, sheet_h) = layout.sheet_size.dims_mm();
     if sheet_w <= 0.0 || sheet_h <= 0.0 {
         return Vec::new();
     }
+
+    // A page already sized to the drawing is optimal: it cannot be made
+    // smaller, so a fixed area ratio is the wrong test and would fire
+    // forever. Ask the same function `fit_sheet` uses; if it returns the
+    // current page there is nothing to compact. A wide-and-short or
+    // narrow-and-tall drawing legitimately covers well under half of its
+    // own minimal page, because `sheet_needs` reserves the page margin and
+    // the title-block band.
+    let fitted = synth_layout::fit_sheet_size_any(min_x, max_x, min_y, max_y);
+    let (fit_w, fit_h) = fitted.dims_mm();
+    if fit_w >= sheet_w - 0.5 && fit_h >= sheet_h - 0.5 {
+        return Vec::new();
+    }
+
     let content_w = (max_x - min_x).max(0.0);
     let content_h = (max_y - min_y).max(0.0);
     let ratio = content_w * content_h / (sheet_w * sheet_h);
     if ratio >= min_ratio {
         return Vec::new();
     }
-    let smaller = synth_layout::fit_sheet_size(min_x, max_x, min_y, max_y);
-    let (smaller_w, smaller_h) = smaller.dims_mm();
-    let smaller_hint = if smaller_w < sheet_w && smaller_h < sheet_h {
-        format!(" — content would fit {smaller:?}")
-    } else {
-        String::new()
-    };
+    let smaller_hint = format!(" — content would fit {fitted:?}");
     vec![DiagnosticBuilder::new(
         "E-SYNTH-SCHEM-012",
         Severity::Info,
@@ -2479,8 +2487,13 @@ mod tests {
         // Expect 002 (6 crossings), 003 (90 mm cap), 004 (150 mm net),
         // 005 (4-line node), 006 (foreign wire through the node),
         // 007 (placement past the sheet edge), 008 (lowercase name),
-        // 009 (long name), 010 (ambiguous VCC rail), 012 (roomy A4
-        // sheet — no annotations, so 011 stays silent).
+        // 009 (long name), 010 (ambiguous VCC rail).
+        //
+        // 012 (roomy sheet) is deliberately absent: this fixture's content
+        // runs past the A4 edge, so the page is too SMALL, not too roomy.
+        // Suggesting "compact onto a smaller sheet" for content that already
+        // overflows would be backwards; 007 is the finding that applies.
+        // `roomy_sheet_is_flagged` covers 012 on an on-page drawing.
         assert_eq!(
             codes,
             vec![
@@ -2493,7 +2506,6 @@ mod tests {
                 "E-SYNTH-SCHEM-008",
                 "E-SYNTH-SCHEM-009",
                 "E-SYNTH-SCHEM-010",
-                "E-SYNTH-SCHEM-012",
             ]
         );
     }
@@ -2572,5 +2584,68 @@ mod tests {
         );
         assert!(multi.iter().any(|d| d.title.starts_with("[root] ")));
         assert!(multi.iter().any(|d| d.title.starts_with("[Power] ")));
+    }
+
+    /// One component so `drawing_bounds` is well-defined and the sheet can be
+    /// sized around it.
+    fn board_with_one_component() -> Board {
+        let mut b = board_with_nets(Vec::new());
+        b.components.push(Component {
+            id: ComponentId(0),
+            refdes: "R1".to_string(),
+            kind: "resistor".to_string(),
+            part: None,
+            value: Some("10k".to_string()),
+            dnp: false,
+            properties: std::collections::BTreeMap::new(),
+            placement_hint: None,
+            group: None,
+            sheet: None,
+            source_span: Span::new(0, 0),
+        });
+        b
+    }
+
+    #[test]
+    fn roomy_sheet_is_flagged() {
+        // A single part marooned on A4: content is far smaller than the page
+        // and a smaller page exists, so 012 must fire and name the target.
+        let board = board_with_one_component();
+        let l = layout(
+            vec![placement(ComponentId(0), 30.0, 30.0, Rotation::Zero)],
+            Vec::new(),
+            Vec::new(),
+            Vec::new(),
+        );
+        let v = check_sheet_fill(&board, &l, DEFAULT_MIN_SHEET_FILL_RATIO);
+        assert_eq!(v.len(), 1, "roomy A4 sheet must be flagged");
+        assert_eq!(v[0].code, "E-SYNTH-SCHEM-012");
+        assert!(
+            v[0].message.as_deref().unwrap_or("").contains("would fit"),
+            "012 must name the sheet that would fit: {:?}",
+            v[0].message
+        );
+    }
+
+    #[test]
+    fn already_fitted_sheet_is_silent() {
+        // Size the page to the drawing, exactly as `fit_sheet` does; the
+        // rule must then fall silent, or a fitted design would warn forever.
+        let board = board_with_one_component();
+        let mut l = layout(
+            vec![placement(ComponentId(0), 30.0, 30.0, Rotation::Zero)],
+            Vec::new(),
+            Vec::new(),
+            Vec::new(),
+        );
+        let (min_x, max_x, min_y, max_y) =
+            synth_layout::drawing_bounds(&board, &l).expect("drawing bounds");
+        l.sheet_size = synth_layout::fit_sheet_size_any(min_x, max_x, min_y, max_y);
+
+        let v = check_sheet_fill(&board, &l, DEFAULT_MIN_SHEET_FILL_RATIO);
+        assert!(
+            v.is_empty(),
+            "an optimally-fitted page must not warn: {v:?}"
+        );
     }
 }

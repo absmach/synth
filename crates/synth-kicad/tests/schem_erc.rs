@@ -510,8 +510,10 @@ fn all_rules_fire_together_in_order() {
             "E-SYNTH-SCHEM-005",
             "E-SYNTH-SCHEM-006",
             "E-SYNTH-SCHEM-007",
-            // Sparse synthetic content on A4 → info-level fill warning.
-            "E-SYNTH-SCHEM-012",
+            // No 012: component 2 sits at x=350, past the A4 edge, so the
+            // page is too SMALL rather than too roomy. 012 only fires when a
+            // smaller page would actually fit (see the unit tests
+            // `roomy_sheet_is_flagged` / `already_fitted_sheet_is_silent`).
         ]
     );
 }

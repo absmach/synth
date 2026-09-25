@@ -3616,7 +3616,11 @@ fn place_cluster_into(
 /// - height: the content's bottom edge plus the title-block band it
 ///   must clear (see `TITLE_BLOCK_H`), or its own height plus a margin
 ///   on each side, whichever is larger.
-fn sheet_needs(min_x: f64, max_x: f64, min_y: f64, max_y: f64) -> (f64, f64) {
+///
+/// Public so a consumer can tell whether a sheet is already the smallest
+/// that fits it: a page sized to `sheet_needs` cannot be shrunk further,
+/// whatever its area ratio.
+pub fn sheet_needs(min_x: f64, max_x: f64, min_y: f64, max_y: f64) -> (f64, f64) {
     let w = (max_x + PAGE_MARGIN).max(max_x - min_x + 2.0 * PAGE_MARGIN);
     let h = (max_y + TITLE_BLOCK_H + TEXT_MARGIN_Y).max(max_y - min_y + 2.0 * PAGE_MARGIN);
     (w, h)
@@ -4323,23 +4327,37 @@ const CUSTOM_SHEET_QUANTUM_MM: f64 = 5.0;
 /// at least one axis; a marginal saving is not worth leaving the standard
 /// ladder and its title-block geometry.
 const CUSTOM_SHEET_MIN_SAVING: f64 = 0.7;
+/// Inset (mm) of KiCad's default page frame from the paper edge. The
+/// title block is drawn inside this frame, so it bounds how small a
+/// custom page can be.
+const FRAME_INSET: f64 = 10.0;
+/// Width (mm) of KiCad's default title block (`(rect (start 110 34) (end 2
+/// 2))`, frame-relative). A custom page narrower than this plus the frame
+/// would clip the title block.
+const TITLE_BLOCK_W: f64 = 110.0;
+/// Glyph height (mm) of the exporter's Reference/Value fields.
+const FIELD_TEXT_SIZE: f64 = 1.27;
 
-/// Smallest sheet that actually fits the content, including a
-/// [`SheetSize::Custom`] page below A4.
+/// Smallest sheet that fits content of the given bounds once it is
+/// re-centred by [`centre_on_sheet`], including a [`SheetSize::Custom`]
+/// page below A4.
 ///
 /// [`fit_sheet_size`] is bounded below by A4 because the standard ladder has
-/// nothing smaller, so a three-part design on A4 is always "5% full" and
-/// `E-SYNTH-SCHEM-012` can never be satisfied on a standard sheet. A human
-/// drawing three parts does not use A4; they use a small sheet. This returns
-/// a rounded custom page when the content needs materially less than A4, and
-/// falls back to the standard ladder otherwise.
+/// nothing smaller, so a three-part design on A4 is always mostly blank. A
+/// human drawing three parts uses a small sheet. This sizes the page from the
+/// content's *extent* (not its absolute position, since the caller centres
+/// it): a margin on every side plus the title-block band, and never narrower
+/// than the title block itself. A rounded custom page is returned when that
+/// needs materially less than A4; otherwise the standard ladder.
 pub fn fit_sheet_size_any(min_x: f64, max_x: f64, min_y: f64, max_y: f64) -> SheetSize {
-    let (need_w, need_h) = sheet_needs(min_x, max_x, min_y, max_y);
+    let need_w =
+        ((max_x - min_x).max(0.0) + 2.0 * PAGE_MARGIN).max(TITLE_BLOCK_W + 2.0 * FRAME_INSET);
+    let need_h = (max_y - min_y).max(0.0) + 2.0 * PAGE_MARGIN + TITLE_BLOCK_H;
     let standard = sheet_size_for(need_w, need_h);
     let (std_w, std_h) = standard.dims_mm();
     // Only shrink below A4 when the standard fit is already A4 and the
     // content needs clearly less — a marginal saving is not worth leaving
-    // the standard ladder (and its title block geometry).
+    // the standard ladder.
     if std_w > A4_W || std_h > A4_H {
         return standard;
     }
@@ -4349,8 +4367,93 @@ pub fn fit_sheet_size_any(min_x: f64, max_x: f64, min_y: f64, max_y: f64) -> She
         return standard;
     }
     SheetSize::Custom {
-        width_mm: w.max(CUSTOM_SHEET_QUANTUM_MM),
-        height_mm: h.max(CUSTOM_SHEET_QUANTUM_MM),
+        width_mm: w,
+        height_mm: h,
+    }
+}
+
+/// [`content_bounds`] widened to cover each component's Reference and
+/// Value fields, which the exporter places around the body after layout
+/// and so `content_bounds` cannot see.
+///
+/// Page fitting and centring use this rather than the bare bounds: a sheet
+/// sized to bodies and wires alone puts the refdes/value text of the
+/// outermost parts on the margin or the frame. The field extent is an
+/// estimate (the same stroke-font advance [`resolve_text_overlaps`] uses),
+/// taken on the conservative side — a field may sit beside a rotated body
+/// or above/below an upright one.
+pub fn drawing_bounds(board: &Board, layout: &Layout) -> Option<(f64, f64, f64, f64)> {
+    let (mut min_x, mut max_x, mut min_y, mut max_y) = content_bounds(board, layout)?;
+    for placement in &layout.components {
+        let Some(comp) = board.component(placement.id) else {
+            continue;
+        };
+        let (cx, cy) = placement.center_mm;
+        let (bw, bh) = comp
+            .part
+            .as_ref()
+            .map_or((BODY_FALLBACK_W, BODY_FALLBACK_H), body_size_for_part);
+        let value = comp.value.as_deref().unwrap_or("(no value)");
+        let field_w = text_run_width(&comp.refdes, FIELD_TEXT_SIZE)
+            .max(text_run_width(value, FIELD_TEXT_SIZE));
+        // Upright parts centre their fields over the body; rotated parts
+        // put them beside it. Half a field past the body edge covers both.
+        let reach = bw / 2.0 + field_w / 2.0;
+        min_x = min_x.min(cx - reach);
+        max_x = max_x.max(cx + reach);
+        min_y = min_y.min(cy - bh / 2.0 - TEXT_MARGIN_Y);
+        max_y = max_y.max(cy + bh / 2.0 + TEXT_MARGIN_Y);
+    }
+    Some((min_x, max_x, min_y, max_y))
+}
+
+/// Translate everything on the sheet so the drawing sits centred in the
+/// page area above the title-block band.
+///
+/// The auto-layout packs content against the top-left page margin, which
+/// is right for a page sized to fit it from the origin but leaves a
+/// shrunken page (see [`fit_sheet_size_any`]) with all its slack on the
+/// right and bottom — the drawing hugs the frame in one corner. Page
+/// coordinates are absolute, so centring means moving the content, not
+/// the frame. The shift is snapped to the 2.54 mm pin grid so wires stay
+/// on grid, and applied to every geometric field (bodies, wires,
+/// junctions, text, group boxes); labels and power flags are anchored to
+/// pins and follow their component.
+///
+/// Never shifts content past the top/left margin: a drawing larger than
+/// the page area stays anchored at the margin rather than being pushed
+/// off the sheet.
+pub fn centre_on_sheet(board: &Board, layout: &mut Layout) {
+    let Some((min_x, max_x, min_y, max_y)) = drawing_bounds(board, layout) else {
+        return;
+    };
+    let (sheet_w, sheet_h) = layout.sheet_size.dims_mm();
+    let area_h = sheet_h - TITLE_BLOCK_H;
+    let target_x = ((sheet_w - (max_x - min_x)) / 2.0).max(PAGE_MARGIN);
+    let target_y = ((area_h - (max_y - min_y)) / 2.0).max(PAGE_MARGIN);
+    let dx = snap_grid(target_x - min_x);
+    let dy = snap_grid(target_y - min_y);
+    if dx == 0.0 && dy == 0.0 {
+        return;
+    }
+    let shift = |p: &mut (f64, f64)| {
+        p.0 += dx;
+        p.1 += dy;
+    };
+    for placement in &mut layout.components {
+        shift(&mut placement.center_mm);
+    }
+    for wire in &mut layout.wires {
+        wire.points.iter_mut().for_each(shift);
+        wire.junctions.iter_mut().for_each(shift);
+    }
+    layout.junctions.iter_mut().for_each(shift);
+    for text in &mut layout.annotations {
+        shift(&mut text.at_mm);
+    }
+    for group in &mut layout.group_boxes {
+        shift(&mut group.min_mm);
+        shift(&mut group.max_mm);
     }
 }
 

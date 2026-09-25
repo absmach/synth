@@ -112,20 +112,28 @@ that op straight back into `synth_mutate_layout`. Two hints exist today:
 | Finding                | Suggested op                                              |
 | ---------------------- | --------------------------------------------------------- |
 | `E-SYNTH-SCHEM-012` (content covers only a corner of the page) | `fit_sheet` — shrink the page, including a custom size below A4 |
-| signal-flow (3+ parts span a tall, narrow column) | `distribute_row` — a left-to-right row in signal order |
+| signal-flow (3–8 parts, no row holds more than half of them: a column, a diagonal staircase, a scatter) | `distribute_row` — a left-to-right row in signal order |
 
 The fill-ratio repair is deliberately **sheet shrinking, not part
 spreading**. The standard A4/A3/A2 ladder has nothing below A4, so a
 three-part design on A4 is always mostly empty; stretching the parts to
 fill the page only draws long wires across blank paper. A human drawing
 three parts uses a small sheet, so `fit_sheet` returns a rounded
-`Custom` page (115 × 95 mm for the canonical LED indicator) and the
-diagnostic clears.
+`Custom` page (130 × 115 mm for the canonical LED indicator) and the
+diagnostic clears. The page is sized around the drawing *including*
+Reference/Value fields, is never narrower than KiCad's 110 mm title block
+plus its frame, and is exported as `(paper "User" W H)`. `fit_sheet` then
+centres the drawing in the area above the title block with one rigid,
+grid-snapped translation, so the slack is not all left on the right and
+bottom.
 
 Persisted placement goes to `<design>.synth.layout.toml`; the `.synth`
 source stays the source of truth for connectivity. `fit_sheet` persists
-as `fit_sheet = true` and is re-applied after the auto-layout, because
-the pipeline otherwise re-derives the sheet size from scratch.
+as `fit_sheet = true` and is re-applied (size and centring) after the
+auto-layout, because the pipeline otherwise re-derives the sheet size from
+scratch. Component overrides in the sidecar stay in the auto-layout's
+un-centred coordinates; the centring shift moves them with everything
+else.
 
 ### Step 4 — confirm no regression
 

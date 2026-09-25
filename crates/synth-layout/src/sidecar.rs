@@ -36,7 +36,8 @@ pub struct SidecarLayout {
     pub components: HashMap<String, SidecarPlacement>,
     #[serde(default)]
     pub forced_net_labels: Vec<ForcedNetLabel>,
-    /// Force the sheet to the smallest standard size that fits content.
+    /// Force the sheet to the smallest size that fits the drawing, with the
+    /// drawing centred on it.
     /// Applied *after* the auto-layout, because the pipeline re-derives
     /// `sheet_size` from scratch (`grow_sheet_to_fit`) and would otherwise
     /// discard a persisted fit.
@@ -226,15 +227,20 @@ impl SidecarLayout {
         }
     }
 
-    /// Shrink the sheet to the smallest standard size that fits the content,
-    /// when [`Self::fit_sheet`] is set. Applied after routing/annotation so
-    /// bounds include wires and text.
+    /// Shrink the sheet to the smallest size that fits the drawing and
+    /// centre the drawing on it, when [`Self::fit_sheet`] is set. Applied
+    /// after routing/annotation so bounds include wires and text.
+    ///
+    /// Component overrides in this file stay in the auto-layout's
+    /// (un-centred) coordinates: they are overlaid first and the centring
+    /// shift moves them together with everything else.
     pub fn apply_sheet_fit(&self, board: &synth_ir::Board, layout: &mut Layout) {
         if !self.fit_sheet {
             return;
         }
-        if let Some((min_x, max_x, min_y, max_y)) = crate::content_bounds(board, layout) {
+        if let Some((min_x, max_x, min_y, max_y)) = crate::drawing_bounds(board, layout) {
             layout.sheet_size = crate::fit_sheet_size_any(min_x, max_x, min_y, max_y);
+            crate::centre_on_sheet(board, layout);
         }
     }
 }

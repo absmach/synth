@@ -363,7 +363,7 @@ pub fn apply_op(layout: &mut Layout, board: &Board, op: LayoutOp) -> Result<(), 
             route_and_label(board, layout);
         }
         LayoutOp::FitSheet { grow } => {
-            let Some((min_x, max_x, min_y, max_y)) = crate::content_bounds(board, layout) else {
+            let Some((min_x, max_x, min_y, max_y)) = crate::drawing_bounds(board, layout) else {
                 return Ok(());
             };
             let fitted = crate::fit_sheet_size_any(min_x, max_x, min_y, max_y);
@@ -373,11 +373,13 @@ pub fn apply_op(layout: &mut Layout, board: &Board, op: LayoutOp) -> Result<(), 
             if !is_growth || grow {
                 layout.sheet_size = fitted;
             }
-            // Sheet size is a layout property, not a component position, so
-            // nothing moves; re-running the layout passes keeps the drawing
-            // consistent with the new page (the auto-layout re-runs
-            // `grow_sheet_to_fit` itself, which is why a persisted fit needs
-            // an explicit override below).
+            // The auto-layout packs content against the top-left margin; on
+            // a page sized to the drawing that leaves every millimetre of
+            // slack on the right and bottom. Centre it. A persisted fit is
+            // re-applied (size + centring) after the auto-layout by
+            // `SidecarLayout::apply_sheet_fit`, since the pipeline re-derives
+            // `sheet_size` from scratch.
+            crate::centre_on_sheet(board, layout);
         }
     }
     Ok(())

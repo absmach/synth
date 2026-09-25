@@ -2107,11 +2107,16 @@ fn repair_hints(layout: &synth_layout::Layout, board: &synth_ir::Board) -> Vec<V
     // wires across blank paper.
     if let Some((min_x, max_x, min_y, max_y)) = synth_layout::content_bounds(board, layout) {
         let (sheet_w, sheet_h) = layout.sheet_size.dims_mm();
+        // Size the target page the way `fit_sheet` will: around the drawing
+        // including Reference/Value fields, not just bodies and wires.
+        let (fit_min_x, fit_max_x, fit_min_y, fit_max_y) =
+            synth_layout::drawing_bounds(board, layout).unwrap_or((min_x, max_x, min_y, max_y));
         let content_w = (max_x - min_x).max(0.0);
         let content_h = (max_y - min_y).max(0.0);
         if sheet_w > 0.0 && sheet_h > 0.0 {
             let ratio = content_w * content_h / (sheet_w * sheet_h);
-            let fitted = synth_layout::fit_sheet_size_any(min_x, max_x, min_y, max_y);
+            let fitted =
+                synth_layout::fit_sheet_size_any(fit_min_x, fit_max_x, fit_min_y, fit_max_y);
             let (fit_w, fit_h) = fitted.dims_mm();
             if ratio < 0.45 && (fit_w < sheet_w || fit_h < sheet_h) {
                 hints.push(serde_json::json!({
@@ -2136,28 +2141,66 @@ fn repair_hints(layout: &synth_layout::Layout, board: &synth_ir::Board) -> Vec<V
     hints
 }
 
-/// Suggest `distribute_row` when three or more components share a narrow x
-/// band but span a tall y band — the visual signature of a stack.
+/// Row tolerance (mm) for [`row_flow_hint`]: parts whose centres are this
+/// close in y read as sharing a row.
+const ROW_ALIGN_TOL_MM: f64 = 2.54;
+/// [`row_flow_hint`] only fires for small designs: putting a large board's
+/// every part into one row is not a repair.
+const ROW_HINT_MAX_PARTS: usize = 8;
+/// Below this vertical spread (mm) the parts already read as one band.
+const ROW_HINT_MIN_Y_SPAN_MM: f64 = 25.0;
+
+/// Suggest `distribute_row` when a small design's parts do not share rows
+/// — a column, a diagonal staircase, or any scatter where no row holds more
+/// than half the parts. That is the visual signature of a pile rather than a
+/// left-to-right signal path.
+///
+/// Measuring row sharing, not the x/y span ratio, is what catches the
+/// diagonal case: a staircase is as wide as it is tall, so a
+/// "narrow-and-tall" test never saw it.
 fn row_flow_hint(layout: &synth_layout::Layout) -> Option<Value> {
     let placed: Vec<(u32, f64, f64)> = layout
         .components
         .iter()
         .map(|p| (p.id.0, p.center_mm.0, p.center_mm.1))
         .collect();
-    if placed.len() < 3 {
+    if placed.len() < 3 || placed.len() > ROW_HINT_MAX_PARTS {
         return None;
     }
-    let x_span = placed.iter().map(|p| p.1).fold(f64::NEG_INFINITY, f64::max)
-        - placed.iter().map(|p| p.1).fold(f64::INFINITY, f64::min);
-    let y_span = placed.iter().map(|p| p.2).fold(f64::NEG_INFINITY, f64::max)
-        - placed.iter().map(|p| p.2).fold(f64::INFINITY, f64::min);
+    let span = |axis: fn(&(u32, f64, f64)) -> f64| {
+        placed.iter().map(axis).fold(f64::NEG_INFINITY, f64::max)
+            - placed.iter().map(axis).fold(f64::INFINITY, f64::min)
+    };
+    let x_span = span(|p| p.1);
+    let y_span = span(|p| p.2);
+    if y_span < ROW_HINT_MIN_Y_SPAN_MM {
+        return None;
+    }
+    // Largest set of parts sharing a row with any one part.
+    let max_row = placed
+        .iter()
+        .map(|a| {
+            placed
+                .iter()
+                .filter(|b| (a.2 - b.2).abs() <= ROW_ALIGN_TOL_MM)
+                .count()
+        })
+        .max()
+        .unwrap_or(0);
+    if max_row * 2 > placed.len() {
+        return None;
+    }
 
-    // Narrow in x, tall in y: a column.
-    if x_span > 40.0 || y_span < 25.0 || y_span <= x_span {
-        return None;
+    // Signal order follows the arrangement's dominant axis: a column reads
+    // top to bottom, a wide staircase left to right; the other axis breaks
+    // ties.
+    let mut ordered = placed.clone();
+    if y_span > x_span {
+        ordered.sort_by(|a, b| a.2.total_cmp(&b.2).then(a.1.total_cmp(&b.1)));
+    } else {
+        ordered.sort_by(|a, b| a.1.total_cmp(&b.1).then(a.2.total_cmp(&b.2)));
     }
-    let mut ids: Vec<u32> = placed.iter().map(|p| p.0).collect();
-    ids.sort_unstable();
+    let ids: Vec<u32> = ordered.iter().map(|p| p.0).collect();
     // A schematic never has the 2^53 components f64 conversion would need to
     // be lossy; the count is bounded by the drawing.
     #[allow(clippy::cast_precision_loss)]
@@ -2166,8 +2209,8 @@ fn row_flow_hint(layout: &synth_layout::Layout) -> Option<Value> {
     Some(serde_json::json!({
         "finding": "signal-flow",
         "problem": format!(
-            "{} components span {:.0} mm vertically but only {:.0} mm horizontally — \
-             a column rather than a left-to-right signal path",
+            "{} components span {:.0} mm vertically and {:.0} mm horizontally with at most \
+             {max_row} sharing a row — a pile rather than a left-to-right signal path",
             placed.len(), y_span, x_span
         ),
         "suggested_op": {
@@ -4012,5 +4055,87 @@ mod tool_registration_tests {
                 );
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::row_flow_hint;
+    use synth_ir::ComponentId;
+    use synth_layout::{ComponentPlacement, Layout, Rotation, SheetSize};
+
+    fn layout_at(centres: &[(f64, f64)]) -> Layout {
+        Layout {
+            components: centres
+                .iter()
+                .enumerate()
+                .map(|(i, &c)| ComponentPlacement {
+                    id: ComponentId(u32::try_from(i).unwrap()),
+                    center_mm: c,
+                    rotation: Rotation::Zero,
+                })
+                .collect(),
+            wires: Vec::new(),
+            junctions: Vec::new(),
+            power_flags: Vec::new(),
+            net_labels: Vec::new(),
+            hierarchical_labels: Vec::new(),
+            annotations: Vec::new(),
+            group_boxes: Vec::new(),
+            sheet_size: SheetSize::A4,
+        }
+    }
+
+    fn hinted_ids(centres: &[(f64, f64)]) -> Option<Vec<u64>> {
+        row_flow_hint(&layout_at(centres)).map(|h| {
+            h["suggested_op"]["ids"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .map(|v| v.as_u64().unwrap())
+                .collect()
+        })
+    }
+
+    #[test]
+    fn column_is_hinted_top_to_bottom() {
+        assert_eq!(
+            hinted_ids(&[(50.0, 80.0), (50.0, 20.0), (50.0, 50.0)]),
+            Some(vec![1, 2, 0])
+        );
+    }
+
+    #[test]
+    fn diagonal_staircase_is_hinted_left_to_right() {
+        // As wide as it is tall: the old narrow-column test never fired.
+        assert_eq!(
+            hinted_ids(&[(90.0, 70.0), (20.0, 20.0), (55.0, 45.0)]),
+            Some(vec![1, 2, 0])
+        );
+    }
+
+    #[test]
+    fn existing_row_is_not_hinted() {
+        assert_eq!(
+            hinted_ids(&[(20.0, 40.0), (50.0, 40.0), (80.0, 41.0)]),
+            None
+        );
+    }
+
+    #[test]
+    fn mostly_shared_row_is_not_hinted() {
+        // Two of three parts already share a row (the LED indicator's shape).
+        assert_eq!(
+            hinted_ids(&[(20.0, 40.0), (80.0, 40.0), (78.0, 10.0)]),
+            None
+        );
+    }
+
+    #[test]
+    fn large_designs_are_not_hinted() {
+        let scatter: Vec<(f64, f64)> = (0..9)
+            .map(|i| (f64::from(i) * 10.0, f64::from(i) * 10.0))
+            .collect();
+        assert_eq!(hinted_ids(&scatter), None);
     }
 }
