@@ -451,7 +451,7 @@ expression: schematic
 		(property
 			"Reference"
 			"D1_R1"
-			(at 81.28 18.32 0)
+			(at 81.28 18.32 90)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -461,7 +461,7 @@ expression: schematic
 		(property
 			"Value"
 			"10kohm"
-			(at 81.28 27.4 0)
+			(at 81.28 27.4 90)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -523,7 +523,7 @@ expression: schematic
 		(property
 			"Reference"
 			"D1_R2"
-			(at 81.28 89.44 0)
+			(at 81.28 89.44 90)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -533,7 +533,7 @@ expression: schematic
 		(property
 			"Value"
 			"4.7kohm"
-			(at 81.28 98.52 0)
+			(at 81.28 98.52 90)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -595,7 +595,7 @@ expression: schematic
 		(property
 			"Reference"
 			"D2_R1"
-			(at 142.24 18.32 0)
+			(at 142.24 18.32 90)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -605,7 +605,7 @@ expression: schematic
 		(property
 			"Value"
 			"22kohm"
-			(at 142.24 27.4 0)
+			(at 142.24 27.4 90)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -667,7 +667,7 @@ expression: schematic
 		(property
 			"Reference"
 			"D2_R2"
-			(at 142.24 89.44 0)
+			(at 142.24 89.44 90)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -677,7 +677,7 @@ expression: schematic
 		(property
 			"Value"
 			"4.7kohm"
-			(at 142.24 98.52 0)
+			(at 142.24 98.52 90)
 			(effects
 				(font
 					(size 1.27 1.27)

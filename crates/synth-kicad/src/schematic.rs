@@ -246,12 +246,19 @@ pub(crate) fn build_sheet_schematic(
             computed_drivers = crate::pin_reconcile::undriven_power_nets(board, &placements);
             &computed_drivers
         };
+    // KiCad has no named size below A4; a custom page is written as
+    // `(paper "User" W H)`, which KiCad honours exactly.
     let paper = match layout.sheet_size {
-        synth_layout::SheetSize::A4 => "A4",
-        synth_layout::SheetSize::A3 => "A3",
-        // KiCad doesn't carry a "Custom" enum value in the standard
-        // paper sizes; A2 is the safe upper bound for V1 designs.
-        synth_layout::SheetSize::A2 | synth_layout::SheetSize::Custom { .. } => "A2",
+        synth_layout::SheetSize::A4 => Sexp::list("paper", vec![Sexp::str("A4")]),
+        synth_layout::SheetSize::A3 => Sexp::list("paper", vec![Sexp::str("A3")]),
+        synth_layout::SheetSize::A2 => Sexp::list("paper", vec![Sexp::str("A2")]),
+        synth_layout::SheetSize::Custom {
+            width_mm,
+            height_mm,
+        } => Sexp::list(
+            "paper",
+            vec![Sexp::str("User"), num(width_mm), num(height_mm)],
+        ),
     };
 
     // Fabrication target from the `manufacturer "…"` board statement.
@@ -273,7 +280,7 @@ pub(crate) fn build_sheet_schematic(
         str_pair("generator", "synth-eda"),
         str_pair("generator_version", "10.0"),
         str_pair("uuid", render.uuid.to_string()),
-        Sexp::list("paper", vec![Sexp::str(paper)]),
+        paper,
         // Title block from board metadata. Deliberately NO date:
         // embedding today's date would break the byte-identical
         // re-export guarantee that motivates UUIDv5 everywhere else.
@@ -1021,6 +1028,11 @@ fn build_no_connect(
     ))
 }
 
+/// How far (mm) a label on a vertical pin continues out along the pin
+/// before turning sideways — one grid step, enough to lift the label text
+/// off the part's end and away from its side-placed fields.
+const VERTICAL_LABEL_RISE: f64 = 2.54;
+
 /// Emit a KiCad `(global_label)` entry attached to a stub extending
 /// from the pin's coordinate.
 fn build_net_label(
@@ -1031,8 +1043,18 @@ fn build_net_label(
     color: Option<[u8; 3]>,
 ) -> Option<Vec<Sexp>> {
     let component = board.component(label.component)?;
-    let (x, y, dx, _dy) = pin_terminal_xy(board, label.component, label.pin, placements)?;
+    let (x, y, dx, dy) = pin_terminal_xy(board, label.component, label.pin, placements)?;
     let stub_len = 5.08;
+    // A label on a vertical pin (a resistor or LED turned upright) used to
+    // turn sideways right at the pin end, which drops its text beside the
+    // part's end — in the same column as the part's side-placed
+    // Reference/Value fields. Carry the wire one grid step further out
+    // along the pin first, so the label clears the part's extent.
+    let elbow_y = if dx.abs() < 0.1 && dy.abs() > 0.1 {
+        y + dy.signum() * VERTICAL_LABEL_RISE
+    } else {
+        y
+    };
     let (stub_x, angle) = if dx >= -0.1 {
         (x + stub_len, 0.0)
     } else {
@@ -1043,20 +1065,28 @@ fn build_net_label(
     let wire_uuid = derive_entity_uuid(project, "net_label_wire", &key);
     let label_uuid = derive_entity_uuid(project, "net_label", &key);
 
-    let wire_sexp = Sexp::list(
-        "wire",
-        vec![
-            Sexp::list(
-                "pts",
-                vec![
-                    Sexp::list("xy", vec![num(x), num(y)]),
-                    Sexp::list("xy", vec![num(stub_x), num(y)]),
-                ],
-            ),
-            wire_stroke(color),
-            str_pair("uuid", wire_uuid.to_string()),
-        ],
-    );
+    let wire = |from: (f64, f64), to: (f64, f64), uuid: Uuid| {
+        Sexp::list(
+            "wire",
+            vec![
+                Sexp::list(
+                    "pts",
+                    vec![
+                        Sexp::list("xy", vec![num(from.0), num(from.1)]),
+                        Sexp::list("xy", vec![num(to.0), num(to.1)]),
+                    ],
+                ),
+                wire_stroke(color),
+                str_pair("uuid", uuid.to_string()),
+            ],
+        )
+    };
+    let mut out = Vec::with_capacity(3);
+    if (elbow_y - y).abs() > f64::EPSILON {
+        let rise_uuid = derive_entity_uuid(project, "net_label_rise", &key);
+        out.push(wire((x, y), (x, elbow_y), rise_uuid));
+    }
+    out.push(wire((x, elbow_y), (stub_x, elbow_y), wire_uuid));
 
     // The label text carries the same hue as its wire, so a name and
     // the line it names read as one object (reference sheet
@@ -1069,13 +1099,14 @@ fn build_net_label(
         "label",
         vec![
             Sexp::str(&label.label),
-            Sexp::list("at", vec![num(stub_x), num(y), num(angle)]),
+            Sexp::list("at", vec![num(stub_x), num(elbow_y), num(angle)]),
             Sexp::list("effects", vec![Sexp::list("font", font)]),
             str_pair("uuid", label_uuid.to_string()),
         ],
     );
+    out.push(label_sexp);
 
-    Some(vec![wire_sexp, label_sexp])
+    Some(out)
 }
 
 /// Cross-sheet stub for one in-sheet endpoint of a net that continues
@@ -1850,6 +1881,15 @@ fn build_symbol_unit(
         Rotation::TwoSeventy => 270.0,
     };
     let angle = ((logical_deg + natural_offset_deg) as i32).rem_euclid(360) as f64;
+    // KiCad reads an instance field's angle relative to the symbol's, so a
+    // field written at 0 on a symbol turned 90/270 draws vertical text that
+    // runs along the body (an LED's value into its emission arrows).
+    // Counter-rotating keeps Reference/Value horizontal on every part.
+    let field_angle = if angle == 90.0 || angle == 270.0 {
+        90.0
+    } else {
+        0.0
+    };
 
     let mut fields = vec![
         str_pair("lib_id", lib_id),
@@ -1870,7 +1910,7 @@ fn build_symbol_unit(
         vec![
             Sexp::str("Reference"),
             Sexp::str(&component.refdes),
-            Sexp::list("at", vec![num(ref_pos.0), num(ref_pos.1), num(0.0)]),
+            Sexp::list("at", vec![num(ref_pos.0), num(ref_pos.1), num(field_angle)]),
             field_effects(ref_justify),
         ],
     ));
@@ -1879,7 +1919,10 @@ fn build_symbol_unit(
         vec![
             Sexp::str("Value"),
             Sexp::str(display_value),
-            Sexp::list("at", vec![num(value_pos.0), num(value_pos.1), num(0.0)]),
+            Sexp::list(
+                "at",
+                vec![num(value_pos.0), num(value_pos.1), num(field_angle)],
+            ),
             field_effects(value_justify),
         ],
     ));

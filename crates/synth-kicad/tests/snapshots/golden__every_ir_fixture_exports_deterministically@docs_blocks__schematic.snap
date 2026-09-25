@@ -660,7 +660,7 @@ expression: schematic
 		(property
 			"Reference"
 			"R1"
-			(at 116.84 20.86 0)
+			(at 116.84 20.86 90)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -670,7 +670,7 @@ expression: schematic
 		(property
 			"Value"
 			"(no value)"
-			(at 116.84 29.94 0)
+			(at 116.84 29.94 90)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -733,7 +733,7 @@ expression: schematic
 		(property
 			"Reference"
 			"R2"
-			(at 116.84 91.98 0)
+			(at 116.84 91.98 90)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -743,7 +743,7 @@ expression: schematic
 		(property
 			"Value"
 			"(no value)"
-			(at 116.84 101.06 0)
+			(at 116.84 101.06 90)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -805,7 +805,7 @@ expression: schematic
 		(property
 			"Reference"
 			"C1"
-			(at 25.4 23.4 0)
+			(at 25.4 23.4 90)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -815,7 +815,7 @@ expression: schematic
 		(property
 			"Value"
 			"(no value)"
-			(at 25.4 32.48 0)
+			(at 25.4 32.48 90)
 			(effects
 				(font
 					(size 1.27 1.27)

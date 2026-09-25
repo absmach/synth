@@ -1799,7 +1799,7 @@ expression: schematic
 		(property
 			"Reference"
 			"C1"
-			(at 162.56 56.42 0)
+			(at 162.56 56.42 90)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -1809,7 +1809,7 @@ expression: schematic
 		(property
 			"Value"
 			"(no value)"
-			(at 162.56 65.5 0)
+			(at 162.56 65.5 90)
 			(effects
 				(font
 					(size 1.27 1.27)
