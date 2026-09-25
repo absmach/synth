@@ -659,6 +659,9 @@ fn filter_registry_matches(
 /// Static SynthSpec grammar reference + worked examples, for
 /// `synth_language_reference`. No filesystem/registry access, so it
 /// needs no `default_registry` and can't fail.
+// The body is a single static JSON grammar + example document; splitting
+// it would scatter the documentation without simplifying anything.
+#[allow(clippy::too_many_lines)]
 fn execute_language_reference(_args: &Value) -> Value {
     serde_json::json!({
         "language": "SynthSpec (.synth)",
@@ -711,6 +714,66 @@ fn execute_language_reference(_args: &Value) -> Value {
                     "form": "keepout <name> { radius <value><unit> }",
                     "description": "Declares a circular routing keepout zone (e.g. under an antenna).",
                     "example": "keepout antenna { radius 15mm }"
+                },
+                {
+                    "form": "group \"<title>\" [color \"#rrggbb\"] [title \"<display>\"] [region <region>] { <statement>* }",
+                    "description": "Declares a sub-circuit region. THE most important statement for schematic readability: a group becomes a titled, coloured, dashed box on the sheet, its members are placed together inside it, and nets that stay inside it are drawn as wires while nets crossing out of it become labels. Components keep board-unique refdes and may be connected across groups. Prefer 3-6 groups naming the functional blocks (power input, MCU, sensor, ...). `color` overrides the deterministic palette hue; `title` sets a display title different from the identifier; `region` steers which page quadrant it packs toward.",
+                    "example": "group \"3V3 LDO\" color \"#c2410c\" { component U2: regulator \"ap2112k_3v3\" value \"AP2112K-3.3\" }"
+                },
+                {
+                    "form": "notes \"<title>\" { \"<line>\"* }",
+                    "description": "Free prose rendered on the sheet. Inside a `group` the block is drawn at the bottom of that group's box; at board level it stacks below all content. Use it for the intent the netlist cannot carry: I2C addresses, strap choices, current budgets, assembly notes. Pass an empty title (\"\") for an untitled block.",
+                    "example": "notes \"\" { \"I2C address 0x76 (SDO tied low).\" \"4.7k pull-ups sized for 400 kHz at 3.3 V.\" }"
+                },
+                {
+                    "form": "power \"<RAIL>\" <value><unit> [class \"<netclass>\"] [{ <REFDES>.<pin>* }]",
+                    "description": "Declares a named power rail with a nominal voltage. Rails become power symbols on the schematic instead of drawn wires, and the declared voltage feeds the voltage-domain ERC rules rather than being guessed from pin names. A bare declaration still materialises the net so later `connect ... as \"<RAIL>\"` lines join it.",
+                    "example": "power \"+3V3\" 3.3v"
+                },
+                {
+                    "form": "net \"<NAME>\" [class \"<netclass>\"] [{ <REFDES>.<pin>* }]",
+                    "description": "Names a net explicitly. A named net renders its name as the schematic label; an unnamed net is auto-named (net_7) and `E-SYNTH-SCHEM-014` flags it if it reaches the sheet. Names should be UPPERCASE and <= 16 characters (`E-SYNTH-SCHEM-008/009`).",
+                    "example": "net \"I2C_SCL\" { U1.scl U2.pb6 }"
+                },
+                {
+                    "form": "netclass \"<name>\" { [trace_width <value><unit>] [clearance <value><unit>] [color \"#rrggbb\"] }",
+                    "description": "Routing and colour class. Nets are auto-classified (Power, Ground, I2C, SPI, UART, USB, Clock, Reset) and coloured from a fixed palette; a declared class joined with `class \"<name>\"` overrides both. `color` sets the schematic wire/label hue and the PCB net colour.",
+                    "example": "netclass \"PWR\" { trace_width 0.4mm clearance 0.25mm color \"#d55e00\" }"
+                },
+                {
+                    "form": "connect <REFDES>.<pin> -> <REFDES>.<pin> as \"<NET_NAME>\"",
+                    "description": "Same as plain `connect`, but joins the named net instead of an auto-named one. This is the usual way to put a connection on a declared `power` rail or a semantic signal name.",
+                    "example": "connect U1.vout -> U2.vdd as \"+3V3\""
+                },
+                {
+                    "form": "legends <on|off>",
+                    "description": "Connector pin legends, default off. When on, each external connector gets a compact pin:net list beside it. Off is usually right: a one-line `notes` block reads better than a generated table, and no-connect crosses already mark unused pins.",
+                    "example": "legends on"
+                },
+                {
+                    "form": "company \"<name>\"",
+                    "description": "Design-authority name for the schematic title block's Company field. Distinct from `manufacturer`, which names who builds the board.",
+                    "example": "company \"Acme Robotics\""
+                },
+                {
+                    "form": "sheet \"<name>\" { <statement>* }",
+                    "description": "A hierarchical-sheet boundary. Statements lower exactly as in a `group` (refdes stay board-unique, cross-sheet `connect` is allowed), but the name is also a split point: a board whose single-sheet content overflows A2 and which has two or more populated boundaries exports as a KiCad hierarchy, one file per sheet. Small boards stay on one page.",
+                    "example": "sheet \"Power\" { component U1: regulator \"ams1117_3v3\" }"
+                },
+                {
+                    "form": "variant \"<name>\" [description \"<text>\"] { dnp <REFDES>* }",
+                    "description": "A build variant sharing one schematic and layout but leaving the listed refdes unpopulated. Exports as KiCad 10 native variants plus one bom.<variant>.csv per variant. ERC still checks DNP parts.",
+                    "example": "variant \"lite\" description \"No radio\" { dnp U3 U4 }"
+                },
+                {
+                    "form": "module <Name> [( <param> = <default>, ... )] { port <Port>: <interface> ... <statement>* }",
+                    "description": "A reusable parameterised sub-circuit definition. Instantiate with `use`. Ports are typed by a declared `interface`; bind them at the instantiation site with `bind`.",
+                    "example": "module LedBank(count = 3) { port ctrl: Gpio component R1: resistor \"r_generic_0603\" value \"1k\" }"
+                },
+                {
+                    "form": "interface <Name> { <signal>* }   |   bus <Name> { <member>* }   |   use <Module> as <Prefix> [( <param> = <value> )]   |   bind <Prefix>.<Port> -> <target>",
+                    "description": "Module plumbing. `interface` names a signal bundle a port can carry, `bus` groups member nets under one name, `use` instantiates a module under a refdes prefix, and `bind` wires an instance port to a net or interface.",
+                    "example": "use LedBank as LB1 ( count = 4 )"
                 }
             ],
             "component_kinds_seen_in_registry": [
@@ -745,7 +808,7 @@ fn execute_language_reference(_args: &Value) -> Value {
                 "source": include_str!("../../../examples/placement_and_diff_pair.synth")
             }
         ],
-        "workflow_tip": "1) synth_search_registry to find real (kind, part_id) pairs and exact pin names. 2) Draft the .synth source using the grammar above. 3) synth_validate it. 4) synth_fix in a loop over diagnostics with suggested_fixes until clean. 5) synth_export."
+        "workflow_tip": "1) synth_search_registry to find real (kind, part_id) pairs and exact pin names. 2) Draft the .synth source using the grammar above. Put every component inside a `group` and give each group a `notes` block - grouping is what makes the generated sheet readable, and an ungrouped board lays out as one flat band. Give every generic passive a `value` (a missing one is an error, E-SYNTH-VALUE-001). 3) synth_validate it: this returns electrical ERC *and* the readability rules (E-SYNTH-SCHEM-*). 4) synth_fix in a loop over diagnostics with suggested_fixes until clean. 5) synth_preview_schematic to inspect group_boxes/annotations before exporting. 6) synth_export."
     })
 }
 
@@ -790,6 +853,16 @@ fn execute_validate(args: &Value, default_registry: Option<&Path>) -> Result<Val
             diagnostics.extend(lowered.diagnostics);
             if let Some(board) = lowered.board.as_ref() {
                 diagnostics.extend(synth_validate::run_erc(board, file_name));
+                // Readability rules (E-SYNTH-SCHEM-*) alongside the
+                // electrical ones, matching what `synth validate` does
+                // on the CLI. Without these an agent iterating on
+                // `synth_validate` gets no feedback on layout quality
+                // until it exports, by which point the sheet is built.
+                let global = synth_layout::layout(board);
+                let sheets = synth_layout::sheets::layout_sheets(board, global);
+                let mut schem = synth_kicad::check_schem_erc_sheets(board, &sheets);
+                synth_kicad::attach_schem_erc_locations(&mut schem, board, file_name);
+                diagnostics.extend(schem);
             }
         } else {
             let registry_dir = resolve_registry(args, default_registry);
@@ -1493,10 +1566,13 @@ fn execute_export(args: &Value, default_registry: Option<&Path>) -> Result<Value
     let aesthetic = {
         let global = synth_layout::layout(&board);
         let sheets = synth_layout::sheets::layout_sheets(&board, global);
-        synth_kicad::check_schem_erc_sheets(&board, &sheets)
-            .into_iter()
-            .map(|d| serde_json::json!({ "code": d.code, "title": d.title }))
-            .collect::<Vec<_>>()
+        let mut found = synth_kicad::check_schem_erc_sheets(&board, &sheets);
+        // Whole diagnostics, not just `{code, title}`: a title alone
+        // ("decoupling capacitor separation") does not say *which*
+        // capacitor, so an agent cannot act on it. `attach_locations`
+        // resolves a source span through the entity each rule names.
+        synth_kicad::attach_schem_erc_locations(&mut found, &board, file_name);
+        found
     };
 
     Ok(serde_json::json!({
