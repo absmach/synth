@@ -397,17 +397,33 @@ fn build_net_assignments(board: &Board) -> (Vec<(u32, String)>, PadNetLookup) {
         }
     }
 
-    // Mirrored USB-C pin mapping: reversible USB-C connectors bridge A6/B6 (DP)
-    // and A7/B7 (DN), as well as shield pins (SH) to GND. If the primary pin is
-    // assigned, ensure the mirrored counterpart inherits the same net.
+    // USB-C pin-group mapping: the receptacle has physically duplicated VBUS,
+    // GND, and USB2 differential pads. The Synth registry exposes one logical
+    // pin for each function, so the PCB exporter must fan that logical net out
+    // to every physical pad in the connector group. Without this, a valid
+    // `connect J1.vbus -> ...` leaves A9/B4/B9 as no-connect pads and external
+    // routers see a boxed-in VBUS terminal (often the last unrouted net).
     let mut mirror_additions = Vec::new();
+    let usb_pin_groups: &[&[&str]] = &[
+        &["A4", "B4", "A9", "B9"],   // VBUS
+        &["A1", "B1", "A12", "B12"], // GND
+        &["A6", "B6"],               // USB D+
+        &["A7", "B7"],               // USB D-
+    ];
+
     for ((comp, pin), net_info) in &lookup {
-        if pin == "A1" || pin == "B12" {
-            mirror_additions.push(((*comp, "SH".to_string()), net_info.clone()));
-            mirror_additions.push(((*comp, "SH1".to_string()), net_info.clone()));
-            mirror_additions.push(((*comp, "SH2".to_string()), net_info.clone()));
-            mirror_additions.push(((*comp, "SH3".to_string()), net_info.clone()));
-            mirror_additions.push(((*comp, "SH4".to_string()), net_info.clone()));
+        for group in usb_pin_groups {
+            if group.iter().any(|alias| *alias == pin) {
+                for alias in *group {
+                    mirror_additions.push(((*comp, (*alias).to_string()), net_info.clone()));
+                }
+            }
+        }
+
+        if pin == "A1" || pin == "B12" || pin == "B1" || pin == "A12" {
+            for shield in ["SH", "SH1", "SH2", "SH3", "SH4"] {
+                mirror_additions.push(((*comp, shield.to_string()), net_info.clone()));
+            }
         }
     }
     for (k, v) in mirror_additions {
