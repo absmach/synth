@@ -1,0 +1,8 @@
+---
+source: crates/synth-kicad/tests/golden.rs
+expression: bom
+---
+refdes,value,kind,description,kicad_symbol,kicad_footprint,lcsc_pn,mpn
+C1,(no value),capacitor,"Generic 0603 MLCC, X7R/X5R, any value",Device:C,Capacitor_SMD:C_0603_1608Metric,,
+J1,(no value),connector,"1x4 through-hole pin header, 2.54mm pitch",Connector_Generic:Conn_01x04,Connector_PinHeader_2.54mm:PinHeader_1x04_P2.54mm_Vertical,,
+R1,(no value),resistor,"Generic 0603 thick-film resistor, any value",Device:R_US,Resistor_SMD:R_0603_1608Metric,,

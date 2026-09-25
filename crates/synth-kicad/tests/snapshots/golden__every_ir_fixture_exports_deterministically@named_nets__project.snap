@@ -1,0 +1,121 @@
+---
+source: crates/synth-kicad/tests/golden.rs
+expression: project
+---
+{
+  "board": {
+    "design_settings": {
+      "defaults": {
+        "min_clearance": 0.127,
+        "min_track_width": 0.127
+      },
+      "rules": {
+        "min_clearance": 0.127,
+        "min_track_width": 0.127
+      }
+    }
+  },
+  "boards": [],
+  "meta": {
+    "filename": "named_nets.kicad_pro",
+    "uuid": "2acbf012-b83b-59f0-b12a-5f7bde7bb35c",
+    "version": 1
+  },
+  "net_settings": {
+    "classes": [
+      {
+        "bus_width": 12,
+        "clearance": 0.2,
+        "diff_pair_gap": 0.25,
+        "diff_pair_via_gap": 0.25,
+        "diff_pair_width": 0.2,
+        "line_style": 0,
+        "microvia_diameter": 0.3,
+        "microvia_drill": 0.1,
+        "name": "Power",
+        "pcb_color": "rgba(213, 94, 0, 1.000)",
+        "priority": 0,
+        "schematic_color": "rgba(213, 94, 0, 1.000)",
+        "track_width": 0.2,
+        "via_diameter": 0.6,
+        "via_drill": 0.4,
+        "wire_width": 6
+      },
+      {
+        "bus_width": 12,
+        "clearance": 0.2,
+        "diff_pair_gap": 0.25,
+        "diff_pair_via_gap": 0.25,
+        "diff_pair_width": 0.2,
+        "line_style": 0,
+        "microvia_diameter": 0.3,
+        "microvia_drill": 0.1,
+        "name": "Ground",
+        "pcb_color": "rgba(51, 51, 51, 1.000)",
+        "priority": 1,
+        "schematic_color": "rgba(51, 51, 51, 1.000)",
+        "track_width": 0.2,
+        "via_diameter": 0.6,
+        "via_drill": 0.4,
+        "wire_width": 6
+      },
+      {
+        "bus_width": 12,
+        "clearance": 0.2,
+        "diff_pair_gap": 0.25,
+        "diff_pair_via_gap": 0.25,
+        "diff_pair_width": 0.2,
+        "line_style": 0,
+        "microvia_diameter": 0.3,
+        "microvia_drill": 0.1,
+        "name": "PWR",
+        "pcb_color": "rgba(191, 67, 171, 1.000)",
+        "priority": 2,
+        "schematic_color": "rgba(191, 67, 171, 1.000)",
+        "track_width": 0.5,
+        "via_diameter": 0.6,
+        "via_drill": 0.4,
+        "wire_width": 6
+      },
+      {
+        "bus_width": 12,
+        "clearance": 0.2,
+        "diff_pair_gap": 0.25,
+        "diff_pair_via_gap": 0.25,
+        "diff_pair_width": 0.2,
+        "line_style": 0,
+        "microvia_diameter": 0.3,
+        "microvia_drill": 0.1,
+        "name": "Default",
+        "pcb_color": "rgba(0, 0, 0, 1.000)",
+        "priority": 2147483647,
+        "schematic_color": "rgba(0, 0, 0, 1.000)",
+        "track_width": 0.2,
+        "via_diameter": 0.6,
+        "via_drill": 0.4,
+        "wire_width": 6
+      }
+    ],
+    "meta": {
+      "version": 4
+    },
+    "net_colors": null,
+    "netclass_assignments": {
+      "+3V3": "PWR",
+      "GND": "Ground",
+      "VIN": "Power"
+    },
+    "netclass_patterns": []
+  },
+  "schematic": {
+    "annotate_start_num": 0,
+    "drawing": {},
+    "variants": []
+  },
+  "sheets": [
+    [
+      "266939c0-33d2-5060-9ef2-5ae9aca4a6aa",
+      ""
+    ]
+  ]
+}

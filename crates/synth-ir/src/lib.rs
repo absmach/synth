@@ -27,9 +27,9 @@ pub mod power_domains;
 pub mod units;
 
 pub use board::{
-    Board, Component, ComponentId, DiffPair, Keepout, Net, NetClass, NetEndpoint, NetId, Note,
-    PinId, PlacementConstraint, PlacementEdge, PlacementPriority, PlacementRegion, PlacementSide,
-    Variant,
+    Board, Component, ComponentId, DiffPair, Group, Keepout, Net, NetClass, NetEndpoint, NetId,
+    Note, PinId, PlacementConstraint, PlacementEdge, PlacementPriority, PlacementRegion,
+    PlacementSide, Variant,
 };
 pub use imports::{
     resolve as resolve_imports, FsImportLoader, ImportLoadError, ImportLoader, MemoryImportLoader,

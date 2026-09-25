@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 
-//! In-house schematic aesthetic ERC rule engine (`E-SYNTH-SCHEM-001..010`).
+//! In-house schematic aesthetic ERC rule engine (`E-SYNTH-SCHEM-001..012`).
 //!
 //! Pure, deterministic rules over a [`synth_layout::Layout`] (plus the
 //! [`synth_ir::Board`] where connectivity context is needed). This is
@@ -11,8 +11,10 @@
 //!
 //! The rules are advisory aesthetic checks per §7.7.7 of the
 //! implementation plan, reported at [`Severity::Warning`] (they must
-//! never block compilation). Implemented here, mapped onto the
-//! `E-SYNTH-SCHEM-001..010` code range:
+//! never block compilation), plus the schematic-quality plan's
+//! legibility rules (011–012, and the `E-SYNTH-VALUE-001` error owned
+//! by `synth-validate`). Implemented here, mapped onto the
+//! `E-SYNTH-SCHEM-001..012` code range:
 //!
 //! * **E-SYNTH-SCHEM-001** — Inverted power symbol (GND pointing up or
 //!   VCC pointing down).
@@ -25,17 +27,16 @@
 //!   net-label truncation.
 //!
 //! The remaining `E-SYNTH-SCHEM-005..010` codes cover the connection
-//! and page conventions from Sierra Circuits' "Schematic Design
-//! Rules" knowledge base (protoexpress.com/kb/schematic-design-rules/):
+//! and page conventions that standard schematic design-rule practice
+//! agrees on:
 //!
 //! * **E-SYNTH-SCHEM-005** — Junction fan-out: more than
 //!   [`SchemErcConfig::max_junction_degree`] wire lines meeting at a
-//!   node ("It is always a good practice to have only 3 lines
-//!   connected to a node").
+//!   node — three is the readable limit, a fourth makes the
+//!   connection ambiguous.
 //! * **E-SYNTH-SCHEM-006** — Cross-net junction: a node dot placed at
-//!   a point a *different* net's wire touches ("Lines that intersect
-//!   with each other are not connected unless there is a node present
-//!   at the point of intersection" — so a node must never sit on a
+//!   a point a *different* net's wire touches. Crossing lines are
+//!   connected only where a node is drawn, so a node must never sit on a
 //!   foreign net's geometry, or KiCad reads it as a designed-in short).
 //! * **E-SYNTH-SCHEM-007** — Page overflow: content outside the
 //!   selected sheet size ("Select the `page` size based on the size of
@@ -54,6 +55,22 @@
 //!   the generic `VCC`/`VDD`/`VPP` symbol instead of an explicit
 //!   voltage ("DO NOT USE VDD or VCC as they are ambiguous. Make a
 //!   new symbol for explicitly declaring what the voltage is").
+//!
+//! The schematic-quality plan's legibility rules continue the range:
+//!
+//! * **E-SYNTH-SCHEM-011** — Overlapping text runs: two free-text
+//!   runs (captions, note lines, legend lines) still overlapping
+//!   after the layout `resolve_text_overlaps` pass.
+//! * **E-SYNTH-SCHEM-012** — Sheet fill ratio below threshold: content
+//!   covers less than [`SchemErcConfig::min_sheet_fill_ratio`] of the
+//!   chosen sheet (info).
+//! * **E-SYNTH-SCHEM-013** — Group regions overlap, or a component
+//!   from one group falls inside another group's box: the region
+//!   placement (Phase C1) failed to keep groups contiguous.
+//! * **E-SYNTH-SCHEM-014** — Auto-named net (`net_N`) rendered on the
+//!   sheet as a label, suggesting a name from its endpoint pin.
+//! * **E-SYNTH-SCHEM-015** — A declared `group` carries no `notes`
+//!   block (info): the reference sheet's regions each explain intent.
 
 use std::collections::{HashMap, HashSet};
 
@@ -64,22 +81,31 @@ use synth_layout::{Layout, PinSide, PowerFlagKind, Rotation, WirePath};
 /// Default wire-crossing budget on a single sheet before
 /// `E-SYNTH-SCHEM-002` fires. Plan §7.7.7: "> 5 crossings".
 const DEFAULT_MAX_CROSSINGS: usize = 5;
-/// Default schematic distance (mm) a decoupling capacitor may sit from
-/// its target IC before `E-SYNTH-SCHEM-003` fires. Plan §7.7.7:
-/// "> 15 mm".
-const DEFAULT_DECOUPLING_MAX_MM: f64 = 15.0;
+/// Default empty space (mm) between a decoupling capacitor's symbol
+/// body and its target IC's before `E-SYNTH-SCHEM-003` fires.
+///
+/// Plan §7.7.7 says "> 15 mm", but measured centre to centre — which
+/// is incoherent across part sizes: 15 mm centres allowed a ~5 mm gap
+/// beside a small AMS1117 and was unsatisfiable beside an LQFP-48,
+/// whose half-diagonal alone exceeds it. The metric is now the gap
+/// between bodies, so the budget is restated for it: 25 mm is about
+/// ten grid steps, the distance at which a reader stops seeing the
+/// cap as belonging to the IC. The two numbers are not comparable.
+const DEFAULT_DECOUPLING_MAX_MM: f64 = 25.0;
 /// Default per-net span (mm) before `E-SYNTH-SCHEM-004` fires. Plan
 /// §7.7.7: "> 100 mm".
 const DEFAULT_LONG_NET_MAX_MM: f64 = 100.0;
 /// Default number of wire lines a node may carry before
-/// `E-SYNTH-SCHEM-005` fires. Sierra Circuits "Schematic Design
-/// Rules": "It is always a good practice to have only 3 lines
-/// connected to a node".
+/// `E-SYNTH-SCHEM-005` fires. Three lines at a node is the readable
+/// limit; a fourth makes the connection ambiguous.
 const DEFAULT_MAX_JUNCTION_DEGREE: usize = 3;
 /// Default rendered-net-name budget (chars) before `E-SYNTH-SCHEM-009`
 /// fires. StackExchange #28251: "Keep names reasonably short — no
 /// names is no information, but lots of long names are clutter."
 const DEFAULT_MAX_NET_LABEL_LEN: usize = 16;
+/// Default sheet-fill ratio (content bbox area over sheet area)
+/// below which `E-SYNTH-SCHEM-012` fires. Plan §A5: 45 %.
+const DEFAULT_MIN_SHEET_FILL_RATIO: f64 = 0.45;
 /// Power-rail labels too generic to be useful, flagged by
 /// `E-SYNTH-SCHEM-010`. StackExchange #28251: "DO NOT USE VDD or VCC
 /// as they are ambiguous. Make a new symbol for explicitly declaring
@@ -109,6 +135,9 @@ pub struct SchemErcConfig {
     /// `E-SYNTH-SCHEM-009`: a rendered net name longer than this many
     /// characters is flagged.
     pub max_net_label_len: usize,
+    /// `E-SYNTH-SCHEM-012`: content covering less than this fraction
+    /// of the sheet area is flagged (info).
+    pub min_sheet_fill_ratio: f64,
 }
 
 impl Default for SchemErcConfig {
@@ -119,6 +148,57 @@ impl Default for SchemErcConfig {
             long_net_max_mm: DEFAULT_LONG_NET_MAX_MM,
             max_junction_degree: DEFAULT_MAX_JUNCTION_DEGREE,
             max_net_label_len: DEFAULT_MAX_NET_LABEL_LEN,
+            min_sheet_fill_ratio: DEFAULT_MIN_SHEET_FILL_RATIO,
+        }
+    }
+}
+
+/// Fill in each diagnostic's source location from the entity it names.
+///
+/// The aesthetic rules run over a *layout*, which has no source spans
+/// — so every finding printed as `(?)` and a sheet with seventeen
+/// identical decoupling warnings gave the reader no way to tell which
+/// capacitor each meant. Every rule already attaches the component or
+/// net it is about; this resolves that back to the declaration's span
+/// so the CLI can print `file:start-end` like any other diagnostic.
+///
+/// Diagnostics naming no locatable entity (page overflow, wire-crossing
+/// density — properties of the sheet, not of one part) are left
+/// without a location, which is honest.
+pub fn attach_locations(diagnostics: &mut [Diagnostic], board: &Board, file: &str) {
+    for diagnostic in diagnostics {
+        if diagnostic.location.is_some() {
+            continue;
+        }
+        let span = diagnostic
+            .entities
+            .iter()
+            .chain(diagnostic.peer_entities.iter())
+            .find_map(|entity| match entity {
+                EntityRef::Component { id } => board
+                    .components
+                    .iter()
+                    .find(|c| c.refdes == *id)
+                    .map(|c| c.source_span),
+                EntityRef::Pin { component, .. } => board
+                    .components
+                    .iter()
+                    .find(|c| c.refdes == *component)
+                    .map(|c| c.source_span),
+                EntityRef::Net { name } => board
+                    .nets
+                    .iter()
+                    .find(|n| n.name == *name)
+                    .and_then(|n| n.endpoints.first())
+                    .and_then(|ep| board.component(ep.component))
+                    .map(|c| c.source_span),
+                _ => None,
+            });
+        if let Some(span) = span {
+            diagnostic.location = Some(synth_diagnostics::Location::from_span(
+                file.to_string(),
+                span,
+            ));
         }
     }
 }
@@ -126,7 +206,7 @@ impl Default for SchemErcConfig {
 /// Run every aesthetic ERC rule over `layout`/`board` and return the
 /// violations, using the §7.7.7 default thresholds.
 ///
-/// Order is deterministic and rule-stable: 001 → 002 → … → 010.
+/// Order is deterministic and rule-stable: 001 → 002 → … → 012.
 pub fn check(layout: &Layout, board: &Board) -> Vec<Diagnostic> {
     check_with_config(layout, board, SchemErcConfig::default())
 }
@@ -182,6 +262,11 @@ pub fn check_with_config(
     violations.extend(check_net_label_case(layout));
     violations.extend(check_net_label_length(layout, config.max_net_label_len));
     violations.extend(check_ambiguous_power_rails(layout, board));
+    violations.extend(check_text_overlaps(layout));
+    violations.extend(check_sheet_fill(board, layout, config.min_sheet_fill_ratio));
+    violations.extend(check_auto_named_nets(board, layout));
+    violations.extend(check_group_regions(board, layout));
+    violations.extend(check_group_notes(board));
     violations
 }
 
@@ -388,6 +473,71 @@ fn check_wire_crossings(layout: &Layout, max_crossings: usize) -> Vec<Diagnostic
 
 // ----- E-SYNTH-SCHEM-003: decoupling capacitor separation --------------------
 
+/// Empty space (mm) between two placed components' symbol bodies,
+/// zero when they overlap. `None` when either is unplaced or has no
+/// resolved part.
+fn body_gap_mm(
+    board: &Board,
+    layout: &Layout,
+    a: synth_ir::ComponentId,
+    b: synth_ir::ComponentId,
+) -> Option<f64> {
+    let half = |id: synth_ir::ComponentId| -> Option<((f64, f64), (f64, f64))> {
+        let place = layout.placement(id)?;
+        let part = board.component(id)?.part.as_ref()?;
+        let (w, h) = synth_layout::body_size_for_part(part);
+        // A rotated symbol presents its other axis to the gap.
+        let (w, h) = match place.rotation {
+            synth_layout::Rotation::Zero | synth_layout::Rotation::OneEighty => (w, h),
+            synth_layout::Rotation::Ninety | synth_layout::Rotation::TwoSeventy => (h, w),
+        };
+        Some((place.center_mm, (w / 2.0, h / 2.0)))
+    };
+    let ((ax, ay), (ahw, ahh)) = half(a)?;
+    let ((bx, by), (bhw, bhh)) = half(b)?;
+    let dx = ((ax - bx).abs() - (ahw + bhw)).max(0.0);
+    let dy = ((ay - by).abs() - (ahh + bhh)).max(0.0);
+    Some(dx.hypot(dy))
+}
+
+/// Whether `ic` is the closest decoupling-capable part to `cap` among
+/// everything sharing `rail`.
+///
+/// Ownership mirrors how the layouter assigns an orphan rail cap to a
+/// cluster (`patterns::ic_block::attach_orphan_rail_caps`), so the
+/// rule judges the same pairing the placer built.
+fn is_nearest_ic_on_rail(
+    board: &Board,
+    layout: &Layout,
+    rail: &synth_ir::Net,
+    cap: ComponentId,
+    ic: ComponentId,
+) -> bool {
+    let Some(own) = body_gap_mm(board, layout, ic, cap) else {
+        return true;
+    };
+    for ep in &rail.endpoints {
+        if ep.component == cap || ep.component == ic {
+            continue;
+        }
+        let Some(other) = board.component(ep.component) else {
+            continue;
+        };
+        let Some(part) = other.part.as_ref() else {
+            continue;
+        };
+        // Only parts that declare decoupling compete for ownership;
+        // another cap or a pull-up on the rail is not a candidate.
+        if part.required_decoupling.is_empty() {
+            continue;
+        }
+        if body_gap_mm(board, layout, ep.component, cap).is_some_and(|d| d < own) {
+            return false;
+        }
+    }
+    true
+}
+
 /// `E-SYNTH-SCHEM-003`: a decoupling capacitor connected to one of an
 /// IC's `required_decoupling` power nets sits further than
 /// `max_mm` (schematic distance) from the IC.
@@ -398,6 +548,12 @@ fn check_wire_crossings(layout: &Layout, max_crossings: usize) -> Vec<Diagnostic
 /// without pulling in KiCad symbol-pin geometry. Cap-to-IC pairs are
 /// deduplicated so a cap shared across multiple required nets only
 /// yields one diagnostic.
+///
+/// Schematic-quality plan Phase A2: the rail net is resolved through
+/// the IC's power *pin*, not by net-name equality. Merged rails keep
+/// one global net whose name rarely equals the manifest key, and
+/// power-flag-mediated nets are nets all the same — matching by name
+/// silently passed every shared-rail decoupling cap.
 fn check_decoupling_distance(board: &Board, layout: &Layout, max_mm: f64) -> Vec<Diagnostic> {
     let mut out = Vec::new();
     let mut seen: HashSet<(ComponentId, ComponentId)> = HashSet::new();
@@ -414,10 +570,31 @@ fn check_decoupling_distance(board: &Board, layout: &Layout, max_mm: f64) -> Vec
         };
 
         for req in &part.required_decoupling {
-            for net in &board.nets {
-                if net.name != req.net || !net.endpoints.iter().any(|e| e.component == ic.id) {
-                    continue;
-                }
+            // The rail net carrying the IC's power pin. Resolved
+            // through the pin (not by net-name equality): merged rails
+            // keep one global net whose name rarely equals the manifest
+            // key, and power-flag-mediated nets are nets all the same.
+            // When the part declares no such pin (synthetic boards),
+            // fall back to the legacy name match so the rule still fires.
+            // u32 cast is bounded: the index comes from the part's own pin list.
+            let rail_nets: Vec<&synth_ir::Net> =
+                match part.pins.iter().position(|p| p.name == req.net) {
+                    Some(pin_idx) => board
+                        .nets_containing(ic.id, PinId(pin_idx as u32))
+                        .map(|(_, net)| net)
+                        .next()
+                        .into_iter()
+                        .collect(),
+                    None => board
+                        .nets
+                        .iter()
+                        .filter(|net| {
+                            net.name == req.net
+                                && net.endpoints.iter().any(|e| e.component == ic.id)
+                        })
+                        .collect(),
+                };
+            for net in rail_nets {
                 for ep in &net.endpoints {
                     if ep.component == ic.id {
                         continue;
@@ -431,14 +608,37 @@ fn check_decoupling_distance(board: &Board, layout: &Layout, max_mm: f64) -> Vec
                     if !seen.insert((ic.id, ep.component)) {
                         continue;
                     }
+                    // A shared rail reaches every IC on the board, so
+                    // a naive sweep reported each cap against all of
+                    // them — one misplaced cap became N findings, and
+                    // no placement could satisfy them all at once. A
+                    // cap decouples exactly one part: the one it sits
+                    // nearest. Only that pair is judged; for the rest
+                    // this cap is simply not their decoupling.
+                    if !is_nearest_ic_on_rail(board, layout, net, ep.component, ic.id) {
+                        continue;
+                    }
                     let Some(cap_center) = layout.placement(ep.component).map(|p| p.center_mm)
                     else {
                         continue;
                     };
-                    let dist = ((ic_center.0 - cap_center.0).powi(2)
-                        + (ic_center.1 - cap_center.1).powi(2))
-                    .sqrt();
-                    if dist <= max_mm {
+                    // Gap between the two symbol bodies, not centre to
+                    // centre: a stock LQFP-48 symbol is ~25 x 55 mm, so
+                    // its half-diagonal alone exceeds the budget and a
+                    // centre measure could never be satisfied however
+                    // tightly the cap is placed. The budget is empty
+                    // space between the parts, which is what "too far"
+                    // means to a reader.
+                    let dist =
+                        body_gap_mm(board, layout, ic.id, ep.component).unwrap_or_else(|| {
+                            ((ic_center.0 - cap_center.0).powi(2)
+                                + (ic_center.1 - cap_center.1).powi(2))
+                            .sqrt()
+                        });
+                    // Epsilon: both sides are 2.54 mm-grid sums, so a
+                    // gap that lands exactly on the budget must pass
+                    // rather than fail on the last float bit.
+                    if dist <= max_mm + 1e-6 {
                         continue;
                     }
                     out.push(
@@ -449,10 +649,10 @@ fn check_decoupling_distance(board: &Board, layout: &Layout, max_mm: f64) -> Vec
                         )
                         .message(format!(
                             "decoupling capacitor {} is {dist:.1} mm from its target IC {} \
-                             (net \"{net_name}\"), exceeding the {max_mm} mm limit",
+                         (rail net \"{}\"), exceeding the {max_mm} mm limit",
                             cap.describe(),
                             ic.describe(),
-                            net_name = req.net,
+                            net.name,
                         ))
                         .entity(EntityRef::Component {
                             id: ic.refdes.clone(),
@@ -562,8 +762,8 @@ fn junction_degree(wires: &[WirePath], p: (i64, i64)) -> usize {
 }
 
 /// `E-SYNTH-SCHEM-005`: a node carrying more than `max_degree` wire
-/// lines (Sierra Circuits: "It is always a good practice to have only
-/// 3 lines connected to a node"). A 4-way node is unreadable — split
+/// lines. Three lines at a node is the readable limit, and a 4-way
+/// node is unreadable — split
 /// it into two staggered T junctions or truncate the net to labels.
 fn check_junction_fanout(layout: &Layout, max_degree: usize) -> Vec<Diagnostic> {
     let mut out = Vec::new();
@@ -625,9 +825,8 @@ fn point_touches_wire(p: (i64, i64), wire: &WirePath) -> bool {
 /// `E-SYNTH-SCHEM-006`: a junction dot placed where a *different*
 /// net's wire touches the same point.
 ///
-/// Sierra Circuits: "Lines that intersect with each other are not
-/// connected unless there is a node present at the point of
-/// intersection" — inverse corollary: where a node *is* present,
+/// Crossing lines are connected only where a node is drawn —
+/// inverse corollary: where a node *is* present,
 /// everything touching it is connected. The canonical router scopes
 /// junction detection per net so foreign wires crossing a same-net
 /// junction get no dot; if a dot ever lands on foreign geometry
@@ -685,8 +884,8 @@ const PAGE_OVERFLOW_EPSILON_MM: f64 = 0.01;
 
 /// `E-SYNTH-SCHEM-007`: content placed outside the selected sheet.
 ///
-/// Sierra Circuits: "Select the [page] size based on the size of your
-/// circuit design." The placer escalates A4 → A3 → A2 from the content
+/// The page size should follow the size of the circuit. The placer
+/// escalates A4 → A3 → A2 from the content
 /// bounding box; past A2 it stops growing and the §P26 split takes
 /// over (§MULTI-SHEET). This rule makes any residual overflow
 /// visible: a component placement or wire point beyond the sheet's
@@ -845,6 +1044,339 @@ fn check_ambiguous_power_rails(layout: &Layout, board: &Board) -> Vec<Diagnostic
             .build()
         })
         .collect()
+}
+
+// ----- E-SYNTH-SCHEM-011: overlapping text runs ------------------------------
+
+/// Slack (mm) below which two text runs count as merely touching —
+/// far below any glyph size, only absorbing float noise.
+const TEXT_OVERLAP_EPSILON_MM: f64 = 1e-6;
+
+/// Axis-aligned box of a free-text run, mirroring
+/// `synth_layout`'s overlap pass: `(x0, y0, x1, y1)` with `y` the
+/// baseline anchor and KiCad's ~0.72 em stroke-font advance.
+fn annotation_rect(text: &synth_layout::TextAnnotation) -> (f64, f64, f64, f64) {
+    let (x, y) = text.at_mm;
+    // u32 cast is bounded: annotation strings are far shorter than u32::MAX chars.
+    let chars = u32::try_from(text.text.chars().count()).unwrap_or(u32::MAX);
+    (
+        x,
+        y - text.size_mm,
+        x + f64::from(chars) * text.size_mm * 0.72,
+        y,
+    )
+}
+
+/// Shorten a run for messages: first `max` chars plus `…` when cut.
+fn ellipsize(text: &str, max: usize) -> String {
+    if text.chars().count() <= max {
+        return text.to_string();
+    }
+    format!("{}…", text.chars().take(max).collect::<String>())
+}
+
+/// `E-SYNTH-SCHEM-011`: two free-text runs (captions, note lines,
+/// legend lines) still overlapping after the layout
+/// `resolve_text_overlaps` pass (schematic-quality plan Phase A4).
+/// One diagnostic per overlapping pair, in annotation order — the
+/// measurement that keeps the resolve pass honest.
+fn check_text_overlaps(layout: &Layout) -> Vec<Diagnostic> {
+    let mut out = Vec::new();
+    for (i, a) in layout.annotations.iter().enumerate() {
+        let ra = annotation_rect(a);
+        for b in layout.annotations.iter().skip(i + 1) {
+            let rb = annotation_rect(b);
+            let overlaps = ra.0 < rb.2 - TEXT_OVERLAP_EPSILON_MM
+                && rb.0 < ra.2 - TEXT_OVERLAP_EPSILON_MM
+                && ra.1 < rb.3 - TEXT_OVERLAP_EPSILON_MM
+                && rb.1 < ra.3 - TEXT_OVERLAP_EPSILON_MM;
+            if !overlaps {
+                continue;
+            }
+            out.push(
+                DiagnosticBuilder::new(
+                    "E-SYNTH-SCHEM-011",
+                    Severity::Warning,
+                    "overlapping text runs",
+                )
+                .message(format!(
+                    "text runs \"{}\" and \"{}\" still overlap after the resolve pass; \
+                     move one of them or shorten the text",
+                    ellipsize(&a.text, 32),
+                    ellipsize(&b.text, 32),
+                ))
+                .expected("disjoint text runs")
+                .found(format!(
+                    "\"{}\" overlaps \"{}\"",
+                    ellipsize(&a.text, 32),
+                    ellipsize(&b.text, 32),
+                ))
+                .explanation_url("synth.docs/diagnostics/E-SYNTH-SCHEM-011")
+                .build(),
+            );
+        }
+    }
+    out
+}
+
+// ----- E-SYNTH-SCHEM-012: sheet fill ratio -----------------------------------
+/// `E-SYNTH-SCHEM-012`: the content bounding box covers less than
+/// `min_ratio` of the chosen sheet's area (schematic-quality plan
+/// Phase A5, defect D6 — content in the top 40 % of an A3 page while
+/// the bottom half sits empty). Info, never blocking: a roomy sheet
+/// is wasteful, not wrong. Names the smaller standard sheet that
+/// would fit when one exists.
+fn check_sheet_fill(board: &Board, layout: &Layout, min_ratio: f64) -> Vec<Diagnostic> {
+    let Some((min_x, max_x, min_y, max_y)) = synth_layout::drawing_bounds(board, layout) else {
+        return Vec::new();
+    };
+    let (sheet_w, sheet_h) = layout.sheet_size.dims_mm();
+    if sheet_w <= 0.0 || sheet_h <= 0.0 {
+        return Vec::new();
+    }
+
+    // A page already sized to the drawing is optimal: it cannot be made
+    // smaller, so a fixed area ratio is the wrong test and would fire
+    // forever. Ask the same function `fit_sheet` uses; if it returns the
+    // current page there is nothing to compact. A wide-and-short or
+    // narrow-and-tall drawing legitimately covers well under half of its
+    // own minimal page, because `sheet_needs` reserves the page margin and
+    // the title-block band.
+    let fitted = synth_layout::fit_sheet_size_any(min_x, max_x, min_y, max_y);
+    let (fit_w, fit_h) = fitted.dims_mm();
+    if fit_w >= sheet_w - 0.5 && fit_h >= sheet_h - 0.5 {
+        return Vec::new();
+    }
+
+    let content_w = (max_x - min_x).max(0.0);
+    let content_h = (max_y - min_y).max(0.0);
+    let ratio = content_w * content_h / (sheet_w * sheet_h);
+    if ratio >= min_ratio {
+        return Vec::new();
+    }
+    let smaller_hint = format!(" — content would fit {fitted:?}");
+    vec![DiagnosticBuilder::new(
+        "E-SYNTH-SCHEM-012",
+        Severity::Info,
+        "sheet fill ratio below threshold",
+    )
+    .message(format!(
+        "content ({content_w:.0} × {content_h:.0} mm) covers only {:.0}% of the \
+         {sheet_w:.0} × {sheet_h:.0} mm sheet, below the {:.0}% threshold{smaller_hint}; \
+         compact the layout or move to a smaller sheet",
+        ratio * 100.0,
+        min_ratio * 100.0,
+    ))
+    .expected(format!(
+        "at least {:.0}% of the sheet covered",
+        min_ratio * 100.0
+    ))
+    .found(format!("{:.0}% covered", ratio * 100.0))
+    .explanation_url("synth.docs/diagnostics/E-SYNTH-SCHEM-012")
+    .build()]
+}
+
+// ----- E-SYNTH-SCHEM-013: group regions overlap ------------------------------
+
+/// `E-SYNTH-SCHEM-013`: the region placement (Phase C1) failed to keep
+/// groups apart. Two failure modes, both reported as warnings:
+///
+/// - two group boxes overlap — a caption would title another region's
+///   parts;
+/// - a component whose declared group differs from a box's group lies
+///   inside that box — the regions interleave even if the boxes
+///   themselves only touch.
+///
+/// Boards with no declared groups have one implicit region and can
+/// never fire. One diagnostic per offending pair, in box order.
+fn check_group_regions(board: &Board, layout: &Layout) -> Vec<Diagnostic> {
+    let mut out = Vec::new();
+    let boxes = &layout.group_boxes;
+    // Box-vs-box overlap.
+    for i in 0..boxes.len() {
+        for j in (i + 1)..boxes.len() {
+            let a = &boxes[i];
+            let b = &boxes[j];
+            let disjoint = a.max_mm.0 <= b.min_mm.0
+                || b.max_mm.0 <= a.min_mm.0
+                || a.max_mm.1 <= b.min_mm.1
+                || b.max_mm.1 <= a.min_mm.1;
+            if disjoint {
+                continue;
+            }
+            out.push(
+                DiagnosticBuilder::new(
+                    "E-SYNTH-SCHEM-013",
+                    Severity::Warning,
+                    "group regions overlap",
+                )
+                .message(format!(
+                    "region boxes \"{}\" and \"{}\" overlap; a caption would title \
+                     another region's parts — check the region placement",
+                    a.group, b.group,
+                ))
+                .expected("disjoint group regions")
+                .found(format!("\"{}\" overlaps \"{}\"", a.group, b.group))
+                .explanation_url("synth.docs/diagnostics/E-SYNTH-SCHEM-013")
+                .build(),
+            );
+        }
+    }
+    // A component outside its own group's box (or inside another's).
+    // The component's region is resolved through the layout helper, so
+    // the implicit `MOUNTING` region of a mechanical part counts as
+    // its own region, exactly as placement treats it.
+    for placement in &layout.components {
+        let Some(component) = board.component(placement.id) else {
+            continue;
+        };
+        let Some(part) = component.part.as_ref() else {
+            continue;
+        };
+        let (bw, bh) = synth_layout::body_size_for_part(part);
+        let (cx, cy) = placement.center_mm;
+        let (x0, x1) = (cx - bw / 2.0, cx + bw / 2.0);
+        let (y0, y1) = (cy - bh / 2.0, cy + bh / 2.0);
+        for box_ in boxes {
+            // Inside this box?
+            let inside = x0 >= box_.min_mm.0
+                && x1 <= box_.max_mm.0
+                && y0 >= box_.min_mm.1
+                && y1 <= box_.max_mm.1;
+            if !inside {
+                continue;
+            }
+            // Its own region, or a nested declaration (a component may
+            // only belong to one group; a mismatch is the interleave).
+            if synth_layout::effective_group(board, placement.id) == Some(box_.group.as_str()) {
+                break;
+            }
+            out.push(
+                DiagnosticBuilder::new(
+                    "E-SYNTH-SCHEM-013",
+                    Severity::Warning,
+                    "component outside its group region",
+                )
+                .message(format!(
+                    "component {} sits inside region \"{}\" but declares a different \
+                     group; the regions are not contiguous",
+                    component.describe(),
+                    box_.group,
+                ))
+                .entity(EntityRef::Component {
+                    id: component.refdes.clone(),
+                })
+                .expected("every component inside its own group's region")
+                .found(format!("inside \"{}\"", box_.group))
+                .explanation_url("synth.docs/diagnostics/E-SYNTH-SCHEM-013")
+                .build(),
+            );
+            break;
+        }
+    }
+    out
+}
+
+// ----- E-SYNTH-SCHEM-015: group has no notes ---------------------------------
+
+/// `E-SYNTH-SCHEM-015`: a declared `group` carries no `notes` block
+/// (schematic-quality plan §2 mechanism 3, info).
+///
+/// The reference sheet's every region explains its intent in prose
+/// (*"VIN = 3.3 – 5.5 V, EN tied to VIN (always on)"*) — text the
+/// netlist cannot carry. Advisory, never blocking: a group without
+/// notes is under-documented, not wrong. One diagnostic per group, in
+/// declaration order.
+fn check_group_notes(board: &Board) -> Vec<Diagnostic> {
+    board
+        .groups
+        .iter()
+        .filter(|group| {
+            !board
+                .notes
+                .iter()
+                .any(|note| note.group.as_deref() == Some(group.name.as_str()))
+        })
+        .map(|group| {
+            DiagnosticBuilder::new("E-SYNTH-SCHEM-015", Severity::Info, "group has no notes")
+                .message(format!(
+                    "group \"{}\" carries no `notes` block; add one so the region explains \
+                 intent the netlist cannot (e.g. voltage range, always-on tie-off)",
+                    group.name,
+                ))
+                .expected("a `notes` block inside the group")
+                .found("no notes")
+                .explanation_url("synth.docs/diagnostics/E-SYNTH-SCHEM-015")
+                .build()
+        })
+        .collect()
+}
+
+/// Whether a rendered net name is an auto-generated placeholder
+/// (`net_3`, `NET_3`) rather than a human name.
+fn is_auto_net_label(label: &str) -> bool {
+    let lower = label.to_ascii_lowercase();
+    lower
+        .strip_prefix("net_")
+        .is_some_and(|rest| !rest.is_empty() && rest.bytes().all(|b| b.is_ascii_digit()))
+}
+
+// ----- E-SYNTH-SCHEM-014: auto-named net rendered on the sheet ---------------
+
+/// `E-SYNTH-SCHEM-014`: an auto-named net (`net_N`) reaching the sheet
+/// as a rendered label (schematic-quality plan Phase D3).
+///
+/// A placeholder name carries no intent — the reference sheet names
+/// every net it draws (`SCL`, `SDA`, `VIN`). The diagnostic suggests a
+/// name derived from the net's first endpoint pin, which is exactly
+/// the vocabulary `synth_layout::pick_net_label` uses, so an author
+/// can name the net at its source.
+///
+/// Nets drawn only as wires are *not* rendered by name and never fire;
+/// power rails get derived labels (`GND`, `VCC`), not placeholders.
+/// One diagnostic per offending net, in label order.
+fn check_auto_named_nets(board: &Board, layout: &Layout) -> Vec<Diagnostic> {
+    let mut seen: HashSet<NetId> = HashSet::new();
+    let mut out = Vec::new();
+    for label in &layout.net_labels {
+        if !is_auto_net_label(&label.label) || !seen.insert(label.net) {
+            continue;
+        }
+        let net = board.net(label.net);
+        // Suggest the first endpoint pin's name, uppercased — the same
+        // token `pick_net_label` would fall back to.
+        let suggestion = net
+            .and_then(|n| n.endpoints.first())
+            .and_then(|ep| board.pin(ep.component, ep.pin))
+            .map(|p| p.name.to_ascii_uppercase());
+        let message = match &suggestion {
+            Some(name) => format!(
+                "net rendered as \"{}\" is auto-named; give it a real name at its \
+                 source (`net \"{name}\" {{ … }}` or `connect … as \"{name}\"`)",
+                label.label,
+            ),
+            None => format!(
+                "net rendered as \"{}\" is auto-named; give it a real name at its source",
+                label.label,
+            ),
+        };
+        out.push(
+            DiagnosticBuilder::new(
+                "E-SYNTH-SCHEM-014",
+                Severity::Warning,
+                "auto-named net rendered on the sheet",
+            )
+            .message(message)
+            .entity(EntityRef::Net {
+                name: label.label.clone(),
+            })
+            .expected("a declared net name (e.g. SDA, VIN)")
+            .found(label.label.clone())
+            .explanation_url("synth.docs/diagnostics/E-SYNTH-SCHEM-014")
+            .build(),
+        );
+    }
+    out
 }
 
 #[cfg(test)]
@@ -1036,11 +1568,30 @@ mod tests {
         part
     }
 
+    /// A one-pin part, so the SCHEM-014 suggestion can name a pin.
+    fn single_pin_part(pin_name: &str) -> synth_registry::Part {
+        let mut part = cap_part();
+        part.pins = vec![synth_registry::Pin {
+            name: pin_name.to_string(),
+            number: synth_registry::PinNumber("1".to_string()),
+            electrical_type: synth_registry::ElectricalType::Bidirectional,
+            capabilities: Vec::new(),
+            required: false,
+            unit: None,
+            voltage_max_v: None,
+            voltage_min_v: None,
+            voltage_nominal_v: None,
+        }];
+        part
+    }
+
     #[test]
     fn decoupling_cap_far_from_ic_is_flagged() {
         // IC at (10, 10); a VCC net connecting IC pin 0 and cap C1 at
         // (100, 10) — 90 mm apart, beyond the 15 mm default.
         let board = Board {
+            groups: Vec::new(),
+            legends: false,
             name: "b".to_string(),
             layers: 2,
             manufacturer: None,
@@ -1119,6 +1670,8 @@ mod tests {
     #[test]
     fn decoupling_cap_near_ic_is_silent() {
         let board = Board {
+            groups: Vec::new(),
+            legends: false,
             name: "b".to_string(),
             layers: 2,
             manufacturer: None,
@@ -1465,6 +2018,8 @@ mod tests {
 
     fn board_with_nets(nets: Vec<Net>) -> Board {
         Board {
+            groups: Vec::new(),
+            legends: false,
             name: "b".to_string(),
             layers: 2,
             manufacturer: None,
@@ -1546,11 +2101,272 @@ mod tests {
         assert!(check_ambiguous_power_rails(&layout, &board).is_empty());
     }
 
-    // ----- aggregate entry point ------------------------------------------
+    // ----- E-SYNTH-SCHEM-011 ----------------------------------------------
 
+    fn annotation(text: &str, size_mm: f64, x: f64, y: f64) -> synth_layout::TextAnnotation {
+        synth_layout::TextAnnotation {
+            text: text.to_string(),
+            at_mm: (x, y),
+            size_mm,
+            kind: synth_layout::TextKind::NoteLine,
+        }
+    }
+
+    #[test]
+    fn overlapping_annotations_are_flagged() {
+        let mut layout = layout(Vec::new(), Vec::new(), Vec::new(), Vec::new());
+        layout.annotations = vec![
+            annotation("J1 pinout", 2.0, 20.0, 100.0),
+            annotation("J1 pinout", 2.0, 20.0, 100.0),
+        ];
+        let violations = check_text_overlaps(&layout);
+        assert_eq!(violations.len(), 1);
+        assert_eq!(violations[0].code, "E-SYNTH-SCHEM-011");
+        assert_eq!(violations[0].severity, Severity::Warning);
+    }
+
+    #[test]
+    fn disjoint_annotations_are_silent() {
+        let mut layout = layout(Vec::new(), Vec::new(), Vec::new(), Vec::new());
+        layout.annotations = vec![
+            annotation("Input", 2.0, 20.0, 100.0),
+            annotation("Output", 2.0, 20.0, 120.0),
+        ];
+        assert!(check_text_overlaps(&layout).is_empty());
+    }
+
+    // ----- E-SYNTH-SCHEM-012 ----------------------------------------------
+
+    #[test]
+    fn roomy_sheet_is_info() {
+        let board = board_with_nets(Vec::new());
+        let mut layout = layout(
+            vec![placement(ComponentId(0), 30.0, 30.0, Rotation::Zero)],
+            Vec::new(),
+            Vec::new(),
+            Vec::new(),
+        );
+        layout.sheet_size = SheetSize::A3;
+        let violations = check_sheet_fill(&board, &layout, 0.45);
+        assert_eq!(violations.len(), 1);
+        assert_eq!(violations[0].code, "E-SYNTH-SCHEM-012");
+        assert_eq!(violations[0].severity, Severity::Info);
+    }
+
+    #[test]
+    fn full_sheet_is_silent() {
+        let board = board_with_nets(Vec::new());
+        // Content spanning most of A4: well above the 45 % bar.
+        let layout = layout(
+            vec![
+                placement(ComponentId(0), 30.0, 30.0, Rotation::Zero),
+                placement(ComponentId(1), 260.0, 180.0, Rotation::Zero),
+            ],
+            Vec::new(),
+            Vec::new(),
+            Vec::new(),
+        );
+        assert!(check_sheet_fill(&board, &layout, 0.45).is_empty());
+    }
+
+    // ----- E-SYNTH-SCHEM-014 ----------------------------------------------
+
+    #[test]
+    fn auto_named_rendered_net_is_flagged_with_a_suggestion() {
+        let mut board = board_with_nets(Vec::new());
+        board.components.push(Component {
+            id: ComponentId(0),
+            refdes: "U1".to_string(),
+            kind: "mcu".to_string(),
+            part: Some(single_pin_part("sda")),
+            value: None,
+            dnp: false,
+            properties: std::collections::BTreeMap::new(),
+            placement_hint: None,
+            group: None,
+            sheet: None,
+            source_span: Span::new(0, 0),
+        });
+        board.nets.push(Net {
+            id: NetId(0),
+            name: "net_3".to_string(),
+            endpoints: vec![NetEndpoint {
+                component: ComponentId(0),
+                pin: PinId(0),
+                source_span: Span::new(0, 0),
+            }],
+            netclass: None,
+            voltage: None,
+        });
+        let layout = layout(
+            Vec::new(),
+            Vec::new(),
+            Vec::new(),
+            vec![net_label(NetId(0), ComponentId(0), "NET_3")],
+        );
+        let violations = check_auto_named_nets(&board, &layout);
+        assert_eq!(violations.len(), 1);
+        assert_eq!(violations[0].code, "E-SYNTH-SCHEM-014");
+        assert!(
+            violations[0].message.as_deref().unwrap().contains("SDA"),
+            "suggestion should name the endpoint pin: {:?}",
+            violations[0].message
+        );
+    }
+
+    #[test]
+    fn named_net_is_silent_for_014() {
+        let board = board_with_nets(Vec::new());
+        let layout = layout(
+            Vec::new(),
+            Vec::new(),
+            Vec::new(),
+            vec![net_label(NetId(0), ComponentId(0), "SDA")],
+        );
+        assert!(check_auto_named_nets(&board, &layout).is_empty());
+    }
+
+    // ----- E-SYNTH-SCHEM-013 / 015 ----------------------------------------
+
+    fn group_box(name: &str, x0: f64, y0: f64, x1: f64, y1: f64) -> synth_layout::GroupBox {
+        synth_layout::GroupBox {
+            group: name.to_string(),
+            min_mm: (x0, y0),
+            max_mm: (x1, y1),
+            color: [0, 0, 0],
+            caption_inside: true,
+        }
+    }
+
+    #[test]
+    fn overlapping_group_boxes_are_flagged() {
+        let board = board_with_nets(Vec::new());
+        let mut layout = layout(Vec::new(), Vec::new(), Vec::new(), Vec::new());
+        layout.group_boxes = vec![
+            group_box("A", 0.0, 0.0, 100.0, 100.0),
+            group_box("B", 50.0, 50.0, 150.0, 150.0),
+        ];
+        let violations = check_group_regions(&board, &layout);
+        assert_eq!(violations.len(), 1);
+        assert_eq!(violations[0].code, "E-SYNTH-SCHEM-013");
+    }
+
+    #[test]
+    fn disjoint_group_boxes_are_silent() {
+        let board = board_with_nets(Vec::new());
+        let mut layout = layout(Vec::new(), Vec::new(), Vec::new(), Vec::new());
+        layout.group_boxes = vec![
+            group_box("A", 0.0, 0.0, 40.0, 40.0),
+            group_box("B", 60.0, 0.0, 100.0, 40.0),
+        ];
+        assert!(check_group_regions(&board, &layout).is_empty());
+    }
+
+    #[test]
+    fn foreign_component_inside_a_region_is_flagged() {
+        let mut board = board_with_nets(Vec::new());
+        // Two grouped components: one in A, one in B.
+        for (i, (refdes, group)) in [("R1", "A"), ("R2", "B")].iter().enumerate() {
+            board.components.push(Component {
+                id: ComponentId(i as u32),
+                refdes: refdes.to_string(),
+                kind: "resistor".to_string(),
+                part: Some(single_pin_part("p1")),
+                value: None,
+                dnp: false,
+                properties: std::collections::BTreeMap::new(),
+                placement_hint: None,
+                group: Some(group.to_string()),
+                sheet: None,
+                source_span: Span::new(0, 0),
+            });
+        }
+        let mut layout = layout(
+            vec![
+                placement(ComponentId(0), 10.0, 10.0, Rotation::Zero),
+                // R2 (group B) physically inside A's box.
+                placement(ComponentId(1), 12.0, 12.0, Rotation::Zero),
+            ],
+            Vec::new(),
+            Vec::new(),
+            Vec::new(),
+        );
+        layout.group_boxes = vec![group_box("A", 0.0, 0.0, 40.0, 40.0)];
+        let violations = check_group_regions(&board, &layout);
+        assert_eq!(violations.len(), 1, "{violations:?}");
+        assert_eq!(violations[0].code, "E-SYNTH-SCHEM-013");
+    }
+
+    #[test]
+    fn mechanical_component_in_mounting_region_is_silent() {
+        // Regression: the implicit MOUNTING region is not a declared
+        // `group` on the component, so a naive group comparison fired
+        // 013 on every mechanical part. Resolving through the layout's
+        // `effective_group` fixes it.
+        let mut board = board_with_nets(Vec::new());
+        let mut hole = single_pin_part("1");
+        hole.kind = "mounting_hole".to_string();
+        board.components.push(Component {
+            id: ComponentId(0),
+            refdes: "H1".to_string(),
+            kind: "mounting_hole".to_string(),
+            part: Some(hole),
+            value: None,
+            dnp: false,
+            properties: std::collections::BTreeMap::new(),
+            placement_hint: None,
+            group: None,
+            sheet: None,
+            source_span: Span::new(0, 0),
+        });
+        let mut layout = layout(
+            vec![placement(ComponentId(0), 10.0, 10.0, Rotation::Zero)],
+            Vec::new(),
+            Vec::new(),
+            Vec::new(),
+        );
+        layout.group_boxes = vec![group_box(
+            synth_layout::MOUNTING_REGION,
+            0.0,
+            0.0,
+            40.0,
+            40.0,
+        )];
+        assert!(check_group_regions(&board, &layout).is_empty());
+    }
+
+    #[test]
+    fn group_without_notes_is_info() {
+        use synth_ir::Group;
+        let mut board = board_with_nets(Vec::new());
+        board.groups = vec![Group {
+            name: "Power".to_string(),
+            title: None,
+            color: None,
+            region: None,
+            source_span: Span::new(0, 0),
+        }];
+        let violations = check_group_notes(&board);
+        assert_eq!(violations.len(), 1);
+        assert_eq!(violations[0].code, "E-SYNTH-SCHEM-015");
+        assert_eq!(violations[0].severity, Severity::Info);
+        // A matching notes block silences it.
+        board.notes.push(synth_ir::Note {
+            title: "Power notes".to_string(),
+            lines: vec!["VIN = 3.3 - 5.5 V".to_string()],
+            group: Some("Power".to_string()),
+            sheet: None,
+            source_span: Span::new(0, 0),
+        });
+        assert!(check_group_notes(&board).is_empty());
+    }
+
+    // ----- aggregate entry point ------------------------------------------
     #[test]
     fn aggregate_check_returns_warnings_in_rule_order() {
         let board = Board {
+            groups: Vec::new(),
+            legends: false,
             name: "b".to_string(),
             layers: 2,
             manufacturer: None,
@@ -1672,6 +2488,12 @@ mod tests {
         // 005 (4-line node), 006 (foreign wire through the node),
         // 007 (placement past the sheet edge), 008 (lowercase name),
         // 009 (long name), 010 (ambiguous VCC rail).
+        //
+        // 012 (roomy sheet) is deliberately absent: this fixture's content
+        // runs past the A4 edge, so the page is too SMALL, not too roomy.
+        // Suggesting "compact onto a smaller sheet" for content that already
+        // overflows would be backwards; 007 is the finding that applies.
+        // `roomy_sheet_is_flagged` covers 012 on an on-page drawing.
         assert_eq!(
             codes,
             vec![
@@ -1694,6 +2516,8 @@ mod tests {
         // A VCC rail with no explicit voltage name trips SCHEM-010
         // wherever it is rendered — a stable diagnostic to attribute.
         let b = Board {
+            groups: Vec::new(),
+            legends: false,
             name: "b".to_string(),
             layers: 2,
             manufacturer: None,
@@ -1760,5 +2584,68 @@ mod tests {
         );
         assert!(multi.iter().any(|d| d.title.starts_with("[root] ")));
         assert!(multi.iter().any(|d| d.title.starts_with("[Power] ")));
+    }
+
+    /// One component so `drawing_bounds` is well-defined and the sheet can be
+    /// sized around it.
+    fn board_with_one_component() -> Board {
+        let mut b = board_with_nets(Vec::new());
+        b.components.push(Component {
+            id: ComponentId(0),
+            refdes: "R1".to_string(),
+            kind: "resistor".to_string(),
+            part: None,
+            value: Some("10k".to_string()),
+            dnp: false,
+            properties: std::collections::BTreeMap::new(),
+            placement_hint: None,
+            group: None,
+            sheet: None,
+            source_span: Span::new(0, 0),
+        });
+        b
+    }
+
+    #[test]
+    fn roomy_sheet_is_flagged() {
+        // A single part marooned on A4: content is far smaller than the page
+        // and a smaller page exists, so 012 must fire and name the target.
+        let board = board_with_one_component();
+        let l = layout(
+            vec![placement(ComponentId(0), 30.0, 30.0, Rotation::Zero)],
+            Vec::new(),
+            Vec::new(),
+            Vec::new(),
+        );
+        let v = check_sheet_fill(&board, &l, DEFAULT_MIN_SHEET_FILL_RATIO);
+        assert_eq!(v.len(), 1, "roomy A4 sheet must be flagged");
+        assert_eq!(v[0].code, "E-SYNTH-SCHEM-012");
+        assert!(
+            v[0].message.as_deref().unwrap_or("").contains("would fit"),
+            "012 must name the sheet that would fit: {:?}",
+            v[0].message
+        );
+    }
+
+    #[test]
+    fn already_fitted_sheet_is_silent() {
+        // Size the page to the drawing, exactly as `fit_sheet` does; the
+        // rule must then fall silent, or a fitted design would warn forever.
+        let board = board_with_one_component();
+        let mut l = layout(
+            vec![placement(ComponentId(0), 30.0, 30.0, Rotation::Zero)],
+            Vec::new(),
+            Vec::new(),
+            Vec::new(),
+        );
+        let (min_x, max_x, min_y, max_y) =
+            synth_layout::drawing_bounds(&board, &l).expect("drawing bounds");
+        l.sheet_size = synth_layout::fit_sheet_size_any(min_x, max_x, min_y, max_y);
+
+        let v = check_sheet_fill(&board, &l, DEFAULT_MIN_SHEET_FILL_RATIO);
+        assert!(
+            v.is_empty(),
+            "an optimally-fitted page must not warn: {v:?}"
+        );
     }
 }

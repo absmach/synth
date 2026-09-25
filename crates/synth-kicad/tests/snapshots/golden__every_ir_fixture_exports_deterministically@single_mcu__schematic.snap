@@ -18,7 +18,7 @@ expression: schematic
 		(comment 3 "Fab: jlcpcb")
 	)
 	(lib_symbols
-		(symbol "MCU_RaspberryPi:RP2040"
+		(symbol "MCU_RaspberryPi:RP2350A"
 		(exclude_from_sim no)
 		(in_bom yes)
 		(on_board yes)
@@ -35,7 +35,7 @@ expression: schematic
 				(justify left)
 			)
 		)
-		(property "Value" "RP2040"
+		(property "Value" "RP2350A"
 			(at 17.526 44.704 0)
 			(show_name no)
 			(do_not_autoplace no)
@@ -46,7 +46,7 @@ expression: schematic
 				(justify left)
 			)
 		)
-		(property "Footprint" "Package_DFN_QFN:QFN-56-1EP_7x7mm_P0.4mm_EP3.2x3.2mm"
+		(property "Footprint" "Package_DFN_QFN:QFN-60-1EP_7x7mm_P0.4mm_EP3.4x3.4mm"
 			(at 0 0 0)
 			(show_name no)
 			(do_not_autoplace no)
@@ -57,7 +57,7 @@ expression: schematic
 				)
 			)
 		)
-		(property "Datasheet" "https://datasheets.raspberrypi.com/rp2040/rp2040-datasheet.pdf"
+		(property "Datasheet" "https://datasheets.raspberrypi.com/rp2350/rp2350-datasheet.pdf"
 			(at 0 0 0)
 			(show_name no)
 			(do_not_autoplace no)
@@ -68,7 +68,7 @@ expression: schematic
 				)
 			)
 		)
-		(property "Description" "A microcontroller by Raspberry Pi, Dual ARM Cortex-M0+, 133MHz, no flash, 264KB SRAM, 8 PIO state machines, VQFN-56"
+		(property "Description" "A microcontroller by Raspberry Pi, dual CPU architecture (ARM Cortex-M33 / RISC-V Hazard3), 150MHz, no flash, 520KB SRAM, 12 PIO state machines, VQFN-60"
 			(at 0 0 0)
 			(show_name no)
 			(do_not_autoplace no)
@@ -90,7 +90,7 @@ expression: schematic
 				)
 			)
 		)
-		(property private "KLC_S4.2_VREG_VOUT" "Should be placed next to DVDD."
+		(property private "KLC_S4.2_VREG_LX" "Should be placed next to DVDD."
 			(at 0 -2.54 0)
 			(show_name yes)
 			(do_not_autoplace no)
@@ -101,7 +101,7 @@ expression: schematic
 				)
 			)
 		)
-		(property "ki_keywords" "RPi Pico USB QSPI I2C UART SC0914"
+		(property "ki_keywords" "RPi Pico USB QSPI I2C UART ADC SC1509"
 			(at 0 0 0)
 			(show_name no)
 			(do_not_autoplace no)
@@ -112,7 +112,7 @@ expression: schematic
 				)
 			)
 		)
-		(property "ki_fp_filters" "*QFN*7x7mm?P0.4mm?EP3.2x3.2mm*"
+		(property "ki_fp_filters" "*QFN*7x7mm?P0.4mm?EP3.4x3.4mm*"
 			(at 0 0 0)
 			(show_name no)
 			(do_not_autoplace no)
@@ -123,7 +123,7 @@ expression: schematic
 				)
 			)
 		)
-		(symbol "RP2040_0_1"
+		(symbol "RP2350A_0_1"
 			(rectangle
 				(start -21.59 41.91)
 				(end 21.59 -41.91)
@@ -136,7 +136,118 @@ expression: schematic
 				)
 			)
 		)
-		(symbol "RP2040_1_1"
+		(symbol "RP2350A_1_0"
+			(pin power_in line
+				(at 12.7 45.72 270)
+				(length 3.81)
+				(name "DVDD"
+					(effects
+						(font
+							(size 1.27 1.27)
+						)
+					)
+				)
+				(number "6"
+					(effects
+						(font
+							(size 1.27 1.27)
+						)
+					)
+				)
+			)
+			(pin passive line
+				(at 12.7 45.72 270)
+				(length 3.81)
+				(hide yes)
+				(name "DVDD"
+					(effects
+						(font
+							(size 1.27 1.27)
+						)
+					)
+				)
+				(number "39"
+					(effects
+						(font
+							(size 1.27 1.27)
+						)
+					)
+				)
+			)
+			(pin power_in line
+				(at -17.78 45.72 270)
+				(length 3.81)
+				(name "VREG_AVDD"
+					(effects
+						(font
+							(size 1.27 1.27)
+						)
+					)
+				)
+				(number "46"
+					(effects
+						(font
+							(size 1.27 1.27)
+						)
+					)
+				)
+			)
+			(pin power_in line
+				(at -2.54 -45.72 90)
+				(length 3.81)
+				(name "VREG_PGND"
+					(effects
+						(font
+							(size 1.27 1.27)
+						)
+					)
+				)
+				(number "47"
+					(effects
+						(font
+							(size 1.27 1.27)
+						)
+					)
+				)
+			)
+			(pin power_in line
+				(at -12.7 45.72 270)
+				(length 3.81)
+				(name "USB_OTP_VDD"
+					(effects
+						(font
+							(size 1.27 1.27)
+						)
+					)
+				)
+				(number "53"
+					(effects
+						(font
+							(size 1.27 1.27)
+						)
+					)
+				)
+			)
+			(pin power_in line
+				(at -5.08 45.72 270)
+				(length 3.81)
+				(name "QSPI_IOVDD"
+					(effects
+						(font
+							(size 1.27 1.27)
+						)
+					)
+				)
+				(number "54"
+					(effects
+						(font
+							(size 1.27 1.27)
+						)
+					)
+				)
+			)
+		)
+		(symbol "RP2350A_1_1"
 			(pin power_in line
 				(at -2.54 45.72 270)
 				(length 3.81)
@@ -237,7 +348,7 @@ expression: schematic
 						)
 					)
 				)
-				(number "6"
+				(number "7"
 					(effects
 						(font
 							(size 1.27 1.27)
@@ -255,7 +366,7 @@ expression: schematic
 						)
 					)
 				)
-				(number "7"
+				(number "8"
 					(effects
 						(font
 							(size 1.27 1.27)
@@ -273,7 +384,7 @@ expression: schematic
 						)
 					)
 				)
-				(number "8"
+				(number "9"
 					(effects
 						(font
 							(size 1.27 1.27)
@@ -291,7 +402,7 @@ expression: schematic
 						)
 					)
 				)
-				(number "9"
+				(number "10"
 					(effects
 						(font
 							(size 1.27 1.27)
@@ -310,7 +421,7 @@ expression: schematic
 						)
 					)
 				)
-				(number "10"
+				(number "11"
 					(effects
 						(font
 							(size 1.27 1.27)
@@ -328,7 +439,7 @@ expression: schematic
 						)
 					)
 				)
-				(number "11"
+				(number "12"
 					(effects
 						(font
 							(size 1.27 1.27)
@@ -346,7 +457,7 @@ expression: schematic
 						)
 					)
 				)
-				(number "12"
+				(number "13"
 					(effects
 						(font
 							(size 1.27 1.27)
@@ -364,7 +475,7 @@ expression: schematic
 						)
 					)
 				)
-				(number "13"
+				(number "14"
 					(effects
 						(font
 							(size 1.27 1.27)
@@ -382,7 +493,7 @@ expression: schematic
 						)
 					)
 				)
-				(number "14"
+				(number "15"
 					(effects
 						(font
 							(size 1.27 1.27)
@@ -400,7 +511,7 @@ expression: schematic
 						)
 					)
 				)
-				(number "15"
+				(number "16"
 					(effects
 						(font
 							(size 1.27 1.27)
@@ -418,7 +529,7 @@ expression: schematic
 						)
 					)
 				)
-				(number "16"
+				(number "17"
 					(effects
 						(font
 							(size 1.27 1.27)
@@ -436,7 +547,7 @@ expression: schematic
 						)
 					)
 				)
-				(number "17"
+				(number "18"
 					(effects
 						(font
 							(size 1.27 1.27)
@@ -454,61 +565,7 @@ expression: schematic
 						)
 					)
 				)
-				(number "18"
-					(effects
-						(font
-							(size 1.27 1.27)
-						)
-					)
-				)
-			)
-			(pin input line
-				(at -25.4 30.48 0)
-				(length 3.81)
-				(name "TESTEN"
-					(effects
-						(font
-							(size 1.27 1.27)
-						)
-					)
-				)
 				(number "19"
-					(effects
-						(font
-							(size 1.27 1.27)
-						)
-					)
-				)
-			)
-			(pin input line
-				(at -25.4 -15.24 0)
-				(length 3.81)
-				(name "XIN"
-					(effects
-						(font
-							(size 1.27 1.27)
-						)
-					)
-				)
-				(number "20"
-					(effects
-						(font
-							(size 1.27 1.27)
-						)
-					)
-				)
-			)
-			(pin output line
-				(at -25.4 -25.4 0)
-				(length 3.81)
-				(name "XOUT"
-					(effects
-						(font
-							(size 1.27 1.27)
-						)
-					)
-				)
-				(number "21"
 					(effects
 						(font
 							(size 1.27 1.27)
@@ -527,6 +584,42 @@ expression: schematic
 						)
 					)
 				)
+				(number "20"
+					(effects
+						(font
+							(size 1.27 1.27)
+						)
+					)
+				)
+			)
+			(pin input line
+				(at -25.4 -15.24 0)
+				(length 3.81)
+				(name "XIN"
+					(effects
+						(font
+							(size 1.27 1.27)
+						)
+					)
+				)
+				(number "21"
+					(effects
+						(font
+							(size 1.27 1.27)
+						)
+					)
+				)
+			)
+			(pin output line
+				(at -25.4 -25.4 0)
+				(length 3.81)
+				(name "XOUT"
+					(effects
+						(font
+							(size 1.27 1.27)
+						)
+					)
+				)
 				(number "22"
 					(effects
 						(font
@@ -535,9 +628,10 @@ expression: schematic
 					)
 				)
 			)
-			(pin power_in line
+			(pin passive line
 				(at 12.7 45.72 270)
 				(length 3.81)
+				(hide yes)
 				(name "DVDD"
 					(effects
 						(font
@@ -661,6 +755,25 @@ expression: schematic
 					)
 				)
 			)
+			(pin passive line
+				(at -2.54 45.72 270)
+				(length 3.81)
+				(hide yes)
+				(name "IOVDD"
+					(effects
+						(font
+							(size 1.27 1.27)
+						)
+					)
+				)
+				(number "30"
+					(effects
+						(font
+							(size 1.27 1.27)
+						)
+					)
+				)
+			)
 			(pin bidirectional line
 				(at 25.4 -10.16 180)
 				(length 3.81)
@@ -671,7 +784,7 @@ expression: schematic
 						)
 					)
 				)
-				(number "30"
+				(number "31"
 					(effects
 						(font
 							(size 1.27 1.27)
@@ -689,7 +802,7 @@ expression: schematic
 						)
 					)
 				)
-				(number "31"
+				(number "32"
 					(effects
 						(font
 							(size 1.27 1.27)
@@ -701,25 +814,6 @@ expression: schematic
 				(at 25.4 -15.24 180)
 				(length 3.81)
 				(name "GPIO21"
-					(effects
-						(font
-							(size 1.27 1.27)
-						)
-					)
-				)
-				(number "32"
-					(effects
-						(font
-							(size 1.27 1.27)
-						)
-					)
-				)
-			)
-			(pin passive line
-				(at -2.54 45.72 270)
-				(length 3.81)
-				(hide yes)
-				(name "IOVDD"
 					(effects
 						(font
 							(size 1.27 1.27)
@@ -806,6 +900,25 @@ expression: schematic
 					)
 				)
 			)
+			(pin passive line
+				(at -2.54 45.72 270)
+				(length 3.81)
+				(hide yes)
+				(name "IOVDD"
+					(effects
+						(font
+							(size 1.27 1.27)
+						)
+					)
+				)
+				(number "38"
+					(effects
+						(font
+							(size 1.27 1.27)
+						)
+					)
+				)
+			)
 			(pin bidirectional line
 				(at 25.4 -30.48 180)
 				(length 3.81)
@@ -816,7 +929,7 @@ expression: schematic
 						)
 					)
 				)
-				(number "38"
+				(number "40"
 					(effects
 						(font
 							(size 1.27 1.27)
@@ -834,7 +947,7 @@ expression: schematic
 						)
 					)
 				)
-				(number "39"
+				(number "41"
 					(effects
 						(font
 							(size 1.27 1.27)
@@ -852,7 +965,7 @@ expression: schematic
 						)
 					)
 				)
-				(number "40"
+				(number "42"
 					(effects
 						(font
 							(size 1.27 1.27)
@@ -870,26 +983,7 @@ expression: schematic
 						)
 					)
 				)
-				(number "41"
-					(effects
-						(font
-							(size 1.27 1.27)
-						)
-					)
-				)
-			)
-			(pin passive line
-				(at -2.54 45.72 270)
-				(length 3.81)
-				(hide yes)
-				(name "IOVDD"
-					(effects
-						(font
-							(size 1.27 1.27)
-						)
-					)
-				)
-				(number "42"
+				(number "43"
 					(effects
 						(font
 							(size 1.27 1.27)
@@ -907,97 +1001,7 @@ expression: schematic
 						)
 					)
 				)
-				(number "43"
-					(effects
-						(font
-							(size 1.27 1.27)
-						)
-					)
-				)
-			)
-			(pin power_in line
-				(at 2.54 45.72 270)
-				(length 3.81)
-				(name "VREG_VIN"
-					(effects
-						(font
-							(size 1.27 1.27)
-						)
-					)
-				)
 				(number "44"
-					(effects
-						(font
-							(size 1.27 1.27)
-						)
-					)
-				)
-			)
-			(pin power_out line
-				(at 7.62 45.72 270)
-				(length 3.81)
-				(name "VREG_VOUT"
-					(effects
-						(font
-							(size 1.27 1.27)
-						)
-					)
-				)
-				(number "45"
-					(effects
-						(font
-							(size 1.27 1.27)
-						)
-					)
-				)
-			)
-			(pin bidirectional line
-				(at -25.4 15.24 0)
-				(length 3.81)
-				(name "USB_DM"
-					(effects
-						(font
-							(size 1.27 1.27)
-						)
-					)
-				)
-				(number "46"
-					(effects
-						(font
-							(size 1.27 1.27)
-						)
-					)
-				)
-			)
-			(pin bidirectional line
-				(at -25.4 12.7 0)
-				(length 3.81)
-				(name "USB_DP"
-					(effects
-						(font
-							(size 1.27 1.27)
-						)
-					)
-				)
-				(number "47"
-					(effects
-						(font
-							(size 1.27 1.27)
-						)
-					)
-				)
-			)
-			(pin power_in line
-				(at -12.7 45.72 270)
-				(length 3.81)
-				(name "USB_VDD"
-					(effects
-						(font
-							(size 1.27 1.27)
-						)
-					)
-				)
-				(number "48"
 					(effects
 						(font
 							(size 1.27 1.27)
@@ -1016,6 +1020,42 @@ expression: schematic
 						)
 					)
 				)
+				(number "45"
+					(effects
+						(font
+							(size 1.27 1.27)
+						)
+					)
+				)
+			)
+			(pin power_out line
+				(at 5.08 45.72 270)
+				(length 3.81)
+				(name "VREG_LX"
+					(effects
+						(font
+							(size 1.27 1.27)
+						)
+					)
+				)
+				(number "48"
+					(effects
+						(font
+							(size 1.27 1.27)
+						)
+					)
+				)
+			)
+			(pin power_in line
+				(at 2.54 45.72 270)
+				(length 3.81)
+				(name "VREG_VIN"
+					(effects
+						(font
+							(size 1.27 1.27)
+						)
+					)
+				)
 				(number "49"
 					(effects
 						(font
@@ -1025,10 +1065,9 @@ expression: schematic
 				)
 			)
 			(pin passive line
-				(at 12.7 45.72 270)
+				(at 7.62 45.72 270)
 				(length 3.81)
-				(hide yes)
-				(name "DVDD"
+				(name "VREG_FB"
 					(effects
 						(font
 							(size 1.27 1.27)
@@ -1036,6 +1075,42 @@ expression: schematic
 					)
 				)
 				(number "50"
+					(effects
+						(font
+							(size 1.27 1.27)
+						)
+					)
+				)
+			)
+			(pin bidirectional line
+				(at -25.4 15.24 0)
+				(length 3.81)
+				(name "USB_DM"
+					(effects
+						(font
+							(size 1.27 1.27)
+						)
+					)
+				)
+				(number "51"
+					(effects
+						(font
+							(size 1.27 1.27)
+						)
+					)
+				)
+			)
+			(pin bidirectional line
+				(at -25.4 12.7 0)
+				(length 3.81)
+				(name "USB_DP"
+					(effects
+						(font
+							(size 1.27 1.27)
+						)
+					)
+				)
+				(number "52"
 					(effects
 						(font
 							(size 1.27 1.27)
@@ -1053,7 +1128,7 @@ expression: schematic
 						)
 					)
 				)
-				(number "51"
+				(number "55"
 					(effects
 						(font
 							(size 1.27 1.27)
@@ -1071,7 +1146,7 @@ expression: schematic
 						)
 					)
 				)
-				(number "52"
+				(number "56"
 					(effects
 						(font
 							(size 1.27 1.27)
@@ -1089,7 +1164,7 @@ expression: schematic
 						)
 					)
 				)
-				(number "53"
+				(number "57"
 					(effects
 						(font
 							(size 1.27 1.27)
@@ -1107,7 +1182,7 @@ expression: schematic
 						)
 					)
 				)
-				(number "54"
+				(number "58"
 					(effects
 						(font
 							(size 1.27 1.27)
@@ -1125,7 +1200,7 @@ expression: schematic
 						)
 					)
 				)
-				(number "55"
+				(number "59"
 					(effects
 						(font
 							(size 1.27 1.27)
@@ -1143,7 +1218,7 @@ expression: schematic
 						)
 					)
 				)
-				(number "56"
+				(number "60"
 					(effects
 						(font
 							(size 1.27 1.27)
@@ -1161,7 +1236,7 @@ expression: schematic
 						)
 					)
 				)
-				(number "57"
+				(number "61"
 					(effects
 						(font
 							(size 1.27 1.27)
@@ -1174,8 +1249,8 @@ expression: schematic
 	)
 	)
 	(symbol
-		(lib_id "MCU_RaspberryPi:RP2040")
-		(at 58.42 78.74 0)
+		(lib_id "MCU_RaspberryPi:RP2350A")
+		(at 40.64 60.96 0)
 		(unit 1)
 		(in_bom yes)
 		(on_board yes)
@@ -1183,7 +1258,7 @@ expression: schematic
 		(property
 			"Reference"
 			"U1"
-			(at 58.42 63.5 0)
+			(at 40.64 15.24 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -1193,7 +1268,7 @@ expression: schematic
 		(property
 			"Value"
 			"RP2350A"
-			(at 58.42 93.98 0)
+			(at 40.64 106.68 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -1202,8 +1277,8 @@ expression: schematic
 		)
 		(property
 			"Footprint"
-			"Package_DFN_QFN:QFN-56-1EP_7x7mm_P0.4mm_EP3.2x3.2mm"
-			(at 58.42 78.74 0)
+			"Package_DFN_QFN:QFN-60-1EP_7x7mm_P0.4mm_EP3.4x3.4mm"
+			(at 40.64 60.96 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -1214,7 +1289,7 @@ expression: schematic
 		(property
 			"Datasheet"
 			""
-			(at 58.42 78.74 0)
+			(at 40.64 60.96 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -1225,7 +1300,7 @@ expression: schematic
 		(property
 			"MPN"
 			"RP2350A"
-			(at 58.42 78.74 0)
+			(at 40.64 60.96 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -1236,7 +1311,7 @@ expression: schematic
 		(property
 			"LCSC"
 			"C14663"
-			(at 58.42 78.74 0)
+			(at 40.64 60.96 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -1246,227 +1321,247 @@ expression: schematic
 		)
 	)
 	(no_connect
-		(at 55.88 33.02)
-		(uuid "05832aa7-c132-5647-b8f1-ea0763d3e31c")
-	)
-	(no_connect
-		(at 83.82 40.64)
-		(uuid "5ecf813f-65df-5adf-a353-f3185f0c3cc1")
-	)
-	(no_connect
-		(at 83.82 43.18)
-		(uuid "0f347927-99ab-5660-b581-527057acd1e2")
-	)
-	(no_connect
-		(at 83.82 45.72)
-		(uuid "986709bc-ee9f-551c-b375-a85d4bc41552")
-	)
-	(no_connect
-		(at 83.82 48.26)
-		(uuid "1a5a49ab-46f2-502e-9f52-cb7863e72c20")
-	)
-	(no_connect
-		(at 83.82 50.8)
+		(at 53.34 15.24)
 		(uuid "83cd15c6-f0fd-55c2-bd76-a41015a57d14")
 	)
 	(no_connect
-		(at 83.82 53.34)
-		(uuid "f6608755-5f55-5ec5-84d3-8a4af95ec0b3")
-	)
-	(no_connect
-		(at 83.82 55.88)
-		(uuid "507468f0-6040-5b12-8f71-d4df95d2fa07")
-	)
-	(no_connect
-		(at 83.82 58.42)
-		(uuid "930ebb8b-d6e1-5058-b94b-d94f6e67a6f8")
-	)
-	(no_connect
-		(at 55.88 33.02)
-		(uuid "32cd920f-af46-553d-a9b8-9b2f11089116")
-	)
-	(no_connect
-		(at 83.82 60.96)
-		(uuid "3ec50c63-e522-5811-a08a-a26bb434e304")
-	)
-	(no_connect
-		(at 83.82 63.5)
-		(uuid "6ec7022d-fb2a-5619-895c-0dff57d44e63")
-	)
-	(no_connect
-		(at 83.82 66.04)
-		(uuid "6b461157-6611-5de1-aca8-516bd2cc6c34")
-	)
-	(no_connect
-		(at 83.82 68.58)
-		(uuid "3886aa4b-f17c-593f-8cad-e27902110baa")
-	)
-	(no_connect
-		(at 83.82 71.12)
-		(uuid "d37418a1-68a5-5763-bcf6-87ae2b1f4863")
-	)
-	(no_connect
-		(at 83.82 73.66)
-		(uuid "b16bfb2b-2669-5712-beed-552fcb2078f4")
-	)
-	(no_connect
-		(at 83.82 76.2)
-		(uuid "b002fe96-7519-589f-8317-33cb7ef4f5ef")
-	)
-	(no_connect
-		(at 83.82 78.74)
-		(uuid "174447fb-fb55-552c-8a48-14c1f0f6f098")
-	)
-	(no_connect
-		(at 33.02 48.26)
-		(uuid "dc196068-edd6-5c9e-b016-af84a469b906")
-	)
-	(no_connect
-		(at 33.02 93.98)
-		(uuid "0e08bbc0-2b97-56ae-a48a-c7c929ab73b4")
-	)
-	(no_connect
-		(at 33.02 104.14)
-		(uuid "b186a407-d804-53bd-8fc8-1f5b65edb32b")
-	)
-	(no_connect
-		(at 55.88 33.02)
-		(uuid "55afc26d-f9e9-50bf-bcd7-f486100a7952")
-	)
-	(no_connect
-		(at 71.12 33.02)
-		(uuid "b752a0a8-32a1-548e-8359-9504f5a4aa62")
-	)
-	(no_connect
-		(at 33.02 111.76)
-		(uuid "0a028c90-aff4-5ade-98c7-1de5e0bd845d")
-	)
-	(no_connect
-		(at 33.02 114.3)
-		(uuid "e1157f05-2c12-5e00-8991-350e3899d8d6")
-	)
-	(no_connect
-		(at 33.02 55.88)
-		(uuid "01f1c24b-b3d6-5c85-8d51-7e2e17711f70")
-	)
-	(no_connect
-		(at 83.82 81.28)
-		(uuid "f2ec66a6-1d85-5e8b-b3ee-e12a879ce364")
-	)
-	(no_connect
-		(at 83.82 83.82)
-		(uuid "955f80ae-cf18-53f1-9dc6-8d6a4daf2373")
-	)
-	(no_connect
-		(at 83.82 86.36)
-		(uuid "400d798e-78da-5ec3-8116-2b1dc81a7bd9")
-	)
-	(no_connect
-		(at 83.82 88.9)
-		(uuid "3f267bb9-e386-569f-9539-ff130b21b994")
-	)
-	(no_connect
-		(at 83.82 91.44)
-		(uuid "f95aebc8-170e-5766-ae8c-7be2a26cd535")
-	)
-	(no_connect
-		(at 83.82 93.98)
-		(uuid "c69a42ae-fec7-5f93-896f-d4ad38b3611e")
-	)
-	(no_connect
-		(at 55.88 33.02)
-		(uuid "8d2eefb5-71ed-5b6d-9074-4ee892b11bce")
-	)
-	(no_connect
-		(at 83.82 96.52)
-		(uuid "ea41b73a-0cd9-56bb-9170-aadee96f0c7e")
-	)
-	(no_connect
-		(at 83.82 99.06)
-		(uuid "36b55c45-939d-5c9a-87d6-2f2d76247b58")
-	)
-	(no_connect
-		(at 83.82 101.6)
-		(uuid "f3f715d0-5ca9-5b13-963e-84fa0940e564")
-	)
-	(no_connect
-		(at 83.82 104.14)
-		(uuid "c285e57d-13aa-540f-a79b-741656a21533")
-	)
-	(no_connect
-		(at 83.82 109.22)
-		(uuid "8fc29670-8e7d-5a4f-ba5f-3af7705ea6cd")
-	)
-	(no_connect
-		(at 83.82 111.76)
+		(at 53.34 15.24)
 		(uuid "dad9c931-8d96-5dc8-bc69-86de192215fd")
 	)
 	(no_connect
-		(at 83.82 114.3)
-		(uuid "76bd71eb-aa4d-57fe-a809-93e87dee3305")
-	)
-	(no_connect
-		(at 83.82 116.84)
-		(uuid "4325c0d4-23b7-5320-a7d4-06bdd8bde365")
-	)
-	(no_connect
-		(at 55.88 33.02)
-		(uuid "4f9916d2-4dc0-5e54-a8d9-c194dc087456")
-	)
-	(no_connect
-		(at 48.26 33.02)
-		(uuid "0593e17f-6964-5057-a3cd-9367039192a4")
-	)
-	(no_connect
-		(at 60.96 33.02)
-		(uuid "86537e71-cf7d-5103-af34-7eb13e8e2f25")
-	)
-	(no_connect
-		(at 66.04 33.02)
-		(uuid "8938c405-ef1e-5052-bb0d-0ee2e0abb380")
-	)
-	(no_connect
-		(at 33.02 63.5)
+		(at 22.86 15.24)
 		(uuid "cea1b16b-572c-5444-9900-1bbb991e7246")
 	)
 	(no_connect
-		(at 33.02 66.04)
+		(at 38.1 106.68)
 		(uuid "0513477f-2329-5646-9213-9c7276a344cf")
 	)
 	(no_connect
-		(at 45.72 33.02)
-		(uuid "ab716a96-a8c3-5ac8-85fb-4dc5cf19a8c1")
-	)
-	(no_connect
-		(at 55.88 33.02)
-		(uuid "c75a08b7-8877-50b6-ae08-c610032a7712")
-	)
-	(no_connect
-		(at 33.02 86.36)
-		(uuid "38c92b30-94c0-5e60-a928-feaaea5cf153")
-	)
-	(no_connect
-		(at 33.02 76.2)
-		(uuid "f9f99441-9cd7-527e-8471-fdd11f508e08")
-	)
-	(no_connect
-		(at 33.02 78.74)
+		(at 27.94 15.24)
 		(uuid "9324005c-2af4-50d6-81f1-b181dad9a84e")
 	)
 	(no_connect
-		(at 33.02 83.82)
+		(at 35.56 15.24)
 		(uuid "4f4782ff-2f39-5435-b803-2cc894969f5e")
 	)
 	(no_connect
-		(at 33.02 81.28)
+		(at 38.1 15.24)
+		(uuid "05832aa7-c132-5647-b8f1-ea0763d3e31c")
+	)
+	(no_connect
+		(at 66.04 22.86)
+		(uuid "5ecf813f-65df-5adf-a353-f3185f0c3cc1")
+	)
+	(no_connect
+		(at 66.04 25.4)
+		(uuid "0f347927-99ab-5660-b581-527057acd1e2")
+	)
+	(no_connect
+		(at 66.04 27.94)
+		(uuid "986709bc-ee9f-551c-b375-a85d4bc41552")
+	)
+	(no_connect
+		(at 66.04 30.48)
+		(uuid "1a5a49ab-46f2-502e-9f52-cb7863e72c20")
+	)
+	(no_connect
+		(at 66.04 33.02)
+		(uuid "f6608755-5f55-5ec5-84d3-8a4af95ec0b3")
+	)
+	(no_connect
+		(at 66.04 35.56)
+		(uuid "507468f0-6040-5b12-8f71-d4df95d2fa07")
+	)
+	(no_connect
+		(at 66.04 38.1)
+		(uuid "930ebb8b-d6e1-5058-b94b-d94f6e67a6f8")
+	)
+	(no_connect
+		(at 66.04 40.64)
+		(uuid "32cd920f-af46-553d-a9b8-9b2f11089116")
+	)
+	(no_connect
+		(at 38.1 15.24)
+		(uuid "3ec50c63-e522-5811-a08a-a26bb434e304")
+	)
+	(no_connect
+		(at 66.04 43.18)
+		(uuid "6ec7022d-fb2a-5619-895c-0dff57d44e63")
+	)
+	(no_connect
+		(at 66.04 45.72)
+		(uuid "6b461157-6611-5de1-aca8-516bd2cc6c34")
+	)
+	(no_connect
+		(at 66.04 48.26)
+		(uuid "3886aa4b-f17c-593f-8cad-e27902110baa")
+	)
+	(no_connect
+		(at 66.04 50.8)
+		(uuid "d37418a1-68a5-5763-bcf6-87ae2b1f4863")
+	)
+	(no_connect
+		(at 66.04 53.34)
+		(uuid "b16bfb2b-2669-5712-beed-552fcb2078f4")
+	)
+	(no_connect
+		(at 66.04 55.88)
+		(uuid "b002fe96-7519-589f-8317-33cb7ef4f5ef")
+	)
+	(no_connect
+		(at 66.04 58.42)
+		(uuid "174447fb-fb55-552c-8a48-14c1f0f6f098")
+	)
+	(no_connect
+		(at 66.04 60.96)
+		(uuid "dc196068-edd6-5c9e-b016-af84a469b906")
+	)
+	(no_connect
+		(at 38.1 15.24)
+		(uuid "0e08bbc0-2b97-56ae-a48a-c7c929ab73b4")
+	)
+	(no_connect
+		(at 15.24 76.2)
+		(uuid "b186a407-d804-53bd-8fc8-1f5b65edb32b")
+	)
+	(no_connect
+		(at 15.24 86.36)
+		(uuid "55afc26d-f9e9-50bf-bcd7-f486100a7952")
+	)
+	(no_connect
+		(at 53.34 15.24)
+		(uuid "b752a0a8-32a1-548e-8359-9504f5a4aa62")
+	)
+	(no_connect
+		(at 15.24 93.98)
+		(uuid "0a028c90-aff4-5ade-98c7-1de5e0bd845d")
+	)
+	(no_connect
+		(at 15.24 96.52)
+		(uuid "e1157f05-2c12-5e00-8991-350e3899d8d6")
+	)
+	(no_connect
+		(at 15.24 38.1)
+		(uuid "01f1c24b-b3d6-5c85-8d51-7e2e17711f70")
+	)
+	(no_connect
+		(at 66.04 63.5)
+		(uuid "f2ec66a6-1d85-5e8b-b3ee-e12a879ce364")
+	)
+	(no_connect
+		(at 66.04 66.04)
+		(uuid "955f80ae-cf18-53f1-9dc6-8d6a4daf2373")
+	)
+	(no_connect
+		(at 66.04 68.58)
+		(uuid "400d798e-78da-5ec3-8116-2b1dc81a7bd9")
+	)
+	(no_connect
+		(at 38.1 15.24)
+		(uuid "3f267bb9-e386-569f-9539-ff130b21b994")
+	)
+	(no_connect
+		(at 66.04 71.12)
+		(uuid "f95aebc8-170e-5766-ae8c-7be2a26cd535")
+	)
+	(no_connect
+		(at 66.04 73.66)
+		(uuid "c69a42ae-fec7-5f93-896f-d4ad38b3611e")
+	)
+	(no_connect
+		(at 66.04 76.2)
+		(uuid "8d2eefb5-71ed-5b6d-9074-4ee892b11bce")
+	)
+	(no_connect
+		(at 66.04 78.74)
+		(uuid "ea41b73a-0cd9-56bb-9170-aadee96f0c7e")
+	)
+	(no_connect
+		(at 66.04 81.28)
+		(uuid "36b55c45-939d-5c9a-87d6-2f2d76247b58")
+	)
+	(no_connect
+		(at 66.04 83.82)
+		(uuid "f3f715d0-5ca9-5b13-963e-84fa0940e564")
+	)
+	(no_connect
+		(at 66.04 86.36)
+		(uuid "c285e57d-13aa-540f-a79b-741656a21533")
+	)
+	(no_connect
+		(at 38.1 15.24)
+		(uuid "8fc29670-8e7d-5a4f-ba5f-3af7705ea6cd")
+	)
+	(no_connect
+		(at 66.04 91.44)
+		(uuid "76bd71eb-aa4d-57fe-a809-93e87dee3305")
+	)
+	(no_connect
+		(at 66.04 93.98)
+		(uuid "4325c0d4-23b7-5320-a7d4-06bdd8bde365")
+	)
+	(no_connect
+		(at 66.04 96.52)
+		(uuid "4f9916d2-4dc0-5e54-a8d9-c194dc087456")
+	)
+	(no_connect
+		(at 66.04 99.06)
+		(uuid "0593e17f-6964-5057-a3cd-9367039192a4")
+	)
+	(no_connect
+		(at 30.48 15.24)
+		(uuid "86537e71-cf7d-5103-af34-7eb13e8e2f25")
+	)
+	(no_connect
+		(at 38.1 15.24)
+		(uuid "8938c405-ef1e-5052-bb0d-0ee2e0abb380")
+	)
+	(no_connect
+		(at 45.72 15.24)
+		(uuid "ab716a96-a8c3-5ac8-85fb-4dc5cf19a8c1")
+	)
+	(no_connect
+		(at 43.18 15.24)
+		(uuid "c75a08b7-8877-50b6-ae08-c610032a7712")
+	)
+	(no_connect
+		(at 48.26 15.24)
+		(uuid "215512fd-d333-546c-b222-34199cf50686")
+	)
+	(no_connect
+		(at 15.24 45.72)
+		(uuid "38c92b30-94c0-5e60-a928-feaaea5cf153")
+	)
+	(no_connect
+		(at 15.24 48.26)
+		(uuid "f9f99441-9cd7-527e-8471-fdd11f508e08")
+	)
+	(no_connect
+		(at 15.24 68.58)
 		(uuid "59c80559-8d49-5110-8286-3f622ccad111")
 	)
 	(no_connect
-		(at 33.02 73.66)
+		(at 15.24 58.42)
 		(uuid "7ffe73a4-ffd4-5e8e-b501-6e007fd072a5")
 	)
 	(no_connect
-		(at 58.42 124.46)
+		(at 15.24 60.96)
 		(uuid "1083e349-4f75-5d42-bb09-c50cfeb2b334")
+	)
+	(no_connect
+		(at 15.24 66.04)
+		(uuid "946678db-bec1-5a9b-904c-7392afb7164f")
+	)
+	(no_connect
+		(at 15.24 63.5)
+		(uuid "0d530303-1c4c-5f1c-8722-53dd9230b489")
+	)
+	(no_connect
+		(at 15.24 55.88)
+		(uuid "7cc84bf3-02f3-5512-80e4-d4704d368bcf")
+	)
+	(no_connect
+		(at 40.64 106.68)
+		(uuid "7676119e-7815-5b86-b46b-f9386824ab5f")
 	)
 )

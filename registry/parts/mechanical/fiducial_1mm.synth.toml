@@ -1,0 +1,10 @@
+id = "fiducial_1mm"
+kind = "fiducial"
+description = "1 mm fiducial mark for pick-and-place alignment"
+kicad_symbol = "Mechanical:Fiducial"
+kicad_footprint = "Fiducial:Fiducial_1mm_Mask2mm"
+
+[footprint_dimensions]
+width_mm = 1.0
+height_mm = 1.0
+courtyard_margin_mm = 0.25

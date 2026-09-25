@@ -5,11 +5,11 @@ board "documentation" {
   layers 2
 
   component J1: connector "header_1x4"
-  component R1: resistor "r_generic_0603"
-  component R2: resistor "r_generic_0603" dnp
+  component R1: resistor "r_generic_0603" value "10k"
+  component R2: resistor "r_generic_0603" value "10k" dnp
 
   group "Input" {
-    component C1: capacitor "c_generic_0603"
+    component C1: capacitor "c_generic_0603" value "100nF"
     notes "Input notes" {
       "Keep leads short."
     }

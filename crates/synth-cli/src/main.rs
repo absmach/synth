@@ -1690,6 +1690,40 @@ fn read_source(input: &PathBuf) -> anyhow::Result<(String, String)> {
     Ok((source, file))
 }
 
+/// Aesthetic-schematic ERC thresholds for a design (Phase E): the
+/// `[schematic]` section of `<design>.synth.erc.toml` when it exists
+/// and parses, else the built-in defaults. A malformed sidecar is
+/// reported but never blocks — the defaults are always safe.
+/// The `<design>.synth.layout.toml` sidecar convention, as every other
+/// consumer resolves it (`synth-web`, `synth-kicad::export`).
+fn sidecar_path_for(design: &Path) -> Option<PathBuf> {
+    let name = design.file_name()?.to_string_lossy();
+    let candidate = design.with_file_name(format!("{name}.layout.toml"));
+    candidate.exists().then_some(candidate)
+}
+
+fn schem_erc_config_for(design: &Path) -> synth_kicad::SchemErcConfig {
+    let settings = match synth_validate::ErcConfig::load_for_design(design) {
+        Ok(Some(config)) => config.schematic,
+        Ok(None) => synth_validate::config::SchematicSettings::default(),
+        Err(e) => {
+            eprintln!(
+                "warning: ignoring schematic ERC config for {}: {e}",
+                design.display()
+            );
+            synth_validate::config::SchematicSettings::default()
+        }
+    };
+    synth_kicad::SchemErcConfig {
+        max_crossings: settings.max_crossings,
+        decoupling_max_mm: settings.decoupling_max_mm,
+        long_net_max_mm: settings.long_net_max_mm,
+        max_junction_degree: settings.max_junction_degree,
+        max_net_label_len: settings.max_net_label_len,
+        min_sheet_fill_ratio: settings.min_sheet_fill_ratio,
+    }
+}
+
 /// Where Tier-1 (shipped) parts come from.
 #[derive(Debug, Clone)]
 enum Tier1Source {
@@ -1934,7 +1968,9 @@ fn validate(
                     // clears the single-sheet overflow).
                     let global = synth_layout::layout(board);
                     let sheets = synth_layout::sheets::layout_sheets(board, global);
-                    diagnostics.extend(synth_kicad::check_schem_erc_sheets(board, &sheets));
+                    let mut schem = synth_kicad::check_schem_erc_sheets(board, &sheets);
+                    synth_kicad::attach_schem_erc_locations(&mut schem, board, &file);
+                    diagnostics.extend(schem);
                 }
             }
         }
@@ -2086,13 +2122,21 @@ fn dump_layout(
                 has_errors = true;
             }
             lowered.board.as_ref().map(|board| {
-                let layout = synth_layout::layout(board);
+                // Honour `<design>.synth.layout.toml` like every other
+                // consumer (preview, export) — `synth layout` is what an
+                // agent inspects, so it must reflect persisted refinements.
+                let layout =
+                    synth_layout::layout_with_sidecar(board, sidecar_path_for(input).as_deref());
                 let layout_score = score.then(|| {
                     let mut s = synth_layout::score::score(&layout, board);
-                    s.aesthetic_violations = synth_kicad::check_schem_erc(&layout, board)
-                        .into_iter()
-                        .map(|d| d.code)
-                        .collect();
+                    s.aesthetic_violations = synth_kicad::check_schem_erc_with_config(
+                        &layout,
+                        board,
+                        schem_erc_config_for(input),
+                    )
+                    .into_iter()
+                    .map(|d| d.code)
+                    .collect();
                     s
                 });
                 (layout, layout_score)
@@ -2493,8 +2537,12 @@ fn export_kicad(
 
     // Aesthetic schematic ERC (E-SYNTH-SCHEM-*): advisory warnings
     // printed alongside the rule-based ERC; never blocks export.
+    // Thresholds come from the design's `<design>.synth.erc.toml`
+    // `[schematic]` section when present (Phase E), else the defaults.
     let pre_layout = synth_layout::layout(board);
-    let schem_diags = synth_kicad::check_schem_erc(&pre_layout, board);
+    let mut schem_diags =
+        synth_kicad::check_schem_erc_with_config(&pre_layout, board, schem_erc_config_for(input));
+    synth_kicad::attach_schem_erc_locations(&mut schem_diags, board, &input.display().to_string());
     write_diagnostics_to_stderr(&schem_diags)?;
 
     // Honour manual tuning: if a sidecar sits beside the source

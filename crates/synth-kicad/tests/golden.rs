@@ -114,7 +114,15 @@ fn export_reference_deterministically(registry: &synth_registry::Registry, stem:
         .expect("board");
 
     let tmp = tempdir(&format!("ref_{stem}"));
-    let result = synth_kicad::export(&board, &tmp).expect("export reference design");
+    let tmp2 = tempdir(&format!("ref_{stem}_rerun"));
+    // The determinism check needs two independent exports. They write to
+    // separate temp dirs and share only the read-only board, so run them
+    // concurrently: this test is the slowest reference export and the two
+    // passes are the dominant cost.
+    let (result, result2) = rayon::join(
+        || synth_kicad::export(&board, &tmp).expect("export reference design"),
+        || synth_kicad::export(&board, &tmp2).expect("export rerun"),
+    );
 
     let project = fs::read_to_string(&result.project_path).unwrap();
     let schematic = fs::read_to_string(&result.schematic_path).unwrap();
@@ -138,9 +146,7 @@ fn export_reference_deterministically(registry: &synth_registry::Registry, stem:
     assert!(pcb.contains("(kicad_pcb"), "{stem}: PCB missing (kicad_pcb");
     assert!(bom.starts_with("refdes,"), "{stem}: BOM missing header");
 
-    // Determinism check: re-export and assert byte-for-byte identity
-    let tmp2 = tempdir(&format!("ref_{stem}_rerun"));
-    let result2 = synth_kicad::export(&board, &tmp2).expect("export rerun");
+    // Determinism check: the concurrent re-export must be byte-for-byte identical.
     assert_eq!(
         fs::read_to_string(&result2.project_path).unwrap(),
         project,

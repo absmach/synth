@@ -25,6 +25,11 @@
 //! led_max_current_ma = 20.0
 //! pullup_margin_v = 0.5
 //! power_budget_headroom_pct = 0.0
+//!
+//! # aesthetic schematic ERC thresholds (`E-SYNTH-SCHEM-*`)
+//! [schematic]
+//! min_sheet_fill_ratio = 0.45
+//! decoupling_max_mm = 25.0
 //! ```
 //!
 //! The table is *symmetric*: `"output:output"` and its reverse are the
@@ -66,6 +71,45 @@ pub struct ErcConfig {
     /// `E-SYNTH-CAP-001`: fraction of a Class-II ceramic capacitor's
     /// rated voltage above which DC-bias derating is warned about.
     pub ceramic_dc_bias_threshold: f64,
+    /// Aesthetic schematic ERC thresholds (`E-SYNTH-SCHEM-*`),
+    /// applied by the exporter's `check_schem_erc` pass.
+    #[serde(default)]
+    pub schematic: SchematicSettings,
+}
+
+/// Thresholds for the aesthetic schematic ERC rules
+/// (`E-SYNTH-SCHEM-*`). Defaults match `synth_kicad::SchemErcConfig`,
+/// so an absent `[schematic]` section changes nothing.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(default, deny_unknown_fields)]
+pub struct SchematicSettings {
+    /// `E-SYNTH-SCHEM-002`: max different-net wire crossings on a sheet.
+    pub max_crossings: usize,
+    /// `E-SYNTH-SCHEM-003`: max empty space (mm) between a decoupling
+    /// cap's symbol body and its target IC's. Measured body-to-body,
+    /// not centre-to-centre — see `synth_kicad::schem_erc`.
+    pub decoupling_max_mm: f64,
+    /// `E-SYNTH-SCHEM-004`: max span (mm) of an explicitly drawn net.
+    pub long_net_max_mm: f64,
+    /// `E-SYNTH-SCHEM-005`: max wire lines meeting at one node.
+    pub max_junction_degree: usize,
+    /// `E-SYNTH-SCHEM-009`: max rendered net-name length (chars).
+    pub max_net_label_len: usize,
+    /// `E-SYNTH-SCHEM-012`: minimum sheet fill ratio (0..=1).
+    pub min_sheet_fill_ratio: f64,
+}
+
+impl Default for SchematicSettings {
+    fn default() -> Self {
+        Self {
+            max_crossings: 5,
+            decoupling_max_mm: 25.0,
+            long_net_max_mm: 100.0,
+            max_junction_degree: 3,
+            max_net_label_len: 16,
+            min_sheet_fill_ratio: 0.45,
+        }
+    }
 }
 
 impl Default for ErcConfig {
@@ -78,6 +122,7 @@ impl Default for ErcConfig {
             open_drain_no_pullup: Severity::Warning,
             require_connector_protection: true,
             ceramic_dc_bias_threshold: 0.5,
+            schematic: SchematicSettings::default(),
         }
     }
 }
@@ -484,5 +529,29 @@ mod tests {
             ErcConfig::sidecar_path_for(Path::new("/d/board.synth")),
             PathBuf::from("/d/board.synth.erc.toml")
         );
+    }
+
+    #[test]
+    fn schematic_section_overrides_thresholds() {
+        let cfg = ErcConfig::from_toml_str(
+            "[schematic]\nmin_sheet_fill_ratio = 0.7\nmax_crossings = 2\n",
+        )
+        .unwrap();
+        assert!((cfg.schematic.min_sheet_fill_ratio - 0.7).abs() < f64::EPSILON);
+        assert_eq!(cfg.schematic.max_crossings, 2);
+        // Untouched fields keep the built-in defaults.
+        assert!((cfg.schematic.decoupling_max_mm - 25.0).abs() < f64::EPSILON);
+        // An absent section is the default.
+        assert_eq!(
+            ErcConfig::from_toml_str("led_max_current_ma = 5.0\n")
+                .unwrap()
+                .schematic,
+            SchematicSettings::default()
+        );
+    }
+
+    #[test]
+    fn unknown_schematic_key_is_rejected() {
+        assert!(ErcConfig::from_toml_str("[schematic]\nnope = 1\n").is_err());
     }
 }

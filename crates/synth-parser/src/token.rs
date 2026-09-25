@@ -29,6 +29,7 @@ pub enum TokenKind {
     KwManufacturer,
     KwRevision,
     KwCompany,
+    KwLegends,
     KwComponent,
     KwConnect,
     KwNet,
@@ -405,7 +406,13 @@ impl<'a> Lexer<'a> {
             };
         }
 
-        let Ok(unit) = unit_str.parse::<Unit>() else {
+        // Case-insensitive fallback: `100nF` and `100nf` are the same
+        // unit, and EE notation mixes the two freely. Exact case still
+        // wins so existing spellings are untouched.
+        let unit = unit_str
+            .parse::<Unit>()
+            .or_else(|_| unit_str.to_ascii_lowercase().parse::<Unit>());
+        let Ok(unit) = unit else {
             return Token {
                 kind: TokenKind::Error(LexError::UnknownUnit(unit_str.to_string())),
                 span: Span::new(start, self.offset()),
@@ -437,6 +444,7 @@ impl<'a> Lexer<'a> {
             "manufacturer" => TokenKind::KwManufacturer,
             "revision" => TokenKind::KwRevision,
             "company" => TokenKind::KwCompany,
+            "legends" => TokenKind::KwLegends,
             "component" => TokenKind::KwComponent,
             "connect" => TokenKind::KwConnect,
             "net" => TokenKind::KwNet,
@@ -507,7 +515,7 @@ mod tests {
     #[test]
     fn keywords_recognized() {
         let ks = kinds(
-            "board import layers manufacturer revision company component connect net power notes dnp module interface bus use bind prefix param as class diff_pair netclass keepout group sheet impedance trace_width clearance radius value tolerance voltage power_rating dielectric variant description",
+            "board import layers manufacturer revision company legends component connect net power notes dnp module interface bus use bind prefix param as class diff_pair netclass keepout group sheet impedance trace_width clearance radius value tolerance voltage power_rating dielectric variant description",
         );
         assert_eq!(
             ks,
@@ -518,6 +526,7 @@ mod tests {
                 TokenKind::KwManufacturer,
                 TokenKind::KwRevision,
                 TokenKind::KwCompany,
+                TokenKind::KwLegends,
                 TokenKind::KwComponent,
                 TokenKind::KwConnect,
                 TokenKind::KwNet,

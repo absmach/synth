@@ -23,9 +23,9 @@ use std::collections::{HashMap, HashSet};
 use synth_ir::{Board, ComponentId, NetId};
 
 use crate::{
-    annotate_groups, body_size_for_part, clamp_annotations_to_sheet, grow_sheet_to_fit,
-    place_connector_legends, place_design_notes, HierarchicalLabel, Layout, SheetSize,
-    BODY_FALLBACK_H, BODY_FALLBACK_W, PAGE_MARGIN,
+    annotate_groups, body_size_for_part, clamp_annotations_to_sheet, compact_sheet_to_fit,
+    grow_sheet_to_fit, place_connector_legends, place_design_notes, resolve_text_overlaps,
+    HierarchicalLabel, Layout, SheetSize, BODY_FALLBACK_H, BODY_FALLBACK_W, PAGE_MARGIN,
 };
 
 /// One sheet's share of a board: `None` is the root sheet, `Some`
@@ -45,13 +45,21 @@ pub struct SheetLayout {
     pub layout: Layout,
 }
 
-/// Partition a board along sheet boundaries: components without a
-/// `sheet` land on the root sheet, the rest group by sheet name in
-/// first-seen component order. The root partition always comes first,
-/// even when empty (a board whose components all live in sheets
-/// still needs a root file for its sheet instances) — so exporters
-/// can rely on `partitions[0]` being root. Empty named partitions
-/// never occur.
+/// Partition a board along its natural boundaries: an explicit
+/// `sheet` block (or an import file, which lowers to one) if the
+/// component has one, otherwise its declared `group` — a region
+/// already carries a caption, a note and a colour, which is most of a
+/// sheet header (Phase C4). Components with neither land on the root
+/// sheet; the rest group by boundary name in first-seen component
+/// order. The root partition always comes first, even when empty (a
+/// board whose components all live in sheets still needs a root file
+/// for its sheet instances) — so exporters can rely on
+/// `partitions[0]` being root. Empty named partitions never occur.
+///
+/// Splitting only happens when the board overflows A2 (see
+/// [`layout_sheets`]), so a small grouped board stays on one sheet
+/// with its regions drawn as boxes; only a board too large for A2
+/// falls back to one sheet per region.
 ///
 /// # Panics
 ///
@@ -62,7 +70,9 @@ pub fn plan_sheets(board: &Board) -> Vec<SheetPartition> {
     let mut members: HashMap<Option<String>, Vec<ComponentId>> = HashMap::new();
     members.insert(None, Vec::new());
     for component in &board.components {
-        let key = component.sheet.clone();
+        // Explicit sheet first; a declared group is the implicit
+        // boundary when there is none.
+        let key = component.sheet.clone().or_else(|| component.group.clone());
         if !members.contains_key(&key) {
             members.insert(key.clone(), Vec::new());
             order.push(key.clone());
@@ -316,7 +326,9 @@ fn split_layout(board: &Board, global: &Layout, partitions: &[SheetPartition]) -
             annotate_groups(board, &mut layout);
             place_connector_legends(board, &mut layout);
             place_sheet_notes(board, &mut layout, partition.name.as_deref());
+            resolve_text_overlaps(board, &mut layout);
             grow_sheet_to_fit(board, &mut layout);
+            compact_sheet_to_fit(board, &mut layout);
             clamp_annotations_to_sheet(&mut layout);
             SheetLayout {
                 name: partition.name.clone(),
@@ -332,6 +344,8 @@ fn split_layout(board: &Board, global: &Layout, partitions: &[SheetPartition]) -
 /// but scoped to a partition instead of the whole board.
 fn place_sheet_notes(board: &Board, layout: &mut Layout, sheet: Option<&str>) {
     let scoped = Board {
+        groups: Vec::new(),
+        legends: board.legends,
         name: board.name.clone(),
         layers: board.layers,
         manufacturer: board.manufacturer.clone(),
@@ -459,6 +473,12 @@ mod tests {
         }
     }
 
+    fn grouped_component(id: u32, refdes: &str, group: &str, pins: Vec<RegPin>) -> Component {
+        let mut c = component(id, refdes, None, pins);
+        c.group = Some(group.to_string());
+        c
+    }
+
     fn net(id: u32, name: &str, endpoints: &[(u32, u32)]) -> Net {
         Net {
             id: NetId(id),
@@ -478,6 +498,8 @@ mod tests {
 
     fn board(components: Vec<Component>, nets: Vec<Net>) -> Board {
         Board {
+            groups: Vec::new(),
+            legends: false,
             name: "b".to_string(),
             layers: 2,
             manufacturer: None,
@@ -516,6 +538,28 @@ mod tests {
             group_boxes: Vec::new(),
             sheet_size: SheetSize::A4,
         }
+    }
+
+    #[test]
+    fn plan_splits_on_group_when_no_sheet() {
+        // Phase C4: a declared `group` is an implicit split boundary
+        // when the component has no explicit `sheet`.
+        let two = || vec![pin("p1"), pin("p2")];
+        let b = board(
+            vec![
+                grouped_component(0, "R1", "Input", two()),
+                grouped_component(1, "R2", "Power", two()),
+                grouped_component(2, "R3", "Power", two()),
+            ],
+            vec![],
+        );
+        let plan = plan_sheets(&b);
+        assert_eq!(plan.len(), 3, "root (empty) + two group sheets");
+        assert_eq!(plan[0].name, None);
+        assert!(plan[0].components.is_empty(), "no ungrouped components");
+        assert_eq!(plan[1].name.as_deref(), Some("Input"));
+        assert_eq!(plan[2].name.as_deref(), Some("Power"));
+        assert_eq!(plan[2].components, vec![ComponentId(1), ComponentId(2)]);
     }
 
     #[test]

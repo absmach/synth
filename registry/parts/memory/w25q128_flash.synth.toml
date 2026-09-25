@@ -26,7 +26,7 @@ required = true
 [[pins]]
 name = "io1"
 number = "2"
-electrical_type = "output"
+electrical_type = "bidirectional"
 capabilities = ["spi_miso", "spi_mosi"]
 required = true
 
@@ -45,7 +45,7 @@ required = true
 [[pins]]
 name = "io0"
 number = "5"
-electrical_type = "input"
+electrical_type = "bidirectional"
 capabilities = ["spi_miso", "spi_mosi"]
 required = true
 

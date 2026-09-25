@@ -5,9 +5,11 @@ KiCad-importable schematic — the auto-layout pipeline, KiCad export,
 ERC / DRC validation, the live browser preview, and the CLI commands
 that drive them.
 
-**Status:** describes the implemented pipeline as of 2026-08-25, cross-checked
+**Status:** describes the implemented pipeline as of 2026-09-24, cross-checked
 against `crates/synth-layout`, `crates/synth-kicad`, `crates/synth-web`,
-`crates/synth-cli`, and `crates/synth-validate`.
+`crates/synth-cli`, and `crates/synth-validate`. Phases A–E of
+[`schematic-quality-plan.md`](schematic-quality-plan.md) are folded in;
+§2.1 (regions) and §3.2 (net colours) are the parts that changed most.
 
 Every downstream consumer — the browser preview, the KiCad exporter,
 the PCB placer/router — derives the schematic from a single shared
@@ -66,7 +68,54 @@ with `(0, 0)` at the top-left of the page rect.
    | 5    | `IcBlock`      | full IC: decoupling caps (Below), reset network (Left/Right), pull-up/down resistors (Above)                      |
    | 6    | `I2cBus`       | I2C SDA/SCL pull-ups on a shared rail (Above) — runs **after** `IcBlock` so a full MCU keeps its decoupling/reset |
    | 7    | `Divider`      | rail→R1→mid→R2→gnd two-resistor divider                                                                           |
-   | 8    | `Singleton`    | every remaining unclaimed component                                                                               |
+   | 8    | *orphan caps*  | `attach_orphan_rail_caps`: a cap on a **shared** rail joins the cluster whose anchor draws most from that rail    |
+   | 9    | `Singleton`    | every remaining unclaimed component                                                                               |
+
+   Pass 8 exists because the per-anchor `required_decoupling` claim in
+   pass 5 cannot see a cap on a merged rail (one net feeding the
+   regulator, the MCU and the sensor). Those caps used to fall through
+   to `Singleton` and be placed by power-flow layer — 150+ mm from the
+   part they decouple.
+
+   **A declared `group` bounds cluster membership.** After every pass,
+   `evict_cross_group_members` drops any member whose declared group
+   differs from its anchor's and re-emits it as a `Singleton`. The
+   pattern passes match on topology alone, so an I²C pull-up declared
+   inside the sensor's group can be claimed by the MCU's `IcBlock` two
+   groups away; placement would then put it in the *anchor's* region
+   while `group_bounds` still measures it as part of its own, stretching
+   that group's box across the sheet. Ungrouped boards are unaffected.
+
+### 2.1 Regions (Phase C)
+
+A board that declares `group`s lays out **by region**, not as one band
+of columns:
+
+- clusters partition by group; each region is laid out in its own local
+  frame, so its true content rectangle is known before packing;
+- regions are then shelf-packed to tile the page (reference mechanism 1:
+  *the page is a grid of titled regions*). Packing measures the **box**,
+  not the bodies — the box reaches above its members for the caption and
+  below them for the note block (`group_box_overhang`), and packing on
+  body bounds alone let boxes overlap;
+- `REGION_SHELF_WIDTHS` (A4/A3/A2 content width) is swept by the fitting
+  loop rather than fixed, because which regions share a shelf decides the
+  stack's height and only a concrete candidate sheet can judge it;
+- `region` / `color` / `title` on the group header (Phase D1) steer the
+  packing order and the box hue.
+
+An **ungrouped** board keeps the single-band path, with one addition:
+when the band is too wide for the page shape it **shelf-wraps** onto
+successive rows. Layers are columns, so a board with a dozen
+one-cluster layers used to spread ~290 mm wide and ~118 mm tall on a
+420 × 297 mm page.
+
+The fitting loop ranks attempts by
+**`(sheet area, shelves, column pitch, aspect mismatch)`**. Shelf-wrapping
+and pitch-tightening are spent only on *saving a sheet size*, never on a
+page that already fits: wrapping costs the left-to-right power-flow
+reading order (a shelf break continues on the next line), and tightening
+pushes nets past the span threshold until they degrade into labels.
 
 2. **`place_clusters` — layered placement** (run via the `Placer` trait
    seam; V1 ships `NativeSemanticPlacer`, `crates/synth-layout/src/placer.rs`,
@@ -93,7 +142,18 @@ with `(0, 0)` at the top-left of the page rect.
    GND down), `rotate_led_chains`, `rotate_usb_esd_diodes`,
    `lock_connector_rotations`.
 
-6. **`route_and_label`** — for every signal net:
+6. **`resolve_text_overlaps`** — nudges captions, note lines and
+   legend runs off each other and off component bodies, then shrinks,
+   then drops the lowest-priority run. Symbol Reference/Value fields are
+   placed separately by the exporter (§3) and are *not* moved here.
+
+7. **`route_and_label`** — for every signal net:
+   - **region crossing** (Phase C2): on a board that declares groups, a
+     net whose endpoints live in different regions becomes a label and
+     one that stays inside a region is drawn — *wires inside a region,
+     labels between regions*. The span threshold below is the secondary
+     guard for large single regions, and the only rule on an ungrouped
+     board.
    - `classify_net_labels`: nets spanning > 80 mm or with 3+ endpoints
      are truncated into **net labels** (semantic names like `I2C_SCL`);
      unroutable / over-crossing nets get the same escape hatch.
@@ -159,6 +219,7 @@ project into `out_dir`:
   copied from the registry part (empty string when unknown) — so the
   exported `.kicad_sch` is self-sufficient for KiCad BOM tooling and
   the JLCPCB/DigiKey plugin ecosystem without the sidecar `bom.csv`
+- **net-class colours** (Phase B1) — see §3.2
 - **power symbols** on rails + a stub `wire`
 - **`no_connect` markers** on unreached physical pins and
   **`PWR_FLAG` drivers** on undriven power nets (`pin_reconcile`)
@@ -181,6 +242,31 @@ project into `out_dir`:
 - **deterministic UUID v5** for every entity
   (`derive_entity_uuid(project, kind, name)`), so unchanged input
   re-exports byte-identically for stable diffs.
+
+### 3.2 Net-class colours (Phase B1)
+
+Nets are classified (`synth_layout::netclass`) into `Power`, `Ground`,
+`I2C`, `SPI`, `UART`, `USB`, `Clock`, `Reset`, `Default` — reusing
+`classify_power_net` for the rails and the `pick_net_label` capability
+vocabulary for the protocols, so the colour and the label can never
+disagree. An author-declared `netclass "…"` wins, and `color "#rrggbb"`
+on it overrides the palette. The palette is fixed and colour-blind-safe
+(Okabe–Ito derived), so I²C is the same blue in every design.
+
+The colour is written **twice**, deliberately:
+
+1. `.kicad_pro` `net_settings` — `classes[]` with `schematic_color` /
+   `pcb_color`, plus `netclass_assignments` and `netclass_patterns`.
+   These are keyed on the name **KiCad** will know the net by, which it
+   derives from the drawing at load time: a power symbol's value
+   (`+3V3`, `GND`, global, unprefixed) or a local label with its sheet
+   path (`/SDA`). Keying them on the IR name (`net_7`) matches nothing,
+   and the colours silently never apply.
+2. An explicit `(stroke … (color …))` on each wire and `(color …)` in
+   each label's font. A net carrying neither a power symbol nor a label
+   is auto-named by KiCad (`Net-(U2-BOOT0)`), so no assignment written
+   ahead of time can reach it; the explicit stroke reaches every net and
+   is what the SVG plot shows.
 
 ### 3.1 Multi-sheet export (`sheets.rs`, `multisheet.rs`)
 
@@ -266,7 +352,7 @@ guessing.
 | **Rule-based ERC**  | `synth-validate::run_erc`                        | `E-SYNTH-*` rules: connectivity, I²C pullups, power output shorts, clock/reset/boot, decoupling counts, etc. `E-SYNTH-POWER-001` auto-inserts missing decoupling caps as a patch                                                                                                                                                                                                                                                                                                                                                                                                                                                                      |
 | **Value-based ERC** | `synth-validate::value` + `E-SYNTH-CRYSTAL-001`  | parses component **values** (SI-prefix aware) and reasons about magnitude, not just topology. `E-SYNTH-CRYSTAL-001` warns when a crystal's two load caps differ by > 10% (e.g. 22 pF vs 33 pF). The `value` parser (`parse_resistance` / `parse_capacitance`) is the shared foundation for future divider-ratio, derating, and power checks                                                                                                                                                                                                                                                                                                           |
 | **KiCad ERC**       | `synth-kicad::run_kicad_erc`                     | shells out to `kicad-cli sch erc`, parses the JSON report per sheet                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
-| **Aesthetic ERC**   | `synth-kicad::schem_erc`                         | in-house `E-SYNTH-SCHEM-001..010`: inverted power symbol (001), wire-crossing density > 5 (002), decoupling cap > 15 mm from its IC (003), long explicit net > 100 mm (004), junction fan-out > 3 lines (005), junction dot on a foreign net's wire (006), content outside the selected sheet size (007), non-uppercase net name (008), net name > 16 chars (009), ambiguous `VCC`/`VDD`/`VPP` power rail (010). 005–007 encode Sierra Circuits' "Schematic Design Rules" (protoexpress.com/kb/schematic-design-rules/); 008–010 encode the "Rules and guidelines for drawing good schematics" thread (electronics.stackexchange.com/questions/28251) |
+| **Aesthetic ERC**   | `synth-kicad::schem_erc`                         | in-house `E-SYNTH-SCHEM-001..015`: inverted power symbol (001), wire-crossing density > 5 (002), decoupling cap further than 25 mm of *body gap* from the IC it sits nearest (003), long explicit net > 100 mm (004), junction fan-out > 3 lines (005), junction dot on a foreign net's wire (006), content outside the selected sheet size (007), non-uppercase net name (008), net name > 16 chars (009), ambiguous `VCC`/`VDD`/`VPP` power rail (010). 005–007 encode standard schematic design-rule practice; 008–010 encode the "Rules and guidelines for drawing good schematics" thread (electronics.stackexchange.com/questions/28251). 011 text-run overlap, 012 sheet fill ratio, 013 group regions overlapping or a component outside its region, 014 auto-named net (`net_N`) rendered on the sheet, 015 a group with no `notes` block. `E-SYNTH-VALUE-001` (a generic passive with no `value`) is an error, not aesthetic. Every finding resolves a source span through the entity it names (`attach_locations`) |
 | **Schematic DRC**   | `route::drc_wire_crosses_unrelated_pin_terminal` | any routed wire passing over a pin terminal of a component its net does _not_ connect to (the `test_no_wire_crosses_unrelated_pin_terminals` gate)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    |
 
 ---
@@ -297,12 +383,30 @@ guessing.
 | `synth dump-ast` / `dump-ir`  | inspect the AST / IR                                                                                              |
 | `synth export-kicad <file>`   | run auto-layout + export the full KiCad project (§3)                                                              |
 | `synth fix <file>`            | apply highest-confidence suggested patches (incl. auto-inserted decoupling)                                       |
-| `synth layout <file>`         | print the auto-layout JSON (placements, wires, labels, flags)                                                     |
+| `synth layout <file>`         | print the auto-layout JSON, honouring `<design>.synth.layout.toml` (placements, wires, labels, flags)             |
 | `synth place` / `synth route` | PCB placement / routing stages                                                                                    |
 | `synth drc <file>`            | design-rule check                                                                                                 |
 | `synth schema <kind>`         | emit a JSON schema for a protocol artifact                                                                        |
 | `synth preview <file>`        | live browser viewer (§5)                                                                                          |
 | `synth mcp`                   | stdio/SSE MCP server exposing `synth_validate`, `synth_apply_patch`, `synth_preview_schematic`, `synth_export`, … |
+
+### 6.1 Agent visual-feedback loop (MCP)
+
+The MCP server exposes the closed loop an agent runs to make a schematic
+*readable*, not just electrically correct. See
+[`schematic-visual-loop.md`](schematic-visual-loop.md) for the full
+workflow; the tools are:
+
+| Tool                       | Purpose                                                                                                 |
+| -------------------------- | ------------------------------------------------------------------------------------------------------- |
+| `synth_render_schematic`   | Export the sheet, plot it with `kicad-cli sch export svg`, rasterize with the pinned renderer, and return each sheet as an MCP **image** content block so the model can look at it |
+| `synth_review_schematic`   | One-pass packet: diagnostics + readability rules + layout summary + render (+ optional baseline diff)    |
+| `synth_schematic_baseline` | `set` / `compare` / `clear` a stored visual baseline (content-pixel drift, bounding box)                 |
+| `synth_mutate_layout`      | Apply one structured layout op; `persist=true` writes it through to the sidecar                          |
+
+The gate order for a handoff is: `synth_validate` (zero blocking) →
+placement review → **render inspection** → `synth_export` →
+`kicad-cli sch erc` (zero errors).
 
 ---
 
@@ -312,6 +416,9 @@ guessing.
 | -------------------------------------------------------- | ------------------------------------------------------------------------------------------- |
 | Layout engine, clusters, routing, DRC                    | `crates/synth-layout` (`lib.rs`, `patterns/`, `route/`, `ops.rs`, `score.rs`, `sidecar.rs`) |
 | KiCad .kicad_sch / .kicad_sym / export                   | `crates/synth-kicad` (`schematic.rs`, `symbol_lib.rs`, `export.rs`, `sexp.rs`)              |
+| Schematic-only export + `kicad-cli sch export svg`       | `crates/synth-kicad` (`export::export_schematic_only`, `sch_svg.rs`)                        |
+| Deterministic SVG rasterization + pixel diff             | `crates/synth-render` (`svg_to_png`, `diff_pngs`, `RENDERER_ID`)                            |
+| Render / baseline / review MCP tools                     | `crates/synth-mcp` (`tools.rs`, `server.rs` image-content promotion)                        |
 | Pin reconciliation & PWR_FLAG                            | `crates/synth-kicad/src/pin_reconcile.rs`                                                   |
 | Pin functions (alternates)                               | `crates/synth-kicad/src/alternates.rs`                                                      |
 | Multi-unit symbols                                       | `crates/synth-layout/src/kicad_lib_loader.rs` (`symbol_units`), `symbol_lib.rs`, `schematic.rs` |

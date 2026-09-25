@@ -383,6 +383,15 @@ expression: board
   ],
   "keepouts": [],
   "netclasses": [],
+  "groups": [
+    {
+      "name": "Input",
+      "source_span": {
+        "byte_start": 277,
+        "byte_end": 399
+      }
+    }
+  ],
   "source_span": {
     "byte_start": 113,
     "byte_end": 576

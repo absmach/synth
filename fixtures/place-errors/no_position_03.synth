@@ -63,6 +63,6 @@ board "no_position_03" {
   connect U1.vdd_io -> C20.p1
   connect U1.gnd -> C20.p2
   keepout ant {
-    radius 125mm
+    radius 180mm
   }
 }

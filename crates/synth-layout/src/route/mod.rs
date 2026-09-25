@@ -92,8 +92,8 @@ pub fn natural_rotation_offset(part: &Part) -> f64 {
 /// computed from this classifier while the drawn pins come from that
 /// one, and a disagreement would leave wires landing on a body edge
 /// with no pin. Both copies implement the same schematic convention
-/// (ProtoExpress "Schematic Design Rules": inputs on the left,
-/// outputs on the right, power up, ground down); unifying them into
+/// (inputs on the left, outputs on the right, power up, ground
+/// down); unifying them into
 /// one shared function is still a known follow-up.
 pub fn classify_ic_pin(pin: &Pin) -> PinSide {
     let lower = pin.name.to_ascii_lowercase();
@@ -2025,6 +2025,8 @@ mod cleanup_tests {
 
     fn empty_board() -> Board {
         Board {
+            groups: Vec::new(),
+            legends: false,
             name: "test".to_string(),
             layers: 2,
             manufacturer: None,
@@ -2540,6 +2542,8 @@ mod channel_router_tests {
         // Two clusters far apart in y => one horizontal gutter between
         // them becomes a channel. Build a board + layout by hand.
         let board = Board {
+            groups: Vec::new(),
+            legends: false,
             name: "t".to_string(),
             layers: 2,
             manufacturer: None,
@@ -2699,6 +2703,8 @@ mod drc_tests {
         // flagged; the same geometry through R1's p1 (net0's own pin)
         // must not.
         let board = Board {
+            groups: Vec::new(),
+            legends: false,
             name: "t".to_string(),
             layers: 2,
             manufacturer: None,
@@ -2872,6 +2878,8 @@ mod net_termination_tests {
     fn board_with_dangling_pin(bad_on: ComponentId) -> Board {
         let bad_pin = |id| if id == bad_on { PinId(5) } else { PinId(0) };
         Board {
+            groups: Vec::new(),
+            legends: false,
             name: "t".to_string(),
             layers: 2,
             manufacturer: None,

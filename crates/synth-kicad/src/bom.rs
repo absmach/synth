@@ -44,11 +44,15 @@ fn build_bom_csv_filtered(board: &Board, extra_dnp: &BTreeSet<&str>) -> String {
         .iter()
         .filter(|c| !c.dnp && !extra_dnp.contains(c.refdes.as_str()))
         .map(|c| {
+            // Schematic-quality plan Phase A1: `value` → part `mpn` →
+            // `(no value)` sentinel, never the registry part id. An
+            // unorderable BOM cell must look unorderable
+            // (`E-SYNTH-VALUE-001` fires for the generic case).
             let value = c
                 .value
                 .clone()
-                .or_else(|| c.part.as_ref().map(|p| p.id.as_str().to_string()))
-                .unwrap_or_default();
+                .or_else(|| c.part.as_ref().and_then(|p| p.mpn.clone()))
+                .unwrap_or_else(|| "(no value)".to_string());
             let description = c
                 .part
                 .as_ref()
@@ -152,6 +156,8 @@ mod tests {
             source_span: synth_diagnostics::Span::new(0, 0),
         };
         let board = Board {
+            groups: Vec::new(),
+            legends: false,
             name: "b".to_string(),
             layers: 2,
             manufacturer: None,
@@ -200,6 +206,51 @@ mod tests {
         let mut s = String::new();
         write_field(&mut s, "a,b");
         assert_eq!(s, "\"a,b\"");
+    }
+
+    // Schematic-quality plan Phase A1: `value` → part `mpn` →
+    // `(no value)` sentinel, never the registry part id.
+    #[test]
+    fn value_fallback_chain_never_uses_part_id() {
+        use std::path::Path;
+        let root = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("..")
+            .join("..")
+            .canonicalize()
+            .unwrap();
+        let registry = synth_registry::load_dir(&root.join("registry").join("parts")).unwrap();
+        let src = r#"board "b" {
+            component R1: resistor "r_generic_0603" value "10k"
+            component R2: resistor "r_generic_0603"
+            component U1: regulator "ams1117_3v3"
+            connect R1.p1 -> R2.p1
+            connect R1.p2 -> R2.p2
+            connect U1.vin -> R1.p1
+            connect U1.gnd -> R1.p2
+            connect U1.vout -> R2.p1
+        }"#;
+        let parsed = synth_parser::parse(src, "inline.synth");
+        assert!(!parsed.has_errors(), "{:?}", parsed.diagnostics);
+        let board = synth_ir::lower(&parsed.ast.unwrap(), &registry, "inline.synth")
+            .board
+            .unwrap();
+        let csv = build_bom_csv(&board);
+        let value_of = |refdes: &str| {
+            csv.lines()
+                .find(|line| line.starts_with(&format!("{refdes},")))
+                .unwrap_or_else(|| panic!("{refdes} missing:\n{csv}"))
+                .split(',')
+                .nth(1)
+                .unwrap()
+                .to_string()
+        };
+        assert_eq!(value_of("R1"), "10k");
+        assert_eq!(value_of("R2"), "(no value)");
+        assert_eq!(value_of("U1"), "AMS1117-3.3");
+        assert!(
+            !csv.contains("r_generic_0603"),
+            "part id must never leak into the value column:\n{csv}"
+        );
     }
 
     #[test]

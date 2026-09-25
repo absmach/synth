@@ -143,6 +143,13 @@ pub fn export_with_sidecar_and_routing_order(
             entry
         })
         .collect();
+    // Net-class colours (schematic-quality plan Phase B1): KiCad reads
+    // `net_settings` and colours wires *and* labels by class
+    // automatically, so the encoding survives user edits and shows in
+    // the netlist UI — unlike per-wire `(stroke (color …))`.
+    // Across every sheet: a net's power symbol or label may live on
+    // any page, and the project file is board-wide.
+    let net_settings = build_net_settings(board, sheets.iter().map(|s| &s.layout));
     let project_doc = json!({
         // Keep the project-level defaults explicit. KiCad 10 may discard
         // legacy setup minima when it first saves a generated board, and an
@@ -168,6 +175,7 @@ pub fn export_with_sidecar_and_routing_order(
             "version": 1,
             "uuid": project_namespace.to_string(),
         },
+        "net_settings": net_settings,
         "schematic": {
             "annotate_start_num": 0,
             "drawing": {},
@@ -320,6 +328,133 @@ pub fn export_with_sidecar_and_routing_order(
     })
 }
 
+/// Paths written by [`export_schematic_only`].
+#[derive(Debug, Clone)]
+pub struct SchematicExportResult {
+    pub out_dir: PathBuf,
+    pub project_path: PathBuf,
+    pub schematic_path: PathBuf,
+    pub library_path: PathBuf,
+    /// Number of schematic sheets written: 1 unless a large splittable board
+    /// took the §P26 multi-sheet path.
+    pub sheet_count: usize,
+}
+
+/// Write only the schematic-side artifacts — project, symbol library,
+/// `sym-lib-table`, and the `.kicad_sch` (or per-sheet files) — without
+/// placing, routing, or emitting the PCB.
+///
+/// This exists for the visual-feedback loop: `kicad-cli sch export svg` needs
+/// a real `.kicad_sch`, but a schematic review has no use for a routed board,
+/// and running the PCB placer/router on every render would make the loop
+/// needlessly slow. The output is byte-identical to the schematic-side files
+/// [`export_with_sidecar_and_routing_order`] writes for the same board; a
+/// test pins the two together.
+///
+/// # Errors
+/// Same I/O and placement-file errors as [`export`].
+pub fn export_schematic_only(
+    board: &Board,
+    out_dir: &Path,
+    sidecar: Option<&Path>,
+) -> Result<SchematicExportResult, ExportError> {
+    std::fs::create_dir_all(out_dir).map_err(|source| ExportError::CreateDir {
+        path: out_dir.to_path_buf(),
+        source,
+    })?;
+
+    let stem = sanitize_filename(&board.name);
+    let project_path = out_dir.join(format!("{stem}.kicad_pro"));
+    let schematic_path = out_dir.join(format!("{stem}.kicad_sch"));
+    let library_path = out_dir.join(format!("{stem}.kicad_sym"));
+
+    let global_layout = synth_layout::layout_with_sidecar(board, sidecar);
+    let sheets = synth_layout::sheets::layout_sheets(board, global_layout);
+    let project_namespace = uuid_v5::project_namespace(&board.name);
+
+    let mut sheet_entries = vec![vec![
+        uuid_v5::derive_entity_uuid(&project_namespace, "sheet", "root").to_string(),
+        String::new(),
+    ]];
+    if sheets.len() > 1 {
+        for sheet in &sheets {
+            if let Some(name) = sheet.name.as_deref() {
+                sheet_entries.push(vec![
+                    crate::multisheet::sheet_uuid(&project_namespace, name).to_string(),
+                    crate::multisheet::sheet_filename(&stem, name),
+                ]);
+            }
+        }
+    }
+    let variant_entries: Vec<serde_json::Value> = board
+        .variants
+        .iter()
+        .map(|v| {
+            let mut entry = json!({ "name": v.name });
+            if let Some(desc) = &v.description {
+                entry["description"] = json!(desc);
+            }
+            entry
+        })
+        .collect();
+    let net_settings = build_net_settings(board, sheets.iter().map(|s| &s.layout));
+    let project_doc = json!({
+        "board": {
+          "design_settings": {
+            "defaults": {
+              "min_clearance": 0.127,
+              "min_track_width": 0.127,
+            },
+            "rules": {
+              "min_clearance": 0.127,
+              "min_track_width": 0.127,
+            }
+          }
+        },
+        "boards": [],
+        "meta": {
+            "filename": format!("{stem}.kicad_pro"),
+            "version": 1,
+            "uuid": project_namespace.to_string(),
+        },
+        "net_settings": net_settings,
+        "schematic": {
+            "annotate_start_num": 0,
+            "drawing": {},
+            "variants": variant_entries,
+        },
+        "sheets": sheet_entries,
+    });
+    let project_text = serde_json::to_string_pretty(&project_doc)
+        .map_err(|source| ExportError::SerializeProject { source })?;
+    write_file(&project_path, &project_text)?;
+
+    let sym_table = format!(
+        "(sym_lib_table\n  (version 7)\n  (lib\n    (name \"synth\")\n    (uri \"${{KIPRJMOD}}/{stem}.kicad_sym\")\n    (type \"KiCad\")\n    (options \"\")\n    (descr \"Synth synthesized symbol library\")\n  )\n)\n"
+    );
+    write_file(&out_dir.join("sym-lib-table"), &sym_table)?;
+
+    let library_text = symbol_lib::build_library(board, &sheets[0].layout).to_string_pretty();
+    write_file(&library_path, &library_text)?;
+    let sheet_count = sheets.len();
+    if sheet_count == 1 {
+        let schematic_text =
+            schematic::build_schematic_from_layout(board, &project_namespace, &sheets[0].layout)
+                .to_string_pretty();
+        write_file(&schematic_path, &schematic_text)?;
+    } else {
+        crate::multisheet::export_sheets(board, out_dir, &stem, &project_namespace, sheets)?;
+    }
+
+    Ok(SchematicExportResult {
+        out_dir: out_dir.to_path_buf(),
+        project_path,
+        schematic_path,
+        library_path,
+        sheet_count,
+    })
+}
+
 pub(crate) fn write_file(path: &Path, contents: &str) -> Result<(), ExportError> {
     std::fs::write(path, contents).map_err(|source| ExportError::Write {
         path: path.to_path_buf(),
@@ -365,6 +500,133 @@ fn route_with_optional_order(
         Some(order) if !order.is_empty() => synth_route::route_with_order(board, placement, order),
         _ => synth_route::route(board, placement),
     }
+}
+
+/// Build the `.kicad_pro` `net_settings` block (schematic-quality
+/// plan Phase B1).
+///
+/// Emits one class entry per class the board actually uses (fixed
+/// semantic classes first, then author-declared ones, `Default`
+/// always present), each with `schematic_color` / `pcb_color` from the
+/// deterministic palette, plus `netclass_assignments` mapping every
+/// non-Default net to its class. KiCad then colours wires and labels
+/// automatically and preserves the encoding across edits.
+fn build_net_settings<'a>(
+    board: &Board,
+    layouts: impl Iterator<Item = &'a synth_layout::Layout>,
+) -> serde_json::Value {
+    use std::collections::BTreeMap;
+
+    let assignments = synth_layout::netclass::classify_nets(board);
+    let mut names = synth_layout::netclass::class_names(board, &assignments);
+    if !names.iter().any(|n| n == "Default") {
+        names.push("Default".to_string());
+    }
+    // Class → hue: assignment colours first (fixed palette / declared
+    // override), then declared classes with no member net.
+    let mut colors: BTreeMap<String, [u8; 3]> = BTreeMap::new();
+    for a in &assignments {
+        colors.insert(a.class.clone(), a.color);
+    }
+    for nc in &board.netclasses {
+        colors.entry(nc.name.clone()).or_insert_with(|| {
+            nc.color
+                .unwrap_or_else(|| synth_layout::netclass::net_class_color(&nc.name))
+        });
+    }
+    // Declared width/clearance per class, where the author set them.
+    let mut rules: BTreeMap<&str, (f64, f64)> = BTreeMap::new();
+    for nc in &board.netclasses {
+        rules.insert(
+            nc.name.as_str(),
+            (
+                nc.trace_width.map_or(0.2, synth_ir::Length::to_mm),
+                nc.clearance.map_or(0.2, synth_ir::Length::to_mm),
+            ),
+        );
+    }
+
+    let rgba = |rgb: [u8; 3]| format!("rgba({}, {}, {}, 1.000)", rgb[0], rgb[1], rgb[2]);
+    let mut classes = Vec::new();
+    for (index, name) in names.iter().enumerate() {
+        let rgb = colors
+            .get(name)
+            .copied()
+            .unwrap_or_else(|| synth_layout::netclass::net_class_color(name));
+        let (track_width, clearance) = rules.get(name.as_str()).copied().unwrap_or((0.2, 0.2));
+        // KiCad gives Default the max priority so it always loses to a
+        // specific class; specific classes count up from 0.
+        let priority = if name == "Default" {
+            i64::from(i32::MAX)
+        } else {
+            i64::try_from(index).unwrap_or(i64::from(i32::MAX) - 1)
+        };
+        classes.push(json!({
+            "bus_width": 12,
+            "clearance": clearance,
+            "diff_pair_gap": 0.25,
+            "diff_pair_via_gap": 0.25,
+            "diff_pair_width": 0.2,
+            "line_style": 0,
+            "microvia_diameter": 0.3,
+            "microvia_drill": 0.1,
+            "name": name,
+            "pcb_color": rgba(rgb),
+            "priority": priority,
+            "schematic_color": rgba(rgb),
+            "track_width": track_width,
+            "via_diameter": 0.6,
+            "via_drill": 0.4,
+            "wire_width": 6,
+        }));
+    }
+    // Assignments are keyed on the name *KiCad* will know the net by,
+    // not our IR name: KiCad derives net names from the drawing at
+    // load time, so an assignment written against `net_7` matches
+    // nothing. `kicad_net_names` maps a net to its power-symbol value
+    // (`+3V3`) or its label spellings (`/SDA`, `SDA`); a glob pattern
+    // covers the same label on a deeper sheet path. Nets with neither
+    // are auto-named by KiCad and unreachable this way — the explicit
+    // per-wire stroke in `schematic.rs` is what colours those.
+    let mut visible: BTreeMap<synth_ir::NetId, Vec<String>> = BTreeMap::new();
+    for layout in layouts {
+        for (net, names) in synth_layout::netclass::kicad_net_names(layout) {
+            let entry = visible.entry(net).or_default();
+            entry.extend(names);
+        }
+    }
+    for names in visible.values_mut() {
+        names.sort();
+        names.dedup();
+    }
+    let mut assignments_json = serde_json::Map::new();
+    let mut patterns = Vec::new();
+    for a in &assignments {
+        if a.class == "Default" {
+            continue;
+        }
+        let Some(names) = visible.get(&a.net) else {
+            continue;
+        };
+        for name in names {
+            assignments_json.insert(name.clone(), json!(a.class));
+            if let Some(bare) = name.strip_prefix('/') {
+                patterns.push(json!({ "netclass": a.class, "pattern": format!("/*/{bare}") }));
+            }
+        }
+    }
+    let netclass_assignments = if assignments_json.is_empty() {
+        serde_json::Value::Null
+    } else {
+        serde_json::Value::Object(assignments_json)
+    };
+    json!({
+        "classes": classes,
+        "meta": { "version": 4 },
+        "net_colors": serde_json::Value::Null,
+        "netclass_assignments": netclass_assignments,
+        "netclass_patterns": patterns,
+    })
 }
 
 fn place_and_route_with_repair(
@@ -588,5 +850,138 @@ mod tests {
         assert_eq!(sanitize_filename("ok-name_42"), "ok-name_42");
         assert_eq!(sanitize_filename("../etc/passwd"), "___etc_passwd");
         assert_eq!(sanitize_filename(""), "untitled");
+    }
+
+    fn board_from(src: &str) -> Board {
+        use std::path::Path;
+        let root = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("..")
+            .join("..")
+            .canonicalize()
+            .unwrap();
+        let registry = synth_registry::load_dir(&root.join("registry").join("parts")).unwrap();
+        let parsed = synth_parser::parse(src, "inline.synth");
+        assert!(!parsed.has_errors(), "{:?}", parsed.diagnostics);
+        synth_ir::lower(&parsed.ast.unwrap(), &registry, "inline.synth")
+            .board
+            .unwrap()
+    }
+
+    #[test]
+    fn net_settings_colours_i2c_and_power_classes() {
+        let board = board_from(
+            r#"board "b" {
+                component U1: mcu "stm32f103c8"
+                component U2: sensor "bme680_env"
+                component R1: resistor "r_generic_0603" value "4.7k"
+                component R2: resistor "r_generic_0603" value "4.7k"
+                connect U1.pb6 -> U2.scl
+                connect U1.pb6 -> R1.p1
+                connect R1.p2 -> U2.vdd
+                connect U1.pb7 -> U2.sda
+                connect U1.pb7 -> R2.p1
+                connect R2.p2 -> U2.vdd
+                connect U2.vdd -> U1.vdd
+                connect U1.vss -> U2.gnd
+            }"#,
+        );
+        let settings = build_net_settings(&board, std::iter::once(&synth_layout::layout(&board)));
+        let classes = settings["classes"].as_array().unwrap();
+        let names: Vec<&str> = classes
+            .iter()
+            .map(|c| c["name"].as_str().unwrap())
+            .collect();
+        assert!(names.contains(&"I2C"), "I2C class missing: {names:?}");
+        assert!(names.contains(&"Power"), "Power class missing: {names:?}");
+        assert!(names.contains(&"Default"), "Default always present");
+        // Deterministic palette hue, rgba-encoded.
+        let i2c = classes
+            .iter()
+            .find(|c| c["name"] == "I2C")
+            .expect("I2C class");
+        assert_eq!(i2c["schematic_color"], "rgba(0, 114, 178, 1.000)");
+        assert_eq!(i2c["pcb_color"], i2c["schematic_color"]);
+        // Every SCL/SDA net is assigned to I2C.
+        let assignments = settings["netclass_assignments"].as_object().unwrap();
+        assert!(
+            assignments.values().any(|v| v == "I2C"),
+            "an I2C net must be assigned: {assignments:?}"
+        );
+    }
+
+    /// End-to-end: a project file carrying `net_settings` alongside its
+    /// schematic must load in `kicad-cli` (it reads the project for
+    /// net-class colours). Skips when KiCad is not installed.
+    #[test]
+    fn project_with_net_settings_loads_in_kicad() {
+        let board = board_from(
+            r##"board "b" {
+                netclass "PWR" {
+                    trace_width 0.5mm
+                    color "#c2410c"
+                }
+                component U1: regulator "ams1117_3v3"
+                component C1: capacitor "c_generic_0805" value "10uF"
+                component C2: capacitor "c_generic_0805" value "10uF"
+                connect U1.vout -> C1.p1
+                connect U1.gnd -> C1.p2
+                connect U1.vout -> C2.p1 as "PWR"
+                connect U1.gnd -> C2.p2
+            }"##,
+        );
+        let dir = std::env::temp_dir().join(format!("synth-b1-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let stem = sanitize_filename(&board.name);
+        let project = crate::uuid_v5::project_namespace(&board.name);
+        let sch = crate::schematic::build_schematic(&board, &project).to_string_pretty();
+        let sch_path = dir.join(format!("{stem}.kicad_sch"));
+        std::fs::write(&sch_path, &sch).unwrap();
+        let pro = serde_json::to_string_pretty(&json!({
+            "meta": { "filename": format!("{stem}.kicad_pro"), "version": 1,
+                      "uuid": project.to_string() },
+            "net_settings": build_net_settings(&board, std::iter::once(&synth_layout::layout(&board))),
+            "sheets": [],
+        }))
+        .unwrap();
+        std::fs::write(dir.join(format!("{stem}.kicad_pro")), &pro).unwrap();
+
+        match crate::run_kicad_erc(&sch_path) {
+            Ok(_) => {}
+            Err(crate::ErcRunError::NotInstalled { .. }) => {
+                eprintln!("kicad-cli not installed; skipping net_settings load test");
+            }
+            Err(e) => panic!("project with net_settings must load: {e}"),
+        }
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn net_settings_honours_declared_colour() {
+        let board = board_from(
+            r##"board "b" {
+                netclass "PWR" {
+                    trace_width 0.5mm
+                    clearance 0.2mm
+                    color "#c2410c"
+                }
+                component U1: regulator "ams1117_3v3"
+                component C1: capacitor "c_generic_0805" value "10uF"
+                component C2: capacitor "c_generic_0805" value "10uF"
+                connect U1.vout -> C1.p1
+                connect U1.gnd -> C1.p2
+                connect U1.vout -> C2.p1 as "PWR"
+                connect U1.gnd -> C2.p2
+            }"##,
+        );
+        let settings = build_net_settings(&board, std::iter::once(&synth_layout::layout(&board)));
+        let classes = settings["classes"].as_array().unwrap();
+        let pwr = classes
+            .iter()
+            .find(|c| c["name"] == "PWR")
+            .expect("declared PWR class present");
+        assert_eq!(pwr["schematic_color"], "rgba(194, 65, 12, 1.000)");
+        // Declared width/clearance flow through.
+        assert_eq!(pwr["track_width"], 0.5);
+        assert_eq!(pwr["clearance"], 0.2);
     }
 }

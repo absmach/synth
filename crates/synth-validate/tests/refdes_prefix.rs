@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: Apache-2.0
 
 //! Tests for `E-SYNTH-NAME-004`: refdes letter vs component kind
-//! (IEEE reference-designator convention; Sierra Circuits schematic
-//! guideline 10). Warnings only — convention, not correctness.
+//! (IEEE reference-designator convention). Warnings only —
+//! convention, not correctness.
 
 use std::path::{Path, PathBuf};
 
@@ -90,7 +90,7 @@ board \"t\" {
 ";
     let diags = validate(src);
     let flagged = name_004(&diags);
-    assert_eq!(flagged.len(), 1, "Sierra table: Diode/LED -> D");
+    assert_eq!(flagged.len(), 1, "refdes table: Diode/LED -> D");
 }
 
 #[test]

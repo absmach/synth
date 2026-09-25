@@ -260,6 +260,14 @@ fn check_debounce(
             let Some(net) = board.nets_containing(sw.id, pid).next().map(|(_, n)| n) else {
                 continue;
             };
+            // A switch terminal sitting on a rail is its *reference*,
+            // not its output — the grounded leg of a button. Rails also
+            // carry strapped mode pins (a sensor's address `sdo` tied
+            // low), which made the rule read "this switch drives that
+            // input" and demand a debounce on the ground net.
+            if net_is_rail(board, net) {
+                continue;
+            }
             // Does this pin's net reach an IC digital input?
             let Some(peer) = ic_input_peer(board, net, sw.id) else {
                 continue;
@@ -567,6 +575,25 @@ fn check_polarized_caps(
 /// Any other component on `net` (excluding `exclude`) that terminates
 /// `net` at a digital input/bidirectional pin — the "IC input" a
 /// switch or sensor drives.
+/// Whether a net is a supply rail or ground — any endpoint declares a
+/// power or ground pin on it.
+fn net_is_rail(board: &Board, net: &Net) -> bool {
+    net.endpoints.iter().any(|e| {
+        board
+            .component(e.component)
+            .and_then(|c| c.part.as_ref())
+            .and_then(|p| p.pins.get(e.pin.0 as usize))
+            .is_some_and(|pin| {
+                matches!(
+                    pin.electrical_type,
+                    ElectricalType::PowerInput
+                        | ElectricalType::PowerOutput
+                        | ElectricalType::GroundReference
+                )
+            })
+    })
+}
+
 fn ic_input_peer<'a>(board: &'a Board, net: &Net, exclude: ComponentId) -> Option<&'a Component> {
     net.endpoints.iter().find_map(|e| {
         if e.component == exclude {
@@ -859,11 +886,11 @@ fn debounce_patch(
     let mut text = String::new();
     let _ = writeln!(
         text,
-        "\n  component {r}: resistor \"r_generic_0603\" // auto-inserted debounce {res_what}"
+        "\n  component {r}: resistor \"r_generic_0603\" value \"10k\" // auto-inserted debounce {res_what}"
     );
     let _ = writeln!(
         text,
-        "  component {c}: capacitor \"c_generic_0603\" // auto-inserted debounce filter"
+        "  component {c}: capacitor \"c_generic_0603\" value \"100nF\" // auto-inserted debounce filter"
     );
     let _ = writeln!(text, "  connect {}.{} -> {r}.p1", sw.refdes, wiper_pin);
     let _ = writeln!(text, "  connect {}.{} -> {c}.p1", sw.refdes, wiper_pin);
@@ -921,7 +948,7 @@ fn pullup_patch(
     let mut text = String::new();
     let _ = writeln!(
         text,
-        "\n  component {r}: resistor \"r_generic_0603\" // auto-inserted pull-up"
+        "\n  component {r}: resistor \"r_generic_0603\" value \"10k\" // auto-inserted pull-up"
     );
     let _ = writeln!(
         text,
@@ -1025,6 +1052,8 @@ mod tests {
 
     fn board(components: Vec<Component>, nets: Vec<Net>) -> Board {
         Board {
+            groups: Vec::new(),
+            legends: false,
             name: "kg_test".to_string(),
             layers: 2,
             manufacturer: None,

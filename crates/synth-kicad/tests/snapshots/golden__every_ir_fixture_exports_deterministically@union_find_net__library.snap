@@ -404,7 +404,7 @@ expression: library
 		)
 		(embedded_fonts no)
 	)
-	(symbol "MCU_RaspberryPi:RP2040"
+	(symbol "MCU_RaspberryPi:RP2350A"
 		(exclude_from_sim no)
 		(in_bom yes)
 		(on_board yes)
@@ -421,7 +421,7 @@ expression: library
 				(justify left)
 			)
 		)
-		(property "Value" "RP2040"
+		(property "Value" "RP2350A"
 			(at 17.526 44.704 0)
 			(show_name no)
 			(do_not_autoplace no)
@@ -432,7 +432,7 @@ expression: library
 				(justify left)
 			)
 		)
-		(property "Footprint" "Package_DFN_QFN:QFN-56-1EP_7x7mm_P0.4mm_EP3.2x3.2mm"
+		(property "Footprint" "Package_DFN_QFN:QFN-60-1EP_7x7mm_P0.4mm_EP3.4x3.4mm"
 			(at 0 0 0)
 			(show_name no)
 			(do_not_autoplace no)
@@ -443,7 +443,7 @@ expression: library
 				)
 			)
 		)
-		(property "Datasheet" "https://datasheets.raspberrypi.com/rp2040/rp2040-datasheet.pdf"
+		(property "Datasheet" "https://datasheets.raspberrypi.com/rp2350/rp2350-datasheet.pdf"
 			(at 0 0 0)
 			(show_name no)
 			(do_not_autoplace no)
@@ -454,7 +454,7 @@ expression: library
 				)
 			)
 		)
-		(property "Description" "A microcontroller by Raspberry Pi, Dual ARM Cortex-M0+, 133MHz, no flash, 264KB SRAM, 8 PIO state machines, VQFN-56"
+		(property "Description" "A microcontroller by Raspberry Pi, dual CPU architecture (ARM Cortex-M33 / RISC-V Hazard3), 150MHz, no flash, 520KB SRAM, 12 PIO state machines, VQFN-60"
 			(at 0 0 0)
 			(show_name no)
 			(do_not_autoplace no)
@@ -476,7 +476,7 @@ expression: library
 				)
 			)
 		)
-		(property private "KLC_S4.2_VREG_VOUT" "Should be placed next to DVDD."
+		(property private "KLC_S4.2_VREG_LX" "Should be placed next to DVDD."
 			(at 0 -2.54 0)
 			(show_name yes)
 			(do_not_autoplace no)
@@ -487,7 +487,7 @@ expression: library
 				)
 			)
 		)
-		(property "ki_keywords" "RPi Pico USB QSPI I2C UART SC0914"
+		(property "ki_keywords" "RPi Pico USB QSPI I2C UART ADC SC1509"
 			(at 0 0 0)
 			(show_name no)
 			(do_not_autoplace no)
@@ -498,7 +498,7 @@ expression: library
 				)
 			)
 		)
-		(property "ki_fp_filters" "*QFN*7x7mm?P0.4mm?EP3.2x3.2mm*"
+		(property "ki_fp_filters" "*QFN*7x7mm?P0.4mm?EP3.4x3.4mm*"
 			(at 0 0 0)
 			(show_name no)
 			(do_not_autoplace no)
@@ -509,7 +509,7 @@ expression: library
 				)
 			)
 		)
-		(symbol "RP2040_0_1"
+		(symbol "RP2350A_0_1"
 			(rectangle
 				(start -21.59 41.91)
 				(end 21.59 -41.91)
@@ -522,7 +522,118 @@ expression: library
 				)
 			)
 		)
-		(symbol "RP2040_1_1"
+		(symbol "RP2350A_1_0"
+			(pin power_in line
+				(at 12.7 45.72 270)
+				(length 3.81)
+				(name "DVDD"
+					(effects
+						(font
+							(size 1.27 1.27)
+						)
+					)
+				)
+				(number "6"
+					(effects
+						(font
+							(size 1.27 1.27)
+						)
+					)
+				)
+			)
+			(pin passive line
+				(at 12.7 45.72 270)
+				(length 3.81)
+				(hide yes)
+				(name "DVDD"
+					(effects
+						(font
+							(size 1.27 1.27)
+						)
+					)
+				)
+				(number "39"
+					(effects
+						(font
+							(size 1.27 1.27)
+						)
+					)
+				)
+			)
+			(pin power_in line
+				(at -17.78 45.72 270)
+				(length 3.81)
+				(name "VREG_AVDD"
+					(effects
+						(font
+							(size 1.27 1.27)
+						)
+					)
+				)
+				(number "46"
+					(effects
+						(font
+							(size 1.27 1.27)
+						)
+					)
+				)
+			)
+			(pin power_in line
+				(at -2.54 -45.72 90)
+				(length 3.81)
+				(name "VREG_PGND"
+					(effects
+						(font
+							(size 1.27 1.27)
+						)
+					)
+				)
+				(number "47"
+					(effects
+						(font
+							(size 1.27 1.27)
+						)
+					)
+				)
+			)
+			(pin power_in line
+				(at -12.7 45.72 270)
+				(length 3.81)
+				(name "USB_OTP_VDD"
+					(effects
+						(font
+							(size 1.27 1.27)
+						)
+					)
+				)
+				(number "53"
+					(effects
+						(font
+							(size 1.27 1.27)
+						)
+					)
+				)
+			)
+			(pin power_in line
+				(at -5.08 45.72 270)
+				(length 3.81)
+				(name "QSPI_IOVDD"
+					(effects
+						(font
+							(size 1.27 1.27)
+						)
+					)
+				)
+				(number "54"
+					(effects
+						(font
+							(size 1.27 1.27)
+						)
+					)
+				)
+			)
+		)
+		(symbol "RP2350A_1_1"
 			(pin power_in line
 				(at -2.54 45.72 270)
 				(length 3.81)
@@ -623,7 +734,7 @@ expression: library
 						)
 					)
 				)
-				(number "6"
+				(number "7"
 					(effects
 						(font
 							(size 1.27 1.27)
@@ -641,7 +752,7 @@ expression: library
 						)
 					)
 				)
-				(number "7"
+				(number "8"
 					(effects
 						(font
 							(size 1.27 1.27)
@@ -659,7 +770,7 @@ expression: library
 						)
 					)
 				)
-				(number "8"
+				(number "9"
 					(effects
 						(font
 							(size 1.27 1.27)
@@ -677,7 +788,7 @@ expression: library
 						)
 					)
 				)
-				(number "9"
+				(number "10"
 					(effects
 						(font
 							(size 1.27 1.27)
@@ -696,7 +807,7 @@ expression: library
 						)
 					)
 				)
-				(number "10"
+				(number "11"
 					(effects
 						(font
 							(size 1.27 1.27)
@@ -714,7 +825,7 @@ expression: library
 						)
 					)
 				)
-				(number "11"
+				(number "12"
 					(effects
 						(font
 							(size 1.27 1.27)
@@ -732,7 +843,7 @@ expression: library
 						)
 					)
 				)
-				(number "12"
+				(number "13"
 					(effects
 						(font
 							(size 1.27 1.27)
@@ -750,7 +861,7 @@ expression: library
 						)
 					)
 				)
-				(number "13"
+				(number "14"
 					(effects
 						(font
 							(size 1.27 1.27)
@@ -768,7 +879,7 @@ expression: library
 						)
 					)
 				)
-				(number "14"
+				(number "15"
 					(effects
 						(font
 							(size 1.27 1.27)
@@ -786,7 +897,7 @@ expression: library
 						)
 					)
 				)
-				(number "15"
+				(number "16"
 					(effects
 						(font
 							(size 1.27 1.27)
@@ -804,7 +915,7 @@ expression: library
 						)
 					)
 				)
-				(number "16"
+				(number "17"
 					(effects
 						(font
 							(size 1.27 1.27)
@@ -822,7 +933,7 @@ expression: library
 						)
 					)
 				)
-				(number "17"
+				(number "18"
 					(effects
 						(font
 							(size 1.27 1.27)
@@ -840,61 +951,7 @@ expression: library
 						)
 					)
 				)
-				(number "18"
-					(effects
-						(font
-							(size 1.27 1.27)
-						)
-					)
-				)
-			)
-			(pin input line
-				(at -25.4 30.48 0)
-				(length 3.81)
-				(name "TESTEN"
-					(effects
-						(font
-							(size 1.27 1.27)
-						)
-					)
-				)
 				(number "19"
-					(effects
-						(font
-							(size 1.27 1.27)
-						)
-					)
-				)
-			)
-			(pin input line
-				(at -25.4 -15.24 0)
-				(length 3.81)
-				(name "XIN"
-					(effects
-						(font
-							(size 1.27 1.27)
-						)
-					)
-				)
-				(number "20"
-					(effects
-						(font
-							(size 1.27 1.27)
-						)
-					)
-				)
-			)
-			(pin output line
-				(at -25.4 -25.4 0)
-				(length 3.81)
-				(name "XOUT"
-					(effects
-						(font
-							(size 1.27 1.27)
-						)
-					)
-				)
-				(number "21"
 					(effects
 						(font
 							(size 1.27 1.27)
@@ -913,6 +970,42 @@ expression: library
 						)
 					)
 				)
+				(number "20"
+					(effects
+						(font
+							(size 1.27 1.27)
+						)
+					)
+				)
+			)
+			(pin input line
+				(at -25.4 -15.24 0)
+				(length 3.81)
+				(name "XIN"
+					(effects
+						(font
+							(size 1.27 1.27)
+						)
+					)
+				)
+				(number "21"
+					(effects
+						(font
+							(size 1.27 1.27)
+						)
+					)
+				)
+			)
+			(pin output line
+				(at -25.4 -25.4 0)
+				(length 3.81)
+				(name "XOUT"
+					(effects
+						(font
+							(size 1.27 1.27)
+						)
+					)
+				)
 				(number "22"
 					(effects
 						(font
@@ -921,9 +1014,10 @@ expression: library
 					)
 				)
 			)
-			(pin power_in line
+			(pin passive line
 				(at 12.7 45.72 270)
 				(length 3.81)
+				(hide yes)
 				(name "DVDD"
 					(effects
 						(font
@@ -1047,6 +1141,25 @@ expression: library
 					)
 				)
 			)
+			(pin passive line
+				(at -2.54 45.72 270)
+				(length 3.81)
+				(hide yes)
+				(name "IOVDD"
+					(effects
+						(font
+							(size 1.27 1.27)
+						)
+					)
+				)
+				(number "30"
+					(effects
+						(font
+							(size 1.27 1.27)
+						)
+					)
+				)
+			)
 			(pin bidirectional line
 				(at 25.4 -10.16 180)
 				(length 3.81)
@@ -1057,7 +1170,7 @@ expression: library
 						)
 					)
 				)
-				(number "30"
+				(number "31"
 					(effects
 						(font
 							(size 1.27 1.27)
@@ -1075,7 +1188,7 @@ expression: library
 						)
 					)
 				)
-				(number "31"
+				(number "32"
 					(effects
 						(font
 							(size 1.27 1.27)
@@ -1087,25 +1200,6 @@ expression: library
 				(at 25.4 -15.24 180)
 				(length 3.81)
 				(name "GPIO21"
-					(effects
-						(font
-							(size 1.27 1.27)
-						)
-					)
-				)
-				(number "32"
-					(effects
-						(font
-							(size 1.27 1.27)
-						)
-					)
-				)
-			)
-			(pin passive line
-				(at -2.54 45.72 270)
-				(length 3.81)
-				(hide yes)
-				(name "IOVDD"
 					(effects
 						(font
 							(size 1.27 1.27)
@@ -1192,6 +1286,25 @@ expression: library
 					)
 				)
 			)
+			(pin passive line
+				(at -2.54 45.72 270)
+				(length 3.81)
+				(hide yes)
+				(name "IOVDD"
+					(effects
+						(font
+							(size 1.27 1.27)
+						)
+					)
+				)
+				(number "38"
+					(effects
+						(font
+							(size 1.27 1.27)
+						)
+					)
+				)
+			)
 			(pin bidirectional line
 				(at 25.4 -30.48 180)
 				(length 3.81)
@@ -1202,7 +1315,7 @@ expression: library
 						)
 					)
 				)
-				(number "38"
+				(number "40"
 					(effects
 						(font
 							(size 1.27 1.27)
@@ -1220,7 +1333,7 @@ expression: library
 						)
 					)
 				)
-				(number "39"
+				(number "41"
 					(effects
 						(font
 							(size 1.27 1.27)
@@ -1238,7 +1351,7 @@ expression: library
 						)
 					)
 				)
-				(number "40"
+				(number "42"
 					(effects
 						(font
 							(size 1.27 1.27)
@@ -1256,26 +1369,7 @@ expression: library
 						)
 					)
 				)
-				(number "41"
-					(effects
-						(font
-							(size 1.27 1.27)
-						)
-					)
-				)
-			)
-			(pin passive line
-				(at -2.54 45.72 270)
-				(length 3.81)
-				(hide yes)
-				(name "IOVDD"
-					(effects
-						(font
-							(size 1.27 1.27)
-						)
-					)
-				)
-				(number "42"
+				(number "43"
 					(effects
 						(font
 							(size 1.27 1.27)
@@ -1293,97 +1387,7 @@ expression: library
 						)
 					)
 				)
-				(number "43"
-					(effects
-						(font
-							(size 1.27 1.27)
-						)
-					)
-				)
-			)
-			(pin power_in line
-				(at 2.54 45.72 270)
-				(length 3.81)
-				(name "VREG_VIN"
-					(effects
-						(font
-							(size 1.27 1.27)
-						)
-					)
-				)
 				(number "44"
-					(effects
-						(font
-							(size 1.27 1.27)
-						)
-					)
-				)
-			)
-			(pin power_out line
-				(at 7.62 45.72 270)
-				(length 3.81)
-				(name "VREG_VOUT"
-					(effects
-						(font
-							(size 1.27 1.27)
-						)
-					)
-				)
-				(number "45"
-					(effects
-						(font
-							(size 1.27 1.27)
-						)
-					)
-				)
-			)
-			(pin bidirectional line
-				(at -25.4 15.24 0)
-				(length 3.81)
-				(name "USB_DM"
-					(effects
-						(font
-							(size 1.27 1.27)
-						)
-					)
-				)
-				(number "46"
-					(effects
-						(font
-							(size 1.27 1.27)
-						)
-					)
-				)
-			)
-			(pin bidirectional line
-				(at -25.4 12.7 0)
-				(length 3.81)
-				(name "USB_DP"
-					(effects
-						(font
-							(size 1.27 1.27)
-						)
-					)
-				)
-				(number "47"
-					(effects
-						(font
-							(size 1.27 1.27)
-						)
-					)
-				)
-			)
-			(pin power_in line
-				(at -12.7 45.72 270)
-				(length 3.81)
-				(name "USB_VDD"
-					(effects
-						(font
-							(size 1.27 1.27)
-						)
-					)
-				)
-				(number "48"
 					(effects
 						(font
 							(size 1.27 1.27)
@@ -1402,6 +1406,42 @@ expression: library
 						)
 					)
 				)
+				(number "45"
+					(effects
+						(font
+							(size 1.27 1.27)
+						)
+					)
+				)
+			)
+			(pin power_out line
+				(at 5.08 45.72 270)
+				(length 3.81)
+				(name "VREG_LX"
+					(effects
+						(font
+							(size 1.27 1.27)
+						)
+					)
+				)
+				(number "48"
+					(effects
+						(font
+							(size 1.27 1.27)
+						)
+					)
+				)
+			)
+			(pin power_in line
+				(at 2.54 45.72 270)
+				(length 3.81)
+				(name "VREG_VIN"
+					(effects
+						(font
+							(size 1.27 1.27)
+						)
+					)
+				)
 				(number "49"
 					(effects
 						(font
@@ -1411,10 +1451,9 @@ expression: library
 				)
 			)
 			(pin passive line
-				(at 12.7 45.72 270)
+				(at 7.62 45.72 270)
 				(length 3.81)
-				(hide yes)
-				(name "DVDD"
+				(name "VREG_FB"
 					(effects
 						(font
 							(size 1.27 1.27)
@@ -1422,6 +1461,42 @@ expression: library
 					)
 				)
 				(number "50"
+					(effects
+						(font
+							(size 1.27 1.27)
+						)
+					)
+				)
+			)
+			(pin bidirectional line
+				(at -25.4 15.24 0)
+				(length 3.81)
+				(name "USB_DM"
+					(effects
+						(font
+							(size 1.27 1.27)
+						)
+					)
+				)
+				(number "51"
+					(effects
+						(font
+							(size 1.27 1.27)
+						)
+					)
+				)
+			)
+			(pin bidirectional line
+				(at -25.4 12.7 0)
+				(length 3.81)
+				(name "USB_DP"
+					(effects
+						(font
+							(size 1.27 1.27)
+						)
+					)
+				)
+				(number "52"
 					(effects
 						(font
 							(size 1.27 1.27)
@@ -1439,7 +1514,7 @@ expression: library
 						)
 					)
 				)
-				(number "51"
+				(number "55"
 					(effects
 						(font
 							(size 1.27 1.27)
@@ -1457,7 +1532,7 @@ expression: library
 						)
 					)
 				)
-				(number "52"
+				(number "56"
 					(effects
 						(font
 							(size 1.27 1.27)
@@ -1475,7 +1550,7 @@ expression: library
 						)
 					)
 				)
-				(number "53"
+				(number "57"
 					(effects
 						(font
 							(size 1.27 1.27)
@@ -1493,7 +1568,7 @@ expression: library
 						)
 					)
 				)
-				(number "54"
+				(number "58"
 					(effects
 						(font
 							(size 1.27 1.27)
@@ -1511,7 +1586,7 @@ expression: library
 						)
 					)
 				)
-				(number "55"
+				(number "59"
 					(effects
 						(font
 							(size 1.27 1.27)
@@ -1529,7 +1604,7 @@ expression: library
 						)
 					)
 				)
-				(number "56"
+				(number "60"
 					(effects
 						(font
 							(size 1.27 1.27)
@@ -1547,7 +1622,7 @@ expression: library
 						)
 					)
 				)
-				(number "57"
+				(number "61"
 					(effects
 						(font
 							(size 1.27 1.27)

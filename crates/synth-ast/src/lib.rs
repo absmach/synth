@@ -49,6 +49,7 @@ pub enum StatementAst {
     Manufacturer(ManufacturerStmt),
     Revision(RevisionStmt),
     Company(CompanyStmt),
+    Legends(LegendsStmt),
     Component(ComponentDeclAst),
     Variant(VariantDeclStmt),
     Connection(ConnectionAst),
@@ -74,6 +75,7 @@ impl StatementAst {
             StatementAst::Manufacturer(s) => s.span,
             StatementAst::Revision(s) => s.span,
             StatementAst::Company(s) => s.span,
+            StatementAst::Legends(s) => s.span,
             StatementAst::Component(s) => s.span,
             StatementAst::Variant(s) => s.span,
             StatementAst::Connection(s) => s.span,
@@ -105,8 +107,27 @@ impl StatementAst {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct GroupStmt {
     pub name: String,
+    /// Optional attributes between the name and the body:
+    /// `group "3.3V LDO" color "#c2410c" title "3.3 V regulator" { … }`.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub attrs: Vec<GroupAttr>,
     pub statements: Vec<StatementAst>,
     pub span: Span,
+}
+
+/// A `group` header attribute (schematic-quality plan Phase D1).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(tag = "kind", rename_all = "snake_case")]
+#[non_exhaustive]
+pub enum GroupAttr {
+    /// Explicit box hue (`color "#c2410c"`), overriding the
+    /// deterministic palette colour.
+    Color(String),
+    /// Pin the region to a page quadrant (`region top_left`), reusing
+    /// the placement-region vocabulary.
+    Region(String),
+    /// Display title when it should differ from the identifier.
+    Title(String),
 }
 
 /// A hierarchical sheet block: `sheet "Power" { ... }`.
@@ -146,8 +167,7 @@ pub struct ManufacturerStmt {
 }
 
 /// Board revision tag, carried into the schematic title block
-/// (Sierra Circuits "Schematic Design Rules": the title block should
-/// display the Revision).
+/// which by convention displays the revision.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct RevisionStmt {
     pub rev: String,
@@ -155,13 +175,23 @@ pub struct RevisionStmt {
 }
 
 /// Design-authority company name, carried into the schematic title
-/// block's Company field (Sierra Circuits "Schematic Design Rules":
-/// the title block should display the Company). Unlike
+/// block's Company field, which by convention names the design
+/// authority. Unlike
 /// `ManufacturerStmt` (who *builds* the board), this names who
 /// *designed* it.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct CompanyStmt {
     pub name: String,
+    pub span: Span,
+}
+
+/// Connector pin legends (`legends on|off`, default off).
+/// Schematic-quality plan Phase A3: generated per-pin connector
+/// legends are opt-in — the reference sheet carries a one-line prose
+/// note instead of a pin dump.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct LegendsStmt {
+    pub enabled: bool,
     pub span: Span,
 }
 
@@ -501,6 +531,10 @@ pub struct NetclassStmt {
 pub enum NetclassAttr {
     TraceWidth(ValueWithUnit),
     Clearance(ValueWithUnit),
+    /// Explicit hue for the class (`color "#c2410c"`), applied to the
+    /// schematic `net_settings` colour. Six-digit `#rrggbb` (the
+    /// leading `#` optional).
+    Color(String),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

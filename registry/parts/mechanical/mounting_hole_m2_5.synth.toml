@@ -1,0 +1,10 @@
+id = "mounting_hole_m2_5"
+kind = "mounting_hole"
+description = "M2.5 non-plated mounting hole (NPTH) for a board corner"
+kicad_symbol = "Mechanical:MountingHole"
+kicad_footprint = "MountingHole:MountingHole_2.5mm"
+
+[footprint_dimensions]
+width_mm = 2.5
+height_mm = 2.5
+courtyard_margin_mm = 0.25

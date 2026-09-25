@@ -301,3 +301,339 @@ fn layout_op_json_shape_is_kind_tagged_snake_case() {
         }
     );
 }
+
+#[test]
+fn new_repair_ops_json_shape_is_kind_tagged_snake_case() {
+    let row = serde_json::json!({
+        "kind": "distribute_row", "ids": [1, 2, 3], "y_mm": 50.8, "x_mm": 25.4
+    });
+    let parsed: LayoutOp = serde_json::from_value(row).unwrap();
+    assert_eq!(
+        parsed,
+        LayoutOp::DistributeRow {
+            ids: vec![
+                synth_ir::ComponentId(1),
+                synth_ir::ComponentId(2),
+                synth_ir::ComponentId(3),
+            ],
+            y_mm: Some(50.8),
+            x_mm: Some(25.4),
+        }
+    );
+
+    let spread = serde_json::json!({ "kind": "spread_region", "ids": [], "scale": 1.4 });
+    let parsed: LayoutOp = serde_json::from_value(spread).unwrap();
+    assert_eq!(
+        parsed,
+        LayoutOp::SpreadRegion {
+            ids: Vec::new(),
+            scale: 1.4,
+        }
+    );
+}
+
+#[test]
+fn distribute_row_lays_components_left_to_right_at_distinct_x() {
+    let board = board_for("fixtures/layout/led_indicator.synth");
+    let mut layout = synth_layout::layout(&board);
+    let ids: Vec<_> = layout.components.iter().map(|p| p.id).collect();
+
+    apply_op(
+        &mut layout,
+        &board,
+        LayoutOp::DistributeRow {
+            ids: ids.clone(),
+            y_mm: Some(50.8),
+            x_mm: Some(25.4),
+        },
+    )
+    .unwrap();
+
+    // Every member shares the row y...
+    for &id in &ids {
+        let (_, y) = layout.placement(id).unwrap().center_mm;
+        assert_eq!(y, 50.8, "row members must share one y");
+    }
+    // ...and x strictly increases in the given order, with no overlap.
+    let xs: Vec<f64> = ids
+        .iter()
+        .map(|&id| layout.placement(id).unwrap().center_mm.0)
+        .collect();
+    for w in xs.windows(2) {
+        assert!(w[1] > w[0], "row must advance left-to-right: {xs:?}");
+    }
+    assert!(
+        xs[0] >= 25.4 - 1e-9,
+        "row must start at or right of the requested left edge"
+    );
+}
+
+#[test]
+fn distribute_row_defaults_keep_current_row_position() {
+    let board = board_for("fixtures/layout/led_indicator.synth");
+    let mut layout = synth_layout::layout(&board);
+    let ids: Vec<_> = layout.components.iter().map(|p| p.id).collect();
+
+    apply_op(
+        &mut layout,
+        &board,
+        LayoutOp::DistributeRow {
+            ids: ids.clone(),
+            y_mm: None,
+            x_mm: None,
+        },
+    )
+    .unwrap();
+
+    // Still a valid, fully-placed layout.
+    assert_eq!(layout.components.len(), board.components.len());
+    for wire in &layout.wires {
+        for pair in wire.points.windows(2) {
+            let (p1, p2) = (pair[0], pair[1]);
+            let horiz = (p1.1 - p2.1).abs() < 1e-6;
+            let vert = (p1.0 - p2.0).abs() < 1e-6;
+            assert!(horiz || vert, "wire segments must stay orthogonal");
+        }
+    }
+}
+
+#[test]
+fn distribute_row_empty_ids_is_an_error() {
+    let board = board_for("fixtures/layout/led_indicator.synth");
+    let mut layout = synth_layout::layout(&board);
+    let result = apply_op(
+        &mut layout,
+        &board,
+        LayoutOp::DistributeRow {
+            ids: Vec::new(),
+            y_mm: None,
+            x_mm: None,
+        },
+    );
+    assert_eq!(result, Err(LayoutOpError::EmptyGroup));
+}
+
+#[test]
+fn distribute_row_unknown_id_is_an_error_and_does_not_mutate() {
+    let board = board_for("fixtures/layout/led_indicator.synth");
+    let mut layout = synth_layout::layout(&board);
+    let before = layout.clone();
+    let bogus = synth_ir::ComponentId(9999);
+    let first = layout.components[0].id;
+
+    let result = apply_op(
+        &mut layout,
+        &board,
+        LayoutOp::DistributeRow {
+            ids: vec![first, bogus],
+            y_mm: None,
+            x_mm: None,
+        },
+    );
+
+    assert_eq!(result, Err(LayoutOpError::UnknownComponent(bogus)));
+    assert_eq!(layout, before, "layout must be untouched on error");
+}
+
+#[test]
+fn spread_region_increases_content_bounds_and_stays_grid_aligned() {
+    let board = board_for("fixtures/layout/led_indicator.synth");
+    let mut layout = synth_layout::layout(&board);
+
+    let before = synth_layout::content_bounds(&board, &layout).expect("content bounds");
+    let width_before = before.1 - before.0;
+    let height_before = before.3 - before.2;
+
+    apply_op(
+        &mut layout,
+        &board,
+        LayoutOp::SpreadRegion {
+            ids: Vec::new(),
+            scale: 1.4,
+        },
+    )
+    .unwrap();
+
+    let after = synth_layout::content_bounds(&board, &layout).expect("content bounds");
+    let width_after = after.1 - after.0;
+    let height_after = after.3 - after.2;
+
+    assert!(
+        width_after > width_before || height_after > height_before,
+        "spread must enlarge the content box: before {width_before:.1}×{height_before:.1}, \
+         after {width_after:.1}×{height_after:.1}"
+    );
+    for placement in &layout.components {
+        assert!(
+            (placement.center_mm.0 / 2.54).fract().abs() < 1e-9,
+            "spread must snap x to the pin grid: {:?}",
+            placement.center_mm
+        );
+    }
+}
+
+#[test]
+fn spread_region_rejects_non_positive_and_non_finite_scale() {
+    let board = board_for("fixtures/layout/led_indicator.synth");
+    let mut layout = synth_layout::layout(&board);
+    let before = layout.clone();
+
+    for bad in [0.0, -1.0, f64::INFINITY, f64::NAN] {
+        let result = apply_op(
+            &mut layout,
+            &board,
+            LayoutOp::SpreadRegion {
+                ids: Vec::new(),
+                scale: bad,
+            },
+        );
+        assert!(
+            matches!(result, Err(LayoutOpError::InvalidScale(_))),
+            "scale {bad} must be rejected"
+        );
+        assert_eq!(layout, before, "layout must be untouched on error");
+    }
+}
+
+#[test]
+fn fit_sheet_shrinks_a_small_board_below_a4() {
+    let board = board_for("fixtures/layout/led_indicator.synth");
+    let mut layout = synth_layout::layout(&board);
+    let before = layout.sheet_size.dims_mm();
+
+    apply_op(&mut layout, &board, LayoutOp::FitSheet { grow: false }).unwrap();
+
+    let after = layout.sheet_size.dims_mm();
+    assert!(
+        after.0 < before.0 || after.1 < before.1,
+        "fit_sheet must shrink a small design below {before:?}, got {after:?}"
+    );
+    // And the fit must actually contain the content.
+    let (min_x, max_x, min_y, max_y) =
+        synth_layout::content_bounds(&board, &layout).expect("content bounds");
+    assert!(
+        max_x <= after.0,
+        "content must fit page width: {max_x} > {}",
+        after.0
+    );
+    assert!(
+        max_y <= after.1,
+        "content must fit page height: {max_y} > {}",
+        after.1
+    );
+    let _ = (min_x, min_y);
+}
+
+#[test]
+fn fit_sheet_never_grows_without_the_grow_flag() {
+    let board = board_for("fixtures/layout/led_indicator.synth");
+    let mut layout = synth_layout::layout(&board);
+    // Shrink first, then confirm a plain fit does not re-grow.
+    apply_op(&mut layout, &board, LayoutOp::FitSheet { grow: false }).unwrap();
+    let shrunk = layout.sheet_size.dims_mm();
+
+    apply_op(&mut layout, &board, LayoutOp::FitSheet { grow: false }).unwrap();
+    assert_eq!(
+        layout.sheet_size.dims_mm(),
+        shrunk,
+        "fit must be idempotent"
+    );
+}
+
+#[test]
+fn fit_sheet_size_any_returns_a_smaller_custom_page_for_tiny_content() {
+    // A 20x15mm blob of content on the standard ladder floors at A4.
+    let standard = synth_layout::fit_sheet_size(10.0, 30.0, 10.0, 25.0);
+    assert!(matches!(standard, synth_layout::SheetSize::A4));
+
+    let any = synth_layout::fit_sheet_size_any(10.0, 30.0, 10.0, 25.0);
+    match any {
+        synth_layout::SheetSize::Custom {
+            width_mm,
+            height_mm,
+        } => {
+            assert!(width_mm < 297.0 && height_mm < 210.0);
+            assert!(
+                width_mm >= 30.0 && height_mm >= 25.0,
+                "must contain content"
+            );
+        }
+        other => panic!("expected a custom page below A4, got {other:?}"),
+    }
+}
+
+#[test]
+fn fit_sheet_size_any_keeps_standard_ladder_for_large_content() {
+    // Content needing more than A4 must stay on the standard ladder.
+    let any = synth_layout::fit_sheet_size_any(0.0, 900.0, 0.0, 700.0);
+    assert!(
+        !matches!(any, synth_layout::SheetSize::Custom { .. }),
+        "large content must not get a custom page, got {any:?}"
+    );
+}
+
+#[test]
+fn fit_sheet_centres_the_drawing_on_the_page() {
+    let board = board_for("fixtures/layout/led_indicator.synth");
+    let mut layout = synth_layout::layout(&board);
+
+    apply_op(&mut layout, &board, LayoutOp::FitSheet { grow: false }).unwrap();
+
+    let (sheet_w, sheet_h) = layout.sheet_size.dims_mm();
+    let (min_x, max_x, min_y, max_y) =
+        synth_layout::drawing_bounds(&board, &layout).expect("drawing bounds");
+    // Horizontal slack is split evenly (to within the 2.54 mm grid snap).
+    let left = min_x;
+    let right = sheet_w - max_x;
+    assert!(
+        (left - right).abs() <= 2.54,
+        "drawing must be centred horizontally: left gap {left:.2}, right gap {right:.2}"
+    );
+    // Vertically it centres in the area above the 34 mm title-block band.
+    let top = min_y;
+    let bottom = sheet_h - 34.0 - max_y;
+    assert!(
+        (top - bottom).abs() <= 2.54,
+        "drawing must be centred above the title block: top gap {top:.2}, bottom gap {bottom:.2}"
+    );
+    assert!(left >= 10.0 && top >= 10.0, "drawing must clear the frame");
+}
+
+#[test]
+fn fit_sheet_page_is_never_narrower_than_the_title_block() {
+    let board = board_for("fixtures/layout/led_indicator.synth");
+    let mut layout = synth_layout::layout(&board);
+    apply_op(&mut layout, &board, LayoutOp::FitSheet { grow: false }).unwrap();
+    // KiCad's title block is 110 mm wide inside a 10 mm frame.
+    assert!(layout.sheet_size.dims_mm().0 >= 130.0);
+}
+
+#[test]
+fn fit_sheet_centring_keeps_wires_attached() {
+    let board = board_for("fixtures/layout/led_indicator.synth");
+    let base = synth_layout::layout(&board);
+    let mut fitted = base.clone();
+    apply_op(&mut fitted, &board, LayoutOp::FitSheet { grow: false }).unwrap();
+
+    // Centring is one rigid, grid-snapped translation of everything.
+    let (bx, by) = base.components[0].center_mm;
+    let (fx, fy) = fitted.components[0].center_mm;
+    let (dx, dy) = (fx - bx, fy - by);
+    assert!(
+        ((dx / 2.54).round() * 2.54 - dx).abs() < 1e-9,
+        "dx off grid: {dx}"
+    );
+    assert!(
+        ((dy / 2.54).round() * 2.54 - dy).abs() < 1e-9,
+        "dy off grid: {dy}"
+    );
+    for (b, f) in base.components.iter().zip(&fitted.components) {
+        assert!((f.center_mm.0 - b.center_mm.0 - dx).abs() < 1e-9);
+        assert!((f.center_mm.1 - b.center_mm.1 - dy).abs() < 1e-9);
+    }
+    for (bw, fw) in base.wires.iter().zip(&fitted.wires) {
+        for (bp, fp) in bw.points.iter().zip(&fw.points) {
+            assert!((fp.0 - bp.0 - dx).abs() < 1e-9 && (fp.1 - bp.1 - dy).abs() < 1e-9);
+        }
+    }
+}

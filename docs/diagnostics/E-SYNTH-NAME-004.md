@@ -7,8 +7,7 @@
 
 The component's reference designator prefix is unconventional for its
 declared kind. Reference-designator letters follow an IEEE-derived
-industry convention (Sierra Circuits, "How to Draw and Design a PCB
-Schematic", guideline 10): reviewers, datasheets, and fab/assembly
+industry convention: reviewers, datasheets, and fab/assembly
 teams expect them, so a nonstandard letter slows every downstream
 reader down.
 

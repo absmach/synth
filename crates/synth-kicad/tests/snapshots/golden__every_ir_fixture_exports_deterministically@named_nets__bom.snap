@@ -1,0 +1,10 @@
+---
+source: crates/synth-kicad/tests/golden.rs
+expression: bom
+---
+refdes,value,kind,description,kicad_symbol,kicad_footprint,lcsc_pn,mpn
+C1,10u,capacitor,"Generic 0805 MLCC, X7R/X5R, any value",Device:C,Capacitor_SMD:C_0805_2012Metric,,
+C2,10u,capacitor,"Generic 0805 MLCC, X7R/X5R, any value",Device:C,Capacitor_SMD:C_0805_2012Metric,,
+C3,10u,capacitor,"Generic 0805 MLCC, X7R/X5R, any value",Device:C,Capacitor_SMD:C_0805_2012Metric,,
+C4,10u,capacitor,"Generic 0805 MLCC, X7R/X5R, any value",Device:C,Capacitor_SMD:C_0805_2012Metric,,
+U1,AMS1117-3.3,regulator,"AMS1117-3.3 fixed 3.3V LDO regulator, SOT-223 — common JLC stock",Regulator_Linear:AMS1117-3.3,Package_TO_SOT_SMD:SOT-223-3_TabPin2,C6186,AMS1117-3.3

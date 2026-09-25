@@ -14,6 +14,8 @@
 use std::fs;
 use std::path::{Path, PathBuf};
 
+use rayon::prelude::*;
+
 fn workspace_root() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("..")
@@ -66,9 +68,13 @@ fn all_reference_designs_pass_kicad_erc() {
         ref_paths.len()
     );
 
-    for path in ref_paths {
+    // Each reference design drives a full place+route+export, which is the
+    // dominant cost of this suite. The designs are independent and write to
+    // per-stem temp dirs, so fan them out across the rayon pool instead of
+    // serialising ten exports behind one test thread.
+    ref_paths.par_iter().for_each(|path| {
         let stem = path.file_stem().unwrap().to_string_lossy().to_string();
-        let src = fs::read_to_string(&path).unwrap();
+        let src = fs::read_to_string(path).unwrap();
         let filename = path.file_name().unwrap().to_string_lossy().to_string();
 
         let parsed = synth_parser::parse(&src, filename.clone());
@@ -152,7 +158,7 @@ fn all_reference_designs_pass_kicad_erc() {
                 panic!("{stem}: run_kicad_erc failed: {e}");
             }
         }
-    }
+    });
 }
 
 #[test]

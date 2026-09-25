@@ -53,6 +53,7 @@ use synth_ir::{Board, ComponentId, NetId, PinId};
 pub mod kicad_footprint_loader;
 pub mod kicad_lib_loader;
 pub mod kicad_zip;
+pub mod netclass;
 pub mod ops;
 mod patterns;
 pub mod placer;
@@ -230,6 +231,30 @@ pub struct TextAnnotation {
     pub at_mm: (f64, f64),
     /// Glyph height in mm. KiCad's schematic default is 1.27.
     pub size_mm: f64,
+    /// What the run is. The exporter renders captions bold (the top
+    /// of the Phase B typography hierarchy); every other kind renders
+    /// plain at its authored size.
+    #[serde(default)]
+    pub kind: TextKind,
+}
+
+/// The role of a [`TextAnnotation`] run. Determines exporter styling
+/// (bold captions) and documents the resolve pass's priority order
+/// (caption > note > legend, larger glyphs first).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum TextKind {
+    /// A declared `group`'s title: bold, group-hued box, inside top-left.
+    Caption,
+    /// A `notes` block title.
+    NoteTitle,
+    /// One line of a `notes` block.
+    #[default]
+    NoteLine,
+    /// A generated `{refdes} pinout` legend title.
+    LegendTitle,
+    /// One `pin: net` legend line (or its `…` truncation marker).
+    LegendLine,
 }
 
 /// A titled outline box drawn around one declared `group` (§21.1).
@@ -242,6 +267,16 @@ pub struct GroupBox {
     pub group: String,
     pub min_mm: (f64, f64),
     pub max_mm: (f64, f64),
+    /// Outline + tint hue, assigned deterministically from the group
+    /// name ([`group_color`]). The schematic exporter strokes the box
+    /// dashed in this hue with a translucent fill of the same hue.
+    #[serde(default = "default_group_color")]
+    pub color: [u8; 3],
+    /// The caption sits inside the box at the top-left (Phase B2).
+    /// Always true; carried so other consumers (preview renderer)
+    /// place captions without re-deriving the convention.
+    #[serde(default = "default_caption_inside")]
+    pub caption_inside: bool,
 }
 
 impl Layout {
@@ -322,19 +357,24 @@ const MEMBER_CLEARANCE: f64 = 17.78;
 /// component. KiCad's stock title-block leaves ~10–15 mm on each
 /// side; 20 mm covers most variants.
 const PAGE_MARGIN: f64 = 20.0;
-/// Height of a group caption's glyphs, and its clearance above the
-/// group's topmost body edge. Captions are set larger than a
-/// Reference/Value field (1.27 mm) so a sub-circuit name reads as a
-/// heading rather than as another component label.
+/// Height of a group caption's glyphs. Captions render bold at this
+/// size (Phase B typography: captions 2.0 bold, refdes/value 1.27,
+/// note/legend lines 1.0) so a sub-circuit name reads as a heading
+/// rather than as another component label.
 const GROUP_CAPTION_SIZE: f64 = 2.0;
-const GROUP_CAPTION_DY: f64 = 12.7;
+/// Gap between the box's top edge and the caption baseline, in mm:
+/// one glyph height plus this gap keeps the caption fully inside the
+/// box while clearing the edge stroke.
+const GROUP_CAPTION_INSET: f64 = 1.0;
 /// Padding between a group's outline box (§21.1) and its contents —
 /// caption included, so the box top clears the caption baseline.
 const GROUP_BOX_PAD: f64 = 5.0;
 /// Title and line sizes for design notes (§21.1 `notes` blocks) and
-/// generated connector pin legends.
+/// generated connector pin legends. Phase B typography: titles stay
+/// at 2.0 mm, lines drop to 1.0 mm so prose reads subordinate to
+/// component labels (1.27 mm) and captions (2.0 mm bold).
 const NOTE_TITLE_SIZE: f64 = 2.0;
-const NOTE_LINE_SIZE: f64 = 1.27;
+const NOTE_LINE_SIZE: f64 = 1.0;
 /// Baseline step between note/legend lines, and the gap between a
 /// title baseline and its first line.
 const NOTE_LINE_PITCH: f64 = 2.54;
@@ -342,6 +382,17 @@ const NOTE_TITLE_GAP: f64 = 4.0;
 /// Gap below a group box, connector body, or content bottom before a
 /// notes block or pin legend starts.
 const BELOW_GAP: f64 = 8.0;
+/// Gap between a group box's bottom edge and its first in-box note
+/// title baseline's top (Phase B3): the title clears the edge stroke
+/// before the box grows to enclose the strip.
+const NOTE_STRIP_GAP: f64 = 1.0;
+/// A connector earns a generated pin legend only with at least this
+/// many pins joining *named* nets (Phase A3): fewer means an internal
+/// header, not a board-edge interface.
+const LEGEND_MIN_NAMED_PINS: usize = 4;
+/// Maximum `pin: net` lines in one connector legend before an
+/// ellipsis (Phase A3).
+const LEGEND_MAX_LINES: usize = 8;
 
 /// Fallback body extents when a component has no part info.
 const BODY_FALLBACK_W: f64 = 15.0;
@@ -350,6 +401,29 @@ const BODY_FALLBACK_H: f64 = 10.0;
 /// an anchor. A vertical cap with two power flags occupies ~10 mm
 /// horizontally; 14 mm keeps neighbouring caps readable.
 const MEMBER_DX: f64 = 14.0;
+/// Most shelves the fitting loop will fold a column band onto
+/// (schematic-quality plan Phase A5/C3). Four is enough to turn any
+/// band that fits A2 at all into a roughly page-shaped block; more
+/// only costs fitting attempts.
+const MAX_SHELVES: usize = 4;
+/// Gap (mm) between two packed regions' *body* bounds.
+///
+/// Each region already draws its own padded, captioned box, so the
+/// full inter-cluster pitch on top of that is dead space: at
+/// `BASE_CLUSTER_DX` a three-region board spent ~80 mm on gaps and
+/// tipped from A3 onto A2 with two thirds of the page blank. Eight
+/// grid steps still clears both boxes' padding and captions — the
+/// margin `E-SYNTH-SCHEM-013` checks — while reading as a deliberate
+/// separation rather than a void.
+const REGION_GAP: f64 = 20.32;
+/// Candidate shelf widths (mm) for region packing, one per sheet the
+/// exporter can declare (A4/A3/A2 content width). The fitting loop
+/// tries each and keeps whichever lands on the smallest page.
+const REGION_SHELF_WIDTHS: [f64; 3] = [
+    297.0 - 2.0 * PAGE_MARGIN,
+    420.0 - 2.0 * PAGE_MARGIN,
+    594.0 - 2.0 * PAGE_MARGIN,
+];
 /// Target sheet aspect ratio (width/height) for cluster packing.
 /// 1.4 ≈ A4 landscape.
 const TARGET_ASPECT: f64 = 1.4;
@@ -362,6 +436,49 @@ const TARGET_ASPECT: f64 = 1.4;
 /// colliding with the title block. The band is sheet-relative: it is
 /// the same 34 mm on A4, A3 and A2.
 const TITLE_BLOCK_H: f64 = 34.0;
+
+/// Clearance from the anchor's body edge to a member's *centre*,
+/// sized to the member instead of to the largest part on the board
+/// (schematic-quality plan Phase A2).
+///
+/// [`MEMBER_CLEARANCE`] is a single constant tuned for a large member
+/// — enough room for its body, its Reference/Value text and a routing
+/// channel. Applying it to an 0603 decoupling cap put the cap's
+/// centre 17.78 mm below the IC's edge, a ~15 mm body gap, which read
+/// as "floating near the IC" rather than "decoupling it" and tripped
+/// `E-SYNTH-SCHEM-003` no matter how well the cluster was formed.
+///
+/// A member only needs its own half-extent, its text margin and one
+/// grid step of channel. Clamped to [`MEMBER_CLEARANCE`] at the top
+/// so nothing ever moves *further* out than before, and to five grid
+/// steps at the bottom so the router keeps a usable channel.
+fn member_clearance(board: &Board, id: ComponentId, vertical: bool) -> f64 {
+    const MIN_CLEARANCE: f64 = 12.7;
+    let (w, h) = board
+        .component(id)
+        .and_then(|c| c.part.as_ref())
+        .map_or((BODY_FALLBACK_W, BODY_FALLBACK_H), body_size_for_part);
+    let half = if vertical { h / 2.0 } else { w / 2.0 };
+    snap_grid((half + TEXT_MARGIN_Y + 2.54).clamp(MIN_CLEARANCE, MEMBER_CLEARANCE))
+}
+
+/// Clearance for the row below an anchor: the largest its members
+/// need, so one oversized member never overlaps a tightly-placed
+/// neighbour.
+///
+/// Only the *Below* row uses this. The Above row (bus pull-ups) and
+/// the side columns (reset networks) keep the fixed
+/// [`MEMBER_CLEARANCE`]: pulling those in crowds the anchor's own pin
+/// stubs, and the pin-aware router responds by abandoning the route
+/// and degrading the net to a label — a strictly worse drawing than
+/// the few millimetres it saved.
+fn row_clearance(board: &Board, members: &[ComponentId], vertical: bool) -> f64 {
+    members
+        .iter()
+        .map(|&id| member_clearance(board, id, vertical))
+        .fold(0.0_f64, f64::max)
+        .max(12.7)
+}
 
 fn compute_dynamic_member_dx(board: &Board, members: &[ComponentId]) -> f64 {
     let mut max_label_len = 0_usize;
@@ -439,7 +556,7 @@ fn component_text_inclusive_half_width(board: &Board, id: ComponentId) -> f64 {
 /// `part.id` alone underestimates the rendered width whenever the
 /// component carries a longer custom `value`, so the precedence below
 /// mirrors `synth_kicad::schematic`'s `display_value` exactly
-/// (`component.value` → `part.mpn` → `part.id`).
+/// (`component.value` → `part.mpn` → `(no value)` sentinel).
 pub(crate) fn text_inclusive_half_width(
     component: &synth_ir::Component,
     part: &synth_registry::Part,
@@ -450,7 +567,7 @@ pub(crate) fn text_inclusive_half_width(
         .value
         .as_deref()
         .or(part.mpn.as_deref())
-        .unwrap_or(part.id.as_str());
+        .unwrap_or("(no value)");
     let val_w = (display_value.len() as f64) * 1.27 * 0.85 + 2.54;
     (body_w / 2.0).max(refdes_w / 2.0).max(val_w / 2.0)
 }
@@ -708,7 +825,9 @@ pub fn layout_with_overrides(
     annotate_groups(board, &mut layout);
     place_connector_legends(board, &mut layout);
     place_design_notes(board, &mut layout);
+    resolve_text_overlaps(board, &mut layout);
     grow_sheet_to_fit(board, &mut layout);
+    compact_sheet_to_fit(board, &mut layout);
     clamp_annotations_to_sheet(&mut layout);
     layout
 }
@@ -733,41 +852,159 @@ fn clamp_annotations_to_sheet(layout: &mut Layout) {
     }
 }
 
+/// Implicit region for mechanical and test parts that declare no
+/// `group` (Phase D2): mounting holes, test points, and fiducials get
+/// their own titled block, matching the reference sheet's `MOUNTING`
+/// region, instead of trailing loose in the ungrouped region.
+pub const MOUNTING_REGION: &str = "MOUNTING";
+
+/// The region a component belongs to: its declared `group`, else the
+/// implicit [`MOUNTING_REGION`] for a mechanical/test part, else
+/// `None` (the trailing ungrouped region).
+///
+/// Public so consumers that reason about regions (the
+/// `E-SYNTH-SCHEM-013` contiguity check) resolve a component to its
+/// region exactly as placement does.
+pub fn effective_group(board: &Board, id: ComponentId) -> Option<&str> {
+    let component = board.component(id)?;
+    if let Some(group) = component.group.as_deref() {
+        return Some(group);
+    }
+    let kind = component.part.as_ref().map(|p| p.kind.as_str())?;
+    matches!(kind, "mounting_hole" | "testpoint" | "fiducial").then_some(MOUNTING_REGION)
+}
+
 /// Caption every declared `group` on the sheet, and draw its titled
 /// outline box (§21.1).
 ///
-/// One text run per group, sitting above the top-left corner of the
-/// bounding box of that group's components — the device the SIM7080G
-/// reference schematic uses ("VBAT DECOUPLING + ESD", "NANO SIM (1.8V
-/// only) + ESD"): a sub-circuit is named where it is drawn, so a
-/// reader can see what a cluster of parts is *for* without tracing
-/// nets. The box pads the component bounds (caption included) so the
-/// eye groups the parts even before reading the title. Groups are
-/// declaration-order, and a board that declares none gets no captions
-/// and no boxes.
+/// One text run per group, sitting inside the box at the top-left —
+/// the device the SIM7080G reference schematic uses ("VBAT
+/// DECOUPLING + ESD", "NANO SIM (1.8V only) + ESD"): a sub-circuit
+/// is named where it is drawn, so a reader can see what a cluster of
+/// parts is *for* without tracing nets. The box pads the component
+/// bounds so the eye groups the parts even before reading the title.
+/// Groups are declaration-order, and a board that declares none gets
+/// no captions and no boxes.
+///
+/// The box carries a deterministic hue ([`group_color`], dark band
+/// distinct from the net-class brights); the exporter strokes it
+/// dashed in that hue with a translucent fill. Per-text color is not
+/// expressible in KiCad's schematic grammar (verified against
+/// `kicad-cli`: `(color …)` inside text effects fails to load), so
+/// the caption itself renders bold monochrome — containment in the
+/// hued box is what ties it to the sub-circuit.
 ///
 /// Runs after routing so captions sit above the final positions, and
 /// before `grow_sheet_to_fit` so a caption pushed near an edge grows
 /// the page like any other content.
 fn annotate_groups(board: &Board, layout: &mut Layout) {
     for (group, min_x, max_x, min_y, max_y) in group_bounds(board, layout) {
-        let caption_y = (min_y - GROUP_CAPTION_DY).max(0.0);
+        let caption_y = (min_y - GROUP_BOX_PAD + GROUP_CAPTION_SIZE + GROUP_CAPTION_INSET)
+            .max(GROUP_CAPTION_SIZE);
+        // Header attributes (Phase D1): the display title when set,
+        // and an explicit hue in place of the deterministic palette one.
+        let declared = board.group(&group);
+        let caption = declared.map_or_else(|| group.clone(), |g| g.display_title().to_string());
+        let color = declared
+            .and_then(|g| g.color)
+            .unwrap_or_else(|| group_color(&group));
         layout.annotations.push(TextAnnotation {
-            text: group.clone(),
-            // Clear of the tallest symbol's Reference text, which
-            // already sits above its body.
+            text: caption,
+            // Inside the box at the top-left, one glyph plus an
+            // inset below the top edge stroke.
             at_mm: (min_x, caption_y),
             size_mm: GROUP_CAPTION_SIZE,
+            kind: TextKind::Caption,
         });
         layout.group_boxes.push(GroupBox {
             group,
-            min_mm: (
-                min_x - GROUP_BOX_PAD,
-                caption_y - GROUP_CAPTION_SIZE - GROUP_BOX_PAD,
-            ),
+            min_mm: (min_x - GROUP_BOX_PAD, min_y - GROUP_BOX_PAD),
             max_mm: (max_x + GROUP_BOX_PAD, max_y + GROUP_BOX_PAD),
+            color,
+            caption_inside: true,
         });
     }
+}
+/// Height (mm) a group's box adds above and below its members'
+/// bodies: `(above, below)`.
+///
+/// Above is the box padding — the caption is drawn *inside* the box,
+/// so it costs nothing extra. Below is the padding plus the note
+/// block, which `place_design_notes` puts inside the box and grows
+/// the box to hold. Region packing needs both or boxes overlap.
+fn group_box_overhang(board: &Board, group: Option<&str>) -> (f64, f64) {
+    let Some(group) = group else {
+        return (0.0, 0.0);
+    };
+    let notes: f64 = board
+        .notes
+        .iter()
+        .filter(|n| n.group.as_deref() == Some(group))
+        .map(|n| NOTE_TITLE_GAP + n.lines.len() as f64 * NOTE_LINE_PITCH)
+        .sum();
+    (GROUP_BOX_PAD, GROUP_BOX_PAD + notes)
+}
+
+/// Dark-band hues for group boxes, distinct from the net-class
+/// brights (`synth_kicad::netclass_colors`): boxes are large areas,
+/// so they take muted tones with a translucent fill while nets take
+/// saturated signal colors.
+const GROUP_PALETTE: [[u8; 3]; 8] = [
+    [0x8B, 0x00, 0x00], // dark red
+    [0x00, 0x64, 0x00], // dark green
+    [0x00, 0x00, 0x8B], // dark blue
+    [0x8B, 0x45, 0x13], // saddle brown
+    [0x8B, 0x00, 0x8B], // dark magenta
+    [0x00, 0x80, 0x80], // teal
+    [0x80, 0x80, 0x00], // olive
+    [0x4B, 0x00, 0x82], // indigo
+];
+
+/// Neutral packing key for a region with no `region` hint: unhinted
+/// groups sit in the middle of the shelf order, keeping declaration
+/// order among themselves.
+const QUADRANT_NEUTRAL: u8 = 4;
+
+/// Packing key for a pinned page quadrant (Phase D1). Lower sorts
+/// earlier in the shelf flow, so `top_left` packs first and
+/// `bottom_right` last.
+fn quadrant_key(region: &synth_ir::PlacementRegion) -> u8 {
+    use synth_ir::PlacementRegion as R;
+    match region {
+        R::TopLeft => 0,
+        R::TopEdge => 1,
+        R::TopRight => 2,
+        R::LeftEdge => 3,
+        R::Centre => QUADRANT_NEUTRAL,
+        R::RightEdge => 5,
+        R::BottomLeft => 6,
+        R::BottomEdge => 7,
+        R::BottomRight => 8,
+    }
+}
+
+/// Deterministic hue for a group name: FNV-1a into
+/// [`GROUP_PALETTE`]. Same name, same hue, every export —
+/// `DefaultHasher` would not promise that across processes.
+pub fn group_color(name: &str) -> [u8; 3] {
+    let mut hash: u64 = 0xcbf2_9ce4_8422_2325;
+    for byte in name.bytes() {
+        hash ^= u64::from(byte);
+        hash = hash.wrapping_mul(0x0100_0000_01b3);
+    }
+    GROUP_PALETTE[(hash % GROUP_PALETTE.len() as u64) as usize]
+}
+
+/// Serde default for [`GroupBox::color`]: the hue of the empty name,
+/// so hand-built boxes without a color still land in the palette.
+fn default_group_color() -> [u8; 3] {
+    group_color("")
+}
+
+/// Serde default for [`GroupBox::caption_inside`]: captions live
+/// inside their box (Phase B2).
+fn default_caption_inside() -> bool {
+    true
 }
 
 /// Bounding box of each declared `group`'s component bodies, in
@@ -779,7 +1016,7 @@ fn group_bounds(board: &Board, layout: &Layout) -> Vec<(String, f64, f64, f64, f
     let mut bounds: std::collections::HashMap<String, (f64, f64, f64, f64)> =
         std::collections::HashMap::new();
     for placement in &layout.components {
-        let Some(group) = board.component(placement.id).and_then(|c| c.group.clone()) else {
+        let Some(group) = effective_group(board, placement.id).map(str::to_string) else {
             continue;
         };
         let (cx, cy) = placement.center_mm;
@@ -810,16 +1047,35 @@ fn group_bounds(board: &Board, layout: &Layout) -> Vec<(String, f64, f64, f64, f
         .collect()
 }
 
-/// Pin legend for every connector, generated from the netlist (§21.1).
+/// Pin legend for opt-in board-edge connectors (schematic-quality
+/// plan Phase A3, §21.1).
 ///
-/// One titled block per connector — `{refdes} pinout` plus one
-/// `pin: net` line per pin in part order (`NC` when the pin joins no
-/// net) — sitting below the connector's body. A reader checking a
+/// One titled block per qualifying connector — `{refdes} pinout` plus
+/// one `pin: net` line per pin on a *named* net, capped at
+/// [`LEGEND_MAX_LINES`] lines with an ellipsis. A reader checking a
 /// harness against the schematic reads the mating list where the
-/// connector is drawn instead of tracing each stub. Runs after
-/// routing (positions are final) and before `grow_sheet_to_fit` so a
-/// tall legend grows the page like any other content.
+/// connector is drawn instead of tracing each stub.
+///
+/// Three filters keep the legend from becoming the sheet's largest
+/// text block (defect D4):
+///
+/// - Opt-in: nothing is emitted unless the board declares
+///   `legends on` (default off). The reference sheet carries a
+///   one-line prose note (*"Silk order: VIN 3Vo GND SCL SDA"*) instead
+///   — that is what `notes` is for.
+/// - Board-edge only: the connector must have at least
+///   [`LEGEND_MIN_NAMED_PINS`] pins joining *named* nets. An internal
+///   header on auto-named nets gets no legend.
+/// - Compact: `NC` lines are dropped entirely (a no-connect cross on
+///   the pin already says it), and long pinouts truncate with `…`.
+///
+/// Runs after routing (positions are final) and before
+/// `grow_sheet_to_fit` so a legend grows the page like any other
+/// content.
 fn place_connector_legends(board: &Board, layout: &mut Layout) {
+    if !board.legends {
+        return;
+    }
     for placement in &layout.components {
         let Some(component) = board.component(placement.id) else {
             continue;
@@ -830,6 +1086,21 @@ fn place_connector_legends(board: &Board, layout: &mut Layout) {
         if part.kind != "connector" {
             continue;
         }
+        let mut lines: Vec<(String, String)> = Vec::new();
+        for (index, pin) in part.pins.iter().enumerate() {
+            // u32 cast is bounded: the index comes from the part's own pin list.
+            let pid = PinId(index as u32);
+            let Some((_, net)) = board.nets_containing(component.id, pid).next() else {
+                continue;
+            };
+            if is_auto_net_name(&net.name) {
+                continue;
+            }
+            lines.push((pin.name.clone(), net.name.clone()));
+        }
+        if lines.len() < LEGEND_MIN_NAMED_PINS {
+            continue;
+        }
         let (cx, cy) = placement.center_mm;
         let (bw, bh) = body_size_for_part(part);
         let x = cx - bw / 2.0;
@@ -838,77 +1109,245 @@ fn place_connector_legends(board: &Board, layout: &mut Layout) {
             text: format!("{} pinout", component.refdes),
             at_mm: (x, y),
             size_mm: NOTE_TITLE_SIZE,
+            kind: TextKind::LegendTitle,
         });
         y += NOTE_TITLE_GAP;
-        for (index, pin) in part.pins.iter().enumerate() {
-            // u32 cast is bounded: parts cannot exceed pin counts the
-            // layouter already indexed.
-            let net = board
-                .nets_containing(component.id, PinId(index as u32))
-                .next()
-                .map_or("NC", |(_, net)| net.name.as_str());
+        for (pin_name, net_name) in lines.iter().take(LEGEND_MAX_LINES) {
             layout.annotations.push(TextAnnotation {
-                text: format!("{}: {net}", pin.name),
+                text: format!("{pin_name}: {net_name}"),
                 at_mm: (x, y),
                 size_mm: NOTE_LINE_SIZE,
+                kind: TextKind::LegendLine,
             });
             y += NOTE_LINE_PITCH;
+        }
+        if lines.len() > LEGEND_MAX_LINES {
+            layout.annotations.push(TextAnnotation {
+                text: "…".to_string(),
+                at_mm: (x, y),
+                size_mm: NOTE_LINE_SIZE,
+                kind: TextKind::LegendLine,
+            });
         }
     }
 }
 
+/// Whether a net name is an auto-generated `net_<idx>` placeholder
+/// rather than a human name. Legends only list named nets.
+fn is_auto_net_name(name: &str) -> bool {
+    name.strip_prefix("net_")
+        .is_some_and(|rest| !rest.is_empty() && rest.bytes().all(|b| b.is_ascii_digit()))
+}
+
 /// Render `notes` blocks as titled text (§21.1).
 ///
-/// A note inside a `group` sits beneath that group's outline box;
-/// top-level notes stack at the bottom-left below all content. Each
-/// block is its title (caption size) plus one run per line. Runs
-/// before `grow_sheet_to_fit` so notes near an edge grow the page,
-/// and before `clamp_annotations_to_sheet` so wide lines slide
-/// on-page like captions.
+/// A note inside a `group` sits in a strip at the bottom *inside*
+/// that group's outline box (reference mechanism 3: intent lives
+/// where the sub-circuit is drawn); the box grows to fit. Top-level
+/// notes stack at the bottom-left below all content. Each block is
+/// its title (caption size) plus one run per line. Runs before
+/// `grow_sheet_to_fit` so notes near an edge grow the page, and
+/// before `clamp_annotations_to_sheet` so wide lines slide on-page
+/// like captions.
 fn place_design_notes(board: &Board, layout: &mut Layout) {
     if board.notes.is_empty() {
         return;
     }
-    let boxes: std::collections::HashMap<&str, &GroupBox> = layout
-        .group_boxes
-        .iter()
-        .map(|b| (b.group.as_str(), b))
-        .collect();
-    // Next free baseline per group, and one for board-level notes.
-    let mut group_cursor: std::collections::HashMap<&str, f64> = std::collections::HashMap::new();
     let mut board_cursor = content_bottom(board, layout) + BELOW_GAP;
     for note in &board.notes {
-        let (x, y) = if let Some(group) = note.group.as_deref() {
-            let y = group_cursor.get(group).copied().unwrap_or_else(|| {
-                boxes
-                    .get(group)
-                    .map_or(board_cursor, |b| b.max_mm.1 + BELOW_GAP)
-            });
-            let x = boxes.get(group).map_or(PAGE_MARGIN, |b| b.min_mm.0);
-            group_cursor.insert(
-                group,
-                y + NOTE_TITLE_GAP + note.lines.len() as f64 * NOTE_LINE_PITCH,
-            );
-            (x, y)
+        if let Some(group) = note.group.as_deref() {
+            // Index — not a reference: the box grows as notes land.
+            let Some(box_idx) = layout.group_boxes.iter().position(|b| b.group == group) else {
+                let y = board_cursor;
+                board_cursor += NOTE_TITLE_GAP + note.lines.len() as f64 * NOTE_LINE_PITCH;
+                push_note_runs(layout, note, PAGE_MARGIN, y);
+                continue;
+            };
+            // Strip below the current box bottom edge, inside the
+            // grown box: title first, lines beneath it.
+            let title_y = layout.group_boxes[box_idx].max_mm.1 + NOTE_STRIP_GAP + NOTE_TITLE_SIZE;
+            let x = layout.group_boxes[box_idx].min_mm.0 + GROUP_BOX_PAD;
+            push_note_runs(layout, note, x, title_y);
+            let last_y = title_y
+                + NOTE_TITLE_GAP
+                + note.lines.len().saturating_sub(1) as f64 * NOTE_LINE_PITCH;
+            layout.group_boxes[box_idx].max_mm.1 = last_y + GROUP_BOX_PAD;
         } else {
             let y = board_cursor;
             board_cursor += NOTE_TITLE_GAP + note.lines.len() as f64 * NOTE_LINE_PITCH;
-            (PAGE_MARGIN, y)
-        };
-        layout.annotations.push(TextAnnotation {
-            text: note.title.clone(),
-            at_mm: (x, y),
-            size_mm: NOTE_TITLE_SIZE,
-        });
-        let mut line_y = y + NOTE_TITLE_GAP;
-        for line in &note.lines {
-            layout.annotations.push(TextAnnotation {
-                text: line.clone(),
-                at_mm: (x, line_y),
-                size_mm: NOTE_LINE_SIZE,
-            });
-            line_y += NOTE_LINE_PITCH;
+            push_note_runs(layout, note, PAGE_MARGIN, y);
         }
+    }
+}
+
+/// Push one titled note block's runs: the title at `(x, y)`, one run
+/// per line beneath it.
+fn push_note_runs(layout: &mut Layout, note: &synth_ir::Note, x: f64, y: f64) {
+    layout.annotations.push(TextAnnotation {
+        text: note.title.clone(),
+        at_mm: (x, y),
+        size_mm: NOTE_TITLE_SIZE,
+        kind: TextKind::NoteTitle,
+    });
+    let mut line_y = y + NOTE_TITLE_GAP;
+    for line in &note.lines {
+        layout.annotations.push(TextAnnotation {
+            text: line.clone(),
+            at_mm: (x, line_y),
+            size_mm: NOTE_LINE_SIZE,
+            kind: TextKind::NoteLine,
+        });
+        line_y += NOTE_LINE_PITCH;
+    }
+}
+
+/// Advance width of a text run in mm. KiCad's stroke font is about
+/// 0.72 em — shared by [`grow_sheet_to_fit`] and the overlap pass so
+/// placement and page sizing agree on how wide a run is.
+fn text_run_width(text: &str, size_mm: f64) -> f64 {
+    text.chars().count() as f64 * size_mm * 0.72
+}
+
+/// Axis-aligned box of a text run: `(x0, y0, x1, y1)` with `y` the
+/// baseline anchor (the box spans one glyph height above it).
+fn text_run_rect(text: &TextAnnotation) -> (f64, f64, f64, f64) {
+    let (x, y) = text.at_mm;
+    (
+        x,
+        y - text.size_mm,
+        x + text_run_width(&text.text, text.size_mm),
+        y,
+    )
+}
+
+/// True when two rects overlap with more than float noise in common.
+/// Touching edges do not count — adjacent note lines at
+/// [`NOTE_LINE_PITCH`] must never flag.
+fn rects_overlap(a: (f64, f64, f64, f64), b: (f64, f64, f64, f64)) -> bool {
+    const EPS: f64 = 1e-6;
+    a.0 < b.2 - EPS && b.0 < a.2 - EPS && a.1 < b.3 - EPS && b.1 < a.3 - EPS
+}
+
+/// Vertical nudge step for overlap resolution: half the schematic
+/// grid so runs land back on grid after an even number of steps.
+const TEXT_NUDGE_STEP: f64 = 1.27;
+/// How far one run moves before the pass gives up on nudging it
+/// (then shrinks, then drops — see below).
+const TEXT_MAX_NUDGES: usize = 16;
+/// Shrunk glyph height for line runs that cannot be nudged clear.
+/// Titles and captions (2.0 mm) are never shrunk — only nudged or
+/// left for `E-SYNTH-SCHEM-011` to report.
+const TEXT_SHRUNK_SIZE: f64 = 0.8;
+
+/// Resolve overlapping free-text runs (schematic-quality plan Phase
+/// A4, defect D5).
+///
+/// Builds axis-aligned boxes for every annotation (captions, note
+/// lines, legend lines) plus component bodies as fixed obstacles,
+/// then places runs largest-first (captions and titles before body
+/// text — the plan's priority with refdes/value/net-label kinds owned
+/// by the exporter, which places those after layout): each run keeps
+/// its authored position when free, otherwise nudges down along the
+/// free axis; a line run that still overlaps after
+/// [`TEXT_MAX_NUDGES`] steps shrinks one glyph step and retries; a
+/// line run that still overlaps is dropped. Title-size runs are never
+/// shrunk or dropped — if one cannot be placed clear it stays where
+/// it was authored and `E-SYNTH-SCHEM-011` reports the residue.
+///
+/// Runs after `place_design_notes` (every run exists) and before
+/// `grow_sheet_to_fit` (nudged runs grow the page like any content).
+/// Deterministic: input order breaks all ties.
+fn resolve_text_overlaps(board: &Board, layout: &mut Layout) {
+    if layout.annotations.is_empty() {
+        return;
+    }
+    // Fixed obstacles: component bodies including their Reference /
+    // Value text margin, so a nudged run never lands on a part.
+    let mut placed: Vec<(f64, f64, f64, f64)> = layout
+        .components
+        .iter()
+        .map(|p| {
+            let (cx, cy) = p.center_mm;
+            let (bw, bh) = board
+                .component(p.id)
+                .and_then(|c| c.part.as_ref())
+                .map_or((BODY_FALLBACK_W, BODY_FALLBACK_H), body_size_for_part);
+            (
+                cx - bw / 2.0,
+                cy - bh / 2.0 - TEXT_MARGIN_Y,
+                cx + bw / 2.0,
+                cy + bh / 2.0 + TEXT_MARGIN_Y,
+            )
+        })
+        .collect();
+    // Largest glyphs first; authored order breaks ties (stable sort).
+    let mut order: Vec<usize> = (0..layout.annotations.len()).collect();
+    order.sort_by(|&a, &b| {
+        layout.annotations[b]
+            .size_mm
+            .total_cmp(&layout.annotations[a].size_mm)
+    });
+    let mut drop: Vec<bool> = vec![false; layout.annotations.len()];
+    for &idx in &order {
+        let origin = layout.annotations[idx].clone();
+        let mut size = origin.size_mm;
+        let mut shrunk = false;
+        let droppable = size < NOTE_TITLE_SIZE;
+        loop {
+            let mut y = origin.at_mm.1;
+            let mut nudges = 0_usize;
+            while nudges < TEXT_MAX_NUDGES
+                && placed.iter().any(|&r| {
+                    rects_overlap(
+                        (
+                            origin.at_mm.0,
+                            y - size,
+                            origin.at_mm.0 + text_run_width(&origin.text, size),
+                            y,
+                        ),
+                        r,
+                    )
+                })
+            {
+                y += TEXT_NUDGE_STEP;
+                nudges += 1;
+            }
+            let rect = (
+                origin.at_mm.0,
+                y - size,
+                origin.at_mm.0 + text_run_width(&origin.text, size),
+                y,
+            );
+            if !placed.iter().any(|&r| rects_overlap(rect, r)) {
+                layout.annotations[idx].at_mm.1 = y;
+                layout.annotations[idx].size_mm = size;
+                placed.push(rect);
+                break;
+            }
+            if !shrunk && droppable {
+                size = TEXT_SHRUNK_SIZE;
+                shrunk = true;
+                continue;
+            }
+            if droppable {
+                drop[idx] = true;
+            } else {
+                // Title-size runs are never shrunk or dropped: keep
+                // the authored position so the caption still names its
+                // group, but reserve it so smaller runs stay clear.
+                placed.push(text_run_rect(&origin));
+            }
+            break;
+        }
+    }
+    if drop.iter().any(|&d| d) {
+        let mut kept = Vec::with_capacity(layout.annotations.len());
+        for (i, run) in layout.annotations.drain(..).enumerate() {
+            if !drop[i] {
+                kept.push(run);
+            }
+        }
+        layout.annotations = kept;
     }
 }
 
@@ -942,23 +1381,14 @@ fn content_bottom(board: &Board, layout: &Layout) -> f64 {
     }
 }
 
-/// Grow `layout.sheet_size` if anything ended up past the edge of the
-/// page the placer chose.
-///
-/// The placer sizes the sheet from the positions *it* assigns, but
-/// three later stages can move content: grid alignment and the
-/// rotation passes nudge components, `overlay` can drop one anywhere
-/// the user dragged it, and routing adds wire points of its own. A
-/// sidecar override in particular is unbounded — nothing stops a
-/// dragged component from landing past the right edge — and without
-/// this pass the page stayed whatever the placer picked, so the
-/// component simply rendered off-sheet (`E-SYNTH-SCHEM-007`).
-///
-/// Only ever grows, never shrinks: a page that shrank under a manual
-/// arrangement would move everything the user had just positioned by
-/// hand relative to the frame. A layout that is merely roomier than it
-/// needs to be is fine; one whose content hangs off the page is not.
-fn grow_sheet_to_fit(board: &Board, layout: &mut Layout) {
+/// Bounding box of everything drawn on the sheet — component
+/// bodies, wire points, text runs, and group boxes — as
+/// `(min_x, max_x, min_y, max_y)` in mm page coordinates, or `None`
+/// for an empty layout. Shared by [`grow_sheet_to_fit`],
+/// [`compact_sheet_to_fit`], and the `E-SYNTH-SCHEM-012` fill rule so
+/// page sizing and the fill measurement can never disagree about
+/// where the content is.
+pub fn content_bounds(board: &Board, layout: &Layout) -> Option<(f64, f64, f64, f64)> {
     let mut min_x = f64::INFINITY;
     let mut max_x = f64::NEG_INFINITY;
     let mut min_y = f64::INFINITY;
@@ -985,7 +1415,7 @@ fn grow_sheet_to_fit(board: &Board, layout: &mut Layout) {
     for text in &layout.annotations {
         let (x, y) = text.at_mm;
         // Rough advance width: KiCad's stroke font is about 0.72 em.
-        let width = text.text.chars().count() as f64 * text.size_mm * 0.72;
+        let width = text_run_width(&text.text, text.size_mm);
         min_x = min_x.min(x);
         max_x = max_x.max(x + width);
         min_y = min_y.min(y - text.size_mm);
@@ -998,14 +1428,72 @@ fn grow_sheet_to_fit(board: &Board, layout: &mut Layout) {
         max_y = max_y.max(box_.max_mm.1);
     }
     if !min_x.is_finite() {
-        return;
+        return None;
     }
+    Some((min_x, max_x, min_y, max_y))
+}
+
+/// Grow `layout.sheet_size` if anything ended up past the edge of the
+/// page the placer chose.
+///
+/// The placer sizes the sheet from the positions *it* assigns, but
+/// three later stages can move content: grid alignment and the
+/// rotation passes nudge components, `overlay` can drop one anywhere
+/// the user dragged it, and routing adds wire points of its own. A
+/// sidecar override in particular is unbounded — nothing stops a
+/// dragged component from landing past the right edge — and without
+/// this pass the page stayed whatever the placer picked, so the
+/// component simply rendered off-sheet (`E-SYNTH-SCHEM-007`).
+///
+/// Only ever grows, never shrinks: a page that shrank under a manual
+/// arrangement would move everything the user had just positioned by
+/// hand relative to the frame. A layout that is merely roomier than it
+/// needs to be is fine; one whose content hangs off the page is not.
+/// (The Phase A5 companion [`compact_sheet_to_fit`] shrinks only to a
+/// sheet the content provably fits, so the two never fight.)
+fn grow_sheet_to_fit(board: &Board, layout: &mut Layout) {
+    let Some((min_x, max_x, min_y, max_y)) = content_bounds(board, layout) else {
+        return;
+    };
     let (need_w, need_h) = sheet_needs(min_x, max_x, min_y, max_y);
     let required = sheet_size_for(need_w, need_h);
     let (have_w, have_h) = layout.sheet_size.dims_mm();
     let (want_w, want_h) = required.dims_mm();
     if want_w > have_w || want_h > have_h {
         layout.sheet_size = required;
+    }
+}
+
+/// Shrink `layout.sheet_size` to the smallest standard sheet the
+/// content provably fits (schematic-quality plan Phase A5, defect
+/// D6: content occupying the top 40 % of an A3 page while the bottom
+/// half sits empty).
+///
+/// Runs after [`grow_sheet_to_fit`], so the sheet first covers the
+/// content and then compacts onto it. Shrinking only re-declares the
+/// frame — component positions are absolute from the top-left, so
+/// nothing moves — and only happens when [`sheet_needs`] (which
+/// already reserves the page margin and the title-block band) fits
+/// the smaller sheet, so compacted content can neither overflow the
+/// page nor slide under the title block. Sidecar-dragged components
+/// are content like any other: if they fit a smaller sheet the sheet
+/// shrinks around them; if not, it stays.
+fn compact_sheet_to_fit(board: &Board, layout: &mut Layout) {
+    let Some((min_x, max_x, min_y, max_y)) = content_bounds(board, layout) else {
+        return;
+    };
+    let (need_w, need_h) = sheet_needs(min_x, max_x, min_y, max_y);
+    let smallest = sheet_size_for(need_w, need_h);
+    // `sheet_size_for` ceilings at A2: beyond that the "smallest"
+    // does not actually contain the content, so check the fit
+    // explicitly instead of trusting the name.
+    let (want_w, want_h) = smallest.dims_mm();
+    if need_w > want_w || need_h > want_h {
+        return;
+    }
+    let (have_w, have_h) = layout.sheet_size.dims_mm();
+    if want_w < have_w && want_h < have_h {
+        layout.sheet_size = smallest;
     }
 }
 
@@ -1084,9 +1572,42 @@ pub fn layout_with_sidecar(board: &Board, sidecar_path: Option<&std::path::Path>
         .iter()
         .map(|c| (c.refdes.clone(), c.id))
         .collect();
-    layout_with_overrides(board, &default_placer(), &move |l| {
+    let mut l = layout_with_overrides(board, &default_placer(), &|l| {
         sidecar.apply_to_layout(board, l, &refdes_to_id);
-    })
+    });
+    // Forced net labels are applied *after* routing, because
+    // `route_and_label` recomputes wires and labels for the whole board. Doing
+    // it here is what lets a net an agent pinned to a label survive a later
+    // structural op (see `ops` module docs).
+    sidecar.apply_forced_labels(board, &mut l);
+    sidecar.apply_sheet_fit(board, &mut l);
+    l
+}
+
+/// Force `net` to render as per-endpoint net-label stubs instead of a wire,
+/// regardless of span or crossing count.
+///
+/// Shared by [`ops::LayoutOp::ReplaceWireWithLabel`] and sidecar persistence,
+/// so a manually forced net cannot silently revert to the automatic
+/// distance/crossing heuristic on the next structural edit.
+pub fn force_net_label(board: &Board, layout: &mut Layout, net: NetId) {
+    let Some(net_ir) = board.net(net) else {
+        return;
+    };
+    layout.wires.retain(|w| w.net != net);
+    layout.net_labels.retain(|l| l.net != net);
+    let text = pick_net_label(board, net_ir).unwrap_or_else(|| format!("NET_{}", net.0));
+    for ep in &net_ir.endpoints {
+        layout.net_labels.push(NetLabel {
+            net,
+            component: ep.component,
+            pin: ep.pin,
+            label: text.clone(),
+        });
+    }
+    // A hand-forced label can collide with labels the last routing pass
+    // produced; re-run the uniqueness pass so the sheet-wide guarantee holds.
+    uniquify_net_labels(board, &mut layout.net_labels);
 }
 
 /// USB ESD diodes sit in a column to the LEFT of the USB
@@ -1400,11 +1921,60 @@ pub fn build_clusters(board: &Board) -> Vec<Cluster> {
     clusters.extend(patterns::ic_block::IcBlock::recognize(board, &mut claimed));
     clusters.extend(patterns::i2c_bus::I2cBus::recognize(board, &mut claimed));
     clusters.extend(patterns::divider::Divider::recognize(board, &mut claimed));
+    // Second sweep before `Singleton` mops up (schematic-quality plan
+    // Phase A2): a decoupling cap on a *shared* rail is reachable
+    // from no single anchor's `required_decoupling`, so it used to
+    // fall through to `Singleton` and get placed by power-flow layer
+    // — 150+ mm from the part it decouples. Running here, after every
+    // structural pass, lets it attach to whichever cluster actually
+    // draws from its rail, `LdoBlock` and `Crystal` included.
+    patterns::ic_block::attach_orphan_rail_caps(board, &mut claimed, &mut clusters);
+    evict_cross_group_members(board, &mut clusters);
     clusters.extend(patterns::singleton::Singleton::recognize(
         board,
         &mut claimed,
     ));
     clusters
+}
+
+/// A declared `group` bounds cluster membership: drop any member whose
+/// group differs from its anchor's, leaving it to `Singleton`.
+///
+/// The pattern passes match on topology alone, so an I²C pull-up
+/// declared inside the sensor's group can be claimed by the MCU's
+/// `IcBlock` two groups away. Placement then puts it in the *anchor's*
+/// region while `group_bounds` still measures it as part of its own —
+/// stretching that group's box across the whole sheet, overlapping
+/// every other box (`E-SYNTH-SCHEM-013`) and pushing the page from A4
+/// to A2. Ungrouped boards are unaffected: every component's group is
+/// `None`, so nothing is ever evicted.
+fn evict_cross_group_members(board: &Board, clusters: &mut Vec<Cluster>) {
+    let group_of =
+        |id: ComponentId| -> Option<String> { board.component(id).and_then(|c| c.group.clone()) };
+    let mut evicted: Vec<ComponentId> = Vec::new();
+    for cluster in clusters.iter_mut() {
+        let anchor_group = group_of(cluster.anchor);
+        cluster.members.retain(|m| {
+            if group_of(m.id) == anchor_group {
+                true
+            } else {
+                evicted.push(m.id);
+                false
+            }
+        });
+    }
+    // Evicted members become their own single-component clusters, in
+    // id order so the result stays deterministic.
+    evicted.sort_by_key(|id| id.0);
+    evicted.dedup();
+    for id in evicted {
+        clusters.push(Cluster {
+            kind: ClusterKind::Singleton,
+            anchor: id,
+            anchor_vertical: false,
+            members: Vec::new(),
+        });
+    }
 }
 
 /// Largest body width and height across every part in the board.
@@ -2001,6 +2571,17 @@ fn horizontal_compaction(
 /// and members fan out into a single horizontal row beneath the
 /// anchor — so a cluster with 4 caps looks like an IC sitting on top
 /// of a 4-cap "shelf", not a 5-component column.
+///
+/// **Region packing (Phase C1).** A board that declares `group`s does
+/// not lay out as one long horizontal strip. Instead each group's
+/// columns are laid out independently in a local frame, their true
+/// content rectangles measured, and the rectangles shelf-packed onto
+/// the sheet (ordered by declaration, which follows power/signal
+/// flow). A group's parts therefore stay inside one rectangle, the
+/// drawn boxes never overlap, and the page reads as the reference
+/// sheet's grid of titled regions. A board with no groups (or all
+/// components in one group) takes the historic single-region path
+/// unchanged, so ungrouped output is byte-identical.
 fn place_clusters(board: &Board, clusters: &[Cluster]) -> Layout {
     // Fallback order — also the initial, pre-barycenter row order:
     // by declared sub-circuit first, then power-flow layer (sources
@@ -2015,7 +2596,7 @@ fn place_clusters(board: &Board, clusters: &[Cluster]) -> Layout {
     // declare no groups get one band and the order they always had.
     let mut group_bands: Vec<&str> = Vec::new();
     for component in &board.components {
-        if let Some(group) = component.group.as_deref() {
+        if let Some(group) = effective_group(board, component.id) {
             if !group_bands.contains(&group) {
                 group_bands.push(group);
             }
@@ -2024,9 +2605,7 @@ fn place_clusters(board: &Board, clusters: &[Cluster]) -> Layout {
     // Ungrouped clusters trail the named ones rather than interleaving:
     // they have no caption, so they cannot break one.
     let band_of = |anchor: ComponentId| -> u32 {
-        board
-            .component(anchor)
-            .and_then(|c| c.group.as_deref())
+        effective_group(board, anchor)
             .and_then(|g| group_bands.iter().position(|b| *b == g))
             .map_or(u32::MAX, |idx| idx as u32)
     };
@@ -2141,6 +2720,9 @@ fn place_clusters(board: &Board, clusters: &[Cluster]) -> Layout {
     // closure so the fitting loop below can retry with a taller column
     // when the content runs off the page.
     let place_for_rows = |rows: usize,
+                          shelves_hint: usize,
+                          pitch_floor: f64,
+                          region_target_w: f64,
                           fallback_key: &[(u32, u32, u32)],
                           fallback_order: &[usize]|
      -> (Vec<ComponentPlacement>, (f64, f64, f64, f64)) {
@@ -2203,408 +2785,293 @@ fn place_clusters(board: &Board, clusters: &[Cluster]) -> Layout {
         // needs a bigger gap than either column's own width alone would
         // suggest, or the wide anchor's Reference/Value text reaches
         // left into the column before it.
-        let col_x_offset: Vec<f64> = {
-            // Which band (declared group, or layer for an ungrouped
-            // board) each column belongs to, so consecutive columns
-            // *inside* one sub-circuit can sit closer than the boundary
-            // between two.
-            let col_band: Vec<u32> = col_groups
-                .iter()
-                .map(|group| group.first().map_or(u32::MAX, |&idx| fallback_key[idx].0))
-                .collect();
-            let mut offsets = Vec::with_capacity(col_groups.len());
-            let mut cum = 0.0;
-            offsets.push(cum);
-            for i in 1..col_groups.len() {
-                // A column of 0603 passives needs nothing like the full
-                // `BASE_CLUSTER_DX` to clear its neighbour — that floor
-                // buys routing room between unrelated blocks, and two
-                // columns of one declared sub-circuit are not unrelated.
-                // Charging them the full pitch is what pushed a
-                // six-group board off A2 (measured: 604 mm against a
-                // 594 mm page), forcing it back to ungrouped placement.
-                // The text-inclusive requirement below still applies;
-                // only the floor relaxes, and only within one group.
-                let same_group = col_band[i] == col_band[i - 1] && col_band[i] != u32::MAX;
-                let floor = if same_group {
-                    INTRA_GROUP_CLUSTER_DX
-                } else {
-                    BASE_CLUSTER_DX
-                };
-                let gap =
-                    snap_grid(floor.max(col_max_half_w[i - 1] + col_max_half_w[i] + WIRE_MARGIN));
-                cum += gap;
-                offsets.push(cum);
-            }
-            offsets
-        };
-
-        // Vertically centre each column's stack of clusters around the
-        // sheet's mid-height instead of hanging them all off the origin
-        // — "MCU should be at the centre... let's use the page real
-        // estate" (team review, 2026-08-17). A column with fewer
-        // clusters than the tallest column starts further down so its
-        // content is centred, not top-aligned.
-
-        // Brandes–Köpf coordinate assignment (§7.5.5 step 3 / §7.7.4 step
-        // 3): replaces the former uniform "sequential rows per column"
-        // with straight vertical alignment of aligned (connected) nodes.
-        // `bk_units` holds a unit y-offset per cluster; it is scaled by
-        // `grid_h` and snapped to the 2.54 mm grid below, keeping the
-        // grid-snapping invariant intact.
-        let bk_units = bk_y_coordinates(&col_groups, &adjacency);
-        let (bk_min, bk_max) = if bk_units.is_empty() {
-            (0.0, 0.0)
-        } else {
-            let lo = bk_units.iter().copied().fold(f64::INFINITY, f64::min);
-            let hi = bk_units.iter().copied().fold(f64::NEG_INFINITY, f64::max);
-            (lo, hi)
-        };
-        // Centre the BK content vertically within the `rows`-tall column
-        // band the same way the old row-centring did.
-        let bk_content_h = (bk_max - bk_min) * grid_h + grid_h;
-        let bk_origin_y = origin_y + ((rows as f64 * grid_h - bk_content_h).max(0.0)) / 2.0;
-
-        let placement_order: Vec<(usize, usize, &Cluster)> = col_groups
+        // Which declared group (or the implicit trailing region,
+        // `u32::MAX`) each column belongs to.
+        let col_band: Vec<u32> = col_groups
             .iter()
-            .enumerate()
-            .flat_map(|(col, group)| {
-                group
-                    .iter()
-                    .map(move |&cluster_idx| (col, cluster_idx, &clusters[cluster_idx]))
-            })
+            .map(|group| group.first().map_or(u32::MAX, |&idx| fallback_key[idx].0))
             .collect();
 
+        // Brandes–Köpf y coordinates across the whole cluster set. Each
+        // region below takes its own slice relative to its own minimum,
+        // so regions keep their internal vertical ordering without
+        // inheriting a global offset.
+        let bk_units = bk_y_coordinates(&col_groups, &adjacency);
+
+        // Contiguous runs of columns sharing one band = one placement
+        // region (Phase C1). `place_for_rows` already refuses to put two
+        // bands in one column, so a run is exactly one group's columns.
+        let mut region_runs: Vec<(u32, usize, usize)> = Vec::new(); // (band, start, end)
+        for (col, &band) in col_band.iter().enumerate() {
+            match region_runs.last_mut() {
+                Some((b, _, end)) if *b == band => *end = col + 1,
+                _ => region_runs.push((band, col, col + 1)),
+            }
+        }
+        // A declared `region` hint (Phase D1) reorders the regions so a
+        // `top_left` group packs first and a `bottom_right` one last;
+        // unhinted groups keep declaration order in the neutral middle
+        // band. A stable sort means hints can never reorder two
+        // unhinted groups relative to each other, and packing (which
+        // follows this order) can never produce overlapping boxes.
+        region_runs.sort_by_key(|&(band, _, _)| {
+            let hinted = usize::try_from(band)
+                .ok()
+                .and_then(|b| group_bands.get(b))
+                .and_then(|name| board.group(name))
+                .and_then(|g| g.region.as_ref())
+                .map(quadrant_key);
+            hinted.unwrap_or(QUADRANT_NEUTRAL)
+        });
+
+        // Local x offsets *within* a region, reset at each region
+        // boundary. Inside a declared group columns may sit closer
+        // (`INTRA_GROUP_CLUSTER_DX`) than between unrelated regions; the
+        // ungrouped region keeps the historic full pitch so ungrouped
+        // boards stay byte-identical.
+        let mut col_x_local: Vec<f64> = vec![0.0; col_groups.len()];
+        for &(band, start, end) in &region_runs {
+            let floor = if band == u32::MAX {
+                pitch_floor
+            } else {
+                INTRA_GROUP_CLUSTER_DX
+            };
+            let mut cum = 0.0;
+            for col in start..end {
+                if col > start {
+                    let gap = snap_grid(
+                        floor.max(col_max_half_w[col - 1] + col_max_half_w[col] + WIRE_MARGIN),
+                    );
+                    cum += gap;
+                }
+                col_x_local[col] = cum;
+            }
+        }
+
+        // Lowest BK unit, subtracted so each region's vertical
+        // ordering starts at zero in its own local frame.
+        let bk_min = if bk_units.is_empty() {
+            0.0
+        } else {
+            bk_units.iter().copied().fold(f64::INFINITY, f64::min)
+        };
+
         let mut placements: Vec<ComponentPlacement> = Vec::with_capacity(board.components.len());
-        let mut occupied: std::collections::HashSet<(i64, i64)> = std::collections::HashSet::new();
+        if region_runs.len() <= 1 {
+            // Single region (an ungrouped board, or every component in
+            // one group): the pre-region path exactly — absolute
+            // anchors, one `place_cluster_into` per cluster. No packing,
+            // no translation, so the output is unchanged for every
+            // design that declares no groups.
+            let mut occupied: std::collections::HashSet<(i64, i64)> =
+                std::collections::HashSet::new();
+            // Shelf-wrap a band that is too wide for the page shape
+            // (schematic-quality plan Phase A5/C3).
+            //
+            // Layers are columns, so a board with many distinct layers
+            // lays every column side by side in one band. Wrapping only
+            // ever kicked in *within* a populous layer (`chunks(rows)`),
+            // never across layers, so a board with a dozen one-cluster
+            // layers spread 290 mm wide and 118 mm tall across a
+            // 420 x 297 mm page: 27 % fill, the bottom two thirds empty,
+            // and every inter-layer net long enough to degrade into a
+            // label. Folding the column sequence onto successive shelves
+            // trades width for height until the content is roughly
+            // page-shaped. A band already within `TARGET_ASPECT` is left
+            // exactly as it was, so balanced boards do not move.
+            let band_w = col_x_local.iter().copied().fold(0.0_f64, f64::max) + grid_w;
+            // The shelf count is swept by the fitting loop, not guessed
+            // here: how many shelves land on the smallest page depends
+            // on the sheet's usable aspect (which the title block eats
+            // into asymmetrically), so it can only be judged against a
+            // concrete candidate sheet. One shelf reproduces the
+            // historic single band exactly.
+            let shelves = shelves_hint.max(1).min(col_groups.len().max(1));
+            {
+                // Cut the column sequence into shelves of roughly equal
+                // width, keeping reading order: a shelf break never
+                // reorders columns, so power still flows left-to-right
+                // along each shelf and top-to-bottom between them.
+                let shelf_target = band_w / shelves as f64;
+                let mut shelf_of: Vec<usize> = Vec::with_capacity(col_groups.len());
+                let mut shelf = 0_usize;
+                let mut shelf_start_x = 0.0_f64;
+                for (col, &x) in col_x_local.iter().enumerate().take(col_groups.len()) {
+                    if col > 0 && x - shelf_start_x > shelf_target {
+                        shelf += 1;
+                        shelf_start_x = x;
+                    }
+                    shelf_of.push(shelf);
+                }
+                // Place each shelf in its own local frame, measure what
+                // it actually occupies, then stack the shelves. Measuring
+                // beats predicting: members hang above and below their
+                // anchors by amounts only `place_cluster_into` knows.
+                let mut shelf_y = PAGE_MARGIN;
+                for shelf_idx in 0..=shelf {
+                    let mut local: Vec<ComponentPlacement> = Vec::new();
+                    let mut local_occupied: std::collections::HashSet<(i64, i64)> =
+                        std::collections::HashSet::new();
+                    let base_x = col_groups
+                        .iter()
+                        .enumerate()
+                        .filter(|(col, _)| shelf_of[*col] == shelf_idx)
+                        .map(|(col, _)| col_x_local[col])
+                        .fold(f64::INFINITY, f64::min);
+                    for (col, group) in col_groups.iter().enumerate() {
+                        if shelf_of[col] != shelf_idx {
+                            continue;
+                        }
+                        for &cluster_idx in group {
+                            let anchor_x = snap_grid(col_x_local[col] - base_x);
+                            let anchor_y = snap_grid((bk_units[cluster_idx] - bk_min) * grid_h);
+                            place_cluster_into(
+                                board,
+                                &clusters[cluster_idx],
+                                anchor_x,
+                                anchor_y,
+                                grid_w,
+                                &mut local,
+                                &mut local_occupied,
+                            );
+                        }
+                    }
+                    let (local_min_x, _, local_min_y, local_max_y) = body_bbox_of(board, &local)
+                        .unwrap_or((origin_x, origin_x + grid_w, 0.0, grid_h));
+                    let dy = snap_grid(shelf_y - local_min_y);
+                    let dx = snap_grid(PAGE_MARGIN - local_min_x);
+                    for mut place in local {
+                        place.center_mm.0 += dx;
+                        place.center_mm.1 += dy;
+                        let key = (
+                            (place.center_mm.0 * 10.0).round() as i64,
+                            (place.center_mm.1 * 10.0).round() as i64,
+                        );
+                        occupied.insert(key);
+                        placements.push(place);
+                    }
+                    shelf_y += (local_max_y - local_min_y) + WIRE_MARGIN;
+                }
+            }
+        } else {
+            // Phase A (C1): lay out each region independently in its own
+            // local frame — origin at (0,0) — so its *true* content
+            // rectangle is known before packing. Using the grid cell
+            // instead over-counts badly (one tall USB-C symbol inflates
+            // every region's cell height), which is what tipped a
+            // grouped board off A2 in the first cut of this pass.
+            let mut region_layouts: Vec<RegionLayout> = Vec::with_capacity(region_runs.len());
+            for &(band, start, end) in &region_runs {
+                let mut local: Vec<ComponentPlacement> = Vec::new();
+                let mut occupied: std::collections::HashSet<(i64, i64)> =
+                    std::collections::HashSet::new();
+                for col in start..end {
+                    for &cluster_idx in &col_groups[col] {
+                        let anchor_x = snap_grid(col_x_local[col]);
+                        let anchor_y = snap_grid((bk_units[cluster_idx] - bk_min) * grid_h);
+                        place_cluster_into(
+                            board,
+                            &clusters[cluster_idx],
+                            anchor_x,
+                            anchor_y,
+                            grid_w,
+                            &mut local,
+                            &mut occupied,
+                        );
+                    }
+                }
+                local.sort_by_key(|p| p.id.0);
+                let bbox = body_bbox_of(board, &local).unwrap_or((0.0, grid_w, 0.0, grid_h));
+                let group_name = usize::try_from(band)
+                    .ok()
+                    .and_then(|b| group_bands.get(b))
+                    .copied();
+                region_layouts.push(RegionLayout {
+                    placements: local,
+                    bbox,
+                    box_overhang: group_box_overhang(board, group_name),
+                });
+            }
 
-        for (col, cluster_idx, cluster) in placement_order {
-            let anchor_x = snap_grid(origin_x + col_x_offset[col]);
-            let anchor_y = snap_grid(bk_origin_y + (bk_units[cluster_idx] - bk_min) * grid_h);
-
-            // Anchor body half-extents so member placement clears the
-            // actual rendered footprint regardless of how big the
-            // KiCad symbol is. Fixed `MEMBER_DX/MEMBER_DY` constants
-            // assume a small generic rectangle; an ATmega328P-P DIP
-            // (~50 mm tall) or a USB-C receptacle (~50 mm tall × 15 mm
-            // wide) needs more headroom than that.
-            let (anchor_body_w, anchor_body_h) = board
-                .component(cluster.anchor)
-                .and_then(|c| c.part.as_ref())
-                .map_or((BODY_FALLBACK_W, BODY_FALLBACK_H), body_size_for_part);
-            let anchor_half_w = anchor_body_w / 2.0;
-            let anchor_half_h = anchor_body_h / 2.0;
-
-            let anchor_key = (
-                (anchor_x * 10.0).round() as i64,
-                (anchor_y * 10.0).round() as i64,
+            // Phase B: shelf-pack the *measured* region rectangles
+            // left-to-right, wrapping to a new shelf when the running
+            // width passes the target, so regions tile the page in two
+            // dimensions instead of one long horizontal strip (reference
+            // mechanism 1: the page is a grid of titled regions). Target
+            // width balances total region area to the sheet aspect,
+            // floored at the widest region so one wide region never
+            // overflows its own shelf.
+            let region_gap = REGION_GAP;
+            let total_area: f64 = region_layouts
+                .iter()
+                .map(|r| (r.bbox.1 - r.bbox.0) * (r.bbox.3 - r.bbox.2))
+                .sum();
+            let widest = region_layouts
+                .iter()
+                .map(|r| r.bbox.1 - r.bbox.0)
+                .fold(0.0_f64, f64::max);
+            // Shelf width is swept by the fitting loop (`region_target_w`)
+            // rather than fixed at A4's content width. Which regions
+            // share a shelf decides the stack's height, and only a
+            // concrete candidate sheet can say whether a wider, shorter
+            // arrangement or a narrower, taller one lands on the smaller
+            // page: a three-region board packs 150+110 on one shelf and
+            // drops from A2 to A3, which the A4-width target could never
+            // find. Floored at the widest region so one wide region
+            // never overflows its own shelf.
+            let target_w = region_target_w.max(widest).min(
+                (total_area * TARGET_ASPECT)
+                    .sqrt()
+                    .max(widest)
+                    .max(region_target_w),
             );
-            occupied.insert(anchor_key);
-
-            placements.push(ComponentPlacement {
-                id: cluster.anchor,
-                center_mm: (anchor_x, anchor_y),
-                rotation: Rotation::Zero,
-            });
-
-            // Bucket members by side.
-            let below: Vec<ComponentId> = cluster
-                .members
-                .iter()
-                .filter(|m| m.side == MemberSide::Below)
-                .map(|m| m.id)
-                .collect();
-            let right: Vec<ComponentId> = cluster
-                .members
-                .iter()
-                .filter(|m| m.side == MemberSide::Right)
-                .map(|m| m.id)
-                .collect();
-            let above: Vec<ComponentId> = cluster
-                .members
-                .iter()
-                .filter(|m| m.side == MemberSide::Above)
-                .map(|m| m.id)
-                .collect();
-            let left: Vec<ComponentId> = cluster
-                .members
-                .iter()
-                .filter(|m| m.side == MemberSide::Left)
-                .map(|m| m.id)
-                .collect();
-
-            // Below: members fan out in a single row beneath the anchor,
-            // horizontally aligned with their connected pins where possible.
-            if !below.is_empty() {
-                let member_dx = compute_dynamic_member_dx(board, &below);
-                let row_y = snap_grid(anchor_y + anchor_half_h + MEMBER_CLEARANCE);
-                let total_width = (below.len().saturating_sub(1)) as f64 * member_dx;
-                let row_start_x = snap_grid(anchor_x - total_width / 2.0);
-                let mut last_x: Option<f64> = None;
-                for (i, id) in below.iter().enumerate() {
-                    let mut placed_x = snap_grid(row_start_x + i as f64 * member_dx);
-                    if let Some(lx) = last_x {
-                        placed_x = placed_x.max(snap_grid(lx + member_dx));
+            let mut region_offset: Vec<(f64, f64)> = vec![(0.0, 0.0); region_layouts.len()];
+            {
+                let mut cx = 0.0;
+                let mut cy = 0.0;
+                let mut shelf_h = 0.0;
+                for (i, region) in region_layouts.iter().enumerate() {
+                    let w = region.bbox.1 - region.bbox.0 + 2.0 * GROUP_BOX_PAD;
+                    // Pack against what is *drawn* — the box — not the
+                    // bodies inside it. The box reaches above the bodies
+                    // for its caption and below them for its note block,
+                    // so packing on body bounds alone let two boxes
+                    // overlap (`E-SYNTH-SCHEM-013`) even with a generous
+                    // gap between the parts themselves.
+                    let h = region.bbox.3 - region.bbox.2
+                        + region.box_overhang.0
+                        + region.box_overhang.1;
+                    if cx > 0.0 && cx + w > target_w {
+                        cy += shelf_h + region_gap;
+                        cx = 0.0;
+                        shelf_h = 0.0;
                     }
-                    if let Some(pin_idx) = find_connecting_active_pin(board, cluster.anchor, *id) {
-                        if let Some(anchor) = board.component(cluster.anchor) {
-                            if let Some(part) = anchor.part.as_ref() {
-                                let (px, _py, _side) = compute_anchor_pin_offset(part, pin_idx);
-                                let target_x = snap_grid(anchor_x + px);
-                                let coord_key = (
-                                    (target_x * 10.0).round() as i64,
-                                    (row_y * 10.0).round() as i64,
-                                );
-                                let remains_local = (target_x - anchor_x).abs() <= grid_w / 3.0;
-                                let clears_neighbour = placements.iter().all(|placed| {
-                                    (placed.center_mm.1 - row_y).abs() > 0.1
-                                        || (placed.center_mm.0 - target_x).abs() >= member_dx * 0.8
-                                });
-                                let clears_last =
-                                    last_x.is_none_or(|lx| target_x >= lx + member_dx * 0.8);
-                                if remains_local
-                                    && clears_neighbour
-                                    && clears_last
-                                    && !occupied.contains(&coord_key)
-                                {
-                                    placed_x = target_x;
-                                }
-                            }
-                        }
-                    }
-                    if let Some(lx) = last_x {
-                        placed_x = placed_x.max(snap_grid(lx + member_dx));
-                    }
-                    last_x = Some(placed_x);
-                    let coord_key = (
-                        (placed_x * 10.0).round() as i64,
-                        (row_y * 10.0).round() as i64,
-                    );
-                    occupied.insert(coord_key);
-
-                    placements.push(ComponentPlacement {
-                        id: *id,
-                        center_mm: (placed_x, row_y),
-                        rotation: Rotation::Zero,
-                    });
+                    region_offset[i] = (cx, cy);
+                    cx += w + region_gap;
+                    shelf_h = shelf_h.max(h);
                 }
             }
 
-            // Right: members stack in a vertical column to the right of
-            // the anchor, vertically aligned with their connected pins
-            // where possible. Spacing between consecutive members is
-            // dynamic (`min_member_dy`, text-inclusive) rather than the
-            // fixed `MEMBER_DX`, and pin-alignment nudges are clamped
-            // against it — a fixed constant or an unclamped pin-aligned
-            // position can both leave less room than a member's own
-            // Reference/Value text needs, overlapping its neighbour.
-            if !right.is_empty() {
-                let default_col_x = snap_grid(anchor_x + anchor_half_w + MEMBER_CLEARANCE);
-                let total_height: f64 = right
-                    .windows(2)
-                    .map(|pair| min_member_dy(board, pair[0], pair[1]))
-                    .sum();
-                let col_start_y = snap_grid(anchor_y - total_height / 2.0);
-                let mut prev: Option<(ComponentId, f64)> = None;
-                for (i, id) in right.iter().enumerate() {
-                    let mut col_x = default_col_x;
-                    let mut placed_y = if i == 0 {
-                        col_start_y
-                    } else {
-                        let (prev_id, prev_y) = prev.unwrap();
-                        snap_grid(prev_y + min_member_dy(board, prev_id, *id))
-                    };
-                    // Pin-Y alignment is only safe for a single member —
-                    // with more than one, distinct members can each
-                    // align to a different anchor pin that happens to
-                    // sit within a couple mm of another (e.g. a reset
-                    // network's pullup/button/debounce-cap all landing
-                    // near VCC/RESET/GND pins on a real KiCad symbol),
-                    // collapsing their text-inclusive extents on top of
-                    // each other. Mirrors the identical guard already on
-                    // the Left column below.
-                    if right.len() == 1 {
-                        if let Some(pin_idx) =
-                            find_connecting_active_pin(board, cluster.anchor, *id)
-                        {
-                            if let Some(anchor) = board.component(cluster.anchor) {
-                                if let Some(part) = anchor.part.as_ref() {
-                                    let (px, py, side) = compute_anchor_pin_offset(part, pin_idx);
-                                    // Only honour pin-Y alignment when the
-                                    // connecting pin actually sits on the
-                                    // Right side of the anchor. Otherwise
-                                    // (e.g. a reset pull-up whose other end
-                                    // hits VCC on Top), `find_connecting_*`
-                                    // would pick that wrong pin and yank
-                                    // the member up-and-inside the body.
-                                    if side == PinSide::Right {
-                                        col_x = snap_grid(anchor_x + px + MEMBER_CLEARANCE);
-                                        let target_y = snap_grid(anchor_y + py);
-                                        let coord_key = (
-                                            (col_x * 10.0).round() as i64,
-                                            (target_y * 10.0).round() as i64,
-                                        );
-                                        if !occupied.contains(&coord_key) {
-                                            placed_y = target_y;
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    } else if let Some((prev_id, prev_y)) = prev {
-                        // Multi-member column, default spacing already
-                        // applied above — still clamp in case a future
-                        // change reintroduces per-member pin alignment
-                        // here without threading it through this check.
-                        placed_y =
-                            placed_y.max(snap_grid(prev_y + min_member_dy(board, prev_id, *id)));
-                    }
-                    let coord_key = (
-                        (col_x * 10.0).round() as i64,
-                        (placed_y * 10.0).round() as i64,
-                    );
-                    occupied.insert(coord_key);
-
+            // Phase C: translate each region's local placements to its
+            // slot, normalising the region's own top-left to the slot
+            // origin.
+            // Hug the page margin rather than the grid origin: the
+            // per-region bbox already reserves whatever its members
+            // need above and left of their anchors, so `origin_x`/
+            // `origin_y`'s guard band is pure waste here — ~55 mm of it,
+            // enough to cost a sheet size on its own.
+            for (ri, region) in region_layouts.iter().enumerate() {
+                let dx = PAGE_MARGIN + GROUP_BOX_PAD + region_offset[ri].0 - region.bbox.0;
+                let dy = PAGE_MARGIN + region.box_overhang.0 + region_offset[ri].1 - region.bbox.2;
+                for placement in &region.placements {
                     placements.push(ComponentPlacement {
-                        id: *id,
-                        center_mm: (col_x, placed_y),
-                        rotation: Rotation::Zero,
+                        id: placement.id,
+                        center_mm: (
+                            snap_grid(placement.center_mm.0 + dx),
+                            snap_grid(placement.center_mm.1 + dy),
+                        ),
+                        rotation: placement.rotation,
                     });
-                    prev = Some((*id, placed_y));
-                }
-            }
-
-            // Above: LED limit resistors remain in a vertical chain.
-            // Pull-ups for an IC fan into a horizontal row above it,
-            // which is the usual readable bus-pull-up arrangement.
-            if !above.is_empty() {
-                let member_dx = compute_dynamic_member_dx(board, &above);
-                let horizontal_row_y = snap_grid(anchor_y - anchor_half_h - MEMBER_CLEARANCE);
-                let horizontal_width = (above.len().saturating_sub(1)) as f64 * member_dx;
-                let horizontal_start_x = snap_grid(anchor_x - horizontal_width / 2.0);
-                let mut last_x: Option<f64> = None;
-                for (i, id) in above.iter().enumerate() {
-                    let mut placed_x = if cluster.anchor_vertical {
-                        anchor_x
-                    } else {
-                        snap_grid(horizontal_start_x + i as f64 * member_dx)
-                    };
-                    let target_y = if cluster.anchor_vertical {
-                        snap_grid(
-                            anchor_y - anchor_half_h - MEMBER_CLEARANCE - (i as f64) * MEMBER_DX,
-                        )
-                    } else {
-                        horizontal_row_y
-                    };
-                    if !cluster.anchor_vertical {
-                        if let Some(lx) = last_x {
-                            placed_x = placed_x.max(snap_grid(lx + member_dx));
-                        }
-                    }
-                    if let Some(pin_idx) = find_connecting_active_pin(board, cluster.anchor, *id) {
-                        if let Some(anchor) = board.component(cluster.anchor) {
-                            if let Some(part) = anchor.part.as_ref() {
-                                let (px, _py, _side) = compute_anchor_pin_offset(part, pin_idx);
-                                let target_x = snap_grid(anchor_x + px);
-                                let coord_key = (
-                                    (target_x * 10.0).round() as i64,
-                                    (target_y * 10.0).round() as i64,
-                                );
-                                let remains_local = (target_x - anchor_x).abs() <= grid_w / 3.0;
-                                let clears_neighbour = placements.iter().all(|placed| {
-                                    (placed.center_mm.1 - target_y).abs() > 0.1
-                                        || (placed.center_mm.0 - target_x).abs() >= member_dx * 0.8
-                                });
-                                let clears_last =
-                                    last_x.is_none_or(|lx| target_x >= lx + member_dx * 0.8);
-                                if remains_local
-                                    && clears_neighbour
-                                    && clears_last
-                                    && !occupied.contains(&coord_key)
-                                {
-                                    placed_x = target_x;
-                                }
-                            }
-                        }
-                    }
-                    if !cluster.anchor_vertical {
-                        if let Some(lx) = last_x {
-                            placed_x = placed_x.max(snap_grid(lx + member_dx));
-                        }
-                        last_x = Some(placed_x);
-                    }
-                    let coord_key = (
-                        (placed_x * 10.0).round() as i64,
-                        (target_y * 10.0).round() as i64,
-                    );
-                    occupied.insert(coord_key);
-
-                    placements.push(ComponentPlacement {
-                        id: *id,
-                        center_mm: (placed_x, target_y),
-                        rotation: Rotation::Zero,
-                    });
-                }
-            }
-
-            // Left: members stack vertically just outside the anchor's
-            // left edge. Dynamic (`min_member_dy`, text-inclusive)
-            // spacing so members are visually distinct — pin-Y alignment
-            // would collapse them on top of each other when the anchor's
-            // pins are 2.54mm apart (e.g. USB connector D+/D- adjacency).
-            // A single Left member has no such adjacency, so it y-aligns
-            // with its connecting pin for a straight-across wire.
-            if !left.is_empty() {
-                let col_x = snap_grid(anchor_x - anchor_half_w - MEMBER_CLEARANCE);
-                let total_height: f64 = left
-                    .windows(2)
-                    .map(|pair| min_member_dy(board, pair[0], pair[1]))
-                    .sum();
-                let col_start_y = snap_grid(anchor_y - total_height / 2.0);
-                let mut prev: Option<(ComponentId, f64)> = None;
-                for (i, id) in left.iter().enumerate() {
-                    let mut placed_y = if i == 0 {
-                        col_start_y
-                    } else {
-                        let (prev_id, prev_y) = prev.unwrap();
-                        snap_grid(prev_y + min_member_dy(board, prev_id, *id))
-                    };
-                    if left.len() == 1 {
-                        if let Some(pin_idx) =
-                            find_connecting_active_pin(board, cluster.anchor, *id)
-                        {
-                            if let Some(anchor) = board.component(cluster.anchor) {
-                                if let Some(part) = anchor.part.as_ref() {
-                                    let (_px, py, side) = compute_anchor_pin_offset(part, pin_idx);
-                                    if side == PinSide::Left {
-                                        let target_y = snap_grid(anchor_y + py);
-                                        let coord_key = (
-                                            (col_x * 10.0).round() as i64,
-                                            (target_y * 10.0).round() as i64,
-                                        );
-                                        if !occupied.contains(&coord_key) {
-                                            placed_y = target_y;
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    } else if let Some((prev_id, prev_y)) = prev {
-                        placed_y =
-                            placed_y.max(snap_grid(prev_y + min_member_dy(board, prev_id, *id)));
-                    }
-                    let coord_key = (
-                        (col_x * 10.0).round() as i64,
-                        (placed_y * 10.0).round() as i64,
-                    );
-                    occupied.insert(coord_key);
-
-                    placements.push(ComponentPlacement {
-                        id: *id,
-                        center_mm: (col_x, placed_y),
-                        rotation: Rotation::OneEighty,
-                    });
-                    prev = Some((*id, placed_y));
                 }
             }
         }
@@ -2620,27 +3087,12 @@ fn place_clusters(board: &Board, clusters: &[Cluster]) -> Layout {
         // small parts is only as big as the parts actually drawn. The
         // reference designs (e.g. a sensor logger with a 76 mm-tall STM32
         // symbol) land in A4/A3 this way instead of blowing out to A2.
-        let mut min_x = f64::INFINITY;
-        let mut max_x = f64::NEG_INFINITY;
-        let mut min_y = f64::INFINITY;
-        let mut max_y = f64::NEG_INFINITY;
-        for placement in &placements {
-            let (cx, cy) = placement.center_mm;
-            let (bw, bh) = board
-                .component(placement.id)
-                .and_then(|c| c.part.as_ref())
-                .map_or((BODY_FALLBACK_W, BODY_FALLBACK_H), body_size_for_part);
-            min_x = min_x.min(cx - bw / 2.0);
-            max_x = max_x.max(cx + bw / 2.0);
-            min_y = min_y.min(cy - bh / 2.0);
-            max_y = max_y.max(cy + bh / 2.0);
-        }
-        if !min_x.is_finite() {
-            min_x = origin_x;
-            max_x = origin_x + col_groups.len().max(1) as f64 * grid_w;
-            min_y = origin_y;
-            max_y = origin_y + rows as f64 * grid_h;
-        }
+        let (min_x, max_x, min_y, max_y) = body_bbox_of(board, &placements).unwrap_or((
+            origin_x,
+            origin_x + col_groups.len().max(1) as f64 * grid_w,
+            origin_y,
+            origin_y + rows as f64 * grid_h,
+        ));
         (placements, (min_x, max_x, min_y, max_y))
     };
 
@@ -2684,28 +3136,78 @@ fn place_clusters(board: &Board, clusters: &[Cluster]) -> Layout {
     // so they simply place once.
     let bandings: [Bandings<'_>; 2] = [(&grouped_key, &grouped_order), (&flat_key, &flat_order)];
 
-    let mut fitted: Option<(f64, Vec<ComponentPlacement>, SheetSize)> = None;
+    // Selection key: smallest sheet first, then the attempt whose
+    // content shape best matches that sheet's (schematic-quality plan
+    // Phase A5/C3).
+    //
+    // Area alone was not enough. Every attempt that lands on the same
+    // sheet ties on area, so the first — the most aspect-balanced
+    // `rows_start`, which is also the *shortest* column stack and
+    // therefore the widest content — always won. On A3 that left a
+    // 290 x 118 mm band across the top of a 420 x 297 mm page: 27 %
+    // fill, the lower two thirds empty, and every net long enough to
+    // degrade into a label (`E-SYNTH-SCHEM-012`, and the reason the
+    // reference sheet's "wires inside a block" reads so much better).
+    // Ranking ties by how close the content's aspect is to the page's
+    // picks the squarer stack instead, which uses the page the way a
+    // drawn-by-hand sheet does.
+    let mut fitted: Option<(f64, usize, usize, f64, Vec<ComponentPlacement>, SheetSize)> = None;
     let mut closest: Option<(f64, Vec<ComponentPlacement>, SheetSize)> = None;
     for (fallback_key, fallback_order) in bandings {
         if fitted.is_some() {
             break;
         }
-        for rows in rows_start..=rows_cap {
-            let (placements, (min_x, max_x, min_y, max_y)) =
-                place_for_rows(rows, fallback_key, fallback_order);
+        // `BASE_CLUSTER_DX` is a generous default gap between unrelated
+        // columns. It is tried first, so a board that already fits its
+        // page keeps the airier spacing; the tighter floor is only
+        // reached for a board that would otherwise need a larger sheet,
+        // where a denser page beats a sparser bigger one.
+        for (rows, shelves, pitch_floor, region_w) in (rows_start..=rows_cap).flat_map(|r| {
+            (1..=MAX_SHELVES).flat_map(move |sh| {
+                [BASE_CLUSTER_DX, INTRA_GROUP_CLUSTER_DX]
+                    .into_iter()
+                    .flat_map(move |p| REGION_SHELF_WIDTHS.map(move |w| (r, sh, p, w)))
+            })
+        }) {
+            let (placements, (min_x, max_x, min_y, max_y)) = place_for_rows(
+                rows,
+                shelves,
+                pitch_floor,
+                region_w,
+                fallback_key,
+                fallback_order,
+            );
             let (need_w, need_h) = sheet_needs(min_x, max_x, min_y, max_y);
             let sheet_size = sheet_size_for(need_w, need_h);
             let (sheet_w, sheet_h) = sheet_size.dims_mm();
             if need_w <= sheet_w && need_h <= sheet_h {
                 let area = sheet_w * sheet_h;
-                let improves = fitted.as_ref().is_none_or(|(best, _, _)| area < *best);
+                let mismatch = if need_h > 0.0 && sheet_h > 0.0 {
+                    (need_w / need_h - sheet_w / sheet_h).abs()
+                } else {
+                    f64::INFINITY
+                };
+                // Rank: smallest sheet, then fewest shelves, then the
+                // airier column pitch, then the best aspect match.
+                //
+                // Both shelf-wrapping and pitch-tightening are spent
+                // only on *saving a sheet size*, never on a page that
+                // already fits. Wrapping costs the left-to-right
+                // power-flow reading order — a shelf break continues
+                // on the next line, so a late-layer passive can sit
+                // left of an early-layer connector — and tightening
+                // pushes nets past the span threshold until they
+                // degrade into labels. Both are worth it to drop A3 to
+                // A4; neither is worth it otherwise.
+                let pitch_rank = usize::from(pitch_floor < BASE_CLUSTER_DX);
+                let key = (area, shelves, pitch_rank, mismatch);
+                let improves = fitted.as_ref().is_none_or(
+                    |(best_area, best_shelves, best_pitch, best_mismatch, _, _)| {
+                        key < (*best_area, *best_shelves, *best_pitch, *best_mismatch)
+                    },
+                );
                 if improves {
-                    let smallest = sheet_size == SheetSize::A4;
-                    fitted = Some((area, placements, sheet_size));
-                    // Nothing can beat the smallest sheet we ever declare.
-                    if smallest {
-                        break;
-                    }
+                    fitted = Some((area, shelves, pitch_rank, mismatch, placements, sheet_size));
                 }
                 continue;
             }
@@ -2715,6 +3217,7 @@ fn place_clusters(board: &Board, clusters: &[Cluster]) -> Layout {
             }
         }
     }
+    let fitted = fitted.map(|(_, _, _, _, placements, sheet)| (0.0, placements, sheet));
     let (components, sheet_size) = fitted
         .or(closest)
         .map_or((Vec::new(), SheetSize::A4), |(_, placements, sheet)| {
@@ -2734,6 +3237,374 @@ fn place_clusters(board: &Board, clusters: &[Cluster]) -> Layout {
     }
 }
 
+/// One region's independently-laid-out content and its measured
+/// rectangle, in the region's own local frame (Phase C1).
+struct RegionLayout {
+    placements: Vec<ComponentPlacement>,
+    bbox: (f64, f64, f64, f64),
+    /// Extra height its group box needs beyond the body bounds:
+    /// padding above, plus padding and the note block below.
+    box_overhang: (f64, f64),
+}
+
+/// Body bounding box of a set of placements, in the same frame as
+/// their centres: `(min_x, max_x, min_y, max_y)`, or `None` when
+/// empty. Shared by the per-region measurement (Phase C1) and the
+/// final content box so region packing and sheet fitting agree on how
+/// big the drawn content actually is.
+fn body_bbox_of(board: &Board, placements: &[ComponentPlacement]) -> Option<(f64, f64, f64, f64)> {
+    let mut min_x = f64::INFINITY;
+    let mut max_x = f64::NEG_INFINITY;
+    let mut min_y = f64::INFINITY;
+    let mut max_y = f64::NEG_INFINITY;
+    for placement in placements {
+        let (cx, cy) = placement.center_mm;
+        let (bw, bh) = board
+            .component(placement.id)
+            .and_then(|c| c.part.as_ref())
+            .map_or((BODY_FALLBACK_W, BODY_FALLBACK_H), body_size_for_part);
+        min_x = min_x.min(cx - bw / 2.0);
+        max_x = max_x.max(cx + bw / 2.0);
+        min_y = min_y.min(cy - bh / 2.0);
+        max_y = max_y.max(cy + bh / 2.0);
+    }
+    min_x.is_finite().then_some((min_x, max_x, min_y, max_y))
+}
+
+/// Place one cluster's anchor and members into `placements`, updating
+/// `occupied` so later clusters avoid the same grid points.
+///
+/// `anchor_x`/`anchor_y` are the anchor's centre in whatever frame the
+/// caller lays the cluster out in — absolute for a single ungrouped
+/// region, region-local for the packed path (Phase C1) — so the same
+/// member geometry serves both and can never diverge between them.
+#[allow(clippy::too_many_arguments)]
+fn place_cluster_into(
+    board: &Board,
+    cluster: &Cluster,
+    anchor_x: f64,
+    anchor_y: f64,
+    grid_w: f64,
+    placements: &mut Vec<ComponentPlacement>,
+    occupied: &mut std::collections::HashSet<(i64, i64)>,
+) {
+    // Anchor body half-extents so member placement clears the
+    // actual rendered footprint regardless of how big the
+    // KiCad symbol is. Fixed `MEMBER_DX/MEMBER_DY` constants
+    // assume a small generic rectangle; an ATmega328P-P DIP
+    // (~50 mm tall) or a USB-C receptacle (~50 mm tall × 15 mm
+    // wide) needs more headroom than that.
+    let (anchor_body_w, anchor_body_h) = board
+        .component(cluster.anchor)
+        .and_then(|c| c.part.as_ref())
+        .map_or((BODY_FALLBACK_W, BODY_FALLBACK_H), body_size_for_part);
+    let anchor_half_w = anchor_body_w / 2.0;
+    let anchor_half_h = anchor_body_h / 2.0;
+
+    let anchor_key = (
+        (anchor_x * 10.0).round() as i64,
+        (anchor_y * 10.0).round() as i64,
+    );
+    occupied.insert(anchor_key);
+
+    placements.push(ComponentPlacement {
+        id: cluster.anchor,
+        center_mm: (anchor_x, anchor_y),
+        rotation: Rotation::Zero,
+    });
+
+    // Bucket members by side.
+    let below: Vec<ComponentId> = cluster
+        .members
+        .iter()
+        .filter(|m| m.side == MemberSide::Below)
+        .map(|m| m.id)
+        .collect();
+    let right: Vec<ComponentId> = cluster
+        .members
+        .iter()
+        .filter(|m| m.side == MemberSide::Right)
+        .map(|m| m.id)
+        .collect();
+    let above: Vec<ComponentId> = cluster
+        .members
+        .iter()
+        .filter(|m| m.side == MemberSide::Above)
+        .map(|m| m.id)
+        .collect();
+    let left: Vec<ComponentId> = cluster
+        .members
+        .iter()
+        .filter(|m| m.side == MemberSide::Left)
+        .map(|m| m.id)
+        .collect();
+
+    // Below: members fan out in a single row beneath the anchor,
+    // horizontally aligned with their connected pins where possible.
+    if !below.is_empty() {
+        let member_dx = compute_dynamic_member_dx(board, &below);
+        let row_y = snap_grid(anchor_y + anchor_half_h + row_clearance(board, &below, true));
+        let total_width = (below.len().saturating_sub(1)) as f64 * member_dx;
+        let row_start_x = snap_grid(anchor_x - total_width / 2.0);
+        let mut last_x: Option<f64> = None;
+        for (i, id) in below.iter().enumerate() {
+            let mut placed_x = snap_grid(row_start_x + i as f64 * member_dx);
+            if let Some(lx) = last_x {
+                placed_x = placed_x.max(snap_grid(lx + member_dx));
+            }
+            if let Some(pin_idx) = find_connecting_active_pin(board, cluster.anchor, *id) {
+                if let Some(anchor) = board.component(cluster.anchor) {
+                    if let Some(part) = anchor.part.as_ref() {
+                        let (px, _py, _side) = compute_anchor_pin_offset(part, pin_idx);
+                        let target_x = snap_grid(anchor_x + px);
+                        let coord_key = (
+                            (target_x * 10.0).round() as i64,
+                            (row_y * 10.0).round() as i64,
+                        );
+                        let remains_local = (target_x - anchor_x).abs() <= grid_w / 3.0;
+                        let clears_neighbour = placements.iter().all(|placed| {
+                            (placed.center_mm.1 - row_y).abs() > 0.1
+                                || (placed.center_mm.0 - target_x).abs() >= member_dx * 0.8
+                        });
+                        let clears_last = last_x.is_none_or(|lx| target_x >= lx + member_dx * 0.8);
+                        if remains_local
+                            && clears_neighbour
+                            && clears_last
+                            && !occupied.contains(&coord_key)
+                        {
+                            placed_x = target_x;
+                        }
+                    }
+                }
+            }
+            if let Some(lx) = last_x {
+                placed_x = placed_x.max(snap_grid(lx + member_dx));
+            }
+            last_x = Some(placed_x);
+            let coord_key = (
+                (placed_x * 10.0).round() as i64,
+                (row_y * 10.0).round() as i64,
+            );
+            occupied.insert(coord_key);
+
+            placements.push(ComponentPlacement {
+                id: *id,
+                center_mm: (placed_x, row_y),
+                rotation: Rotation::Zero,
+            });
+        }
+    }
+
+    // Right: members stack in a vertical column to the right of
+    // the anchor, vertically aligned with their connected pins
+    // where possible. Spacing between consecutive members is
+    // dynamic (`min_member_dy`, text-inclusive) rather than the
+    // fixed `MEMBER_DX`, and pin-alignment nudges are clamped
+    // against it — a fixed constant or an unclamped pin-aligned
+    // position can both leave less room than a member's own
+    // Reference/Value text needs, overlapping its neighbour.
+    if !right.is_empty() {
+        let default_col_x = snap_grid(anchor_x + anchor_half_w + MEMBER_CLEARANCE);
+        let total_height: f64 = right
+            .windows(2)
+            .map(|pair| min_member_dy(board, pair[0], pair[1]))
+            .sum();
+        let col_start_y = snap_grid(anchor_y - total_height / 2.0);
+        let mut prev: Option<(ComponentId, f64)> = None;
+        for (i, id) in right.iter().enumerate() {
+            let mut col_x = default_col_x;
+            let mut placed_y = if i == 0 {
+                col_start_y
+            } else {
+                let (prev_id, prev_y) = prev.unwrap();
+                snap_grid(prev_y + min_member_dy(board, prev_id, *id))
+            };
+            // Pin-Y alignment is only safe for a single member —
+            // with more than one, distinct members can each
+            // align to a different anchor pin that happens to
+            // sit within a couple mm of another (e.g. a reset
+            // network's pullup/button/debounce-cap all landing
+            // near VCC/RESET/GND pins on a real KiCad symbol),
+            // collapsing their text-inclusive extents on top of
+            // each other. Mirrors the identical guard already on
+            // the Left column below.
+            if right.len() == 1 {
+                if let Some(pin_idx) = find_connecting_active_pin(board, cluster.anchor, *id) {
+                    if let Some(anchor) = board.component(cluster.anchor) {
+                        if let Some(part) = anchor.part.as_ref() {
+                            let (px, py, side) = compute_anchor_pin_offset(part, pin_idx);
+                            // Only honour pin-Y alignment when the
+                            // connecting pin actually sits on the
+                            // Right side of the anchor. Otherwise
+                            // (e.g. a reset pull-up whose other end
+                            // hits VCC on Top), `find_connecting_*`
+                            // would pick that wrong pin and yank
+                            // the member up-and-inside the body.
+                            if side == PinSide::Right {
+                                col_x = snap_grid(anchor_x + px + MEMBER_CLEARANCE);
+                                let target_y = snap_grid(anchor_y + py);
+                                let coord_key = (
+                                    (col_x * 10.0).round() as i64,
+                                    (target_y * 10.0).round() as i64,
+                                );
+                                if !occupied.contains(&coord_key) {
+                                    placed_y = target_y;
+                                }
+                            }
+                        }
+                    }
+                }
+            } else if let Some((prev_id, prev_y)) = prev {
+                // Multi-member column, default spacing already
+                // applied above — still clamp in case a future
+                // change reintroduces per-member pin alignment
+                // here without threading it through this check.
+                placed_y = placed_y.max(snap_grid(prev_y + min_member_dy(board, prev_id, *id)));
+            }
+            let coord_key = (
+                (col_x * 10.0).round() as i64,
+                (placed_y * 10.0).round() as i64,
+            );
+            occupied.insert(coord_key);
+
+            placements.push(ComponentPlacement {
+                id: *id,
+                center_mm: (col_x, placed_y),
+                rotation: Rotation::Zero,
+            });
+            prev = Some((*id, placed_y));
+        }
+    }
+
+    // Above: LED limit resistors remain in a vertical chain.
+    // Pull-ups for an IC fan into a horizontal row above it,
+    // which is the usual readable bus-pull-up arrangement.
+    if !above.is_empty() {
+        let member_dx = compute_dynamic_member_dx(board, &above);
+        let horizontal_row_y = snap_grid(anchor_y - anchor_half_h - MEMBER_CLEARANCE);
+        let horizontal_width = (above.len().saturating_sub(1)) as f64 * member_dx;
+        let horizontal_start_x = snap_grid(anchor_x - horizontal_width / 2.0);
+        let mut last_x: Option<f64> = None;
+        for (i, id) in above.iter().enumerate() {
+            let mut placed_x = if cluster.anchor_vertical {
+                anchor_x
+            } else {
+                snap_grid(horizontal_start_x + i as f64 * member_dx)
+            };
+            let target_y = if cluster.anchor_vertical {
+                snap_grid(anchor_y - anchor_half_h - MEMBER_CLEARANCE - (i as f64) * MEMBER_DX)
+            } else {
+                horizontal_row_y
+            };
+            if !cluster.anchor_vertical {
+                if let Some(lx) = last_x {
+                    placed_x = placed_x.max(snap_grid(lx + member_dx));
+                }
+            }
+            if let Some(pin_idx) = find_connecting_active_pin(board, cluster.anchor, *id) {
+                if let Some(anchor) = board.component(cluster.anchor) {
+                    if let Some(part) = anchor.part.as_ref() {
+                        let (px, _py, _side) = compute_anchor_pin_offset(part, pin_idx);
+                        let target_x = snap_grid(anchor_x + px);
+                        let coord_key = (
+                            (target_x * 10.0).round() as i64,
+                            (target_y * 10.0).round() as i64,
+                        );
+                        let remains_local = (target_x - anchor_x).abs() <= grid_w / 3.0;
+                        let clears_neighbour = placements.iter().all(|placed| {
+                            (placed.center_mm.1 - target_y).abs() > 0.1
+                                || (placed.center_mm.0 - target_x).abs() >= member_dx * 0.8
+                        });
+                        let clears_last = last_x.is_none_or(|lx| target_x >= lx + member_dx * 0.8);
+                        if remains_local
+                            && clears_neighbour
+                            && clears_last
+                            && !occupied.contains(&coord_key)
+                        {
+                            placed_x = target_x;
+                        }
+                    }
+                }
+            }
+            if !cluster.anchor_vertical {
+                if let Some(lx) = last_x {
+                    placed_x = placed_x.max(snap_grid(lx + member_dx));
+                }
+                last_x = Some(placed_x);
+            }
+            let coord_key = (
+                (placed_x * 10.0).round() as i64,
+                (target_y * 10.0).round() as i64,
+            );
+            occupied.insert(coord_key);
+
+            placements.push(ComponentPlacement {
+                id: *id,
+                center_mm: (placed_x, target_y),
+                rotation: Rotation::Zero,
+            });
+        }
+    }
+
+    // Left: members stack vertically just outside the anchor's
+    // left edge. Dynamic (`min_member_dy`, text-inclusive)
+    // spacing so members are visually distinct — pin-Y alignment
+    // would collapse them on top of each other when the anchor's
+    // pins are 2.54mm apart (e.g. USB connector D+/D- adjacency).
+    // A single Left member has no such adjacency, so it y-aligns
+    // with its connecting pin for a straight-across wire.
+    if !left.is_empty() {
+        let col_x = snap_grid(anchor_x - anchor_half_w - MEMBER_CLEARANCE);
+        let total_height: f64 = left
+            .windows(2)
+            .map(|pair| min_member_dy(board, pair[0], pair[1]))
+            .sum();
+        let col_start_y = snap_grid(anchor_y - total_height / 2.0);
+        let mut prev: Option<(ComponentId, f64)> = None;
+        for (i, id) in left.iter().enumerate() {
+            let mut placed_y = if i == 0 {
+                col_start_y
+            } else {
+                let (prev_id, prev_y) = prev.unwrap();
+                snap_grid(prev_y + min_member_dy(board, prev_id, *id))
+            };
+            if left.len() == 1 {
+                if let Some(pin_idx) = find_connecting_active_pin(board, cluster.anchor, *id) {
+                    if let Some(anchor) = board.component(cluster.anchor) {
+                        if let Some(part) = anchor.part.as_ref() {
+                            let (_px, py, side) = compute_anchor_pin_offset(part, pin_idx);
+                            if side == PinSide::Left {
+                                let target_y = snap_grid(anchor_y + py);
+                                let coord_key = (
+                                    (col_x * 10.0).round() as i64,
+                                    (target_y * 10.0).round() as i64,
+                                );
+                                if !occupied.contains(&coord_key) {
+                                    placed_y = target_y;
+                                }
+                            }
+                        }
+                    }
+                }
+            } else if let Some((prev_id, prev_y)) = prev {
+                placed_y = placed_y.max(snap_grid(prev_y + min_member_dy(board, prev_id, *id)));
+            }
+            let coord_key = (
+                (col_x * 10.0).round() as i64,
+                (placed_y * 10.0).round() as i64,
+            );
+            occupied.insert(coord_key);
+
+            placements.push(ComponentPlacement {
+                id: *id,
+                center_mm: (col_x, placed_y),
+                rotation: Rotation::OneEighty,
+            });
+            prev = Some((*id, placed_y));
+        }
+    }
+}
+
 /// Page dimensions a content bounding box needs, in mm.
 ///
 /// Both axes take the larger of two demands, because a sheet has to
@@ -2745,7 +3616,11 @@ fn place_clusters(board: &Board, clusters: &[Cluster]) -> Layout {
 /// - height: the content's bottom edge plus the title-block band it
 ///   must clear (see `TITLE_BLOCK_H`), or its own height plus a margin
 ///   on each side, whichever is larger.
-fn sheet_needs(min_x: f64, max_x: f64, min_y: f64, max_y: f64) -> (f64, f64) {
+///
+/// Public so a consumer can tell whether a sheet is already the smallest
+/// that fits it: a page sized to `sheet_needs` cannot be shrunk further,
+/// whatever its area ratio.
+pub fn sheet_needs(min_x: f64, max_x: f64, min_y: f64, max_y: f64) -> (f64, f64) {
     let w = (max_x + PAGE_MARGIN).max(max_x - min_x + 2.0 * PAGE_MARGIN);
     let h = (max_y + TITLE_BLOCK_H + TEXT_MARGIN_Y).max(max_y - min_y + 2.0 * PAGE_MARGIN);
     (w, h)
@@ -2819,7 +3694,6 @@ fn sanitize_rail_label(raw: &str) -> Option<String> {
 }
 
 fn classify_power_flags(board: &Board) -> Vec<PowerFlag> {
-    use synth_registry::ElectricalType;
     let mut flags = Vec::new();
     // Label uniqueness guard: two distinct nets sharing one flag
     // label would merge into a single global net inside KiCad
@@ -2828,74 +3702,7 @@ fn classify_power_flags(board: &Board) -> Vec<PowerFlag> {
     let mut seen_labels: std::collections::HashMap<String, NetId> =
         std::collections::HashMap::new();
     for net in &board.nets {
-        if net.endpoints.len() < 2 {
-            continue;
-        }
-        let mut has_power_output = false;
-        let mut power_input_count = 0_usize;
-        let mut gnd_pin_count = 0_usize;
-        let mut output_label: Option<String> = None;
-        let mut input_label: Option<String> = None;
-
-        for endpoint in &net.endpoints {
-            let Some(pin) = board.pin(endpoint.component, endpoint.pin) else {
-                continue;
-            };
-            match pin.electrical_type {
-                ElectricalType::PowerOutput => {
-                    has_power_output = true;
-                    if output_label.is_none() {
-                        output_label = Some(
-                            board
-                                .component(endpoint.component)
-                                .and_then(|c| c.part.as_ref())
-                                .filter(|p| p.kind == "regulator")
-                                .and_then(regulator_rail_label)
-                                .unwrap_or_else(|| pin.name.to_ascii_uppercase()),
-                        );
-                    }
-                }
-                ElectricalType::PowerInput => {
-                    power_input_count += 1;
-                    let lower = pin.name.to_ascii_lowercase();
-                    if matches!(
-                        lower.as_str(),
-                        "gnd" | "vss" | "vssa" | "gnda" | "gnd_a" | "ground"
-                    ) {
-                        gnd_pin_count += 1;
-                    } else {
-                        input_label.get_or_insert_with(|| pin.name.to_ascii_uppercase());
-                    }
-                }
-                _ => {}
-            }
-        }
-
-        let declared = declared_rail_name(&net.name);
-        let (kind, label) = if gnd_pin_count >= 1 {
-            // Any net touching a gnd-named power pin is ground.
-            // One endpoint is enough — even a 2-endpoint
-            // `U1.gnd → C2.p2` net should fly a GND symbol.
-            // A declared name (AGND, DGND, ...) wins so separate
-            // grounds stay separate; unnamed nets keep the classic
-            // global `GND`.
-            let l = declared.unwrap_or_else(|| "GND".to_string());
-            (PowerFlagKind::Gnd, l)
-        } else if has_power_output {
-            let l = declared
-                .or(output_label)
-                .unwrap_or_else(|| "VCC".to_string());
-            (PowerFlagKind::Vcc, l)
-        } else if power_input_count >= 1 {
-            // A `power_input` pin without a matching ground name
-            // (e.g. `vin`, `vcc`, `vdd`, `vbus`) anchors a positive
-            // rail. One endpoint is enough — see the comment above
-            // GND for why.
-            let l = declared
-                .or(input_label)
-                .unwrap_or_else(|| "VCC".to_string());
-            (PowerFlagKind::Vcc, l)
-        } else {
+        let Some((kind, label)) = classify_power_net(board, net) else {
             continue;
         };
         // Cross-net collision guard (see `seen_labels` above): if a
@@ -2923,6 +3730,97 @@ fn classify_power_flags(board: &Board) -> Vec<PowerFlag> {
         }
     }
     flags
+}
+
+/// Classify a single net as a positive rail or ground, using exactly
+/// the rule the schematic power flags use, or `None` for a signal net.
+///
+/// Shared with [`crate::netclass`] so the drawn power symbol and the
+/// net-class colour can never disagree about what is a rail. The
+/// returned label is the pre-collision suggestion; callers that emit
+/// symbols apply their own uniqueness guard.
+///
+/// - Ground: any endpoint pin is a `power_input` named `gnd`/`vss`/…
+///   A declared name (`AGND`, `DGND`, …) wins so separate grounds stay
+///   separate; unnamed nets keep the classic global `GND`.
+/// - Rail: a `power_output` pin, or any `power_input` pin with a
+///   non-ground name (`vin`, `vcc`, `vdd`, `vbus`).
+pub(crate) fn classify_power_net(
+    board: &Board,
+    net: &synth_ir::Net,
+) -> Option<(PowerFlagKind, String)> {
+    use synth_registry::ElectricalType;
+    if net.endpoints.len() < 2 {
+        return None;
+    }
+    let mut has_power_output = false;
+    let mut power_input_count = 0_usize;
+    let mut gnd_pin_count = 0_usize;
+    let mut output_label: Option<String> = None;
+    let mut input_label: Option<String> = None;
+
+    for endpoint in &net.endpoints {
+        let Some(pin) = board.pin(endpoint.component, endpoint.pin) else {
+            continue;
+        };
+        match pin.electrical_type {
+            ElectricalType::PowerOutput => {
+                has_power_output = true;
+                if output_label.is_none() {
+                    output_label = Some(
+                        board
+                            .component(endpoint.component)
+                            .and_then(|c| c.part.as_ref())
+                            .filter(|p| p.kind == "regulator")
+                            .and_then(regulator_rail_label)
+                            .unwrap_or_else(|| pin.name.to_ascii_uppercase()),
+                    );
+                }
+            }
+            ElectricalType::PowerInput => {
+                power_input_count += 1;
+                let lower = pin.name.to_ascii_lowercase();
+                if matches!(
+                    lower.as_str(),
+                    "gnd" | "vss" | "vssa" | "gnda" | "gnd_a" | "ground"
+                ) {
+                    gnd_pin_count += 1;
+                } else {
+                    input_label.get_or_insert_with(|| pin.name.to_ascii_uppercase());
+                }
+            }
+            _ => {}
+        }
+    }
+
+    let declared = declared_rail_name(&net.name);
+    if gnd_pin_count >= 1 {
+        // Any net touching a gnd-named power pin is ground. One
+        // endpoint is enough — even a 2-endpoint `U1.gnd → C2.p2` net
+        // should fly a GND symbol.
+        Some((
+            PowerFlagKind::Gnd,
+            declared.unwrap_or_else(|| "GND".to_string()),
+        ))
+    } else if has_power_output {
+        Some((
+            PowerFlagKind::Vcc,
+            declared
+                .or(output_label)
+                .unwrap_or_else(|| "VCC".to_string()),
+        ))
+    } else if power_input_count >= 1 {
+        // A `power_input` pin without a matching ground name (e.g.
+        // `vin`, `vcc`, `vdd`, `vbus`) anchors a positive rail.
+        Some((
+            PowerFlagKind::Vcc,
+            declared
+                .or(input_label)
+                .unwrap_or_else(|| "VCC".to_string()),
+        ))
+    } else {
+        None
+    }
 }
 
 /// Derive a human rail label for a fixed-voltage regulator part.
@@ -3014,11 +3912,16 @@ const LABEL_MIN_ENDPOINTS_MULTIDROP: usize = 3;
 ///
 /// - It is NOT already a power net (those use `PowerFlag` instead).
 /// - It has ≥2 endpoints (1-endpoint nets are warnings, not wires).
-/// - It is a multi-drop net with ≥3 endpoints, OR the bounding box
-///   of all endpoint positions spans more than
-///   [`LABEL_SPAN_THRESHOLD_MM`] in either x or y. Nets that fit
-///   within a single cluster stay as wires; nets that reach across
-///   the page get labelled.
+/// - **Region crossing (Phase C2):** on a board that declares `group`s,
+///   a net whose endpoints live in different regions becomes a label —
+///   *"wires inside a region, labels between regions"*, the mechanism
+///   that makes the reference sheet readable. A net entirely inside one
+///   region is drawn. The distance threshold below stays as a secondary
+///   guard for a large single region.
+/// - **Ungrouped boards** keep the historic rule verbatim: a multi-drop
+///   net (≥3 endpoints) or one spanning more than
+///   [`LABEL_SPAN_THRESHOLD_MM`] gets labelled, so their output is
+///   byte-identical.
 fn classify_net_labels(board: &Board, layout: &Layout) -> Vec<NetLabel> {
     let centres: std::collections::HashMap<ComponentId, (f64, f64)> = layout
         .components
@@ -3026,6 +3929,11 @@ fn classify_net_labels(board: &Board, layout: &Layout) -> Vec<NetLabel> {
         .map(|p| (p.id, p.center_mm))
         .collect();
     let power_nets = layout.power_net_ids();
+    // Whether the board declares any region at all. Only then does the
+    // region-crossing test apply; an ungrouped board has one implicit
+    // region and must keep its historic labelling.
+    let region_of = |id: ComponentId| -> Option<&str> { effective_group(board, id) };
+    let has_regions = board.components.iter().any(|c| c.group.is_some());
     let mut labels = Vec::new();
     for net in &board.nets {
         if power_nets.contains(&net.id) || net.endpoints.len() < 2 {
@@ -3046,8 +3954,20 @@ fn classify_net_labels(board: &Board, layout: &Layout) -> Vec<NetLabel> {
         }
         let span_x = max_x - min_x;
         let span_y = max_y - min_y;
-        let is_multidrop = net.endpoints.len() >= LABEL_MIN_ENDPOINTS_MULTIDROP;
-        if !(is_multidrop || span_x > LABEL_SPAN_THRESHOLD_MM || span_y > LABEL_SPAN_THRESHOLD_MM) {
+        let spans_far = span_x > LABEL_SPAN_THRESHOLD_MM || span_y > LABEL_SPAN_THRESHOLD_MM;
+        let label_it = if has_regions {
+            // Region crossing is the primary test; the span guard is a
+            // secondary backstop for one very large region.
+            let first = region_of(net.endpoints[0].component);
+            let crosses = net
+                .endpoints
+                .iter()
+                .any(|ep| region_of(ep.component) != first);
+            crosses || spans_far
+        } else {
+            net.endpoints.len() >= LABEL_MIN_ENDPOINTS_MULTIDROP || spans_far
+        };
+        if !label_it {
             continue;
         }
         let label = pick_net_label(board, net).unwrap_or_else(|| format!("NET_{}", net.id.0));
@@ -3395,6 +4315,148 @@ pub fn fit_sheet_size(min_x: f64, max_x: f64, min_y: f64, max_y: f64) -> SheetSi
     sheet_size_for(need_w, need_h)
 }
 
+/// A4 page width (mm) — the floor of the standard sheet ladder, and the
+/// reference below which a custom page becomes worthwhile.
+const A4_W: f64 = 297.0;
+/// A4 page height (mm).
+const A4_H: f64 = 210.0;
+/// Custom sheet dimensions are rounded up to this quantum (mm), so the page
+/// is a clean number rather than a raw content measurement.
+const CUSTOM_SHEET_QUANTUM_MM: f64 = 5.0;
+/// A custom page is only chosen when it saves at least this fraction of A4 in
+/// at least one axis; a marginal saving is not worth leaving the standard
+/// ladder and its title-block geometry.
+const CUSTOM_SHEET_MIN_SAVING: f64 = 0.7;
+/// Inset (mm) of KiCad's default page frame from the paper edge. The
+/// title block is drawn inside this frame, so it bounds how small a
+/// custom page can be.
+const FRAME_INSET: f64 = 10.0;
+/// Width (mm) of KiCad's default title block (`(rect (start 110 34) (end 2
+/// 2))`, frame-relative). A custom page narrower than this plus the frame
+/// would clip the title block.
+const TITLE_BLOCK_W: f64 = 110.0;
+/// Glyph height (mm) of the exporter's Reference/Value fields.
+const FIELD_TEXT_SIZE: f64 = 1.27;
+
+/// Smallest sheet that fits content of the given bounds once it is
+/// re-centred by [`centre_on_sheet`], including a [`SheetSize::Custom`]
+/// page below A4.
+///
+/// [`fit_sheet_size`] is bounded below by A4 because the standard ladder has
+/// nothing smaller, so a three-part design on A4 is always mostly blank. A
+/// human drawing three parts uses a small sheet. This sizes the page from the
+/// content's *extent* (not its absolute position, since the caller centres
+/// it): a margin on every side plus the title-block band, and never narrower
+/// than the title block itself. A rounded custom page is returned when that
+/// needs materially less than A4; otherwise the standard ladder.
+pub fn fit_sheet_size_any(min_x: f64, max_x: f64, min_y: f64, max_y: f64) -> SheetSize {
+    let need_w =
+        ((max_x - min_x).max(0.0) + 2.0 * PAGE_MARGIN).max(TITLE_BLOCK_W + 2.0 * FRAME_INSET);
+    let need_h = (max_y - min_y).max(0.0) + 2.0 * PAGE_MARGIN + TITLE_BLOCK_H;
+    let standard = sheet_size_for(need_w, need_h);
+    let (std_w, std_h) = standard.dims_mm();
+    // Only shrink below A4 when the standard fit is already A4 and the
+    // content needs clearly less — a marginal saving is not worth leaving
+    // the standard ladder.
+    if std_w > A4_W || std_h > A4_H {
+        return standard;
+    }
+    let w = (need_w / CUSTOM_SHEET_QUANTUM_MM).ceil() * CUSTOM_SHEET_QUANTUM_MM;
+    let h = (need_h / CUSTOM_SHEET_QUANTUM_MM).ceil() * CUSTOM_SHEET_QUANTUM_MM;
+    if w >= A4_W * CUSTOM_SHEET_MIN_SAVING || h >= A4_H * CUSTOM_SHEET_MIN_SAVING {
+        return standard;
+    }
+    SheetSize::Custom {
+        width_mm: w,
+        height_mm: h,
+    }
+}
+
+/// [`content_bounds`] widened to cover each component's Reference and
+/// Value fields, which the exporter places around the body after layout
+/// and so `content_bounds` cannot see.
+///
+/// Page fitting and centring use this rather than the bare bounds: a sheet
+/// sized to bodies and wires alone puts the refdes/value text of the
+/// outermost parts on the margin or the frame. The field extent is an
+/// estimate (the same stroke-font advance [`resolve_text_overlaps`] uses),
+/// taken on the conservative side — a field may sit beside a rotated body
+/// or above/below an upright one.
+pub fn drawing_bounds(board: &Board, layout: &Layout) -> Option<(f64, f64, f64, f64)> {
+    let (mut min_x, mut max_x, mut min_y, mut max_y) = content_bounds(board, layout)?;
+    for placement in &layout.components {
+        let Some(comp) = board.component(placement.id) else {
+            continue;
+        };
+        let (cx, cy) = placement.center_mm;
+        let (bw, bh) = comp
+            .part
+            .as_ref()
+            .map_or((BODY_FALLBACK_W, BODY_FALLBACK_H), body_size_for_part);
+        let value = comp.value.as_deref().unwrap_or("(no value)");
+        let field_w = text_run_width(&comp.refdes, FIELD_TEXT_SIZE)
+            .max(text_run_width(value, FIELD_TEXT_SIZE));
+        // Upright parts centre their fields over the body; rotated parts
+        // put them beside it. Half a field past the body edge covers both.
+        let reach = bw / 2.0 + field_w / 2.0;
+        min_x = min_x.min(cx - reach);
+        max_x = max_x.max(cx + reach);
+        min_y = min_y.min(cy - bh / 2.0 - TEXT_MARGIN_Y);
+        max_y = max_y.max(cy + bh / 2.0 + TEXT_MARGIN_Y);
+    }
+    Some((min_x, max_x, min_y, max_y))
+}
+
+/// Translate everything on the sheet so the drawing sits centred in the
+/// page area above the title-block band.
+///
+/// The auto-layout packs content against the top-left page margin, which
+/// is right for a page sized to fit it from the origin but leaves a
+/// shrunken page (see [`fit_sheet_size_any`]) with all its slack on the
+/// right and bottom — the drawing hugs the frame in one corner. Page
+/// coordinates are absolute, so centring means moving the content, not
+/// the frame. The shift is snapped to the 2.54 mm pin grid so wires stay
+/// on grid, and applied to every geometric field (bodies, wires,
+/// junctions, text, group boxes); labels and power flags are anchored to
+/// pins and follow their component.
+///
+/// Never shifts content past the top/left margin: a drawing larger than
+/// the page area stays anchored at the margin rather than being pushed
+/// off the sheet.
+pub fn centre_on_sheet(board: &Board, layout: &mut Layout) {
+    let Some((min_x, max_x, min_y, max_y)) = drawing_bounds(board, layout) else {
+        return;
+    };
+    let (sheet_w, sheet_h) = layout.sheet_size.dims_mm();
+    let area_h = sheet_h - TITLE_BLOCK_H;
+    let target_x = ((sheet_w - (max_x - min_x)) / 2.0).max(PAGE_MARGIN);
+    let target_y = ((area_h - (max_y - min_y)) / 2.0).max(PAGE_MARGIN);
+    let dx = snap_grid(target_x - min_x);
+    let dy = snap_grid(target_y - min_y);
+    if dx == 0.0 && dy == 0.0 {
+        return;
+    }
+    let shift = |p: &mut (f64, f64)| {
+        p.0 += dx;
+        p.1 += dy;
+    };
+    for placement in &mut layout.components {
+        shift(&mut placement.center_mm);
+    }
+    for wire in &mut layout.wires {
+        wire.points.iter_mut().for_each(shift);
+        wire.junctions.iter_mut().for_each(shift);
+    }
+    layout.junctions.iter_mut().for_each(shift);
+    for text in &mut layout.annotations {
+        shift(&mut text.at_mm);
+    }
+    for group in &mut layout.group_boxes {
+        shift(&mut group.min_mm);
+        shift(&mut group.max_mm);
+    }
+}
+
 // ----- Human-like schematic alignment helpers --------------------------------
 
 fn classify_ic_pin_layout(pin: &synth_registry::Pin) -> PinSide {
@@ -3653,6 +4715,8 @@ mod barycenter_tests {
 
     fn board_with(components: Vec<Component>, nets: Vec<Net>) -> Board {
         Board {
+            groups: Vec::new(),
+            legends: false,
             name: "test".to_string(),
             layers: 2,
             manufacturer: None,
@@ -3860,6 +4924,8 @@ mod semantic_weights_tests {
 
     fn board(components: Vec<Component>, nets: Vec<Net>) -> Board {
         Board {
+            groups: Vec::new(),
+            legends: false,
             name: "test".to_string(),
             layers: 2,
             manufacturer: None,
@@ -4187,6 +5253,8 @@ mod soft_pin_swap_tests {
 
     fn board(components: Vec<Component>, nets: Vec<Net>) -> Board {
         Board {
+            groups: Vec::new(),
+            legends: false,
             name: "test".to_string(),
             layers: 2,
             manufacturer: None,
@@ -4428,6 +5496,8 @@ mod patterns_tests {
 
     fn board(components: Vec<Component>, nets: Vec<Net>) -> Board {
         Board {
+            groups: Vec::new(),
+            legends: false,
             name: "test".to_string(),
             layers: 2,
             manufacturer: None,
@@ -4759,7 +5829,7 @@ mod text_width_tests {
             .value
             .as_deref()
             .or(component.part.as_ref().and_then(|p| p.mpn.as_deref()))
-            .unwrap_or(component.part.as_ref().map_or("", |p| p.id.as_str()));
+            .unwrap_or("(no value)");
         (val_text.len() as f64) * 1.27 * 0.85 + 2.54
     }
 
@@ -4787,11 +5857,12 @@ mod text_width_tests {
         let half = text_inclusive_half_width(&c, p);
         assert!(half >= long("AC0603FR-0710KL") / 2.0);
 
-        // Neither: falls back to the part id.
+        // Neither: falls back to the `(no value)` sentinel (Phase A1:
+        // the part id must never render as a value).
         let c = component("R1", None, two_pin_part("resistor_10k", None));
         let p = c.part.as_ref().unwrap();
         let half = text_inclusive_half_width(&c, p);
-        assert!(half >= long("resistor_10k") / 2.0);
+        assert!(half >= long("(no value)") / 2.0);
     }
 
     #[test]
@@ -4808,6 +5879,169 @@ mod text_width_tests {
         let half = text_inclusive_half_width(&c, p);
         assert!(half > 7.62, "body half-width must not dominate");
         assert!(half >= text_width(&c) / 2.0 - 1e-9);
+    }
+}
+
+#[cfg(test)]
+mod text_overlap_tests {
+    use synth_diagnostics::Span;
+    use synth_ir::Board;
+
+    use super::*;
+
+    fn empty_board() -> Board {
+        Board {
+            groups: Vec::new(),
+            legends: false,
+            name: "b".to_string(),
+            layers: 2,
+            manufacturer: None,
+            revision: None,
+            company: None,
+            components: Vec::new(),
+            nets: Vec::new(),
+            diff_pairs: Vec::new(),
+            notes: Vec::new(),
+            keepouts: Vec::new(),
+            netclasses: Vec::new(),
+            buses: Vec::new(),
+            modules: Vec::new(),
+            variants: Vec::new(),
+            source_span: Span::new(0, 0),
+        }
+    }
+
+    fn empty_layout(annotations: Vec<TextAnnotation>, sheet_size: SheetSize) -> Layout {
+        Layout {
+            components: Vec::new(),
+            wires: Vec::new(),
+            junctions: Vec::new(),
+            power_flags: Vec::new(),
+            net_labels: Vec::new(),
+            hierarchical_labels: Vec::new(),
+            annotations,
+            group_boxes: Vec::new(),
+            sheet_size,
+        }
+    }
+
+    fn run(text: &str, size_mm: f64, x: f64, y: f64) -> TextAnnotation {
+        TextAnnotation {
+            text: text.to_string(),
+            at_mm: (x, y),
+            size_mm,
+            kind: TextKind::NoteLine,
+        }
+    }
+
+    fn overlaps(layout: &Layout) -> bool {
+        for (i, a) in layout.annotations.iter().enumerate() {
+            let ra = text_run_rect(a);
+            for b in layout.annotations.iter().skip(i + 1) {
+                if rects_overlap(ra, text_run_rect(b)) {
+                    return true;
+                }
+            }
+        }
+        false
+    }
+
+    #[test]
+    fn overlapping_annotations_are_nudged_apart() {
+        let board = empty_board();
+        let mut layout = empty_layout(
+            vec![
+                run("J1 pinout", 2.0, 20.0, 100.0),
+                run("J1 pinout", 2.0, 20.0, 100.0),
+                run("vbus: VBUS", 1.27, 20.0, 104.0),
+            ],
+            SheetSize::A4,
+        );
+        resolve_text_overlaps(&board, &mut layout);
+        assert_eq!(layout.annotations.len(), 3, "nothing dropped: {layout:?}");
+        assert!(!overlaps(&layout), "runs must separate: {layout:?}");
+    }
+
+    #[test]
+    fn titles_are_never_shrunk_or_dropped() {
+        let board = empty_board();
+        let mut layout = empty_layout(
+            vec![
+                run("Input", 2.0, 20.0, 100.0),
+                run("Input", 2.0, 20.0, 100.0),
+            ],
+            SheetSize::A4,
+        );
+        resolve_text_overlaps(&board, &mut layout);
+        assert_eq!(layout.annotations.len(), 2);
+        assert!(
+            layout.annotations.iter().all(|a| a.size_mm == 2.0),
+            "titles keep their size: {layout:?}"
+        );
+    }
+
+    #[test]
+    fn unplaceable_line_is_dropped() {
+        // A line run under a continuous wall of bodies: 16 nudges
+        // plus one shrink step cannot clear it, so it is dropped
+        // rather than left overlapping.
+        let mut board = empty_board();
+        board.components = vec![synth_ir::Component {
+            id: ComponentId(0),
+            refdes: "U1".to_string(),
+            kind: "mcu".to_string(),
+            part: None,
+            value: None,
+            dnp: false,
+            properties: std::collections::BTreeMap::new(),
+            placement_hint: None,
+            group: None,
+            sheet: None,
+            source_span: Span::new(0, 0),
+        }];
+        let mut layout = empty_layout(vec![run("buried note", 1.27, 95.0, 100.0)], SheetSize::A4);
+        // Fallback body (15 × 10) plus text margins covers ±11.35 mm
+        // vertically; bodies every 12 mm form a continuous wall the
+        // run cannot nudge past within its step budget.
+        for y in [100.0, 112.0, 124.0, 136.0, 148.0] {
+            layout.components.push(ComponentPlacement {
+                id: ComponentId(0),
+                center_mm: (100.0, y),
+                rotation: Rotation::Zero,
+            });
+        }
+        resolve_text_overlaps(&board, &mut layout);
+        assert!(
+            layout.annotations.is_empty(),
+            "unplaceable line must drop: {layout:?}"
+        );
+    }
+
+    #[test]
+    fn compact_sheet_shrinks_to_smallest_fitting_sheet() {
+        let board = empty_board();
+        let mut layout = empty_layout(vec![run("tiny", 1.27, 20.0, 30.0)], SheetSize::A3);
+        layout.components.push(ComponentPlacement {
+            id: ComponentId(0),
+            center_mm: (30.0, 30.0),
+            rotation: Rotation::Zero,
+        });
+        compact_sheet_to_fit(&board, &mut layout);
+        assert_eq!(layout.sheet_size, SheetSize::A4);
+    }
+
+    #[test]
+    fn compact_sheet_never_shrinks_past_content() {
+        let board = empty_board();
+        let mut layout = empty_layout(vec![], SheetSize::A4);
+        // Content near the A4 right edge: A4 must stay.
+        layout.components.push(ComponentPlacement {
+            id: ComponentId(0),
+            center_mm: (280.0, 30.0),
+            rotation: Rotation::Zero,
+        });
+        compact_sheet_to_fit(&board, &mut layout);
+        assert_eq!(layout.sheet_size, SheetSize::A4);
     }
 }
 
@@ -4985,6 +6219,8 @@ mod naming_tests {
 
     fn board(components: Vec<Component>, nets: Vec<Net>) -> Board {
         Board {
+            groups: Vec::new(),
+            legends: false,
             name: "test".to_string(),
             layers: 2,
             manufacturer: None,
@@ -5280,6 +6516,8 @@ mod documentation_tests {
 
     fn board_with_notes(components: Vec<Component>, nets: Vec<Net>, notes: Vec<Note>) -> Board {
         Board {
+            groups: Vec::new(),
+            legends: false,
             name: "test".to_string(),
             layers: 2,
             manufacturer: None,
@@ -5387,7 +6625,7 @@ mod documentation_tests {
     }
 
     #[test]
-    fn group_notes_render_under_their_box() {
+    fn group_notes_render_inside_their_box() {
         let r = || part("resistor", vec![pin("p1"), pin("p2")]);
         let b = board_with_notes(
             vec![
@@ -5412,25 +6650,58 @@ mod documentation_tests {
             .expect("group note title")
             .at_mm
             .1;
-        assert!(title_y > box_.max_mm.1);
+        let line_y = layout
+            .annotations
+            .iter()
+            .find(|a| a.text == "Keep leads short.")
+            .expect("group note line")
+            .at_mm
+            .1;
+        // Phase B3: the note strip lives inside the box, and the box
+        // grew to enclose it.
+        assert!(title_y > box_.min_mm.1, "title inside box top: {title_y}");
+        assert!(title_y < box_.max_mm.1, "title above box bottom: {title_y}");
+        assert!(line_y < box_.max_mm.1, "line inside box: {line_y}");
     }
 
     #[test]
-    fn connector_legend_lists_pin_nets() {
+    fn connector_legend_lists_named_pins_when_opted_in() {
+        // Phase A3: legends are opt-in and require ≥4 named pins.
         let j = component(
             0,
             "J1",
-            part("connector", vec![pin("p1"), pin("p2"), pin("p3")]),
+            part(
+                "connector",
+                vec![pin("p1"), pin("p2"), pin("p3"), pin("p4")],
+            ),
             None,
         );
-        let r = component(1, "R1", part("resistor", vec![pin("p1"), pin("p2")]), None);
-        let b = board_with_notes(vec![j, r], vec![net(0, "SIG", &[(0, 0), (1, 0)])], vec![]);
-        let layout = layout(&b);
+        let r = || part("resistor", vec![pin("p1"), pin("p2")]);
+        let b = board_with_notes(
+            vec![
+                j,
+                component(1, "R1", r(), None),
+                component(2, "R2", r(), None),
+            ],
+            vec![
+                net(0, "SIG", &[(0, 0), (1, 0)]),
+                net(1, "CLK", &[(0, 1), (1, 1)]),
+                net(2, "RST", &[(0, 2), (2, 0)]),
+                net(3, "EN", &[(0, 3), (2, 1)]),
+            ],
+            vec![],
+        );
+        // Legends are off by default: no pinout block.
+        let off = layout(&b);
+        assert!(!texts(&off).iter().any(|t| t.contains("pinout")));
+        // Opt in and the named pins render; NC lines never appear.
+        let mut on = b.clone();
+        on.legends = true;
+        let layout = layout(&on);
         let labels = texts(&layout);
-        assert!(labels.contains(&"J1 pinout"));
-        assert!(labels.contains(&"p1: SIG"));
-        assert!(labels.contains(&"p2: NC"));
-        assert!(labels.contains(&"p3: NC"));
+        assert!(labels.contains(&"J1 pinout"), "{labels:?}");
+        assert!(labels.contains(&"p1: SIG"), "{labels:?}");
+        assert!(!labels.iter().any(|t| t.contains("NC")), "{labels:?}");
         // Legend sits below the connector body.
         let j_center = layout.components[0].center_mm.1;
         let title_y = layout

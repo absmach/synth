@@ -149,6 +149,7 @@ fn all_rules(config: &ErcConfig) -> Vec<Box<dyn ErcRule>> {
         Box::new(SourcingIdentityRule),
         Box::new(UnverifiedPartRule),
         Box::new(DividerRatioRule),
+        Box::new(GenericPassiveValueRule),
         // Phase 6 — deeper ERC.
         Box::new(deep_erc::PinConflictRule::new(config)),
         Box::new(deep_erc::PullupRailMismatchRule::new(config)),
@@ -305,6 +306,23 @@ impl ErcRule for I2cPeerCapabilityRule {
 /// listing `spi_mosi`, `uart_tx`, `i2c_sda` all at once — are not
 /// dedicated and therefore do not on their own demand a protocol.
 #[allow(clippy::too_many_arguments)]
+/// Whether a net is a supply rail or ground: some endpoint drives it
+/// as power, or it joins a pin declared as a power/ground reference.
+fn net_is_power_rail(board: &Board, net: &synth_ir::Net) -> bool {
+    use synth_registry::ElectricalType;
+    net.endpoints.iter().any(|e| {
+        board.pin(e.component, e.pin).is_some_and(|p| {
+            matches!(
+                p.electrical_type,
+                ElectricalType::PowerOutput
+                    | ElectricalType::PowerInput
+                    | ElectricalType::GroundReference
+            )
+        })
+    })
+}
+
+#[allow(clippy::too_many_arguments)]
 fn check_capability_consistency(
     board: &Board,
     net_id: NetId,
@@ -316,6 +334,15 @@ fn check_capability_consistency(
     out: &mut Vec<Diagnostic>,
 ) {
     let Some(net) = board.net(net_id) else { return };
+    // A power rail is never a protocol bus. Multifunction pins are
+    // routinely strapped to a rail to select a mode — a quad-SPI
+    // flash's `/WP` and `/HOLD` (IO2/IO3, both SPI-capable) tie high
+    // for single-SPI operation — which used to make the whole 3V3 net
+    // look like an SPI bus and fault every regulator and VDD pin on
+    // it. Strapping is configuration, not signalling.
+    if net_is_power_rail(board, net) {
+        return;
+    }
     let has_dedicated = net.endpoints.iter().any(|e| {
         endpoint_has_any_capability(board, e.component, e.pin, capabilities)
             && !endpoint_has_any_capability(board, e.component, e.pin, competing)
@@ -523,11 +550,14 @@ fn ground_pin_for(board: &Board, component: &Component) -> Option<String> {
 
 /// Build a textual patch that inserts `count` decoupling capacitors and
 /// their two connects each, right after `component`'s declaration, so
-/// the source becomes fixable with a single byte-range patch.
+/// the source becomes fixable with a single byte-range patch. Inserted
+/// caps carry the manifest `value` (Phase A1: auto-inserted generics
+/// must not trip `E-SYNTH-VALUE-001`).
 fn decoupling_cap_patch(
     component: &Component,
     net: &str,
     gnd_pin: &str,
+    value: &str,
     count: usize,
     next_cap_number: &mut i64,
 ) -> PatchKind {
@@ -538,7 +568,7 @@ fn decoupling_cap_patch(
         *next_cap_number += 1;
         let _ = writeln!(
             text,
-            "\n  component {cap}: capacitor \"c_generic_0603\" // auto-inserted decoupling"
+            "\n  component {cap}: capacitor \"c_generic_0603\" value \"{value}\" // auto-inserted decoupling"
         );
         let _ = writeln!(text, "  connect {}.{net} -> {cap}.p1", component.refdes);
         let _ = writeln!(text, "  connect {}.{gnd_pin} -> {cap}.p2", component.refdes);
@@ -621,6 +651,7 @@ impl ErcRule for MissingDecouplingRule {
                                 component,
                                 &decoupling.net,
                                 &gnd_pin,
+                                &decoupling.value,
                                 shortfall,
                                 &mut next_cap_number,
                             ),
@@ -1306,6 +1337,11 @@ impl ErcRule for OrphanComponentRule {
     fn check(&self, board: &Board, file: &str) -> Vec<Diagnostic> {
         let mut out = Vec::new();
         for component in &board.components {
+            // Mechanical parts (mounting holes, fiducials) have no
+            // electrical pins by design — never orphaned (Phase D2).
+            if is_non_electrical_kind(&component.kind) {
+                continue;
+            }
             let has_any_connection = board.nets.iter().any(|net| {
                 net.endpoints
                     .iter()
@@ -1960,8 +1996,7 @@ impl ErcRule for DuplicateRefdesRule {
 // E-SYNTH-NAME-004 — refdes letter does not match the component kind
 // -----------------------------------------------------------------------------
 
-/// IEEE / industry reference-designator letters (Sierra Circuits
-/// "How to Draw and Design a PCB Schematic", guideline 10). Only
+/// IEEE / industry reference-designator letters. Only
 /// kinds with a well-known letter are listed; unknown kinds are
 /// never flagged (no false positives on new taxonomies).
 fn accepted_refdes_prefixes(kind: &str) -> Option<&'static [&'static str]> {
@@ -1983,8 +2018,19 @@ fn accepted_refdes_prefixes(kind: &str) -> Option<&'static [&'static str]> {
         // IC-family kinds: any package-level "U" convention.
         "ic" | "mcu" | "sensor" | "regulator" | "opamp" | "memory" | "modem" | "charger"
         | "secure_element" | "display" | "level_shifter" => &["U"][..],
+        // Mechanical / test parts (Phase D2).
+        "mounting_hole" => &["H", "MH"][..],
+        "testpoint" => &["TP"][..],
+        "fiducial" => &["FID"][..],
         _ => return None,
     })
+}
+
+/// Kinds that carry no electrical connectivity by design (Phase D2):
+/// mechanical and test parts. They are exempt from the connectivity
+/// rules that assume a part must be wired (orphan, no-driver, …).
+fn is_non_electrical_kind(kind: &str) -> bool {
+    matches!(kind, "mounting_hole" | "fiducial")
 }
 
 struct RefdesPrefixRule;
@@ -3240,6 +3286,201 @@ impl ErcRule for DividerRatioRule {
     }
 }
 
+// -----------------------------------------------------------------------------
+// E-SYNTH-VALUE-001 — generic passive with no value
+// -----------------------------------------------------------------------------
+
+/// Schematic-quality plan Phase A1: a component whose registry part is
+/// generic (`c_generic_*`, `r_generic_*`, `l_generic_*`) must declare a
+/// `value`. Without one the schematic renders a stock-symbol default
+/// (`C`, `R`) and the BOM carries the registry part id instead of an
+/// orderable value.
+///
+/// The rule never silently picks a value: the topology inference below
+/// is emitted as a `suggested_fix` patch (trailing attributes may appear
+/// after a `{ … }` body, so appending ` value "…"` at the statement end
+/// is valid in every component form).
+struct GenericPassiveValueRule;
+
+/// The generic-passive family of a registry part id, or `None` for
+/// concrete parts (which carry their value in `mpn`/identity).
+fn generic_passive_kind(part_id: &str) -> Option<&'static str> {
+    if part_id.starts_with("c_generic_") {
+        Some("capacitor")
+    } else if part_id.starts_with("r_generic_") {
+        Some("resistor")
+    } else if part_id.starts_with("l_generic_") {
+        Some("inductor")
+    } else {
+        None
+    }
+}
+
+/// Infer a starting value from the topology the cluster classifier
+/// already recognises: a cap on a rail the manifest requires decoupling
+/// for, an I²C pull-up, an LED series resistor. Returns the value and
+/// the human rationale recorded on the patch.
+fn infer_generic_value(board: &Board, component: &Component, kind: &str) -> (String, String) {
+    let Some(part) = component.part.as_ref() else {
+        return (String::new(), String::new());
+    };
+    // Global nets on each of the component's pins, in pin order.
+    let pin_nets: Vec<Option<&synth_ir::Net>> = (0..part.pins.len())
+        .map(|i| {
+            board
+                // u32 cast is bounded: pin indexes come from the part's own pin list.
+                .nets_containing(component.id, PinId(i as u32))
+                .map(|(_, net)| net)
+                .next()
+        })
+        .collect();
+
+    if kind == "capacitor" {
+        // A cap sitting on a net some other part requires decoupling
+        // for takes that manifest value (an LDO's `10uF` rail cap, an
+        // MCU's `100nF` decoupling cap).
+        for net in pin_nets.iter().flatten() {
+            for ep in &net.endpoints {
+                if ep.component == component.id {
+                    continue;
+                }
+                let Some(other) = board.component(ep.component) else {
+                    continue;
+                };
+                let Some(other_part) = other.part.as_ref() else {
+                    continue;
+                };
+                for decoupling in &other_part.required_decoupling {
+                    let matches = other_part
+                        .pins
+                        .iter()
+                        .position(|p| p.name == decoupling.net)
+                        // u32 cast is bounded: position indexes the pin list.
+                        .is_some_and(|idx| ep.pin == PinId(idx as u32));
+                    if matches {
+                        return (
+                            decoupling.value.clone(),
+                            format!(
+                                "matches {} required decoupling ({} on {})",
+                                other.describe(),
+                                decoupling.value,
+                                other.describe_pin(&decoupling.net),
+                            ),
+                        );
+                    }
+                }
+            }
+        }
+        return (
+            "100nF".to_string(),
+            "generic decoupling guess — confirm against the rail's required value".to_string(),
+        );
+    }
+
+    if kind == "resistor" {
+        use synth_registry::PinCapability as Cap;
+        let nets: Vec<&synth_ir::Net> = pin_nets.into_iter().flatten().collect();
+        let net_pins_capability = |caps: &[PinCapability]| {
+            nets.iter().any(|net| {
+                net.endpoints.iter().any(|ep| {
+                    board
+                        .pin(ep.component, ep.pin)
+                        .is_some_and(|p| p.capabilities.iter().any(|c| caps.contains(c)))
+                })
+            })
+        };
+        if net_pins_capability(&[Cap::I2cSda, Cap::I2cScl]) {
+            return (
+                "4.7k".to_string(),
+                "I2C pull-up — confirm against the bus speed and rail".to_string(),
+            );
+        }
+        let shares_net_with_led = nets.iter().any(|net| {
+            net.endpoints.iter().any(|ep| {
+                board
+                    .component(ep.component)
+                    .and_then(|c| c.part.as_ref())
+                    .is_some_and(|p| p.kind == "led")
+            })
+        });
+        if shares_net_with_led {
+            return (
+                "330R".to_string(),
+                "LED series resistor guess — confirm against the LED current".to_string(),
+            );
+        }
+        return (
+            "10k".to_string(),
+            "generic pull-up/pull-down guess — confirm against the circuit".to_string(),
+        );
+    }
+
+    (
+        "10uH".to_string(),
+        "generic inductor guess — confirm against the circuit".to_string(),
+    )
+}
+
+impl ErcRule for GenericPassiveValueRule {
+    fn code(&self) -> &'static str {
+        "E-SYNTH-VALUE-001"
+    }
+
+    fn category(&self) -> ErcCategory {
+        ErcCategory::RequiredSupport
+    }
+
+    fn check(&self, board: &Board, file: &str) -> Vec<Diagnostic> {
+        let mut out = Vec::new();
+        for component in &board.components {
+            if component.value.is_some() {
+                continue;
+            }
+            let Some(part) = component.part.as_ref() else {
+                continue;
+            };
+            let Some(kind) = generic_passive_kind(part.id.as_str()) else {
+                continue;
+            };
+            let (inferred, rationale) = infer_generic_value(board, component, kind);
+            out.push(
+                DiagnosticBuilder::new(self.code(), Severity::Error, "generic passive with no value")
+                    .location(Location::from_span(file.to_string(), component.source_span))
+                    .primary_entity(EntityRef::Component {
+                        id: component.refdes.clone(),
+                    })
+                    .expected(format!(
+                        "{} declares `value \"…\"` so the schematic and BOM carry an orderable value",
+                        component.describe(),
+                    ))
+                    .found(format!(
+                        "no `value` on generic {kind} (part `{}`) — the schematic renders a \
+                         stock-symbol default and the BOM falls back to the part id",
+                        part.id,
+                    ))
+                    .message(format!(
+                        "add `value \"{inferred}\"` to {} ({rationale})",
+                        component.describe(),
+                    ))
+                    .explanation_url(format!("synth.docs/diagnostics/{}", self.code()))
+                    .suggested_fix(synth_diagnostics::Patch {
+                        confidence: 0.7,
+                        rationale: Some(format!(
+                            "inferred `{inferred}` from topology ({rationale}) — verify before accepting"
+                        )),
+                        patch_consequence_preview: None,
+                        kind: PatchKind::InsertAt {
+                            at: component.source_span.byte_end,
+                            text: format!(" value \"{inferred}\""),
+                        },
+                    })
+                    .build(),
+            );
+        }
+        out
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -3334,6 +3575,8 @@ mod tests {
             source_span: Span::new(0, 0),
         };
         Board {
+            groups: Vec::new(),
+            legends: false,
             name: "b".into(),
             layers: 2,
             manufacturer: None,
@@ -3411,6 +3654,8 @@ mod tests {
             source_span: Span::new(0, 0),
         };
         Board {
+            groups: Vec::new(),
+            legends: false,
             name: "b".into(),
             layers: 2,
             manufacturer: None,
@@ -3496,6 +3741,8 @@ mod tests {
     fn identity_test_board(parts: Vec<(synth_registry::Part, &str)>) -> Board {
         use synth_diagnostics::Span;
         Board {
+            groups: Vec::new(),
+            legends: false,
             name: "b".into(),
             layers: 2,
             manufacturer: None,
@@ -3611,6 +3858,117 @@ mod tests {
         assert!(diags.is_empty(), "{diags:?}");
     }
 
+    fn value_test_board(part_id: &str, kind: &str, value: Option<&str>) -> Board {
+        use synth_diagnostics::Span;
+        use synth_ir::{Net, NetEndpoint, NetId};
+        let ep = |c: u32, p: u32| NetEndpoint {
+            component: ComponentId(c),
+            pin: PinId(p),
+            source_span: Span::new(0, 0),
+        };
+        Board {
+            groups: Vec::new(),
+            legends: false,
+            name: "b".into(),
+            layers: 2,
+            manufacturer: None,
+            revision: None,
+            company: None,
+            components: vec![Component {
+                id: ComponentId(0),
+                refdes: "R1".into(),
+                kind: kind.into(),
+                part: Some(part(
+                    part_id,
+                    kind,
+                    vec![
+                        pin("p1", ElectricalType::Passive),
+                        pin("p2", ElectricalType::Passive),
+                    ],
+                )),
+                value: value.map(str::to_string),
+                dnp: false,
+                properties: std::collections::BTreeMap::new(),
+                placement_hint: None,
+                group: None,
+                sheet: None,
+                source_span: Span::new(0, 0),
+            }],
+            nets: vec![Net {
+                id: NetId(0),
+                name: "n".into(),
+                endpoints: vec![ep(0, 0), ep(0, 1)],
+                netclass: None,
+                voltage: None,
+            }],
+            diff_pairs: vec![],
+            notes: vec![],
+            keepouts: vec![],
+            netclasses: vec![],
+            buses: vec![],
+            modules: vec![],
+            variants: vec![],
+            source_span: Span::new(0, 0),
+        }
+    }
+
+    #[test]
+    fn valueless_generic_resistor_errors_with_fix() {
+        let board = value_test_board("r_generic_0603", "resistor", None);
+        let diags = GenericPassiveValueRule.check(&board, "test.synth");
+        assert_eq!(diags.len(), 1, "{diags:?}");
+        assert_eq!(diags[0].code, "E-SYNTH-VALUE-001");
+        assert_eq!(diags[0].severity, Severity::Error);
+        assert_eq!(diags[0].suggested_fixes.len(), 1, "{diags:?}");
+        match &diags[0].suggested_fixes[0].kind {
+            PatchKind::InsertAt { text, .. } => assert_eq!(text, " value \"10k\""),
+            other => panic!("expected InsertAt fix, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn valued_generic_is_clean() {
+        for (id, kind, value) in [
+            ("r_generic_0603", "resistor", Some("10k")),
+            ("c_generic_0805", "capacitor", Some("100nF")),
+            ("l_generic_0603", "inductor", Some("10uH")),
+        ] {
+            let board = value_test_board(id, kind, value);
+            let diags = GenericPassiveValueRule.check(&board, "test.synth");
+            assert!(diags.is_empty(), "{id}: {diags:?}");
+        }
+    }
+
+    #[test]
+    fn concrete_part_without_value_is_clean() {
+        let board = value_test_board("bme680_env", "sensor", None);
+        let diags = GenericPassiveValueRule.check(&board, "test.synth");
+        assert!(diags.is_empty(), "{diags:?}");
+    }
+
+    #[test]
+    fn decoupling_cap_infers_manifest_value() {
+        let mut board = decoupling_test_board(None);
+        // The shared fixture uses part id "c"; make it generic so the
+        // rule fires, then expect the regulator's manifest value.
+        if let Some(cap) = board.components.iter_mut().find(|c| c.refdes == "C1") {
+            cap.part = Some(part(
+                "c_generic_0603",
+                "capacitor",
+                vec![
+                    pin("p1", ElectricalType::Passive),
+                    pin("p2", ElectricalType::Passive),
+                ],
+            ));
+        }
+        let diags = GenericPassiveValueRule.check(&board, "test.synth");
+        assert_eq!(diags.len(), 1, "{diags:?}");
+        match &diags[0].suggested_fixes[0].kind {
+            PatchKind::InsertAt { text, .. } => assert_eq!(text, " value \"10u\""),
+            other => panic!("expected InsertAt fix, got {other:?}"),
+        }
+    }
+
     #[test]
     fn unverified_part_emits_warning() {
         use synth_diagnostics::Span;
@@ -3654,6 +4012,8 @@ mod tests {
             }),
         };
         let board = Board {
+            groups: Vec::new(),
+            legends: false,
             name: "b".into(),
             layers: 2,
             manufacturer: None,
@@ -3713,6 +4073,8 @@ mod tests {
             }],
         );
         let board = Board {
+            groups: Vec::new(),
+            legends: false,
             name: "b".into(),
             layers: 2,
             manufacturer: None,

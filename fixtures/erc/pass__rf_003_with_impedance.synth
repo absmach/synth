@@ -1,7 +1,7 @@
 board "rf_pass" {
   layers 2
   component U1: antenna "ant_chip_2g4"
-  component R1: resistor "r_generic_0603"
+  component R1: resistor "r_generic_0603" value "10k"
 
   connect U1.feed -> R1.p1
 

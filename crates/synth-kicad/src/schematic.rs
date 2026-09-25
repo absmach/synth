@@ -85,6 +85,38 @@ use synth_layout::route::{
 /// Build the entire `.kicad_sch` s-expression for `board`.
 /// `project` is the per-project UUID namespace.
 #[allow(clippy::too_many_lines)]
+/// A wire `(stroke …)`, tinted with the net's class hue when it has
+/// one (schematic-quality plan Phase B1).
+///
+/// `net_settings` in the `.kicad_pro` carries the same hue per class,
+/// but KiCad matches those by net *name*, which it derives from the
+/// drawing at load time — an unlabelled local net is auto-named
+/// `Net-(U2-BOOT0)` and no pre-written assignment can reach it. The
+/// explicit stroke reaches every net and is what the SVG plot shows.
+fn wire_stroke(color: Option<[u8; 3]>) -> Sexp {
+    let mut parts = vec![
+        Sexp::list("width", vec![num(0.0)]),
+        Sexp::list("type", vec![Sexp::atom("default")]),
+    ];
+    if let Some(rgb) = color {
+        parts.push(rgb_color(rgb));
+    }
+    Sexp::list("stroke", parts)
+}
+
+/// `(color r g b a)` — KiCad wants the alpha as a float.
+fn rgb_color(rgb: [u8; 3]) -> Sexp {
+    Sexp::list(
+        "color",
+        vec![
+            num(f64::from(rgb[0])),
+            num(f64::from(rgb[1])),
+            num(f64::from(rgb[2])),
+            num(1.0),
+        ],
+    )
+}
+
 pub fn build_schematic(board: &Board, project: &Uuid) -> Sexp {
     build_schematic_from_layout(board, project, &synth_layout::layout(board))
 }
@@ -214,12 +246,19 @@ pub(crate) fn build_sheet_schematic(
             computed_drivers = crate::pin_reconcile::undriven_power_nets(board, &placements);
             &computed_drivers
         };
+    // KiCad has no named size below A4; a custom page is written as
+    // `(paper "User" W H)`, which KiCad honours exactly.
     let paper = match layout.sheet_size {
-        synth_layout::SheetSize::A4 => "A4",
-        synth_layout::SheetSize::A3 => "A3",
-        // KiCad doesn't carry a "Custom" enum value in the standard
-        // paper sizes; A2 is the safe upper bound for V1 designs.
-        synth_layout::SheetSize::A2 | synth_layout::SheetSize::Custom { .. } => "A2",
+        synth_layout::SheetSize::A4 => Sexp::list("paper", vec![Sexp::str("A4")]),
+        synth_layout::SheetSize::A3 => Sexp::list("paper", vec![Sexp::str("A3")]),
+        synth_layout::SheetSize::A2 => Sexp::list("paper", vec![Sexp::str("A2")]),
+        synth_layout::SheetSize::Custom {
+            width_mm,
+            height_mm,
+        } => Sexp::list(
+            "paper",
+            vec![Sexp::str("User"), num(width_mm), num(height_mm)],
+        ),
     };
 
     // Fabrication target from the `manufacturer "…"` board statement.
@@ -241,7 +280,7 @@ pub(crate) fn build_sheet_schematic(
         str_pair("generator", "synth-eda"),
         str_pair("generator_version", "10.0"),
         str_pair("uuid", render.uuid.to_string()),
-        Sexp::list("paper", vec![Sexp::str(paper)]),
+        paper,
         // Title block from board metadata. Deliberately NO date:
         // embedding today's date would break the byte-identical
         // re-export guarantee that motivates UUIDv5 everywhere else.
@@ -262,9 +301,8 @@ pub(crate) fn build_sheet_schematic(
                 ),
                 Sexp::list("date", vec![Sexp::str("")]),
                 // Revision from the `revision "…"` board statement, or
-                // blank when unset (Sierra Circuits "Schematic Design
-                // Rules": the title block should display the
-                // Revision).
+                // blank when unset; the title block displays the
+                // revision by convention.
                 Sexp::list(
                     "rev",
                     vec![Sexp::str(board.revision.as_deref().unwrap_or(""))],
@@ -273,9 +311,8 @@ pub(crate) fn build_sheet_schematic(
                     "company",
                     vec![Sexp::str(board.company.as_deref().unwrap_or(""))],
                 ),
-                // Design notes (ProtoExpress "Schematic Design Rules":
-                // "Provide all the required notes related to the
-                // schematic"). KiCad renders `comment` entries inside
+                // Design notes: a schematic should carry the notes a
+                // reader needs. KiCad renders `comment` entries inside
                 // its own title block, so they can never collide with
                 // placed symbols. Deterministic content only — no
                 // timestamps (byte-identical re-export guarantee).
@@ -408,6 +445,7 @@ pub(crate) fn build_sheet_schematic(
     // and emit one `(wire ...)` per segment.
     let mut emitted: HashSet<EmittedSegment> = HashSet::new();
     let quant = |v: f64| (v * 100.0).round() as i64;
+    let net_colors = synth_layout::netclass::net_colors(board);
     for wire in &layout.wires {
         let net_name = board
             .net(wire.net)
@@ -439,13 +477,7 @@ pub(crate) fn build_sheet_schematic(
                             Sexp::list("xy", vec![num(p2.0), num(p2.1)]),
                         ],
                     ),
-                    Sexp::list(
-                        "stroke",
-                        vec![
-                            Sexp::list("width", vec![num(0.0)]),
-                            Sexp::list("type", vec![Sexp::atom("default")]),
-                        ],
-                    ),
+                    wire_stroke(net_colors.get(&wire.net).copied()),
                     str_pair("uuid", wire_uuid.to_string()),
                 ],
             ));
@@ -487,7 +519,8 @@ pub(crate) fn build_sheet_schematic(
     // were merged into `layout.net_labels` by `synth_layout::layout`,
     // so this loop covers the routing-fallback labels too.
     for label in &layout.net_labels {
-        if let Some(sexps) = build_net_label(board, label, &placements, project) {
+        let color = net_colors.get(&label.net).copied();
+        if let Some(sexps) = build_net_label(board, label, &placements, project, color) {
             children.extend(sexps);
         }
     }
@@ -516,9 +549,14 @@ pub(crate) fn build_sheet_schematic(
     }
 
     // Sub-circuit captions: one text run per declared `group`, drawn
-    // above the parts it names. These are pure annotation — KiCad
-    // treats `(text)` as a graphic with no electrical meaning, so a
-    // caption can never join a net or trip ERC.
+    // inside the group's box at the top-left. These are pure
+    // annotation — KiCad treats `(text)` as a graphic with no
+    // electrical meaning, so a caption can never join a net or trip
+    // ERC. Captions render bold (Phase B4 typography hierarchy: bold
+    // 2.0 mm caption, 1.27 mm refdes/value, 1.0 mm note/legend line);
+    // every other kind renders plain. Per-text color is not part of
+    // KiCad's grammar — `kicad-cli` rejects `(color …)` inside text
+    // effects — so hue lives on the box and on net classes only.
     for (index, annotation) in layout.annotations.iter().enumerate() {
         let (x, y) = annotation.at_mm;
         let uuid = derive_entity_uuid(
@@ -526,6 +564,13 @@ pub(crate) fn build_sheet_schematic(
             "annotation",
             &format!("{index}_{}", annotation.text),
         );
+        let mut font = vec![Sexp::list(
+            "size",
+            vec![num(annotation.size_mm), num(annotation.size_mm)],
+        )];
+        if annotation.kind == synth_layout::TextKind::Caption {
+            font.push(Sexp::atom("bold"));
+        }
         children.push(Sexp::list(
             "text",
             vec![
@@ -534,13 +579,7 @@ pub(crate) fn build_sheet_schematic(
                 Sexp::list(
                     "effects",
                     vec![
-                        Sexp::list(
-                            "font",
-                            vec![Sexp::list(
-                                "size",
-                                vec![num(annotation.size_mm), num(annotation.size_mm)],
-                            )],
-                        ),
+                        Sexp::list("font", font),
                         Sexp::list("justify", vec![Sexp::atom("left"), Sexp::atom("bottom")]),
                     ],
                 ),
@@ -553,11 +592,19 @@ pub(crate) fn build_sheet_schematic(
     // (§21.1), framing the caption and its parts. Same graphic
     // status as captions — no electrical meaning, never trips ERC.
     // Shape grammar mirrors the embedded symbol library
-    // (`(rectangle … (stroke … (type default)) (fill (type none)))`),
-    // which is what `kicad-cli sch erc` accepts at top level — a bare
+    // (`(rectangle … (stroke …) (fill …))`), which is what
+    // `kicad-cli sch erc` accepts at top level — a bare
     // `(rect … (fill none))` fails to load.
+    //
+    // Phase B2 styling: a dashed stroke in the group's deterministic
+    // hue ([`synth_layout::group_color`]) plus a translucent fill of
+    // the same hue, so each region reads as its own block (reference
+    // mechanism 2). The grammar was verified against `kicad-cli 10`:
+    // `(stroke (type dash) (color r g b 1))` and
+    // `(fill (type color) (color r g b 0.08))` both load.
     for group_box in &layout.group_boxes {
         let uuid = derive_entity_uuid(project, "group_box", &group_box.group);
+        let [r, g, b] = group_box.color;
         children.push(Sexp::list(
             "rectangle",
             vec![
@@ -573,10 +620,33 @@ pub(crate) fn build_sheet_schematic(
                     "stroke",
                     vec![
                         Sexp::list("width", vec![num(0.254)]),
-                        Sexp::list("type", vec![Sexp::atom("default")]),
+                        Sexp::list("type", vec![Sexp::atom("dash")]),
+                        Sexp::list(
+                            "color",
+                            vec![
+                                Sexp::atom(r.to_string()),
+                                Sexp::atom(g.to_string()),
+                                Sexp::atom(b.to_string()),
+                                num(1.0),
+                            ],
+                        ),
                     ],
                 ),
-                Sexp::list("fill", vec![Sexp::list("type", vec![Sexp::atom("none")])]),
+                Sexp::list(
+                    "fill",
+                    vec![
+                        Sexp::list("type", vec![Sexp::atom("color")]),
+                        Sexp::list(
+                            "color",
+                            vec![
+                                Sexp::atom(r.to_string()),
+                                Sexp::atom(g.to_string()),
+                                Sexp::atom(b.to_string()),
+                                num(0.08),
+                            ],
+                        ),
+                    ],
+                ),
                 str_pair("uuid", uuid.to_string()),
             ],
         ));
@@ -958,6 +1028,11 @@ fn build_no_connect(
     ))
 }
 
+/// How far (mm) a label on a vertical pin continues out along the pin
+/// before turning sideways — one grid step, enough to lift the label text
+/// off the part's end and away from its side-placed fields.
+const VERTICAL_LABEL_RISE: f64 = 2.54;
+
 /// Emit a KiCad `(global_label)` entry attached to a stub extending
 /// from the pin's coordinate.
 fn build_net_label(
@@ -965,10 +1040,21 @@ fn build_net_label(
     label: &synth_layout::NetLabel,
     placements: &HashMap<ComponentId, &ComponentPlacement>,
     project: &Uuid,
+    color: Option<[u8; 3]>,
 ) -> Option<Vec<Sexp>> {
     let component = board.component(label.component)?;
-    let (x, y, dx, _dy) = pin_terminal_xy(board, label.component, label.pin, placements)?;
+    let (x, y, dx, dy) = pin_terminal_xy(board, label.component, label.pin, placements)?;
     let stub_len = 5.08;
+    // A label on a vertical pin (a resistor or LED turned upright) used to
+    // turn sideways right at the pin end, which drops its text beside the
+    // part's end — in the same column as the part's side-placed
+    // Reference/Value fields. Carry the wire one grid step further out
+    // along the pin first, so the label clears the part's extent.
+    let elbow_y = if dx.abs() < 0.1 && dy.abs() > 0.1 {
+        y + dy.signum() * VERTICAL_LABEL_RISE
+    } else {
+        y
+    };
     let (stub_x, angle) = if dx >= -0.1 {
         (x + stub_len, 0.0)
     } else {
@@ -979,44 +1065,48 @@ fn build_net_label(
     let wire_uuid = derive_entity_uuid(project, "net_label_wire", &key);
     let label_uuid = derive_entity_uuid(project, "net_label", &key);
 
-    let wire_sexp = Sexp::list(
-        "wire",
-        vec![
-            Sexp::list(
-                "pts",
-                vec![
-                    Sexp::list("xy", vec![num(x), num(y)]),
-                    Sexp::list("xy", vec![num(stub_x), num(y)]),
-                ],
-            ),
-            Sexp::list(
-                "stroke",
-                vec![
-                    Sexp::list("width", vec![num(0.0)]),
-                    Sexp::list("type", vec![Sexp::atom("default")]),
-                ],
-            ),
-            str_pair("uuid", wire_uuid.to_string()),
-        ],
-    );
+    let wire = |from: (f64, f64), to: (f64, f64), uuid: Uuid| {
+        Sexp::list(
+            "wire",
+            vec![
+                Sexp::list(
+                    "pts",
+                    vec![
+                        Sexp::list("xy", vec![num(from.0), num(from.1)]),
+                        Sexp::list("xy", vec![num(to.0), num(to.1)]),
+                    ],
+                ),
+                wire_stroke(color),
+                str_pair("uuid", uuid.to_string()),
+            ],
+        )
+    };
+    let mut out = Vec::with_capacity(3);
+    if (elbow_y - y).abs() > f64::EPSILON {
+        let rise_uuid = derive_entity_uuid(project, "net_label_rise", &key);
+        out.push(wire((x, y), (x, elbow_y), rise_uuid));
+    }
+    out.push(wire((x, elbow_y), (stub_x, elbow_y), wire_uuid));
 
+    // The label text carries the same hue as its wire, so a name and
+    // the line it names read as one object (reference sheet
+    // mechanism 4).
+    let mut font = vec![Sexp::list("size", vec![num(1.27), num(1.27)])];
+    if let Some(rgb) = color {
+        font.push(rgb_color(rgb));
+    }
     let label_sexp = Sexp::list(
         "label",
         vec![
             Sexp::str(&label.label),
-            Sexp::list("at", vec![num(stub_x), num(y), num(angle)]),
-            Sexp::list(
-                "effects",
-                vec![Sexp::list(
-                    "font",
-                    vec![Sexp::list("size", vec![num(1.27), num(1.27)])],
-                )],
-            ),
+            Sexp::list("at", vec![num(stub_x), num(elbow_y), num(angle)]),
+            Sexp::list("effects", vec![Sexp::list("font", font)]),
             str_pair("uuid", label_uuid.to_string()),
         ],
     );
+    out.push(label_sexp);
 
-    Some(vec![wire_sexp, label_sexp])
+    Some(out)
 }
 
 /// Cross-sheet stub for one in-sheet endpoint of a net that continues
@@ -1722,6 +1812,20 @@ fn build_symbol_unit(
         } else {
             (w, h)
         }
+    } else if part.kicad_symbol.is_some() {
+        // A part mapped to a stock KiCad symbol is drawn with *that*
+        // symbol's geometry, which the pin-count synthesis below does
+        // not predict — a USB-C receptacle is ~50 mm tall where the
+        // synthesis guessed ~30, so the Value field landed 8 mm inside
+        // the body, on top of the pin names. `body_size_for_part` is
+        // the same measurement the layouter places against, so fields
+        // and placement now agree on where the body ends.
+        let (w, h) = synth_layout::body_size_for_part(part);
+        if matches!(placement.rotation, Rotation::Ninety | Rotation::TwoSeventy) {
+            (h, w)
+        } else {
+            (w, h)
+        }
     } else {
         let sides: Vec<PinSide> = part.pins.iter().map(classify_ic_pin).collect();
         let top_n = sides.iter().filter(|s| **s == PinSide::Top).count();
@@ -1752,7 +1856,11 @@ fn build_symbol_unit(
         .value
         .as_deref()
         .or(part.mpn.as_deref())
-        .unwrap_or(part_id);
+        // Schematic-quality plan Phase A1: `value` → part `mpn` →
+        // `(no value)` sentinel, never the registry part id. An
+        // unorderable value must look unorderable (`E-SYNTH-VALUE-001`
+        // fires for the generic case).
+        .unwrap_or("(no value)");
     let display_value = if display_value_raw.starts_with("c_generic_") {
         "C"
     } else if display_value_raw.starts_with("r_generic_") {
@@ -1773,6 +1881,15 @@ fn build_symbol_unit(
         Rotation::TwoSeventy => 270.0,
     };
     let angle = ((logical_deg + natural_offset_deg) as i32).rem_euclid(360) as f64;
+    // KiCad reads an instance field's angle relative to the symbol's, so a
+    // field written at 0 on a symbol turned 90/270 draws vertical text that
+    // runs along the body (an LED's value into its emission arrows).
+    // Counter-rotating keeps Reference/Value horizontal on every part.
+    let field_angle = if angle == 90.0 || angle == 270.0 {
+        90.0
+    } else {
+        0.0
+    };
 
     let mut fields = vec![
         str_pair("lib_id", lib_id),
@@ -1793,7 +1910,7 @@ fn build_symbol_unit(
         vec![
             Sexp::str("Reference"),
             Sexp::str(&component.refdes),
-            Sexp::list("at", vec![num(ref_pos.0), num(ref_pos.1), num(0.0)]),
+            Sexp::list("at", vec![num(ref_pos.0), num(ref_pos.1), num(field_angle)]),
             field_effects(ref_justify),
         ],
     ));
@@ -1802,7 +1919,10 @@ fn build_symbol_unit(
         vec![
             Sexp::str("Value"),
             Sexp::str(display_value),
-            Sexp::list("at", vec![num(value_pos.0), num(value_pos.1), num(0.0)]),
+            Sexp::list(
+                "at",
+                vec![num(value_pos.0), num(value_pos.1), num(field_angle)],
+            ),
             field_effects(value_justify),
         ],
     ));
@@ -2099,6 +2219,48 @@ mod tests {
         );
     }
 
+    /// Schematic-quality plan B2: the styled group rectangle (dashed
+    /// stroke, `(color …)`, `(fill (type color) …)`) and the bold
+    /// caption must both load in `kicad-cli` — the shape grammar is
+    /// sensitive (a bare `(fill none)` fails). Skips when KiCad is not
+    /// installed.
+    #[test]
+    fn styled_group_box_and_bold_caption_load_in_kicad() {
+        let board = lower_inline(
+            r#"board "b" {
+                component R1: resistor "r_generic_0603" value "10k"
+                group "Input" {
+                    component C1: capacitor "c_generic_0603" value "100nF"
+                    notes "Input notes" {
+                        "Keep leads short."
+                    }
+                }
+                connect R1.p1 -> C1.p1
+                connect R1.p2 -> C1.p2
+            }"#,
+        );
+        let project = crate::uuid_v5::project_namespace(&board.name);
+        let text = build_schematic(&board, &project).to_string_pretty();
+        // Sanity: the styled forms are present before we ask KiCad.
+        assert!(text.contains("(type dash)"), "dashed stroke");
+        assert!(text.contains("(type color)"), "colour fill");
+        assert!(text.contains("bold"), "bold caption");
+        assert!(text.contains("Keep leads short."), "in-box note line");
+
+        let dir = std::env::temp_dir().join(format!("synth-b2-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("b.kicad_sch");
+        std::fs::write(&path, &text).unwrap();
+        match crate::run_kicad_erc(&path) {
+            Ok(_) => {}
+            Err(crate::ErcRunError::NotInstalled { .. }) => {
+                eprintln!("kicad-cli not installed; skipping styled-box load test");
+            }
+            Err(e) => panic!("styled group box must load in kicad-cli: {e}"),
+        }
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
     #[test]
     fn group_box_exports_rectangle() {
         let board = lower_inline(
@@ -2115,6 +2277,18 @@ mod tests {
         let text = build_schematic(&board, &project).to_string_pretty();
         assert!(text.contains("(rectangle"), "group outline box must render");
         assert!(text.contains("\"Input\""), "group caption must render");
+        // Phase B2: dashed stroke in the group hue plus a translucent
+        // fill of the same hue.
+        assert!(text.contains("(type dash)"), "box stroke must be dashed");
+        assert!(
+            text.contains("(fill") && text.contains("(type color)"),
+            "box must carry a colour fill"
+        );
+        // Phase B4: the caption renders bold.
+        assert!(
+            text.contains("bold"),
+            "group caption must render bold: {text}"
+        );
     }
 
     #[test]

@@ -16,7 +16,7 @@ for i in range(1, 6):
 # 2. No Position Available (01..05) — Keepout covers almost entire board, remaining area too small
 for i in range(1, 6):
     path = os.path.join(out_dir, f"no_position_{i:02d}.synth")
-    radius = 110 + i * 5
+    radius = 165 + i * 5
     with open(path, "w") as f:
         f.write(f'board "no_position_{i:02d}" {{\n  layers 2\n')
         f.write('  component U1: mcu "rp2350"\n')

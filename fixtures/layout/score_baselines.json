@@ -1,8 +1,8 @@
 {
   "fixtures": {
     "crystal": {
-      "crossing_count": 1,
-      "total_wire_length_mm": 104.14,
+      "crossing_count": 0,
+      "total_wire_length_mm": 86.36000000000001,
       "label_stub_count": 0,
       "aesthetic_violations": []
     },
@@ -14,20 +14,20 @@
     },
     "divider": {
       "crossing_count": 0,
-      "total_wire_length_mm": 163.83,
+      "total_wire_length_mm": 148.58999999999997,
       "label_stub_count": 2,
       "aesthetic_violations": []
     },
     "full_board_combo": {
-      "crossing_count": 1,
-      "total_wire_length_mm": 370.84,
+      "crossing_count": 0,
+      "total_wire_length_mm": 347.9799999999999,
       "label_stub_count": 17,
       "aesthetic_violations": []
     },
     "i2c_bus": {
       "crossing_count": 0,
-      "total_wire_length_mm": 115.57000000000001,
-      "label_stub_count": 2,
+      "total_wire_length_mm": 0.0,
+      "label_stub_count": 4,
       "aesthetic_violations": []
     },
     "ldo_block": {
@@ -61,5 +61,5 @@
       "aesthetic_violations": []
     }
   },
-  "total_crossing_count": 2
+  "total_crossing_count": 0
 }

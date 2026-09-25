@@ -11,13 +11,14 @@ board "placement_and_diff_pair" {
     placement_hint { region: top_left priority: hard }
   }
   component J1: connector "usb_c_receptacle"
-  component C1: capacitor "c_generic_0805"
+  component C1: capacitor "c_generic_0805" value "10uF"
 
   connect J1.vbus -> C1.p1
   connect J1.gnd  -> C1.p2
   connect J1.gnd  -> U1.gnd
-  connect J1.vbus -> U1.vdd_io
-  connect J1.vbus -> U1.vdd_core
+  connect J1.vbus -> U1.iovdd
+  connect J1.vbus -> U1.dvdd
+  connect J1.vbus -> U1.dvdd3
   connect J1.vbus -> U1.run
 
   // USB D+/D- run from the connector straight to the MCU's native

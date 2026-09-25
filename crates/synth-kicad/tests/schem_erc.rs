@@ -17,6 +17,8 @@ use synth_registry::{Lifecycle, Part, PartId, Pin, PinNumber, RequiredDecoupling
 
 fn empty_board() -> Board {
     Board {
+        groups: Vec::new(),
+        legends: false,
         name: "test".to_string(),
         layers: 2,
         manufacturer: None,
@@ -68,6 +70,17 @@ fn wire(net: NetId, points: Vec<(f64, f64)>) -> synth_layout::WirePath {
         points,
         junctions: Vec::new(),
     }
+}
+
+/// Diagnostics for one rule code, ignoring the rest. Synthetic test
+/// layouts are sparse, so the info-level sheet-fill rule
+/// (`E-SYNTH-SCHEM-012`) fires on all of them; filtering keeps each
+/// twin-pair test focused on the rule it exercises.
+fn rule(
+    diags: Vec<synth_diagnostics::Diagnostic>,
+    code: &str,
+) -> Vec<synth_diagnostics::Diagnostic> {
+    diags.into_iter().filter(|d| d.code == code).collect()
 }
 
 fn flag(component: ComponentId, pin: PinId, kind: PowerFlagKind, label: &str) -> PowerFlag {
@@ -136,7 +149,7 @@ fn schem_001_fires_on_inverted_gnd_symbol() {
         vec![flag(ComponentId(0), PinId(1), PowerFlagKind::Gnd, "GND")],
         Vec::new(),
     );
-    let violations = check(&layout, &empty_board());
+    let violations = rule(check(&layout, &empty_board()), "E-SYNTH-SCHEM-001");
     assert_eq!(violations.len(), 1);
     assert_eq!(violations[0].code, "E-SYNTH-SCHEM-001");
     assert_eq!(violations[0].severity, Severity::Warning);
@@ -151,7 +164,7 @@ fn schem_001_stays_silent_on_correctly_oriented_gnd() {
         vec![flag(ComponentId(0), PinId(1), PowerFlagKind::Gnd, "GND")],
         Vec::new(),
     );
-    assert!(check(&layout, &empty_board()).is_empty());
+    assert!(rule(check(&layout, &empty_board()), "E-SYNTH-SCHEM-001").is_empty());
 }
 
 // ----- E-SYNTH-SCHEM-002 -----------------------------------------------------
@@ -164,7 +177,7 @@ fn schem_002_fires_on_six_crossings() {
         wires.push(wire(NetId(i), vec![(x, 0.0), (x, 10.0)]));
     }
     let layout = layout(Vec::new(), wires, Vec::new(), Vec::new());
-    let violations = check(&layout, &empty_board());
+    let violations = rule(check(&layout, &empty_board()), "E-SYNTH-SCHEM-002");
     assert_eq!(violations.len(), 1);
     assert_eq!(violations[0].code, "E-SYNTH-SCHEM-002");
     assert!(violations[0].message.as_deref().unwrap().contains('6'));
@@ -182,7 +195,7 @@ fn schem_002_stays_silent_on_two_crossings() {
         Vec::new(),
         Vec::new(),
     );
-    assert!(check(&layout, &empty_board()).is_empty());
+    assert!(rule(check(&layout, &empty_board()), "E-SYNTH-SCHEM-002").is_empty());
 }
 
 // ----- E-SYNTH-SCHEM-003 -----------------------------------------------------
@@ -199,6 +212,8 @@ fn decoupling_board() -> Board {
     cap_part.required_decoupling = Vec::new();
 
     Board {
+        groups: Vec::new(),
+        legends: false,
         name: "dec".to_string(),
         layers: 2,
         manufacturer: None,
@@ -273,7 +288,7 @@ fn schem_003_fires_on_cap_far_from_ic() {
         Vec::new(),
         Vec::new(),
     );
-    let violations = check(&layout, &board);
+    let violations = rule(check(&layout, &board), "E-SYNTH-SCHEM-003");
     assert_eq!(violations.len(), 1);
     assert_eq!(violations[0].code, "E-SYNTH-SCHEM-003");
     assert!(violations[0]
@@ -294,7 +309,7 @@ fn schem_003_stays_silent_on_cap_near_ic() {
         Vec::new(),
         Vec::new(),
     );
-    assert!(check(&layout, &board).is_empty());
+    assert!(rule(check(&layout, &board), "E-SYNTH-SCHEM-003").is_empty());
 }
 
 // ----- E-SYNTH-SCHEM-004 -----------------------------------------------------
@@ -307,7 +322,7 @@ fn schem_004_fires_on_long_explicit_net() {
         Vec::new(),
         Vec::new(),
     );
-    let violations = check(&layout, &empty_board());
+    let violations = rule(check(&layout, &empty_board()), "E-SYNTH-SCHEM-004");
     assert_eq!(violations.len(), 1);
     assert_eq!(violations[0].code, "E-SYNTH-SCHEM-004");
     assert!(violations[0].message.as_deref().unwrap().contains("net 0"));
@@ -321,7 +336,7 @@ fn schem_004_stays_silent_on_short_net() {
         Vec::new(),
         Vec::new(),
     );
-    assert!(check(&layout, &empty_board()).is_empty());
+    assert!(rule(check(&layout, &empty_board()), "E-SYNTH-SCHEM-004").is_empty());
 }
 
 #[test]
@@ -340,7 +355,7 @@ fn schem_004_stays_silent_on_label_truncated_net() {
             label: "LONG_SIG".to_string(),
         }],
     );
-    assert!(check(&layout, &empty_board()).is_empty());
+    assert!(rule(check(&layout, &empty_board()), "E-SYNTH-SCHEM-004").is_empty());
 }
 
 // ----- E-SYNTH-SCHEM-005 -----------------------------------------------------
@@ -360,7 +375,7 @@ fn schem_005_fires_on_four_line_node() {
         Vec::new(),
     );
     l.junctions = vec![(5.0, 5.0)];
-    let violations = check(&l, &empty_board());
+    let violations = rule(check(&l, &empty_board()), "E-SYNTH-SCHEM-005");
     assert_eq!(violations.len(), 1);
     assert_eq!(violations[0].code, "E-SYNTH-SCHEM-005");
     assert_eq!(violations[0].severity, Severity::Warning);
@@ -378,7 +393,7 @@ fn schem_005_stays_silent_on_three_line_t_node() {
         Vec::new(),
     );
     l.junctions = vec![(5.0, 5.0)];
-    assert!(check(&l, &empty_board()).is_empty());
+    assert!(rule(check(&l, &empty_board()), "E-SYNTH-SCHEM-005").is_empty());
 }
 
 // ----- E-SYNTH-SCHEM-006 -----------------------------------------------------
@@ -398,7 +413,7 @@ fn schem_006_fires_on_junction_dot_touching_foreign_wire() {
         Vec::new(),
     );
     l.junctions = vec![(5.0, 5.0)];
-    let violations = check(&l, &empty_board());
+    let violations = rule(check(&l, &empty_board()), "E-SYNTH-SCHEM-006");
     assert_eq!(violations.len(), 1);
     assert_eq!(violations[0].code, "E-SYNTH-SCHEM-006");
 }
@@ -416,7 +431,7 @@ fn schem_006_stays_silent_when_foreign_wire_stops_short() {
         Vec::new(),
     );
     l.junctions = vec![(5.0, 5.0)];
-    assert!(check(&l, &empty_board()).is_empty());
+    assert!(rule(check(&l, &empty_board()), "E-SYNTH-SCHEM-006").is_empty());
 }
 
 // ----- E-SYNTH-SCHEM-007 -----------------------------------------------------
@@ -430,7 +445,7 @@ fn schem_007_fires_on_content_past_the_sheet_edge() {
         Vec::new(),
         Vec::new(),
     );
-    let violations = check(&layout, &empty_board());
+    let violations = rule(check(&layout, &empty_board()), "E-SYNTH-SCHEM-007");
     assert_eq!(violations.len(), 1);
     assert_eq!(violations[0].code, "E-SYNTH-SCHEM-007");
 }
@@ -443,7 +458,7 @@ fn schem_007_stays_silent_when_content_fits_the_sheet() {
         Vec::new(),
         Vec::new(),
     );
-    assert!(check(&layout, &empty_board()).is_empty());
+    assert!(rule(check(&layout, &empty_board()), "E-SYNTH-SCHEM-007").is_empty());
 }
 
 // ----- aggregate -------------------------------------------------------------
@@ -495,6 +510,10 @@ fn all_rules_fire_together_in_order() {
             "E-SYNTH-SCHEM-005",
             "E-SYNTH-SCHEM-006",
             "E-SYNTH-SCHEM-007",
+            // No 012: component 2 sits at x=350, past the A4 edge, so the
+            // page is too SMALL rather than too roomy. 012 only fires when a
+            // smaller page would actually fit (see the unit tests
+            // `roomy_sheet_is_flagged` / `already_fitted_sheet_is_silent`).
         ]
     );
 }

@@ -55,7 +55,7 @@ electrical_type = "differential_positive"
 capabilities = ["usb_dp"]
 
 [[pins]]
-name = "usb_dm"
+name = "usb_dn"
 number = "51"
 electrical_type = "differential_negative"
 capabilities = ["usb_dn"]

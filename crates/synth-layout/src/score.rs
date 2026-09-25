@@ -137,6 +137,8 @@ mod tests {
 
     fn empty_board() -> Board {
         Board {
+            groups: Vec::new(),
+            legends: false,
             name: "test".to_string(),
             layers: 2,
             manufacturer: None,

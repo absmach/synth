@@ -23,7 +23,7 @@ expression: board
         "lcsc_pn": "C14663",
         "pins": [
           {
-            "name": "vdd_io",
+            "name": "iovdd",
             "number": "1",
             "electrical_type": "power_input",
             "capabilities": [],
@@ -32,7 +32,7 @@ expression: board
             "voltage_max_v": null
           },
           {
-            "name": "vdd_core",
+            "name": "dvdd3",
             "number": "23",
             "electrical_type": "power_input",
             "capabilities": [],
@@ -42,7 +42,7 @@ expression: board
           },
           {
             "name": "gnd",
-            "number": "57",
+            "number": "61",
             "electrical_type": "power_input",
             "capabilities": [],
             "required": true,
@@ -51,7 +51,7 @@ expression: board
           },
           {
             "name": "usb_dp",
-            "number": "47",
+            "number": "52",
             "electrical_type": "differential_positive",
             "capabilities": [
               "usb_dp"
@@ -62,7 +62,7 @@ expression: board
           },
           {
             "name": "usb_dn",
-            "number": "46",
+            "number": "51",
             "electrical_type": "differential_negative",
             "capabilities": [
               "usb_dn"
@@ -127,7 +127,282 @@ expression: board
           },
           {
             "name": "gp4",
-            "number": "6",
+            "number": "7",
+            "electrical_type": "bidirectional",
+            "capabilities": [
+              "gpio"
+            ],
+            "required": false,
+            "unit": null,
+            "voltage_max_v": null
+          },
+          {
+            "name": "gp5",
+            "number": "8",
+            "electrical_type": "bidirectional",
+            "capabilities": [
+              "gpio"
+            ],
+            "required": false,
+            "unit": null,
+            "voltage_max_v": null
+          },
+          {
+            "name": "gp6",
+            "number": "9",
+            "electrical_type": "bidirectional",
+            "capabilities": [
+              "gpio"
+            ],
+            "required": false,
+            "unit": null,
+            "voltage_max_v": null
+          },
+          {
+            "name": "gp7",
+            "number": "10",
+            "electrical_type": "bidirectional",
+            "capabilities": [
+              "gpio"
+            ],
+            "required": false,
+            "unit": null,
+            "voltage_max_v": null
+          },
+          {
+            "name": "gp8",
+            "number": "12",
+            "electrical_type": "bidirectional",
+            "capabilities": [
+              "gpio"
+            ],
+            "required": false,
+            "unit": null,
+            "voltage_max_v": null
+          },
+          {
+            "name": "gp9",
+            "number": "13",
+            "electrical_type": "bidirectional",
+            "capabilities": [
+              "gpio"
+            ],
+            "required": false,
+            "unit": null,
+            "voltage_max_v": null
+          },
+          {
+            "name": "gp10",
+            "number": "14",
+            "electrical_type": "bidirectional",
+            "capabilities": [
+              "gpio"
+            ],
+            "required": false,
+            "unit": null,
+            "voltage_max_v": null
+          },
+          {
+            "name": "gp11",
+            "number": "15",
+            "electrical_type": "bidirectional",
+            "capabilities": [
+              "gpio"
+            ],
+            "required": false,
+            "unit": null,
+            "voltage_max_v": null
+          },
+          {
+            "name": "gp12",
+            "number": "16",
+            "electrical_type": "bidirectional",
+            "capabilities": [
+              "gpio"
+            ],
+            "required": false,
+            "unit": null,
+            "voltage_max_v": null
+          },
+          {
+            "name": "gp13",
+            "number": "17",
+            "electrical_type": "bidirectional",
+            "capabilities": [
+              "gpio"
+            ],
+            "required": false,
+            "unit": null,
+            "voltage_max_v": null
+          },
+          {
+            "name": "gp14",
+            "number": "18",
+            "electrical_type": "bidirectional",
+            "capabilities": [
+              "gpio"
+            ],
+            "required": false,
+            "unit": null,
+            "voltage_max_v": null
+          },
+          {
+            "name": "gp15",
+            "number": "19",
+            "electrical_type": "bidirectional",
+            "capabilities": [
+              "gpio"
+            ],
+            "required": false,
+            "unit": null,
+            "voltage_max_v": null
+          },
+          {
+            "name": "gp16",
+            "number": "27",
+            "electrical_type": "bidirectional",
+            "capabilities": [
+              "gpio"
+            ],
+            "required": false,
+            "unit": null,
+            "voltage_max_v": null
+          },
+          {
+            "name": "gp17",
+            "number": "28",
+            "electrical_type": "bidirectional",
+            "capabilities": [
+              "gpio"
+            ],
+            "required": false,
+            "unit": null,
+            "voltage_max_v": null
+          },
+          {
+            "name": "gp18",
+            "number": "29",
+            "electrical_type": "bidirectional",
+            "capabilities": [
+              "gpio"
+            ],
+            "required": false,
+            "unit": null,
+            "voltage_max_v": null
+          },
+          {
+            "name": "gp19",
+            "number": "31",
+            "electrical_type": "bidirectional",
+            "capabilities": [
+              "gpio"
+            ],
+            "required": false,
+            "unit": null,
+            "voltage_max_v": null
+          },
+          {
+            "name": "gp20",
+            "number": "32",
+            "electrical_type": "bidirectional",
+            "capabilities": [
+              "gpio"
+            ],
+            "required": false,
+            "unit": null,
+            "voltage_max_v": null
+          },
+          {
+            "name": "gp21",
+            "number": "33",
+            "electrical_type": "bidirectional",
+            "capabilities": [
+              "gpio"
+            ],
+            "required": false,
+            "unit": null,
+            "voltage_max_v": null
+          },
+          {
+            "name": "gp22",
+            "number": "34",
+            "electrical_type": "bidirectional",
+            "capabilities": [
+              "gpio"
+            ],
+            "required": false,
+            "unit": null,
+            "voltage_max_v": null
+          },
+          {
+            "name": "gp23",
+            "number": "35",
+            "electrical_type": "bidirectional",
+            "capabilities": [
+              "gpio"
+            ],
+            "required": false,
+            "unit": null,
+            "voltage_max_v": null
+          },
+          {
+            "name": "gp24",
+            "number": "36",
+            "electrical_type": "bidirectional",
+            "capabilities": [
+              "gpio"
+            ],
+            "required": false,
+            "unit": null,
+            "voltage_max_v": null
+          },
+          {
+            "name": "gp25",
+            "number": "37",
+            "electrical_type": "bidirectional",
+            "capabilities": [
+              "gpio"
+            ],
+            "required": false,
+            "unit": null,
+            "voltage_max_v": null
+          },
+          {
+            "name": "gp26",
+            "number": "40",
+            "electrical_type": "bidirectional",
+            "capabilities": [
+              "gpio"
+            ],
+            "required": false,
+            "unit": null,
+            "voltage_max_v": null
+          },
+          {
+            "name": "gp27",
+            "number": "41",
+            "electrical_type": "bidirectional",
+            "capabilities": [
+              "gpio"
+            ],
+            "required": false,
+            "unit": null,
+            "voltage_max_v": null
+          },
+          {
+            "name": "gp28",
+            "number": "42",
+            "electrical_type": "bidirectional",
+            "capabilities": [
+              "gpio"
+            ],
+            "required": false,
+            "unit": null,
+            "voltage_max_v": null
+          },
+          {
+            "name": "gp29",
+            "number": "43",
             "electrical_type": "bidirectional",
             "capabilities": [
               "gpio"
@@ -149,10 +424,244 @@ expression: board
           },
           {
             "name": "xin",
-            "number": "20",
+            "number": "21",
             "electrical_type": "clock",
             "capabilities": [
               "clock_input"
+            ],
+            "required": false,
+            "unit": null,
+            "voltage_max_v": null
+          },
+          {
+            "name": "xout",
+            "number": "22",
+            "electrical_type": "clock",
+            "capabilities": [
+              "clock_output"
+            ],
+            "required": false,
+            "unit": null,
+            "voltage_max_v": null
+          },
+          {
+            "name": "swclk",
+            "number": "24",
+            "electrical_type": "input",
+            "capabilities": [],
+            "required": false,
+            "unit": null,
+            "voltage_max_v": null
+          },
+          {
+            "name": "swdio",
+            "number": "25",
+            "electrical_type": "bidirectional",
+            "capabilities": [],
+            "required": false,
+            "unit": null,
+            "voltage_max_v": null
+          },
+          {
+            "name": "iovdd2",
+            "number": "11",
+            "electrical_type": "power_input",
+            "capabilities": [],
+            "required": false,
+            "unit": null,
+            "voltage_max_v": null
+          },
+          {
+            "name": "iovdd3",
+            "number": "20",
+            "electrical_type": "power_input",
+            "capabilities": [],
+            "required": false,
+            "unit": null,
+            "voltage_max_v": null
+          },
+          {
+            "name": "iovdd4",
+            "number": "30",
+            "electrical_type": "power_input",
+            "capabilities": [],
+            "required": false,
+            "unit": null,
+            "voltage_max_v": null
+          },
+          {
+            "name": "iovdd5",
+            "number": "38",
+            "electrical_type": "power_input",
+            "capabilities": [],
+            "required": false,
+            "unit": null,
+            "voltage_max_v": null
+          },
+          {
+            "name": "iovdd6",
+            "number": "45",
+            "electrical_type": "power_input",
+            "capabilities": [],
+            "required": false,
+            "unit": null,
+            "voltage_max_v": null
+          },
+          {
+            "name": "dvdd",
+            "number": "6",
+            "electrical_type": "power_input",
+            "capabilities": [],
+            "required": false,
+            "unit": null,
+            "voltage_max_v": null
+          },
+          {
+            "name": "dvdd2",
+            "number": "39",
+            "electrical_type": "power_input",
+            "capabilities": [],
+            "required": false,
+            "unit": null,
+            "voltage_max_v": null
+          },
+          {
+            "name": "qspi_iovdd",
+            "number": "54",
+            "electrical_type": "power_input",
+            "capabilities": [],
+            "required": false,
+            "unit": null,
+            "voltage_max_v": null
+          },
+          {
+            "name": "usb_otp_vdd",
+            "number": "53",
+            "electrical_type": "power_input",
+            "capabilities": [],
+            "required": false,
+            "unit": null,
+            "voltage_max_v": null
+          },
+          {
+            "name": "vreg_avdd",
+            "number": "46",
+            "electrical_type": "power_input",
+            "capabilities": [],
+            "required": false,
+            "unit": null,
+            "voltage_max_v": null
+          },
+          {
+            "name": "vreg_pgnd",
+            "number": "47",
+            "electrical_type": "power_input",
+            "capabilities": [],
+            "required": false,
+            "unit": null,
+            "voltage_max_v": null
+          },
+          {
+            "name": "vreg_lx",
+            "number": "48",
+            "electrical_type": "power_output",
+            "capabilities": [],
+            "required": false,
+            "unit": null,
+            "voltage_max_v": null
+          },
+          {
+            "name": "vreg_vin",
+            "number": "49",
+            "electrical_type": "power_input",
+            "capabilities": [],
+            "required": false,
+            "unit": null,
+            "voltage_max_v": null
+          },
+          {
+            "name": "vreg_fb",
+            "number": "50",
+            "electrical_type": "input",
+            "capabilities": [],
+            "required": false,
+            "unit": null,
+            "voltage_max_v": null
+          },
+          {
+            "name": "adc_avdd",
+            "number": "44",
+            "electrical_type": "power_input",
+            "capabilities": [],
+            "required": false,
+            "unit": null,
+            "voltage_max_v": null
+          },
+          {
+            "name": "qspi_sclk",
+            "number": "56",
+            "electrical_type": "output",
+            "capabilities": [
+              "spi_sck"
+            ],
+            "required": false,
+            "unit": null,
+            "voltage_max_v": null
+          },
+          {
+            "name": "qspi_sd0",
+            "number": "57",
+            "electrical_type": "bidirectional",
+            "capabilities": [
+              "spi_mosi",
+              "spi_miso"
+            ],
+            "required": false,
+            "unit": null,
+            "voltage_max_v": null
+          },
+          {
+            "name": "qspi_sd1",
+            "number": "59",
+            "electrical_type": "bidirectional",
+            "capabilities": [
+              "spi_mosi",
+              "spi_miso"
+            ],
+            "required": false,
+            "unit": null,
+            "voltage_max_v": null
+          },
+          {
+            "name": "qspi_sd2",
+            "number": "58",
+            "electrical_type": "bidirectional",
+            "capabilities": [
+              "spi_mosi",
+              "spi_miso"
+            ],
+            "required": false,
+            "unit": null,
+            "voltage_max_v": null
+          },
+          {
+            "name": "qspi_sd3",
+            "number": "55",
+            "electrical_type": "bidirectional",
+            "capabilities": [
+              "spi_mosi",
+              "spi_miso"
+            ],
+            "required": false,
+            "unit": null,
+            "voltage_max_v": null
+          },
+          {
+            "name": "qspi_ss",
+            "number": "60",
+            "electrical_type": "output",
+            "capabilities": [
+              "spi_cs"
             ],
             "required": false,
             "unit": null,
@@ -161,20 +670,20 @@ expression: board
         ],
         "required_decoupling": [
           {
-            "net": "vdd_io",
+            "net": "iovdd",
             "value": "100nf",
             "count": 4,
             "max_distance_mm": null
           },
           {
-            "net": "vdd_core",
+            "net": "dvdd",
             "value": "100nf",
             "count": 2,
             "max_distance_mm": null
           }
         ],
-        "kicad_symbol": "MCU_RaspberryPi:RP2040",
-        "kicad_footprint": "Package_DFN_QFN:QFN-56-1EP_7x7mm_P0.4mm_EP3.2x3.2mm",
+        "kicad_symbol": "MCU_RaspberryPi:RP2350A",
+        "kicad_footprint": "Package_DFN_QFN:QFN-60-1EP_7x7mm_P0.4mm_EP3.4x3.4mm",
         "footprint_dimensions": {
           "width_mm": 7.75,
           "height_mm": 7.75,

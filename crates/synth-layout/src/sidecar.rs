@@ -36,6 +36,13 @@ pub struct SidecarLayout {
     pub components: HashMap<String, SidecarPlacement>,
     #[serde(default)]
     pub forced_net_labels: Vec<ForcedNetLabel>,
+    /// Force the sheet to the smallest size that fits the drawing, with the
+    /// drawing centred on it.
+    /// Applied *after* the auto-layout, because the pipeline re-derives
+    /// `sheet_size` from scratch (`grow_sheet_to_fit`) and would otherwise
+    /// discard a persisted fit.
+    #[serde(default)]
+    pub fit_sheet: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -202,6 +209,40 @@ impl SidecarLayout {
             }
         }
     }
+    /// Force every net named in [`Self::forced_net_labels`] to render as
+    /// label stubs. Applied *after* routing: `route_and_label` recomputes
+    /// wires and labels for the whole board, so a forced label set before it
+    /// would be overwritten. Unknown net names are ignored (a stale sidecar
+    /// entry after a rename must not fail a layout).
+    pub fn apply_forced_labels(&self, board: &synth_ir::Board, layout: &mut Layout) {
+        if self.forced_net_labels.is_empty() {
+            return;
+        }
+        let by_name: HashMap<&str, synth_ir::NetId> =
+            board.nets.iter().map(|n| (n.name.as_str(), n.id)).collect();
+        for forced in &self.forced_net_labels {
+            if let Some(&net) = by_name.get(forced.net.as_str()) {
+                crate::force_net_label(board, layout, net);
+            }
+        }
+    }
+
+    /// Shrink the sheet to the smallest size that fits the drawing and
+    /// centre the drawing on it, when [`Self::fit_sheet`] is set. Applied
+    /// after routing/annotation so bounds include wires and text.
+    ///
+    /// Component overrides in this file stay in the auto-layout's
+    /// (un-centred) coordinates: they are overlaid first and the centring
+    /// shift moves them together with everything else.
+    pub fn apply_sheet_fit(&self, board: &synth_ir::Board, layout: &mut Layout) {
+        if !self.fit_sheet {
+            return;
+        }
+        if let Some((min_x, max_x, min_y, max_y)) = crate::drawing_bounds(board, layout) {
+            layout.sheet_size = crate::fit_sheet_size_any(min_x, max_x, min_y, max_y);
+            crate::centre_on_sheet(board, layout);
+        }
+    }
 }
 
 #[cfg(test)]
@@ -297,6 +338,8 @@ priority = "hard"
         use synth_diagnostics::Span;
         use synth_ir::{Board, Component, ComponentId};
         Board {
+            groups: Vec::new(),
+            legends: false,
             name: "t".to_string(),
             layers: 2,
             manufacturer: None,
@@ -405,5 +448,150 @@ priority = "hard"
         let ids: HashMap<String, ComponentId> = HashMap::from([("R1".to_string(), ComponentId(0))]);
         sidecar.apply_to_layout(&board, &mut layout, &ids);
         assert_eq!(layout.components[0].center_mm, (42.0, 43.0));
+    }
+}
+
+#[cfg(test)]
+mod forced_label_tests {
+    use super::*;
+    use synth_diagnostics::Span;
+    use synth_ir::{Board, Component, ComponentId, Net, NetEndpoint, NetId, PinId};
+
+    fn two_net_board() -> Board {
+        let comp = |i: u32, refdes: &str| Component {
+            id: ComponentId(i),
+            refdes: refdes.to_string(),
+            kind: "resistor".to_string(),
+            part: None,
+            value: None,
+            dnp: false,
+            properties: std::collections::BTreeMap::new(),
+            placement_hint: None,
+            group: None,
+            sheet: None,
+            source_span: Span::new(0, 0),
+        };
+        Board {
+            groups: Vec::new(),
+            legends: false,
+            name: "t".to_string(),
+            layers: 2,
+            manufacturer: None,
+            revision: None,
+            company: None,
+            components: vec![comp(0, "R1"), comp(1, "R2")],
+            nets: vec![Net {
+                id: NetId(0),
+                name: "SIG".to_string(),
+                endpoints: vec![
+                    NetEndpoint {
+                        component: ComponentId(0),
+                        pin: PinId(0),
+                        source_span: Span::new(0, 0),
+                    },
+                    NetEndpoint {
+                        component: ComponentId(1),
+                        pin: PinId(0),
+                        source_span: Span::new(0, 0),
+                    },
+                ],
+                netclass: None,
+                voltage: None,
+            }],
+            diff_pairs: Vec::new(),
+            notes: Vec::new(),
+            keepouts: Vec::new(),
+            netclasses: vec![],
+            buses: vec![],
+            modules: vec![],
+            variants: vec![],
+            source_span: Span::new(0, 0),
+        }
+    }
+
+    fn layout_with_wire_on_net_zero() -> (Board, crate::Layout) {
+        let board = two_net_board();
+        let mut layout = crate::Layout {
+            components: vec![
+                crate::ComponentPlacement {
+                    id: ComponentId(0),
+                    center_mm: (10.0, 10.0),
+                    rotation: Rotation::Zero,
+                },
+                crate::ComponentPlacement {
+                    id: ComponentId(1),
+                    center_mm: (40.0, 10.0),
+                    rotation: Rotation::Zero,
+                },
+            ],
+            wires: Vec::new(),
+            junctions: Vec::new(),
+            power_flags: Vec::new(),
+            net_labels: Vec::new(),
+            hierarchical_labels: Vec::new(),
+            annotations: Vec::new(),
+            group_boxes: Vec::new(),
+            sheet_size: crate::SheetSize::A4,
+        };
+        layout.wires.push(crate::WirePath {
+            net: NetId(0),
+            points: vec![(10.0, 10.0), (40.0, 10.0)],
+            junctions: Vec::new(),
+        });
+        (board, layout)
+    }
+
+    #[test]
+    fn forced_label_replaces_wire_and_persists() {
+        let (board, mut layout) = layout_with_wire_on_net_zero();
+        let mut sidecar = SidecarLayout::default();
+        sidecar.forced_net_labels.push(ForcedNetLabel {
+            net: "SIG".to_string(),
+            source: OverrideSource::Agent,
+        });
+
+        // Re-running routing (a structural op) reintroduces the wire...
+        crate::route_and_label(&board, &mut layout);
+        // ...and applying forced labels afterwards must remove it again.
+        sidecar.apply_forced_labels(&board, &mut layout);
+
+        assert!(
+            layout.wires.iter().all(|w| w.net != NetId(0)),
+            "net 0 should be forced to labels, not wires; wires={:?} labels={:?}",
+            layout.wires.iter().map(|w| w.net).collect::<Vec<_>>(),
+            layout.net_labels.iter().map(|l| l.net).collect::<Vec<_>>()
+        );
+        assert_eq!(layout.net_labels.len(), 2, "one label per endpoint");
+        assert!(layout.wires.iter().all(|w| w.net != NetId(0)));
+    }
+
+    #[test]
+    fn forced_label_round_trips_through_toml() {
+        let mut sidecar = SidecarLayout::default();
+        sidecar.forced_net_labels.push(ForcedNetLabel {
+            net: "SIG".to_string(),
+            source: OverrideSource::Agent,
+        });
+        let dir = std::env::temp_dir().join(format!("synth_fnl_{}", std::process::id()));
+        let _ = std::fs::create_dir_all(&dir);
+        let path = dir.join("x.layout.toml");
+        sidecar.save_to_file(&path).unwrap();
+        let reloaded = SidecarLayout::load_from_file(&path).expect("reload");
+        assert_eq!(reloaded.forced_net_labels.len(), 1);
+        assert_eq!(reloaded.forced_net_labels[0].net, "SIG");
+        let _ = std::fs::remove_file(&path);
+    }
+
+    #[test]
+    fn unknown_forced_net_name_is_ignored() {
+        let (board, mut layout) = layout_with_wire_on_net_zero();
+        let mut sidecar = SidecarLayout::default();
+        sidecar.forced_net_labels.push(ForcedNetLabel {
+            net: "RENAMED_AWAY".to_string(),
+            source: OverrideSource::Agent,
+        });
+        // Must not panic, and must leave the real net's wire alone.
+        sidecar.apply_forced_labels(&board, &mut layout);
+        assert!(layout.wires.iter().any(|w| w.net == NetId(0)));
     }
 }
