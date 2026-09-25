@@ -819,3 +819,102 @@ fn compile_led_board() -> synth_ir::Board {
     let lowered = synth_ir::lower(&ast, &registry, "led_indicator.synth");
     lowered.board.expect("led source must lower")
 }
+
+/// The review packet must turn a visibly-bad sheet into a concrete repair:
+/// this board was observed to render as a low-fill vertical stack.
+#[test]
+fn test_mcp_review_schematic_returns_repair_hints() {
+    if !kicad_cli_available() {
+        eprintln!("skipping: kicad-cli not installed");
+        return;
+    }
+    let source = LED_INDICATOR_SOURCE.replace(
+        "component R1: resistor  \"r_generic_0603\"",
+        "component R1: resistor  \"r_generic_0603\" value \"330\"",
+    );
+    let req = json!({
+        "jsonrpc": "2.0",
+        "id": 61,
+        "method": "tools/call",
+        "params": {
+            "name": "synth_review_schematic",
+            "arguments": { "source": source, "width_px": 600, "inline": false }
+        }
+    });
+    let resp = handle_jsonrpc_request(req, None);
+    let payload: serde_json::Value =
+        serde_json::from_str(resp["result"]["content"][0]["text"].as_str().unwrap()).unwrap();
+
+    let hints = payload["repair_hints"]
+        .as_array()
+        .expect("repair_hints must be an array");
+    let kinds: Vec<&str> = hints
+        .iter()
+        .filter_map(|h| h["suggested_op"]["kind"].as_str())
+        .collect();
+    assert!(
+        kinds.contains(&"fit_sheet"),
+        "a low-fill sheet must suggest shrinking the page, got {hints:?}"
+    );
+    // The suggested op must name the smaller target, so the agent can act.
+    let problem = hints
+        .iter()
+        .find(|h| h["suggested_op"]["kind"] == "fit_sheet")
+        .and_then(|h| h["problem"].as_str())
+        .unwrap_or_default();
+    assert!(
+        problem.contains("would fit"),
+        "fit_sheet hint must state the target sheet: {problem}"
+    );
+    for hint in hints {
+        assert!(
+            hint["problem"].is_string(),
+            "hint needs a human problem: {hint}"
+        );
+        assert!(
+            hint["suggested_op"]["kind"].is_string(),
+            "hint needs a concrete op: {hint}"
+        );
+    }
+}
+
+/// A suggested repair must actually be accepted by `synth_mutate_layout` —
+/// the hint is useless if applying it errors.
+#[test]
+fn test_mcp_suggested_repair_op_is_applicable() {
+    let req = json!({
+        "jsonrpc": "2.0",
+        "id": 62,
+        "method": "tools/call",
+        "params": {
+            "name": "synth_mutate_layout",
+            "arguments": {
+                "source": LED_INDICATOR_SOURCE,
+                "op": { "kind": "fit_sheet", "grow": false }
+            }
+        }
+    });
+    let resp = handle_jsonrpc_request(req, None);
+    assert!(resp["result"].is_object(), "fit_sheet failed: {resp:?}");
+    let payload: serde_json::Value =
+        serde_json::from_str(resp["result"]["content"][0]["text"].as_str().unwrap()).unwrap();
+    assert!(payload["components"].is_array());
+
+    let req = json!({
+        "jsonrpc": "2.0",
+        "id": 63,
+        "method": "tools/call",
+        "params": {
+            "name": "synth_mutate_layout",
+            "arguments": {
+                "source": LED_INDICATOR_SOURCE,
+                "op": { "kind": "distribute_row", "ids": [0, 1, 2], "y_mm": 50.8 }
+            }
+        }
+    });
+    let resp = handle_jsonrpc_request(req, None);
+    assert!(
+        resp["result"].is_object(),
+        "distribute_row failed: {resp:?}"
+    );
+}

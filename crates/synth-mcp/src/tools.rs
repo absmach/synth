@@ -173,8 +173,17 @@ pub fn list_tools() -> Vec<McpToolInfo> {
                     "persist": { "type": "boolean", "description": "Write the op's effect through to the sidecar (default false unless layout_file_path is given)" },
                     "op": {
                         "type": "object",
-                        "description": "Layout edit operation: move_component, rotate_component, group_components, set_net_style, or reroute_net"
-                    }
+                        "description": "Layout edit operation. Visual repairs for a bad render: fit_sheet (shrink the page to what the content needs — the correct fix for a low fill ratio / E-SYNTH-SCHEM-012), distribute_row (lay parts left-to-right in signal order — fixes a pile that should read input→chain→output), spread_region (scale offsets about the centroid; use sparingly, it stretches wires rather than reflowing). Existing ops: move_component, rotate_component, group_components (tidy column), set_net_style (force a net to labels), reroute_net."
+                    },
+                    "grow": { "type": "boolean", "description": "fit_sheet: also enlarge the sheet if content overflows it (default false)" },
+                    "ids": {
+                        "type": "array",
+                        "items": { "type": "integer" },
+                        "description": "For distribute_row / spread_region: the component ids to arrange, in signal order. For spread_region, empty means every placed component."
+                    },
+                    "y_mm": { "type": "number", "description": "distribute_row: vertical centre of the row (defaults to the ids' current centroid y)" },
+                    "x_mm": { "type": "number", "description": "distribute_row: left edge of the row (defaults to the ids' current minimum x)" },
+                    "scale": { "type": "number", "description": "spread_region: offset multiplier about the centroid; >1 spreads, <1 compacts (default 1.4)" }
                 },
                 "required": ["op"]
             }),
@@ -1500,9 +1509,31 @@ fn execute_preview_schematic(
 /// With `persist=true` (or an explicit `layout_file_path`) the op's effect
 /// is written through to the `<design>.synth.layout.toml` sidecar so it
 /// survives a recompile and is honoured by rendering and export.
+/// Fold the tool-level convenience args (`ids`, `y_mm`, `x_mm`, `scale`)
+/// into the `op` object, so a caller can write either
+/// `op: {kind: "distribute_row", ids: [...]}` or pass `ids` at the top
+/// level. Explicit keys inside `op` always win.
+fn normalize_layout_op(args: &Value) -> Value {
+    let mut op = args.get("op").cloned().unwrap_or(Value::Null);
+    let Some(obj) = op.as_object_mut() else {
+        return op;
+    };
+    for key in ["ids", "y_mm", "x_mm", "scale", "grow"] {
+        if !obj.contains_key(key) {
+            if let Some(v) = args.get(key) {
+                if !v.is_null() {
+                    obj.insert(key.to_string(), v.clone());
+                }
+            }
+        }
+    }
+    op
+}
+
 fn execute_mutate_layout(args: &Value, default_registry: Option<&Path>) -> Result<Value, String> {
+    let op_value = normalize_layout_op(args);
     let op: synth_layout::ops::LayoutOp =
-        serde_json::from_value(args["op"].clone()).map_err(|e| format!("Invalid 'op': {e}"))?;
+        serde_json::from_value(op_value).map_err(|e| format!("Invalid 'op': {e}"))?;
 
     let source = get_source_from_args(args)?;
     let file_name = args["file_path"].as_str().unwrap_or("board.synth");
@@ -1568,6 +1599,9 @@ fn persist_layout_op(
     } else {
         SidecarLayout::default()
     };
+    // `Default` yields 0; the sidecar schema version is a real contract,
+    // so stamp the current one before writing.
+    sidecar.schema_version = synth_layout::sidecar::SIDECAR_SCHEMA_VERSION;
 
     let ids: Vec<synth_ir::ComponentId> = match op {
         LayoutOp::MoveComponent { id, .. } | LayoutOp::Rotate { id, .. } => vec![*id],
@@ -1577,6 +1611,23 @@ fn persist_layout_op(
                 v.push(*anchor);
             }
             v
+        }
+        // Both repair ops may move many components; persist every one that
+        // actually changed position, resolved by diffing against the fresh
+        // auto-layout rather than re-deriving the op's target set.
+        LayoutOp::DistributeRow { .. } | LayoutOp::SpreadRegion { .. } => {
+            let base = synth_layout::layout(board);
+            base.components
+                .iter()
+                .filter(|p| {
+                    layout
+                        .components
+                        .iter()
+                        .find(|q| q.id == p.id)
+                        .is_some_and(|q| q.center_mm != p.center_mm)
+                })
+                .map(|p| p.id)
+                .collect()
         }
         _ => Vec::new(),
     };
@@ -1619,6 +1670,10 @@ fn persist_layout_op(
             }
             forced_net_labels.push(n.name.clone());
         }
+    }
+
+    if matches!(op, LayoutOp::FitSheet { .. }) {
+        sidecar.fit_sheet = true;
     }
 
     sidecar
@@ -2034,6 +2089,95 @@ fn execute_schematic_baseline(
     }
 }
 
+/// Inspect the layout for the failure modes the rendered image exposes and
+/// return ready-to-apply `synth_mutate_layout` ops for them.
+///
+/// The readability rules (`E-SYNTH-SCHEM-011`/`012`) already detect a blank
+/// sheet and colliding text, but a rule code is not an action. This turns
+/// each detectable defect into the op that fixes it, so an agent that *sees*
+/// a bad sheet can repair it without inventing coordinates.
+fn repair_hints(layout: &synth_layout::Layout, board: &synth_ir::Board) -> Vec<Value> {
+    let mut hints = Vec::new();
+
+    // --- E-SYNTH-SCHEM-012: content covers only a corner of the page. -----
+    // The correct repair is a smaller sheet, not a stretched layout: a
+    // three-part design on A4 is a page-size mismatch. The auto-layout
+    // already knows which sheet fits (`fit_sheet_size`), so the hint is the
+    // op that applies it. Spreading parts to fill the page only pushes
+    // wires across blank paper.
+    if let Some((min_x, max_x, min_y, max_y)) = synth_layout::content_bounds(board, layout) {
+        let (sheet_w, sheet_h) = layout.sheet_size.dims_mm();
+        let content_w = (max_x - min_x).max(0.0);
+        let content_h = (max_y - min_y).max(0.0);
+        if sheet_w > 0.0 && sheet_h > 0.0 {
+            let ratio = content_w * content_h / (sheet_w * sheet_h);
+            let fitted = synth_layout::fit_sheet_size_any(min_x, max_x, min_y, max_y);
+            let (fit_w, fit_h) = fitted.dims_mm();
+            if ratio < 0.45 && (fit_w < sheet_w || fit_h < sheet_h) {
+                hints.push(serde_json::json!({
+                    "finding": "E-SYNTH-SCHEM-012",
+                    "problem": format!(
+                        "content covers only {:.0}% of the {sheet_w:.0}×{sheet_h:.0} mm sheet \
+                         and would fit {fitted:?} ({fit_w:.0}×{fit_h:.0} mm)",
+                        ratio * 100.0
+                    ),
+                    "suggested_op": { "kind": "fit_sheet", "grow": false }
+                }));
+            }
+        }
+    }
+
+    // --- Signal flow: a chain of 3+ parts in a narrow x band reads as a
+    // pile, not as input → chain → output. Suggest the left-to-right row.
+    if let Some(hint) = row_flow_hint(layout) {
+        hints.push(hint);
+    }
+
+    hints
+}
+
+/// Suggest `distribute_row` when three or more components share a narrow x
+/// band but span a tall y band — the visual signature of a stack.
+fn row_flow_hint(layout: &synth_layout::Layout) -> Option<Value> {
+    let placed: Vec<(u32, f64, f64)> = layout
+        .components
+        .iter()
+        .map(|p| (p.id.0, p.center_mm.0, p.center_mm.1))
+        .collect();
+    if placed.len() < 3 {
+        return None;
+    }
+    let x_span = placed.iter().map(|p| p.1).fold(f64::NEG_INFINITY, f64::max)
+        - placed.iter().map(|p| p.1).fold(f64::INFINITY, f64::min);
+    let y_span = placed.iter().map(|p| p.2).fold(f64::NEG_INFINITY, f64::max)
+        - placed.iter().map(|p| p.2).fold(f64::INFINITY, f64::min);
+
+    // Narrow in x, tall in y: a column.
+    if x_span > 40.0 || y_span < 25.0 || y_span <= x_span {
+        return None;
+    }
+    let mut ids: Vec<u32> = placed.iter().map(|p| p.0).collect();
+    ids.sort_unstable();
+    // A schematic never has the 2^53 components f64 conversion would need to
+    // be lossy; the count is bounded by the drawing.
+    #[allow(clippy::cast_precision_loss)]
+    let count = placed.len() as f64;
+    let centroid_y = placed.iter().map(|p| p.2).sum::<f64>() / count;
+    Some(serde_json::json!({
+        "finding": "signal-flow",
+        "problem": format!(
+            "{} components span {:.0} mm vertically but only {:.0} mm horizontally — \
+             a column rather than a left-to-right signal path",
+            placed.len(), y_span, x_span
+        ),
+        "suggested_op": {
+            "kind": "distribute_row",
+            "ids": ids,
+            "y_mm": (centroid_y * 100.0).round() / 100.0,
+        }
+    }))
+}
+
 fn execute_review_schematic(
     args: &Value,
     default_registry: Option<&Path>,
@@ -2091,6 +2235,7 @@ fn execute_review_schematic(
         "error_count": error_count,
         "warning_count": warning_count,
         "readability_findings": readability,
+        "repair_hints": repair_hints(&layout, &compiled.board),
         "diagnostics": diagnostics,
         "layout": {
             "sheet_size": format!("{:?}", layout.sheet_size),

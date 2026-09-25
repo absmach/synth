@@ -100,10 +100,32 @@ Two kinds of fix:
   `move_component`, `rotate_component`, `group_components`
   (`GroupBlock` — pull scattered parts into a tidy column beside an
   anchor), `set_net_style` (`ReplaceWireWithLabel` — force a net to
-  render as labels instead of a long wire), and `reroute_net`.
+  render as labels instead of a long wire), `distribute_row` (lay parts
+  left-to-right in signal order), `fit_sheet` (shrink the page to the
+  content), and `reroute_net`.
+
+**Repair hints.** `synth_review_schematic` does not stop at naming a
+defect: for the failures it can mechanise, it returns a `repair_hints[]`
+entry with a `problem` string and a ready-to-apply `suggested_op`. Feed
+that op straight back into `synth_mutate_layout`. Two hints exist today:
+
+| Finding                | Suggested op                                              |
+| ---------------------- | --------------------------------------------------------- |
+| `E-SYNTH-SCHEM-012` (content covers only a corner of the page) | `fit_sheet` — shrink the page, including a custom size below A4 |
+| signal-flow (3+ parts span a tall, narrow column) | `distribute_row` — a left-to-right row in signal order |
+
+The fill-ratio repair is deliberately **sheet shrinking, not part
+spreading**. The standard A4/A3/A2 ladder has nothing below A4, so a
+three-part design on A4 is always mostly empty; stretching the parts to
+fill the page only draws long wires across blank paper. A human drawing
+three parts uses a small sheet, so `fit_sheet` returns a rounded
+`Custom` page (115 × 95 mm for the canonical LED indicator) and the
+diagnostic clears.
 
 Persisted placement goes to `<design>.synth.layout.toml`; the `.synth`
-source stays the source of truth for connectivity.
+source stays the source of truth for connectivity. `fit_sheet` persists
+as `fit_sheet = true` and is re-applied after the auto-layout, because
+the pipeline otherwise re-derives the sheet size from scratch.
 
 ### Step 4 — confirm no regression
 

@@ -36,6 +36,12 @@ pub struct SidecarLayout {
     pub components: HashMap<String, SidecarPlacement>,
     #[serde(default)]
     pub forced_net_labels: Vec<ForcedNetLabel>,
+    /// Force the sheet to the smallest standard size that fits content.
+    /// Applied *after* the auto-layout, because the pipeline re-derives
+    /// `sheet_size` from scratch (`grow_sheet_to_fit`) and would otherwise
+    /// discard a persisted fit.
+    #[serde(default)]
+    pub fit_sheet: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -217,6 +223,18 @@ impl SidecarLayout {
             if let Some(&net) = by_name.get(forced.net.as_str()) {
                 crate::force_net_label(board, layout, net);
             }
+        }
+    }
+
+    /// Shrink the sheet to the smallest standard size that fits the content,
+    /// when [`Self::fit_sheet`] is set. Applied after routing/annotation so
+    /// bounds include wires and text.
+    pub fn apply_sheet_fit(&self, board: &synth_ir::Board, layout: &mut Layout) {
+        if !self.fit_sheet {
+            return;
+        }
+        if let Some((min_x, max_x, min_y, max_y)) = crate::content_bounds(board, layout) {
+            layout.sheet_size = crate::fit_sheet_size_any(min_x, max_x, min_y, max_y);
         }
     }
 }

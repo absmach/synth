@@ -1580,6 +1580,7 @@ pub fn layout_with_sidecar(board: &Board, sidecar_path: Option<&std::path::Path>
     // it here is what lets a net an agent pinned to a label survive a later
     // structural op (see `ops` module docs).
     sidecar.apply_forced_labels(board, &mut l);
+    sidecar.apply_sheet_fit(board, &mut l);
     l
 }
 
@@ -4308,6 +4309,49 @@ fn sheet_size_for(w: f64, h: f64) -> SheetSize {
 pub fn fit_sheet_size(min_x: f64, max_x: f64, min_y: f64, max_y: f64) -> SheetSize {
     let (need_w, need_h) = sheet_needs(min_x, max_x, min_y, max_y);
     sheet_size_for(need_w, need_h)
+}
+
+/// A4 page width (mm) — the floor of the standard sheet ladder, and the
+/// reference below which a custom page becomes worthwhile.
+const A4_W: f64 = 297.0;
+/// A4 page height (mm).
+const A4_H: f64 = 210.0;
+/// Custom sheet dimensions are rounded up to this quantum (mm), so the page
+/// is a clean number rather than a raw content measurement.
+const CUSTOM_SHEET_QUANTUM_MM: f64 = 5.0;
+/// A custom page is only chosen when it saves at least this fraction of A4 in
+/// at least one axis; a marginal saving is not worth leaving the standard
+/// ladder and its title-block geometry.
+const CUSTOM_SHEET_MIN_SAVING: f64 = 0.7;
+
+/// Smallest sheet that actually fits the content, including a
+/// [`SheetSize::Custom`] page below A4.
+///
+/// [`fit_sheet_size`] is bounded below by A4 because the standard ladder has
+/// nothing smaller, so a three-part design on A4 is always "5% full" and
+/// `E-SYNTH-SCHEM-012` can never be satisfied on a standard sheet. A human
+/// drawing three parts does not use A4; they use a small sheet. This returns
+/// a rounded custom page when the content needs materially less than A4, and
+/// falls back to the standard ladder otherwise.
+pub fn fit_sheet_size_any(min_x: f64, max_x: f64, min_y: f64, max_y: f64) -> SheetSize {
+    let (need_w, need_h) = sheet_needs(min_x, max_x, min_y, max_y);
+    let standard = sheet_size_for(need_w, need_h);
+    let (std_w, std_h) = standard.dims_mm();
+    // Only shrink below A4 when the standard fit is already A4 and the
+    // content needs clearly less — a marginal saving is not worth leaving
+    // the standard ladder (and its title block geometry).
+    if std_w > A4_W || std_h > A4_H {
+        return standard;
+    }
+    let w = (need_w / CUSTOM_SHEET_QUANTUM_MM).ceil() * CUSTOM_SHEET_QUANTUM_MM;
+    let h = (need_h / CUSTOM_SHEET_QUANTUM_MM).ceil() * CUSTOM_SHEET_QUANTUM_MM;
+    if w >= A4_W * CUSTOM_SHEET_MIN_SAVING || h >= A4_H * CUSTOM_SHEET_MIN_SAVING {
+        return standard;
+    }
+    SheetSize::Custom {
+        width_mm: w.max(CUSTOM_SHEET_QUANTUM_MM),
+        height_mm: h.max(CUSTOM_SHEET_QUANTUM_MM),
+    }
 }
 
 // ----- Human-like schematic alignment helpers --------------------------------

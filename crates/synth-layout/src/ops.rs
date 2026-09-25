@@ -86,6 +86,54 @@ pub enum LayoutOp {
     /// as the forward-compatible entry point for when this router
     /// gains real per-net incremental routing.
     RerouteNet { net: NetId },
+    /// Lay `ids` out left-to-right in one horizontal row, centred on
+    /// `y_mm`, at a pitch wide enough to clear each component's body
+    /// plus a readable gap.
+    ///
+    /// This is the repair for the signal-flow failure the render
+    /// surfaces: the auto-layout's `GroupBlock` packs parts into a
+    /// *column*, which reads as a pile rather than as `input → chain
+    /// → output`. Order `ids` in signal order.
+    DistributeRow {
+        ids: Vec<ComponentId>,
+        /// Vertical centre for the row, in mm. When `None`, the
+        /// current centroid y of `ids` is kept.
+        y_mm: Option<f64>,
+        /// Left edge of the row, in mm. When `None`, the current
+        /// minimum x of `ids` is kept.
+        x_mm: Option<f64>,
+    },
+    /// Expand the listed components (or every placed component when
+    /// `ids` is empty) to fill the sheet with a minimum gap, by
+    /// scaling their offsets about their common centroid.
+    ///
+    /// This is the repair for `E-SYNTH-SCHEM-012` (content covering
+    /// only a corner of the page): the auto-layout sizes the content
+    /// box for a compact grid and never stretches it to the page, so
+    /// a small board can leave most of the sheet blank. `scale > 1`
+    /// spreads, `< 1` compacts; the offsets are snapped to the pin
+    /// grid so wires stay routable.
+    SpreadRegion {
+        /// Components to move. Empty means "every placed component".
+        ids: Vec<ComponentId>,
+        /// Multiplier applied to each component's offset from the
+        /// group centroid. Must be finite and positive.
+        scale: f64,
+    },
+    /// Shrink (or grow) the sheet to the smallest standard size that
+    /// fits the current content.
+    ///
+    /// This is the *correct* repair for `E-SYNTH-SCHEM-012`: a small
+    /// design on A4 is not a layout defect to be stretched, it is a
+    /// sheet-size mismatch. Spreading parts to fill the page only
+    /// pushes wires across blank paper; sizing the page to the
+    /// drawing is what a human does. `grow` allows moving up a size
+    /// (default false — this op exists to shrink).
+    FitSheet {
+        /// When true, also enlarge the sheet if the content overflows
+        /// the current one.
+        grow: bool,
+    },
 }
 
 /// Why a [`LayoutOp`] could not be applied.
@@ -102,6 +150,10 @@ pub enum LayoutOpError {
     UnknownNet(NetId),
     /// [`LayoutOp::GroupBlock`] was given an empty `ids` list.
     EmptyGroup,
+    /// [`LayoutOp::SpreadRegion`] was given a non-finite or
+    /// non-positive `scale`. Carried as a rendered string so
+    /// `LayoutOpError` can keep its `Eq` derive (`f64` is not `Eq`).
+    InvalidScale(String),
 }
 
 impl std::fmt::Display for LayoutOpError {
@@ -112,6 +164,9 @@ impl std::fmt::Display for LayoutOpError {
             }
             Self::UnknownNet(id) => write!(f, "net {} is not in this board", id.0),
             Self::EmptyGroup => write!(f, "GroupBlock needs at least one component id"),
+            Self::InvalidScale(s) => {
+                write!(f, "SpreadRegion scale must be finite and positive, got {s}")
+            }
         }
     }
 }
@@ -126,6 +181,12 @@ const GROUP_BLOCK_SPACING_MM: f64 = 14.0;
 /// Horizontal clearance (mm) from the anchor's centre to the group
 /// column, matching the auto-layout's `MEMBER_CLEARANCE`.
 const GROUP_BLOCK_CLEARANCE_MM: f64 = 17.78;
+/// Body-edge clearance (mm) between neighbours in a
+/// [`LayoutOp::DistributeRow`].
+const ROW_GAP_MM: f64 = 5.08;
+/// Fallback body width (mm) when a component's part is unknown,
+/// matching the auto-layout's own fallback.
+const BODY_FALLBACK_W: f64 = 15.0;
 
 /// Apply `op` to `layout` in place.
 ///
@@ -205,6 +266,118 @@ pub fn apply_op(layout: &mut Layout, board: &Board, op: LayoutOp) -> Result<(), 
             // call already supersedes any prior wire/label state.
             require_net(board, net)?;
             route_and_label(board, layout);
+        }
+        LayoutOp::DistributeRow { ids, y_mm, x_mm } => {
+            if ids.is_empty() {
+                return Err(LayoutOpError::EmptyGroup);
+            }
+            // Validate every id up front: `apply_op` promises to leave
+            // `layout` unmodified on error.
+            for &id in &ids {
+                require_component(board, id)?;
+                if layout.placement(id).is_none() {
+                    return Err(LayoutOpError::UnknownComponent(id));
+                }
+            }
+
+            let mut centres: Vec<(f64, f64)> = Vec::with_capacity(ids.len());
+            for &id in &ids {
+                centres.push(
+                    layout
+                        .placement(id)
+                        .ok_or(LayoutOpError::UnknownComponent(id))?
+                        .center_mm,
+                );
+            }
+
+            // Pitch = half of each neighbour's body width + a readable
+            // gap, so tall/wide parts never collide. Reuses the same
+            // body-size source the exporter and `content_bounds` use.
+            let half_width = |id: ComponentId| -> f64 {
+                board
+                    .component(id)
+                    .and_then(|c| c.part.as_ref())
+                    .map_or(BODY_FALLBACK_W, |p| crate::body_size_for_part(p).0)
+                    / 2.0
+            };
+            let row_y = snap_grid(y_mm.unwrap_or_else(|| {
+                centres.iter().map(|c| c.1).sum::<f64>() / centres.len() as f64
+            }));
+            let start_x = snap_grid(
+                x_mm.unwrap_or_else(|| centres.iter().map(|c| c.0).fold(f64::INFINITY, f64::min)),
+            );
+
+            let mut cursor = start_x;
+            for (i, &id) in ids.iter().enumerate() {
+                let placement =
+                    find_placement_mut(layout, id).ok_or(LayoutOpError::UnknownComponent(id))?;
+                placement.center_mm = (snap_grid(cursor), row_y);
+                // Advance past this part and the next part's half-width,
+                // so the gap is measured body-edge to body-edge.
+                let next_half = ids.get(i + 1).map_or(0.0, |&n| half_width(n));
+                cursor += half_width(id) + next_half + ROW_GAP_MM;
+            }
+            route_and_label(board, layout);
+        }
+        LayoutOp::SpreadRegion { ids, scale } => {
+            if !scale.is_finite() || scale <= 0.0 {
+                return Err(LayoutOpError::InvalidScale(scale.to_string()));
+            }
+            let targets: Vec<ComponentId> = if ids.is_empty() {
+                layout.components.iter().map(|p| p.id).collect()
+            } else {
+                for &id in &ids {
+                    require_component(board, id)?;
+                    if layout.placement(id).is_none() {
+                        return Err(LayoutOpError::UnknownComponent(id));
+                    }
+                }
+                ids.clone()
+            };
+            if targets.is_empty() {
+                route_and_label(board, layout);
+                return Ok(());
+            }
+
+            // Centroid of the targets, then scale each offset about it.
+            let mut sum = (0.0, 0.0);
+            for &id in &targets {
+                let (x, y) = layout
+                    .placement(id)
+                    .ok_or(LayoutOpError::UnknownComponent(id))?
+                    .center_mm;
+                sum = (sum.0 + x, sum.1 + y);
+            }
+            let n = targets.len() as f64;
+            let centroid = (sum.0 / n, sum.1 / n);
+
+            for &id in &targets {
+                let placement =
+                    find_placement_mut(layout, id).ok_or(LayoutOpError::UnknownComponent(id))?;
+                let (x, y) = placement.center_mm;
+                placement.center_mm = (
+                    snap_grid(centroid.0 + (x - centroid.0) * scale),
+                    snap_grid(centroid.1 + (y - centroid.1) * scale),
+                );
+            }
+            route_and_label(board, layout);
+        }
+        LayoutOp::FitSheet { grow } => {
+            let Some((min_x, max_x, min_y, max_y)) = crate::content_bounds(board, layout) else {
+                return Ok(());
+            };
+            let fitted = crate::fit_sheet_size_any(min_x, max_x, min_y, max_y);
+            let (cur_w, cur_h) = layout.sheet_size.dims_mm();
+            let (fit_w, fit_h) = fitted.dims_mm();
+            let is_growth = fit_w > cur_w || fit_h > cur_h;
+            if !is_growth || grow {
+                layout.sheet_size = fitted;
+            }
+            // Sheet size is a layout property, not a component position, so
+            // nothing moves; re-running the layout passes keeps the drawing
+            // consistent with the new page (the auto-layout re-runs
+            // `grow_sheet_to_fit` itself, which is why a persisted fit needs
+            // an explicit override below).
         }
     }
     Ok(())
