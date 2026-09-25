@@ -190,17 +190,21 @@ pub fn build_pcb(board: &Board, placement: &Placement, routing: &Routing, projec
         })
         .collect();
 
-    let gnd_layers = if board.layers == 4 {
-        vec!["F.Cu", "In1.Cu", "In2.Cu", "B.Cu"]
-    } else {
-        vec!["F.Cu", "B.Cu"]
-    };
+    let gnd_layers = ground_plane_layers(board.layers);
     for (pcb_net, net_name) in plane_nets {
         for layer in &gnd_layers {
             children.push(build_gnd_zone(placement, layer, pcb_net, net_name, project));
         }
     }
     Sexp::list("kicad_pcb", children)
+}
+
+fn ground_plane_layers(layer_count: u32) -> Vec<&'static str> {
+    match layer_count {
+        4 => vec!["F.Cu", "In1.Cu", "In2.Cu", "B.Cu"],
+        6 => vec!["F.Cu", "In1.Cu", "In2.Cu", "In3.Cu", "In4.Cu", "B.Cu"],
+        _ => vec!["F.Cu", "B.Cu"],
+    }
 }
 
 /// Emit a single `(via ...)` block.
@@ -1726,6 +1730,19 @@ mod tests {
                 );
             }
         }
+    }
+
+    #[test]
+    fn six_layer_ground_planes_cover_every_copper_layer() {
+        assert_eq!(
+            ground_plane_layers(6),
+            vec!["F.Cu", "In1.Cu", "In2.Cu", "In3.Cu", "In4.Cu", "B.Cu"]
+        );
+        assert_eq!(
+            ground_plane_layers(4),
+            vec!["F.Cu", "In1.Cu", "In2.Cu", "B.Cu"]
+        );
+        assert_eq!(ground_plane_layers(2), vec!["F.Cu", "B.Cu"]);
     }
 
     #[test]
