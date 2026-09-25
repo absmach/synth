@@ -1,0 +1,42 @@
+version: 2
+updates:
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "monthly"
+      day: "monday"
+    groups:
+      gh-dependency:
+        patterns:
+          - "*"
+
+  - package-ecosystem: "cargo"
+    directories:
+      - "./"
+      - "crates/synth-ast"
+      - "crates/synth-cli"
+      - "crates/synth-connectivity"
+      - "crates/synth-diagnostics"
+      - "crates/synth-drc"
+      - "crates/synth-geometry"
+      - "crates/synth-ir"
+      - "crates/synth-kicad"
+      - "crates/synth-knowledge"
+      - "crates/synth-layout"
+      - "crates/synth-mcp"
+      - "crates/synth-parser"
+      - "crates/synth-place"
+      - "crates/synth-registry"
+      - "crates/synth-render"
+      - "crates/synth-route"
+      - "crates/synth-smt"
+      - "crates/synth-supply"
+      - "crates/synth-validate"
+      - "crates/synth-web"
+    schedule:
+      interval: "monthly"
+      day: "monday"
+    groups:
+      cargo-dependency:
+        patterns:
+          - "*"

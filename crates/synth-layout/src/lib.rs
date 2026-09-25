@@ -984,7 +984,7 @@ fn quadrant_key(region: &synth_ir::PlacementRegion) -> u8 {
 }
 
 /// Deterministic hue for a group name: FNV-1a into
-/// [`GROUP_PALETTE`]. Same name, same hue, every export —
+/// the fixed palette. Same name, same hue, every export —
 /// `DefaultHasher` would not promise that across processes.
 pub fn group_color(name: &str) -> [u8; 3] {
     let mut hash: u64 = 0xcbf2_9ce4_8422_2325;
@@ -1384,8 +1384,8 @@ fn content_bottom(board: &Board, layout: &Layout) -> f64 {
 /// Bounding box of everything drawn on the sheet — component
 /// bodies, wire points, text runs, and group boxes — as
 /// `(min_x, max_x, min_y, max_y)` in mm page coordinates, or `None`
-/// for an empty layout. Shared by [`grow_sheet_to_fit`],
-/// [`compact_sheet_to_fit`], and the `E-SYNTH-SCHEM-012` fill rule so
+/// for an empty layout. Shared by `grow_sheet_to_fit`,
+/// `compact_sheet_to_fit`, and the `E-SYNTH-SCHEM-012` fill rule so
 /// page sizing and the fill measurement can never disagree about
 /// where the content is.
 pub fn content_bounds(board: &Board, layout: &Layout) -> Option<(f64, f64, f64, f64)> {
@@ -4379,7 +4379,7 @@ pub fn fit_sheet_size_any(min_x: f64, max_x: f64, min_y: f64, max_y: f64) -> She
 /// Page fitting and centring use this rather than the bare bounds: a sheet
 /// sized to bodies and wires alone puts the refdes/value text of the
 /// outermost parts on the margin or the frame. The field extent is an
-/// estimate (the same stroke-font advance [`resolve_text_overlaps`] uses),
+/// estimate (the same stroke-font advance `resolve_text_overlaps` uses),
 /// taken on the conservative side — a field may sit beside a rotated body
 /// or above/below an upright one.
 pub fn drawing_bounds(board: &Board, layout: &Layout) -> Option<(f64, f64, f64, f64)> {
