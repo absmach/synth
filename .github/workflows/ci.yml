@@ -37,12 +37,17 @@ jobs:
       - name: Cache Cargo
         uses: Swatinem/rust-cache@v2
 
-      - name: Install kicad-cli
+      - name: Install kicad-cli and the symbol library
         run: |
           sudo add-apt-repository --yes ppa:kicad/kicad-10.0-releases
           sudo apt-get update
-          sudo apt-get install --no-install-recommends -y kicad
+          sudo apt-get install --no-install-recommends -y kicad kicad-libraries
           kicad-cli version
+          test -d /usr/share/kicad/symbols || {
+            echo "::error::/usr/share/kicad/symbols is missing; the exporter cannot resolve stock symbols"
+            exit 1
+          }
+          ls /usr/share/kicad/symbols | wc -l
 
       - name: Check formatting
         run: cargo fmt --all -- --check
