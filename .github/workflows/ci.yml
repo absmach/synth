@@ -133,7 +133,7 @@ jobs:
       - name: Run tests (shard ${{ matrix.shard }})
         run: |
           cargo nextest run --workspace --locked \
-            --partition count:2/${{ matrix.shard }}
+            --partition count:${{ matrix.shard }}/2
 
       # nextest intentionally does not run doctests, so keep them here.
       # Run them on one shard only; they are not partitionable and are fast.
