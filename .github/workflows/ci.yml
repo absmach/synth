@@ -130,16 +130,11 @@ jobs:
       #
       # nextest runs test *binaries* concurrently, unlike `cargo test`, which
       # runs them one after another. --partition divides the test set into
-      # shards so the runners share the work.
-      #
-      # hash: rather than count: is deliberate. count: assigns by test index,
-      # which put every expensive synthesis suite in shard 1 and left it ~4
-      # minutes behind the others; hash: spreads by test name so the heavy
-      # suites are distributed instead of clustered.
+      # shards so the two runners share the work.
       - name: Run tests (shard ${{ matrix.shard }})
         run: |
           cargo nextest run --workspace --locked \
-            --partition hash:${{ matrix.shard }}/3
+            --partition count:${{ matrix.shard }}/3
 
       # nextest intentionally does not run doctests, so keep them here.
       # Run them on one shard only; they are not partitionable and are fast.
