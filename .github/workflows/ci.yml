@@ -37,19 +37,8 @@ jobs:
       - name: Cache Cargo
         uses: Swatinem/rust-cache@v2
         with:
-          # Without a shared key the cache is written per-ref: PR runs save
-          # under refs/pull/N/merge and push runs under refs/heads/main, and
-          # neither can read the other. Every PR then recompiles the whole
-          # workspace from scratch. Pinning the key to OS + toolchain lets a
-          # PR restore the cache the main-branch run populated.
           shared-key: ${{ runner.os }}-${{ hashFiles('rust-toolchain.toml') }}
 
-      # ERC resolves library *nicknames* (`Device`, `power`, `Capacitor_SMD`)
-      # against the global sym-lib-table / fp-lib-table. KiCad seeds those
-      # from the shipped templates on first launch, which never happens on a
-      # headless runner, so every stock nickname would otherwise be reported
-      # as "configuration does not include the library". Copy them in the
-      # same way the first-run wizard does.
       - name: Install kicad-cli and the stock symbol/footprint libraries
         run: |
           sudo add-apt-repository --yes ppa:kicad/kicad-10.0-releases
@@ -67,10 +56,6 @@ jobs:
       - name: Run linter
         run: cargo clippy --workspace --all-targets --locked -- -D warnings
 
-      # The release profile (lto + a single codegen unit) is the slowest
-      # build in the job and nothing on a PR consumes its output; CD builds
-      # its own binaries in a target matrix. Keep it as a gate on main and
-      # tags so the shipping profile is still known to build.
       - name: Build release
         if: github.event_name != 'pull_request'
         run: cargo build --workspace --release --locked
@@ -93,11 +78,6 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # The hardware-synthesis suites are CPU-bound, and a single runner's
-        # cores are the hard ceiling: nextest already overlaps binaries, so
-        # the only way to cut wall clock further is to add cores. Three
-        # shards put the ~11 minutes of test work on three runners at once;
-        # two left one shard ~150s behind the other.
         shard: [1, 2, 3]
 
     steps:
@@ -125,19 +105,11 @@ jobs:
       - name: Install cargo-nextest
         uses: taiki-e/install-action@nextest
 
-      # `cargo check` is deliberately absent: clippy already type-checks
-      # every target, and this run compiles the same crates for real.
-      #
-      # nextest runs test *binaries* concurrently, unlike `cargo test`, which
-      # runs them one after another. --partition divides the test set into
-      # shards so the two runners share the work.
       - name: Run tests (shard ${{ matrix.shard }})
         run: |
           cargo nextest run --workspace --locked \
             --partition count:${{ matrix.shard }}/3
 
-      # nextest intentionally does not run doctests, so keep them here.
-      # Run them on one shard only; they are not partitionable and are fast.
       - name: Run doctests
         if: matrix.shard == 1
         run: cargo test --workspace --locked --doc

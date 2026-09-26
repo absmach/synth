@@ -16,8 +16,6 @@ env:
 
 concurrency:
   group: cd-${{ github.ref }}
-  # Never cancel a tag run: a release is already uploading assets, and a
-  # half-uploaded release is worse than a queued one. Branch runs may cancel.
   cancel-in-progress: ${{ !startsWith(github.ref, 'refs/tags/v') }}
 
 jobs:
@@ -62,10 +60,6 @@ jobs:
       - name: Checkout Code
         uses: actions/checkout@v7
 
-      # Pinned, not @stable: rust-toolchain.toml pins 1.98.1, so cargo always
-      # builds with that toolchain. Requesting the cross target from @stable
-      # installs its rust-std onto a toolchain cargo never uses, and the build
-      # then fails with "can't find crate for `core`" for every target.
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@1.98.1
         with:
@@ -73,6 +67,8 @@ jobs:
 
       - name: Cache Cargo
         uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: ${{ runner.os }}-${{ hashFiles('rust-toolchain.toml') }}
 
       - name: Install cross linker (linux-arm64)
         if: matrix.target == 'aarch64-unknown-linux-gnu'
@@ -80,9 +76,6 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y gcc-aarch64-linux-gnu libc6-dev-arm64-cross
 
-      # Only the arm64 leg sets a linker. Setting the variable to "" on the
-      # other legs would leave an empty CARGO_TARGET_*_LINKER in the
-      # environment for no reason.
       - name: Build (linux-arm64)
         if: matrix.target == 'aarch64-unknown-linux-gnu'
         env:
@@ -107,6 +100,7 @@ jobs:
         with:
           name: synth-${{ matrix.label }}
           path: dist/
+          if-no-files-found: error
           retention-days: 7
 
   release:
