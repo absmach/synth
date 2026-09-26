@@ -87,7 +87,7 @@ jobs:
           arguments: --locked
 
   test:
-    name: Test shard ${{ matrix.shard }}/2
+    name: Test shard ${{ matrix.shard }}/3
     runs-on: ubuntu-latest
 
     strategy:
@@ -95,9 +95,10 @@ jobs:
       matrix:
         # The hardware-synthesis suites are CPU-bound, and a single runner's
         # cores are the hard ceiling: nextest already overlaps binaries, so
-        # the only way to cut wall clock further is to add cores. Split the
-        # suite across two runners and partition the tests between them.
-        shard: [1, 2]
+        # the only way to cut wall clock further is to add cores. Three
+        # shards put the ~11 minutes of test work on three runners at once;
+        # two left one shard ~150s behind the other.
+        shard: [1, 2, 3]
 
     steps:
       - name: Checkout Code
@@ -133,7 +134,7 @@ jobs:
       - name: Run tests (shard ${{ matrix.shard }})
         run: |
           cargo nextest run --workspace --locked \
-            --partition count:${{ matrix.shard }}/2
+            --partition count:${{ matrix.shard }}/3
 
       # nextest intentionally does not run doctests, so keep them here.
       # Run them on one shard only; they are not partitionable and are fast.
