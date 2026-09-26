@@ -16,7 +16,9 @@ env:
 
 concurrency:
   group: cd-${{ github.ref }}
-  cancel-in-progress: true
+  # Never cancel a tag run: a release is already uploading assets, and a
+  # half-uploaded release is worse than a queued one. Branch runs may cancel.
+  cancel-in-progress: ${{ !startsWith(github.ref, 'refs/tags/v') }}
 
 jobs:
   bin:
@@ -60,8 +62,12 @@ jobs:
       - name: Checkout Code
         uses: actions/checkout@v7
 
+      # Pinned, not @stable: rust-toolchain.toml pins 1.98.1, so cargo always
+      # builds with that toolchain. Requesting the cross target from @stable
+      # installs its rust-std onto a toolchain cargo never uses, and the build
+      # then fails with "can't find crate for `core`" for every target.
       - name: Setup Rust
-        uses: dtolnay/rust-toolchain@stable
+        uses: dtolnay/rust-toolchain@1.98.1
         with:
           targets: ${{ matrix.target }}
 
@@ -74,9 +80,17 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y gcc-aarch64-linux-gnu libc6-dev-arm64-cross
 
-      - name: Build
+      # Only the arm64 leg sets a linker. Setting the variable to "" on the
+      # other legs would leave an empty CARGO_TARGET_*_LINKER in the
+      # environment for no reason.
+      - name: Build (linux-arm64)
+        if: matrix.target == 'aarch64-unknown-linux-gnu'
         env:
-          CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER: ${{ matrix.target == 'aarch64-unknown-linux-gnu' && 'aarch64-linux-gnu-gcc' || '' }}
+          CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER: aarch64-linux-gnu-gcc
+        run: cargo build -p synth-cli --release --locked --target ${{ matrix.target }}
+
+      - name: Build
+        if: matrix.target != 'aarch64-unknown-linux-gnu'
         run: cargo build -p synth-cli --release --locked --target ${{ matrix.target }}
 
       - name: Package
