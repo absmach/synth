@@ -21,8 +21,8 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  rust-lint-and-build:
-    name: Rust Lint and Build
+  lint-and-build:
+    name: Lint and Build
     runs-on: ubuntu-latest
 
     steps:
@@ -44,6 +44,12 @@ jobs:
           # PR restore the cache the main-branch run populated.
           shared-key: ${{ runner.os }}-${{ hashFiles('rust-toolchain.toml') }}
 
+      # ERC resolves library *nicknames* (`Device`, `power`, `Capacitor_SMD`)
+      # against the global sym-lib-table / fp-lib-table. KiCad seeds those
+      # from the shipped templates on first launch, which never happens on a
+      # headless runner, so every stock nickname would otherwise be reported
+      # as "configuration does not include the library". Copy them in the
+      # same way the first-run wizard does.
       - name: Install kicad-cli and the stock symbol/footprint libraries
         run: |
           sudo add-apt-repository --yes ppa:kicad/kicad-10.0-releases
@@ -51,50 +57,15 @@ jobs:
           sudo apt-get install --no-install-recommends -y \
             kicad kicad-symbols kicad-footprints
           kicad-cli version
-          test -d /usr/share/kicad/symbols || {
-            echo "::error::/usr/share/kicad/symbols is missing; the exporter cannot resolve stock symbols"
-            exit 1
-          }
-          test -d /usr/share/kicad/footprints || {
-            echo "::error::/usr/share/kicad/footprints is missing; ERC cannot resolve footprint nicknames"
-            exit 1
-          }
-          # ERC resolves library *nicknames* (`Device`, `power`, `Capacitor_SMD`)
-          # against the global sym-lib-table / fp-lib-table. KiCad seeds those
-          # from the shipped templates on first launch, which never happens on a
-          # headless runner, so every stock nickname would otherwise be reported
-          # as "configuration does not include the library". Copy them in the
-          # same way the first-run wizard does.
           mkdir -p "$HOME/.config/kicad/10.0"
           cp /usr/share/kicad/template/sym-lib-table "$HOME/.config/kicad/10.0/sym-lib-table"
           cp /usr/share/kicad/template/fp-lib-table "$HOME/.config/kicad/10.0/fp-lib-table"
-          ls /usr/share/kicad/symbols | wc -l
 
       - name: Check formatting
         run: cargo fmt --all -- --check
 
       - name: Run linter
         run: cargo clippy --workspace --all-targets --locked -- -D warnings
-
-      - name: Install cargo-nextest
-        uses: taiki-e/install-action@nextest
-
-      # `cargo check` is deliberately absent: clippy above already
-      # type-checks every target, and the test run compiles the same crates
-      # for real. A separate check pass only recompiles the workspace.
-      #
-      # nextest runs test *binaries* concurrently, unlike `cargo test`, which
-      # runs them one after another. Two suites here dominate the wall clock
-      # (the reference-design ERC golden and the schematic golden, ~230s and
-      # ~180s) and previously could never overlap; nextest lets them share
-      # the runner's cores.
-      - name: Run tests
-        run: cargo nextest run --workspace --locked
-
-      # nextest intentionally does not run doctests, so keep them here.
-      # Cargo has no way to ask nextest for them.
-      - name: Run doctests
-        run: cargo test --workspace --locked --doc
 
       # The release profile (lto + a single codegen unit) is the slowest
       # build in the job and nothing on a PR consumes its output; CD builds
@@ -114,3 +85,58 @@ jobs:
         with:
           command: check
           arguments: --locked
+
+  test:
+    name: Test shard ${{ matrix.shard }}/2
+    runs-on: ubuntu-latest
+
+    strategy:
+      fail-fast: false
+      matrix:
+        # The hardware-synthesis suites are CPU-bound, and a single runner's
+        # cores are the hard ceiling: nextest already overlaps binaries, so
+        # the only way to cut wall clock further is to add cores. Split the
+        # suite across two runners and partition the tests between them.
+        shard: [1, 2]
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v7
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@1.98.1
+
+      - name: Cache Cargo
+        uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: ${{ runner.os }}-${{ hashFiles('rust-toolchain.toml') }}
+
+      - name: Install kicad-cli and the stock symbol/footprint libraries
+        run: |
+          sudo add-apt-repository --yes ppa:kicad/kicad-10.0-releases
+          sudo apt-get update
+          sudo apt-get install --no-install-recommends -y \
+            kicad kicad-symbols kicad-footprints
+          mkdir -p "$HOME/.config/kicad/10.0"
+          cp /usr/share/kicad/template/sym-lib-table "$HOME/.config/kicad/10.0/sym-lib-table"
+          cp /usr/share/kicad/template/fp-lib-table "$HOME/.config/kicad/10.0/fp-lib-table"
+
+      - name: Install cargo-nextest
+        uses: taiki-e/install-action@nextest
+
+      # `cargo check` is deliberately absent: clippy already type-checks
+      # every target, and this run compiles the same crates for real.
+      #
+      # nextest runs test *binaries* concurrently, unlike `cargo test`, which
+      # runs them one after another. --partition divides the test set into
+      # shards so the two runners share the work.
+      - name: Run tests (shard ${{ matrix.shard }})
+        run: |
+          cargo nextest run --workspace --locked \
+            --partition count:2/${{ matrix.shard }}
+
+      # nextest intentionally does not run doctests, so keep them here.
+      # Run them on one shard only; they are not partitionable and are fast.
+      - name: Run doctests
+        if: matrix.shard == 1
+        run: cargo test --workspace --locked --doc
