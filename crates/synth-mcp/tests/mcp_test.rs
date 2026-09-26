@@ -918,3 +918,86 @@ fn test_mcp_suggested_repair_op_is_applicable() {
         "distribute_row failed: {resp:?}"
     );
 }
+
+/// The page fit is owned by `layout_with_sidecar`; the op result, the
+/// reload, and `preview_schematic` must all agree on the sheet and on
+/// every position, or the reviewed sheet is not the exported one.
+#[test]
+fn test_mcp_fit_sheet_result_reload_and_preview_agree() {
+    let dir = tempfile::tempdir().unwrap();
+    let src = dir.path().join("d.synth");
+    let sidecar = dir.path().join("d.synth.layout.toml");
+
+    let call = |id: u32, tool: &str, extra: serde_json::Value| -> serde_json::Value {
+        let mut args = json!({
+            "source": LED_INDICATOR_SOURCE,
+            "file_path": src.to_str().unwrap(),
+        });
+        for (k, v) in extra.as_object().into_iter().flatten() {
+            args[k] = v.clone();
+        }
+        let req = json!({
+            "jsonrpc": "2.0", "id": id, "method": "tools/call",
+            "params": { "name": tool, "arguments": args }
+        });
+        let resp = handle_jsonrpc_request(req, None);
+        serde_json::from_str(resp["result"]["content"][0]["text"].as_str().unwrap())
+            .unwrap_or_else(|e| panic!("{tool} failed ({e}): {resp:?}"))
+    };
+    let state = |v: &serde_json::Value| -> (String, Vec<(f64, f64)>) {
+        (
+            v["sheet_size"].to_string(),
+            v["components"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .map(|p| {
+                    (
+                        p["center_mm"][0].as_f64().unwrap(),
+                        p["center_mm"][1].as_f64().unwrap(),
+                    )
+                })
+                .collect(),
+        )
+    };
+
+    // Drag, then fit, both persisted.
+    call(
+        90,
+        "synth_mutate_layout",
+        json!({ "persist": true, "layout_file_path": sidecar.to_str().unwrap(),
+                "op": { "kind": "move_component", "id": 2, "x_mm": 60.96, "y_mm": 50.8 } }),
+    );
+    let fitted = call(
+        91,
+        "synth_mutate_layout",
+        json!({ "persist": true, "layout_file_path": sidecar.to_str().unwrap(),
+                "op": { "kind": "fit_sheet", "grow": false } }),
+    );
+    let reloaded = call(
+        92,
+        "synth_mutate_layout",
+        json!({ "op": { "kind": "reroute_net", "net": 0 } }),
+    );
+    let previewed = call(93, "synth_preview_schematic", json!({}));
+
+    let (fsheet, fpos) = state(&fitted);
+    assert_eq!(
+        (fsheet.clone(), fpos.clone()),
+        state(&reloaded),
+        "fit result and reload must agree"
+    );
+    assert_eq!(
+        (fsheet.clone(), fpos.clone()),
+        state(&previewed),
+        "fit result and preview must agree"
+    );
+
+    // Nothing may be driven off the top/left of the page by the fit.
+    for (i, (x, y)) in fpos.iter().enumerate() {
+        assert!(
+            *x >= -1e-6 && *y >= -1e-6,
+            "part {i} at ({x}, {y}) is off the sheet"
+        );
+    }
+}

@@ -14,7 +14,7 @@ synth-registry = { path = "../synth-registry" }
 synth-diagnostics = { path = "../synth-diagnostics" }
 synth-layout = { path = "../synth-layout" }
 thiserror = "1.0"
-uuid = { version = "1.0", features = ["v4", "serde"] }
+uuid = { version = "1.26", features = ["v4", "serde"] }
 serde = { version = "1.0", features = ["derive"] }
-indexmap = "2.0"
-smallvec = "1.0"
+indexmap = "2.14"
+smallvec = "1.16"

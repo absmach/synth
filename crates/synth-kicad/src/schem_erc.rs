@@ -889,25 +889,37 @@ const PAGE_OVERFLOW_EPSILON_MM: f64 = 0.01;
 /// bounding box; past A2 it stops growing and the §P26 split takes
 /// over (§MULTI-SHEET). This rule makes any residual overflow
 /// visible: a component placement or wire point beyond the sheet's
-/// landscape dimensions is flagged. Multi-sheet boards run this per
+/// dimensions is flagged. Multi-sheet boards run this per
 /// sheet (`check_sheets`), so a split board no longer trips it.
+///
+/// Overflow is checked on all four sides. The right/bottom case is the
+/// placer failing to grow the page; the left/top case (negative
+/// coordinates) is content driven off the page by a page shift or a
+/// manual/agent override, which used to be invisible to every rule.
 fn check_page_overflow(layout: &Layout) -> Vec<Diagnostic> {
     let (w, h) = layout.sheet_size.dims_mm();
     let max_x = w + PAGE_OVERFLOW_EPSILON_MM;
     let max_y = h + PAGE_OVERFLOW_EPSILON_MM;
+    let min_x = -PAGE_OVERFLOW_EPSILON_MM;
+    let min_y = -PAGE_OVERFLOW_EPSILON_MM;
+
+    let overflows = |x: f64, y: f64| x > max_x || y > max_y || x < min_x || y < min_y;
+    // Most-extreme point by Manhattan distance from the origin, so the
+    // reported culprit is the one furthest off the page.
+    let rank = |x: f64, y: f64| x.abs() + y.abs();
 
     let mut worst: Option<(f64, f64)> = None;
-    for placement in &layout.components {
-        let (x, y) = placement.center_mm;
-        if (x > max_x || y > max_y) && worst.is_none_or(|(wx, wy)| x + y > wx + wy) {
+    let mut consider = |x: f64, y: f64| {
+        if overflows(x, y) && worst.is_none_or(|(wx, wy)| rank(x, y) > rank(wx, wy)) {
             worst = Some((x, y));
         }
+    };
+    for placement in &layout.components {
+        consider(placement.center_mm.0, placement.center_mm.1);
     }
     for wire in &layout.wires {
         for &(x, y) in &wire.points {
-            if (x > max_x || y > max_y) && worst.is_none_or(|(wx, wy)| x + y > wx + wy) {
-                worst = Some((x, y));
-            }
+            consider(x, y);
         }
     }
     let Some((x, y)) = worst else {
@@ -919,8 +931,8 @@ fn check_page_overflow(layout: &Layout) -> Vec<Diagnostic> {
         "content overflows the selected sheet size",
     )
     .message(format!(
-        "content reaches ({x:.1}, {y:.1}) mm but the sheet is only {w:.0} × {h:.0} mm; \
-                 shrink the layout or move to a larger sheet",
+        "content reaches ({x:.1}, {y:.1}) mm but the sheet is only {w:.0} × {h:.0} mm \
+                 (origin at the top-left corner); move it onto the page or resize the sheet",
     ))
     .expected(format!("all content within {w:.0} × {h:.0} mm"))
     .found(format!("content at ({x:.1}, {y:.1}) mm"))
@@ -1928,6 +1940,54 @@ mod tests {
                 placement(ComponentId(1), 280.0, 200.0, Rotation::Zero),
             ],
             vec![wire(NetId(0), vec![(10.0, 10.0), (280.0, 10.0)])],
+            Vec::new(),
+            Vec::new(),
+        );
+        assert!(check_page_overflow(&layout).is_empty());
+    }
+
+    #[test]
+    fn negative_coordinates_off_the_left_edge_are_flagged() {
+        // A page shift or an override can drive a part past the origin.
+        // That used to be invisible: only right/bottom overflow was
+        // checked, so content off the left/top edge passed every rule.
+        let layout = layout(
+            vec![placement(ComponentId(0), -22.86, 2.54, Rotation::Zero)],
+            Vec::new(),
+            Vec::new(),
+            Vec::new(),
+        );
+        let violations = check_page_overflow(&layout);
+        assert_eq!(violations.len(), 1);
+        assert_eq!(violations[0].code, "E-SYNTH-SCHEM-007");
+        assert!(
+            violations[0]
+                .message
+                .as_deref()
+                .unwrap_or("")
+                .contains("-22.9"),
+            "message must name the negative coordinate: {:?}",
+            violations[0].message
+        );
+    }
+
+    #[test]
+    fn negative_wire_point_off_the_top_edge_is_flagged() {
+        let layout = layout(
+            Vec::new(),
+            vec![wire(NetId(0), vec![(50.0, -10.0), (50.0, 40.0)])],
+            Vec::new(),
+            Vec::new(),
+        );
+        assert_eq!(check_page_overflow(&layout).len(), 1);
+    }
+
+    #[test]
+    fn zero_origin_content_is_silent() {
+        // Exactly on the origin is on the page, not off it.
+        let layout = layout(
+            vec![placement(ComponentId(0), 0.0, 0.0, Rotation::Zero)],
+            Vec::new(),
             Vec::new(),
             Vec::new(),
         );

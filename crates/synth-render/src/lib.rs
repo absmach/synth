@@ -114,7 +114,7 @@ pub fn visible_text_count(svg: &[u8]) -> usize {
     let mut rest = text.as_ref();
     while let Some(pos) = rest.find("<text") {
         let after = &rest[pos + 5..];
-        let end = after.find('>').map_or(after.len(), |i| i);
+        let end = after.find('>').unwrap_or(after.len());
         let tag = &after[..end];
         let invisible = tag.contains("opacity=\"0\"")
             || tag.contains("stroke-opacity=\"0\"")

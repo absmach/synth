@@ -9,7 +9,7 @@
 //! (`sheet` blocks or import files, which lower to implicit sheets).
 //!
 //! The split reuses the single-sheet pipeline instead of
-//! re-clustering: [`split_layout`] partitions one finished [`Layout`]
+//! re-clustering: `split_layout` partitions one finished [`Layout`]
 //! per sheet, drops cross-sheet wires in favour of
 //! [`HierarchicalLabel`] stubs, and recomputes captions, boxes,
 //! legends, and notes per sheet. Positions translate rigidly, so the

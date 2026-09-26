@@ -61,7 +61,7 @@ chrono = "0.4"
 sha2 = "0.10"
 thiserror = "2.0"
 anyhow = "1.0"
-rayon = "1.10"
+rayon = "1.12"
 
 # Deterministic rasterization for the schematic visual-feedback loop
 # (synth-render). Pinned exactly: a resvg bump that moves one antialiased
@@ -70,9 +70,9 @@ resvg = "=0.48.1"
 image = { version = "0.25", default-features = false, features = ["png"] }
 base64 = "0.22"
 
-clap = { version = "4.5", features = ["derive"] }
-insta = { version = "1.41", features = ["json", "yaml"] }
-proptest = "1.5"
+clap = { version = "4.6", features = ["derive"] }
+insta = { version = "1.48", features = ["json", "yaml"] }
+proptest = "1.11"
 toml = "0.8"
 uuid = { version = "1", features = ["v5"] }
 zip = { version = "7.2", default-features = false }

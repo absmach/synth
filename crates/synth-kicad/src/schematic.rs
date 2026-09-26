@@ -2156,7 +2156,10 @@ mod tests {
         assert!(text.contains("(unit 1)"));
         assert!(
             text.contains("(unit 2)"),
-            "unit 2 must be placed, not left missing"
+            "unit 2 must be placed, not left missing — if the bundled KiCad \
+             symbol library is absent (no /usr/share/kicad/symbols and no \
+             KICAD_SYMBOL_DIR), the LM358 resolves to a single-unit symbol \
+             and this assertion cannot hold. Install `kicad-libraries`."
         );
         assert!(
             text.contains("(unit 3)"),

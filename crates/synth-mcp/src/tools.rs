@@ -1491,7 +1491,15 @@ fn execute_preview_schematic(
         if let Some(reg) = registry {
             let lowered = synth_ir::lower(&resolved.program, &reg, file_name);
             if let Some(board) = lowered.board.as_ref() {
-                let layout = synth_layout::layout(board);
+                // Honour the sidecar like every other consumer
+                // (`synth_review_schematic`, `synth_render_schematic`,
+                // `synth_mutate_layout`, the exporter). Returning the bare
+                // auto-layout here made `preview` disagree with the render
+                // and export about both dragged positions and `fit_sheet`.
+                let layout = synth_layout::layout_with_sidecar(
+                    board,
+                    resolve_sidecar(args, file_name).as_deref(),
+                );
                 return serde_json::to_value(&layout).map_err(|e| e.to_string());
             }
         }
@@ -1551,11 +1559,28 @@ fn execute_mutate_layout(args: &Value, default_registry: Option<&Path>) -> Resul
         .board
         .ok_or("Could not generate layout: board lowering failed")?;
 
-    let mut layout = synth_layout::layout(&board);
+    // Start from the sheet the caller actually sees — sidecar overrides and
+    // a persisted `fit_sheet` included — so op coordinates and the positions
+    // persisted below are in the same page space as the render. Starting
+    // from the bare auto-layout made the op's result disagree with the very
+    // next reload by the page-fit delta.
+    let sidecar_path = resolve_sidecar(args, file_name);
+    let mut layout = synth_layout::layout_with_sidecar(&board, sidecar_path.as_deref());
+    let before = layout.clone();
     synth_layout::ops::apply_op(&mut layout, &board, op.clone())
         .map_err(|e| format!("Could not apply layout op: {e}"))?;
 
-    let persisted = persist_layout_op(args, &board, &layout, &op, file_name)?;
+    let persisted = persist_layout_op(args, &board, &before, &layout, &op, file_name)?;
+
+    // A page fit is owned by `layout_with_sidecar`; the op's in-place
+    // approximation of it can differ by a few millimetres because it ran on
+    // a different starting layout. Return the reloaded sheet, which is what
+    // every later render and export will show.
+    if let (synth_layout::ops::LayoutOp::FitSheet { .. }, Some(saved)) = (&op, persisted.as_ref()) {
+        if let Some(path) = saved["saved_path"].as_str() {
+            layout = synth_layout::layout_with_sidecar(&board, Some(Path::new(path)));
+        }
+    }
 
     let mut response = serde_json::to_value(&layout).map_err(|e| e.to_string())?;
     response["persisted"] = persisted.unwrap_or(Value::Null);
@@ -1571,6 +1596,7 @@ fn execute_mutate_layout(args: &Value, default_registry: Option<&Path>) -> Resul
 fn persist_layout_op(
     args: &Value,
     board: &synth_ir::Board,
+    before: &synth_layout::Layout,
     layout: &synth_layout::Layout,
     op: &synth_layout::ops::LayoutOp,
     file_name: &str,
@@ -1613,22 +1639,20 @@ fn persist_layout_op(
             v
         }
         // Both repair ops may move many components; persist every one that
-        // actually changed position, resolved by diffing against the fresh
-        // auto-layout rather than re-deriving the op's target set.
-        LayoutOp::DistributeRow { .. } | LayoutOp::SpreadRegion { .. } => {
-            let base = synth_layout::layout(board);
-            base.components
-                .iter()
-                .filter(|p| {
-                    layout
-                        .components
-                        .iter()
-                        .find(|q| q.id == p.id)
-                        .is_some_and(|q| q.center_mm != p.center_mm)
-                })
-                .map(|p| p.id)
-                .collect()
-        }
+        // actually changed position, resolved by diffing against the layout
+        // the op started from rather than re-deriving its target set.
+        LayoutOp::DistributeRow { .. } | LayoutOp::SpreadRegion { .. } => before
+            .components
+            .iter()
+            .filter(|p| {
+                layout
+                    .components
+                    .iter()
+                    .find(|q| q.id == p.id)
+                    .is_some_and(|q| q.center_mm != p.center_mm)
+            })
+            .map(|p| p.id)
+            .collect(),
         _ => Vec::new(),
     };
 
@@ -2822,6 +2846,9 @@ fn execute_write_layout_override(args: &Value) -> Result<Value, String> {
     } else {
         synth_layout::sidecar::SidecarLayout::default()
     };
+    // `Default` yields schema_version 0; the sidecar schema version is a
+    // real contract, so stamp the current one before writing.
+    sidecar.schema_version = synth_layout::sidecar::SIDECAR_SCHEMA_VERSION;
 
     let placement = synth_layout::sidecar::SidecarPlacement {
         x: x_mm,

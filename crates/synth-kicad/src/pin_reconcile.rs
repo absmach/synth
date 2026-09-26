@@ -57,7 +57,7 @@ impl RailFamily {
     /// This stays name+type based by design: it classifies the
     /// *physical symbol* pin (KiCad reality — `VDDA`, `VSS`, …), where
     /// there is no declared voltage to consult. The *net* side instead
-    /// goes through [`net_family`], which prefers the declared
+    /// goes through `net_family`, which prefers the declared
     /// `power "NAME" V` voltage and the inferred power domains and only
     /// falls back to name heuristics.
     pub fn for_pin(electrical_type: &str, name: &str) -> Option<Self> {
