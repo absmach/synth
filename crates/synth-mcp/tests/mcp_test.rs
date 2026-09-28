@@ -261,6 +261,83 @@ fn test_mcp_call_synth_place_with_explicit_dimensions() {
 }
 
 #[test]
+fn test_mcp_call_synth_place_with_board_family_profile() {
+    let req = json!({
+        "jsonrpc": "2.0",
+        "id": 33,
+        "method": "tools/call",
+        "params": {
+            "name": "synth_place_with_hints",
+            "arguments": {
+                "source": LED_INDICATOR_SOURCE,
+                "board_family": "arduino-uno-shield"
+            }
+        }
+    });
+    let resp = handle_jsonrpc_request(req, None);
+    let content_text = resp["result"]["content"][0]["text"].as_str().unwrap();
+    let placement: serde_json::Value = serde_json::from_str(content_text).unwrap();
+    assert_eq!(placement["status"], "placed");
+    assert_eq!(placement["board_size_mm"], json!([68.6, 53.3]));
+}
+
+#[test]
+fn test_mcp_rejects_unknown_or_conflicting_board_family_profile() {
+    for (id, arguments, expected) in [
+        (
+            34,
+            json!({"source": LED_INDICATOR_SOURCE, "board_family": "unknown"}),
+            "unsupported board family",
+        ),
+        (
+            35,
+            json!({
+                "source": LED_INDICATOR_SOURCE,
+                "board_family": "featherwing",
+                "board_width_mm": 50.0,
+                "board_height_mm": 25.0
+            }),
+            "cannot be combined",
+        ),
+    ] {
+        let resp = handle_jsonrpc_request(
+            json!({
+                "jsonrpc": "2.0",
+                "id": id,
+                "method": "tools/call",
+                "params": {"name": "synth_place_with_hints", "arguments": arguments}
+            }),
+            None,
+        );
+        assert!(resp["result"]["content"][0]["text"]
+            .as_str()
+            .unwrap()
+            .contains(expected));
+    }
+}
+
+#[test]
+fn test_mcp_rejects_board_family_layer_mismatch() {
+    let req = json!({
+        "jsonrpc": "2.0",
+        "id": 36,
+        "method": "tools/call",
+        "params": {
+            "name": "synth_place_with_hints",
+            "arguments": {
+                "source": LED_INDICATOR_SOURCE,
+                "board_family": "standard-4-layer-100x100"
+            }
+        }
+    });
+    let resp = handle_jsonrpc_request(req, None);
+    assert!(resp["result"]["content"][0]["text"]
+        .as_str()
+        .unwrap()
+        .contains("does not support the source layer count"));
+}
+
+#[test]
 fn test_mcp_call_synth_describe_placement() {
     let req = json!({
         "jsonrpc": "2.0",

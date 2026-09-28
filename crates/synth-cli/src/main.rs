@@ -249,6 +249,10 @@ enum Command {
         /// Explicit board height in millimetres. Must be supplied with width.
         #[arg(long)]
         height: Option<f64>,
+        /// Compiler-owned fixed-form-factor board family. Cannot be combined
+        /// with explicit width/height.
+        #[arg(long)]
+        board_family: Option<String>,
         #[arg(long)]
         pretty: bool,
     },
@@ -379,6 +383,14 @@ enum Command {
         svg: bool,
     },
 
+    /// Emit the compiler-owned capability descriptor used by agents and
+    /// cloud/UI integrations. This is read-only and never inspects or
+    /// mutates a design.
+    Capability {
+        #[command(subcommand)]
+        cmd: CapabilityCommand,
+    },
+
     /// Inspect the component registry (Phase 15, R15.2): resolve tier
     /// directories, list merged parts, and run a health check.
     Registry {
@@ -406,6 +418,17 @@ enum Command {
         /// Path to the Tier-2 (per-user) registry directory.
         #[arg(long, value_name = "DIR")]
         user_registry: Option<PathBuf>,
+    },
+}
+
+/// Subcommands of `synth capability`.
+#[derive(Debug, Subcommand)]
+enum CapabilityCommand {
+    /// List the actual CLI/compiler surface and supported physical stages.
+    List {
+        /// Emit a stable JSON descriptor instead of the human table.
+        #[arg(long)]
+        json: bool,
     },
 }
 
@@ -736,8 +759,16 @@ fn main() -> ExitCode {
             registry,
             width,
             height,
+            board_family,
             pretty,
-        } => dump_place(&input, registry.as_deref(), width, height, pretty),
+        } => dump_place(
+            &input,
+            registry.as_deref(),
+            width,
+            height,
+            board_family.as_deref(),
+            pretty,
+        ),
         Command::Route {
             input,
             registry,
@@ -793,6 +824,7 @@ fn main() -> ExitCode {
             registry.as_deref(),
             svg,
         ),
+        Command::Capability { cmd } => capability_cmd(cmd),
         Command::Registry {
             cmd,
             registry,
@@ -809,6 +841,113 @@ fn main() -> ExitCode {
             ExitCode::from(EXIT_USAGE)
         }
     }
+}
+
+fn capability_cmd(cmd: CapabilityCommand) -> anyhow::Result<u8> {
+    let commands = [
+        "validate",
+        "dump-ast",
+        "dump-ir",
+        "export-kicad",
+        "fix",
+        "schema",
+        "layout",
+        "place",
+        "route",
+        "drc",
+        "preview",
+        "mcp",
+        "supply-chain",
+        "render",
+        "capability",
+        "registry",
+        "part",
+    ];
+    let board_families = synth_place::board_family::PROFILES
+        .iter()
+        .map(|profile| {
+            serde_json::json!({
+                "name": profile.name,
+                "description": profile.description,
+                "layers": profile.layers,
+                "width_mm": profile.width_mm,
+                "height_mm": profile.height_mm,
+                "edge_clearance_mm": profile.edge_clearance_mm
+            })
+        })
+        .collect::<Vec<_>>();
+
+    let descriptor = serde_json::json!({
+        "schema_version": "1.0",
+        "compiler": {
+            "name": "synth",
+            "version": env!("CARGO_PKG_VERSION")
+        },
+        "commands": commands.iter().map(|name| serde_json::json!({
+            "name": name,
+            "available": true
+        })).collect::<Vec<_>>(),
+        "physical_stages": [
+            {"name": "layout", "evidence": ["layout_ir"]},
+            {"name": "placement", "evidence": ["placement_ir", "placement_hash"]},
+            {"name": "routing", "evidence": ["routing_ir", "routing_hash"]},
+            {"name": "drc", "evidence": ["drc_report", "drc_status"]},
+            {"name": "kicad_export", "evidence": ["artifact_hashes", "archive_sha256"]}
+        ],
+        "manufacturer_profiles": [
+            {"name": "jlc-standard", "layers": [2, 4], "min_trace_width_mm": 0.127, "min_clearance_mm": 0.127, "min_drill_mm": 0.3},
+            {"name": "pcbway-standard", "layers": [2, 4], "min_trace_width_mm": 0.15, "min_clearance_mm": 0.15, "min_drill_mm": 0.3},
+            {"name": "oshpark-4layer", "layers": [4], "min_trace_width_mm": 0.125, "min_clearance_mm": 0.125, "min_drill_mm": 0.25}
+        ],
+        "language": {
+            "syntax_version": "1.0",
+            "statements": ["board", "import", "layers", "manufacturer", "revision", "component", "connect", "net", "power", "module", "interface", "bus", "use", "bind", "netclass", "keepout", "group", "sheet", "variant"],
+            "attributes": ["company", "legends", "notes", "dnp", "prefix", "param", "as", "class", "diff_pair", "impedance", "trace_width", "clearance", "radius", "value", "tolerance", "voltage", "power_rating", "dielectric", "description"],
+            "endpoint_forms": ["component.pin", "named_net", "bus.member"]
+        },
+        "geometry_and_constraints": {
+            "board_dimensions": {
+                "source": "placement_cli_options",
+                "width": {"option": "--width", "unit": "mm", "paired_with": "height"},
+                "height": {"option": "--height", "unit": "mm", "paired_with": "width"}
+            },
+            "layer_count": {"statement": "layers", "type": "integer", "min": 1, "max": 64},
+            "routing_constraints": {
+                "netclass": ["trace_width", "clearance", "color"],
+                "diff_pair": ["impedance"],
+                "keepout": ["radius"],
+                "component": ["placement_hint"]
+            },
+            "units": ["mm", "mil", "ohm", "kohm", "mohm", "v", "mv", "a", "ma", "mhz", "ghz", "pf", "nf", "uf"]
+        },
+        "board_family_profiles": {
+            "available": true,
+            "source": "synth-place::board_family",
+            "families": board_families
+        }
+    });
+
+    match cmd {
+        CapabilityCommand::List { json: true } => {
+            serde_json::to_writer_pretty(std::io::stdout(), &descriptor)?;
+            println!();
+        }
+        CapabilityCommand::List { json: false } => {
+            println!("COMMAND              AVAILABLE");
+            println!("-------------------- ---------");
+            for command in commands {
+                println!("{command:<20} yes");
+            }
+            println!();
+            println!("PHYSICAL STAGES: layout, placement, routing, drc, kicad_export");
+            println!(
+                "BOARD FAMILY PROFILES: {} shipped",
+                synth_place::board_family::PROFILES.len()
+            );
+        }
+    }
+
+    Ok(EXIT_SUCCESS)
 }
 
 fn run_mcp(stdio: bool, sse: bool, port: u16, registry: Option<PathBuf>) -> anyhow::Result<u8> {
@@ -2180,6 +2319,7 @@ fn dump_place(
     registry_dir: Option<&Path>,
     width: Option<f64>,
     height: Option<f64>,
+    board_family: Option<&str>,
     pretty: bool,
 ) -> anyhow::Result<u8> {
     let (source, file) = read_source(input)?;
@@ -2210,9 +2350,27 @@ fn dump_place(
             }
             // Surface placement failures as structured
             // `E-SYNTH-PLACE-*` diagnostics (slice 5).
-            let requested_dimensions = match (width, height) {
-                (Some(w), Some(h)) => Some((w, h)),
-                (None, None) => None,
+            let family_dimensions = board_family
+                .map(|name| {
+                    synth_place::board_family::get(name)
+                        .ok_or_else(|| anyhow::anyhow!("unsupported board family: {name}"))
+                        .map(|profile| (profile.width_mm, profile.height_mm))
+                })
+                .transpose()?;
+            if let Some(name) = board_family {
+                let profile =
+                    synth_place::board_family::get(name).expect("board family was resolved above");
+                let layers = lowered.board.as_ref().map_or(0, |board| board.layers);
+                if !synth_place::board_family::supports_layers(profile, layers) {
+                    anyhow::bail!("board family {name} does not support {layers} board layers")
+                }
+            }
+            if family_dimensions.is_some() && (width.is_some() || height.is_some()) {
+                anyhow::bail!("--board-family cannot be combined with --width/--height")
+            }
+            let requested_dimensions = match (width, height, family_dimensions) {
+                (Some(w), Some(h), None) => Some((w, h)),
+                (None, None, family) => family,
                 _ => {
                     anyhow::bail!("--width and --height must be supplied together")
                 }

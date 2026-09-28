@@ -74,6 +74,7 @@
 )]
 
 pub mod advisor;
+pub mod board_family;
 pub mod cem;
 pub mod floorplan;
 pub mod modules;

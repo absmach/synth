@@ -313,6 +313,7 @@ pub fn list_tools() -> Vec<McpToolInfo> {
                     "profile":          { "type": "string", "description": "Optional manufacturer DRC profile ('jlcpcb_standard' or path to toml)" },
                     "board_width_mm":   { "type": "number", "description": "Optional explicit board width in millimetres; must be provided with board_height_mm" },
                     "board_height_mm":  { "type": "number", "description": "Optional explicit board height in millimetres; must be provided with board_width_mm" },
+                    "board_family":    { "type": "string", "description": "Optional compiler-owned fixed-form-factor profile; cannot be combined with explicit dimensions" },
                     "allow_placement_warnings": { "type": "boolean", "description": "Allow combined routing despite visual-review findings; use only for deliberate manual/debug routing (default false)" },
                     "registry_path":    { "type": "string", "description": "Optional custom component registry path" },
                     "workspace_root":   { "type": "string", "description": "Optional workspace root path" },
@@ -2623,7 +2624,32 @@ fn execute_place_with_hints(
         Vec::new()
     };
 
-    let requested_dimensions = match (
+    let family_dimensions = match args.get("board_family").and_then(Value::as_str) {
+        Some(name) => match synth_place::board_family::get(name) {
+            Some(profile) if synth_place::board_family::supports_layers(profile, board.layers) => {
+                Some((profile.width_mm, profile.height_mm))
+            }
+            Some(profile) => {
+                return Ok(serde_json::json!({
+                    "status": "error",
+                    "error": "board family does not support the source layer count",
+                    "board_family": name,
+                    "board_layers": board.layers,
+                    "supported_layers": profile.layers
+                }));
+            }
+            None => {
+                return Ok(serde_json::json!({
+                    "status": "error",
+                    "error": "unsupported board family",
+                    "board_family": name,
+                    "supported_board_families": synth_place::board_family::PROFILES
+                }));
+            }
+        },
+        None => None,
+    };
+    let explicit_dimensions = match (
         args.get("board_width_mm").and_then(Value::as_f64),
         args.get("board_height_mm").and_then(Value::as_f64),
     ) {
@@ -2636,6 +2662,13 @@ fn execute_place_with_hints(
             }));
         }
     };
+    if family_dimensions.is_some() && explicit_dimensions.is_some() {
+        return Ok(serde_json::json!({
+            "status": "error",
+            "error": "board_family cannot be combined with board_width_mm/board_height_mm"
+        }));
+    }
+    let requested_dimensions = family_dimensions.or(explicit_dimensions);
 
     let placement_result = requested_dimensions.map_or_else(
         || synth_place::place_with_hints(&board, &hints),
