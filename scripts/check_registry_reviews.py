@@ -78,7 +78,10 @@ def main() -> int:
             )
 
     if failures:
-        print("registry-review: FAILED — unreviewed Tier-1 registry changes:", file=sys.stderr)
+        print(
+            "registry-review: FAILED — unreviewed Tier-1 registry changes:",
+            file=sys.stderr,
+        )
         for line in failures:
             print(f"  {line}", file=sys.stderr)
         print(

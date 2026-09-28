@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 import sys
+
 import pcbnew
 
 board = pcbnew.LoadBoard(sys.argv[1])

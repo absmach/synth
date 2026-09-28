@@ -11,7 +11,7 @@ for i in range(1, 6):
         f.write(f'board "area_overflow_{i:02d}" {{\n  layers 2\n')
         for c in range(1, 450 + i * 20):
             f.write(f'  component MCU{c}: mcu "rp2350"\n')
-        f.write('  connect MCU1.run -> MCU2.run\n}\n')
+        f.write("  connect MCU1.run -> MCU2.run\n}\n")
 
 # 2. No Position Available (01..05) — Keepout covers almost entire board, remaining area too small
 for i in range(1, 6):
@@ -23,10 +23,10 @@ for i in range(1, 6):
         f.write('  component ANT1: antenna "ant_chip_2g4"\n')
         for c in range(1, 15 + i * 2):
             f.write(f'  component C{c}: capacitor "c_generic_0603"\n')
-            f.write(f'  connect U1.vdd_io -> C{c}.p1\n')
-            f.write(f'  connect U1.gnd -> C{c}.p2\n')
-        f.write(f'  keepout ant {{\n    radius {radius}mm\n  }}\n')
-        f.write('}\n')
+            f.write(f"  connect U1.vdd_io -> C{c}.p1\n")
+            f.write(f"  connect U1.gnd -> C{c}.p2\n")
+        f.write(f"  keepout ant {{\n    radius {radius}mm\n  }}\n")
+        f.write("}\n")
 
 # 3. Keepout Blocked (01..05) — Radius > 300mm covers entire board
 for i in range(1, 6):
@@ -38,10 +38,10 @@ for i in range(1, 6):
         f.write('  component U2: regulator "ams1117_3v3"\n')
         f.write('  component J1: connector "usb_c_receptacle"\n')
         f.write('  component ANT1: antenna "ant_chip_2g4"\n')
-        f.write(f'  keepout board_blocker {{\n    radius {radius}mm\n  }}\n')
-        f.write('  connect J1.vbus -> U2.vin\n')
-        f.write('  connect U2.vout -> U1.vdd_io\n')
-        f.write('}\n')
+        f.write(f"  keepout board_blocker {{\n    radius {radius}mm\n  }}\n")
+        f.write("  connect J1.vbus -> U2.vin\n")
+        f.write("  connect U2.vout -> U1.vdd_io\n")
+        f.write("}\n")
 
 # 4. Oversized / Extreme constraint (01..05) — Radius 500mm+
 for i in range(1, 6):
@@ -53,7 +53,7 @@ for i in range(1, 6):
         f.write('  component ANT1: antenna "ant_chip_2g4"\n')
         for c in range(1, 15):
             f.write(f'  component MCU_BLOCK{c}: mcu "rp2350"\n')
-        f.write(f'  keepout ant_huge {{\n    radius {radius}mm\n  }}\n')
-        f.write('}\n')
+        f.write(f"  keepout ant_huge {{\n    radius {radius}mm\n  }}\n")
+        f.write("}\n")
 
 print(f"Generated 20 placement error fixtures in {out_dir}")

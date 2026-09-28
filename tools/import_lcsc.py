@@ -37,7 +37,9 @@ def main() -> None:
     updated = 0
     skipped = 0
 
-    for filepath in sorted(glob.glob(os.path.join(parts_dir, "**", "*.synth.toml"), recursive=True)):
+    for filepath in sorted(
+        glob.glob(os.path.join(parts_dir, "**", "*.synth.toml"), recursive=True)
+    ):
         with open(filepath) as f:
             content = f.read()
 
@@ -52,13 +54,15 @@ def main() -> None:
             continue
 
         # Remove any stale lcsc_id line first
-        lines = [l for l in content.splitlines(True) if not l.strip().startswith("lcsc_id =")]
+        lines = [
+            l for l in content.splitlines(True) if not l.strip().startswith("lcsc_id =")
+        ]
 
         new_lines: list[str] = []
         inserted = False
         for line in lines:
             new_lines.append(line)
-            if not inserted and re.match(r'^version\s*=', line.strip()):
+            if not inserted and re.match(r"^version\s*=", line.strip()):
                 new_lines.append(f'lcsc_id = "{real_lcsc}"\n')
                 inserted = True
         if not inserted:
@@ -69,7 +73,9 @@ def main() -> None:
         updated += 1
         print(f"  {part_id}: {real_lcsc}")
 
-    print(f"\n{updated} parts updated with verified LCSC IDs; {skipped} parts skipped (not yet verified).")
+    print(
+        f"\n{updated} parts updated with verified LCSC IDs; {skipped} parts skipped (not yet verified)."
+    )
 
 
 if __name__ == "__main__":

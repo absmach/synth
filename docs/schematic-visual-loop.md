@@ -1,7 +1,7 @@
 # Schematic Visual-Feedback Loop
 
 **Scope:** how an agent (or a human through an MCP client) closes the loop
-on schematic *readability* in Synth — render the sheet, look at it, refine
+on schematic _readability_ in Synth — render the sheet, look at it, refine
 the layout, confirm nothing regressed, then export.
 
 **Companion docs:** [`schematic-procedures.md`](schematic-procedures.md)
@@ -18,7 +18,7 @@ wire-crossing density, decoupling distance, content outside the page,
 text-run overlap, group-region contiguity. Those rules catch the
 mechanical failures. They cannot catch the ones that need eyes:
 
-- labels that overlap *in this particular* arrangement,
+- labels that overlap _in this particular_ arrangement,
 - a wire that crosses a body in a way that reads as connected,
 - a sub-circuit that is logically grouped but visually scattered,
 - signal flow that runs right-to-left.
@@ -31,13 +31,13 @@ produced, not just at a success status from a render command.
 
 ## 2. The tools
 
-| Tool                       | What it does                                                                                                 |
-| -------------------------- | ----------------------------------------------------------------------------------------------------------- |
-| `synth_review_schematic`   | One call: compile → ERC + readability rules → render → layout summary → optional baseline diff. Start here. |
-| `synth_render_schematic`   | Render only, when you just want to look after a targeted edit.                                              |
-| `synth_schematic_baseline` | `set` captures a known-good render; `compare` reports drift; `clear` removes it.                            |
-| `synth_mutate_layout`      | One structured layout edit; `persist=true` writes it through to the sidecar.                                 |
-| `synth_write_layout_override` | Directly write an absolute/relative placement override.                                                |
+| Tool                          | What it does                                                                                                |
+| ----------------------------- | ----------------------------------------------------------------------------------------------------------- |
+| `synth_review_schematic`      | One call: compile → ERC + readability rules → render → layout summary → optional baseline diff. Start here. |
+| `synth_render_schematic`      | Render only, when you just want to look after a targeted edit.                                              |
+| `synth_schematic_baseline`    | `set` captures a known-good render; `compare` reports drift; `clear` removes it.                            |
+| `synth_mutate_layout`         | One structured layout edit; `persist=true` writes it through to the sidecar.                                |
+| `synth_write_layout_override` | Directly write an absolute/relative placement override.                                                     |
 
 Rendering does **not** require you to export first: the tools call
 `synth_kicad::export_schematic_only` into a temp directory, plot that with
@@ -109,10 +109,10 @@ defect: for the failures it can mechanise, it returns a `repair_hints[]`
 entry with a `problem` string and a ready-to-apply `suggested_op`. Feed
 that op straight back into `synth_mutate_layout`. Two hints exist today:
 
-| Finding                | Suggested op                                              |
-| ---------------------- | --------------------------------------------------------- |
-| `E-SYNTH-SCHEM-012` (content covers only a corner of the page) | `fit_sheet` — shrink the page, including a custom size below A4 |
-| signal-flow (3–8 parts, no row holds more than half of them: a column, a diagonal staircase, a scatter) | `distribute_row` — a left-to-right row in signal order |
+| Finding                                                                                                 | Suggested op                                                    |
+| ------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------- |
+| `E-SYNTH-SCHEM-012` (content covers only a corner of the page)                                          | `fit_sheet` — shrink the page, including a custom size below A4 |
+| signal-flow (3–8 parts, no row holds more than half of them: a column, a diagonal staircase, a scatter) | `distribute_row` — a left-to-right row in signal order          |
 
 The fill-ratio repair is deliberately **sheet shrinking, not part
 spreading**. The standard A4/A3/A2 ladder has nothing below A4, so a
@@ -120,7 +120,7 @@ three-part design on A4 is always mostly empty; stretching the parts to
 fill the page only draws long wires across blank paper. A human drawing
 three parts uses a small sheet, so `fit_sheet` returns a rounded
 `Custom` page (130 × 115 mm for the canonical LED indicator) and the
-diagnostic clears. The page is sized around the drawing *including*
+diagnostic clears. The page is sized around the drawing _including_
 Reference/Value fields, is never narrower than KiCad's 110 mm title block
 plus its frame, and is exported as `(paper "User" W H)`. `fit_sheet` then
 centres the drawing in the area above the title block with one rigid,

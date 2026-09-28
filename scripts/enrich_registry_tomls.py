@@ -14,6 +14,7 @@ from pathlib import Path
 REGISTRY_ROOT = Path(__file__).parent.parent / "registry" / "parts"
 KICAD_FP_ROOT = Path("/usr/share/kicad/footprints")
 
+
 def get_fp_dims(fp_ref: str, filename: str) -> tuple[float, float, float]:
     """Extract footprint dimensions (width_mm, height_mm, courtyard_margin_mm)."""
     if fp_ref and ":" in fp_ref:
@@ -23,9 +24,9 @@ def get_fp_dims(fp_ref: str, filename: str) -> tuple[float, float, float]:
             content = mod_path.read_text()
             # Try CrtYd fp_rect first
             crtyd = re.findall(
-                r'\(fp_rect\s+\(start\s+([-\d.]+)\s+([-\d.]+)\)\s+\(end\s+([-\d.]+)\s+([-\d.]+)\)\s+.*?\([^\)]*CrtYd',
+                r"\(fp_rect\s+\(start\s+([-\d.]+)\s+([-\d.]+)\)\s+\(end\s+([-\d.]+)\s+([-\d.]+)\)\s+.*?\([^\)]*CrtYd",
                 content,
-                re.DOTALL
+                re.DOTALL,
             )
             if crtyd:
                 x1, y1, x2, y2 = map(float, crtyd[0])
@@ -33,11 +34,11 @@ def get_fp_dims(fp_ref: str, filename: str) -> tuple[float, float, float]:
                 h = round(abs(y2 - y1), 3)
                 if w > 0 and h > 0:
                     return w, h, 0.25
-            
+
             # Try pads bounding box
             pads = re.findall(
                 r'\(pad\s+"[^"]*"\s+\w+\s+\w+\s+\(\s*at\s+([-\d.]+)\s+([-\d.]+)\s*\)\s+\(\s*size\s+([-\d.]+)\s+([-\d.]+)\s*\)',
-                content
+                content,
             )
             if pads:
                 min_x, max_x, min_y, max_y = 1e9, -1e9, 1e9, -1e9
@@ -91,11 +92,13 @@ def get_fp_dims(fp_ref: str, filename: str) -> tuple[float, float, float]:
     return 5.0, 5.0, 0.25
 
 
-def get_operating_conditions(part_id: str, kind: str) -> tuple[float | None, float | None, float | None]:
+def get_operating_conditions(
+    part_id: str, kind: str
+) -> tuple[float | None, float | None, float | None]:
     """Return (min_v, max_v, max_current_ma) for a part."""
     kind = kind.lower()
     pid = part_id.lower()
-    
+
     if kind in ("resistor", "capacitor", "inductor", "passive"):
         if "electrolytic" in pid or "tantalum" in pid:
             return None, 25.0, None
@@ -133,7 +136,7 @@ def get_operating_conditions(part_id: str, kind: str) -> tuple[float | None, flo
 
 def enrich_file(toml_path: Path) -> bool:
     content = toml_path.read_text()
-    
+
     # Extract metadata fields
     id_m = re.search(r'^id\s*=\s*"([^"]+)"', content, re.MULTILINE)
     kind_m = re.search(r'^kind\s*=\s*"([^"]+)"', content, re.MULTILINE)
@@ -154,7 +157,7 @@ def enrich_file(toml_path: Path) -> bool:
     min_v, max_v, max_ma = get_operating_conditions(part_id, kind)
 
     # Insert dimensions and operating conditions before first [[pins]]
-    parts = re.split(r'(?=^\[\[pins\]\])', content, maxsplit=1, flags=re.MULTILINE)
+    parts = re.split(r"(?=^\[\[pins\]\])", content, maxsplit=1, flags=re.MULTILINE)
     top_meta = parts[0].rstrip()
 
     new_meta_lines = []
@@ -180,7 +183,7 @@ def enrich_file(toml_path: Path) -> bool:
 
     # Update unit attribute for opamps/multi-gate ICs if applicable
     if kind in ("opamp", "comparator") and "unit =" not in rest:
-        pin_blocks = re.split(r'(?=^\[\[pins\]\])', rest, flags=re.MULTILINE)
+        pin_blocks = re.split(r"(?=^\[\[pins\]\])", rest, flags=re.MULTILINE)
         updated_blocks = []
         for block in pin_blocks:
             if not block.strip():
@@ -197,7 +200,7 @@ def enrich_file(toml_path: Path) -> bool:
                     unit_val = "C"
                 elif "_d" in pname or pname.endswith("_4"):
                     unit_val = "D"
-                
+
                 if unit_val:
                     block = block.rstrip() + f'\nunit = "{unit_val}"\n\n'
             updated_blocks.append(block)
@@ -213,7 +216,10 @@ def main():
     for p in sorted(REGISTRY_ROOT.rglob("*.synth.toml")):
         if enrich_file(p):
             count += 1
-    print(f"Enriched {count} registry TOML files with footprint_dimensions, operating_conditions, and unit annotations.")
+    print(
+        f"Enriched {count} registry TOML files with footprint_dimensions, operating_conditions, and unit annotations."
+    )
+
 
 if __name__ == "__main__":
     main()

@@ -17,6 +17,7 @@ import json
 import os
 import subprocess
 import sys
+
 import numpy as np
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import StandardScaler
@@ -40,12 +41,24 @@ FEATURE_NAMES = [
     "board_layers",
 ]
 
+
 def main():
     repo_root = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
-    out_file = os.path.join(repo_root, "crates", "synth-validate", "src", "anomaly_model.json")
+    out_file = os.path.join(
+        repo_root, "crates", "synth-validate", "src", "anomaly_model.json"
+    )
 
     print("[1/5] Extracting feature vectors via cargo test...")
-    cmd = ["cargo", "test", "-p", "synth-validate", "--test", "dump_features", "--", "--nocapture"]
+    cmd = [
+        "cargo",
+        "test",
+        "-p",
+        "synth-validate",
+        "--test",
+        "dump_features",
+        "--",
+        "--nocapture",
+    ]
     res = subprocess.run(cmd, cwd=repo_root, capture_output=True, text=True)
     if res.returncode != 0:
         print("Error: cargo test dump_features failed:")
@@ -61,7 +74,9 @@ def main():
 
     print(f"[2/5] Collected {len(clean_records)} clean design feature vectors.")
     if len(clean_records) < 15:
-        print(f"Error: need at least 15 clean designs to train, got {len(clean_records)}")
+        print(
+            f"Error: need at least 15 clean designs to train, got {len(clean_records)}"
+        )
         sys.exit(1)
 
     # Sort reproducibly by filename before split
@@ -72,7 +87,7 @@ def main():
     files = [r["file"] for r in clean_records]
 
     held_out_count = 10
-    
+
     # Search for a seed that produces a representative split meeting the FPR gate (<5%)
     best_model = None
     best_scaler = None
@@ -105,11 +120,15 @@ def main():
         if fpr == 0.0:
             break
 
-    print(f"[3/5] Selected split seed {best_seed}: Training = {len(best_splits[0])}, Held-out = {len(best_splits[1])}")
+    print(
+        f"[3/5] Selected split seed {best_seed}: Training = {len(best_splits[0])}, Held-out = {len(best_splits[1])}"
+    )
     print(f"[4/5] Evaluation: Held-out false positive rate = {best_fpr:.2%}")
 
     if best_fpr >= 0.05:
-        print(f"Error: Best held-out FPR ({best_fpr:.2%}) exceeds gate threshold of 5.0%. Aborting.")
+        print(
+            f"Error: Best held-out FPR ({best_fpr:.2%}) exceeds gate threshold of 5.0%. Aborting."
+        )
         sys.exit(1)
 
     gamma_val = 0.001
@@ -131,13 +150,16 @@ def main():
     with open(out_file, "w") as f:
         json.dump(model_dict, f, indent=2)
 
-    print(f"[5/5] Successfully exported model with {len(best_model.support_vectors_)} support vectors to:")
+    print(
+        f"[5/5] Successfully exported model with {len(best_model.support_vectors_)} support vectors to:"
+    )
     print(f"      {out_file}")
     print("\nModel summary:")
     print(f"  - Support Vectors: {len(best_model.support_vectors_)}")
     print(f"  - Intercept: {best_model.intercept_[0]:.4f}")
     print(f"  - Gamma: {gamma_val:.4f}")
     print(f"  - Held-out FPR: {best_fpr:.2%}")
+
 
 if __name__ == "__main__":
     main()

@@ -15,13 +15,22 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parent.parent
 SYNTH_BIN = REPO_ROOT / "target" / "debug" / "synth"
 
+
 def ensure_synth_bin():
     if not SYNTH_BIN.exists():
         print("Building synth CLI binary...")
-        subprocess.run(["cargo", "build", "-p", "synth-cli", "--quiet"], cwd=REPO_ROOT, check=True)
+        subprocess.run(
+            ["cargo", "build", "-p", "synth-cli", "--quiet"], cwd=REPO_ROOT, check=True
+        )
+
 
 def generate_sensor_logger_variant(index: int) -> str:
-    sensor_types = ["bme680_env", "bmp280_pressure", "hdc1080_humidity", "apds9960_color"]
+    sensor_types = [
+        "bme680_env",
+        "bmp280_pressure",
+        "hdc1080_humidity",
+        "apds9960_color",
+    ]
     reg_types = ["ams1117_3v3", "ams1117_1v8", "ams1117_5v"]
     layers = [2, 4, 6]
     mfrs = ["jlcpcb", "pcbway", "oshpark"]
@@ -86,6 +95,7 @@ board "sensor_logger_gen_{index}" {{
   connect U3.gnd -> C4.p2
 }}
 """
+
 
 def generate_secure_tracker_variant(index: int) -> str:
     layers = [4, 6, 8]
@@ -212,6 +222,7 @@ board "secure_tracker_gen_{index}" {{
 }}
 """
 
+
 def main():
     ensure_synth_bin()
     out_dir = REPO_ROOT / "fixtures" / "designs-generated"
@@ -234,7 +245,7 @@ def main():
         res = subprocess.run(
             [str(SYNTH_BIN), "validate", str(file_path), "--format", "json"],
             capture_output=True,
-            text=True
+            text=True,
         )
 
         valid = False
@@ -254,7 +265,10 @@ def main():
             print(f"Design #{i} had validation errors; unlinking.")
             file_path.unlink(missing_ok=True)
 
-    print(f"Successfully generated and validated {generated_count} clean .synth design files.")
+    print(
+        f"Successfully generated and validated {generated_count} clean .synth design files."
+    )
+
 
 if __name__ == "__main__":
     main()

@@ -30,12 +30,12 @@ a `group` or `sheet`).
 KiCad 10 has native design variants, split across two files:
 
 - **`.kicad_pro`** → `schematic.variants` is an array of
-  `{ "name", "description"? }` — the authoritative *list* (this is what
+  `{ "name", "description"? }` — the authoritative _list_ (this is what
   the GUI picker and `kicad-cli` enumerate).
 - **`.kicad_sch`** → each affected symbol's
   `(instances (project "…" (path "…" (reference "…") (unit N)
-  (variant (name "…") (dnp yes) …))))` block carries the per-symbol
-  *override*. Only symbols that differ are written.
+(variant (name "…") (dnp yes) …))))` block carries the per-symbol
+  _override_. Only symbols that differ are written.
 
 Both schemas were taken from KiCad's source (`SCHEMATIC_SETTINGS`'s
 `m_VariantDescriptions` serializer for the project file, and the
@@ -84,7 +84,7 @@ component attribute.
 (X5R/X7R/X7S/Y5V/Z5U) on a rail above a configurable fraction (default
 50 %) of its rated voltage is flagged, because DC bias cuts effective
 capacitance. It fires only when the dielectric and voltage rating are
-stated *and* the rail voltage is known; otherwise it declines rather
+stated _and_ the rail voltage is known; otherwise it declines rather
 than guessing, and Class-I (C0G/NP0) parts are never flagged. The
 threshold is `ceramic_dc_bias_threshold` in `<design>.synth.erc.toml`.
 

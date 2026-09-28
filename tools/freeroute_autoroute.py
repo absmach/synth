@@ -43,9 +43,9 @@ def _top_level_netclass_blocks(text: str) -> list[str]:
                     in_string = False
             elif char == '"':
                 in_string = True
-            elif char == '(':
+            elif char == "(":
                 depth += 1
-            elif char == ')':
+            elif char == ")":
                 depth -= 1
                 if depth == 0:
                     end = index + 1
@@ -114,15 +114,16 @@ def main() -> int:
             # borrowed wrappers on newer KiCad builds.  Remove owned Python
             # objects from `GetTracks()` instead; this works with KiCad 9/10
             # and avoids the `SwigPyObject.thisown` failure.
-            ground_net_codes = {
-                zone.GetNetCode() for zone in export_board.Zones()
-            }
+            ground_net_codes = {zone.GetNetCode() for zone in export_board.Zones()}
             for track in list(export_board.GetTracks()):
                 # Ground stitching vias are part of the board's plane
                 # topology, not FreeRouting's candidate geometry. Keep them
                 # in the clean netlist so the six-layer planes remain
                 # electrically joined after SES import.
-                if track.GetClass() == "PCB_VIA" and track.GetNetCode() in ground_net_codes:
+                if (
+                    track.GetClass() == "PCB_VIA"
+                    and track.GetNetCode() in ground_net_codes
+                ):
                     continue
                 export_board.Remove(track)
             print("routing a clean duplicate netlist", flush=True)
@@ -166,7 +167,9 @@ def main() -> int:
         # remains a suitable merge base even when the DSN was exported from a
         # copper-free duplicate.
         merge_input = args.input_board
-        merger = os.path.join(os.path.dirname(__file__), "import_freerouting_ses_text.py")
+        merger = os.path.join(
+            os.path.dirname(__file__), "import_freerouting_ses_text.py"
+        )
         subprocess.run(
             [sys.executable, merger, merge_input, ses, args.output_board],
             check=True,

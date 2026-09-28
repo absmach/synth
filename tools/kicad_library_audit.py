@@ -15,13 +15,18 @@ import sys
 
 KICAD_SYMBOLS_DIR = "/usr/share/kicad/symbols"
 
+
 def parse_kicad_sym_pins(symbol_text):
     """Extract all pin numbers defined in a (symbol ...) s-expression block."""
     pins = set()
     # Find all (pin ... (number "1" ...)) occurrences
-    for m in re.finditer(r'\(pin\s+[^\)]+\(at[^\)]+\)(?:[^\)]|\([^\)]*\))*\([^\)]*number\s+"([^"]+)"', symbol_text):
+    for m in re.finditer(
+        r'\(pin\s+[^\)]+\(at[^\)]+\)(?:[^\)]|\([^\)]*\))*\([^\)]*number\s+"([^"]+)"',
+        symbol_text,
+    ):
         pins.add(m.group(1))
     return pins
+
 
 def main():
     root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -36,9 +41,13 @@ def main():
     missing_sym = 0
     pin_mismatches = 0
 
-    print(f"Auditing registry parts against installed KiCad symbols in {KICAD_SYMBOLS_DIR}...\n")
+    print(
+        f"Auditing registry parts against installed KiCad symbols in {KICAD_SYMBOLS_DIR}...\n"
+    )
 
-    for filepath in sorted(glob.glob(os.path.join(parts_dir, "**", "*.synth.toml"), recursive=True)):
+    for filepath in sorted(
+        glob.glob(os.path.join(parts_dir, "**", "*.synth.toml"), recursive=True)
+    ):
         with open(filepath, "r") as f:
             content = f.read()
 
@@ -51,7 +60,7 @@ def main():
         if not m_sym:
             continue
 
-        symbol_ref = m_sym.group(1) # e.g. "MCU_RaspberryPi:RP2040"
+        symbol_ref = m_sym.group(1)  # e.g. "MCU_RaspberryPi:RP2040"
         if ":" not in symbol_ref:
             continue
 
@@ -60,16 +69,23 @@ def main():
 
         if not os.path.exists(sym_file):
             missing_lib += 1
-            print(f"[MISSING LIB] {part_id}: library `{lib_nickname}.kicad_sym` not found")
+            print(
+                f"[MISSING LIB] {part_id}: library `{lib_nickname}.kicad_sym` not found"
+            )
             continue
 
         with open(sym_file, "r", encoding="utf-8", errors="ignore") as f:
             sym_content = f.read()
 
         # Check if symbol exists: (symbol "RP2040" or (symbol "MCU_RaspberryPi:RP2040"
-        if f'symbol "{symbol_name}"' not in sym_content and f'symbol "{symbol_ref}"' not in sym_content:
+        if (
+            f'symbol "{symbol_name}"' not in sym_content
+            and f'symbol "{symbol_ref}"' not in sym_content
+        ):
             missing_sym += 1
-            print(f"[MISSING SYM] {part_id}: symbol `{symbol_name}` not found in `{lib_nickname}.kicad_sym`")
+            print(
+                f"[MISSING SYM] {part_id}: symbol `{symbol_name}` not found in `{lib_nickname}.kicad_sym`"
+            )
             continue
 
         checked += 1
@@ -78,6 +94,7 @@ def main():
     print(f"  Total parts checked: {checked}")
     print(f"  Missing libraries:   {missing_lib}")
     print(f"  Missing symbols:     {missing_sym}")
+
 
 if __name__ == "__main__":
     main()

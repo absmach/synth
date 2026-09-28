@@ -29,9 +29,9 @@ KiCad electrical type -> synth electrical type mapping:
 """
 
 import argparse
-import re
 import glob
 import os
+import re
 import sys
 from pathlib import Path
 
@@ -60,17 +60,19 @@ NC_NAMES = {"NC", "~", "", "~{NC}"}
 def _extract_pins_from_block(block: str) -> list[tuple[str, str, str]]:
     """Extract (kicad_type, name, number) from an s-expression symbol block."""
     pin_pat = re.compile(
-        r'\(pin\s+(\w+)\s+\w+\s*'         # (pin <type> <style>
-        r'\(\s*at\s[^\)]+\)\s*'            # (at x y angle)
-        r'\(\s*length\s[^\)]+\)\s*'        # (length n)
-        r'\(\s*name\s+"([^"]*)".*?'        # (name "NAME" ...)
-        r'\(\s*number\s+"([^"]*)"',        # (number "NUM"
+        r"\(pin\s+(\w+)\s+\w+\s*"  # (pin <type> <style>
+        r"\(\s*at\s[^\)]+\)\s*"  # (at x y angle)
+        r"\(\s*length\s[^\)]+\)\s*"  # (length n)
+        r'\(\s*name\s+"([^"]*)".*?'  # (name "NAME" ...)
+        r'\(\s*number\s+"([^"]*)"',  # (number "NUM"
         re.DOTALL,
     )
     return pin_pat.findall(block)
 
 
-def parse_kicad_sym(sym_file: Path, sym_name: str, _visited: set[str] | None = None) -> list[dict] | None:
+def parse_kicad_sym(
+    sym_file: Path, sym_name: str, _visited: set[str] | None = None
+) -> list[dict] | None:
     """
     Parse a .kicad_sym file and return all pins for the named symbol.
     Handles KiCad symbol inheritance via `(extends "ParentSymbol")`.
@@ -101,9 +103,9 @@ def parse_kicad_sym(sym_file: Path, sym_name: str, _visited: set[str] | None = N
     block_end = len(content)
     while i < len(content):
         c = content[i]
-        if c == '(':
+        if c == "(":
             depth += 1
-        elif c == ')':
+        elif c == ")":
             depth -= 1
             if depth == 0:
                 block_end = i + 1
@@ -120,7 +122,6 @@ def parse_kicad_sym(sym_file: Path, sym_name: str, _visited: set[str] | None = N
         return parse_kicad_sym(sym_file, parent_name, _visited)
 
     raw_pins = _extract_pins_from_block(block)
-
 
     seen: set[str] = set()  # deduplicate by pin number
     pins = []
@@ -145,8 +146,6 @@ def parse_kicad_sym(sym_file: Path, sym_name: str, _visited: set[str] | None = N
     return pins
 
 
-
-
 def load_toml_metadata(toml_path: Path) -> dict:
     """
     Extract the non-pin metadata fields from a registry TOML.
@@ -156,15 +155,15 @@ def load_toml_metadata(toml_path: Path) -> dict:
     meta: dict[str, str] = {}
 
     # Top-level scalar fields (everything before first [[pins]])
-    top_section = re.split(r'^\[\[pins\]\]', content, maxsplit=1, flags=re.MULTILINE)[0]
+    top_section = re.split(r"^\[\[pins\]\]", content, maxsplit=1, flags=re.MULTILINE)[0]
     for line in top_section.splitlines():
-        m = re.match(r'^(\w+)\s*=\s*(.+)', line.strip())
+        m = re.match(r"^(\w+)\s*=\s*(.+)", line.strip())
         if m:
             meta[m.group(1)] = m.group(2)
 
     # required_decoupling blocks
     meta["_required_decoupling_raw"] = re.findall(
-        r'\[\[required_decoupling\]\].*?(?=\[\[|\Z)', content, re.DOTALL
+        r"\[\[required_decoupling\]\].*?(?=\[\[|\Z)", content, re.DOTALL
     )
     return meta
 
@@ -183,7 +182,7 @@ def sanitize_pin_name(name: str, number: str = "") -> str:
     if name == "-":
         return "neg"
     # Strip KiCad overbar notation ~{...}
-    name = re.sub(r'~\{([^}]+)\}', r'\1', name)
+    name = re.sub(r"~\{([^}]+)\}", r"\1", name)
     name = name.lower()
 
     if name in ("d+", "d_p", "usb_d+", "usb_dp"):
@@ -191,18 +190,20 @@ def sanitize_pin_name(name: str, number: str = "") -> str:
     elif name in ("d-", "d_n", "usb_d-", "usb_dn"):
         name = "dn"
     else:
-        name = name.replace('+', '_plus').replace('-', '_minus')
+        name = name.replace("+", "_plus").replace("-", "_minus")
 
     # Replace non-alphanumeric chars with underscore
-    name = re.sub(r'[^a-z0-9]+', '_', name)
-    name = re.sub(r'_+', '_', name)
-    name = name.strip('_')
+    name = re.sub(r"[^a-z0-9]+", "_", name)
+    name = re.sub(r"_+", "_", name)
+    name = name.strip("_")
     if not name and number:
         return f"pin{number}"
     return name
 
 
-def pins_to_toml_blocks(pins: list[dict], existing_capabilities: dict[str, list[str]] = None) -> str:
+def pins_to_toml_blocks(
+    pins: list[dict], existing_capabilities: dict[str, list[str]] = None
+) -> str:
     """
     Render a list of pin dicts to TOML [[pins]] blocks.
     `existing_capabilities` maps sanitized_name -> capabilities list from old TOML.
@@ -222,10 +223,14 @@ def pins_to_toml_blocks(pins: list[dict], existing_capabilities: dict[str, list[
         lines.append(f'electrical_type = "{pin["synth_type"]}"')
 
         # Preserve capabilities from old TOML if pin name or number matches
-        caps = existing_capabilities.get(clean_name) or existing_capabilities.get(pin["name"]) or existing_capabilities.get(pin["number"])
+        caps = (
+            existing_capabilities.get(clean_name)
+            or existing_capabilities.get(pin["name"])
+            or existing_capabilities.get(pin["number"])
+        )
         if caps:
             caps_str = ", ".join(f'"{c}"' for c in caps)
-            lines.append(f'capabilities = [{caps_str}]')
+            lines.append(f"capabilities = [{caps_str}]")
 
         if synth_type_to_required(pin["synth_type"]):
             lines.append("required = true")
@@ -238,12 +243,12 @@ def extract_existing_capabilities(toml_path: Path) -> dict[str, list[str]]:
     content = toml_path.read_text()
     result: dict[str, list[str]] = {}
     blocks = re.findall(
-        r'\[\[pins\]\](.*?)(?=\[\[pins\]\]|\[\[required|\Z)', content, re.DOTALL
+        r"\[\[pins\]\](.*?)(?=\[\[pins\]\]|\[\[required|\Z)", content, re.DOTALL
     )
     for block in blocks:
         name_m = re.search(r'name\s*=\s*"([^"]+)"', block)
         num_m = re.search(r'number\s*=\s*"([^"]+)"', block)
-        cap_m = re.search(r'capabilities\s*=\s*\[([^\]]+)\]', block)
+        cap_m = re.search(r"capabilities\s*=\s*\[([^\]]+)\]", block)
         if cap_m:
             caps = [c.strip().strip('"') for c in cap_m.group(1).split(",")]
             if name_m:
@@ -262,7 +267,7 @@ def rebuild_toml(toml_path: Path, kicad_pins: list[dict], dry_run: bool = False)
 
     # Split into: [metadata_section, ...pin_blocks..., trailing]
     # Everything before the first [[pins]] is metadata
-    parts = re.split(r'(?=^\[\[pins\]\])', content, maxsplit=1, flags=re.MULTILINE)
+    parts = re.split(r"(?=^\[\[pins\]\])", content, maxsplit=1, flags=re.MULTILINE)
     metadata_section = parts[0].rstrip("\n") + "\n\n"
 
     # Extract existing capabilities before we overwrite
@@ -270,7 +275,7 @@ def rebuild_toml(toml_path: Path, kicad_pins: list[dict], dry_run: bool = False)
 
     # Extract required_decoupling from original
     decoupling_blocks = re.findall(
-        r'(\[\[required_decoupling\]\].*?)(?=\[\[required_decoupling\]\]|\Z)',
+        r"(\[\[required_decoupling\]\].*?)(?=\[\[required_decoupling\]\]|\Z)",
         content,
         re.DOTALL,
     )
@@ -341,17 +346,19 @@ def audit_all() -> None:
         else:
             ok.append((part_id, len(kicad_pins)))
 
-    print(f"{'='*60}")
-    print(f" KICAD DATA AUDIT — {len(ok)+len(mismatch)+len(no_sym)} parts total")
-    print(f"{'='*60}")
+    print(f"{'=' * 60}")
+    print(f" KICAD DATA AUDIT — {len(ok) + len(mismatch) + len(no_sym)} parts total")
+    print(f"{'=' * 60}")
     print(f"\n✓ VERIFIED ({len(ok)} parts — pin numbers match KiCad exactly):")
     for part_id, n in ok:
         print(f"    {part_id:<35} ({n} pins in KiCad)")
 
     print(f"\n✗ MISMATCH ({len(mismatch)} parts — TOML pin numbers not in KiCad):")
     for part_id, bad_nums, toml_total, kicad_total in mismatch:
-        print(f"    {part_id:<35} bad pin#s: {bad_nums}  "
-              f"(TOML:{toml_total} KiCad:{kicad_total})")
+        print(
+            f"    {part_id:<35} bad pin#s: {bad_nums}  "
+            f"(TOML:{toml_total} KiCad:{kicad_total})"
+        )
         print(f"      → Run: python3 tools/kicad_import.py --update {part_id}")
 
     print(f"\n? NO SYMBOL ({len(no_sym)} parts — need manual data entry or EasyEDA):")
@@ -364,7 +371,7 @@ def audit_all() -> None:
 def update_part(part_id: str, dry_run: bool = False) -> None:
     toml_path = find_toml_by_id(part_id)
     if not toml_path:
-        print(f"Error: no TOML found with id = \"{part_id}\"")
+        print(f'Error: no TOML found with id = "{part_id}"')
         sys.exit(1)
 
     sym_ref = get_kicad_sym_ref(toml_path)
@@ -384,7 +391,11 @@ def update_part(part_id: str, dry_run: bool = False) -> None:
         print(f"  Available symbols containing the keyword:")
         content = sym_file.read_text()
         keyword = sym.split("-")[0]  # try partial match
-        found = re.findall(r'\(symbol "([^"]*' + re.escape(keyword) + r'[^"]*)"', content, re.IGNORECASE)
+        found = re.findall(
+            r'\(symbol "([^"]*' + re.escape(keyword) + r'[^"]*)"',
+            content,
+            re.IGNORECASE,
+        )
         for f in found[:10]:
             print(f"    {f}")
         sys.exit(1)
@@ -393,19 +404,25 @@ def update_part(part_id: str, dry_run: bool = False) -> None:
     print(f"Symbol: {lib}:{sym}")
     print(f"Pins from KiCad: {len(kicad_pins)}")
     for p in kicad_pins[:10]:
-        print(f"  {p['number']:<6} {p['name']:<30} ({p['kicad_type']} → {p['synth_type']})")
+        print(
+            f"  {p['number']:<6} {p['name']:<30} ({p['kicad_type']} → {p['synth_type']})"
+        )
     if len(kicad_pins) > 10:
-        print(f"  ... and {len(kicad_pins)-10} more")
+        print(f"  ... and {len(kicad_pins) - 10} more")
 
     new_content = rebuild_toml(toml_path, kicad_pins, dry_run=dry_run)
 
     if dry_run:
-        print(f"\n--- DRY RUN: would write to {toml_path.relative_to(REGISTRY_ROOT.parent.parent)} ---")
+        print(
+            f"\n--- DRY RUN: would write to {toml_path.relative_to(REGISTRY_ROOT.parent.parent)} ---"
+        )
         print(new_content[:800])
         return
 
     toml_path.write_text(new_content)
-    print(f"\n✓ Written {len(kicad_pins)} KiCad-verified pins to {toml_path.relative_to(REGISTRY_ROOT.parent.parent)}")
+    print(
+        f"\n✓ Written {len(kicad_pins)} KiCad-verified pins to {toml_path.relative_to(REGISTRY_ROOT.parent.parent)}"
+    )
 
 
 def update_all(dry_run: bool = False) -> None:
@@ -454,10 +471,18 @@ def main():
         description="Import verified pin data from local KiCad symbol libraries into registry TOMLs."
     )
     group = parser.add_mutually_exclusive_group(required=True)
-    group.add_argument("--audit", action="store_true", help="Audit all parts without writing")
+    group.add_argument(
+        "--audit", action="store_true", help="Audit all parts without writing"
+    )
     group.add_argument("--update", metavar="PART_ID", help="Update pins for one part")
-    group.add_argument("--update-all", action="store_true", help="Update pins for all parts with kicad_symbol")
-    parser.add_argument("--dry-run", action="store_true", help="Print output without writing files")
+    group.add_argument(
+        "--update-all",
+        action="store_true",
+        help="Update pins for all parts with kicad_symbol",
+    )
+    parser.add_argument(
+        "--dry-run", action="store_true", help="Print output without writing files"
+    )
     args = parser.parse_args()
 
     if args.audit:

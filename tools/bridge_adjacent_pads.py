@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 import sys
+
 import pcbnew
 
 board = pcbnew.LoadBoard(sys.argv[1])
@@ -7,12 +8,14 @@ plane_codes = {zone.GetNetCode() for zone in board.Zones()}
 added = 0
 for footprint in board.GetFootprints():
     pads = [
-        pad for pad in footprint.Pads()
-        if pad.GetAttribute() == 0 and pad.GetNetCode() > 0
+        pad
+        for pad in footprint.Pads()
+        if pad.GetAttribute() == 0
+        and pad.GetNetCode() > 0
         and pad.GetNetCode() not in plane_codes
     ]
     for index, first in enumerate(pads):
-        for second in pads[index + 1:]:
+        for second in pads[index + 1 :]:
             if first.GetNetCode() != second.GetNetCode():
                 continue
             a, b = first.GetPosition(), second.GetPosition()

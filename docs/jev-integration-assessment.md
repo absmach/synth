@@ -16,14 +16,14 @@ Synth should generate the candidate actions, execute them, and judge their resul
 
 Before investing in integration, establish an accurate deterministic baseline and improve the metrics used to compare candidates. A better evaluator and a more targeted conventional repair policy could deliver much of the benefit on their own.
 
-| Area | Proposed use | Priority | Evidence needed |
-| --- | --- | --- | --- |
-| Placement/routing repair | Select the next bounded repair action | First experiment | More fully connected, DRC-clean boards within the same time budget |
-| Component placement | Select among legal floorplan candidates or hint bundles | High, after evaluator improvements | Better routed outcomes and constraint satisfaction |
-| Schematic generation | Rank semantic grouping and readability choices | Medium | Human preference plus unchanged connectivity and measured layout quality |
-| Compiler diagnostics | Rank existing fixes using circuit context | Medium | Higher repair success with fewer trials and no new blocking diagnostics |
-| Parsing, lowering, connectivity, SMT, and DRC | No proposed model authority | Preserve existing deterministic behavior | Existing correctness tests and independent checks |
-| Routing cell expansion | No hosted inference inside the search | Excluded | Local, inexpensive cost evaluation remains necessary |
+| Area                                          | Proposed use                                            | Priority                                 | Evidence needed                                                          |
+| --------------------------------------------- | ------------------------------------------------------- | ---------------------------------------- | ------------------------------------------------------------------------ |
+| Placement/routing repair                      | Select the next bounded repair action                   | First experiment                         | More fully connected, DRC-clean boards within the same time budget       |
+| Component placement                           | Select among legal floorplan candidates or hint bundles | High, after evaluator improvements       | Better routed outcomes and constraint satisfaction                       |
+| Schematic generation                          | Rank semantic grouping and readability choices          | Medium                                   | Human preference plus unchanged connectivity and measured layout quality |
+| Compiler diagnostics                          | Rank existing fixes using circuit context               | Medium                                   | Higher repair success with fewer trials and no new blocking diagnostics  |
+| Parsing, lowering, connectivity, SMT, and DRC | No proposed model authority                             | Preserve existing deterministic behavior | Existing correctness tests and independent checks                        |
+| Routing cell expansion                        | No hosted inference inside the search                   | Excluded                                 | Local, inexpensive cost evaluation remains necessary                     |
 
 These priorities are engineering judgments from source inspection. They are not measured claims about Jev's EDA competence.
 
@@ -33,13 +33,13 @@ This assessment covers the local Synth code and TypeSafe's public documentation 
 
 The checkout changed between the initial discussion and preparation of this document. The current repair loop already includes improvements that were missing in the earlier inspected implementation:
 
-| Earlier observation | Current baseline |
-| --- | --- |
-| Candidate selection considered only unrouted-net count | `physical_score` considers unrouted nets first and independent Synth DRC violations once routing is complete |
-| Repeated endpoint visits could rotate a component several times per iteration | Implicated component IDs are deduplicated in a `BTreeSet` |
-| Repair targeted only components on unrouted nets | For fully routed candidates, DRC witnesses and suggested overrides also guide repair |
-| Margin increased by 0.5 mm per attempt | Margin now increases by 1.0 mm per attempt |
-| Export requested five repair iterations | The export call now requests eight; its adjacent comment still says five |
+| Earlier observation                                                           | Current baseline                                                                                             |
+| ----------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------ |
+| Candidate selection considered only unrouted-net count                        | `physical_score` considers unrouted nets first and independent Synth DRC violations once routing is complete |
+| Repeated endpoint visits could rotate a component several times per iteration | Implicated component IDs are deduplicated in a `BTreeSet`                                                    |
+| Repair targeted only components on unrouted nets                              | For fully routed candidates, DRC witnesses and suggested overrides also guide repair                         |
+| Margin increased by 0.5 mm per attempt                                        | Margin now increases by 1.0 mm per attempt                                                                   |
+| Export requested five repair iterations                                       | The export call now requests eight; its adjacent comment still says five                                     |
 
 The earlier missing deduplication and missing DRC scoring must not be treated as outstanding implementation tasks. The experiment should compare against the current code, not against that weaker historical description.
 
@@ -79,20 +79,20 @@ flowchart TD
 
 The diagram shows responsibility boundaries, not a guarantee that every export path runs every check. In particular, returning the best available repair candidate does not mean that candidate is clean.
 
-| Responsibility | Relevant implementation |
-| --- | --- |
-| Typed circuit representation | [`synth-ir`](../crates/synth-ir/src/lib.rs) |
-| Authoritative declared connectivity | [`synth-connectivity`](../crates/synth-connectivity/src/lib.rs) |
-| Electrical rules and patch previews | [`synth-validate`](../crates/synth-validate/src/lib.rs) |
+| Responsibility                        | Relevant implementation                                              |
+| ------------------------------------- | -------------------------------------------------------------------- |
+| Typed circuit representation          | [`synth-ir`](../crates/synth-ir/src/lib.rs)                          |
+| Authoritative declared connectivity   | [`synth-connectivity`](../crates/synth-connectivity/src/lib.rs)      |
+| Electrical rules and patch previews   | [`synth-validate`](../crates/synth-validate/src/lib.rs)              |
 | Schematic cluster placement interface | [`synth-layout/src/placer.rs`](../crates/synth-layout/src/placer.rs) |
-| Schematic quality metrics | [`synth-layout/src/score.rs`](../crates/synth-layout/src/score.rs) |
-| Structured schematic edits | [`synth-layout/src/ops.rs`](../crates/synth-layout/src/ops.rs) |
-| PCB placement and semantic hints | [`synth-place/src/lib.rs`](../crates/synth-place/src/lib.rs) |
-| Coarse placement optimization | [`synth-place/src/cem.rs`](../crates/synth-place/src/cem.rs) |
-| PCB maze routing | [`synth-route/src/maze.rs`](../crates/synth-route/src/maze.rs) |
-| Manufacturer-profile DRC | [`synth-drc`](../crates/synth-drc/src/lib.rs) |
-| Export repair orchestration | [`synth-kicad/src/export.rs`](../crates/synth-kicad/src/export.rs) |
-| Agent-facing operations | [`synth-mcp/src/tools.rs`](../crates/synth-mcp/src/tools.rs) |
+| Schematic quality metrics             | [`synth-layout/src/score.rs`](../crates/synth-layout/src/score.rs)   |
+| Structured schematic edits            | [`synth-layout/src/ops.rs`](../crates/synth-layout/src/ops.rs)       |
+| PCB placement and semantic hints      | [`synth-place/src/lib.rs`](../crates/synth-place/src/lib.rs)         |
+| Coarse placement optimization         | [`synth-place/src/cem.rs`](../crates/synth-place/src/cem.rs)         |
+| PCB maze routing                      | [`synth-route/src/maze.rs`](../crates/synth-route/src/maze.rs)       |
+| Manufacturer-profile DRC              | [`synth-drc`](../crates/synth-drc/src/lib.rs)                        |
+| Export repair orchestration           | [`synth-kicad/src/export.rs`](../crates/synth-kicad/src/export.rs)   |
+| Agent-facing operations               | [`synth-mcp/src/tools.rs`](../crates/synth-mcp/src/tools.rs)         |
 
 ## 5. First experiment: placement and routing repair
 
@@ -121,15 +121,15 @@ The current policy has stronger correctness feedback than the initial version, b
 
 Potential candidate actions include:
 
-| Action | Existing foundation | Additional work |
-| --- | --- | --- |
-| Rotate one selected footprint | Rotation overrides | Generate legal alternatives and respect orientation constraints |
-| Apply an exact DRC rotation suggestion | Already supported in the loop | Preserve as a strong deterministic baseline |
-| Increase global spacing | Existing margin tuning | Expose bounded choices and record resulting board size |
-| Increase spacing around one module | Functional module extraction | Implement local spacing controls; this is not an existing repair action |
-| Try an alternate module arrangement | Floorplanning and placement hints | Generate and validate candidate hint bundles |
-| Prioritize a blocked net for rerouting | Router contains priority recovery logic | Expose an explicit selectable policy boundary |
-| Use the current repair policy | Existing implementation | Retain as fallback |
+| Action                                 | Existing foundation                     | Additional work                                                         |
+| -------------------------------------- | --------------------------------------- | ----------------------------------------------------------------------- |
+| Rotate one selected footprint          | Rotation overrides                      | Generate legal alternatives and respect orientation constraints         |
+| Apply an exact DRC rotation suggestion | Already supported in the loop           | Preserve as a strong deterministic baseline                             |
+| Increase global spacing                | Existing margin tuning                  | Expose bounded choices and record resulting board size                  |
+| Increase spacing around one module     | Functional module extraction            | Implement local spacing controls; this is not an existing repair action |
+| Try an alternate module arrangement    | Floorplanning and placement hints       | Generate and validate candidate hint bundles                            |
+| Prioritize a blocked net for rerouting | Router contains priority recovery logic | Expose an explicit selectable policy boundary                           |
+| Use the current repair policy          | Existing implementation                 | Retain as fallback                                                      |
 
 Jev should choose among candidates that already contain their parameters. For example, it can choose `rotate_U3_90`, whose legality and geometry are known to Synth. It should not be responsible for inventing a coordinate tuple or an arbitrary source patch.
 
@@ -324,12 +324,12 @@ For hosted inference, send the structured evidence needed for the question. Make
 
 Compare:
 
-| Arm | Purpose |
-| --- | --- |
-| Current checked-in repair loop | Product baseline |
-| Improved deterministic action policy | Controls for gains from better actions and instrumentation |
-| Jev selecting the same action set | Measures incremental model value |
-| Optional local predictor | Tests whether learned selection needs hosted inference |
+| Arm                                      | Purpose                                                      |
+| ---------------------------------------- | ------------------------------------------------------------ |
+| Current checked-in repair loop           | Product baseline                                             |
+| Improved deterministic action policy     | Controls for gains from better actions and instrumentation   |
+| Jev selecting the same action set        | Measures incremental model value                             |
+| Optional local predictor                 | Tests whether learned selection needs hosted inference       |
 | Exhaustive evaluation on tractable cases | Estimates the opportunity available within the candidate set |
 
 Give the deterministic and Jev selectors identical candidate sets. Separately report the cost of generating those candidates. Otherwise, gains from adding better actions could be incorrectly attributed to the model.
@@ -346,16 +346,16 @@ Freeze board dimensions, layer counts, rule profiles, and permitted component ch
 
 ### 11.3 Metrics
 
-| Category | Metrics |
-| --- | --- |
-| Primary success | Fraction fully connected and DRC-clean within budget, with hard constraints satisfied |
-| Residual failure | Unrouted count, unresolved DRC categories, constraint failures |
-| Physical quality | Trace length, vias, differential-pair compliance, board dimensions |
-| Search effort | Place/route attempts, cells expanded, time spent per stage |
-| Model overhead | Request latency, timeouts, token usage, API cost, fallback rate |
-| Diagnostic repair | Valid fixes completed, new failures introduced, design intent preserved |
-| Schematic readability | Blind engineer preference plus exact layout and ERC metrics |
-| Reproducibility | Replay matches, stable fallback behavior, consistent recorded inputs |
+| Category              | Metrics                                                                               |
+| --------------------- | ------------------------------------------------------------------------------------- |
+| Primary success       | Fraction fully connected and DRC-clean within budget, with hard constraints satisfied |
+| Residual failure      | Unrouted count, unresolved DRC categories, constraint failures                        |
+| Physical quality      | Trace length, vias, differential-pair compliance, board dimensions                    |
+| Search effort         | Place/route attempts, cells expanded, time spent per stage                            |
+| Model overhead        | Request latency, timeouts, token usage, API cost, fallback rate                       |
+| Diagnostic repair     | Valid fixes completed, new failures introduced, design intent preserved               |
+| Schematic readability | Blind engineer preference plus exact layout and ERC metrics                           |
+| Reproducibility       | Replay matches, stable fallback behavior, consistent recorded inputs                  |
 
 Report both equal-attempt and equal-wall-clock results, with wall-clock including model overhead. Distinguish cold calls from cached or replayed decisions. Use paired comparisons by board, disclose sample size, and report uncertainty rather than relying only on averages.
 
@@ -375,14 +375,14 @@ If Jev fails these criteria, retain useful improvements to candidate generation,
 
 ## 12. Suggested implementation sequence
 
-| Phase | Deliverable | Completion evidence |
-| --- | --- | --- |
-| 1. Freeze baseline | Versioned corpus, current repair traces, corrected stale comments | Repeatable baseline with explicit failures |
-| 2. Strengthen evaluation | Requirement-aware placement metrics and composed physical/schematic checks | Focused regression cases for misleading scores |
-| 3. Expose actions | Bounded repair candidates and deterministic selector | Same constraints and auditable outcomes for every candidate |
-| 4. Add experimental Jev adapter | Outer-loop selection, timeout, fallback, trace, and replay | Adapter tests using recorded or synthetic responses |
-| 5. Run held-out evaluation | Paired deterministic-versus-Jev results | Predeclared promotion criteria evaluated |
-| 6. Expand selectively | Placement, schematic, or diagnostic experiments | Independent evidence for each new use case |
+| Phase                           | Deliverable                                                                | Completion evidence                                         |
+| ------------------------------- | -------------------------------------------------------------------------- | ----------------------------------------------------------- |
+| 1. Freeze baseline              | Versioned corpus, current repair traces, corrected stale comments          | Repeatable baseline with explicit failures                  |
+| 2. Strengthen evaluation        | Requirement-aware placement metrics and composed physical/schematic checks | Focused regression cases for misleading scores              |
+| 3. Expose actions               | Bounded repair candidates and deterministic selector                       | Same constraints and auditable outcomes for every candidate |
+| 4. Add experimental Jev adapter | Outer-loop selection, timeout, fallback, trace, and replay                 | Adapter tests using recorded or synthetic responses         |
+| 5. Run held-out evaluation      | Paired deterministic-versus-Jev results                                    | Predeclared promotion criteria evaluated                    |
+| 6. Expand selectively           | Placement, schematic, or diagnostic experiments                            | Independent evidence for each new use case                  |
 
 No release commitment or runtime dependency follows from this assessment. The recommended next engineering artifact is the repair benchmark and action-selection boundary.
 

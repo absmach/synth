@@ -8,6 +8,7 @@ import glob
 import os
 import sys
 
+
 def main():
     root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     parts_dir = os.path.join(root, "registry", "parts")
@@ -23,20 +24,27 @@ def main():
                 break
 
     if not kicad_dir or not os.path.isdir(kicad_dir):
-        print("KiCad symbol directory not found locally. Skipping full KiCad library audit.")
+        print(
+            "KiCad symbol directory not found locally. Skipping full KiCad library audit."
+        )
         sys.exit(0)
 
     print(f"Auditing registry parts against KiCad symbols in {kicad_dir}...")
     checked = 0
     mismatches = 0
 
-    for filepath in sorted(glob.glob(os.path.join(parts_dir, "**", "*.synth.toml"), recursive=True)):
+    for filepath in sorted(
+        glob.glob(os.path.join(parts_dir, "**", "*.synth.toml"), recursive=True)
+    ):
         with open(filepath, "r") as f:
             content = f.read()
 
         checked += 1
 
-    print(f"KiCad symbol cross-check complete: {checked} parts audited, {mismatches} mismatches found.")
+    print(
+        f"KiCad symbol cross-check complete: {checked} parts audited, {mismatches} mismatches found."
+    )
+
 
 if __name__ == "__main__":
     main()

@@ -29,7 +29,7 @@ for synth_file in fixtures/kicad-reference/*.synth; do
     TOTAL=$((TOTAL + 1))
     stem="$(basename "${synth_file}" .synth)"
     out_dir="${OUT_BASE}/${stem}"
-    
+
     echo -n "Exporting ${stem}... "
     if "${SYNTH_BIN}" export-kicad "${synth_file}" --out "${out_dir}" --validate-erc >/dev/null 2>&1; then
         echo "✅ OK (ERC 0 violations)"

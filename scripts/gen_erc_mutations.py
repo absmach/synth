@@ -13,17 +13,25 @@ from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 
+
 def mutate_float_required_pin(src: str) -> str:
     lines = src.splitlines()
     new_lines = []
     removed = False
     for line in lines:
-        if not removed and any(kw in line for kw in ["vdd_io", "vdd_core", "vcc", "vbat", "vdd", "vin"]) and "connect" in line:
+        if (
+            not removed
+            and any(
+                kw in line for kw in ["vdd_io", "vdd_core", "vcc", "vbat", "vdd", "vin"]
+            )
+            and "connect" in line
+        ):
             new_lines.append(f"  // MUTATION: {line}")
             removed = True
         else:
             new_lines.append(line)
     return "\n".join(new_lines) if removed else None
+
 
 def mutate_single_endpoint_net(src: str) -> str:
     lines = src.splitlines()
@@ -38,23 +46,30 @@ def mutate_single_endpoint_net(src: str) -> str:
             new_lines.append(line)
     return "\n".join(new_lines) if removed else None
 
+
 def mutate_power_short(src: str) -> str:
     lines = src.splitlines()
     idx = len(lines) - 2
     lines.insert(idx, "  // MUTATION E-SYNTH-POWER-002\n  connect U3.vout -> U4.vout")
     return "\n".join(lines)
 
+
 def mutate_missing_decoupling(src: str) -> str:
     lines = src.splitlines()
     new_lines = []
     removed = 0
     for line in lines:
-        if "connect" in line and (".p1" in line or ".p2" in line) and any(c in line for c in ["C1", "C2", "C3", "C4"]):
+        if (
+            "connect" in line
+            and (".p1" in line or ".p2" in line)
+            and any(c in line for c in ["C1", "C2", "C3", "C4"])
+        ):
             new_lines.append(f"  // MUTATION: {line}")
             removed += 1
         else:
             new_lines.append(line)
     return "\n".join(new_lines) if removed > 0 else None
+
 
 def mutate_strip_diff_impedance(src: str) -> str:
     if "diff_pair" not in src:
@@ -70,10 +85,14 @@ def mutate_strip_diff_impedance(src: str) -> str:
             new_lines.append(line)
     return "\n".join(new_lines) if modified else None
 
+
 def mutate_diff_self_ref(src: str) -> str:
     if "diff_pair" not in src:
         return None
-    return re.sub(r'diff_pair\s+([A-Za-z0-9_]+)\s+([A-Za-z0-9_]+)', r'diff_pair \1 \1', src)
+    return re.sub(
+        r"diff_pair\s+([A-Za-z0-9_]+)\s+([A-Za-z0-9_]+)", r"diff_pair \1 \1", src
+    )
+
 
 def mutate_drop_i2c_pullup(src: str) -> str:
     if "sda" not in src.lower() and "scl" not in src.lower():
@@ -82,12 +101,15 @@ def mutate_drop_i2c_pullup(src: str) -> str:
     new_lines = []
     modified = False
     for line in lines:
-        if ("sda" in line.lower() or "scl" in line.lower()) and any(r in line for r in ["R1", "R2", "R3", "R4"]):
+        if ("sda" in line.lower() or "scl" in line.lower()) and any(
+            r in line for r in ["R1", "R2", "R3", "R4"]
+        ):
             new_lines.append(f"  // MUTATION: {line}")
             modified = True
         else:
             new_lines.append(line)
     return "\n".join(new_lines) if modified else None
+
 
 def mutate_remove_keepout_radius(src: str) -> str:
     if "keepout" not in src:
@@ -103,10 +125,12 @@ def mutate_remove_keepout_radius(src: str) -> str:
             new_lines.append(line)
     return "\n".join(new_lines) if modified else None
 
+
 def mutate_zero_keepout_radius(src: str) -> str:
     if "keepout" not in src:
         return None
-    return re.sub(r'radius\s+[0-9\.]+[a-z]+', 'radius 0mm', src)
+    return re.sub(r"radius\s+[0-9\.]+[a-z]+", "radius 0mm", src)
+
 
 def mutate_remove_cc_pulldown(src: str) -> str:
     if "cc1" not in src.lower() and "cc2" not in src.lower():
@@ -122,6 +146,7 @@ def mutate_remove_cc_pulldown(src: str) -> str:
             new_lines.append(line)
     return "\n".join(new_lines) if modified else None
 
+
 ALL_MUTATIONS = [
     ("float_required", mutate_float_required_pin),
     ("single_endpoint", mutate_single_endpoint_net),
@@ -134,6 +159,7 @@ ALL_MUTATIONS = [
     ("zero_keepout_radius", mutate_zero_keepout_radius),
     ("remove_cc_pulldown", mutate_remove_cc_pulldown),
 ]
+
 
 def main():
     out_dir = REPO_ROOT / "fixtures" / "erc-generated"
@@ -150,10 +176,16 @@ def main():
     for d in input_dirs:
         if d.exists():
             for p in d.glob("*.synth"):
-                if "pass__" in p.name or d.name.startswith("designs") or d.name.startswith("kicad"):
+                if (
+                    "pass__" in p.name
+                    or d.name.startswith("designs")
+                    or d.name.startswith("kicad")
+                ):
                     clean_files.append(p)
 
-    print(f"Applying ERC single & double mutations to {len(clean_files)} clean design files...")
+    print(
+        f"Applying ERC single & double mutations to {len(clean_files)} clean design files..."
+    )
 
     generated_mutations = 0
 
@@ -189,7 +221,10 @@ def main():
                     out_file.write_text(double_src, encoding="utf-8")
                     generated_mutations += 1
 
-    print(f"Successfully generated {generated_mutations} mutated ERC fixture files into {out_dir}.")
+    print(
+        f"Successfully generated {generated_mutations} mutated ERC fixture files into {out_dir}."
+    )
+
 
 if __name__ == "__main__":
     main()

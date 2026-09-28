@@ -35,7 +35,7 @@ netlist — the export was silently incomplete.
 
 1. **Loader** (`synth-layout::kicad_lib_loader`): `symbol_units(lib_id)`
    parses the `<Symbol>_<unit>_<style>` sub-symbols (following
-   `(extends …)`) into a *pin number → unit* map plus a unit count.
+   `(extends …)`) into a _pin number → unit_ map plus a unit count.
    Unit `0` (common pins) is attributed to unit 1, where the router
    draws it.
 2. **Layout**: a multi-unit package keeps **one placement**, and the
@@ -123,7 +123,7 @@ See `docs/diagnostics/E-SYNTH-PINMUX-001.md` and `-002.md`.
   when KiCad is installed).
 - `synth-kicad::alternates` unit tests: name selection, injection
   (idempotent, byte-identical when untouched).
-- `synth-kicad::schematic` tests: alternates declared *and* selected;
+- `synth-kicad::schematic` tests: alternates declared _and_ selected;
   a multi-unit part emits `(unit 1)`, `(unit 2)`, `(unit 3)`.
 - `synth-validate::deep_erc` tests: both pin-mux rules, including the
   no-double-report and passive-skip cases.

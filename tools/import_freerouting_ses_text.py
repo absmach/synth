@@ -101,26 +101,27 @@ def top_level_blocks(text: str):
         elif char == ")":
             depth -= 1
             if depth == 1 and start is not None:
-                yield start, index + 1, text[start:index + 1]
+                yield start, index + 1, text[start : index + 1]
                 start = None
 
 
 def board_net_codes(text: str) -> dict[str, str]:
     return {
-        name: code
-        for code, name in re.findall(r'\(net\s+(\d+)\s+"([^"]*)"\)', text)
+        name: code for code, name in re.findall(r'\(net\s+(\d+)\s+"([^"]*)"\)', text)
     }
 
 
 def ground_net_codes(text: str) -> set[str]:
     """Return net codes attached to the board's generated ground zones."""
-    return set(re.findall(r'\(zone\s+\(net\s+(\d+)\)', text))
+    return set(re.findall(r"\(zone\s+\(net\s+(\d+)\)", text))
 
 
 def route_records(ses_text: str, net_codes: dict[str, str]):
     root = parse(ses_text)
     routes = next(x for x in root if isinstance(x, list) and x and x[0] == "routes")
-    network = next(x for x in routes if isinstance(x, list) and x and x[0] == "network_out")
+    network = next(
+        x for x in routes if isinstance(x, list) and x and x[0] == "network_out"
+    )
     records = []
     for net in children(network, "net"):
         net_code = net_codes[net[1]]
@@ -134,9 +135,9 @@ def route_records(ses_text: str, net_codes: dict[str, str]):
                         f"\t\t(start {fmt(first[0])} {fmt(first[1])})\n"
                         f"\t\t(end {fmt(second[0])} {fmt(second[1])})\n"
                         f"\t\t(width {width})\n"
-                        f"\t\t(layer \"{layer}\")\n"
+                        f'\t\t(layer "{layer}")\n'
                         f"\t\t(net {net_code})\n"
-                        f"\t\t(uuid \"{uuid.uuid4()}\")\n"
+                        f'\t\t(uuid "{uuid.uuid4()}")\n'
                         "\t)\n"
                     )
         for via in children(net, "via"):
@@ -148,9 +149,9 @@ def route_records(ses_text: str, net_codes: dict[str, str]):
                 f"\t\t(at {fmt(px)} {fmt(py)})\n"
                 f"\t\t(size {diameter})\n"
                 f"\t\t(drill {drill})\n"
-                "\t\t(layers \"F.Cu\" \"B.Cu\")\n"
+                '\t\t(layers "F.Cu" "B.Cu")\n'
                 f"\t\t(net {net_code})\n"
-                f"\t\t(uuid \"{uuid.uuid4()}\")\n"
+                f'\t\t(uuid "{uuid.uuid4()}")\n'
                 "\t)\n"
             )
     return records
@@ -175,7 +176,7 @@ def main() -> int:
         if first == "segment":
             continue
         if first == "via":
-            net = re.search(r'\(net\s+(\d+)\)', block)
+            net = re.search(r"\(net\s+(\d+)\)", block)
             if not net or net.group(1) not in ground_codes:
                 continue
         if insert_at is None and first == "zone":
@@ -195,7 +196,12 @@ def main() -> int:
     insert_at = without_routes.find("\n\t(zone")
     if insert_at < 0:
         insert_at = without_routes.rfind(")")
-    result = without_routes[:insert_at] + "\n" + "".join(records) + without_routes[insert_at:]
+    result = (
+        without_routes[:insert_at]
+        + "\n"
+        + "".join(records)
+        + without_routes[insert_at:]
+    )
     Path(args.output_board).write_text(result)
     print(f"merged {len(records)} FreeRouting records")
     return 0

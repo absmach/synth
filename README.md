@@ -44,14 +44,14 @@ Synth resolves parts from a component registry and lowers the source into a type
 
 ## Features
 
-| Area | Capabilities |
-| --- | --- |
-| Design language | SynthSpec parser, typed board IR, components, connections, differential pairs, keepouts, and placement hints |
-| Validation | Electrical-rule checks, design-rule checks, structured diagnostics, and SMT-backed quantitative fixes |
-| Layout and routing | Deterministic schematic layout, component placement, and multilayer routing |
-| KiCad integration | Project, schematic, PCB, and BOM export; optional fabrication outputs through `kicad-cli` |
-| Component registry | Versioned parts, project and user overlays, search, import, and authoring tools |
-| Developer tools | CLI, live browser preview, JSON diagnostics, and an MCP server for agent integration |
+| Area               | Capabilities                                                                                                 |
+| ------------------ | ------------------------------------------------------------------------------------------------------------ |
+| Design language    | SynthSpec parser, typed board IR, components, connections, differential pairs, keepouts, and placement hints |
+| Validation         | Electrical-rule checks, design-rule checks, structured diagnostics, and SMT-backed quantitative fixes        |
+| Layout and routing | Deterministic schematic layout, component placement, and multilayer routing                                  |
+| KiCad integration  | Project, schematic, PCB, and BOM export; optional fabrication outputs through `kicad-cli`                    |
+| Component registry | Versioned parts, project and user overlays, search, import, and authoring tools                              |
+| Developer tools    | CLI, live browser preview, JSON diagnostics, and an MCP server for agent integration                         |
 
 ## Quick Start
 
@@ -103,12 +103,12 @@ Agents can retrieve the SynthSpec language reference, search the registry, valid
 
 ## Examples
 
-| Design | What it demonstrates |
-| --- | --- |
-| [Hello](fixtures/designs/hello.synth) | The smallest board declaration |
-| [Environmental logger](examples/env_logger.synth) | USB-C power, a regulator, an MCU, an environmental sensor, and a debug header |
-| [Sensor logger](examples/sensor_logger.synth) | A larger design with dual I²C sensors, SPI flash, and status LEDs |
-| [Placement and differential pairs](examples/placement_and_diff_pair.synth) | Placement hints, differential-pair constraints, and keepout regions |
+| Design                                                                     | What it demonstrates                                                          |
+| -------------------------------------------------------------------------- | ----------------------------------------------------------------------------- |
+| [Hello](fixtures/designs/hello.synth)                                      | The smallest board declaration                                                |
+| [Environmental logger](examples/env_logger.synth)                          | USB-C power, a regulator, an MCU, an environmental sensor, and a debug header |
+| [Sensor logger](examples/sensor_logger.synth)                              | A larger design with dual I²C sensors, SPI flash, and status LEDs             |
+| [Placement and differential pairs](examples/placement_and_diff_pair.synth) | Placement hints, differential-pair constraints, and keepout regions           |
 
 Additional language and validation cases live in [fixtures](fixtures/designs/README.md). Part definitions live in the [component registry](registry/README.md).
 
@@ -122,8 +122,8 @@ artifact in [examples/rp2350](examples/rp2350/).
 
 ![Rendered RP2350 routed example](examples/rp2350/rp2350_devboard_freerouting_clean.png)
 
-*Pre-generated compact RP2350 routed review artifact; open the [KiCad board](examples/rp2350/rp2350_devboard_freerouting_clean.kicad_pcb)
-for an interactive review.*
+_Pre-generated compact RP2350 routed review artifact; open the [KiCad board](examples/rp2350/rp2350_devboard_freerouting_clean.kicad_pcb)
+for an interactive review._
 
 ## Documentation
 

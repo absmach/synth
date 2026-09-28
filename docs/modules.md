@@ -10,22 +10,22 @@ they constrain the whole design.
 KiCad 10 (`SEXPR_SCHEMATIC_FILE_VERSION 20251012`, "Flat schematic
 hierarchy support") documents **three** multi-sheet modes:
 
-| Mode | What it is |
-| --- | --- |
-| **Flat** | Several top-level sheets, *no* master/root diagram. Sheets are peers. |
-| **Simple hierarchy** | A root sheet with sub-sheets; each sub-sheet file is used **once**. |
+| Mode                  | What it is                                                                                                                                             |
+| --------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| **Flat**              | Several top-level sheets, _no_ master/root diagram. Sheets are peers.                                                                                  |
+| **Simple hierarchy**  | A root sheet with sub-sheets; each sub-sheet file is used **once**.                                                                                    |
 | **Complex hierarchy** | A sub-sheet **file** is instantiated **several times**; per-instance data lives in each symbol's `(instances (project (path … (reference …))))` block. |
 
 Two constraints follow, and they decide the design:
 
-1. In a **flat** schematic every sheet must have a *different filename*.
+1. In a **flat** schematic every sheet must have a _different filename_.
    Pointing two sheets at the same file is only legal in a
    **hierarchical** schematic (KiCad warns and loses symbol↔footprint
    links otherwise).
 2. Flat sheets connect through **global labels**; local labels are
    strictly sheet-local (briefly not, in 10.0.0–10.0.2; reverted).
 
-So "reuse one sheet file for several instances" is *only* available via
+So "reuse one sheet file for several instances" is _only_ available via
 complex hierarchy. Flat hierarchy cannot do it, by construction.
 
 ### Decision
@@ -34,7 +34,7 @@ complex hierarchy. Flat hierarchy cannot do it, by construction.
 physical parts.** Instantiating a module twice yields two sets of
 components with prefixed reference designators (`CH1_U1`, `CH2_U1`) and
 distinct nets. This is the physically correct model — two sensor
-channels *are* two sensors — and it keeps the IR flat, which is what
+channels _are_ two sensors — and it keeps the IR flat, which is what
 every downstream stage (ERC, power domains, placement, routing, DRC,
 BOM) already assumes.
 
@@ -65,7 +65,7 @@ complex-hierarchy exporter what they need.
 
 P26 is unchanged and compatible: it already splits on `sheet`
 boundaries and emits one file per boundary with distinct filenames.
-Module instances simply *are* such boundaries — `use "X" as CH1`
+Module instances simply _are_ such boundaries — `use "X" as CH1`
 assigns `sheet = "CH1"` to everything it expands to, so P26's existing
 machinery splits per instance with no special casing. This is the whole
 reason the decision had to be made first: had P26 assumed one file could
@@ -157,7 +157,7 @@ every sheet that carries one of its members, so KiCad's bus tools know
 the member set. Member connectivity is by **label name**: each member
 net is labelled with its full `<bus>.<member>` name (an explicit
 exception to the pin-derived-token policy, which would otherwise render
-a guessed `SDA` and collide across two buses). No bus *graphic* is
+a guessed `SDA` and collide across two buses). No bus _graphic_ is
 drawn — the exporter is label-driven for nets too, so a floating bus
 wire would only give ERC something to flag.
 

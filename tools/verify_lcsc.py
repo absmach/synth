@@ -24,14 +24,16 @@ How to find a real LCSC C-number:
     5. Run this tool with the part_id and C-number
 """
 
-import sys
 import glob
 import os
 import re
-import urllib.request
+import sys
 import time
+import urllib.request
 
-REGISTRY_ROOT = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "registry", "parts")
+REGISTRY_ROOT = os.path.join(
+    os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "registry", "parts"
+)
 
 
 def find_toml(part_id: str) -> str | None:
@@ -50,7 +52,9 @@ def verify_lcsc_id(lcsc_id: str) -> bool:
     try:
         req = urllib.request.Request(
             url,
-            headers={"User-Agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36"},
+            headers={
+                "User-Agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36"
+            },
         )
         with urllib.request.urlopen(req, timeout=10) as resp:
             status = resp.status
@@ -78,7 +82,7 @@ def write_lcsc_id(toml_path: str, lcsc_id: str) -> None:
     inserted = False
     for line in lines:
         new_lines.append(line)
-        if not inserted and re.match(r'^version\s*=', line.strip()):
+        if not inserted and re.match(r"^version\s*=", line.strip()):
             new_lines.append(f'lcsc_id = "{lcsc_id}"\n')
             inserted = True
 
@@ -103,13 +107,15 @@ def main():
     part_id = sys.argv[1].strip()
     lcsc_id = sys.argv[2].strip()
 
-    if not re.match(r'^C\d+$', lcsc_id):
-        print(f"Error: '{lcsc_id}' doesn't look like an LCSC C-number (should be C followed by digits)")
+    if not re.match(r"^C\d+$", lcsc_id):
+        print(
+            f"Error: '{lcsc_id}' doesn't look like an LCSC C-number (should be C followed by digits)"
+        )
         sys.exit(1)
 
     toml_path = find_toml(part_id)
     if not toml_path:
-        print(f"Error: No registry TOML found with id = \"{part_id}\"")
+        print(f'Error: No registry TOML found with id = "{part_id}"')
         sys.exit(1)
 
     print(f"Part ID:   {part_id}")
@@ -135,7 +141,7 @@ def main():
         sys.exit(0)
 
     write_lcsc_id(toml_path, lcsc_id)
-    print(f"✓ Written lcsc_id = \"{lcsc_id}\" to {os.path.relpath(toml_path)}")
+    print(f'✓ Written lcsc_id = "{lcsc_id}" to {os.path.relpath(toml_path)}')
 
 
 if __name__ == "__main__":
