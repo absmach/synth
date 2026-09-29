@@ -914,7 +914,9 @@ fn render_title_block(
 
 fn classify_sheet_size(w: f64, h: f64) -> &'static str {
     let area = w * h;
-    if area <= 297.0 * 210.0 * 1.1 {
+    if area <= 148.0 * 210.0 * 1.1 {
+        "A5"
+    } else if area <= 297.0 * 210.0 * 1.1 {
         "A4"
     } else if area <= 420.0 * 297.0 * 1.1 {
         "A3"

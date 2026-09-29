@@ -868,7 +868,7 @@ pub fn layout_with_overrides(
     resolve_text_overlaps(board, &mut layout);
     grow_sheet_to_fit(board, &mut layout);
     compact_sheet_to_fit(board, &mut layout);
-    enforce_sheet_floor(board, &mut layout);
+    settle_sheet_size(board, &mut layout);
     clamp_annotations_to_sheet(&mut layout);
     layout
 }
@@ -1538,32 +1538,45 @@ fn compact_sheet_to_fit(board: &Board, layout: &mut Layout) {
     }
 }
 
-/// The smallest page this design will accept, from
-/// `schematic { paper = "…" }`, defaulting to A4.
-///
-/// A *floor*, not a pin: [`grow_sheet_to_fit`] still enlarges the page when
-/// content genuinely does not fit, because a design that cannot be drawn is
-/// worse than one on a larger sheet than requested. What the floor forbids
-/// is the opposite failure — silently compacting a design onto A5 or a
-/// custom page when the author asked for A4.
-pub fn sheet_floor(board: &Board) -> SheetSize {
+/// The page this design asked for, from `schematic { paper = "…" }`,
+/// defaulting to A4.
+pub fn requested_sheet(board: &Board) -> SheetSize {
     board.schematic_paper.map_or(SheetSize::A4, SheetSize::from)
 }
 
-/// Re-declare the page when it is smaller than the design's floor, and
-/// re-centre the content on the larger page.
+/// Settle the final page: the requested size, grown only if the content
+/// genuinely does not fit.
 ///
-/// Compaction only ever re-declares the frame (positions are absolute from
-/// the top-left), so without the re-centre a small design pinned to A4 would
-/// sit in the top-left corner of an otherwise empty sheet.
-fn enforce_sheet_floor(board: &Board, layout: &mut Layout) {
-    let (floor_w, floor_h) = sheet_floor(board).dims_mm();
-    let (have_w, have_h) = layout.sheet_size.dims_mm();
-    if have_w >= floor_w && have_h >= floor_h {
-        return;
+/// The request is the page, not a bound on it. Two failures are being
+/// avoided at once — drawing on a page smaller than the author asked for
+/// (asking A3 and getting A4 would be a different drawing than the one they
+/// are reviewing), and silently resizing a design that did fit. Overflow is
+/// the one case that still changes the page, because a design that cannot be
+/// drawn is worse than one on a larger sheet, and `grow_sheet_to_fit` has
+/// already reported what it needs.
+///
+/// Only the frame is re-declared, never the content. Positions are absolute
+/// from the top-left, so moving them here would silently rewrite a
+/// hand-arranged drawing: the schematic sidecar stores absolute
+/// millimetres, and a preview drag has to survive a save/reload
+/// bit-exact. A small design on a roomy requested page therefore sits in
+/// the top-left rather than centred — the same trade
+/// [`compact_sheet_to_fit`] already makes, and the same reason it makes it.
+fn settle_sheet_size(board: &Board, layout: &mut Layout) {
+    let requested = requested_sheet(board);
+    let mut target = requested;
+    if let Some((min_x, max_x, min_y, max_y)) = content_bounds(board, layout) {
+        // Compare the *content* against the requested page, not one rung of
+        // the ladder against another: `sheet_size_for` never returns A5, so
+        // comparing its result with an A5 request would report an overflow
+        // for a design that fits A5 with room to spare.
+        let (content_w, content_h) = sheet_needs(min_x, max_x, min_y, max_y);
+        let (req_w, req_h) = requested.dims_mm();
+        if content_w > req_w || content_h > req_h {
+            target = sheet_size_for(content_w, content_h);
+        }
     }
-    layout.sheet_size = sheet_floor(board);
-    centre_on_sheet(board, layout);
+    layout.sheet_size = target;
 }
 
 /// Classify net labels and route every signal net over `layout`'s
@@ -4370,9 +4383,17 @@ fn layer_for(component: &synth_ir::Component) -> u32 {
 /// at A2; beyond A2 the declared size stops growing and the
 /// multi-sheet split (§P26) takes over. `w`/`h` are the
 /// caller-computed content bounds including page margins.
+/// Smallest page in the *auto-fit* ladder that holds `w` x `h`.
+///
+/// A4 is the floor here on purpose. A5 is a page an author selects with
+/// `schematic { paper = "A5" }`, never one the fitter infers: the placer
+/// ranks candidate sheets smallest-first (see the shelf/pitch search), so
+/// putting A5 in this ladder silently re-laid-out every existing design onto
+/// a smaller, more cramped page. Growth is the only direction this is
+/// consulted for; the requested size is applied separately in
+/// [`settle_sheet_size`].
 fn sheet_size_for(w: f64, h: f64) -> SheetSize {
-    const SIZES: [(SheetSize, f64, f64); 4] = [
-        (SheetSize::A5, 148.0, 210.0),
+    const SIZES: [(SheetSize, f64, f64); 3] = [
         (SheetSize::A4, 297.0, 210.0),
         (SheetSize::A3, 420.0, 297.0),
         (SheetSize::A2, 594.0, 420.0),
@@ -6100,6 +6121,94 @@ mod text_overlap_tests {
         );
     }
 
+    /// A board whose content is far smaller than any standard page.
+    fn paper_board(paper: Option<SchematicPaper>) -> Board {
+        Board {
+            schematic_paper: paper,
+            ..empty_board()
+        }
+    }
+
+    #[test]
+    fn a_design_with_no_paper_request_defaults_to_a4() {
+        assert_eq!(requested_sheet(&empty_board()), SheetSize::A4);
+    }
+
+    #[test]
+    fn the_requested_page_is_used_verbatim_even_when_smaller_than_the_fit() {
+        // The whole point of the statement: asking for A5 must produce A5.
+        // A minimum would silently hand back A4 here.
+        for (paper, want) in [
+            (SchematicPaper::A5, SheetSize::A5),
+            (SchematicPaper::A4, SheetSize::A4),
+            (SchematicPaper::A3, SheetSize::A3),
+            (SchematicPaper::A2, SheetSize::A2),
+        ] {
+            let board = paper_board(Some(paper));
+            let mut layout = empty_layout(vec![run("tiny", 1.27, 20.0, 30.0)], SheetSize::A4);
+            layout.components.push(ComponentPlacement {
+                id: ComponentId(0),
+                center_mm: (30.0, 30.0),
+                rotation: Rotation::Zero,
+            });
+            settle_sheet_size(&board, &mut layout);
+            assert_eq!(layout.sheet_size, want, "paper = {paper:?}");
+        }
+    }
+
+    #[test]
+    fn a_roomy_requested_page_moves_no_content() {
+        // The sidecar stores absolute sheet millimetres, so re-declaring a
+        // larger frame must leave every position exactly where it was.
+        let board = paper_board(Some(SchematicPaper::A2));
+        let mut layout = empty_layout(vec![], SheetSize::A4);
+        layout.components.push(ComponentPlacement {
+            id: ComponentId(0),
+            center_mm: (20.0, 20.0),
+            rotation: Rotation::Zero,
+        });
+        settle_sheet_size(&board, &mut layout);
+        assert_eq!(layout.sheet_size, SheetSize::A2);
+        assert_eq!(
+            layout.components[0].center_mm,
+            (20.0, 20.0),
+            "content must not move when only the frame changes"
+        );
+    }
+
+    #[test]
+    fn content_too_big_for_the_requested_page_grows_it_instead_of_clipping() {
+        // A design asked for A4 whose content needs A2: the page grows, which
+        // is the deliberate trade — an undrawable design is worse than a
+        // larger sheet than the one requested.
+        let board = paper_board(Some(SchematicPaper::A4));
+        let mut layout = empty_layout(vec![], SheetSize::A4);
+        for i in 0..40u32 {
+            layout.components.push(ComponentPlacement {
+                id: ComponentId(i),
+                center_mm: (20.0 + (i % 8) as f64 * 60.0, 20.0 + (i / 8) as f64 * 55.0),
+                rotation: Rotation::Zero,
+            });
+        }
+        grow_sheet_to_fit(&board, &mut layout);
+        settle_sheet_size(&board, &mut layout);
+        assert_eq!(layout.sheet_size, SheetSize::A2);
+    }
+
+    #[test]
+    fn a5_is_selectable_but_never_auto_fitted() {
+        assert_eq!(SheetSize::A5.dims_mm(), (148.0, 210.0));
+        assert_eq!(SheetSize::A5.dims_mm().0, 148.0);
+        // The auto-fit ladder starts at A4: the placer ranks sheets
+        // smallest-first, so an A5 entry here would re-lay-out every design.
+        assert_eq!(sheet_size_for(10.0, 10.0), SheetSize::A4);
+        assert_eq!(sheet_size_for(290.0, 200.0), SheetSize::A4);
+        assert_eq!(sheet_size_for(400.0, 280.0), SheetSize::A3);
+        assert_eq!(sheet_size_for(500.0, 400.0), SheetSize::A2);
+        // Content wider than A4 still climbs rather than being clipped.
+        assert_eq!(sheet_size_for(300.0, 200.0), SheetSize::A3);
+    }
+
     #[test]
     fn compact_sheet_shrinks_to_smallest_fitting_sheet() {
         let board = empty_board();
@@ -6111,6 +6220,8 @@ mod text_overlap_tests {
         });
         compact_sheet_to_fit(&board, &mut layout);
         assert_eq!(layout.sheet_size, SheetSize::A4);
+        settle_sheet_size(&board, &mut layout);
+        assert_eq!(layout.sheet_size, SheetSize::A4, "the default page is A4");
     }
 
     #[test]

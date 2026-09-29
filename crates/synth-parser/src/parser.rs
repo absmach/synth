@@ -1431,7 +1431,10 @@ impl Parser {
                     ) else {
                         continue;
                     };
-                    match raw.to_ascii_uppercase().as_str() {
+                    // Trim: `paper = " A4 "` is a typo, not a request for a
+                    // page called " A4 ", and rejecting it would send the
+                    // author looking for a grammar rule that does not exist.
+                    match raw.trim().to_ascii_uppercase().as_str() {
                         "A5" => paper = Some(SchematicPaperAst::A5),
                         "A4" => paper = Some(SchematicPaperAst::A4),
                         "A3" => paper = Some(SchematicPaperAst::A3),
@@ -2753,6 +2756,68 @@ mod tests {
             panic!("Expected company statement")
         };
         assert_eq!(c.name, "Absmach");
+    }
+
+    #[test]
+    fn parse_schematic_paper_accepts_the_whole_ladder() {
+        for paper in ["A5", "A4", "A3", "A2", "a4", " A4 "] {
+            let src = format!("board \"b\" {{\n schematic {{ paper = \"{paper}\" }}\n}}");
+            let res = parse(lex(&src), "test.synth".into());
+            assert!(
+                res.diagnostics.is_empty(),
+                "{paper} should parse: {:?}",
+                res.diagnostics
+            );
+            let ast = res.ast.unwrap();
+            let StatementAst::Schematic(sc) = &ast.board.statements[0] else {
+                panic!("expected a schematic statement for {paper}");
+            };
+            assert!(sc.paper.is_some(), "{paper} should yield a paper");
+        }
+    }
+
+    #[test]
+    fn parse_schematic_paper_is_case_insensitive() {
+        let src = "board \"b\" {\n schematic { paper = \"a3\" }\n}";
+        let res = parse(lex(src), "t.synth".into());
+        assert!(res.diagnostics.is_empty(), "{:?}", res.diagnostics);
+        let ast = res.ast.unwrap();
+        let StatementAst::Schematic(sc) = &ast.board.statements[0] else {
+            panic!("expected schematic");
+        };
+        assert_eq!(sc.paper, Some(SchematicPaperAst::A3));
+    }
+
+    #[test]
+    fn parse_schematic_rejects_an_unknown_paper_size() {
+        let src = "board \"b\" {\n schematic { paper = \"A9\" }\n}";
+        let res = parse(lex(src), "t.synth".into());
+        assert!(
+            res.diagnostics
+                .iter()
+                .any(|d| d.code == "E-SYNTH-PARSE-034"),
+            "expected E-SYNTH-PARSE-034, got {:?}",
+            res.diagnostics
+        );
+    }
+
+    #[test]
+    fn parse_schematic_rejects_a_non_quoted_paper_size() {
+        let src = "board \"b\" {\n schematic { paper = A4 }\n}";
+        let res = parse(lex(src), "t.synth".into());
+        assert!(!res.diagnostics.is_empty(), "bare A4 must be an error");
+    }
+
+    #[test]
+    fn parse_schematic_with_an_empty_body_is_legal_and_leaves_the_default() {
+        let src = "board \"b\" {\n schematic { }\n}";
+        let res = parse(lex(src), "t.synth".into());
+        assert!(res.diagnostics.is_empty(), "{:?}", res.diagnostics);
+        let ast = res.ast.unwrap();
+        let StatementAst::Schematic(sc) = &ast.board.statements[0] else {
+            panic!("expected schematic");
+        };
+        assert_eq!(sc.paper, None, "an empty block must not pick a size");
     }
 
     #[test]

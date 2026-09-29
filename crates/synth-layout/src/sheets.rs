@@ -25,7 +25,8 @@ use synth_ir::{Board, ComponentId, NetId};
 use crate::{
     annotate_groups, body_size_for_part, clamp_annotations_to_sheet, compact_sheet_to_fit,
     grow_sheet_to_fit, place_connector_legends, place_design_notes, resolve_text_overlaps,
-    HierarchicalLabel, Layout, SheetSize, BODY_FALLBACK_H, BODY_FALLBACK_W, PAGE_MARGIN,
+    settle_sheet_size, HierarchicalLabel, Layout, SheetSize, BODY_FALLBACK_H, BODY_FALLBACK_W,
+    PAGE_MARGIN,
 };
 
 /// One sheet's share of a board: `None` is the root sheet, `Some`
@@ -329,6 +330,10 @@ fn split_layout(board: &Board, global: &Layout, partitions: &[SheetPartition]) -
             resolve_text_overlaps(board, &mut layout);
             grow_sheet_to_fit(board, &mut layout);
             compact_sheet_to_fit(board, &mut layout);
+            // Sub-sheets honour the same `schematic { paper }` request as the
+            // root, so a design that asked for A3 does not come back as a
+            // hierarchy of A4 pages.
+            settle_sheet_size(board, &mut layout);
             clamp_annotations_to_sheet(&mut layout);
             SheetLayout {
                 name: partition.name.clone(),
