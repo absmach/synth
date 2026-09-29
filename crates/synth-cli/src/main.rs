@@ -935,7 +935,7 @@ fn capability_cmd(cmd: &CapabilityCommand) -> anyhow::Result<u8> {
         ],
         "language": {
             "syntax_version": "1.0",
-            "statements": ["board", "import", "layers", "manufacturer", "revision", "component", "connect", "net", "power", "module", "interface", "bus", "use", "bind", "netclass", "keepout", "group", "sheet", "variant"],
+            "statements": ["board", "import", "layers", "manufacturer", "revision", "schematic", "component", "connect", "net", "power", "module", "interface", "bus", "use", "bind", "netclass", "keepout", "group", "sheet", "variant"],
             "attributes": ["company", "legends", "notes", "dnp", "prefix", "param", "as", "class", "diff_pair", "impedance", "trace_width", "clearance", "radius", "value", "tolerance", "voltage", "power_rating", "dielectric", "description"],
             "endpoint_forms": ["component.pin", "named_net", "bus.member"]
         },
@@ -946,6 +946,15 @@ fn capability_cmd(cmd: &CapabilityCommand) -> anyhow::Result<u8> {
                 "height": {"option": "--height", "unit": "mm", "paired_with": "width"}
             },
             "layer_count": {"statement": "layers", "type": "integer", "min": 1, "max": 64},
+            "schematic_page": {
+                "statement": "schematic",
+                "body": "schematic { paper = \"A4\" }",
+                "setting": "paper",
+                "accepted": ["A5", "A4", "A3", "A2"],
+                "default": "A4",
+                "type": "string",
+                "notes": "The requested page is used as-is; it is enlarged only when the content does not fit. A5 is selectable but never auto-fitted."
+            },
             "routing_constraints": {
                 "netclass": ["trace_width", "clearance", "color"],
                 "diff_pair": ["impedance"],
