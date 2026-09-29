@@ -68,6 +68,7 @@ fn create_test_board() -> Board {
     };
 
     Board {
+        schematic_paper: None,
         groups: Vec::new(),
         legends: false,
         name: "cem_test_board".to_string(),

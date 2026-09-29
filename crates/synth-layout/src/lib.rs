@@ -49,7 +49,7 @@
 use std::collections::HashSet;
 
 use serde::{Deserialize, Serialize};
-use synth_ir::{Board, ComponentId, NetId, PinId};
+use synth_ir::{Board, ComponentId, NetId, PinId, SchematicPaper};
 
 pub mod footprint_resolve;
 pub mod kicad_footprint_loader;
@@ -77,9 +77,14 @@ pub enum Rotation {
 }
 
 /// Standard schematic sheet sizes. `Custom` is for designs whose
-/// content bounding box doesn't fit any of A4/A3/A2.
+/// content bounding box doesn't fit any of A5/A4/A3/A2.
+///
+/// The ladder floor is set by `schematic { paper = … }` in the design
+/// source and defaults to A4, so a design is never auto-compacted onto a
+/// page smaller than the one it asked for.
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 pub enum SheetSize {
+    A5,
     A4,
     A3,
     A2,
@@ -89,6 +94,7 @@ pub enum SheetSize {
 impl SheetSize {
     pub fn dims_mm(self) -> (f64, f64) {
         match self {
+            Self::A5 => (148.0, 210.0),
             Self::A4 => (297.0, 210.0),
             Self::A3 => (420.0, 297.0),
             Self::A2 => (594.0, 420.0),
@@ -96,6 +102,17 @@ impl SheetSize {
                 width_mm,
                 height_mm,
             } => (width_mm, height_mm),
+        }
+    }
+}
+
+impl From<SchematicPaper> for SheetSize {
+    fn from(p: SchematicPaper) -> Self {
+        match p {
+            SchematicPaper::A5 => Self::A5,
+            SchematicPaper::A4 => Self::A4,
+            SchematicPaper::A3 => Self::A3,
+            SchematicPaper::A2 => Self::A2,
         }
     }
 }
@@ -851,6 +868,7 @@ pub fn layout_with_overrides(
     resolve_text_overlaps(board, &mut layout);
     grow_sheet_to_fit(board, &mut layout);
     compact_sheet_to_fit(board, &mut layout);
+    enforce_sheet_floor(board, &mut layout);
     clamp_annotations_to_sheet(&mut layout);
     layout
 }
@@ -1518,6 +1536,34 @@ fn compact_sheet_to_fit(board: &Board, layout: &mut Layout) {
     if want_w < have_w && want_h < have_h {
         layout.sheet_size = smallest;
     }
+}
+
+/// The smallest page this design will accept, from
+/// `schematic { paper = "…" }`, defaulting to A4.
+///
+/// A *floor*, not a pin: [`grow_sheet_to_fit`] still enlarges the page when
+/// content genuinely does not fit, because a design that cannot be drawn is
+/// worse than one on a larger sheet than requested. What the floor forbids
+/// is the opposite failure — silently compacting a design onto A5 or a
+/// custom page when the author asked for A4.
+pub fn sheet_floor(board: &Board) -> SheetSize {
+    board.schematic_paper.map_or(SheetSize::A4, SheetSize::from)
+}
+
+/// Re-declare the page when it is smaller than the design's floor, and
+/// re-centre the content on the larger page.
+///
+/// Compaction only ever re-declares the frame (positions are absolute from
+/// the top-left), so without the re-centre a small design pinned to A4 would
+/// sit in the top-left corner of an otherwise empty sheet.
+fn enforce_sheet_floor(board: &Board, layout: &mut Layout) {
+    let (floor_w, floor_h) = sheet_floor(board).dims_mm();
+    let (have_w, have_h) = layout.sheet_size.dims_mm();
+    if have_w >= floor_w && have_h >= floor_h {
+        return;
+    }
+    layout.sheet_size = sheet_floor(board);
+    centre_on_sheet(board, layout);
 }
 
 /// Classify net labels and route every signal net over `layout`'s
@@ -4325,7 +4371,8 @@ fn layer_for(component: &synth_ir::Component) -> u32 {
 /// multi-sheet split (§P26) takes over. `w`/`h` are the
 /// caller-computed content bounds including page margins.
 fn sheet_size_for(w: f64, h: f64) -> SheetSize {
-    const SIZES: [(SheetSize, f64, f64); 3] = [
+    const SIZES: [(SheetSize, f64, f64); 4] = [
+        (SheetSize::A5, 148.0, 210.0),
         (SheetSize::A4, 297.0, 210.0),
         (SheetSize::A3, 420.0, 297.0),
         (SheetSize::A2, 594.0, 420.0),
@@ -4746,6 +4793,7 @@ mod barycenter_tests {
 
     fn board_with(components: Vec<Component>, nets: Vec<Net>) -> Board {
         Board {
+            schematic_paper: None,
             groups: Vec::new(),
             legends: false,
             name: "test".to_string(),
@@ -4955,6 +5003,7 @@ mod semantic_weights_tests {
 
     fn board(components: Vec<Component>, nets: Vec<Net>) -> Board {
         Board {
+            schematic_paper: None,
             groups: Vec::new(),
             legends: false,
             name: "test".to_string(),
@@ -5284,6 +5333,7 @@ mod soft_pin_swap_tests {
 
     fn board(components: Vec<Component>, nets: Vec<Net>) -> Board {
         Board {
+            schematic_paper: None,
             groups: Vec::new(),
             legends: false,
             name: "test".to_string(),
@@ -5527,6 +5577,7 @@ mod patterns_tests {
 
     fn board(components: Vec<Component>, nets: Vec<Net>) -> Board {
         Board {
+            schematic_paper: None,
             groups: Vec::new(),
             legends: false,
             name: "test".to_string(),
@@ -5922,6 +5973,7 @@ mod text_overlap_tests {
 
     fn empty_board() -> Board {
         Board {
+            schematic_paper: None,
             groups: Vec::new(),
             legends: false,
             name: "b".to_string(),
@@ -6250,6 +6302,7 @@ mod naming_tests {
 
     fn board(components: Vec<Component>, nets: Vec<Net>) -> Board {
         Board {
+            schematic_paper: None,
             groups: Vec::new(),
             legends: false,
             name: "test".to_string(),
@@ -6547,6 +6600,7 @@ mod documentation_tests {
 
     fn board_with_notes(components: Vec<Component>, nets: Vec<Net>, notes: Vec<Note>) -> Board {
         Board {
+            schematic_paper: None,
             groups: Vec::new(),
             legends: false,
             name: "test".to_string(),

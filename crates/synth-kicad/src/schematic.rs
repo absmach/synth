@@ -246,9 +246,12 @@ pub(crate) fn build_sheet_schematic(
             computed_drivers = crate::pin_reconcile::undriven_power_nets(board, &placements);
             &computed_drivers
         };
-    // KiCad has no named size below A4; a custom page is written as
-    // `(paper "User" W H)`, which KiCad honours exactly.
+    // Standard sizes are written by name. KiCad's own paper list runs A0-A5,
+    // so A5 needs no special handling (an earlier comment here claimed
+    // otherwise); only a measured page falls outside the named set, and that
+    // is written as `(paper "User" W H)`, which KiCad honours exactly.
     let paper = match layout.sheet_size {
+        synth_layout::SheetSize::A5 => Sexp::list("paper", vec![Sexp::str("A5")]),
         synth_layout::SheetSize::A4 => Sexp::list("paper", vec![Sexp::str("A4")]),
         synth_layout::SheetSize::A3 => Sexp::list("paper", vec![Sexp::str("A3")]),
         synth_layout::SheetSize::A2 => Sexp::list("paper", vec![Sexp::str("A2")]),

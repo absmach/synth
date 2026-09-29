@@ -66,6 +66,7 @@ pub enum StatementAst {
     Keepout(KeepoutStmt),
     Group(GroupStmt),
     Sheet(SheetStmt),
+    Schematic(SchematicStmt),
 }
 
 impl StatementAst {
@@ -92,6 +93,7 @@ impl StatementAst {
             StatementAst::Keepout(s) => s.span,
             StatementAst::Group(s) => s.span,
             StatementAst::Sheet(s) => s.span,
+            StatementAst::Schematic(s) => s.span,
         }
     }
 }
@@ -152,6 +154,50 @@ pub struct SheetStmt {
     pub name: String,
     pub statements: Vec<StatementAst>,
     pub span: Span,
+}
+
+/// `schematic { paper = "A4" }` — page settings for the rendered sheet.
+///
+/// A block rather than a bare `paper "A4"` statement so that further page
+/// concerns (orientation, a fill-ratio threshold) have somewhere to live
+/// without a second top-level keyword.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct SchematicStmt {
+    /// Requested page size, already validated against the accepted set by
+    /// the parser so lowering never has to re-parse a free-form string.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub paper: Option<SchematicPaperAst>,
+    pub span: Span,
+}
+
+/// A standard page size an author may request. Mirrors
+/// `synth_ir::SchematicPaper`; the AST cannot depend on the IR crate, so
+/// the two are converted during lowering.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "UPPERCASE")]
+pub enum SchematicPaperAst {
+    A5,
+    A4,
+    A3,
+    A2,
+}
+
+impl SchematicPaperAst {
+    pub const ALL: [SchematicPaperAst; 4] = [
+        SchematicPaperAst::A5,
+        SchematicPaperAst::A4,
+        SchematicPaperAst::A3,
+        SchematicPaperAst::A2,
+    ];
+
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::A5 => "A5",
+            Self::A4 => "A4",
+            Self::A3 => "A3",
+            Self::A2 => "A2",
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

@@ -606,6 +606,9 @@ fn ordinary_ground_net_is_not_flagged() {
 /// NAME-010 needs a per-unit-power symbol, which the shipped registry
 /// does not have yet, so the board is built from a synthetic part.
 #[test]
+// A long, explicit `Board` fixture: it is almost entirely the literal, and
+// adding a field to `Board` pushes it one line past the default threshold.
+#[allow(clippy::too_many_lines)]
 fn multi_unit_rails_split_is_an_error() {
     use synth_diagnostics::Span;
     use synth_ir::{Board, Component, ComponentId, Net, NetEndpoint, NetId, PinId};
@@ -649,6 +652,7 @@ fn multi_unit_rails_split_is_an_error() {
         provenance: None,
     };
     let board = Board {
+        schematic_paper: None,
         groups: Vec::new(),
         legends: false,
         name: "t".into(),

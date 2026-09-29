@@ -452,6 +452,7 @@ mod tests {
 
     fn board(components: Vec<Component>, nets: Vec<Net>) -> Board {
         Board {
+            schematic_paper: None,
             groups: Vec::new(),
             legends: false,
             name: "test".to_string(),

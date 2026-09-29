@@ -3651,6 +3651,7 @@ mod tests {
         let mut p = part(part_id, "mcu", pins);
         p.kicad_footprint = Some(footprint.into());
         Board {
+            schematic_paper: None,
             groups: Vec::new(),
             legends: false,
             name: "t".into(),
@@ -3798,6 +3799,7 @@ mod tests {
             source_span: Span::new(0, 0),
         };
         Board {
+            schematic_paper: None,
             groups: Vec::new(),
             legends: false,
             name: "b".into(),
@@ -3877,6 +3879,7 @@ mod tests {
             source_span: Span::new(0, 0),
         };
         Board {
+            schematic_paper: None,
             groups: Vec::new(),
             legends: false,
             name: "b".into(),
@@ -3964,6 +3967,7 @@ mod tests {
     fn identity_test_board(parts: Vec<(synth_registry::Part, &str)>) -> Board {
         use synth_diagnostics::Span;
         Board {
+            schematic_paper: None,
             groups: Vec::new(),
             legends: false,
             name: "b".into(),
@@ -4090,6 +4094,7 @@ mod tests {
             source_span: Span::new(0, 0),
         };
         Board {
+            schematic_paper: None,
             groups: Vec::new(),
             legends: false,
             name: "b".into(),
@@ -4235,6 +4240,7 @@ mod tests {
             }),
         };
         let board = Board {
+            schematic_paper: None,
             groups: Vec::new(),
             legends: false,
             name: "b".into(),
@@ -4296,6 +4302,7 @@ mod tests {
             }],
         );
         let board = Board {
+            schematic_paper: None,
             groups: Vec::new(),
             legends: false,
             name: "b".into(),

@@ -346,6 +346,7 @@ fn place_sheet_notes(board: &Board, layout: &mut Layout, sheet: Option<&str>) {
     let scoped = Board {
         groups: Vec::new(),
         legends: board.legends,
+        schematic_paper: board.schematic_paper,
         name: board.name.clone(),
         layers: board.layers,
         manufacturer: board.manufacturer.clone(),
@@ -498,6 +499,7 @@ mod tests {
 
     fn board(components: Vec<Component>, nets: Vec<Net>) -> Board {
         Board {
+            schematic_paper: None,
             groups: Vec::new(),
             legends: false,
             name: "b".to_string(),

@@ -149,6 +149,7 @@ mod tests {
         };
 
         Board {
+            schematic_paper: None,
             groups: Vec::new(),
             legends: false,
             name: "test".into(),
