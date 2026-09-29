@@ -139,6 +139,41 @@ sub-sheets are A4. The statement is design-wide: it is honoured wherever it
 appears, including nested in a `group`, because it is a statement about the
 sheet the design renders to.
 
+### 2.0.1 MaxRects compaction (Stage B2)
+
+After the semantic arrangement wins, a MaxRects pass repacks the cluster
+rectangles to remove the dead space column packing leaves behind:
+`compact` reduces each cluster to a rectangle, packs those with
+`maxrects` (BSSF/BAF/BLSF, free-rectangle split-and-prune), and
+translates every component rigidly to follow its cluster — a cluster's
+internal arrangement is what makes the drawing readable, so the packer never
+repositions components individually.
+
+It is a *compaction*, not a replacement, and it only speaks when it is
+strictly better on `(page, content area, aspect)`. Three constraints are not
+expressible in that key and are enforced separately:
+
+- **A box carries `INTRA_GROUP_CLUSTER_DX / 2` of clearance per side**, so
+  two clusters can never sit closer than the placer's minimum column pitch.
+  Padding by the bare body instead produced a 20 mm row of four components
+  in the corner of an A4 — the exact failure the placer avoids.
+- **The result is anchored to the page margin**, using box extents rather
+  than component centres. A box is wider than what it contains, so anchoring
+  on centres lands the leftmost box short of the margin.
+- **Aspect may not drift more than `MIN_ASPECT_RETENTION` (0.6)** in either
+  direction. Ranking on area alone has a systematic bias — a bin that is
+  small in one axis fits everything and yields a tall thin stripe, which
+  wins on area and loses on the page. A 133x48 mm drawing became a 20x154 mm
+  column: half the sheet, and a stripe down one side.
+
+Boxes are sized from the **text-inclusive** extents
+(`component_text_inclusive_half_width` / `text_inclusive_half_height`) that
+the placer reserves and the router treats as obstacles — not from
+`body_size_for_part`. Sizing from the body let a 43-pin module be packed
+flush to the margin and render half off the left edge, which is how this was
+caught: by rendering the sheet and looking at it, not by reading the
+numbers.
+
 ### 2.1 Regions (Phase C)
 
 A board that declares `group`s lays out **by region**, not as one band

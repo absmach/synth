@@ -51,10 +51,12 @@ use std::collections::HashSet;
 use serde::{Deserialize, Serialize};
 use synth_ir::{Board, ComponentId, NetId, PinId, SchematicOverflow, SchematicPaper};
 
+mod compact;
 pub mod footprint_resolve;
 pub mod kicad_footprint_loader;
 pub mod kicad_lib_loader;
 pub mod kicad_zip;
+pub mod maxrects;
 pub mod netclass;
 pub mod ops;
 mod patterns;
@@ -531,7 +533,7 @@ const TEXT_MARGIN_Y: f64 = 6.35;
 /// needs the same number wherever it decides vertical clearance
 /// between components, or refdes/value text can visually overlap a
 /// neighbour even though the bodies themselves don't.
-fn text_inclusive_half_height(board: &Board, id: ComponentId) -> f64 {
+pub(crate) fn text_inclusive_half_height(board: &Board, id: ComponentId) -> f64 {
     let (_, body_h) = board
         .component(id)
         .and_then(|c| c.part.as_ref())
@@ -3324,11 +3326,25 @@ fn place_clusters(board: &Board, clusters: &[Cluster]) -> Layout {
         }
     }
     let fitted = fitted.map(|(_, _, _, _, placements, sheet)| (0.0, placements, sheet));
-    let (components, sheet_size) = fitted
+    let (mut components, mut sheet_size) = fitted
         .or(closest)
         .map_or((Vec::new(), SheetSize::A4), |(_, placements, sheet)| {
             (placements, sheet)
         });
+
+    // Compaction, once the semantic arrangement has won. Column packing is
+    // ordered for reading, not for density: it leaves a dead notch beside
+    // every short column and pays the widest column's width in every row.
+    // `compact` repacks whole cluster rectangles and only returns a result
+    // when it is genuinely tighter, so an already-compact board comes
+    // through byte-identical.
+    if let Some(tighter) = crate::compact::compact(board, &components) {
+        let (min_x, max_x, min_y, max_y) =
+            body_bbox_of(board, &tighter).unwrap_or((origin_x, origin_x, origin_y, origin_y));
+        let (need_w, need_h) = sheet_needs(min_x, max_x, min_y, max_y);
+        sheet_size = sheet_size_for(need_w, need_h);
+        components = tighter;
+    }
 
     Layout {
         components,
