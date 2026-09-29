@@ -44,6 +44,13 @@ pub struct Board {
     /// `manufacturer` (who builds the board).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub company: Option<String>,
+    /// Requested schematic page size (`schematic { paper = "A4" }`).
+    ///
+    /// `None` means the author did not ask, and the layout defaults to A4.
+    /// This is the page's *floor*: the layout still enlarges the sheet when
+    /// content does not fit, but never compacts below the requested size.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub schematic_paper: Option<SchematicPaper>,
     pub components: Vec<Component>,
     pub nets: Vec<Net>,
     pub diff_pairs: Vec<DiffPair>,
@@ -83,6 +90,53 @@ pub struct Board {
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub variants: Vec<Variant>,
     pub source_span: Span,
+}
+
+/// A standard schematic page, selectable per design with
+/// `schematic { paper = "…" }`.
+///
+/// Deliberately not the layout's `SheetSize`: that enum also carries a
+/// `Custom { width_mm, height_mm }` variant produced by content
+/// measurement, which is a result of layout rather than something an author
+/// declares. Keeping the authored subset here means `synth-ir` stays free of
+/// a dependency on the layout crate, and an unparseable paper size is a
+/// parser error rather than a silently-ignored string.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "UPPERCASE")]
+pub enum SchematicPaper {
+    A5,
+    A4,
+    A3,
+    A2,
+}
+
+impl SchematicPaper {
+    /// Every accepted spelling, for diagnostics and the language reference.
+    pub const ALL: [SchematicPaper; 4] = [
+        SchematicPaper::A5,
+        SchematicPaper::A4,
+        SchematicPaper::A3,
+        SchematicPaper::A2,
+    ];
+
+    pub fn parse(s: &str) -> Option<Self> {
+        match s.trim().to_ascii_uppercase().as_str() {
+            "A5" => Some(Self::A5),
+            "A4" => Some(Self::A4),
+            "A3" => Some(Self::A3),
+            "A2" => Some(Self::A2),
+            _ => None,
+        }
+    }
+
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::A5 => "A5",
+            Self::A4 => "A4",
+            Self::A3 => "A3",
+            Self::A2 => "A2",
+        }
+    }
 }
 
 /// A named design variant: the refdes left unpopulated in it, plus an

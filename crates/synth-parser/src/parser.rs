@@ -18,8 +18,8 @@ use synth_ast::{
     DiffPairStmt, EndpointAst, GroupAttr, GroupStmt, ImportAst, InterfaceDeclStmt, KeepoutAttr,
     KeepoutStmt, LayersStmt, LegendsStmt, ManufacturerStmt, ModuleDeclStmt, NetDeclAst,
     NetclassAttr, NetclassStmt, NotesDeclAst, ParamDeclAst, PlacementHintAst, PlacementHintAttr,
-    PortBindingAst, PortDeclAst, PowerDeclAst, ProgramAst, RevisionStmt, SheetStmt, StatementAst,
-    UseStmt, ValueWithUnit, VariantDeclStmt,
+    PortBindingAst, PortDeclAst, PowerDeclAst, ProgramAst, RevisionStmt, SchematicPaperAst,
+    SchematicStmt, SheetStmt, StatementAst, UseStmt, ValueWithUnit, VariantDeclStmt,
 };
 
 use synth_diagnostics::{
@@ -321,12 +321,13 @@ impl Parser {
             TokenKind::KwKeepout => self.parse_keepout().map(StatementAst::Keepout),
             TokenKind::KwGroup => self.parse_group().map(StatementAst::Group),
             TokenKind::KwSheet => self.parse_sheet().map(StatementAst::Sheet),
+            TokenKind::KwSchematic => self.parse_schematic().map(StatementAst::Schematic),
             _ => {
                 self.emit(
                     self.peek().span,
                     "E-SYNTH-PARSE-011",
                     "expected statement keyword",
-                    "one of: layers, manufacturer, revision, company, legends, component, variant, connect, net, power, notes, module, interface, bus, use, bind, diff_pair, netclass, keepout, group, sheet",
+                    "one of: layers, manufacturer, revision, company, legends, schematic, component, variant, connect, net, power, notes, module, interface, bus, use, bind, diff_pair, netclass, keepout, group, sheet",
                     self.describe_current(),
                     None,
                 );
@@ -1381,6 +1382,105 @@ impl Parser {
         attrs
     }
 
+    /// `schematic { paper = "A4" }`.
+    ///
+    /// `paper` is parsed as a bare identifier rather than a reserved keyword
+    /// so a design that already uses `paper` as a component or group name
+    /// keeps parsing. The value is validated here, at the span that actually
+    /// holds the typo, instead of being carried down to lowering where a bad
+    /// size would have no useful span to point at.
+    fn parse_schematic(&mut self) -> Option<SchematicStmt> {
+        let start = self.peek().span.byte_start;
+        self.bump(); // consume `schematic`
+        if !matches!(self.peek_kind(), TokenKind::LBrace) {
+            self.emit(
+                self.peek().span,
+                "E-SYNTH-PARSE-003",
+                "expected `{` to open schematic body",
+                "`schematic { paper = \"A4\" }`",
+                self.describe_current(),
+                None,
+            );
+            return None;
+        }
+        self.bump();
+        let mut paper = None;
+        loop {
+            self.skip_error_tokens();
+            match self.peek_kind() {
+                TokenKind::RBrace | TokenKind::Eof => break,
+                TokenKind::Ident(name) if name == "paper" => {
+                    self.bump();
+                    if matches!(self.peek_kind(), TokenKind::Eq) {
+                        self.bump();
+                    } else {
+                        self.emit(
+                            self.peek().span,
+                            "E-SYNTH-PARSE-002",
+                            "expected `=` after `paper`",
+                            "`paper = \"A4\"`",
+                            self.describe_current(),
+                            None,
+                        );
+                        continue;
+                    }
+                    let value_span = self.peek().span;
+                    let Some(raw) = self.expect_string(
+                        "E-SYNTH-PARSE-002",
+                        "expected a quoted page size (e.g. \"A4\")",
+                    ) else {
+                        continue;
+                    };
+                    match raw.to_ascii_uppercase().as_str() {
+                        "A5" => paper = Some(SchematicPaperAst::A5),
+                        "A4" => paper = Some(SchematicPaperAst::A4),
+                        "A3" => paper = Some(SchematicPaperAst::A3),
+                        "A2" => paper = Some(SchematicPaperAst::A2),
+                        _ => {
+                            self.emit(
+                                value_span,
+                                "E-SYNTH-PARSE-034",
+                                "unknown schematic page size",
+                                "one of: A5, A4, A3, A2",
+                                raw,
+                                Some(Patch {
+                                    confidence: 0.9,
+                                    rationale: Some(
+                                        "A4 is the default page and fits most designs".into(),
+                                    ),
+                                    patch_consequence_preview: None,
+                                    kind: PatchKind::ReplaceRange {
+                                        range: value_span,
+                                        replacement: "\"A4\"".into(),
+                                    },
+                                }),
+                            );
+                        }
+                    }
+                }
+                _ => {
+                    self.emit(
+                        self.peek().span,
+                        "E-SYNTH-PARSE-012",
+                        "unknown schematic setting",
+                        "`paper`",
+                        self.describe_current(),
+                        None,
+                    );
+                    self.bump();
+                }
+            }
+        }
+        if matches!(self.peek_kind(), TokenKind::RBrace) {
+            self.bump();
+        }
+        let end = self.last_offset();
+        Some(SchematicStmt {
+            paper,
+            span: Span::new(start, end),
+        })
+    }
+
     fn parse_sheet(&mut self) -> Option<SheetStmt> {
         let start = self.peek().span.byte_start;
         self.bump(); // consume `sheet`
@@ -2084,6 +2184,7 @@ impl Parser {
             TokenKind::KwManufacturer => "`manufacturer`".to_string(),
             TokenKind::KwRevision => "`revision`".to_string(),
             TokenKind::KwCompany => "`company`".to_string(),
+            TokenKind::KwSchematic => "`schematic`".to_string(),
             TokenKind::KwLegends => "`legends`".to_string(),
             TokenKind::KwComponent => "`component`".to_string(),
             TokenKind::KwConnect => "`connect`".to_string(),

@@ -137,6 +137,7 @@ mod tests {
 
     fn empty_board() -> Board {
         Board {
+            schematic_paper: None,
             groups: Vec::new(),
             legends: false,
             name: "test".to_string(),
