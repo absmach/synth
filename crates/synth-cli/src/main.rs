@@ -950,10 +950,20 @@ fn capability_cmd(cmd: &CapabilityCommand) -> anyhow::Result<u8> {
                 "statement": "schematic",
                 "body": "schematic { paper = \"A4\" }",
                 "setting": "paper",
-                "accepted": ["A5", "A4", "A3", "A2"],
+                "accepted": ["A5", "A4", "A3", "A2", "A1", "A0"],
                 "default": "A4",
                 "type": "string",
                 "notes": "The requested page is used as-is; it is enlarged only when the content does not fit. A5 is selectable but never auto-fitted."
+            },
+            "schematic_overflow": {
+                "statement": "schematic",
+                "body": "schematic { paper = \"A4\" overflow = \"grow\" }",
+                "setting": "overflow",
+                "accepted": ["grow", "hierarchy"],
+                "default": "grow",
+                "type": "string",
+                "aliases": {"hierarchy": ["hierarchical", "sheets"]},
+                "notes": "grow climbs A4->A3->A2->A1->A0 then splits into a sheet hierarchy; hierarchy caps growth at the requested page and splits as soon as the content no longer fits."
             },
             "routing_constraints": {
                 "netclass": ["trace_width", "clearance", "color"],

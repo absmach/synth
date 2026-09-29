@@ -86,7 +86,7 @@ with `(0, 0)` at the top-left of the page rect.
    while `group_bounds` still measures it as part of its own, stretching
    that group's box across the sheet. Ungrouped boards are unaffected.
 
-### 2.0 Page size (`schematic { paper }`)
+### 2.0 Page size and overflow policy (`schematic { … }`)
 
 The rendered page is normally inferred: the layout grows the sheet to cover
 whatever it placed (`grow_sheet_to_fit`), then compacts it onto the smallest
@@ -94,16 +94,24 @@ standard size that still fits (`compact_sheet_to_fit`), with A4 as the
 auto-fit floor. A design can override the result:
 
 ```
-schematic { paper = "A2" }
+schematic {
+  paper    = "A2"
+  overflow = "grow"
+}
 ```
 
-Accepted values are `A5`, `A4`, `A3` and `A2`; the default is `A4`. The
-requested page is used **as-is** and is enlarged only when the content does
-not fit — `settle_sheet_size` compares the content bounding box (with the
-page margin and title-block band reserved) against the requested page and
-climbs the ladder from there. A design that asks for A2 and fits stays on
-A2; one that asks for A4 and does not fit is drawn on A3 or A2 rather than
-being clipped or blocked.
+`paper` accepts `A5`, `A4`, `A3`, `A2`, `A1` and `A0`; the default is `A4`.
+`overflow` decides what happens when the content does not fit:
+
+| `overflow`   | Behaviour                                                              |
+| ------------ | ---------------------------------------------------------------------- |
+| `grow`       | **default.** Climb the ladder A4 → A3 → A2 → A1 → A0, then split into a hierarchy if it still does not fit |
+| `hierarchy`  | The requested page is the page. The moment content no longer fits, the design is split into a sheet per group |
+
+The two settings are one decision rather than two halves that can disagree:
+`hierarchy` caps page growth at the requested page *and* moves the split
+threshold to the same page, so it is impossible to say "split at A4" and
+"draw on A3" at once. An explicit `paper` moves both.
 
 Two details worth knowing:
 
@@ -111,18 +119,25 @@ Two details worth knowing:
   the top-left, so moving them when the page grows would rewrite a
   hand-arranged drawing — the schematic sidecar stores absolute millimetres
   and a preview drag has to survive a save/reload bit-exact. A small design
-  on a roomy page therefore sits in the top-left rather than centred, the
-  same trade `compact_sheet_to_fit` already makes.
+  on a roomy requested page therefore sits in the top-left rather than
+  centred, the same trade `compact_sheet_to_fit` already makes.
 - **A5 is selectable but never auto-fitted.** The placer ranks candidate
-  sheets smallest-first, so an A5 rung in `sheet_size_for` would re-lay-out
+  pages smallest-first, so an A5 rung in `sheet_size_for` would re-lay-out
   every existing design onto a more cramped page. `A5` exists as a
   `SheetSize` variant and is reachable only through an explicit request.
 
+Past `A0` the fitter returns a `Custom { width_mm, height_mm }` page rather
+than reporting `A0`, because naming A0 would claim the content fits when it
+provably does not.
+
 Sub-sheets in a multi-sheet export settle against the same request as the
 root, so a design that asked for A3 does not come back as a hierarchy of A4
-pages. The statement is design-wide: it is honoured wherever it appears,
-including nested in a `group`, because it is a statement about the one sheet
-the design renders to.
+pages. Note that the hierarchy *root* is sized separately, to fit the row of
+sheet instances and their wire channels, so a design split under
+`hierarchy = "hierarchy"` typically has an A2 or larger root even when the
+sub-sheets are A4. The statement is design-wide: it is honoured wherever it
+appears, including nested in a `group`, because it is a statement about the
+sheet the design renders to.
 
 ### 2.1 Regions (Phase C)
 

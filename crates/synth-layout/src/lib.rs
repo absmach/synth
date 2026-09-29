@@ -6240,6 +6240,114 @@ mod text_overlap_tests {
         assert_eq!(layout.sheet_size, SheetSize::A2);
     }
 
+    fn overflow_board(paper: Option<SchematicPaper>, overflow: Option<SchematicOverflow>) -> Board {
+        Board {
+            schematic_paper: paper,
+            schematic_overflow: overflow,
+            ..empty_board()
+        }
+    }
+
+    fn layout_with_components(n: u32, pitch_x: f64, pitch_y: f64) -> Layout {
+        let mut layout = empty_layout(vec![], SheetSize::A4);
+        for i in 0..n {
+            layout.components.push(ComponentPlacement {
+                id: ComponentId(i),
+                center_mm: (
+                    20.0 + (i % 8) as f64 * pitch_x,
+                    20.0 + (i / 8) as f64 * pitch_y,
+                ),
+                rotation: Rotation::Zero,
+            });
+        }
+        layout
+    }
+
+    /// An 8x7 grid at `pitch`, so the content bounding box is a function of
+    /// the pitch alone and each rung can be straddled deliberately.
+    fn grid_layout(pitch: f64) -> Layout {
+        layout_with_components(56, pitch, pitch * 0.9)
+    }
+
+    #[test]
+    fn grow_climbs_the_ladder_one_rung_at_a_time() {
+        // 8x7 at these pitches lands on each rung in turn once
+        // `sheet_needs` has added the page margin and title-block band.
+        for (pitch, want) in [
+            (30.0, SheetSize::A3),
+            (45.0, SheetSize::A2),
+            (80.0, SheetSize::A1),
+            (120.0, SheetSize::A0),
+        ] {
+            let board = overflow_board(None, None);
+            let mut layout = grid_layout(pitch);
+            grow_sheet_to_fit(&board, &mut layout);
+            settle_sheet_size(&board, &mut layout);
+            assert_eq!(layout.sheet_size, want, "8x7 grid at {pitch}mm pitch");
+        }
+    }
+
+    #[test]
+    fn grow_keeps_growing_past_a2_which_used_to_be_the_ceiling() {
+        let board = overflow_board(None, None);
+        let mut layout = layout_with_components(200, 150.0, 140.0);
+        grow_sheet_to_fit(&board, &mut layout);
+        settle_sheet_size(&board, &mut layout);
+        assert_ne!(
+            layout.sheet_size,
+            SheetSize::A2,
+            "A2 is no longer the ceiling"
+        );
+    }
+
+    #[test]
+    fn hierarchy_never_grows_past_the_requested_page() {
+        // The whole point of the option: the page is the page, and more
+        // content means more sheets.
+        let board = overflow_board(None, Some(SchematicOverflow::Hierarchy));
+        let mut layout = layout_with_components(24, 60.0, 54.0);
+        grow_sheet_to_fit(&board, &mut layout);
+        settle_sheet_size(&board, &mut layout);
+        assert_eq!(layout.sheet_size, SheetSize::A4);
+    }
+
+    #[test]
+    fn hierarchy_caps_growth_at_an_explicitly_requested_page_too() {
+        let board = overflow_board(Some(SchematicPaper::A3), Some(SchematicOverflow::Hierarchy));
+        let mut layout = layout_with_components(24, 60.0, 54.0);
+        grow_sheet_to_fit(&board, &mut layout);
+        settle_sheet_size(&board, &mut layout);
+        assert_eq!(layout.sheet_size, SheetSize::A3);
+    }
+
+    #[test]
+    fn the_split_threshold_follows_the_policy() {
+        let grow = overflow_board(None, None);
+        let hierarchy = overflow_board(None, Some(SchematicOverflow::Hierarchy));
+        assert_eq!(max_single_sheet(&grow), SheetSize::A0);
+        assert_eq!(max_single_sheet(&hierarchy), SheetSize::A4);
+        // An explicit request moves the hierarchy threshold with it.
+        let pinned = overflow_board(Some(SchematicPaper::A2), Some(SchematicOverflow::Hierarchy));
+        assert_eq!(max_single_sheet(&pinned), SheetSize::A2);
+    }
+
+    #[test]
+    fn past_a0_the_fitter_reports_a_custom_page_rather_than_lying() {
+        let sized = sheet_size_for(2000.0, 1500.0);
+        assert!(
+            matches!(sized, SheetSize::Custom { .. }),
+            "expected Custom, got {sized:?}"
+        );
+    }
+
+    #[test]
+    fn a1_and_a0_have_the_standard_dimensions() {
+        assert_eq!(SheetSize::A1.dims_mm(), (841.0, 594.0));
+        assert_eq!(SheetSize::A0.dims_mm(), (1189.0, 841.0));
+        assert_eq!(sheet_size_for(600.0, 500.0), SheetSize::A1);
+        assert_eq!(sheet_size_for(1000.0, 700.0), SheetSize::A0);
+    }
+
     #[test]
     fn a5_is_selectable_but_never_auto_fitted() {
         assert_eq!(SheetSize::A5.dims_mm(), (148.0, 210.0));

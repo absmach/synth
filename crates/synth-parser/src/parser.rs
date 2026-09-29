@@ -1411,10 +1411,16 @@ impl Parser {
             self.skip_error_tokens();
             match self.peek_kind() {
                 TokenKind::RBrace | TokenKind::Eof => break,
+                // The setting name is consumed here, not in the helper: a
+                // helper that returned without consuming would leave the
+                // loop re-reading the same token and emitting diagnostics
+                // forever.
                 TokenKind::Ident(name) if name == "paper" => {
+                    self.bump();
                     paper = self.parse_schematic_paper();
                 }
                 TokenKind::Ident(name) if name == "overflow" => {
+                    self.bump();
                     overflow = self.parse_schematic_overflow();
                 }
                 _ => {
@@ -1465,7 +1471,7 @@ impl Parser {
             _ => {
                 self.emit(
                     value_span,
-                    "E-SYNTH-PARSE-034",
+                    "E-SYNTH-PARSE-035",
                     "unknown schematic page size",
                     "one of: A5, A4, A3, A2, A1, A0",
                     raw,
@@ -1502,7 +1508,7 @@ impl Parser {
             _ => {
                 self.emit(
                     value_span,
-                    "E-SYNTH-PARSE-035",
+                    "E-SYNTH-PARSE-036",
                     "unknown schematic overflow policy",
                     "one of: grow, hierarchy",
                     raw,
@@ -1527,6 +1533,9 @@ impl Parser {
 
     /// Consume the `=` after a `key = value` setting, reporting the missing
     /// token in this block's own error vocabulary.
+    ///
+    /// Always makes progress: on failure the offending token is skipped, so
+    /// a malformed setting cannot spin the enclosing loop.
     fn consume_eq_after_setting(&mut self) -> bool {
         if matches!(self.peek_kind(), TokenKind::Eq) {
             self.bump();
@@ -1540,6 +1549,9 @@ impl Parser {
             self.describe_current(),
             None,
         );
+        if !matches!(self.peek_kind(), TokenKind::RBrace | TokenKind::Eof) {
+            self.bump();
+        }
         false
     }
 
@@ -2848,14 +2860,77 @@ mod tests {
     }
 
     #[test]
+    fn parse_schematic_overflow_policies() {
+        for (text, want) in [
+            ("grow", Some(SchematicOverflowAst::Grow)),
+            ("hierarchy", Some(SchematicOverflowAst::Hierarchy)),
+            ("HIERARCHICAL", Some(SchematicOverflowAst::Hierarchy)),
+            ("sheets", Some(SchematicOverflowAst::Hierarchy)),
+        ] {
+            let src = format!("board \"b\" {{\n schematic {{ overflow = \"{text}\" }}\n}}");
+            let res = parse(lex(&src), "t.synth".into());
+            assert!(res.diagnostics.is_empty(), "{text}: {:?}", res.diagnostics);
+            let ast = res.ast.unwrap();
+            let StatementAst::Schematic(sc) = &ast.board.statements[0] else {
+                panic!("expected schematic for {text}");
+            };
+            assert_eq!(sc.overflow, want, "{text}");
+        }
+    }
+
+    #[test]
+    fn parse_schematic_rejects_an_unknown_overflow_policy() {
+        let src = "board \"b\" {\n schematic { overflow = \"shrink\" }\n}";
+        let res = parse(lex(src), "t.synth".into());
+        assert!(
+            res.diagnostics
+                .iter()
+                .any(|d| d.code == "E-SYNTH-PARSE-036"),
+            "expected E-SYNTH-PARSE-036, got {:?}",
+            res.diagnostics
+        );
+    }
+
+    #[test]
+    fn a_setting_without_an_equals_sign_terminates() {
+        // The body loop must always make progress: a helper that returns
+        // without consuming would re-read the same token and emit
+        // diagnostics until the process ran out of memory.
+        for body in ["paper", "overflow", "paper paper", "overflow overflow"] {
+            let src = format!("board \"b\" {{\n schematic {{ {body} }}\n}}");
+            let res = parse(lex(&src), "t.synth".into());
+            assert!(!res.diagnostics.is_empty(), "{body} should be an error");
+            assert!(
+                res.diagnostics.len() < 10,
+                "{body} produced {} diagnostics, so the parser is looping",
+                res.diagnostics.len()
+            );
+        }
+    }
+
+    #[test]
+    fn parse_schematic_paper_accepts_a1_and_a0() {
+        for want in ["A1", "A0"] {
+            let src = format!("board \"b\" {{\n schematic {{ paper = \"{want}\" }}\n}}");
+            let res = parse(lex(&src), "t.synth".into());
+            assert!(res.diagnostics.is_empty(), "{want}: {:?}", res.diagnostics);
+            let ast = res.ast.unwrap();
+            let StatementAst::Schematic(sc) = &ast.board.statements[0] else {
+                panic!("expected schematic");
+            };
+            assert!(sc.paper.is_some());
+        }
+    }
+
+    #[test]
     fn parse_schematic_rejects_an_unknown_paper_size() {
         let src = "board \"b\" {\n schematic { paper = \"A9\" }\n}";
         let res = parse(lex(src), "t.synth".into());
         assert!(
             res.diagnostics
                 .iter()
-                .any(|d| d.code == "E-SYNTH-PARSE-034"),
-            "expected E-SYNTH-PARSE-034, got {:?}",
+                .any(|d| d.code == "E-SYNTH-PARSE-035"),
+            "expected E-SYNTH-PARSE-035, got {:?}",
             res.diagnostics
         );
     }

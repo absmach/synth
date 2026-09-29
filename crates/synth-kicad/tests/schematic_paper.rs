@@ -103,7 +103,7 @@ fn tiny_source(paper: &str) -> String {
 
 #[test]
 fn every_standard_paper_reaches_the_exported_schematic() {
-    for want in ["A5", "A4", "A3", "A2"] {
+    for want in ["A5", "A4", "A3", "A2", "A1", "A0"] {
         assert_eq!(
             exported_paper(&tiny_source(want)),
             want,
@@ -141,4 +141,32 @@ fn the_request_survives_lowering() {
         );
     }
     assert_eq!(load_board(&with_paper(None)).schematic_paper, None);
+}
+
+#[test]
+fn the_overflow_policy_survives_lowering() {
+    for (text, want) in [
+        ("grow", synth_ir::SchematicOverflow::Grow),
+        ("hierarchy", synth_ir::SchematicOverflow::Hierarchy),
+    ] {
+        let src = with_paper(Some("A4")).replace(
+            "  schematic { paper = \"A4\" }\n",
+            &format!("  schematic {{ paper = \"A4\" overflow = \"{text}\" }}\n"),
+        );
+        let board = load_board(&src);
+        assert_eq!(board.schematic_overflow, Some(want), "{text}");
+    }
+    // Omitting the block leaves both settings to their defaults, which the
+    // layout resolves to A4 + Grow.
+    let board = load_board(&with_paper(None));
+    assert_eq!(board.schematic_paper, None);
+    assert_eq!(board.schematic_overflow, None);
+    assert_eq!(
+        synth_layout::requested_sheet(&board),
+        synth_layout::SheetSize::A4
+    );
+    assert_eq!(
+        synth_layout::max_single_sheet(&board),
+        synth_layout::SheetSize::A0
+    );
 }
