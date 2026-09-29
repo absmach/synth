@@ -1,8 +1,14 @@
 id = "nrf52840"
 kind = "mcu"
-description = "Nordic nRF52840 ARM Cortex-M4F with BLE 5/Thread/Zigbee, QFN-73"
+description = "Nordic nRF52840 ARM Cortex-M4F with BLE 5/Thread/Zigbee, aQFN-73 7x7mm"
+mpn = "NRF52840-QIAA-R"
+lcsc_pn = "C190794"
 kicad_symbol = "RF_Module:NRF52840-QIAA"
-kicad_footprint = "Package_DFN_QFN:QFN-73-1EP_7x7mm_P0.5mm_EP4.5x4.5mm"
+# Real KiCad stock footprint. The aQFN-73 uses *ball* designators
+# (A8, A10, AA24, ...), not the datasheet's linear 1..73 pin numbers, so
+# every pin below is named by ball. Verified against two independent sources:
+# the EasyEDA CAD model for LCSC C190794 and the KiCad `MCU_Nordic` symbol.
+kicad_footprint = "Package_DFN_QFN:Nordic_AQFN-73-1EP_7x7mm_P0.5mm"
 
 [footprint_dimensions]
 width_mm = 7.0
@@ -14,51 +20,52 @@ min_voltage_v = 1.8
 max_voltage_v = 3.6
 max_current_ma = 150.0
 
+# VDD is ball A22. The QIAA's dedicated RESET ball is AC13 (P0.18).
 [[pins]]
 name = "vdd"
-number = "47"
+number = "A22"
 electrical_type = "power_input"
 required = true
 
 [[pins]]
 name = "vss"
-number = "1"
+number = "B7"
 electrical_type = "power_input"
 required = true
 
 [[pins]]
 name = "p0_06"
-number = "14"
+number = "L1"
 electrical_type = "bidirectional"
 capabilities = ["gpio", "uart_tx"]
 
 [[pins]]
 name = "p0_08"
-number = "16"
+number = "N1"
 electrical_type = "bidirectional"
 capabilities = ["gpio", "uart_rx"]
 
 [[pins]]
 name = "p0_26"
-number = "11"
+number = "G1"
 electrical_type = "bidirectional"
 capabilities = ["gpio", "i2c_sda"]
 
 [[pins]]
 name = "p0_27"
-number = "12"
+number = "H2"
 electrical_type = "bidirectional"
 capabilities = ["gpio", "i2c_scl"]
 
 [[pins]]
 name = "ant"
-number = "23"
+number = "H23"
 electrical_type = "rf"
 capabilities = ["rf_feed"]
 
 [[pins]]
 name = "reset"
-number = "32"
+number = "AC13"
 electrical_type = "input"
 capabilities = ["reset"]
 required = true
@@ -67,4 +74,3 @@ required = true
 net = "vdd"
 value = "100nf"
 count = 2
-

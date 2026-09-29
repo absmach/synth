@@ -789,7 +789,246 @@ fn test_mcp_review_schematic_packet() {
 }
 
 /// `persist=true` must write the op's effect through to the sidecar so a
-/// later render/export honours it — the whole point of Phase-2 persistence.
+/// `synth_resolve_footprints` must find the real footprint for a part whose
+/// `kicad_footprint` names one that is not installed — the fabricated
+/// `QFN-73-1EP_7x7mm_P0.5mm_EP4.5x4.5mm` is the real-world case, and KiCad
+/// ships the correct part as `Nordic_AQFN-73-1EP_7x7mm_P0.5mm`.
+///
+/// Skips when no KiCad footprint library is installed, since the resolver is
+/// a lookup over the local library and has nothing to say without one.
+#[test]
+fn test_mcp_resolve_footprints_finds_the_installed_part() {
+    if synth_layout::footprint_resolve::FootprintIndex::load().is_empty() {
+        eprintln!("skipping: no KiCad footprint library installed");
+        return;
+    }
+    let dir = tempfile::tempdir().unwrap();
+    let src = dir.path().join("d.synth");
+    let parts = dir.path().join("parts");
+    std::fs::create_dir_all(&parts).unwrap();
+    // A minimal Tier-1 overlay: only the part under test, whose footprint
+    // name is fabricated but whose package is a real installed one.
+    std::fs::write(
+        parts.join("fabricated_qfn.synth.toml"),
+        r#"id = "fabricated_qfn"
+kind = "mcu"
+description = "part naming a footprint that does not exist"
+kicad_footprint = "Package_DFN_QFN:QFN-73-1EP_7x7mm_P0.5mm_EP4.5x4.5mm"
+
+[[pins]]
+name = "vdd"
+number = "1"
+electrical_type = "power_input"
+"#,
+    )
+    .unwrap();
+    let source = r#"board "d" {
+  layers 2
+  power "+3V3" 3.3v
+  group "U" {
+    component U1: ic "fabricated_qfn"
+    notes "" { "x" }
+  }
+  component R1: resistor "r_generic_0603" value "1k"
+  connect U1.vdd -> R1.p1 as "+3V3"
+  connect R1.p2 -> U1.gnd as "GND"
+}
+"#;
+    std::fs::write(&src, source).unwrap();
+
+    let call = |apply: bool| {
+        let req = json!({
+            "jsonrpc": "2.0", "id": 95, "method": "tools/call",
+            "params": { "name": "synth_resolve_footprints", "arguments": {
+                "source": source,
+                "file_path": src.to_str().unwrap(),
+                "registry_path": parts.to_str().unwrap(),
+                "apply": apply,
+            }}
+        });
+        let resp = handle_jsonrpc_request(req, None);
+        serde_json::from_str::<serde_json::Value>(
+            resp["result"]["content"][0]["text"].as_str().unwrap(),
+        )
+        .unwrap_or_else(|e| panic!("tool failed ({e}): {resp:?}"))
+    };
+
+    let report = call(false);
+    assert_eq!(report["status"], "gaps_found", "{report}");
+    let gap = &report["gaps"][0];
+    assert_eq!(gap["part_id"], "fabricated_qfn", "{gap}");
+    assert!(
+        gap["candidates"]
+            .as_array()
+            .expect("candidates")
+            .iter()
+            .any(|c| c["lib_id"] == "Package_DFN_QFN:Nordic_AQFN-73-1EP_7x7mm_P0.5mm"),
+        "the installed Nordic aQFN-73 must be offered: {gap}"
+    );
+
+    // Report-only must not touch disk.
+    assert!(
+        !dir.path().join("userreg").exists(),
+        "apply=false must not write an overlay"
+    );
+}
+
+/// With `apply`, a confident and unambiguous match is written as a Tier-2
+/// overlay that shadows the broken entry — and stays unreviewed, so the
+/// fab gate still fires on a machine-written footprint.
+#[test]
+fn test_mcp_resolve_footprints_apply_writes_an_unverified_overlay() {
+    if synth_layout::footprint_resolve::FootprintIndex::load().is_empty() {
+        eprintln!("skipping: no KiCad footprint library installed");
+        return;
+    }
+    let dir = tempfile::tempdir().unwrap();
+    let src = dir.path().join("d.synth");
+    let parts = dir.path().join("parts");
+    let userreg = dir.path().join("userreg");
+    std::fs::create_dir_all(&parts).unwrap();
+    std::fs::write(
+        parts.join("fabricated_qfn.synth.toml"),
+        r#"id = "fabricated_qfn"
+kind = "mcu"
+description = "part naming a footprint that does not exist"
+kicad_footprint = "Package_DFN_QFN:QFN-73-1EP_7x7mm_P0.5mm_EP4.5x4.5mm"
+
+[[pins]]
+name = "vdd"
+number = "1"
+electrical_type = "power_input"
+"#,
+    )
+    .unwrap();
+    let source = r#"board "d" {
+  layers 2
+  power "+3V3" 3.3v
+  group "U" {
+    component U1: ic "fabricated_qfn"
+    notes "" { "x" }
+  }
+  component R1: resistor "r_generic_0603" value "1k"
+  connect U1.vdd -> R1.p1 as "+3V3"
+  connect R1.p2 -> U1.gnd as "GND"
+}
+"#;
+    std::fs::write(&src, source).unwrap();
+
+    let req = json!({
+        "jsonrpc": "2.0", "id": 96, "method": "tools/call",
+        "params": { "name": "synth_resolve_footprints", "arguments": {
+            "source": source,
+            "file_path": src.to_str().unwrap(),
+            "registry_path": parts.to_str().unwrap(),
+            "user_registry": userreg.to_str().unwrap(),
+            "apply": true,
+        }}
+    });
+    let resp = handle_jsonrpc_request(req, None);
+    let report: serde_json::Value =
+        serde_json::from_str(resp["result"]["content"][0]["text"].as_str().unwrap()).unwrap();
+
+    let overlay = userreg.join("fabricated_qfn.synth.toml");
+    if report["gaps"][0]["auto_applicable"] == serde_json::Value::Bool(false) {
+        // Ambiguous on this machine: reporting without applying is the
+        // correct outcome, and nothing may be written.
+        assert!(
+            !overlay.exists(),
+            "declined match must not write an overlay"
+        );
+        return;
+    }
+    assert!(
+        overlay.exists(),
+        "apply=true must write the overlay: {report}"
+    );
+    let written = std::fs::read_to_string(&overlay).unwrap();
+    assert!(
+        written.contains("Nordic_AQFN-73-1EP_7x7mm_P0.5mm"),
+        "overlay must carry the corrected footprint: {written}"
+    );
+    // The pin inventory has to survive: the overlay shadows the whole entry,
+    // so a dropped pin would silently delete it from the design.
+    assert!(
+        written.contains("number = \"1\""),
+        "overlay must preserve pins: {written}"
+    );
+    assert!(
+        written.contains("reviewed_by = \"\""),
+        "a machine-written overlay must stay unreviewed: {written}"
+    );
+}
+
+/// `synth_validate` must block a part whose pin numbers are not pads on its
+/// footprint — the failure mode where a board wires every net to a pad that
+/// does not exist and still routes and ERCs clean.
+#[test]
+fn test_mcp_validate_flags_pins_that_are_not_footprint_pads() {
+    if synth_layout::kicad_footprint_loader::pads("Resistor_SMD:R_0603_1608Metric").is_none() {
+        eprintln!("skipping: no KiCad footprint library installed");
+        return;
+    }
+    let dir = tempfile::tempdir().unwrap();
+    let parts = dir.path().join("parts");
+    std::fs::create_dir_all(&parts).unwrap();
+    // Real footprint, fictional pin numbers: `R_0603_1608Metric` has pads 1
+    // and 2 only.
+    std::fs::write(
+        parts.join("wrongpins.synth.toml"),
+        r#"id = "wrongpins"
+kind = "ic"
+description = "pins that do not exist on its footprint"
+kicad_footprint = "Resistor_SMD:R_0603_1608Metric"
+
+[[pins]]
+name = "a"
+number = "1"
+electrical_type = "passive"
+
+[[pins]]
+name = "b"
+number = "99"
+electrical_type = "passive"
+"#,
+    )
+    .unwrap();
+    let source = r#"board "d" {
+  layers 2
+  group "U" {
+    component U1: ic "wrongpins"
+    notes "" { "x" }
+  }
+  net "N1" { U1.a U1.b }
+}
+"#;
+    let req = json!({
+        "jsonrpc": "2.0", "id": 97, "method": "tools/call",
+        "params": { "name": "synth_validate", "arguments": {
+            "source": source,
+            "file_path": dir.path().join("d.synth").to_str().unwrap(),
+            "registry_path": parts.to_str().unwrap(),
+        }}
+    });
+    let resp = handle_jsonrpc_request(req, None);
+    let payload: serde_json::Value =
+        serde_json::from_str(resp["result"]["content"][0]["text"].as_str().unwrap()).unwrap();
+    let hit = payload["diagnostics"]
+        .as_array()
+        .expect("diagnostics array")
+        .iter()
+        .find(|d| d["code"] == "E-SYNTH-PIN-001")
+        .unwrap_or_else(|| panic!("E-SYNTH-PIN-001 must fire: {payload}"));
+    assert_eq!(hit["severity"], "error", "must block: {hit}");
+    assert!(
+        hit["found"].as_str().unwrap_or("").contains("99"),
+        "must name the pin with no pad: {hit}"
+    );
+}
+
+/// `synth_mutate_layout_persist_writes_sidecar` documents the schematic
+/// sidecar; the placement sidecar it must NOT write is the point of the
+/// namespace split.
 #[test]
 fn test_mcp_mutate_layout_persist_writes_sidecar() {
     let dir = tempfile::tempdir().unwrap();

@@ -189,9 +189,20 @@ const UV_PER_V: i64 = 1_000_000;
 const UV_PER_MV: i64 = 1_000;
 
 impl Voltage {
+    /// Quantise volts to whole microvolts.
+    ///
+    /// `.round()`, not a bare `as i64`: the float→int cast truncates toward
+    /// zero, so any value whose scaled product lands a hair below an integer
+    /// loses a whole microvolt. `529390.326636 V` scales to
+    /// `529390326635.99997`, truncated to `529390326635 µV`, which reads back
+    /// as `529390.326635 V` — a round trip that is off by one part in 5.3e11
+    /// and is caught by the `voltage_from_v_to_v_roundtrips` property.
+    ///
+    /// The same applies to every negative input, where truncation rounds
+    /// toward zero and therefore *inflates* the magnitude.
     #[allow(clippy::cast_precision_loss, clippy::cast_possible_truncation)]
     pub fn from_v(v: f64) -> Self {
-        Voltage((v * UV_PER_V as f64) as i64)
+        Voltage((v * UV_PER_V as f64).round() as i64)
     }
 
     #[allow(clippy::cast_precision_loss)]

@@ -1,12 +1,18 @@
 id = "ant_chip_2g4"
 kind = "antenna"
-description = "Chip antenna, 2.4 GHz, SMD"
+description = "Ceramic chip antenna, 2.4 GHz, 1 dBi, SMD"
+mpn = "2450AT43F0100E"
+lcsc_pn = "C17192881"
 kicad_symbol = "Device:Antenna_Chip"
-kicad_footprint = "RF_Antenna:Johanson_2450AT43B100"
+# Real KiCad stock footprint. Note the 'F' in 2450AT43F0100 — the
+# previously-referenced `Johanson_2450AT43B100` does not exist in any KiCad
+# library. Pads 1/2, 2400-2500 MHz, 1 dBi, datasheet-backed.
+kicad_footprint = "RF_Antenna:Johanson_2450AT43F0100"
 
 [footprint_dimensions]
-width_mm = 5.0
-height_mm = 5.0
+# Courtyard extent of the stock footprint (pads at x = -/+2.85, 1.2 x 2.2 mm).
+width_mm = 7.4
+height_mm = 2.7
 courtyard_margin_mm = 0.25
 
 [operating_conditions]
@@ -25,4 +31,3 @@ required = true
 name = "gnd"
 number = "2"
 electrical_type = "passive"
-

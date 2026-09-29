@@ -415,6 +415,11 @@ enum Command {
         #[command(subcommand)]
         cmd: PartCommand,
 
+        /// Path to the Tier-1 registry `parts` directory. Defaults to the
+        /// checkout's `registry/parts`, then the embedded seed registry.
+        #[arg(long, value_name = "DIR")]
+        registry: Option<PathBuf>,
+
         /// Path to the Tier-2 (per-user) registry directory.
         #[arg(long, value_name = "DIR")]
         user_registry: Option<PathBuf>,
@@ -553,6 +558,31 @@ enum PartCommand {
         /// sanitized.
         #[arg(long, value_name = "ID")]
         id: Option<String>,
+    },
+
+    /// Find a real `.kicad_mod` for parts whose `kicad_footprint` names one
+    /// that is not installed.
+    ///
+    /// A wrong footprint name is the common failure, and the right footprint
+    /// is usually already in the local KiCad libraries — so this searches
+    /// them by name, reports what it finds, and with `--apply` writes the
+    /// correction into the Tier-2 user registry. `synth export-kicad` runs
+    /// the same resolver automatically, so this command is for inspecting
+    /// and forcing the repair ahead of an export.
+    ///
+    /// A match is only applied when it is both confident and clearly ahead
+    /// of the runner-up; an ambiguous result is reported, never guessed.
+    /// Pin numbers are never touched — see `synth validate`'s
+    /// `E-SYNTH-PIN-001` for why that has to stay a human decision.
+    ResolveFootprint {
+        /// Write the matched footprint into the Tier-2 user registry
+        /// instead of only reporting it.
+        #[arg(long)]
+        apply: bool,
+
+        /// Limit to a single part id. Default: every part in the registry.
+        #[arg(value_name = "PART_ID")]
+        part_id: Option<String>,
     },
 
     /// Write a `<id>.synth.toml` skeleton into the Tier-2 registry
@@ -831,7 +861,11 @@ fn main() -> ExitCode {
             user_registry,
             strict,
         } => registry_cmd(cmd, registry.as_deref(), user_registry.as_deref(), strict),
-        Command::Part { cmd, user_registry } => part_cmd(cmd, user_registry.as_deref()),
+        Command::Part {
+            cmd,
+            registry,
+            user_registry,
+        } => part_cmd(cmd, registry.as_deref(), user_registry.as_deref()),
     };
 
     match result {
@@ -1126,7 +1160,11 @@ fn registry_cmd(
 }
 
 /// Handler for `synth part import lcsc` (Phase 15, R15.4).
-fn part_cmd(cmd: PartCommand, user_registry: Option<&Path>) -> anyhow::Result<u8> {
+fn part_cmd(
+    cmd: PartCommand,
+    registry_dir: Option<&Path>,
+    user_registry: Option<&Path>,
+) -> anyhow::Result<u8> {
     match cmd {
         PartCommand::ImportLcsc {
             code,
@@ -1150,6 +1188,9 @@ fn part_cmd(cmd: PartCommand, user_registry: Option<&Path>) -> anyhow::Result<u8
         },
         PartCommand::ImportZip { zip_path, id } => {
             import_kicad_zip(&zip_path, id.as_deref(), user_registry)
+        }
+        PartCommand::ResolveFootprint { apply, part_id } => {
+            part_resolve_footprint(registry_dir, user_registry, apply, part_id.as_deref())
         }
         PartCommand::Stub {
             id,
@@ -1347,19 +1388,34 @@ fn import_lcsc(
     std::fs::create_dir_all(&user_dir)
         .map_err(|e| anyhow::anyhow!("could not create {}: {e}", user_dir.display()))?;
 
-    // 2. Acquire the EasyEDA CAD JSON (from a local file or a live fetch).
+    // 2. Acquire the footprint CAD: a cached document, or a live fetch of
+    //    LCSC's `pcbSvg` for this part.
     let raw = match from_file {
         Some(path) => std::fs::read_to_string(path)
             .map_err(|e| anyhow::anyhow!("could not read {}: {e}", path.display()))?,
-        None => fetch_component_json(code)?,
+        None => fetch_lcsc_footprint_svg(code)?,
     };
 
     // 3. Parse + convert the CAD geometry into a KiCad footprint.
-    let comp = synth_registry::easyeda::parse_easyeda(&raw)
-        .map_err(|e| anyhow::anyhow!("could not parse EasyEDA JSON: {e}"))?;
+    //
+    //    A document with no pads is a hard error, never an empty footprint:
+    //    a pad-less `.kicad_mod` satisfies the "has a real footprint" export
+    //    gate while being unbuildable, which is the exact failure the old
+    //    EasyEDA-shape importer had.
+    let fp = synth_registry::parse_component_svg(&raw).ok_or_else(|| {
+        anyhow::anyhow!(
+            "no pads found in the CAD document for {code}. Expected an LCSC component \
+             footprint SVG (elements with c_partid=\"part_pad\"). If this came from \
+             --from-file, check that the file is the `pcbSvg`, not the schematic symbol."
+        )
+    })?;
     let id = code.to_lowercase();
-    let pins = synth_registry::easyeda::extract_pins(&comp);
-    let modl = synth_registry::easyeda::to_kicad_mod(&comp, &id);
+    let modl = synth_registry::svg_to_kicad_mod(&fp, &id);
+    // The part's pins come from the pad designators. That is enough to
+    // import the footprint and clear E-SYNTH-PIN-001, but it carries no
+    // electrical types or capabilities: those come from the datasheet, and
+    // the entry stays unverified until a human says so.
+    let pins: Vec<String> = fp.pads.iter().map(|p| p.number.clone()).collect();
 
     // 4. Write the `.kicad_mod` into the user footprint directory.
     let fp_dir = footprint_dir.map_or_else(|| user_dir.join("footprints"), PathBuf::from);
@@ -1387,10 +1443,28 @@ fn import_lcsc(
 
     println!("imported {code} -> {}", part_path.display());
     println!("footprint   -> {}", kmod.display());
-    println!("pins ({}): {}", pins.len(), pins.join(", "));
+    if let Some(package) = &fp.package {
+        println!("package     -> {package}");
+    }
+    println!(
+        "pads ({}), canvas {:.2} x {:.2} mm",
+        fp.pads.len(),
+        fp.canvas_mm.0,
+        fp.canvas_mm.1
+    );
+    println!("pad numbers: {}", pins.join(", "));
     println!(
         "next: set SYNTH_USER_FOOTPRINT_DIR={} when exporting a board using this part.",
         fp_dir.display()
+    );
+    println!(
+        "pins were taken from the footprint's pad designators only. Fill in each \
+         pin's name, electrical_type and capabilities from the datasheet, then set \
+         [provenance].reviewed_by."
+    );
+    println!(
+        "orientation is as EasyEDA draws it, which is not always the datasheet \
+         orientation. CHECK PIN 1 against the datasheet before relying on this part."
     );
     println!(
         "this part is UNVERIFIED (provenance.source = imported, reviewed_by empty) until reviewed."
@@ -1777,48 +1851,91 @@ fn import_kicad_zip(
         );
     }
     println!(
+        "pins were taken from the footprint's pad designators only. Fill in each \
+         pin's name, electrical_type and capabilities from the datasheet, then set \
+         [provenance].reviewed_by."
+    );
+    println!(
         "this part is UNVERIFIED (provenance.source = imported, reviewed_by empty) until reviewed."
     );
     Ok(EXIT_SUCCESS)
 }
 
-/// Best-effort live fetch of a component's EasyEDA CAD JSON from LCSC.
+/// Fetch a part's **footprint** CAD from LCSC's public product API.
 ///
-/// The LCSC product-detail endpoint returns the EasyEDA CAD document either as a
-/// JSON string under `result.data` or, on some deployments, directly. We accept
-/// both shapes. Network access is required; callers without it should pass
-/// `--from-file` with a cached CAD document.
-fn fetch_component_json(code: &str) -> anyhow::Result<String> {
+/// Two steps, both on LCSC/JLCPCB-operated hosts:
+///
+/// 1. `wmsc.lcsc.com/ftps/wm/product/detail` returns the part's metadata,
+///    including `edaSvgInfo.pcbSvg` — the URL of the component footprint SVG.
+/// 2. That SVG is fetched and returned verbatim.
+///
+/// # Why not EasyEDA's component JSON
+///
+/// `easyeda.com/api/products/{code}/components` looks like the obvious source
+/// and is what the previous importer used. It is the wrong document: it
+/// carries the part's **schematic symbol**, not its footprint. For an
+/// aQFN-73 that is two columns of 37 pins — and because the primitives now
+/// arrive as compact tilde-delimited strings rather than objects, the old
+/// parser matched none of them and emitted a `.kicad_mod` with **zero pads**,
+/// silently. The symbol carries no pad geometry at all, so no amount of
+/// fixing that parser would have turned it into a footprint.
+///
+/// The `pcbSvg` is the real land pattern and labels every pad
+/// (`c_partid="part_pad" … number=… c_width=… c_height=…`), so
+/// [`synth_registry::parse_component_svg`] needs no format archaeology.
+///
+/// The raw document is handed back for immediate conversion and is never
+/// written to disk (see `registry/CREDITS.md`).
+fn fetch_lcsc_footprint_svg(code: &str) -> anyhow::Result<String> {
     let rt = tokio::runtime::Builder::new_current_thread()
         .enable_all()
         .build()
         .map_err(|e| anyhow::anyhow!("could not start tokio runtime: {e}"))?;
     rt.block_on(async {
+        // A browser UA: the product API sits behind a CDN that rejects
+        // unrecognised agents before returning JSON, which is why the old
+        // fetch failed with a *parse* error rather than an HTTP error.
         let client = reqwest::Client::builder()
-            .user_agent("Synth-EDA/0.0.1 (part-import)")
+            .user_agent(concat!(
+                "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 ",
+                "(KHTML, like Gecko) Chrome/120.0 Safari/537.36"
+            ))
             .build()
             .map_err(|e| anyhow::anyhow!("could not build http client: {e}"))?;
-        let url = format!("https://lcsc.com/api/products/detail?productCode={code}");
-        let resp = client
+
+        let detail_url = format!("https://wmsc.lcsc.com/ftps/wm/product/detail?productCode={code}");
+        let detail: serde_json::Value = client
+            .get(&detail_url)
+            .send()
+            .await
+            .map_err(|e| anyhow::anyhow!("fetch {detail_url} failed: {e}"))?
+            .json()
+            .await
+            .map_err(|e| anyhow::anyhow!("{detail_url} did not return JSON: {e}"))?;
+
+        let pcb_svg = detail
+            .pointer("/result/edaSvgInfo/pcbSvg")
+            .and_then(|v| v.as_str())
+            .ok_or_else(|| {
+                anyhow::anyhow!(
+                    "LCSC has no EDA footprint published for {code}. The part may be \\
+                     assembly-only, have no CAD model, or the code may be wrong. \\
+                     Check https://www.lcsc.com/product-detail/{code}"
+                )
+            })?;
+        let url = if pcb_svg.starts_with("//") {
+            format!("https:{pcb_svg}")
+        } else {
+            pcb_svg.to_string()
+        };
+        client
             .get(&url)
             .send()
             .await
-            .map_err(|e| anyhow::anyhow!("fetch {url} failed: {e}"))?;
-        let text = resp
+            .map_err(|e| anyhow::anyhow!("fetch {url} failed: {e}"))?
             .text()
             .await
-            .map_err(|e| anyhow::anyhow!("reading body failed: {e}"))?;
-        if let Ok(v) = serde_json::from_str::<serde_json::Value>(&text) {
-            if let Some(data) = v.get("result").and_then(|r| r.get("data")) {
-                if let Some(s) = data.as_str() {
-                    return Ok(s.to_string());
-                }
-                if data.is_object() {
-                    return Ok(data.to_string());
-                }
-            }
-        }
-        Ok(text)
+            .map_err(|e| anyhow::anyhow!("reading {url} failed: {e}"))
     })
 }
 
@@ -2625,6 +2742,271 @@ fn dump_drc(
 // `--validate-erc`, `--force`, `--allow-unverified-parts`) — an enum
 // would need a variant per combination for no clarity gain.
 #[allow(clippy::fn_params_excessive_bools)]
+/// Every part on `board` whose `kicad_footprint` does not resolve, with the
+/// best candidate the local KiCad libraries offer.
+#[derive(Debug, Clone)]
+struct FootprintGap {
+    part_id: String,
+    refdes: String,
+    wanted: String,
+    candidates: Vec<synth_layout::footprint_resolve::Candidate>,
+}
+
+/// Find, report, and where possible repair unresolvable footprint references.
+///
+/// Returns `Some(())` when at least one correction was written to the Tier-2
+/// user registry, meaning the caller must reload the registry and re-lower.
+/// Returns `None` when there was nothing to do.
+///
+/// Never touches pin numbers. See the module docs of
+/// `synth_layout::footprint_resolve` for why that line is drawn there.
+fn repair_unresolvable_footprints(
+    board: Option<&synth_ir::Board>,
+    registry: &synth_registry::Registry,
+    user_registry: Option<&Path>,
+    registry_dir: Option<&Path>,
+    file: &str,
+) -> Option<()> {
+    use synth_layout::footprint_resolve as fr;
+
+    let board = board?;
+    let index = fr::FootprintIndex::load();
+    if index.is_empty() {
+        return None;
+    }
+
+    let mut gaps: Vec<FootprintGap> = Vec::new();
+    for component in &board.components {
+        let Some(part) = component.part.as_ref() else {
+            continue;
+        };
+        let Some(wanted) = part.kicad_footprint.as_deref() else {
+            continue;
+        };
+        if synth_layout::kicad_footprint_loader::pads(wanted).is_some() {
+            continue;
+        }
+        if gaps.iter().any(|g| g.part_id == part.id.as_str()) {
+            continue;
+        }
+        let pins: Vec<String> = part.pins.iter().map(|p| p.number.0.clone()).collect();
+        gaps.push(FootprintGap {
+            part_id: part.id.as_str().to_string(),
+            refdes: component.refdes.clone(),
+            wanted: wanted.to_string(),
+            candidates: fr::candidates(&index, wanted, &pins, 3, 0.0),
+        });
+    }
+
+    if gaps.is_empty() {
+        return None;
+    }
+
+    // Report every gap, whether or not it can be repaired, so the reason for
+    // a `--force` export is always visible.
+    for gap in &gaps {
+        eprintln!(
+            "warning: [E-SYNTH-FP-001] part `{}` ({}) references footprint `{}`, which is not installed",
+            gap.part_id, gap.refdes, gap.wanted
+        );
+        if gap.candidates.is_empty() {
+            eprintln!(
+                "         no candidate found in {} footprint(s) under {:?}; \
+                 import one (`synth part import-lcsc <C-code>`) or author it (`synth part stub`)",
+                index.entries.len(),
+                fr::search_roots()
+            );
+            continue;
+        }
+        for (i, c) in gap.candidates.iter().enumerate() {
+            eprintln!("         [{:.2}] {}", c.score, c.lib_id);
+            eprintln!("                {}", c.reason);
+            if i == 0 {
+                break;
+            }
+        }
+    }
+
+    // Repair only the unambiguous ones.
+    let mut repaired = false;
+    for gap in &gaps {
+        let Some(best) = fr::resolve_one(&index, &gap.wanted, &[]) else {
+            if gap.candidates.len() > 1 {
+                eprintln!(
+                    "warning: part `{}` left un-repaired: the top two candidates are within \
+                     {:.2} of each other, which is too close to call. Set `kicad_footprint` \
+                     on the part by hand.",
+                    gap.part_id,
+                    fr::AUTO_APPLY_MIN_MARGIN
+                );
+            }
+            continue;
+        };
+        let Some(part) = registry.lookup(&gap.part_id) else {
+            continue;
+        };
+        let mut fixed = part.clone();
+        fixed.kicad_footprint = Some(best.lib_id.clone());
+        // A machine-written correction is not a reviewed one. Marking it so
+        // keeps `W-SYNTH-PART-UNVERIFIED` firing, which is the last gate
+        // before someone sends this to fab.
+        fixed.provenance = Some(synth_registry::Provenance {
+            source: synth_registry::ProvenanceSource::Generated,
+            generator: Some(GENERATOR_FOOTPRINT_REPAIR.to_string()),
+            ..Default::default()
+        });
+        match write_user_part_overlay(&fixed, user_registry, registry_dir) {
+            Ok(path) => {
+                eprintln!(
+                    "         auto-repaired: `{}` -> `{}` (written to {})",
+                    gap.wanted,
+                    best.lib_id,
+                    path.display()
+                );
+                repaired = true;
+            }
+            Err(e) => {
+                eprintln!(
+                    "warning: could not write repair for part `{}` into the user registry: {e}",
+                    gap.part_id
+                );
+            }
+        }
+    }
+
+    let _ = file;
+    repaired.then_some(())
+}
+
+/// Write `part` into the Tier-2 user registry as a shadowing overlay.
+fn write_user_part_overlay(
+    part: &synth_registry::Part,
+    user_registry: Option<&Path>,
+    _registry_dir: Option<&Path>,
+) -> anyhow::Result<PathBuf> {
+    let dir = match user_registry {
+        Some(d) => PathBuf::from(d),
+        None => synth_registry::user_registry_dir()
+            .ok_or_else(|| anyhow::anyhow!("no user registry directory available"))?,
+    };
+    std::fs::create_dir_all(&dir)?;
+    let path = dir.join(format!("{}.synth.toml", sanitize_part_id(part.id.as_str())));
+    let text = synth_registry::part_to_toml(
+        part,
+        &[
+            &format!("Auto-repaired by `{GENERATOR_FOOTPRINT_REPAIR}`."),
+            "This file shadows the Tier-1 registry entry of the same id.",
+            "`provenance.reviewed_by` is empty, so the part still reports",
+            "W-SYNTH-PART-UNVERIFIED: set it once a human has checked the package.",
+        ],
+    );
+    std::fs::write(&path, text)?;
+    Ok(path)
+}
+
+/// A part id is a filename component; keep it to a safe subset.
+fn sanitize_part_id(id: &str) -> String {
+    id.chars()
+        .map(|c| {
+            if c.is_ascii_alphanumeric() || c == '_' || c == '-' {
+                c
+            } else {
+                '_'
+            }
+        })
+        .collect()
+}
+
+/// Handler for `synth part resolve-footprint`.
+fn part_resolve_footprint(
+    registry_dir: Option<&Path>,
+    user_registry: Option<&Path>,
+    apply: bool,
+    part_filter: Option<&str>,
+) -> anyhow::Result<u8> {
+    use synth_layout::footprint_resolve as fr;
+
+    let registry = load_registry_strict(registry_dir, user_registry, false)
+        .ok_or_else(|| anyhow::anyhow!("registry could not be loaded"))?;
+    let index = fr::FootprintIndex::load();
+    if index.is_empty() {
+        eprintln!(
+            "no KiCad footprint libraries found under {:?}",
+            fr::search_roots()
+        );
+        return Ok(1);
+    }
+    eprintln!(
+        "indexed {} footprints from {:?}",
+        index.entries.len(),
+        fr::search_roots()
+    );
+
+    let mut unresolvable = 0usize;
+    let mut repaired = 0usize;
+    let ids: Vec<String> = registry
+        .iter()
+        .map(|(_, p)| p.id.as_str().to_string())
+        .filter(|id| part_filter.is_none_or(|f| f == id.as_str()))
+        .collect();
+    for id in ids {
+        let Some(part) = registry.lookup(&id) else {
+            continue;
+        };
+        let Some(wanted) = part.kicad_footprint.as_deref() else {
+            continue;
+        };
+        if synth_layout::kicad_footprint_loader::pads(wanted).is_some() {
+            continue;
+        }
+        unresolvable += 1;
+        let pins: Vec<String> = part.pins.iter().map(|p| p.number.0.clone()).collect();
+        eprintln!("\n{id}: `{wanted}` is not installed");
+        let cands = fr::candidates(&index, wanted, &pins, 3, 0.0);
+        if cands.is_empty() {
+            eprintln!("  no candidate in the local libraries");
+            continue;
+        }
+        for c in &cands {
+            eprintln!("  [{:.2}] {}", c.score, c.lib_id);
+            eprintln!("         {}", c.reason);
+        }
+        if !apply {
+            continue;
+        }
+        let Some(best) = fr::resolve_one(&index, wanted, &pins) else {
+            eprintln!(
+                "  not auto-applied: the top two candidates are within {:.2}, too close to call",
+                fr::AUTO_APPLY_MIN_MARGIN
+            );
+            continue;
+        };
+        let mut fixed = part.clone();
+        fixed.kicad_footprint = Some(best.lib_id.clone());
+        fixed.provenance = Some(synth_registry::Provenance {
+            source: synth_registry::ProvenanceSource::Generated,
+            generator: Some(GENERATOR_FOOTPRINT_REPAIR.to_string()),
+            ..Default::default()
+        });
+        match write_user_part_overlay(&fixed, user_registry, registry_dir) {
+            Ok(path) => {
+                eprintln!("  applied -> {} ({})", best.lib_id, path.display());
+                repaired += 1;
+            }
+            Err(e) => eprintln!("  could not write overlay: {e}"),
+        }
+    }
+    eprintln!(
+        "\n{unresolvable} part(s) reference a footprint that is not installed; {repaired} repaired"
+    );
+    Ok(u8::from(unresolvable != 0))
+}
+
+/// Stamped into `[provenance].generator` on every auto-repaired part, so a
+/// later reader can tell a machine-written footprint correction from a
+/// hand-edited one.
+const GENERATOR_FOOTPRINT_REPAIR: &str = "synth-part-resolve-footprint 0.1";
+
 fn export_kicad(
     input: &PathBuf,
     registry_dir: Option<&Path>,
@@ -2665,6 +3047,41 @@ fn export_kicad(
         .ok_or_else(|| anyhow::anyhow!("registry could not be loaded"))?;
     let lowered = synth_ir::lower(&resolved.program, &registry, &file);
     write_diagnostics_to_stderr(&lowered.diagnostics)?;
+
+    // Automatic footprint repair (§R15.9). A part whose `kicad_footprint`
+    // names a footprint that is not installed is almost always a name the
+    // author mistyped rather than a part KiCad does not ship — and the right
+    // one is normally already in the local library. When the match is both
+    // confident and unambiguous, the correction is written into the Tier-2
+    // user registry (the documented home for machine-generated overrides)
+    // and the design is re-lowered against it, so everything downstream
+    // sees the fix.
+    //
+    // Deliberately not done for ambiguous matches, and deliberately never
+    // for pin numbers: a wrong footprint is recoverable because a footprint
+    // either exists or does not, whereas an invented pin designator produces
+    // a board that routes and passes every check while being unbuildable.
+    let lowered = match repair_unresolvable_footprints(
+        lowered.board.as_ref(),
+        &registry,
+        user_registry,
+        registry_dir,
+        &file,
+    ) {
+        Some(()) => {
+            // Re-read the registry so the freshly written Tier-2 overlay
+            // shadows the entry the repair just corrected, then re-lower so
+            // every later stage sees the fixed footprint.
+            let repaired_registry =
+                load_registry_strict(registry_dir, user_registry, strict_registry).ok_or_else(
+                    || anyhow::anyhow!("registry could not be reloaded after footprint repair"),
+                )?;
+            let lowered = synth_ir::lower(&resolved.program, &repaired_registry, &file);
+            write_diagnostics_to_stderr(&lowered.diagnostics)?;
+            lowered
+        }
+        None => lowered,
+    };
     let board = lowered
         .board
         .as_ref()

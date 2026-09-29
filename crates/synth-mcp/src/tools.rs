@@ -338,6 +338,21 @@ pub fn list_tools() -> Vec<McpToolInfo> {
             }),
         },
         McpToolInfo {
+            name: "synth_resolve_footprints".into(),
+            description: "Find a real `.kicad_mod` for parts whose `kicad_footprint` names one that is not installed. A wrong footprint name is the common failure and the right footprint is usually already in the local KiCad libraries, so this searches them by name and reports scored candidates. With apply=true it writes confident, unambiguous corrections into the Tier-2 user registry (marked unverified, so W-SYNTH-PART-UNVERIFIED still fires). synth_export runs the same resolver automatically. A match is applied only when it is both confident and clearly ahead of the runner-up; an ambiguous result is reported, never guessed. Pin numbers are never touched — run synth_validate and act on E-SYNTH-PIN-001 for that, since an invented pin designator produces a board that routes and passes every check while being unbuildable.".into(),
+            input_schema: serde_json::json!({
+                "type": "object",
+                "properties": {
+                    "source":        { "type": "string", "description": "SynthSpec source code string" },
+                    "file_path":     { "type": "string", "description": "Optional path to .synth source file on disk" },
+                    "apply":         { "type": "boolean", "description": "Write confident, unambiguous matches into the Tier-2 user registry (default false: report only)" },
+                    "part_id":       { "type": "string", "description": "Restrict to a single part id; default every part the design uses" },
+                    "registry_path": { "type": "string", "description": "Optional custom component registry path" },
+                    "workspace_root":{ "type": "string", "description": "Optional workspace root path for auto-resolving registry" }
+                }
+            }),
+        },
+        McpToolInfo {
             name: "synth_describe_placement".into(),
             description: "Get a human-readable semantic summary of the current PCB placement — which functional clusters are in which board regions, density warnings, structural visual-review findings, and DRC status. Pass layout_file_path so the review evaluates the agent/human sidecar arrangement rather than only the automatic placement.".into(),
             input_schema: serde_json::json!({
@@ -541,6 +556,7 @@ pub fn call_tool(
         "synth_live_supply_chain" => execute_live_supply_chain(args, default_registry),
         "synth_place_with_hints" => execute_place_with_hints(args, default_registry),
         "synth_describe_placement" => execute_describe_placement(args, default_registry),
+        "synth_resolve_footprints" => execute_resolve_footprints(args, default_registry),
         "synth_read_layout_overrides" => execute_read_layout_overrides(args),
         "synth_write_layout_override" => execute_write_layout_override(args),
         "synth_route_with_constraints" => execute_route_with_constraints(args, default_registry),
@@ -2826,6 +2842,137 @@ fn execute_place_with_hints(
             "diagnostics": e.to_diagnostics(&board, file_name)
         })),
     }
+}
+
+/// `synth_resolve_footprints`: report — and optionally apply — corrections
+/// for parts whose `kicad_footprint` names a footprint that is not installed.
+#[allow(clippy::too_many_lines)]
+fn execute_resolve_footprints(
+    args: &Value,
+    default_registry: Option<&Path>,
+) -> Result<Value, String> {
+    use synth_layout::footprint_resolve as fr;
+
+    let source = get_source_from_args(args)?;
+    let file_name = args["file_path"].as_str().unwrap_or("board.synth");
+    let apply = args["apply"].as_bool().unwrap_or(false);
+    let only = args["part_id"].as_str();
+
+    let parse = synth_parser::parse(&source, file_name.to_string());
+    if parse.has_errors() {
+        return Ok(serde_json::json!({
+            "status": "error",
+            "error": "Parse phase produced blocking errors",
+            "diagnostics": parse.diagnostics
+        }));
+    }
+    let ast = parse.ast.ok_or("No AST produced")?;
+    let import_root = Path::new(file_name)
+        .parent()
+        .map_or_else(|| PathBuf::from("."), Path::to_path_buf);
+    let loader = synth_ir::FsImportLoader { root: import_root };
+    let resolved = synth_ir::resolve_imports(&ast, &loader, file_name);
+    let registry = load_registry_tiered(args, default_registry).map_err(|e| e.to_string())?;
+    let lowered = synth_ir::lower(&resolved.program, &registry, file_name);
+    let board = lowered
+        .board
+        .as_ref()
+        .ok_or_else(|| "Lowering failed".to_string())?;
+
+    let index = fr::FootprintIndex::load();
+    if index.is_empty() {
+        return Ok(serde_json::json!({
+            "status": "unavailable",
+            "reason": "no KiCad footprint libraries found",
+            "search_roots": fr::search_roots(),
+        }));
+    }
+
+    // Which parts to look at: those the design actually uses, so a repair
+    // never rewrites an unused registry entry as a side effect.
+    let mut gaps: Vec<serde_json::Value> = Vec::new();
+    let mut seen: std::collections::BTreeSet<String> = std::collections::BTreeSet::new();
+    for component in &board.components {
+        let Some(part) = component.part.as_ref() else {
+            continue;
+        };
+        if only.is_some_and(|o| o != part.id.as_str()) {
+            continue;
+        }
+        if !seen.insert(part.id.as_str().to_string()) {
+            continue;
+        }
+        let Some(wanted) = part.kicad_footprint.as_deref() else {
+            continue;
+        };
+        if synth_layout::kicad_footprint_loader::pads(wanted).is_some() {
+            continue;
+        }
+        let pins: Vec<String> = part.pins.iter().map(|p| p.number.0.clone()).collect();
+        let cands = fr::candidates(&index, wanted, &pins, 3, 0.0);
+        let best = fr::resolve_one(&index, wanted, &pins);
+        let mut applied = None::<String>;
+        if apply {
+            if let (Some(best), Some(target)) = (best.as_ref(), resolve_user_registry_opt(args)) {
+                if let Some(part_def) = registry.lookup(part.id.as_str()) {
+                    let mut fixed = part_def.clone();
+                    fixed.kicad_footprint = Some(best.lib_id.clone());
+                    fixed.provenance = Some(synth_registry::Provenance {
+                        source: synth_registry::ProvenanceSource::Generated,
+                        generator: Some("synth-part-resolve-footprint 0.1".into()),
+                        ..Default::default()
+                    });
+                    let text = synth_registry::part_to_toml(
+                        &fixed,
+                        &[
+                            "Auto-repaired by `synth_resolve_footprints`.",
+                            "This file shadows the Tier-1 registry entry of the same id.",
+                            "`provenance.reviewed_by` is empty, so the part still reports",
+                            "W-SYNTH-PART-UNVERIFIED: set it once a human has checked the package.",
+                        ],
+                    );
+                    let _ = std::fs::create_dir_all(&target);
+                    let path = target.join(format!("{}.synth.toml", part.id));
+                    std::fs::write(&path, text)
+                        .map_err(|e| format!("writing {}: {e}", path.display()))?;
+                    applied = Some(path.display().to_string());
+                }
+            }
+        }
+        gaps.push(serde_json::json!({
+            "part_id": part.id,
+            "refdes": component.refdes,
+            "wanted": wanted,
+            "candidates": cands.iter().map(|c| serde_json::json!({
+                "lib_id": c.lib_id,
+                "score": c.score,
+                "reason": c.reason,
+                "pin_coverage": c.pin_coverage,
+            })).collect::<Vec<_>>(),
+            "auto_applicable": best.is_some(),
+            "selected": best.as_ref().map(|c| c.lib_id.clone()),
+            "decline_reason": if best.is_none() {
+                if cands.is_empty() {
+                    Some("no candidate in the local KiCad libraries; import one (synth part import-lcsc) or author one (synth part stub)")
+                } else {
+                    Some("the top two candidates are too close to call; set kicad_footprint by hand")
+                }
+            } else {
+                None
+            },
+            "applied_to": applied,
+        }));
+    }
+
+    Ok(serde_json::json!({
+        "status": if gaps.is_empty() { "ok" } else { "gaps_found" },
+        "indexed_footprints": index.entries.len(),
+        "search_roots": fr::search_roots(),
+        "apply": apply,
+        "auto_apply_min_score": fr::AUTO_APPLY_MIN_SCORE,
+        "auto_apply_min_margin": fr::AUTO_APPLY_MIN_MARGIN,
+        "gaps": gaps,
+    }))
 }
 
 fn execute_describe_placement(

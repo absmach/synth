@@ -1,8 +1,9 @@
 ---
 source: crates/synth-place/tests/snapshots.rs
+assertion_line: 80
 expression: snapshot
 ---
-board_outline_mm: 90.05 x 61.97
+board_outline_mm: 91.45 x 61.97
 
   U1  (  44.40,   37.29) mm  rot=Zero layer=Top
   U2  (  45.00,   45.89) mm  rot=Zero layer=Top
@@ -10,7 +11,7 @@ board_outline_mm: 90.05 x 61.97
   U4  (  22.43,   26.32) mm  rot=Zero layer=Top
   J1  (  22.62,    8.90) mm  rot=OneEighty layer=Top
   J2  (   6.60,   25.64) mm  rot=Ninety layer=Top
-ANT1  (  82.80,   25.69) mm  rot=Zero layer=Top
+ANT1  (  83.00,   25.54) mm  rot=Zero layer=Top
   Y1  (  44.80,   28.69) mm  rot=Zero layer=Top
   C8  (  62.80,   33.69) mm  rot=Zero layer=Top
   R1  (  30.87,   20.50) mm  rot=Zero layer=Top

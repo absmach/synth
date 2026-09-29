@@ -51,6 +51,7 @@ use std::collections::HashSet;
 use serde::{Deserialize, Serialize};
 use synth_ir::{Board, ComponentId, NetId, PinId};
 
+pub mod footprint_resolve;
 pub mod kicad_footprint_loader;
 pub mod kicad_lib_loader;
 pub mod kicad_zip;

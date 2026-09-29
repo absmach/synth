@@ -42,8 +42,14 @@ pub use part::{
 
 /// Clean-room EasyEDA → KiCad footprint converter (Phase 15, R15.4).
 pub mod easyeda;
+pub mod footprint_svg;
+pub mod overlay;
 pub use easyeda::{
     extract_pins, generate_part_toml, parse_easyeda, to_kicad_mod, EasyEdaComponent,
 };
+pub use footprint_svg::{
+    parse_component_svg, to_kicad_mod as svg_to_kicad_mod, Pad, ParsedFootprint,
+};
+pub use overlay::{part_to_toml, quoted};
 pub use registry::Registry;
 pub use vector_search::{VectorSearchIndex, VectorSearchResult};

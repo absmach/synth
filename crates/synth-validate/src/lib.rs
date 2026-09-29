@@ -150,6 +150,9 @@ fn all_rules(config: &ErcConfig) -> Vec<Box<dyn ErcRule>> {
         Box::new(UnverifiedPartRule),
         Box::new(DividerRatioRule),
         Box::new(GenericPassiveValueRule),
+        // Footprint/pin agreement. Registered after the naming rules so a
+        // part reported for other reasons still gets this check.
+        Box::new(FootprintPinCrossCheckRule),
         // Phase 6 — deeper ERC.
         Box::new(deep_erc::PinConflictRule::new(config)),
         Box::new(deep_erc::PullupRailMismatchRule::new(config)),
@@ -3481,6 +3484,119 @@ impl ErcRule for GenericPassiveValueRule {
     }
 }
 
+// -----------------------------------------------------------------------------
+// E-SYNTH-PIN-001 — a declared pin must exist as a pad on the footprint
+// -----------------------------------------------------------------------------
+
+/// Cross-checks every registry part's declared pin numbers against the pads
+/// actually present in its `kicad_footprint`.
+///
+/// This is the check that catches the failure mode where a part declares
+/// plausible-looking pin numbers that no real package uses. A QFN-73
+/// ball-grid part declares balls (`A22`, `AC13`, `H23`); a registry that
+/// lists them as `47`, `32`, `23` lowers cleanly, wires cleanly, and ERCs
+/// cleanly — every net connects to a pad that does not exist, so the board
+/// is unbuildable and nothing complains until fab. Comparing the declared
+/// numbers to the footprint's pad list is the only place that mismatch is
+/// visible.
+///
+/// Blocking. A net bound to a nonexistent pad cannot be routed, and a
+/// router that silently drops it produces a board that looks routed.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct FootprintPinCrossCheckRule;
+
+impl ErcRule for FootprintPinCrossCheckRule {
+    fn code(&self) -> &'static str {
+        "E-SYNTH-PIN-001"
+    }
+
+    fn category(&self) -> ErcCategory {
+        ErcCategory::Geometry
+    }
+
+    fn check(&self, board: &Board, file: &str) -> Vec<Diagnostic> {
+        let mut out = Vec::new();
+        // One report per part, not per pin: a package whose numbering is
+        // wrong is wrong as a set, and eight separate errors bury the cause.
+        let mut reported: std::collections::BTreeSet<&str> = std::collections::BTreeSet::new();
+
+        for component in &board.components {
+            let Some(part) = component.part.as_ref() else {
+                continue;
+            };
+            let Some(lib_id) = part.kicad_footprint.as_deref() else {
+                continue;
+            };
+            if !reported.insert(part.id.as_str()) {
+                continue;
+            }
+            // A footprint that will not resolve is E-SYNTH-EXPORT-001's job;
+            // reporting it here too would double-count one problem.
+            let Some(pads) = synth_layout::kicad_footprint_loader::pads(lib_id) else {
+                continue;
+            };
+            let pad_numbers: std::collections::HashSet<&str> =
+                pads.iter().map(|p| p.number.as_str()).collect();
+
+            let missing: Vec<&str> = part
+                .pins
+                .iter()
+                .map(|p| p.number.0.as_str())
+                .filter(|n| !pad_numbers.contains(n))
+                .collect();
+
+            if missing.is_empty() {
+                continue;
+            }
+
+            let sample = missing
+                .iter()
+                .take(6)
+                .copied()
+                .collect::<Vec<_>>()
+                .join(", ");
+            let more = missing.len().saturating_sub(6);
+            let shown = if more == 0 {
+                sample
+            } else {
+                format!("{sample}, +{more} more")
+            };
+
+            out.push(
+                DiagnosticBuilder::new(
+                    self.code(),
+                    Severity::Error,
+                    "part pin numbers do not exist as pads on its footprint",
+                )
+                .location(Location::from_span(file.to_string(), component.source_span))
+                .expected(format!(
+                    "every pin number in part `{}` to be a pad of `{lib_id}`",
+                    part.id
+                ))
+                .found(format!(
+                    "{missing_len} of {total} pin(s) have no matching pad: {shown}",
+                    missing_len = missing.len(),
+                    total = part.pins.len(),
+                ))
+                .message(
+                    "The pin numbers and the footprint disagree, so every net on \
+                     these pins connects to a pad that does not exist. Either the \
+                     package uses ball/grid designators (e.g. aQFN `A22`, `AC13`) \
+                     rather than linear numbers, or the part points at the wrong \
+                     footprint. Fix the pin numbers in the part definition, or \
+                     repoint `kicad_footprint` at the package this part actually is.",
+                )
+                .primary_entity(EntityRef::Component {
+                    id: component.refdes.clone(),
+                })
+                .explanation_url(format!("synth.docs/diagnostics/{}", self.code()))
+                .build(),
+            );
+        }
+        out
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -3512,6 +3628,113 @@ mod tests {
             voltage_min_v: None,
             voltage_nominal_v: None,
         }
+    }
+
+    /// Board carrying one part whose `kicad_footprint` is `footprint` and
+    /// whose pins are `pin_numbers`, for the footprint/pin cross-check.
+    fn footprint_crosscheck_board(part_id: &str, footprint: &str, pin_numbers: &[&str]) -> Board {
+        use synth_diagnostics::Span;
+        let pins: Vec<Pin> = pin_numbers
+            .iter()
+            .map(|n| Pin {
+                name: (*n).into(),
+                number: PinNumber((*n).into()),
+                electrical_type: ElectricalType::Passive,
+                capabilities: vec![],
+                required: false,
+                unit: None,
+                voltage_max_v: None,
+                voltage_min_v: None,
+                voltage_nominal_v: None,
+            })
+            .collect();
+        let mut p = part(part_id, "mcu", pins);
+        p.kicad_footprint = Some(footprint.into());
+        Board {
+            groups: Vec::new(),
+            legends: false,
+            name: "t".into(),
+            layers: 2,
+            manufacturer: None,
+            revision: None,
+            company: None,
+            components: vec![Component {
+                id: ComponentId(0),
+                refdes: "U1".into(),
+                kind: "mcu".into(),
+                part: Some(p),
+                value: None,
+                dnp: false,
+                properties: std::collections::BTreeMap::new(),
+                placement_hint: None,
+                group: None,
+                sheet: None,
+                source_span: Span::new(0, 0),
+            }],
+            nets: vec![],
+            diff_pairs: vec![],
+            notes: vec![],
+            keepouts: vec![],
+            netclasses: vec![],
+            buses: vec![],
+            modules: vec![],
+            variants: vec![],
+            source_span: Span::new(0, 0),
+        }
+    }
+
+    /// A stock KiCad 2-pad footprint. Used as a resolvable target so the
+    /// cross-check has real pads to compare against without depending on any
+    /// particular part being in the seed registry.
+    const TWO_PAD_FOOTPRINT: &str = "Resistor_SMD:R_0603_1608Metric";
+
+    #[test]
+    fn footprint_pin_crosscheck_flags_a_pad_that_does_not_exist() {
+        // `R_0603_1608Metric` has pads 1 and 2. A part claiming a pad 99 is
+        // the fictional-pin failure this rule exists to catch.
+        let board = footprint_crosscheck_board("t", TWO_PAD_FOOTPRINT, &["1", "99"]);
+        let diags = run_erc(&board, "t.synth");
+        let diag = diags
+            .iter()
+            .find(|d| d.code == "E-SYNTH-PIN-001")
+            .expect("a pin with no matching pad must error");
+        assert_eq!(diag.severity, Severity::Error, "must block");
+        let found = diag.found.as_deref().unwrap_or("");
+        assert!(found.contains("99"), "must name the bad pin: {found}");
+        assert!(
+            !found.contains("1,"),
+            "must not list the pad that does exist: {found}"
+        );
+    }
+
+    #[test]
+    fn footprint_pin_crosscheck_is_quiet_when_every_pin_has_a_pad() {
+        let board = footprint_crosscheck_board("t", TWO_PAD_FOOTPRINT, &["1", "2"]);
+        let diags = run_erc(&board, "t.synth");
+        assert!(
+            !diags.iter().any(|d| d.code == "E-SYNTH-PIN-001"),
+            "matching pins must not report: {diags:?}"
+        );
+    }
+
+    #[test]
+    fn footprint_pin_crosscheck_defers_to_the_export_gate_for_unresolvable_footprints() {
+        // A footprint that does not resolve is E-SYNTH-EXPORT-001's job. This
+        // rule must stay silent rather than double-report one problem.
+        let board = footprint_crosscheck_board("t", "NoSuchLib:NoSuchPart", &["1", "2"]);
+        let diags = run_erc(&board, "t.synth");
+        assert!(
+            !diags.iter().any(|d| d.code == "E-SYNTH-PIN-001"),
+            "unresolvable footprint is not this rule's finding: {diags:?}"
+        );
+    }
+
+    #[test]
+    fn footprint_pin_crosscheck_reports_one_diagnostic_per_part_not_per_pin() {
+        let board = footprint_crosscheck_board("t", TWO_PAD_FOOTPRINT, &["7", "8", "9"]);
+        let diags = run_erc(&board, "t.synth");
+        let n = diags.iter().filter(|d| d.code == "E-SYNTH-PIN-001").count();
+        assert_eq!(n, 1, "a mis-numbered package is one problem, not three");
     }
 
     fn part(id: &str, kind: &str, pins: Vec<Pin>) -> Part {

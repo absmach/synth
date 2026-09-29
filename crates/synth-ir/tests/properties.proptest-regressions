@@ -5,3 +5,4 @@
 # It is recommended to check this file in to source control so that
 # everyone who runs the test benefits from these saved cases.
 cc 0060931eab06a1fcdf7028a87ab96120d0e899f1807f43023bab43d3d97a62f1 # shrinks to mm = -269080690.464902
+cc e3425913aa6da7ceda89a79f768fd49be2760d1a0927f9bd8c719950c8a9eb37 # shrinks to v = 529390.326636
