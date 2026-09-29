@@ -92,10 +92,15 @@ pub fn plan_sheets(board: &Board) -> Vec<SheetPartition> {
         .collect()
 }
 
-/// True when the laid-out content needs more room than A2, the
-/// biggest standard sheet. Only then is a board *large* for §P26
-/// purposes. Mirrors the bound computation in `grow_sheet_to_fit`
+/// True when the laid-out content needs more room than the largest page
+/// this design will use on a single sheet, so it must be split into a
+/// hierarchy. Mirrors the bound computation in `grow_sheet_to_fit`
 /// (components, wires, annotations, group boxes).
+///
+/// The threshold follows `schematic { overflow }`: A0 by default, so a
+/// board that overflows A4 keeps growing through the standard ladder, or
+/// the requested page under `overflow = "hierarchy"`, where more content
+/// means more sheets.
 pub fn sheet_overflow(board: &Board, layout: &Layout) -> bool {
     let mut min_x = f64::INFINITY;
     let mut max_x = f64::NEG_INFINITY;
@@ -138,8 +143,8 @@ pub fn sheet_overflow(board: &Board, layout: &Layout) -> bool {
         return false;
     }
     let (need_w, need_h) = crate::sheet_needs(min_x, max_x, min_y, max_y);
-    let (a2_w, a2_h) = SheetSize::A2.dims_mm();
-    need_w > a2_w || need_h > a2_h
+    let (ceiling_w, ceiling_h) = crate::max_single_sheet(board).dims_mm();
+    need_w > ceiling_w || need_h > ceiling_h
 }
 
 /// Lay out every sheet of a board: single-sheet layout as today when
@@ -352,6 +357,7 @@ fn place_sheet_notes(board: &Board, layout: &mut Layout, sheet: Option<&str>) {
         groups: Vec::new(),
         legends: board.legends,
         schematic_paper: board.schematic_paper,
+        schematic_overflow: board.schematic_overflow,
         name: board.name.clone(),
         layers: board.layers,
         manufacturer: board.manufacturer.clone(),
@@ -504,6 +510,7 @@ mod tests {
 
     fn board(components: Vec<Component>, nets: Vec<Net>) -> Board {
         Board {
+            schematic_overflow: None,
             schematic_paper: None,
             groups: Vec::new(),
             legends: false,

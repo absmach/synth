@@ -167,7 +167,33 @@ pub struct SchematicStmt {
     /// the parser so lowering never has to re-parse a free-form string.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub paper: Option<SchematicPaperAst>,
+    /// What to do when the content does not fit, validated by the parser
+    /// like `paper` so a bad value is reported where it was written.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub overflow: Option<SchematicOverflowAst>,
     pub span: Span,
+}
+
+/// How a design reacts to content that does not fit the requested page.
+///
+/// `Grow` walks the standard ladder (A4 → A3 → A2 → A1 → A0) and only then
+/// splits into a hierarchy; `Hierarchy` splits as soon as the page is full.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum SchematicOverflowAst {
+    Grow,
+    Hierarchy,
+}
+
+impl SchematicOverflowAst {
+    pub const ALL: [SchematicOverflowAst; 2] = [Self::Grow, Self::Hierarchy];
+
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Grow => "grow",
+            Self::Hierarchy => "hierarchy",
+        }
+    }
 }
 
 /// A standard page size an author may request. Mirrors
@@ -180,14 +206,18 @@ pub enum SchematicPaperAst {
     A4,
     A3,
     A2,
+    A1,
+    A0,
 }
 
 impl SchematicPaperAst {
-    pub const ALL: [SchematicPaperAst; 4] = [
+    pub const ALL: [SchematicPaperAst; 6] = [
         SchematicPaperAst::A5,
         SchematicPaperAst::A4,
         SchematicPaperAst::A3,
         SchematicPaperAst::A2,
+        SchematicPaperAst::A1,
+        SchematicPaperAst::A0,
     ];
 
     pub fn as_str(self) -> &'static str {
@@ -196,6 +226,8 @@ impl SchematicPaperAst {
             Self::A4 => "A4",
             Self::A3 => "A3",
             Self::A2 => "A2",
+            Self::A1 => "A1",
+            Self::A0 => "A0",
         }
     }
 }

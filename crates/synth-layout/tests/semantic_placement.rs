@@ -95,6 +95,7 @@ fn net(id: u32, name: &str, endpoints: &[(u32, u32)]) -> Net {
 
 fn board(components: Vec<Component>, nets: Vec<Net>) -> Board {
     Board {
+        schematic_overflow: None,
         schematic_paper: None,
         groups: Vec::new(),
         legends: false,

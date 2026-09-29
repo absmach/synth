@@ -68,6 +68,7 @@ fn create_test_board() -> Board {
     };
 
     Board {
+        schematic_overflow: None,
         schematic_paper: None,
         groups: Vec::new(),
         legends: false,

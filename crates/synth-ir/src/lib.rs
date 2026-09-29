@@ -29,7 +29,7 @@ pub mod units;
 pub use board::{
     Board, Component, ComponentId, DiffPair, Group, Keepout, Net, NetClass, NetEndpoint, NetId,
     Note, PinId, PlacementConstraint, PlacementEdge, PlacementPriority, PlacementRegion,
-    PlacementSide, SchematicPaper, Variant,
+    PlacementSide, SchematicOverflow, SchematicPaper, Variant,
 };
 pub use imports::{
     resolve as resolve_imports, FsImportLoader, ImportLoadError, ImportLoader, MemoryImportLoader,

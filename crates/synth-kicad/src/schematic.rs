@@ -255,6 +255,8 @@ pub(crate) fn build_sheet_schematic(
         synth_layout::SheetSize::A4 => Sexp::list("paper", vec![Sexp::str("A4")]),
         synth_layout::SheetSize::A3 => Sexp::list("paper", vec![Sexp::str("A3")]),
         synth_layout::SheetSize::A2 => Sexp::list("paper", vec![Sexp::str("A2")]),
+        synth_layout::SheetSize::A1 => Sexp::list("paper", vec![Sexp::str("A1")]),
+        synth_layout::SheetSize::A0 => Sexp::list("paper", vec![Sexp::str("A0")]),
         synth_layout::SheetSize::Custom {
             width_mm,
             height_mm,

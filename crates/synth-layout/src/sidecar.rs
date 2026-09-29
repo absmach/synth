@@ -506,6 +506,7 @@ priority = "hard"
         use synth_diagnostics::Span;
         use synth_ir::{Board, Component, ComponentId};
         Board {
+            schematic_overflow: None,
             schematic_paper: None,
             groups: Vec::new(),
             legends: false,
@@ -641,6 +642,7 @@ mod forced_label_tests {
             source_span: Span::new(0, 0),
         };
         Board {
+            schematic_overflow: None,
             schematic_paper: None,
             groups: Vec::new(),
             legends: false,

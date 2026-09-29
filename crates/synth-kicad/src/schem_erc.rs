@@ -1618,6 +1618,7 @@ mod tests {
         // IC at (10, 10); a VCC net connecting IC pin 0 and cap C1 at
         // (100, 10) — 90 mm apart, beyond the 15 mm default.
         let board = Board {
+            schematic_overflow: None,
             schematic_paper: None,
             groups: Vec::new(),
             legends: false,
@@ -1699,6 +1700,7 @@ mod tests {
     #[test]
     fn decoupling_cap_near_ic_is_silent() {
         let board = Board {
+            schematic_overflow: None,
             schematic_paper: None,
             groups: Vec::new(),
             legends: false,
@@ -2096,6 +2098,7 @@ mod tests {
 
     fn board_with_nets(nets: Vec<Net>) -> Board {
         Board {
+            schematic_overflow: None,
             schematic_paper: None,
             groups: Vec::new(),
             legends: false,
@@ -2444,6 +2447,7 @@ mod tests {
     #[test]
     fn aggregate_check_returns_warnings_in_rule_order() {
         let board = Board {
+            schematic_overflow: None,
             schematic_paper: None,
             groups: Vec::new(),
             legends: false,
@@ -2596,6 +2600,7 @@ mod tests {
         // A VCC rail with no explicit voltage name trips SCHEM-010
         // wherever it is rendered — a stable diagnostic to attribute.
         let b = Board {
+            schematic_overflow: None,
             schematic_paper: None,
             groups: Vec::new(),
             legends: false,

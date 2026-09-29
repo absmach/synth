@@ -2025,6 +2025,7 @@ mod cleanup_tests {
 
     fn empty_board() -> Board {
         Board {
+            schematic_overflow: None,
             schematic_paper: None,
             groups: Vec::new(),
             legends: false,
@@ -2543,6 +2544,7 @@ mod channel_router_tests {
         // Two clusters far apart in y => one horizontal gutter between
         // them becomes a channel. Build a board + layout by hand.
         let board = Board {
+            schematic_overflow: None,
             schematic_paper: None,
             groups: Vec::new(),
             legends: false,
@@ -2705,6 +2707,7 @@ mod drc_tests {
         // flagged; the same geometry through R1's p1 (net0's own pin)
         // must not.
         let board = Board {
+            schematic_overflow: None,
             schematic_paper: None,
             groups: Vec::new(),
             legends: false,
@@ -2881,6 +2884,7 @@ mod net_termination_tests {
     fn board_with_dangling_pin(bad_on: ComponentId) -> Board {
         let bad_pin = |id| if id == bad_on { PinId(5) } else { PinId(0) };
         Board {
+            schematic_overflow: None,
             schematic_paper: None,
             groups: Vec::new(),
             legends: false,

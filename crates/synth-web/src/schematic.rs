@@ -922,6 +922,10 @@ fn classify_sheet_size(w: f64, h: f64) -> &'static str {
         "A3"
     } else if area <= 594.0 * 420.0 * 1.1 {
         "A2"
+    } else if area <= 841.0 * 594.0 * 1.1 {
+        "A1"
+    } else if area <= 1189.0 * 841.0 * 1.1 {
+        "A0"
     } else {
         "custom"
     }

@@ -49,7 +49,7 @@
 use std::collections::HashSet;
 
 use serde::{Deserialize, Serialize};
-use synth_ir::{Board, ComponentId, NetId, PinId, SchematicPaper};
+use synth_ir::{Board, ComponentId, NetId, PinId, SchematicOverflow, SchematicPaper};
 
 pub mod footprint_resolve;
 pub mod kicad_footprint_loader;
@@ -88,6 +88,8 @@ pub enum SheetSize {
     A4,
     A3,
     A2,
+    A1,
+    A0,
     Custom { width_mm: f64, height_mm: f64 },
 }
 
@@ -98,6 +100,8 @@ impl SheetSize {
             Self::A4 => (297.0, 210.0),
             Self::A3 => (420.0, 297.0),
             Self::A2 => (594.0, 420.0),
+            Self::A1 => (841.0, 594.0),
+            Self::A0 => (1189.0, 841.0),
             Self::Custom {
                 width_mm,
                 height_mm,
@@ -113,6 +117,8 @@ impl From<SchematicPaper> for SheetSize {
             SchematicPaper::A4 => Self::A4,
             SchematicPaper::A3 => Self::A3,
             SchematicPaper::A2 => Self::A2,
+            SchematicPaper::A1 => Self::A1,
+            SchematicPaper::A0 => Self::A0,
         }
     }
 }
@@ -1571,9 +1577,19 @@ fn settle_sheet_size(board: &Board, layout: &mut Layout) {
         // comparing its result with an A5 request would report an overflow
         // for a design that fits A5 with room to spare.
         let (content_w, content_h) = sheet_needs(min_x, max_x, min_y, max_y);
+        // `hierarchy` caps growth at the requested page, so content beyond it
+        // is split into more sheets rather than drawn on a larger one.
+        let (ceiling_w, ceiling_h) = max_single_sheet(board).dims_mm();
         let (req_w, req_h) = requested.dims_mm();
         if content_w > req_w || content_h > req_h {
-            target = sheet_size_for(content_w, content_h);
+            target = if content_w > ceiling_w || content_h > ceiling_h {
+                // Past the last page this policy will use: leave it at the
+                // ceiling and let `layout_sheets` split. Reporting a bigger
+                // page here would be a lie the split then contradicts.
+                max_single_sheet(board)
+            } else {
+                sheet_size_for(content_w, content_h)
+            };
         }
     }
     layout.sheet_size = target;
@@ -4393,17 +4409,40 @@ fn layer_for(component: &synth_ir::Component) -> u32 {
 /// consulted for; the requested size is applied separately in
 /// [`settle_sheet_size`].
 fn sheet_size_for(w: f64, h: f64) -> SheetSize {
-    const SIZES: [(SheetSize, f64, f64); 3] = [
+    const SIZES: [(SheetSize, f64, f64); 5] = [
         (SheetSize::A4, 297.0, 210.0),
         (SheetSize::A3, 420.0, 297.0),
         (SheetSize::A2, 594.0, 420.0),
+        (SheetSize::A1, 841.0, 594.0),
+        (SheetSize::A0, 1189.0, 841.0),
     ];
     for (size, max_w, max_h) in SIZES {
         if w <= max_w && h <= max_h {
             return size;
         }
     }
-    SheetSize::A2
+    // Past A0 there is no standard page left. A `Custom` page is the honest
+    // answer: naming it A0 would claim the content fits when it provably
+    // does not.
+    SheetSize::Custom {
+        width_mm: w.ceil(),
+        height_mm: h.ceil(),
+    }
+}
+
+/// The largest page a design will use on a *single* sheet before it must
+/// split into a hierarchy.
+///
+/// `Grow` (the default) walks the standard ladder up to A0 first, so a
+/// design that overflows A4 stays on one readable sheet for as long as a
+/// standard page can hold it. `Hierarchy` answers at the requested page:
+/// the author has said they want that page, so more content means more
+/// sheets, not a bigger sheet.
+pub fn max_single_sheet(board: &Board) -> SheetSize {
+    match board.schematic_overflow.unwrap_or(SchematicOverflow::Grow) {
+        SchematicOverflow::Grow => SheetSize::A0,
+        SchematicOverflow::Hierarchy => requested_sheet(board),
+    }
 }
 
 /// Smallest standard sheet fitting the given content bounds, in mm
@@ -4814,6 +4853,7 @@ mod barycenter_tests {
 
     fn board_with(components: Vec<Component>, nets: Vec<Net>) -> Board {
         Board {
+            schematic_overflow: None,
             schematic_paper: None,
             groups: Vec::new(),
             legends: false,
@@ -5024,6 +5064,7 @@ mod semantic_weights_tests {
 
     fn board(components: Vec<Component>, nets: Vec<Net>) -> Board {
         Board {
+            schematic_overflow: None,
             schematic_paper: None,
             groups: Vec::new(),
             legends: false,
@@ -5354,6 +5395,7 @@ mod soft_pin_swap_tests {
 
     fn board(components: Vec<Component>, nets: Vec<Net>) -> Board {
         Board {
+            schematic_overflow: None,
             schematic_paper: None,
             groups: Vec::new(),
             legends: false,
@@ -5598,6 +5640,7 @@ mod patterns_tests {
 
     fn board(components: Vec<Component>, nets: Vec<Net>) -> Board {
         Board {
+            schematic_overflow: None,
             schematic_paper: None,
             groups: Vec::new(),
             legends: false,
@@ -5994,6 +6037,7 @@ mod text_overlap_tests {
 
     fn empty_board() -> Board {
         Board {
+            schematic_overflow: None,
             schematic_paper: None,
             groups: Vec::new(),
             legends: false,
@@ -6124,6 +6168,7 @@ mod text_overlap_tests {
     /// A board whose content is far smaller than any standard page.
     fn paper_board(paper: Option<SchematicPaper>) -> Board {
         Board {
+            schematic_overflow: None,
             schematic_paper: paper,
             ..empty_board()
         }
@@ -6413,6 +6458,7 @@ mod naming_tests {
 
     fn board(components: Vec<Component>, nets: Vec<Net>) -> Board {
         Board {
+            schematic_overflow: None,
             schematic_paper: None,
             groups: Vec::new(),
             legends: false,
@@ -6711,6 +6757,7 @@ mod documentation_tests {
 
     fn board_with_notes(components: Vec<Component>, nets: Vec<Net>, notes: Vec<Note>) -> Board {
         Board {
+            schematic_overflow: None,
             schematic_paper: None,
             groups: Vec::new(),
             legends: false,

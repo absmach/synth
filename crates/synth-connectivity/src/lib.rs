@@ -149,6 +149,7 @@ mod tests {
         };
 
         Board {
+            schematic_overflow: None,
             schematic_paper: None,
             groups: Vec::new(),
             legends: false,

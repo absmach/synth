@@ -18,8 +18,9 @@ use synth_ast::{
     DiffPairStmt, EndpointAst, GroupAttr, GroupStmt, ImportAst, InterfaceDeclStmt, KeepoutAttr,
     KeepoutStmt, LayersStmt, LegendsStmt, ManufacturerStmt, ModuleDeclStmt, NetDeclAst,
     NetclassAttr, NetclassStmt, NotesDeclAst, ParamDeclAst, PlacementHintAst, PlacementHintAttr,
-    PortBindingAst, PortDeclAst, PowerDeclAst, ProgramAst, RevisionStmt, SchematicPaperAst,
-    SchematicStmt, SheetStmt, StatementAst, UseStmt, ValueWithUnit, VariantDeclStmt,
+    PortBindingAst, PortDeclAst, PowerDeclAst, ProgramAst, RevisionStmt, SchematicOverflowAst,
+    SchematicPaperAst, SchematicStmt, SheetStmt, StatementAst, UseStmt, ValueWithUnit,
+    VariantDeclStmt,
 };
 
 use synth_diagnostics::{
@@ -1382,13 +1383,13 @@ impl Parser {
         attrs
     }
 
-    /// `schematic { paper = "A4" }`.
+    /// `schematic { paper = "A4", overflow = "grow" }`.
     ///
-    /// `paper` is parsed as a bare identifier rather than a reserved keyword
-    /// so a design that already uses `paper` as a component or group name
-    /// keeps parsing. The value is validated here, at the span that actually
-    /// holds the typo, instead of being carried down to lowering where a bad
-    /// size would have no useful span to point at.
+    /// Both settings are parsed as bare identifiers rather than reserved
+    /// keywords so a design that already uses `paper` or `overflow` as a
+    /// component or group name keeps parsing. Values are validated here, at
+    /// the span that actually holds the typo, instead of being carried down
+    /// to lowering where a bad value would have no useful span to point at.
     fn parse_schematic(&mut self) -> Option<SchematicStmt> {
         let start = self.peek().span.byte_start;
         self.bump(); // consume `schematic`
@@ -1405,68 +1406,23 @@ impl Parser {
         }
         self.bump();
         let mut paper = None;
+        let mut overflow = None;
         loop {
             self.skip_error_tokens();
             match self.peek_kind() {
                 TokenKind::RBrace | TokenKind::Eof => break,
                 TokenKind::Ident(name) if name == "paper" => {
-                    self.bump();
-                    if matches!(self.peek_kind(), TokenKind::Eq) {
-                        self.bump();
-                    } else {
-                        self.emit(
-                            self.peek().span,
-                            "E-SYNTH-PARSE-002",
-                            "expected `=` after `paper`",
-                            "`paper = \"A4\"`",
-                            self.describe_current(),
-                            None,
-                        );
-                        continue;
-                    }
-                    let value_span = self.peek().span;
-                    let Some(raw) = self.expect_string(
-                        "E-SYNTH-PARSE-002",
-                        "expected a quoted page size (e.g. \"A4\")",
-                    ) else {
-                        continue;
-                    };
-                    // Trim: `paper = " A4 "` is a typo, not a request for a
-                    // page called " A4 ", and rejecting it would send the
-                    // author looking for a grammar rule that does not exist.
-                    match raw.trim().to_ascii_uppercase().as_str() {
-                        "A5" => paper = Some(SchematicPaperAst::A5),
-                        "A4" => paper = Some(SchematicPaperAst::A4),
-                        "A3" => paper = Some(SchematicPaperAst::A3),
-                        "A2" => paper = Some(SchematicPaperAst::A2),
-                        _ => {
-                            self.emit(
-                                value_span,
-                                "E-SYNTH-PARSE-034",
-                                "unknown schematic page size",
-                                "one of: A5, A4, A3, A2",
-                                raw,
-                                Some(Patch {
-                                    confidence: 0.9,
-                                    rationale: Some(
-                                        "A4 is the default page and fits most designs".into(),
-                                    ),
-                                    patch_consequence_preview: None,
-                                    kind: PatchKind::ReplaceRange {
-                                        range: value_span,
-                                        replacement: "\"A4\"".into(),
-                                    },
-                                }),
-                            );
-                        }
-                    }
+                    paper = self.parse_schematic_paper();
+                }
+                TokenKind::Ident(name) if name == "overflow" => {
+                    overflow = self.parse_schematic_overflow();
                 }
                 _ => {
                     self.emit(
                         self.peek().span,
                         "E-SYNTH-PARSE-012",
                         "unknown schematic setting",
-                        "`paper`",
+                        "`paper` or `overflow`",
                         self.describe_current(),
                         None,
                     );
@@ -1480,8 +1436,111 @@ impl Parser {
         let end = self.last_offset();
         Some(SchematicStmt {
             paper,
+            overflow,
             span: Span::new(start, end),
         })
+    }
+
+    /// `paper = "A4"` inside a `schematic { … }` body. The `paper`
+    /// identifier is already consumed.
+    fn parse_schematic_paper(&mut self) -> Option<SchematicPaperAst> {
+        if !self.consume_eq_after_setting() {
+            return None;
+        }
+        let value_span = self.peek().span;
+        // Trim: `paper = " A4 "` is a typo, not a request for a page called
+        // " A4 ", and rejecting it would send the author looking for a
+        // grammar rule that does not exist.
+        let raw = self.expect_string(
+            "E-SYNTH-PARSE-002",
+            "expected a quoted page size (e.g. \"A4\")",
+        )?;
+        match raw.trim().to_ascii_uppercase().as_str() {
+            "A5" => Some(SchematicPaperAst::A5),
+            "A4" => Some(SchematicPaperAst::A4),
+            "A3" => Some(SchematicPaperAst::A3),
+            "A2" => Some(SchematicPaperAst::A2),
+            "A1" => Some(SchematicPaperAst::A1),
+            "A0" => Some(SchematicPaperAst::A0),
+            _ => {
+                self.emit(
+                    value_span,
+                    "E-SYNTH-PARSE-034",
+                    "unknown schematic page size",
+                    "one of: A5, A4, A3, A2, A1, A0",
+                    raw,
+                    Some(Patch {
+                        confidence: 0.9,
+                        rationale: Some("A4 is the default page and fits most designs".into()),
+                        patch_consequence_preview: None,
+                        kind: PatchKind::ReplaceRange {
+                            range: value_span,
+                            replacement: "\"A4\"".into(),
+                        },
+                    }),
+                );
+                None
+            }
+        }
+    }
+
+    /// `overflow = "grow"` inside a `schematic { … }` body. The `overflow`
+    /// identifier is already consumed.
+    fn parse_schematic_overflow(&mut self) -> Option<SchematicOverflowAst> {
+        if !self.consume_eq_after_setting() {
+            return None;
+        }
+        let value_span = self.peek().span;
+        let raw = self.expect_string(
+            "E-SYNTH-PARSE-002",
+            "expected a quoted overflow policy (\"grow\" or \"hierarchy\")",
+        )?;
+        match raw.trim().to_ascii_lowercase().as_str() {
+            "grow" => Some(SchematicOverflowAst::Grow),
+            // The aliases are what people actually type.
+            "hierarchy" | "hierarchical" | "sheets" => Some(SchematicOverflowAst::Hierarchy),
+            _ => {
+                self.emit(
+                    value_span,
+                    "E-SYNTH-PARSE-035",
+                    "unknown schematic overflow policy",
+                    "one of: grow, hierarchy",
+                    raw,
+                    Some(Patch {
+                        confidence: 0.8,
+                        rationale: Some(
+                            "`grow` keeps one sheet and enlarges the page; `hierarchy` splits \
+                             the design into a sheet per group instead of enlarging"
+                                .into(),
+                        ),
+                        patch_consequence_preview: None,
+                        kind: PatchKind::ReplaceRange {
+                            range: value_span,
+                            replacement: "\"grow\"".into(),
+                        },
+                    }),
+                );
+                None
+            }
+        }
+    }
+
+    /// Consume the `=` after a `key = value` setting, reporting the missing
+    /// token in this block's own error vocabulary.
+    fn consume_eq_after_setting(&mut self) -> bool {
+        if matches!(self.peek_kind(), TokenKind::Eq) {
+            self.bump();
+            return true;
+        }
+        self.emit(
+            self.peek().span,
+            "E-SYNTH-PARSE-002",
+            "expected `=` after this setting",
+            "`paper = \"A4\"`",
+            self.describe_current(),
+            None,
+        );
+        false
     }
 
     fn parse_sheet(&mut self) -> Option<SheetStmt> {

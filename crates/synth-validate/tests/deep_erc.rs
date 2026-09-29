@@ -652,6 +652,7 @@ fn multi_unit_rails_split_is_an_error() {
         provenance: None,
     };
     let board = Board {
+        schematic_overflow: None,
         schematic_paper: None,
         groups: Vec::new(),
         legends: false,
