@@ -161,7 +161,7 @@ pub fn list_tools() -> Vec<McpToolInfo> {
         },
         McpToolInfo {
             name: "synth_mutate_layout".into(),
-            description: "Apply one structured edit to a SynthSpec design's auto-generated schematic layout — move or rotate a component, group several components into a tidy column beside an anchor, force a net to render as a label instead of a wire, or re-route a net. Never changes connectivity, only visual placement. Returns the updated layout as JSON, or a structured error if the op references an unknown component/net id. Set persist=true (or pass layout_file_path) to write the effect through to the <design>.synth.layout.toml sidecar so it survives a recompile and is honoured by rendering and export.".into(),
+            description: "Apply one structured edit to a SynthSpec design's auto-generated schematic layout — move or rotate a component, group several components into a tidy column beside an anchor, force a net to render as a label instead of a wire, or re-route a net. Never changes connectivity, only visual placement. Returns the updated layout as JSON, or a structured error if the op references an unknown component/net id. Set persist=true (or pass layout_file_path) to write the effect through to the <design>.schematic.layout.toml sidecar so it survives a recompile and is honoured by rendering and export. This tool edits the schematic sheet (sheet millimetres); PCB footprint placement lives in the separate <design>.placement.layout.toml sidecar.".into(),
             input_schema: serde_json::json!({
                 "type": "object",
                 "properties": {
@@ -190,7 +190,7 @@ pub fn list_tools() -> Vec<McpToolInfo> {
         },
         McpToolInfo {
             name: "synth_export".into(),
-            description: "Export a validated SynthSpec design to KiCad schematic (.kicad_sch), PCB (.kicad_pcb), BOM CSV, or Gerber files. By default this is a release export and rejects incomplete routing or DRC violations. Set allow_incomplete=true only to create explicitly draft artifacts for review/manual routing; draft artifacts are never release-ready.".into(),
+            description: "Export a validated SynthSpec design to KiCad schematic (.kicad_sch), PCB (.kicad_pcb), BOM CSV, or Gerber files. By default this is a release export and rejects incomplete routing or DRC violations. Set allow_incomplete=true only to create explicitly draft artifacts for review/manual routing; draft artifacts are never release-ready. Layout overrides live in two separate sidecars with different coordinate spaces: layout_file_path / <design>.placement.layout.toml is board millimetres (footprints, routing) and schematic_layout_file_path / <design>.schematic.layout.toml is sheet millimetres (component placement on the page). Passing only one of them leaves the other at auto-layout.".into(),
             input_schema: serde_json::json!({
                 "type": "object",
                 "properties": {
@@ -198,7 +198,8 @@ pub fn list_tools() -> Vec<McpToolInfo> {
                     "file_path": { "type": "string", "description": "Path to source file" },
                     "out_dir": { "type": "string", "description": "Output directory path (accepts 'out' or 'out_dir')" },
                     "out": { "type": "string", "description": "Alias for out_dir" },
-                    "layout_file_path": { "type": "string", "description": "Optional agent or human placement sidecar; exact component positions and rotations are applied to routing and export" },
+                    "layout_file_path": { "type": "string", "description": "Optional agent or human PCB placement sidecar (<design>.placement.layout.toml; board millimetres); exact component positions and rotations are applied to placement and routing. Omit for auto-placement." },
+                    "schematic_layout_file_path": { "type": "string", "description": "Optional schematic layout sidecar (<design>.schematic.layout.toml; sheet millimetres); component positions on the exported sheet. Omit for auto-layout. Distinct from layout_file_path: the two files hold the same schema but different coordinate spaces, so passing one where the other is expected silently misplaces parts." },
                     "allow_incomplete": { "type": "boolean", "description": "Export a clearly labelled draft even when routing is incomplete or DRC has violations. Defaults to false; never use this output for fabrication." },
                     "routing_order": { "type": "array", "items": { "type": "string" }, "description": "Optional net order from synth_route routing_feedback; preserves the ordered recovery route during export." },
                     "registry_path": { "type": "string", "description": "Optional custom component registry path" },
@@ -208,7 +209,7 @@ pub fn list_tools() -> Vec<McpToolInfo> {
         },
         McpToolInfo {
             name: "synth_render_schematic".into(),
-            description: "Render the generated schematic to PNG so you can inspect your own output. Compiles the design, applies the layout sidecar, exports the sheet with synth_kicad::export_schematic_only, plots it with `kicad-cli sch export svg`, and rasterizes with the pinned deterministic renderer. Returns per-sheet pixel dimensions and file paths; with inline=true (default) each sheet's PNG is returned as an MCP image content block so the model can actually look at the sheet. Use set_visual_baseline/compare via synth_schematic_baseline to detect drift, and fix what connectivity checks cannot: overlapping labels, confusing wire crossings, components outside their group box, content past the page edge.".into(),
+            description: "Render the generated schematic to PNG so you can inspect your own output. Compiles the design, applies the schematic layout sidecar (<design>.schematic.layout.toml, sheet millimetres), exports the sheet with synth_kicad::export_schematic_only, plots it with `kicad-cli sch export svg`, and rasterizes with the pinned deterministic renderer. Returns per-sheet pixel dimensions and file paths; with inline=true (default) each sheet's PNG is returned as an MCP image content block so the model can actually look at the sheet. Use set_visual_baseline/compare via synth_schematic_baseline to detect drift, and fix what connectivity checks cannot: overlapping labels, confusing wire crossings, components outside their group box, content past the page edge.".into(),
             input_schema: serde_json::json!({
                 "type": "object",
                 "properties": {
@@ -309,7 +310,7 @@ pub fn list_tools() -> Vec<McpToolInfo> {
                 "properties": {
                     "source":           { "type": "string", "description": "SynthSpec source code string" },
                     "file_path":        { "type": "string", "description": "Optional path to .synth source file on disk" },
-                    "layout_file_path": { "type": "string", "description": "Optional path to .layout.toml sidecar overrides file" },
+                    "layout_file_path": { "type": "string", "description": "Optional path to the PCB placement sidecar (<design>.placement.layout.toml; board millimetres). Do not point this at the schematic sidecar — its coordinates are sheet millimetres." },
                     "profile":          { "type": "string", "description": "Optional manufacturer DRC profile ('jlcpcb_standard' or path to toml)" },
                     "board_width_mm":   { "type": "number", "description": "Optional explicit board width in millimetres; must be provided with board_height_mm" },
                     "board_height_mm":  { "type": "number", "description": "Optional explicit board height in millimetres; must be provided with board_width_mm" },
@@ -352,22 +353,22 @@ pub fn list_tools() -> Vec<McpToolInfo> {
         },
         McpToolInfo {
             name: "synth_read_layout_overrides".into(),
-            description: "Read all persisted component placement overrides and forced net labels from sidecar file (<design>.synth.layout.toml). Includes provenance (human_drag vs agent), priority, and timestamp.".into(),
+            description: "Read all persisted component placement overrides and forced net labels from a sidecar file. The two sidecars share a schema but not a coordinate space: <design>.schematic.layout.toml holds sheet millimetres (schematic) and <design>.placement.layout.toml holds board millimetres (PCB). Pass layout_file_path to choose. Includes provenance (human_drag vs agent), priority, and timestamp.".into(),
             input_schema: serde_json::json!({
                 "type": "object",
                 "properties": {
-                    "layout_file_path": { "type": "string", "description": "Path to sidecar TOML file" }
+                    "layout_file_path": { "type": "string", "description": "Path to the sidecar TOML. Use <design>.placement.layout.toml for PCB footprints (board mm) or <design>.schematic.layout.toml for schematic positions (sheet mm)." }
                 },
                 "required": ["layout_file_path"]
             }),
         },
         McpToolInfo {
             name: "synth_write_layout_override".into(),
-            description: "Write or update a component placement override or forced net label in sidecar file (<design>.synth.layout.toml). Preserves existing overrides. Prefer relative_to with dx_mm/dy_mm for agent revisions so the arrangement remains robust when the board is resized; rerun synth_place_with_hints or synth_describe_placement afterward.".into(),
+            description: "Write or update a component placement override or forced net label in a sidecar file. Pass layout_file_path = <design>.placement.layout.toml for PCB footprints (board millimetres, consumed by synth_place_with_hints / synth_route / synth_describe_placement) or <design>.schematic.layout.toml for schematic sheet positions (sheet millimetres, consumed by synth_render_schematic / synth_export). The two share a schema but not a coordinate space, so the wrong file misplaces parts silently. Preserves existing overrides. Prefer relative_to with dx_mm/dy_mm for agent revisions so the arrangement remains robust when the board is resized.".into(),
             input_schema: serde_json::json!({
                 "type": "object",
                 "properties": {
-                    "layout_file_path": { "type": "string", "description": "Path to sidecar TOML file" },
+                    "layout_file_path": { "type": "string", "description": "Path to the sidecar TOML. Use <design>.placement.layout.toml for PCB footprints (board mm) or <design>.schematic.layout.toml for schematic positions (sheet mm)." },
                     "refdes":           { "type": "string", "description": "Component refdes e.g. 'U1'" },
                     "x_mm":             { "type": "number", "description": "Absolute X position in mm; omit when using relative_to" },
                     "y_mm":             { "type": "number", "description": "Absolute Y position in mm; omit when using relative_to" },
@@ -390,7 +391,7 @@ pub fn list_tools() -> Vec<McpToolInfo> {
                 "properties": {
                     "source":           { "type": "string", "description": "SynthSpec source code string" },
                     "file_path":        { "type": "string", "description": "Optional path to .synth source file on disk" },
-                    "layout_file_path": { "type": "string", "description": "Optional path to .layout.toml sidecar overrides file" },
+                    "layout_file_path": { "type": "string", "description": "Optional path to the PCB placement sidecar (<design>.placement.layout.toml; board millimetres). Do not point this at the schematic sidecar — its coordinates are sheet millimetres." },
                     "allow_placement_warnings": { "type": "boolean", "description": "Allow routing despite visual-review findings; use only for deliberate manual/debug routing (default false)" },
                     "profile":          { "type": "string", "description": "Optional manufacturer DRC profile ('jlcpcb_standard' or path to toml)" },
                     "routing_order":    { "type": "array", "items": { "type": "string" }, "description": "Optional net order from routing feedback; preserved with the requested width/clearance profile." },
@@ -1131,14 +1132,7 @@ fn execute_drc_report(args: &Value, default_registry: Option<&Path>) -> Result<V
     }
     let board = lowered.board.ok_or("Lowering failed")?;
 
-    let sidecar_opt: Option<PathBuf> = args
-        .get("layout_file_path")
-        .and_then(|v| v.as_str())
-        .map(PathBuf::from)
-        .or_else(|| {
-            let candidate = PathBuf::from(format!("{file_name}.layout.toml"));
-            candidate.exists().then_some(candidate)
-        });
+    let sidecar_opt = resolve_placement_sidecar(args, file_name);
     let placement = synth_place::place_with_sidecar(&board, sidecar_opt.as_deref())
         .map_err(|e| format!("Placement failed: {e:?}"))?;
 
@@ -1193,14 +1187,7 @@ fn execute_route(args: &Value, default_registry: Option<&Path>) -> Result<Value,
     let lowered = synth_ir::lower(&resolved.program, &registry, file_name);
     let board = lowered.board.ok_or("Lowering failed")?;
 
-    let sidecar_opt: Option<PathBuf> = args
-        .get("layout_file_path")
-        .and_then(|v| v.as_str())
-        .map(PathBuf::from)
-        .or_else(|| {
-            let candidate = PathBuf::from(format!("{file_name}.layout.toml"));
-            candidate.exists().then_some(candidate)
-        });
+    let sidecar_opt = resolve_placement_sidecar(args, file_name);
     let placement = synth_place::place_with_sidecar(&board, sidecar_opt.as_deref())
         .map_err(|e| format!("Placement failed: {e:?}"))?;
 
@@ -1499,7 +1486,7 @@ fn execute_preview_schematic(
                 // and export about both dragged positions and `fit_sheet`.
                 let layout = synth_layout::layout_with_sidecar(
                     board,
-                    resolve_sidecar(args, file_name).as_deref(),
+                    resolve_schematic_sidecar(args, file_name).as_deref(),
                 );
                 return serde_json::to_value(&layout).map_err(|e| e.to_string());
             }
@@ -1516,7 +1503,7 @@ fn execute_preview_schematic(
 /// `crates/synth-layout/tests/ops.rs` for the exact wire shape.
 ///
 /// With `persist=true` (or an explicit `layout_file_path`) the op's effect
-/// is written through to the `<design>.synth.layout.toml` sidecar so it
+/// is written through to the `<design>.schematic.layout.toml` sidecar so it
 /// survives a recompile and is honoured by rendering and export.
 /// Fold the tool-level convenience args (`ids`, `y_mm`, `x_mm`, `scale`)
 /// into the `op` object, so a caller can write either
@@ -1565,7 +1552,7 @@ fn execute_mutate_layout(args: &Value, default_registry: Option<&Path>) -> Resul
     // persisted below are in the same page space as the render. Starting
     // from the bare auto-layout made the op's result disagree with the very
     // next reload by the page-fit delta.
-    let sidecar_path = resolve_sidecar(args, file_name);
+    let sidecar_path = resolve_schematic_sidecar(args, file_name);
     let mut layout = synth_layout::layout_with_sidecar(&board, sidecar_path.as_deref());
     let before = layout.clone();
     synth_layout::ops::apply_op(&mut layout, &board, op.clone())
@@ -1617,8 +1604,15 @@ fn persist_layout_op(
         return Ok(None);
     }
 
+    // Layout ops are schematic-sheet edits, so they persist to the
+    // schematic sidecar. Writing them anywhere else either loses them or
+    // reinterprets sheet millimetres as board millimetres.
     let path = explicit.map_or_else(
-        || PathBuf::from(format!("{file_name}.layout.toml")),
+        || {
+            synth_layout::sidecar::SidecarKind::Schematic
+                .canonical_path_str(file_name)
+                .unwrap_or_else(|| PathBuf::from(format!("{file_name}.schematic.layout.toml")))
+        },
         PathBuf::from,
     );
     let mut sidecar = if path.exists() {
@@ -1762,14 +1756,62 @@ fn compile_design(args: &Value, default_registry: Option<&Path>) -> Result<Compi
     })
 }
 
-/// Resolve the layout sidecar from an explicit path or the
-/// `<file_name>.layout.toml` convention.
-fn resolve_sidecar(args: &Value, file_name: &str) -> Option<PathBuf> {
+/// Resolve the schematic-side sidecar from an explicit path or the
+/// `<file_name>.schematic.layout.toml` convention.
+///
+/// `explicit_key` is the argument name holding an explicit path. For most
+/// tools that is `layout_file_path`; `synth_export` checks
+/// `schematic_layout_file_path` first because it has one parameter per
+/// coordinate space.
+///
+/// Sheet-local millimetres, applied by `layout_with_sidecar`. An explicit
+/// path is always honoured — the caller knows what it holds. Implicit
+/// discovery never falls back to the deprecated shared
+/// `<file_name>.layout.toml`: those are board millimetres, and applying them
+/// to the sheet silently wrecks the layout (see [`synth_layout::SidecarKind`]).
+fn resolve_schematic_sidecar(args: &Value, file_name: &str) -> Option<PathBuf> {
+    resolve_schematic_sidecar_with(args, file_name, "layout_file_path")
+}
+
+/// [`resolve_schematic_sidecar`] with the explicit-path argument named by the
+/// caller.
+fn resolve_schematic_sidecar_with(
+    args: &Value,
+    file_name: &str,
+    explicit_key: &str,
+) -> Option<PathBuf> {
+    if let Some(p) = args.get(explicit_key).and_then(Value::as_str) {
+        return Some(PathBuf::from(p));
+    }
+    // `synth_export` also accepts a single `layout_file_path` for both
+    // spaces. Honour it when `schematic_layout_file_path` is absent: an
+    // explicit path is a deliberate choice, whereas implicit discovery is
+    // where the coordinate-space bug lived.
+    if explicit_key != "layout_file_path" {
+        if let Some(p) = args.get("layout_file_path").and_then(Value::as_str) {
+            return Some(PathBuf::from(p));
+        }
+    }
+    synth_layout::sidecar::SidecarKind::Schematic.resolve_str(file_name)
+}
+
+/// Resolve the PCB-placement sidecar from an explicit path or the
+/// `<file_name>.placement.layout.toml` convention (with the deprecated
+/// shared file as fallback).
+///
+/// Board millimetres, applied by `synth_place::place_with_sidecar`.
+fn resolve_placement_sidecar(args: &Value, file_name: &str) -> Option<PathBuf> {
     if let Some(p) = args.get("layout_file_path").and_then(Value::as_str) {
         return Some(PathBuf::from(p));
     }
-    let candidate = PathBuf::from(format!("{file_name}.layout.toml"));
-    candidate.exists().then_some(candidate)
+    synth_layout::sidecar::SidecarKind::Placement.resolve_str(file_name)
+}
+
+/// Migration notice for a design still carrying a deprecated shared
+/// sidecar, if any. Returned to the agent so a schematic sidecar that is
+/// being ignored is reported rather than silently dropped.
+fn sidecar_migration_notice(file_name: &str) -> Option<String> {
+    synth_layout::sidecar::SidecarKind::Schematic.migration_notice(Path::new(file_name))
 }
 
 /// Validate the render width, defaulting to 1600 px.
@@ -1905,7 +1947,7 @@ fn execute_render_schematic(
     }
 
     let width_px = parse_width_px(args)?;
-    let sidecar = resolve_sidecar(args, &compiled.file_name);
+    let sidecar = resolve_schematic_sidecar(args, &compiled.file_name);
     let out_dir = render_out_dir(args, &compiled.file_name);
     let sheets = render_schematic(
         &compiled.board,
@@ -2042,7 +2084,7 @@ fn execute_schematic_baseline(
     }
 
     let width_px = parse_width_px(args)?;
-    let sidecar = resolve_sidecar(args, &compiled.file_name);
+    let sidecar = resolve_schematic_sidecar(args, &compiled.file_name);
     let sheets = render_schematic(&compiled.board, sidecar.as_deref(), width_px, None)?;
     let source = get_source_from_args(args)?;
 
@@ -2258,7 +2300,7 @@ fn execute_review_schematic(
 
     let layout = synth_layout::layout_with_sidecar(
         &compiled.board,
-        resolve_sidecar(args, &file_name).as_deref(),
+        resolve_schematic_sidecar(args, &file_name).as_deref(),
     );
     let sheets_layout = synth_layout::sheets::layout_sheets(&compiled.board, layout.clone());
     let mut schem = synth_kicad::check_schem_erc_sheets(&compiled.board, &sheets_layout);
@@ -2276,7 +2318,7 @@ fn execute_review_schematic(
         .collect();
 
     let width_px = parse_width_px(args)?;
-    let sidecar = resolve_sidecar(args, &file_name);
+    let sidecar = resolve_schematic_sidecar(args, &file_name);
     let out_dir = render_out_dir(args, &file_name);
     let inline = args.get("inline").and_then(Value::as_bool).unwrap_or(true);
     let sheets = render_schematic(
@@ -2374,15 +2416,14 @@ fn execute_export(args: &Value, default_registry: Option<&Path>) -> Result<Value
                 .collect()
         })
         .unwrap_or_default();
-    let sidecar_opt: Option<PathBuf> = args
-        .get("layout_file_path")
-        .and_then(|v| v.as_str())
-        .map(PathBuf::from)
-        .or_else(|| {
-            let candidate = PathBuf::from(format!("{file_name}.layout.toml"));
-            candidate.exists().then_some(candidate)
-        });
-    let placement = synth_place::place_with_sidecar(&board, sidecar_opt.as_deref())
+    // Two sidecars, two coordinate spaces: board millimetres drive the PCB
+    // placer/router, sheet millimetres drive the schematic. Resolving one
+    // file for both is what made an exported PDF disagree with the rendered
+    // preview, so they are resolved independently here.
+    let placement_sidecar = resolve_placement_sidecar(args, file_name);
+    let schematic_sidecar =
+        resolve_schematic_sidecar_with(args, file_name, "schematic_layout_file_path");
+    let placement = synth_place::place_with_sidecar(&board, placement_sidecar.as_deref())
         .map_err(|e| format!("Placement failed: {e}"))?;
     let routing = if routing_order.is_empty() {
         synth_route::route(&board, &placement)
@@ -2410,10 +2451,13 @@ fn execute_export(args: &Value, default_registry: Option<&Path>) -> Result<Value
         ));
     }
 
-    let res = synth_kicad::export_with_sidecar_and_routing_order(
+    let res = synth_kicad::export_with_sidecars_and_routing_order(
         &board,
         &out_dir,
-        sidecar_opt.as_deref(),
+        &synth_kicad::Sidecars {
+            schematic: schematic_sidecar.clone(),
+            placement: placement_sidecar.clone(),
+        },
         (!routing_order.is_empty()).then_some(routing_order.as_slice()),
     )
     .map_err(|e| format!("Export failed: {e}"))?;
@@ -2422,8 +2466,13 @@ fn execute_export(args: &Value, default_registry: Option<&Path>) -> Result<Value
     // surfaced to the agent so it can repair readability regressions
     // in the same closed loop as electrical ERC findings. Per-sheet
     // on §P26 split boards.
+    //
+    // Built from the *schematic* sidecar, not the bare auto-layout: the
+    // findings must describe the sheet that is actually written, or an
+    // agent chases warnings that name sheets and components the exported
+    // file does not contain.
     let aesthetic = {
-        let global = synth_layout::layout(&board);
+        let global = synth_layout::layout_with_sidecar(&board, schematic_sidecar.as_deref());
         let sheets = synth_layout::sheets::layout_sheets(&board, global);
         let mut found = synth_kicad::check_schem_erc_sheets(&board, &sheets);
         // Whole diagnostics, not just `{code, title}`: a title alone
@@ -2434,7 +2483,7 @@ fn execute_export(args: &Value, default_registry: Option<&Path>) -> Result<Value
         found
     };
 
-    Ok(serde_json::json!({
+    let mut result = serde_json::json!({
         "status": if drc_clean { "success" } else { "draft_incomplete" },
         "release_ready": drc_clean,
         "route_complete": route_complete,
@@ -2449,8 +2498,14 @@ fn execute_export(args: &Value, default_registry: Option<&Path>) -> Result<Value
         "schematic_path": res.schematic_path,
         "pcb_path": res.pcb_path,
         "bom_path": res.bom_path,
+        "schematic_sidecar": schematic_sidecar,
+        "placement_sidecar": placement_sidecar,
         "aesthetic_violations": aesthetic
-    }))
+    });
+    if let Some(notice) = sidecar_migration_notice(file_name) {
+        result["sidecar_migration"] = serde_json::json!(notice);
+    }
+    Ok(result)
 }
 
 fn execute_live_supply_chain(
@@ -2679,18 +2734,7 @@ fn execute_place_with_hints(
 
     match placement_result {
         Ok((mut placement, report)) => {
-            let sidecar_opt: Option<PathBuf> = args
-                .get("layout_file_path")
-                .and_then(|v| v.as_str())
-                .map(PathBuf::from)
-                .or_else(|| {
-                    let sidecar_candidate = PathBuf::from(format!("{file_name}.layout.toml"));
-                    if sidecar_candidate.exists() {
-                        Some(sidecar_candidate)
-                    } else {
-                        None
-                    }
-                });
+            let sidecar_opt = resolve_placement_sidecar(args, file_name);
             if let Some(sc_path) = sidecar_opt.as_deref() {
                 if let Some(sidecar) = synth_layout::sidecar::SidecarLayout::load_from_file(sc_path)
                 {
@@ -2986,18 +3030,7 @@ fn execute_route_with_constraints(
 
     let (min_width_nm, min_clearance_nm, diagnostics) = collect_route_constraints(args, &board);
 
-    let sidecar_opt: Option<PathBuf> = args
-        .get("layout_file_path")
-        .and_then(|v| v.as_str())
-        .map(PathBuf::from)
-        .or_else(|| {
-            let sidecar_candidate = PathBuf::from(format!("{file_name}.layout.toml"));
-            if sidecar_candidate.exists() {
-                Some(sidecar_candidate)
-            } else {
-                None
-            }
-        });
+    let sidecar_opt = resolve_placement_sidecar(args, file_name);
 
     let mut placement = synth_place::place(&board).map_err(|e| format!("Placement failed: {e}"))?;
     if let Some(sc_path) = sidecar_opt.as_deref() {

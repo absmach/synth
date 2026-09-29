@@ -125,7 +125,7 @@ type BasePositions = Vec<(u32, String, (f64, f64), Rotation)>;
 
 /// Build the refdes-keyed sidecar payload from the base positions plus
 /// the live drag offsets: `{ "components": { <refdes>: { x, y, rotation
-/// } } }`, matching `<design>.synth.layout.toml` (§7.7.6). Positions
+/// } } }`, matching `<design>.schematic.layout.toml` (§7.7.6). Positions
 /// are *absolute* (base centre + drag delta), so the server can write
 /// them straight into the sidecar and a reload reproduces the same
 /// on-screen placement.
@@ -147,7 +147,7 @@ fn sidecar_save_payload(base: &BasePositions, offsets: &Offsets) -> serde_json::
 
 /// POST the current drag offsets to the preview server's
 /// `POST /api/v1/layout/save` endpoint, which writes them to
-/// `<design>.synth.layout.toml` on disk (§7.7.6). Fire-and-forget: a
+/// `<design>.schematic.layout.toml` on disk (§7.7.6). Fire-and-forget: a
 /// failure only logs to the console and never breaks the live view.
 /// The browser remains read-only with respect to the `.synth` source.
 fn save_layout_to_sidecar(base: &BasePositions, offsets: &Offsets) {

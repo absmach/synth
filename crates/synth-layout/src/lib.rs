@@ -30,7 +30,8 @@
 //!   barycenter-ordered columns/clusters with straight vertical
 //!   alignment of aligned nodes, then snaps to the 2.54 mm grid.
 //! - **Slice 5 — sidecar drag offsets.** Per-component overrides
-//!   from `<source>.synth.layout.toml`.
+//!   from the schematic sidecar (`<source>.schematic.layout.toml`) or
+//!   the PCB placement sidecar (`<source>.placement.layout.toml`).
 
 #![forbid(unsafe_code)]
 #![allow(
@@ -573,6 +574,27 @@ pub(crate) fn text_inclusive_half_width(
 }
 
 pub mod sidecar;
+
+pub use sidecar::SidecarKind;
+
+/// The schematic-side sidecar for `design`, if it has one: sheet-local
+/// millimetres, applied by [`layout_with_sidecar`].
+///
+/// Prefer this over hand-building the filename — it is the only place the
+/// convention lives.
+pub fn schematic_sidecar_path(design: &std::path::Path) -> Option<std::path::PathBuf> {
+    SidecarKind::Schematic.resolve(design)
+}
+
+/// The PCB-placement sidecar for `design`, if it has one: board millimetres,
+/// applied by `synth_place::place_with_sidecar`.
+///
+/// Falls back to the deprecated shared `<design>.layout.toml`, which is why
+/// this and [`schematic_sidecar_path`] can return *different* files for the
+/// same design.
+pub fn placement_sidecar_path(design: &std::path::Path) -> Option<std::path::PathBuf> {
+    SidecarKind::Placement.resolve(design)
+}
 
 /// After grid-snapping component centres, some stock KiCad symbols
 /// (e.g. `Device:R`, `Device:C`) have pin origins that are half a
@@ -1554,12 +1576,20 @@ fn lock_connector_rotations(board: &Board, layout: &mut Layout) {
     }
 }
 
-/// Compute layout and overlay overrides from `<design>.synth.layout.toml` if present.
+/// Compute layout and overlay overrides from `<design>.schematic.layout.toml` if present.
 ///
 /// This is the canonical entry point for every consumer that must
 /// honour manual tuning — preview reload AND KiCad export alike.
 /// Overrides move components between placement and routing, so the
 /// returned layout is fully re-routed against the dragged positions.
+/// Lay out the schematic sheet, applying the schematic-side sidecar.
+///
+/// `sidecar_path` holds **sheet-local millimetres** and must come from
+/// [`schematic_sidecar_path`] (or an explicit `layout_file_path`). Passing a
+/// placement sidecar here applies board-millimetre positions to the sheet,
+/// which drags parts out of their groups and can overflow the page into a
+/// spurious multi-sheet split — so the two namespaces are never
+/// interchangeable, only the file format is.
 pub fn layout_with_sidecar(board: &Board, sidecar_path: Option<&std::path::Path>) -> Layout {
     let Some(path) = sidecar_path else {
         return layout(board);

@@ -1,13 +1,34 @@
 // SPDX-License-Identifier: Apache-2.0
 
-//! Sidecar layout persistence (`<design>.synth.layout.toml`).
+//! Sidecar layout persistence.
 //!
 //! Allows manual component drag-and-drop overrides from `synth preview`
 //! or human design tuning to persist to disk adjacent to `.synth` source files.
 //! Version 2 supports provenance (`source: "human_drag" | "agent"`) and priority.
+//!
+//! # Two namespaces, one schema
+//!
+//! A component's position is a *different number* depending on what it is
+//! a position on, so the overrides cannot be shared between the two
+//! consumers:
+//!
+//! | | coordinates | consumer | canonical file |
+//! |---|---|---|---|
+//! | [`SidecarKind::Schematic`] | sheet mm, page-local | [`crate::layout_with_sidecar`] | `<design>.schematic.layout.toml` |
+//! | [`SidecarKind::Placement`] | board mm | `synth_place::place_with_sidecar` | `<design>.placement.layout.toml` |
+//!
+//! Both files use the same [`SidecarLayout`] schema — that is the point of
+//! the split being by *file*, not by format.
+//!
+//! Feeding one file to both consumers was a live bug: the placement sidecar
+//! was auto-discovered for the schematic too, so board-millimetre overrides
+//! were applied to the sheet. A part at board `x = 63.5 mm` landed hundreds
+//! of millimetres off its schematic group, which overflowed the page and
+//! split the sheet into one near-empty page per group — the exported PDF no
+//! longer matched the rendered preview. See [`SidecarKind::resolve`].
 
 use std::collections::HashMap;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use serde::{Deserialize, Serialize};
 use synth_ir::ComponentId;
@@ -15,6 +36,153 @@ use synth_ir::ComponentId;
 use crate::{Layout, Rotation};
 
 pub const SIDECAR_SCHEMA_VERSION: u32 = 2;
+
+/// Which coordinate space a sidecar's overrides are expressed in.
+///
+/// Both variants parse the same [`SidecarLayout`] file format; they differ
+/// only in which file they look for and which consumer applies it, which is
+/// what keeps the two sets of numbers apart.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SidecarKind {
+    /// Sheet-local millimetres on the schematic sheet. Carries
+    /// `fit_sheet` and `forced_net_labels`, both schematic-only concepts.
+    Schematic,
+    /// Board millimetres on the PCB, from `synth_place`.
+    Placement,
+}
+
+impl SidecarKind {
+    /// The canonical filename suffix appended to a `.synth` design's own
+    /// filename, e.g. `board.synth` → `board.schematic.layout.toml`.
+    pub const fn suffix(self) -> &'static str {
+        match self {
+            Self::Schematic => ".schematic.layout.toml",
+            Self::Placement => ".placement.layout.toml",
+        }
+    }
+
+    /// The deprecated pre-split filename. One file served both consumers,
+    /// which is the bug this module documents.
+    const LEGACY_SUFFIX: &'static str = ".layout.toml";
+
+    /// The canonical path for this kind, replacing the design's extension
+    /// rather than appending to it.
+    ///
+    /// `board.synth` → `board.schematic.layout.toml`, not
+    /// `board.synth.schematic.layout.toml`: `.synth` is the source's
+    /// extension, and repeating it reads like a typo. This is also the path
+    /// new overrides are *written* to — writers must never target
+    /// [`Self::legacy_path`], or the entries would be re-interpreted in the
+    /// other coordinate space.
+    pub fn canonical_path(self, design: &Path) -> Option<PathBuf> {
+        let stem = design.file_stem()?.to_string_lossy();
+        let stem = if stem.is_empty() {
+            design.file_name()?.to_string_lossy()
+        } else {
+            stem
+        };
+        Some(design.with_file_name(format!("{stem}{}", self.suffix())))
+    }
+
+    /// The deprecated shared path, whether or not it exists.
+    ///
+    /// Keeps its historical form — appended to the *full* filename, so
+    /// `board.synth` → `board.synth.layout.toml`. Renaming it would strand
+    /// every pre-split sidecar where it is, silently dropping overrides.
+    pub fn legacy_path(design: &Path) -> Option<PathBuf> {
+        let name = design.file_name()?.to_string_lossy();
+        Some(design.with_file_name(format!("{name}{}", Self::LEGACY_SUFFIX)))
+    }
+
+    /// Resolve the sidecar to read for this kind, or `None` when the design
+    /// has no persisted overrides.
+    ///
+    /// [`Self::Placement`] still falls back to the deprecated shared file, so
+    /// a board whose footprints were dragged before the split keeps its
+    /// positions. Placement is the fallback's correct home: the placement
+    /// sidecar is what `synth_place_with_hints`, `synth_route`, and
+    /// `synth_drc_report` always documented.
+    ///
+    /// [`Self::Schematic`] deliberately does **not** fall back. Reading the
+    /// legacy file here is precisely the coordinate-space bug, and it fails
+    /// silently and badly (board millimetres on the sheet, page overflow,
+    /// spurious multi-sheet split), so a legacy file is reported instead —
+    /// see [`Self::legacy_needs_migration`].
+    pub fn resolve(self, design: &Path) -> Option<PathBuf> {
+        let canonical = self.canonical_path(design).filter(|p| p.exists());
+        match self {
+            Self::Schematic => canonical,
+            Self::Placement => {
+                canonical.or_else(|| Self::legacy_path(design).filter(|p| p.exists()))
+            }
+        }
+    }
+
+    /// Whether a deprecated shared sidecar exists that the schematic will
+    /// not read on its own.
+    ///
+    /// [`Self::Schematic`] returns `true` whenever one exists *and carries
+    /// component overrides*, because that is exactly when schematic positions
+    /// may be sitting in a file the schematic will never load. Nothing in the
+    /// file records which coordinate space its numbers are in — that
+    /// ambiguity is the whole reason for the split — so the only safe action
+    /// is to ask the user to split the file. An empty legacy file (a
+    /// placeholder that was never written) is not worth reporting.
+    pub fn legacy_needs_migration(self, design: &Path) -> bool {
+        self == Self::Schematic
+            && Self::legacy_path(design).is_some_and(|p| {
+                SidecarLayout::load_from_file(&p).is_some_and(|s| !s.components.is_empty())
+            })
+    }
+
+    /// Resolve from a design path held as a string, which is how the MCP
+    /// layer carries `file_path`.
+    pub fn resolve_str(self, design: &str) -> Option<PathBuf> {
+        self.resolve(Path::new(design))
+    }
+
+    /// Canonical path from a design path held as a string.
+    pub fn canonical_path_str(self, design: &str) -> Option<PathBuf> {
+        self.canonical_path(Path::new(design))
+    }
+
+    /// Deprecated shared path from a design path held as a string.
+    pub fn legacy_path_str(self, design: &str) -> Option<PathBuf> {
+        Self::legacy_path(Path::new(design))
+    }
+
+    /// A user-facing migration hint for [`Self::legacy_needs_migration`].
+    ///
+    /// Advisory, not an error: the legacy file keeps working for placement,
+    /// which is what most designs used it for. It is reported because any
+    /// schematic positions in it are being dropped, and the file cannot be
+    /// read as a schematic sidecar without guessing.
+    ///
+    /// # Panics
+    ///
+    /// Never: every `expect` is guarded by [`Self::legacy_needs_migration`],
+    /// which itself returns `false` for a design with no file name.
+    pub fn migration_notice(self, design: &Path) -> Option<String> {
+        if !self.legacy_needs_migration(design) {
+            return None;
+        }
+        let legacy = Self::legacy_path(design).expect("checked by legacy_needs_migration");
+        let schematic = self.canonical_path(design).expect("design has a file name");
+        let placement = SidecarKind::Placement
+            .canonical_path(design)
+            .expect("design has a file name");
+        Some(format!(
+            "{} is a pre-split sidecar. It is still read for PCB placement, but the \
+             schematic ignores it: nothing in the file says whether its coordinates are \
+             board mm or sheet mm, so applying them to the sheet is not safe. Rename it \
+             to {}, or split its entries between {} (sheet mm) and {} (board mm).",
+            legacy.display(),
+            placement.display(),
+            schematic.display(),
+            placement.display(),
+        ))
+    }
+}
 
 fn default_schema_version() -> u32 {
     SIDECAR_SCHEMA_VERSION
@@ -580,6 +748,153 @@ mod forced_label_tests {
         assert_eq!(reloaded.forced_net_labels.len(), 1);
         assert_eq!(reloaded.forced_net_labels[0].net, "SIG");
         let _ = std::fs::remove_file(&path);
+    }
+
+    // ----- Two namespaces: the coordinate-space regression -------------------
+    //
+    // Before the split one `<design>.layout.toml` fed both the sheet layout
+    // and the PCB placer. A footprint dragged to board (63.5, 12) was then
+    // read as sheet position 63.5 mm, which threw the part out of its group,
+    // overflowed A2, and split the export into one near-empty sheet per
+    // group. These tests pin both halves of the fix.
+
+    #[test]
+    fn canonical_names_replace_the_extension_and_differ_per_kind() {
+        let design = Path::new("/p/board.synth");
+        assert_eq!(
+            SidecarKind::Schematic.canonical_path(design).unwrap(),
+            PathBuf::from("/p/board.schematic.layout.toml"),
+        );
+        assert_eq!(
+            SidecarKind::Placement.canonical_path(design).unwrap(),
+            PathBuf::from("/p/board.placement.layout.toml"),
+        );
+        // The legacy name appends to the full filename and must not move,
+        // or every pre-split sidecar is stranded in place.
+        assert_eq!(
+            SidecarKind::legacy_path(design).unwrap(),
+            PathBuf::from("/p/board.synth.layout.toml"),
+        );
+    }
+
+    #[test]
+    fn schematic_resolution_refuses_the_deprecated_shared_file() {
+        let dir = std::env::temp_dir().join(format!("synth_ns_{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let design = dir.join("board.synth");
+
+        // A pre-split sidecar, board millimetres, alone on disk.
+        let mut legacy = SidecarLayout {
+            schema_version: SIDECAR_SCHEMA_VERSION,
+            ..Default::default()
+        };
+        legacy.merge_override(
+            "L1".into(),
+            SidecarPlacement {
+                x: 63.5,
+                y: 12.0,
+                rotation: 0,
+                source: OverrideSource::Agent,
+                priority: OverridePriority::Hard,
+                sheet: None,
+                timestamp: None,
+                relative_to: None,
+                dx: 0.0,
+                dy: 0.0,
+            },
+        );
+        legacy
+            .save_to_file(&SidecarKind::legacy_path(&design).unwrap())
+            .unwrap();
+
+        // Placement keeps reading it, so existing board drags survive.
+        assert_eq!(
+            SidecarKind::Placement.resolve(&design),
+            SidecarKind::legacy_path(&design),
+            "placement must fall back to the deprecated file"
+        );
+        // The schematic must not: applying board millimetres to the sheet is
+        // the bug, and it fails silently.
+        assert_eq!(
+            SidecarKind::Schematic.resolve(&design),
+            None,
+            "schematic must never read the deprecated shared file"
+        );
+        assert!(SidecarKind::Schematic.legacy_needs_migration(&design));
+        let notice = SidecarKind::Schematic
+            .migration_notice(&design)
+            .expect("a notice when one is needed");
+        assert!(notice.contains("board.schematic.layout.toml"), "{notice}");
+        assert!(notice.contains("board.placement.layout.toml"), "{notice}");
+
+        // Once the canonical schematic file exists it wins, and the notice
+        // stops firing even though the legacy file is still there.
+        SidecarLayout::default()
+            .save_to_file(&SidecarKind::Schematic.canonical_path(&design).unwrap())
+            .unwrap();
+        assert_eq!(
+            SidecarKind::Schematic.resolve(&design),
+            SidecarKind::Schematic.canonical_path(&design),
+            "canonical schematic file must take precedence"
+        );
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn each_kind_reads_only_its_own_canonical_file() {
+        let dir = std::env::temp_dir().join(format!("synth_ns2_{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let design = dir.join("board.synth");
+
+        // Both files exist, each with a single component in its own space.
+        for (kind, refdes, x) in [
+            (SidecarKind::Schematic, "R1", 210.82_f64),
+            (SidecarKind::Placement, "L1", 63.5_f64),
+        ] {
+            let mut s = SidecarLayout {
+                schema_version: SIDECAR_SCHEMA_VERSION,
+                ..Default::default()
+            };
+            s.merge_override(
+                refdes.into(),
+                SidecarPlacement {
+                    x,
+                    y: 12.0,
+                    rotation: 0,
+                    source: OverrideSource::Agent,
+                    priority: OverridePriority::Hard,
+                    sheet: None,
+                    timestamp: None,
+                    relative_to: None,
+                    dx: 0.0,
+                    dy: 0.0,
+                },
+            );
+            s.save_to_file(&kind.canonical_path(&design).unwrap())
+                .unwrap();
+        }
+
+        // Resolution never crosses over, so neither consumer can see the
+        // other's coordinates.
+        assert_eq!(
+            SidecarKind::Schematic
+                .resolve(&design)
+                .unwrap()
+                .file_name()
+                .unwrap(),
+            "board.schematic.layout.toml"
+        );
+        assert_eq!(
+            SidecarKind::Placement
+                .resolve(&design)
+                .unwrap()
+                .file_name()
+                .unwrap(),
+            "board.placement.layout.toml"
+        );
+        let _ = std::fs::remove_dir_all(&dir);
     }
 
     #[test]

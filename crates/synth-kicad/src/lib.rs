@@ -63,8 +63,10 @@ pub mod uuid_v5;
 
 pub use erc_validate::{run_kicad_erc, ErcRunError, KicadErcItem, KicadErcViolation};
 pub use export::{
-    export, export_schematic_only, export_with_sidecar, export_with_sidecar_and_routing_order,
-    ExportError, ExportResult, SchematicExportResult,
+    export, export_for_design, export_schematic_only, export_with_sidecar,
+    export_with_sidecar_and_routing_order, export_with_sidecars,
+    export_with_sidecars_and_routing_order, ExportError, ExportResult, SchematicExportResult,
+    Sidecars,
 };
 pub use sch_svg::{run_kicad_svg_export, SvgExportError};
 
@@ -80,7 +82,8 @@ pub use pin_reconcile::physical_terminal;
 pub use pnp::build_pnp_csv;
 pub use schem_erc::{
     attach_locations as attach_schem_erc_locations, check as check_schem_erc,
-    check_sheets as check_schem_erc_sheets, check_with_config as check_schem_erc_with_config,
-    SchemErcConfig,
+    check_sheets as check_schem_erc_sheets,
+    check_sheets_with_config as check_schem_erc_sheets_with_config,
+    check_with_config as check_schem_erc_with_config, SchemErcConfig,
 };
 pub use symbol_lib::build_pwr_flag_fallback;

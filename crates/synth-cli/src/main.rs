@@ -1833,12 +1833,14 @@ fn read_source(input: &PathBuf) -> anyhow::Result<(String, String)> {
 /// `[schematic]` section of `<design>.synth.erc.toml` when it exists
 /// and parses, else the built-in defaults. A malformed sidecar is
 /// reported but never blocks — the defaults are always safe.
-/// The `<design>.synth.layout.toml` sidecar convention, as every other
-/// consumer resolves it (`synth-web`, `synth-kicad::export`).
+///
+/// The schematic layout sidecar for `design`.
+///
+/// `synth layout` reports the *sheet*, so this is the schematic sidecar
+/// (sheet millimetres). The PCB placement sidecar is a different file and is
+/// not consulted here.
 fn sidecar_path_for(design: &Path) -> Option<PathBuf> {
-    let name = design.file_name()?.to_string_lossy();
-    let candidate = design.with_file_name(format!("{name}.layout.toml"));
-    candidate.exists().then_some(candidate)
+    synth_layout::schematic_sidecar_path(design)
 }
 
 fn schem_erc_config_for(design: &Path) -> synth_kicad::SchemErcConfig {
@@ -2071,6 +2073,7 @@ fn validate(
     let parse = synth_parser::parse(&source, file.clone());
 
     let mut diagnostics = parse.diagnostics;
+    let schematic_sidecar = sidecar_path_for(input);
 
     if !parse_only {
         if let Some(ast) = parse.ast.as_ref() {
@@ -2101,11 +2104,17 @@ fn validate(
                         &erc_config,
                     ));
                     // Aesthetic schematic ERC (E-SYNTH-SCHEM-*): advisory
-                    // warnings over the auto-layout; never blocking.
-                    // Per-sheet on §P26 split boards so findings
-                    // attribute to their page (and the split itself
-                    // clears the single-sheet overflow).
-                    let global = synth_layout::layout(board);
+                    // warnings; never blocking. Per-sheet on §P26 split
+                    // boards so findings attribute to their page (and the
+                    // split itself clears the single-sheet overflow).
+                    //
+                    // Over the *schematic sidecar* layout, not the bare
+                    // auto-layout: the sheet these rules judge is the one
+                    // `synth render` and `synth_export` produce, and on the
+                    // auto-layout a tuned design reports sheet overflow and
+                    // low fill for a drawing that is fine.
+                    let global =
+                        synth_layout::layout_with_sidecar(board, schematic_sidecar.as_deref());
                     let sheets = synth_layout::sheets::layout_sheets(board, global);
                     let mut schem = synth_kicad::check_schem_erc_sheets(board, &sheets);
                     synth_kicad::attach_schem_erc_locations(&mut schem, board, &file);
@@ -2261,7 +2270,7 @@ fn dump_layout(
                 has_errors = true;
             }
             lowered.board.as_ref().map(|board| {
-                // Honour `<design>.synth.layout.toml` like every other
+                // Honour `<design>.schematic.layout.toml` like every other
                 // consumer (preview, export) — `synth layout` is what an
                 // agent inspects, so it must reflect persisted refinements.
                 let layout =
@@ -2693,28 +2702,32 @@ fn export_kicad(
         }
     }
 
+    // Honour manual tuning: the schematic sidecar beside the source
+    // (`<design>.schematic.layout.toml`, sheet millimetres) drives the
+    // exported sheet. Resolved before the aesthetic ERC below so both
+    // describe the same drawing.
+    let sidecars = synth_kicad::Sidecars::resolve_for(input);
+    let sidecar = sidecars.schematic.as_deref();
+
     // Aesthetic schematic ERC (E-SYNTH-SCHEM-*): advisory warnings
     // printed alongside the rule-based ERC; never blocks export.
     // Thresholds come from the design's `<design>.synth.erc.toml`
     // `[schematic]` section when present (Phase E), else the defaults.
-    let pre_layout = synth_layout::layout(board);
-    let mut schem_diags =
-        synth_kicad::check_schem_erc_with_config(&pre_layout, board, schem_erc_config_for(input));
+    let pre_layout = synth_layout::layout_with_sidecar(board, sidecar);
+    let pre_sheets = synth_layout::sheets::layout_sheets(board, pre_layout.clone());
+    let mut schem_diags = synth_kicad::check_schem_erc_sheets_with_config(
+        board,
+        &pre_sheets,
+        schem_erc_config_for(input),
+    );
     synth_kicad::attach_schem_erc_locations(&mut schem_diags, board, &input.display().to_string());
     write_diagnostics_to_stderr(&schem_diags)?;
 
-    // Honour manual tuning: if a sidecar sits beside the source
-    // (`<stem>.synth.layout.toml`), the export applies those drags.
-    let sidecar_path = input.with_file_name(format!(
-        "{}.synth.layout.toml",
-        input
-            .file_stem()
-            .and_then(|s| s.to_str())
-            .unwrap_or("design")
-    ));
-    let sidecar = sidecar_path.is_file().then_some(sidecar_path.as_path());
+    if let Some(notice) = synth_layout::SidecarKind::Schematic.migration_notice(input.as_path()) {
+        eprintln!("warning: {notice}");
+    }
 
-    let result = synth_kicad::export_with_sidecar(board, out_dir, sidecar)
+    let result = synth_kicad::export_with_sidecars(board, out_dir, &sidecars)
         .map_err(|e| anyhow::anyhow!("kicad export failed: {e}"))?;
 
     let mut external_router_clean = true;

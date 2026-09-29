@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 //! End-to-end placement-hint plumbing tests (plan item D2): DSL
-//! `placement_hint` declarations and `<design>.synth.layout.toml`
+//! `placement_hint` declarations and `<design>.placement.layout.toml`
 //! sidecar overrides must reach the exported `.kicad_pcb` component
 //! positions. Each test exports a small hinted design and parses the
 //! emitted sexp back, asserting footprint `(at x y)` placements
@@ -279,8 +279,19 @@ fn human_sidecar_overrides_win_over_dsl_hints_in_exported_pcb() {
     )
     .expect("sidecar TOML written");
 
-    let result =
-        synth_kicad::export_with_sidecar(&board, &tmp, Some(&sidecar_path)).expect("export");
+    // This override is board millimetres reaching footprints, so it goes in
+    // the placement namespace explicitly — `export_with_sidecar` treats a
+    // lone path as a schematic sidecar, and board millimetres on a sheet are
+    // the cross-space bug this split exists to prevent.
+    let result = synth_kicad::export_with_sidecars(
+        &board,
+        &tmp,
+        &synth_kicad::Sidecars {
+            schematic: None,
+            placement: Some(sidecar_path.clone()),
+        },
+    )
+    .expect("export");
 
     let pcb_text = fs::read_to_string(&result.pcb_path).expect(".kicad_pcb written");
     let footprints = parse_footprints(&pcb_text);

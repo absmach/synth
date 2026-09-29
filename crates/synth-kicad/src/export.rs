@@ -59,15 +59,59 @@ pub struct ExportResult {
 /// directory is created if absent. Files inside an existing
 /// directory are overwritten.
 pub fn export(board: &Board, out_dir: &Path) -> Result<ExportResult, ExportError> {
-    export_with_sidecar(board, out_dir, None)
+    export_with_sidecars(board, out_dir, &Sidecars::default())
 }
 
-/// [`export`] honouring an optional `<design>.synth.layout.toml`
-/// sidecar: manual component drags are applied between placement and
-/// routing so both the exported schematic *and* the exported PCB
-/// reflect hand-tuned positions. DSL `placement_hint`s declared on
-/// components are honoured inside the placer itself and need no
-/// plumbing here.
+/// The two layout-override files an export applies, one per coordinate
+/// space.
+///
+/// They share a file schema and nothing else: `schematic` positions are
+/// sheet millimetres and drive the drawn sheet, `placement` positions are
+/// board millimetres and drive the placer and router. They are separate
+/// fields because passing one file for both is exactly the bug this split
+/// fixed — the placement sidecar was auto-resolved for the schematic too, so
+/// board-millimetre positions landed on the page, overflowed A2, and split
+/// the export into one near-empty sheet per group.
+#[derive(Debug, Clone, Default)]
+pub struct Sidecars {
+    /// `<design>.schematic.layout.toml` — sheet millimetres.
+    pub schematic: Option<PathBuf>,
+    /// `<design>.placement.layout.toml` — board millimetres.
+    pub placement: Option<PathBuf>,
+}
+
+impl Sidecars {
+    /// Both namespaces resolved from a `.synth` design path, honouring each
+    /// kind's own convention.
+    ///
+    /// The preferred entry point: it is the only place that decides which
+    /// file belongs to which coordinate space.
+    pub fn resolve_for(design: &Path) -> Self {
+        Self {
+            schematic: synth_layout::schematic_sidecar_path(design),
+            placement: synth_layout::placement_sidecar_path(design),
+        }
+    }
+
+    fn schematic_path(&self) -> Option<&Path> {
+        self.schematic.as_deref()
+    }
+
+    fn placement_path(&self) -> Option<&Path> {
+        self.placement.as_deref()
+    }
+}
+
+/// [`export`] honouring a single **schematic** layout sidecar (sheet
+/// millimetres).
+///
+/// The path is treated as schematic-only: feeding board-millimetre
+/// coordinates to the sheet is the failure this crate's two-namespace split
+/// exists to prevent, so a lone path is never guessed to be a placement
+/// sidecar. Pass [`Sidecars::placement`] explicitly when footprints must be
+/// overridden too — [`export_with_sidecars`] is the form that can express
+/// both. DSL `placement_hint`s declared on components are honoured inside
+/// the placer itself and need no plumbing here.
 ///
 /// # Errors
 /// Same as [`export`].
@@ -76,18 +120,78 @@ pub fn export_with_sidecar(
     out_dir: &Path,
     sidecar: Option<&Path>,
 ) -> Result<ExportResult, ExportError> {
-    export_with_sidecar_and_routing_order(board, out_dir, sidecar, None)
+    export_with_sidecars(
+        board,
+        out_dir,
+        &Sidecars {
+            schematic: sidecar.map(Path::to_path_buf),
+            placement: None,
+        },
+    )
 }
 
-/// Export while preserving an optional agent-selected routing order.
+/// [`export`] applying both layout-override namespaces independently.
+///
+/// # Errors
+/// Same as [`export`].
+pub fn export_with_sidecars(
+    board: &Board,
+    out_dir: &Path,
+    sidecars: &Sidecars,
+) -> Result<ExportResult, ExportError> {
+    export_with_sidecars_and_routing_order(board, out_dir, sidecars, None)
+}
+
+/// Export with an optional agent-selected routing order, honouring a single
+/// **schematic** layout sidecar.
 ///
 /// The route used for export must be the same route that the MCP gate
 /// inspected; silently recomputing with the default order can discard a
-/// successful recovery pass and produce a different PCB artifact.
+/// successful recovery pass and produce a different PCB artifact. See
+/// [`export_with_sidecar`] for why the lone path is schematic-only, and
+/// [`export_with_sidecars_and_routing_order`] for the both-namespaces form.
 pub fn export_with_sidecar_and_routing_order(
     board: &Board,
     out_dir: &Path,
     sidecar: Option<&Path>,
+    routing_order: Option<&[String]>,
+) -> Result<ExportResult, ExportError> {
+    export_with_sidecars_and_routing_order(
+        board,
+        out_dir,
+        &Sidecars {
+            schematic: sidecar.map(Path::to_path_buf),
+            placement: None,
+        },
+        routing_order,
+    )
+}
+
+/// [`export_with_sidecars_and_routing_order`] with both namespaces resolved
+/// from a `.synth` design path.
+///
+/// # Errors
+/// Same as [`export`].
+pub fn export_for_design(
+    board: &Board,
+    out_dir: &Path,
+    design: &Path,
+    routing_order: Option<&[String]>,
+) -> Result<ExportResult, ExportError> {
+    let sidecars = Sidecars::resolve_for(design);
+    export_with_sidecars_and_routing_order(board, out_dir, &sidecars, routing_order)
+}
+
+/// [`export`] applying both layout-override namespaces independently, while
+/// preserving an optional agent-selected routing order.
+///
+/// The route used for export must be the same route that the MCP gate
+/// inspected; silently recomputing with the default order can discard a
+/// successful recovery pass and produce a different PCB artifact.
+pub fn export_with_sidecars_and_routing_order(
+    board: &Board,
+    out_dir: &Path,
+    sidecars: &Sidecars,
     routing_order: Option<&[String]>,
 ) -> Result<ExportResult, ExportError> {
     std::fs::create_dir_all(out_dir).map_err(|source| ExportError::CreateDir {
@@ -106,7 +210,7 @@ pub fn export_with_sidecar_and_routing_order(
     // schematic exports as one file (small boards, byte-identical to
     // before) or one file per sheet boundary (large boards only).
     // The project file below lists every sheet, so it comes after.
-    let global_layout = synth_layout::layout_with_sidecar(board, sidecar);
+    let global_layout = synth_layout::layout_with_sidecar(board, sidecars.schematic_path());
     let sheets = synth_layout::sheets::layout_sheets(board, global_layout);
     let project_namespace = uuid_v5::project_namespace(&board.name);
     // Project file (.kicad_pro): minimal JSON. KiCad fills in the
@@ -296,8 +400,9 @@ pub fn export_with_sidecar_and_routing_order(
     // different placement, making routing feedback and the delivered PCB
     // disagree. Repair/retry belongs to the agent loop; export is a
     // serialization boundary.
-    let (placement, routing) = place_and_route_with_repair(board, 0, sidecar, routing_order)
-        .map_err(|source| ExportError::Placement { source })?;
+    let (placement, routing) =
+        place_and_route_with_repair(board, 0, sidecars.placement_path(), routing_order)
+            .map_err(|source| ExportError::Placement { source })?;
     let pcb_text =
         pcb::build_pcb(board, &placement, &routing, &project_namespace).to_string_pretty();
     write_file(&pcb_path, &pcb_text)?;
@@ -356,7 +461,7 @@ pub struct SchematicExportResult {
 pub fn export_schematic_only(
     board: &Board,
     out_dir: &Path,
-    sidecar: Option<&Path>,
+    schematic_sidecar: Option<&Path>,
 ) -> Result<SchematicExportResult, ExportError> {
     std::fs::create_dir_all(out_dir).map_err(|source| ExportError::CreateDir {
         path: out_dir.to_path_buf(),
@@ -368,7 +473,7 @@ pub fn export_schematic_only(
     let schematic_path = out_dir.join(format!("{stem}.kicad_sch"));
     let library_path = out_dir.join(format!("{stem}.kicad_sym"));
 
-    let global_layout = synth_layout::layout_with_sidecar(board, sidecar);
+    let global_layout = synth_layout::layout_with_sidecar(board, schematic_sidecar);
     let sheets = synth_layout::sheets::layout_sheets(board, global_layout);
     let project_namespace = uuid_v5::project_namespace(&board.name);
 

@@ -226,13 +226,29 @@ pub fn check_sheets(
     board: &Board,
     sheets: &[synth_layout::sheets::SheetLayout],
 ) -> Vec<Diagnostic> {
+    check_sheets_with_config(board, sheets, SchemErcConfig::default())
+}
+
+/// [`check_sheets`] with explicit thresholds.
+///
+/// The sheet-aware wrapper exists because a §P26 split board must be judged
+/// per page: running the single-sheet [`check`] on the global layout
+/// false-positives overflow and crossings that no longer exist once sheets
+/// separate. Callers that honour a design's `<design>.synth.erc.toml`
+/// `[schematic]` thresholds need the same sheet awareness, so they use this
+/// rather than [`check_with_config`].
+pub fn check_sheets_with_config(
+    board: &Board,
+    sheets: &[synth_layout::sheets::SheetLayout],
+    config: SchemErcConfig,
+) -> Vec<Diagnostic> {
     if sheets.len() == 1 {
-        return check(&sheets[0].layout, board);
+        return check_with_config(&sheets[0].layout, board, config);
     }
     let mut out = Vec::new();
     for sheet in sheets {
         let name = sheet.name.as_deref().unwrap_or("root");
-        for mut diagnostic in check(&sheet.layout, board) {
+        for mut diagnostic in check_with_config(&sheet.layout, board, config) {
             diagnostic.title = format!("[{name}] {}", diagnostic.title);
             out.push(diagnostic);
         }

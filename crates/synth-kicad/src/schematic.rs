@@ -121,8 +121,8 @@ pub fn build_schematic(board: &Board, project: &Uuid) -> Sexp {
     build_schematic_from_layout(board, project, &synth_layout::layout(board))
 }
 
-/// Build the schematic honouring an optional sidecar override file
-/// (`<design>.synth.layout.toml`). The sidecar moves components
+/// Build the schematic honouring an optional schematic sidecar override file
+/// (`<design>.schematic.layout.toml`, sheet millimetres). The sidecar moves components
 /// between placement and routing (see
 /// [`synth_layout::layout_with_sidecar`]), so the exported wires and
 /// labels always match the manually tuned positions.

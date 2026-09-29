@@ -1059,7 +1059,7 @@ fn build_footprint_instance(
     // can parse the module. For inlined (user-imported) footprints the geometry
     // is embedded inline, so a real library lookup is unnecessary — but the
     // reference must still be present. The exporter registers the user footprint
-    // directory in the project's fp-lib-table (see `export_with_sidecar`) so the
+    // directory in the project's fp-lib-table (see `export_with_sidecars`) so the
     // reference resolves without a spurious "library not found" warning.
     children.insert(0, Sexp::str(lib_id));
     if !has_model {

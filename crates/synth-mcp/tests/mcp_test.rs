@@ -41,8 +41,10 @@ fn test_mcp_initialize_carries_instructions() {
         "ownership doctrine (no hand-editing generated files) missing"
     );
     assert!(
-        instructions.contains(".synth.layout.toml"),
-        "sidecar placement rule missing"
+        instructions.contains(".schematic.layout.toml")
+            && instructions.contains(".placement.layout.toml"),
+        "two-sidecar rule missing: the agent must be told schematic (sheet mm) \
+         and placement (board mm) are different files"
     );
     assert!(
         instructions.contains("registry"),
@@ -359,7 +361,7 @@ fn test_mcp_call_synth_describe_placement() {
 
 #[test]
 fn test_mcp_call_sidecar_overrides_read_write() {
-    let tmp = std::env::temp_dir().join("test_sidecar.synth.layout.toml");
+    let tmp = std::env::temp_dir().join("test_sidecar.placement.layout.toml");
     let tmp_path = tmp.to_str().unwrap();
 
     let write_req = json!({
@@ -454,7 +456,7 @@ fn test_mcp_call_synth_route_with_constraints_returns_drc_and_trace_info() {
 fn test_closed_loop_agent_drc_repair_convergence() {
     let sensor_logger_path = std::path::Path::new("../../examples/sensor_logger.synth");
     let source = std::fs::read_to_string(sensor_logger_path).expect("read sensor_logger.synth");
-    let sidecar_tmp = std::env::temp_dir().join("sensor_logger_repair.synth.layout.toml");
+    let sidecar_tmp = std::env::temp_dir().join("sensor_logger_repair.placement.layout.toml");
     if sidecar_tmp.exists() {
         let _ = std::fs::remove_file(&sidecar_tmp);
     }
@@ -793,7 +795,7 @@ fn test_mcp_mutate_layout_persist_writes_sidecar() {
     let dir = tempfile::tempdir().unwrap();
     let src = dir.path().join("led_indicator.synth");
     std::fs::write(&src, LED_INDICATOR_SOURCE).unwrap();
-    let sidecar = dir.path().join("led_indicator.synth.layout.toml");
+    let sidecar = dir.path().join("led_indicator.schematic.layout.toml");
 
     let req = json!({
         "jsonrpc": "2.0",
@@ -842,7 +844,7 @@ fn test_mcp_mutate_layout_persist_writes_sidecar() {
 #[test]
 fn test_mcp_persisted_forced_label_is_recorded_and_reloads() {
     let dir = tempfile::tempdir().unwrap();
-    let sidecar = dir.path().join("d.synth.layout.toml");
+    let sidecar = dir.path().join("d.schematic.layout.toml");
 
     let req = json!({
         "jsonrpc": "2.0",
@@ -1003,7 +1005,7 @@ fn test_mcp_suggested_repair_op_is_applicable() {
 fn test_mcp_fit_sheet_result_reload_and_preview_agree() {
     let dir = tempfile::tempdir().unwrap();
     let src = dir.path().join("d.synth");
-    let sidecar = dir.path().join("d.synth.layout.toml");
+    let sidecar = dir.path().join("d.schematic.layout.toml");
 
     let call = |id: u32, tool: &str, extra: serde_json::Value| -> serde_json::Value {
         let mut args = json!({

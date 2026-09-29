@@ -50,13 +50,13 @@ struct BoardView {
 struct AppState {
     rx: watch::Receiver<BoardView>,
     /// The `.synth` source file being watched. Sidecar overrides are
-    /// written adjacent to it (`<source>.synth.layout.toml`, §7.7.6).
+    /// written adjacent to it (`<source>.schematic.layout.toml`, §7.7.6).
     input: PathBuf,
 }
 
 /// Strict wire schema for `POST /api/v1/layout/save`.
 ///
-/// Mirrors the `<design>.synth.layout.toml` sidecar schema (§7.7.6) —
+/// Mirrors the `<design>.schematic.layout.toml` sidecar schema (§7.7.6) —
 /// refdes-keyed per-component absolute positions — and rejects any
 /// field outside it (`deny_unknown_fields`) so the endpoint only ever
 /// accepts exactly the sidecar shape.
@@ -80,11 +80,20 @@ struct LayoutSavePlacement {
     sheet: Option<String>,
 }
 
-/// `<source>.synth.layout.toml` next to the `.synth` file (§7.7.6).
+/// `<source>.schematic.layout.toml` next to the `.synth` file (§7.7.6).
+///
+/// The preview drags components on the *schematic sheet*, so its coordinates
+/// are sheet millimetres and belong to the schematic sidecar. Writing them to
+/// the shared pre-split file also fed board millimetres to the schematic
+/// placer, which is why the preview and the exported PDF could disagree.
 fn sidecar_path_for(source_path: &Path) -> PathBuf {
-    let mut name = source_path.as_os_str().to_os_string();
-    name.push(".layout.toml");
-    PathBuf::from(name)
+    synth_layout::sidecar::SidecarKind::Schematic
+        .canonical_path(source_path)
+        .unwrap_or_else(|| {
+            let mut name = source_path.as_os_str().to_os_string();
+            name.push(".schematic.layout.toml");
+            PathBuf::from(name)
+        })
 }
 
 /// Persist a refdes-keyed drag-offset layout to the sidecar file
@@ -105,7 +114,7 @@ pub fn save_layout_sidecar(
 
 /// `POST /api/v1/layout/save` — persist browser drag offsets (refdes-keyed
 /// absolute positions matching the sidecar schema) to
-/// `<source>.synth.layout.toml` adjacent to the watched `.synth` file.
+/// `<source>.schematic.layout.toml` adjacent to the watched `.synth` file.
 /// The `.synth` source itself is never touched.
 async fn layout_save_handler(
     State(state): State<AppState>,
@@ -299,7 +308,7 @@ mod tests {
     /// §7.7.8 gate: "drag in web → reload → position matches bit-exact".
     /// Covers the whole save path without a live server: base layout →
     /// apply a drag offset → build the refdes-keyed sidecar → save to
-    /// `<source>.synth.layout.toml` → reload via `layout_with_sidecar`
+    /// `<source>.schematic.layout.toml` → reload via `layout_with_sidecar`
     /// (the same entry point `synth preview` uses on startup) → assert
     /// the repositioned centre and rotation round-trip exactly.
     #[test]

@@ -521,8 +521,13 @@ fn legalize_sidecar_overrides(
     }
 }
 
-/// Run placement with optional sidecar layout override file
-/// (`<design>.synth.layout.toml`).
+/// Run placement with the optional PCB-placement sidecar.
+///
+/// `sidecar_path` holds **board millimetres** and must come from
+/// `synth_layout::placement_sidecar_path` (or an explicit
+/// `layout_file_path`). The schematic sidecar is a different file in sheet
+/// millimetres and must not be passed here; see
+/// [`synth_layout::SidecarKind`] for why the two are kept apart.
 pub fn place_with_sidecar(
     board: &Board,
     sidecar_path: Option<&std::path::Path>,
@@ -544,11 +549,12 @@ pub fn place_with_sidecar(
 }
 
 /// Run placement with iteration tuning (extra courtyard margin +
-/// rotation overrides) and an optional sidecar layout override file
-/// (`<design>.synth.layout.toml`).
+/// rotation overrides) and the optional PCB-placement sidecar (board
+/// millimetres).
 ///
-/// Sidecar entries record manual component drags (`synth preview`,
-/// `synth_write_layout_override`). They are applied *after* the
+/// Sidecar entries record manual component drags
+/// (`synth_write_layout_override`) and must come from
+/// `synth_layout::placement_sidecar_path`. They are applied *after* the
 /// solver runs so recorded human intent wins over the automatic
 /// placement; DSL `placement_hint`s are honoured *inside* the solver
 /// (`place_with_outline`). Export pipelines call this between
