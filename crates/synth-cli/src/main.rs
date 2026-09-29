@@ -824,7 +824,7 @@ fn main() -> ExitCode {
             registry.as_deref(),
             svg,
         ),
-        Command::Capability { cmd } => capability_cmd(cmd),
+        Command::Capability { cmd } => capability_cmd(&cmd),
         Command::Registry {
             cmd,
             registry,
@@ -843,7 +843,7 @@ fn main() -> ExitCode {
     }
 }
 
-fn capability_cmd(cmd: CapabilityCommand) -> anyhow::Result<u8> {
+fn capability_cmd(cmd: &CapabilityCommand) -> anyhow::Result<u8> {
     let commands = [
         "validate",
         "dump-ast",
