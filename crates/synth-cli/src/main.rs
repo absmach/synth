@@ -2737,11 +2737,11 @@ fn dump_drc(
     })
 }
 
-// strict_registry/validate_erc/force/allow_unverified_parts are four
-// independent, non-exclusive CLI toggles (`--strict-registry`,
-// `--validate-erc`, `--force`, `--allow-unverified-parts`) — an enum
-// would need a variant per combination for no clarity gain.
-#[allow(clippy::fn_params_excessive_bools)]
+/// Stamped into `[provenance].generator` on every auto-repaired part, so a
+/// later reader can tell a machine-written footprint correction from a
+/// hand-edited one.
+const GENERATOR_FOOTPRINT_REPAIR: &str = "synth-part-resolve-footprint 0.1";
+
 /// Every part on `board` whose `kicad_footprint` does not resolve, with the
 /// best candidate the local KiCad libraries offer.
 #[derive(Debug, Clone)]
@@ -3002,11 +3002,11 @@ fn part_resolve_footprint(
     Ok(u8::from(unresolvable != 0))
 }
 
-/// Stamped into `[provenance].generator` on every auto-repaired part, so a
-/// later reader can tell a machine-written footprint correction from a
-/// hand-edited one.
-const GENERATOR_FOOTPRINT_REPAIR: &str = "synth-part-resolve-footprint 0.1";
-
+// strict_registry/validate_erc/force/allow_unverified_parts are four
+// independent, non-exclusive CLI toggles (`--strict-registry`,
+// `--validate-erc`, `--force`, `--allow-unverified-parts`) — an enum
+// would need a variant per combination for no clarity gain.
+#[allow(clippy::fn_params_excessive_bools)]
 fn export_kicad(
     input: &PathBuf,
     registry_dir: Option<&Path>,

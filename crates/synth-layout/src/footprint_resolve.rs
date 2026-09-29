@@ -35,7 +35,7 @@
 //! the datasheet, and a plausible-but-wrong pin number produces a board that
 //! routes and passes every check while being unbuildable. Resolver output
 //! therefore only ever repairs the *footprint reference*; pin/pad agreement
-//! stays a blocking diagnostic ([`E-SYNTH-PIN-001`]) for a human or agent
+//! stays a blocking diagnostic (`E-SYNTH-PIN-001`) for a human or agent
 //! with the datasheet in hand.
 
 use std::collections::BTreeSet;
@@ -47,7 +47,7 @@ use std::sync::OnceLock;
 pub struct Candidate {
     /// `Library:FootprintName`, the form `kicad_footprint` takes.
     pub lib_id: String,
-    /// 0.0–1.0. Only candidates at or above [`AUTO_APPLY_THRESHOLD`] are
+    /// 0.0–1.0. Only candidates at or above [`AUTO_APPLY_MIN_SCORE`] are
     /// applied without asking.
     pub score: f64,
     /// Human-readable justification, surfaced in the diagnostic and the CLI
@@ -407,10 +407,12 @@ pub fn candidates(
             let coverage = pin_coverage(&lib_id, part_pins);
             let mut reason = reason;
             if !part_pins.is_empty() {
-                reason.push_str(&format!(
+                use std::fmt::Write as _;
+                let _ = write!(
+                    reason,
                     "; {:.0}% of declared pins are pads here",
                     coverage * 100.0
-                ));
+                );
             }
             // A footprint that carries every declared pin is the strongest
             // possible corroboration, so it outranks an equally-named one

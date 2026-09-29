@@ -77,6 +77,23 @@ pub struct Pad {
     pub plated: bool,
 }
 
+/// A pad as read from the document, in source units.
+///
+/// Kept separate from [`Pad`] because the origin is not known until every pad
+/// has been seen — it may have to fall back to the pad centroid — so the raw
+/// values are collected first and converted once at the end.
+#[derive(Debug, Clone)]
+struct RawPad {
+    number: String,
+    origin_x: f64,
+    origin_y: f64,
+    width: f64,
+    height: f64,
+    rotation: f64,
+    shape: PadShape,
+    plated: bool,
+}
+
 /// A footprint recovered from a component SVG.
 ///
 /// # Orientation is as-drawn, and that is not always the datasheet orientation
@@ -160,44 +177,15 @@ fn attr(tag: &str, name: &str) -> Option<String> {
     None
 }
 
-/// Parse a component SVG into pads.
+/// Collect every `part_pad` group in `doc`, in source units.
 ///
-/// Returns `None` when the document carries no `part_pad` groups. Callers
-/// must treat that as a hard failure, never as "an empty footprint": a pad
-/// list is the entire point of the document.
-pub fn parse_component_svg(svg: &str) -> Option<ParsedFootprint> {
-    // viewBox gives the canvas origin and size. The source is Y-down (SVG);
-    // KiCad is Y-up, so the vertical flip is anchored on the canvas.
-    //
-    // The search has to skip past the *opening* quote before looking for the
-    // closing one, or the first `"` it finds is the one it just matched.
-    const VB_KEY: &str = "viewBox=\"";
-    let open = svg.find(VB_KEY)? + VB_KEY.len();
-    let close = open + svg[open..].find('"')?;
-    let nums: Vec<f64> = svg[open..close]
-        .split_whitespace()
-        .filter_map(|v| v.parse::<f64>().ok())
-        .collect();
-    if nums.len() != 4 {
-        return None;
-    }
-    // Only the canvas *size* is used, for reporting: the pads are anchored on
-    // the component origin, so the canvas origin itself is irrelevant.
-    let (w_units, h_units) = (nums[2], nums[3]);
-
-    // The document's <style> block contains CSS *selectors* that quote the
-    // very attribute we search for, e.g.
-    //     g[c_partid="part_pad"][layerid] > polyline[c_padhole] { ... }
-    // A naive substring scan matches those first, walks back to the enclosing
-    // <style> tag, and then cannot find `number` on it. Blank out the
-    // non-rendered blocks so the scan only ever sees real elements.
-    let doc = strip_non_rendered_blocks(svg);
-
-    // Collected in source units first: the origin is only known once every
-    // pad has been seen (it may have to fall back to the centroid).
-    let mut raw: Vec<(String, f64, f64, f64, f64, f64, PadShape, bool)> = Vec::new();
+/// Returns the pads and the number of groups that carried no emittable
+/// geometry, so a caller can tell "73 of 73 pads" from "70 of 73, three
+/// unreadable" rather than losing the difference silently.
+fn scan_raw_pads(doc: &str) -> (Vec<RawPad>, usize) {
+    let mut raw: Vec<RawPad> = Vec::new();
     let mut skipped = 0usize;
-    let mut rest = doc.as_str();
+    let mut rest = doc;
     while let Some(idx) = rest.find("c_partid=\"part_pad\"") {
         // Walk back to the element's `<g` so attribute scanning starts clean.
         let start = rest[..idx].rfind('<').unwrap_or(0);
@@ -241,8 +229,56 @@ pub fn parse_component_svg(svg: &str) -> Option<ParsedFootprint> {
         // naive `plated="` search misses; absence means plated.
         let plated = !matches!(attr(tag, "plated").as_deref(), Some("N"));
 
-        raw.push((number, ox, oy, width, height, rotation, shape, plated));
+        raw.push(RawPad {
+            number,
+            origin_x: ox,
+            origin_y: oy,
+            width,
+            height,
+            rotation,
+            shape,
+            plated,
+        });
     }
+    (raw, skipped)
+}
+
+/// Parse a component SVG into pads.
+///
+/// Returns `None` when the document carries no `part_pad` groups. Callers
+/// must treat that as a hard failure, never as "an empty footprint": a pad
+/// list is the entire point of the document.
+pub fn parse_component_svg(svg: &str) -> Option<ParsedFootprint> {
+    // viewBox gives the canvas origin and size. The source is Y-down (SVG);
+    // KiCad is Y-up, so the vertical flip is anchored on the canvas.
+    //
+    // The search has to skip past the *opening* quote before looking for the
+    // closing one, or the first `"` it finds is the one it just matched.
+    const VB_KEY: &str = "viewBox=\"";
+    let open = svg.find(VB_KEY)? + VB_KEY.len();
+    let close = open + svg[open..].find('"')?;
+    let nums: Vec<f64> = svg[open..close]
+        .split_whitespace()
+        .filter_map(|v| v.parse::<f64>().ok())
+        .collect();
+    if nums.len() != 4 {
+        return None;
+    }
+    // Only the canvas *size* is used, for reporting: the pads are anchored on
+    // the component origin, so the canvas origin itself is irrelevant.
+    let (w_units, h_units) = (nums[2], nums[3]);
+
+    // The document's <style> block contains CSS *selectors* that quote the
+    // very attribute we search for, e.g.
+    //     g[c_partid="part_pad"][layerid] > polyline[c_padhole] { ... }
+    // A naive substring scan matches those first, walks back to the enclosing
+    // <style> tag, and then cannot find `number` on it. Blank out the
+    // non-rendered blocks so the scan only ever sees real elements.
+    let doc = strip_non_rendered_blocks(svg);
+
+    // Collected in source units first: the origin is only known once every
+    // pad has been seen (it may have to fall back to the centroid).
+    let (raw, skipped) = scan_raw_pads(&doc);
 
     if raw.is_empty() {
         return None;
@@ -258,27 +294,25 @@ pub fn parse_component_svg(svg: &str) -> Option<ParsedFootprint> {
         #[allow(clippy::cast_precision_loss)]
         let n = raw.len() as f64;
         (
-            raw.iter().map(|r| r.1).sum::<f64>() / n,
-            raw.iter().map(|r| r.2).sum::<f64>() / n,
+            raw.iter().map(|r| r.origin_x).sum::<f64>() / n,
+            raw.iter().map(|r| r.origin_y).sum::<f64>() / n,
         )
     });
     let origin_from_component = origin.is_some();
 
     let pads = raw
         .into_iter()
-        .map(
-            |(number, ox, oy, width, height, rotation, shape, plated)| Pad {
-                number,
-                x_mm: (ox - cx) * UNIT_TO_MM,
-                // Flip: SVG grows downward, KiCad grows upward.
-                y_mm: (cy - oy) * UNIT_TO_MM,
-                width_mm: width * UNIT_TO_MM,
-                height_mm: height * UNIT_TO_MM,
-                rotation_deg: rotation,
-                shape,
-                plated,
-            },
-        )
+        .map(|r| Pad {
+            number: r.number,
+            x_mm: (r.origin_x - cx) * UNIT_TO_MM,
+            // Flip: SVG grows downward, KiCad grows upward.
+            y_mm: (cy - r.origin_y) * UNIT_TO_MM,
+            width_mm: r.width * UNIT_TO_MM,
+            height_mm: r.height * UNIT_TO_MM,
+            rotation_deg: r.rotation,
+            shape: r.shape,
+            plated: r.plated,
+        })
         .collect();
 
     // The package string is in the first group's `c_para`, formatted as
