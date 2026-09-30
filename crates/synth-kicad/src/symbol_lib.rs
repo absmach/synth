@@ -480,12 +480,20 @@ fn build_symbol(part: &Part, alternates: Option<&BTreeMap<String, BTreeSet<Strin
         (0.0, top + PIN_PITCH, 0.0, top + (PIN_PITCH * 2.0))
     };
 
-    // Pin numbers stay visible: KiCad draws them outside the symbol
-    // graphic at the pin's outer end (the standard convention puts
-    // pin numbers outside the symbol graphic). Power-flag symbols keep
-    // theirs hidden in `build_power_symbol_def`.
+    let pin_numbers = if is_two_pin {
+        Sexp::list("pin_numbers", vec![Sexp::list("offset", vec![num(1.016)])])
+    } else {
+        Sexp::list(
+            "pin_numbers",
+            vec![
+                Sexp::list("offset", vec![num(1.016)]),
+                Sexp::list("hide", vec![Sexp::atom("yes")]),
+            ],
+        )
+    };
     let mut children = vec![
         Sexp::list("pin_names", vec![Sexp::list("offset", vec![num(0.508)])]),
+        pin_numbers,
         Sexp::list("in_bom", vec![Sexp::atom("yes")]),
         Sexp::list("on_board", vec![Sexp::atom("yes")]),
         property(

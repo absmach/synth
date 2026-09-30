@@ -1379,6 +1379,95 @@ fn power_symbol_lib_id(label: &str) -> String {
     format!("{LIBRARY_NICKNAME}:{label}")
 }
 
+/// One grid unit out from a pin terminal is where its power-flag
+/// symbol sits.
+const POWER_FLAG_STUB_LEN: f64 = 2.54;
+
+/// Grid tolerance for "these two points are the same point" when
+/// deciding whether a flag lands on a foreign pin.
+const PIN_COINCIDENT_EPS: f64 = 0.05;
+
+/// Whether `(x, y)` coincides with a pin terminal that is *not* an
+/// endpoint of the power flag's own net.
+fn lands_on_foreign_pin(
+    board: &Board,
+    flag: &synth_layout::PowerFlag,
+    placements: &HashMap<ComponentId, &ComponentPlacement>,
+    x: f64,
+    y: f64,
+) -> bool {
+    for component in &board.components {
+        let Some(part) = component.part.as_ref() else {
+            continue;
+        };
+        for idx in 0..part.pins.len() {
+            let pin_id = synth_ir::PinId(idx as u32);
+            // A pin on the flag's own net is a legal landing spot.
+            if board.net(flag.net).is_some_and(|net| {
+                net.endpoints
+                    .iter()
+                    .any(|ep| ep.component == component.id && ep.pin == pin_id)
+            }) {
+                continue;
+            }
+            if let Some((px, py, _, _)) = pin_terminal_xy(board, component.id, pin_id, placements) {
+                if (px - x).abs() <= PIN_COINCIDENT_EPS && (py - y).abs() <= PIN_COINCIDENT_EPS {
+                    return true;
+                }
+            }
+        }
+    }
+    false
+}
+
+/// Pick a power-flag position that cannot short a neighbouring part.
+///
+/// The natural spot is one stub length out from the anchor pin's
+/// terminal. When two 2-pin parts sit close together and are rotated
+/// so their pins point at each other, that stub can land exactly on
+/// the *other* part's pin terminal. A `+3V3` flag landing on an
+/// `I2C_SDA` pin silently merges the two nets, dragging every pin of
+/// the signal net onto the rail. When the natural spot is occupied,
+/// step clear of it.
+fn clear_power_flag_position(
+    board: &Board,
+    flag: &synth_layout::PowerFlag,
+    placements: &HashMap<ComponentId, &ComponentPlacement>,
+    x: f64,
+    y: f64,
+    dx: f64,
+    dy: f64,
+) -> (f64, f64) {
+    let stub_len = POWER_FLAG_STUB_LEN;
+    let natural = (x + dx * stub_len, y + dy * stub_len);
+    if !lands_on_foreign_pin(board, flag, placements, natural.0, natural.1) {
+        return natural;
+    }
+    // Reach further out along the stub axis first: those keep the
+    // connecting wire straight, which is the case the obstacle grid
+    // already reasons about.
+    for reach in [2.0 * stub_len, 3.0 * stub_len, -stub_len, -2.0 * stub_len] {
+        let candidate = (x + dx * reach, y + dy * reach);
+        if !lands_on_foreign_pin(board, flag, placements, candidate.0, candidate.1) {
+            return candidate;
+        }
+    }
+    // Otherwise step perpendicular. The wire then needs a bend, so the
+    // corner is checked too — a clear flag position reached through an
+    // occupied corner is still a short.
+    let (perp_x, perp_y) = (-dy, dx);
+    for step in [stub_len, 2.0 * stub_len, -stub_len, -2.0 * stub_len] {
+        let candidate = (natural.0 + perp_x * step, natural.1 + perp_y * step);
+        let corner = (candidate.0, y);
+        if !lands_on_foreign_pin(board, flag, placements, candidate.0, candidate.1)
+            && !lands_on_foreign_pin(board, flag, placements, corner.0, corner.1)
+        {
+            return candidate;
+        }
+    }
+    natural
+}
+
 /// Emit a KiCad `(symbol)` entry for a power-flag symbol attached
 /// just outside the pin terminal with a short connecting wire.
 /// Returns `[wire, symbol]` so the stub is explicit and the flag
@@ -1407,9 +1496,7 @@ fn build_power_symbol(
 
     // Offset the symbol one grid unit outward from the pin so it
     // sits clear of the body.
-    let stub_len = 2.54;
-    let flag_x = x + dx * stub_len;
-    let flag_y = y + dy * stub_len;
+    let (flag_x, flag_y) = clear_power_flag_position(board, flag, placements, x, y, dx, dy);
 
     let lib_id = power_symbol_lib_id(&flag.label);
     let key = format!("power_{}_{}", component.refdes, flag.pin.0);
@@ -1417,26 +1504,43 @@ fn build_power_symbol(
     let wire_uuid = derive_entity_uuid(project, "power_wire", &key);
     let refdes_pwr = power_refs.allocate("#PWR", &sym_uuid);
 
-    let wire_sexp = Sexp::list(
-        "wire",
-        vec![
-            Sexp::list(
-                "pts",
-                vec![
-                    Sexp::list("xy", vec![num(x), num(y)]),
-                    Sexp::list("xy", vec![num(flag_x), num(flag_y)]),
-                ],
-            ),
-            Sexp::list(
-                "stroke",
-                vec![
-                    Sexp::list("width", vec![num(0.0)]),
-                    Sexp::list("type", vec![Sexp::atom("default")]),
-                ],
-            ),
-            str_pair("uuid", wire_uuid.to_string()),
-        ],
-    );
+    // The connecting stub. Normally one straight segment from the pin
+    // terminal to the flag; when the flag had to step off the stub
+    // axis, bend through the flag's x so the run stays orthogonal.
+    let mut stub_points = vec![(x, y)];
+    if (flag_x - x).abs() > PIN_COINCIDENT_EPS && (flag_y - y).abs() > PIN_COINCIDENT_EPS {
+        stub_points.push((flag_x, y));
+    }
+    stub_points.push((flag_x, flag_y));
+
+    let mut stub_wires = Vec::new();
+    for (segment, pair) in stub_points.windows(2).enumerate() {
+        let seg_uuid = if segment == 0 {
+            wire_uuid
+        } else {
+            derive_entity_uuid(project, "power_wire_bend", &format!("{key}_{segment}"))
+        };
+        stub_wires.push(Sexp::list(
+            "wire",
+            vec![
+                Sexp::list(
+                    "pts",
+                    vec![
+                        Sexp::list("xy", vec![num(pair[0].0), num(pair[0].1)]),
+                        Sexp::list("xy", vec![num(pair[1].0), num(pair[1].1)]),
+                    ],
+                ),
+                Sexp::list(
+                    "stroke",
+                    vec![
+                        Sexp::list("width", vec![num(0.0)]),
+                        Sexp::list("type", vec![Sexp::atom("default")]),
+                    ],
+                ),
+                str_pair("uuid", seg_uuid.to_string()),
+            ],
+        ));
+    }
 
     let sym_sexp = Sexp::list(
         "symbol",
@@ -1486,7 +1590,9 @@ fn build_power_symbol(
         ],
     );
 
-    Some(vec![wire_sexp, sym_sexp])
+    let mut out = stub_wires;
+    out.push(sym_sexp);
+    Some(out)
 }
 
 fn embed_library(
@@ -2091,6 +2197,117 @@ mod tests {
         lower(&parsed.ast.unwrap(), &registry, "inline.synth")
             .board
             .unwrap()
+    }
+
+    /// A power flag must never be drawn on top of a pin that belongs to
+    /// a *different* net.
+    ///
+    /// Two 2-pin parts placed close together and rotated so their pins
+    /// face each other can be only one stub apart, so the `+3V3` flag's
+    /// one-grid offset lands exactly on the neighbour's signal pin.
+    /// KiCad treats a symbol sitting on a pin as joining that net, so
+    /// the two merge silently and every pin of the signal net is
+    /// dragged onto the rail — which is how a whole `I2C_SDA` bus once
+    /// disappeared into `+3V3`.
+    #[test]
+    fn power_flag_steps_clear_of_a_neighbouring_signal_pin() {
+        use std::collections::HashMap;
+
+        use synth_layout::{ComponentPlacement, PowerFlag, PowerFlagKind, Rotation};
+
+        let board = lower_lenient(
+            r#"board "b" {
+                component R1: resistor "r_generic_0603" value "4.7k"
+                component R2: resistor "r_generic_0603" value "4.7k"
+                connect R1.p1 -> R2.p1 as "SIG"
+                connect R1.p2 -> "GND"
+                connect R2.p2 -> "GND"
+            }"#,
+        );
+
+        // The rail R2 belongs to besides SIG, so its flag is the one at
+        // risk. Resolved by net membership rather than a hard-coded pin
+        // index, which depends on the registry's pin ordering.
+        let r2_id = board.components[1].id;
+        let rail = board
+            .nets
+            .iter()
+            .find(|n| n.name != "SIG" && n.endpoints.iter().any(|e| e.component == r2_id))
+            .expect("R2 sits on a rail as well as SIG");
+        let rail_pin = rail
+            .endpoints
+            .iter()
+            .find(|e| e.component == r2_id)
+            .expect("R2 is an endpoint of the rail")
+            .pin;
+        let flag = PowerFlag {
+            net: rail.id,
+            component: r2_id,
+            pin: rail_pin,
+            kind: PowerFlagKind::Gnd,
+            label: "GND".to_string(),
+        };
+        // R2 sits at a fixed spot; R1 is then positioned so its SIG pin
+        // lands exactly on the naive flag position. Deriving R1's
+        // placement rather than hard-coding it keeps the fixture valid
+        // if the symbol's pin geometry ever changes.
+        let r2 = ComponentPlacement {
+            id: r2_id,
+            center_mm: (127.0, 63.5),
+            rotation: Rotation::TwoSeventy,
+        };
+        let probe = ComponentPlacement {
+            id: board.components[0].id,
+            center_mm: (0.0, 0.0),
+            rotation: Rotation::TwoSeventy,
+        };
+        let probe_map: HashMap<_, &ComponentPlacement> =
+            [(probe.id, &probe), (r2.id, &r2)].into_iter().collect();
+
+        let (px, py, dx, dy) =
+            pin_terminal_xy(&board, flag.component, flag.pin, &probe_map).unwrap();
+        let naive = (px + dx * POWER_FLAG_STUB_LEN, py + dy * POWER_FLAG_STUB_LEN);
+
+        // R1's SIG pin, read at the origin, gives the offset to cancel.
+        let sig = board
+            .nets
+            .iter()
+            .find(|n| n.name == "SIG")
+            .expect("SIG is declared");
+        let sig_pin = sig
+            .endpoints
+            .iter()
+            .find(|e| e.component == probe.id)
+            .expect("R1 is an endpoint of SIG")
+            .pin;
+        let (ox, oy, _, _) = pin_terminal_xy(&board, probe.id, sig_pin, &probe_map).unwrap();
+        let r1 = ComponentPlacement {
+            id: probe.id,
+            center_mm: (naive.0 - ox, naive.1 - oy),
+            rotation: Rotation::TwoSeventy,
+        };
+        let placements: HashMap<_, &ComponentPlacement> =
+            [(r1.id, &r1), (r2.id, &r2)].into_iter().collect();
+
+        // The naive one-stub offset now sits on R1's signal pin. This
+        // assertion matters: without it the test would pass vacuously
+        // if the geometry ever stopped reproducing the collision.
+        assert!(
+            lands_on_foreign_pin(&board, &flag, &placements, naive.0, naive.1),
+            "fixture no longer reproduces the collision"
+        );
+
+        let cleared = clear_power_flag_position(&board, &flag, &placements, px, py, dx, dy);
+        assert_ne!(cleared, naive, "flag must move off the foreign pin");
+        assert!(
+            !lands_on_foreign_pin(&board, &flag, &placements, cleared.0, cleared.1),
+            "flag must not land on a foreign pin"
+        );
+        assert_ne!(cleared, naive, "flag must move off the foreign pin");
+        assert!(
+            !lands_on_foreign_pin(&board, &flag, &placements, cleared.0, cleared.1),
+            "flag must not land on a foreign pin"
+        );
     }
 
     #[test]
