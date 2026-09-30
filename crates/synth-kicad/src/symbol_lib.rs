@@ -480,20 +480,19 @@ fn build_symbol(part: &Part, alternates: Option<&BTreeMap<String, BTreeSet<Strin
         (0.0, top + PIN_PITCH, 0.0, top + (PIN_PITCH * 2.0))
     };
 
-    let pin_numbers = if is_two_pin {
-        Sexp::list("pin_numbers", vec![Sexp::list("offset", vec![num(1.016)])])
-    } else {
-        Sexp::list(
-            "pin_numbers",
-            vec![
-                Sexp::list("offset", vec![num(1.016)]),
-                Sexp::list("hide", vec![Sexp::atom("yes")]),
-            ],
-        )
-    };
+    // `pin_numbers` takes `hide` but no `offset`: KiCad's symbol parser
+    // rejects an offset child there and refuses to load the file. Two-pin
+    // parts keep their numbers, which is both conventional and free of
+    // crowding.
+    let pin_numbers = Sexp::list(
+        "pin_numbers",
+        vec![Sexp::list("hide", vec![Sexp::atom("yes")])],
+    );
     let mut children = vec![
         Sexp::list("pin_names", vec![Sexp::list("offset", vec![num(0.508)])]),
         pin_numbers,
+    ];
+    children.extend([
         Sexp::list("in_bom", vec![Sexp::atom("yes")]),
         Sexp::list("on_board", vec![Sexp::atom("yes")]),
         property(
@@ -548,7 +547,7 @@ fn build_symbol(part: &Part, alternates: Option<&BTreeMap<String, BTreeSet<Strin
         ),
         // Pins sub-symbol.
         build_pins_subsymbol(part_id, &part.pins, body_w, body_h, is_two_pin, alternates),
-    ];
+    ]);
 
     // KiCad expects the outer (symbol "lib:id" ...) form where the
     // name includes the library nickname — that's the key instances

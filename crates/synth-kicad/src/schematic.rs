@@ -510,7 +510,7 @@ pub(crate) fn build_sheet_schematic(
     // KiCad power symbols at every power-flag pin (wire stub + symbol).
     for flag in &layout.power_flags {
         if let Some(mut sexps) =
-            build_power_symbol(board, flag, &placements, project, &mut *power_refs)
+            build_power_symbol(board, flag, &placements, layout, project, &mut *power_refs)
         {
             children.append(&mut sexps);
         }
@@ -1387,14 +1387,24 @@ const POWER_FLAG_STUB_LEN: f64 = 2.54;
 /// deciding whether a flag lands on a foreign pin.
 const PIN_COINCIDENT_EPS: f64 = 0.05;
 
-/// Whether `(x, y)` coincides with a pin terminal that is *not* an
-/// endpoint of the power flag's own net.
-fn lands_on_foreign_pin(
+/// Whether the flag's connecting stub would collide with something
+/// that is not part of its own net.
+///
+/// Two things count. A *foreign pin terminal*: drawing a symbol on a
+/// pin joins that net, which is how a `+3V3` flag once welded an
+/// `I2C_SDA` pin to the rail and took all eight of its pins with it.
+/// And a *foreign wire*: a stub that runs along a signal wire stays
+/// electrically separate (KiCad joins wires at endpoints, not where
+/// they merely overlap) but reads as a short to anyone checking the
+/// sheet, and lands on top of the other net's copper in any tool that
+/// treats an overlap as a connection.
+fn stub_is_blocked(
     board: &Board,
     flag: &synth_layout::PowerFlag,
     placements: &HashMap<ComponentId, &ComponentPlacement>,
-    x: f64,
-    y: f64,
+    layout: &synth_layout::Layout,
+    from: (f64, f64),
+    to: (f64, f64),
 ) -> bool {
     for component in &board.components {
         let Some(part) = component.part.as_ref() else {
@@ -1411,61 +1421,111 @@ fn lands_on_foreign_pin(
                 continue;
             }
             if let Some((px, py, _, _)) = pin_terminal_xy(board, component.id, pin_id, placements) {
-                if (px - x).abs() <= PIN_COINCIDENT_EPS && (py - y).abs() <= PIN_COINCIDENT_EPS {
+                if point_on_segment((px, py), from, to) {
                     return true;
                 }
+            }
+        }
+    }
+    for wire in &layout.wires {
+        if wire.net == flag.net {
+            continue;
+        }
+        for pair in wire.points.windows(2) {
+            if segments_touch(from, to, pair[0], pair[1]) {
+                return true;
             }
         }
     }
     false
 }
 
-/// Pick a power-flag position that cannot short a neighbouring part.
-///
-/// The natural spot is one stub length out from the anchor pin's
-/// terminal. When two 2-pin parts sit close together and are rotated
-/// so their pins point at each other, that stub can land exactly on
-/// the *other* part's pin terminal. A `+3V3` flag landing on an
-/// `I2C_SDA` pin silently merges the two nets, dragging every pin of
-/// the signal net onto the rail. When the natural spot is occupied,
-/// step clear of it.
-fn clear_power_flag_position(
-    board: &Board,
-    flag: &synth_layout::PowerFlag,
-    placements: &HashMap<ComponentId, &ComponentPlacement>,
+/// Whether `p` lies on the axis-aligned segment `a`..`b`, allowing a
+/// grid of slack so a coincident-in-theory touch is still caught.
+fn point_on_segment(p: (f64, f64), a: (f64, f64), b: (f64, f64)) -> bool {
+    const SLACK: f64 = PIN_COINCIDENT_EPS;
+    let (lo_x, hi_x) = (a.0.min(b.0) - SLACK, a.0.max(b.0) + SLACK);
+    let (lo_y, hi_y) = (a.1.min(b.1) - SLACK, a.1.max(b.1) + SLACK);
+    p.0 >= lo_x && p.0 <= hi_x && p.1 >= lo_y && p.1 <= hi_y
+}
+
+/// Whether two axis-aligned segments touch or overlap.
+fn segments_touch(a0: (f64, f64), a1: (f64, f64), b0: (f64, f64), b1: (f64, f64)) -> bool {
+    point_on_segment(a0, b0, b1)
+        || point_on_segment(a1, b0, b1)
+        || point_on_segment(b0, a0, a1)
+        || point_on_segment(b1, a0, a1)
+}
+
+/// A pin terminal plus the unit vector pointing outward along it, as
+/// returned by [`pin_terminal_xy`]. Bundled so callers pass one
+/// geometry value around rather than four loose coordinates.
+#[derive(Clone, Copy)]
+struct PinAnchor {
     x: f64,
     y: f64,
     dx: f64,
     dy: f64,
-) -> (f64, f64) {
+}
+
+/// Pick a power-flag position whose stub cannot short a neighbour.
+///
+/// The natural spot is one stub length out from the anchor pin's
+/// terminal. When two 2-pin parts sit close together and are rotated
+/// so their pins point at each other, that stub can land exactly on
+/// the *other* part's pin terminal.
+///
+/// Returns the flag position and, when the route needs a bend, the
+/// corner it validated. Handing the corner back rather than letting
+/// the emitter re-derive it keeps the drawn stub identical to the
+/// route that was checked — the two drifting apart is how a clear
+/// candidate turns into a stub that runs back through the obstacle.
+///
+/// Candidate order matters. Stepping *perpendicular* comes first: the
+/// leg leaves the pin sideways, so it never sweeps along the axis
+/// through whatever is sitting alongside. Reaching further *along* the
+/// axis is the fallback, and it is the direction that produced the
+/// 2.54 mm of collinear overlap with a neighbouring signal wire.
+fn clear_power_flag_position(
+    board: &Board,
+    flag: &synth_layout::PowerFlag,
+    placements: &HashMap<ComponentId, &ComponentPlacement>,
+    layout: &synth_layout::Layout,
+    anchor: PinAnchor,
+) -> (f64, f64, Option<(f64, f64)>) {
+    let (x, y, dx, dy) = (anchor.x, anchor.y, anchor.dx, anchor.dy);
     let stub_len = POWER_FLAG_STUB_LEN;
     let natural = (x + dx * stub_len, y + dy * stub_len);
-    if !lands_on_foreign_pin(board, flag, placements, natural.0, natural.1) {
-        return natural;
+    if !stub_is_blocked(board, flag, placements, layout, (x, y), natural) {
+        return (natural.0, natural.1, None);
     }
-    // Reach further out along the stub axis first: those keep the
-    // connecting wire straight, which is the case the obstacle grid
-    // already reasons about.
-    for reach in [2.0 * stub_len, 3.0 * stub_len, -stub_len, -2.0 * stub_len] {
-        let candidate = (x + dx * reach, y + dy * reach);
-        if !lands_on_foreign_pin(board, flag, placements, candidate.0, candidate.1) {
-            return candidate;
-        }
-    }
-    // Otherwise step perpendicular. The wire then needs a bend, so the
-    // corner is checked too — a clear flag position reached through an
-    // occupied corner is still a short.
+    // Perpendicular from the pin, then along the axis. Bending the
+    // other way — out to the natural spot first, then across — routes
+    // the first leg straight through the obstacle, so the
+    // perpendicular route would never be viable.
     let (perp_x, perp_y) = (-dy, dx);
     for step in [stub_len, 2.0 * stub_len, -stub_len, -2.0 * stub_len] {
         let candidate = (natural.0 + perp_x * step, natural.1 + perp_y * step);
-        let corner = (candidate.0, y);
-        if !lands_on_foreign_pin(board, flag, placements, candidate.0, candidate.1)
-            && !lands_on_foreign_pin(board, flag, placements, corner.0, corner.1)
+        let corner = (x + perp_x * step, y + perp_y * step);
+        if !stub_is_blocked(board, flag, placements, layout, (x, y), corner)
+            && !stub_is_blocked(board, flag, placements, layout, corner, candidate)
         {
-            return candidate;
+            return (candidate.0, candidate.1, Some(corner));
         }
     }
-    natural
+    // Fall back to reaching further out along the stub axis, straight.
+    for reach in [2.0 * stub_len, 3.0 * stub_len, -stub_len, -2.0 * stub_len] {
+        let candidate = (x + dx * reach, y + dy * reach);
+        if !stub_is_blocked(board, flag, placements, layout, (x, y), candidate) {
+            return (candidate.0, candidate.1, None);
+        }
+    }
+    // Every route out is occupied, so drop the stub entirely and sit the
+    // symbol on its own anchor pin. That point is by definition on the
+    // flag's own net, so it cannot short anything — which makes it the
+    // one position that is always safe. The symbol overlaps its own pin
+    // stub, which is an aesthetic cost, not an electrical one.
+    (x, y, None)
 }
 
 /// Emit a KiCad `(symbol)` entry for a power-flag symbol attached
@@ -1476,6 +1536,7 @@ fn build_power_symbol(
     board: &Board,
     flag: &synth_layout::PowerFlag,
     placements: &HashMap<ComponentId, &ComponentPlacement>,
+    layout: &synth_layout::Layout,
     project: &Uuid,
     power_refs: &mut PowerRefAllocator,
 ) -> Option<Vec<Sexp>> {
@@ -1496,7 +1557,8 @@ fn build_power_symbol(
 
     // Offset the symbol one grid unit outward from the pin so it
     // sits clear of the body.
-    let (flag_x, flag_y) = clear_power_flag_position(board, flag, placements, x, y, dx, dy);
+    let (flag_x, flag_y, stub_corner) =
+        clear_power_flag_position(board, flag, placements, layout, PinAnchor { x, y, dx, dy });
 
     let lib_id = power_symbol_lib_id(&flag.label);
     let key = format!("power_{}_{}", component.refdes, flag.pin.0);
@@ -1506,10 +1568,11 @@ fn build_power_symbol(
 
     // The connecting stub. Normally one straight segment from the pin
     // terminal to the flag; when the flag had to step off the stub
-    // axis, bend through the flag's x so the run stays orthogonal.
+    // axis, bend at the pin so the run matches the route
+    // `clear_power_flag_position` validated.
     let mut stub_points = vec![(x, y)];
-    if (flag_x - x).abs() > PIN_COINCIDENT_EPS && (flag_y - y).abs() > PIN_COINCIDENT_EPS {
-        stub_points.push((flag_x, y));
+    if let Some(corner) = stub_corner {
+        stub_points.push(corner);
     }
     stub_points.push((flag_x, flag_y));
 
@@ -2199,16 +2262,18 @@ mod tests {
             .unwrap()
     }
 
-    /// A power flag must never be drawn on top of a pin that belongs to
-    /// a *different* net.
+    /// A power-flag stub must not short a neighbouring part, and must
+    /// not run along a neighbouring wire.
     ///
     /// Two 2-pin parts placed close together and rotated so their pins
-    /// face each other can be only one stub apart, so the `+3V3` flag's
+    /// face each other can be only one stub apart, so the flag's
     /// one-grid offset lands exactly on the neighbour's signal pin.
     /// KiCad treats a symbol sitting on a pin as joining that net, so
     /// the two merge silently and every pin of the signal net is
     /// dragged onto the rail — which is how a whole `I2C_SDA` bus once
-    /// disappeared into `+3V3`.
+    /// disappeared into `+3V3`. The stub must also stay clear of wires
+    /// belonging to other nets: an overlap is electrically separate,
+    /// but it reads as a short to anyone checking the sheet.
     #[test]
     fn power_flag_steps_clear_of_a_neighbouring_signal_pin() {
         use std::collections::HashMap;
@@ -2247,6 +2312,7 @@ mod tests {
             kind: PowerFlagKind::Gnd,
             label: "GND".to_string(),
         };
+
         // R2 sits at a fixed spot; R1 is then positioned so its SIG pin
         // lands exactly on the naive flag position. Deriving R1's
         // placement rather than hard-coding it keeps the fixture valid
@@ -2289,24 +2355,195 @@ mod tests {
         let placements: HashMap<_, &ComponentPlacement> =
             [(r1.id, &r1), (r2.id, &r2)].into_iter().collect();
 
+        // Only the hand-built placements matter here, so drop whatever
+        // wires the router produced.
+        let mut layout = synth_layout::layout(&board);
+        layout.wires.clear();
+
         // The naive one-stub offset now sits on R1's signal pin. This
         // assertion matters: without it the test would pass vacuously
         // if the geometry ever stopped reproducing the collision.
         assert!(
-            lands_on_foreign_pin(&board, &flag, &placements, naive.0, naive.1),
+            stub_is_blocked(&board, &flag, &placements, &layout, (px, py), naive),
             "fixture no longer reproduces the collision"
         );
 
-        let cleared = clear_power_flag_position(&board, &flag, &placements, px, py, dx, dy);
-        assert_ne!(cleared, naive, "flag must move off the foreign pin");
-        assert!(
-            !lands_on_foreign_pin(&board, &flag, &placements, cleared.0, cleared.1),
-            "flag must not land on a foreign pin"
+        let (cx, cy, corner) = clear_power_flag_position(
+            &board,
+            &flag,
+            &placements,
+            &layout,
+            PinAnchor {
+                x: px,
+                y: py,
+                dx,
+                dy,
+            },
         );
+        let cleared = (cx, cy);
         assert_ne!(cleared, naive, "flag must move off the foreign pin");
+        // Check the legs the guard actually validated. Measuring the
+        // single segment pin->flag would be wrong for a bent route: its
+        // bounding box covers a rectangle the wire never enters, so it
+        // reports hits that do not exist.
+        let leg_clear = match corner {
+            Some(corner) => {
+                !stub_is_blocked(&board, &flag, &placements, &layout, (px, py), corner)
+                    && !stub_is_blocked(&board, &flag, &placements, &layout, corner, cleared)
+            }
+            None => !stub_is_blocked(&board, &flag, &placements, &layout, (px, py), cleared),
+        };
+        assert!(leg_clear, "flag stub must not touch a foreign pin");
+    }
+
+    /// A flag steps *perpendicular* off the stub axis rather than
+    /// reaching further *along* it.
+    ///
+    /// This is the shape the I2C pull-ups hit: R5 and R6 sit one stub
+    /// apart with their pins facing each other, so R6's rail flag
+    /// cannot sit on its natural spot (R5's signal pin is there) and
+    /// every further reach along that axis runs along R5's signal
+    /// wire. Reaching along is electrically separate — KiCad joins
+    /// wires at endpoints, not where they merely overlap — but it left
+    /// 2.54 mm of collinear overlap that reads as a short to anyone
+    /// checking the sheet, and lands on top of the other net's copper
+    /// in any tool that treats an overlap as a connection.
+    #[test]
+    fn power_flag_steps_off_axis_rather_than_along_a_foreign_wire() {
+        use std::collections::HashMap;
+
+        use synth_layout::{ComponentPlacement, PowerFlag, PowerFlagKind, Rotation, WirePath};
+
+        let board = lower_lenient(
+            r#"board "b" {
+                component R1: resistor "r_generic_0603" value "4.7k"
+                component R2: resistor "r_generic_0603" value "4.7k"
+                connect R1.p1 -> R2.p1 as "SIG"
+                connect R1.p2 -> "GND"
+                connect R2.p2 -> "GND"
+            }"#,
+        );
+        let r2_id = board.components[1].id;
+        let rail = board
+            .nets
+            .iter()
+            .find(|n| n.name != "SIG" && n.endpoints.iter().any(|e| e.component == r2_id))
+            .expect("R2 sits on a rail as well as SIG");
+        let rail_pin = rail
+            .endpoints
+            .iter()
+            .find(|e| e.component == r2_id)
+            .expect("R2 is an endpoint of the rail")
+            .pin;
+        let flag = PowerFlag {
+            net: rail.id,
+            component: r2_id,
+            pin: rail_pin,
+            kind: PowerFlagKind::Gnd,
+            label: "GND".to_string(),
+        };
+        let sig_net = board
+            .nets
+            .iter()
+            .find(|n| n.name == "SIG")
+            .expect("SIG is declared")
+            .id;
+
+        // R1's signal pin is placed exactly on the naive flag spot, the
+        // way the two pull-ups sit one stub apart in the real design.
+        let r2 = ComponentPlacement {
+            id: r2_id,
+            center_mm: (127.0, 63.5),
+            rotation: Rotation::TwoSeventy,
+        };
+        let probe = ComponentPlacement {
+            id: board.components[0].id,
+            center_mm: (0.0, 0.0),
+            rotation: Rotation::TwoSeventy,
+        };
+        let probe_map: HashMap<_, &ComponentPlacement> =
+            [(probe.id, &probe), (r2.id, &r2)].into_iter().collect();
+        let (px, py, dx, dy) =
+            pin_terminal_xy(&board, flag.component, flag.pin, &probe_map).unwrap();
+        let stub = POWER_FLAG_STUB_LEN;
+        let natural = (px + dx * stub, py + dy * stub);
+        let sig_pin = board
+            .nets
+            .iter()
+            .find(|n| n.name == "SIG")
+            .unwrap()
+            .endpoints
+            .iter()
+            .find(|e| e.component == probe.id)
+            .expect("R1 is an endpoint of SIG")
+            .pin;
+        let (ox, oy, _, _) = pin_terminal_xy(&board, probe.id, sig_pin, &probe_map).unwrap();
+        let r1 = ComponentPlacement {
+            id: probe.id,
+            center_mm: (natural.0 - ox, natural.1 - oy),
+            rotation: Rotation::TwoSeventy,
+        };
+        let placements: HashMap<_, &ComponentPlacement> =
+            [(r1.id, &r1), (r2.id, &r2)].into_iter().collect();
+
+        // A SIG wire along the stub axis, covering the reaches beyond
+        // the natural spot.
+        let mut layout = synth_layout::layout(&board);
+        layout.wires = vec![WirePath {
+            net: sig_net,
+            points: vec![
+                (px + dx * stub * 2.0, py + dy * stub * 2.0),
+                (px + dx * stub * 4.0, py + dy * stub * 4.0),
+            ],
+            junctions: vec![],
+        }];
+
+        // The natural spot is taken by R1's pin, and every reach along
+        // the axis crosses the wire…
         assert!(
-            !lands_on_foreign_pin(&board, &flag, &placements, cleared.0, cleared.1),
-            "flag must not land on a foreign pin"
+            stub_is_blocked(&board, &flag, &placements, &layout, (px, py), natural),
+            "natural spot should be blocked by the neighbour pin"
+        );
+        assert!(
+            stub_is_blocked(
+                &board,
+                &flag,
+                &placements,
+                &layout,
+                (px, py),
+                (px + dx * stub * 2.0, py + dy * stub * 2.0)
+            ),
+            "along-axis reach should be blocked by the foreign wire"
+        );
+
+        // …so the guard must step perpendicular.
+        let (cx, cy, corner) = clear_power_flag_position(
+            &board,
+            &flag,
+            &placements,
+            &layout,
+            PinAnchor {
+                x: px,
+                y: py,
+                dx,
+                dy,
+            },
+        );
+        let cleared = (cx, cy);
+        // The route must bend off the axis rather than run straight down
+        // it, and must not be one of the along-axis reaches.
+        let corner = corner.expect("a blocked natural spot must bend off the axis");
+        let along_reach = |m: f64| (px + dx * m, py + dy * m);
+        assert!(
+            ![1.0, 2.0, 3.0, -1.0, -2.0]
+                .iter()
+                .any(|m| cleared == along_reach(*m * stub)),
+            "flag must not sit on an along-axis reach, got {cleared:?}"
+        );
+        assert!(
+            !stub_is_blocked(&board, &flag, &placements, &layout, (px, py), corner)
+                && !stub_is_blocked(&board, &flag, &placements, &layout, corner, cleared),
+            "flag stub must not touch the foreign wire"
         );
     }
 

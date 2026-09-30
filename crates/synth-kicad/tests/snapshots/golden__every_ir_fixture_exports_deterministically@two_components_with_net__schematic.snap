@@ -1,5 +1,6 @@
 ---
 source: crates/synth-kicad/tests/golden.rs
+assertion_line: 60
 expression: schematic
 ---
 (kicad_sch
@@ -21,6 +22,9 @@ expression: schematic
 			"Security:ATECC608A-SSH"
 			(pin_names
 				(offset 0.508)
+			)
+			(pin_numbers
+				(hide yes)
 			)
 			(in_bom yes)
 			(on_board yes)

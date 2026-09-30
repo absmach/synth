@@ -11,6 +11,9 @@ expression: library
 		(pin_names
 			(offset 0.508)
 		)
+		(pin_numbers
+			(hide yes)
+		)
 		(in_bom yes)
 		(on_board yes)
 		(property

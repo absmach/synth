@@ -536,12 +536,14 @@ mod tests {
             ],
             vec![],
         );
-        // Spread the two sheets' parts across a page wider than A2.
+        // Spread the two sheets' parts wider than the largest single
+        // sheet. `overflow = "grow"` (the default) tops out at A0, so the
+        // fixture has to clear 841 mm of page width to force a split.
         let global = layout_at(&[
             (0, 50.0, 50.0),
             (1, 120.0, 50.0),
-            (2, 800.0, 50.0),
-            (3, 900.0, 50.0),
+            (2, 1400.0, 50.0),
+            (3, 1500.0, 50.0),
         ]);
         let sheets = layout_sheets(&b, global);
         assert_eq!(sheets.len(), 3, "root + A + B");
@@ -717,7 +719,10 @@ mod tests {
             ],
             vec![],
         );
-        let global = layout_at(&[(0, 50.0, 50.0), (1, 800.0, 50.0), (2, 900.0, 50.0)]);
+        // Wider than A0, the ceiling for `overflow = "grow"`, so the
+        // board genuinely splits and this test exercises a multi-sheet
+        // root rather than a single sheet.
+        let global = layout_at(&[(0, 50.0, 50.0), (1, 1400.0, 50.0), (2, 1500.0, 50.0)]);
         let sheets = layout_sheets(&b, global);
         assert!(sheets.len() > 1, "precondition: the board splits");
         let project = crate::uuid_v5::project_namespace(&b.name);

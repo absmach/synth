@@ -1,6 +1,5 @@
 ---
 source: crates/synth-kicad/tests/golden.rs
-assertion_line: 64
 expression: library
 ---
 (kicad_symbol_lib
