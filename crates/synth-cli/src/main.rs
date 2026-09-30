@@ -292,6 +292,27 @@ enum Command {
         pretty: bool,
     },
 
+    /// Run the deterministic, network-free release/check contract. The
+    /// command composes compiler validation, DRC, and (with --fab) a complete
+    /// KiCad manufacturing export into one stable JSON result.
+    Check {
+        /// Path to a `.synth` source file.
+        input: PathBuf,
+        #[arg(long, value_name = "DIR")]
+        registry: Option<PathBuf>,
+        /// Run the manufacturing export gate as well as source/DRC checks.
+        #[arg(long)]
+        fab: bool,
+        /// Allow manufacturing output containing unverified registry parts.
+        #[arg(long)]
+        allow_unverified_parts: bool,
+        /// Emit machine-readable output. Without this flag a concise summary
+        /// is printed while the JSON shape remains available to CI via
+        /// `--json`.
+        #[arg(long)]
+        json: bool,
+    },
+
     /// Start a local HTTP server that watches the given `.synth`
     /// source and shows a live, read-only schematic + diagnostics
     /// view in the browser. Source-of-truth stays in the user's
@@ -818,6 +839,19 @@ fn main() -> ExitCode {
             profile,
             pretty,
         } => dump_drc(&input, registry.as_deref(), profile.as_deref(), pretty),
+        Command::Check {
+            input,
+            registry,
+            fab,
+            allow_unverified_parts,
+            json,
+        } => check(
+            &input,
+            registry.as_deref(),
+            fab,
+            allow_unverified_parts,
+            json,
+        ),
         Command::Preview {
             input,
             registry,
@@ -889,6 +923,7 @@ fn capability_cmd(cmd: &CapabilityCommand) -> anyhow::Result<u8> {
         "place",
         "route",
         "drc",
+        "check",
         "preview",
         "mcp",
         "supply-chain",
@@ -996,6 +1031,211 @@ fn run_mcp(stdio: bool, sse: bool, port: u16, registry: Option<PathBuf>) -> anyh
         runtime.block_on(synth_mcp::run_stdio_server(registry))?;
     }
     Ok(EXIT_SUCCESS)
+}
+
+/// The release boundary described by copperheadideas.md. This deliberately
+/// delegates each stage to the same CLI implementation used by agents and
+/// humans, but captures their machine-readable results into one deterministic
+/// report. No model, network, or project mutation is involved.
+fn check(
+    input: &Path,
+    registry: Option<&Path>,
+    fab: bool,
+    allow_unverified_parts: bool,
+    json: bool,
+) -> anyhow::Result<u8> {
+    use sha2::{Digest, Sha256};
+
+    if !input.is_file() {
+        anyhow::bail!("input file {} does not exist", input.display());
+    }
+    let source = std::fs::read(input)?;
+    let source_hash = format!("{:x}", Sha256::digest(&source));
+    let exe = std::env::current_exe()?;
+    let nonce = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_or(0, |d| d.as_nanos());
+    let work = std::env::temp_dir().join(format!("synth_check_{}_{}", std::process::id(), nonce));
+    std::fs::create_dir_all(&work)?;
+
+    let base = vec!["--jobs".to_string(), "1".to_string()];
+
+    let mut validate_args = base.clone();
+    validate_args.extend([
+        "validate".into(),
+        "--format".into(),
+        "json".into(),
+        input.display().to_string(),
+    ]);
+    if let Some(dir) = registry {
+        validate_args.extend(["--registry".into(), dir.display().to_string()]);
+    }
+    let (validate_output, validate_timed_out) = run_check_child(&exe, &validate_args, 120)?;
+    let validate_json = serde_json::from_slice::<serde_json::Value>(&validate_output.stdout)
+        .unwrap_or_else(|_| serde_json::json!({"diagnostics": [], "parse_error": true}));
+    let validate_pass = !validate_timed_out && validate_output.status.success();
+
+    let (drc_json, drc_pass, drc_timed_out) = if validate_pass {
+        let mut drc_args = base.clone();
+        drc_args.extend(["drc".into(), "--pretty".into(), input.display().to_string()]);
+        if let Some(dir) = registry {
+            drc_args.extend(["--registry".into(), dir.display().to_string()]);
+        }
+        let (drc_output, timed_out) = run_check_child(&exe, &drc_args, 30)?;
+        (
+            serde_json::from_slice::<serde_json::Value>(&drc_output.stdout)
+                .unwrap_or_else(|_| serde_json::json!({"status": "unknown", "parse_error": true})),
+            drc_output.status.success(),
+            timed_out,
+        )
+    } else {
+        (
+            serde_json::json!({"status": "unknown", "reason": "source gate failed"}),
+            false,
+            false,
+        )
+    };
+
+    let mut stages = serde_json::Map::new();
+    stages.insert(
+        "source".into(),
+        serde_json::json!({
+            "status": if validate_pass { "pass" } else { "fail" },
+            "result": validate_json,
+        }),
+    );
+    stages.insert(
+        "drc".into(),
+        serde_json::json!({
+            "status": if !validate_pass || drc_timed_out {
+                "unknown"
+            } else if drc_pass {
+                "pass"
+            } else {
+                "fail"
+            },
+            "result": drc_json,
+        }),
+    );
+
+    let mut fab_pass = true;
+    if fab && validate_pass && drc_pass {
+        let export_dir = work.join("release");
+        let mut export_args = base.clone();
+        export_args.extend([
+            "export-kicad".into(),
+            input.display().to_string(),
+            "--out".into(),
+            export_dir.display().to_string(),
+            "--gerbers".into(),
+            "--drill".into(),
+            "--step".into(),
+            "--pnp".into(),
+            "--validate-erc".into(),
+        ]);
+        if let Some(dir) = registry {
+            export_args.extend(["--registry".into(), dir.display().to_string()]);
+        }
+        if allow_unverified_parts {
+            export_args.push("--allow-unverified-parts".into());
+        }
+        let (export_output, export_timed_out) = run_check_child(&exe, &export_args, 120)?;
+        fab_pass = !export_timed_out && export_output.status.success();
+        let mut artifacts = serde_json::Map::new();
+        if export_dir.is_dir() {
+            let mut files = Vec::new();
+            let mut pending = vec![export_dir.clone()];
+            while let Some(dir) = pending.pop() {
+                for entry in std::fs::read_dir(dir)? {
+                    let path = entry?.path();
+                    if path.is_dir() {
+                        pending.push(path);
+                    } else {
+                        let bytes = std::fs::read(&path)?;
+                        let rel = path
+                            .strip_prefix(&export_dir)
+                            .unwrap_or(&path)
+                            .to_string_lossy()
+                            .to_string();
+                        files.push((rel, format!("{:x}", Sha256::digest(bytes))));
+                    }
+                }
+            }
+            files.sort_by(|a, b| a.0.cmp(&b.0));
+            for (path, hash) in files {
+                artifacts.insert(path, serde_json::Value::String(hash));
+            }
+        }
+        stages.insert(
+            "manufacturing".into(),
+            serde_json::json!({
+                "status": if fab_pass { "pass" } else { "fail" },
+                "artifacts": artifacts,
+            }),
+        );
+    } else if fab {
+        fab_pass = false;
+        stages.insert(
+            "manufacturing".into(),
+            serde_json::json!({"status": "unknown", "reason": "upstream source or DRC gate failed"}),
+        );
+    }
+
+    let pass = validate_pass && drc_pass && (!fab || fab_pass);
+    let report = serde_json::json!({
+        "schema_version": "synth.check.v1",
+        "status": if pass { "pass" } else { "fail" },
+        "input": input.display().to_string(),
+        "source_sha256": source_hash,
+        "network": "not_used",
+        "model": "not_used",
+        "stages": stages,
+    });
+    let _ = std::fs::remove_dir_all(&work);
+
+    if json {
+        println!("{}", serde_json::to_string_pretty(&report)?);
+    } else {
+        println!("{} {}", if pass { "PASS" } else { "FAIL" }, input.display());
+        for (name, stage) in report["stages"].as_object().into_iter().flatten() {
+            println!(
+                "  {name}: {}",
+                stage["status"].as_str().unwrap_or("unknown")
+            );
+        }
+        println!(
+            "  source_sha256: {}",
+            report["source_sha256"].as_str().unwrap_or("")
+        );
+    }
+    Ok(if pass {
+        EXIT_SUCCESS
+    } else {
+        EXIT_VALIDATION_ERRORS
+    })
+}
+
+fn run_check_child(
+    exe: &Path,
+    args: &[String],
+    timeout_seconds: u64,
+) -> anyhow::Result<(std::process::Output, bool)> {
+    let mut child = ProcessCommand::new(exe)
+        .args(args)
+        .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::piped())
+        .spawn()?;
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(timeout_seconds);
+    loop {
+        if child.try_wait()?.is_some() {
+            return Ok((child.wait_with_output()?, false));
+        }
+        if std::time::Instant::now() >= deadline {
+            let _ = child.kill();
+            return Ok((child.wait_with_output()?, true));
+        }
+        std::thread::sleep(std::time::Duration::from_millis(100));
+    }
 }
 
 fn run_preview(

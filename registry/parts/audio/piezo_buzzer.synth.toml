@@ -5,8 +5,8 @@ kicad_symbol = "Device:Buzzer"
 kicad_footprint = "Buzzer_Beeper:Buzzer_15x7.5RM7.6"
 
 [footprint_dimensions]
-width_mm = 9.6
-height_mm = 2.0
+width_mm = 15.5
+height_mm = 15.5
 courtyard_margin_mm = 0.25
 
 [operating_conditions]
@@ -23,4 +23,3 @@ electrical_type = "passive"
 name = "n"
 number = "2"
 electrical_type = "passive"
-

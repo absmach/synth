@@ -5,8 +5,8 @@ kicad_symbol = "Device:D_TVS"
 kicad_footprint = "Diode_SMD:D_SOD-323"
 
 [footprint_dimensions]
-width_mm = 2.7
-height_mm = 0.45
+width_mm = 3.2
+height_mm = 1.9
 courtyard_margin_mm = 0.25
 
 [operating_conditions]

@@ -20,6 +20,14 @@ This brings a software development workflow to hardware: edit designs in your us
 
 Engineers can use Synth from the command line. AI agents can use its **Model Context Protocol (MCP)** server to find components, validate circuits, and generate outputs through the same compiler, with structured diagnostics to guide corrections.
 
+## Release checks
+
+For CI and agent workflows, `synth check DESIGN.synth --json` is the single
+deterministic, model-free gate for compiler validation and DRC. Add `--fab` to
+require a complete KiCad manufacturing export and receive SHA-256 hashes for
+the emitted files. A timed-out or unavailable physical stage is reported as
+`unknown` and blocks the command; it is never treated as a pass.
+
 ## Why Synth?
 
 - **Review hardware changes in Git.** Components, connections, and constraints are text, making design intent visible in diffs and pull requests.
