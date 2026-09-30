@@ -166,6 +166,19 @@ expressible in that key and are enforced separately:
   wins on area and loses on the page. A 133x48 mm drawing became a 20x154 mm
   column: half the sheet, and a stripe down one side.
 
+Two further constraints keep the pass from overruling the design:
+
+- **A `placement_hint` pins its cluster.** `near: U3 priority: hard` is the
+  author saying "this part belongs beside that one". Such clusters are
+  reserved in the bin at their existing position (`MaxRectsBin::pre_place`)
+  and everything else is packed around them; the result is then not re-anchored,
+  because shifting it to restore the margin would drag the pinned cluster off
+  the position that was asked for.
+- **Declared groups must stay contiguous.** MaxRects has no notion of groups
+  and will drop one group's cluster inside another's box, which the renderer
+  then titles with parts that do not belong to it
+  (`E-SYNTH-SCHEM-013`). A packing that interleaves groups is refused.
+
 Boxes are sized from the **text-inclusive** extents
 (`component_text_inclusive_half_width` / `text_inclusive_half_height`) that
 the placer reserves and the router treats as obstacles — not from

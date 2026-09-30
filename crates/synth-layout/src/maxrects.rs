@@ -185,6 +185,55 @@ impl MaxRectsBin {
         self.free.len()
     }
 
+    /// Reserve `rect` without packing it, splitting the free list around it.
+    ///
+    /// For an item whose position is already decided — a component carrying
+    /// a `placement_hint`, say, which is the author's statement and not the
+    /// packer's to overrule. The item still has to fit somewhere in the bin,
+    /// so a reservation that does not fit returns `None`.
+    pub(crate) fn pre_place(&mut self, item: usize, rect: Rect) -> Option<()> {
+        if !self.free.iter().any(|f| {
+            rect.x >= f.x
+                && rect.y >= f.y
+                && rect.x + rect.w <= f.right()
+                && rect.y + rect.h <= f.bottom()
+        }) {
+            return None;
+        }
+        let mut next: Vec<Rect> = Vec::with_capacity(self.free.len() + 4);
+        for free in self.free.drain(..) {
+            if !free.overlaps(&rect) {
+                next.push(free);
+                continue;
+            }
+            if rect.x > free.x {
+                next.push(Rect::new(free.x, free.y, rect.x - free.x, free.h));
+            }
+            if rect.right() < free.right() {
+                next.push(Rect::new(
+                    rect.right(),
+                    free.y,
+                    free.right() - rect.right(),
+                    free.h,
+                ));
+            }
+            if rect.y > free.y {
+                next.push(Rect::new(free.x, free.y, free.w, rect.y - free.y));
+            }
+            if rect.bottom() < free.bottom() {
+                next.push(Rect::new(
+                    free.x,
+                    rect.bottom(),
+                    free.w,
+                    free.bottom() - rect.bottom(),
+                ));
+            }
+        }
+        self.free = prune_contained(next);
+        self.placed.push((item, rect));
+        Some(())
+    }
+
     /// Place item `item` of size `item_w` x `item_h` at the bottom-left of
     /// the best free rectangle, or `None` if it does not fit anywhere.
     pub(crate) fn insert(

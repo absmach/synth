@@ -48,6 +48,15 @@ struct ClusterBox {
     /// Indices into the incoming `placements`, ascending.
     members: Vec<usize>,
     rect: Rect,
+    /// The cluster holds a component carrying a `placement_hint`, so its
+    /// position is the author's statement and the packer must not touch it.
+    ///
+    /// A hint is an explicit instruction — `near: U3 priority: hard` says
+    /// "this capacitor belongs beside that part" — and a packer that
+    /// overrides one is discarding the designer's intent while reporting a
+    /// tidier sheet. Such clusters are reserved in the bin at their existing
+    /// position and everything else is packed around them.
+    pinned: bool,
 }
 
 /// Repack `placements` with MaxRects, or `None` to keep them as they are.
@@ -73,7 +82,7 @@ pub(crate) fn compact(
     let mut best: Option<((f64, f64, f64), Vec<ComponentPlacement>)> = None;
     for bin in candidate_bins(bounds_of_boxes(&boxes)) {
         for heuristic in Heuristic::ALL {
-            let Some(arrangement) = try_pack(placements, &boxes, bin, heuristic) else {
+            let Some(arrangement) = try_pack(board, placements, &boxes, bin, heuristic) else {
                 continue;
             };
             let key = page_key(board, &arrangement);
@@ -120,6 +129,78 @@ fn content_aspect(board: &Board, placements: &[ComponentPlacement]) -> f64 {
     } else {
         0.0
     }
+}
+
+/// Would this packing keep each declared group contiguous?
+///
+/// A group is contiguous when no cluster that does not belong to it sits
+/// inside the area its own clusters occupy. MaxRects has no notion of
+/// groups and will happily drop one group's cluster inside another's box,
+/// which the renderer then titles with parts that do not belong to it
+/// (`E-SYNTH-SCHEM-013`, "component outside its group region").
+///
+/// Clusters carry [`CLUSTER_PAD`] on every side, so this tests the padded
+/// rectangles and is stricter than the renderer's body-level test — the
+/// right direction for a guard.
+///
+/// A cluster whose members declare *different* groups is treated as
+/// belonging to none: guessing a group for it would be worse than letting
+/// the caller's own check decide.
+fn keeps_groups_contiguous(
+    board: &Board,
+    placements: &[ComponentPlacement],
+    boxes: &[ClusterBox],
+    target: &[Option<Rect>],
+) -> bool {
+    let group_of_cluster = |b: &ClusterBox| -> Option<String> {
+        let mut names: Vec<String> = b
+            .members
+            .iter()
+            .filter_map(|&i| {
+                let id = placements.get(i)?.id;
+                crate::effective_group(board, id).map(str::to_string)
+            })
+            .collect();
+        names.sort();
+        names.dedup();
+        if names.len() == 1 {
+            names.pop()
+        } else {
+            None
+        }
+    };
+
+    let placed: Vec<(Option<String>, Rect)> = boxes
+        .iter()
+        .zip(target)
+        .filter_map(|(b, t)| t.as_ref().map(|r| (group_of_cluster(b), *r)))
+        .collect();
+
+    // Union of each group's own clusters.
+    let mut regions: Vec<(String, (f64, f64, f64, f64))> = Vec::new();
+    for (group, rect) in &placed {
+        let Some(group) = group else { continue };
+        regions.push((
+            group.clone(),
+            (rect.x, rect.y, rect.x + rect.w, rect.y + rect.h),
+        ));
+    }
+
+    for (group, rect) in &placed {
+        let Some(group) = group else { continue };
+        let (x0, y0, x1, y1) = (rect.x, rect.y, rect.x + rect.w, rect.y + rect.h);
+        for (other, region) in &regions {
+            if other == group {
+                continue;
+            }
+            let disjoint = x1 <= region.0 || region.2 <= x0 || y1 <= region.1 || region.3 <= y0;
+            if disjoint {
+                continue;
+            }
+            return false;
+        }
+    }
+    true
 }
 
 /// Rank an arrangement, lower being better: the page it needs, then how much
@@ -227,7 +308,16 @@ fn cluster_boxes(board: &Board, placements: &[ComponentPlacement]) -> Vec<Cluste
         let Some(rect) = members_rect(board, placements, &members) else {
             continue;
         };
-        boxes.push(ClusterBox { members, rect });
+        let pinned = members
+            .iter()
+            .filter_map(|&i| placements.get(i))
+            .filter_map(|p| board.component(p.id))
+            .any(|c| c.placement_hint.is_some());
+        boxes.push(ClusterBox {
+            members,
+            rect,
+            pinned,
+        });
     }
     boxes
 }
@@ -316,6 +406,7 @@ fn candidate_bins(original: (f64, f64, f64, f64)) -> Vec<(f64, f64)> {
 
 /// Pack every cluster box into `bin`, or `None` if one does not fit.
 fn try_pack(
+    board: &Board,
     originals: &[ComponentPlacement],
     boxes: &[ClusterBox],
     bin: (f64, f64),
@@ -342,10 +433,29 @@ fn try_pack(
             })
     });
 
+    // Pinned clusters are reserved where the author put them; the bin is
+    // then only free to arrange the rest around them.
     let mut target: Vec<Option<Rect>> = vec![None; boxes.len()];
+    for (i, b) in boxes.iter().enumerate() {
+        if b.pinned {
+            packer.pre_place(i, b.rect)?;
+            target[i] = Some(b.rect);
+        }
+    }
     for &i in &order {
+        if boxes[i].pinned {
+            continue;
+        }
         let r = boxes[i].rect;
         target[i] = Some(packer.insert(i, r.w, r.h, heuristic)?);
+    }
+
+    // MaxRects has no notion of declared groups and will drop one group's
+    // cluster inside another's box, which the renderer then titles with
+    // parts that do not belong to it. Refuse the packing rather than
+    // reorder around it.
+    if !keeps_groups_contiguous(board, originals, boxes, &target) {
+        return None;
     }
 
     // Translate each cluster rigidly. `members_rect` pads the box by
@@ -355,10 +465,16 @@ fn try_pack(
         Vec::with_capacity(boxes.iter().map(|b| b.members.len()).sum());
     for (bi, b) in boxes.iter().enumerate() {
         let at = target[bi]?;
-        let from_x = b.rect.x + b.rect.w / 2.0;
-        let from_y = b.rect.y + b.rect.h / 2.0;
-        let dx = snap_to_grid(at.x + at.w / 2.0 - from_x);
-        let dy = snap_to_grid(at.y + at.h / 2.0 - from_y);
+        let (dx, dy) = if b.pinned {
+            (0.0, 0.0)
+        } else {
+            let from_x = b.rect.x + b.rect.w / 2.0;
+            let from_y = b.rect.y + b.rect.h / 2.0;
+            (
+                snap_to_grid(at.x + at.w / 2.0 - from_x),
+                snap_to_grid(at.y + at.h / 2.0 - from_y),
+            )
+        };
         for &i in &b.members {
             let src = originals.get(i)?;
             out.push(ComponentPlacement {
@@ -383,22 +499,29 @@ fn try_pack(
     // It also keeps the ranking honest. `page_key` measures absolute bounds,
     // so an arrangement that merely slid left would otherwise look like a
     // large improvement while covering exactly as much sheet.
-    let min_x = target
-        .iter()
-        .flatten()
-        .map(|r| r.x)
-        .fold(f64::INFINITY, f64::min);
-    let min_y = target
-        .iter()
-        .flatten()
-        .map(|r| r.y)
-        .fold(f64::INFINITY, f64::min);
-    let dx = snap_to_grid(crate::PAGE_MARGIN - min_x);
-    let dy = snap_to_grid(crate::PAGE_MARGIN - min_y);
-    if dx != 0.0 || dy != 0.0 {
-        for p in &mut out {
-            p.center_mm.0 += dx;
-            p.center_mm.1 += dy;
+    //
+    // Skipped when anything is pinned: a pinned cluster is already where the
+    // semantic placer put it, margin included, and shifting the result to
+    // re-anchor the margin would drag that pinned cluster off the position
+    // the author asked for.
+    if !boxes.iter().any(|b| b.pinned) {
+        let min_x = target
+            .iter()
+            .flatten()
+            .map(|r| r.x)
+            .fold(f64::INFINITY, f64::min);
+        let min_y = target
+            .iter()
+            .flatten()
+            .map(|r| r.y)
+            .fold(f64::INFINITY, f64::min);
+        let dx = snap_to_grid(crate::PAGE_MARGIN - min_x);
+        let dy = snap_to_grid(crate::PAGE_MARGIN - min_y);
+        if dx != 0.0 || dy != 0.0 {
+            for p in &mut out {
+                p.center_mm.0 += dx;
+                p.center_mm.1 += dy;
+            }
         }
     }
     Some(out)
@@ -445,7 +568,10 @@ mod tests {
             .enumerate()
             .map(|(i, c)| ComponentPlacement {
                 id: c.id,
-                center_mm: (50.0 + (i % 2) as f64 * 80.0, 50.0 + (i / 2) as f64 * 80.0),
+                center_mm: (
+                    20.0 * GRID + (i % 2) as f64 * 32.0 * GRID,
+                    20.0 * GRID + (i / 2) as f64 * 32.0 * GRID,
+                ),
                 rotation: crate::Rotation::Zero,
             })
             .collect()
@@ -563,6 +689,56 @@ mod tests {
                 );
             }
         }
+    }
+
+    #[test]
+    fn a_placement_hint_pins_its_cluster() {
+        // `placement_hint { near: U3 priority: hard }` is the author saying
+        // "this part belongs beside that one". A packer that overrides it
+        // discards the designer's intent while reporting a tidier sheet, and
+        // the renderer then finds a component inside a region it does not
+        // belong to (E-SYNTH-SCHEM-013).
+        let src = "board \"t\" {\n  layers 2\n  group \"Sensors\" {\n    \
+                   component U3: sensor \"bmp280_full\"\n    \
+                   component C8: capacitor \"c_generic_0805\" value \"100nF\" \
+                   { placement_hint { near: U3 priority: hard } }\n    \
+                   component R1: resistor \"r_generic_0805\"\n    \
+                   component R2: resistor \"r_generic_0805\"\n  }\n}";
+        let ast = synth_parser::parse(src, "t.synth").ast.expect("ast");
+        let reg = synth_registry::load_dir(
+            &std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+                .join("..")
+                .join("..")
+                .join("registry")
+                .join("parts"),
+        )
+        .expect("seed registry");
+        let board = synth_ir::lower(&ast, &reg, "t.synth").board.expect("board");
+
+        let hinted = board
+            .components
+            .iter()
+            .find(|c| c.placement_hint.is_some())
+            .expect("the fixture must contain a hinted component")
+            .id;
+        let before = column_layout(&board);
+        let before_pos = before
+            .iter()
+            .find(|p| p.id == hinted)
+            .expect("hinted component is placed")
+            .center_mm;
+
+        let after = compact(&board, &before).expect("compaction should still run");
+        let after_pos = after
+            .iter()
+            .find(|p| p.id == hinted)
+            .expect("hinted component survives")
+            .center_mm;
+        assert!(
+            (before_pos.0 - after_pos.0).abs() < 1e-6 && (before_pos.1 - after_pos.1).abs() < 1e-6,
+            "a component with a placement_hint must not move: {before_pos:?} -> \
+             {after_pos:?}"
+        );
     }
 
     #[test]
