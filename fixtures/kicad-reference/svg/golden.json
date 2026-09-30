@@ -1,6 +1,6 @@
 {
   "ref_battery_charger": {
-    "sha256": "6e61832f4eb0d55aa2af05ac2a616d583e2e6e1fa37ee6713827fa7d73022f17",
+    "sha256": "1044ba219f2643f8327891ebc050a76764e3959bf7c2bf92061281512be4f1d4",
     "width": "297.0022mm",
     "height": "210.0072mm",
     "paths": 6134,
@@ -56,11 +56,11 @@
     "texts": 267
   },
   "secure_tracker": {
-    "sha256": "ce3935d9bea48a4ba6bed1f145603f02e7d8192b462c633677fede4a081e536b",
-    "width": "419.9890mm",
-    "height": "297.0022mm",
-    "paths": 24865,
-    "texts": 639
+    "sha256": "48a8a7d586296ff1ba91446e49908413bda85c61acaaddeddf738d60b48ff095",
+    "width": "594.0044mm",
+    "height": "419.9890mm",
+    "paths": 25024,
+    "texts": 649
   },
   "sensor_logger": {
     "sha256": "dd706f3ac7392c728711e74cb12da3ba1c4b0d5ae481c0b8c5b2d12d9b0c397f",

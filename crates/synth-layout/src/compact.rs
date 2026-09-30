@@ -63,6 +63,48 @@ struct ClusterBox {
 ///
 /// `None` means the semantic arrangement already wins — either nothing fit,
 /// or no packing was tighter. Nothing worse is ever returned.
+/// Whether the semantic power-flow layering survives a candidate
+/// arrangement.
+///
+/// [`crate::layer_for`] assigns every component a reading-order column
+/// — connectors, then regulators, then the MCU, then passives — and
+/// `place_clusters` lays each layer out as a band with the bands
+/// ordered left to right. Compaction may *reshape* those bands (tighten
+/// their width, re-stack parts inside one) but it must never merge two
+/// of them: a connector sharing a column with the regulator it feeds
+/// reads as one block, and the left-to-right power flow that the
+/// layering exists to show is gone.
+///
+/// The bands must therefore stay disjoint and in order.
+///
+/// The predicate is unit-tested below. That it is actually consulted on
+/// the compaction path is covered by the two integration gates that
+/// failed when this guard was missing:
+/// `semantic_placement::power_flow_layer_assignment_still_holds` and
+/// `scorer_gate::scorer_matches_checked_in_baselines_and_crossing_gate`.
+/// A small in-crate fixture is not enough — the packer only merges bands
+/// once a board is big enough for the merge to pay off on area.
+fn layers_preserved(board: &Board, placements: &[ComponentPlacement]) -> bool {
+    let mut bands: std::collections::BTreeMap<u32, (f64, f64)> = std::collections::BTreeMap::new();
+    for placement in placements {
+        let Some(component) = board.component(placement.id) else {
+            continue;
+        };
+        bands
+            .entry(crate::layer_for(component))
+            .and_modify(|band| {
+                band.0 = band.0.min(placement.center_mm.0);
+                band.1 = band.1.max(placement.center_mm.0);
+            })
+            .or_insert((placement.center_mm.0, placement.center_mm.0));
+    }
+    bands
+        .values()
+        .collect::<Vec<_>>()
+        .windows(2)
+        .all(|pair| pair[0].1 < pair[1].0)
+}
+
 pub(crate) fn compact(
     board: &Board,
     placements: &[ComponentPlacement],
@@ -103,6 +145,14 @@ pub(crate) fn compact(
                 && aspect > 0.0
                 && (aspect / original_aspect).min(original_aspect / aspect) < MIN_ASPECT_RETENTION
             {
+                continue;
+            }
+            // A guard for the property the ranking cannot see: the
+            // semantic power-flow layering. Ranking on area has no reason
+            // to keep a connector in its own column, so without this the
+            // packer happily merges adjacent layers and the sheet stops
+            // reading left to right.
+            if !layers_preserved(board, &arrangement) {
                 continue;
             }
             if best.as_ref().is_none_or(|(best_key, _)| key < *best_key) {
@@ -530,6 +580,84 @@ fn try_pack(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// A board spanning several semantic layers, so the layering guard
+    /// has something to lose: connector (0), regulator (1), and enough
+    /// passives to give the packer room to be tempted.
+    fn multilayer_board() -> Board {
+        let src = r#"board "t" {
+  layers 2
+  component J1: connector "jst_ph_4pin"
+  component J2: connector "jst_ph_4pin"
+  component U1: regulator "ldo_3v3"
+  component R1: resistor "r_generic_0805"
+  component R2: resistor "r_generic_0805"
+  component R3: resistor "r_generic_0805"
+  component C1: capacitor "c_generic_0805" value "100nF"
+  component C2: capacitor "c_generic_0805" value "100nF"
+  component C3: capacitor "c_generic_0805" value "100nF"
+}"#;
+        let ast = synth_parser::parse(src, "t.synth").ast.expect("ast");
+        let reg = synth_registry::load_dir(
+            &std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+                .join("..")
+                .join("..")
+                .join("registry")
+                .join("parts"),
+        )
+        .expect("seed registry");
+        synth_ir::lower(&ast, &reg, "t.synth").board.expect("board")
+    }
+
+    /// A hand-built arrangement that merges two layers is rejected by the
+    /// guard, so the test above cannot pass merely because the packer
+    /// happened not to produce one.
+    ///
+    /// Needs parts that actually land in *different* layers: a connector
+    /// (layer 0) and a regulator (layer 1). Passives alone would all share
+    /// one layer, where sharing a column is the layout working as intended.
+    #[test]
+    fn layers_preserved_rejects_merged_bands() {
+        let board = multilayer_board();
+
+        // Guard precondition: these parts really do span several layers.
+        let layers: std::collections::BTreeSet<u32> =
+            board.components.iter().map(crate::layer_for).collect();
+        assert!(layers.len() > 1, "fixture must span several layers");
+
+        let same_column: Vec<ComponentPlacement> = board
+            .components
+            .iter()
+            .enumerate()
+            .map(|(i, c)| ComponentPlacement {
+                id: c.id,
+                // One shared column, whatever the layer.
+                center_mm: (50.0, 50.0 + i as f64 * 25.0),
+                rotation: crate::Rotation::Zero,
+            })
+            .collect();
+        assert!(
+            !layers_preserved(&board, &same_column),
+            "a single shared column must fail the layering guard"
+        );
+
+        // …and the same parts, spread into ordered columns, must pass.
+        let mut ordered = same_column.clone();
+        let mut x = 25.0;
+        for placement in &mut ordered {
+            let layer = crate::layer_for(board.component(placement.id).expect("component"));
+            let slot = (layer * 100) as f64;
+            if slot >= x {
+                x = slot + 25.0;
+            }
+            placement.center_mm.0 = x;
+            x += 25.0;
+        }
+        assert!(
+            layers_preserved(&board, &ordered),
+            "disjoint ordered columns must satisfy the layering guard"
+        );
+    }
 
     fn board_with(parts: usize) -> Board {
         // A board of unrelated passives: `build_clusters` claims each as its

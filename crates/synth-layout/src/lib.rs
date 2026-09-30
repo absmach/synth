@@ -4365,7 +4365,7 @@ pub(crate) fn uniquify_net_labels(board: &Board, labels: &mut [NetLabel]) {
 /// - **Layer 2** — active sinks (MCU / ic / sensor / memory / opamp /
 ///   secure_element).
 /// - **Layer 3** — passives and everything else.
-fn layer_for(component: &synth_ir::Component) -> u32 {
+pub(crate) fn layer_for(component: &synth_ir::Component) -> u32 {
     use synth_registry::ElectricalType;
     let Some(part) = component.part.as_ref() else {
         return 3;
