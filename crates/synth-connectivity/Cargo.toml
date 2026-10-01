@@ -13,7 +13,7 @@ synth-ir = { path = "../synth-ir" }
 synth-registry = { path = "../synth-registry" }
 synth-diagnostics = { path = "../synth-diagnostics" }
 synth-layout = { path = "../synth-layout" }
-thiserror = "1.0"
+thiserror = "2.0"
 uuid = { version = "1.26", features = ["v4", "serde"] }
 serde = { version = "1.0", features = ["derive"] }
 indexmap = "2.14"
