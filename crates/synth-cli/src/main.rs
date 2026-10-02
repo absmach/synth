@@ -20,6 +20,7 @@ use std::process::Command as ProcessCommand;
 use std::process::ExitCode;
 
 use clap::{Parser, Subcommand, ValueEnum};
+use synth_diagnostics::NativeCheckStatus;
 
 const EXIT_SUCCESS: u8 = 0;
 const EXIT_VALIDATION_ERRORS: u8 = 1;
@@ -127,6 +128,8 @@ enum Command {
         /// Run KiCad schematic ERC (`kicad-cli sch erc`) on the exported schematic.
         #[arg(long)]
         validate_erc: bool,
+        #[arg(long, value_name = "FILE")]
+        verification_report: Option<PathBuf>,
         /// Force export even if Synth ERC validation produces error diagnostics.
         #[arg(long)]
         force: bool,
@@ -751,6 +754,7 @@ fn main() -> ExitCode {
             pnp: _,
             profile: _,
             validate_erc,
+            verification_report,
             force,
             allow_unverified_parts,
             user_registry,
@@ -778,6 +782,7 @@ fn main() -> ExitCode {
                 step,
             },
             validate_erc,
+            verification_report.as_deref(),
             force,
             allow_unverified_parts,
             autoroute,
@@ -1140,6 +1145,7 @@ fn check(
     let mut fab_pass = true;
     if fab && validate_pass && drc_pass {
         let export_dir = work.join("release");
+        let verification_path = work.join("verification.json");
         let mut export_args = base.clone();
         export_args.extend([
             "export-kicad".into(),
@@ -1151,6 +1157,8 @@ fn check(
             "--step".into(),
             "--pnp".into(),
             "--validate-erc".into(),
+            "--verification-report".into(),
+            verification_path.display().to_string(),
         ]);
         if let Some(dir) = registry {
             export_args.extend(["--registry".into(), dir.display().to_string()]);
@@ -1160,6 +1168,9 @@ fn check(
         }
         let (export_output, export_timed_out) = run_check_child(&exe, &export_args, 120)?;
         fab_pass = !export_timed_out && export_output.status.success();
+        let native = std::fs::read_to_string(&verification_path)
+            .ok()
+            .and_then(|s| serde_json::from_str::<serde_json::Value>(&s).ok());
         let mut artifacts = serde_json::Map::new();
         if export_dir.is_dir() {
             let mut files = Vec::new();
@@ -1185,13 +1196,20 @@ fn check(
                 artifacts.insert(path, serde_json::Value::String(hash));
             }
         }
-        stages.insert(
-            "manufacturing".into(),
-            serde_json::json!({
-                "status": if fab_pass { "pass" } else { "fail" },
-                "artifacts": artifacts,
-            }),
-        );
+        let status = manufacturing_status(fab_pass, export_timed_out, native.as_ref());
+        fab_pass = status == "pass";
+        let mut stage = serde_json::json!({
+            "status": status,
+            "artifacts": artifacts,
+        });
+        if export_timed_out {
+            stage["reason"] = serde_json::json!("timeout");
+            stage["detail"] = serde_json::json!("`export-kicad` exceeded its 120s budget");
+        }
+        if let Some(native) = native {
+            stage["native"] = native;
+        }
+        stages.insert("manufacturing".into(), stage);
     } else if fab {
         fab_pass = false;
         stages.insert(
@@ -1232,6 +1250,27 @@ fn check(
     } else {
         EXIT_VALIDATION_ERRORS
     })
+}
+
+fn manufacturing_status(
+    fab_pass: bool,
+    timed_out: bool,
+    native: Option<&serde_json::Value>,
+) -> &'static str {
+    if timed_out {
+        return "unknown";
+    }
+    let native_unknown = native
+        .and_then(|n| n["stages"].as_array())
+        .is_some_and(|stages| stages.iter().any(|s| s["status"] == "unknown"));
+    if native_unknown {
+        return "unknown";
+    }
+    if fab_pass {
+        "pass"
+    } else {
+        "fail"
+    }
 }
 
 fn run_check_child(
@@ -3274,6 +3313,7 @@ fn export_kicad(
     out_dir: &Path,
     fab: synth_kicad::FabRequest,
     validate_erc: bool,
+    verification_report: Option<&Path>,
     force: bool,
     allow_unverified_parts: bool,
     autoroute: bool,
@@ -3433,6 +3473,7 @@ fn export_kicad(
     eprintln!("wrote {}", result.pcb_path.display());
     eprintln!("wrote {}", result.bom_path.display());
 
+    let mut fab_evidence = None;
     if !fab.is_empty() {
         // R15.3 trust boundary: a fab submission (gerbers/drill/step) must
         // not silently include parts nobody has reviewed. Interactive
@@ -3449,17 +3490,48 @@ fn export_kicad(
             );
             return Ok(1);
         }
-        let artifacts = synth_kicad::run_fab(&result.pcb_path, out_dir, &fab)
-            .map_err(|e| anyhow::anyhow!("kicad-cli fab export failed: {e}"))?;
-        if let Some(dir) = artifacts.gerbers_dir {
-            eprintln!("wrote gerbers into {}", dir.display());
+        match synth_kicad::run_fab(&result.pcb_path, out_dir, &fab) {
+            Ok(artifacts) => {
+                if let Some(dir) = artifacts.gerbers_dir {
+                    eprintln!("wrote gerbers into {}", dir.display());
+                }
+                if let Some(dir) = artifacts.drill_dir {
+                    eprintln!("wrote drill files into {}", dir.display());
+                }
+                if let Some(path) = artifacts.step_path {
+                    eprintln!("wrote {}", path.display());
+                }
+                fab_evidence = Some(synth_diagnostics::NativeCheckEvidence::concluded(
+                    FAB_STAGE,
+                    synth_drc::kicad_cli::binary(),
+                    Vec::new(),
+                    0,
+                ));
+            }
+            Err(e) => {
+                let mut evidence = synth_diagnostics::NativeCheckEvidence::unknown(
+                    FAB_STAGE,
+                    synth_drc::kicad_cli::binary(),
+                    Vec::new(),
+                    e.unknown_reason(),
+                    format!("kicad-cli fab export failed: {e}"),
+                )
+                .with_version(synth_drc::kicad_cli::version());
+                if let Some(stderr) = e.stderr() {
+                    evidence = evidence.with_stderr(stderr);
+                }
+                fab_evidence = Some(evidence);
+            }
         }
-        if let Some(dir) = artifacts.drill_dir {
-            eprintln!("wrote drill files into {}", dir.display());
+    }
+
+    let production = !fab.is_empty();
+    let mut native = Vec::new();
+    if let Some(evidence) = fab_evidence {
+        if !evidence.is_trusted() {
+            report_unavailable_check(&evidence);
         }
-        if let Some(path) = artifacts.step_path {
-            eprintln!("wrote {}", path.display());
-        }
+        native.push(evidence);
     }
 
     // Slice 3: Run KiCad ERC if requested
@@ -3469,44 +3541,66 @@ fn export_kicad(
             "running kicad-cli sch erc on {}",
             result.schematic_path.display()
         );
-        match synth_kicad::run_kicad_erc(&result.schematic_path) {
-            Ok(violations) => {
-                if violations.is_empty() {
-                    eprintln!("kicad-cli sch erc: 0 violations found");
-                } else {
-                    for v in &violations {
-                        eprintln!(
-                            "[kicad-erc] {}: [{}] {}",
-                            v.severity, v.violation_type, v.description
-                        );
-                        if v.severity.eq_ignore_ascii_case("error") {
-                            has_kicad_erc_errs = true;
-                        }
-                    }
+        let erc = synth_kicad::run_kicad_erc(&result.schematic_path);
+        if erc.evidence.status == NativeCheckStatus::Unknown {
+            report_unavailable_check(&erc.evidence);
+        } else {
+            if erc.violations.is_empty() {
+                eprintln!("kicad-cli sch erc: 0 violations found");
+            } else {
+                for v in &erc.violations {
+                    eprintln!(
+                        "[kicad-erc] {}: [{}] {}",
+                        v.severity, v.violation_type, v.description
+                    );
                 }
             }
-            Err(e) => {
-                eprintln!("warning: could not run kicad-cli sch erc: {e}");
-            }
+            has_kicad_erc_errs = erc.errors().next().is_some();
         }
+        native.push(erc.evidence);
     }
 
     // Slice 13.4: Run KiCad native PCB DRC verification gate
     let mut has_kicad_drc_errors = false;
-    match synth_drc::run_kicad_cli_drc(&result.pcb_path) {
-        Ok(violations) => {
-            if violations.is_empty() {
-                eprintln!("kicad-cli pcb drc: 0 violations found (Phase 13 Zero-DRC gate clean)");
-            } else {
-                for v in &violations {
-                    eprintln!("[kicad-drc] error: [{}] {}", v.code, v.message);
-                    has_kicad_drc_errors = true;
-                }
-            }
+    let drc = synth_drc::run_kicad_cli_drc(&result.pcb_path);
+    if drc.evidence.status == NativeCheckStatus::Unknown {
+        report_unavailable_check(&drc.evidence);
+    } else if drc.violations.is_empty() {
+        eprintln!("kicad-cli pcb drc: 0 violations found (Phase 13 Zero-DRC gate clean)");
+    } else {
+        for v in &drc.violations {
+            eprintln!("[kicad-drc] error: [{}] {}", v.code, v.message);
         }
-        Err(e) => {
-            eprintln!("warning: could not run kicad-cli pcb drc: {e}");
+        has_kicad_drc_errors = true;
+    }
+    native.push(drc.evidence);
+
+    let blocked_by_unknown: Vec<_> = native
+        .iter()
+        .filter(|e| e.status == NativeCheckStatus::Unknown)
+        .filter(|e| production || e.stage == synth_kicad::ERC_STAGE)
+        .collect();
+    if !blocked_by_unknown.is_empty() {
+        eprintln!();
+        if production {
+            eprintln!(
+                "error: UNTRUSTED / NOT FOR FABRICATION — this export has no native \
+                 verification evidence:"
+            );
+        } else {
+            eprintln!("error: requested native verification could not be performed:");
         }
+        for evidence in &blocked_by_unknown {
+            eprintln!("  {}", evidence.summary_line());
+        }
+        eprintln!(
+            "An unavailable check is not a pass. Install KiCad (or set KICAD_CLI), \
+             then re-run; --force does not override this."
+        );
+    }
+
+    if let Some(path) = verification_report {
+        write_verification_report(path, input, &native)?;
     }
 
     let has_errors = parse.has_errors()
@@ -3514,12 +3608,55 @@ fn export_kicad(
         || (has_erc_errors && !force)
         || (has_kicad_drc_errors && !force)
         || has_kicad_erc_errs
+        || !blocked_by_unknown.is_empty()
         || !external_router_clean;
     Ok(if has_errors {
         EXIT_VALIDATION_ERRORS
     } else {
         EXIT_SUCCESS
     })
+}
+
+const FAB_STAGE: &str = "kicad_fab";
+
+fn report_unavailable_check(evidence: &synth_diagnostics::NativeCheckEvidence) {
+    eprintln!("warning: {}", evidence.summary_line());
+    eprintln!("  tool: {}", evidence.tool);
+    if let Some(version) = &evidence.tool_version {
+        eprintln!("  version: {version}");
+    }
+    if !evidence.command.is_empty() {
+        eprintln!("  command: {}", evidence.command.join(" "));
+    }
+    if let Some(detail) = &evidence.detail {
+        eprintln!("  detail: {detail}");
+    }
+    if let Some(stderr) = &evidence.stderr {
+        eprintln!("  stderr: {}", stderr.replace('\n', "\n          "));
+    }
+}
+
+fn write_verification_report(
+    path: &Path,
+    input: &Path,
+    native: &[synth_diagnostics::NativeCheckEvidence],
+) -> anyhow::Result<()> {
+    let release_ready = native
+        .iter()
+        .all(synth_diagnostics::NativeCheckEvidence::is_trusted);
+    let report = serde_json::json!({
+        "schema_version": "synth.verification.v1",
+        "input": input.display().to_string(),
+        "release_ready": release_ready,
+        "stages": native,
+    });
+    if let Some(parent) = path.parent() {
+        if !parent.as_os_str().is_empty() {
+            std::fs::create_dir_all(parent)?;
+        }
+    }
+    std::fs::write(path, serde_json::to_string_pretty(&report)?)?;
+    Ok(())
 }
 
 fn run_freerouting_postpass(

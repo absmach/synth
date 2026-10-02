@@ -11,12 +11,22 @@
 //! enough that single-threaded execution stays under the
 //! 1-second budget for a sensor_logger-class design).
 
+use synth_diagnostics::{NativeCheckEvidence, UnknownReason};
 use synth_geometry::{mm_to_nm, nm_to_mm, Point, Rect, Rotation};
 use synth_place::Placement;
 use synth_route::{Routing, Segment, Via};
 
+use crate::kicad_cli;
 use crate::profile::ManufacturerProfile;
 use crate::Violation;
+
+pub const DRC_STAGE: &str = "kicad_drc";
+
+#[derive(Debug, Clone)]
+pub struct NativeDrcOutcome {
+    pub violations: Vec<Violation>,
+    pub evidence: NativeCheckEvidence,
+}
 
 fn courtyard_rect(
     component: &synth_ir::Component,
@@ -583,53 +593,137 @@ fn sort_pair(a: i64, b: i64) -> (i64, i64) {
     }
 }
 
-/// Helper that runs `kicad-cli pcb drc --format json` on a `.kicad_pcb` file
-/// and returns the list of violations parsed from KiCad's official DRC engine.
-///
-/// # Panics
-/// Panics if the temporary report file path cannot be converted to a string
-/// (which should never happen on standard platforms).
-#[allow(dead_code)]
-pub fn run_kicad_cli_drc(kicad_pcb_path: &std::path::Path) -> Result<Vec<Violation>, String> {
-    use std::process::Command;
-    let temp_root = std::env::temp_dir();
-    let report_file = temp_root.join(format!("synth_drc_report_{}.json", std::process::id()));
-    let analysis_board =
-        temp_root.join(format!("synth_drc_board_{}.kicad_pcb", std::process::id()));
-    std::fs::copy(kicad_pcb_path, &analysis_board)
-        .map_err(|e| format!("Failed to stage PCB for kicad-cli DRC: {e}"))?;
-    let output = Command::new("kicad-cli")
-        .args([
-            "pcb",
-            "drc",
-            "--refill-zones",
-            "--save-board",
-            "--output",
-            report_file.to_str().unwrap(),
-            "--format",
-            "json",
-            analysis_board.to_str().unwrap(),
-        ])
-        .output()
-        .map_err(|e| format!("Failed to execute kicad-cli: {e}"))?;
+pub fn run_kicad_cli_drc(kicad_pcb_path: &std::path::Path) -> NativeDrcOutcome {
+    let tool = kicad_cli::binary();
+    let version = kicad_cli::version();
 
-    // DRC uses --save-board so zones are refilled in the analysis copy, but
-    // never rewrites the user's generated PCB. This keeps the delivered
-    // artifact's netclass/setup metadata and lets an incomplete route remain
-    // reviewable and manually editable.
-    let _ = std::fs::remove_file(&analysis_board);
+    let unknown = |reason: UnknownReason, command: Vec<String>, detail: String| NativeDrcOutcome {
+        violations: Vec::new(),
+        evidence: NativeCheckEvidence::unknown(DRC_STAGE, &tool, command, reason, detail)
+            .with_version(version.clone()),
+    };
 
-    if !report_file.exists() {
-        return Err(format!(
-            "KiCad DRC report not generated: {}",
-            String::from_utf8_lossy(&output.stderr)
+    if let Some((reason, detail)) = kicad_cli::version_rejection(version.as_deref()) {
+        return unknown(reason, Vec::new(), detail);
+    }
+
+    let analysis_board = kicad_cli::ScratchFile::reserve("synth_drc_board", "kicad_pcb");
+    if let Err(e) = std::fs::copy(kicad_pcb_path, analysis_board.path()) {
+        return unknown(
+            UnknownReason::SpawnFailed,
+            Vec::new(),
+            format!("could not stage PCB for kicad-cli DRC: {e}"),
+        );
+    }
+    let report = kicad_cli::ScratchFile::reserve("synth_drc_report", "json");
+
+    let args = vec![
+        "pcb".to_string(),
+        "drc".to_string(),
+        "--refill-zones".to_string(),
+        "--save-board".to_string(),
+        "--output".to_string(),
+        report.arg(),
+        "--format".to_string(),
+        "json".to_string(),
+        analysis_board.arg(),
+    ];
+    let budget = kicad_cli::timeout();
+    let run = match kicad_cli::run(&args, budget) {
+        Ok(run) => run,
+        Err(failure) => return unknown(failure.reason, failure.command, failure.detail),
+    };
+
+    if let Some(reason) = run.failure_reason() {
+        return NativeDrcOutcome {
+            violations: Vec::new(),
+            evidence: NativeCheckEvidence::unknown(
+                DRC_STAGE,
+                &tool,
+                run.command.clone(),
+                reason,
+                run.failure_detail(budget),
+            )
+            .with_version(version.clone())
+            .with_stderr(&run.stderr),
+        };
+    }
+
+    let violations = match read_drc_report(report.path()) {
+        Ok(violations) => violations,
+        Err((reason, detail)) => {
+            return NativeDrcOutcome {
+                violations: Vec::new(),
+                evidence: NativeCheckEvidence::unknown(
+                    DRC_STAGE,
+                    &tool,
+                    run.command.clone(),
+                    reason,
+                    detail,
+                )
+                .with_version(version.clone())
+                .with_stderr(&run.stderr),
+            }
+        }
+    };
+
+    let evidence = NativeCheckEvidence::concluded(DRC_STAGE, &tool, run.command, violations.len())
+        .with_version(version)
+        .with_stderr(&run.stderr);
+    NativeDrcOutcome {
+        violations,
+        evidence,
+    }
+}
+
+fn read_drc_report(path: &std::path::Path) -> Result<Vec<Violation>, (UnknownReason, String)> {
+    if !path.exists() {
+        return Err((
+            UnknownReason::ReportMissing,
+            format!(
+                "kicad-cli exited cleanly but wrote no report at {}",
+                path.display()
+            ),
+        ));
+    }
+    let content = std::fs::read_to_string(path).map_err(|e| {
+        (
+            UnknownReason::ReportUnreadable,
+            format!("could not read DRC report {}: {e}", path.display()),
+        )
+    })?;
+    let json: serde_json::Value = serde_json::from_str(&content).map_err(|e| {
+        (
+            UnknownReason::ReportMalformed,
+            format!("DRC report {} is not valid JSON: {e}", path.display()),
+        )
+    })?;
+    parse_drc_report(&json)
+}
+
+const DRC_REPORT_KEYS: [&str; 6] = [
+    "violations",
+    "unconnected_items",
+    "schematic_parity",
+    "kicad_version",
+    "coordinate_units",
+    "$schema",
+];
+
+fn parse_drc_report(json: &serde_json::Value) -> Result<Vec<Violation>, (UnknownReason, String)> {
+    let recognized = json
+        .as_object()
+        .is_some_and(|map| DRC_REPORT_KEYS.iter().any(|key| map.contains_key(*key)));
+    if !recognized {
+        return Err((
+            UnknownReason::ReportUnrecognized,
+            "DRC report JSON has none of the keys a kicad-cli report carries, so an \
+             empty result cannot be read as a clean board"
+                .to_string(),
         ));
     }
 
-    let content = std::fs::read_to_string(&report_file).map_err(|e| e.to_string())?;
-    let json: serde_json::Value = serde_json::from_str(&content).map_err(|e| e.to_string())?;
     let mut violations = Vec::new();
-
     if let Some(v_array) = json.get("violations").and_then(|v| v.as_array()) {
         for v in v_array {
             let severity = v
@@ -651,14 +745,12 @@ pub fn run_kicad_cli_drc(kicad_pcb_path: &std::path::Path) -> Result<Vec<Violati
                             comps.push(refdes.to_string());
                         }
                     }
-                    if pos.is_none() {
-                        if let Some(p) = item.get("pos") {
-                            if let (Some(x), Some(y)) = (
-                                p.get("x").and_then(serde_json::Value::as_f64),
-                                p.get("y").and_then(serde_json::Value::as_f64),
-                            ) {
-                                pos = Some((x, y));
-                            }
+                    if let Some(p) = item.get("pos") {
+                        if let (Some(x), Some(y)) = (
+                            p.get("x").and_then(serde_json::Value::as_f64),
+                            p.get("y").and_then(serde_json::Value::as_f64),
+                        ) {
+                            pos = Some((x, y));
                         }
                     }
                 }
@@ -682,7 +774,6 @@ pub fn run_kicad_cli_drc(kicad_pcb_path: &std::path::Path) -> Result<Vec<Violati
             });
         }
     }
-    let _ = std::fs::remove_file(report_file);
     Ok(violations)
 }
 
@@ -831,5 +922,96 @@ mod tests {
             width_nm: mm_to_nm(0.15),
         });
         assert!(check_min_drill_to_copper(&r, &jlc()).is_empty());
+    }
+
+    mod report {
+        use super::*;
+
+        fn clean_report() -> serde_json::Value {
+            serde_json::json!({
+                "$schema": "https://schemas.kicad.org/drc.v1.json",
+                "kicad_version": "10.0.1",
+                "coordinate_units": "mm",
+                "violations": [],
+                "unconnected_items": [],
+                "schematic_parity": []
+            })
+        }
+
+        #[test]
+        fn a_clean_report_parses_to_no_violations() {
+            let violations = parse_drc_report(&clean_report()).expect("recognized report");
+            assert!(violations.is_empty());
+        }
+
+        #[test]
+        fn a_sparse_clean_report_is_still_recognized() {
+            let sparse = serde_json::json!({ "kicad_version": "10.0.1" });
+            assert!(parse_drc_report(&sparse).is_ok());
+        }
+
+        #[test]
+        fn errors_become_violations_and_warnings_are_skipped() {
+            let report = serde_json::json!({
+                "violations": [
+                    {
+                        "type": "clearance",
+                        "severity": "error",
+                        "description": "Clearance violation",
+                        "items": [{"reference": "R1", "pos": {"x": 1.5, "y": 2.5}}]
+                    },
+                    {
+                        "type": "silk_overlap",
+                        "severity": "warning",
+                        "description": "Silkscreen overlap"
+                    }
+                ]
+            });
+            let violations = parse_drc_report(&report).expect("recognized report");
+            assert_eq!(violations.len(), 1, "warnings must not become violations");
+            assert_eq!(violations[0].code, "E-KICAD-DRC-clearance");
+            assert_eq!(violations[0].components, vec!["R1".to_string()]);
+            assert_eq!(violations[0].pos_mm, Some((1.5, 2.5)));
+        }
+
+        #[test]
+        fn a_foreign_document_is_unrecognized_not_clean() {
+            for foreign in [
+                serde_json::json!({}),
+                serde_json::json!({"error": "could not open board"}),
+                serde_json::json!([]),
+                serde_json::Value::Null,
+            ] {
+                let (reason, _) = parse_drc_report(&foreign)
+                    .expect_err("an unrecognized document must not read as clean");
+                assert_eq!(reason, UnknownReason::ReportUnrecognized, "{foreign:?}");
+            }
+        }
+
+        #[test]
+        fn a_missing_report_is_report_missing() {
+            let absent = std::env::temp_dir().join("synth_drc_absent_report_test.json");
+            let _ = std::fs::remove_file(&absent);
+            let (reason, detail) =
+                read_drc_report(&absent).expect_err("a missing report is not evidence");
+            assert_eq!(reason, UnknownReason::ReportMissing);
+            assert!(detail.contains("no report"), "{detail}");
+        }
+
+        #[test]
+        fn a_truncated_report_is_report_malformed() {
+            let path = std::env::temp_dir().join("synth_drc_malformed_report_test.json");
+            std::fs::write(&path, b"{\"violations\": [").expect("write truncated report");
+            let (reason, _) = read_drc_report(&path).expect_err("invalid JSON is not evidence");
+            assert_eq!(reason, UnknownReason::ReportMalformed);
+            let _ = std::fs::remove_file(&path);
+        }
+
+        #[test]
+        fn an_outdated_kicad_is_rejected_before_it_runs() {
+            let (reason, _) = kicad_cli::version_rejection(Some("7.0.11"))
+                .expect("KiCad 7 predates the JSON reports");
+            assert_eq!(reason, UnknownReason::UnsupportedVersion);
+        }
     }
 }

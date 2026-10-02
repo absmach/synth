@@ -1050,12 +1050,16 @@ mod tests {
         .unwrap();
         std::fs::write(dir.join(format!("{stem}.kicad_pro")), &pro).unwrap();
 
-        match crate::run_kicad_erc(&sch_path) {
-            Ok(_) => {}
-            Err(crate::ErcRunError::NotInstalled { .. }) => {
+        let erc = crate::run_kicad_erc(&sch_path);
+        match erc.evidence.reason {
+            Some(synth_diagnostics::UnknownReason::NotInstalled) => {
                 eprintln!("kicad-cli not installed; skipping net_settings load test");
             }
-            Err(e) => panic!("project with net_settings must load: {e}"),
+            Some(_) => panic!(
+                "project with net_settings must load: {}",
+                erc.evidence.summary_line()
+            ),
+            None => {}
         }
         let _ = std::fs::remove_dir_all(&dir);
     }

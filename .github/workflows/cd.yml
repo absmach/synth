@@ -143,6 +143,6 @@ jobs:
 
             ## Optional: KiCad integration
 
-            Electrical-rule checks, schematic rendering, and fabrication outputs shell out to `kicad-cli`. Install KiCad 10 to enable them; without it those checks are skipped and everything else works.
+            Electrical-rule checks, schematic rendering, and fabrication outputs shell out to `kicad-cli`. Install KiCad 10 to enable them. Without it, `synth export-kicad` still generates a project, but every native check reports `unknown` rather than passing, and any command that asked for verification (`--validate-erc`, `--gerbers`/`--drill`/`--step`, `synth check --fab`) fails closed. Set `KICAD_CLI` if the binary is not on `PATH`.
 
             See the [README](https://github.com/absmach/synth) for the language, the MCP server, and the review workflow.

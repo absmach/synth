@@ -2713,12 +2713,16 @@ mod tests {
         std::fs::create_dir_all(&dir).unwrap();
         let path = dir.join("b.kicad_sch");
         std::fs::write(&path, &text).unwrap();
-        match crate::run_kicad_erc(&path) {
-            Ok(_) => {}
-            Err(crate::ErcRunError::NotInstalled { .. }) => {
+        let erc = crate::run_kicad_erc(&path);
+        match erc.evidence.reason {
+            Some(synth_diagnostics::UnknownReason::NotInstalled) => {
                 eprintln!("kicad-cli not installed; skipping styled-box load test");
             }
-            Err(e) => panic!("styled group box must load in kicad-cli: {e}"),
+            Some(_) => panic!(
+                "styled group box must load in kicad-cli: {}",
+                erc.evidence.summary_line()
+            ),
+            None => {}
         }
         let _ = std::fs::remove_dir_all(&dir);
     }

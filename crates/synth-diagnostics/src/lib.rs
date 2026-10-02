@@ -17,6 +17,7 @@ mod advisor;
 mod diagnostic;
 pub mod harness;
 mod location;
+mod native;
 mod patch;
 mod severity;
 
@@ -28,6 +29,7 @@ pub use diagnostic::{
 };
 pub use harness::{AgentHarness, HarnessRunResult, HarnessStrategy};
 pub use location::{ByteOffset, FileId, LineCol, Location, Span};
+pub use native::{NativeCheckEvidence, NativeCheckStatus, UnknownReason, STDERR_CAPTURE_LIMIT};
 pub use patch::{apply_smt_patch, Patch, PatchError, PatchKind};
 pub use severity::Severity;
 

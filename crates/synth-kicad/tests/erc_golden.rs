@@ -15,6 +15,25 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 use rayon::prelude::*;
+use synth_diagnostics::UnknownReason;
+use synth_kicad::NativeErcOutcome;
+
+fn live_violations(
+    outcome: NativeErcOutcome,
+    label: &str,
+) -> Option<Vec<synth_kicad::KicadErcViolation>> {
+    match outcome.evidence.reason {
+        Some(UnknownReason::NotInstalled) => {
+            eprintln!("kicad-cli not installed; skipping live ERC test for {label}");
+            None
+        }
+        Some(_) => panic!(
+            "{label}: ERC produced no usable evidence — {}",
+            outcome.evidence.summary_line()
+        ),
+        None => Some(outcome.violations),
+    }
+}
 
 fn workspace_root() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR"))
@@ -114,49 +133,40 @@ fn all_reference_designs_pass_kicad_erc() {
             0
         };
 
-        match synth_kicad::run_kicad_erc(&result.schematic_path) {
-            Ok(violations) => {
-                let error_violations: Vec<_> = violations
-                    .iter()
-                    .filter(|v| v.severity.eq_ignore_ascii_case("error"))
-                    .collect();
+        let Some(violations) = live_violations(
+            synth_kicad::run_kicad_erc(&result.schematic_path),
+            &stem,
+        ) else {
+            return;
+        };
+        let error_violations: Vec<_> = violations.iter().filter(|v| v.is_error()).collect();
 
-                if golden_error_count > 0 {
-                    assert!(
-                        error_violations.len() <= golden_error_count,
-                        "{stem}: KiCad ERC error count regressed: produced {} errors, golden baseline has {}",
-                        error_violations.len(),
-                        golden_error_count
-                    );
-                } else if MULTI_UNIT_LIMITATION.contains(&stem.as_str()) {
-                    // Documented limitation: only the multi-unit pin error
-                    // is acceptable; anything else is a real regression.
-                    let unexpected: Vec<_> = error_violations
-                        .iter()
-                        .filter(|v| {
-                            !(v.violation_type == "pin_not_connected"
-                                || v.violation_type == "pin_not_driven")
-                        })
-                        .collect();
-                    assert!(
-                        unexpected.is_empty(),
-                        "{stem}: unexpected non-multi-unit ERC errors: {unexpected:?}",
-                    );
-                } else {
-                    assert!(
-                        error_violations.is_empty(),
-                        "{stem}: KiCad ERC produced {} error-level violations: {:?}",
-                        error_violations.len(),
-                        error_violations
-                    );
-                }
-            }
-            Err(synth_kicad::ErcRunError::NotInstalled { .. }) => {
-                eprintln!("kicad-cli not installed; skipping live ERC test for {stem}");
-            }
-            Err(e) => {
-                panic!("{stem}: run_kicad_erc failed: {e}");
-            }
+        if golden_error_count > 0 {
+            assert!(
+                error_violations.len() <= golden_error_count,
+                "{stem}: KiCad ERC error count regressed: produced {} errors, golden baseline has {}",
+                error_violations.len(),
+                golden_error_count
+            );
+        } else if MULTI_UNIT_LIMITATION.contains(&stem.as_str()) {
+            let unexpected: Vec<_> = error_violations
+                .iter()
+                .filter(|v| {
+                    !(v.violation_type == "pin_not_connected"
+                        || v.violation_type == "pin_not_driven")
+                })
+                .collect();
+            assert!(
+                unexpected.is_empty(),
+                "{stem}: unexpected non-multi-unit ERC errors: {unexpected:?}",
+            );
+        } else {
+            assert!(
+                error_violations.is_empty(),
+                "{stem}: KiCad ERC produced {} error-level violations: {:?}",
+                error_violations.len(),
+                error_violations
+            );
         }
     });
 }
@@ -186,17 +196,15 @@ fn erc_report_parser_is_not_vacuous() {
     let tmp = tempdir("parser-not-vacuous");
     let result = synth_kicad::export(&board, &tmp).expect("export");
 
-    match synth_kicad::run_kicad_erc(&result.schematic_path) {
-        Ok(violations) => {
-            assert!(
-                !violations.is_empty(),
-                "ERC parser returned empty violations for a design with known errors — \
-                 the KiCad 10 schemas[].violations nesting may have regressed"
-            );
-        }
-        Err(synth_kicad::ErcRunError::NotInstalled { .. }) => {
-            eprintln!("kicad-cli not installed; skipping vacuous-parser regression test");
-        }
-        Err(e) => panic!("run_kicad_erc failed: {e}"),
-    }
+    let Some(violations) = live_violations(
+        synth_kicad::run_kicad_erc(&result.schematic_path),
+        "vacuous-parser regression",
+    ) else {
+        return;
+    };
+    assert!(
+        !violations.is_empty(),
+        "ERC parser returned empty violations for a design with known errors — \
+         the KiCad 10 sheets[].violations nesting may have regressed"
+    );
 }

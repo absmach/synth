@@ -61,7 +61,9 @@ pub mod sexp;
 mod symbol_lib;
 pub mod uuid_v5;
 
-pub use erc_validate::{run_kicad_erc, ErcRunError, KicadErcItem, KicadErcViolation};
+pub use erc_validate::{
+    run_kicad_erc, KicadErcItem, KicadErcViolation, NativeErcOutcome, ERC_STAGE,
+};
 pub use export::{
     export, export_for_design, export_schematic_only, export_with_sidecar,
     export_with_sidecar_and_routing_order, export_with_sidecars,

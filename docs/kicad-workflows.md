@@ -42,6 +42,16 @@ board.synth.layout.toml   ← optional visual drag offsets (sidecar)
    Synth's 80+ `E-SYNTH-*` rules run before export; `kicad-cli sch
 erc` validates the exported artifact after. Both must be clean
    before anything ships (see §1).
+6. **A check that could not run is not a check that passed.** When
+   `kicad-cli` is missing, unsupported, too slow, or writes a report
+   Synth cannot read, that stage is reported as `unknown` with the
+   tool, version, command, stderr, and a machine-stable reason.
+   `unknown` blocks any command that asked for verification, and
+   `--force` does not override it. A plain `synth export-kicad` is the
+   one exception: it records the `unknown` and still writes the
+   project, because that output claims nothing about being verified.
+   Use `--verification-report FILE` to capture the evidence, or read
+   `stages.manufacturing.native` from `synth check --fab --json`.
 
 ---
 

@@ -28,6 +28,30 @@ require a complete KiCad manufacturing export and receive SHA-256 hashes for
 the emitted files. A timed-out or unavailable physical stage is reported as
 `unknown` and blocks the command; it is never treated as a pass.
 
+Stages that shell out to `kicad-cli` are tri-state, because a check that
+could not run is neither a pass nor a failure:
+
+| Status    | Meaning                                                                 |
+| --------- | ----------------------------------------------------------------------- |
+| `pass`    | The tool ran and reported no blocking violations.                       |
+| `fail`    | The tool ran and rejected the design.                                   |
+| `unknown` | No evidence. Missing or unsupported `kicad-cli`, a missing symbol/footprint library, a crash, a timeout, or an unreadable report. |
+
+`unknown` blocks exactly as `fail` does, and `--force` does not override it —
+it overrides Synth's own findings, not the absence of verification. Each
+`unknown` reports the tool, its version, the exact command, its stderr, and a
+machine-stable reason (`not_installed`, `timeout`, `command_failed`,
+`report_malformed`, `unsupported_version`, ...). `synth check --fab` embeds
+that evidence under `stages.manufacturing.native`; `synth export-kicad
+--verification-report FILE` writes it directly.
+
+A plain `synth export-kicad` still works with no KiCad installed: it records
+the `unknown` and sets `release_ready: false`, but does not block, since
+nothing about that output claims to have been verified. Requesting
+verification — `--validate-erc`, or any of `--gerbers`/`--drill`/`--step` —
+makes an `unknown` blocking. Set `KICAD_CLI` to point at a specific build, and
+`SYNTH_KICAD_CLI_TIMEOUT_SECS` to change the per-run budget (default 300s).
+
 ## Why Synth?
 
 - **Review hardware changes in Git.** Components, connections, and constraints are text, making design intent visible in diffs and pull requests.
