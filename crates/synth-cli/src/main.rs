@@ -1523,7 +1523,11 @@ fn check(
     if let Some(dir) = registry {
         validate_args.extend(["--registry".into(), dir.display().to_string()]);
     }
-    let (validate_output, validate_timed_out) = run_check_child(&exe, &validate_args, 120)?;
+    let (validate_output, validate_timed_out) = run_check_child(
+        &exe,
+        &validate_args,
+        stage_budget("SYNTH_CHECK_SOURCE_TIMEOUT_SECS", 120),
+    )?;
     let validate_json = serde_json::from_slice::<serde_json::Value>(&validate_output.stdout)
         .unwrap_or_else(|_| serde_json::json!({"diagnostics": [], "parse_error": true}));
     let validate_pass = !validate_timed_out && validate_output.status.success();
@@ -1534,7 +1538,11 @@ fn check(
         if let Some(dir) = registry {
             drc_args.extend(["--registry".into(), dir.display().to_string()]);
         }
-        let (drc_output, timed_out) = run_check_child(&exe, &drc_args, 30)?;
+        let (drc_output, timed_out) = run_check_child(
+            &exe,
+            &drc_args,
+            stage_budget("SYNTH_CHECK_DRC_TIMEOUT_SECS", 30),
+        )?;
         (
             serde_json::from_slice::<serde_json::Value>(&drc_output.stdout)
                 .unwrap_or_else(|_| serde_json::json!({"status": "unknown", "parse_error": true})),
@@ -1607,7 +1615,8 @@ fn check(
         if allow_unverified_parts {
             export_args.push("--allow-unverified-parts".into());
         }
-        let (export_output, export_timed_out) = run_check_child(&exe, &export_args, 120)?;
+        let export_budget = stage_budget("SYNTH_CHECK_FAB_TIMEOUT_SECS", 120);
+        let (export_output, export_timed_out) = run_check_child(&exe, &export_args, export_budget)?;
         fab_pass = !export_timed_out && export_output.status.success();
         let native = std::fs::read_to_string(&verification_path)
             .ok()
@@ -1656,7 +1665,9 @@ fn check(
         });
         if export_timed_out {
             stage["reason"] = serde_json::json!("timeout");
-            stage["detail"] = serde_json::json!("`export-kicad` exceeded its 120s budget");
+            stage["detail"] = serde_json::json!(format!(
+                "`export-kicad` exceeded its {export_budget}s budget"
+            ));
         }
         if let Some(native) = native {
             stage["native"] = native;
@@ -1961,6 +1972,22 @@ fn structural_refusal(board: &synth_ir::Board) -> Option<String> {
     }
     out.push_str("Fix the part definitions, or run `synth registry qualify` for the full report.");
     Some(out)
+}
+
+/// Wall-clock budget for one `synth check` stage, in seconds.
+///
+/// The defaults suit a small board on a warm release build. A real board's
+/// DRC runs a full place-and-route, which takes minutes rather than seconds,
+/// and a stage that overruns is reported as `unknown` — correctly, but
+/// uselessly, since nothing was actually wrong. `SYNTH_CHECK_*_TIMEOUT_SECS`
+/// lets a release gate buy the time its boards need. Mirrors
+/// `SYNTH_KICAD_CLI_TIMEOUT_SECS` on the native stages.
+fn stage_budget(var: &str, default_secs: u64) -> u64 {
+    std::env::var(var)
+        .ok()
+        .and_then(|v| v.trim().parse::<u64>().ok())
+        .filter(|s| *s > 0)
+        .unwrap_or(default_secs)
 }
 
 fn run_check_child(
