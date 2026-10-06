@@ -59,12 +59,12 @@ pub fn snap_grid_127(val: f64) -> f64 {
 /// symbol instance's `(at x y angle)`. Reconciles the divergence
 /// between KiCad's symbol-natural orientation (which varies per
 /// part) and our `Rotation` enum's logical convention
-/// (`Zero` = horizontal, pin 0 on left).
+/// (`Zero` = horizontal).
 ///
-/// - `LED`, `D`, `D_TVS` ship horizontal in `Device.kicad_sym`
-///   (pin 1 on left) — already matches our convention → offset 0.
+/// - `LED`, `D`, `D_TVS` ship horizontal in `Device.kicad_sym` —
+///   already matches our convention → offset 0.
 /// - `R`, `R_US`, `C`, `L` ship vertical (pin 1 on top) — needs
-///   +90° to land pin 1 on the left → offset 90.
+///   +90° to lie horizontal → offset 90.
 ///
 /// Without this offset, a resistor at `Rotation::Zero` renders
 /// vertical (KiCad's natural) and a vertical LED chain with
