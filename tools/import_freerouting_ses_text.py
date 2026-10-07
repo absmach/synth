@@ -8,6 +8,8 @@ import re
 import uuid
 from pathlib import Path
 
+NAMESPACE = uuid.UUID("5d0f0ab5-3f4e-4b86-9f6e-2c5a8f1e7a31")
+
 
 def tokens(text: str):
     token = ""
@@ -116,7 +118,14 @@ def ground_net_codes(text: str) -> set[str]:
     return set(re.findall(r"\(zone\s+\(net\s+(\d+)\)", text))
 
 
+def content_uuid(seen: dict[str, int], *parts: object) -> uuid.UUID:
+    key = "|".join(str(part) for part in parts)
+    seen[key] = seen.get(key, 0) + 1
+    return uuid.uuid5(NAMESPACE, f"{key}|{seen[key]}")
+
+
 def route_records(ses_text: str, net_codes: dict[str, str]):
+    seen: dict[str, int] = {}
     root = parse(ses_text)
     routes = next(x for x in root if isinstance(x, list) and x and x[0] == "routes")
     network = next(
@@ -130,6 +139,9 @@ def route_records(ses_text: str, net_codes: dict[str, str]):
                 layer, width = path[1], fmt(max(coord(path[2]), 0.127))
                 points = [xy(path[i], path[i + 1]) for i in range(3, len(path), 2)]
                 for first, second in zip(points, points[1:]):
+                    item = content_uuid(
+                        seen, "segment", layer, net_code, first, second, width
+                    )
                     records.append(
                         "\t(segment\n"
                         f"\t\t(start {fmt(first[0])} {fmt(first[1])})\n"
@@ -137,13 +149,14 @@ def route_records(ses_text: str, net_codes: dict[str, str]):
                         f"\t\t(width {width})\n"
                         f'\t\t(layer "{layer}")\n'
                         f"\t\t(net {net_code})\n"
-                        f'\t\t(uuid "{uuid.uuid4()}")\n'
+                        f'\t\t(uuid "{item}")\n'
                         "\t)\n"
                     )
         for via in children(net, "via"):
             name, x, y = via[1:4]
             diameter, drill = ("0.8", "0.4") if "800:400" in name else ("0.6", "0.3")
             px, py = xy(x, y)
+            item = content_uuid(seen, "via", net_code, px, py, diameter, drill)
             records.append(
                 "\t(via\n"
                 f"\t\t(at {fmt(px)} {fmt(py)})\n"
@@ -151,7 +164,7 @@ def route_records(ses_text: str, net_codes: dict[str, str]):
                 f"\t\t(drill {drill})\n"
                 '\t\t(layers "F.Cu" "B.Cu")\n'
                 f"\t\t(net {net_code})\n"
-                f'\t\t(uuid "{uuid.uuid4()}")\n'
+                f'\t\t(uuid "{item}")\n'
                 "\t)\n"
             )
     return records
