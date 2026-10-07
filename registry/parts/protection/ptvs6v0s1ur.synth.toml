@@ -1,0 +1,29 @@
+id = "ptvs6v0s1ur"
+kind = "diode"
+version = 0
+lifecycle = "active"
+description = "Nexperia PTVS6V0S1UR 400 W unidirectional TVS, 6.0 V standoff, SOD123W, for VBUS and CC"
+mpn = "PTVS6V0S1UR"
+kicad_symbol = "Device:D_Zener"
+kicad_footprint = "Diode_SMD:Nexperia_CFP3_SOD-123W"
+
+[footprint_dimensions]
+width_mm = 4.5
+height_mm = 2.2
+courtyard_margin_mm = 0.25
+
+[operating_conditions]
+max_voltage_v = 6.0
+
+[[pins]]
+name = "cathode"
+number = "1"
+electrical_type = "passive"
+
+[[pins]]
+name = "anode"
+number = "2"
+electrical_type = "passive"
+
+[provenance]
+datasheet_url = "https://assets.nexperia.com/documents/data-sheet/PTVSXS1UR_SER.pdf"

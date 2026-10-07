@@ -5,18 +5,18 @@ lifecycle = "active"
 description = "WCH CH340G USB to UART bridge controller, SOP-16"
 mpn = "CH340G"
 lcsc_pn = "C14267"
-kicad_symbol = "Interface_USB:CH340C"
-kicad_footprint = "Package_SO:SOP-16_3.9x9.9mm_P1.27mm"
+kicad_symbol = "Interface_USB:CH340G"
+kicad_footprint = "Package_SO:SOIC-16_3.9x9.9mm_P1.27mm"
 
 [footprint_dimensions]
-width_mm = 5.0
-height_mm = 5.0
+width_mm = 7.4
+height_mm = 10.4
 courtyard_margin_mm = 0.25
 
 [operating_conditions]
-min_voltage_v = 1.8
-max_voltage_v = 5.0
-max_current_ma = 100.0
+min_voltage_v = 2.9
+max_voltage_v = 5.3
+max_current_ma = 20.0
 
 [[pins]]
 name = "gnd"
@@ -39,18 +39,30 @@ capabilities = ["uart_rx"]
 [[pins]]
 name = "v3"
 number = "4"
-electrical_type = "power_output"
+electrical_type = "passive"
 required = true
 
 [[pins]]
 name = "ud_plus"
 number = "5"
-electrical_type = "bidirectional"
+electrical_type = "differential_positive"
+capabilities = ["usb_dp"]
 
 [[pins]]
 name = "ud_minus"
 number = "6"
-electrical_type = "bidirectional"
+electrical_type = "differential_negative"
+capabilities = ["usb_dn"]
+
+[[pins]]
+name = "xi"
+number = "7"
+electrical_type = "input"
+
+[[pins]]
+name = "xo"
+number = "8"
+electrical_type = "output"
 
 [[pins]]
 name = "cts"
