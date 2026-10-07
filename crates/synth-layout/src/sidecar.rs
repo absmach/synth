@@ -2,8 +2,8 @@
 
 //! Sidecar layout persistence.
 //!
-//! Allows manual component drag-and-drop overrides from `synth preview`
-//! or human design tuning to persist to disk adjacent to `.synth` source files.
+//! Allows manual component overrides from human design tuning or agents to
+//! persist to disk adjacent to `.synth` source files.
 //! Version 2 supports provenance (`source: "human_drag" | "agent"`) and priority.
 //!
 //! # Two namespaces, one schema

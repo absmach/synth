@@ -31,8 +31,7 @@
 //! move actually affects, so "only Stage C+D for the affected nets"
 //! (as originally scoped in §7.8.8) is approximated here as "all of
 //! Stage C+D," not a true incremental re-route. In practice this is
-//! fast enough for a single discrete op (unlike continuous drag,
-//! §7.8's `synth-web` migration note), but it has one real
+//! fast enough for a single discrete op, but it has one real
 //! consequence: a net you forced to a label via
 //! [`LayoutOp::ReplaceWireWithLabel`] reverts to the automatic
 //! distance/crossing heuristic the next time a structural op runs,

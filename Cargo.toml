@@ -17,7 +17,6 @@ members = [
   "crates/synth-router",
   "crates/synth-route",
   "crates/synth-drc",
-  "crates/synth-web",
   "crates/synth-mcp",
   "crates/synth-render",
   "crates/synth-smt",
@@ -89,8 +88,6 @@ tokio = { version = "1", features = [
 ] }
 axum = "0.8"
 tower-http = { version = "0.7", features = ["fs", "trace", "set-header"] }
-notify-debouncer-mini = { version = "0.7", default-features = false }
-futures = "0.3"
 include_dir = "0.7"
 schemars = "1.2"
 
@@ -110,7 +107,6 @@ synth-route = { path = "crates/synth-route", version = "0.1.1" }
 synth-router = { path = "crates/synth-router", version = "0.1.1" }
 synth-pcb = { path = "crates/synth-pcb", version = "0.1.1" }
 synth-drc = { path = "crates/synth-drc", version = "0.1.1" }
-synth-web = { path = "crates/synth-web", version = "0.1.1" }
 synth-mcp = { path = "crates/synth-mcp", version = "0.1.1" }
 synth-render = { path = "crates/synth-render", version = "0.1.1" }
 synth-smt = { path = "crates/synth-smt", version = "0.1.1" }

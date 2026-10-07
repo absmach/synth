@@ -2,11 +2,10 @@
 
 //! Schematic placement and wire routing for the Synth EDA compiler.
 //!
-//! Both consumers — the browser preview (`synth-web`) and the
-//! KiCad export (`synth-kicad`) — call [`layout`] on the same
-//! [`Board`] to get component positions and (eventually) wire
-//! routes. Keeping the layouter in one crate is the only way to
-//! ensure the two views agree.
+//! Every consumer — the KiCad export (`synth-kicad`) and the MCP
+//! tools — calls [`layout`] on the same [`Board`] to get component
+//! positions and (eventually) wire routes. Keeping the layouter in
+//! one crate is the only way to ensure the views agree.
 //!
 //! ## Layered roadmap (§7.5 of the implementation plan)
 //!
@@ -84,9 +83,8 @@ struct FittedAttempt {
 
 // Pin-side classification and two-pin symbol recognition are the
 // *single* source of truth in `route`. The router computes wire
-// terminals from them, `synth-kicad` draws the pins from them, and
-// `synth-web` sizes preview bodies from them; a divergent copy
-// silently desynchronises all three (it already did: this file's
+// terminals from them and `synth-kicad` draws the pins from them;
+// a divergent copy silently desynchronises both (it already did: this file's
 // own copies omitted `inductor` and `switch` while listing
 // `ferrite_bead`/`zener_diode`/`resonator`, which are not registry
 // `kind`s at all). Aliased rather than re-declared so the many
