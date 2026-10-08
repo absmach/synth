@@ -283,6 +283,36 @@ mod tests {
     }
 
     #[test]
+    fn outline_check_uses_the_rotated_footprint_extents() {
+        let board = load_board("../../fixtures/designs/iot_sensor_board.synth");
+        let usb = board
+            .components
+            .iter()
+            .find(|component| component.refdes == "J1")
+            .expect("USB-C component");
+        let placed = |rotation| synth_place::Placement {
+            board_outline: synth_geometry::Rect::new(
+                synth_geometry::Point::new(0, 0),
+                synth_geometry::Point::new(20_000_000, 20_000_000),
+            ),
+            components: vec![synth_place::ComponentPlacement {
+                id: usb.id,
+                center: synth_geometry::Point::new(4_000_000, 10_000_000),
+                rotation,
+                layer: synth_geometry::Layer::Top,
+            }],
+        };
+        assert_eq!(
+            rules::check_silkscreen_overlap(&board, &placed(synth_geometry::Rotation::Zero)).len(),
+            1
+        );
+        assert!(
+            rules::check_silkscreen_overlap(&board, &placed(synth_geometry::Rotation::Ninety))
+                .is_empty()
+        );
+    }
+
+    #[test]
     fn env_logger_drc() {
         let board = load_board("../../examples/env_logger.synth");
         let placement = synth_place::place(&board).expect("place");
