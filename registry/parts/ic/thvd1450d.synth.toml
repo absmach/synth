@@ -1,0 +1,74 @@
+id = "thvd1450d"
+kind = "ic"
+version = 0
+lifecycle = "active"
+description = "TI THVD1450D RS-485 transceiver, 3.3-5 V, 50 Mbps, ±18 kV IEC 61000-4-2 contact ESD, SOIC-8"
+mpn = "THVD1450D"
+lcsc_pn = "C2671361"
+kicad_symbol = "Interface_UART:THVD1450D"
+kicad_footprint = "Package_SO:SOIC-8_3.9x4.9mm_P1.27mm"
+
+[footprint_dimensions]
+width_mm = 3.9
+height_mm = 4.9
+courtyard_margin_mm = 0.25
+
+[operating_conditions]
+min_voltage_v = 3.0
+max_voltage_v = 5.5
+max_current_ma = 3.0
+
+[[pins]]
+name = "ro"
+number = "1"
+electrical_type = "output"
+
+[[pins]]
+name = "re_n"
+number = "2"
+electrical_type = "input"
+
+[[pins]]
+name = "de"
+number = "3"
+electrical_type = "input"
+
+[[pins]]
+name = "di"
+number = "4"
+electrical_type = "input"
+
+[[pins]]
+name = "gnd"
+number = "5"
+electrical_type = "ground_reference"
+required = true
+
+[[pins]]
+name = "a"
+number = "6"
+electrical_type = "bidirectional"
+required = true
+
+[[pins]]
+name = "b"
+number = "7"
+electrical_type = "bidirectional"
+required = true
+
+[[pins]]
+name = "vcc"
+number = "8"
+electrical_type = "power_input"
+required = true
+
+[[required_decoupling]]
+net = "vcc"
+value = "100nf"
+count = 1
+
+[provenance]
+source = "imported"
+generator = "synth-part-import-kicad 0.1"
+datasheet_url = "https://www.ti.com/lit/gpn/THVD1450"
+reviewed_by = ""
