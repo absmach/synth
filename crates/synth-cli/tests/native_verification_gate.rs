@@ -582,6 +582,77 @@ fn a_plain_export_still_succeeds_but_records_the_unknown() {
     assert_eq!(drc["reason"], "not_installed");
 }
 
+#[test]
+fn a_plain_export_with_allow_incomplete_is_a_draft_not_a_failure() {
+    // The same un-routed export that is a failure above becomes an explicit
+    // draft when the caller asks for one: exit zero, board kept, and the
+    // report still refusing to call it release-ready. This is the path a
+    // pipeline uses to hand an un-routed board to an external router.
+    let dir = scratch("plain_draft");
+    let report_path = dir.join("verification.json");
+    let _lock = stub_router::serialised();
+    let _router = stub_router::install(&dir);
+    let output = Command::new(SYNTH)
+        .arg("export-kicad")
+        .arg(design())
+        .arg("--out")
+        .arg(dir.join("out"))
+        .arg("--allow-incomplete")
+        .arg("--verification-report")
+        .arg(&report_path)
+        .env("KICAD_CLI", dir.join("does-not-exist"))
+        .output()
+        .expect("run synth export-kicad");
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert_eq!(output.status.code(), Some(0), "stderr:\n{stderr}");
+    assert!(
+        stderr.contains("DRAFT") && stderr.contains("NOT FOR FABRICATION"),
+        "the draft status must be stated:\n{stderr}"
+    );
+    let report: serde_json::Value =
+        serde_json::from_str(&std::fs::read_to_string(&report_path).expect("report written"))
+            .expect("report parses");
+    assert_eq!(
+        report["release_ready"], false,
+        "a draft is never release ready"
+    );
+    assert!(
+        dir.join("out").join("hello.synth.kicad_pcb").is_file(),
+        "the un-routed baseline must be preserved"
+    );
+}
+
+#[test]
+fn allow_incomplete_refuses_to_emit_fabrication_artifacts() {
+    // A draft must never produce manufacturing artifacts. `run_fab` writes
+    // Gerbers/drill/STEP before the final validation gate, so without this
+    // check `--allow-incomplete --gerbers` would emit them from an unrouted
+    // board and only afterwards fail.
+    let dir = scratch("draft_fab");
+    let _lock = stub_router::serialised();
+    let _router = stub_router::install(&dir);
+    let output = Command::new(SYNTH)
+        .arg("export-kicad")
+        .arg(design())
+        .arg("--out")
+        .arg(dir.join("out"))
+        .arg("--allow-incomplete")
+        .arg("--gerbers")
+        .env("KICAD_CLI", dir.join("does-not-exist"))
+        .output()
+        .expect("run synth export-kicad");
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert_ne!(output.status.code(), Some(0), "{stderr}");
+    assert!(
+        stderr.contains("--allow-incomplete") && stderr.contains("fabrication"),
+        "the refusal must name the flag combination:\n{stderr}"
+    );
+    assert!(
+        !dir.join("out").join("gerbers").exists(),
+        "a draft must not create a gerbers directory"
+    );
+}
+
 mod release_gate {
     use super::*;
 

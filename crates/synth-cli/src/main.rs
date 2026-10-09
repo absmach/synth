@@ -196,6 +196,12 @@ enum Command {
         /// the independent checks rather than by either engine's own report.
         #[arg(long)]
         best_of: bool,
+        /// Export a clearly labelled draft even when routing is incomplete,
+        /// the router is unavailable, or the board is not fabrication-ready.
+        /// The un-routed `<name>.synth.kicad_pcb` is preserved for review or
+        /// for an external router to complete. Never fabricate this output.
+        #[arg(long)]
+        allow_incomplete: bool,
     },
 
     /// Apply the highest-confidence `suggested_fix` from every
@@ -943,6 +949,7 @@ fn main() -> ExitCode {
             krt_same_net_pad_clearance,
             krt_allow_via_in_pad,
             best_of,
+            allow_incomplete,
         } => export_kicad(
             &input,
             registry.as_deref(),
@@ -971,6 +978,7 @@ fn main() -> ExitCode {
             krt_same_net_pad_clearance,
             krt_allow_via_in_pad,
             best_of,
+            allow_incomplete,
         ),
         Command::Fix {
             input,
@@ -3893,6 +3901,7 @@ fn export_kicad(
     krt_same_net_pad_clearance: f64,
     krt_allow_via_in_pad: bool,
     best_of: bool,
+    allow_incomplete: bool,
 ) -> anyhow::Result<u8> {
     if autoroute {
         // Still parsed, so an existing script fails with something
@@ -3904,6 +3913,22 @@ fn export_kicad(
              an external checkout."
         );
     }
+    // A draft is the one export that is allowed to be un-routed, and an
+    // un-routed board must never produce fabrication artifacts. Check the
+    // combination here, before any file is written: `run_fab` runs before the
+    // final validation gate, so otherwise `--allow-incomplete --gerbers`
+    // would emit Gerbers from an unrouted board and only then fail. `--force`
+    // is not a way around this either — fabrication artifacts from a draft are
+    // never release evidence.
+    if allow_incomplete && !fab.is_empty() {
+        anyhow::bail!(
+            "--allow-incomplete cannot be combined with fabrication artifacts \
+             (--gerbers / --drill / --step): a draft export is never fabricable. \
+             Export the draft first, route and validate it, then run the export \
+             again without --allow-incomplete to produce the manufacturing package."
+        );
+    }
+
     let (source, file) = read_source(input)?;
     let parse = synth_parser::parse(&source, file.clone());
     write_diagnostics_to_stderr(&parse.diagnostics)?;
@@ -4291,6 +4316,21 @@ fn export_kicad(
         return Ok(EXIT_VALIDATION_ERRORS);
     }
 
+    // A draft export is explicitly allowed to be un-routed: it exists so an
+    // external router can complete it, or so a human can review it. Say so
+    // loudly, because the artifacts it writes are otherwise indistinguishable
+    // from a release.
+    if allow_incomplete && !routing.is_fabrication_ready() {
+        eprintln!(
+            "warning: DRAFT / NOT FOR FABRICATION — exporting an un-routed board: {}",
+            routing.summary()
+        );
+        eprintln!(
+            "  the un-routed baseline is preserved beside the export for review or \
+             for an external router to complete; the routing run record names it."
+        );
+    }
+
     let has_errors = parse.has_errors()
         || lowered.has_errors()
         || (has_erc_errors && !force)
@@ -4302,7 +4342,9 @@ fn export_kicad(
         // is a board whose router could not run or whose copper failed
         // independent validation. `--force` deliberately does not override
         // this, for the same reason it does not override a KiCad DRC error.
-        || !routing.is_fabrication_ready();
+        // `--allow-incomplete` is the one deliberate exception: it produces
+        // a draft, and never a release-ready package.
+        || (!routing.is_fabrication_ready() && !allow_incomplete);
     Ok(if has_errors {
         EXIT_VALIDATION_ERRORS
     } else {
