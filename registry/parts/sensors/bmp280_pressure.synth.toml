@@ -47,3 +47,23 @@ net = "vdd"
 value = "100nf"
 count = 1
 
+
+[[pins]]
+name = "vddio"
+number = "6"
+electrical_type = "power_input"
+
+[[pins]]
+name = "gnd2"
+number = "7"
+electrical_type = "power_input"
+
+[[pins]]
+name = "csb"
+number = "2"
+electrical_type = "input"
+
+[[pins]]
+name = "sdo"
+number = "5"
+electrical_type = "input"

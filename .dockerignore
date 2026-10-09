@@ -6,3 +6,9 @@
 !target/release/synth
 !registry/
 !registry/**
+
+# Renderer adapters are copied into the production KiCad image.
+!tools/
+!tools/freeroute_autoroute.py
+!tools/import_freerouting_ses_text.py
+!tools/kicad_routing_tools_route.py
