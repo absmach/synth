@@ -77,7 +77,7 @@ board "usb_uart" {
   }
 
   group "VIO SELECT" color "#9333ea" {
-    component J_VIO: connector "header_1x3" value "VIO_SEL"
+    component J_VIO: connector "header_1x3" value "VIO_SEL" { placement_hint { edge: bottom priority: hard } }
     notes "" {
       "p1=+3V3, p2=VIO, p3=VBUS."
       "Jumper 1-2: 3.3 V. Jumper 2-3: 5 V."
@@ -102,7 +102,7 @@ board "usb_uart" {
     component U3: ic "thvd1450d"
     component R_TNOW: resistor "r_generic_0603" value "4.7k" tolerance "1%"
     component C7: capacitor "c_generic_0603" value "100nF" dielectric "X7R" voltage "16V"
-    component J4: connector "header_1x3" value "RS485"
+    component J4: connector "header_1x3" value "RS485" { placement_hint { edge: bottom priority: hard } }
     component R_TERM: resistor "r_generic_0603" value "120ohm" tolerance "1%"
     notes "" {
       "DI <- TXD0, RO -> RXD0. DE//RE tied together and driven by DTR0/TNOW0."
