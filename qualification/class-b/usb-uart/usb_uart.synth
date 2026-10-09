@@ -1,0 +1,204 @@
+// SYN-66 board #66 rework: USB-C to CH342F dual-UART + RS-485 adapter.
+//
+// UART1 is broken out as TTL at the VIO level (3.3 V or 5 V). UART0 is
+// not broken out as TTL: it feeds a THVD1450 RS-485 transceiver, which
+// needs at least 3 V, so VIO is never below 3.3 V. VIO (the I/O rail
+// for both UARTs and the transceiver) is selected by the J_VIO 3-way
+// jumper: +3V3 or VBUS. With no jumper VIO is unpowered and the
+// bridge stays in reset.
+board "usb_uart" {
+  layers 4
+  manufacturer "jlcpcb"
+  revision "A"
+
+  netclass "USB" {
+    trace_width 0.242mm
+    clearance 0.127mm
+  }
+
+  stackup {
+    copper 0.035mm
+    insulator 0.2104mm er 4.4 material "FR4"
+    copper 0.0152mm
+    insulator 1.065mm er 4.6 material "FR4"
+    copper 0.0152mm
+    insulator 0.2104mm er 4.4 material "FR4"
+    copper 0.035mm
+  }
+
+  power "VBUS" 5v
+  power "+3V3" 3.3v
+
+  group "USB-C INPUT" color "#c2410c" {
+    component J1: connector "usb_c_receptacle" { placement_hint { edge: top priority: hard } }
+    component R1: resistor "r_generic_0603" value "5.1k"
+    component R2: resistor "r_generic_0603" value "5.1k"
+    notes "" {
+      "USB 2.0 device port, VBUS 5 V in. D+/D- go straight to U1 (no series R)."
+      "CC1/CC2 5.1k Rd to GND so a USB-C host sources 5 V."
+    }
+  }
+
+  group "ESD" color "#7c3aed" {
+    component D1: diode "prtr5v0u2x" value "TVS"
+    component D2: diode "ptvs6v0s1ur" value "TVS"
+    component D5: diode "ptvs6v0s1ur" value "TVS"
+    component D6: diode "ptvs6v0s1ur" value "TVS"
+    notes "" {
+      "PRTR5V0U2X rail-to-rail clamp on D+/D- (VCC pin on VBUS)."
+      "PTVS6V0S1UR on VBUS, CC1 and CC2, close to the connector."
+    }
+  }
+
+  group "3V3 LDO" color "#0072b2" {
+    component U2: regulator "lp5907_3v3" value "LDO"
+    component C2: capacitor "c_generic_0603" value "2.2uF" dielectric "X7R" voltage "16V"
+    component C3: capacitor "c_generic_0603" value "2.2uF" dielectric "X7R" voltage "16V"
+    notes "" {
+      "LP5907-3.3: 2.2 uF ceramic in and out."
+      "(datasheet minimum is 1 uF)."
+      "EN tied to VIN, always on."
+    }
+  }
+
+  group "CH342F BRIDGE" color "#0a7d4a" {
+    component U1: ic "ch342f"
+    component C4: capacitor "c_generic_0603" value "100nF" dielectric "X7R" voltage "16V"
+    component C5: capacitor "c_generic_0603" value "100nF" dielectric "X7R" voltage "16V"
+    component C6: capacitor "c_generic_0603" value "100nF" dielectric "X7R" voltage "16V"
+    component R8: resistor "r_generic_0603" value "10k"
+    component R9: resistor "r_generic_0603" value "10k"
+    notes "" {
+      "VDD5 <- VBUS (100nF C4), V3 <- 100nF only (C5), VIO <- VIO net (100nF C6)."
+      "VBUS pin <- VBUS net. RST left NC (internal pull-up). EP (pin 25) to GND."
+      "R8 10k pulls the unused modem inputs RI0/RI1/DCD0/DCD1/DSR0/DSR1 to VIO (inactive)."
+      "R9 10k holds CTS0 low (always clear to send) so UART0 flow control cannot stall."
+    }
+  }
+
+  group "VIO SELECT" color "#9333ea" {
+    component J_VIO: connector "header_1x3" value "VIO_SEL"
+    notes "" {
+      "p1=+3V3, p2=VIO, p3=VBUS."
+      "Jumper 1-2: 3.3 V. Jumper 2-3: 5 V."
+      "No jumper: VIO off, bridge in reset."
+      "Do not wire anything to pin 2."
+    }
+  }
+
+  group "UART1 TTL" color "#b45309" {
+    component J2: connector "header_1x3" value "UART1" { placement_hint { edge: bottom priority: hard } }
+    component J3: connector "header_1x3" value "FLOW1" { placement_hint { edge: bottom priority: hard } }
+    component R5: resistor "r_generic_0603" value "1k"
+    component R6: resistor "r_generic_0603" value "1k"
+    notes "" {
+      "J2: GND, TXD1, RXD1 (pin 1 is GND)."
+      "J3: DTR1, RTS1, CTS1."
+      "R5 1k series on RXD1, R6 1k on CTS1."
+    }
+  }
+
+  group "RS485 UART0" color "#0d9488" {
+    component U3: ic "thvd1450d"
+    component R_TNOW: resistor "r_generic_0603" value "4.7k" tolerance "1%"
+    component C7: capacitor "c_generic_0603" value "100nF" dielectric "X7R" voltage "16V"
+    component J4: connector "header_1x3" value "RS485"
+    component R_TERM: resistor "r_generic_0603" value "120ohm" tolerance "1%"
+    notes "" {
+      "DI <- TXD0, RO -> RXD0. DE//RE tied together and driven by DTR0/TNOW0."
+      "R_TNOW 4.7k to GND on TNOW0 (auto-direction config). VCC <- VIO (100nF C7)."
+      "J4: A, B, GND. R_TERM 120 ohm 1% across A/B. UART0 TTL is not broken out."
+    }
+  }
+
+  group "LEDs" color "#be123c" {
+    component D3: led "ltst_c190kgkt" value "VIO"
+    component R3: resistor "r_generic_0603" value "470"
+    component D4: led "ltst_c190krkt" value "TX0"
+    component R4: resistor "r_generic_0603" value "470"
+    component D7: led "ltst_c190krkt" value "TX1"
+    component R7: resistor "r_generic_0603" value "470"
+    notes "" {
+      "D3 green LED from VIO (VIO present)."
+      "D4/D7 red LEDs from TXD0/TXD1."
+      "No ACT# LED: the CH342F QFN24 has no ACT# bond-out."
+    }
+  }
+
+  net "VBUS" {
+    J1.vbus, J1.vbus_b4, J1.vbus_a9, J1.vbus_b9,
+    D1.vcc, D2.cathode,
+    U2.vin, U2.en, C2.p1,
+    U1.vdd5, U1.vbus, C4.p1,
+    J_VIO.p3
+  }
+
+  net "+3V3" {
+    U2.vout, C3.p1, J_VIO.p1
+  }
+
+  net "VIO" {
+    J_VIO.p2, U1.vio, C6.p1, U3.vcc, C7.p1, R3.p1, R8.p1
+  }
+
+  net "GND" {
+    J1.gnd, J1.gnd_a12, J1.gnd_b1, J1.gnd_b12, J1.shld,
+    R1.p2, R2.p2,
+    D1.gnd, D2.anode, D5.anode, D6.anode,
+    C2.p2, C3.p2, C4.p2, C5.p2, C6.p2, C7.p2,
+    U2.gnd, U1.gnd, U1.ep, U3.gnd,
+    J2.p1, J4.p3, R9.p2,
+    R_TNOW.p2,
+    D3.cathode, D4.cathode, D7.cathode
+  }
+
+  connect J1.cc1 -> R1.p1 as "CC1"
+  connect J1.cc1 -> D5.cathode as "CC1"
+  connect J1.cc2 -> R2.p1 as "CC2"
+  connect J1.cc2 -> D6.cathode as "CC2"
+
+  connect J1.dp -> J1.dp_b6 as "USB_DP" class "USB"
+  connect J1.dp -> D1.io1 as "USB_DP"
+  connect J1.dp -> U1.ud_plus as "USB_DP"
+  connect J1.dn -> J1.dn_b7 as "USB_DN" class "USB"
+  connect J1.dn -> D1.io2 as "USB_DN"
+  connect J1.dn -> U1.ud_minus as "USB_DN"
+
+  diff_pair USB_DP USB_DN {
+    impedance 90ohm
+  }
+
+  connect U1.v3 -> C5.p1 as "V3"
+
+  connect U1.ri0 -> R8.p2 as "MODEM_IDLE"
+  connect U1.ri1 -> R8.p2 as "MODEM_IDLE"
+  connect U1.dcd0 -> R8.p2 as "MODEM_IDLE"
+  connect U1.dcd1 -> R8.p2 as "MODEM_IDLE"
+  connect U1.dsr0 -> R8.p2 as "MODEM_IDLE"
+  connect U1.dsr1_tnow1 -> R8.p2 as "MODEM_IDLE"
+  connect U1.cts0 -> R9.p1 as "CTS0_LOW"
+
+  connect U1.txd1 -> J2.p2 as "TXD1"
+  connect U1.txd1 -> R7.p1 as "TXD1"
+  connect J2.p3 -> R5.p2 as "RXD1"
+  connect R5.p1 -> U1.rxd1 as "RXD1_MCU"
+  connect U1.dtr1_tnow1 -> J3.p1 as "DTR1"
+  connect U1.rts1 -> J3.p2 as "RTS1"
+  connect J3.p3 -> R6.p2 as "CTS1"
+  connect R6.p1 -> U1.cts1 as "CTS1_MCU"
+
+  connect U1.txd0 -> U3.di as "TXD0"
+  connect U1.txd0 -> R4.p1 as "TXD0"
+  connect U1.rxd0 -> U3.ro as "RXD0"
+  connect U1.dtr0_tnow0 -> U3.de as "TNOW0"
+  connect U1.dtr0_tnow0 -> U3.re_n as "TNOW0"
+  connect U1.dtr0_tnow0 -> R_TNOW.p1 as "TNOW0"
+  connect U3.a -> J4.p1 as "RS485_A"
+  connect U3.a -> R_TERM.p1 as "RS485_A"
+  connect U3.b -> J4.p2 as "RS485_B"
+  connect U3.b -> R_TERM.p2 as "RS485_B"
+
+  connect R3.p2 -> D3.anode as "LED_PWR"
+  connect R4.p2 -> D4.anode as "LED_TX0"
+  connect R7.p2 -> D7.anode as "LED_TX1"
+}

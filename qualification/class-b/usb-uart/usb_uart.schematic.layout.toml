@@ -1,0 +1,323 @@
+schema_version = 2
+forced_net_labels = []
+fit_sheet = false
+
+[components.J1]
+x = 35.56
+y = 55.88
+rotation = 0
+source = "agent"
+priority = "soft"
+timestamp = "2026-10-09T09:00:00+00:00"
+dx = 0.0
+dy = 0.0
+
+[components.R1]
+x = 83.82
+y = 60.96
+rotation = 0
+source = "agent"
+priority = "soft"
+timestamp = "2026-10-09T09:00:00+00:00"
+dx = 0.0
+dy = 0.0
+
+[components.R2]
+x = 83.82
+y = 109.22
+rotation = 0
+source = "agent"
+priority = "soft"
+timestamp = "2026-10-09T09:00:00+00:00"
+dx = 0.0
+dy = 0.0
+
+[components.D1]
+x = 124.46
+y = 33.02
+rotation = 0
+source = "agent"
+priority = "soft"
+timestamp = "2026-10-09T09:00:00+00:00"
+dx = 0.0
+dy = 0.0
+
+[components.D2]
+x = 124.46
+y = 76.20
+rotation = 270
+source = "agent"
+priority = "soft"
+timestamp = "2026-10-09T09:00:00+00:00"
+dx = 0.0
+dy = 0.0
+
+[components.D5]
+x = 160.02
+y = 33.02
+rotation = 270
+source = "agent"
+priority = "soft"
+timestamp = "2026-10-09T09:00:00+00:00"
+dx = 0.0
+dy = 0.0
+
+[components.D6]
+x = 160.02
+y = 76.20
+rotation = 270
+source = "agent"
+priority = "soft"
+timestamp = "2026-10-09T09:00:00+00:00"
+dx = 0.0
+dy = 0.0
+
+[components.U2]
+x = 198.12
+y = 30.48
+rotation = 0
+source = "agent"
+priority = "soft"
+timestamp = "2026-10-09T09:00:00+00:00"
+dx = 0.0
+dy = 0.0
+
+[components.C2]
+x = 190.50
+y = 48.26
+rotation = 0
+source = "agent"
+priority = "soft"
+timestamp = "2026-10-09T09:00:00+00:00"
+dx = 0.0
+dy = 0.0
+
+[components.C3]
+x = 210.82
+y = 48.26
+rotation = 0
+source = "agent"
+priority = "soft"
+timestamp = "2026-10-09T09:00:00+00:00"
+dx = 0.0
+dy = 0.0
+
+[components.U1]
+x = 276.86
+y = 66.04
+rotation = 0
+source = "agent"
+priority = "soft"
+timestamp = "2026-10-09T09:00:00+00:00"
+dx = 0.0
+dy = 0.0
+
+[components.C4]
+x = 264.16
+y = 101.60
+rotation = 0
+source = "agent"
+priority = "soft"
+timestamp = "2026-10-09T09:00:00+00:00"
+dx = 0.0
+dy = 0.0
+
+[components.C5]
+x = 284.48
+y = 101.60
+rotation = 0
+source = "agent"
+priority = "soft"
+timestamp = "2026-10-09T09:00:00+00:00"
+dx = 0.0
+dy = 0.0
+
+[components.C6]
+x = 304.80
+y = 101.60
+rotation = 0
+source = "agent"
+priority = "soft"
+timestamp = "2026-10-09T09:00:00+00:00"
+dx = 0.0
+dy = 0.0
+
+[components.R8]
+x = 233.68
+y = 43.18
+rotation = 0
+source = "agent"
+priority = "soft"
+timestamp = "2026-10-09T09:00:00+00:00"
+dx = 0.0
+dy = 0.0
+
+[components.R9]
+x = 233.68
+y = 78.74
+rotation = 0
+source = "agent"
+priority = "soft"
+timestamp = "2026-10-09T09:00:00+00:00"
+dx = 0.0
+dy = 0.0
+
+[components.J_VIO]
+x = 340.36
+y = 27.94
+rotation = 0
+source = "agent"
+priority = "soft"
+timestamp = "2026-10-09T09:00:00+00:00"
+dx = 0.0
+dy = 0.0
+
+[components.J2]
+x = 429.26
+y = 30.48
+rotation = 0
+source = "agent"
+priority = "soft"
+timestamp = "2026-10-09T09:00:00+00:00"
+dx = 0.0
+dy = 0.0
+
+[components.R5]
+x = 411.48
+y = 33.02
+rotation = 0
+source = "agent"
+priority = "soft"
+timestamp = "2026-10-09T09:00:00+00:00"
+dx = 0.0
+dy = 0.0
+
+[components.J3]
+x = 429.26
+y = 60.96
+rotation = 0
+source = "agent"
+priority = "soft"
+timestamp = "2026-10-09T09:00:00+00:00"
+dx = 0.0
+dy = 0.0
+
+[components.R6]
+x = 411.48
+y = 63.50
+rotation = 0
+source = "agent"
+priority = "soft"
+timestamp = "2026-10-09T09:00:00+00:00"
+dx = 0.0
+dy = 0.0
+
+[components.J4]
+x = 469.90
+y = 38.10
+rotation = 0
+source = "agent"
+priority = "soft"
+timestamp = "2026-10-09T09:00:00+00:00"
+dx = 0.0
+dy = 0.0
+
+[components.U3]
+x = 510.54
+y = 38.10
+rotation = 0
+source = "agent"
+priority = "soft"
+timestamp = "2026-10-09T09:00:00+00:00"
+dx = 0.0
+dy = 0.0
+
+[components.R_TNOW]
+x = 553.72
+y = 38.10
+rotation = 0
+source = "agent"
+priority = "soft"
+timestamp = "2026-10-09T09:00:00+00:00"
+dx = 0.0
+dy = 0.0
+
+[components.C7]
+x = 510.54
+y = 63.50
+rotation = 0
+source = "agent"
+priority = "soft"
+timestamp = "2026-10-09T09:00:00+00:00"
+dx = 0.0
+dy = 0.0
+
+[components.R_TERM]
+x = 553.72
+y = 71.12
+rotation = 90
+source = "agent"
+priority = "soft"
+timestamp = "2026-10-09T09:00:00+00:00"
+dx = 0.0
+dy = 0.0
+
+[components.D3]
+x = 35.56
+y = 167.64
+rotation = 90
+source = "agent"
+priority = "soft"
+timestamp = "2026-10-09T09:00:00+00:00"
+dx = 0.0
+dy = 0.0
+
+[components.R3]
+x = 30.48
+y = 149.86
+rotation = 0
+source = "agent"
+priority = "soft"
+timestamp = "2026-10-09T09:00:00+00:00"
+dx = 0.0
+dy = 0.0
+
+[components.D4]
+x = 71.12
+y = 167.64
+rotation = 90
+source = "agent"
+priority = "soft"
+timestamp = "2026-10-09T09:00:00+00:00"
+dx = 0.0
+dy = 0.0
+
+[components.R4]
+x = 66.04
+y = 149.86
+rotation = 0
+source = "agent"
+priority = "soft"
+timestamp = "2026-10-09T09:00:00+00:00"
+dx = 0.0
+dy = 0.0
+
+[components.D7]
+x = 104.14
+y = 167.64
+rotation = 90
+source = "agent"
+priority = "soft"
+timestamp = "2026-10-09T09:00:00+00:00"
+dx = 0.0
+dy = 0.0
+
+[components.R7]
+x = 99.06
+y = 149.86
+rotation = 0
+source = "agent"
+priority = "soft"
+timestamp = "2026-10-09T09:00:00+00:00"
+dx = 0.0
+dy = 0.0
