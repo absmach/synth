@@ -1,0 +1,262 @@
+schema_version = 2
+forced_net_labels = []
+fit_sheet = false
+
+# Board millimetres. J1 on the top edge, protection parts under it,
+# decoupling caps 1 to 1.5 mm from their pins, headers on the bottom edge.
+
+[components.J1]
+x = 22.0
+y = 4.15
+rotation = 180
+source = "agent"
+priority = "hard"
+timestamp = "2026-10-10T09:00:00+00:00"
+
+[components.D2]
+x = 16.93
+y = 11.95
+rotation = 270
+source = "agent"
+priority = "hard"
+timestamp = "2026-10-10T09:00:00+00:00"
+
+[components.D6]
+x = 19.33
+y = 11.95
+rotation = 270
+source = "agent"
+priority = "hard"
+timestamp = "2026-10-10T09:00:00+00:00"
+
+[components.D1]
+x = 22.23
+y = 11.3
+rotation = 180
+source = "agent"
+priority = "hard"
+timestamp = "2026-10-10T09:00:00+00:00"
+
+[components.D5]
+x = 25.13
+y = 11.95
+rotation = 270
+source = "agent"
+priority = "hard"
+timestamp = "2026-10-10T09:00:00+00:00"
+
+[components.R2]
+x = 13.6
+y = 11.95
+rotation = 0
+source = "agent"
+priority = "hard"
+timestamp = "2026-10-10T09:00:00+00:00"
+
+[components.R1]
+x = 27.9
+y = 11.95
+rotation = 0
+source = "agent"
+priority = "hard"
+timestamp = "2026-10-10T09:00:00+00:00"
+
+[components.U2]
+x = 9.6
+y = 17.3
+rotation = 0
+source = "agent"
+priority = "hard"
+timestamp = "2026-10-10T09:00:00+00:00"
+
+[components.C2]
+x = 5.58
+y = 16.35
+rotation = 180
+source = "agent"
+priority = "hard"
+timestamp = "2026-10-10T09:00:00+00:00"
+
+[components.C3]
+x = 13.62
+y = 16.35
+rotation = 0
+source = "agent"
+priority = "hard"
+timestamp = "2026-10-10T09:00:00+00:00"
+
+[components.U1]
+x = 23.8
+y = 17.3
+rotation = 0
+source = "agent"
+priority = "hard"
+timestamp = "2026-10-10T09:00:00+00:00"
+
+[components.C6]
+x = 19.23
+y = 18.05
+rotation = 180
+source = "agent"
+priority = "hard"
+timestamp = "2026-10-10T09:00:00+00:00"
+
+[components.C5]
+x = 19.23
+y = 19.7
+rotation = 180
+source = "agent"
+priority = "hard"
+timestamp = "2026-10-10T09:00:00+00:00"
+
+[components.C4]
+x = 22.55
+y = 21.87
+rotation = 270
+source = "agent"
+priority = "hard"
+timestamp = "2026-10-10T09:00:00+00:00"
+
+[components.U3]
+x = 33.9
+y = 17.3
+rotation = 0
+source = "agent"
+priority = "hard"
+timestamp = "2026-10-10T09:00:00+00:00"
+
+[components.C7]
+x = 39.57
+y = 15.4
+rotation = 0
+source = "agent"
+priority = "hard"
+timestamp = "2026-10-10T09:00:00+00:00"
+
+[components.R8]
+x = 6.0
+y = 25.6
+rotation = 0
+source = "agent"
+priority = "hard"
+timestamp = "2026-10-10T09:00:00+00:00"
+
+[components.R9]
+x = 9.4
+y = 25.6
+rotation = 0
+source = "agent"
+priority = "hard"
+timestamp = "2026-10-10T09:00:00+00:00"
+
+[components.R_TNOW]
+x = 12.8
+y = 25.6
+rotation = 0
+source = "agent"
+priority = "hard"
+timestamp = "2026-10-10T09:00:00+00:00"
+
+[components.R3]
+x = 6.0
+y = 27.8
+rotation = 0
+source = "agent"
+priority = "hard"
+timestamp = "2026-10-10T09:00:00+00:00"
+
+[components.D3]
+x = 9.4
+y = 27.8
+rotation = 0
+source = "agent"
+priority = "hard"
+timestamp = "2026-10-10T09:00:00+00:00"
+
+[components.R5]
+x = 21.0
+y = 27.8
+rotation = 0
+source = "agent"
+priority = "hard"
+timestamp = "2026-10-10T09:00:00+00:00"
+
+[components.R6]
+x = 29.0
+y = 27.8
+rotation = 0
+source = "agent"
+priority = "hard"
+timestamp = "2026-10-10T09:00:00+00:00"
+
+[components.R4]
+x = 32.4
+y = 25.6
+rotation = 0
+source = "agent"
+priority = "hard"
+timestamp = "2026-10-10T09:00:00+00:00"
+
+[components.D4]
+x = 35.8
+y = 25.6
+rotation = 0
+source = "agent"
+priority = "hard"
+timestamp = "2026-10-10T09:00:00+00:00"
+
+[components.R7]
+x = 32.4
+y = 27.8
+rotation = 0
+source = "agent"
+priority = "hard"
+timestamp = "2026-10-10T09:00:00+00:00"
+
+[components.D7]
+x = 35.8
+y = 27.8
+rotation = 0
+source = "agent"
+priority = "hard"
+timestamp = "2026-10-10T09:00:00+00:00"
+
+[components.R_TERM]
+x = 39.4
+y = 27.8
+rotation = 0
+source = "agent"
+priority = "hard"
+timestamp = "2026-10-10T09:00:00+00:00"
+
+[components.J_VIO]
+x = 8.36
+y = 33.4
+rotation = 90
+source = "agent"
+priority = "hard"
+timestamp = "2026-10-10T09:00:00+00:00"
+
+[components.J2]
+x = 17.46
+y = 33.4
+rotation = 90
+source = "agent"
+priority = "hard"
+timestamp = "2026-10-10T09:00:00+00:00"
+
+[components.J3]
+x = 26.56
+y = 33.4
+rotation = 90
+source = "agent"
+priority = "hard"
+timestamp = "2026-10-10T09:00:00+00:00"
+
+[components.J4]
+x = 35.66
+y = 33.4
+rotation = 90
+source = "agent"
+priority = "hard"
+timestamp = "2026-10-10T09:00:00+00:00"
