@@ -319,3 +319,157 @@ fn human_sidecar_overrides_win_over_dsl_hints_in_exported_pcb() {
         hl1.x_mm
     );
 }
+
+const FLUSH_SOURCE: &str = r#"board "flush_export" {
+  layers 2
+
+  component J1: connector "jst_ph_2pin" {
+    placement_hint { edge: EDGE  priority: hard }
+  }
+  component R1: resistor "r_generic_0603"
+  component R2: resistor "r_generic_0603"
+  component C1: capacitor "c_generic_0603"
+
+  connect J1.p1 -> R1.p1
+  connect R1.p2 -> R2.p1
+  connect R2.p2 -> J1.p2
+  connect R1.p2 -> C1.p1
+  connect C1.p2 -> J1.p2
+}
+"#;
+
+fn footprint_block<'a>(pcb_text: &'a str, refdes: &str) -> &'a str {
+    const OPEN: &str = "(footprint";
+    let needle = format!("\"Reference\"\n\t\t\t\"{refdes}\"");
+    let mut rest = pcb_text;
+    while let Some(start) = rest.find(OPEN) {
+        rest = &rest[start..];
+        let end = rest[OPEN.len()..]
+            .find(OPEN)
+            .map_or(rest.len(), |rel| rel + OPEN.len());
+        if rest[..end].contains(&needle) {
+            return &rest[..end];
+        }
+        rest = &rest[end..];
+    }
+    panic!("{refdes} missing from exported PCB");
+}
+
+fn at_with_angle(block: &str) -> (f64, f64, i64) {
+    let mut nums = block[block.find("(at ").expect("(at") + 4..].split_whitespace();
+    let x = nums.next().and_then(coord_token).expect("x");
+    let y = nums.next().and_then(coord_token).expect("y");
+    let angle = nums
+        .next()
+        .and_then(coord_token)
+        .map_or(0, |angle| angle as i64);
+    (x, y, angle)
+}
+
+fn to_board(origin: (f64, f64, i64), local: (f64, f64)) -> (f64, f64) {
+    let (x, y) = match origin.2.rem_euclid(360) {
+        0 => (local.0, local.1),
+        90 => (local.1, -local.0),
+        180 => (-local.0, -local.1),
+        _ => (-local.1, local.0),
+    };
+    (origin.0 + x, origin.1 + y)
+}
+
+type Bounds = (f64, f64, f64, f64);
+
+fn courtyard_and_pad_bounds(block: &str) -> (Bounds, Bounds) {
+    let origin = at_with_angle(block);
+    let swaps = origin.2.rem_euclid(180) == 90;
+    let empty = (
+        f64::INFINITY,
+        f64::INFINITY,
+        f64::NEG_INFINITY,
+        f64::NEG_INFINITY,
+    );
+    let grow = |bounds: Bounds, x: f64, y: f64, half_w: f64, half_h: f64| {
+        (
+            bounds.0.min(x - half_w),
+            bounds.1.min(y - half_h),
+            bounds.2.max(x + half_w),
+            bounds.3.max(y + half_h),
+        )
+    };
+    let (mut courtyard, mut pads) = (empty, empty);
+    let mut rest = block;
+    while let Some(start) = rest.find("\n\t(") {
+        rest = &rest[start + 2..];
+        let end = rest.find("\n\t(").unwrap_or(rest.len());
+        let item = &rest[..end];
+        if item.starts_with("(fp_") && item.contains("\"F.CrtYd\"") {
+            for (x, y) in coords_after(item, "(start ")
+                .into_iter()
+                .chain(coords_after(item, "(end "))
+            {
+                let (bx, by) = to_board(origin, (x, y));
+                courtyard = grow(courtyard, bx, by, 0.0, 0.0);
+            }
+        } else if item.starts_with("(pad") {
+            let (px, py, _) = at_with_angle(item);
+            let size = coords_after(item, "(size ")[0];
+            let (w, h) = if swaps { (size.1, size.0) } else { size };
+            let (bx, by) = to_board(origin, (px, py));
+            pads = grow(pads, bx, by, w / 2.0, h / 2.0);
+        }
+        rest = &rest[end..];
+    }
+    (courtyard, pads)
+}
+
+fn outline_bounds(pcb_text: &str) -> Bounds {
+    let mut bounds = (
+        f64::INFINITY,
+        f64::INFINITY,
+        f64::NEG_INFINITY,
+        f64::NEG_INFINITY,
+    );
+    for item in pcb_text.split("\n\t(") {
+        if item.starts_with("gr_line") && item.contains("\"Edge.Cuts\"") {
+            for (x, y) in coords_after(item, "(start ")
+                .into_iter()
+                .chain(coords_after(item, "(end "))
+            {
+                bounds = (
+                    bounds.0.min(x),
+                    bounds.1.min(y),
+                    bounds.2.max(x),
+                    bounds.3.max(y),
+                );
+            }
+        }
+    }
+    bounds
+}
+
+#[test]
+fn hard_edge_hinted_jst_is_flush_with_copper_clear_in_the_exported_pcb() {
+    for edge in ["left", "right", "top", "bottom"] {
+        let source = FLUSH_SOURCE.replace("EDGE", edge);
+        let board = lower_source(&source, "flush_export.synth");
+        let tmp = tempdir(&format!("flush-{edge}"));
+        let result = synth_kicad::export(&board, &tmp).expect("export");
+        let pcb_text = fs::read_to_string(&result.pcb_path).expect(".kicad_pcb written");
+
+        let (min_x, min_y, max_x, max_y) = outline_bounds(&pcb_text);
+        let (courtyard, pads) = courtyard_and_pad_bounds(footprint_block(&pcb_text, "J1"));
+        let gaps = |b: Bounds| [b.0 - min_x, max_x - b.2, b.1 - min_y, max_y - b.3];
+        let side = ["left", "right", "top", "bottom"]
+            .iter()
+            .position(|candidate| *candidate == edge)
+            .expect("edge");
+        let (court_gap, pad_gap) = (gaps(courtyard)[side], gaps(pads)[side]);
+        assert!(
+            court_gap.abs() < 0.005,
+            "{edge}: J1 courtyard must sit on the outline, gap {court_gap} mm"
+        );
+        assert!(
+            pad_gap >= 0.5 - 0.005,
+            "{edge}: J1 copper must stay 0.5 mm inside Edge.Cuts, gap {pad_gap} mm"
+        );
+    }
+}

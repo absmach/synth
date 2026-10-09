@@ -341,6 +341,12 @@ const PLACEMENT_COURTYARD_OFFSET_MM: (f64, f64) = (0.0, 0.0);
 /// component courtyards along the board perimeter.
 const BOARD_MARGIN_MM: f64 = 6.0;
 
+const COPPER_EDGE_CLEARANCE_MM: f64 = 0.5;
+
+const MAX_DOCKING_SLIDE_STEPS: i64 = 40;
+
+const EDGE_MARGIN_MM: f64 = 4.0;
+
 /// Target fill ratio (placed-component courtyard area ÷ board
 /// area). 0.45 leaves 55% of the board for routing channels and
 /// keep-outs — a reasonable starting point for unconstrained
@@ -457,31 +463,119 @@ pub fn apply_sidecar_overrides(
 /// The outline origin is allowed to be non-zero so absolute sidecar coordinates
 /// remain authoritative; only unused perimeter area is removed.
 fn tighten_outline_after_sidecar(board: &Board, placement: &mut Placement) {
-    if placement.components.is_empty() {
-        return;
+    if let Some(outline) = outline_with_flush_connectors(
+        board,
+        &placement.components,
+        mm_to_nm(EDGE_MARGIN_MM),
+        sidecar_courtyard_rect,
+    ) {
+        placement.board_outline = outline;
     }
-    let mut min_x = i64::MAX;
-    let mut min_y = i64::MAX;
-    let mut max_x = i64::MIN;
-    let mut max_y = i64::MIN;
-    for component_placement in &placement.components {
-        let Some(component) = board.component(component_placement.id) else {
-            continue;
-        };
-        let rect = sidecar_courtyard_rect(board, component, component_placement);
-        min_x = min_x.min(rect.min.x_nm);
-        min_y = min_y.min(rect.min.y_nm);
-        max_x = max_x.max(rect.max.x_nm);
-        max_y = max_y.max(rect.max.y_nm);
+}
+
+fn rotated_courtyard_rect(placed: &ComponentPlacement, (width, height): (f64, f64)) -> Rect {
+    let (w, h) = if placed.rotation.swaps_extents() {
+        (height, width)
+    } else {
+        (width, height)
+    };
+    Rect::from_center_half_extents(placed.center, mm_to_nm(w) / 2, mm_to_nm(h) / 2)
+}
+
+fn padded_courtyard_rect(
+    lookup: &std::collections::HashMap<ComponentId, (f64, f64)>,
+    placed: &ComponentPlacement,
+) -> Rect {
+    rotated_courtyard_rect(placed, lookup[&placed.id])
+}
+
+fn is_edge_flush_connector(component: &synth_ir::Component) -> bool {
+    matches!(component.kind.as_str(), "connector" | "jack")
+        && component.placement_hint.as_ref().is_some_and(|hint| {
+            hint.priority == synth_ir::PlacementPriority::Hard && hint.edge.is_some()
+        })
+}
+
+fn outline_with_flush_connectors(
+    board: &Board,
+    placements: &[ComponentPlacement],
+    margin_nm: i64,
+    courtyard: impl Fn(&Board, &synth_ir::Component, &ComponentPlacement) -> Rect,
+) -> Option<Rect> {
+    let parts: Vec<_> = placements
+        .iter()
+        .filter_map(|placed| {
+            let component = board.component(placed.id)?;
+            Some((component, placed, courtyard(board, component, placed)))
+        })
+        .collect();
+    let body = parts
+        .iter()
+        .filter(|(component, _, _)| !is_edge_flush_connector(component))
+        .map(|(_, _, rect)| *rect)
+        .reduce(|a, b| {
+            Rect::new(
+                Point::new(a.min.x_nm.min(b.min.x_nm), a.min.y_nm.min(b.min.y_nm)),
+                Point::new(a.max.x_nm.max(b.max.x_nm), a.max.y_nm.max(b.max.y_nm)),
+            )
+        });
+    let mut outline = [i64::MAX, i64::MAX, i64::MIN, i64::MIN];
+    for (component, placed, rect) in &parts {
+        let mut reach = [
+            rect.min.x_nm - margin_nm,
+            rect.min.y_nm - margin_nm,
+            rect.max.x_nm + margin_nm,
+            rect.max.y_nm + margin_nm,
+        ];
+        if is_edge_flush_connector(component) {
+            let real = sidecar_courtyard_rect(board, component, placed);
+            let copper = exported_pad_bounds(component, placed).unwrap_or(real);
+            let clearance = mm_to_nm(COPPER_EDGE_CLEARANCE_MM);
+            let flush = [
+                real.min.x_nm.min(copper.min.x_nm - clearance),
+                real.min.y_nm.min(copper.min.y_nm - clearance),
+                real.max.x_nm.max(copper.max.x_nm + clearance),
+                real.max.y_nm.max(copper.max.y_nm + clearance),
+            ];
+            let side = match body {
+                Some(body) => [
+                    body.min.x_nm - real.min.x_nm,
+                    body.min.y_nm - real.min.y_nm,
+                    real.max.x_nm - body.max.x_nm,
+                    real.max.y_nm - body.max.y_nm,
+                ]
+                .iter()
+                .enumerate()
+                .max_by_key(|(_, p)| **p)
+                .map(|(side, _)| side),
+                None => component
+                    .placement_hint
+                    .as_ref()
+                    .and_then(|hint| hint.edge.as_ref())
+                    .map(|edge| match edge {
+                        synth_ir::PlacementEdge::Left => 0,
+                        synth_ir::PlacementEdge::Top => 1,
+                        synth_ir::PlacementEdge::Right => 2,
+                        synth_ir::PlacementEdge::Bottom => 3,
+                    }),
+            };
+            if let Some(side) = side {
+                reach[side] = flush[side];
+            }
+        }
+        outline = [
+            outline[0].min(reach[0]),
+            outline[1].min(reach[1]),
+            outline[2].max(reach[2]),
+            outline[3].max(reach[3]),
+        ];
     }
-    if min_x == i64::MAX {
-        return;
-    }
-    let margin_nm = mm_to_nm(4.0);
-    placement.board_outline = Rect::new(
-        Point::new(min_x - margin_nm, min_y - margin_nm),
-        Point::new(max_x + margin_nm, max_y + margin_nm),
-    );
+    (outline[0] != i64::MAX).then(|| {
+        Rect::new(
+            Point::new(outline[0], outline[1]),
+            Point::new(outline[2], outline[3]),
+        )
+    })
 }
 
 fn sidecar_courtyard_rect(
@@ -492,19 +586,11 @@ fn sidecar_courtyard_rect(
     // Use the same offset, dimensions, and rotation convention as the visual
     // review and KiCad exporter. A simpler unrotated bbox here can accept a
     // sidecar that later collides once the real footprint courtyard is used.
-    let (width, height) = component.part.as_ref().map_or_else(
+    let size = component.part.as_ref().map_or_else(
         || fallback_courtyard(&component.kind),
         |part| synth_layout::pcb_courtyard_geometry_for_part(part).1,
     );
-    let (rotated_width, rotated_height) = match placement.rotation {
-        Rotation::Zero | Rotation::OneEighty => (width, height),
-        Rotation::Ninety | Rotation::TwoSeventy => (height, width),
-    };
-    Rect::from_center_half_extents(
-        placement.center,
-        mm_to_nm(rotated_width) / 2,
-        mm_to_nm(rotated_height) / 2,
-    )
+    rotated_courtyard_rect(placement, size)
 }
 
 fn sidecar_position_is_legal(
@@ -1888,10 +1974,6 @@ fn place_with_outline<S: ::std::hash::BuildHasher>(
     let component_span_mm = nm_to_mm((max_x_nm - min_x_nm).max(max_y_nm - min_y_nm));
     let edge_margin_nm = mm_to_nm(if component_span_mm < 30.0 { 2.0 } else { 4.0 });
 
-    // Keep every courtyard inside a real board-edge margin. Connectors may be
-    // edge-oriented, but their copper pads and plated holes still need
-    // clearance from Edge.Cuts. The old edge-docking path placed connector
-    // courtyards at x=0/y=0 and caused otherwise valid boards to fail KiCad DRC.
     let target_left_margin = edge_margin_nm;
 
     // When a top-edge connector is present, the board's y=0 is the mating face.
@@ -2092,124 +2174,6 @@ fn place_with_outline<S: ::std::hash::BuildHasher>(
         adaptive_board_outline.max.y_nm -= mm_to_nm(8.0);
     }
 
-    // Preserve an explicit edge contract through the final compacting pass.
-    // The solver may legally move a dense header inward while resolving other
-    // courtyards; that is unacceptable for a breakout connector because its
-    // pin row must remain reachable from the board edge in the exported PCB.
-    let has_side_expansion_headers = is_rp2350_board
-        && placements.iter().any(|candidate| {
-            let Some(other) = board.component(candidate.id) else {
-                return false;
-            };
-            matches!(other.kind.as_str(), "connector" | "jack")
-                && other
-                    .part
-                    .as_ref()
-                    .is_some_and(|part| part.pins.len() >= 16)
-                && other.placement_hint.as_ref().is_some_and(|hint| {
-                    hint.priority == synth_ir::PlacementPriority::Hard
-                        && matches!(
-                            hint.edge,
-                            Some(synth_ir::PlacementEdge::Left | synth_ir::PlacementEdge::Right)
-                        )
-                })
-        });
-    for placement in &mut placements {
-        let Some(component) = board.component(placement.id) else {
-            continue;
-        };
-        let is_dense_connector = matches!(component.kind.as_str(), "connector" | "jack")
-            && component
-                .part
-                .as_ref()
-                .is_some_and(|part| part.pins.len() >= 8);
-        let Some(requested_edge) = component
-            .placement_hint
-            .as_ref()
-            .and_then(|hint| hint.edge.as_ref())
-        else {
-            continue;
-        };
-        let usb_on_compact_top_edge = is_rp2350_board
-            && component.part.as_ref().is_some_and(|part| {
-                let id = part.id.0.to_ascii_lowercase();
-                id.contains("usb") || id.contains("type-c")
-            })
-            && has_side_expansion_headers;
-        let edge = if usb_on_compact_top_edge {
-            &synth_ir::PlacementEdge::Top
-        } else {
-            requested_edge
-        };
-        if !is_dense_connector
-            || component
-                .placement_hint
-                .as_ref()
-                .is_none_or(|hint| hint.priority != synth_ir::PlacementPriority::Hard)
-        {
-            continue;
-        }
-        let (width_mm, height_mm) = courtyard_lookup[&placement.id];
-        let (half_w, half_h) = match placement.rotation {
-            Rotation::Zero | Rotation::OneEighty => {
-                (mm_to_nm(width_mm) / 2, mm_to_nm(height_mm) / 2)
-            }
-            Rotation::Ninety | Rotation::TwoSeventy => {
-                (mm_to_nm(height_mm) / 2, mm_to_nm(width_mm) / 2)
-            }
-        };
-        let (offset_x_mm, offset_y_mm) = courtyard_offset_lookup
-            .get(&placement.id)
-            .copied()
-            .unwrap_or((0.0, 0.0));
-        let (offset_x_nm, offset_y_nm) = placement
-            .rotation
-            .rotate_offset(mm_to_nm(offset_x_mm), mm_to_nm(offset_y_mm));
-        // Courtyard docking alone is insufficient for a through-hole header:
-        // its outer pad can extend beyond the courtyard envelope. Reserve an
-        // extra copper margin for hard dense connectors so native KiCad's
-        // 0.5 mm Edge.Cuts rule is satisfied after export.
-        let copper_edge_margin_nm = if is_dense_connector { mm_to_nm(0.8) } else { 0 };
-        let docking_margin_nm = edge_margin_nm + copper_edge_margin_nm;
-        let min_center_x =
-            adaptive_board_outline.min.x_nm + docking_margin_nm + half_w - offset_x_nm;
-        let max_center_x =
-            adaptive_board_outline.max.x_nm - docking_margin_nm - half_w - offset_x_nm;
-        let min_center_y =
-            adaptive_board_outline.min.y_nm + docking_margin_nm + half_h - offset_y_nm;
-        let max_center_y =
-            adaptive_board_outline.max.y_nm - docking_margin_nm - half_h - offset_y_nm;
-        match edge {
-            synth_ir::PlacementEdge::Top => {
-                placement.center.y_nm =
-                    adaptive_board_outline.min.y_nm + docking_margin_nm + half_h - offset_y_nm;
-                placement.center.x_nm = placement.center.x_nm.clamp(min_center_x, max_center_x);
-            }
-            synth_ir::PlacementEdge::Bottom => {
-                placement.center.y_nm =
-                    adaptive_board_outline.max.y_nm - docking_margin_nm - half_h - offset_y_nm;
-                placement.center.x_nm = placement.center.x_nm.clamp(min_center_x, max_center_x);
-            }
-            synth_ir::PlacementEdge::Left => {
-                placement.center.x_nm =
-                    adaptive_board_outline.min.x_nm + docking_margin_nm + half_w - offset_x_nm;
-                placement.center.y_nm = placement.center.y_nm.clamp(min_center_y, max_center_y);
-            }
-            synth_ir::PlacementEdge::Right => {
-                placement.center.x_nm =
-                    adaptive_board_outline.max.x_nm - docking_margin_nm - half_w - offset_x_nm;
-                placement.center.y_nm = placement.center.y_nm.clamp(min_center_y, max_center_y);
-            }
-        }
-        enforce_edge_copper_clearance(component, placement, adaptive_board_outline, edge);
-    }
-
-    // Apply the core compaction after edge docking as well. The preceding
-    // envelope normalization intentionally translates every component, which
-    // would otherwise cancel the relative shift when the topmost core part is
-    // also the envelope minimum. The board has already been sized from the
-    // pre-shift envelope; this bounded move remains inside its 4 mm keep-in
-    // margin for the RP2350 floorplan and shortens the bottom breakout.
     if is_rp2350_board {
         let has_bottom_dense_connector = placements.iter().any(|placed| {
             let Some(component) = board.component(placed.id) else {
@@ -2244,18 +2208,130 @@ fn place_with_outline<S: ::std::hash::BuildHasher>(
                 let Some(component) = board.component(placed.id) else {
                     continue;
                 };
-                let keep_on_edge = matches!(component.kind.as_str(), "connector" | "jack")
-                    && component
-                        .part
-                        .as_ref()
-                        .is_some_and(|part| part.pins.len() >= 8)
-                    && component.placement_hint.as_ref().is_some_and(|hint| {
-                        hint.priority == synth_ir::PlacementPriority::Hard && hint.edge.is_some()
-                    });
+                let keep_on_edge = is_edge_flush_connector(component);
                 if !keep_on_edge {
                     placed.center.y_nm += mm_to_nm(10.0);
                 }
             }
+            let lowest_nm = placements
+                .iter()
+                .filter(|placed| {
+                    board
+                        .component(placed.id)
+                        .is_some_and(|c| !is_edge_flush_connector(c))
+                })
+                .map(|placed| padded_courtyard_rect(&courtyard_lookup, placed).max.y_nm)
+                .max();
+            if let Some(lowest_nm) = lowest_nm {
+                adaptive_board_outline.max.y_nm = adaptive_board_outline
+                    .max
+                    .y_nm
+                    .max(lowest_nm + edge_margin_nm);
+            }
+        }
+    }
+
+    let has_side_expansion_headers = is_rp2350_board
+        && placements.iter().any(|candidate| {
+            let Some(other) = board.component(candidate.id) else {
+                return false;
+            };
+            matches!(other.kind.as_str(), "connector" | "jack")
+                && other
+                    .part
+                    .as_ref()
+                    .is_some_and(|part| part.pins.len() >= 16)
+                && other.placement_hint.as_ref().is_some_and(|hint| {
+                    hint.priority == synth_ir::PlacementPriority::Hard
+                        && matches!(
+                            hint.edge,
+                            Some(synth_ir::PlacementEdge::Left | synth_ir::PlacementEdge::Right)
+                        )
+                })
+        });
+    for index in 0..placements.len() {
+        let mut placement = placements[index];
+        let Some(component) = board.component(placement.id) else {
+            continue;
+        };
+        if !is_edge_flush_connector(component) {
+            continue;
+        }
+        let Some(requested_edge) = component
+            .placement_hint
+            .as_ref()
+            .and_then(|hint| hint.edge.as_ref())
+        else {
+            continue;
+        };
+        let usb_on_compact_top_edge = is_rp2350_board
+            && component.part.as_ref().is_some_and(|part| {
+                let id = part.id.0.to_ascii_lowercase();
+                id.contains("usb") || id.contains("type-c")
+            })
+            && has_side_expansion_headers;
+        let edge = if usb_on_compact_top_edge {
+            &synth_ir::PlacementEdge::Top
+        } else {
+            requested_edge
+        };
+        let courtyard = sidecar_courtyard_rect(board, component, &placement);
+        let (half_w, half_h) = (courtyard.width_nm() / 2, courtyard.height_nm() / 2);
+        let min_center_x = adaptive_board_outline.min.x_nm + edge_margin_nm + half_w;
+        let max_center_x = adaptive_board_outline.max.x_nm - edge_margin_nm - half_w;
+        let min_center_y = adaptive_board_outline.min.y_nm + edge_margin_nm + half_h;
+        let max_center_y = adaptive_board_outline.max.y_nm - edge_margin_nm - half_h;
+        match edge {
+            synth_ir::PlacementEdge::Top => {
+                placement.center.y_nm = adaptive_board_outline.min.y_nm + half_h;
+                placement.center.x_nm = placement.center.x_nm.clamp(min_center_x, max_center_x);
+            }
+            synth_ir::PlacementEdge::Bottom => {
+                placement.center.y_nm = adaptive_board_outline.max.y_nm - half_h;
+                placement.center.x_nm = placement.center.x_nm.clamp(min_center_x, max_center_x);
+            }
+            synth_ir::PlacementEdge::Left => {
+                placement.center.x_nm = adaptive_board_outline.min.x_nm + half_w;
+                placement.center.y_nm = placement.center.y_nm.clamp(min_center_y, max_center_y);
+            }
+            synth_ir::PlacementEdge::Right => {
+                placement.center.x_nm = adaptive_board_outline.max.x_nm - half_w;
+                placement.center.y_nm = placement.center.y_nm.clamp(min_center_y, max_center_y);
+            }
+        }
+        enforce_edge_copper_clearance(component, &mut placement, adaptive_board_outline, edge);
+        let along_x = matches!(
+            edge,
+            synth_ir::PlacementEdge::Top | synth_ir::PlacementEdge::Bottom
+        );
+        let (min_along, max_along) = if along_x {
+            (min_center_x, max_center_x)
+        } else {
+            (min_center_y, max_center_y)
+        };
+        let is_clear = |candidate: &ComponentPlacement| {
+            placements.iter().all(|other| {
+                other.id == candidate.id
+                    || !padded_courtyard_rect(&courtyard_lookup, candidate)
+                        .intersects(&padded_courtyard_rect(&courtyard_lookup, other))
+            })
+        };
+        let pitch_nm = mm_to_nm(GRID_PITCH_MM);
+        let slot = std::iter::once(0)
+            .chain((1..=MAX_DOCKING_SLIDE_STEPS).flat_map(|step| [step, -step]))
+            .find_map(|step| {
+                let mut candidate = placement;
+                let along = if along_x {
+                    &mut candidate.center.x_nm
+                } else {
+                    &mut candidate.center.y_nm
+                };
+                *along += step * pitch_nm;
+                ((min_along..=max_along).contains(along) && is_clear(&candidate))
+                    .then_some(candidate)
+            });
+        if let Some(slot) = slot {
+            placements[index] = slot;
         }
     }
 
@@ -2265,49 +2341,23 @@ fn place_with_outline<S: ::std::hash::BuildHasher>(
     // band below or beside the board. This preserves every relative
     // component position and the hard edge contracts while producing the
     // compact outline expected of a development board.
-    if is_rp2350_board && !placements.is_empty() {
-        let mut final_min_x_nm = i64::MAX;
-        let mut final_max_x_nm = i64::MIN;
-        let mut final_min_y_nm = i64::MAX;
-        let mut final_max_y_nm = i64::MIN;
-        for placement in &placements {
-            let (width_mm, height_mm) = courtyard_lookup[&placement.id];
-            let (offset_x_mm, offset_y_mm) = courtyard_offset_lookup
-                .get(&placement.id)
-                .copied()
-                .unwrap_or((0.0, 0.0));
-            let (offset_x, offset_y) = placement
-                .rotation
-                .rotate_offset(mm_to_nm(offset_x_mm), mm_to_nm(offset_y_mm));
-            let (half_w, half_h) = match placement.rotation {
-                Rotation::Zero | Rotation::OneEighty => {
-                    (mm_to_nm(width_mm) / 2, mm_to_nm(height_mm) / 2)
-                }
-                Rotation::Ninety | Rotation::TwoSeventy => {
-                    (mm_to_nm(height_mm) / 2, mm_to_nm(width_mm) / 2)
-                }
-            };
-            let center_x = placement.center.x_nm + offset_x;
-            let center_y = placement.center.y_nm + offset_y;
-            final_min_x_nm = final_min_x_nm.min(center_x - half_w);
-            final_max_x_nm = final_max_x_nm.max(center_x + half_w);
-            final_min_y_nm = final_min_y_nm.min(center_y - half_h);
-            final_max_y_nm = final_max_y_nm.max(center_y + half_h);
-        }
-        let compact_margin_nm = mm_to_nm(4.0);
-        let shift_x = compact_margin_nm - final_min_x_nm;
-        let shift_y = compact_margin_nm - final_min_y_nm;
-        for placement in &mut placements {
-            placement.center.x_nm += shift_x;
-            placement.center.y_nm += shift_y;
-        }
-        adaptive_board_outline = Rect::new(
-            Point::new(0, 0),
-            Point::new(
-                final_max_x_nm - final_min_x_nm + compact_margin_nm * 2,
-                final_max_y_nm - final_min_y_nm + compact_margin_nm * 2,
-            ),
+    if is_rp2350_board {
+        let outline = outline_with_flush_connectors(
+            board,
+            &placements,
+            mm_to_nm(EDGE_MARGIN_MM),
+            |_, _, placed| padded_courtyard_rect(&courtyard_lookup, placed),
         );
+        if let Some(outline) = outline {
+            for placement in &mut placements {
+                placement.center.x_nm -= outline.min.x_nm;
+                placement.center.y_nm -= outline.min.y_nm;
+            }
+            adaptive_board_outline = Rect::new(
+                Point::new(0, 0),
+                Point::new(outline.width_nm(), outline.height_nm()),
+            );
+        }
     }
 
     Ok(Placement {
@@ -2316,37 +2366,17 @@ fn place_with_outline<S: ::std::hash::BuildHasher>(
     })
 }
 
-/// Shift an edge-mounted connector using its actual transformed pad bounds.
-/// Courtyard offsets describe the body, not necessarily the outermost PTH
-/// copper, and some stock footprints have a large local anchor offset. The
-/// exported KiCad board must keep every copper pad at least the manufacturer
-/// edge clearance inside Edge.Cuts.
-fn enforce_edge_copper_clearance(
+fn exported_pad_bounds(
     component: &synth_ir::Component,
-    placement: &mut ComponentPlacement,
-    outline: Rect,
-    edge: &synth_ir::PlacementEdge,
-) {
-    let Some(part) = component.part.as_ref() else {
-        return;
-    };
-    let Some(pads) = part
+    placement: &ComponentPlacement,
+) -> Option<Rect> {
+    let part = component.part.as_ref()?;
+    let pads = part
         .kicad_footprint
         .as_deref()
         .and_then(synth_layout::kicad_footprint_loader::pads)
-        .or_else(|| synth_layout::kicad_footprint_loader::synth_part_pads(part))
-    else {
-        return;
-    };
-    let (courtyard_center_mm, _) = synth_layout::pcb_courtyard_geometry_for_part(part);
-    let rotated_courtyard = placement.rotation.rotate_offset(
-        mm_to_nm(courtyard_center_mm.0),
-        mm_to_nm(courtyard_center_mm.1),
-    );
-    let origin = Point::new(
-        placement.center.x_nm - rotated_courtyard.0,
-        placement.center.y_nm - rotated_courtyard.1,
-    );
+        .or_else(|| synth_layout::kicad_footprint_loader::synth_part_pads(part))?;
+    let origin = footprint_origin(Some(part), placement);
     let mut min_x = i64::MAX;
     let mut max_x = i64::MIN;
     let mut min_y = i64::MAX;
@@ -2366,7 +2396,25 @@ fn enforce_edge_copper_clearance(
         min_y = min_y.min(center.y_nm - h / 2);
         max_y = max_y.max(center.y_nm + h / 2);
     }
-    let margin = mm_to_nm(0.5);
+    (min_x <= max_x).then(|| Rect::new(Point::new(min_x, min_y), Point::new(max_x, max_y)))
+}
+
+/// Shift an edge-mounted connector using its actual transformed pad bounds.
+/// Courtyard offsets describe the body, not necessarily the outermost PTH
+/// copper, and some stock footprints have a large local anchor offset. The
+/// exported KiCad board must keep every copper pad at least the manufacturer
+/// edge clearance inside Edge.Cuts.
+fn enforce_edge_copper_clearance(
+    component: &synth_ir::Component,
+    placement: &mut ComponentPlacement,
+    outline: Rect,
+    edge: &synth_ir::PlacementEdge,
+) {
+    let Some(pads) = exported_pad_bounds(component, placement) else {
+        return;
+    };
+    let (min_x, max_x, min_y, max_y) = (pads.min.x_nm, pads.max.x_nm, pads.min.y_nm, pads.max.y_nm);
+    let margin = mm_to_nm(COPPER_EDGE_CLEARANCE_MM);
     match edge {
         synth_ir::PlacementEdge::Left => {
             placement.center.x_nm += (outline.min.x_nm + margin - min_x).max(0);
@@ -3943,12 +3991,12 @@ pub fn describe_placement(board: &Board, placement: &Placement) -> PlacementDesc
 
             // Give the agent a concrete sidecar target rather than requiring
             // it to guess a coordinate from a prose warning. Preserve the
-            // current orthogonal coordinate and place the courtyard 4 mm
-            // inside the selected edge.
+            // current orthogonal coordinate.
             let half_w_nm = connector_rect.width_nm() / 2;
             let half_h_nm = connector_rect.height_nm() / 2;
             let current = connector_placement.center;
-            let edge_margin_nm = mm_to_nm(4.0);
+            let flush = is_edge_flush_connector(connector);
+            let edge_margin_nm = if flush { 0 } else { mm_to_nm(EDGE_MARGIN_MM) };
             let target = match nearest_edge {
                 "left" => Point::new(
                     placement.board_outline.min.x_nm + edge_margin_nm + half_w_nm,
@@ -3976,8 +4024,14 @@ pub fn describe_placement(board: &Board, placement: &Placement) -> PlacementDesc
                 suggested_y_mm: Some(synth_geometry::nm_to_mm(target.y_nm)),
                 suggested_rotation_deg: None,
                 rationale: format!(
-                    "keep the {} connector courtyard approximately 4 mm inside the {} edge",
-                    connector.refdes, nearest_edge
+                    "place the {} connector courtyard {} the {} edge",
+                    connector.refdes,
+                    if flush {
+                        "flush with"
+                    } else {
+                        "approximately 4 mm inside"
+                    },
+                    nearest_edge
                 ),
             });
         }
@@ -4288,7 +4342,15 @@ mod tests {
     /// Load a fixture against the real registry so the placer
     /// sees real `Part` metadata.
     fn load_board(path: &str) -> Board {
-        let source = std::fs::read_to_string(path).expect("read fixture");
+        load_board_replacing(path, &[])
+    }
+
+    fn load_board_replacing(path: &str, replacements: &[(&str, &str)]) -> Board {
+        let mut source = std::fs::read_to_string(path).expect("read fixture");
+        for (from, to) in replacements {
+            assert!(source.contains(from), "{from} not in {path}");
+            source = source.replace(from, to);
+        }
         let file = path.to_string();
         let parse = synth_parser::parse(&source, file.clone());
         let ast = parse.ast.as_ref().expect("parse");
@@ -5109,5 +5171,405 @@ mod tests {
             u1_index,
             overridden.components[u1_placement_index]
         ));
+    }
+
+    const EDGES: [&str; 4] = ["left", "right", "top", "bottom"];
+
+    fn with_hint(board: &Board, refdes: &str, edge: &str, priority: &str) -> Board {
+        board_with_external_hints(
+            board,
+            &[ExternalHint {
+                component: Some(refdes.into()),
+                edge: Some(edge.into()),
+                priority: Some(priority.into()),
+                ..ExternalHint::default()
+            }],
+        )
+    }
+
+    const FEATHER: &str = "../../fixtures/designs/feather_m4_express.synth";
+    const WIDE_PAD_PLUG: &str = "Connector_USB:USB3_A_Plug_Wuerth_692112030100_Horizontal";
+    const LITERAL_COPPER_CLEARANCE_NM: i64 = 500_000;
+
+    fn feather_with_j2_hint(edge: &str, priority: &str) -> Board {
+        with_hint(&load_board(FEATHER), "J2", edge, priority)
+    }
+
+    fn with_wide_pad_footprint(mut board: Board, refdes: &str) -> Board {
+        let part = board
+            .components
+            .iter_mut()
+            .find(|c| c.refdes == refdes)
+            .and_then(|c| c.part.as_mut())
+            .expect("part");
+        part.kicad_footprint = Some(WIDE_PAD_PLUG.into());
+        board
+    }
+
+    fn pad_extents_as_exported(board: &Board, placed: &ComponentPlacement) -> Rect {
+        let part = board
+            .component(placed.id)
+            .and_then(|c| c.part.as_ref())
+            .expect("part");
+        let origin = footprint_origin(Some(part), placed);
+        let pads = synth_layout::kicad_footprint_loader::pads(
+            part.kicad_footprint.as_deref().expect("footprint"),
+        )
+        .expect("pads");
+        let mut bounds = Rect::new(
+            Point::new(i64::MAX, i64::MAX),
+            Point::new(i64::MIN, i64::MIN),
+        );
+        for pad in pads {
+            let (dx, dy) = placed
+                .rotation
+                .rotate_offset(mm_to_nm(pad.center_mm.0), mm_to_nm(pad.center_mm.1));
+            let (w, h) = if placed.rotation.swaps_extents() {
+                (pad.size_mm.1, pad.size_mm.0)
+            } else {
+                pad.size_mm
+            };
+            bounds.min.x_nm = bounds.min.x_nm.min(origin.x_nm + dx - mm_to_nm(w) / 2);
+            bounds.min.y_nm = bounds.min.y_nm.min(origin.y_nm + dy - mm_to_nm(h) / 2);
+            bounds.max.x_nm = bounds.max.x_nm.max(origin.x_nm + dx + mm_to_nm(w) / 2);
+            bounds.max.y_nm = bounds.max.y_nm.max(origin.y_nm + dy + mm_to_nm(h) / 2);
+        }
+        bounds
+    }
+
+    fn gaps_to_outline(rect: Rect, outline: Rect) -> [i64; 4] {
+        [
+            rect.min.x_nm - outline.min.x_nm,
+            outline.max.x_nm - rect.max.x_nm,
+            rect.min.y_nm - outline.min.y_nm,
+            outline.max.y_nm - rect.max.y_nm,
+        ]
+    }
+
+    fn courtyard_gaps(board: &Board, placement: &Placement, refdes: &str) -> [i64; 4] {
+        let placed = placement.component_by_refdes(board, refdes).expect(refdes);
+        let component = board.component(placed.id).expect("component");
+        gaps_to_outline(
+            sidecar_courtyard_rect(board, component, placed),
+            placement.board_outline,
+        )
+    }
+
+    fn assert_flush_with_copper_clear(
+        board: &Board,
+        placement: &Placement,
+        refdes: &str,
+        edge: &str,
+    ) {
+        assert_connector_flush(board, placement, refdes, edge);
+        let side = EDGES.iter().position(|e| *e == edge).expect("edge");
+        for component in &board.components {
+            let gaps = courtyard_gaps(board, placement, &component.refdes);
+            for (index, gap) in gaps.iter().enumerate() {
+                assert!(
+                    (component.refdes == refdes && index == side) || *gap >= mm_to_nm(2.0),
+                    "{} must keep its normal margin on {}, gap {gap} nm",
+                    component.refdes,
+                    EDGES[index]
+                );
+            }
+        }
+    }
+
+    fn assert_connector_flush(board: &Board, placement: &Placement, refdes: &str, edge: &str) {
+        let placed = placement.component_by_refdes(board, refdes).expect(refdes);
+        let side = EDGES.iter().position(|e| *e == edge).expect("edge");
+        let courtyard = courtyard_gaps(board, placement, refdes)[side];
+        let copper = gaps_to_outline(
+            pad_extents_as_exported(board, placed),
+            placement.board_outline,
+        )[side];
+        assert!(
+            courtyard >= -1_000 && copper >= LITERAL_COPPER_CLEARANCE_NM - 1_000,
+            "{refdes} on {edge}: courtyard gap {courtyard} nm, copper gap {copper} nm"
+        );
+        assert!(
+            courtyard <= 1_000 || copper <= LITERAL_COPPER_CLEARANCE_NM + 1_000,
+            "{refdes} on {edge} is neither flush nor held back by copper: courtyard gap {courtyard} nm, copper gap {copper} nm"
+        );
+    }
+
+    fn only_hinted_connectors(hints: &[(&str, &str)]) -> Board {
+        let mut board = load_board(FEATHER);
+        for (refdes, edge) in hints {
+            board = with_hint(&board, refdes, edge, "hard");
+        }
+        board
+            .components
+            .retain(|c| hints.iter().any(|(refdes, _)| c.refdes == *refdes));
+        for (index, component) in board.components.iter_mut().enumerate() {
+            component.id = ComponentId(u32::try_from(index).expect("index"));
+        }
+        board.nets.clear();
+        board
+    }
+
+    #[test]
+    fn a_lone_hard_edge_hinted_connector_is_flush_in_the_solver_and_the_sidecar_pass() {
+        for edge in EDGES {
+            let board = only_hinted_connectors(&[("J2", edge)]);
+            let placement = place(&board).expect("place");
+            assert_flush_with_copper_clear(&board, &placement, "J2", edge);
+            let mut tightened = placement.clone();
+            tightened.board_outline = Rect::new(Point::new(0, 0), Point::new(1, 1));
+            tighten_outline_after_sidecar(&board, &mut tightened);
+            assert_flush_with_copper_clear(&board, &tightened, "J2", edge);
+        }
+    }
+
+    #[test]
+    fn two_hard_connectors_on_opposite_edges_are_both_flush() {
+        for hints in [
+            [("J2", "left"), ("J3", "right")],
+            [("J2", "top"), ("J3", "bottom")],
+        ] {
+            let board = only_hinted_connectors(&hints);
+            let mut placement = place(&board).expect("place");
+            tighten_outline_after_sidecar(&board, &mut placement);
+            for (refdes, edge) in hints {
+                assert_connector_flush(&board, &placement, refdes, edge);
+            }
+            let solved = place(&board).expect("place");
+            for (refdes, edge) in hints {
+                assert_connector_flush(&board, &solved, refdes, edge);
+            }
+        }
+    }
+
+    #[test]
+    fn hard_edge_hinted_connectors_are_flush_and_soft_ones_are_not_in_the_solver() {
+        let header_1x20 = [(
+            "component J4: connector \"header_1x4\"",
+            "component J4: connector \"header_1x20\"",
+        )];
+        let mut cases: Vec<(&str, &[(&str, &str)], &str, &str, bool)> = Vec::new();
+        for edge in EDGES {
+            cases.push((FEATHER, &[], "J2", edge, false));
+            cases.push((FEATHER, &[], "J2", edge, true));
+            cases.push(("../../examples/env_logger.synth", &[], "J2", edge, true));
+        }
+        cases.push((
+            "../../fixtures/designs/iot_sensor_board.synth",
+            &[],
+            "J1",
+            "top",
+            false,
+        ));
+        cases.push((FEATHER, &[], "J1", "bottom", false));
+        cases.push((FEATHER, &header_1x20, "J4", "bottom", false));
+        for (path, replacements, refdes, edge, wide_pads) in cases {
+            for priority in ["hard", "soft"] {
+                let board = load_board_replacing(path, replacements);
+                let board = if wide_pads {
+                    with_wide_pad_footprint(board, refdes)
+                } else {
+                    board
+                };
+                let board = with_hint(&board, refdes, edge, priority);
+                let placement = place(&board).expect("place");
+                let rects = authoritative_courtyards(&board, &placement);
+                for (i, a) in rects.iter().enumerate() {
+                    for b in &rects[i + 1..] {
+                        assert!(
+                            !a.intersects(b),
+                            "{refdes} {edge} {priority} wide={wide_pads}: {a:?} and {b:?} overlap"
+                        );
+                    }
+                }
+                if priority == "hard" {
+                    assert_flush_with_copper_clear(&board, &placement, refdes, edge);
+                } else {
+                    let gaps = courtyard_gaps(&board, &placement, refdes);
+                    assert!(
+                        gaps.iter().all(|gap| *gap >= mm_to_nm(2.0)),
+                        "soft hint for {refdes} on {edge} must not reach the edge, gaps {gaps:?}"
+                    );
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn solver_keeps_overhanging_pads_clear_of_the_edge_in_every_orientation() {
+        for edge in EDGES {
+            for rotation in [
+                Rotation::Zero,
+                Rotation::Ninety,
+                Rotation::OneEighty,
+                Rotation::TwoSeventy,
+            ] {
+                let board = load_board("../../examples/env_logger.synth");
+                let board = with_wide_pad_footprint(board, "J2");
+                let board = with_hint(&board, "J2", edge, "hard");
+                let j2 = board
+                    .components
+                    .iter()
+                    .find(|c| c.refdes == "J2")
+                    .expect("J2")
+                    .id;
+                let turned = std::collections::HashMap::from([(j2, rotation)]);
+                let placement = place_with_tuning(&board, 1.5, &turned).expect("place");
+                let placed = placement.component_by_refdes(&board, "J2").expect("J2");
+                if placed.rotation != rotation {
+                    continue;
+                }
+                assert_flush_with_copper_clear(&board, &placement, "J2", edge);
+            }
+        }
+    }
+
+    fn j2_protruding(board: &Board, edge: &str, protrusion_mm: f64) -> Placement {
+        let mut placement = place(&load_board(FEATHER)).expect("place");
+        let j2 = board
+            .components
+            .iter()
+            .find(|c| c.refdes == "J2")
+            .expect("J2");
+        let others: Vec<Rect> = placement
+            .components
+            .iter()
+            .filter(|placed| placed.id != j2.id)
+            .map(|placed| {
+                let component = board.component(placed.id).expect("component");
+                sidecar_courtyard_rect(board, component, placed)
+            })
+            .collect();
+        let pull = mm_to_nm(protrusion_mm);
+        let placed = placement
+            .components
+            .iter_mut()
+            .find(|placed| placed.id == j2.id)
+            .expect("J2 placement");
+        let half = sidecar_courtyard_rect(board, j2, placed);
+        let (half_w, half_h) = (half.width_nm() / 2, half.height_nm() / 2);
+        match edge {
+            "left" => {
+                placed.center.x_nm =
+                    others.iter().map(|r| r.min.x_nm).min().expect("others") - pull + half_w;
+            }
+            "right" => {
+                placed.center.x_nm =
+                    others.iter().map(|r| r.max.x_nm).max().expect("others") + pull - half_w;
+            }
+            "top" => {
+                placed.center.y_nm =
+                    others.iter().map(|r| r.min.y_nm).min().expect("others") - pull + half_h;
+            }
+            _ => {
+                placed.center.y_nm =
+                    others.iter().map(|r| r.max.y_nm).max().expect("others") + pull - half_h;
+            }
+        }
+        placement
+    }
+
+    #[test]
+    fn sidecar_outline_pass_makes_a_pulled_out_hinted_connector_flush() {
+        for wide_pads in [false, true] {
+            for edge in EDGES {
+                let board = feather_with_j2_hint(edge, "hard");
+                let board = if wide_pads {
+                    with_wide_pad_footprint(board, "J2")
+                } else {
+                    board
+                };
+                let mut placement = j2_protruding(&board, edge, 12.0);
+                tighten_outline_after_sidecar(&board, &mut placement);
+                assert_flush_with_copper_clear(&board, &placement, "J2", edge);
+            }
+        }
+    }
+
+    #[test]
+    fn sidecar_outline_pass_goes_flush_only_past_the_four_millimetre_margin() {
+        let soft = feather_with_j2_hint("left", "soft");
+        let mut placement = j2_protruding(&soft, "left", 12.0);
+        tighten_outline_after_sidecar(&soft, &mut placement);
+        assert_eq!(
+            courtyard_gaps(&soft, &placement, "J2")[0],
+            mm_to_nm(EDGE_MARGIN_MM)
+        );
+
+        let hard = feather_with_j2_hint("left", "hard");
+        let mut short = j2_protruding(&hard, "left", 3.9);
+        tighten_outline_after_sidecar(&hard, &mut short);
+        let j2_gap = courtyard_gaps(&hard, &short, "J2")[0];
+        assert!(
+            (mm_to_nm(0.1) - 1_000..=mm_to_nm(0.1) + 1_000).contains(&j2_gap),
+            "3.9 mm protrusion keeps the neighbours' 4 mm margin, J2 gap {j2_gap} nm"
+        );
+        let mut past = j2_protruding(&hard, "left", 4.1);
+        tighten_outline_after_sidecar(&hard, &mut past);
+        assert_flush_with_copper_clear(&hard, &past, "J2", "left");
+    }
+
+    #[test]
+    fn placer_and_exporter_agree_on_asymmetric_courtyards() {
+        let board = load_board("../../fixtures/designs/feather_m4_express.synth");
+        let template = board
+            .components
+            .iter()
+            .find(|c| c.refdes == "J2")
+            .expect("J2");
+        for footprint in [
+            "Connector_USB:USB_C_Receptacle_HRO_TYPE-C-31-M-12",
+            "Connector_JST:JST_PH_B2B-PH-K_1x02_P2.00mm_Vertical",
+        ] {
+            let mut component = template.clone();
+            let part = component.part.as_mut().expect("part");
+            part.kicad_footprint = Some(footprint.into());
+            let (offset, _) = synth_layout::pcb_courtyard_geometry_for_part(part);
+            assert!(
+                offset.0.abs() + offset.1.abs() > 0.1,
+                "{footprint} must have an asymmetric courtyard"
+            );
+            let (cx, cy, w, h) =
+                synth_layout::kicad_footprint_loader::courtyard_rect(footprint).expect("courtyard");
+            for rotation in [
+                Rotation::Zero,
+                Rotation::Ninety,
+                Rotation::OneEighty,
+                Rotation::TwoSeventy,
+            ] {
+                let placed = ComponentPlacement {
+                    id: component.id,
+                    center: Point::new(mm_to_nm(31.0), mm_to_nm(17.0)),
+                    rotation,
+                    layer: Layer::Top,
+                };
+                let origin = footprint_origin(component.part.as_ref(), &placed);
+                let corners =
+                    [(-1.0, -1.0), (1.0, -1.0), (-1.0, 1.0), (1.0, 1.0)].map(|(sx, sy)| {
+                        let (dx, dy) = rotation.rotate_offset(
+                            mm_to_nm(cx + sx * w / 2.0),
+                            mm_to_nm(cy + sy * h / 2.0),
+                        );
+                        (origin.x_nm + dx, origin.y_nm + dy)
+                    });
+                let exported = Rect::new(
+                    Point::new(
+                        corners.iter().map(|c| c.0).min().expect("corners"),
+                        corners.iter().map(|c| c.1).min().expect("corners"),
+                    ),
+                    Point::new(
+                        corners.iter().map(|c| c.0).max().expect("corners"),
+                        corners.iter().map(|c| c.1).max().expect("corners"),
+                    ),
+                );
+                let placer = sidecar_courtyard_rect(&board, &component, &placed);
+                assert!(
+                    (placer.min.x_nm - exported.min.x_nm).abs() <= 2
+                        && (placer.min.y_nm - exported.min.y_nm).abs() <= 2
+                        && (placer.max.x_nm - exported.max.x_nm).abs() <= 2
+                        && (placer.max.y_nm - exported.max.y_nm).abs() <= 2,
+                    "{footprint} {rotation:?}: placer {placer:?} vs exporter {exported:?}"
+                );
+            }
+        }
     }
 }

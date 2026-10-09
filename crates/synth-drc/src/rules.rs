@@ -488,6 +488,11 @@ pub fn check_silkscreen_overlap(board: &synth_ir::Board, placement: &Placement) 
             .footprint_dimensions
             .as_ref()
             .map_or((2.0, 2.0), |d| (d.width_mm, d.height_mm));
+        let (w, h) = if cp.rotation.swaps_extents() {
+            (h, w)
+        } else {
+            (w, h)
+        };
         let half_w = synth_geometry::mm_to_nm(w) / 2;
         let half_h = synth_geometry::mm_to_nm(h) / 2;
         let bounds = synth_geometry::Rect::from_center_half_extents(cp.center, half_w, half_h);
