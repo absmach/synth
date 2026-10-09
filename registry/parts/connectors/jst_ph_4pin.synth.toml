@@ -5,8 +5,11 @@ kicad_symbol = "Connector_Generic:Conn_01x04"
 kicad_footprint = "Connector_JST:JST_PH_S4B-PH-K_1x04_P2.00mm_Horizontal"
 
 [footprint_dimensions]
-width_mm = 1.0
-height_mm = 1.6
+# Courtyard extent of the stock footprint. The previous values were a
+# single pad's size, not the connector body, which is what the
+# pin-to-footprint check compares against.
+width_mm = 10.9
+height_mm = 8.6
 courtyard_margin_mm = 0.25
 
 [operating_conditions]

@@ -1,0 +1,318 @@
+// Class A, #39 — produced from a prompt through the Synth MCP server.
+//
+// PROMPT: "A 2-layer greenhouse irrigation controller: 12 V barrel-jack power
+// entry protected against reverse polarity and over-current, stepped down to
+// 3.3 V; an STM32 with an 8 MHz crystal, SWD header and reset button; an I2C
+// soil-moisture and temperature sensor on an external JST connector with bus
+// pull-ups; an EEPROM for calibration; a low-side MOSFET driving a solenoid
+// valve; and two status LEDs."
+//
+// One product that covers three of #39's four test cases at once, rather than
+// three fixtures that each cover one:
+//
+//   case 1  MCU + SWD + crystal + reset + status LED  -> U3, J3, Y1, SW1, D4/D5
+//   case 2  I2C sensors, regulator, decoupling,
+//           pull-ups, external connector              -> U4, U5, U2, J2
+//   case 3  protected power entry, reverse polarity
+//           and over-current                          -> J1, F1, Q1, D1, D2
+//
+// Every support circuit the Synth knowledge graph enforces is designed in,
+// not discovered from diagnostics: crystal load caps (C9/C10), I2C pull-ups
+// (R5/R6), LED current limiting (R7/R8), a defined reset level (R3) with RC
+// debounce (R4/C11), local decoupling on every IC power pin, and a flyback
+// path across the solenoid (D3).
+//
+// 12 V is the horticultural-solenoid standard, which is what sets the
+// topology: the valve runs from the protected 12 V rail and only its return
+// is switched, so the MCU never sees 12 V.
+
+board "a5_greenhouse_irrigation_controller" {
+    layers 2
+    manufacturer "jlcpcb"
+    revision "A"
+
+    netclass "POWER" {
+      trace_width 0.6mm
+      clearance 0.25mm
+    }
+
+    netclass "VALVE" {
+      trace_width 0.6mm
+      clearance 0.3mm
+    }
+
+    netclass "I2C" {
+      trace_width 0.15mm
+      clearance 0.15mm
+    }
+
+    group "POWER ENTRY" color "#c2410c" {
+      component J1: connector "jst_xh_2pin"        value "12V IN" {
+        placement_hint { region: left_edge edge: left priority: soft }
+      }
+      component F1: fuse      "polyfuse"            value "1.1A hold"
+      component Q1: transistor "p_mosfet_si2301"    value "Si2301"
+      component D1: diode     "d_zener_5v1"         value "5V1"
+      component R1: resistor  "r_generic_0603"      value "100k"
+      component D2: diode     "tvs_array_5v"        value "SOT-363 TVS"
+      component C1: capacitor "c_generic_0805"      value "22uF"
+      component C15: capacitor "c_generic_0603"     value "100nF"
+      component C16: capacitor "c_generic_0805"     value "22uF" {
+        placement_hint { near: J4 priority: soft }
+      }
+      notes "" {
+        "12V in. F1 limits fault current, Q1 blocks reverse polarity, D1 clamps"
+        "its gate, D2 absorbs field transients from the solenoid cable."
+        "C16 is local bulk at the valve: the solenoid's switching current is"
+        "sourced beside J4 rather than pulled through the buck's input cap."
+      }
+    }
+
+    // Reverse-polarity protection: the P-FET sits in the high side with its
+    // source on the incoming rail, so body-diode conduction is forward-only
+    // and a reversed supply leaves the gate at source potential — off. R1
+    // pulls the gate down to enrol it, D1 keeps Vgs inside the 20 V limit.
+    connect J1.p1 -> F1.p1
+    connect F1.p2 -> Q1.s
+    connect Q1.g  -> R1.p1
+    connect J1.p2 -> R1.p2
+    connect Q1.g  -> D1.cathode
+    connect J1.p2 -> D1.anode
+
+    // D2 clamps the entry against the inductive kick the valve cable brings
+    // back. Its four channels tie to the rail; vcc/gnd are the array's own.
+    connect Q1.d  -> D2.ch1
+    connect Q1.d  -> D2.ch2
+    connect Q1.d  -> D2.vcc
+    connect J1.p2 -> D2.ch3
+    connect J1.p2 -> D2.ch4
+    connect J1.p2 -> D2.gnd
+
+    connect Q1.d  -> C1.p1
+    connect J1.p2 -> C1.p2
+
+    // The 12 V rail carries nine loads — the buck, the TVS array, the valve
+    // and their returns — against one bulk capacitor, which Synth flags as a
+    // residual-energy anomaly on net_4. C15 gives the rail a high-frequency
+    // path at the buck input; C16 is bulk at the valve connector.
+    connect Q1.d  -> C15.p1
+    connect J1.p2 -> C15.p2
+    connect Q1.d  -> C16.p1
+    connect J1.p2 -> C16.p2
+
+    group "3V3 BUCK" color "#0369a1" {
+      component U2: regulator "mp2307_buck"     value "MP2307"
+      component L1: inductor  "l_generic_1210"  value "10uH"
+      component C2: capacitor "c_generic_0805"  value "22uF"
+      component C3: capacitor "c_generic_0603"  value "100nF"
+      component C4: capacitor "c_generic_0603"  value "10nF"
+      component C5: capacitor "c_generic_0603"  value "100nF"
+      component R2: resistor  "r_generic_0603"  value "10k"
+      component R9: resistor  "r_generic_0603"  value "3k01"
+      notes "" {
+        "12V to 3V3 at up to 3A. R2/R9 set the feedback divider, C4 compensates,"
+        "C3 is the bootstrap reservoir for the high-side gate."
+      }
+    }
+
+    connect Q1.d   -> U2.in
+    connect J1.p2  -> U2.gnd
+    connect J1.p2  -> U2.ep
+    connect Q1.d   -> U2.en
+
+    connect U2.sw  -> C3.p1
+    connect C3.p2  -> U2.bs
+    connect U2.sw  -> L1.p1
+
+    connect L1.p2  -> C2.p1
+    connect J1.p2  -> C2.p2
+    connect L1.p2  -> C5.p1
+    connect J1.p2  -> C5.p2
+
+    // Feedback from the 3V3 rail. The MP2307's reference is 0.925 V, so
+    // 10k over 3k01 puts the output at 3.3 V.
+    connect L1.p2  -> R2.p1
+    connect R2.p2  -> U2.fb
+    connect U2.fb  -> R9.p1
+    connect J1.p2  -> R9.p2
+    connect U2.fb  -> C4.p1
+    connect U2.comp -> C4.p2
+
+    group "MCU" color "#4338ca" {
+      component U3: mcu       "stm32g030"      value "STM32G030K8T6" {
+        placement_hint { region: centre priority: hard }
+      }
+      component Y1: crystal   "xtal_8mhz"      value "8MHz"
+      component C9:  capacitor "c_generic_0603" value "12pF"
+      component C10: capacitor "c_generic_0603" value "12pF"
+      component C6: capacitor "c_generic_0603" value "100nF"
+      component C7: capacitor "c_generic_0603" value "100nF"
+      component C8: capacitor "c_generic_0603" value "4u7"
+      component SW1: switch   "spst_tactile"   value "RESET" {
+        placement_hint { near: R4 priority: soft }
+      }
+      component R3: resistor  "r_generic_0603" value "10k"
+      component R4: resistor  "r_generic_0603" value "100"
+      component C11: capacitor "c_generic_0603" value "100nF"
+      component J3: connector "header_1x4"     value "SWD"
+      notes "" {
+        "R3 holds NRST high, SW1 pulls it low, R4/C11 debounce the contact."
+        "J3 is SWD: 3V3, SWDIO, SWCLK, GND."
+      }
+    }
+
+    connect L1.p2 -> U3.vdd
+    connect J1.p2 -> U3.vss
+
+    connect U3.vdd -> C6.p1
+    connect J1.p2  -> C6.p2
+    connect U3.vdd -> C7.p1
+    connect J1.p2  -> C7.p2
+    connect U3.vdd -> C8.p1
+    connect J1.p2  -> C8.p2
+
+    // 8 MHz crystal on the HSE pins with its two load capacitors. The
+    // package's case pads are grounded for shielding.
+    connect U3.pc14 -> Y1.p1
+    connect U3.pc15 -> Y1.p2
+    connect Y1.p1   -> C9.p1
+    connect J1.p2   -> C9.p2
+    connect Y1.p2   -> C10.p1
+    connect J1.p2   -> C10.p2
+    connect J1.p2   -> Y1.case_1
+    connect J1.p2   -> Y1.case_2
+
+    // Reset: pulled up, switched to ground, debounced. The series resistor
+    // and capacitor form the RC the knowledge graph asks for, and keep the
+    // switch from dumping the full edge straight into NRST.
+    connect U3.nrst -> R3.p1
+    connect L1.p2   -> R3.p2
+    connect U3.nrst -> R4.p1
+    connect R4.p2   -> SW1.p1
+    connect J1.p2   -> SW1.p2
+    connect U3.nrst -> C11.p1
+    connect J1.p2   -> C11.p2
+
+    connect L1.p2   -> J3.p1
+    connect U3.pa13 -> J3.p2
+    connect U3.pa14 -> J3.p3
+    connect J1.p2   -> J3.p4
+
+    group "I2C SENSORS" color "#047857" {
+      component U4: sensor    "hdc1080_humidity" value "HDC1080"
+      component U5: sensor    "bh1750_lux"       value "BH1750FVI"
+      component U6: memory    "24lc256_eeprom"   value "24LC256"
+      component R5: resistor  "r_generic_0603"   value "4k7"
+      component R6: resistor  "r_generic_0603"   value "4k7"
+      component C12: capacitor "c_generic_0603"  value "100nF"
+      component C13: capacitor "c_generic_0603"  value "100nF"
+      component C14: capacitor "c_generic_0603"  value "100nF"
+      component J2: connector "jst_ph_4pin"      value "SOIL I2C" {
+        placement_hint { region: bottom_edge edge: bottom priority: soft }
+      }
+      notes "" {
+        "One I2C bus: on-board air temp/humidity and lux, calibration EEPROM,"
+        "and J2 for the external soil probe. R5/R6 are the only pull-ups."
+      }
+    }
+
+    connect U3.pb7 -> U4.sda
+    connect U3.pb6 -> U4.scl
+    connect U3.pb7 -> U5.sda
+    connect U3.pb6 -> U5.scl
+    connect U3.pb7 -> U6.sda
+    connect U3.pb6 -> U6.scl
+
+    connect U3.pb7 -> R5.p1
+    connect L1.p2  -> R5.p2
+    connect U3.pb6 -> R6.p1
+    connect L1.p2  -> R6.p2
+
+    connect L1.p2 -> U4.vdd
+    connect J1.p2 -> U4.gnd
+    connect L1.p2 -> U5.vdd
+    connect J1.p2 -> U5.gnd
+    connect L1.p2 -> U6.vdd
+    connect J1.p2 -> U6.gnd
+
+    connect U4.vdd -> C12.p1
+    connect J1.p2  -> C12.p2
+    connect U5.vdd -> C13.p1
+    connect J1.p2  -> C13.p2
+    connect U6.vdd -> C14.p1
+    connect J1.p2  -> C14.p2
+
+    // The EEPROM's address straps and write protect. A0-A2 low puts it at
+    // 0x50, clear of the HDC1080 (0x40) and the BH1750 (0x23); WP low keeps
+    // it writable so calibration can be stored in the field.
+    connect J1.p2 -> U6.a0
+    connect J1.p2 -> U6.a1
+    connect J1.p2 -> U6.a2
+    connect J1.p2 -> U6.wp
+
+    // External soil probe: 3V3, SDA, SCL, GND in connector order.
+    connect L1.p2 -> J2.p1
+    connect U3.pb7 -> J2.p2
+    connect U3.pb6 -> J2.p3
+    connect J1.p2 -> J2.p4
+
+    group "VALVE DRIVE" color "#b91c1c" {
+      component Q2: transistor "n_mosfet_irlml6244" value "IRLML6244" {
+        placement_hint { near: J4 priority: hard }
+      }
+      component D3: diode      "d_schottky"         value "1N5819" {
+        placement_hint { near: Q2 priority: hard }
+      }
+      component R10: resistor  "r_generic_0603"     value "100"
+      component R11: resistor  "r_generic_0603"     value "100k"
+      component J4: connector  "jst_xh_2pin"        value "VALVE 12V" {
+        placement_hint { region: right_edge edge: right priority: soft }
+      }
+      notes "" {
+        "Low-side switch on the solenoid return. D3 carries the coil's"
+        "collapse current, R11 holds the gate off while the MCU boots."
+      }
+    }
+
+    // The coil sits between the protected 12 V rail and the FET drain, so
+    // the MCU switches only the return. D3 is reversed across the coil:
+    // cathode to 12 V, anode to the drain, so it conducts only when the
+    // field collapses and drives the drain above the rail.
+    connect Q1.d  -> J4.p1
+    connect J4.p2 -> Q2.d
+    connect Q1.d  -> D3.cathode
+    connect Q2.d  -> D3.anode
+    connect J1.p2 -> Q2.s
+
+    connect U3.pa4 -> R10.p1
+    connect R10.p2 -> Q2.g
+    connect Q2.g   -> R11.p1
+    connect J1.p2  -> R11.p2
+
+    group "STATUS" color "#a16207" {
+      component D4: led      "led_green_0603" value "PWR"
+      component D5: led      "led_red_0603"   value "VALVE"
+      component R7: resistor "r_generic_0603" value "1k"
+      component R8: resistor "r_generic_0603" value "1k"
+      notes "" {
+        "D4 sits on the 3V3 rail, so it reports the buck is up without any"
+        "firmware running. D5 is driven from PA5, beside the valve gate on"
+        "PA4, so the indicator and the load are commanded from one port."
+      }
+    }
+
+    connect L1.p2   -> R7.p1
+    connect R7.p2   -> D4.anode
+    connect J1.p2   -> D4.cathode
+
+    connect U3.pa5  -> R8.p1
+    connect R8.p2   -> D5.anode
+    connect J1.p2   -> D5.cathode
+
+    notes "Produced from a prompt via the Synth MCP server for #39." {
+      "Registry parts whose metadata or pin maps this corpus corrected are"
+      "exercised deliberately: stm32g030 (32 pads, LQFP-32 identity),"
+      "mp2307_buck (exposed pad 9), 24lc256_eeprom (address straps on 1-3,"
+      "not vdd/gnd/sda/scl), xtal_8mhz (p2 on pad 3, case pads grounded)."
+    }
+}

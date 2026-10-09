@@ -3192,6 +3192,7 @@ dependencies = [
  "synth-supply",
  "synth-validate",
  "tokio",
+ "toml",
  "tower-http 0.7.1",
 ]
 

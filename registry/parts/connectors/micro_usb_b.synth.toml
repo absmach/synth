@@ -16,12 +16,20 @@ min_voltage_v = 1.8
 max_voltage_v = 5.0
 max_current_ma = 100.0
 
+# Pin names and numbers come from the stock KiCad symbol this part names,
+# cross-checked against the footprint it names. Pads that the previous map
+# got wrong keep their old name where the name still denotes the same pin,
+# so a design that referenced one keeps working.
+
 [[pins]]
 name = "vbus"
 number = "1"
-electrical_type = "power_input"
+electrical_type = "power_output"
 capabilities = ["usb_vbus"]
 
+# The symbol types D-/D+ as plain bidirectional pins. Synth needs the
+# differential types, because `usb_dn`/`usb_dp` are what let a diff pair be
+# declared against them, so those two keep the types the part already had.
 [[pins]]
 name = "dn"
 number = "2"
@@ -37,10 +45,14 @@ capabilities = ["usb_dp"]
 [[pins]]
 name = "id"
 number = "4"
-electrical_type = "bidirectional"
+electrical_type = "passive"
 
 [[pins]]
 name = "gnd"
 number = "5"
-electrical_type = "power_input"
+electrical_type = "power_output"
 
+[[pins]]
+name = "shield"
+number = "SH"
+electrical_type = "passive"

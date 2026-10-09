@@ -16,6 +16,11 @@ min_voltage_v = 3.5
 max_voltage_v = 15.0
 max_current_ma = 800.0
 
+# Pin names and numbers come from the stock KiCad symbol this part names,
+# cross-checked against the footprint it names. Pads that the previous map
+# got wrong keep their old name where the name still denotes the same pin,
+# so a design that referenced one keeps working.
+
 [[pins]]
 name = "ts"
 number = "1"
@@ -26,6 +31,11 @@ name = "bat"
 number = "2"
 electrical_type = "power_output"
 required = true
+
+[[pins]]
+name = "bat_2"
+number = "3"
+electrical_type = "passive"
 
 [[pins]]
 name = "ce"
@@ -45,7 +55,7 @@ electrical_type = "input"
 [[pins]]
 name = "pgood"
 number = "7"
-electrical_type = "output"
+electrical_type = "open_drain_low"
 
 [[pins]]
 name = "vss"
@@ -56,13 +66,18 @@ required = true
 [[pins]]
 name = "chg"
 number = "9"
-electrical_type = "output"
+electrical_type = "open_drain_low"
 
 [[pins]]
 name = "out"
 number = "10"
 electrical_type = "power_output"
 required = true
+
+[[pins]]
+name = "out_2"
+number = "11"
+electrical_type = "passive"
 
 [[pins]]
 name = "ilim"
@@ -88,6 +103,11 @@ electrical_type = "input"
 [[pins]]
 name = "iset"
 number = "16"
+electrical_type = "passive"
+
+[[pins]]
+name = "vss_2"
+number = "17"
 electrical_type = "passive"
 
 [[required_decoupling]]

@@ -32,4 +32,13 @@ board "ref_ldo_sensor" {
 
   connect U1.vout -> C2.p1
   connect U1.gnd -> C2.p2
+
+  // The BMP280's interface pins. Until the part declared all eight pads these
+  // were invisible, and the design looked complete without them: CSB high
+  // selects I2C, SDO low selects address 0x76, VDDIO is the interface rail,
+  // and pad 7 is the second ground.
+  connect U1.vout -> U2.vddio
+  connect U2.vddio -> U2.csb
+  connect U1.gnd -> U2.sdo
+  connect U1.gnd -> U2.gnd_2
 }

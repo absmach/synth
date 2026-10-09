@@ -1,0 +1,70 @@
+// Class B, negative 1 of 1 — #38 case "Negative cases for missing pair
+// constraints, invalid stackup assumptions, and unsafe regulator feedback
+// routing"
+//
+// Every defect is deliberate. This board must FAIL.
+//
+// Planted defects:
+//   1. `layers 4` with a 2-layer stackup  -> E-SYNTH-STACKUP-001
+//   2. USB D+/D- routed to plain GPIO     -> E-SYNTH-USB-001
+//   3. USB-C with no CC pull-downs        -> E-SYNTH-USB-002
+//   4. Buck feedback taken from the switch node, not the output
+board "b4_negative_unsafe_mixed_signal" {
+    layers 4
+    manufacturer "jlcpcb"
+
+    // Defect 1: the stackup describes two copper layers while the board
+    // declares four.
+    stackup {
+      copper 0.035mm
+      insulator 1.5mm er 4.4 material "FR4"
+      copper 0.035mm
+    }
+
+    component J1: connector "usb_c_receptacle"
+    component U1: mcu       "rp2350"
+    component U2: regulator "mp2307_buck" value "MP2307"
+    component L1: inductor  "l_generic_1210" value "4.7uH"
+    component C1: capacitor "c_generic_0805" value "22uF"
+    component C2: capacitor "c_generic_0805" value "22uF"
+    component R1: resistor  "r_generic_0603" value "10k"
+    component R2: resistor  "r_generic_0603" value "3.83k"
+
+    connect J1.vbus -> U2.in
+    connect J1.gnd  -> U2.gnd
+    connect U2.in   -> U2.en
+    connect U2.in   -> C1.p1
+    connect J1.gnd  -> C1.p2
+    connect U2.sw   -> L1.p1
+    connect L1.p2   -> C2.p1
+    connect J1.gnd  -> C2.p2
+
+    // Defect 4: the divider hangs off the switch node, so the loop senses
+    // the full switching waveform instead of the regulated output.
+    connect U2.sw -> R1.p1
+    connect R1.p2 -> U2.fb
+    connect U2.fb -> R2.p1
+    connect R2.p2 -> J1.gnd
+
+    connect L1.p2 -> U1.iovdd
+    connect L1.p2 -> U1.iovdd2
+    connect L1.p2 -> U1.iovdd3
+    connect L1.p2 -> U1.qspi_iovdd
+    connect L1.p2 -> U1.usb_otp_vdd
+    connect L1.p2 -> U1.adc_avdd
+    connect L1.p2 -> U1.vreg_avdd
+    connect L1.p2 -> U1.vreg_vin
+    connect L1.p2 -> U1.dvdd
+    connect L1.p2 -> U1.dvdd2
+    connect L1.p2 -> U1.dvdd3
+    connect L1.p2 -> U1.run
+    connect J1.gnd -> U1.gnd
+    connect J1.gnd -> U1.vreg_pgnd
+
+    // Defect 2: the USB data pair goes to general-purpose IO, and there is
+    // no diff_pair declaration anywhere in this board.
+    connect J1.dp -> U1.gp2
+    connect J1.dn -> U1.gp3
+
+    // Defect 3: CC1/CC2 are left floating, so the sink advertises nothing.
+  }

@@ -52,6 +52,21 @@ number = "5"
 electrical_type = "input"
 required = true
 
+# The rest of the LGA-8's pads. Names and numbers come from the stock
+# symbol `Sensor:BME680`, cross-checked against the 8 copper pads of
+# `Package_LGA:Bosch_LGA-8_2.5x2.5mm_P0.65mm_ClockwisePinNumbering`.
+# The second ground pad is real: Bosch ties both to the substrate.
+
+[[pins]]
+name = "vddio"
+number = "6"
+electrical_type = "power_input"
+
+[[pins]]
+name = "gnd_2"
+number = "7"
+electrical_type = "power_input"
+
 [[required_decoupling]]
 net = "vdd"
 value = "100nf"

@@ -377,6 +377,11 @@ pub struct Pad {
     /// Absolute position on the board, in nanometres.
     pub at: Point,
     pub size_nm: (i64, i64),
+    /// Orientation of the pad's own axes in the board frame, in degrees:
+    /// the footprint's rotation plus the pad's local angle, negated for a
+    /// footprint on the back. Needed because a rectangular pad's extent is
+    /// only meaningful along its own axes.
+    pub rotation_deg: f64,
     pub layers: Vec<String>,
     /// Net code as written in the file, if the pad carries one.
     pub net: Option<u32>,
@@ -385,15 +390,63 @@ pub struct Pad {
 }
 
 impl Pad {
-    /// Copper radius used for connectivity, in nanometres.
+    /// Copper radius used for **connectivity**, in nanometres.
     ///
     /// The larger half-dimension is used so a rectangular pad behaves
     /// like the disc that inscribes it. Being conservative here in the
     /// narrow direction would report false opens on fine-pitch parts,
     /// which is the more damaging direction for this check to err.
+    ///
+    /// That bias makes this radius wrong for any check that *reports a
+    /// violation*. On a 1.95 × 0.6 mm SOIC pad the disc reaches 0.975 mm
+    /// from the centre while the copper reaches 0.3 mm across the narrow
+    /// axis, so it covers 0.675 mm of bare laminate on each long side.
+    /// Deciding "inside a pad" from it invents violations against copper
+    /// that is comfortably clear. Use [`Self::contains_point`] there.
     #[must_use]
     pub fn radius_nm(&self) -> i64 {
         self.size_nm.0.max(self.size_nm.1) / 2
+    }
+
+    /// Whether `point` lies on this pad's copper.
+    ///
+    /// Exact where [`Self::radius_nm`] is deliberately generous: the point
+    /// is taken into the pad's own rotated frame and tested against the
+    /// real shape. Unknown shapes fall back to the rectangle, which is the
+    /// aperture KiCad draws for `custom` pads' bounding box and never
+    /// smaller than the drawn copper for the shapes it names.
+    #[must_use]
+    pub fn contains_point(&self, point: Point) -> bool {
+        let (half_x, half_y) = (self.size_nm.0 as f64 / 2.0, self.size_nm.1 as f64 / 2.0);
+        if half_x <= 0.0 || half_y <= 0.0 {
+            return false;
+        }
+        // Into the pad's frame: translate to its centre, then rotate by
+        // -rotation so the pad's axes become the coordinate axes.
+        let (dx, dy) = (
+            (point.x_nm - self.at.x_nm) as f64,
+            (point.y_nm - self.at.y_nm) as f64,
+        );
+        let theta = -self.rotation_deg.to_radians();
+        let (cos, sin) = (theta.cos(), theta.sin());
+        let local_x = dx * cos - dy * sin;
+        let local_y = dx * sin + dy * cos;
+
+        match self.shape.as_str() {
+            // A circle's diameter is the first size element; KiCad writes
+            // both the same, but the first is the authoritative one.
+            "circle" => local_x.hypot(local_y) <= half_x,
+            // An obround/oval pad is an ellipse for containment purposes.
+            "oval" => (local_x / half_x).powi(2) + (local_y / half_y).powi(2) <= 1.0,
+            // `rect`, `roundrect`, `trapezoid`, `custom`, and anything new.
+            // A roundrect's clipped corners are inside this rectangle, so a
+            // via centred in a corner notch still reads as inside the pad.
+            // That residue is bounded by the corner radius — tens of
+            // micrometres — rather than by the pad's aspect ratio, and
+            // resolving it needs the `roundrect_rratio` the parser does not
+            // read today.
+            _ => local_x.abs() <= half_x && local_y.abs() <= half_y,
+        }
     }
 
     /// Whether this pad carries copper on `layer`.
@@ -820,6 +873,19 @@ fn parse_footprint(node: &Node) -> Footprint {
     // wrong spot and makes the connectivity pass report nets open that
     // are perfectly routed.
     let mirrored = layer.starts_with('B');
+    // A footprint's `(at x y angle)` angle is anticlockwise *on screen*, and
+    // KiCad's y axis points down, so a pad offset transforms by -angle:
+    //
+    //     x' =  x cos + y sin
+    //     y' = -x sin + y cos
+    //
+    // Rotating by +angle instead puts every pad with a non-zero offset on
+    // the wrong side of its footprint. It survived because the corpus is
+    // mostly symmetric two-pad passives, where +90 and -90 produce the same
+    // *set* of positions and only swap which pad is which, so nets still
+    // close. An asymmetric part exposes it at once: on a 1x2 JST rotated
+    // 90, pad 2 was read 5 mm from where its copper is, and the net read
+    // open against a board the engine had routed correctly.
     let cos = rotation_deg.to_radians().cos();
     let sin = rotation_deg.to_radians().sin();
 
@@ -840,9 +906,25 @@ fn parse_footprint(node: &Node) -> Footprint {
                 .unwrap_or("")
                 .to_string();
             let local = parse_point(pad, "at").unwrap_or_default();
-            let x_nm = (local.x_nm as f64 * cos - local.y_nm as f64 * sin).round() as i64;
-            let y_nm = (local.x_nm as f64 * sin + local.y_nm as f64 * cos).round() as i64;
+            let x_nm = (local.x_nm as f64 * cos + local.y_nm as f64 * sin).round() as i64;
+            let y_nm = (local.y_nm as f64 * cos - local.x_nm as f64 * sin).round() as i64;
             let y_nm = if mirrored { -y_nm } else { y_nm };
+            // A pad's `(at x y angle)` angle is relative to its footprint,
+            // so the board-frame orientation is the sum. Mirroring a
+            // footprint onto the back reflects its pads in y, which negates
+            // the angle just as it negates the offset above.
+            let local_rotation_deg = pad
+                .find("at")
+                .and_then(|n| n.body().get(2).and_then(Node::as_str))
+                .and_then(|s| s.parse::<f64>().ok())
+                .unwrap_or(0.0);
+            // Negated for the same reason as the offset above: the pad's own
+            // axes turn with its footprint, in the same y-down sense.
+            let rotation_deg = if mirrored {
+                rotation_deg + local_rotation_deg
+            } else {
+                -(rotation_deg + local_rotation_deg)
+            };
             let size = pad.find("size");
             let size_nm = (
                 size.and_then(|s| s.body().first())
@@ -866,6 +948,7 @@ fn parse_footprint(node: &Node) -> Footprint {
                 shape,
                 at: Point::new(at.x_nm + x_nm, at.y_nm + y_nm),
                 size_nm,
+                rotation_deg,
                 layers,
                 net,
                 net_name,
@@ -964,6 +1047,12 @@ fn collect_edge_cuts(node: &Node, out: &mut Vec<(Point, Point)>) {
 /// Written by hand rather than exported by Synth so the reader's tests do
 /// not depend on the exporter's own output being correct — a reader
 /// tested only against its own writer proves nothing.
+///
+/// Hand-writing has its own trap: U1's `B.Cu` segment used to end at
+/// (30, 21), the point the reader's own rotation arithmetic reported for
+/// pad 1, so the fixture certified the sign error it should have caught.
+/// The pad is at (30, 19). Coordinates here are worth checking against a
+/// board a router actually produced.
 pub const SAMPLE_BOARD: &str = r#"(kicad_pcb
   (version 20260206)
   (generator "synth-eda")
@@ -994,7 +1083,7 @@ pub const SAMPLE_BOARD: &str = r#"(kicad_pcb
   (segment (start 10.825 20) (end 15 20) (width 0.25) (layer "F.Cu") (net 2))
   (segment (start 15 20) (end 15 18) (width 0.25) (layer "F.Cu") (net 2))
   (via (at 15 18) (size 0.8) (drill 0.4) (layers "F.Cu" "B.Cu") (net 2))
-  (segment (start 15 18) (end 30 21) (width 0.25) (layer "B.Cu") (net 2))
+  (segment (start 15 18) (end 30 19) (width 0.25) (layer "B.Cu") (net 2))
   (gr_line (start 0 0) (end 40 0) (layer "Edge.Cuts") (width 0.1))
   (gr_line (start 0 30) (end 40 30) (layer "Edge.Cuts") (width 0.1))
 )
@@ -1089,8 +1178,13 @@ mod tests {
         assert_eq!(u1.layer, "B.Cu");
         assert_eq!(u1.rotation_deg, 90.0);
         let pad1 = u1.pads.iter().find(|p| p.number == "1").expect("pad 1");
-        // A local offset of (-1, 0) rotates to (0, -1), then mirrors in y.
-        assert_eq!(pad1.at, Point::new(mm_to_nm(30.0), mm_to_nm(21.0)));
+        // A local offset of (-1, 0) rotates to (0, +1) in KiCad's y-down
+        // sense, then mirrors in y for the bottom side: (30, 19).
+        //
+        // The front-side half of this transform is measured against copper
+        // a router produced. The mirror composition is not: the placer puts
+        // every footprint on the front, so no board exercises it.
+        assert_eq!(pad1.at, Point::new(mm_to_nm(30.0), mm_to_nm(19.0)));
     }
 
     #[test]
@@ -1119,8 +1213,8 @@ mod tests {
     #[test]
     fn wire_length_sums_every_segment() {
         let board = PcbBoard::parse(SAMPLE_BOARD).expect("sample parses");
-        // 4.175 mm + 2 mm + the diagonal (15, 18)-(30, 21).
-        let expected = 4.175 + 2.0 + 225.0f64.sqrt() * 0.0 + (15.0f64 * 15.0 + 3.0 * 3.0).sqrt();
+        // 4.175 mm + 2 mm + the diagonal (15, 18)-(30, 19).
+        let expected = 4.175 + 2.0 + (15.0f64 * 15.0 + 1.0).sqrt();
         assert!(
             (board.wire_length_mm() - expected).abs() < 0.001,
             "{}",

@@ -70,4 +70,25 @@ board "sensor_logger" {
 
   connect U2.vdd -> C4.p1
   connect U3.gnd -> C4.p2
+
+  // The STM32's other supply pads. The part used to declare 11 of the LQFP's
+  // 48, so these were invisible and the design read as complete without them.
+  // A real board has to tie every one.
+  connect U3.vout -> U1.vdd_2
+  connect U3.vout -> U1.vdd_3
+  connect U3.vout -> U1.vdda
+  connect U3.gnd -> U1.vss_2
+  connect U3.gnd -> U1.vss_3
+  connect U3.gnd -> U1.vssa
+
+  // BOOT0 is marked required by the part and was floating. On an F1 it has to
+  // be low to boot from flash, and a direct tie to ground is the usual way.
+  connect U3.gnd -> U1.boot0
+
+  // The BME680's interface pins, invisible for the same reason. CSB high
+  // selects I2C, SDO low selects address 0x76, VDDIO is the interface rail.
+  connect U3.vout -> U2.vddio
+  connect U2.vddio -> U2.csb
+  connect U3.gnd -> U2.sdo
+  connect U3.gnd -> U2.gnd_2
 }

@@ -887,7 +887,12 @@ fn find_via_in_pad(board: &PcbBoard) -> Vec<String> {
             if !shares_layer(pad, &via.layers) {
                 continue;
             }
-            if point_distance(pad.at, via.at) <= pad.radius_nm() {
+            // Exactly: the connectivity radius treats a pad as a disc of its
+            // long half-dimension, which on an ordinary SOIC pad reaches
+            // 0.675 mm past the copper across the narrow axis. Judging
+            // via-in-pad from it failed every Class-A board on vias the
+            // router had placed a quarter of a millimetre clear of the pad.
+            if pad.contains_point(via.at) {
                 hits.push(format!("{via} {}", pad.id()));
             }
         }
@@ -1088,6 +1093,128 @@ mod tests {
         // The finding is still recorded; policy decides whether it blocks,
         // and that decision is made by the caller reading the report.
         assert!(!permissive.via_in_pad.is_empty());
+    }
+
+    /// The geometry that failed `a3_protected_power_entry`: U1 pad 2 of a
+    /// `SOIC-8-1EP_3.9x4.9mm_P1.27mm_EP2.41x3.3mm` at (23.975, 29.5183),
+    /// 1.95 × 0.6 mm, and the via KiCadRoutingTools placed at
+    /// (24.0, 28.95) — 0.268 mm below the pad's edge, against the 0.1 mm
+    /// same-net clearance Synth had asked it for. Centre-to-centre that is
+    /// 0.569 mm, inside the 0.975 mm connectivity disc and well outside the
+    /// copper.
+    #[test]
+    fn a_via_clear_of_an_elongated_pad_is_not_via_in_pad() {
+        let text = r#"(kicad_pcb
+          (version 20260206)
+          (layers (0 "F.Cu" signal) (31 "B.Cu" signal) (44 "Edge.Cuts" user))
+          (net 0 "")
+          (net 1 "net_4")
+          (footprint "Package_SO:SOIC-8-1EP" (layer "F.Cu") (at 26.45 30.1533)
+            (property "Reference" "U1" (at 0 0) (layer "F.SilkS"))
+            (pad "2" smd roundrect (at -2.475 -0.635) (size 1.95 0.6)
+              (layers "F.Cu") (net 1 "net_4")))
+          (via (at 24.0 28.95) (size 0.6) (drill 0.3) (layers "F.Cu" "B.Cu") (net 1))
+          (gr_line (start 0 0) (end 40 0) (layer "Edge.Cuts") (width 0.1))
+        )"#;
+        let board = board(text);
+        let pad = board.pads().next().expect("the pad parses");
+        assert!(
+            point_distance(pad.at, board.vias[0].at) <= pad.radius_nm(),
+            "the via must sit inside the connectivity disc, or this test has \
+             stopped covering the case it was written for"
+        );
+        let report = check_connectivity(&board, &FabricationPolicy::default());
+        assert!(
+            report.via_in_pad.is_empty(),
+            "a via 0.268 mm clear of the pad's copper is not in the pad: {:?}",
+            report.via_in_pad
+        );
+    }
+
+    /// The same pad, with the via moved onto its copper.
+    #[test]
+    fn a_via_on_an_elongated_pad_is_still_via_in_pad() {
+        let text = r#"(kicad_pcb
+          (version 20260206)
+          (layers (0 "F.Cu" signal) (31 "B.Cu" signal) (44 "Edge.Cuts" user))
+          (net 0 "")
+          (net 1 "net_4")
+          (footprint "Package_SO:SOIC-8-1EP" (layer "F.Cu") (at 26.45 30.1533)
+            (property "Reference" "U1" (at 0 0) (layer "F.SilkS"))
+            (pad "2" smd roundrect (at -2.475 -0.635) (size 1.95 0.6)
+              (layers "F.Cu") (net 1 "net_4")))
+          (via (at 24.5 29.5183) (size 0.6) (drill 0.3) (layers "F.Cu" "B.Cu") (net 1))
+          (gr_line (start 0 0) (end 40 0) (layer "Edge.Cuts") (width 0.1))
+        )"#;
+        let report = check_connectivity(&board(text), &FabricationPolicy::default());
+        assert_eq!(
+            report.via_in_pad,
+            vec!["via at (24.500, 29.518) mm U1.2".to_string()]
+        );
+    }
+
+    /// The geometry that exposed the pad-rotation sign error: a 1x2 JST,
+    /// `JST_XH_S2B-XH-A-1_1x02_P2.50mm_Horizontal`, at (81.205, 37.93)
+    /// rotated 90°, whose pad 2 offset is `(at 2.5 0)`. KiCad's y axis
+    /// points down, so the pad's copper is at (81.205, 35.43) — which is
+    /// where KiCadRoutingTools routed it. Reading the rotation as +90 put
+    /// it at (81.205, 40.43), 5 mm away, and the net was reported open
+    /// against a board that was correctly routed.
+    ///
+    /// Pad 1 is at offset (0, 0), so it lands in the same place either way:
+    /// that is why the two pads behaved differently and why symmetric
+    /// two-pad passives never caught this.
+    #[test]
+    fn a_rotated_footprint_places_its_pads_in_the_y_down_sense() {
+        let text = r#"(kicad_pcb
+          (version 20260206)
+          (layers (0 "F.Cu" signal) (31 "B.Cu" signal) (44 "Edge.Cuts" user))
+          (net 0 "")
+          (net 19 "net_18")
+          (footprint "Connector_JST:JST_XH_S2B" (layer "F.Cu") (at 81.205 37.93 90)
+            (property "Reference" "J4" (at 0 0) (layer "F.SilkS"))
+            (pad "2" thru_hole oval (at 2.5 0) (size 1.7 2) (drill 1)
+              (layers "*.Cu") (net 19 "net_18")))
+          (gr_line (start 0 0) (end 94 0) (layer "Edge.Cuts") (width 0.1))
+        )"#;
+        let board = board(text);
+        let pad = board.pads().next().expect("the pad parses");
+        assert_eq!(
+            (pad.at.x_mm(), pad.at.y_mm()),
+            (81.205, 35.43),
+            "a +2.5 mm x offset on a footprint rotated 90 lands 2.5 mm *up* \
+             the board, where the router put its copper"
+        );
+    }
+
+    /// A rotated footprint turns the pad's long axis, and the check has to
+    /// turn with it: the point that is clear at 0° is on copper at 90°.
+    #[test]
+    fn pad_rotation_turns_the_containment_test() {
+        let make = |rotation: &str| {
+            format!(
+                r#"(kicad_pcb
+              (version 20260206)
+              (layers (0 "F.Cu" signal) (31 "B.Cu" signal) (44 "Edge.Cuts" user))
+              (net 0 "")
+              (net 1 "N")
+              (footprint "a:1" (layer "F.Cu") (at 10 10 {rotation})
+                (property "Reference" "U1" (at 0 0) (layer "F.SilkS"))
+                (pad "1" smd rect (at 0 0) (size 1.95 0.6)
+                  (layers "F.Cu") (net 1 "N")))
+              (via (at 10 10.6) (size 0.6) (drill 0.3) (layers "F.Cu" "B.Cu") (net 1))
+              (gr_line (start 0 0) (end 40 0) (layer "Edge.Cuts") (width 0.1))
+            )"#
+            )
+        };
+        // Unrotated the pad spans ±0.3 mm in y, so a via 0.6 mm away in y
+        // is clear of it.
+        let flat = check_connectivity(&board(&make("0")), &FabricationPolicy::default());
+        assert!(flat.via_in_pad.is_empty(), "{:?}", flat.via_in_pad);
+        // Rotated 90° the long axis runs in y and reaches 0.975 mm, so the
+        // same via is on copper.
+        let turned = check_connectivity(&board(&make("90")), &FabricationPolicy::default());
+        assert!(!turned.via_in_pad.is_empty(), "rotation must be honoured");
     }
 
     #[test]

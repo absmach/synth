@@ -1,0 +1,220 @@
+// Class C, positive 1 of 3 — #40 "dense/high-speed constraints and exported
+// output"
+//
+// A six-layer dual-USB compute board: an RP2350 on its native USB, an
+// ESP32-C3 module on a second USB, each pair declared at 90 ohm, QSPI boot
+// flash, and a 20-pin expansion header. Two independent pairs on one board
+// is the constraint case: each must stay its own pair, on signal copper,
+// with its own keepout.
+//
+// STATED LIMITATION: SynthSpec has no length-matching or skew syntax, so the
+// intra-pair skew and inter-pair length budgets #40 asks about cannot be
+// declared here. Impedance is the only pair constraint the language carries.
+board "c1_dual_usb_compute" {
+    layers 6
+    manufacturer "jlcpcb"
+    revision "A"
+
+    stackup {
+      copper 0.035mm
+      insulator 0.1mm er 3.9 material "FR4"
+      copper 0.0152mm
+      insulator 0.2mm er 4.4 material "FR4"
+      copper 0.0152mm
+      insulator 0.5mm er 4.6 material "FR4"
+      copper 0.0152mm
+      insulator 0.2mm er 4.4 material "FR4"
+      copper 0.0152mm
+      insulator 0.1mm er 3.9 material "FR4"
+      copper 0.035mm
+    }
+
+    netclass "USB" {
+      trace_width 0.2mm
+      clearance 0.2mm
+    }
+
+    netclass "QSPI" {
+      trace_width 0.2mm
+      clearance 0.2mm
+    }
+
+    netclass "PWR" {
+      trace_width 0.8mm
+      clearance 0.25mm
+    }
+
+    group "USB-C HOST PORT" color "#c2410c" {
+      component J1: connector "usb_c_receptacle" { placement_hint { region: top_left priority: hard } }
+      component R1: resistor  "r_generic_0603" value "5.1k"
+      component R2: resistor  "r_generic_0603" value "5.1k"
+      component D1: diode     "esd_usb"
+      component D2: diode     "esd_usb"
+      component F1: fuse      "polyfuse" value "1A"
+      component C1: capacitor "c_generic_0805" value "10uF"
+    }
+
+    connect J1.vbus -> F1.p1
+    connect F1.p2   -> C1.p1
+    connect J1.gnd  -> C1.p2
+    connect J1.cc1  -> R1.p1
+    connect J1.gnd  -> R1.p2
+    connect J1.cc2  -> R2.p1
+    connect J1.gnd  -> R2.p2
+    connect J1.dp   -> D1.io
+    connect J1.gnd  -> D1.gnd
+    connect J1.dn   -> D2.io
+    connect J1.gnd  -> D2.gnd
+
+    group "MICRO-USB DEVICE PORT" color "#b45309" {
+      component J2: connector "micro_usb_b" { placement_hint { region: top_right priority: hard } }
+      component D3: diode     "esd_usb"
+      component D4: diode     "esd_usb"
+    }
+
+    connect J2.gnd -> J1.gnd
+    connect J2.dp  -> D3.io
+    connect J1.gnd -> D3.gnd
+    connect J2.dn  -> D4.io
+    connect J1.gnd -> D4.gnd
+
+    group "3V3 RAIL" color "#7c3aed" {
+      component U1: regulator "ams1117_3v3" value "AMS1117-3.3"
+      component C2: capacitor "c_generic_0805" value "22uF"
+      component C3: capacitor "c_generic_0603" value "100nF" { placement_hint { near: "U1" priority: hard } }
+    }
+
+    connect F1.p2   -> U1.vin
+    connect J1.gnd  -> U1.gnd
+    connect U1.vout -> C2.p1
+    connect U1.gnd  -> C2.p2
+    connect U1.vout -> C3.p1
+    connect U1.gnd  -> C3.p2
+
+    group "RP2350" color "#0072b2" {
+      component U2: mcu       "rp2350" { placement_hint { region: center priority: hard } }
+      component C4: capacitor "c_generic_0603" value "100nF" { placement_hint { near: "U2" priority: hard } }
+      component C5: capacitor "c_generic_0603" value "100nF" { placement_hint { near: "U2" priority: hard } }
+      component C6: capacitor "c_generic_0603" value "100nF" { placement_hint { near: "U2" priority: hard } }
+      component C7: capacitor "c_generic_0603" value "1uF"   { placement_hint { near: "U2" priority: hard } }
+      component L1: inductor  "l_generic_0603" value "3.3uH" { placement_hint { near: "U2" priority: hard } }
+      component C8: capacitor "c_generic_0805" value "4.7uF" { placement_hint { near: "U2" priority: hard } }
+      component R3: resistor  "r_generic_0603" value "10k"
+      component U3: memory    "w25q128_flash" { placement_hint { near: "U2" priority: hard } }
+      component C9: capacitor "c_generic_0603" value "100nF" { placement_hint { near: "U3" priority: hard } }
+      notes "" {
+        "QSPI runs at speed, so the flash is pinned next to the MCU with a"
+        "hard hint and the bus has its own netclass."
+      }
+    }
+
+    connect U1.vout -> U2.iovdd
+    connect U1.vout -> U2.iovdd2
+    connect U1.vout -> U2.iovdd3
+    connect U1.vout -> U2.qspi_iovdd
+    connect U1.vout -> U2.usb_otp_vdd
+    connect U1.vout -> U2.adc_avdd
+    connect U1.vout -> U2.vreg_avdd
+    connect U1.vout -> U2.vreg_vin
+    connect U1.gnd  -> U2.gnd
+    connect U1.gnd  -> U2.vreg_pgnd
+
+    connect U2.iovdd      -> C4.p1
+    connect U2.gnd        -> C4.p2
+    connect U2.iovdd2     -> C5.p1
+    connect U2.gnd        -> C5.p2
+    connect U2.qspi_iovdd -> C6.p1
+    connect U2.gnd        -> C6.p2
+    connect U2.vreg_avdd  -> C7.p1
+    connect U2.gnd        -> C7.p2
+
+    connect U2.vreg_lx -> L1.p1
+    connect L1.p2      -> U2.dvdd
+    connect U2.dvdd    -> U2.vreg_fb
+    connect U2.dvdd    -> C8.p1
+    connect U2.gnd     -> C8.p2
+    connect U2.dvdd    -> U2.dvdd2
+    connect U2.dvdd    -> U2.dvdd3
+
+    connect U1.vout -> R3.p1
+    connect R3.p2   -> U2.run
+
+    connect U1.vout -> U3.vcc
+    connect U1.gnd  -> U3.gnd
+    connect U3.vcc  -> C9.p1
+    connect U3.gnd  -> C9.p2
+    connect U2.qspi_sclk -> U3.clk
+    connect U2.qspi_ss   -> U3.cs
+    connect U2.qspi_sd0  -> U3.io0
+    connect U2.qspi_sd1  -> U3.io1
+    connect U2.qspi_sd2  -> U3.io2
+    connect U2.qspi_sd3  -> U3.io3
+
+    connect J1.dp -> U2.usb_dp
+    connect J1.dn -> U2.usb_dn
+
+    group "ESP32-C3 RADIO" color "#0a7d4a" {
+      component U4: mcu       "esp32_c3_mini" { placement_hint { region: bottom_right priority: hard } }
+      component C10: capacitor "c_generic_0805" value "10uF" { placement_hint { near: "U4" priority: hard } }
+      component C11: capacitor "c_generic_0603" value "100nF" { placement_hint { near: "U4" priority: hard } }
+      component R4: resistor  "r_generic_0603" value "10k"
+    }
+
+    connect U1.vout -> U4.vdd
+    connect U1.gnd  -> U4.gnd
+    connect U4.vdd  -> C10.p1
+    connect U4.gnd  -> C10.p2
+    connect U4.vdd  -> C11.p1
+    connect U4.gnd  -> C11.p2
+    connect U1.vout -> R4.p1
+    connect R4.p2   -> U4.en
+
+    connect J2.dp -> U4.dp
+    connect J2.dn -> U4.dn
+
+    group "EXPANSION" color "#334155" {
+      component J3: connector "header_1x20"
+      notes "" {
+        "The 20-pin header is left to the placer: at 2.54mm pitch it is about"
+        "50mm long, and pinning it into a corner with a hard hint pushed its"
+        "courtyard past the auto-sized outline (E-SYNTH-DRC-009)."
+      }
+    }
+
+    connect U1.vout -> J3.p1
+    connect U1.gnd  -> J3.p2
+    connect U2.gp2  -> J3.p3
+    connect U2.gp3  -> J3.p4
+    connect U2.gp4  -> J3.p5
+    connect U2.gp5  -> J3.p6
+    connect U2.gp6  -> J3.p7
+    connect U2.gp7  -> J3.p8
+    connect U2.gp8  -> J3.p9
+    connect U2.gp9  -> J3.p10
+    connect U2.gp10 -> J3.p11
+    connect U2.gp11 -> J3.p12
+    connect U2.gp12 -> J3.p13
+    connect U2.gp13 -> J3.p14
+    connect U2.gp14 -> J3.p15
+    connect U2.gp15 -> J3.p16
+    connect U2.gp16 -> J3.p17
+    connect U2.gp17 -> J3.p18
+    connect U2.gp18 -> J3.p19
+    connect U2.gp19 -> J3.p20
+
+    diff_pair U2_usb_dp U2_usb_dn {
+      impedance 90ohm
+    }
+
+    diff_pair U4_dp U4_dn {
+      impedance 90ohm
+    }
+
+    keepout host_port_pair {
+      radius 8mm
+    }
+
+    keepout device_port_pair {
+      radius 8mm
+    }
+  }

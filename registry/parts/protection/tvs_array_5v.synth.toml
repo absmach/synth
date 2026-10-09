@@ -1,6 +1,6 @@
 id = "tvs_array_5v"
 kind = "diode"
-description = "TVS diode array, 5V, 4 channels, SOIC-8"
+description = "TVS diode array, 5V, 4 channels, SOT-363"
 kicad_footprint = "Package_TO_SOT_SMD:SOT-363_SC-70-6"
 # kicad_symbol intentionally unmapped: the registry pin model
 # (pins 1-5 + 8) doesn't match any KiCad stock TVS-array symbol.
@@ -42,6 +42,6 @@ electrical_type = "passive"
 
 [[pins]]
 name = "vcc"
-number = "8"
+number = "6"
 electrical_type = "passive"
 

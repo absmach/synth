@@ -42,6 +42,30 @@ electrical_type = "bidirectional"
 capabilities = ["i2c_scl"]
 required = true
 
+# The rest of the LGA-8's pads, from the stock symbol
+# `Sensor_Pressure:BMP280` and the same Bosch footprint. The part shares
+# its package and pin map with the BME680.
+
+[[pins]]
+name = "csb"
+number = "2"
+electrical_type = "input"
+
+[[pins]]
+name = "sdo"
+number = "5"
+electrical_type = "bidirectional"
+
+[[pins]]
+name = "vddio"
+number = "6"
+electrical_type = "power_input"
+
+[[pins]]
+name = "gnd_2"
+number = "7"
+electrical_type = "power_input"
+
 [[required_decoupling]]
 net = "vdd"
 value = "100nf"

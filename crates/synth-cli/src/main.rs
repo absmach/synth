@@ -418,6 +418,16 @@ enum Command {
         /// Run the manufacturing export gate as well as source/DRC checks.
         #[arg(long)]
         fab: bool,
+        /// External router to use. Passed through to the `drc` and
+        /// `export-kicad` stages this command runs. Without an engine the DRC
+        /// stage cannot produce counts at all and reports `unknown`, so this
+        /// is what decides whether the gate can say anything.
+        #[arg(long, value_enum, default_value_t = ExternalRouter::FreeRouting)]
+        router: ExternalRouter,
+        /// KiCadRoutingTools checkout, required with `--router
+        /// kicad-routing-tools`.
+        #[arg(long, value_name = "DIR")]
+        kicad_routing_tools_repo: Option<PathBuf>,
         /// Allow manufacturing output containing unverified registry parts.
         #[arg(long)]
         allow_unverified_parts: bool,
@@ -1083,31 +1093,41 @@ fn main() -> ExitCode {
             input,
             registry,
             fab,
+            router,
+            kicad_routing_tools_repo,
             allow_unverified_parts,
             override_exception,
             authorized_by,
             json,
-        } => match (authorized_by.as_deref(), override_exception.as_deref()) {
-            (Some(who), Some(why)) => match release::Exception::new(who, why) {
-                Ok(exception) => check(
+        } => {
+            let routing = CheckRouting {
+                engine: router,
+                kicad_routing_tools_repo: kicad_routing_tools_repo.as_deref(),
+            };
+            match (authorized_by.as_deref(), override_exception.as_deref()) {
+                (Some(who), Some(why)) => match release::Exception::new(who, why) {
+                    Ok(exception) => check(
+                        &input,
+                        registry.as_deref(),
+                        fab,
+                        &routing,
+                        allow_unverified_parts,
+                        Some(&exception),
+                        json,
+                    ),
+                    Err(e) => Err(anyhow::anyhow!("{e}")),
+                },
+                _ => check(
                     &input,
                     registry.as_deref(),
                     fab,
+                    &routing,
                     allow_unverified_parts,
-                    Some(&exception),
+                    None,
                     json,
                 ),
-                Err(e) => Err(anyhow::anyhow!("{e}")),
-            },
-            _ => check(
-                &input,
-                registry.as_deref(),
-                fab,
-                allow_unverified_parts,
-                None,
-                json,
-            ),
-        },
+            }
+        }
         Command::Preview {
             input,
             registry,
@@ -1411,10 +1431,45 @@ fn run_mcp(stdio: bool, sse: bool, port: u16, registry: Option<PathBuf>) -> anyh
 /// delegates each stage to the same CLI implementation used by agents and
 /// humans, but captures their machine-readable results into one deterministic
 /// report. No model, network, or project mutation is involved.
+/// Which external router `check` hands to the stages it runs.
+///
+/// `check` does not route anything itself; it spawns `synth drc` and
+/// `synth export-kicad`, and those are the commands that own the engine. The
+/// selection therefore has to travel with them, or the children fall back to
+/// the default and the operator's choice is silently discarded.
+struct CheckRouting<'a> {
+    engine: ExternalRouter,
+    kicad_routing_tools_repo: Option<&'a Path>,
+}
+
+impl CheckRouting<'_> {
+    /// The arguments a child command needs to use this engine.
+    ///
+    /// The engine's name here is clap's own value for the variant, not
+    /// `RouterEngine::as_str`. Those two disagree — `as_str` says
+    /// `freerouting` where the CLI accepts `free-routing` — and a child
+    /// invoked with the wrong spelling is rejected by its own parser.
+    fn child_args(&self) -> Vec<String> {
+        let engine = clap::ValueEnum::to_possible_value(&self.engine)
+            .expect("every ExternalRouter variant has a CLI value")
+            .get_name()
+            .to_string();
+        let mut args = vec!["--router".to_string(), engine];
+        if let Some(repo) = self.kicad_routing_tools_repo {
+            args.extend([
+                "--kicad-routing-tools-repo".to_string(),
+                repo.display().to_string(),
+            ]);
+        }
+        args
+    }
+}
+
 fn check(
     input: &Path,
     registry: Option<&Path>,
     fab: bool,
+    routing: &CheckRouting<'_>,
     allow_unverified_parts: bool,
     exception: Option<&release::Exception>,
     json: bool,
@@ -1443,7 +1498,11 @@ fn check(
     if let Some(dir) = registry {
         validate_args.extend(["--registry".into(), dir.display().to_string()]);
     }
-    let (validate_output, validate_timed_out) = run_check_child(&exe, &validate_args, 120)?;
+    let (validate_output, validate_timed_out) = run_check_child(
+        &exe,
+        &validate_args,
+        stage_budget("SYNTH_CHECK_SOURCE_TIMEOUT_SECS", 120),
+    )?;
     let validate_json = serde_json::from_slice::<serde_json::Value>(&validate_output.stdout)
         .unwrap_or_else(|_| serde_json::json!({"diagnostics": [], "parse_error": true}));
     let validate_pass = !validate_timed_out && validate_output.status.success();
@@ -1451,10 +1510,15 @@ fn check(
     let (drc_json, drc_outcome, drc_timed_out) = if validate_pass {
         let mut drc_args = base.clone();
         drc_args.extend(["drc".into(), "--pretty".into(), input.display().to_string()]);
+        drc_args.extend(routing.child_args());
         if let Some(dir) = registry {
             drc_args.extend(["--registry".into(), dir.display().to_string()]);
         }
-        let (drc_output, timed_out) = run_check_child(&exe, &drc_args, 30)?;
+        let (drc_output, timed_out) = run_check_child(
+            &exe,
+            &drc_args,
+            stage_budget("SYNTH_CHECK_DRC_TIMEOUT_SECS", 30),
+        )?;
         (
             serde_json::from_slice::<serde_json::Value>(&drc_output.stdout)
                 .unwrap_or_else(|_| serde_json::json!({"status": "unknown", "parse_error": true})),
@@ -1521,13 +1585,15 @@ fn check(
             "--verification-report".into(),
             verification_path.display().to_string(),
         ]);
+        export_args.extend(routing.child_args());
         if let Some(dir) = registry {
             export_args.extend(["--registry".into(), dir.display().to_string()]);
         }
         if allow_unverified_parts {
             export_args.push("--allow-unverified-parts".into());
         }
-        let (export_output, export_timed_out) = run_check_child(&exe, &export_args, 120)?;
+        let export_budget = stage_budget("SYNTH_CHECK_FAB_TIMEOUT_SECS", 120);
+        let (export_output, export_timed_out) = run_check_child(&exe, &export_args, export_budget)?;
         fab_pass = !export_timed_out && export_output.status.success();
         let native = std::fs::read_to_string(&verification_path)
             .ok()
@@ -1576,7 +1642,9 @@ fn check(
         });
         if export_timed_out {
             stage["reason"] = serde_json::json!("timeout");
-            stage["detail"] = serde_json::json!("`export-kicad` exceeded its 120s budget");
+            stage["detail"] = serde_json::json!(format!(
+                "`export-kicad` exceeded its {export_budget}s budget"
+            ));
         }
         if let Some(native) = native {
             stage["native"] = native;
@@ -1881,6 +1949,22 @@ fn structural_refusal(board: &synth_ir::Board) -> Option<String> {
     }
     out.push_str("Fix the part definitions, or run `synth registry qualify` for the full report.");
     Some(out)
+}
+
+/// Wall-clock budget for one `synth check` stage, in seconds.
+///
+/// The defaults suit a small board on a warm release build. A real board's
+/// DRC runs a full place-and-route, which takes minutes rather than seconds,
+/// and a stage that overruns is reported as `unknown` — correctly, but
+/// uselessly, since nothing was actually wrong. `SYNTH_CHECK_*_TIMEOUT_SECS`
+/// lets a release gate buy the time its boards need. Mirrors
+/// `SYNTH_KICAD_CLI_TIMEOUT_SECS` on the native stages.
+fn stage_budget(var: &str, default_secs: u64) -> u64 {
+    std::env::var(var)
+        .ok()
+        .and_then(|v| v.trim().parse::<u64>().ok())
+        .filter(|s| *s > 0)
+        .unwrap_or(default_secs)
 }
 
 fn run_check_child(

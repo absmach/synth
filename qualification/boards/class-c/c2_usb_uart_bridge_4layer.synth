@@ -1,0 +1,113 @@
+// Class C, positive 2 of 3 — #40 "constraint preservation in KiCad" and
+// "layer transitions, impedance assumptions, keepouts"
+//
+// A USB-to-UART bridge on four layers with an explicit impedance-controlled
+// stackup. The CH340G's D+/D- pair is the constrained net: declared at 90
+// ohm, clamped at the connector, and fenced off with a keepout. The 3.3V
+// regulator output feeds the bridge's own V3 pin through its decoupling.
+//
+// STATED LIMITATION: no length-matching or skew syntax exists, so the pair's
+// intra-pair skew budget is not declared.
+board "c2_usb_uart_bridge_4layer" {
+    layers 4
+    manufacturer "jlcpcb"
+    revision "A"
+
+    stackup {
+      copper 0.035mm
+      insulator 0.2104mm er 4.4 material "FR4"
+      copper 0.0152mm
+      insulator 1.065mm er 4.6 material "FR4"
+      copper 0.0152mm
+      insulator 0.2104mm er 4.4 material "FR4"
+      copper 0.035mm
+    }
+
+    netclass "USB" {
+      trace_width 0.2mm
+      clearance 0.2mm
+    }
+
+    netclass "PWR" {
+      trace_width 0.6mm
+      clearance 0.25mm
+    }
+
+    group "USB-C PORT" color "#c2410c" {
+      component J1: connector "usb_c_receptacle" { placement_hint { region: top_left priority: hard } }
+      component R1: resistor  "r_generic_0603" value "5.1k"
+      component R2: resistor  "r_generic_0603" value "5.1k"
+      component D1: diode     "esd_usb"
+      component D2: diode     "esd_usb"
+      component C1: capacitor "c_generic_0805" value "10uF"
+      notes "" {
+        "Clamps sit on the pair at the connector, before the constrained run."
+      }
+    }
+
+    connect J1.vbus -> C1.p1
+    connect J1.gnd  -> C1.p2
+    connect J1.cc1  -> R1.p1
+    connect J1.gnd  -> R1.p2
+    connect J1.cc2  -> R2.p1
+    connect J1.gnd  -> R2.p2
+    connect J1.dp   -> D1.io
+    connect J1.gnd  -> D1.gnd
+    connect J1.dn   -> D2.io
+    connect J1.gnd  -> D2.gnd
+
+    group "BRIDGE" color "#0072b2" {
+      component U1: ic        "ch340g" { placement_hint { region: center priority: hard } }
+      component C2: capacitor "c_generic_0603" value "100nF" { placement_hint { near: "U1" priority: hard } }
+      component C3: capacitor "c_generic_0603" value "100nF" { placement_hint { near: "U1" priority: hard } }
+      component Y1: crystal   "xtal_generic" value "12MHz"  { placement_hint { near: "U1" priority: hard } }
+      component C4: capacitor "c_generic_0603" value "22pF" { placement_hint { near: "Y1" priority: hard } }
+      component C5: capacitor "c_generic_0603" value "22pF" { placement_hint { near: "Y1" priority: hard } }
+      notes "" {
+        "V3 is the bridge's internal 3.3V regulator output and needs its own"
+        "decoupling, not a feed from the rail."
+      }
+    }
+
+    connect J1.vbus -> U1.vcc
+    connect J1.gnd  -> U1.gnd
+    connect U1.vcc  -> C2.p1
+    connect U1.gnd  -> C2.p2
+    connect U1.v3   -> C3.p1
+    connect U1.gnd  -> C3.p2
+
+    connect J1.dp -> U1.ud_plus
+    connect J1.dn -> U1.ud_minus
+
+    group "UART BREAKOUT" color "#0a7d4a" {
+      component J2: connector "header_1x4"
+      component R3: resistor  "r_generic_0603" value "1k"
+      component D3: led       "led_amber_0603"
+      component R4: resistor  "r_generic_0603" value "1k"
+      component D4: led       "led_blue_0603"
+      notes "" {
+        "TX and RX activity indicators, plus the 4-pin breakout in"
+        "3V3 / TX / RX / GND order."
+      }
+    }
+
+    connect U1.v3   -> J2.p1
+    connect U1.txd  -> J2.p2
+    connect U1.rxd  -> J2.p3
+    connect J1.gnd  -> J2.p4
+
+    connect U1.txd -> R3.p1
+    connect R3.p2  -> D3.anode
+    connect D3.cathode -> J1.gnd
+    connect U1.rxd -> R4.p1
+    connect R4.p2  -> D4.anode
+    connect D4.cathode -> J1.gnd
+
+    diff_pair U1_ud_plus U1_ud_minus {
+      impedance 90ohm
+    }
+
+    keepout bridge_pair_zone {
+      radius 7mm
+    }
+  }

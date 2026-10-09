@@ -1,0 +1,149 @@
+// Class B, positive 1 of 3 — #38 case "Switching regulator with input/output
+// filtering, feedback, power-good, and thermal copper"
+//
+// A 12V-to-3V3 buck module on four layers, with the switch node deliberately
+// kept small, the feedback divider taken from the output capacitor rather
+// than the inductor, pi filtering on both sides, and a discrete power-good
+// comparator since the MP2307 has no PG pin.
+board "b1_buck_regulator_module" {
+    layers 4
+    manufacturer "jlcpcb"
+
+    stackup {
+      copper 0.035mm
+      insulator 0.2104mm er 4.4 material "FR4"
+      copper 0.0152mm
+      insulator 1.065mm er 4.6 material "FR4"
+      copper 0.0152mm
+      insulator 0.2104mm er 4.4 material "FR4"
+      copper 0.035mm
+    }
+
+    netclass "PWR" {
+      trace_width 0.8mm
+      clearance 0.25mm
+    }
+
+    netclass "SWITCH" {
+      trace_width 1.0mm
+      clearance 0.3mm
+    }
+
+    group "INPUT FILTER" color "#c2410c" {
+      component J1: connector "jst_xh_2pin"
+      component F1: fuse      "polyfuse" value "2A"
+      component D1: diode     "tvs_array_5v" value "SMAJ15A"
+      component C1: capacitor "c_generic_0805" value "22uF"
+      component L1: inductor  "ferrite_bead_0603" value "600R"
+      component C2: capacitor "c_generic_0805" value "22uF"
+      component C3: capacitor "c_generic_0603" value "100nF"
+      notes "" {
+        "Pi filter on the input: bulk, bead, bulk, then a high-frequency"
+        "shunt right at the IN pin. The bead keeps switching current out of"
+        "the supply lead rather than letting the harness radiate."
+      }
+    }
+
+    connect J1.p1 -> F1.p1
+    connect F1.p2 -> D1.ch1
+    connect J1.p2 -> D1.gnd
+    connect F1.p2 -> C1.p1
+    connect J1.p2 -> C1.p2
+    connect F1.p2 -> L1.p1
+    connect L1.p2 -> C2.p1
+    connect J1.p2 -> C2.p2
+    connect L1.p2 -> C3.p1
+    connect J1.p2 -> C3.p2
+
+    group "BUCK CORE" color "#0072b2" {
+      component U1: regulator "mp2307_buck" value "MP2307"
+      component L2: inductor  "l_generic_1210" value "4.7uH"
+      component C4: capacitor "c_generic_0603" value "100nF" { placement_hint { near: "U1" priority: hard } }
+      component C5: capacitor "c_generic_0603" value "10nF"  { placement_hint { near: "U1" priority: hard } }
+      component R1: resistor  "r_generic_0603" value "10k"
+      component R2: resistor  "r_generic_0603" value "3.83k"
+      component C6: capacitor "c_generic_0603" value "22pF"
+      notes "" {
+        "Feedback divider R1/R2 from the OUTPUT capacitor, not the inductor"
+        "node, so the loop does not sense switching ripple. C6 is the"
+        "feed-forward cap across the upper leg."
+        "C5 on SS sets the soft-start ramp; C4 is the bootstrap cap."
+      }
+    }
+
+    connect L1.p2  -> U1.in
+    connect J1.p2  -> U1.gnd
+    connect U1.in  -> U1.en
+    connect U1.sw  -> L2.p1
+    connect U1.bs  -> C4.p1
+    connect C4.p2  -> U1.sw
+    connect U1.ss  -> C5.p1
+    connect J1.p2  -> C5.p2
+
+    group "OUTPUT FILTER" color "#7c3aed" {
+      component C7: capacitor "c_generic_0805" value "22uF"
+      component C8: capacitor "c_generic_0805" value "22uF"
+      component L3: inductor  "ferrite_bead_0603" value "600R"
+      component C9: capacitor "c_generic_0603" value "100nF"
+      component J2: connector "header_1x3"
+    }
+
+    connect L2.p2 -> C7.p1
+    connect J1.p2 -> C7.p2
+    connect L2.p2 -> R1.p1
+    connect R1.p2 -> U1.fb
+    connect U1.fb -> R2.p1
+    connect R2.p2 -> J1.p2
+    connect L2.p2 -> C6.p1
+    connect C6.p2 -> U1.fb
+
+    connect L2.p2 -> L3.p1
+    connect L3.p2 -> C8.p1
+    connect J1.p2 -> C8.p2
+    connect L3.p2 -> C9.p1
+    connect J1.p2 -> C9.p2
+    connect L3.p2 -> J2.p1
+    connect J1.p2 -> J2.p2
+
+    group "POWER GOOD" color "#0a7d4a" {
+      component U2: opamp     "mcp6022_dual"
+      component R3: resistor  "r_generic_0603" value "100k"
+      component R4: resistor  "r_generic_0603" value "33k"
+      component R5: resistor  "r_generic_0603" value "100k"
+      component R6: resistor  "r_generic_0603" value "100k"
+      component D2: diode     "d_zener_3v3" value "2.5V"
+      component C10: capacitor "c_generic_0603" value "100nF" { placement_hint { near: "U2" priority: hard } }
+      component D3: led       "led_green_0603"
+      component R7: resistor  "r_generic_0603" value "1k"
+      notes "" {
+        "The MP2307 has no power-good output, so one is built: a divider on"
+        "the rail compared against a 2.5 V reference. Channel A is the"
+        "comparator, channel B buffers the reference so the divider does not"
+        "load it."
+      }
+    }
+
+    connect L3.p2  -> U2.vdd
+    connect J1.p2  -> U2.vss
+    connect U2.vdd -> C10.p1
+    connect U2.vss -> C10.p2
+
+    connect L3.p2  -> R3.p1
+    connect R3.p2  -> U2.in_a_pos
+    connect U2.in_a_pos -> R4.p1
+    connect R4.p2  -> J1.p2
+
+    connect L3.p2  -> R5.p1
+    connect R5.p2  -> D2.cathode
+    connect D2.anode -> J1.p2
+    connect D2.cathode -> U2.in_b_pos
+    connect U2.out_b -> U2.in_b_neg
+    connect U2.out_b -> U2.in_a_neg
+
+    connect U2.out_a -> R6.p1
+    connect R6.p2    -> J2.p3
+
+    connect U2.out_a -> R7.p1
+    connect R7.p2    -> D3.anode
+    connect D3.cathode -> J1.p2
+  }

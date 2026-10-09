@@ -1,0 +1,40 @@
+// Class A, negative 1 of 1 — #39 case "missing power pins, unconnected
+// required pins, duplicate references, and impossible footprint"
+//
+// Every defect here is deliberate. This board must FAIL, and it must fail
+// with diagnostics that name the actual mistake. If it ever starts passing,
+// a rule has regressed.
+//
+// Planted defects:
+//   1. U1.vss never connected          -> E-SYNTH-CONNECT-001
+//   2. U1.nrst never connected         -> E-SYNTH-CONNECT-001
+//   3. C1 declared twice               -> E-SYNTH-NAME-001
+//   4. R1 generic passive with no value -> E-SYNTH-VALUE-001
+board "a4_negative_broken_mcu_board" {
+    layers 2
+    manufacturer "jlcpcb"
+
+    component J1: connector "jst_ph_2pin"
+    component U0: regulator "ams1117_3v3" value "AMS1117-3.3"
+    component U1: mcu       "stm32g030"
+
+    // Defect 3: C1 is declared twice.
+    component C1: capacitor "c_generic_0603" value "100nF"
+    component C1: capacitor "c_generic_0603" value "100nF"
+
+    // Defect 4: a generic resistor with no value.
+    component R1: resistor  "r_generic_0603"
+
+    connect J1.p1 -> U0.vin
+    connect J1.p2 -> U0.gnd
+
+    // Defect 1: VDD is fed but VSS is left floating.
+    connect U0.vout -> U1.vdd
+    connect U0.vout -> C1.p1
+    connect U0.gnd  -> C1.p2
+
+    // Defect 2: NRST is required and never connected.
+
+    connect U1.pa2 -> R1.p1
+    connect R1.p2  -> U0.gnd
+  }

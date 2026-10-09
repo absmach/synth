@@ -1,0 +1,139 @@
+// Class B, positive 3 of 3 — #38 case "USB 2.0 or Ethernet peripheral with
+// differential pairs and connector protection"
+//
+// A USB 2.0 full-speed peripheral: USB-C with CC pull-downs, ESD clamps on
+// the data pair before anything else, a declared 90 ohm differential pair
+// into the RP2350's native USB pins, and a keepout around the connector so
+// the placer cannot crowd the pair.
+board "b3_usb_peripheral" {
+    layers 4
+    manufacturer "jlcpcb"
+    revision "A"
+
+    stackup {
+      copper 0.035mm
+      insulator 0.2104mm er 4.4 material "FR4"
+      copper 0.0152mm
+      insulator 1.065mm er 4.6 material "FR4"
+      copper 0.0152mm
+      insulator 0.2104mm er 4.4 material "FR4"
+      copper 0.035mm
+    }
+
+    netclass "USB" {
+      trace_width 0.25mm
+      clearance 0.2mm
+    }
+
+    netclass "PWR" {
+      trace_width 0.8mm
+      clearance 0.25mm
+    }
+
+    group "USB-C AND PROTECTION" color "#c2410c" {
+      component J1: connector "usb_c_receptacle"
+      component R1: resistor  "r_generic_0603" value "5.1k"
+      component R2: resistor  "r_generic_0603" value "5.1k"
+      component D1: diode     "esd_usb"
+      component D2: diode     "esd_usb"
+      component F1: fuse      "polyfuse" value "1A"
+      component C1: capacitor "c_generic_0805" value "10uF"
+      notes "" {
+        "ESD clamps sit on D+/D- at the connector, ahead of the pair's run,"
+        "so a strike is shunted before it reaches the MCU."
+        "CC1/CC2 pulled down 5.1k each: advertises a 5 V sink."
+      }
+    }
+
+    connect J1.vbus -> F1.p1
+    connect F1.p2   -> C1.p1
+    connect J1.gnd  -> C1.p2
+    connect J1.cc1  -> R1.p1
+    connect J1.gnd  -> R1.p2
+    connect J1.cc2  -> R2.p1
+    connect J1.gnd  -> R2.p2
+
+    group "3V3 RAIL" color "#7c3aed" {
+      component U1: regulator "ams1117_3v3" value "AMS1117-3.3"
+      component C2: capacitor "c_generic_0805" value "22uF"
+      component C3: capacitor "c_generic_0603" value "100nF" { placement_hint { near: "U1" priority: hard } }
+    }
+
+    connect F1.p2   -> U1.vin
+    connect J1.gnd  -> U1.gnd
+    connect U1.vout -> C2.p1
+    connect U1.gnd  -> C2.p2
+    connect U1.vout -> C3.p1
+    connect U1.gnd  -> C3.p2
+
+    group "RP2350" color "#0072b2" {
+      component U2: mcu       "rp2350"
+      component C4: capacitor "c_generic_0603" value "100nF" { placement_hint { near: "U2" priority: hard } }
+      component C5: capacitor "c_generic_0603" value "100nF" { placement_hint { near: "U2" priority: hard } }
+      component C6: capacitor "c_generic_0603" value "100nF" { placement_hint { near: "U2" priority: hard } }
+      component C7: capacitor "c_generic_0603" value "1uF"   { placement_hint { near: "U2" priority: hard } }
+      component L1: inductor  "l_generic_0603" value "3.3uH" { placement_hint { near: "U2" priority: hard } }
+      component C8: capacitor "c_generic_0805" value "4.7uF" { placement_hint { near: "U2" priority: hard } }
+      component R3: resistor  "r_generic_0603" value "10k"
+      component U3: memory    "w25q128_flash"
+      component C9: capacitor "c_generic_0603" value "100nF" { placement_hint { near: "U3" priority: hard } }
+    }
+
+    connect U1.vout -> U2.iovdd
+    connect U1.vout -> U2.iovdd2
+    connect U1.vout -> U2.iovdd3
+    connect U1.vout -> U2.qspi_iovdd
+    connect U1.vout -> U2.usb_otp_vdd
+    connect U1.vout -> U2.adc_avdd
+    connect U1.vout -> U2.vreg_avdd
+    connect U1.vout -> U2.vreg_vin
+    connect U1.gnd  -> U2.gnd
+    connect U1.gnd  -> U2.vreg_pgnd
+
+    connect U2.iovdd      -> C4.p1
+    connect U2.gnd        -> C4.p2
+    connect U2.iovdd2     -> C5.p1
+    connect U2.gnd        -> C5.p2
+    connect U2.qspi_iovdd -> C6.p1
+    connect U2.gnd        -> C6.p2
+    connect U2.vreg_avdd  -> C7.p1
+    connect U2.gnd        -> C7.p2
+
+    connect U2.vreg_lx -> L1.p1
+    connect L1.p2      -> U2.dvdd
+    connect U2.dvdd    -> U2.vreg_fb
+    connect U2.dvdd    -> C8.p1
+    connect U2.gnd     -> C8.p2
+    connect U2.dvdd    -> U2.dvdd2
+    connect U2.dvdd    -> U2.dvdd3
+
+    connect U1.vout -> R3.p1
+    connect R3.p2   -> U2.run
+
+    connect U1.vout -> U3.vcc
+    connect U1.gnd  -> U3.gnd
+    connect U3.vcc  -> C9.p1
+    connect U3.gnd  -> C9.p2
+    connect U2.qspi_sclk -> U3.clk
+    connect U2.qspi_ss   -> U3.cs
+    connect U2.qspi_sd0  -> U3.io0
+    connect U2.qspi_sd1  -> U3.io1
+    connect U2.qspi_sd2  -> U3.io2
+    connect U2.qspi_sd3  -> U3.io3
+
+    // The data pair: connector to ESD clamp to the MCU's native USB pins.
+    connect J1.dp -> D1.io
+    connect J1.gnd -> D1.gnd
+    connect J1.dn -> D2.io
+    connect J1.gnd -> D2.gnd
+    connect J1.dp -> U2.usb_dp
+    connect J1.dn -> U2.usb_dn
+
+    diff_pair U2_usb_dp U2_usb_dn {
+      impedance 90ohm
+    }
+
+    keepout usb_pair_zone {
+      radius 9mm
+    }
+  }
