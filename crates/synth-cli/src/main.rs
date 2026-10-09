@@ -435,6 +435,21 @@ enum Command {
         /// Run the manufacturing export gate as well as source/DRC checks.
         #[arg(long)]
         fab: bool,
+        /// External router to use. Passed through to the `drc` and
+        /// `export-kicad` stages this command runs. Without an engine the DRC
+        /// stage cannot produce counts at all and reports `unknown`, so this
+        /// is what decides whether the gate can say anything.
+        ///
+        /// Unset means "do not mention it", not "use the default": the stages
+        /// resolve their own engine, from their own default and the
+        /// environment. Naming a default here and always forwarding it would
+        /// override a selection made any other way.
+        #[arg(long, value_enum)]
+        router: Option<ExternalRouter>,
+        /// KiCadRoutingTools checkout, required with `--router
+        /// kicad-routing-tools`.
+        #[arg(long, value_name = "DIR")]
+        kicad_routing_tools_repo: Option<PathBuf>,
         /// Allow manufacturing output containing unverified registry parts.
         #[arg(long)]
         allow_unverified_parts: bool,
@@ -1108,31 +1123,41 @@ fn main() -> ExitCode {
             input,
             registry,
             fab,
+            router,
+            kicad_routing_tools_repo,
             allow_unverified_parts,
             override_exception,
             authorized_by,
             json,
-        } => match (authorized_by.as_deref(), override_exception.as_deref()) {
-            (Some(who), Some(why)) => match release::Exception::new(who, why) {
-                Ok(exception) => check(
+        } => {
+            let routing = CheckRouting {
+                engine: router,
+                kicad_routing_tools_repo: kicad_routing_tools_repo.as_deref(),
+            };
+            match (authorized_by.as_deref(), override_exception.as_deref()) {
+                (Some(who), Some(why)) => match release::Exception::new(who, why) {
+                    Ok(exception) => check(
+                        &input,
+                        registry.as_deref(),
+                        fab,
+                        &routing,
+                        allow_unverified_parts,
+                        Some(&exception),
+                        json,
+                    ),
+                    Err(e) => Err(anyhow::anyhow!("{e}")),
+                },
+                _ => check(
                     &input,
                     registry.as_deref(),
                     fab,
+                    &routing,
                     allow_unverified_parts,
-                    Some(&exception),
+                    None,
                     json,
                 ),
-                Err(e) => Err(anyhow::anyhow!("{e}")),
-            },
-            _ => check(
-                &input,
-                registry.as_deref(),
-                fab,
-                allow_unverified_parts,
-                None,
-                json,
-            ),
-        },
+            }
+        }
         Command::Mcp {
             stdio,
             sse,
@@ -1491,10 +1516,54 @@ fn run_mcp(stdio: bool, sse: bool, port: u16, registry: Option<PathBuf>) -> anyh
 /// delegates each stage to the same CLI implementation used by agents and
 /// humans, but captures their machine-readable results into one deterministic
 /// report. No model, network, or project mutation is involved.
+/// Which external router `check` hands to the stages it runs.
+///
+/// `check` does not route anything itself; it spawns `synth drc` and
+/// `synth export-kicad`, and those are the commands that own the engine. The
+/// selection therefore has to travel with them, or the children fall back to
+/// the default and the operator's choice is silently discarded.
+struct CheckRouting<'a> {
+    engine: Option<ExternalRouter>,
+    kicad_routing_tools_repo: Option<&'a Path>,
+}
+
+impl CheckRouting<'_> {
+    /// The arguments a child command needs to use this engine.
+    ///
+    /// No engine named means no `--router` argument. The stages already have
+    /// a default and read the environment, and an explicit flag outranks
+    /// both, so forwarding one unasked silently replaces a selection made
+    /// another way — which is how an engine installed through
+    /// `KICAD_ROUTING_TOOLS_REPO` ends up reported as a missing Java runtime.
+    ///
+    /// The engine's name here is clap's own value for the variant, not
+    /// `RouterEngine::as_str`. Those two disagree — `as_str` says
+    /// `freerouting` where the CLI accepts `free-routing` — and a child
+    /// invoked with the wrong spelling is rejected by its own parser.
+    fn child_args(&self) -> Vec<String> {
+        let mut args = Vec::new();
+        if let Some(engine) = self.engine {
+            let engine = clap::ValueEnum::to_possible_value(&engine)
+                .expect("every ExternalRouter variant has a CLI value")
+                .get_name()
+                .to_string();
+            args.extend(["--router".to_string(), engine]);
+        }
+        if let Some(repo) = self.kicad_routing_tools_repo {
+            args.extend([
+                "--kicad-routing-tools-repo".to_string(),
+                repo.display().to_string(),
+            ]);
+        }
+        args
+    }
+}
+
 fn check(
     input: &Path,
     registry: Option<&Path>,
     fab: bool,
+    routing: &CheckRouting<'_>,
     allow_unverified_parts: bool,
     exception: Option<&release::Exception>,
     json: bool,
@@ -1535,6 +1604,7 @@ fn check(
     let (drc_json, drc_outcome, drc_timed_out) = if validate_pass {
         let mut drc_args = base.clone();
         drc_args.extend(["drc".into(), "--pretty".into(), input.display().to_string()]);
+        drc_args.extend(routing.child_args());
         if let Some(dir) = registry {
             drc_args.extend(["--registry".into(), dir.display().to_string()]);
         }
@@ -1609,6 +1679,7 @@ fn check(
             "--verification-report".into(),
             verification_path.display().to_string(),
         ]);
+        export_args.extend(routing.child_args());
         if let Some(dir) = registry {
             export_args.extend(["--registry".into(), dir.display().to_string()]);
         }
