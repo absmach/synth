@@ -3915,6 +3915,22 @@ fn export_kicad(
              an external checkout."
         );
     }
+    // A draft is the one export that is allowed to be un-routed, and an
+    // un-routed board must never produce fabrication artifacts. Check the
+    // combination here, before any file is written: `run_fab` runs before the
+    // final validation gate, so otherwise `--allow-incomplete --gerbers`
+    // would emit Gerbers from an unrouted board and only then fail. `--force`
+    // is not a way around this either — fabrication artifacts from a draft are
+    // never release evidence.
+    if allow_incomplete && !fab.is_empty() {
+        anyhow::bail!(
+            "--allow-incomplete cannot be combined with fabrication artifacts \
+             (--gerbers / --drill / --step): a draft export is never fabricable. \
+             Export the draft first, route and validate it, then run the export \
+             again without --allow-incomplete to produce the manufacturing package."
+        );
+    }
+
     let (source, file) = read_source(input)?;
     let parse = synth_parser::parse(&source, file.clone());
     write_diagnostics_to_stderr(&parse.diagnostics)?;
