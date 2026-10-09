@@ -1,0 +1,182 @@
+schema_version = "synth.qualification.v1"
+
+[matrix]
+release_command = "synth check <board> --json"
+fab_command = "synth check <board> --fab --json"
+
+[[board]]
+id = "hello"
+path = "fixtures/designs/hello.synth"
+class = "A"
+status = "qualified"
+expect = "fail"
+expect_fab = "unestablished"
+rationale = "Smallest valid board declaration. Proves the release command itself is sound. First routed run: the DRC stage reported `unknown` on this empty board, so the gate fails. Recorded, not accepted — see #98. The router contract changed under #39: the board's design rules now reach the engine at all, and via-in-pad is judged against the pad's copper rather than a disc of its long side. No manufacturing baseline measured before that applies, so this run establishes one."
+
+[[board]]
+id = "env_logger"
+path = "examples/env_logger.synth"
+class = "A"
+status = "experimental"
+expect = "pass"
+expect_fab = "unestablished"
+rationale = "USB-C power, LDO, MCU, I2C sensor, debug header. The Class-A envelope in #39. Manufacturing fails on E-SYNTH-QUAL-000: a part's pin map disagrees with its KiCad footprint. Manufacturing was E-SYNTH-QUAL-000 on bme680_env and stm32f103c8; both pin maps are now complete, so no baseline applies. A router is installed as of #95, so the DRC stage can run for the first time; nothing has observed what these report with copper on the board. The router contract changed under #39: the board's design rules now reach the engine at all, and via-in-pad is judged against the pad's copper rather than a disc of its long side. No manufacturing baseline measured before that applies, so this run establishes one."
+
+[[board]]
+id = "sensor_logger"
+path = "examples/sensor_logger.synth"
+class = "A"
+status = "experimental"
+expect = "pass"
+expect_fab = "unestablished"
+rationale = "Dual I2C sensors, SPI flash, status LEDs. Larger Class-A digital board. Manufacturing fails on E-SYNTH-QUAL-000: a part's pin map disagrees with its KiCad footprint. Manufacturing was E-SYNTH-QUAL-000 on atmega328p, bme680_env and bmp280_pressure; all three pin maps are now complete. A router is installed as of #95, so the DRC stage can run for the first time; nothing has observed what these report with copper on the board. The router contract changed under #39: the board's design rules now reach the engine at all, and via-in-pad is judged against the pad's copper rather than a disc of its long side. No manufacturing baseline measured before that applies, so this run establishes one."
+
+[[board]]
+id = "placement_and_diff_pair"
+path = "examples/placement_and_diff_pair.synth"
+class = "C"
+status = "experimental"
+expect = "pass"
+expect_fab = "unestablished"
+rationale = "Differential-pair constraints, placement hints, keepouts. Class-C constraint surface per #40. Manufacturing fails on KiCad DRC: 17 unconnected pads, so the router did not complete every net. A router is installed as of #95, so the DRC stage can run for the first time; nothing has observed what these report with copper on the board. The router contract changed under #39: the board's design rules now reach the engine at all, and via-in-pad is judged against the pad's copper rather than a disc of its long side. No manufacturing baseline measured before that applies, so this run establishes one."
+
+[[board]]
+id = "ref_ldo_sensor"
+path = "fixtures/kicad-reference/ref_ldo_sensor.synth"
+class = "A"
+status = "unsupported"
+expect = "fail"
+expect_fab = "unknown"
+expect_source_codes = ["E-SYNTH-VALUE-001"]
+rationale = "Negative test. Generic passives carry no `value`, so the BOM would not be orderable."
+
+[[board]]
+id = "ref_crystal_mcu"
+path = "fixtures/kicad-reference/ref_crystal_mcu.synth"
+class = "A"
+status = "unsupported"
+expect = "fail"
+expect_fab = "unknown"
+expect_source_codes = ["E-SYNTH-VALUE-001"]
+rationale = "Negative test. Same unvalued-passive defect on a crystal/MCU board."
+
+[[board]]
+id = "ref_usb_cdc"
+path = "fixtures/kicad-reference/ref_usb_cdc.synth"
+class = "B"
+status = "unsupported"
+expect = "fail"
+expect_fab = "unknown"
+expect_source_codes = ["E-SYNTH-VALUE-001"]
+rationale = "Negative test. USB-class interface; unvalued passives block it today."
+
+[[board]]
+id = "secure_tracker"
+path = "fixtures/kicad-reference/secure_tracker.synth"
+class = "D"
+status = "unsupported"
+expect = "fail"
+expect_fab = "unknown"
+expect_source_codes = ["E-SYNTH-VALUE-001"]
+rationale = "Negative test. Most complex reference board; stands in for the Class-D envelope in #41."
+
+[[board]]
+id = "a1_rp2350_debug_target"
+path = "qualification/boards/class-a/a1_rp2350_debug_target.synth"
+class = "A"
+status = "experimental"
+expect = "pass"
+expect_fab = "unestablished"
+rationale = "Novel Class-A board: RP2350 with SWD header, crystal, reset, boot flash and status LED. #39 case 1. Manufacturing fails on E-SYNTH-QUAL-000: a part's pin map disagrees with its KiCad footprint. Manufacturing was E-SYNTH-QUAL-000 on xtal_8mhz, whose second terminal was a case-ground pad. Fixed, so no baseline applies. A router is installed as of #95, so the DRC stage can run for the first time; nothing has observed what these report with copper on the board. The router contract changed under #39: the board's design rules now reach the engine at all, and via-in-pad is judged against the pad's copper rather than a disc of its long side. No manufacturing baseline measured before that applies, so this run establishes one."
+
+[[board]]
+id = "a2_i2c_sensor_node"
+path = "qualification/boards/class-a/a2_i2c_sensor_node.synth"
+class = "A"
+status = "experimental"
+expect = "pass"
+expect_fab = "unestablished"
+rationale = "Novel Class-A board: regulated I2C sensor node with pull-ups, EEPROM and a protected breakout. #39 case 2. Manufacturing fails on E-SYNTH-QUAL-000: a part's pin map disagrees with its KiCad footprint. Manufacturing was E-SYNTH-QUAL-000 on 24lc256_eeprom, bme680_env, stm32g030 and jst_ph_4pin. All four are fixed. A router is installed as of #95, so the DRC stage can run for the first time; nothing has observed what these report with copper on the board. The router contract changed under #39: the board's design rules now reach the engine at all, and via-in-pad is judged against the pad's copper rather than a disc of its long side. No manufacturing baseline measured before that applies, so this run establishes one."
+
+[[board]]
+id = "a3_protected_power_entry"
+path = "qualification/boards/class-a/a3_protected_power_entry.synth"
+class = "A"
+status = "experimental"
+expect = "pass"
+expect_fab = "unestablished"
+rationale = "Novel Class-A board: reverse-polarity P-FET, polyfuse, TVS, buck, soft-start load switch. #39 case 3. Source gate failed in CI on E-SYNTH-PIN-001 from tvs_array_5v's impossible pad 8; that part is fixed here, so CI must re-establish both stages. The router contract changed under #39: the board's design rules now reach the engine at all, and via-in-pad is judged against the pad's copper rather than a disc of its long side. No manufacturing baseline measured before that applies, so this run establishes one."
+
+[[board]]
+id = "a4_negative_broken_mcu_board"
+path = "qualification/boards/class-a/a4_negative_broken_mcu_board.synth"
+class = "A"
+status = "unsupported"
+expect = "fail"
+expect_fab = "unknown"
+expect_source_codes = ["E-SYNTH-CONNECT-001", "E-SYNTH-NAME-001", "E-SYNTH-VALUE-001"]
+rationale = "Novel Class-A negative: floating required pins, a duplicated reference and an unvalued passive. #39 negative case."
+
+[[board]]
+id = "b1_buck_regulator_module"
+path = "qualification/boards/class-b/b1_buck_regulator_module.synth"
+class = "B"
+status = "experimental"
+expect = "pass"
+expect_fab = "unestablished"
+rationale = "Novel Class-B board: 12V-to-3V3 buck with pi filtering both sides, output-sensed feedback and a discrete power-good. #38 case 1. Source gate failed in CI on E-SYNTH-PIN-001 from tvs_array_5v's impossible pad 8; that part is fixed here, so CI must re-establish both stages. The router contract changed under #39: the board's design rules now reach the engine at all, and via-in-pad is judged against the pad's copper rather than a disc of its long side. No manufacturing baseline measured before that applies, so this run establishes one."
+
+[[board]]
+id = "b2_precision_analog_frontend"
+path = "qualification/boards/class-b/b2_precision_analog_frontend.synth"
+class = "B"
+status = "experimental"
+expect = "pass"
+expect_fab = "unestablished"
+rationale = "Novel Class-B board: differential gain stage, buffered mid-rail bias, analog keepout and netclass, SPI bus to the MCU. #38 case 2. Synth DRC failed in CI but passes without KiCad, because real footprint geometry changes placement. Not yet investigated, so unestablished rather than guessed. The router contract changed under #39: the board's design rules now reach the engine at all, and via-in-pad is judged against the pad's copper rather than a disc of its long side. No manufacturing baseline measured before that applies, so this run establishes one."
+
+[[board]]
+id = "b3_usb_peripheral"
+path = "qualification/boards/class-b/b3_usb_peripheral.synth"
+class = "B"
+status = "experimental"
+expect = "fail"
+expect_fab = "unestablished"
+rationale = "Novel Class-B board: USB-C with CC pull-downs, ESD clamps at the connector, a declared 90 ohm pair into native USB pins. #38 case 3. Manufacturing fails on KiCad DRC: 37 unconnected pads, so the router did not complete every net. A router is installed as of #95, so the DRC stage can run for the first time; nothing has observed what these report with copper on the board. First routed run: DRC reported fail. 43 unconnected pads on a 0.4 mm QFN-60 over 2 layers — see #98. The router contract changed under #39: the board's design rules now reach the engine at all, and via-in-pad is judged against the pad's copper rather than a disc of its long side. No manufacturing baseline measured before that applies, so this run establishes one."
+
+[[board]]
+id = "b4_negative_unsafe_mixed_signal"
+path = "qualification/boards/class-b/b4_negative_unsafe_mixed_signal.synth"
+class = "B"
+status = "unsupported"
+expect = "fail"
+expect_fab = "unknown"
+expect_source_codes = ["E-SYNTH-STACKUP-001", "E-SYNTH-USB-001", "E-SYNTH-POWER-011"]
+rationale = "Novel Class-B negative: stackup contradicting the layer count, USB pair on plain GPIO, and buck feedback taken from the switch node. #38 negative case."
+
+[[board]]
+id = "b5_wifi_radio_peripheral"
+path = "qualification/boards/class-b/b5_wifi_radio_peripheral.synth"
+class = "B"
+status = "experimental"
+expect = "pass"
+expect_fab = "unestablished"
+rationale = "Novel Class-B board: ESP32-WROOM-32 radio with an antenna keepout and a 12 MHz reference in its own netclass. #35 case 3, the radio/clock-sensitive peripheral the corpus was missing. No baseline yet; the next CI run records what it observed. The router contract changed under #39: the board's design rules now reach the engine at all, and via-in-pad is judged against the pad's copper rather than a disc of its long side. No manufacturing baseline measured before that applies, so this run establishes one."
+
+[[board]]
+id = "c1_dual_usb_compute"
+path = "qualification/boards/class-c/c1_dual_usb_compute.synth"
+class = "C"
+status = "experimental"
+expect = "pass"
+expect_fab = "unestablished"
+rationale = "Novel Class-C board: six-layer stackup, two independent 90 ohm USB pairs, QSPI at speed, 61-pin MCU and a 20-pin header. #40 constraint surface, minus the length/skew budgets the language cannot express. Manufacturing fails on E-SYNTH-EXPORT-001: esp32_c3_mini has no real .kicad_mod footprint. A router is installed as of #95, so the DRC stage can run for the first time; nothing has observed what these report with copper on the board. The router contract changed under #39: the board's design rules now reach the engine at all, and via-in-pad is judged against the pad's copper rather than a disc of its long side. No manufacturing baseline measured before that applies, so this run establishes one."
+
+[[board]]
+id = "c2_usb_uart_bridge_4layer"
+path = "qualification/boards/class-c/c2_usb_uart_bridge_4layer.synth"
+class = "C"
+status = "experimental"
+expect = "pass"
+expect_fab = "unestablished"
+rationale = "Novel Class-C board: impedance-controlled 4-layer stackup, CH340G USB pair at 90 ohm with clamps at the connector, crystal and activity indicators. #40 constraint preservation. Manufacturing fails on E-SYNTH-EXPORT-001: a part has no real .kicad_mod footprint. Manufacturing was E-SYNTH-QUAL-000 on ch340g and xtal_generic. Both are fixed. A router is installed as of #95, so the DRC stage can run for the first time; nothing has observed what these report with copper on the board. The router contract changed under #39: the board's design rules now reach the engine at all, and via-in-pad is judged against the pad's copper rather than a disc of its long side. No manufacturing baseline measured before that applies, so this run establishes one."

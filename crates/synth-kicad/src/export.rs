@@ -259,24 +259,10 @@ pub fn export_with_sidecars_and_routing_order(
     // any page, and the project file is board-wide.
     let net_settings = build_net_settings(board, sheets.iter().map(|s| &s.layout));
     let project_doc = json!({
-        // Keep the project-level defaults explicit. KiCad 10 may discard
-        // legacy setup minima when it first saves a generated board, and an
-        // empty `board` object then silently restores its own 0.2 mm
-        // clearance. These values match the router's 0.2 mm signal width
-        // and the 0.127 mm clearance supported by the default manufacturer
-        // profile, so native DRC sees the same contract as Synth.
-        "board": {
-          "design_settings": {
-            "defaults": {
-              "min_clearance": 0.127,
-              "min_track_width": 0.127,
-            },
-            "rules": {
-              "min_clearance": 0.127,
-              "min_track_width": 0.127,
-            }
-          }
-        },
+        // Every minimum the board's manufacturer profile carries, so
+        // native DRC, the external router, and Synth's own validation all
+        // read the same contract. See `design_settings`.
+        "board": design_settings(board),
         "boards": [],
         "meta": {
             "filename": format!("{stem}.kicad_pro"),
@@ -516,18 +502,10 @@ pub fn export_schematic_only(
         .collect();
     let net_settings = build_net_settings(board, sheets.iter().map(|s| &s.layout));
     let project_doc = json!({
-        "board": {
-          "design_settings": {
-            "defaults": {
-              "min_clearance": 0.127,
-              "min_track_width": 0.127,
-            },
-            "rules": {
-              "min_clearance": 0.127,
-              "min_track_width": 0.127,
-            }
-          }
-        },
+        // Every minimum the board's manufacturer profile carries, so
+        // native DRC, the external router, and Synth's own validation all
+        // read the same contract. See `design_settings`.
+        "board": design_settings(board),
         "boards": [],
         "meta": {
             "filename": format!("{stem}.kicad_pro"),
@@ -720,6 +698,55 @@ fn placement_score(board: &Board, placement: &synth_place::Placement) -> usize {
     synth_drc::check(board, placement, &synth_pcb::Routing::default(), &profile)
         .violations
         .len()
+}
+
+/// The `board.design_settings` block for a board's declared manufacturer.
+///
+/// Every minimum the profile carries is written out, because three parties
+/// read these numbers and they have to be the same numbers:
+///
+/// - `kicad-cli pcb drc`, whose rule has nothing to check against when the
+///   key is absent;
+/// - the external router, which is asked to preserve "the board's declared
+///   minimums" and can only preserve what the project states — KiCad writes
+///   `0` for *not configured*, and a router reads that as *unset*;
+/// - [`synth_router::validate`], which judges the returned copper against
+///   this same profile.
+///
+/// Writing only clearance and track width is what made the manufacturing
+/// stage unpassable: with no `min_through_hole_diameter` the router had no
+/// drill floor to hold, took the 0.15 mm rung its fabrication tier allows,
+/// and Synth then rejected the board against the profile's 0.3 mm. Native
+/// DRC passed the same board, having been given no drill rule either.
+fn design_settings(board: &Board) -> serde_json::Value {
+    let profile = synth_drc::ManufacturerProfile::from_name(
+        board.manufacturer.as_deref().unwrap_or("jlc-standard"),
+    );
+    let mm = synth_geometry::nm_to_mm;
+    // KiCad enforces the annular ring as (diameter - drill) / 2, so the
+    // smallest legal via diameter follows from the two minima the profile
+    // does carry rather than being a fourth number to pick.
+    let min_via_diameter = mm(profile.min_drill_diameter_nm + 2 * profile.min_annular_ring_nm);
+    let rules = json!({
+        "min_clearance": mm(profile.min_copper_clearance_nm),
+        "min_track_width": mm(profile.min_trace_width_nm),
+        "min_through_hole_diameter": mm(profile.min_drill_diameter_nm),
+        "min_via_annular_width": mm(profile.min_annular_ring_nm),
+        "min_via_diameter": min_via_diameter,
+        "min_copper_edge_clearance": mm(profile.min_copper_to_edge_nm),
+        "min_hole_clearance": mm(profile.min_drill_to_copper_nm),
+    });
+    // `defaults` seeds Board Setup for a human opening the project;
+    // `rules` is the set DRC and the router read. KiCad 10 may discard
+    // legacy setup minima when it first saves a generated board, and an
+    // empty `board` object then silently restores its own 0.2 mm
+    // clearance, so both are stated.
+    json!({
+        "design_settings": {
+            "defaults": rules.clone(),
+            "rules": rules,
+        }
+    })
 }
 
 /// Build the `.kicad_pro` `net_settings` block (schematic-quality

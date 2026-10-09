@@ -16,11 +16,96 @@ min_voltage_v = 1.8
 max_voltage_v = 5.0
 max_current_ma = 100.0
 
+# Pin names and numbers come from the stock KiCad symbol this part names,
+# cross-checked against the footprint it names. Pads that the previous map
+# got wrong keep their old name where the name still denotes the same pin,
+# so a design that referenced one keeps working.
+
+[[pins]]
+name = "clkin"
+number = "1"
+electrical_type = "input"
+
+[[pins]]
+name = "nc"
+number = "2"
+electrical_type = "do_not_connect"
+
+[[pins]]
+name = "nc_2"
+number = "3"
+electrical_type = "do_not_connect"
+
+[[pins]]
+name = "nc_3"
+number = "4"
+electrical_type = "do_not_connect"
+
+[[pins]]
+name = "nc_4"
+number = "5"
+electrical_type = "do_not_connect"
+
+[[pins]]
+name = "aux_da"
+number = "6"
+electrical_type = "bidirectional"
+
+[[pins]]
+name = "aux_cl"
+number = "7"
+electrical_type = "output"
+
+[[pins]]
+name = "vlogic"
+number = "8"
+electrical_type = "power_input"
+
+[[pins]]
+name = "ad0"
+number = "9"
+electrical_type = "input"
+
+[[pins]]
+name = "regout"
+number = "10"
+electrical_type = "passive"
+
+[[pins]]
+name = "fsync"
+number = "11"
+electrical_type = "input"
+
+[[pins]]
+name = "int"
+number = "12"
+electrical_type = "output"
+
 [[pins]]
 name = "vdd"
 number = "13"
 electrical_type = "power_input"
 required = true
+
+[[pins]]
+name = "nc_5"
+number = "14"
+electrical_type = "do_not_connect"
+
+[[pins]]
+name = "nc_6"
+number = "15"
+electrical_type = "do_not_connect"
+
+[[pins]]
+name = "nc_7"
+number = "16"
+electrical_type = "do_not_connect"
+
+[[pins]]
+name = "nc_8"
+number = "17"
+electrical_type = "do_not_connect"
 
 [[pins]]
 name = "gnd"
@@ -29,17 +114,37 @@ electrical_type = "power_input"
 required = true
 
 [[pins]]
-name = "sda"
-number = "24"
-electrical_type = "bidirectional"
-capabilities = ["i2c_sda"]
-required = true
+name = "resv"
+number = "19"
+electrical_type = "do_not_connect"
+
+[[pins]]
+name = "cpout"
+number = "20"
+electrical_type = "passive"
+
+[[pins]]
+name = "resv_2"
+number = "21"
+electrical_type = "do_not_connect"
+
+[[pins]]
+name = "resv_3"
+number = "22"
+electrical_type = "do_not_connect"
 
 [[pins]]
 name = "scl"
 number = "23"
-electrical_type = "bidirectional"
+electrical_type = "input"
 capabilities = ["i2c_scl"]
+required = true
+
+[[pins]]
+name = "sda"
+number = "24"
+electrical_type = "bidirectional"
+capabilities = ["i2c_sda"]
 required = true
 
 [[required_decoupling]]

@@ -45,8 +45,8 @@ expression: board
         "kicad_symbol": "Connector_Generic:Conn_01x02",
         "kicad_footprint": "Connector_JST:JST_PH_S2B-PH-K_1x02_P2.00mm_Horizontal",
         "footprint_dimensions": {
-          "width_mm": 1.0,
-          "height_mm": 1.6,
+          "width_mm": 6.9,
+          "height_mm": 8.6,
           "courtyard_margin_mm": 0.25,
           "mating_face": null
         },

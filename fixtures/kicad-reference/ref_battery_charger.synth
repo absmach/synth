@@ -29,4 +29,11 @@ board "ref_battery_charger" {
 
   connect U1.out -> C2.p1
   connect U1.vss -> C2.p2
+
+  // The BQ24074's duplicated power pads and its exposed pad. The part declared
+  // 14 of the VQFN's 17, so these three were invisible; BAT and OUT are each
+  // two pads of the same node, and the exposed pad is the thermal ground.
+  connect U1.bat -> U1.bat_2
+  connect U1.out -> U1.out_2
+  connect U1.vss -> U1.vss_2
 }

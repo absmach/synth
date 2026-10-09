@@ -1,0 +1,197 @@
+// Class B, positive 4 of 4 — #35 case "Radio or clock-sensitive peripheral
+// with controlled/critical nets"
+//
+// A Wi-Fi/BT peripheral built on the ESP32-WROOM-32 module. The module's
+// antenna hangs off one edge, so the board declares a keepout there and the
+// placer has to respect it. The CH340G's 12 MHz crystal is the clock-sensitive
+// net: it sits in its own netclass with wider clearance, and its load caps are
+// pinned to the crystal rather than left to the placer.
+board "b5_wifi_radio_peripheral" {
+    layers 4
+    manufacturer "jlcpcb"
+    revision "A"
+
+    stackup {
+      copper 0.035mm
+      insulator 0.2104mm er 4.4 material "FR4"
+      copper 0.0152mm
+      insulator 1.065mm er 4.6 material "FR4"
+      copper 0.0152mm
+      insulator 0.2104mm er 4.4 material "FR4"
+      copper 0.035mm
+    }
+
+    netclass "CLOCK" {
+      trace_width 0.2mm
+      clearance 0.4mm
+    }
+
+    netclass "USB" {
+      trace_width 0.25mm
+      clearance 0.2mm
+    }
+
+    netclass "PWR" {
+      trace_width 0.8mm
+      clearance 0.25mm
+    }
+
+    group "USB-C AND PROTECTION" color "#c2410c" {
+      component J1: connector "usb_c_receptacle"
+      component R1: resistor  "r_generic_0603" value "5.1k"
+      component R2: resistor  "r_generic_0603" value "5.1k"
+      component D1: diode     "esd_usb"
+      component D2: diode     "esd_usb"
+      component F1: fuse      "polyfuse" value "1A"
+      component C1: capacitor "c_generic_0805" value "10uF"
+      notes "" {
+        "ESD clamps sit on D+/D- at the connector, ahead of the pair's run."
+        "CC1/CC2 pulled down 5.1k each: advertises a 5 V sink."
+      }
+    }
+
+    connect J1.vbus -> F1.p1
+    connect F1.p2   -> C1.p1
+    connect J1.gnd  -> C1.p2
+    connect J1.cc1  -> R1.p1
+    connect J1.gnd  -> R1.p2
+    connect J1.cc2  -> R2.p1
+    connect J1.gnd  -> R2.p2
+
+    group "3V3 RAIL" color "#7c3aed" {
+      component U1: regulator "ams1117_3v3" value "AMS1117-3.3"
+      component C2: capacitor "c_generic_0805" value "22uF"
+      component C3: capacitor "c_generic_0805" value "10uF"
+      component C4: capacitor "c_generic_0603" value "100nF" { placement_hint { near: "U1" priority: hard } }
+      notes "" {
+        "The module pulls several hundred milliamps while the radio transmits,"
+        "so the rail carries 22 uF of bulk next to the LDO and another 10 uF at"
+        "the module's own supply pin. The transmit burst is the load this rail"
+        "is sized for, not the average."
+      }
+    }
+
+    connect F1.p2   -> U1.vin
+    connect J1.gnd  -> U1.gnd
+    connect U1.vin  -> C2.p1
+    connect U1.gnd  -> C2.p2
+    connect U1.vout -> C4.p1
+    connect U1.gnd  -> C4.p2
+
+    group "USB-UART BRIDGE" color "#0072b2" {
+      component U2: ic        "ch340g"
+      component C5: capacitor "c_generic_0603" value "100nF" { placement_hint { near: "U2" priority: hard } }
+      component C6: capacitor "c_generic_0603" value "100nF" { placement_hint { near: "U2" priority: hard } }
+      notes "" {
+        "The bridge drives the module's UART0 and, through the two strapping"
+        "transistors' absence, is wired for manual boot: hold BOOT, tap RESET."
+      }
+    }
+
+    connect U1.vout -> U2.vcc
+    connect J1.gnd  -> U2.gnd
+    connect U2.vcc  -> C5.p1
+    connect U2.gnd  -> C5.p2
+    connect U2.v3   -> C6.p1
+    connect U2.gnd  -> C6.p2
+
+    connect J1.dp -> D1.io
+    connect J1.gnd -> D1.gnd
+    connect J1.dn -> D2.io
+    connect J1.gnd -> D2.gnd
+    connect J1.dp -> U2.ud_plus
+    connect J1.dn -> U2.ud_minus
+
+    diff_pair U2_ud_plus U2_ud_minus {
+      impedance 90ohm
+    }
+
+    group "12 MHZ REFERENCE" color "#0a7d4a" {
+      component Y1: crystal   "xtal_generic" value "12MHz" { placement_hint { near: "U2" priority: hard } }
+      component C7: capacitor "c_generic_0603" value "22pF" { placement_hint { near: "Y1" priority: hard } }
+      component C8: capacitor "c_generic_0603" value "22pF" { placement_hint { near: "Y1" priority: hard } }
+      notes "" {
+        "The crystal is the only net on this board whose length and neighbours"
+        "both matter. Its load caps are pinned to it so the placer cannot put"
+        "them across the board, and the CLOCK netclass gives the two legs"
+        "wider clearance than a signal would get."
+        "Synth does not check oscillator drive level or load-capacitance"
+        "match; that is a reviewer's job, and the handoff doc says so."
+      }
+    }
+
+    connect U2.r232 -> Y1.p1
+    connect Y1.p2   -> C7.p1
+    connect J1.gnd  -> C7.p2
+    connect Y1.p1   -> C8.p1
+    connect J1.gnd  -> C8.p2
+
+    group "ESP32-WROOM-32" color "#b8860b" {
+      component U3: mcu       "esp32_wroom_32"
+      component C9: capacitor "c_generic_0603" value "100nF" { placement_hint { near: "U3" priority: hard } }
+      component C10: capacitor "c_generic_0603" value "1uF"  { placement_hint { near: "U3" priority: hard } }
+      component R3: resistor  "r_generic_0603" value "10k"
+      component R4: resistor  "r_generic_0603" value "10k"
+      component SW1: switch   "spst_tactile"
+      component SW2: switch   "spst_tactile"
+      component D3: led       "led_green_0603"
+      component R5: resistor  "r_generic_0603" value "1k"
+      notes "" {
+        "EN is pulled up through R3 and pulled to ground by SW1: that is the"
+        "reset. IO0 is pulled up through R4 and pulled down by SW2, which is"
+        "the bootloader strap. Both are deliberate: an ESP32 that cannot be"
+        "put into download mode is a board you can only program once."
+      }
+    }
+
+    connect U1.vout -> U3.vdd
+    connect J1.gnd  -> U3.gnd
+    connect U1.vout -> C3.p1
+    connect J1.gnd  -> C3.p2
+    connect U3.vdd  -> C9.p1
+    connect U3.gnd  -> C9.p2
+    connect U3.vdd  -> C10.p1
+    connect U3.gnd  -> C10.p2
+
+    connect U1.vout -> R3.p1
+    connect R3.p2   -> U3.en
+    connect U3.en   -> SW1.p1
+    connect J1.gnd  -> SW1.p2
+
+    connect U1.vout -> R4.p1
+    connect R4.p2   -> U3.io0
+    connect U3.io0  -> SW2.p1
+    connect J1.gnd  -> SW2.p2
+
+    connect U2.txd -> U3.io3_rx
+    connect U2.rxd -> U3.io1_tx
+
+    connect U3.io2   -> R5.p1
+    connect R5.p2    -> D3.anode
+    connect J1.gnd   -> D3.cathode
+
+    group "I2C EXPANSION" color "#6b7280" {
+      component J2: connector "header_1x4"
+      component R6: resistor  "r_generic_0603" value "4.7k"
+      component R7: resistor  "r_generic_0603" value "4.7k"
+      notes "" {
+        "The sensor bus is brought out rather than populated, so the board"
+        "qualifies the radio and the clock without a sensor's pin map"
+        "standing in the way."
+      }
+    }
+
+    connect U1.vout     -> J2.p1
+    connect J1.gnd      -> J2.p2
+    connect U3.io21_sda -> J2.p3
+    connect U3.io22_scl -> J2.p4
+    connect U1.vout     -> R6.p1
+    connect R6.p2       -> U3.io21_sda
+    connect U1.vout     -> R7.p1
+    connect R7.p2       -> U3.io22_scl
+
+    // The module's antenna overhangs the board edge; nothing may sit under it.
+    keepout antenna_clearance {
+      radius 12mm
+    }
+  }

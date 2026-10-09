@@ -1,0 +1,146 @@
+// Class A, positive 1 of 3 — #39 case "MCU + SWD/JTAG + crystal + reset + status LED"
+//
+// A minimal RP2350 debug target: USB-C power into a 3V3 LDO, the MCU's own
+// crystal, a tactile reset on RUN, a 3-pin SWD header, QSPI boot flash, and
+// one status LED. Deliberately no USB data path — that belongs to Class B.
+//
+// Four layers, because two cannot be routed. The RP2350's QFN-60 has a
+// 0.4 mm pitch and leaves 0.2 mm between pads, while a via at JLCPCB's
+// standard floor needs 0.687 mm between centres: the drill that would fit
+// between two pins is 0.013 mm. Synth's escape analysis and
+// KiCadRoutingTools agree independently — "0/1 signals escaped ... the
+// smallest the fab ladder reaches is 0.56 mm" — and the analysis names 4
+// layers as the remedy. The Raspberry Pi Pico 2 is a four-layer board for
+// the same reason. This was declared `layers 2` and was unroutable.
+board "a1_rp2350_debug_target" {
+    layers 4
+    manufacturer "jlcpcb"
+
+    group "POWER ENTRY" color "#c2410c" {
+      component J1: connector "usb_c_receptacle"
+      component R1: resistor  "r_generic_0603" value "5.1k"
+      component R2: resistor  "r_generic_0603" value "5.1k"
+      component U1: regulator "ams1117_3v3" value "AMS1117-3.3"
+      component C1: capacitor "c_generic_0805" value "22uF"
+      component C2: capacitor "c_generic_0805" value "22uF"
+      notes "" {
+        "VBUS 5 V in, 3V3 out. CC1/CC2 pulled down 5.1k each: advertises a 5 V sink."
+      }
+    }
+
+    connect J1.vbus -> U1.vin
+    connect J1.gnd  -> U1.gnd
+    connect J1.cc1  -> R1.p1
+    connect J1.gnd  -> R1.p2
+    connect J1.cc2  -> R2.p1
+    connect J1.gnd  -> R2.p2
+    connect U1.vin  -> C1.p1
+    connect U1.gnd  -> C1.p2
+    connect U1.vout -> C2.p1
+    connect U1.gnd  -> C2.p2
+
+    group "RP2350 CORE" color "#0072b2" {
+      component U2: mcu       "rp2350"
+      component C3: capacitor "c_generic_0603" value "100nF" { placement_hint { near: "U2" priority: hard } }
+      component C4: capacitor "c_generic_0603" value "100nF" { placement_hint { near: "U2" priority: hard } }
+      component C5: capacitor "c_generic_0603" value "100nF" { placement_hint { near: "U2" priority: hard } }
+      component C6: capacitor "c_generic_0603" value "100nF" { placement_hint { near: "U2" priority: hard } }
+      component C7: capacitor "c_generic_0603" value "1uF"   { placement_hint { near: "U2" priority: hard } }
+      component L1: inductor  "l_generic_0603" value "3.3uH" { placement_hint { near: "U2" priority: hard } }
+      component C8: capacitor "c_generic_0805" value "4.7uF" { placement_hint { near: "U2" priority: hard } }
+      notes "" {
+        "Core rail comes from the RP2350's own switching regulator: VREG_VIN"
+        "from 3V3, VREG_LX through L1 into DVDD, VREG_FB sensing DVDD."
+      }
+    }
+
+    connect U1.vout -> U2.iovdd
+    connect U1.vout -> U2.iovdd2
+    connect U1.vout -> U2.iovdd3
+    connect U1.vout -> U2.qspi_iovdd
+    connect U1.vout -> U2.usb_otp_vdd
+    connect U1.vout -> U2.adc_avdd
+    connect U1.vout -> U2.vreg_avdd
+    connect U1.vout -> U2.vreg_vin
+    connect U1.gnd  -> U2.gnd
+    connect U1.gnd  -> U2.vreg_pgnd
+
+    connect U2.iovdd      -> C3.p1
+    connect U2.gnd        -> C3.p2
+    connect U2.iovdd2     -> C4.p1
+    connect U2.gnd        -> C4.p2
+    connect U2.qspi_iovdd -> C5.p1
+    connect U2.gnd        -> C5.p2
+    connect U2.adc_avdd   -> C6.p1
+    connect U2.gnd        -> C6.p2
+    connect U2.vreg_avdd  -> C7.p1
+    connect U2.gnd        -> C7.p2
+
+    connect U2.vreg_lx -> L1.p1
+    connect L1.p2      -> U2.dvdd
+    connect U2.dvdd    -> U2.vreg_fb
+    connect U2.dvdd    -> C8.p1
+    connect U2.gnd     -> C8.p2
+    connect U2.dvdd    -> U2.dvdd2
+    connect U2.dvdd    -> U2.dvdd3
+
+    group "CLOCK AND RESET" color "#7c3aed" {
+      component Y1: crystal   "xtal_8mhz" value "12MHz"
+      component C9: capacitor "c_generic_0603" value "15pF" { placement_hint { near: "Y1" priority: hard } }
+      component C10: capacitor "c_generic_0603" value "15pF" { placement_hint { near: "Y1" priority: hard } }
+      component SW1: switch    "spst_tactile"
+      component R3: resistor   "r_generic_0603" value "10k"
+      component C11: capacitor "c_generic_0603" value "100nF"
+      notes "" {
+        "RUN is pulled up 10k and pulled low by SW1. C11 debounces the edge."
+      }
+    }
+
+    connect U2.xin  -> Y1.p1
+    connect U2.xout -> Y1.p2
+    connect Y1.p1   -> C9.p1
+    connect U1.gnd  -> C9.p2
+    connect Y1.p2   -> C10.p1
+    connect U1.gnd  -> C10.p2
+
+    connect U1.vout -> R3.p1
+    connect R3.p2   -> U2.run
+    connect U2.run  -> SW1.p1
+    connect SW1.p2  -> U1.gnd
+    connect U2.run  -> C11.p1
+    connect U1.gnd  -> C11.p2
+
+    group "BOOT FLASH" color "#0a7d4a" {
+      component U3: memory    "w25q128_flash"
+      component C12: capacitor "c_generic_0603" value "100nF" { placement_hint { near: "U3" priority: hard } }
+    }
+
+    connect U1.vout -> U3.vcc
+    connect U1.gnd  -> U3.gnd
+    connect U3.vcc  -> C12.p1
+    connect U3.gnd  -> C12.p2
+    connect U2.qspi_sclk -> U3.clk
+    connect U2.qspi_ss   -> U3.cs
+    connect U2.qspi_sd0  -> U3.io0
+    connect U2.qspi_sd1  -> U3.io1
+    connect U2.qspi_sd2  -> U3.io2
+    connect U2.qspi_sd3  -> U3.io3
+
+    group "SWD AND STATUS" color "#b45309" {
+      component J2: connector "header_1x3"
+      component D1: led       "led_green_0603"
+      component R4: resistor  "r_generic_0603" value "1k"
+      notes "" {
+        "SWD header in probe pin order: SWCLK / GND / SWDIO."
+        "Status LED on GP25 at ~1 mA, sized for 3V3 through 1k."
+      }
+    }
+
+    connect U2.swclk -> J2.p1
+    connect U1.gnd   -> J2.p2
+    connect U2.swdio -> J2.p3
+
+    connect U2.gp25  -> R4.p1
+    connect R4.p2    -> D1.anode
+    connect D1.cathode -> U1.gnd
+  }

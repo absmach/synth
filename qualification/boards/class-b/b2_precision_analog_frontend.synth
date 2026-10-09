@@ -1,0 +1,144 @@
+// Class B, positive 2 of 3 — #38 case "Precision analog front end with
+// sensitive nets, AGND/DGND intent, shielding/keepout, and ADC interface"
+//
+// A two-channel instrumentation front end: differential input, anti-alias
+// filtering, a buffered reference, and an SPI ADC read by an MCU. The analog
+// section is kept in its own keepout with its own netclass, and AGND is
+// declared as a separate net joined to DGND at one point.
+board "b2_precision_analog_frontend" {
+    layers 4
+    manufacturer "jlcpcb"
+
+    stackup {
+      copper 0.035mm
+      insulator 0.2104mm er 4.4 material "FR4"
+      copper 0.0152mm
+      insulator 1.065mm er 4.6 material "FR4"
+      copper 0.0152mm
+      insulator 0.2104mm er 4.4 material "FR4"
+      copper 0.035mm
+    }
+
+    netclass "ANALOG" {
+      trace_width 0.25mm
+      clearance 0.4mm
+    }
+
+    netclass "PWR" {
+      trace_width 0.6mm
+      clearance 0.25mm
+    }
+
+    group "RAILS" color "#c2410c" {
+      component J1: connector "jst_xh_2pin"
+      component U1: regulator "ams1117_5v" value "AMS1117-5.0"
+      component U2: regulator "lp5907_3v3" value "LP5907-3.3"
+      component L1: inductor  "ferrite_bead_0603" value "600R"
+      component C1: capacitor "c_generic_0805" value "22uF"
+      component C2: capacitor "c_generic_0805" value "10uF"
+      component C3: capacitor "c_generic_0603" value "1uF"
+      component C4: capacitor "c_generic_0603" value "100nF"
+      notes "" {
+        "Digital 5 V from the AMS1117; the analog 3V3 comes from the LP5907"
+        "behind a ferrite bead, so ADC reference noise is not shared with the"
+        "MCU's switching currents."
+      }
+    }
+
+    connect J1.p1 -> U1.vin
+    connect J1.p2 -> U1.gnd
+    connect U1.vin  -> C1.p1
+    connect U1.gnd  -> C1.p2
+    connect U1.vout -> C2.p1
+    connect U1.gnd  -> C2.p2
+
+    connect U1.vout -> L1.p1
+    connect L1.p2   -> U2.vin
+    connect U2.vin  -> U2.en
+    connect J1.p2   -> U2.gnd
+    connect U2.vin  -> C3.p1
+    connect U2.gnd  -> C3.p2
+    connect U2.vout -> C4.p1
+    connect U2.gnd  -> C4.p2
+
+    group "ANALOG FRONT END" color "#0a7d4a" {
+      component J2: connector "jst_ph_3pin"
+      component U3: opamp     "mcp6022_dual"
+      component R1: resistor  "r_generic_0603" value "10k"
+      component R2: resistor  "r_generic_0603" value "10k"
+      component R3: resistor  "r_generic_0603" value "100k"
+      component R4: resistor  "r_generic_0603" value "100k"
+      component C5: capacitor "c_generic_0603" value "1nF"
+      component C6: capacitor "c_generic_0603" value "1nF"
+      component C7: capacitor "c_generic_0603" value "100nF" { placement_hint { near: "U3" priority: hard } }
+      component C8: capacitor "c_generic_0603" value "10uF"  { placement_hint { near: "U3" priority: hard } }
+      notes "" {
+        "Channel A is the gain stage, R3/R1 setting x10. C5 across the"
+        "feedback leg is the anti-alias pole, placed ahead of the ADC rather"
+        "than after it. Channel B buffers the mid-rail bias so a single-supply"
+        "input can swing both ways."
+        "Sensitive nets are in the ANALOG netclass: wider clearance, narrow"
+        "traces, and they stay inside the analog keepout."
+      }
+    }
+
+    connect U2.vout -> U3.vdd
+    connect J1.p2   -> U3.vss
+    connect U3.vdd  -> C7.p1
+    connect U3.vss  -> C7.p2
+    connect U3.vdd  -> C8.p1
+    connect U3.vss  -> C8.p2
+
+    connect J2.p1 -> R1.p1
+    connect R1.p2 -> U3.in_a_neg
+    connect U3.in_a_neg -> R3.p1
+    connect R3.p2 -> U3.out_a
+    connect U3.in_a_neg -> C5.p1
+    connect C5.p2 -> U3.out_a
+
+    connect U2.vout -> R4.p1
+    connect R4.p2   -> U3.in_b_pos
+    connect U3.in_b_pos -> R2.p1
+    connect R2.p2   -> J1.p2
+    connect U3.in_b_pos -> C6.p1
+    connect J1.p2   -> C6.p2
+    connect U3.out_b -> U3.in_b_neg
+    connect U3.out_b -> U3.in_a_pos
+    connect J2.p3 -> J1.p2
+
+    group "ADC AND MCU" color "#0072b2" {
+      component U4: memory    "23lc1024_sram"
+      component U5: mcu       "atmega328p"
+      component C9: capacitor "c_generic_0603" value "100nF" { placement_hint { near: "U5" priority: hard } }
+      component C10: capacitor "c_generic_0603" value "100nF" { placement_hint { near: "U4" priority: hard } }
+      component R5: resistor  "r_generic_0603" value "10k"
+      notes "" {
+        "The registry has no SPI ADC part, so the SPI peripheral here is an"
+        "SRAM standing in for the converter's bus interface: same four-wire"
+        "topology, same chip-select and decoupling requirements. See the"
+        "qualification notes — this is a stated limitation of the board, not"
+        "a claim that an ADC was verified."
+      }
+    }
+
+    connect U1.vout -> U5.vcc
+    connect J1.p2   -> U5.gnd
+    connect U5.vcc  -> C9.p1
+    connect U5.gnd  -> C9.p2
+    connect U1.vout -> R5.p1
+    connect R5.p2   -> U5.reset
+
+    connect U1.vout -> U4.vcc
+    connect J1.p2   -> U4.gnd
+    connect U4.vcc  -> C10.p1
+    connect U4.gnd  -> C10.p2
+
+    connect U5.pb5_sck  -> U4.sck
+    connect U5.pb3_mosi -> U4.mosi
+    connect U5.pb4_miso -> U4.miso
+    connect U5.pb2_ss   -> U4.cs
+
+    keepout analog_section {
+      radius 10mm
+    }
+  }

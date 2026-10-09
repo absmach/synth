@@ -1,0 +1,111 @@
+// Class A, positive 3 of 3 — #39 case "Protected power-entry board with
+// reverse-polarity and over-current components"
+//
+// A power front end on its own board: barrel/JST 12 V in, reverse-polarity
+// P-FET, resettable over-current, TVS clamp, a buck down to 5 V, a soft-start
+// load switch, and a 3V3 rail for logic. No MCU — this board exists to be
+// reviewed as a power stage.
+board "a3_protected_power_entry" {
+    layers 2
+    manufacturer "jlcpcb"
+
+    group "INPUT PROTECTION" color "#c2410c" {
+      component J1: connector  "jst_xh_2pin"
+      component Q1: transistor "p_mosfet_si2301"
+      component R1: resistor   "r_generic_0603" value "100k"
+      component D1: diode      "d_zener_5v1" value "12V"
+      component F1: fuse       "polyfuse" value "1.5A"
+      component D2: diode      "tvs_array_5v" value "SMAJ15A"
+      component C1: capacitor  "c_generic_0805" value "22uF"
+      notes "" {
+        "Reverse-polarity P-FET in the high side: source to the input, drain to"
+        "the protected rail, gate held down through R1 so it enhances only on"
+        "correct polarity. D1 clamps Vgs. F1 is the resettable over-current"
+        "element and D2 the surge clamp."
+      }
+    }
+
+    connect J1.p1 -> Q1.s
+    connect Q1.d  -> F1.p1
+    connect Q1.g  -> R1.p1
+    connect R1.p2 -> J1.p2
+    connect Q1.g  -> D1.cathode
+    connect D1.anode -> J1.p2
+    connect F1.p2 -> D2.ch1
+    connect J1.p2 -> D2.gnd
+    connect F1.p2 -> C1.p1
+    connect J1.p2 -> C1.p2
+
+    group "12V TO 5V BUCK" color "#0072b2" {
+      component U1: regulator "mp2307_buck" value "MP2307"
+      component L1: inductor  "l_generic_1210" value "6.8uH"
+      component C2: capacitor "c_generic_0805" value "22uF"
+      component C3: capacitor "c_generic_0805" value "22uF"
+      component R2: resistor  "r_generic_0603" value "10k"
+      component R3: resistor  "r_generic_0603" value "3.16k"
+      component C4: capacitor "c_generic_0603" value "100nF" { placement_hint { near: "U1" priority: hard } }
+      notes "" {
+        "Feedback divider R2/R3 sets 5 V from the 0.925 V reference."
+        "Divider sits at the output capacitor, not at the inductor node."
+      }
+    }
+
+    connect F1.p2   -> U1.in
+    connect J1.p2   -> U1.gnd
+    connect U1.in   -> C4.p1
+    connect U1.gnd  -> C4.p2
+    connect U1.in   -> C2.p1
+    connect U1.gnd  -> C2.p2
+    connect U1.sw   -> L1.p1
+    connect L1.p2   -> C3.p1
+    connect J1.p2   -> C3.p2
+    connect L1.p2   -> R2.p1
+    connect R2.p2   -> U1.fb
+    connect U1.fb   -> R3.p1
+    connect R3.p2   -> J1.p2
+    connect U1.bs   -> L1.p1
+    connect U1.en   -> U1.in
+
+    group "SWITCHED 5V OUTPUT" color "#7c3aed" {
+      component U2: regulator "tps22918_loadswitch"
+      component R4: resistor  "r_generic_0603" value "100k"
+      component C5: capacitor "c_generic_0603" value "10nF"
+      component J2: connector "header_1x3"
+      notes "" {
+        "Soft start: CT sets the slew so a capacitive load does not brown out"
+        "the buck at turn-on. ON is pulled up, so the rail comes up by default."
+      }
+    }
+
+    connect L1.p2  -> U2.vin
+    connect J1.p2  -> U2.gnd
+    connect U2.vin -> R4.p1
+    connect R4.p2  -> U2.on
+    connect U2.ct  -> C5.p1
+    connect J1.p2  -> C5.p2
+    connect U2.vout -> J2.p1
+    connect J1.p2   -> J2.p2
+    connect U2.vout -> J2.p3
+
+    group "3V3 LOGIC RAIL" color "#0a7d4a" {
+      component U3: regulator "ams1117_3v3" value "AMS1117-3.3"
+      component C6: capacitor "c_generic_0805" value "10uF"
+      component C7: capacitor "c_generic_0603" value "100nF" { placement_hint { near: "U3" priority: hard } }
+      component D3: led       "led_green_0603"
+      component R5: resistor  "r_generic_0603" value "1k"
+      notes "" {
+        "Housekeeping rail for whatever carries this front end, with a"
+        "power-good indicator sized for ~1 mA."
+      }
+    }
+
+    connect U2.vout -> U3.vin
+    connect J1.p2   -> U3.gnd
+    connect U3.vin  -> C6.p1
+    connect U3.gnd  -> C6.p2
+    connect U3.vout -> C7.p1
+    connect U3.gnd  -> C7.p2
+    connect U3.vout -> R5.p1
+    connect R5.p2   -> D3.anode
+    connect D3.cathode -> U3.gnd
+  }

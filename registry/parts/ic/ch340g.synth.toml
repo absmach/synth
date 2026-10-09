@@ -6,7 +6,9 @@ description = "WCH CH340G USB to UART bridge controller, SOP-16"
 mpn = "CH340G"
 lcsc_pn = "C14267"
 kicad_symbol = "Interface_USB:CH340C"
-kicad_footprint = "Package_SO:SOP-16_3.9x9.9mm_P1.27mm"
+# `Package_SO:SOP-16_3.9x9.9mm_P1.27mm` is in no KiCad library; the
+# footprint resolver was repairing the name to this one on every run.
+kicad_footprint = "Package_SO:STC_SOP-16_3.9x9.9mm_P1.27mm"
 
 [footprint_dimensions]
 width_mm = 5.0
@@ -45,12 +47,14 @@ required = true
 [[pins]]
 name = "ud_plus"
 number = "5"
-electrical_type = "bidirectional"
+electrical_type = "differential_positive"
+capabilities = ["usb_dp"]
 
 [[pins]]
 name = "ud_minus"
 number = "6"
-electrical_type = "bidirectional"
+electrical_type = "differential_negative"
+capabilities = ["usb_dn"]
 
 [[pins]]
 name = "cts"
@@ -92,6 +96,19 @@ name = "vcc"
 number = "16"
 electrical_type = "power_input"
 required = true
+
+# Pads 7 and 8 are the datasheet's NC pins. They are copper, so the pin
+# map has to account for them even though nothing connects.
+
+[[pins]]
+name = "nc"
+number = "7"
+electrical_type = "do_not_connect"
+
+[[pins]]
+name = "nc_2"
+number = "8"
+electrical_type = "do_not_connect"
 
 [[required_decoupling]]
 net = "vcc"

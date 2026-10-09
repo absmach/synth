@@ -133,4 +133,11 @@ board "secure_tracker" {
   keepout antenna {
     radius 20mm
   }
+
+  // The BQ24074's duplicated power pads and its exposed pad. The part declared
+  // 14 of the VQFN's 17, so these three were invisible; BAT and OUT are each
+  // two pads of the same node, and the exposed pad is the thermal ground.
+  connect U4.bat -> U4.bat_2
+  connect U4.out -> U4.out_2
+  connect U4.vss -> U4.vss_2
 }
