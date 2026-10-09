@@ -16,15 +16,15 @@ electrical_type = "power_input"
 
 [[pins]]
 name = "din"
-number = "2"
+number = "4"
 electrical_type = "input"
 
 [[pins]]
 name = "dout"
-number = "3"
+number = "2"
 electrical_type = "output"
 
 [[pins]]
 name = "gnd"
-number = "4"
+number = "3"
 electrical_type = "power_input"
