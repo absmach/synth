@@ -185,12 +185,14 @@ fn test_rendered_schematic_integrity() {
     }
 
     // 7. Comprehensive Automated Pin Connectivity Validation
-    // For EVERY pin of EVERY component, verify a wire endpoint, power flag, or net label lands within 0.1mm of its terminal coordinate.
+    // Every pin must have a connection within 0.1 mm of its terminal, or an
+    // explicit no-connect marker if the board does not assign it to a net.
     let board = load_reference_board("ref_ldo_sensor");
     let layout = synth_layout::layout(&board);
     let placements_map: std::collections::HashMap<_, _> =
         layout.components.iter().map(|p| (p.id, p)).collect();
     let conn_points = collect_schematic_connection_points(&sch_text);
+    let no_connect_points = collect_schematic_no_connect_points(&sch_text);
 
     for component in &board.components {
         if let Some(part) = component.part.as_ref() {
@@ -199,12 +201,12 @@ fn test_rendered_schematic_integrity() {
                 if let Some((px, py, _, _)) =
                     pin_terminal_xy(&board, component.id, pin_id, &placements_map)
                 {
-                    let connected = conn_points.iter().any(|&(cx, cy): &(f64, f64)| {
-                        (px - cx).abs() <= 0.1 && (py - cy).abs() <= 0.1
-                    });
+                    let has_net = board.nets_containing(component.id, pin_id).next().is_some();
+                    let connected =
+                        pin_is_terminated((px, py), has_net, &conn_points, &no_connect_points);
                     assert!(
                         connected,
-                        "UNCONNECTED PIN DETECTED: Component {} ({}) pin {} ({}) at ({:.2}, {:.2}) has no wire or power flag endpoint!",
+                        "UNCONNECTED PIN DETECTED: Component {} ({}) pin {} ({}) at ({:.2}, {:.2}) has no connection or valid no-connect marker!",
                         component.refdes,
                         part.id.as_str(),
                         pin.number.0,
@@ -262,6 +264,60 @@ fn test_rendered_schematic_integrity() {
             }
         }
     }
+}
+
+fn pin_is_terminated(
+    (px, py): (f64, f64),
+    has_net: bool,
+    connection_points: &[(f64, f64)],
+    no_connect_points: &[(f64, f64)],
+) -> bool {
+    let at_pin = |&(x, y): &(f64, f64)| (px - x).abs() <= 0.1 && (py - y).abs() <= 0.1;
+    connection_points.iter().any(at_pin) || (!has_net && no_connect_points.iter().any(at_pin))
+}
+
+fn collect_schematic_no_connect_points(sch_text: &str) -> Vec<(f64, f64)> {
+    sch_text
+        .split("\n\t(")
+        .filter(|block| block.starts_with("no_connect\n"))
+        .filter_map(|block| {
+            let (_, at) = block.split_once("(at ")?;
+            let mut tokens = at.split_whitespace();
+            let x = tokens.next()?.trim_end_matches(')').parse().ok()?;
+            let y = tokens.next()?.trim_end_matches(')').parse().ok()?;
+            Some((x, y))
+        })
+        .collect()
+}
+
+#[test]
+fn no_connect_markers_only_terminate_pins_without_nets() {
+    let schematic = synth_kicad::sexp::Sexp::list(
+        "kicad_sch",
+        vec![synth_kicad::pin_reconcile::no_connect_sexp(
+            132.08,
+            50.8,
+            "unused-pin",
+        )],
+    )
+    .to_string_pretty();
+    let no_connect_points = collect_schematic_no_connect_points(&schematic);
+    let pin = (132.08, 50.8);
+
+    assert!(pin_is_terminated(pin, false, &[], &no_connect_points));
+    assert!(
+        !pin_is_terminated(pin, true, &[], &no_connect_points),
+        "a no-connect marker must not hide a missing connection on a netlisted pin"
+    );
+    assert!(
+        !pin_is_terminated(pin, false, &[], &[]),
+        "an unused pin still needs an explicit no-connect marker"
+    );
+    assert!(
+        !pin_is_terminated((132.08, 52.07), false, &[], &no_connect_points),
+        "a marker on another pin must not satisfy the check"
+    );
+    assert!(pin_is_terminated(pin, true, &[pin], &[]));
 }
 
 fn collect_schematic_wire_segments(sch_text: &str) -> Vec<((f64, f64), (f64, f64))> {
