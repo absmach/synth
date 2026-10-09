@@ -2122,15 +2122,8 @@ pub fn body_size_for_part(part: &synth_registry::Part) -> (f64, f64) {
         return (7.62, 4.0);
     }
     let sides: Vec<PinSide> = part.pins.iter().map(classify_ic_pin_layout).collect();
-    let top_n = sides.iter().filter(|s| **s == PinSide::Top).count();
-    let bottom_n = sides.iter().filter(|s| **s == PinSide::Bottom).count();
-    let left_n = sides.iter().filter(|s| **s == PinSide::Left).count();
-    let right_n = sides.iter().filter(|s| **s == PinSide::Right).count();
-    let horiz_max = top_n.max(bottom_n).max(2);
-    let vert_max = left_n.max(right_n).max(2);
-    let w = ((horiz_max as f64) * 2.54 + 2.0 * 2.54).max(15.24);
-    let h = ((vert_max as f64) * 2.54 + 2.0 * 2.54).max(10.16);
-    (w, h)
+    let body = route::synthesized_body(&sides);
+    (body.width, body.height)
 }
 
 /// PCB footprint courtyard size for a part, in millimetres.

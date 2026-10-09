@@ -126,6 +126,36 @@ pub fn classify_ic_pin(pin: &Pin) -> PinSide {
     PinSide::Left
 }
 
+/// Rectangle of a synthesized (no `kicad_symbol`) IC body, plus the
+/// inset of its first top/bottom pin from the body's left edge.
+///
+/// **Single source of truth** for the router, the symbol library, the
+/// schematic field placement and the preview: every one of them has to
+/// agree on where a pin tip lands, or the wire stub stops short of it.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct SynthesizedBody {
+    pub width: f64,
+    pub height: f64,
+    pub corner_pad: f64,
+}
+
+pub fn synthesized_body(sides: &[PinSide]) -> SynthesizedBody {
+    let count = |wanted| sides.iter().filter(|s| **s == wanted).count();
+    let (left, right) = (count(PinSide::Left), count(PinSide::Right));
+    let horiz_max = count(PinSide::Top).max(count(PinSide::Bottom)).max(2);
+    let vert_max = left.max(right).max(2);
+    let corner_pad = if left > 0 || right > 0 {
+        PIN_PITCH * 2.0
+    } else {
+        BODY_PIN_PADDING
+    };
+    SynthesizedBody {
+        width: ((horiz_max as f64) * PIN_PITCH + 2.0 * corner_pad).max(BODY_HALF_WIDTH * 2.0),
+        height: ((vert_max as f64) * PIN_PITCH + 2.0 * BODY_PIN_PADDING).max(MIN_BODY_HEIGHT),
+        corner_pad,
+    }
+}
+
 /// Whether a part is drawn and routed as a bare two-pin symbol.
 ///
 /// **This is the single source of truth**, and the list is written
@@ -257,16 +287,11 @@ fn endpoint_xy(
         }
     } else {
         let sides: Vec<PinSide> = part.pins.iter().map(classify_ic_pin).collect();
-        let top_n = sides.iter().filter(|s| **s == PinSide::Top).count();
-        let bottom_n = sides.iter().filter(|s| **s == PinSide::Bottom).count();
-        let left_n = sides.iter().filter(|s| **s == PinSide::Left).count();
-        let right_n = sides.iter().filter(|s| **s == PinSide::Right).count();
-
-        let horiz_max = top_n.max(bottom_n).max(2);
-        let vert_max = left_n.max(right_n).max(2);
-        let body_w =
-            ((horiz_max as f64) * PIN_PITCH + 2.0 * BODY_PIN_PADDING).max(BODY_HALF_WIDTH * 2.0);
-        let body_h = ((vert_max as f64) * PIN_PITCH + 2.0 * BODY_PIN_PADDING).max(MIN_BODY_HEIGHT);
+        let SynthesizedBody {
+            width: body_w,
+            height: body_h,
+            corner_pad,
+        } = synthesized_body(&sides);
         let bx = cx - body_w / 2.0;
         let by = cy - body_h / 2.0;
 
@@ -275,11 +300,6 @@ fn endpoint_xy(
         let mut left_idx = 0_usize;
         let mut right_idx = 0_usize;
 
-        let corner_pad = if left_n > 0 || right_n > 0 {
-            PIN_PITCH * 2.0
-        } else {
-            BODY_PIN_PADDING
-        };
         for (i, &side) in sides.iter().enumerate() {
             let px;
             let py;
