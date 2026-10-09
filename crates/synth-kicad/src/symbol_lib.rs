@@ -25,7 +25,7 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use synth_ir::Board;
-use synth_layout::route::is_two_pin_symbol_kind;
+use synth_layout::route::{is_two_pin_symbol_kind, synthesized_body};
 use synth_layout::PinSide;
 use synth_registry::{ElectricalType, Part};
 
@@ -33,20 +33,12 @@ use synth_layout::kicad_lib_loader;
 
 use crate::sexp::{num, pair, str_pair, Sexp};
 
-/// Width of the symbol body in millimetres. Half-widths land at
-/// ±`BODY_HALF_WIDTH`.
-const BODY_HALF_WIDTH: f64 = 7.62; // 0.3" — KiCad symbol convention.
-
 /// Spacing between pins along the body's left edge.
 const PIN_PITCH: f64 = 2.54;
 
 /// How far the pin tip extends from the body. `length = 2.54 mm`
 /// puts the pin tip at `x = -10.16 mm`.
 const PIN_LENGTH: f64 = 2.54;
-
-/// Minimum body height regardless of pin count (so single-pin
-/// stubs are still readable).
-const MIN_BODY_HEIGHT: f64 = 10.16;
 
 const BODY_PIN_PADDING: f64 = 2.54;
 const TWOPIN_HALF_W: f64 = 5.08;
@@ -410,21 +402,8 @@ fn build_symbol(part: &Part, alternates: Option<&BTreeMap<String, BTreeSet<Strin
         (TWOPIN_HALF_W * 2.0, 4.0, true)
     } else {
         let sides: Vec<PinSide> = part.pins.iter().map(classify_ic_pin).collect();
-        let top_n = sides.iter().filter(|s| **s == PinSide::Top).count();
-        let bottom_n = sides.iter().filter(|s| **s == PinSide::Bottom).count();
-        let left_n = sides.iter().filter(|s| **s == PinSide::Left).count();
-        let right_n = sides.iter().filter(|s| **s == PinSide::Right).count();
-
-        let horiz_max = top_n.max(bottom_n).max(2);
-        let vert_max = left_n.max(right_n).max(2);
-        let corner_pad = if left_n > 0 || right_n > 0 {
-            PIN_PITCH * 2.0
-        } else {
-            BODY_PIN_PADDING
-        };
-        let w = ((horiz_max as f64) * PIN_PITCH + 2.0 * corner_pad).max(BODY_HALF_WIDTH * 2.0);
-        let h = ((vert_max as f64) * PIN_PITCH + 2.0 * BODY_PIN_PADDING).max(MIN_BODY_HEIGHT);
-        (w, h, false)
+        let body = synthesized_body(&sides);
+        (body.width, body.height, false)
     };
 
     let top = body_h / 2.0;
@@ -540,13 +519,7 @@ fn build_pins_subsymbol(
         }
     } else {
         let sides: Vec<PinSide> = pins.iter().map(classify_ic_pin).collect();
-        let left_n = sides.iter().filter(|s| **s == PinSide::Left).count();
-        let right_n = sides.iter().filter(|s| **s == PinSide::Right).count();
-        let corner_pad = if left_n > 0 || right_n > 0 {
-            PIN_PITCH * 2.0
-        } else {
-            BODY_PIN_PADDING
-        };
+        let corner_pad = synthesized_body(&sides).corner_pad;
 
         let bx = -body_w / 2.0;
         let by_top = body_h / 2.0;

@@ -79,7 +79,7 @@ use crate::uuid_v5::derive_entity_uuid;
 pub use synth_layout::route::pin_terminal_xy;
 use synth_layout::route::{
     classify_ic_pin, is_two_pin_symbol_kind, natural_rotation_offset, snap_grid_127,
-    BODY_HALF_WIDTH, BODY_PIN_PADDING, MIN_BODY_HEIGHT, PIN_LENGTH, PIN_PITCH, TWOPIN_HALF_W,
+    synthesized_body, PIN_LENGTH, TWOPIN_HALF_W,
 };
 
 /// Build the entire `.kicad_sch` s-expression for `board`.
@@ -2002,17 +2002,8 @@ fn build_symbol_unit(
         }
     } else {
         let sides: Vec<PinSide> = part.pins.iter().map(classify_ic_pin).collect();
-        let top_n = sides.iter().filter(|s| **s == PinSide::Top).count();
-        let bottom_n = sides.iter().filter(|s| **s == PinSide::Bottom).count();
-        let left_n = sides.iter().filter(|s| **s == PinSide::Left).count();
-        let right_n = sides.iter().filter(|s| **s == PinSide::Right).count();
-
-        let horiz_max = top_n.max(bottom_n).max(2);
-        let vert_max = left_n.max(right_n).max(2);
-        let w =
-            ((horiz_max as f64) * PIN_PITCH + 2.0 * BODY_PIN_PADDING).max(BODY_HALF_WIDTH * 2.0);
-        let h = ((vert_max as f64) * PIN_PITCH + 2.0 * BODY_PIN_PADDING).max(MIN_BODY_HEIGHT);
-        (w, h)
+        let body = synthesized_body(&sides);
+        (body.width, body.height)
     };
 
     let body_top = y - body_h / 2.0;
