@@ -22,6 +22,7 @@ max_current_ma = 3.0
 name = "ro"
 number = "1"
 electrical_type = "output"
+capabilities = ["uart_tx"]
 
 [[pins]]
 name = "re_n"
@@ -37,6 +38,7 @@ electrical_type = "input"
 name = "di"
 number = "4"
 electrical_type = "input"
+capabilities = ["uart_rx"]
 
 [[pins]]
 name = "gnd"
