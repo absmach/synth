@@ -26,7 +26,7 @@ members = [
 ]
 
 [workspace.package]
-version = "0.1.0"
+version = "0.1.1"
 edition = "2021"
 rust-version = "1.85"
 license = "Apache-2.0"
@@ -95,27 +95,27 @@ include_dir = "0.7"
 schemars = "1.2"
 
 # Workspace crates referenced by path
-synth-diagnostics = { path = "crates/synth-diagnostics", version = "0.1.0" }
-synth-ast = { path = "crates/synth-ast", version = "0.1.0" }
-synth-parser = { path = "crates/synth-parser", version = "0.1.0" }
-synth-ir = { path = "crates/synth-ir", version = "0.1.0" }
-synth-geometry = { path = "crates/synth-geometry", version = "0.1.0" }
-synth-layout = { path = "crates/synth-layout", version = "0.1.0" }
-synth-registry = { path = "crates/synth-registry", version = "0.1.0" }
-synth-knowledge = { path = "crates/synth-knowledge", version = "0.1.0" }
-synth-validate = { path = "crates/synth-validate", version = "0.1.0" }
-synth-kicad = { path = "crates/synth-kicad", version = "0.1.0" }
-synth-place = { path = "crates/synth-place", version = "0.1.0" }
-synth-route = { path = "crates/synth-route", version = "0.1.0" }
-synth-router = { path = "crates/synth-router", version = "0.1.0" }
-synth-pcb = { path = "crates/synth-pcb", version = "0.1.0" }
-synth-drc = { path = "crates/synth-drc", version = "0.1.0" }
-synth-web = { path = "crates/synth-web", version = "0.1.0" }
-synth-mcp = { path = "crates/synth-mcp", version = "0.1.0" }
-synth-render = { path = "crates/synth-render", version = "0.1.0" }
-synth-smt = { path = "crates/synth-smt", version = "0.1.0" }
-synth-connectivity = { path = "crates/synth-connectivity", version = "0.1.0" }
-synth-supply = { path = "crates/synth-supply", version = "0.1.0" }
+synth-diagnostics = { path = "crates/synth-diagnostics", version = "0.1.1" }
+synth-ast = { path = "crates/synth-ast", version = "0.1.1" }
+synth-parser = { path = "crates/synth-parser", version = "0.1.1" }
+synth-ir = { path = "crates/synth-ir", version = "0.1.1" }
+synth-geometry = { path = "crates/synth-geometry", version = "0.1.1" }
+synth-layout = { path = "crates/synth-layout", version = "0.1.1" }
+synth-registry = { path = "crates/synth-registry", version = "0.1.1" }
+synth-knowledge = { path = "crates/synth-knowledge", version = "0.1.1" }
+synth-validate = { path = "crates/synth-validate", version = "0.1.1" }
+synth-kicad = { path = "crates/synth-kicad", version = "0.1.1" }
+synth-place = { path = "crates/synth-place", version = "0.1.1" }
+synth-route = { path = "crates/synth-route", version = "0.1.1" }
+synth-router = { path = "crates/synth-router", version = "0.1.1" }
+synth-pcb = { path = "crates/synth-pcb", version = "0.1.1" }
+synth-drc = { path = "crates/synth-drc", version = "0.1.1" }
+synth-web = { path = "crates/synth-web", version = "0.1.1" }
+synth-mcp = { path = "crates/synth-mcp", version = "0.1.1" }
+synth-render = { path = "crates/synth-render", version = "0.1.1" }
+synth-smt = { path = "crates/synth-smt", version = "0.1.1" }
+synth-connectivity = { path = "crates/synth-connectivity", version = "0.1.1" }
+synth-supply = { path = "crates/synth-supply", version = "0.1.1" }
 
 [profile.release]
 lto = "thin"
