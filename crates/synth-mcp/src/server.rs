@@ -91,7 +91,7 @@ pub fn handle_jsonrpc_request(req: Value, default_registry: Option<&Path>) -> Va
                 },
                 "serverInfo": {
                     "name": "synth-mcp",
-                    "version": "0.1.0"
+                    "version": "0.1.1"
                 },
                 "instructions": SERVER_INSTRUCTIONS
             }
