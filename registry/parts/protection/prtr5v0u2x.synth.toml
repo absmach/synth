@@ -1,0 +1,41 @@
+id = "prtr5v0u2x"
+kind = "diode"
+version = 0
+lifecycle = "active"
+description = "Nexperia PRTR5V0U2X ultra low capacitance (1 pF) 2-line rail-to-rail ESD protection for USB 2.0 data lines, SOT143B"
+mpn = "PRTR5V0U2X"
+kicad_symbol = "Power_Protection:PRTR5V0U2X"
+kicad_footprint = "Package_TO_SOT_SMD:SOT-143"
+
+[footprint_dimensions]
+width_mm = 3.2
+height_mm = 3.4
+courtyard_margin_mm = 0.25
+
+[operating_conditions]
+max_voltage_v = 5.5
+
+[[pins]]
+name = "gnd"
+number = "1"
+electrical_type = "passive"
+required = true
+
+[[pins]]
+name = "io1"
+number = "2"
+electrical_type = "passive"
+
+[[pins]]
+name = "io2"
+number = "3"
+electrical_type = "passive"
+
+[[pins]]
+name = "vcc"
+number = "4"
+electrical_type = "passive"
+required = true
+
+[provenance]
+datasheet_url = "https://assets.nexperia.com/documents/data-sheet/PRTR5V0U2X.pdf"

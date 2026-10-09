@@ -12,9 +12,9 @@ height_mm = 2.5
 courtyard_margin_mm = 0.25
 
 [operating_conditions]
-min_voltage_v = 3.5
-max_voltage_v = 15.0
-max_current_ma = 800.0
+min_voltage_v = 2.2
+max_voltage_v = 5.5
+max_current_ma = 250.0
 
 [[pins]]
 name = "vin"

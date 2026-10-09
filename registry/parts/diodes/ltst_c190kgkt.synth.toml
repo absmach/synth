@@ -1,0 +1,29 @@
+id = "ltst_c190kgkt"
+kind = "led"
+version = 0
+lifecycle = "active"
+description = "Lite-On LTST-C190KGKT green AlInGaP LED, 0603, Vf 1.9 to 2.4V at 20mA"
+mpn = "LTST-C190KGKT"
+kicad_symbol = "Device:LED"
+kicad_footprint = "LED_SMD:LED_0603_1608Metric"
+
+[footprint_dimensions]
+width_mm = 2.96
+height_mm = 1.46
+courtyard_margin_mm = 0.25
+
+[operating_conditions]
+max_current_ma = 30.0
+
+[[pins]]
+name = "cathode"
+number = "1"
+electrical_type = "passive"
+
+[[pins]]
+name = "anode"
+number = "2"
+electrical_type = "passive"
+
+[provenance]
+datasheet_url = "https://optoelectronics.liteon.com/upload/download/DS22-2000-074/LTST-C190KGKT.PDF"

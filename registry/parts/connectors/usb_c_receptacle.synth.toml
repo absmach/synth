@@ -18,7 +18,7 @@ mating_face = "bottom"
 [operating_conditions]
 min_voltage_v = 1.8
 max_voltage_v = 5.0
-max_current_ma = 100.0
+max_current_ma = 3000.0
 
 [[pins]]
 name = "vbus"

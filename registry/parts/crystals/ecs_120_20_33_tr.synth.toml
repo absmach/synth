@@ -1,0 +1,36 @@
+id = "ecs_120_20_33_tr"
+kind = "crystal"
+version = 0
+lifecycle = "active"
+description = "ECS ECS-120-20-33-TR 12.000 MHz crystal, 20 pF load, 3.2 x 2.5 mm 4-pad SMD; pads 1 and 3 are the crystal, 2 and 4 are ground"
+mpn = "ECS-120-20-33-TR"
+kicad_symbol = "Device:Crystal_GND24"
+kicad_footprint = "Crystal:Crystal_SMD_3225-4Pin_3.2x2.5mm"
+
+[footprint_dimensions]
+width_mm = 4.2
+height_mm = 3.5
+courtyard_margin_mm = 0.25
+
+[[pins]]
+name = "xtal_a"
+number = "1"
+electrical_type = "passive"
+
+[[pins]]
+name = "gnd_2"
+number = "2"
+electrical_type = "passive"
+
+[[pins]]
+name = "xtal_b"
+number = "3"
+electrical_type = "passive"
+
+[[pins]]
+name = "gnd_4"
+number = "4"
+electrical_type = "passive"
+
+[provenance]
+datasheet_url = "https://ecsxtal.com/store/pdf/ecx-32.pdf"
