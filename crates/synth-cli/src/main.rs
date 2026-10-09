@@ -12,7 +12,6 @@
 //! - `2` — usage error (bad arguments, file not found)
 //! - `3` — internal compiler error (a bug — should never happen)
 
-mod preview;
 mod release;
 
 use std::io::Write;
@@ -434,30 +433,6 @@ enum Command {
         /// `--json`.
         #[arg(long)]
         json: bool,
-    },
-
-    /// Start a local HTTP server that watches the given `.synth`
-    /// source and shows a live, read-only schematic + diagnostics
-    /// view in the browser. Source-of-truth stays in the user's
-    /// editor; this command never modifies the source.
-    Preview {
-        /// Path to a `.synth` source file.
-        input: PathBuf,
-
-        /// Path to the component registry.
-        #[arg(long, value_name = "DIR")]
-        registry: Option<PathBuf>,
-
-        /// Directory holding the Trunk-built browser bundle.
-        /// Default: `crates/synth-web/dist` relative to the working
-        /// directory. Run `trunk build --release` in
-        /// `crates/synth-web/` to produce it.
-        #[arg(long, value_name = "DIR")]
-        assets_dir: Option<PathBuf>,
-
-        /// Port to bind on 127.0.0.1.
-        #[arg(long, default_value_t = 8080)]
-        port: u16,
     },
 
     /// Start the Synth Model Context Protocol (MCP) Server for native AI tool integration.
@@ -1108,12 +1083,6 @@ fn main() -> ExitCode {
                 json,
             ),
         },
-        Command::Preview {
-            input,
-            registry,
-            assets_dir,
-            port,
-        } => run_preview(input, registry, assets_dir, port),
         Command::Mcp {
             stdio,
             sse,
@@ -1167,7 +1136,7 @@ fn main() -> ExitCode {
     }
 }
 
-const CAPABILITY_COMMANDS: [&str; 18] = [
+const CAPABILITY_COMMANDS: [&str; 17] = [
     "validate",
     "dump-ast",
     "dump-ir",
@@ -1179,7 +1148,6 @@ const CAPABILITY_COMMANDS: [&str; 18] = [
     "route",
     "drc",
     "check",
-    "preview",
     "mcp",
     "supply-chain",
     "render",
@@ -1904,52 +1872,6 @@ fn run_check_child(
         }
         std::thread::sleep(std::time::Duration::from_millis(100));
     }
-}
-
-fn run_preview(
-    input: PathBuf,
-    registry: Option<PathBuf>,
-    assets_dir: Option<PathBuf>,
-    port: u16,
-) -> anyhow::Result<u8> {
-    if !input.exists() {
-        anyhow::bail!("input file {} does not exist", input.display());
-    }
-    let resolved_assets = match assets_dir {
-        Some(dir) if dir.exists() => dir,
-        Some(dir) => {
-            eprintln!(
-                "synth preview: specified assets dir `{}` does not exist.",
-                dir.display()
-            );
-            anyhow::bail!("missing assets directory");
-        }
-        None => {
-            let candidates = [
-                PathBuf::from("crates").join("synth-web").join("dist"),
-                PathBuf::from("dist"),
-            ];
-            candidates
-                .into_iter()
-                .find(|p| p.exists())
-                .unwrap_or_else(|| PathBuf::from("crates").join("synth-web").join("dist"))
-        }
-    };
-    if !resolved_assets.exists() {
-        eprintln!(
-            "synth preview: assets dir `{}` does not exist.",
-            resolved_assets.display(),
-        );
-        eprintln!("Build the browser bundle first:");
-        eprintln!("  cd crates/synth-web && trunk build --release");
-        anyhow::bail!("missing assets directory");
-    }
-    let runtime = tokio::runtime::Builder::new_multi_thread()
-        .enable_all()
-        .build()
-        .map_err(|e| anyhow::anyhow!("could not start tokio runtime: {e}"))?;
-    runtime.block_on(preview::run_preview(input, registry, resolved_assets, port))?;
-    Ok(EXIT_SUCCESS)
 }
 
 /// Handler for `synth registry {path,list,doctor}` (Phase 15, R15.2).

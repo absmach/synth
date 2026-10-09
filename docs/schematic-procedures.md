@@ -2,18 +2,18 @@
 
 **Scope:** how Synth turns a `.synth` design into a human-readable,
 KiCad-importable schematic — the auto-layout pipeline, KiCad export,
-ERC / DRC validation, the live browser preview, and the CLI commands
+ERC / DRC validation, and the CLI commands
 that drive them.
 
 **Status:** describes the implemented pipeline as of 2026-09-24, cross-checked
-against `crates/synth-layout`, `crates/synth-kicad`, `crates/synth-web`,
+against `crates/synth-layout`, `crates/synth-kicad`,
 `crates/synth-cli`, and `crates/synth-validate`. The phases of the
 (never-committed) schematic-quality plan are folded in; §2.1 (regions) and
 §3.2 (net colours) are the parts that changed most. Code comments still
 cite that plan's phase letters (`Phase A2`, `Phase C1`, `Phase D3`, …)
 with no resolvable target — read them as provenance, not as pointers.
 
-Every downstream consumer — the browser preview, the KiCad exporter,
+Every downstream consumer — the KiCad exporter,
 the PCB placer/router — derives the schematic from a single shared
 `synth_layout::layout` result so all views agree on the same
 component positions and wire routes.
@@ -83,14 +83,13 @@ Board (nets / components / diff-pairs)
 Layout (placements, rotations, wires, junctions, net labels, power flags)
    ├──> synth-layout::sheets::layout_sheets   split on sheet/import
    │                                          boundaries, large boards only (§3.1)
-   ├──> synth-web (live preview, drag-and-drop)          (§5)
    ├──> synth-kicad::export      .kicad_sch/.kicad_sym/.kicad_pcb/bom (§3)
    └──> ERC / DRC validation                             (§4)
 ```
 
 `layout_sheets` returns exactly one entry for the common case (the
 board's single-sheet content fits A2, or it is not splittable), so the
-preview, the exporter, and the checks all keep working off the same
+exporter and the checks all keep working off the same
 single `Layout` unchanged. Only a _large splittable_ board — content
 past A2 **and** two or more `sheet`/import boundaries — becomes a
 hierarchy, described in §6.
@@ -168,7 +167,7 @@ Two details worth knowing:
 - **Only the frame changes, never the content.** Positions are absolute from
   the top-left, so moving them when the page grows would rewrite a
   hand-arranged drawing — the schematic sidecar stores absolute millimetres
-  and a preview drag has to survive a save/reload bit-exact. A small design
+  and a layout override has to survive a save/reload bit-exact. A small design
   on a roomy requested page therefore sits in the top-left rather than
   centred, the same trade `compact_sheet_to_fit` already makes.
 - **A5 is selectable but never auto-fitted.** The placer ranks candidate
@@ -509,21 +508,11 @@ guessing.
 
 ---
 
-## 5. Browser preview (`synth-web` + `synth preview`)
+## 5. Browser preview (removed)
 
-`synth preview <file>` runs an axum HTTP server:
-
-- **`GET /events`** — SSE stream: on every recompile a `BoardView`
-  payload (board + layout + diagnostics) is pushed; the Leptos/WASM
-  viewer re-renders reactively (no two-language schema drift).
-- **SVG schematic** rendered via Leptos `view!` from the shared
-  `Layout` (same router and power symbols as the KiCad export).
-- **Drag-and-drop** re-positioning; on drag end the browser
-  `POST /api/v1/layout/save` with the refdes-keyed offsets, which the
-  server writes to the `<design>.synth.layout.toml` sidecar so a later
-  reload restores the positions.
-- **Diagnostics + Inspector** panels with click-to-cross-probe between
-  a diagnostic and the offending component/net.
+The `synth-web` crate and the `synth preview` command were removed. Use
+`synth_render_schematic` / `synth_review_schematic` (§6.1) to look at the
+sheet, and `synth_mutate_layout` or the schematic sidecar to tune it.
 
 ---
 
@@ -539,7 +528,6 @@ guessing.
 | `synth place` / `synth route` | PCB placement / routing stages                                                                                    |
 | `synth drc <file>`            | design-rule check                                                                                                 |
 | `synth schema <kind>`         | emit a JSON schema for a protocol artifact                                                                        |
-| `synth preview <file>`        | live browser viewer (§5)                                                                                          |
 | `synth mcp`                   | stdio/SSE MCP server exposing `synth_validate`, `synth_apply_patch`, `synth_preview_schematic`, `synth_export`, … |
 
 ### 6.1 Agent visual-feedback loop (MCP)
@@ -578,8 +566,7 @@ placement review → **render inspection** → `synth_export` →
 | Aesthetic + KiCad ERC                                    | `crates/synth-kicad/src/schem_erc.rs`, `erc_validate.rs`                                        |
 | Rule-based ERC / decoupling auto-insert                  | `crates/synth-validate`                                                                         |
 | Value parsing + `E-SYNTH-CRYSTAL-001`                    | `crates/synth-validate/src/value.rs`, `crates/synth-validate/src/lib.rs`                        |
-| Browser preview                                          | `crates/synth-web` (`schematic.rs`, `state.rs`)                                                 |
-| Server + CLI surface                                     | `crates/synth-cli` (`main.rs`, `preview.rs`)                                                    |
+| Server + CLI surface                                     | `crates/synth-cli` (`main.rs`)                                                                      |
 | Registry of parts (pins, `required_decoupling`, symbols) | `registry/parts/`                                                                               |
 
 ---

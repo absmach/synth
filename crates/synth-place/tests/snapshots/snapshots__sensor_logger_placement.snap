@@ -23,10 +23,10 @@ board_outline_mm: 82.69 x 69.06
  SW1  (  46.39,   11.63) mm  rot=Zero layer=Top
   C1  (   7.29,   20.80) mm  rot=Zero layer=Top
   C2  (   7.47,   27.30) mm  rot=Zero layer=Top
-  C3  (  51.05,   35.38) mm  rot=Zero layer=Top
+  C3  (  50.87,   35.38) mm  rot=Zero layer=Top
   D1  (  29.85,   12.95) mm  rot=Zero layer=Top
   D2  (   6.35,   12.95) mm  rot=Zero layer=Top
-  C4  (  50.83,   26.43) mm  rot=Zero layer=Top
+  C4  (  50.66,   26.43) mm  rot=Zero layer=Top
   R1  (  33.06,    6.38) mm  rot=Zero layer=Top
   C6  (  14.27,   37.76) mm  rot=Zero layer=Top
   R2  (  69.66,   29.12) mm  rot=Zero layer=Top

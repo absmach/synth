@@ -11,6 +11,9 @@ use std::path::{Path, PathBuf};
 use synth_geometry::nm_to_mm;
 use synth_ir::Board;
 
+const FEATHER_M4_EXPRESS_BASELINE_OUTLINE_AREA_MM2_115_04_X_95_40: f64 = 115.04 * 95.40;
+const OUTLINE_AREA_TOLERANCE: f64 = 0.10;
+
 fn workspace_root() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("..")
@@ -86,6 +89,19 @@ fn feather_m4_express_placement_snapshot() {
     let placement = synth_place::place(&board).expect("place");
     let snapshot = render_placement_snapshot(&board, &placement);
     insta::assert_snapshot!("feather_m4_express_placement", snapshot);
+}
+
+#[test]
+fn feather_m4_express_outline_area_stays_within_baseline_tolerance() {
+    let board = load_board("fixtures/designs/feather_m4_express.synth");
+    let placement = synth_place::place(&board).expect("place");
+    let area = nm_to_mm(placement.board_outline.width_nm())
+        * nm_to_mm(placement.board_outline.height_nm());
+    let baseline = FEATHER_M4_EXPRESS_BASELINE_OUTLINE_AREA_MM2_115_04_X_95_40;
+    assert!(
+        (area - baseline).abs() <= baseline * OUTLINE_AREA_TOLERANCE,
+        "outline area {area:.1} mm2 deviates more than 10% from baseline {baseline:.1} mm2"
+    );
 }
 
 /// The external placement contract publishes the footprint origin (KiCad

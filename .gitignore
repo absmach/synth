@@ -17,7 +17,6 @@
 # Fuzz corpora (committed corpora live under fuzz/corpus/, not here)
 /crates-internal/synth-fuzz/artifacts/
 /crates-internal/synth-fuzz/corpus/
-/crates/synth-web/dist/
 
 # Compiler-generated outputs. KiCad exports from `synth export-kicad`
 # land in `<source>_kicad/` next to the .synth file; they are pure

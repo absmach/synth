@@ -120,7 +120,7 @@ Synth resolves parts from a component registry and lowers the source into a type
 | Layout and routing | Deterministic schematic layout, component placement, and multilayer routing                                  |
 | KiCad integration  | Project, schematic, PCB, and BOM export; optional fabrication outputs through `kicad-cli`                    |
 | Component registry | Versioned parts, project and user overlays, search, import, and authoring tools                              |
-| Developer tools    | CLI, live browser preview, JSON diagnostics, and an MCP server for agent integration                         |
+| Developer tools    | CLI, JSON diagnostics, and an MCP server for agent integration                         |
 
 ## Quick Start
 
@@ -149,16 +149,6 @@ cargo run -p synth-cli -- validate examples/env_logger.synth --format json
 ```
 
 Open exported projects in KiCad. Optional Gerber, drill, and STEP exports require `kicad-cli`; see the [KiCad workflow guide](docs/kicad-workflows.md) for export and review details.
-
-### Live Preview
-
-Build the browser assets using the prerequisites and instructions in the [viewer guide](crates/synth-web/README.md), then run:
-
-```bash
-cargo run -p synth-cli -- preview examples/env_logger.synth
-```
-
-Open the local URL printed by the command. Save changes to the `.synth` file in your editor to refresh the schematic and diagnostics.
 
 ### Agent Integration
 
@@ -202,7 +192,6 @@ for an interactive review._
 - [Diagnostic reference](docs/diagnostics/README.md) — diagnostic codes and repair guidance.
 - [Diagnostic protocol](docs/protocol-v1.0.md) — the machine-readable diagnostic format.
 - [Component registry](registry/README.md) — part definitions and registry structure.
-- [Browser viewer](crates/synth-web/README.md) — build and run the live preview.
 - [MCP server](crates/synth-mcp/README.md) — agent tools and integration.
 
 ## Contributing

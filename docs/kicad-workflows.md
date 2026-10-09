@@ -29,9 +29,8 @@ board.synth.layout.toml   ← optional visual drag offsets (sidecar)
    `board.synth.erc.toml` beside the design to override the pin-type
    conflict table and the deeper-check thresholds; leave it absent for
    the defaults.
-3. **Visual tuning goes through the sidecar.** Drag positions in the
-   `synth preview` browser, or edit `<design>.synth.layout.toml`
-   directly — never nudge symbol coordinates inside the `.kicad_sch`.
+3. **Visual tuning goes through the sidecar.** Edit
+   `<design>.synth.layout.toml` directly or use `synth_mutate_layout` — never nudge symbol coordinates inside the `.kicad_sch`.
 4. **Sourcing data lives in the registry**, not in the drawing. Each
    `registry/parts/*.synth.toml` carries `mpn`, `lcsc_pn`, footprint,
    and provenance; the exporter stamps hidden `MPN` / `LCSC` fields
@@ -302,8 +301,7 @@ production approval.
 - Title block carries name, revision, and fab target (Synth emits
   these from the `board` statement automatically).
 - Reference/Value fields must not collide with wires or each other
-  (Synth auto-places them; check visually in `synth preview` or an
-  exported PDF).
+  (Synth auto-places them; check visually in an exported PDF).
 
 ---
 

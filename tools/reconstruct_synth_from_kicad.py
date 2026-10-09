@@ -104,7 +104,7 @@ def pin_for(ref: str, pin: str, function: str | None) -> str:
     if ref in {"D2", "D3"}:
         return "io" if pin == "1" else "gnd"
     if ref.startswith("D") and ref != "D4":
-        return "anode" if pin == "1" else "cathode"
+        return "cathode" if pin == "1" else "anode"
     if ref == "Y1":
         return "p1" if pin == "1" else "p2"
     if ref.startswith("J") and ref != "J1":

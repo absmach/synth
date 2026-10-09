@@ -2,9 +2,8 @@
 
 //! Canonical schematic wire routing (§7.8.6 of the implementation plan).
 //!
-//! Both consumers — the browser preview (`synth-web`) and the KiCad
-//! export (`synth-kicad`) — consume [`super::Layout`]`::wires` produced
-//! by [`route_board`] so the two views agree on geometry. This module
+//! The KiCad export (`synth-kicad`) consumes [`super::Layout`]`::wires`
+//! produced by [`route_board`] so every view agrees on geometry. This module
 //! holds the A* grid pathfinder, the pin-approach corridors, the
 //! L-route fallback, and junction detection that previously lived in
 //! `synth-kicad`; moving it here is what actually populates
@@ -59,12 +58,12 @@ pub fn snap_grid_127(val: f64) -> f64 {
 /// symbol instance's `(at x y angle)`. Reconciles the divergence
 /// between KiCad's symbol-natural orientation (which varies per
 /// part) and our `Rotation` enum's logical convention
-/// (`Zero` = horizontal, pin 0 on left).
+/// (`Zero` = horizontal).
 ///
-/// - `LED`, `D`, `D_TVS` ship horizontal in `Device.kicad_sym`
-///   (pin 1 on left) — already matches our convention → offset 0.
+/// - `LED`, `D`, `D_TVS` ship horizontal in `Device.kicad_sym` —
+///   already matches our convention → offset 0.
 /// - `R`, `R_US`, `C`, `L` ship vertical (pin 1 on top) — needs
-///   +90° to land pin 1 on the left → offset 90.
+///   +90° to lie horizontal → offset 90.
 ///
 /// Without this offset, a resistor at `Rotation::Zero` renders
 /// vertical (KiCad's natural) and a vertical LED chain with
@@ -89,11 +88,8 @@ pub fn natural_rotation_offset(part: &Part) -> f64 {
 /// **This is the single source of truth.** The sides assigned here
 /// drive both the wire terminals the router aims at *and* the pin
 /// rectangles `synth-kicad::symbol_lib` draws; a disagreement would
-/// leave wires landing on a body edge with no pin. The browser
-/// preview used to carry a third copy that omitted `GroundReference`
-/// and the `Output → Right` rule, so `synth preview` sized IC bodies
-/// differently from what the exporter actually drew. It now imports
-/// this function — do not reintroduce a local copy.
+/// leave wires landing on a body edge with no pin. Do not
+/// reintroduce a local copy.
 pub fn classify_ic_pin(pin: &Pin) -> PinSide {
     let lower = pin.name.to_ascii_lowercase();
     if matches!(
@@ -141,8 +137,8 @@ pub fn classify_ic_pin(pin: &Pin) -> PinSide {
 /// `inductor` and `switch`. That made [`super::body_size_for_part`]
 /// reserve a multi-pin-sized body for an inductor or a 2-pin switch
 /// that the router and the exporter both drew as a bare two-pin
-/// symbol. `synth-kicad` and `synth-web` import this function; do not
-/// reintroduce a local copy.
+/// symbol. `synth-kicad` imports this function; do not reintroduce a
+/// local copy.
 pub fn is_two_pin_symbol_kind(kind: &str) -> bool {
     matches!(
         kind,

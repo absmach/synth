@@ -15,10 +15,10 @@ max_current_ma = 1000.0
 
 [[pins]]
 name = "anode"
-number = "1"
+number = "2"
 electrical_type = "passive"
 
 [[pins]]
 name = "cathode"
-number = "2"
+number = "1"
 electrical_type = "passive"

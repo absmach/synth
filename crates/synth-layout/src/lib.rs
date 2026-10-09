@@ -2,11 +2,10 @@
 
 //! Schematic placement and wire routing for the Synth EDA compiler.
 //!
-//! Both consumers — the browser preview (`synth-web`) and the
-//! KiCad export (`synth-kicad`) — call [`layout`] on the same
-//! [`Board`] to get component positions and (eventually) wire
-//! routes. Keeping the layouter in one crate is the only way to
-//! ensure the two views agree.
+//! Every consumer — the KiCad export (`synth-kicad`) and the MCP
+//! tools — calls [`layout`] on the same [`Board`] to get component
+//! positions and (eventually) wire routes. Keeping the layouter in
+//! one crate is the only way to ensure the views agree.
 //!
 //! ## Layered roadmap (§7.5 of the implementation plan)
 //!
@@ -84,9 +83,8 @@ struct FittedAttempt {
 
 // Pin-side classification and two-pin symbol recognition are the
 // *single* source of truth in `route`. The router computes wire
-// terminals from them, `synth-kicad` draws the pins from them, and
-// `synth-web` sizes preview bodies from them; a divergent copy
-// silently desynchronises all three (it already did: this file's
+// terminals from them and `synth-kicad` draws the pins from them;
+// a divergent copy silently desynchronises both (it already did: this file's
 // own copies omitted `inductor` and `switch` while listing
 // `ferrite_bead`/`zener_diode`/`resonator`, which are not registry
 // `kind`s at all). Aliased rather than re-declared so the many
@@ -1746,10 +1744,9 @@ pub fn force_net_label(board: &Board, layout: &mut Layout, net: NetId) {
 }
 
 /// USB ESD diodes sit in a column to the LEFT of the USB
-/// connector. Rotate each to `OneEighty` so the anode (pin 0) ends
-/// up on the right-hand side of the diode, facing the connector.
-/// The cathode (pin 1) ends up on the left, where its GND symbol
-/// can extend horizontally without crossing anything.
+/// connector. Rotate each so pin 0 ends up on the right-hand side
+/// of the diode, facing the connector, and pin 1 on the left, where
+/// its GND symbol can extend horizontally without crossing anything.
 ///
 /// Overrides the generic 2-pin power-flag rotation, which would
 /// otherwise rotate these diodes to `TwoSeventy` (cathode-down).
@@ -1774,12 +1771,13 @@ fn rotate_usb_esd_diodes(board: &Board, clusters: &[Cluster], layout: &mut Layou
             let Some(member_component) = board.component(member.id) else {
                 continue;
             };
-            if member_component
-                .part
-                .as_ref()
-                .is_some_and(|p| p.kind == "diode")
-            {
-                rot.insert(member.id, Rotation::OneEighty);
+            if let Some(p) = member_component.part.as_ref().filter(|p| p.kind == "diode") {
+                let rotation = if pin_is_left_at_zero(p, 0) {
+                    Rotation::OneEighty
+                } else {
+                    Rotation::Zero
+                };
+                rot.insert(member.id, rotation);
             }
         }
     }
@@ -1791,9 +1789,8 @@ fn rotate_usb_esd_diodes(board: &Board, clusters: &[Cluster], layout: &mut Layou
 }
 
 /// LED-indicator clusters get rendered as a vertical chain
-/// (current-limit resistor on top, LED below). Rotate both
-/// components 270° (CCW) so pin 0 ends up on top — for the LED
-/// that's the anode, for the resistor it's the signal-side pin.
+/// (current-limit resistor on top, LED below), with the LED's
+/// anode and the resistor's signal-side pin on top.
 fn rotate_led_chains(board: &Board, clusters: &[Cluster], layout: &mut Layout) {
     use std::collections::HashMap;
     let mut rot: HashMap<ComponentId, Rotation> = HashMap::new();
@@ -1803,7 +1800,11 @@ fn rotate_led_chains(board: &Board, clusters: &[Cluster], layout: &mut Layout) {
         }
         // Anchor (the LED): pin 0 is the anode, which should point
         // up toward the signal source.
-        rot.insert(cluster.anchor, Rotation::TwoSeventy);
+        let anchor_rotation = board
+            .component(cluster.anchor)
+            .and_then(|c| c.part.as_ref())
+            .map_or(Rotation::TwoSeventy, |p| top_rotation(p, 0));
+        rot.insert(cluster.anchor, anchor_rotation);
         // Resistor members of an LED-indicator cluster: pin 0 is
         // signal-side, pin 1 connects down to the LED's anode.
         // Rotate the same direction so the resistor's body sits
@@ -1874,24 +1875,17 @@ fn rotate_two_pin_with_power_flags(board: &Board, layout: &mut Layout) {
         let pin0_kind = flags.iter().find(|f| f.pin == PinId(0)).map(|f| f.kind);
         let pin1_kind = flags.iter().find(|f| f.pin == PinId(1)).map(|f| f.kind);
 
-        // Determine the desired rotation. At rotation Zero pin 0 is
-        // on the left and pin 1 is on the right. A clockwise 90°
-        // (`Ninety`) moves pin 0 to the bottom and pin 1 to the top.
-        // A counter-clockwise 90° (`TwoSeventy`) moves pin 0 to the
-        // top and pin 1 to the bottom.
-        let rotation = match (pin0_kind, pin1_kind) {
-            // Pin 0 on top (VCC) → use TwoSeventy (CCW).
+        let top_pin = match (pin0_kind, pin1_kind) {
             (Some(PowerFlagKind::Vcc), Some(PowerFlagKind::Gnd) | None)
-            | (None, Some(PowerFlagKind::Gnd)) => Rotation::TwoSeventy,
-            // Pin 1 on top (VCC) → use Ninety (CW).
+            | (None, Some(PowerFlagKind::Gnd)) => 0,
             (Some(PowerFlagKind::Gnd) | None, Some(PowerFlagKind::Vcc))
-            | (Some(PowerFlagKind::Gnd), None) => Rotation::Ninety,
+            | (Some(PowerFlagKind::Gnd), None) => 1,
             // No power flag, or both pins on the same rail (a
             // 2-endpoint short — undefined orientation): leave at
             // whatever the placer chose.
             _ => continue,
         };
-        placement.rotation = rotation;
+        placement.rotation = top_rotation(part, top_pin);
     }
 }
 
@@ -3633,7 +3627,10 @@ fn place_cluster_into(
             if let Some(pin_idx) = find_connecting_active_pin(board, cluster.anchor, *id) {
                 if let Some(anchor) = board.component(cluster.anchor) {
                     if let Some(part) = anchor.part.as_ref() {
-                        let (px, _py, _side) = compute_anchor_pin_offset(part, pin_idx);
+                        let (mut px, _py, _side) = compute_anchor_pin_offset(part, pin_idx);
+                        if cluster.anchor_vertical && !pin_is_left_at_zero(part, pin_idx) {
+                            px = -px;
+                        }
                         let target_x = snap_grid(anchor_x + px);
                         let coord_key = (
                             (target_x * 10.0).round() as i64,
@@ -4668,6 +4665,31 @@ fn compute_anchor_pin_offset(part: &synth_registry::Part, pin_idx: usize) -> (f6
     compute_anchor_pin_offset_synthesized(part, pin_idx)
 }
 
+fn pin_is_left_at_zero(part: &synth_registry::Part, pin_idx: usize) -> bool {
+    if part.pins.len() != 2 {
+        return pin_idx == 0;
+    }
+    let vertical = route::natural_rotation_offset(part) != 0.0;
+    let key = |idx: usize| {
+        let (x, y, _) = compute_anchor_pin_offset(part, idx);
+        if vertical {
+            y
+        } else {
+            x
+        }
+    };
+    let d = key(pin_idx) - key(1 - pin_idx);
+    d < -1e-6 || (d.abs() < 1e-6 && pin_idx == 0)
+}
+
+fn top_rotation(part: &synth_registry::Part, pin_idx: usize) -> Rotation {
+    if pin_is_left_at_zero(part, pin_idx) {
+        Rotation::TwoSeventy
+    } else {
+        Rotation::Ninety
+    }
+}
+
 fn compute_anchor_pin_offset_synthesized(
     part: &synth_registry::Part,
     pin_idx: usize,
@@ -4954,6 +4976,24 @@ mod barycenter_tests {
             vec![1, 2],
             "no adjacency to the row above: falls back to (layer, anchor id) order, not the input order"
         );
+    }
+}
+
+#[cfg(test)]
+mod pin_orientation_tests {
+    use super::*;
+
+    #[test]
+    fn pin_is_left_at_zero_follows_real_symbol_geometry() {
+        let dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../registry/parts");
+        let registry = synth_registry::load_dir(&dir).unwrap();
+        let part = |id: &str| registry.lookup(id).unwrap();
+
+        assert!(!pin_is_left_at_zero(part("led_red_0603"), 0));
+        assert!(pin_is_left_at_zero(part("led_red_0603"), 1));
+        assert!(pin_is_left_at_zero(part("r_generic_0603"), 0));
+        assert!(pin_is_left_at_zero(part("esd_usb"), 0));
+        assert!(!pin_is_left_at_zero(part("d_bridge_rectifier"), 3));
     }
 }
 

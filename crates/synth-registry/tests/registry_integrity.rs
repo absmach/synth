@@ -64,3 +64,33 @@ fn registry_integrity_check() {
         }
     }
 }
+
+#[test]
+fn diodes_number_pins_like_kicad() {
+    let dir = workspace_root().join("registry").join("parts");
+    let registry = synth_registry::load_dir(&dir).expect("seed registry must load without errors");
+
+    let mut checked = 0;
+    for (_, part) in registry.iter() {
+        let number_of = |name: &str| {
+            part.pins
+                .iter()
+                .find(|p| p.name == name)
+                .map(|p| p.number.0.as_str())
+        };
+        let (Some(cathode), Some(anode)) = (number_of("cathode"), number_of("anode")) else {
+            continue;
+        };
+        assert_eq!(
+            (cathode, anode),
+            ("1", "2"),
+            "part {} must number cathode 1, anode 2 like KiCad",
+            part.id
+        );
+        checked += 1;
+    }
+    assert!(
+        checked >= 10,
+        "expected at least 10 diodes, checked {checked}"
+    );
+}

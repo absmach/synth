@@ -76,10 +76,6 @@ clean: ## Clean build target directory
 run-cli: ## Run the synth CLI (pass ARGS="...")
 	$(CARGO) run -p synth-cli -- $(ARGS)
 
-.PHONY: run-web
-run-web: ## Launch the local synth-web browser preview server
-	$(CARGO) run -p synth-web
-
 .PHONY: verify
 verify: fmt check lint test test-registry ## Full CI pre-flight verification gate
 	@echo -e "$(COLOR_GREEN)$(COLOR_BOLD)✔ All pre-flight checks passed!$(COLOR_RESET)"
