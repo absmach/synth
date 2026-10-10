@@ -128,6 +128,9 @@ pub fn build_command(
     if !request.freerouting.retain_session {
         args.push("--no-retain-session".to_string());
     }
+    if request.policy.allow_via_in_pad {
+        args.push("--allow-via-in-pad".to_string());
+    }
     args
 }
 
@@ -693,6 +696,14 @@ mod tests {
         let joined = argv(&request);
         assert!(!joined.contains("--clean-netlist"), "{joined}");
         assert!(joined.contains("--no-retain-session"), "{joined}");
+    }
+
+    #[test]
+    fn via_in_pad_reaches_the_helper_only_when_approved() {
+        assert!(!argv(&request()).contains("--allow-via-in-pad"));
+        let mut approved = request();
+        approved.policy.allow_via_in_pad = true;
+        assert!(argv(&approved).contains("--allow-via-in-pad"));
     }
 
     #[test]
