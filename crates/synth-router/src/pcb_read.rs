@@ -815,11 +815,12 @@ fn parse_footprint(node: &Node) -> Footprint {
         .child_atom("layer")
         .map_or_else(|| "F.Cu".to_string(), ToString::to_string);
 
-    // A footprint on the bottom layer is mirrored, so its pad offsets
-    // negate in y. Ignoring this places every bottom-side pad at the
-    // wrong spot and makes the connectivity pass report nets open that
-    // are perfectly routed.
-    let mirrored = layer.starts_with('B');
+    // KiCad stores each pad's offset in the footprint's own frame, already
+    // mirrored for a bottom-side footprint, and rotates it by the footprint's
+    // angle. The board's y axis points down, so a positive angle
+    // (counter-clockwise on screen) is `x' = x cos + y sin`,
+    // `y' = -x sin + y cos`. `synth_geometry::Rotation::rotate_offset` is the
+    // quarter-turn twin of this.
     let cos = rotation_deg.to_radians().cos();
     let sin = rotation_deg.to_radians().sin();
 
@@ -840,9 +841,8 @@ fn parse_footprint(node: &Node) -> Footprint {
                 .unwrap_or("")
                 .to_string();
             let local = parse_point(pad, "at").unwrap_or_default();
-            let x_nm = (local.x_nm as f64 * cos - local.y_nm as f64 * sin).round() as i64;
-            let y_nm = (local.x_nm as f64 * sin + local.y_nm as f64 * cos).round() as i64;
-            let y_nm = if mirrored { -y_nm } else { y_nm };
+            let x_nm = (local.x_nm as f64 * cos + local.y_nm as f64 * sin).round() as i64;
+            let y_nm = (local.y_nm as f64 * cos - local.x_nm as f64 * sin).round() as i64;
             let size = pad.find("size");
             let size_nm = (
                 size.and_then(|s| s.body().first())
@@ -1076,7 +1076,7 @@ mod tests {
     }
 
     #[test]
-    fn a_rotated_bottom_side_pad_is_placed_in_board_coordinates() {
+    fn the_sample_boards_bottom_side_pad_is_placed_in_board_coordinates() {
         // U1 is on B.Cu at (30, 20) rotated 90 degrees. Getting this
         // wrong puts every bottom-side pad in the wrong place and makes
         // correctly routed nets look open.
@@ -1089,8 +1089,47 @@ mod tests {
         assert_eq!(u1.layer, "B.Cu");
         assert_eq!(u1.rotation_deg, 90.0);
         let pad1 = u1.pads.iter().find(|p| p.number == "1").expect("pad 1");
-        // A local offset of (-1, 0) rotates to (0, -1), then mirrors in y.
+        // (-1, 0) turned 90 degrees on a y-down board lands at (0, +1). The
+        // pad is on the x axis, so this cannot tell the rotation direction
+        // apart; `rotated_pads_land_where_kicad_puts_them` does.
         assert_eq!(pad1.at, Point::new(mm_to_nm(30.0), mm_to_nm(21.0)));
+    }
+
+    /// Pad offsets taken from KiCad 10 itself (pcbnew), on a footprint at
+    /// (30, 20) rotated 90 degrees. Pads off the footprint's axes tell the
+    /// rotation direction apart; a pad on an axis cannot.
+    #[test]
+    fn rotated_pads_land_where_kicad_puts_them() {
+        let board = |layer: &str, pads: &str| {
+            PcbBoard::parse(&format!(
+                r#"(kicad_pcb (version 20260206)
+                  (footprint "a:b" (layer "{layer}") (at 30 20 90)
+                    (property "Reference" "U1" (at 0 0) (layer "F.SilkS"))
+                    {pads}))"#
+            ))
+            .expect("parses")
+        };
+        let at = |board: &PcbBoard, number: &str| {
+            let pad = board.pads().find(|p| p.number == number).expect("pad");
+            (pad.at.x_mm(), pad.at.y_mm())
+        };
+        let pad = |n: &str, x: f64, y: f64| {
+            format!(r#"(pad "{n}" smd rect (at {x} {y} 90) (size 1 1) (layers "F.Cu"))"#)
+        };
+
+        let top = board(
+            "F.Cu",
+            &[pad("1", -1.0, 0.0), pad("2", 0.0, 2.0), pad("3", 1.5, 0.5)].join(""),
+        );
+        assert_eq!(at(&top, "1"), (30.0, 21.0));
+        assert_eq!(at(&top, "2"), (32.0, 20.0));
+        assert_eq!(at(&top, "3"), (30.5, 18.5));
+
+        // KiCad has already mirrored a bottom-side footprint's pad offsets
+        // when it writes them, so nothing is mirrored again here.
+        let bottom = board("B.Cu", &[pad("2", 0.0, -2.0), pad("3", 1.5, -0.5)].join(""));
+        assert_eq!(at(&bottom, "2"), (28.0, 20.0));
+        assert_eq!(at(&bottom, "3"), (29.5, 18.5));
     }
 
     #[test]
