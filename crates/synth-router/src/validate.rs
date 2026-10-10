@@ -149,6 +149,17 @@ impl ConnectivityReport {
             && self.undersized_tracks.is_empty()
     }
 
+    /// [`Self::blocking_reasons`], except that a via inside a pad is not a
+    /// reason when `policy` approves via-in-pad.
+    #[must_use]
+    pub fn blocking_reasons_under(&self, policy: &FabricationPolicy) -> Vec<String> {
+        let mut report = self.clone();
+        if policy.allow_via_in_pad {
+            report.via_in_pad.clear();
+        }
+        report.blocking_reasons()
+    }
+
     /// Every connectivity finding, as reasons.
     #[must_use]
     pub fn blocking_reasons(&self) -> Vec<String> {
@@ -296,7 +307,7 @@ pub fn validate_candidate(
 
     let mut blocking = Vec::new();
     blocking.extend(verdict.topology.blocking_reasons());
-    blocking.extend(verdict.connectivity.blocking_reasons());
+    blocking.extend(verdict.connectivity.blocking_reasons_under(&request.policy));
     verdict.blocking_reasons = blocking;
 
     // KiCad DRC is the last required check. A DRC that could not run
@@ -1088,6 +1099,17 @@ mod tests {
         // The finding is still recorded; policy decides whether it blocks,
         // and that decision is made by the caller reading the report.
         assert!(!permissive.via_in_pad.is_empty());
+        let approved = FabricationPolicy {
+            allow_via_in_pad: true,
+            ..FabricationPolicy::default()
+        };
+        assert!(permissive.blocking_reasons_under(&approved).is_empty());
+        assert_eq!(
+            strict
+                .blocking_reasons_under(&FabricationPolicy::default())
+                .len(),
+            1
+        );
     }
 
     #[test]
