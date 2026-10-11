@@ -1,0 +1,122 @@
+// SYN-67 NEGATIVE CASE. Same board as buck.synth (see its header and README.md)
+// except R_FB_T and C7 hang from SW, not from the output node.
+// `synth validate` must report E-SYNTH-POWER-011. Not for build.
+board "buck_neg_fb_sw" {
+  layers 4
+  manufacturer "jlcpcb"
+  revision "A"
+
+  netclass "PWR" {
+    trace_width 0.5mm
+    clearance 0.2mm
+  }
+
+  power "VIN" 24v
+  power "+3V3" 3.3v
+
+  group "INPUT PROTECTION" color "#c2410c" {
+    component J1: connector "jst_b2b_xh_a_2pin" value "24V_IN"
+    component F1: fuse "mf_msmf110_33x" value "1.1A_PTC"
+    component D1: diode "ss36" value "SS36"
+    component D2: diode "smbj26a" value "SMBJ26A"
+    notes "" {
+      "J1 pin 1 is +24 V, pin 2 is GND."
+      "F1 resettable PTC: Ihold 1.1 A, Vmax 33 V."
+      "D1 Schottky in series blocks reverse polarity."
+      "D2 TVS (26 V standoff) sits after D1, directly on the VIN node. It clamps surge energy only."
+    }
+  }
+
+  group "INPUT FILTER" color "#7c3aed" {
+    component C1: capacitor "c_electrolytic_smd_8x10" value "47uF" voltage "50V"
+    component C2: capacitor "c_generic_1206" value "10uF" dielectric "X7R" voltage "50V"
+    component C3: capacitor "c_generic_0603" value "100nF" dielectric "X7R" voltage "50V"
+    notes "" {
+      "C1 bulk, C2 ceramic (datasheet: over 10 uF), C3 high-frequency next to the VIN pin."
+      "50 V parts for a 24 V rail; DC-bias derating not known, effective C2 may be under 10 uF."
+    }
+  }
+
+  group "UVLO" color "#0a7d4a" {
+    component R_UV_T: resistor "r_generic_0603" value "1.5M" tolerance "1%"
+    component R_UV_B: resistor "r_generic_0603" value "100k" tolerance "1%"
+    notes "" {
+      "EN divider from VIN. Datasheet Eq 1 and 2 give start 18.31 V, stop 15.67 V (typical thresholds)."
+      "With 1% resistors: start 17.96-18.67 V, stop 15.35-15.99 V."
+      "EN stays under 1.75 V at a 28 V input (EN limit 5.5 V)."
+    }
+  }
+
+  group "BUCK" color "#0072b2" {
+    component U1: regulator "tps54202"
+    component C4: capacitor "c_generic_0603" value "100nF" dielectric "X7R" voltage "16V"
+    component L1: inductor "l_bourns_srn6045ta_100m" value "10uH"
+    component C5: capacitor "c_generic_1206" value "22uF" dielectric "X7R" voltage "25V"
+    component C6: capacitor "c_generic_1206" value "22uF" dielectric "X7R" voltage "25V"
+    notes "" {
+      "TPS54202: 500 kHz, internal compensation, no power-good pin."
+      "C4 100 nF boot capacitor between BOOT and SW."
+      "L1 10 uH and 2x 22 uF follow datasheet Table 7-2 for 3.3 V (44 uF)."
+      "C5/C6 are 25 V X7R; DC-bias derating unknown. fo = 3.95/(Vout x COUT) must stay under 40 kHz."
+    }
+  }
+
+  group "FEEDBACK" color "#b45309" {
+    component R_FB_T: resistor "r_generic_0603" value "100k" tolerance "1%"
+    component R_FB_B: resistor "r_generic_0603" value "22.1k" tolerance "1%"
+    component C7: capacitor "c_generic_0603" value "56pF" dielectric "C0G" voltage "50V"
+    notes "" {
+      "NEGATIVE CASE: the divider top is on SW instead of the output node."
+      "C7 56 pF feed-forward across the upper resistor (Table 7-2)."
+    }
+  }
+
+  group "OUTPUT" color "#be123c" {
+    component J2: connector "jst_b2b_xh_a_2pin" value "3V3_OUT"
+    component D3: led "ltst_c190kgkt" value "PWR"
+    component R_LED: resistor "r_generic_0603" value "470"
+    notes "" {
+      "J2 pin 1 is +3.3 V, pin 2 is GND."
+      "D3 green power LED from the 3.3 V rail."
+    }
+  }
+
+  net "VIN_RAW" class "PWR" {
+    J1.p1, F1.p1
+  }
+
+  net "VIN_FUSED" class "PWR" {
+    F1.p2, D1.anode
+  }
+
+  net "VIN" class "PWR" {
+    D1.cathode, D2.cathode,
+    C1.p1, C2.p1, C3.p1,
+    U1.vin, R_UV_T.p1
+  }
+
+  net "GND" class "PWR" {
+    J1.p2, D2.anode,
+    C1.p2, C2.p2, C3.p2,
+    U1.gnd, R_UV_B.p2,
+    C5.p2, C6.p2, R_FB_B.p2,
+    J2.p2, D3.cathode
+  }
+
+  net "SW" class "PWR" {
+    U1.sw, L1.p1, C4.p2, R_FB_T.p1
+  }
+
+  net "+3V3" class "PWR" {
+    L1.p2, C5.p1, C6.p1, J2.p1, R_LED.p1
+  }
+
+  connect U1.boot -> C4.p1 as "BOOT"
+  connect U1.en -> R_UV_T.p2 as "EN"
+  connect U1.en -> R_UV_B.p1 as "EN"
+  connect U1.fb -> R_FB_T.p2 as "FB"
+  connect U1.fb -> R_FB_B.p1 as "FB"
+  connect U1.fb -> C7.p1 as "FB"
+  connect C7.p2 -> R_FB_T.p1 as "SW"
+  connect R_LED.p2 -> D3.anode as "LED_PWR"
+}
