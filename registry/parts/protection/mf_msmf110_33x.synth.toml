@@ -1,0 +1,33 @@
+id = "mf_msmf110_33x"
+kind = "fuse"
+version = 0
+lifecycle = "active"
+description = "Bourns MF-MSMF110/33X resettable PTC fuse, 1812. max_current_ma is Ihold 1.1 A at 23 C (0.63 A at 70 C, 0.50 A at 85 C); Itrip 2.2 A, Vmax 33 V"
+mpn = "MF-MSMF110/33X"
+kicad_symbol = "Device:Polyfuse"
+kicad_footprint = "Fuse:Fuse_1812_4532Metric"
+
+[footprint_dimensions]
+width_mm = 5.9
+height_mm = 3.9
+courtyard_margin_mm = 0.25
+
+[operating_conditions]
+max_voltage_v = 33.0
+max_current_ma = 1100.0
+
+[[pins]]
+name = "p1"
+number = "1"
+electrical_type = "passive"
+
+[[pins]]
+name = "p2"
+number = "2"
+electrical_type = "passive"
+
+[provenance]
+source = "imported"
+generator = "synth-part-import-kicad 0.1"
+datasheet_url = "https://www.bourns.com/docs/Product-Datasheets/mfmsmf.pdf"
+reviewed_by = ""

@@ -1,0 +1,10 @@
+# sha256 of the files written by:
+#   synth export-kicad qualification/class-b/buck/buck.synth --out OUT --allow-unverified-parts --validate-erc
+# Check: B=$(pwd)/qualification/class-b/buck; cd OUT && grep -v '^#' "$B/artifacts.sha256" | sha256sum -c -
+# Synth base: upstream/main f441851 plus this branch (the SYN-67 commit holding these files).
+# Two exports gave identical hashes. FreeRouting 2.4.1, Java 25.0.4.1, synth built from this branch.
+0ea0af61cb4a6d8453e035980059a396f6b25b10046773b251002372bf043ea6  buck.kicad_pcb
+47b7451740a8ebb606ed427d4abac50329bff12a97c7c0078efa7dc5b1d6156c  buck.kicad_sch
+2d4857192b7deef95f7d47c91cdd6183e8185dba9e154f78d4f5ba194db41b2b  buck.kicad_sym
+dae4b37a5b33b8d666d0260ccfe883e2ee5c0afc7e94d0fde02b1f4f307605c5  buck.kicad_pro
+6bcdcd49cdd480d13f13a3ca4052ab3149f22614b13f9f347a6a9443c0b9e50d  bom.csv
