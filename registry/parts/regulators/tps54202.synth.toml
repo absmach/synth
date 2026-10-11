@@ -1,0 +1,67 @@
+id = "tps54202"
+kind = "regulator"
+version = 0
+lifecycle = "active"
+description = "TI TPS54202 4.5-28 V input, 2 A synchronous step-down converter, 500 kHz, SOT-23-6 (DDC)"
+mpn = "TPS54202DDCR"
+kicad_symbol = "Regulator_Switching:TPS54202DDC"
+kicad_footprint = "Package_TO_SOT_SMD:SOT-23-6"
+
+[footprint_dimensions]
+width_mm = 4.1
+height_mm = 3.4
+courtyard_margin_mm = 0.25
+
+[operating_conditions]
+min_voltage_v = 4.5
+max_voltage_v = 28.0
+max_current_ma = 2000.0
+
+[[pins]]
+name = "gnd"
+number = "1"
+electrical_type = "power_input"
+required = true
+
+[[pins]]
+name = "sw"
+number = "2"
+electrical_type = "passive"
+capabilities = ["switch_node"]
+required = true
+
+[[pins]]
+name = "vin"
+number = "3"
+electrical_type = "power_input"
+required = true
+
+[[pins]]
+name = "fb"
+number = "4"
+electrical_type = "input"
+capabilities = ["feedback"]
+required = true
+
+[[pins]]
+name = "en"
+number = "5"
+electrical_type = "input"
+
+[[pins]]
+name = "boot"
+number = "6"
+electrical_type = "passive"
+required = true
+
+# TI recommends a ceramic over 10 uF on VIN (datasheet 7.2.3.1); the schema takes one value.
+[[required_decoupling]]
+net = "vin"
+value = "10uf"
+count = 1
+
+[provenance]
+source = "imported"
+generator = "synth-part-import-kicad 0.1"
+datasheet_url = "https://www.ti.com/lit/ds/symlink/tps54202.pdf"
+reviewed_by = ""
