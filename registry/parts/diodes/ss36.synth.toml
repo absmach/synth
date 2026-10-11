@@ -1,0 +1,33 @@
+id = "ss36"
+kind = "diode"
+version = 0
+lifecycle = "active"
+description = "Vishay SS36 60 V 3 A Schottky rectifier, SMC (DO-214AB), for reverse-polarity blocking"
+mpn = "SS36"
+kicad_symbol = "Diode:SS36"
+kicad_footprint = "Diode_SMD:D_SMC"
+
+[footprint_dimensions]
+width_mm = 9.8
+height_mm = 6.7
+courtyard_margin_mm = 0.25
+
+[operating_conditions]
+max_voltage_v = 60.0
+max_current_ma = 3000.0
+
+[[pins]]
+name = "cathode"
+number = "1"
+electrical_type = "passive"
+
+[[pins]]
+name = "anode"
+number = "2"
+electrical_type = "passive"
+
+[provenance]
+source = "imported"
+generator = "synth-part-import-kicad 0.1"
+datasheet_url = "https://www.vishay.com/docs/88751/ss32.pdf"
+reviewed_by = ""

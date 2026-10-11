@@ -1,0 +1,32 @@
+id = "l_bourns_srn6045ta_100m"
+kind = "inductor"
+version = 0
+lifecycle = "active"
+description = "Bourns SRN6045TA-100M 10 uH semi-shielded power inductor, 6.0 x 6.0 mm. Datasheet typ: Isat 4.6 A (L drops 30%), Irms 3.2 A (max_current_ma is Irms), DCR 52 mOhm +-20%"
+mpn = "SRN6045TA-100M"
+kicad_symbol = "Device:L"
+kicad_footprint = "Inductor_SMD:L_Bourns_SRN6045TA"
+
+[footprint_dimensions]
+width_mm = 7.0
+height_mm = 6.5
+courtyard_margin_mm = 0.25
+
+[operating_conditions]
+max_current_ma = 3200.0
+
+[[pins]]
+name = "p1"
+number = "1"
+electrical_type = "passive"
+
+[[pins]]
+name = "p2"
+number = "2"
+electrical_type = "passive"
+
+[provenance]
+source = "imported"
+generator = "synth-part-import-kicad 0.1"
+datasheet_url = "https://www.bourns.com/docs/Product-Datasheets/SRN6045TA.pdf"
+reviewed_by = ""
