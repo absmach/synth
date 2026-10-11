@@ -1,0 +1,127 @@
+schema_version = 2
+forced_net_labels = []
+fit_sheet = false
+
+# Board millimetres (not sheet mm). Parts are centred on these points; the JST connectors
+# are anchored on pin 1, so their footprint origin sits (-1.25, -0.525) mm from the entry.
+# Rotations are 0 or 180 only. priority = hard is read by the placer; nothing else is needed.
+
+[components.J1]
+x = 6.0
+y = 6.0
+rotation = 0
+priority = "hard"
+
+[components.F1]
+x = 16.5
+y = 6.0
+rotation = 0
+priority = "hard"
+
+[components.D1]
+x = 27.5
+y = 6.0
+rotation = 180
+priority = "hard"
+
+[components.D2]
+x = 38.5
+y = 6.0
+rotation = 0
+priority = "hard"
+
+[components.C1]
+x = 22.0
+y = 16.0
+rotation = 0
+priority = "hard"
+
+[components.C2]
+x = 39.5
+y = 11.6
+rotation = 0
+priority = "hard"
+
+[components.C3]
+x = 42.0
+y = 14.1
+rotation = 0
+priority = "hard"
+
+[components.U1]
+x = 41.0
+y = 17.0
+rotation = 180
+priority = "hard"
+
+[components.R_UV_T]
+x = 35.5
+y = 20.4
+rotation = 0
+priority = "hard"
+
+[components.R_UV_B]
+x = 35.5
+y = 22.9
+rotation = 0
+priority = "hard"
+
+[components.C4]
+x = 39.8
+y = 21.5
+rotation = 0
+priority = "hard"
+
+[components.L1]
+x = 48.0
+y = 17.0
+rotation = 0
+priority = "hard"
+
+[components.C5]
+x = 54.5
+y = 13.5
+rotation = 0
+priority = "hard"
+
+[components.C6]
+x = 54.5
+y = 19.0
+rotation = 0
+priority = "hard"
+
+[components.R_FB_T]
+x = 36.0
+y = 15.2
+rotation = 0
+priority = "hard"
+
+[components.R_FB_B]
+x = 36.0
+y = 17.7
+rotation = 0
+priority = "hard"
+
+[components.C7]
+x = 36.0
+y = 13.5
+rotation = 180
+priority = "hard"
+
+[components.D3]
+x = 46.5
+y = 29.0
+rotation = 0
+priority = "hard"
+
+[components.R_LED]
+x = 46.5
+y = 31.5
+rotation = 0
+priority = "hard"
+
+[components.J2]
+x = 52.5
+y = 25.5
+rotation = 0
+priority = "hard"
