@@ -83,6 +83,197 @@ number = "44"
 electrical_type = "input"
 required = true
 
+# The rest of the LQFP-48's pads. Names and numbers come from the stock
+# symbol `MCU_ST_STM32F1:STM32F103C8Tx`, which extends
+# `STM32F103C_8-B_Tx`, cross-checked against the footprint's 48 pads.
+# The part has four VSS and four VDD pads; all of them are copper and
+# all of them have to be connected on a real board.
+
+[[pins]]
+name = "pc13"
+number = "2"
+electrical_type = "bidirectional"
+
+[[pins]]
+name = "pc14"
+number = "3"
+electrical_type = "bidirectional"
+
+[[pins]]
+name = "pc15"
+number = "4"
+electrical_type = "bidirectional"
+
+[[pins]]
+name = "pd0"
+number = "5"
+electrical_type = "bidirectional"
+
+[[pins]]
+name = "pd1"
+number = "6"
+electrical_type = "bidirectional"
+
+[[pins]]
+name = "vssa"
+number = "8"
+electrical_type = "power_input"
+
+[[pins]]
+name = "vdda"
+number = "9"
+electrical_type = "power_input"
+
+[[pins]]
+name = "pa2"
+number = "12"
+electrical_type = "bidirectional"
+
+[[pins]]
+name = "pa3"
+number = "13"
+electrical_type = "bidirectional"
+
+[[pins]]
+name = "pa4"
+number = "14"
+electrical_type = "bidirectional"
+
+[[pins]]
+name = "pa5"
+number = "15"
+electrical_type = "bidirectional"
+
+[[pins]]
+name = "pa6"
+number = "16"
+electrical_type = "bidirectional"
+
+[[pins]]
+name = "pa7"
+number = "17"
+electrical_type = "bidirectional"
+
+[[pins]]
+name = "pb0"
+number = "18"
+electrical_type = "bidirectional"
+
+[[pins]]
+name = "pb1"
+number = "19"
+electrical_type = "bidirectional"
+
+[[pins]]
+name = "pb2"
+number = "20"
+electrical_type = "bidirectional"
+
+[[pins]]
+name = "pb10"
+number = "21"
+electrical_type = "bidirectional"
+
+[[pins]]
+name = "pb11"
+number = "22"
+electrical_type = "bidirectional"
+
+[[pins]]
+name = "vss_2"
+number = "23"
+electrical_type = "power_input"
+
+[[pins]]
+name = "vdd_2"
+number = "24"
+electrical_type = "power_input"
+
+[[pins]]
+name = "pb12"
+number = "25"
+electrical_type = "bidirectional"
+
+[[pins]]
+name = "pb13"
+number = "26"
+electrical_type = "bidirectional"
+
+[[pins]]
+name = "pb14"
+number = "27"
+electrical_type = "bidirectional"
+
+[[pins]]
+name = "pb15"
+number = "28"
+electrical_type = "bidirectional"
+
+[[pins]]
+name = "pa8"
+number = "29"
+electrical_type = "bidirectional"
+
+[[pins]]
+name = "pa11"
+number = "32"
+electrical_type = "bidirectional"
+
+[[pins]]
+name = "pa12"
+number = "33"
+electrical_type = "bidirectional"
+
+[[pins]]
+name = "pa13"
+number = "34"
+electrical_type = "bidirectional"
+
+[[pins]]
+name = "vss_3"
+number = "35"
+electrical_type = "passive"
+
+[[pins]]
+name = "vdd_3"
+number = "36"
+electrical_type = "power_input"
+
+[[pins]]
+name = "pa14"
+number = "37"
+electrical_type = "bidirectional"
+
+[[pins]]
+name = "pa15"
+number = "38"
+electrical_type = "bidirectional"
+
+[[pins]]
+name = "pb3"
+number = "39"
+electrical_type = "bidirectional"
+
+[[pins]]
+name = "pb4"
+number = "40"
+electrical_type = "bidirectional"
+
+[[pins]]
+name = "pb5"
+number = "41"
+electrical_type = "bidirectional"
+
+[[pins]]
+name = "pb8"
+number = "45"
+electrical_type = "bidirectional"
+
+[[pins]]
+name = "pb9"
+number = "46"
+electrical_type = "bidirectional"
+
 [[required_decoupling]]
 net = "vdd"
 value = "100nf"

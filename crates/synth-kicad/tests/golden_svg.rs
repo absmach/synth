@@ -188,15 +188,27 @@ fn reference_schematics_match_golden_fingerprints() {
     let golden: BTreeMap<String, Fingerprint> =
         serde_json::from_str(&raw).unwrap_or_else(|e| panic!("invalid golden manifest: {e}"));
 
+    // Report every design that moved, not just the first. A registry change
+    // that completes a part's pin map shifts the plot of every design using
+    // that part, and seeing one name at a time turns a single regeneration
+    // into a sequence of guesses.
+    let mut drifted = Vec::new();
     for (stem, live_fp) in &live {
-        let base = golden.get(stem).unwrap_or_else(|| {
-            panic!("no golden for `{stem}` — regenerate with SYNTH_REGEN_SVG_GOLDEN=1")
-        });
-        assert_eq!(
-            live_fp, base,
-            "{stem}: rendered schematic differs from its golden fingerprint"
-        );
+        match golden.get(stem) {
+            None => drifted.push(format!("{stem}: no golden recorded")),
+            Some(base) if base != live_fp => drifted.push(format!(
+                "{stem}:\n       golden {base:?}\n       live   {live_fp:?}"
+            )),
+            Some(_) => {}
+        }
     }
+    assert!(
+        drifted.is_empty(),
+        "{} rendered schematic(s) differ from their golden fingerprint. If the \
+         change was intended, regenerate with SYNTH_REGEN_SVG_GOLDEN=1.\n  {}",
+        drifted.len(),
+        drifted.join("\n  ")
+    );
     for stem in golden.keys() {
         assert!(
             live.contains_key(stem),

@@ -3,7 +3,9 @@ kind = "mcu"
 description = "Nordic nRF52840 ARM Cortex-M4F with BLE 5/Thread/Zigbee, aQFN-73 7x7mm"
 mpn = "NRF52840-QIAA-R"
 lcsc_pn = "C190794"
-kicad_symbol = "RF_Module:NRF52840-QIAA"
+# `RF_Module:NRF52840-QIAA` is in no KiCad library -- see #96. This is the
+# real symbol, and it is where the ball designators below come from.
+kicad_symbol = "MCU_Nordic:nRF52840"
 # Real KiCad stock footprint. The aQFN-73 uses *ball* designators
 # (A8, A10, AA24, ...), not the datasheet's linear 1..73 pin numbers, so
 # every pin below is named by ball. Verified against two independent sources:
@@ -69,6 +71,347 @@ number = "AC13"
 electrical_type = "input"
 capabilities = ["reset"]
 required = true
+
+# The rest of the aQFN-73's balls, plus the exposed pad. Names and ball
+# designators come from the stock symbol `MCU_Nordic:nRF52840`,
+# cross-checked against
+# `Package_DFN_QFN:Nordic_AQFN-73-1EP_7x7mm_P0.5mm`. The eight the part
+# already declared were all on the right balls and are untouched: this
+# only adds the ones that had no pin to own them.
+# 
+# The part names `RF_Module:NRF52840-QIAA` as its symbol, which does not
+# exist in any KiCad library -- see #96. The real one is
+# `MCU_Nordic:nRF52840`, which is what these names come from.
+
+[[pins]]
+name = "ain7_p0_31"
+number = "A8"
+electrical_type = "bidirectional"
+
+[[pins]]
+name = "ain5_p0_29"
+number = "A10"
+electrical_type = "bidirectional"
+
+[[pins]]
+name = "ain0_p0_02"
+number = "A12"
+electrical_type = "bidirectional"
+
+[[pins]]
+name = "p1_15"
+number = "A14"
+electrical_type = "bidirectional"
+
+[[pins]]
+name = "p1_13"
+number = "A16"
+electrical_type = "bidirectional"
+
+[[pins]]
+name = "dec2"
+number = "A18"
+electrical_type = "passive"
+
+[[pins]]
+name = "p1_10"
+number = "A20"
+electrical_type = "bidirectional"
+
+[[pins]]
+name = "xc2"
+number = "A23"
+electrical_type = "input"
+
+[[pins]]
+name = "swdclk"
+number = "AA24"
+electrical_type = "input"
+
+[[pins]]
+name = "dcch"
+number = "AB2"
+electrical_type = "power_output"
+
+[[pins]]
+name = "decusb"
+number = "AC5"
+electrical_type = "passive"
+
+[[pins]]
+name = "p0_14"
+number = "AC9"
+electrical_type = "bidirectional"
+
+[[pins]]
+name = "p0_16"
+number = "AC11"
+electrical_type = "bidirectional"
+
+[[pins]]
+name = "p0_19"
+number = "AC15"
+electrical_type = "bidirectional"
+
+[[pins]]
+name = "p0_21"
+number = "AC17"
+electrical_type = "bidirectional"
+
+[[pins]]
+name = "p0_23"
+number = "AC19"
+electrical_type = "bidirectional"
+
+[[pins]]
+name = "p0_25"
+number = "AC21"
+electrical_type = "bidirectional"
+
+[[pins]]
+name = "swdio"
+number = "AC24"
+electrical_type = "bidirectional"
+
+[[pins]]
+name = "vbus"
+number = "AD2"
+electrical_type = "power_input"
+
+[[pins]]
+name = "d_minus"
+number = "AD4"
+electrical_type = "bidirectional"
+
+[[pins]]
+name = "d_plus"
+number = "AD6"
+electrical_type = "bidirectional"
+
+[[pins]]
+name = "p0_13"
+number = "AD8"
+electrical_type = "bidirectional"
+
+[[pins]]
+name = "p0_15"
+number = "AD10"
+electrical_type = "bidirectional"
+
+[[pins]]
+name = "p0_17"
+number = "AD12"
+electrical_type = "bidirectional"
+
+[[pins]]
+name = "vdd_2"
+number = "AD14"
+electrical_type = "passive"
+
+[[pins]]
+name = "p0_20"
+number = "AD16"
+electrical_type = "bidirectional"
+
+[[pins]]
+name = "p0_22"
+number = "AD18"
+electrical_type = "bidirectional"
+
+[[pins]]
+name = "p0_24"
+number = "AD20"
+electrical_type = "bidirectional"
+
+[[pins]]
+name = "tracedata0_p1_00"
+number = "AD22"
+electrical_type = "bidirectional"
+
+[[pins]]
+name = "vdd_3"
+number = "AD23"
+electrical_type = "passive"
+
+[[pins]]
+name = "vdd_4"
+number = "B1"
+electrical_type = "power_input"
+
+[[pins]]
+name = "dcc"
+number = "B3"
+electrical_type = "power_output"
+
+[[pins]]
+name = "dec4"
+number = "B5"
+electrical_type = "passive"
+
+[[pins]]
+name = "ain6_p0_30"
+number = "B9"
+electrical_type = "bidirectional"
+
+[[pins]]
+name = "ain4_p0_28"
+number = "B11"
+electrical_type = "bidirectional"
+
+[[pins]]
+name = "ain1_p0_03"
+number = "B13"
+electrical_type = "bidirectional"
+
+[[pins]]
+name = "p1_14"
+number = "B15"
+electrical_type = "bidirectional"
+
+[[pins]]
+name = "p1_12"
+number = "B17"
+electrical_type = "bidirectional"
+
+[[pins]]
+name = "p1_11"
+number = "B19"
+electrical_type = "bidirectional"
+
+[[pins]]
+name = "xc1"
+number = "B24"
+electrical_type = "input"
+
+[[pins]]
+name = "dec1"
+number = "C1"
+electrical_type = "passive"
+
+[[pins]]
+name = "xl1_p0_00"
+number = "D2"
+electrical_type = "bidirectional"
+
+[[pins]]
+name = "dec3"
+number = "D23"
+electrical_type = "passive"
+
+[[pins]]
+name = "dec6"
+number = "E24"
+electrical_type = "passive"
+
+[[pins]]
+name = "vss_2"
+number = "EP"
+electrical_type = "passive"
+
+[[pins]]
+name = "xl2_p0_01"
+number = "F2"
+electrical_type = "bidirectional"
+
+[[pins]]
+name = "vss_pa"
+number = "F23"
+electrical_type = "power_input"
+
+[[pins]]
+name = "ain2_p0_04"
+number = "J1"
+electrical_type = "bidirectional"
+
+[[pins]]
+name = "nfc2_p0_10"
+number = "J24"
+electrical_type = "bidirectional"
+
+[[pins]]
+name = "ain3_p0_05"
+number = "K2"
+electrical_type = "bidirectional"
+
+[[pins]]
+name = "nfc1_p0_09"
+number = "L24"
+electrical_type = "bidirectional"
+
+[[pins]]
+name = "traceclk_p0_07"
+number = "M2"
+electrical_type = "bidirectional"
+
+[[pins]]
+name = "dec5"
+number = "N24"
+electrical_type = "passive"
+
+[[pins]]
+name = "p1_08"
+number = "P2"
+electrical_type = "bidirectional"
+
+[[pins]]
+name = "p1_07"
+number = "P23"
+electrical_type = "bidirectional"
+
+[[pins]]
+name = "tracedata3_p1_09"
+number = "R1"
+electrical_type = "bidirectional"
+
+[[pins]]
+name = "p1_06"
+number = "R24"
+electrical_type = "bidirectional"
+
+[[pins]]
+name = "tracedata2_p0_11"
+number = "T2"
+electrical_type = "bidirectional"
+
+[[pins]]
+name = "p1_05"
+number = "T23"
+electrical_type = "bidirectional"
+
+[[pins]]
+name = "tracedata1_p0_12"
+number = "U1"
+electrical_type = "bidirectional"
+
+[[pins]]
+name = "p1_04"
+number = "U24"
+electrical_type = "bidirectional"
+
+[[pins]]
+name = "p1_03"
+number = "V23"
+electrical_type = "bidirectional"
+
+[[pins]]
+name = "vdd_5"
+number = "W1"
+electrical_type = "passive"
+
+[[pins]]
+name = "p1_02"
+number = "W24"
+electrical_type = "bidirectional"
+
+[[pins]]
+name = "vddh"
+number = "Y2"
+electrical_type = "power_input"
+
+[[pins]]
+name = "p1_01"
+number = "Y23"
+electrical_type = "bidirectional"
 
 [[required_decoupling]]
 net = "vdd"

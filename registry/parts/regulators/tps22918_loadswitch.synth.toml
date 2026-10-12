@@ -36,9 +36,22 @@ name = "ct"
 number = "4"
 electrical_type = "passive"
 
+# `Package_TO_SOT_SMD:SOT-23-6` has six copper pads and only five were
+# declared, with `vout` on pad 5. On this package pad 5 is QOD, the quick
+# output discharge, and VOUT is pad 6.
+#
+# KiCad ships no TPS22918 symbol. The pinout is taken from
+# `Power_Management:TPS22917DBV` -- the same TI load-switch family in the same
+# DBV package, with the same QOD pin -- and should be confirmed against the
+# TPS22918 datasheet before this part leaves `experimental`.
+[[pins]]
+name = "qod"
+number = "5"
+electrical_type = "open_drain_low"
+
 [[pins]]
 name = "vout"
-number = "5"
+number = "6"
 electrical_type = "power_output"
 required = true
 

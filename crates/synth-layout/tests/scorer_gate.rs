@@ -135,25 +135,47 @@ fn scorer_matches_checked_in_baselines_and_crossing_gate() {
     let baselines: Baselines =
         serde_json::from_str(&raw).unwrap_or_else(|e| panic!("invalid baseline JSON: {e}"));
 
+    // Report every fixture that moved, not just the first. These scores
+    // depend on the symbol geometry KiCad hands back, so a registry change
+    // can shift several at once, and one name per run turns a baseline
+    // refresh into a sequence of guesses.
+    let mut drifted = Vec::new();
     for (stem, live_score) in &live {
-        let base = baselines.fixtures.get(stem).unwrap_or_else(|| {
-            panic!("no baseline for `{stem}` — regenerate with SYNTH_REGEN_SCORE_BASELINES=1")
-        });
-        assert_eq!(
-            live_score.crossing_count, base.crossing_count,
-            "{stem}: crossing count regressed"
-        );
-        assert_eq!(
-            live_score.label_stub_count, base.label_stub_count,
-            "{stem}: label-stub count regressed"
-        );
-        assert!(
-            (live_score.total_wire_length_mm - base.total_wire_length_mm).abs() < 0.001,
-            "{stem}: wire length regressed (live {} vs baseline {})",
-            live_score.total_wire_length_mm,
-            base.total_wire_length_mm
-        );
+        let Some(base) = baselines.fixtures.get(stem) else {
+            drifted.push(format!("{stem}: no baseline recorded"));
+            continue;
+        };
+        let mut moved = Vec::new();
+        if live_score.crossing_count != base.crossing_count {
+            moved.push(format!(
+                "crossings {} -> {}",
+                base.crossing_count, live_score.crossing_count
+            ));
+        }
+        if live_score.label_stub_count != base.label_stub_count {
+            moved.push(format!(
+                "label stubs {} -> {}",
+                base.label_stub_count, live_score.label_stub_count
+            ));
+        }
+        if (live_score.total_wire_length_mm - base.total_wire_length_mm).abs() >= 0.001 {
+            moved.push(format!(
+                "wire length {} -> {}",
+                base.total_wire_length_mm, live_score.total_wire_length_mm
+            ));
+        }
+        if !moved.is_empty() {
+            drifted.push(format!("{stem}: {}", moved.join(", ")));
+        }
     }
+    assert!(
+        drifted.is_empty(),
+        "{} fixture score(s) moved. If the change was intended, regenerate with \
+         SYNTH_REGEN_SCORE_BASELINES=1 in an environment that has the KiCad \
+         symbol libraries, because the scores depend on them.\n  {}",
+        drifted.len(),
+        drifted.join("\n  ")
+    );
     for stem in baselines.fixtures.keys() {
         assert!(
             live.iter().any(|(s, _)| s == stem),

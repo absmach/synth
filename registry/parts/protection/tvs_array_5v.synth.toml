@@ -42,6 +42,6 @@ electrical_type = "passive"
 
 [[pins]]
 name = "vcc"
-number = "8"
+number = "6"
 electrical_type = "passive"
 

@@ -1,11 +1,17 @@
 id = "mp2307_buck"
 kind = "regulator"
 description = "MPS MP2307 3A step-down switching regulator, SO-8"
-kicad_footprint = "Package_SO:SOIC-8-1EP_3.9x4.9mm_P1.27mm_EP2.4x3.4mm"
+# `SOIC-8-1EP_3.9x4.9mm_P1.27mm_EP2.4x3.4mm` does not exist in any KiCad
+# library, so the export fell back to a synthesized bounding box. This is the
+# nearest stock footprint to the MP2307's SOIC8E: same body and pitch, exposed
+# pad 2.41 x 3.3 mm. A reviewer should confirm the pad against the datasheet
+# before this part is promoted past `experimental`.
+kicad_footprint = "Package_SO:SOIC-8-1EP_3.9x4.9mm_P1.27mm_EP2.41x3.3mm"
 
 [footprint_dimensions]
-width_mm = 5.0
-height_mm = 5.0
+# Courtyard extent of that footprint.
+width_mm = 7.4
+height_mm = 5.4
 courtyard_margin_mm = 0.25
 
 [operating_conditions]
@@ -59,6 +65,14 @@ required = true
 name = "ss"
 number = "8"
 electrical_type = "passive"
+
+# Pad 9 is the exposed thermal pad, tied to GND on this part. The footprint has
+# it, so the pin map has to declare it: an exposed pad left out of the map is a
+# short waiting to happen.
+[[pins]]
+name = "ep"
+number = "9"
+electrical_type = "power_input"
 
 [[required_decoupling]]
 net = "in"

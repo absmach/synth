@@ -65,6 +65,198 @@ number = "36"
 electrical_type = "bidirectional"
 capabilities = ["gpio", "i2c_scl"]
 
+# The rest of the module's pads. Names and numbers come from the stock
+# symbol `RF_Module:ESP32-WROOM-32`, cross-checked against the 39 pads of
+# the footprint of the same name, so the pin map can be checked against the
+# package instead of trusted. Pads 15, 38 and 39 are the module's ground
+# tabs and pad 32 is the datasheet's NC.
+#
+# The SPI capabilities sit on IO5/18/19/23, which is the VSPI mapping the
+# module's own datasheet uses. Nothing here is marked `required`, so no
+# existing design is retroactively rejected.
+
+[[pins]]
+name = "sensor_vp"
+number = "4"
+electrical_type = "input"
+capabilities = ["gpio"]
+
+[[pins]]
+name = "sensor_vn"
+number = "5"
+electrical_type = "input"
+capabilities = ["gpio"]
+
+[[pins]]
+name = "io34"
+number = "6"
+electrical_type = "input"
+capabilities = ["gpio"]
+
+[[pins]]
+name = "io35"
+number = "7"
+electrical_type = "input"
+capabilities = ["gpio"]
+
+[[pins]]
+name = "io32"
+number = "8"
+electrical_type = "bidirectional"
+capabilities = ["gpio"]
+
+[[pins]]
+name = "io33"
+number = "9"
+electrical_type = "bidirectional"
+capabilities = ["gpio"]
+
+[[pins]]
+name = "io25"
+number = "10"
+electrical_type = "bidirectional"
+capabilities = ["gpio"]
+
+[[pins]]
+name = "io26"
+number = "11"
+electrical_type = "bidirectional"
+capabilities = ["gpio"]
+
+[[pins]]
+name = "io27"
+number = "12"
+electrical_type = "bidirectional"
+capabilities = ["gpio"]
+
+[[pins]]
+name = "io14"
+number = "13"
+electrical_type = "bidirectional"
+capabilities = ["gpio"]
+
+[[pins]]
+name = "io12"
+number = "14"
+electrical_type = "bidirectional"
+capabilities = ["gpio"]
+
+[[pins]]
+name = "gnd_2"
+number = "15"
+electrical_type = "passive"
+
+[[pins]]
+name = "io13"
+number = "16"
+electrical_type = "bidirectional"
+capabilities = ["gpio"]
+
+[[pins]]
+name = "sd2"
+number = "17"
+electrical_type = "bidirectional"
+capabilities = ["gpio"]
+
+[[pins]]
+name = "sd3"
+number = "18"
+electrical_type = "bidirectional"
+capabilities = ["gpio"]
+
+[[pins]]
+name = "scs_cmd"
+number = "19"
+electrical_type = "bidirectional"
+capabilities = ["gpio"]
+
+[[pins]]
+name = "sck_clk"
+number = "20"
+electrical_type = "bidirectional"
+capabilities = ["gpio"]
+
+[[pins]]
+name = "sdo_sd0"
+number = "21"
+electrical_type = "bidirectional"
+capabilities = ["gpio"]
+
+[[pins]]
+name = "sdi_sd1"
+number = "22"
+electrical_type = "bidirectional"
+capabilities = ["gpio"]
+
+[[pins]]
+name = "io15"
+number = "23"
+electrical_type = "bidirectional"
+capabilities = ["gpio"]
+
+[[pins]]
+name = "io2"
+number = "24"
+electrical_type = "bidirectional"
+capabilities = ["gpio"]
+
+[[pins]]
+name = "io4"
+number = "26"
+electrical_type = "bidirectional"
+capabilities = ["gpio"]
+
+[[pins]]
+name = "io16"
+number = "27"
+electrical_type = "bidirectional"
+capabilities = ["gpio"]
+
+[[pins]]
+name = "io17"
+number = "28"
+electrical_type = "bidirectional"
+capabilities = ["gpio"]
+
+[[pins]]
+name = "io5"
+number = "29"
+electrical_type = "bidirectional"
+capabilities = ["gpio", "spi_cs"]
+
+[[pins]]
+name = "io18"
+number = "30"
+electrical_type = "bidirectional"
+capabilities = ["gpio", "spi_sck"]
+
+[[pins]]
+name = "io19"
+number = "31"
+electrical_type = "bidirectional"
+capabilities = ["gpio", "spi_miso"]
+
+[[pins]]
+name = "nc"
+number = "32"
+electrical_type = "do_not_connect"
+
+[[pins]]
+name = "io23"
+number = "37"
+electrical_type = "bidirectional"
+capabilities = ["gpio", "spi_mosi"]
+
+[[pins]]
+name = "gnd_3"
+number = "38"
+electrical_type = "passive"
+
+[[pins]]
+name = "gnd_4"
+number = "39"
+electrical_type = "passive"
+
 [[required_decoupling]]
 net = "vdd"
 value = "10uf"

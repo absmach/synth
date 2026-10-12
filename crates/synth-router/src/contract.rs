@@ -420,11 +420,28 @@ impl RouteRequest {
             .join(format!("{}.{}.work", self.stem, self.engine.artifact_tag()))
     }
 
+    /// The project file that belongs to the preserved baseline.
+    ///
+    /// A `.kicad_pcb` does not carry its own design rules or net classes;
+    /// they live in the sibling `.kicad_pro`, which tools find by replacing
+    /// the board's extension. The baseline is named `<stem>.synth.kicad_pcb`
+    /// while the exported project is `<stem>.kicad_pro`, so without a copy
+    /// under this name the router looks for `<stem>.synth.kicad_pro`, finds
+    /// nothing, and routes against its own defaults.
+    #[must_use]
+    pub fn baseline_project_path(&self) -> PathBuf {
+        self.out_dir.join(format!("{}.synth.kicad_pro", self.stem))
+    }
+
     /// Copy the un-routed export to the baseline path.
     ///
     /// Fails loudly rather than continuing: routing a board whose baseline
     /// was not preserved would leave a failed run with nothing to fall
     /// back to, which is the one outcome the baseline exists to prevent.
+    ///
+    /// The sibling project is copied too, and that one is best-effort: a
+    /// board exported without a project still routes, just against the
+    /// engine's defaults, whereas a missing baseline is unrecoverable.
     pub fn preserve_baseline(&self) -> Result<(), RouterFailure> {
         if self.board_path == self.baseline_path() {
             return Ok(());
@@ -446,7 +463,12 @@ impl RouteRequest {
                         self.baseline_path().display()
                     ),
                 )
-            })
+            })?;
+        let exported_project = self.board_path.with_extension("kicad_pro");
+        if exported_project.is_file() {
+            let _ = std::fs::copy(exported_project, self.baseline_project_path());
+        }
+        Ok(())
     }
 
     /// The board a router should read: the preserved baseline, not the
