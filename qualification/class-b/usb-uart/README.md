@@ -1,6 +1,6 @@
 # USB-C dual UART + RS-485 adapter (SYN-66)
 
-Status: design and compact placement. Routing is incomplete. Not fabricated, not tested on hardware.
+Status: routed (FreeRouting 2.4.1), KiCad design-rule check 0 errors and 0 unconnected nets. Not fabricated, not tested on hardware.
 Do not call it proven or clean. The list of what is unchecked is at the bottom.
 
 ## What it is
@@ -61,9 +61,7 @@ The THVD1450 needs 3 V or more, so 1.8 V and target-powered VIO were dropped.
 Checked by me against the manufacturer file in this work: CH342F, THVD1450D, LP5907 (revision line only), the two Nexperia parts (revision line only).
 The Nexperia and LP5907 electrical numbers were not re-read.
 
-## Placement and routing (this commit)
-
-Status: compact placement done. Routing is not complete. Do not call it routed.
+## Placement and routing
 
 - Outline: 45.1 x 35.8 mm (was 92.6 x 66.8 mm).
   Old cause: the sidecar only fixed the caps and protection parts. The rest was auto-placed far apart, and the placer adds 4 mm around every part.
@@ -87,15 +85,13 @@ Status: compact placement done. Routing is not complete. Do not call it routed.
 - D2 is over 2 mm: four protection parts do not fit side by side under the 7 mm of J1 pads any closer.
 - R1, R2, the LEDs and R3 to R9 are placed by hand but not checked against any rule.
 
-Routing (FreeRouting 2.4.1, default settings, 40 passes; best of several placement tries):
-- Result: not complete. FreeRouting leaves nets open; Synth's own check says 9 nets are open (CC1, CC2, CTS1, RS485_B, RTS1, RXD1, TXD1, VBUS, VIO). Synth marks the board draft, not fabricable.
-- kicad-cli DRC on the routed attempt (`--severity-all --refill-zones`): 0 errors, 5 unconnected items, 49 warnings.
-  The 5 unconnected items are GND pour fragments on F.Cu with no stitching via. No signal net is listed. KiCad and Synth's check disagree about the 9 nets; this is not resolved.
-  The warnings are 32 footprint library links, 12 silk over copper, 5 silk overlap.
-- 263 track segments, 23 vias.
+Routing (FreeRouting 2.4.1, 40 passes, `--router free-routing --krt-allow-via-in-pad`; run on 2026-10-12 on Synth main 5f62566 plus this branch):
+- Result: routed. Synth's own check: 26 nets connected, 0 open. kicad-cli DRC (`--severity-all --refill-zones`, KiCad 10.0.7): 0 errors, 0 unconnected items, 49 warnings (32 footprint library links, 12 silk over copper, 5 silk overlap).
+- 263 track segments, 28 vias, 549 mm of copper. The tracks and vias are identical to an earlier run on an older Synth build; the KiCad files in `kicad/` are the board as delivered by current main, so the ground pours are filled.
+- Via-in-pad: one place, the U1 exposed pad (pin 25): a GND via, 0.6 mm pad / 0.3 mm drill. JLCPCB would have to fill and cap it (epoxy or copper paste, extra cost on a 4-layer board) and the order must ask for it. Not confirmed with JLCPCB for this board. Synth's own check also lists a GND via by U3 pin 5; measured, that via is 0.2 mm clear of the pad, so it is not in it.
 - USB pair: width 0.242 mm. D+ is 17.03 mm (F.Cu only). D- is 18.43 mm (11.21 F.Cu, 7.23 B.Cu, 2 vias). Skew 1.40 mm. Closest gap 0.133 mm; 12.6 mm of D+ is within 0.5 mm of D-.
   FreeRouting does not couple the pair, so the 90 ohm geometry holds only where the tracks happen to run side by side.
-- KiCadRoutingTools was also tried (`--best-of`): 17 open nets, worse.
+- KiCadRoutingTools (now Synth's default router) was tried earlier on an older build (`--best-of`): 17 open nets. It has not been tried again on current main.
 - Other widths FreeRouting used: CC and UART nets 0.127 mm, VBUS 0.5 mm. The CC net width is not a design choice.
 - The silkscreen reference text is large and sits away from its part. Labels overlap each other, and some sit outside the board.
 
@@ -104,22 +100,21 @@ Commands (use an empty `XDG_DATA_HOME` so a user registry cannot shadow parts):
 export XDG_DATA_HOME=$(mktemp -d)
 scripts/setup-routing-engines.sh
 synth validate qualification/class-b/usb-uart/usb_uart.synth
-synth export-kicad qualification/class-b/usb-uart/usb_uart.synth --out /tmp/usb_uart --allow-incomplete
-kicad-cli pcb drc --severity-all --refill-zones /tmp/usb_uart/usb_uart.freerouting.kicad_pcb
+synth route qualification/class-b/usb-uart/usb_uart.synth --router free-routing --krt-allow-via-in-pad
+kicad-cli pcb drc --severity-all --refill-zones <delivered board printed by synth route>
 ```
-The routed attempt is `usb_uart.freerouting.kicad_pcb`; the unrouted placement is `usb_uart.synth.kicad_pcb`.
-Add `--best-of --kicad-routing-tools-repo <dir> --kicad-routing-tools-python <python>` to try the second engine.
+`synth route` keeps its files in a temporary folder and prints a run record that names the delivered board. Current Synth main defaults to KiCadRoutingTools, which needs its own checkout; this board was routed with FreeRouting, hence `--router free-routing`.
 
 ## Known limits and gaps
 
-- Schematic: an earlier exporter bug drew the CH342F wires 1.27 mm short of its pins. With commit 9592ad5 (PR #104) applied, the netlist shows U1 connected (only RST and RTS0 left open). Without that fix, KiCad sees every U1 pin as unconnected.
+- Schematic: an earlier exporter bug drew the CH342F wires 1.27 mm short of its pins. Fixed by PR #104 (merged); the netlist shows U1 connected (only RST and RTS0 left open).
 - Schematic look: R_TERM text overlaps, notes sit on top of J1 pin text, U1 top pins crowd their title, and the sheet is A2 with most of it empty. Not tidied.
 - Validate still warns: E-SYNTH-POWER-004 x2 (VBUS and GND load-to-capacitor ratio, a count heuristic), W-SYNTH-ANOMALY-001, W-SYNTH-IMPEDANCE-001 (inner layers not verified), W-SYNTH-SUPPLY-002 x4, W-SYNTH-PART-UNVERIFIED x9.
 - No VBUS bulk capacitor, no fuse, no reverse or inrush protection.
 - R_TERM (120 ohm across A/B) is always connected. The registry has no 2-pin header (`header_1x2`) for a jumper.
 - RS-485: no bias resistors (the THVD1450 has idle, open and short bus failsafe built in, per SLLSEY3E). No surge or TVS on A/B: only the on-chip +/-18 kV IEC contact ESD. TI shows an external circuit for 1 kV surge. No common-mode choke.
 - No silkscreen text support in Synth: header labels (GND/TXD1/RXD1 and so on) exist only in the schematic.
-- Routing is incomplete (see above), so the board is not fabricable.
+- The U1 exposed-pad via needs a filled and capped via at the fab (see Routing).
 - 4-layer stackup and 90 ohm USB pair are declared but not verified.
 
 ## Not verified
