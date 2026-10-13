@@ -26,11 +26,6 @@ use crate::result::{RouteArtifacts, RouteStatistics, RouterProvenance};
 /// The helper script that drives the external `py_router/route.py`.
 pub const HELPER: &str = "kicad_routing_tools_route.py";
 
-/// The helper's exit status when a package it was told to escape was not
-/// escaped. Mirrors `ESCAPE_FAILED` in the helper; the general router never
-/// ran, so there is no board.
-pub const ESCAPE_FAILED_EXIT: i32 = 4;
-
 /// KiCadRoutingTools' own JSON route summary, as written by the engine.
 ///
 /// Fields the engine may omit are optional; the fields Synth relies on
@@ -201,9 +196,8 @@ pub fn build_command(
     // out the two 0.5 mm connectors and skipped the 121-ball BGA, because
     // 0.8 mm clears the 0.687 mm two vias need between centres. Needing an
     // escape and failing one are different questions.
-    let candidates = escape_plan(request);
-    let escaping = !candidates.is_empty();
-    if escaping {
+    let candidates = crate::escape::grid_arrays_in_baseline(request);
+    if !candidates.is_empty() {
         // Escape with the smallest via the declared process permits, not with
         // the engine's default. Measured without this, the escape placed 11
         // vias under the fabrication minimum drill — the independent gate
@@ -219,49 +213,10 @@ pub fn build_command(
             format!("{:.4}", synth_ir::Length(drill_nm).to_mm()),
             "--escape-via-size".to_string(),
             format!("{:.4}", synth_ir::Length(diameter_nm).to_mm()),
-            // And the clearance the escape routes to, for the same reason the
-            // via is sized here. Left unsaid, the adapter's own 0.1 mm default
-            // applies, which is under both this floor and the engine's 0.25 mm
-            // — an escape squeezed through a channel the board never agreed
-            // to, and the independent gate then rejects the copper for it.
-            "--escape-clearance".to_string(),
-            format!(
-                "{:.4}",
-                synth_ir::Length(request.policy.min_clearance_nm).to_mm()
-            ),
         ]);
-        for spec in candidates {
-            args.extend(["--fanout-component".to_string(), spec]);
+        for refdes in candidates {
+            args.extend(["--fanout-component".to_string(), refdes]);
         }
-        // Which of those the design asked for, as opposed to which the
-        // geometry selected. An escape stage that fails fails the route for
-        // either, because a grid array handed to the maze router unescaped
-        // is the board this stage exists to prevent. The difference is the
-        // via-in-pad gate: a declared under-pad escape the board cannot
-        // fabricate fails, where a selected one is skipped, since the board's
-        // own rules declined it and nothing was promised about it.
-        let off: std::collections::BTreeSet<&str> =
-            request.escapes_off.iter().map(String::as_str).collect();
-        for escape in &request.escapes {
-            if !off.contains(escape.refdes.as_str()) {
-                args.extend(["--escape-required".to_string(), escape.refdes.clone()]);
-            }
-        }
-    }
-    let perimeter = perimeter_plan(request);
-    if !perimeter.is_empty() && !escaping {
-        // The stub is routed to the board's clearance floor, not the adapter's
-        // own 0.1 mm default, for the reason the grid-array escape is.
-        args.extend([
-            "--escape-clearance".to_string(),
-            format!(
-                "{:.4}",
-                synth_ir::Length(request.policy.min_clearance_nm).to_mm()
-            ),
-        ]);
-    }
-    for refdes in perimeter {
-        args.extend(["--perimeter-component".to_string(), refdes]);
     }
     if let Some(ordering) = &options.ordering {
         args.extend(["--ordering".to_string(), ordering.clone()]);
@@ -319,19 +274,6 @@ fn escape_plan(request: &RouteRequest) -> Vec<String> {
     plan
 }
 
-/// Fine-pitch perimeter packages to give an escape stub before routing.
-///
-/// A package the design declared `escape { off }` on is left alone, and one
-/// that is a grid array is escaped by [`escape_plan`] instead.
-fn perimeter_plan(request: &RouteRequest) -> Vec<String> {
-    let off: std::collections::BTreeSet<&str> =
-        request.escapes_off.iter().map(String::as_str).collect();
-    crate::escape::fine_pitch_perimeter_in_baseline(request)
-        .into_iter()
-        .filter(|refdes| !off.contains(refdes.as_str()))
-        .collect()
-}
-
 /// Run KiCadRoutingTools over the request's baseline.
 #[allow(clippy::too_many_lines)]
 pub fn route(request: &RouteRequest) -> Result<Candidate, RouterFailure> {
@@ -380,7 +322,6 @@ pub fn route(request: &RouteRequest) -> Result<Candidate, RouterFailure> {
         let _ = std::fs::create_dir_all(parent);
     }
 
-    check_baseline(request)?;
     let argv = build_command(request, &python, &helper, &repo);
     let start = std::time::Instant::now();
     let invocation = crate::process::run(
@@ -454,9 +395,6 @@ pub fn route(request: &RouteRequest) -> Result<Candidate, RouterFailure> {
     // and is kept for review rather than discarded.
     let has_board = request.candidate_path().is_file();
     if !has_board {
-        if let Some(failure) = escape_failure(&invocation) {
-            return Err(failure);
-        }
         crate::freerouting::check_process_outcome(
             RouterEngine::KiCadRoutingTools,
             HELPER,
@@ -517,58 +455,6 @@ pub fn route(request: &RouteRequest) -> Result<Candidate, RouterFailure> {
     }
 
     Ok(candidate)
-}
-
-/// Refuse a baseline the escape stage cannot read.
-///
-/// Which packages are escaped is decided from the baseline, so one that is
-/// missing or does not parse would otherwise yield an empty plan, and every
-/// dense package on the board would reach the general router with nothing
-/// said about it. The engine is never started on such a board.
-fn check_baseline(request: &RouteRequest) -> Result<(), RouterFailure> {
-    crate::escape::read_baseline(request)
-        .map(drop)
-        .map_err(|detail| {
-            RouterFailure::io(
-                RouterEngine::KiCadRoutingTools,
-                format!("cannot decide which packages to escape: {detail}"),
-            )
-        })
-}
-
-/// The failure for a run the helper stopped at the escape stage.
-///
-/// Reported as a rejection with the helper's own reason rather than as a
-/// crash, because the helper decided not to route; the reason is its last
-/// `error:` line, not the first line of output, which is whatever the pour
-/// or the fanout printed before it failed.
-fn escape_failure(invocation: &crate::process::Invocation) -> Option<RouterFailure> {
-    if invocation.timed_out
-        || invocation.cancelled
-        || invocation.exit_code != Some(ESCAPE_FAILED_EXIT)
-    {
-        return None;
-    }
-    let reason = invocation
-        .stderr
-        .lines()
-        .rev()
-        .find_map(|line| line.trim().strip_prefix("error: "))
-        .unwrap_or("a required escape did not run");
-    Some(
-        RouterFailure::for_stage(
-            RouterEngine::KiCadRoutingTools,
-            RouterStage::Route,
-            RouterFailureReason::Rejected,
-            format!("{reason}; the baseline export is preserved unchanged"),
-        )
-        .with_exit_code(invocation.exit_code)
-        .with_remediation(
-            "the retained session log has the pour or fanout stage's own error; install \
-             the missing KiCadRoutingTools stage, declare a method the board can \
-             fabricate in the package's `escape` block, or declare `escape { off }`",
-        ),
-    )
 }
 
 /// Both resolvers are shared with capability discovery so the path an engine
@@ -637,18 +523,6 @@ pub fn statistics_from(
     }
     statistics.engine_findings = findings;
     statistics
-}
-
-/// Replace the track and via counts with those of the board as it is now.
-///
-/// [`statistics_from`] reads the board the router wrote. Synth then repairs
-/// that candidate (it prunes dangling stubs and adds island ties and return
-/// vias), so the counts of the delivered board differ. The report describes
-/// the delivered board, so its counts are read again after the repairs.
-pub fn refresh_counts(statistics: &mut RouteStatistics, board: &crate::pcb_read::PcbBoard) {
-    statistics.segments = board.segments.len();
-    statistics.vias = board.vias.len();
-    statistics.wire_length_mm = board.wire_length_mm();
 }
 
 #[cfg(test)]
@@ -757,8 +631,8 @@ mod tests {
     #[test]
     fn a_declared_escape_is_marked_required_and_an_inferred_one_is_not() {
         let (mut request, dir) = with_baseline(&grid_pads(11, 11, 0.8));
-        // U1 is selected by geometry alone: no declaration, so the board's
-        // via-in-pad rule may still skip it.
+        // U1 is selected by geometry alone: no declaration, so a failed
+        // escape may degrade to the general router.
         let joined = argv(&request);
         assert!(joined.contains("--fanout-component U1"), "{joined}");
         assert!(
@@ -885,45 +759,6 @@ mod tests {
         pads
     }
 
-    /// A row of 0.65 mm pads in two rows' worth of pitch: a TSSOP-style body.
-    #[allow(clippy::cast_precision_loss)]
-    fn perimeter_pads(count: usize, pitch: f64) -> String {
-        use std::fmt::Write as _;
-        let mut pads = String::new();
-        for n in 1..=count {
-            let x = (n - 1) as f64 * pitch;
-            let _ = write!(
-                pads,
-                "    (pad \"{n}\" smd roundrect (at {x:.4} 0) (size 0.400 1.500)\n      \
-                 (layers \"F.Cu\" \"F.Paste\" \"F.Mask\") (net {n} \"N{n}\"))\n"
-            );
-        }
-        pads
-    }
-
-    /// A fine-pitch perimeter package is not a grid array, so the grid-array
-    /// stage never saw it and the maze router met its pads with no stub.
-    /// It is handed to the adapter's perimeter stage, routed to the board's
-    /// clearance floor rather than the adapter's own default, and a coarse
-    /// package is not.
-    #[test]
-    fn a_fine_pitch_perimeter_package_is_handed_to_the_perimeter_stage() {
-        let (request, dir) = with_baseline(&perimeter_pads(20, 0.65));
-        let joined = argv(&request);
-        std::fs::remove_dir_all(&dir).ok();
-        assert!(joined.contains("--perimeter-component U1"), "{joined}");
-        assert!(joined.contains("--escape-clearance"), "{joined}");
-        assert!(
-            !joined.contains("--fanout-component"),
-            "a row is not a grid array: {joined}"
-        );
-
-        let (request, dir) = with_baseline(&perimeter_pads(8, 1.27));
-        let joined = argv(&request);
-        std::fs::remove_dir_all(&dir).ok();
-        assert!(!joined.contains("--perimeter-component"), "{joined}");
-    }
-
     /// The escape engine is driven from the baseline, so the flags only
     /// appear when the board actually carries a grid array. Without this the
     /// maze router returns a 0.8 mm ball grid with a stub on every lane.
@@ -941,83 +776,6 @@ mod tests {
         // And the clearance, which the adapter would otherwise default to
         // 0.1 mm — under this board's own 0.127 mm floor.
         assert!(joined.contains("--escape-clearance 0.1270"), "{joined}");
-    }
-
-    /// The escape plan is read off the baseline, so a baseline that cannot be
-    /// read must stop the run rather than produce an empty plan.
-    #[test]
-    fn a_baseline_the_escape_stage_cannot_read_fails_the_route() {
-        let missing = request();
-        let failure = check_baseline(&missing).expect_err("a missing baseline must fail");
-        assert_eq!(failure.stage, RouterStage::Baseline);
-        assert_eq!(failure.reason, RouterFailureReason::Io);
-        assert!(
-            failure.detail.contains("cannot be read"),
-            "{}",
-            failure.detail
-        );
-
-        let (malformed, dir) = with_baseline(&grid_pads(11, 11, 0.8));
-        std::fs::write(malformed.baseline_path(), "(kicad_sch (version 1))").expect("write");
-        let failure = check_baseline(&malformed).expect_err("a malformed baseline must fail");
-        std::fs::remove_dir_all(&dir).ok();
-        assert_eq!(failure.reason, RouterFailureReason::Io);
-        assert!(
-            failure.detail.contains("does not parse"),
-            "{}",
-            failure.detail
-        );
-    }
-
-    #[test]
-    fn a_readable_baseline_passes_the_escape_check() {
-        let (request, dir) = with_baseline(&grid_pads(1, 2, 2.54));
-        let checked = check_baseline(&request);
-        std::fs::remove_dir_all(&dir).ok();
-        assert!(checked.is_ok(), "{checked:?}");
-    }
-
-    fn invocation(exit_code: Option<i32>, stderr: &str) -> crate::process::Invocation {
-        crate::process::Invocation {
-            command: Vec::new(),
-            stdout: "pouring planes: python route_planes.py in out\n".to_string(),
-            stderr: stderr.to_string(),
-            exit_code,
-            timed_out: false,
-            cancelled: false,
-            output_truncated: false,
-            cwd: PathBuf::new(),
-        }
-    }
-
-    /// A stopped escape is a rejection carrying the helper's own reason, not
-    /// a crash named after whatever the child stage printed first.
-    #[test]
-    fn a_failed_escape_is_reported_with_the_helpers_reason() {
-        let stderr = "Traceback (most recent call last):\n  boom\n\
-                      error: grid-array escape of U1 failed; the route fails\n";
-        let failure = escape_failure(&invocation(Some(ESCAPE_FAILED_EXIT), stderr))
-            .expect("exit 4 is an escape failure");
-        assert_eq!(failure.reason, RouterFailureReason::Rejected);
-        assert_eq!(failure.stage, RouterStage::Route);
-        assert_eq!(failure.exit_code, Some(ESCAPE_FAILED_EXIT));
-        assert!(
-            failure.detail.starts_with("grid-array escape of U1 failed"),
-            "{}",
-            failure.detail
-        );
-    }
-
-    #[test]
-    fn only_the_escape_exit_status_is_an_escape_failure() {
-        assert!(escape_failure(&invocation(Some(1), "error: crashed\n")).is_none());
-        assert!(escape_failure(&invocation(Some(0), "")).is_none());
-        let mut timed_out = invocation(Some(ESCAPE_FAILED_EXIT), "");
-        timed_out.timed_out = true;
-        assert!(
-            escape_failure(&timed_out).is_none(),
-            "a timeout is reported as a timeout"
-        );
     }
 
     /// A board with nothing dense on it must not ask for an escape at all,
@@ -1196,37 +954,6 @@ mod tests {
             ..KrtReport::default()
         };
         assert!(report.below_floor().is_empty());
-    }
-
-    /// The repairs after the router add vias and drop stubs, so the counts of
-    /// the board the router wrote are not those of the board that is delivered.
-    #[test]
-    fn the_counts_are_those_of_the_board_after_the_repairs() {
-        let routed =
-            crate::pcb_read::PcbBoard::parse(crate::pcb_read::SAMPLE_BOARD).expect("parses");
-        let mut statistics = statistics_from(Some(&routed), None);
-        let (segments, vias) = (statistics.segments, statistics.vias);
-        assert_eq!((segments, vias), (routed.segments.len(), routed.vias.len()));
-
-        let repaired_text = crate::pcb_read::SAMPLE_BOARD
-            .replace(
-                "  (segment (start 15 20) (end 15 18) (width 0.25) (layer \"F.Cu\") (net 2))\n",
-                "",
-            )
-            .replace(
-                "  (via (at 15 18)",
-                "  (via (at 12 12) (size 0.8) (drill 0.4) (layers \"F.Cu\" \"B.Cu\") (net 1))\n  (via (at 15 18)",
-            );
-        let repaired = crate::pcb_read::PcbBoard::parse(&repaired_text).expect("parses");
-        refresh_counts(&mut statistics, &repaired);
-
-        assert_eq!(
-            statistics.segments,
-            segments - 1,
-            "the pruned stub is not counted"
-        );
-        assert_eq!(statistics.vias, vias + 1, "the added via is counted");
-        assert!((statistics.wire_length_mm - repaired.wire_length_mm()).abs() < 1e-9);
     }
 
     #[test]
