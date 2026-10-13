@@ -111,6 +111,7 @@ fn board(components: Vec<Component>, nets: Vec<Net>) -> synth_ir::Board {
         buses: vec![],
         modules: vec![],
         variants: vec![],
+        required_processes: std::collections::BTreeSet::new(),
         source_span: Span::new(0, 0),
     }
 }

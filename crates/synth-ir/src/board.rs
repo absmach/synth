@@ -4,7 +4,7 @@
 //! ids that downstream stages (ERC, placement, routing, export) use
 //! as the addressable model.
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 
 use serde::{Deserialize, Serialize};
 use synth_diagnostics::Span;
@@ -99,7 +99,53 @@ pub struct Board {
     /// declaration order. Exported to KiCad's native design variants.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub variants: Vec<Variant>,
+    /// Fabrication processes the board declares it needs
+    /// (`requires via_in_pad`), deduplicated and in a stable order.
+    ///
+    /// A requirement, not a permission: it says the design cannot be built
+    /// without the process, and the gate still has to find a manufacturer
+    /// profile that offers it.
+    #[serde(default, skip_serializing_if = "BTreeSet::is_empty")]
+    pub required_processes: BTreeSet<ProcessRequirement>,
     pub source_span: Span,
+}
+
+/// A fabrication process a board declares it cannot be built without.
+///
+/// Deliberately a closed set rather than free text. A misspelled
+/// requirement that reached the router as an unknown string would read
+/// exactly like a board that asked for nothing.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ProcessRequirement {
+    /// The process must fill and cap a via drilled inside an SMD pad.
+    /// At fine pitch this is the only escape the arithmetic leaves; on a
+    /// process that cannot do it, the same copper is a solder-bridging
+    /// defect.
+    ViaInPad,
+}
+
+impl ProcessRequirement {
+    /// Resolve the spelling a `requires` statement used.
+    #[must_use]
+    pub fn from_source(name: &str) -> Option<Self> {
+        match name {
+            "via_in_pad" => Some(Self::ViaInPad),
+            _ => None,
+        }
+    }
+
+    /// The spelling a board writes, for diagnostics and round-tripping.
+    #[must_use]
+    pub const fn as_source(self) -> &'static str {
+        match self {
+            Self::ViaInPad => "via_in_pad",
+        }
+    }
+
+    /// Every requirement this build knows, for the "expected one of" list
+    /// an unknown name is reported against.
+    pub const ALL: &'static [Self] = &[Self::ViaInPad];
 }
 
 /// A standard schematic page, selectable per design with

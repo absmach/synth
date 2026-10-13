@@ -18,9 +18,9 @@ use synth_ast::{
     DiffPairStmt, EndpointAst, GroupAttr, GroupStmt, ImportAst, InterfaceDeclStmt, KeepoutAttr,
     KeepoutStmt, LayersStmt, LegendsStmt, ManufacturerStmt, ModuleDeclStmt, NetDeclAst,
     NetclassAttr, NetclassStmt, NotesDeclAst, ParamDeclAst, PlacementHintAst, PlacementHintAttr,
-    PortBindingAst, PortDeclAst, PowerDeclAst, ProgramAst, RevisionStmt, SchematicOverflowAst,
-    SchematicPaperAst, SchematicStmt, SheetStmt, StackupLayerAst, StackupStmt, StatementAst,
-    UseStmt, ValueWithUnit, VariantDeclStmt,
+    PortBindingAst, PortDeclAst, PowerDeclAst, ProgramAst, RequiresStmt, RevisionStmt,
+    SchematicOverflowAst, SchematicPaperAst, SchematicStmt, SheetStmt, StackupLayerAst,
+    StackupStmt, StatementAst, UseStmt, ValueWithUnit, VariantDeclStmt,
 };
 
 use synth_diagnostics::{
@@ -324,12 +324,13 @@ impl Parser {
             TokenKind::KwSheet => self.parse_sheet().map(StatementAst::Sheet),
             TokenKind::KwSchematic => self.parse_schematic().map(StatementAst::Schematic),
             TokenKind::KwStackup => self.parse_stackup().map(StatementAst::Stackup),
+            TokenKind::KwRequires => self.parse_requires().map(StatementAst::Requires),
             _ => {
                 self.emit(
                     self.peek().span,
                     "E-SYNTH-PARSE-011",
                     "expected statement keyword",
-                    "one of: layers, manufacturer, revision, company, legends, schematic, stackup, component, variant, connect, net, power, notes, module, interface, bus, use, bind, diff_pair, netclass, keepout, group, sheet",
+                    "one of: layers, manufacturer, revision, company, legends, schematic, stackup, component, variant, connect, net, power, notes, module, interface, bus, use, bind, diff_pair, netclass, keepout, group, sheet, requires",
                     self.describe_current(),
                     None,
                 );
@@ -414,6 +415,26 @@ impl Parser {
         let end = self.last_offset();
         Some(ManufacturerStmt {
             name,
+            span: Span::new(start, end),
+        })
+    }
+
+    /// `requires via_in_pad` — a fabrication process the board needs.
+    ///
+    /// The capability is taken as a bare identifier and not resolved here.
+    /// A board naming a process this build does not know about is still a
+    /// board worth checking, so the unknown name is a lowering diagnostic
+    /// rather than a parse error that discards everything after it.
+    fn parse_requires(&mut self) -> Option<RequiresStmt> {
+        let start = self.peek().span.byte_start;
+        self.bump();
+        let capability = self.expect_ident(
+            "E-SYNTH-PARSE-039",
+            "expected the name of a required fabrication process",
+        )?;
+        let end = self.last_offset();
+        Some(RequiresStmt {
+            capability,
             span: Span::new(start, end),
         })
     }
@@ -2456,6 +2477,7 @@ impl Parser {
             TokenKind::KwCompany => "`company`".to_string(),
             TokenKind::KwSchematic => "`schematic`".to_string(),
             TokenKind::KwStackup => "`stackup`".to_string(),
+            TokenKind::KwRequires => "`requires`".to_string(),
             TokenKind::KwLegends => "`legends`".to_string(),
             TokenKind::KwComponent => "`component`".to_string(),
             TokenKind::KwConnect => "`connect`".to_string(),
