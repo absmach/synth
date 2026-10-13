@@ -19,7 +19,7 @@ a key bumps the major version. Version `1.1` added `unsupported` and `unverified
 | `physical_stages` | Layout, placement, routing, DRC and export stages with their evidence. |
 | `manufacturer_profiles` | Built-in fabrication limits. |
 | `language` | Statements, attributes and endpoint forms the parser accepts. |
-| `geometry_and_constraints` | Board size, layer count, schematic page and `routing_constraints`. |
+| `geometry_and_constraints` | Board size, layer count, schematic page, `routing_constraints` and `fabrication_processes`. |
 | `board_family_profiles` | Shipped board-family mechanical outlines. |
 | `unsupported` | Capabilities with no code path in Synth. |
 | `unverified` | Declarations Synth accepts but does not check or use. |
@@ -37,6 +37,18 @@ limits explicitly. Each is an array of entries:
 
 - `unsupported` means no code path exists for the capability.
 - `unverified` means the language accepts the declaration but no stage verifies or consumes it.
+
+## `fabrication_processes`
+
+A process a board cannot be built without, declared with `requires <process>`.
+
+Two facts, kept apart. The board declares what its geometry needs; the manufacturer profile
+declares what the tier sells. `processes` names the first, `profiles_offering_via_in_pad` the
+second, and `gate` the diagnostic that fires when a board requires what its declared tier does
+not offer — so a requirement is never a permission on its own.
+
+`override` names the escape hatch and says what it is: an operator taking responsibility for one
+panel, not an answer about the process.
 
 An entry moves out of its section when a stage starts honouring it. The entries are the
 `UNSUPPORTED` and `UNVERIFIED` tables in `crates/synth-cli/src/main.rs`.

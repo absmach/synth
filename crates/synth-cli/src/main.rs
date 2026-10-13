@@ -1372,7 +1372,18 @@ fn capability_descriptor() -> serde_json::Value {
                 "netclass": ["trace_width", "clearance", "color", "impedance", "current", "plane", "max_length", "max_skew"],
                 "diff_pair": ["impedance", "max_skew", "couple"],
                 "keepout": ["radius"],
-                "component": ["placement_hint"]
+                "component": ["placement_hint"],
+                "requires": ["via_in_pad"]
+            },
+            "fabrication_processes": {
+                "declared_by": "requires <process>",
+                "offered_by": "the manufacturer profile the board's `manufacturer` resolves to",
+                "processes": {
+                    "via_in_pad": "the process fills and caps a via drilled inside an SMD pad, which at fine pitch is the only escape the geometry leaves"
+                },
+                "profiles_offering_via_in_pad": ["jlc-filled-via"],
+                "gate": "E-SYNTH-PROCESS-002: a requirement the declared tier does not offer is an error, so a requirement is never a permission on its own",
+                "override": "--krt-allow-via-in-pad permits via-in-pad in the fabrication gate without a declared requirement or a capable tier; it is an operator taking responsibility for one panel, not a process answer"
             },
             "units": ["mm", "mil", "ohm", "kohm", "mohm", "v", "mv", "a", "ma", "mhz", "ghz", "pf", "nf", "uf"]
         },
