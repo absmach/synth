@@ -2,9 +2,7 @@
 
 Two RP2350s on a six-layer stackup, each on its own native USB, each pair at
 90 Ω with its own skew budget, a shared QSPI boot flash, and a 20-pin
-expansion header. Written for #40 case 3, "PCIe, USB 3.x, or HDMI-class
-differential interface": two independent pairs on one board, each staying its
-own pair with its own budgets.
+expansion header.
 
 ## Board
 
