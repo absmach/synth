@@ -97,7 +97,7 @@ board "dual_usb_compute" {
 
     connect F1.p2   -> U1.vin
     connect J1.gnd  -> U1.gnd
-    connect U1.vout -> C2.p1
+    connect U1.vout -> C2.p1 class "PWR"
     connect U1.gnd  -> C2.p2
     connect U1.vout -> C3.p1
     connect U1.gnd  -> C3.p2
@@ -154,15 +154,14 @@ board "dual_usb_compute" {
     connect U1.gnd  -> U3.gnd
     connect U3.vcc  -> C9.p1
     connect U3.gnd  -> C9.p2
-    connect U2.qspi_sclk -> U3.clk
-    connect U2.qspi_ss   -> U3.cs
-    connect U2.qspi_sd0  -> U3.io0
-    connect U2.qspi_sd1  -> U3.io1
-    connect U2.qspi_sd2  -> U3.io2
-    connect U2.qspi_sd3  -> U3.io3
-
-    connect J1.dp -> U2.usb_dp
-    connect J1.dn -> U2.usb_dn
+    connect U2.qspi_sclk -> U3.clk class "QSPI"
+    connect U2.qspi_ss   -> U3.cs class "QSPI"
+    connect U2.qspi_sd0  -> U3.io0 class "QSPI"
+    connect U2.qspi_sd1  -> U3.io1 class "QSPI"
+    connect U2.qspi_sd2  -> U3.io2 class "QSPI"
+    connect U2.qspi_sd3  -> U3.io3 class "QSPI"
+    connect J1.dp -> U2.usb_dp class "USB"
+    connect J1.dn -> U2.usb_dn class "USB"
 
     group "RP2350 DEVICE" color "#0a7d4a" {
       // A second RP2350 rather than the ESP32-C3 this board was first
@@ -194,8 +193,8 @@ board "dual_usb_compute" {
     connect U1.vout -> R4.p1
     connect R4.p2   -> U4.run
 
-    connect J2.dp -> U4.usb_dp
-    connect J2.dn -> U4.usb_dn
+    connect J2.dp -> U4.usb_dp class "USB"
+    connect J2.dn -> U4.usb_dn class "USB"
 
     group "EXPANSION" color "#334155" {
       component J3: connector "header_1x20"
