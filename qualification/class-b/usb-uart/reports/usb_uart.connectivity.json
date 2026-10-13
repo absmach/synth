@@ -23,7 +23,7 @@
   "kicad_drc": {
     "errors": 0,
     "unconnected": 2,
-    "warnings": 76
+    "warnings": 51
   },
   "blocking_reasons": [
     "kicad-cli pcb drc reported 2 blocking violation(s)"

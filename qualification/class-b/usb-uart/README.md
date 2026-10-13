@@ -1,7 +1,7 @@
 # USB-C dual UART + RS-485 adapter (SYN-66)
 
 Status: **requires expert review. Not a completed qualification result.** Not fabricated, not tested on hardware.
-Revision B (this change) routes with FreeRouting 2.4.1 with 0 open nets. KiCad reports 2 unconnected ground-pour items, so Synth's release gate says `validation_failed` and marks the package UNTRUSTED. DRC reports 0 errors on the raw router file, but 67 clearance errors after a KiCad re-save (59 on revision A); see Routing. See `QUALIFICATION.md` for what Synth checked and what needs an SI/PI/RF expert, and `SHA256SUMS` for the artifact hashes.
+Revision B (this change) routes with FreeRouting 2.4.1 with 0 open nets. KiCad reports 2 unconnected ground-pour items, so Synth's release gate says `validation_failed` and marks the package UNTRUSTED. DRC reports 0 errors on the raw router file, but 63 clearance errors after a KiCad re-save (59 on revision A); see Routing. See `QUALIFICATION.md` for what Synth checked and what needs an SI/PI/RF expert, and `SHA256SUMS` for the artifact hashes.
 Do not call it proven or clean. The list of what is unchecked is at the bottom.
 
 ## What it is
@@ -69,9 +69,9 @@ The Nexperia and LP5907 electrical numbers were not re-read.
 
 ## Placement and routing
 
-- Outline, revision B: 49.4 x 39.8 mm (Edge.Cuts extents). Revision A was 45.1 x 35.8 mm by the same measure (the first version was 92.6 x 66.8 mm), so the board grew by 4.3 x 4.0 mm.
-  Every part has a position in `usb_uart.placement.layout.toml`; the placer adds 4 mm around the part bounding box. The new RS-485 parts (D8, R_TERM, J_TERM, R_A, R_B) sit on the right side. **The delivered board does not match the sidecar for J4:** the sidecar says (35.66, 33.4) and J4 carries an edge hint, but in the routed board it sits 4.0 mm lower and 4.0 mm further left, while J_VIO, J2, J3 and J_TERM are at y 33.4 and no longer flush with the bottom edge. Not tidied.
-- J1 sits flush on the top edge. Courtyard overlaps were not re-checked for revision B beyond KiCad DRC (no overlap errors).
+- Outline, revision B: 50.5 x 36.2 mm (Edge.Cuts extents). Revision A was 45.1 x 35.8 mm by the same measure (the first version was 92.6 x 66.8 mm), so the board grew by 5.4 x 0.4 mm, almost all of it width for the new RS-485 parts.
+  Every part has a position in `usb_uart.placement.layout.toml`; the placer adds 4 mm around the part bounding box. The five headers (J_VIO, J2, J3, J4, J_TERM) all carry the bottom-edge hint and sit in one straight row at y 33.4, flush with the bottom edge; the delivered board matches the sidecar. J4 is turned 180 degrees so its pin 1 (RS-485 A) is on the right, next to the RS-485 parts, which keeps A and B from crossing on the way to the header; D8 sits beside J4. Without turning J4, FreeRouting left the B net open at J4 in 6 of 6 tries; turning J4 alone still left two other nets open; turning it and moving D8 beside it routed every net.
+- J1 sits flush on the top edge. KiCad DRC reports no courtyard overlap and no label overlap or label clipped by the board edge on this board. That depends on the reference-label placement in PR #144 (not merged yet); with the old fixed label offset the same layout had 11 to 12 label-overlap warnings and the labels were cut by the board edge. A few labels in the dense area near U1 (C6, D6, D1) still look crowded in the render.
 - Naming: "revision B" is the name used in these documents for this change. `usb_uart.synth` still declares `revision "A"`, so the title block and BOM say A.
 - Pad-edge gap to the target pad on the same net (revision A, not re-measured for revision B):
 
@@ -91,12 +91,12 @@ The Nexperia and LP5907 electrical numbers were not re-read.
 - D2 is over 2 mm: four protection parts do not fit side by side under the 7 mm of J1 pads any closer.
 - R1, R2, the LEDs and R3 to R9 are placed by hand but not checked against any rule.
 
-Routing, revision B (FreeRouting 2.4.1, `--router free-routing --krt-allow-via-in-pad`; run on 2026-10-13 with a local build of Synth main 5f62566 plus PR #139 and PR #140, both merged into main afterwards):
-- Result: `validation_failed`. Synth's connectivity check: 29 nets connected, 0 open. kicad-cli DRC (`--severity-all --refill-zones`, KiCad 10.0.7) on the file in `kicad/`: 0 errors, **2 unconnected items**, 76 warnings (36 footprint library links, 25 silk over copper, 11 silk overlap, 4 silk edge clearance). The release gate blocks on the 2 unconnected items, so `reports/release.json` says `production_status: untrusted`.
-- 295 track segments, 29 vias, 587 mm of copper, 617 s.
-- The 2 unconnected items are ground-pour (zone) items. The same 2 appeared in every route that completed (3 of 3: this one and two placement variants). Two other variants left a USB net open, and two timed out at 20 minutes. Cause not found. The exporter only adds 4 corner stitch vias; the rest of the ground connection depends on the router's GND vias. Revision A, routed the same way, had 0 unconnected items. Needs a tool fix or another route; not done here.
+Routing, revision B (FreeRouting 2.4.1, `--router free-routing --krt-allow-via-in-pad`; run on 2026-10-13 with a local build of Synth main bb9ae95 (it includes PR #139 and PR #140) plus the label placement of PR #144, not merged yet):
+- Result: `validation_failed`. Synth's connectivity check: 29 nets connected, 0 open. kicad-cli DRC (`--severity-all --refill-zones`, KiCad 10.0.7) on the file in `kicad/`: 0 errors, **2 unconnected items**, 51 warnings (36 footprint library links, 15 silk over copper). The release gate blocks on the 2 unconnected items, so `reports/release.json` says `production_status: untrusted`.
+- 265 track segments, 27 vias, 551 mm of copper, 274 s.
+- The 2 unconnected items are ground-pour (zone) items. The same 2 appeared in every route that reached 0 open nets (4 of 4). Many other placements left nets open or timed out at 20 minutes before this one routed: the aligned row failed in 8 tries before J4 was turned and D8 moved beside it. Cause of the 2 items not found. The exporter only adds 4 corner stitch vias; the rest of the ground connection depends on the router's GND vias. Revision A, routed the same way, had 0 unconnected items. Needs a tool fix or another route; not done here.
 - The file in `kicad/` is the router's output as Synth delivers it for a failed gate. Its zones are not filled (KiCad fills them when it runs DRC). The 3D render is from a KiCad-refilled copy.
-- DRC caveat: re-saving the file through KiCad (`kicad-cli pcb drc --save-board`) turns the router's old-style `(net 0 "")` pad nets into real no-net pads, and DRC then reports 67 clearance errors on this board (and 59 on revision A) against the project's 0.2 mm default clearance, mostly CC tracks beside the J1 pads (0.5 mm pitch). The numbers above are from the raw file. I did not find out which view is right. A person checking this board should open it in KiCad and look at J1.
+- DRC caveat: re-saving the file through KiCad (`kicad-cli pcb drc --save-board`) turns the router's old-style `(net 0 "")` pad nets into real no-net pads, and DRC then reports 63 clearance errors on this board (and 59 on revision A) against the project's 0.2 mm default clearance, mostly CC tracks beside the J1 pads (0.5 mm pitch). The numbers above are from the raw file. I did not find out which view is right. A person checking this board should open it in KiCad and look at J1.
 - Via-in-pad: one place, the U1 exposed pad (pin 25): a GND via, 0.6 mm pad / 0.3 mm drill (`via at (23.800, 17.300) mm U1.25` in the connectivity record). JLCPCB would have to fill and cap it (epoxy or copper paste, extra cost on a 4-layer board) and the order must ask for it. Not confirmed with JLCPCB for this board. With PR #139 (merged), a routed board lists this site under `routing.fabrication_notes` in `release.json`; this run is not routed, so its `release.json` has no note, and the requirement is stated here and in `QUALIFICATION.md` instead.
 - USB pair (revision A numbers, not re-measured for revision B): width 0.242 mm. D+ was 17.03 mm (F.Cu only). D- was 18.43 mm (11.21 F.Cu, 7.23 B.Cu, 2 vias). Skew 1.40 mm. Closest gap 0.133 mm; 12.6 mm of D+ within 0.5 mm of D-.
   FreeRouting does not couple the pair, so the 90 ohm geometry holds only where the tracks happen to run side by side.
@@ -136,5 +136,5 @@ kicad-cli sch erc --severity-all --format json <dir>/usb_uart.kicad_sch
 - Exposed pad: KiCad footprint 2.6 mm, supplier drawing 2.4 mm. Not reconciled.
 - Parts availability, JLCPCB assembly, and the registry LCSC numbers were not checked.
 - The LCSC number for CDSOT23-SM712 (C404012) and the Bourns part's 400 W / 17 A figures come from a search result and the Bourns file; availability and price were not checked.
-- Whether the 67 clearance errors seen after a KiCad re-save are real (see Routing).
+- Whether the 63 clearance errors seen after a KiCad re-save are real (see Routing).
 - Nothing was powered or tested.

@@ -104,7 +104,7 @@ board "usb_uart" {
     component C7: capacitor "c_generic_0603" value "100nF" dielectric "X7R" voltage "16V"
     component J4: connector "header_1x3" value "RS485" { placement_hint { edge: bottom priority: hard } }
     component R_TERM: resistor "r_generic_0603" value "120ohm" tolerance "1%"
-    component J_TERM: connector "header_1x2" value "TERM"
+    component J_TERM: connector "header_1x2" value "TERM" { placement_hint { edge: bottom priority: hard } }
     component R_A: resistor "r_generic_0603" value "10ohm"
     component R_B: resistor "r_generic_0603" value "10ohm"
     component D8: diode "cdsot23_sm712" value "TVS"

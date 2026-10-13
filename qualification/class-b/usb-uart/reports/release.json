@@ -1,7 +1,7 @@
 {
   "schema_version": "synth.release.v1",
   "tool_version": "synth-cli 0.1.1",
-  "input": "qualification/class-b/usb-uart/usb_uart.synth",
+  "input": "/tmp/claude-1000/-home-steve-work-synth/1b15c859-243c-47c6-88fe-751b8f29b86c/scratchpad/R2/usb_uart.synth",
   "fab_requested": false,
   "production_status": "untrusted",
   "release_ready": false,
@@ -63,8 +63,8 @@
     "engine": "freerouting",
     "engine_version": "/home/steve/work/synth-103-integ/tools/freerouting/freerouting-2.4.1.jar",
     "state": "validation_failed",
-    "input_hash": "d089c6409119bdb3cd8553c55c14b9f900cac116a302553849464f5514f50e52",
-    "run_record": "/tmp/claude-1000/-home-steve-work-synth/1b15c859-243c-47c6-88fe-751b8f29b86c/scratchpad/exp2/usb_uart.routing.json",
+    "input_hash": "9cc04ace87dc40fb010e9f57466711f4052ee3debf0543857c51b8d812db5a9f",
+    "run_record": "/tmp/claude-1000/-home-steve-work-synth/1b15c859-243c-47c6-88fe-751b8f29b86c/scratchpad/out_R2/usb_uart.routing.json",
     "reasons": [
       "kicad-cli pcb drc reported 2 blocking violation(s)"
     ]
