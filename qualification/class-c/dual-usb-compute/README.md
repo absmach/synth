@@ -6,10 +6,6 @@ expansion header. Written for #40 case 3, "PCIe, USB 3.x, or HDMI-class
 differential interface": two independent pairs on one board, each staying its
 own pair with its own budgets.
 
-**Status: not fabricated, not powered, not routed here.** Validates clean and
-exports a complete KiCad project. Routed copper needs the independent routing
-validator, which is not part of this build.
-
 ## Board
 
 | Parameter    | Value                      |
