@@ -102,7 +102,7 @@ board "dual_usb_compute" {
     connect U1.vout -> C3.p1
     connect U1.gnd  -> C3.p2
 
-    group "RP2350" color "#0072b2" {
+    group "RP2350 HOST" color "#0072b2" {
       component U2: mcu       "rp2350" { placement_hint { region: center priority: hard } }
       component C4: capacitor "c_generic_0603" value "100nF" { placement_hint { near: "U2" priority: hard } }
       component C5: capacitor "c_generic_0603" value "100nF" { placement_hint { near: "U2" priority: hard } }
@@ -164,7 +164,7 @@ board "dual_usb_compute" {
     connect J1.dp -> U2.usb_dp
     connect J1.dn -> U2.usb_dn
 
-    group "ESP32-C3 RADIO" color "#0a7d4a" {
+    group "RP2350 DEVICE" color "#0a7d4a" {
       // A second RP2350 rather than the ESP32-C3 this board was first
       // written around: `esp32_c3_mini` names a symbol and footprint absent
       // from KiCad 10 and invents two USB pins the module does not have
