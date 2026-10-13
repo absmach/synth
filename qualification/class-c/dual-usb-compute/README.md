@@ -39,10 +39,6 @@ expansion header.
 | QSPI  | 0.2 mm | 0.2 mm    | —                    | 6    |
 | PWR   | 0.8 mm | 0.25 mm   | —                    | 1    |
 
-A `netclass` block assigns no nets. Each of these is joined by `class "NAME"`
-on a `connect`, which is the spelling the language reference omitted until
-#129. Without it a class is inert and reads as satisfied.
-
 ## Differential pairs
 
 | Pair                      | Impedance | Max skew | Couple |
@@ -50,10 +46,9 @@ on a `connect`, which is the spelling the language reference omitted until
 | `U2_usb_dp` / `U2_usb_dn` | 90 Ω      | 0.15 mm  | tight  |
 | `U4_usb_dp` / `U4_usb_dn` | 90 Ω      | 0.15 mm  | tight  |
 
-`max_skew` bounds one pair's own two halves. `match_length` on the USB class
-bounds all four nets against each other. They answer different questions and
-this board states both: USB 2.0 high speed tolerates a few tens of
-picoseconds between halves, which is a few tenths of a millimetre of FR4.
+Skew is the budget between a pair's own two halves; the 0.5 mm
+`match_length` on the USB class is the budget across all four nets. At FR4
+velocity 0.15 mm is of the order of a picosecond.
 
 ## Notable parts
 
@@ -67,8 +62,8 @@ picoseconds between halves, which is a few tenths of a millimetre of FR4.
 | J2  | Micro-USB B      | `micro_usb_b`      |
 | J3  | 1×20 header      | `header_1x20`      |
 
-The actives and connectors; 21 passives are omitted. The generated `bom.csv`
-is the bill of materials.
+Actives and connectors. 21 passives are omitted; `bom.csv` is the full bill
+of materials.
 
 ## Reproducing
 
