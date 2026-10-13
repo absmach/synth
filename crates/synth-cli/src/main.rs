@@ -4716,6 +4716,19 @@ fn build_route_request(
             .clone()
             .unwrap_or_else(|| "jlc-standard".to_string()),
     );
+    // After the floor, so the capability is read from the profile this board
+    // actually names. Anything unmet has already failed ERC with
+    // E-SYNTH-PROCESS-002, so reaching here means the board was forced past
+    // it; the gate below will still refuse the copper, and saying why beats
+    // letting it read as an ordinary routing failure.
+    for unmet in request.use_board_process_requirements(board) {
+        eprintln!(
+            "warning: board requires `{}`, which profile `{}` does not offer \
+             [E-SYNTH-PROCESS-002]",
+            unmet.as_source(),
+            request.profile_name
+        );
+    }
     request.input_hash = sha256_file(&result.pcb_path)?;
     request
         .kicad_routing_tools
