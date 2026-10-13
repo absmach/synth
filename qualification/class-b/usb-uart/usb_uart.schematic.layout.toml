@@ -262,6 +262,46 @@ timestamp = "2026-10-09T09:00:00+00:00"
 dx = 0.0
 dy = 0.0
 
+[components.R_A]
+x = 469.90
+y = 96.52
+rotation = 0
+source = "agent"
+priority = "soft"
+timestamp = "2026-10-13T09:00:00+00:00"
+dx = 0.0
+dy = 0.0
+
+[components.R_B]
+x = 490.22
+y = 96.52
+rotation = 0
+source = "agent"
+priority = "soft"
+timestamp = "2026-10-13T09:00:00+00:00"
+dx = 0.0
+dy = 0.0
+
+[components.D8]
+x = 510.54
+y = 96.52
+rotation = 0
+source = "agent"
+priority = "soft"
+timestamp = "2026-10-13T09:00:00+00:00"
+dx = 0.0
+dy = 0.0
+
+[components.J_TERM]
+x = 535.94
+y = 96.52
+rotation = 0
+source = "agent"
+priority = "soft"
+timestamp = "2026-10-13T09:00:00+00:00"
+dx = 0.0
+dy = 0.0
+
 [components.D3]
 x = 35.56
 y = 167.64

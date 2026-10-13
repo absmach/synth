@@ -46,16 +46,20 @@ number = "5"
 electrical_type = "ground_reference"
 required = true
 
+# Bus pins A and B. The rs485_a / rs485_b tags are read by the RS-485 checks
+# in absmach/synth#140. Absolute maximum at these pins is +/-18 V (SLLSEY3E, 7.1).
 [[pins]]
 name = "a"
 number = "6"
 electrical_type = "bidirectional"
+capabilities = ["rs485_a"]
 required = true
 
 [[pins]]
 name = "b"
 number = "7"
 electrical_type = "bidirectional"
+capabilities = ["rs485_b"]
 required = true
 
 [[pins]]

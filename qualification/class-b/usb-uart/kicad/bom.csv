@@ -12,10 +12,12 @@ D4,TX0,led,"Lite-On LTST-C190KRKT red AlInGaP LED, 0603, Vf 1.6 to 2.4V at 20mA"
 D5,TVS,diode,"Nexperia PTVS6V0S1UR 400 W unidirectional TVS, 6.0 V standoff, SOD123W, for VBUS and CC",Device:D_Zener,Diode_SMD:Nexperia_CFP3_SOD-123W,,PTVS6V0S1UR
 D6,TVS,diode,"Nexperia PTVS6V0S1UR 400 W unidirectional TVS, 6.0 V standoff, SOD123W, for VBUS and CC",Device:D_Zener,Diode_SMD:Nexperia_CFP3_SOD-123W,,PTVS6V0S1UR
 D7,TX1,led,"Lite-On LTST-C190KRKT red AlInGaP LED, 0603, Vf 1.6 to 2.4V at 20mA",Device:LED,LED_SMD:LED_0603_1608Metric,,LTST-C190KRKT
+D8,TVS,diode,"Bourns CDSOT23-SM712 400 W TVS diode array for RS-485, 12 V / -7 V standoff, SOT-23",,Package_TO_SOT_SMD:SOT-23,C404012,CDSOT23-SM712
 J1,TYPE-C-31-M-12,connector,"USB-C receptacle, 24-pin SMD. Modelled here with primary and mirrored power/ground/data pins for full pad coverage.",Connector:USB_C_Receptacle,Connector_USB:USB_C_Receptacle_HRO_TYPE-C-31-M-12,C165948,TYPE-C-31-M-12
 J2,UART1,connector,"1x3 through-hole pin header, 2.54mm pitch",Connector_Generic:Conn_01x03,Connector_PinHeader_2.54mm:PinHeader_1x03_P2.54mm_Vertical,,
 J3,FLOW1,connector,"1x3 through-hole pin header, 2.54mm pitch",Connector_Generic:Conn_01x03,Connector_PinHeader_2.54mm:PinHeader_1x03_P2.54mm_Vertical,,
 J4,RS485,connector,"1x3 through-hole pin header, 2.54mm pitch",Connector_Generic:Conn_01x03,Connector_PinHeader_2.54mm:PinHeader_1x03_P2.54mm_Vertical,,
+J_TERM,TERM,connector,"1x2 through-hole pin header, 2.54mm pitch",Connector_Generic:Conn_01x02,Connector_PinHeader_2.54mm:PinHeader_1x02_P2.54mm_Vertical,,
 J_VIO,VIO_SEL,connector,"1x3 through-hole pin header, 2.54mm pitch",Connector_Generic:Conn_01x03,Connector_PinHeader_2.54mm:PinHeader_1x03_P2.54mm_Vertical,,
 R1,5.1k,resistor,"Generic 0603 thick-film resistor, any value",Device:R_US,Resistor_SMD:R_0603_1608Metric,,
 R2,5.1k,resistor,"Generic 0603 thick-film resistor, any value",Device:R_US,Resistor_SMD:R_0603_1608Metric,,
@@ -26,6 +28,8 @@ R6,1k,resistor,"Generic 0603 thick-film resistor, any value",Device:R_US,Resisto
 R7,470,resistor,"Generic 0603 thick-film resistor, any value",Device:R_US,Resistor_SMD:R_0603_1608Metric,,
 R8,10k,resistor,"Generic 0603 thick-film resistor, any value",Device:R_US,Resistor_SMD:R_0603_1608Metric,,
 R9,10k,resistor,"Generic 0603 thick-film resistor, any value",Device:R_US,Resistor_SMD:R_0603_1608Metric,,
+R_A,10ohm,resistor,"Generic 0603 thick-film resistor, any value",Device:R_US,Resistor_SMD:R_0603_1608Metric,,
+R_B,10ohm,resistor,"Generic 0603 thick-film resistor, any value",Device:R_US,Resistor_SMD:R_0603_1608Metric,,
 R_TERM,120ohm,resistor,"Generic 0603 thick-film resistor, any value",Device:R_US,Resistor_SMD:R_0603_1608Metric,,
 R_TNOW,4.7k,resistor,"Generic 0603 thick-film resistor, any value",Device:R_US,Resistor_SMD:R_0603_1608Metric,,
 U1,CH342F,ic,"WCH CH342F USB to dual UART bridge controller, QFN-24 (4x4 mm, 0.5 mm pitch, exposed pad)",,Package_DFN_QFN:QFN-24-1EP_4x4mm_P0.5mm_EP2.6x2.6mm,C2841530,CH342F

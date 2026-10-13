@@ -1,0 +1,72 @@
+{
+  "schema_version": "synth.release.v1",
+  "tool_version": "synth-cli 0.1.1",
+  "input": "qualification/class-b/usb-uart/usb_uart.synth",
+  "fab_requested": false,
+  "production_status": "untrusted",
+  "release_ready": false,
+  "reviewer_state": [
+    {
+      "part_id": "c_generic_0603",
+      "reviewed": false
+    },
+    {
+      "part_id": "cdsot23_sm712",
+      "reviewed": false
+    },
+    {
+      "part_id": "ch342f",
+      "reviewed": false
+    },
+    {
+      "part_id": "header_1x2",
+      "reviewed": false
+    },
+    {
+      "part_id": "header_1x3",
+      "reviewed": false
+    },
+    {
+      "part_id": "lp5907_3v3",
+      "reviewed": false
+    },
+    {
+      "part_id": "ltst_c190kgkt",
+      "reviewed": false
+    },
+    {
+      "part_id": "ltst_c190krkt",
+      "reviewed": false
+    },
+    {
+      "part_id": "prtr5v0u2x",
+      "reviewed": false
+    },
+    {
+      "part_id": "ptvs6v0s1ur",
+      "reviewed": false
+    },
+    {
+      "part_id": "r_generic_0603",
+      "reviewed": false
+    },
+    {
+      "part_id": "thvd1450d",
+      "reviewed": false
+    },
+    {
+      "part_id": "usb_c_receptacle",
+      "reviewed": false
+    }
+  ],
+  "routing": {
+    "engine": "freerouting",
+    "engine_version": "/home/steve/work/synth-103-integ/tools/freerouting/freerouting-2.4.1.jar",
+    "state": "validation_failed",
+    "input_hash": "d089c6409119bdb3cd8553c55c14b9f900cac116a302553849464f5514f50e52",
+    "run_record": "/tmp/claude-1000/-home-steve-work-synth/1b15c859-243c-47c6-88fe-751b8f29b86c/scratchpad/exp2/usb_uart.routing.json",
+    "reasons": [
+      "kicad-cli pcb drc reported 2 blocking violation(s)"
+    ]
+  }
+}

@@ -1,0 +1,40 @@
+id = "cdsot23_sm712"
+kind = "diode"
+version = 0
+lifecycle = "active"
+description = "Bourns CDSOT23-SM712 400 W TVS diode array for RS-485, 12 V / -7 V standoff, SOT-23"
+mpn = "CDSOT23-SM712"
+lcsc_pn = "C404012"
+# kicad_symbol intentionally unmapped: KiCad's stock library has no SM712
+# symbol. Falls back to a synthesized rectangle.
+kicad_footprint = "Package_TO_SOT_SMD:SOT-23"
+
+[footprint_dimensions]
+width_mm = 2.9
+height_mm = 2.4
+courtyard_margin_mm = 0.25
+
+[operating_conditions]
+max_voltage_v = 12.0
+
+# Pins 1 and 2 are the two protected lines, pin 3 is the common (ground).
+# Datasheet (Bourns, REV. 06/24, read from bourns.com): pin 1-3 and pin 2-3
+# breakdown 13.3 V min, working peak 12 V, clamp 19 V at 1 A and 26 V at
+# 17 A; pin 3-1 and pin 3-2 working peak 7 V, clamp 11 V at 1 A.
+[[pins]]
+name = "io1"
+number = "1"
+electrical_type = "passive"
+
+[[pins]]
+name = "io2"
+number = "2"
+electrical_type = "passive"
+
+[[pins]]
+name = "common"
+number = "3"
+electrical_type = "passive"
+
+[provenance]
+datasheet_url = "https://www.bourns.com/docs/Product-Datasheets/CDSOT23-SM712.pdf"
