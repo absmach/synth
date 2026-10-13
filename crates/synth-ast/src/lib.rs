@@ -693,6 +693,13 @@ pub enum NetclassAttr {
     /// Current the class's nets carry (`current 1.5A`), used to check routed
     /// width against the IPC-2221 ampacity curve.
     Current(ValueWithUnit),
+    /// Finished diameter of a via on this class's nets
+    /// (`via_diameter 0.6mm`), and the hole drilled through it
+    /// (`via_drill 0.3mm`). The pair is the escape geometry a
+    /// fine-pitch package needs to state: the exporter wrote one
+    /// constant for every class on every board before this existed.
+    ViaDiameter(ValueWithUnit),
+    ViaDrill(ValueWithUnit),
     /// Give the class's nets a copper plane (`plane`): a full-board zone on
     /// each plane layer, so a rail has a low-impedance path instead of only
     /// routed traces. Opt-in, because on a two-layer board a plane competes

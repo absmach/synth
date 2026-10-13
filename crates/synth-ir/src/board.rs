@@ -558,6 +558,18 @@ pub struct NetClass {
     /// routed width via the IPC-2221 ampacity curve.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub current: Option<Current>,
+    /// Finished via diameter and drill for this class's nets
+    /// (`via_diameter 0.6mm`, `via_drill 0.3mm`), written into the exported
+    /// KiCad net class and honoured by a router that reads one.
+    ///
+    /// `None` keeps the exporter's default. The escape arithmetic in
+    /// `synth_router::escape` sizes the *smallest* via a process permits,
+    /// which answers whether a package can escape at all; this is the via
+    /// the board asks to be routed with, which is a different question.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub via_diameter: Option<Length>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub via_drill: Option<Length>,
     /// Give the class's nets a copper plane (`plane`): the exporter floods a
     /// zone for each member net on the plane layers too, not only for ground.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]

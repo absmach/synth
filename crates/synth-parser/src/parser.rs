@@ -1417,6 +1417,21 @@ impl Parser {
                         attrs.push(NetclassAttr::MaxSkew(v));
                     }
                 }
+                // Escape geometry. Contextual, unlike `max_skew` above, because
+                // these two are not reserved: a design already using the words
+                // as names keeps parsing.
+                TokenKind::Ident(name) if name == "via_diameter" => {
+                    self.bump();
+                    if let Some(v) = self.expect_value() {
+                        attrs.push(NetclassAttr::ViaDiameter(v));
+                    }
+                }
+                TokenKind::Ident(name) if name == "via_drill" => {
+                    self.bump();
+                    if let Some(v) = self.expect_value() {
+                        attrs.push(NetclassAttr::ViaDrill(v));
+                    }
+                }
                 TokenKind::Ident(name) if name == "color" => {
                     self.bump();
                     if let Some(hex) = self.expect_string(
@@ -1431,7 +1446,7 @@ impl Parser {
                         self.peek().span,
                         "E-SYNTH-PARSE-019",
                         "unexpected attribute inside netclass",
-                        "`trace_width <value><unit>`, `clearance <value><unit>`, `impedance <value><unit>`, `current <value><unit>`, `max_length <value><unit>`, `max_skew <value><unit>`, `plane`, or `color \"#rrggbb\"`",
+                        "`trace_width <value><unit>`, `clearance <value><unit>`, `impedance <value><unit>`, `current <value><unit>`, `max_length <value><unit>`, `max_skew <value><unit>`, `via_diameter <value><unit>`, `via_drill <value><unit>`, `plane`, or `color \"#rrggbb\"`",
                         self.describe_current(),
                         None,
                     );
