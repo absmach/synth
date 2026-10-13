@@ -7,7 +7,7 @@ Revision B routes with 0 open nets but does not pass Synth's release gate (2 unc
 
 ## Reproduce
 
-Run from the repository root. Use a Synth build that includes PR #139 (fabrication note) and PR #140 (RS-485 checks). Use an empty `XDG_DATA_HOME` so a user registry cannot shadow parts.
+Run from the repository root. Use Synth `main` from 2026-10-13 or later: it includes PR #139 (fabrication note, merged as `de4a5b2`) and PR #140 (RS-485 checks, merged as `bb9ae95`). Use an empty `XDG_DATA_HOME` so a user registry cannot shadow parts.
 
 ```
 export XDG_DATA_HOME=$(mktemp -d)
@@ -19,7 +19,7 @@ kicad-cli sch erc --severity-all --format json <dir>/usb_uart.kicad_sch
 (cd qualification/class-b/usb-uart && sha256sum -c SHA256SUMS)
 ```
 
-Tool versions used: KiCad 10.0.7, FreeRouting 2.4.1 on OpenJDK 25.0.4.1, Synth `main` 5f62566 plus PR #139 and PR #140, on 2026-10-13. Routing is not bit-for-bit repeatable here: small placement changes gave different results (see A5).
+Tool versions used: KiCad 10.0.7, FreeRouting 2.4.1 on OpenJDK 25.0.4.1, Synth `main` 5f62566 plus PR #139 and PR #140 (both merged into `main` afterwards), on 2026-10-13. Routing is not bit-for-bit repeatable here: small placement changes gave different results (see A5).
 
 ## Artifact hashes
 
