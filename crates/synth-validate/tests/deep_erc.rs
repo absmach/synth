@@ -19,12 +19,20 @@ fn workspace_root() -> PathBuf {
 }
 
 fn validate_with(src: &str, config: &ErcConfig) -> Vec<Diagnostic> {
+    let registry_dir = workspace_root().join("registry").join("parts");
+    let registry = synth_registry::load_dir(&registry_dir).expect("registry must load");
+    validate_in(src, &registry, config)
+}
+
+fn validate_in(
+    src: &str,
+    registry: &synth_registry::Registry,
+    config: &ErcConfig,
+) -> Vec<Diagnostic> {
     let filename = "deep_erc.synth".to_string();
     let parse = synth_parser::parse(src, filename.clone());
     let ast = parse.ast.as_ref().expect("source must parse");
-    let registry_dir = workspace_root().join("registry").join("parts");
-    let registry = synth_registry::load_dir(&registry_dir).expect("registry must load");
-    let lowered = synth_ir::lower(ast, &registry, &filename);
+    let lowered = synth_ir::lower(ast, registry, &filename);
     let mut all = parse.diagnostics;
     all.extend(lowered.diagnostics);
     if let Some(board) = lowered.board.as_ref() {
@@ -459,6 +467,128 @@ fn esd_check_can_be_disabled() {
     let config = ErcConfig::from_toml_str("require_connector_protection = false\n").unwrap();
     let diags = validate_with(src, &config);
     assert!(codes(&diags, "E-SYNTH-ESD-001").is_empty());
+}
+
+// ---------------------------------------------------------------------------
+// RS-485 lines: E-SYNTH-ESD-001 and E-SYNTH-RS485-001
+// ---------------------------------------------------------------------------
+
+/// A half-duplex RS-485 transceiver with its bus pins tagged. Its
+/// description mentions the on-chip ESD rating, as real transceivers do:
+/// that is not an external TVS and must not silence the warning.
+const RS485_XCVR: &str = r#"id = "rs485_xcvr"
+kind = "ic"
+version = 0
+lifecycle = "active"
+description = "Test RS-485 transceiver, 18 kV IEC 61000-4-2 contact ESD"
+
+[[pins]]
+name = "a"
+number = "1"
+electrical_type = "bidirectional"
+capabilities = ["rs485_a"]
+
+[[pins]]
+name = "b"
+number = "2"
+electrical_type = "bidirectional"
+capabilities = ["rs485_b"]
+
+[[pins]]
+name = "gnd"
+number = "3"
+electrical_type = "ground_reference"
+"#;
+
+fn validate_rs485(src: &str) -> Vec<Diagnostic> {
+    let mut registry =
+        synth_registry::load_dir(&workspace_root().join("registry").join("parts")).unwrap();
+    let extra = synth_registry::load_from_strs(&[("rs485_xcvr.synth.toml", RS485_XCVR)]).unwrap();
+    for (_, part) in extra.iter() {
+        registry.insert(part.clone());
+    }
+    validate_in(src, &registry, &ErcConfig::default())
+}
+
+#[test]
+fn an_unprotected_rs485_line_to_a_connector_warns() {
+    let src = r#"board "t" {
+      layers 2
+      component U1: ic "rs485_xcvr"
+      component J1: connector "header_1x3"
+      connect U1.a -> J1.p1
+      connect U1.b -> J1.p2
+      connect U1.gnd -> J1.p3
+    }"#;
+    let diags = validate_rs485(src);
+    assert_eq!(
+        codes(&diags, "E-SYNTH-ESD-001").len(),
+        2,
+        "A and B each reach the connector with no TVS: {diags:#?}"
+    );
+}
+
+#[test]
+fn a_tvs_on_each_rs485_line_silences_the_warning() {
+    let src = r#"board "t" {
+      layers 2
+      component U1: ic "rs485_xcvr"
+      component J1: connector "header_1x3"
+      component D1: diode "d_tvs_5v"
+      component D2: diode "d_tvs_5v"
+      connect U1.a -> J1.p1
+      connect U1.b -> J1.p2
+      connect U1.gnd -> J1.p3
+      connect U1.a -> D1.anode
+      connect U1.b -> D2.anode
+      connect D1.cathode -> U1.gnd
+      connect D2.cathode -> U1.gnd
+    }"#;
+    let diags = validate_rs485(src);
+    assert!(codes(&diags, "E-SYNTH-ESD-001").is_empty(), "{diags:#?}");
+}
+
+#[test]
+fn a_termination_resistor_hard_wired_across_a_and_b_warns() {
+    let src = r#"board "t" {
+      layers 2
+      component U1: ic "rs485_xcvr"
+      component R1: resistor "r_generic_0603" value "120"
+      connect U1.a -> R1.p1
+      connect U1.b -> R1.p2
+    }"#;
+    let diags = validate_rs485(src);
+    let found = codes(&diags, "E-SYNTH-RS485-001");
+    assert_eq!(found.len(), 1, "{diags:#?}");
+    assert_eq!(found[0].severity, Severity::Warning);
+}
+
+#[test]
+fn a_resistor_from_one_rs485_line_to_ground_is_not_termination() {
+    let src = r#"board "t" {
+      layers 2
+      component U1: ic "rs485_xcvr"
+      component R1: resistor "r_generic_0603" value "680"
+      connect U1.a -> R1.p1
+      connect R1.p2 -> U1.gnd
+    }"#;
+    let diags = validate_rs485(src);
+    assert!(codes(&diags, "E-SYNTH-RS485-001").is_empty(), "{diags:#?}");
+}
+
+#[test]
+fn a_termination_resistor_behind_a_jumper_does_not_warn() {
+    let src = r#"board "t" {
+      layers 2
+      component U1: ic "rs485_xcvr"
+      component R1: resistor "r_generic_0603" value "120"
+      component J2: connector "header_1x3"
+      connect U1.a -> R1.p1
+      connect R1.p2 -> J2.p1
+      connect J2.p2 -> U1.b
+    }"#;
+    let diags = validate_rs485(src);
+    assert!(codes(&diags, "E-SYNTH-RS485-001").is_empty(), "{diags:#?}");
 }
 
 #[test]

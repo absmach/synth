@@ -58,6 +58,7 @@ mod sch_svg;
 pub mod schem_erc;
 pub mod schematic;
 pub mod sexp;
+mod silk_labels;
 mod symbol_lib;
 pub mod uuid_v5;
 

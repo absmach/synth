@@ -1,6 +1,5 @@
 ---
 source: crates/synth-ir/tests/lowering.rs
-assertion_line: 71
 expression: board
 ---
 {
@@ -77,7 +76,9 @@ expression: board
         "operating_conditions": {
           "min_voltage_v": 3.5,
           "max_voltage_v": 15.0,
-          "max_current_ma": 800.0
+          "max_current_ma": 800.0,
+          "max_power_mw": 800.0,
+          "thermal_resistance_c_per_w": 60.0
         }
       },
       "source_span": {

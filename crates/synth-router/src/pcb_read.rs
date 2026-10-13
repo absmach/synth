@@ -460,6 +460,12 @@ pub struct Zone {
     /// and a ground net connected through a plane is connected through this
     /// copper, so connectivity has to see it.
     pub outlines: Vec<(String, Vec<Point>)>,
+    /// The copper KiCad actually poured, per layer, from `(filled_polygon …)`.
+    ///
+    /// Only present after a refill. Where the outline says the pour may reach,
+    /// the fill says where it did — the difference is a plane split, which a
+    /// signal routed across has no return path under.
+    pub fills: Vec<(String, Vec<Vec<Point>>)>,
     /// Whether the zone is set to fill at all.
     pub filled: bool,
 }
@@ -512,6 +518,53 @@ fn zone_fill_enabled(zone: &Node) -> bool {
         Some(fill) => fill.body().first().and_then(Node::as_str) != Some("no"),
         None => false,
     }
+}
+
+/// Read a zone's poured copper, keyed by layer.
+///
+/// KiCad writes one `(filled_polygon (layer "…") (pts …))` per disjoint poured
+/// region after a refill. A zone never refilled has none, so an empty result
+/// means "not poured yet", not "poured nothing".
+fn zone_fills(zone: &Node) -> Vec<(String, Vec<Vec<Point>>)> {
+    let mut out: Vec<(String, Vec<Vec<Point>>)> = Vec::new();
+    for filled in zone.find_all("filled_polygon") {
+        let Some(layer) = filled
+            .find("layer")
+            .and_then(|layer| layer.body().first())
+            .and_then(Node::as_str)
+        else {
+            continue;
+        };
+        let Some(pts) = filled.find("pts") else {
+            continue;
+        };
+        let vertices: Vec<Point> = pts
+            .find_all("xy")
+            .filter_map(|xy| {
+                let x = xy
+                    .body()
+                    .first()
+                    .and_then(Node::as_str)?
+                    .parse::<f64>()
+                    .ok()?;
+                let y = xy
+                    .body()
+                    .get(1)
+                    .and_then(Node::as_str)?
+                    .parse::<f64>()
+                    .ok()?;
+                Some(Point::new(mm_to_nm(x), mm_to_nm(y)))
+            })
+            .collect();
+        if vertices.len() < 3 {
+            continue;
+        }
+        match out.iter_mut().find(|(name, _)| name == layer) {
+            Some((_, polygons)) => polygons.push(vertices),
+            None => out.push((layer.to_string(), vec![vertices])),
+        }
+    }
+    out
 }
 
 /// A routed board as read back from disk.
@@ -622,6 +675,7 @@ impl PcbBoard {
                     .or_else(|| zone.child_atom("net_name").map(ToString::to_string)),
                 layers: zone.layer_names(),
                 outlines: zone_outlines(zone),
+                fills: zone_fills(zone),
                 filled: zone_fill_enabled(zone),
             });
         }

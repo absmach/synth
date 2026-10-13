@@ -155,6 +155,11 @@ fn net_has_protection(board: &Board, net: NetId) -> bool {
         return false;
     };
     target.endpoints.iter().any(|ep| {
+        // A transceiver's own on-chip ESD rating, which its description
+        // often names, is not an external protection device.
+        if crate::endpoint_has_any_capability(board, ep.component, ep.pin, &RS485_LINES) {
+            return false;
+        }
         let Some(component) = board.component(ep.component) else {
             return false;
         };
@@ -879,6 +884,26 @@ fn is_external_signal(caps: &[synth_registry::PinCapability]) -> bool {
         .any(|c| matches!(c, C::UsbDp | C::UsbDn | C::UsbCc | C::UartTx | C::UartRx))
 }
 
+/// The two bus lines of an RS-485 transceiver.
+const RS485_LINES: [synth_registry::PinCapability; 2] = [
+    synth_registry::PinCapability::Rs485A,
+    synth_registry::PinCapability::Rs485B,
+];
+
+/// True when some pin on `net` carries one of `caps`.
+fn net_has_any_capability(
+    board: &Board,
+    net: NetId,
+    caps: &[synth_registry::PinCapability],
+) -> bool {
+    board.net(net).is_some_and(|target| {
+        target
+            .endpoints
+            .iter()
+            .any(|ep| crate::endpoint_has_any_capability(board, ep.component, ep.pin, caps))
+    })
+}
+
 /// A connector that plausibly brings *power* in from outside (USB, a DC
 /// jack, a battery lead). Used to decide whether a connector-fed rail
 /// should carry reverse-polarity protection; a plain debug header is
@@ -983,8 +1008,12 @@ impl ErcRule for ConnectorProtectionRule {
                 }
                 // An externally-reachable signal net: the registry must
                 // have tagged the pin as an interface pin, so a generic
-                // header pin does not drag in a TVS requirement.
-                if !is_external_signal(&pin.capabilities) {
+                // header pin does not drag in a TVS requirement. An RS-485
+                // line is recognised by the transceiver pin on its net,
+                // since the connector pin itself carries no tag.
+                if !is_external_signal(&pin.capabilities)
+                    && !net_has_any_capability(board, net, &RS485_LINES)
+                {
                     continue;
                 }
                 if net_has_protection(board, net) {
@@ -1014,6 +1043,76 @@ impl ErcRule for ConnectorProtectionRule {
                     },
                 ));
             }
+        }
+        out
+    }
+}
+
+// -----------------------------------------------------------------------------
+// E-SYNTH-RS485-001 — termination hard-wired across the bus
+// -----------------------------------------------------------------------------
+
+/// A terminator belongs only at the two ends of an RS-485 bus. One wired
+/// straight across A and B loads a bus the board may sit in the middle of,
+/// so it needs a jumper or switch in series.
+pub(crate) struct Rs485TerminationRule;
+
+impl ErcRule for Rs485TerminationRule {
+    fn code(&self) -> &'static str {
+        "E-SYNTH-RS485-001"
+    }
+
+    fn category(&self) -> ErcCategory {
+        ErcCategory::Protocol
+    }
+
+    fn check(&self, board: &Board, file: &str) -> Vec<Diagnostic> {
+        use synth_registry::PinCapability as C;
+        let mut out = Vec::new();
+        for component in &board.components {
+            let Some(part) = component.part.as_ref() else {
+                continue;
+            };
+            if !part.kind.eq_ignore_ascii_case("resistor") || part.pins.len() != 2 {
+                continue;
+            }
+            let (Some(first), Some(second)) = (
+                pin_net(board, component.id, PinId(0)),
+                pin_net(board, component.id, PinId(1)),
+            ) else {
+                continue;
+            };
+            let a_to_b = |a: NetId, b: NetId| {
+                net_has_any_capability(board, a, &[C::Rs485A])
+                    && net_has_any_capability(board, b, &[C::Rs485B])
+            };
+            let a_net = if a_to_b(first, second) {
+                first
+            } else if a_to_b(second, first) {
+                second
+            } else {
+                continue;
+            };
+            let Some(target) = board.net(a_net) else {
+                continue;
+            };
+            out.push(net_diag(
+                self.code(),
+                Severity::Warning,
+                board,
+                target,
+                file,
+                DiagText {
+                    title: "RS-485 termination is always connected",
+                    message: format!(
+                        "{} sits straight across the RS-485 A and B lines; away from the ends \
+                         of a bus it loads the line",
+                        component.describe()
+                    ),
+                    expected: "a jumper or switch in series with the terminator".to_string(),
+                    found: format!("{} connects RS-485 A and B directly", component.describe()),
+                },
+            ));
         }
         out
     }

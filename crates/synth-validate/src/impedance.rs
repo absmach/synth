@@ -14,6 +14,8 @@ const ESTIMATE_PAIR: &str =
     " (an estimate from a closed-form coupled-pair approximation; does not replace expert analysis)";
 const ERROR_DEVIATION: f64 = 0.20;
 const WARNING_DEVIATION: f64 = 0.10;
+/// Reference trace width for the stackup impedance envelope (`W-SYNTH-SI-001`).
+const SI_REFERENCE_WIDTH_MM: f64 = 0.2;
 
 struct Controlled<'a> {
     net: &'a Net,
@@ -211,6 +213,62 @@ impl ErcRule for DeclaredWidthRule {
                 )
             })
             .collect()
+    }
+}
+
+/// `W-SYNTH-SI-001` — the stackup's outer microstrip at a reference width sits
+/// outside a standard impedance envelope.
+///
+/// The same characteristic-impedance and propagation-delay calculation the
+/// `synth_evaluate_thermal_si` oracle computes, folded into the gate so a
+/// stackup whose signal layer is too thin or too thick to route normal traces
+/// is flagged at validation rather than only when an agent asks.
+pub(crate) struct StackupImpedanceEnvelopeRule;
+
+impl ErcRule for StackupImpedanceEnvelopeRule {
+    fn code(&self) -> &'static str {
+        "W-SYNTH-SI-001"
+    }
+
+    fn category(&self) -> ErcCategory {
+        ErcCategory::Rf
+    }
+
+    fn check(&self, board: &Board, file: &str) -> Vec<Diagnostic> {
+        let Some(stackup) = board.stackup.as_ref() else {
+            return Vec::new();
+        };
+        let Some(outer) = outer_microstrip_params(stackup) else {
+            return Vec::new();
+        };
+        // A reference width in the middle of the usual range, so the envelope
+        // reflects the stackup rather than a particular design's geometry.
+        let result = calculate_microstrip_z0(&MicrostripParams {
+            width_mm: SI_REFERENCE_WIDTH_MM,
+            ..outer
+        });
+        if (30.0..=100.0).contains(&result.z0_ohms) {
+            return Vec::new();
+        }
+        vec![DiagnosticBuilder::new(
+            self.code(),
+            Severity::Warning,
+            "stackup impedance is outside the standard envelope",
+        )
+        .location(Location::from_span(file.to_string(), stackup.source_span))
+        .expected("an outer-layer microstrip giving 30 to 100 ohm at a 0.2 mm trace")
+        .found(format!(
+            "about {:.0} ohm ({:.2} ns/m delay)",
+            result.z0_ohms, result.propagation_delay_ns_m
+        ))
+        .message(format!(
+            "the stackup's outer microstrip gives about {:.0} ohm at a 0.2 mm trace \
+                 ({:.2} ns/m delay), outside the 30-100 ohm envelope a normal signal layer \
+                 sits in. An estimate from the declared dielectric, not a field solve.",
+            result.z0_ohms, result.propagation_delay_ns_m
+        ))
+        .explanation_url(format!("synth.docs/diagnostics/{}", self.code()))
+        .build()]
     }
 }
 

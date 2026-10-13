@@ -233,6 +233,7 @@ fn evaluate(
         violations.extend(signal_integrity::check_return_path_vias(
             board, routing, stackup,
         ));
+        violations.extend(signal_integrity::check_ir_drop(board, routing, stackup));
     }
     violations.extend(signal_integrity::check_diff_pair_skew(board, routing));
     violations.extend(signal_integrity::check_ampacity(
@@ -755,5 +756,56 @@ mod tests {
         assert!(
             super::signal_integrity::check_return_path_vias(&board, &returned, &stackup).is_empty()
         );
+    }
+
+    #[test]
+    fn a_rail_dropping_more_than_the_budget_is_warned() {
+        let mut board = load_board("../../examples/env_logger.synth");
+        board.stackup = Some(four_layer_stackup());
+        board.nets[0].netclass = Some("PWR".to_string());
+        board.netclasses.push(synth_ir::NetClass {
+            name: "PWR".to_string(),
+            trace_width: None,
+            clearance: None,
+            color: None,
+            impedance: None,
+            current: Some(synth_ir::Current(1_000_000)),
+            plane: false,
+            source_span: synth_diagnostics::Span::new(0, 0),
+        });
+        let stackup = StackupProfile::for_board(&board);
+        let net = board.nets[0].id;
+
+        // 100 mm of 0.2 mm track carrying 1 A drops a few hundred mV.
+        let long = Routing {
+            segments: vec![straight(net, 200_000, 0, 100_000_000)],
+            ..Routing::default()
+        };
+        let flagged = super::signal_integrity::check_ir_drop(&board, &long, &stackup);
+        assert_eq!(flagged.len(), 1, "{flagged:?}");
+        assert_eq!(flagged[0].code, "W-SYNTH-DRC-017");
+        assert!(!flagged[0].is_blocking());
+
+        // 5 mm of 1 mm track drops a few mV.
+        let short = Routing {
+            segments: vec![straight(net, 1_000_000, 0, 5_000_000)],
+            ..Routing::default()
+        };
+        assert!(super::signal_integrity::check_ir_drop(&board, &short, &stackup).is_empty());
+
+        // A 45-degree diagonal on the same copper: 12 mm by 12 mm is 16.97 mm
+        // of track (about 41 mV, within budget). Manhattan distance — abs(dx) +
+        // abs(dy) = 24 mm, about 58 mV — would falsely warn.
+        let diagonal = Routing {
+            segments: vec![synth_pcb::Segment {
+                net,
+                layer: synth_geometry::Layer::Top,
+                start: synth_geometry::Point::new(0, 0),
+                end: synth_geometry::Point::new(12_000_000, 12_000_000),
+                width_nm: 200_000,
+            }],
+            ..Routing::default()
+        };
+        assert!(super::signal_integrity::check_ir_drop(&board, &diagonal, &stackup).is_empty());
     }
 }

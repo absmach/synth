@@ -202,6 +202,13 @@ pub struct OperatingConditions {
     pub max_voltage_v: Option<f64>,
     #[serde(default)]
     pub max_current_ma: Option<f64>,
+    /// Worst-case power the part dissipates, in milliwatts. With
+    /// [`Self::thermal_resistance_c_per_w`] this drives the thermal check.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub max_power_mw: Option<f64>,
+    /// Junction-to-ambient thermal resistance, in degrees C per watt.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub thermal_resistance_c_per_w: Option<f64>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]

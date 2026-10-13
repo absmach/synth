@@ -538,3 +538,73 @@ pub(crate) fn net_name_or_pin_is_ground(board: &Board, net: &Net) -> bool {
                 .is_some_and(|pin| named(&pin.name))
         })
 }
+
+/// Copper resistivity, ohm-metres.
+const COPPER_RESISTIVITY: f64 = 1.68e-8;
+
+/// Default IR-drop budget, in millivolts.
+const IR_DROP_BUDGET_MV: f64 = 50.0;
+
+/// Power-integrity check. Code: `W-SYNTH-DRC-017` — a **warning**.
+///
+/// A net that declares a `current` has the resistance of its routed copper
+/// summed from the track geometry (length, width, and the layer's copper
+/// thickness from the stackup) and turned into an IR drop `I·R`. Above the
+/// budget a rail sags under load. Advisory: the sum treats a net's tracks in
+/// series, so a net with parallel paths is over-estimated, and the budget is a
+/// default rather than the design's own. Needs a declared stackup for the
+/// copper thickness, like the other physics rules.
+#[must_use]
+#[allow(clippy::cast_precision_loss)] // nm → f64 metres; magnitudes are far below 2^53
+pub fn check_ir_drop(board: &Board, routing: &Routing, stackup: &StackupProfile) -> Vec<Violation> {
+    let mut violations = Vec::new();
+    for class in &board.netclasses {
+        let Some(current) = class.current else {
+            continue;
+        };
+        for net in member_nets(board, class) {
+            let mut resistance_ohms = 0.0_f64;
+            for segment in routing.segments.iter().filter(|s| s.net == net.id) {
+                let thickness_nm = stackup
+                    .geometry(segment.layer)
+                    .map_or_else(|| mm_to_nm(0.035), |geometry| geometry.copper_thickness.0);
+                // Euclidean length, not Manhattan: a diagonal track is up to
+                // ~41% shorter than abs(dx)+abs(dy), so Manhattan overestimates
+                // its resistance and can raise a false W-SYNTH-DRC-017.
+                let dx_nm = (segment.end.x_nm - segment.start.x_nm) as f64;
+                let dy_nm = (segment.end.y_nm - segment.start.y_nm) as f64;
+                let length_m = dx_nm.hypot(dy_nm) / 1e9;
+                let area_m2 = (segment.width_nm as f64 / 1e9) * (thickness_nm as f64 / 1e9);
+                if area_m2 > 0.0 {
+                    resistance_ohms += COPPER_RESISTIVITY * length_m / area_m2;
+                }
+            }
+            if resistance_ohms <= 0.0 {
+                continue;
+            }
+            let drop_mv = current.to_amps() * resistance_ohms * 1000.0;
+            if drop_mv <= IR_DROP_BUDGET_MV {
+                continue;
+            }
+            violations.push(Violation {
+                code: "W-SYNTH-DRC-017".to_string(),
+                message: format!(
+                    "net `{}` drops about {drop_mv:.0} mV carrying {:.2} A over {resistance_ohms:.3} \
+                     ohm of copper, above the {IR_DROP_BUDGET_MV:.0} mV budget",
+                    net.name,
+                    current.to_amps(),
+                ),
+                witness: segments_for_net(routing, net.id),
+                nets: vec![net.id],
+                components: Vec::new(),
+                pos_mm: routing
+                    .segments
+                    .iter()
+                    .find(|s| s.net == net.id)
+                    .map(|s| (nm_to_mm(s.start.x_nm), nm_to_mm(s.start.y_nm))),
+                suggested_override: None,
+            });
+        }
+    }
+    violations
+}

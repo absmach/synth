@@ -136,6 +136,10 @@ pub struct ConnectivityReport {
     pub undersized_vias: Vec<String>,
     /// Tracks thinner than the policy allows.
     pub undersized_tracks: Vec<String>,
+    /// Signal tracks with no reference-plane copper under them (a plane split).
+    /// Advisory: geometry alone cannot say whether the split matters.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub plane_splits: Vec<String>,
 }
 
 impl ConnectivityReport {
@@ -554,7 +558,98 @@ pub fn check_connectivity(board: &PcbBoard, policy: &FabricationPolicy) -> Conne
             )
         })
         .collect();
+    report.plane_splits = check_plane_splits(board);
     report
+}
+
+/// Signal tracks with no reference-plane copper under them.
+///
+/// The zone fill says where a plane actually poured. A signal track whose
+/// adjacent plane layer has poured copper of a plane net but does not cover the
+/// track's midpoint is routed across a split: the return current has no plane
+/// under it. Advisory, because geometry alone cannot say whether the split
+/// matters for the signalling scheme, and only reported once a plane layer
+/// carries fill (an un-refilled board has none).
+#[must_use]
+pub fn check_plane_splits(board: &PcbBoard) -> Vec<String> {
+    // Poured plane copper, per layer. A zone *is* a plane pour, so its net name
+    // is not consulted: a plane declared as VCORE or MOTOR_RAIL has a zone just
+    // like GND does, and matching on names (gnd/vcc/...) silently skips it. The
+    // nets that own a filled zone are the plane nets, and a track on one of them
+    // is plane distribution, not a signal that needs a return path.
+    let mut plane_copper: BTreeMap<&str, Vec<&Vec<Point>>> = BTreeMap::new();
+    let mut plane_nets: BTreeSet<String> = BTreeSet::new();
+    for zone in &board.zones {
+        if zone.fills.is_empty() {
+            continue;
+        }
+        if let Some(name) = zone.net_name.as_deref() {
+            plane_nets.insert(name.to_string());
+        } else if let Some(name) = zone.net.and_then(|code| board.nets.get(&code)) {
+            plane_nets.insert(name.clone());
+        }
+        for (layer, polygons) in &zone.fills {
+            for polygon in polygons {
+                plane_copper
+                    .entry(layer.as_str())
+                    .or_default()
+                    .push(polygon);
+            }
+        }
+    }
+    if plane_copper.is_empty() {
+        return Vec::new();
+    }
+    let layer_index: BTreeMap<&str, usize> = board
+        .layers
+        .iter()
+        .enumerate()
+        .map(|(index, layer)| (layer.as_str(), index))
+        .collect();
+
+    let mut out = Vec::new();
+    for segment in &board.segments {
+        let net_name = segment
+            .net
+            .and_then(|code| board.nets.get(&code))
+            .map(String::as_str)
+            .or(segment.net_name.as_deref());
+        if net_name.is_some_and(|name| plane_nets.contains(name)) {
+            continue;
+        }
+        let Some(&index) = layer_index.get(segment.layer.as_str()) else {
+            continue;
+        };
+        let adjacent: Vec<&str> = [index.checked_sub(1), Some(index + 1)]
+            .into_iter()
+            .flatten()
+            .filter_map(|neighbour| board.layers.get(neighbour).map(String::as_str))
+            .filter(|layer| plane_copper.contains_key(layer))
+            .collect();
+        if adjacent.is_empty() {
+            // No plane adjacent to this layer: nothing is referenced.
+            continue;
+        }
+        let midpoint = Point::new(
+            (segment.start.x_nm + segment.end.x_nm) / 2,
+            (segment.start.y_nm + segment.end.y_nm) / 2,
+        );
+        let covered = adjacent.iter().any(|layer| {
+            plane_copper[layer]
+                .iter()
+                .any(|polygon| point_in_polygon(&midpoint, polygon))
+        });
+        if !covered {
+            out.push(format!(
+                "net {} track on {} at ({:.2}, {:.2}) mm has no reference plane copper under it",
+                net_name.unwrap_or("<unnamed>"),
+                segment.layer,
+                midpoint.x_mm(),
+                midpoint.y_mm(),
+            ));
+        }
+    }
+    out
 }
 
 fn describe_via(board: &PcbBoard, via: &crate::pcb_read::Via) -> String {
@@ -1524,5 +1619,40 @@ mod tests {
     fn a_malformed_candidate_is_reported_as_an_unperformed_check() {
         let err: PcbParseError = parse_sexpr("(kicad_pcb").expect_err("unclosed");
         assert!(err.to_string().contains("malformed .kicad_pcb"));
+    }
+
+    fn board_with_track(text_track: &str) -> PcbBoard {
+        let text = format!(
+            r#"(kicad_pcb
+              (layers (0 "F.Cu" signal) (1 "In1.Cu" power) (2 "B.Cu" signal))
+              (net 0 "")
+              (net 1 "SIG")
+              (net 2 "GND")
+              {text_track}
+              (zone (net 2) (net_name "GND") (layer "In1.Cu") (fill yes)
+                (polygon (pts (xy 0 0) (xy 10 0) (xy 10 10) (xy 0 10)))
+                (filled_polygon (layer "In1.Cu") (pts (xy 0 0) (xy 10 0) (xy 10 10) (xy 0 10)))))
+            "#
+        );
+        PcbBoard::parse(&text).expect("board must parse")
+    }
+
+    #[test]
+    fn a_signal_track_over_a_plane_gap_is_flagged() {
+        // The reference plane (In1.Cu) pours over x 0..10; the track at x 20
+        // has no copper under it.
+        let board = board_with_track(
+            r#"(segment (start 20 5) (end 21 5) (width 0.25) (layer "F.Cu") (net 1))"#,
+        );
+        let splits = check_plane_splits(&board);
+        assert_eq!(splits.len(), 1, "{splits:?}");
+    }
+
+    #[test]
+    fn a_signal_track_over_plane_copper_is_not_flagged() {
+        let board = board_with_track(
+            r#"(segment (start 2 5) (end 3 5) (width 0.25) (layer "F.Cu") (net 1))"#,
+        );
+        assert!(check_plane_splits(&board).is_empty());
     }
 }

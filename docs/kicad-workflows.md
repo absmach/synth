@@ -315,6 +315,11 @@ delivered dimensions below the board floor, and unapproved via-in-pad sites.
 KRT's fabrication capability floor when a manufacturer-specific override is
 needed.
 
+On a routed board, each approved via-in-pad site is listed under
+`routing.fabrication_notes` in `release.json` and printed as a
+`fabrication note:` line, so the order can carry the filled-and-capped
+requirement. A board that is not routed gets no such note.
+
 KRT may adapt to
 fabrication floors and may write project DRC settings; review those changes
 explicitly rather than treating a zero-unconnected result as automatic

@@ -12,6 +12,8 @@ courtyard_margin_mm = 0.25
 min_voltage_v = 3.5
 max_voltage_v = 15.0
 max_current_ma = 800.0
+max_power_mw = 200
+thermal_resistance_c_per_w = 200
 
 [[pins]]
 name = "vin"

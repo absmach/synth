@@ -477,7 +477,8 @@ Beyond the per-protocol rules, the engine carries three deeper families:
 - **Protection and hygiene** — floating CMOS inputs
   (`E-SYNTH-CONNECT-008`), open-drain without a pull-up outside I²C
   (`E-SYNTH-CONNECT-009`), unprotected external connectors
-  (`E-SYNTH-ESD-001`), LED current/dissipation (`E-SYNTH-LED-001`),
+  (`E-SYNTH-ESD-001`), an RS-485 terminator wired straight across A/B
+  (`E-SYNTH-RS485-001`), LED current/dissipation (`E-SYNTH-LED-001`),
   case-only net collisions (`E-SYNTH-NAME-007`), single-use declared
   labels (`E-SYNTH-NAME-008`), a ground pin on a non-ground net
   (`E-SYNTH-NAME-009`), and multi-unit parts split across rails

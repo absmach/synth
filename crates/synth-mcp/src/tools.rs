@@ -436,7 +436,6 @@ pub fn list_tools() -> Vec<McpToolInfo> {
                     "layout_file_path": { "type": "string", "description": "Optional path to the PCB placement sidecar (<design>.placement.layout.toml; board millimetres). Do not point this at the schematic sidecar — its coordinates are sheet millimetres." },
                     "allow_placement_warnings": { "type": "boolean", "description": "Allow routing despite visual-review findings; use only for deliberate manual/debug routing (default false)" },
                     "profile":          { "type": "string", "description": "Optional manufacturer DRC profile ('jlcpcb_standard' or path to toml)" },
-                    "routing_order":    { "type": "array", "items": { "type": "string" }, "description": "Optional net order from routing feedback; preserved with the requested width/clearance profile." },
                     "log_routing_outcomes": { "type": "string", "description": "Optional directory to append a Dataset 6 routing outcome record to; a later run on the same board reads it back as retry advice" },
                     "registry_path":    { "type": "string", "description": "Optional custom component registry path" },
                     "workspace_root":   { "type": "string", "description": "Optional workspace root path" },
@@ -2531,52 +2530,103 @@ fn execute_review_schematic(
 /// `None` means "keep the export's own choice": there is one candidate, or the
 /// engine is unavailable, so the opt-in flag never turns a valid export into a
 /// failure. Mirrors the CLI's `--place-route-iterate`.
+/// Lower-is-better route-quality key (`RouteReport::layout_cost`).
+type RouteCost = (u8, usize, usize, usize, u64);
+
 fn select_placement_by_route(
     board: &synth_ir::Board,
     sidecars: &synth_kicad::Sidecars,
     args: &Value,
     engine: synth_router::RouterEngine,
 ) -> Result<Option<synth_place::Placement>, String> {
-    /// Lower-is-better route-quality key (`RouteReport::layout_cost`).
-    type Cost = (u8, usize, usize, usize, u64);
-
     let candidates = synth_kicad::placement_candidates(board, sidecars)
         .map_err(|e| format!("could not enumerate placement candidates: {e}"))?;
     if candidates.len() < 2 {
         return Ok(None);
     }
-    let mut best: Option<(Cost, synth_place::Placement)> = None;
+    let mut best: Option<(RouteCost, synth_place::Placement, Vec<String>)> = None;
     for (index, candidate) in candidates.iter().enumerate() {
-        let scratch = std::env::temp_dir().join(format!(
-            "synth-mcp-place-route-{}-{index}",
-            std::process::id()
-        ));
-        let _ = std::fs::remove_dir_all(&scratch);
-        let res = synth_kicad::export_with_placement(board, &scratch, sidecars, candidate)
-            .map_err(|e| format!("candidate export failed: {e}"))?;
-        let mut request = routing_request(args, engine);
-        request.board_path.clone_from(&res.pcb_path);
-        request.out_dir.clone_from(&res.out_dir);
-        request.stem = synth_router::sanitize_stem(&board.name);
-        request.use_profile_floor(
-            &board
-                .manufacturer
-                .clone()
-                .unwrap_or_else(|| "jlc-standard".to_string()),
-        );
-        request.input_hash = sha256_of(&res.pcb_path);
-        request.preserve_baseline().map_err(|f| f.to_string())?;
-        let report = synth_router::route(&request);
-        let _ = std::fs::remove_dir_all(&scratch);
-        if report.state == synth_router::RouteState::RouterUnavailable {
+        let Some((cost, order)) =
+            evaluate_candidate_mcp(board, sidecars, args, engine, candidate, index)?
+        else {
             return Ok(None);
-        }
-        let cost = report.layout_cost();
-        if best.as_ref().is_none_or(|(previous, _)| cost < *previous) {
-            best = Some((cost, candidate.clone()));
+        };
+        if best
+            .as_ref()
+            .is_none_or(|(previous, _, _)| cost < *previous)
+        {
+            best = Some((cost, candidate.clone(), order));
         }
     }
-    Ok(best.map(|(_, placement)| placement))
+
+    // Hardest-net grouping, as the CLI loop does: pull each hard net's parts
+    // toward the component carrying most of its pins and keep it if better.
+    if let Some((best_cost, _, order)) = best.clone() {
+        if !order.is_empty() {
+            let hints = synth_place::hard_net_proximity_hints(board, &order);
+            if !hints.is_empty() {
+                let hinted = synth_place::with_hard_net_hints(board, &hints);
+                if let Ok(grouped) = synth_kicad::placement_candidates(&hinted, sidecars) {
+                    if let Some(candidate) = grouped.into_iter().next() {
+                        if let Some((cost, _)) = evaluate_candidate_mcp(
+                            board,
+                            sidecars,
+                            args,
+                            engine,
+                            &candidate,
+                            usize::MAX,
+                        )? {
+                            if cost < best_cost {
+                                best = Some((cost, candidate, order));
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+    Ok(best.map(|(_, placement, _)| placement))
+}
+
+/// Export `candidate` to a scratch directory and route it, returning the route
+/// cost and the report's recommended net order. `None` when the engine is
+/// unavailable.
+fn evaluate_candidate_mcp(
+    board: &synth_ir::Board,
+    sidecars: &synth_kicad::Sidecars,
+    args: &Value,
+    engine: synth_router::RouterEngine,
+    candidate: &synth_place::Placement,
+    index: usize,
+) -> Result<Option<(RouteCost, Vec<String>)>, String> {
+    let scratch = std::env::temp_dir().join(format!(
+        "synth-mcp-place-route-{}-{index}",
+        std::process::id()
+    ));
+    let _ = std::fs::remove_dir_all(&scratch);
+    let res = synth_kicad::export_with_placement(board, &scratch, sidecars, candidate)
+        .map_err(|e| format!("candidate export failed: {e}"))?;
+    let mut request = routing_request(args, engine);
+    request.board_path.clone_from(&res.pcb_path);
+    request.out_dir.clone_from(&res.out_dir);
+    request.stem = synth_router::sanitize_stem(&board.name);
+    request.use_profile_floor(
+        &board
+            .manufacturer
+            .clone()
+            .unwrap_or_else(|| "jlc-standard".to_string()),
+    );
+    request.input_hash = sha256_of(&res.pcb_path);
+    request.preserve_baseline().map_err(|f| f.to_string())?;
+    let report = synth_router::route(&request);
+    let _ = std::fs::remove_dir_all(&scratch);
+    if report.state == synth_router::RouteState::RouterUnavailable {
+        return Ok(None);
+    }
+    Ok(Some((
+        report.layout_cost(),
+        report.recommended_routing_order.clone(),
+    )))
 }
 
 fn execute_export(args: &Value, default_registry: Option<&Path>) -> Result<Value, String> {

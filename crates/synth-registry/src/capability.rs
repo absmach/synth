@@ -182,6 +182,10 @@ pub enum PinCapability {
     DiffPairPositive,
     DiffPairNegative,
 
+    // RS-485 bus lines
+    Rs485A,
+    Rs485B,
+
     // Switching regulators
     SwitchNode,
     Feedback,
@@ -246,6 +250,8 @@ impl PinCapability {
             PinCapability::RfFeed => "RF",
             PinCapability::DiffPairPositive => "DIFF_P",
             PinCapability::DiffPairNegative => "DIFF_N",
+            PinCapability::Rs485A => "RS485_A",
+            PinCapability::Rs485B => "RS485_B",
             PinCapability::SwitchNode => "SW",
             PinCapability::Feedback => "FB",
         }

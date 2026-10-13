@@ -342,6 +342,14 @@ pub struct RouteRequest {
     pub input_hash: String,
     /// Source revision the board was compiled from, when known.
     pub source_revision: Option<String>,
+    /// Nets to reserve routes for first, hardest first.
+    ///
+    /// Retry advice from a prior run on this board: the run that failed on
+    /// these nets recorded them, and this run starts from that order. Carried
+    /// on the request rather than only printed, so a retry actually starts
+    /// from it. Empty when there is no advice.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub routing_order: Vec<String>,
 }
 
 impl RouteRequest {
@@ -483,6 +491,7 @@ impl RouteRequest {
             profile_name: "unspecified".to_string(),
             input_hash: String::new(),
             source_revision: None,
+            routing_order: Vec::new(),
         }
     }
 }

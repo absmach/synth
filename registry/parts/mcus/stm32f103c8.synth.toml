@@ -15,6 +15,8 @@ courtyard_margin_mm = 0.25
 min_voltage_v = 1.8
 max_voltage_v = 3.6
 max_current_ma = 150.0
+max_power_mw = 200
+thermal_resistance_c_per_w = 50
 
 [[pins]]
 name = "vbat"

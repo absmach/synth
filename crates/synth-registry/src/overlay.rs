@@ -213,6 +213,8 @@ impl PinCapability {
             Self::RfFeed => "rf_feed",
             Self::DiffPairPositive => "diff_pair_positive",
             Self::DiffPairNegative => "diff_pair_negative",
+            Self::Rs485A => "rs485_a",
+            Self::Rs485B => "rs485_b",
             Self::SwitchNode => "switch_node",
             Self::Feedback => "feedback",
         }

@@ -82,8 +82,10 @@ pub mod outline_packer;
 pub mod score;
 
 use serde::{Deserialize, Serialize};
+use std::collections::BTreeMap;
 use synth_diagnostics::{Diagnostic, DiagnosticBuilder, Location, Severity, Span};
 use synth_geometry::{mm_to_nm, Layer, Point, Rect, Rotation};
+
 use synth_ir::{Board, ComponentId, PinId};
 use thiserror::Error;
 
@@ -986,6 +988,83 @@ pub fn place_with_tuning<S: ::std::hash::BuildHasher>(
     rotation_overrides: &std::collections::HashMap<ComponentId, synth_geometry::Rotation, S>,
 ) -> Result<Placement, PlaceError> {
     place_with_tuning_seeded(board, extra_margin_mm, rotation_overrides, 0)
+}
+
+/// Soft placement hints that pull each of `hard_nets`' components toward the
+/// one carrying most of that net's pins.
+///
+/// The place→route→re-place loop routes a candidate, learns which nets were
+/// hardest, and calls this to ask for one more arrangement with those nets'
+/// parts grouped. Components that already declare a hint are left alone, and a
+/// net with fewer than two components offers nothing. Deterministic.
+#[must_use]
+pub fn hard_net_proximity_hints(board: &Board, hard_nets: &[String]) -> Vec<(ComponentId, String)> {
+    let mut out = Vec::new();
+    for name in hard_nets {
+        let Some(net) = board.nets.iter().find(|net| net.name == *name) else {
+            continue;
+        };
+        let mut pin_counts: BTreeMap<ComponentId, usize> = BTreeMap::new();
+        for endpoint in &net.endpoints {
+            *pin_counts.entry(endpoint.component).or_default() += 1;
+        }
+        if pin_counts.len() < 2 {
+            continue;
+        }
+        let Some(anchor_id) = pin_counts
+            .iter()
+            .max_by(|a, b| a.1.cmp(b.1).then_with(|| b.0.cmp(a.0)))
+            .map(|(id, _)| *id)
+        else {
+            continue;
+        };
+        let Some(anchor_refdes) = board
+            .component(anchor_id)
+            .map(|component| component.refdes.clone())
+        else {
+            continue;
+        };
+        for component in pin_counts.keys().copied() {
+            if component == anchor_id {
+                continue;
+            }
+            if board
+                .component(component)
+                .is_some_and(|component| component.placement_hint.is_none())
+            {
+                out.push((component, anchor_refdes.clone()));
+            }
+        }
+    }
+    out
+}
+
+/// A copy of `board` with each `(component, anchor)` from
+/// [`hard_net_proximity_hints`] added as a soft `near` constraint.
+///
+/// Components that already declare a hint are left alone, so an author's own
+/// hints win over the loop's grouping.
+#[must_use]
+pub fn with_hard_net_hints(board: &Board, hints: &[(ComponentId, String)]) -> Board {
+    let mut hinted = board.clone();
+    for (id, anchor) in hints {
+        if let Some(component) = hinted
+            .components
+            .iter_mut()
+            .find(|component| component.id == *id)
+        {
+            if component.placement_hint.is_none() {
+                component.placement_hint = Some(synth_ir::PlacementConstraint {
+                    region: None,
+                    edge: None,
+                    near: Some(anchor.clone()),
+                    side: None,
+                    priority: synth_ir::PlacementPriority::Soft,
+                });
+            }
+        }
+    }
+    hinted
 }
 
 /// [`place_with_tuning`] with a deterministic `seed`.

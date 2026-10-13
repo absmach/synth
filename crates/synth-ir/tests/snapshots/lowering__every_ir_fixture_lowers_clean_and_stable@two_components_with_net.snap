@@ -693,7 +693,9 @@ expression: board
         "operating_conditions": {
           "min_voltage_v": 1.8,
           "max_voltage_v": 3.6,
-          "max_current_ma": 150.0
+          "max_current_ma": 150.0,
+          "max_power_mw": 300.0,
+          "thermal_resistance_c_per_w": 40.0
         }
       },
       "source_span": {

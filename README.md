@@ -186,6 +186,7 @@ for an interactive review._
 
 ## Documentation
 
+- [Release notes](docs/release-notes.md) — what changed in each release, including new DSL and DRC codes.
 - [KiCad workflows](docs/kicad-workflows.md) — exported projects, validation, BOMs, and fabrication outputs.
 - [RP2350 agent workflow](docs/rp2350-agent-workflow.md) — clean-netlist FreeRouting, compact outlines, agent setup, and review prompts.
 - [Schematic procedures](docs/schematic-procedures.md) — schematic generation and review.

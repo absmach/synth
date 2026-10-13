@@ -152,6 +152,29 @@ pub struct RoutingState {
     /// Why the gate is not satisfied, when it is not.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub reasons: Vec<String>,
+    /// What the fabricator must be told about this board's copper.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub fabrication_notes: Vec<String>,
+}
+
+/// One order note per via found inside a pad of a routed board.
+///
+/// The validator lists every via-in-pad site whatever the policy, and an
+/// unapproved one blocks the route. So a `Routed` state with sites in the
+/// list means they were approved; any other state gets no order note.
+fn fabrication_notes(
+    state: synth_router::RouteState,
+    validation: Option<&synth_router::ValidationSummary>,
+) -> Vec<String> {
+    let Some(validation) = validation.filter(|_| state == synth_router::RouteState::Routed) else {
+        return Vec::new();
+    };
+    validation
+        .connectivity
+        .via_in_pad
+        .iter()
+        .map(|site| format!("{site}: via-in-pad, order with filled and capped vias"))
+        .collect()
 }
 
 impl RoutingState {
@@ -178,6 +201,7 @@ impl RoutingState {
             input_hash: report.provenance.input_hash.clone(),
             run_record: run_record.display().to_string(),
             reasons,
+            fabrication_notes: fabrication_notes(report.state, report.validation.as_ref()),
         }
     }
 
@@ -416,6 +440,54 @@ mod tests {
             vec!["ams1117_3v3".into()],
             "1 part has no reviewer",
         )
+    }
+
+    fn validation_with_via_in_pad() -> synth_router::ValidationSummary {
+        synth_router::ValidationSummary {
+            fabrication_ready: true,
+            topology: synth_router::validate::TopologyReport::default(),
+            connectivity: synth_router::validate::ConnectivityReport {
+                via_in_pad: vec!["via at (11.000, 10.000) mm U1.EP".to_string()],
+                ..Default::default()
+            },
+            kicad_drc: None,
+            blocking_reasons: Vec::new(),
+            unavailable_checks: Vec::new(),
+        }
+    }
+
+    #[test]
+    fn a_routed_via_in_pad_becomes_a_fabrication_note_naming_the_site() {
+        let validation = validation_with_via_in_pad();
+        let notes = fabrication_notes(synth_router::RouteState::Routed, Some(&validation));
+        assert_eq!(notes.len(), 1, "{notes:?}");
+        assert!(notes[0].contains("U1.EP"), "{notes:?}");
+        assert!(notes[0].contains("filled and capped"), "{notes:?}");
+    }
+
+    #[test]
+    fn a_board_that_is_not_routed_gets_no_order_note() {
+        let validation = validation_with_via_in_pad();
+        for state in [
+            synth_router::RouteState::ValidationFailed,
+            synth_router::RouteState::ReviewRequired,
+            synth_router::RouteState::RouterUnavailable,
+        ] {
+            assert!(fabrication_notes(state, Some(&validation)).is_empty());
+        }
+        assert!(fabrication_notes(synth_router::RouteState::Routed, None).is_empty());
+    }
+
+    #[test]
+    fn fabrication_notes_are_omitted_from_the_record_when_there_are_none() {
+        let none = serde_json::to_value(RoutingState::default()).unwrap();
+        assert!(none.get("fabrication_notes").is_none(), "{none}");
+        let some = serde_json::to_value(RoutingState {
+            fabrication_notes: vec!["n".into()],
+            ..RoutingState::default()
+        })
+        .unwrap();
+        assert_eq!(some["fabrication_notes"][0], "n");
     }
 
     #[test]

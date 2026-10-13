@@ -43,6 +43,11 @@ pub enum ExportError {
         #[source]
         source: synth_place::PlaceError,
     },
+    #[error(
+        "power-plane fanout failed: net `{net}`: {detail}. A declared plane needs a \
+         stitching via beside each pad; none could be placed without via-in-pad."
+    )]
+    PlaneFanout { net: String, detail: String },
 }
 
 #[derive(Debug, Clone)]
@@ -464,6 +469,10 @@ fn export_inner(
         &synth_pcb::Routing::default(),
         &project_namespace,
     )
+    .map_err(|error| ExportError::PlaneFanout {
+        net: error.net,
+        detail: error.detail,
+    })?
     .to_string_pretty();
     write_file(&pcb_path, &pcb_text)?;
 

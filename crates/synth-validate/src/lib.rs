@@ -60,6 +60,7 @@ pub use value::{parse_capacitance, parse_resistance, parse_voltage};
 mod impedance;
 pub mod patch_mlp;
 mod stackup;
+mod thermal;
 pub use patch_mlp::PatchMlp;
 
 pub mod placement;
@@ -137,6 +138,7 @@ fn all_rules(config: &ErcConfig) -> Vec<Box<dyn ErcRule>> {
         Box::new(stackup::StackupLayerCountRule),
         Box::new(stackup::StackupAlternationRule),
         Box::new(stackup::StackupNonPositiveRule),
+        Box::new(thermal::ComponentThermalRule),
         Box::new(stackup::ImpedanceReferencePlaneRule),
         Box::new(stackup::ImpedanceNotVerifiedRule),
         Box::new(EmptyBoardRule),
@@ -148,6 +150,7 @@ fn all_rules(config: &ErcConfig) -> Vec<Box<dyn ErcRule>> {
         Box::new(RfFeedImpedanceRule),
         Box::new(impedance::DeclaredWidthRule),
         Box::new(impedance::UnreachableTargetRule),
+        Box::new(impedance::StackupImpedanceEnvelopeRule),
         Box::new(impedance::InnerLayerNotVerifiedRule),
         Box::new(ResidualEnergyAnomalyRule),
         Box::new(CrystalLoadCapBalanceRule),
@@ -173,6 +176,7 @@ fn all_rules(config: &ErcConfig) -> Vec<Box<dyn ErcRule>> {
         Box::new(deep_erc::FloatingCmosInputRule),
         Box::new(deep_erc::OpenDrainPullupRule::new(config)),
         Box::new(deep_erc::ConnectorProtectionRule::new(config)),
+        Box::new(deep_erc::Rs485TerminationRule),
         Box::new(deep_erc::LedCurrentRule::new(config)),
         Box::new(deep_erc::CaseOnlyNetCollisionRule),
         Box::new(deep_erc::SingleUseLabelRule),
