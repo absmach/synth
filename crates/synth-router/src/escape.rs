@@ -192,6 +192,66 @@ pub fn analyse(board: &PcbBoard, policy: &FabricationPolicy) -> Vec<PackageEscap
     findings
 }
 
+/// [`grid_arrays`] for the request's exported baseline board.
+#[must_use]
+pub fn grid_arrays_in_baseline(request: &crate::contract::RouteRequest) -> Vec<String> {
+    let Ok(text) = std::fs::read_to_string(request.baseline_path()) else {
+        return Vec::new();
+    };
+    PcbBoard::parse(&text)
+        .map(|board| grid_arrays(&board))
+        .unwrap_or_default()
+}
+
+/// Packages worth handing to a dedicated escape engine: dense grid arrays.
+///
+/// Returned in reference order, as reference designators.
+///
+/// Deliberately a different question from [`analyse`]. That one asks whether a
+/// package *cannot* be fanned out at the fabrication floor, which the iCE40's
+/// 0.8 mm grid passes — 0.8 mm clears the 0.687 mm two vias need between
+/// centres — so driving an escape engine from its findings fans out the 0.5 mm
+/// connectors and skips the ball grid, which is backwards. What makes a
+/// package need a grid escape is being a grid: a connector is one or two rows
+/// of pads and a BGA is a lattice, so three distinct rows *and* three distinct
+/// columns separates them without naming packages or trusting a library id.
+#[must_use]
+pub fn grid_arrays(board: &PcbBoard) -> Vec<String> {
+    /// Rows and columns a lattice needs before it is one.
+    const MIN_LINES: usize = 3;
+    /// Pad centres within this distance share a row or a column. A ball grid
+    /// is laid out on an exact pitch, so this only has to absorb rounding.
+    const LINE_EPS_NM: i64 = 50_000;
+
+    let lines = |values: &mut Vec<i64>| {
+        values.sort_unstable();
+        values.dedup_by(|a, b| (*a - *b).abs() <= LINE_EPS_NM);
+        values.len()
+    };
+
+    board
+        .footprints
+        .iter()
+        .filter_map(|footprint| {
+            let copper: Vec<&Pad> = footprint
+                .pads
+                .iter()
+                .filter(|pad| pad.layers.iter().any(|layer| layer.ends_with(".Cu")))
+                .collect();
+            if copper.len() < DENSE_MIN_PADS {
+                return None;
+            }
+            let pitch_nm = min_pitch_nm(&copper)?;
+            if pitch_nm > mm(DENSE_MAX_PITCH_MM) {
+                return None;
+            }
+            let rows = lines(&mut copper.iter().map(|pad| pad.at.y_nm).collect());
+            let columns = lines(&mut copper.iter().map(|pad| pad.at.x_nm).collect());
+            (rows >= MIN_LINES && columns >= MIN_LINES).then(|| footprint.reference.clone())
+        })
+        .collect()
+}
+
 fn describe(
     pitch_nm: i64,
     gap_nm: i64,
@@ -332,6 +392,72 @@ mod tests {
         format!(
             "(kicad_pcb\n  (version 20260206)\n  (generator \"synth-eda\")\n  (layers (0 \"F.Cu\" signal) (31 \"B.Cu\" signal) (44 \"Edge.Cuts\" user))\n  (net 0 \"\")\n  (footprint \"{lib}\"\n    (layer \"F.Cu\")\n    (at 10 20)\n    (property \"Reference\" \"U1\" (at 0 -1) (layer \"F.SilkS\"))\n{pads}  )\n  (gr_line (start 0 0) (end 40 0) (layer \"Edge.Cuts\") (width 0.1))\n  (gr_line (start 0 0) (end 0 30) (layer \"Edge.Cuts\") (width 0.1))\n  (gr_line (start 40 0) (end 40 30) (layer \"Edge.Cuts\") (width 0.1))\n  (gr_line (start 0 30) (end 40 30) (layer \"Edge.Cuts\") (width 0.1))\n)"
         )
+    }
+
+    /// A `rows` x `cols` ball grid at `pitch` mm, each ball `ball` mm across.
+    fn grid(rows: usize, cols: usize, pitch: f64, ball: f64, lib: &str) -> String {
+        let mut pads = String::new();
+        for r in 0..rows {
+            for c in 0..cols {
+                let (x, y) = (c as f64 * pitch, r as f64 * pitch);
+                let n = r * cols + c + 1;
+                let _ = write!(
+                    pads,
+                    "    (pad \"{n}\" smd circle (at {x:.4} {y:.4}) (size {ball:.3} {ball:.3})\n      \
+                     (layers \"F.Cu\" \"F.Paste\" \"F.Mask\") (net {n} \"N{n}\"))\n"
+                );
+            }
+        }
+        format!(
+            "(kicad_pcb\n  (version 20260206)\n  (generator \"synth-eda\")\n  (layers (0 \"F.Cu\" signal) (31 \"B.Cu\" signal) (44 \"Edge.Cuts\" user))\n  (net 0 \"\")\n  (footprint \"{lib}\"\n    (layer \"F.Cu\")\n    (at 10 20)\n    (property \"Reference\" \"U1\" (at 0 -1) (layer \"F.SilkS\"))\n{pads}  )\n  (gr_line (start 0 0) (end 40 0) (layer \"Edge.Cuts\") (width 0.1))\n  (gr_line (start 0 0) (end 0 30) (layer \"Edge.Cuts\") (width 0.1))\n  (gr_line (start 40 0) (end 40 30) (layer \"Edge.Cuts\") (width 0.1))\n  (gr_line (start 0 30) (end 40 30) (layer \"Edge.Cuts\") (width 0.1))\n)"
+        )
+    }
+
+    /// The distinction the fanout wiring turns on, and the one that was got
+    /// backwards first time: a 0.8 mm ball grid passes `analyse` because a via
+    /// fits between its balls, and is exactly what needs a grid escape. A
+    /// fine-pitch connector fails `analyse` and is not a grid at all.
+    #[test]
+    fn a_ball_grid_is_a_fanout_candidate_even_though_it_escapes_at_the_floor() {
+        let board = board(&grid(11, 11, 0.8, 0.4, "Package_BGA:BGA-121_11x11"));
+
+        assert!(
+            analyse(&board, &FabricationPolicy::default()).is_empty(),
+            "0.8 mm clears the floor's via span, so nothing is blocked"
+        );
+        assert_eq!(grid_arrays(&board), vec!["U1".to_string()]);
+    }
+
+    /// A single row is not a lattice however fine its pitch, so the pitch
+    /// alone never makes something a fanout candidate.
+    ///
+    /// Note what this does *not* claim. A real USB-C or HDMI receptacle has
+    /// three or more distinct pad rows once mounting and shield pads are
+    /// counted, so it does qualify, and on the Class C board all four of
+    /// J1/J2/U1/U2 are escaped. That is intended: they are dense pad fields,
+    /// and escaping the two connectors measurably cut DRC errors. The
+    /// criterion is "is this a lattice", not "is this a BGA".
+    #[test]
+    fn a_single_row_package_is_not_a_grid_however_fine_its_pitch() {
+        let board = board(&row(12, 0.5, 0.23, 1.5, "Connector_USB:USB_C_Receptacle"));
+
+        assert!(
+            !analyse(&board, &FabricationPolicy::default()).is_empty(),
+            "0.5 mm pitch cannot take a fab-floor via"
+        );
+        assert!(
+            grid_arrays(&board).is_empty(),
+            "one row of pads is not a lattice, whatever its pitch"
+        );
+    }
+
+    #[test]
+    fn a_coarse_grid_is_not_a_fanout_candidate() {
+        // 2.54 mm through-hole header: a lattice, but nothing a dedicated
+        // escape engine is needed for.
+        let board = board(&grid(3, 4, 2.54, 1.0, "Connector_PinHeader:PinHeader_3x4"));
+
+        assert!(grid_arrays(&board).is_empty());
     }
 
     #[test]
