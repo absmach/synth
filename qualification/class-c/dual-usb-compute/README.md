@@ -1,8 +1,8 @@
 # Dual-USB compute board
 
-Two RP2350s on a six-layer stackup, each on its own native USB, each pair at
-90 Ω with its own skew budget, a shared QSPI boot flash, and a 20-pin
-expansion header.
+A USB 3.0 Type-A host port whose two SuperSpeed lanes run at 5 Gb/s, two
+RP2350s on their own USB 2.0 pairs, a shared QSPI boot flash, and a 20-pin
+expansion header, on a six-layer stackup.
 
 ## Board
 
@@ -13,7 +13,7 @@ expansion header.
 | Revision     | A                          |
 | Components   | 28                         |
 | Nets         | 38                         |
-| Outline      | 83.4 × 89.9 mm, auto-sized |
+| Outline      | 64.3 × 64.3 mm, auto-sized |
 
 ## Stackup
 
@@ -33,34 +33,36 @@ expansion header.
 
 ## Netclasses
 
-| Class | Track  | Clearance | Other                | Nets |
-|-------|--------|-----------|----------------------|------|
-| USB   | 0.2 mm | 0.2 mm    | `match_length 0.5mm` | 4    |
-| QSPI  | 0.2 mm | 0.2 mm    | —                    | 6    |
-| PWR   | 0.8 mm | 0.25 mm   | —                    | 1    |
+| Class | Track   | Clearance | Match length | Nets |
+|-------|---------|-----------|--------------|------|
+| SS    | 0.15 mm | 0.2 mm    | 0.2 mm       | 4    |
+| USB   | 0.2 mm  | 0.2 mm    | 0.5 mm       | 4    |
+| QSPI  | 0.2 mm  | 0.2 mm    | —            | 6    |
+| PWR   | 0.8 mm  | 0.25 mm   | —            | 1    |
 
 ## Differential pairs
 
-| Pair                      | Impedance | Max skew | Couple |
-|---------------------------|-----------|----------|--------|
-| `U2_usb_dp` / `U2_usb_dn` | 90 Ω      | 0.15 mm  | tight  |
-| `U4_usb_dp` / `U4_usb_dn` | 90 Ω      | 0.15 mm  | tight  |
+| Pair                      | Signal         | Rate    | Impedance | Max skew | Couple |
+|---------------------------|----------------|---------|-----------|----------|--------|
+| `J2_sstx_p` / `J2_sstx_n` | SuperSpeed TX  | 5 Gb/s  | 90 Ω      | 0.1 mm   | tight  |
+| `J2_ssrx_p` / `J2_ssrx_n` | SuperSpeed RX  | 5 Gb/s  | 90 Ω      | 0.1 mm   | tight  |
+| `U2_usb_dp` / `U2_usb_dn` | USB 2.0 host   | 12 Mb/s | 90 Ω      | 0.15 mm  | tight  |
+| `U4_usb_dp` / `U4_usb_dn` | USB 2.0 device | 12 Mb/s | 90 Ω      | 0.15 mm  | tight  |
 
-Skew is the budget between a pair's own two halves; the 0.5 mm
-`match_length` on the USB class is the budget across all four nets. At FR4
-velocity 0.15 mm is of the order of a picosecond.
+Skew is the budget between a pair's own two halves; `match_length` on a class
+is the budget across its nets. At FR4 velocity 0.1 mm is about 0.7 ps.
 
 ## Notable parts
 
-| Ref | Part             | Registry id        |
-|-----|------------------|--------------------|
-| U1  | AMS1117-3.3      | `ams1117_3v3`      |
-| U2  | RP2350A (host)   | `rp2350`           |
-| U3  | W25Q128JV        | `w25q128_flash`    |
-| U4  | RP2350A (device) | `rp2350`           |
-| J1  | USB-C receptacle | `usb_c_receptacle` |
-| J2  | Micro-USB B      | `micro_usb_b`      |
-| J3  | 1×20 header      | `header_1x20`      |
+| Ref | Part                      | Registry id         |
+|-----|---------------------------|---------------------|
+| U1  | AMS1117-3.3               | `ams1117_3v3`       |
+| U2  | RP2350A (host)            | `rp2350`            |
+| U3  | W25Q128JV                 | `w25q128_flash`     |
+| U4  | RP2350A (device)          | `rp2350`            |
+| J1  | USB-C receptacle          | `usb_c_receptacle`  |
+| J2  | USB 3.0 Type-A receptacle | `usb3_a_receptacle` |
+| J3  | 1×20 header               | `header_1x20`       |
 
 Actives and connectors. 21 passives are omitted; `bom.csv` is the full bill
 of materials.

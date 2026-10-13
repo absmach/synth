@@ -36,6 +36,15 @@ board "dual_usb_compute" {
       copper 0.035mm
     }
 
+    // SuperSpeed carries its own budget: tighter than USB 2.0 because the
+    // lanes run at 5 Gb/s, and narrower tracks because 90 ohm on this
+    // stackup is a finer geometry than the 2.0 pair needs.
+    netclass "SS" {
+      trace_width 0.15mm
+      clearance 0.2mm
+      match_length 0.2mm
+    }
+
     netclass "USB" {
       trace_width 0.2mm
       clearance 0.2mm
@@ -77,8 +86,8 @@ board "dual_usb_compute" {
     connect J1.dn   -> D2.io
     connect J1.gnd  -> D2.gnd
 
-    group "MICRO-USB DEVICE PORT" color "#b45309" {
-      component J2: connector "micro_usb_b" { placement_hint { region: top_right priority: hard } }
+    group "USB 3.0 PORT" color "#b45309" {
+      component J2: connector "usb3_a_receptacle" { placement_hint { region: top_right priority: hard } }
       component D3: diode     "esd_usb"
       component D4: diode     "esd_usb"
     }
@@ -221,10 +230,13 @@ board "dual_usb_compute" {
     connect U2.gp13 -> J3.p14
     connect U2.gp14 -> J3.p15
     connect U2.gp15 -> J3.p16
-    connect U2.gp16 -> J3.p17
-    connect U2.gp17 -> J3.p18
-    connect U2.gp18 -> J3.p19
-    connect U2.gp19 -> J3.p20
+    // The SuperSpeed lanes leave through the expansion header rather than
+    // stopping at the receptacle: a pair that ends nowhere is not routed and
+    // not measurable.
+    connect J2.ssrx_p -> J3.p17 class "SS"
+    connect J2.ssrx_n -> J3.p18 class "SS"
+    connect J2.sstx_p -> J3.p19 class "SS"
+    connect J2.sstx_n -> J3.p20 class "SS"
 
     // The intra-pair budget, per pair: USB 2.0 high speed tolerates a few
     // tens of picoseconds between halves, which is a few tenths of a
@@ -232,6 +244,21 @@ board "dual_usb_compute" {
     diff_pair U2_usb_dp U2_usb_dn {
       impedance 90ohm
       max_skew 0.15mm
+      couple tight
+    }
+
+    // SuperSpeed, 5 Gb/s. Two lanes out of the receptacle, each 90 ohm
+    // differential. At this rate the skew budget binds: 0.1 mm of FR4 is
+    // about 0.7 ps, and the lane budget is a few picoseconds.
+    diff_pair J2_ssrx_p J2_ssrx_n {
+      impedance 90ohm
+      max_skew 0.1mm
+      couple tight
+    }
+
+    diff_pair J2_sstx_p J2_sstx_n {
+      impedance 90ohm
+      max_skew 0.1mm
       couple tight
     }
 
