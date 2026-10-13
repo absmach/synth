@@ -1257,7 +1257,12 @@ const UNSUPPORTED: &[CapabilityLimit] = &[
     ),
     (
         "escape_pattern_and_direction",
-        Some("component.escape"),
+        // No `constraint`: the descriptor's constraint vocabulary is built by
+        // reflecting over the netclass, diff_pair and keepout attribute enums,
+        // and a component's `escape` is a struct field with no variant list to
+        // reflect. Naming `component.escape` claimed an id that vocabulary
+        // does not contain.
+        None,
         "A component's `escape` block picks the engine (`channel`, `underpad`), limits the \
          copper layers, or turns the escape off. What it cannot express is a pattern or a \
          direction: the engine's `--primary-escape`, `--force-escape-direction` and \
