@@ -334,6 +334,33 @@ impl FabricationPolicy {
 }
 
 impl RouteRequest {
+    /// Grant the fabrication processes the board declares it needs.
+    ///
+    /// Returns the requirements the declared process does not offer, so the
+    /// caller can say so. Lives here rather than in a caller because there
+    /// are three — the CLI and both MCP routing entry points — and a
+    /// requirement honoured in only one of them is a permission the other two
+    /// silently withhold.
+    ///
+    /// Call after [`Self::use_profile_floor`]: the capability comes from the
+    /// profile, so granting against a stale floor would answer about the
+    /// wrong process.
+    pub fn use_board_process_requirements(
+        &mut self,
+        board: &synth_ir::Board,
+    ) -> Vec<synth_ir::ProcessRequirement> {
+        let mut unmet = Vec::new();
+        for requirement in &board.required_processes {
+            let granted = match requirement {
+                synth_ir::ProcessRequirement::ViaInPad => self.policy.grant_via_in_pad(),
+            };
+            if !granted {
+                unmet.push(*requirement);
+            }
+        }
+        unmet
+    }
+
     /// Adopt the fabrication floor a manufacturer profile imposes.
     ///
     /// Keeps whatever via-in-pad permission was already granted: an operator
@@ -637,6 +664,34 @@ mod tests {
         let _ = std::fs::remove_dir_all(&dir);
     }
 
+    /// A board with nothing on it, for the policy questions that turn only
+    /// on what it declares.
+    fn empty_board() -> synth_ir::Board {
+        synth_ir::Board {
+            name: "t".to_string(),
+            layers: 4,
+            manufacturer: None,
+            revision: None,
+            company: None,
+            schematic_paper: None,
+            schematic_overflow: None,
+            components: Vec::new(),
+            nets: Vec::new(),
+            diff_pairs: Vec::new(),
+            notes: Vec::new(),
+            legends: false,
+            keepouts: Vec::new(),
+            stackup: None,
+            netclasses: Vec::new(),
+            buses: Vec::new(),
+            modules: Vec::new(),
+            groups: Vec::new(),
+            variants: Vec::new(),
+            required_processes: std::collections::BTreeSet::new(),
+            source_span: synth_diagnostics::Span::new(0, 0),
+        }
+    }
+
     #[test]
     fn engine_round_trips_through_its_identifier() {
         for engine in RouterEngine::all() {
@@ -793,6 +848,47 @@ mod tests {
 
         request.use_profile_floor("jlcpcb");
         assert!(!request.policy.process_fills_via_in_pad);
+    }
+
+    /// The board's declaration reaches the router, which is what stops the
+    /// gate from reporting via-in-pad as blocking on a board that asked for
+    /// it and a process that sells it.
+    #[test]
+    fn a_declared_requirement_grants_the_permission_on_a_capable_tier() {
+        let mut request = RouteRequest::new(
+            std::path::Path::new("board.kicad_pcb"),
+            std::path::Path::new("out"),
+            RouterEngine::KiCadRoutingTools,
+        );
+        let mut board = empty_board();
+        board
+            .required_processes
+            .insert(synth_ir::ProcessRequirement::ViaInPad);
+
+        request.use_profile_floor("jlc-filled-via");
+        let unmet = request.use_board_process_requirements(&board);
+
+        assert!(unmet.is_empty());
+        assert!(request.policy.allow_via_in_pad);
+    }
+
+    #[test]
+    fn a_declared_requirement_a_tier_refuses_is_reported_not_granted() {
+        let mut request = RouteRequest::new(
+            std::path::Path::new("board.kicad_pcb"),
+            std::path::Path::new("out"),
+            RouterEngine::KiCadRoutingTools,
+        );
+        let mut board = empty_board();
+        board
+            .required_processes
+            .insert(synth_ir::ProcessRequirement::ViaInPad);
+
+        request.use_profile_floor("jlcpcb");
+        let unmet = request.use_board_process_requirements(&board);
+
+        assert_eq!(unmet, vec![synth_ir::ProcessRequirement::ViaInPad]);
+        assert!(!request.policy.allow_via_in_pad);
     }
 
     /// An operator override is a promise about the panel rather than a claim
