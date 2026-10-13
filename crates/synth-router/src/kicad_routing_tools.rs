@@ -133,7 +133,23 @@ pub fn build_command(
         "--escalation".to_string(),
         options.escalation.as_str().to_string(),
         "--fab-tier".to_string(),
-        options.fab_tier.clone(),
+        // `auto` lets the engine choose a fabrication tier, and an advanced
+        // tier permits a finer drill than the board's declared process. On
+        // the Class C board that produced 11 filled-and-capped vias at a
+        // 0.2 mm drill against a declared 0.3 mm floor: manufacturable
+        // somewhere, just not where this board says it is being built. An
+        // explicit operator choice still wins; `auto` now resolves against
+        // the floor the board declared instead of against the engine's
+        // judgement.
+        if options.fab_tier == "auto" {
+            if request.policy.min_drill_diameter_nm <= 200_000 {
+                "advanced".to_string()
+            } else {
+                "standard".to_string()
+            }
+        } else {
+            options.fab_tier.clone()
+        },
         // Via-in-pad is expressed as a clearance sentinel by the engine,
         // not as its own flag, so the adapter maps the policy decision onto
         // that encoding here rather than leaking a second meaning.
@@ -152,6 +168,37 @@ pub fn build_command(
     }
     if options.strict_sizes {
         args.push("--strict-sizes".to_string());
+    }
+    // Hand every dense grid array to the escape engine before the general
+    // router sees the board. Left to the maze router, a 0.8 mm ball grid comes
+    // back with a stub on every lane rather than an escape under every pad.
+    //
+    // Measured on the Class C board: driving this from `escape::analyse`
+    // instead — the packages that *cannot* be escaped at the floor — fanned
+    // out the two 0.5 mm connectors and skipped the 121-ball BGA, because
+    // 0.8 mm clears the 0.687 mm two vias need between centres. Needing an
+    // escape and failing one are different questions.
+    let candidates = crate::escape::grid_arrays_in_baseline(request);
+    if !candidates.is_empty() {
+        // Escape with the smallest via the declared process permits, not with
+        // the engine's default. Measured without this, the escape placed 11
+        // vias under the fabrication minimum drill — the independent gate
+        // caught them, but a board that cannot be drilled is not an escape.
+        //
+        // The floor rather than a netclass value because a ball grid's nets
+        // span several classes, and the one thing every escape via on the
+        // package must satisfy is the process.
+        let drill_nm = request.policy.min_drill_diameter_nm;
+        let diameter_nm = drill_nm + 2 * request.policy.min_annular_ring_nm;
+        args.extend([
+            "--escape-via-drill".to_string(),
+            format!("{:.4}", synth_ir::Length(drill_nm).to_mm()),
+            "--escape-via-size".to_string(),
+            format!("{:.4}", synth_ir::Length(diameter_nm).to_mm()),
+        ]);
+        for refdes in candidates {
+            args.extend(["--fanout-component".to_string(), refdes]);
+        }
     }
     args
 }
