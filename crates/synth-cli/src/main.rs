@@ -1385,7 +1385,7 @@ fn capability_descriptor() -> serde_json::Value {
                 "notes": "No fabricator presets are shipped; every value is declared by the design. A diff_pair impedance derives its net class trace width (and, for a true pair, its gap) from the first copper and insulator layers."
             },
             "routing_constraints": {
-                "netclass": ["trace_width", "clearance", "color", "impedance", "current", "plane", "max_length", "max_skew"],
+                "netclass": ["trace_width", "clearance", "color", "impedance", "current", "plane", "max_length", "max_skew", "via_diameter", "via_drill"],
                 "diff_pair": ["impedance", "max_skew", "couple"],
                 "keepout": ["radius"],
                 "component": ["placement_hint", "escape"],
@@ -1400,6 +1400,7 @@ fn capability_descriptor() -> serde_json::Value {
                 "profiles_offering_via_in_pad": ["jlc-filled-via"],
                 "gate": "E-SYNTH-PROCESS-002: a requirement the declared tier does not offer is an error, so a requirement is never a permission on its own",
                 "escape": "dense grid arrays (three pad rows and three columns, at or below 1.3 mm pitch) are escaped before routing by KiCadRoutingTools, with the escape via sized from the declared process floor and the fabrication tier pinned to it. A component's `escape { method … layers … }` block overrides the engine and layers, and `escape { off }` leaves a package to the general router; pattern and direction are not declarable, see the escape_pattern_and_direction limit",
+                "via_geometry": "netclass via_diameter / via_drill reach the exported net class; E-SYNTH-PROCESS-003 checks both against the profile's drill and annular-ring floors. Escape strategy — which layer a ball fans out to, and in what pattern — is not declarable; see the unsupported entry",
                 "override": "--krt-allow-via-in-pad permits via-in-pad in the fabrication gate without a declared requirement or a capable tier; it is an operator taking responsibility for one panel, not a process answer"
             },
             "units": ["mm", "mil", "ohm", "kohm", "mohm", "v", "mv", "a", "ma", "mhz", "ghz", "pf", "nf", "uf"]

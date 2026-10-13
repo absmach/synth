@@ -863,7 +863,7 @@ fn execute_language_reference(_args: &Value) -> Value {
                     "example": "net \"I2C_SCL\" { U1.scl U2.pb6 }"
                 },
                 {
-                    "form": "netclass \"<name>\" { [trace_width <value><unit>] [clearance <value><unit>] [color \"#rrggbb\"] }",
+                    "form": "netclass \"<name>\" { [trace_width <value><unit>] [clearance <value><unit>] [via_diameter <value><unit>] [via_drill <value><unit>] [color \"#rrggbb\"] }",
                     "description": "Routing and colour class. Nets are auto-classified (Power, Ground, I2C, SPI, UART, USB, Clock, Reset) and coloured from a fixed palette; a declared class joined with `class \"<name>\"` overrides both. `color` sets the schematic wire/label hue and the PCB net colour.",
                     "example": "netclass \"PWR\" { trace_width 0.4mm clearance 0.25mm color \"#d55e00\" }"
                 },

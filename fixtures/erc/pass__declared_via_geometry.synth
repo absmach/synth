@@ -1,0 +1,19 @@
+board "declared_via_geometry" {
+  layers 4
+  manufacturer "jlcpcb"
+
+  component R1: resistor "r_generic_0603" value "10k"
+  component R2: resistor "r_generic_0603" value "10k"
+
+  connect R1.p1 -> R2.p1 class "ESCAPE"
+  connect R1.p2 -> R2.p2
+
+  // The smallest via JLC's standard tier permits: 0.3 mm drill with the
+  // 0.13 mm annular minimum, which is the via the escape arithmetic sizes.
+  netclass "ESCAPE" {
+    trace_width 0.2mm
+    clearance 0.2mm
+    via_diameter 0.56mm
+    via_drill 0.3mm
+  }
+}

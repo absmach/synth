@@ -1418,16 +1418,6 @@ struct DeclaredGroup {
     nets: Vec<String>,
 }
 
-/// Via geometry for a class that declares none.
-///
-/// What the exporter wrote for every class on every board before
-/// `via_diameter` / `via_drill` existed, kept as the default so a design that
-/// says nothing exports the copper it always did. A 0.3 mm drill with 0.15 mm
-/// annular clears JLC's 0.13 mm floor; a board that wants the floor itself, or
-/// a finer tier's, now says so.
-const DEFAULT_VIA_DIAMETER_MM: f64 = 0.60;
-const DEFAULT_VIA_DRILL_MM: f64 = 0.30;
-
 pub(crate) fn declared_pair_geometry(
     board: &Board,
     class: &synth_ir::NetClass,
@@ -1576,12 +1566,8 @@ fn build_netclasses(net_table: &[(u32, String)], board: &Board) -> Vec<Sexp> {
             name: nc.name.clone(),
             trace_width_mm: declared_trace_width_mm(nc, board),
             clearance_mm: nc.clearance.map_or(0.127, synth_ir::Length::to_mm),
-            via_diameter_mm: nc
-                .via_diameter
-                .map_or(DEFAULT_VIA_DIAMETER_MM, synth_ir::Length::to_mm),
-            via_drill_mm: nc
-                .via_drill
-                .map_or(DEFAULT_VIA_DRILL_MM, synth_ir::Length::to_mm),
+            via_diameter_mm: nc.effective_via_diameter().to_mm(),
+            via_drill_mm: nc.effective_via_drill().to_mm(),
             pair: declared_pair_geometry(board, nc),
             nets: Vec::new(),
         })

@@ -670,6 +670,49 @@ pub struct EscapeIntent {
     pub off: bool,
     pub source_span: Span,
 }
+
+impl NetClass {
+    /// Via geometry a class that declares none is exported with.
+    ///
+    /// What the exporter wrote for every class on every board before
+    /// `via_diameter` / `via_drill` existed. It lives here rather than in the
+    /// exporter so the stage that checks a via against the process floor and
+    /// the stage that writes it cannot disagree about what an undeclared
+    /// class means.
+    pub const DEFAULT_VIA_DIAMETER: Length = Length(600_000);
+    pub const DEFAULT_VIA_DRILL: Length = Length(300_000);
+
+    /// The via diameter this class is exported with, declared or default.
+    #[must_use]
+    pub fn effective_via_diameter(&self) -> Length {
+        self.via_diameter.unwrap_or(Self::DEFAULT_VIA_DIAMETER)
+    }
+
+    /// The via drill this class is exported with, declared or default.
+    #[must_use]
+    pub fn effective_via_drill(&self) -> Length {
+        self.via_drill.unwrap_or(Self::DEFAULT_VIA_DRILL)
+    }
+
+    /// Copper between the drill wall and the pad edge, in nanometres.
+    ///
+    /// Negative when the declared diameter does not clear its own drill,
+    /// which is a via with no copper rather than a thin one.
+    #[must_use]
+    pub fn annular_ring_nm(&self) -> i64 {
+        (self.effective_via_diameter().0 - self.effective_via_drill().0) / 2
+    }
+
+    /// Whether either half of the via geometry was declared.
+    ///
+    /// A class that declared neither is not making a claim about its vias,
+    /// so the process check has nothing to judge.
+    #[must_use]
+    pub fn declares_via_geometry(&self) -> bool {
+        self.via_diameter.is_some() || self.via_drill.is_some()
+    }
+}
+
 impl Component {
     /// Look up a pin by name on the resolved part.
     pub fn find_pin(&self, name: &str) -> Option<(PinId, &synth_registry::Pin)> {

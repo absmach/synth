@@ -136,6 +136,7 @@ fn all_rules(config: &ErcConfig) -> Vec<Box<dyn ErcRule>> {
         Box::new(RefdesPrefixRule),
         Box::new(BoardZeroLayersRule),
         Box::new(RequiredProcessOfferedRule),
+        Box::new(DeclaredViaGeometryRule),
         Box::new(stackup::StackupLayerCountRule),
         Box::new(stackup::StackupAlternationRule),
         Box::new(stackup::StackupNonPositiveRule),
@@ -2222,10 +2223,6 @@ impl ErcRule for RefdesFormatRule {
 }
 
 // -----------------------------------------------------------------------------
-// E-SYNTH-BOARD-001 — board declared with zero layers
-// -----------------------------------------------------------------------------
-
-// -----------------------------------------------------------------------------
 // E-SYNTH-PROCESS-002 — the declared process does not offer a required one
 // -----------------------------------------------------------------------------
 
@@ -2290,6 +2287,127 @@ impl ErcRule for RequiredProcessOfferedRule {
             })
             .collect()
     }
+}
+
+// -----------------------------------------------------------------------------
+// E-SYNTH-PROCESS-003 — declared via geometry is below the process floor
+// -----------------------------------------------------------------------------
+
+/// A `netclass` whose declared via cannot be drilled by the declared process.
+///
+/// Making via geometry declarable without this check would be worse than
+/// leaving it hardcoded: a board could ask for a 0.15 mm drill on a tier whose
+/// floor is 0.3 mm, the exporter would write it into the net class, the router
+/// would honour it, and the first sign of trouble would be the fab's quote or
+/// the panel.
+///
+/// Judged on the geometry the board is *exported* with, so declaring one half
+/// is checked against the default for the other. A class declaring neither
+/// makes no claim and is not judged.
+struct DeclaredViaGeometryRule;
+
+impl ErcRule for DeclaredViaGeometryRule {
+    fn code(&self) -> &'static str {
+        "E-SYNTH-PROCESS-003"
+    }
+
+    fn category(&self) -> ErcCategory {
+        ErcCategory::Geometry
+    }
+
+    fn check(&self, board: &Board, file: &str) -> Vec<Diagnostic> {
+        let declared = board.manufacturer.as_deref().unwrap_or("jlc-standard");
+        let profile = synth_drc::ManufacturerProfile::from_name(declared);
+        let mut out = Vec::new();
+
+        for class in board
+            .netclasses
+            .iter()
+            .filter(|c| c.declares_via_geometry())
+        {
+            let diameter = class.effective_via_diameter();
+            let drill = class.effective_via_drill();
+
+            // A diameter that does not clear its own drill is a hole, not a
+            // via. Reported alone, because the ring figure below would be
+            // negative and read as a merely thin ring.
+            if diameter.0 <= drill.0 {
+                out.push(via_finding(
+                    self.code(),
+                    file,
+                    class,
+                    "a via diameter larger than its drill",
+                    format!(
+                        "`{}` declares {} diameter over a {} drill, leaving no copper",
+                        class.name,
+                        via_mm(diameter),
+                        via_mm(drill)
+                    ),
+                ));
+                continue;
+            }
+
+            if drill.0 < profile.min_drill_diameter_nm {
+                out.push(via_finding(
+                    self.code(),
+                    file,
+                    class,
+                    format!(
+                        "a drill of at least {} on profile `{}`",
+                        via_mm(synth_ir::Length(profile.min_drill_diameter_nm)),
+                        profile.name
+                    ),
+                    format!("`{}` declares a {} drill", class.name, via_mm(drill)),
+                ));
+            }
+
+            let ring = class.annular_ring_nm();
+            if ring < profile.min_annular_ring_nm {
+                out.push(via_finding(
+                    self.code(),
+                    file,
+                    class,
+                    format!(
+                        "an annular ring of at least {} on profile `{}`",
+                        via_mm(synth_ir::Length(profile.min_annular_ring_nm)),
+                        profile.name
+                    ),
+                    format!(
+                        "`{}` declares {} diameter over a {} drill, a {} ring",
+                        class.name,
+                        via_mm(diameter),
+                        via_mm(drill),
+                        via_mm(synth_ir::Length(ring))
+                    ),
+                ));
+            }
+        }
+
+        out
+    }
+}
+
+fn via_mm(length: synth_ir::Length) -> String {
+    format!("{:.3} mm", length.to_mm())
+}
+
+fn via_finding(
+    code: &str,
+    file: &str,
+    class: &synth_ir::NetClass,
+    expected: impl Into<String>,
+    found: impl Into<String>,
+) -> Diagnostic {
+    DiagnosticBuilder::new(
+        code,
+        Severity::Error,
+        "declared via geometry is below the process floor",
+    )
+    .location(Location::from_span(file.to_string(), class.source_span))
+    .expected(expected.into())
+    .found(found.into())
+    .explanation_url(format!("synth.docs/diagnostics/{code}"))
+    .build()
 }
 
 // -----------------------------------------------------------------------------
@@ -4019,6 +4137,94 @@ mod tests {
             RequiredProcessOfferedRule.check(&board, "test.synth").len(),
             1
         );
+    }
+
+    /// A class with via geometry, on whichever tier `manufacturer` names.
+    fn board_with_via(
+        manufacturer: Option<&str>,
+        diameter_mm: Option<f64>,
+        drill_mm: Option<f64>,
+    ) -> Board {
+        use synth_diagnostics::Span;
+        let mut board = bare_board(manufacturer);
+        board.netclasses = vec![synth_ir::NetClass {
+            name: "ESCAPE".to_string(),
+            trace_width: None,
+            clearance: None,
+            match_length: None,
+            via_diameter: diameter_mm.map(synth_ir::Length::from_mm),
+            via_drill: drill_mm.map(synth_ir::Length::from_mm),
+            color: None,
+            impedance: None,
+            current: None,
+            plane: false,
+            source_span: Span::new(0, 0),
+        }];
+        board
+    }
+
+    #[test]
+    fn a_via_at_the_tier_floor_is_accepted() {
+        // JLC standard: 0.3 mm drill, 0.13 mm ring. 0.56 over 0.30 is exactly
+        // the smallest via the tier permits, which the escape arithmetic uses.
+        let board = board_with_via(Some("jlcpcb"), Some(0.56), Some(0.30));
+
+        assert!(DeclaredViaGeometryRule
+            .check(&board, "test.synth")
+            .is_empty());
+    }
+
+    #[test]
+    fn a_drill_below_the_tier_floor_is_refused() {
+        let board = board_with_via(Some("jlcpcb"), Some(0.45), Some(0.15));
+        let found = DeclaredViaGeometryRule.check(&board, "test.synth");
+
+        assert!(found.iter().any(|d| d.code == "E-SYNTH-PROCESS-003"));
+        assert!(
+            found
+                .iter()
+                .any(|d| d.found.as_deref().is_some_and(|f| f.contains("0.150 mm"))),
+            "the refusal must quote the drill asked for: {found:?}"
+        );
+    }
+
+    #[test]
+    fn a_ring_below_the_tier_floor_is_refused() {
+        // 0.40 over 0.30 is a 0.05 mm ring against a 0.13 mm floor.
+        let board = board_with_via(Some("jlcpcb"), Some(0.40), Some(0.30));
+        let found = DeclaredViaGeometryRule.check(&board, "test.synth");
+
+        assert_eq!(found.len(), 1);
+        assert!(found[0]
+            .expected
+            .as_deref()
+            .is_some_and(|e| e.contains("annular ring")));
+    }
+
+    /// Declaring one half is judged against the default for the other, which
+    /// is the geometry the board actually exports.
+    #[test]
+    fn declaring_only_a_diameter_is_judged_against_the_default_drill() {
+        // 0.30 diameter over the 0.30 default drill: no copper at all.
+        let board = board_with_via(Some("jlcpcb"), Some(0.30), None);
+        let found = DeclaredViaGeometryRule.check(&board, "test.synth");
+
+        assert_eq!(found.len(), 1, "a hole is one finding, not two");
+        assert!(found[0]
+            .found
+            .as_deref()
+            .is_some_and(|f| f.contains("no copper")));
+    }
+
+    /// A class that declares neither is making no claim about its vias, so
+    /// the default must not be judged as though the board had asked for it.
+    #[test]
+    fn a_class_declaring_no_via_geometry_is_not_judged() {
+        let board = board_with_via(Some("jlcpcb"), None, None);
+
+        assert!(DeclaredViaGeometryRule
+            .check(&board, "test.synth")
+            .is_empty());
     }
 
     #[test]
