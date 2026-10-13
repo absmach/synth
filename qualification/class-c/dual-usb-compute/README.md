@@ -76,29 +76,6 @@ picoseconds between halves, which is a few tenths of a millimetre of FR4.
 The actives and connectors; 21 passives are omitted. The generated `bom.csv`
 is the bill of materials.
 
-## What #40 case 3 asks, and what this board answers
-
-| Case 3 asks                       | Answer                                                |
-|-----------------------------------|-------------------------------------------------------|
-| a differential interface declared | **Yes.** Two pairs, 90 Ω, `max_skew`, `couple tight`. |
-| an inter-pair length budget       | **Yes.** `match_length 0.5mm` over four nets.         |
-| constraints preserved in KiCad    | **No.** Neither budget survives export (#147).        |
-| routed evidence                   | **Not here.** No router in this build.                |
-
-## Limitations
-
-| Limitation                                                                                                                                                                                                       | Issue |
-|------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|-------|
-| `match_length` and `max_skew` are dropped at the export boundary, and no `.kicad_dru` is written, so KiCad enforces neither                                                                                      | #147  |
-| Nothing in this build measures either budget; the checks live in the routing validator                                                                                                                           | —     |
-| The second endpoint is an RP2350, not the ESP32-C3 this design was written around: that part names a symbol and footprint absent from KiCad 10 and declares USB on two pins the module does not have             | #146  |
-| No keepouts. A declared keepout reaches no exported board, and even when it does a KiCad keepout is unconditional and would forbid the pair it protects; isolating a pair needs a rule area with a net condition | #142  |
-| The outline is roughly twice the area the parts occupy — components span 84% × 53% of it                                                                                                                         | —     |
-
-What reaches the exported project file is `clearance`, `trace_width`,
-`diff_pair_width` and `diff_pair_gap`, which is what makes #147 easy to miss:
-the net class looks like it carries the design's constraints.
-
 ## Reproducing
 
 ```
