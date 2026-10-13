@@ -427,6 +427,7 @@ mod tests {
             min_drill_diameter_nm: 140_000,
             min_annular_ring_nm: 130_000,
             allow_via_in_pad: true,
+            process_fills_via_in_pad: true,
         };
         assert!(
             analyse(&board, &relaxed).is_empty(),

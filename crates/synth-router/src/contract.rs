@@ -240,15 +240,28 @@ impl Default for KiCadRoutingToolsOptions {
 
 /// Fabrication policy decisions that are not derivable from the board.
 ///
-/// Via-in-pad is the one that matters: it is manufacturable on some
-/// processes and a solder-bridging defect on others, so it is an explicit
-/// approval from the fabrication profile rather than something a router may
-/// decide for itself.
+/// Via-in-pad is the one that matters, and it is two facts rather than one:
+/// whether the process can fill and cap a via inside an SMD pad, and whether
+/// this board is permitted to use one. Conflating them is how a board ends up
+/// approved for a process that would bridge it.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct FabricationPolicy {
     /// Permit vias inside SMD pads. Defaults to false: a board that has not
     /// been explicitly approved for via-in-pad is not one.
+    ///
+    /// The resolved permission, not the capability. It is granted either by
+    /// [`Self::grant_via_in_pad`], when the board declares it needs via-in-pad
+    /// and the process offers it, or by an explicit operator override, which
+    /// outranks the profile because a human has taken responsibility for the
+    /// panel.
     pub allow_via_in_pad: bool,
+    /// Whether the declared process fills and caps a via inside an SMD pad.
+    ///
+    /// Read from the manufacturer profile, so it describes the fab rather than
+    /// the design. Absent from policies serialised before the capability
+    /// existed, and absence reads as "not offered".
+    #[serde(default)]
+    pub process_fills_via_in_pad: bool,
     /// Minimum acceptable copper width, in nanometres.
     pub min_track_width_nm: i64,
     /// Minimum acceptable copper clearance between distinct nets, in nm.
@@ -267,6 +280,7 @@ impl Default for FabricationPolicy {
         // JLCPCB's standard hobbyist tier, matching `ManufacturerProfile`.
         Self {
             allow_via_in_pad: false,
+            process_fills_via_in_pad: false,
             min_track_width_nm: 127_000,
             min_clearance_nm: 127_000,
             min_drill_diameter_nm: 300_000,
@@ -287,6 +301,7 @@ impl FabricationPolicy {
     pub fn from_profile(profile: &synth_drc::ManufacturerProfile) -> Self {
         Self {
             allow_via_in_pad: false,
+            process_fills_via_in_pad: profile.via_in_pad,
             min_track_width_nm: profile.min_trace_width_nm,
             min_clearance_nm: profile.min_copper_clearance_nm,
             min_drill_diameter_nm: profile.min_drill_diameter_nm,
@@ -304,13 +319,27 @@ impl FabricationPolicy {
     pub fn from_profile_name(name: &str) -> Self {
         Self::from_profile(&synth_drc::ManufacturerProfile::from_name(name))
     }
+
+    /// Grant via-in-pad because the board declared it needs one.
+    ///
+    /// Returns whether the permission was granted, which is to say whether
+    /// the declared process offers the capability at all. A board cannot
+    /// approve its own fabrication: asking for via-in-pad on a tier that does
+    /// not fill and cap it grants nothing, and the caller turns that `false`
+    /// into a diagnostic naming the escape arithmetic.
+    pub fn grant_via_in_pad(&mut self) -> bool {
+        self.allow_via_in_pad = self.process_fills_via_in_pad;
+        self.allow_via_in_pad
+    }
 }
 
 impl RouteRequest {
     /// Adopt the fabrication floor a manufacturer profile imposes.
     ///
-    /// Keeps whatever via-in-pad decision was already made: that is a process
-    /// approval, not a profile rule, so it is not reset here.
+    /// Keeps whatever via-in-pad permission was already granted: an operator
+    /// override is a promise about the panel, not a profile rule, so it is not
+    /// reset here. The *capability* is rebuilt from the new profile, because
+    /// that one does describe the process being named.
     pub fn use_profile_floor(&mut self, manufacturer: &str) {
         let allow_via_in_pad = self.policy.allow_via_in_pad;
         self.policy = FabricationPolicy::from_profile_name(manufacturer);
@@ -711,5 +740,76 @@ mod tests {
     #[test]
     fn via_in_pad_requires_explicit_approval() {
         assert!(!FabricationPolicy::default().allow_via_in_pad);
+    }
+
+    /// A tier that sells the fill carries the capability, and still grants no
+    /// permission: the design has not asked for one. Reading the capability as
+    /// the permission would hand via-in-pad to every board exported against an
+    /// advanced tier, including the ones that never needed it.
+    #[test]
+    fn a_capable_process_grants_no_permission_by_itself() {
+        let policy = FabricationPolicy::from_profile_name("jlc-filled-via");
+
+        assert!(policy.process_fills_via_in_pad);
+        assert!(!policy.allow_via_in_pad);
+    }
+
+    #[test]
+    fn a_standard_process_carries_no_capability() {
+        let policy = FabricationPolicy::from_profile_name("jlcpcb");
+
+        assert!(!policy.process_fills_via_in_pad);
+        assert!(!policy.allow_via_in_pad);
+    }
+
+    /// The gate: a board's declaration grants a permission only where the
+    /// process backs it.
+    #[test]
+    fn granting_via_in_pad_needs_the_process_to_offer_it() {
+        let mut capable = FabricationPolicy::from_profile_name("jlc-filled-via");
+        assert!(capable.grant_via_in_pad());
+        assert!(capable.allow_via_in_pad);
+
+        let mut incapable = FabricationPolicy::from_profile_name("jlcpcb");
+        assert!(!incapable.grant_via_in_pad());
+        assert!(
+            !incapable.allow_via_in_pad,
+            "a board must not approve its own fabrication"
+        );
+    }
+
+    /// Switching profiles re-reads the capability from the tier being named,
+    /// so a board cannot keep a process property it no longer declares.
+    #[test]
+    fn the_profile_floor_rebuilds_the_capability() {
+        let mut request = RouteRequest::new(
+            std::path::Path::new("board.kicad_pcb"),
+            std::path::Path::new("out"),
+            RouterEngine::KiCadRoutingTools,
+        );
+
+        request.use_profile_floor("jlc-filled-via");
+        assert!(request.policy.process_fills_via_in_pad);
+
+        request.use_profile_floor("jlcpcb");
+        assert!(!request.policy.process_fills_via_in_pad);
+    }
+
+    /// An operator override is a promise about the panel rather than a claim
+    /// about the tier, so it survives a profile swap. The capability does not,
+    /// which is what keeps the two facts distinguishable afterwards.
+    #[test]
+    fn an_operator_override_survives_the_profile_floor() {
+        let mut request = RouteRequest::new(
+            std::path::Path::new("board.kicad_pcb"),
+            std::path::Path::new("out"),
+            RouterEngine::KiCadRoutingTools,
+        );
+
+        request.policy.allow_via_in_pad = true;
+        request.use_profile_floor("jlcpcb");
+
+        assert!(request.policy.allow_via_in_pad);
+        assert!(!request.policy.process_fills_via_in_pad);
     }
 }
