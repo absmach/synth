@@ -798,6 +798,11 @@ fn execute_language_reference(_args: &Value) -> Value {
                     "example": "manufacturer \"jlcpcb\""
                 },
                 {
+                    "form": "requires <process>",
+                    "description": "Declares a fabrication process the board cannot be built without. `via_in_pad` is the only one today: the process must fill and cap a via drilled inside an SMD pad, which at fine pitch is the only escape the geometry leaves. A requirement is not a permission — it is matched against the `manufacturer` profile's capability, and a tier that does not offer the process is an error rather than a silent downgrade. Repeat the statement for several processes; declaring one twice is one requirement.",
+                    "example": "requires via_in_pad"
+                },
+                {
                     "form": "revision \"<tag>\"",
                     "description": "Board revision tag (e.g. \"A\", \"1.2\") carried into the schematic title block's Revision field. At most one per board; optional.",
                     "example": "revision \"A\""

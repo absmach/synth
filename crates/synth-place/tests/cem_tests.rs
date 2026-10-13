@@ -88,6 +88,7 @@ fn create_test_board() -> Board {
         buses: vec![],
         modules: vec![],
         variants: vec![],
+        required_processes: std::collections::BTreeSet::new(),
         source_span: dummy_span,
     }
 }

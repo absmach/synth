@@ -46,8 +46,8 @@ use synth_registry::{Part, PinCapability, Registry};
 
 use crate::board::{
     Board, Component, ComponentId, Couple, DiffPair, Keepout, Net, NetClass, NetEndpoint, NetId,
-    Note, PinId, PlacementEdge, PlacementRegion, PlacementSide, SchematicOverflow, SchematicPaper,
-    Stackup, StackupLayer, Variant,
+    Note, PinId, PlacementEdge, PlacementRegion, PlacementSide, ProcessRequirement,
+    SchematicOverflow, SchematicPaper, Stackup, StackupLayer, Variant,
 };
 use crate::units::{ConversionError, Current, DielectricConstant, Impedance, Length, Voltage};
 
@@ -177,6 +177,10 @@ pub fn lower(ast: &ProgramAst, registry: &Registry, file: &str) -> LowerResult {
     // wherever it appears rather than being scoped to its block.
     let mut schematic_paper: Option<SchematicPaper> = None;
     let mut schematic_overflow: Option<SchematicOverflow> = None;
+    // Declared fabrication processes. A set, because declaring the same
+    // requirement in two places is a duplicate rather than a conflict.
+    let mut required_processes: std::collections::BTreeSet<ProcessRequirement> =
+        std::collections::BTreeSet::new();
 
     // Groups and sheets are flattened here, not represented in the
     // IR as a tree: a group names its components and a sheet names
@@ -253,6 +257,12 @@ pub fn lower(ast: &ProgramAst, registry: &Registry, file: &str) -> LowerResult {
             StatementAst::Sheet(s) => {
                 stack.push((&s.statements, 0, group, Some(s.name.as_str())));
             }
+            StatementAst::Requires(r) => match ProcessRequirement::from_source(&r.capability) {
+                Some(requirement) => {
+                    required_processes.insert(requirement);
+                }
+                None => ctx.emit_unknown_process_requirement(&r.capability, r.span),
+            },
             // StatementAst is #[non_exhaustive]; future statement
             // kinds reach here until lowering is taught about them.
             _ => {}
@@ -298,6 +308,7 @@ pub fn lower(ast: &ProgramAst, registry: &Registry, file: &str) -> LowerResult {
         modules,
         groups,
         variants,
+        required_processes,
         source_span: ast.board.span,
     };
 
@@ -1414,6 +1425,35 @@ impl<'a> LowerCtx<'a> {
         );
     }
 
+    /// A `requires` naming a process this build does not know about.
+    ///
+    /// An error rather than a warning: the board states it cannot be built
+    /// without the process, and a requirement nothing can check is not a
+    /// weaker requirement, it is an unchecked one.
+    fn emit_unknown_process_requirement(
+        &mut self,
+        capability: &str,
+        span: synth_diagnostics::Span,
+    ) {
+        let known = ProcessRequirement::ALL
+            .iter()
+            .map(|r| format!("`{}`", r.as_source()))
+            .collect::<Vec<_>>()
+            .join(", ");
+        self.diagnostics.push(
+            DiagnosticBuilder::new(
+                "E-SYNTH-PROCESS-001",
+                Severity::Error,
+                "unknown required fabrication process",
+            )
+            .location(Location::from_span(self.file.to_string(), span))
+            .expected(format!("one of: {known}"))
+            .found(format!("`{capability}`"))
+            .explanation_url("synth.docs/diagnostics/E-SYNTH-PROCESS-001")
+            .build(),
+        );
+    }
+
     fn emit_unit_error(&mut self, e: &ConversionError, context: &str) {
         let span = e.span();
         let (title, expected, found) = match e {
@@ -2346,5 +2386,72 @@ mod tests {
         assert_eq!(board.notes[0].group.as_deref(), Some("Power"));
         assert_eq!(board.notes[1].title, "General");
         assert_eq!(board.notes[1].group, None);
+    }
+
+    #[test]
+    fn a_board_declares_the_process_it_cannot_be_built_without() {
+        let board = lower_ok(
+            r#"board "b" {
+                layers 4
+                requires via_in_pad
+            }"#,
+        );
+        assert!(board
+            .required_processes
+            .contains(&ProcessRequirement::ViaInPad));
+    }
+
+    /// A board that says nothing must not read as a board that asked, which
+    /// is the whole point of keeping the requirement separate from the
+    /// process's capability.
+    #[test]
+    fn a_board_that_declares_nothing_requires_nothing() {
+        let board = lower_ok(
+            r#"board "b" {
+                layers 4
+            }"#,
+        );
+        assert!(board.required_processes.is_empty());
+    }
+
+    #[test]
+    fn declaring_the_same_process_twice_is_one_requirement() {
+        let board = lower_ok(
+            r#"board "b" {
+                layers 4
+                requires via_in_pad
+                requires via_in_pad
+            }"#,
+        );
+        assert_eq!(board.required_processes.len(), 1);
+    }
+
+    /// A misspelled requirement must not lower quietly. Reaching the router
+    /// as an unknown string would read exactly like a board that asked for
+    /// nothing, which is the failure this diagnostic exists to prevent.
+    #[test]
+    fn an_unknown_process_is_an_error_naming_what_is_known() {
+        let result = lower_with_diags(
+            r#"board "b" {
+                layers 4
+                requires blind_vias
+            }"#,
+        );
+
+        let diagnostic = result
+            .diagnostics
+            .iter()
+            .find(|d| d.code == "E-SYNTH-PROCESS-001")
+            .expect("E-SYNTH-PROCESS-001");
+        assert_eq!(diagnostic.severity, Severity::Error);
+        assert!(
+            diagnostic
+                .expected
+                .as_deref()
+                .is_some_and(|e| e.contains("via_in_pad")),
+            "the error must name what this build knows: {:?}",
+            diagnostic.expected
+        );
+        assert!(result.board.is_none_or(|b| b.required_processes.is_empty()));
     }
 }

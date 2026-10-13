@@ -965,6 +965,7 @@ fn multi_unit_rails_split_is_an_error() {
         buses: vec![],
         modules: vec![],
         variants: vec![],
+        required_processes: std::collections::BTreeSet::new(),
         source_span: Span::new(0, 0),
     };
     let diags = synth_validate::run_erc(&board, "t.synth");

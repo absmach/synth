@@ -141,6 +141,7 @@ pub fn board(
         modules: Vec::new(),
         groups: Vec::new(),
         variants: Vec::new(),
+        required_processes: std::collections::BTreeSet::new(),
         source_span: Span::new(0, 0),
     }
 }
