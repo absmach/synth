@@ -4151,7 +4151,7 @@ mod tests {
             name: "ESCAPE".to_string(),
             trace_width: None,
             clearance: None,
-            match_length: None,
+            max_length: None,
             via_diameter: diameter_mm.map(synth_ir::Length::from_mm),
             via_drill: drill_mm.map(synth_ir::Length::from_mm),
             color: None,
