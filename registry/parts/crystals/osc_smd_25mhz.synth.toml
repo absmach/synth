@@ -1,12 +1,17 @@
 id = "osc_smd_25mhz"
 kind = "crystal"
 description = "25MHz SMD oscillator, 4-pad, 3.3V"
-kicad_symbol = "Oscillator:SiT8008B"
-kicad_footprint = "Oscillator:Oscillator_SMD_SiTime_SiT8008-4Pin_5.0x3.2mm"
+# `SiT8008B` and `Oscillator_SMD_SiTime_SiT8008-4Pin_5.0x3.2mm` name
+# nothing in KiCad 10.0.6. These are the stock symbol and footprint for the
+# same 4-pin 5.0 x 3.2 mm SiTime oscillator; the pin map already matched
+# OE/GND/OUT/Vdd on pads 1-4 and is unchanged.
+kicad_symbol = "Oscillator:SiT8008xx-1x-xxE"
+kicad_footprint = "Oscillator:Oscillator_SMD_SiT_PQFN-4Pin_5.0x3.2mm"
 
 [footprint_dimensions]
-width_mm = 5.0
-height_mm = 5.0
+# Courtyard extent of that footprint; the body is 5.0 x 3.2 mm.
+width_mm = 6.0
+height_mm = 4.32
 courtyard_margin_mm = 0.25
 
 [operating_conditions]
