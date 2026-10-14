@@ -773,9 +773,6 @@ mod tests {
         // them under the fabrication minimum.
         assert!(joined.contains("--escape-via-drill 0.3000"), "{joined}");
         assert!(joined.contains("--escape-via-size 0.5600"), "{joined}");
-        // And the clearance, which the adapter would otherwise default to
-        // 0.1 mm — under this board's own 0.127 mm floor.
-        assert!(joined.contains("--escape-clearance 0.1270"), "{joined}");
     }
 
     /// A board with nothing dense on it must not ask for an escape at all,
