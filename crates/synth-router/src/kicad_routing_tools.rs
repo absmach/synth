@@ -501,6 +501,109 @@ mod tests {
         assert!(joined.contains("--strict-sizes"), "{joined}");
     }
 
+    /// A baseline on disk, because the escape engine reads the board the
+    /// engine will be given rather than the request.
+    fn with_baseline(pads: &str) -> (RouteRequest, PathBuf) {
+        let dir = std::env::temp_dir().join(format!(
+            "synth-krt-escape-{}-{:?}",
+            std::process::id(),
+            std::thread::current().id()
+        ));
+        std::fs::create_dir_all(&dir).expect("temp dir");
+        let mut request = RouteRequest::new(
+            &dir.join("demo.kicad_pcb"),
+            &dir,
+            RouterEngine::KiCadRoutingTools,
+        );
+        request.stem = "demo".to_string();
+        request.limits = RouterLimits::default();
+        let board = format!(
+            "(kicad_pcb\n  (version 20260206)\n  (generator \"synth-eda\")\n  \
+             (layers (0 \"F.Cu\" signal) (31 \"B.Cu\" signal) (44 \"Edge.Cuts\" user))\n  \
+             (net 0 \"\")\n  (footprint \"Test:Part\"\n    (layer \"F.Cu\")\n    \
+             (at 10 20)\n    (property \"Reference\" \"U1\" (at 0 -1) (layer \"F.SilkS\"))\n\
+             {pads}  )\n  (gr_line (start 0 0) (end 40 0) (layer \"Edge.Cuts\") (width 0.1))\n  \
+             (gr_line (start 0 0) (end 0 30) (layer \"Edge.Cuts\") (width 0.1))\n  \
+             (gr_line (start 40 0) (end 40 30) (layer \"Edge.Cuts\") (width 0.1))\n  \
+             (gr_line (start 0 30) (end 40 30) (layer \"Edge.Cuts\") (width 0.1))\n)"
+        );
+        std::fs::write(request.baseline_path(), board).expect("write baseline");
+        (request, dir)
+    }
+
+    /// Stepped rather than multiplied by the index, so the helper needs no
+    /// `usize as f64` cast and no pedantic allow for one.
+    fn grid_pads(rows: usize, cols: usize, pitch: f64) -> String {
+        use std::fmt::Write as _;
+        let mut pads = String::new();
+        let mut n = 1;
+        let mut y = 0.0_f64;
+        for _ in 0..rows {
+            let mut x = 0.0_f64;
+            for _ in 0..cols {
+                let _ = write!(
+                    pads,
+                    "    (pad \"{n}\" smd circle (at {x:.4} {y:.4}) (size 0.400 0.400)\n      \
+                     (layers \"F.Cu\" \"F.Paste\" \"F.Mask\") (net {n} \"N{n}\"))\n"
+                );
+                x += pitch;
+                n += 1;
+            }
+            y += pitch;
+        }
+        pads
+    }
+
+    /// The escape engine is driven from the baseline, so the flags only
+    /// appear when the board actually carries a grid array. Without this the
+    /// maze router returns a 0.8 mm ball grid with a stub on every lane.
+    #[test]
+    fn a_grid_array_in_the_baseline_is_handed_to_the_escape_engine() {
+        let (request, dir) = with_baseline(&grid_pads(11, 11, 0.8));
+        let joined = argv(&request);
+        std::fs::remove_dir_all(&dir).ok();
+        assert!(joined.contains("--fanout-component U1"), "{joined}");
+        // The declared floor, not the engine's default: 0.3 mm drill plus
+        // two 0.13 mm rings. Escaping with the engine's own via put 11 of
+        // them under the fabrication minimum.
+        assert!(joined.contains("--escape-via-drill 0.3000"), "{joined}");
+        assert!(joined.contains("--escape-via-size 0.5600"), "{joined}");
+    }
+
+    /// A board with nothing dense on it must not ask for an escape at all,
+    /// or every two-pad design pays for a stage it does not need.
+    #[test]
+    fn a_board_with_no_grid_array_asks_for_no_escape() {
+        let (request, dir) = with_baseline(&grid_pads(1, 2, 2.54));
+        let joined = argv(&request);
+        std::fs::remove_dir_all(&dir).ok();
+        for flag in [
+            "--fanout-component",
+            "--escape-via-drill",
+            "--escape-via-size",
+        ] {
+            assert!(!joined.contains(flag), "{flag} leaked: {joined}");
+        }
+    }
+
+    /// `auto` must resolve against the floor the board declared. Letting the
+    /// engine choose produced filled-and-capped vias at a 0.2 mm drill on a
+    /// board whose declared minimum was 0.3 mm.
+    #[test]
+    fn auto_resolves_the_fab_tier_against_the_declared_floor() {
+        let (mut request, dir) = with_baseline(&grid_pads(1, 2, 2.54));
+        request.kicad_routing_tools.fab_tier = "auto".to_string();
+        assert!(argv(&request).contains("--fab-tier standard"));
+
+        request.policy.min_drill_diameter_nm = 200_000;
+        assert!(argv(&request).contains("--fab-tier advanced"));
+
+        // An explicit operator choice still wins.
+        request.kicad_routing_tools.fab_tier = "standard".to_string();
+        assert!(argv(&request).contains("--fab-tier standard"));
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
     #[test]
     fn no_freerouting_option_leaks_into_this_contract() {
         // A flag one engine honours and another ignores would make the run
