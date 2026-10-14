@@ -322,14 +322,23 @@ impl FabricationPolicy {
 
     /// Grant via-in-pad because the board declared it needs one.
     ///
-    /// Returns whether the permission was granted, which is to say whether
-    /// the declared process offers the capability at all. A board cannot
-    /// approve its own fabrication: asking for via-in-pad on a tier that does
-    /// not fill and cap it grants nothing, and the caller turns that `false`
-    /// into a diagnostic naming the escape arithmetic.
+    /// Returns whether the *process* offers the capability, not whether the
+    /// permission ended up set. A board cannot approve its own fabrication:
+    /// asking for via-in-pad on a tier that does not fill and cap it grants
+    /// nothing, and the caller turns that `false` into a diagnostic naming
+    /// the escape arithmetic.
+    ///
+    /// Adds to the permission rather than replacing it. An operator who
+    /// passed `--krt-allow-via-in-pad` has already set it, and
+    /// [`RouteRequest::use_profile_floor`] deliberately carries that across a change
+    /// of profile; assigning here would revoke it precisely when the tier
+    /// cannot fill, which is the case the override exists for. The returned
+    /// capability stays a statement about the process either way, so an
+    /// overridden run is still reported as unmet.
     pub fn grant_via_in_pad(&mut self) -> bool {
-        self.allow_via_in_pad = self.process_fills_via_in_pad;
-        self.allow_via_in_pad
+        let offered = self.process_fills_via_in_pad;
+        self.allow_via_in_pad |= offered;
+        offered
     }
 }
 
@@ -889,6 +898,39 @@ mod tests {
 
         assert_eq!(unmet, vec![synth_ir::ProcessRequirement::ViaInPad]);
         assert!(!request.policy.allow_via_in_pad);
+    }
+
+    /// The override is a promise about the panel, so a board declaration must
+    /// not take it away. Assigning the capability here revoked it exactly when
+    /// the tier cannot fill, which is the case `--krt-allow-via-in-pad` exists
+    /// for: the run would then be refused for the one reason the operator had
+    /// already answered.
+    #[test]
+    fn a_declaration_does_not_revoke_an_operator_override() {
+        let mut request = RouteRequest::new(
+            std::path::Path::new("board.kicad_pcb"),
+            std::path::Path::new("out"),
+            RouterEngine::KiCadRoutingTools,
+        );
+        let mut board = empty_board();
+        board
+            .required_processes
+            .insert(synth_ir::ProcessRequirement::ViaInPad);
+
+        // The operator's flag, applied before the floor as the CLI applies it.
+        request.policy.allow_via_in_pad = true;
+        request.use_profile_floor("jlcpcb");
+        let unmet = request.use_board_process_requirements(&board);
+
+        assert!(
+            request.policy.allow_via_in_pad,
+            "the override must survive a board declaring the same process"
+        );
+        assert_eq!(
+            unmet,
+            vec![synth_ir::ProcessRequirement::ViaInPad],
+            "and the tier still does not offer it, which is what gets reported"
+        );
     }
 
     /// An operator override is a promise about the panel rather than a claim
