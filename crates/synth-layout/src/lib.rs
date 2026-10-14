@@ -421,6 +421,12 @@ const GROUP_CAPTION_INSET: f64 = 1.0;
 /// Padding between a group's outline box (§21.1) and its contents —
 /// caption included, so the box top clears the caption baseline.
 const GROUP_BOX_PAD: f64 = 5.0;
+/// Left/right padding of a group box: [`GROUP_BOX_PAD`] plus 6 mm for
+/// text drawn beside a symbol body — value text ("1.5M") and pin-stub
+/// net labels sit outside the body, so a body-sized box leaves them on
+/// its edge. Ungrouped regions packed beside grouped ones reserve the
+/// same room, so their own labels get it too.
+const GROUP_BOX_SIDE_PAD: f64 = GROUP_BOX_PAD + 6.0;
 /// Title and line sizes for design notes (§21.1 `notes` blocks) and
 /// generated connector pin legends. Phase B typography: titles stay
 /// at 2.0 mm, lines drop to 1.0 mm so prose reads subordinate to
@@ -992,8 +998,8 @@ fn annotate_groups(board: &Board, layout: &mut Layout) {
         });
         layout.group_boxes.push(GroupBox {
             group,
-            min_mm: (min_x - GROUP_BOX_PAD, min_y - GROUP_BOX_PAD),
-            max_mm: (max_x + GROUP_BOX_PAD, max_y + GROUP_BOX_PAD),
+            min_mm: (min_x - GROUP_BOX_SIDE_PAD, min_y - GROUP_BOX_PAD),
+            max_mm: (max_x + GROUP_BOX_SIDE_PAD, max_y + GROUP_BOX_PAD),
             color,
             caption_inside: true,
         });
@@ -1017,6 +1023,23 @@ fn group_box_overhang(board: &Board, group: Option<&str>) -> (f64, f64) {
         .map(|n| NOTE_TITLE_GAP + n.lines.len() as f64 * NOTE_LINE_PITCH)
         .sum();
     (GROUP_BOX_PAD, GROUP_BOX_PAD + notes)
+}
+
+/// Width (mm) of the widest note run inside a group: the box must be at
+/// least this wide or the text pokes out of it into the next region.
+fn group_note_width(board: &Board, group: Option<&str>) -> f64 {
+    let Some(group) = group else {
+        return 0.0;
+    };
+    board
+        .notes
+        .iter()
+        .filter(|n| n.group.as_deref() == Some(group))
+        .flat_map(|n| {
+            std::iter::once(text_run_width(&n.title, NOTE_TITLE_SIZE))
+                .chain(n.lines.iter().map(|l| text_run_width(l, NOTE_LINE_SIZE)))
+        })
+        .fold(0.0, f64::max)
 }
 
 /// Dark-band hues for group boxes, distinct from the net-class
@@ -1083,6 +1106,8 @@ fn default_caption_inside() -> bool {
 
 /// Bounding box of each declared `group`'s component bodies, in
 /// first-seen placement order: `(group, min_x, max_x, min_y, max_y)`.
+/// `max_x` also reaches across the group's widest note line, which
+/// region packing reserves the same way ([`group_note_width`]).
 /// Shared by captions, boxes, and group-placed design notes so the
 /// three can never disagree about where a group is.
 fn group_bounds(board: &Board, layout: &Layout) -> Vec<(String, f64, f64, f64, f64)> {
@@ -1116,6 +1141,9 @@ fn group_bounds(board: &Board, layout: &Layout) -> Vec<(String, f64, f64, f64, f
         .into_iter()
         .map(|group| {
             let (min_x, max_x, min_y, max_y) = bounds[&group];
+            // Notes start at the box's inner left edge, so the box
+            // reaches at least one note width past `min_x`.
+            let max_x = max_x.max(min_x + group_note_width(board, Some(&group)));
             (group, min_x, max_x, min_y, max_y)
         })
         .collect()
@@ -1240,7 +1268,7 @@ fn place_design_notes(board: &Board, layout: &mut Layout) {
             // Strip below the current box bottom edge, inside the
             // grown box: title first, lines beneath it.
             let title_y = layout.group_boxes[box_idx].max_mm.1 + NOTE_STRIP_GAP + NOTE_TITLE_SIZE;
-            let x = layout.group_boxes[box_idx].min_mm.0 + GROUP_BOX_PAD;
+            let x = layout.group_boxes[box_idx].min_mm.0 + GROUP_BOX_SIDE_PAD;
             push_note_runs(layout, note, x, title_y);
             let last_y = title_y
                 + NOTE_TITLE_GAP
@@ -3063,11 +3091,13 @@ fn place_clusters(board: &Board, clusters: &[Cluster]) -> Layout {
                     }
                 }
                 local.sort_by_key(|p| p.id.0);
-                let bbox = body_bbox_of(board, &local).unwrap_or((0.0, grid_w, 0.0, grid_h));
+                let mut bbox = body_bbox_of(board, &local).unwrap_or((0.0, grid_w, 0.0, grid_h));
                 let group_name = usize::try_from(band)
                     .ok()
                     .and_then(|b| group_bands.get(b))
                     .copied();
+                // A region is at least as wide as its notes' text.
+                bbox.1 = bbox.1.max(bbox.0 + group_note_width(board, group_name));
                 region_layouts.push(RegionLayout {
                     placements: local,
                     bbox,
@@ -3113,7 +3143,7 @@ fn place_clusters(board: &Board, clusters: &[Cluster]) -> Layout {
                 let mut cy = 0.0;
                 let mut shelf_h = 0.0;
                 for (i, region) in region_layouts.iter().enumerate() {
-                    let w = region.bbox.1 - region.bbox.0 + 2.0 * GROUP_BOX_PAD;
+                    let w = region.bbox.1 - region.bbox.0 + 2.0 * GROUP_BOX_SIDE_PAD;
                     // Pack against what is *drawn* — the box — not the
                     // bodies inside it. The box reaches above the bodies
                     // for its caption and below them for its note block,
@@ -3143,7 +3173,7 @@ fn place_clusters(board: &Board, clusters: &[Cluster]) -> Layout {
             // `origin_y`'s guard band is pure waste here — ~55 mm of it,
             // enough to cost a sheet size on its own.
             for (ri, region) in region_layouts.iter().enumerate() {
-                let dx = PAGE_MARGIN + GROUP_BOX_PAD + region_offset[ri].0 - region.bbox.0;
+                let dx = PAGE_MARGIN + GROUP_BOX_SIDE_PAD + region_offset[ri].0 - region.bbox.0;
                 let dy = PAGE_MARGIN + region.box_overhang.0 + region_offset[ri].1 - region.bbox.2;
                 for placement in &region.placements {
                     placements.push(ComponentPlacement {
@@ -7023,6 +7053,67 @@ mod documentation_tests {
         assert!(title_y > box_.min_mm.1, "title inside box top: {title_y}");
         assert!(title_y < box_.max_mm.1, "title above box bottom: {title_y}");
         assert!(line_y < box_.max_mm.1, "line inside box: {line_y}");
+    }
+
+    #[test]
+    fn group_box_leaves_label_room_beside_its_parts() {
+        let r = || part("resistor", vec![pin("p1"), pin("p2")]);
+        let b = board_with_notes(
+            vec![component(0, "R1", r(), Some("Input"))],
+            vec![net(0, "sig", &[(0, 0)])],
+            vec![],
+        );
+        let layout = layout(&b);
+        let (bw, _) = body_size_for_part(&r());
+        let box_ = &layout.group_boxes[0];
+        let x = layout.components[0].center_mm.0;
+        assert!(x - bw / 2.0 - box_.min_mm.0 >= GROUP_BOX_SIDE_PAD - 1e-6);
+        assert!(box_.max_mm.0 - (x + bw / 2.0) >= GROUP_BOX_SIDE_PAD - 1e-6);
+    }
+
+    #[test]
+    fn long_group_note_stays_inside_its_box_and_clear_of_neighbours() {
+        let r = || part("resistor", vec![pin("p1"), pin("p2")]);
+        let long = "x".repeat(140);
+        let b = board_with_notes(
+            vec![
+                component(0, "R1", r(), Some("Left")),
+                component(1, "R2", r(), Some("Right")),
+            ],
+            vec![net(0, "sig", &[(0, 0), (1, 0)])],
+            vec![Note {
+                title: "Left notes".to_string(),
+                lines: vec![long.clone()],
+                group: Some("Left".to_string()),
+                sheet: None,
+                source_span: Span::new(0, 0),
+            }],
+        );
+        let layout = layout(&b);
+        let left = layout
+            .group_boxes
+            .iter()
+            .find(|g| g.group == "Left")
+            .expect("left box");
+        let line = layout
+            .annotations
+            .iter()
+            .find(|a| a.text == long)
+            .expect("note line");
+        assert!(
+            text_run_rect(line).2 <= left.max_mm.0,
+            "note text runs past its box edge"
+        );
+        let right = layout
+            .group_boxes
+            .iter()
+            .find(|g| g.group == "Right")
+            .expect("right box");
+        let apart = left.max_mm.0 <= right.min_mm.0
+            || right.max_mm.0 <= left.min_mm.0
+            || left.max_mm.1 <= right.min_mm.1
+            || right.max_mm.1 <= left.min_mm.1;
+        assert!(apart, "group boxes overlap: {left:?} vs {right:?}");
     }
 
     #[test]
