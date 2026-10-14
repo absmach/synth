@@ -3,8 +3,8 @@ kind = "crystal"
 description = "25MHz SMD oscillator, 4-pad, 3.3V"
 # `SiT8008B` and `Oscillator_SMD_SiTime_SiT8008-4Pin_5.0x3.2mm` name
 # nothing in KiCad 10.0.6. These are the stock symbol and footprint for the
-# same 4-pin 5.0 x 3.2 mm SiTime oscillator; the pin map already matched
-# OE/GND/OUT/Vdd on pads 1-4 and is unchanged.
+# same 4-pin 5.0 x 3.2 mm SiTime oscillator. The pin map matches it on pads
+# 1-4, with pad 1 renamed from `ne` to the symbol's `oe`.
 kicad_symbol = "Oscillator:SiT8008xx-1x-xxE"
 kicad_footprint = "Oscillator:Oscillator_SMD_SiT_PQFN-4Pin_5.0x3.2mm"
 
@@ -20,7 +20,12 @@ max_voltage_v = 5.0
 max_current_ma = 100.0
 
 [[pins]]
-name = "ne"
+# `OE` on the stock symbol, and active high: driving it low tristates the
+# output. The old name here was `ne`, which reads as an active-low "not
+# enable" — the opposite sense — and was invisible while the symbol fell back
+# to a rectangle. Now that the real symbol renders, the schematic and the
+# language agree.
+name = "oe"
 number = "1"
 electrical_type = "input"
 
