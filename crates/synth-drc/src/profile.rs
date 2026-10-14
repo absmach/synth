@@ -164,16 +164,24 @@ impl ManufacturerProfile {
         }
     }
 
-    /// Select a built-in profile by string name ("jlc", "pcbway", "oshpark").
+    /// Select a built-in profile by string name.
+    ///
+    /// The fabricator tiers match on a substring, because a board writes a
+    /// vendor's name loosely ("pcbway", "PCBWay standard") and the tier is the
+    /// same either way. `jlc-filled-via` does not: it is matched exactly,
+    /// because it is one named process option rather than a vendor, and a
+    /// substring would hand it to any future profile whose name happened to
+    /// contain the word. A name this does not recognise falls back to
+    /// `jlc-standard`, the most conservative floor.
     #[must_use]
     pub fn from_name(name: &str) -> Self {
         let lower = name.to_ascii_lowercase();
-        if lower.contains("pcbway") {
+        if lower == Self::jlc_filled_via().name {
+            Self::jlc_filled_via()
+        } else if lower.contains("pcbway") {
             Self::pcbway_standard()
         } else if lower.contains("oshpark") {
             Self::oshpark_4layer()
-        } else if lower.contains("filled") {
-            Self::jlc_filled_via()
         } else {
             Self::jlc_standard()
         }
@@ -326,6 +334,41 @@ min_drill_to_copper_mm = 0.25
     fn from_name_resolves_the_filled_via_tier() {
         assert!(ManufacturerProfile::from_name("jlc-filled-via").via_in_pad);
         assert!(!ManufacturerProfile::from_name("jlcpcb").via_in_pad);
+    }
+
+    /// The filled-via tier is matched exactly, not as a substring. A
+    /// substring would hand the capability to any future profile whose name
+    /// happened to contain the word — a process permission is not something
+    /// to grant by accident of spelling.
+    #[test]
+    fn a_name_that_merely_contains_filled_is_not_the_filled_via_tier() {
+        for name in [
+            "jlc-unfilled-via",
+            "acme-filled-resin",
+            "filled",
+            "JLC-FILLED-VIA-draft",
+        ] {
+            assert!(
+                !ManufacturerProfile::from_name(name).via_in_pad,
+                "`{name}` must not resolve to the filled-via tier"
+            );
+        }
+        // Spelling the tier exactly still works, in any case.
+        assert!(ManufacturerProfile::from_name("JLC-Filled-Via").via_in_pad);
+    }
+
+    /// The vendor tiers keep their loose match: a board writes a fabricator's
+    /// name as prose and the floor is the same either way.
+    #[test]
+    fn a_vendor_tier_still_matches_loosely() {
+        assert_eq!(
+            ManufacturerProfile::from_name("PCBWay standard").min_trace_width_nm,
+            ManufacturerProfile::pcbway_standard().min_trace_width_nm
+        );
+        assert_eq!(
+            ManufacturerProfile::from_name("oshpark 4-layer").min_trace_width_nm,
+            ManufacturerProfile::oshpark_4layer().min_trace_width_nm
+        );
     }
 
     /// Every profile TOML written before the capability existed
