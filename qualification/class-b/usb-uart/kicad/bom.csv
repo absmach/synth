@@ -13,10 +13,10 @@ D5,TVS,diode,"Nexperia PTVS6V0S1UR 400 W unidirectional TVS, 6.0 V standoff, SOD
 D6,TVS,diode,"Nexperia PTVS6V0S1UR 400 W unidirectional TVS, 6.0 V standoff, SOD123W, for VBUS and CC",Device:D_Zener,Diode_SMD:Nexperia_CFP3_SOD-123W,,PTVS6V0S1UR
 D7,TX1,led,"Lite-On LTST-C190KRKT red AlInGaP LED, 0603, Vf 1.6 to 2.4V at 20mA",Device:LED,LED_SMD:LED_0603_1608Metric,,LTST-C190KRKT
 D8,TVS,diode,"Bourns CDSOT23-SM712 400 W TVS diode array for RS-485, 12 V / -7 V standoff, SOT-23",,Package_TO_SOT_SMD:SOT-23,C404012,CDSOT23-SM712
-H1,(no value),mounting_hole,M2.5 non-plated mounting hole (NPTH) for a board corner,Mechanical:MountingHole,MountingHole:MountingHole_2.5mm,,
-H2,(no value),mounting_hole,M2.5 non-plated mounting hole (NPTH) for a board corner,Mechanical:MountingHole,MountingHole:MountingHole_2.5mm,,
-H3,(no value),mounting_hole,M2.5 non-plated mounting hole (NPTH) for a board corner,Mechanical:MountingHole,MountingHole:MountingHole_2.5mm,,
-H4,(no value),mounting_hole,M2.5 non-plated mounting hole (NPTH) for a board corner,Mechanical:MountingHole,MountingHole:MountingHole_2.5mm,,
+H1,(no value),mounting_hole,"M3 non-plated mounting hole (NPTH, 3.2 mm) for a board corner",Mechanical:MountingHole,MountingHole:MountingHole_3.2mm_M3,,
+H2,(no value),mounting_hole,"M3 non-plated mounting hole (NPTH, 3.2 mm) for a board corner",Mechanical:MountingHole,MountingHole:MountingHole_3.2mm_M3,,
+H3,(no value),mounting_hole,"M3 non-plated mounting hole (NPTH, 3.2 mm) for a board corner",Mechanical:MountingHole,MountingHole:MountingHole_3.2mm_M3,,
+H4,(no value),mounting_hole,"M3 non-plated mounting hole (NPTH, 3.2 mm) for a board corner",Mechanical:MountingHole,MountingHole:MountingHole_3.2mm_M3,,
 J1,12401610E4#2A,connector,"Amphenol 12401610E4#2A USB Type-C receptacle, 24 contacts, right-angle SMD with through-hole shield tabs. Modelled with primary and mirrored power/ground/data pins; the SuperSpeed pads are listed as unconnected passives.",Connector:USB_C_Receptacle,Connector_USB:USB_C_Receptacle_Amphenol_12401610E4-2A,,12401610E4#2A
 J2,UART1,connector,"1x3 through-hole pin header, 2.54mm pitch",Connector_Generic:Conn_01x03,Connector_PinHeader_2.54mm:PinHeader_1x03_P2.54mm_Vertical,,
 J3,FLOW1,connector,"1x3 through-hole pin header, 2.54mm pitch",Connector_Generic:Conn_01x03,Connector_PinHeader_2.54mm:PinHeader_1x03_P2.54mm_Vertical,,

@@ -139,10 +139,10 @@ board "usb_uart" {
     }
   }
 
-  component H1: mounting_hole "mounting_hole_m2_5"
-  component H2: mounting_hole "mounting_hole_m2_5"
-  component H3: mounting_hole "mounting_hole_m2_5"
-  component H4: mounting_hole "mounting_hole_m2_5"
+  component H1: mounting_hole "mounting_hole_m3"
+  component H2: mounting_hole "mounting_hole_m3"
+  component H3: mounting_hole "mounting_hole_m3"
+  component H4: mounting_hole "mounting_hole_m3"
 
   net "VBUS" class "VBUS_FINE" {
     J1.vbus, J1.vbus_b4, J1.vbus_a9, J1.vbus_b9,

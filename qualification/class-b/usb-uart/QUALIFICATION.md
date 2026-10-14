@@ -7,7 +7,7 @@ Revision B routes with 0 open nets and passes Synth's release gate (`release_rea
 
 ## Reproduce
 
-Run from the repository root. Use Synth `main` from 2026-10-13 or later: it includes PR #139 (fabrication note, merged as `de4a5b2`) and PR #140 (RS-485 checks, merged as `bb9ae95`). The board's reference-label positions depend on PR #144 (label placement, merged), its project file and DRC rules on PR #154 (manufacturer clearances in the project file, not merged yet; without it a KiCad re-save shows 63 clearance errors, see B9), and the outline round the mounting holes on PR #162 (not merged yet; without it the four holes grow the board to about 56 x 42 mm). Use an empty `XDG_DATA_HOME` so a user registry cannot shadow parts.
+Run from the repository root. Use Synth `main` from 2026-10-13 or later: it includes PR #139 (fabrication note, merged as `de4a5b2`) and PR #140 (RS-485 checks, merged as `bb9ae95`). The board's reference-label positions depend on PR #144 (label placement, merged), its project file and DRC rules on PR #154 (manufacturer clearances in the project file, not merged yet; without it a KiCad re-save shows 63 clearance errors, see B9), and the outline round the mounting holes on PR #162 (not merged yet; without it the four M3 holes grow the board by about 7 mm in each direction). Use an empty `XDG_DATA_HOME` so a user registry cannot shadow parts.
 
 ```
 export XDG_DATA_HOME=$(mktemp -d)
@@ -23,17 +23,17 @@ Tool versions used: KiCad 10.0.7, FreeRouting 2.4.1 on OpenJDK 25.0.4.1, Synth `
 
 ## Artifact hashes
 
-`SHA256SUMS` in this folder lists every design artifact (source, sidecars, KiCad files, BOM, 3D render, the board STEP, routing and DRC reports). It leaves out `README.md`, `QUALIFICATION.md` and itself. The key ones:
+`SHA256SUMS` in this folder lists every design artifact (source, sidecars, KiCad files, BOM, 3D renders, copper and schematic pictures, the board STEP, routing and DRC reports). It leaves out `README.md`, `QUALIFICATION.md` and itself. The key ones:
 
 | Artifact | SHA-256 |
 | --- | --- |
-| `usb_uart.synth` | `18785bbbf0599147794ec75bcc2ed0ea160e959764c5022c2db16a2f0de38df0` |
-| `usb_uart.placement.layout.toml` | `883bc18f4869aae0fcfdd8ce3c53aaa63db1445767ed8afda5ec58ed215a8c7d` |
-| `kicad/usb_uart.kicad_pcb` | `2c7b09a8c9753ca32074ed5cd1545eb22a2448298467c9db297bc279ab70d337` |
-| `kicad/usb_uart.kicad_sch` | `dcc4cdff074c99b4cbb2bd3ea7d8a0a917216032e7851fcd6d62417432631e9f` |
-| `kicad/bom.csv` | `3b65ee73f4f5df36752a013aed0084b15777eb7b29a0cd7972bd4624ebd103b9` |
-| `reports/release.json` | `4aee290aa7eddea614ea9c69f9d35f2f0dd21964b1f50fb7531d70e4e8215666` |
-| `reports/usb_uart.drc.json` | `e8f5a00a8c10ad1ce82bb53b9dee8b7bbcd782ab281368d1c0774494a800e804` |
+| `usb_uart.synth` | `cdd5eb9b9070265da6bd69e23081cf5155b759ee721d0aa513c11218777a55f6` |
+| `usb_uart.placement.layout.toml` | `d38408e9d0e080ebdd91577fdf8b47b0fe71a93a8561e5c9f9040a5ed5197230` |
+| `kicad/usb_uart.kicad_pcb` | `1a9df574466f38ce8de18e62e2b7c1f563bb0db9a499a9f7d6610792bfe6c266` |
+| `kicad/usb_uart.kicad_sch` | `8670d99a27b044f011658d51605427d25fb1bdae44ce48820820d3e5e674d127` |
+| `kicad/bom.csv` | `5852e79981c28ef46446095c433feff0890cfda97c7a32e97357a0c309aeede8` |
+| `reports/release.json` | `b7f1415987614d8b12e91ec9270be460d6fdb0be2037605857a170f2983d09c9` |
+| `reports/usb_uart.drc.json` | `1b264dd4cb04036b58080700df1efed7f6df67b0d32600c3e4de61e072216dcb` |
 
 `reports/` holds the files as captured, so they contain the absolute paths of the machine that produced them, and `engine_version` in `release.json` is a jar path.
 
@@ -49,7 +49,7 @@ Datasheet files read for this revision (not committed, so the figures taken from
 | A4 | The RS-485 line is protected and the terminator is switchable | `E-SYNTH-ESD-001` and `E-SYNTH-RS485-001` (PR #140) | Revision A: 2 + 1 warnings. Revision B: none. **Weak evidence:** both rules follow only the same net, and R_A/R_B split the nets, so on revision B the rules cannot see the bus side. This was confirmed by reading the schematic only |
 | A5 | The package passes Synth's release gate | `synth export-kicad`, `reports/release.json` | **Yes**, with C4 moved to x 21.6. Before that move the gate failed: KiCad reported 2 unconnected ground-pour items, the ground pins of C4 and D1 in top-layer pour pieces with no via to the ground planes (a real missing ground connection, which Synth's own connectivity check did not see because it counts a pad on a pour as connected). The router's stitching step printed `pour piece on F.Cu still cut off from its net` for both. Other placements left nets open or timed out; the aligned header row only routed after J4 was turned 180 degrees and D8 moved beside it. A passed gate is not a qualification |
 | A6 | Schematic electrical rules | `kicad-cli sch erc` | 1 error (`power_pin_not_driven` on the VIO symbol, jumper-selected rail, also on revision A), 117 warnings |
-| A7 | Via-in-pad sites are found and recorded | Synth connectivity `via_in_pad`; PR #139 fabrication note | One site: U1 exposed pad (GND, at 23.4, 19.8). The note is written for a routed board and is in this board's `release.json` |
+| A7 | Via-in-pad sites are found and recorded | Synth connectivity `via_in_pad`; PR #139 fabrication note | One site: U1 exposed pad (GND, at 23.8, 19.8). The note is written for a routed board and is in this board's `release.json` |
 | A8 | The four parts added or changed here match their KiCad footprints | `synth registry qualify` | `header_1x2`, `cdsot23_sm712`, `thvd1450d` and `usb_c_receptacle_amphenol_12401610e4_2a` have no pin-to-pad, mirrored-footprint or dimension finding. Each has one blocking finding, `E-SYNTH-QUAL-008` (no reviewer or provenance); the Amphenol part also has `E-SYNTH-QUAL-009` (no datasheet URL: the manufacturer's site refused every request, so its datasheet was not read). Like every part that command listed in my run (all of them blocked), they stay `blocked` until a reviewer is named, and none has one |
 
 ## B. Not proven: needs expert review
@@ -58,7 +58,7 @@ Datasheet files read for this revision (not committed, so the figures taken from
 | --- | --- | --- | --- |
 | B1 | USB D+/D- is a 90 ohm differential pair | Declared (`impedance 90ohm`). Synth gives only a closed-form estimate and says it does not verify inner layers (W-SYNTH-IMPEDANCE-001). The 4-layer stackup and the fab's real stackup are unverified. FreeRouting does not couple the pair. Revision A: width 0.242 mm, closest gap 0.133 mm | Requires expert review |
 | B2 | USB return path and layer transitions | D- changes layer through vias (revision A: 2). Whether a ground return via sits beside each signal via was not analysed | Requires expert review |
-| B3 | USB coupling and skew | Revision B skew 3.54 mm (D+ 19.26 mm with 3 vias and 14.15 mm on B.Cu, D- 15.72 mm with 2 vias and 9.55 mm on B.Cu; centre-line length from the board file; both lines mostly on the bottom layer). Gap and coupled length not re-measured (revision A: 1.40 mm skew, 12.6 mm of D+ within 0.5 mm of D-). No simulation | Requires expert review |
+| B3 | USB coupling and skew | Revision B skew 13.5 mm (D+ 31.77 mm all on F.Cu with no vias, D- 45.28 mm with 3 vias and 39.2 mm on B.Cu; centre-line length from the board file). A long detour on one line; this is a poor pair for USB, left as the router produced it. Gap and coupled length not re-measured (revision A: 1.40 mm skew, 12.6 mm of D+ within 0.5 mm of D-). No simulation | Requires expert review |
 | B4 | RS-485 surge protection (IEC 61000-4-5) | Topology follows TI's 1 kV circuit (SLLSEY3E fig. 37): 10 ohm series, TVS on the bus side. R_A and R_B are generic 0603; TI lists pulse-proof parts. THVD1450 bus abs max is +/-18 V and the SM712 clamps at 19 V (1 A) to 26 V (17 A), so the series resistors matter. Not surge-tested, no expert approval | Requires expert review |
 | B5 | RS-485 common-mode range, bias and fail-safe | Relies on the THVD1450's own fail-safe (per SLLSEY3E). No bias network, no common-mode choke. SM712 stand-off is 12 V / 7 V, matching the +12 / -7 V range, from the Bourns datasheet only | Requires expert review |
 | B6 | RS-485 termination | Selectable through J_TERM. With no jumper the bus is unterminated. Correct jumper use depends on where the board sits on the bus. Bus-side layout and stub lengths were not analysed | Requires expert review |

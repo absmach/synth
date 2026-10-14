@@ -364,7 +364,7 @@ dy = 0.0
 
 [components.H1]
 x = 30.48
-y = 5.08
+y = 215
 rotation = 0
 source = "agent"
 priority = "soft"
@@ -374,7 +374,7 @@ dy = 0.0
 
 [components.H2]
 x = 45.72
-y = 5.08
+y = 215
 rotation = 0
 source = "agent"
 priority = "soft"
@@ -384,7 +384,7 @@ dy = 0.0
 
 [components.H3]
 x = 60.96
-y = 5.08
+y = 215
 rotation = 0
 source = "agent"
 priority = "soft"
@@ -394,7 +394,7 @@ dy = 0.0
 
 [components.H4]
 x = 76.20
-y = 5.08
+y = 215
 rotation = 0
 source = "agent"
 priority = "soft"

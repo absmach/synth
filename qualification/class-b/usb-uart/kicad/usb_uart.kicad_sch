@@ -7277,7 +7277,7 @@
 	)
 	(symbol
 		(lib_id "Mechanical:MountingHole")
-		(at 30.48 5.08 0)
+		(at 30.48 214.63 0)
 		(unit 1)
 		(in_bom yes)
 		(on_board yes)
@@ -7285,7 +7285,7 @@
 		(property
 			"Reference"
 			"H1"
-			(at 30.48 -2.54 0)
+			(at 30.48 207.01 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -7295,7 +7295,7 @@
 		(property
 			"Value"
 			"(no value)"
-			(at 30.48 12.7 0)
+			(at 30.48 222.25 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -7304,8 +7304,8 @@
 		)
 		(property
 			"Footprint"
-			"MountingHole:MountingHole_2.5mm"
-			(at 30.48 5.08 0)
+			"MountingHole:MountingHole_3.2mm_M3"
+			(at 30.48 214.63 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -7316,7 +7316,7 @@
 		(property
 			"Datasheet"
 			""
-			(at 30.48 5.08 0)
+			(at 30.48 214.63 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -7327,7 +7327,7 @@
 		(property
 			"MPN"
 			""
-			(at 30.48 5.08 0)
+			(at 30.48 214.63 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -7338,7 +7338,7 @@
 		(property
 			"LCSC"
 			""
-			(at 30.48 5.08 0)
+			(at 30.48 214.63 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -7349,7 +7349,7 @@
 	)
 	(symbol
 		(lib_id "Mechanical:MountingHole")
-		(at 45.72 5.08 0)
+		(at 45.72 214.63 0)
 		(unit 1)
 		(in_bom yes)
 		(on_board yes)
@@ -7357,7 +7357,7 @@
 		(property
 			"Reference"
 			"H2"
-			(at 45.72 -2.54 0)
+			(at 45.72 207.01 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -7367,7 +7367,7 @@
 		(property
 			"Value"
 			"(no value)"
-			(at 45.72 12.7 0)
+			(at 45.72 222.25 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -7376,8 +7376,8 @@
 		)
 		(property
 			"Footprint"
-			"MountingHole:MountingHole_2.5mm"
-			(at 45.72 5.08 0)
+			"MountingHole:MountingHole_3.2mm_M3"
+			(at 45.72 214.63 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -7388,7 +7388,7 @@
 		(property
 			"Datasheet"
 			""
-			(at 45.72 5.08 0)
+			(at 45.72 214.63 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -7399,7 +7399,7 @@
 		(property
 			"MPN"
 			""
-			(at 45.72 5.08 0)
+			(at 45.72 214.63 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -7410,7 +7410,7 @@
 		(property
 			"LCSC"
 			""
-			(at 45.72 5.08 0)
+			(at 45.72 214.63 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -7421,7 +7421,7 @@
 	)
 	(symbol
 		(lib_id "Mechanical:MountingHole")
-		(at 60.96 5.08 0)
+		(at 60.96 214.63 0)
 		(unit 1)
 		(in_bom yes)
 		(on_board yes)
@@ -7429,7 +7429,7 @@
 		(property
 			"Reference"
 			"H3"
-			(at 60.96 -2.54 0)
+			(at 60.96 207.01 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -7439,7 +7439,7 @@
 		(property
 			"Value"
 			"(no value)"
-			(at 60.96 12.7 0)
+			(at 60.96 222.25 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -7448,8 +7448,8 @@
 		)
 		(property
 			"Footprint"
-			"MountingHole:MountingHole_2.5mm"
-			(at 60.96 5.08 0)
+			"MountingHole:MountingHole_3.2mm_M3"
+			(at 60.96 214.63 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -7460,7 +7460,7 @@
 		(property
 			"Datasheet"
 			""
-			(at 60.96 5.08 0)
+			(at 60.96 214.63 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -7471,7 +7471,7 @@
 		(property
 			"MPN"
 			""
-			(at 60.96 5.08 0)
+			(at 60.96 214.63 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -7482,7 +7482,7 @@
 		(property
 			"LCSC"
 			""
-			(at 60.96 5.08 0)
+			(at 60.96 214.63 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -7493,7 +7493,7 @@
 	)
 	(symbol
 		(lib_id "Mechanical:MountingHole")
-		(at 76.2 5.08 0)
+		(at 76.2 214.63 0)
 		(unit 1)
 		(in_bom yes)
 		(on_board yes)
@@ -7501,7 +7501,7 @@
 		(property
 			"Reference"
 			"H4"
-			(at 76.2 -2.54 0)
+			(at 76.2 207.01 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -7511,7 +7511,7 @@
 		(property
 			"Value"
 			"(no value)"
-			(at 76.2 12.7 0)
+			(at 76.2 222.25 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -7520,8 +7520,8 @@
 		)
 		(property
 			"Footprint"
-			"MountingHole:MountingHole_2.5mm"
-			(at 76.2 5.08 0)
+			"MountingHole:MountingHole_3.2mm_M3"
+			(at 76.2 214.63 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -7532,7 +7532,7 @@
 		(property
 			"Datasheet"
 			""
-			(at 76.2 5.08 0)
+			(at 76.2 214.63 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -7543,7 +7543,7 @@
 		(property
 			"MPN"
 			""
-			(at 76.2 5.08 0)
+			(at 76.2 214.63 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -7554,7 +7554,7 @@
 		(property
 			"LCSC"
 			""
-			(at 76.2 5.08 0)
+			(at 76.2 214.63 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -11241,7 +11241,7 @@
 	)
 	(text
 		"MOUNTING"
-		(at 22.86 2 0)
+		(at 22.86 207.92 0)
 		(effects
 			(font
 				(size 2 2)
@@ -11738,8 +11738,8 @@
 		(uuid "a9e5465e-bd30-5a2e-a865-7d5576acb0c8")
 	)
 	(rectangle
-		(start 17.86 -5)
-		(end 88.82 15.16)
+		(start 17.86 204.92)
+		(end 88.82 225.08)
 		(stroke
 			(width 0.254)
 			(type dash)

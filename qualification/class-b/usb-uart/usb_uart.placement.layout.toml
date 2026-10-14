@@ -14,7 +14,7 @@ priority = "hard"
 timestamp = "2026-10-10T09:00:00+00:00"
 
 [components.D2]
-x = 20.18
+x = 19.98
 y = 14.75
 rotation = 270
 source = "agent"
@@ -22,7 +22,7 @@ priority = "hard"
 timestamp = "2026-10-10T09:00:00+00:00"
 
 [components.D6]
-x = 22.58
+x = 22.38
 y = 14.75
 rotation = 270
 source = "agent"
@@ -30,7 +30,7 @@ priority = "hard"
 timestamp = "2026-10-10T09:00:00+00:00"
 
 [components.D1]
-x = 25.48
+x = 25.28
 y = 14.10
 rotation = 180
 source = "agent"
@@ -38,7 +38,7 @@ priority = "hard"
 timestamp = "2026-10-10T09:00:00+00:00"
 
 [components.D5]
-x = 28.38
+x = 28.18
 y = 14.75
 rotation = 270
 source = "agent"
@@ -46,7 +46,7 @@ priority = "hard"
 timestamp = "2026-10-10T09:00:00+00:00"
 
 [components.R2]
-x = 16.85
+x = 16.65
 y = 14.75
 rotation = 0
 source = "agent"
@@ -54,7 +54,7 @@ priority = "hard"
 timestamp = "2026-10-10T09:00:00+00:00"
 
 [components.R1]
-x = 31.15
+x = 30.95
 y = 14.75
 rotation = 0
 source = "agent"
@@ -294,32 +294,32 @@ priority = "hard"
 timestamp = "2026-10-10T09:00:00+00:00"
 
 [components.H1]
-x = 2.85
-y = 2.85
+x = 3.50
+y = 3.45
 rotation = 0
 source = "agent"
 priority = "hard"
 timestamp = "2026-10-14T09:00:00+00:00"
 
 [components.H2]
-x = 47.75
-y = 2.85
+x = 47.00
+y = 3.45
 rotation = 0
 source = "agent"
 priority = "hard"
 timestamp = "2026-10-14T09:00:00+00:00"
 
 [components.H3]
-x = 2.85
-y = 24.50
+x = 3.50
+y = 23.90
 rotation = 0
 source = "agent"
 priority = "hard"
 timestamp = "2026-10-14T09:00:00+00:00"
 
 [components.H4]
-x = 47.75
-y = 24.50
+x = 47.00
+y = 23.90
 rotation = 0
 source = "agent"
 priority = "hard"

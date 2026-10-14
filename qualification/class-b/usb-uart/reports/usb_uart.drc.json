@@ -1,7 +1,7 @@
 {
     "$schema": "https://schemas.kicad.org/drc.v1.json",
     "coordinate_units": "mm",
-    "date": "2026-10-14T12:11:41",
+    "date": "2026-10-14T13:39:38",
     "ignored_checks": [
         {
             "description": "Footprint has no courtyard defined",
@@ -39,7 +39,7 @@
                 {
                     "description": "Reference field of D6",
                     "pos": {
-                        "x": 22.58,
+                        "x": 22.38,
                         "y": 20.5
                     },
                     "uuid": "74315db6-16c0-5e48-81da-314013c442a5"
@@ -62,53 +62,7 @@
                 {
                     "description": "Reference field of D6",
                     "pos": {
-                        "x": 22.58,
-                        "y": 20.5
-                    },
-                    "uuid": "74315db6-16c0-5e48-81da-314013c442a5"
-                },
-                {
-                    "description": "Pad 5 [VIO] of U1 on F.Cu",
-                    "pos": {
-                        "x": 21.8625,
-                        "y": 20.85
-                    },
-                    "uuid": "be7f1a82-0175-5d22-b23c-8547d8350211"
-                }
-            ],
-            "severity": "warning",
-            "type": "silk_over_copper"
-        },
-        {
-            "description": "Silkscreen clipped by solder mask",
-            "items": [
-                {
-                    "description": "Reference field of D6",
-                    "pos": {
-                        "x": 22.58,
-                        "y": 20.5
-                    },
-                    "uuid": "74315db6-16c0-5e48-81da-314013c442a5"
-                },
-                {
-                    "description": "Pad 6 [V3] of U1 on F.Cu",
-                    "pos": {
-                        "x": 21.8625,
-                        "y": 21.35
-                    },
-                    "uuid": "84b7c311-a6dd-5c90-937c-ab1b997c3dee"
-                }
-            ],
-            "severity": "warning",
-            "type": "silk_over_copper"
-        },
-        {
-            "description": "Silkscreen clipped by solder mask",
-            "items": [
-                {
-                    "description": "Reference field of D6",
-                    "pos": {
-                        "x": 22.58,
+                        "x": 22.38,
                         "y": 20.5
                     },
                     "uuid": "74315db6-16c0-5e48-81da-314013c442a5"
@@ -131,7 +85,53 @@
                 {
                     "description": "Reference field of D6",
                     "pos": {
-                        "x": 22.58,
+                        "x": 22.38,
+                        "y": 20.5
+                    },
+                    "uuid": "74315db6-16c0-5e48-81da-314013c442a5"
+                },
+                {
+                    "description": "Pad 5 [VIO] of U1 on F.Cu",
+                    "pos": {
+                        "x": 21.8625,
+                        "y": 20.85
+                    },
+                    "uuid": "be7f1a82-0175-5d22-b23c-8547d8350211"
+                }
+            ],
+            "severity": "warning",
+            "type": "silk_over_copper"
+        },
+        {
+            "description": "Silkscreen clipped by solder mask",
+            "items": [
+                {
+                    "description": "Reference field of D6",
+                    "pos": {
+                        "x": 22.38,
+                        "y": 20.5
+                    },
+                    "uuid": "74315db6-16c0-5e48-81da-314013c442a5"
+                },
+                {
+                    "description": "Pad 6 [V3] of U1 on F.Cu",
+                    "pos": {
+                        "x": 21.8625,
+                        "y": 21.35
+                    },
+                    "uuid": "84b7c311-a6dd-5c90-937c-ab1b997c3dee"
+                }
+            ],
+            "severity": "warning",
+            "type": "silk_over_copper"
+        },
+        {
+            "description": "Silkscreen clipped by solder mask",
+            "items": [
+                {
+                    "description": "Reference field of D6",
+                    "pos": {
+                        "x": 22.38,
                         "y": 20.5
                     },
                     "uuid": "74315db6-16c0-5e48-81da-314013c442a5"
@@ -143,75 +143,6 @@
                         "y": 20.35
                     },
                     "uuid": "5f817798-bc2d-5e33-8439-2165dc8aa11a"
-                }
-            ],
-            "severity": "warning",
-            "type": "silk_over_copper"
-        },
-        {
-            "description": "Silkscreen clipped by solder mask",
-            "items": [
-                {
-                    "description": "Polygon of D8 on F.Silkscreen",
-                    "pos": {
-                        "x": 38.22,
-                        "y": 33.7
-                    },
-                    "uuid": "12bb02cd-5379-5ce6-b681-915ee4d3c0ce"
-                },
-                {
-                    "description": "Pad 1 [RS485_A_BUS] of D8 on F.Cu",
-                    "pos": {
-                        "x": 37.65,
-                        "y": 33.3375
-                    },
-                    "uuid": "c79d4611-c695-5d52-9668-017951fe13a9"
-                }
-            ],
-            "severity": "warning",
-            "type": "silk_over_copper"
-        },
-        {
-            "description": "Silkscreen clipped by solder mask",
-            "items": [
-                {
-                    "description": "Segment of D8 on F.Silkscreen",
-                    "pos": {
-                        "x": 37.04,
-                        "y": 33.16
-                    },
-                    "uuid": "44e7a6ff-4eda-5d96-ba88-b18db5850cc5"
-                },
-                {
-                    "description": "Pad 1 [RS485_A_BUS] of D8 on F.Cu",
-                    "pos": {
-                        "x": 37.65,
-                        "y": 33.3375
-                    },
-                    "uuid": "c79d4611-c695-5d52-9668-017951fe13a9"
-                }
-            ],
-            "severity": "warning",
-            "type": "silk_over_copper"
-        },
-        {
-            "description": "Silkscreen clipped by solder mask",
-            "items": [
-                {
-                    "description": "Segment of D8 on F.Silkscreen",
-                    "pos": {
-                        "x": 37.09,
-                        "y": 33.16
-                    },
-                    "uuid": "fd5b6ae7-c901-547f-b5ac-57c597b1d571"
-                },
-                {
-                    "description": "Pad 1 [RS485_A_BUS] of D8 on F.Cu",
-                    "pos": {
-                        "x": 37.65,
-                        "y": 33.3375
-                    },
-                    "uuid": "c79d4611-c695-5d52-9668-017951fe13a9"
                 }
             ],
             "severity": "warning",
@@ -292,29 +223,6 @@
                 {
                     "description": "Segment of D8 on F.Silkscreen",
                     "pos": {
-                        "x": 37.04,
-                        "y": 31.64
-                    },
-                    "uuid": "e1a4e86e-8d51-57e4-9db2-fa06ba3b37c9"
-                },
-                {
-                    "description": "Pad 3 [GND] of D8 on F.Cu",
-                    "pos": {
-                        "x": 38.6,
-                        "y": 31.4625
-                    },
-                    "uuid": "6c086b6c-9521-5026-8cb8-49e2f3ebed4f"
-                }
-            ],
-            "severity": "warning",
-            "type": "silk_over_copper"
-        },
-        {
-            "description": "Silkscreen clipped by solder mask",
-            "items": [
-                {
-                    "description": "Segment of D8 on F.Silkscreen",
-                    "pos": {
                         "x": 39.16,
                         "y": 31.64
                     },
@@ -356,6 +264,98 @@
             "type": "silk_over_copper"
         },
         {
+            "description": "Silkscreen clipped by solder mask",
+            "items": [
+                {
+                    "description": "Segment of D8 on F.Silkscreen",
+                    "pos": {
+                        "x": 37.04,
+                        "y": 33.16
+                    },
+                    "uuid": "44e7a6ff-4eda-5d96-ba88-b18db5850cc5"
+                },
+                {
+                    "description": "Pad 1 [RS485_A_BUS] of D8 on F.Cu",
+                    "pos": {
+                        "x": 37.65,
+                        "y": 33.3375
+                    },
+                    "uuid": "c79d4611-c695-5d52-9668-017951fe13a9"
+                }
+            ],
+            "severity": "warning",
+            "type": "silk_over_copper"
+        },
+        {
+            "description": "Silkscreen clipped by solder mask",
+            "items": [
+                {
+                    "description": "Segment of D8 on F.Silkscreen",
+                    "pos": {
+                        "x": 37.09,
+                        "y": 33.16
+                    },
+                    "uuid": "fd5b6ae7-c901-547f-b5ac-57c597b1d571"
+                },
+                {
+                    "description": "Pad 1 [RS485_A_BUS] of D8 on F.Cu",
+                    "pos": {
+                        "x": 37.65,
+                        "y": 33.3375
+                    },
+                    "uuid": "c79d4611-c695-5d52-9668-017951fe13a9"
+                }
+            ],
+            "severity": "warning",
+            "type": "silk_over_copper"
+        },
+        {
+            "description": "Silkscreen clipped by solder mask",
+            "items": [
+                {
+                    "description": "Segment of D8 on F.Silkscreen",
+                    "pos": {
+                        "x": 37.04,
+                        "y": 31.64
+                    },
+                    "uuid": "e1a4e86e-8d51-57e4-9db2-fa06ba3b37c9"
+                },
+                {
+                    "description": "Pad 3 [GND] of D8 on F.Cu",
+                    "pos": {
+                        "x": 38.6,
+                        "y": 31.4625
+                    },
+                    "uuid": "6c086b6c-9521-5026-8cb8-49e2f3ebed4f"
+                }
+            ],
+            "severity": "warning",
+            "type": "silk_over_copper"
+        },
+        {
+            "description": "Silkscreen clipped by solder mask",
+            "items": [
+                {
+                    "description": "Polygon of D8 on F.Silkscreen",
+                    "pos": {
+                        "x": 38.22,
+                        "y": 33.7
+                    },
+                    "uuid": "12bb02cd-5379-5ce6-b681-915ee4d3c0ce"
+                },
+                {
+                    "description": "Pad 1 [RS485_A_BUS] of D8 on F.Cu",
+                    "pos": {
+                        "x": 37.65,
+                        "y": 33.3375
+                    },
+                    "uuid": "c79d4611-c695-5d52-9668-017951fe13a9"
+                }
+            ],
+            "severity": "warning",
+            "type": "silk_over_copper"
+        },
+        {
             "description": "The current configuration does not include the footprint library 'Connector_USB'",
             "items": [
                 {
@@ -376,7 +376,7 @@
                 {
                     "description": "Footprint R1",
                     "pos": {
-                        "x": 31.15,
+                        "x": 30.95,
                         "y": 14.75
                     },
                     "uuid": "437ce98f-85e9-5268-942c-1952dbb3c528"
@@ -391,7 +391,7 @@
                 {
                     "description": "Footprint R2",
                     "pos": {
-                        "x": 16.85,
+                        "x": 16.65,
                         "y": 14.75
                     },
                     "uuid": "5be097df-bbd3-56b5-9fc9-fa2e4235c8fb"
@@ -406,7 +406,7 @@
                 {
                     "description": "Footprint D1",
                     "pos": {
-                        "x": 25.48,
+                        "x": 25.28,
                         "y": 14.1
                     },
                     "uuid": "a3d60053-28d2-5cd5-85df-300d92010734"
@@ -421,7 +421,7 @@
                 {
                     "description": "Footprint D2",
                     "pos": {
-                        "x": 20.18,
+                        "x": 19.98,
                         "y": 14.75
                     },
                     "uuid": "74fda175-a97b-59ca-a521-2d933c99ed0c"
@@ -436,7 +436,7 @@
                 {
                     "description": "Footprint D5",
                     "pos": {
-                        "x": 28.38,
+                        "x": 28.18,
                         "y": 14.75
                     },
                     "uuid": "35fa54d1-9d74-501c-a9e1-ac8df2b3ff5c"
@@ -451,7 +451,7 @@
                 {
                     "description": "Footprint D6",
                     "pos": {
-                        "x": 22.58,
+                        "x": 22.38,
                         "y": 14.75
                     },
                     "uuid": "44f4eb78-c347-5a76-98c5-4c8d200043b4"
@@ -901,8 +901,8 @@
                 {
                     "description": "Footprint H1",
                     "pos": {
-                        "x": 2.85,
-                        "y": 2.85
+                        "x": 3.5,
+                        "y": 3.45
                     },
                     "uuid": "0068c6ae-2d1f-57f1-aa82-8ceba8355cbf"
                 }
@@ -916,8 +916,8 @@
                 {
                     "description": "Footprint H2",
                     "pos": {
-                        "x": 47.75,
-                        "y": 2.85
+                        "x": 47.0,
+                        "y": 3.45
                     },
                     "uuid": "d18aa47e-5ee4-5175-82b0-8b72eec69763"
                 }
@@ -931,8 +931,8 @@
                 {
                     "description": "Footprint H3",
                     "pos": {
-                        "x": 2.85,
-                        "y": 24.5
+                        "x": 3.5,
+                        "y": 23.9
                     },
                     "uuid": "2b63727c-cf44-583c-a253-b5fba0ac3207"
                 }
@@ -946,8 +946,8 @@
                 {
                     "description": "Footprint H4",
                     "pos": {
-                        "x": 47.75,
-                        "y": 24.5
+                        "x": 47.0,
+                        "y": 23.9
                     },
                     "uuid": "4257ac06-c40a-566e-9c92-b46185af293c"
                 }
