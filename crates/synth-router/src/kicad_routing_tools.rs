@@ -178,7 +178,7 @@ pub fn build_command(
     // out the two 0.5 mm connectors and skipped the 121-ball BGA, because
     // 0.8 mm clears the 0.687 mm two vias need between centres. Needing an
     // escape and failing one are different questions.
-    let candidates = crate::escape::grid_arrays_in_baseline(request);
+    let candidates = escape_plan(request);
     if !candidates.is_empty() {
         // Escape with the smallest via the declared process permits, not with
         // the engine's default. Measured without this, the escape placed 11
@@ -196,11 +196,49 @@ pub fn build_command(
             "--escape-via-size".to_string(),
             format!("{:.4}", synth_ir::Length(diameter_nm).to_mm()),
         ]);
-        for refdes in candidates {
-            args.extend(["--fanout-component".to_string(), refdes]);
+        for spec in candidates {
+            args.extend(["--fanout-component".to_string(), spec]);
         }
     }
     args
+}
+
+/// Which packages to escape, and how, as `REFDES[:method[:layers]]`.
+///
+/// Three inputs, in precedence order. A package the design declared `escape
+/// { off }` on is never escaped, because refusing is the stronger statement
+/// and escaping it anyway would be the worse failure. A package the design
+/// declared an `escape { … }` block on is escaped as asked, even if the
+/// geometry would not have selected it — being able to say so is the point
+/// of the declaration. Everything else falls back to the dense grid arrays,
+/// because a 0.8 mm ball grid left to a maze router comes back with a stub
+/// on every lane whether or not the design thought to mention it.
+fn escape_plan(request: &RouteRequest) -> Vec<String> {
+    let off: std::collections::BTreeSet<&str> =
+        request.escapes_off.iter().map(String::as_str).collect();
+    let declared: std::collections::BTreeSet<&str> =
+        request.escapes.iter().map(|e| e.refdes.as_str()).collect();
+
+    let mut plan: Vec<String> = request
+        .escapes
+        .iter()
+        .filter(|e| !off.contains(e.refdes.as_str()))
+        .map(|e| {
+            let method = e.method.clone().unwrap_or_default();
+            if e.layers.is_empty() && method.is_empty() {
+                e.refdes.clone()
+            } else {
+                format!("{}:{}:{}", e.refdes, method, e.layers.join(","))
+            }
+        })
+        .collect();
+
+    for refdes in crate::escape::grid_arrays_in_baseline(request) {
+        if !off.contains(refdes.as_str()) && !declared.contains(refdes.as_str()) {
+            plan.push(refdes);
+        }
+    }
+    plan
 }
 
 /// Run KiCadRoutingTools over the request's baseline.
@@ -456,7 +494,66 @@ pub fn statistics_from(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::contract::EscapeRequest;
     use crate::contract::{FabricationPolicy, KrtEscalation, RouterEngine, RouterLimits};
+
+    /// `escape { off }` is the stronger statement: a design that refuses an
+    /// escape must not get one because the geometry disagreed.
+    #[test]
+    fn a_package_declared_off_is_never_escaped() {
+        let mut request = RouteRequest::new(
+            std::path::Path::new("board.kicad_pcb"),
+            std::path::Path::new("out"),
+            RouterEngine::KiCadRoutingTools,
+        );
+        request.escapes_off = vec!["U1".to_string()];
+        request.escapes = vec![EscapeRequest {
+            refdes: "U1".to_string(),
+            method: Some("underpad".to_string()),
+            layers: vec![],
+        }];
+
+        assert!(
+            escape_plan(&request).is_empty(),
+            "off must beat a method on the same package"
+        );
+    }
+
+    /// A declaration reaches the engine with its own method and layers, and
+    /// the spec stays attached to the package it belongs to.
+    #[test]
+    fn a_declared_escape_carries_its_method_and_layers() {
+        let mut request = RouteRequest::new(
+            std::path::Path::new("board.kicad_pcb"),
+            std::path::Path::new("out"),
+            RouterEngine::KiCadRoutingTools,
+        );
+        request.escapes = vec![EscapeRequest {
+            refdes: "U1".to_string(),
+            method: Some("channel".to_string()),
+            layers: vec!["In1.Cu".to_string(), "In2.Cu".to_string()],
+        }];
+
+        assert_eq!(escape_plan(&request), vec!["U1:channel:In1.Cu,In2.Cu"]);
+    }
+
+    /// A package named with no method and no layers needs no spec suffix, so
+    /// the adapter's defaults apply and the argument stays legible.
+    #[test]
+    fn a_bare_declaration_is_just_the_refdes() {
+        let mut request = RouteRequest::new(
+            std::path::Path::new("board.kicad_pcb"),
+            std::path::Path::new("out"),
+            RouterEngine::KiCadRoutingTools,
+        );
+        request.escapes = vec![EscapeRequest {
+            refdes: "U7".to_string(),
+            method: None,
+            layers: vec![],
+        }];
+
+        assert_eq!(escape_plan(&request), vec!["U7"]);
+    }
 
     fn request() -> RouteRequest {
         let mut request = RouteRequest::new(

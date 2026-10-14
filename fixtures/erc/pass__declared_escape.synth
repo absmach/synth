@@ -1,0 +1,14 @@
+board "declared_escape" {
+  layers 4
+  manufacturer "jlcpcb"
+
+  component R1: resistor "r_generic_0603" value "10k" {
+    escape { method underpad  layers "In1.Cu", "In2.Cu" }
+  }
+  component R2: resistor "r_generic_0603" value "10k" {
+    escape { off }
+  }
+
+  connect R1.p1 -> R2.p1
+  connect R1.p2 -> R2.p2
+}
