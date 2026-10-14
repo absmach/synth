@@ -106,6 +106,38 @@ fn feather_m4_express_outline_area_does_not_grow_past_baseline() {
     );
 }
 
+/// `secure_tracker`'s outline before the 25 MHz oscillator's courtyard was
+/// corrected from 5.0 x 5.0 to its real 6.0 x 4.32 mm: 64.90 x 63.85 mm.
+const SECURE_TRACKER_BASELINE_OUTLINE_AREA_MM2_64_90_X_63_85: f64 = 64.90 * 63.85;
+
+/// A 1 mm part correction must not move the board 44%.
+///
+/// Correcting one courtyard by 1 mm took this board from 4143.9 mm2 to
+/// 5960.9 mm2, and nothing failed on it: the insta snapshot records whatever
+/// the placer does, so the non-monotonicity in #158 would be baked in
+/// silently. This bounds it against the area from before that change, which
+/// is what the placer should still produce.
+///
+/// Ignored because it fails today, by design: #158 is the defect, this is the
+/// record of it, and removing the attribute is the check that it is fixed.
+/// The sweep in #158 shows the board oscillating between 64.90 and 93.90 mm
+/// wide as one part grows in 0.2 mm steps, so the figure to restore is a
+/// property of the placer rather than of this fixture.
+#[test]
+#[ignore = "fails until the placer non-monotonicity in #158 is fixed"]
+fn secure_tracker_outline_area_stays_within_baseline_tolerance() {
+    let board = load_board("fixtures/kicad-reference/secure_tracker.synth");
+    let placement = synth_place::place(&board).expect("place");
+    let area = nm_to_mm(placement.board_outline.width_nm())
+        * nm_to_mm(placement.board_outline.height_nm());
+    let baseline = SECURE_TRACKER_BASELINE_OUTLINE_AREA_MM2_64_90_X_63_85;
+    assert!(
+        (area - baseline).abs() <= baseline * OUTLINE_AREA_TOLERANCE,
+        "outline area {area:.1} mm2 deviates more than 10% from baseline \
+         {baseline:.1} mm2 — see #158"
+    );
+}
+
 /// The external placement contract publishes the footprint origin (KiCad
 /// `at`), not the internal courtyard centre. For an asymmetric footprint the
 /// two differ by the courtyard offset; publishing the internal value shifts
