@@ -288,6 +288,48 @@ pub fn lower(ast: &ProgramAst, registry: &Registry, file: &str) -> LowerResult {
     // refdes can be checked against the final component set.
     let variants = ctx.lower_variants(&root_statements, &refdes_index);
 
+    // `escape { layers … }` against the copper the board actually has.
+    //
+    // After the walk rather than in `lower_escape`, because the layer count
+    // is a statement like any other and a board may declare it after the
+    // component that names a layer. An unknown name has to fail here: left
+    // alone it reaches the engine, the fanout fails at route time, and the
+    // package is routed unescaped behind a stderr warning — the silent
+    // fallback the unknown-method check exists to prevent.
+    let copper = copper_layer_names(layers);
+    for component in &components {
+        let Some(escape) = component.escape.as_ref() else {
+            continue;
+        };
+        for layer in &escape.layers {
+            if copper.iter().any(|known| known == layer) {
+                continue;
+            }
+            ctx.diagnostics.push(
+                DiagnosticBuilder::new(
+                    "E-SYNTH-PROCESS-005",
+                    Severity::Error,
+                    "escape layer is not on this board",
+                )
+                .location(Location::from_span(
+                    ctx.file.to_string(),
+                    escape.source_span,
+                ))
+                .expected(format!(
+                    "one of: {}",
+                    copper
+                        .iter()
+                        .map(|l| format!("`{l}`"))
+                        .collect::<Vec<_>>()
+                        .join(", ")
+                ))
+                .found(format!("`{layer}`"))
+                .explanation_url("synth.docs/diagnostics/E-SYNTH-PROCESS-005")
+                .build(),
+            );
+        }
+    }
+
     let board = Board {
         legends,
         schematic_paper,
@@ -316,6 +358,22 @@ pub fn lower(ast: &ProgramAst, registry: &Registry, file: &str) -> LowerResult {
         board: Some(board),
         diagnostics: ctx.diagnostics,
     }
+}
+
+/// Copper layer names a board of `count` layers has, outer first.
+///
+/// KiCad's own naming: the two outer layers always exist, and the inner ones
+/// are numbered from the top. A count below two has no copper to name.
+fn copper_layer_names(count: u32) -> Vec<String> {
+    if count < 2 {
+        return Vec::new();
+    }
+    let mut names = vec!["F.Cu".to_string()];
+    for inner in 1..count.saturating_sub(1) {
+        names.push(format!("In{inner}.Cu"));
+    }
+    names.push("B.Cu".to_string());
+    names
 }
 
 struct LowerCtx<'a> {
