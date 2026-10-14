@@ -23,7 +23,7 @@ Tool versions used: KiCad 10.0.7, FreeRouting 2.4.1 on OpenJDK 25.0.4.1, Synth `
 
 ## Artifact hashes
 
-`SHA256SUMS` in this folder lists every design artifact (source, sidecars, KiCad files, BOM, 3D render, routing and DRC reports). It leaves out `README.md`, `QUALIFICATION.md` and itself. The key ones:
+`SHA256SUMS` in this folder lists every design artifact (source, sidecars, KiCad files, BOM, 3D render, the board STEP, routing and DRC reports). It leaves out `README.md`, `QUALIFICATION.md` and itself. The key ones:
 
 | Artifact | SHA-256 |
 | --- | --- |
