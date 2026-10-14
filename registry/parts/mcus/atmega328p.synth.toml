@@ -83,6 +83,120 @@ electrical_type = "input"
 capabilities = ["reset"]
 required = true
 
+# The remaining pads of the DIP-28. Pin names and numbers come from the
+# stock KiCad symbol `MCU_Microchip_ATmega:ATmega328P-P`, which extends
+# `ATmega48PV-10P`; the footprint `Package_DIP:DIP-28_W7.62mm` has 28 pads
+# and every one of them is declared below, so the pin map can be checked
+# against the package rather than trusted.
+#
+# None of these is marked `required`: AVCC and the analog ground do have to
+# be connected on a real board, but that is a board rule, and asserting it
+# here would reject every existing design that leaves them floating.
+#
+# PB6/PB7 carry the crystal and PC0-PC3 reach the ADC, but all of them are
+# plain bidirectional GPIO in the symbol. The clock and analog capabilities
+# require a clock or analog pin, so tagging a muxed GPIO with them would be a
+# claim about the pin's electrical type that the package does not support.
+
+[[pins]]
+name = "pd2"
+number = "4"
+electrical_type = "bidirectional"
+capabilities = ["gpio"]
+
+[[pins]]
+name = "pd3"
+number = "5"
+electrical_type = "bidirectional"
+capabilities = ["gpio"]
+
+[[pins]]
+name = "pd4"
+number = "6"
+electrical_type = "bidirectional"
+capabilities = ["gpio"]
+
+[[pins]]
+name = "pb6_xtal1"
+number = "9"
+electrical_type = "bidirectional"
+capabilities = ["gpio"]
+
+[[pins]]
+name = "pb7_xtal2"
+number = "10"
+electrical_type = "bidirectional"
+capabilities = ["gpio"]
+
+[[pins]]
+name = "pd5"
+number = "11"
+electrical_type = "bidirectional"
+capabilities = ["gpio"]
+
+[[pins]]
+name = "pd6"
+number = "12"
+electrical_type = "bidirectional"
+capabilities = ["gpio"]
+
+[[pins]]
+name = "pd7"
+number = "13"
+electrical_type = "bidirectional"
+capabilities = ["gpio"]
+
+[[pins]]
+name = "pb0"
+number = "14"
+electrical_type = "bidirectional"
+capabilities = ["gpio"]
+
+[[pins]]
+name = "pb1"
+number = "15"
+electrical_type = "bidirectional"
+capabilities = ["gpio"]
+
+[[pins]]
+name = "avcc"
+number = "20"
+electrical_type = "power_input"
+
+[[pins]]
+name = "aref"
+number = "21"
+electrical_type = "passive"
+
+[[pins]]
+name = "gnd_analog"
+number = "22"
+electrical_type = "passive"
+
+[[pins]]
+name = "pc0_adc0"
+number = "23"
+electrical_type = "bidirectional"
+capabilities = ["gpio"]
+
+[[pins]]
+name = "pc1_adc1"
+number = "24"
+electrical_type = "bidirectional"
+capabilities = ["gpio"]
+
+[[pins]]
+name = "pc2_adc2"
+number = "25"
+electrical_type = "bidirectional"
+capabilities = ["gpio"]
+
+[[pins]]
+name = "pc3_adc3"
+number = "26"
+electrical_type = "bidirectional"
+capabilities = ["gpio"]
+
 [[required_decoupling]]
 net = "vcc"
 value = "100nf"

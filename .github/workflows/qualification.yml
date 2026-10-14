@@ -1,0 +1,196 @@
+name: Reference Board Qualification
+
+on:
+  push:
+    branches:
+      - main
+    paths: &qualification_paths
+      - "crates/synth-ast/**"
+      - "crates/synth-cli/**"
+      - "crates/synth-connectivity/**"
+      - "crates/synth-drc/**"
+      - "crates/synth-geometry/**"
+      - "crates/synth-ir/**"
+      - "crates/synth-kicad/**"
+      - "crates/synth-layout/**"
+      - "crates/synth-parser/**"
+      - "crates/synth-place/**"
+      - "crates/synth-registry/**"
+      - "crates/synth-route/**"
+      - "crates/synth-validate/**"
+      - "registry/**"
+      - "qualification/**"
+      - "examples/**"
+      - "fixtures/designs/**"
+      - "fixtures/kicad-reference/**"
+      - ".github/workflows/qualification.yml"
+
+  pull_request:
+    branches:
+      - main
+    paths: *qualification_paths
+
+  workflow_dispatch:
+
+env:
+  CARGO_TERM_COLOR: always
+  CARGO_NET_RETRY: 3
+  CARGO_HTTP_TIMEOUT: 60
+
+concurrency:
+  group: qualification-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # Release-blocking. Runs the same deterministic release command a human
+  # would (`synth check <board> --json`) over the checked-in corpus and fails
+  # when any board stops matching its declared status in
+  # qualification/matrix.toml — in either direction, so a launch claim cannot
+  # grow without someone declaring it.
+  matrix:
+    name: Qualification matrix
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v7
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Cargo
+        uses: Swatinem/rust-cache@v2
+        with:
+          key: qualification
+
+      - name: Install kicad-cli and the stock symbol/footprint libraries
+        run: |
+          sudo add-apt-repository --yes ppa:kicad/kicad-10.0-releases
+          sudo apt-get update
+          sudo apt-get install --yes --no-install-recommends \
+            kicad kicad-symbols kicad-footprints
+          kicad-cli version
+          mkdir -p "$HOME/.config/kicad/10.0"
+          cp /usr/share/kicad/template/sym-lib-table "$HOME/.config/kicad/10.0/sym-lib-table"
+          cp /usr/share/kicad/template/fp-lib-table "$HOME/.config/kicad/10.0/fp-lib-table"
+
+      # Without an engine, `synth drc` refuses to route and emits no DRC
+      # counts, so the DRC stage reports `unknown` and every board's gate
+      # fails for a reason that is not about the board. See #95.
+      #
+      # KiCadRoutingTools is the engine; freerouting stays the reference
+      # baseline rather than the thing the gate depends on. Pinned to a tag,
+      # because "whatever main is today" is not a reproducible run.
+      # `build_router.py` fetches a prebuilt grid_router for the runner's OS
+      # and falls back to a local cargo build.
+      - name: Install KiCadRoutingTools
+        run: |
+          git clone --depth 1 --branch v0.23.0 \
+            https://github.com/drandyhaas/KiCadRoutingTools "$RUNNER_TEMP/krt"
+          python3 -m pip install --quiet -r "$RUNNER_TEMP/krt/requirements.txt"
+          python3 "$RUNNER_TEMP/krt/build_router.py"
+          echo "KICAD_ROUTING_TOOLS_REPO=$RUNNER_TEMP/krt" >> "$GITHUB_ENV"
+          echo "SYNTH_QUALIFY_ROUTER=kicad-routing-tools" >> "$GITHUB_ENV"
+
+      - name: Report which routers this runner has
+        run: cargo run --release -p synth-cli -- routers
+
+      # A release build is not an optimization here. A debug DRC on a real
+      # board takes roughly ten times as long and overruns the stage budget,
+      # which reports `unknown` and blocks for no real reason.
+      - name: Run the qualification matrix
+        run: cargo test --release -p synth-cli --test qualification_matrix -- --ignored --nocapture
+
+      # The matrix says which boards drifted; this says why, when the cause is
+      # a part whose pin map disagrees with its footprint. Only meaningful with
+      # KiCad installed, which is why it lives here and not in the main CI job.
+      - name: Qualify the registry against the installed KiCad libraries
+        if: always()
+        # Without these the check cannot read the libraries it is meant to
+        # check against, and most parts come back `unknown` rather than pass
+        # or fail. The apt packages install here.
+        env:
+          KICAD_FOOTPRINT_DIR: /usr/share/kicad/footprints
+          KICAD_SYMBOL_DIR: /usr/share/kicad/symbols
+        run: |
+          cargo run --release -p synth-cli -- registry qualify \
+            --report target/qualification/registry.json --no-fail
+
+      - name: Upload qualification results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: qualification-results
+          path: |
+            target/qualification/results.json
+            target/qualification/registry.json
+          if-no-files-found: warn
+
+  # Blocking. The manufacturing stage needs a KiCad install to produce any
+  # evidence at all, so this job established the first baseline and
+  # qualification/matrix.toml now records it per board in `expect_fab`. Boards
+  # whose baseline is not yet known carry `expect_fab = "unestablished"`: the
+  # observed value is recorded in the artifact but not compared, so this gate
+  # blocks on real drift without asserting a guess.
+  fab:
+    name: Qualification matrix (manufacturing)
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v7
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Cargo
+        uses: Swatinem/rust-cache@v2
+        with:
+          key: qualification
+
+      - name: Install kicad-cli and the stock symbol/footprint libraries
+        run: |
+          sudo add-apt-repository --yes ppa:kicad/kicad-10.0-releases
+          sudo apt-get update
+          sudo apt-get install --yes --no-install-recommends \
+            kicad kicad-symbols kicad-footprints
+          kicad-cli version
+          mkdir -p "$HOME/.config/kicad/10.0"
+          cp /usr/share/kicad/template/sym-lib-table "$HOME/.config/kicad/10.0/sym-lib-table"
+          cp /usr/share/kicad/template/fp-lib-table "$HOME/.config/kicad/10.0/fp-lib-table"
+
+      # Without an engine, `synth drc` refuses to route and emits no DRC
+      # counts, so the DRC stage reports `unknown` and every board's gate
+      # fails for a reason that is not about the board. See #95.
+      #
+      # KiCadRoutingTools is the engine; freerouting stays the reference
+      # baseline rather than the thing the gate depends on. Pinned to a tag,
+      # because "whatever main is today" is not a reproducible run.
+      # `build_router.py` fetches a prebuilt grid_router for the runner's OS
+      # and falls back to a local cargo build.
+      - name: Install KiCadRoutingTools
+        run: |
+          git clone --depth 1 --branch v0.23.0 \
+            https://github.com/drandyhaas/KiCadRoutingTools "$RUNNER_TEMP/krt"
+          python3 -m pip install --quiet -r "$RUNNER_TEMP/krt/requirements.txt"
+          python3 "$RUNNER_TEMP/krt/build_router.py"
+          echo "KICAD_ROUTING_TOOLS_REPO=$RUNNER_TEMP/krt" >> "$GITHUB_ENV"
+          echo "SYNTH_QUALIFY_ROUTER=kicad-routing-tools" >> "$GITHUB_ENV"
+
+      - name: Report which routers this runner has
+        run: cargo run --release -p synth-cli -- routers
+
+      - name: Run the matrix through the manufacturing stage
+        env:
+          SYNTH_QUALIFY_FAB: "1"
+          SYNTH_CHECK_FAB_TIMEOUT_SECS: "900"
+          SYNTH_CHECK_DRC_TIMEOUT_SECS: "300"
+        run: cargo test --release -p synth-cli --test qualification_matrix -- --ignored --nocapture
+
+      - name: Upload manufacturing baseline
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: qualification-results-fab
+          path: target/qualification/results.json
+          if-no-files-found: warn

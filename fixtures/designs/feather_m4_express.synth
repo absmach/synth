@@ -17,7 +17,7 @@ board "feather_m4_express" {
   // Sensors
   component U6: sensor "bme680_env"
   component U7: sensor "bmp280_pressure"
-  component U8: sensor "bh1750_lux"
+  component U8: sensor "apds9301_lux"
   component U9: sensor "tmp117_temperature"
 
   // Connectors & Headers

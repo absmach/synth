@@ -433,7 +433,12 @@ pub fn compare_topology(baseline: &PcbBoard, routed: &PcbBoard) -> TopologyRepor
 /// A copper item participating in the connectivity graph.
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
 enum Item {
-    Pad(String),
+    /// Index into the board's pads, not `Pad::id()`: a pad *number* is not
+    /// unique. A SOT-223 regulator's tab and its pin 2 are two copper areas
+    /// both numbered `2`, and keying them by `U3.2` collapsed them into one
+    /// entry, so whichever lost the race was tested against the other's
+    /// geometry and the net read open on a board that was routed correctly.
+    Pad(usize),
     Segment(usize),
     Via(usize),
 }
@@ -456,11 +461,12 @@ pub fn check_connectivity(board: &PcbBoard, policy: &FabricationPolicy) -> Conne
     // recorded separately rather than as a connected island. Whether they are
     // a *defect* is decided by the caller, which can compare against the
     // baseline: an unassigned pin in the design is not a routing failure.
+    let all_pads: Vec<&Pad> = board.pads().collect();
     let mut by_net: BTreeMap<u32, Vec<Item>> = BTreeMap::new();
-    for pad in board.pads() {
+    for (index, pad) in all_pads.iter().enumerate() {
         match pad.net {
             Some(0) | None => report.unconnected_pads.push(pad.id()),
-            Some(net) => by_net.entry(net).or_default().push(Item::Pad(pad.id())),
+            Some(net) => by_net.entry(net).or_default().push(Item::Pad(index)),
         }
     }
     for (idx, _) in board.segments.iter().enumerate() {
@@ -475,8 +481,6 @@ pub fn check_connectivity(board: &PcbBoard, policy: &FabricationPolicy) -> Conne
     }
 
     report.unconnected_pads.sort();
-
-    let pad_by_id: BTreeMap<String, &Pad> = board.pads().map(|p| (p.id(), p)).collect();
 
     for (net, items) in by_net {
         let net_name = board
@@ -493,7 +497,9 @@ pub fn check_connectivity(board: &PcbBoard, policy: &FabricationPolicy) -> Conne
             }
         }
 
-        union_touching_items(board, &items, &mut islands, &pad_by_id);
+        union_touching_items(board, &items, &mut islands, &all_pads);
+
+        union_areas_of_one_pin(&items, &pad_indices, &all_pads, &mut islands);
 
         // Anything this net's own pour touches is one electrical island.
         let pour_items = zone_copper_items(board, net, &items);
@@ -529,6 +535,7 @@ pub fn check_connectivity(board: &PcbBoard, policy: &FabricationPolicy) -> Conne
                 &pad_indices,
                 net_name,
                 pad_count,
+                &all_pads,
             ));
         }
     }
@@ -677,6 +684,7 @@ fn stranded_connection(
     pad_indices: &[usize],
     net_name: String,
     pad_count: usize,
+    all_pads: &[&Pad],
 ) -> OpenConnection {
     let (root, size) = island_sizes
         .iter()
@@ -686,7 +694,7 @@ fn stranded_connection(
         .iter()
         .find(|idx| islands.find(**idx) == root)
         .and_then(|idx| match &items[*idx] {
-            Item::Pad(id) => Some(id.clone()),
+            Item::Pad(index) => Some(all_pads[*index].id()),
             _ => None,
         })
         .unwrap_or_else(|| format!("net {net_name}"));
@@ -695,6 +703,33 @@ fn stranded_connection(
         pad: stranded,
         island_size: size,
         pad_count,
+    }
+}
+
+/// Join the copper areas that are the same pin.
+///
+/// Two areas that share a footprint and a pad number are one pin, joined
+/// inside the package: a SOT-223's pin 2 and its tab, or a QFN's thermal pad
+/// split into several areas. No copper on the board runs between them, and
+/// none needs to, so reaching either one reaches the pin.
+fn union_areas_of_one_pin(
+    items: &[Item],
+    pad_indices: &[usize],
+    all_pads: &[&Pad],
+    islands: &mut UnionFind,
+) {
+    let mut first_area: BTreeMap<String, usize> = BTreeMap::new();
+    for &idx in pad_indices {
+        if let Item::Pad(pad) = &items[idx] {
+            match first_area.entry(all_pads[*pad].id()) {
+                std::collections::btree_map::Entry::Vacant(slot) => {
+                    slot.insert(idx);
+                }
+                std::collections::btree_map::Entry::Occupied(slot) => {
+                    islands.union(*slot.get(), idx);
+                }
+            }
+        }
     }
 }
 
@@ -707,11 +742,11 @@ fn union_touching_items(
     board: &PcbBoard,
     items: &[Item],
     islands: &mut UnionFind,
-    pad_by_id: &BTreeMap<String, &Pad>,
+    all_pads: &[&Pad],
 ) {
     for i in 0..items.len() {
         for j in (i + 1)..items.len() {
-            if items_touch(board, &items[i], &items[j], pad_by_id) {
+            if items_touch(board, &items[i], &items[j], all_pads) {
                 islands.union(i, j);
             }
         }
@@ -735,11 +770,11 @@ fn zone_copper_items(board: &PcbBoard, net: u32, items: &[Item]) -> Vec<usize> {
         return Vec::new();
     }
 
-    let pads: BTreeMap<String, &Pad> = board.pads().map(|p| (p.id(), p)).collect();
+    let pads: Vec<&Pad> = board.pads().collect();
     let mut reached = Vec::new();
     for (index, item) in items.iter().enumerate() {
         let touched = match item {
-            Item::Pad(id) => pads.get(id).is_some_and(|pad| {
+            Item::Pad(index) => pads.get(*index).is_some_and(|pad| {
                 pad.layers
                     .iter()
                     .any(|layer| entry_is_copper(layer) && covered_by_zone(&zones, layer, &pad.at))
@@ -813,13 +848,13 @@ fn point_on_segment(point: &Point, a: &Point, b: &Point) -> bool {
     within_x && within_y
 }
 
-fn items_touch(board: &PcbBoard, a: &Item, b: &Item, pads: &BTreeMap<String, &Pad>) -> bool {
+fn items_touch(board: &PcbBoard, a: &Item, b: &Item, pads: &[&Pad]) -> bool {
     match (a, b) {
         (Item::Pad(x), Item::Pad(y)) => {
-            matches!((pads.get(x), pads.get(y)), (Some(x), Some(y)) if pads_touch(x, y))
+            matches!((pads.get(*x), pads.get(*y)), (Some(x), Some(y)) if pads_touch(x, y))
         }
         (Item::Pad(x), Item::Segment(s)) | (Item::Segment(s), Item::Pad(x)) => {
-            let Some(pad) = pads.get(x) else {
+            let Some(pad) = pads.get(*x) else {
                 return false;
             };
             let segment = &board.segments[*s];
@@ -833,7 +868,7 @@ fn items_touch(board: &PcbBoard, a: &Item, b: &Item, pads: &BTreeMap<String, &Pa
                     <= pad.radius_nm() + segment.width_nm / 2 + TOUCH_TOLERANCE_NM
         }
         (Item::Pad(x), Item::Via(v)) | (Item::Via(v), Item::Pad(x)) => {
-            let Some(pad) = pads.get(x) else {
+            let Some(pad) = pads.get(*x) else {
                 return false;
             };
             let via = &board.vias[*v];
@@ -956,7 +991,14 @@ fn segments_intersect(a0: Point, a1: Point, b0: Point, b1: Point) -> bool {
     let d3 = cross(b0, b1, a0);
     let d4 = cross(b0, b1, a1);
 
-    let opposite = |x: i64, y: i64| (x <= 0 && y >= 0) || (x >= 0 && y <= 0);
+    // Strictly opposite, not `<=`/`>=`: a proper crossing has each segment's
+    // endpoints on genuinely opposite sides of the other. Admitting zero here
+    // made every pair of COLLINEAR segments intersect — all four cross
+    // products are zero, and `0 <= 0 && 0 >= 0` holds — so two pieces of track
+    // on the same line read as touching however far apart they lay, and a net
+    // with a missing span in the middle was reported connected. The collinear
+    // case belongs to the `on_span` test below, which checks the gap.
+    let opposite = |x: i64, y: i64| (x < 0 && y > 0) || (x > 0 && y < 0);
     if opposite(d1, d2) && opposite(d3, d4) {
         return true;
     }
@@ -993,7 +1035,12 @@ fn find_via_in_pad(board: &PcbBoard) -> Vec<String> {
             if !shares_layer(pad, &via.layers) {
                 continue;
             }
-            if point_distance(pad.at, via.at) <= pad.radius_nm() {
+            // Exactly: the connectivity radius treats a pad as a disc of its
+            // long half-dimension, which on an ordinary SOIC pad reaches
+            // 0.675 mm past the copper across the narrow axis. Judging
+            // via-in-pad from it failed every Class-A board on vias the
+            // router had placed a quarter of a millimetre clear of the pad.
+            if pad.contains_point(via.at) {
                 hits.push(format!("{via} {}", pad.id()));
             }
         }
@@ -1090,6 +1137,85 @@ mod tests {
         assert_eq!(report.open_nets, 0, "{:?}", report.open);
         assert_eq!(report.connected_nets, 1, "net 2 must be connected");
         assert!(report.open.is_empty());
+    }
+
+    /// The same SOT-223, routed the way a board often is: the net reaches the
+    /// tab on one side and pin 2 on the other, with no copper between them.
+    /// They are one pin inside the package, so the net is whole — and under
+    /// the old keying it was not merely miscounted, it read as two islands.
+    #[test]
+    fn a_pin_reached_through_only_one_of_its_areas_is_connected() {
+        let text = r#"(kicad_pcb
+  (version 20260206)
+  (generator "synth-eda")
+  (layers
+    (0 "F.Cu" signal)
+    (31 "B.Cu" signal)
+  )
+  (net 0 "")
+  (net 1 "VOUT")
+  (footprint "Package_TO_SOT_SMD:SOT-223-3_TabPin2"
+    (layer "F.Cu")
+    (at 20 20)
+    (property "Reference" "U1" (at 0 0) (layer "F.SilkS"))
+    (pad "2" smd rect (at -3 0) (size 2 1.5) (layers "F.Cu") (net 1 "VOUT"))
+    (pad "2" smd rect (at 3 0) (size 2 3.8) (layers "F.Cu") (net 1 "VOUT"))
+  )
+  (footprint "Capacitor_SMD:C_0603"
+    (layer "F.Cu")
+    (at 10 20)
+    (property "Reference" "C1" (at 0 0) (layer "F.SilkS"))
+    (pad "1" smd rect (at 0 0) (size 0.9 0.95) (layers "F.Cu") (net 1 "VOUT"))
+  )
+  (footprint "Capacitor_SMD:C_0603"
+    (layer "F.Cu")
+    (at 30 20)
+    (property "Reference" "C2" (at 0 0) (layer "F.SilkS"))
+    (pad "1" smd rect (at 0 0) (size 0.9 0.95) (layers "F.Cu") (net 1 "VOUT"))
+  )
+  (segment (start 10 20) (end 17 20) (width 0.25) (layer "F.Cu") (net 1))
+  (segment (start 23 20) (end 30 20) (width 0.25) (layer "F.Cu") (net 1))
+)"#;
+        let report = check_connectivity(&board(text), &FabricationPolicy::default());
+        assert_eq!(report.open_nets, 0, "{:?}", report.open);
+        assert_eq!(report.connected_nets, 1);
+    }
+
+    /// Two pieces of track on the same line, with a six-millimetre gap
+    /// between them. They do not touch, and a net that depends on them is
+    /// open. Every cross product of a collinear pair is zero, so an
+    /// intersection test that accepts zero as "opposite sides" joins them and
+    /// reports the board connected — a gate failing in the direction that
+    /// ships a broken board.
+    #[test]
+    fn collinear_tracks_with_a_gap_between_them_do_not_touch() {
+        let text = r#"(kicad_pcb
+  (version 20260206)
+  (generator "synth-eda")
+  (layers
+    (0 "F.Cu" signal)
+  )
+  (net 0 "")
+  (net 1 "VOUT")
+  (footprint "Capacitor_SMD:C_0603"
+    (layer "F.Cu")
+    (at 10 20)
+    (property "Reference" "C1" (at 0 0) (layer "F.SilkS"))
+    (pad "1" smd rect (at 0 0) (size 0.9 0.95) (layers "F.Cu") (net 1 "VOUT"))
+  )
+  (footprint "Capacitor_SMD:C_0603"
+    (layer "F.Cu")
+    (at 30 20)
+    (property "Reference" "C2" (at 0 0) (layer "F.SilkS"))
+    (pad "1" smd rect (at 0 0) (size 0.9 0.95) (layers "F.Cu") (net 1 "VOUT"))
+  )
+  (segment (start 10 20) (end 17 20) (width 0.25) (layer "F.Cu") (net 1))
+  (segment (start 23 20) (end 30 20) (width 0.25) (layer "F.Cu") (net 1))
+)"#;
+        let report = check_connectivity(&board(text), &FabricationPolicy::default());
+        assert_eq!(report.open_nets, 1, "the gap must be reported");
+        assert_eq!(report.connected_nets, 0);
+        assert_eq!(report.open[0].pad_count, 2);
     }
 
     #[test]
@@ -1205,6 +1331,128 @@ mod tests {
                 .len(),
             1
         );
+    }
+
+    /// The geometry that failed `protected_power_entry`: U1 pad 2 of a
+    /// `SOIC-8-1EP_3.9x4.9mm_P1.27mm_EP2.41x3.3mm` at (23.975, 29.5183),
+    /// 1.95 × 0.6 mm, and the via KiCadRoutingTools placed at
+    /// (24.0, 28.95) — 0.268 mm below the pad's edge, against the 0.1 mm
+    /// same-net clearance Synth had asked it for. Centre-to-centre that is
+    /// 0.569 mm, inside the 0.975 mm connectivity disc and well outside the
+    /// copper.
+    #[test]
+    fn a_via_clear_of_an_elongated_pad_is_not_via_in_pad() {
+        let text = r#"(kicad_pcb
+          (version 20260206)
+          (layers (0 "F.Cu" signal) (31 "B.Cu" signal) (44 "Edge.Cuts" user))
+          (net 0 "")
+          (net 1 "net_4")
+          (footprint "Package_SO:SOIC-8-1EP" (layer "F.Cu") (at 26.45 30.1533)
+            (property "Reference" "U1" (at 0 0) (layer "F.SilkS"))
+            (pad "2" smd roundrect (at -2.475 -0.635) (size 1.95 0.6)
+              (layers "F.Cu") (net 1 "net_4")))
+          (via (at 24.0 28.95) (size 0.6) (drill 0.3) (layers "F.Cu" "B.Cu") (net 1))
+          (gr_line (start 0 0) (end 40 0) (layer "Edge.Cuts") (width 0.1))
+        )"#;
+        let board = board(text);
+        let pad = board.pads().next().expect("the pad parses");
+        assert!(
+            point_distance(pad.at, board.vias[0].at) <= pad.radius_nm(),
+            "the via must sit inside the connectivity disc, or this test has \
+             stopped covering the case it was written for"
+        );
+        let report = check_connectivity(&board, &FabricationPolicy::default());
+        assert!(
+            report.via_in_pad.is_empty(),
+            "a via 0.268 mm clear of the pad's copper is not in the pad: {:?}",
+            report.via_in_pad
+        );
+    }
+
+    /// The same pad, with the via moved onto its copper.
+    #[test]
+    fn a_via_on_an_elongated_pad_is_still_via_in_pad() {
+        let text = r#"(kicad_pcb
+          (version 20260206)
+          (layers (0 "F.Cu" signal) (31 "B.Cu" signal) (44 "Edge.Cuts" user))
+          (net 0 "")
+          (net 1 "net_4")
+          (footprint "Package_SO:SOIC-8-1EP" (layer "F.Cu") (at 26.45 30.1533)
+            (property "Reference" "U1" (at 0 0) (layer "F.SilkS"))
+            (pad "2" smd roundrect (at -2.475 -0.635) (size 1.95 0.6)
+              (layers "F.Cu") (net 1 "net_4")))
+          (via (at 24.5 29.5183) (size 0.6) (drill 0.3) (layers "F.Cu" "B.Cu") (net 1))
+          (gr_line (start 0 0) (end 40 0) (layer "Edge.Cuts") (width 0.1))
+        )"#;
+        let report = check_connectivity(&board(text), &FabricationPolicy::default());
+        assert_eq!(
+            report.via_in_pad,
+            vec!["via at (24.500, 29.518) mm U1.2".to_string()]
+        );
+    }
+
+    /// The geometry that exposed the pad-rotation sign error: a 1x2 JST,
+    /// `JST_XH_S2B-XH-A-1_1x02_P2.50mm_Horizontal`, at (81.205, 37.93)
+    /// rotated 90°, whose pad 2 offset is `(at 2.5 0)`. KiCad's y axis
+    /// points down, so the pad's copper is at (81.205, 35.43) — which is
+    /// where KiCadRoutingTools routed it. Reading the rotation as +90 put
+    /// it at (81.205, 40.43), 5 mm away, and the net was reported open
+    /// against a board that was correctly routed.
+    ///
+    /// Pad 1 is at offset (0, 0), so it lands in the same place either way:
+    /// that is why the two pads behaved differently and why symmetric
+    /// two-pad passives never caught this.
+    #[test]
+    fn a_rotated_footprint_places_its_pads_in_the_y_down_sense() {
+        let text = r#"(kicad_pcb
+          (version 20260206)
+          (layers (0 "F.Cu" signal) (31 "B.Cu" signal) (44 "Edge.Cuts" user))
+          (net 0 "")
+          (net 19 "net_18")
+          (footprint "Connector_JST:JST_XH_S2B" (layer "F.Cu") (at 81.205 37.93 90)
+            (property "Reference" "J4" (at 0 0) (layer "F.SilkS"))
+            (pad "2" thru_hole oval (at 2.5 0) (size 1.7 2) (drill 1)
+              (layers "*.Cu") (net 19 "net_18")))
+          (gr_line (start 0 0) (end 94 0) (layer "Edge.Cuts") (width 0.1))
+        )"#;
+        let board = board(text);
+        let pad = board.pads().next().expect("the pad parses");
+        assert_eq!(
+            (pad.at.x_mm(), pad.at.y_mm()),
+            (81.205, 35.43),
+            "a +2.5 mm x offset on a footprint rotated 90 lands 2.5 mm *up* \
+             the board, where the router put its copper"
+        );
+    }
+
+    /// A rotated footprint turns the pad's long axis, and the check has to
+    /// turn with it: the point that is clear at 0° is on copper at 90°.
+    #[test]
+    fn pad_rotation_turns_the_containment_test() {
+        let make = |rotation: &str| {
+            format!(
+                r#"(kicad_pcb
+              (version 20260206)
+              (layers (0 "F.Cu" signal) (31 "B.Cu" signal) (44 "Edge.Cuts" user))
+              (net 0 "")
+              (net 1 "N")
+              (footprint "a:1" (layer "F.Cu") (at 10 10 {rotation})
+                (property "Reference" "U1" (at 0 0) (layer "F.SilkS"))
+                (pad "1" smd rect (at 0 0) (size 1.95 0.6)
+                  (layers "F.Cu") (net 1 "N")))
+              (via (at 10 10.6) (size 0.6) (drill 0.3) (layers "F.Cu" "B.Cu") (net 1))
+              (gr_line (start 0 0) (end 40 0) (layer "Edge.Cuts") (width 0.1))
+            )"#
+            )
+        };
+        // Unrotated the pad spans ±0.3 mm in y, so a via 0.6 mm away in y
+        // is clear of it.
+        let flat = check_connectivity(&board(&make("0")), &FabricationPolicy::default());
+        assert!(flat.via_in_pad.is_empty(), "{:?}", flat.via_in_pad);
+        // Rotated 90° the long axis runs in y and reaches 0.975 mm, so the
+        // same via is on copper.
+        let turned = check_connectivity(&board(&make("90")), &FabricationPolicy::default());
+        assert!(!turned.via_in_pad.is_empty(), "rotation must be honoured");
     }
 
     #[test]

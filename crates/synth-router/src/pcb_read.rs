@@ -377,6 +377,11 @@ pub struct Pad {
     /// Absolute position on the board, in nanometres.
     pub at: Point,
     pub size_nm: (i64, i64),
+    /// Orientation of the pad's own axes in the board frame, in degrees:
+    /// the footprint's rotation plus the pad's local angle, negated for a
+    /// footprint on the back. Needed because a rectangular pad's extent is
+    /// only meaningful along its own axes.
+    pub rotation_deg: f64,
     pub layers: Vec<String>,
     /// Net code as written in the file, if the pad carries one.
     pub net: Option<u32>,
@@ -385,15 +390,63 @@ pub struct Pad {
 }
 
 impl Pad {
-    /// Copper radius used for connectivity, in nanometres.
+    /// Copper radius used for **connectivity**, in nanometres.
     ///
     /// The larger half-dimension is used so a rectangular pad behaves
     /// like the disc that inscribes it. Being conservative here in the
     /// narrow direction would report false opens on fine-pitch parts,
     /// which is the more damaging direction for this check to err.
+    ///
+    /// That bias makes this radius wrong for any check that *reports a
+    /// violation*. On a 1.95 × 0.6 mm SOIC pad the disc reaches 0.975 mm
+    /// from the centre while the copper reaches 0.3 mm across the narrow
+    /// axis, so it covers 0.675 mm of bare laminate on each long side.
+    /// Deciding "inside a pad" from it invents violations against copper
+    /// that is comfortably clear. Use [`Self::contains_point`] there.
     #[must_use]
     pub fn radius_nm(&self) -> i64 {
         self.size_nm.0.max(self.size_nm.1) / 2
+    }
+
+    /// Whether `point` lies on this pad's copper.
+    ///
+    /// Exact where [`Self::radius_nm`] is deliberately generous: the point
+    /// is taken into the pad's own rotated frame and tested against the
+    /// real shape. Unknown shapes fall back to the rectangle, which is the
+    /// aperture KiCad draws for `custom` pads' bounding box and never
+    /// smaller than the drawn copper for the shapes it names.
+    #[must_use]
+    pub fn contains_point(&self, point: Point) -> bool {
+        let (half_x, half_y) = (self.size_nm.0 as f64 / 2.0, self.size_nm.1 as f64 / 2.0);
+        if half_x <= 0.0 || half_y <= 0.0 {
+            return false;
+        }
+        // Into the pad's frame: translate to its centre, then rotate by
+        // -rotation so the pad's axes become the coordinate axes.
+        let (dx, dy) = (
+            (point.x_nm - self.at.x_nm) as f64,
+            (point.y_nm - self.at.y_nm) as f64,
+        );
+        let theta = -self.rotation_deg.to_radians();
+        let (cos, sin) = (theta.cos(), theta.sin());
+        let local_x = dx * cos - dy * sin;
+        let local_y = dx * sin + dy * cos;
+
+        match self.shape.as_str() {
+            // A circle's diameter is the first size element; KiCad writes
+            // both the same, but the first is the authoritative one.
+            "circle" => local_x.hypot(local_y) <= half_x,
+            // An obround/oval pad is an ellipse for containment purposes.
+            "oval" => (local_x / half_x).powi(2) + (local_y / half_y).powi(2) <= 1.0,
+            // `rect`, `roundrect`, `trapezoid`, `custom`, and anything new.
+            // A roundrect's clipped corners are inside this rectangle, so a
+            // via centred in a corner notch still reads as inside the pad.
+            // That residue is bounded by the corner radius — tens of
+            // micrometres — rather than by the pad's aspect ratio, and
+            // resolving it needs the `roundrect_rratio` the parser does not
+            // read today.
+            _ => local_x.abs() <= half_x && local_y.abs() <= half_y,
+        }
     }
 
     /// Whether this pad carries copper on `layer`.
@@ -875,6 +928,13 @@ fn parse_footprint(node: &Node) -> Footprint {
     // (counter-clockwise on screen) is `x' = x cos + y sin`,
     // `y' = -x sin + y cos`. `synth_geometry::Rotation::rotate_offset` is the
     // quarter-turn twin of this.
+    //
+    // Rotating by +angle instead survives most of the corpus, because a
+    // symmetric two-pad passive at +90 and -90 produces the same *set* of
+    // positions and only swaps which pad is which, so its net still closes.
+    // An asymmetric part exposes it at once: on a 1x2 JST rotated 90, pad 2
+    // was read 5 mm from where its copper is, and the net read open against
+    // a board the engine had routed correctly.
     let cos = rotation_deg.to_radians().cos();
     let sin = rotation_deg.to_radians().sin();
 
@@ -897,6 +957,16 @@ fn parse_footprint(node: &Node) -> Footprint {
             let local = parse_point(pad, "at").unwrap_or_default();
             let x_nm = (local.x_nm as f64 * cos + local.y_nm as f64 * sin).round() as i64;
             let y_nm = (local.y_nm as f64 * cos - local.x_nm as f64 * sin).round() as i64;
+            // A pad's `(at x y angle)` angle is relative to its footprint, so
+            // the board-frame orientation is the sum. It carries the same
+            // y-down sign as the offset transform above, because the pad's own
+            // axes turn with the footprint they sit in.
+            let local_rotation_deg = pad
+                .find("at")
+                .and_then(|n| n.body().get(2).and_then(Node::as_str))
+                .and_then(|s| s.parse::<f64>().ok())
+                .unwrap_or(0.0);
+            let rotation_deg = -(rotation_deg + local_rotation_deg);
             let size = pad.find("size");
             let size_nm = (
                 size.and_then(|s| s.body().first())
@@ -920,6 +990,7 @@ fn parse_footprint(node: &Node) -> Footprint {
                 shape,
                 at: Point::new(at.x_nm + x_nm, at.y_nm + y_nm),
                 size_nm,
+                rotation_deg,
                 layers,
                 net,
                 net_name,
@@ -1018,6 +1089,12 @@ fn collect_edge_cuts(node: &Node, out: &mut Vec<(Point, Point)>) {
 /// Written by hand rather than exported by Synth so the reader's tests do
 /// not depend on the exporter's own output being correct — a reader
 /// tested only against its own writer proves nothing.
+///
+/// Hand-writing has its own trap: a coordinate copied out of the reader's
+/// own output certifies whatever the reader does, including a sign error.
+/// `rotated_pads_land_where_kicad_puts_them` takes its numbers from pcbnew
+/// instead, and the coordinates here are worth checking against a board a
+/// router actually produced.
 pub const SAMPLE_BOARD: &str = r#"(kicad_pcb
   (version 20260206)
   (generator "synth-eda")
@@ -1213,7 +1290,7 @@ mod tests {
     fn wire_length_sums_every_segment() {
         let board = PcbBoard::parse(SAMPLE_BOARD).expect("sample parses");
         // 4.175 mm + 2 mm + the diagonal (15, 18)-(30, 21).
-        let expected = 4.175 + 2.0 + 225.0f64.sqrt() * 0.0 + (15.0f64 * 15.0 + 3.0 * 3.0).sqrt();
+        let expected = 4.175 + 2.0 + (15.0f64 * 15.0 + 3.0 * 3.0).sqrt();
         assert!(
             (board.wire_length_mm() - expected).abs() < 0.001,
             "{}",
