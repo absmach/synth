@@ -1,10 +1,10 @@
 {
   "schema_version": "synth.release.v1",
   "tool_version": "synth-cli 0.1.1",
-  "input": "/tmp/claude-1000/-home-steve-work-synth/1b15c859-243c-47c6-88fe-751b8f29b86c/scratchpad/R2/usb_uart.synth",
+  "input": "/home/steve/work/synth-103/qualification/class-b/usb-uart/usb_uart.synth",
   "fab_requested": false,
-  "production_status": "untrusted",
-  "release_ready": false,
+  "production_status": "production",
+  "release_ready": true,
   "reviewer_state": [
     {
       "part_id": "c_generic_0603",
@@ -61,12 +61,12 @@
   ],
   "routing": {
     "engine": "freerouting",
-    "engine_version": "/home/steve/work/synth-103-integ/tools/freerouting/freerouting-2.4.1.jar",
-    "state": "validation_failed",
-    "input_hash": "9cc04ace87dc40fb010e9f57466711f4052ee3debf0543857c51b8d812db5a9f",
-    "run_record": "/tmp/claude-1000/-home-steve-work-synth/1b15c859-243c-47c6-88fe-751b8f29b86c/scratchpad/out_R2/usb_uart.routing.json",
-    "reasons": [
-      "kicad-cli pcb drc reported 2 blocking violation(s)"
+    "engine_version": "/home/steve/work/synth-103-new/tools/freerouting/freerouting-2.4.1.jar",
+    "state": "routed",
+    "input_hash": "4f3035b71cefa34336b8558abb30850a78a6ef7bfefbbfb91682c2f001ad59ad",
+    "run_record": "/tmp/claude-1000/-home-steve-work-synth/1b15c859-243c-47c6-88fe-751b8f29b86c/scratchpad/final/usb_uart.routing.json",
+    "fabrication_notes": [
+      "via at (23.800, 17.300) mm U1.25: via-in-pad, order with filled and capped vias"
     ]
   }
 }
