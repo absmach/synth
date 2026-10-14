@@ -1,0 +1,149 @@
+id = "hdmi_a_receptacle"
+kind = "connector"
+description = "HDMI Type-A receptacle, 19-pin + shield, horizontal"
+mpn = "10029449-111RLF"
+kicad_symbol = "Connector:HDMI_A_1.4"
+kicad_footprint = "Connector_Video:HDMI_A_Amphenol_10029449-x01xLF_Horizontal"
+
+[footprint_dimensions]
+width_mm = 18.5
+height_mm = 11.45
+courtyard_margin_mm = 0.25
+
+[operating_conditions]
+min_voltage_v = 0.0
+max_voltage_v = 5.5
+max_current_ma = 55.0
+
+# The four TMDS pairs. Declaring the polarity in the electrical type is what
+# lets `diff_pair` resolve them: `diff_pair_positive` requires
+# `differential_positive`, so the two have to agree or the part will not load.
+[[pins]]
+name = "d2_p"
+number = "1"
+electrical_type = "differential_positive"
+capabilities = ["diff_pair_positive"]
+required = true
+
+[[pins]]
+name = "d2_shield"
+number = "2"
+electrical_type = "ground_reference"
+required = true
+
+[[pins]]
+name = "d2_n"
+number = "3"
+electrical_type = "differential_negative"
+capabilities = ["diff_pair_negative"]
+required = true
+
+[[pins]]
+name = "d1_p"
+number = "4"
+electrical_type = "differential_positive"
+capabilities = ["diff_pair_positive"]
+required = true
+
+[[pins]]
+name = "d1_shield"
+number = "5"
+electrical_type = "ground_reference"
+required = true
+
+[[pins]]
+name = "d1_n"
+number = "6"
+electrical_type = "differential_negative"
+capabilities = ["diff_pair_negative"]
+required = true
+
+[[pins]]
+name = "d0_p"
+number = "7"
+electrical_type = "differential_positive"
+capabilities = ["diff_pair_positive"]
+required = true
+
+[[pins]]
+name = "d0_shield"
+number = "8"
+electrical_type = "ground_reference"
+required = true
+
+[[pins]]
+name = "d0_n"
+number = "9"
+electrical_type = "differential_negative"
+capabilities = ["diff_pair_negative"]
+required = true
+
+[[pins]]
+name = "ck_p"
+number = "10"
+electrical_type = "differential_positive"
+capabilities = ["diff_pair_positive"]
+required = true
+
+[[pins]]
+name = "ck_shield"
+number = "11"
+electrical_type = "ground_reference"
+required = true
+
+[[pins]]
+name = "ck_n"
+number = "12"
+electrical_type = "differential_negative"
+capabilities = ["diff_pair_negative"]
+required = true
+
+# CEC is optional in a source-only design; the DDC pair and hot-plug detect
+# are not, because a sink reads EDID over DDC and asserts HPD.
+[[pins]]
+name = "cec"
+number = "13"
+electrical_type = "bidirectional"
+
+[[pins]]
+name = "utility"
+number = "14"
+electrical_type = "passive"
+
+[[pins]]
+name = "scl"
+number = "15"
+electrical_type = "bidirectional"
+capabilities = ["i2c_scl"]
+required = true
+
+[[pins]]
+name = "sda"
+number = "16"
+electrical_type = "bidirectional"
+capabilities = ["i2c_sda"]
+required = true
+
+[[pins]]
+name = "gnd"
+number = "17"
+electrical_type = "ground_reference"
+required = true
+
+[[pins]]
+name = "vcc_5v"
+number = "18"
+electrical_type = "power_input"
+required = true
+
+[[pins]]
+name = "hpd"
+number = "19"
+electrical_type = "passive"
+required = true
+
+[[pins]]
+name = "shield"
+number = "SH"
+electrical_type = "passive"
+required = true

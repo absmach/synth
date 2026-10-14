@@ -113,3 +113,33 @@ board \"t\" {
         "X is an accepted crystal alias: {flagged:?}"
     );
 }
+
+#[test]
+fn an_fpga_is_a_u_like_every_other_packaged_device() {
+    let src = "\
+board \"t\" {
+  component R9: fpga \"ice40hx4k_bg121\"
+  component R1: resistor \"r_generic_0603\"
+  connect R9.iot_225 -> R1.p1
+  connect R9.iot_222 -> R1.p2
+}
+";
+    let diags = validate(src);
+    let flagged = name_004(&diags);
+    assert_eq!(flagged.len(), 1, "refdes table: FPGA -> U, so R9 is wrong");
+}
+
+#[test]
+fn an_fpga_called_u_is_not_flagged() {
+    let src = "\
+board \"t\" {
+  component U9: fpga \"ice40hx4k_bg121\"
+  component R1: resistor \"r_generic_0603\"
+  connect U9.iot_225 -> R1.p1
+  connect U9.iot_222 -> R1.p2
+}
+";
+    let diags = validate(src);
+    let flagged = name_004(&diags);
+    assert!(flagged.is_empty(), "U is the FPGA letter: {flagged:?}");
+}

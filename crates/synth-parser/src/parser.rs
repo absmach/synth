@@ -1283,6 +1283,12 @@ impl Parser {
                     self.bump();
                     attrs.push(NetclassAttr::Plane);
                 }
+                TokenKind::Ident(name) if name == "max_length" => {
+                    self.bump();
+                    if let Some(v) = self.expect_value() {
+                        attrs.push(NetclassAttr::MaxLength(v));
+                    }
+                }
                 TokenKind::Ident(name) if name == "color" => {
                     self.bump();
                     if let Some(hex) = self.expect_string(

@@ -65,6 +65,9 @@ pub mod kicad_cli;
 mod profile;
 mod rules;
 mod signal_integrity;
+/// The IPC-2221 width a `current` needs. Re-exported so the exporter can size
+/// a high-current net's trace for the router.
+pub use signal_integrity::required_width_nm;
 
 use serde::{Deserialize, Serialize};
 use synth_geometry::Point;
@@ -229,16 +232,22 @@ fn evaluate(
         violations.extend(signal_integrity::check_controlled_impedance(
             board, routing, profile, stackup,
         ));
-        violations.extend(signal_integrity::check_edge_coupling(routing, stackup));
+        violations.extend(signal_integrity::check_edge_coupling(
+            routing, profile, stackup,
+        ));
         violations.extend(signal_integrity::check_return_path_vias(
             board, routing, stackup,
         ));
-        violations.extend(signal_integrity::check_ir_drop(board, routing, stackup));
+        violations.extend(signal_integrity::check_ir_drop(
+            board, routing, profile, stackup,
+        ));
     }
     violations.extend(signal_integrity::check_diff_pair_skew(board, routing));
+    violations.extend(signal_integrity::check_net_length(board, routing));
     violations.extend(signal_integrity::check_ampacity(
         board,
         routing,
+        profile,
         stackup.as_ref(),
     ));
     DrcReport {
@@ -538,6 +547,7 @@ mod tests {
             impedance: None,
             current: Some(synth_ir::Current(1_000_000)),
             plane: false,
+            max_length: None,
             source_span: synth_diagnostics::Span::new(0, 0),
         });
         let net = board.nets[0].id;
@@ -546,9 +556,11 @@ mod tests {
             ..Routing::default()
         };
 
+        let profile = ManufacturerProfile::jlc_standard();
         let thin = super::signal_integrity::check_ampacity(
             &board,
             &routed(synth_geometry::mm_to_nm(0.2)),
+            &profile,
             None,
         );
         assert_eq!(thin.len(), 1, "{thin:?}");
@@ -557,6 +569,7 @@ mod tests {
             super::signal_integrity::check_ampacity(
                 &board,
                 &routed(synth_geometry::mm_to_nm(1.0)),
+                &profile,
                 None
             )
             .is_empty(),
@@ -576,6 +589,7 @@ mod tests {
             impedance: Some(synth_ir::Impedance(50_000)),
             current: None,
             plane: false,
+            max_length: None,
             source_span: synth_diagnostics::Span::new(0, 0),
         });
         let stackup = StackupProfile::for_board(&board);
@@ -624,7 +638,11 @@ mod tests {
             ],
             ..Routing::default()
         };
-        let warnings = super::signal_integrity::check_edge_coupling(&near, &stackup);
+        let warnings = super::signal_integrity::check_edge_coupling(
+            &near,
+            &ManufacturerProfile::jlc_standard(),
+            &stackup,
+        );
         assert_eq!(warnings.len(), 1, "{warnings:?}");
         assert_eq!(warnings[0].code, "W-SYNTH-DRC-013");
         assert!(!warnings[0].is_blocking());
@@ -646,7 +664,12 @@ mod tests {
             ],
             ..Routing::default()
         };
-        assert!(super::signal_integrity::check_edge_coupling(&far, &stackup).is_empty());
+        assert!(super::signal_integrity::check_edge_coupling(
+            &far,
+            &ManufacturerProfile::jlc_standard(),
+            &stackup
+        )
+        .is_empty());
     }
 
     #[test]
@@ -771,6 +794,7 @@ mod tests {
             impedance: None,
             current: Some(synth_ir::Current(1_000_000)),
             plane: false,
+            max_length: None,
             source_span: synth_diagnostics::Span::new(0, 0),
         });
         let stackup = StackupProfile::for_board(&board);
@@ -781,7 +805,12 @@ mod tests {
             segments: vec![straight(net, 200_000, 0, 100_000_000)],
             ..Routing::default()
         };
-        let flagged = super::signal_integrity::check_ir_drop(&board, &long, &stackup);
+        let flagged = super::signal_integrity::check_ir_drop(
+            &board,
+            &long,
+            &ManufacturerProfile::jlc_standard(),
+            &stackup,
+        );
         assert_eq!(flagged.len(), 1, "{flagged:?}");
         assert_eq!(flagged[0].code, "W-SYNTH-DRC-017");
         assert!(!flagged[0].is_blocking());
@@ -791,7 +820,13 @@ mod tests {
             segments: vec![straight(net, 1_000_000, 0, 5_000_000)],
             ..Routing::default()
         };
-        assert!(super::signal_integrity::check_ir_drop(&board, &short, &stackup).is_empty());
+        assert!(super::signal_integrity::check_ir_drop(
+            &board,
+            &short,
+            &ManufacturerProfile::jlc_standard(),
+            &stackup
+        )
+        .is_empty());
 
         // A 45-degree diagonal on the same copper: 12 mm by 12 mm is 16.97 mm
         // of track (about 41 mV, within budget). Manhattan distance — abs(dx) +
@@ -806,6 +841,42 @@ mod tests {
             }],
             ..Routing::default()
         };
-        assert!(super::signal_integrity::check_ir_drop(&board, &diagonal, &stackup).is_empty());
+        assert!(super::signal_integrity::check_ir_drop(
+            &board,
+            &diagonal,
+            &ManufacturerProfile::jlc_standard(),
+            &stackup
+        )
+        .is_empty());
+    }
+
+    #[test]
+    fn a_net_longer_than_its_class_allows_is_flagged() {
+        let mut board = load_board("../../examples/env_logger.synth");
+        board.nets[0].netclass = Some("LEN".to_string());
+        board.netclasses.push(synth_ir::NetClass {
+            name: "LEN".to_string(),
+            trace_width: None,
+            clearance: None,
+            color: None,
+            impedance: None,
+            current: None,
+            plane: false,
+            max_length: Some(synth_ir::Length::from_mm(10.0)),
+            source_span: synth_diagnostics::Span::new(0, 0),
+        });
+        let net = board.nets[0].id;
+        let long = Routing {
+            segments: vec![straight(net, 127_000, 0, 50_000_000)],
+            ..Routing::default()
+        };
+        let flagged = super::signal_integrity::check_net_length(&board, &long);
+        assert_eq!(flagged.len(), 1, "{flagged:?}");
+        assert_eq!(flagged[0].code, "E-SYNTH-DRC-018");
+        let short = Routing {
+            segments: vec![straight(net, 127_000, 0, 5_000_000)],
+            ..Routing::default()
+        };
+        assert!(super::signal_integrity::check_net_length(&board, &short).is_empty());
     }
 }

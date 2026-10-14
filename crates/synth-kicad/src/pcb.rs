@@ -231,6 +231,7 @@ pub fn build_pcb(
         };
 
     for (plane_index, (pcb_net, net_name, net_id)) in plane_nets.iter().enumerate() {
+        let region = ground_zone_region(board, placement, *net_id, &plane_nets);
         for layer in &gnd_layers {
             // The first plane keeps the layer-only key so single-ground uuids stay unchanged.
             let zone_key = if plane_index == 0 {
@@ -246,7 +247,7 @@ pub fn build_pcb(
                 project,
                 &zone_key,
                 ground_zone_priority(plane_index, plane_nets.len()),
-                ground_zone_region(board, placement, *net_id, plane_nets.len()),
+                region.as_deref(),
             ));
         }
         // A zone on each copper layer is only a plane, not an electrical
@@ -667,18 +668,55 @@ fn ground_zone_region(
     board: &Board,
     placement: &Placement,
     net_id: synth_ir::NetId,
-    ground_count: usize,
-) -> Option<synth_geometry::Rect> {
-    if ground_count < 2 {
+    grounds: &[(u32, &str, synth_ir::NetId)],
+) -> Option<Vec<synth_geometry::Point>> {
+    if grounds.len() < 2 {
         return None;
     }
+    let outline = placement.board_outline;
+    let inset = mm_to_nm(0.5);
+    let board_polygon = vec![
+        synth_geometry::Point::new(outline.min.x_nm + inset, outline.min.y_nm + inset),
+        synth_geometry::Point::new(outline.max.x_nm - inset, outline.min.y_nm + inset),
+        synth_geometry::Point::new(outline.max.x_nm - inset, outline.max.y_nm - inset),
+        synth_geometry::Point::new(outline.min.x_nm + inset, outline.max.y_nm - inset),
+    ];
+    let Some(index) = grounds.iter().position(|(_, _, id)| *id == net_id) else {
+        return Some(board_polygon);
+    };
+
+    // Two grounds: split the board along the perpendicular bisector of their
+    // pad centroids, so each pour covers its own side rather than both
+    // overlapping everywhere. This is a true partition for the common
+    // analog/digital case; a centroid that cannot be found falls back to the
+    // whole board.
+    if grounds.len() == 2 {
+        let other = 1 - index;
+        let (Some(mine), Some(theirs)) = (
+            net_centroid(board, placement, net_id),
+            net_centroid(board, placement, grounds[other].2),
+        ) else {
+            return Some(board_polygon);
+        };
+        let d = synth_geometry::Point::new(theirs.x_nm - mine.x_nm, theirs.y_nm - mine.y_nm);
+        if d.x_nm == 0 && d.y_nm == 0 {
+            return Some(board_polygon);
+        }
+        let mid = synth_geometry::Point::new(
+            (mine.x_nm + theirs.x_nm) / 2,
+            (mine.y_nm + theirs.y_nm) / 2,
+        );
+        return Some(clip_half_plane(&board_polygon, mid, d));
+    }
+
+    // More than two grounds: a bounding box of this net's own pads.
     let net = board.net(net_id)?;
     let centres: Vec<synth_geometry::Point> = plane_pad_targets(board, placement, net)
         .into_iter()
         .map(|(centre, _, _)| centre)
         .collect();
     if centres.len() < 2 {
-        return None;
+        return Some(board_polygon);
     }
     let margin = mm_to_nm(POUR_REGION_MARGIN_MM);
     let (mut min_x, mut min_y) = (i64::MAX, i64::MAX);
@@ -689,17 +727,78 @@ fn ground_zone_region(
         min_y = min_y.min(point.y_nm);
         max_y = max_y.max(point.y_nm);
     }
-    let outline = placement.board_outline;
-    Some(synth_geometry::Rect::new(
-        synth_geometry::Point::new(
-            (min_x - margin).max(outline.min.x_nm),
-            (min_y - margin).max(outline.min.y_nm),
-        ),
-        synth_geometry::Point::new(
-            (max_x + margin).min(outline.max.x_nm),
-            (max_y + margin).min(outline.max.y_nm),
-        ),
-    ))
+    let (min_x, min_y) = (
+        (min_x - margin).max(outline.min.x_nm + inset),
+        (min_y - margin).max(outline.min.y_nm + inset),
+    );
+    let (max_x, max_y) = (
+        (max_x + margin).min(outline.max.x_nm - inset),
+        (max_y + margin).min(outline.max.y_nm - inset),
+    );
+    Some(vec![
+        synth_geometry::Point::new(min_x, min_y),
+        synth_geometry::Point::new(max_x, min_y),
+        synth_geometry::Point::new(max_x, max_y),
+        synth_geometry::Point::new(min_x, max_y),
+    ])
+}
+
+/// Board-space centroid of a net's pads, or `None` when none resolve.
+fn net_centroid(
+    board: &Board,
+    placement: &Placement,
+    net_id: synth_ir::NetId,
+) -> Option<synth_geometry::Point> {
+    let net = board.net(net_id)?;
+    let centres = plane_pad_targets(board, placement, net);
+    if centres.is_empty() {
+        return None;
+    }
+    let (mut sx, mut sy) = (0_i64, 0_i64);
+    for (centre, _, _) in &centres {
+        sx += centre.x_nm;
+        sy += centre.y_nm;
+    }
+    #[allow(clippy::cast_possible_wrap)] // a board has far fewer pads than i64::MAX
+    let count = centres.len() as i64;
+    Some(synth_geometry::Point::new(sx / count, sy / count))
+}
+
+/// Sutherland–Hodgman clip of a convex polygon by the half-plane
+/// `(p - mid)·d <= 0`.
+#[allow(
+    clippy::cast_precision_loss,
+    clippy::cast_possible_truncation,
+    clippy::cast_sign_loss
+)]
+fn clip_half_plane(
+    polygon: &[synth_geometry::Point],
+    mid: synth_geometry::Point,
+    d: synth_geometry::Point,
+) -> Vec<synth_geometry::Point> {
+    let side = |p: synth_geometry::Point| -> i64 {
+        (p.x_nm - mid.x_nm) * d.x_nm + (p.y_nm - mid.y_nm) * d.y_nm
+    };
+    let mut out = Vec::new();
+    for i in 0..polygon.len() {
+        let current = polygon[i];
+        let next = polygon[(i + 1) % polygon.len()];
+        let (sc, sn) = (side(current), side(next));
+        if sc <= 0 {
+            out.push(current);
+        }
+        if (sc <= 0) != (sn <= 0) {
+            let denom = sc - sn;
+            if denom != 0 {
+                let t = sc as f64 / denom as f64;
+                out.push(synth_geometry::Point::new(
+                    current.x_nm + ((next.x_nm - current.x_nm) as f64 * t) as i64,
+                    current.y_nm + ((next.y_nm - current.y_nm) as f64 * t) as i64,
+                ));
+            }
+        }
+    }
+    out
 }
 
 /// Priority of a declared power plane (`netclass "PWR" { plane }`).
@@ -714,8 +813,8 @@ const PLANE_STUB_WIDTH_NM: i64 = 250_000; // 0.25 mm
 /// Emit a `(zone ...)` S-expression for a copper flood on one layer.
 ///
 /// Used for both the automatic ground planes and the opt-in power planes.
-/// `region` restricts the pour to a sub-rectangle — a split ground floods only
-/// over its own parts — and defaults to the whole board.
+/// `region` restricts the pour to a polygon — a split ground floods only over
+/// its own side — and defaults to the whole board rectangle.
 #[allow(clippy::too_many_arguments)] // a zone is a wide record; its fields are read in order
 fn build_zone(
     placement: &Placement,
@@ -725,27 +824,32 @@ fn build_zone(
     project: &Uuid,
     zone_key: &str,
     priority: u8,
-    region: Option<synth_geometry::Rect>,
+    region: Option<&[synth_geometry::Point]>,
 ) -> Sexp {
-    let r = region.unwrap_or(placement.board_outline);
     // Keep the zone just inside Edge.Cuts.  A polygon whose vertices lie
     // exactly on the board boundary can be entirely removed by KiCad's edge
     // clearance during refill, leaving every ground pad reported as
     // unconnected.  The inset is smaller than the normal board margin and
     // still covers all ordinary ground pads, including edge connectors.
-    let inset = 0.5;
-    let min_x = nm_to_mm(r.min.x_nm) + inset;
-    let min_y = nm_to_mm(r.min.y_nm) + inset;
-    let max_x = nm_to_mm(r.max.x_nm) - inset;
-    let max_y = nm_to_mm(r.max.y_nm) - inset;
+    let inset_nm = mm_to_nm(0.5);
+    let vertices: Vec<synth_geometry::Point> = if let Some(points) = region {
+        points.to_vec()
+    } else {
+        let r = placement.board_outline;
+        let (min_x, min_y) = (r.min.x_nm + inset_nm, r.min.y_nm + inset_nm);
+        let (max_x, max_y) = (r.max.x_nm - inset_nm, r.max.y_nm - inset_nm);
+        vec![
+            synth_geometry::Point::new(min_x, min_y),
+            synth_geometry::Point::new(max_x, min_y),
+            synth_geometry::Point::new(max_x, max_y),
+            synth_geometry::Point::new(min_x, max_y),
+        ]
+    };
     let zone_uuid = derive_entity_uuid(project, "zone", zone_key);
-
-    let pts = vec![
-        Sexp::list("xy", vec![num(min_x), num(min_y)]),
-        Sexp::list("xy", vec![num(max_x), num(min_y)]),
-        Sexp::list("xy", vec![num(max_x), num(max_y)]),
-        Sexp::list("xy", vec![num(min_x), num(max_y)]),
-    ];
+    let pts = vertices
+        .iter()
+        .map(|p| Sexp::list("xy", vec![num(nm_to_mm(p.x_nm)), num(nm_to_mm(p.y_nm))]))
+        .collect();
 
     Sexp::list(
         "zone",
@@ -1129,6 +1233,40 @@ struct DerivedGeometry {
     gap_mm: Option<f64>,
 }
 
+/// A declared class's trace width for the router.
+///
+/// What the author wrote, or — when the class declares a `current` but no width
+/// — the IPC-2221 width that current needs, so the engine widens a
+/// high-current rail instead of routing it at the default and failing the
+/// ampacity check afterwards. Falls back to the profile default.
+///
+/// The width is sized against the board's own manufacturer profile and declared
+/// stackup — the same inputs the ampacity DRC uses — so a custom profile (a
+/// different allowed temperature rise) or a thinner stackup is not under-sized
+/// and then failed after routing. The thinnest copper in the stackup is the
+/// worst case the router can pick, so a rail stays wide enough on every layer.
+fn declared_trace_width_mm(class: &synth_ir::NetClass, board: &Board) -> f64 {
+    if let Some(width) = class.trace_width {
+        return width.to_mm();
+    }
+    if let Some(current) = class.current {
+        let profile = synth_drc::ManufacturerProfile::from_name(
+            board.manufacturer.as_deref().unwrap_or("jlc-standard"),
+        );
+        let delta_t_c =
+            f64::from(i32::try_from(profile.ampacity_delta_t_milli_c).unwrap_or(10_000)) / 1000.0;
+        let thickness_nm = synth_geometry::StackupProfile::for_board(board)
+            .layers
+            .iter()
+            .map(|layer| layer.copper_thickness.0)
+            .min()
+            .unwrap_or_else(|| mm_to_nm(0.035));
+        let width_nm = synth_drc::required_width_nm(current.0, thickness_nm, delta_t_c);
+        return nm_to_mm(width_nm);
+    }
+    0.127
+}
+
 fn derived_controlled_geometry(board: &Board) -> Vec<(synth_ir::NetId, DerivedGeometry)> {
     // Declared stackup only: deriving controlled geometry from a substituted
     // default would silently change the exported board for a design that
@@ -1225,7 +1363,7 @@ fn build_netclasses(net_table: &[(u32, String)], board: &Board) -> Vec<Sexp> {
         .iter()
         .map(|nc| DeclaredGroup {
             name: nc.name.clone(),
-            trace_width_mm: nc.trace_width.map_or(0.127, synth_ir::Length::to_mm),
+            trace_width_mm: declared_trace_width_mm(nc, board),
             clearance_mm: nc.clearance.map_or(0.127, synth_ir::Length::to_mm),
             pair: declared_pair_geometry(board, nc),
             nets: Vec::new(),
@@ -2604,6 +2742,7 @@ mod tests {
                 impedance: None,
                 current: None,
                 plane: false,
+                max_length: None,
                 source_span: Span::new(0, 0),
             }],
             buses: vec![],

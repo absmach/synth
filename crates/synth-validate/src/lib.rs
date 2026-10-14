@@ -2036,8 +2036,8 @@ fn accepted_refdes_prefixes(kind: &str) -> Option<&'static [&'static str]> {
         "buzzer" => &["LS", "BZ"][..],
         "connector" => &["J", "P", "CON"][..],
         // IC-family kinds: any package-level "U" convention.
-        "ic" | "mcu" | "sensor" | "regulator" | "opamp" | "memory" | "modem" | "charger"
-        | "secure_element" | "display" | "level_shifter" => &["U"][..],
+        "ic" | "mcu" | "fpga" | "sensor" | "regulator" | "opamp" | "memory" | "modem"
+        | "charger" | "secure_element" | "display" | "level_shifter" => &["U"][..],
         // Mechanical / test parts (Phase D2).
         "mounting_hole" => &["H", "MH"][..],
         "testpoint" => &["TP"][..],

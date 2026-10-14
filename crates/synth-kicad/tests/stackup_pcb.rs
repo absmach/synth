@@ -106,3 +106,55 @@ fn a_design_without_a_stackup_keeps_the_fixed_thickness_and_no_stackup() {
     assert!(!pcb.contains("(stackup"));
     assert!(pcb.contains("(general (thickness 1.6)"), "{pcb}");
 }
+
+/// A current-carrying class is sized from the board's declared stackup, not a
+/// hardcoded 0.035 mm copper: the same rail on thinner copper needs a wider
+/// trace, and the ampacity check must not fail it afterwards.
+#[test]
+fn a_current_class_is_sized_from_the_declared_stackup() {
+    // Two declared stackups that differ only in copper thickness.
+    let thick = squashed(&export_pcb(
+        "ampacity_thick",
+        4,
+        r#"  netclass "PWR" { current 1A }
+  stackup {
+    copper 0.035mm
+    insulator 0.2mm er 4.4 material "FR4"
+    copper 0.035mm
+    insulator 1.2mm er 4.6
+    copper 0.035mm
+    insulator 0.2mm er 4.4 material "FR4"
+    copper 0.035mm
+  }"#,
+    ));
+    let thin = squashed(&export_pcb(
+        "ampacity_thin",
+        4,
+        r#"  netclass "PWR" { current 1A }
+  stackup {
+    copper 0.010mm
+    insulator 0.2mm er 4.4 material "FR4"
+    copper 0.010mm
+    insulator 1.2mm er 4.6
+    copper 0.010mm
+    insulator 0.2mm er 4.4 material "FR4"
+    copper 0.010mm
+  }"#,
+    ));
+    let thick_width = declared_trace_width(&thick);
+    let thin_width = declared_trace_width(&thin);
+    assert!(
+        thin_width > thick_width,
+        "0.010 mm copper width {thin_width} mm must exceed the 0.035 mm copper width {thick_width} mm"
+    );
+}
+
+/// The `(trace_width …)` of the declared `PWR` net class in an exported board.
+fn declared_trace_width(pcb: &str) -> f64 {
+    let class = pcb.find("(net_class \"PWR\"").expect("PWR net class");
+    let rest = &pcb[class..];
+    let key = "(trace_width ";
+    let at = rest.find(key).expect("trace_width") + key.len();
+    let end = rest[at..].find(')').expect("closing paren") + at;
+    rest[at..end].trim().parse().expect("width value")
+}

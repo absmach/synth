@@ -68,6 +68,14 @@ erc` validates the exported artifact after. Both must be clean
    `kicad_drc` stage exits non-zero and `--force` does not override it. A
    plain export still writes the board and exits 0 on unconnected pads;
    only errors fail it, as before.
+8. **The exporter emits plane copper, and it is not a layering violation.**
+   For every ground net it floods a zone on the plane layers, and for a
+   `netclass` that declares `plane` it floods the power net too, adding a
+   stitching via beside each of that net's pads reached by a short fanout
+   stub. That stub is the one signal-layer trace the exporter draws; it is a
+   plane connection, it is regenerated on every export, and it is not signal
+   routing to be "fixed" by hand. Change the plane at the source —
+   `netclass "PWR" { plane }` — not in the generated `.kicad_pcb`.
 
 ---
 

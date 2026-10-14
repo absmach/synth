@@ -687,6 +687,7 @@ impl PcbBoard {
             collect_edge_cuts(graphic, &mut board.edge_cuts);
         }
 
+        board.expand_via_layer_spans();
         board.reconcile_name_only_nets();
 
         Ok(board)
@@ -703,6 +704,47 @@ impl PcbBoard {
     /// A board that *does* have a table keeps its own numbering, which is
     /// what makes it comparable with its baseline; renumbering it would
     /// report every pad as renetted.
+    /// Rewrite each via's two-layer span into the copper layers it actually
+    /// crosses.
+    ///
+    /// KiCad writes a via's extent as a *span*: `(layers "F.Cu" "B.Cu")` names
+    /// the first and last layer, not a two-element list. Read literally, a
+    /// through via on a six-layer board touches only the two outer layers, so
+    /// copper it drops onto an inner layer is invisible and every net routed
+    /// that way reads as open.
+    ///
+    /// Measured on a routed USB 3.0 board: the engine reported 14 of 14 nets
+    /// routed and `kicad-cli pcb drc` reported no unconnected pads, while this
+    /// reader called 10 nets open — all ten routed through a via, every one
+    /// spelled `(layers "F.Cu" "B.Cu")`.
+    ///
+    /// A two-layer board needs no expansion: its endpoints already are the
+    /// whole stack.
+    fn expand_via_layer_spans(&mut self) {
+        let copper: Vec<&str> = self
+            .layers
+            .iter()
+            .map(String::as_str)
+            .filter(|layer| crate::validate::entry_is_copper(layer))
+            .collect();
+        if copper.len() < 3 {
+            return;
+        }
+        for via in &mut self.vias {
+            if via.layers.len() != 2 {
+                continue;
+            }
+            let (Some(start), Some(end)) = (
+                copper.iter().position(|l| *l == via.layers[0]),
+                copper.iter().position(|l| *l == via.layers[1]),
+            ) else {
+                continue;
+            };
+            let (lo, hi) = (start.min(end), start.max(end));
+            via.layers = copper[lo..=hi].iter().map(|l| (*l).to_string()).collect();
+        }
+    }
+
     fn reconcile_name_only_nets(&mut self) {
         if !self.nets.is_empty() && self.nets.len() > 1 {
             return;

@@ -26,10 +26,6 @@ use synth_pcb::{Routing, Segment};
 use crate::profile::ManufacturerProfile;
 use crate::Violation;
 
-/// Assumed temperature rise (°C) for the IPC-2221 ampacity curve when a
-/// design does not name one.
-const AMPACITY_DELTA_T_C: f64 = 10.0;
-
 /// IPC-2221 external-layer ampacity: the width a trace needs to carry
 /// `current_ua` with a `delta_t_c` rise over `thickness_nm` copper.
 ///
@@ -37,7 +33,9 @@ const AMPACITY_DELTA_T_C: f64 = 10.0;
 /// by the copper thickness in mil to get the width. `k = 0.048` is the
 /// external-layer constant. The result is a conservative starting point, not
 /// a thermal simulation.
-fn required_width_nm(current_ua: i64, thickness_nm: i64, delta_t_c: f64) -> i64 {
+/// The constructor is public so the exporter can size a `current` net's trace
+/// for the router, not only check it afterwards.
+pub fn required_width_nm(current_ua: i64, thickness_nm: i64, delta_t_c: f64) -> i64 {
     #[allow(clippy::cast_precision_loss)]
     let current_a = current_ua as f64 / 1_000_000.0;
     let area_mil2 = (current_a / (0.048 * delta_t_c.powf(0.44))).powf(1.0 / 0.725);
@@ -239,8 +237,11 @@ fn member_nets<'a>(
 pub fn check_ampacity(
     board: &Board,
     routing: &Routing,
+    profile: &ManufacturerProfile,
     stackup: Option<&StackupProfile>,
 ) -> Vec<Violation> {
+    #[allow(clippy::cast_precision_loss)] // milli-degrees → degrees
+    let delta_t_c = profile.ampacity_delta_t_milli_c as f64 / 1000.0;
     let mut violations = Vec::new();
     for class in &board.netclasses {
         let Some(current) = class.current else {
@@ -253,7 +254,7 @@ pub fn check_ampacity(
             let thickness_nm = stackup
                 .and_then(|s| s.geometry(layer))
                 .map_or_else(|| mm_to_nm(0.035), |g| g.copper_thickness.0);
-            let required_nm = required_width_nm(current.0, thickness_nm, AMPACITY_DELTA_T_C);
+            let required_nm = required_width_nm(current.0, thickness_nm, delta_t_c);
             if width_nm >= required_nm {
                 continue;
             }
@@ -267,7 +268,7 @@ pub fn check_ampacity(
                     layer.name(),
                     current.to_amps(),
                     nm_to_mm(required_nm),
-                    AMPACITY_DELTA_T_C,
+                    delta_t_c,
                 ),
                 witness: segments_for_net(routing, net.id),
                 nets: vec![net.id],
@@ -332,10 +333,6 @@ pub fn check_diff_pair_skew(board: &Board, routing: &Routing) -> Vec<Violation> 
     violations
 }
 
-/// How many dielectric heights of parallel run two traces must share before
-/// edge coupling is flagged.
-const COUPLING_RUN_MULTIPLE: i64 = 10;
-
 /// The strongest coupled run between one pair of nets:
 /// `(overlap_nm, edge_gap_nm, segment_a, segment_b, layer)`.
 type CoupledRun = (i64, i64, Segment, Segment, Layer);
@@ -380,16 +377,22 @@ fn parallel_run(a: &Segment, b: &Segment, coupling_nm: i64) -> Option<(i64, i64)
 /// Edge-coupling (crosstalk) check. Code: `W-SYNTH-DRC-013` — a **warning**.
 ///
 /// Two foreign nets whose traces run parallel on the same layer, closer than
-/// one dielectric height (`StackupProfile`), for more than
-/// [`COUPLING_RUN_MULTIPLE`] dielectric heights are flagged as a coupling
-/// risk. The mutual inductance and capacitance of a long close run couple more
-/// energy than a short one, so run length gates the warning.
+/// one dielectric height (`StackupProfile`), for more than the profile's
+/// `crosstalk_run_multiple` dielectric heights are flagged as a coupling risk.
+/// The mutual inductance and capacitance of a long close run couple more energy
+/// than a short one, so run length gates the warning, and the multiple is a
+/// profile knob rather than a hard-coded constant.
 ///
 /// Advisory because how much coupling is acceptable depends on the signalling
 /// scheme and cannot be judged from geometry alone. At most one warning is
 /// emitted per net pair, for its worst run, so a dense board does not flood.
 #[must_use]
-pub fn check_edge_coupling(routing: &Routing, stackup: &StackupProfile) -> Vec<Violation> {
+pub fn check_edge_coupling(
+    routing: &Routing,
+    profile: &ManufacturerProfile,
+    stackup: &StackupProfile,
+) -> Vec<Violation> {
+    let run_multiple = profile.crosstalk_run_multiple;
     // Per net pair (ordered), the strongest coupled run.
     let mut worst: BTreeMap<(NetId, NetId), CoupledRun> = BTreeMap::new();
     for i in 0..routing.segments.len() {
@@ -405,7 +408,7 @@ pub fn check_edge_coupling(routing: &Routing, stackup: &StackupProfile) -> Vec<V
             let Some((gap, overlap)) = parallel_run(a, b, height_nm) else {
                 continue;
             };
-            if overlap < COUPLING_RUN_MULTIPLE * height_nm {
+            if overlap < run_multiple * height_nm {
                 continue;
             }
             let key = if a.net.0 <= b.net.0 {
@@ -542,9 +545,6 @@ pub(crate) fn net_name_or_pin_is_ground(board: &Board, net: &Net) -> bool {
 /// Copper resistivity, ohm-metres.
 const COPPER_RESISTIVITY: f64 = 1.68e-8;
 
-/// Default IR-drop budget, in millivolts.
-const IR_DROP_BUDGET_MV: f64 = 50.0;
-
 /// Power-integrity check. Code: `W-SYNTH-DRC-017` — a **warning**.
 ///
 /// A net that declares a `current` has the resistance of its routed copper
@@ -556,12 +556,24 @@ const IR_DROP_BUDGET_MV: f64 = 50.0;
 /// copper thickness, like the other physics rules.
 #[must_use]
 #[allow(clippy::cast_precision_loss)] // nm → f64 metres; magnitudes are far below 2^53
-pub fn check_ir_drop(board: &Board, routing: &Routing, stackup: &StackupProfile) -> Vec<Violation> {
+pub fn check_ir_drop(
+    board: &Board,
+    routing: &Routing,
+    profile: &ManufacturerProfile,
+    stackup: &StackupProfile,
+) -> Vec<Violation> {
+    let budget_mv = profile.ir_drop_budget_mv as f64;
     let mut violations = Vec::new();
     for class in &board.netclasses {
         let Some(current) = class.current else {
             continue;
         };
+        // A plane carries the current as a sheet, so summing the routed traces
+        // would wildly over-estimate the drop; the breakout resistance is the
+        // planner's to bound, not this rule's.
+        if class.plane {
+            continue;
+        }
         for net in member_nets(board, class) {
             let mut resistance_ohms = 0.0_f64;
             for segment in routing.segments.iter().filter(|s| s.net == net.id) {
@@ -583,16 +595,58 @@ pub fn check_ir_drop(board: &Board, routing: &Routing, stackup: &StackupProfile)
                 continue;
             }
             let drop_mv = current.to_amps() * resistance_ohms * 1000.0;
-            if drop_mv <= IR_DROP_BUDGET_MV {
+            if drop_mv <= budget_mv {
                 continue;
             }
             violations.push(Violation {
                 code: "W-SYNTH-DRC-017".to_string(),
                 message: format!(
                     "net `{}` drops about {drop_mv:.0} mV carrying {:.2} A over {resistance_ohms:.3} \
-                     ohm of copper, above the {IR_DROP_BUDGET_MV:.0} mV budget",
+                     ohm of copper, above the {budget_mv:.0} mV budget",
                     net.name,
                     current.to_amps(),
+                ),
+                witness: segments_for_net(routing, net.id),
+                nets: vec![net.id],
+                components: Vec::new(),
+                pos_mm: routing
+                    .segments
+                    .iter()
+                    .find(|s| s.net == net.id)
+                    .map(|s| (nm_to_mm(s.start.x_nm), nm_to_mm(s.start.y_nm))),
+                suggested_override: None,
+            });
+        }
+    }
+    violations
+}
+
+/// Routed-length budget check. Code: `E-SYNTH-DRC-018`.
+///
+/// A net whose `netclass` declares `max_length` must not exceed it once routed.
+/// This is the length half of a propagation-delay budget: on a known stackup
+/// delay is proportional to length, so a length target is the same statement as
+/// a delay target without a separate time unit. Only classes that declare a
+/// length are checked.
+#[must_use]
+pub fn check_net_length(board: &Board, routing: &Routing) -> Vec<Violation> {
+    let mut violations = Vec::new();
+    for class in &board.netclasses {
+        let Some(max_length) = class.max_length else {
+            continue;
+        };
+        for net in member_nets(board, class) {
+            let routed_nm = routing.length_for_net(net.id);
+            if routed_nm <= max_length.0 {
+                continue;
+            }
+            violations.push(Violation {
+                code: "E-SYNTH-DRC-018".to_string(),
+                message: format!(
+                    "net `{}` is routed {:.1} mm, longer than the {:.1} mm the class allows",
+                    net.name,
+                    nm_to_mm(routed_nm),
+                    max_length.to_mm(),
                 ),
                 witness: segments_for_net(routing, net.id),
                 nets: vec![net.id],

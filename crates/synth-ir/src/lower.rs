@@ -536,6 +536,7 @@ impl<'a> LowerCtx<'a> {
         let mut impedance: Option<Impedance> = None;
         let mut current: Option<Current> = None;
         let mut plane = false;
+        let mut max_length: Option<Length> = None;
         for attr in &n.attrs {
             match attr {
                 NetclassAttr::TraceWidth(v) => match Length::try_from(v) {
@@ -555,6 +556,10 @@ impl<'a> LowerCtx<'a> {
                     Err(e) => self.emit_unit_error(&e, "netclass current"),
                 },
                 NetclassAttr::Plane => plane = true,
+                NetclassAttr::MaxLength(v) => match Length::try_from(v) {
+                    Ok(l) => max_length = Some(l),
+                    Err(e) => self.emit_unit_error(&e, "netclass max_length"),
+                },
                 NetclassAttr::Color(hex) => match parse_hex_color(hex) {
                     Some(rgb) => color = Some(rgb),
                     None => self.diagnostics.push(
@@ -588,6 +593,7 @@ impl<'a> LowerCtx<'a> {
             impedance,
             current,
             plane,
+            max_length,
             source_span: n.span,
         }
     }

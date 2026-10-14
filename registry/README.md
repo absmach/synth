@@ -11,6 +11,7 @@ registry/parts/
   connectors/           # Pin headers, USB-C, JST connectors
   crystals/             # Oscillators and crystals
   diodes/               # Diodes, LEDs, TVS, Zeners
+  fpga/                 # Field-programmable gate arrays
   ic/                   # Logic, shift registers, multiplexers
   mcus/                 # Microcontrollers (RP2040, STM32, ESP32, etc.)
   memory/               # Flash, EEPROM, SRAM

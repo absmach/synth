@@ -69,3 +69,30 @@ fn a_cool_part_is_not_warned() {
         "{diags:?}"
     );
 }
+
+/// The seeded AMS1117-3.3 declares a realistic worst-case dissipation, so it
+/// trips the rule without any injection: a real board warns.
+#[test]
+fn the_seed_ldo_is_flagged_hot() {
+    let src = r#"board "hot" {
+  layers 2
+  component U1: regulator "ams1117_3v3"
+  component C1: capacitor "c_generic_0805" value "10uF"
+  component C2: capacitor "c_generic_0805" value "10uF"
+  connect U1.vin -> C1.p1
+  connect U1.vout -> C2.p1
+  connect C1.p2 -> C2.p2
+}
+"#;
+    let registry = synth_registry::load_dir(&workspace_root().join("registry").join("parts"))
+        .expect("registry must load");
+    let parse = synth_parser::parse(src, "hot.synth".to_string());
+    let ast = parse.ast.as_ref().expect("source must parse");
+    let lowered = synth_ir::lower(ast, &registry, "hot.synth");
+    let board = lowered.board.as_ref().expect("board must lower");
+    let diags = synth_validate::run_erc(board, "hot.synth");
+    assert!(
+        diags.iter().any(|d| d.code == "W-SYNTH-THERMAL-001"),
+        "{diags:?}"
+    );
+}
