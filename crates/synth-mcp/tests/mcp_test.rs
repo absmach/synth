@@ -1320,3 +1320,84 @@ fn test_mcp_fit_sheet_result_reload_and_preview_agree() {
         );
     }
 }
+
+/// `jlcpcb` does not fill and cap, so a board declaring `requires via_in_pad`
+/// against it has an unmet requirement.
+const VIA_IN_PAD_ON_A_STANDARD_TIER: &str = r#"board "needs_via_in_pad" {
+  layers 2
+  manufacturer "jlcpcb"
+  requires via_in_pad
+
+  component J1: connector "jst_ph_2pin"
+  component D1: diode     "led_red_0603"
+  component R1: resistor  "r_generic_0603"
+
+  connect J1.p1      -> R1.p1
+  connect R1.p2       -> D1.anode
+  connect D1.cathode  -> J1.p2
+}
+"#;
+
+/// The routing tools must say when the declared profile cannot offer a process
+/// the board requires.
+///
+/// `synth_route`, `synth_drc_report` and `synth_export` never call `run_erc`,
+/// so `E-SYNTH-PROCESS-002` does not reach the agent through them. Before this
+/// was surfaced the requirement was discarded and an incapable tier read as an
+/// ordinary routing failure.
+///
+/// Asserted on the payload rather than on a routed board, because the grant
+/// happens before the engine runs: the warning is there even where no router
+/// is installed.
+#[test]
+fn test_mcp_route_reports_a_process_the_profile_does_not_offer() {
+    let req = json!({
+        "jsonrpc": "2.0",
+        "id": 70,
+        "method": "tools/call",
+        "params": {
+            "name": "synth_route",
+            "arguments": {
+                "source": VIA_IN_PAD_ON_A_STANDARD_TIER,
+                "allow_placement_warnings": true
+            }
+        }
+    });
+    let resp = handle_jsonrpc_request(req, None);
+    assert_eq!(resp["id"], 70);
+    let text = resp["result"]["content"][0]["text"].as_str().unwrap();
+    assert!(
+        text.contains("process_warnings"),
+        "the payload must carry the unmet requirement: {text}"
+    );
+    assert!(
+        text.contains("E-SYNTH-PROCESS-002"),
+        "and name the diagnostic: {text}"
+    );
+    assert!(
+        text.contains("via_in_pad"),
+        "and the process asked for: {text}"
+    );
+}
+
+/// The same board on a tier that does fill carries no warning, so a clean run's
+/// payload is unchanged.
+#[test]
+fn test_mcp_route_is_quiet_when_the_profile_offers_the_process() {
+    let source = VIA_IN_PAD_ON_A_STANDARD_TIER.replace("jlcpcb", "jlc-filled-via");
+    let req = json!({
+        "jsonrpc": "2.0",
+        "id": 71,
+        "method": "tools/call",
+        "params": {
+            "name": "synth_route",
+            "arguments": { "source": source, "allow_placement_warnings": true }
+        }
+    });
+    let resp = handle_jsonrpc_request(req, None);
+    let text = resp["result"]["content"][0]["text"].as_str().unwrap();
+    assert!(
+        !text.contains("process_warnings"),
+        "a met requirement must not be reported: {text}"
+    );
+}
