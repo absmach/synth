@@ -294,8 +294,6 @@ pub fn lower(ast: &ProgramAst, registry: &Registry, file: &str) -> LowerResult {
     // refdes can be checked against the final component set.
     let variants = ctx.lower_variants(&root_statements, &refdes_index);
 
-    anchor_reset_buttons(&mut components, &nets);
-
     // `escape { layers … }` against the copper the board actually has.
     //
     // After the walk rather than in `lower_escape`, because the layer count
@@ -395,103 +393,6 @@ pub fn lower(ast: &ProgramAst, registry: &Registry, file: &str) -> LowerResult {
     LowerResult {
         board: Some(board),
         diagnostics: ctx.diagnostics,
-    }
-}
-
-/// Anchor each reset or boot button beside the MCU it controls.
-///
-/// A button on a reset or boot pin is a short, noise-sensitive line, and a
-/// person puts it next to the chip. Left to the author it tends to be hinted
-/// only softly, against a neighbouring resistor — which is itself hinted softly
-/// against another — and the chain gives the placer nothing to hold it to: on
-/// the irrigation controller the reset button ended up across the board.
-///
-/// The MCU is found from declared pin roles, not names: a pin carrying
-/// [`PinCapability::Reset`] or [`PinCapability::BootMode`] on the same net as
-/// one of the switch's pins, or one resistor away from it, which is how a
-/// debounced reset is wired. The switch then gets a `near` hint on that MCU.
-///
-/// Only a hint the author wrote is corrected. A soft one is a preference, and a
-/// chain of them (button near a resistor, that near another) anchors nothing to
-/// the chip, so it is replaced with a hard `near` on the MCU; whatever else it
-/// said (a region, an edge) is kept. A hard hint stands. A button with no hint
-/// at all is left to the placer: anchoring those was measured and moves
-/// routability both ways, breaking `env_logger` when hard and `sensor_logger`
-/// when soft, so it is not done on a guess.
-fn anchor_reset_buttons(components: &mut [Component], nets: &[Net]) {
-    use synth_registry::PinCapability;
-
-    let is_control_pin = |component: &Component, pin: PinId| -> bool {
-        component.part.as_ref().is_some_and(|part| {
-            part.pins.get(pin.0 as usize).is_some_and(|p| {
-                p.capabilities
-                    .iter()
-                    .any(|c| matches!(c, PinCapability::Reset | PinCapability::BootMode))
-            })
-        })
-    };
-    let find_mcu = |components: &[Component], net: &Net, skip: ComponentId| -> Option<usize> {
-        net.endpoints.iter().find_map(|e| {
-            let index = components.iter().position(|c| c.id == e.component)?;
-            (e.component != skip
-                && matches!(components[index].kind.as_str(), "mcu" | "processor")
-                && is_control_pin(&components[index], e.pin))
-            .then_some(index)
-        })
-    };
-
-    let mut anchors: Vec<(usize, String)> = Vec::new();
-    for (switch_index, switch) in components.iter().enumerate() {
-        if switch.kind != "switch" {
-            continue;
-        }
-        let mut found: Option<usize> = None;
-        'nets: for net in nets
-            .iter()
-            .filter(|n| n.endpoints.iter().any(|e| e.component == switch.id))
-        {
-            if let Some(mcu) = find_mcu(components, net, switch.id) {
-                found = Some(mcu);
-                break 'nets;
-            }
-            // One series resistor away: the other side of a two-pin resistor
-            // sharing this net.
-            for endpoint in &net.endpoints {
-                let Some(resistor) = components.iter().find(|c| c.id == endpoint.component) else {
-                    continue;
-                };
-                if resistor.kind != "resistor" || resistor.id == switch.id {
-                    continue;
-                }
-                for other in nets
-                    .iter()
-                    .filter(|n| n.id != net.id)
-                    .filter(|n| n.endpoints.iter().any(|e| e.component == resistor.id))
-                {
-                    if let Some(mcu) = find_mcu(components, other, resistor.id) {
-                        found = Some(mcu);
-                        break 'nets;
-                    }
-                }
-            }
-        }
-        if let Some(mcu) = found {
-            anchors.push((switch_index, components[mcu].refdes.clone()));
-        }
-    }
-
-    for (index, mcu_refdes) in anchors {
-        // Only a hint the author wrote. A button with none is left where the
-        // placer puts it: anchoring those was measured and moves routability
-        // both ways (hard broke env_logger, soft broke sensor_logger).
-        let Some(hint) = components[index].placement_hint.as_mut() else {
-            continue;
-        };
-        if hint.priority == crate::PlacementPriority::Hard {
-            continue;
-        }
-        hint.near = Some(mcu_refdes);
-        hint.priority = crate::PlacementPriority::Hard;
     }
 }
 

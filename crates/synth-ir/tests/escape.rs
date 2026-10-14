@@ -145,3 +145,71 @@ fn an_unknown_method_is_reported_rather_than_dropped() {
         "expected E-SYNTH-PROCESS-004: {codes:?}"
     );
 }
+
+/// A layer the board does not have is a typo, and typos have to fail here.
+///
+/// Passed through, the name reaches the escape engine, the fanout fails at
+/// route time, and the package is routed unescaped behind a stderr warning —
+/// the same silent fallback the unknown-method check exists to prevent.
+#[test]
+fn a_layer_the_board_does_not_have_is_reported() {
+    let (_, codes) = lower(
+        r#"board "b" {
+    layers 2
+    component U1: resistor "r_generic_0603" value "10k" {
+        escape { method underpad  layers "In1.Cu" }
+    }
+}"#,
+    );
+    assert!(
+        codes.iter().any(|c| c == "E-SYNTH-PROCESS-005"),
+        "expected E-SYNTH-PROCESS-005: {codes:?}"
+    );
+}
+
+/// The same name on a board that has the layer is fine, so the check is about
+/// the board rather than about the spelling.
+#[test]
+fn an_inner_layer_is_accepted_once_the_board_has_one() {
+    let (board, codes) = lower(
+        r#"board "b" {
+    layers 4
+    component U1: resistor "r_generic_0603" value "10k" {
+        escape { method underpad  layers "In1.Cu", "In2.Cu" }
+    }
+}"#,
+    );
+    assert!(
+        !codes.iter().any(|c| c == "E-SYNTH-PROCESS-005"),
+        "a four-layer board has In1.Cu and In2.Cu: {codes:?}"
+    );
+    let board = board.expect("a board");
+    assert_eq!(
+        component(&board, "U1")
+            .escape
+            .as_ref()
+            .unwrap()
+            .layers
+            .len(),
+        2
+    );
+}
+
+/// The layer count may be declared after the component that names a layer,
+/// which is why the check runs over the finished board rather than where the
+/// block appears.
+#[test]
+fn the_layer_count_may_come_after_the_component() {
+    let (_, codes) = lower(
+        r#"board "b" {
+    component U1: resistor "r_generic_0603" value "10k" {
+        escape { method underpad  layers "In2.Cu" }
+    }
+    layers 4
+}"#,
+    );
+    assert!(
+        !codes.iter().any(|c| c == "E-SYNTH-PROCESS-005"),
+        "declaration order must not decide this: {codes:?}"
+    );
+}
