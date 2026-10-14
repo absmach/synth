@@ -393,6 +393,7 @@ impl<'a> LowerCtx<'a> {
             .placement_hint
             .as_ref()
             .map(|h| self.lower_placement_hint(h));
+        let escape = decl.escape.as_ref().map(|e| self.lower_escape(e));
 
         Component {
             id: ComponentId(next_index as u32),
@@ -403,6 +404,7 @@ impl<'a> LowerCtx<'a> {
             dnp: decl.dnp,
             properties: decl.properties.clone(),
             placement_hint,
+            escape,
             group: group.map(str::to_string),
             sheet: sheet.map(str::to_string),
             source_span: decl.span,
@@ -1423,6 +1425,43 @@ impl<'a> LowerCtx<'a> {
             .explanation_url("synth.docs/diagnostics/E-SYNTH-NAME-001")
             .build(),
         );
+    }
+
+    /// Lower a component's `escape { … }` block.
+    ///
+    /// An unknown method is an error rather than a silent fallback: a board
+    /// asking for an engine this build does not have is not a board that
+    /// asked for the default one.
+    fn lower_escape(&mut self, ast: &synth_ast::EscapeAst) -> crate::board::EscapeIntent {
+        let method = ast.method.as_ref().and_then(|name| {
+            let resolved = crate::board::EscapeMethod::from_source(name);
+            if resolved.is_none() {
+                let known = crate::board::EscapeMethod::ALL
+                    .iter()
+                    .map(|m| format!("`{}`", m.as_source()))
+                    .collect::<Vec<_>>()
+                    .join(", ");
+                self.diagnostics.push(
+                    DiagnosticBuilder::new(
+                        "E-SYNTH-PROCESS-004",
+                        Severity::Error,
+                        "unknown escape method",
+                    )
+                    .location(Location::from_span(self.file.to_string(), ast.span))
+                    .expected(format!("one of: {known}"))
+                    .found(format!("`{name}`"))
+                    .explanation_url("synth.docs/diagnostics/E-SYNTH-PROCESS-004")
+                    .build(),
+                );
+            }
+            resolved
+        });
+        crate::board::EscapeIntent {
+            method,
+            layers: ast.layers.clone(),
+            off: ast.off,
+            source_span: ast.span,
+        }
     }
 
     /// A `requires` naming a process this build does not know about.

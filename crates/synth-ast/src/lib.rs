@@ -341,6 +341,30 @@ pub struct ComponentDeclAst {
     pub properties: BTreeMap<String, String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub placement_hint: Option<PlacementHintAst>,
+    /// How this package's pins leave it (`escape { … }`).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub escape: Option<EscapeAst>,
+    pub span: Span,
+}
+
+/// `escape { method underpad  layers "In1.Cu", "In2.Cu" }` on a component,
+/// or `escape { off }` to leave a package to the general router.
+///
+/// A fine-pitch package is fanned out before routing whether or not it says
+/// so — a 0.8 mm ball grid left to a maze router comes back with a stub on
+/// every lane. This block is how a design overrides that: which engine, onto
+/// which layers, or not at all.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct EscapeAst {
+    /// Escape engine (`channel`, `underpad`), as written.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub method: Option<String>,
+    /// Copper layers the escape may route onto, as written.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub layers: Vec<String>,
+    /// `off`: do not escape this package.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub off: bool,
     pub span: Span,
 }
 
@@ -863,6 +887,7 @@ mod tests {
             dnp: false,
             properties: BTreeMap::new(),
             placement_hint: None,
+            escape: None,
             span: Span::new(0, 0),
         });
         let v = serde_json::to_value(&c).unwrap();

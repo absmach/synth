@@ -77,15 +77,26 @@ def _fanout(python: str, repo: Path, board: Path, components: list[str],
         print(f"warning: no bga_fanout.py under {repo}; skipping escape", file=sys.stderr)
         return current
 
-    for index, refdes in enumerate(components):
+    for index, spec in enumerate(components):
+        # `REFDES[:method[:layers]]`: a design that declared an `escape` block
+        # names its own engine and layers, and one that declared nothing takes
+        # the defaults. Split on ':' rather than parsing a second flag so the
+        # per-package choice cannot drift from the package it belongs to.
+        parts = spec.split(":")
+        refdes = parts[0]
+        want_method = parts[1] if len(parts) > 1 and parts[1] else method
+        want_layers = [l for l in (parts[2].split(",") if len(parts) > 2 else []) if l]
         fanned = board.with_suffix(f".fanned{index}.kicad_pcb")
         command = [
             python, str(fanout), str(current),
             "--component", refdes,
             "--output", str(fanned),
-            "--escape-method", method,
+            "--escape-method", want_method,
             "--clearance", str(clearance),
         ]
+        if want_layers:
+            command.append("--layers")
+            command.extend(want_layers)
         # The escape via is the one the net class declared, so a package that
         # needs the tier's smallest via escapes with it rather than with the
         # engine's default.
@@ -175,10 +186,11 @@ def main() -> int:
         "--fanout-component",
         action="append",
         default=[],
-        metavar="REFDES",
+        metavar="REFDES[:METHOD[:LAYERS]]",
         help="Escape this package before routing. Repeatable. Synth passes the "
-        "packages its own escape analysis found cannot be fanned out at the "
-        "fabrication floor.",
+        "packages a board declared an `escape` block on, plus the dense grid "
+        "arrays it found, minus any the board declared `escape { off }` on. "
+        "METHOD and LAYERS come from that block; omitted, the defaults apply.",
     )
     parser.add_argument(
         "--escape-method",
