@@ -1,0 +1,93 @@
+{
+  "board": {
+    "design_settings": {
+      "defaults": {
+        "min_clearance": 0.127,
+        "min_track_width": 0.127
+      },
+      "rules": {
+        "min_clearance": 0.127,
+        "min_track_width": 0.127
+      }
+    }
+  },
+  "boards": [],
+  "meta": {
+    "filename": "buck.kicad_pro",
+    "uuid": "1bca81bd-8d12-5816-a46f-e1e7cb7a1113",
+    "version": 1
+  },
+  "net_settings": {
+    "classes": [
+      {
+        "bus_width": 12,
+        "clearance": 0.2,
+        "diff_pair_gap": 0.25,
+        "diff_pair_via_gap": 0.25,
+        "diff_pair_width": 0.2,
+        "line_style": 0,
+        "microvia_diameter": 0.3,
+        "microvia_drill": 0.1,
+        "name": "Default",
+        "pcb_color": "rgba(0, 0, 0, 1.000)",
+        "priority": 2147483647,
+        "schematic_color": "rgba(0, 0, 0, 1.000)",
+        "track_width": 0.2,
+        "via_diameter": 0.6,
+        "via_drill": 0.4,
+        "wire_width": 6
+      },
+      {
+        "bus_width": 12,
+        "clearance": 0.2,
+        "diff_pair_gap": 0.25,
+        "diff_pair_via_gap": 0.25,
+        "diff_pair_width": 0.2,
+        "line_style": 0,
+        "microvia_diameter": 0.3,
+        "microvia_drill": 0.1,
+        "name": "PWR",
+        "pcb_color": "rgba(191, 67, 171, 1.000)",
+        "priority": 1,
+        "schematic_color": "rgba(191, 67, 171, 1.000)",
+        "track_width": 0.5,
+        "via_diameter": 0.6,
+        "via_drill": 0.4,
+        "wire_width": 6
+      }
+    ],
+    "meta": {
+      "version": 4
+    },
+    "net_colors": null,
+    "netclass_assignments": {
+      "/P2": "PWR",
+      "/SW": "PWR",
+      "GND": "PWR",
+      "P2": "PWR",
+      "SW": "PWR",
+      "VIN": "PWR"
+    },
+    "netclass_patterns": [
+      {
+        "netclass": "PWR",
+        "pattern": "/*/P2"
+      },
+      {
+        "netclass": "PWR",
+        "pattern": "/*/SW"
+      }
+    ]
+  },
+  "schematic": {
+    "annotate_start_num": 0,
+    "drawing": {},
+    "variants": []
+  },
+  "sheets": [
+    [
+      "b6dff607-99ed-5bce-9f1c-3a180bf3ae6c",
+      ""
+    ]
+  ]
+}

@@ -11,14 +11,14 @@ and a power LED, plus a negative variant that the feedback-safety rule (E-SYNTH-
 
 ## What
 
-- `buck.synth`, board-mm sidecar `buck.placement.layout.toml`, negative `buck_neg_fb_sw.synth`, hashes in `artifacts.sha256`.
+- `buck.synth`, board-mm sidecar `buck.placement.layout.toml`, negative `buck_neg_fb_sw.synth`, hashes in `SHA256SUMS`, matrix in `QUALIFICATION.md`, evidence in `kicad/`, `reports/`, `images/`.
 - Chain: J1 (JST XH) -> F1 PTC -> D1 SS36 Schottky (reverse block) -> VIN node.
   VIN node: D2 SMBJ26A TVS, C1 47 uF bulk, C2 10 uF, C3 100 nF (on the U1 VIN pin), U1 TPS54202, UVLO divider.
 - U1 -> L1 10 uH -> C5, C6 (2x 22 uF, 25 V X7R) -> J2. C4 100 nF boot. D3 green LED + R_LED 470.
 - Feedback: R_FB_T 100k from the output node (L1 pad 2 side), R_FB_B 22.1k, C7 56 pF across R_FB_T.
   Vout = 0.596 x (1 + 100k/22.1k) = 3.293 V typical, 3.21 to 3.376 V over Vref 0.581 to 0.611 V (ideal resistors).
 - Negative file: identical except R_FB_T and C7 hang from SW. Besides E-SYNTH-POWER-011 it emits the same 14 warnings as the good board.
-- Board: 63.0 x 37.6 mm (larger than a hand layout would need because of the SMC diode, the 8 x 10 mm electrolytic and the placer's 4 mm margin), 4 layers, GND pours on all layers. Power tracks 0.5 mm, signal 0.127 mm.
+- Board: 63.0 x 37.6 mm (the SMC diode, the 8 x 10 mm electrolytic and the placer's 4 mm margin take room; the auto placer gave a similar area, see QUALIFICATION.md B9), 4 layers, GND pours on all layers. Power tracks 0.5 mm, signal 0.127 mm.
 
 ## UVLO (TPS54202 SLVSD26C section 6.3.5, Eq 1 and 2, Figure 6-1)
 
@@ -73,8 +73,8 @@ export KICAD_SYMBOL_DIR=/usr/share/kicad/symbols KICAD_FOOTPRINT_DIR=/usr/share/
 scripts/setup-routing-engines.sh --freerouting-only          # FreeRouting jar + Java, or symlink tools/freerouting and tools/jre25
 B=$(pwd)/qualification/class-b/buck   # absolute path, set from the repo root before any cd
 synth validate $B/buck.synth
-synth route $B/buck.synth
-synth export-kicad $B/buck.synth --out OUT --allow-unverified-parts --validate-erc
+synth route $B/buck.synth --router free-routing
+synth export-kicad $B/buck.synth --out OUT --allow-unverified-parts --validate-erc --router free-routing
 kicad-cli pcb drc --severity-all --refill-zones --format json -o OUT/drc.json OUT/buck.kicad_pcb
 kicad-cli sch erc --severity-all --format json -o OUT/erc.json OUT/buck.kicad_sch
 synth validate $B/buck_neg_fb_sw.synth
@@ -93,11 +93,11 @@ The export routes with FreeRouting 2.4.1; the routed board is written as `OUT/bu
 | validate, good board | exit 0, 0 errors, 14 warnings (8 part-unverified, 3 E-SYNTH-SCHEM-003 (schematic-sheet distance of a cap to U1, not PCB distance), 1 anomaly, 1 supply, 1 power symbol) | `synth validate $B/buck.synth 2>&1 \| grep -c '^warning'` and `grep -c '^error'` |
 | validate, negative | exit 1, 1 error (E-SYNTH-POWER-011), same 14 warnings | same on `buck_neg_fb_sw.synth` |
 | routing | `routed`, 10 nets connected, 0 open, 52 segments, 5 vias | `synth route $B/buck.synth` (JSON `state`, `statistics`); cross-check `grep -cP '^\t\(segment' OUT/buck.kicad_pcb`, `grep -cP '^\t\(via' ...` |
-| Synth routing check | kicad_drc 0 errors, 0 unconnected, 38 warnings; `fabrication_ready` true (routing check only) | `synth route` JSON `validation` |
-| DRC | 0 errors, 0 unconnected, 38 warnings: 20 lib_footprint_issues, 5 silk_overlap, 11 silk_over_copper, 2 silk_edge_clearance | `kicad-cli pcb drc ... -o OUT/drc.json`, then `python3 -I -c "import json,collections as c;d=json.load(open('OUT/drc.json'));print(c.Counter((v['severity'],v['type']) for v in d['violations']),len(d['unconnected_items']))"` |
+| Synth routing check | kicad_drc 0 errors, 0 unconnected, 20 warnings; `fabrication_ready` true (routing check only) | `synth route` JSON `validation` |
+| DRC | 0 errors, 0 unconnected, 20 warnings, all lib_footprint_issues | `kicad-cli pcb drc ... -o OUT/drc.json`, then `python3 -I -c "import json,collections as c;d=json.load(open('OUT/drc.json'));print(c.Counter((v['severity'],v['type']) for v in d['violations']),len(d['unconnected_items']))"` |
 | ERC | 0 errors, 54 warnings: 34 lib_symbol_issues, 20 footprint_link_issues (libraries not in the KiCad config) | `kicad-cli sch erc ... -o OUT/erc.json`, same one-liner over `sheets[].violations` |
 | Outline | 63.0 x 37.6 mm (x -2.2 to 60.8, y -1.375 to 36.23) | `grep -A3 gr_line OUT/buck.kicad_pcb \| grep start` |
-| Hashes | pcb 0ea0af61cb4a..., sch 47b7451740a8..., two exports identical | `cd OUT && grep -v '^#' "$B/artifacts.sha256" \| sha256sum -c -` (full values in `artifacts.sha256`) |
+| Hashes | pcb b0aaaa111a15..., sch 47b7451740a8..., two exports identical | `cd $B && sha256sum -c SHA256SUMS` (full values in `SHA256SUMS` and `QUALIFICATION.md`) |
 
 Pad-edge gaps in the placed, routed board, from `pad_gaps.py` (pcbnew pad bounding boxes, edge to edge):
 
@@ -130,29 +130,7 @@ error: [E-SYNTH-POWER-011] regulator feedback is taken from the switching node
 
 ## Qualification matrix
 
-| Claim | Evidence command | Result | Status |
-| --- | --- | --- | --- |
-| Source validates, no blocking diagnostic | `synth validate buck.synth` | exit 0, 0 errors | VERIFIED |
-| Feedback taken from the output, not SW | same, E-SYNTH-POWER-011 | not raised. The rule follows one resistor only, so longer paths are not checked | VERIFIED (with that caveat) |
-| Feedback from SW is flagged | `synth validate buck_neg_fb_sw.synth` | E-SYNTH-POWER-011, exit 1 | VERIFIED |
-| Routed, no open nets | `synth route` | routed, 0 open | VERIFIED |
-| KiCad DRC | `kicad-cli pcb drc` | 0 errors, 0 unconnected, 38 warnings | VERIFIED |
-| KiCad ERC | `kicad-cli sch erc` | 0 errors, 54 library warnings | VERIFIED |
-| Deterministic export | two exports, sha256 | identical | VERIFIED |
-| Part pins and footprints | `synth registry qualify --part <id>` | pin/pad coverage passes; E-SYNTH-QUAL-008 (no reviewer) blocks. The stock KiCad `Package_TO_SOT_SMD:SOT-23-6` footprint was NOT compared with the TI DDC package drawing | UNVERIFIED |
-| Part values vs manufacturer sheets | curl + pdftotext | read, listed above | UNVERIFIED (one reader, no reviewer) |
-| Survives a rated surge or sustained 28-32 V | datasheet numbers above | VC 42.1 V and VBR 28.9 V against abs max 30 V | NEEDS EXPERT |
-| Reverse polarity blocked | SS36 VRRM 60 V | datasheet number only | UNVERIFIED |
-| PTC margin at 1 A out | Ihold table | 0.248 A vs 0.63 A at 70 C, by calculation with an assumed 85% | UNVERIFIED |
-| UVLO thresholds | Eq 1 and 2 | 18.31 / 15.67 V typical, ranges above | UNVERIFIED (calculation) |
-| Output voltage | Eq 7 | 3.293 V typical | UNVERIFIED (calculation) |
-| Output cap value, crossover, stability | Table 7-2, fo equation | 27.3 kHz at 44 uF nominal, derating unknown | UNVERIFIED |
-| Input cap effective value at 24 V | none | vendor data not obtained | UNVERIFIED |
-| Power-good | none | TPS54202 has no PG pin | UNSUPPORTED |
-| Thermal copper, thermal vias, junction temperature | loss estimate, datasheet RthetaJA | Synth has no thermal-pour or via model. Estimated junction about 133 C at 70 C ambient with 118.6 C/W (125 C at about 62 C ambient); about 100 C with 57.2 C/W | UNVERIFIED |
-| Loop area, SW node, return paths | gap table | pad gaps in mm, no loop area or inductance | UNVERIFIED |
-| EMI, ripple, efficiency | none | not simulated or measured | UNVERIFIED |
-| Independent mixed-signal / RF sign-off (#38) | none | no reviewer | NOT DONE |
+The matrix (A: checked by tools, B: needs an expert) is in [`QUALIFICATION.md`](QUALIFICATION.md). Evidence files: `kicad/`, `reports/`, `images/`.
 
 ## Not true yet
 
@@ -161,9 +139,6 @@ error: [E-SYNTH-POWER-011] regulator feedback is taken from the switching node
   C3 sits on the VIN pin and C7 against R_FB_T, but R_FB_B's ground is 4.25 mm from U1 pin 1: pin 1 and pin 4 are on opposite sides of the SOT-23-6, so the ground return goes through a via to the plane.
 - Schematic (rendered and read): readable, but value text overlaps (TPS54202DDCR on the GND symbol, 47uF on C1's wire), the BUCK title crowds U1, and a wire loops over the top of J1/F1.
   Synth labels signal nets from pin names, so +3V3 is drawn as `P2` and LED_PWR as `P2_R_LED`; the schematic netlist names (`/P2`, `Net-(D1-A)`) differ from the PCB names (`+3V3`, `LED_PWR`). No schematic sidecar is used (default layout).
-- Silkscreen references are large and offset (5 overlaps, 11 over copper, 2 over the edge).
-- Rotations are 0 and 180 only. With 90/270 degree parts, Synth's connectivity gate reported 5 open nets while kicad-cli reported none, and `synth route` delivered the unrouted baseline. Not reduced to a minimal repro (a two-resistor board routes clean), cause not found.
-- A GND pour island on F.Cu fails Synth's gate in some placements; the final placement avoids it, others may not. Open PR #108 (join cut-off ground pour pieces) and PR #109 (rotated pad positions) address this and the 90/270-degree open-net finding, so the hashes may change after they merge.
 - Routing used FreeRouting defaults, no length or coupling constraints.
 
 ## Not verified

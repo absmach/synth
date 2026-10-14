@@ -1,0 +1,72 @@
+{
+  "schema_version": "synth.release.v1",
+  "tool_version": "synth-cli 0.1.1",
+  "input": "qualification/class-b/buck/buck.synth",
+  "fab_requested": false,
+  "production_status": "production",
+  "release_ready": true,
+  "reviewer_state": [
+    {
+      "part_id": "c_electrolytic_smd_8x10",
+      "reviewed": false
+    },
+    {
+      "part_id": "c_generic_0603",
+      "reviewed": false
+    },
+    {
+      "part_id": "c_generic_1206",
+      "reviewed": false
+    },
+    {
+      "part_id": "jst_b2b_xh_a_2pin",
+      "reviewed": false
+    },
+    {
+      "part_id": "l_bourns_srn6045ta_100m",
+      "reviewed": false
+    },
+    {
+      "part_id": "ltst_c190kgkt",
+      "reviewed": false
+    },
+    {
+      "part_id": "mf_msmf110_33x",
+      "reviewed": false
+    },
+    {
+      "part_id": "r_generic_0603",
+      "reviewed": false
+    },
+    {
+      "part_id": "smbj26a",
+      "reviewed": false
+    },
+    {
+      "part_id": "ss36",
+      "reviewed": false
+    },
+    {
+      "part_id": "tps54202",
+      "reviewed": false
+    }
+  ],
+  "routing": {
+    "engine": "freerouting",
+    "engine_version": "/home/steve/work/synth/.claude/worktrees/buck-67/tools/freerouting/freerouting-2.4.1.jar",
+    "state": "routed",
+    "input_hash": "a4fe738838eabcf05890d9036bcd252f2bc953224318f67a0f83df256ecd079e",
+    "run_record": "/tmp/claude-1000/-home-steve-work-synth/3243ecc1-3f76-4e29-825e-a63779cac97a/scratchpad/buck-out/e1/buck.routing.json"
+  },
+  "signal_integrity": {
+    "blocking": 0,
+    "warnings": 1,
+    "findings": [
+      {
+        "code": "W-SYNTH-DRC-016",
+        "message": "net 3 changes layers at (35.97, 14.43) mm with no ground return via within 0.64 mm, so the return current has to jump reference planes",
+        "blocking": false
+      }
+    ]
+  }
+}

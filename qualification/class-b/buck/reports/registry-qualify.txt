@@ -1,0 +1,21 @@
+== tps54202
+  blocking E-SYNTH-QUAL-008: part has no reviewer
+1 part(s): 0 qualified, 1 blocked, 0 unproven
+== l_bourns_srn6045ta_100m
+  blocking E-SYNTH-QUAL-008: part has no reviewer
+1 part(s): 0 qualified, 1 blocked, 0 unproven
+== ss36
+  blocking E-SYNTH-QUAL-008: part has no reviewer
+1 part(s): 0 qualified, 1 blocked, 0 unproven
+== smbj26a
+  blocking E-SYNTH-QUAL-008: part has no reviewer
+1 part(s): 0 qualified, 1 blocked, 0 unproven
+== mf_msmf110_33x
+  blocking E-SYNTH-QUAL-008: part has no reviewer
+1 part(s): 0 qualified, 1 blocked, 0 unproven
+== jst_b2b_xh_a_2pin
+  blocking E-SYNTH-QUAL-008: part has no reviewer
+1 part(s): 0 qualified, 1 blocked, 0 unproven
+== c_electrolytic_smd_8x10
+  blocking E-SYNTH-QUAL-008: part carries no provenance
+1 part(s): 0 qualified, 1 blocked, 0 unproven
