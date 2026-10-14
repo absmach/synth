@@ -1,7 +1,7 @@
 {
   "schema_version": "synth.release.v1",
   "tool_version": "synth-cli 0.1.1",
-  "input": "/home/steve/work/synth-103/qualification/class-b/usb-uart/usb_uart.synth",
+  "input": "/tmp/claude-1000/-home-steve-work-synth/1b15c859-243c-47c6-88fe-751b8f29b86c/scratchpad/v_k/usb_uart.synth",
   "fab_requested": false,
   "production_status": "production",
   "release_ready": true,
@@ -39,6 +39,10 @@
       "reviewed": false
     },
     {
+      "part_id": "mounting_hole_m2_5",
+      "reviewed": false
+    },
+    {
       "part_id": "prtr5v0u2x",
       "reviewed": false
     },
@@ -55,18 +59,18 @@
       "reviewed": false
     },
     {
-      "part_id": "usb_c_receptacle",
+      "part_id": "usb_c_receptacle_amphenol_12401610e4_2a",
       "reviewed": false
     }
   ],
   "routing": {
     "engine": "freerouting",
-    "engine_version": "/home/steve/work/synth-103-new/tools/freerouting/freerouting-2.4.1.jar",
+    "engine_version": "/home/steve/work/synth-103/tools/freerouting/freerouting-2.4.1.jar",
     "state": "routed",
-    "input_hash": "4f3035b71cefa34336b8558abb30850a78a6ef7bfefbbfb91682c2f001ad59ad",
-    "run_record": "/tmp/claude-1000/-home-steve-work-synth/1b15c859-243c-47c6-88fe-751b8f29b86c/scratchpad/final/usb_uart.routing.json",
+    "input_hash": "50e786685d73de9c2df722ef1abb85c7f42b3e81a0a7283aeb3fd5ec304ddde7",
+    "run_record": "/tmp/claude-1000/-home-steve-work-synth/1b15c859-243c-47c6-88fe-751b8f29b86c/scratchpad/v_k/out/usb_uart.routing.json",
     "fabrication_notes": [
-      "via at (23.800, 17.300) mm U1.25: via-in-pad, order with filled and capped vias"
+      "via at (23.400, 19.800) mm U1.25: via-in-pad, order with filled and capped vias"
     ]
   }
 }

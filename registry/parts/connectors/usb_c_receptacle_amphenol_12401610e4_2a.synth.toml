@@ -1,0 +1,163 @@
+id = "usb_c_receptacle_amphenol_12401610e4_2a"
+kind = "connector"
+version = 0
+lifecycle = "active"
+description = "Amphenol 12401610E4#2A USB Type-C receptacle, 24 contacts, right-angle SMD with through-hole shield tabs. Modelled with primary and mirrored power/ground/data pins; the SuperSpeed pads are listed as unconnected passives."
+mpn = "12401610E4#2A"
+# lcsc_pn intentionally unset: the LCSC number was not checked.
+kicad_symbol = "Connector:USB_C_Receptacle"
+kicad_footprint = "Connector_USB:USB_C_Receptacle_Amphenol_12401610E4-2A"
+
+[footprint_dimensions]
+width_mm = 9.2
+height_mm = 10.45
+courtyard_margin_mm = 0.25
+# In the unrotated KiCad footprint the receptacle opening points toward +Y.
+mating_face = "bottom"
+
+[operating_conditions]
+min_voltage_v = 1.8
+max_voltage_v = 5.0
+max_current_ma = 3000.0
+
+[[pins]]
+name = "vbus"
+number = "A4"
+electrical_type = "power_input"
+capabilities = ["usb_vbus"]
+
+[[pins]]
+name = "gnd"
+number = "A1"
+electrical_type = "power_input"
+
+[[pins]]
+name = "dp"
+number = "A6"
+electrical_type = "differential_positive"
+capabilities = ["usb_dp"]
+
+[[pins]]
+name = "dn"
+number = "A7"
+electrical_type = "differential_negative"
+capabilities = ["usb_dn"]
+
+[[pins]]
+name = "cc1"
+number = "A5"
+electrical_type = "bidirectional"
+capabilities = ["usb_cc"]
+
+[[pins]]
+name = "cc2"
+number = "B5"
+electrical_type = "bidirectional"
+capabilities = ["usb_cc"]
+
+[[pins]]
+name = "gnd_b12"
+number = "B12"
+electrical_type = "power_input"
+
+[[pins]]
+name = "gnd_a12"
+number = "A12"
+electrical_type = "power_input"
+
+[[pins]]
+name = "gnd_b1"
+number = "B1"
+electrical_type = "power_input"
+
+[[pins]]
+name = "vbus_b4"
+number = "B4"
+electrical_type = "power_input"
+capabilities = ["usb_vbus"]
+
+[[pins]]
+name = "vbus_a9"
+number = "A9"
+electrical_type = "power_input"
+capabilities = ["usb_vbus"]
+
+[[pins]]
+name = "vbus_b9"
+number = "B9"
+electrical_type = "power_input"
+capabilities = ["usb_vbus"]
+
+[[pins]]
+name = "dp_b6"
+number = "B6"
+electrical_type = "differential_positive"
+capabilities = ["usb_dp"]
+
+[[pins]]
+name = "dn_b7"
+number = "B7"
+electrical_type = "differential_negative"
+capabilities = ["usb_dn"]
+
+[[pins]]
+name = "shld"
+number = "SH"
+electrical_type = "passive"
+
+[[pins]]
+name = "sbu1"
+number = "A8"
+electrical_type = "passive"
+
+[[pins]]
+name = "sbu2"
+number = "B8"
+electrical_type = "passive"
+
+[[pins]]
+name = "a2_ss"
+number = "A2"
+electrical_type = "passive"
+
+[[pins]]
+name = "a3_ss"
+number = "A3"
+electrical_type = "passive"
+
+[[pins]]
+name = "a10_ss"
+number = "A10"
+electrical_type = "passive"
+
+[[pins]]
+name = "a11_ss"
+number = "A11"
+electrical_type = "passive"
+
+[[pins]]
+name = "b2_ss"
+number = "B2"
+electrical_type = "passive"
+
+[[pins]]
+name = "b3_ss"
+number = "B3"
+electrical_type = "passive"
+
+[[pins]]
+name = "b10_ss"
+number = "B10"
+electrical_type = "passive"
+
+[[pins]]
+name = "b11_ss"
+number = "B11"
+electrical_type = "passive"
+
+# The manufacturer's datasheet was not read: amphenol-cs.com returned 403 to
+# every request. Pad numbers come from KiCad's footprint for this part; the
+# current and voltage ratings are not recorded here because only distributor
+# listings (5 A, 100 V) were seen, and those disagree between sites.
+[provenance]
+source = "authored"

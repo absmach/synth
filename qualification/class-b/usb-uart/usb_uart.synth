@@ -16,6 +16,14 @@ board "usb_uart" {
     clearance 0.127mm
   }
 
+  // The connector's contacts are 0.3 mm wide at 0.5 mm pitch, so a VBUS track
+  // cannot be wider than 0.3 mm where it leaves them. This board draws well
+  // under the 500 mA of a bus-powered device.
+  netclass "VBUS_FINE" {
+    trace_width 0.3mm
+    clearance 0.127mm
+  }
+
   stackup {
     copper 0.035mm
     insulator 0.2104mm er 4.4 material "FR4"
@@ -30,7 +38,7 @@ board "usb_uart" {
   power "+3V3" 3.3v
 
   group "USB-C INPUT" color "#c2410c" {
-    component J1: connector "usb_c_receptacle" { placement_hint { edge: top priority: hard } }
+    component J1: connector "usb_c_receptacle_amphenol_12401610e4_2a" { placement_hint { edge: top priority: hard } }
     component R1: resistor "r_generic_0603" value "5.1k"
     component R2: resistor "r_generic_0603" value "5.1k"
     notes "" {
@@ -131,7 +139,12 @@ board "usb_uart" {
     }
   }
 
-  net "VBUS" {
+  component H1: mounting_hole "mounting_hole_m2_5"
+  component H2: mounting_hole "mounting_hole_m2_5"
+  component H3: mounting_hole "mounting_hole_m2_5"
+  component H4: mounting_hole "mounting_hole_m2_5"
+
+  net "VBUS" class "VBUS_FINE" {
     J1.vbus, J1.vbus_b4, J1.vbus_a9, J1.vbus_b9,
     D1.vcc, D2.cathode,
     U2.vin, U2.en, C2.p1,
