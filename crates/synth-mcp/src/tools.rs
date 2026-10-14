@@ -1239,6 +1239,32 @@ fn execute_router_capabilities(args: &Value) -> Result<Value, String> {
 /// Shared by `synth_route`, `synth_drc_report`, and `synth_export` so all
 /// three evaluate the identical board through the identical pipeline and
 /// cannot report different routers or different terminal states.
+/// Grant the board's declared fabrication processes, and say which the
+/// declared profile does not offer.
+///
+/// The CLI prints these to stderr. An MCP tool has no stderr the agent reads,
+/// and the three routing entry points do not run ERC — `run_erc` is reached
+/// only from `validate`, `erc_report`, `fix` and `predict_patch_consequence` —
+/// so a discarded requirement here is neither granted nor reported, and an
+/// incapable tier reads as an ordinary routing failure.
+fn grant_processes(
+    request: &mut synth_router::RouteRequest,
+    board: &synth_ir::Board,
+) -> Vec<String> {
+    let unmet = request.use_board_process_requirements(board);
+    let profile = request.profile_name.clone();
+    unmet
+        .into_iter()
+        .map(|requirement| {
+            format!(
+                "board requires `{}`, which profile `{profile}` does not offer \
+                 [E-SYNTH-PROCESS-002]",
+                requirement.as_source()
+            )
+        })
+        .collect()
+}
+
 fn route_design_externally(
     args: &Value,
     default_registry: Option<&Path>,
@@ -1247,6 +1273,7 @@ fn route_design_externally(
         synth_router::RouteReport,
         PathBuf,
         Vec<synth_drc::Violation>,
+        Vec<String>,
     ),
     String,
 > {
@@ -1267,6 +1294,7 @@ fn route_design_externally_with(
         synth_router::RouteReport,
         PathBuf,
         Vec<synth_drc::Violation>,
+        Vec<String>,
     ),
     String,
 > {
@@ -1343,10 +1371,7 @@ fn route_design_externally_with(
             .clone()
             .unwrap_or_else(|| "jlc-standard".to_string()),
     );
-    // Discarded deliberately: an unmet requirement has already failed ERC
-    // with E-SYNTH-PROCESS-002, which these tools return, and the gate still
-    // refuses the copper. What this call is here for is the granting.
-    let _ = request.use_board_process_requirements(&board);
+    let process_warnings = grant_processes(&mut request, &board);
     request.input_hash = sha256_of(&res.pcb_path);
     request.preserve_baseline().map_err(|f| f.to_string())?;
 
@@ -1361,7 +1386,7 @@ fn route_design_externally_with(
         .clone()
         .unwrap_or_else(|| request.board_path.clone());
     let signal_integrity = routed_signal_integrity(&board, &delivered);
-    Ok((report, res.out_dir, signal_integrity))
+    Ok((report, res.out_dir, signal_integrity, process_warnings))
 }
 
 fn sha256_of(path: &Path) -> String {
@@ -1393,6 +1418,16 @@ fn sha256_hex(bytes: &[u8]) -> String {
 /// not run", and an absent field cannot carry that distinction — so
 /// `drc_performed` is reported alongside `drc_clean`, which is only true when
 /// DRC actually ran and found nothing blocking.
+/// Attach the board's unmet process requirements to a tool payload.
+///
+/// Omitted when there are none, so a clean run's payload is unchanged.
+fn with_process_warnings(mut payload: Value, warnings: &[String]) -> Value {
+    if !warnings.is_empty() {
+        payload["process_warnings"] = serde_json::json!(warnings);
+    }
+    payload
+}
+
 fn route_report_payload(report: &synth_router::RouteReport) -> Value {
     let mut payload = serde_json::to_value(report).unwrap_or(Value::Null);
     // Alias for the trace-length field, under the name every consumer of this
@@ -1439,8 +1474,9 @@ fn attach_signal_integrity(payload: &mut Value, findings: &[synth_drc::Violation
 /// with zones refilled — so it cannot be satisfied by the router's own
 /// opinion of its work.
 fn execute_drc_report(args: &Value, default_registry: Option<&Path>) -> Result<Value, String> {
-    let (report, _, signal_integrity) = route_design_externally(args, default_registry)?;
-    let mut payload = route_report_payload(&report);
+    let (report, _, signal_integrity, process_warnings) =
+        route_design_externally(args, default_registry)?;
+    let mut payload = with_process_warnings(route_report_payload(&report), &process_warnings);
     attach_signal_integrity(&mut payload, &signal_integrity);
 
     // A structurally poor floorplan never reaches the router at all, so
@@ -1465,9 +1501,10 @@ fn execute_drc_report(args: &Value, default_registry: Option<&Path>) -> Result<V
 /// to decode: it means the engine is not installed here, and the payload
 /// says what to install.
 fn execute_route(args: &Value, default_registry: Option<&Path>) -> Result<Value, String> {
-    let (report, out_dir, signal_integrity) = route_design_externally(args, default_registry)?;
+    let (report, out_dir, signal_integrity, process_warnings) =
+        route_design_externally(args, default_registry)?;
     log_routing_outcome(args, &report);
-    let mut payload = route_report_payload(&report);
+    let mut payload = with_process_warnings(route_report_payload(&report), &process_warnings);
     payload["out_dir"] = serde_json::json!(out_dir);
     attach_signal_integrity(&mut payload, &signal_integrity);
     Ok(payload)
@@ -2664,8 +2701,10 @@ fn evaluate_candidate_mcp(
             .clone()
             .unwrap_or_else(|| "jlc-standard".to_string()),
     );
-    // See the note at the other call sites: this is here to grant, and an
-    // unmet requirement is already an ERC error.
+    // Granting only. Reporting belongs to the run the caller keeps: this is
+    // reached from `select_placement_by_route` inside `execute_export`, which
+    // grants again for the chosen placement and puts any unmet requirement in
+    // its own payload. Saying it once per candidate would say it N times.
     let _ = request.use_board_process_requirements(board);
     request.input_hash = sha256_of(&res.pcb_path);
     request.preserve_baseline().map_err(|f| f.to_string())?;
@@ -2837,17 +2876,14 @@ fn execute_export(args: &Value, default_registry: Option<&Path>) -> Result<Value
             .clone()
             .unwrap_or_else(|| "jlc-standard".to_string()),
     );
-    // Discarded deliberately: an unmet requirement has already failed ERC
-    // with E-SYNTH-PROCESS-002, which these tools return, and the gate still
-    // refuses the copper. What this call is here for is the granting.
-    let _ = request.use_board_process_requirements(&board);
+    let process_warnings = grant_processes(&mut request, &board);
     request.input_hash = sha256_of(&res.pcb_path);
     request.preserve_baseline().map_err(|f| f.to_string())?;
     let routing = synth_router::route(&request);
 
     let route_complete = routing.is_fabrication_ready();
     if !route_complete && !allow_incomplete {
-        let mut payload = route_report_payload(&routing);
+        let mut payload = with_process_warnings(route_report_payload(&routing), &process_warnings);
         payload["hint"] = serde_json::Value::String(format!(
             "The board is not fabrication-ready. Fix the findings in the routing run \
              record and retry, or set allow_incomplete=true to emit an explicitly \
@@ -2924,7 +2960,7 @@ fn execute_export(args: &Value, default_registry: Option<&Path>) -> Result<Value
     if let Some(notice) = sidecar_migration_notice(file_name) {
         result["sidecar_migration"] = serde_json::json!(notice);
     }
-    Ok(result)
+    Ok(with_process_warnings(result, &process_warnings))
 }
 
 fn execute_live_supply_chain(
@@ -3597,10 +3633,10 @@ fn execute_route_with_constraints(
         routed.policy.min_clearance_nm = routed.policy.min_clearance_nm.max(clearance);
     }
 
-    let (report, _, signal_integrity) =
+    let (report, _, signal_integrity, process_warnings) =
         route_design_externally_with(args, default_registry, Some(routed))?;
     log_routing_outcome(args, &report);
-    let mut payload = route_report_payload(&report);
+    let mut payload = with_process_warnings(route_report_payload(&report), &process_warnings);
     attach_signal_integrity(&mut payload, &signal_integrity);
     payload["diagnostics"] = serde_json::json!(diagnostics);
     payload["constraints"] = serde_json::json!({
