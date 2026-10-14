@@ -13,7 +13,7 @@ board "two_oscillators" {
   connect Y1.gnd -> C1.p2
   connect Y2.vcc -> C2.p1
   connect Y2.gnd -> C2.p2
-  connect Y1.ne -> Y2.ne
+  connect Y1.oe -> Y2.oe
   // Two oscillators driving the same net — clock collision.
   connect Y1.out -> Y2.out
 }
