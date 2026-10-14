@@ -75,6 +75,12 @@ electrical_type = "passive"
 name = "ep"
 number = "9"
 electrical_type = "power_input"
+# Required, so a board that leaves it floating is an error rather than a pass.
+# On this part the exposed pad is the thermal path and is tied to GND; an
+# untied one is both a thermal failure and a large piece of unconnected copper
+# under the package. E-SYNTH-CONNECT-001 keys off this flag, so without it the
+# pad existed in the map and nothing checked that anything reached it.
+required = true
 
 [[required_decoupling]]
 net = "in"
