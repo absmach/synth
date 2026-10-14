@@ -8803,6 +8803,88 @@
 	)
 	(wire
 		(pts
+			(xy 62.23 149.86)
+			(xy 59.69 149.86)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "fbf87236-8ad8-5deb-bfaa-11afaa357dc7")
+	)
+	(symbol
+		(lib_id "synth:VIO")
+		(at 59.69 149.86 0)
+		(unit 1)
+		(in_bom no)
+		(on_board no)
+		(uuid "ca31bf44-eb65-5fe5-b4fd-4004dd33e72b")
+		(property
+			"Reference"
+			"#PWR1627"
+			(at 59.69 149.86 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property
+			"Value"
+			"VIO"
+			(at 59.69 149.86 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+	)
+	(wire
+		(pts
+			(xy 95.25 149.86)
+			(xy 92.71 149.86)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "09777ba5-e244-5e14-a93d-9e066bcfa6ee")
+	)
+	(symbol
+		(lib_id "synth:VIO")
+		(at 92.71 149.86 0)
+		(unit 1)
+		(in_bom no)
+		(on_board no)
+		(uuid "57516ab1-6aad-5356-a020-d1187dcf9447")
+		(property
+			"Reference"
+			"#PWR4135"
+			(at 92.71 149.86 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property
+			"Value"
+			"VIO"
+			(at 92.71 149.86 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+	)
+	(wire
+		(pts
 			(xy 229.87 43.18)
 			(xy 227.33 43.18)
 		)
@@ -9951,88 +10033,6 @@
 	)
 	(wire
 		(pts
-			(xy 71.12 171.45)
-			(xy 71.12 173.99)
-		)
-		(stroke
-			(width 0)
-			(type default)
-		)
-		(uuid "8714cd04-63c3-5926-a857-c9d9334a8f71")
-	)
-	(symbol
-		(lib_id "power:GND")
-		(at 71.12 173.99 0)
-		(unit 1)
-		(in_bom no)
-		(on_board no)
-		(uuid "ec37e061-507b-5f8f-b095-4cbef507b9ea")
-		(property
-			"Reference"
-			"#PWR6690"
-			(at 71.12 173.99 0)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-				(hide yes)
-			)
-		)
-		(property
-			"Value"
-			"GND"
-			(at 71.12 173.99 0)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-				(hide yes)
-			)
-		)
-	)
-	(wire
-		(pts
-			(xy 104.14 171.45)
-			(xy 104.14 173.99)
-		)
-		(stroke
-			(width 0)
-			(type default)
-		)
-		(uuid "1291e6a3-6955-5b19-8d45-c6d6e12ab91f")
-	)
-	(symbol
-		(lib_id "power:GND")
-		(at 104.14 173.99 0)
-		(unit 1)
-		(in_bom no)
-		(on_board no)
-		(uuid "3bb12c28-7808-549b-9acd-556195aca002")
-		(property
-			"Reference"
-			"#PWR4826"
-			(at 104.14 173.99 0)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-				(hide yes)
-			)
-		)
-		(property
-			"Value"
-			"GND"
-			(at 104.14 173.99 0)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-				(hide yes)
-			)
-		)
-	)
-	(wire
-		(pts
 			(xy 50.8 35.56)
 			(xy 55.88 35.56)
 		)
@@ -10425,26 +10425,38 @@
 	)
 	(wire
 		(pts
-			(xy 95.25 149.86)
-			(xy 90.17 149.86)
+			(xy 104.14 171.45)
+			(xy 104.14 173.99)
 		)
 		(stroke
 			(width 0)
 			(type default)
 			(color 204 121 167 1)
 		)
-		(uuid "06216088-897b-5faa-879f-88ad564cca08")
+		(uuid "a79d064a-b69e-5379-8ba5-180a20cc7dcb")
+	)
+	(wire
+		(pts
+			(xy 104.14 173.99)
+			(xy 109.22 173.99)
+		)
+		(stroke
+			(width 0)
+			(type default)
+			(color 204 121 167 1)
+		)
+		(uuid "9e0e34a2-78e8-52d3-8366-5423fca446d3")
 	)
 	(label
 		"TX"
-		(at 90.17 149.86 180)
+		(at 109.22 173.99 0)
 		(effects
 			(font
 				(size 1.27 1.27)
 				(color 204 121 167 1)
 			)
 		)
-		(uuid "d3b64164-b6a4-51bf-a704-54b576f91756")
+		(uuid "16fdc98b-835d-5745-b93c-62a05bce13b8")
 	)
 	(wire
 		(pts
@@ -10666,26 +10678,38 @@
 	)
 	(wire
 		(pts
-			(xy 62.23 149.86)
-			(xy 57.15 149.86)
+			(xy 71.12 171.45)
+			(xy 71.12 173.99)
 		)
 		(stroke
 			(width 0)
 			(type default)
 			(color 204 121 167 1)
 		)
-		(uuid "5adebd57-7f12-5d08-bc1f-c61161c304ef")
+		(uuid "0dba7094-33ff-50f8-9cc9-6535bac0b2f5")
+	)
+	(wire
+		(pts
+			(xy 71.12 173.99)
+			(xy 76.2 173.99)
+		)
+		(stroke
+			(width 0)
+			(type default)
+			(color 204 121 167 1)
+		)
+		(uuid "116e4807-c126-58fd-8788-e45baa928ce9")
 	)
 	(label
 		"TX_U1"
-		(at 57.15 149.86 180)
+		(at 76.2 173.99 0)
 		(effects
 			(font
 				(size 1.27 1.27)
 				(color 204 121 167 1)
 			)
 		)
-		(uuid "9b678733-3a94-58e1-8cf1-3b2e261535e8")
+		(uuid "6f4bc41e-0696-5acb-b4b2-ed0b738f225a")
 	)
 	(wire
 		(pts
@@ -11604,7 +11628,7 @@
 		(uuid "c41ddfeb-7bb3-514e-b663-e7d20e4ca2d1")
 	)
 	(text
-		"D4/D7 red LEDs from TXD0/TXD1."
+		"D4/D7 red LEDs from VIO into TXD0/TXD1: TXD idles high, so they light only while data goes out."
 		(at 30.48 182.18 0)
 		(effects
 			(font
@@ -11612,7 +11636,7 @@
 			)
 			(justify left bottom)
 		)
-		(uuid "4d114f8b-5040-53ba-af90-e8474ccef1ec")
+		(uuid "482b9f68-d491-57bc-ac2b-7fd5a35c7f06")
 	)
 	(text
 		"No ACT# LED: the CH342F QFN24 has no ACT# bond-out."

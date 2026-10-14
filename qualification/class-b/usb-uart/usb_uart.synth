@@ -134,7 +134,7 @@ board "usb_uart" {
     component R7: resistor "r_generic_0603" value "470"
     notes "" {
       "D3 green LED from VIO (VIO present)."
-      "D4/D7 red LEDs from TXD0/TXD1."
+      "D4/D7 red LEDs from VIO into TXD0/TXD1: TXD idles high, so they light only while data goes out."
       "No ACT# LED: the CH342F QFN24 has no ACT# bond-out."
     }
   }
@@ -157,7 +157,7 @@ board "usb_uart" {
   }
 
   net "VIO" {
-    J_VIO.p2, U1.vio, C6.p1, U3.vcc, C7.p1, R3.p1, R8.p1
+    J_VIO.p2, U1.vio, C6.p1, U3.vcc, C7.p1, R3.p1, R4.p1, R7.p1, R8.p1
   }
 
   net "GND" {
@@ -168,7 +168,7 @@ board "usb_uart" {
     U2.gnd, U1.gnd, U1.ep, U3.gnd,
     J2.p1, J4.p3, R9.p2,
     R_TNOW.p2, D8.common,
-    D3.cathode, D4.cathode, D7.cathode
+    D3.cathode
   }
 
   connect J1.cc1 -> R1.p1 as "CC1"
@@ -198,7 +198,7 @@ board "usb_uart" {
   connect U1.cts0 -> R9.p1 as "CTS0_LOW"
 
   connect U1.txd1 -> J2.p2 as "TXD1"
-  connect U1.txd1 -> R7.p1 as "TXD1"
+  connect U1.txd1 -> D7.cathode as "TXD1"
   connect J2.p3 -> R5.p2 as "RXD1"
   connect R5.p1 -> U1.rxd1 as "RXD1_MCU"
   connect U1.dtr1_tnow1 -> J3.p1 as "DTR1"
@@ -207,7 +207,7 @@ board "usb_uart" {
   connect R6.p1 -> U1.cts1 as "CTS1_MCU"
 
   connect U1.txd0 -> U3.di as "TXD0"
-  connect U1.txd0 -> R4.p1 as "TXD0"
+  connect U1.txd0 -> D4.cathode as "TXD0"
   connect U1.rxd0 -> U3.ro as "RXD0"
   connect U1.dtr0_tnow0 -> U3.de as "TNOW0"
   connect U1.dtr0_tnow0 -> U3.re_n as "TNOW0"
