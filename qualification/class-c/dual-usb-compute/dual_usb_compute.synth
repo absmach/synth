@@ -7,16 +7,14 @@
 //
 // This file used to carry a STATED LIMITATION saying SynthSpec had no
 // length-matching or skew syntax, so the intra-pair skew and inter-pair
-// length budgets #40 asks about could not be declared. Both now exist:
-// `max_skew` on a pair and `match_length` on a netclass, added for this
-// case. The budgets below are what that limitation was standing in for.
+// length budgets #40 asks about could not be declared. Both now exist, both
+// spelled `max_skew`: on a `diff_pair` it bounds that pair's own two halves,
+// on a `netclass` it bounds the spread across the class's members, longest
+// minus shortest. The budgets below are what that limitation stood in for.
 //
-// What is still true is that nothing in this build measures them. The
-// checks that sum a class's members from emitted copper, and compare a
-// pair's two halves, live in the independent routing validator, which is
-// not part of this build — see the capability descriptor's `unverified`
-// list. These budgets are preserved into the exported KiCad net classes and
-// are not yet verified against copper.
+// Both are measured against routed copper — E-SYNTH-DRC-014 for the pair and
+// E-SYNTH-DRC-019 for the group — so they are checked rather than merely
+// preserved into the exported KiCad net classes.
 board "dual_usb_compute" {
     layers 6
     manufacturer "jlcpcb"
@@ -42,16 +40,19 @@ board "dual_usb_compute" {
     netclass "SS" {
       trace_width 0.15mm
       clearance 0.2mm
-      match_length 0.2mm
+      // The group budget: the four SuperSpeed nets held to one length within
+      // this tolerance. The same word on a `diff_pair` below is the per-pair
+      // budget, bounding one pair's own two halves; they are different
+      // questions and E-SYNTH-DRC-019 and -014 answer them separately.
+      max_skew 0.2mm
     }
 
     netclass "USB" {
       trace_width 0.2mm
       clearance 0.2mm
       // The inter-pair budget: all four USB nets held to one length within
-      // this tolerance. A `diff_pair`'s `max_skew` cannot express it — that
-      // one bounds a single pair's own two halves.
-      match_length 0.5mm
+      // this tolerance.
+      max_skew 0.5mm
     }
 
     netclass "QSPI" {

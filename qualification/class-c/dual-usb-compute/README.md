@@ -33,12 +33,12 @@ expansion header, on a six-layer stackup.
 
 ## Netclasses
 
-| Class | Track   | Clearance | Match length | Nets |
-|-------|---------|-----------|--------------|------|
-| SS    | 0.15 mm | 0.2 mm    | 0.2 mm       | 4    |
-| USB   | 0.2 mm  | 0.2 mm    | 0.5 mm       | 4    |
-| QSPI  | 0.2 mm  | 0.2 mm    | —            | 6    |
-| PWR   | 0.8 mm  | 0.25 mm   | —            | 1    |
+| Class | Track   | Clearance | Group skew | Nets |
+|-------|---------|-----------|------------|------|
+| SS    | 0.15 mm | 0.2 mm    | 0.2 mm     | 4    |
+| USB   | 0.2 mm  | 0.2 mm    | 0.5 mm     | 4    |
+| QSPI  | 0.2 mm  | 0.2 mm    | —          | 6    |
+| PWR   | 0.8 mm  | 0.25 mm   | —          | 1    |
 
 ## Differential pairs
 
@@ -49,8 +49,10 @@ expansion header, on a six-layer stackup.
 | `U2_usb_dp` / `U2_usb_dn` | USB 2.0 host   | 12 Mb/s | 90 Ω      | 0.15 mm  | tight  |
 | `U4_usb_dp` / `U4_usb_dn` | USB 2.0 device | 12 Mb/s | 90 Ω      | 0.15 mm  | tight  |
 
-Skew is the budget between a pair's own two halves; `match_length` on a class
-is the budget across its nets. At FR4 velocity 0.1 mm is about 0.7 ps.
+A pair's skew is the budget between its own two halves, checked by
+E-SYNTH-DRC-014; a class's group skew is the spread across its nets, longest
+minus shortest, checked by E-SYNTH-DRC-019. Both are measured on routed copper.
+At FR4 velocity 0.1 mm is about 0.7 ps.
 
 ## Notable parts
 
