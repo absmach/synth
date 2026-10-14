@@ -1303,7 +1303,7 @@ fn capability_descriptor() -> serde_json::Value {
         .collect::<Vec<_>>();
 
     serde_json::json!({
-        "schema_version": "1.1",
+        "schema_version": "1.2",
         "compiler": {
             "name": "synth",
             "version": env!("CARGO_PKG_VERSION")
@@ -1322,11 +1322,12 @@ fn capability_descriptor() -> serde_json::Value {
         "manufacturer_profiles": [
             {"name": "jlc-standard", "layers": [2, 4], "min_trace_width_mm": 0.127, "min_clearance_mm": 0.127, "min_drill_mm": 0.3},
             {"name": "pcbway-standard", "layers": [2, 4], "min_trace_width_mm": 0.15, "min_clearance_mm": 0.15, "min_drill_mm": 0.3},
-            {"name": "oshpark-4layer", "layers": [4], "min_trace_width_mm": 0.125, "min_clearance_mm": 0.125, "min_drill_mm": 0.25}
+            {"name": "oshpark-4layer", "layers": [4], "min_trace_width_mm": 0.125, "min_clearance_mm": 0.125, "min_drill_mm": 0.25},
+            {"name": "jlc-filled-via", "layers": [2, 4], "min_trace_width_mm": 0.127, "min_clearance_mm": 0.127, "min_drill_mm": 0.3, "offers": ["via_in_pad"]}
         ],
         "language": {
             "syntax_version": "1.0",
-            "statements": ["board", "import", "layers", "manufacturer", "revision", "schematic", "component", "connect", "net", "power", "module", "interface", "bus", "use", "bind", "netclass", "keepout", "stackup", "group", "sheet", "variant"],
+            "statements": ["board", "import", "layers", "manufacturer", "revision", "schematic", "component", "connect", "net", "power", "module", "interface", "bus", "use", "bind", "netclass", "keepout", "stackup", "requires", "group", "sheet", "variant"],
             "attributes": ["company", "legends", "notes", "dnp", "prefix", "param", "as", "class", "diff_pair", "impedance", "trace_width", "clearance", "radius", "copper", "insulator", "er", "material", "value", "tolerance", "voltage", "power_rating", "dielectric", "description"],
             "endpoint_forms": ["component.pin", "named_net", "bus.member"]
         },
@@ -4728,10 +4729,15 @@ fn build_route_request(
             .unwrap_or_else(|| "jlc-standard".to_string()),
     );
     // After the floor, so the capability is read from the profile this board
-    // actually names. Anything unmet has already failed ERC with
-    // E-SYNTH-PROCESS-002, so reaching here means the board was forced past
-    // it; the gate below will still refuse the copper, and saying why beats
-    // letting it read as an ordinary routing failure.
+    // actually names.
+    //
+    // This warning is the only place an unmet requirement surfaces on these
+    // paths. `synth route` and `synth drc` reach here without running ERC —
+    // `route_design` writes parse and lower diagnostics only — so
+    // E-SYNTH-PROCESS-002 is not guaranteed upstream and the requirement
+    // would otherwise be granted silently or not at all. The gate below will
+    // still refuse the copper; saying why beats letting it read as an
+    // ordinary routing failure.
     for unmet in request.use_board_process_requirements(board) {
         eprintln!(
             "warning: board requires `{}`, which profile `{}` does not offer \
