@@ -705,6 +705,7 @@ impl NetClass {
     }
 }
 
+
 /// Escape engine for a package's pins.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -756,7 +757,6 @@ pub struct EscapeIntent {
     pub off: bool,
     pub source_span: Span,
 }
-
 impl Component {
     /// Look up a pin by name on the resolved part.
     pub fn find_pin(&self, name: &str) -> Option<(PinId, &synth_registry::Pin)> {

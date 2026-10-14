@@ -196,7 +196,7 @@ pub fn build_command(
     // out the two 0.5 mm connectors and skipped the 121-ball BGA, because
     // 0.8 mm clears the 0.687 mm two vias need between centres. Needing an
     // escape and failing one are different questions.
-    let candidates = crate::escape::grid_arrays_in_baseline(request);
+    let candidates = escape_plan(request);
     if !candidates.is_empty() {
         // Escape with the smallest via the declared process permits, not with
         // the engine's default. Measured without this, the escape placed 11
@@ -214,26 +214,14 @@ pub fn build_command(
             "--escape-via-size".to_string(),
             format!("{:.4}", synth_ir::Length(diameter_nm).to_mm()),
         ]);
-        for refdes in candidates {
-            args.extend(["--fanout-component".to_string(), refdes]);
+        for spec in candidates {
+            args.extend(["--fanout-component".to_string(), spec]);
         }
     }
     if let Some(ordering) = &options.ordering {
         args.extend(["--ordering".to_string(), ordering.clone()]);
     }
     args
-}
-
-/// Removes the candidate a previous run left in the output directory, with the
-/// project, project-local and rules files the engine wrote beside it. The engine
-/// reads the project beside its output as its starting rules, so a leftover one
-/// from an earlier export of an earlier revision decides how this export routes:
-/// the same source gave 70 vias in a reused directory and 66, three of them in
-/// pads, in a fresh one.
-fn remove_previous_candidate(candidate: &Path) {
-    for extension in ["kicad_pcb", "kicad_pro", "kicad_prl", "kicad_dru"] {
-        let _ = std::fs::remove_file(candidate.with_extension(extension));
-    }
 }
 
 /// Which packages to escape, and how, as `REFDES[:method[:layers]]`.

@@ -1290,13 +1290,7 @@ const UNSUPPORTED: &[CapabilityLimit] = &[
     ),
     (
         "escape_pattern_and_direction",
-        // No `constraint`: a limit names the attribute it qualifies, and there
-        // is none to name here. `component.escape` exists — it is listed in
-        // `routing_constraints` below — but this limit is not about `escape`.
-        // It is about pattern and direction, which no attribute declares, so
-        // pointing at `escape` would claim this limit qualifies something the
-        // block can express.
-        None,
+        Some("component.escape"),
         "A component's `escape` block picks the engine (`channel`, `underpad`), limits the \
          copper layers, or turns the escape off. What it cannot express is a pattern or a \
          direction: the engine's `--primary-escape`, `--force-escape-direction` and \
@@ -1451,7 +1445,7 @@ fn capability_descriptor() -> serde_json::Value {
                 },
                 "profiles_offering_via_in_pad": ["jlc-filled-via", "jlc-advanced"],
                 "gate": "E-SYNTH-PROCESS-002: a requirement the declared tier does not offer is an error, so a requirement is never a permission on its own",
-                "via_geometry": "netclass via_diameter / via_drill reach the exported net class; E-SYNTH-PROCESS-003 checks both against the profile's drill and annular-ring floors",
+                "via_geometry": "netclass via_diameter / via_drill reach the exported net class; E-SYNTH-PROCESS-003 checks both against the profile's drill and annular-ring floors. Which engine escapes a package, and onto which layers, is declarable too; see the escape entry",
                 "escape": "dense grid arrays (three pad rows and three columns, at or below 1.3 mm pitch) are escaped before routing by KiCadRoutingTools, with the escape via sized from the declared process floor and the fabrication tier pinned to it. A component's `escape { method … layers … }` block overrides the engine and layers, and `escape { off }` leaves a package to the general router; pattern and direction are not declarable, see the escape_pattern_and_direction limit",
                 "override": "--krt-allow-via-in-pad permits via-in-pad in the fabrication gate without a declared requirement or a capable tier; it is an operator taking responsibility for one panel, not a process answer"
             },
