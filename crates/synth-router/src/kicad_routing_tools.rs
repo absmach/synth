@@ -195,6 +195,16 @@ pub fn build_command(
             format!("{:.4}", synth_ir::Length(drill_nm).to_mm()),
             "--escape-via-size".to_string(),
             format!("{:.4}", synth_ir::Length(diameter_nm).to_mm()),
+            // And the clearance the escape routes to, for the same reason the
+            // via is sized here. Left unsaid, the adapter's own 0.1 mm default
+            // applies, which is under both this floor and the engine's 0.25 mm
+            // — an escape squeezed through a channel the board never agreed
+            // to, and the independent gate then rejects the copper for it.
+            "--escape-clearance".to_string(),
+            format!(
+                "{:.4}",
+                synth_ir::Length(request.policy.min_clearance_nm).to_mm()
+            ),
         ]);
         for spec in candidates {
             args.extend(["--fanout-component".to_string(), spec]);
@@ -665,6 +675,9 @@ mod tests {
         // them under the fabrication minimum.
         assert!(joined.contains("--escape-via-drill 0.3000"), "{joined}");
         assert!(joined.contains("--escape-via-size 0.5600"), "{joined}");
+        // And the clearance, which the adapter would otherwise default to
+        // 0.1 mm — under this board's own 0.127 mm floor.
+        assert!(joined.contains("--escape-clearance 0.1270"), "{joined}");
     }
 
     /// A board with nothing dense on it must not ask for an escape at all,
