@@ -977,6 +977,8 @@ mod tests {
             plane: false,
             max_length: None,
             max_skew: Some(synth_ir::Length::from_mm(1.0)),
+            via_diameter: None,
+            via_drill: None,
             source_span: synth_diagnostics::Span::new(0, 0),
         }
     }
@@ -1021,6 +1023,8 @@ mod tests {
             plane: false,
             max_length: None,
             max_skew: None,
+            via_diameter: None,
+            via_drill: None,
             source_span: synth_diagnostics::Span::new(0, 0),
         });
         let net = board.nets[0].id;

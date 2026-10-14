@@ -1345,6 +1345,102 @@ impl Parser {
         })
     }
 
+    /// One attribute inside a `netclass { … }` body.
+    ///
+    /// Lifted out of [`Self::parse_netclass`] so the loop there stays short
+    /// enough to read: the body is a flat list of attributes and grows by one
+    /// arm every time the language gains one.
+    ///
+    /// `None` when the token is not an attribute, having already reported it.
+    fn parse_netclass_attribute(&mut self) -> Option<NetclassAttr> {
+        match self.peek_kind() {
+            TokenKind::KwTraceWidth => {
+                self.bump();
+                if let Some(v) = self.expect_value() {
+                    return Some(NetclassAttr::TraceWidth(v));
+                }
+            }
+            TokenKind::KwClearance => {
+                self.bump();
+                if let Some(v) = self.expect_value() {
+                    return Some(NetclassAttr::Clearance(v));
+                }
+            }
+            TokenKind::KwImpedance => {
+                self.bump();
+                if let Some(v) = self.expect_value() {
+                    return Some(NetclassAttr::Impedance(v));
+                }
+            }
+            // `color`, `current` and `plane` are parsed contextually
+            // (identifiers, not reserved keywords) so existing designs
+            // that use the words as names keep parsing.
+            TokenKind::Ident(name) if name == "current" => {
+                self.bump();
+                if let Some(v) = self.expect_value() {
+                    return Some(NetclassAttr::Current(v));
+                }
+            }
+            TokenKind::Ident(name) if name == "plane" => {
+                self.bump();
+                return Some(NetclassAttr::Plane);
+            }
+            TokenKind::Ident(name) if name == "max_length" => {
+                self.bump();
+                if let Some(v) = self.expect_value() {
+                    return Some(NetclassAttr::MaxLength(v));
+                }
+            }
+            // `max_skew` is a reserved keyword (it is also a `diff_pair`
+            // attribute), so the lexer emits `KwMaxSkew`, never
+            // `Ident("max_skew")`. Matching the identifier here would be
+            // dead code and the attribute would fall through to the
+            // catch-all.
+            TokenKind::KwMaxSkew => {
+                self.bump();
+                if let Some(v) = self.expect_value() {
+                    return Some(NetclassAttr::MaxSkew(v));
+                }
+            }
+            // Escape geometry. Contextual, unlike `max_skew` above, because
+            // these two are not reserved: a design already using the words
+            // as names keeps parsing.
+            TokenKind::Ident(name) if name == "via_diameter" => {
+                self.bump();
+                if let Some(v) = self.expect_value() {
+                    return Some(NetclassAttr::ViaDiameter(v));
+                }
+            }
+            TokenKind::Ident(name) if name == "via_drill" => {
+                self.bump();
+                if let Some(v) = self.expect_value() {
+                    return Some(NetclassAttr::ViaDrill(v));
+                }
+            }
+            TokenKind::Ident(name) if name == "color" => {
+                self.bump();
+                if let Some(hex) = self.expect_string(
+                    "E-SYNTH-PARSE-002",
+                    "expected colour hex string (e.g. \"#c2410c\")",
+                ) {
+                    return Some(NetclassAttr::Color(hex));
+                }
+            }
+            _ => {
+                self.emit(
+                    self.peek().span,
+                    "E-SYNTH-PARSE-019",
+                    "unexpected attribute inside netclass",
+                    "`trace_width <value><unit>`, `clearance <value><unit>`, `impedance <value><unit>`, `current <value><unit>`, `max_length <value><unit>`, `max_skew <value><unit>`, `via_diameter <value><unit>`, `via_drill <value><unit>`, `plane`, or `color \"#rrggbb\"`",
+                    self.describe_current(),
+                    None,
+                );
+                self.bump();
+            }
+        }
+        None
+    }
+
     fn parse_netclass(&mut self) -> Option<NetclassStmt> {
         let start = self.peek().span.byte_start;
         self.bump(); // consume `netclass`
@@ -1367,91 +1463,11 @@ impl Parser {
         let mut attrs = Vec::new();
         loop {
             self.skip_error_tokens();
-            match self.peek_kind() {
-                TokenKind::RBrace | TokenKind::Eof => break,
-                TokenKind::KwTraceWidth => {
-                    self.bump();
-                    if let Some(v) = self.expect_value() {
-                        attrs.push(NetclassAttr::TraceWidth(v));
-                    }
-                }
-                TokenKind::KwClearance => {
-                    self.bump();
-                    if let Some(v) = self.expect_value() {
-                        attrs.push(NetclassAttr::Clearance(v));
-                    }
-                }
-                TokenKind::KwImpedance => {
-                    self.bump();
-                    if let Some(v) = self.expect_value() {
-                        attrs.push(NetclassAttr::Impedance(v));
-                    }
-                }
-                // `color`, `current` and `plane` are parsed contextually
-                // (identifiers, not reserved keywords) so existing designs
-                // that use the words as names keep parsing.
-                TokenKind::Ident(name) if name == "current" => {
-                    self.bump();
-                    if let Some(v) = self.expect_value() {
-                        attrs.push(NetclassAttr::Current(v));
-                    }
-                }
-                TokenKind::Ident(name) if name == "plane" => {
-                    self.bump();
-                    attrs.push(NetclassAttr::Plane);
-                }
-                TokenKind::Ident(name) if name == "max_length" => {
-                    self.bump();
-                    if let Some(v) = self.expect_value() {
-                        attrs.push(NetclassAttr::MaxLength(v));
-                    }
-                }
-                // `max_skew` is a reserved keyword (it is also a `diff_pair`
-                // attribute), so the lexer emits `KwMaxSkew`, never
-                // `Ident("max_skew")`. Matching the identifier here would be
-                // dead code and the attribute would fall through to the
-                // catch-all.
-                TokenKind::KwMaxSkew => {
-                    self.bump();
-                    if let Some(v) = self.expect_value() {
-                        attrs.push(NetclassAttr::MaxSkew(v));
-                    }
-                }
-                // Escape geometry. Contextual, unlike `max_skew` above, because
-                // these two are not reserved: a design already using the words
-                // as names keeps parsing.
-                TokenKind::Ident(name) if name == "via_diameter" => {
-                    self.bump();
-                    if let Some(v) = self.expect_value() {
-                        attrs.push(NetclassAttr::ViaDiameter(v));
-                    }
-                }
-                TokenKind::Ident(name) if name == "via_drill" => {
-                    self.bump();
-                    if let Some(v) = self.expect_value() {
-                        attrs.push(NetclassAttr::ViaDrill(v));
-                    }
-                }
-                TokenKind::Ident(name) if name == "color" => {
-                    self.bump();
-                    if let Some(hex) = self.expect_string(
-                        "E-SYNTH-PARSE-002",
-                        "expected colour hex string (e.g. \"#c2410c\")",
-                    ) {
-                        attrs.push(NetclassAttr::Color(hex));
-                    }
-                }
-                _ => {
-                    self.emit(
-                        self.peek().span,
-                        "E-SYNTH-PARSE-019",
-                        "unexpected attribute inside netclass",
-                        "`trace_width <value><unit>`, `clearance <value><unit>`, `impedance <value><unit>`, `current <value><unit>`, `max_length <value><unit>`, `max_skew <value><unit>`, `via_diameter <value><unit>`, `via_drill <value><unit>`, `plane`, or `color \"#rrggbb\"`",
-                        self.describe_current(),
-                        None,
-                    );
-                    self.bump();
-                }
+            if matches!(self.peek_kind(), TokenKind::RBrace | TokenKind::Eof) {
+                break;
+            }
+            if let Some(attr) = self.parse_netclass_attribute() {
+                attrs.push(attr);
             }
         }
         if matches!(self.peek_kind(), TokenKind::RBrace) {

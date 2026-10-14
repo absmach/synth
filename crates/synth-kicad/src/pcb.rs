@@ -3486,6 +3486,7 @@ mod tests {
             trace_width: Some(Length::from_mm(0.2)),
             clearance: Some(Length::from_mm(0.2)),
             max_length: None,
+            max_skew: None,
             via_diameter: Some(Length::from_mm(0.45)),
             via_drill: Some(Length::from_mm(0.2)),
             color: None,

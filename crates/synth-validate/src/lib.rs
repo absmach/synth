@@ -4152,6 +4152,7 @@ mod tests {
             trace_width: None,
             clearance: None,
             max_length: None,
+            max_skew: None,
             via_diameter: diameter_mm.map(synth_ir::Length::from_mm),
             via_drill: drill_mm.map(synth_ir::Length::from_mm),
             color: None,
