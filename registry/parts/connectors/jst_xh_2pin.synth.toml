@@ -8,8 +8,11 @@ mpn = "S2B-XH-A-1(LF)(SN)"
 lcsc_pn = "C163035"
 
 [footprint_dimensions]
-width_mm = 0.5
-height_mm = 5.5
+# Courtyard extent of the stock footprint. The previous values were a
+# single pad's size, not the connector body, which is what the
+# pin-to-footprint check compares against.
+width_mm = 8.4
+height_mm = 12.5
 courtyard_margin_mm = 0.25
 # Side-entry (horizontal) footprint: the housing extends toward +y from the
 # pad row and the plug enters from that end, read from the footprint outline.
