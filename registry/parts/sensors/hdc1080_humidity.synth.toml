@@ -4,7 +4,7 @@ description = "TI HDC1080 humidity/temp sensor, I²C"
 mpn = "HDC1080DMBR"
 lcsc_pn = "C80854"
 kicad_symbol = "Sensor_Humidity:HDC1080"
-kicad_footprint = "Package_SON:WSON-6-1EP_3x3mm_P0.95mm_EP1.5x2.4mm"
+kicad_footprint = "Package_SON:Texas_PWSON-N6"
 
 [footprint_dimensions]
 width_mm = 3.0
@@ -41,6 +41,25 @@ number = "6"
 electrical_type = "bidirectional"
 capabilities = ["i2c_scl"]
 required = true
+
+# Pins 3, 4 and the die-attach pad carry copper in `Texas_PWSON-N6`, so they
+# are declared: a thermal pad left out of the pin map is a short waiting to
+# happen. All three are no-connects on the stock `Sensor_Humidity:HDC1080`
+# symbol, and the DAP is left floating rather than tied.
+[[pins]]
+name = "nc"
+number = "3"
+electrical_type = "do_not_connect"
+
+[[pins]]
+name = "nc_2"
+number = "4"
+electrical_type = "do_not_connect"
+
+[[pins]]
+name = "dap"
+number = "7"
+electrical_type = "do_not_connect"
 
 [[required_decoupling]]
 net = "vdd"
