@@ -7,7 +7,7 @@ Revision B routes with 0 open nets and passes Synth's release gate (`release_rea
 
 ## Reproduce
 
-Run from the repository root. Use Synth `main` from 2026-10-13 or later: it includes PR #139 (fabrication note, merged as `de4a5b2`) and PR #140 (RS-485 checks, merged as `bb9ae95`). The board's reference-label positions depend on PR #144 (label placement, merged), its project file and DRC rules on PR #154 (manufacturer clearances in the project file, not merged yet; without it a KiCad re-save shows 63 clearance errors, see B9), the outline round the mounting holes on PR #162 (not merged yet; without it the four M3 holes grow the board by about 7 mm in each direction), the ground via beside every ground pad on PR #175 (not merged yet) and the copper keepout under the screw heads, with the corner vias moved clear, on PR #176 (not merged yet). Use an empty `XDG_DATA_HOME` so a user registry cannot shadow parts.
+Run from the repository root. Use Synth `main` from 2026-10-15 or later (commit 50a165c or newer). It includes PR #139 (fabrication note), PR #140 (RS-485 checks), PR #144 and #173 (label placement), PR #154 (manufacturer clearances in the project file; without it a KiCad re-save shows 63 clearance errors, see B9), PR #162 (outline round the mounting holes; without it the four M3 holes grow the board by about 7 mm in each direction), PR #175 (a ground via beside every ground pad) and PR #176 (copper keepout under the screw heads, with the corner vias moved clear). All of them are merged. Use an empty `XDG_DATA_HOME` so a user registry cannot shadow parts.
 
 ```
 export XDG_DATA_HOME=$(mktemp -d)
@@ -19,7 +19,7 @@ kicad-cli sch erc --severity-all --format json <dir>/usb_uart.kicad_sch
 (cd qualification/class-b/usb-uart && sha256sum -c SHA256SUMS)
 ```
 
-Tool versions used: KiCad 10.0.7, FreeRouting 2.4.1 on OpenJDK 25.0.4.1, Synth `main` f931fd1 (includes PR #139, #140 and #144) plus PR #154 (0f074f5), PR #162 (e845714), PR #175 (b6ad2ed) and PR #176 (3b2b32f), none merged, on 2026-10-14. Routing is not bit-for-bit repeatable across placements: small placement changes gave different results (see A5); the same inputs gave the same board on repeat.
+Tool versions used: KiCad 10.0.7, FreeRouting 2.4.1 on OpenJDK 25.0.4.1, Synth `main` 50a165c (includes PR #139, #140, #144, #154, #162, #173, #175 and #176), on 2026-10-15. Routing is not bit-for-bit repeatable across placements: small placement changes gave different results (see A5); the same inputs gave the same board on repeat.
 
 ## Artifact hashes
 
@@ -29,11 +29,11 @@ Tool versions used: KiCad 10.0.7, FreeRouting 2.4.1 on OpenJDK 25.0.4.1, Synth `
 | --- | --- |
 | `usb_uart.synth` | `b41775b3dee135611e45b8d79d257fb734d0dc58cd08a8e9d1400c4ce0df8b49` |
 | `usb_uart.placement.layout.toml` | `d38408e9d0e080ebdd91577fdf8b47b0fe71a93a8561e5c9f9040a5ed5197230` |
-| `kicad/usb_uart.kicad_pcb` | `ce5ac860fe052e89d666a4793214393d4e7d26dfcf38b924669f7bbdfec4d55f` |
+| `kicad/usb_uart.kicad_pcb` | `c95062da0d3ab3bc2b98ae0177b1ad570b0fc7a9a63adf5242f8b232e30c8369` |
 | `kicad/usb_uart.kicad_sch` | `fdd0739cb4629c12630aba6acf28fbd38a6fcd71603f17c41c8ffef3dd43cfe1` |
 | `kicad/bom.csv` | `5852e79981c28ef46446095c433feff0890cfda97c7a32e97357a0c309aeede8` |
-| `reports/release.json` | `0b242bfb02b1415df8f9765d095048400acd23c48202846cc5add17d33180dff` |
-| `reports/usb_uart.drc.json` | `2cf1328c907d0dd5a24ce387f4007f6f1fabc5a7f3dd285977f1fe93e46603a8` |
+| `reports/release.json` | `655a0bf264e62dd82deae093e555563097670c61833c0047a0d871d16cd60fd4` |
+| `reports/usb_uart.drc.json` | `4b9a0d4679ded4f13ee258c3592aa8bf2cca0b6c2f2100b2c5e74ed5111ed494` |
 
 `reports/` holds the files as captured, so they contain the absolute paths of the machine that produced them, and `engine_version` in `release.json` is a jar path.
 

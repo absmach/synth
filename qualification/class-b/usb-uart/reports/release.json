@@ -1,7 +1,7 @@
 {
   "schema_version": "synth.release.v1",
   "tool_version": "synth-cli 0.1.1",
-  "input": "/tmp/claude-1000/-home-steve-work-synth/1b15c859-243c-47c6-88fe-751b8f29b86c/scratchpad/w_d1/usb_uart.synth",
+  "input": "/tmp/claude-1000/-home-steve-work-synth/1b15c859-243c-47c6-88fe-751b8f29b86c/scratchpad/reroute1/usb_uart.synth",
   "fab_requested": false,
   "production_status": "production",
   "release_ready": true,
@@ -65,10 +65,10 @@
   ],
   "routing": {
     "engine": "freerouting",
-    "engine_version": "/home/steve/work/synth-103-new/tools/freerouting/freerouting-2.4.1.jar",
+    "engine_version": "/home/steve/work/synth-103/tools/freerouting/freerouting-2.4.1.jar",
     "state": "routed",
-    "input_hash": "ecd75815ea1f04817ff3574c96aa8426b16a50b12de261c617d849aba89e9a86",
-    "run_record": "/tmp/claude-1000/-home-steve-work-synth/1b15c859-243c-47c6-88fe-751b8f29b86c/scratchpad/w_d1/out/usb_uart.routing.json",
+    "input_hash": "aa534473f5e8cb3488d5108d81431c781cd1e36cd37f7c2b44f0fca97fe01359",
+    "run_record": "/tmp/claude-1000/-home-steve-work-synth/1b15c859-243c-47c6-88fe-751b8f29b86c/scratchpad/reroute1/out/usb_uart.routing.json",
     "fabrication_notes": [
       "via at (23.800, 20.100) mm U1.25: via-in-pad, order with filled and capped vias"
     ]
