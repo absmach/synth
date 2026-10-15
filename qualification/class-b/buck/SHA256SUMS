@@ -1,0 +1,19 @@
+# sha256 of the design artifacts. Check: grep -v '^#' SHA256SUMS | sha256sum -c -   (from this folder)
+# Written by: synth export-kicad buck.synth --out OUT --allow-unverified-parts --validate-erc --router free-routing (see QUALIFICATION.md)
+26f162ecff18fd997af69431fc21b7c9a42fb53876860d2e137242c1c6710d64  buck.placement.layout.toml
+f723600457999808dee340bcdc7b75850056e3df1d4cefd5c2686faf1cdf5796  buck.synth
+928ba7985c9722f259d56a6a2c491b5c4aad4dece47b0402bf1c79b408c60c06  buck_neg_fb_sw.synth
+b07f6750cc5dce43db67639116d1701fb0df6d3abaee5bc73fb04bc0f2f160a9  images/pcb-3d-bottom.png
+8232f54883c833fdd914a1aa15ea9b459a24e496734b6e340b9a14b679a8b837  images/pcb-3d-top.png
+6bcdcd49cdd480d13f13a3ca4052ab3149f22614b13f9f347a6a9443c0b9e50d  kicad/bom.csv
+b0aaaa111a15b60020b28ac8cf2cc077bb83dbb62d7058657c5872f6aa779bbb  kicad/buck.kicad_pcb
+dae4b37a5b33b8d666d0260ccfe883e2ee5c0afc7e94d0fde02b1f4f307605c5  kicad/buck.kicad_pro
+47b7451740a8ebb606ed427d4abac50329bff12a97c7c0078efa7dc5b1d6156c  kicad/buck.kicad_sch
+2d4857192b7deef95f7d47c91cdd6183e8185dba9e154f78d4f5ba194db41b2b  kicad/buck.kicad_sym
+3745652df73754a099fa5e84d6add1d3a31c694e8c638aff1f285291b5f7da70  kicad/pnp.csv
+ebd9e5f25e9d61f9aed1c7afc919602a3995d0b9d02972f7f6a10670ad836b78  pad_gaps.py
+65f2abd31387ed9775dd4b2fd394aae7e68f6bf0f9f724bc4c4970ad78d99ada  reports/buck.connectivity.json
+bad2a05aa9a3a61b9aaca18aea569b1fe2214653427441b2ba45a361de00c77c  reports/buck.kicad-drc.json
+79d31770edbbb12f3ee60e52d8489c181de1414050f30915a8350ae56ea41caf  reports/buck.kicad-erc.json
+56a863d8ab5498e5d912197cfd370dd52dc3f745cf87ffa5947f7523b5c69435  reports/registry-qualify.txt
+34aaa8c9fb737dac9eedfd1e2689f6f9c8a749348d0d54ae1954240bc24a00ea  reports/release.json

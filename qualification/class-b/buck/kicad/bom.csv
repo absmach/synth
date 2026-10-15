@@ -1,0 +1,21 @@
+refdes,value,kind,description,kicad_symbol,kicad_footprint,lcsc_pn,mpn
+C1,47uF,capacitor,"Generic 8 x 10 mm SMD aluminium electrolytic, polarised (pin 1 is +), any value, 50 V class",Device:C_Polarized,Capacitor_SMD:CP_Elec_8x10,,
+C2,10uF,capacitor,"Generic 1206 ceramic capacitor, any value",Device:C,Capacitor_SMD:C_1206_3216Metric,,
+C3,100nF,capacitor,"Generic 0603 MLCC, X7R/X5R, any value",Device:C,Capacitor_SMD:C_0603_1608Metric,,
+C4,100nF,capacitor,"Generic 0603 MLCC, X7R/X5R, any value",Device:C,Capacitor_SMD:C_0603_1608Metric,,
+C5,22uF,capacitor,"Generic 1206 ceramic capacitor, any value",Device:C,Capacitor_SMD:C_1206_3216Metric,,
+C6,22uF,capacitor,"Generic 1206 ceramic capacitor, any value",Device:C,Capacitor_SMD:C_1206_3216Metric,,
+C7,56pF,capacitor,"Generic 0603 MLCC, X7R/X5R, any value",Device:C,Capacitor_SMD:C_0603_1608Metric,,
+D1,SS36,diode,"Vishay SS36 60 V 3 A Schottky rectifier, SMC (DO-214AB), for reverse-polarity blocking",Diode:SS36,Diode_SMD:D_SMC,,SS36
+D2,SMBJ26A,diode,"Vishay SMBJ26A 600 W unidirectional TVS, SMB (DO-214AA). max_voltage_v is the 26 V standoff VWM, not a clamp or abs max: VBR 28.9-31.9 V at 1 mA, VC 42.1 V at 14.3 A",Device:D_Zener,Diode_SMD:D_SMB,,SMBJ26A
+D3,PWR,led,"Lite-On LTST-C190KGKT green AlInGaP LED, 0603, Vf 1.9 to 2.4V at 20mA",Device:LED,LED_SMD:LED_0603_1608Metric,,LTST-C190KGKT
+F1,1.1A_PTC,fuse,"Bourns MF-MSMF110/33X resettable PTC fuse, 1812. max_current_ma is Ihold 1.1 A at 23 C (0.63 A at 70 C, 0.50 A at 85 C); Itrip 2.2 A, Vmax 33 V",Device:Polyfuse,Fuse:Fuse_1812_4532Metric,,MF-MSMF110/33X
+J1,24V_IN,connector,"JST XH 2.5 mm pitch 2-pin vertical header B2B-XH-A, 250 V / 3 A per JST XH sheet",Connector_Generic:Conn_01x02,Connector_JST:JST_XH_B2B-XH-A_1x02_P2.50mm_Vertical,,B2B-XH-A
+J2,3V3_OUT,connector,"JST XH 2.5 mm pitch 2-pin vertical header B2B-XH-A, 250 V / 3 A per JST XH sheet",Connector_Generic:Conn_01x02,Connector_JST:JST_XH_B2B-XH-A_1x02_P2.50mm_Vertical,,B2B-XH-A
+L1,10uH,inductor,"Bourns SRN6045TA-100M 10 uH semi-shielded power inductor, 6.0 x 6.0 mm. Datasheet typ: Isat 4.6 A (L drops 30%), Irms 3.2 A (max_current_ma is Irms), DCR 52 mOhm +-20%",Device:L,Inductor_SMD:L_Bourns_SRN6045TA,,SRN6045TA-100M
+R_FB_B,22.1k,resistor,"Generic 0603 thick-film resistor, any value",Device:R_US,Resistor_SMD:R_0603_1608Metric,,
+R_FB_T,100k,resistor,"Generic 0603 thick-film resistor, any value",Device:R_US,Resistor_SMD:R_0603_1608Metric,,
+R_LED,470,resistor,"Generic 0603 thick-film resistor, any value",Device:R_US,Resistor_SMD:R_0603_1608Metric,,
+R_UV_B,100k,resistor,"Generic 0603 thick-film resistor, any value",Device:R_US,Resistor_SMD:R_0603_1608Metric,,
+R_UV_T,1.5M,resistor,"Generic 0603 thick-film resistor, any value",Device:R_US,Resistor_SMD:R_0603_1608Metric,,
+U1,TPS54202DDCR,regulator,"TI TPS54202 4.5-28 V input, 2 A synchronous step-down converter, 500 kHz, SOT-23-6 (DDC)",Regulator_Switching:TPS54202DDC,Package_TO_SOT_SMD:SOT-23-6,,TPS54202DDCR
