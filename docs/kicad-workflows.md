@@ -362,6 +362,21 @@ production approval.
 - Reference/Value fields must not collide with wires or each other
   (Synth auto-places them; check visually in an exported PDF).
 
+### Schematic quality score
+
+`python3 tools/schematic_quality.py board.kicad_sch` (needs `kicad-cli`)
+counts what the checklist above asks you to look for. It plots the schematic,
+takes the text boxes from the plot and the wires from the `.kicad_sch`, and
+prints: text pairs that overlap, texts with a wire through them, wire
+crossings, total wire length, how much of the rectangle the group boxes span
+they cover, and the share of 10 mm cells in the used area that hold a wire or
+text. `--json` prints the same as JSON.
+
+It is a floor, not a grade. A schematic can score zero on every count and still
+be badly grouped: it does not measure grouping, alignment, how far a part sits
+from its pin, or reading order. The numbers for the USB-C dual UART board
+(absmach/synth#103) are in the pull request that added the tool.
+
 ---
 
 ## 2. Parts, BOM, and sourcing
