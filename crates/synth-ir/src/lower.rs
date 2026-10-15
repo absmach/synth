@@ -931,6 +931,7 @@ impl<'a> LowerCtx<'a> {
             nets.push(Net {
                 id,
                 name: orphan.name.clone(),
+                auto_named: false,
                 endpoints: Vec::new(),
                 netclass,
                 voltage,
@@ -1025,6 +1026,7 @@ impl<'a> LowerCtx<'a> {
         let name = distinct_names
             .first()
             .map_or_else(|| format!("net_{idx}"), |(n, _)| n.clone());
+        let auto_named = distinct_names.is_empty();
 
         let (netclass, voltage) =
             self.resolve_joins(&name, &info.classes, &info.voltages, known_classes);
@@ -1045,6 +1047,7 @@ impl<'a> LowerCtx<'a> {
         Net {
             id,
             name,
+            auto_named,
             endpoints: ir_endpoints,
             netclass,
             voltage,
@@ -2040,6 +2043,68 @@ mod tests {
         let net = &board.nets[0];
         assert_eq!(net.name, "+3V3");
         assert_eq!(net.endpoints.len(), 4);
+    }
+
+    #[test]
+    fn test_only_an_unnamed_net_is_auto_named() {
+        let board = lower_ok(
+            r#"board "b" {
+                component C1: capacitor "c_generic_0603"
+                component C2: capacitor "c_generic_0603"
+                component C3: capacitor "c_generic_0603"
+                component C4: capacitor "c_generic_0603"
+                connect C1.p1 -> C2.p1 as "net_7"
+                connect C3.p1 -> C4.p1
+            }"#,
+        );
+        let net_named = |name: &str| board.nets.iter().find(|n| n.name == name).unwrap();
+        assert!(
+            !net_named("net_7").auto_named,
+            "a declared net_7 is declared"
+        );
+        let unnamed = board
+            .nets
+            .iter()
+            .find(|n| n.auto_named)
+            .expect("one net the author never named");
+        assert!(unnamed.name.starts_with("net_"));
+        assert_eq!(board.nets.iter().filter(|n| n.auto_named).count(), 1);
+    }
+
+    #[test]
+    fn test_auto_named_survives_json() {
+        let board = lower_ok(
+            r#"board "b" {
+                component C1: capacitor "c_generic_0603"
+                component C2: capacitor "c_generic_0603"
+                component C3: capacitor "c_generic_0603"
+                component C4: capacitor "c_generic_0603"
+                connect C1.p1 -> C2.p1
+                connect C3.p1 -> C4.p1 as "net_7"
+            }"#,
+        );
+        for net in &board.nets {
+            let back: Net = serde_json::from_str(&serde_json::to_string(net).unwrap()).unwrap();
+            assert_eq!(&back, net, "{} must round-trip", net.name);
+        }
+        assert!(board
+            .nets
+            .iter()
+            .any(|n| n.name == "net_7" && !n.auto_named));
+    }
+
+    #[test]
+    fn test_legacy_json_without_auto_named_keeps_its_old_meaning() {
+        // Nets serialized before the flag existed were told apart by name:
+        // `net_<n>` was the placeholder.
+        let legacy = |name: &str| format!(r#"{{"id":0,"name":"{name}","endpoints":[]}}"#);
+        let net = |name: &str| serde_json::from_str::<Net>(&legacy(name)).unwrap();
+        assert!(net("net_7").auto_named, "legacy net_7 is the placeholder");
+        assert!(!net("SIG").auto_named);
+        assert!(!net("net_clk").auto_named);
+        // With the flag present it wins over the name.
+        let declared = r#"{"id":0,"name":"net_7","auto_named":false,"endpoints":[]}"#;
+        assert!(!serde_json::from_str::<Net>(declared).unwrap().auto_named);
     }
 
     #[test]

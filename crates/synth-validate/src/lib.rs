@@ -3995,6 +3995,7 @@ mod tests {
                 Net {
                     id: NetId(0),
                     name: "rail".into(),
+                    auto_named: false,
                     endpoints: vec![ep(0, 2), ep(1, 0)],
                     netclass: None,
                     voltage: None,
@@ -4002,6 +4003,7 @@ mod tests {
                 Net {
                     id: NetId(1),
                     name: "mid".into(),
+                    auto_named: false,
                     endpoints: vec![ep(1, 1), ep(2, 0)],
                     netclass: None,
                     voltage: None,
@@ -4009,6 +4011,7 @@ mod tests {
                 Net {
                     id: NetId(2),
                     name: "gnd".into(),
+                    auto_named: false,
                     endpoints: vec![ep(0, 1), ep(2, 1)],
                     netclass: None,
                     voltage: None,
@@ -4100,6 +4103,7 @@ mod tests {
                 Net {
                     id: NetId(0),
                     name: "vin_net".into(),
+                    auto_named: false,
                     endpoints: vec![ep(0, 0), ep(1, 0)],
                     netclass: None,
                     voltage: None,
@@ -4107,6 +4111,7 @@ mod tests {
                 Net {
                     id: NetId(1),
                     name: "gnd".into(),
+                    auto_named: false,
                     endpoints: vec![ep(0, 1), ep(1, 1)],
                     netclass: None,
                     voltage: None,
@@ -4310,6 +4315,7 @@ mod tests {
             nets: vec![Net {
                 id: NetId(0),
                 name: "n".into(),
+                auto_named: false,
                 endpoints: vec![ep(0, 0), ep(0, 1)],
                 netclass: None,
                 voltage: None,

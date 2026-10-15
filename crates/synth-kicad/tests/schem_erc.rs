@@ -255,6 +255,7 @@ fn decoupling_board() -> Board {
         nets: vec![Net {
             id: NetId(0),
             name: "VCC".to_string(),
+            auto_named: false,
             endpoints: vec![
                 NetEndpoint {
                     component: ComponentId(0),

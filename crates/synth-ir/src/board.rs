@@ -310,6 +310,7 @@ impl Default for PlacementConstraint {
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(from = "NetWire")]
 pub struct Net {
     pub id: NetId,
     /// User-declared name if available; otherwise auto-generated
@@ -319,6 +320,11 @@ pub struct Net {
     /// Declared via `net "NAME" { … }`, `power "NAME" …`, or
     /// `connect … as "NAME"`.
     pub name: String,
+    /// True when `name` is the `net_<n>` placeholder lowering gave a net the
+    /// author never named. A declared name that happens to look like that
+    /// placeholder (`as "net_7"`) has this false. Always written, so a
+    /// declared `net_7` is not read back as the placeholder.
+    pub auto_named: bool,
     pub endpoints: Vec<NetEndpoint>,
     /// Netclass this net is joined to (`class "PWR"` on the `net`,
     /// `power`, or `connect` statement). Must name a declared
@@ -515,6 +521,39 @@ pub struct NetClass {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub max_skew: Option<Length>,
     pub source_span: Span,
+}
+
+/// A `Net` as it is read: `auto_named` is missing from data written before
+/// the flag existed, when `net_<n>` was how the placeholder was told apart.
+#[derive(Deserialize)]
+struct NetWire {
+    id: NetId,
+    name: String,
+    #[serde(default)]
+    auto_named: Option<bool>,
+    endpoints: Vec<NetEndpoint>,
+    #[serde(default)]
+    netclass: Option<String>,
+    #[serde(default)]
+    voltage: Option<Voltage>,
+}
+
+impl From<NetWire> for Net {
+    fn from(w: NetWire) -> Self {
+        let auto_named = w.auto_named.unwrap_or_else(|| {
+            w.name
+                .strip_prefix("net_")
+                .is_some_and(|n| !n.is_empty() && n.bytes().all(|b| b.is_ascii_digit()))
+        });
+        Net {
+            id: w.id,
+            name: w.name,
+            auto_named,
+            endpoints: w.endpoints,
+            netclass: w.netclass,
+            voltage: w.voltage,
+        }
+    }
 }
 
 impl Component {

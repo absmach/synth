@@ -1019,7 +1019,9 @@ fn find_via_in_pad(board: &PcbBoard) -> Vec<String> {
             if !shares_layer(pad, &via.layers) {
                 continue;
             }
-            if point_distance(pad.at, via.at) <= pad.radius_nm() {
+            // The via's hole against the pad's real outline, not a disc
+            // around it (absmach/synth#178).
+            if pad.signed_distance_nm(via.at) <= (via.drill_nm / 2) as f64 {
                 hits.push(format!("{via} {}", pad.id()));
             }
         }
@@ -1229,6 +1231,102 @@ mod tests {
         let report = check_connectivity(&board(text), &FabricationPolicy::default());
         assert_eq!(report.unconnected_pads, vec!["R1.1".to_string()]);
         assert_eq!(report.connected_nets, 0);
+    }
+
+    /// How many via-in-pad findings a GND pad given as `pad` (the text after
+    /// `(pad "1" smd`) and a GND via at `(x, y)` mm with a 0.3 mm drill give.
+    fn via_in_pad_hits(pad: &str, via_at: (f64, f64)) -> usize {
+        let text = format!(
+            r#"(kicad_pcb
+              (version 20260206)
+              (layers (0 "F.Cu" signal) (31 "B.Cu" signal) (44 "Edge.Cuts" user))
+              (net 0 "")
+              (net 1 "GND")
+              (footprint "a:1" (layer "F.Cu") (at 0 0)
+                (property "Reference" "U1" (at 0 0) (layer "F.SilkS"))
+                (pad "1" smd {pad} (layers "F.Cu") (net 1 "GND")))
+              (via (at {} {}) (size 0.6) (drill 0.3) (layers "F.Cu" "B.Cu") (net 1))
+              (gr_line (start 0 0) (end 10 0) (layer "Edge.Cuts") (width 0.1))
+            )"#,
+            via_at.0, via_at.1
+        );
+        check_connectivity(&board(&text), &FabricationPolicy::default())
+            .via_in_pad
+            .len()
+    }
+
+    #[test]
+    fn a_via_beside_a_long_pad_is_not_in_it() {
+        // absmach/synth#178: 1.95 x 0.6 pad, via 0.8 mm from the centre
+        // and 0.5 mm from the pad edge. The old disc test flagged it.
+        let pad = "rect (at 0 0) (size 1.95 0.6)";
+        assert_eq!(via_in_pad_hits(pad, (0.0, 0.8)), 0);
+    }
+
+    #[test]
+    fn a_via_near_the_end_of_a_long_pad_is_in_it() {
+        let pad = "rect (at 0 0) (size 1.95 0.6)";
+        assert_eq!(via_in_pad_hits(pad, (0.8, 0.0)), 1);
+    }
+
+    #[test]
+    fn the_pad_angle_turns_the_pad() {
+        // The same pad written at 90 degrees is a vertical bar.
+        let pad = "rect (at 0 0 90) (size 1.95 0.6)";
+        assert_eq!(via_in_pad_hits(pad, (0.0, 0.8)), 1);
+        assert_eq!(via_in_pad_hits(pad, (0.8, 0.0)), 0);
+    }
+
+    #[test]
+    fn the_pad_angle_keeps_its_direction() {
+        // A long pad turned 30 degrees counter-clockwise on screen (y down)
+        // points along (cos 30, -sin 30). A via 0.8 mm along that axis is in
+        // the pad; the mirror image of it, on the other side of x, is not.
+        let pad = "rect (at 0 0 30) (size 1.95 0.6)";
+        assert_eq!(via_in_pad_hits(pad, (0.693, -0.4)), 1);
+        assert_eq!(via_in_pad_hits(pad, (0.693, 0.4)), 0);
+    }
+
+    #[test]
+    fn a_rotated_footprint_keeps_the_pad_angle_as_written() {
+        // KiCad writes a pad's angle as its absolute orientation, so the
+        // footprint's own rotation is not added to it. Footprint at 90
+        // degrees, pad at (-1 0) in its frame with angle 90: the position
+        // turns to (30, 21) and the 2 x 0.6 bar stands vertical there.
+        let hits = |via: (f64, f64)| {
+            let text = format!(
+                r#"(kicad_pcb
+                  (version 20260206)
+                  (layers (0 "F.Cu" signal) (31 "B.Cu" signal) (44 "Edge.Cuts" user))
+                  (net 0 "")
+                  (net 1 "GND")
+                  (footprint "a:1" (layer "F.Cu") (at 30 20 90)
+                    (property "Reference" "U1" (at 0 0) (layer "F.SilkS"))
+                    (pad "1" smd rect (at -1 0 90) (size 2 0.6) (layers "F.Cu") (net 1 "GND")))
+                  (via (at {} {}) (size 0.6) (drill 0.3) (layers "F.Cu" "B.Cu") (net 1))
+                  (gr_line (start 0 0) (end 50 0) (layer "Edge.Cuts") (width 0.1))
+                )"#,
+                via.0, via.1
+            );
+            check_connectivity(&board(&text), &FabricationPolicy::default())
+                .via_in_pad
+                .len()
+        };
+        // Along the bar (vertical): in. Beside it (where a bar turned a
+        // second time to horizontal would reach): out.
+        assert_eq!(hits((30.0, 21.9)), 1);
+        assert_eq!(hits((30.9, 21.0)), 0);
+    }
+
+    #[test]
+    fn a_rounded_corner_is_not_copper() {
+        // 1 x 1 pad with fully rounded corners (a disc of radius 0.5):
+        // a 0.3 mm hole at the square's corner is 0.2 mm off the copper,
+        // more than the hole's 0.15 mm radius. A square pad has copper there.
+        let pad = "roundrect (at 0 0) (size 1 1) (roundrect_rratio 0.5)";
+        assert_eq!(via_in_pad_hits(pad, (0.5, 0.5)), 0);
+        assert_eq!(via_in_pad_hits("rect (at 0 0) (size 1 1)", (0.5, 0.5)), 1);
+        assert_eq!(via_in_pad_hits(pad, (0.3, 0.3)), 1);
     }
 
     #[test]

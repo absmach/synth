@@ -51,6 +51,7 @@ fn create_test_board() -> Board {
     let net1 = Net {
         id: synth_ir::NetId(1),
         name: "VBUS".to_string(),
+        auto_named: false,
         endpoints: vec![
             NetEndpoint {
                 component: ComponentId(2),

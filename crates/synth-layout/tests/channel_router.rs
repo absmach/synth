@@ -127,6 +127,7 @@ fn two_row_board_and_layout() -> (Board, Layout) {
             Net {
                 id: NetId(0),
                 name: "n0".to_string(),
+                auto_named: false,
                 endpoints: vec![ep(ComponentId(0), 0), ep(ComponentId(1), 1)],
                 netclass: None,
                 voltage: None,
@@ -134,6 +135,7 @@ fn two_row_board_and_layout() -> (Board, Layout) {
             Net {
                 id: NetId(1),
                 name: "n1".to_string(),
+                auto_named: false,
                 endpoints: vec![ep(ComponentId(2), 0), ep(ComponentId(3), 1)],
                 netclass: None,
                 voltage: None,

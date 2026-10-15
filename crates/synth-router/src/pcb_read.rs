@@ -367,6 +367,9 @@ fn read_quoted(text: &str, start: usize) -> Result<(String, usize), PcbParseErro
     })
 }
 
+/// KiCad's corner radius for a `roundrect` pad that gives no `roundrect_rratio`.
+const KICAD_DEFAULT_ROUNDRECT_RATIO: f64 = 0.25;
+
 /// A pad as it appears on the board, with its net resolved.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Pad {
@@ -377,6 +380,13 @@ pub struct Pad {
     /// Absolute position on the board, in nanometres.
     pub at: Point,
     pub size_nm: (i64, i64),
+    /// The pad's own angle as written in its `at` (degrees, counter-clockwise
+    /// on screen, y axis down). KiCad reads this as the pad's orientation on
+    /// the board, so `size_nm` runs along these axes.
+    pub angle_deg: f64,
+    /// `roundrect_rratio`: corner radius as a share of the shorter side.
+    /// Zero for a pad that is not a rounded rectangle.
+    pub corner_ratio: f64,
     pub layers: Vec<String>,
     /// Net code as written in the file, if the pad carries one.
     pub net: Option<u32>,
@@ -394,6 +404,32 @@ impl Pad {
     #[must_use]
     pub fn radius_nm(&self) -> i64 {
         self.size_nm.0.max(self.size_nm.1) / 2
+    }
+
+    /// Signed distance in nanometres from `p` to this pad's copper: negative
+    /// inside, zero on the edge, positive outside.
+    ///
+    /// The pad is a rounded box in its own frame: a rectangle (corner radius
+    /// 0), a rounded rectangle, an oval (a stadium, radius half the shorter
+    /// side) or a circle. Any other shape is read as its bounding rectangle.
+    /// This is the exact distance to that outline, not to a disc around it.
+    #[must_use]
+    pub fn signed_distance_nm(&self, p: Point) -> f64 {
+        let (sin, cos) = self.angle_deg.to_radians().sin_cos();
+        let dx = (p.x_nm - self.at.x_nm) as f64;
+        let dy = (p.y_nm - self.at.y_nm) as f64;
+        // Board frame to pad frame (the inverse of the y-down rotation).
+        let qx = (dx * cos - dy * sin).abs();
+        let qy = (dx * sin + dy * cos).abs();
+        let (hx, hy) = (self.size_nm.0 as f64 / 2.0, self.size_nm.1 as f64 / 2.0);
+        let short = hx.min(hy);
+        let radius = match self.shape.as_str() {
+            "circle" | "oval" => short,
+            "roundrect" => (self.corner_ratio * 2.0 * short).clamp(0.0, short),
+            _ => 0.0,
+        };
+        let (ex, ey) = (qx - (hx - radius), qy - (hy - radius));
+        ex.max(0.0).hypot(ey.max(0.0)) + ex.max(ey).min(0.0) - radius
     }
 
     /// Whether this pad carries copper on `layer`.
@@ -937,6 +973,20 @@ fn parse_footprint(node: &Node) -> Footprint {
                 .unwrap_or("")
                 .to_string();
             let local = parse_point(pad, "at").unwrap_or_default();
+            let angle_deg = pad
+                .find("at")
+                .and_then(|n| n.body().get(2).and_then(Node::as_str))
+                .and_then(|s| s.parse::<f64>().ok())
+                .unwrap_or(0.0);
+            let corner_ratio = pad
+                .find("roundrect_rratio")
+                .and_then(|n| n.body().first().and_then(Node::as_str))
+                .and_then(|s| s.parse::<f64>().ok())
+                .unwrap_or(if shape == "roundrect" {
+                    KICAD_DEFAULT_ROUNDRECT_RATIO
+                } else {
+                    0.0
+                });
             let x_nm = (local.x_nm as f64 * cos + local.y_nm as f64 * sin).round() as i64;
             let y_nm = (local.y_nm as f64 * cos - local.x_nm as f64 * sin).round() as i64;
             let size = pad.find("size");
@@ -962,6 +1012,8 @@ fn parse_footprint(node: &Node) -> Footprint {
                 shape,
                 at: Point::new(at.x_nm + x_nm, at.y_nm + y_nm),
                 size_nm,
+                angle_deg,
+                corner_ratio,
                 layers,
                 net,
                 net_name,
@@ -1098,6 +1150,61 @@ pub const SAMPLE_BOARD: &str = r#"(kicad_pcb
 
 #[cfg(test)]
 mod tests {
+    fn pad_at_origin(shape: &str, w_mm: f64, h_mm: f64, angle_deg: f64, ratio: f64) -> Pad {
+        Pad {
+            footprint: String::new(),
+            number: "1".to_string(),
+            kind: "smd".to_string(),
+            shape: shape.to_string(),
+            at: Point::new(0, 0),
+            size_nm: (mm_to_nm(w_mm), mm_to_nm(h_mm)),
+            angle_deg,
+            corner_ratio: ratio,
+            layers: vec!["F.Cu".to_string()],
+            net: None,
+            net_name: None,
+        }
+    }
+
+    fn distance_mm(pad: &Pad, x_mm: f64, y_mm: f64) -> f64 {
+        pad.signed_distance_nm(Point::new(mm_to_nm(x_mm), mm_to_nm(y_mm))) / 1e6
+    }
+
+    #[test]
+    fn signed_distance_of_a_rectangle() {
+        let pad = pad_at_origin("rect", 2.0, 1.0, 0.0, 0.0);
+        assert!(
+            (distance_mm(&pad, 0.0, 0.0) + 0.5).abs() < 1e-6,
+            "centre is 0.5 inside"
+        );
+        assert!(distance_mm(&pad, 1.0, 0.0).abs() < 1e-6, "end edge is zero");
+        assert!((distance_mm(&pad, 2.0, 0.0) - 1.0).abs() < 1e-6);
+        // Past the corner the distance is to the corner point.
+        assert!((distance_mm(&pad, 4.0, 4.5) - 5.0).abs() < 1e-6);
+    }
+
+    #[test]
+    fn signed_distance_of_an_oval_and_a_circle() {
+        // Oval 2 x 1 is a stadium: radius 0.5, cap centres at x = -0.5, 0.5.
+        let oval = pad_at_origin("oval", 2.0, 1.0, 0.0, 0.0);
+        assert!(distance_mm(&oval, 1.0, 0.0).abs() < 1e-6);
+        let want = (0.5f64 * 0.5 + 1.0).sqrt() - 0.5;
+        assert!((distance_mm(&oval, 1.0, 1.0) - want).abs() < 1e-6);
+        let circle = pad_at_origin("circle", 1.0, 1.0, 0.0, 0.0);
+        assert!((distance_mm(&circle, 1.5, 0.0) - 1.0).abs() < 1e-6);
+        assert!((distance_mm(&circle, 0.0, 0.0) + 0.5).abs() < 1e-6);
+    }
+
+    #[test]
+    fn signed_distance_of_a_rounded_rectangle() {
+        // 2 x 2, ratio 0.25: radius 0.5, so the corner point (1, 1) is
+        // sqrt(2) * 0.5 - 0.5 away from the copper.
+        let pad = pad_at_origin("roundrect", 2.0, 2.0, 0.0, 0.25);
+        let want = 0.5 * 2f64.sqrt() - 0.5;
+        assert!((distance_mm(&pad, 1.0, 1.0) - want).abs() < 1e-6);
+        assert!(distance_mm(&pad, 1.0, 0.0).abs() < 1e-6);
+    }
+
     use super::*;
 
     #[test]

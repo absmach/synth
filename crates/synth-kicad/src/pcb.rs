@@ -1826,6 +1826,15 @@ fn build_footprint_instance(
         Layer::Top => "F.Cu",
         _ => "B.Cu",
     };
+    // KiCad reads a pad's angle as its absolute orientation, so a top-side
+    // footprint's rotation has to be added to every pad (absmach/synth#199).
+    // The bottom side keeps the library angles: its pads are not mirrored
+    // here either, which is a separate gap.
+    let pad_angle = if placement.layer == Layer::Top {
+        angle
+    } else {
+        0.0
+    };
     let fp_uuid = derive_entity_uuid(project, "footprint", &component.refdes);
 
     // Resolve the bundled/user footprint body up front so we can decide whether
@@ -1985,6 +1994,7 @@ fn build_footprint_instance(
         // (e.g. a user-generated `<id>.pretty`), which is not registered in the
         // project's fp-lib-table and produces a spurious DRC error.
         let body = strip_footprint_head(body);
+        let body = add_footprint_angle_to_pads(&body, pad_angle);
         let body_with_nets = inject_pad_nets(&body, component.id, pad_net_lookup);
         let body_with_nets = ensure_body_uuids(&body_with_nets, project, lib_id);
         let has_model = body_with_nets.contains("(model ");
@@ -2016,7 +2026,7 @@ fn build_footprint_instance(
                             Sexp::str(&pad.number),
                             Sexp::atom("smd"),
                             Sexp::atom("rect"),
-                            Sexp::list("at", vec![num(pad.center_mm.0), num(pad.center_mm.1)]),
+                            Sexp::list("at", pad_at_args(pad.center_mm, pad_angle)),
                             Sexp::list("size", vec![num(pad.size_mm.0), num(pad.size_mm.1)]),
                             Sexp::list(
                                 "layers",
@@ -2441,6 +2451,61 @@ fn next_token(s: &str) -> &str {
     }
 }
 
+/// `(at x y)` arguments for a pad, with the angle added when it is not zero.
+fn pad_at_args(center_mm: (f64, f64), angle_deg: f64) -> Vec<Sexp> {
+    let mut args = vec![num(center_mm.0), num(center_mm.1)];
+    if angle_deg != 0.0 {
+        args.push(num(angle_deg));
+    }
+    args
+}
+
+/// Add `angle_deg` to the angle of every `(pad ...)` in a footprint body.
+///
+/// A pad's `(at x y [angle])` is its absolute orientation in KiCad, so a
+/// footprint turned by `angle_deg` needs the same turn on each pad. A pad
+/// with no angle gets one; the result stays in `0..360`. The pad's own `at`
+/// is the first one after its head, before any primitive.
+fn add_footprint_angle_to_pads(body: &str, angle_deg: f64) -> String {
+    if angle_deg == 0.0 {
+        return body.to_string();
+    }
+    let mut out = String::with_capacity(body.len() + 64);
+    let mut pos = 0;
+    while let Some(idx) = body[pos..].find("(pad ") {
+        let pad_start = pos + idx;
+        let Some(pad_end) = balanced_close(body, pad_start) else {
+            break;
+        };
+        let pad = &body[pad_start..pad_end];
+        let Some(at_idx) = pad.find("(at ") else {
+            out.push_str(&body[pos..pad_end]);
+            pos = pad_end;
+            continue;
+        };
+        let args_start = at_idx + "(at ".len();
+        let args_end = args_start + pad[args_start..].find(')').unwrap_or(0);
+        let mut words: Vec<&str> = pad[args_start..args_end].split_whitespace().collect();
+        let own: f64 = words.get(2).and_then(|w| w.parse().ok()).unwrap_or(0.0);
+        let turned = format_angle((own + angle_deg).rem_euclid(360.0));
+        words.truncate(2);
+        words.push(&turned);
+        out.push_str(&body[pos..pad_start + args_start]);
+        out.push_str(&words.join(" "));
+        out.push_str(&pad[args_end..]);
+        pos = pad_end;
+    }
+    out.push_str(&body[pos..]);
+    out
+}
+
+fn format_angle(v: f64) -> String {
+    match num(v) {
+        Sexp::Atom(s) => s,
+        _ => unreachable!("num returns an atom"),
+    }
+}
+
 fn inject_pad_nets(body: &str, component: ComponentId, lookup: &PadNetLookup) -> String {
     use std::fmt::Write;
     let mut out = String::with_capacity(body.len() + 256);
@@ -2536,6 +2601,35 @@ mod tests {
     use super::*;
     use synth_diagnostics::Span;
     use synth_registry::{ElectricalType, Lifecycle, Pin, PinNumber};
+
+    #[test]
+    fn a_footprint_angle_is_added_to_every_pad_angle() {
+        let body = concat!(
+            "(fp_text reference \"R\" (at 0 -1.2 90))\n",
+            "(pad \"1\" smd rect (at -1 0) (size 1 2))\n",
+            "(pad \"2\" smd rect (at 1 0 90) (size 1 2))\n",
+            "(pad \"3\" smd custom (at 0 2 270) (size 1 1) (primitives (gr_poly (pts (xy 0 0))) (at 5 5)))"
+        );
+        let got = add_footprint_angle_to_pads(body, 90.0);
+        assert!(
+            got.contains("(fp_text reference \"R\" (at 0 -1.2 90))"),
+            "text untouched"
+        );
+        assert!(
+            got.contains("(pad \"1\" smd rect (at -1 0 90)"),
+            "no angle gets one"
+        );
+        assert!(
+            got.contains("(pad \"2\" smd rect (at 1 0 180)"),
+            "own angle is added"
+        );
+        assert!(got.contains("(at 0 2 0)"), "360 wraps to 0");
+        assert!(
+            got.contains("(at 5 5)"),
+            "a primitive's own at is not a pad at"
+        );
+        assert_eq!(add_footprint_angle_to_pads(body, 0.0), body);
+    }
 
     fn hole(x: f64, y: f64, radius: f64) -> (Point, i64) {
         (Point::new(mm_to_nm(x), mm_to_nm(y)), mm_to_nm(radius))
@@ -2810,6 +2904,58 @@ mod tests {
         assert_eq!(once, again, "uuid pass must be deterministic");
     }
 
+    #[test]
+    fn synthesized_pads_carry_the_footprint_angle() {
+        let part = no_footprint_part();
+        let component = synth_ir::Component {
+            id: ComponentId(0),
+            refdes: "U1".to_string(),
+            kind: part.kind.clone(),
+            part: Some(part.clone()),
+            value: None,
+            dnp: false,
+            properties: std::collections::BTreeMap::new(),
+            placement_hint: None,
+            group: None,
+            sheet: None,
+            source_span: Span::new(0, 0),
+        };
+        let placement = ComponentPlacement {
+            id: ComponentId(0),
+            center: Point { x_nm: 0, y_nm: 0 },
+            rotation: Rotation::Ninety,
+            layer: Layer::Top,
+        };
+        let mut pad_net_lookup: PadNetLookup = HashMap::new();
+        pad_net_lookup.insert((ComponentId(0), "1".to_string()), (1, "VDD".to_string()));
+        pad_net_lookup.insert((ComponentId(0), "2".to_string()), (2, "GND".to_string()));
+        let instance = build_footprint_instance(
+            &component,
+            &part,
+            &placement,
+            "synth:nofp",
+            &Uuid::nil(),
+            &pad_net_lookup,
+            silk_labels::LabelPos {
+                local_x_mm: 0.0,
+                local_y_mm: -4.5,
+                angle_deg: 0.0,
+                hidden: false,
+            },
+        )
+        .to_string_pretty();
+        let pad_ats: Vec<&str> = instance
+            .lines()
+            .filter(|l| l.trim_start().starts_with("(at ") && l.trim_end().ends_with(" 90)"))
+            .collect();
+        // Two pads, each `(at x y 90)`; the footprint's own `(at x y 90)`
+        // and the property texts make up the rest of the matches.
+        assert!(
+            instance.matches("(pad").count() == 2 && pad_ats.len() >= 2,
+            "pads must carry the 90 degree footprint angle:\n{instance}"
+        );
+    }
+
     /// Regression test for the `lib_footprint_mismatch` DRC violation:
     /// the standalone module written to `<project>.pretty/` must carry
     /// *only* the fields the embedded PCB instance's fallback branch
@@ -3020,6 +3166,7 @@ mod tests {
                 synth_ir::Net {
                     id: synth_ir::NetId(0),
                     name: "VCC".to_string(),
+                    auto_named: false,
                     endpoints: vec![],
                     netclass: None,
                     voltage: None,
@@ -3027,6 +3174,7 @@ mod tests {
                 synth_ir::Net {
                     id: synth_ir::NetId(1),
                     name: "GND".to_string(),
+                    auto_named: false,
                     endpoints: vec![],
                     netclass: None,
                     voltage: None,
@@ -3034,6 +3182,7 @@ mod tests {
                 synth_ir::Net {
                     id: synth_ir::NetId(2),
                     name: "SIG1".to_string(),
+                    auto_named: false,
                     endpoints: vec![],
                     netclass: None,
                     voltage: None,
@@ -3041,6 +3190,7 @@ mod tests {
                 synth_ir::Net {
                     id: synth_ir::NetId(3),
                     name: "MAIN_ANT".to_string(),
+                    auto_named: false,
                     endpoints: vec![],
                     netclass: None,
                     voltage: None,
@@ -3098,6 +3248,7 @@ mod tests {
                 synth_ir::Net {
                     id: synth_ir::NetId(0),
                     name: "+3V3".to_string(),
+                    auto_named: false,
                     endpoints: vec![],
                     netclass: Some("PWR".to_string()),
                     voltage: None,
@@ -3105,6 +3256,7 @@ mod tests {
                 synth_ir::Net {
                     id: synth_ir::NetId(1),
                     name: "SIG".to_string(),
+                    auto_named: false,
                     endpoints: vec![],
                     netclass: None,
                     voltage: None,

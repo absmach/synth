@@ -114,6 +114,7 @@ mod tests {
         let net1 = Net {
             id: NetId(1),
             name: "SIGNAL".into(),
+            auto_named: false,
             endpoints: vec![
                 NetEndpoint {
                     component: ComponentId(1),
@@ -132,6 +133,7 @@ mod tests {
         let net2 = Net {
             id: NetId(2),
             name: "3V3".into(),
+            auto_named: false,
             endpoints: vec![
                 NetEndpoint {
                     component: ComponentId(1),

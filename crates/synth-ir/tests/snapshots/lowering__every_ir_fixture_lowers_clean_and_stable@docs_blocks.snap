@@ -256,6 +256,7 @@ expression: board
     {
       "id": 0,
       "name": "net_0",
+      "auto_named": true,
       "endpoints": [
         {
           "component": 0,
@@ -278,6 +279,7 @@ expression: board
     {
       "id": 1,
       "name": "net_1",
+      "auto_named": true,
       "endpoints": [
         {
           "component": 1,
@@ -300,6 +302,7 @@ expression: board
     {
       "id": 2,
       "name": "net_2",
+      "auto_named": true,
       "endpoints": [
         {
           "component": 0,
@@ -322,6 +325,7 @@ expression: board
     {
       "id": 3,
       "name": "net_3",
+      "auto_named": true,
       "endpoints": [
         {
           "component": 0,
@@ -344,6 +348,7 @@ expression: board
     {
       "id": 4,
       "name": "net_4",
+      "auto_named": true,
       "endpoints": [
         {
           "component": 2,

@@ -719,6 +719,7 @@ mod forced_label_tests {
             nets: vec![Net {
                 id: NetId(0),
                 name: "SIG".to_string(),
+                auto_named: false,
                 endpoints: vec![
                     NetEndpoint {
                         component: ComponentId(0),

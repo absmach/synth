@@ -321,6 +321,7 @@ expression: board
     {
       "id": 0,
       "name": "+3V3",
+      "auto_named": false,
       "endpoints": [
         {
           "component": 0,
@@ -353,6 +354,7 @@ expression: board
     {
       "id": 1,
       "name": "net_1",
+      "auto_named": true,
       "endpoints": [
         {
           "component": 0,
@@ -399,6 +401,7 @@ expression: board
     {
       "id": 2,
       "name": "VIN",
+      "auto_named": false,
       "endpoints": [
         {
           "component": 0,

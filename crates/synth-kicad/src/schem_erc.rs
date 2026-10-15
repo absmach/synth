@@ -1373,10 +1373,14 @@ fn check_auto_named_nets(board: &Board, layout: &Layout) -> Vec<Diagnostic> {
     let mut seen: HashSet<NetId> = HashSet::new();
     let mut out = Vec::new();
     for label in &layout.net_labels {
-        if !is_auto_net_label(&label.label) || !seen.insert(label.net) {
+        // The name shape alone is not enough: `as "net_7"` is a declared name.
+        let net = board.net(label.net);
+        if !is_auto_net_label(&label.label)
+            || !net.is_some_and(|n| n.auto_named)
+            || !seen.insert(label.net)
+        {
             continue;
         }
-        let net = board.net(label.net);
         // Suggest the first endpoint pin's name, uppercased — the same
         // token `pick_net_label` would fall back to.
         let suggestion = net
@@ -1664,6 +1668,7 @@ mod tests {
             nets: vec![Net {
                 id: NetId(0),
                 name: "VCC".to_string(),
+                auto_named: false,
                 endpoints: vec![
                     NetEndpoint {
                         component: ComponentId(0),
@@ -1747,6 +1752,7 @@ mod tests {
             nets: vec![Net {
                 id: NetId(0),
                 name: "VCC".to_string(),
+                auto_named: false,
                 endpoints: vec![
                     NetEndpoint {
                         component: ComponentId(0),
@@ -2133,6 +2139,7 @@ mod tests {
         Net {
             id: NetId(0),
             name: name.to_string(),
+            auto_named: name.starts_with("net_"),
             endpoints: Vec::new(),
             netclass: None,
             voltage: None,
@@ -2185,6 +2192,7 @@ mod tests {
         let board = board_with_nets(vec![Net {
             id: NetId(0),
             name: "VCC".to_string(),
+            auto_named: false,
             endpoints: Vec::new(),
             netclass: None,
             voltage: Some(synth_ir::Voltage::from_v(3.3)),
@@ -2281,6 +2289,7 @@ mod tests {
         board.nets.push(Net {
             id: NetId(0),
             name: "net_3".to_string(),
+            auto_named: true,
             endpoints: vec![NetEndpoint {
                 component: ComponentId(0),
                 pin: PinId(0),
@@ -2303,6 +2312,20 @@ mod tests {
             "suggestion should name the endpoint pin: {:?}",
             violations[0].message
         );
+    }
+
+    #[test]
+    fn a_declared_net_named_like_the_placeholder_is_silent_for_014() {
+        // `connect ... as "net_7"` is a name the author chose.
+        let mut board = board_with_nets(vec![undeclared_net("net_7")]);
+        board.nets[0].auto_named = false;
+        let layout = layout(
+            Vec::new(),
+            Vec::new(),
+            Vec::new(),
+            vec![net_label(NetId(0), ComponentId(0), "net_7")],
+        );
+        assert!(check_auto_named_nets(&board, &layout).is_empty());
     }
 
     #[test]
@@ -2509,6 +2532,7 @@ mod tests {
             nets: vec![Net {
                 id: NetId(0),
                 name: "VCC".to_string(),
+                auto_named: false,
                 endpoints: vec![
                     NetEndpoint {
                         component: ComponentId(0),
@@ -2623,6 +2647,7 @@ mod tests {
             nets: vec![Net {
                 id: NetId(0),
                 name: "VCC".to_string(),
+                auto_named: false,
                 endpoints: vec![
                     NetEndpoint {
                         component: ComponentId(0),

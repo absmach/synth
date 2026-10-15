@@ -831,6 +831,7 @@ expression: board
     {
       "id": 0,
       "name": "net_0",
+      "auto_named": true,
       "endpoints": [
         {
           "component": 0,
@@ -853,6 +854,7 @@ expression: board
     {
       "id": 1,
       "name": "net_1",
+      "auto_named": true,
       "endpoints": [
         {
           "component": 0,

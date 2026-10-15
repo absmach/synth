@@ -87,6 +87,7 @@ fn net(id: u32, name: &str, endpoints: &[(u32, u32)]) -> Net {
     Net {
         id: NetId(id),
         name: name.to_string(),
+        auto_named: name.starts_with("net_"),
         endpoints: endpoints.iter().map(|&(c, p)| ep(c, p)).collect(),
         netclass: None,
         voltage: None,

@@ -689,6 +689,27 @@ fn case_only_net_collision_is_an_error() {
 }
 
 #[test]
+fn declared_names_that_look_like_the_placeholder_are_still_checked() {
+    // `net_7` written by the author is a declared name, not the `net_<n>`
+    // lowering gives an unnamed net (absmach/synth#197).
+    let collision = r#"board "t" {
+      layers 2
+      component R1: resistor "r_generic_0603"
+      component R2: resistor "r_generic_0603"
+      net "net_7" { R1.p1 }
+      connect R2.p1 -> R2.p2 as "NET_7"
+    }"#;
+    assert_eq!(codes(&validate(collision), "E-SYNTH-NAME-007").len(), 1);
+
+    let once = r#"board "t" {
+      layers 2
+      component R1: resistor "r_generic_0603"
+      net "net_7" { R1.p1 }
+    }"#;
+    assert_eq!(codes(&validate(once), "E-SYNTH-NAME-008").len(), 1);
+}
+
+#[test]
 fn declared_label_used_once_warns_and_unnamed_net_uses_connect_002() {
     // Declared, one endpoint → NAME-008 (not CONNECT-002).
     let declared = r#"board "t" {
@@ -840,6 +861,7 @@ fn multi_unit_rails_split_is_an_error() {
             Net {
                 id: NetId(0),
                 name: "+3V3".into(),
+                auto_named: false,
                 endpoints: vec![NetEndpoint {
                     component: ComponentId(0),
                     pin: PinId(0),
@@ -851,6 +873,7 @@ fn multi_unit_rails_split_is_an_error() {
             Net {
                 id: NetId(1),
                 name: "+5V".into(),
+                auto_named: false,
                 endpoints: vec![NetEndpoint {
                     component: ComponentId(0),
                     pin: PinId(1),

@@ -2256,6 +2256,7 @@ mod cleanup_tests {
             board.nets.push(synth_ir::Net {
                 id: NetId(idx as u32),
                 name: format!("bus{idx}"),
+                auto_named: false,
                 endpoints: vec![
                     synth_ir::NetEndpoint {
                         component: ComponentId(0),
@@ -2754,6 +2755,7 @@ mod drc_tests {
                 synth_ir::Net {
                     id: NetId(0),
                     name: "n0".to_string(),
+                    auto_named: false,
                     endpoints: vec![
                         synth_ir::NetEndpoint {
                             component: ComponentId(0),
@@ -2772,6 +2774,7 @@ mod drc_tests {
                 synth_ir::Net {
                     id: NetId(1),
                     name: "n1".to_string(),
+                    auto_named: false,
                     endpoints: vec![synth_ir::NetEndpoint {
                         component: ComponentId(1),
                         pin: PinId(1),
@@ -2955,6 +2958,7 @@ mod net_termination_tests {
             nets: vec![synth_ir::Net {
                 id: NetId(0),
                 name: "n0".to_string(),
+                auto_named: false,
                 endpoints: vec![
                     synth_ir::NetEndpoint {
                         component: ComponentId(0),

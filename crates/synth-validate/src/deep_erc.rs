@@ -1494,7 +1494,7 @@ impl ErcRule for CaseOnlyNetCollisionRule {
         let mut seen: BTreeMap<String, (&str, NetId)> = BTreeMap::new();
         for net in &board.nets {
             // Auto-generated names can't collide meaningfully.
-            if net.name.starts_with("net_") {
+            if net.auto_named {
                 continue;
             }
             let key = net.name.to_ascii_lowercase();
@@ -1559,7 +1559,7 @@ impl ErcRule for SingleUseLabelRule {
     fn check(&self, board: &Board, file: &str) -> Vec<Diagnostic> {
         let mut out = Vec::new();
         for net in &board.nets {
-            if net.name.starts_with("net_") || net.endpoints.len() >= 2 {
+            if net.auto_named || net.endpoints.len() >= 2 {
                 continue;
             }
             let uses = net.endpoints.len();
@@ -1644,7 +1644,7 @@ impl ErcRule for GroundPinOffGroundNetRule {
                         .is_some_and(|p| looks_like_ground_name(&p.name))
                 })
                 .count();
-            let declared_name = !net.name.starts_with("net_");
+            let declared_name = !net.auto_named;
             let positively_non_ground = is_rail_net(&domains, net.id)
                 || crate::net_has_power_output(board, net)
                 || declared_name;

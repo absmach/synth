@@ -300,6 +300,7 @@ expression: board
     {
       "id": 0,
       "name": "VIN",
+      "auto_named": false,
       "endpoints": [
         {
           "component": 1,
@@ -322,6 +323,7 @@ expression: board
     {
       "id": 1,
       "name": "SENSE_1",
+      "auto_named": false,
       "endpoints": [
         {
           "component": 1,
@@ -344,6 +346,7 @@ expression: board
     {
       "id": 2,
       "name": "RTN",
+      "auto_named": false,
       "endpoints": [
         {
           "component": 2,
@@ -366,6 +369,7 @@ expression: board
     {
       "id": 3,
       "name": "SENSE_2",
+      "auto_named": false,
       "endpoints": [
         {
           "component": 3,
@@ -388,6 +392,7 @@ expression: board
     {
       "id": 4,
       "name": "LINK0.a",
+      "auto_named": false,
       "endpoints": [
         {
           "component": 0,
@@ -402,6 +407,7 @@ expression: board
     {
       "id": 5,
       "name": "LINK0.b",
+      "auto_named": false,
       "endpoints": [
         {
           "component": 0,

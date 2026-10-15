@@ -76,6 +76,7 @@ fn net(id: u32, name: &str, endpoints: &[(u32, u32)]) -> Net {
     Net {
         id: NetId(id),
         name: name.to_string(),
+        auto_named: name.starts_with("net_"),
         endpoints: endpoints
             .iter()
             .map(|&(c, p)| NetEndpoint {
@@ -133,7 +134,10 @@ fn capability_tokens_map_to_bare_names() {
         (&[PinCapability::Reset], "RESET"),
     ];
     for (caps, want) in cases {
-        let b = board(vec![mcu_with_pin("x", caps)], vec![net(0, "n", &[(0, 0)])]);
+        let b = board(
+            vec![mcu_with_pin("x", caps)],
+            vec![net(0, "net_0", &[(0, 0)])],
+        );
         assert_eq!(
             pick_net_label(&b, &b.nets[0]).as_deref(),
             Some(*want),
@@ -147,7 +151,10 @@ fn active_pin_without_caps_falls_back_to_uppercased_pin_name() {
     // An active-IC pin with no semantic capability yields its own
     // name uppercased — this is how two sensors' `int` pins both
     // become `INT` today (the C1 collision shape).
-    let b = board(vec![mcu_with_pin("int", &[])], vec![net(0, "n", &[(0, 0)])]);
+    let b = board(
+        vec![mcu_with_pin("int", &[])],
+        vec![net(0, "net_0", &[(0, 0)])],
+    );
     assert_eq!(pick_net_label(&b, &b.nets[0]).as_deref(), Some("INT"));
 }
 
@@ -166,7 +173,7 @@ fn first_active_endpoint_short_circuits_the_scan() {
             vec![pin("gnd", &[]), pin("sda", &[PinCapability::I2cSda])],
         ),
     );
-    let b = board(vec![u1, u2], vec![net(0, "n", &[(0, 0), (1, 1)])]);
+    let b = board(vec![u1, u2], vec![net(0, "net_0", &[(0, 0), (1, 1)])]);
     assert_eq!(pick_net_label(&b, &b.nets[0]).as_deref(), Some("INT"));
 }
 
@@ -183,10 +190,10 @@ fn unresolvable_endpoints_are_skipped() {
         vec![sensor],
         vec![
             // Component 9 does not exist.
-            net(0, "missing_component", &[(9, 0), (0, 0)]),
+            net(0, "net_0", &[(9, 0), (0, 0)]),
             // Pin 3 is out of range for U2 but component 8 is also
             // missing, so the scan falls through to U2's real pin.
-            net(1, "missing_then_real", &[(8, 3), (0, 0)]),
+            net(1, "net_1", &[(8, 3), (0, 0)]),
         ],
     );
     assert_eq!(pick_net_label(&b, &b.nets[0]).as_deref(), Some("SDA"));
@@ -206,7 +213,7 @@ fn passive_only_net_falls_back_to_first_endpoint_pin_name() {
         "R2",
         part("resistor", vec![pin("z", &[]), pin("y", &[])]),
     );
-    let b = board(vec![r1, r2], vec![net(0, "sig", &[(0, 1), (1, 0)])]);
+    let b = board(vec![r1, r2], vec![net(0, "net_0", &[(0, 1), (1, 0)])]);
     assert_eq!(pick_net_label(&b, &b.nets[0]).as_deref(), Some("B"));
 }
 
@@ -214,6 +221,41 @@ fn passive_only_net_falls_back_to_first_endpoint_pin_name() {
 fn net_without_endpoints_yields_none() {
     let b = board(vec![], vec![net(0, "dangling", &[])]);
     assert_eq!(pick_net_label(&b, &b.nets[0]), None);
+}
+
+#[test]
+fn a_declared_net_name_is_the_schematic_label() {
+    // `connect ... as "USB_DP"` names the PCB net USB_DP. The schematic
+    // must carry the same name so KiCad's net classes and "Update PCB
+    // from Schematic" see one design (absmach/synth#177).
+    let b = board(
+        vec![mcu_with_pin("dp", &[PinCapability::UsbDp])],
+        vec![net(0, "USB_DP", &[(0, 0)])],
+    );
+    assert_eq!(pick_net_label(&b, &b.nets[0]).as_deref(), Some("USB_DP"));
+}
+
+#[test]
+fn a_declared_name_that_looks_like_the_placeholder_is_still_declared() {
+    // `connect ... as "net_7"` is a name the author chose. It must not be
+    // mistaken for the `net_<n>` lowering gives an unnamed net.
+    let mut b = board(
+        vec![mcu_with_pin("dp", &[PinCapability::UsbDp])],
+        vec![net(0, "net_7", &[(0, 0)])],
+    );
+    b.nets[0].auto_named = false;
+    assert_eq!(pick_net_label(&b, &b.nets[0]).as_deref(), Some("net_7"));
+}
+
+#[test]
+fn an_auto_named_net_keeps_the_pin_derived_label() {
+    // Lowering names an undeclared net `net_<n>`; that carries no
+    // identity, so the hand-drawn token (`D+`) still applies.
+    let b = board(
+        vec![mcu_with_pin("dp", &[PinCapability::UsbDp])],
+        vec![net(0, "net_7", &[(0, 0)])],
+    );
+    assert_eq!(pick_net_label(&b, &b.nets[0]).as_deref(), Some("D+"));
 }
 
 // ----- Uniqueness property (plan 002 step 3) --------------------------------
@@ -288,11 +330,11 @@ fn two_bus_board() -> synth_ir::Board {
             net(0, "gnd", &[(0, 0), (1, 0), (2, 0)]),
             net(1, "vdd", &[(0, 1), (3, 1), (4, 1), (5, 1), (6, 1)]),
             // Bus 1: U1.sda1/scl1 ↔ U2, pull-ups R1/R2.
-            net(2, "bus1_sda", &[(0, 2), (1, 2), (3, 0)]),
-            net(3, "bus1_scl", &[(0, 3), (1, 3), (4, 0)]),
+            net(2, "net_2", &[(0, 2), (1, 2), (3, 0)]),
+            net(3, "net_3", &[(0, 3), (1, 3), (4, 0)]),
             // Bus 2: U1.sda2/scl2 ↔ U3, pull-ups R3/R4.
-            net(4, "bus2_sda", &[(0, 4), (2, 2), (5, 0)]),
-            net(5, "bus2_scl", &[(0, 5), (2, 3), (6, 0)]),
+            net(4, "net_4", &[(0, 4), (2, 2), (5, 0)]),
+            net(5, "net_5", &[(0, 5), (2, 3), (6, 0)]),
         ],
     )
 }
@@ -346,4 +388,56 @@ fn two_buses_never_share_a_rendered_label() {
     // Output is deterministic across runs.
     let again = synth_layout::layout(&b);
     assert_eq!(layout.net_labels, again.net_labels);
+}
+
+#[test]
+fn declared_names_reach_the_labels_and_the_class_names() {
+    // The `.kicad_pro` class assignments come from `kicad_net_names`,
+    // so a declared name must be the label and the assigned name.
+    let mut b = two_bus_board();
+    for (id, name) in [
+        (2, "BUS1_SDA"),
+        (3, "BUS1_SCL"),
+        (4, "BUS2_SDA"),
+        (5, "BUS2_SCL"),
+    ] {
+        b.nets[id].name = name.to_string();
+        b.nets[id].auto_named = false;
+    }
+    let layout = synth_layout::layout(&b);
+    let names = synth_layout::netclass::kicad_net_names(&layout);
+    for (id, name) in [
+        (2, "BUS1_SDA"),
+        (3, "BUS1_SCL"),
+        (4, "BUS2_SDA"),
+        (5, "BUS2_SCL"),
+    ] {
+        let got = names
+            .get(&NetId(id))
+            .unwrap_or_else(|| panic!("net {id} has no label"));
+        assert!(
+            got.iter().any(|n| n == name),
+            "net {id}: {got:?} lacks {name}"
+        );
+    }
+}
+
+#[test]
+fn a_declared_name_keeps_the_bare_label_over_a_pin_derived_token() {
+    // Net 2 is auto-named and renders the pin token `SDA`; net 4 is
+    // declared `SDA`. The declared net keeps the bare name so it still
+    // matches the PCB; the pin-derived one takes the suffix.
+    let mut b = two_bus_board();
+    b.nets[4].name = "SDA".to_string();
+    b.nets[4].auto_named = false;
+    let layout = synth_layout::layout(&b);
+    let text_of = |id: u32| {
+        layout
+            .net_labels
+            .iter()
+            .find(|l| l.net == NetId(id))
+            .map(|l| l.label.as_str())
+    };
+    assert_eq!(text_of(4), Some("SDA"));
+    assert_eq!(text_of(2), Some("SDA_U1"));
 }

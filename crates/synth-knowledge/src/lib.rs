@@ -1039,6 +1039,7 @@ mod tests {
         Net {
             id: NetId(id),
             name: name.to_string(),
+            auto_named: name.starts_with("net_"),
             endpoints: endpoints
                 .into_iter()
                 .map(|(c, p)| NetEndpoint {
