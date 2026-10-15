@@ -3,11 +3,21 @@
     "design_settings": {
       "defaults": {
         "min_clearance": 0.127,
-        "min_track_width": 0.127
+        "min_copper_edge_clearance": 0.3,
+        "min_hole_clearance": 0.2,
+        "min_through_hole_diameter": 0.3,
+        "min_track_width": 0.127,
+        "min_via_annular_width": 0.13,
+        "min_via_diameter": 0.56
       },
       "rules": {
         "min_clearance": 0.127,
-        "min_track_width": 0.127
+        "min_copper_edge_clearance": 0.3,
+        "min_hole_clearance": 0.2,
+        "min_through_hole_diameter": 0.3,
+        "min_track_width": 0.127,
+        "min_via_annular_width": 0.13,
+        "min_via_diameter": 0.56
       }
     }
   },
@@ -136,21 +146,21 @@
       "+3V3": "Power",
       "/CC1": "USB",
       "/CC2": "USB",
-      "/D+": "USB",
-      "/D-": "USB",
-      "/RX": "UART",
-      "/RX_U1": "UART",
-      "/TX": "UART",
-      "/TX_U1": "UART",
+      "/RXD0": "UART",
+      "/RXD1_MCU": "UART",
+      "/TXD0": "UART",
+      "/TXD1": "UART",
+      "/USB_DN": "USB",
+      "/USB_DP": "USB",
       "CC1": "USB",
       "CC2": "USB",
-      "D+": "USB",
-      "D-": "USB",
       "GND": "Ground",
-      "RX": "UART",
-      "RX_U1": "UART",
-      "TX": "UART",
-      "TX_U1": "UART",
+      "RXD0": "UART",
+      "RXD1_MCU": "UART",
+      "TXD0": "UART",
+      "TXD1": "UART",
+      "USB_DN": "USB",
+      "USB_DP": "USB",
       "VBUS": "VBUS_FINE",
       "VIO": "Power"
     },
@@ -165,27 +175,27 @@
       },
       {
         "netclass": "USB",
-        "pattern": "/*/D+"
+        "pattern": "/*/USB_DP"
       },
       {
         "netclass": "USB",
-        "pattern": "/*/D-"
+        "pattern": "/*/USB_DN"
       },
       {
         "netclass": "UART",
-        "pattern": "/*/TX"
+        "pattern": "/*/TXD1"
       },
       {
         "netclass": "UART",
-        "pattern": "/*/RX"
+        "pattern": "/*/RXD1_MCU"
       },
       {
         "netclass": "UART",
-        "pattern": "/*/TX_U1"
+        "pattern": "/*/TXD0"
       },
       {
         "netclass": "UART",
-        "pattern": "/*/RX_U1"
+        "pattern": "/*/RXD0"
       }
     ]
   },

@@ -18,8 +18,8 @@
     "command": [
       "/usr/bin/python3",
       "/home/steve/work/synth-103/tools/freeroute_autoroute.py",
-      "/tmp/claude-1000/-home-steve-work-synth/1b15c859-243c-47c6-88fe-751b8f29b86c/scratchpad/reroute1/out/usb_uart.synth.kicad_pcb",
-      "/tmp/claude-1000/-home-steve-work-synth/1b15c859-243c-47c6-88fe-751b8f29b86c/scratchpad/reroute1/out/usb_uart.freerouting.kicad_pcb",
+      "/tmp/claude-1000/-home-steve-work-synth/1b15c859-243c-47c6-88fe-751b8f29b86c/scratchpad/final1/out/usb_uart.synth.kicad_pcb",
+      "/tmp/claude-1000/-home-steve-work-synth/1b15c859-243c-47c6-88fe-751b8f29b86c/scratchpad/final1/out/usb_uart.freerouting.kicad_pcb",
       "--jar",
       "/home/steve/work/synth-103/tools/freerouting/freerouting-2.4.1.jar",
       "--java",
@@ -29,9 +29,9 @@
       "--threads",
       "4",
       "--ses-output",
-      "/tmp/claude-1000/-home-steve-work-synth/1b15c859-243c-47c6-88fe-751b8f29b86c/scratchpad/reroute1/out/usb_uart.freerouting.ses",
+      "/tmp/claude-1000/-home-steve-work-synth/1b15c859-243c-47c6-88fe-751b8f29b86c/scratchpad/final1/out/usb_uart.freerouting.ses",
       "--report",
-      "/tmp/claude-1000/-home-steve-work-synth/1b15c859-243c-47c6-88fe-751b8f29b86c/scratchpad/reroute1/out/usb_uart.freerouting.json",
+      "/tmp/claude-1000/-home-steve-work-synth/1b15c859-243c-47c6-88fe-751b8f29b86c/scratchpad/final1/out/usb_uart.freerouting.json",
       "--clean-netlist",
       "--allow-via-in-pad"
     ],
@@ -41,31 +41,31 @@
       "threads": "4",
       "wall_clock_secs": "1200"
     },
-    "input_hash": "aa534473f5e8cb3488d5108d81431c781cd1e36cd37f7c2b44f0fca97fe01359",
+    "input_hash": "daaca4b2d39bd685b3228299535f2340f0c354f599e409d511351d7a4178493d",
     "output_hash": "",
     "source_revision": null,
-    "duration_ms": 109440
+    "duration_ms": 134683
   },
   "statistics": {
     "connected_nets": 29,
     "open_nets": 0,
     "open_net_names": [],
-    "segments": 271,
-    "vias": 44,
-    "wire_length_mm": 582.236034,
+    "segments": 276,
+    "vias": 45,
+    "wire_length_mm": 584.796925,
     "pad_escape_rejections": 0,
     "engine_findings": {
-      "claimed_imported_segments": "271",
-      "claimed_imported_vias": "44"
+      "claimed_imported_segments": "276",
+      "claimed_imported_vias": "45"
     }
   },
   "artifacts": {
-    "baseline": "/tmp/claude-1000/-home-steve-work-synth/1b15c859-243c-47c6-88fe-751b8f29b86c/scratchpad/reroute1/out/usb_uart.synth.kicad_pcb",
-    "candidate": "/tmp/claude-1000/-home-steve-work-synth/1b15c859-243c-47c6-88fe-751b8f29b86c/scratchpad/reroute1/out/usb_uart.freerouting.kicad_pcb",
-    "delivered": "/tmp/claude-1000/-home-steve-work-synth/1b15c859-243c-47c6-88fe-751b8f29b86c/scratchpad/reroute1/out/usb_uart.kicad_pcb",
-    "session_log": "/tmp/claude-1000/-home-steve-work-synth/1b15c859-243c-47c6-88fe-751b8f29b86c/scratchpad/reroute1/out/usb_uart.freerouting.log",
-    "ses": "/tmp/claude-1000/-home-steve-work-synth/1b15c859-243c-47c6-88fe-751b8f29b86c/scratchpad/reroute1/out/usb_uart.freerouting.ses",
-    "router_report": "/tmp/claude-1000/-home-steve-work-synth/1b15c859-243c-47c6-88fe-751b8f29b86c/scratchpad/reroute1/out/usb_uart.freerouting.json",
+    "baseline": "/tmp/claude-1000/-home-steve-work-synth/1b15c859-243c-47c6-88fe-751b8f29b86c/scratchpad/final1/out/usb_uart.synth.kicad_pcb",
+    "candidate": "/tmp/claude-1000/-home-steve-work-synth/1b15c859-243c-47c6-88fe-751b8f29b86c/scratchpad/final1/out/usb_uart.freerouting.kicad_pcb",
+    "delivered": "/tmp/claude-1000/-home-steve-work-synth/1b15c859-243c-47c6-88fe-751b8f29b86c/scratchpad/final1/out/usb_uart.kicad_pcb",
+    "session_log": "/tmp/claude-1000/-home-steve-work-synth/1b15c859-243c-47c6-88fe-751b8f29b86c/scratchpad/final1/out/usb_uart.freerouting.log",
+    "ses": "/tmp/claude-1000/-home-steve-work-synth/1b15c859-243c-47c6-88fe-751b8f29b86c/scratchpad/final1/out/usb_uart.freerouting.ses",
+    "router_report": "/tmp/claude-1000/-home-steve-work-synth/1b15c859-243c-47c6-88fe-751b8f29b86c/scratchpad/final1/out/usb_uart.freerouting.json",
     "connectivity_report": null,
     "drc_report": null
   },
@@ -94,7 +94,7 @@
     "kicad_drc": {
       "errors": 0,
       "unconnected": 0,
-      "warnings": 54
+      "warnings": 45
     },
     "blocking_reasons": [],
     "unavailable_checks": []

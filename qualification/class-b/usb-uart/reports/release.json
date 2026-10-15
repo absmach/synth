@@ -1,7 +1,7 @@
 {
   "schema_version": "synth.release.v1",
   "tool_version": "synth-cli 0.1.1",
-  "input": "/tmp/claude-1000/-home-steve-work-synth/1b15c859-243c-47c6-88fe-751b8f29b86c/scratchpad/reroute1/usb_uart.synth",
+  "input": "/tmp/claude-1000/-home-steve-work-synth/1b15c859-243c-47c6-88fe-751b8f29b86c/scratchpad/final1/usb_uart.synth",
   "fab_requested": false,
   "production_status": "production",
   "release_ready": true,
@@ -67,19 +67,24 @@
     "engine": "freerouting",
     "engine_version": "/home/steve/work/synth-103/tools/freerouting/freerouting-2.4.1.jar",
     "state": "routed",
-    "input_hash": "aa534473f5e8cb3488d5108d81431c781cd1e36cd37f7c2b44f0fca97fe01359",
-    "run_record": "/tmp/claude-1000/-home-steve-work-synth/1b15c859-243c-47c6-88fe-751b8f29b86c/scratchpad/reroute1/out/usb_uart.routing.json",
+    "input_hash": "daaca4b2d39bd685b3228299535f2340f0c354f599e409d511351d7a4178493d",
+    "run_record": "/tmp/claude-1000/-home-steve-work-synth/1b15c859-243c-47c6-88fe-751b8f29b86c/scratchpad/final1/out/usb_uart.routing.json",
     "fabrication_notes": [
       "via at (23.800, 20.100) mm U1.25: via-in-pad, order with filled and capped vias"
     ]
   },
   "signal_integrity": {
     "blocking": 0,
-    "warnings": 23,
+    "warnings": 24,
     "findings": [
       {
         "code": "W-SYNTH-DRC-013",
         "message": "nets 14 and 15 run parallel for 5.8 mm on F.Cu 0.176 mm apart, within a dielectric height; risk of crosstalk",
+        "blocking": false
+      },
+      {
+        "code": "W-SYNTH-DRC-013",
+        "message": "nets 20 and 27 run parallel for 4.2 mm on F.Cu 0.143 mm apart, within a dielectric height; risk of crosstalk",
         "blocking": false
       },
       {
@@ -129,7 +134,7 @@
       },
       {
         "code": "W-SYNTH-DRC-016",
-        "message": "net 6 changes layers at (23.29, 24.56) mm with no ground return via within 0.64 mm, so the return current has to jump reference planes",
+        "message": "net 6 changes layers at (23.30, 24.56) mm with no ground return via within 0.64 mm, so the return current has to jump reference planes",
         "blocking": false
       },
       {
@@ -174,7 +179,7 @@
       },
       {
         "code": "W-SYNTH-DRC-016",
-        "message": "net 16 changes layers at (23.26, 17.25) mm with no ground return via within 0.64 mm, so the return current has to jump reference planes",
+        "message": "net 16 changes layers at (23.27, 17.25) mm with no ground return via within 0.64 mm, so the return current has to jump reference planes",
         "blocking": false
       },
       {
@@ -184,7 +189,7 @@
       },
       {
         "code": "W-SYNTH-DRC-016",
-        "message": "net 25 changes layers at (22.62, 24.08) mm with no ground return via within 0.64 mm, so the return current has to jump reference planes",
+        "message": "net 25 changes layers at (22.64, 24.08) mm with no ground return via within 0.64 mm, so the return current has to jump reference planes",
         "blocking": false
       },
       {
