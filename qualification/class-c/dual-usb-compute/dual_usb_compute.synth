@@ -99,6 +99,15 @@ board "dual_usb_compute" {
     connect J2.dn  -> D4.io
     connect J1.gnd -> D4.gnd
 
+    // The SuperSpeed drain wire and the connector shell. Both are returns and
+    // both are tied to board ground, which is the single-ground choice this
+    // board has already made: there is no separate chassis net to isolate
+    // them to, and a floating shell on a 5 Gb/s port is an antenna rather
+    // than a shield. Leaving either unconnected would have been a decision
+    // by omission.
+    connect J2.drain  -> J1.gnd
+    connect J2.shield -> J1.gnd
+
     group "3V3 RAIL" color "#7c3aed" {
       component U1: regulator "ams1117_3v3" value "AMS1117-3.3"
       component C2: capacitor "c_generic_0805" value "22uF"
