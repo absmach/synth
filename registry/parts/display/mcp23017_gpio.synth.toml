@@ -1,7 +1,10 @@
 id = "mcp23017_gpio"
 kind = "ic"
 description = "Microchip MCP23017 16-bit I²C GPIO expander"
-kicad_symbol = "Interface_Expansion:MCP23017_SO"
+# `Interface_Expansion:MCP23017_SO` is in no KiCad library, so the symbol
+# checks were skipped rather than passing. This is the real name for the
+# SOIC variant, which is the package this part's footprint names.
+kicad_symbol = "Interface_Expansion:MCP23017x-x-SO"
 kicad_footprint = "Package_SO:SOIC-28W_7.5x17.9mm_P1.27mm"
 
 [footprint_dimensions]
@@ -14,31 +17,153 @@ min_voltage_v = 1.8
 max_voltage_v = 5.0
 max_current_ma = 100.0
 
+# Pin names and numbers come from the stock KiCad symbol this part names,
+# cross-checked against the footprint it names. The previous map had four
+# pins -- vdd, gnd, sda, scl -- on pads 1-4, which on this package are
+# general-purpose pins, so nothing it declared was where it said it was.
+
+[[pins]]
+name = "gpb0"
+number = "1"
+electrical_type = "bidirectional"
+
+[[pins]]
+name = "gpb1"
+number = "2"
+electrical_type = "bidirectional"
+
+[[pins]]
+name = "gpb2"
+number = "3"
+electrical_type = "bidirectional"
+
+[[pins]]
+name = "gpb3"
+number = "4"
+electrical_type = "bidirectional"
+
+[[pins]]
+name = "gpb4"
+number = "5"
+electrical_type = "bidirectional"
+
+[[pins]]
+name = "gpb5"
+number = "6"
+electrical_type = "bidirectional"
+
+[[pins]]
+name = "gpb6"
+number = "7"
+electrical_type = "bidirectional"
+
+[[pins]]
+name = "gpb7"
+number = "8"
+electrical_type = "output"
+
 [[pins]]
 name = "vdd"
-number = "1"
+number = "9"
 electrical_type = "power_input"
 required = true
 
 [[pins]]
-name = "gnd"
-number = "2"
+name = "v_ss"
+number = "10"
 electrical_type = "power_input"
-required = true
+
+[[pins]]
+name = "nc"
+number = "11"
+electrical_type = "do_not_connect"
+
+[[pins]]
+name = "sck"
+number = "12"
+electrical_type = "input"
 
 [[pins]]
 name = "sda"
-number = "3"
+number = "13"
 electrical_type = "bidirectional"
 capabilities = ["i2c_sda"]
 required = true
 
 [[pins]]
-name = "scl"
-number = "4"
+name = "nc_2"
+number = "14"
+electrical_type = "do_not_connect"
+
+[[pins]]
+name = "a0"
+number = "15"
+electrical_type = "input"
+
+[[pins]]
+name = "a1"
+number = "16"
+electrical_type = "input"
+
+[[pins]]
+name = "a2"
+number = "17"
+electrical_type = "input"
+
+[[pins]]
+name = "reset"
+number = "18"
+electrical_type = "input"
+
+[[pins]]
+name = "intb"
+number = "19"
+electrical_type = "three_statable"
+
+[[pins]]
+name = "inta"
+number = "20"
+electrical_type = "three_statable"
+
+[[pins]]
+name = "gpa0"
+number = "21"
 electrical_type = "bidirectional"
-capabilities = ["i2c_scl"]
-required = true
+
+[[pins]]
+name = "gpa1"
+number = "22"
+electrical_type = "bidirectional"
+
+[[pins]]
+name = "gpa2"
+number = "23"
+electrical_type = "bidirectional"
+
+[[pins]]
+name = "gpa3"
+number = "24"
+electrical_type = "bidirectional"
+
+[[pins]]
+name = "gpa4"
+number = "25"
+electrical_type = "bidirectional"
+
+[[pins]]
+name = "gpa5"
+number = "26"
+electrical_type = "bidirectional"
+
+[[pins]]
+name = "gpa6"
+number = "27"
+electrical_type = "bidirectional"
+
+[[pins]]
+name = "gpa7"
+number = "28"
+electrical_type = "output"
 
 [[required_decoupling]]
 net = "vdd"

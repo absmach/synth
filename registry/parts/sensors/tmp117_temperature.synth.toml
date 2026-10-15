@@ -40,6 +40,20 @@ electrical_type = "bidirectional"
 capabilities = ["i2c_scl"]
 required = true
 
+# `Package_TO_SOT_SMD:SOT-563` has six copper pads; pads 3 and 4 were the two
+# with no pin to own them. Names and types come from the stock symbol
+# `Sensor_Temperature:TMP117xxDRV`, which extends `TMP102xxDRL`. The four pads
+# the part already declared were on the right pins.
+[[pins]]
+name = "alert"
+number = "3"
+electrical_type = "open_drain_low"
+
+[[pins]]
+name = "add0"
+number = "4"
+electrical_type = "input"
+
 [[required_decoupling]]
 net = "vdd"
 value = "100nf"
