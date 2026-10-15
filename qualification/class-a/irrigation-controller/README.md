@@ -165,10 +165,45 @@ The generated `bom.csv` is the bill of materials; this table is the actives
 and omits twenty-six generic passives. Twenty of the board's parts carry no
 distributor identity, so neither can be ordered as it stands.
 
+## Measured
+
+One local run of the export and the external router. No figure here came from
+anywhere else.
+
+| | |
+| --- | --- |
+| Nets closed | **34 of 34** |
+| Open | **0** |
+| Routed copper | 1968.2 mm over 392 segments and 87 vias |
+| Tracks below the 0.127 mm floor | **0** |
+| Vias below the 0.3 mm drill or 0.13 mm ring | **0** |
+| `kicad-cli pcb drc` | **0 errors**, 0 unconnected items, 19 warnings |
+
+Three consecutive exports produce a byte-identical board and schematic.
+
+This is the largest board in the Class-A set and the only one that routes with
+no DRC error at all. Size is not what decides it: every package here escapes
+on the standard floor, which the 0.4 mm pitch QFN on the debug target does
+not.
+
+### The nineteen warnings
+
+| Finding | Count |
+| --- | --- |
+| silkscreen over copper | 12 |
+| library footprint mismatch | 7 |
+
+Both are advisory. The silkscreen warnings are reference designators crossing
+pads, cosmetic on a fabricated board and fixed in a silkscreen pass Synth does
+not perform. The footprint-mismatch warnings compare the board's embedded
+footprints against the installed libraries and depend on library version, so
+they should be read from CI rather than a local run.
+
 ## Limitations
 
-- `kicad-cli pcb drc` has not run on the copper. The independent geometric
-  checks pass; KiCad's own DRC has not.
+- **Two vias land inside pads** and via-in-pad is not declared, so the package
+  is refused despite the clean DRC. That is the one thing standing between
+  this board and a fabricable result.
 - No Gerbers, drill, position file or STEP: the export stops short of
   fabrication artifacts while the board is not fabrication-ready.
 - **The analogue path is unverified.** `stm32g030` declares no
