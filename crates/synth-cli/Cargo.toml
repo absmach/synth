@@ -21,6 +21,7 @@ synth-parser = { workspace = true }
 synth-ir = { workspace = true }
 synth-registry = { workspace = true }
 synth-validate = { workspace = true }
+synth-geometry = { workspace = true }
 synth-layout = { workspace = true }
 synth-kicad = { workspace = true }
 synth-place = { workspace = true }

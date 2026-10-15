@@ -231,6 +231,26 @@ pub struct ReleaseManifest {
     pub reviewer_state: Vec<ReviewerState>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub routing: Option<RoutingState>,
+    /// Signal/power-integrity findings on the routed board. Recorded so a CI
+    /// consumer reads them here rather than parsing a stderr line nobody kept.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub signal_integrity: Option<SignalIntegrityState>,
+}
+
+/// One routed signal/power-integrity finding, as recorded in the manifest.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct SignalFinding {
+    pub code: String,
+    pub message: String,
+    pub blocking: bool,
+}
+
+/// Routed signal/power-integrity findings and their counts.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
+pub struct SignalIntegrityState {
+    pub blocking: usize,
+    pub warnings: usize,
+    pub findings: Vec<SignalFinding>,
 }
 
 impl ReleaseManifest {
@@ -258,7 +278,35 @@ impl ReleaseManifest {
             exception: None,
             reviewer_state,
             routing: None,
+            signal_integrity: None,
         }
+    }
+
+    /// Record the routed signal/power-integrity findings.
+    ///
+    /// A blocking finding downgrades the manifest exactly as an override or an
+    /// unvalidated route does: the package is not release-ready, and the reason
+    /// is in the manifest.
+    pub fn with_signal_integrity(mut self, violations: &[synth_drc::Violation]) -> Self {
+        let findings: Vec<SignalFinding> = violations
+            .iter()
+            .map(|violation| SignalFinding {
+                code: violation.code.clone(),
+                message: violation.message.clone(),
+                blocking: violation.is_blocking(),
+            })
+            .collect();
+        let blocking = findings.iter().filter(|finding| finding.blocking).count();
+        if blocking > 0 {
+            self.production_status = ProductionStatus::Untrusted;
+            self.release_ready = false;
+        }
+        self.signal_integrity = Some(SignalIntegrityState {
+            blocking,
+            warnings: findings.len() - blocking,
+            findings,
+        });
+        self
     }
 
     /// Record the routing run the package was built from.

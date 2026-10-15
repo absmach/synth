@@ -279,7 +279,7 @@ mod tests {
 
         let registry_dir = std::path::Path::new("../..").join("registry").join("parts");
         let registry = synth_registry::load_dir(&registry_dir).expect("registry");
-        let file = "../../examples/sensor_logger.synth".to_string();
+        let file = "../../examples/sensor_logger/sensor_logger.synth".to_string();
         let source = std::fs::read_to_string(&file).expect("fixture");
         let parse = synth_parser::parse(&source, file.clone());
         let ast = parse.ast.as_ref().expect("parse");

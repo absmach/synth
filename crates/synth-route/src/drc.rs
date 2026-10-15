@@ -237,7 +237,7 @@ mod tests {
         // The slice-5 contract: every trace the router emits
         // must pass the independent re-check. Disagreements
         // are P0 correctness bugs.
-        let board = load_board("../../examples/sensor_logger.synth");
+        let board = load_board("../../examples/sensor_logger/sensor_logger.synth");
         let placement = synth_place::place(&board).expect("place");
         let routing = crate::route(&board, &placement);
         let violations = check(&board, &placement, &routing);

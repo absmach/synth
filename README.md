@@ -145,7 +145,7 @@ The minimal example declares an empty two-layer board. Use the [example designs]
 For machine-readable diagnostics:
 
 ```bash
-cargo run -p synth-cli -- validate examples/env_logger.synth --format json
+cargo run -p synth-cli -- validate examples/env_logger/env_logger.synth --format json
 ```
 
 Open exported projects in KiCad. Optional Gerber, drill, and STEP exports require `kicad-cli`; see the [KiCad workflow guide](docs/kicad-workflows.md) for export and review details.
@@ -165,9 +165,9 @@ Agents can retrieve the SynthSpec language reference, search the registry, valid
 | Design                                                                     | What it demonstrates                                                          |
 | -------------------------------------------------------------------------- | ----------------------------------------------------------------------------- |
 | [Hello](fixtures/designs/hello.synth)                                      | The smallest board declaration                                                |
-| [Environmental logger](examples/env_logger.synth)                          | USB-C power, a regulator, an MCU, an environmental sensor, and a debug header |
-| [Sensor logger](examples/sensor_logger.synth)                              | A larger design with dual I²C sensors, SPI flash, and status LEDs             |
-| [Placement and differential pairs](examples/placement_and_diff_pair.synth) | Placement hints, differential-pair constraints, and keepout regions           |
+| [Environmental logger](examples/env_logger/env_logger.synth)                          | USB-C power, a regulator, an MCU, an environmental sensor, and a debug header |
+| [Sensor logger](examples/sensor_logger/sensor_logger.synth)                              | A larger design with dual I²C sensors, SPI flash, and status LEDs             |
+| [Placement and differential pairs](examples/placement_and_diff_pair/placement_and_diff_pair.synth) | Placement hints, differential-pair constraints, and keepout regions           |
 
 Additional language and validation cases live in [fixtures](fixtures/designs/README.md). Part definitions live in the [component registry](registry/README.md).
 

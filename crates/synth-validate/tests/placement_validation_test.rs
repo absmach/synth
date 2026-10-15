@@ -30,7 +30,7 @@ fn load_board(rel: &str) -> Board {
 #[test]
 fn reference_designs_pass_independent_placement_validation() {
     let designs = [
-        "examples/sensor_logger.synth",
+        "examples/sensor_logger/sensor_logger.synth",
         "fixtures/designs/secure_tracker.synth",
         "fixtures/designs/feather_m4_express.synth",
     ];

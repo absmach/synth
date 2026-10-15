@@ -139,6 +139,81 @@ struct Label {
     half_h: f64,
 }
 
+/// Export `SOURCE` with `sidecar_toml` as its placement sidecar.
+fn export_with_sidecar(sidecar_toml: &str, tag: &str) -> String {
+    let board = lower_source(SOURCE, "label_edge_export.synth");
+    let tmp = tempdir(tag);
+    fs::create_dir_all(&tmp).expect("temp dir");
+    let sidecar = tmp.join("labels.placement.layout.toml");
+    fs::write(&sidecar, sidecar_toml).expect("sidecar written");
+    let result = synth_kicad::export_with_sidecars(
+        &board,
+        &tmp,
+        &synth_kicad::Sidecars {
+            schematic: None,
+            placement: Some(sidecar),
+        },
+    )
+    .expect("export");
+    fs::read_to_string(&result.pcb_path).expect(".kicad_pcb written")
+}
+
+/// Whether `refdes`'s reference property carries `(hide yes)`.
+fn label_is_hidden(pcb: &str, refdes: &str) -> bool {
+    let needle = format!("\"Reference\"\n\t\t\t\"{refdes}\"");
+    let start = pcb
+        .find(&needle)
+        .unwrap_or_else(|| panic!("{refdes} reference property"));
+    let property = &pcb[start..];
+    let end = property[1..]
+        .find("(property")
+        .map_or(property.len(), |i| i + 1);
+    property[..end].contains("(hide yes)")
+}
+
+#[test]
+fn a_sidecar_that_names_no_part_changes_nothing() {
+    // Compared with an empty sidecar, not with none: giving the export any
+    // placement sidecar takes a different placement path than giving none.
+    let empty = export_with_sidecar("schema_version = 2\n", "empty");
+    let stray = export_with_sidecar(
+        "schema_version = 2\n\n[labels.NOSUCHPART]\nhide = true\ndx = 4.0\n",
+        "stray",
+    );
+    assert_eq!(empty, stray, "an unknown designator must be ignored");
+}
+
+#[test]
+fn a_sidecar_can_hide_one_label_and_leave_the_others() {
+    let pcb = export_with_sidecar("[labels.J1]\nhide = true\n", "hide");
+    assert!(label_is_hidden(&pcb, "J1"));
+    assert!(!label_is_hidden(&pcb, "J2"));
+}
+
+#[test]
+fn a_hard_sidecar_offset_moves_the_label_by_exactly_that_amount() {
+    let at = |toml: &str, tag: &str| {
+        let pcb = export_with_sidecar(toml, tag);
+        let l = labels(&pcb)
+            .into_iter()
+            .find(|l| l.refdes == "J3")
+            .expect("J3 label");
+        (l.x, l.y)
+    };
+    let base = at(
+        "[labels.J3]\ndx = 0.0\ndy = 0.0\npriority = \"hard\"\n",
+        "hard-base",
+    );
+    let moved = at(
+        "[labels.J3]\ndx = 3.0\ndy = -2.0\npriority = \"hard\"\n",
+        "hard-moved",
+    );
+    assert!(
+        (moved.0 - base.0 - 3.0).abs() < 0.01 && (moved.1 - base.1 + 2.0).abs() < 0.01,
+        "label moved from {base:?} to {moved:?}, expected a shift of (3.0, -2.0)"
+    );
+}
+
 #[test]
 fn every_reference_label_sits_inside_the_exported_outline() {
     let board = lower_source(SOURCE, "label_edge_export.synth");

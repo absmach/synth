@@ -662,3 +662,106 @@ pub fn check_net_length(board: &Board, routing: &Routing) -> Vec<Violation> {
     }
     violations
 }
+
+/// Bus/group length-match check. Code: `E-SYNTH-DRC-019`.
+///
+/// Every net in a class that declares `max_skew` must be routed within that of
+/// the class's other members: the routed lengths are compared and the spread
+/// (longest minus shortest) must not exceed the budget. This is what a matched
+/// bus — DDR, a parallel interface — needs, beyond the per-pair skew of
+/// `E-SYNTH-DRC-014`. Nets with no copper are not counted.
+#[must_use]
+pub fn check_group_skew(board: &Board, routing: &Routing) -> Vec<Violation> {
+    let mut violations = Vec::new();
+    for class in &board.netclasses {
+        let Some(max_skew) = class.max_skew else {
+            continue;
+        };
+        let lengths: Vec<(NetId, i64)> = member_nets(board, class)
+            .map(|net| (net.id, routing.length_for_net(net.id)))
+            .filter(|(_, length)| *length > 0)
+            .collect();
+        if lengths.len() < 2 {
+            continue;
+        }
+        let longest = lengths.iter().map(|(_, length)| *length).max().unwrap_or(0);
+        let shortest = lengths.iter().map(|(_, length)| *length).min().unwrap_or(0);
+        let spread = longest - shortest;
+        if spread <= max_skew.0 {
+            continue;
+        }
+        violations.push(Violation {
+            code: "E-SYNTH-DRC-019".to_string(),
+            message: format!(
+                "class `{}` has a {:.1} mm length spread, wider than the {:.1} mm it allows",
+                class.name,
+                nm_to_mm(spread),
+                max_skew.to_mm(),
+            ),
+            witness: lengths
+                .iter()
+                .flat_map(|(net, _)| segments_for_net(routing, *net))
+                .collect(),
+            nets: lengths.iter().map(|(net, _)| *net).collect(),
+            components: Vec::new(),
+            pos_mm: None,
+            suggested_override: None,
+        });
+    }
+    violations
+}
+
+/// Current a single via is assumed to carry, in amps (a 0.3 mm drill at a
+/// 10 °C rise, a conservative rule of thumb).
+const VIA_CURRENT_LIMIT_A: f64 = 1.5;
+
+/// Per-via current check. Code: `W-SYNTH-DRC-020` — a **warning**.
+///
+/// A net that declares a `current` spreads it across its vias. If the current
+/// divided by the number of vias on the net exceeds [`VIA_CURRENT_LIMIT_A`],
+/// the vias are a bottleneck a wider trace will not fix. Assumes the vias share
+/// the current evenly, which is optimistic when they sit on one path; advisory.
+#[must_use]
+pub fn check_via_current(board: &Board, routing: &Routing) -> Vec<Violation> {
+    let mut violations = Vec::new();
+    for class in &board.netclasses {
+        let Some(current) = class.current else {
+            continue;
+        };
+        for net in member_nets(board, class) {
+            let vias = routing.vias.iter().filter(|via| via.net == net.id).count();
+            if vias == 0 {
+                continue;
+            }
+            #[allow(clippy::cast_precision_loss)] // a board has far fewer vias than 2^53
+            let per_via = current.to_amps() / vias as f64;
+            if per_via <= VIA_CURRENT_LIMIT_A {
+                continue;
+            }
+            violations.push(Violation {
+                code: "W-SYNTH-DRC-020".to_string(),
+                message: format!(
+                    "net `{}` carries {:.2} A through {vias} via(s), about {per_via:.2} A each, \
+                     above the {VIA_CURRENT_LIMIT_A:.1} A a via is assumed to take",
+                    net.name,
+                    current.to_amps(),
+                ),
+                witness: routing
+                    .vias
+                    .iter()
+                    .filter(|via| via.net == net.id)
+                    .map(|via| via.at)
+                    .collect(),
+                nets: vec![net.id],
+                components: Vec::new(),
+                pos_mm: routing
+                    .vias
+                    .iter()
+                    .find(|via| via.net == net.id)
+                    .map(|via| (nm_to_mm(via.at.x_nm), nm_to_mm(via.at.y_nm))),
+                suggested_override: None,
+            });
+        }
+    }
+    violations
+}

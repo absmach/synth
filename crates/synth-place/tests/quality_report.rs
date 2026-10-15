@@ -41,8 +41,8 @@ fn load_board(path: &str) -> synth_ir::Board {
 #[allow(clippy::cast_precision_loss)]
 fn bound_member_pad_distances() {
     for path in [
-        "../../examples/sensor_logger.synth",
-        "../../examples/env_logger.synth",
+        "../../examples/sensor_logger/sensor_logger.synth",
+        "../../examples/env_logger/env_logger.synth",
         "../../fixtures/designs/secure_tracker.synth",
     ] {
         if !Path::new(path).exists() {
@@ -128,9 +128,9 @@ fn bound_member_pad_distances() {
 #[allow(clippy::cast_precision_loss)]
 fn diff_pair_geometry() {
     for path in [
-        "../../examples/placement_and_diff_pair.synth",
-        "../../examples/sensor_logger.synth",
-        "../../examples/env_logger.synth",
+        "../../examples/placement_and_diff_pair/placement_and_diff_pair.synth",
+        "../../examples/sensor_logger/sensor_logger.synth",
+        "../../examples/env_logger/env_logger.synth",
     ] {
         if !Path::new(path).exists() {
             continue;
@@ -176,9 +176,9 @@ fn diff_pair_geometry() {
 #[ignore = "diagnostic report, not a gate"]
 fn placement_quality_report() {
     let examples = [
-        "../../examples/sensor_logger.synth",
-        "../../examples/env_logger.synth",
-        "../../examples/placement_and_diff_pair.synth",
+        "../../examples/sensor_logger/sensor_logger.synth",
+        "../../examples/env_logger/env_logger.synth",
+        "../../examples/placement_and_diff_pair/placement_and_diff_pair.synth",
         "../../fixtures/designs/secure_tracker.synth",
     ];
     for path in examples {

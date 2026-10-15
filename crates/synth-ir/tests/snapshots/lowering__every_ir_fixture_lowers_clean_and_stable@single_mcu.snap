@@ -688,7 +688,9 @@ expression: board
           "width_mm": 7.75,
           "height_mm": 7.75,
           "courtyard_margin_mm": 0.25,
-          "mating_face": null
+          "mating_face": null,
+          "label_side": null,
+          "label_hidden": null
         },
         "operating_conditions": {
           "min_voltage_v": 1.8,

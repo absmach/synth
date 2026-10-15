@@ -71,7 +71,9 @@ expression: board
           "width_mm": 8.3,
           "height_mm": 6.1,
           "courtyard_margin_mm": 0.25,
-          "mating_face": null
+          "mating_face": null,
+          "label_side": null,
+          "label_hidden": null
         },
         "operating_conditions": {
           "min_voltage_v": 3.5,
@@ -127,7 +129,9 @@ expression: board
           "width_mm": 3.4,
           "height_mm": 1.96,
           "courtyard_margin_mm": 0.25,
-          "mating_face": null
+          "mating_face": null,
+          "label_side": null,
+          "label_hidden": null
         },
         "operating_conditions": {
           "min_voltage_v": null,
@@ -182,7 +186,9 @@ expression: board
           "width_mm": 3.4,
           "height_mm": 1.96,
           "courtyard_margin_mm": 0.25,
-          "mating_face": null
+          "mating_face": null,
+          "label_side": null,
+          "label_hidden": null
         },
         "operating_conditions": {
           "min_voltage_v": null,
@@ -237,7 +243,9 @@ expression: board
           "width_mm": 3.4,
           "height_mm": 1.96,
           "courtyard_margin_mm": 0.25,
-          "mating_face": null
+          "mating_face": null,
+          "label_side": null,
+          "label_hidden": null
         },
         "operating_conditions": {
           "min_voltage_v": null,
@@ -292,7 +300,9 @@ expression: board
           "width_mm": 3.4,
           "height_mm": 1.96,
           "courtyard_margin_mm": 0.25,
-          "mating_face": null
+          "mating_face": null,
+          "label_side": null,
+          "label_hidden": null
         },
         "operating_conditions": {
           "min_voltage_v": null,

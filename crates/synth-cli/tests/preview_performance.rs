@@ -9,7 +9,7 @@
 //! `Layout.wires`/`Layout.junctions`) — at that point the whole
 //! pipeline really did run in ~2ms. That real geometric work is now
 //! in the hot path, and its cost is dramatically different between
-//! build profiles: `cargo build --release` on `examples/sensor_logger.synth`
+//! build profiles: `cargo build --release` on `examples/sensor_logger/sensor_logger.synth`
 //! (27 components) comfortably meets the original 250ms budget
 //! (~150ms wall clock including process startup, measured 2026-08-14),
 //! but the *unoptimized* debug build `cargo test` uses by default
@@ -42,7 +42,10 @@ fn preview_compile_performance_benchmark() {
     let registry = synth_registry::load_dir(&registry_dir)
         .expect("registry should load cleanly for performance test");
 
-    let sample_design_path = workspace_root.join("examples").join("sensor_logger.synth");
+    let sample_design_path = workspace_root
+        .join("examples")
+        .join("sensor_logger")
+        .join("sensor_logger.synth");
     assert!(
         sample_design_path.exists(),
         "sensor_logger.synth must exist at {}",

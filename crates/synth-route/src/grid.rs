@@ -900,7 +900,7 @@ mod tests {
 
     #[test]
     fn grid_is_deterministic() {
-        let board = load_board("../../examples/sensor_logger.synth");
+        let board = load_board("../../examples/sensor_logger/sensor_logger.synth");
         let placement = synth_place::place(&board).expect("place");
         let a = build_grid(&board, &placement);
         let b = build_grid(&board, &placement);
@@ -909,7 +909,7 @@ mod tests {
 
     #[test]
     fn grid_has_obstacles_and_pads_and_free_cells() {
-        let board = load_board("../../examples/sensor_logger.synth");
+        let board = load_board("../../examples/sensor_logger/sensor_logger.synth");
         let placement = synth_place::place(&board).expect("place");
         let grid = build_grid(&board, &placement);
 
@@ -934,7 +934,7 @@ mod tests {
         // net id. Without this invariant, slice 2's Lee maze
         // would have no source / sink to expand from for
         // entire nets.
-        let board = load_board("../../examples/sensor_logger.synth");
+        let board = load_board("../../examples/sensor_logger/sensor_logger.synth");
         let placement = synth_place::place(&board).expect("place");
         let grid = build_grid(&board, &placement);
 

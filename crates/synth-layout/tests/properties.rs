@@ -60,7 +60,7 @@ fn board_from_source(name: &str, source: &str) -> Board {
 
 #[test]
 fn every_component_is_placed_exactly_once() {
-    let board = board_for("examples/sensor_logger.synth");
+    let board = board_for("examples/sensor_logger/sensor_logger.synth");
     let layout = synth_layout::layout(&board);
     assert_eq!(layout.components.len(), board.components.len());
     let mut ids: Vec<u32> = layout.components.iter().map(|p| p.id.0).collect();
@@ -75,7 +75,7 @@ fn every_component_is_placed_exactly_once() {
 
 #[test]
 fn layout_is_deterministic_across_runs() {
-    let board = board_for("examples/sensor_logger.synth");
+    let board = board_for("examples/sensor_logger/sensor_logger.synth");
     let a = synth_layout::layout(&board);
     let b = synth_layout::layout(&board);
     assert_eq!(a, b, "layout is not deterministic");
@@ -83,7 +83,7 @@ fn layout_is_deterministic_across_runs() {
 
 #[test]
 fn all_coordinates_are_finite() {
-    let board = board_for("examples/sensor_logger.synth");
+    let board = board_for("examples/sensor_logger/sensor_logger.synth");
     let layout = synth_layout::layout(&board);
     for p in &layout.components {
         assert!(p.center_mm.0.is_finite(), "{p:?} x is not finite");
@@ -93,7 +93,7 @@ fn all_coordinates_are_finite() {
 
 #[test]
 fn no_two_components_share_a_position() {
-    let board = board_for("examples/sensor_logger.synth");
+    let board = board_for("examples/sensor_logger/sensor_logger.synth");
     let layout = synth_layout::layout(&board);
     let mut positions: Vec<(i64, i64)> = layout
         .components
@@ -123,7 +123,7 @@ fn sheet_size_escalates_with_content_size() {
     // also the invariant `E-SYNTH-SCHEM-007` (page overflow) relies on.
     let small = board_for("fixtures/ir/two_components_with_net.synth");
     let small_layout = synth_layout::layout(&small);
-    let big = board_for("examples/sensor_logger.synth");
+    let big = board_for("examples/sensor_logger/sensor_logger.synth");
     let big_layout = synth_layout::layout(&big);
     assert_eq!(small_layout.sheet_size, synth_layout::SheetSize::A4);
     // Escalation only ever grows the page: never smaller than A4, and

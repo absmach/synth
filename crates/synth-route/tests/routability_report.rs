@@ -31,8 +31,8 @@ fn load_board(path: &str) -> synth_ir::Board {
 #[ignore = "diagnostic report, not a gate"]
 fn routability_report() {
     let examples = [
-        "../../examples/sensor_logger.synth",
-        "../../examples/env_logger.synth",
+        "../../examples/sensor_logger/sensor_logger.synth",
+        "../../examples/env_logger/env_logger.synth",
         "../../fixtures/designs/secure_tracker.synth",
     ];
     for path in examples {
@@ -153,8 +153,8 @@ fn small_designs_do_not_regress_unrouted_nets() {
 fn unrouted_nets_do_not_regress() {
     // (design, max unrouted nets tolerated)
     let expected = [
-        ("../../examples/sensor_logger.synth", 2_usize),
-        ("../../examples/env_logger.synth", 3_usize),
+        ("../../examples/sensor_logger/sensor_logger.synth", 2_usize),
+        ("../../examples/env_logger/env_logger.synth", 3_usize),
         ("../../fixtures/designs/secure_tracker.synth", 3_usize),
     ];
     let mut regressions = Vec::new();
@@ -196,7 +196,7 @@ fn unrouted_nets_do_not_regress() {
 #[allow(clippy::cast_precision_loss, clippy::needless_range_loop)]
 fn unrouted_net_endpoints() {
     for path in [
-        "../../examples/sensor_logger.synth",
+        "../../examples/sensor_logger/sensor_logger.synth",
         "../../fixtures/designs/secure_tracker.synth",
     ] {
         if !Path::new(path).exists() {

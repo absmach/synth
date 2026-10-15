@@ -1,7 +1,7 @@
 // Mcu pattern: an IC with both a decoupling cap and a reset
 // network (pullup resistor + button + debounce cap), the two
 // halves of `build_clusters` pass 3 exercised on the same anchor —
-// mirrors the U2 block in examples/sensor_logger.synth. No
+// mirrors the U2 block in examples/sensor_logger/sensor_logger.synth. No
 // registry MCU (atmega328p, esp32_c3_mini, esp32_wroom_32,
 // nrf52840, rp2350, stm32f103c8, stm32g030) exposes dedicated
 // XTAL1/XTAL2 oscillator pins, so the "and a crystal" half of the

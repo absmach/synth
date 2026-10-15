@@ -416,7 +416,7 @@ mod tests {
 
     #[test]
     fn flags_trace_running_through_a_component_courtyard() {
-        let board = load_board("../../examples/sensor_logger.synth");
+        let board = load_board("../../examples/sensor_logger/sensor_logger.synth");
         let placement = synth_place::place(&board).expect("place");
         let comp = placement
             .components
@@ -443,7 +443,7 @@ mod tests {
 
     #[test]
     fn does_not_flag_a_trace_far_from_every_component() {
-        let board = load_board("../../examples/sensor_logger.synth");
+        let board = load_board("../../examples/sensor_logger/sensor_logger.synth");
         let placement = synth_place::place(&board).expect("place");
         let mut r = empty_routing();
         r.segments.push(Segment {

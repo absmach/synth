@@ -37,7 +37,7 @@ fn board_for(fixture_rel_path: &str) -> Board {
 #[test]
 fn test_no_wire_crosses_unrelated_pin_terminals() {
     for rel in [
-        "examples/sensor_logger.synth",
+        "examples/sensor_logger/sensor_logger.synth",
         "fixtures/layout/led_indicator.synth",
         "fixtures/layout/i2c_bus.synth",
         "fixtures/layout/ldo_block.synth",
@@ -63,7 +63,7 @@ fn test_no_wire_crosses_unrelated_pin_terminals() {
 /// the DRC reports exactly that crossing.
 #[test]
 fn drc_detects_an_injected_wire_through_an_unrelated_pin() {
-    let board = board_for("examples/sensor_logger.synth");
+    let board = board_for("examples/sensor_logger/sensor_logger.synth");
     let layout = synth_layout::layout(&board);
     assert!(
         synth_layout::route::drc_wire_crosses_unrelated_pin_terminal(&board, &layout).is_empty(),

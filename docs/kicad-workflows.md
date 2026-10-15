@@ -242,6 +242,22 @@ report every plane-backed net as open however correctly it was routed. Zones
 are refilled before DRC so clearances are checked against copper that actually
 exists.
 
+After FreeRouting, two steps add ground vias where the pour alone is not enough.
+The first rescues a pour piece that no via ties to the rest of the net (a piece
+holding only SMD pads is cut off). The second gives every outer ground pad a via
+(only on pours of nets named like ground: `GND`, `AGND`, `DGND`, `PGND`, `SGND`,
+`GNDA`, `VSS`, with or without a sheet path; power and signal pours are left
+alone) within 2 mm of its edge, in the same pour piece, at the nearest legal spot and
+never inside a pad and never inside the disc the release gate reads a pad as
+(its larger half-dimension), which the gate would report as a via-in-pad: a
+decoupling capacitor or protection part whose only ground
+path is a long run of pour has a long return loop. "Within 2 mm" is a straight
+line, so a narrow neck in the pour can still make the copper path longer. A pad
+with no legal spot within 2 mm is
+reported in the router log (`ground pad C4.2 has no via within 2.0 mm and no
+room for one`) and counted as `ground_unresolved` in the run record; the fix is
+a layout change.
+
 The delivered board has those same fills saved into it (the router's board,
 plus KiCad's `filled_polygon` copper and nothing else), so KiCad opens it showing
 the connectivity the gate validated rather than unrouted plane pads until you
@@ -515,6 +531,47 @@ placement sidecar only to fix specific parts. A sidecar entry fixes that part's
 position (it moves only to clear a collision, and `priority = "hard"` entries
 win over soft ones), so the placer's spacing choices do not apply to it;
 pinning every part bypasses the placer.
+
+### Silkscreen reference labels
+
+The export keeps each part's reference label on the board and clear of other
+parts and labels: it tries the long-standing offset first, then the other
+three sides of the part, and keeps the offset if nothing fits. Two optional
+schemas steer it.
+
+A part file can state a preference in its `[footprint_dimensions]` table:
+
+```toml
+[footprint_dimensions]
+width_mm = 3.54
+height_mm = 8.62
+label_side = "below"   # above | below | left | right, tried first
+label_hidden = true    # leave the label off the silkscreen
+```
+
+A design can override one label in `<design>.placement.layout.toml`, keyed by
+designator (this file is board millimetres, and so are these offsets):
+
+```toml
+[labels.R9]
+dx = 0.0          # label centre relative to the part's courtyard centre,
+dy = -3.0         # in board axes
+angle = 0         # degrees in board axes, even on a rotated part; 0 reads left to right
+priority = "hard" # hard: use it as given, kept on the board; soft (default): try it first
+
+[labels.C3]
+hide = true       # hide it; `hide = false` shows a part file's hidden label
+```
+
+A hidden label takes no room. A sidecar entry beats the part file, and a hard
+offset is not checked for collisions but is pulled back inside the board edge.
+`angle` and `priority` apply to an offset: without `dx` or `dy` they do
+nothing, and if only one of the two is given the other counts as 0. A
+designator that names no part is ignored. A sidecar that does not parse is
+ignored as a whole, so a typo in one entry (for example `priority = "firm"`)
+drops every label entry and every part position in that file. The sidecar
+schema version is unchanged: the `labels` table is optional, and an older
+file without it loads as before.
 
 ---
 

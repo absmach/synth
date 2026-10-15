@@ -68,8 +68,8 @@ pub use erc_validate::{
 pub use export::{
     export, export_for_design, export_schematic_only, export_with_placement, export_with_sidecar,
     export_with_sidecar_and_routing_order, export_with_sidecars,
-    export_with_sidecars_and_routing_order, placement_candidates, ExportError, ExportResult,
-    SchematicExportResult, Sidecars,
+    export_with_sidecars_and_routing_order, placement_candidates, placement_for_export,
+    ExportError, ExportResult, SchematicExportResult, Sidecars,
 };
 pub use sch_svg::{run_kicad_svg_export, SvgExportError};
 

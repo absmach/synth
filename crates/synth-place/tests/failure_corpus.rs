@@ -114,7 +114,7 @@ fn failure_corpus_emits_structured_placement_errors() {
 
 #[test]
 fn explicit_dimensions_are_used_and_reject_an_infeasible_outline() {
-    let board = load_board(&workspace_root().join("examples/sensor_logger.synth"));
+    let board = load_board(&workspace_root().join("examples/sensor_logger/sensor_logger.synth"));
 
     let placement = synth_place::place_with_dimensions(&board, 160.0, 120.0)
         .expect("the reference design fits in the explicit outline");

@@ -692,6 +692,68 @@ voltage_max_v = 5.0
     }
 
     #[test]
+    fn parses_label_hints_in_footprint_dimensions() {
+        let toml = r#"
+id = "test_header"
+kind = "connector"
+
+[footprint_dimensions]
+width_mm = 3.5
+height_mm = 8.6
+label_side = "below"
+label_hidden = true
+
+[[pins]]
+name = "p1"
+number = "1"
+electrical_type = "passive"
+"#;
+        let reg = load_from_strs(&[("test_header.synth.toml", toml)]).expect("valid part");
+        let dims = reg
+            .lookup("test_header")
+            .unwrap()
+            .footprint_dimensions
+            .as_ref()
+            .unwrap();
+        assert_eq!(dims.label_side, Some(crate::part::LabelSide::Below));
+        assert_eq!(dims.label_hidden, Some(true));
+    }
+
+    #[test]
+    fn a_part_without_label_hints_has_none() {
+        let toml = r#"
+id = "plain"
+kind = "resistor"
+
+[footprint_dimensions]
+width_mm = 2.0
+height_mm = 1.0
+"#;
+        let reg = load_from_strs(&[("plain.synth.toml", toml)]).expect("valid part");
+        let dims = reg
+            .lookup("plain")
+            .unwrap()
+            .footprint_dimensions
+            .as_ref()
+            .unwrap();
+        assert_eq!((dims.label_side, dims.label_hidden), (None, None));
+    }
+
+    #[test]
+    fn an_unknown_label_side_is_rejected() {
+        let toml = r#"
+id = "bad_side"
+kind = "resistor"
+
+[footprint_dimensions]
+width_mm = 2.0
+height_mm = 1.0
+label_side = "inside"
+"#;
+        assert!(load_from_strs(&[("bad_side.synth.toml", toml)]).is_err());
+    }
+
+    #[test]
     fn create_part_stub_is_valid_and_unverified() {
         let stub = create_part_stub("mystery_ic", &["vcc".into(), "gnd".into(), "sda".into()]);
         let reg = load_from_strs(&[("mystery_ic.synth.toml", &stub)])

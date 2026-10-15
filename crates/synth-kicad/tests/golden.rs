@@ -205,3 +205,34 @@ fn tempdir(label: &str) -> PathBuf {
     }
     p
 }
+
+/// `kicad-cli` takes the manufacturer's edge and hole clearances from a custom
+/// rules file next to the board, so the export has to write it.
+#[test]
+fn the_export_writes_the_manufacturer_rules_file() {
+    let registry = synth_registry::load_dir(&workspace_root().join("registry").join("parts"))
+        .expect("seed registry must load");
+    let path = workspace_root()
+        .join("fixtures")
+        .join("ir")
+        .join("single_mcu.synth");
+    let src = fs::read_to_string(&path).unwrap();
+    let parsed = synth_parser::parse(&src, "single_mcu.synth".to_string());
+    let board = synth_ir::lower(&parsed.ast.expect("ast"), &registry, "single_mcu.synth")
+        .board
+        .expect("board");
+
+    let dir = tempdir("rules");
+    let result = synth_kicad::export(&board, &dir).expect("export");
+
+    let rules = fs::read_to_string(result.project_path.with_extension("kicad_dru"))
+        .expect("the export must write <board>.kicad_dru");
+    assert!(
+        rules.contains("(constraint edge_clearance (min 0.3mm))"),
+        "{rules}"
+    );
+    assert!(
+        rules.contains("(constraint hole_clearance (min 0.2mm))"),
+        "{rules}"
+    );
+}

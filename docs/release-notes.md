@@ -20,8 +20,12 @@
   | `W-SYNTH-DRC-016` | signal via with no ground return via |
   | `W-SYNTH-DRC-017` | rail IR drop over budget |
   | `E-SYNTH-DRC-018` | net over its class `max_length` |
+  | `E-SYNTH-DRC-019` | matched bus over its class `max_skew` |
+  | `W-SYNTH-DRC-020` | too much current per via |
+  | `W-SYNTH-DRC-021` | EMC placement (crystal isolation, switching loop) |
+  | `E-SYNTH-DRC-022` | routed board could not be read, so SI/PI was not checked |
 
-  `W-` codes are advisory and never block a release; the DRC report now carries a severity dimension (`is_blocking`, warning-aware `is_clean`).
+  `W-` codes are advisory and never block a release; the DRC report now carries a severity dimension (`is_blocking`, warning-aware `is_clean`). `E-SYNTH-DRC-022` is blocking: an unreadable delivered board must not read as clean.
 - Independent validation now reads a zone's **poured** copper (`filled_polygon`), not only its outline, and records `plane_splits`: signal tracks whose adjacent plane layer pours copper but does not cover the track, so it has no return path under it. Advisory.
 - `E-SYNTH-STACKUP-004/005` and `E-SYNTH-IMPEDANCE-001/002` now cover a netclass's single-ended impedance too.
 
@@ -38,3 +42,10 @@
 ### Placement
 
 - The placer takes a deterministic seed: `synth export-kicad --place-route-iterate` (and `synth_export`'s `place_route_iterate`) routes each candidate placement — density-margin and seed variants — and keeps the one that routes best, judged by the independent checks. Best-of-N per candidate is used when `--best-of` is set, and the winner's hardest-net order is reported for a retry.
+
+### Estimator scope
+
+All signal- and power-integrity figures (impedance, crosstalk, ampacity, IR
+drop, thermal rise, propagation delay) are closed-form estimates from the
+declared stackup and geometry. They are not field solves and do not replace
+expert analysis or simulation; each diagnostic says so.

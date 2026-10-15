@@ -148,6 +148,30 @@ fn pullup_on_net<'a>(
     None
 }
 
+/// True when `part` is a protection device — a TVS/ESD diode, a varistor, a
+/// fuse, or a reverse-polarity / ideal-diode path.
+///
+/// A protection device passes surge current rather than drawing steady
+/// current, so it is not a load (see [`PowerBudgetRule`]) and is what
+/// satisfies the connector-protection rule ([`net_has_protection`]).
+fn is_protection_part(part: &synth_registry::Part) -> bool {
+    let hay = format!(
+        "{} {} {}",
+        part.id.as_str(),
+        part.kind,
+        part.description.as_deref().unwrap_or("")
+    )
+    .to_ascii_lowercase();
+    part.kind.eq_ignore_ascii_case("protection")
+        || hay.contains("esd")
+        || hay.contains("tvs")
+        || hay.contains("varistor")
+        || hay.contains("fuse")
+        || hay.contains("reverse")
+        || hay.contains("schottky")
+        || hay.contains("ideal diode")
+}
+
 /// True when any component on `net` belongs to a protection family —
 /// a TVS/ESD diode, a fused or reverse-polarity protected path.
 fn net_has_protection(board: &Board, net: NetId) -> bool {
@@ -160,27 +184,10 @@ fn net_has_protection(board: &Board, net: NetId) -> bool {
         if crate::endpoint_has_any_capability(board, ep.component, ep.pin, &RS485_LINES) {
             return false;
         }
-        let Some(component) = board.component(ep.component) else {
-            return false;
-        };
-        let Some(part) = component.part.as_ref() else {
-            return false;
-        };
-        let hay = format!(
-            "{} {} {}",
-            part.id.as_str(),
-            part.kind,
-            part.description.as_deref().unwrap_or("")
-        )
-        .to_ascii_lowercase();
-        part.kind.eq_ignore_ascii_case("protection")
-            || hay.contains("esd")
-            || hay.contains("tvs")
-            || hay.contains("varistor")
-            || hay.contains("fuse")
-            || hay.contains("reverse")
-            || hay.contains("schottky")
-            || hay.contains("ideal diode")
+        board
+            .component(ep.component)
+            .and_then(|component| component.part.as_ref())
+            .is_some_and(is_protection_part)
     })
 }
 
@@ -596,10 +603,20 @@ impl ErcRule for PowerBudgetRule {
                 let Some(load) = board.component(ep.component) else {
                     continue;
                 };
-                let Some(draw) = load
-                    .part
+                let Some(load_part) = load.part.as_ref() else {
+                    continue;
+                };
+                // A protection device's `max_current_ma` is its clamping/surge
+                // rating, not a steady draw: a TVS on a rail idles at microamps
+                // and only conducts during a surge. Counting it charges the
+                // regulator a full amp for a part that draws nothing, and the
+                // "fix" for a failing budget would be to drop the protection.
+                if is_protection_part(load_part) {
+                    continue;
+                }
+                let Some(draw) = load_part
+                    .operating_conditions
                     .as_ref()
-                    .and_then(|p| p.operating_conditions.as_ref())
                     .and_then(|c| c.max_current_ma)
                 else {
                     continue;

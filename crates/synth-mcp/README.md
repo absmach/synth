@@ -41,9 +41,9 @@ they can't silently drift from what the parser accepts):
 
 | Example                                  | Demonstrates                                                                                                                                                                                                      |
 | ---------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `examples/env_logger.synth`              | A realistic full board: MCU, LDO regulator, I2C sensor, reset circuit, debug header.                                                                                                                              |
-| `examples/sensor_logger.synth`           | A larger full board: USB-C power, dual I2C sensors, SPI flash, status LEDs.                                                                                                                                       |
-| `examples/placement_and_diff_pair.synth` | The syntax the other two don't use: a hard `placement_hint`, a `diff_pair` with `impedance` (resolved via the `<REFDES>_<pin>` endpoint convention — V1 has no separate net-naming syntax), and a `keepout` zone. |
+| `examples/env_logger/env_logger.synth`              | A realistic full board: MCU, LDO regulator, I2C sensor, reset circuit, debug header.                                                                                                                              |
+| `examples/sensor_logger/sensor_logger.synth`           | A larger full board: USB-C power, dual I2C sensors, SPI flash, status LEDs.                                                                                                                                       |
+| `examples/placement_and_diff_pair/placement_and_diff_pair.synth` | The syntax the other two don't use: a hard `placement_hint`, a `diff_pair` with `impedance` (resolved via the `<REFDES>_<pin>` endpoint convention — V1 has no separate net-naming syntax), and a `keepout` zone. |
 
 ```jsonrpc
 --> { "jsonrpc": "2.0", "id": 0, "method": "tools/call",
@@ -51,9 +51,9 @@ they can't silently drift from what the parser accepts):
 
 <-- { "jsonrpc": "2.0", "id": 0,
       "result": { "grammar": { "statements": [ ... ] },
-                  "examples": [ { "file": "examples/env_logger.synth", "source": "..." },
-                                { "file": "examples/sensor_logger.synth", "source": "..." },
-                                { "file": "examples/placement_and_diff_pair.synth", "source": "..." } ] } }
+                  "examples": [ { "file": "examples/env_logger/env_logger.synth", "source": "..." },
+                                { "file": "examples/sensor_logger/sensor_logger.synth", "source": "..." },
+                                { "file": "examples/placement_and_diff_pair/placement_and_diff_pair.synth", "source": "..." } ] } }
 ```
 
 ## Part-import & authoring tools

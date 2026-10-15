@@ -1321,7 +1321,7 @@ fn capability_descriptor() -> serde_json::Value {
                 "notes": "No fabricator presets are shipped; every value is declared by the design. A diff_pair impedance derives its net class trace width (and, for a true pair, its gap) from the first copper and insulator layers."
             },
             "routing_constraints": {
-                "netclass": ["trace_width", "clearance", "color", "impedance", "current", "plane", "max_length"],
+                "netclass": ["trace_width", "clearance", "color", "impedance", "current", "plane", "max_length", "max_skew"],
                 "diff_pair": ["impedance", "max_skew", "couple"],
                 "keepout": ["radius"],
                 "component": ["placement_hint"]
@@ -3436,12 +3436,17 @@ fn dump_route(
     best_of: bool,
     pretty: bool,
 ) -> anyhow::Result<u8> {
-    let report = route_design(input, registry_dir, engine, options, best_of)?;
+    let (report, signal_integrity) = route_design(input, registry_dir, engine, options, best_of)?;
     print_route_report(&report);
+    let si_blocking = print_signal_integrity(&signal_integrity);
 
     let stdout = std::io::stdout();
     let mut out = stdout.lock();
-    let value = serde_json::to_value(&report)?;
+    let mut value = serde_json::to_value(&report)?;
+    value["signal_integrity"] = serde_json::json!(signal_integrity);
+    if si_blocking > 0 {
+        value["drc_clean"] = serde_json::json!(false);
+    }
     if pretty {
         serde_json::to_writer_pretty(&mut out, &value)?;
     } else {
@@ -3449,11 +3454,33 @@ fn dump_route(
     }
     writeln!(&mut out)?;
 
-    Ok(if report.is_fabrication_ready() {
+    Ok(if report.is_fabrication_ready() && si_blocking == 0 {
         EXIT_SUCCESS
     } else {
         EXIT_VALIDATION_ERRORS
     })
+}
+
+/// Print the routed signal/power-integrity findings, one per line, and return
+/// the number that block a release.
+fn print_signal_integrity(violations: &[synth_drc::Violation]) -> usize {
+    let mut blocking = 0;
+    for violation in violations {
+        if violation.is_blocking() {
+            blocking += 1;
+        }
+        eprintln!(
+            "{} {} {}",
+            if violation.is_blocking() {
+                "error:"
+            } else {
+                "warning:"
+            },
+            violation.code,
+            violation.message
+        );
+    }
+    blocking
 }
 
 /// Compile, place, export, and route a design through the external router.
@@ -3467,7 +3494,7 @@ fn route_design(
     engine: ExternalRouter,
     options: &RouterOptions,
     best_of: bool,
-) -> anyhow::Result<synth_router::RouteReport> {
+) -> anyhow::Result<(synth_router::RouteReport, Vec<synth_drc::Violation>)> {
     let (source, file) = read_source(input)?;
     let parse = synth_parser::parse(&source, file.clone());
     write_diagnostics_to_stderr(&parse.diagnostics)?;
@@ -3503,7 +3530,21 @@ fn route_design(
     let sidecars = synth_kicad::Sidecars::resolve_for(input);
     let result = synth_kicad::export_with_sidecars(board, &out_dir, &sidecars)
         .map_err(|e| anyhow::anyhow!("kicad export failed: {e}"))?;
-    route_externally(board, &result, input, engine, options, best_of, &[])
+    let report = route_externally(board, &result, input, engine, options, best_of, &[])?;
+
+    // Signal/power-integrity on the delivered copper, so `synth route` and
+    // `synth drc` see the same findings the export gate does instead of only
+    // the geometry kicad-cli judges.
+    let profile = synth_drc::ManufacturerProfile::from_name(
+        board.manufacturer.as_deref().unwrap_or("jlc-standard"),
+    );
+    let delivered = report
+        .artifacts
+        .delivered
+        .clone()
+        .unwrap_or_else(|| result.pcb_path.clone());
+    let signal_integrity = synth_drc_on_routed(board, &delivered, &profile);
+    Ok((report, signal_integrity))
 }
 
 /// Report the physical state of a design after routing it externally.
@@ -3517,12 +3558,17 @@ fn dump_drc(
     options: &RouterOptions,
     pretty: bool,
 ) -> anyhow::Result<u8> {
-    let report = route_design(input, registry_dir, engine, options, false)?;
+    let (report, signal_integrity) = route_design(input, registry_dir, engine, options, false)?;
     print_route_report(&report);
+    let si_blocking = print_signal_integrity(&signal_integrity);
 
     let stdout = std::io::stdout();
     let mut out = stdout.lock();
-    let value = serde_json::to_value(&report)?;
+    let mut value = serde_json::to_value(&report)?;
+    value["signal_integrity"] = serde_json::json!(signal_integrity);
+    if si_blocking > 0 {
+        value["drc_clean"] = serde_json::json!(false);
+    }
     if pretty {
         serde_json::to_writer_pretty(&mut out, &value)?;
     } else {
@@ -3530,7 +3576,7 @@ fn dump_drc(
     }
     writeln!(&mut out)?;
 
-    Ok(if report.is_fabrication_ready() {
+    Ok(if report.is_fabrication_ready() && si_blocking == 0 {
         EXIT_SUCCESS
     } else {
         EXIT_VALIDATION_ERRORS
@@ -4043,6 +4089,30 @@ fn export_kicad(
         &chosen_order,
     )?;
 
+    // Signal integrity and power integrity on the routed copper. The rules
+    // need the routed board, not the placement, so they run here on the file
+    // the router produced. Blocking findings stop the export unless --force.
+    let drc_profile = synth_drc::ManufacturerProfile::from_name(
+        board.manufacturer.as_deref().unwrap_or("jlc-standard"),
+    );
+    // Read the delivered copper, not the baseline path: the router may deliver
+    // its board elsewhere, and reading the un-routed baseline would make these
+    // rules silently no-op.
+    let delivered = routing
+        .artifacts
+        .delivered
+        .clone()
+        .unwrap_or_else(|| result.pcb_path.clone());
+    let synth_violations = synth_drc_on_routed(board, &delivered, &drc_profile);
+    let blocking = print_signal_integrity(&synth_violations);
+    if blocking > 0 && !force {
+        eprintln!(
+            "error: the routed board has {blocking} blocking signal/power-integrity finding(s); \
+             fix the routing or use --force to export anyway."
+        );
+        return Ok(1);
+    }
+
     eprintln!("wrote {}", result.project_path.display());
     eprintln!("wrote {}", result.schematic_path.display());
     eprintln!("wrote {}", result.library_path.display());
@@ -4239,6 +4309,7 @@ fn export_kicad(
         overrides,
         release::reviewer_state(board),
     )
+    .with_signal_integrity(&synth_violations)
     .with_release_blocked(release_drc_blocked)
     .with_routing(Some(release::RoutingState::from_report(
         &routing,
@@ -4649,6 +4720,107 @@ fn evaluate_candidate(
         return Ok(None);
     }
     Ok(Some((report.layout_cost(), report)))
+}
+
+/// Synth's rule engine run on the **routed** board, read back from disk.
+///
+/// The impedance, crosstalk, skew, ampacity, IR-drop, net-length and
+/// return-path rules all read routed copper; running them on the placement
+/// (the empty-routing path) can never see it. This reads the board the router
+/// produced back into [`synth_pcb::Routing`] and checks it against the same
+/// placement the export wrote, so the release gate actually evaluates the
+/// physics on the copper, not only on the intent.
+fn synth_drc_on_routed(
+    board: &synth_ir::Board,
+    pcb_path: &Path,
+    profile: &synth_drc::ManufacturerProfile,
+) -> Vec<synth_drc::Violation> {
+    // A board that cannot be read must not look clean: the gate cannot tell
+    // "checked, nothing found" from "never checked" if the failure is
+    // swallowed. Report it as a blocking finding so it downgrades the manifest
+    // and stops the export, exactly as a real violation would.
+    let text = match std::fs::read_to_string(pcb_path) {
+        Ok(text) => text,
+        Err(error) => {
+            return vec![synth_drc::unreadable_routed_board(
+                pcb_path,
+                &error.to_string(),
+            )];
+        }
+    };
+    let routed = match synth_router::pcb_read::PcbBoard::parse(&text) {
+        Ok(routed) => routed,
+        Err(error) => {
+            return vec![synth_drc::unreadable_routed_board(
+                pcb_path,
+                &error.to_string(),
+            )];
+        }
+    };
+    let routing = routing_from_routed(board, &routed);
+    let stackup = synth_geometry::StackupProfile::for_board(board);
+    synth_drc::check_signal_integrity(board, &routing, profile, Some(&stackup))
+}
+
+/// Convert a board read back from disk into the copper IR the DRC rules read.
+///
+/// Nets are matched by name (the file carries names, the IR carries ids), and
+/// a segment or via whose net does not resolve is skipped rather than
+/// mis-attributed.
+fn routing_from_routed(
+    board: &synth_ir::Board,
+    routed: &synth_router::pcb_read::PcbBoard,
+) -> synth_pcb::Routing {
+    let net_of = |code: Option<u32>| -> Option<synth_ir::NetId> {
+        let name = routed.nets.get(&code?)?;
+        board
+            .nets
+            .iter()
+            .find(|net| net.name == *name)
+            .map(|net| net.id)
+    };
+    let segments = routed
+        .segments
+        .iter()
+        .filter_map(|segment| {
+            Some(synth_pcb::Segment {
+                net: net_of(segment.net)?,
+                layer: pcb_layer(&segment.layer),
+                start: synth_geometry::Point::new(segment.start.x_nm, segment.start.y_nm),
+                end: synth_geometry::Point::new(segment.end.x_nm, segment.end.y_nm),
+                width_nm: segment.width_nm,
+            })
+        })
+        .collect();
+    let vias = routed
+        .vias
+        .iter()
+        .filter_map(|via| {
+            Some(synth_pcb::Via {
+                net: net_of(via.net)?,
+                at: synth_geometry::Point::new(via.at.x_nm, via.at.y_nm),
+                drill_nm: via.drill_nm,
+                pad_diameter_nm: via.size_nm,
+            })
+        })
+        .collect();
+    synth_pcb::Routing {
+        segments,
+        vias,
+        ..synth_pcb::Routing::default()
+    }
+}
+
+/// Map a KiCad copper layer name back to the IR layer identity.
+fn pcb_layer(name: &str) -> synth_geometry::Layer {
+    match name {
+        "B.Cu" => synth_geometry::Layer::Bottom,
+        "In1.Cu" => synth_geometry::Layer::Inner1,
+        "In2.Cu" => synth_geometry::Layer::Inner2,
+        "In3.Cu" => synth_geometry::Layer::Inner3,
+        "In4.Cu" => synth_geometry::Layer::Inner4,
+        _ => synth_geometry::Layer::Top,
+    }
 }
 
 /// Run the external router and report the outcome to the operator.
@@ -5343,5 +5515,86 @@ mod tests {
                 }
             }
         }
+    }
+
+    #[test]
+    fn routed_segments_map_back_to_ir_nets_and_layers() {
+        let registry = synth_registry::load_dir(
+            &std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+                .join("..")
+                .join("..")
+                .join("registry")
+                .join("parts"),
+        )
+        .expect("registry must load");
+        let src = r#"board "t" {
+  layers 4
+  component R1: resistor "r_generic_0603" value "10k"
+  component R2: resistor "r_generic_0603" value "10k"
+  connect R1.p1 -> R2.p1 as "PWR"
+}
+"#;
+        let parse = synth_parser::parse(src, "t.synth".to_string());
+        let ast = parse.ast.as_ref().expect("parse");
+        let board = synth_ir::lower(ast, &registry, "t.synth")
+            .board
+            .expect("board");
+        let net = board
+            .nets
+            .iter()
+            .find(|net| net.name == "PWR")
+            .expect("net")
+            .id;
+        let text = r#"(kicad_pcb
+          (layers (0 "F.Cu" signal) (1 "In1.Cu" power) (2 "In2.Cu" power) (3 "B.Cu" signal))
+          (net 0 "")
+          (net 1 "PWR")
+          (segment (start 0 0) (end 5 0) (width 0.25) (layer "B.Cu") (net 1))
+        )"#;
+        let pcb = synth_router::pcb_read::PcbBoard::parse(text).expect("pcb parse");
+        let routing = routing_from_routed(&board, &pcb);
+        assert_eq!(routing.segments.len(), 1, "one segment maps");
+        assert_eq!(routing.segments[0].net, net, "net matched by name");
+        assert_eq!(routing.segments[0].layer, synth_geometry::Layer::Bottom);
+    }
+
+    /// A minimal board for the routed-SI/PI read-back tests.
+    fn routed_check_board() -> synth_ir::Board {
+        let parse = synth_parser::parse(r#"board "t" { layers 2 }"#, "t.synth".to_string());
+        let ast = parse.ast.as_ref().expect("parse");
+        synth_ir::lower(ast, &synth_registry::Registry::default(), "t.synth")
+            .board
+            .expect("board")
+    }
+
+    #[test]
+    fn a_missing_routed_board_is_a_blocking_finding() {
+        let board = routed_check_board();
+        let profile = synth_drc::ManufacturerProfile::from_name("jlc-standard");
+        let findings = synth_drc_on_routed(
+            &board,
+            std::path::Path::new("/nonexistent/synth-routed-board.kicad_pcb"),
+            &profile,
+        );
+        assert_eq!(findings.len(), 1, "{findings:?}");
+        assert_eq!(findings[0].code, "E-SYNTH-DRC-022");
+        assert!(
+            findings[0].is_blocking(),
+            "an unreadable routed board must block, not read as clean"
+        );
+    }
+
+    #[test]
+    fn a_malformed_routed_board_is_a_blocking_finding() {
+        let board = routed_check_board();
+        let profile = synth_drc::ManufacturerProfile::from_name("jlc-standard");
+        let path =
+            std::env::temp_dir().join(format!("synth-malformed-{}.kicad_pcb", std::process::id()));
+        std::fs::write(&path, "(kicad_pcb (unbalanced").expect("write scratch board");
+        let findings = synth_drc_on_routed(&board, &path, &profile);
+        let _ = std::fs::remove_file(&path);
+        assert_eq!(findings.len(), 1, "{findings:?}");
+        assert_eq!(findings[0].code, "E-SYNTH-DRC-022");
+        assert!(findings[0].is_blocking());
     }
 }

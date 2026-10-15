@@ -147,8 +147,11 @@ fn layout_summary(board: &Board, layout: &synth_layout::Layout) -> String {
 #[test]
 fn real_designs_layout_snapshots() {
     for (fixture, snapshot_name) in [
-        ("examples/sensor_logger.synth", "sensor_logger_layout"),
-        ("examples/env_logger.synth", "env_logger_layout"),
+        (
+            "examples/sensor_logger/sensor_logger.synth",
+            "sensor_logger_layout",
+        ),
+        ("examples/env_logger/env_logger.synth", "env_logger_layout"),
     ] {
         let board = board_for(fixture);
         let layout = synth_layout::layout(&board);

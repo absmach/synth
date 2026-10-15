@@ -46,7 +46,9 @@ board "sensor_logger" {
   component C6: capacitor  "c_generic_0603" value "100nF"  // reset cap
 
   connect U1.vout -> U2.vcc
+  connect U1.vout -> U2.avcc
   connect U1.gnd  -> U2.gnd
+  connect U1.gnd  -> U2.gnd_2
   connect U2.vcc  -> C5.p1
   connect U2.gnd  -> C5.p2
   connect U2.vcc  -> R1.p1

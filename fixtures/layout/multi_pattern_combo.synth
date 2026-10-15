@@ -2,7 +2,7 @@
 // (decoupling on both rails), an MCU (decoupling + reset network),
 // an I2C sensor with SDA/SCL pullups, and a status LED — four of
 // the eight cataloged motifs on one board. Distinct from
-// examples/sensor_logger.synth: different regulator
+// examples/sensor_logger/sensor_logger.synth: different regulator
 // (lp5907_3v3 vs. ams1117_3v3), different MCU (stm32f103c8 vs.
 // atmega328p), different ESD diode (d_tvs_5v vs. esd_usb), and a
 // single status LED instead of three.

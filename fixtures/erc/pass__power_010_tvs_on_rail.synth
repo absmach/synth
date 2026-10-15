@@ -1,0 +1,20 @@
+// A TVS on a regulator's rail records 1000 mA — its surge rating, not a
+// steady draw. Counting it would put a rail that idles at microamps a full
+// amp over its 800 mA regulator; the power budget must not charge the
+// regulator for the clamp. (Cathode to the rail, anode to ground: the
+// reverse-biased clamp a rail wants.)
+board "power_010_tvs_on_rail" {
+  layers 2
+
+  component U1: regulator "ams1117_3v3"
+  component D1: diode "d_tvs_5v"
+  component C1: capacitor "c_generic_0805" value "10uF"
+  component C2: capacitor "c_generic_0805" value "10uF"
+
+  connect U1.vin -> C1.p1
+  connect U1.gnd -> C1.p2
+  connect U1.vout -> C2.p1
+  connect U1.gnd -> C2.p2
+  connect U1.vout -> D1.cathode
+  connect U1.gnd -> D1.anode
+}

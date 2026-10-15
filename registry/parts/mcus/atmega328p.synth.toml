@@ -16,6 +16,14 @@ min_voltage_v = 1.8
 max_voltage_v = 5.5
 max_current_ma = 200.0
 
+# Full DIP-28 pin map from the Microchip ATmega328P datasheet (DS40002061)
+# Pin Configurations, cross-checked against KiCad's
+# MCU_Microchip_ATmega:ATmega328P-P symbol. Every pad of the footprint is
+# declared: an undeclared pad is a routing and netlist hazard
+# (E-SYNTH-QUAL-002).
+
+# --- Power ---------------------------------------------------------------
+
 [[pins]]
 name = "vcc"
 number = "7"
@@ -29,28 +37,50 @@ electrical_type = "power_input"
 required = true
 
 [[pins]]
-name = "pd0_rx"
-number = "2"
-electrical_type = "bidirectional"
-capabilities = ["gpio", "uart_rx"]
+name = "avcc"
+number = "20"
+electrical_type = "power_input"
+required = true
 
 [[pins]]
-name = "pd1_tx"
-number = "3"
-electrical_type = "bidirectional"
-capabilities = ["gpio", "uart_tx"]
+name = "aref"
+number = "21"
+electrical_type = "passive"
 
 [[pins]]
-name = "pc4_sda"
-number = "27"
-electrical_type = "bidirectional"
-capabilities = ["gpio", "i2c_sda"]
+name = "gnd_2"
+number = "22"
+electrical_type = "power_input"
+required = true
+
+# --- Reset ---------------------------------------------------------------
 
 [[pins]]
-name = "pc5_scl"
-number = "28"
+name = "reset"
+number = "1"
+electrical_type = "input"
+capabilities = ["reset"]
+required = true
+
+# --- Port B --------------------------------------------------------------
+
+[[pins]]
+name = "pb0"
+number = "14"
 electrical_type = "bidirectional"
-capabilities = ["gpio", "i2c_scl"]
+capabilities = ["gpio"]
+
+[[pins]]
+name = "pb1"
+number = "15"
+electrical_type = "bidirectional"
+capabilities = ["gpio"]
+
+[[pins]]
+name = "pb2_ss"
+number = "16"
+electrical_type = "bidirectional"
+capabilities = ["gpio", "spi_cs"]
 
 [[pins]]
 name = "pb3_mosi"
@@ -71,20 +101,106 @@ electrical_type = "bidirectional"
 capabilities = ["gpio", "spi_sck"]
 
 [[pins]]
-name = "pb2_ss"
-number = "16"
+name = "xtal1"
+number = "9"
 electrical_type = "bidirectional"
-capabilities = ["gpio", "spi_cs"]
+capabilities = ["gpio"]
 
 [[pins]]
-name = "reset"
-number = "1"
-electrical_type = "input"
-capabilities = ["reset"]
-required = true
+name = "xtal2"
+number = "10"
+electrical_type = "bidirectional"
+capabilities = ["gpio"]
+
+# --- Port C --------------------------------------------------------------
+
+[[pins]]
+name = "pc0"
+number = "23"
+electrical_type = "bidirectional"
+capabilities = ["gpio"]
+
+[[pins]]
+name = "pc1"
+number = "24"
+electrical_type = "bidirectional"
+capabilities = ["gpio"]
+
+[[pins]]
+name = "pc2"
+number = "25"
+electrical_type = "bidirectional"
+capabilities = ["gpio"]
+
+[[pins]]
+name = "pc3"
+number = "26"
+electrical_type = "bidirectional"
+capabilities = ["gpio"]
+
+[[pins]]
+name = "pc4_sda"
+number = "27"
+electrical_type = "bidirectional"
+capabilities = ["gpio", "i2c_sda"]
+
+[[pins]]
+name = "pc5_scl"
+number = "28"
+electrical_type = "bidirectional"
+capabilities = ["gpio", "i2c_scl"]
+
+# --- Port D --------------------------------------------------------------
+
+[[pins]]
+name = "pd0_rx"
+number = "2"
+electrical_type = "bidirectional"
+capabilities = ["gpio", "uart_rx"]
+
+[[pins]]
+name = "pd1_tx"
+number = "3"
+electrical_type = "bidirectional"
+capabilities = ["gpio", "uart_tx"]
+
+[[pins]]
+name = "pd2"
+number = "4"
+electrical_type = "bidirectional"
+capabilities = ["gpio"]
+
+[[pins]]
+name = "pd3"
+number = "5"
+electrical_type = "bidirectional"
+capabilities = ["gpio"]
+
+[[pins]]
+name = "pd4"
+number = "6"
+electrical_type = "bidirectional"
+capabilities = ["gpio"]
+
+[[pins]]
+name = "pd5"
+number = "11"
+electrical_type = "bidirectional"
+capabilities = ["gpio"]
+
+[[pins]]
+name = "pd6"
+number = "12"
+electrical_type = "bidirectional"
+capabilities = ["gpio"]
+
+[[pins]]
+name = "pd7"
+number = "13"
+electrical_type = "bidirectional"
+capabilities = ["gpio"]
 
 [[required_decoupling]]
 net = "vcc"
 value = "100nf"
 count = 1
-

@@ -932,6 +932,14 @@ fn clamp_annotations_to_sheet(layout: &mut Layout) {
 /// region, instead of trailing loose in the ungrouped region.
 pub const MOUNTING_REGION: &str = "MOUNTING";
 
+/// A board feature rather than a circuit part: a mounting hole, test point or
+/// fiducial. Both the schematic regions and the board outline treat the three
+/// alike.
+#[must_use]
+pub fn is_board_feature_kind(kind: &str) -> bool {
+    matches!(kind, "mounting_hole" | "testpoint" | "fiducial")
+}
+
 /// The region a component belongs to: its declared `group`, else the
 /// implicit [`MOUNTING_REGION`] for a mechanical/test part, else
 /// `None` (the trailing ungrouped region).
@@ -945,7 +953,7 @@ pub fn effective_group(board: &Board, id: ComponentId) -> Option<&str> {
         return Some(group);
     }
     let kind = component.part.as_ref().map(|p| p.kind.as_str())?;
-    matches!(kind, "mounting_hole" | "testpoint" | "fiducial").then_some(MOUNTING_REGION)
+    is_board_feature_kind(kind).then_some(MOUNTING_REGION)
 }
 
 /// Caption every declared `group` on the sheet, and draw its titled

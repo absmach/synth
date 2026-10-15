@@ -1289,6 +1289,17 @@ impl Parser {
                         attrs.push(NetclassAttr::MaxLength(v));
                     }
                 }
+                // `max_skew` is a reserved keyword (it is also a `diff_pair`
+                // attribute), so the lexer emits `KwMaxSkew`, never
+                // `Ident("max_skew")`. Matching the identifier here would be
+                // dead code and the attribute would fall through to the
+                // catch-all.
+                TokenKind::KwMaxSkew => {
+                    self.bump();
+                    if let Some(v) = self.expect_value() {
+                        attrs.push(NetclassAttr::MaxSkew(v));
+                    }
+                }
                 TokenKind::Ident(name) if name == "color" => {
                     self.bump();
                     if let Some(hex) = self.expect_string(
@@ -1303,7 +1314,7 @@ impl Parser {
                         self.peek().span,
                         "E-SYNTH-PARSE-019",
                         "unexpected attribute inside netclass",
-                        "`trace_width <value><unit>`, `clearance <value><unit>`, `impedance <value><unit>`, `current <value><unit>`, `plane`, or `color \"#rrggbb\"`",
+                        "`trace_width <value><unit>`, `clearance <value><unit>`, `impedance <value><unit>`, `current <value><unit>`, `max_length <value><unit>`, `max_skew <value><unit>`, `plane`, or `color \"#rrggbb\"`",
                         self.describe_current(),
                         None,
                     );
@@ -3288,6 +3299,45 @@ mod tests {
                 .iter()
                 .any(|a| matches!(a, NetclassAttr::Color(c) if c == "#c2410c")),
             "colour attr must parse: {:?}",
+            n.attrs
+        );
+    }
+
+    #[test]
+    fn parse_netclass_length_match_attributes() {
+        // `max_skew` is a reserved keyword, so this is the regression guard
+        // that the netclass arm matches `KwMaxSkew` rather than an identifier
+        // the lexer never emits.
+        let src = r#"board "b" {
+            netclass "DDR" {
+                trace_width 0.2mm
+                max_length 50mm
+                max_skew 1mm
+            }
+        }"#;
+        let tokens = lex(src);
+        let res = parse(tokens, "test.synth".into());
+        assert!(
+            res.diagnostics.is_empty(),
+            "Diagnostics should be empty: {:?}",
+            res.diagnostics
+        );
+        let ast = res.ast.unwrap();
+        let StatementAst::Netclass(n) = &ast.board.statements[0] else {
+            panic!("Expected netclass statement")
+        };
+        assert!(
+            n.attrs
+                .iter()
+                .any(|a| matches!(a, NetclassAttr::MaxLength(v) if v.literal == "50")),
+            "max_length attr must parse: {:?}",
+            n.attrs
+        );
+        assert!(
+            n.attrs
+                .iter()
+                .any(|a| matches!(a, NetclassAttr::MaxSkew(v) if v.literal == "1")),
+            "max_skew attr must parse: {:?}",
             n.attrs
         );
     }

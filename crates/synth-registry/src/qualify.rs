@@ -1043,6 +1043,8 @@ mod tests {
                 height_mm: PAD_EXTENT_MM.1,
                 courtyard_margin_mm: Some(0.25),
                 mating_face: None,
+                label_side: None,
+                label_hidden: None,
             }),
             operating_conditions: None,
         }

@@ -180,6 +180,25 @@ pub struct FootprintDimensions {
     /// physically accessible from an edge.
     #[serde(default)]
     pub mating_face: Option<MatingFace>,
+    /// Side of the part the reference label prefers on the silkscreen, in
+    /// board axes after placement. Tried before the default offset; the
+    /// exporter still moves the label if that side is blocked.
+    #[serde(default)]
+    pub label_side: Option<LabelSide>,
+    /// Leave the reference label off the silkscreen. A design can override
+    /// this per part in its placement sidecar.
+    #[serde(default)]
+    pub label_hidden: Option<bool>,
+}
+
+/// A side of a part, in board axes, for its silkscreen label.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum LabelSide {
+    Above,
+    Below,
+    Left,
+    Right,
 }
 
 /// Cardinal direction of a connector's mating opening before placement

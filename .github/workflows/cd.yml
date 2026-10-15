@@ -72,7 +72,13 @@ jobs:
       - name: Cache Cargo
         uses: Swatinem/rust-cache@v2
         with:
-          shared-key: ${{ runner.os }}-${{ hashFiles('rust-toolchain.toml') }}
+          # Key on the runner *image*, not just `runner.os` (always "Linux").
+          # The cache holds host build-script binaries, and one compiled on a
+          # newer glibc cannot run on an older one. CI fills this cache on
+          # `ubuntu-latest` (24.04, glibc 2.39); without the image in the key
+          # these 22.04 jobs (glibc 2.35) restore it and fail with
+          # "GLIBC_2.39 not found" before compiling anything.
+          shared-key: ${{ runner.os }}-${{ matrix.os }}-${{ hashFiles('rust-toolchain.toml') }}
 
       - name: Install cross linker (linux-arm64)
         if: matrix.target == 'aarch64-unknown-linux-gnu'

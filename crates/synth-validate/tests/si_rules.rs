@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 //! End-to-end tests for `E-SYNTH-DIFF-004` and `E-SYNTH-DIFF-005`. Each case
-//! starts from a small USB board modelled on `examples/placement_and_diff_pair.synth`,
+//! starts from a small USB board modelled on `examples/placement_and_diff_pair/placement_and_diff_pair.synth`,
 //! which is clean for these rules, and changes only the `diff_pair` declarations.
 //! The plain pass/fail cases also live in `fixtures/erc/`; the tests here cover the
 //! named-net form and the edge cases fixtures cannot express.

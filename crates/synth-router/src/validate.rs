@@ -630,22 +630,24 @@ pub fn check_plane_splits(board: &PcbBoard) -> Vec<String> {
             // No plane adjacent to this layer: nothing is referenced.
             continue;
         }
-        let midpoint = Point::new(
-            (segment.start.x_nm + segment.end.x_nm) / 2,
-            (segment.start.y_nm + segment.end.y_nm) / 2,
-        );
-        let covered = adjacent.iter().any(|layer| {
-            plane_copper[layer]
-                .iter()
-                .any(|polygon| point_in_polygon(&midpoint, polygon))
+        // Sample the whole track, not just its midpoint: a run that starts over
+        // a plane and splits off it halfway has a discontinuous return path the
+        // midpoint would miss.
+        let samples = samples_along(&segment.start, &segment.end);
+        let uncovered = samples.into_iter().find(|point| {
+            !adjacent.iter().any(|layer| {
+                plane_copper[layer]
+                    .iter()
+                    .any(|polygon| point_in_polygon(point, polygon))
+            })
         });
-        if !covered {
+        if let Some(uncovered) = uncovered {
             out.push(format!(
                 "net {} track on {} at ({:.2}, {:.2}) mm has no reference plane copper under it",
                 net_name.unwrap_or("<unnamed>"),
                 segment.layer,
-                midpoint.x_mm(),
-                midpoint.y_mm(),
+                uncovered.x_mm(),
+                uncovered.y_mm(),
             ));
         }
     }
@@ -778,6 +780,30 @@ fn covered_by_zone(
 ///
 /// A point exactly on an edge counts as inside: the pour's own outline is
 /// where its copper ends, and a via drilled on the outline is stitched to it.
+/// Points along a segment, at most ~2 mm apart, including both ends.
+///
+/// Used to sample a track's whole path against a plane, not only its midpoint.
+#[allow(
+    clippy::cast_precision_loss,
+    clippy::cast_possible_truncation,
+    clippy::cast_sign_loss
+)]
+fn samples_along(start: &Point, end: &Point) -> Vec<Point> {
+    let dx = end.x_nm - start.x_nm;
+    let dy = end.y_nm - start.y_nm;
+    let length_nm = ((dx * dx + dy * dy) as f64).sqrt();
+    let steps = (length_nm / 2_000_000.0).ceil().max(1.0) as i64;
+    (0..=steps)
+        .map(|i| {
+            let t = i as f64 / steps as f64;
+            Point::new(
+                start.x_nm + (dx as f64 * t) as i64,
+                start.y_nm + (dy as f64 * t) as i64,
+            )
+        })
+        .collect()
+}
+
 fn point_in_polygon(point: &Point, polygon: &[Point]) -> bool {
     let mut inside = false;
     let count = polygon.len();

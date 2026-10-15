@@ -14,7 +14,7 @@
 //! could not check" and "we checked and found nothing" must never look
 //! the same to the release gate.
 
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use serde::{Deserialize, Serialize};
 
@@ -169,7 +169,21 @@ pub fn run_detailed(board_path: &Path, request: &RouteRequest) -> DrcReport {
         board_path.display().to_string(),
     ];
 
-    let invocation = match crate::process::run(Path::new(&cli), &args, DRC_BUDGET, DRC_OUTPUT_CAP) {
+    let staged = match StagedProject::stage(&request.out_dir, &request.stem, board_path) {
+        Ok(staged) => staged,
+        Err(reason) => {
+            return DrcReport {
+                unavailable_reason: Some(format!(
+                    "the export's DRC rules could not be put in place ({reason}); an \
+                     unperformed DRC is not a clean DRC"
+                )),
+                ..DrcReport::default()
+            }
+        }
+    };
+    let result = crate::process::run(Path::new(&cli), &args, DRC_BUDGET, DRC_OUTPUT_CAP);
+    drop(staged);
+    let invocation = match result {
         Ok(invocation) => invocation,
         Err(error) => {
             return DrcReport {
@@ -200,6 +214,111 @@ pub fn run_detailed(board_path: &Path, request: &RouteRequest) -> DrcReport {
         )),
         ..DrcReport::default()
     })
+}
+
+/// The export's project file and custom rules, copied next to a candidate board
+/// for one DRC run.
+///
+/// `kicad-cli` reads both from files that share the board's name, and the
+/// routed candidate is named differently from the export, so without this the
+/// DRC runs on KiCad's own defaults, not the rules the export wrote. A file
+/// already beside the board (left by an earlier run, or written by KiCad) is
+/// moved aside for the run, so it cannot decide the rules, and moved back when
+/// the guard is dropped; a file that was not there is removed. Moving, not
+/// deleting, means a run that is killed mid-way cannot lose the original.
+///
+/// Staging does not fail open: if the rules cannot be put in place the run is
+/// refused, because the DRC would otherwise use an old sidecar or KiCad's
+/// defaults and judge the board by rules the export never wrote. A path that
+/// cannot be inspected counts as a failure, not as absent.
+///
+/// Not safe for two runs on the same candidate path at once; the router runs
+/// its DRC one board at a time.
+struct StagedProject {
+    /// Files this guard wrote; removed on drop.
+    created: Vec<PathBuf>,
+    /// `(aside, original)` pairs; moved back on drop. Recorded as soon as the
+    /// move is made, so an early return restores them.
+    moved: Vec<(PathBuf, PathBuf)>,
+}
+
+/// Whether a path exists, looking at the link itself, with any error other than
+/// "not found" reported instead of read as "absent".
+fn exists_or_err(path: &Path) -> Result<bool, String> {
+    match std::fs::symlink_metadata(path) {
+        Ok(_) => Ok(true),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(false),
+        Err(error) => Err(format!("cannot inspect {}: {error}", path.display())),
+    }
+}
+
+impl StagedProject {
+    fn stage(export_dir: &Path, export_stem: &str, board_path: &Path) -> Result<Self, String> {
+        let extensions = ["kicad_pro", "kicad_dru"];
+        let sources: Vec<PathBuf> = extensions
+            .iter()
+            .map(|extension| export_dir.join(format!("{export_stem}.{extension}")))
+            .collect();
+        let mut present = 0;
+        for source in &sources {
+            present += usize::from(exists_or_err(source)?);
+        }
+        if present == 1 {
+            return Err(format!(
+                "the export left only one of its project and rules files in {}",
+                export_dir.display()
+            ));
+        }
+        let mut staged = Self {
+            created: Vec::new(),
+            moved: Vec::new(),
+        };
+        for (extension, source) in extensions.iter().zip(&sources) {
+            let dest = board_path.with_extension(extension);
+            if exists_or_err(&dest)? {
+                let mut aside = dest.clone().into_os_string();
+                aside.push(".synth-aside");
+                let aside = PathBuf::from(aside);
+                if exists_or_err(&aside)? {
+                    return Err(format!(
+                        "{} is left from an earlier run that did not finish; \
+                         restore or remove it first",
+                        aside.display()
+                    ));
+                }
+                std::fs::rename(&dest, &aside)
+                    .map_err(|error| format!("cannot move {} aside: {error}", dest.display()))?;
+                staged.moved.push((aside, dest.clone()));
+            }
+            if present == 2 {
+                let rules = std::fs::read(source)
+                    .map_err(|error| format!("cannot read {}: {error}", source.display()))?;
+                staged.created.push(dest.clone());
+                std::fs::write(&dest, rules)
+                    .map_err(|error| format!("cannot write {}: {error}", dest.display()))?;
+            }
+        }
+        Ok(staged)
+    }
+}
+
+impl Drop for StagedProject {
+    fn drop(&mut self) {
+        for path in &self.created {
+            let _ = std::fs::remove_file(path);
+        }
+        for (aside, original) in self.moved.iter().rev() {
+            if let Err(error) = std::fs::rename(aside, original) {
+                // Never drop this silently: the original is still on disk
+                // under the aside name.
+                eprintln!(
+                    "warning: could not move {} back to {}: {error}",
+                    aside.display(),
+                    original.display()
+                );
+            }
+        }
+    }
 }
 
 pub(crate) fn first_line(text: &str) -> String {
@@ -327,6 +446,185 @@ pub fn parse_report_text(text: &str) -> Option<DrcReport> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn staging_dir(label: &str) -> std::path::PathBuf {
+        let dir = std::env::temp_dir().join(format!("synth-drc-{label}-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).expect("temp dir");
+        std::fs::write(dir.join("b.kicad_dru"), "rules").expect("dru");
+        std::fs::write(dir.join("b.kicad_pro"), "project").expect("pro");
+        dir
+    }
+
+    fn read(path: std::path::PathBuf) -> String {
+        std::fs::read_to_string(path).unwrap()
+    }
+
+    /// `kicad-cli` reads a board's project and custom rules from files that
+    /// share the board's name. The candidate board has another name than the
+    /// exported one, so the export's rules are staged beside it for the run.
+    #[test]
+    fn the_exports_rules_are_staged_beside_a_candidate_board() {
+        let dir = staging_dir("stage");
+        let board = dir.join("b.freerouting.kicad_pcb");
+        let staged = StagedProject::stage(&dir, "b", &board).expect("staged");
+        assert_eq!(read(dir.join("b.freerouting.kicad_dru")), "rules");
+        assert_eq!(read(dir.join("b.freerouting.kicad_pro")), "project");
+        drop(staged);
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// A sidecar left beside the candidate by an earlier run (or by KiCad) must
+    /// not decide the rules: this run's export overwrites it, and whatever was
+    /// there is put back afterwards. Files that were not there are removed.
+    #[test]
+    fn a_stale_sidecar_is_overwritten_for_the_run_and_restored_after() {
+        let dir = staging_dir("stale");
+        std::fs::write(dir.join("b.freerouting.kicad_dru"), "stale rules").unwrap();
+        let board = dir.join("b.freerouting.kicad_pcb");
+
+        let staged = StagedProject::stage(&dir, "b", &board).expect("staged");
+        assert_eq!(read(dir.join("b.freerouting.kicad_dru")), "rules");
+        drop(staged);
+
+        assert_eq!(read(dir.join("b.freerouting.kicad_dru")), "stale rules");
+        assert!(!dir.join("b.freerouting.kicad_pro").exists());
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// Staging must not fail open: if a rules file cannot be put in place, the
+    /// run is refused, because the DRC would otherwise use an old sidecar or
+    /// KiCad's defaults. Whatever was staged before the failure is undone and
+    /// every original is back where it was.
+    #[test]
+    fn a_failure_part_way_restores_every_original() {
+        let dir = staging_dir("blocked");
+        std::fs::write(dir.join("b.freerouting.kicad_pro"), "stale project").unwrap();
+        // The second file cannot be staged: its export source is unreadable.
+        std::fs::remove_file(dir.join("b.kicad_dru")).unwrap();
+        std::fs::create_dir(dir.join("b.kicad_dru")).unwrap();
+        let board = dir.join("b.freerouting.kicad_pcb");
+
+        assert!(StagedProject::stage(&dir, "b", &board).is_err());
+
+        assert_eq!(read(dir.join("b.freerouting.kicad_pro")), "stale project");
+        assert!(!dir.join("b.freerouting.kicad_dru").exists());
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// An original is moved aside, not deleted, so a run killed mid-way cannot
+    /// lose it. If an aside copy is already there, an earlier run died: refuse
+    /// rather than overwrite it.
+    #[test]
+    fn an_aside_copy_left_by_a_dead_run_refuses_the_run() {
+        let dir = staging_dir("aside");
+        std::fs::write(dir.join("b.freerouting.kicad_dru"), "original").unwrap();
+        std::fs::write(
+            dir.join("b.freerouting.kicad_dru.synth-aside"),
+            "older original",
+        )
+        .unwrap();
+        let board = dir.join("b.freerouting.kicad_pcb");
+
+        assert!(StagedProject::stage(&dir, "b", &board).is_err());
+
+        assert_eq!(read(dir.join("b.freerouting.kicad_dru")), "original");
+        assert_eq!(
+            read(dir.join("b.freerouting.kicad_dru.synth-aside")),
+            "older original"
+        );
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// A symlink sidecar is moved aside as the link, so its target is neither
+    /// overwritten during the run nor lost, and the link is back afterwards.
+    #[cfg(unix)]
+    #[test]
+    fn a_symlink_sidecar_is_preserved() {
+        let dir = staging_dir("symlink");
+        std::fs::write(dir.join("target.dru"), "target rules").unwrap();
+        std::os::unix::fs::symlink(dir.join("target.dru"), dir.join("b.freerouting.kicad_dru"))
+            .unwrap();
+        let board = dir.join("b.freerouting.kicad_pcb");
+
+        let staged = StagedProject::stage(&dir, "b", &board).expect("staged");
+        assert_eq!(read(dir.join("b.freerouting.kicad_dru")), "rules");
+        assert_eq!(read(dir.join("target.dru")), "target rules");
+        drop(staged);
+
+        assert!(
+            std::fs::symlink_metadata(dir.join("b.freerouting.kicad_dru"))
+                .unwrap()
+                .file_type()
+                .is_symlink()
+        );
+        assert_eq!(read(dir.join("b.freerouting.kicad_dru")), "target rules");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// A rules file that cannot even be looked at is not absent: an export
+    /// source that is a dangling symlink must refuse the run, not read as
+    /// "no rules".
+    #[cfg(unix)]
+    #[test]
+    fn an_unreachable_export_rules_file_refuses_the_run() {
+        let dir = staging_dir("dangling");
+        std::fs::remove_file(dir.join("b.kicad_dru")).unwrap();
+        std::fs::remove_file(dir.join("b.kicad_pro")).unwrap();
+        std::os::unix::fs::symlink(dir.join("nowhere"), dir.join("b.kicad_dru")).unwrap();
+        std::os::unix::fs::symlink(dir.join("nowhere"), dir.join("b.kicad_pro")).unwrap();
+        std::fs::write(dir.join("b.freerouting.kicad_dru"), "stale rules").unwrap();
+        let board = dir.join("b.freerouting.kicad_pcb");
+
+        assert!(StagedProject::stage(&dir, "b", &board).is_err());
+
+        assert_eq!(read(dir.join("b.freerouting.kicad_dru")), "stale rules");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn half_an_export_refuses_the_run() {
+        let dir = staging_dir("half");
+        std::fs::remove_file(dir.join("b.kicad_dru")).unwrap();
+        let board = dir.join("b.freerouting.kicad_pcb");
+        assert!(StagedProject::stage(&dir, "b", &board).is_err());
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// With no export rules at all there is nothing to stage, but a stale
+    /// sidecar beside the candidate must still not decide the rules: it is
+    /// hidden for the run and put back after.
+    #[test]
+    fn without_export_rules_a_stale_sidecar_is_hidden_for_the_run() {
+        let dir = staging_dir("none");
+        std::fs::remove_file(dir.join("b.kicad_dru")).unwrap();
+        std::fs::remove_file(dir.join("b.kicad_pro")).unwrap();
+        std::fs::write(dir.join("b.freerouting.kicad_dru"), "stale rules").unwrap();
+        let board = dir.join("b.freerouting.kicad_pcb");
+
+        let staged = StagedProject::stage(&dir, "b", &board).expect("nothing to stage");
+        assert!(!dir.join("b.freerouting.kicad_dru").exists());
+        drop(staged);
+        assert_eq!(read(dir.join("b.freerouting.kicad_dru")), "stale rules");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// The refusal reaches the caller as an unavailable DRC, never a clean one.
+    #[test]
+    fn a_staging_failure_makes_the_drc_unavailable_not_clean() {
+        let dir = staging_dir("unavailable");
+        std::fs::remove_file(dir.join("b.kicad_dru")).unwrap();
+        let board = dir.join("b.freerouting.kicad_pcb");
+        let mut request =
+            RouteRequest::new(&board, &dir, crate::contract::RouterEngine::Freerouting);
+        request.stem = "b".to_string();
+
+        let report = run_detailed(&board, &request);
+
+        let reason = report.unavailable_reason.expect("the DRC must not run");
+        assert!(reason.contains("could not be put in place"), "{reason}");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
 
     #[test]
     fn a_clean_report_is_clean() {

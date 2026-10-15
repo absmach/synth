@@ -38,7 +38,7 @@
 use std::collections::HashMap;
 use std::fmt::Write as _;
 
-use synth_geometry::{mm_to_nm, nm_to_mm, Layer, Rotation};
+use synth_geometry::{mm_to_nm, nm_to_mm, Layer, Point, Rotation};
 use synth_ir::{Board, ComponentId, Stackup, StackupLayer};
 use synth_pcb::{Routing, Segment};
 use synth_place::{ComponentPlacement, Placement};
@@ -74,11 +74,14 @@ pub struct PlaneFanoutError {
     pub detail: String,
 }
 
+/// `label_overrides` is the design's say over reference labels, by designator,
+/// from the placement sidecar.
 pub fn build_pcb(
     board: &Board,
     placement: &Placement,
     routing: &Routing,
     project: &Uuid,
+    label_overrides: &HashMap<String, synth_layout::sidecar::SidecarLabel>,
 ) -> Result<Sexp, PlaneFanoutError> {
     let placements_by_id: HashMap<ComponentId, &ComponentPlacement> =
         placement.components.iter().map(|p| (p.id, p)).collect();
@@ -134,6 +137,7 @@ pub fn build_pcb(
     let labels = silk_labels::place_labels(
         &label_parts(board, &placements_by_id),
         placement.board_outline,
+        &label_overrides_by_id(board, label_overrides),
     );
     for component in &board.components {
         let Some(part) = component.part.as_ref() else {
@@ -258,13 +262,31 @@ pub fn build_pcb(
         if board.layers >= 4 && plane_index == 0 {
             let outline = placement.board_outline;
             let inset = mm_to_nm(1.5);
+            let holes: Vec<(Point, i64)> = board
+                .components
+                .iter()
+                .filter(|component| component.kind == "mounting_hole")
+                .filter_map(|component| {
+                    let centre = placements_by_id.get(&component.id)?.center;
+                    let width_mm = component
+                        .part
+                        .as_ref()?
+                        .footprint_dimensions
+                        .as_ref()?
+                        .width_mm;
+                    Some((centre, mm_to_nm(width_mm / 2.0)))
+                })
+                .collect();
+            // Left corners slide right and right corners slide left.
             let points = [
-                (outline.min.x_nm + inset, outline.min.y_nm + inset),
-                (outline.max.x_nm - inset, outline.min.y_nm + inset),
-                (outline.max.x_nm - inset, outline.max.y_nm - inset),
-                (outline.min.x_nm + inset, outline.max.y_nm - inset),
+                (outline.min.x_nm + inset, outline.min.y_nm + inset, 1),
+                (outline.max.x_nm - inset, outline.min.y_nm + inset, -1),
+                (outline.max.x_nm - inset, outline.max.y_nm - inset, -1),
+                (outline.min.x_nm + inset, outline.max.y_nm - inset, 1),
             ];
-            for (stitch_index, (x_nm, y_nm)) in points.into_iter().enumerate() {
+            for (stitch_index, (x_nm, y_nm, inward)) in points.into_iter().enumerate() {
+                let Point { x_nm, y_nm } =
+                    clear_of_mounting_holes(Point::new(x_nm, y_nm), inward, &holes);
                 children.push(build_ground_stitch_via(
                     x_nm,
                     y_nm,
@@ -274,6 +296,33 @@ pub fn build_pcb(
                 ));
             }
         }
+    }
+
+    // A screw head over copper shorts it or crushes the mask, so each mounting
+    // hole keeps tracks, vias and pour out of the area under the head.
+    for component in board
+        .components
+        .iter()
+        .filter(|component| component.kind == "mounting_hole")
+    {
+        let Some(placed) = placements_by_id.get(&component.id) else {
+            continue;
+        };
+        let Some(width_mm) = component
+            .part
+            .as_ref()
+            .and_then(|part| part.footprint_dimensions.as_ref())
+            .map(|dimensions| dimensions.width_mm)
+        else {
+            continue;
+        };
+        children.push(build_mounting_hole_keepout(
+            placed.center,
+            mm_to_nm(width_mm / 2.0),
+            &ground_plane_layers(board.layers),
+            project,
+            &component.refdes,
+        ));
     }
 
     // Declared planes (`netclass "PWR" { plane }`): flood a zone for each
@@ -294,21 +343,47 @@ pub fn build_pcb(
         } else {
             Vec::new()
         };
+    // One rail per layer. Pouring every plane net on every power layer puts
+    // two rails at the same priority on the same copper, which is the
+    // starvation described above with ground swapped out for a second rail:
+    // on a four-layer board with a core rail and an I/O rail it left the I/O
+    // rail's thirty pads stranded.
+    //
+    // Rails are dealt across the layers with a stride, so no two share one
+    // while there are enough layers to go round. Dealing contiguous blocks
+    // instead reintroduces the bug as soon as the counts do not divide: three
+    // rails over four layers would give the first and third the same pair.
+    // With a stride they take In1/In4, In2 and In3. Only when the rails
+    // outnumber the layers does a layer carry two, and then each rail still
+    // gets exactly one.
+    let rails: Vec<(u32, &synth_ir::Net)> = board
+        .netclasses
+        .iter()
+        .filter(|class| class.plane)
+        .flat_map(|class| {
+            board
+                .nets
+                .iter()
+                .filter(move |net| net.netclass.as_deref() == Some(class.name.as_str()))
+        })
+        .filter_map(|net| net_id_lookup.get(&net.id).copied().map(|id| (id, net)))
+        .collect();
+
     let mut plane_via_index = 0usize;
     let mut plane_stub_index = 0usize;
-    for class in &board.netclasses {
-        if !class.plane || power_layers.is_empty() {
-            continue;
-        }
-        for net in board
-            .nets
-            .iter()
-            .filter(|net| net.netclass.as_deref() == Some(class.name.as_str()))
-        {
-            let Some(pcb_net) = net_id_lookup.get(&net.id).copied() else {
-                continue;
+    if !power_layers.is_empty() {
+        for (rail_index, (pcb_net, net)) in rails.iter().copied().enumerate() {
+            let layers: Vec<&'static str> = if rails.len() >= power_layers.len() {
+                vec![power_layers[rail_index % power_layers.len()]]
+            } else {
+                power_layers
+                    .iter()
+                    .skip(rail_index)
+                    .step_by(rails.len())
+                    .copied()
+                    .collect()
             };
-            for layer in &power_layers {
+            for layer in layers {
                 let zone_key = format!("plane/{}/{layer}", net.name);
                 children.push(build_zone(
                     placement,
@@ -617,13 +692,96 @@ fn build_plane_via(x_nm: i64, y_nm: i64, pcb_net: u32, project: &Uuid, idx: usiz
         "via",
         vec![
             Sexp::list("at", vec![num(nm_to_mm(x_nm)), num(nm_to_mm(y_nm))]),
-            Sexp::list("size", vec![num(0.6)]),
+            Sexp::list("size", vec![num(GROUND_VIA_RADIUS_MM * 2.0)]),
             Sexp::list("drill", vec![num(0.3)]),
             Sexp::list("layers", vec![Sexp::str("F.Cu"), Sexp::str("B.Cu")]),
             Sexp::list("net", vec![Sexp::atom(pcb_net.to_string())]),
             str_pair("uuid", via_uuid.to_string()),
         ],
     )
+}
+
+/// How far a via keeps from a mounting hole's edge, in mm. A screw head and its
+/// washer sit over the copper round the hole, so a via closer than this is
+/// under them. Covers the head of an M3 screw (about 5.5 mm across) with room
+/// for the via's own pad.
+const MOUNTING_HOLE_KEEPOUT_MM: f64 = 1.5;
+
+/// Radius of the pad of a ground fence via (the via is 0.6 mm across).
+const GROUND_VIA_RADIUS_MM: f64 = 0.3;
+
+/// A copper keepout under a mounting hole's screw head: a round rule area on
+/// every copper layer that refuses tracks, vias and pour, as wide as the hole
+/// plus `MOUNTING_HOLE_KEEPOUT_MM`. Pads stay allowed, so the hole's own part
+/// is not flagged. `layers` are the board's copper layers.
+fn build_mounting_hole_keepout(
+    centre: Point,
+    radius_nm: i64,
+    layers: &[&str],
+    project: &Uuid,
+    refdes: &str,
+) -> Sexp {
+    const SIDES: u32 = 24;
+    let reach = nm_to_mm(radius_nm) + MOUNTING_HOLE_KEEPOUT_MM;
+    let points = (0..SIDES)
+        .map(|k| {
+            let angle = std::f64::consts::TAU * f64::from(k) / f64::from(SIDES);
+            Sexp::list(
+                "xy",
+                vec![
+                    num(nm_to_mm(centre.x_nm) + reach * angle.cos()),
+                    num(nm_to_mm(centre.y_nm) + reach * angle.sin()),
+                ],
+            )
+        })
+        .collect();
+    let zone_uuid = derive_entity_uuid(project, "mounting-hole-keepout", refdes);
+    Sexp::list(
+        "zone",
+        vec![
+            Sexp::list("net", vec![Sexp::atom("0")]),
+            str_pair("net_name", ""),
+            Sexp::list(
+                "layers",
+                layers.iter().map(|layer| Sexp::str(*layer)).collect(),
+            ),
+            str_pair("uuid", zone_uuid.to_string()),
+            str_pair("name", format!("{refdes} screw head")),
+            Sexp::list("hatch", vec![Sexp::atom("edge"), num(0.5)]),
+            Sexp::list(
+                "keepout",
+                vec![
+                    Sexp::list("tracks", vec![Sexp::atom("not_allowed")]),
+                    Sexp::list("vias", vec![Sexp::atom("not_allowed")]),
+                    Sexp::list("pads", vec![Sexp::atom("allowed")]),
+                    Sexp::list("copperpour", vec![Sexp::atom("not_allowed")]),
+                    Sexp::list("footprints", vec![Sexp::atom("allowed")]),
+                ],
+            ),
+            Sexp::list("polygon", vec![Sexp::list("pts", points)]),
+        ],
+    )
+}
+
+/// Slide a corner fence via along the board edge, toward the inside (`inward`
+/// is +1 for a left-hand corner and -1 for a right-hand one), until it is out of
+/// every mounting hole's zone: the hole's radius plus the keepout. A via that is
+/// already clear is returned as it is. `holes` are `(centre, radius)`.
+fn clear_of_mounting_holes(via: Point, inward: i64, holes: &[(Point, i64)]) -> Point {
+    let mut via = via;
+    for &(centre, radius) in holes {
+        // The whole pad must be outside the zone, not only its centre.
+        let limit = nm_to_mm(radius) + MOUNTING_HOLE_KEEPOUT_MM + GROUND_VIA_RADIUS_MM;
+        let dx = nm_to_mm(via.x_nm - centre.x_nm);
+        let dy = nm_to_mm(via.y_nm - centre.y_nm);
+        if dx.hypot(dy) >= limit {
+            continue;
+        }
+        // Along the edge the via must be at least this far from the centre.
+        let reach = (limit * limit - dy * dy).sqrt();
+        via.x_nm = centre.x_nm + inward * (mm_to_nm(reach) + 1);
+    }
+    via
 }
 
 fn build_ground_stitch_via(x_nm: i64, y_nm: i64, pcb_net: u32, project: &Uuid, idx: usize) -> Sexp {
@@ -1587,6 +1745,7 @@ fn label_parts(
             };
             let (half_w, half_h) = (mm_to_nm(w) / 2, mm_to_nm(h) / 2);
             let c = placement.center;
+            let (side, hidden) = part_label_hints(part);
             Some(silk_labels::LabelPart {
                 id: component.id,
                 refdes: component.refdes.clone(),
@@ -1597,9 +1756,54 @@ fn label_parts(
                     synth_geometry::Point::new(c.x_nm + half_w, c.y_nm + half_h),
                 ),
                 half_extent_mm: footprint_half_extent_mm(part),
+                side,
+                hidden,
             })
         })
         .collect()
+}
+
+/// The label side and visibility a part file asks for.
+fn part_label_hints(part: &synth_registry::Part) -> (Option<silk_labels::Side>, bool) {
+    use synth_registry::LabelSide;
+    let dims = part.footprint_dimensions.as_ref();
+    let side = dims.and_then(|d| d.label_side).map(|s| match s {
+        LabelSide::Above => silk_labels::Side::Above,
+        LabelSide::Below => silk_labels::Side::Below,
+        LabelSide::Left => silk_labels::Side::Left,
+        LabelSide::Right => silk_labels::Side::Right,
+    });
+    (side, dims.and_then(|d| d.label_hidden).unwrap_or(false))
+}
+
+/// The placement sidecar's label entries, keyed by component instead of
+/// designator. A designator that names no part is ignored.
+fn label_overrides_by_id(
+    board: &Board,
+    overrides: &HashMap<String, synth_layout::sidecar::SidecarLabel>,
+) -> HashMap<ComponentId, silk_labels::LabelOverride> {
+    board
+        .components
+        .iter()
+        .filter_map(|component| {
+            let o = overrides.get(&component.refdes)?;
+            Some((component.id, label_override(o)))
+        })
+        .collect()
+}
+
+/// A sidecar label entry as the placer sees it. A missing `dx` or `dy` counts
+/// as 0; with neither there is no offset, so `angle` and `priority` have
+/// nothing to apply to.
+fn label_override(entry: &synth_layout::sidecar::SidecarLabel) -> silk_labels::LabelOverride {
+    let offset_mm = (entry.dx.is_some() || entry.dy.is_some())
+        .then(|| (entry.dx.unwrap_or(0.0), entry.dy.unwrap_or(0.0)));
+    silk_labels::LabelOverride {
+        offset_mm,
+        angle_deg: entry.angle,
+        hide: entry.hide,
+        hard: entry.priority == synth_layout::sidecar::OverridePriority::Hard,
+    }
 }
 
 fn build_footprint_instance(
@@ -1643,6 +1847,7 @@ fn build_footprint_instance(
         local_x_mm: ref_local_x,
         local_y_mm: ref_local_y,
         angle_deg: ref_text_angle,
+        hidden: ref_hidden,
     } = ref_label;
 
     let (val_local_x, val_local_y, val_text_angle) = match placement.rotation {
@@ -1713,30 +1918,32 @@ fn build_footprint_instance(
         )
     };
 
+    let mut reference_property = vec![
+        Sexp::str("Reference"),
+        Sexp::str(&component.refdes),
+        Sexp::list(
+            "at",
+            vec![num(ref_local_x), num(ref_local_y), num(ref_text_angle)],
+        ),
+        Sexp::list("layer", vec![Sexp::str(silk_layer)]),
+        str_pair("uuid", ref_prop_uuid.to_string()),
+    ];
+    if ref_hidden {
+        reference_property.push(Sexp::list("hide", vec![Sexp::atom("yes")]));
+    }
+    reference_property.push(Sexp::list(
+        "effects",
+        vec![Sexp::list(
+            "font",
+            vec![Sexp::list("size", vec![num(1.0), num(1.0)])],
+        )],
+    ));
+
     let mut children = vec![
         Sexp::list("layer", vec![Sexp::str(layer_name)]),
         str_pair("uuid", fp_uuid.to_string()),
         Sexp::list("at", at_args),
-        Sexp::list(
-            "property",
-            vec![
-                Sexp::str("Reference"),
-                Sexp::str(&component.refdes),
-                Sexp::list(
-                    "at",
-                    vec![num(ref_local_x), num(ref_local_y), num(ref_text_angle)],
-                ),
-                Sexp::list("layer", vec![Sexp::str(silk_layer)]),
-                str_pair("uuid", ref_prop_uuid.to_string()),
-                Sexp::list(
-                    "effects",
-                    vec![Sexp::list(
-                        "font",
-                        vec![Sexp::list("size", vec![num(1.0), num(1.0)])],
-                    )],
-                ),
-            ],
-        ),
+        Sexp::list("property", reference_property),
         Sexp::list(
             "property",
             vec![
@@ -2328,8 +2535,118 @@ fn escape_sexp_str(s: &str) -> String {
 mod tests {
     use super::*;
     use synth_diagnostics::Span;
-    use synth_geometry::Point;
     use synth_registry::{ElectricalType, Lifecycle, Pin, PinNumber};
+
+    fn hole(x: f64, y: f64, radius: f64) -> (Point, i64) {
+        (Point::new(mm_to_nm(x), mm_to_nm(y)), mm_to_nm(radius))
+    }
+
+    /// The `(xy x y)` pairs of a serialised s-expression, in order.
+    fn xy_pairs(text: &str) -> Vec<(f64, f64)> {
+        text.split("(xy ")
+            .skip(1)
+            .map(|rest| {
+                let mut numbers = rest.trim_start().split([' ', ')']);
+                let x = numbers.next().unwrap().parse().unwrap();
+                let y = numbers.next().unwrap().parse().unwrap();
+                (x, y)
+            })
+            .collect()
+    }
+
+    /// Under a screw head no copper may run: a rule area on every copper layer
+    /// that refuses tracks, vias and pour, centred on the hole and as wide as
+    /// the hole plus the head's keepout. Pads stay allowed so the part itself
+    /// is not flagged.
+    #[test]
+    fn a_mounting_hole_gets_a_copper_keepout_the_size_of_its_screw_head() {
+        let project = Uuid::nil();
+        let (centre, radius) = hole(3.5, 3.45, 1.6);
+        let layers = ground_plane_layers(4);
+
+        let zone = build_mounting_hole_keepout(centre, radius, &layers, &project, "H1");
+        let text = zone.to_string_pretty();
+
+        for expected in [
+            "(tracks not_allowed)",
+            "(vias not_allowed)",
+            "(copperpour not_allowed)",
+            "(pads allowed)",
+            "\"F.Cu\"",
+            "\"In1.Cu\"",
+            "\"In2.Cu\"",
+            "\"B.Cu\"",
+        ] {
+            assert!(text.contains(expected), "{expected}\n{text}");
+        }
+        let reach = 1.6 + MOUNTING_HOLE_KEEPOUT_MM;
+        let points = xy_pairs(&text);
+        assert!(
+            points.len() >= 16,
+            "a round outline, not a box: {}",
+            points.len()
+        );
+        for (x, y) in points {
+            let distance = (x - 3.5).hypot(y - 3.45);
+            assert!(
+                (distance - reach).abs() < 0.02,
+                "({x}, {y}) is {distance:.3} mm from the centre, not {reach}"
+            );
+        }
+    }
+
+    #[test]
+    fn the_same_hole_gives_the_same_keepout_bytes() {
+        let project = Uuid::nil();
+        let (centre, radius) = hole(47.0, 3.45, 1.6);
+        let layers = ground_plane_layers(4);
+        let a = build_mounting_hole_keepout(centre, radius, &layers, &project, "H2");
+        let b = build_mounting_hole_keepout(centre, radius, &layers, &project, "H2");
+        assert_eq!(a.to_string_pretty(), b.to_string_pretty());
+    }
+
+    fn gap_mm(a: Point, b: Point) -> f64 {
+        nm_to_mm(a.x_nm - b.x_nm).hypot(nm_to_mm(a.y_nm - b.y_nm))
+    }
+
+    /// A ground fence via in the corner must stay out of a mounting hole's
+    /// screw-head zone: the whole pad, so its centre is the hole's radius plus
+    /// `MOUNTING_HOLE_KEEPOUT_MM` plus the pad's radius from the hole.
+    #[test]
+    fn a_corner_via_moves_along_the_edge_out_of_a_mounting_hole_zone() {
+        // M3 hole 3.5 mm in from both edges; the via sits 1.5 mm in.
+        let hole = hole(3.5, 3.45, 1.6);
+        let corner = Point::new(mm_to_nm(1.5), mm_to_nm(1.5));
+        let moved = clear_of_mounting_holes(corner, 1, &[hole]);
+        assert!(
+            gap_mm(moved, hole.0) >= 1.6 + MOUNTING_HOLE_KEEPOUT_MM + GROUND_VIA_RADIUS_MM - 0.001,
+            "{moved:?}"
+        );
+        assert_eq!(moved.y_nm, corner.y_nm, "it slides along the edge only");
+        assert!(
+            moved.x_nm > corner.x_nm,
+            "and toward the inside of the board"
+        );
+    }
+
+    #[test]
+    fn a_right_hand_corner_slides_the_other_way() {
+        let hole = hole(47.0, 3.45, 1.6);
+        let corner = Point::new(mm_to_nm(49.0), mm_to_nm(1.5));
+        let moved = clear_of_mounting_holes(corner, -1, &[hole]);
+        assert!(moved.x_nm < corner.x_nm);
+        assert!(
+            gap_mm(moved, hole.0) >= 1.6 + MOUNTING_HOLE_KEEPOUT_MM + GROUND_VIA_RADIUS_MM - 0.001
+        );
+    }
+
+    #[test]
+    fn a_via_clear_of_every_hole_stays_where_it_is() {
+        let corner = Point::new(mm_to_nm(1.5), mm_to_nm(1.5));
+        assert_eq!(clear_of_mounting_holes(corner, 1, &[]), corner);
+        let far = hole(40.0, 30.0, 1.6);
+        assert_eq!(clear_of_mounting_holes(corner, 1, &[far]), corner);
+    }
 
     /// A fanout stub that crosses another pad is rejected even when the via
     /// endpoint itself is clear: the whole segment is checked, not only its end.
@@ -2349,6 +2666,68 @@ mod tests {
         let via = plane_via_offset(pad, origin, outline, &obstacles)
             .expect("an off-axis candidate is legal");
         assert_eq!(via, Point::new(0, PLANE_VIA_OFFSET_NM));
+    }
+
+    fn part_from_toml(id: &str, dims: &str) -> synth_registry::Part {
+        let toml = format!(
+            "id = \"{id}\"\nkind = \"resistor\"\n\n[footprint_dimensions]\nwidth_mm = 2.0\nheight_mm = 1.0\n{dims}\n"
+        );
+        let registry =
+            synth_registry::load_from_strs(&[(&format!("{id}.synth.toml"), &toml)]).unwrap();
+        registry.lookup(id).unwrap().clone()
+    }
+
+    fn entry(dx: Option<f64>, dy: Option<f64>) -> synth_layout::sidecar::SidecarLabel {
+        synth_layout::sidecar::SidecarLabel {
+            dx,
+            dy,
+            angle: 0.0,
+            hide: None,
+            priority: synth_layout::sidecar::OverridePriority::Soft,
+        }
+    }
+
+    #[test]
+    fn a_half_set_sidecar_offset_counts_the_missing_axis_as_zero() {
+        assert_eq!(
+            label_override(&entry(Some(2.5), None)).offset_mm,
+            Some((2.5, 0.0))
+        );
+        assert_eq!(
+            label_override(&entry(None, Some(-1.0))).offset_mm,
+            Some((0.0, -1.0))
+        );
+    }
+
+    #[test]
+    fn a_sidecar_label_with_no_offset_has_no_position() {
+        let hidden_only = synth_layout::sidecar::SidecarLabel {
+            hide: Some(true),
+            ..entry(None, None)
+        };
+        let o = label_override(&hidden_only);
+        assert_eq!((o.offset_mm, o.hide), (None, Some(true)));
+    }
+
+    #[test]
+    fn a_hard_priority_is_carried_to_the_placer() {
+        let hard = synth_layout::sidecar::SidecarLabel {
+            priority: synth_layout::sidecar::OverridePriority::Hard,
+            ..entry(Some(1.0), Some(1.0))
+        };
+        assert!(label_override(&hard).hard);
+        assert!(!label_override(&entry(Some(1.0), Some(1.0))).hard);
+    }
+
+    #[test]
+    fn a_part_files_label_hints_reach_the_placer() {
+        let hinted = part_from_toml("hinted", "label_side = \"left\"\nlabel_hidden = true");
+        assert_eq!(
+            part_label_hints(&hinted),
+            (Some(silk_labels::Side::Left), true)
+        );
+        let plain = part_from_toml("plain", "");
+        assert_eq!(part_label_hints(&plain), (None, false));
     }
 
     fn no_footprint_part() -> synth_registry::Part {
@@ -2485,6 +2864,7 @@ mod tests {
                 local_x_mm: 0.0,
                 local_y_mm: -4.5,
                 angle_deg: 0.0,
+                hidden: false,
             },
         );
         let instance_text = instance.to_string_pretty();
@@ -2743,6 +3123,7 @@ mod tests {
                 current: None,
                 plane: false,
                 max_length: None,
+                max_skew: None,
                 source_span: Span::new(0, 0),
             }],
             buses: vec![],
@@ -2814,7 +3195,8 @@ mod tests {
             pad_escape_rejections: 0,
         };
         let project = Uuid::nil();
-        let pcb_sexp = build_pcb(&board, &placement, &routing, &project).expect("plane fanout");
+        let pcb_sexp = build_pcb(&board, &placement, &routing, &project, &HashMap::new())
+            .expect("plane fanout");
         let pcb_str = pcb_sexp.to_string_pretty();
 
         let tmp_path =

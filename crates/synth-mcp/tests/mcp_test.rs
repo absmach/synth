@@ -454,7 +454,8 @@ fn test_mcp_call_synth_route_with_constraints_returns_drc_and_trace_info() {
 
 #[test]
 fn test_closed_loop_agent_drc_repair_convergence() {
-    let sensor_logger_path = std::path::Path::new("../../examples/sensor_logger.synth");
+    let sensor_logger_path =
+        std::path::Path::new("../../examples/sensor_logger/sensor_logger.synth");
     let source = std::fs::read_to_string(sensor_logger_path).expect("read sensor_logger.synth");
     let sidecar_tmp = std::env::temp_dir().join("sensor_logger_repair.placement.layout.toml");
     if sidecar_tmp.exists() {

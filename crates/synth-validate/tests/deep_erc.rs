@@ -278,6 +278,38 @@ fn power_budget_over_limit_is_an_error() {
 }
 
 #[test]
+fn a_tvs_clamped_to_a_rail_is_not_counted_as_a_load() {
+    // The TVS array records 1000 mA — its surge/clamp rating, not a steady
+    // draw. Counting it charges the regulator a full amp for a part that idles
+    // at microamps, so a correctly protected board looks over budget and the
+    // "fix" would be to drop the protection. Here U2 draws 200 mA and the rail
+    // is well inside the 800 mA regulator once the TVS is not a load.
+    let src = r#"board "t" {
+      layers 2
+      component U1: regulator "ams1117_3v3"
+      component U2: mcu "atmega328p"
+      component D1: diode "tvs_array_5v"
+      component C1: capacitor "c_generic_0805" value "10u"
+      component C2: capacitor "c_generic_0805" value "10u"
+      component J1: connector "header_1x4"
+      power "+3V3" 3.3v
+      connect J1.p1 -> U1.vin
+      connect J1.p2 -> U1.gnd
+      connect U1.vin -> C1.p1
+      connect U1.gnd -> C1.p2
+      connect U1.vout -> C2.p1 as "+3V3"
+      connect U1.gnd -> C2.p2
+      connect U1.vout -> U2.vcc
+      connect U1.vout -> D1.vcc as "+3V3"
+      connect U1.gnd -> D1.gnd
+    }"#;
+    assert!(
+        codes(&validate(src), "E-SYNTH-POWER-010").is_empty(),
+        "a TVS clamp on the rail is not a steady load"
+    );
+}
+
+#[test]
 fn power_budget_headroom_is_configurable() {
     // 3 MCUs = 600mA against an 800mA regulator: fine at 0% headroom,
     // over budget at 50% (600 > 800 × 0.5).

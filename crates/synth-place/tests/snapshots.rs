@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 //! Bit-exact regression tests for `synth-place`. Snapshot is the
-//! `Placement` of `examples/sensor_logger.synth` rendered as a
+//! `Placement` of `examples/sensor_logger/sensor_logger.synth` rendered as a
 //! short, human-readable summary. Updates land via
 //! `cargo insta review` when the algorithm intentionally changes.
 
@@ -69,7 +69,7 @@ fn render_placement_snapshot(board: &Board, placement: &synth_place::Placement) 
 
 #[test]
 fn sensor_logger_placement_snapshot() {
-    let board = load_board("examples/sensor_logger.synth");
+    let board = load_board("examples/sensor_logger/sensor_logger.synth");
     let placement = synth_place::place(&board).expect("place");
     let snapshot = render_placement_snapshot(&board, &placement);
     insta::assert_snapshot!("sensor_logger_placement", snapshot);
@@ -92,15 +92,17 @@ fn feather_m4_express_placement_snapshot() {
 }
 
 #[test]
-fn feather_m4_express_outline_area_stays_within_baseline_tolerance() {
+fn feather_m4_express_outline_area_does_not_grow_past_baseline() {
     let board = load_board("fixtures/designs/feather_m4_express.synth");
     let placement = synth_place::place(&board).expect("place");
     let area = nm_to_mm(placement.board_outline.width_nm())
         * nm_to_mm(placement.board_outline.height_nm());
     let baseline = FEATHER_M4_EXPRESS_BASELINE_OUTLINE_AREA_MM2_115_04_X_95_40;
+    // The guard is against growth. Global compaction now shrinks this board,
+    // which is the point, so only an outline above the baseline fails.
     assert!(
-        (area - baseline).abs() <= baseline * OUTLINE_AREA_TOLERANCE,
-        "outline area {area:.1} mm2 deviates more than 10% from baseline {baseline:.1} mm2"
+        area <= baseline * (1.0 + OUTLINE_AREA_TOLERANCE),
+        "outline area {area:.1} mm2 is more than 10% above baseline {baseline:.1} mm2"
     );
 }
 
@@ -110,7 +112,7 @@ fn feather_m4_express_outline_area_stays_within_baseline_tolerance() {
 /// every downstream consumer (notably synth-ee) relative to the exported PCB.
 #[test]
 fn external_placement_publishes_footprint_origin_not_courtyard_centre() {
-    let board = load_board("examples/sensor_logger.synth");
+    let board = load_board("examples/sensor_logger/sensor_logger.synth");
     let placement = synth_place::place(&board).expect("place");
     let external = synth_place::to_external(&board, &placement);
 

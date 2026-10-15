@@ -38,8 +38,8 @@ pub use loader::{
     LoadWarning,
 };
 pub use part::{
-    Lifecycle, MatingFace, OperatingConditions, Part, PartId, Pin, PinNumber, Provenance,
-    ProvenanceSource, RequiredDecoupling,
+    LabelSide, Lifecycle, MatingFace, OperatingConditions, Part, PartId, Pin, PinNumber,
+    Provenance, ProvenanceSource, RequiredDecoupling,
 };
 
 /// Clean-room EasyEDA → KiCad footprint converter (Phase 15, R15.4).

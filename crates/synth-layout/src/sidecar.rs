@@ -204,6 +204,10 @@ pub struct SidecarLayout {
     pub components: HashMap<String, SidecarPlacement>,
     #[serde(default)]
     pub forced_net_labels: Vec<ForcedNetLabel>,
+    /// Silkscreen reference labels, by designator. Only the PCB export reads
+    /// these, so they belong in `<design>.placement.layout.toml`.
+    #[serde(default, skip_serializing_if = "HashMap::is_empty")]
+    pub labels: HashMap<String, SidecarLabel>,
     /// Force the sheet to the smallest size that fits the drawing, with the
     /// drawing centred on it.
     /// Applied *after* the auto-layout, because the pipeline re-derives
@@ -241,6 +245,27 @@ pub struct SidecarPlacement {
     pub dx: f64,
     #[serde(default)]
     pub dy: f64,
+}
+
+/// A design's say over one part's silkscreen reference label.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct SidecarLabel {
+    /// Label centre relative to the part's courtyard centre, in board
+    /// millimetres and board axes. Unset leaves the position to the placer.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub dx: Option<f64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub dy: Option<f64>,
+    /// Text angle in degrees; 0 reads left to right.
+    #[serde(default)]
+    pub angle: f64,
+    /// Hide (or, with `false`, show) the label, overriding the part file.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub hide: Option<bool>,
+    /// `hard` uses the offset as given; `soft` tries it first and falls back
+    /// to the automatic choice if it would collide.
+    #[serde(default = "default_priority")]
+    pub priority: OverridePriority,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
@@ -500,6 +525,44 @@ priority = "hard"
         let c1 = &sidecar.components["C1"];
         assert_eq!(c1.relative_to.as_deref(), Some("U1"));
         assert_eq!((c1.x, c1.y, c1.dx, c1.dy), (0.0, 0.0, 2.5, -1.0));
+    }
+
+    #[test]
+    fn label_entries_load_with_their_own_fields() {
+        let toml = r#"[labels.R1]
+dx = 1.5
+dy = -3.0
+angle = 90
+priority = "hard"
+
+[labels.R2]
+hide = true
+"#;
+        let sidecar: SidecarLayout = toml::from_str(toml).unwrap();
+        let r1 = &sidecar.labels["R1"];
+        assert_eq!((r1.dx, r1.dy, r1.angle), (Some(1.5), Some(-3.0), 90.0));
+        assert_eq!(r1.priority, OverridePriority::Hard);
+        let r2 = &sidecar.labels["R2"];
+        assert_eq!(
+            (r2.hide, r2.dx, r2.priority),
+            (Some(true), None, OverridePriority::Soft)
+        );
+    }
+
+    #[test]
+    fn a_sidecar_without_labels_has_none_and_writes_none_back() {
+        let sidecar: SidecarLayout = toml::from_str("[components.U1]\nx = 1.0\ny = 2.0\n").unwrap();
+        assert!(sidecar.labels.is_empty());
+        let written = toml::to_string(&sidecar).unwrap();
+        assert!(!written.contains("[labels"), "{written}");
+    }
+
+    #[test]
+    fn labels_survive_a_round_trip() {
+        let toml = "[labels.C3]\nhide = true\n";
+        let sidecar: SidecarLayout = toml::from_str(toml).unwrap();
+        let again: SidecarLayout = toml::from_str(&toml::to_string(&sidecar).unwrap()).unwrap();
+        assert_eq!(again.labels["C3"], sidecar.labels["C3"]);
     }
 
     fn test_board(pairs: &[(&str, Option<&str>)]) -> crate::Board {

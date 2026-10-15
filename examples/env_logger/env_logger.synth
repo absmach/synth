@@ -67,8 +67,14 @@ board "env_logger" {
     }
 
     connect U1.vout -> U2.vdd
+    connect U1.vout -> U2.vdd_2
+    connect U1.vout -> U2.vdd_3
     connect U1.vout -> U2.vbat
+    connect U1.vout -> U2.vdda
     connect U1.gnd  -> U2.vss
+    connect U1.gnd  -> U2.vss_2
+    connect U1.gnd  -> U2.vss_3
+    connect U1.gnd  -> U2.vssa
 
     connect U2.vdd  -> C4.p1
     connect U2.vss  -> C4.p2

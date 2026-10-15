@@ -1,6 +1,5 @@
 ---
 source: crates/synth-ir/tests/lowering.rs
-assertion_line: 71
 expression: board
 ---
 {
@@ -67,7 +66,9 @@ expression: board
           "width_mm": 3.54,
           "height_mm": 11.16,
           "courtyard_margin_mm": 0.25,
-          "mating_face": null
+          "mating_face": null,
+          "label_side": null,
+          "label_hidden": null
         },
         "operating_conditions": {
           "min_voltage_v": 1.8,
@@ -121,7 +122,9 @@ expression: board
           "width_mm": 2.96,
           "height_mm": 1.46,
           "courtyard_margin_mm": 0.25,
-          "mating_face": null
+          "mating_face": null,
+          "label_side": null,
+          "label_hidden": null
         },
         "operating_conditions": {
           "min_voltage_v": null,
@@ -175,7 +178,9 @@ expression: board
           "width_mm": 2.96,
           "height_mm": 1.46,
           "courtyard_margin_mm": 0.25,
-          "mating_face": null
+          "mating_face": null,
+          "label_side": null,
+          "label_hidden": null
         },
         "operating_conditions": {
           "min_voltage_v": null,
@@ -230,7 +235,9 @@ expression: board
           "width_mm": 2.96,
           "height_mm": 1.46,
           "courtyard_margin_mm": 0.25,
-          "mating_face": null
+          "mating_face": null,
+          "label_side": null,
+          "label_hidden": null
         },
         "operating_conditions": {
           "min_voltage_v": null,

@@ -662,6 +662,9 @@ pub enum NetclassAttr {
     /// Maximum routed length for the class's nets (`max_length 50mm`), a
     /// length-match/ propagation-delay budget.
     MaxLength(ValueWithUnit),
+    /// Length the class's nets may differ from each other (`max_skew 1mm`), a
+    /// bus/group length-match budget.
+    MaxSkew(ValueWithUnit),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

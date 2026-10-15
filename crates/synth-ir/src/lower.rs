@@ -537,6 +537,7 @@ impl<'a> LowerCtx<'a> {
         let mut current: Option<Current> = None;
         let mut plane = false;
         let mut max_length: Option<Length> = None;
+        let mut max_skew: Option<Length> = None;
         for attr in &n.attrs {
             match attr {
                 NetclassAttr::TraceWidth(v) => match Length::try_from(v) {
@@ -559,6 +560,10 @@ impl<'a> LowerCtx<'a> {
                 NetclassAttr::MaxLength(v) => match Length::try_from(v) {
                     Ok(l) => max_length = Some(l),
                     Err(e) => self.emit_unit_error(&e, "netclass max_length"),
+                },
+                NetclassAttr::MaxSkew(v) => match Length::try_from(v) {
+                    Ok(l) => max_skew = Some(l),
+                    Err(e) => self.emit_unit_error(&e, "netclass max_skew"),
                 },
                 NetclassAttr::Color(hex) => match parse_hex_color(hex) {
                     Some(rgb) => color = Some(rgb),
@@ -594,6 +599,7 @@ impl<'a> LowerCtx<'a> {
             current,
             plane,
             max_length,
+            max_skew,
             source_span: n.span,
         }
     }
@@ -1849,6 +1855,25 @@ mod tests {
         assert_eq!(nc.trace_width, Some(Length::from_mm(0.5)));
         assert_eq!(nc.clearance, Some(Length::from_mm(0.2)));
         assert_eq!(nc.color, None, "no colour attribute → default palette");
+    }
+
+    #[test]
+    fn test_lower_netclass_length_match_from_source() {
+        // End-to-end from source: a `netclass { max_length / max_skew }` must
+        // reach the IR. The rule tests build `NetClass` directly in Rust, so
+        // this is the guard that the parser/lowering path is actually wired.
+        let src = r#"board "b" {
+            netclass "DDR" {
+                max_length 50mm
+                max_skew 1mm
+            }
+        }"#;
+        let ast = parse(src, "test.synth").ast.unwrap();
+        let res = lower(&ast, &Registry::default(), "test.synth");
+        assert!(res.diagnostics.is_empty(), "{:?}", res.diagnostics);
+        let nc = &res.board.unwrap().netclasses[0];
+        assert_eq!(nc.max_length, Some(Length::from_mm(50.0)));
+        assert_eq!(nc.max_skew, Some(Length::from_mm(1.0)));
     }
 
     #[test]

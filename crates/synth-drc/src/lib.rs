@@ -60,6 +60,7 @@
 #![forbid(unsafe_code)]
 #![allow(clippy::cast_possible_wrap, clippy::similar_names)]
 
+mod emc;
 mod geometry;
 pub mod kicad_cli;
 mod profile;
@@ -202,6 +203,75 @@ pub fn check_with_stackup(
     evaluate(board, placement, routing, profile, Some(stackup.clone()))
 }
 
+/// The routed signal/power-integrity rules: the ones `kicad-cli` DRC cannot
+/// see. Impedance, crosstalk, differential skew, ampacity, return path, IR drop
+/// and net length all read the copper the router produced.
+///
+/// Geometric clearance (min width, copper clearance, shorts, copper-to-edge)
+/// is deliberately **not** here: the route validation runs `kicad-cli pcb drc`
+/// on the same board, so repeating it would double-gate the same finding. This
+/// is the set to run on a routed board whose clearance kicad-cli has already
+/// judged.
+#[must_use]
+pub fn check_signal_integrity(
+    board: &Board,
+    routing: &Routing,
+    profile: &ManufacturerProfile,
+    stackup: Option<&StackupProfile>,
+) -> Vec<Violation> {
+    let mut violations = Vec::new();
+    if let Some(stackup) = stackup {
+        violations.extend(signal_integrity::check_controlled_impedance(
+            board, routing, profile, stackup,
+        ));
+        violations.extend(signal_integrity::check_edge_coupling(
+            routing, profile, stackup,
+        ));
+        violations.extend(signal_integrity::check_return_path_vias(
+            board, routing, stackup,
+        ));
+        violations.extend(signal_integrity::check_ir_drop(
+            board, routing, profile, stackup,
+        ));
+    }
+    violations.extend(signal_integrity::check_diff_pair_skew(board, routing));
+    violations.extend(signal_integrity::check_ampacity(
+        board, routing, profile, stackup,
+    ));
+    violations.extend(signal_integrity::check_net_length(board, routing));
+    violations.extend(signal_integrity::check_group_skew(board, routing));
+    violations.extend(signal_integrity::check_via_current(board, routing));
+    violations
+}
+
+/// A blocking finding that the routed board could not be read, so the
+/// signal/power-integrity rules never ran.
+///
+/// A delivered board that is missing, unreadable or malformed must not look
+/// clean. A gate that swallows the read error cannot tell "checked, nothing
+/// found" from "never checked" — the exact failure the routed SI/PI pass
+/// exists to prevent. Callers that read the routed copper back from disk emit
+/// this in place of the (empty) rule output, so it flows through the same
+/// blocking path as a real violation and downgrades the release manifest.
+///
+/// Code: `E-SYNTH-DRC-022`.
+#[must_use]
+pub fn unreadable_routed_board(path: &std::path::Path, error: &str) -> Violation {
+    Violation {
+        code: "E-SYNTH-DRC-022".to_string(),
+        message: format!(
+            "the routed board `{}` could not be read ({error}); signal/power integrity \
+             was not checked",
+            path.display()
+        ),
+        witness: Vec::new(),
+        nets: Vec::new(),
+        components: Vec::new(),
+        pos_mm: None,
+        suggested_override: None,
+    }
+}
+
 fn evaluate(
     board: &Board,
     placement: &Placement,
@@ -224,6 +294,7 @@ fn evaluate(
         board, placement, routing, profile,
     ));
     violations.extend(geometry::check_shorts(board, placement, routing));
+    violations.extend(emc::check_emc_placement(board, placement));
     // Routed signal integrity (E-SYNTH-DRC-012 / 014). The impedance rule
     // needs a stackup and is skipped without one, preserving the documented
     // "no stackup, impedance not verified" contract; the skew rule is
@@ -244,6 +315,8 @@ fn evaluate(
     }
     violations.extend(signal_integrity::check_diff_pair_skew(board, routing));
     violations.extend(signal_integrity::check_net_length(board, routing));
+    violations.extend(signal_integrity::check_group_skew(board, routing));
+    violations.extend(signal_integrity::check_via_current(board, routing));
     violations.extend(signal_integrity::check_ampacity(
         board,
         routing,
@@ -294,7 +367,7 @@ mod tests {
         // same technique as `geometry::flags_trace_running_
         // through_a_component_courtyard` — independent of
         // whatever quality the router happens to produce.
-        let board = load_board("../../examples/sensor_logger.synth");
+        let board = load_board("../../examples/sensor_logger/sensor_logger.synth");
         let placement = synth_place::place(&board).expect("place");
         let mut routing = synth_route::route(&board, &placement);
 
@@ -349,7 +422,7 @@ mod tests {
 
     #[test]
     fn report_is_deterministic() {
-        let board = load_board("../../examples/sensor_logger.synth");
+        let board = load_board("../../examples/sensor_logger/sensor_logger.synth");
         let placement = synth_place::place(&board).expect("place");
         let routing = synth_route::route(&board, &placement);
         let profile = ManufacturerProfile::jlc_standard();
@@ -379,7 +452,7 @@ mod tests {
 
     #[test]
     fn a_board_without_a_stackup_substitutes_a_standard_profile() {
-        let board = load_board("../../examples/env_logger.synth");
+        let board = load_board("../../examples/env_logger/env_logger.synth");
         assert!(
             StackupProfile::declared(&board).is_none(),
             "env_logger must not declare a stackup for this test to be meaningful"
@@ -417,7 +490,8 @@ mod tests {
     }
 
     fn board_with_controlled_pair() -> Board {
-        let mut board = load_board("../../examples/placement_and_diff_pair.synth");
+        let mut board =
+            load_board("../../examples/placement_and_diff_pair/placement_and_diff_pair.synth");
         board.stackup = Some(four_layer_stackup());
         board
     }
@@ -537,7 +611,7 @@ mod tests {
 
     #[test]
     fn an_undersized_trace_on_a_declared_current_blocks() {
-        let mut board = load_board("../../examples/env_logger.synth");
+        let mut board = load_board("../../examples/env_logger/env_logger.synth");
         board.nets[0].netclass = Some("PWR".to_string());
         board.netclasses.push(synth_ir::NetClass {
             name: "PWR".to_string(),
@@ -548,6 +622,7 @@ mod tests {
             current: Some(synth_ir::Current(1_000_000)),
             plane: false,
             max_length: None,
+            max_skew: None,
             source_span: synth_diagnostics::Span::new(0, 0),
         });
         let net = board.nets[0].id;
@@ -590,6 +665,7 @@ mod tests {
             current: None,
             plane: false,
             max_length: None,
+            max_skew: None,
             source_span: synth_diagnostics::Span::new(0, 0),
         });
         let stackup = StackupProfile::for_board(&board);
@@ -721,7 +797,7 @@ mod tests {
 
     #[test]
     fn env_logger_drc() {
-        let board = load_board("../../examples/env_logger.synth");
+        let board = load_board("../../examples/env_logger/env_logger.synth");
         let placement = synth_place::place(&board).expect("place");
         let routing = synth_route::route(&board, &placement);
         let profile = ManufacturerProfile::jlc_standard();
@@ -738,7 +814,7 @@ mod tests {
 
     #[test]
     fn a_signal_via_needs_a_nearby_ground_return_via() {
-        let mut board = load_board("../../examples/env_logger.synth");
+        let mut board = load_board("../../examples/env_logger/env_logger.synth");
         board.stackup = Some(four_layer_stackup());
         let stackup = StackupProfile::for_board(&board);
         let ground = board
@@ -783,7 +859,7 @@ mod tests {
 
     #[test]
     fn a_rail_dropping_more_than_the_budget_is_warned() {
-        let mut board = load_board("../../examples/env_logger.synth");
+        let mut board = load_board("../../examples/env_logger/env_logger.synth");
         board.stackup = Some(four_layer_stackup());
         board.nets[0].netclass = Some("PWR".to_string());
         board.netclasses.push(synth_ir::NetClass {
@@ -795,6 +871,7 @@ mod tests {
             current: Some(synth_ir::Current(1_000_000)),
             plane: false,
             max_length: None,
+            max_skew: None,
             source_span: synth_diagnostics::Span::new(0, 0),
         });
         let stackup = StackupProfile::for_board(&board);
@@ -852,7 +929,7 @@ mod tests {
 
     #[test]
     fn a_net_longer_than_its_class_allows_is_flagged() {
-        let mut board = load_board("../../examples/env_logger.synth");
+        let mut board = load_board("../../examples/env_logger/env_logger.synth");
         board.nets[0].netclass = Some("LEN".to_string());
         board.netclasses.push(synth_ir::NetClass {
             name: "LEN".to_string(),
@@ -863,6 +940,7 @@ mod tests {
             current: None,
             plane: false,
             max_length: Some(synth_ir::Length::from_mm(10.0)),
+            max_skew: None,
             source_span: synth_diagnostics::Span::new(0, 0),
         });
         let net = board.nets[0].id;
@@ -878,5 +956,83 @@ mod tests {
             ..Routing::default()
         };
         assert!(super::signal_integrity::check_net_length(&board, &short).is_empty());
+    }
+
+    fn bus_class(name: &str) -> synth_ir::NetClass {
+        synth_ir::NetClass {
+            name: name.to_string(),
+            trace_width: None,
+            clearance: None,
+            color: None,
+            impedance: None,
+            current: None,
+            plane: false,
+            max_length: None,
+            max_skew: Some(synth_ir::Length::from_mm(1.0)),
+            source_span: synth_diagnostics::Span::new(0, 0),
+        }
+    }
+
+    #[test]
+    fn a_matched_bus_with_too_much_skew_is_flagged() {
+        let mut board = load_board("../../examples/env_logger/env_logger.synth");
+        board.netclasses.push(bus_class("BUS"));
+        board.nets[0].netclass = Some("BUS".to_string());
+        board.nets[1].netclass = Some("BUS".to_string());
+        let routing = Routing {
+            segments: vec![
+                straight(board.nets[0].id, 127_000, 0, 10_000_000),
+                straight(board.nets[1].id, 127_000, 1_000_000, 20_000_000),
+            ],
+            ..Routing::default()
+        };
+        let flagged = super::signal_integrity::check_group_skew(&board, &routing);
+        assert_eq!(flagged.len(), 1, "{flagged:?}");
+        assert_eq!(flagged[0].code, "E-SYNTH-DRC-019");
+        let matched = Routing {
+            segments: vec![
+                straight(board.nets[0].id, 127_000, 0, 10_000_000),
+                straight(board.nets[1].id, 127_000, 1_000_000, 10_500_000),
+            ],
+            ..Routing::default()
+        };
+        assert!(super::signal_integrity::check_group_skew(&board, &matched).is_empty());
+    }
+
+    #[test]
+    fn too_much_current_per_via_is_flagged() {
+        let mut board = load_board("../../examples/env_logger/env_logger.synth");
+        board.nets[0].netclass = Some("PWR".to_string());
+        board.netclasses.push(synth_ir::NetClass {
+            name: "PWR".to_string(),
+            trace_width: None,
+            clearance: None,
+            color: None,
+            impedance: None,
+            current: Some(synth_ir::Current(3_000_000)),
+            plane: false,
+            max_length: None,
+            max_skew: None,
+            source_span: synth_diagnostics::Span::new(0, 0),
+        });
+        let net = board.nets[0].id;
+        let via = |x: i64| synth_pcb::Via {
+            net,
+            at: synth_geometry::Point::new(x, 0),
+            drill_nm: 300_000,
+            pad_diameter_nm: 600_000,
+        };
+        let one = Routing {
+            vias: vec![via(0)],
+            ..Routing::default()
+        };
+        let flagged = super::signal_integrity::check_via_current(&board, &one);
+        assert_eq!(flagged.len(), 1, "{flagged:?}");
+        assert_eq!(flagged[0].code, "W-SYNTH-DRC-020");
+        let two = Routing {
+            vias: vec![via(0), via(1_000_000)],
+            ..Routing::default()
+        };
+        assert!(super::signal_integrity::check_via_current(&board, &two).is_empty());
     }
 }

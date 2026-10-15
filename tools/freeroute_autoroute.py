@@ -119,6 +119,12 @@ STITCH_CLEARANCE_MM = 0.2
 STITCH_BIG_PAD_MM = 1.5
 # Max error allowed when shrinking a pour piece, in mm.
 STITCH_DEFLATE_ERROR_MM = 0.01
+# A ground pad on an outer pour is tied to the inner planes only if a via or
+# through-hole pad of its net lies this close to the pad's edge, in the same
+# pour piece. Farther
+# away its return current runs through the pour, which is a long loop for a
+# decoupling capacitor or a protection part.
+STITCH_TIE_MM = 2.0
 
 _STITCH_STEPS = int(STITCH_SEARCH_MM / STITCH_STEP_MM)
 # Grid offsets around a pad, nearest first, so the first legal spot is the
@@ -179,6 +185,12 @@ def _via_fits(tracks, pads, net, point, in_pad=False) -> bool:
     via = pcbnew.SHAPE_CIRCLE(point, _mm(STITCH_PAD_MM / 2))
     clearance = _mm(STITCH_CLEARANCE_MM)
     for track in tracks:
+        # Never on or against another via, whatever its net: they would be one
+        # hole drilled twice.
+        if track.GetClass().endswith("VIA") and (
+            track.GetPosition() - point
+        ).EuclideanNorm() < _mm(STITCH_PAD_MM + STITCH_CLEARANCE_MM):
+            return False
         if track.GetNetCode() == net:
             continue
         if track.GetEffectiveShape().Collide(via, clearance):
@@ -304,6 +316,170 @@ def stitch_floating_pour(
         )
     _append_vias(board_path, board, added)
     return [(x, y) for _, x, y in added], len(pieces)
+
+
+def _near_pad(pad, layer, point, limit) -> bool:
+    """True if `point` is within `limit` of the pad's copper edge on `layer`.
+
+    The edge, not the centre: a via cannot sit inside a pad or within the
+    clearance of it, so a large pad's centre can be farther from any via than
+    its edge is.
+    """
+    return pad.GetEffectiveShape(layer).Collide(
+        pcbnew.SHAPE_CIRCLE(point, 1), limit
+    )
+
+
+def _inside_pad_disc(pads, net, point) -> bool:
+    """True if `point` is inside the disc Synth's gate reads a pad of `net` as.
+
+    The connectivity check treats a pad as the disc of its larger half-dimension
+    and calls a via of the same net inside it a via-in-pad, which the fab
+    charges for (filled and capped vias). A via beside a long pad can sit in
+    that disc without touching the pad, so stay out of it.
+    """
+    for pad in pads:
+        if pad.GetNetCode() != net:
+            continue
+        radius = max(pad.GetSizeX(), pad.GetSizeY()) // 2
+        if (pad.GetPosition() - point).EuclideanNorm() <= radius:
+            return True
+    return False
+
+
+def _nearest_via_spot(piece, tracks, pads, net, pad, limit):
+    """The legal via position nearest to `pad`'s centre, within `limit` of its edge.
+
+    Unlike `_stitch_point`, which prefers the roomiest spot in the whole search
+    window, this takes the nearest one whatever its margin: a close spot with
+    a little less room beats a roomy one beyond the tie distance.
+    """
+    inner = pcbnew.SHAPE_POLY_SET(piece)
+    inner.Deflate(
+        _mm(STITCH_ROOMS_MM[-1]),
+        pcbnew.CORNER_STRATEGY_ROUND_ALL_CORNERS,
+        _mm(STITCH_DEFLATE_ERROR_MM),
+    )
+    if inner.OutlineCount() == 0:
+        return None
+    layer = pad.GetLayer()
+    pos = pad.GetPosition()
+    for dx, dy in _STITCH_OFFSETS:
+        point = pcbnew.VECTOR2I(
+            pos.x + _mm(dx * STITCH_STEP_MM), pos.y + _mm(dy * STITCH_STEP_MM)
+        )
+        if (
+            inner.PointInside(point)
+            and _near_pad(pad, layer, point, limit)
+            and _via_fits(tracks, pads, net, point)
+            and not _inside_pad_disc(pads, net, point)
+        ):
+            return point
+    return None
+
+
+_GROUND_NET = re.compile(r"[ADPS]?GND[A-Z0-9_]*|VSS[A-Z0-9_]*")
+
+
+def _is_ground_net(name: str) -> bool:
+    """True for a net named like ground, ignoring a sheet path such as `/GND`."""
+    return _GROUND_NET.fullmatch(name.rsplit("/", 1)[-1].upper()) is not None
+
+
+def _distant_ground_pads(board, tracks, pads):
+    """(net, piece, pad) for each outer SMD pad lying on a ground pour with no
+    tie within `STITCH_TIE_MM`, in a fixed order. Pours of other nets are skipped.
+
+    A tie is a via or through-hole pad of the net inside the same pour piece: a
+    tie in another piece is not reachable through copper.
+    """
+    pcbnew.ZONE_FILLER(board).Fill(board.Zones())
+    limit = _mm(STITCH_TIE_MM)
+    found = []
+    for zone in board.Zones():
+        layer = zone.GetFirstLayer()
+        if layer not in (pcbnew.F_Cu, pcbnew.B_Cu) or not _is_ground_net(
+            zone.GetNetname()
+        ):
+            continue
+        net = zone.GetNetCode()
+        for piece in _fragments(zone.GetFilledPolysList(layer)):
+            ties = [
+                track.GetPosition()
+                for track in tracks
+                if track.GetClass().endswith("VIA")
+                and track.GetNetCode() == net
+                and piece.PointInside(track.GetPosition())
+            ] + [
+                pad.GetPosition()
+                for pad in pads
+                if pad.GetNetCode() == net
+                and pad.GetAttribute() == pcbnew.PAD_ATTRIB_PTH
+                and piece.PointInside(pad.GetPosition())
+            ]
+            for pad in pads:
+                if (
+                    pad.GetNetCode() == net
+                    and pad.GetAttribute() == pcbnew.PAD_ATTRIB_SMD
+                    and pad.IsOnLayer(layer)
+                    and piece.PointInside(pad.GetPosition())
+                    and not any(_near_pad(pad, layer, tie, limit) for tie in ties)
+                ):
+                    found.append((net, piece, pad))
+    found.sort(
+        key=lambda item: (
+            item[2].GetParentFootprint().GetReference(),
+            item[2].GetNumber(),
+        )
+    )
+    return found
+
+
+def tie_distant_ground_pads(board_path: str) -> tuple[list[tuple[float, float]], int]:
+    """Add a via beside each outer ground pad that has no tie within reach.
+
+    `stitch_floating_pour` only rescues pour pieces with no way to the rest of
+    the net. A piece tied by one far-off via still leaves its pads with a long
+    return path. Each such pad gets a via at the nearest legal spot in its own
+    piece, never inside a pad. A pad with no legal spot is left alone and
+    reported.
+
+    Returns the via positions added and the number of pads left without a tie.
+    """
+    board = pcbnew.LoadBoard(board_path)
+    pads = [pad for pad in board.GetPads() if pad.IsOnCopperLayer()]
+    tracks = all_tracks(board)
+    added: list[tuple[int, float, float]] = []
+    for _ in range(STITCH_ROUNDS):
+        added_now = 0
+        for net, piece, pad in _distant_ground_pads(board, tracks, pads):
+            # A via added earlier this round may already tie this pad.
+            if any(
+                track.GetClass().endswith("VIA")
+                and track.GetNetCode() == net
+                and piece.PointInside(track.GetPosition())
+                and _near_pad(pad, pad.GetLayer(), track.GetPosition(), _mm(STITCH_TIE_MM))
+                for track in tracks
+            ):
+                continue
+            point = _nearest_via_spot(
+                piece, tracks, pads, net, pad, _mm(STITCH_TIE_MM)
+            )
+            if point is not None:
+                tracks.append(_add_via(board, net, point))
+                added.append((net, pcbnew.ToMM(point.x), pcbnew.ToMM(point.y)))
+                added_now += 1
+        if added_now == 0:
+            break
+    remaining = _distant_ground_pads(board, tracks, pads)
+    for _net, _piece, pad in remaining:
+        sys.stderr.write(
+            f"warning: ground pad {pad.GetParentFootprint().GetReference()}."
+            f"{pad.GetNumber()} has no via within {STITCH_TIE_MM} mm and no room "
+            "for one\n"
+        )
+    _append_vias(board_path, board, added)
+    return [(x, y) for _, x, y in added], len(remaining)
 
 
 def _append_vias(board_path: str, board, added) -> None:
@@ -514,6 +690,13 @@ def main() -> int:
             raise
         if stitched:
             print(f"stitched {len(stitched)} floating pour piece(s)", flush=True)
+        try:
+            tied, tie_unresolved = tie_distant_ground_pads(args.output_board)
+        except Exception as exc:
+            write_report(router="freerouting", error="tie_failed", detail=str(exc))
+            raise
+        if tied:
+            print(f"tied {len(tied)} ground pad(s) to the planes", flush=True)
 
         # Counted from the merged board rather than from the engine's log, so
         # the claim can be checked against the file that was written.
@@ -535,6 +718,8 @@ def main() -> int:
             imported_vias=vias,
             stitch_vias=len(stitched),
             stitch_unresolved=unresolved,
+            ground_vias=len(tied),
+            ground_unresolved=tie_unresolved,
             notes=[],
         )
     return 0

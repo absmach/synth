@@ -431,7 +431,7 @@ mod tests {
 
     #[test]
     fn sensor_logger_routes_cleanly() {
-        let board = load_board("../../examples/sensor_logger.synth");
+        let board = load_board("../../examples/sensor_logger/sensor_logger.synth");
         let placement = synth_place::place(&board).expect("place");
         let r = route(&board, &placement);
         // The maze router is DRC-correct but not complete on dense connector
@@ -457,7 +457,7 @@ mod tests {
 
     #[test]
     fn env_logger_routes_cleanly() {
-        let board = load_board("../../examples/env_logger.synth");
+        let board = load_board("../../examples/env_logger/env_logger.synth");
         let placement = synth_place::place(&board).expect("place");
         let r = route(&board, &placement);
         // See `sensor_logger_routes_cleanly`: the reference board carries
@@ -548,7 +548,7 @@ mod tests {
     fn test_default_advisor_zero_cost() {
         use advisor::{CongestionAdvisor, DefaultCongestionAdvisor};
         let adv = DefaultCongestionAdvisor;
-        let board = load_board("../../examples/sensor_logger.synth");
+        let board = load_board("../../examples/sensor_logger/sensor_logger.synth");
         let cost = adv.evaluate_cell_cost(&board, Point::new(0, 0), 0);
         assert_eq!(cost.penalty, 0.0);
         assert_eq!(cost.cost_multiplier, 1.0);

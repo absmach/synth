@@ -143,21 +143,21 @@ fn assert_no_wires_cross_unrelated_bodies(board: &Board, layout: &synth_layout::
 
 #[test]
 fn sensor_logger_wires_are_orthogonal() {
-    let board = board_for("examples/sensor_logger.synth");
+    let board = board_for("examples/sensor_logger/sensor_logger.synth");
     let layout = synth_layout::layout(&board);
     assert_all_wires_orthogonal(&layout);
 }
 
 #[test]
 fn sensor_logger_wires_do_not_cross_component_bodies() {
-    let board = board_for("examples/sensor_logger.synth");
+    let board = board_for("examples/sensor_logger/sensor_logger.synth");
     let layout = synth_layout::layout(&board);
     assert_no_wires_cross_unrelated_bodies(&board, &layout);
 }
 
 #[test]
 fn sensor_logger_routing_is_deterministic() {
-    let board = board_for("examples/sensor_logger.synth");
+    let board = board_for("examples/sensor_logger/sensor_logger.synth");
     let a = synth_layout::layout(&board);
     let b = synth_layout::layout(&board);
     assert_eq!(a.wires, b.wires, "routing is not deterministic");
@@ -174,7 +174,8 @@ fn sensor_logger_routing_is_deterministic() {
 /// connectivity silently vanished from the schematic.
 #[test]
 fn every_signal_net_terminates_in_wires_or_labels() {
-    let mut paths: Vec<PathBuf> = vec![workspace_root().join("examples/sensor_logger.synth")];
+    let mut paths: Vec<PathBuf> =
+        vec![workspace_root().join("examples/sensor_logger/sensor_logger.synth")];
     let dir = workspace_root().join("fixtures").join("layout");
     paths.extend(
         std::fs::read_dir(&dir)
