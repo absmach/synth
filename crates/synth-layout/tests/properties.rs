@@ -428,6 +428,78 @@ board "mech" {
     assert!(disjoint, "Power and MOUNTING regions must not overlap");
 }
 
+/// Pinless, netless mechanical parts carry no connectivity, so their region
+/// is one tight row sized to its content: not a column spread over several
+/// rows, and not stretched to fill the free area beside the real regions.
+#[test]
+fn mounting_holes_take_a_small_row_of_their_own() {
+    let source = r#"
+board "mech" {
+  layers 2
+  group "Power" {
+    component U1: regulator "ams1117_3v3"
+    component C1: capacitor "c_generic_0805" value "10uF"
+    component C2: capacitor "c_generic_0805" value "10uF"
+    connect U1.vout -> C1.p1
+    connect U1.gnd -> C1.p2
+    connect U1.vout -> C2.p1
+    connect U1.gnd -> C2.p2
+  }
+  group "Filter" {
+    component R1: resistor "r_generic_0603" value "10k"
+    component R2: resistor "r_generic_0603" value "10k"
+    component C3: capacitor "c_generic_0805" value "10uF"
+    connect R1.p2 -> R2.p1
+    connect R2.p2 -> C3.p1
+    connect R1.p1 -> U1.vout
+    connect C3.p2 -> U1.gnd
+  }
+  component H1: mounting_hole "mounting_hole_m2_5"
+  component H2: mounting_hole "mounting_hole_m2_5"
+  component H3: mounting_hole "mounting_hole_m2_5"
+  component H4: mounting_hole "mounting_hole_m2_5"
+}
+"#;
+    let board = board_from_source("mech_row.synth", source);
+    let layout = synth_layout::layout(&board);
+    let mounting = layout
+        .group_boxes
+        .iter()
+        .find(|b| b.group == synth_layout::MOUNTING_REGION)
+        .expect("MOUNTING region");
+    let (width, height) = (
+        mounting.max_mm.0 - mounting.min_mm.0,
+        mounting.max_mm.1 - mounting.min_mm.1,
+    );
+    assert!(
+        width <= 90.0 && height <= 30.0,
+        "MOUNTING box {width} x {height} mm is bigger than four holes in a row need"
+    );
+    let hole_ys: Vec<f64> = board
+        .components
+        .iter()
+        .filter(|c| c.refdes.starts_with('H'))
+        .filter_map(|c| layout.components.iter().find(|p| p.id == c.id))
+        .map(|p| p.center_mm.1)
+        .collect();
+    assert_eq!(hole_ys.len(), 4);
+    assert!(
+        hole_ys.iter().all(|y| (*y - hole_ys[0]).abs() < 1e-9),
+        "the holes must share one row: {hole_ys:?}"
+    );
+    for other in layout
+        .group_boxes
+        .iter()
+        .filter(|b| b.group != synth_layout::MOUNTING_REGION)
+    {
+        let disjoint = other.max_mm.0 <= mounting.min_mm.0
+            || mounting.max_mm.0 <= other.min_mm.0
+            || other.max_mm.1 <= mounting.min_mm.1
+            || mounting.max_mm.1 <= other.min_mm.1;
+        assert!(disjoint, "{} overlaps MOUNTING", other.group);
+    }
+}
+
 #[test]
 fn wires_inside_a_region_labels_between_regions() {
     let source = r#"

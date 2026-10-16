@@ -1346,6 +1346,35 @@ pub struct RouteResult {
     pub nets_truncated_to_labels: Vec<NetId>,
 }
 
+/// The rectangle `(x_min, y_min, x_max, y_max)` the text `text` of a net label
+/// on `pin` covers on the sheet: centred on the end of a 5.08 mm stub at the
+/// pin. `None` when the pin has no terminal. The router keeps wires out of it
+/// and the note placer keeps note text off it.
+#[allow(clippy::implicit_hasher)]
+pub fn net_label_rect(
+    board: &Board,
+    text: &str,
+    component: ComponentId,
+    pin: PinId,
+    placements: &HashMap<ComponentId, &ComponentPlacement>,
+) -> Option<(f64, f64, f64, f64)> {
+    let (x, y, dx, _dy) = pin_terminal_xy(board, component, pin, placements)?;
+    let stub_len = 5.08;
+    let label_x = if dx >= -0.1 {
+        x + stub_len
+    } else {
+        x - stub_len
+    };
+    let label_w = (text.len() as f64) * 1.5 + 3.0;
+    let label_h = 3.81;
+    Some((
+        label_x - label_w / 2.0,
+        y - label_h / 2.0,
+        label_x + label_w / 2.0,
+        y + label_h / 2.0,
+    ))
+}
+
 /// Route every signal net on `board` over the already-placed `layout`.
 ///
 /// Replicates, in order: building the obstacle grid from component
@@ -1415,23 +1444,10 @@ pub fn route_board(board: &Board, layout: &Layout) -> RouteResult {
 
     // 2. Mark net label (global_label) obstacles.
     for label in &layout.net_labels {
-        if let Some((x, y, dx, _dy)) =
-            pin_terminal_xy(board, label.component, label.pin, &placements)
+        if let Some((x_min, y_min, x_max, y_max)) =
+            net_label_rect(board, &label.label, label.component, label.pin, &placements)
         {
-            let stub_len = 5.08;
-            let label_x = if dx >= -0.1 {
-                x + stub_len
-            } else {
-                x - stub_len
-            };
-            let label_w = (label.label.len() as f64) * 1.5 + 3.0;
-            let label_h = 3.81;
-            grid.mark_obstacle_rect(
-                label_x - label_w / 2.0,
-                y - label_h / 2.0,
-                label_x + label_w / 2.0,
-                y + label_h / 2.0,
-            );
+            grid.mark_obstacle_rect(x_min, y_min, x_max, y_max);
         }
     }
 
