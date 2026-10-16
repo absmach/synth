@@ -123,6 +123,15 @@ const SECURE_TRACKER_BASELINE_OUTLINE_AREA_MM2_64_90_X_63_85: f64 = 64.90 * 63.8
 /// The sweep in #158 shows the board oscillating between 64.90 and 93.90 mm
 /// wide as one part grows in 0.2 mm steps, so the figure to restore is a
 /// property of the placer rather than of this fixture.
+///
+/// It now fails in the other direction. Reading a rotated footprint's pads in
+/// KiCad's own sense moved this board to 91.00 x 60.94 mm, an area of
+/// 2818.0 mm2 — 32% *under* the baseline rather than 44% over it. A smaller
+/// board is not a defect on its own, and this assertion is two-sided on
+/// purpose: the complaint is that one correction of a single courtyard moves
+/// the outline by a third in either direction, not that the outline is large.
+/// Whether 2818.0 mm2 is the right answer or another swing of the same
+/// oscillation is the question #158 is still open on.
 #[test]
 #[ignore = "fails until the placer non-monotonicity in #158 is fixed"]
 fn secure_tracker_outline_area_stays_within_baseline_tolerance() {
