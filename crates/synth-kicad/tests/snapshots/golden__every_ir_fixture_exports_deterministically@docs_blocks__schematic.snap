@@ -598,11 +598,12 @@ expression: schematic
 		(property
 			"Value"
 			"(no value)"
-			(at 55.88 33.02 0)
+			(at 59.69 25.4 0)
 			(effects
 				(font
 					(size 1.27 1.27)
 				)
+				(justify left)
 			)
 		)
 		(property
@@ -805,7 +806,7 @@ expression: schematic
 		(property
 			"Reference"
 			"C1"
-			(at 25.4 23.4 90)
+			(at 25.4 32.48 90)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -815,7 +816,7 @@ expression: schematic
 		(property
 			"Value"
 			"(no value)"
-			(at 25.4 32.48 90)
+			(at 25.4 18.32 90)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -1010,13 +1011,15 @@ expression: schematic
 		)
 		(uuid "ea2fad9d-1e93-5dd5-a0bb-7acb95d7e7ec")
 	)
-	(label
+	(global_label
 		"P2_R1"
+		(shape output)
 		(at 125.73 25.4 0)
 		(effects
 			(font
 				(size 1.27 1.27)
 			)
+			(justify left)
 		)
 		(uuid "5c561a74-3aed-53af-be65-936734d0e2f5")
 	)
@@ -1031,13 +1034,15 @@ expression: schematic
 		)
 		(uuid "f97b460c-9151-5f01-a243-ce313e889410")
 	)
-	(label
+	(global_label
 		"P2_R1"
+		(shape output)
 		(at 16.51 27.94 180)
 		(effects
 			(font
 				(size 1.27 1.27)
 			)
+			(justify right)
 		)
 		(uuid "f6c3330e-a0df-59d1-b456-c419cdb587a8")
 	)
@@ -1052,13 +1057,15 @@ expression: schematic
 		)
 		(uuid "283652e7-0a13-5626-94d8-920be29b08ea")
 	)
-	(label
+	(global_label
 		"P2"
+		(shape output)
 		(at 45.72 25.4 180)
 		(effects
 			(font
 				(size 1.27 1.27)
 			)
+			(justify right)
 		)
 		(uuid "8f2f231f-cad6-575f-a5b8-59af510b121f")
 	)
@@ -1073,13 +1080,15 @@ expression: schematic
 		)
 		(uuid "8358e72f-ad51-5a5f-adb9-e610979e6f3c")
 	)
-	(label
+	(global_label
 		"P2"
+		(shape output)
 		(at 34.29 27.94 0)
 		(effects
 			(font
 				(size 1.27 1.27)
 			)
+			(justify left)
 		)
 		(uuid "0828e7fe-ac33-5549-9ba5-f40fe414d5c0")
 	)

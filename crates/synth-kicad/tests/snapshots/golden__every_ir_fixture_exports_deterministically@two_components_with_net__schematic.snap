@@ -1,6 +1,5 @@
 ---
 source: crates/synth-kicad/tests/golden.rs
-assertion_line: 60
 expression: schematic
 ---
 (kicad_sch
@@ -1514,11 +1513,12 @@ expression: schematic
 		(property
 			"Value"
 			"RP2350A"
-			(at 40.64 106.68 0)
+			(at 66.04 60.96 0)
 			(effects
 				(font
 					(size 1.27 1.27)
 				)
+				(justify left)
 			)
 		)
 		(property
@@ -1674,14 +1674,16 @@ expression: schematic
 		)
 		(uuid "20219e2e-795d-5cd5-9395-266e7d835d75")
 	)
-	(label
+	(global_label
 		"CS"
+		(shape output)
 		(at 71.12 25.4 0)
 		(effects
 			(font
 				(size 1.27 1.27)
 				(color 0 158 115 1)
 			)
+			(justify left)
 		)
 		(uuid "96570d70-fa74-50ba-9a33-ffc514c50338")
 	)
@@ -1697,14 +1699,16 @@ expression: schematic
 		)
 		(uuid "8cf4ceae-150d-5112-9007-3a1bcf352c72")
 	)
-	(label
+	(global_label
 		"CS"
+		(shape output)
 		(at 86.36 55.88 180)
 		(effects
 			(font
 				(size 1.27 1.27)
 				(color 0 158 115 1)
 			)
+			(justify right)
 		)
 		(uuid "c721b3ee-28a8-5329-a60c-968b770fc648")
 	)

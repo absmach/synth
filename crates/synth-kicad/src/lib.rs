@@ -49,6 +49,7 @@ mod bom;
 mod erc_validate;
 mod export;
 mod fab;
+mod field_clear;
 pub mod import;
 pub mod multisheet;
 mod pcb;

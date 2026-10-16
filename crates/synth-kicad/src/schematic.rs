@@ -72,6 +72,7 @@ impl PowerRefAllocator {
 use synth_layout::{ComponentPlacement, PinSide, Rotation};
 use uuid::Uuid;
 
+use crate::field_clear;
 use crate::sexp::{num, pair, str_pair, Sexp};
 use crate::symbol_lib::{self, LIBRARY_NICKNAME};
 use crate::uuid_v5::derive_entity_uuid;
@@ -391,10 +392,12 @@ pub(crate) fn build_sheet_schematic(
     // design variant overrides the symbol, which also lives in that
     // block. A design with no variants keeps byte-identical output.
     let variant_dnp = variant_dnp_by_refdes(board);
+    let mut obstacles = field_obstacles(board, layout, &placements);
+    let mut power_names = Vec::new();
     for component in &board.components {
         if let Some(placement) = placements.get(&component.id) {
             let overrides = variant_dnp.get(component.refdes.as_str());
-            for s in build_symbol_instance(component, placement, project, board) {
+            for s in build_symbol_instance(component, placement, project, board, &mut obstacles) {
                 let path = render
                     .symbol_path
                     .clone()
@@ -507,19 +510,54 @@ pub(crate) fn build_sheet_schematic(
         ));
     }
 
+    // The fan-out legs come after the power flags, so their stubs are
+    // registered first or a power name could land on one.
+    let rail_flag = |net_id: NetId| -> Option<&synth_layout::PowerFlag> {
+        layout.power_flags.iter().find(|f| f.net == net_id)
+    };
+    // Multi-sheet: reconcile runs board-wide, but each sheet emits only
+    // its own members' legs.
+    let on_sheet = |component: ComponentId| {
+        render
+            .members
+            .is_none_or(|members| members.contains(&component))
+    };
+    let reconciled_pins = crate::pin_reconcile::reconcile_all(board);
+    for leg in reconciled_pins.iter().flat_map(|r| &r.power_legs) {
+        if on_sheet(leg.component) && rail_flag(leg.net).is_some() {
+            if let Some(((x, y), (flag_x, flag_y))) = fanned_leg_stub(board, leg, &placements) {
+                obstacles.push(FieldObstacle {
+                    owner: None,
+                    rect: power_flag_rect(flag_x, flag_y),
+                });
+                obstacles.push(FieldObstacle {
+                    owner: None,
+                    rect: wire_rect((x, y), (flag_x, flag_y)),
+                });
+            }
+        }
+    }
+
     // KiCad power symbols at every power-flag pin (wire stub + symbol).
     for flag in &layout.power_flags {
-        if let Some(mut sexps) =
-            build_power_symbol(board, flag, &placements, layout, project, &mut *power_refs)
-        {
+        if let Some(mut sexps) = build_power_symbol(
+            board,
+            flag,
+            &placements,
+            layout,
+            project,
+            &mut *power_refs,
+            &mut obstacles,
+            &mut power_names,
+        ) {
             children.append(&mut sexps);
         }
     }
 
     // KiCad per-pin net labels at every labeled-net endpoint. Each
-    // endpoint gets its own short stub + local `(label)` with the
-    // same name; same-named labels on the sheet are electrically
-    // connected (the same primitive the reference designs use for
+    // endpoint gets its own short stub + `(global_label)` flag with the
+    // same name; same-named labels are electrically connected, across
+    // sheets too (the same primitive the reference designs use for
     // SCL/SDA/D+/D-). No long wires, no top rails. Unroutable nets
     // were merged into `layout.net_labels` by `synth_layout::layout`,
     // so this loop covers the routing-fallback labels too.
@@ -667,31 +705,21 @@ pub(crate) fn build_sheet_schematic(
     // The fan-out leg must share the rail's *actual* net label (e.g.
     // "OUT", "VBUS", "+3V3") rather than a hard-coded "+3V3", or KiCad
     // would place it on a distinct global net with no driver.
-    let rail_label = |net_id: NetId| -> Option<&str> {
-        layout
-            .power_flags
-            .iter()
-            .find(|f| f.net == net_id)
-            .map(|f| f.label.as_str())
-    };
-    for reconciled in crate::pin_reconcile::reconcile_all(board) {
+    for reconciled in &reconciled_pins {
         for leg in &reconciled.power_legs {
-            // Multi-sheet: reconcile runs board-wide, but each sheet
-            // emits only its own members' legs.
-            if render
-                .members
-                .is_some_and(|members| !members.contains(&leg.component))
-            {
+            if !on_sheet(leg.component) {
                 continue;
             }
-            if let Some(label) = rail_label(leg.net) {
+            if let Some(rail) = rail_flag(leg.net) {
                 if let Some(sexps) = build_fanned_power_symbol(
                     board,
                     leg,
-                    label,
+                    rail,
                     &placements,
                     project,
                     &mut *power_refs,
+                    &mut obstacles,
+                    &mut power_names,
                 ) {
                     children.extend(sexps);
                 }
@@ -796,7 +824,7 @@ fn build_power_flag_driver(
         total_deg,
     )?;
 
-    let stub_len = 2.54;
+    let stub_len = POWER_FLAG_STUB_LEN;
     let flag_x = x + dx * stub_len;
     let flag_y = y + dy * stub_len;
 
@@ -853,18 +881,13 @@ fn build_power_flag_driver(
     ))
 }
 
-/// Emit a power symbol + stub for a physical power leg that the
-/// netlist doesn't reach but belongs on an existing rail net (fan-out
-/// of the declared VDD/VSS legs). Mirrors [`build_power_symbol`] but
-/// drives the geometry from the symbol's physical pin positions.
-fn build_fanned_power_symbol(
+/// Where a fanned power leg's stub runs: from the pin terminal to the point
+/// its power symbol sits at.
+fn fanned_leg_stub(
     board: &Board,
     leg: &crate::pin_reconcile::PowerLeg,
-    rail_label: &str,
     placements: &HashMap<ComponentId, &ComponentPlacement>,
-    project: &Uuid,
-    power_refs: &mut PowerRefAllocator,
-) -> Option<Vec<Sexp>> {
+) -> Option<((f64, f64), (f64, f64))> {
     let component = board.component(leg.component)?;
     let part = component.part.as_ref()?;
     let lib_id = part.kicad_symbol.as_deref()?;
@@ -889,6 +912,33 @@ fn build_fanned_power_symbol(
         total_deg,
     )?;
 
+    // Offset the symbol one grid unit outward from the pin so it
+    // sits clear of the body.
+    let stub_len = POWER_FLAG_STUB_LEN;
+    let flag_x = x + dx * stub_len;
+    let flag_y = y + dy * stub_len;
+    Some(((x, y), (flag_x, flag_y)))
+}
+
+/// Emit a power symbol + stub for a physical power leg that the
+/// netlist doesn't reach but belongs on an existing rail net (fan-out
+/// of the declared VDD/VSS legs). Mirrors [`build_power_symbol`] but
+/// drives the geometry from the symbol's physical pin positions.
+#[allow(clippy::too_many_arguments)]
+fn build_fanned_power_symbol(
+    board: &Board,
+    leg: &crate::pin_reconcile::PowerLeg,
+    rail: &synth_layout::PowerFlag,
+    placements: &HashMap<ComponentId, &ComponentPlacement>,
+    project: &Uuid,
+    power_refs: &mut PowerRefAllocator,
+    obstacles: &mut Vec<FieldObstacle>,
+    power_names: &mut Vec<PowerName>,
+) -> Option<Vec<Sexp>> {
+    let rail_label = rail.label.as_str();
+    let component = board.component(leg.component)?;
+    let ((x, y), (flag_x, flag_y)) = fanned_leg_stub(board, leg, placements)?;
+
     let label = match leg.family {
         // Both families fly the *net's own* power-flag label: since
         // `classify_power_flags` prefers declared net names, a
@@ -899,12 +949,6 @@ fn build_fanned_power_symbol(
             rail_label
         }
     };
-
-    // Offset the symbol one grid unit outward from the pin so it
-    // sits clear of the body.
-    let stub_len = 2.54;
-    let flag_x = x + dx * stub_len;
-    let flag_y = y + dy * stub_len;
 
     let lib_id_out = power_symbol_lib_id(label);
     let key = format!("power_fanout_{}_{}", component.refdes, leg.pin_number);
@@ -933,53 +977,38 @@ fn build_fanned_power_symbol(
         ],
     );
 
-    let sym_sexp = fanned_symbol_sexp(lib_id_out, flag_x, flag_y, sym_uuid, &refdes_pwr, label);
+    let properties = power_symbol_properties(
+        &refdes_pwr,
+        label,
+        rail.kind,
+        (flag_x, flag_y),
+        obstacles,
+        power_names,
+    );
+    let sym_sexp = power_symbol_sexp(lib_id_out, flag_x, flag_y, sym_uuid, properties);
 
     Some(vec![wire_sexp, sym_sexp])
 }
 
-/// Build the `(symbol ...)` S-expression for a fanned power flag,
-/// carrying hidden Reference/Value properties at the given position.
-fn fanned_symbol_sexp(
+/// Build the `(symbol ...)` S-expression for a power flag carrying the given
+/// Reference and Value properties.
+fn power_symbol_sexp(
     lib_id: String,
     flag_x: f64,
     flag_y: f64,
     sym_uuid: Uuid,
-    refdes: &str,
-    label: &str,
+    properties: Vec<Sexp>,
 ) -> Sexp {
-    let property_at = Sexp::list("at", vec![num(flag_x), num(flag_y), num(0.0)]);
-    let effects = Sexp::list(
-        "effects",
-        vec![
-            Sexp::list("font", vec![Sexp::list("size", vec![num(1.27), num(1.27)])]),
-            Sexp::list("hide", vec![Sexp::atom("yes")]),
-        ],
-    );
-    Sexp::list(
-        "symbol",
-        vec![
-            str_pair("lib_id", lib_id),
-            Sexp::list("at", vec![num(flag_x), num(flag_y), num(0.0)]),
-            pair("unit", Sexp::atom("1")),
-            pair("in_bom", Sexp::atom("no")),
-            pair("on_board", Sexp::atom("no")),
-            str_pair("uuid", sym_uuid.to_string()),
-            Sexp::list(
-                "property",
-                vec![
-                    Sexp::str("Reference"),
-                    Sexp::str(refdes),
-                    property_at.clone(),
-                    effects.clone(),
-                ],
-            ),
-            Sexp::list(
-                "property",
-                vec![Sexp::str("Value"), Sexp::str(label), property_at, effects],
-            ),
-        ],
-    )
+    let mut children = vec![
+        str_pair("lib_id", lib_id),
+        Sexp::list("at", vec![num(flag_x), num(flag_y), num(0.0)]),
+        pair("unit", Sexp::atom("1")),
+        pair("in_bom", Sexp::atom("no")),
+        pair("on_board", Sexp::atom("no")),
+        str_pair("uuid", sym_uuid.to_string()),
+    ];
+    children.extend(properties);
+    Sexp::list("symbol", children)
 }
 
 /// Emit a `(no_connect ...)` marker at a physical pin's terminal so
@@ -1039,7 +1068,8 @@ fn build_no_connect(
 const VERTICAL_LABEL_RISE: f64 = 2.54;
 
 /// Emit a KiCad `(global_label)` entry attached to a stub extending
-/// from the pin's coordinate.
+/// from the pin's coordinate. The output shape draws a boxed flag whose
+/// point faces away from the stub.
 fn build_net_label(
     board: &Board,
     label: &synth_layout::NetLabel,
@@ -1101,11 +1131,24 @@ fn build_net_label(
         font.push(rgb_color(rgb));
     }
     let label_sexp = Sexp::list(
-        "label",
+        "global_label",
         vec![
             Sexp::str(&label.label),
+            Sexp::list("shape", vec![Sexp::atom("output")]),
             Sexp::list("at", vec![num(stub_x), num(elbow_y), num(angle)]),
-            Sexp::list("effects", vec![Sexp::list("font", font)]),
+            Sexp::list(
+                "effects",
+                vec![
+                    Sexp::list("font", font),
+                    // KiCad centres a label's text on its anchor unless the
+                    // file says which way it runs, which drops half of it on
+                    // the stub and the pin. Run it away from the pin.
+                    Sexp::list(
+                        "justify",
+                        vec![Sexp::atom(if angle == 180.0 { "right" } else { "left" })],
+                    ),
+                ],
+            ),
             str_pair("uuid", label_uuid.to_string()),
         ],
     );
@@ -1532,6 +1575,7 @@ fn clear_power_flag_position(
 /// just outside the pin terminal with a short connecting wire.
 /// Returns `[wire, symbol]` so the stub is explicit and the flag
 /// never overlaps the component body.
+#[allow(clippy::too_many_arguments)]
 fn build_power_symbol(
     board: &Board,
     flag: &synth_layout::PowerFlag,
@@ -1539,6 +1583,8 @@ fn build_power_symbol(
     layout: &synth_layout::Layout,
     project: &Uuid,
     power_refs: &mut PowerRefAllocator,
+    obstacles: &mut Vec<FieldObstacle>,
+    power_names: &mut Vec<PowerName>,
 ) -> Option<Vec<Sexp>> {
     let component = board.component(flag.component)?;
     // Pre-emission validation: verify net match against source netlist declaration
@@ -1605,53 +1651,19 @@ fn build_power_symbol(
         ));
     }
 
-    let sym_sexp = Sexp::list(
-        "symbol",
-        vec![
-            str_pair("lib_id", lib_id),
-            Sexp::list("at", vec![num(flag_x), num(flag_y), num(0.0)]),
-            pair("unit", Sexp::atom("1")),
-            pair("in_bom", Sexp::atom("no")),
-            pair("on_board", Sexp::atom("no")),
-            str_pair("uuid", sym_uuid.to_string()),
-            Sexp::list(
-                "property",
-                vec![
-                    Sexp::str("Reference"),
-                    Sexp::str(&refdes_pwr),
-                    Sexp::list("at", vec![num(flag_x), num(flag_y), num(0.0)]),
-                    Sexp::list(
-                        "effects",
-                        vec![
-                            Sexp::list(
-                                "font",
-                                vec![Sexp::list("size", vec![num(1.27), num(1.27)])],
-                            ),
-                            Sexp::list("hide", vec![Sexp::atom("yes")]),
-                        ],
-                    ),
-                ],
-            ),
-            Sexp::list(
-                "property",
-                vec![
-                    Sexp::str("Value"),
-                    Sexp::str(&flag.label),
-                    Sexp::list("at", vec![num(flag_x), num(flag_y), num(0.0)]),
-                    Sexp::list(
-                        "effects",
-                        vec![
-                            Sexp::list(
-                                "font",
-                                vec![Sexp::list("size", vec![num(1.27), num(1.27)])],
-                            ),
-                            Sexp::list("hide", vec![Sexp::atom("yes")]),
-                        ],
-                    ),
-                ],
-            ),
-        ],
+    obstacles.extend(stub_points.windows(2).map(|seg| FieldObstacle {
+        owner: None,
+        rect: wire_rect(seg[0], seg[1]),
+    }));
+    let properties = power_symbol_properties(
+        &refdes_pwr,
+        &flag.label,
+        flag.kind,
+        (flag_x, flag_y),
+        obstacles,
+        power_names,
     );
+    let sym_sexp = power_symbol_sexp(lib_id, flag_x, flag_y, sym_uuid, properties);
 
     let mut out = stub_wires;
     out.push(sym_sexp);
@@ -1867,6 +1879,91 @@ fn hidden_field_effects() -> Sexp {
     )
 }
 
+/// How far a power symbol's name sits from its pin in mm: 1.27 mm past the
+/// tip of the arrow or triangle, where KiCad's own power symbols put it.
+const POWER_NAME_OFFSET_MM: f64 = 3.81;
+/// How far from the symbol's axis a name that moved to a side starts, in mm.
+const POWER_NAME_SIDE_MM: f64 = 1.9;
+/// How far past its usual spot a power name may move to clear what is in the
+/// way, nearest first, in mm.
+const POWER_NAME_RINGS_MM: [f64; 3] = [0.0, 2.54, 5.08];
+/// How far the tip of the arrow or triangle is from the pin, in mm.
+const POWER_TIP_MM: f64 = 2.54;
+
+/// A power symbol's position and the name it prints there.
+type PowerName = ((f64, f64), String);
+
+/// The Reference and Value properties of a power symbol at `at`. The
+/// Reference (`#PWR12`) stays hidden. The Value is the net name, drawn past
+/// the arrow tip or triangle, or at the level of the tip to either side when
+/// that spot is taken. The name is added to `obstacles` for what is placed
+/// afterwards.
+/// Stacked pins give several symbols at one point; the first draws the name and
+/// the rest keep theirs hidden, so the same text is not printed over itself.
+fn power_symbol_properties(
+    refdes: &str,
+    name: &str,
+    kind: synth_layout::PowerFlagKind,
+    at: (f64, f64),
+    obstacles: &mut Vec<FieldObstacle>,
+    power_names: &mut Vec<PowerName>,
+) -> Vec<Sexp> {
+    // A rail arrow points up the sheet, a ground triangle down.
+    let away = match kind {
+        synth_layout::PowerFlagKind::Vcc => -1.0,
+        synth_layout::PowerFlagKind::Gnd => 1.0,
+    };
+    let candidates: Vec<(f64, f64, Option<&'static str>)> = POWER_NAME_RINGS_MM
+        .iter()
+        .flat_map(|&ring| {
+            [
+                (0.0, away * (POWER_NAME_OFFSET_MM + ring), None),
+                (POWER_NAME_SIDE_MM + ring, away * POWER_TIP_MM, Some("left")),
+                (
+                    -(POWER_NAME_SIDE_MM + ring),
+                    away * POWER_TIP_MM,
+                    Some("right"),
+                ),
+            ]
+        })
+        .collect();
+    let repeats = power_names.iter().any(|(p, n)| *p == at && n == name);
+    let chars = name.chars().count();
+    let rect_at = |(dx, dy, justify): (f64, f64, Option<&'static str>)| {
+        text_rect_at((at.0 + dx, at.1 + dy), justify, chars)
+    };
+    let others = obstacles.iter().map(|o| &o.rect);
+    let (dx, dy, justify) = field_clear::pick_clear(&candidates, &rect_at, &others);
+    let pos = (at.0 + dx, at.1 + dy);
+    if !repeats {
+        power_names.push((at, name.to_string()));
+        obstacles.push(FieldObstacle {
+            owner: None,
+            rect: text_rect_at(pos, justify, chars),
+        });
+    }
+    let value_effects = if repeats {
+        hidden_field_effects()
+    } else {
+        field_effects(justify)
+    };
+    let property = |field: &str, text: &str, pos: (f64, f64), effects: Sexp| {
+        Sexp::list(
+            "property",
+            vec![
+                Sexp::str(field),
+                Sexp::str(text),
+                Sexp::list("at", vec![num(pos.0), num(pos.1), num(0.0)]),
+                effects,
+            ],
+        )
+    };
+    vec![
+        property("Reference", refdes, at, hidden_field_effects()),
+        property("Value", name, pos, value_effects),
+    ]
+}
+
 /// Which variants mark each refdes do-not-populate, keyed by refdes and
 /// listing the variant names in declaration order. Empty when the board
 /// declares no variants.
@@ -1907,6 +2004,7 @@ fn build_symbol_instance(
     placement: &ComponentPlacement,
     project: &Uuid,
     board: &Board,
+    obstacles: &mut Vec<FieldObstacle>,
 ) -> Vec<Sexp> {
     let Some(part) = component.part.as_ref() else {
         return Vec::new();
@@ -1933,6 +2031,7 @@ fn build_symbol_instance(
             placement,
             project,
             board,
+            &mut *obstacles,
             unit,
             dy,
             &uuid_key,
@@ -1942,12 +2041,291 @@ fn build_symbol_instance(
     out
 }
 
+/// Something a symbol's Reference or Value text must stay off: a wire, another
+/// symbol's body, a caption or text already placed. `owner` is the symbol a
+/// body belongs to, so a symbol's own body is not an obstacle to its own text.
+struct FieldObstacle {
+    owner: Option<ComponentId>,
+    rect: field_clear::Rect,
+}
+
+/// The four sides of a symbol body a field can sit on.
+const FIELD_SIDES: [FieldSide; 4] = [
+    FieldSide::Top,
+    FieldSide::Bottom,
+    FieldSide::Right,
+    FieldSide::Left,
+];
+/// How far past its usual spot a field may move to clear what is in the way,
+/// nearest first, in mm. The 5.08 is a ring spacing that happens to equal the
+/// net label stub, not a reference to it.
+const FIELD_RINGS_MM: [f64; 3] = [0.0, 5.08, 10.16];
+
+/// Height of a Reference or Value string in mm, from KiCad's plot of 1.27 mm text.
+const FIELD_TEXT_HEIGHT_MM: f64 = 1.4;
+/// Width of one Reference or Value character in mm, from the same plot.
+const FIELD_CHAR_WIDTH_MM: f64 = 1.2;
+/// Half the thickness given to a wire when it is an obstacle, in mm.
+const WIRE_HALF_WIDTH_MM: f64 = 0.15;
+/// Half the height of a pin line and its number, in mm.
+const PIN_TEXT_HALF_MM: f64 = 1.3;
+/// Half the side of the square a power flag symbol covers, in mm.
+const POWER_FLAG_HALF_MM: f64 = 1.4;
+/// Width of one caption or note character, as a share of its font size.
+const NOTE_CHAR_WIDTH: f64 = 0.95;
+
+/// The rectangle `chars` characters of Reference or Value text cover when
+/// anchored at `pos` with the justification `field_anchor` returned.
+fn text_rect_at(pos: (f64, f64), justify: Option<&'static str>, chars: usize) -> field_clear::Rect {
+    let width = chars as f64 * FIELD_CHAR_WIDTH_MM;
+    let (x0, x1) = match justify {
+        Some("left") => (pos.0, pos.0 + width),
+        Some("right") => (pos.0 - width, pos.0),
+        _ => (pos.0 - width / 2.0, pos.0 + width / 2.0),
+    };
+    field_clear::Rect {
+        x0,
+        y0: pos.1 - FIELD_TEXT_HEIGHT_MM / 2.0,
+        x1,
+        y1: pos.1 + FIELD_TEXT_HEIGHT_MM / 2.0,
+    }
+}
+
+/// Where a field may go, best first: the sides at each distance in
+/// [`FIELD_RINGS_MM`], nearest ring first. `first` and `second` are the sides
+/// the field would take by preference, then the other two follow.
+fn field_candidates(first: FieldSide, second: FieldSide) -> Vec<(FieldSide, f64)> {
+    let rest = FIELD_SIDES.iter().filter(|&&s| s != first && s != second);
+    let order: Vec<FieldSide> = [first, second].into_iter().chain(rest.copied()).collect();
+    FIELD_RINGS_MM
+        .iter()
+        .flat_map(|&ring| order.iter().map(move |&side| (side, ring)))
+        .collect()
+}
+
+/// `anchor` moved `ring` mm further out from the body on `side`.
+fn push_out(anchor: (f64, f64), side: FieldSide, ring: f64) -> (f64, f64) {
+    match side {
+        FieldSide::Top => (anchor.0, anchor.1 - ring),
+        FieldSide::Bottom => (anchor.0, anchor.1 + ring),
+        FieldSide::Right => (anchor.0 + ring, anchor.1),
+        FieldSide::Left => (anchor.0 - ring, anchor.1),
+    }
+}
+
+/// The rectangle a wire segment covers.
+fn wire_rect(a: (f64, f64), b: (f64, f64)) -> field_clear::Rect {
+    field_clear::Rect {
+        x0: a.0.min(b.0) - WIRE_HALF_WIDTH_MM,
+        y0: a.1.min(b.1) - WIRE_HALF_WIDTH_MM,
+        x1: a.0.max(b.0) + WIRE_HALF_WIDTH_MM,
+        y1: a.1.max(b.1) + WIRE_HALF_WIDTH_MM,
+    }
+}
+
+/// The square a power flag symbol at (`x`, `y`) covers.
+fn power_flag_rect(x: f64, y: f64) -> field_clear::Rect {
+    field_clear::Rect {
+        x0: x - POWER_FLAG_HALF_MM,
+        y0: y - POWER_FLAG_HALF_MM,
+        x1: x + POWER_FLAG_HALF_MM,
+        y1: y + POWER_FLAG_HALF_MM,
+    }
+}
+
+/// Every wire, body, pin, net label, power flag and caption on the sheet as an
+/// obstacle for the Reference and Value text of the symbols.
+fn field_obstacles(
+    board: &Board,
+    layout: &synth_layout::Layout,
+    placements: &HashMap<ComponentId, &ComponentPlacement>,
+) -> Vec<FieldObstacle> {
+    let fixed = |rect| FieldObstacle { owner: None, rect };
+    let mut out = Vec::new();
+    for wire in &layout.wires {
+        for seg in wire.points.windows(2) {
+            out.push(fixed(wire_rect(seg[0], seg[1])));
+        }
+    }
+    // Walk the board, not the placement map: `pick_clear` sums overlap areas
+    // in obstacle order, and a hash map would shuffle that between runs.
+    for component in &board.components {
+        let (Some(part), Some(placement)) =
+            (component.part.as_ref(), placements.get(&component.id))
+        else {
+            continue;
+        };
+        let (w, h) = symbol_body_size(part, placement.rotation);
+        let (x, y) = (
+            snap_grid_127(placement.center_mm.0),
+            snap_grid_127(placement.center_mm.1),
+        );
+        out.push(FieldObstacle {
+            owner: Some(component.id),
+            rect: field_clear::Rect {
+                x0: x - w / 2.0,
+                y0: y - h / 2.0,
+                x1: x + w / 2.0,
+                y1: y + h / 2.0,
+            },
+        });
+    }
+    // A net label is its text and the stub that joins it to the pin; a
+    // cross-sheet label is drawn the same way.
+    let labels = layout
+        .net_labels
+        .iter()
+        .map(|l| (&l.label, l.component, l.pin))
+        .chain(
+            layout
+                .hierarchical_labels
+                .iter()
+                .map(|l| (&l.label, l.component, l.pin)),
+        );
+    for (text, component, pin) in labels {
+        let Some((x0, y0, x1, y1)) =
+            synth_layout::route::net_label_rect(board, text, component, pin, placements)
+        else {
+            continue;
+        };
+        let Some((pin_x, ..)) = pin_terminal_xy(board, component, pin, placements) else {
+            continue;
+        };
+        out.push(fixed(field_clear::Rect {
+            x0: x0.min(pin_x),
+            y0,
+            x1: x1.max(pin_x),
+            y1,
+        }));
+    }
+    for component in &board.components {
+        let Some(part) = component.part.as_ref() else {
+            continue;
+        };
+        // A multi-pin symbol draws each pin's name inside the body, along the
+        // pin; a passive draws none.
+        let names = !(part.pins.len() == 2 && is_two_pin_symbol_kind(&part.kind));
+        for (index, part_pin) in part.pins.iter().enumerate() {
+            let pin = synth_ir::PinId(index as u32);
+            let Some((x, y, dx, dy)) = pin_terminal_xy(board, component.id, pin, placements) else {
+                continue;
+            };
+            // The pin line, its number and its name, from the terminal back
+            // toward the body. The number is centred on the line, so one
+            // longer than the line runs past the terminal.
+            let name = if names {
+                part_pin.name.chars().count() as f64 * FIELD_CHAR_WIDTH_MM
+            } else {
+                0.0
+            };
+            let over = ((part_pin.number.0.chars().count() as f64 * FIELD_CHAR_WIDTH_MM
+                - PIN_LENGTH)
+                / 2.0)
+                .max(0.0);
+            let (front, back) = (over, -(PIN_LENGTH + name));
+            out.push(fixed(if dx.abs() >= dy.abs() {
+                let (a, b) = (x + dx.signum() * front, x + dx.signum() * back);
+                field_clear::Rect {
+                    x0: a.min(b),
+                    y0: y - PIN_TEXT_HALF_MM,
+                    x1: a.max(b),
+                    y1: y + PIN_TEXT_HALF_MM,
+                }
+            } else {
+                let (a, b) = (y + dy.signum() * front, y + dy.signum() * back);
+                field_clear::Rect {
+                    x0: x - PIN_TEXT_HALF_MM,
+                    y0: a.min(b),
+                    x1: x + PIN_TEXT_HALF_MM,
+                    y1: a.max(b),
+                }
+            }));
+        }
+    }
+    for flag in &layout.power_flags {
+        if let Some((x, y, dx, dy)) = pin_terminal_xy(board, flag.component, flag.pin, placements) {
+            let (cx, cy) = (x + dx * POWER_FLAG_STUB_LEN, y + dy * POWER_FLAG_STUB_LEN);
+            out.push(fixed(power_flag_rect(cx, cy)));
+            out.push(fixed(wire_rect((x, y), (cx, cy))));
+        }
+    }
+    // A note is anchored left and bottom, so it rises from `at_mm`.
+    for note in &layout.annotations {
+        let width = note.text.chars().count() as f64 * note.size_mm * NOTE_CHAR_WIDTH;
+        out.push(fixed(field_clear::Rect {
+            x0: note.at_mm.0,
+            y0: note.at_mm.1 - note.size_mm,
+            x1: note.at_mm.0 + width,
+            y1: note.at_mm.1 + 0.3 * note.size_mm,
+        }));
+    }
+    out
+}
+
+/// The justification to write for a field so KiCad draws it as `wanted`.
+/// KiCad draws a string upside down (symbol angle plus field angle of 180) the
+/// right way up and swaps left and right justification on the way, so the
+/// value has to be mirrored for those symbols.
+fn written_justify(
+    wanted: Option<&'static str>,
+    symbol_angle: f64,
+    field_angle: f64,
+) -> Option<&'static str> {
+    // Both angles are whole degrees by construction, so the compare is exact.
+    if (symbol_angle + field_angle).rem_euclid(360.0) != 180.0 {
+        return wanted;
+    }
+    match wanted {
+        Some("left") => Some("right"),
+        Some("right") => Some("left"),
+        other => other,
+    }
+}
+
+/// The on-sheet width and height of a symbol's body, in mm, as the exporter
+/// measures it for text placement and the layouter places against.
+fn symbol_body_size(part: &synth_registry::Part, rotation: Rotation) -> (f64, f64) {
+    let pin_count = part.pins.len();
+    let is_two_pin = pin_count == 2 && is_two_pin_symbol_kind(&part.kind);
+    if is_two_pin {
+        let (w, h) = (TWOPIN_HALF_W * 2.0, 4.0);
+        // Logically-vertical 2-pin parts (decoupling caps rotated so
+        // VCC lands up, ESD diodes, LED current-limit resistors) are
+        // drawn tall-and-thin, not wide-and-short, so swap the extents
+        // so `field_anchor` measures the true on-sheet body.
+        if matches!(rotation, Rotation::Ninety | Rotation::TwoSeventy) {
+            (h, w)
+        } else {
+            (w, h)
+        }
+    } else if part.kicad_symbol.is_some() {
+        // A part mapped to a stock KiCad symbol is drawn with *that*
+        // symbol's geometry, which the pin-count synthesis below does
+        // not predict: a USB-C receptacle is ~50 mm tall where the
+        // synthesis guessed ~30, so the Value field landed 8 mm inside
+        // the body, on top of the pin names. `body_size_for_part` is
+        // the same measurement the layouter places against, so fields
+        // and placement now agree on where the body ends.
+        let (w, h) = synth_layout::body_size_for_part(part);
+        if matches!(rotation, Rotation::Ninety | Rotation::TwoSeventy) {
+            (h, w)
+        } else {
+            (w, h)
+        }
+    } else {
+        let sides: Vec<PinSide> = part.pins.iter().map(classify_ic_pin).collect();
+        let body = synthesized_body(&sides);
+        (body.width, body.height)
+    }
+}
+
 #[allow(clippy::too_many_lines, clippy::too_many_arguments)]
 fn build_symbol_unit(
     component: &Component,
     placement: &ComponentPlacement,
     project: &Uuid,
     board: &Board,
+    obstacles: &mut Vec<FieldObstacle>,
     unit: u32,
     dy: f64,
     uuid_key: &str,
@@ -1973,38 +2351,7 @@ fn build_symbol_unit(
         .clone()
         .unwrap_or_else(|| format!("{LIBRARY_NICKNAME}:{part_id}"));
 
-    let pin_count = part.pins.len();
-    let is_two_pin = pin_count == 2 && is_two_pin_symbol_kind(&part.kind);
-    let (body_w, body_h) = if is_two_pin {
-        let (w, h) = (TWOPIN_HALF_W * 2.0, 4.0);
-        // Logically-vertical 2-pin parts (decoupling caps rotated so
-        // VCC lands up, ESD diodes, LED current-limit resistors) are
-        // drawn tall-and-thin, not wide-and-short — swap the extents
-        // so `field_anchor` below measures the true on-sheet body.
-        if matches!(placement.rotation, Rotation::Ninety | Rotation::TwoSeventy) {
-            (h, w)
-        } else {
-            (w, h)
-        }
-    } else if part.kicad_symbol.is_some() {
-        // A part mapped to a stock KiCad symbol is drawn with *that*
-        // symbol's geometry, which the pin-count synthesis below does
-        // not predict — a USB-C receptacle is ~50 mm tall where the
-        // synthesis guessed ~30, so the Value field landed 8 mm inside
-        // the body, on top of the pin names. `body_size_for_part` is
-        // the same measurement the layouter places against, so fields
-        // and placement now agree on where the body ends.
-        let (w, h) = synth_layout::body_size_for_part(part);
-        if matches!(placement.rotation, Rotation::Ninety | Rotation::TwoSeventy) {
-            (h, w)
-        } else {
-            (w, h)
-        }
-    } else {
-        let sides: Vec<PinSide> = part.pins.iter().map(classify_ic_pin).collect();
-        let body = synthesized_body(&sides);
-        (body.width, body.height)
-    };
+    let (body_w, body_h) = symbol_body_size(part, placement.rotation);
 
     let body_top = y - body_h / 2.0;
     let body_bottom = y + body_h / 2.0;
@@ -2012,11 +2359,6 @@ fn build_symbol_unit(
     let body_right = x + body_w / 2.0;
     let body_edges: BodyEdges = (body_left, body_right, body_top, body_bottom);
     let counts = side_pin_counts(part, placement.rotation);
-    let (ref_side, value_side) = choose_field_sides(counts);
-    let (ref_pos, ref_justify) =
-        field_anchor(ref_side, pins_on(counts, ref_side), (x, y), body_edges);
-    let (value_pos, value_justify) =
-        field_anchor(value_side, pins_on(counts, value_side), (x, y), body_edges);
     let display_value_raw = component
         .value
         .as_deref()
@@ -2055,6 +2397,33 @@ fn build_symbol_unit(
     } else {
         0.0
     };
+
+    // The Reference is pushed onto `obstacles` once placed, so the Value
+    // cannot take its spot. The symbol's own body is skipped, since its text
+    // sits against it.
+    let (ref_pref, value_pref) = choose_field_sides(counts);
+    let mut place_field = |text: &str, candidates: &[(FieldSide, f64)]| {
+        let spot = |(side, ring): (FieldSide, f64)| {
+            let (pos, justify) = field_anchor(side, pins_on(counts, side), (x, y), body_edges);
+            (push_out(pos, side, ring), justify)
+        };
+        let rect_at = |candidate| {
+            let (pos, justify) = spot(candidate);
+            text_rect_at(pos, justify, text.chars().count())
+        };
+        let others = obstacles
+            .iter()
+            .filter(|o| o.owner != Some(component.id))
+            .map(|o| &o.rect);
+        let (pos, justify) = spot(field_clear::pick_clear(candidates, &rect_at, &others));
+        let rect = text_rect_at(pos, justify, text.chars().count());
+        obstacles.push(FieldObstacle { owner: None, rect });
+        (pos, written_justify(justify, angle, field_angle))
+    };
+    let (ref_pos, ref_justify) =
+        place_field(&component.refdes, &field_candidates(ref_pref, value_pref));
+    let (value_pos, value_justify) =
+        place_field(display_value, &field_candidates(value_pref, ref_pref));
 
     let mut fields = vec![
         str_pair("lib_id", lib_id),
@@ -3017,6 +3386,449 @@ mod tests {
         assert_eq!(left_justify, Some("right"));
     }
 
+    #[test]
+    fn justify_is_mirrored_only_where_kicad_draws_the_text_upside_down() {
+        // Measured on the plot of absmach/synth#103: a symbol at 180 degrees
+        // and a symbol at 90 with the field turned to 90 draw "left" text
+        // right-justified; 0 and 270 (field 90) do not.
+        for (symbol, field, flipped) in [
+            (0.0, 0.0, false),
+            (90.0, 90.0, true),
+            (180.0, 0.0, true),
+            (270.0, 90.0, false),
+        ] {
+            assert_eq!(
+                written_justify(Some("left"), symbol, field),
+                Some(if flipped { "right" } else { "left" }),
+                "symbol {symbol} field {field}"
+            );
+            assert_eq!(
+                written_justify(Some("right"), symbol, field),
+                Some(if flipped { "left" } else { "right" }),
+                "symbol {symbol} field {field}"
+            );
+            assert_eq!(written_justify(None, symbol, field), None);
+        }
+    }
+
+    /// Where each Reference and Value is drawn for `board` laid out as `layout`.
+    fn field_boxes_for(
+        board: &Board,
+        layout: &synth_layout::Layout,
+    ) -> Vec<(String, f64, f64, f64, f64)> {
+        let project = crate::uuid_v5::project_namespace(&board.name);
+        drawn_field_boxes(&build_schematic_from_layout(board, &project, layout))
+    }
+
+    fn boxes_overlap(a: (f64, f64, f64, f64), b: (f64, f64, f64, f64)) -> bool {
+        a.0 < b.2 && a.2 > b.0 && a.1 < b.3 && a.3 > b.1
+    }
+
+    fn box_of(boxes: &[(String, f64, f64, f64, f64)], text: &str) -> (f64, f64, f64, f64) {
+        let (_, x0, y0, x1, y1) = boxes
+            .iter()
+            .find(|b| b.0 == text)
+            .expect("the text is drawn");
+        (*x0, *y0, *x1, *y1)
+    }
+
+    #[test]
+    fn a_field_moves_off_a_wire_that_crosses_its_usual_spot() {
+        let (board, ..) = build_reference("ref_ldo_sensor");
+        let mut layout = synth_layout::layout(&board);
+        let refdes = board.components[0].refdes.as_str();
+        let usual = box_of(&field_boxes_for(&board, &layout), refdes);
+        let x = f64::midpoint(usual.0, usual.2);
+        layout.wires.push(synth_layout::WirePath {
+            net: board.nets[0].id,
+            points: vec![(x, usual.1 - 3.0), (x, usual.3 + 3.0)],
+            junctions: Vec::new(),
+        });
+        let moved = box_of(&field_boxes_for(&board, &layout), refdes);
+        let wire = (x - 0.15, usual.1 - 3.0, x + 0.15, usual.3 + 3.0);
+        assert!(
+            !boxes_overlap(moved, wire),
+            "{refdes} at {moved:?} on the wire"
+        );
+        assert_ne!(moved, usual, "{refdes} did not move");
+    }
+
+    #[test]
+    fn a_field_moves_off_a_net_label_that_covers_its_usual_spot() {
+        const LABEL: &str = "A_VERY_LONG_NET_LABEL_TO_REACH_ACROSS_THE_SHEET";
+        let (board, ..) = build_reference("ref_ldo_sensor");
+        let layout = synth_layout::layout(&board);
+        let placements: HashMap<ComponentId, &ComponentPlacement> =
+            layout.components.iter().map(|p| (p.id, p)).collect();
+        let baseline = field_boxes_for(&board, &layout);
+        // A label on some pin that lands on a field in the baseline.
+        let mut hit = None;
+        'search: for component in &board.components {
+            let Some(part) = component.part.as_ref() else {
+                continue;
+            };
+            for index in 0..part.pins.len() {
+                let pin = synth_ir::PinId(index as u32);
+                let Some(rect) = synth_layout::route::net_label_rect(
+                    &board,
+                    LABEL,
+                    component.id,
+                    pin,
+                    &placements,
+                ) else {
+                    continue;
+                };
+                if let Some(field) = baseline
+                    .iter()
+                    .position(|b| boxes_overlap((b.1, b.2, b.3, b.4), rect))
+                {
+                    hit = Some((component.id, pin, rect, field));
+                    break 'search;
+                }
+            }
+        }
+        let (component, pin, rect, field) = hit.expect("a label that lands on a field");
+        let mut layout = layout;
+        layout.net_labels.push(synth_layout::NetLabel {
+            net: board.nets[0].id,
+            component,
+            pin,
+            label: LABEL.to_string(),
+        });
+        let after = field_boxes_for(&board, &layout);
+        let (text, x0, y0, x1, y1) = &after[field];
+        assert!(
+            !boxes_overlap((*x0, *y0, *x1, *y1), rect),
+            "{text} still on the label {rect:?}"
+        );
+    }
+
+    #[test]
+    fn a_wire_is_an_obstacle_where_it_runs() {
+        let (board, _sexp, _text) = build_reference("ref_ldo_sensor");
+        let mut layout = synth_layout::layout(&board);
+        layout.wires.push(synth_layout::WirePath {
+            net: board.nets[0].id,
+            points: vec![(900.0, 500.0), (920.0, 500.0)],
+            junctions: Vec::new(),
+        });
+        let placements: HashMap<ComponentId, &ComponentPlacement> =
+            layout.components.iter().map(|p| (p.id, p)).collect();
+        let obstacles = field_obstacles(&board, &layout, &placements);
+        assert!(
+            obstacles.iter().any(|o| {
+                o.rect.x0 <= 910.0 && 910.0 <= o.rect.x1 && o.rect.y0 <= 500.0 && 500.0 <= o.rect.y1
+            }),
+            "no obstacle on the wire"
+        );
+    }
+
+    #[test]
+    fn body_obstacles_follow_the_board_order_not_the_placement_map() {
+        // `pick_clear` sums overlaps in obstacle order, so a hash-map order
+        // here would let near-equal costs flip between runs.
+        let (board, ..) = build_reference("ref_ldo_sensor");
+        let layout = synth_layout::layout(&board);
+        let placements: HashMap<ComponentId, &ComponentPlacement> =
+            layout.components.iter().map(|p| (p.id, p)).collect();
+        let owners: Vec<ComponentId> = field_obstacles(&board, &layout, &placements)
+            .iter()
+            .filter_map(|o| o.owner)
+            .collect();
+        let expected: Vec<ComponentId> = board
+            .components
+            .iter()
+            .filter(|c| c.part.is_some() && placements.contains_key(&c.id))
+            .map(|c| c.id)
+            .collect();
+        assert!(expected.len() > 4, "too few bodies to tell an order");
+        assert_eq!(owners, expected);
+    }
+
+    #[test]
+    fn field_text_keeps_clear_of_a_cross_sheet_label_and_its_stub() {
+        let (board, _sexp, _text) = build_reference("ref_ldo_sensor");
+        let mut layout = synth_layout::layout(&board);
+        layout.wires.clear();
+        layout.net_labels.clear();
+        layout.power_flags.clear();
+        let component = board.components[0].id;
+        let pin = synth_ir::PinId(0);
+        layout
+            .hierarchical_labels
+            .push(synth_layout::HierarchicalLabel {
+                net: board.nets[0].id,
+                component,
+                pin,
+                label: "CROSS_SHEET_NET".to_string(),
+            });
+        let placements: HashMap<ComponentId, &ComponentPlacement> =
+            layout.components.iter().map(|p| (p.id, p)).collect();
+        let (x, y, dx, _) = pin_terminal_xy(&board, component, pin, &placements).unwrap();
+        // Out along the pin: on the stub, then in the middle of the text.
+        let out = if dx >= -0.1 { 1.0 } else { -1.0 };
+        let obstacles = field_obstacles(&board, &layout, &placements);
+        for reach in [2.5, 11.0] {
+            let px = x + out * reach;
+            assert!(
+                obstacles.iter().any(|o| {
+                    o.owner.is_none()
+                        && o.rect.x0 <= px
+                        && px <= o.rect.x1
+                        && o.rect.y0 <= y
+                        && y <= o.rect.y1
+                }),
+                "no obstacle {reach} mm out from the pin"
+            );
+        }
+    }
+
+    /// `build_net_label` for pin 0 of every placed part of `ref_ldo_sensor`,
+    /// as the entries it emits.
+    fn net_label_entries() -> Vec<Sexp> {
+        let (board, _sexp, _text) = build_reference("ref_ldo_sensor");
+        let layout = synth_layout::layout(&board);
+        let placements: HashMap<ComponentId, &ComponentPlacement> =
+            layout.components.iter().map(|p| (p.id, p)).collect();
+        let project = crate::uuid_v5::project_namespace(&board.name);
+        board
+            .components
+            .iter()
+            .filter_map(|c| {
+                let label = synth_layout::NetLabel {
+                    net: board.nets[0].id,
+                    component: c.id,
+                    pin: synth_ir::PinId(0),
+                    label: "SIG".to_string(),
+                };
+                build_net_label(&board, &label, &placements, &project, None)
+            })
+            .filter_map(|mut parts| parts.pop())
+            .collect()
+    }
+
+    #[test]
+    fn a_net_label_is_a_global_label_flag() {
+        let entries = net_label_entries();
+        assert!(entries.len() > 4, "too few labels to tell");
+        for entry in &entries {
+            let Sexp::List { head, .. } = entry else {
+                panic!("not a list")
+            };
+            assert_eq!(head, "global_label", "a signal label is a flag");
+        }
+    }
+
+    #[test]
+    fn a_net_label_flag_points_away_from_its_stub() {
+        let entries = net_label_entries();
+        let mut sides = [false; 2];
+        for entry in &entries {
+            let shape = sub(entry, "shape").expect("a global label has a shape");
+            assert!(matches!(&shape[0], Sexp::Atom(a) if a == "output"));
+            let at = sub(entry, "at").expect("at");
+            let angle = parse_num_atom(&at[2]).expect("angle");
+            let effects = sub(entry, "effects").expect("effects");
+            let justify = effects
+                .iter()
+                .find_map(|c| match c {
+                    Sexp::List { head, children } if head == "justify" => Some(children),
+                    _ => None,
+                })
+                .expect("justify");
+            let want = if angle == 180.0 { "right" } else { "left" };
+            assert!(matches!(&justify[0], Sexp::Atom(a) if a == want));
+            sides[usize::from(angle == 180.0)] = true;
+        }
+        assert_eq!(sides, [true, true], "both stub sides must occur");
+    }
+
+    #[test]
+    fn only_net_labels_become_flags_and_power_symbols_stay() {
+        let (board, _sexp, text) = build_reference("ref_ldo_sensor");
+        let labelled = synth_layout::layout(&board).net_labels.len();
+        assert!(labelled > 0, "the board must carry net labels");
+        assert_eq!(text.matches("\n\t(global_label\n").count(), labelled);
+        assert!(
+            text.contains("(lib_id \"power:") || text.contains("(lib_id \"synth:"),
+            "power symbols must still be drawn"
+        );
+    }
+
+    #[test]
+    fn a_cross_sheet_label_stays_a_hierarchical_label() {
+        let (board, _sexp, _text) = build_reference("ref_ldo_sensor");
+        let layout = synth_layout::layout(&board);
+        let placements: HashMap<ComponentId, &ComponentPlacement> =
+            layout.components.iter().map(|p| (p.id, p)).collect();
+        let project = crate::uuid_v5::project_namespace(&board.name);
+        let label = synth_layout::HierarchicalLabel {
+            net: board.nets[0].id,
+            component: board.components[0].id,
+            pin: synth_ir::PinId(0),
+            label: "SIG".to_string(),
+        };
+        let parts =
+            build_hierarchical_label(&board, &label, &placements, &project, "A").expect("label");
+        let text: String = parts.iter().map(Sexp::to_string_pretty).collect();
+        assert!(text.contains("hierarchical_label"));
+        assert!(!text.contains("global_label"));
+    }
+
+    /// The first child list of `sexp` with head `head`, as its children.
+    fn sub<'a>(sexp: &'a Sexp, head: &str) -> Option<&'a [Sexp]> {
+        let Sexp::List { children, .. } = sexp else {
+            return None;
+        };
+        children.iter().find_map(|c| match c {
+            Sexp::List { head: h, children } if h == head => Some(children.as_slice()),
+            _ => None,
+        })
+    }
+
+    fn sub_node<'a>(sexp: &'a Sexp, head: &str) -> &'a Sexp {
+        let Sexp::List { children, .. } = sexp else {
+            panic!("not a list");
+        };
+        children
+            .iter()
+            .find(|c| matches!(c, Sexp::List { head: h, .. } if h == head))
+            .expect("a child with that head")
+    }
+
+    fn str_of(sexp: &Sexp) -> String {
+        match sexp {
+            Sexp::Atom(a) | Sexp::Str(a) => a.clone(),
+            _ => String::new(),
+        }
+    }
+
+    fn at_of(sexp: &Sexp) -> (f64, f64, f64) {
+        let at = sub(sexp, "at").expect("an at child");
+        let n = |i: usize| at.get(i).map_or(0.0, |a| str_of(a).parse().unwrap());
+        (n(0), n(1), n(2))
+    }
+
+    /// The text of every placed symbol's Reference and Value as KiCad draws
+    /// it: `(text, x0, y0, x1, y1)`. A string drawn upside down (symbol angle
+    /// plus field angle of 180) swaps its left and right justification, which
+    /// is checked on the plot of absmach/synth#103.
+    fn drawn_field_boxes(sexp: &Sexp) -> Vec<(String, f64, f64, f64, f64)> {
+        let Sexp::List { children, .. } = sexp else {
+            return Vec::new();
+        };
+        let mut out = Vec::new();
+        for symbol in children {
+            let Sexp::List {
+                head,
+                children: props,
+            } = symbol
+            else {
+                continue;
+            };
+            // Power symbols and flags have no body and sit on their own stub.
+            let on_bom = sub(symbol, "in_bom").is_some_and(|v| str_of(&v[0]) == "yes");
+            if head != "symbol" || !on_bom {
+                continue;
+            }
+            let symbol_angle = at_of(symbol).2;
+            for prop in props {
+                let Sexp::List { head, children: p } = prop else {
+                    continue;
+                };
+                if head != "property" || !matches!(str_of(&p[0]).as_str(), "Reference" | "Value") {
+                    continue;
+                }
+                let text = str_of(&p[1]);
+                let (x, y, field_angle) = at_of(prop);
+                let mut justify =
+                    sub(sub_node(prop, "effects"), "justify").and_then(|j| j.first().map(str_of));
+                // Written out again here, not taken from `written_justify`, so
+                // the tests that use this box are an independent check on it.
+                if (symbol_angle + field_angle).rem_euclid(360.0) == 180.0 {
+                    justify = match justify.as_deref() {
+                        Some("left") => Some("right".to_string()),
+                        Some("right") => Some("left".to_string()),
+                        other => other.map(str::to_string),
+                    };
+                }
+                let w = text.chars().count() as f64 * FIELD_CHAR_WIDTH_MM;
+                let (x0, x1) = match justify.as_deref() {
+                    Some("left") => (x, x + w),
+                    Some("right") => (x - w, x),
+                    _ => (x - w / 2.0, x + w / 2.0),
+                };
+                out.push((
+                    text,
+                    x0,
+                    y - FIELD_TEXT_HEIGHT_MM / 2.0,
+                    x1,
+                    y + FIELD_TEXT_HEIGHT_MM / 2.0,
+                ));
+            }
+        }
+        out
+    }
+
+    /// Every wire segment of a built schematic.
+    fn wire_segments(sexp: &Sexp) -> Vec<((f64, f64), (f64, f64))> {
+        let Sexp::List { children, .. } = sexp else {
+            return Vec::new();
+        };
+        children
+            .iter()
+            .filter(|c| matches!(c, Sexp::List { head, .. } if head == "wire"))
+            .filter_map(|w| {
+                let pts = sub(w, "pts")?;
+                let xy = |i: usize| {
+                    let Sexp::List { children: p, .. } = pts.get(i)? else {
+                        return None;
+                    };
+                    Some((str_of(&p[0]).parse().ok()?, str_of(&p[1]).parse().ok()?))
+                };
+                Some((xy(0)?, xy(1)?))
+            })
+            .collect()
+    }
+
+    /// `(fixture, text)` of every Reference or Value with a wire through it.
+    fn field_text_on_wires(board_name: &str) -> Vec<(String, String)> {
+        let (_board, sexp, _text) = build_reference(board_name);
+        let wires = wire_segments(&sexp);
+        drawn_field_boxes(&sexp)
+            .into_iter()
+            .filter(|(_, x0, y0, x1, y1)| {
+                wires.iter().any(|((ax, ay), (bx, by))| {
+                    ax.min(*bx) < *x1 - 0.05
+                        && ax.max(*bx) > *x0 + 0.05
+                        && ay.min(*by) < *y1 - 0.05
+                        && ay.max(*by) > *y0 + 0.05
+                })
+            })
+            .map(|(text, ..)| (board_name.to_string(), text))
+            .collect()
+    }
+
+    #[test]
+    fn reference_and_value_text_stays_off_wires() {
+        let mut hits = Vec::new();
+        for name in [
+            "ref_battery_charger",
+            "ref_crystal_mcu",
+            "ref_ldo_sensor",
+            "ref_led_driver",
+            "ref_secure_element",
+            "ref_spi_flash",
+            "ref_uart_bridge",
+            "ref_usb_cdc",
+            "secure_tracker",
+            "sensor_logger",
+        ] {
+            hits.extend(field_text_on_wires(name));
+        }
+        assert!(hits.is_empty(), "text with a wire through it: {hits:?}");
+    }
+
     // ------------------------------------------------------------------
     // Quality assertions against the reference designs
     // ------------------------------------------------------------------
@@ -3309,6 +4121,155 @@ mod tests {
             "expected at least some wires in the schematic"
         );
         let _ = board;
+    }
+
+    /// One power symbol's Reference and Value as written: the symbol's `at`,
+    /// then for each property its name, text, `at`, justify and whether it is
+    /// hidden.
+    type PowerField = (String, String, (f64, f64), Option<String>, bool);
+    type PowerSymbol = ((f64, f64), Vec<PowerField>);
+
+    fn power_symbols(sexp: &Sexp) -> Vec<PowerSymbol> {
+        let Sexp::List { children, .. } = sexp else {
+            return Vec::new();
+        };
+        children
+            .iter()
+            .filter(|c| matches!(c, Sexp::List { head, .. } if head == "symbol"))
+            .filter(|s| {
+                sub(s, "lib_id").is_some_and(|v| {
+                    let id = str_of(&v[0]);
+                    id.starts_with("power:") || id.starts_with("synth:")
+                }) && sub(s, "in_bom").is_some_and(|v| str_of(&v[0]) == "no")
+            })
+            .map(|s| {
+                let Sexp::List {
+                    children: props, ..
+                } = s
+                else {
+                    unreachable!("filtered to lists")
+                };
+                let fields = props
+                    .iter()
+                    .filter(|p| matches!(p, Sexp::List { head, .. } if head == "property"))
+                    .map(|p| {
+                        let Sexp::List { children: v, .. } = p else {
+                            unreachable!("filtered to lists")
+                        };
+                        let effects = sub_node(p, "effects");
+                        let (x, y, _) = at_of(p);
+                        (
+                            str_of(&v[0]),
+                            str_of(&v[1]),
+                            (x, y),
+                            sub(effects, "justify").and_then(|j| j.first().map(str_of)),
+                            sub(effects, "hide").is_some_and(|h| str_of(&h[0]) == "yes"),
+                        )
+                    })
+                    .collect();
+                let (x, y, _) = at_of(s);
+                ((x, y), fields)
+            })
+            .collect()
+    }
+
+    fn power_value(fields: &[PowerField]) -> &PowerField {
+        fields.iter().find(|f| f.0 == "Value").expect("a Value")
+    }
+
+    #[test]
+    fn a_rail_symbol_shows_its_name_above_the_arrow() {
+        let (_board, sexp, _text) = build_reference("ref_ldo_sensor");
+        let rails: Vec<_> = power_symbols(&sexp)
+            .into_iter()
+            .filter(|(_, f)| !matches!(power_value(f).1.as_str(), "GND" | "PWR_FLAG"))
+            .collect();
+        assert!(!rails.is_empty(), "the fixture has a supply rail");
+        for ((_, y), fields) in &rails {
+            let value = power_value(fields);
+            assert!(!value.4, "{} is hidden", value.1);
+            assert!(value.2 .1 < *y, "{} is not above its arrow", value.1);
+        }
+    }
+
+    #[test]
+    fn a_ground_symbol_shows_its_name_below_the_triangle() {
+        let (_board, sexp, _text) = build_reference("ref_ldo_sensor");
+        let grounds: Vec<_> = power_symbols(&sexp)
+            .into_iter()
+            .filter(|(_, f)| power_value(f).1 == "GND")
+            .collect();
+        assert!(!grounds.is_empty(), "the fixture has a ground");
+        for ((_, y), fields) in &grounds {
+            let value = power_value(fields);
+            assert!(!value.4, "GND is hidden");
+            assert!(value.2 .1 > *y, "GND is not below its triangle");
+        }
+    }
+
+    #[test]
+    fn power_names_keep_clear_of_wires_and_other_text() {
+        for name in [
+            "ref_ldo_sensor",
+            "ref_usb_cdc",
+            "ref_crystal_mcu",
+            "ref_battery_charger",
+            "sensor_logger",
+        ] {
+            let (board, sexp, _) = build_reference(name);
+            let names: Vec<(String, (f64, f64, f64, f64))> = power_symbols(&sexp)
+                .into_iter()
+                .filter_map(|(_, fields)| {
+                    let (_, text, pos, justify, hidden) = power_value(&fields).clone();
+                    let w = text.chars().count() as f64 * FIELD_CHAR_WIDTH_MM;
+                    let (x0, x1) = match justify.as_deref() {
+                        Some("left") => (pos.0, pos.0 + w),
+                        Some("right") => (pos.0 - w, pos.0),
+                        _ => (pos.0 - w / 2.0, pos.0 + w / 2.0),
+                    };
+                    let half = FIELD_TEXT_HEIGHT_MM / 2.0;
+                    (!hidden).then_some((text, (x0, pos.1 - half, x1, pos.1 + half)))
+                })
+                .collect();
+            assert!(!names.is_empty(), "{name} shows no power name");
+            let wires = wire_segments(&sexp);
+            let fields = field_boxes_for(&board, &synth_layout::layout(&board));
+            for (i, (text, rect)) in names.iter().enumerate() {
+                for (a, b) in &wires {
+                    let wire = (
+                        a.0.min(b.0) - WIRE_HALF_WIDTH_MM,
+                        a.1.min(b.1) - WIRE_HALF_WIDTH_MM,
+                        a.0.max(b.0) + WIRE_HALF_WIDTH_MM,
+                        a.1.max(b.1) + WIRE_HALF_WIDTH_MM,
+                    );
+                    assert!(
+                        !boxes_overlap(*rect, wire),
+                        "{name}: {text} {rect:?} on a wire {wire:?}"
+                    );
+                }
+                for (field, x0, y0, x1, y1) in &fields {
+                    assert!(
+                        !boxes_overlap(*rect, (*x0, *y0, *x1, *y1)),
+                        "{name}: {text} on {field}"
+                    );
+                }
+                for (other, other_rect) in &names[i + 1..] {
+                    assert!(
+                        !boxes_overlap(*rect, *other_rect),
+                        "{name}: {text} {rect:?} on {other} {other_rect:?}"
+                    );
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn a_power_symbol_keeps_its_reference_hidden() {
+        let (_board, sexp, _text) = build_reference("ref_ldo_sensor");
+        for (_, fields) in power_symbols(&sexp) {
+            let reference = fields.iter().find(|f| f.0 == "Reference").unwrap();
+            assert!(reference.4, "{} is shown", reference.1);
+        }
     }
 
     #[test]

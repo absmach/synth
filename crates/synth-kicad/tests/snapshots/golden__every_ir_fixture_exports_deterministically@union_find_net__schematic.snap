@@ -1668,11 +1668,12 @@ expression: schematic
 		(property
 			"Value"
 			"RP2350A"
-			(at 40.64 106.68 0)
+			(at 66.04 60.96 0)
 			(effects
 				(font
 					(size 1.27 1.27)
 				)
+				(justify left)
 			)
 		)
 		(property
@@ -1876,14 +1877,16 @@ expression: schematic
 		)
 		(uuid "12803670-16eb-51d8-8dec-aee2572b5aea")
 	)
-	(label
+	(global_label
 		"MOSI"
+		(shape output)
 		(at 71.12 22.86 0)
 		(effects
 			(font
 				(size 1.27 1.27)
 				(color 0 158 115 1)
 			)
+			(justify left)
 		)
 		(uuid "35063bb4-3900-5698-9e28-217ce107b765")
 	)
@@ -1899,14 +1902,16 @@ expression: schematic
 		)
 		(uuid "cfb5f9b8-19ac-5f8c-b5fc-5ba63c2680cd")
 	)
-	(label
+	(global_label
 		"MOSI"
+		(shape output)
 		(at 86.36 53.34 180)
 		(effects
 			(font
 				(size 1.27 1.27)
 				(color 0 158 115 1)
 			)
+			(justify right)
 		)
 		(uuid "7b165788-11f8-5051-a339-f84bd8cd9556")
 	)
@@ -1922,14 +1927,16 @@ expression: schematic
 		)
 		(uuid "bed0b06f-284e-5cd9-a70b-fd0e85e58540")
 	)
-	(label
+	(global_label
 		"MOSI"
+		(shape output)
 		(at 153.67 60.96 180)
 		(effects
 			(font
 				(size 1.27 1.27)
 				(color 0 158 115 1)
 			)
+			(justify right)
 		)
 		(uuid "50f7ce9e-22ce-553c-aa27-042fda96428e")
 	)

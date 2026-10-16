@@ -1346,6 +1346,57 @@ pub struct RouteResult {
     pub nets_truncated_to_labels: Vec<NetId>,
 }
 
+/// The rectangle `(x_min, y_min, x_max, y_max)` the text `text` of a net label
+/// on `pin` covers on the sheet. The label hangs off a [`NET_LABEL_STUB_MM`]
+/// stub at its pin and runs away from the pin. `None` when the pin has no
+/// terminal. The router keeps wires out of it and the exporter keeps symbol
+/// text out of it.
+#[allow(clippy::implicit_hasher)]
+pub fn net_label_rect(
+    board: &Board,
+    text: &str,
+    component: ComponentId,
+    pin: PinId,
+    placements: &HashMap<ComponentId, &ComponentPlacement>,
+) -> Option<(f64, f64, f64, f64)> {
+    let (x, y, dx, _dy) = pin_terminal_xy(board, component, pin, placements)?;
+    let label_x = if dx >= -0.1 {
+        x + NET_LABEL_STUB_MM
+    } else {
+        x - NET_LABEL_STUB_MM
+    };
+    Some(net_label_obstacle(text, label_x, y, dx >= -0.1))
+}
+
+/// Length of the stub between a pin and its net label, in mm.
+const NET_LABEL_STUB_MM: f64 = 5.08;
+
+/// The routing obstacle for a net label whose stub ends at `label_x`: the
+/// rectangle `(x_min, y_min, x_max, y_max)` the label's text covers.
+/// `faces_right` is true when the label runs to the right of its stub end.
+///
+/// The text starts at the stub end and runs away from the pin, at about
+/// [`LABEL_CHAR_WIDTH_MM`] per character, so the obstacle does the same.
+/// Centring it on the stub end left the outer half of a long label open to
+/// wires and walled off the pin side.
+fn net_label_obstacle(text: &str, label_x: f64, y: f64, faces_right: bool) -> (f64, f64, f64, f64) {
+    let label_w = (text.len() as f64) * LABEL_CHAR_WIDTH_MM + LABEL_PADDING_MM;
+    let label_h = 3.81;
+    let (x_min, x_max) = if faces_right {
+        (label_x, label_x + label_w)
+    } else {
+        (label_x - label_w, label_x)
+    };
+    (x_min, y - label_h / 2.0, x_max, y + label_h / 2.0)
+}
+
+/// Width of one label character on the sheet, in mm: a little over the
+/// 1.13 mm measured on KiCad's plot of 1.27 mm text.
+const LABEL_CHAR_WIDTH_MM: f64 = 1.2;
+/// Room around a label's text for its flag box and arrow, in mm: a global
+/// label output flag plots 2.9 mm wider than its text.
+const LABEL_PADDING_MM: f64 = 3.0;
+
 /// Route every signal net on `board` over the already-placed `layout`.
 ///
 /// Replicates, in order: building the obstacle grid from component
@@ -1415,23 +1466,10 @@ pub fn route_board(board: &Board, layout: &Layout) -> RouteResult {
 
     // 2. Mark net label (global_label) obstacles.
     for label in &layout.net_labels {
-        if let Some((x, y, dx, _dy)) =
-            pin_terminal_xy(board, label.component, label.pin, &placements)
+        if let Some((x_min, y_min, x_max, y_max)) =
+            net_label_rect(board, &label.label, label.component, label.pin, &placements)
         {
-            let stub_len = 5.08;
-            let label_x = if dx >= -0.1 {
-                x + stub_len
-            } else {
-                x - stub_len
-            };
-            let label_w = (label.label.len() as f64) * 1.5 + 3.0;
-            let label_h = 3.81;
-            grid.mark_obstacle_rect(
-                label_x - label_w / 2.0,
-                y - label_h / 2.0,
-                label_x + label_w / 2.0,
-                y + label_h / 2.0,
-            );
+            grid.mark_obstacle_rect(x_min, y_min, x_max, y_max);
         }
     }
 
@@ -3065,6 +3103,61 @@ mod net_termination_tests {
         assert!(
             layout.wires.iter().any(|w| w.net == NetId(0)),
             "healthy net must still route"
+        );
+    }
+}
+
+#[cfg(test)]
+mod label_obstacle_tests {
+    use super::net_label_obstacle;
+
+    // Widths measured on the KiCad plot of the USB-C dual UART schematic
+    // (1.27 mm text): a label is about 1.13 mm per character, drawn from the
+    // end of its stub away from the pin. A global label output flag adds
+    // 2.9 mm for its box margins and arrow (CC2 plots 6.25 mm wide, a
+    // 17 character name 21.9 mm).
+    const MODEM_IDLE_MM: f64 = 11.13;
+    const V3_MM: f64 = 1.94;
+    const FLAG_EXTRA_MM: f64 = 2.9;
+
+    #[test]
+    fn a_right_facing_label_is_covered_from_its_stub_end_outward() {
+        let (x_min, _, x_max, _) = net_label_obstacle("MODEM_IDLE", 50.0, 20.0, true);
+        assert!(x_min >= 49.99, "must not reach back over the stub: {x_min}");
+        assert!(
+            x_max >= 50.0 + MODEM_IDLE_MM + FLAG_EXTRA_MM,
+            "must cover the text and the flag: {x_max}"
+        );
+        assert!(
+            x_max - x_min <= MODEM_IDLE_MM + FLAG_EXTRA_MM + 1.0,
+            "not oversized: {}",
+            x_max - x_min
+        );
+    }
+
+    #[test]
+    fn a_left_facing_label_is_covered_from_its_stub_end_outward() {
+        let (x_min, _, x_max, _) = net_label_obstacle("MODEM_IDLE", 50.0, 20.0, false);
+        assert!(x_max <= 50.01, "must not reach back over the stub: {x_max}");
+        assert!(
+            x_min <= 50.0 - MODEM_IDLE_MM - FLAG_EXTRA_MM,
+            "must cover the text and the flag: {x_min}"
+        );
+        assert!(
+            x_max - x_min <= MODEM_IDLE_MM + FLAG_EXTRA_MM + 1.0,
+            "not oversized: {}",
+            x_max - x_min
+        );
+    }
+
+    #[test]
+    fn a_short_label_gets_a_short_obstacle() {
+        let (x_min, _, x_max, _) = net_label_obstacle("V3", 50.0, 20.0, true);
+        assert!(x_max - x_min >= V3_MM + FLAG_EXTRA_MM);
+        assert!(
+            x_max - x_min <= V3_MM + FLAG_EXTRA_MM + 1.0,
+            "not oversized: {}",
+            x_max - x_min
         );
     }
 }
