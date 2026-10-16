@@ -1,72 +1,72 @@
 {
   "ref_battery_charger": {
-    "sha256": "f92b00cfe8888c829f2f27fdbd317691eb197d11800678b4f6d884f3e043e9d8",
+    "sha256": "5a2858eb0674271fd4a2e87025cb300d01e41fb8955a8a267ec6c31f68fdaa7b",
     "width": "297.0022mm",
     "height": "210.0072mm",
-    "paths": 6014,
-    "texts": 191
+    "paths": 6869,
+    "texts": 216
   },
   "ref_crystal_mcu": {
-    "sha256": "5b924ceb1c0ccb74439616f117de7bc6e0e28423a92e73e136884dc03b1ec909",
+    "sha256": "8d4b3ca57b949d482b03d9796b7cbc22f46b0aab3d44369c63a506ab024155a4",
     "width": "297.0022mm",
     "height": "210.0072mm",
-    "paths": 8416,
-    "texts": 197
+    "paths": 9027,
+    "texts": 221
   },
   "ref_ldo_sensor": {
-    "sha256": "04ccd5e89ff74985148f03b09eefda7fd5447cf2870984664ad39692907b40bd",
+    "sha256": "3cf326bdd40a49a1ccf53cec4e6acada7af7c8e33a5d4b5637ad6bf5cfa0c412",
     "width": "297.0022mm",
     "height": "210.0072mm",
-    "paths": 3965,
-    "texts": 109
+    "paths": 4607,
+    "texts": 134
   },
   "ref_led_driver": {
-    "sha256": "e8a890b7e5bc2df92c0f2e810b2573d2d3c4af46c7a8bf8f3b9359f091e7a1ef",
+    "sha256": "bb1152a5d89c552ce1ce232cd764b37c37e875b0c5a2c9cde2bffe744d196b95",
     "width": "297.0022mm",
     "height": "210.0072mm",
-    "paths": 8385,
-    "texts": 193
+    "paths": 8844,
+    "texts": 212
   },
   "ref_secure_element": {
-    "sha256": "a9a72398f196c9609159f0a49057f414b13dfbfb47b505a0001486d94d47f1ed",
+    "sha256": "446b472ea0e1119392301573dc999b7603f8c113b36dff0176556b7cf7f608ef",
     "width": "297.0022mm",
     "height": "210.0072mm",
-    "paths": 8981,
-    "texts": 205
+    "paths": 9651,
+    "texts": 231
   },
   "ref_spi_flash": {
-    "sha256": "97db19818b751f781d248de9902783743e2965fe852e539f07dae453abf3a03f",
+    "sha256": "f83b6ca19feb438f880b4186c4e9f04516d385846d44a8a9ad2b6d03146915f7",
     "width": "297.0022mm",
     "height": "210.0072mm",
-    "paths": 8830,
-    "texts": 206
+    "paths": 9440,
+    "texts": 230
   },
   "ref_uart_bridge": {
-    "sha256": "48f84eaba0f4cec22fa89240b95f639144f9e063946f038cc487f1ffe9bd469b",
+    "sha256": "18b6344aedd8b7375f7c28c356a85187697f6b3821d107fb28ed17abb298cd69",
     "width": "297.0022mm",
     "height": "210.0072mm",
-    "paths": 17680,
-    "texts": 419
+    "paths": 18564,
+    "texts": 452
   },
   "ref_usb_cdc": {
-    "sha256": "a4fe3b68aa241e89ec58ef844916d6626796645a745fc0baae63511f1e6fa812",
+    "sha256": "50b68db0f7439aff8019dd0f5b3d3a287cc34afe4f38c7dc1b07f581caa5936f",
     "width": "297.0022mm",
     "height": "210.0072mm",
-    "paths": 10410,
-    "texts": 265
+    "paths": 11409,
+    "texts": 293
   },
   "secure_tracker": {
-    "sha256": "3ed2c76ea12d5798442fad3a1d6c6d7df43a603a5d9a4212b9d86aa2d5c8a4d6",
+    "sha256": "339ff80351d2541fb6bdda383409930d7b94f0a8fec529110d654db605d9d99c",
     "width": "594.0044mm",
     "height": "419.9890mm",
-    "paths": 24686,
-    "texts": 639
+    "paths": 26719,
+    "texts": 705
   },
   "sensor_logger": {
-    "sha256": "a09d04a2a6fdae63fbd04b258fdacfc0a29995a5c287d8ff34ff5d8066880003",
+    "sha256": "45eceace41c4a988cfa935e33965b7741cfaa1dd55b8b8798b37297f1a7bc9b7",
     "width": "297.0022mm",
     "height": "210.0072mm",
-    "paths": 11033,
-    "texts": 323
+    "paths": 13408,
+    "texts": 395
   }
 }
