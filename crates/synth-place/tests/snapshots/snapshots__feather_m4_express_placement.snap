@@ -6,12 +6,12 @@ board_outline_mm: 90.57 x 76.16
 
   U1  (  45.30,   38.21) mm  rot=Zero layer=Top
   U2  (  24.30,   27.21) mm  rot=Zero layer=Top
-  U3  (  67.30,   27.21) mm  rot=Zero layer=Top
+  U3  (  67.30,   26.21) mm  rot=Zero layer=Top
   U4  (  67.30,   37.21) mm  rot=Zero layer=Top
   U5  (  70.80,   56.21) mm  rot=Zero layer=Top
   U6  (  67.30,   45.71) mm  rot=Zero layer=Top
   U7  (  65.30,   55.71) mm  rot=Zero layer=Top
-  U8  (  67.30,   65.21) mm  rot=Zero layer=Top
+  U8  (  67.30,   64.21) mm  rot=Zero layer=Top
   U9  (  67.30,   71.21) mm  rot=Zero layer=Top
   J1  (  24.30,    8.71) mm  rot=OneEighty layer=Top
   J2  (   9.30,   27.21) mm  rot=Ninety layer=Top
@@ -28,41 +28,41 @@ board_outline_mm: 90.57 x 76.16
   D2  (  35.80,   27.71) mm  rot=Zero layer=Top
   D3  (  45.30,   29.71) mm  rot=Zero layer=Top
   D4  (  30.50,   26.50) mm  rot=Zero layer=Top
-  D5  (  54.80,   31.21) mm  rot=Zero layer=Top
+  D5  (  30.50,   36.50) mm  rot=Zero layer=Top
   D6  (  31.00,   40.50) mm  rot=Zero layer=Top
   D7  (  16.50,   25.50) mm  rot=Zero layer=Top
   R1  (  31.80,   17.71) mm  rot=Zero layer=Top
   R2  (  13.80,   11.71) mm  rot=Zero layer=Top
-  R3  (  54.80,   43.21) mm  rot=Zero layer=Top
-  R4  (  57.30,   46.71) mm  rot=Zero layer=Top
+  R3  (  54.80,   42.21) mm  rot=Zero layer=Top
+  R4  (  56.80,   45.71) mm  rot=Zero layer=Top
   R5  (  38.80,   50.21) mm  rot=Zero layer=Top
   R6  (  23.30,   38.21) mm  rot=Zero layer=Top
   R7  (  45.80,   27.71) mm  rot=Zero layer=Top
   R8  (  30.50,   28.00) mm  rot=Zero layer=Top
-  R9  (  54.50,   34.50) mm  rot=Zero layer=Top
- R10  (  29.50,   39.00) mm  rot=Zero layer=Top
+  R9  (  29.50,   38.00) mm  rot=Zero layer=Top
+ R10  (  31.00,   42.00) mm  rot=Zero layer=Top
  R11  (  15.50,   24.00) mm  rot=Zero layer=Top
- R12  (  56.80,   27.71) mm  rot=Zero layer=Top
- R13  (  33.80,   50.21) mm  rot=Zero layer=Top
- R14  (  57.80,   50.71) mm  rot=Zero layer=Top
- R15  (  58.30,   38.21) mm  rot=Zero layer=Top
- R16  (  45.30,   24.21) mm  rot=Zero layer=Top
- R17  (  45.30,   54.21) mm  rot=Zero layer=Top
- R18  (  30.30,   54.21) mm  rot=Zero layer=Top
-  C4  (  63.30,   20.71) mm  rot=Zero layer=Top
-  C5  (  45.30,   20.71) mm  rot=Zero layer=Top
-  C6  (  45.30,   57.71) mm  rot=Zero layer=Top
-  C7  (  26.80,   57.71) mm  rot=Zero layer=Top
-  C8  (  67.30,   17.21) mm  rot=Zero layer=Top
-  C9  (  45.30,   16.71) mm  rot=Zero layer=Top
+ R12  (  56.80,   49.71) mm  rot=Zero layer=Top
+ R13  (  65.50,   69.50) mm  rot=Zero layer=Top
+ R14  (  63.50,   33.50) mm  rot=Zero layer=Top
+ R15  (  56.80,   27.71) mm  rot=Zero layer=Top
+ R16  (  66.50,   33.50) mm  rot=Zero layer=Top
+ R17  (  59.30,   41.71) mm  rot=Zero layer=Top
+ R18  (  59.30,   31.71) mm  rot=Zero layer=Top
+  C4  (  33.80,   50.21) mm  rot=Zero layer=Top
+  C5  (  45.30,   24.21) mm  rot=Zero layer=Top
+  C6  (  45.30,   54.21) mm  rot=Zero layer=Top
+  C7  (  30.30,   54.21) mm  rot=Zero layer=Top
+  C8  (  45.30,   20.71) mm  rot=Zero layer=Top
+  C9  (  64.30,   20.21) mm  rot=Zero layer=Top
  C10  (  50.30,   54.21) mm  rot=Zero layer=Top
- C11  (  56.80,   24.21) mm  rot=Zero layer=Top
- C12  (  45.30,   61.21) mm  rot=Zero layer=Top
- C13  (  21.80,   59.71) mm  rot=Zero layer=Top
- C14  (  67.80,   13.71) mm  rot=Zero layer=Top
- C15  (  44.80,   13.71) mm  rot=Zero layer=Top
- C16  (  21.30,   62.71) mm  rot=Zero layer=Top
- C17  (  45.30,   63.71) mm  rot=Zero layer=Top
- C18  (  18.30,   37.71) mm  rot=Zero layer=Top
- C19  (  33.80,   46.71) mm  rot=Zero layer=Top
- C20  (  59.30,   54.71) mm  rot=Zero layer=Top
+ C11  (  58.30,   24.21) mm  rot=Zero layer=Top
+ C12  (  45.30,   57.71) mm  rot=Zero layer=Top
+ C13  (  25.30,   57.71) mm  rot=Zero layer=Top
+ C14  (  59.30,   53.21) mm  rot=Zero layer=Top
+ C15  (  45.30,   16.21) mm  rot=Zero layer=Top
+ C16  (  67.80,   16.21) mm  rot=Zero layer=Top
+ C17  (  45.30,   61.21) mm  rot=Zero layer=Top
+ C18  (  22.30,   61.21) mm  rot=Zero layer=Top
+ C19  (  45.30,   13.71) mm  rot=Zero layer=Top
+ C20  (  69.80,   13.71) mm  rot=Zero layer=Top

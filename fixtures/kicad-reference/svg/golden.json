@@ -1,9 +1,9 @@
 {
   "ref_battery_charger": {
-    "sha256": "95b181147ff7ecafef1a7c5b67f18f829e10d4fb2e4f09a86de76064b9679229",
+    "sha256": "fff09d25f1a431477e1925c3038837ff7a3e6dd374e49990469de504ffe9e8d9",
     "width": "297.0022mm",
     "height": "210.0072mm",
-    "paths": 6115,
+    "paths": 6117,
     "texts": 193
   },
   "ref_crystal_mcu": {
@@ -56,10 +56,10 @@
     "texts": 267
   },
   "secure_tracker": {
-    "sha256": "e1c953f4fb8a56d09f632ecfdfa9a6ede4be1da67edecb6a2ec567589888405f",
+    "sha256": "3b586911ee60b7fd5df310608e4ec26cce41ea814278f9ae6ca341c702122deb",
     "width": "594.0044mm",
     "height": "419.9890mm",
-    "paths": 25005,
+    "paths": 25007,
     "texts": 649
   },
   "sensor_logger": {
