@@ -3386,6 +3386,7 @@ mod tests {
             escape: None,
             group: None,
             sheet: None,
+            escape: None,
             source_span: Span::new(0, 0),
         };
         let placement = ComponentPlacement {
