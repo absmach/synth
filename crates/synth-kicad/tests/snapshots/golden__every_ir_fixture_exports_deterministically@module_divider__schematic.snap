@@ -677,11 +677,12 @@ expression: schematic
 		(property
 			"Value"
 			"4.7kohm"
-			(at 142.24 98.52 90)
+			(at 151.13 93.98 90)
 			(effects
 				(font
 					(size 1.27 1.27)
 				)
+				(justify right)
 			)
 		)
 		(property

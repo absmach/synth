@@ -598,11 +598,12 @@ expression: schematic
 		(property
 			"Value"
 			"(no value)"
-			(at 55.88 33.02 0)
+			(at 59.69 25.4 0)
 			(effects
 				(font
 					(size 1.27 1.27)
 				)
+				(justify left)
 			)
 		)
 		(property
@@ -805,7 +806,7 @@ expression: schematic
 		(property
 			"Reference"
 			"C1"
-			(at 25.4 23.4 90)
+			(at 25.4 32.48 90)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -815,7 +816,7 @@ expression: schematic
 		(property
 			"Value"
 			"(no value)"
-			(at 25.4 32.48 90)
+			(at 25.4 18.32 90)
 			(effects
 				(font
 					(size 1.27 1.27)

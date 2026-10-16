@@ -800,18 +800,17 @@ expression: schematic
 		(property
 			"Reference"
 			"U1"
-			(at 58.42 22.86 0)
+			(at 50.8 15.5575 0)
 			(effects
 				(font
 					(size 1.27 1.27)
 				)
-				(justify left)
 			)
 		)
 		(property
 			"Value"
 			"AMS1117-3.3"
-			(at 43.18 22.86 0)
+			(at 38.1 22.86 0)
 			(effects
 				(font
 					(size 1.27 1.27)

@@ -1668,11 +1668,12 @@ expression: schematic
 		(property
 			"Value"
 			"RP2350A"
-			(at 40.64 106.68 0)
+			(at 66.04 60.96 0)
 			(effects
 				(font
 					(size 1.27 1.27)
 				)
+				(justify left)
 			)
 		)
 		(property
