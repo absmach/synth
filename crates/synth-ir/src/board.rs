@@ -663,6 +663,7 @@ impl From<NetWire> for Net {
     }
 }
 
+<<<<<<< HEAD
 impl NetClass {
     /// Via geometry a class that declares none is exported with.
     ///
@@ -706,6 +707,8 @@ impl NetClass {
 }
 
 
+=======
+>>>>>>> d5011d7 (test(place): re-record the two placements for main's pad rotation)
 /// Escape engine for a package's pins.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
