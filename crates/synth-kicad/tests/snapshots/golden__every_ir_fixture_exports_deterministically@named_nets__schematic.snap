@@ -800,18 +800,17 @@ expression: schematic
 		(property
 			"Reference"
 			"U1"
-			(at 58.42 22.86 0)
+			(at 50.8 15.5575 0)
 			(effects
 				(font
 					(size 1.27 1.27)
 				)
-				(justify left)
 			)
 		)
 		(property
 			"Value"
 			"AMS1117-3.3"
-			(at 43.18 22.86 0)
+			(at 38.1 22.86 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -1192,12 +1191,11 @@ expression: schematic
 		(property
 			"Value"
 			"+3V3"
-			(at 60.96 22.86 0)
+			(at 60.96 19.05 0)
 			(effects
 				(font
 					(size 1.27 1.27)
 				)
-				(hide yes)
 			)
 		)
 	)
@@ -1233,12 +1231,11 @@ expression: schematic
 		(property
 			"Value"
 			"+3V3"
-			(at 40.64 31.75 0)
+			(at 40.64 27.94 0)
 			(effects
 				(font
 					(size 1.27 1.27)
 				)
-				(hide yes)
 			)
 		)
 	)
@@ -1274,12 +1271,11 @@ expression: schematic
 		(property
 			"Value"
 			"+3V3"
-			(at 20.32 31.75 0)
+			(at 20.32 27.94 0)
 			(effects
 				(font
 					(size 1.27 1.27)
 				)
-				(hide yes)
 			)
 		)
 	)
@@ -1315,12 +1311,11 @@ expression: schematic
 		(property
 			"Value"
 			"GND"
-			(at 50.8 33.02 0)
+			(at 50.8 36.83 0)
 			(effects
 				(font
 					(size 1.27 1.27)
 				)
-				(hide yes)
 			)
 		)
 	)
@@ -1356,12 +1351,11 @@ expression: schematic
 		(property
 			"Value"
 			"GND"
-			(at 20.32 44.45 0)
+			(at 20.32 48.26 0)
 			(effects
 				(font
 					(size 1.27 1.27)
 				)
-				(hide yes)
 			)
 		)
 	)
@@ -1397,12 +1391,11 @@ expression: schematic
 		(property
 			"Value"
 			"GND"
-			(at 40.64 44.45 0)
+			(at 40.64 48.26 0)
 			(effects
 				(font
 					(size 1.27 1.27)
 				)
-				(hide yes)
 			)
 		)
 	)
@@ -1438,12 +1431,11 @@ expression: schematic
 		(property
 			"Value"
 			"GND"
-			(at 60.96 44.45 0)
+			(at 60.96 48.26 0)
 			(effects
 				(font
 					(size 1.27 1.27)
 				)
-				(hide yes)
 			)
 		)
 	)
@@ -1479,12 +1471,11 @@ expression: schematic
 		(property
 			"Value"
 			"GND"
-			(at 81.28 44.45 0)
+			(at 81.28 48.26 0)
 			(effects
 				(font
 					(size 1.27 1.27)
 				)
-				(hide yes)
 			)
 		)
 	)
@@ -1520,12 +1511,11 @@ expression: schematic
 		(property
 			"Value"
 			"VIN"
-			(at 40.64 22.86 0)
+			(at 40.64 19.05 0)
 			(effects
 				(font
 					(size 1.27 1.27)
 				)
-				(hide yes)
 			)
 		)
 	)
@@ -1561,12 +1551,11 @@ expression: schematic
 		(property
 			"Value"
 			"VIN"
-			(at 81.28 31.75 0)
+			(at 81.28 27.94 0)
 			(effects
 				(font
 					(size 1.27 1.27)
 				)
-				(hide yes)
 			)
 		)
 	)
@@ -1602,12 +1591,11 @@ expression: schematic
 		(property
 			"Value"
 			"VIN"
-			(at 60.96 31.75 0)
+			(at 60.96 27.94 0)
 			(effects
 				(font
 					(size 1.27 1.27)
 				)
-				(hide yes)
 			)
 		)
 	)
