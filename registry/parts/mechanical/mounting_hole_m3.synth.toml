@@ -1,0 +1,10 @@
+id = "mounting_hole_m3"
+kind = "mounting_hole"
+description = "M3 non-plated mounting hole (NPTH, 3.2 mm) for a board corner"
+kicad_symbol = "Mechanical:MountingHole"
+kicad_footprint = "MountingHole:MountingHole_3.2mm_M3"
+
+[footprint_dimensions]
+width_mm = 3.2
+height_mm = 3.2
+courtyard_margin_mm = 0.25
