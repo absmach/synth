@@ -1877,8 +1877,9 @@ expression: schematic
 		)
 		(uuid "12803670-16eb-51d8-8dec-aee2572b5aea")
 	)
-	(label
+	(global_label
 		"MOSI"
+		(shape output)
 		(at 71.12 22.86 0)
 		(effects
 			(font
@@ -1901,8 +1902,9 @@ expression: schematic
 		)
 		(uuid "cfb5f9b8-19ac-5f8c-b5fc-5ba63c2680cd")
 	)
-	(label
+	(global_label
 		"MOSI"
+		(shape output)
 		(at 86.36 53.34 180)
 		(effects
 			(font
@@ -1925,8 +1927,9 @@ expression: schematic
 		)
 		(uuid "bed0b06f-284e-5cd9-a70b-fd0e85e58540")
 	)
-	(label
+	(global_label
 		"MOSI"
+		(shape output)
 		(at 153.67 60.96 180)
 		(effects
 			(font

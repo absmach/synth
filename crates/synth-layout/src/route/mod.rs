@@ -1393,8 +1393,9 @@ fn net_label_obstacle(text: &str, label_x: f64, y: f64, faces_right: bool) -> (f
 /// Width of one label character on the sheet, in mm: a little over the
 /// 1.13 mm measured on KiCad's plot of 1.27 mm text.
 const LABEL_CHAR_WIDTH_MM: f64 = 1.2;
-/// Room around a label's text for its box or arrow, in mm.
-const LABEL_PADDING_MM: f64 = 2.0;
+/// Room around a label's text for its flag box and arrow, in mm: a global
+/// label output flag plots 2.9 mm wider than its text.
+const LABEL_PADDING_MM: f64 = 3.0;
 
 /// Route every signal net on `board` over the already-placed `layout`.
 ///
@@ -3112,20 +3113,23 @@ mod label_obstacle_tests {
 
     // Widths measured on the KiCad plot of the USB-C dual UART schematic
     // (1.27 mm text): a label is about 1.13 mm per character, drawn from the
-    // end of its stub away from the pin.
+    // end of its stub away from the pin. A global label output flag adds
+    // 2.9 mm for its box margins and arrow (CC2 plots 6.25 mm wide, a
+    // 17 character name 21.9 mm).
     const MODEM_IDLE_MM: f64 = 11.13;
     const V3_MM: f64 = 1.94;
+    const FLAG_EXTRA_MM: f64 = 2.9;
 
     #[test]
     fn a_right_facing_label_is_covered_from_its_stub_end_outward() {
         let (x_min, _, x_max, _) = net_label_obstacle("MODEM_IDLE", 50.0, 20.0, true);
         assert!(x_min >= 49.99, "must not reach back over the stub: {x_min}");
         assert!(
-            x_max >= 50.0 + MODEM_IDLE_MM,
-            "must cover the text: {x_max}"
+            x_max >= 50.0 + MODEM_IDLE_MM + FLAG_EXTRA_MM,
+            "must cover the text and the flag: {x_max}"
         );
         assert!(
-            x_max - x_min <= MODEM_IDLE_MM + 3.0,
+            x_max - x_min <= MODEM_IDLE_MM + FLAG_EXTRA_MM + 1.0,
             "not oversized: {}",
             x_max - x_min
         );
@@ -3136,11 +3140,11 @@ mod label_obstacle_tests {
         let (x_min, _, x_max, _) = net_label_obstacle("MODEM_IDLE", 50.0, 20.0, false);
         assert!(x_max <= 50.01, "must not reach back over the stub: {x_max}");
         assert!(
-            x_min <= 50.0 - MODEM_IDLE_MM,
-            "must cover the text: {x_min}"
+            x_min <= 50.0 - MODEM_IDLE_MM - FLAG_EXTRA_MM,
+            "must cover the text and the flag: {x_min}"
         );
         assert!(
-            x_max - x_min <= MODEM_IDLE_MM + 3.0,
+            x_max - x_min <= MODEM_IDLE_MM + FLAG_EXTRA_MM + 1.0,
             "not oversized: {}",
             x_max - x_min
         );
@@ -3149,9 +3153,9 @@ mod label_obstacle_tests {
     #[test]
     fn a_short_label_gets_a_short_obstacle() {
         let (x_min, _, x_max, _) = net_label_obstacle("V3", 50.0, 20.0, true);
-        assert!(x_max - x_min >= V3_MM);
+        assert!(x_max - x_min >= V3_MM + FLAG_EXTRA_MM);
         assert!(
-            x_max - x_min <= V3_MM + 3.0,
+            x_max - x_min <= V3_MM + FLAG_EXTRA_MM + 1.0,
             "not oversized: {}",
             x_max - x_min
         );

@@ -1674,8 +1674,9 @@ expression: schematic
 		)
 		(uuid "20219e2e-795d-5cd5-9395-266e7d835d75")
 	)
-	(label
+	(global_label
 		"CS"
+		(shape output)
 		(at 71.12 25.4 0)
 		(effects
 			(font
@@ -1698,8 +1699,9 @@ expression: schematic
 		)
 		(uuid "8cf4ceae-150d-5112-9007-3a1bcf352c72")
 	)
-	(label
+	(global_label
 		"CS"
+		(shape output)
 		(at 86.36 55.88 180)
 		(effects
 			(font

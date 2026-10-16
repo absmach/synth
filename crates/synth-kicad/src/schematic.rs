@@ -519,9 +519,9 @@ pub(crate) fn build_sheet_schematic(
     }
 
     // KiCad per-pin net labels at every labeled-net endpoint. Each
-    // endpoint gets its own short stub + local `(label)` with the
-    // same name; same-named labels on the sheet are electrically
-    // connected (the same primitive the reference designs use for
+    // endpoint gets its own short stub + `(global_label)` flag with the
+    // same name; same-named labels are electrically connected, across
+    // sheets too (the same primitive the reference designs use for
     // SCL/SDA/D+/D-). No long wires, no top rails. Unroutable nets
     // were merged into `layout.net_labels` by `synth_layout::layout`,
     // so this loop covers the routing-fallback labels too.
@@ -1041,7 +1041,8 @@ fn build_no_connect(
 const VERTICAL_LABEL_RISE: f64 = 2.54;
 
 /// Emit a KiCad `(global_label)` entry attached to a stub extending
-/// from the pin's coordinate.
+/// from the pin's coordinate. The output shape draws a boxed flag whose
+/// point faces away from the stub.
 fn build_net_label(
     board: &Board,
     label: &synth_layout::NetLabel,
@@ -1103,9 +1104,10 @@ fn build_net_label(
         font.push(rgb_color(rgb));
     }
     let label_sexp = Sexp::list(
-        "label",
+        "global_label",
         vec![
             Sexp::str(&label.label),
+            Sexp::list("shape", vec![Sexp::atom("output")]),
             Sexp::list("at", vec![num(stub_x), num(elbow_y), num(angle)]),
             Sexp::list(
                 "effects",
@@ -3487,6 +3489,98 @@ mod tests {
                 "no obstacle {reach} mm out from the pin"
             );
         }
+    }
+
+    /// `build_net_label` for pin 0 of every placed part of `ref_ldo_sensor`,
+    /// as the entries it emits.
+    fn net_label_entries() -> Vec<Sexp> {
+        let (board, _sexp, _text) = build_reference("ref_ldo_sensor");
+        let layout = synth_layout::layout(&board);
+        let placements: HashMap<ComponentId, &ComponentPlacement> =
+            layout.components.iter().map(|p| (p.id, p)).collect();
+        let project = crate::uuid_v5::project_namespace(&board.name);
+        board
+            .components
+            .iter()
+            .filter_map(|c| {
+                let label = synth_layout::NetLabel {
+                    net: board.nets[0].id,
+                    component: c.id,
+                    pin: synth_ir::PinId(0),
+                    label: "SIG".to_string(),
+                };
+                build_net_label(&board, &label, &placements, &project, None)
+            })
+            .filter_map(|mut parts| parts.pop())
+            .collect()
+    }
+
+    #[test]
+    fn a_net_label_is_a_global_label_flag() {
+        let entries = net_label_entries();
+        assert!(entries.len() > 4, "too few labels to tell");
+        for entry in &entries {
+            let Sexp::List { head, .. } = entry else {
+                panic!("not a list")
+            };
+            assert_eq!(head, "global_label", "a signal label is a flag");
+        }
+    }
+
+    #[test]
+    fn a_net_label_flag_points_away_from_its_stub() {
+        let entries = net_label_entries();
+        let mut sides = [false; 2];
+        for entry in &entries {
+            let shape = sub(entry, "shape").expect("a global label has a shape");
+            assert!(matches!(&shape[0], Sexp::Atom(a) if a == "output"));
+            let at = sub(entry, "at").expect("at");
+            let angle = parse_num_atom(&at[2]).expect("angle");
+            let effects = sub(entry, "effects").expect("effects");
+            let justify = effects
+                .iter()
+                .find_map(|c| match c {
+                    Sexp::List { head, children } if head == "justify" => Some(children),
+                    _ => None,
+                })
+                .expect("justify");
+            let want = if angle == 180.0 { "right" } else { "left" };
+            assert!(matches!(&justify[0], Sexp::Atom(a) if a == want));
+            sides[usize::from(angle == 180.0)] = true;
+        }
+        assert_eq!(sides, [true, true], "both stub sides must occur");
+    }
+
+    #[test]
+    fn only_net_labels_become_flags_and_power_symbols_stay() {
+        let (board, _sexp, text) = build_reference("ref_ldo_sensor");
+        let labelled = synth_layout::layout(&board).net_labels.len();
+        assert!(labelled > 0, "the board must carry net labels");
+        assert_eq!(text.matches("\n\t(global_label\n").count(), labelled);
+        assert!(
+            text.contains("(lib_id \"power:") || text.contains("(lib_id \"synth:"),
+            "power symbols must still be drawn"
+        );
+    }
+
+    #[test]
+    fn a_cross_sheet_label_stays_a_hierarchical_label() {
+        let (board, _sexp, _text) = build_reference("ref_ldo_sensor");
+        let layout = synth_layout::layout(&board);
+        let placements: HashMap<ComponentId, &ComponentPlacement> =
+            layout.components.iter().map(|p| (p.id, p)).collect();
+        let project = crate::uuid_v5::project_namespace(&board.name);
+        let label = synth_layout::HierarchicalLabel {
+            net: board.nets[0].id,
+            component: board.components[0].id,
+            pin: synth_ir::PinId(0),
+            label: "SIG".to_string(),
+        };
+        let parts =
+            build_hierarchical_label(&board, &label, &placements, &project, "A").expect("label");
+        let text: String = parts.iter().map(Sexp::to_string_pretty).collect();
+        assert!(text.contains("hierarchical_label"));
+        assert!(!text.contains("global_label"));
     }
 
     /// The first child list of `sexp` with head `head`, as its children.

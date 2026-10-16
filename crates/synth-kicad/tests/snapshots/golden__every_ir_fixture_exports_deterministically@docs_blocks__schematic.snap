@@ -1011,8 +1011,9 @@ expression: schematic
 		)
 		(uuid "ea2fad9d-1e93-5dd5-a0bb-7acb95d7e7ec")
 	)
-	(label
+	(global_label
 		"P2_R1"
+		(shape output)
 		(at 125.73 25.4 0)
 		(effects
 			(font
@@ -1033,8 +1034,9 @@ expression: schematic
 		)
 		(uuid "f97b460c-9151-5f01-a243-ce313e889410")
 	)
-	(label
+	(global_label
 		"P2_R1"
+		(shape output)
 		(at 16.51 27.94 180)
 		(effects
 			(font
@@ -1055,8 +1057,9 @@ expression: schematic
 		)
 		(uuid "283652e7-0a13-5626-94d8-920be29b08ea")
 	)
-	(label
+	(global_label
 		"P2"
+		(shape output)
 		(at 45.72 25.4 180)
 		(effects
 			(font
@@ -1077,8 +1080,9 @@ expression: schematic
 		)
 		(uuid "8358e72f-ad51-5a5f-adb9-e610979e6f3c")
 	)
-	(label
+	(global_label
 		"P2"
+		(shape output)
 		(at 34.29 27.94 0)
 		(effects
 			(font
