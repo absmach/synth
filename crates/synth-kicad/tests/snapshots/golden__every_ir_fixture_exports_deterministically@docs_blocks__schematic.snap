@@ -1017,6 +1017,7 @@ expression: schematic
 			(font
 				(size 1.27 1.27)
 			)
+			(justify left)
 		)
 		(uuid "5c561a74-3aed-53af-be65-936734d0e2f5")
 	)
@@ -1038,6 +1039,7 @@ expression: schematic
 			(font
 				(size 1.27 1.27)
 			)
+			(justify right)
 		)
 		(uuid "f6c3330e-a0df-59d1-b456-c419cdb587a8")
 	)
@@ -1059,6 +1061,7 @@ expression: schematic
 			(font
 				(size 1.27 1.27)
 			)
+			(justify right)
 		)
 		(uuid "8f2f231f-cad6-575f-a5b8-59af510b121f")
 	)
@@ -1080,6 +1083,7 @@ expression: schematic
 			(font
 				(size 1.27 1.27)
 			)
+			(justify left)
 		)
 		(uuid "0828e7fe-ac33-5549-9ba5-f40fe414d5c0")
 	)

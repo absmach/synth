@@ -1,6 +1,5 @@
 ---
 source: crates/synth-kicad/tests/golden.rs
-assertion_line: 60
 expression: schematic
 ---
 (kicad_sch
@@ -1682,6 +1681,7 @@ expression: schematic
 				(size 1.27 1.27)
 				(color 0 158 115 1)
 			)
+			(justify left)
 		)
 		(uuid "96570d70-fa74-50ba-9a33-ffc514c50338")
 	)
@@ -1705,6 +1705,7 @@ expression: schematic
 				(size 1.27 1.27)
 				(color 0 158 115 1)
 			)
+			(justify right)
 		)
 		(uuid "c721b3ee-28a8-5329-a60c-968b770fc648")
 	)

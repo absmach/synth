@@ -1105,7 +1105,19 @@ fn build_net_label(
         vec![
             Sexp::str(&label.label),
             Sexp::list("at", vec![num(stub_x), num(elbow_y), num(angle)]),
-            Sexp::list("effects", vec![Sexp::list("font", font)]),
+            Sexp::list(
+                "effects",
+                vec![
+                    Sexp::list("font", font),
+                    // KiCad centres a label's text on its anchor unless the
+                    // file says which way it runs, which drops half of it on
+                    // the stub and the pin. Run it away from the pin.
+                    Sexp::list(
+                        "justify",
+                        vec![Sexp::atom(if angle == 180.0 { "right" } else { "left" })],
+                    ),
+                ],
+            ),
             str_pair("uuid", label_uuid.to_string()),
         ],
     );
