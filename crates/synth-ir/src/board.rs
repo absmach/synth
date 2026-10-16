@@ -618,7 +618,6 @@ impl From<NetWire> for Net {
     }
 }
 
-
 /// Escape engine for a package's pins.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
