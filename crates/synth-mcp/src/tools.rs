@@ -320,6 +320,17 @@ pub fn list_tools() -> Vec<McpToolInfo> {
             }),
         },
         McpToolInfo {
+            name: "synth_cost_report".into(),
+            description: "Calculate a deterministic manufacturing cost report from frozen supplier offers and dated PCB, assembly, and delivery inputs. Returns complete_total=null and explicit unresolved lines when evidence is stale or incomplete; agents must not claim a final cost in that state.".into(),
+            input_schema: serde_json::json!({
+                "type": "object",
+                "properties": {
+                    "input": { "type": "object", "description": "A synth.cost-input.v1 JSON object containing only frozen, revision-bound evidence" }
+                },
+                "required": ["input"]
+            }),
+        },
+        McpToolInfo {
             name: "synth_multi_agent_synthesize".into(),
             description: "World Model multi-agent board synthesis engine (under active local development).".into(),
             input_schema: serde_json::json!({
@@ -582,6 +593,7 @@ pub fn call_tool(
             execute_predict_patch_consequence(args, default_registry)
         }
         "synth_live_supply_chain" => execute_live_supply_chain(args, default_registry),
+        "synth_cost_report" => execute_cost_report(args),
         "synth_place_with_hints" => execute_place_with_hints(args, default_registry),
         "synth_describe_placement" => execute_describe_placement(args, default_registry),
         "synth_resolve_footprints" => execute_resolve_footprints(args, default_registry),
@@ -601,6 +613,36 @@ pub fn call_tool(
         })),
         _ => Err(format!("Unknown tool: {name}")),
     }
+}
+
+fn execute_cost_report(args: &Value) -> Result<Value, String> {
+    let input = args
+        .get("input")
+        .ok_or_else(|| "missing required input: synth.cost-input.v1".to_string())?;
+    let parsed: synth_cost::CostInput = serde_json::from_value(input.clone())
+        .map_err(|error| format!("invalid synth.cost-input.v1: {error}"))?;
+    let report = synth_cost::calculate(&parsed).map_err(|error| error.to_string())?;
+    let unresolved: Vec<Value> = report
+        .lines
+        .iter()
+        .filter(|line| line.status == synth_cost::CostLineStatus::Unknown || line.uncertain)
+        .map(|line| {
+            serde_json::json!({
+                "category": line.category,
+                "item": line.item,
+                "reason": line.reason,
+                "expires_at": line.expires_at,
+            })
+        })
+        .collect();
+    let mut value = serde_json::to_value(report).map_err(|error| error.to_string())?;
+    value["review_status"] = if unresolved.is_empty() {
+        serde_json::json!("complete")
+    } else {
+        serde_json::json!("unresolved")
+    };
+    value["unresolved"] = Value::Array(unresolved);
+    Ok(value)
 }
 
 /// Attempt to find workspace root containing `registry/parts`.
@@ -4540,6 +4582,31 @@ electrical_type = "input"
             source == "lcsc" || source == "local_registry",
             "expected a graceful source, got {source:?}"
         );
+    }
+
+    #[test]
+    fn cost_report_requires_frozen_input_and_returns_structured_unresolved_state() {
+        let missing = call_tool("synth_cost_report", &serde_json::json!({}), None);
+        assert!(missing.is_err());
+
+        let input = serde_json::json!({
+            "schema_version": "synth.cost-input.v1",
+            "snapshot_id": "snap-1",
+            "scenario": {"fabricated_boards": 1, "assembled_boards": 1},
+            "currency": "Usd",
+            "parts": [],
+            "pcb_specification": null,
+            "pcb_profile": null,
+            "pcb_quote": null,
+            "assembly": null,
+            "delivery": null,
+            "budget": null,
+            "evaluated_at": "2026-10-16T00:00:00Z"
+        });
+        let result = call_tool("synth_cost_report", &serde_json::json!({"input": input}), None)
+            .expect("empty frozen input is a valid complete scenario");
+        assert_eq!(result["review_status"], "complete");
+        assert!(result["unresolved"].as_array().unwrap().is_empty());
     }
 }
 

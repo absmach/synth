@@ -2412,6 +2412,7 @@ dependencies = [
  "serde_json",
  "sha2",
  "synth-ast",
+ "synth-cost",
  "synth-diagnostics",
  "synth-drc",
  "synth-geometry",
