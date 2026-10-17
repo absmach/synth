@@ -1303,7 +1303,7 @@ fn capability_descriptor() -> serde_json::Value {
         .collect::<Vec<_>>();
 
     serde_json::json!({
-        "schema_version": "1.1",
+        "schema_version": "1.2",
         "compiler": {
             "name": "synth",
             "version": env!("CARGO_PKG_VERSION")
@@ -1322,11 +1322,12 @@ fn capability_descriptor() -> serde_json::Value {
         "manufacturer_profiles": [
             {"name": "jlc-standard", "layers": [2, 4], "min_trace_width_mm": 0.127, "min_clearance_mm": 0.127, "min_drill_mm": 0.3},
             {"name": "pcbway-standard", "layers": [2, 4], "min_trace_width_mm": 0.15, "min_clearance_mm": 0.15, "min_drill_mm": 0.3},
-            {"name": "oshpark-4layer", "layers": [4], "min_trace_width_mm": 0.125, "min_clearance_mm": 0.125, "min_drill_mm": 0.25}
+            {"name": "oshpark-4layer", "layers": [4], "min_trace_width_mm": 0.125, "min_clearance_mm": 0.125, "min_drill_mm": 0.25},
+            {"name": "jlc-filled-via", "layers": [2, 4], "min_trace_width_mm": 0.127, "min_clearance_mm": 0.127, "min_drill_mm": 0.3, "offers": ["via_in_pad"]}
         ],
         "language": {
             "syntax_version": "1.0",
-            "statements": ["board", "import", "layers", "manufacturer", "revision", "schematic", "component", "connect", "net", "power", "module", "interface", "bus", "use", "bind", "netclass", "keepout", "stackup", "group", "sheet", "variant"],
+            "statements": ["board", "import", "layers", "manufacturer", "revision", "schematic", "component", "connect", "net", "power", "module", "interface", "bus", "use", "bind", "netclass", "keepout", "stackup", "requires", "group", "sheet", "variant"],
             "attributes": ["company", "legends", "notes", "dnp", "prefix", "param", "as", "class", "diff_pair", "impedance", "trace_width", "clearance", "radius", "copper", "insulator", "er", "material", "value", "tolerance", "voltage", "power_rating", "dielectric", "description"],
             "endpoint_forms": ["component.pin", "named_net", "bus.member"]
         },
@@ -1372,7 +1373,18 @@ fn capability_descriptor() -> serde_json::Value {
                 "netclass": ["trace_width", "clearance", "color", "impedance", "current", "plane", "max_length", "max_skew"],
                 "diff_pair": ["impedance", "max_skew", "couple"],
                 "keepout": ["radius"],
-                "component": ["placement_hint"]
+                "component": ["placement_hint"],
+                "requires": ["via_in_pad"]
+            },
+            "fabrication_processes": {
+                "declared_by": "requires <process>",
+                "offered_by": "the manufacturer profile the board's `manufacturer` resolves to",
+                "processes": {
+                    "via_in_pad": "the process fills and caps a via drilled inside an SMD pad, which at fine pitch is the only escape the geometry leaves"
+                },
+                "profiles_offering_via_in_pad": ["jlc-filled-via"],
+                "gate": "E-SYNTH-PROCESS-002: a requirement the declared tier does not offer is an error, so a requirement is never a permission on its own",
+                "override": "--krt-allow-via-in-pad permits via-in-pad in the fabrication gate without a declared requirement or a capable tier; it is an operator taking responsibility for one panel, not a process answer"
             },
             "units": ["mm", "mil", "ohm", "kohm", "mohm", "v", "mv", "a", "ma", "mhz", "ghz", "pf", "nf", "uf"]
         },
@@ -4716,6 +4728,24 @@ fn build_route_request(
             .clone()
             .unwrap_or_else(|| "jlc-standard".to_string()),
     );
+    // After the floor, so the capability is read from the profile this board
+    // actually names.
+    //
+    // This warning is the only place an unmet requirement surfaces on these
+    // paths. `synth route` and `synth drc` reach here without running ERC —
+    // `route_design` writes parse and lower diagnostics only — so
+    // E-SYNTH-PROCESS-002 is not guaranteed upstream and the requirement
+    // would otherwise be granted silently or not at all. The gate below will
+    // still refuse the copper; saying why beats letting it read as an
+    // ordinary routing failure.
+    for unmet in request.use_board_process_requirements(board) {
+        eprintln!(
+            "warning: board requires `{}`, which profile `{}` does not offer \
+             [E-SYNTH-PROCESS-002]",
+            unmet.as_source(),
+            request.profile_name
+        );
+    }
     request.input_hash = sha256_file(&result.pcb_path)?;
     request
         .kicad_routing_tools

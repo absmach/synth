@@ -135,6 +135,7 @@ fn all_rules(config: &ErcConfig) -> Vec<Box<dyn ErcRule>> {
         Box::new(RefdesFormatRule),
         Box::new(RefdesPrefixRule),
         Box::new(BoardZeroLayersRule),
+        Box::new(RequiredProcessOfferedRule),
         Box::new(stackup::StackupLayerCountRule),
         Box::new(stackup::StackupAlternationRule),
         Box::new(stackup::StackupNonPositiveRule),
@@ -2224,6 +2225,77 @@ impl ErcRule for RefdesFormatRule {
 // E-SYNTH-BOARD-001 — board declared with zero layers
 // -----------------------------------------------------------------------------
 
+// -----------------------------------------------------------------------------
+// E-SYNTH-PROCESS-002 — the declared process does not offer a required one
+// -----------------------------------------------------------------------------
+
+/// A board declaring `requires <process>` against a manufacturer whose tier
+/// does not offer it.
+///
+/// The gate between the design's half of the decision and the fab's. Without
+/// it, `requires via_in_pad` would be a comment: the board would export, the
+/// router would route, and the panel would come back bridged because nothing
+/// ever compared the requirement with the process.
+///
+/// Reported here rather than at the router, so a board that cannot be built
+/// fails `synth check` without waiting for copper. The router's own refusal
+/// quotes the escape arithmetic, which needs geometry this stage does not
+/// have.
+struct RequiredProcessOfferedRule;
+
+impl ErcRule for RequiredProcessOfferedRule {
+    fn code(&self) -> &'static str {
+        "E-SYNTH-PROCESS-002"
+    }
+
+    fn category(&self) -> ErcCategory {
+        ErcCategory::Board
+    }
+
+    fn check(&self, board: &Board, file: &str) -> Vec<Diagnostic> {
+        if board.required_processes.is_empty() {
+            return Vec::new();
+        }
+
+        // An undeclared manufacturer resolves the same way the router and the
+        // DRC resolve it, so a board cannot reach a capability by leaving the
+        // tier unstated.
+        let declared = board.manufacturer.as_deref().unwrap_or("jlc-standard");
+        let profile = synth_drc::ManufacturerProfile::from_name(declared);
+
+        board
+            .required_processes
+            .iter()
+            .filter(|requirement| match requirement {
+                synth_ir::ProcessRequirement::ViaInPad => !profile.via_in_pad,
+            })
+            .map(|requirement| {
+                DiagnosticBuilder::new(
+                    self.code(),
+                    Severity::Error,
+                    "the declared manufacturer does not offer a required fabrication process",
+                )
+                .location(Location::from_span(file.to_string(), board.source_span))
+                .expected(format!(
+                    "a manufacturer profile that offers `{}`",
+                    requirement.as_source()
+                ))
+                .found(format!(
+                    "`requires {}` against profile `{}`, which does not offer it",
+                    requirement.as_source(),
+                    profile.name
+                ))
+                .explanation_url(format!("synth.docs/diagnostics/{}", self.code()))
+                .build()
+            })
+            .collect()
+    }
+}
+
+// -----------------------------------------------------------------------------
+// E-SYNTH-BOARD-001 — board declared with zero layers
+// -----------------------------------------------------------------------------
+
 struct BoardZeroLayersRule;
 
 impl ErcRule for BoardZeroLayersRule {
@@ -3872,6 +3944,92 @@ mod tests {
         assert_eq!(rule.category(), ErcCategory::Analog);
     }
 
+    /// An empty board naming `manufacturer`, with no process requirements.
+    fn bare_board(manufacturer: Option<&str>) -> Board {
+        use synth_diagnostics::Span;
+        Board {
+            schematic_overflow: None,
+            schematic_paper: None,
+            groups: Vec::new(),
+            legends: false,
+            name: "t".into(),
+            layers: 4,
+            manufacturer: manufacturer.map(str::to_string),
+            revision: None,
+            company: None,
+            components: vec![],
+            nets: vec![],
+            diff_pairs: vec![],
+            notes: vec![],
+            keepouts: vec![],
+            stackup: None,
+            netclasses: vec![],
+            buses: vec![],
+            modules: vec![],
+            variants: vec![],
+            required_processes: std::collections::BTreeSet::new(),
+            source_span: Span::new(0, 0),
+        }
+    }
+
+    /// [`bare_board`] that declares it needs via-in-pad.
+    fn board_requiring_via_in_pad(manufacturer: Option<&str>) -> Board {
+        let mut board = bare_board(manufacturer);
+        board
+            .required_processes
+            .insert(synth_ir::ProcessRequirement::ViaInPad);
+        board
+    }
+
+    #[test]
+    fn a_tier_that_sells_the_fill_satisfies_the_requirement() {
+        let board = board_requiring_via_in_pad(Some("jlc-filled-via"));
+
+        assert!(RequiredProcessOfferedRule
+            .check(&board, "test.synth")
+            .is_empty());
+    }
+
+    #[test]
+    fn a_standard_tier_cannot_build_what_the_board_requires() {
+        let board = board_requiring_via_in_pad(Some("jlcpcb"));
+        let found = RequiredProcessOfferedRule.check(&board, "test.synth");
+
+        assert_eq!(found.len(), 1);
+        assert_eq!(found[0].code, "E-SYNTH-PROCESS-002");
+        assert_eq!(found[0].severity, Severity::Error);
+        assert!(
+            found[0]
+                .found
+                .as_deref()
+                .is_some_and(|f| f.contains("jlc-standard")),
+            "the refusal must name the tier that refused: {:?}",
+            found[0].found
+        );
+    }
+
+    /// Leaving the manufacturer unstated must not be a way to reach a
+    /// capability. It resolves the way the router and the DRC resolve it,
+    /// which is to the standard tier.
+    #[test]
+    fn an_undeclared_manufacturer_offers_nothing_extra() {
+        let board = board_requiring_via_in_pad(None);
+
+        assert_eq!(
+            RequiredProcessOfferedRule.check(&board, "test.synth").len(),
+            1
+        );
+    }
+
+    #[test]
+    fn a_board_requiring_nothing_is_not_judged() {
+        let board = bare_board(Some("jlcpcb"));
+
+        assert!(RequiredProcessOfferedRule
+            .check(&board, "test.synth")
+            .is_empty());
+    }
+
     fn pin(name: &str, t: ElectricalType) -> Pin {
         Pin {
             name: name.into(),
@@ -3938,6 +4096,7 @@ mod tests {
             buses: vec![],
             modules: vec![],
             variants: vec![],
+            required_processes: std::collections::BTreeSet::new(),
             source_span: Span::new(0, 0),
         }
     }
@@ -4105,6 +4264,7 @@ mod tests {
             buses: vec![],
             modules: vec![],
             variants: vec![],
+            required_processes: std::collections::BTreeSet::new(),
             source_span: Span::new(0, 0),
         }
     }
@@ -4205,6 +4365,7 @@ mod tests {
             buses: vec![],
             modules: vec![],
             variants: vec![],
+            required_processes: std::collections::BTreeSet::new(),
             source_span: Span::new(0, 0),
         }
     }
@@ -4269,6 +4430,7 @@ mod tests {
             buses: vec![],
             modules: vec![],
             variants: vec![],
+            required_processes: std::collections::BTreeSet::new(),
             source_span: Span::new(0, 0),
         }
     }
@@ -4408,6 +4570,7 @@ mod tests {
             buses: vec![],
             modules: vec![],
             variants: vec![],
+            required_processes: std::collections::BTreeSet::new(),
             source_span: Span::new(0, 0),
         }
     }
@@ -4543,6 +4706,7 @@ mod tests {
             buses: vec![],
             modules: vec![],
             variants: vec![],
+            required_processes: std::collections::BTreeSet::new(),
             source_span: Span::new(0, 0),
         };
 
@@ -4607,6 +4771,7 @@ mod tests {
             buses: vec![],
             modules: vec![],
             variants: vec![],
+            required_processes: std::collections::BTreeSet::new(),
             source_span: Span::new(0, 0),
         };
         let diags = run_erc(&board, "test.synth");

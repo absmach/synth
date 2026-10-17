@@ -68,6 +68,7 @@ pub enum StatementAst {
     Sheet(SheetStmt),
     Schematic(SchematicStmt),
     Stackup(StackupStmt),
+    Requires(RequiresStmt),
 }
 
 impl StatementAst {
@@ -96,6 +97,7 @@ impl StatementAst {
             StatementAst::Sheet(s) => s.span,
             StatementAst::Schematic(s) => s.span,
             StatementAst::Stackup(s) => s.span,
+            StatementAst::Requires(s) => s.span,
         }
     }
 }
@@ -270,6 +272,19 @@ pub struct LayersStmt {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ManufacturerStmt {
     pub name: String,
+    pub span: Span,
+}
+
+/// A fabrication process the board declares it needs
+/// (`requires via_in_pad`).
+///
+/// The capability is kept as written rather than resolved here: the
+/// parser's job is to say what the source asked for, and naming a
+/// process this build does not know about is a lowering diagnostic
+/// with a span, not a parse failure that loses the rest of the board.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct RequiresStmt {
+    pub capability: String,
     pub span: Span,
 }
 
