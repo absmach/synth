@@ -378,6 +378,7 @@ fn place_sheet_notes(board: &Board, layout: &mut Layout, sheet: Option<&str>) {
         buses: vec![],
         modules: vec![],
         variants: vec![],
+        required_processes: std::collections::BTreeSet::new(),
         source_span: board.source_span,
     };
     // Group boxes were recomputed for this subset already, so group
@@ -480,6 +481,7 @@ mod tests {
             dnp: false,
             properties: std::collections::BTreeMap::new(),
             placement_hint: None,
+            escape: None,
             group: None,
             sheet: sheet.map(str::to_string),
             source_span: Span::new(0, 0),
@@ -531,6 +533,7 @@ mod tests {
             buses: vec![],
             modules: vec![],
             variants: vec![],
+            required_processes: std::collections::BTreeSet::new(),
             source_span: Span::new(0, 0),
         }
     }

@@ -1,0 +1,438 @@
+// A four-layer open-toolchain FPGA video board: a Lattice iCE40 HX4K in a
+// 121-ball BGA generating HDMI, with its configuration flash, a 25 MHz
+// oscillator, USB-C power split into a 1.2 V core rail and a 3.3 V I/O rail,
+// and the four TMDS pairs taken to an HDMI Type-A receptacle.
+//
+// Produced from a prompt through the Synth MCP server.
+//
+// What this board is for: escape routing and via fanout on a fine-pitch
+// device. U1 is 121 balls on an 0.8 mm grid, 11 x 11, which is the densest
+// thing the registry can place and the reason every other choice here
+// follows.
+//
+// ESCAPE ARITHMETIC, which is the whole point and is a property of the
+// process rather than of the router. At JLCPCB's standard floor a via is
+// 0.3 mm drill plus 2 x 0.13 mm annular ring, so 0.56 mm of copper across.
+// Dropped between two balls 0.8 mm apart it sits 0.400 mm from each ball
+// centre and needs 0.582 mm to clear the pad copper. 0.400 < 0.582, so a
+// dog-bone escape does not fit on this tier at all. Via-in-pad is the
+// required technique, not a shortcut, and the board says so in its own
+// source with `requires via_in_pad`.
+//
+// Four layers follows from the same arithmetic. The escape needs somewhere
+// to go once it is under the pad, and two layers leaves it nowhere: the
+// 0.8 mm grid needs an inner pair. The rails are planes on those inner
+// layers -- 1.2 V core on In1.Cu, 3.3 V I/O on In2.Cu -- with ground on the
+// outer copper, which is how a real four-layer FPGA board is built.
+//
+// STATED LIMITATION: the iCE40 has no dedicated TMDS transmitter, so the
+// pairs are driven as pseudo-differential LVCMOS33 from one bank with
+// series termination, which is how the open-source iCE40 HDMI designs do
+// it. That is good for 640x480 and not for 1080p. A real 1080p board uses a
+// transmitter such as the TFP410; the registry has no such part yet.
+//
+board "ice40_hdmi_video" {
+    layers 4
+    // The filled-via tier, because the board requires via-in-pad above and
+    // the standard one does not offer it: E-SYNTH-PROCESS-002 refuses that
+    // combination rather than letting it route and fail later. Same
+    // minimums otherwise, so the escape arithmetic is unchanged.
+    manufacturer "jlc-filled-via"
+    revision "A"
+
+    // Forced, not chosen: see the escape arithmetic above. A via on this
+    // tier is 0.56 mm across and would need 0.582 mm of room between two
+    // balls 0.8 mm apart, so there is no dog-bone to drop. Declaring it
+    // here rather than passing a flag means the board states the process it
+    // cannot be built without, and ERC refuses a tier that does not fill.
+    requires via_in_pad
+
+    // Impedance-controlled stackup. The 0.2104 mm prepreg under the signal
+    // layer is what puts a 0.2 mm trace over the ground plane near 50 ohm
+    // single-ended, which is the 100 ohm differential the TMDS pairs want.
+    stackup {
+      copper 0.035mm
+      insulator 0.2104mm er 4.4 material "FR4"
+      copper 0.0152mm
+      insulator 1.065mm er 4.6 material "FR4"
+      copper 0.0152mm
+      insulator 0.2104mm er 4.4 material "FR4"
+      copper 0.035mm
+    }
+
+    // The four TMDS lanes travel together. `max_skew` on each pair below
+    // bounds that pair's own two halves, which is declarable and checked.
+    //
+    // STATED LIMITATION: the lane-to-lane budget is not. It would be a
+    // group tolerance across the class's four pairs, and SynthSpec has no
+    // syntax for one — the netclass attribute that would carry it does not
+    // reach the IR today. So this class declares geometry only, and the
+    // lanes are matched against each other by nothing.
+    //
+    // Declaring a netclass puts no net in it: a net joins one through
+    // `class "NAME"` on its `connect`, `net` or `power` statement. Without
+    // that the width and clearance below apply to nothing — the class is
+    // inert and reads as satisfied. The eight lane connects carry
+    // `class "TMDS"` for that reason.
+    netclass "TMDS" {
+      trace_width 0.2mm
+      clearance 0.2mm
+    }
+
+    // `plane` floods a zone for the class's nets on the inner layers, which
+    // is how a four-layer FPGA board carries its rails: the 1.2 V core and
+    // the 3.3 V I/O rail are planes, not traces threaded between 121 balls.
+    // The class is inert until a net joins it, so the rail's first connect
+    // carries `class "CORE"` / `class "IO"`.
+    netclass "CORE" {
+      trace_width 0.6mm
+      clearance 0.25mm
+      plane
+    }
+
+    netclass "IO" {
+      trace_width 0.4mm
+      clearance 0.2mm
+      plane
+    }
+
+    group "USB-C POWER IN" color "#c2410c" {
+      component J1: connector "usb_c_receptacle" value "USB-C 5V"
+      component R1: resistor  "r_generic_0603"   value "5.1k"
+      component R2: resistor  "r_generic_0603"   value "5.1k"
+      component D1: diode     "tvs_array_5v"     value "SOT-363 TVS"
+      component C1: capacitor "c_generic_0805"   value "22uF"
+      notes "" {
+        "5 V in. R1/R2 pull CC1/CC2 down 5.1k each to advertise a 5 V sink."
+        "D1 clamps the bus and the two sideband pins at the connector."
+      }
+    }
+
+    connect J1.vbus -> C1.p1
+    connect J1.gnd  -> C1.p2
+    connect J1.cc1  -> R1.p1
+    connect J1.gnd  -> R1.p2
+    connect J1.cc2  -> R2.p1
+    connect J1.gnd  -> R2.p2
+
+    // The receptacle's duplicated power and ground contacts are real
+    // contacts: leaving them open halves the current path and puts the
+    // shield at no defined potential.
+    connect J1.vbus -> J1.vbus_b4
+    connect J1.vbus -> J1.vbus_a9
+    connect J1.vbus -> J1.vbus_b9
+    connect J1.gnd  -> J1.gnd_b12
+    connect J1.gnd  -> J1.gnd_a12
+    connect J1.gnd  -> J1.gnd_b1
+    connect J1.gnd  -> J1.shld
+
+    // Four channels, spent on the four pins that leave the board. D+/D- are
+    // not among them: this is a power-only inlet and they go nowhere, so
+    // clamping them would protect nothing while leaving CC exposed.
+    connect J1.vbus -> D1.vcc
+    connect J1.gnd  -> D1.gnd
+    connect J1.cc1  -> D1.ch1
+    connect J1.cc2  -> D1.ch2
+    connect J1.sbu1 -> D1.ch3
+    connect J1.sbu2 -> D1.ch4
+
+    group "1V2 CORE RAIL" color "#4338ca" {
+      component U2: regulator "mp2307_buck"    value "MP2307"
+      component L1: inductor  "l_generic_1210" value "4u7"
+      component C2: capacitor "c_generic_0805" value "22uF"
+      component C3: capacitor "c_generic_0603" value "100nF"
+      component C4: capacitor "c_generic_0603" value "10nF"
+      component R3: resistor  "r_generic_0603" value "3k01"
+      component R4: resistor  "r_generic_0603" value "10k"
+      notes "" {
+        "5 V to 1.2 V for the FPGA core. The MP2307's 0.925 V reference with"
+        "3k01 over 10k lands at 1.2 V. C4 compensates, C3 is the bootstrap."
+      }
+    }
+
+    connect J1.vbus -> U2.in
+    connect J1.gnd  -> U2.gnd
+    connect J1.gnd  -> U2.ep
+    connect J1.vbus -> U2.en
+    connect U2.sw   -> C3.p1
+    connect C3.p2   -> U2.bs
+    connect U2.sw   -> L1.p1
+    connect L1.p2   -> C2.p1
+    connect J1.gnd  -> C2.p2
+    connect L1.p2   -> R3.p1
+    connect R3.p2   -> U2.fb
+    connect U2.fb   -> R4.p1
+    connect J1.gnd  -> R4.p2
+    connect U2.fb   -> C4.p1
+    connect U2.comp -> C4.p2
+
+    group "3V3 IO RAIL" color "#0369a1" {
+      component U3: regulator "ams1117_3v3"    value "AMS1117-3.3"
+      component C5: capacitor "c_generic_0805" value "22uF"
+      component C6: capacitor "c_generic_0603" value "100nF"
+      notes "" {
+        "5 V to 3.3 V for every I/O bank, the configuration flash, the"
+        "oscillator and the FPGA's 2.5-3.3 V programming supplies."
+      }
+    }
+
+    connect J1.vbus -> U3.vin
+    connect J1.gnd  -> U3.gnd
+    connect U3.vout -> C5.p1
+    connect J1.gnd  -> C5.p2
+    connect U3.vout -> C6.p1
+    connect J1.gnd  -> C6.p2
+
+    group "iCE40 HX4K BGA" color "#047857" {
+      component U1: fpga "ice40hx4k_bg121" value "ICE40HX4K-BG121" {
+        placement_hint { region: centre priority: hard }
+        // 121 balls on an 0.8 mm grid: the geometry would pick this package
+        // anyway, but the method is a design decision rather than the
+        // engine's. `underpad` is the only one the arithmetic leaves open,
+        // and the inner layers are where the escaped nets have room to go.
+        escape { method underpad  layers "In1.Cu", "In2.Cu" }
+      }
+      component C7:  capacitor "c_generic_0603" value "100nF"
+      component C8:  capacitor "c_generic_0603" value "100nF"
+      component C9:  capacitor "c_generic_0603" value "100nF"
+      component C10: capacitor "c_generic_0603" value "100nF"
+      component C11: capacitor "c_generic_0805" value "10uF"
+      component C12: capacitor "c_generic_0603" value "100nF"
+      component C13: capacitor "c_generic_0603" value "100nF"
+      component C17: capacitor "c_generic_0603" value "100nF"
+      component C18: capacitor "c_generic_0603" value "100nF"
+      component C19: capacitor "c_generic_0805" value "10uF"
+      component C20: capacitor "c_generic_0805" value "10uF"
+      component R5:  resistor  "r_generic_0603" value "10k"
+      component R6:  resistor  "r_generic_0603" value "10k"
+      component D2:  led       "led_green_0603" value "CDONE"
+      component R7:  resistor  "r_generic_0603" value "1k"
+      notes "" {
+        "Core on 1.2 V, all four I/O banks on 3.3 V, the PLL supply filtered"
+        "from the core rail. CDONE is open-drain: R6 pulls it up and D2"
+        "lights when the bitstream has loaded."
+      }
+    }
+
+    // Core rail: every VCC ball and both PLL supplies.
+    connect L1.p2 -> U1.vcc class "CORE"
+    connect L1.p2 -> U1.vcc_2
+    connect L1.p2 -> U1.vcc_3
+    connect L1.p2 -> U1.vcc_4
+    connect L1.p2 -> U1.vccpll0
+    connect L1.p2 -> U1.vccpll1
+
+    // I/O rail: all four banks, the SPI supply, and the programming rails.
+    // VPP_2V5 and VPP_FAST want 2.5-3.3 V, not the 1.2 V core.
+    connect U3.vout -> U1.vccio_0 class "IO"
+    connect U3.vout -> U1.vccio_1
+    connect U3.vout -> U1.vccio_2
+    connect U3.vout -> U1.vccio_3
+    connect U3.vout -> U1.vccio_3_2
+    connect U3.vout -> U1.vcc_spi
+    connect U3.vout -> U1.vpp_2v5
+    connect U3.vout -> U1.vpp_fast
+
+    // Every ground ball. Ten of them on this package, and an untied one is
+    // not a cosmetic omission on a part that switches this fast.
+    connect J1.gnd -> U1.gnd
+    connect J1.gnd -> U1.gnd_2
+    connect J1.gnd -> U1.gnd_3
+    connect J1.gnd -> U1.gnd_4
+    connect J1.gnd -> U1.gnd_5
+    connect J1.gnd -> U1.gnd_6
+    connect J1.gnd -> U1.gnd_7
+    connect J1.gnd -> U1.gnd_8
+    connect J1.gnd -> U1.gnd_9
+    connect J1.gnd -> U1.gnd_10
+    connect J1.gnd -> U1.gndpll0
+    connect J1.gnd -> U1.gndpll1
+
+    // Decoupling: core, each I/O bank, and the PLL.
+    connect U1.vcc     -> C7.p1
+    connect J1.gnd     -> C7.p2
+    connect U1.vcc_2   -> C8.p1
+    connect J1.gnd     -> C8.p2
+    connect U1.vccio_0 -> C9.p1
+    connect J1.gnd     -> C9.p2
+    connect U1.vccio_2 -> C10.p1
+    connect J1.gnd     -> C10.p2
+    connect U1.vcc_3   -> C11.p1
+    connect J1.gnd     -> C11.p2
+    connect U1.vccpll0 -> C12.p1
+    connect J1.gnd     -> C12.p2
+    connect U1.vcc_spi -> C13.p1
+    connect J1.gnd     -> C13.p2
+    // The remaining banks and a second bulk reservoir on each rail. Synth
+    // flagged all three rails as carrying more load than their decoupling
+    // count supports, and on a 121-ball package that is a fair complaint.
+    connect U1.vccio_1 -> C17.p1
+    connect J1.gnd     -> C17.p2
+    connect U1.vccio_3 -> C18.p1
+    connect J1.gnd     -> C18.p2
+    connect L1.p2      -> C19.p1
+    connect J1.gnd     -> C19.p2
+    connect U3.vout    -> C20.p1
+    connect J1.gnd     -> C20.p2
+
+    // CRESET is held high to let the FPGA boot from flash; CDONE is
+    // open-drain and needs its own pull-up before it can drive the LED.
+    connect U1.creset -> R5.p1
+    connect U3.vout   -> R5.p2
+    connect U1.cdone  -> R6.p1
+    connect U3.vout   -> R6.p2
+    connect U1.cdone  -> R7.p1
+    connect R7.p2     -> D2.cathode
+    connect U3.vout   -> D2.anode
+
+    group "CONFIG FLASH" color "#a16207" {
+      component U4: memory    "w25q128_flash"  value "W25Q128JV"
+      component C14: capacitor "c_generic_0603" value "100nF"
+      component R18: resistor  "r_generic_0603" value "10k"
+      component R19: resistor  "r_generic_0603" value "10k"
+      notes "" {
+        "The FPGA master-boots from this flash over its dedicated SPI pins."
+      }
+    }
+
+    connect U3.vout -> U4.vcc
+    connect J1.gnd  -> U4.gnd
+    connect U4.vcc  -> C14.p1
+    connect J1.gnd  -> C14.p2
+
+    connect U1.iob_107_sck -> U4.clk
+    connect U1.iob_108_ss  -> U4.cs
+    connect U1.iob_106_sdi -> U4.io1
+    connect U1.iob_105_sdo -> U4.io0
+    // IO2 and IO3 are /WP and /HOLD while the flash is in single-bit SPI
+    // mode. They are pulled up rather than strapped to the rail: a resistor
+    // keeps the option of quad mode later, and a rail driving a
+    // bidirectional pin directly is a pin-type conflict.
+    connect U4.io2  -> R18.p1
+    connect U3.vout -> R18.p2
+    connect U4.io3  -> R19.p1
+    connect U3.vout -> R19.p2
+
+    group "25 MHz CLOCK" color "#b91c1c" {
+      component Y1: crystal   "osc_smd_25mhz"  value "25MHz"
+      component C15: capacitor "c_generic_0603" value "100nF"
+      notes "" {
+        "25 MHz into a global clock buffer. The 640x480 pixel clock is"
+        "derived from it in the fabric PLL."
+      }
+    }
+
+    connect U3.vout -> Y1.vcc
+    connect J1.gnd  -> Y1.gnd
+    connect U3.vout -> Y1.oe
+    connect Y1.vcc  -> C15.p1
+    connect J1.gnd  -> C15.p2
+    connect Y1.out  -> U1.iot_198_gbin0
+
+    group "HDMI OUT" color "#7c3aed" {
+      component J2: connector "hdmi_a_receptacle" value "HDMI A" {
+        placement_hint { region: right_edge edge: right priority: soft }
+      }
+      component R8:  resistor "r_generic_0603" value "270"
+      component R9:  resistor "r_generic_0603" value "270"
+      component R10: resistor "r_generic_0603" value "270"
+      component R11: resistor "r_generic_0603" value "270"
+      component R12: resistor "r_generic_0603" value "270"
+      component R13: resistor "r_generic_0603" value "270"
+      component R14: resistor "r_generic_0603" value "270"
+      component R15: resistor "r_generic_0603" value "270"
+      component R16: resistor "r_generic_0603" value "47k"
+      component R17: resistor "r_generic_0603" value "47k"
+      component C16: capacitor "c_generic_0603" value "100nF"
+      notes "" {
+        "Four lanes out of bank 0 through 270R series termination. R16/R17"
+        "pull the DDC pair up; the sink's own 5 V supply comes from VBUS."
+      }
+    }
+
+    // The four TMDS lanes. Series resistors sit between the FPGA bank and
+    // the connector, so the pair constraint is declared on the connector
+    // side where the controlled-impedance run actually is.
+    connect U1.iot_225 -> R8.p1
+    connect R8.p2      -> J2.d2_p class "TMDS"
+    connect U1.iot_222 -> R9.p1
+    connect R9.p2      -> J2.d2_n class "TMDS"
+
+    connect U1.iot_223 -> R10.p1
+    connect R10.p2     -> J2.d1_p class "TMDS"
+    connect U1.iot_211 -> R11.p1
+    connect R11.p2     -> J2.d1_n class "TMDS"
+
+    connect U1.iot_207 -> R12.p1
+    connect R12.p2     -> J2.d0_p class "TMDS"
+    connect U1.iot_206 -> R13.p1
+    connect R13.p2     -> J2.d0_n class "TMDS"
+
+    connect U1.iot_192 -> R14.p1
+    connect R14.p2     -> J2.ck_p class "TMDS"
+    connect U1.iot_190 -> R15.p1
+    connect R15.p2     -> J2.ck_n class "TMDS"
+
+    diff_pair R8_p2 R9_p2 {
+      impedance 100ohm
+      max_skew 0.1mm
+      couple tight
+    }
+
+    diff_pair R10_p2 R11_p2 {
+      impedance 100ohm
+      max_skew 0.1mm
+      couple tight
+    }
+
+    diff_pair R12_p2 R13_p2 {
+      impedance 100ohm
+      max_skew 0.1mm
+      couple tight
+    }
+
+    diff_pair R14_p2 R15_p2 {
+      impedance 100ohm
+      max_skew 0.1mm
+      couple tight
+    }
+
+    // Lane shields and the connector's own ground and shell.
+    connect J1.gnd -> J2.d2_shield
+    connect J1.gnd -> J2.d1_shield
+    connect J1.gnd -> J2.d0_shield
+    connect J1.gnd -> J2.ck_shield
+    connect J1.gnd -> J2.gnd
+    connect J1.gnd -> J2.shield
+
+    // DDC and hot-plug detect. The FPGA reads EDID over the DDC pair, and
+    // HPD tells it a sink is present at all.
+    connect U1.iob_103_cbsel0 -> J2.scl
+    connect U1.iob_104_cbsel1 -> J2.sda
+    connect J2.scl -> R16.p1
+    connect U3.vout -> R16.p2
+    connect J2.sda -> R17.p1
+    connect U3.vout -> R17.p2
+    connect J2.hpd -> U1.iob_87
+
+    // The sink's 5 V comes from the board's own input, decoupled locally.
+    connect J1.vbus -> J2.vcc_5v
+    connect J2.vcc_5v -> C16.p1
+    connect J1.gnd    -> C16.p2
+
+    // The pairs leave the BGA and run to the connector. Nothing else may
+    // cross that corridor; a plane cut under a TMDS lane is the classic
+    // way to lose the return path.
+    keepout tmds_corridor { radius 6mm }
+
+    notes "Produced from a prompt via the Synth MCP server." {
+      "Three gaps were closed to write this board: `ice40hx4k_bg121`, the"
+      "first BGA part in the registry, verified ball by ball against the"
+      "stock symbol and footprint; `requires via_in_pad`, so a board that"
+      "cannot be built without the process says so in its own source; and"
+      "a component `escape` block, so the method is the design's choice"
+      "rather than the engine's. `hdmi_a_receptacle` is new too, with its"
+      "TMDS polarity in the electrical types so `diff_pair` resolves the"
+      "four lanes."
+    }
+}

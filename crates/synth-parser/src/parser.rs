@@ -15,12 +15,12 @@
 use std::collections::BTreeMap;
 use synth_ast::{
     BindStmt, BoardAst, BusDeclStmt, CompanyStmt, ComponentDeclAst, ConnectionAst, DiffPairAttr,
-    DiffPairStmt, EndpointAst, GroupAttr, GroupStmt, ImportAst, InterfaceDeclStmt, KeepoutAttr,
-    KeepoutStmt, LayersStmt, LegendsStmt, ManufacturerStmt, ModuleDeclStmt, NetDeclAst,
-    NetclassAttr, NetclassStmt, NotesDeclAst, ParamDeclAst, PlacementHintAst, PlacementHintAttr,
-    PortBindingAst, PortDeclAst, PowerDeclAst, ProgramAst, RevisionStmt, SchematicOverflowAst,
-    SchematicPaperAst, SchematicStmt, SheetStmt, StackupLayerAst, StackupStmt, StatementAst,
-    UseStmt, ValueWithUnit, VariantDeclStmt,
+    DiffPairStmt, EndpointAst, EscapeAst, GroupAttr, GroupStmt, ImportAst, InterfaceDeclStmt,
+    KeepoutAttr, KeepoutStmt, LayersStmt, LegendsStmt, ManufacturerStmt, ModuleDeclStmt,
+    NetDeclAst, NetclassAttr, NetclassStmt, NotesDeclAst, ParamDeclAst, PlacementHintAst,
+    PlacementHintAttr, PortBindingAst, PortDeclAst, PowerDeclAst, ProgramAst, RequiresStmt,
+    RevisionStmt, SchematicOverflowAst, SchematicPaperAst, SchematicStmt, SheetStmt,
+    StackupLayerAst, StackupStmt, StatementAst, UseStmt, ValueWithUnit, VariantDeclStmt,
 };
 
 use synth_diagnostics::{
@@ -324,12 +324,13 @@ impl Parser {
             TokenKind::KwSheet => self.parse_sheet().map(StatementAst::Sheet),
             TokenKind::KwSchematic => self.parse_schematic().map(StatementAst::Schematic),
             TokenKind::KwStackup => self.parse_stackup().map(StatementAst::Stackup),
+            TokenKind::KwRequires => self.parse_requires().map(StatementAst::Requires),
             _ => {
                 self.emit(
                     self.peek().span,
                     "E-SYNTH-PARSE-011",
                     "expected statement keyword",
-                    "one of: layers, manufacturer, revision, company, legends, schematic, stackup, component, variant, connect, net, power, notes, module, interface, bus, use, bind, diff_pair, netclass, keepout, group, sheet",
+                    "one of: layers, manufacturer, revision, company, legends, schematic, stackup, component, variant, connect, net, power, notes, module, interface, bus, use, bind, diff_pair, netclass, keepout, group, sheet, requires",
                     self.describe_current(),
                     None,
                 );
@@ -414,6 +415,26 @@ impl Parser {
         let end = self.last_offset();
         Some(ManufacturerStmt {
             name,
+            span: Span::new(start, end),
+        })
+    }
+
+    /// `requires via_in_pad` — a fabrication process the board needs.
+    ///
+    /// The capability is taken as a bare identifier and not resolved here.
+    /// A board naming a process this build does not know about is still a
+    /// board worth checking, so the unknown name is a lowering diagnostic
+    /// rather than a parse error that discards everything after it.
+    fn parse_requires(&mut self) -> Option<RequiresStmt> {
+        let start = self.peek().span.byte_start;
+        self.bump();
+        let capability = self.expect_ident(
+            "E-SYNTH-PARSE-039",
+            "expected the name of a required fabrication process",
+        )?;
+        let end = self.last_offset();
+        Some(RequiresStmt {
+            capability,
             span: Span::new(start, end),
         })
     }
@@ -521,6 +542,7 @@ impl Parser {
         let mut properties: BTreeMap<String, String> = BTreeMap::new();
         let mut dnp = false;
         let mut placement_hint = None;
+        let mut escape = None;
         loop {
             if self.parse_component_attribute(&mut value, &mut properties, &mut dnp) {
                 continue;
@@ -528,6 +550,9 @@ impl Parser {
             match self.peek_kind() {
                 TokenKind::KwPlacementHint => {
                     placement_hint = self.parse_placement_hint();
+                }
+                TokenKind::Ident(name) if name == "escape" => {
+                    escape = self.parse_escape();
                 }
                 TokenKind::LBrace => {
                     self.bump(); // consume `{`
@@ -537,6 +562,9 @@ impl Parser {
                             TokenKind::RBrace | TokenKind::Eof => break,
                             TokenKind::KwPlacementHint => {
                                 placement_hint = self.parse_placement_hint();
+                            }
+                            TokenKind::Ident(name) if name == "escape" => {
+                                escape = self.parse_escape();
                             }
                             _ => {
                                 if !self.parse_component_attribute(
@@ -548,8 +576,8 @@ impl Parser {
                                         self.peek().span,
                                         "E-SYNTH-PARSE-029",
                                         "unexpected keyword inside component body",
-                                        "`placement_hint`, `tolerance`, `voltage`, `power_rating`, \
-                                         `dielectric`, or `dnp`",
+                                        "`placement_hint`, `escape`, `tolerance`, `voltage`, \
+                                         `power_rating`, `dielectric`, or `dnp`",
                                         self.describe_current(),
                                         None,
                                     );
@@ -574,6 +602,95 @@ impl Parser {
             dnp,
             properties,
             placement_hint,
+            escape,
+            span: Span::new(start, end),
+        })
+    }
+
+    /// `escape { method underpad  layers "In1.Cu", "In2.Cu" }`, or
+    /// `escape { off }`.
+    ///
+    /// Attribute names are taken as identifiers rather than reserved
+    /// keywords, so a design already using `escape`, `method` or `off` as a
+    /// name keeps parsing — the same treatment `current`, `plane` and
+    /// `color` get inside a netclass.
+    fn parse_escape(&mut self) -> Option<EscapeAst> {
+        let start = self.peek().span.byte_start;
+        self.bump(); // consume `escape`
+        if !matches!(self.peek_kind(), TokenKind::LBrace) {
+            self.emit(
+                self.peek().span,
+                "E-SYNTH-PARSE-003",
+                "expected `{` to open escape body",
+                "`{`",
+                self.describe_current(),
+                None,
+            );
+            return None;
+        }
+        self.bump(); // consume `{`
+
+        let mut method = None;
+        let mut layers = Vec::new();
+        let mut off = false;
+        loop {
+            self.skip_error_tokens();
+            match self.peek_kind() {
+                TokenKind::RBrace | TokenKind::Eof => break,
+                TokenKind::Ident(name) if name == "method" => {
+                    self.bump();
+                    if matches!(self.peek_kind(), TokenKind::Colon) {
+                        self.bump();
+                    }
+                    method = self.expect_ident(
+                        "E-SYNTH-PARSE-040",
+                        "expected an escape method (`channel` or `underpad`)",
+                    );
+                }
+                // `layers` is a reserved keyword — `layers 4` declares the
+                // board's copper count — so it arrives as KwLayers, not as an
+                // identifier like `method` and `off` do.
+                TokenKind::KwLayers => {
+                    self.bump();
+                    if matches!(self.peek_kind(), TokenKind::Colon) {
+                        self.bump();
+                    }
+                    while let TokenKind::StringLit(_) = self.peek_kind() {
+                        if let Some(layer) =
+                            self.expect_string("E-SYNTH-PARSE-040", "expected a copper layer name")
+                        {
+                            layers.push(layer);
+                        }
+                        if matches!(self.peek_kind(), TokenKind::Comma) {
+                            self.bump();
+                        }
+                    }
+                }
+                TokenKind::Ident(name) if name == "off" => {
+                    self.bump();
+                    off = true;
+                }
+                _ => {
+                    self.emit(
+                        self.peek().span,
+                        "E-SYNTH-PARSE-040",
+                        "unexpected attribute inside escape",
+                        "`method <channel|underpad>`, `layers \"<layer>\", …`, or `off`",
+                        self.describe_current(),
+                        None,
+                    );
+                    self.bump();
+                }
+            }
+        }
+        if matches!(self.peek_kind(), TokenKind::RBrace) {
+            self.bump();
+        }
+        let end = self.last_offset();
+        Some(EscapeAst {
+            method,
+            layers,
+            off,
             span: Span::new(start, end),
         })
     }
@@ -1228,6 +1345,102 @@ impl Parser {
         })
     }
 
+    /// One attribute inside a `netclass { … }` body.
+    ///
+    /// Lifted out of [`Self::parse_netclass`] so the loop there stays short
+    /// enough to read: the body is a flat list of attributes and grows by one
+    /// arm every time the language gains one.
+    ///
+    /// `None` when the token is not an attribute, having already reported it.
+    fn parse_netclass_attribute(&mut self) -> Option<NetclassAttr> {
+        match self.peek_kind() {
+            TokenKind::KwTraceWidth => {
+                self.bump();
+                if let Some(v) = self.expect_value() {
+                    return Some(NetclassAttr::TraceWidth(v));
+                }
+            }
+            TokenKind::KwClearance => {
+                self.bump();
+                if let Some(v) = self.expect_value() {
+                    return Some(NetclassAttr::Clearance(v));
+                }
+            }
+            TokenKind::KwImpedance => {
+                self.bump();
+                if let Some(v) = self.expect_value() {
+                    return Some(NetclassAttr::Impedance(v));
+                }
+            }
+            // `color`, `current` and `plane` are parsed contextually
+            // (identifiers, not reserved keywords) so existing designs
+            // that use the words as names keep parsing.
+            TokenKind::Ident(name) if name == "current" => {
+                self.bump();
+                if let Some(v) = self.expect_value() {
+                    return Some(NetclassAttr::Current(v));
+                }
+            }
+            TokenKind::Ident(name) if name == "plane" => {
+                self.bump();
+                return Some(NetclassAttr::Plane);
+            }
+            TokenKind::Ident(name) if name == "max_length" => {
+                self.bump();
+                if let Some(v) = self.expect_value() {
+                    return Some(NetclassAttr::MaxLength(v));
+                }
+            }
+            // `max_skew` is a reserved keyword (it is also a `diff_pair`
+            // attribute), so the lexer emits `KwMaxSkew`, never
+            // `Ident("max_skew")`. Matching the identifier here would be
+            // dead code and the attribute would fall through to the
+            // catch-all.
+            TokenKind::KwMaxSkew => {
+                self.bump();
+                if let Some(v) = self.expect_value() {
+                    return Some(NetclassAttr::MaxSkew(v));
+                }
+            }
+            // Escape geometry. Contextual, unlike `max_skew` above, because
+            // these two are not reserved: a design already using the words
+            // as names keeps parsing.
+            TokenKind::Ident(name) if name == "via_diameter" => {
+                self.bump();
+                if let Some(v) = self.expect_value() {
+                    return Some(NetclassAttr::ViaDiameter(v));
+                }
+            }
+            TokenKind::Ident(name) if name == "via_drill" => {
+                self.bump();
+                if let Some(v) = self.expect_value() {
+                    return Some(NetclassAttr::ViaDrill(v));
+                }
+            }
+            TokenKind::Ident(name) if name == "color" => {
+                self.bump();
+                if let Some(hex) = self.expect_string(
+                    "E-SYNTH-PARSE-002",
+                    "expected colour hex string (e.g. \"#c2410c\")",
+                ) {
+                    return Some(NetclassAttr::Color(hex));
+                }
+            }
+            _ => {
+                self.emit(
+                    self.peek().span,
+                    "E-SYNTH-PARSE-019",
+                    "unexpected attribute inside netclass",
+                    "`trace_width <value><unit>`, `clearance <value><unit>`, `impedance <value><unit>`, `current <value><unit>`, `max_length <value><unit>`, `max_skew <value><unit>`, `via_diameter <value><unit>`, `via_drill <value><unit>`, `plane`, or `color \"#rrggbb\"`",
+                    self.describe_current(),
+                    None,
+                );
+                self.bump();
+            }
+        }
+        None
+    }
+
     fn parse_netclass(&mut self) -> Option<NetclassStmt> {
         let start = self.peek().span.byte_start;
         self.bump(); // consume `netclass`
@@ -1250,76 +1463,11 @@ impl Parser {
         let mut attrs = Vec::new();
         loop {
             self.skip_error_tokens();
-            match self.peek_kind() {
-                TokenKind::RBrace | TokenKind::Eof => break,
-                TokenKind::KwTraceWidth => {
-                    self.bump();
-                    if let Some(v) = self.expect_value() {
-                        attrs.push(NetclassAttr::TraceWidth(v));
-                    }
-                }
-                TokenKind::KwClearance => {
-                    self.bump();
-                    if let Some(v) = self.expect_value() {
-                        attrs.push(NetclassAttr::Clearance(v));
-                    }
-                }
-                TokenKind::KwImpedance => {
-                    self.bump();
-                    if let Some(v) = self.expect_value() {
-                        attrs.push(NetclassAttr::Impedance(v));
-                    }
-                }
-                // `color`, `current` and `plane` are parsed contextually
-                // (identifiers, not reserved keywords) so existing designs
-                // that use the words as names keep parsing.
-                TokenKind::Ident(name) if name == "current" => {
-                    self.bump();
-                    if let Some(v) = self.expect_value() {
-                        attrs.push(NetclassAttr::Current(v));
-                    }
-                }
-                TokenKind::Ident(name) if name == "plane" => {
-                    self.bump();
-                    attrs.push(NetclassAttr::Plane);
-                }
-                TokenKind::Ident(name) if name == "max_length" => {
-                    self.bump();
-                    if let Some(v) = self.expect_value() {
-                        attrs.push(NetclassAttr::MaxLength(v));
-                    }
-                }
-                // `max_skew` is a reserved keyword (it is also a `diff_pair`
-                // attribute), so the lexer emits `KwMaxSkew`, never
-                // `Ident("max_skew")`. Matching the identifier here would be
-                // dead code and the attribute would fall through to the
-                // catch-all.
-                TokenKind::KwMaxSkew => {
-                    self.bump();
-                    if let Some(v) = self.expect_value() {
-                        attrs.push(NetclassAttr::MaxSkew(v));
-                    }
-                }
-                TokenKind::Ident(name) if name == "color" => {
-                    self.bump();
-                    if let Some(hex) = self.expect_string(
-                        "E-SYNTH-PARSE-002",
-                        "expected colour hex string (e.g. \"#c2410c\")",
-                    ) {
-                        attrs.push(NetclassAttr::Color(hex));
-                    }
-                }
-                _ => {
-                    self.emit(
-                        self.peek().span,
-                        "E-SYNTH-PARSE-019",
-                        "unexpected attribute inside netclass",
-                        "`trace_width <value><unit>`, `clearance <value><unit>`, `impedance <value><unit>`, `current <value><unit>`, `max_length <value><unit>`, `max_skew <value><unit>`, `plane`, or `color \"#rrggbb\"`",
-                        self.describe_current(),
-                        None,
-                    );
-                    self.bump();
-                }
+            if matches!(self.peek_kind(), TokenKind::RBrace | TokenKind::Eof) {
+                break;
+            }
+            if let Some(attr) = self.parse_netclass_attribute() {
+                attrs.push(attr);
             }
         }
         if matches!(self.peek_kind(), TokenKind::RBrace) {
@@ -2456,6 +2604,7 @@ impl Parser {
             TokenKind::KwCompany => "`company`".to_string(),
             TokenKind::KwSchematic => "`schematic`".to_string(),
             TokenKind::KwStackup => "`stackup`".to_string(),
+            TokenKind::KwRequires => "`requires`".to_string(),
             TokenKind::KwLegends => "`legends`".to_string(),
             TokenKind::KwComponent => "`component`".to_string(),
             TokenKind::KwConnect => "`connect`".to_string(),

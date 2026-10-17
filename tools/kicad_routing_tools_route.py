@@ -36,6 +36,84 @@ from pathlib import Path
 POLICY_REJECTED = 3
 
 
+def _fanout(python: str, repo: Path, board: Path, components: list[str],
+            method: str, clearance: float, via_size: float | None,
+            via_drill: float | None, fab_tier: str, strict_sizes: bool,
+            escalation: str) -> Path:
+    """Escape every named package, returning the board to route next.
+
+    Two stages, in the order KiCadRoutingTools documents (#562): pour the
+    planes first so the fanout's plane-drop vias land on real fill, then fan
+    out each package. Routing before either leaves a dense package's balls to
+    the general-purpose router, which is how a 0.8 mm grid ends up with a
+    stub on every lane.
+
+    A stage that fails is not fatal. The un-fanned board still routes, just
+    worse, and reporting that honestly beats refusing to route at all — the
+    caller sees the stage's own error and the stats still describe whatever
+    copper came back.
+
+    The fabrication floor travels with every stage. `--fab-tier auto` is
+    documented to escalate to an advanced tier when a fine-pitch escape needs
+    one, which is the right default for a human at a terminal and the wrong one
+    for a board that has already named its manufacturer: measured without these
+    flags, escaping a 121-ball BGA rewrote the project's own minimums from
+    0.56/0.3 down to 0.35/0.2 and placed 11 vias there.
+    """
+    planes = repo / "py_router" / "route_planes.py"
+    fanout = repo / "py_router" / "bga_fanout.py"
+    current = board
+
+    if planes.is_file():
+        poured = board.with_suffix(".poured.kicad_pcb")
+        command = [python, str(planes), str(current), str(poured)]
+        print("pouring planes:", " ".join(command), flush=True)
+        if subprocess.run(command, check=False).returncode == 0 and poured.is_file():
+            current = poured
+        else:
+            print("warning: plane pour failed; fanning out on unpoured fill", file=sys.stderr)
+
+    if not fanout.is_file():
+        print(f"warning: no bga_fanout.py under {repo}; skipping escape", file=sys.stderr)
+        return current
+
+    for index, spec in enumerate(components):
+        # `REFDES[:method[:layers]]`: a design that declared an `escape` block
+        # names its own engine and layers, and one that declared nothing takes
+        # the defaults. Split on ':' rather than parsing a second flag so the
+        # per-package choice cannot drift from the package it belongs to.
+        parts = spec.split(":")
+        refdes = parts[0]
+        want_method = parts[1] if len(parts) > 1 and parts[1] else method
+        want_layers = [l for l in (parts[2].split(",") if len(parts) > 2 else []) if l]
+        fanned = board.with_suffix(f".fanned{index}.kicad_pcb")
+        command = [
+            python, str(fanout), str(current),
+            "--component", refdes,
+            "--output", str(fanned),
+            "--escape-method", want_method,
+            "--clearance", str(clearance),
+        ]
+        if want_layers:
+            command.append("--layers")
+            command.extend(want_layers)
+        # The escape via is the one the net class declared, so a package that
+        # needs the tier's smallest via escapes with it rather than with the
+        # engine's default.
+        if via_size and via_drill:
+            command.extend(("--via-size", str(via_size), "--via-drill", str(via_drill)))
+        command.extend(("--fab-tier", fab_tier, "--escalation", escalation))
+        if strict_sizes:
+            command.append("--strict-sizes")
+        print(f"escaping {refdes}:", " ".join(command), flush=True)
+        if subprocess.run(command, check=False).returncode == 0 and fanned.is_file():
+            current = fanned
+        else:
+            print(f"warning: fanout of {refdes} failed; routing it unescaped", file=sys.stderr)
+
+    return current
+
+
 def _load_summary(stats: Path) -> dict:
     """Read the engine's JSON summary, or explain why it could not be read."""
     if not stats.is_file():
@@ -104,6 +182,25 @@ def main() -> int:
     parser.add_argument("--same-net-pad-clearance", type=float, default=0.1)
     parser.add_argument("--strict-sizes", action="store_true", default=True)
     parser.add_argument("--allow-via-in-pad", action="store_true")
+    parser.add_argument(
+        "--fanout-component",
+        action="append",
+        default=[],
+        metavar="REFDES[:METHOD[:LAYERS]]",
+        help="Escape this package before routing. Repeatable. Synth passes the "
+        "packages a board declared an `escape` block on, plus the dense grid "
+        "arrays it found, minus any the board declared `escape { off }` on. "
+        "METHOD and LAYERS come from that block; omitted, the defaults apply.",
+    )
+    parser.add_argument(
+        "--escape-method",
+        default="underpad",
+        help="Escape engine for --fanout-component (KRT: channel or underpad). "
+        "underpad is the one that escapes fully populated arrays.",
+    )
+    parser.add_argument("--escape-clearance", type=float, default=0.1)
+    parser.add_argument("--escape-via-size", type=float)
+    parser.add_argument("--escape-via-drill", type=float)
     args = parser.parse_args()
 
     route = args.repo / "py_router" / "route.py"
@@ -111,10 +208,25 @@ def main() -> int:
         parser.error(f"KRT route.py not found under {args.repo}")
     args.output_board.parent.mkdir(parents=True, exist_ok=True)
     stats = args.stats or args.output_board.with_suffix(".krt-stats.json")
+    board_to_route = args.input_board
+    if args.fanout_component:
+        board_to_route = _fanout(
+            args.python,
+            args.repo,
+            args.input_board,
+            args.fanout_component,
+            args.escape_method,
+            args.escape_clearance,
+            args.escape_via_size,
+            args.escape_via_drill,
+            args.fab_tier,
+            args.strict_sizes,
+            args.escalation,
+        )
     command = [
         args.python,
         str(route),
-        str(args.input_board),
+        str(board_to_route),
         str(args.output_board),
         "--nets",
         "*",

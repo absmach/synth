@@ -46,8 +46,8 @@ use synth_registry::{Part, PinCapability, Registry};
 
 use crate::board::{
     Board, Component, ComponentId, Couple, DiffPair, Keepout, Net, NetClass, NetEndpoint, NetId,
-    Note, PinId, PlacementEdge, PlacementRegion, PlacementSide, SchematicOverflow, SchematicPaper,
-    Stackup, StackupLayer, Variant,
+    Note, PinId, PlacementEdge, PlacementRegion, PlacementSide, ProcessRequirement,
+    SchematicOverflow, SchematicPaper, Stackup, StackupLayer, Variant,
 };
 use crate::units::{ConversionError, Current, DielectricConstant, Impedance, Length, Voltage};
 
@@ -177,6 +177,10 @@ pub fn lower(ast: &ProgramAst, registry: &Registry, file: &str) -> LowerResult {
     // wherever it appears rather than being scoped to its block.
     let mut schematic_paper: Option<SchematicPaper> = None;
     let mut schematic_overflow: Option<SchematicOverflow> = None;
+    // Declared fabrication processes. A set, because declaring the same
+    // requirement in two places is a duplicate rather than a conflict.
+    let mut required_processes: std::collections::BTreeSet<ProcessRequirement> =
+        std::collections::BTreeSet::new();
 
     // Groups and sheets are flattened here, not represented in the
     // IR as a tree: a group names its components and a sheet names
@@ -253,6 +257,12 @@ pub fn lower(ast: &ProgramAst, registry: &Registry, file: &str) -> LowerResult {
             StatementAst::Sheet(s) => {
                 stack.push((&s.statements, 0, group, Some(s.name.as_str())));
             }
+            StatementAst::Requires(r) => match ProcessRequirement::from_source(&r.capability) {
+                Some(requirement) => {
+                    required_processes.insert(requirement);
+                }
+                None => ctx.emit_unknown_process_requirement(&r.capability, r.span),
+            },
             // StatementAst is #[non_exhaustive]; future statement
             // kinds reach here until lowering is taught about them.
             _ => {}
@@ -278,6 +288,48 @@ pub fn lower(ast: &ProgramAst, registry: &Registry, file: &str) -> LowerResult {
     // refdes can be checked against the final component set.
     let variants = ctx.lower_variants(&root_statements, &refdes_index);
 
+    // `escape { layers … }` against the copper the board actually has.
+    //
+    // After the walk rather than in `lower_escape`, because the layer count
+    // is a statement like any other and a board may declare it after the
+    // component that names a layer. An unknown name has to fail here: left
+    // alone it reaches the engine, the fanout fails at route time, and the
+    // package is routed unescaped behind a stderr warning — the silent
+    // fallback the unknown-method check exists to prevent.
+    let copper = copper_layer_names(layers);
+    for component in &components {
+        let Some(escape) = component.escape.as_ref() else {
+            continue;
+        };
+        for layer in &escape.layers {
+            if copper.iter().any(|known| known == layer) {
+                continue;
+            }
+            ctx.diagnostics.push(
+                DiagnosticBuilder::new(
+                    "E-SYNTH-PROCESS-005",
+                    Severity::Error,
+                    "escape layer is not on this board",
+                )
+                .location(Location::from_span(
+                    ctx.file.to_string(),
+                    escape.source_span,
+                ))
+                .expected(format!(
+                    "one of: {}",
+                    copper
+                        .iter()
+                        .map(|l| format!("`{l}`"))
+                        .collect::<Vec<_>>()
+                        .join(", ")
+                ))
+                .found(format!("`{layer}`"))
+                .explanation_url("synth.docs/diagnostics/E-SYNTH-PROCESS-005")
+                .build(),
+            );
+        }
+    }
+
     let board = Board {
         legends,
         schematic_paper,
@@ -298,6 +350,7 @@ pub fn lower(ast: &ProgramAst, registry: &Registry, file: &str) -> LowerResult {
         modules,
         groups,
         variants,
+        required_processes,
         source_span: ast.board.span,
     };
 
@@ -305,6 +358,22 @@ pub fn lower(ast: &ProgramAst, registry: &Registry, file: &str) -> LowerResult {
         board: Some(board),
         diagnostics: ctx.diagnostics,
     }
+}
+
+/// Copper layer names a board of `count` layers has, outer first.
+///
+/// KiCad's own naming: the two outer layers always exist, and the inner ones
+/// are numbered from the top. A count below two has no copper to name.
+fn copper_layer_names(count: u32) -> Vec<String> {
+    if count < 2 {
+        return Vec::new();
+    }
+    let mut names = vec!["F.Cu".to_string()];
+    for inner in 1..count.saturating_sub(1) {
+        names.push(format!("In{inner}.Cu"));
+    }
+    names.push("B.Cu".to_string());
+    names
 }
 
 struct LowerCtx<'a> {
@@ -382,6 +451,7 @@ impl<'a> LowerCtx<'a> {
             .placement_hint
             .as_ref()
             .map(|h| self.lower_placement_hint(h));
+        let escape = decl.escape.as_ref().map(|e| self.lower_escape(e));
 
         Component {
             id: ComponentId(next_index as u32),
@@ -392,6 +462,7 @@ impl<'a> LowerCtx<'a> {
             dnp: decl.dnp,
             properties: decl.properties.clone(),
             placement_hint,
+            escape,
             group: group.map(str::to_string),
             sheet: sheet.map(str::to_string),
             source_span: decl.span,
@@ -535,6 +606,8 @@ impl<'a> LowerCtx<'a> {
         let mut color: Option<[u8; 3]> = None;
         let mut impedance: Option<Impedance> = None;
         let mut current: Option<Current> = None;
+        let mut via_diameter: Option<Length> = None;
+        let mut via_drill: Option<Length> = None;
         let mut plane = false;
         let mut max_length: Option<Length> = None;
         let mut max_skew: Option<Length> = None;
@@ -555,6 +628,14 @@ impl<'a> LowerCtx<'a> {
                 NetclassAttr::Current(v) => match Current::try_from(v) {
                     Ok(c) => current = Some(c),
                     Err(e) => self.emit_unit_error(&e, "netclass current"),
+                },
+                NetclassAttr::ViaDiameter(v) => match Length::try_from(v) {
+                    Ok(l) => via_diameter = Some(l),
+                    Err(e) => self.emit_unit_error(&e, "netclass via_diameter"),
+                },
+                NetclassAttr::ViaDrill(v) => match Length::try_from(v) {
+                    Ok(l) => via_drill = Some(l),
+                    Err(e) => self.emit_unit_error(&e, "netclass via_drill"),
                 },
                 NetclassAttr::Plane => plane = true,
                 NetclassAttr::MaxLength(v) => match Length::try_from(v) {
@@ -597,6 +678,8 @@ impl<'a> LowerCtx<'a> {
             color,
             impedance,
             current,
+            via_diameter,
+            via_drill,
             plane,
             max_length,
             max_skew,
@@ -1410,6 +1493,72 @@ impl<'a> LowerCtx<'a> {
             .expected("each refdes used at most once in a board")
             .found(format!("`{refdes}` declared more than once"))
             .explanation_url("synth.docs/diagnostics/E-SYNTH-NAME-001")
+            .build(),
+        );
+    }
+
+    /// Lower a component's `escape { … }` block.
+    ///
+    /// An unknown method is an error rather than a silent fallback: a board
+    /// asking for an engine this build does not have is not a board that
+    /// asked for the default one.
+    fn lower_escape(&mut self, ast: &synth_ast::EscapeAst) -> crate::board::EscapeIntent {
+        let method = ast.method.as_ref().and_then(|name| {
+            let resolved = crate::board::EscapeMethod::from_source(name);
+            if resolved.is_none() {
+                let known = crate::board::EscapeMethod::ALL
+                    .iter()
+                    .map(|m| format!("`{}`", m.as_source()))
+                    .collect::<Vec<_>>()
+                    .join(", ");
+                self.diagnostics.push(
+                    DiagnosticBuilder::new(
+                        "E-SYNTH-PROCESS-004",
+                        Severity::Error,
+                        "unknown escape method",
+                    )
+                    .location(Location::from_span(self.file.to_string(), ast.span))
+                    .expected(format!("one of: {known}"))
+                    .found(format!("`{name}`"))
+                    .explanation_url("synth.docs/diagnostics/E-SYNTH-PROCESS-004")
+                    .build(),
+                );
+            }
+            resolved
+        });
+        crate::board::EscapeIntent {
+            method,
+            layers: ast.layers.clone(),
+            off: ast.off,
+            source_span: ast.span,
+        }
+    }
+
+    /// A `requires` naming a process this build does not know about.
+    ///
+    /// An error rather than a warning: the board states it cannot be built
+    /// without the process, and a requirement nothing can check is not a
+    /// weaker requirement, it is an unchecked one.
+    fn emit_unknown_process_requirement(
+        &mut self,
+        capability: &str,
+        span: synth_diagnostics::Span,
+    ) {
+        let known = ProcessRequirement::ALL
+            .iter()
+            .map(|r| format!("`{}`", r.as_source()))
+            .collect::<Vec<_>>()
+            .join(", ");
+        self.diagnostics.push(
+            DiagnosticBuilder::new(
+                "E-SYNTH-PROCESS-001",
+                Severity::Error,
+                "unknown required fabrication process",
+            )
+            .location(Location::from_span(self.file.to_string(), span))
+            .expected(format!("one of: {known}"))
+            .found(format!("`{capability}`"))
+            .explanation_url("synth.docs/diagnostics/E-SYNTH-PROCESS-001")
             .build(),
         );
     }
@@ -2346,5 +2495,72 @@ mod tests {
         assert_eq!(board.notes[0].group.as_deref(), Some("Power"));
         assert_eq!(board.notes[1].title, "General");
         assert_eq!(board.notes[1].group, None);
+    }
+
+    #[test]
+    fn a_board_declares_the_process_it_cannot_be_built_without() {
+        let board = lower_ok(
+            r#"board "b" {
+                layers 4
+                requires via_in_pad
+            }"#,
+        );
+        assert!(board
+            .required_processes
+            .contains(&ProcessRequirement::ViaInPad));
+    }
+
+    /// A board that says nothing must not read as a board that asked, which
+    /// is the whole point of keeping the requirement separate from the
+    /// process's capability.
+    #[test]
+    fn a_board_that_declares_nothing_requires_nothing() {
+        let board = lower_ok(
+            r#"board "b" {
+                layers 4
+            }"#,
+        );
+        assert!(board.required_processes.is_empty());
+    }
+
+    #[test]
+    fn declaring_the_same_process_twice_is_one_requirement() {
+        let board = lower_ok(
+            r#"board "b" {
+                layers 4
+                requires via_in_pad
+                requires via_in_pad
+            }"#,
+        );
+        assert_eq!(board.required_processes.len(), 1);
+    }
+
+    /// A misspelled requirement must not lower quietly. Reaching the router
+    /// as an unknown string would read exactly like a board that asked for
+    /// nothing, which is the failure this diagnostic exists to prevent.
+    #[test]
+    fn an_unknown_process_is_an_error_naming_what_is_known() {
+        let result = lower_with_diags(
+            r#"board "b" {
+                layers 4
+                requires blind_vias
+            }"#,
+        );
+
+        let diagnostic = result
+            .diagnostics
+            .iter()
+            .find(|d| d.code == "E-SYNTH-PROCESS-001")
+            .expect("E-SYNTH-PROCESS-001");
+        assert_eq!(diagnostic.severity, Severity::Error);
+        assert!(
+            diagnostic
+                .expected
+                .as_deref()
+                .is_some_and(|e| e.contains("via_in_pad")),
+            "the error must name what this build knows: {:?}",
+            diagnostic.expected
+        );
+        assert!(result.board.is_none_or(|b| b.required_processes.is_empty()));
     }
 }

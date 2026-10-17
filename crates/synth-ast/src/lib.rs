@@ -68,6 +68,7 @@ pub enum StatementAst {
     Sheet(SheetStmt),
     Schematic(SchematicStmt),
     Stackup(StackupStmt),
+    Requires(RequiresStmt),
 }
 
 impl StatementAst {
@@ -96,6 +97,7 @@ impl StatementAst {
             StatementAst::Sheet(s) => s.span,
             StatementAst::Schematic(s) => s.span,
             StatementAst::Stackup(s) => s.span,
+            StatementAst::Requires(s) => s.span,
         }
     }
 }
@@ -273,6 +275,19 @@ pub struct ManufacturerStmt {
     pub span: Span,
 }
 
+/// A fabrication process the board declares it needs
+/// (`requires via_in_pad`).
+///
+/// The capability is kept as written rather than resolved here: the
+/// parser's job is to say what the source asked for, and naming a
+/// process this build does not know about is a lowering diagnostic
+/// with a span, not a parse failure that loses the rest of the board.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct RequiresStmt {
+    pub capability: String,
+    pub span: Span,
+}
+
 /// Board revision tag, carried into the schematic title block
 /// which by convention displays the revision.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -326,6 +341,30 @@ pub struct ComponentDeclAst {
     pub properties: BTreeMap<String, String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub placement_hint: Option<PlacementHintAst>,
+    /// How this package's pins leave it (`escape { … }`).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub escape: Option<EscapeAst>,
+    pub span: Span,
+}
+
+/// `escape { method underpad  layers "In1.Cu", "In2.Cu" }` on a component,
+/// or `escape { off }` to leave a package to the general router.
+///
+/// A fine-pitch package is fanned out before routing whether or not it says
+/// so — a 0.8 mm ball grid left to a maze router comes back with a stub on
+/// every lane. This block is how a design overrides that: which engine, onto
+/// which layers, or not at all.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct EscapeAst {
+    /// Escape engine (`channel`, `underpad`), as written.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub method: Option<String>,
+    /// Copper layers the escape may route onto, as written.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub layers: Vec<String>,
+    /// `off`: do not escape this package.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub off: bool,
     pub span: Span,
 }
 
@@ -654,6 +693,13 @@ pub enum NetclassAttr {
     /// Current the class's nets carry (`current 1.5A`), used to check routed
     /// width against the IPC-2221 ampacity curve.
     Current(ValueWithUnit),
+    /// Finished diameter of a via on this class's nets
+    /// (`via_diameter 0.6mm`), and the hole drilled through it
+    /// (`via_drill 0.3mm`). The pair is the escape geometry a
+    /// fine-pitch package needs to state: the exporter wrote one
+    /// constant for every class on every board before this existed.
+    ViaDiameter(ValueWithUnit),
+    ViaDrill(ValueWithUnit),
     /// Give the class's nets a copper plane (`plane`): a full-board zone on
     /// each plane layer, so a rail has a low-impedance path instead of only
     /// routed traces. Opt-in, because on a two-layer board a plane competes
@@ -848,6 +894,7 @@ mod tests {
             dnp: false,
             properties: BTreeMap::new(),
             placement_hint: None,
+            escape: None,
             span: Span::new(0, 0),
         });
         let v = serde_json::to_value(&c).unwrap();

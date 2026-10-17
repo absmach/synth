@@ -89,6 +89,7 @@ pub fn component(id: u32, refdes: &str, part: Part) -> Component {
         dnp: false,
         properties: std::collections::BTreeMap::default(),
         placement_hint: None,
+        escape: None,
         group: None,
         sheet: None,
         source_span: Span::new(0, 0),
@@ -141,6 +142,7 @@ pub fn board(
         modules: Vec::new(),
         groups: Vec::new(),
         variants: Vec::new(),
+        required_processes: std::collections::BTreeSet::new(),
         source_span: Span::new(0, 0),
     }
 }
