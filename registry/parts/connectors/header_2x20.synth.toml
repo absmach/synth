@@ -1,0 +1,214 @@
+id = "header_2x20"
+kind = "connector"
+description = "2x20 through-hole pin header, 2.54mm pitch, odd-even numbering"
+kicad_symbol = "Connector_Generic:Conn_02x20_Odd_Even"
+kicad_footprint = "Connector_PinHeader_2.54mm:PinHeader_2x20_P2.54mm_Vertical"
+
+# The courtyard KiCad ships for this footprint: two rows 2.54 mm apart over
+# twenty 2.54 mm positions. A dual row carries twice the pins of the 1x20 in
+# the same length, which is why a bus wide enough to need forty pins reaches
+# the edge of a card without setting the card's size.
+[footprint_dimensions]
+width_mm = 6.09
+height_mm = 51.81
+courtyard_margin_mm = 0.25
+
+[[pins]]
+name = "p1"
+number = "1"
+electrical_type = "passive"
+
+[[pins]]
+name = "p2"
+number = "2"
+electrical_type = "passive"
+
+[[pins]]
+name = "p3"
+number = "3"
+electrical_type = "passive"
+
+[[pins]]
+name = "p4"
+number = "4"
+electrical_type = "passive"
+
+[[pins]]
+name = "p5"
+number = "5"
+electrical_type = "passive"
+
+[[pins]]
+name = "p6"
+number = "6"
+electrical_type = "passive"
+
+[[pins]]
+name = "p7"
+number = "7"
+electrical_type = "passive"
+
+[[pins]]
+name = "p8"
+number = "8"
+electrical_type = "passive"
+
+[[pins]]
+name = "p9"
+number = "9"
+electrical_type = "passive"
+
+[[pins]]
+name = "p10"
+number = "10"
+electrical_type = "passive"
+
+[[pins]]
+name = "p11"
+number = "11"
+electrical_type = "passive"
+
+[[pins]]
+name = "p12"
+number = "12"
+electrical_type = "passive"
+
+[[pins]]
+name = "p13"
+number = "13"
+electrical_type = "passive"
+
+[[pins]]
+name = "p14"
+number = "14"
+electrical_type = "passive"
+
+[[pins]]
+name = "p15"
+number = "15"
+electrical_type = "passive"
+
+[[pins]]
+name = "p16"
+number = "16"
+electrical_type = "passive"
+
+[[pins]]
+name = "p17"
+number = "17"
+electrical_type = "passive"
+
+[[pins]]
+name = "p18"
+number = "18"
+electrical_type = "passive"
+
+[[pins]]
+name = "p19"
+number = "19"
+electrical_type = "passive"
+
+[[pins]]
+name = "p20"
+number = "20"
+electrical_type = "passive"
+
+[[pins]]
+name = "p21"
+number = "21"
+electrical_type = "passive"
+
+[[pins]]
+name = "p22"
+number = "22"
+electrical_type = "passive"
+
+[[pins]]
+name = "p23"
+number = "23"
+electrical_type = "passive"
+
+[[pins]]
+name = "p24"
+number = "24"
+electrical_type = "passive"
+
+[[pins]]
+name = "p25"
+number = "25"
+electrical_type = "passive"
+
+[[pins]]
+name = "p26"
+number = "26"
+electrical_type = "passive"
+
+[[pins]]
+name = "p27"
+number = "27"
+electrical_type = "passive"
+
+[[pins]]
+name = "p28"
+number = "28"
+electrical_type = "passive"
+
+[[pins]]
+name = "p29"
+number = "29"
+electrical_type = "passive"
+
+[[pins]]
+name = "p30"
+number = "30"
+electrical_type = "passive"
+
+[[pins]]
+name = "p31"
+number = "31"
+electrical_type = "passive"
+
+[[pins]]
+name = "p32"
+number = "32"
+electrical_type = "passive"
+
+[[pins]]
+name = "p33"
+number = "33"
+electrical_type = "passive"
+
+[[pins]]
+name = "p34"
+number = "34"
+electrical_type = "passive"
+
+[[pins]]
+name = "p35"
+number = "35"
+electrical_type = "passive"
+
+[[pins]]
+name = "p36"
+number = "36"
+electrical_type = "passive"
+
+[[pins]]
+name = "p37"
+number = "37"
+electrical_type = "passive"
+
+[[pins]]
+name = "p38"
+number = "38"
+electrical_type = "passive"
+
+[[pins]]
+name = "p39"
+number = "39"
+electrical_type = "passive"
+
+[[pins]]
+name = "p40"
+number = "40"
+electrical_type = "passive"
