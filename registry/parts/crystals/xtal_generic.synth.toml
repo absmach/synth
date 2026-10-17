@@ -1,7 +1,11 @@
 id = "xtal_generic"
 kind = "crystal"
 description = "Generic quartz crystal, 2-pin SMD"
-kicad_symbol = "Device:Crystal"
+# `Device:Crystal` is the two-pin symbol, but this is the four-pad SMD3225
+# package: pads 1 and 3 are the crystal, diagonally opposite each other, and
+# pads 2 and 4 are the grounded case. `Device:Crystal_GND24` is the symbol that
+# says so.
+kicad_symbol = "Device:Crystal_GND24"
 kicad_footprint = "Crystal:Crystal_SMD_3225-4Pin_3.2x2.5mm"
 
 [footprint_dimensions]
@@ -19,7 +23,22 @@ name = "p1"
 number = "1"
 electrical_type = "passive"
 
+# `p2` was pad 2, which on this package is a case-ground tab, not the second
+# terminal. The second terminal is pad 3, diagonally opposite pad 1. The name
+# is unchanged so every board that drives `p2` still drives the crystal.
 [[pins]]
 name = "p2"
+number = "3"
+electrical_type = "passive"
+
+# The two case tabs. They are copper, they go to ground, and leaving them out
+# of the pin map is what let pad 2 be mistaken for a terminal.
+[[pins]]
+name = "case_1"
 number = "2"
+electrical_type = "passive"
+
+[[pins]]
+name = "case_2"
+number = "4"
 electrical_type = "passive"
