@@ -4839,6 +4839,7 @@ mod barycenter_tests {
             buses: vec![],
             modules: vec![],
             variants: vec![],
+            required_processes: std::collections::BTreeSet::new(),
             source_span: Span::new(0, 0),
         }
     }
@@ -5070,6 +5071,7 @@ mod semantic_weights_tests {
             buses: vec![],
             modules: vec![],
             variants: vec![],
+            required_processes: std::collections::BTreeSet::new(),
             source_span: Span::new(0, 0),
         }
     }
@@ -5403,6 +5405,7 @@ mod soft_pin_swap_tests {
             buses: vec![],
             modules: vec![],
             variants: vec![],
+            required_processes: std::collections::BTreeSet::new(),
             source_span: Span::new(0, 0),
         }
     }
@@ -5650,6 +5653,7 @@ mod patterns_tests {
             buses: vec![],
             modules: vec![],
             variants: vec![],
+            required_processes: std::collections::BTreeSet::new(),
             source_span: Span::new(0, 0),
         }
     }
@@ -6048,6 +6052,7 @@ mod text_overlap_tests {
             buses: Vec::new(),
             modules: Vec::new(),
             variants: Vec::new(),
+            required_processes: std::collections::BTreeSet::new(),
             source_span: Span::new(0, 0),
         }
     }
@@ -6581,6 +6586,7 @@ mod naming_tests {
             buses: vec![],
             modules: vec![],
             variants: vec![],
+            required_processes: std::collections::BTreeSet::new(),
             source_span: Span::new(0, 0),
         }
     }
@@ -6882,6 +6888,7 @@ mod documentation_tests {
             buses: vec![],
             modules: vec![],
             variants: vec![],
+            required_processes: std::collections::BTreeSet::new(),
             source_span: Span::new(0, 0),
         }
     }

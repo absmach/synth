@@ -57,3 +57,43 @@ fn the_native_router_fixed_rf_width_is_disclosed() {
         "{summary}"
     );
 }
+
+/// The descriptor is what an agent reads before writing a board, and
+/// via-in-pad is the capability a dense board's escape turns on. A
+/// descriptor that did not disclose where the decision lives would send an
+/// agent to the CLI flag, which is the operator's override rather than the
+/// design's declaration.
+#[test]
+fn the_descriptor_states_where_the_via_in_pad_decision_lives() {
+    let descriptor: serde_json::Value =
+        serde_json::from_str(&capability_list(&["--json"])).expect("descriptor is JSON");
+    let processes = &descriptor["geometry_and_constraints"]["fabrication_processes"];
+
+    assert_eq!(
+        processes["declared_by"].as_str(),
+        Some("requires <process>"),
+        "the descriptor must name the statement a board writes"
+    );
+    assert!(
+        processes["processes"]["via_in_pad"].is_string(),
+        "via_in_pad must be described, not merely listed"
+    );
+    assert!(
+        processes["profiles_offering_via_in_pad"]
+            .as_array()
+            .is_some_and(|tiers| tiers.iter().any(|t| t == "jlc-filled-via")),
+        "a board cannot reach the capability without a tier that offers it"
+    );
+    assert!(
+        processes["gate"]
+            .as_str()
+            .is_some_and(|g| g.contains("E-SYNTH-PROCESS-002")),
+        "the descriptor must name the diagnostic that refuses an unmet requirement"
+    );
+    assert!(
+        descriptor["geometry_and_constraints"]["routing_constraints"]["requires"]
+            .as_array()
+            .is_some_and(|v| v.iter().any(|a| a == "via_in_pad")),
+        "`requires` belongs in the statement/attribute list an agent reads"
+    );
+}

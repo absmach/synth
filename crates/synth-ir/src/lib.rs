@@ -35,7 +35,8 @@ pub(crate) mod test_support;
 pub use board::{
     Board, Component, ComponentId, Couple, DiffPair, Group, Keepout, Net, NetClass, NetEndpoint,
     NetId, Note, PinId, PlacementConstraint, PlacementEdge, PlacementPriority, PlacementRegion,
-    PlacementSide, SchematicOverflow, SchematicPaper, Stackup, StackupLayer, Variant,
+    PlacementSide, ProcessRequirement, SchematicOverflow, SchematicPaper, Stackup, StackupLayer,
+    Variant,
 };
 pub use clusters::{
     recognize_clusters, ClusterKind, ClusterMember, FunctionalCluster, MemberBinding, MemberRole,

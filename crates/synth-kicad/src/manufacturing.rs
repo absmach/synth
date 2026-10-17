@@ -376,6 +376,7 @@ mod tests {
             keepouts: vec![],
             stackup: None,
             netclasses: vec![],
+            required_processes: std::collections::BTreeSet::new(),
             buses: vec![],
             modules: vec![],
             groups: vec![],
