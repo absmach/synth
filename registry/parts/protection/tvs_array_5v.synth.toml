@@ -1,14 +1,24 @@
 id = "tvs_array_5v"
 kind = "diode"
-description = "TVS diode array, 5V, 4 channels, SOIC-8"
+description = "TVS diode array, 5V, 4 channels, SOT-363"
 kicad_footprint = "Package_TO_SOT_SMD:SOT-363_SC-70-6"
 # kicad_symbol intentionally unmapped: the registry pin model
-# (pins 1-5 + 8) doesn't match any KiCad stock TVS-array symbol.
+# (pins 1-6) doesn't match any KiCad stock TVS-array symbol.
 # Falls back to a synthesized rectangle. Track in V1.1 cleanup.
+#
+# Where this pin map comes from, since the synthesized symbol means it is
+# the only place the pad functions are recorded: the part names no device --
+# no `mpn`, no `lcsc_pn` -- so there is no datasheet pinout to cite. `vcc`
+# is pad 6 by elimination: `SOT-363_SC-70-6` has pads 1 to 6, the other five
+# assignments below are unchanged, and 6 is the one left. The five it was
+# deduced from are themselves unattested, and stay that way until the part
+# names a device and a reviewer. That is what `[provenance]` is for, and
+# what E-SYNTH-QUAL-008 blocks every part in this registry on today.
 
 [footprint_dimensions]
-width_mm = 5.0
-height_mm = 5.0
+# Courtyard extent of that footprint; the body is 2.0 x 1.25 mm.
+width_mm = 2.9
+height_mm = 2.2
 courtyard_margin_mm = 0.25
 
 [operating_conditions]
@@ -42,6 +52,6 @@ electrical_type = "passive"
 
 [[pins]]
 name = "vcc"
-number = "8"
+number = "6"
 electrical_type = "passive"
 
