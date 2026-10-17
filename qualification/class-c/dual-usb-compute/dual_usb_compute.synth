@@ -1,9 +1,24 @@
-// Class C — #40 case 3, "PCIe, USB 3.x, or HDMI-class differential interface"
-//
 // A six-layer dual-USB compute board: two RP2350s, each on its own native
-// USB, each pair at 90 ohm, QSPI boot flash, and a 20-pin expansion header. Two independent pairs on one board is the
-// constraint case: each must stay its own pair, on signal copper, with its
-// own budgets.
+// USB 2.0 pair at 90 ohm, a shared QSPI boot flash, a USB 3.0 Type-A
+// receptacle, and a 20-pin expansion header.
+//
+// WHAT THIS BOARD QUALIFIES, AND WHAT IT DOES NOT. Two independent pairs on
+// one board is the constraint case: each must stay its own pair, on signal
+// copper, with its own budgets, and nothing else on the board may borrow
+// either one. The two USB 2.0 pairs are complete interfaces — each ends at
+// an RP2350's native USB device pins, so each has a real endpoint, a real
+// 90 ohm geometry and a declared intra-pair budget that routed copper is
+// measured against.
+//
+// The two SuperSpeed pairs are not. No device on this board speaks USB 3.x:
+// the RP2350 has a USB 1.1/2.0 controller and no SuperSpeed PHY, and there
+// is no hub, redriver or host controller here to terminate the lanes. They
+// are routed as a controlled-impedance pass-through from the receptacle to
+// the expansion header, which is what a lane carried across a connector
+// actually is, and the endpoint is whatever the header is mated to. That
+// makes them evidence about pair routing, polarity, spacing and skew — not
+// evidence of a working USB 3.x interface, which would need silicon this
+// board does not have.
 //
 // This file used to carry a STATED LIMITATION saying SynthSpec had no
 // length-matching or skew syntax, so the intra-pair skew and inter-pair
@@ -242,7 +257,9 @@ board "dual_usb_compute" {
     connect U2.gp15 -> J3.p16
     // The SuperSpeed lanes leave through the expansion header rather than
     // stopping at the receptacle: a pair that ends nowhere is not routed and
-    // not measurable.
+    // not measurable. The header is where they end on this board, and the
+    // device that answers them is off it — see the note at the top of this
+    // file for what that does and does not qualify.
     connect J2.ssrx_p -> J3.p17 class "SS"
     connect J2.ssrx_n -> J3.p18 class "SS"
     connect J2.sstx_p -> J3.p19 class "SS"

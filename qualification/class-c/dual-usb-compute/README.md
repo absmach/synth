@@ -1,8 +1,8 @@
 # Dual-USB compute board
 
-A USB 3.0 Type-A host port whose two SuperSpeed lanes run at 5 Gb/s, two
-RP2350s on their own USB 2.0 pairs, a shared QSPI boot flash, and a 20-pin
-expansion header, on a six-layer stackup.
+Two RP2350s on their own USB 2.0 pairs, a shared QSPI boot flash, and a
+USB 3.0 Type-A receptacle whose two SuperSpeed lanes are carried at 90 Ω to a
+20-pin expansion header, on a six-layer stackup.
 
 ## Board
 
@@ -48,6 +48,11 @@ expansion header, on a six-layer stackup.
 | `J2_ssrx_p` / `J2_ssrx_n` | SuperSpeed RX  | 5 Gb/s  | 90 Ω      | 0.1 mm   | tight  |
 | `U2_usb_dp` / `U2_usb_dn` | USB 2.0 host   | 12 Mb/s | 90 Ω      | 0.15 mm  | tight  |
 | `U4_usb_dp` / `U4_usb_dn` | USB 2.0 device | 12 Mb/s | 90 Ω      | 0.15 mm  | tight  |
+
+Each USB 2.0 pair ends at an RP2350's native USB pins. The two SuperSpeed
+pairs end at J3: no device on this board carries a USB 3.x PHY, so the lanes
+are a controlled-impedance pass-through from J2 to the header and their
+endpoint is whatever the header is mated to.
 
 A pair's skew is the budget between its own two halves, checked by
 E-SYNTH-DRC-014; a class's group skew is the spread across its nets, longest
