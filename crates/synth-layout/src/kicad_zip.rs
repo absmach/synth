@@ -78,7 +78,14 @@ pub fn parse_kicad_zip(bytes: &[u8]) -> Result<KicadZipImport, String> {
         if entry.is_dir() {
             continue;
         }
-        let name = entry.name().to_string();
+        // zip 9 returns the entry name as a `Result`: a name that is not
+        // valid UTF-8 is an error rather than a lossy string. This parser
+        // only looks for `.kicad_sym` and `.kicad_mod`, so an unreadable
+        // name is an entry it was never going to match.
+        let Ok(name) = entry.name() else {
+            continue;
+        };
+        let name = name.into_owned();
         let lower = name.to_ascii_lowercase();
 
         if lower.ends_with(".kicad_sym") && sym_text.is_none() {
@@ -148,7 +155,7 @@ mod tests {
         let mut buf = std::io::Cursor::new(Vec::new());
         {
             let mut zw = zip::ZipWriter::new(&mut buf);
-            let opts: zip::write::FileOptions<'_, ()> = zip::write::FileOptions::default();
+            let opts: zip::write::FileOptions<'_, '_, ()> = zip::write::FileOptions::default();
             zw.start_file("MyPart.kicad_sym", opts).unwrap();
             zw.write_all(sym.as_bytes()).unwrap();
             zw.start_file("MyPart.pretty/MyPart.kicad_mod", opts)
@@ -176,7 +183,7 @@ mod tests {
         let mut buf = std::io::Cursor::new(Vec::new());
         {
             let mut zw = zip::ZipWriter::new(&mut buf);
-            let opts: zip::write::FileOptions<'_, ()> = zip::write::FileOptions::default();
+            let opts: zip::write::FileOptions<'_, '_, ()> = zip::write::FileOptions::default();
             zw.start_file("readme.txt", opts).unwrap();
             zw.write_all(b"no symbol here").unwrap();
             zw.finish().unwrap();
@@ -190,7 +197,7 @@ mod tests {
         let sym_only = {
             let mut buf = std::io::Cursor::new(Vec::new());
             let mut zw = zip::ZipWriter::new(&mut buf);
-            let opts: zip::write::FileOptions<'_, ()> = zip::write::FileOptions::default();
+            let opts: zip::write::FileOptions<'_, '_, ()> = zip::write::FileOptions::default();
             zw.start_file("MyPart.kicad_sym", opts).unwrap();
             zw.write_all(
                 br#"(kicad_symbol_lib (version 20211014)

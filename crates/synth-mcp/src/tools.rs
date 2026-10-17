@@ -4461,7 +4461,7 @@ electrical_type = "input"
         let zip_path = dir.join("testpart_export.zip");
         let file = std::fs::File::create(&zip_path).unwrap();
         let mut zw = zip::ZipWriter::new(file);
-        let opts: zip::write::FileOptions<'_, ()> = zip::write::FileOptions::default();
+        let opts: zip::write::FileOptions<'_, '_, ()> = zip::write::FileOptions::default();
         zw.start_file("TestPart.kicad_sym", opts).unwrap();
         zw.write_all(sym.as_bytes()).unwrap();
         zw.start_file("TestPart.pretty/TestPart.kicad_mod", opts)
