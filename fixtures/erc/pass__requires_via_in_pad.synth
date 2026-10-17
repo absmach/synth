@@ -1,0 +1,12 @@
+board "requires_via_in_pad" {
+  layers 4
+  manufacturer "jlc-filled-via"
+
+  component R1: resistor "r_generic_0603" value "10k"
+  component R2: resistor "r_generic_0603" value "10k"
+
+  connect R1.p1 -> R2.p1
+  connect R1.p2 -> R2.p2
+
+  requires via_in_pad
+}

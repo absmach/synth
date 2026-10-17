@@ -590,6 +590,7 @@ hide = true
                     dnp: false,
                     properties: std::collections::BTreeMap::new(),
                     placement_hint: None,
+                    escape: None,
                     group: None,
                     sheet: sheet.map(str::to_string),
                     source_span: Span::new(0, 0),
@@ -604,6 +605,7 @@ hide = true
             buses: vec![],
             modules: vec![],
             variants: vec![],
+            required_processes: std::collections::BTreeSet::new(),
             source_span: Span::new(0, 0),
         }
     }
@@ -701,6 +703,7 @@ mod forced_label_tests {
             dnp: false,
             properties: std::collections::BTreeMap::new(),
             placement_hint: None,
+            escape: None,
             group: None,
             sheet: None,
             source_span: Span::new(0, 0),
@@ -743,6 +746,7 @@ mod forced_label_tests {
             buses: vec![],
             modules: vec![],
             variants: vec![],
+            required_processes: std::collections::BTreeSet::new(),
             source_span: Span::new(0, 0),
         }
     }

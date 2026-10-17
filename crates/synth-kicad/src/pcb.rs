@@ -2950,6 +2950,7 @@ mod tests {
             dnp: false,
             properties: std::collections::BTreeMap::new(),
             placement_hint: None,
+            escape: None,
             group: None,
             sheet: None,
             source_span: Span::new(0, 0),
@@ -3004,6 +3005,7 @@ mod tests {
             dnp: false,
             properties: std::collections::BTreeMap::new(),
             placement_hint: None,
+            escape: None,
             group: None,
             sheet: None,
             source_span: Span::new(0, 0),
@@ -3062,6 +3064,7 @@ mod tests {
             dnp: false,
             properties: std::collections::BTreeMap::new(),
             placement_hint: None,
+            escape: None,
             group: None,
             sheet: None,
             source_span: Span::new(0, 0),
@@ -3281,6 +3284,7 @@ mod tests {
             buses: vec![],
             modules: vec![],
             variants: vec![],
+            required_processes: std::collections::BTreeSet::new(),
             source_span: Span::new(0, 0),
         };
         let net_table = vec![
@@ -3358,6 +3362,7 @@ mod tests {
             buses: vec![],
             modules: vec![],
             variants: vec![],
+            required_processes: std::collections::BTreeSet::new(),
             source_span: Span::new(0, 0),
         };
         let net_table = vec![(1_u32, "+3V3".to_string()), (2_u32, "SIG".to_string())];
@@ -3405,6 +3410,7 @@ mod tests {
             buses: vec![],
             modules: vec![],
             variants: vec![],
+            required_processes: std::collections::BTreeSet::new(),
             source_span: Span::new(0, 0),
         };
         let placement = Placement {

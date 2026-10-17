@@ -151,6 +151,7 @@ mod tests {
             dnp,
             properties: std::collections::BTreeMap::new(),
             placement_hint: None,
+            escape: None,
             group: None,
             sheet: None,
             source_span: synth_diagnostics::Span::new(0, 0),
@@ -175,6 +176,7 @@ mod tests {
             buses: vec![],
             modules: vec![],
             variants: vec![],
+            required_processes: std::collections::BTreeSet::new(),
             source_span: synth_diagnostics::Span::new(0, 0),
         };
         // Base BOM drops the component-level dnp part.
