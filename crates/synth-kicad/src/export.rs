@@ -1019,6 +1019,24 @@ fn build_net_settings<'a>(
         );
     }
 
+    // Declared via geometry per class. This is the copy that matters: KiCad 7
+    // and later read net-class rules from the project file, and the router
+    // reads them from the design rules it loads, so the `net_class` block in
+    // the board is the legacy spelling nothing consumes. Both are written.
+    let vias: BTreeMap<&str, (f64, f64)> = board
+        .netclasses
+        .iter()
+        .map(|nc| {
+            (
+                nc.name.as_str(),
+                (
+                    nc.effective_via_diameter().to_mm(),
+                    nc.effective_via_drill().to_mm(),
+                ),
+            )
+        })
+        .collect();
+
     let pairs: BTreeMap<&str, (f64, f64)> = board
         .netclasses
         .iter()
@@ -1041,6 +1059,14 @@ fn build_net_settings<'a>(
             .get(name.as_str())
             .copied()
             .unwrap_or((0.2, default_clearance));
+        // An undeclared class takes the same default the board's `net_class`
+        // block takes. The previous 0.6 over a 0.4 drill left a 0.10 mm
+        // annular ring, under JLC's 0.13 mm floor, so every net class Synth
+        // wrote asked for a via the declared process would not plate.
+        let (via_diameter, via_drill) = vias.get(name.as_str()).copied().unwrap_or((
+            synth_ir::NetClass::DEFAULT_VIA_DIAMETER.to_mm(),
+            synth_ir::NetClass::DEFAULT_VIA_DRILL.to_mm(),
+        ));
         let (pair_width, pair_gap) = pairs.get(name.as_str()).copied().unwrap_or((0.2, 0.25));
         // KiCad gives Default the max priority so it always loses to a
         // specific class; specific classes count up from 0.
@@ -1063,8 +1089,8 @@ fn build_net_settings<'a>(
             "priority": priority,
             "schematic_color": rgba(rgb),
             "track_width": track_width,
-            "via_diameter": 0.6,
-            "via_drill": 0.4,
+            "via_diameter": via_diameter,
+            "via_drill": via_drill,
             "wire_width": 6,
         }));
     }

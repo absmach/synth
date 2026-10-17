@@ -620,6 +620,8 @@ mod tests {
             color: None,
             impedance: None,
             current: Some(synth_ir::Current(1_000_000)),
+            via_diameter: None,
+            via_drill: None,
             plane: false,
             max_length: None,
             max_skew: None,
@@ -663,6 +665,8 @@ mod tests {
             color: None,
             impedance: Some(synth_ir::Impedance(50_000)),
             current: None,
+            via_diameter: None,
+            via_drill: None,
             plane: false,
             max_length: None,
             max_skew: None,
@@ -870,6 +874,8 @@ mod tests {
             impedance: None,
             current: Some(synth_ir::Current(1_000_000)),
             plane: false,
+            via_diameter: None,
+            via_drill: None,
             max_length: None,
             max_skew: None,
             source_span: synth_diagnostics::Span::new(0, 0),
@@ -939,6 +945,8 @@ mod tests {
             impedance: None,
             current: None,
             plane: false,
+            via_diameter: None,
+            via_drill: None,
             max_length: Some(synth_ir::Length::from_mm(10.0)),
             max_skew: None,
             source_span: synth_diagnostics::Span::new(0, 0),
@@ -969,6 +977,8 @@ mod tests {
             plane: false,
             max_length: None,
             max_skew: Some(synth_ir::Length::from_mm(1.0)),
+            via_diameter: None,
+            via_drill: None,
             source_span: synth_diagnostics::Span::new(0, 0),
         }
     }
@@ -1013,6 +1023,8 @@ mod tests {
             plane: false,
             max_length: None,
             max_skew: None,
+            via_diameter: None,
+            via_drill: None,
             source_span: synth_diagnostics::Span::new(0, 0),
         });
         let net = board.nets[0].id;

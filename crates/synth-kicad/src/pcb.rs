@@ -1371,6 +1371,8 @@ struct DeclaredGroup {
     name: String,
     trace_width_mm: f64,
     clearance_mm: f64,
+    via_diameter_mm: f64,
+    via_drill_mm: f64,
     pair: Option<(f64, f64)>,
     nets: Vec<String>,
 }
@@ -1523,6 +1525,8 @@ fn build_netclasses(net_table: &[(u32, String)], board: &Board) -> Vec<Sexp> {
             name: nc.name.clone(),
             trace_width_mm: declared_trace_width_mm(nc, board),
             clearance_mm: nc.clearance.map_or(0.127, synth_ir::Length::to_mm),
+            via_diameter_mm: nc.effective_via_diameter().to_mm(),
+            via_drill_mm: nc.effective_via_drill().to_mm(),
             pair: declared_pair_geometry(board, nc),
             nets: Vec::new(),
         })
@@ -1604,8 +1608,8 @@ fn build_netclasses(net_table: &[(u32, String)], board: &Board) -> Vec<Sexp> {
             Sexp::str(format!("Synth netclass {}", group.name)),
             Sexp::list("clearance", vec![num(group.clearance_mm)]),
             Sexp::list("trace_width", vec![num(group.trace_width_mm)]),
-            Sexp::list("via_dia", vec![num(0.60)]),
-            Sexp::list("via_drill", vec![num(0.30)]),
+            Sexp::list("via_dia", vec![num(group.via_diameter_mm)]),
+            Sexp::list("via_drill", vec![num(group.via_drill_mm)]),
         ];
         if let Some((width_mm, gap_mm)) = group.pair {
             args.push(Sexp::list("diff_pair_width", vec![num(width_mm)]));
@@ -3281,6 +3285,7 @@ mod tests {
             buses: vec![],
             modules: vec![],
             variants: vec![],
+            required_processes: std::collections::BTreeSet::new(),
             source_span: Span::new(0, 0),
         };
         let net_table = vec![
@@ -3347,6 +3352,8 @@ mod tests {
                 name: "PWR".to_string(),
                 trace_width: Some(Length::from_mm(0.5)),
                 clearance: Some(Length::from_mm(0.2)),
+                via_diameter: None,
+                via_drill: None,
                 color: None,
                 impedance: None,
                 current: None,
@@ -3358,6 +3365,7 @@ mod tests {
             buses: vec![],
             modules: vec![],
             variants: vec![],
+            required_processes: std::collections::BTreeSet::new(),
             source_span: Span::new(0, 0),
         };
         let net_table = vec![(1_u32, "+3V3".to_string()), (2_u32, "SIG".to_string())];
@@ -3375,12 +3383,95 @@ mod tests {
         assert!(nc_str.contains("(trace_width 0.5)"));
         assert!(nc_str.contains("(clearance 0.2)"));
         assert!(nc_str.contains("(add_net \"+3V3\")"));
+        // A class declaring no via geometry exports the copper it always did.
+        assert!(nc_str.contains("(via_dia 0.6)"));
+        assert!(nc_str.contains("(via_drill 0.3)"));
         assert!(
             !nc_str.contains("\"Power\""),
             "heuristic Power must not duplicate PWR"
         );
         // The unjoined signal net still lands in Default.
         assert!(nc_str.contains("(add_net \"SIG\")"));
+    }
+
+    /// An empty two-layer board, for the net-class questions that turn only
+    /// on what the classes declare.
+    fn plain_test_board() -> Board {
+        Board {
+            schematic_overflow: None,
+            schematic_paper: None,
+            groups: Vec::new(),
+            legends: false,
+            name: "via_geometry".to_string(),
+            layers: 2,
+            manufacturer: None,
+            revision: None,
+            company: None,
+            components: vec![],
+            nets: vec![],
+            diff_pairs: vec![],
+            notes: vec![],
+            keepouts: vec![],
+            stackup: None,
+            netclasses: vec![],
+            buses: vec![],
+            modules: vec![],
+            variants: vec![],
+            required_processes: std::collections::BTreeSet::new(),
+            source_span: Span::new(0, 0),
+        }
+    }
+
+    /// Escape geometry reaches the exported net class, which is where a
+    /// router that reads net classes picks it up. Before this the exporter
+    /// wrote one constant for every class on every board, so a fine-pitch
+    /// package could not ask for the via its escape needs.
+    #[test]
+    fn declared_via_geometry_reaches_the_exported_net_class() {
+        use synth_ir::Length;
+        let mut board = plain_test_board();
+        board.nets = vec![synth_ir::Net {
+            id: synth_ir::NetId(0),
+            name: "TMDS0_P".to_string(),
+            auto_named: false,
+            endpoints: vec![],
+            netclass: Some("ESCAPE".to_string()),
+            voltage: None,
+        }];
+        board.netclasses = vec![synth_ir::NetClass {
+            name: "ESCAPE".to_string(),
+            trace_width: Some(Length::from_mm(0.2)),
+            clearance: Some(Length::from_mm(0.2)),
+            max_length: None,
+            max_skew: None,
+            via_diameter: Some(Length::from_mm(0.45)),
+            via_drill: Some(Length::from_mm(0.2)),
+            color: None,
+            impedance: None,
+            current: None,
+            plane: false,
+            source_span: Span::new(0, 0),
+        }];
+
+        let net_table = vec![(1_u32, "TMDS0_P".to_string())];
+        let nc_str = build_netclasses(&net_table, &board)
+            .iter()
+            .map(super::super::sexp::Sexp::to_string_pretty)
+            .collect::<Vec<_>>()
+            .join("\n");
+
+        assert!(
+            nc_str.contains("(via_dia 0.45)"),
+            "declared via diameter must reach the net class: {nc_str}"
+        );
+        assert!(
+            nc_str.contains("(via_drill 0.2)"),
+            "declared via drill must reach the net class: {nc_str}"
+        );
+        assert!(
+            !nc_str.contains("(via_dia 0.6)") || nc_str.matches("(via_dia 0.6)").count() <= 1,
+            "the default must not shadow the declared class"
+        );
     }
 
     #[test]
@@ -3405,6 +3496,7 @@ mod tests {
             buses: vec![],
             modules: vec![],
             variants: vec![],
+            required_processes: std::collections::BTreeSet::new(),
             source_span: Span::new(0, 0),
         };
         let placement = Placement {

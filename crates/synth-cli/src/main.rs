@@ -1255,6 +1255,16 @@ const UNSUPPORTED: &[CapabilityLimit] = &[
         None,
         "Enable ordering, power-good signals and sequencing timing are neither declared nor checked.",
     ),
+    (
+        "escape_fanout_strategy",
+        None,
+        "Via geometry is declarable per netclass, but escape strategy is not: nothing expresses \
+         which layer a fine-pitch ball fans out to, or in what pattern. The gap is Synth's, not \
+         the router's — KiCadRoutingTools ships a BGA fanout engine (`py_router/bga_fanout`, \
+         including an under-pad method for arrays its channel router cannot escape) and Synth \
+         never invokes it. `synth_router::escape` reports whether a package can be fanned out at \
+         the process floor, and nothing acts on what it reports.",
+    ),
 ];
 
 const UNVERIFIED: &[CapabilityLimit] = &[
@@ -1303,7 +1313,7 @@ fn capability_descriptor() -> serde_json::Value {
         .collect::<Vec<_>>();
 
     serde_json::json!({
-        "schema_version": "1.1",
+        "schema_version": "1.2",
         "compiler": {
             "name": "synth",
             "version": env!("CARGO_PKG_VERSION")
@@ -1322,11 +1332,12 @@ fn capability_descriptor() -> serde_json::Value {
         "manufacturer_profiles": [
             {"name": "jlc-standard", "layers": [2, 4], "min_trace_width_mm": 0.127, "min_clearance_mm": 0.127, "min_drill_mm": 0.3},
             {"name": "pcbway-standard", "layers": [2, 4], "min_trace_width_mm": 0.15, "min_clearance_mm": 0.15, "min_drill_mm": 0.3},
-            {"name": "oshpark-4layer", "layers": [4], "min_trace_width_mm": 0.125, "min_clearance_mm": 0.125, "min_drill_mm": 0.25}
+            {"name": "oshpark-4layer", "layers": [4], "min_trace_width_mm": 0.125, "min_clearance_mm": 0.125, "min_drill_mm": 0.25},
+            {"name": "jlc-filled-via", "layers": [2, 4], "min_trace_width_mm": 0.127, "min_clearance_mm": 0.127, "min_drill_mm": 0.3, "offers": ["via_in_pad"]}
         ],
         "language": {
             "syntax_version": "1.0",
-            "statements": ["board", "import", "layers", "manufacturer", "revision", "schematic", "component", "connect", "net", "power", "module", "interface", "bus", "use", "bind", "netclass", "keepout", "stackup", "group", "sheet", "variant"],
+            "statements": ["board", "import", "layers", "manufacturer", "revision", "schematic", "component", "connect", "net", "power", "module", "interface", "bus", "use", "bind", "netclass", "keepout", "stackup", "requires", "group", "sheet", "variant"],
             "attributes": ["company", "legends", "notes", "dnp", "prefix", "param", "as", "class", "diff_pair", "impedance", "trace_width", "clearance", "radius", "copper", "insulator", "er", "material", "value", "tolerance", "voltage", "power_rating", "dielectric", "description"],
             "endpoint_forms": ["component.pin", "named_net", "bus.member"]
         },
@@ -1369,10 +1380,22 @@ fn capability_descriptor() -> serde_json::Value {
                 "notes": "No fabricator presets are shipped; every value is declared by the design. A diff_pair impedance derives its net class trace width (and, for a true pair, its gap) from the first copper and insulator layers."
             },
             "routing_constraints": {
-                "netclass": ["trace_width", "clearance", "color", "impedance", "current", "plane", "max_length", "max_skew"],
+                "netclass": ["trace_width", "clearance", "color", "impedance", "current", "plane", "max_length", "max_skew", "via_diameter", "via_drill"],
                 "diff_pair": ["impedance", "max_skew", "couple"],
                 "keepout": ["radius"],
-                "component": ["placement_hint"]
+                "component": ["placement_hint"],
+                "requires": ["via_in_pad"]
+            },
+            "fabrication_processes": {
+                "declared_by": "requires <process>",
+                "offered_by": "the manufacturer profile the board's `manufacturer` resolves to",
+                "processes": {
+                    "via_in_pad": "the process fills and caps a via drilled inside an SMD pad, which at fine pitch is the only escape the geometry leaves"
+                },
+                "profiles_offering_via_in_pad": ["jlc-filled-via"],
+                "gate": "E-SYNTH-PROCESS-002: a requirement the declared tier does not offer is an error, so a requirement is never a permission on its own",
+                "via_geometry": "netclass via_diameter / via_drill reach the exported net class; E-SYNTH-PROCESS-003 checks both against the profile's drill and annular-ring floors. Escape strategy — which layer a ball fans out to, and in what pattern — is not declarable; see the unsupported entry",
+                "override": "--krt-allow-via-in-pad permits via-in-pad in the fabrication gate without a declared requirement or a capable tier; it is an operator taking responsibility for one panel, not a process answer"
             },
             "units": ["mm", "mil", "ohm", "kohm", "mohm", "v", "mv", "a", "ma", "mhz", "ghz", "pf", "nf", "uf"]
         },
@@ -4716,6 +4739,50 @@ fn build_route_request(
             .clone()
             .unwrap_or_else(|| "jlc-standard".to_string()),
     );
+    // After the floor, so the capability is read from the profile this board
+    // actually names.
+    //
+    // This is the only place an unmet requirement surfaces on these paths.
+    // `synth route` and `synth drc` reach here without running ERC —
+    // `route_design` writes parse and lower diagnostics only — so
+    // E-SYNTH-PROCESS-002 is not guaranteed upstream. `export-kicad` does run
+    // ERC and already refuses there; these two did not.
+    //
+    // It has to refuse rather than warn. The geometry gate downstream only
+    // rejects a via that actually lands in a pad, so a board declaring
+    // `requires via_in_pad` against a tier that cannot fill one would route
+    // and be reported fabrication-ready whenever the router happened not to
+    // need the process — the requirement granted by luck. A declared process
+    // the named profile does not offer is a statement about the panel, and no
+    // routing outcome can satisfy it.
+    //
+    // An operator who passed `--krt-allow-via-in-pad` has promised the panel
+    // themselves, so the run proceeds on that promise and keeps the warning:
+    // the requirement is still unmet by the profile, which is what the
+    // capability reports either way.
+    let unmet = request.use_board_process_requirements(board);
+    if !unmet.is_empty() {
+        let named = unmet
+            .iter()
+            .map(|r| r.as_source())
+            .collect::<Vec<_>>()
+            .join("`, `");
+        if request.policy.allow_via_in_pad {
+            eprintln!(
+                "warning: board requires `{named}`, which profile `{}` does not offer; \
+                 proceeding on the operator override [E-SYNTH-PROCESS-002]",
+                request.profile_name
+            );
+        } else {
+            anyhow::bail!(
+                "board requires `{named}`, which profile `{}` does not offer \
+                 [E-SYNTH-PROCESS-002]. Name a manufacturer profile whose process \
+                 offers it, drop the requirement, or pass --krt-allow-via-in-pad to \
+                 route on your own promise about the panel.",
+                request.profile_name
+            );
+        }
+    }
     request.input_hash = sha256_file(&result.pcb_path)?;
     request
         .kicad_routing_tools
