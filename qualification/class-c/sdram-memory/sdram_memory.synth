@@ -1,0 +1,425 @@
+// A four-layer x32 SDR SDRAM memory card: two ISSI IS42S16400J dice, each
+// sixteen bits wide, sharing one address and command bus and bringing a
+// 32-bit data bus to a pair of dual-row carrier connectors, under the skew
+// and impedance budgets a 143 MHz memory bus needs.
+//
+// Produced from a prompt through the Synth MCP server.
+//
+// WHAT THIS BOARD IS FOR. A length- and impedance-sensitive parallel
+// interface. Everything here is subordinate to the bus: one rail, no
+// controller, no second clock domain. The subject is seventy-one nets that
+// have to arrive together.
+//
+// WHY TWO DICE RATHER THAN ONE. A single x16 die gives sixteen data lines
+// that each run point to point from the connector to one pad, which is the
+// easy half of the problem. Widening to x32 is how memory is actually built,
+// and it changes the question: address and command now fan out to two loads
+// each, so every one of the twenty-four shared lines is a branch whose two
+// halves have to match, and the data bus splits into two groups of sixteen
+// that are matched within a group rather than across all thirty-two. That
+// is the constraint a real module carries.
+//
+// WHY THERE IS NO CONTROLLER ON THIS BOARD. A driver would need about
+// thirty-six signal pins, honest SDRAM controller hardware, and a package
+// whose pads a minimum track can leave. At JLCPCB's standard floor that last
+// one wants 0.254 mm of gap between pads, and nothing in the registry has all
+// three:
+//
+//   ice40hx4k_bg121   121 pins, a real controller, but a 0.8 mm BGA grid that
+//                     escapes only through vias in its pads, and the FPGA
+//                     video board already measured what that costs
+//   rp2350            QFN-60 at 0.4 mm pitch: 0.200 mm of gap, and no SDRAM
+//                     controller
+//   stm32f103c8       LQFP-48 at 0.5 mm pitch: 0.200 mm of gap, and this die
+//                     carries no FSMC
+//   stm32g030         escapes, but seven pins
+//   atmega328p        escapes, but no memory bus
+//
+// So the board is a memory card rather than a system: the bus terminates at
+// two carrier connectors, which is where module length matching actually
+// lives — a SO-DIMM matches from its dice to its edge fingers and no
+// further. The TSOP-II's 0.8 mm two-row pads escape without a via at all, so
+// no part of this board fails for want of room, and the skew measurement is
+// about skew.
+//
+// WHY DUAL-ROW CONNECTORS. Seventy-one signals need pins, and at 2.54 mm a
+// single row buys twenty of them per fifty millimetres of board edge. Three
+// single rows is what the first version of this card used, and it set the
+// outline from three sides at once: the dice and their decoupling occupied a
+// tenth of a board that the connectors had sized. Two 2x20 headers carry
+// twice the pins in the same length, so the card is sized by what is on it.
+//
+// THE BUS, AND WHY IT IS FIVE CLASSES RATHER THAN ONE. A memory bus is not
+// one group. The data lines have to track the clock, the address lines have
+// to be stable before it, and the control lines are sampled on its edge.
+// Declaring one tolerance across all seventy-one would state a constraint
+// nobody has:
+//
+//   SDRAM_DQL    16 data lines to U1, max_skew 2.5mm — the +/-100 mil the
+//                SDRAM layout guides ask for within a data group
+//   SDRAM_DQH    16 data lines to U2, max_skew 2.5mm — its own group, for
+//                its own die, masked by its own two DQM lines
+//   SDRAM_ADDR   12 address + 2 bank, max_skew 5mm, two loads each
+//   SDRAM_CTRL   /RAS /CAS /WE /CS CKE and the four byte masks, max_skew 5mm
+//   SDRAM_CLK    the clock alone, max_length 60mm
+//
+// The two data groups are separate because nothing requires DQ0 and DQ31 to
+// match: they are captured by different dice on different byte masks. What
+// has to match is each group against the clock, and the clock is bounded by
+// a length rather than a skew because the group check compares a class's
+// members against each other and skips a class with fewer than two.
+//
+// All five carry impedance 50ohm, because that is what an
+// impedance-sensitive interface means: a budget on one line of seventy-one
+// would not be one.
+//
+// THE CLOCK IS A T, AND ITS TERMINATION IS NOT ON THIS CARD. CLK arrives on
+// one pin and reaches two dice, so it is a branch like the rest of the
+// shared bus, and the card's job is to keep the two halves the same length.
+// The series source termination a 143 MHz clock needs belongs at the driver,
+// which is on the controller board: a resistor in the middle of this card's
+// transmission line would damp the wrong end and split one logical signal
+// into two nets of unequal length.
+//
+// IMPEDANCE comes from the stackup below, and the width comes from the
+// stackup rather than from habit. Over the 0.2104 mm prepreg under F.Cu,
+// Synth's estimator puts a 0.2 mm trace at 67.3 Ohm and a 0.35 mm trace at
+// 50.0 Ohm, so 0.35 mm is what the bus classes declare. Only outer-layer
+// microstrip is derived, so a line routed on B.Cu is referenced to the 3V3
+// plane instead and W-SYNTH-IMPEDANCE-001 will say the figure is unverified
+// there. That is accurate and stays stated.
+
+board "sdram_memory" {
+    layers 4
+    manufacturer "jlcpcb"
+    revision "B"
+
+    // Four layers because a 143 MHz bus needs a continuous reference under
+    // it. The 3V3 plane on In1.Cu is that reference and also feeds the
+    // fourteen supply pins without a star of traces across the board.
+    stackup {
+      copper 0.035mm
+      insulator 0.2104mm er 4.4 material "FR4"
+      copper 0.0152mm
+      insulator 1.065mm er 4.6 material "FR4"
+      copper 0.0152mm
+      insulator 0.2104mm er 4.4 material "FR4"
+      copper 0.035mm
+    }
+
+    // The 3V3 rail is the declared plane, and it takes the first inner layer,
+    // so it is the copper the F.Cu bus is referenced to. Ground pours on the
+    // outer layers, as it does on the other Class-C boards.
+    //
+    // Ground is deliberately *not* declared as a plane class. A declared
+    // plane needs a stitching via beside every pad on it, and GND reaches
+    // more than sixty endpoints including both TSOP-II packages' own pads: on
+    // an 0.8 mm two-row package the exporter finds no legal position beside
+    // those pads and refuses the export unless via-in-pad is allowed. The bus
+    // escapes these packages with a plain track on the standard floor, and
+    // buying a filled-via process to stitch a plane would give that up for a
+    // return path the decoupling already provides — the fourteen capacitors
+    // tie the 3V3 plane to ground at every supply pin, which is what makes it
+    // a valid AC reference.
+    netclass "V3V3" {
+      trace_width 0.6mm
+      clearance 0.25mm
+      plane
+    }
+
+    netclass "GND" {
+      trace_width 0.6mm
+      clearance 0.25mm
+    }
+
+    // 0.35 mm over the 0.2104 mm prepreg is the 50 Ohm geometry for this
+    // stackup — Synth's own estimator, not a rule of thumb — so every bus
+    // class takes it. What differs between them is the spread each allows.
+    netclass "SDRAM_DQL" {
+      trace_width 0.35mm
+      clearance 0.2mm
+      impedance 50ohm
+      max_skew 2.5mm
+    }
+
+    netclass "SDRAM_DQH" {
+      trace_width 0.35mm
+      clearance 0.2mm
+      impedance 50ohm
+      max_skew 2.5mm
+    }
+
+    netclass "SDRAM_ADDR" {
+      trace_width 0.35mm
+      clearance 0.2mm
+      impedance 50ohm
+      max_skew 5mm
+    }
+
+    netclass "SDRAM_CTRL" {
+      trace_width 0.35mm
+      clearance 0.2mm
+      impedance 50ohm
+      max_skew 5mm
+    }
+
+    // The clock is alone in its class on purpose: it is the reference every
+    // other budget is measured against, and sharing a tolerance with the
+    // signals it clocks would be circular. A length bounds it instead, which
+    // is the constraint a single net can carry.
+    netclass "SDRAM_CLK" {
+      trace_width 0.35mm
+      clearance 0.25mm
+      impedance 50ohm
+      max_length 60mm
+    }
+
+    // U1 takes the low half of the data bus, U2 the high half. They sit
+    // beside each other in the middle of the card with the connectors on
+    // either side, so the shared address and command lines reach both dice
+    // over comparable copper — which is what makes their branch budget
+    // achievable rather than merely declared.
+    group "SDRAM LOW HALF" color "#1d4ed8" {
+      component U1: memory "is42s16400j_sdram" {
+        placement_hint { region: centre priority: hard }
+      }
+
+      // One 100 nF per supply pin, because the seven pins are on four sides
+      // of the package and a shared capacitor is only local to one of them.
+      component C1: capacitor "c_generic_0603" value "100nF" { placement_hint { near: "U1" priority: hard } }
+      component C2: capacitor "c_generic_0603" value "100nF" { placement_hint { near: "U1" priority: hard } }
+      component C3: capacitor "c_generic_0603" value "100nF" { placement_hint { near: "U1" priority: hard } }
+      component C4: capacitor "c_generic_0603" value "100nF" { placement_hint { near: "U1" priority: hard } }
+      component C5: capacitor "c_generic_0603" value "100nF" { placement_hint { near: "U1" priority: hard } }
+      component C6: capacitor "c_generic_0603" value "100nF" { placement_hint { near: "U1" priority: hard } }
+      component C7: capacitor "c_generic_0603" value "100nF" { placement_hint { near: "U1" priority: hard } }
+      component C8: capacitor "c_generic_0805" value "22uF"  { placement_hint { near: "U1" priority: soft } }
+
+      // Every rail endpoint names its net. A `connect` with no `as` makes a
+      // net of its own, so leaving the later ones unnamed strands each supply
+      // pin on a two-endpoint net with nothing but its own capacitor.
+      connect U1.vdd_0  -> C1.p1 as "V3V3" class "V3V3"
+      connect U1.vdd_1  -> C2.p1 as "V3V3"
+      connect U1.vdd_2  -> C3.p1 as "V3V3"
+      connect U1.vddq_0 -> C4.p1 as "V3V3"
+      connect U1.vddq_1 -> C5.p1 as "V3V3"
+      connect U1.vddq_2 -> C6.p1 as "V3V3"
+      connect U1.vddq_3 -> C7.p1 as "V3V3"
+      connect U1.vdd_0  -> C8.p1 as "V3V3"
+
+      connect C1.p2 -> U1.gnd_0  as "GND" class "GND"
+      connect C2.p2 -> U1.gnd_1  as "GND"
+      connect C3.p2 -> U1.gnd_2  as "GND"
+      connect C4.p2 -> U1.gndq_0 as "GND"
+      connect C5.p2 -> U1.gndq_1 as "GND"
+      connect C6.p2 -> U1.gndq_2 as "GND"
+      connect C7.p2 -> U1.gndq_3 as "GND"
+      connect C8.p2 -> U1.gnd_0  as "GND"
+
+      // The two no-connect balls are left unconnected, which is what the
+      // datasheet asks for; tying them to anything would be inventing a net.
+    }
+
+    group "SDRAM HIGH HALF" color "#1e40af" {
+      component U2: memory "is42s16400j_sdram" {
+        placement_hint { region: centre priority: hard }
+      }
+
+      component C9:  capacitor "c_generic_0603" value "100nF" { placement_hint { near: "U2" priority: hard } }
+      component C10: capacitor "c_generic_0603" value "100nF" { placement_hint { near: "U2" priority: hard } }
+      component C11: capacitor "c_generic_0603" value "100nF" { placement_hint { near: "U2" priority: hard } }
+      component C12: capacitor "c_generic_0603" value "100nF" { placement_hint { near: "U2" priority: hard } }
+      component C13: capacitor "c_generic_0603" value "100nF" { placement_hint { near: "U2" priority: hard } }
+      component C14: capacitor "c_generic_0603" value "100nF" { placement_hint { near: "U2" priority: hard } }
+      component C15: capacitor "c_generic_0603" value "100nF" { placement_hint { near: "U2" priority: hard } }
+      component C16: capacitor "c_generic_0805" value "22uF"  { placement_hint { near: "U2" priority: soft } }
+
+      connect U2.vdd_0  -> C9.p1  as "V3V3"
+      connect U2.vdd_1  -> C10.p1 as "V3V3"
+      connect U2.vdd_2  -> C11.p1 as "V3V3"
+      connect U2.vddq_0 -> C12.p1 as "V3V3"
+      connect U2.vddq_1 -> C13.p1 as "V3V3"
+      connect U2.vddq_2 -> C14.p1 as "V3V3"
+      connect U2.vddq_3 -> C15.p1 as "V3V3"
+      connect U2.vdd_0  -> C16.p1 as "V3V3"
+
+      connect C9.p2  -> U2.gnd_0  as "GND"
+      connect C10.p2 -> U2.gnd_1  as "GND"
+      connect C11.p2 -> U2.gnd_2  as "GND"
+      connect C12.p2 -> U2.gndq_0 as "GND"
+      connect C13.p2 -> U2.gndq_1 as "GND"
+      connect C14.p2 -> U2.gndq_2 as "GND"
+      connect C15.p2 -> U2.gndq_3 as "GND"
+      connect C16.p2 -> U2.gnd_0  as "GND"
+    }
+
+    // The rail arrives on the command connector, as a mezzanine's supply
+    // does, and is bulk-decoupled where it lands as well as at each die.
+    group "RAIL" color "#047857" {
+      component C17: capacitor "c_generic_0805" value "10uF"
+      component TP1: testpoint "testpoint_pad_1_5" {
+        placement_hint { region: top_edge edge: top priority: soft }
+      }
+      component TP2: testpoint "testpoint_pad_1_5" {
+        placement_hint { region: top_edge edge: top priority: soft }
+      }
+
+      connect C17.p1 -> U1.vdd_1 as "V3V3"
+      connect C17.p2 -> U1.gnd_1 as "GND"
+      connect TP1.p1 -> U1.vdd_2 as "V3V3"
+      connect TP2.p1 -> U1.gnd_2 as "GND"
+    }
+
+    // Two passives that decide what the dice do before the controller says
+    // anything. CKE low holds both dice out of any command the bus happens
+    // to be carrying while the host is in reset, and /CS high keeps them
+    // deselected; a floating input on either pin leaves that to chance.
+    group "BUS IDLE" color "#a16207" {
+      component R1: resistor "r_generic_0603" value "10k"
+      component R2: resistor "r_generic_0603" value "10k"
+
+      connect R1.p1 -> U1.cke as "CKE"
+      connect R1.p2 -> U1.gnd_0 as "GND"
+      connect R2.p1 -> U1.cs as "nCS"
+      connect R2.p2 -> U1.vdd_0 as "V3V3"
+    }
+
+    // J1 carries the thirty-two data lines with a ground every four. Eight
+    // grounds in forty pins is what the connector leaves room for once the
+    // bus has its pins; the plane does the rest of the return. The header is
+    // odd-even numbered, so consecutive pins sit across the two rows and
+    // every group of four data lines has a ground on one row beside it.
+    group "DATA BUS" color "#b91c1c" {
+      component J1: connector "header_2x20" {
+        placement_hint { region: right_edge edge: right priority: hard }
+      }
+
+      connect J1.p1  -> U1.gnd_0  as "GND"  class "GND"
+      connect J1.p2  -> U1.dq0    as "DQ0"  class "SDRAM_DQL"
+      connect J1.p3  -> U1.dq1    as "DQ1"  class "SDRAM_DQL"
+      connect J1.p4  -> U1.dq2    as "DQ2"  class "SDRAM_DQL"
+      connect J1.p5  -> U1.dq3    as "DQ3"  class "SDRAM_DQL"
+      connect J1.p6  -> U1.gndq_0 as "GND"  class "GND"
+      connect J1.p7  -> U1.dq4    as "DQ4"  class "SDRAM_DQL"
+      connect J1.p8  -> U1.dq5    as "DQ5"  class "SDRAM_DQL"
+      connect J1.p9  -> U1.dq6    as "DQ6"  class "SDRAM_DQL"
+      connect J1.p10 -> U1.dq7    as "DQ7"  class "SDRAM_DQL"
+      connect J1.p11 -> U1.gndq_1 as "GND"  class "GND"
+      connect J1.p12 -> U1.dq8    as "DQ8"  class "SDRAM_DQL"
+      connect J1.p13 -> U1.dq9    as "DQ9"  class "SDRAM_DQL"
+      connect J1.p14 -> U1.dq10   as "DQ10" class "SDRAM_DQL"
+      connect J1.p15 -> U1.dq11   as "DQ11" class "SDRAM_DQL"
+      connect J1.p16 -> U1.gndq_2 as "GND"  class "GND"
+      connect J1.p17 -> U1.dq12   as "DQ12" class "SDRAM_DQL"
+      connect J1.p18 -> U1.dq13   as "DQ13" class "SDRAM_DQL"
+      connect J1.p19 -> U1.dq14   as "DQ14" class "SDRAM_DQL"
+      connect J1.p20 -> U1.dq15   as "DQ15" class "SDRAM_DQL"
+      connect J1.p21 -> U2.gnd_0  as "GND"  class "GND"
+      connect J1.p22 -> U2.dq0    as "DQ16" class "SDRAM_DQH"
+      connect J1.p23 -> U2.dq1    as "DQ17" class "SDRAM_DQH"
+      connect J1.p24 -> U2.dq2    as "DQ18" class "SDRAM_DQH"
+      connect J1.p25 -> U2.dq3    as "DQ19" class "SDRAM_DQH"
+      connect J1.p26 -> U2.gndq_0 as "GND"  class "GND"
+      connect J1.p27 -> U2.dq4    as "DQ20" class "SDRAM_DQH"
+      connect J1.p28 -> U2.dq5    as "DQ21" class "SDRAM_DQH"
+      connect J1.p29 -> U2.dq6    as "DQ22" class "SDRAM_DQH"
+      connect J1.p30 -> U2.dq7    as "DQ23" class "SDRAM_DQH"
+      connect J1.p31 -> U2.gndq_1 as "GND"  class "GND"
+      connect J1.p32 -> U2.dq8    as "DQ24" class "SDRAM_DQH"
+      connect J1.p33 -> U2.dq9    as "DQ25" class "SDRAM_DQH"
+      connect J1.p34 -> U2.dq10   as "DQ26" class "SDRAM_DQH"
+      connect J1.p35 -> U2.dq11   as "DQ27" class "SDRAM_DQH"
+      connect J1.p36 -> U2.gndq_2 as "GND"  class "GND"
+      connect J1.p37 -> U2.dq12   as "DQ28" class "SDRAM_DQH"
+      connect J1.p38 -> U2.dq13   as "DQ29" class "SDRAM_DQH"
+      connect J1.p39 -> U2.dq14   as "DQ30" class "SDRAM_DQH"
+      connect J1.p40 -> U2.dq15   as "DQ31" class "SDRAM_DQH"
+    }
+
+    // J2 carries the address, bank, command and mask lines, the clock and
+    // the supply. Every line on this connector but the four masks reaches
+    // both dice, so each is a two-load branch and the class budget is what
+    // holds the two halves together.
+    //
+    // The clock has a ground on both sides, which is the one place on this
+    // connector where the pinout is chosen for the signal rather than for
+    // the pin count.
+    group "COMMAND BUS" color "#be185d" {
+      component J2: connector "header_2x20" {
+        placement_hint { region: left_edge edge: left priority: hard }
+      }
+
+      connect J2.p1  -> U1.gnd_0  as "GND"   class "GND"
+      connect J2.p2  -> U1.clk    as "CLK"   class "SDRAM_CLK"
+      connect J2.p2  -> U2.clk    as "CLK"
+      connect J2.p3  -> U1.gnd_1  as "GND"
+      connect J2.p4  -> U1.cke    as "CKE"   class "SDRAM_CTRL"
+      connect J2.p4  -> U2.cke    as "CKE"
+      connect J2.p5  -> U1.cs     as "nCS"   class "SDRAM_CTRL"
+      connect J2.p5  -> U2.cs     as "nCS"
+      connect J2.p6  -> U1.gnd_2  as "GND"
+      connect J2.p7  -> U1.ras    as "nRAS"  class "SDRAM_CTRL"
+      connect J2.p7  -> U2.ras    as "nRAS"
+      connect J2.p8  -> U1.cas    as "nCAS"  class "SDRAM_CTRL"
+      connect J2.p8  -> U2.cas    as "nCAS"
+      connect J2.p9  -> U1.we     as "nWE"   class "SDRAM_CTRL"
+      connect J2.p9  -> U2.we     as "nWE"
+      connect J2.p10 -> U1.gndq_0 as "GND"
+      connect J2.p11 -> U1.ldqm   as "DQM0"  class "SDRAM_CTRL"
+      connect J2.p12 -> U1.udqm   as "DQM1"  class "SDRAM_CTRL"
+      connect J2.p13 -> U2.ldqm   as "DQM2"  class "SDRAM_CTRL"
+      connect J2.p14 -> U2.udqm   as "DQM3"  class "SDRAM_CTRL"
+      connect J2.p15 -> U1.gndq_1 as "GND"
+      connect J2.p16 -> U1.a0     as "A0"    class "SDRAM_ADDR"
+      connect J2.p16 -> U2.a0     as "A0"
+      connect J2.p17 -> U1.a1     as "A1"    class "SDRAM_ADDR"
+      connect J2.p17 -> U2.a1     as "A1"
+      connect J2.p18 -> U1.a2     as "A2"    class "SDRAM_ADDR"
+      connect J2.p18 -> U2.a2     as "A2"
+      connect J2.p19 -> U1.a3     as "A3"    class "SDRAM_ADDR"
+      connect J2.p19 -> U2.a3     as "A3"
+      connect J2.p20 -> U1.gndq_2 as "GND"
+      connect J2.p21 -> U1.a4     as "A4"    class "SDRAM_ADDR"
+      connect J2.p21 -> U2.a4     as "A4"
+      connect J2.p22 -> U1.a5     as "A5"    class "SDRAM_ADDR"
+      connect J2.p22 -> U2.a5     as "A5"
+      connect J2.p23 -> U1.a6     as "A6"    class "SDRAM_ADDR"
+      connect J2.p23 -> U2.a6     as "A6"
+      connect J2.p24 -> U1.a7     as "A7"    class "SDRAM_ADDR"
+      connect J2.p24 -> U2.a7     as "A7"
+      connect J2.p25 -> U1.gndq_3 as "GND"
+      connect J2.p26 -> U1.a8     as "A8"    class "SDRAM_ADDR"
+      connect J2.p26 -> U2.a8     as "A8"
+      connect J2.p27 -> U1.a9     as "A9"    class "SDRAM_ADDR"
+      connect J2.p27 -> U2.a9     as "A9"
+      connect J2.p28 -> U1.a10    as "A10"   class "SDRAM_ADDR"
+      connect J2.p28 -> U2.a10    as "A10"
+      connect J2.p29 -> U1.a11    as "A11"   class "SDRAM_ADDR"
+      connect J2.p29 -> U2.a11    as "A11"
+      connect J2.p30 -> U2.gnd_1  as "GND"
+      connect J2.p31 -> U1.ba0    as "BA0"   class "SDRAM_ADDR"
+      connect J2.p31 -> U2.ba0    as "BA0"
+      connect J2.p32 -> U1.ba1    as "BA1"   class "SDRAM_ADDR"
+      connect J2.p32 -> U2.ba1    as "BA1"
+      connect J2.p33 -> U2.gnd_2  as "GND"
+      connect J2.p34 -> U1.vdd_0  as "V3V3"  class "V3V3"
+      connect J2.p35 -> U1.vddq_0 as "V3V3"
+      connect J2.p36 -> U2.gndq_3 as "GND"
+      connect J2.p37 -> U2.vdd_0  as "V3V3"
+      connect J2.p38 -> U2.vddq_0 as "V3V3"
+      connect J2.p39 -> U1.gnd_0  as "GND"
+      connect J2.p40 -> U2.gnd_0  as "GND"
+    }
+
+    group "MECHANICAL" color "#525252" {
+      component H1: mounting_hole "mounting_hole_m2_5" { placement_hint { region: top_left priority: hard } }
+      component H2: mounting_hole "mounting_hole_m2_5" { placement_hint { region: top_right priority: hard } }
+      component H3: mounting_hole "mounting_hole_m2_5" { placement_hint { region: bottom_left priority: hard } }
+      component H4: mounting_hole "mounting_hole_m2_5" { placement_hint { region: bottom_right priority: hard } }
+      // The four holes take the corners. The fiducials are deliberately
+      // unhinted: a fiducial pinned to a corner a hole already holds lands
+      // on top of it, and KiCad reports the pair as overlapping courtyards.
+      component FID1: fiducial "fiducial_1mm"
+      component FID2: fiducial "fiducial_1mm"
+    }
+}
