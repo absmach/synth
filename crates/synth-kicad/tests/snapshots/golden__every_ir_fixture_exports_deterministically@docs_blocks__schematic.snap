@@ -1114,7 +1114,7 @@ expression: schematic
 		(stroke
 			(width 0.254)
 			(type solid)
-			(color 49 66 150 1)
+			(color 139 69 19 1)
 		)
 		(uuid "3e8601c9-71c3-5011-be4c-384cf44d13f3")
 	)

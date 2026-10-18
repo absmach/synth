@@ -688,17 +688,23 @@ pub(crate) fn build_sheet_schematic(
         ));
     }
 
-    // The outline of the region boxes (§21.1), framing each caption and its
-    // parts. Same graphic status as captions — no electrical meaning, never
-    // trips ERC. The boxes tile the page, so together they read as a single
-    // outline cut into sections: one colour, no tint, and each boundary
-    // drawn once as a `(polyline ...)` rather than once per box.
-    let [r, g, b] = REGION_LINE_RGB;
-    for (n, (from, to)) in region_outline(&layout.group_boxes, layout.sheet_size.dims_mm())
-        .into_iter()
-        .enumerate()
-    {
-        let uuid = derive_entity_uuid(project, "region_line", &n.to_string());
+    // Titled outline boxes: one `(rectangle ...)` per declared `group`
+    // (§21.1), framing the caption and its parts. Same graphic
+    // status as captions — no electrical meaning, never trips ERC.
+    // Shape grammar mirrors the embedded symbol library
+    // (`(rectangle … (stroke …) (fill …))`), which is what
+    // `kicad-cli sch erc` accepts at top level — a bare
+    // `(rect … (fill none))` fails to load.
+    //
+    // Phase B2 styling: a thin solid stroke in the group's deterministic
+    // hue ([`synth_layout::group_color`]) plus a translucent fill of
+    // the same hue, so each region reads as its own block (reference
+    // mechanism 2). The grammar was verified against `kicad-cli 10`:
+    // `(stroke (type solid) (color r g b 1))` and
+    // `(fill (type color) (color r g b 0.08))` both load.
+    for group_box in &layout.group_boxes {
+        let uuid = derive_entity_uuid(project, "group_box", &group_box.group);
+        let [r, g, b] = group_box.color;
         children.push(Sexp::list(
             "polyline",
             vec![
@@ -3564,7 +3570,7 @@ mod tests {
         let text = build_schematic(&board, &project).to_string_pretty();
         // Sanity: the styled forms are present before we ask KiCad.
         assert!(text.contains("(type solid)"), "solid stroke");
-        assert!(text.contains("(polyline"), "outline line");
+        assert!(text.contains("(type color)"), "colour fill");
         assert!(text.contains("bold"), "bold caption");
         assert!(text.contains("Keep leads short."), "in-box note line");
 
@@ -3602,7 +3608,9 @@ mod tests {
         let text = build_schematic(&board, &project).to_string_pretty();
         assert!(text.contains("(polyline"), "group outline must render");
         assert!(text.contains("\"Input\""), "group caption must render");
-        // Thin solid stroke in the one region colour.
+        // Phase B2: thin solid stroke in the group hue plus a translucent
+        // fill of the same hue.
+        assert!(text.contains("(type solid)"), "box stroke must be solid");
         assert!(
             text.contains("(type solid)"),
             "outline stroke must be solid"

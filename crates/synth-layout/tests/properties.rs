@@ -467,17 +467,6 @@ board "mech" {
         .iter()
         .find(|b| b.group == synth_layout::MOUNTING_REGION)
         .expect("MOUNTING region");
-    // Inside the sheet frame the boxes are cut for.
-    let (sheet_w, sheet_h) = layout.sheet_size.dims_mm();
-    let border = synth_layout::SHEET_BORDER_MM;
-    assert!(
-        mounting.min_mm.0 >= border
-            && mounting.min_mm.1 >= border
-            && mounting.max_mm.0 <= sheet_w - border
-            && mounting.max_mm.1 <= sheet_h - border,
-        "MOUNTING box {:?} leaves the page frame of {sheet_w} x {sheet_h} mm",
-        (mounting.min_mm, mounting.max_mm)
-    );
     let hole_ys: Vec<f64> = board
         .components
         .iter()
