@@ -2259,6 +2259,7 @@ dependencies = [
  "synth-supply",
  "synth-validate",
  "tokio",
+ "toml",
 ]
 
 [[package]]
