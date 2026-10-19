@@ -74,6 +74,11 @@ x = 52.0
 y = 17.5
 rotation = 0
 
+[components.C21]
+x = 57.0
+y = 39.0
+rotation = 0
+
 [components.C3]
 x = 20.5
 y = 20.5
@@ -284,6 +289,16 @@ x = 12.4
 y = 47.6
 rotation = 0
 
+[components.R31]
+x = 50.0
+y = 46.5
+rotation = 0
+
+[components.R32]
+x = 50.0
+y = 42.0
+rotation = 0
+
 [components.R4]
 x = 57.8
 y = 13.5
@@ -324,6 +339,26 @@ x = 61.5
 y = 25.0
 rotation = 0
 
+[components.TP3]
+x = 61.5
+y = 28.0
+rotation = 0
+
+[components.TP4]
+x = 61.5
+y = 31.0
+rotation = 0
+
+[components.TP5]
+x = 61.5
+y = 34.0
+rotation = 0
+
+[components.TP6]
+x = 61.5
+y = 37.0
+rotation = 0
+
 [components.U1]
 x = 31.5
 y = 21.0
@@ -337,4 +372,9 @@ rotation = 0
 [components.U3]
 x = 52.0
 y = 12.95
+rotation = 0
+
+[components.U4]
+x = 57.33
+y = 44.0
 rotation = 0
