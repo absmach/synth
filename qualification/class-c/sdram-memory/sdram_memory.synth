@@ -298,17 +298,52 @@ board "sdram_memory" {
       component L1: inductor "ferrite_bead_0603" value "600R@100MHz"
       component C19: capacitor "c_generic_0805" value "22uF"
       component C17: capacitor "c_generic_0805" value "10uF"
+
+      // 0.1 ohm in each rail, so the monitor has something to measure across.
+      // At the card's ~200 mA that is 20 mV, well inside the monitor's 163.8
+      // mV full scale and 4 mW in a 2010 part rated for half a watt. R31 sees
+      // the whole module, R32 only the driver rail, so the core current is
+      // the difference rather than a third shunt.
+      //
+      // R31 sits ahead of the fuse rather than behind it, which is not the
+      // conventional place for a shunt. The reason is the plane: the monitor
+      // has to tap both ends of whatever it measures, its pads are on an
+      // 0.65 mm grid, and a declared plane needs a stitching via beside every
+      // pad on it — which there is no room for beside a pad that fine. Ahead
+      // of the fuse both ends of the shunt are routed copper, and what channel
+      // one then reports is the current the host actually delivers, fuse drop
+      // included.
+      component R31: resistor "r_generic_2010" value "0.1R"
+      component R32: resistor "r_generic_2010" value "0.1R"
+      // Six pads, so bring-up and a production test need no wire soldered to
+      // a component: both rails, ground, the thermal line and the two
+      // presence detect lines. The bus is deliberately not probed — a stub
+      // off a 143 MHz line to a test pad is a stub.
       component TP1: testpoint "testpoint_pad_1_5" {
         placement_hint { region: top_edge edge: top priority: soft }
       }
       component TP2: testpoint "testpoint_pad_1_5" {
         placement_hint { region: top_edge edge: top priority: soft }
       }
+      component TP3: testpoint "testpoint_pad_1_5" {
+        placement_hint { region: top_edge edge: top priority: soft }
+      }
+      component TP4: testpoint "testpoint_pad_1_5" {
+        placement_hint { region: top_edge edge: top priority: soft }
+      }
+      component TP5: testpoint "testpoint_pad_1_5" {
+        placement_hint { region: top_edge edge: top priority: soft }
+      }
+      component TP6: testpoint "testpoint_pad_1_5" {
+        placement_hint { region: top_edge edge: top priority: soft }
+      }
 
+      connect R31.p2 -> F1.p1  as "RAIL_FUSED" class "RAIL_IN"
       connect F1.p2  -> C18.p1 as "V3V3" class "V3V3"
       connect F1.p2  -> C17.p1 as "V3V3"
       connect F1.p2  -> L1.p1  as "V3V3"
-      connect L1.p2  -> C19.p1 as "VDDQ" class "VDDQ"
+      connect L1.p2  -> R32.p1 as "VDDQ_SENSE" class "VDDQ"
+      connect R32.p2 -> C19.p1 as "VDDQ" class "VDDQ"
       connect C18.p2 -> C19.p2 as "GND"  class "GND"
       connect C17.p2 -> C19.p2 as "GND"
 
@@ -317,6 +352,7 @@ board "sdram_memory" {
       // a write burst.
       connect TP1.p1 -> C17.p1 as "V3V3"
       connect TP2.p1 -> C19.p1 as "VDDQ"
+      connect TP3.p1 -> C17.p2 as "GND"
     }
 
     // U1 takes the low half of the data bus. The dice sit beside each other in the middle of the card
@@ -432,6 +468,33 @@ board "sdram_memory" {
     // on the card. Address strapped to zero, write-protect strapped low, one
     // ceramic of its own, and the clamp across the two lines that leave the
     // board.
+    //
+    // WHAT THE DEVICE HOLDS. Not arbitrary bytes: a fixed 32-byte record at
+    // offset 0, little-endian, so a host can read a known structure rather
+    // than a convention nobody wrote down.
+    //
+    //   0x00  u8    format version, 0x01
+    //   0x01  u8    record length, 32
+    //   0x02  u16   organisation: 0x2002 = two x16 devices, one rank
+    //   0x04  u32   capacity in mebibytes, 16
+    //   0x08  u16   maximum clock in MHz, 143
+    //   0x0A  u8    CAS latency, 3
+    //   0x0B  u8    supply, tenths of a volt, 33
+    //   0x0C  char  board identifier, 8 bytes, "SDRAMX32"
+    //   0x14  u8    board revision, ASCII, 'C'
+    //   0x15  u8    BOM revision, 1
+    //   0x16  u8    thermal sensor: 0x01 = NTC on the analog line
+    //   0x17  u8    power monitor: 0x01 = three-channel, I2C 0x40
+    //   0x18  u32   reserved, zero
+    //   0x1C  u16   reserved, zero
+    //   0x1E  u16   CRC-16/CCITT-FALSE over bytes 0x00..0x1D
+    //
+    // This is the card's own schema and it is deliberately not called SPD: a
+    // JEDEC presence-detect image has a layout and a checksum of its own, and
+    // claiming compatibility without meeting it would be worse than having no
+    // schema at all. Nothing in this repository programs the device, so a
+    // card built from these files reads back whatever the part shipped with —
+    // the schema is what a programming step would write, not what is there.
     group "PRESENCE DETECT" color "#7c3aed" {
       component U3: memory "24lc256_eeprom"
       component C20: capacitor "c_generic_0603" value "100nF" {
@@ -460,10 +523,51 @@ board "sdram_memory" {
       connect R3.p2 -> U3.vdd as "V3V3"
       connect R4.p2 -> U3.vdd as "V3V3"
 
+      connect TP5.p1 -> U3.sda as "SPD_SDA"
+      connect TP6.p1 -> U3.scl as "SPD_SCL"
+
       connect D1.io1 -> U3.sda as "SPD_SDA"
       connect D1.io2 -> U3.scl as "SPD_SCL"
       connect D1.vcc -> U3.vdd as "V3V3"
       connect D1.gnd -> U3.gnd as "GND"
+    }
+
+    // What the module actually draws, rather than what it was estimated to
+    // draw. One device on the presence detect bus measures both rails and
+    // costs no connector pins, which is the only reason it can be here: both
+    // connectors are full.
+    //
+    // Channel 1 is across R31 and sees the whole card, fuse included; two is
+    // across R32 and sees the driver rail, so core current is the difference.
+    // Channel 3 has both inputs on V3V3: no current, and the bus voltage for
+    // free. WARNING, CRITICAL, PV and TC are open-drain outputs with nowhere
+    // to go on this card and are left unconnected.
+    group "POWER MONITOR" color "#0e7490" {
+      component U4: sensor "ina3221_power_monitor"
+      component C21: capacitor "c_generic_0603" value "100nF" {
+        placement_hint { near: "U4" priority: hard }
+      }
+
+      // The monitor runs off the fused rail rather than the plane, so none of
+      // its 0.65 mm pads sits on a net that needs a stitching via beside it.
+      connect U4.vs  -> C21.p1 as "RAIL_FUSED"
+      connect C21.p2 -> U4.gnd as "GND"
+      connect U4.vpu -> U4.vs  as "RAIL_FUSED"
+
+      // Address 0x40, and the exposed pad on ground: TI's land pattern asks
+      // for it to be soldered, and ground is the only plane it can reach.
+      connect U4.a0 -> U4.gnd as "GND"
+      connect U4.ep -> U4.gnd as "GND"
+
+      connect U4.sda -> U3.sda as "SPD_SDA"
+      connect U4.scl -> U3.scl as "SPD_SCL"
+
+      connect U4.in1_p -> R31.p1 as "RAIL_IN"
+      connect U4.in1_n -> R31.p2 as "RAIL_FUSED"
+      connect U4.in2_p -> R32.p1 as "VDDQ_SENSE"
+      connect U4.in2_n -> R32.p2 as "VDDQ"
+      connect U4.in3_p -> R31.p2 as "RAIL_FUSED"
+      connect U4.in3_n -> R31.p2 as "RAIL_FUSED"
     }
 
     // One analog line that says how hot the dice are. The NTC sits between
@@ -481,6 +585,7 @@ board "sdram_memory" {
       connect R6.p1 -> U1.vdd_0 as "V3V3"
       connect R6.p2 -> R5.p1 as "THERM" class "THERMAL"
       connect R5.p2 -> U1.gnd_0 as "GND"
+      connect TP4.p1 -> R5.p1 as "THERM"
     }
 
     // J1 carries the thirty-two data lines with a ground every four. Eight
@@ -658,11 +763,11 @@ board "sdram_memory" {
       connect R30.p2 -> U1.ba1     as "BA1" class "SDRAM_ADDR"
       connect R30.p2 -> U2.ba1     as "BA1"
       connect J2.p33 -> U2.gnd_0   as "GND"
-      connect J2.p34 -> F1.p1     as "RAIL_IN" class "RAIL_IN"
-      connect J2.p35 -> F1.p1     as "RAIL_IN"
+      connect J2.p34 -> R31.p1    as "RAIL_IN" class "RAIL_IN"
+      connect J2.p35 -> R31.p1    as "RAIL_IN"
       connect J2.p36 -> U2.gndq_3  as "GND"
-      connect J2.p37 -> F1.p1     as "RAIL_IN"
-      connect J2.p38 -> F1.p1     as "RAIL_IN"
+      connect J2.p37 -> R31.p1    as "RAIL_IN"
+      connect J2.p38 -> R31.p1    as "RAIL_IN"
 
       // The supply arrives on four pins and meets the fuse before anything
       // else on the card, so the whole board is behind it. Presence detect
