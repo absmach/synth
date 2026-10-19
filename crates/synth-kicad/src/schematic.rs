@@ -2093,15 +2093,9 @@ fn power_symbol_properties(
                     ]
                 } else {
                     // A symbol turned along its stub keeps its name on its own
-                    // row past the tip, or just above or below that row when
-                    // the row is taken.
-                    let justify = Some(if body.0 > 0.0 { "left" } else { "right" });
-                    let x = body.0 * POWER_NAME_OFFSET_MM;
-                    vec![
-                        (body.0 * (POWER_NAME_OFFSET_MM + ring), 0.0, justify),
-                        (x, -(POWER_NAME_SIDE_MM + ring), justify),
-                        (x, POWER_NAME_SIDE_MM + ring, justify),
-                    ]
+                    // row, past the tip.
+                    let justify = if body.0 > 0.0 { "left" } else { "right" };
+                    vec![(body.0 * (POWER_NAME_OFFSET_MM + ring), 0.0, Some(justify))]
                 }
             })
             .collect();
@@ -2359,6 +2353,78 @@ fn upright(kind: synth_layout::PowerFlagKind) -> Body {
     match kind {
         synth_layout::PowerFlagKind::Gnd => (0.0, 1.0),
         synth_layout::PowerFlagKind::Vcc => (0.0, -1.0),
+    }
+}
+
+/// The angle to write for a symbol of `kind` so its body points along `body`.
+/// KiCad turns counter-clockwise on the sheet, so a triangle that points down
+/// ends up pointing right at 90 and left at 270, and an arrow that points up
+/// the other way round.
+fn power_symbol_angle(kind: synth_layout::PowerFlagKind, body: Body) -> f64 {
+    if body.0 == 0.0 {
+        return 0.0;
+    }
+    match (kind, body.0 > 0.0) {
+        (synth_layout::PowerFlagKind::Gnd, true) | (synth_layout::PowerFlagKind::Vcc, false) => {
+            90.0
+        }
+        (synth_layout::PowerFlagKind::Gnd, false) | (synth_layout::PowerFlagKind::Vcc, true) => {
+            270.0
+        }
+    }
+}
+
+/// What a power symbol at (`x`, `y`) draws: from its point to the tip of the
+/// triangle or arrow, as wide as the symbol across the body.
+fn power_flag_rect(x: f64, y: f64, body: Body) -> field_clear::Rect {
+    let (tip_x, tip_y) = (x + body.0 * POWER_TIP_MM, y + body.1 * POWER_TIP_MM);
+    let (half_x, half_y) = (
+        POWER_FLAG_HALF_MM * body.1.abs(),
+        POWER_FLAG_HALF_MM * body.0.abs(),
+    );
+    field_clear::Rect {
+        x0: x.min(tip_x) - half_x,
+        y0: y.min(tip_y) - half_y,
+        x1: x.max(tip_x) + half_x,
+        y1: y.max(tip_y) + half_y,
+    }
+}
+
+/// How the symbol of `flag`, drawn at `at` on a stub that leaves its pin along
+/// `dx`, points.
+///
+/// Unturned, a ground triangle drops one pin pitch below its stub, so beside a
+/// column of pins it ends on the next pin's row: across that pin's wire, number
+/// and flag, and its name finds no free spot nearer than the pin after that.
+/// Turned to point along the stub it stays in its own pin's row. It is only
+/// turned when the unturned body would land on a wire or a flag of another
+/// net, so a sheet where nothing is in the way keeps the usual symbol.
+fn power_body(
+    board: &Board,
+    layout: &synth_layout::Layout,
+    placements: &HashMap<ComponentId, &ComponentPlacement>,
+    flag: &synth_layout::PowerFlag,
+    at: (f64, f64),
+    dx: f64,
+) -> Body {
+    let unturned = upright(flag.kind);
+    if dx == 0.0 {
+        return unturned;
+    }
+    let rect = power_flag_rect(at.0, at.1, unturned);
+    let on_a_wire = layout
+        .wires
+        .iter()
+        .filter(|wire| wire.net != flag.net)
+        .flat_map(|wire| wire.points.windows(2))
+        .any(|seg| rect.overlaps(&wire_rect(seg[0], seg[1])));
+    let on_a_flag = label_rects(board, layout, placements)
+        .iter()
+        .any(|label| rect.overlaps(label));
+    if on_a_wire || on_a_flag {
+        (dx.signum(), 0.0)
+    } else {
+        unturned
     }
 }
 
@@ -4732,10 +4798,13 @@ mod tests {
                         let effects = sub_node(p, "effects");
                         let (fx, fy, field_angle) = at_of(p);
                         let justify = sub(effects, "justify").and_then(|j| j.first().map(str_of));
-                        let flip = (angle + field_angle).rem_euclid(360.0) == 180.0;
                         let justify = match justify.as_deref() {
-                            Some("left") if flip => Some("right".to_string()),
-                            Some("right") if flip => Some("left".to_string()),
+                            Some("left") if (angle + field_angle).rem_euclid(360.0) == 180.0 => {
+                                Some("right".to_string())
+                            }
+                            Some("right") if (angle + field_angle).rem_euclid(360.0) == 180.0 => {
+                                Some("left".to_string())
+                            }
                             _ => justify,
                         };
                         (

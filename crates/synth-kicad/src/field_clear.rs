@@ -29,6 +29,11 @@ impl Rect {
         }
     }
 
+    /// Whether the two share any area; rectangles that only touch do not.
+    pub(crate) fn overlaps(&self, other: &Rect) -> bool {
+        self.overlap_area(other) > 0.0
+    }
+
     fn overlap_area(&self, other: &Rect) -> f64 {
         let w = self.x1.min(other.x1) - self.x0.max(other.x0);
         let h = self.y1.min(other.y1) - self.y0.max(other.y0);
