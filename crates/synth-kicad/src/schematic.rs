@@ -2364,13 +2364,10 @@ fn power_symbol_angle(kind: synth_layout::PowerFlagKind, body: Body) -> f64 {
     if body.0 == 0.0 {
         return 0.0;
     }
-    match (kind, body.0 > 0.0) {
-        (synth_layout::PowerFlagKind::Gnd, true) | (synth_layout::PowerFlagKind::Vcc, false) => {
-            90.0
-        }
-        (synth_layout::PowerFlagKind::Gnd, false) | (synth_layout::PowerFlagKind::Vcc, true) => {
-            270.0
-        }
+    if (kind == synth_layout::PowerFlagKind::Gnd) == (body.0 > 0.0) {
+        90.0
+    } else {
+        270.0
     }
 }
 
@@ -4798,13 +4795,10 @@ mod tests {
                         let effects = sub_node(p, "effects");
                         let (fx, fy, field_angle) = at_of(p);
                         let justify = sub(effects, "justify").and_then(|j| j.first().map(str_of));
+                        let flip = (angle + field_angle).rem_euclid(360.0) == 180.0;
                         let justify = match justify.as_deref() {
-                            Some("left") if (angle + field_angle).rem_euclid(360.0) == 180.0 => {
-                                Some("right".to_string())
-                            }
-                            Some("right") if (angle + field_angle).rem_euclid(360.0) == 180.0 => {
-                                Some("left".to_string())
-                            }
+                            Some("left") if flip => Some("right".to_string()),
+                            Some("right") if flip => Some("left".to_string()),
                             _ => justify,
                         };
                         (
