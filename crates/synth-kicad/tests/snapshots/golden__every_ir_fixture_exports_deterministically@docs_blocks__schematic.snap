@@ -1108,13 +1108,13 @@ expression: schematic
 	)
 	(polyline
 		(pts
-			(xy 57.47 21.16)
+			(xy 57.47 21.7)
 			(xy 57.47 58.42)
 		)
 		(stroke
 			(width 0.254)
 			(type solid)
-			(color 139 69 19 1)
+			(color 49 66 150 1)
 		)
 		(uuid "3e8601c9-71c3-5011-be4c-384cf44d13f3")
 	)
@@ -1132,7 +1132,7 @@ expression: schematic
 	)
 	(polyline
 		(pts
-			(xy 20.21 21.16)
+			(xy 20.21 21.7)
 			(xy 20.21 58.42)
 		)
 		(stroke
@@ -1144,8 +1144,8 @@ expression: schematic
 	)
 	(polyline
 		(pts
-			(xy 20.21 21.16)
-			(xy 57.47 21.16)
+			(xy 20.21 21.7)
+			(xy 57.47 21.7)
 		)
 		(stroke
 			(width 0.254)

@@ -1059,6 +1059,7 @@ pub fn layout_with_overrides(
     grow_sheet_to_fit(board, &mut layout);
     compact_sheet_to_fit(board, &mut layout);
     settle_sheet_size(board, &mut layout);
+    extend_boxes_to_frame_bottom(&mut layout);
     clamp_annotations_to_sheet(&mut layout);
     layout
 }
@@ -1429,14 +1430,44 @@ const FLOOR_EPS: f64 = 1e-6;
 /// flipping a comparison or a `ceil`.
 const FLOOR_NOISE: f64 = 1e-9;
 
-/// The part of a page the region boxes fill: inside the margin and above the
-/// title block band, the same area [`sheet_needs`] keeps clear.
+/// Where the inner line of a sheet's frame sits, in mm from the paper's edge:
+/// KiCad draws an outer line at 10 and the frame proper 2 mm inside it.
+pub const SHEET_BORDER_MM: f64 = 12.0;
+
+/// Where KiCad's title block starts on a sheet `sheet` mm across: its top-left
+/// corner. The block is anchored to the bottom-right corner of the paper's
+/// outer frame line, so a region must stay above this y wherever it reaches
+/// past this x.
+pub fn title_block_origin(sheet: (f64, f64)) -> (f64, f64) {
+    (
+        sheet.0 - FRAME_INSET - TITLE_BLOCK_W,
+        sheet.1 - FRAME_INSET - TITLE_BLOCK_H,
+    )
+}
+
+/// The part of a page the region boxes fill: out to the sheet frame on the
+/// left, top and right so the boxes start at the edge of the drawing, and down
+/// to the top of the title block at the bottom.
 fn page_frame(size: SheetSize) -> Rect {
     let (w, h) = size.dims_mm();
     (
-        (PAGE_MARGIN, PAGE_MARGIN),
-        (w - PAGE_MARGIN, h - TITLE_BLOCK_H - TEXT_MARGIN_Y),
+        (SHEET_BORDER_MM, SHEET_BORDER_MM),
+        (w - SHEET_BORDER_MM, title_block_origin((w, h)).1),
     )
+}
+
+/// Stretch the regions on the bottom row down to the sheet frame, so the page
+/// has no empty strip under them. A region that reaches over the title block
+/// stays above it.
+fn extend_boxes_to_frame_bottom(layout: &mut Layout) {
+    let sheet = layout.sheet_size.dims_mm();
+    let (block_x, block_y) = title_block_origin(sheet);
+    for box_ in &mut layout.group_boxes {
+        let on_the_bottom_row = (box_.max_mm.1 - block_y).abs() < GROUP_TILE_GAP;
+        if on_the_bottom_row && box_.max_mm.0 <= block_x + GROUP_TILE_GAP {
+            box_.max_mm.1 = sheet.1 - SHEET_BORDER_MM;
+        }
+    }
 }
 
 /// One way to cut a set of regions into two: which regions go first, how the
@@ -2578,13 +2609,11 @@ fn bounds_of(board: &Board, layout: &Layout, with_boxes: bool) -> Option<(f64, f
         min_y = min_y.min(y - text.size_mm);
         max_y = max_y.max(y);
     }
-    if with_boxes {
-        for box_ in &layout.group_boxes {
-            min_x = min_x.min(box_.min_mm.0);
-            max_x = max_x.max(box_.max_mm.0);
-            min_y = min_y.min(box_.min_mm.1);
-            max_y = max_y.max(box_.max_mm.1);
-        }
+    for box_ in layout.group_boxes.iter().filter(|_| with_boxes) {
+        min_x = min_x.min(box_.min_mm.0);
+        max_x = max_x.max(box_.max_mm.0);
+        min_y = min_y.min(box_.min_mm.1);
+        max_y = max_y.max(box_.max_mm.1);
     }
     if !min_x.is_finite() {
         return None;
@@ -2595,19 +2624,8 @@ fn bounds_of(board: &Board, layout: &Layout, with_boxes: bool) -> Option<(f64, f
 /// The page the layout needs: its content clear of the margin, and its region
 /// boxes out to the sheet border, since they are meant to fill the page.
 fn page_needs(board: &Board, layout: &Layout) -> Option<(f64, f64)> {
-    // Content inside region boxes sits on the sheet border, not the wider
-    // page margin, so only the far edges need room.
-    let boxed = !layout.group_boxes.is_empty();
-    let mut need = bounds_of(board, layout, false).map(|(min_x, max_x, min_y, max_y)| {
-        if boxed {
-            (
-                max_x + SHEET_BORDER_MM,
-                max_y + TITLE_BLOCK_H + TEXT_MARGIN_Y,
-            )
-        } else {
-            sheet_needs(min_x, max_x, min_y, max_y)
-        }
-    });
+    let mut need = bounds_of(board, layout, false)
+        .map(|(min_x, max_x, min_y, max_y)| sheet_needs(min_x, max_x, min_y, max_y));
     for box_ in &layout.group_boxes {
         let (w, h) = need.unwrap_or((0.0, 0.0));
         need = Some((
@@ -9712,6 +9730,23 @@ mod documentation_tests {
     const FOUR_REGIONS: [(&str, u32); 4] =
         [("Input", 3), ("Filter", 5), ("Output", 2), ("Debug", 1)];
 
+    /// The frame the boxes should fill on `layout`'s sheet: out to the sheet
+    /// frame on every side, less the corner the title block takes.
+    fn sheet_frame(layout: &Layout) -> Rect {
+        let (w, h) = layout.sheet_size.dims_mm();
+        (
+            (SHEET_BORDER_MM, SHEET_BORDER_MM),
+            (w - SHEET_BORDER_MM, h - SHEET_BORDER_MM),
+        )
+    }
+
+    /// The area of the frame under the title block.
+    fn title_block_area(layout: &Layout) -> f64 {
+        let (w, h) = layout.sheet_size.dims_mm();
+        let (x, y) = title_block_origin((w, h));
+        (w - SHEET_BORDER_MM - x) * (h - SHEET_BORDER_MM - y)
+    }
+
     fn area(r: &Rect) -> f64 {
         (r.1 .0 - r.0 .0) * (r.1 .1 - r.0 .1)
     }
@@ -9735,11 +9770,13 @@ mod documentation_tests {
             .map(|b| (b.min_mm, b.max_mm))
             .collect();
         assert_eq!(boxes.len(), 4);
-        let covered = boxes_area(&layout);
+        let covered: f64 = boxes.iter().map(area).sum();
+        let to_fill = area(&frame) - title_block_area(&layout);
+        // A region over the title block's left edge stops above the block, which
+        // leaves the strip beside it empty.
         assert!(
-            covered >= 0.99 * area(&frame),
-            "boxes cover {covered} of the frame {}",
-            area(&frame)
+            covered >= 0.9 * to_fill,
+            "boxes cover {covered} of the {to_fill} the frame leaves the regions"
         );
         let hull = bounds(&boxes);
         assert!((hull.0 .0 - frame.0 .0).abs() < 1e-6 && (hull.1 .0 - frame.1 .0).abs() < 1e-6);
@@ -9809,8 +9846,13 @@ mod documentation_tests {
         let layout = layout(&resistor_groups(&crowded, 0));
         let (w, h) = layout.sheet_size.dims_mm();
         assert!(w > 297.0 && h > 210.0, "{:?}", layout.sheet_size);
-        let frame = page_frame(layout.sheet_size);
-        assert!(boxes_area(&layout) >= 0.99 * area(&frame));
+        let frame = sheet_frame(&layout);
+        let covered: f64 = layout
+            .group_boxes
+            .iter()
+            .map(|b| area(&(b.min_mm, b.max_mm)))
+            .sum();
+        assert!(covered >= 0.9 * (area(&frame) - title_block_area(&layout)));
     }
 
     #[test]

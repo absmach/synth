@@ -53,6 +53,49 @@ const SOURCE: &str = r#"board "ground_rows" {
 }
 "#;
 
+/// A header whose three pins each carry a different supply rail.
+const RAILS_SOURCE: &str = r#"board "rail_rows" {
+  layers 2
+  manufacturer "jlcpcb"
+
+  component U1: ic "ch340g"
+  component U2: regulator "lp5907_3v3"
+  component J2: connector "header_1x3"
+
+  net "+3V3" {
+    U2.vout, J2.p1
+  }
+
+  net "VIO" {
+    U1.vcc, J2.p2
+  }
+
+  net "VBUS" {
+    U2.vin, J2.p3
+  }
+
+  net "GND" {
+    U1.gnd, U2.gnd
+  }
+}
+"#;
+
+/// A ground net that reaches a pin the sheet puts on the top edge of its part,
+/// as the exposed pad of a package does. A ground pin by name goes to the
+/// bottom edge, so the part's supply pin stands in for the pad.
+const TOP_GROUND_SOURCE: &str = r#"board "top_ground" {
+  layers 2
+  manufacturer "jlcpcb"
+
+  component U1: ic "ch340g"
+  component U2: regulator "lp5907_3v3"
+
+  net "GND" {
+    U2.gnd, U1.vcc
+  }
+}
+"#;
+
 fn workspace_root() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("..")
@@ -240,5 +283,198 @@ fn a_ground_symbol_on_a_header_pin_stays_in_its_own_row() {
         found.is_empty(),
         "ground symbol in the way:\n{}",
         found.join("\n")
+    );
+}
+
+/// What a supply arrow at `angle` draws. An arrow at 0 points up, and KiCad
+/// turns it counter-clockwise on the sheet, so 90 points left and 270 right.
+fn arrow(block: &str) -> Rect {
+    let (x, y, angle) = at_of(block);
+    match angle as i32 {
+        0 => (
+            x - TRIANGLE_HALF_MM,
+            y - TRIANGLE_TIP_MM,
+            x + TRIANGLE_HALF_MM,
+            y,
+        ),
+        90 => (
+            x - TRIANGLE_TIP_MM,
+            y - TRIANGLE_HALF_MM,
+            x,
+            y + TRIANGLE_HALF_MM,
+        ),
+        270 => (
+            x,
+            y - TRIANGLE_HALF_MM,
+            x + TRIANGLE_TIP_MM,
+            y + TRIANGLE_HALF_MM,
+        ),
+        other => panic!("a supply symbol at {other} degrees"),
+    }
+}
+
+#[test]
+fn supply_arrows_on_adjacent_header_pins_stay_in_their_own_rows() {
+    let board = load_board(RAILS_SOURCE);
+    let dir = tempfile::tempdir().unwrap();
+    let result = synth_kicad::export_schematic_only(&board, dir.path(), None).expect("export");
+    let sch = std::fs::read_to_string(&result.schematic_path).unwrap();
+
+    let layout = synth_layout::layout_with_sidecar(&board, None);
+    let placements: std::collections::HashMap<_, _> =
+        layout.components.iter().map(|p| (p.id, p)).collect();
+    let header = board.components.iter().find(|c| c.refdes == "J2").unwrap();
+    let terminals: Vec<(f64, f64, f64)> = (0..3)
+        .map(|pin| {
+            let (x, y, dx, _) = synth_layout::route::pin_terminal_xy(
+                &board,
+                header.id,
+                synth_ir::PinId(pin),
+                &placements,
+            )
+            .unwrap();
+            (x, y, dx)
+        })
+        .collect();
+    assert!(
+        terminals.iter().all(|t| t.2 != 0.0),
+        "the header's pins are meant to face sideways"
+    );
+    let rows: Vec<Rect> = terminals
+        .iter()
+        .map(|&(x, y, dx)| {
+            let (a, b) = (x, x + dx * ROW_REACH_MM);
+            (a.min(b), y - ROW_HALF_MM, a.max(b), y + ROW_HALF_MM)
+        })
+        .collect();
+
+    let symbols: Vec<&str> = sch
+        .split("(lib_id \"")
+        .skip(1)
+        .filter(|block| block.contains("\"#PWR"))
+        .collect();
+    let mut found = Vec::new();
+    for (pin, &(x, y, _)) in terminals.iter().enumerate() {
+        let own: Vec<&&str> = symbols
+            .iter()
+            .filter(|block| {
+                let (sx, sy, _) = at_of(block);
+                (sx - x).hypot(sy - y) < 2.6
+            })
+            .collect();
+        assert_eq!(
+            own.len(),
+            1,
+            "one supply symbol belongs to J2 pin {}",
+            pin + 1
+        );
+        let rect = arrow(own[0]);
+        for (other, row) in rows.iter().enumerate().filter(|&(other, _)| other != pin) {
+            if overlap(rect, *row) {
+                found.push(format!(
+                    "pin {}'s arrow {rect:?} on pin {}'s row {row:?}",
+                    pin + 1,
+                    other + 1
+                ));
+            }
+        }
+    }
+    assert!(
+        found.is_empty(),
+        "supply arrow in the way:\n{}",
+        found.join("\n")
+    );
+}
+
+/// Every wire in `sch` as a box, from its two end points, padded so a wire
+/// has a width wider than what counts as a touch.
+fn wires(sch: &str) -> Vec<Rect> {
+    const PAD_MM: f64 = 0.15;
+    sch.split("(wire")
+        .skip(1)
+        .map(|block| {
+            let nums: Vec<f64> = block
+                .split("(pts")
+                .nth(1)
+                .expect("the wire's points")
+                .split(')')
+                .take(2)
+                .flat_map(|xy| {
+                    xy.split(|c: char| c.is_whitespace() || c == '(')
+                        .filter_map(|t| t.parse::<f64>().ok())
+                        .collect::<Vec<_>>()
+                })
+                .collect();
+            (
+                nums[0].min(nums[2]) - PAD_MM,
+                nums[1].min(nums[3]) - PAD_MM,
+                nums[0].max(nums[2]) + PAD_MM,
+                nums[1].max(nums[3]) + PAD_MM,
+            )
+        })
+        .collect()
+}
+
+#[test]
+fn a_ground_on_a_top_edge_pin_hangs_beside_its_stub() {
+    let board = load_board(TOP_GROUND_SOURCE);
+    let dir = tempfile::tempdir().unwrap();
+    let result = synth_kicad::export_schematic_only(&board, dir.path(), None).expect("export");
+    let sch = std::fs::read_to_string(&result.schematic_path).unwrap();
+
+    let layout = synth_layout::layout_with_sidecar(&board, None);
+    let placements: std::collections::HashMap<_, _> =
+        layout.components.iter().map(|p| (p.id, p)).collect();
+    let chip = board.components.iter().find(|c| c.refdes == "U1").unwrap();
+    let pin = chip
+        .part
+        .as_ref()
+        .unwrap()
+        .pins
+        .iter()
+        .position(|p| p.name == "vcc")
+        .unwrap();
+    let (x, y, dx, dy) = synth_layout::route::pin_terminal_xy(
+        &board,
+        chip.id,
+        synth_ir::PinId(pin as u32),
+        &placements,
+    )
+    .unwrap();
+    assert!(
+        dx == 0.0 && dy < 0.0,
+        "the supply pin is meant to face up, got ({dx}, {dy})"
+    );
+
+    let nearest = sch
+        .split("(lib_id \"")
+        .skip(1)
+        .filter(|block| block.starts_with("power:GND"))
+        .min_by(|a, b| {
+            let dist = |block: &&str| {
+                let (sx, sy, _) = at_of(block);
+                (sx - x).hypot(sy - y)
+            };
+            dist(a).total_cmp(&dist(b))
+        })
+        .expect("a ground symbol");
+    let (sx, sy, _) = at_of(nearest);
+    assert!(
+        (sx - x).hypot(sy - y) < 6.0,
+        "the ground symbol at ({sx}, {sy}) is not this pin's"
+    );
+
+    let (triangle, _) = drawn(nearest);
+    let over: Vec<Rect> = wires(&sch)
+        .into_iter()
+        .filter(|wire| overlap(triangle, *wire))
+        .collect();
+    assert!(
+        over.is_empty(),
+        "triangle {triangle:?} hangs over its own wire {over:?}"
+    );
+    assert!(
+        (sx - x).abs() > TRIANGLE_HALF_MM,
+        "the symbol at x {sx} sits over the pin's column at x {x}"
     );
 }
