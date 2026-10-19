@@ -2394,8 +2394,9 @@ fn power_flag_rect(x: f64, y: f64, body: Body) -> field_clear::Rect {
 /// column of pins it ends on the next pin's row: across that pin's wire, number
 /// and flag, and its name finds no free spot nearer than the pin after that.
 /// Turned to point along the stub it stays in its own pin's row. It is only
-/// turned when the unturned body would land on a wire or a flag of another
-/// net, so a sheet where nothing is in the way keeps the usual symbol.
+/// turned when the unturned body would land on a wire of another net or on a
+/// net label (a power net never has one), so a sheet where nothing is in the
+/// way keeps the usual symbol.
 fn power_body(
     board: &Board,
     layout: &synth_layout::Layout,
