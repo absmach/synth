@@ -1,7 +1,7 @@
 id = "ferrite_bead_0603"
 kind = "inductor"
 description = "0603 ferrite bead, 600Ω @ 100MHz — EMI suppression"
-kicad_symbol = "Device:Ferrite_Bead"
+kicad_symbol = "Device:FerriteBead"
 kicad_footprint = "Inductor_SMD:L_0603_1608Metric"
 
 [footprint_dimensions]
