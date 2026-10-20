@@ -272,7 +272,7 @@ number = "48"
 electrical_type = "passive"
 
 [[required_decoupling]]
-net = "vcc"
+net = "vdd"
 value = "100nf"
 count = 2
 
