@@ -17,9 +17,9 @@ this file is the specification.
 | Size | 69.09 x 62.00 mm |
 | Layers | 4 |
 | Process | JLCPCB standard (0.127 mm track/clearance, 0.3 mm drill, 0.13 mm ring) |
-| Components | 66 |
-| Nets | 87 |
-| Courtyard area | 1476 mm2 of 4284 mm2, 34.4% |
+| Components | 74 |
+| Nets | 89 |
+| Courtyard area | 1554 mm2 of 4284 mm2, 36.3% |
 | Data width | 32 bits, two x16 dice |
 | Placement | pinned, `sdram_memory.placement.layout.toml` |
 | Source | `sdram_memory.synth` |
@@ -49,7 +49,7 @@ geometry is derived from: over it, Synth's estimator puts a 0.2 mm trace at
 | `A0`-`A11`, `BA0`, `BA1` | both dice, through R17-R30 - 14 damped two-load branches |
 | `CLK`, `CKE`, `/CS`, `/RAS`, `/CAS`, `/WE` | both dice, through R7-R12 - 6 damped two-load branches |
 | `DQM0`-`DQM3` | one die each, through R13-R16 - damped single loads |
-| `SPD_SDA`, `SPD_SCL` | presence detect, J2 to U3, clamped at the connector |
+| `SPD_SDA`, `SPD_SCL` | presence detect, J2 to U3 and U4, clamped at the connector |
 | `THERM` | one analog line off the NTC divider |
 
 Widening to x32 is what changes the problem from the easy half to the real
@@ -63,9 +63,11 @@ carry the bus class. A total path budget is the sum of the two.
 
 | Rail | Source | Nominal | Carried as | Feeds |
 | --- | --- | --- | --- | --- |
-| `RAIL_IN` | J2 pins 34, 35, 37, 38, from the carrier | 3.3 V | 0.8 mm track | F1 only |
-| `V3V3` | F1, a 500 mA polyfuse | 3.3 V | **In1.Cu plane** | six core supply pins, U3, the pull-ups, the divider |
-| `VDDQ` | L1, a 600 R ferrite bead off V3V3 | 3.3 V | 0.8 mm track | eight driver supply pins |
+| `RAIL_IN` | J2 pins 34, 35, 37, 38, from the carrier | 3.3 V | 0.8 mm track | R31, the input shunt |
+| `RAIL_FUSED` | R31 then F1, a 500 mA polyfuse | 3.3 V | 0.8 mm track | the plane, and U4's own supply |
+| `V3V3` | F1 | 3.3 V | **In1.Cu plane** | six core supply pins, U3, the pull-ups, the divider |
+| `VDDQ_SENSE` | L1, a 600 R ferrite bead off V3V3 | 3.3 V | 0.8 mm track | R32, the driver-rail shunt |
+| `VDDQ` | R32 | 3.3 V | 0.8 mm track | eight driver supply pins |
 | `GND` | J1 and J2, 17 pins between them | 0 V | outer-layer pour | all fourteen ground pins |
 
 The card takes its rail from the connector, as a mezzanine does, behind a
@@ -102,6 +104,63 @@ A module that cannot say what it is has to be configured by hand. The bus is
 slow and it crosses the fast one, which is why it carries its own class with
 its own width and clearance rather than the default.
 
+## Power monitoring
+
+| | |
+| --- | --- |
+| Device | U4, INA3221, three-channel high-side current and bus voltage, I2C |
+| Address | 0x40 — A0 strapped to ground |
+| Bus | the presence-detect bus, so the monitor costs no connector pins |
+| Channel 1 | across R31, 0.1 Ω: everything the host delivers, fuse drop included |
+| Channel 2 | across R32, 0.1 Ω: the driver rail alone |
+| Channel 3 | both inputs on `RAIL_FUSED`: no current, bus voltage only |
+| Core current | channel 1 minus channel 2, rather than a third shunt |
+| Full scale | 163.8 mV across a shunt, so 1.6 A; the card draws about 0.2 A |
+| Alerts | `WARNING`, `CRITICAL`, `PV` and `TC` are unconnected |
+
+Both connectors are full — 40 of 40 pins each — so a monitor that needed a pin
+of its own could not be on this card at all. One I2C device on the bus the
+EEPROM already uses is what makes it possible, and it is also why the alert
+outputs go nowhere: they are open-drain pins with no route to the host.
+
+R31 sits **ahead** of the fuse. That is not where a shunt conventionally goes,
+and the reason is the plane: the monitor has to tap both ends of what it
+measures, its pads are on an 0.65 mm grid, and a declared plane needs a
+stitching via beside every pad on it. Ahead of the fuse both ends are routed
+copper. What channel 1 reports is therefore the current the host delivers
+rather than the current the dice draw, which is the more useful of the two.
+
+## Module identity
+
+The EEPROM holds a fixed 32-byte record at offset 0, little-endian, so a host
+reads a structure rather than a convention nobody wrote down:
+
+| Offset | Type | Field |
+| --- | --- | --- |
+| 0x00 | u8 | format version, 0x01 |
+| 0x01 | u8 | record length, 32 |
+| 0x02 | u16 | organisation: 0x2002, two x16 devices, one rank |
+| 0x04 | u32 | capacity in MiB, 16 |
+| 0x08 | u16 | maximum clock in MHz, 143 |
+| 0x0A | u8 | CAS latency, 3 |
+| 0x0B | u8 | supply in tenths of a volt, 33 |
+| 0x0C | char[8] | board identifier, `SDRAMX32` |
+| 0x14 | u8 | board revision, ASCII `C` |
+| 0x15 | u8 | BOM revision, 1 |
+| 0x16 | u8 | thermal sensor, 0x01 = NTC on the analog line |
+| 0x17 | u8 | power monitor, 0x01 = three channels at I2C 0x40 |
+| 0x18 | u32 | reserved, zero |
+| 0x1C | u16 | reserved, zero |
+| 0x1E | u16 | CRC-16/CCITT-FALSE over 0x00..0x1D |
+
+This is the card's own schema and is deliberately **not** called SPD: a JEDEC
+presence-detect image has a layout and a checksum of its own, and claiming
+compatibility without meeting it would be worse than carrying no schema.
+
+Write protect is strapped low, so a host can program the device. Nothing in
+this repository does, so a card built from these files reads back whatever the
+part shipped with.
+
 ## Thermal provision
 
 | | |
@@ -116,6 +175,25 @@ what an SDR-era module did; it is deliberately not a digital sensor on the
 presence detect bus, because the registry's TMP117 cannot have its address
 strapped and a sensor whose address is decided by a floating pin is not a
 measurement.
+
+**Reading it.** `THERM` is the junction of R6 (10 kOhm to the rail) and R5
+(the NTC to ground), so
+
+```
+R_ntc = 10000 * V / (3.3 - V)
+T     = 1 / (1/298.15 + ln(R_ntc / 10000) / 3380)      kelvin
+```
+
+At 25 C the NTC is 10 kOhm and `THERM` is 1.65 V, with a slope of about
+-31 mV/C. The divider draws 165 uA, which puts 0.27 mW into the thermistor
+and self-heats it by roughly 0.1 C in an 0603 part — below the measurement's
+own error.
+
+**What the error is.** A generic NTC is +/-1% on R25 and +/-1% on B, and the
+divider resistor another +/-1%, which is about +/-1.3 C near 25 C and worse at
+the extremes. The host's ADC reference and resolution add to that. The figure
+is a board temperature beside the dice, not a junction temperature: nothing
+here measures the die.
 
 ## Series damping
 
@@ -184,8 +262,8 @@ name carries the branch beyond it.
 | `SPD` | 2 | 0.25 mm | 0.3 mm | - | - |
 | `THERMAL` | 1 | 0.25 mm | 0.3 mm | - | - |
 | `V3V3` | 1 | 0.6 mm | 0.25 mm | - | `plane` |
-| `VDDQ` | 1 | 0.8 mm | 0.25 mm | - | - |
-| `RAIL_IN` | 1 | 0.8 mm | 0.25 mm | - | - |
+| `VDDQ` | 2 | 0.8 mm | 0.25 mm | - | - |
+| `RAIL_IN` | 2 | 0.8 mm | 0.25 mm | - | - |
 | `GND` | 1 | 0.6 mm | 0.25 mm | - | - |
 
 Every net names its class. A class carries the nets that say so, and a skew
@@ -207,46 +285,66 @@ fill, with the two long headers as far apart as the canvas the solver settled
 on. A pinned floorplan is also what makes the measurements below reproducible
 rather than a property of a heuristic.
 
+## Silkscreen and mechanical
+
+| | |
+| --- | --- |
+| Reference designators | 74, one per component |
+| Package outlines and pin-1 markers | from each footprint's own silkscreen |
+| Mounting holes | four M2.5, in the top and bottom bands |
+| Fiducials | two, 1 mm |
+| Board identifier or revision on the board | **none** |
+
+The card declares `revision "C"` and the schematic carries it, but the
+exported `.kicad_pcb` has no title block, so neither the revision nor the
+board name reaches the Gerber headers or the silkscreen. A bare board from
+this project cannot be told from another revision with it in hand.
+
+Connector pin legends are available (`legends on`) and deliberately not used:
+on two 2 x 20 headers that is eighty labels on a 69 x 62 mm card.
+
 ## Measured
 
 Release build, KiCad 10.0.6, KiCadRoutingTools v0.23.0, one run.
 
 | | |
 | --- | --- |
-| Nets closed | **87 of 87** |
-| Open | none |
+| Nets closed | **88 of 89** |
+| Open | one |
 | Unconnected pads | none |
-| Routed copper | 3502.4 mm over 1296 segments and 231 vias |
+| Routed copper | 3820.4 mm over 1601 segments and 261 vias |
 | Tracks below the 0.127 mm floor | **0** |
 | Vias below the 0.3 mm drill or 0.13 mm ring | **0** |
-| `kicad-cli pcb drc` | 88 errors, 0 unconnected items, 5 warnings |
+| `kicad-cli pcb drc` | 76 errors, 3 unconnected items, 6 warnings |
 | Engine verdict | `validation_failed` |
 
-The 88 errors are 87 clearance violations and one hole clearance. The
+The 76 errors are 75 clearance violations and one hole clearance. The
 clearance figures are the tell: `netclass 'GND' clearance 0.2500 mm; actual
 0.1810 mm` and `netclass 'SDRAM_ADDR' clearance 0.2000 mm; actual 0.1657 mm`.
 The exported `.kicad_dru` carries the manufacturer's edge and hole rules, not
 the per-netclass clearances, so the external engine routes to the global
 0.127 mm floor and KiCad then rejects the board against rules the engine never
-saw. The five warnings are four silkscreen overlaps and one dangling track.
+saw. The six warnings are four silkscreen overlaps and two dangling tracks.
 
-One blocking reason is not a clearance: a plane stitching via at (37.200,
-26.600) mm sits inside U1 pad 34. The fanout places its vias from a
+Five blocking reasons are not clearances: plane stitching vias inside
+`C4.1`, `C5.1`, `U3.1`, `R32.2` and `C19.1`. The fanout places its vias from a
 synthesized pad map rather than the footprint the board carries, so where they
-land is not controlled.
+land is not controlled — and the monitor's own rail added four more plane pads
+for it to get wrong.
 
 ### Skew against the declared budgets
 
 | Class | Nets with copper | Shortest | Longest | Spread | Budget | |
 | --- | --- | --- | --- | --- | --- | --- |
-| `SDRAM_DQL` | 16 | `DQ9` 32.5 mm | `DQ2` 46.6 mm | 14.1 mm | 2.5 mm | missed |
-| `SDRAM_DQH` | 16 | `DQ25` 29.5 mm | `DQ21` 71.1 mm | 41.6 mm | 2.5 mm | missed |
-| `SDRAM_ADDR` | 14 | `A2` 42.7 mm | `A6` 101.1 mm | 58.4 mm | 5 mm | missed |
+| `SDRAM_DQL` | 16 | `DQ9` 33.3 mm | `DQ5` 47.4 mm | 14.0 mm | 2.5 mm | missed |
+| `SDRAM_DQH` | 16 | `DQ25` 30.1 mm | `DQ21` 52.5 mm | 22.3 mm | 2.5 mm | missed |
+| `SDRAM_ADDR` | 14 | `A1` 46.2 mm | `A6` 105.0 mm | 58.9 mm | 5 mm | missed |
 | `SDRAM_ADDR_HOST` | 14 | `A3_H` 7.1 mm | `BA0_H` 13.5 mm | 6.4 mm | 3 mm | missed |
-| `SDRAM_CTRL` | 9 | `DQM0` 16.7 mm | `CKE` 93.6 mm | 77.0 mm | 5 mm | missed |
+| `SDRAM_CTRL` | 9 | `DQM0` 16.7 mm | `WE_N` 105.9 mm | 89.3 mm | 5 mm | missed |
 | `SDRAM_CTRL_HOST` | 9 | `CKE_H` 6.5 mm | `DQM0_H` 13.4 mm | 6.8 mm | 3 mm | missed |
-| `SDRAM_CLK` | 1 | `CLK` 62.3 mm | - | - | 45 mm max | missed |
+| `SDRAM_CLK` | 1 | `CLK` 66.3 mm | - | - | 45 mm max | missed |
 | `SDRAM_CLK_HOST` | 1 | `CLK_H` 6.9 mm | - | - | 25 mm max | **met** |
+| `SPD` | 2 | `SPD_SCL` 108.8 mm | `SPD_SDA` 150.9 mm | 42.0 mm | - | - |
 
 Lengths are Euclidean sums of the routed segments, measured outside Synth.
 
@@ -270,13 +368,16 @@ length-matched interface exist.
 | D1 | PRTR5V0U2X, dual rail clamp | `prtr5v0u2x` |
 | L1 | 600 R ferrite bead, 0603 | `ferrite_bead_0603` |
 | F1 | 500 mA resettable fuse | `polyfuse` |
+| U4 | INA3221, three-channel power monitor | `ina3221_power_monitor` |
 | R5 | 10 kOhm NTC thermistor | `r_thermistor_ntc_10k` |
+| R31, R32 | 0.1 Ohm shunts, 2010 | `r_generic_2010` |
+| TP1-TP6 | 1.5 mm test pads: both rails, ground, thermal, both SPD lines | `testpoint_pad_1_5` |
 | J1, J2 | 2x20 pin header, 2.54 mm | `header_2x20` |
-| TP1, TP2 | 1.5 mm test pad | `testpoint_pad_1_5` |
 
-`header_2x20` was written for this board and verified against the stock KiCad
-symbol and footprint: 40 part pins, 40 symbol pins, 40 footprint pads, matched
-both ways. The remaining components are generic passives and mechanical
+`header_2x20` and `ina3221_power_monitor` were written for this board and
+verified against the stock KiCad symbol and footprint — the monitor's 17
+declared pins cover all sixteen pads and the exposed pad, and it is the first
+part in the registry to declare one. The remaining components are generic passives and mechanical
 features; the generated `bom.csv` is the bill of materials.
 
 ## Limitations
@@ -284,7 +385,7 @@ features; the generated `bom.csv` is the bill of materials.
 - **The bus is not length-matched.** Declared and verified, not met - see
   *Skew against the declared budgets*. A carrier reading this card at 143 MHz
   would need each data group inside +/-100 mil of the clock; the routed copper
-  spreads 14.1 mm and 41.6 mm.
+  spreads 14.0 mm and 22.3 mm.
 - **Synth's own signal-integrity rules did not run on this copper.** The
   export runs them on the board named as delivered, and when the router's
   copper is rejected that name still points at the un-routed baseline. So the
@@ -309,8 +410,19 @@ features; the generated `bom.csv` is the bill of materials.
 - **Seventeen connector pins carry ground and nothing else.** On a 2.54 mm
   header that is the best available return, and it is still worse than the
   edge fingers of a real memory module.
-- **The EEPROM is not programmed.** Nothing writes an SPD image, so a host
-  reading the card gets whatever the device shipped with.
+- **The EEPROM is not programmed.** The schema above is what a programming
+  step would write; nothing in this repository writes it.
+- **The current-sense pins are not Kelvin-routed.** A shunt wants its sense
+  lines taken from its own pads, and nothing in the language expresses that,
+  so the router takes them from the net. At 0.1 Ohm and 0.2 A the error from a
+  few millimetres of 0.8 mm copper is small, but it is an error.
+- **The monitor's alert outputs go nowhere,** and there is no voltage
+  supervisor. Both want a host-facing pin, and both connectors are full at 40
+  of 40.
+- **The fast bus is not ESD-protected.** Only the two presence-detect lines
+  are clamped. Fifty-six lines would need twenty-eight clamp channels and
+  about a picofarad each on a 143 MHz bus, which would cost more than it
+  buys.
 - No thermal analysis. Each die draws 90 mA at 3.3 V, the NTC reports a
   voltage, and nothing checks what two dice do to the board.
 - Return paths, layer transitions, via stubs and plane continuity are not
