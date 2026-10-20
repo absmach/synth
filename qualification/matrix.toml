@@ -4,14 +4,27 @@ schema_version = "synth.qualification.v1"
 release_command = "synth check <board> --json"
 fab_command = "synth check <board> --fab --json"
 
-# Every `expect` and `expect_fab` below was measured, not assumed. The run:
-# KiCad 10.0.6, KiCadRoutingTools v0.23.0 (grid_router 9399bfb), release build,
+# Every `expect` and `expect_fab` that names a gate result below was measured,
+# not assumed. The run: KiCad 10.0.7, KiCadRoutingTools v0.23.0 (grid_router
+# 9399bfb), release build,
 # `synth check <board> --json [--fab] --router kicad-routing-tools`.
 #
-# No board in the corpus currently clears the gate. That is the finding, not a
-# gap in the corpus: `status` says what each board is here to demonstrate and
-# `expect` says what the release command does today, so the two disagreeing is
-# exactly the state this file exists to make visible.
+# `unestablished` is not a measurement and not a claim: it marks a board the
+# reference environment cannot yet give an honest verdict for. The gate records
+# what it observes for those and compares nothing, so a row can never pass for
+# a reason nobody checked.
+#
+# Four boards now clear the source/DRC gate, and three of those clear
+# manufacturing as well. That is new. The three that had been failing on their
+# own declared rules did so because the per-netclass clearance and the minimum
+# via diameter never reached the external engine; writing the via geometry into
+# the project file the router reads closed it, and the gate reported the change
+# by failing in the other direction until these rows were corrected.
+#
+# `status` is unmoved by any of that. Clearing the gate is a measurement;
+# promotion to `qualified` takes the human review in
+# `docs/qualification-handoff.md`, so every positive board here stays
+# `experimental`.
 
 [[board]]
 id = "hello"
@@ -29,9 +42,9 @@ path = "examples/env_logger/env_logger.synth"
 fixture_sha256 = "b89025f6eb05df789c317eb875f0efb6df86a85c61d48bf708b76972ec0f50d1"
 class = "A"
 status = "experimental"
-expect = "fail"
-expect_fab = "fail"
-rationale = "USB-C power, an AMS1117 LDO, an MCU, a BME680 on I2C and a debug header: the Class-A envelope. The copper is complete — 11 nets connected, none open, 206 segments and 25 vias over 499.3 mm — but `kicad-cli pcb drc` reports 6 clearance errors, actual 0.165 to 0.194 mm against the 0.2 mm the netclass declares. The exported `.kicad_dru` carries only the manufacturer edge and hole rules, so the per-netclass clearance never reaches the engine and it routes to the 0.127 mm global floor instead. Manufacturing then fails because no shipped part carries a reviewer, which is #51, not a property of this board."
+expect = "pass"
+expect_fab = "pass"
+rationale = "USB-C power, an AMS1117 LDO, an MCU, a BME680 on I2C and a debug header: the Class-A envelope. The copper is complete, 11 nets connected and none open, and `kicad-cli pcb drc` is now clean. It had reported 6 clearance errors at 0.165 to 0.194 mm against the 0.2 mm the netclass declares, because the exported project carried only the manufacturer edge and hole rules and the engine routed to the global floor instead. The via geometry and netclass rules now reach the engine, so source, DRC and manufacturing all pass."
 
 [[board]]
 id = "sensor_logger"
@@ -39,9 +52,9 @@ path = "examples/sensor_logger/sensor_logger.synth"
 fixture_sha256 = "6dad544533dcb92fe94d46a32ea64ae44f342c69996c70af73df734b761a8c4a"
 class = "A"
 status = "experimental"
-expect = "fail"
-expect_fab = "fail"
-rationale = "Dual I2C sensors, SPI flash and status LEDs: a larger Class-A digital board. 19 nets connected, none open, 143 segments and 17 vias over 424.6 mm. `kicad-cli pcb drc` reports 5 clearance errors at 0.165 to 0.195 mm and one via under the declared minimum — the same unexpressed netclass rules as env_logger."
+expect = "pass"
+expect_fab = "pass"
+rationale = "Dual I2C sensors, SPI flash and status LEDs: a larger Class-A digital board. 19 nets connected, none open. It had reported 5 clearance errors at 0.165 to 0.195 mm and one via under the declared minimum, from the same unexpressed netclass rules as env_logger. With those rules reaching the engine, source, DRC and manufacturing all pass."
 
 [[board]]
 id = "placement_and_diff_pair"
@@ -49,9 +62,9 @@ path = "examples/placement_and_diff_pair/placement_and_diff_pair.synth"
 fixture_sha256 = "bfa9d000e2bd58a7fbbf595fba8459c2c6afc2a6168f6d943d06bdf88e7e6414"
 class = "C"
 status = "experimental"
-expect = "fail"
-expect_fab = "fail"
-rationale = "Differential-pair constraints, placement hints and keepouts: the Class-C constraint surface. 4 nets connected, none open, 60 segments and 11 vias over 53.9 mm. `kicad-cli pcb drc` reports 5 vias at 0.56 mm against the 0.6 mm minimum this board's setup declares, plus 4 dangling-via warnings. Same cause: the declared via minimum is not expressed to the engine that places the vias."
+expect = "pass"
+expect_fab = "pass"
+rationale = "Differential-pair constraints, placement hints and keepouts: the Class-C constraint surface. 4 nets connected, none open. It had reported 5 vias at 0.56 mm against the 0.6 mm minimum this board's setup declares, because the declared via minimum was not expressed to the engine that places the vias. It is now, so source, DRC and manufacturing all pass."
 
 [[board]]
 id = "ref_ldo_sensor"
@@ -109,12 +122,88 @@ expect_source_codes = [
 ]
 rationale = "Negative test and the corpus's only Class-D entry: the largest imported design, with eight undefined pins, two required pins unconnected and seventeen valueless passives. Class D's obligation is an auditable result and a stated limitation, and this is the stated limitation."
 
+# The nine boards below were measured in the reference environment by the run
+# recorded in this file's header. `sdram_memory` is the exception and says why
+# in its own rationale.
+
 [[board]]
-id = "buck"
-path = "qualification/class-b/buck/buck.synth"
-fixture_sha256 = "1ddfc86b649f25bc25465f82145a3d96baf623ff1fc32bfa3c830650cd100b14"
-class = "B"
+id = "i2c_sensor_node"
+path = "qualification/class-a/i2c-sensor-node/i2c_sensor_node.synth"
+class = "A"
+status = "experimental"
+expect = "pass"
+expect_fab = "pass"
+rationale = "A JST-fed 5 V input, a 3V3 LDO, an STM32G030 reading an environmental sensor and a config EEPROM on one I2C bus with one set of pull-ups, and a 4-pin break-out for the host UART: the Class-A single-bus envelope. Source, DRC and manufacturing all pass, so this board clears the gate end to end. `status` stays `experimental` because clearing the gate is a measurement; promotion to `qualified` takes the human review the handoff document sets out."
+
+[[board]]
+id = "irrigation_controller"
+path = "qualification/class-a/irrigation-controller/irrigation_controller.synth"
+class = "A"
+status = "experimental"
+expect = "fail"
+expect_fab = "fail"
+rationale = "Two soil-moisture probes, a flow meter, two solenoid valve outputs and ambient temperature, humidity and light: a Class-A board wide enough to exercise mixed sensing and switched loads on one controller. The source stage passes with 39 diagnostics and no error. The route stage does not complete, so DRC reports `unknown`, which is not a pass, and manufacturing fails carrying that."
+
+[[board]]
+id = "negative_broken_mcu_board"
+path = "qualification/class-a/negative-broken-mcu-board/negative_broken_mcu_board.synth"
+class = "A"
+status = "unsupported"
+expect = "fail"
+expect_fab = "unknown"
+expect_source_codes = ["E-SYNTH-CONNECT-001", "E-SYNTH-NAME-001", "E-SYNTH-VALUE-001"]
+rationale = "Negative test, written to be wrong on purpose so the diagnostics can be read. The source stage fails with exactly three codes: a pin left floating, a refdes that does not match its part kind, and a generic passive with no value. Manufacturing is never reached, so its verdict can only be `unknown`. These are compiler diagnostics over declared source, so they do not depend on the installed KiCad libraries."
+
+[[board]]
+id = "protected_power_entry"
+path = "qualification/class-a/protected-power-entry/protected_power_entry.synth"
+class = "A"
 status = "experimental"
 expect = "pass"
 expect_fab = "fail"
-rationale = "24 V in, 3.3 V out buck (LMR38010) with a PTC, reverse-block Schottky and TVS on the input, an EN divider, feedback, power-good and a thermal via array under the exposed pad. The FreeRouting copper is complete and `kicad-cli pcb drc` reports 0 errors and 0 warnings, so source and DRC pass. Every part with a registry record is reviewed. Manufacturing still fails under `synth check --fab`, which routes with KiCadRoutingTools: that copper leaves 11 signal vias without a ground return via (W-SYNTH-DRC-016), so the release is validation_failed. The board stays `experimental`: no human has signed off its artifacts."
+rationale = "12 V in, a reverse-polarity P-FET, resettable over-current, a TVS clamp, a buck to 5 V, a soft-start load switch and a 3V3 logic rail, with no MCU: a power front end that exists to be reviewed as one. Source and DRC both pass, so the board clears the source/DRC gate. Manufacturing still fails, which is why `expect_fab` differs from `expect`."
+
+[[board]]
+id = "rp2350_debug_target"
+path = "qualification/class-a/rp2350-debug-target/rp2350_debug_target.synth"
+class = "A"
+status = "experimental"
+expect = "fail"
+expect_fab = "fail"
+rationale = "USB-C power into a 3V3 LDO, the RP2350's own crystal, a tactile reset on RUN, a 3-pin SWD header, QSPI boot flash and one status LED, with no USB data path. The source stage passes with 14 diagnostics and no error; `kicad-cli pcb drc` then reports errors on the routed copper, and manufacturing fails carrying that."
+
+[[board]]
+id = "dual_usb_compute"
+path = "qualification/class-c/dual-usb-compute/dual_usb_compute.synth"
+class = "C"
+status = "experimental"
+expect = "fail"
+expect_fab = "fail"
+rationale = "Two RP2350s on their own USB 2.0 pairs, a shared QSPI boot flash, and a USB 3.0 Type-A receptacle whose two SuperSpeed lanes are carried at 90 ohms to a 20-pin header, on six layers: Class-C case 3, declared-and-preserved length and skew budgets. The source stage passes with 32 diagnostics and no error; DRC on the routed copper fails, and manufacturing fails carrying that."
+
+[[board]]
+id = "ice40_hdmi_video"
+path = "qualification/class-c/ice40-hdmi-video/ice40_hdmi_video.synth"
+class = "C"
+status = "experimental"
+expect = "fail"
+expect_fab = "fail"
+rationale = "A Lattice iCE40 HX4K in a 121-ball 0.8 mm BGA driving an HDMI Type-A output, with configuration flash, a 25 MHz oscillator, and 1.2 V and 3.3 V inner-layer planes from one 5 V USB-C input: Class-C case 1, fine-pitch escape and via/fanout rules. The source stage passes with 20 diagnostics and no error; DRC on the routed copper fails, and manufacturing fails carrying that."
+
+[[board]]
+id = "multirail_compute"
+path = "qualification/class-c/multirail-compute/multirail_compute.synth"
+class = "C"
+status = "experimental"
+expect = "fail"
+expect_fab = "fail"
+rationale = "An ESP32-WROOM-32 on four supply rails from one 12 V input, with an I2C GPIO expander and two expansion headers, on four layers whose two heavy rails are inner-layer planes: Class-C case 4, a multi-rail compute board. The source stage passes with 51 diagnostics and no error; DRC on the routed copper fails, and manufacturing fails carrying that."
+
+[[board]]
+id = "sdram_memory"
+path = "qualification/class-c/sdram-memory/sdram_memory.synth"
+class = "C"
+status = "experimental"
+expect = "unestablished"
+expect_fab = "unestablished"
+rationale = "Two ISSI IS42S16400J SDRAM dice on four layers sharing one series-damped address and command bus, bringing a 32-bit data bus to a pair of dual-row carrier connectors, with serial presence detect and thermal sense: Class-C case 2, declared bus skew budgets. Left `unestablished` deliberately. The release command reports the source stage as a parse failure on this board, and it is not one: `synth validate` accepts the file and emits 214 diagnostics with no error. `synth check` runs the stage as a child process and does not read its pipes, so a stage whose output passes the 64 KiB a pipe holds deadlocks and its output is lost — this board emits 137626 bytes. Until that is fixed there is no honest source verdict to record, so the gate records what it sees and compares nothing."

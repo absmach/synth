@@ -22,19 +22,34 @@ and edit `matrix.toml` second.
 
 ### Where the corpus stands
 
-No board in the corpus clears the gate today, and every `expect` says so. The
-three real boards route completely — no open nets — and then fail
-`kicad-cli pcb drc` on the board's own declared rules: the exported
-`.kicad_dru` carries only the manufacturer edge and hole clearances, so the
-per-netclass clearance and the minimum via diameter never reach the external
-engine, which routes to the global floor instead. `hello`, which has nothing to
-route, fails because the engine exits 1 on an empty board. The manufacturing
-stage fails on every board whose source passes, because no shipped part
-carries a recorded reviewer.
+The corpus is 17 boards. **Five clear the source/DRC gate** —
+`env_logger`, `sensor_logger`, `placement_and_diff_pair`, `i2c_sensor_node`
+and `protected_power_entry` — and four of those clear manufacturing too.
 
-None of that is a reason to soften the declarations. A matrix whose rows all
-read `fail` is doing its job: it names the four distinct causes, and the day
-one of them is fixed the gate will say so by failing in the other direction.
+The first three had been failing on their own declared rules: the exported
+project carried only the manufacturer edge and hole clearances, so the
+per-netclass clearance and the minimum via diameter never reached the external
+engine, which routed to the global floor instead. Writing the via geometry
+into the project file the router reads closed that, and the gate announced it
+by failing in the other direction — three rows declared `fail` that had
+started passing — which is the half of the contract that is easy to forget
+exists.
+
+What still fails, and why it is not one cause but several: `hello` has nothing
+to route and the engine exits 1 on an empty board. Four boards route and then
+fail `kicad-cli pcb drc` on the copper that came back. `irrigation_controller`
+does not finish routing at all, so DRC reports `unknown`, which is not a pass.
+The `ref_*` boards and `negative_broken_mcu_board` are negative tests and fail
+at source by design. `sdram_memory` is `unestablished` because the release
+command cannot read its source stage: `synth check` runs that stage as a child
+process without draining its pipes, so a board emitting more than the 64 KiB a
+pipe holds deadlocks and is reported as a parse error it does not have.
+Manufacturing fails on most boards whose source passes, because no shipped
+part carries a recorded reviewer.
+
+Nothing above is a reason to soften a declaration. A matrix that names its
+distinct causes is doing its job, and each cause fixed is one more row the
+gate will make somebody correct.
 
 ## Running it
 
