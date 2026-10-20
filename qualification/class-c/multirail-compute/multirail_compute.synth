@@ -241,14 +241,14 @@ board "multirail_compute" {
       component R7: resistor "r_generic_0603" value "4.7k"
 
       connect U2.vout -> U7.vdd
-      connect U7.gnd -> U2.gnd
+      connect U7.v_ss -> U2.gnd
       connect U7.vdd -> C13.p1
-      connect C13.p2 -> U7.gnd
+      connect C13.p2 -> U7.v_ss
       connect U5.io21_sda -> U7.sda as "I2C_SDA"
-      connect U5.io22_scl -> U7.scl as "I2C_SCL"
+      connect U5.io22_scl -> U7.sck as "I2C_SCL"
       connect U7.sda -> R6.p1
       connect R6.p2 -> U2.vout
-      connect U7.scl -> R7.p1
+      connect U7.sck -> R7.p1
       connect R7.p2 -> U2.vout
     }
 
@@ -275,7 +275,7 @@ board "multirail_compute" {
       connect U3.vout -> J3.p1
       connect J3.p2 -> U2.gnd
       connect U7.sda -> J3.p3
-      connect U7.scl -> J3.p4
+      connect U7.sck -> J3.p4
     }
 
     group "MECHANICAL" color "#525252" {
