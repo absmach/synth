@@ -2,11 +2,25 @@ id = "tmp117_temperature"
 kind = "sensor"
 description = "TI TMP117 high-accuracy temperature sensor, I²C"
 kicad_symbol = "Sensor_Temperature:TMP117xxDRV"
-kicad_footprint = "Package_TO_SOT_SMD:SOT-563"
+# The symbol the part names is `TMP117xxDRV`, and DRV is TI's code for the
+# 2.00 x 2.00 mm six-pin WSON with an exposed pad. The footprint said
+# `SOT-563`, a 1.6 x 1.2 mm leaded package that is a different part in a
+# different body, so every exported land, pad position and courtyard was
+# taken from the wrong outline.
+#
+# The exposed pad is pad 7 of that footprint and is deliberately NOT declared
+# here, which leaves `E-SYNTH-QUAL-002` reporting it. It cannot be declared:
+# `TMP117xxDRV` extends `TMP102xxDRL`, which declares pins 1 to 6, and the
+# registry loader requires every declared pin number to exist in the symbol as
+# well as the footprint -- so a pin for pad 7 makes the whole registry fail to
+# load. A part whose exposed pad is absent from the stock symbol has no way to
+# cover that pad today. Compare `ina3221_power_monitor`, whose `ep` on pad 17
+# is declarable only because the `INA3221` symbol happens to carry pin 17.
+kicad_footprint = "Package_SON:WSON-6-1EP_2x2mm_P0.65mm_EP1x1.6mm"
 
 [footprint_dimensions]
-width_mm = 1.6
-height_mm = 1.6
+width_mm = 2.0
+height_mm = 2.0
 courtyard_margin_mm = 0.25
 
 [operating_conditions]
