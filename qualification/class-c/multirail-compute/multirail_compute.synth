@@ -126,6 +126,13 @@ board "multirail_compute" {
       component C4: capacitor "c_generic_0603" value "100nF"
       // The thermal sense, beside the part that dissipates.
       component NTC1: resistor "r_thermistor_ntc_10k" value "10k"
+      // The compensation network, the soft-start cap and the enable pull-up.
+      // COMP is the error amplifier's output and wants a series RC to ground;
+      // SS sets the ramp; EN is a 6 V pin and cannot sit on a 12 V rail.
+      component R9: resistor  "r_generic_0603" value "6.8k"
+      component C12: capacitor "c_generic_0603" value "3.9nF"
+      component C14: capacitor "c_generic_0603" value "100nF"
+      component R10: resistor  "r_generic_0603" value "100k"
       component TP2: testpoint "testpoint_pad_1_5" {
         placement_hint { region: top_edge edge: top priority: soft }
       }
@@ -133,7 +140,11 @@ board "multirail_compute" {
       connect F1.p2 -> U1.in
       connect F1.p2 -> C2.p1
       connect C2.p2 -> U1.gnd as "GND"
-      connect U1.en -> F1.p2
+      // EN through 100k, not straight to 12 V: absolute maximum on every pin
+      // but IN, SW and BS is 6 V, and the part has a 7 V zener on EN that the
+      // resistor is there to feed. Tied hard to the rail it is an overstress.
+      connect U1.en -> R10.p1
+      connect R10.p2 -> F1.p2
       connect U1.bs -> C4.p1
       connect C4.p2 -> U1.sw
       connect U1.sw -> L1.p1
@@ -149,6 +160,14 @@ board "multirail_compute" {
       connect U1.ep -> U1.gnd as "GND"
       connect NTC1.p1 -> L1.p2
       connect NTC1.p2 -> U1.gnd as "GND"
+      // Series RC from COMP to ground, and the soft-start cap. 0.1 uF gives
+      // the datasheet's 15 ms ramp; unconnected, SS disables soft-start and
+      // the rail comes up as fast as the inrush allows.
+      connect U1.comp -> R9.p1
+      connect R9.p2 -> C12.p1
+      connect C12.p2 -> U1.gnd as "GND"
+      connect U1.ss -> C14.p1
+      connect C14.p2 -> U1.gnd as "GND"
     }
 
     group "3V3 RAIL" color "#0369a1" {
