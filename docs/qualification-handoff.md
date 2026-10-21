@@ -22,9 +22,17 @@ and edit `matrix.toml` second.
 
 ### Where the corpus stands
 
-The corpus is 17 boards. **Five clear the source/DRC gate** —
-`env_logger`, `sensor_logger`, `placement_and_diff_pair`, `i2c_sensor_node`
-and `protected_power_entry` — and four of those clear manufacturing too.
+The corpus is 17 boards. **Six clear the source/DRC gate** —
+`env_logger`, `sensor_logger`, `placement_and_diff_pair`, `i2c_sensor_node`,
+`irrigation_controller` and `protected_power_entry` — and four of those clear
+manufacturing too. `irrigation_controller` and `protected_power_entry` are the
+two that do not: their copper is complete and their rules are met, and the
+manufacturing stage fails because no shipped part records a reviewer, which is
+#51 rather than anything about those boards.
+
+Clearing the gate is a measurement, not an approval. Every one of the six is
+still `experimental`, and the table further down is what a human still has to
+judge before any of them becomes `qualified`.
 
 The first three had been failing on their own declared rules: the exported
 project carried only the manufacturer edge and hole clearances, so the

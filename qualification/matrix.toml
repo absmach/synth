@@ -14,7 +14,7 @@ fab_command = "synth check <board> --fab --json"
 # what it observes for those and compares nothing, so a row can never pass for
 # a reason nobody checked.
 #
-# Four boards now clear the source/DRC gate, and three of those clear
+# Six boards now clear the source/DRC gate, and four of those clear
 # manufacturing as well. That is new. The three that had been failing on their
 # own declared rules did so because the per-netclass clearance and the minimum
 # via diameter never reached the external engine; writing the via geometry into
