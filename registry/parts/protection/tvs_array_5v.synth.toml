@@ -2,9 +2,18 @@ id = "tvs_array_5v"
 kind = "diode"
 description = "TVS diode array, 5V, 4 channels, SOT-363"
 kicad_footprint = "Package_TO_SOT_SMD:SOT-363_SC-70-6"
-# kicad_symbol intentionally unmapped: the registry pin model
-# (pins 1-6) doesn't match any KiCad stock TVS-array symbol.
-# Falls back to a synthesized rectangle. Track in V1.1 cleanup.
+# THIS PART IS NOT ATTESTED, AND #157 IS NOT CLAIMED RESOLVED FOR IT.
+#
+# kicad_symbol is unmapped because no stock KiCad symbol matches this pin
+# model. Checked: the library's SC-70-6 arrays are `SP0505BAJT` and
+# `PESD5V0L5UY`, both five channels on a common anode, and the 5.0 V
+# four-channel parts (`PESD5V0L4UF/UG/UW`) are five-pin packages -- SOT-886,
+# SOT-353 and SOT-665. None is four channels with a separate Vcc and ground,
+# which is what the boards here wire. So the export falls back to a
+# synthesized rectangle rather than a real symbol.
+#
+# Closing this needs a named device with a datasheet, not a better guess, and
+# it will move the boards that use it onto whatever topology that device has.
 #
 # Where this pin map comes from, since the synthesized symbol means it is
 # the only place the pad functions are recorded: the part names no device --
