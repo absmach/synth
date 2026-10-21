@@ -80,7 +80,10 @@ board "dual_usb_compute" {
       clearance 0.25mm
     }
 
-    group "USB-C HOST PORT" color "#c2410c" {
+    // A sink, not a host: VBUS enters here and feeds the fuse and the
+    // regulator, and both CC lines carry the 5.1k Rd that advertises a UFP.
+    // The group used to say HOST, which contradicted every component in it.
+    group "USB-C DEVICE PORT" color "#c2410c" {
       component J1: connector "usb_c_receptacle" { placement_hint { region: top_left priority: hard } }
       component R1: resistor  "r_generic_0603" value "5.1k"
       component R2: resistor  "r_generic_0603" value "5.1k"
@@ -102,12 +105,23 @@ board "dual_usb_compute" {
     connect J1.dn   -> D2.io
     connect J1.gnd  -> D2.gnd
 
+    // STILL INCONSISTENT, AND DELIBERATELY NAMED HERE. A Type-A receptacle is
+    // a host-side connector, and the USB 2.0 pair behind it ends at U4's
+    // native device pins. Powering VBUS makes the port able to feed a device;
+    // it does not make this board able to talk to one, because no silicon
+    // here is a USB host. Resolving that is a connector or a controller
+    // decision, not a wiring one, and it is the open question on #40 case 3.
     group "USB 3.0 PORT" color "#b45309" {
       component J2: connector "usb3_a_receptacle" { placement_hint { region: top_right priority: hard } }
       component D3: diode     "esd_usb"
       component D4: diode     "esd_usb"
     }
 
+    // VBUS, which was left unconnected. The board already states, for the
+    // drain and the shell below, that leaving a pin off is a decision by
+    // omission; this pin was the one place it did that. It takes the same
+    // protected 5V the board runs on, so a downstream device shares F1's 1A
+    // budget with the regulator -- a real limit, and a declared one.
     connect J2.gnd -> J1.gnd
     connect J2.dp  -> D3.io
     connect J1.gnd -> D3.gnd
@@ -136,7 +150,10 @@ board "dual_usb_compute" {
     connect U1.vout -> C3.p1
     connect U1.gnd  -> C3.p2
 
-    group "RP2350 HOST" color "#0072b2" {
+    // U2 terminates J1's pair on its native USB device pins, so it is the
+    // device this board presents to whatever it is plugged into. It was
+    // labelled HOST, which no pin on it supports.
+    group "RP2350 ON THE DEVICE PORT" color "#0072b2" {
       component U2: mcu       "rp2350" { placement_hint { region: center priority: hard } }
       component C4: capacitor "c_generic_0603" value "100nF" { placement_hint { near: "U2" priority: hard } }
       component C5: capacitor "c_generic_0603" value "100nF" { placement_hint { near: "U2" priority: hard } }
