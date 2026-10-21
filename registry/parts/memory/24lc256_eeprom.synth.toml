@@ -18,11 +18,14 @@ min_voltage_v = 1.8
 max_voltage_v = 3.6
 max_current_ma = 50.0
 
-# Pads are the datasheet's, which is what `Memory_EEPROM:24LC256` draws:
-# A0 A1 A2 GND SDA SCL WP VCC. The three address inputs and WP are not
-# `required`, because a design is free to strap them to either rail — but
-# leaving them unconnected gives the device an undefined address, so a board
-# that means to use the part straps all four.
+# Pin names and numbers come from the stock symbol the part names, which
+# extends `24LC16`, cross-checked against the 8 pads of the SOIC-8 footprint.
+#
+# The previous map had `vdd` on pad 1, `gnd` on 2, `sda` on 3 and `scl` on 4.
+# On this package those four pads are A0, A1, A2 and GND, so a board wired to
+# this part put its supply on an address pin and its ground on another. The
+# four names keep their meaning and move to the pads that carry it.
+
 [[pins]]
 name = "a0"
 number = "1"
@@ -54,7 +57,7 @@ required = true
 [[pins]]
 name = "scl"
 number = "6"
-electrical_type = "bidirectional"
+electrical_type = "input"
 capabilities = ["i2c_scl"]
 required = true
 

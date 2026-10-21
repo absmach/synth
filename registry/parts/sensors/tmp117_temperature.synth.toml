@@ -55,10 +55,10 @@ electrical_type = "bidirectional"
 capabilities = ["i2c_scl"]
 required = true
 
-# ALERT and ADD0 are the remaining two pads of the package. ADD0 selects the
-# device address and has no default: left unconnected the address is whatever a
-# floating input decides, so a board straps it. ALERT is an open-drain output a
-# design may leave unused.
+# `Package_TO_SOT_SMD:SOT-563` has six copper pads; pads 3 and 4 were the two
+# with no pin to own them. Names and types come from the stock symbol
+# `Sensor_Temperature:TMP117xxDRV`, which extends `TMP102xxDRL`. The four pads
+# the part already declared were on the right pins.
 [[pins]]
 name = "alert"
 number = "3"
