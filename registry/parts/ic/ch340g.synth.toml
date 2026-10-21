@@ -39,7 +39,7 @@ capabilities = ["uart_rx"]
 [[pins]]
 name = "v3"
 number = "4"
-electrical_type = "passive"
+electrical_type = "power_output"
 required = true
 
 [[pins]]
