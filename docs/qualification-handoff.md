@@ -85,14 +85,27 @@ Stage budgets are configurable when a board needs more time:
 `SYNTH_CHECK_SOURCE_TIMEOUT_SECS`, `SYNTH_CHECK_DRC_TIMEOUT_SECS`,
 `SYNTH_CHECK_FAB_TIMEOUT_SECS`.
 
-### Why Gerber hashes are not pinned
+### Why no artifact hash is pinned
 
-`kicad-cli` stamps a per-run timestamp into Gerber headers, so those files are
-not byte-reproducible (see the determinism note in `crates/synth-kicad/src/fab.rs`).
-The matrix records every artifact hash `synth check` reports but compares only
-the `.kicad_sch`, `.kicad_pcb` and `bom.csv` hashes, which are IR-driven and
-stable. Pinning the rest would make the gate fail at random, which trains
-people to ignore it.
+The matrix records the `.kicad_sch`, `.kicad_pcb` and `bom.csv` hashes in
+`results.json` and **compares none of them**. They are there so a human can
+ask whether two runs produced the same output, and so a result is attributable
+to something; they do not fail the build.
+
+Two reasons they are not pinned. `kicad-cli` stamps a per-run timestamp into
+Gerber headers, so those files are not byte-reproducible at all (see the
+determinism note in `crates/synth-kicad/src/fab.rs`). And the `.kicad_pcb`
+carries the copper an external routing engine laid, so its hash moves when
+that engine is upgraded even though no board, part or compiler changed.
+Pinning it would make the gate fail for a reason no reviewer could act on,
+which trains people to ignore it.
+
+What the matrix gates on instead is the declared verdict: `expect`,
+`expect_fab`, and `expect_source_codes`. The last is compared as an exact set
+in both directions, so a board that acquires a new error-level diagnostic
+fails even while every code already written down keeps firing, and a board
+that stops reporting one fails too. A board's error-level output is a
+declaration, not a floor.
 
 ## What automation cannot prove
 

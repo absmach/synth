@@ -158,12 +158,20 @@ fn source_codes(report: &serde_json::Value) -> Vec<String> {
         .unwrap_or_default()
 }
 
-/// Artifact hashes for the files that are byte-deterministic.
+/// Artifact hashes for the files that are byte-deterministic, **recorded for
+/// attribution and not compared against anything**.
 ///
-/// `kicad-cli` stamps per-run timestamps into Gerber headers, so those are
-/// recorded by `synth check` but deliberately not compared here: pinning them
-/// would make the matrix fail at random. The schematic, PCB and BOM are
-/// IR-driven and stable, so they are the drift detector.
+/// Two separate reasons nothing is pinned here. `kicad-cli` stamps a per-run
+/// timestamp into Gerber headers, so those are not reproducible at all. And
+/// the `.kicad_pcb` carries the copper an external routing engine laid, so its
+/// hash moves when that engine is upgraded even though no board, part or
+/// compiler changed — pinning it would make the gate fail for a reason no
+/// reviewer could act on, which is how a gate teaches people to ignore it.
+///
+/// So these hashes answer "was this the same output as last time?" when a
+/// human compares two runs' artifacts; they do not fail the build. What this
+/// matrix actually gates on is `expect`, `expect_fab` and
+/// `expect_source_codes` — the declared verdicts, compared exactly.
 fn deterministic_artifacts(report: &serde_json::Value) -> BTreeMap<String, String> {
     const STABLE: [&str; 3] = [".kicad_sch", ".kicad_pcb", "bom.csv"];
     report["stages"]["manufacturing"]["artifacts"]
