@@ -93,25 +93,25 @@ board "multirail_compute" {
       }
       component F1: fuse      "polyfuse"
       component D1: diode     "d_schottky"
-      component D2: diode     "tvs_array_5v"
       component C1: capacitor "c_electrolytic_100uf" value "100uF"
       component TP1: testpoint "testpoint_pad_1_5" {
         placement_hint { region: top_edge edge: top priority: soft }
       }
 
-      // Reverse polarity first, then the fuse, then the clamp: a TVS in front
-      // of the fuse has nothing to limit the fault current it conducts.
+      // Reverse polarity first, then the fuse. There is no transient clamp:
+      // this rail is 12 V and the highest standoff in the registry is the
+      // 6.0 V PTVS6V0S1UR, so every candidate conducts continuously here.
+      // D2 used to be `tvs_array_5v`, a 5 V array, which did exactly that --
+      // it clamped the rail flat and sank the fuse's current instead of a
+      // transient's. A clamp returns when a part rated above 12 V exists.
       connect J1.p1 -> D1.anode
       connect D1.cathode -> F1.p1
       // The input rail is its own net and its own copper: it is 12 V, not the
       // 5 V the buck makes, and putting both in one class would pour them on
       // the same plane.
-      connect F1.p2 -> D2.ch1 as "V12"
-      connect F1.p2 -> C1.p1
+      connect F1.p2 -> C1.p1 as "V12"
       connect F1.p2 -> TP1.p1
-      connect J1.p2 -> D2.gnd as "GND"
-      connect J1.p2 -> C1.p2
-      connect D2.vcc -> D2.ch1
+      connect J1.p2 -> C1.p2 as "GND"
     }
 
     group "5V BUCK" color "#b91c1c" {
