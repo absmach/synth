@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
@@ -293,12 +293,26 @@ fn run_board(spec: &BoardSpec, fab: bool) -> BoardResult {
             spec.expect
         ));
     }
-    for code in &spec.expect_source_codes {
-        if !codes.contains(code) {
-            disagreements.push(format!(
-                "expected source diagnostic {code}, which was not reported"
-            ));
-        }
+    // The declared codes are the board's whole error-level source output, not
+    // a minimum. A subset check would let an `unsupported` board acquire a new
+    // defect and still pass, so long as the ones already written down kept
+    // firing — which is the direction this matrix exists to catch. Codes that
+    // appear and codes that vanish are both reported, because either means the
+    // compiler now says something different about a board nobody re-declared.
+    //
+    // Only error-level codes are compared. `source_codes` already filters to
+    // those, so a new warning does not fail the gate.
+    let expected_codes: BTreeSet<&String> = spec.expect_source_codes.iter().collect();
+    let observed_codes: BTreeSet<&String> = codes.iter().collect();
+    for code in expected_codes.difference(&observed_codes) {
+        disagreements.push(format!(
+            "expected source diagnostic {code}, which was not reported"
+        ));
+    }
+    for code in observed_codes.difference(&expected_codes) {
+        disagreements.push(format!(
+            "reported source diagnostic {code}, which the matrix does not declare"
+        ));
     }
 
     let manufacturing = fab.then(|| stage_status(&report, "manufacturing"));
