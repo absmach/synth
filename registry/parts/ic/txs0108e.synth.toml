@@ -3,7 +3,9 @@ kind = "level_shifter"
 description = "TI TXS0108E 8-bit bidirectional voltage level translator"
 mpn = "TXS0108EPWR"
 lcsc_pn = "C19187"
-kicad_symbol = "Logic_LevelTranslator:TXS0108E"
+# `Logic_LevelTranslator:TXS0108E` is in no KiCad library. `TXS0108EPW` is
+# the TSSOP variant, which is the package this part's footprint names.
+kicad_symbol = "Logic_LevelTranslator:TXS0108EPW"
 kicad_footprint = "Package_SO:TSSOP-20_4.4x6.5mm_P0.65mm"
 
 [footprint_dimensions]
@@ -16,44 +18,107 @@ min_voltage_v = 1.2
 max_voltage_v = 5.5
 max_current_ma = 50.0
 
-[[pins]]
-name = "vcca"
-number = "1"
-electrical_type = "power_input"
-required = false
+# Pin names and numbers come from the stock KiCad symbol this part names,
+# cross-checked against the footprint it names. Pads that the previous map
+# got wrong keep their old name where the name still denotes the same pin,
+# so a design that referenced one keeps working.
 
 [[pins]]
 name = "a1"
-number = "2"
+number = "1"
 electrical_type = "bidirectional"
-required = false
+
+[[pins]]
+name = "vcca"
+number = "2"
+electrical_type = "power_input"
 
 [[pins]]
 name = "a2"
 number = "3"
 electrical_type = "bidirectional"
-required = false
+
+[[pins]]
+name = "a3"
+number = "4"
+electrical_type = "bidirectional"
+
+[[pins]]
+name = "a4"
+number = "5"
+electrical_type = "bidirectional"
+
+[[pins]]
+name = "a5"
+number = "6"
+electrical_type = "bidirectional"
+
+[[pins]]
+name = "a6"
+number = "7"
+electrical_type = "bidirectional"
+
+[[pins]]
+name = "a7"
+number = "8"
+electrical_type = "bidirectional"
+
+[[pins]]
+name = "a8"
+number = "9"
+electrical_type = "bidirectional"
+
+[[pins]]
+name = "oe"
+number = "10"
+electrical_type = "input"
 
 [[pins]]
 name = "gnd"
 number = "11"
 electrical_type = "power_input"
-required = false
 
 [[pins]]
-name = "b1"
-number = "19"
+name = "b8"
+number = "12"
 electrical_type = "bidirectional"
-required = false
+
+[[pins]]
+name = "b7"
+number = "13"
+electrical_type = "bidirectional"
+
+[[pins]]
+name = "b6"
+number = "14"
+electrical_type = "bidirectional"
+
+[[pins]]
+name = "b5"
+number = "15"
+electrical_type = "bidirectional"
+
+[[pins]]
+name = "b4"
+number = "16"
+electrical_type = "bidirectional"
+
+[[pins]]
+name = "b3"
+number = "17"
+electrical_type = "bidirectional"
 
 [[pins]]
 name = "b2"
 number = "18"
 electrical_type = "bidirectional"
-required = false
 
 [[pins]]
 name = "vccb"
-number = "20"
+number = "19"
 electrical_type = "power_input"
-required = false
+
+[[pins]]
+name = "b1"
+number = "20"
+electrical_type = "bidirectional"
