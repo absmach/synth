@@ -24,6 +24,13 @@ on:
       - "fixtures/designs/**"
       - "fixtures/kicad-reference/**"
       - ".github/workflows/qualification.yml"
+      # The release output is not only the tree under crates/. A dependency
+      # bump, a feature change or a toolchain move can change what the
+      # compiler emits for every board while touching none of the paths
+      # above, so the matrix has to run for these too.
+      - "Cargo.toml"
+      - "Cargo.lock"
+      - "rust-toolchain.toml"
 
   pull_request:
     branches:
