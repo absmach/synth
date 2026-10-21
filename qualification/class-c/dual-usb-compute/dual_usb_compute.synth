@@ -105,13 +105,19 @@ board "dual_usb_compute" {
     connect J1.dn   -> D2.io
     connect J1.gnd  -> D2.gnd
 
-    // STILL INCONSISTENT, AND DELIBERATELY NAMED HERE. A Type-A receptacle is
-    // a host-side connector, and the USB 2.0 pair behind it ends at U4's
-    // native device pins. Powering VBUS makes the port able to feed a device;
-    // it does not make this board able to talk to one, because no silicon
-    // here is a USB host. Resolving that is a connector or a controller
-    // decision, not a wiring one, and it is the open question on #40 case 3.
-    group "USB 3.0 PORT" color "#b45309" {
+    // NOT A PORT, AND NOT WIRED AS ONE. A Type-A receptacle is a host-side
+    // connector, and the USB 2.0 pair behind it ends at U4's native device
+    // pins, so nothing here can host whatever is plugged in. J2 is a
+    // mechanical and signal fixture: it carries one USB 2.0 pair to U4 and
+    // two SuperSpeed lanes to the expansion header, and that is all it is
+    // evidence for.
+    //
+    // VBUS is deliberately not connected, and this is the decision rather
+    // than the omission. Feeding it would make the receptacle able to power
+    // a device the board still could not talk to, which is a worse claim
+    // than making none. A real port needs a host controller, which is a
+    // silicon decision and the open question on #40 case 3.
+    group "USB 3.0 LANE FIXTURE" color "#b45309" {
       component J2: connector "usb3_a_receptacle" { placement_hint { region: top_right priority: hard } }
       component D3: diode     "esd_usb"
       component D4: diode     "esd_usb"
