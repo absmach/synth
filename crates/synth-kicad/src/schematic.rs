@@ -5166,6 +5166,35 @@ mod tests {
     }
 
     #[test]
+    fn moving_a_power_name_away_from_a_near_miss_never_drops_it() {
+        for name in [
+            "ref_ldo_sensor",
+            "ref_usb_cdc",
+            "ref_crystal_mcu",
+            "ref_battery_charger",
+            "sensor_logger",
+        ] {
+            let (_board, sexp, _) = build_reference(name);
+            let mut shown: std::collections::BTreeMap<(i64, i64, String), usize> =
+                std::collections::BTreeMap::new();
+            for ((x, y), fields) in power_symbols(&sexp) {
+                let (_, text, _, _, hidden) = power_value(&fields).clone();
+                if text == "PWR_FLAG" {
+                    continue;
+                }
+                let key = ((x * 100.0).round() as i64, (y * 100.0).round() as i64, text);
+                *shown.entry(key).or_default() += usize::from(!hidden);
+            }
+            for ((x, y, text), visible) in shown {
+                assert_eq!(
+                    visible, 1,
+                    "{name}: {text} at ({x}, {y}) shows {visible} times, not once"
+                );
+            }
+        }
+    }
+
+    #[test]
     fn a_vertical_resistor_shows_reference_above_value_beside_its_body() {
         let board = lower_lenient(
             r#"board "b" {
