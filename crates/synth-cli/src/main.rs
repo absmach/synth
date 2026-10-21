@@ -1256,14 +1256,19 @@ const UNSUPPORTED: &[CapabilityLimit] = &[
         "Enable ordering, power-good signals and sequencing timing are neither declared nor checked.",
     ),
     (
-        "escape_fanout_strategy",
+        "escape_pattern_and_direction",
+        // No `constraint`: a limit names the attribute it qualifies, and there
+        // is none to name here. `component.escape` exists — it is listed in
+        // `routing_constraints` below — but this limit is not about `escape`.
+        // It is about pattern and direction, which no attribute declares, so
+        // pointing at `escape` would claim this limit qualifies something the
+        // block can express.
         None,
-        "Via geometry is declarable per netclass, but escape strategy is not: nothing expresses \
-         which layer a fine-pitch ball fans out to, or in what pattern. The gap is Synth's, not \
-         the router's — KiCadRoutingTools ships a BGA fanout engine (`py_router/bga_fanout`, \
-         including an under-pad method for arrays its channel router cannot escape) and Synth \
-         never invokes it. `synth_router::escape` reports whether a package can be fanned out at \
-         the process floor, and nothing acts on what it reports.",
+        "A component's `escape` block picks the engine (`channel`, `underpad`), limits the \
+         copper layers, or turns the escape off. What it cannot express is a pattern or a \
+         direction: the engine's `--primary-escape`, `--force-escape-direction` and \
+         `--layer-costs` are not reachable from a board, so which way a package fans out is the \
+         engine's choice.",
     ),
 ];
 
@@ -1383,7 +1388,7 @@ fn capability_descriptor() -> serde_json::Value {
                 "netclass": ["trace_width", "clearance", "color", "impedance", "current", "plane", "max_length", "max_skew", "via_diameter", "via_drill"],
                 "diff_pair": ["impedance", "max_skew", "couple"],
                 "keepout": ["radius"],
-                "component": ["placement_hint"],
+                "component": ["placement_hint", "escape"],
                 "requires": ["via_in_pad"]
             },
             "fabrication_processes": {
@@ -1394,6 +1399,8 @@ fn capability_descriptor() -> serde_json::Value {
                 },
                 "profiles_offering_via_in_pad": ["jlc-filled-via"],
                 "gate": "E-SYNTH-PROCESS-002: a requirement the declared tier does not offer is an error, so a requirement is never a permission on its own",
+                "via_geometry": "netclass via_diameter / via_drill reach the exported net class; E-SYNTH-PROCESS-003 checks both against the profile's drill and annular-ring floors. Which engine escapes a package, and onto which layers, is declarable too; see the escape entry",
+                "escape": "dense grid arrays (three pad rows and three columns, at or below 1.3 mm pitch) are escaped before routing by KiCadRoutingTools, with the escape via sized from the declared process floor and the fabrication tier pinned to it. A component's `escape { method … layers … }` block overrides the engine and layers, and `escape { off }` leaves a package to the general router; pattern and direction are not declarable, see the escape_pattern_and_direction limit",
                 "via_geometry": "netclass via_diameter / via_drill reach the exported net class; E-SYNTH-PROCESS-003 checks both against the profile's drill and annular-ring floors. Escape strategy — which layer a ball fans out to, and in what pattern — is not declarable; see the unsupported entry",
                 "override": "--krt-allow-via-in-pad permits via-in-pad in the fabrication gate without a declared requirement or a capable tier; it is an operator taking responsibility for one panel, not a process answer"
             },
@@ -4792,6 +4799,7 @@ fn build_route_request(
     request.kicad_routing_tools.fab_tier = options.fab_tier.as_str().to_string();
     request.kicad_routing_tools.same_net_pad_clearance_mm = options.same_net_pad_clearance;
     request.policy.allow_via_in_pad = options.allow_via_in_pad;
+    request.use_board_escapes(board);
     request.use_profile_floor(
         &board
             .manufacturer

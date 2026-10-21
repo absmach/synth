@@ -276,6 +276,10 @@ pub struct Component {
     pub properties: BTreeMap<String, String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub placement_hint: Option<PlacementConstraint>,
+    /// How this package's pins leave it (`escape { … }`). `None` means the
+    /// design did not say, and a dense grid array is escaped anyway.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub escape: Option<EscapeIntent>,
     /// Name of the `group` this component was declared inside — the
     /// sub-circuit an engineer would point at ("USB-C input"). `None`
     /// for components declared directly in the board body.
@@ -612,6 +616,58 @@ impl From<NetWire> for Net {
             voltage: w.voltage,
         }
     }
+}
+
+/// Escape engine for a package's pins.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum EscapeMethod {
+    /// Route out between the pads, in the channels they leave.
+    Channel,
+    /// Drop a via inside each pad and route away underneath. The only
+    /// method a fully populated fine-pitch array leaves open.
+    Underpad,
+}
+
+impl EscapeMethod {
+    /// Resolve the spelling an `escape { method … }` used.
+    #[must_use]
+    pub fn from_source(name: &str) -> Option<Self> {
+        match name {
+            "channel" => Some(Self::Channel),
+            "underpad" => Some(Self::Underpad),
+            _ => None,
+        }
+    }
+
+    /// The spelling a board writes, which is also the engine's own.
+    #[must_use]
+    pub const fn as_source(self) -> &'static str {
+        match self {
+            Self::Channel => "channel",
+            Self::Underpad => "underpad",
+        }
+    }
+
+    /// Every method this build knows, for an unknown name's error.
+    pub const ALL: &'static [Self] = &[Self::Channel, Self::Underpad];
+}
+
+/// What a component's `escape { … }` block asked for.
+///
+/// `off` and a method are not contradictory in the grammar, so a board can
+/// say both; `off` wins, because refusing to escape a package is the
+/// stronger statement and silently escaping it anyway would be the worse
+/// failure.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct EscapeIntent {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub method: Option<EscapeMethod>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub layers: Vec<String>,
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub off: bool,
+    pub source_span: Span,
 }
 
 impl NetClass {
