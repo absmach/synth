@@ -7,11 +7,11 @@
     "texts": 214
   },
   "ref_crystal_mcu": {
-    "sha256": "0ff9c56de610ead57ad93feca280359b09cc91ab3adc8c0e062b5262190fa8d7",
+    "sha256": "44a00de40e75ec8ba128cf8f93a9f6fd51ade22e1d28b408f0f8b4681a55a406",
     "width": "297.0022mm",
     "height": "210.0072mm",
-    "paths": 8718,
-    "texts": 214
+    "paths": 8516,
+    "texts": 211
   },
   "ref_ldo_sensor": {
     "sha256": "ddc6da0eaed81602d4a90b7c6d9e222e09ed507b7e3b63db4f002e548ea71948",
@@ -56,11 +56,11 @@
     "texts": 303
   },
   "secure_tracker": {
-    "sha256": "ed3340bd5ee5cb7e2b23bd6423168f034611140c5b656ca4097bbb10b3e5508d",
+    "sha256": "edceeacba20e52e901e9d77b5c8f46a61bc1365e550b49ab3d48f1a6467c645f",
     "width": "419.9890mm",
     "height": "297.0022mm",
-    "paths": 26122,
-    "texts": 689
+    "paths": 26125,
+    "texts": 695
   },
   "sensor_logger": {
     "sha256": "a17a01256bed9d41c4957674cb46a3ad7f76c996686508088f935a3d46811655",
