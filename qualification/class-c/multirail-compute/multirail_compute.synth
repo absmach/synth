@@ -132,7 +132,7 @@ board "multirail_compute" {
 
       connect F1.p2 -> U1.in
       connect F1.p2 -> C2.p1
-      connect C2.p2 -> U1.gnd
+      connect C2.p2 -> U1.gnd as "GND"
       connect U1.en -> F1.p2
       connect U1.bs -> C4.p1
       connect C4.p2 -> U1.sw
@@ -141,14 +141,14 @@ board "multirail_compute" {
       connect L1.p2 -> R1.p1
       connect R1.p2 -> U1.fb
       connect U1.fb -> R2.p1
-      connect R2.p2 -> U1.gnd
-      connect C3.p2 -> U1.gnd
+      connect R2.p2 -> U1.gnd as "GND"
+      connect C3.p2 -> U1.gnd as "GND"
       connect L1.p2 -> TP2.p1
       // The exposed pad is the heat path and is tied to ground; an untied one
       // is both a thermal failure and unconnected copper under the package.
-      connect U1.ep -> U1.gnd
+      connect U1.ep -> U1.gnd as "GND"
       connect NTC1.p1 -> L1.p2
-      connect NTC1.p2 -> U1.gnd
+      connect NTC1.p2 -> U1.gnd as "GND"
     }
 
     group "3V3 RAIL" color "#0369a1" {
@@ -161,9 +161,9 @@ board "multirail_compute" {
 
       connect L1.p2 -> U2.vin
       connect U2.vout -> C5.p1 as "V3V3" class "V3V3"
-      connect C5.p2 -> U2.gnd
+      connect C5.p2 -> U2.gnd as "GND"
       connect U2.vout -> C6.p1
-      connect C6.p2 -> U2.gnd
+      connect C6.p2 -> U2.gnd as "GND"
       connect U2.vout -> TP3.p1
     }
 
@@ -181,10 +181,10 @@ board "multirail_compute" {
       connect U2.vout -> FB1.p1
       connect FB1.p2 -> U3.vin
       connect U3.vin -> C7.p1
-      connect C7.p2 -> U3.gnd
+      connect C7.p2 -> U3.gnd as "GND"
       connect U3.en -> U3.vin
       connect U3.vout -> C8.p1 as "V3V3_A" class "ANALOG"
-      connect C8.p2 -> U3.gnd
+      connect C8.p2 -> U3.gnd as "GND"
       connect U3.vout -> TP4.p1
     }
 
@@ -198,12 +198,12 @@ board "multirail_compute" {
       // at 3.5 V, so a 3.3 V supply is below it and E-SYNTH-POWER-009 says so.
       connect L1.p2 -> U4.vin
       connect U4.vout -> C9.p1 as "V5_SW" class "ANALOG"
-      connect C9.p2 -> U4.gnd
+      connect C9.p2 -> U4.gnd as "GND"
       // `ct` sets the inrush slew; `on` is strapped high so the rail comes up
       // with the board. Sequencing it would need a spare GPIO, and the
       // registry models eight of this module's pins — see the limitation.
       connect U4.ct -> R3.p1
-      connect R3.p2 -> U4.gnd
+      connect R3.p2 -> U4.gnd as "GND"
       connect U4.on -> R8.p1
       connect R8.p2 -> L1.p2
     }
@@ -220,18 +220,18 @@ board "multirail_compute" {
       component R5: resistor   "r_generic_0603" value "1k"
 
       connect U2.vout -> U5.vdd
-      connect U5.gnd -> U2.gnd
+      connect U5.gnd -> U2.gnd as "GND"
       connect U5.vdd -> C10.p1
-      connect C10.p2 -> U5.gnd
+      connect C10.p2 -> U5.gnd as "GND"
       connect U5.vdd -> C11.p1
-      connect C11.p2 -> U5.gnd
+      connect C11.p2 -> U5.gnd as "GND"
       connect U5.en -> R4.p1
       connect R4.p2 -> U5.vdd
       connect U5.en -> SW1.p1
-      connect SW1.p2 -> U5.gnd
+      connect SW1.p2 -> U5.gnd as "GND"
       connect U5.io1_tx -> R5.p1
       connect R5.p2 -> LED1.anode
-      connect LED1.cathode -> U5.gnd
+      connect LED1.cathode -> U5.gnd as "GND"
     }
 
     group "IO EXPANDER" color "#0891b2" {
@@ -241,9 +241,9 @@ board "multirail_compute" {
       component R7: resistor "r_generic_0603" value "4.7k"
 
       connect U2.vout -> U7.vdd
-      connect U7.v_ss -> U2.gnd
+      connect U7.v_ss -> U2.gnd as "GND"
       connect U7.vdd -> C13.p1
-      connect C13.p2 -> U7.v_ss
+      connect C13.p2 -> U7.v_ss as "GND"
       connect U5.io21_sda -> U7.sda as "I2C_SDA"
       connect U5.io22_scl -> U7.sck as "I2C_SCL"
       connect U7.sda -> R6.p1
@@ -264,7 +264,7 @@ board "multirail_compute" {
       // powered down without dropping the module, plus the UART and the I2C
       // bus the expander sits on.
       connect U4.vout -> J2.p1
-      connect J2.p2 -> U2.gnd
+      connect J2.p2 -> U2.gnd as "GND"
       connect U5.io1_tx -> J2.p3
       connect U5.io3_rx -> J2.p4
       connect U5.io21_sda -> J2.p5
@@ -273,7 +273,7 @@ board "multirail_compute" {
 
       // The analog header carries the filtered rail and nothing switching.
       connect U3.vout -> J3.p1
-      connect J3.p2 -> U2.gnd
+      connect J3.p2 -> U2.gnd as "GND"
       connect U7.sda -> J3.p3
       connect U7.sck -> J3.p4
     }
