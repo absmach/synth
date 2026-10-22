@@ -1456,3 +1456,57 @@ fn a_divided_rail_is_judged_against_the_pin_rating_not_the_rail() {
         codes(&diags, "E-SYNTH-POWER-008")
     );
 }
+
+/// A resistor network with more than two branches is not a divider.
+///
+/// Keeping the last resistor found on each side turned any network with a
+/// branch to a rail and a branch to ground into a two-resistor divider, and
+/// the arithmetic that followed described a circuit the board does not have.
+/// That suppresses a real overvoltage rather than reporting it, so the
+/// exemption now needs exactly one readable resistor to each side.
+///
+/// Here a second 100k to the 12 V rail puts the true node at 6.0 V, not the
+/// 4.0 V the two-resistor reading would have claimed, and 6.0 V is over the
+/// pin's 4.5 V rating. The conservative rail check has to stand.
+#[test]
+fn a_three_branch_resistor_network_is_not_exempted_as_a_divider() {
+    let mut registry =
+        synth_registry::load_dir(&workspace_root().join("registry").join("parts")).unwrap();
+    let extra = synth_registry::load_from_strs(&[
+        ("test_five_volt_tolerant.synth.toml", FIVE_VOLT_TOLERANT),
+        ("test_12v_supply.synth.toml", TWELVE_VOLT_SUPPLY),
+    ])
+    .unwrap();
+    for (_, part) in extra.iter() {
+        registry.insert(part.clone());
+    }
+
+    let src = r#"board "t" {
+      layers 2
+      component U1: regulator "ams1117_3v3"
+      component U2: regulator "test_12v_supply"
+      component U3: sensor "test_five_volt_tolerant"
+      component R1: resistor "r_generic_0603" value "100k"
+      component R2: resistor "r_generic_0603" value "50k"
+      component R3: resistor "r_generic_0603" value "100k"
+      component C1: capacitor "c_generic_0805" value "10u"
+      component C2: capacitor "c_generic_0805" value "10u"
+      component C3: capacitor "c_generic_0805" value "10u"
+      connect U1.vout -> U3.vdd
+      connect U2.vout -> R1.p1
+      connect R1.p2 -> U3.sense
+      connect U3.sense -> R2.p1
+      connect R2.p2 -> U1.gnd as "GND"
+      // A second branch to the same rail: two resistors up, one down.
+      connect U2.vout -> R3.p1
+      connect R3.p2 -> U3.sense
+    }"#;
+    let diags = validate_in(src, &registry, &ErcConfig::default());
+    assert_eq!(
+        codes(&diags, "E-SYNTH-POWER-008").len(),
+        1,
+        "two resistors to the rail is not a divider this can reduce to two \
+         values, so the rail voltage stands: {:?}",
+        codes(&diags, "E-SYNTH-POWER-008")
+    );
+}

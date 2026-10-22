@@ -160,14 +160,22 @@ fn pullup_on_net<'a>(
 /// rail above its own logic level, which is the ordinary way to read a 12 V
 /// input on a 3.3 V ADC pin.
 ///
-/// Returns `None` when the net is not a divider, or when either resistor
-/// carries a value this cannot read. A rule must not claim a violation it
-/// cannot compute, and it must not clear one either, so the caller keeps the
-/// conservative rail voltage in that case.
+/// Returns `None` for anything that is not exactly one readable resistor to a
+/// rail and exactly one readable resistor to ground. A rule must not claim a
+/// violation it cannot compute, and it must not clear one either, so the
+/// caller keeps the conservative rail voltage in every other case.
+///
+/// "Exactly" is the whole guarantee. Keeping the last resistor found on each
+/// side turned any resistor network with a branch to a rail and a branch to
+/// ground into a two-resistor divider, and the arithmetic that followed was
+/// about a circuit the board does not have -- which suppresses a real
+/// overvoltage rather than reporting it. A third branch, a second resistor to
+/// either side, or one whose value cannot be read all mean the same thing
+/// here: this is not a divider that can be reasoned about from two values.
 fn divider_output_v(board: &Board, domains: &Domains, net: NetId, rail_v: f64) -> Option<f64> {
     let target = board.net(net)?;
-    let mut to_rail = None;
-    let mut to_ground = None;
+    let mut to_rail: Vec<f64> = Vec::new();
+    let mut to_ground: Vec<f64> = Vec::new();
     for ep in &target.endpoints {
         let Some(component) = board.component(ep.component) else {
             continue;
@@ -184,23 +192,32 @@ fn divider_output_v(board: &Board, domains: &Domains, net: NetId, rail_v: f64) -
         if other_id == net {
             continue;
         }
-        let Some(ohms) = component
-            .value
-            .as_deref()
-            .and_then(crate::value::parse_resistance)
-        else {
-            continue;
-        };
         let Some(other) = board.net(other_id) else {
             continue;
         };
-        if is_ground_net(domains, other) {
-            to_ground = Some(ohms);
-        } else if is_rail_net(domains, other_id) {
-            to_rail = Some(ohms);
+        let to_ground_branch = is_ground_net(domains, other);
+        if !to_ground_branch && !is_rail_net(domains, other_id) {
+            // A resistor off to somewhere that is neither a rail nor ground
+            // is a third branch, and the divider ratio is not two values any
+            // more.
+            return None;
+        }
+        // Read the value only once the branch is known to matter, and refuse
+        // the whole network if it cannot be read: an unknown resistance in
+        // the ladder is not a divider whose output can be computed.
+        let ohms = component
+            .value
+            .as_deref()
+            .and_then(crate::value::parse_resistance)?;
+        if to_ground_branch {
+            to_ground.push(ohms);
+        } else {
+            to_rail.push(ohms);
         }
     }
-    let (top, bottom) = (to_rail?, to_ground?);
+    let ([top], [bottom]) = (to_rail.as_slice(), to_ground.as_slice()) else {
+        return None;
+    };
     if top + bottom <= 0.0 {
         return None;
     }
