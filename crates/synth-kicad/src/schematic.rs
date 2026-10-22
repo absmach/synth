@@ -2093,9 +2093,15 @@ fn power_symbol_properties(
                     ]
                 } else {
                     // A symbol turned along its stub keeps its name on its own
-                    // row, past the tip.
-                    let justify = if body.0 > 0.0 { "left" } else { "right" };
-                    vec![(body.0 * (POWER_NAME_OFFSET_MM + ring), 0.0, Some(justify))]
+                    // row past the tip, or just above or below that row when
+                    // the row is taken.
+                    let justify = Some(if body.0 > 0.0 { "left" } else { "right" });
+                    let x = body.0 * POWER_NAME_OFFSET_MM;
+                    vec![
+                        (body.0 * (POWER_NAME_OFFSET_MM + ring), 0.0, justify),
+                        (x, -(POWER_NAME_SIDE_MM + ring), justify),
+                        (x, POWER_NAME_SIDE_MM + ring, justify),
+                    ]
                 }
             })
             .collect();
