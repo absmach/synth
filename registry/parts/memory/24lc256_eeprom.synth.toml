@@ -16,30 +16,55 @@ min_voltage_v = 1.8
 max_voltage_v = 3.6
 max_current_ma = 50.0
 
+# Pads are the datasheet's, which is what `Memory_EEPROM:24LC256` draws:
+# A0 A1 A2 GND SDA SCL WP VCC. The three address inputs and WP are not
+# `required`, because a design is free to strap them to either rail — but
+# leaving them unconnected gives the device an undefined address, so a board
+# that means to use the part straps all four.
 [[pins]]
-name = "vdd"
+name = "a0"
 number = "1"
-electrical_type = "power_input"
-required = true
+electrical_type = "input"
+
+[[pins]]
+name = "a1"
+number = "2"
+electrical_type = "input"
+
+[[pins]]
+name = "a2"
+number = "3"
+electrical_type = "input"
 
 [[pins]]
 name = "gnd"
-number = "2"
+number = "4"
 electrical_type = "power_input"
 required = true
 
 [[pins]]
 name = "sda"
-number = "3"
+number = "5"
 electrical_type = "bidirectional"
 capabilities = ["i2c_sda"]
 required = true
 
 [[pins]]
 name = "scl"
-number = "4"
+number = "6"
 electrical_type = "bidirectional"
 capabilities = ["i2c_scl"]
+required = true
+
+[[pins]]
+name = "wp"
+number = "7"
+electrical_type = "input"
+
+[[pins]]
+name = "vdd"
+number = "8"
+electrical_type = "power_input"
 required = true
 
 [[required_decoupling]]

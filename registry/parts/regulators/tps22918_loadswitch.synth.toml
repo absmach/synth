@@ -38,9 +38,25 @@ name = "ct"
 number = "4"
 electrical_type = "passive"
 
+# Pads 5 and 6 are QOD and VOUT, in that order, per the DBV (SOT-23-6)
+# pinout in the datasheet: VIN 1, GND 2, ON 3, CT 4, QOD 5, VOUT 6. `vout`
+# was on pad 5, which is the quick-output-discharge terminal the part's own
+# description names -- so a board connecting its load to `vout` wired it to
+# the discharge pin instead, and `E-SYNTH-QUAL-002` reported pad 6 as having
+# no pin at all.
+#
+# QOD is passive rather than an output. It is a discharge path, strapped to
+# VOUT directly or through a resistor to set the rate, so declaring it a
+# driver would make the datasheet's own wiring look like two outputs shorted
+# together. It is not required: left open, quick discharge is simply off.
+[[pins]]
+name = "qod"
+number = "5"
+electrical_type = "passive"
+
 [[pins]]
 name = "vout"
-number = "5"
+number = "6"
 electrical_type = "power_output"
 required = true
 

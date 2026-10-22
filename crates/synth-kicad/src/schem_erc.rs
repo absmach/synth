@@ -1623,6 +1623,7 @@ mod tests {
             electrical_type: synth_registry::ElectricalType::Bidirectional,
             capabilities: Vec::new(),
             required: false,
+            footprint_only: false,
             unit: None,
             voltage_max_v: None,
             voltage_min_v: None,

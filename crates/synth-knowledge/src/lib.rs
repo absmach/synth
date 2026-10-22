@@ -991,6 +991,7 @@ mod tests {
             electrical_type: t,
             capabilities: vec![],
             required: false,
+            footprint_only: false,
             unit: None,
             voltage_max_v: None,
             voltage_min_v: None,

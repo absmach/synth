@@ -374,6 +374,7 @@ mod tests {
             electrical_type: ElectricalType::Passive,
             capabilities: Vec::new(),
             required: false,
+            footprint_only: false,
             unit: None,
             voltage_max_v: None,
             voltage_min_v: None,
