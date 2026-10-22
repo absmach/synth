@@ -5612,9 +5612,10 @@ fn classify_net_labels(board: &Board, layout: &Layout) -> Vec<NetLabel> {
                 .iter()
                 .any(|ep| region_of(ep.component) != first);
         let label_it = if has_regions {
-            // Region crossing is the primary test; the span guard is a
-            // secondary backstop for one very large region.
-            crosses || spans_far
+            // Region crossing is the only test: regions fill the page, so a
+            // net can run far inside one, and the router flags a net it
+            // cannot draw.
+            crosses
         } else {
             net.endpoints.len() >= LABEL_MIN_ENDPOINTS_MULTIDROP || spans_far
         };

@@ -908,48 +908,4 @@ expression: schematic
 		)
 		(uuid "a746a70e-2d5f-5737-ba97-5e8134d8674c")
 	)
-	(label
-		"VIN"
-		(at 114.3 35.56 0)
-		(effects
-			(font
-				(size 1.27 1.27)
-			)
-			(justify left)
-		)
-		(uuid "0b24bfa3-fcc0-56bf-be1c-cf6907fffbc2")
-	)
-	(label
-		"SENSE_1"
-		(at 85.09 69.215 0)
-		(effects
-			(font
-				(size 1.27 1.27)
-			)
-			(justify left)
-		)
-		(uuid "ba9ec2e6-d2ca-5f46-9c33-a20ec9e14d39")
-	)
-	(label
-		"RTN"
-		(at 118.11 101.6 0)
-		(effects
-			(font
-				(size 1.27 1.27)
-			)
-			(justify left)
-		)
-		(uuid "41a26afe-a5d2-51cf-9e5d-75210f17bec1")
-	)
-	(label
-		"SENSE_2"
-		(at 146.05 69.215 0)
-		(effects
-			(font
-				(size 1.27 1.27)
-			)
-			(justify left)
-		)
-		(uuid "009c554e-3932-5181-9772-0a644ddaf722")
-	)
 )
