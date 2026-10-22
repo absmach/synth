@@ -1,4 +1,6 @@
 id = "bme680_env"
+mpn = "BME680"
+lcsc_pn = "C125972"
 kind = "sensor"
 description = "Bosch BME680 environmental sensor: T/RH/P/VOC, I²C"
 kicad_symbol = "Sensor:BME680"

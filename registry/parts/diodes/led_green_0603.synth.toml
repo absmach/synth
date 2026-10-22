@@ -2,7 +2,7 @@ id = "led_green_0603"
 kind = "led"
 description = "Green LED, 0603 package, ~2.2V Vf"
 mpn = "0603-GREEN"
-lcsc_pn = "C72043"
+lcsc_pn = "C125094"
 kicad_symbol = "Device:LED"
 kicad_footprint = "LED_SMD:LED_0603_1608Metric"
 

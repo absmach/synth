@@ -1,8 +1,8 @@
 id = "atmega328p"
 kind = "mcu"
 description = "Microchip ATmega328P AVR @ 20MHz, 32KB flash — the Arduino Uno MCU"
-mpn = "ATMEGA328P-AU"
-lcsc_pn = "C14877"
+mpn = "ATMEGA328P-PU"
+lcsc_pn = "C33901"
 kicad_symbol = "MCU_Microchip_ATmega:ATmega328P-P"
 kicad_footprint = "Package_DIP:DIP-28_W7.62mm"
 
