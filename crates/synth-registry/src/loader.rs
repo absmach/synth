@@ -74,6 +74,18 @@ pub enum LoadError {
     },
 
     #[error(
+        "part {path}: kicad_symbol `{kicad_symbol}` disagrees about pad \
+         `{registry_number}`: {detail}. A rail and a signal would meet \
+         on that pad."
+    )]
+    KicadPinRoleMismatch {
+        path: PathBuf,
+        kicad_symbol: String,
+        registry_number: String,
+        detail: String,
+    },
+
+    #[error(
         "part {path}: invalid operating conditions (min_voltage_v {min} > max_voltage_v {max})"
     )]
     InvalidOperatingConditions { path: PathBuf, min: f64, max: f64 },
@@ -540,6 +552,8 @@ fn validate_part(path: &Path, part: &Part) -> Result<(), LoadError> {
         }
     }
 
+    check_kicad_pin_roles(part, path)?;
+
     if let Some(ref dims) = part.footprint_dimensions {
         if dims.width_mm <= 0.0 || dims.height_mm <= 0.0 {
             return Err(LoadError::InvalidFootprintDimensions {
@@ -565,6 +579,50 @@ fn validate_part(path: &Path, part: &Part) -> Result<(), LoadError> {
     }
 
     let _ = PartId(part.id.as_str().to_string());
+    Ok(())
+}
+
+/// Role invariant: a registry pin's declared role must not contradict the
+/// KiCad symbol pin carrying the same number.
+///
+/// The pin-number check proves the pad exists; it cannot tell whether it is
+/// the right pad, because a part that numbers its pins 1, 2, 3 in the order
+/// the author listed the signals hits numbers every package has. Five shipped
+/// parts did exactly that, putting a 3.3 V rail on an Ethernet transmit pad
+/// and a reset line on a supply pin. Comparing roles catches that class
+/// without needing to know the part.
+///
+/// Skipped, like the number check, when no symbol library resolves.
+fn check_kicad_pin_roles(part: &Part, path: &Path) -> Result<(), LoadError> {
+    let Some(lib_id) = part.kicad_symbol.as_deref() else {
+        return Ok(());
+    };
+    let Some(kicad_types) = crate::kicad_pin_check::kicad_pin_types(lib_id) else {
+        return Ok(());
+    };
+    let names = crate::kicad_pin_check::kicad_pin_names(lib_id).unwrap_or_default();
+    for pin in &part.pins {
+        let Some(symbol_types) = kicad_types.get(&pin.number.0) else {
+            continue;
+        };
+        if crate::kicad_pin_check::roles_agree(pin.electrical_type, symbol_types) {
+            continue;
+        }
+        let carries = names.get(&pin.number.0).map_or_else(
+            || "an unnamed pin".to_string(),
+            |n| n.iter().cloned().collect::<Vec<_>>().join("/"),
+        );
+        let types = symbol_types.iter().cloned().collect::<Vec<_>>().join("/");
+        return Err(LoadError::KicadPinRoleMismatch {
+            path: path.to_path_buf(),
+            kicad_symbol: lib_id.to_string(),
+            registry_number: pin.number.0.clone(),
+            detail: format!(
+                "the part declares `{}` as {:?}, the symbol carries {} there ({})",
+                pin.name, pin.electrical_type, types, carries
+            ),
+        });
+    }
     Ok(())
 }
 

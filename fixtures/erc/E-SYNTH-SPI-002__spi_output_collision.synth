@@ -12,13 +12,13 @@ board "spi_dir_test" {
   connect U1.vcc -> C1.p1
   connect U1.gnd -> C1.p2
 
-  connect U2.vcc -> J1.p1
+  connect U2.vdd -> J1.p1
   connect U2.gnd -> J1.p2
   connect U2.scs_n -> J1.p3
   connect U2.sclk -> J1.p4
   connect U2.mosi -> J1.p4
   connect U2.rst_n -> J1.p3
-  connect U2.vcc -> C2.p1
+  connect U2.vdd -> C2.p1
   connect U2.gnd -> C2.p2
 
   connect U1.txd -> U2.miso

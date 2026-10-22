@@ -1508,3 +1508,42 @@ fn a_three_branch_resistor_network_is_not_exempted_as_a_divider() {
         codes(&diags, "E-SYNTH-POWER-008")
     );
 }
+
+/// The CH340G's `v3` is not a rail with a budget.
+///
+/// `v3` is the internal LDO's decoupling tap, and the part's 20 mA
+/// `max_current_ma` is its own draw rather than anything it can deliver.
+/// Once the pin was corrected to `power_output` to match the stock symbol,
+/// `PowerBudgetRule` read it as a 20 mA regulator and charged it for whatever
+/// sat on the net, so `pass__power_004_sufficient_decoupling` reported two
+/// E-SYNTH-POWER-010 overruns on a board that is fine.
+#[test]
+fn the_ch340g_auxiliary_output_is_not_a_regulator_rail() {
+    let src = r#"board "power_anomaly_pass" {
+      layers 2
+      component U1: ic "ch340g"
+      component U2: ic "ch340g"
+      component J1: connector "header_1x4"
+      component C1: capacitor "c_generic_0603" value "100nF"
+      component C2: capacitor "c_generic_0603" value "100nF"
+
+      connect J1.p1 -> U1.vcc
+      connect J1.p1 -> U2.vcc
+      connect J1.p1 -> C1.p1
+      connect J1.p1 -> C2.p1
+
+      connect J1.p2 -> U1.gnd
+      connect J1.p2 -> U2.gnd
+      connect J1.p2 -> C1.p2
+      connect J1.p2 -> C2.p2
+
+      connect U1.v3 -> J1.p3
+      connect U2.v3 -> J1.p4
+    }"#;
+    let diags = validate(src);
+    assert!(
+        codes(&diags, "E-SYNTH-POWER-010").is_empty(),
+        "an internal regulator's decoupling pin supplies no rail: {:?}",
+        codes(&diags, "E-SYNTH-POWER-010")
+    );
+}
