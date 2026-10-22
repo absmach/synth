@@ -1,0 +1,34 @@
+id = "smaj15a_tvs"
+kind = "diode"
+version = 0
+lifecycle = "active"
+description = "Littelfuse SMAJ15A 400 W unidirectional TVS, 15 V standoff, 24.4 V clamp, DO-214AC, for a 12 V input"
+mpn = "SMAJ15A"
+kicad_symbol = "Device:D_Zener"
+kicad_footprint = "Diode_SMD:D_SMA"
+
+[footprint_dimensions]
+width_mm = 6.5
+height_mm = 1.8
+courtyard_margin_mm = 0.25
+
+# Standoff, not clamp. A TVS conducts nothing below its standoff voltage and
+# everything above its clamping voltage; what a 12 V rail needs is a part
+# whose standoff is above the rail and whose clamp is below the downstream
+# absolute maximum. 15 V standoff clears a 12 V nominal with margin for
+# regulation, and the 24.4 V clamp is under the MP2307's 28 V input rating.
+[operating_conditions]
+max_voltage_v = 15.0
+
+[[pins]]
+name = "cathode"
+number = "1"
+electrical_type = "passive"
+
+[[pins]]
+name = "anode"
+number = "2"
+electrical_type = "passive"
+
+[provenance]
+datasheet_url = "https://www.littelfuse.com/products/tvs-diodes/surface-mount/smaj/smaj15a.aspx"

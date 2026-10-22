@@ -1,0 +1,84 @@
+id = "sn65hvd230_can"
+kind = "ic"
+version = 0
+lifecycle = "active"
+description = "TI SN65HVD230 3.3 V CAN transceiver, 1 Mbps, SOIC-8, with slope control and standby"
+mpn = "SN65HVD230DR"
+kicad_symbol = "Interface_CAN_LIN:SN65HVD230"
+kicad_footprint = "Package_SO:SOIC-8_3.9x4.9mm_P1.27mm"
+
+[footprint_dimensions]
+width_mm = 6.9
+height_mm = 4.41
+courtyard_margin_mm = 0.25
+
+# A 3.3 V transceiver, which is why it is this part and not a 5 V one: the
+# logic side faces an ESP32 directly with no translation.
+[operating_conditions]
+min_voltage_v = 3.0
+max_voltage_v = 3.6
+max_current_ma = 70.0
+max_power_mw = 250
+thermal_resistance_c_per_w = 120
+
+[[pins]]
+# Driver input: the controller's TX.
+name = "d"
+number = "1"
+electrical_type = "input"
+required = true
+
+[[pins]]
+name = "gnd"
+number = "2"
+electrical_type = "power_input"
+required = true
+
+[[pins]]
+name = "vcc"
+number = "3"
+electrical_type = "power_input"
+required = true
+
+[[pins]]
+# Receiver output: the controller's RX.
+name = "r"
+number = "4"
+electrical_type = "output"
+required = true
+
+[[pins]]
+# 1.2 V reference, for split termination. Left open when unused.
+name = "vref"
+number = "5"
+electrical_type = "output"
+
+[[pins]]
+name = "canl"
+number = "6"
+electrical_type = "differential_negative"
+capabilities = ["diff_pair_negative"]
+required = true
+
+[[pins]]
+name = "canh"
+number = "7"
+electrical_type = "differential_positive"
+capabilities = ["diff_pair_positive"]
+required = true
+
+[[pins]]
+# Slope/standby. To ground for full speed, through a resistor for slope
+# control, high for standby. Floating is undefined, so it is required.
+name = "rs"
+number = "8"
+electrical_type = "input"
+required = true
+
+[[required_decoupling]]
+net = "vcc"
+value = "100nf"
+count = 1
+
+[provenance]
+datasheet_url = "https://www.ti.com/lit/ds/symlink/sn65hvd230.pdf"

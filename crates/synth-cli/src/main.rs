@@ -1333,7 +1333,8 @@ fn capability_descriptor() -> serde_json::Value {
             {"name": "jlc-standard", "layers": [2, 4], "min_trace_width_mm": 0.127, "min_clearance_mm": 0.127, "min_drill_mm": 0.3},
             {"name": "pcbway-standard", "layers": [2, 4], "min_trace_width_mm": 0.15, "min_clearance_mm": 0.15, "min_drill_mm": 0.3},
             {"name": "oshpark-4layer", "layers": [4], "min_trace_width_mm": 0.125, "min_clearance_mm": 0.125, "min_drill_mm": 0.25},
-            {"name": "jlc-filled-via", "layers": [2, 4], "min_trace_width_mm": 0.127, "min_clearance_mm": 0.127, "min_drill_mm": 0.3, "offers": ["via_in_pad"]}
+            {"name": "jlc-filled-via", "layers": [2, 4], "min_trace_width_mm": 0.127, "min_clearance_mm": 0.127, "min_drill_mm": 0.3, "offers": ["via_in_pad"]},
+            {"name": "jlc-advanced", "layers": [4, 6], "min_trace_width_mm": 0.127, "min_clearance_mm": 0.127, "min_drill_mm": 0.2, "offers": ["via_in_pad"]}
         ],
         "language": {
             "syntax_version": "1.0",
@@ -1392,7 +1393,7 @@ fn capability_descriptor() -> serde_json::Value {
                 "processes": {
                     "via_in_pad": "the process fills and caps a via drilled inside an SMD pad, which at fine pitch is the only escape the geometry leaves"
                 },
-                "profiles_offering_via_in_pad": ["jlc-filled-via"],
+                "profiles_offering_via_in_pad": ["jlc-filled-via", "jlc-advanced"],
                 "gate": "E-SYNTH-PROCESS-002: a requirement the declared tier does not offer is an error, so a requirement is never a permission on its own",
                 "via_geometry": "netclass via_diameter / via_drill reach the exported net class; E-SYNTH-PROCESS-003 checks both against the profile's drill and annular-ring floors. Escape strategy — which layer a ball fans out to, and in what pattern — is not declarable; see the unsupported entry",
                 "override": "--krt-allow-via-in-pad permits via-in-pad in the fabrication gate without a declared requirement or a capable tier; it is an operator taking responsibility for one panel, not a process answer"

@@ -1,0 +1,84 @@
+id = "max3485_rs485"
+kind = "ic"
+version = 0
+lifecycle = "active"
+description = "Maxim MAX3485 3.3 V RS-485/RS-422 transceiver, 10 Mbps, half duplex, SOIC-8"
+mpn = "MAX3485CSA+"
+kicad_symbol = "Interface_UART:MAX3485"
+kicad_footprint = "Package_SO:SOIC-8_3.9x4.9mm_P1.27mm"
+
+[footprint_dimensions]
+width_mm = 6.9
+height_mm = 4.41
+courtyard_margin_mm = 0.25
+
+[operating_conditions]
+min_voltage_v = 3.0
+max_voltage_v = 3.6
+max_current_ma = 60.0
+max_power_mw = 200
+thermal_resistance_c_per_w = 120
+
+[[pins]]
+# Receiver output: the controller's RX.
+name = "ro"
+number = "1"
+electrical_type = "output"
+required = true
+
+[[pins]]
+# Receiver enable, active low. Tied low keeps the receiver on, which is what
+# makes a half-duplex node hear its own bus and detect collisions.
+name = "re_n"
+number = "2"
+electrical_type = "input"
+required = true
+
+[[pins]]
+# Driver enable, active high. Its default must be low: a node that powers up
+# driving the bus takes the whole segment down.
+name = "de"
+number = "3"
+electrical_type = "input"
+required = true
+
+[[pins]]
+# Driver input: the controller's TX.
+name = "di"
+number = "4"
+electrical_type = "input"
+required = true
+
+[[pins]]
+name = "gnd"
+number = "5"
+electrical_type = "power_input"
+required = true
+
+[[pins]]
+name = "a"
+number = "6"
+electrical_type = "differential_positive"
+capabilities = ["diff_pair_positive"]
+required = true
+
+[[pins]]
+name = "b"
+number = "7"
+electrical_type = "differential_negative"
+capabilities = ["diff_pair_negative"]
+required = true
+
+[[pins]]
+name = "vcc"
+number = "8"
+electrical_type = "power_input"
+required = true
+
+[[required_decoupling]]
+net = "vcc"
+value = "100nf"
+count = 1
+
+[provenance]
+datasheet_url = "https://www.analog.com/media/en/technical-documentation/data-sheets/MAX3483-MAX3491.pdf"

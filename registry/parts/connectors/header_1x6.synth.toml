@@ -1,0 +1,47 @@
+id = "header_1x6"
+kind = "connector"
+version = 0
+lifecycle = "active"
+description = "1x6 through-hole pin header, 2.54mm pitch, for the debug and JTAG interface"
+kicad_symbol = "Connector_Generic:Conn_01x06"
+kicad_footprint = "Connector_PinHeader_2.54mm:PinHeader_1x06_P2.54mm_Vertical"
+
+[footprint_dimensions]
+width_mm = 3.54
+height_mm = 16.24
+courtyard_margin_mm = 0.25
+
+[operating_conditions]
+min_voltage_v = 1.8
+max_voltage_v = 5.0
+max_current_ma = 100.0
+
+[[pins]]
+name = "p1"
+number = "1"
+electrical_type = "passive"
+
+[[pins]]
+name = "p2"
+number = "2"
+electrical_type = "passive"
+
+[[pins]]
+name = "p3"
+number = "3"
+electrical_type = "passive"
+
+[[pins]]
+name = "p4"
+number = "4"
+electrical_type = "passive"
+
+[[pins]]
+name = "p5"
+number = "5"
+electrical_type = "passive"
+
+[[pins]]
+name = "p6"
+number = "6"
+electrical_type = "passive"

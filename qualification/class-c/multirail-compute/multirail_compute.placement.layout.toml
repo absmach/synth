@@ -1,0 +1,802 @@
+schema_version = 2
+
+# A complete floorplan, authored because the placer cannot produce one: it
+# refuses this board with E-SYNTH-PLACE-002 on whichever passive it reaches
+# last, being greedy first-fit with no backtracking.
+#
+# Positions are computed in COURTYARD space from each footprint's real
+# `F.CrtYd` polygon, not from the registry's declared body size. That
+# distinction is the whole point of this file: the ESP32-WROOM-32's courtyard
+# is 48.0 x 41.2 mm, not the 19.0 x 17.4 mm body, because the footprint draws
+# the antenna keepout on the courtyard layer; and a 1x20 header's courtyard
+# runs y -1.78 to +50.03 from its origin, so the origin is nowhere near the
+# centre. An earlier floorplan that used declared body sizes produced 46
+# courtyard overlaps in `kicad-cli pcb drc`.
+#
+# Each group gets a region and its parts are packed inside it largest-first,
+# every candidate tested as a true courtyard rectangle against every courtyard
+# already placed, with a 1.6 mm gap. The value written here is the footprint
+# origin, derived back from the courtyard position, because that is what the
+# sidecar's x/y means.
+#
+# The board reads left to right as it works: 12 V entry and the rails down the
+# left edge, the module in the middle with a header above and below, and the
+# interfaces on the right.
+
+# --- 3V3 ANALOG --------------------------------------------------
+[components.C7]
+x = 15.48
+y = 50.73
+rotation = 0
+
+[components.C8]
+x = 20.48
+y = 50.73
+rotation = 0
+
+[components.FB1]
+x = 10.48
+y = 50.73
+rotation = 0
+
+[components.TP4]
+x = 24.62
+y = 50.00
+rotation = 0
+
+[components.U3]
+x = 5.05
+y = 51.70
+rotation = 0
+
+# --- 3V3 RAIL ----------------------------------------------------
+[components.C39]
+x = 16.20
+y = 28.48
+rotation = 0
+
+[components.C41]
+x = 20.98
+y = 31.73
+rotation = 0
+
+[components.C42]
+x = 25.98
+y = 33.73
+rotation = 0
+
+[components.C43]
+x = 30.98
+y = 33.73
+rotation = 0
+
+[components.C5]
+x = 11.20
+y = 28.48
+rotation = 0
+
+[components.C6]
+x = 20.98
+y = 28.23
+rotation = 0
+
+[components.L2]
+x = 5.28
+y = 29.08
+rotation = 0
+
+[components.R41]
+x = 10.98
+y = 32.23
+rotation = 0
+
+[components.R42]
+x = 15.98
+y = 32.23
+rotation = 0
+
+[components.R43]
+x = 4.48
+y = 33.23
+rotation = 0
+
+[components.R44]
+x = 20.98
+y = 35.23
+rotation = 0
+
+[components.TP3]
+x = 25.12
+y = 27.50
+rotation = 0
+
+[components.U2]
+x = 32.20
+y = 28.70
+rotation = 0
+
+# --- 5V BUCK -----------------------------------------------------
+[components.C12]
+x = 76.98
+y = 21.23
+rotation = 0
+
+[components.C14]
+x = 57.48
+y = 22.23
+rotation = 0
+
+[components.C2]
+x = 30.20
+y = 22.98
+rotation = 0
+
+[components.C3]
+x = 126.20
+y = 16.48
+rotation = 0
+
+[components.C4]
+x = 88.48
+y = 19.73
+rotation = 0
+
+[components.L1]
+x = 82.78
+y = 16.58
+rotation = 0
+
+[components.NTC1]
+x = 66.98
+y = 20.23
+rotation = 0
+
+[components.R1]
+x = 48.98
+y = 18.23
+rotation = 0
+
+[components.R10]
+x = 86.98
+y = 23.23
+rotation = 0
+
+[components.R2]
+x = 53.98
+y = 18.23
+rotation = 0
+
+[components.R39]
+x = 81.98
+y = 20.73
+rotation = 0
+
+[components.R9]
+x = 71.98
+y = 21.23
+rotation = 0
+
+[components.TP2]
+x = 3.62
+y = 12.00
+rotation = 0
+
+[components.U1]
+x = 32.20
+y = 17.70
+rotation = 0
+
+# --- COMPUTE -----------------------------------------------------
+[components.C10]
+x = 89.70
+y = 30.98
+rotation = 0
+
+[components.C11]
+x = 89.48
+y = 52.23
+rotation = 0
+
+[components.C15]
+x = 89.48
+y = 55.73
+rotation = 0
+
+[components.R11]
+x = 94.48
+y = 55.73
+rotation = 0
+
+[components.R4]
+x = 94.48
+y = 52.23
+rotation = 0
+
+[components.SW1]
+x = 93.05
+y = 37.90
+rotation = 0
+
+[components.SW2]
+x = 93.05
+y = 46.40
+rotation = 0
+
+[components.U5]
+x = 62.00
+y = 50.62
+rotation = 0
+
+# --- DEBUG AND RECOVERY ------------------------------------------
+[components.J9]
+x = 95.27
+y = 11.12
+rotation = 0
+
+[components.LED5]
+x = 4.48
+y = 40.23
+rotation = 0
+
+[components.R57]
+x = 24.48
+y = 40.73
+rotation = 0
+
+# --- ETHERNET ----------------------------------------------------
+[components.C22]
+x = 9.48
+y = 35.73
+rotation = 0
+
+[components.C23]
+x = 14.48
+y = 35.73
+rotation = 0
+
+[components.C24]
+x = 101.48
+y = 35.73
+rotation = 0
+
+[components.C25]
+x = 106.48
+y = 35.73
+rotation = 0
+
+[components.C26]
+x = 111.48
+y = 35.73
+rotation = 0
+
+[components.C27]
+x = 4.48
+y = 36.73
+rotation = 0
+
+[components.C28]
+x = 25.98
+y = 37.23
+rotation = 0
+
+[components.C29]
+x = 106.48
+y = 39.23
+rotation = 0
+
+[components.C30]
+x = 111.48
+y = 39.23
+rotation = 0
+
+[components.C37]
+x = 131.20
+y = 16.48
+rotation = 0
+
+[components.C38]
+x = 131.48
+y = 35.23
+rotation = 0
+
+[components.C40]
+x = 131.70
+y = 20.48
+rotation = 0
+
+[components.J3]
+x = 17.05
+y = 14.29
+rotation = 0
+
+[components.LED3]
+x = 131.48
+y = 38.73
+rotation = 0
+
+[components.LED4]
+x = 14.48
+y = 39.23
+rotation = 0
+
+[components.R20]
+x = 30.98
+y = 37.23
+rotation = 0
+
+[components.R21]
+x = 19.48
+y = 38.73
+rotation = 0
+
+[components.R25]
+x = 9.48
+y = 39.23
+rotation = 0
+
+[components.R26]
+x = 101.48
+y = 39.23
+rotation = 0
+
+[components.TP6]
+x = 135.12
+y = 15.50
+rotation = 0
+
+[components.U15]
+x = 53.90
+y = 12.10
+rotation = 0
+
+[components.U9]
+x = 121.65
+y = 8.15
+rotation = 0
+
+[components.Y2]
+x = 119.50
+y = 17.16
+rotation = 0
+
+# --- EXPANSION HEADERS -------------------------------------------
+[components.J4]
+x = 65.91
+y = 4.97
+rotation = 90
+
+[components.J5]
+x = 65.91
+y = 94.77
+rotation = 90
+
+# --- INDUSTRIAL COMMS --------------------------------------------
+[components.C45]
+x = 131.98
+y = 52.73
+rotation = 0
+
+[components.C46]
+x = 101.98
+y = 63.23
+rotation = 0
+
+[components.J6]
+x = 104.95
+y = 56.30
+rotation = 0
+
+[components.J7]
+x = 115.45
+y = 56.30
+rotation = 0
+
+[components.R48]
+x = 131.98
+y = 56.23
+rotation = 0
+
+[components.R49]
+x = 131.98
+y = 59.73
+rotation = 0
+
+[components.R50]
+x = 106.98
+y = 63.23
+rotation = 0
+
+[components.R51]
+x = 111.98
+y = 63.23
+rotation = 0
+
+[components.R52]
+x = 116.98
+y = 63.23
+rotation = 0
+
+[components.U17]
+x = 125.20
+y = 54.70
+rotation = 0
+
+[components.U18]
+x = 125.20
+y = 61.70
+rotation = 0
+
+# --- IO EXPANSION ------------------------------------------------
+[components.C31]
+x = 131.48
+y = 42.23
+rotation = 0
+
+[components.C32]
+x = 111.48
+y = 42.73
+rotation = 0
+
+[components.C33]
+x = 116.48
+y = 42.73
+rotation = 0
+
+[components.C34]
+x = 121.48
+y = 42.73
+rotation = 0
+
+[components.R27]
+x = 101.48
+y = 42.73
+rotation = 0
+
+[components.R28]
+x = 106.48
+y = 42.73
+rotation = 0
+
+[components.U10]
+x = 122.43
+y = 31.20
+rotation = 0
+
+[components.U11]
+x = 98.85
+y = 27.60
+rotation = 0
+
+[components.U12]
+x = 108.35
+y = 26.00
+rotation = 0
+
+# --- MECHANICAL --------------------------------------------------
+[components.FID1]
+x = 3.62
+y = 7.00
+rotation = 0
+
+[components.FID2]
+x = 90.62
+y = 8.50
+rotation = 0
+
+[components.FID3]
+x = 3.62
+y = 9.00
+rotation = 0
+
+[components.H1]
+x = 4.38
+y = 3.00
+rotation = 0
+
+[components.H2]
+x = 135.38
+y = 3.00
+rotation = 0
+
+[components.H3]
+x = 4.38
+y = 94.00
+rotation = 0
+
+[components.H4]
+x = 135.38
+y = 94.00
+rotation = 0
+
+# --- MONITORING --------------------------------------------------
+[components.C35]
+x = 58.98
+y = 74.73
+rotation = 0
+
+[components.C44]
+x = 68.98
+y = 74.73
+rotation = 0
+
+[components.R40]
+x = 63.98
+y = 74.73
+rotation = 0
+
+[components.R45]
+x = 41.83
+y = 75.93
+rotation = 0
+
+[components.U13]
+x = 54.70
+y = 74.95
+rotation = 0
+
+[components.U16]
+x = 49.63
+y = 76.13
+rotation = 0
+
+# --- POWER IN ----------------------------------------------------
+[components.C1]
+x = 130.20
+y = 3.00
+rotation = 0
+
+[components.D1]
+x = 89.35
+y = 16.15
+rotation = 0
+
+[components.D2]
+x = 69.00
+y = 15.75
+rotation = 0
+
+[components.F1]
+x = 69.30
+y = 10.25
+rotation = 0
+
+[components.J1]
+x = 131.95
+y = 9.30
+rotation = 0
+
+[components.TP1]
+x = 3.62
+y = 5.00
+rotation = 0
+
+# --- REMOVABLE STORAGE -------------------------------------------
+[components.C47]
+x = 131.70
+y = 24.48
+rotation = 0
+
+[components.C48]
+x = 126.48
+y = 42.73
+rotation = 0
+
+[components.J8]
+x = 106.85
+y = 11.85
+rotation = 0
+
+[components.R53]
+x = 131.48
+y = 45.73
+rotation = 0
+
+[components.R54]
+x = 101.48
+y = 46.23
+rotation = 0
+
+[components.R55]
+x = 106.48
+y = 46.23
+rotation = 0
+
+# --- RTC AND SUPERVISION -----------------------------------------
+[components.BT1]
+x = 19.45
+y = 64.12
+rotation = 0
+
+[components.C49]
+x = 18.98
+y = 70.73
+rotation = 0
+
+[components.C50]
+x = 28.98
+y = 70.73
+rotation = 0
+
+[components.R56]
+x = 23.98
+y = 70.73
+rotation = 0
+
+[components.U19]
+x = 6.70
+y = 75.20
+rotation = 0
+
+[components.U20]
+x = 13.93
+y = 71.70
+rotation = 0
+
+# --- STATUS AND DISPLAY ------------------------------------------
+[components.LED1]
+x = 39.48
+y = 88.73
+rotation = 0
+
+[components.LED2]
+x = 49.48
+y = 88.73
+rotation = 0
+
+[components.R36]
+x = 44.48
+y = 88.73
+rotation = 0
+
+[components.R37]
+x = 54.48
+y = 88.73
+rotation = 0
+
+[components.R38]
+x = 59.48
+y = 88.73
+rotation = 0
+
+[components.SW3]
+x = 42.55
+y = 11.90
+rotation = 0
+
+[components.U14]
+x = 61.77
+y = 14.08
+rotation = 0
+
+# --- STORAGE -----------------------------------------------------
+[components.C20]
+x = 62.48
+y = 27.23
+rotation = 0
+
+[components.C21]
+x = 110.98
+y = 32.23
+rotation = 0
+
+[components.R18]
+x = 131.48
+y = 28.23
+rotation = 0
+
+[components.R22]
+x = 131.48
+y = 31.73
+rotation = 0
+
+[components.R23]
+x = 105.98
+y = 32.23
+rotation = 0
+
+[components.U7]
+x = 41.70
+y = 24.70
+rotation = 0
+
+[components.U8]
+x = 50.70
+y = 24.70
+rotation = 0
+
+# --- SWITCHED RAIL -----------------------------------------------
+[components.C9]
+x = 10.48
+y = 44.73
+rotation = 0
+
+[components.R3]
+x = 15.48
+y = 44.73
+rotation = 0
+
+[components.TP5]
+x = 19.62
+y = 44.00
+rotation = 0
+
+[components.U4]
+x = 5.05
+y = 45.70
+rotation = 0
+
+# --- USB AND PROGRAMMING -----------------------------------------
+[components.C16]
+x = 62.48
+y = 23.73
+rotation = 0
+
+[components.C17]
+x = 81.98
+y = 24.23
+rotation = 0
+
+[components.D3]
+x = 89.60
+y = 72.45
+rotation = 0
+
+[components.D4]
+x = 94.60
+y = 72.45
+rotation = 0
+
+[components.D5]
+x = 39.10
+y = 17.95
+rotation = 0
+
+[components.D6]
+x = 44.10
+y = 17.95
+rotation = 0
+
+[components.J2]
+x = 93.32
+y = 64.71
+rotation = 0
+
+[components.Q1]
+x = 77.73
+y = 10.87
+rotation = 0
+
+[components.Q2]
+x = 85.23
+y = 10.87
+rotation = 0
+
+[components.R12]
+x = 57.48
+y = 25.73
+rotation = 0
+
+[components.R13]
+x = 86.98
+y = 26.73
+rotation = 0
+
+[components.R16]
+x = 67.48
+y = 24.73
+rotation = 0
+
+[components.R17]
+x = 72.48
+y = 24.73
+rotation = 0
+
+[components.U6]
+x = 32.20
+y = 8.20
+rotation = 0
+
+[components.Y1]
+x = 76.60
+y = 16.75
+rotation = 0

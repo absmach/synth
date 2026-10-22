@@ -1,0 +1,1104 @@
+// A standalone single-board computer: an ESP32-WROOM-32 on five supply rails
+// from one 12 V input, with its own USB programming path, QSPI flash, I2C
+// EEPROM, 10/100 Ethernet, a PWM driver, a GPIO expander, a level-shifted
+// header and on-board rail and temperature monitoring.
+//
+// Produced from a prompt through the Synth MCP server.
+//
+// WHAT THIS BOARD IS FOR. Case 4 of #40: thermal paths, keepouts, assembly
+// access and DFM on a board that carries several rails. It is deliberately
+// not a fine-pitch board -- escape routing is case 1's question and the
+// iCE40 board asks it. The coarsest package here is 0.5 mm pitch (the
+// W5500's LQFP-48), which the standard floor clears.
+//
+// WHY IT IS A COMPUTER AND NOT A RAIL FIXTURE. The earlier revision of this
+// board was an ESP32 with two headers: it exercised the rails and nothing
+// else, and it needed a second board to program it. This one boots, is
+// flashed over its own USB-C connector, stores to its own flash and EEPROM,
+// talks to a network, drives sixteen PWM channels and sixteen expander GPIO,
+// and reports its own rail voltages and die temperature. Nothing external is
+// required to make it run.
+//
+// THE RAILS, AND WHY THERE ARE FIVE.
+//
+//   V12       input, through reverse-polarity, a polyfuse and a 15 V clamp
+//   V5        MP2307 buck, the only switching stage and the part that gets
+//             hot: 500 mW at 50 C/W, with NTC1 beside it
+//   V3V3      AMS1117 from V5, the digital rail, poured as a plane
+//   V3V3_A    LP5907 behind a ferrite bead -- the ADC reference domain and
+//             the temperature sensor, so switching ripple does not reach the
+//             rail the board measures itself against
+//   V5_SW     TPS22918 load switch under GPIO control, so the peripheral
+//             header can be powered down without dropping the module
+//
+// V5 and V3V3 are planes, each on an inner layer of its own; two rails on one
+// layer at the same priority starve each other. The analog rail stays a trace
+// because pouring it would couple it back to the switcher it is filtered
+// from.
+//
+// PROCESS. `jlc-advanced`, not the standard tier, and the reason is the
+// module rather than the routing: every KiCad ESP32-WROOM-32 footprint drills
+// twelve 0.2 mm thermal vias into the ground paddle, below the 0.3 mm
+// standard floor, and they sit inside pad 39 so they need the fill as well as
+// the drill. Declaring `jlcpcb` here would be declaring a process this board
+// cannot be built on.
+//
+// THERMAL. Three parts declare what they dissipate and how well they shed it.
+// The buck is the one that matters: its exposed pad is its heat path and ties
+// to ground, NTC1 sits beside it, and U13 reports the board temperature over
+// I2C, so the thermal claim is measured at runtime rather than asserted here.
+//
+// KEEPOUT. The module's antenna is at one end of the package, not its centre,
+// and copper must not sit under it. The keepout is placed on that end.
+//
+// ASSEMBLY ACCESS. Both connectors, the RJ45, both headers and the five test
+// points are hinted to edges; the mounting holes take the corners. A test
+// point in the middle of a populated board is a test point you cannot reach.
+//
+// THE MODULE'S RESERVED PINS. Pads 17 to 22 are the module's own SPI flash
+// bus, bonded to the flash die inside the shield, and pad 32 is marked NC.
+// They are modelled `do_not_connect` and this board connects none of them;
+// the external flash at U7 is on HSPI instead. All four ground pads -- 1, 15,
+// 38 and the paddle at 39 -- are connected, because the footprint has four.
+
+board "multirail_compute" {
+    layers 6
+    manufacturer "jlc-advanced"
+    revision "B"
+
+    // Two independent reasons this board cannot be built without a filled
+    // via, which is why it says so here rather than taking a CLI flag:
+    //
+    // The module's paddle. Every KiCad ESP32-WROOM-32 footprint drills
+    // twelve 0.2 mm thermal vias inside pad 39, and a via inside an SMD pad
+    // is a solder-bridging defect on a process that cannot fill and cap it.
+    //
+    // The plane pads. V5 and V3V3 are poured planes, and a plane pad needs a
+    // stitching via beside it to reach its layer. On a board this dense some
+    // pads have no legal position beside them -- every candidate is inside
+    // another pad's clearance -- and the only place left for the via is the
+    // pad itself.
+    //
+    // `jlc-advanced` offers the fill, so ERC accepts the requirement; it
+    // would refuse a tier that does not.
+    requires via_in_pad
+
+    // Six layers, not four. The Ethernet MDI pairs need a continuous
+    // reference under them for their whole run, and the two plane rails each
+    // want a layer, which on four layers leaves the pairs referenced to a
+    // split. Top and bottom carry signals over ground pours; In1 and In4 are
+    // ground; In2 and In3 are the rails.
+    // The outer dielectric is 0.2 mm rather than the 0.1 mm a four-layer
+    // board would use, and that is an impedance decision rather than a
+    // mechanical one. A 100 ohm differential pair over a plane 0.1 mm away
+    // needs a track near the 0.127 mm process floor, which leaves no
+    // tolerance; at 0.2 mm the same pair is a 0.25 mm track, comfortably
+    // above the floor. The core makes the total up to 1.59 mm.
+    stackup {
+      copper 0.035mm
+      insulator 0.2mm er 4.4 material "FR4"
+      copper 0.0152mm
+      insulator 0.2mm er 4.4 material "FR4"
+      copper 0.0152mm
+      insulator 0.66mm er 4.6 material "FR4"
+      copper 0.0152mm
+      insulator 0.2mm er 4.4 material "FR4"
+      copper 0.0152mm
+      insulator 0.2mm er 4.4 material "FR4"
+      copper 0.035mm
+    }
+
+    // `plane` floods a zone for the class's nets on the inner layers. A
+    // netclass assigns no nets by itself: each is joined by `class "NAME"` on
+    // a `connect`, which is why every rail connect below carries one.
+    netclass "V5" {
+      trace_width 0.8mm
+      clearance 0.25mm
+      plane
+    }
+
+    netclass "V3V3" {
+      trace_width 0.6mm
+      clearance 0.25mm
+      plane
+    }
+
+    // The analog rail stays a trace: it is behind a ferrite bead, and
+    // pouring it as a plane would couple it back to the switching rail it is
+    // filtered from.
+    netclass "ANALOG" {
+      trace_width 0.4mm
+      clearance 0.3mm
+    }
+
+    // 100BASE-TX is a 100 ohm differential interface. The pair budget is per
+    // pair, on the `diff_pair` blocks at the foot of the file; this bounds
+    // the spread across all four MDI nets, so transmit and receive leave the
+    // controller together.
+    netclass "MDI" {
+      trace_width 0.25mm
+      clearance 0.2mm
+      max_skew 0.5mm
+    }
+
+    // One SPI bus, three devices, three chip selects. It used to be two
+    // buses: the flash had HSPI to itself. HSPI is IO12-15, which is also
+    // where the ESP32's JTAG port is fixed in silicon, so a dedicated flash
+    // bus and a debug port cannot both exist. The flash joins the Ethernet
+    // controller and the card socket here, and IO12-15 become JTAG.
+    netclass "SPI_BUS" {
+      trace_width 0.2mm
+      clearance 0.2mm
+      max_skew 2.0mm
+    }
+
+    // The two field buses. Both are differential pairs into screw-terminal
+    // wiring, so they are routed as pairs and clamped at the connector.
+    netclass "FIELDBUS" {
+      trace_width 0.25mm
+      clearance 0.25mm
+    }
+
+    group "POWER IN" color "#c2410c" {
+      component J1: connector "jst_ph_2pin" {
+        placement_hint { region: left_edge edge: left priority: hard }
+      }
+      component F1: fuse      "polyfuse"
+      component D1: diode     "d_schottky"
+      // The clamp the 12 V input never had. A TVS conducts nothing below its
+      // standoff and everything above its clamping voltage: 15 V standoff
+      // clears a 12 V nominal with regulation margin, and the 24.4 V clamp
+      // is under the MP2307's 28 V input rating. The part that used to sit
+      // here was a 5 V array, which on a 12 V rail clamps continuously and
+      // sinks the fuse's current instead of a transient's.
+      component D2: diode     "smaj15a_tvs"
+      component C1: capacitor "c_electrolytic_100uf" value "100uF"
+      component TP1: testpoint "testpoint_pad_1_5" {
+        placement_hint { region: top_edge edge: top priority: soft }
+      }
+
+      // Reverse polarity first, then the fuse, then the clamp. The clamp sits
+      // behind the fuse so a sustained overvoltage opens the fuse rather than
+      // cooking the diode.
+      connect J1.p1 -> D1.anode
+      connect D1.cathode -> F1.p1
+      connect F1.p2 -> C1.p1 as "V12"
+      connect F1.p2 -> D2.cathode
+      connect D2.anode -> C1.p2 as "GND"
+      connect F1.p2 -> TP1.p1
+      connect J1.p2 -> C1.p2 as "GND"
+    }
+
+    group "5V BUCK" color "#b91c1c" {
+      component U1: regulator "mp2307_buck" {
+        placement_hint { region: left_edge priority: soft }
+      }
+      component L1: inductor  "l_generic_1210" value "10uH"
+      component C2: capacitor "c_generic_0805" value "22uF"
+      component C3: capacitor "c_generic_0805" value "22uF"
+      component R1: resistor  "r_generic_0603" value "31.6k"
+      component R2: resistor  "r_generic_0603" value "10k"
+      component C4: capacitor "c_generic_0603" value "100nF"
+      // The thermal sense, beside the part that dissipates. R39 is the fixed
+      // half of the divider and NTC1 the varying half; the tap between them
+      // is what an ADC pin can actually read. Wired straight from the rail to
+      // ground, as it was, a thermistor is a 2.5 mA load that reports
+      // nothing.
+      component NTC1: resistor "r_thermistor_ntc_10k" value "10k"
+      component R39: resistor  "r_generic_0603" value "10k"
+      // The compensation network, the soft-start cap and the enable pull-up.
+      component R9: resistor  "r_generic_0603" value "6.8k"
+      component C12: capacitor "c_generic_0603" value "3.9nF"
+      component C14: capacitor "c_generic_0603" value "100nF"
+      component R10: resistor  "r_generic_0603" value "100k"
+      component TP2: testpoint "testpoint_pad_1_5" {
+        placement_hint { region: top_edge edge: top priority: soft }
+      }
+
+      connect R45.p2 -> U1.in
+      connect R45.p2 -> C2.p1
+      connect C2.p2 -> U1.gnd as "GND"
+      // EN through 100k, not straight to 12 V: absolute maximum on every pin
+      // but IN, SW and BS is 6 V, and the part has a 7 V zener on EN that the
+      // resistor is there to feed.
+      connect U1.en -> R10.p1
+      connect R10.p2 -> R45.p2
+      connect U1.bs -> C4.p1
+      connect C4.p2 -> U1.sw
+      connect U1.sw -> L1.p1
+      connect L1.p2 -> C3.p1 as "V5" class "V5"
+      connect L1.p2 -> R1.p1
+      connect R1.p2 -> U1.fb
+      connect U1.fb -> R2.p1
+      connect R2.p2 -> U1.gnd as "GND"
+      connect C3.p2 -> U1.gnd as "GND"
+      connect L1.p2 -> TP2.p1
+      // The exposed pad is the heat path and is tied to ground; an untied one
+      // is both a thermal failure and unconnected copper under the package.
+      connect U1.ep -> U1.gnd as "GND"
+      connect L1.p2 -> R39.p1
+      connect R39.p2 -> NTC1.p1 as "NTC_SENSE"
+      connect NTC1.p2 -> U1.gnd as "GND"
+      // Series RC from COMP to ground, and the soft-start cap. 0.1 uF gives
+      // the datasheet's 15 ms ramp.
+      connect U1.comp -> R9.p1
+      connect R9.p2 -> C12.p1
+      connect C12.p2 -> U1.gnd as "GND"
+      connect U1.ss -> C14.p1
+      connect C14.p2 -> U1.gnd as "GND"
+    }
+
+    // The digital rail is a switcher, not a linear, and the arithmetic is why.
+    // Summed, the parts on V3V3 draw 320 mA with the Ethernet island on its
+    // own supply. An AMS1117 dropping 5 V to 3.3 V at that current dissipates
+    // 1.7 V x 0.32 A = 0.54 W in a SOT-223, and at the 620 mA this rail
+    // carried before the island was split off it was 1.05 W -- 25 + 1.05 x 60
+    // = 88 C, past the 85 C the thermal rule warns at, in the one package on
+    // the board with no exposed pad. A second MP2307 loses about 0.23 W at
+    // the same current, which is 37 C, and brings 800 mA of headroom instead
+    // of a thermal limit.
+    group "3V3 RAIL" color "#0369a1" {
+      component U2: regulator "mp2307_buck"
+      component L2: inductor  "l_generic_1210" value "10uH"
+      component C5: capacitor "c_generic_0805" value "22uF"
+      component C6: capacitor "c_generic_0603" value "100nF"
+      component C39: capacitor "c_generic_0805" value "22uF"
+      component C41: capacitor "c_generic_0603" value "100nF"
+      component R41: resistor  "r_generic_0603" value "25.5k"
+      component R42: resistor  "r_generic_0603" value "10k"
+      component R43: resistor  "r_generic_0603" value "6.8k"
+      component C42: capacitor "c_generic_0603" value "3.9nF"
+      component C43: capacitor "c_generic_0603" value "100nF"
+      component R44: resistor  "r_generic_0603" value "100k"
+      component TP3: testpoint "testpoint_pad_1_5" {
+        placement_hint { region: top_edge edge: top priority: soft }
+      }
+
+      connect L1.p2 -> U2.in
+      connect L1.p2 -> C39.p1
+      connect C39.p2 -> U2.gnd as "GND"
+      // EN through 100k from the 5 V rail. Unlike the 12 V stage this input
+      // is already inside the part's 6 V maximum, so the resistor is feeding
+      // the pin's zener rather than protecting it.
+      connect U2.en -> R44.p1
+      connect R44.p2 -> L1.p2
+      connect U2.bs -> C41.p1
+      connect C41.p2 -> U2.sw
+      connect U2.sw -> L2.p1
+      connect L2.p2 -> C5.p1 as "V3V3" class "V3V3"
+      // 0.925 V reference, so 25.5k over 10k sets 3.29 V. The divider taps
+      // the output after the inductor, not the switch node.
+      connect L2.p2 -> R41.p1
+      connect R41.p2 -> U2.fb
+      connect U2.fb -> R42.p1
+      connect R42.p2 -> U2.gnd as "GND"
+      connect C5.p2 -> U2.gnd as "GND"
+      connect L2.p2 -> C6.p1
+      connect C6.p2 -> U2.gnd as "GND"
+      connect L2.p2 -> TP3.p1
+      connect U2.ep -> U2.gnd as "GND"
+      connect U2.comp -> R43.p1
+      connect R43.p2 -> C42.p1
+      connect C42.p2 -> U2.gnd as "GND"
+      connect U2.ss -> C43.p1
+      connect C43.p2 -> U2.gnd as "GND"
+    }
+
+    group "3V3 ANALOG" color "#047857" {
+      // The bead is what makes this a separate rail rather than a second
+      // name for the digital one.
+      component FB1: inductor  "ferrite_bead_0603" value "600R"
+      component U3: regulator  "lp5907_3v3"
+      component C7: capacitor  "c_generic_0603" value "1uF"
+      component C8: capacitor  "c_generic_0603" value "1uF"
+      component TP4: testpoint "testpoint_pad_1_5" {
+        placement_hint { region: bottom_edge edge: bottom priority: soft }
+      }
+
+      connect L2.p2 -> FB1.p1
+      connect FB1.p2 -> U3.vin
+      connect U3.vin -> C7.p1
+      connect C7.p2 -> U3.gnd as "GND"
+      connect U3.en -> U3.vin
+      connect U3.vout -> C8.p1 as "V3V3_A" class "ANALOG"
+      connect C8.p2 -> U3.gnd as "GND"
+      connect U3.vout -> TP4.p1
+    }
+
+    group "SWITCHED RAIL" color "#7c3aed" {
+      component U4: regulator "tps22918_loadswitch"
+      component C9: capacitor "c_generic_0603" value "1uF"
+      component R3: resistor  "r_generic_0603" value "100k"
+      component TP5: testpoint "testpoint_pad_1_5" {
+        placement_hint { region: bottom_edge edge: bottom priority: soft }
+      }
+
+      // From V5, not V3V3: this part's input range starts at 3.5 V, so a
+      // 3.3 V supply is below it and E-SYNTH-POWER-009 says so.
+      connect L1.p2 -> U4.vin
+      connect U4.vout -> C9.p1 as "V5_SW" class "ANALOG"
+      connect C9.p2 -> U4.gnd as "GND"
+      // `ct` sets the inrush slew. `on` reaches a GPIO rather than a pull-up:
+      // the rail is switched because software switches it, which is the whole
+      // point of having it. The earlier revision strapped this high for want
+      // of a spare pin, which made it a rail with a switch in it.
+      connect U4.ct -> R3.p1
+      connect R3.p2 -> U4.gnd as "GND"
+      connect U4.vout -> TP5.p1
+    }
+
+    group "COMPUTE" color "#4338ca" {
+      component U5: mcu "esp32_wroom_32" {
+        placement_hint { region: centre priority: hard }
+      }
+      component C10: capacitor "c_generic_0805" value "22uF"
+      component C11: capacitor "c_generic_0603" value "100nF"
+      component R4: resistor   "r_generic_0603" value "10k"
+      component C15: capacitor "c_generic_0603" value "100nF"
+      component R11: resistor  "r_generic_0603" value "10k"
+      component SW1: switch    "spst_tactile"
+      component SW2: switch    "spst_tactile"
+
+      connect L2.p2 -> U5.vdd
+      // All four ground pads. The footprint has four and the paddle at 39 is
+      // the module's only thermal path.
+      connect U5.gnd -> U2.gnd as "GND"
+      connect U5.gnd_2 -> U2.gnd as "GND"
+      connect U5.gnd_3 -> U2.gnd as "GND"
+      connect U5.gnd_4 -> U2.gnd as "GND"
+      connect U5.vdd -> C10.p1
+      connect C10.p2 -> U5.gnd as "GND"
+      connect U5.vdd -> C11.p1
+      connect C11.p2 -> U5.gnd as "GND"
+      // EN: 10k pull-up and 100 nF to ground is the module's reset delay,
+      // and SW1 pulls it down.
+      connect U5.en -> R4.p1
+      connect R4.p2 -> U5.vdd
+      connect U5.en -> C15.p1
+      connect C15.p2 -> U5.gnd as "GND"
+      connect U5.en -> SW1.p1
+      connect SW1.p2 -> U5.gnd as "GND"
+      // IO0 low at reset enters the download mode the USB path drives.
+      connect U5.io0 -> R11.p1
+      connect R11.p2 -> U5.vdd
+      connect U5.io0 -> SW2.p1
+      connect SW2.p2 -> U5.gnd as "GND"
+      // The switched rail's enable, from the expander: it is a slow control
+      // line and the module has no pin to spare for it.
+      connect U10.gpa5 -> U4.on as "PERIPH_EN"
+    }
+
+    group "USB AND PROGRAMMING" color "#0d9488" {
+      component J2: connector "usb_c_receptacle" {
+        placement_hint { region: bottom_edge edge: bottom priority: hard }
+      }
+      component U6: ic         "ch340g"
+      component Y1: crystal    "ecs_120_20_33_tr"
+      component C16: capacitor "c_generic_0603" value "100nF"
+      component C17: capacitor "c_generic_0603" value "100nF"
+      component D3: diode      "esd_usb"
+      component D4: diode      "esd_usb"
+      component R16: resistor  "r_generic_0603" value "5.1k"
+      component R17: resistor  "r_generic_0603" value "5.1k"
+      component Q1: transistor "npn_bjt_2n3904"
+      component Q2: transistor "npn_bjt_2n3904"
+      component R12: resistor  "r_generic_0603" value "10k"
+      component R13: resistor  "r_generic_0603" value "10k"
+      component D5: diode      "esd_usb"
+      component D6: diode      "esd_usb"
+
+      // A sink, not a host: VBUS enters here and both CC lines carry the
+      // 5.1k Rd that advertises a UFP.
+      connect J2.cc1 -> R16.p1
+      connect R16.p2 -> U2.gnd as "GND"
+      connect J2.cc1 -> D5.io
+      connect D5.gnd -> U2.gnd as "GND"
+      connect J2.cc2 -> R17.p1
+      connect R17.p2 -> U2.gnd as "GND"
+      connect J2.cc2 -> D6.io
+      connect D6.gnd -> U2.gnd as "GND"
+      connect J2.gnd -> U2.gnd as "GND"
+      connect J2.shld -> U2.gnd as "GND"
+
+      // The bridge runs from the 3.3 V rail, so V3 ties to VCC and the logic
+      // levels match the module without a shifter.
+      connect L2.p2 -> U6.vcc
+      connect U6.v3 -> U6.vcc
+      connect U6.vcc -> C16.p1
+      connect C16.p2 -> U6.gnd as "GND"
+      connect U6.gnd -> U2.gnd as "GND"
+      connect U6.xi -> Y1.xtal_a
+      connect U6.xo -> Y1.xtal_b
+      connect Y1.gnd_2 -> U2.gnd as "GND"
+      connect Y1.gnd_4 -> U2.gnd as "GND"
+      connect U6.vcc -> C17.p1
+      connect C17.p2 -> U6.gnd as "GND"
+
+      // The data pair, clamped at the connector.
+      connect J2.dp -> U6.ud_plus as "USB_DP"
+      connect J2.dn -> U6.ud_minus as "USB_DN"
+      connect J2.dp -> D3.io
+      connect D3.gnd -> U2.gnd as "GND"
+      connect J2.dn -> D4.io
+      connect D4.gnd -> U2.gnd as "GND"
+
+      // The console, crossed: the bridge's TXD drives the module's RX.
+      connect U6.txd -> U5.io3_rx as "UART_RX"
+      connect U6.rxd -> U5.io1_tx as "UART_TX"
+
+      // Auto-reset. DTR and RTS through two transistors put the module into
+      // download mode without a button press, which is what makes this board
+      // flashable from a host rather than from a second board. The pair is
+      // cross-coupled so that asserting one line alone does nothing.
+      // The modem status inputs this console does not use, asserted rather
+      // than floating, and R232 low for plain UART framing.
+      connect U6.cts -> U6.gnd as "GND"
+      connect U6.dsr -> U6.gnd as "GND"
+      connect U6.ri -> U6.gnd as "GND"
+      connect U6.dcd -> U6.gnd as "GND"
+      connect U6.r232 -> U6.gnd as "GND"
+
+      connect U6.dtr -> R12.p1
+      connect R12.p2 -> Q1.base
+      connect Q1.emitter -> U2.gnd as "GND"
+      connect Q1.collector -> U5.en
+      connect U6.rts -> R13.p1
+      connect R13.p2 -> Q2.base
+      connect Q2.emitter -> U2.gnd as "GND"
+      connect Q2.collector -> U5.io0
+    }
+
+    group "STORAGE" color "#a16207" {
+      component U7: memory    "w25q128_flash"
+      component C20: capacitor "c_generic_0603" value "100nF"
+      component R18: resistor  "r_generic_0603" value "10k"
+      component R22: resistor  "r_generic_0603" value "10k"
+      component R23: resistor  "r_generic_0603" value "10k"
+      component U8: memory    "24lc256_eeprom"
+      component C21: capacitor "c_generic_0603" value "100nF"
+
+      // HSPI, not the module's own flash bus. Pads 17-22 are bonded to the
+      // die inside the shield and carry `do_not_connect`.
+      connect L2.p2 -> U7.vcc
+      connect U7.gnd -> U2.gnd as "GND"
+      connect U7.vcc -> C20.p1
+      connect C20.p2 -> U7.gnd as "GND"
+      // On the shared bus, with its own chip select. IO12-15 are JTAG now.
+      connect U7.clk -> U5.io18 as "SPI_SCK" class "SPI_BUS"
+      connect U7.io0 -> U5.io23 as "SPI_MOSI" class "SPI_BUS"
+      connect U7.io1 -> U5.io19 as "SPI_MISO" class "SPI_BUS"
+      connect U5.io25 -> U7.cs as "FLASH_CS" class "SPI_BUS"
+      // CS idles high so the part ignores the bus while the module boots.
+      connect U7.cs -> R18.p1
+      connect R18.p2 -> L2.p2
+      // The quad lines are held high through resistors, not strapped: in SPI
+      // mode they are /WP and /HOLD and a floating /HOLD stalls the part, but
+      // tying a bidirectional pin hard to a rail forbids ever driving it.
+      connect U7.io2 -> R22.p1
+      connect R22.p2 -> L2.p2
+      connect U7.io3 -> R23.p1
+      connect R23.p2 -> L2.p2
+
+      // Board identity and configuration, on the I2C bus at address 0x50.
+      connect L2.p2 -> U8.vdd
+      connect U8.gnd -> U2.gnd as "GND"
+      connect U8.vdd -> C21.p1
+      connect C21.p2 -> U8.gnd as "GND"
+      connect U5.io21_sda -> U8.sda as "I2C_SDA"
+      connect U5.io22_scl -> U8.scl as "I2C_SCL"
+      // Address strapped to 000, and write-protect tied low so the board can
+      // write its own configuration.
+      connect U8.a0 -> U8.gnd as "GND"
+      connect U8.a1 -> U8.gnd as "GND"
+      connect U8.a2 -> U8.gnd as "GND"
+      connect U8.wp -> U8.gnd as "GND"
+    }
+
+    group "ETHERNET" color "#1d4ed8" {
+      component U15: regulator "ams1117_3v3"
+      component C37: capacitor "c_generic_0805" value "22uF"
+      component C38: capacitor "c_generic_0603" value "100nF"
+      component C40: capacitor "c_generic_0805" value "22uF"
+      component TP6: testpoint "testpoint_pad_1_5" {
+        placement_hint { region: right_edge edge: right priority: soft }
+      }
+      component U9: ic        "w5500_ethernet" {
+        placement_hint { region: right_edge priority: soft }
+      }
+      component J3: connector "rj45_magjack_si60062" {
+        placement_hint { region: right_edge edge: right priority: hard }
+      }
+      component Y2: crystal   "osc_smd_25mhz"
+      component C22: capacitor "c_generic_0603" value "100nF"
+      component C23: capacitor "c_generic_0603" value "100nF"
+      component C24: capacitor "c_generic_0603" value "100nF"
+      component C25: capacitor "c_generic_0603" value "1uF"
+      component C26: capacitor "c_generic_0603" value "100nF"
+      component C27: capacitor "c_generic_0603" value "100nF"
+      component C28: capacitor "c_generic_0603" value "100nF"
+      component R20: resistor  "r_generic_0603" value "12.4k"
+      component R21: resistor  "r_generic_0603" value "10k"
+      component LED3: led      "led_green_0603"
+      component R25: resistor  "r_generic_0603" value "1k"
+      component LED4: led      "led_amber_0603"
+      component R26: resistor  "r_generic_0603" value "1k"
+      component C29: capacitor "c_generic_0603" value "100nF"
+      component C30: capacitor "c_generic_0603" value "100nF"
+
+      // The island's own rail, from V5 rather than from V3V3, so the
+      // controller's 100 mA of switching current does not return through the
+      // module's supply.
+      connect L1.p2 -> U15.vin
+      connect U15.vin -> C40.p1
+      connect C40.p2 -> U15.gnd as "GND"
+      connect U15.vout -> C37.p1 as "V3V3_E" class "V3V3"
+      connect C37.p2 -> U15.gnd as "GND"
+      connect U15.vout -> C38.p1
+      connect C38.p2 -> U15.gnd as "GND"
+      connect U15.vout -> TP6.p1
+
+      connect U15.vout -> U9.vdd
+      connect U9.gnd -> U2.gnd as "GND"
+      connect U9.gnd_2 -> U2.gnd as "GND"
+      connect U9.vdd -> C22.p1
+      connect C22.p2 -> U9.gnd as "GND"
+
+      // The analog island. The controller's AVDD pads take the digital rail
+      // through their own decoupling, and every AGND pad reaches the one
+      // ground: a split return under a 25 MHz part is a worse problem than
+      // the coupling it is meant to avoid.
+      connect U15.vout -> U9.avdd
+      connect U9.avdd -> C23.p1
+      connect C23.p2 -> U9.gnd as "GND"
+      connect U15.vout -> U9.avdd_2
+      connect U15.vout -> U9.avdd_3
+      connect U15.vout -> U9.avdd_4
+      connect U15.vout -> U9.avdd_5
+      connect U15.vout -> U9.avdd_6
+      connect U9.avdd_6 -> C24.p1
+      connect C24.p2 -> U9.gnd as "GND"
+      connect U9.agnd -> U2.gnd as "GND"
+      connect U9.agnd_2 -> U2.gnd as "GND"
+      connect U9.agnd_3 -> U2.gnd as "GND"
+      connect U9.agnd_4 -> U2.gnd as "GND"
+      connect U9.agnd_5 -> U2.gnd as "GND"
+
+      // EXRES1 sets the PHY's bias current and the datasheet fixes it at
+      // 12.4k to ground; VBG and TOCAP are internal references that want
+      // their own capacitor, and 1V2O is the core regulator's output.
+      connect U9.exres1 -> R20.p1
+      connect R20.p2 -> U2.gnd as "GND"
+      connect U9.vbg -> C26.p1
+      connect C26.p2 -> U9.gnd as "GND"
+      connect U9.tocap -> C27.p1
+      connect C27.p2 -> U9.gnd as "GND"
+      connect U9.core_1v2 -> C25.p1
+      connect C25.p2 -> U9.gnd as "GND"
+
+      // 25 MHz, from an oscillator rather than a crystal: the oscillator is
+      // a driven output, so XO stays unconnected.
+      connect U15.vout -> Y2.vcc
+      connect Y2.gnd -> U2.gnd as "GND"
+      connect Y2.vcc -> C28.p1
+      connect C28.p2 -> Y2.gnd as "GND"
+      connect Y2.out -> U9.xi_clkin as "ETH_CLK"
+      connect Y2.oe -> Y2.vcc
+
+      // SPI mode: all three PMODE pins high selects the hardwired TCP/IP
+      // stack over the variants that expect a different host interface.
+      connect U9.pmode0 -> U15.vout
+      connect U9.pmode1 -> U15.vout
+      connect U9.pmode2 -> U15.vout
+
+      // VSPI from the module, with interrupt and reset on their own pins.
+      connect U9.sclk -> U5.io18 as "SPI_SCK" class "SPI_BUS"
+      connect U9.mosi -> U5.io23 as "SPI_MOSI" class "SPI_BUS"
+      connect U9.miso -> U5.io19 as "SPI_MISO" class "SPI_BUS"
+      connect U5.io5 -> U9.scs_n as "ETH_CS" class "SPI_BUS"
+      connect U5.io4 -> U9.intn as "ETH_INT"
+      connect U5.io16 -> U9.rst_n as "ETH_RST"
+      connect U9.rst_n -> R21.p1
+      connect R21.p2 -> U15.vout
+
+      // The MDI pairs, into a jack that carries its own magnetics. The
+      // centre taps take a capacitor to ground, which is what holds the
+      // pair's common mode; floating, it wanders.
+      connect U9.txp -> J3.td_p as "ETH_TXP" class "MDI"
+      connect U9.txn -> J3.td_n as "ETH_TXN" class "MDI"
+      connect U9.rxp -> J3.rd_p as "ETH_RXP" class "MDI"
+      connect U9.rxn -> J3.rd_n as "ETH_RXN" class "MDI"
+      connect J3.tct -> C29.p1
+      connect C29.p2 -> U2.gnd as "GND"
+      connect J3.rct -> C30.p1
+      connect C30.p2 -> U2.gnd as "GND"
+      connect J3.gnd -> U2.gnd as "GND"
+      connect J3.shield -> U2.gnd as "GND"
+
+      // Link and activity, driven by the controller's own LED outputs.
+      connect U9.linkled -> R25.p1
+      connect R25.p2 -> LED3.anode
+      connect LED3.cathode -> U2.gnd as "GND"
+      connect U9.actled -> R26.p1
+      connect R26.p2 -> LED4.anode
+      connect LED4.cathode -> U2.gnd as "GND"
+    }
+
+    group "IO EXPANSION" color "#0891b2" {
+      component U10: ic        "mcp23017_gpio"
+      component C31: capacitor "c_generic_0603" value "100nF"
+      component R27: resistor  "r_generic_0603" value "4.7k"
+      component R28: resistor  "r_generic_0603" value "4.7k"
+      component U11: ic        "pca9685_pwm"
+      component C32: capacitor "c_generic_0603" value "100nF"
+      component U12: level_shifter "txs0108e"
+      component C33: capacitor "c_generic_0603" value "100nF"
+      component C34: capacitor "c_generic_0603" value "100nF"
+
+      // The expander: sixteen GPIO at address 0x20, with reset and interrupt
+      // on module pins rather than strapped.
+      connect L2.p2 -> U10.vdd
+      connect U10.v_ss -> U2.gnd as "GND"
+      connect U10.vdd -> C31.p1
+      connect C31.p2 -> U10.v_ss as "GND"
+      connect U5.io21_sda -> U10.sda as "I2C_SDA"
+      connect U5.io22_scl -> U10.sck as "I2C_SCL"
+      connect U10.a0 -> U10.v_ss as "GND"
+      connect U10.a1 -> U10.v_ss as "GND"
+      connect U10.a2 -> U10.v_ss as "GND"
+      connect U5.io17 -> U10.reset as "EXP_RESET"
+      connect U5.io27 -> U10.inta as "EXP_INT"
+
+      // The one bus pull-up pair for the whole I2C bus. Four devices sit on
+      // it -- the EEPROM, the expander, the PWM driver and the sensor -- and
+      // one pair of pull-ups is what a shared bus wants.
+      connect U10.sda -> R27.p1
+      connect R27.p2 -> L2.p2
+      connect U10.sck -> R28.p1
+      connect R28.p2 -> L2.p2
+
+      // Sixteen PWM channels at address 0x40, output-enabled from a GPIO so
+      // the outputs are inert until software asks for them.
+      connect L2.p2 -> U11.vdd
+      connect U11.vss -> U2.gnd as "GND"
+      connect U11.vdd -> C32.p1
+      connect C32.p2 -> U11.vss as "GND"
+      connect U5.io21_sda -> U11.sda as "I2C_SDA"
+      connect U5.io22_scl -> U11.scl as "I2C_SCL"
+      connect U11.a0 -> U11.vss as "GND"
+      connect U11.a1 -> U11.vss as "GND"
+      connect U11.a2 -> U11.vss as "GND"
+      connect U11.a3 -> U11.vss as "GND"
+      connect U11.a4 -> U11.vss as "GND"
+      connect U11.a5 -> U11.vss as "GND"
+      connect U11.extclk -> U11.vss as "GND"
+      connect U10.gpa3 -> U11.oe as "PWM_OE"
+
+      // The level shifter gives the header a 5 V side. A is the module's
+      // 3.3 V, B is the switched 5 V rail, so a 5 V peripheral can be driven
+      // and powered down together.
+      connect L2.p2 -> U12.vcca
+      connect U4.vout -> U12.vccb
+      connect U12.gnd -> U2.gnd as "GND"
+      connect U12.vcca -> C33.p1
+      connect C33.p2 -> U12.gnd as "GND"
+      connect U12.vccb -> C34.p1
+      connect C34.p2 -> U12.gnd as "GND"
+      connect U12.oe -> U12.vcca
+      connect U10.gpa0 -> U12.a1
+      connect U10.gpa1 -> U12.a2
+    }
+
+    group "MONITORING" color "#065f46" {
+      component U13: sensor   "tmp117_temperature"
+      component C35: capacitor "c_generic_0603" value "100nF"
+      component R40: resistor  "r_generic_0603" value "10k"
+      component U16: sensor    "ina3221_power_monitor"
+      component C44: capacitor "c_generic_0603" value "100nF"
+      component R45: resistor  "r_generic_2512" value "0.01"
+
+      // The sensor runs from the analog rail, because a board that measures
+      // its own temperature should not read the switcher's ripple as a
+      // reading. Address strapped to 0x48, alert on a module pin.
+      connect U3.vout -> U13.vdd
+      connect U13.gnd -> U2.gnd as "GND"
+      connect U13.vdd -> C35.p1
+      connect C35.p2 -> U13.gnd as "GND"
+      connect U5.io21_sda -> U13.sda as "I2C_SDA"
+      connect U5.io22_scl -> U13.scl as "I2C_SCL"
+      connect U13.add0 -> U13.gnd as "GND"
+      connect U10.gpa4 -> U13.alert as "TEMP_ALERT"
+      // ALERT is open-drain: without a pull-up it can only ever pull low
+      // against nothing. The pull-up goes to V3V3 rather than to the analog
+      // rail the sensor runs from, because the pin that reads this line is
+      // the module's, and an open-drain level is referenced to the receiver.
+      connect U13.alert -> R40.p1
+      connect R40.p2 -> L2.p2
+
+      // Three-channel power telemetry. The device runs from V3V3 and its
+      // common mode reaches 26 V, so the 12 V input and both regulated rails
+      // are measurable on one part at one I2C address.
+      connect L2.p2 -> U16.vs
+      connect U16.gnd -> U2.gnd as "GND"
+      connect U16.ep -> U2.gnd as "GND"
+      connect U16.vs -> C44.p1
+      connect C44.p2 -> U16.gnd as "GND"
+      connect U5.io21_sda -> U16.sda as "I2C_SDA"
+      connect U5.io22_scl -> U16.scl as "I2C_SCL"
+      // A0 to VS, not to ground. Grounded this part answers at 0x40, which
+      // is exactly where the PWM driver with all six of its address pins low
+      // already answers. Tied to VS it is 0x41. The four options are GND,
+      // VS, SDA and SCL for 0x40 through 0x43.
+      connect U16.a0 -> U16.vs
+      connect L2.p2 -> U16.vpu
+      connect U10.gpb0 -> U16.critical_n as "RAIL_CRITICAL"
+
+      // Channel 1 measures the 12 V input through a 10 mohm shunt, which is
+      // the current worth knowing: everything the board draws passes through
+      // it. 2 A gives 20 mV across the shunt and 40 mW in a 2512.
+      connect F1.p2 -> R45.p1
+      connect R45.p1 -> U16.in1_p
+      connect R45.p2 -> U16.in1_n
+      // Channels 2 and 3 are bus-voltage only, inputs tied together at the
+      // rail. A shunt in series with V5 or V3V3 would split a poured plane
+      // in two, which costs more in return path than the reading is worth;
+      // channel 1 already bounds the board's total draw.
+      connect L1.p2 -> U16.in2_p
+      connect L1.p2 -> U16.in2_n
+      connect L2.p2 -> U16.in3_p
+      connect L2.p2 -> U16.in3_n
+      // The buck's thermistor tap. 10k over a 10k NTC puts 2.5 V at 25 C and
+      // falls as the regulator warms, so the firmware reads the rise at the
+      // part rather than inferring it from the die sensor across the board.
+      connect U5.sensor_vn -> R39.p2 as "NTC_SENSE"
+
+      // Rail monitoring. Two dividers onto the module's two input-only ADC
+      // pins: 100k/10k brings a 12 V rail to 1.09 V and 22k/10k brings 5 V
+      // to 1.56 V, both inside the ADC's range. These pins have no output
+      // driver, which is why the dividers go here and not on a GPIO.
+      // Rail monitoring is U16's job now: it measures current as well as
+      // voltage, over I2C, which frees the module's two input-only ADC pins
+      // for the field buses' receive lines. The thermistor stays an ADC
+      // measurement because it is a resistance and nothing on the bus reads
+      // one.
+    }
+
+    group "STATUS AND DISPLAY" color "#be123c" {
+      component U14: display  "ssd1306_oled" {
+        placement_hint { region: top_edge edge: top priority: soft }
+      }
+      component LED1: led      "led_green_0603"
+      component R36: resistor  "r_generic_0603" value "1k"
+      component LED2: led      "led_blue_0603"
+      component R37: resistor  "r_generic_0603" value "1k"
+      component SW3: switch    "spst_tactile"
+      component R38: resistor  "r_generic_0603" value "10k"
+
+      // The status display sits on the shared I2C bus at 0x3C.
+      connect L2.p2 -> U14.vdd
+      connect U14.gnd -> U2.gnd as "GND"
+      connect U5.io21_sda -> U14.sda as "I2C_SDA"
+      connect U5.io22_scl -> U14.scl as "I2C_SCL"
+
+      // Power on, and a user LED the firmware drives.
+      connect L2.p2 -> R36.p1
+      connect R36.p2 -> LED1.anode
+      connect LED1.cathode -> U2.gnd as "GND"
+      connect U10.gpa2 -> R37.p1
+      connect R37.p2 -> LED2.anode
+      connect LED2.cathode -> U2.gnd as "GND"
+
+      // A user button on an input-only pin, which therefore needs its
+      // pull-up on the board rather than in the pad.
+      connect U5.io34 -> R38.p1
+      connect R38.p2 -> L2.p2
+      connect U5.io34 -> SW3.p1
+      connect SW3.p2 -> U2.gnd as "GND"
+    }
+
+    group "EXPANSION HEADERS" color "#be185d" {
+      component J4: connector "header_1x20" {
+        placement_hint { region: top_edge edge: top priority: hard }
+      }
+      component J5: connector "header_1x20" {
+        placement_hint { region: bottom_edge edge: bottom priority: hard }
+      }
+
+      // The digital header: the switched rail, the shifted 5 V pair, the
+      // console, the shared I2C bus and eight expander lines.
+      connect U4.vout -> J4.p1
+      connect J4.p2 -> U2.gnd as "GND"
+      connect U12.b1 -> J4.p3
+      connect U12.b2 -> J4.p4
+      connect U5.io1_tx -> J4.p5
+      connect U5.io3_rx -> J4.p6
+      connect U5.io21_sda -> J4.p7
+      connect U5.io22_scl -> J4.p8
+      connect U10.gpb2 -> J4.p9
+      connect U10.gpb3 -> J4.p10
+      connect U10.gpb4 -> J4.p11
+      connect U10.gpb5 -> J4.p12
+      connect U10.gpb6 -> J4.p13
+      connect U10.gpb7 -> J4.p14
+      // The expander's sixteen lines are now fully spoken for: GPA0-GPA1 to
+      // the level shifter, GPA2-GPA5 to the user LED, the PWM output-enable,
+      // the temperature alert and the switched rail, GPA6-GPA7 and GPB0-GPB1
+      // to the card detect, the RTC alarm, the monitor's critical flag and
+      // the watchdog heartbeat, and GPB2-GPB7 to this header. So p15-p20
+      // carry the field buses and the console instead of more expander pins.
+      connect U18.ro -> J4.p15 as "RS485_RX"
+      connect U18.di -> J4.p16 as "RS485_TX"
+      connect U17.r -> J4.p17 as "CAN_RX"
+      connect U17.d -> J4.p18 as "CAN_TX"
+      connect L2.p2 -> J4.p19
+      connect J4.p20 -> U2.gnd as "GND"
+
+      // The analog and drive header: the filtered rail, a spare ADC pin and
+      // the first twelve PWM channels.
+      connect U3.vout -> J5.p1
+      connect J5.p2 -> U2.gnd as "GND"
+      connect U5.sensor_vn -> J5.p3
+      connect U5.io2 -> J5.p4
+      connect U11.led0 -> J5.p5
+      connect U11.led1 -> J5.p6
+      connect U11.led2 -> J5.p7
+      connect U11.led3 -> J5.p8
+      connect U11.led4 -> J5.p9
+      connect U11.led5 -> J5.p10
+      connect U11.led6 -> J5.p11
+      connect U11.led7 -> J5.p12
+      connect U11.led8 -> J5.p13
+      connect U11.led9 -> J5.p14
+      connect U11.led10 -> J5.p15
+      connect U11.led11 -> J5.p16
+      connect U11.led12 -> J5.p17
+      connect U11.led13 -> J5.p18
+      connect U11.led14 -> J5.p19
+      connect U11.led15 -> J5.p20
+    }
+
+    group "REMOVABLE STORAGE" color "#7e22ce" {
+      component J8: connector "microsd_dm3at" {
+        placement_hint { region: right_edge edge: right priority: hard }
+      }
+      component C47: capacitor "c_generic_0805" value "10uF"
+      component C48: capacitor "c_generic_0603" value "100nF"
+      component R53: resistor  "r_generic_0603" value "10k"
+      component R54: resistor  "r_generic_0603" value "10k"
+      component R55: resistor  "r_generic_0603" value "10k"
+
+      // On the shared bus with its own chip select, in one-bit SPI mode:
+      // CMD is the host's MOSI, DAT0 the card's MISO, DAT3 the select. The
+      // card is a 3.3 V device on a 3.3 V bus, so nothing is translated.
+      connect L2.p2 -> J8.vdd
+      connect J8.vss -> U2.gnd as "GND"
+      connect J8.vdd -> C47.p1
+      connect C47.p2 -> J8.vss as "GND"
+      connect J8.vdd -> C48.p1
+      connect C48.p2 -> J8.vss as "GND"
+      connect J8.clk -> U5.io18 as "SPI_SCK" class "SPI_BUS"
+      connect J8.cmd_mosi -> U5.io23 as "SPI_MOSI" class "SPI_BUS"
+      connect J8.dat0_miso -> U5.io19 as "SPI_MISO" class "SPI_BUS"
+      connect U5.io26 -> J8.dat3_cs as "SD_CS" class "SPI_BUS"
+
+      // The SD specification wants the command and data lines pulled up so a
+      // card that has not been selected does not float its outputs.
+      connect J8.cmd_mosi -> R53.p1
+      connect R53.p2 -> L2.p2
+      connect J8.dat0_miso -> R54.p1
+      connect R54.p2 -> L2.p2
+      connect J8.dat3_cs -> R55.p1
+      connect R55.p2 -> L2.p2
+
+      // DAT1 and DAT2 are unused in one-bit mode and the socket's own
+      // specification is that they may float; naming them keeps the pads
+      // accounted for rather than silently absent.
+      connect J8.dat1 -> R55.p2
+      connect J8.dat2 -> R55.p2
+
+      // The detect switch closes to ground when a card is seated, read on an
+      // expander pin because the module has none to spare.
+      connect U10.gpa6 -> J8.det_a as "SD_DETECT"
+      connect J8.det_b -> U2.gnd as "GND"
+      connect J8.shield -> U2.gnd as "GND"
+    }
+
+    group "INDUSTRIAL COMMS" color "#854d0e" {
+      component U17: ic        "sn65hvd230_can"
+      component C45: capacitor "c_generic_0603" value "100nF"
+      component R48: resistor  "r_generic_0603" value "10k"
+      component R49: resistor  "r_generic_0603" value "120"
+      component J6: connector  "jst_ph_3pin" {
+        placement_hint { region: right_edge edge: right priority: hard }
+      }
+      component U18: ic        "max3485_rs485"
+      component C46: capacitor "c_generic_0603" value "100nF"
+      component R50: resistor  "r_generic_0603" value "120"
+      component R51: resistor  "r_generic_0603" value "560"
+      component R52: resistor  "r_generic_0603" value "560"
+      component J7: connector  "jst_ph_3pin" {
+        placement_hint { region: right_edge edge: right priority: hard }
+      }
+
+      // CAN, via the TWAI controller in the module. A 3.3 V transceiver, so
+      // the logic side faces the module with nothing in between.
+      connect L2.p2 -> U17.vcc
+      connect U17.gnd -> U2.gnd as "GND"
+      connect U17.vcc -> C45.p1
+      connect C45.p2 -> U17.gnd as "GND"
+      connect U5.io32 -> U17.d as "CAN_TX"
+      connect U17.r -> U5.sensor_vp as "CAN_RX"
+      // Rs through 10k selects slope control rather than the fastest edge,
+      // which is the right default for field wiring; grounded it would be
+      // full speed and floating it would be standby.
+      connect U17.rs -> R48.p1
+      connect R48.p2 -> U17.gnd as "GND"
+      connect U17.canh -> J6.p1 as "CANH" class "FIELDBUS"
+      connect U17.canl -> J6.p2 as "CANL" class "FIELDBUS"
+      connect J6.p3 -> U2.gnd as "GND"
+      // 120 ohm across the pair. This board is wired as a bus end; a node in
+      // the middle of a segment must not fit R49, and the silkscreen says so.
+      connect U17.canh -> R49.p1
+      connect R49.p2 -> U17.canl
+
+      // RS-485, half duplex on the second UART. RE is tied low so the
+      // receiver is always on and the node hears its own transmission.
+      connect L2.p2 -> U18.vcc
+      connect U18.gnd -> U2.gnd as "GND"
+      connect U18.vcc -> C46.p1
+      connect C46.p2 -> U18.gnd as "GND"
+      connect U5.io33 -> U18.di as "RS485_TX"
+      connect U18.ro -> U5.io35 as "RS485_RX"
+      connect U18.re_n -> U18.gnd as "GND"
+      // DE on IO2, which is a strapping pin that must be low or floating at
+      // reset. Receive is the safe default and it is also what low means
+      // here, so the two requirements are the same requirement.
+      connect U5.io2 -> U18.de as "RS485_DE"
+      connect U18.a -> J7.p1 as "RS485_A" class "FIELDBUS"
+      connect U18.b -> J7.p2 as "RS485_B" class "FIELDBUS"
+      connect J7.p3 -> U2.gnd as "GND"
+      connect U18.a -> R50.p1
+      connect R50.p2 -> U18.b
+      // Fail-safe bias: without it an idle bus floats and the receiver
+      // chatters. 560 ohm to each rail holds A above B by about 200 mV.
+      connect U18.a -> R51.p1
+      connect R51.p2 -> L2.p2
+      connect U18.b -> R52.p1
+      connect R52.p2 -> U2.gnd as "GND"
+    }
+
+    group "RTC AND SUPERVISION" color "#0f766e" {
+      component U19: ic        "ds3231m_rtc"
+      component C49: capacitor "c_generic_0603" value "100nF"
+      component R56: resistor  "r_generic_0603" value "10k"
+      component BT1: battery   "coin_cell_cr2032" {
+        placement_hint { region: bottom_edge edge: bottom priority: soft }
+      }
+      component U20: ic        "tps3839_supervisor"
+      component C50: capacitor "c_generic_0603" value "100nF"
+
+      // The M variant carries its own MEMS resonator, so there is no crystal
+      // to place and no 32 kHz layout to get wrong.
+      connect L2.p2 -> U19.vcc
+      connect U19.gnd -> U2.gnd as "GND"
+      connect U19.gnd_2 -> U2.gnd as "GND"
+      connect U19.gnd_3 -> U2.gnd as "GND"
+      connect U19.gnd_4 -> U2.gnd as "GND"
+      connect U19.gnd_5 -> U2.gnd as "GND"
+      connect U19.gnd_6 -> U2.gnd as "GND"
+      connect U19.gnd_7 -> U2.gnd as "GND"
+      connect U19.gnd_8 -> U2.gnd as "GND"
+      connect U19.gnd_9 -> U2.gnd as "GND"
+      connect U19.vcc -> C49.p1
+      connect C49.p2 -> U19.gnd as "GND"
+      connect U5.io21_sda -> U19.sda as "I2C_SDA"
+      connect U5.io22_scl -> U19.scl as "I2C_SCL"
+      // The alarm output is open drain and needs a pull-up to be read.
+      connect U10.gpa7 -> U19.int_sqw_n as "RTC_ALARM"
+      connect U19.int_sqw_n -> R56.p1
+      connect R56.p2 -> L2.p2
+
+      // A CR2032 is not rechargeable, so it must never see a charging path.
+      // It does not: VBAT is an input the part switches over to when VCC
+      // falls below it, and there is nothing between the cell and that pin.
+      connect BT1.plus -> U19.vbat
+      connect BT1.minus -> U2.gnd as "GND"
+
+      // The supervisor holds the module in reset until V3V3 is valid, and
+      // through any brownout after. It watches the rail it runs on, so no
+      // divider sets its threshold; the G33 option trips at 2.93 V falling.
+      connect L2.p2 -> U20.vdd
+      connect U20.gnd -> U2.gnd as "GND"
+      connect U20.vdd -> C50.p1
+      connect C50.p2 -> U20.gnd as "GND"
+      connect U20.reset_n -> U5.en as "SYS_RESET"
+    }
+
+    group "DEBUG AND RECOVERY" color "#4c1d95" {
+      component J9: connector "header_1x6" {
+        placement_hint { region: top_edge edge: top priority: soft }
+      }
+      component LED5: led      "led_amber_0603"
+      component R57: resistor  "r_generic_0603" value "1k"
+
+      // The ESP32's JTAG port is fixed in silicon on IO12-15. Those four
+      // pins carried the external flash on a dedicated HSPI bus until this
+      // revision; the flash moved to the shared bus so that a debug port
+      // could exist at all. There is no arrangement in which both have them.
+      connect U5.io14 -> J9.p1 as "JTAG_TMS"
+      connect U5.io13 -> J9.p2 as "JTAG_TCK"
+      connect U5.io12 -> J9.p3 as "JTAG_TDI"
+      connect U5.io15 -> J9.p4 as "JTAG_TDO"
+      connect J9.p5 -> U2.gnd as "GND"
+      connect L2.p2 -> J9.p6
+
+      // IO12 is a strapping pin that selects the flash voltage at reset and
+      // IO15 silences the boot log when held low, so a debugger must not
+      // drive either during reset. The USB path stays the recovery route:
+      // it needs no debugger and no jumper, which is what keeps a board with
+      // bad firmware recoverable.
+
+      // A comms-activity indicator on the last free expander pin.
+      connect U10.gpb1 -> R57.p1
+      connect R57.p2 -> LED5.anode
+      connect LED5.cathode -> U2.gnd as "GND"
+    }
+
+    group "MECHANICAL" color "#525252" {
+      component H1: mounting_hole "mounting_hole_m2_5"
+      component H2: mounting_hole "mounting_hole_m2_5"
+      component H3: mounting_hole "mounting_hole_m2_5"
+      component H4: mounting_hole "mounting_hole_m2_5"
+      component FID1: fiducial "fiducial_1mm"
+      component FID2: fiducial "fiducial_1mm"
+      component FID3: fiducial "fiducial_1mm"
+    }
+
+    // Copper must not sit under the module's antenna, which is at one end of
+    // the package rather than at its centre.
+    keepout antenna_clearance { radius 12mm }
+
+    // Per pair, the intra-pair budget: 100BASE-TX tolerates a few hundred
+    // picoseconds between halves, which is more FR4 than this board is wide,
+    // so the binding constraint is the impedance and the coupling rather
+    // than the skew. The budget is still declared, because an uncoupled pair
+    // routed apart is the failure this catches.
+    diff_pair ETH_TXP ETH_TXN {
+      impedance 100ohm
+      max_skew 0.3mm
+      couple tight
+    }
+
+    diff_pair ETH_RXP ETH_RXN {
+      impedance 100ohm
+      max_skew 0.3mm
+      couple tight
+    }
+
+    notes "Produced from a prompt via the Synth MCP server." {
+      "A standalone computer, not a rail fixture: five rails from one 12 V"
+      "input, an ESP32-WROOM-32 with all 39 pads modelled, its own USB-C"
+      "programming path with auto-reset, QSPI flash, I2C EEPROM, 10/100"
+      "Ethernet into a magjack, sixteen PWM channels, sixteen expander GPIO,"
+      "a level-shifted 5 V header, and rail and die-temperature monitoring."
+    }
+}

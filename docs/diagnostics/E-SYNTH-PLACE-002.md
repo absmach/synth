@@ -33,15 +33,25 @@ board "boxed_in" {
 
 ## Suggested fixes
 
-1. **Try the next-larger board.** The placer escalates
+1. **Pin the parts in a placement sidecar.** An absolute entry in
+   `<design>.placement.layout.toml` is a constraint the solver is given,
+   not a correction applied to its answer: a pinned component is placed
+   where the author put it, its courtyard is occupied before the greedy
+   search takes its first step, and it is removed from both the search
+   and the passive packer. Pinning carries no passive clearance either —
+   the 1.5 mm the search reserves around a loose passive is a spacing
+   choice, and on a pinned part the author has already made it. Pinning
+   every part therefore always places, which is the escape hatch for a
+   board the greedy search cannot pack.
+2. **Try the next-larger board.** The placer escalates
    through standard sizes (100×80, 160×100, 200×150, 230×230 mm)
    but a tight design may need a hand-picked larger outline.
    (Future work: the placer will accept a user-declared
    `board_outline` in SynthSpec.)
-2. **Choose a smaller footprint variant** for the offending
+3. **Choose a smaller footprint variant** for the offending
    component. Swapping `r_generic_0805` → `r_generic_0603` on
    the closest neighbours often frees enough adjacent space.
-3. **Wait for slice 2.x backtracking.** The current placer is
+4. **Wait for slice 2.x backtracking.** The current placer is
    greedy first-fit; it commits to each placement and never
    un-commits. Slice 2.x adds backtracking + connector / RF /
    fixed-component ordering that resolves boxed-in scenarios

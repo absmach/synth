@@ -1,0 +1,139 @@
+id = "ina3221_power_monitor"
+kind = "sensor"
+version = 0
+lifecycle = "active"
+description = "TI INA3221 three-channel high-side current and bus voltage monitor, I2C, QFN-16 with exposed pad"
+mpn = "INA3221AIRGVR"
+kicad_symbol = "Power_Management:INA3221"
+kicad_footprint = "Package_DFN_QFN:QFN-16-1EP_3x3mm_P0.5mm_EP1.7x1.7mm"
+
+[footprint_dimensions]
+width_mm = 3.0
+height_mm = 3.0
+courtyard_margin_mm = 0.25
+
+# Three channels in one package and one I2C address, which is why it is this
+# part rather than three single-channel monitors: three addresses and three
+# footprints buy nothing here. Common mode runs to 26 V, so the 12 V input is
+# measurable on the same device as the two regulated rails.
+[operating_conditions]
+min_voltage_v = 2.7
+max_voltage_v = 5.5
+max_current_ma = 1.0
+
+[[pins]]
+name = "in3_n"
+number = "1"
+electrical_type = "input"
+# Common mode to 26 V, independent of VS: this is a high-side monitor.
+voltage_max_v = 26.0
+
+[[pins]]
+name = "in3_p"
+number = "2"
+electrical_type = "input"
+# Common mode to 26 V, independent of VS: this is a high-side monitor.
+voltage_max_v = 26.0
+
+[[pins]]
+name = "gnd"
+number = "3"
+electrical_type = "power_input"
+required = true
+
+[[pins]]
+# Supply for the device itself, separate from the rails it measures.
+name = "vs"
+number = "4"
+electrical_type = "power_input"
+required = true
+
+[[pins]]
+name = "a0"
+number = "5"
+electrical_type = "input"
+required = true
+
+[[pins]]
+name = "scl"
+number = "6"
+electrical_type = "input"
+capabilities = ["i2c_scl"]
+required = true
+
+[[pins]]
+name = "sda"
+number = "7"
+electrical_type = "bidirectional"
+capabilities = ["i2c_sda"]
+required = true
+
+[[pins]]
+name = "warning_n"
+number = "8"
+electrical_type = "open_drain_low"
+
+[[pins]]
+name = "critical_n"
+number = "9"
+electrical_type = "open_drain_low"
+
+[[pins]]
+# Power-valid, open drain. Asserts when every monitored channel is above its
+# threshold, so it is a rail-good signal with no extra parts.
+name = "power_valid_n"
+number = "10"
+electrical_type = "open_drain_low"
+
+[[pins]]
+name = "in1_n"
+number = "11"
+electrical_type = "input"
+# Common mode to 26 V, independent of VS: this is a high-side monitor.
+voltage_max_v = 26.0
+
+[[pins]]
+name = "in1_p"
+number = "12"
+electrical_type = "input"
+# Common mode to 26 V, independent of VS: this is a high-side monitor.
+voltage_max_v = 26.0
+
+[[pins]]
+name = "timing_control"
+number = "13"
+electrical_type = "open_drain_low"
+
+[[pins]]
+name = "in2_n"
+number = "14"
+electrical_type = "input"
+# Common mode to 26 V, independent of VS: this is a high-side monitor.
+voltage_max_v = 26.0
+
+[[pins]]
+name = "in2_p"
+number = "15"
+electrical_type = "input"
+# Common mode to 26 V, independent of VS: this is a high-side monitor.
+voltage_max_v = 26.0
+
+[[pins]]
+# Pull-up reference for the open-drain outputs.
+name = "vpu"
+number = "16"
+electrical_type = "power_input"
+
+[[pins]]
+# Exposed pad: ties to ground.
+name = "ep"
+number = "17"
+electrical_type = "power_input"
+
+[[required_decoupling]]
+net = "vs"
+value = "100nf"
+count = 1
+
+[provenance]
+datasheet_url = "https://www.ti.com/lit/ds/symlink/ina3221.pdf"

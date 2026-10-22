@@ -164,19 +164,49 @@ impl ManufacturerProfile {
         }
     }
 
+    /// JLCPCB's advanced tier: the filled-via process plus the 0.2 mm
+    /// minimum via hole, which JLCPCB offers on four- and six-layer builds
+    /// at a surcharge.
+    ///
+    /// Only the drill moves. The trace, clearance, edge and annular-ring
+    /// floors stay where [`Self::jlc_standard`] put them, for the same
+    /// reason [`Self::jlc_filled_via`] does not widen them: a board that
+    /// names this tier to reach a finer hole is not also granted geometry it
+    /// never paid for.
+    ///
+    /// What needs it: a module whose stock footprint drills its own thermal
+    /// vias finer than the standard floor. Every KiCad ESP32-WROOM-32
+    /// variant does — twelve 0.2 mm holes in the ground paddle, and because
+    /// they sit inside pad 39 they also need the fill, which is why this
+    /// builds on the filled-via tier rather than on the plain one. Their
+    /// pads are 0.6 mm across, so the 0.13 mm ring floor is already clear
+    /// and does not have to move with the drill.
+    #[must_use]
+    pub fn jlc_advanced() -> Self {
+        Self {
+            name: "jlc-advanced".to_string(),
+            min_drill_diameter_nm: mm_to_nm(0.2),
+            ..Self::jlc_filled_via()
+        }
+    }
+
     /// Select a built-in profile by string name.
     ///
     /// The fabricator tiers match on a substring, because a board writes a
     /// vendor's name loosely ("pcbway", "PCBWay standard") and the tier is the
-    /// same either way. `jlc-filled-via` does not: it is matched exactly,
-    /// because it is one named process option rather than a vendor, and a
-    /// substring would hand it to any future profile whose name happened to
-    /// contain the word. A name this does not recognise falls back to
+    /// same either way. `jlc-filled-via` and `jlc-advanced` do not: each is
+    /// one named process option rather than a vendor, so each is matched
+    /// exactly. A substring would hand a surcharged process to any future
+    /// profile whose name happened to contain the word, and a board gets the
+    /// tier it named or the conservative floor, never a better one by
+    /// accident. A name this does not recognise falls back to
     /// `jlc-standard`, the most conservative floor.
     #[must_use]
     pub fn from_name(name: &str) -> Self {
         let lower = name.to_ascii_lowercase();
-        if lower == Self::jlc_filled_via().name {
+        if lower == Self::jlc_advanced().name {
+            Self::jlc_advanced()
+        } else if lower == Self::jlc_filled_via().name {
             Self::jlc_filled_via()
         } else if lower.contains("pcbway") {
             Self::pcbway_standard()
@@ -255,6 +285,77 @@ pub enum ProfileError {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn jlc_advanced_moves_the_drill_and_nothing_else() {
+        let standard = ManufacturerProfile::jlc_standard();
+        let advanced = ManufacturerProfile::jlc_advanced();
+
+        // The one thing it buys, plus the fill those holes need because they
+        // sit inside a pad.
+        assert_eq!(advanced.min_drill_diameter_nm, mm_to_nm(0.2));
+        assert!(advanced.via_in_pad);
+
+        // Everything else stays on the conservative floor. A finer hole is
+        // not a licence to draw a narrower track.
+        assert_eq!(advanced.min_trace_width_nm, standard.min_trace_width_nm);
+        assert_eq!(
+            advanced.min_copper_clearance_nm,
+            standard.min_copper_clearance_nm
+        );
+        assert_eq!(
+            advanced.min_copper_to_edge_nm,
+            standard.min_copper_to_edge_nm
+        );
+        assert_eq!(advanced.min_annular_ring_nm, standard.min_annular_ring_nm);
+        assert_eq!(
+            advanced.min_drill_to_copper_nm,
+            standard.min_drill_to_copper_nm
+        );
+    }
+
+    #[test]
+    fn the_esp32_module_paddle_vias_fit_the_advanced_tier_and_not_the_standard_one() {
+        // Every KiCad ESP32-WROOM-32 variant drills twelve 0.2 mm holes in
+        // the ground paddle, on 0.6 mm pads.
+        let paddle_drill = mm_to_nm(0.2);
+        let paddle_ring = mm_to_nm((0.6 - 0.2) / 2.0);
+
+        let standard = ManufacturerProfile::jlc_standard();
+        assert!(
+            paddle_drill < standard.min_drill_diameter_nm,
+            "the standard floor is what the board was violating"
+        );
+
+        let advanced = ManufacturerProfile::jlc_advanced();
+        assert!(paddle_drill >= advanced.min_drill_diameter_nm);
+        assert!(
+            paddle_ring >= advanced.min_annular_ring_nm,
+            "the ring was never the problem, so it did not move"
+        );
+    }
+
+    #[test]
+    fn a_surcharged_tier_is_never_reached_by_a_loose_name() {
+        // Exact names get their tier.
+        assert_eq!(
+            ManufacturerProfile::from_name("jlc-advanced").name,
+            "jlc-advanced"
+        );
+        assert_eq!(
+            ManufacturerProfile::from_name("JLC-Advanced").name,
+            "jlc-advanced"
+        );
+
+        // A board writing the vendor loosely gets the conservative floor,
+        // not the process it did not order.
+        for loose in ["jlcpcb", "JLCPCB advanced", "jlc", "jlcpcb-advanced"] {
+            let p = ManufacturerProfile::from_name(loose);
+            assert_eq!(p.name, "jlc-standard", "{loose} should not buy a tier");
+            assert!(!p.via_in_pad);
+            assert_eq!(p.min_drill_diameter_nm, mm_to_nm(0.3));
+        }
+    }
 
     #[test]
     fn jlc_standard_constants_match_jlc_docs() {

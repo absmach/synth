@@ -1,0 +1,122 @@
+id = "ds3231m_rtc"
+kind = "ic"
+version = 0
+lifecycle = "active"
+description = "Maxim DS3231M I2C real-time clock with integrated MEMS resonator and battery backover, SO-16"
+mpn = "DS3231MZ+"
+kicad_symbol = "Timer_RTC:DS3231M"
+kicad_footprint = "Package_SO:SOIC-16_3.9x9.9mm_P1.27mm"
+
+[footprint_dimensions]
+width_mm = 6.9
+height_mm = 9.9
+courtyard_margin_mm = 0.25
+
+# The M variant carries its own MEMS resonator, so there is no crystal to
+# place, no load capacitors to match and no 32 kHz layout to get wrong. That
+# is why it is this part: the accuracy is in the package.
+[operating_conditions]
+min_voltage_v = 2.3
+max_voltage_v = 5.5
+max_current_ma = 1.0
+
+[[pins]]
+# 32 kHz square wave, open drain. Unused here; needs a pull-up if driven.
+name = "out_32khz"
+number = "1"
+electrical_type = "open_drain_low"
+
+[[pins]]
+name = "vcc"
+number = "2"
+electrical_type = "power_input"
+required = true
+
+[[pins]]
+# Alarm interrupt / square wave, open drain. Needs a pull-up to be read.
+name = "int_sqw_n"
+number = "3"
+electrical_type = "open_drain_low"
+
+[[pins]]
+# Active-low reset, open drain with an internal pull-up. Also a pushbutton
+# input on this part.
+name = "rst_n"
+number = "4"
+electrical_type = "bidirectional"
+
+[[pins]]
+name = "gnd_2"
+number = "5"
+electrical_type = "power_input"
+
+[[pins]]
+name = "gnd_3"
+number = "6"
+electrical_type = "power_input"
+
+[[pins]]
+name = "gnd_4"
+number = "7"
+electrical_type = "power_input"
+
+[[pins]]
+name = "gnd_5"
+number = "8"
+electrical_type = "power_input"
+
+[[pins]]
+name = "gnd_6"
+number = "9"
+electrical_type = "power_input"
+
+[[pins]]
+name = "gnd_7"
+number = "10"
+electrical_type = "power_input"
+
+[[pins]]
+name = "gnd_8"
+number = "11"
+electrical_type = "power_input"
+
+[[pins]]
+name = "gnd_9"
+number = "12"
+electrical_type = "power_input"
+
+[[pins]]
+name = "gnd"
+number = "13"
+electrical_type = "power_input"
+required = true
+
+[[pins]]
+# Backup supply. The part switches to it when VCC falls below it, which is
+# what keeps time through a main-power loss.
+name = "vbat"
+number = "14"
+electrical_type = "power_input"
+required = true
+
+[[pins]]
+name = "sda"
+number = "15"
+electrical_type = "bidirectional"
+capabilities = ["i2c_sda"]
+required = true
+
+[[pins]]
+name = "scl"
+number = "16"
+electrical_type = "input"
+capabilities = ["i2c_scl"]
+required = true
+
+[[required_decoupling]]
+net = "vcc"
+value = "100nf"
+count = 1
+
+[provenance]
+datasheet_url = "https://www.analog.com/media/en/technical-documentation/data-sheets/DS3231M.pdf"

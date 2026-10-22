@@ -1,0 +1,94 @@
+id = "microsd_dm3at"
+kind = "connector"
+version = 0
+lifecycle = "active"
+description = "Hirose DM3AT-SF-PEJM5 push-pull microSD socket with card-detect switch, surface mount"
+mpn = "DM3AT-SF-PEJM5"
+kicad_symbol = "Connector:Micro_SD_Card_Det_Hirose_DM3AT"
+kicad_footprint = "Connector_Card:microSD_HC_Hirose_DM3AT-SF-PEJM5"
+
+[footprint_dimensions]
+width_mm = 15.0
+height_mm = 14.5
+courtyard_margin_mm = 0.25
+# The card enters along +Y in the unrotated footprint; the placer maps this
+# face to the chosen board edge. A socket whose slot points inboard cannot be
+# loaded.
+mating_face = "top"
+
+[operating_conditions]
+min_voltage_v = 2.7
+max_voltage_v = 3.6
+max_current_ma = 200.0
+
+# Pin names follow the SD bus, with the SPI role each line takes in the
+# one-bit mode this board uses given as a capability. In SPI mode CMD is the
+# host's MOSI, DAT0 the card's MISO, and DAT3 the chip select.
+[[pins]]
+name = "dat2"
+number = "1"
+electrical_type = "bidirectional"
+
+[[pins]]
+name = "dat3_cs"
+number = "2"
+electrical_type = "bidirectional"
+capabilities = ["spi_cs"]
+required = true
+
+[[pins]]
+name = "cmd_mosi"
+number = "3"
+electrical_type = "input"
+capabilities = ["spi_mosi"]
+required = true
+
+[[pins]]
+name = "vdd"
+number = "4"
+electrical_type = "power_input"
+required = true
+
+[[pins]]
+name = "clk"
+number = "5"
+electrical_type = "input"
+capabilities = ["spi_sck"]
+required = true
+
+[[pins]]
+name = "vss"
+number = "6"
+electrical_type = "power_input"
+required = true
+
+[[pins]]
+name = "dat0_miso"
+number = "7"
+electrical_type = "bidirectional"
+capabilities = ["spi_miso"]
+required = true
+
+[[pins]]
+name = "dat1"
+number = "8"
+electrical_type = "bidirectional"
+
+[[pins]]
+# The detect switch: DET_A and DET_B close when a card is seated.
+name = "det_b"
+number = "9"
+electrical_type = "passive"
+
+[[pins]]
+name = "det_a"
+number = "10"
+electrical_type = "passive"
+
+[[pins]]
+name = "shield"
+number = "SH"
+electrical_type = "passive"
+
+[provenance]
+datasheet_url = "https://www.hirose.com/product/document?clcode=CL0836-0288-9-05&productname=DM3AT-SF-PEJM5"

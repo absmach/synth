@@ -1,0 +1,104 @@
+id = "rj45_magjack_si60062"
+kind = "connector"
+version = 0
+lifecycle = "active"
+description = "Bel Fuse SI-60062-F RJ45 jack with integrated 10/100 magnetics and two indicator LEDs"
+mpn = "SI-60062-F"
+kicad_symbol = "Connector:RJ45_Bel_SI-60062-F"
+kicad_footprint = "Connector_RJ:RJ45_Bel_SI-60062-F"
+
+[footprint_dimensions]
+width_mm = 18.09
+height_mm = 14.95
+courtyard_margin_mm = 0.25
+# The opening faces +Y in the unrotated footprint. The placer maps this face
+# to the chosen board edge; a jack whose opening points inboard is not a jack.
+mating_face = "top"
+
+[operating_conditions]
+max_voltage_v = 3.6
+max_current_ma = 200.0
+
+# Why a magjack and not a bare RJ45: a 10/100 PHY needs isolation
+# transformers, a common-mode choke and the Bob Smith termination between its
+# MDI pins and the cable. This part contains all of it, so the board carries
+# four differential pins and two centre taps instead of a discrete magnetics
+# section. The centre taps are what the termination network hangs off, which
+# is why they are modelled rather than hidden.
+
+[[pins]]
+name = "td_p"
+number = "1"
+electrical_type = "differential_positive"
+capabilities = ["diff_pair_positive"]
+
+[[pins]]
+# Transmit centre tap. Takes the rail through a 0.1 uF to chassis in the
+# classic Bob Smith arrangement; left floating the pair common-mode wanders.
+name = "tct"
+number = "2"
+electrical_type = "passive"
+
+[[pins]]
+name = "td_n"
+number = "3"
+electrical_type = "differential_negative"
+capabilities = ["diff_pair_negative"]
+
+[[pins]]
+name = "rd_p"
+number = "4"
+electrical_type = "differential_positive"
+capabilities = ["diff_pair_positive"]
+
+[[pins]]
+name = "rct"
+number = "5"
+electrical_type = "passive"
+
+[[pins]]
+name = "rd_n"
+number = "6"
+electrical_type = "differential_negative"
+capabilities = ["diff_pair_negative"]
+
+[[pins]]
+name = "nc"
+number = "7"
+electrical_type = "do_not_connect"
+
+[[pins]]
+# The jack's chassis return, which the symbol types as a supply pin.
+name = "gnd"
+number = "8"
+electrical_type = "power_input"
+
+[[pins]]
+name = "led_green_anode"
+number = "L1"
+electrical_type = "passive"
+
+[[pins]]
+name = "led_green_cathode"
+number = "L2"
+electrical_type = "passive"
+
+[[pins]]
+name = "led_yellow_anode"
+number = "L3"
+electrical_type = "passive"
+
+[[pins]]
+name = "led_yellow_cathode"
+number = "L4"
+electrical_type = "passive"
+
+[[pins]]
+# Shell tie. Chassis rather than signal ground on a real build; the board
+# decides which, so the part only says the pad exists.
+name = "shield"
+number = "SH"
+electrical_type = "passive"
+
+[provenance]
+datasheet_url = "https://www.belfuse.com/resources/datasheets/magneticsolutions/ds-mg-si-60000-f-series.pdf"

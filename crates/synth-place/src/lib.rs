@@ -933,19 +933,54 @@ pub fn place_with_tuning_and_sidecar_seeded<S: ::std::hash::BuildHasher>(
     seed: u64,
 ) -> Result<Placement, PlaceError> {
     let has_sidecar = sidecar_path.is_some_and(std::path::Path::exists);
+    let loaded = sidecar_path
+        .filter(|path| path.exists())
+        .and_then(synth_layout::sidecar::SidecarLayout::load_from_file);
+
+    // The author's absolute entries become constraints the solver is given,
+    // not corrections applied to its answer. The old order ran the whole
+    // greedy placement first and only then moved the pinned parts, so a
+    // design the solver could not place was refused however completely its
+    // floorplan was specified -- the overrides were never reached. A relative
+    // entry still resolves afterwards, because it is defined against an
+    // anchor that has to be placed before it can be measured from.
+    let pinned: PinnedPlacements = loaded
+        .as_ref()
+        .map_or_else(PinnedPlacements::new, |sidecar| {
+            board
+                .components
+                .iter()
+                .filter_map(|component| {
+                    let entry = sidecar.components.get(&component.refdes)?;
+                    if entry.relative_to.is_some() {
+                        return None;
+                    }
+                    Some((
+                        component.id,
+                        (
+                            Point::new(mm_to_nm(entry.x), mm_to_nm(entry.y)),
+                            match entry.rotation {
+                                90 => Rotation::Ninety,
+                                180 => Rotation::OneEighty,
+                                270 => Rotation::TwoSeventy,
+                                _ => Rotation::Zero,
+                            },
+                        ),
+                    ))
+                })
+                .collect()
+        });
+
     let mut placement = place_with_tuning_impl(
         board,
         extra_margin_mm,
         rotation_overrides,
         seed,
         !has_sidecar,
+        &pinned,
     )?;
-    if let Some(path) = sidecar_path {
-        if path.exists() {
-            if let Some(sidecar) = synth_layout::sidecar::SidecarLayout::load_from_file(path) {
-                apply_sidecar_overrides(board, &mut placement, &sidecar);
-            }
-        }
+    if let Some(sidecar) = loaded.as_ref() {
+        apply_sidecar_overrides(board, &mut placement, sidecar);
     }
     if sidecar_path.is_some_and(std::path::Path::exists) {
         tighten_outline_after_sidecar(board, &mut placement);
@@ -977,7 +1012,14 @@ fn place_with_default_tuning(board: &Board, compact: bool) -> Result<Placement, 
             rotation_overrides.insert(component.id, synth_geometry::Rotation::Zero);
         }
     }
-    place_with_tuning_impl(board, 1.5, &rotation_overrides, 0, compact)
+    place_with_tuning_impl(
+        board,
+        1.5,
+        &rotation_overrides,
+        0,
+        compact,
+        &PinnedPlacements::new(),
+    )
 }
 
 /// Place a board inside an explicit rectangular outline in millimetres.
@@ -1023,6 +1065,7 @@ pub fn place_with_dimensions(
         &std::collections::HashMap::new(),
         false,
         0,
+        &PinnedPlacements::new(),
     )?;
 
     // `place_with_outline` tightens automatic outlines after solving. For an
@@ -1147,7 +1190,14 @@ pub fn place_with_tuning_seeded<S: ::std::hash::BuildHasher>(
     rotation_overrides: &std::collections::HashMap<ComponentId, synth_geometry::Rotation, S>,
     seed: u64,
 ) -> Result<Placement, PlaceError> {
-    place_with_tuning_impl(board, extra_margin_mm, rotation_overrides, seed, true)
+    place_with_tuning_impl(
+        board,
+        extra_margin_mm,
+        rotation_overrides,
+        seed,
+        true,
+        &PinnedPlacements::new(),
+    )
 }
 
 /// `compact` squeezes the finished layout. A caller that is about to apply a
@@ -1160,6 +1210,7 @@ fn place_with_tuning_impl<S: ::std::hash::BuildHasher>(
     rotation_overrides: &std::collections::HashMap<ComponentId, synth_geometry::Rotation, S>,
     seed: u64,
     compact: bool,
+    pinned: &PinnedPlacements,
 ) -> Result<Placement, PlaceError> {
     use synth_layout::pcb_courtyard_geometry_for_part;
 
@@ -1212,6 +1263,7 @@ fn place_with_tuning_impl<S: ::std::hash::BuildHasher>(
             rotation_overrides,
             true,
             seed,
+            pinned,
         ) {
             Ok(p) => {
                 let packed = if compact {
@@ -1537,6 +1589,12 @@ fn rotated_half_extents(rotation: Rotation, unrot_half_w: i64, unrot_half_h: i64
 ///
 /// `extra_nm` widens the result symmetrically; pass a non-zero value to keep a
 /// deliberate spacing margin around small passives.
+/// Components whose position the design author fixed, as anchor and rotation.
+///
+/// A pinned component is a constraint on the solver, not an adjustment made
+/// after it: see [`place_with_tuning_and_sidecar_seeded`].
+pub(crate) type PinnedPlacements = std::collections::HashMap<ComponentId, (Point, Rotation)>;
+
 fn courtyard_rect_at_anchor(
     anchor: Point,
     rotation: Rotation,
@@ -1598,6 +1656,7 @@ fn place_with_outline<S: ::std::hash::BuildHasher>(
     rotation_overrides: &std::collections::HashMap<ComponentId, synth_geometry::Rotation, S>,
     tighten_outline: bool,
     seed: u64,
+    pinned: &PinnedPlacements,
 ) -> Result<Placement, PlaceError> {
     use synth_geometry::nm_to_mm;
     let mut resolved_rotation_overrides: std::collections::HashMap<
@@ -1738,6 +1797,21 @@ fn place_with_outline<S: ::std::hash::BuildHasher>(
         .partition(|&id| is_macro(id) || has_hint(id));
     passives.sort_by_key(|&id| has_near(id));
 
+    // A pinned component is a constraint, so it comes out of both searches:
+    // the greedy loop below and the passive packer after it. Leaving it in
+    // meant the solver had to find a position for a part whose position was
+    // already decided, and then the override moved it anyway -- which is how
+    // a board with every part pinned could still fail to place.
+    let (order, pinned_from_order): (Vec<ComponentId>, Vec<ComponentId>) =
+        order.into_iter().partition(|id| !pinned.contains_key(id));
+    let (passives, pinned_from_passives): (Vec<ComponentId>, Vec<ComponentId>) = passives
+        .into_iter()
+        .partition(|id| !pinned.contains_key(id));
+    let (board_features, pinned_from_features): (Vec<ComponentId>, Vec<ComponentId>) =
+        board_features
+            .into_iter()
+            .partition(|id| !pinned.contains_key(id));
+
     let courtyard_offset_lookup: std::collections::HashMap<ComponentId, (f64, f64)> = courtyards_mm
         .iter()
         .map(|(id, offset, _)| (*id, *offset))
@@ -1794,6 +1868,40 @@ fn place_with_outline<S: ::std::hash::BuildHasher>(
     // the authoritative courtyard, offset-corrected so overlap tests here agree
     // with the legalization sweep and the exported board.
     let mut placed: Vec<(ComponentId, Point, Rect)> = Vec::with_capacity(board.components.len());
+
+    // The pinned courtyards, occupied before the solver takes its first step.
+    // No passive clearance is added: the 1.5 mm the greedy search reserves
+    // around a loose passive is a spacing choice, and on a pinned part the
+    // author has already made it.
+    for id in pinned_from_order
+        .iter()
+        .chain(&pinned_from_passives)
+        .chain(&pinned_from_features)
+    {
+        let Some(&(anchor, rotation)) = pinned.get(id) else {
+            continue;
+        };
+        let Some(&(w_mm, h_mm)) = courtyard_lookup.get(id) else {
+            continue;
+        };
+        let offset = courtyard_offset_lookup
+            .get(id)
+            .copied()
+            .unwrap_or(PLACEMENT_COURTYARD_OFFSET_MM);
+        let courtyard = courtyard_rect_at_anchor(
+            anchor,
+            rotation,
+            mm_to_nm(w_mm) / 2,
+            mm_to_nm(h_mm) / 2,
+            offset,
+            0,
+        );
+        placed.push((*id, anchor, courtyard));
+        // So the emitted rotation is the pinned one rather than a floorplan
+        // target computed for a part the solver never positioned.
+        resolved_rotation_overrides.insert(*id, rotation);
+    }
+
     let mut grid_start_indices = vec![0_usize; order.len()];
     let mut backtracks = 0_usize;
 

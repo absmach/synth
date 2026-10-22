@@ -1,0 +1,49 @@
+id = "tps3839_supervisor"
+kind = "ic"
+version = 0
+lifecycle = "active"
+description = "TI TPS3839 nanopower voltage supervisor, active-low reset with fixed 200 ms delay, SOT-23-3"
+mpn = "TPS3839G33DBZR"
+kicad_symbol = "Power_Supervisor:TPS3839DBZ"
+kicad_footprint = "Package_TO_SOT_SMD:SOT-23"
+
+[footprint_dimensions]
+width_mm = 2.9
+height_mm = 2.8
+courtyard_margin_mm = 0.25
+
+# 150 nA quiescent, so it can sit on a rail permanently without being part of
+# the power budget. The G33 option trips at 2.93 V falling, below the ESP32's
+# 3.0 V minimum but above its brownout floor.
+[operating_conditions]
+min_voltage_v = 1.6
+max_voltage_v = 6.5
+max_current_ma = 1.0
+
+[[pins]]
+name = "gnd"
+number = "1"
+electrical_type = "power_input"
+required = true
+
+[[pins]]
+# Active low, released after the fixed delay once VDD is valid.
+name = "reset_n"
+number = "2"
+electrical_type = "output"
+required = true
+
+[[pins]]
+# Both the supply and the sense input: this part watches the rail it runs on.
+name = "vdd"
+number = "3"
+electrical_type = "power_input"
+required = true
+
+[[required_decoupling]]
+net = "vdd"
+value = "100nf"
+count = 1
+
+[provenance]
+datasheet_url = "https://www.ti.com/lit/ds/symlink/tps3839.pdf"

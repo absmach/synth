@@ -1,0 +1,40 @@
+id = "coin_cell_cr2032"
+kind = "battery"
+version = 0
+lifecycle = "active"
+description = "Keystone 1058 surface-mount CR2032 coin cell holder, 20 mm, for RTC backup"
+mpn = "1058"
+kicad_symbol = "Device:Battery"
+kicad_footprint = "Battery:BatteryHolder_Keystone_1058_1x2032"
+
+[footprint_dimensions]
+width_mm = 24.0
+height_mm = 20.5
+courtyard_margin_mm = 0.25
+
+# A CR2032 is NOT rechargeable. It must never reach a charging path: the
+# backup pin it feeds has to be isolated from the main rail by a diode or by
+# the RTC's own internal switchover.
+[operating_conditions]
+min_voltage_v = 2.0
+max_voltage_v = 3.6
+max_current_ma = 3.0
+
+[[pins]]
+# A power source, not a passive terminal. Typed `passive` it reads as a
+# decoupling capacitor -- far plate on ground, bringing no power in from
+# anywhere -- and E-SYNTH-POWER-003 then reports the RTC's backup pin as a
+# supply input with nothing supplying it.
+name = "plus"
+number = "1"
+electrical_type = "power_output"
+required = true
+
+[[pins]]
+name = "minus"
+number = "2"
+electrical_type = "passive"
+required = true
+
+[provenance]
+datasheet_url = "https://www.keyelco.com/userAssets/file/M65p28.pdf"
