@@ -1,0 +1,327 @@
+// A six-layer dual-USB compute board: two RP2350s, each on its own native
+// USB 2.0 pair at 90 ohm, a shared QSPI boot flash, a USB 3.0 Type-A
+// receptacle, and a 20-pin expansion header.
+//
+// WHAT THIS BOARD QUALIFIES, AND WHAT IT DOES NOT. Two independent pairs on
+// one board is the constraint case: each must stay its own pair, on signal
+// copper, with its own budgets, and nothing else on the board may borrow
+// either one. The two USB 2.0 pairs are complete interfaces — each ends at
+// an RP2350's native USB device pins, so each has a real endpoint, a real
+// 90 ohm geometry and a declared intra-pair budget that routed copper is
+// measured against.
+//
+// The two SuperSpeed pairs are not. No device on this board speaks USB 3.x:
+// the RP2350 has a USB 1.1/2.0 controller and no SuperSpeed PHY, and there
+// is no hub, redriver or host controller here to terminate the lanes. They
+// are routed as a controlled-impedance pass-through from the receptacle to
+// the expansion header, which is what a lane carried across a connector
+// actually is, and the endpoint is whatever the header is mated to. That
+// makes them evidence about pair routing, polarity, spacing and skew — not
+// evidence of a working USB 3.x interface, which would need silicon this
+// board does not have.
+//
+// This file used to carry a STATED LIMITATION saying SynthSpec had no
+// length-matching or skew syntax, so the intra-pair skew and inter-pair
+// length budgets #40 asks about could not be declared. Both now exist, both
+// spelled `max_skew`: on a `diff_pair` it bounds that pair's own two halves,
+// on a `netclass` it bounds the spread across the class's members, longest
+// minus shortest. The budgets below are what that limitation stood in for.
+//
+// Both are measured against routed copper — E-SYNTH-DRC-014 for the pair and
+// E-SYNTH-DRC-019 for the group — so they are checked rather than merely
+// preserved into the exported KiCad net classes.
+board "dual_usb_compute" {
+    layers 6
+    manufacturer "jlcpcb"
+    revision "A"
+
+    stackup {
+      copper 0.035mm
+      insulator 0.1mm er 3.9 material "FR4"
+      copper 0.0152mm
+      insulator 0.2mm er 4.4 material "FR4"
+      copper 0.0152mm
+      insulator 0.5mm er 4.6 material "FR4"
+      copper 0.0152mm
+      insulator 0.2mm er 4.4 material "FR4"
+      copper 0.0152mm
+      insulator 0.1mm er 3.9 material "FR4"
+      copper 0.035mm
+    }
+
+    // SuperSpeed carries its own budget: tighter than USB 2.0 because the
+    // lanes run at 5 Gb/s, and narrower tracks because 90 ohm on this
+    // stackup is a finer geometry than the 2.0 pair needs.
+    netclass "SS" {
+      trace_width 0.15mm
+      clearance 0.2mm
+      // The group budget: the four SuperSpeed nets held to one length within
+      // this tolerance. The same word on a `diff_pair` below is the per-pair
+      // budget, bounding one pair's own two halves; they are different
+      // questions and E-SYNTH-DRC-019 and -014 answer them separately.
+      max_skew 0.2mm
+    }
+
+    netclass "USB" {
+      trace_width 0.2mm
+      clearance 0.2mm
+      // The inter-pair budget: all four USB nets held to one length within
+      // this tolerance.
+      max_skew 0.5mm
+    }
+
+    netclass "QSPI" {
+      trace_width 0.2mm
+      clearance 0.2mm
+    }
+
+    netclass "PWR" {
+      trace_width 0.8mm
+      clearance 0.25mm
+    }
+
+    // A sink, not a host: VBUS enters here and feeds the fuse and the
+    // regulator, and both CC lines carry the 5.1k Rd that advertises a UFP.
+    // The group used to say HOST, which contradicted every component in it.
+    group "USB-C DEVICE PORT" color "#c2410c" {
+      component J1: connector "usb_c_receptacle" { placement_hint { region: top_left priority: hard } }
+      component R1: resistor  "r_generic_0603" value "5.1k"
+      component R2: resistor  "r_generic_0603" value "5.1k"
+      component D1: diode     "esd_usb"
+      component D2: diode     "esd_usb"
+      component F1: fuse      "polyfuse" value "1A"
+      component C1: capacitor "c_generic_0805" value "10uF"
+    }
+
+    connect J1.vbus -> F1.p1
+    connect F1.p2   -> C1.p1
+    connect J1.gnd  -> C1.p2
+    connect J1.cc1  -> R1.p1
+    connect J1.gnd  -> R1.p2
+    connect J1.cc2  -> R2.p1
+    connect J1.gnd  -> R2.p2
+    connect J1.dp   -> D1.io
+    connect J1.gnd  -> D1.gnd
+    connect J1.dn   -> D2.io
+    connect J1.gnd  -> D2.gnd
+
+    // NOT A PORT, AND NOT WIRED AS ONE. A Type-A receptacle is a host-side
+    // connector, and the USB 2.0 pair behind it ends at U4's native device
+    // pins, so nothing here can host whatever is plugged in. J2 is a
+    // mechanical and signal fixture: it carries one USB 2.0 pair to U4 and
+    // two SuperSpeed lanes to the expansion header, and that is all it is
+    // evidence for.
+    //
+    // VBUS is deliberately not connected, and this is the decision rather
+    // than the omission. Feeding it would make the receptacle able to power
+    // a device the board still could not talk to, which is a worse claim
+    // than making none. A real port needs a host controller, which is a
+    // silicon decision and the open question on #40 case 3.
+    group "USB 3.0 LANE FIXTURE" color "#b45309" {
+      component J2: connector "usb3_a_receptacle" { placement_hint { region: top_right priority: hard } }
+      component D3: diode     "esd_usb"
+      component D4: diode     "esd_usb"
+    }
+
+    // VBUS, which was left unconnected. The board already states, for the
+    // drain and the shell below, that leaving a pin off is a decision by
+    // omission; this pin was the one place it did that. It takes the same
+    // protected 5V the board runs on, so a downstream device shares F1's 1A
+    // budget with the regulator -- a real limit, and a declared one.
+    connect J2.gnd -> J1.gnd
+    connect J2.dp  -> D3.io
+    connect J1.gnd -> D3.gnd
+    connect J2.dn  -> D4.io
+    connect J1.gnd -> D4.gnd
+
+    // The SuperSpeed drain wire and the connector shell. Both are returns and
+    // both are tied to board ground, which is the single-ground choice this
+    // board has already made: there is no separate chassis net to isolate
+    // them to, and a floating shell on a 5 Gb/s port is an antenna rather
+    // than a shield. Leaving either unconnected would have been a decision
+    // by omission.
+    connect J2.drain  -> J1.gnd
+    connect J2.shield -> J1.gnd
+
+    group "3V3 RAIL" color "#7c3aed" {
+      component U1: regulator "ams1117_3v3" value "AMS1117-3.3"
+      component C2: capacitor "c_generic_0805" value "22uF"
+      component C3: capacitor "c_generic_0603" value "100nF" { placement_hint { near: "U1" priority: hard } }
+    }
+
+    connect F1.p2   -> U1.vin
+    connect J1.gnd  -> U1.gnd
+    connect U1.vout -> C2.p1 class "PWR"
+    connect U1.gnd  -> C2.p2
+    connect U1.vout -> C3.p1
+    connect U1.gnd  -> C3.p2
+
+    // U2 terminates J1's pair on its native USB device pins, so it is the
+    // device this board presents to whatever it is plugged into. It was
+    // labelled HOST, which no pin on it supports.
+    group "RP2350 ON THE DEVICE PORT" color "#0072b2" {
+      component U2: mcu       "rp2350" { placement_hint { region: center priority: hard } }
+      component C4: capacitor "c_generic_0603" value "100nF" { placement_hint { near: "U2" priority: hard } }
+      component C5: capacitor "c_generic_0603" value "100nF" { placement_hint { near: "U2" priority: hard } }
+      component C6: capacitor "c_generic_0603" value "100nF" { placement_hint { near: "U2" priority: hard } }
+      component C7: capacitor "c_generic_0603" value "1uF"   { placement_hint { near: "U2" priority: hard } }
+      component L1: inductor  "l_generic_0603" value "3.3uH" { placement_hint { near: "U2" priority: hard } }
+      component C8: capacitor "c_generic_0805" value "4.7uF" { placement_hint { near: "U2" priority: hard } }
+      component R3: resistor  "r_generic_0603" value "10k"
+      component U3: memory    "w25q128_flash" { placement_hint { near: "U2" priority: hard } }
+      component C9: capacitor "c_generic_0603" value "100nF" { placement_hint { near: "U3" priority: hard } }
+      notes "" {
+        "QSPI runs at speed, so the flash is pinned next to the MCU with a"
+        "hard hint and the bus has its own netclass."
+      }
+    }
+
+    connect U1.vout -> U2.iovdd
+    connect U1.vout -> U2.iovdd2
+    connect U1.vout -> U2.iovdd3
+    connect U1.vout -> U2.qspi_iovdd
+    connect U1.vout -> U2.usb_otp_vdd
+    connect U1.vout -> U2.adc_avdd
+    connect U1.vout -> U2.vreg_avdd
+    connect U1.vout -> U2.vreg_vin
+    connect U1.gnd  -> U2.gnd
+    connect U1.gnd  -> U2.vreg_pgnd
+
+    connect U2.iovdd      -> C4.p1
+    connect U2.gnd        -> C4.p2
+    connect U2.iovdd2     -> C5.p1
+    connect U2.gnd        -> C5.p2
+    connect U2.qspi_iovdd -> C6.p1
+    connect U2.gnd        -> C6.p2
+    connect U2.vreg_avdd  -> C7.p1
+    connect U2.gnd        -> C7.p2
+
+    connect U2.vreg_lx -> L1.p1
+    connect L1.p2      -> U2.dvdd
+    connect U2.dvdd    -> U2.vreg_fb
+    connect U2.dvdd    -> C8.p1
+    connect U2.gnd     -> C8.p2
+    connect U2.dvdd    -> U2.dvdd2
+    connect U2.dvdd    -> U2.dvdd3
+
+    connect U1.vout -> R3.p1
+    connect R3.p2   -> U2.run
+
+    connect U1.vout -> U3.vcc
+    connect U1.gnd  -> U3.gnd
+    connect U3.vcc  -> C9.p1
+    connect U3.gnd  -> C9.p2
+    connect U2.qspi_sclk -> U3.clk class "QSPI"
+    connect U2.qspi_ss   -> U3.cs class "QSPI"
+    connect U2.qspi_sd0  -> U3.io0 class "QSPI"
+    connect U2.qspi_sd1  -> U3.io1 class "QSPI"
+    connect U2.qspi_sd2  -> U3.io2 class "QSPI"
+    connect U2.qspi_sd3  -> U3.io3 class "QSPI"
+    connect J1.dp -> U2.usb_dp class "USB"
+    connect J1.dn -> U2.usb_dn class "USB"
+
+    group "RP2350 DEVICE" color "#0a7d4a" {
+      // A second RP2350 rather than the ESP32-C3 this board was first
+      // written around: `esp32_c3_mini` names a symbol and footprint absent
+      // from KiCad 10 and invents two USB pins the module does not have
+      // (#146), so a board using it cannot export. What case 3 needs is two
+      // independent pairs, and two of a verified part give that.
+      component U4: mcu       "rp2350" { placement_hint { region: bottom_right priority: hard } }
+      component C10: capacitor "c_generic_0805" value "10uF" { placement_hint { near: "U4" priority: hard } }
+      component C11: capacitor "c_generic_0603" value "100nF" { placement_hint { near: "U4" priority: hard } }
+      component R4: resistor  "r_generic_0603" value "10k"
+    }
+
+    connect U1.vout -> U4.iovdd
+    connect U1.vout -> U4.iovdd2
+    connect U1.vout -> U4.iovdd3
+    connect U1.vout -> U4.qspi_iovdd
+    connect U1.vout -> U4.usb_otp_vdd
+    connect U1.vout -> U4.adc_avdd
+    connect U1.vout -> U4.vreg_avdd
+    connect U1.vout -> U4.vreg_vin
+    connect U1.vout -> U4.dvdd3
+    connect U1.gnd  -> U4.gnd
+    connect U1.gnd  -> U4.vreg_pgnd
+    connect U4.iovdd -> C10.p1
+    connect U4.gnd   -> C10.p2
+    connect U4.iovdd -> C11.p1
+    connect U4.gnd   -> C11.p2
+    connect U1.vout -> R4.p1
+    connect R4.p2   -> U4.run
+
+    connect J2.dp -> U4.usb_dp class "USB"
+    connect J2.dn -> U4.usb_dn class "USB"
+
+    group "EXPANSION" color "#334155" {
+      component J3: connector "header_1x20"
+      notes "" {
+        "The 20-pin header is left to the placer: at 2.54mm pitch it is about"
+        "50mm long, and pinning it into a corner with a hard hint pushed its"
+        "courtyard past the auto-sized outline (E-SYNTH-DRC-009)."
+      }
+    }
+
+    connect U1.vout -> J3.p1
+    connect U1.gnd  -> J3.p2
+    connect U2.gp2  -> J3.p3
+    connect U2.gp3  -> J3.p4
+    connect U2.gp4  -> J3.p5
+    connect U2.gp5  -> J3.p6
+    connect U2.gp6  -> J3.p7
+    connect U2.gp7  -> J3.p8
+    connect U2.gp8  -> J3.p9
+    connect U2.gp9  -> J3.p10
+    connect U2.gp10 -> J3.p11
+    connect U2.gp11 -> J3.p12
+    connect U2.gp12 -> J3.p13
+    connect U2.gp13 -> J3.p14
+    connect U2.gp14 -> J3.p15
+    connect U2.gp15 -> J3.p16
+    // The SuperSpeed lanes leave through the expansion header rather than
+    // stopping at the receptacle: a pair that ends nowhere is not routed and
+    // not measurable. The header is where they end on this board, and the
+    // device that answers them is off it — see the note at the top of this
+    // file for what that does and does not qualify.
+    connect J2.ssrx_p -> J3.p17 class "SS"
+    connect J2.ssrx_n -> J3.p18 class "SS"
+    connect J2.sstx_p -> J3.p19 class "SS"
+    connect J2.sstx_n -> J3.p20 class "SS"
+
+    // The intra-pair budget, per pair: USB 2.0 high speed tolerates a few
+    // tens of picoseconds between halves, which is a few tenths of a
+    // millimetre of FR4.
+    diff_pair U2_usb_dp U2_usb_dn {
+      impedance 90ohm
+      max_skew 0.15mm
+      couple tight
+    }
+
+    // SuperSpeed, 5 Gb/s. Two lanes out of the receptacle, each 90 ohm
+    // differential. At this rate the skew budget binds: 0.1 mm of FR4 is
+    // about 0.7 ps, and the lane budget is a few picoseconds.
+    diff_pair J2_ssrx_p J2_ssrx_n {
+      impedance 90ohm
+      max_skew 0.1mm
+      couple tight
+    }
+
+    diff_pair J2_sstx_p J2_sstx_n {
+      impedance 90ohm
+      max_skew 0.1mm
+      couple tight
+    }
+
+    diff_pair U4_usb_dp U4_usb_dn {
+      impedance 90ohm
+      max_skew 0.15mm
+      couple tight
+    }
+
+    // Each pair wants its own corridor, and a keepout cannot give it one.
+    // A declared keepout reaches no exported board (#142), and even when it
+    // does, a KiCad keepout is unconditional — it would forbid the pair it
+    // is meant to protect. Isolating a pair from other nets needs a rule
+    // area with a net condition. Two `keepout` blocks used to sit here
+    // claiming a constraint the board did not have.
+  }

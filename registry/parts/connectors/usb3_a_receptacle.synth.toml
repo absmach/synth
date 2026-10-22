@@ -1,0 +1,80 @@
+id = "usb3_a_receptacle"
+kind = "connector"
+description = "USB 3.0 Type-A receptacle, 9-pin SMD plus shield. Carries the USB 2.0 pair and two SuperSpeed pairs at 5 Gb/s."
+mpn = "692122030100"
+kicad_symbol = "Connector:USB3_A"
+kicad_footprint = "Connector_USB:USB3_A_Receptacle_Wuerth_692122030100"
+
+[footprint_dimensions]
+width_mm = 16.7
+height_mm = 18.9
+courtyard_margin_mm = 0.25
+# Pads sit at negative y and the body extends to +y, so the receptacle
+# opening points toward +Y in the unrotated footprint.
+mating_face = "bottom"
+
+[operating_conditions]
+min_voltage_v = 4.4
+max_voltage_v = 5.25
+max_current_ma = 900.0
+
+[provenance]
+source = "imported"
+notes = "Pins verified one by one against Connector:USB3_A and the Wuerth 692122030100 footprint: ten symbol pins, ten footprint pads, numbers 1-9 plus SH."
+
+[[pins]]
+name = "vbus"
+number = "1"
+electrical_type = "power_output"
+capabilities = ["usb_vbus"]
+
+[[pins]]
+name = "dn"
+number = "2"
+electrical_type = "differential_negative"
+capabilities = ["usb_dn"]
+
+[[pins]]
+name = "dp"
+number = "3"
+electrical_type = "differential_positive"
+capabilities = ["usb_dp"]
+
+[[pins]]
+name = "gnd"
+number = "4"
+electrical_type = "power_input"
+
+[[pins]]
+name = "ssrx_n"
+number = "5"
+electrical_type = "differential_negative"
+capabilities = ["diff_pair_negative"]
+
+[[pins]]
+name = "ssrx_p"
+number = "6"
+electrical_type = "differential_positive"
+capabilities = ["diff_pair_positive"]
+
+[[pins]]
+name = "drain"
+number = "7"
+electrical_type = "power_input"
+
+[[pins]]
+name = "sstx_n"
+number = "8"
+electrical_type = "differential_negative"
+capabilities = ["diff_pair_negative"]
+
+[[pins]]
+name = "sstx_p"
+number = "9"
+electrical_type = "differential_positive"
+capabilities = ["diff_pair_positive"]
+
+[[pins]]
+name = "shield"
+number = "SH"
+electrical_type = "power_input"

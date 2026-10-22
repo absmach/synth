@@ -20,4 +20,6 @@ board "power_011_feedback_on_switch_net" {
   connect R2.p2 -> U1.gnd
   connect J1.p1 -> U1.en
   connect U1.sw -> U1.fb
+  // The exposed thermal pad is the ground path on this regulator.
+  connect U1.ep -> U1.gnd
 }

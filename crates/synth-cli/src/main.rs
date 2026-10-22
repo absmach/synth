@@ -429,6 +429,21 @@ enum Command {
         /// Run the manufacturing export gate as well as source/DRC checks.
         #[arg(long)]
         fab: bool,
+        /// External router to use. Passed through to the `drc` and
+        /// `export-kicad` stages this command runs. Without an engine the DRC
+        /// stage cannot produce counts at all and reports `unknown`, so this
+        /// is what decides whether the gate can say anything.
+        ///
+        /// Unset means "do not mention it", not "use the default": the stages
+        /// resolve their own engine, from their own default and the
+        /// environment. Naming a default here and always forwarding it would
+        /// override a selection made any other way.
+        #[arg(long, value_enum)]
+        router: Option<ExternalRouter>,
+        /// KiCadRoutingTools checkout, required with `--router
+        /// kicad-routing-tools`.
+        #[arg(long, value_name = "DIR")]
+        kicad_routing_tools_repo: Option<PathBuf>,
         /// Allow manufacturing output containing unverified registry parts.
         #[arg(long)]
         allow_unverified_parts: bool,
@@ -1100,31 +1115,41 @@ fn main() -> ExitCode {
             input,
             registry,
             fab,
+            router,
+            kicad_routing_tools_repo,
             allow_unverified_parts,
             override_exception,
             authorized_by,
             json,
-        } => match (authorized_by.as_deref(), override_exception.as_deref()) {
-            (Some(who), Some(why)) => match release::Exception::new(who, why) {
-                Ok(exception) => check(
+        } => {
+            let routing = CheckRouting {
+                engine: router,
+                kicad_routing_tools_repo: kicad_routing_tools_repo.as_deref(),
+            };
+            match (authorized_by.as_deref(), override_exception.as_deref()) {
+                (Some(who), Some(why)) => match release::Exception::new(who, why) {
+                    Ok(exception) => check(
+                        &input,
+                        registry.as_deref(),
+                        fab,
+                        &routing,
+                        allow_unverified_parts,
+                        Some(&exception),
+                        json,
+                    ),
+                    Err(e) => Err(anyhow::anyhow!("{e}")),
+                },
+                _ => check(
                     &input,
                     registry.as_deref(),
                     fab,
+                    &routing,
                     allow_unverified_parts,
-                    Some(&exception),
+                    None,
                     json,
                 ),
-                Err(e) => Err(anyhow::anyhow!("{e}")),
-            },
-            _ => check(
-                &input,
-                registry.as_deref(),
-                fab,
-                allow_unverified_parts,
-                None,
-                json,
-            ),
-        },
+            }
+        }
         Command::Mcp {
             stdio,
             sse,
@@ -1256,14 +1281,19 @@ const UNSUPPORTED: &[CapabilityLimit] = &[
         "Enable ordering, power-good signals and sequencing timing are neither declared nor checked.",
     ),
     (
-        "escape_fanout_strategy",
+        "escape_pattern_and_direction",
+        // No `constraint`: a limit names the attribute it qualifies, and there
+        // is none to name here. `component.escape` exists — it is listed in
+        // `routing_constraints` below — but this limit is not about `escape`.
+        // It is about pattern and direction, which no attribute declares, so
+        // pointing at `escape` would claim this limit qualifies something the
+        // block can express.
         None,
-        "Via geometry is declarable per netclass, but escape strategy is not: nothing expresses \
-         which layer a fine-pitch ball fans out to, or in what pattern. The gap is Synth's, not \
-         the router's — KiCadRoutingTools ships a BGA fanout engine (`py_router/bga_fanout`, \
-         including an under-pad method for arrays its channel router cannot escape) and Synth \
-         never invokes it. `synth_router::escape` reports whether a package can be fanned out at \
-         the process floor, and nothing acts on what it reports.",
+        "A component's `escape` block picks the engine (`channel`, `underpad`), limits the \
+         copper layers, or turns the escape off. What it cannot express is a pattern or a \
+         direction: the engine's `--primary-escape`, `--force-escape-direction` and \
+         `--layer-costs` are not reachable from a board, so which way a package fans out is the \
+         engine's choice.",
     ),
 ];
 
@@ -1383,7 +1413,7 @@ fn capability_descriptor() -> serde_json::Value {
                 "netclass": ["trace_width", "clearance", "color", "impedance", "current", "plane", "max_length", "max_skew", "via_diameter", "via_drill"],
                 "diff_pair": ["impedance", "max_skew", "couple"],
                 "keepout": ["radius"],
-                "component": ["placement_hint"],
+                "component": ["placement_hint", "escape"],
                 "requires": ["via_in_pad"]
             },
             "fabrication_processes": {
@@ -1394,6 +1424,8 @@ fn capability_descriptor() -> serde_json::Value {
                 },
                 "profiles_offering_via_in_pad": ["jlc-filled-via"],
                 "gate": "E-SYNTH-PROCESS-002: a requirement the declared tier does not offer is an error, so a requirement is never a permission on its own",
+                "via_geometry": "netclass via_diameter / via_drill reach the exported net class; E-SYNTH-PROCESS-003 checks both against the profile's drill and annular-ring floors. Which engine escapes a package, and onto which layers, is declarable too; see the escape entry",
+                "escape": "dense grid arrays (three pad rows and three columns, at or below 1.3 mm pitch) are escaped before routing by KiCadRoutingTools, with the escape via sized from the declared process floor and the fabrication tier pinned to it. A component's `escape { method … layers … }` block overrides the engine and layers, and `escape { off }` leaves a package to the general router; pattern and direction are not declarable, see the escape_pattern_and_direction limit",
                 "via_geometry": "netclass via_diameter / via_drill reach the exported net class; E-SYNTH-PROCESS-003 checks both against the profile's drill and annular-ring floors. Escape strategy — which layer a ball fans out to, and in what pattern — is not declarable; see the unsupported entry",
                 "override": "--krt-allow-via-in-pad permits via-in-pad in the fabrication gate without a declared requirement or a capable tier; it is an operator taking responsibility for one panel, not a process answer"
             },
@@ -1458,10 +1490,54 @@ fn run_mcp(stdio: bool, sse: bool, port: u16, registry: Option<PathBuf>) -> anyh
 /// delegates each stage to the same CLI implementation used by agents and
 /// humans, but captures their machine-readable results into one deterministic
 /// report. No model, network, or project mutation is involved.
+/// Which external router `check` hands to the stages it runs.
+///
+/// `check` does not route anything itself; it spawns `synth drc` and
+/// `synth export-kicad`, and those are the commands that own the engine. The
+/// selection therefore has to travel with them, or the children fall back to
+/// the default and the operator's choice is silently discarded.
+struct CheckRouting<'a> {
+    engine: Option<ExternalRouter>,
+    kicad_routing_tools_repo: Option<&'a Path>,
+}
+
+impl CheckRouting<'_> {
+    /// The arguments a child command needs to use this engine.
+    ///
+    /// No engine named means no `--router` argument. The stages already have
+    /// a default and read the environment, and an explicit flag outranks
+    /// both, so forwarding one unasked silently replaces a selection made
+    /// another way — which is how an engine installed through
+    /// `KICAD_ROUTING_TOOLS_REPO` ends up reported as a missing Java runtime.
+    ///
+    /// The engine's name here is clap's own value for the variant, not
+    /// `RouterEngine::as_str`. Those two disagree — `as_str` says
+    /// `freerouting` where the CLI accepts `free-routing` — and a child
+    /// invoked with the wrong spelling is rejected by its own parser.
+    fn child_args(&self) -> Vec<String> {
+        let mut args = Vec::new();
+        if let Some(engine) = self.engine {
+            let engine = clap::ValueEnum::to_possible_value(&engine)
+                .expect("every ExternalRouter variant has a CLI value")
+                .get_name()
+                .to_string();
+            args.extend(["--router".to_string(), engine]);
+        }
+        if let Some(repo) = self.kicad_routing_tools_repo {
+            args.extend([
+                "--kicad-routing-tools-repo".to_string(),
+                repo.display().to_string(),
+            ]);
+        }
+        args
+    }
+}
+
 fn check(
     input: &Path,
     registry: Option<&Path>,
     fab: bool,
+    routing: &CheckRouting<'_>,
     allow_unverified_parts: bool,
     exception: Option<&release::Exception>,
     json: bool,
@@ -1490,7 +1566,11 @@ fn check(
     if let Some(dir) = registry {
         validate_args.extend(["--registry".into(), dir.display().to_string()]);
     }
-    let (validate_output, validate_timed_out) = run_check_child(&exe, &validate_args, 120)?;
+    let (validate_output, validate_timed_out) = run_check_child(
+        &exe,
+        &validate_args,
+        stage_budget("SYNTH_CHECK_SOURCE_TIMEOUT_SECS", 120),
+    )?;
     let validate_json = serde_json::from_slice::<serde_json::Value>(&validate_output.stdout)
         .unwrap_or_else(|_| serde_json::json!({"diagnostics": [], "parse_error": true}));
     let validate_pass = !validate_timed_out && validate_output.status.success();
@@ -1498,10 +1578,15 @@ fn check(
     let (drc_json, drc_outcome, drc_timed_out) = if validate_pass {
         let mut drc_args = base.clone();
         drc_args.extend(["drc".into(), "--pretty".into(), input.display().to_string()]);
+        drc_args.extend(routing.child_args());
         if let Some(dir) = registry {
             drc_args.extend(["--registry".into(), dir.display().to_string()]);
         }
-        let (drc_output, timed_out) = run_check_child(&exe, &drc_args, 30)?;
+        let (drc_output, timed_out) = run_check_child(
+            &exe,
+            &drc_args,
+            stage_budget("SYNTH_CHECK_DRC_TIMEOUT_SECS", 30),
+        )?;
         (
             serde_json::from_slice::<serde_json::Value>(&drc_output.stdout)
                 .unwrap_or_else(|_| serde_json::json!({"status": "unknown", "parse_error": true})),
@@ -1568,13 +1653,15 @@ fn check(
             "--verification-report".into(),
             verification_path.display().to_string(),
         ]);
+        export_args.extend(routing.child_args());
         if let Some(dir) = registry {
             export_args.extend(["--registry".into(), dir.display().to_string()]);
         }
         if allow_unverified_parts {
             export_args.push("--allow-unverified-parts".into());
         }
-        let (export_output, export_timed_out) = run_check_child(&exe, &export_args, 120)?;
+        let export_budget = stage_budget("SYNTH_CHECK_FAB_TIMEOUT_SECS", 120);
+        let (export_output, export_timed_out) = run_check_child(&exe, &export_args, export_budget)?;
         fab_pass = !export_timed_out && export_output.status.success();
         let native = std::fs::read_to_string(&verification_path)
             .ok()
@@ -1623,7 +1710,9 @@ fn check(
         });
         if export_timed_out {
             stage["reason"] = serde_json::json!("timeout");
-            stage["detail"] = serde_json::json!("`export-kicad` exceeded its 120s budget");
+            stage["detail"] = serde_json::json!(format!(
+                "`export-kicad` exceeded its {export_budget}s budget"
+            ));
         }
         if let Some(native) = native {
             stage["native"] = native;
@@ -1928,6 +2017,22 @@ fn structural_refusal(board: &synth_ir::Board) -> Option<String> {
     }
     out.push_str("Fix the part definitions, or run `synth registry qualify` for the full report.");
     Some(out)
+}
+
+/// Wall-clock budget for one `synth check` stage, in seconds.
+///
+/// The defaults suit a small board on a warm release build. A real board's
+/// DRC runs a full place-and-route, which takes minutes rather than seconds,
+/// and a stage that overruns is reported as `unknown` — correctly, but
+/// uselessly, since nothing was actually wrong. `SYNTH_CHECK_*_TIMEOUT_SECS`
+/// lets a release gate buy the time its boards need. Mirrors
+/// `SYNTH_KICAD_CLI_TIMEOUT_SECS` on the native stages.
+fn stage_budget(var: &str, default_secs: u64) -> u64 {
+    std::env::var(var)
+        .ok()
+        .and_then(|v| v.trim().parse::<u64>().ok())
+        .filter(|s| *s > 0)
+        .unwrap_or(default_secs)
 }
 
 fn run_check_child(
@@ -4792,6 +4897,7 @@ fn build_route_request(
     request.kicad_routing_tools.fab_tier = options.fab_tier.as_str().to_string();
     request.kicad_routing_tools.same_net_pad_clearance_mm = options.same_net_pad_clearance;
     request.policy.allow_via_in_pad = options.allow_via_in_pad;
+    request.use_board_escapes(board);
     request.use_profile_floor(
         &board
             .manufacturer

@@ -343,6 +343,26 @@ pub fn build_pcb(
         } else {
             Vec::new()
         };
+    // Whether a stitching via may go *in* a pad rather than beside it.
+    //
+    // Both halves, because a board cannot approve its own fabrication: it has
+    // to have declared `requires via_in_pad`, and the tier it named has to
+    // offer the process. ERC already refuses the required-but-not-offered
+    // combination with E-SYNTH-PROCESS-002, so reaching here with both true is
+    // the only way the permission is live.
+    //
+    // Without this an interior supply ball on a fine-pitch array cannot be
+    // stitched at all: its neighbours are a pitch away on every side, and a
+    // beside-pad via needs more clearance than that leaves. The export failed
+    // and told the user to "allow via-in-pad explicitly", which nothing could
+    // do — the CLI's flag is a router option and never reached here.
+    let via_in_pad_allowed = board
+        .required_processes
+        .contains(&synth_ir::ProcessRequirement::ViaInPad)
+        && synth_drc::ManufacturerProfile::from_name(
+            board.manufacturer.as_deref().unwrap_or("jlc-standard"),
+        )
+        .via_in_pad;
     // One rail per layer. Pouring every plane net on every power layer puts
     // two rails at the same priority on the same copper, which is the
     // starvation described above with ground swapped out for a second rail:
@@ -397,15 +417,21 @@ pub fn build_pcb(
                 ));
             }
             for (pad, origin, layer) in plane_pad_targets(board, placement, net) {
-                let Some(via) = plane_via_offset(pad, origin, placement.board_outline, &obstacles)
-                else {
+                let Some(via) = plane_via_offset(
+                    pad,
+                    origin,
+                    placement.board_outline,
+                    &obstacles,
+                    via_in_pad_allowed,
+                ) else {
                     return Err(PlaneFanoutError {
                         net: net.name.clone(),
                         detail: format!(
                             "no legal stitching-via position beside the pad at ({:.2}, {:.2}) mm \
                              on {layer:?}: every candidate is outside the board or within \
-                             clearance of another pad or via. Move the part, widen the board, or \
-                             allow via-in-pad explicitly.",
+                             clearance of another pad or via. Move the part, widen the board, \
+                             or declare `requires via_in_pad` on a manufacturer that offers it, \
+                             which lets the via go in the pad.",
                             nm_to_mm(pad.x_nm),
                             nm_to_mm(pad.y_nm),
                         ),
@@ -420,20 +446,25 @@ pub fn build_pcb(
                     plane_via_index,
                 ));
                 plane_via_index += 1;
-                children.push(build_segment(
-                    &Segment {
-                        net: net.id,
-                        layer,
-                        start: pad,
-                        end: via,
-                        width_nm: PLANE_STUB_WIDTH_NM,
-                    },
-                    plane_stub_index,
-                    &net_id_lookup,
-                    project,
-                    board.layers,
-                ));
-                plane_stub_index += 1;
+                // A via in the pad needs no fanout stub: the two are the same
+                // point, and a zero-length segment is not a track. Only an
+                // offset via is reached by one.
+                if via != pad {
+                    children.push(build_segment(
+                        &Segment {
+                            net: net.id,
+                            layer,
+                            start: pad,
+                            end: via,
+                            width_nm: PLANE_STUB_WIDTH_NM,
+                        },
+                        plane_stub_index,
+                        &net_id_lookup,
+                        project,
+                        board.layers,
+                    ));
+                    plane_stub_index += 1;
+                }
             }
         }
     }
@@ -624,14 +655,20 @@ fn segment_clearance_nm_sq(
 /// via-in-pad. That preference is only a first choice: 1 mm along one axis can
 /// land outside Edge.Cuts or on a neighbouring pad, so candidate positions are
 /// tried (four axes, three distances) and the first that stays inside the board
-/// and clear of every pad and already-placed via is used. `None` when no side
-/// location is legal — a pad boxed in on every side — so the caller can stop
-/// rather than silently fall back to via-in-pad.
+/// and clear of every pad and already-placed via is used.
+///
+/// When no side location is legal — a pad boxed in on every side — the via goes
+/// in the pad if `via_in_pad` says the board declared that process and its tier
+/// offers it, and otherwise `None`, so the caller can stop. The distinction is
+/// the point: falling back silently would make a board depend on a process it
+/// never asked for, while refusing a board that did ask leaves a fine-pitch
+/// array with no way to stitch its interior supply balls at all.
 fn plane_via_offset(
     pad: synth_geometry::Point,
     origin: synth_geometry::Point,
     outline: synth_geometry::Rect,
     obstacles: &[(synth_geometry::Point, i64)],
+    via_in_pad: bool,
 ) -> Option<synth_geometry::Point> {
     let inset = PLANE_EDGE_MARGIN_NM;
     let usable = synth_geometry::Rect::new(
@@ -680,7 +717,11 @@ fn plane_via_offset(
             }
         }
     }
-    // Boxed in on every side: report it rather than quietly place a via-in-pad.
+    // Boxed in on every side. In the pad if the board declared the process,
+    // and otherwise reported rather than quietly placed.
+    if via_in_pad {
+        return Some(pad);
+    }
     None
 }
 
@@ -2795,7 +2836,9 @@ mod tests {
         // straight through it.
         let blocker = (Point::new(400_000, 0), 50_000);
         let obstacles = vec![(pad, 50_000), blocker];
-        let via = plane_via_offset(pad, origin, outline, &obstacles)
+        // false: this board declared no process, so the fallback is off and
+        // the assertion is about the candidate search alone.
+        let via = plane_via_offset(pad, origin, outline, &obstacles, false)
             .expect("an off-axis candidate is legal");
         assert_eq!(via, Point::new(0, PLANE_VIA_OFFSET_NM));
     }
@@ -2956,6 +2999,7 @@ mod tests {
             placement_hint: None,
             group: None,
             sheet: None,
+            escape: None,
             source_span: Span::new(0, 0),
         };
         let placement = ComponentPlacement {
@@ -3008,6 +3052,7 @@ mod tests {
             dnp: false,
             properties: std::collections::BTreeMap::new(),
             placement_hint: None,
+            escape: None,
             group: None,
             sheet: None,
             source_span: Span::new(0, 0),
@@ -3066,6 +3111,7 @@ mod tests {
             dnp: false,
             properties: std::collections::BTreeMap::new(),
             placement_hint: None,
+            escape: None,
             group: None,
             sheet: None,
             source_span: Span::new(0, 0),
@@ -3536,5 +3582,82 @@ mod tests {
                 String::from_utf8_lossy(&output.stderr)
             );
         }
+    }
+}
+
+#[cfg(test)]
+mod plane_via_in_pad_tests {
+    use super::{plane_via_offset, PLANE_VIA_RADIUS_NM};
+    use synth_geometry::{Point, Rect};
+
+    /// A pad ringed by neighbours on all four sides, close enough that no
+    /// offset candidate clears them. This is an interior supply ball on a
+    /// fine-pitch array: the neighbours are one pitch away in every
+    /// direction, and a beside-pad via needs more room than that leaves.
+    fn boxed_in() -> (Point, Point, Rect, Vec<(Point, i64)>) {
+        let pad = Point::new(50_000_000, 50_000_000);
+        let origin = Point::new(47_000_000, 47_000_000);
+        let outline = Rect::new(Point::new(0, 0), Point::new(100_000_000, 100_000_000));
+        // 0.8 mm pitch, the grid this whole problem comes from.
+        let pitch = 800_000;
+        let neighbours = vec![
+            (Point::new(pad.x_nm + pitch, pad.y_nm), PLANE_VIA_RADIUS_NM),
+            (Point::new(pad.x_nm - pitch, pad.y_nm), PLANE_VIA_RADIUS_NM),
+            (Point::new(pad.x_nm, pad.y_nm + pitch), PLANE_VIA_RADIUS_NM),
+            (Point::new(pad.x_nm, pad.y_nm - pitch), PLANE_VIA_RADIUS_NM),
+            (
+                Point::new(pad.x_nm + pitch, pad.y_nm + pitch),
+                PLANE_VIA_RADIUS_NM,
+            ),
+            (
+                Point::new(pad.x_nm - pitch, pad.y_nm - pitch),
+                PLANE_VIA_RADIUS_NM,
+            ),
+            (
+                Point::new(pad.x_nm + pitch, pad.y_nm - pitch),
+                PLANE_VIA_RADIUS_NM,
+            ),
+            (
+                Point::new(pad.x_nm - pitch, pad.y_nm + pitch),
+                PLANE_VIA_RADIUS_NM,
+            ),
+        ];
+        (pad, origin, outline, neighbours)
+    }
+
+    /// Without the declaration the pad is reported, not quietly stitched
+    /// through its own copper. A board must not end up depending on a process
+    /// it never asked for.
+    #[test]
+    fn a_boxed_in_pad_is_refused_when_via_in_pad_was_not_declared() {
+        let (pad, origin, outline, obstacles) = boxed_in();
+        assert_eq!(
+            plane_via_offset(pad, origin, outline, &obstacles, false),
+            None
+        );
+    }
+
+    /// With it, the via goes in the pad. Refusing here is what left a
+    /// fine-pitch array unable to stitch its interior supply balls at all.
+    #[test]
+    fn a_boxed_in_pad_takes_the_via_when_via_in_pad_was_declared() {
+        let (pad, origin, outline, obstacles) = boxed_in();
+        assert_eq!(
+            plane_via_offset(pad, origin, outline, &obstacles, true),
+            Some(pad),
+            "the via belongs in the pad it stitches"
+        );
+    }
+
+    /// The permission is a fallback, not a preference: a pad with room beside
+    /// it still gets an offset via, so an ordinary board's copper does not
+    /// change just because it declared the process for one dense package.
+    #[test]
+    fn a_pad_with_room_still_gets_an_offset_via() {
+        let pad = Point::new(50_000_000, 50_000_000);
+        let origin = Point::new(47_000_000, 47_000_000);
+        let outline = Rect::new(Point::new(0, 0), Point::new(100_000_000, 100_000_000));
+        let via = plane_via_offset(pad, origin, outline, &[], true).expect("a position");
+        assert_ne!(via, pad, "an uncrowded pad does not need via-in-pad");
     }
 }
