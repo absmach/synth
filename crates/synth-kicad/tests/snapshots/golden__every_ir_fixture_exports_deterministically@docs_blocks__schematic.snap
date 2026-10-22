@@ -1108,7 +1108,7 @@ expression: schematic
 	)
 	(polyline
 		(pts
-			(xy 57.47 21.7)
+			(xy 57.47 21.16)
 			(xy 57.47 58.42)
 		)
 		(stroke
@@ -1132,7 +1132,7 @@ expression: schematic
 	)
 	(polyline
 		(pts
-			(xy 20.21 21.7)
+			(xy 20.21 21.16)
 			(xy 20.21 58.42)
 		)
 		(stroke
@@ -1144,8 +1144,8 @@ expression: schematic
 	)
 	(polyline
 		(pts
-			(xy 20.21 21.7)
-			(xy 57.47 21.7)
+			(xy 20.21 21.16)
+			(xy 57.47 21.16)
 		)
 		(stroke
 			(width 0.254)

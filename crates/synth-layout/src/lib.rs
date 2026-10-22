@@ -1055,6 +1055,7 @@ pub fn layout_with_overrides(
     if !stretched {
         tile_boxes_to_content(board, &mut layout);
     }
+    center_captions(board, &mut layout);
     resolve_text_overlaps(board, &mut layout);
     grow_sheet_to_fit(board, &mut layout);
     compact_sheet_to_fit(board, &mut layout);
@@ -9873,6 +9874,27 @@ mod documentation_tests {
             covered >= 0.9 * to_fill,
             "boxes cover {covered} of the {to_fill} the frame leaves the regions"
         );
+    }
+
+    #[test]
+    fn a_region_caption_is_centred_on_its_box_and_bigger_than_a_label() {
+        let layout = layout(&resistor_groups(&FOUR_REGIONS, 0));
+        for b in &layout.group_boxes {
+            let caption = layout
+                .annotations
+                .iter()
+                .find(|a| a.kind == TextKind::Caption && a.text == b.group)
+                .expect("a caption for every region");
+            let width = caption.text.chars().count() as f64 * caption.size_mm * NOTE_CHAR_WIDTH;
+            let centre = caption.at_mm.0 + width / 2.0;
+            let box_centre = f64::midpoint(b.min_mm.0, b.max_mm.0);
+            assert!(
+                (centre - box_centre).abs() < 1.0,
+                "{}: caption centre {centre} vs box centre {box_centre}",
+                b.group
+            );
+            assert!(caption.size_mm >= 2.5, "{}: {}", b.group, caption.size_mm);
+        }
     }
 
     #[test]
