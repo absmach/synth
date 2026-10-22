@@ -186,6 +186,108 @@ fn pullup_to_the_devices_own_rail_is_clean() {
     );
 }
 
+/// A part whose sense pin is rated far above its own supply, defined here
+/// rather than taken from the registry so the rule is tested on its own.
+const HIGH_SIDE_MONITOR: &str = r#"
+id = "test_high_side_monitor"
+kind = "sensor"
+description = "Three-channel high-side monitor: 3.3 V supply, 26 V sense inputs"
+
+[operating_conditions]
+min_voltage_v = 2.7
+max_voltage_v = 5.5
+
+[[pins]]
+name = "vs"
+number = "1"
+electrical_type = "power_input"
+
+[[pins]]
+name = "gnd"
+number = "2"
+electrical_type = "ground_reference"
+
+[[pins]]
+name = "in_p"
+number = "3"
+electrical_type = "input"
+voltage_max_v = 26.0
+
+[[pins]]
+name = "in_n"
+number = "4"
+electrical_type = "input"
+voltage_max_v = 26.0
+"#;
+
+fn validate_with_monitor(src: &str) -> Vec<Diagnostic> {
+    let mut registry =
+        synth_registry::load_dir(&workspace_root().join("registry").join("parts")).unwrap();
+    let extra =
+        synth_registry::load_from_strs(&[("test_high_side_monitor.synth.toml", HIGH_SIDE_MONITOR)])
+            .unwrap();
+    for (_, part) in extra.iter() {
+        registry.insert(part.clone());
+    }
+    validate_in(src, &registry, &ErcConfig::default())
+}
+
+/// A pin that declares what it tolerates outranks its device's supply.
+///
+/// A high-side current monitor runs from 3.3 V and specifies 26 V common mode
+/// on its sense inputs. Comparing the measured rail against the device supply
+/// condemns the part for doing its job.
+#[test]
+fn a_pin_rated_above_its_device_supply_tolerates_the_rail() {
+    let src = r#"board "t" {
+      layers 2
+      component U1: regulator "ams1117_3v3"
+      component U2: regulator "ams1117_5v"
+      component U3: sensor "test_high_side_monitor"
+      component R1: resistor "r_generic_0603" value "0.01"
+      component C1: capacitor "c_generic_0805" value "10u"
+      component C2: capacitor "c_generic_0805" value "10u"
+      component C3: capacitor "c_generic_0805" value "10u"
+      component C4: capacitor "c_generic_0805" value "10u"
+      connect U1.vout -> U3.vs
+      connect U3.gnd -> U1.gnd as "GND"
+      // The 5 V rail reaches a sense input through the shunt. The pin is
+      // rated to 26 V, so this is the measurement working, not an overstress.
+      connect U2.vout -> R1.p1
+      connect R1.p1 -> U3.in_p
+      connect R1.p2 -> U3.in_n
+    }"#;
+    let diags = validate_with_monitor(src);
+    assert!(
+        codes(&diags, "E-SYNTH-POWER-008").is_empty(),
+        "a 26 V-rated sense pin tolerates a 5 V rail: {:?}",
+        codes(&diags, "E-SYNTH-POWER-008")
+    );
+}
+
+/// And a pin that says nothing still falls back to its device's supply, so
+/// the exemption is a statement by the part rather than a hole in the rule.
+#[test]
+fn a_pin_with_no_rating_still_falls_back_to_the_device_supply() {
+    let src = r#"board "t" {
+      layers 2
+      component U1: regulator "ams1117_3v3"
+      component U2: regulator "ams1117_5v"
+      component U3: sensor "bmp280_pressure"
+      component R1: resistor "r_generic_0603" value "4.7k"
+      component C1: capacitor "c_generic_0805" value "10u"
+      component C2: capacitor "c_generic_0805" value "10u"
+      component C3: capacitor "c_generic_0805" value "10u"
+      component C4: capacitor "c_generic_0805" value "10u"
+      connect U1.vout -> U3.vdd
+      connect U1.vout -> U3.scl
+      connect U3.sda -> R1.p1
+      connect R1.p2 -> U2.vout
+    }"#;
+    let diags = validate(src);
+    assert_eq!(codes(&diags, "E-SYNTH-POWER-008").len(), 1);
+}
+
 /// A rail-monitoring divider is not a bus pull-up either.
 ///
 /// Reading a 5 V rail on a 3.3 V ADC pin through a divider is the ordinary
