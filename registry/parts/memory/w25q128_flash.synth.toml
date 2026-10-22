@@ -5,7 +5,6 @@ mpn = "W25Q128JVSIQ"
 lcsc_pn = "C97521"
 kicad_symbol = "Memory_Flash:W25Q128JVS"
 kicad_footprint = "Package_SO:SOIC-8_3.9x4.9mm_P1.27mm"
-package = "SOIC-8"
 
 [footprint_dimensions]
 width_mm = 6.9

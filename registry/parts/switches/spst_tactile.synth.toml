@@ -1,9 +1,10 @@
 id = "spst_tactile"
 kind = "switch"
-description = "Generic SPST tactile button"
+description = "C&K PTS645 6 mm SPST tactile switch, 4.3 mm actuator, SMD"
+mpn = "PTS645SM43SMTR92LFS"
+lcsc_pn = "C221880"
 kicad_symbol = "Switch:SW_Push"
 kicad_footprint = "Button_Switch_SMD:SW_SPST_PTS645Sx43SMTR92"
-package = "SMD"
 
 [footprint_dimensions]
 width_mm = 5.0
