@@ -480,7 +480,13 @@ impl ErcRule for PullupRailMismatchRule {
                 // a 5 V-tolerant input on a 3.3 V part is the same shape.
                 // Comparing the rail against the device's *supply* condemns
                 // both, which is why the pin's own rating comes first.
-                if pin.voltage_max_v.is_some_and(|max| rail_v <= max) {
+                //
+                // And the rating is about the pin, so it is compared against
+                // what reaches the pin. Comparing the *rail* instead undoes
+                // the divider this rule just computed: 12 V divided to 4 V on
+                // a 5 V-tolerant input was still reported, because 12 V > 5 V,
+                // while the pin was inside its rating the whole time.
+                if pin.voltage_max_v.is_some_and(|max| applied_v <= max) {
                     continue;
                 }
                 let Some(device_v) = component_supply_v(board, &domains, component) else {
