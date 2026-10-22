@@ -3,6 +3,7 @@ kind = "switch"
 description = "Generic SPST tactile button"
 kicad_symbol = "Switch:SW_Push"
 kicad_footprint = "Button_Switch_SMD:SW_SPST_PTS645Sx43SMTR92"
+package = "SMD"
 
 [footprint_dimensions]
 width_mm = 5.0

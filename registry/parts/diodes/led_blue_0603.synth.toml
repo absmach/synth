@@ -1,4 +1,6 @@
 id = "led_blue_0603"
+mpn = "19-217/BHC-ZL1M2RY/6T"
+lcsc_pn = "C2986058"
 kind = "diode"
 description = "Blue surface-mount LED, 0603"
 kicad_symbol = "Device:LED"
