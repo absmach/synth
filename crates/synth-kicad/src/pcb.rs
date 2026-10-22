@@ -1410,8 +1410,9 @@ fn declared_trace_width_mm(class: &synth_ir::NetClass, board: &Board) -> f64 {
         return width.to_mm();
     }
     if let Some(current) = class.current {
-        let profile = synth_drc::ManufacturerProfile::from_name(
+        let profile = synth_drc::ManufacturerProfile::for_layers(
             board.manufacturer.as_deref().unwrap_or("jlc-standard"),
+            board.layers,
         );
         let delta_t_c =
             f64::from(i32::try_from(profile.ampacity_delta_t_milli_c).unwrap_or(10_000)) / 1000.0;

@@ -136,6 +136,7 @@ fn all_rules(config: &ErcConfig) -> Vec<Box<dyn ErcRule>> {
         Box::new(RefdesPrefixRule),
         Box::new(BoardZeroLayersRule),
         Box::new(RequiredProcessOfferedRule),
+        Box::new(ProcessLayerApplicabilityRule),
         Box::new(DeclaredViaGeometryRule),
         Box::new(stackup::StackupLayerCountRule),
         Box::new(stackup::StackupAlternationRule),
@@ -2355,6 +2356,67 @@ impl ErcRule for RequiredProcessOfferedRule {
 }
 
 // -----------------------------------------------------------------------------
+// E-SYNTH-PROCESS-004 — the declared process is not offered for this stackup
+// -----------------------------------------------------------------------------
+
+/// A surcharged tier is quoted against a stackup, not sold outright.
+///
+/// JLCPCB offers the 0.2 mm drill on its 4- and 6-layer builds; a 2-layer
+/// board cannot buy it. Profile resolution matches on the manufacturer string
+/// alone, so without this a 2-layer board could declare `jlc-advanced`, clear
+/// the 0.2 mm drill and via-in-pad checks against a floor no fabricator had
+/// agreed to, and be reported fabrication-ready. The capability descriptor
+/// advertised the restriction and nothing enforced it, which is the gap this
+/// closes.
+///
+/// A profile that names no layer counts is offered on every stackup, which is
+/// every stock tier: their floors are the fabricator's baseline and do not
+/// depend on how many layers are stacked.
+struct ProcessLayerApplicabilityRule;
+
+impl ErcRule for ProcessLayerApplicabilityRule {
+    fn code(&self) -> &'static str {
+        "E-SYNTH-PROCESS-004"
+    }
+
+    fn category(&self) -> ErcCategory {
+        ErcCategory::Board
+    }
+
+    fn check(&self, board: &Board, file: &str) -> Vec<Diagnostic> {
+        let Some(declared) = board.manufacturer.as_deref() else {
+            return Vec::new();
+        };
+        let profile = synth_drc::ManufacturerProfile::from_name(declared);
+        if profile.supports_layers(board.layers) {
+            return Vec::new();
+        }
+        let offered = profile
+            .supported_layers
+            .iter()
+            .map(ToString::to_string)
+            .collect::<Vec<_>>()
+            .join(", ");
+        vec![DiagnosticBuilder::new(
+            self.code(),
+            Severity::Error,
+            "the declared manufacturer process is not offered for this layer count",
+        )
+        .location(Location::from_span(file.to_string(), board.source_span))
+        .expected(format!(
+            "`manufacturer \"{}\"` on a board of {offered} layers",
+            profile.name
+        ))
+        .found(format!(
+            "`manufacturer \"{}\"` on a {}-layer board",
+            profile.name, board.layers
+        ))
+        .explanation_url(format!("synth.docs/diagnostics/{}", self.code()))
+        .build()]
+    }
+}
+
+// -----------------------------------------------------------------------------
 // E-SYNTH-PROCESS-003 — declared via geometry is below the process floor
 // -----------------------------------------------------------------------------
 
@@ -4162,6 +4224,74 @@ mod tests {
             .required_processes
             .insert(synth_ir::ProcessRequirement::ViaInPad);
         board
+    }
+
+    /// A surcharged tier is quoted against a stackup. Without this, a
+    /// 2-layer board could name `jlc-advanced`, clear the 0.2 mm drill and
+    /// via-in-pad checks against a floor no fabricator had agreed to, and be
+    /// reported fabrication-ready.
+    #[test]
+    fn an_advanced_tier_is_refused_on_a_layer_count_it_is_not_sold_for() {
+        let mut board = bare_board(Some("jlc-advanced"));
+        board.layers = 2;
+        let found = ProcessLayerApplicabilityRule.check(&board, "test.synth");
+
+        assert_eq!(found.len(), 1);
+        assert_eq!(found[0].code, "E-SYNTH-PROCESS-004");
+        assert_eq!(found[0].severity, Severity::Error);
+        assert!(
+            found[0]
+                .found
+                .as_deref()
+                .is_some_and(|f| f.contains("2-layer")),
+            "the finding names the stackup that cannot buy it: {:?}",
+            found[0].found
+        );
+    }
+
+    #[test]
+    fn an_advanced_tier_is_accepted_on_the_layer_counts_it_is_sold_for() {
+        for layers in [4_u32, 6] {
+            let mut board = bare_board(Some("jlc-advanced"));
+            board.layers = layers;
+            assert!(
+                ProcessLayerApplicabilityRule
+                    .check(&board, "test.synth")
+                    .is_empty(),
+                "jlc-advanced is offered on {layers} layers"
+            );
+        }
+    }
+
+    /// A stock tier carries the fabricator's baseline floors, which do not
+    /// depend on the stackup, so the rule must not start refusing the boards
+    /// that were building before it existed.
+    #[test]
+    fn a_stock_tier_is_offered_on_any_layer_count() {
+        for name in ["jlcpcb", "jlc-standard", "pcbway", "oshpark"] {
+            for layers in [2_u32, 4, 6] {
+                let mut board = bare_board(Some(name));
+                board.layers = layers;
+                assert!(
+                    ProcessLayerApplicabilityRule
+                        .check(&board, "test.synth")
+                        .is_empty(),
+                    "{name} on {layers} layers is a baseline floor"
+                );
+            }
+        }
+    }
+
+    /// An undeclared manufacturer is not a declared process, so this rule has
+    /// nothing to say about it; `RequiredProcessOfferedRule` is what stops a
+    /// board reaching a capability by leaving the tier unstated.
+    #[test]
+    fn an_undeclared_manufacturer_is_not_this_rules_business() {
+        let mut board = bare_board(None);
+        board.layers = 2;
+        assert!(ProcessLayerApplicabilityRule
+            .check(&board, "test.synth")
+            .is_empty());
     }
 
     #[test]
