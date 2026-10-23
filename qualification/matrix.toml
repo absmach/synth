@@ -1,0 +1,102 @@
+schema_version = "synth.qualification.v1"
+
+[matrix]
+release_command = "synth check <board> --json"
+fab_command = "synth check <board> --fab --json"
+
+# Every `expect` and `expect_fab` below was measured, not assumed. The run:
+# KiCad 10.0.6, KiCadRoutingTools v0.23.0 (grid_router 9399bfb), release build,
+# `synth check <board> --json [--fab] --router kicad-routing-tools`.
+#
+# No board in the corpus currently clears the gate. That is the finding, not a
+# gap in the corpus: `status` says what each board is here to demonstrate and
+# `expect` says what the release command does today, so the two disagreeing is
+# exactly the state this file exists to make visible.
+
+[[board]]
+id = "hello"
+path = "fixtures/designs/hello.synth"
+class = "A"
+status = "experimental"
+expect = "fail"
+expect_fab = "fail"
+rationale = "`board \"hello\" { layers 2 }` — no components, no nets. It is here to prove the release command itself runs end to end, which it does: the source stage passes. The route stage then exits 1 on a board with nothing to route, so the DRC stage reports `unknown`, which is not a pass, and manufacturing fails carrying that routing failure. A board with nothing to route should route trivially; see #98."
+
+[[board]]
+id = "env_logger"
+path = "examples/env_logger/env_logger.synth"
+class = "A"
+status = "experimental"
+expect = "fail"
+expect_fab = "fail"
+rationale = "USB-C power, an AMS1117 LDO, an MCU, a BME680 on I2C and a debug header: the Class-A envelope. The copper is complete — 11 nets connected, none open, 206 segments and 25 vias over 499.3 mm — but `kicad-cli pcb drc` reports 6 clearance errors, actual 0.165 to 0.194 mm against the 0.2 mm the netclass declares. The exported `.kicad_dru` carries only the manufacturer edge and hole rules, so the per-netclass clearance never reaches the engine and it routes to the 0.127 mm global floor instead. Manufacturing then fails because no shipped part carries a reviewer, which is #51, not a property of this board."
+
+[[board]]
+id = "sensor_logger"
+path = "examples/sensor_logger/sensor_logger.synth"
+class = "A"
+status = "experimental"
+expect = "fail"
+expect_fab = "fail"
+rationale = "Dual I2C sensors, SPI flash and status LEDs: a larger Class-A digital board. 19 nets connected, none open, 143 segments and 17 vias over 424.6 mm. `kicad-cli pcb drc` reports 5 clearance errors at 0.165 to 0.195 mm and one via under the declared minimum — the same unexpressed netclass rules as env_logger."
+
+[[board]]
+id = "placement_and_diff_pair"
+path = "examples/placement_and_diff_pair/placement_and_diff_pair.synth"
+class = "C"
+status = "experimental"
+expect = "fail"
+expect_fab = "fail"
+rationale = "Differential-pair constraints, placement hints and keepouts: the Class-C constraint surface. 4 nets connected, none open, 60 segments and 11 vias over 53.9 mm. `kicad-cli pcb drc` reports 5 vias at 0.56 mm against the 0.6 mm minimum this board's setup declares, plus 4 dangling-via warnings. Same cause: the declared via minimum is not expressed to the engine that places the vias."
+
+[[board]]
+id = "ref_ldo_sensor"
+path = "fixtures/kicad-reference/ref_ldo_sensor.synth"
+class = "A"
+status = "unsupported"
+expect = "fail"
+expect_fab = "unknown"
+expect_source_codes = ["E-SYNTH-VALUE-001"]
+rationale = "Negative test, imported from a KiCad reference project. Four generic passives carry no `value`, so the BOM would not be orderable. The source stage fails, so manufacturing is never reached and reports `unknown`."
+
+[[board]]
+id = "ref_crystal_mcu"
+path = "fixtures/kicad-reference/ref_crystal_mcu.synth"
+class = "A"
+status = "unsupported"
+expect = "fail"
+expect_fab = "unknown"
+expect_source_codes = [
+  "E-SYNTH-COMP-002",
+  "E-SYNTH-CONNECT-001",
+  "E-SYNTH-VALUE-001",
+]
+rationale = "Negative test. Two connections name pins their part does not declare, two required pins are left unconnected, and four passives carry no `value`. An imported design is held to the same rules as a written one."
+
+[[board]]
+id = "ref_usb_cdc"
+path = "fixtures/kicad-reference/ref_usb_cdc.synth"
+class = "B"
+status = "unsupported"
+expect = "fail"
+expect_fab = "unknown"
+expect_source_codes = [
+  "E-SYNTH-COMP-002",
+  "E-SYNTH-CONNECT-001",
+  "E-SYNTH-VALUE-001",
+]
+rationale = "Negative test at the Class-B interface envelope: a USB CDC bridge. Six undefined pins, two required pins unconnected and nine valueless passives. It is the corpus's evidence that an unsupported board at this class fails loudly rather than exporting something unbuildable."
+
+[[board]]
+id = "secure_tracker"
+path = "fixtures/kicad-reference/secure_tracker.synth"
+class = "D"
+status = "unsupported"
+expect = "fail"
+expect_fab = "unknown"
+expect_source_codes = [
+  "E-SYNTH-COMP-002",
+  "E-SYNTH-CONNECT-001",
+  "E-SYNTH-VALUE-001",
+]
+rationale = "Negative test and the corpus's only Class-D entry: the largest imported design, with eight undefined pins, two required pins unconnected and seventeen valueless passives. Class D's obligation is an auditable result and a stated limitation, and this is the stated limitation."
