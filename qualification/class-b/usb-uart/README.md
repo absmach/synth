@@ -64,11 +64,11 @@ The Nexperia and LP5907 electrical numbers were not re-read.
 
 ## Placement and routing (this commit)
 
-Status: compact placement done and routed with FreeRouting. The route passes Synth's own checks; it is not reviewed or fabricated.
+Status: compact placement done and routed with FreeRouting. The route passes Synth's release gate; it is not reviewed or fabricated.
 
-- Outline: 45.0 x 39.73 mm as routed. The four M2.5 holes set the 45.0 mm width with a 2.2 mm rim, and the header courtyards set the 39.73 mm height.
-- The four M2.5 holes are board features with a 2.2 mm rim: 3.5 mm from hole centre to the left, right and top edges, 2.2 mm from the hole edge to the board edge. PR 272's 1.5 mm tight rim would put the holes on the edge and split the F.Cu GND pour into two unconnected islands. The 2.2 mm board-feature rim in this branch restores the 45.0 mm width and the pour connection; it is the rim the board was routed with before PR 272.
-- Every part has a position in `usb_uart.placement.layout.toml`. J1 sits flush on the top edge. J_VIO, J2, J3 and J4 sit flush on the bottom edge at y 37.4 mm, spaced 9.1 mm apart. The rotated 1x3 header courtyard is 8.62 mm long, so the first sidecar, which put J3 8.1 mm from J4, made the legaliser park J3 one row below; the row now stays aligned.
+- Outline: 41.5 x 32.23 mm as routed. The four M2.5 holes are at x 5.5 and 39.6 mm, y 3.0 and 21.0 mm, with a 2.2 mm board-feature rim. The header courtyards at y 29.9 mm set the 32.23 mm height. This is 3.5 mm shorter than the previous 35.73 mm compact layout and 7.5 mm shorter than the 39.73 mm committed board.
+- The 2.2 mm rim keeps the F.Cu GND pour connected. PR 272's 1.5 mm tight rim would put the holes on the edge and split the pour. The exporter now sets `island_removal_mode 0`, dropping copper islands that touch no pad; the remaining split zone is covered by the gate note under Routing.
+- Every part has a position in `usb_uart.placement.layout.toml`. J1 sits flush on the top edge. J_VIO, J2, J3 and J4 sit at y 29.9 mm, spaced 9.1 mm apart. The bottom parts sit at y 23.6 and 25.8 mm. R1 and R2 use the top corners; R3 moved to x 14.5 mm to clear H3.
 - No courtyard overlaps. J1 courtyard to top edge: 0.01 mm (flush).
 - Pad-edge gap to the target pad on the same net:
 
@@ -86,18 +86,19 @@ Status: compact placement done and routed with FreeRouting. The route passes Syn
 | D6 (CC2 TVS) | J1 CC2 pad | 1.60 |
 
 - D2 is over 2 mm: four protection parts do not fit side by side under the 7 mm of J1 pads any closer.
-- R1, R2, the LEDs and R3 to R9 are placed by hand but not checked against any rule.
+- R1 and R2 are in the top corners; the remaining passives are placed by hand. The DRC checks their courtyards, not placement quality.
 
-Routing (FreeRouting 2.4.1, `router: "freerouting"`, `allow_via_in_pad: true`), on Synth main `1eac8a1` (PR #272) plus the board-feature rim fix in this branch:
-- Result: routed. `release.json` has `release_ready` true and the gate reports no open net. `kicad-cli pcb drc --severity-all --refill-zones`: 0 errors, 0 unconnected, 42 warnings (36 footprint library links, 5 silk over copper, 1 silk overlap).
-- 253 track segments, 42 vias, 565.1 mm of copper.
-- The routed board is 45.0 x 39.73 mm.
-- J4 is at x 34.66 mm in the sidecar. At 35.66 and 36.66 mm, and turned 180 degrees, FreeRouting left one to three nets open. Its result changes with small placement changes and is not bit-for-bit repeatable.
+Routing (FreeRouting 2.4.1, `router: "freerouting"`, `allow_via_in_pad: true`), on Synth main `1eac8a1` plus the board-feature rim and zone/gate fixes in this branch:
+- Result: routed. `release.json` has `release_ready` true, `route_complete` true and no open net. `kicad-cli pcb drc --severity-all --refill-zones`: 0 errors, 40 warnings, plus one self-referential GND-zone item in `unconnected_items`; Synth's gate keeps that fill artifact as a warning because no two objects are missing a connection.
+- 255 track segments, 44 vias, 471.9 mm of copper.
+- The routed board is 41.5 x 32.23 mm.
+- J4 is at x 34.66 mm in the sidecar. Small placement changes can change FreeRouting's result; it is not bit-for-bit repeatable.
 - Via-in-pad at the U1 exposed pad (pin 25), at (23.800, 17.300) mm. The fab must fill and cap it. JLCPCB has not been asked.
-- Signal-integrity pass: 23 warnings, none blocking. 22 are layer changes with no ground return via within 0.64 mm, one is a parallel run of 5.9 mm at 0.132 mm.
+- Signal-integrity pass: 24 warnings, none blocking. 23 are layer changes with no ground return via within 0.64 mm, one is a parallel run of 5.9 mm at 0.132 mm.
 - The USB pair is not coupled and its length and skew were not measured for this route. FreeRouting does not couple the pair, so the 90 ohm geometry is unverified.
 - No part has been reviewed (`reviewer_state` is false for every part in `release.json`).
-- The silkscreen reference text is large and sits close to its part. D4 and D7 labels overlap.
+- The D7 reference is rotated into the right margin and R_TERM is vertical; the old D4/D7 overlap is gone. KiCad still reports a silk-over-copper warning for the D7 reference at R7 pad 1, six millimetres away, which reads as a false positive.
+- U1's reference label still sits in the D1/D6 row and triggers one silk-overlap and one silk-over-copper warning; there is no free side between U1, U3, C5 and C6.
 
 ## Committed artifacts
 
@@ -116,7 +117,7 @@ The committed board came from the MCP `synth_export` tool with `router: "freerou
 export XDG_DATA_HOME=$(mktemp -d)
 scripts/setup-routing-engines.sh --freerouting-only
 synth validate qualification/class-b/usb-uart/usb_uart.synth
-synth export-kicad qualification/class-b/usb-uart/usb_uart.synth --out /tmp/usb_uart --router free-routing --krt-allow-via-in-pad --allow-incomplete
+synth export-kicad qualification/class-b/usb-uart/usb_uart.synth --out /tmp/usb_uart --router free-routing --krt-allow-via-in-pad
 kicad-cli pcb drc --severity-all --refill-zones --format json /tmp/usb_uart/usb_uart.kicad_pcb -o /tmp/usb_uart/usb_uart-drc.json
 kicad-cli sch erc --severity-all --format json /tmp/usb_uart/usb_uart.kicad_sch -o /tmp/usb_uart/usb_uart-erc.json
 (cd qualification/class-b/usb-uart && sha256sum -c SHA256SUMS)

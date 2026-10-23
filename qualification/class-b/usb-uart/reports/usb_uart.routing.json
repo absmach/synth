@@ -18,8 +18,8 @@
     "command": [
       "/usr/bin/python3",
       "/home/steve/work/synth/tools/freeroute_autoroute.py",
-      "/home/steve/work/synth/target/pr103-272-row37-1/usb_uart.synth.kicad_pcb",
-      "/home/steve/work/synth/target/pr103-272-row37-1/usb_uart.freerouting.kicad_pcb",
+      "/home/steve/work/synth/target/pr103-compact6-1/usb_uart.synth.kicad_pcb",
+      "/home/steve/work/synth/target/pr103-compact6-1/usb_uart.freerouting.kicad_pcb",
       "--jar",
       "/home/steve/work/synth/tools/freerouting/freerouting-2.4.1.jar",
       "--java",
@@ -29,9 +29,9 @@
       "--threads",
       "4",
       "--ses-output",
-      "/home/steve/work/synth/target/pr103-272-row37-1/usb_uart.freerouting.ses",
+      "/home/steve/work/synth/target/pr103-compact6-1/usb_uart.freerouting.ses",
       "--report",
-      "/home/steve/work/synth/target/pr103-272-row37-1/usb_uart.freerouting.json",
+      "/home/steve/work/synth/target/pr103-compact6-1/usb_uart.freerouting.json",
       "--clean-netlist",
       "--allow-via-in-pad"
     ],
@@ -41,31 +41,31 @@
       "threads": "4",
       "wall_clock_secs": "600"
     },
-    "input_hash": "5998fd10e01412788b9d608deb471f5996fa10909c773481cc4c953c748f4f7a",
+    "input_hash": "9e849250338160171a6273247870d1eea6e10ee72380f169bf5713d9eb3630d6",
     "output_hash": "",
     "source_revision": null,
-    "duration_ms": 118450
+    "duration_ms": 181444
   },
   "statistics": {
     "connected_nets": 26,
     "open_nets": 0,
     "open_net_names": [],
-    "segments": 253,
-    "vias": 42,
-    "wire_length_mm": 565.138646,
+    "segments": 255,
+    "vias": 44,
+    "wire_length_mm": 471.944456,
     "pad_escape_rejections": 0,
     "engine_findings": {
-      "claimed_imported_segments": "253",
-      "claimed_imported_vias": "42"
+      "claimed_imported_segments": "255",
+      "claimed_imported_vias": "44"
     }
   },
   "artifacts": {
-    "baseline": "/home/steve/work/synth/target/pr103-272-row37-1/usb_uart.synth.kicad_pcb",
-    "candidate": "/home/steve/work/synth/target/pr103-272-row37-1/usb_uart.freerouting.kicad_pcb",
-    "delivered": "/home/steve/work/synth/target/pr103-272-row37-1/usb_uart.kicad_pcb",
-    "session_log": "/home/steve/work/synth/target/pr103-272-row37-1/usb_uart.freerouting.log",
-    "ses": "/home/steve/work/synth/target/pr103-272-row37-1/usb_uart.freerouting.ses",
-    "router_report": "/home/steve/work/synth/target/pr103-272-row37-1/usb_uart.freerouting.json",
+    "baseline": "/home/steve/work/synth/target/pr103-compact6-1/usb_uart.synth.kicad_pcb",
+    "candidate": "/home/steve/work/synth/target/pr103-compact6-1/usb_uart.freerouting.kicad_pcb",
+    "delivered": "/home/steve/work/synth/target/pr103-compact6-1/usb_uart.kicad_pcb",
+    "session_log": "/home/steve/work/synth/target/pr103-compact6-1/usb_uart.freerouting.log",
+    "ses": "/home/steve/work/synth/target/pr103-compact6-1/usb_uart.freerouting.ses",
+    "router_report": "/home/steve/work/synth/target/pr103-compact6-1/usb_uart.freerouting.json",
     "connectivity_report": null,
     "drc_report": null
   },
@@ -94,7 +94,7 @@
     "kicad_drc": {
       "errors": 0,
       "unconnected": 0,
-      "warnings": 42
+      "warnings": 40
     },
     "blocking_reasons": [],
     "unavailable_checks": []

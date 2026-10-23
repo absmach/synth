@@ -2,6 +2,24 @@ schema_version = 2
 forced_net_labels = []
 fit_sheet = false
 
+[labels.D7]
+dx = 2.0
+dy = 0.0
+angle = 90.0
+priority = "hard"
+
+[labels.R7]
+dx = 0.0
+dy = 1.5
+angle = 0.0
+priority = "hard"
+
+[labels.R_TERM]
+dx = 2.1
+dy = -1.0
+angle = 90.0
+priority = "hard"
+
 # Board millimetres. J1 on the top edge, protection parts under it,
 # decoupling caps 1 to 1.5 mm from their pins, headers on the bottom edge.
 
@@ -46,20 +64,20 @@ priority = "hard"
 timestamp = "2026-10-10T09:00:00+00:00"
 
 [components.R2]
-x = 13.6
-y = 11.95
+x = 10.0
+y = 8.5
 rotation = 0
 source = "agent"
 priority = "hard"
-timestamp = "2026-10-10T09:00:00+00:00"
+timestamp = "2026-10-23T13:00:00+00:00"
 
 [components.R1]
-x = 27.9
-y = 11.95
+x = 34.0
+y = 8.5
 rotation = 0
 source = "agent"
 priority = "hard"
-timestamp = "2026-10-10T09:00:00+00:00"
+timestamp = "2026-10-23T13:00:00+00:00"
 
 [components.U2]
 x = 9.6
@@ -118,12 +136,12 @@ priority = "hard"
 timestamp = "2026-10-10T09:00:00+00:00"
 
 [components.U3]
-x = 33.9
+x = 32.4
 y = 17.3
 rotation = 0
 source = "agent"
 priority = "hard"
-timestamp = "2026-10-10T09:00:00+00:00"
+timestamp = "2026-10-23T13:30:00+00:00"
 
 [components.C7]
 x = 39.57
@@ -142,8 +160,8 @@ priority = "hard"
 timestamp = "2026-10-10T09:00:00+00:00"
 
 [components.R9]
-x = 9.4
-y = 25.6
+x = 10.8
+y = 23.6
 rotation = 0
 source = "agent"
 priority = "hard"
@@ -151,15 +169,15 @@ timestamp = "2026-10-10T09:00:00+00:00"
 
 [components.R_TNOW]
 x = 12.8
-y = 25.6
+y = 23.6
 rotation = 0
 source = "agent"
 priority = "hard"
 timestamp = "2026-10-10T09:00:00+00:00"
 
 [components.R3]
-x = 6.0
-y = 27.8
+x = 14.5
+y = 25.8
 rotation = 0
 source = "agent"
 priority = "hard"
@@ -167,7 +185,7 @@ timestamp = "2026-10-10T09:00:00+00:00"
 
 [components.D3]
 x = 9.4
-y = 27.8
+y = 25.8
 rotation = 0
 source = "agent"
 priority = "hard"
@@ -175,7 +193,7 @@ timestamp = "2026-10-10T09:00:00+00:00"
 
 [components.R5]
 x = 21.0
-y = 27.8
+y = 25.8
 rotation = 0
 source = "agent"
 priority = "hard"
@@ -183,7 +201,7 @@ timestamp = "2026-10-10T09:00:00+00:00"
 
 [components.R6]
 x = 29.0
-y = 27.8
+y = 25.8
 rotation = 0
 source = "agent"
 priority = "hard"
@@ -191,7 +209,7 @@ timestamp = "2026-10-10T09:00:00+00:00"
 
 [components.R4]
 x = 32.4
-y = 25.6
+y = 23.6
 rotation = 0
 source = "agent"
 priority = "hard"
@@ -199,7 +217,7 @@ timestamp = "2026-10-10T09:00:00+00:00"
 
 [components.D4]
 x = 35.8
-y = 25.6
+y = 23.6
 rotation = 0
 source = "agent"
 priority = "hard"
@@ -207,7 +225,7 @@ timestamp = "2026-10-10T09:00:00+00:00"
 
 [components.R7]
 x = 32.4
-y = 27.8
+y = 25.8
 rotation = 0
 source = "agent"
 priority = "hard"
@@ -215,7 +233,7 @@ timestamp = "2026-10-10T09:00:00+00:00"
 
 [components.D7]
 x = 35.8
-y = 27.8
+y = 25.8
 rotation = 0
 source = "agent"
 priority = "hard"
@@ -223,7 +241,7 @@ timestamp = "2026-10-10T09:00:00+00:00"
 
 [components.R_TERM]
 x = 39.4
-y = 27.8
+y = 25.8
 rotation = 0
 source = "agent"
 priority = "hard"
@@ -231,64 +249,64 @@ timestamp = "2026-10-10T09:00:00+00:00"
 
 [components.J_VIO]
 x = 7.36
-y = 37.4
+y = 29.9
 rotation = 90
 source = "agent"
-priority = "hard"
-timestamp = "2026-10-23T12:00:00+00:00"
+priority = "soft"
+timestamp = "2026-10-23T13:00:00+00:00"
 
 [components.J2]
 x = 16.46
-y = 37.4
+y = 29.9
 rotation = 90
 source = "agent"
-priority = "hard"
-timestamp = "2026-10-23T12:00:00+00:00"
+priority = "soft"
+timestamp = "2026-10-23T13:00:00+00:00"
 
 [components.J3]
 x = 25.56
-y = 37.4
+y = 29.9
 rotation = 90
 source = "agent"
-priority = "hard"
-timestamp = "2026-10-23T12:00:00+00:00"
+priority = "soft"
+timestamp = "2026-10-23T13:00:00+00:00"
 
 [components.J4]
 x = 34.66
-y = 37.4
+y = 29.9
 rotation = 90
 source = "agent"
-priority = "hard"
-timestamp = "2026-10-23T12:00:00+00:00"
+priority = "soft"
+timestamp = "2026-10-23T13:00:00+00:00"
 
 [components.H1]
-x = 3.5
+x = 5.5
 y = 3.0
 rotation = 0
 source = "agent"
 priority = "hard"
-timestamp = "2026-10-23T09:00:00+00:00"
+timestamp = "2026-10-23T13:00:00+00:00"
 
 [components.H2]
-x = 41.6
+x = 39.6
 y = 3.0
 rotation = 0
 source = "agent"
 priority = "hard"
-timestamp = "2026-10-23T09:00:00+00:00"
+timestamp = "2026-10-23T13:00:00+00:00"
 
 [components.H3]
-x = 3.5
+x = 5.5
 y = 21.0
 rotation = 0
 source = "agent"
 priority = "hard"
-timestamp = "2026-10-23T09:00:00+00:00"
+timestamp = "2026-10-23T13:00:00+00:00"
 
 [components.H4]
-x = 41.6
+x = 39.6
 y = 21.0
 rotation = 0
 source = "agent"
 priority = "hard"
-timestamp = "2026-10-23T09:00:00+00:00"
+timestamp = "2026-10-23T13:00:00+00:00"

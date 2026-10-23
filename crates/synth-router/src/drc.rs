@@ -329,6 +329,22 @@ pub(crate) fn first_line(text: &str) -> String {
     line.trim().to_string()
 }
 
+/// KiCad 10 reports a zone that its fill split into islands in
+/// `unconnected_items` with the same zone on both sides. A zone cannot be
+/// unconnected from itself, and the islands are still joined through the
+/// other copper layers and vias, so the pair is a fill artifact rather than an
+/// open net. A genuine missing connection names two different objects.
+fn names_same_zone_twice(item: &serde_json::Value) -> bool {
+    let Some(items) = item.get("items").and_then(serde_json::Value::as_array) else {
+        return false;
+    };
+    let uuids: Vec<&str> = items
+        .iter()
+        .filter_map(|v| v.get("uuid").and_then(serde_json::Value::as_str))
+        .collect();
+    uuids.len() >= 2 && uuids.iter().all(|uuid| *uuid == uuids[0])
+}
+
 /// Parse KiCad's DRC JSON.
 ///
 /// Deliberately tolerant of a missing or unexpected shape: a report that
@@ -367,7 +383,10 @@ pub fn parse_report_text(text: &str) -> Option<DrcReport> {
             continue;
         };
         if is_unconnected_section {
-            unconnected_items = items.len();
+            unconnected_items = items
+                .iter()
+                .filter(|item| !names_same_zone_twice(item))
+                .count();
         }
         for item in items {
             let violation_type = item
@@ -413,7 +432,9 @@ pub fn parse_report_text(text: &str) -> Option<DrcReport> {
             // Mark it by section, not by the severity KiCad happened to
             // write, so `is_blocking` and the counts agree with each other
             // and with what the section actually holds.
-            let severity = if is_unconnected_section {
+            let severity = if is_unconnected_section && names_same_zone_twice(item) {
+                "warning".to_string()
+            } else if is_unconnected_section {
                 "unconnected".to_string()
             } else {
                 if severity == "unconnected" {
@@ -669,6 +690,30 @@ mod tests {
         assert_eq!(report.counts().unconnected, 2);
         assert_eq!(report.counts().blocking_count(), 2);
         assert!(!report.is_clean(), "an unconnected pad still blocks");
+    }
+
+    #[test]
+    fn a_zone_pair_with_the_same_uuid_is_a_fill_warning_not_an_open_net() {
+        // KiCad 10 lists a fill-split zone against itself. The same UUID on
+        // both sides is not a missing connection, so it must not fail the
+        // board; it stays visible as a warning.
+        let report = parse_report_text(
+            r#"{"violations": [],
+               "unconnected_items": [
+                 {"type": "unconnected_items", "severity": "error",
+                  "description": "Missing connection between items",
+                  "items": [
+                    {"description": "Zone [GND] on F.Cu, priority 1", "uuid": "z-1"},
+                    {"description": "Zone [GND] on F.Cu, priority 1", "uuid": "z-1"}
+                  ]}
+               ]}"#,
+        )
+        .expect("parses");
+        assert_eq!(report.unconnected_items, 0);
+        assert_eq!(report.counts().unconnected, 0);
+        assert_eq!(report.counts().warnings, 1);
+        assert_eq!(report.counts().blocking_count(), 0);
+        assert!(report.is_clean());
     }
 
     #[test]
