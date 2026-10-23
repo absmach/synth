@@ -1,6 +1,6 @@
 # USB-C dual UART + RS-485 adapter (SYN-66)
 
-Status: design and compact placement. Routing is incomplete. Not fabricated, not tested on hardware.
+Status: design, placement and a FreeRouting route that passes Synth's release gate. Not fabricated, not tested on hardware.
 Do not call it proven or clean. The list of what is unchecked is at the bottom.
 
 ## What it is
@@ -64,9 +64,9 @@ The Nexperia and LP5907 electrical numbers were not re-read.
 
 ## Placement and routing (this commit)
 
-Status: compact placement done. Routing is not complete. Do not call it routed.
+Status: compact placement done and routed with FreeRouting. The route passes Synth's own checks; it is not reviewed or fabricated.
 
-- Outline: 51.2 x 35.7 mm with the four mounting holes (45.1 x 35.8 mm without them, 92.6 x 66.8 mm before the compact placement).
+- Outline: 45.0 x 35.7 mm as placed, with the four mounting holes 3.5 mm in from the left, right and top edges (92.6 x 66.8 mm before the compact placement). After routing it is 45.0 x 39.7 mm, see below.
   Old cause: the sidecar only fixed the caps and protection parts. The rest was auto-placed far apart, and the placer adds 4 mm around every part.
   Now every part has a position in `usb_uart.placement.layout.toml`. J1 sits flush on the top edge. J_VIO, J2, J3 and J4 sit flush on the bottom edge.
 - No courtyard overlaps. J1 courtyard to top edge: 0.01 mm (flush).
@@ -88,27 +88,26 @@ Status: compact placement done. Routing is not complete. Do not call it routed.
 - D2 is over 2 mm: four protection parts do not fit side by side under the 7 mm of J1 pads any closer.
 - R1, R2, the LEDs and R3 to R9 are placed by hand but not checked against any rule.
 
-Routing (FreeRouting 2.4.1, default settings, 40 passes; best of several placement tries):
-- Result: not complete. FreeRouting leaves nets open; Synth's own check says 9 nets are open (CC1, CC2, CTS1, RS485_B, RTS1, RXD1, TXD1, VBUS, VIO). Synth marks the board draft, not fabricable.
-- kicad-cli DRC on the routed attempt (`--severity-all --refill-zones`): 0 errors, 5 unconnected items, 49 warnings.
-  The 5 unconnected items are GND pour fragments on F.Cu with no stitching via. No signal net is listed. KiCad and Synth's check disagree about the 9 nets; this is not resolved.
-  The warnings are 32 footprint library links, 12 silk over copper, 5 silk overlap.
-- 263 track segments, 23 vias.
-- USB pair: width 0.242 mm. D+ is 17.03 mm (F.Cu only). D- is 18.43 mm (11.21 F.Cu, 7.23 B.Cu, 2 vias). Skew 1.40 mm. Closest gap 0.133 mm; 12.6 mm of D+ is within 0.5 mm of D-.
-  FreeRouting does not couple the pair, so the 90 ohm geometry holds only where the tracks happen to run side by side.
-- KiCadRoutingTools was also tried (`--best-of`): 17 open nets, worse.
-- Other widths FreeRouting used: CC and UART nets 0.127 mm, VBUS 0.5 mm. The CC net width is not a design choice.
-- The silkscreen reference text is large and sits away from its part. Labels overlap each other, and some sit outside the board.
+Routing (FreeRouting 2.4.1, `--router free-routing --krt-allow-via-in-pad`):
+- Result: routed. `release.json` has `release_ready` true and the gate reports no open net. `kicad-cli pcb drc --severity-all --refill-zones`: 0 errors, 0 unconnected, 42 warnings (36 footprint library links, 5 silk over copper, 1 silk overlap).
+- 247 track segments, 41 vias.
+- The exporter's repair step moved J3 down out of the header row (to y 37.4 mm), so the routed board is 45.0 x 39.7 mm. The placement sidecar alone gives 45.0 x 35.7 mm.
+- J4 is at x 34.66 mm in the sidecar. At 35.66 and 36.66 mm, and turned 180 degrees, FreeRouting left one to three nets open. Its result changes with small placement changes and is not bit-for-bit repeatable.
+- Via-in-pad at the U1 exposed pad (pin 25). The fab must fill and cap it. JLCPCB has not been asked.
+- Signal-integrity pass: 21 warnings, none blocking. 20 are layer changes with no ground return via within 0.64 mm, one is a parallel run of 5.9 mm at 0.177 mm.
+- The USB pair is not coupled and its length and skew were not measured for this route. FreeRouting does not couple the pair, so the 90 ohm geometry is unverified.
+- No part has been reviewed (`reviewer_state` is false for every part in `release.json`).
+- The silkscreen reference text is large and sits close to its part. D4 and D7 labels overlap.
 
 Commands (use an empty `XDG_DATA_HOME` so a user registry cannot shadow parts):
 ```
 export XDG_DATA_HOME=$(mktemp -d)
 scripts/setup-routing-engines.sh
 synth validate qualification/class-b/usb-uart/usb_uart.synth
-synth export-kicad qualification/class-b/usb-uart/usb_uart.synth --out /tmp/usb_uart --allow-incomplete
-kicad-cli pcb drc --severity-all --refill-zones /tmp/usb_uart/usb_uart.freerouting.kicad_pcb
+synth export-kicad qualification/class-b/usb-uart/usb_uart.synth --out /tmp/usb_uart --router free-routing --krt-allow-via-in-pad --allow-incomplete
+kicad-cli pcb drc --severity-all --refill-zones /tmp/usb_uart/usb_uart.kicad_pcb
 ```
-The routed attempt is `usb_uart.freerouting.kicad_pcb`; the unrouted placement is `usb_uart.synth.kicad_pcb`.
+A route that passes the gate is `usb_uart.kicad_pcb`; a failed one stays in `usb_uart.freerouting.kicad_pcb`. The unrouted placement is `usb_uart.synth.kicad_pcb`.
 Add `--best-of --kicad-routing-tools-repo <dir> --kicad-routing-tools-python <python>` to try the second engine.
 
 ## Known limits and gaps
@@ -120,7 +119,7 @@ Add `--best-of --kicad-routing-tools-repo <dir> --kicad-routing-tools-python <py
 - R_TERM (120 ohm across A/B) is always connected. The registry has no 2-pin header (`header_1x2`) for a jumper.
 - RS-485: no bias resistors (the THVD1450 has idle, open and short bus failsafe built in, per SLLSEY3E). No surge or TVS on A/B: only the on-chip +/-18 kV IEC contact ESD. TI shows an external circuit for 1 kV surge. No common-mode choke.
 - No silkscreen text support in Synth: header labels (GND/TXD1/RXD1 and so on) exist only in the schematic.
-- Routing is incomplete (see above), so the board is not fabricable.
+- The route passes Synth's own gate but nobody has reviewed it, so the board is not ready to fabricate.
 - 4-layer stackup and 90 ohm USB pair are declared but not verified.
 
 ## Not verified

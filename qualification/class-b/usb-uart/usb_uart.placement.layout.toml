@@ -254,7 +254,7 @@ priority = "hard"
 timestamp = "2026-10-10T09:00:00+00:00"
 
 [components.J4]
-x = 35.66
+x = 34.66
 y = 33.4
 rotation = 90
 source = "agent"
@@ -262,23 +262,23 @@ priority = "hard"
 timestamp = "2026-10-10T09:00:00+00:00"
 
 [components.H1]
-x = 6.0
-y = 6.0
+x = 3.5
+y = 3.0
 rotation = 0
 source = "agent"
 priority = "hard"
 timestamp = "2026-10-23T09:00:00+00:00"
 
 [components.H2]
-x = 50.0
-y = 6.0
+x = 41.6
+y = 3.0
 rotation = 0
 source = "agent"
 priority = "hard"
 timestamp = "2026-10-23T09:00:00+00:00"
 
 [components.H3]
-x = 3.0
+x = 3.5
 y = 21.0
 rotation = 0
 source = "agent"
@@ -286,7 +286,7 @@ priority = "hard"
 timestamp = "2026-10-23T09:00:00+00:00"
 
 [components.H4]
-x = 50.0
+x = 41.6
 y = 21.0
 rotation = 0
 source = "agent"
