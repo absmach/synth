@@ -66,7 +66,7 @@ The Nexperia and LP5907 electrical numbers were not re-read.
 
 Status: compact placement done. Routing is not complete. Do not call it routed.
 
-- Outline: 45.1 x 35.8 mm (was 92.6 x 66.8 mm).
+- Outline: 51.2 x 35.7 mm with the four mounting holes (45.1 x 35.8 mm without them, 92.6 x 66.8 mm before the compact placement).
   Old cause: the sidecar only fixed the caps and protection parts. The rest was auto-placed far apart, and the placer adds 4 mm around every part.
   Now every part has a position in `usb_uart.placement.layout.toml`. J1 sits flush on the top edge. J_VIO, J2, J3 and J4 sit flush on the bottom edge.
 - No courtyard overlaps. J1 courtyard to top edge: 0.01 mm (flush).
