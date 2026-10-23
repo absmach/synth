@@ -1,27 +1,53 @@
-// A protected power-entry board: reverse-polarity and over-current parts in
-// the order a fault actually arrives at them.
+// A protected power-entry and distribution module: reverse-polarity and
+// over-current parts in the order a fault actually arrives at them.
 //
-// A power front end on its own board: barrel/JST 12 V in, reverse-polarity
-// P-FET, resettable over-current, TVS clamp, a buck down to 5 V, a soft-start
-// load switch, and a 3V3 rail for logic. No MCU — this board exists to be
-// reviewed as a power stage.
+// Standalone, for its own purpose. 12 V in on J1, reverse-polarity P-FET,
+// resettable over-current, TVS clamp, a buck down to 5 V, a soft-start load
+// switch with its enable brought out, and a housekeeping 3V3 rail. It needs
+// nothing but a 12 V supply to come up, and a downstream system needs nothing
+// of its own to use the protected output: J2 carries the rail, its return and
+// its enable, and every rail has a probe point.
+//
+// No MCU. The protection here is analogue and wants none: a P-FET, a
+// polyfuse and a clamp do not need firmware to work, and adding a controller
+// would add a failure mode to the one board whose job is to survive faults.
 board "protected_power_entry" {
     layers 2
     manufacturer "jlcpcb"
 
+    // Four rails, declared rather than left to a comment, so that the
+    // regulator-range and load-budget rules have something to check and the
+    // exported schematic names them instead of numbering them.
+    //
+    //   V12_PROT  12 V   input, downstream of the FET, fuse and clamp
+    //   V5         5 V   MP2307 buck output, always on
+    //   V5_SW      5 V   switched and soft-started, out to J2
+    //   V3V3      3.3 V  housekeeping, for the indicator and a carrier's logic
+    power "V12_PROT" 12v
+    power "V5" 5v
+    power "V5_SW" 5v
+    power "V3V3" 3.3v
+
     group "INPUT PROTECTION" color "#c2410c" {
-      component J1: connector  "jst_xh_2pin"
+      component J1: connector  "jst_xh_2pin" { placement_hint { region: left_edge edge: left priority: hard } }
       component Q1: transistor "p_mosfet_si2301"
       component R1: resistor   "r_generic_0603" value "100k"
       component D1: diode      "d_zener_5v1" value "12V"
       component F1: fuse       "polyfuse" value "1.5A"
       component D2: diode      "tvs_array_5v" value "SMAJ15A"
       component C1: capacitor  "c_generic_0805" value "22uF"
+      component D4: led        "led_red_0603"
+      component R8: resistor   "r_generic_0603" value "12k"
+      component TP1: testpoint "testpoint_pad_1_5"
       notes "" {
         "Reverse-polarity P-FET in the high side: source to the input, drain to"
         "the protected rail, gate held down through R1 so it enhances only on"
         "correct polarity. D1 clamps Vgs. F1 is the resettable over-current"
         "element and D2 the surge clamp."
+        "D4 indicates the protected rail, not the connector: it sits behind the"
+        "FET and the fuse, so it is dark on reverse polarity and dark on a"
+        "tripped fuse, which is the pair of faults a person needs to see."
+        "12k gives about 0.8 mA at 12 V, which is visible and costs nothing."
       }
     }
 
@@ -33,8 +59,12 @@ board "protected_power_entry" {
     connect D1.anode -> J1.p2
     connect F1.p2 -> D2.ch1
     connect J1.p2 -> D2.gnd
-    connect F1.p2 -> C1.p1
-    connect J1.p2 -> C1.p2
+    connect F1.p2 -> C1.p1 as "V12_PROT"
+    connect J1.p2 -> C1.p2 as "GND"
+    connect F1.p2 -> R8.p1
+    connect R8.p2 -> D4.anode
+    connect D4.cathode -> J1.p2
+    connect F1.p2 -> TP1.p1
 
     group "12V TO 5V BUCK" color "#0072b2" {
       component U1: regulator "mp2307_buck" value "MP2307"
@@ -44,9 +74,20 @@ board "protected_power_entry" {
       component R2: resistor  "r_generic_0603" value "10k"
       component R3: resistor  "r_generic_0603" value "3.16k"
       component C4: capacitor "c_generic_0603" value "100nF" { placement_hint { near: "U1" priority: hard } }
+      component R6: resistor  "r_generic_0603" value "6.2k"  { placement_hint { near: "U1" priority: hard } }
+      component C8: capacitor "c_generic_0603" value "2.2nF" { placement_hint { near: "U1" priority: hard } }
+      component C9: capacitor "c_generic_0603" value "100nF" { placement_hint { near: "U1" priority: hard } }
+      component TP2: testpoint "testpoint_pad_1_5"
       notes "" {
         "Feedback divider R2/R3 sets 5 V from the 0.925 V reference."
         "Divider sits at the output capacitor, not at the inductor node."
+        "R6/C8 on COMP is the loop compensation. It is not optional: COMP is"
+        "the error amplifier's output and left floating the loop has no"
+        "dominant pole, so the converter rings or refuses to regulate. The"
+        "values are the datasheet's typical network for a 5 V output, not a"
+        "measured result -- a reviewer with a load step should check them."
+        "C9 on SS sets the start ramp, so the buck does not current-limit into"
+        "its own output capacitance at turn-on."
       }
     }
 
@@ -57,7 +98,7 @@ board "protected_power_entry" {
     connect U1.in   -> C2.p1
     connect U1.gnd  -> C2.p2
     connect U1.sw   -> L1.p1
-    connect L1.p2   -> C3.p1
+    connect L1.p2   -> C3.p1 as "V5"
     connect J1.p2   -> C3.p2
     connect L1.p2   -> R2.p1
     connect R2.p2   -> U1.fb
@@ -65,6 +106,12 @@ board "protected_power_entry" {
     connect R3.p2   -> J1.p2
     connect U1.bs   -> L1.p1
     connect U1.en   -> U1.in
+    connect U1.comp -> R6.p1
+    connect R6.p2   -> C8.p1
+    connect C8.p2   -> J1.p2
+    connect U1.ss   -> C9.p1
+    connect C9.p2   -> J1.p2
+    connect L1.p2   -> TP2.p1
     // The exposed pad is the buck's heat path and the datasheet ties it to
     // GND. It is declared `required`, so leaving it floating is an error
     // rather than a silent thermal fault.
@@ -74,10 +121,26 @@ board "protected_power_entry" {
       component U2: regulator "tps22918_loadswitch"
       component R4: resistor  "r_generic_0603" value "100k"
       component C5: capacitor "c_generic_0603" value "10nF"
-      component J2: connector "header_1x3"
+      component J2: connector "header_1x4" { placement_hint { region: right_edge edge: right priority: hard } }
+      component R7: resistor  "r_generic_0603" value "100k"
+      component C10: capacitor "c_generic_0603" value "100nF" { placement_hint { near: "U2" priority: hard } }
+      component C11: capacitor "c_generic_0805" value "10uF"  { placement_hint { near: "J2" priority: hard } }
+      component TP3: testpoint "testpoint_pad_1_5"
       notes "" {
         "Soft start: CT sets the slew so a capacitive load does not brown out"
-        "the buck at turn-on. ON is pulled up, so the rail comes up by default."
+        "the buck at turn-on. ON is pulled up through R4, so the rail comes up"
+        "by default and a host only has to pull J2.p3 down to shed the load."
+        "R7 on QOD discharges the output when the switch opens. Without it a"
+        "capacitive load holds the rail up after shutdown and the next"
+        "soft-start begins from an unknown voltage."
+        "J2 is on the right edge and J1 on the left: power in one side, out"
+        "the other, which is how a module like this gets wired into a system"
+        "and also what keeps both of them clear of the corner mounting holes."
+        "J2: p1 switched 5 V, p2 GND, p3 enable (active high, pulled up on"
+        "board), p4 GND. The enable sits between two grounds, so a short to"
+        "either neighbour turns the output off rather than on."
+        "C11 sits at J2 rather than at the switch, because the impedance that"
+        "matters to a downstream load is the one at the connector."
       }
     }
 
@@ -87,29 +150,69 @@ board "protected_power_entry" {
     connect R4.p2  -> U2.on
     connect U2.ct  -> C5.p1
     connect J1.p2  -> C5.p2
-    connect U2.vout -> J2.p1
+    connect U2.qod -> R7.p1
+    connect R7.p2  -> U2.vout
+    connect U2.vin -> C10.p1
+    connect U2.gnd -> C10.p2
+    connect U2.vout -> C11.p1
+    connect J1.p2   -> C11.p2
+    connect U2.vout -> J2.p1 as "V5_SW"
     connect J1.p2   -> J2.p2
-    connect U2.vout -> J2.p3
+    connect U2.on   -> J2.p3
+    connect J1.p2   -> J2.p4
+    connect U2.vout -> TP3.p1
 
     group "3V3 LOGIC RAIL" color "#0a7d4a" {
-      component U3: regulator "ams1117_3v3" value "AMS1117-3.3"
+      component U3: regulator "lp5907_3v3" value "LP5907-3.3"
       component C6: capacitor "c_generic_0805" value "10uF"
-      component C7: capacitor "c_generic_0603" value "100nF" { placement_hint { near: "U3" priority: hard } }
+      component C7: capacitor "c_generic_0603" value "1uF" { placement_hint { near: "U3" priority: hard } }
       component D3: led       "led_green_0603"
       component R5: resistor  "r_generic_0603" value "1k"
+      component TP4: testpoint "testpoint_pad_1_5"
       notes "" {
-        "Housekeeping rail for whatever carries this front end, with a"
-        "power-good indicator sized for ~1 mA."
+        "Housekeeping rail for whatever carries this front end, with an"
+        "indicator sized for ~1 mA."
+        "An LP5907 rather than an AMS1117. This rail drives an indicator and"
+        "whatever logic a carrier adds, so it needs a few tens of milliamps,"
+        "not 800 -- and an AMS1117 declared at its full rating puts its own"
+        "junction near 107 C through 60 C/W. The LP5907 is 250 mA through"
+        "250 C/W, which is the right trade for a rail this small, and its"
+        "noise figure suits the analogue side of a carrier better."
+        "EN is tied to VIN: the rail is always on while the switched 5 V is."
       }
     }
 
     connect U2.vout -> U3.vin
     connect J1.p2   -> U3.gnd
+    connect U3.en   -> U3.vin
     connect U3.vin  -> C6.p1
     connect U3.gnd  -> C6.p2
-    connect U3.vout -> C7.p1
+    connect U3.vout -> C7.p1 as "V3V3"
     connect U3.gnd  -> C7.p2
     connect U3.vout -> R5.p1
     connect R5.p2   -> D3.anode
     connect D3.cathode -> U3.gnd
+    connect U3.vout -> TP4.p1
+
+    group "MECHANICAL" color "#525252" {
+      component TP5: testpoint "testpoint_pad_1_5"
+      component H1: mounting_hole "mounting_hole_m2_5" { placement_hint { region: top_left priority: hard } }
+      component H2: mounting_hole "mounting_hole_m2_5" { placement_hint { region: top_right priority: hard } }
+      component H3: mounting_hole "mounting_hole_m2_5" { placement_hint { region: bottom_left priority: hard } }
+      component H4: mounting_hole "mounting_hole_m2_5" { placement_hint { region: bottom_right priority: hard } }
+      component FID1: fiducial "fiducial_1mm" { placement_hint { region: top_edge priority: soft } }
+      component FID2: fiducial "fiducial_1mm" { placement_hint { region: bottom_edge priority: soft } }
+      notes "" {
+        "TP5 is the ground reference every other probe point is measured"
+        "against. Four M2.5 holes for a standoff mount, two fiducials for"
+        "placement."
+        "The corner hints are not decoration. `MountingHole_2.5mm` draws its"
+        "courtyard as a single fp_circle, and the placer reads courtyards from"
+        "fp_rect and fp_line only, so an unhinted hole reserves no area and"
+        "lands on top of whatever is already there -- which is exactly what"
+        "the first routed run of this board did, four times over."
+      }
+    }
+
+    connect J1.p2 -> TP5.p1
   }
