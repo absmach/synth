@@ -29,6 +29,11 @@ board "usb_uart" {
   power "VBUS" 5v
   power "+3V3" 3.3v
 
+  component H1: mounting_hole "mounting_hole_m2_5" { placement_hint { region: top_left priority: hard } }
+  component H2: mounting_hole "mounting_hole_m2_5" { placement_hint { region: top_right priority: hard } }
+  component H3: mounting_hole "mounting_hole_m2_5" { placement_hint { region: bottom_left priority: hard } }
+  component H4: mounting_hole "mounting_hole_m2_5" { placement_hint { region: bottom_right priority: hard } }
+
   group "USB-C INPUT" color "#c2410c" {
     component J1: connector "usb_c_receptacle" { placement_hint { edge: top priority: hard } }
     component R1: resistor "r_generic_0603" value "5.1k"

@@ -321,3 +321,43 @@ priority = "soft"
 timestamp = "2026-10-09T09:00:00+00:00"
 dx = 0.0
 dy = 0.0
+
+[components.H1]
+x = 139.7
+y = 152.4
+rotation = 0
+source = "agent"
+priority = "soft"
+timestamp = "2026-10-23T09:00:00+00:00"
+dx = 0.0
+dy = 0.0
+
+[components.H2]
+x = 154.94
+y = 152.4
+rotation = 0
+source = "agent"
+priority = "soft"
+timestamp = "2026-10-23T09:00:00+00:00"
+dx = 0.0
+dy = 0.0
+
+[components.H3]
+x = 170.18
+y = 152.4
+rotation = 0
+source = "agent"
+priority = "soft"
+timestamp = "2026-10-23T09:00:00+00:00"
+dx = 0.0
+dy = 0.0
+
+[components.H4]
+x = 185.42
+y = 152.4
+rotation = 0
+source = "agent"
+priority = "soft"
+timestamp = "2026-10-23T09:00:00+00:00"
+dx = 0.0
+dy = 0.0

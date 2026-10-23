@@ -260,3 +260,35 @@ rotation = 90
 source = "agent"
 priority = "hard"
 timestamp = "2026-10-10T09:00:00+00:00"
+
+[components.H1]
+x = 6.0
+y = 6.0
+rotation = 0
+source = "agent"
+priority = "hard"
+timestamp = "2026-10-23T09:00:00+00:00"
+
+[components.H2]
+x = 50.0
+y = 6.0
+rotation = 0
+source = "agent"
+priority = "hard"
+timestamp = "2026-10-23T09:00:00+00:00"
+
+[components.H3]
+x = 3.0
+y = 21.0
+rotation = 0
+source = "agent"
+priority = "hard"
+timestamp = "2026-10-23T09:00:00+00:00"
+
+[components.H4]
+x = 50.0
+y = 21.0
+rotation = 0
+source = "agent"
+priority = "hard"
+timestamp = "2026-10-23T09:00:00+00:00"
