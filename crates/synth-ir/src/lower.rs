@@ -288,6 +288,8 @@ pub fn lower(ast: &ProgramAst, registry: &Registry, file: &str) -> LowerResult {
     // refdes can be checked against the final component set.
     let variants = ctx.lower_variants(&root_statements, &refdes_index);
 
+    anchor_reset_buttons(&mut components, &nets);
+
     let board = Board {
         legends,
         schematic_paper,
@@ -315,6 +317,103 @@ pub fn lower(ast: &ProgramAst, registry: &Registry, file: &str) -> LowerResult {
     LowerResult {
         board: Some(board),
         diagnostics: ctx.diagnostics,
+    }
+}
+
+/// Anchor each reset or boot button beside the MCU it controls.
+///
+/// A button on a reset or boot pin is a short, noise-sensitive line, and a
+/// person puts it next to the chip. Left to the author it tends to be hinted
+/// only softly, against a neighbouring resistor — which is itself hinted softly
+/// against another — and the chain gives the placer nothing to hold it to: on
+/// the irrigation controller the reset button ended up across the board.
+///
+/// The MCU is found from declared pin roles, not names: a pin carrying
+/// [`PinCapability::Reset`] or [`PinCapability::BootMode`] on the same net as
+/// one of the switch's pins, or one resistor away from it, which is how a
+/// debounced reset is wired. The switch then gets a `near` hint on that MCU.
+///
+/// Only a hint the author wrote is corrected. A soft one is a preference, and a
+/// chain of them (button near a resistor, that near another) anchors nothing to
+/// the chip, so it is replaced with a hard `near` on the MCU; whatever else it
+/// said (a region, an edge) is kept. A hard hint stands. A button with no hint
+/// at all is left to the placer: anchoring those was measured and moves
+/// routability both ways, breaking `env_logger` when hard and `sensor_logger`
+/// when soft, so it is not done on a guess.
+fn anchor_reset_buttons(components: &mut [Component], nets: &[Net]) {
+    use synth_registry::PinCapability;
+
+    let is_control_pin = |component: &Component, pin: PinId| -> bool {
+        component.part.as_ref().is_some_and(|part| {
+            part.pins.get(pin.0 as usize).is_some_and(|p| {
+                p.capabilities
+                    .iter()
+                    .any(|c| matches!(c, PinCapability::Reset | PinCapability::BootMode))
+            })
+        })
+    };
+    let find_mcu = |components: &[Component], net: &Net, skip: ComponentId| -> Option<usize> {
+        net.endpoints.iter().find_map(|e| {
+            let index = components.iter().position(|c| c.id == e.component)?;
+            (e.component != skip
+                && matches!(components[index].kind.as_str(), "mcu" | "processor")
+                && is_control_pin(&components[index], e.pin))
+            .then_some(index)
+        })
+    };
+
+    let mut anchors: Vec<(usize, String)> = Vec::new();
+    for (switch_index, switch) in components.iter().enumerate() {
+        if switch.kind != "switch" {
+            continue;
+        }
+        let mut found: Option<usize> = None;
+        'nets: for net in nets
+            .iter()
+            .filter(|n| n.endpoints.iter().any(|e| e.component == switch.id))
+        {
+            if let Some(mcu) = find_mcu(components, net, switch.id) {
+                found = Some(mcu);
+                break 'nets;
+            }
+            // One series resistor away: the other side of a two-pin resistor
+            // sharing this net.
+            for endpoint in &net.endpoints {
+                let Some(resistor) = components.iter().find(|c| c.id == endpoint.component) else {
+                    continue;
+                };
+                if resistor.kind != "resistor" || resistor.id == switch.id {
+                    continue;
+                }
+                for other in nets
+                    .iter()
+                    .filter(|n| n.id != net.id)
+                    .filter(|n| n.endpoints.iter().any(|e| e.component == resistor.id))
+                {
+                    if let Some(mcu) = find_mcu(components, other, resistor.id) {
+                        found = Some(mcu);
+                        break 'nets;
+                    }
+                }
+            }
+        }
+        if let Some(mcu) = found {
+            anchors.push((switch_index, components[mcu].refdes.clone()));
+        }
+    }
+
+    for (index, mcu_refdes) in anchors {
+        // Only a hint the author wrote. A button with none is left where the
+        // placer puts it: anchoring those was measured and moves routability
+        // both ways (hard broke env_logger, soft broke sensor_logger).
+        let Some(hint) = components[index].placement_hint.as_mut() else {
+            continue;
+        };
+        if hint.priority == crate::PlacementPriority::Hard {
+            continue;
+        }
+        hint.near = Some(mcu_refdes);
+        hint.priority = crate::PlacementPriority::Hard;
     }
 }
 
@@ -2465,5 +2564,74 @@ mod tests {
             diagnostic.expected
         );
         assert!(result.board.is_none_or(|b| b.required_processes.is_empty()));
+    }
+
+    // ----- reset and boot buttons ------------------------------------------
+
+    /// A debounced reset: the button is one series resistor away from NRST, which
+    /// is how the irrigation controller wired it. `hint` is spliced into the
+    /// button's declaration.
+    fn reset_board(hint: &str) -> Board {
+        lower_ok(&format!(
+            r#"board "b" {{
+                component U1: mcu "stm32g030"
+                component R1: resistor "r_generic_0603" value "100"
+                component SW1: switch "spst_tactile" {hint}
+                component SW2: switch "spst_tactile" {{ placement_hint {{ near: R1 priority: soft }} }}
+                connect U1.nrst -> R1.p1
+                connect R1.p2 -> SW1.p1
+                connect SW1.p2 -> U1.vss
+                connect U1.pa2 -> SW2.p1
+                connect SW2.p2 -> U1.vss
+            }}"#
+        ))
+    }
+
+    fn hint_of<'a>(
+        board: &'a Board,
+        refdes: &str,
+    ) -> Option<&'a crate::board::PlacementConstraint> {
+        board
+            .components
+            .iter()
+            .find(|c| c.refdes == refdes)
+            .and_then(|c| c.placement_hint.as_ref())
+    }
+
+    /// A button the author gave no hint is left to the placer. Anchoring those
+    /// was measured and moves routability both ways.
+    #[test]
+    fn a_reset_button_with_no_hint_is_left_alone() {
+        let board = reset_board("");
+        assert!(hint_of(&board, "SW1").is_none());
+    }
+
+    /// A soft hint against a neighbouring resistor is a preference, and a chain
+    /// of them anchors nothing to the chip. It is replaced with a hard hint on
+    /// the MCU, and what else it said is kept.
+    #[test]
+    fn a_soft_hint_does_not_keep_a_reset_button_from_its_mcu() {
+        let board = reset_board("{ placement_hint { near: R1 region: top_left priority: soft } }");
+        let hint = hint_of(&board, "SW1").expect("SW1 is anchored");
+        assert_eq!(hint.near.as_deref(), Some("U1"));
+        assert_eq!(hint.priority, PlacementPriority::Hard);
+        assert_eq!(hint.region, Some(PlacementRegion::TopLeft));
+    }
+
+    /// An author's hard hint stands.
+    #[test]
+    fn an_authored_hard_hint_on_a_reset_button_is_kept() {
+        let board = reset_board("{ placement_hint { near: R1 priority: hard } }");
+        let hint = hint_of(&board, "SW1").expect("SW1 has a hint");
+        assert_eq!(hint.near.as_deref(), Some("R1"));
+    }
+
+    /// A button on an ordinary GPIO is not a reset button.
+    #[test]
+    fn a_button_on_a_gpio_is_left_alone() {
+        let board = reset_board("");
+        let hint = hint_of(&board, "SW2").expect("SW2 keeps its hint");
+        assert_eq!(hint.near.as_deref(), Some("R1"));
+        assert_eq!(hint.priority, PlacementPriority::Soft);
     }
 }
