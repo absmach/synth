@@ -1477,6 +1477,9 @@ fn derived_controlled_geometry(board: &Board) -> Vec<(synth_ir::NetId, DerivedGe
         .collect()
 }
 
+/// The clearance a net class takes when the author declared none.
+const DEFAULT_CLASS_CLEARANCE_MM: f64 = 0.127;
+
 fn build_netclasses(net_table: &[(u32, String)], board: &Board) -> Vec<Sexp> {
     // Topological power-domain map: classifies every net by connected pin types,
     // not by string name. This is the authoritative source for Power/GND class assignment.
@@ -1589,7 +1592,7 @@ fn build_netclasses(net_table: &[(u32, String)], board: &Board) -> Vec<Sexp> {
         let mut default_args = vec![
             Sexp::str("Default"),
             Sexp::str("Default net class"),
-            Sexp::list("clearance", vec![num(0.127)]),
+            Sexp::list("clearance", vec![num(DEFAULT_CLASS_CLEARANCE_MM)]),
             Sexp::list("trace_width", vec![num(0.127)]),
             Sexp::list("via_dia", vec![num(0.60)]),
             Sexp::list("via_drill", vec![num(0.30)]),
@@ -1625,7 +1628,10 @@ fn build_netclasses(net_table: &[(u32, String)], board: &Board) -> Vec<Sexp> {
     // same merge as Default above.
     if !power_nets.is_empty() && !declared.iter().any(|g| g.name == "Power") {
         let power_width = if is_rp2350_board { 0.127 } else { 0.50 };
-        let power_clearance = if is_rp2350_board { 0.127 } else { 0.2 };
+        // The project file writes this class at the manufacturer minimum, which
+        // is what the router honours. A larger value here is the one KiCad's
+        // DRC enforces, so copper the router placed legally is reported.
+        let power_clearance = DEFAULT_CLASS_CLEARANCE_MM;
         let mut power_args = vec![
             Sexp::str("Power"),
             Sexp::str("Power delivery network"),
@@ -3310,6 +3316,10 @@ mod tests {
         assert!(nc_str.contains("(add_net \"VCC\")"));
         assert!(nc_str.contains("(add_net \"GND\")"));
         assert!(nc_str.contains("(add_net \"MAIN_ANT\")"));
+        // The router reads the project file, where an undeclared class is at the
+        // manufacturer minimum. The board's own classes must say the same.
+        assert_eq!(nc_str.matches("(clearance 0.127)").count(), 2, "{nc_str}");
+        assert!(!nc_str.contains("(clearance 0.2)"), "{nc_str}");
     }
 
     #[test]
