@@ -328,6 +328,17 @@ fn krt_capability(_request: &RouteRequest) -> RouterCapability {
         );
     }
 
+    if crate::repo_tool(crate::kicad_routing_tools::HELPER).is_none() {
+        return RouterCapability::unavailable(
+            RouterEngine::KiCadRoutingTools,
+            RouterFailureReason::NotInstalled,
+            format!(
+                "{} was not found in the repository's tools/ directory",
+                crate::kicad_routing_tools::HELPER
+            ),
+        );
+    }
+
     let Some(python) = resolve_python() else {
         return RouterCapability::unavailable(
             RouterEngine::KiCadRoutingTools,

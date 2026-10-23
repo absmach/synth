@@ -393,8 +393,10 @@ pub(crate) fn repo_tool(name: &str) -> Option<PathBuf> {
 /// Best-effort repository root.
 ///
 /// Prefers `CARGO_MANIFEST_DIR` (correct for a binary run out of a build
-/// tree) and falls back to walking up from the current directory (correct
-/// for an installed binary run inside a checkout).
+/// tree), then walks up from the current directory (correct for a binary run
+/// inside a checkout), then from the binary's own location (correct for a
+/// binary built in a checkout and run from anywhere, such as an MCP server
+/// started in an empty workspace).
 pub(crate) fn repo_root() -> Option<PathBuf> {
     if let Ok(manifest) = std::env::var("CARGO_MANIFEST_DIR") {
         let path = PathBuf::from(manifest);
@@ -407,12 +409,50 @@ pub(crate) fn repo_root() -> Option<PathBuf> {
             }
         }
     }
-    let mut dir = std::env::current_dir().ok()?;
-    loop {
-        if dir.join("tools").is_dir() && dir.join("registry").is_dir() {
-            return Some(dir);
-        }
-        dir = dir.parent()?.to_path_buf();
+    std::env::current_dir()
+        .ok()
+        .and_then(|dir| checkout_above(&dir))
+        .or_else(|| {
+            let exe = std::env::current_exe().ok()?;
+            checkout_above(exe.parent()?)
+        })
+}
+
+/// The nearest ancestor of `start`, itself included, holding both `tools/` and
+/// `registry/`.
+fn checkout_above(start: &Path) -> Option<PathBuf> {
+    start
+        .ancestors()
+        .find(|dir| dir.join("tools").is_dir() && dir.join("registry").is_dir())
+        .map(Path::to_path_buf)
+}
+
+#[cfg(test)]
+mod checkout_tests {
+    use super::*;
+
+    #[test]
+    fn a_checkout_is_found_from_any_directory_inside_it() {
+        let root = std::env::temp_dir().join(format!("synth_checkout_{}", std::process::id()));
+        let nested = root.join("target").join("release");
+        std::fs::create_dir_all(&nested).expect("scratch");
+        std::fs::create_dir_all(root.join("tools")).expect("tools");
+        std::fs::create_dir_all(root.join("registry")).expect("registry");
+
+        assert_eq!(checkout_above(&nested).as_deref(), Some(root.as_path()));
+        assert_eq!(checkout_above(&root).as_deref(), Some(root.as_path()));
+
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn a_directory_with_only_tools_is_not_a_checkout() {
+        let root = std::env::temp_dir().join(format!("synth_not_checkout_{}", std::process::id()));
+        std::fs::create_dir_all(root.join("tools")).expect("scratch");
+
+        assert_ne!(checkout_above(&root).as_deref(), Some(root.as_path()));
+
+        let _ = std::fs::remove_dir_all(&root);
     }
 }
 
