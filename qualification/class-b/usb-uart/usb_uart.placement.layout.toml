@@ -230,36 +230,36 @@ priority = "hard"
 timestamp = "2026-10-10T09:00:00+00:00"
 
 [components.J_VIO]
-x = 8.36
-y = 33.4
+x = 7.36
+y = 37.4
 rotation = 90
 source = "agent"
 priority = "hard"
-timestamp = "2026-10-10T09:00:00+00:00"
+timestamp = "2026-10-23T12:00:00+00:00"
 
 [components.J2]
-x = 17.46
-y = 33.4
+x = 16.46
+y = 37.4
 rotation = 90
 source = "agent"
 priority = "hard"
-timestamp = "2026-10-10T09:00:00+00:00"
+timestamp = "2026-10-23T12:00:00+00:00"
 
 [components.J3]
-x = 26.56
-y = 33.4
+x = 25.56
+y = 37.4
 rotation = 90
 source = "agent"
 priority = "hard"
-timestamp = "2026-10-10T09:00:00+00:00"
+timestamp = "2026-10-23T12:00:00+00:00"
 
 [components.J4]
 x = 34.66
-y = 33.4
+y = 37.4
 rotation = 90
 source = "agent"
 priority = "hard"
-timestamp = "2026-10-10T09:00:00+00:00"
+timestamp = "2026-10-23T12:00:00+00:00"
 
 [components.H1]
 x = 3.5

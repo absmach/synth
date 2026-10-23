@@ -66,9 +66,9 @@ The Nexperia and LP5907 electrical numbers were not re-read.
 
 Status: compact placement done and routed with FreeRouting. The route passes Synth's own checks; it is not reviewed or fabricated.
 
-- Outline: 45.0 x 39.73 mm as routed. The placement sidecar gives 45.0 x 35.7 mm; the exporter's repair step moves J3 down out of the header row to y 37.4 mm.
+- Outline: 45.0 x 39.73 mm as routed. The four M2.5 holes set the 45.0 mm width with a 2.2 mm rim, and the header courtyards set the 39.73 mm height.
 - The four M2.5 holes are board features with a 2.2 mm rim: 3.5 mm from hole centre to the left, right and top edges, 2.2 mm from the hole edge to the board edge. PR 272's 1.5 mm tight rim would put the holes on the edge and split the F.Cu GND pour into two unconnected islands. The 2.2 mm board-feature rim in this branch restores the 45.0 mm width and the pour connection; it is the rim the board was routed with before PR 272.
-- Every part has a position in `usb_uart.placement.layout.toml`. J1 sits flush on the top edge. J_VIO, J2, J3 and J4 sit flush on the bottom edge.
+- Every part has a position in `usb_uart.placement.layout.toml`. J1 sits flush on the top edge. J_VIO, J2, J3 and J4 sit flush on the bottom edge at y 37.4 mm, spaced 9.1 mm apart. The rotated 1x3 header courtyard is 8.62 mm long, so the first sidecar, which put J3 8.1 mm from J4, made the legaliser park J3 one row below; the row now stays aligned.
 - No courtyard overlaps. J1 courtyard to top edge: 0.01 mm (flush).
 - Pad-edge gap to the target pad on the same net:
 
@@ -90,11 +90,11 @@ Status: compact placement done and routed with FreeRouting. The route passes Syn
 
 Routing (FreeRouting 2.4.1, `router: "freerouting"`, `allow_via_in_pad: true`), on Synth main `1eac8a1` (PR #272) plus the board-feature rim fix in this branch:
 - Result: routed. `release.json` has `release_ready` true and the gate reports no open net. `kicad-cli pcb drc --severity-all --refill-zones`: 0 errors, 0 unconnected, 42 warnings (36 footprint library links, 5 silk over copper, 1 silk overlap).
-- 247 track segments, 41 vias, 544.4 mm of copper.
+- 253 track segments, 42 vias, 565.1 mm of copper.
 - The routed board is 45.0 x 39.73 mm.
 - J4 is at x 34.66 mm in the sidecar. At 35.66 and 36.66 mm, and turned 180 degrees, FreeRouting left one to three nets open. Its result changes with small placement changes and is not bit-for-bit repeatable.
 - Via-in-pad at the U1 exposed pad (pin 25), at (23.800, 17.300) mm. The fab must fill and cap it. JLCPCB has not been asked.
-- Signal-integrity pass: 21 warnings, none blocking. 20 are layer changes with no ground return via within 0.64 mm, one is a parallel run of 5.9 mm at 0.177 mm.
+- Signal-integrity pass: 23 warnings, none blocking. 22 are layer changes with no ground return via within 0.64 mm, one is a parallel run of 5.9 mm at 0.132 mm.
 - The USB pair is not coupled and its length and skew were not measured for this route. FreeRouting does not couple the pair, so the 90 ohm geometry is unverified.
 - No part has been reviewed (`reviewer_state` is false for every part in `release.json`).
 - The silkscreen reference text is large and sits close to its part. D4 and D7 labels overlap.
