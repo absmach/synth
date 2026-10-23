@@ -177,7 +177,7 @@ What this board is, stated so an integrator does not have to read the source:
 
 - **One stitching via lands in `U2.2`** and the declared process does not fill
   vias, so the package is refused. Same-net, so it shorts nothing; see
-  *Measured* for why the tier is not simply changed.
+  *Measured* for why the tier is not simply changed. Filed as #278.
 - **Four parts are operated outside the envelope their registry entries
   declare.** `jst_xh_2pin`, `p_mosfet_si2301`, `polyfuse` and `d_zener_5v1`
   each declare 5 V and 100 mA, which is a template default rather than a
