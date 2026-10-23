@@ -11,7 +11,7 @@ Do not call it proven or clean. The list of what is unchecked is at the bottom.
 - DTR0/TNOW0 switches the transceiver direction. R_TNOW (4.7k to GND) puts UART0 in the CH342 half-duplex mode.
 - Protection: PRTR5V0U2X on D+/D-, PTVS6V0S1UR on VBUS, CC1 and CC2. A 3.3 V LDO (LP5907) feeds the +3V3 rail.
 - Four M2.5 mounting holes (H1 to H4), pinned in the placement sidecar: two at the top corners, two on the left and right edges at mid-height. The bottom corners are taken by the header row. Screw size and standoff height are not chosen.
-- Source: `usb_uart.synth`. Sidecars: `usb_uart.placement.layout.toml` (board mm), `usb_uart.schematic.layout.toml` (sheet mm).
+- Source: `usb_uart.synth`. Sidecar: `usb_uart.placement.layout.toml` (board mm). The schematic has no sidecar: the compiler lays it out, one region per group.
 
 ## VIO jumper (J_VIO)
 
@@ -114,7 +114,7 @@ Add `--best-of --kicad-routing-tools-repo <dir> --kicad-routing-tools-python <py
 ## Known limits and gaps
 
 - Schematic: an earlier exporter bug drew the CH342F wires 1.27 mm short of its pins. With commit 9592ad5 (PR #104) applied, the netlist shows U1 connected (only RST and RTS0 left open). Without that fix, KiCad sees every U1 pin as unconnected.
-- Schematic look: R_TERM text overlaps, notes sit on top of J1 pin text, U1 top pins crowd their title, and the sheet is A2 with most of it empty. Not tidied.
+- Schematic look: the compiler's own layout, not tuned by hand. The J1 value text runs into its B9 and B10 pin labels, and the labels on U1's left pins are close together.
 - Validate still warns: E-SYNTH-POWER-004 x2 (VBUS and GND load-to-capacitor ratio, a count heuristic), W-SYNTH-ANOMALY-001, W-SYNTH-IMPEDANCE-001 (inner layers not verified), W-SYNTH-SUPPLY-002 x4, W-SYNTH-PART-UNVERIFIED x9.
 - No VBUS bulk capacitor, no fuse, no reverse or inrush protection.
 - R_TERM (120 ohm across A/B) is always connected. The registry has no 2-pin header (`header_1x2`) for a jumper.
