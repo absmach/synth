@@ -65,9 +65,17 @@ capabilities = ["usb_dn"]
 # --- General-purpose IO with peripheral capabilities ---
 # GP0..GP3 sample subset for ERC testing. The RP2350 GPIO mux is much
 # richer than what is recorded here; expanding is mechanical.
-# NOTE: these numbers match the referenced `MCU_RaspberryPi:RP2040`
-# symbol's physical pins (GPIO0..GPIO3 = pins 2..5). The part id and
-# mpn describe the RP2350, but the symbol+footprint are RP2040.
+#
+# Every pin number in this file was compared against the installed
+# `MCU_RaspberryPi:RP2350A` symbol, hidden stacked pins included: 61 symbol
+# pins, 61 here, no pad whose function differs. IOVDD is pads 1, 11, 20, 30,
+# 38 and 45; DVDD is 6, 23 and 39; the exposed pad is 61. The symbol names a
+# few pins differently (`USB_DM` for `usb_dn`, `GPIO26/ADC0` for `gp26`) and
+# those are naming choices, not different pads.
+#
+# This note used to say the numbers matched `MCU_RaspberryPi:RP2040`. That
+# was not true of this map -- an RP2040 is a 56-pin QFN with DVDD on pads 23
+# and 50 -- and #152 was filed from the sentence rather than from the pads.
 
 [[pins]]
 name = "gp0"

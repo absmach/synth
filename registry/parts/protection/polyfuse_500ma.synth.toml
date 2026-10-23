@@ -1,0 +1,29 @@
+id = "polyfuse_500ma"
+kind = "fuse"
+description = "Bourns MF-NSMF050-2 resettable fuse, 0.5 A hold, 13.2 V, 1206"
+# For a 5 V USB-class input. LCSC C75464.
+mpn = "MF-NSMF050-2"
+lcsc_pn = "C75464"
+kicad_symbol = "Device:Polyfuse"
+kicad_footprint = "Fuse:Fuse_1206_3216Metric"
+
+[footprint_dimensions]
+width_mm = 3.2
+height_mm = 1.6
+courtyard_margin_mm = 0.25
+
+# Hold current and maximum voltage from the LCSC listing; confirm against the
+# manufacturer's datasheet before relying on either.
+[operating_conditions]
+max_voltage_v = 13.2
+max_current_ma = 500
+
+[[pins]]
+name = "p1"
+number = "1"
+electrical_type = "passive"
+
+[[pins]]
+name = "p2"
+number = "2"
+electrical_type = "passive"

@@ -3,6 +3,9 @@ kind = "transistor"
 description = "Vishay Si2301 P-channel power MOSFET, SOT-23"
 kicad_symbol = "Transistor_FET:Si2301CDS"
 kicad_footprint = "Package_TO_SOT_SMD:SOT-23"
+# Vishay, 20 V P-channel, Vgs +/-8 V.
+mpn = "SI2301CDS-T1-GE3"
+lcsc_pn = "C10487"
 
 [footprint_dimensions]
 width_mm = 3.35

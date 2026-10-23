@@ -2,16 +2,22 @@ id = "tps22918_loadswitch"
 kind = "regulator"
 description = "TI TPS22918 2A load switch with quick output discharge"
 kicad_footprint = "Package_TO_SOT_SMD:SOT-23-6"
+mpn = "TPS22918DBVR"
+lcsc_pn = "C131941"
 
 [footprint_dimensions]
 width_mm = 5.0
 height_mm = 5.0
 courtyard_margin_mm = 0.25
 
+# TI SLVSD76C: input 1 V to 5.5 V, 2 A maximum continuous switch current,
+# 52 mOhm typical at 5 V. The 3.5-15 V / 800 mA that stood here is a linear
+# regulator's envelope, and it made a 3.3 V rail into this switch an
+# E-SYNTH-POWER-009 error the moment a board declared the rail.
 [operating_conditions]
-min_voltage_v = 3.5
-max_voltage_v = 15.0
-max_current_ma = 800.0
+min_voltage_v = 1.0
+max_voltage_v = 5.5
+max_current_ma = 2000.0
 max_power_mw = 200
 thermal_resistance_c_per_w = 200
 
