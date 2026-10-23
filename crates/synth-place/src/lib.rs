@@ -3206,10 +3206,61 @@ fn place_with_outline<S: ::std::hash::BuildHasher>(
         }
     }
 
+    face_edge_connectors_outward(
+        board,
+        adaptive_board_outline,
+        &mut placements,
+        &courtyard_lookup,
+        pinned,
+    );
+
     Ok(Placement {
         board_outline: adaptive_board_outline,
         components: placements,
     })
+}
+
+/// Turn every edge-mounted connector so its plug opens out of the board.
+///
+/// The floorplan picks a connector's rotation from the edge it was *asked* for,
+/// but a soft hint is a preference and the placer may settle it somewhere else.
+/// What a person sees is where the connector ended up, so this runs last and
+/// uses the same test the DRC does, [`floorplan::connector_orientation_issues`],
+/// which is what keeps the two from disagreeing.
+///
+/// A pinned connector is left alone: a sidecar is a constraint, and the DRC
+/// reports it if it is wrong. So is a turn that would put the courtyard on top
+/// of another part — a quarter turn changes its extents — since an overlap is
+/// worse than a connector that faces sideways, and the DRC reports that too.
+fn face_edge_connectors_outward<S: ::std::hash::BuildHasher>(
+    board: &Board,
+    outline: Rect,
+    placements: &mut [ComponentPlacement],
+    courtyard_lookup: &std::collections::HashMap<ComponentId, (f64, f64)>,
+    pinned: &std::collections::HashMap<ComponentId, (Point, Rotation), S>,
+) {
+    for issue in floorplan::connector_orientation_issues(board, outline, placements) {
+        let Some(index) = placements.iter().position(|placed| {
+            board
+                .component(placed.id)
+                .is_some_and(|component| component.refdes == issue.refdes)
+        }) else {
+            continue;
+        };
+        if pinned.contains_key(&placements[index].id) {
+            continue;
+        }
+        let mut turned = placements[index];
+        turned.rotation = issue.expected;
+        let clear = placements.iter().all(|other| {
+            other.id == turned.id
+                || !padded_courtyard_rect(courtyard_lookup, &turned)
+                    .intersects(&padded_courtyard_rect(courtyard_lookup, other))
+        });
+        if clear {
+            placements[index] = turned;
+        }
+    }
 }
 
 fn exported_pad_bounds(

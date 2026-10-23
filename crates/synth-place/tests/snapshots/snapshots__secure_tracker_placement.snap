@@ -9,7 +9,7 @@ board_outline_mm: 64.90 x 63.85
   U3  (  15.70,   28.55) mm  rot=Zero layer=Top
   U4  (  30.88,   17.88) mm  rot=Zero layer=Top
   J1  (  18.07,    9.46) mm  rot=OneEighty layer=Top
-  J2  (  10.05,   47.20) mm  rot=Ninety layer=Top
+  J2  (  10.05,   47.20) mm  rot=TwoSeventy layer=Top
 ANT1  (  56.45,   31.10) mm  rot=Zero layer=Top
   Y1  (  33.25,   41.25) mm  rot=Zero layer=Top
   C8  (  24.85,   49.65) mm  rot=Zero layer=Top

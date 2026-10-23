@@ -48,7 +48,7 @@ expression: board
           "width_mm": 1.0,
           "height_mm": 1.6,
           "courtyard_margin_mm": 0.25,
-          "mating_face": null,
+          "mating_face": "bottom",
           "label_side": null,
           "label_hidden": null
         },

@@ -8,6 +8,9 @@ kicad_footprint = "Connector_JST:JST_PH_S3B-PH-K_1x03_P2.00mm_Horizontal"
 width_mm = 1.0
 height_mm = 1.6
 courtyard_margin_mm = 0.25
+# Side-entry (horizontal) footprint: the housing extends toward +y from the
+# pad row and the plug enters from that end, read from the footprint outline.
+mating_face = "bottom"
 
 [operating_conditions]
 min_voltage_v = 1.8

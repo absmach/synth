@@ -1,0 +1,32 @@
+// Side-entry JST connectors on three different edges. Each one has to be
+// turned so its plug opens outward, whichever edge it was asked to sit on:
+// the floorplan used to give every JST connector the same rotation and put it
+// on the left edge, so a connector asked for the right edge faced the board.
+board "edge_jst_connectors" {
+  layers 2
+  manufacturer "jlcpcb"
+
+  component U1: mcu "stm32g030"
+  component C1: capacitor "c_generic_0603" value "100nF"
+  component C2: capacitor "c_generic_0603" value "100nF"
+  component J1: connector "jst_ph_2pin" { placement_hint { region: left_edge edge: left priority: hard } }
+  component J2: connector "jst_xh_2pin" { placement_hint { region: right_edge edge: right priority: hard } }
+  component J3: connector "jst_ph_3pin" { placement_hint { region: bottom_edge edge: bottom priority: hard } }
+  component J4: connector "jst_ph_4pin" { placement_hint { region: top_edge edge: top priority: hard } }
+
+  connect J1.p1 -> U1.vdd
+  connect J1.p2 -> U1.vss
+  connect U1.vdd -> C1.p1
+  connect U1.vss -> C1.p2
+  connect U1.vdd -> C2.p1
+  connect U1.vss -> C2.p2
+  connect J2.p1 -> U1.pa0
+  connect J2.p2 -> U1.vss
+  connect J3.p1 -> U1.pa1
+  connect J3.p2 -> U1.pa2
+  connect J3.p3 -> U1.vss
+  connect J4.p1 -> U1.pa3
+  connect J4.p2 -> U1.pa4
+  connect J4.p3 -> U1.pa5
+  connect J4.p4 -> U1.vss
+}

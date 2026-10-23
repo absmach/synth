@@ -156,6 +156,44 @@ pub fn connector_orientation_issues(
     issues
 }
 
+/// The board edge a component was asked to sit on: an explicit `edge`, or the
+/// edge implied by a `region`. `None` for a centre or unspecified request.
+fn hinted_edge(comp: &synth_ir::Component) -> Option<BoardEdge> {
+    let hint = comp.placement_hint.as_ref()?;
+    if let Some(edge) = &hint.edge {
+        return Some(match edge {
+            synth_ir::PlacementEdge::Top => BoardEdge::Top,
+            synth_ir::PlacementEdge::Right => BoardEdge::Right,
+            synth_ir::PlacementEdge::Bottom => BoardEdge::Bottom,
+            synth_ir::PlacementEdge::Left => BoardEdge::Left,
+        });
+    }
+    match hint.region.as_ref()? {
+        synth_ir::PlacementRegion::LeftEdge => Some(BoardEdge::Left),
+        synth_ir::PlacementRegion::RightEdge => Some(BoardEdge::Right),
+        synth_ir::PlacementRegion::TopEdge
+        | synth_ir::PlacementRegion::TopLeft
+        | synth_ir::PlacementRegion::TopRight => Some(BoardEdge::Top),
+        synth_ir::PlacementRegion::BottomEdge
+        | synth_ir::PlacementRegion::BottomLeft
+        | synth_ir::PlacementRegion::BottomRight => Some(BoardEdge::Bottom),
+        synth_ir::PlacementRegion::Centre => None,
+    }
+}
+
+/// The outline edge nearest a point.
+fn nearest_edge(point: Point, usable: Rect) -> BoardEdge {
+    [
+        (point.y_nm - usable.min.y_nm, BoardEdge::Top),
+        (usable.max.x_nm - point.x_nm, BoardEdge::Right),
+        (usable.max.y_nm - point.y_nm, BoardEdge::Bottom),
+        (point.x_nm - usable.min.x_nm, BoardEdge::Left),
+    ]
+    .into_iter()
+    .min_by_key(|(distance, _)| *distance)
+    .map_or(BoardEdge::Left, |(_, edge)| edge)
+}
+
 /// Compute target floorplan positions and rotations for connectors and macro ICs.
 #[allow(clippy::too_many_lines, clippy::implicit_hasher)]
 pub fn compute_floorplan_targets(
@@ -238,9 +276,20 @@ pub fn compute_floorplan_targets(
                 .as_ref()
                 .is_some_and(|p| p.id.as_str().contains("jst"))
         {
-            // JST battery connector on Left Edge, facing left (-X) with Rotation::Ninety
-            let x = min_x + half_h + synth_geometry::mm_to_nm(1.5);
-            let y = min_y + height_nm / 3 + (jst_count * synth_geometry::mm_to_nm(12.0));
+            // A JST connector goes on the edge it asked for, left by default,
+            // spread along that edge. Its rotation is set below from its
+            // declared mating face, so the plug opens outward whichever edge
+            // that is; `Ninety` is only the fallback for a part that declares
+            // no face.
+            let edge = hinted_edge(comp).unwrap_or(BoardEdge::Left);
+            let inset = half_h + synth_geometry::mm_to_nm(1.5);
+            let step = jst_count * synth_geometry::mm_to_nm(12.0);
+            let (x, y) = match edge {
+                BoardEdge::Left => (min_x + inset, min_y + height_nm / 3 + step),
+                BoardEdge::Right => (max_x - inset, min_y + height_nm / 3 + step),
+                BoardEdge::Top => (min_x + width_nm / 3 + step, min_y + inset),
+                BoardEdge::Bottom => (min_x + width_nm / 3 + step, max_y - inset),
+            };
             targets.insert(
                 comp.id,
                 FloorplanTarget {
@@ -386,6 +435,28 @@ pub fn compute_floorplan_targets(
                     rotation: Rotation::Zero,
                 },
             );
+        }
+    }
+
+    // Every connector that declares which way its plug opens faces outward,
+    // not only the USB receptacle. The edge is the one the source asked for,
+    // or failing that the one nearest the connector's target. A part with no
+    // declared face keeps whatever rotation its branch above chose.
+    for comp in &board.components {
+        if !matches!(comp.kind.as_str(), "connector" | "jack") {
+            continue;
+        }
+        let Some(face) = comp
+            .part
+            .as_ref()
+            .and_then(|part| part.footprint_dimensions.as_ref())
+            .and_then(|dimensions| dimensions.mating_face)
+        else {
+            continue;
+        };
+        if let Some(target) = targets.get_mut(&comp.id) {
+            let edge = hinted_edge(comp).unwrap_or_else(|| nearest_edge(target.point, usable));
+            target.rotation = rotation_for_mating_edge(face, edge);
         }
     }
 
