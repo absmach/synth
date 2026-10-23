@@ -1,0 +1,310 @@
+// An MCU debug target: SWD, a crystal, a reset circuit and a status LED.
+//
+// A minimal RP2350 debug target: USB-C power into a 3V3 LDO, the MCU's own
+// crystal, a tactile reset on RUN, a 3-pin SWD header, QSPI boot flash, and
+// one status LED. Deliberately no USB data path — that belongs to Class B.
+//
+// Four layers, because two cannot be routed. The RP2350's QFN-60 has a
+// 0.4 mm pitch and leaves 0.2 mm between pads, while a via at JLCPCB's
+// standard floor needs 0.687 mm between centres: the drill that would fit
+// between two pins is 0.013 mm. Synth's escape analysis and
+// KiCadRoutingTools agree independently — "0/1 signals escaped ... the
+// smallest the fab ladder reaches is 0.56 mm" — and the analysis names 4
+// layers as the remedy. The Raspberry Pi Pico 2 is a four-layer board for
+// the same reason. This was declared `layers 2` and was unroutable.
+//
+// `jlc-filled-via`, and `requires via_in_pad` to say so out loud. Four
+// layers get the escape out of the pad field, but three decoupling pads
+// still take their via inside the pad, and on a 0.4 mm pitch package that
+// is the geometry rather than a routing mistake: there is no 0.2 mm gap to
+// put a 0.56 mm via in. The filled-via tier carries the same track,
+// clearance, drill and annular floors as the standard one — it adds resin
+// fill and a capped plating step, nothing that relaxes a minimum — so the
+// copper is judged against exactly the same numbers it was before.
+board "rp2350_debug_target" {
+    layers 4
+    manufacturer "jlc-filled-via"
+    requires via_in_pad
+
+    // Two declared rails. The core rail is named but not declared: it comes
+    // out of the RP2350's own switcher at about 1.1 V, and the part's
+    // operating conditions are device-level 1.8-3.6 V, so declaring a
+    // voltage for it would have the range rules judge the core against the
+    // I/O limits.
+    //
+    //   V5_VBUS  5 V    J1 VBUS, after the fuse
+    //   V3V3    3.3 V   AMS1117 output: every IOVDD bank, the flash, J3
+    power "V5_VBUS" 5v
+    power "V3V3" 3.3v
+
+    group "POWER ENTRY" color "#c2410c" {
+      component J1: connector "usb_c_receptacle" { placement_hint { region: left_edge edge: left priority: hard } }
+      component R1: resistor  "r_generic_0603" value "5.1k"
+      component R2: resistor  "r_generic_0603" value "5.1k"
+      component U1: regulator "ams1117_3v3" value "AMS1117-3.3"
+      component C1: capacitor "c_generic_0805" value "22uF"
+      component C2: capacitor "c_generic_0805" value "22uF"
+      component F1: fuse      "polyfuse" value "500mA"
+      component D2: diode     "ptvs6v0s1ur"
+      component D3: led       "led_green_0603"
+      component R6: resistor  "r_generic_0603" value "1k"
+      component C17: capacitor "c_generic_0603" value "100nF" { placement_hint { near: "J1" priority: hard } }
+      component C20: capacitor "c_generic_0603" value "100nF" { placement_hint { near: "U1" priority: hard } }
+      component D6: diode     "esd_usb"
+      component D7: diode     "esd_usb"
+      component TP1: testpoint "testpoint_pad_1_5"
+      component TP2: testpoint "testpoint_pad_1_5"
+      notes "" {
+        "VBUS 5 V in, 3V3 out. CC1/CC2 pulled down 5.1k each: advertises a 5 V sink."
+        "C17 sits on VBUS at the connector, ahead of the fuse. A receptacle's"
+        "power pins with nothing across them turn cable inductance into rail"
+        "droop at plug-in, which is what E-SYNTH-KG-001 was reporting."
+        "D6 and D7 clamp CC1 and CC2. They are exposed contacts on a connector"
+        "a person handles, so they get the same treatment as the data pair."
+        "F1 and D2 are what make this safe to hand someone. A debug target gets"
+        "plugged into whatever is on the bench, and a shorted probe lead should"
+        "trip a fuse rather than a host's port."
+        "All four VBUS contacts and all four grounds are tied, not just the"
+        "first of each: a USB-C receptacle splits its current across them, and"
+        "wiring one pin of each leaves the connector carrying its rating on a"
+        "quarter of its contacts. SHLD goes to ground."
+        "J1 is on the left edge and J3 on the right: the cable goes in one"
+        "side and the ribbon out the other, and both stay clear of the corner"
+        "mounting holes."
+        "D3 says the 3V3 rail is up. The other LED is on GP25 and so reports"
+        "firmware, not power -- when a board is dark those are different"
+        "questions."
+      }
+    }
+
+    connect J1.vbus -> F1.p1
+    connect F1.p2   -> U1.vin as "V5_VBUS"
+    connect J1.gnd  -> U1.gnd as "GND"
+    connect J1.vbus -> J1.vbus_b4
+    connect J1.vbus -> J1.vbus_a9
+    connect J1.vbus -> J1.vbus_b9
+    connect J1.gnd  -> J1.gnd_b12
+    connect J1.gnd  -> J1.gnd_a12
+    connect J1.gnd  -> J1.gnd_b1
+    connect J1.shld -> U1.gnd
+    connect F1.p2   -> D2.cathode
+    connect U1.gnd  -> D2.anode
+    connect U1.vout -> R6.p1
+    connect R6.p2   -> D3.anode
+    connect D3.cathode -> U1.gnd
+    connect J1.vbus -> C17.p1
+    connect J1.gnd  -> C17.p2
+    connect J1.cc1  -> D6.io
+    connect U1.gnd  -> D6.gnd
+    connect J1.cc2  -> D7.io
+    connect U1.gnd  -> D7.gnd
+    connect F1.p2   -> TP1.p1
+    connect U1.vout -> TP2.p1
+    connect J1.cc1  -> R1.p1
+    connect J1.gnd  -> R1.p2
+    connect J1.cc2  -> R2.p1
+    connect J1.gnd  -> R2.p2
+    connect U1.vin  -> C1.p1
+    connect U1.vin  -> C20.p1
+    connect U1.gnd  -> C20.p2
+    connect U1.gnd  -> C1.p2
+    connect U1.vout -> C2.p1 as "V3V3"
+    connect U1.gnd  -> C2.p2
+
+    group "RP2350 CORE" color "#0072b2" {
+      component U2: mcu       "rp2350"
+      component C3: capacitor "c_generic_0603" value "100nF" { placement_hint { near: "U2" priority: hard } }
+      component C4: capacitor "c_generic_0603" value "100nF" { placement_hint { near: "U2" priority: hard } }
+      component C5: capacitor "c_generic_0603" value "100nF" { placement_hint { near: "U2" priority: hard } }
+      component C6: capacitor "c_generic_0603" value "100nF" { placement_hint { near: "U2" priority: hard } }
+      component C7: capacitor "c_generic_0603" value "1uF"   { placement_hint { near: "U2" priority: hard } }
+      component L1: inductor  "l_generic_0603" value "3.3uH" { placement_hint { near: "U2" priority: hard } }
+      component C8: capacitor "c_generic_0805" value "4.7uF" { placement_hint { near: "U2" priority: hard } }
+      component C13: capacitor "c_generic_0603" value "100nF" { placement_hint { near: "U2" priority: hard } }
+      component C14: capacitor "c_generic_0603" value "100nF" { placement_hint { near: "U2" priority: hard } }
+      component C15: capacitor "c_generic_0603" value "100nF" { placement_hint { near: "U2" priority: hard } }
+      component C18: capacitor "c_generic_0603" value "100nF" { placement_hint { near: "U2" priority: hard } }
+      component C19: capacitor "c_generic_0603" value "100nF" { placement_hint { near: "U2" priority: hard } }
+      component D4: diode     "esd_usb"
+      component D5: diode     "esd_usb"
+      component TP3: testpoint "testpoint_pad_1_5"
+      notes "" {
+        "Core rail comes from the RP2350's own switching regulator: VREG_VIN"
+        "from 3V3, VREG_LX through L1 into DVDD, VREG_FB sensing DVDD."
+        "IOVDD4, IOVDD5 and IOVDD6 were left unconnected. They are not"
+        "optional pins with a default: they are the supply for three of the six"
+        "I/O banks, and a bank with no supply does not drive. Each now has 3V3"
+        "and its own 100 nF."
+        "USB D+/D- reach the connector. This was deliberately left out as"
+        "'a faster class's problem', but USB full speed is 12 Mbit/s and the"
+        "point of it here is not bandwidth: it is that a board with bad"
+        "firmware is recoverable by someone holding the BOOTSEL button and"
+        "plugging in a cable, with no debugger in the room. D4 and D5 clamp"
+        "both lines, which the bare pins did not have."
+      }
+    }
+
+    connect U1.vout -> U2.iovdd
+    connect U1.vout -> U2.iovdd2
+    connect U1.vout -> U2.iovdd3
+    connect U1.vout -> U2.qspi_iovdd
+    connect U1.vout -> U2.usb_otp_vdd
+    connect U1.vout -> U2.adc_avdd
+    connect U1.vout -> U2.vreg_avdd
+    connect U1.vout -> U2.vreg_vin
+    connect U1.vout -> U2.iovdd4
+    connect U1.vout -> U2.iovdd5
+    connect U1.vout -> U2.iovdd6
+    connect U1.gnd  -> U2.gnd
+    connect U1.gnd  -> U2.vreg_pgnd
+
+    connect U2.iovdd4 -> C13.p1
+    connect U2.gnd    -> C13.p2
+    connect U2.iovdd5 -> C14.p1
+    connect U2.gnd    -> C14.p2
+    connect U2.iovdd6 -> C15.p1
+    connect U2.gnd    -> C15.p2
+
+    // Both halves of each pair, so the cable works either way up.
+    connect U2.usb_dp -> J1.dp
+    connect J1.dp     -> J1.dp_b6
+    connect U2.usb_dn -> J1.dn
+    connect J1.dn     -> J1.dn_b7
+    connect J1.dp     -> D4.io
+    connect U1.gnd    -> D4.gnd
+    connect J1.dn     -> D5.io
+    connect U1.gnd    -> D5.gnd
+
+    connect U2.iovdd      -> C3.p1
+    connect U2.gnd        -> C3.p2
+    connect U2.iovdd2     -> C4.p1
+    connect U2.gnd        -> C4.p2
+    connect U2.qspi_iovdd -> C5.p1
+    connect U2.gnd        -> C5.p2
+    connect U2.adc_avdd   -> C6.p1
+    connect U2.gnd        -> C6.p2
+    connect U2.vreg_avdd  -> C7.p1
+    connect U2.gnd        -> C7.p2
+
+    connect U2.vreg_lx -> L1.p1
+    connect L1.p2      -> U2.dvdd as "VCORE"
+    connect U2.dvdd    -> TP3.p1
+    connect U2.dvdd    -> U2.vreg_fb
+    connect U2.dvdd    -> C8.p1
+    connect U2.gnd     -> C8.p2
+    connect U2.dvdd2   -> C18.p1
+    connect U2.gnd     -> C18.p2
+    connect U2.dvdd3   -> C19.p1
+    connect U2.gnd     -> C19.p2
+    connect U2.dvdd    -> U2.dvdd2
+    connect U2.dvdd    -> U2.dvdd3
+
+    group "CLOCK AND RESET" color "#7c3aed" {
+      component Y1: crystal   "xtal_8mhz" value "12MHz" { placement_hint { near: "U2" priority: hard } }
+      component C9: capacitor "c_generic_0603" value "15pF" { placement_hint { near: "Y1" priority: hard } }
+      component C10: capacitor "c_generic_0603" value "15pF" { placement_hint { near: "Y1" priority: hard } }
+      component SW1: switch    "spst_tactile" { placement_hint { near: "U2" priority: hard } }
+      component R3: resistor   "r_generic_0603" value "10k"   { placement_hint { near: "U2" priority: hard } }
+      component C11: capacitor "c_generic_0603" value "100nF" { placement_hint { near: "U2" priority: hard } }
+      notes "" {
+        "RUN is pulled up 10k and pulled low by SW1. C11 debounces the edge."
+        "The RP2350 has its own pull-up on RUN and the Pico's reference design"
+        "leaves this pin bare, so R3 looks redundant -- but the registry has"
+        "no way to declare an internal pull-up, and without R3 the compiler is"
+        "correct to report E-SYNTH-KG-001: a switch to ground and nothing else"
+        "leaves the input floating when the switch is open. R3 stays."
+        "Y1, R3 and C11 are hinted onto U2: XIN/XOUT and RUN are the two nets"
+        "on this board whose length is the circuit, not just the routing."
+      }
+    }
+
+    connect U2.xin  -> Y1.p1
+    connect U2.xout -> Y1.p2
+    connect Y1.p1   -> C9.p1
+    connect U1.gnd  -> C9.p2
+    connect Y1.p2   -> C10.p1
+    connect U1.gnd  -> C10.p2
+
+    connect U1.vout -> R3.p1
+    connect R3.p2   -> U2.run
+    connect U2.run  -> SW1.p1
+    connect SW1.p2  -> U1.gnd
+    connect U2.run  -> C11.p1
+    connect U1.gnd  -> C11.p2
+
+    group "BOOT FLASH" color "#0a7d4a" {
+      component U3: memory    "w25q128_flash"
+      component C12: capacitor "c_generic_0603" value "100nF" { placement_hint { near: "U3" priority: hard } }
+      component SW2: switch    "spst_tactile" { placement_hint { near: "U3" priority: hard } }
+      component R5: resistor   "r_generic_0603" value "1k" { placement_hint { near: "SW2" priority: hard } }
+      notes "" {
+        "BOOTSEL. Holding QSPI_SS low through R5 at reset stops the boot ROM"
+        "finding valid flash, so it comes up as a USB mass-storage device and"
+        "takes a UF2. The 1k is what lets the flash still be selected"
+        "normally while the button is up -- it is a weak pull, not a short."
+        "This and the USB data path are the whole recovery story: hold SW2,"
+        "tap SW1, let go. No debugger."
+        "SW2 sits on U3 and SW1 on U2, because QSPI_SS and RUN are the two"
+        "nets here whose length is the circuit rather than the routing -- the"
+        "same argument the crystal gets. Unhinted, both switches floated and"
+        "the router left RUN reaching 1 of its 6 pads."
+      }
+    }
+
+    connect U1.vout -> U3.vcc
+    connect U1.gnd  -> U3.gnd
+    connect U3.vcc  -> C12.p1
+    connect U3.gnd  -> C12.p2
+    connect U2.qspi_sclk -> U3.clk
+    connect U2.qspi_ss   -> U3.cs
+    connect U2.qspi_sd0  -> U3.io0
+    connect U2.qspi_sd1  -> U3.io1
+    connect U2.qspi_sd2  -> U3.io2
+    connect U2.qspi_sd3  -> U3.io3
+
+    connect U2.qspi_ss -> R5.p1
+    connect R5.p2      -> SW2.p1
+    connect SW2.p2     -> U1.gnd
+
+    group "SWD AND STATUS" color "#b45309" {
+      component J2: connector "header_1x3" { placement_hint { region: top_edge edge: top priority: hard } }
+      component D1: led       "led_green_0603"
+      component R4: resistor  "r_generic_0603" value "1k"
+      notes "" {
+        "SWD header in probe pin order: SWCLK / GND / SWDIO."
+        "Status LED on GP25 at ~1 mA, sized for 3V3 through 1k."
+      }
+    }
+
+    connect U2.swclk -> J2.p1
+    connect U1.gnd   -> J2.p2
+    connect U2.swdio -> J2.p3
+
+    connect U2.gp25  -> R4.p1
+    connect R4.p2    -> D1.anode
+    connect D1.cathode -> U1.gnd
+
+    connect U1.gnd  -> TP4.p1
+
+    group "MECHANICAL" color "#737373" {
+      component TP4: testpoint "testpoint_pad_1_5"
+      component H1: mounting_hole "mounting_hole_m2_5" { placement_hint { region: top_left priority: hard } }
+      component H2: mounting_hole "mounting_hole_m2_5" { placement_hint { region: bottom_right priority: hard } }
+      component FID1: fiducial "fiducial_1mm" { placement_hint { region: top_edge priority: soft } }
+      component FID2: fiducial "fiducial_1mm" { placement_hint { region: bottom_edge priority: soft } }
+      notes "" {
+        "TP4 is the ground reference the other three probe points are"
+        "measured against. Two M2.5 holes on the diagonal, and two fiducials."
+        "Two rather than four, which is a decision about this board and not a"
+        "default. Each hole brings an all-layer `screw head` keepout, so four"
+        "of them punch four holes through every routing layer -- and this is a"
+        "bench target that sits on a desk or on two standoffs, not a board"
+        "bolted into an enclosure at four corners. With four, F.Cu carried 290"
+        "segments against 6 on B.Cu and four nets would not close."
+        "The corner hints are not decoration. `MountingHole_2.5mm` draws its"
+        "courtyard as a single fp_circle, and until the loader read that"
+        "circle an unhinted hole reserved no area and landed on top of"
+        "whatever was already there."
+      }
+    }
+  }
