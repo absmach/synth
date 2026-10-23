@@ -1,0 +1,133 @@
+{
+  "schema_version": "synth.routing.v1",
+  "state": "routed",
+  "engine": "freerouting",
+  "capability": {
+    "engine": "freerouting",
+    "available": true,
+    "version": "freerouting-2.4.1",
+    "runtime_version": "openjdk version \"25.0.4.1\" 2026-08-18 LTS",
+    "detail": null,
+    "failure": null
+  },
+  "provenance": {
+    "engine": "freerouting",
+    "engine_version": "/home/steve/work/synth/tools/freerouting/freerouting-2.4.1.jar",
+    "runtime_version": "openjdk version \"25.0.4.1\" 2026-08-18 LTS",
+    "profile": "jlcpcb",
+    "command": [
+      "/usr/bin/python3",
+      "/home/steve/work/synth/tools/freeroute_autoroute.py",
+      "/home/steve/work/synth/target/pr103-272-rim22-1/usb_uart.synth.kicad_pcb",
+      "/home/steve/work/synth/target/pr103-272-rim22-1/usb_uart.freerouting.kicad_pcb",
+      "--jar",
+      "/home/steve/work/synth/tools/freerouting/freerouting-2.4.1.jar",
+      "--java",
+      "/home/steve/work/synth/tools/jre25/bin/java",
+      "--passes",
+      "40",
+      "--threads",
+      "4",
+      "--ses-output",
+      "/home/steve/work/synth/target/pr103-272-rim22-1/usb_uart.freerouting.ses",
+      "--report",
+      "/home/steve/work/synth/target/pr103-272-rim22-1/usb_uart.freerouting.json",
+      "--clean-netlist",
+      "--allow-via-in-pad"
+    ],
+    "settings": {
+      "clean_netlist": "true",
+      "passes": "40",
+      "threads": "4",
+      "wall_clock_secs": "600"
+    },
+    "input_hash": "307946a13ebcea58f3407bd99dbe7966cd18fa1e92cbd5ce9220a84f8576b1b9",
+    "output_hash": "",
+    "source_revision": null,
+    "duration_ms": 123868
+  },
+  "statistics": {
+    "connected_nets": 26,
+    "open_nets": 0,
+    "open_net_names": [],
+    "segments": 247,
+    "vias": 41,
+    "wire_length_mm": 544.401468,
+    "pad_escape_rejections": 0,
+    "engine_findings": {
+      "claimed_imported_segments": "247",
+      "claimed_imported_vias": "41"
+    }
+  },
+  "artifacts": {
+    "baseline": "/home/steve/work/synth/target/pr103-272-rim22-1/usb_uart.synth.kicad_pcb",
+    "candidate": "/home/steve/work/synth/target/pr103-272-rim22-1/usb_uart.freerouting.kicad_pcb",
+    "delivered": "/home/steve/work/synth/target/pr103-272-rim22-1/usb_uart.kicad_pcb",
+    "session_log": "/home/steve/work/synth/target/pr103-272-rim22-1/usb_uart.freerouting.log",
+    "ses": "/home/steve/work/synth/target/pr103-272-rim22-1/usb_uart.freerouting.ses",
+    "router_report": "/home/steve/work/synth/target/pr103-272-rim22-1/usb_uart.freerouting.json",
+    "connectivity_report": null,
+    "drc_report": null
+  },
+  "validation": {
+    "fabrication_ready": true,
+    "topology": {
+      "missing_footprints": [],
+      "extra_footprints": [],
+      "missing_nets": [],
+      "missing_layers": [],
+      "missing_pads": [],
+      "renet_pads": [],
+      "outline_present": true
+    },
+    "connectivity": {
+      "connected_nets": 26,
+      "open_nets": 0,
+      "open": [],
+      "unconnected_pads": [],
+      "via_in_pad": [
+        "via at (23.800, 17.300) mm U1.25"
+      ],
+      "undersized_vias": [],
+      "undersized_tracks": []
+    },
+    "kicad_drc": {
+      "errors": 0,
+      "unconnected": 0,
+      "warnings": 42
+    },
+    "blocking_reasons": [],
+    "unavailable_checks": []
+  },
+  "failure": null,
+  "escape": [
+    {
+      "refdes": "J1",
+      "package": "Connector_USB:USB_C_Receptacle_HRO_TYPE-C-31-M-12",
+      "pads": 22,
+      "pitch_mm": 0.5,
+      "gap_mm": 0.2,
+      "via_span_mm": 0.687,
+      "max_drill_mm": 0.113,
+      "layers": 4,
+      "suggested_layers": null,
+      "limit": "track",
+      "detail": "adjacent pins are 0.500 mm apart and the pads leave 0.200 mm between them; a fabrication-floor via needs 0.687 mm between centres, so the drill that would fit is 0.113 mm; even a minimum track needs 0.254 mm of gap",
+      "remediation": "use via-in-pad if the process allows, or choose a coarser-pitch part"
+    },
+    {
+      "refdes": "U1",
+      "package": "Package_DFN_QFN:QFN-24-1EP_4x4mm_P0.5mm_EP2.6x2.6mm",
+      "pads": 25,
+      "pitch_mm": 0.5,
+      "gap_mm": 0.212132,
+      "via_span_mm": 0.687,
+      "max_drill_mm": 0.113,
+      "layers": 4,
+      "suggested_layers": null,
+      "limit": "track",
+      "detail": "adjacent pins are 0.500 mm apart and the pads leave 0.212 mm between them; a fabrication-floor via needs 0.687 mm between centres, so the drill that would fit is 0.113 mm; even a minimum track needs 0.254 mm of gap",
+      "remediation": "use via-in-pad if the process allows, or choose a coarser-pitch part"
+    }
+  ]
+}
