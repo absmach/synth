@@ -4,7 +4,8 @@
 //!
 //! Inspired by tscircuit's `calculate-packing` solver:
 //! 1. Macro components (ICs, connectors, regulators) are placed first via CEM.
-//! 2. Passives (resistors, capacitors, small diodes) are sorted largest → smallest.
+//! 2. Passives are packed largest-first, then smallest-first; the smaller
+//!    envelope wins when it does not lengthen wiring or a decoupling distance.
 //! 3. Maintains an outline hull (union of inflated AABBs of placed components).
 //! 4. Probes boundary candidate positions that minimize distance to pads sharing `NetId`s.
 //! 5. Evaluates 4 orthogonal rotations (0°, 90°, 180°, 270°) and selects the non-overlapping
@@ -15,7 +16,7 @@ use std::collections::HashMap;
 use synth_geometry::{mm_to_nm, Point, Rect, Rotation};
 use synth_ir::{Board, ComponentId, NetId};
 
-use crate::{hpwl_total, intersects_keepout, ComponentPlacement, PadOffsetLookup, PlaceError};
+use crate::{hpwl_total, overlaps_keepout, ComponentPlacement, PadOffsetLookup, PlaceError};
 
 /// Clearance gap kept around a placed macro (IC, connector, regulator) in
 /// nanometres (3.0 mm): room for the fan-out of its pads. Dropping this to
@@ -49,6 +50,7 @@ const PROBE_PITCH_NM: i64 = 500_000;
 #[derive(Debug, Clone)]
 pub struct OutlineHull {
     pub placed_rects: Vec<Rect>,
+    exact_contact: bool,
 }
 
 impl Default for OutlineHull {
@@ -61,6 +63,7 @@ impl OutlineHull {
     pub fn new() -> Self {
         Self {
             placed_rects: Vec::new(),
+            exact_contact: true,
         }
     }
 
@@ -77,6 +80,17 @@ impl OutlineHull {
             Point::new(courtyard.min.x_nm - gap, courtyard.min.y_nm - gap),
             Point::new(courtyard.max.x_nm + gap, courtyard.max.y_nm + gap),
         ));
+    }
+
+    /// Require full cover against every hull rect instead of allowing exact
+    /// contact.
+    ///
+    /// A board that docks a connector to a hard edge hint needs this: the
+    /// boundary slots along that edge are where the solver docks it, so a
+    /// passive packed exactly against a macro there can leave the connector
+    /// no free slot and the hint is dropped.
+    pub fn keep_full_clearance(&mut self) {
+        self.exact_contact = false;
     }
 
     /// Generate candidate probe points along the exposed perimeter of placed components.
@@ -122,7 +136,13 @@ impl OutlineHull {
         candidates.dedup();
         candidates.retain(|pt| {
             let cand_rect = Rect::from_center_half_extents(*pt, half_w, half_h);
-            self.placed_rects.iter().all(|r| !cand_rect.intersects(r))
+            self.placed_rects.iter().all(|r| {
+                if self.exact_contact {
+                    !overlaps_interior(cand_rect, *r)
+                } else {
+                    !cand_rect.intersects(r)
+                }
+            })
         });
         candidates.truncate(150); // Keep top 150 closest boundary candidates
         candidates
@@ -130,6 +150,14 @@ impl OutlineHull {
 }
 
 /// Pack passive components along the outline hull of placed macros.
+///
+/// Two packing orders are tried: largest part first, which gives the big parts
+/// the open boundary slots, and smallest part first, which lets them fill the
+/// pockets between macros before a large part blocks the approach. The first
+/// order is the fallback because it always finishes today; the second is kept
+/// only when it leaves a strictly smaller courtyard envelope without
+/// lengthening the wiring or the maximum decoupling distance. A board whose parts
+/// already pack well therefore comes out of here unchanged.
 pub(crate) fn pack_passives_along_outline(
     board: &Board,
     placements: &mut Vec<ComponentPlacement>,
@@ -139,7 +167,116 @@ pub(crate) fn pack_passives_along_outline(
     pad_offsets: &PadOffsetLookup,
     usable: Rect,
 ) -> Result<(), PlaceError> {
+    let mut largest_first = passives.to_vec();
+    largest_first.sort_by(|a, b| {
+        let (wa, ha) = courtyard_lookup[a];
+        let (wb, hb) = courtyard_lookup[b];
+        (wb * hb).partial_cmp(&(wa * ha)).unwrap()
+    });
+    let smallest_first: Vec<ComponentId> = largest_first.iter().rev().copied().collect();
+
+    let base = placements.clone();
+    let mut best = base.clone();
+    pack_passives_in_order(
+        board,
+        &mut best,
+        passives,
+        &largest_first,
+        courtyard_lookup,
+        courtyard_offset_lookup,
+        pad_offsets,
+        usable,
+    )?;
+    let best_area = envelope_area_mm2(&best, courtyard_lookup, courtyard_offset_lookup);
+    let best_hpwl = hpwl_total(board, &best, pad_offsets);
+    let best_decoupling = crate::score::score_placement(
+        board,
+        &crate::Placement {
+            board_outline: usable,
+            components: best.clone(),
+        },
+    )
+    .max_decoupling_distance_mm;
+
+    let mut alternative = base;
+    if pack_passives_in_order(
+        board,
+        &mut alternative,
+        passives,
+        &smallest_first,
+        courtyard_lookup,
+        courtyard_offset_lookup,
+        pad_offsets,
+        usable,
+    )
+    .is_ok()
+    {
+        let area = envelope_area_mm2(&alternative, courtyard_lookup, courtyard_offset_lookup);
+        let hpwl = hpwl_total(board, &alternative, pad_offsets);
+        let decoupling = crate::score::score_placement(
+            board,
+            &crate::Placement {
+                board_outline: usable,
+                components: alternative.clone(),
+            },
+        )
+        .max_decoupling_distance_mm;
+        if area < best_area && hpwl <= best_hpwl && decoupling <= best_decoupling {
+            best = alternative;
+        }
+    }
+    *placements = best;
+    Ok(())
+}
+
+/// Area of the box around every courtyard in `placements`, in square
+/// millimetres. The fitted outline is this box plus an edge margin, so it is
+/// the size a packing order is judged on.
+fn envelope_area_mm2(
+    placements: &[ComponentPlacement],
+    courtyard_lookup: &HashMap<ComponentId, (f64, f64)>,
+    courtyard_offset_lookup: &HashMap<ComponentId, (f64, f64)>,
+) -> f64 {
+    let mut min_x = i64::MAX;
+    let mut min_y = i64::MAX;
+    let mut max_x = i64::MIN;
+    let mut max_y = i64::MIN;
+    for p in placements {
+        let (w_mm, h_mm) = courtyard_lookup[&p.id];
+        let rect = crate::courtyard_rect_for_placement(
+            p,
+            w_mm,
+            h_mm,
+            courtyard_offset_lookup.get(&p.id).copied(),
+            0,
+        );
+        min_x = min_x.min(rect.min.x_nm);
+        min_y = min_y.min(rect.min.y_nm);
+        max_x = max_x.max(rect.max.x_nm);
+        max_y = max_y.max(rect.max.y_nm);
+    }
+    if min_x > max_x || min_y > max_y {
+        return 0.0;
+    }
+    synth_geometry::nm_to_mm(max_x - min_x) * synth_geometry::nm_to_mm(max_y - min_y)
+}
+
+/// Pack every passive in `order` along the hull built from `placements`.
+fn pack_passives_in_order(
+    board: &Board,
+    placements: &mut Vec<ComponentPlacement>,
+    passives: &[ComponentId],
+    order: &[ComponentId],
+    courtyard_lookup: &HashMap<ComponentId, (f64, f64)>,
+    courtyard_offset_lookup: &HashMap<ComponentId, (f64, f64)>,
+    pad_offsets: &PadOffsetLookup,
+    usable: Rect,
+) -> Result<(), PlaceError> {
     let mut hull = OutlineHull::new();
+    let exact_contact = !board.components.iter().any(crate::is_edge_flush_connector);
+    if !exact_contact {
+        hull.keep_full_clearance();
+    }
 
     // 1. Build initial hull from placed macro components
     for p in placements.iter() {
@@ -149,20 +286,12 @@ pub(crate) fn pack_passives_along_outline(
         hull.add_center(rect, CLEARANCE_GAP_NM);
     }
 
-    // 2. Sort passives by area descending (largest passives first)
-    let mut sorted_passives = passives.to_vec();
-    sorted_passives.sort_by(|a, b| {
-        let (wa, ha) = courtyard_lookup[a];
-        let (wb, hb) = courtyard_lookup[b];
-        (wb * hb).partial_cmp(&(wa * ha)).unwrap()
-    });
-
-    // 3. Map nets to placed pads for quick target centroid lookup
+    // 2. Map nets to placed pads for quick target centroid lookup
     let mut net_pad_positions: HashMap<NetId, Vec<Point>> = HashMap::new();
     update_net_pad_positions(board, placements, pad_offsets, &mut net_pad_positions);
 
-    // 4. Pack each passive component
-    for &comp_id in &sorted_passives {
+    // 3. Pack each passive component
+    for &comp_id in order {
         let (w_mm, h_mm) = courtyard_lookup[&comp_id];
         let unrot_half_w = mm_to_nm(w_mm) / 2;
         let unrot_half_h = mm_to_nm(h_mm) / 2;
@@ -212,6 +341,7 @@ pub(crate) fn pack_passives_along_outline(
                     placements,
                     courtyard_lookup,
                     courtyard_offset_lookup,
+                    exact_contact,
                 ) {
                     continue;
                 }
@@ -231,7 +361,7 @@ pub(crate) fn pack_passives_along_outline(
                         )
                     })
                     .collect();
-                if intersects_keepout(cand_rect, comp_id, board, usable, |pid| {
+                if overlaps_keepout(cand_rect, comp_id, board, usable, |pid| {
                     temp_placed
                         .iter()
                         .find(|(placed_id, _)| *placed_id == pid)
@@ -292,6 +422,7 @@ pub(crate) fn pack_passives_along_outline(
             passives,
             courtyard_lookup,
             courtyard_offset_lookup,
+            exact_contact,
         ) {
             let fallback = ComponentPlacement {
                 id: comp_id,
@@ -332,6 +463,7 @@ fn find_nearest_legal_slot(
     passives: &[ComponentId],
     courtyard_lookup: &HashMap<ComponentId, (f64, f64)>,
     courtyard_offset_lookup: &HashMap<ComponentId, (f64, f64)>,
+    exact_contact: bool,
 ) -> Option<Point> {
     let pitch = 500_000; // 0.5 mm grid step
     let temp_placed: Vec<(ComponentId, Rect)> = placements
@@ -380,8 +512,9 @@ fn find_nearest_legal_slot(
                     placements,
                     courtyard_lookup,
                     courtyard_offset_lookup,
+                    exact_contact,
                 )
-                && !intersects_keepout(cand_rect, id, board, usable, |pid| {
+                && !overlaps_keepout(cand_rect, id, board, usable, |pid| {
                     temp_placed
                         .iter()
                         .find(|(placed_id, _)| *placed_id == pid)
@@ -497,12 +630,25 @@ fn update_net_pad_positions(
     }
 }
 
+/// True when the two rectangles share interior area. Merely touching along an
+/// edge or at a corner is not an overlap: a courtyard sitting exactly at the
+/// required gap is legal. Testing full intersection instead rejected every
+/// boundary probe the hull generates (they all land exactly on the inflated
+/// edge), so each passive fell through to the ring search.
+fn overlaps_interior(a: Rect, b: Rect) -> bool {
+    a.min.x_nm < b.max.x_nm
+        && a.max.x_nm > b.min.x_nm
+        && a.min.y_nm < b.max.y_nm
+        && a.max.y_nm > b.min.y_nm
+}
+
 fn intersects_placed(
     rect: Rect,
     passives: &[ComponentId],
     placements: &[ComponentPlacement],
     courtyard_lookup: &HashMap<ComponentId, (f64, f64)>,
     courtyard_offset_lookup: &HashMap<ComponentId, (f64, f64)>,
+    exact_contact: bool,
 ) -> bool {
     for p in placements {
         let (w_mm, h_mm) = courtyard_lookup[&p.id];
@@ -513,7 +659,12 @@ fn intersects_placed(
             courtyard_offset_lookup.get(&p.id).copied(),
             gap_around(p.id, passives),
         );
-        if rect.intersects(&p_rect) {
+        let overlap = if exact_contact {
+            overlaps_interior(rect, p_rect)
+        } else {
+            rect.intersects(&p_rect)
+        };
+        if overlap {
             return true;
         }
     }

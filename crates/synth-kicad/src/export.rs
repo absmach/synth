@@ -824,12 +824,16 @@ fn place_candidates_with_margins(
 
     // The export is what the external router and the independent DRC gate
     // judge, so it fits the tight rim here. The default placer keeps the
-    // wider perimeter the built-in router's coverage tests need.
+    // wider perimeter the built-in router's coverage tests need. A passive
+    // that sets an edge takes the tighter passive rim: its pads still clear
+    // the fab edge rule, and only the channel a connector or IC fans out
+    // through has to stay wide.
     for candidate in &mut candidates {
-        synth_place::fit_outline_with_margin_mm(
+        synth_place::fit_outline_with_passive_margin_mm(
             board,
             candidate,
             synth_place::tight_edge_margin_mm(board),
+            synth_place::passive_edge_margin_mm(board),
         );
     }
 

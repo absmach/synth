@@ -8,8 +8,15 @@
 //! was refused however completely its floorplan was specified — the
 //! overrides were never reached. These tests use a fixture from
 //! `fixtures/place-errors/`, which exists precisely because the automatic
-//! placer cannot place it, and assert that an author who says where every
-//! part goes gets that placement.
+//! placer cannot place it, and assert that an author who pins every part gets
+//! a placement.
+//!
+//! The pinned coordinates are a floorplan, not a fixed layout: after
+//! legalisation the placer closes the bands no courtyard uses, keeping each
+//! entry's rotation and the order of the pinned parts, so the finished board
+//! is no larger than the floorplan the pins describe. A floorplan with a
+//! `relative_to` entry keeps its coordinates exactly, because the band pass
+//! moves one part at a time.
 
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -64,6 +71,24 @@ fn grid_slot(index: usize) -> (f64, f64) {
     )
 }
 
+/// The extent the pinned grid describes, in millimetres.
+fn grid_span(board: &Board) -> (f64, f64) {
+    let slots: Vec<(f64, f64)> = (0..board.components.len()).map(grid_slot).collect();
+    let min_x = slots.iter().map(|s| s.0).fold(f64::MAX, f64::min);
+    let max_x = slots.iter().map(|s| s.0).fold(f64::MIN, f64::max);
+    let min_y = slots.iter().map(|s| s.1).fold(f64::MAX, f64::min);
+    let max_y = slots.iter().map(|s| s.1).fold(f64::MIN, f64::max);
+    (max_x - min_x, max_y - min_y)
+}
+
+fn inside_outline(placement: &synth_place::Placement, point: synth_geometry::Point) -> bool {
+    let outline = placement.board_outline;
+    point.x_nm >= outline.min.x_nm
+        && point.x_nm <= outline.max.x_nm
+        && point.y_nm >= outline.min.y_nm
+        && point.y_nm <= outline.max.y_nm
+}
+
 fn grid_sidecar(board: &Board, path: &Path) {
     use std::fmt::Write as _;
     let mut out = String::from("schema_version = 2\n");
@@ -113,21 +138,24 @@ fn a_fixture_the_automatic_placer_refuses_places_when_every_part_is_pinned() {
         "every component is placed"
     );
 
-    for (i, component) in board.components.iter().enumerate() {
-        let (want_x, want_y) = grid_slot(i);
+    // The pinned coordinates are a floorplan, not a fixed layout: the pinned
+    // pass closes the empty bands between them, so the finished board is not
+    // larger than the floorplan the pins describe. Every part keeps its pinned
+    // rotation and sits inside the returned outline.
+    let (span_w, span_h) = grid_span(&board);
+    assert!(
+        synth_geometry::nm_to_mm(placement.board_outline.width_nm()) <= span_w
+            && synth_geometry::nm_to_mm(placement.board_outline.height_nm()) <= span_h,
+        "the compacted floorplan must not exceed the pinned span ({span_w} x {span_h} mm)"
+    );
+    for component in &board.components {
         let got = placement
             .components
             .iter()
             .find(|p| p.id == component.id)
             .expect("component placed");
-        assert!(
-            (synth_geometry::nm_to_mm(got.center.x_nm) - want_x).abs() < 0.001
-                && (synth_geometry::nm_to_mm(got.center.y_nm) - want_y).abs() < 0.001,
-            "{} should sit where it was pinned: wanted ({want_x}, {want_y}), got ({}, {})",
-            component.refdes,
-            synth_geometry::nm_to_mm(got.center.x_nm),
-            synth_geometry::nm_to_mm(got.center.y_nm),
-        );
+        assert_eq!(got.rotation, synth_geometry::Rotation::Zero);
+        assert!(inside_outline(&placement, got.center));
     }
 }
 
@@ -170,12 +198,6 @@ fn pinning_some_parts_still_leaves_the_rest_to_the_placer() {
         .iter()
         .find(|p| p.id == board.components[0].id)
         .expect("pinned component placed");
-    assert!(
-        (synth_geometry::nm_to_mm(pinned.center.x_nm) - 12.0).abs() < 0.001
-            && (synth_geometry::nm_to_mm(pinned.center.y_nm) - 40.0).abs() < 0.001,
-        "the pinned part moved"
-    );
-
     let rotated = placement
         .components
         .iter()
@@ -186,6 +208,21 @@ fn pinning_some_parts_still_leaves_the_rest_to_the_placer() {
         synth_geometry::Rotation::Ninety,
         "a pinned rotation is the pinned one, not a floorplan target"
     );
+
+    // The pinned coordinates are a floorplan: the band pass may slide the two
+    // pinned parts toward the near edge, but it keeps their order and their
+    // pinned rotations rather than packing them where it likes.
+    assert!(
+        synth_geometry::nm_to_mm(pinned.center.y_nm) <= 40.0
+            && synth_geometry::nm_to_mm(rotated.center.y_nm) <= 55.0,
+        "a band slide only moves toward the edge"
+    );
+    assert!(
+        pinned.center.y_nm < rotated.center.y_nm,
+        "the pinned order is kept"
+    );
+    assert!(inside_outline(&placement, pinned.center));
+    assert!(inside_outline(&placement, rotated.center));
 }
 
 /// A relative entry is a pin too, and the outline must not overrule it.
@@ -295,18 +332,18 @@ fn the_public_sidecar_api_places_a_fully_pinned_board_the_search_refuses() {
         .expect("a fully pinned floorplan must place through the public API too");
 
     assert_eq!(placement.components.len(), board.components.len());
-    for (i, component) in board.components.iter().enumerate() {
-        let (want_x, want_y) = grid_slot(i);
+    let (span_w, span_h) = grid_span(&board);
+    assert!(
+        synth_geometry::nm_to_mm(placement.board_outline.width_nm()) <= span_w
+            && synth_geometry::nm_to_mm(placement.board_outline.height_nm()) <= span_h,
+        "the compacted floorplan must not exceed the pinned span ({span_w} x {span_h} mm)"
+    );
+    for component in &board.components {
         let got = placement
             .components
             .iter()
             .find(|p| p.id == component.id)
             .expect("component placed");
-        assert!(
-            (synth_geometry::nm_to_mm(got.center.x_nm) - want_x).abs() < 0.001
-                && (synth_geometry::nm_to_mm(got.center.y_nm) - want_y).abs() < 0.001,
-            "{} should sit where it was pinned",
-            component.refdes,
-        );
+        assert!(inside_outline(&placement, got.center));
     }
 }
