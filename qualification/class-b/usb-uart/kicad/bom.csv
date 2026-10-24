@@ -1,0 +1,37 @@
+refdes,value,kind,description,kicad_symbol,kicad_footprint,lcsc_pn,mpn
+C2,2.2uF,capacitor,"Generic 0603 MLCC, X7R/X5R, any value",Device:C,Capacitor_SMD:C_0603_1608Metric,,
+C3,2.2uF,capacitor,"Generic 0603 MLCC, X7R/X5R, any value",Device:C,Capacitor_SMD:C_0603_1608Metric,,
+C4,100nF,capacitor,"Generic 0603 MLCC, X7R/X5R, any value",Device:C,Capacitor_SMD:C_0603_1608Metric,,
+C5,100nF,capacitor,"Generic 0603 MLCC, X7R/X5R, any value",Device:C,Capacitor_SMD:C_0603_1608Metric,,
+C6,100nF,capacitor,"Generic 0603 MLCC, X7R/X5R, any value",Device:C,Capacitor_SMD:C_0603_1608Metric,,
+C7,100nF,capacitor,"Generic 0603 MLCC, X7R/X5R, any value",Device:C,Capacitor_SMD:C_0603_1608Metric,,
+D1,TVS,diode,"Nexperia PRTR5V0U2X ultra low capacitance (1 pF) 2-line rail-to-rail ESD protection for USB 2.0 data lines, SOT143B",Power_Protection:PRTR5V0U2X,Package_TO_SOT_SMD:SOT-143,,PRTR5V0U2X
+D2,TVS,diode,"Nexperia PTVS6V0S1UR 400 W unidirectional TVS, 6.0 V standoff, SOD123W, for VBUS and CC",Device:D_Zener,Diode_SMD:Nexperia_CFP3_SOD-123W,,PTVS6V0S1UR
+D3,VIO,led,"Lite-On LTST-C190KGKT green AlInGaP LED, 0603, Vf 1.9 to 2.4V at 20mA",Device:LED,LED_SMD:LED_0603_1608Metric,,LTST-C190KGKT
+D4,TX0,led,"Lite-On LTST-C190KRKT red AlInGaP LED, 0603, Vf 1.6 to 2.4V at 20mA",Device:LED,LED_SMD:LED_0603_1608Metric,,LTST-C190KRKT
+D5,TVS,diode,"Nexperia PTVS6V0S1UR 400 W unidirectional TVS, 6.0 V standoff, SOD123W, for VBUS and CC",Device:D_Zener,Diode_SMD:Nexperia_CFP3_SOD-123W,,PTVS6V0S1UR
+D6,TVS,diode,"Nexperia PTVS6V0S1UR 400 W unidirectional TVS, 6.0 V standoff, SOD123W, for VBUS and CC",Device:D_Zener,Diode_SMD:Nexperia_CFP3_SOD-123W,,PTVS6V0S1UR
+D7,TX1,led,"Lite-On LTST-C190KRKT red AlInGaP LED, 0603, Vf 1.6 to 2.4V at 20mA",Device:LED,LED_SMD:LED_0603_1608Metric,,LTST-C190KRKT
+H1,(no value),mounting_hole,M2.5 non-plated mounting hole (NPTH) for a board corner,Mechanical:MountingHole,MountingHole:MountingHole_2.5mm,,
+H2,(no value),mounting_hole,M2.5 non-plated mounting hole (NPTH) for a board corner,Mechanical:MountingHole,MountingHole:MountingHole_2.5mm,,
+H3,(no value),mounting_hole,M2.5 non-plated mounting hole (NPTH) for a board corner,Mechanical:MountingHole,MountingHole:MountingHole_2.5mm,,
+H4,(no value),mounting_hole,M2.5 non-plated mounting hole (NPTH) for a board corner,Mechanical:MountingHole,MountingHole:MountingHole_2.5mm,,
+J1,TYPE-C-31-M-12,connector,"USB-C receptacle, 24-pin SMD. Modelled here with primary and mirrored power/ground/data pins for full pad coverage.",Connector:USB_C_Receptacle,Connector_USB:USB_C_Receptacle_HRO_TYPE-C-31-M-12,C165948,TYPE-C-31-M-12
+J2,UART1,connector,"1x3 through-hole pin header, 2.54mm pitch",Connector_Generic:Conn_01x03,Connector_PinHeader_2.54mm:PinHeader_1x03_P2.54mm_Vertical,,
+J3,FLOW1,connector,"1x3 through-hole pin header, 2.54mm pitch",Connector_Generic:Conn_01x03,Connector_PinHeader_2.54mm:PinHeader_1x03_P2.54mm_Vertical,,
+J4,RS485,connector,"1x3 through-hole pin header, 2.54mm pitch",Connector_Generic:Conn_01x03,Connector_PinHeader_2.54mm:PinHeader_1x03_P2.54mm_Vertical,,
+J_VIO,VIO_SEL,connector,"1x3 through-hole pin header, 2.54mm pitch",Connector_Generic:Conn_01x03,Connector_PinHeader_2.54mm:PinHeader_1x03_P2.54mm_Vertical,,
+R1,5.1k,resistor,"Generic 0603 thick-film resistor, any value",Device:R_US,Resistor_SMD:R_0603_1608Metric,,
+R2,5.1k,resistor,"Generic 0603 thick-film resistor, any value",Device:R_US,Resistor_SMD:R_0603_1608Metric,,
+R3,470,resistor,"Generic 0603 thick-film resistor, any value",Device:R_US,Resistor_SMD:R_0603_1608Metric,,
+R4,470,resistor,"Generic 0603 thick-film resistor, any value",Device:R_US,Resistor_SMD:R_0603_1608Metric,,
+R5,1k,resistor,"Generic 0603 thick-film resistor, any value",Device:R_US,Resistor_SMD:R_0603_1608Metric,,
+R6,1k,resistor,"Generic 0603 thick-film resistor, any value",Device:R_US,Resistor_SMD:R_0603_1608Metric,,
+R7,470,resistor,"Generic 0603 thick-film resistor, any value",Device:R_US,Resistor_SMD:R_0603_1608Metric,,
+R8,10k,resistor,"Generic 0603 thick-film resistor, any value",Device:R_US,Resistor_SMD:R_0603_1608Metric,,
+R9,10k,resistor,"Generic 0603 thick-film resistor, any value",Device:R_US,Resistor_SMD:R_0603_1608Metric,,
+R_TERM,120ohm,resistor,"Generic 0603 thick-film resistor, any value",Device:R_US,Resistor_SMD:R_0603_1608Metric,,
+R_TNOW,4.7k,resistor,"Generic 0603 thick-film resistor, any value",Device:R_US,Resistor_SMD:R_0603_1608Metric,,
+U1,CH342F,ic,"WCH CH342F USB to dual UART bridge controller, QFN-24 (4x4 mm, 0.5 mm pitch, exposed pad)",,Package_DFN_QFN:QFN-24-1EP_4x4mm_P0.5mm_EP2.6x2.6mm,C2841530,CH342F
+U2,LDO,regulator,"TI LP5907 3.3V low-noise LDO, 250mA, SOT-23-5",Regulator_Linear:LP5907MFX-3.3,Package_TO_SOT_SMD:SOT-23-5,C83437,LP5907MFX-3.3
+U3,THVD1450D,ic,"TI THVD1450D RS-485 transceiver, 3.3-5 V, 50 Mbps, ±18 kV IEC 61000-4-2 contact ESD, SOIC-8",Interface_UART:THVD1450D,Package_SO:SOIC-8_3.9x4.9mm_P1.27mm,C2671361,THVD1450D

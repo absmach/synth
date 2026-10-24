@@ -1,0 +1,459 @@
+{
+  "aesthetic_violations": [
+    {
+      "code": "E-SYNTH-SCHEM-005",
+      "expected": "at most 3 lines per node",
+      "explanation_url": "synth.docs/diagnostics/E-SYNTH-SCHEM-005",
+      "found": "10 lines",
+      "message": "node at (242.57, 31.75) mm carries 10 wire lines, exceeding the 3-line limit; split the node or truncate the net to labels",
+      "schema_version": "1.3",
+      "severity": "warning",
+      "title": "excessive junction fan-out"
+    },
+    {
+      "code": "E-SYNTH-SCHEM-005",
+      "expected": "at most 3 lines per node",
+      "explanation_url": "synth.docs/diagnostics/E-SYNTH-SCHEM-005",
+      "found": "6 lines",
+      "message": "node at (245.11, 31.75) mm carries 6 wire lines, exceeding the 3-line limit; split the node or truncate the net to labels",
+      "schema_version": "1.3",
+      "severity": "warning",
+      "title": "excessive junction fan-out"
+    }
+  ],
+  "bom_path": "target/pr103-2layer/bom.csv",
+  "capability_tier": "engineer-review-required",
+  "compiler_version": "0.0.1",
+  "kicad_version": "10.0.5",
+  "pcb_path": "target/pr103-2layer/usb_uart.kicad_pcb",
+  "placement_sidecar": "qualification/class-b/usb-uart/usb_uart.placement.layout.toml",
+  "project_path": "target/pr103-2layer/usb_uart.kicad_pro",
+  "registry_version": "0.0.1",
+  "release_ready": true,
+  "route_complete": true,
+  "routing": {
+    "artifacts": {
+      "baseline": "target/pr103-2layer/usb_uart.synth.kicad_pcb",
+      "candidate": "target/pr103-2layer/usb_uart.freerouting.kicad_pcb",
+      "connectivity_report": null,
+      "delivered": "target/pr103-2layer/usb_uart.kicad_pcb",
+      "drc_report": null,
+      "router_report": "target/pr103-2layer/usb_uart.freerouting.json",
+      "ses": "target/pr103-2layer/usb_uart.freerouting.ses",
+      "session_log": "target/pr103-2layer/usb_uart.freerouting.log"
+    },
+    "capability": {
+      "available": true,
+      "detail": null,
+      "engine": "freerouting",
+      "failure": null,
+      "runtime_version": "openjdk version \"25.0.4.1\" 2026-08-18 LTS",
+      "version": "freerouting-2.4.1"
+    },
+    "engine": "freerouting",
+    "escape": [
+      {
+        "detail": "adjacent pins are 0.500 mm apart and the pads leave 0.200 mm between them; a fabrication-floor via needs 0.687 mm between centres, so the drill that would fit is 0.113 mm; even a minimum track needs 0.254 mm of gap",
+        "gap_mm": 0.2,
+        "layers": 2,
+        "limit": "track",
+        "max_drill_mm": 0.113,
+        "package": "Connector_USB:USB_C_Receptacle_HRO_TYPE-C-31-M-12",
+        "pads": 22,
+        "pitch_mm": 0.5,
+        "refdes": "J1",
+        "remediation": "use via-in-pad if the process allows, or choose a coarser-pitch part; this board has 2 copper layers \u2014 an inner plane at 4 layers gives these pins somewhere to change layers",
+        "suggested_layers": 4,
+        "via_span_mm": 0.687
+      },
+      {
+        "detail": "adjacent pins are 0.500 mm apart and the pads leave 0.212 mm between them; a fabrication-floor via needs 0.687 mm between centres, so the drill that would fit is 0.113 mm; even a minimum track needs 0.254 mm of gap",
+        "gap_mm": 0.212132,
+        "layers": 2,
+        "limit": "track",
+        "max_drill_mm": 0.113,
+        "package": "Package_DFN_QFN:QFN-24-1EP_4x4mm_P0.5mm_EP2.6x2.6mm",
+        "pads": 25,
+        "pitch_mm": 0.5,
+        "refdes": "U1",
+        "remediation": "use via-in-pad if the process allows, or choose a coarser-pitch part; this board has 2 copper layers \u2014 an inner plane at 4 layers gives these pins somewhere to change layers",
+        "suggested_layers": 4,
+        "via_span_mm": 0.687
+      }
+    ],
+    "failure": null,
+    "provenance": {
+      "command": [
+        "/usr/bin/python3",
+        "/home/steve/work/synth/.claude/worktrees/agent-a90749fa7d5491b90/tools/freeroute_autoroute.py",
+        "target/pr103-2layer/usb_uart.synth.kicad_pcb",
+        "target/pr103-2layer/usb_uart.freerouting.kicad_pcb",
+        "--jar",
+        "/home/steve/work/synth/.claude/worktrees/agent-a90749fa7d5491b90/tools/freerouting/freerouting-2.4.1.jar",
+        "--java",
+        "/home/steve/work/synth/.claude/worktrees/agent-a90749fa7d5491b90/tools/jre25/bin/java",
+        "--passes",
+        "40",
+        "--threads",
+        "4",
+        "--ses-output",
+        "target/pr103-2layer/usb_uart.freerouting.ses",
+        "--report",
+        "target/pr103-2layer/usb_uart.freerouting.json",
+        "--clean-netlist",
+        "--allow-via-in-pad"
+      ],
+      "duration_ms": 148008,
+      "engine": "freerouting",
+      "engine_version": "/home/steve/work/synth/.claude/worktrees/agent-a90749fa7d5491b90/tools/freerouting/freerouting-2.4.1.jar",
+      "input_hash": "9cb1329eef3d2417f86c4b17bb32403d354edf0a3f3191c1074bd7d8797e622f",
+      "output_hash": "",
+      "profile": "jlcpcb",
+      "runtime_version": "openjdk version \"25.0.4.1\" 2026-08-18 LTS",
+      "settings": {
+        "clean_netlist": "true",
+        "passes": "40",
+        "threads": "4",
+        "wall_clock_secs": "1200"
+      },
+      "source_revision": null
+    },
+    "schema_version": "synth.routing.v1",
+    "state": "routed",
+    "statistics": {
+      "connected_nets": 26,
+      "engine_findings": {
+        "claimed_imported_segments": "271",
+        "claimed_imported_vias": "38"
+      },
+      "open_net_names": [],
+      "open_nets": 0,
+      "pad_escape_rejections": 0,
+      "segments": 271,
+      "vias": 38,
+      "wire_length_mm": 507.652151
+    },
+    "validation": {
+      "blocking_reasons": [],
+      "connectivity": {
+        "connected_nets": 26,
+        "open": [],
+        "open_nets": 0,
+        "unconnected_pads": [],
+        "undersized_tracks": [],
+        "undersized_vias": [],
+        "via_in_pad": [
+          "via at (23.800, 17.200) mm U1.25"
+        ]
+      },
+      "fabrication_ready": true,
+      "kicad_drc": {
+        "errors": 0,
+        "unconnected": 0,
+        "warnings": 40
+      },
+      "topology": {
+        "extra_footprints": [],
+        "missing_footprints": [],
+        "missing_layers": [],
+        "missing_nets": [],
+        "missing_pads": [],
+        "outline_present": true,
+        "renet_pads": []
+      },
+      "unavailable_checks": []
+    }
+  },
+  "schematic_path": "target/pr103-2layer/usb_uart.kicad_sch",
+  "schematic_sidecar": null,
+  "signal_integrity": [
+    {
+      "code": "W-SYNTH-DRC-016",
+      "components": [],
+      "message": "net 2 changes layers at (21.99, 6.20) mm with no ground return via within 1.53 mm, so the return current has to jump reference planes",
+      "nets": [
+        2
+      ],
+      "pos_mm": [
+        21.9869,
+        6.1957
+      ],
+      "suggested_override": null,
+      "witness": [
+        {
+          "x_nm": 21986900,
+          "y_nm": 6195700
+        }
+      ]
+    },
+    {
+      "code": "W-SYNTH-DRC-016",
+      "components": [],
+      "message": "net 2 changes layers at (22.00, 9.87) mm with no ground return via within 1.53 mm, so the return current has to jump reference planes",
+      "nets": [
+        2
+      ],
+      "pos_mm": [
+        22.0011,
+        9.8669
+      ],
+      "suggested_override": null,
+      "witness": [
+        {
+          "x_nm": 22001100,
+          "y_nm": 9866900
+        }
+      ]
+    },
+    {
+      "code": "W-SYNTH-DRC-016",
+      "components": [],
+      "message": "net 6 changes layers at (13.77, 20.35) mm with no ground return via within 1.53 mm, so the return current has to jump reference planes",
+      "nets": [
+        6
+      ],
+      "pos_mm": [
+        13.7725,
+        20.3474
+      ],
+      "suggested_override": null,
+      "witness": [
+        {
+          "x_nm": 13772500,
+          "y_nm": 20347400
+        }
+      ]
+    },
+    {
+      "code": "W-SYNTH-DRC-016",
+      "components": [],
+      "message": "net 6 changes layers at (26.77, 15.34) mm with no ground return via within 1.53 mm, so the return current has to jump reference planes",
+      "nets": [
+        6
+      ],
+      "pos_mm": [
+        26.7681,
+        15.3387
+      ],
+      "suggested_override": null,
+      "witness": [
+        {
+          "x_nm": 26768100,
+          "y_nm": 15338700
+        }
+      ]
+    },
+    {
+      "code": "W-SYNTH-DRC-016",
+      "components": [],
+      "message": "net 9 changes layers at (24.85, 20.69) mm with no ground return via within 1.53 mm, so the return current has to jump reference planes",
+      "nets": [
+        9
+      ],
+      "pos_mm": [
+        24.8457,
+        20.6851
+      ],
+      "suggested_override": null,
+      "witness": [
+        {
+          "x_nm": 24845700,
+          "y_nm": 20685100
+        }
+      ]
+    },
+    {
+      "code": "W-SYNTH-DRC-016",
+      "components": [],
+      "message": "net 10 changes layers at (27.02, 19.86) mm with no ground return via within 1.53 mm, so the return current has to jump reference planes",
+      "nets": [
+        10
+      ],
+      "pos_mm": [
+        27.0157,
+        19.8586
+      ],
+      "suggested_override": null,
+      "witness": [
+        {
+          "x_nm": 27015700,
+          "y_nm": 19858600
+        }
+      ]
+    },
+    {
+      "code": "W-SYNTH-DRC-016",
+      "components": [],
+      "message": "net 11 changes layers at (26.34, 22.51) mm with no ground return via within 1.53 mm, so the return current has to jump reference planes",
+      "nets": [
+        11
+      ],
+      "pos_mm": [
+        26.3405,
+        22.5078
+      ],
+      "suggested_override": null,
+      "witness": [
+        {
+          "x_nm": 26340500,
+          "y_nm": 22507800
+        }
+      ]
+    },
+    {
+      "code": "W-SYNTH-DRC-016",
+      "components": [],
+      "message": "net 13 changes layers at (25.68, 25.05) mm with no ground return via within 1.53 mm, so the return current has to jump reference planes",
+      "nets": [
+        13
+      ],
+      "pos_mm": [
+        25.6755,
+        25.0546
+      ],
+      "suggested_override": null,
+      "witness": [
+        {
+          "x_nm": 25675500,
+          "y_nm": 25054600
+        }
+      ]
+    },
+    {
+      "code": "W-SYNTH-DRC-016",
+      "components": [],
+      "message": "net 13 changes layers at (25.53, 22.19) mm with no ground return via within 1.53 mm, so the return current has to jump reference planes",
+      "nets": [
+        13
+      ],
+      "pos_mm": [
+        25.5331,
+        22.1926
+      ],
+      "suggested_override": null,
+      "witness": [
+        {
+          "x_nm": 25533100,
+          "y_nm": 22192600
+        }
+      ]
+    },
+    {
+      "code": "W-SYNTH-DRC-016",
+      "components": [],
+      "message": "net 16 changes layers at (26.63, 16.19) mm with no ground return via within 1.53 mm, so the return current has to jump reference planes",
+      "nets": [
+        16
+      ],
+      "pos_mm": [
+        26.6254,
+        16.1944
+      ],
+      "suggested_override": null,
+      "witness": [
+        {
+          "x_nm": 26625400,
+          "y_nm": 16194400
+        }
+      ]
+    },
+    {
+      "code": "W-SYNTH-DRC-016",
+      "components": [],
+      "message": "net 16 changes layers at (23.22, 14.52) mm with no ground return via within 1.53 mm, so the return current has to jump reference planes",
+      "nets": [
+        16
+      ],
+      "pos_mm": [
+        23.2203,
+        14.517
+      ],
+      "suggested_override": null,
+      "witness": [
+        {
+          "x_nm": 23220300,
+          "y_nm": 14517000
+        }
+      ]
+    },
+    {
+      "code": "W-SYNTH-DRC-016",
+      "components": [],
+      "message": "net 22 changes layers at (12.55, 20.24) mm with no ground return via within 1.53 mm, so the return current has to jump reference planes",
+      "nets": [
+        22
+      ],
+      "pos_mm": [
+        12.5496,
+        20.2399
+      ],
+      "suggested_override": null,
+      "witness": [
+        {
+          "x_nm": 12549600,
+          "y_nm": 20239900
+        }
+      ]
+    },
+    {
+      "code": "W-SYNTH-DRC-016",
+      "components": [],
+      "message": "net 23 changes layers at (12.43, 18.50) mm with no ground return via within 1.53 mm, so the return current has to jump reference planes",
+      "nets": [
+        23
+      ],
+      "pos_mm": [
+        12.4325,
+        18.5031
+      ],
+      "suggested_override": null,
+      "witness": [
+        {
+          "x_nm": 12432500,
+          "y_nm": 18503100
+        }
+      ]
+    },
+    {
+      "code": "W-SYNTH-DRC-016",
+      "components": [],
+      "message": "net 24 changes layers at (21.16, 20.18) mm with no ground return via within 1.53 mm, so the return current has to jump reference planes",
+      "nets": [
+        24
+      ],
+      "pos_mm": [
+        21.1649,
+        20.1758
+      ],
+      "suggested_override": null,
+      "witness": [
+        {
+          "x_nm": 21164900,
+          "y_nm": 20175800
+        }
+      ]
+    },
+    {
+      "code": "W-SYNTH-DRC-016",
+      "components": [],
+      "message": "net 24 changes layers at (31.92, 14.80) mm with no ground return via within 1.53 mm, so the return current has to jump reference planes",
+      "nets": [
+        24
+      ],
+      "pos_mm": [
+        31.9219,
+        14.7971
+      ],
+      "suggested_override": null,
+      "witness": [
+        {
+          "x_nm": 31921900,
+          "y_nm": 14797100
+        }
+      ]
+    }
+  ],
+  "signal_integrity_blocking": 0,
+  "status": "success",
+  "warning": null
+}

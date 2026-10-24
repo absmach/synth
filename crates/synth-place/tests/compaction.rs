@@ -52,3 +52,41 @@ fn a_small_board_fits_a_tighter_outline_than_the_old_rim() {
          16.78 x 16.68 mm, so the 1.0 mm rim must be 2 mm smaller on both axes"
     );
 }
+
+/// A mounting hole is a board feature, but it still needs a rim. The tight
+/// export fit must not put Edge.Cuts through the hole.
+#[test]
+fn a_mounting_hole_keeps_a_rim_on_the_fitted_outline() {
+    let board = load_board("tests/fixtures/mounting_hole_edge.synth");
+    let mut placement = synth_place::place(&board).expect("place");
+    synth_place::fit_outline_with_margin_mm(&board, &mut placement, 1.5);
+
+    let h1_id = board
+        .components
+        .iter()
+        .find(|component| component.refdes == "H1")
+        .map(|component| component.id)
+        .expect("H1");
+    let h1 = placement
+        .components
+        .iter()
+        .find(|component| component.id == h1_id)
+        .expect("H1 placed");
+
+    // `mounting_hole_m2_5` is a 2.5 mm NPTH, so its edge is 1.25 mm from its
+    // centre. The board-feature rim is 2.2 mm, so it has to stay outside that
+    // edge by at least 2.1 mm.
+    let hole_edge_nm = 1_250_000;
+    let left_rim_nm = (h1.center.x_nm - hole_edge_nm) - placement.board_outline.min.x_nm;
+    assert!(
+        left_rim_nm >= 2_100_000,
+        "left rim is {:.2} mm; the board-feature rim must keep Edge.Cuts off the hole",
+        synth_geometry::nm_to_mm(left_rim_nm)
+    );
+    let top_rim_nm = (h1.center.y_nm - hole_edge_nm) - placement.board_outline.min.y_nm;
+    assert!(
+        top_rim_nm >= 2_100_000,
+        "top rim is {:.2} mm; the board-feature rim must keep Edge.Cuts off the hole",
+        synth_geometry::nm_to_mm(top_rim_nm)
+    );
+}

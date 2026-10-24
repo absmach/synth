@@ -1,0 +1,12 @@
+// A mounting hole at the board edge must keep a rim in the fitted outline.
+board "mounting_hole_edge" {
+  layers 2
+  manufacturer "jlcpcb"
+
+  component H1: mounting_hole "mounting_hole_m2_5" { placement_hint { region: top_left priority: hard } }
+  component J1: connector "jst_ph_2pin" { placement_hint { region: bottom_right priority: hard } }
+  component R1: resistor "r_generic_0603" { placement_hint { region: bottom_right priority: hard } }
+
+  connect J1.p1 -> R1.p1
+  connect J1.p2 -> R1.p2
+}

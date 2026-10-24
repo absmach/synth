@@ -1032,6 +1032,10 @@ fn build_zone(
                     Sexp::atom("yes"),
                     Sexp::list("thermal_gap", vec![num(0.2)]),
                     Sexp::list("thermal_bridge_width", vec![num(0.25)]),
+                    // A pour can be cut into islands by traces and keepouts;
+                    // an island touches no pad, so keeping it only adds copper
+                    // that KiCad reports as an unconnected zone.
+                    Sexp::list("island_removal_mode", vec![Sexp::atom("0")]),
                 ],
             ),
             Sexp::list("polygon", vec![Sexp::list("pts", pts)]),

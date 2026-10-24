@@ -374,6 +374,12 @@ const TIGHT_EDGE_MARGIN_MM: f64 = 1.5;
 /// the tuning and held-out corpora routes cleanly at 1.0 mm.
 const TIGHT_SPARSE_EDGE_MARGIN_MM: f64 = 1.0;
 
+/// The rim a board feature keeps in the fitted outline. A mounting hole needs
+/// more room than the 1.5 mm tight rim: at 1.5 mm its copper clearance cuts
+/// the perimeter pour in two and leaves no room for a stitching via. 2.2 mm is
+/// the rim the reference boards were routed with before the tight fit.
+const BOARD_FEATURE_EDGE_MARGIN_MM: f64 = 2.2;
+
 /// A board with at least this many parts is dense enough that the export fits
 /// its tight 1.5 mm rim; every sparser board fits 1.0 mm. Calibrated on the
 /// reference boards: env_logger (20 parts) and sensor_logger (29) fail to
@@ -527,9 +533,9 @@ pub fn apply_sidecar_overrides(
 /// [`tighten_outline_after_sidecar`] removes any perimeter the courtyards do
 /// not use.
 /// The gap a part's courtyard keeps from Edge.Cuts: only a part whose hard
-/// hint docks it to an edge, or a board feature, may touch the edge.
+/// hint docks it to an edge may touch the edge.
 fn courtyard_edge_inset_nm(component: &synth_ir::Component) -> i64 {
-    if is_edge_flush_connector(component) || synth_layout::is_board_feature_kind(&component.kind) {
+    if is_edge_flush_connector(component) {
         0
     } else {
         mm_to_nm(COPPER_EDGE_CLEARANCE_MM)
@@ -720,10 +726,12 @@ fn outline_with_flush_connectors(
         });
     let mut outline = [i64::MAX, i64::MAX, i64::MIN, i64::MIN];
     for (component, placed, rect, copper) in &parts {
-        // A mounting hole, test point or fiducial belongs in a corner, so the
-        // outline ends at its courtyard instead of leaving a margin round it.
+        // A board feature placed in a corner needs a wider rim than the tight
+        // fit. At 1.5 mm the hole's copper clearance cuts the perimeter pour
+        // in two and there is no room left for a stitching via; 2.2 mm keeps
+        // the pour connected, which is the rim these boards were routed with.
         let margin_nm = if synth_layout::is_board_feature_kind(&component.kind) {
-            0
+            margin_nm.max(mm_to_nm(BOARD_FEATURE_EDGE_MARGIN_MM))
         } else {
             margin_nm
         };

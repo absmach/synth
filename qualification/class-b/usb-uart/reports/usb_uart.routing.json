@@ -1,0 +1,133 @@
+{
+  "artifacts": {
+    "baseline": "target/pr103-2layer/usb_uart.synth.kicad_pcb",
+    "candidate": "target/pr103-2layer/usb_uart.freerouting.kicad_pcb",
+    "connectivity_report": null,
+    "delivered": "target/pr103-2layer/usb_uart.kicad_pcb",
+    "drc_report": null,
+    "router_report": "target/pr103-2layer/usb_uart.freerouting.json",
+    "ses": "target/pr103-2layer/usb_uart.freerouting.ses",
+    "session_log": "target/pr103-2layer/usb_uart.freerouting.log"
+  },
+  "capability": {
+    "available": true,
+    "detail": null,
+    "engine": "freerouting",
+    "failure": null,
+    "runtime_version": "openjdk version \"25.0.4.1\" 2026-08-18 LTS",
+    "version": "freerouting-2.4.1"
+  },
+  "engine": "freerouting",
+  "escape": [
+    {
+      "detail": "adjacent pins are 0.500 mm apart and the pads leave 0.200 mm between them; a fabrication-floor via needs 0.687 mm between centres, so the drill that would fit is 0.113 mm; even a minimum track needs 0.254 mm of gap",
+      "gap_mm": 0.2,
+      "layers": 2,
+      "limit": "track",
+      "max_drill_mm": 0.113,
+      "package": "Connector_USB:USB_C_Receptacle_HRO_TYPE-C-31-M-12",
+      "pads": 22,
+      "pitch_mm": 0.5,
+      "refdes": "J1",
+      "remediation": "use via-in-pad if the process allows, or choose a coarser-pitch part; this board has 2 copper layers \u2014 an inner plane at 4 layers gives these pins somewhere to change layers",
+      "suggested_layers": 4,
+      "via_span_mm": 0.687
+    },
+    {
+      "detail": "adjacent pins are 0.500 mm apart and the pads leave 0.212 mm between them; a fabrication-floor via needs 0.687 mm between centres, so the drill that would fit is 0.113 mm; even a minimum track needs 0.254 mm of gap",
+      "gap_mm": 0.212132,
+      "layers": 2,
+      "limit": "track",
+      "max_drill_mm": 0.113,
+      "package": "Package_DFN_QFN:QFN-24-1EP_4x4mm_P0.5mm_EP2.6x2.6mm",
+      "pads": 25,
+      "pitch_mm": 0.5,
+      "refdes": "U1",
+      "remediation": "use via-in-pad if the process allows, or choose a coarser-pitch part; this board has 2 copper layers \u2014 an inner plane at 4 layers gives these pins somewhere to change layers",
+      "suggested_layers": 4,
+      "via_span_mm": 0.687
+    }
+  ],
+  "failure": null,
+  "provenance": {
+    "command": [
+      "/usr/bin/python3",
+      "/home/steve/work/synth/.claude/worktrees/agent-a90749fa7d5491b90/tools/freeroute_autoroute.py",
+      "target/pr103-2layer/usb_uart.synth.kicad_pcb",
+      "target/pr103-2layer/usb_uart.freerouting.kicad_pcb",
+      "--jar",
+      "/home/steve/work/synth/.claude/worktrees/agent-a90749fa7d5491b90/tools/freerouting/freerouting-2.4.1.jar",
+      "--java",
+      "/home/steve/work/synth/.claude/worktrees/agent-a90749fa7d5491b90/tools/jre25/bin/java",
+      "--passes",
+      "40",
+      "--threads",
+      "4",
+      "--ses-output",
+      "target/pr103-2layer/usb_uart.freerouting.ses",
+      "--report",
+      "target/pr103-2layer/usb_uart.freerouting.json",
+      "--clean-netlist",
+      "--allow-via-in-pad"
+    ],
+    "duration_ms": 148008,
+    "engine": "freerouting",
+    "engine_version": "/home/steve/work/synth/.claude/worktrees/agent-a90749fa7d5491b90/tools/freerouting/freerouting-2.4.1.jar",
+    "input_hash": "9cb1329eef3d2417f86c4b17bb32403d354edf0a3f3191c1074bd7d8797e622f",
+    "output_hash": "",
+    "profile": "jlcpcb",
+    "runtime_version": "openjdk version \"25.0.4.1\" 2026-08-18 LTS",
+    "settings": {
+      "clean_netlist": "true",
+      "passes": "40",
+      "threads": "4",
+      "wall_clock_secs": "1200"
+    },
+    "source_revision": null
+  },
+  "schema_version": "synth.routing.v1",
+  "state": "routed",
+  "statistics": {
+    "connected_nets": 26,
+    "engine_findings": {
+      "claimed_imported_segments": "271",
+      "claimed_imported_vias": "38"
+    },
+    "open_net_names": [],
+    "open_nets": 0,
+    "pad_escape_rejections": 0,
+    "segments": 271,
+    "vias": 38,
+    "wire_length_mm": 507.652151
+  },
+  "validation": {
+    "blocking_reasons": [],
+    "connectivity": {
+      "connected_nets": 26,
+      "open": [],
+      "open_nets": 0,
+      "unconnected_pads": [],
+      "undersized_tracks": [],
+      "undersized_vias": [],
+      "via_in_pad": [
+        "via at (23.800, 17.200) mm U1.25"
+      ]
+    },
+    "fabrication_ready": true,
+    "kicad_drc": {
+      "errors": 0,
+      "unconnected": 0,
+      "warnings": 40
+    },
+    "topology": {
+      "extra_footprints": [],
+      "missing_footprints": [],
+      "missing_layers": [],
+      "missing_nets": [],
+      "missing_pads": [],
+      "outline_present": true,
+      "renet_pads": []
+    },
+    "unavailable_checks": []
+  }
+}
