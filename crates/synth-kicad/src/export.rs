@@ -1206,6 +1206,14 @@ fn build_net_settings<'a>(
         if a.class == "Default" {
             continue;
         }
+        // The board file names a net by its IR name, and the router reads the
+        // classes by the names in the board it routes. A net drawn as a plain
+        // wire has no label or power symbol, so it has no `visible` name and,
+        // without this, no class: it routed at the 0.2 mm default whatever the
+        // source declared.
+        if let Some(net) = board.net(a.net).filter(|net| !net.auto_named) {
+            assignments_json.insert(net.name.clone(), json!(a.class));
+        }
         let Some(names) = visible.get(&a.net) else {
             continue;
         };
@@ -1310,6 +1318,27 @@ mod tests {
         assert!(
             assignments.values().any(|v| v == "I2C"),
             "an I2C net must be assigned: {assignments:?}"
+        );
+    }
+
+    /// A net the schematic draws as a plain wire has no label for KiCad to know
+    /// it by, but the board names it, and the router reads classes by that name.
+    #[test]
+    fn a_net_with_no_label_is_still_assigned_its_class() {
+        let board = board_from(
+            r#"board "b" {
+                netclass "BIG" { trace_width 0.8mm }
+                component J1: connector "jst_xh_2pin"
+                component R1: resistor "r_generic_0603" value "1k"
+                net "VIN_RAW" class "BIG" { J1.p1 R1.p1 }
+            }"#,
+        );
+        let settings = build_net_settings(&board, std::iter::empty());
+        let assignments = settings["netclass_assignments"].as_object().unwrap();
+        assert_eq!(
+            assignments.get("VIN_RAW"),
+            Some(&json!("BIG")),
+            "{assignments:?}"
         );
     }
 
