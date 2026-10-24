@@ -3124,12 +3124,44 @@ fn execute_export(args: &Value, default_registry: Option<&Path>) -> Result<Value
         "bom_path": res.bom_path,
         "schematic_sidecar": schematic_sidecar,
         "placement_sidecar": placement_sidecar,
-        "aesthetic_violations": aesthetic
+        "aesthetic_violations": cap_per_code(&aesthetic, AESTHETIC_PER_CODE),
+        "aesthetic_violation_counts": counts_by_code(&aesthetic)
     });
     if let Some(notice) = sidecar_migration_notice(file_name) {
         result["sidecar_migration"] = serde_json::json!(notice);
     }
     Ok(with_process_warnings(result, &process_warnings))
+}
+
+/// Findings kept per diagnostic code in the export payload.
+const AESTHETIC_PER_CODE: usize = 5;
+
+/// The first `limit` diagnostics of each code, in their original order.
+///
+/// A routed 77-part board produced 93 `E-SYNTH-SCHEM-013` findings and a
+/// 104,000-character export result, which overflowed the agent's tool-result
+/// limit and was never read. The counts travel beside the list, so nothing is
+/// hidden, only repeated.
+fn cap_per_code(diagnostics: &[synth_diagnostics::Diagnostic], limit: usize) -> Vec<Value> {
+    let mut seen: std::collections::HashMap<&str, usize> = std::collections::HashMap::new();
+    diagnostics
+        .iter()
+        .filter(|d| {
+            let n = seen.entry(d.code.as_str()).or_insert(0);
+            *n += 1;
+            *n <= limit
+        })
+        .map(|d| serde_json::json!(d))
+        .collect()
+}
+
+/// How many diagnostics of each code there are, whatever the list was capped to.
+fn counts_by_code(diagnostics: &[synth_diagnostics::Diagnostic]) -> Value {
+    let mut counts: std::collections::BTreeMap<&str, usize> = std::collections::BTreeMap::new();
+    for d in diagnostics {
+        *counts.entry(d.code.as_str()).or_insert(0) += 1;
+    }
+    serde_json::json!(counts)
 }
 
 fn execute_live_supply_chain(
@@ -5024,6 +5056,23 @@ mod tool_registration_tests {
 
 #[cfg(test)]
 mod tests {
+    fn finding(code: &str) -> synth_diagnostics::Diagnostic {
+        synth_diagnostics::DiagnosticBuilder::new(code, synth_diagnostics::Severity::Warning, "t")
+            .build()
+    }
+
+    #[test]
+    fn each_code_is_capped_in_order_and_counted() {
+        let mut found: Vec<_> = (0..8).map(|_| finding("E-SYNTH-SCHEM-013")).collect();
+        found.insert(2, finding("E-SYNTH-SCHEM-001"));
+        let kept = super::cap_per_code(&found, 5);
+        assert_eq!(kept.len(), 6, "five of -013 and the one -001");
+        assert_eq!(kept[2]["code"], "E-SYNTH-SCHEM-001");
+        let counts = super::counts_by_code(&found);
+        assert_eq!(counts["E-SYNTH-SCHEM-013"], 8);
+        assert_eq!(counts["E-SYNTH-SCHEM-001"], 1);
+    }
+
     use super::row_flow_hint;
     use synth_ir::ComponentId;
     use synth_layout::{ComponentPlacement, Layout, Rotation, SheetSize};
