@@ -30,6 +30,20 @@ use crate::pcb_read::PcbBoard;
 /// # Errors
 /// Returns why the board could not be filled and was left as it was.
 pub fn refill_zones(board_path: &Path) -> Result<(), String> {
+    match filled_text(board_path)? {
+        Some(filled) => install(board_path, &filled),
+        None => Ok(()),
+    }
+}
+
+/// The board at `board_path` with its pour zones filled, without writing it.
+///
+/// `None` for a board with no fill-enabled zone. Fails for the reasons
+/// [`refill_zones`] does, and leaves the file as it was in every case.
+///
+/// # Errors
+/// Returns why the board could not be filled.
+pub fn filled_text(board_path: &Path) -> Result<Option<String>, String> {
     let text = std::fs::read_to_string(board_path)
         .map_err(|e| format!("could not read {}: {e}", board_path.display()))?;
     PcbBoard::parse(&text).map_err(|e| e.to_string())?;
@@ -37,7 +51,7 @@ pub fn refill_zones(board_path: &Path) -> Result<(), String> {
         .iter()
         .any(|range| pours_copper(&text[range.clone()]));
     if !pours {
-        return Ok(());
+        return Ok(None);
     }
     if let Some((_, detail)) =
         synth_drc::kicad_cli::version_rejection(synth_drc::kicad_cli::version().as_deref())
@@ -77,8 +91,7 @@ pub fn refill_zones(board_path: &Path) -> Result<(), String> {
         .map_err(|e| format!("kicad-cli saved no board: {e}"))?;
     let filled = graft_fills(&text, &saved)?;
     PcbBoard::parse(&filled).map_err(|e| format!("the filled board does not parse: {e}"))?;
-
-    install(board_path, &filled)
+    Ok(Some(filled))
 }
 
 /// Replace `board_path` with `contents` through a staged file, which is

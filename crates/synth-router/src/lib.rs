@@ -49,6 +49,7 @@ pub mod drc;
 pub mod escape;
 pub mod failure;
 pub mod freerouting;
+pub mod island_vias;
 pub mod kicad_routing_tools;
 pub mod outcomes;
 pub mod pcb_read;
@@ -261,6 +262,15 @@ fn finalize(
     capability: Option<&RouterCapability>,
     candidate: freerouting::Candidate,
 ) -> RouteReport {
+    // A pour that tracks cut into regions leaves some of them tied to nothing
+    // else. Tie each back before the candidate is judged, so the verdict is on
+    // the board that would be delivered.
+    if let Err(detail) = island_vias::tie_islands(&candidate.candidate_path) {
+        eprintln!(
+            "warning: pour islands were not checked in {}: {detail}",
+            candidate.candidate_path.display()
+        );
+    }
     let verdict = validate_candidate(request, &candidate);
 
     let state = RouteReport::state_for_verdict(&verdict);
