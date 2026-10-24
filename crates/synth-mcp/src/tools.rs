@@ -2199,15 +2199,12 @@ fn resolve_schematic_sidecar_with(
     if let Some(p) = args.get(explicit_key).and_then(Value::as_str) {
         return Some(PathBuf::from(p));
     }
-    // `synth_export` also accepts a single `layout_file_path` for both
-    // spaces. Honour it when `schematic_layout_file_path` is absent: an
-    // explicit path is a deliberate choice, whereas implicit discovery is
-    // where the coordinate-space bug lived.
-    if explicit_key != "layout_file_path" {
-        if let Some(p) = args.get("layout_file_path").and_then(Value::as_str) {
-            return Some(PathBuf::from(p));
-        }
-    }
+    // `layout_file_path` is not a fallback here. On `synth_export` it is the
+    // placement sidecar, in board millimetres; read as a sheet layout it put
+    // every symbol of a 92-part board at its PCB coordinates, in a pile in the
+    // corner of an A4 page. The two files are separate arguments because they
+    // are separate coordinate spaces, so a missing schematic path means
+    // auto-layout, as the tool's description says.
     synth_layout::sidecar::SidecarKind::Schematic.resolve_str(file_name)
 }
 
@@ -5024,6 +5021,34 @@ mod tool_registration_tests {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn a_placement_path_is_not_read_as_the_schematic_sidecar() {
+        let only_placement =
+            serde_json::json!({ "layout_file_path": "/nowhere/board.placement.layout.toml" });
+        assert_eq!(
+            super::resolve_schematic_sidecar_with(
+                &only_placement,
+                "/nowhere/board.synth",
+                "schematic_layout_file_path"
+            ),
+            None
+        );
+        let both = serde_json::json!({
+            "layout_file_path": "/nowhere/board.placement.layout.toml",
+            "schematic_layout_file_path": "/nowhere/board.schematic.layout.toml",
+        });
+        assert_eq!(
+            super::resolve_schematic_sidecar_with(
+                &both,
+                "/nowhere/board.synth",
+                "schematic_layout_file_path"
+            ),
+            Some(std::path::PathBuf::from(
+                "/nowhere/board.schematic.layout.toml"
+            ))
+        );
+    }
+
     use super::row_flow_hint;
     use synth_ir::ComponentId;
     use synth_layout::{ComponentPlacement, Layout, Rotation, SheetSize};
