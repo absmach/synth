@@ -95,7 +95,7 @@ Routing (FreeRouting 2.4.1, `router: "freerouting"`, `allow_via_in_pad: true`), 
 - The routed board is 41.5 x 32.23 mm.
 - FreeRouting's escape analysis flags J1 and U1 (0.5 mm pitch) as the packages where neither a fabrication-floor via nor a minimum track fits between adjacent pads, and suggests 4 layers. The route still completes, with its only via-in-pad at U1 pin 25.
 - J3 is at x 27.0 mm and J4 at x 36.1 mm in the sidecar. Small placement changes can change FreeRouting's result; it is not bit-for-bit repeatable.
-- Via-in-pad at the U1 exposed pad (pin 25), at (23.800, 17.300) mm. The fab must fill and cap it. JLCPCB has not been asked.
+- Via-in-pad at the U1 exposed pad (pin 25), at (23.800, 17.200) mm. The fab must fill and cap it. JLCPCB has not been asked.
 - Signal-integrity pass: 15 warnings, none blocking. All 15 are layer changes with no ground return via within 1.53 mm, so the return current has to jump between the F.Cu and B.Cu pours.
 - The USB pair is not coupled and its length and skew were not measured for this route. FreeRouting does not couple the pair. On two layers at 1.6 mm, a 90 ohm differential pair needs about 1.18 mm traces, so the pair has no impedance target and no controlled-impedance geometry (the previous four-layer revision declared 90 ohm but never verified it).
 - No part has been reviewed (`reviewer_state` is false for every part in `release.json`).
