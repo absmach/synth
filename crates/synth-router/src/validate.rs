@@ -322,15 +322,23 @@ pub fn validate_candidate(
     // second run over the same board, which can disagree if the board
     // changed in between — and would let the summary say `kicad_drc: null`
     // beside a verdict of `routed`.
-    let drc = crate::drc::run(&candidate.candidate_path, request);
-    verdict.kicad_drc = drc.map(Into::into);
-    match &drc {
+    let drc = crate::drc::run_detailed(&candidate.candidate_path, request);
+    let counts = if drc.unavailable_reason.is_some() {
+        None
+    } else {
+        Some(drc.counts())
+    };
+    verdict.kicad_drc = counts.map(Into::into);
+    match &counts {
         Some(counts) => {
             if counts.blocking_count() > 0 {
-                verdict.blocking_reasons.push(format!(
-                    "kicad-cli pcb drc reported {} blocking violation(s)",
-                    counts.blocking_count()
-                ));
+                // One reason, not one per finding: the blocking count is the
+                // number of reasons, so listing each would inflate it. The
+                // findings go in the text, because a bare count leaves the
+                // caller no way to tell a clearance from a short.
+                verdict
+                    .blocking_reasons
+                    .push(drc_reason(&drc, counts.blocking_count()));
             }
         }
         None => verdict.unavailable_checks.push(
@@ -340,6 +348,41 @@ pub fn validate_candidate(
 
     verdict.fabrication_ready = verdict.blocking_count() == 0;
     verdict
+}
+
+/// Most findings named in the DRC reason before the rest are summarised.
+const DRC_REASON_FINDINGS: usize = 8;
+
+/// The single blocking reason for a DRC that found errors: the count, then each
+/// finding's type, description and parts.
+fn drc_reason(report: &crate::drc::DrcReport, blocking: usize) -> String {
+    // Unconnected items count toward the blocking total but are not blocking
+    // findings, so they are named here too.
+    let mut named: Vec<String> = report
+        .findings
+        .iter()
+        .filter(|f| f.is_blocking() || f.severity == "unconnected")
+        .take(DRC_REASON_FINDINGS)
+        .map(|f| {
+            let who = if f.items.is_empty() {
+                f.references.join(", ")
+            } else {
+                f.items.join(" / ")
+            };
+            if who.is_empty() {
+                format!("{}: {}", f.violation_type, f.description)
+            } else {
+                format!("{}: {} ({who})", f.violation_type, f.description)
+            }
+        })
+        .collect();
+    if blocking > named.len() {
+        named.push(format!("and {} more", blocking - named.len()));
+    }
+    format!(
+        "kicad-cli pcb drc reported {blocking} blocking violation(s): {}",
+        named.join("; ")
+    )
 }
 
 /// Compare a routed board against the baseline it was routed from.
@@ -1821,5 +1864,68 @@ mod tests {
             r#"(segment (start 2 5) (end 3 5) (width 0.25) (layer "F.Cu") (net 1))"#,
         );
         assert!(check_plane_splits(&board).is_empty());
+    }
+
+    fn finding(kind: &str, description: &str, references: &[&str]) -> crate::drc::DrcFinding {
+        crate::drc::DrcFinding {
+            violation_type: kind.to_string(),
+            severity: "error".to_string(),
+            description: description.to_string(),
+            nets: Vec::new(),
+            references: references.iter().map(ToString::to_string).collect(),
+            items: Vec::new(),
+        }
+    }
+
+    #[test]
+    fn the_drc_reason_names_each_finding_and_its_parts() {
+        let report = crate::drc::DrcReport {
+            findings: vec![
+                finding(
+                    "clearance",
+                    "Clearance violation (0.2 mm; actual 0.1 mm)",
+                    &["U1", "R3"],
+                ),
+                finding("hole_clearance", "Hole to hole", &[]),
+            ],
+            unconnected_items: 0,
+            unavailable_reason: None,
+        };
+        let reason = drc_reason(&report, 2);
+        assert!(reason.starts_with("kicad-cli pcb drc reported 2 blocking violation(s): "));
+        assert!(reason.contains("clearance: Clearance violation (0.2 mm; actual 0.1 mm) (U1, R3)"));
+        assert!(reason.contains("hole_clearance: Hole to hole"));
+    }
+
+    #[test]
+    fn the_drc_reason_caps_how_many_findings_it_lists() {
+        let report = crate::drc::DrcReport {
+            findings: (0..12)
+                .map(|n| finding("clearance", &format!("f{n}"), &[]))
+                .collect(),
+            unconnected_items: 0,
+            unavailable_reason: None,
+        };
+        let reason = drc_reason(&report, 12);
+        assert!(reason.contains("f7") && !reason.contains("f8"), "{reason}");
+        assert!(reason.ends_with("and 4 more"), "{reason}");
+    }
+
+    #[test]
+    fn the_drc_reason_names_an_unconnected_item() {
+        let mut zone = finding("unconnected_items", "Missing connection between items", &[]);
+        zone.severity = "unconnected".to_string();
+        zone.items = vec!["Zone [GND] on F.Cu, priority 1".to_string()];
+        let report = crate::drc::DrcReport {
+            findings: vec![zone],
+            unconnected_items: 1,
+            unavailable_reason: None,
+        };
+        let reason = drc_reason(&report, 1);
+        assert!(
+            reason.contains("Missing connection between items (Zone [GND] on F.Cu, priority 1)"),
+            "{reason}"
+        );
+        assert!(!reason.contains("and "), "{reason}");
     }
 }

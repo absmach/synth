@@ -40,6 +40,11 @@ pub struct DrcFinding {
     /// Component reference designators KiCad attributed it to.
     #[serde(default)]
     pub references: Vec<String>,
+    /// KiCad's description of each item involved, e.g. `Pad 1 [GND] of C3 on
+    /// F.Cu` or `Zone [GND] on F.Cu`. Unlike `references`, this keeps items
+    /// whose description has no `REF, ` prefix.
+    #[serde(default)]
+    pub items: Vec<String>,
 }
 
 impl DrcFinding {
@@ -410,6 +415,20 @@ pub fn parse_report_text(text: &str) -> Option<DrcReport> {
                         .collect()
                 })
                 .unwrap_or_default();
+            let mut items_described: Vec<String> = Vec::new();
+            for v in item
+                .get("items")
+                .and_then(serde_json::Value::as_array)
+                .into_iter()
+                .flatten()
+            {
+                if let Some(d) = v.get("description").and_then(serde_json::Value::as_str) {
+                    // KiCad names both ends of a zone-to-zone link the same.
+                    if !items_described.iter().any(|seen| seen == d) {
+                        items_described.push(d.to_string());
+                    }
+                }
+            }
             // Mark it by section, not by the severity KiCad happened to
             // write, so `is_blocking` and the counts agree with each other
             // and with what the section actually holds.
@@ -427,6 +446,7 @@ pub fn parse_report_text(text: &str) -> Option<DrcReport> {
                 description,
                 nets,
                 references,
+                items: items_described,
             });
         }
     }
