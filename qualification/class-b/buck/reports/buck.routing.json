@@ -1,0 +1,100 @@
+{
+  "schema_version": "synth.routing.v1",
+  "state": "routed",
+  "engine": "freerouting",
+  "capability": {
+    "engine": "freerouting",
+    "available": true,
+    "version": "freerouting-2.4.1",
+    "runtime_version": "openjdk version \"25.0.5\" 2026-10-20 LTS",
+    "detail": null,
+    "failure": null
+  },
+  "provenance": {
+    "engine": "freerouting",
+    "engine_version": "tools/freerouting/freerouting-2.4.1.jar",
+    "runtime_version": "openjdk version \"25.0.5\" 2026-10-20 LTS",
+    "profile": "jlcpcb",
+    "command": [
+      "/usr/bin/python3",
+      "/tmp/opencode/buck2/tools/freeroute_autoroute.py",
+      "out/buck/buck.synth.kicad_pcb",
+      "out/buck/buck.freerouting.kicad_pcb",
+      "--jar",
+      "tools/freerouting/freerouting-2.4.1.jar",
+      "--java",
+      "/tmp/opencode/buck2/tools/jre25/bin/java",
+      "--passes",
+      "40",
+      "--threads",
+      "4",
+      "--ses-output",
+      "out/buck/buck.freerouting.ses",
+      "--report",
+      "out/buck/buck.freerouting.json",
+      "--clean-netlist"
+    ],
+    "settings": {
+      "clean_netlist": "true",
+      "passes": "40",
+      "threads": "4",
+      "wall_clock_secs": "1200"
+    },
+    "input_hash": "1f13f5d349b44874688abeef59a75a9416d68816be6d2605da76be613fd25e89",
+    "output_hash": "",
+    "source_revision": null,
+    "duration_ms": 182404
+  },
+  "statistics": {
+    "connected_nets": 12,
+    "open_nets": 0,
+    "open_net_names": [],
+    "segments": 81,
+    "vias": 18,
+    "wire_length_mm": 220.570681,
+    "pad_escape_rejections": 0,
+    "engine_findings": {
+      "claimed_imported_segments": "81",
+      "claimed_imported_vias": "18"
+    }
+  },
+  "artifacts": {
+    "baseline": "out/buck/buck.synth.kicad_pcb",
+    "candidate": "out/buck/buck.freerouting.kicad_pcb",
+    "delivered": "out/buck/buck.kicad_pcb",
+    "session_log": "out/buck/buck.freerouting.log",
+    "ses": "out/buck/buck.freerouting.ses",
+    "router_report": "out/buck/buck.freerouting.json",
+    "connectivity_report": null,
+    "drc_report": null
+  },
+  "validation": {
+    "fabrication_ready": true,
+    "topology": {
+      "missing_footprints": [],
+      "extra_footprints": [],
+      "missing_nets": [],
+      "missing_layers": [],
+      "missing_pads": [],
+      "renet_pads": [],
+      "outline_present": true
+    },
+    "connectivity": {
+      "connected_nets": 12,
+      "open_nets": 0,
+      "open": [],
+      "unconnected_pads": [],
+      "via_in_pad": [],
+      "undersized_vias": [],
+      "undersized_tracks": []
+    },
+    "kicad_drc": {
+      "errors": 0,
+      "unconnected": 0,
+      "warnings": 30
+    },
+    "blocking_reasons": [],
+    "unavailable_checks": []
+  },
+  "failure": null
+}

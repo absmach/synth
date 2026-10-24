@@ -1,0 +1,92 @@
+id = "lmr33640"
+kind = "regulator"
+version = 0
+lifecycle = "active"
+description = "TI LMR33640 3.8-36 V input, 4 A synchronous step-down converter, 400 kHz, internal compensation, HSOIC-8 (DDA) with exposed thermal pad and open-drain power-good. VFB 1.0 V; VIN abs max 38 V"
+mpn = "LMR33640ADDA"
+kicad_symbol = "Regulator_Switching:LMR33640ADDA"
+kicad_footprint = "Package_SO:HSOP-8-1EP_3.9x4.9mm_P1.27mm_EP2.41x3.1mm"
+
+[footprint_dimensions]
+width_mm = 4.9
+height_mm = 3.9
+courtyard_margin_mm = 0.25
+
+[operating_conditions]
+min_voltage_v = 3.8
+max_voltage_v = 36.0
+max_current_ma = 4000.0
+
+[[pins]]
+name = "gnd"
+number = "1"
+electrical_type = "power_input"
+required = true
+
+[[pins]]
+name = "vin"
+number = "2"
+electrical_type = "power_input"
+required = true
+
+[[pins]]
+name = "en"
+number = "3"
+electrical_type = "input"
+
+[[pins]]
+name = "pg"
+number = "4"
+electrical_type = "open_drain_low"
+
+[[pins]]
+name = "fb"
+number = "5"
+electrical_type = "input"
+capabilities = ["feedback"]
+required = true
+
+[[pins]]
+name = "vcc"
+number = "6"
+# Internal LDO output that needs its own 1 uF decoupling. Passive rather than a
+# power output so the exporter does not invent a rail name for it; it is not a
+# supply for anything else on this board.
+electrical_type = "passive"
+required = true
+
+[[pins]]
+name = "boot"
+number = "7"
+electrical_type = "passive"
+required = true
+
+[[pins]]
+name = "sw"
+number = "8"
+electrical_type = "passive"
+capabilities = ["switch_node"]
+required = true
+
+[[pins]]
+name = "pad"
+number = "9"
+electrical_type = "power_input"
+required = true
+
+# TI Table 9-2 for 3.3 V at 400 kHz: 10 uF + 220 nF on the input.
+[[required_decoupling]]
+net = "vin"
+value = "10uf"
+count = 1
+
+[[required_decoupling]]
+net = "vin"
+value = "220nf"
+count = 1
+
+[provenance]
+source = "imported"
+generator = "synth-part-import-kicad 0.1"
+datasheet_url = "https://www.ti.com/lit/ds/symlink/lmr33640.pdf"
+reviewed_by = ""

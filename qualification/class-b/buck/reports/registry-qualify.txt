@@ -1,0 +1,52 @@
+== lmr33640
+lmr33640 [fail]
+  blocking E-SYNTH-QUAL-008: part has no reviewer
+    expected: [provenance].reviewed_by to name whoever checked this part against its datasheet
+    found:    reviewed_by is empty
+1 part(s): 0 qualified, 1 blocked, 0 unproven
+== l_bourns_srn6045ta_6r8m
+l_bourns_srn6045ta_6r8m [fail]
+  blocking E-SYNTH-QUAL-008: part has no reviewer
+    expected: [provenance].reviewed_by to name whoever checked this part against its datasheet
+    found:    reviewed_by is empty
+1 part(s): 0 qualified, 1 blocked, 0 unproven
+== ss36
+ss36 [fail]
+  blocking E-SYNTH-QUAL-008: part has no reviewer
+    expected: [provenance].reviewed_by to name whoever checked this part against its datasheet
+    found:    reviewed_by is empty
+1 part(s): 0 qualified, 1 blocked, 0 unproven
+== smbj30a
+smbj30a [fail]
+  blocking E-SYNTH-QUAL-008: part has no reviewer
+    expected: [provenance].reviewed_by to name whoever checked this part against its datasheet
+    found:    reviewed_by is empty
+1 part(s): 0 qualified, 1 blocked, 0 unproven
+== mf_msmf110_33x
+mf_msmf110_33x [fail]
+  review E-SYNTH-QUAL-016: footprint names a 3D model file that is not installed
+    expected: a KiCad footprint whose 3D model file is installed
+    found:    `Fuse:Fuse_1812_4532Metric` names `Fuse_1812_4532Metric.step`
+  blocking E-SYNTH-QUAL-008: part has no reviewer
+    expected: [provenance].reviewed_by to name whoever checked this part against its datasheet
+    found:    reviewed_by is empty
+1 part(s): 0 qualified, 1 blocked, 0 unproven
+1 qualified part(s) carry review findings; these are reported, not fatal
+== jst_b2b_xh_a_2pin
+jst_b2b_xh_a_2pin [fail]
+  blocking E-SYNTH-QUAL-008: part has no reviewer
+    expected: [provenance].reviewed_by to name whoever checked this part against its datasheet
+    found:    reviewed_by is empty
+1 part(s): 0 qualified, 1 blocked, 0 unproven
+== jst_b4b_xh_a_4pin
+jst_b4b_xh_a_4pin [fail]
+  blocking E-SYNTH-QUAL-008: part has no reviewer
+    expected: [provenance].reviewed_by to name whoever checked this part against its datasheet
+    found:    reviewed_by is empty
+1 part(s): 0 qualified, 1 blocked, 0 unproven
+== c_electrolytic_smd_8x10
+c_electrolytic_smd_8x10 [fail]
+  blocking E-SYNTH-QUAL-008: part carries no provenance
+    expected: a [provenance] table naming the reviewer and datasheet
+    found:    no provenance recorded
+1 part(s): 0 qualified, 1 blocked, 0 unproven

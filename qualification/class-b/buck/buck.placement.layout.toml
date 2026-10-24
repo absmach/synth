@@ -1,0 +1,158 @@
+schema_version = 2
+forced_net_labels = []
+fit_sheet = false
+
+# Board millimetres (not sheet mm). Parts are centred on these points; the JST connectors
+# are anchored on pin 1, so their footprint origin sits (-1.25, -0.525) mm from the entry.
+# Positions are board millimetres, placed around U1's HSOP-8 pads (pin 2 VIN / 3 EN at
+# x 30.35, pin 7 BOOT / 8 SW at x 35.65): the boot cap and the VCC cap sit beside their pins.
+
+[components.J1]
+x = 7.0
+y = 7.0
+rotation = 0
+priority = "hard"
+
+[components.F1]
+x = 17.0
+y = 7.0
+rotation = 0
+priority = "hard"
+
+[components.D1]
+x = 26.0
+y = 7.0
+rotation = 180
+priority = "hard"
+
+[components.D2]
+x = 35.0
+y = 7.0
+rotation = 0
+priority = "hard"
+
+[components.C2]
+x = 21.5
+y = 15.4
+rotation = 0
+priority = "hard"
+
+[components.C3]
+x = 27.0
+y = 15.4
+rotation = 0
+priority = "hard"
+
+[components.C1]
+x = 11.0
+y = 16.0
+rotation = 0
+priority = "hard"
+
+[components.R_UV_T]
+x = 25.0
+y = 18.6
+rotation = 0
+priority = "hard"
+
+[components.R_UV_B]
+x = 21.0
+y = 18.6
+rotation = 0
+priority = "hard"
+
+[components.U1]
+x = 33.0
+y = 16.0
+rotation = 0
+priority = "hard"
+
+[components.C4]
+x = 38.3
+y = 15.0
+rotation = 0
+priority = "hard"
+
+[components.C8]
+x = 37.7
+y = 18.6
+rotation = 0
+priority = "hard"
+
+[components.L1]
+x = 43.5
+y = 13.8
+rotation = 0
+priority = "hard"
+
+[components.C5]
+x = 50.0
+y = 10.5
+rotation = 0
+priority = "hard"
+
+[components.C6]
+x = 50.0
+y = 14.5
+rotation = 0
+priority = "hard"
+
+[components.C9]
+x = 50.0
+y = 18.5
+rotation = 0
+priority = "hard"
+
+[components.R_FB_T]
+x = 39.5
+y = 19.4
+rotation = 0
+priority = "hard"
+
+[components.R_FB_B]
+x = 39.5
+y = 22.0
+rotation = 0
+priority = "hard"
+
+[components.C7]
+x = 42.5
+y = 19.4
+rotation = 0
+priority = "hard"
+
+[components.R_PG]
+x = 26.0
+y = 22.5
+rotation = 0
+priority = "hard"
+
+[components.J2]
+x = 65.0
+y = 16.0
+rotation = 0
+priority = "hard"
+
+[components.D3]
+x = 59.0
+y = 29.0
+rotation = 0
+priority = "hard"
+
+[components.R_LED]
+x = 54.0
+y = 29.0
+rotation = 0
+priority = "hard"
+
+[components.H1]
+x = 4.0
+y = 32.0
+rotation = 0
+priority = "hard"
+
+[components.H2]
+x = 69.0
+y = 4.0
+rotation = 0
+priority = "hard"

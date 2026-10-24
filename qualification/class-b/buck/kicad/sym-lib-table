@@ -1,0 +1,10 @@
+(sym_lib_table
+  (version 7)
+  (lib
+    (name "synth")
+    (uri "${KIPRJMOD}/buck.kicad_sym")
+    (type "KiCad")
+    (options "")
+    (descr "Synth synthesized symbol library")
+  )
+)
