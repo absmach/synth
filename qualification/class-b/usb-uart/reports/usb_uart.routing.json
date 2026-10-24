@@ -1,133 +1,133 @@
 {
-  "schema_version": "synth.routing.v1",
-  "state": "routed",
-  "engine": "freerouting",
-  "capability": {
-    "engine": "freerouting",
-    "available": true,
-    "version": "freerouting-2.4.1",
-    "runtime_version": "openjdk version \"25.0.4.1\" 2026-08-18 LTS",
-    "detail": null,
-    "failure": null
+  "artifacts": {
+    "baseline": "target/pr103-2layer/usb_uart.synth.kicad_pcb",
+    "candidate": "target/pr103-2layer/usb_uart.freerouting.kicad_pcb",
+    "connectivity_report": null,
+    "delivered": "target/pr103-2layer/usb_uart.kicad_pcb",
+    "drc_report": null,
+    "router_report": "target/pr103-2layer/usb_uart.freerouting.json",
+    "ses": "target/pr103-2layer/usb_uart.freerouting.ses",
+    "session_log": "target/pr103-2layer/usb_uart.freerouting.log"
   },
-  "provenance": {
+  "capability": {
+    "available": true,
+    "detail": null,
     "engine": "freerouting",
-    "engine_version": "/home/steve/work/synth/tools/freerouting/freerouting-2.4.1.jar",
+    "failure": null,
     "runtime_version": "openjdk version \"25.0.4.1\" 2026-08-18 LTS",
-    "profile": "jlcpcb",
+    "version": "freerouting-2.4.1"
+  },
+  "engine": "freerouting",
+  "escape": [
+    {
+      "detail": "adjacent pins are 0.500 mm apart and the pads leave 0.200 mm between them; a fabrication-floor via needs 0.687 mm between centres, so the drill that would fit is 0.113 mm; even a minimum track needs 0.254 mm of gap",
+      "gap_mm": 0.2,
+      "layers": 2,
+      "limit": "track",
+      "max_drill_mm": 0.113,
+      "package": "Connector_USB:USB_C_Receptacle_HRO_TYPE-C-31-M-12",
+      "pads": 22,
+      "pitch_mm": 0.5,
+      "refdes": "J1",
+      "remediation": "use via-in-pad if the process allows, or choose a coarser-pitch part; this board has 2 copper layers \u2014 an inner plane at 4 layers gives these pins somewhere to change layers",
+      "suggested_layers": 4,
+      "via_span_mm": 0.687
+    },
+    {
+      "detail": "adjacent pins are 0.500 mm apart and the pads leave 0.212 mm between them; a fabrication-floor via needs 0.687 mm between centres, so the drill that would fit is 0.113 mm; even a minimum track needs 0.254 mm of gap",
+      "gap_mm": 0.212132,
+      "layers": 2,
+      "limit": "track",
+      "max_drill_mm": 0.113,
+      "package": "Package_DFN_QFN:QFN-24-1EP_4x4mm_P0.5mm_EP2.6x2.6mm",
+      "pads": 25,
+      "pitch_mm": 0.5,
+      "refdes": "U1",
+      "remediation": "use via-in-pad if the process allows, or choose a coarser-pitch part; this board has 2 copper layers \u2014 an inner plane at 4 layers gives these pins somewhere to change layers",
+      "suggested_layers": 4,
+      "via_span_mm": 0.687
+    }
+  ],
+  "failure": null,
+  "provenance": {
     "command": [
       "/usr/bin/python3",
-      "/home/steve/work/synth/tools/freeroute_autoroute.py",
-      "/home/steve/work/synth/target/pr103-compact6-1/usb_uart.synth.kicad_pcb",
-      "/home/steve/work/synth/target/pr103-compact6-1/usb_uart.freerouting.kicad_pcb",
+      "/home/steve/work/synth/.claude/worktrees/agent-a90749fa7d5491b90/tools/freeroute_autoroute.py",
+      "target/pr103-2layer/usb_uart.synth.kicad_pcb",
+      "target/pr103-2layer/usb_uart.freerouting.kicad_pcb",
       "--jar",
-      "/home/steve/work/synth/tools/freerouting/freerouting-2.4.1.jar",
+      "/home/steve/work/synth/.claude/worktrees/agent-a90749fa7d5491b90/tools/freerouting/freerouting-2.4.1.jar",
       "--java",
-      "/home/steve/work/synth/tools/jre25/bin/java",
+      "/home/steve/work/synth/.claude/worktrees/agent-a90749fa7d5491b90/tools/jre25/bin/java",
       "--passes",
       "40",
       "--threads",
       "4",
       "--ses-output",
-      "/home/steve/work/synth/target/pr103-compact6-1/usb_uart.freerouting.ses",
+      "target/pr103-2layer/usb_uart.freerouting.ses",
       "--report",
-      "/home/steve/work/synth/target/pr103-compact6-1/usb_uart.freerouting.json",
+      "target/pr103-2layer/usb_uart.freerouting.json",
       "--clean-netlist",
       "--allow-via-in-pad"
     ],
+    "duration_ms": 148008,
+    "engine": "freerouting",
+    "engine_version": "/home/steve/work/synth/.claude/worktrees/agent-a90749fa7d5491b90/tools/freerouting/freerouting-2.4.1.jar",
+    "input_hash": "9cb1329eef3d2417f86c4b17bb32403d354edf0a3f3191c1074bd7d8797e622f",
+    "output_hash": "",
+    "profile": "jlcpcb",
+    "runtime_version": "openjdk version \"25.0.4.1\" 2026-08-18 LTS",
     "settings": {
       "clean_netlist": "true",
       "passes": "40",
       "threads": "4",
-      "wall_clock_secs": "600"
+      "wall_clock_secs": "1200"
     },
-    "input_hash": "9e849250338160171a6273247870d1eea6e10ee72380f169bf5713d9eb3630d6",
-    "output_hash": "",
-    "source_revision": null,
-    "duration_ms": 181444
+    "source_revision": null
   },
+  "schema_version": "synth.routing.v1",
+  "state": "routed",
   "statistics": {
     "connected_nets": 26,
-    "open_nets": 0,
-    "open_net_names": [],
-    "segments": 255,
-    "vias": 44,
-    "wire_length_mm": 471.944456,
-    "pad_escape_rejections": 0,
     "engine_findings": {
-      "claimed_imported_segments": "255",
-      "claimed_imported_vias": "44"
-    }
-  },
-  "artifacts": {
-    "baseline": "/home/steve/work/synth/target/pr103-compact6-1/usb_uart.synth.kicad_pcb",
-    "candidate": "/home/steve/work/synth/target/pr103-compact6-1/usb_uart.freerouting.kicad_pcb",
-    "delivered": "/home/steve/work/synth/target/pr103-compact6-1/usb_uart.kicad_pcb",
-    "session_log": "/home/steve/work/synth/target/pr103-compact6-1/usb_uart.freerouting.log",
-    "ses": "/home/steve/work/synth/target/pr103-compact6-1/usb_uart.freerouting.ses",
-    "router_report": "/home/steve/work/synth/target/pr103-compact6-1/usb_uart.freerouting.json",
-    "connectivity_report": null,
-    "drc_report": null
+      "claimed_imported_segments": "271",
+      "claimed_imported_vias": "38"
+    },
+    "open_net_names": [],
+    "open_nets": 0,
+    "pad_escape_rejections": 0,
+    "segments": 271,
+    "vias": 38,
+    "wire_length_mm": 507.652151
   },
   "validation": {
-    "fabrication_ready": true,
-    "topology": {
-      "missing_footprints": [],
-      "extra_footprints": [],
-      "missing_nets": [],
-      "missing_layers": [],
-      "missing_pads": [],
-      "renet_pads": [],
-      "outline_present": true
-    },
+    "blocking_reasons": [],
     "connectivity": {
       "connected_nets": 26,
-      "open_nets": 0,
       "open": [],
+      "open_nets": 0,
       "unconnected_pads": [],
-      "via_in_pad": [
-        "via at (23.800, 17.300) mm U1.25"
-      ],
+      "undersized_tracks": [],
       "undersized_vias": [],
-      "undersized_tracks": []
+      "via_in_pad": [
+        "via at (23.800, 17.200) mm U1.25"
+      ]
     },
+    "fabrication_ready": true,
     "kicad_drc": {
       "errors": 0,
       "unconnected": 0,
       "warnings": 40
     },
-    "blocking_reasons": [],
-    "unavailable_checks": []
-  },
-  "failure": null,
-  "escape": [
-    {
-      "refdes": "J1",
-      "package": "Connector_USB:USB_C_Receptacle_HRO_TYPE-C-31-M-12",
-      "pads": 22,
-      "pitch_mm": 0.5,
-      "gap_mm": 0.2,
-      "via_span_mm": 0.687,
-      "max_drill_mm": 0.113,
-      "layers": 4,
-      "suggested_layers": null,
-      "limit": "track",
-      "detail": "adjacent pins are 0.500 mm apart and the pads leave 0.200 mm between them; a fabrication-floor via needs 0.687 mm between centres, so the drill that would fit is 0.113 mm; even a minimum track needs 0.254 mm of gap",
-      "remediation": "use via-in-pad if the process allows, or choose a coarser-pitch part"
+    "topology": {
+      "extra_footprints": [],
+      "missing_footprints": [],
+      "missing_layers": [],
+      "missing_nets": [],
+      "missing_pads": [],
+      "outline_present": true,
+      "renet_pads": []
     },
-    {
-      "refdes": "U1",
-      "package": "Package_DFN_QFN:QFN-24-1EP_4x4mm_P0.5mm_EP2.6x2.6mm",
-      "pads": 25,
-      "pitch_mm": 0.5,
-      "gap_mm": 0.212132,
-      "via_span_mm": 0.687,
-      "max_drill_mm": 0.113,
-      "layers": 4,
-      "suggested_layers": null,
-      "limit": "track",
-      "detail": "adjacent pins are 0.500 mm apart and the pads leave 0.212 mm between them; a fabrication-floor via needs 0.687 mm between centres, so the drill that would fit is 0.113 mm; even a minimum track needs 0.254 mm of gap",
-      "remediation": "use via-in-pad if the process allows, or choose a coarser-pitch part"
-    }
-  ]
+    "unavailable_checks": []
+  }
 }

@@ -7,23 +7,13 @@
 // jumper: +3V3 or VBUS. With no jumper VIO is unpowered and the
 // bridge stays in reset.
 board "usb_uart" {
-  layers 4
+  layers 2
   manufacturer "jlcpcb"
   revision "A"
 
   netclass "USB" {
     trace_width 0.242mm
     clearance 0.127mm
-  }
-
-  stackup {
-    copper 0.035mm
-    insulator 0.2104mm er 4.4 material "FR4"
-    copper 0.0152mm
-    insulator 1.065mm er 4.6 material "FR4"
-    copper 0.0152mm
-    insulator 0.2104mm er 4.4 material "FR4"
-    copper 0.035mm
   }
 
   power "VBUS" 5v
@@ -169,9 +159,8 @@ board "usb_uart" {
   connect J1.dn -> D1.io2 as "USB_DN"
   connect J1.dn -> U1.ud_minus as "USB_DN"
 
-  diff_pair USB_DP USB_DN {
-    impedance 90ohm
-  }
+  // The USB pair has no impedance target: at 1.6 mm on two layers, 90 ohm
+  // differential needs about 1.18 mm traces. Only the netclass width applies.
 
   connect U1.v3 -> C5.p1 as "V3"
 

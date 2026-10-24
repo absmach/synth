@@ -66,9 +66,10 @@ The Nexperia and LP5907 electrical numbers were not re-read.
 
 Status: compact placement done and routed with FreeRouting. The route passes Synth's release gate; it is not reviewed or fabricated.
 
+- Two copper layers: signals on F.Cu and B.Cu, a GND pour on both. The route uses no inner layer because the board has none; the previous revision was four layers with two inner GND planes that carried no routing.
 - Outline: 41.5 x 32.23 mm as routed. The four M2.5 holes are at x 5.5 and 39.6 mm, y 3.0 and 21.0 mm, with a 2.2 mm board-feature rim. The header courtyards at y 29.9 mm set the 32.23 mm height. This is 3.5 mm shorter than the previous 35.73 mm compact layout and 7.5 mm shorter than the 39.73 mm committed board.
 - The 2.2 mm rim keeps the F.Cu GND pour connected. PR 272's 1.5 mm tight rim would put the holes on the edge and split the pour. The exporter now sets `island_removal_mode 0`, dropping copper islands that touch no pad; the remaining split zone is covered by the gate note under Routing.
-- Every part has a position in `usb_uart.placement.layout.toml`. J1 sits flush on the top edge. J_VIO, J2, J3 and J4 sit at y 29.9 mm, spaced 9.1 mm apart. The bottom parts sit at y 23.6 and 25.8 mm. R1 and R2 use the top corners; R3 moved to x 14.5 mm to clear H3.
+- Every part has a position in `usb_uart.placement.layout.toml`. J1 sits flush on the top edge. J_VIO, J2, J3 and J4 sit at y 29.9 mm at x 7.36, 16.46, 27.0 and 36.1 mm. J3 moved 1.44 mm right of its previous 25.56 mm: at 25.56 FreeRouting left DTR1 (U1 pin 15 to J3 pin 1) unrouted, and the move opens that corridor. J4 moved the same 1.44 mm to keep the 8.62 mm header courtyards apart. The bottom parts sit at y 23.6 and 25.8 mm. R1 and R2 use the top corners; R3 moved to x 14.5 mm to clear H3.
 - No courtyard overlaps. J1 courtyard to top edge: 0.01 mm (flush).
 - Pad-edge gap to the target pad on the same net:
 
@@ -89,13 +90,14 @@ Status: compact placement done and routed with FreeRouting. The route passes Syn
 - R1 and R2 are in the top corners; the remaining passives are placed by hand. The DRC checks their courtyards, not placement quality.
 
 Routing (FreeRouting 2.4.1, `router: "freerouting"`, `allow_via_in_pad: true`), on Synth main `1eac8a1` plus the board-feature rim and zone/gate fixes in this branch:
-- Result: routed. `release.json` has `release_ready` true, `route_complete` true and no open net. `kicad-cli pcb drc --severity-all --refill-zones`: 0 errors, 40 warnings, plus one self-referential GND-zone item in `unconnected_items`; Synth's gate keeps that fill artifact as a warning because no two objects are missing a connection.
-- 255 track segments, 44 vias, 471.9 mm of copper.
+- Result: routed. `release.json` has `release_ready` true, `route_complete` true and no open net. `kicad-cli pcb drc --severity-all --refill-zones`: 0 errors, 39 warnings, plus one self-referential GND-zone item in `unconnected_items`; Synth's gate keeps that fill artifact as a warning because no two objects are missing a connection.
+- 271 track segments, 38 vias, 507.7 mm of copper.
 - The routed board is 41.5 x 32.23 mm.
-- J4 is at x 34.66 mm in the sidecar. Small placement changes can change FreeRouting's result; it is not bit-for-bit repeatable.
+- FreeRouting's escape analysis flags J1 and U1 (0.5 mm pitch) as the packages where neither a fabrication-floor via nor a minimum track fits between adjacent pads, and suggests 4 layers. The route still completes, with its only via-in-pad at U1 pin 25.
+- J3 is at x 27.0 mm and J4 at x 36.1 mm in the sidecar. Small placement changes can change FreeRouting's result; it is not bit-for-bit repeatable.
 - Via-in-pad at the U1 exposed pad (pin 25), at (23.800, 17.300) mm. The fab must fill and cap it. JLCPCB has not been asked.
-- Signal-integrity pass: 24 warnings, none blocking. 23 are layer changes with no ground return via within 0.64 mm, one is a parallel run of 5.9 mm at 0.132 mm.
-- The USB pair is not coupled and its length and skew were not measured for this route. FreeRouting does not couple the pair, so the 90 ohm geometry is unverified.
+- Signal-integrity pass: 15 warnings, none blocking. All 15 are layer changes with no ground return via within 1.53 mm, so the return current has to jump between the F.Cu and B.Cu pours.
+- The USB pair is not coupled and its length and skew were not measured for this route. FreeRouting does not couple the pair. On two layers at 1.6 mm, a 90 ohm differential pair needs about 1.18 mm traces, so the pair has no impedance target and no controlled-impedance geometry (the previous four-layer revision declared 90 ohm but never verified it).
 - No part has been reviewed (`reviewer_state` is false for every part in `release.json`).
 - The D7 reference is rotated into the right margin and R_TERM is vertical; the old D4/D7 overlap is gone. KiCad still reports a silk-over-copper warning for the D7 reference at R7 pad 1, six millimetres away, which reads as a false positive.
 - U1's reference label still sits in the D1/D6 row and triggers one silk-overlap and one silk-over-copper warning; there is no free side between U1, U3, C5 and C6.
@@ -107,7 +109,7 @@ Routing (FreeRouting 2.4.1, `router: "freerouting"`, `allow_via_in_pad: true`), 
 - `images/`: 3D top and angled, top and bottom copper, and the schematic.
 - `SHA256SUMS`: hashes of the artifacts above.
 
-The reports are as captured, so they contain the absolute paths of the machine that produced them.
+The reports are as captured; artifact paths inside them are relative to the machine that produced them.
 
 The committed board came from the MCP `synth_export` tool with `router: "freerouting"` and `allow_via_in_pad: true`. The CLI equivalent (same binary, same engine defaults) is below.
 
@@ -131,13 +133,13 @@ Current Synth main defaults the MCP export to KiCadRoutingTools; this board was 
 - Schematic: an earlier exporter bug drew the CH342F wires 1.27 mm short of its pins. With commit 9592ad5 (PR #104) applied, the netlist shows U1 connected (only RST and RTS0 left open). Without that fix, KiCad sees every U1 pin as unconnected.
 - Schematic look: the compiler's own layout, not tuned by hand. See `images/schematic.png`.
 - KiCad schematic ERC: 1 error, `power_pin_not_driven` on the VIO symbol (VIO arrives only through J_VIO), plus 119 warnings (81 lib_symbol_issues, 36 footprint_link_issues, 1 label_multiple_wires, 1 multiple_net_names).
-- Validate still warns: E-SYNTH-POWER-004 x2 (VBUS and GND load-to-capacitor ratio, a count heuristic), E-SYNTH-SCHEM-005 x2 (CH342F bridge junction fan-out), W-SYNTH-ANOMALY-001, W-SYNTH-IMPEDANCE-001 (inner layers not verified), W-SYNTH-SUPPLY-002 x8, W-SYNTH-PART-UNVERIFIED x9.
+- Validate still warns: E-SYNTH-POWER-004 x2 (VBUS and GND load-to-capacitor ratio, a count heuristic), E-SYNTH-SCHEM-005 x2 (CH342F bridge junction fan-out), W-SYNTH-ANOMALY-001, W-SYNTH-SUPPLY-002 x8, W-SYNTH-PART-UNVERIFIED x9.
 - No VBUS bulk capacitor, no fuse, no reverse or inrush protection.
 - R_TERM (120 ohm across A/B) is always connected. The registry has no 2-pin header (`header_1x2`) for a jumper.
 - RS-485: no bias resistors (the THVD1450 has idle, open and short bus failsafe built in, per SLLSEY3E). No surge or TVS on A/B: only the on-chip +/-18 kV IEC contact ESD. TI shows an external circuit for 1 kV surge. No common-mode choke.
 - No silkscreen text support in Synth: header labels (GND/TXD1/RXD1 and so on) exist only in the schematic.
 - The route passes Synth's own gate but nobody has reviewed it, so the board is not ready to fabricate.
-- 4-layer stackup and 90 ohm USB pair are declared but not verified.
+- Two-layer board with no declared stackup: the exporter writes the 1.6 mm default thickness. There is no controlled-impedance net, and the USB pair is not impedance-controlled.
 
 ## Not verified
 
