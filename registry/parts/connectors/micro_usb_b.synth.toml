@@ -10,6 +10,10 @@ kicad_footprint = "Connector_USB:USB_Micro-B_Molex-105017-0001"
 width_mm = 7.6
 height_mm = 4.375
 courtyard_margin_mm = 0.25
+# The signal pads sit at the rear edge (y = -1.46), the shell pads at +1.24 and
+# the housing extends forward to y = +3.64, where the plug enters. Read from the
+# footprint, and the same pattern as usb_c_receptacle.
+mating_face = "bottom"
 
 [operating_conditions]
 min_voltage_v = 1.8

@@ -630,6 +630,80 @@ pub fn fit_outline_with_margin_mm(board: &Board, placement: &mut Placement, marg
     fit_outline(board, placement, mm_to_nm(margin_mm));
 }
 
+/// Channel kept between a trimmed edge and the furthest courtyard or pad it
+/// would otherwise squeeze.
+const OUTLINE_TRIM_RESERVE_NM: i64 = 500_000;
+
+/// Pitch of the cell grid the shape score counts dead space on.
+const DEAD_CELL_NM: i64 = 1_000_000;
+
+/// Pull one fitted edge in to just under the next whole millimetre, but only
+/// while [`OUTLINE_TRIM_RESERVE_NM`] still separates it from the furthest
+/// courtyard or pad.
+fn trim_trailing_edge(edge_nm: i64, origin_nm: i64, hard_nm: i64) -> i64 {
+    let slack = edge_nm - hard_nm - OUTLINE_TRIM_RESERVE_NM;
+    if slack <= 0 {
+        return edge_nm;
+    }
+    let remainder = (edge_nm - origin_nm).rem_euclid(DEAD_CELL_NM);
+    // The grid drops a column only once the span is strictly below a whole
+    // millimetre; the margin absorbs the export's coordinate rounding.
+    let needed = remainder + 10_000;
+    if needed <= slack {
+        edge_nm - needed
+    } else {
+        edge_nm
+    }
+}
+
+/// Trim the trailing x and y sides of a fitted outline onto the shape score's
+/// cell grid.
+///
+/// The score measures dead space over a one-millimetre grid anchored at the
+/// Edge.Cuts bbox minimum, so a box ending a fraction past a whole millimetre
+/// counts a strip narrower than one cell as if it were a full row or column of
+/// air. Removing that unused strip costs no courtyard: the trim stops at the
+/// last pad or courtyard plus the edge clearance placement already asks for,
+/// and it is applied to the same `board_outline` the exporter draws and the
+/// sidecar coordinates are judged against, so all three still agree.
+pub fn trim_outline_to_grid(board: &Board, placement: &mut Placement) {
+    let mut hard_max_x = i64::MIN;
+    let mut hard_max_y = i64::MIN;
+    for placed in &placement.components {
+        let Some(component) = board.component(placed.id) else {
+            continue;
+        };
+        let rect = sidecar_courtyard_rect(board, component, placed);
+        let copper = exported_pad_bounds(component, placed);
+        let mut hard = [rect.min.x_nm, rect.min.y_nm, rect.max.x_nm, rect.max.y_nm];
+        if let Some(copper) = copper {
+            hard[0] = hard[0].min(copper.min.x_nm);
+            hard[1] = hard[1].min(copper.min.y_nm);
+            hard[2] = hard[2].max(copper.max.x_nm);
+            hard[3] = hard[3].max(copper.max.y_nm);
+        }
+        if let Some(side) = flush_edge_index(board, placed.id) {
+            let reach = connector_reach(rect, copper.unwrap_or(rect));
+            let reach = [
+                reach.min.x_nm,
+                reach.min.y_nm,
+                reach.max.x_nm,
+                reach.max.y_nm,
+            ];
+            hard[side] = reach[side];
+        }
+        hard_max_x = hard_max_x.max(hard[2]);
+        hard_max_y = hard_max_y.max(hard[3]);
+    }
+    if hard_max_x == i64::MIN {
+        return;
+    }
+    let mut outline = placement.board_outline;
+    outline.max.x_nm = trim_trailing_edge(outline.max.x_nm, outline.min.x_nm, hard_max_x);
+    outline.max.y_nm = trim_trailing_edge(outline.max.y_nm, outline.min.y_nm, hard_max_y);
+    placement.board_outline = outline;
+}
+
 fn rotated_courtyard_rect(placed: &ComponentPlacement, (width, height): (f64, f64)) -> Rect {
     let (w, h) = if placed.rotation.swaps_extents() {
         (height, width)
@@ -1829,6 +1903,63 @@ pub(crate) fn courtyard_rect_for_placement(
         offset_mm.unwrap_or((0.0, 0.0)),
         extra_nm,
     )
+}
+
+/// Distance from a courtyard within which a raster cell counts as occupied.
+const DEAD_REACH_MM: f64 = 3.0;
+
+/// Raster cells of [`Placement::board_outline`] whose centre is not within
+/// [`DEAD_REACH_MM`] of any component courtyard.
+///
+/// Two arrangements can fit the same box and still leave very different
+/// amounts of air between their parts; this is the shape term that tells them
+/// apart. The grid is anchored at the outline's minimum corner, so the count
+/// is deterministic for a given placement.
+#[must_use]
+pub fn dead_cells(board: &Board, placement: &Placement) -> u64 {
+    let outline = placement.board_outline;
+    let cell_nm = DEAD_CELL_NM;
+    let reach_nm = mm_to_nm(DEAD_REACH_MM);
+    let cols = outline.width_nm() / cell_nm;
+    let rows = outline.height_nm() / cell_nm;
+    if cols <= 0 || rows <= 0 {
+        return 0;
+    }
+    let courtyards: Vec<Rect> = placement
+        .components
+        .iter()
+        .filter_map(|placed| {
+            let component = board.component(placed.id)?;
+            let (offset_mm, (width_mm, height_mm)) = component.part.as_ref().map_or_else(
+                || ((0.0, 0.0), fallback_courtyard(&component.kind)),
+                synth_layout::pcb_courtyard_geometry_for_part,
+            );
+            Some(courtyard_rect_for_placement(
+                placed,
+                width_mm,
+                height_mm,
+                Some(offset_mm),
+                reach_nm,
+            ))
+        })
+        .collect();
+    let mut dead = 0;
+    for col in 0..cols {
+        let x_nm = outline.min.x_nm + col * cell_nm + cell_nm / 2;
+        for row in 0..rows {
+            let y_nm = outline.min.y_nm + row * cell_nm + cell_nm / 2;
+            let occupied = courtyards.iter().any(|courtyard| {
+                courtyard.min.x_nm <= x_nm
+                    && x_nm <= courtyard.max.x_nm
+                    && courtyard.min.y_nm <= y_nm
+                    && y_nm <= courtyard.max.y_nm
+            });
+            if !occupied {
+                dead += 1;
+            }
+        }
+    }
+    dead
 }
 
 /// Deterministic order key for a component under a placement `seed`.
@@ -3206,10 +3337,61 @@ fn place_with_outline<S: ::std::hash::BuildHasher>(
         }
     }
 
+    face_edge_connectors_outward(
+        board,
+        adaptive_board_outline,
+        &mut placements,
+        &courtyard_lookup,
+        pinned,
+    );
+
     Ok(Placement {
         board_outline: adaptive_board_outline,
         components: placements,
     })
+}
+
+/// Turn every edge-mounted connector so its plug opens out of the board.
+///
+/// The floorplan picks a connector's rotation from the edge it was *asked* for,
+/// but a soft hint is a preference and the placer may settle it somewhere else.
+/// What a person sees is where the connector ended up, so this runs last and
+/// uses the same test the DRC does, [`floorplan::connector_orientation_issues`],
+/// which is what keeps the two from disagreeing.
+///
+/// A pinned connector is left alone: a sidecar is a constraint, and the DRC
+/// reports it if it is wrong. So is a turn that would put the courtyard on top
+/// of another part — a quarter turn changes its extents — since an overlap is
+/// worse than a connector that faces sideways, and the DRC reports that too.
+fn face_edge_connectors_outward<S: ::std::hash::BuildHasher>(
+    board: &Board,
+    outline: Rect,
+    placements: &mut [ComponentPlacement],
+    courtyard_lookup: &std::collections::HashMap<ComponentId, (f64, f64)>,
+    pinned: &std::collections::HashMap<ComponentId, (Point, Rotation), S>,
+) {
+    for issue in floorplan::connector_orientation_issues(board, outline, placements) {
+        let Some(index) = placements.iter().position(|placed| {
+            board
+                .component(placed.id)
+                .is_some_and(|component| component.refdes == issue.refdes)
+        }) else {
+            continue;
+        };
+        if pinned.contains_key(&placements[index].id) {
+            continue;
+        }
+        let mut turned = placements[index];
+        turned.rotation = issue.expected;
+        let clear = placements.iter().all(|other| {
+            other.id == turned.id
+                || !padded_courtyard_rect(courtyard_lookup, &turned)
+                    .intersects(&padded_courtyard_rect(courtyard_lookup, other))
+        });
+        if clear {
+            placements[index] = turned;
+        }
+    }
 }
 
 fn exported_pad_bounds(

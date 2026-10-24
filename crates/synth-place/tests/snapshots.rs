@@ -186,3 +186,103 @@ fn usb_c_orientation_is_derived_and_wrong_override_is_detected() {
     assert_eq!(issues[0].refdes, "J1");
     assert_eq!(issues[0].expected, synth_geometry::Rotation::OneEighty);
 }
+
+/// A JST connector's plug opens outward on every edge, not only on the one the
+/// floorplan used to assume. Each connector here asks for a different edge; the
+/// rotation that points its declared mating face out of that edge is derived
+/// from the part, and the orientation check agrees.
+#[test]
+fn jst_connectors_face_outward_on_every_edge() {
+    use synth_geometry::Rotation;
+    use synth_place::floorplan::{rotation_for_mating_edge, BoardEdge};
+    use synth_registry::MatingFace;
+
+    let board = load_board("fixtures/designs/edge_jst_connectors.synth");
+    let placement = synth_place::place(&board).expect("place");
+
+    let asked = [
+        ("J1", BoardEdge::Left),
+        ("J2", BoardEdge::Right),
+        ("J3", BoardEdge::Bottom),
+        ("J4", BoardEdge::Top),
+    ];
+    for (refdes, edge) in asked {
+        let component = board
+            .components
+            .iter()
+            .find(|c| c.refdes == refdes)
+            .expect("connector");
+        let face = component
+            .part
+            .as_ref()
+            .and_then(|part| part.footprint_dimensions.as_ref())
+            .and_then(|dimensions| dimensions.mating_face);
+        assert_eq!(
+            face,
+            Some(MatingFace::Bottom),
+            "{refdes}'s part must declare which way its plug opens"
+        );
+        let placed = placement
+            .components
+            .iter()
+            .find(|c| c.id == component.id)
+            .expect("placement");
+        let expected: Rotation = rotation_for_mating_edge(MatingFace::Bottom, edge);
+        assert_eq!(
+            placed.rotation, expected,
+            "{refdes} asked for the {edge:?} edge and must open outward"
+        );
+    }
+
+    let issues = synth_place::floorplan::connector_orientation_issues(
+        &board,
+        placement.board_outline,
+        &placement.components,
+    );
+    assert!(
+        issues.is_empty(),
+        "an edge-mounted connector faces into the board: {issues:?}\noutline {:?}\n{:?}",
+        placement.board_outline,
+        placement
+            .components
+            .iter()
+            .filter(|c| board
+                .component(c.id)
+                .is_some_and(|k| k.refdes.starts_with('J')))
+            .map(|c| (
+                board.component(c.id).map(|k| k.refdes.clone()),
+                c.center,
+                c.rotation
+            ))
+            .collect::<Vec<_>>()
+    );
+}
+
+/// A connector part that goes on a board edge says which way its plug opens, or
+/// the placer has nothing to orient it by and the DRC cannot check it. Vertical
+/// pin headers are the exception: their opening faces up, not out of an edge.
+#[test]
+fn every_edge_connector_declares_which_way_its_plug_opens() {
+    let registry = synth_registry::load_dir(&workspace_root().join("registry").join("parts"))
+        .expect("registry loads");
+    let mut missing = Vec::new();
+    let mut checked = 0;
+    for (_, part) in registry.iter() {
+        if !matches!(part.kind.as_str(), "connector" | "jack") || part.id.0.starts_with("header_") {
+            continue;
+        }
+        checked += 1;
+        let face = part
+            .footprint_dimensions
+            .as_ref()
+            .and_then(|dimensions| dimensions.mating_face);
+        if face.is_none() {
+            missing.push(part.id.0.clone());
+        }
+    }
+    assert!(checked >= 8, "found only {checked} edge connectors");
+    assert!(
+        missing.is_empty(),
+        "edge connectors with no mating_face: {missing:?}"
+    );
+}

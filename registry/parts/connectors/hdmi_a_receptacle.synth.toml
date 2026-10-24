@@ -9,6 +9,10 @@ kicad_footprint = "Connector_Video:HDMI_A_Amphenol_10029449-x01xLF_Horizontal"
 width_mm = 18.5
 height_mm = 11.45
 courtyard_margin_mm = 0.25
+# Horizontal receptacle: the signal pads sit at the rear edge (y = -5.00) and the
+# housing extends forward to y = +5.00, where the plug enters. Read from the
+# footprint, and the same pattern as usb_c_receptacle.
+mating_face = "bottom"
 
 [operating_conditions]
 min_voltage_v = 0.0

@@ -831,6 +831,7 @@ fn place_candidates_with_margins(
             candidate,
             synth_place::tight_edge_margin_mm(board),
         );
+        synth_place::trim_outline_to_grid(board, candidate);
     }
 
     let mut distinct: Vec<synth_place::Placement> = Vec::with_capacity(candidates.len());
@@ -849,29 +850,126 @@ fn place_candidates_with_margins(
     Ok(distinct)
 }
 
-/// Ordering key for candidate placements: legality, then routability, then
-/// board area.
+/// Ordering key for candidate placements: legality, then the hard edge
+/// contracts, then routability, then the shape the outline would fit.
 ///
 /// Violations lead — an illegal placement is never preferred, however short
-/// its copper — then net hazards, then the box the outline would fit. Area
-/// only decides between candidates with the same legality and the same count
-/// of overlong nets, so a smaller arrangement cannot buy its size with a
-/// routing hazard.
+/// its copper — then a candidate that keeps every hard edge-hinted connector
+/// on its declared edge, then net hazards, then the layout's shape. Shape
+/// only decides between candidates with the same legality, the same connector
+/// contracts and the same count of overlong nets, so a denser arrangement
+/// cannot buy its compactness with a routing hazard.
+///
+/// On a dense board whose rim hard edge hints fix, the shape term is dead
+/// space plus a quarter of the box (in quarter square millimetres). The same
+/// box can then hide very different amounts of air between the pinned rows,
+/// and only the dead cells separate them. On every other board the box is the
+/// right term: on a sparse board a handful of raster cells flips arrangements
+/// that the box already orders correctly.
 fn placement_key(
     board: &Board,
     placement: &synth_place::Placement,
-) -> (usize, usize, usize, u64, u64) {
+) -> (usize, usize, usize, usize, u64, u64) {
     let violations = placement_score(board, placement);
+    let contracts = hard_edge_contract_violations(board, placement);
     let estimate = synth_place::routability(board, placement);
     let area_nm2 = u64::try_from(placement.board_outline.width_nm().max(0)).unwrap_or(0)
         * u64::try_from(placement.board_outline.height_nm().max(0)).unwrap_or(0);
+    let size = if board.components.len() >= synth_place::DENSE_BOARD_COMPONENTS
+        && has_hard_edge_hint(board)
+    {
+        synth_place::dead_cells(board, placement) * 4 + area_nm2 / 1_000_000_000_000
+    } else {
+        area_nm2
+    };
     (
         violations,
+        contracts,
         thermal_crowding(board, placement),
         estimate.overlong_nets,
-        area_nm2,
+        size,
         estimate.copper_length_nm,
     )
+}
+
+/// Whether the design pins at least one connector to an edge with a hard hint.
+///
+/// Such a hint fixes the rim the outline has to keep, so the box cannot shrink
+/// freely and the remaining win is the air between the pinned parts. A board
+/// without one has no fixed rim to pack around, and its box already orders
+/// candidates correctly.
+fn has_hard_edge_hint(board: &Board) -> bool {
+    board.components.iter().any(|component| {
+        matches!(component.kind.as_str(), "connector" | "jack")
+            && component.placement_hint.as_ref().is_some_and(|hint| {
+                hint.priority == synth_ir::PlacementPriority::Hard && hint.edge.is_some()
+            })
+    })
+}
+
+/// Hard edge hints are contracts, not preferences: a connector the design
+/// pins to an edge must stay in that edge's band and, when its part declares
+/// a mating face, open outward.
+///
+/// The solver enforces this while it places, but one of its escapes — the
+/// whole-canvas fallback a blocked band takes — can still leave a connector
+/// in the middle of the board. Candidates differ in whether that happened, so
+/// the export has to count it; otherwise a taller arrangement that routed
+/// marginally better used to win with the connector stranded 13 mm from its
+/// declared edge.
+fn hard_edge_contract_violations(board: &Board, placement: &synth_place::Placement) -> usize {
+    let band_cap_nm = synth_geometry::mm_to_nm(15.0);
+    board
+        .components
+        .iter()
+        .filter(|component| matches!(component.kind.as_str(), "connector" | "jack"))
+        .filter_map(|component| {
+            let hint = component.placement_hint.as_ref()?;
+            let edge = hint.edge.as_ref()?;
+            if hint.priority != synth_ir::PlacementPriority::Hard {
+                return None;
+            }
+            let placed = placement
+                .components
+                .iter()
+                .find(|candidate| candidate.id == component.id)?;
+            let outline = placement.board_outline;
+            let (distance_nm, board_edge) = match edge {
+                synth_ir::PlacementEdge::Left => (
+                    placed.center.x_nm - outline.min.x_nm,
+                    synth_place::floorplan::BoardEdge::Left,
+                ),
+                synth_ir::PlacementEdge::Right => (
+                    outline.max.x_nm - placed.center.x_nm,
+                    synth_place::floorplan::BoardEdge::Right,
+                ),
+                synth_ir::PlacementEdge::Top => (
+                    placed.center.y_nm - outline.min.y_nm,
+                    synth_place::floorplan::BoardEdge::Top,
+                ),
+                synth_ir::PlacementEdge::Bottom => (
+                    outline.max.y_nm - placed.center.y_nm,
+                    synth_place::floorplan::BoardEdge::Bottom,
+                ),
+            };
+            // The same band the solver's edge hint reserves, capped by the
+            // board so a small outline cannot make it unreachable.
+            let band_nm = band_cap_nm
+                .min(outline.width_nm() / 3)
+                .min(outline.height_nm() / 3);
+            let off_edge = distance_nm > band_nm;
+            let mis_faced = component
+                .part
+                .as_ref()
+                .and_then(|part| part.footprint_dimensions.as_ref())
+                .and_then(|dimensions| dimensions.mating_face)
+                .is_some_and(|face| {
+                    placed.rotation
+                        != synth_place::floorplan::rotation_for_mating_edge(face, board_edge)
+                });
+            (off_edge || mis_faced).then_some(())
+        })
+        .count()
 }
 
 /// Pairs of hot components placed within [`HOT_SPACING_MM`] of each other.
@@ -1269,6 +1367,140 @@ mod tests {
         synth_ir::lower(&parsed.ast.unwrap(), &registry, "inline.synth")
             .board
             .unwrap()
+    }
+
+    /// An MCU, a header, and (`dense`) eighteen 0603s to pass the dense-part
+    /// gate. `hint` pins the header to the right edge as a hard contract.
+    fn edge_candidate_board(hint: bool, dense: bool) -> Board {
+        use std::fmt::Write as _;
+        let mut src = String::from("board \"edge_candidate\" {\n  layers 2\n");
+        src.push_str("  component U1: mcu \"rp2350\"\n");
+        src.push_str("  component J1: connector \"header_1x3\"");
+        if hint {
+            src.push_str(" { placement_hint { edge: right priority: hard } }");
+        }
+        src.push('\n');
+        if dense {
+            for index in 1..=18 {
+                writeln!(src, "  component C{index}: capacitor \"c_generic_0603\"").unwrap();
+            }
+        }
+        src.push_str("}\n");
+        board_from(&src)
+    }
+
+    /// Manual 60 x 30 mm arrangement of [`edge_candidate_board`]: the MCU on
+    /// the right, the header at `connector_x_mm`, the passives in two rows.
+    fn edge_candidate_placement(board: &Board, connector_x_mm: f64) -> synth_place::Placement {
+        use synth_geometry::{mm_to_nm, Layer, Point, Rect, Rotation};
+        let mut passive = 0_u32;
+        let components = board
+            .components
+            .iter()
+            .map(|component| {
+                let (x_mm, y_mm) = match component.refdes.as_str() {
+                    "U1" => (45.0, 15.0),
+                    "J1" => (connector_x_mm, 15.0),
+                    _ => {
+                        let column = f64::from(passive % 9);
+                        let row = if passive < 9 { 3.0 } else { 27.0 };
+                        passive += 1;
+                        (5.0 + column * 6.0, row)
+                    }
+                };
+                synth_place::ComponentPlacement {
+                    id: component.id,
+                    center: Point::new(mm_to_nm(x_mm), mm_to_nm(y_mm)),
+                    rotation: Rotation::Zero,
+                    layer: Layer::Top,
+                }
+            })
+            .collect();
+        synth_place::Placement {
+            board_outline: Rect::new(Point::new(0, 0), Point::new(mm_to_nm(60.0), mm_to_nm(30.0))),
+            components,
+        }
+    }
+
+    fn outline_area_nm2(placement: &synth_place::Placement) -> u64 {
+        u64::try_from(placement.board_outline.width_nm().max(0)).unwrap()
+            * u64::try_from(placement.board_outline.height_nm().max(0)).unwrap()
+    }
+
+    /// A stranded hard edge connector is a contract violation, not a cheaper
+    /// shape: the export must keep the connector on its declared edge even
+    /// when the stranded arrangement leaves less dead space.
+    #[test]
+    fn a_stranded_edge_connector_loses_to_a_flush_one_despite_dead_cells() {
+        let board = edge_candidate_board(true, true);
+        let flush = edge_candidate_placement(&board, 57.8);
+        let stranded = edge_candidate_placement(&board, 20.0);
+        let flush_key = placement_key(&board, &flush);
+        let stranded_key = placement_key(&board, &stranded);
+
+        assert_eq!(flush_key.0, 0, "the flush candidate must be legal");
+        assert_eq!(flush_key.0, stranded_key.0, "legality does not decide");
+        assert_eq!(flush_key.1, 0, "the flush connector keeps its edge");
+        assert_eq!(stranded_key.1, 1, "the stranded connector breaks it");
+        assert!(
+            stranded_key.4 < flush_key.4,
+            "the stranded shape has less dead space ({} vs {}), so the contract \
+             term is what rejects it",
+            stranded_key.4,
+            flush_key.4
+        );
+        assert!(
+            flush_key < stranded_key,
+            "the flush candidate must rank first"
+        );
+    }
+
+    /// On a dense board whose hard edge hint fixes the rim, the shape term is
+    /// dead cells plus a quarter of the box; a sparse board, or a dense one
+    /// without a hard edge hint, keeps the box alone.
+    #[test]
+    fn the_shape_term_counts_dead_cells_only_on_a_pinned_dense_board() {
+        for (hint, dense, dead_driven) in [
+            (true, true, true),
+            (true, false, false),
+            (false, true, false),
+        ] {
+            let board = edge_candidate_board(hint, dense);
+            let placement = edge_candidate_placement(&board, 57.8);
+            let area_nm2 = outline_area_nm2(&placement);
+            let size = placement_key(&board, &placement).4;
+            let expected = if dead_driven {
+                synth_place::dead_cells(&board, &placement) * 4 + area_nm2 / 1_000_000_000_000
+            } else {
+                area_nm2
+            };
+            assert_eq!(
+                size, expected,
+                "hint={hint} dense={dense}: the shape term must match its guard"
+            );
+        }
+    }
+
+    /// The dead-cell term is what orders two legal dense candidates that
+    /// share the same box and the same connector contracts.
+    #[test]
+    fn a_dense_board_ranks_two_flush_candidates_by_dead_cells() {
+        let board = edge_candidate_board(true, true);
+        let edge = edge_candidate_placement(&board, 57.8);
+        let inset = edge_candidate_placement(&board, 52.0);
+        let edge_key = placement_key(&board, &edge);
+        let inset_key = placement_key(&board, &inset);
+
+        assert_eq!(edge_key.0, inset_key.0, "legality does not decide");
+        assert_eq!(edge_key.1, inset_key.1, "both stay in the edge band");
+        let edge_dead = synth_place::dead_cells(&board, &edge);
+        let inset_dead = synth_place::dead_cells(&board, &inset);
+        assert_ne!(edge_dead, inset_dead, "the two shapes must differ");
+        assert_eq!(
+            edge_key < inset_key,
+            edge_dead < inset_dead,
+            "dead cells decide the dense shape term: {edge_dead} vs {inset_dead}"
+        );
     }
 
     #[test]

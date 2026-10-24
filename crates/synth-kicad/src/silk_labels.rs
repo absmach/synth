@@ -108,7 +108,9 @@ fn text_width_nm(refdes: &str) -> i64 {
 /// above, below, left and right of its courtyard, then the default. A
 /// candidate fits when it stays inside the board, clear of every other part's
 /// courtyard and clear of the labels already placed. A part with no fitting
-/// candidate keeps the default.
+/// candidate takes the first candidate that at least stays on the board, clear
+/// of the labels already placed; only when none does is the default pulled
+/// inside the board.
 pub(crate) fn place_labels(
     parts: &[LabelPart],
     outline: Rect,
@@ -153,16 +155,39 @@ pub(crate) fn place_labels(
         };
         let pos = match from_design {
             Some(forced) if hard => pulled_inside(part, outline, forced),
-            _ => from_design
-                .into_iter()
-                .chain(part.side.map(|s| side_candidate(part, s)))
-                .chain(
-                    [Side::Above, Side::Below, Side::Left, Side::Right]
-                        .map(|s| side_candidate(part, s)),
-                )
-                .chain(std::iter::once(default))
-                .find(|&p| fits(p))
-                .unwrap_or(default),
+            _ => {
+                let candidates: Vec<LabelPos> = from_design
+                    .into_iter()
+                    .chain(part.side.map(|s| side_candidate(part, s)))
+                    .chain(
+                        [Side::Above, Side::Below, Side::Left, Side::Right]
+                            .map(|s| side_candidate(part, s)),
+                    )
+                    .chain(std::iter::once(default))
+                    .collect();
+                candidates
+                    .iter()
+                    .copied()
+                    .find(|&p| fits(p))
+                    .unwrap_or_else(|| {
+                        // Every side is blocked by a courtyard or a label. A label
+                        // past Edge.Cuts is worse than a crowded one, so keep the
+                        // box on the board, preferring a spot clear of the labels
+                        // already placed, and only then pull the default inside.
+                        candidates
+                            .iter()
+                            .copied()
+                            .filter(|&p| inside(outline, label_box(part, p)))
+                            .find(|&p| !taken.iter().any(|t| t.intersects(&label_box(part, p))))
+                            .or_else(|| {
+                                candidates
+                                    .iter()
+                                    .copied()
+                                    .find(|&p| inside(outline, label_box(part, p)))
+                            })
+                            .unwrap_or_else(|| pulled_inside(part, outline, default))
+                    })
+            }
         };
         taken.push(label_box(part, pos));
         placed.insert(part.id, pos);
@@ -323,6 +348,42 @@ mod tests {
         }
         let placed = place(&parts, outline());
         assert_eq!(placed[&part.id], default_label(&part));
+    }
+
+    /// When every side is blocked and the default leaves the board, the
+    /// fallback still has to stay on the board and clear of the labels
+    /// already placed — not just take the first crowded side.
+    #[test]
+    fn a_fallback_label_avoids_the_labels_already_placed() {
+        let mut part = resistor(2, "R2", 20.0, 2.0);
+        part.courtyard = rect(20.0, 2.0, 2.0, 1.0);
+
+        // Its hard label sits exactly over the below-side candidate.
+        let marker = resistor(9, "M1", 20.0, 2.0);
+        let hard = LabelOverride {
+            hard: true,
+            ..soft((0.0, 1.5))
+        };
+
+        // Courtyards over the left and right spots; the above candidate is
+        // already past the top edge and the default is further out.
+        let mut left = resistor(4, "U2", 17.7, 2.0);
+        left.courtyard = rect(17.7, 2.0, 2.0, 2.0);
+        let mut right = resistor(5, "U3", 22.3, 2.0);
+        right.courtyard = rect(22.3, 2.0, 2.0, 2.0);
+
+        let parts = [marker.clone(), part.clone(), left, right];
+        let placed = place_labels(&parts, outline(), &overrides(9, hard));
+        let pos = placed[&part.id];
+        let b = label_box(&part, pos);
+        let marker_box = label_box(&marker, placed[&marker.id]);
+
+        assert_eq!(pos, side_candidate(&part, Side::Left));
+        assert!(inside(outline(), b), "fallback label {b:?} off the board");
+        assert!(
+            !overlaps(b, marker_box),
+            "fallback label {b:?} overlaps the placed label {marker_box:?}"
+        );
     }
 
     #[test]
@@ -589,11 +650,19 @@ mod tests {
     }
 
     #[test]
-    fn when_nothing_fits_the_default_is_kept() {
-        // A 6 mm board cannot hold the label anywhere.
+    fn when_no_label_fits_the_default_is_pulled_inside() {
+        // A 6 mm board cannot hold the 10 mm label anywhere: the default is
+        // the only candidate left, and it is pulled to the edge clearance.
         let tiny = Rect::new(mm(0.0, 0.0), mm(6.0, 6.0));
         let part = resistor(1, "R_LONGNAME", 3.0, 3.0);
         let placed = place(std::slice::from_ref(&part), tiny);
-        assert_eq!(placed[&part.id], default_label(&part));
+        assert_ne!(placed[&part.id], default_label(&part));
+        let b = label_box(&part, placed[&part.id]);
+        assert_eq!(
+            b.min.y_nm,
+            mm_to_nm(0.2),
+            "the sprawling default gives way to the board edge"
+        );
+        assert_eq!((b.min.x_nm + b.max.x_nm) / 2, mm_to_nm(3.0));
     }
 }
