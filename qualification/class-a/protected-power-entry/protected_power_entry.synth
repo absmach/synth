@@ -1,218 +1,206 @@
-// A protected power-entry and distribution module: reverse-polarity and
-// over-current parts in the order a fault actually arrives at them.
-//
-// Standalone, for its own purpose. 12 V in on J1, reverse-polarity P-FET,
-// resettable over-current, TVS clamp, a buck down to 5 V, a soft-start load
-// switch with its enable brought out, and a housekeeping 3V3 rail. It needs
-// nothing but a 12 V supply to come up, and a downstream system needs nothing
-// of its own to use the protected output: J2 carries the rail, its return and
-// its enable, and every rail has a probe point.
-//
-// No MCU. The protection here is analogue and wants none: a P-FET, a
-// polyfuse and a clamp do not need firmware to work, and adding a controller
-// would add a failure mode to the one board whose job is to survive faults.
+// protected_power_entry rev A
+// 12 V input -> F1 -> Q1 (reverse polarity) -> +12V_PROT (TVS D1 after Q1)
+//   -> MP2307 buck -> +5V -> { TPS22918 -> +5V_SW, AMS1117-3.3 -> +3V3 }
+// No MCU, no USB-C, no SWD: a power stage, nothing on it is programmable.
 board "protected_power_entry" {
-    layers 2
-    manufacturer "jlcpcb"
+  layers 2
+  manufacturer "jlcpcb"
+  revision "A"
 
-    // Four rails, declared rather than left to a comment, so that the
-    // regulator-range and load-budget rules have something to check and the
-    // exported schematic names them instead of numbering them.
-    //
-    //   V12_PROT  12 V   input, downstream of the FET, fuse and clamp
-    //   V5         5 V   MP2307 buck output, always on
-    //   V5_SW      5 V   switched and soft-started, out to J2
-    //   V3V3      3.3 V  housekeeping, for the indicator and a carrier's logic
-    power "V12_PROT" 12v
-    power "V5" 5v
-    power "V5_SW" 5v
-    power "V3V3" 3.3v
+  netclass "PWR12" { trace_width 0.8mm clearance 0.25mm via_diameter 0.8mm via_drill 0.4mm }
+  netclass "PWR5"  { trace_width 1.0mm clearance 0.25mm via_diameter 0.8mm via_drill 0.4mm }
+  netclass "PWR3"  { trace_width 0.5mm clearance 0.25mm via_diameter 0.8mm via_drill 0.4mm }
+  netclass "PGND"  { trace_width 0.8mm clearance 0.25mm via_diameter 0.8mm via_drill 0.4mm }
+  netclass "SIG"   { trace_width 0.25mm clearance 0.2mm via_diameter 0.6mm via_drill 0.3mm }
 
-    group "INPUT PROTECTION" color "#c2410c" {
-      component J1: connector  "jst_xh_2pin" { placement_hint { region: left_edge edge: left priority: hard } }
-      component Q1: transistor "p_mosfet_si2301"
-      component R1: resistor   "r_generic_0603" value "100k"
-      component D1: diode      "d_zener_5v1" value "12V"
-      component F1: fuse       "polyfuse" value "1.5A"
-      component D2: diode      "tvs_array_5v" value "SMAJ15A"
-      component C1: capacitor  "c_generic_0805" value "22uF"
-      component D4: led        "led_red_0603"
-      component R8: resistor   "r_generic_0603" value "12k"
-      component TP1: testpoint "testpoint_pad_1_5"
-      notes "" {
-        "Reverse-polarity P-FET in the high side: source to the input, drain to"
-        "the protected rail, gate held down through R1 so it enhances only on"
-        "correct polarity. D1 clamps Vgs. F1 is the resettable over-current"
-        "element and D2 the surge clamp."
-        "D4 indicates the protected rail, not the connector: it sits behind the"
-        "FET and the fuse, so it is dark on reverse polarity and dark on a"
-        "tripped fuse, which is the pair of faults a person needs to see."
-        "12k gives about 0.8 mA at 12 V, which is visible and costs nothing."
-      }
+  group "INPUT AND PROTECTION" color "#c2410c" {
+    component J1: connector "jst_xh_2pin"
+    component F1: fuse "polyfuse_1r5a"
+    component Q1: transistor "p_mosfet_si2301"
+    component D9: diode "d_zener_5v1"
+    component R1: resistor "r_generic_0603" value "47k"
+    component D1: diode "smaj15a_tvs"
+    component C1: capacitor "c_electrolytic_100uf" value "100uF 25V"
+    notes "" {
+      "J1 pin 1 = +12 V, pin 2 = GND (JST S2B-XH-A, mate with XHP-2)."
+      "Chain: J1 > F1 > Q1 > +12V_PROT; D1 sits after Q1 so it never sees a reversed supply."
+      "Q1 source = load side, drain = input side. D9 holds |Vgs| to 5.1 V (Si2301 abs max 8 V)."
     }
-
-    connect J1.p1 -> Q1.s
-    connect Q1.d  -> F1.p1
-    connect Q1.g  -> R1.p1
-    connect R1.p2 -> J1.p2
-    connect Q1.g  -> D1.cathode
-    connect D1.anode -> J1.p2
-    connect F1.p2 -> D2.ch1
-    connect J1.p2 -> D2.gnd
-    connect F1.p2 -> C1.p1 as "V12_PROT"
-    connect J1.p2 -> C1.p2 as "GND"
-    connect F1.p2 -> R8.p1
-    connect R8.p2 -> D4.anode
-    connect D4.cathode -> J1.p2
-    connect F1.p2 -> TP1.p1
-
-    group "12V TO 5V BUCK" color "#0072b2" {
-      component U1: regulator "mp2307_buck" value "MP2307"
-      component L1: inductor  "l_generic_1210" value "6.8uH"
-      component C2: capacitor "c_generic_0805" value "22uF"
-      component C3: capacitor "c_generic_0805" value "22uF"
-      component R2: resistor  "r_generic_0603" value "10k"
-      component R3: resistor  "r_generic_0603" value "3.16k"
-      component C4: capacitor "c_generic_0603" value "100nF" { placement_hint { near: "U1" priority: hard } }
-      component R6: resistor  "r_generic_0603" value "6.2k"  { placement_hint { near: "U1" priority: hard } }
-      component C8: capacitor "c_generic_0603" value "2.2nF" { placement_hint { near: "U1" priority: hard } }
-      component C9: capacitor "c_generic_0603" value "100nF" { placement_hint { near: "U1" priority: hard } }
-      component TP2: testpoint "testpoint_pad_1_5"
-      notes "" {
-        "Feedback divider R2/R3 sets 5 V from the 0.925 V reference."
-        "Divider sits at the output capacitor, not at the inductor node."
-        "R6/C8 on COMP is the loop compensation. It is not optional: COMP is"
-        "the error amplifier's output and left floating the loop has no"
-        "dominant pole, so the converter rings or refuses to regulate. The"
-        "values are the datasheet's typical network for a 5 V output, not a"
-        "measured result -- a reviewer with a load step should check them."
-        "C9 on SS sets the start ramp, so the buck does not current-limit into"
-        "its own output capacitance at turn-on."
-      }
-    }
-
-    connect F1.p2   -> U1.in
-    connect J1.p2   -> U1.gnd
-    connect U1.in   -> C4.p1
-    connect U1.gnd  -> C4.p2
-    connect U1.in   -> C2.p1
-    connect U1.gnd  -> C2.p2
-    connect U1.sw   -> L1.p1
-    connect L1.p2   -> C3.p1 as "V5"
-    connect J1.p2   -> C3.p2
-    connect L1.p2   -> R2.p1
-    connect R2.p2   -> U1.fb
-    connect U1.fb   -> R3.p1
-    connect R3.p2   -> J1.p2
-    connect U1.bs   -> L1.p1
-    connect U1.en   -> U1.in
-    connect U1.comp -> R6.p1
-    connect R6.p2   -> C8.p1
-    connect C8.p2   -> J1.p2
-    connect U1.ss   -> C9.p1
-    connect C9.p2   -> J1.p2
-    connect L1.p2   -> TP2.p1
-    // The exposed pad is the buck's heat path and the datasheet ties it to
-    // GND. It is declared `required`, so leaving it floating is an error
-    // rather than a silent thermal fault.
-    connect U1.ep   -> U1.gnd
-
-    group "SWITCHED 5V OUTPUT" color "#7c3aed" {
-      component U2: regulator "tps22918_loadswitch"
-      component R4: resistor  "r_generic_0603" value "100k"
-      component C5: capacitor "c_generic_0603" value "10nF"
-      component J2: connector "header_1x4" { placement_hint { region: right_edge edge: right priority: hard } }
-      component R7: resistor  "r_generic_0603" value "100k"
-      component C10: capacitor "c_generic_0603" value "100nF" { placement_hint { near: "U2" priority: hard } }
-      component C11: capacitor "c_generic_0805" value "10uF"  { placement_hint { near: "J2" priority: hard } }
-      component TP3: testpoint "testpoint_pad_1_5"
-      notes "" {
-        "Soft start: CT sets the slew so a capacitive load does not brown out"
-        "the buck at turn-on. ON is pulled up through R4, so the rail comes up"
-        "by default and a host only has to pull J2.p3 down to shed the load."
-        "R7 on QOD discharges the output when the switch opens. Without it a"
-        "capacitive load holds the rail up after shutdown and the next"
-        "soft-start begins from an unknown voltage."
-        "J2 is on the right edge and J1 on the left: power in one side, out"
-        "the other, which is how a module like this gets wired into a system"
-        "and also what keeps both of them clear of the corner mounting holes."
-        "J2: p1 switched 5 V, p2 GND, p3 enable (active high, pulled up on"
-        "board), p4 GND. The enable sits between two grounds, so a short to"
-        "either neighbour turns the output off rather than on."
-        "C11 sits at J2 rather than at the switch, because the impedance that"
-        "matters to a downstream load is the one at the connector."
-      }
-    }
-
-    connect L1.p2  -> U2.vin
-    connect J1.p2  -> U2.gnd
-    connect U2.vin -> R4.p1
-    connect R4.p2  -> U2.on
-    connect U2.ct  -> C5.p1
-    connect J1.p2  -> C5.p2
-    connect U2.qod -> R7.p1
-    connect R7.p2  -> U2.vout
-    connect U2.vin -> C10.p1
-    connect U2.gnd -> C10.p2
-    connect U2.vout -> C11.p1
-    connect J1.p2   -> C11.p2
-    connect U2.vout -> J2.p1 as "V5_SW"
-    connect J1.p2   -> J2.p2
-    connect U2.on   -> J2.p3
-    connect J1.p2   -> J2.p4
-    connect U2.vout -> TP3.p1
-
-    group "3V3 LOGIC RAIL" color "#0a7d4a" {
-      component U3: regulator "lp5907_3v3" value "LP5907-3.3"
-      component C6: capacitor "c_generic_0805" value "10uF"
-      component C7: capacitor "c_generic_0603" value "1uF" { placement_hint { near: "U3" priority: hard } }
-      component D3: led       "led_green_0603"
-      component R5: resistor  "r_generic_0603" value "1k"
-      component TP4: testpoint "testpoint_pad_1_5"
-      notes "" {
-        "Housekeeping rail for whatever carries this front end, with an"
-        "indicator sized for ~1 mA."
-        "An LP5907 rather than an AMS1117. This rail drives an indicator and"
-        "whatever logic a carrier adds, so it needs a few tens of milliamps,"
-        "not 800 -- and an AMS1117 declared at its full rating puts its own"
-        "junction near 107 C through 60 C/W. The LP5907 is 250 mA through"
-        "250 C/W, which is the right trade for a rail this small, and its"
-        "noise figure suits the analogue side of a carrier better."
-        "EN is tied to VIN: the rail is always on while the switched 5 V is."
-      }
-    }
-
-    connect U2.vout -> U3.vin
-    connect J1.p2   -> U3.gnd
-    connect U3.en   -> U3.vin
-    connect U3.vin  -> C6.p1
-    connect U3.gnd  -> C6.p2
-    connect U3.vout -> C7.p1 as "V3V3"
-    connect U3.gnd  -> C7.p2
-    connect U3.vout -> R5.p1
-    connect R5.p2   -> D3.anode
-    connect D3.cathode -> U3.gnd
-    connect U3.vout -> TP4.p1
-
-    group "MECHANICAL" color "#525252" {
-      component TP5: testpoint "testpoint_pad_1_5"
-      component H1: mounting_hole "mounting_hole_m2_5" { placement_hint { region: top_left priority: hard } }
-      component H2: mounting_hole "mounting_hole_m2_5" { placement_hint { region: top_right priority: hard } }
-      component H3: mounting_hole "mounting_hole_m2_5" { placement_hint { region: bottom_left priority: hard } }
-      component H4: mounting_hole "mounting_hole_m2_5" { placement_hint { region: bottom_right priority: hard } }
-      component FID1: fiducial "fiducial_1mm" { placement_hint { region: top_edge priority: soft } }
-      component FID2: fiducial "fiducial_1mm" { placement_hint { region: bottom_edge priority: soft } }
-      notes "" {
-        "TP5 is the ground reference every other probe point is measured"
-        "against. Four M2.5 holes for a standoff mount, two fiducials for"
-        "placement."
-        "The corner hints are not decoration. `MountingHole_2.5mm` draws its"
-        "courtyard as a single fp_circle, and the placer reads courtyards from"
-        "fp_rect and fp_line only, so an unhinted hole reserves no area and"
-        "lands on top of whatever is already there -- which is exactly what"
-        "the first routed run of this board did, four times over."
-      }
-    }
-
-    connect J1.p2 -> TP5.p1
   }
+
+  group "5V BUCK" color "#0072b2" {
+    component U1: regulator "mp2307_buck_ep"
+    component L1: inductor "l_power_10uh_6045"
+    component C2: capacitor "c_generic_1206" value "10uF 25V"
+    component C3: capacitor "c_generic_1206" value "10uF 25V"
+    component C4: capacitor "c_generic_0603" value "100nF"
+    component C5: capacitor "c_generic_0603" value "10nF"
+    component C6: capacitor "c_generic_0603" value "100nF"
+    component R2: resistor "r_generic_0603" value "10k"
+    component C7: capacitor "c_generic_0603" value "2.2nF"
+    component R3: resistor "r_generic_0603" value "44.2k"
+    component R4: resistor "r_generic_0603" value "10k"
+    component R5: resistor "r_generic_0603" value "100k"
+    component R6: resistor "r_generic_0603" value "33k"
+    component C8: capacitor "c_generic_1206" value "22uF 10V"
+    component C9: capacitor "c_generic_1206" value "22uF 10V"
+    component C10: capacitor "c_electrolytic_100uf" value "100uF 25V"
+    notes "" {
+      "FB divider: 0.925 V x (1 + 44.2k/10k) = 5.01 V."
+      "EN divider 100k/33k: buck starts above about 4.8 V in."
+    }
+  }
+
+  group "LOAD SWITCH AND 3V3" color "#0a7d4a" {
+    component U3: regulator "tps22918_sot23_6"
+    component C12: capacitor "c_generic_1206" value "10uF 10V"
+    component C13: capacitor "c_generic_0603" value "2.2nF"
+    component C14: capacitor "c_generic_1206" value "22uF 10V"
+    component R7: resistor "r_generic_0603" value "100k"
+    component R8: resistor "r_generic_0603" value "1k"
+    component D10: diode "d_zener_5v1"
+    component U2: regulator "ams1117_3v3" value "AMS1117-3.3"
+    component C15: capacitor "c_generic_1206" value "10uF 10V"
+    component C16: capacitor "c_generic_1206" value "10uF 10V"
+    component C17: capacitor "c_electrolytic_100uf" value "100uF 25V"
+    component C18: capacitor "c_generic_0603" value "100nF"
+    notes "" {
+      "LOAD_EN default is OFF (R7 pull-down). High (above 1.0 V) turns +5V_SW on."
+      "AMS1117 dissipation: (5 - 3.3) V x 0.5 A = 0.85 W worst case."
+    }
+  }
+
+  group "OUTPUTS" color "#7c3aed" {
+    component F2: fuse "polyfuse_1r5a"
+    component F3: fuse "polyfuse_1r5a"
+    component J3: connector "jst_xh_2pin"
+    component J4: connector "jst_xh_2pin"
+    component J5: connector "jst_xh_2pin"
+    notes "" {
+      "J3 pin 1 = +5V, J4 pin 1 = +5V_SW, J5 pin 1 = +3V3; pin 2 of each = GND."
+    }
+  }
+
+  group "CONTROL HEADER" color "#b45309" {
+    component J2: connector "header_1x8"
+    component R9: resistor "r_generic_0603" value "100"
+    component R10: resistor "r_generic_0603" value "10k"
+    component R11: resistor "r_generic_0603" value "2k"
+    component R12: resistor "r_generic_0603" value "1k"
+    component C19: capacitor "c_generic_0603" value "100nF"
+    component D11: diode "bzt52c3v3"
+    component R13: resistor "r_generic_0603" value "10k"
+    component R14: resistor "r_generic_0603" value "10k"
+    component R15: resistor "r_generic_0603" value "1k"
+    component C20: capacitor "c_generic_0603" value "100nF"
+    component D12: diode "bzt52c3v3"
+    component R16: resistor "r_generic_0603" value "10k"
+    component R17: resistor "r_generic_0603" value "10k"
+    component R18: resistor "r_generic_0603" value "1k"
+    component C21: capacitor "c_generic_0603" value "100nF"
+    component D13: diode "bzt52c3v3"
+    notes "" {
+      "J2: 1 +3V3_REF, 2 GND, 3 LOAD_EN, 4 GND, 5 SENSE_12V, 6 SENSE_5V, 7 SENSE_3V3, 8 GND."
+      "No FAULT pin: no part on the board produces a fault signal."
+    }
+  }
+
+  group "INDICATORS" color "#be123c" {
+    component R19: resistor "r_generic_0603" value "3k"
+    component D8: diode "d_schottky"
+    component D2: diode "led_white_0603"
+    component R20: resistor "r_generic_0603" value "3.3k"
+    component D3: diode "led_blue_0603"
+    component R21: resistor "r_generic_0603" value "1k"
+    component D4: diode "ltst_c190kgkt"
+    component R22: resistor "r_generic_0603" value "1k"
+    component D5: diode "led_green_0603"
+    component R23: resistor "r_generic_0603" value "470"
+    component D6: diode "led_amber_0603"
+    component R24: resistor "r_generic_0603" value "3.3k"
+    component D7: diode "ltst_c190krkt"
+    notes "" {
+      "D2 white raw input (via D8 reverse block), D3 blue +12V_PROT, D4 green +5V, D5 green +5V_SW, D6 amber +3V3, D7 red fuse fault."
+      "D7 lights when the voltage across F1 exceeds about 2 V, i.e. F1 has tripped."
+    }
+  }
+
+  group "TEST POINTS" color "#475569" {
+    component TP1: testpoint "testpoint_pad_1_5"
+    component TP2: testpoint "testpoint_pad_1_5"
+    component TP3: testpoint "testpoint_pad_1_5"
+    component TP4: testpoint "testpoint_pad_1_5"
+    component TP5: testpoint "testpoint_pad_1_5"
+    component TP6: testpoint "testpoint_pad_1_5"
+    component TP7: testpoint "testpoint_pad_1_5"
+    component TP8: testpoint "testpoint_pad_1_5"
+    component TP9: testpoint "testpoint_pad_1_5"
+    component TP10: testpoint "testpoint_pad_1_5"
+    component H1: mounting_hole "mounting_hole_m2_5"
+    component H2: mounting_hole "mounting_hole_m2_5"
+    component H3: mounting_hole "mounting_hole_m2_5"
+    component H4: mounting_hole "mounting_hole_m2_5"
+  }
+
+  // ---- power rails ---------------------------------------------------------
+  power "GND" 0v class "PGND" {
+    J1.p2 J2.p2 J2.p4 J2.p8 J3.p2 J4.p2 J5.p2 TP9.p1 TP10.p1
+    R1.p2 C1.p2 C2.p2 C3.p2 C4.p2 C6.p2 C7.p2 D1.anode
+    U1.gnd U1.gnd_ep R4.p2 R6.p2 C8.p2 C9.p2 C10.p2
+    U3.gnd C12.p2 C13.p2 C14.p2 R7.p2 D10.anode
+    U2.gnd C15.p2 C16.p2 C17.p2 C18.p2
+    R11.p2 D11.anode C19.p2 R14.p2 D12.anode C20.p2 R17.p2 D13.anode C21.p2
+    D2.cathode D3.cathode D4.cathode D5.cathode D6.cathode
+  }
+  power "+12V_PROT" 12v class "PWR12" {
+    Q1.s D9.cathode D1.cathode C1.p1 C2.p1 C3.p1 C4.p1 U1.in R5.p1 TP3.p1 R20.p1 R10.p1
+  }
+  power "+5V" 5v class "PWR5" {
+    L1.p2 C8.p1 C9.p1 C10.p1 R3.p1 F2.p1 U3.vin C12.p1 U2.vin C15.p1 TP4.p1 R21.p1 R13.p1
+  }
+  power "+5V_SW" 5v class "PWR5" {
+    U3.vout U3.qod C14.p1 F3.p1 TP5.p1 R22.p1
+  }
+  power "+3V3" 3.3v class "PWR3" {
+    U2.vout C16.p1 C17.p1 C18.p1 J5.p1 TP6.p1 R9.p1 R23.p1 R16.p1
+  }
+
+  // ---- protection chain ----------------------------------------------------
+  net "VIN_12V_RAW"   class "PWR12" { J1.p1 F1.p1 TP1.p1 R19.p1 R24.p1 }
+  net "VIN_12V_FUSED" class "PWR12" { F1.p2 Q1.d TP2.p1 D7.cathode }
+  net "PFET_GATE" class "SIG" { Q1.g D9.anode R1.p1 }
+
+  // ---- buck ----------------------------------------------------------------
+  net "BUCK_SW" class "PWR5" { U1.sw L1.p1 C5.p2 TP7.p1 }
+  net "BUCK_BS"   class "SIG" { U1.bs C5.p1 }
+  net "BUCK_FB"   class "SIG" { U1.fb R3.p2 R4.p1 }
+  net "BUCK_COMP" class "SIG" { U1.comp R2.p1 }
+  net "BUCK_CRC"  class "SIG" { R2.p2 C7.p1 }
+  net "BUCK_SS"   class "SIG" { U1.ss C6.p1 }
+  net "BUCK_EN"   class "SIG" { U1.en R5.p2 R6.p1 }
+
+  // ---- load switch, outputs ------------------------------------------------
+  net "LS_CT"    class "SIG" { U3.ct C13.p1 }
+  net "LOAD_EN"  class "SIG" { U3.on R7.p1 R8.p2 D10.cathode TP8.p1 }
+  net "EN_HDR"   class "SIG" { R8.p1 J2.p3 }
+  net "OUT_5V"    class "PWR5" { F2.p2 J3.p1 }
+  net "OUT_5V_SW" class "PWR5" { F3.p2 J4.p1 }
+
+  // ---- control header ------------------------------------------------------
+  net "3V3_REF"    class "SIG" { R9.p2 J2.p1 }
+  net "S12_DIV"    class "SIG" { R10.p2 R11.p1 R12.p1 D11.cathode }
+  net "SENSE_12V"  class "SIG" { R12.p2 C19.p1 J2.p5 }
+  net "S5_DIV"     class "SIG" { R13.p2 R14.p1 R15.p1 D12.cathode }
+  net "SENSE_5V"   class "SIG" { R15.p2 C20.p1 J2.p6 }
+  net "S3_DIV"     class "SIG" { R16.p2 R17.p1 R18.p1 D13.cathode }
+  net "SENSE_3V3"  class "SIG" { R18.p2 C21.p1 J2.p7 }
+
+  // ---- indicators ----------------------------------------------------------
+  net "LED_IN_A"  class "SIG" { R19.p2 D8.anode }
+  net "LED_IN_B"  class "SIG" { D8.cathode D2.anode }
+  net "LED12_A"   class "SIG" { R20.p2 D3.anode }
+  net "LED5_A"    class "SIG" { R21.p2 D4.anode }
+  net "LED5SW_A"  class "SIG" { R22.p2 D5.anode }
+  net "LED3V3_A"  class "SIG" { R23.p2 D6.anode }
+  net "FLT_A"     class "SIG" { R24.p2 D7.anode }
+}

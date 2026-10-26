@@ -1,0 +1,460 @@
+schema_version = 2
+forced_net_labels = []
+fit_sheet = false
+
+# ---- Region A: input and protection (left) ----
+[components.J1]
+x = 9.7
+y = 35.0
+rotation = 270
+source = "agent"
+priority = "hard"
+[components.TP1]
+x = 22.0
+y = 26.0
+source = "agent"
+priority = "hard"
+[components.TP9]
+x = 22.0
+y = 44.0
+source = "agent"
+priority = "hard"
+[components.F1]
+x = 27.0
+y = 35.0
+source = "agent"
+priority = "hard"
+[components.TP2]
+x = 31.0
+y = 27.0
+source = "agent"
+priority = "hard"
+[components.Q1]
+x = 37.0
+y = 35.0
+rotation = 180
+source = "agent"
+priority = "hard"
+[components.R1]
+x = 37.0
+y = 41.0
+source = "agent"
+priority = "hard"
+[components.D9]
+x = 42.0
+y = 41.0
+source = "agent"
+priority = "hard"
+[components.D1]
+x = 44.0
+y = 27.0
+source = "agent"
+priority = "hard"
+[components.C1]
+x = 46.0
+y = 46.0
+source = "agent"
+priority = "hard"
+[components.TP3]
+x = 47.0
+y = 36.0
+source = "agent"
+priority = "hard"
+
+# ---- Region B: buck ----
+[components.C2]
+x = 53.0
+y = 28.0
+rotation = 90
+source = "agent"
+priority = "hard"
+[components.C3]
+x = 53.0
+y = 35.0
+rotation = 90
+source = "agent"
+priority = "hard"
+[components.C4]
+x = 57.0
+y = 28.0
+rotation = 90
+source = "agent"
+priority = "hard"
+[components.U1]
+x = 64.0
+y = 34.0
+source = "agent"
+priority = "hard"
+[components.C5]
+x = 57.0
+y = 38.0
+rotation = 90
+source = "agent"
+priority = "hard"
+[components.L1]
+x = 64.0
+y = 46.0
+source = "agent"
+priority = "hard"
+[components.TP7]
+x = 56.0
+y = 46.0
+source = "agent"
+priority = "hard"
+[components.C6]
+x = 70.0
+y = 27.0
+rotation = 90
+source = "agent"
+priority = "hard"
+[components.R5]
+x = 74.0
+y = 26.0
+rotation = 90
+source = "agent"
+priority = "hard"
+[components.R6]
+x = 74.0
+y = 31.0
+rotation = 90
+source = "agent"
+priority = "hard"
+[components.R2]
+x = 71.0
+y = 37.0
+source = "agent"
+priority = "hard"
+[components.C7]
+x = 71.0
+y = 40.0
+source = "agent"
+priority = "hard"
+[components.R3]
+x = 78.0
+y = 38.0
+rotation = 90
+source = "agent"
+priority = "hard"
+[components.R4]
+x = 78.0
+y = 43.0
+rotation = 90
+source = "agent"
+priority = "hard"
+[components.C8]
+x = 71.0
+y = 49.0
+source = "agent"
+priority = "hard"
+[components.C9]
+x = 76.0
+y = 49.0
+source = "agent"
+priority = "hard"
+[components.C10]
+x = 66.0
+y = 56.0
+source = "agent"
+priority = "hard"
+[components.TP4]
+x = 59.0
+y = 52.0
+source = "agent"
+priority = "hard"
+
+# ---- load switch ----
+[components.U3]
+x = 84.0
+y = 50.0
+source = "agent"
+priority = "hard"
+[components.C12]
+x = 84.0
+y = 56.0
+source = "agent"
+priority = "hard"
+[components.C13]
+x = 90.0
+y = 55.0
+source = "agent"
+priority = "hard"
+[components.C14]
+x = 90.0
+y = 46.0
+source = "agent"
+priority = "hard"
+[components.R7]
+x = 84.0
+y = 44.0
+source = "agent"
+priority = "hard"
+[components.R8]
+x = 80.0
+y = 44.0
+source = "agent"
+priority = "hard"
+[components.D10]
+x = 79.0
+y = 56.0
+source = "agent"
+priority = "hard"
+[components.TP5]
+x = 89.0
+y = 40.0
+source = "agent"
+priority = "hard"
+[components.TP8]
+x = 80.0
+y = 61.0
+source = "agent"
+priority = "hard"
+
+# ---- 3V3 regulator ----
+[components.U2]
+x = 66.0
+y = 66.0
+source = "agent"
+priority = "hard"
+[components.C15]
+x = 58.0
+y = 66.0
+source = "agent"
+priority = "hard"
+[components.C16]
+x = 74.0
+y = 66.0
+source = "agent"
+priority = "hard"
+[components.C17]
+x = 80.0
+y = 68.0
+source = "agent"
+priority = "hard"
+[components.C18]
+x = 70.0
+y = 71.0
+source = "agent"
+priority = "hard"
+[components.TP6]
+x = 86.0
+y = 68.0
+source = "agent"
+priority = "hard"
+
+# ---- Region C: outputs (right edge) ----
+[components.J3]
+x = 100.5
+y = 18.0
+rotation = 90
+source = "agent"
+priority = "hard"
+[components.J4]
+x = 100.5
+y = 30.0
+rotation = 90
+source = "agent"
+priority = "hard"
+[components.J5]
+x = 100.5
+y = 62.0
+rotation = 90
+source = "agent"
+priority = "hard"
+[components.F2]
+x = 86.0
+y = 18.0
+source = "agent"
+priority = "hard"
+[components.F3]
+x = 86.0
+y = 30.0
+source = "agent"
+priority = "hard"
+
+# ---- control header (bottom) ----
+[components.J2]
+x = 20.0
+y = 69.0
+rotation = 90
+source = "agent"
+priority = "hard"
+[components.R9]
+x = 14.0
+y = 62.0
+source = "agent"
+priority = "hard"
+[components.R10]
+x = 24.0
+y = 56.0
+rotation = 90
+source = "agent"
+priority = "hard"
+[components.R11]
+x = 24.0
+y = 61.0
+rotation = 90
+source = "agent"
+priority = "hard"
+[components.R12]
+x = 28.0
+y = 58.0
+source = "agent"
+priority = "hard"
+[components.C19]
+x = 28.0
+y = 61.0
+source = "agent"
+priority = "hard"
+[components.D11]
+x = 32.0
+y = 58.0
+source = "agent"
+priority = "hard"
+[components.R13]
+x = 36.0
+y = 56.0
+rotation = 90
+source = "agent"
+priority = "hard"
+[components.R14]
+x = 36.0
+y = 61.0
+rotation = 90
+source = "agent"
+priority = "hard"
+[components.R15]
+x = 40.0
+y = 58.0
+source = "agent"
+priority = "hard"
+[components.C20]
+x = 40.0
+y = 61.0
+source = "agent"
+priority = "hard"
+[components.D12]
+x = 44.0
+y = 58.0
+source = "agent"
+priority = "hard"
+[components.R16]
+x = 46.0
+y = 65.0
+rotation = 90
+source = "agent"
+priority = "hard"
+[components.R17]
+x = 46.0
+y = 70.0
+rotation = 90
+source = "agent"
+priority = "hard"
+[components.R18]
+x = 50.0
+y = 67.0
+source = "agent"
+priority = "hard"
+[components.C21]
+x = 50.0
+y = 70.0
+source = "agent"
+priority = "hard"
+[components.D13]
+x = 54.0
+y = 67.0
+source = "agent"
+priority = "hard"
+[components.TP10]
+x = 36.0
+y = 70.0
+source = "agent"
+priority = "hard"
+
+# ---- indicators (top edge) ----
+[components.D2]
+x = 20.0
+y = 8.0
+source = "agent"
+priority = "hard"
+[components.D3]
+x = 40.0
+y = 8.0
+source = "agent"
+priority = "hard"
+[components.D4]
+x = 52.5
+y = 53.0
+source = "agent"
+priority = "hard"
+[components.D5]
+x = 99.0
+y = 46.0
+source = "agent"
+priority = "hard"
+[components.D6]
+x = 92.0
+y = 69.0
+source = "agent"
+priority = "hard"
+[components.D7]
+x = 28.0
+y = 8.0
+source = "agent"
+priority = "hard"
+[components.R19]
+x = 20.0
+y = 18.0
+source = "agent"
+priority = "hard"
+[components.D8]
+x = 20.0
+y = 13.0
+source = "agent"
+priority = "hard"
+[components.R20]
+x = 40.0
+y = 13.0
+source = "agent"
+priority = "hard"
+[components.R21]
+x = 52.5
+y = 48.5
+source = "agent"
+priority = "hard"
+[components.R22]
+x = 99.0
+y = 51.0
+source = "agent"
+priority = "hard"
+[components.R23]
+x = 92.0
+y = 64.5
+source = "agent"
+priority = "hard"
+[components.R24]
+x = 28.0
+y = 15.0
+source = "agent"
+priority = "hard"
+
+# ---- mounting holes ----
+[components.H1]
+x = 4.0
+y = 4.0
+source = "agent"
+priority = "hard"
+[components.H2]
+x = 109.0
+y = 4.0
+source = "agent"
+priority = "hard"
+[components.H3]
+x = 4.0
+y = 71.0
+source = "agent"
+priority = "hard"
+[components.H4]
+x = 109.0
+y = 71.0
+source = "agent"
+priority = "hard"
