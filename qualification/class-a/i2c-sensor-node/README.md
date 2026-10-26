@@ -1,184 +1,119 @@
-# I²C sensor node
+# I2C sensor node
 
-A field sensor node: JST-fed 5 V into a 3V3 LDO, an STM32G030 reading two I²C
-devices — an environmental sensor and a config EEPROM — with a 4-pin JST
-break-out for the host UART and a 20-pin expansion header carrying the bus,
-SWD and ten spare GPIOs.
+A field sensor module: a BME680 and a 24LC256 on one I2C bus, an STM32G030
+reading them, a 12-pin GPIO header, a UART break-out, and a USB-C port that
+powers and programs the board through a CH340C bridge. Two layers, JLCPCB.
 
-It is programmable, it is usable as a plain I²C module without its MCU, and
-every rail has a probe point.
+**Status: an engineer-review draft, not a release.** The board is routed and
+KiCad reports no error on it, but every part the agent wrote is unreviewed, the
+BOM is not orderable, and the open items below are real. Nothing here was built
+or tested on hardware.
 
-Design rationale is in the source comments next to the circuits it explains;
-this file is the specification.
+## How this board was made
 
-## Board
-
-| | |
-| --- | --- |
-| Size | 71.10 × 64.00 mm |
-| Layers | 2 |
-| Process | JLCPCB standard (0.127 mm track/clearance, 0.3 mm drill, 0.13 mm ring) |
-| Components | 37 |
-| Nets | 23 |
-| Source | `i2c_sensor_node.synth` |
-
-## Rails
-
-| Rail | Nominal | Source | Available | Feeds |
-| --- | --- | --- | --- | --- |
-| `V5_IN` | 5 V | J1, 2-pin JST PH, through F1 and D1 | 500 mA, set by F1 | U1, J3 pin 1 |
-| `V3V3` | 3.3 V | U1 AMS1117-3.3 | 800 mA declared | MCU, both I²C devices, J2, J3 |
-
-Protection order is the point of the front end: F1 polyfuse first, then D1
-SS14 series Schottky, so a fault current meets a part that resets and a
-reversed supply meets a blocking diode. D4 clamps the input behind the fuse —
-a field node's supply arrives on a cable, which is where surges come from, and
-the fuse limits what the clamp has to conduct.
-
-The 3V3 budget is about 300 mA: the STM32G030's declared 150 mA, the BME680's
-100 mA and the EEPROM's 50 mA. C2 is 10 µF, which is what the AMS1117 wants on
-its output to be stable.
-
-## Connectors
-
-| Ref | Part | Carries |
-| --- | --- | --- |
-| J1 | 2-pin JST PH | 5 V in, GND |
-| J2 | 4-pin JST PH | host UART, with D2 and D3 clamping both lines |
-| J3 | 1×20 header, 2.54 mm | expansion: bus, debug, reset, GPIO |
-
-**J2 pinout** — 3V3, TX (PA2), RX (PA3), GND, in that order.
-
-**J3 pinout**
-
-| Pin | Signal | Pin | Signal |
-| --- | --- | --- | --- |
-| 1 | `V5_IN` | 11 | PA0 |
-| 2 | `V3V3` | 12 | PA1 |
-| 3 | GND | 13 | PA4 |
-| 4 | SDA (PA10) | 14 | PA5 |
-| 5 | SCL (PA9) | 15 | PA6 |
-| 6 | GND | 16 | PA7 |
-| 7 | SWDIO (PA13) | 17 | PB0 |
-| 8 | SWCLK (PA14) | 18 | PB1 |
-| 9 | NRST | 19 | PB3 |
-| 10 | GND | 20 | PB4 |
-
-SDA and SCL are the same bus the on-board devices sit on, with the 4.7 kΩ
-pull-ups already fitted, so a host can drive the sensor directly and hold the
-MCU in reset through pin 9. That is what makes this a sensor module as well as
-a sensor node.
-
-Every signal on this header is 3V3 CMOS and none of it is protected. Driving
-it from 5 V logic overstresses the pins: use a level shifter on the host side.
-PA2 and PA3 are not here because they are the UART already brought out on J2,
-clamped; PA9 and PA10 appear only as SDA and SCL. The remaining 13 pins of the
-package are not exposed.
-
-## I²C bus
-
-One bus, 4.7 kΩ pull-ups on both lines, two devices: a BME680 environmental
-sensor and a 24LC256 EEPROM. Each carries its own 100 nF, hinted to sit beside
-the part rather than wherever the placer would otherwise put it.
-
-| Device | Address | Set by |
-| --- | --- | --- |
-| U3 BME680 | 0x76 | CSB high selects I²C, SDO low selects the low address |
-| U4 24LC256 | 0x50 | A0, A1 and A2 to ground |
-
-U4's WP is grounded, so the EEPROM is write-enabled. All four of those pins
-were floating before, which left the device's address and its write-protect
-state undefined — four CMOS inputs with no DC path.
-
-## Indicators and test points
-
-D5, green, through R5 1k, says `V3V3` is up — the first question when a node
-is dark.
-
-| Ref | Probes |
-| --- | --- |
-| TP1 | `V5_IN` |
-| TP2 | `V3V3` |
-| TP3 | SDA |
-| TP4 | SCL |
-| TP5 | GND, the reference for the other four |
-
-## Mechanical
-
-Four M2.5 non-plated holes, hinted to the four corners so the node can be
-mounted in an enclosure, and two fiducials.
-
-## Measured
-
-One local run of the export and the external router, with
-`--place-route-iterate`, which routes each candidate placement and keeps the
-one that routes best. That flag is load-bearing here and the reason is worth
-reading: of the five candidates, **four route cleanly and one does not**, and
-the default path takes the first. The one it takes leaves the ground pour cut
-into two islands with no via tying them together — every net connected, 349
-segments, and `kicad-cli pcb drc` reporting one unconnected item that names
-`Zone [GND]` twice. Filed as #279; the figures below are the placement the
-loop chose.
+Nobody edited the design. An agent produced it from one prompt, driving
+`synth mcp`, and the run was logged.
 
 | | |
-| --- | --- |
-| Nets closed | **23 of 23** |
-| Open | **0** |
-| Routed copper | 1191.7 mm over 273 segments and 65 vias |
-| Tracks below the 0.127 mm floor | **0** |
-| Vias below the 0.3 mm drill or 0.13 mm ring | **0** |
-| Vias inside pads | **0** |
-| `kicad-cli pcb drc` | **0 errors**, 0 unconnected items, 2 warnings |
-| Routing verdict | `routed`, fabrication-ready |
+|---|---|
+| Prompt | [`agent-run/prompt.md`](agent-run/prompt.md), the Class-A specification with this board's emphasis |
+| Model | `claude-sonnet-5-5` |
+| Tools | the Synth MCP server, plus Read, Write and Edit; no shell, no web |
+| Start | an empty workspace and an empty user parts registry |
+| Run | 132 tool calls over 133 turns in 64 minutes 28 seconds; about $5.00 |
+| Calls | [`agent-run/tool-calls.md`](agent-run/tool-calls.md) lists every one |
+| Its documents | the design notes, pin map and power budget it wrote, in `agent-run/` |
 
-Nothing is left for KiCad to report at error severity, and no pad is unconnected. Warnings are advisory: 2× `silk_overlap`.
+The run ended because the agent reached its own usage limit, so it wrote no final
+report, and its last `synth_export` did not return a release. The board here is
+its final source, `i2c_sensor_node.synth` and its placement sidecar, exported with
+`synth export-kicad`, whose output matches the agent's own export byte for byte
+(see the irrigation controller's README for that comparison). The six registry
+parts it authored or imported are in `registry/parts/`.
 
-## Fabrication
+Earlier runs of the same prompt exposed defects in Synth, and each was fixed in
+Synth rather than in the board: #283, #284, #286, #288, #289, #291, #293, #295,
+#297, #299, #301, #303, #308, #310, #312, #314 and #316. This board needs them.
 
-The package validates, so the artifacts are real: `bom.csv` and `pnp.csv` come
-out of the run above, and `--gerbers --drill` add 21 Gerber layers and Excellon
-PTH and NPTH files with drill maps. They need `--allow-unverified-parts`,
-because no part in the registry carries provenance.
+## What was measured
 
-## System boundary
+All figures come from the exported files, checked with `kicad-cli` 10.0.6.
 
-1. **Accepts** 5 V nominal on J1, 2-pin JST PH, reverse-protected and fused
-   at 500 mA.
-2. **Generates** `V3V3` from an AMS1117, and passes `V5_IN` out on J3 pin 1.
-3. **Supports** a ~300 mA 3V3 budget against the regulator's declared 800 mA.
-   The input fuse is the binding limit, not the regulator.
-4. **Exposes** the I²C bus, the host UART, reset and ten GPIOs, all 3V3 CMOS.
-5. **Provides** SWD on J3 pins 7 and 8 with reset on pin 9, and five probe
-   points.
-6. **Still needs**, externally: a 5 V supply, and either a UART host on J2 or
-   an I²C host on J3. A debug probe to load firmware the first time.
-7. **Limits**: 3V3 logic only, no 5 V tolerance on any exposed pin; 500 mA
-   input; 2.54 mm header pitch; no conformal coating or sealing, so "field"
-   means inside an enclosure.
+| | |
+|---|---|
+| Board | 92.55 x 62.54 mm, two layers, 87 components, 51 nets |
+| Routing | state `routed`, 51 of 51 nets connected, 984 segments, 188 vias |
+| KiCad DRC, `--refill-zones` | 0 errors, 0 unconnected, 2 warnings (one dangling track, one silkscreen over copper) |
+| Release gate | `release_ready` true; every part still reads `reviewed: false` |
+| Schematic | A1, 9 labelled regions that do not overlap |
+| Trace width, as routed | `+5V_PROT`, `VIN_5V_RAW` and `VIN_5V_FUSED` 0.5 mm; `+3V3` 0.2 to 0.4 mm |
+| Vias | 166 at 0.6 mm, 20 at 0.8 mm, 2 at 0.56 mm; 91 are on GND |
+| Return paths | 17 of 97 signal vias have no ground via within 1.53 mm |
+| Reset button | 8.9 mm from the MCU |
+| BOM | 87 rows; 14 have an LCSC number and 29 a manufacturer number |
 
-## Limitations
+The schematic was rendered from the exported `.kicad_sch` with
+`kicad-cli sch export pdf`, not from the agent's preview.
 
-- **Two parts are operated outside the envelope their registry entries
-  declare.** `jst_ph_2pin` and `jst_ph_4pin` each declare 5 V and 100 mA,
-  against a ~300 mA budget; `polyfuse` declares 100 mA and carries
-  `value "500mA"`. The real devices are fine — a JST PH is 100 V, 2 A — but
-  the declared numbers are a template default. Filed as #275.
-- `W-SYNTH-THERMAL-001` reports U1's junction at about 107 °C. That is the
-  AMS1117's declared 1360 mW through 60 °C/W, not this board's load: at
-  300 mA the drop is 510 mW and the rise about 31 °C. Filed as #274.
-- `W-SYNTH-PART-UNVERIFIED` fires on `ptvs6v0s1ur`, the input clamp, which
-  carries a `[provenance]` table naming no reviewer. That is #51's governance
-  question rather than this board's.
-- No level shifting on J3. A 5 V host needs one of its own, and the header is
-  documented accordingly rather than protected.
-- Eighteen of its parts carry no distributor identity, so the BOM is not
-  orderable as it stands.
-- Two `E-SYNTH-SCHEM-001` and two `E-SYNTH-SCHEM-003` findings are
-  schematic-readability, not electrical, and `kicad-cli pcb drc` adds two
-  `silk_overlap` warnings — reference designators crossing a pad, which a
-  silkscreen pass Synth does not perform would move.
-- **The default export path does not produce this board.** It picks the first
-  candidate placement, which cuts the ground pour in two (#279). The figures
-  above come from `--place-route-iterate`, and a reviewer re-running without
-  it will get a refused package.
-- No thermal measurement, and no independent reviewer has signed off.
+## The review of this board
+
+| Review point | State |
+|---|---|
+| Default export valid | The export above is the default one, with no optional flag, and it passes. |
+| Three identical exports | See below. |
+| Exposed I/O protection | Each of the 12 GPIO lines has 330 ohm in series and a PRTR5V0U2X ESD array; the UART lines and the USB data and configuration lines have arrays too. Level shifting is not added: the header is 3.3 V and says so. |
+| Net geometry | Classes are declared and applied: the 5 V path routes at 0.5 mm. |
+| Regulator thermals | The agent budgets 0.18 W in the AMS1117 at 0.1 A. Synth's own estimate assumes 0.8 A and reads 107 C. Neither is a measurement. |
+| BOM identity | Not resolved: 14 of 87 rows have an LCSC number. |
+| Clamp and part review | Not resolved: the input clamp and every authored part are unverified. |
+
+## Reproducibility
+
+The source in this directory was exported three times with `synth export-kicad`,
+router included, and the files compared. Each cell is the first ten characters of
+a SHA-256.
+
+| file | export 1 | export 2 | export 3 | |
+|---|---|---|---|---|
+| `i2c_sensor_node.kicad_sch` | 64ed7d7c38 | 64ed7d7c38 | 64ed7d7c38 | identical |
+| `i2c_sensor_node.kicad_pro` | cfe0a30e58 | cfe0a30e58 | cfe0a30e58 | identical |
+| `i2c_sensor_node.kicad_sym` | e95b9b9b04 | e95b9b9b04 | e95b9b9b04 | identical |
+| `bom.csv` | 969af47848 | 969af47848 | 969af47848 | identical |
+| `pnp.csv` | 7ffa5fb360 | 7ffa5fb360 | 7ffa5fb360 | identical |
+| `i2c_sensor_node.kicad_pcb` | b1caeb8610 | d4728dfb58 | 514975b04e | identical after zone-fill ids |
+
+The three PCB files differ only in 1,096 `uuid` lines, the ids KiCad gives each
+filled-zone polygon when it refills a pour. With those masked, the three files
+hash the same, so the copper is the same. That is three exports from one source,
+on one machine, with one router build; it is not a claim about other machines or
+router versions. Each export took about five minutes.
+
+```
+synth export-kicad i2c_sensor_node.synth --out <dir> --router kicad-routing-tools
+```
+
+## Open items
+
+- **Return paths:** 17 layer changes have no ground via within 1.53 mm. The pass
+  that adds them keeps clear of every pad, which leaves some without a spot.
+- **Part review:** the BME680, the CH340C, the STM32G030 variant, the EEPROM and
+  both headers were written by the agent from memory of their datasheets
+  (its documents say "recalled") and are unreviewed.
+- **Regulator:** the AMS1117 dissipation and the input clamp are estimates.
+- **Silkscreen:** `.synth` has no way to put text on the board, so pin-1 marks and
+  legends are not there. One silkscreen-over-copper warning remains.
+- **No Gerbers.** `synth_export` does not write them; `synth export-kicad
+  --gerbers --drill` does, and it refuses parts nobody has reviewed.
+- **Zone fill:** refill in KiCad (B) before judging the pours; the DRC above
+  refilled them itself.
+
+## Files
+
+| File | |
+|---|---|
+| `i2c_sensor_node.synth` | the design, as the agent wrote it |
+| `i2c_sensor_node.placement.layout.toml` | its placement sidecar, in board millimetres |
+| `agent-run/` | the prompt, every tool call, and the agent's design notes, pin map and power budget |
+| `registry/parts/` | the six parts the agent authored or imported |
+
+One part, `polyfuse_500ma`, comes from #266.
