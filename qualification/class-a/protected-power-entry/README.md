@@ -23,8 +23,9 @@ tool calls are in `agent-run/tool-calls.md` (125 calls, 14:52 to 16:36, about
 1 h 43 min) and its own report is `agent-run/report.md`. No file in this
 directory was edited by hand after the run.
 
-The five registry parts the agent wrote are in `registry/parts/`; they are a
-separate commit and are meant to leave this pull request as their own.
+The five registry parts the agent wrote are their own pull request, #324. The
+board also needs `polyfuse_1r5a` and `smaj15a_tvs` from #266, which main does
+not have yet.
 
 ## What was measured
 
@@ -69,8 +70,29 @@ Circuit checks read from the exported netlist:
 
 ## Reproducibility
 
-Three consecutive exports have not been compared yet; this section is filled
-in when they are.
+The source in this directory was exported three more times with
+`synth export-kicad`, router included, and compared with the files the agent's
+own `synth_export` wrote. Each cell is the first ten characters of a SHA-256.
+
+| file | agent (MCP) | export 1 | export 2 | export 3 | |
+|---|---|---|---|---|---|
+| `protected_power_entry.kicad_sch` | 168b27c96a | 168b27c96a | 168b27c96a | 168b27c96a | identical |
+| `protected_power_entry.kicad_pro` | ef134432e9 | ef134432e9 | ef134432e9 | ef134432e9 | identical |
+| `protected_power_entry.kicad_sym` | 9258824cb9 | 9258824cb9 | 9258824cb9 | 9258824cb9 | identical |
+| `bom.csv` | b5eb123bf5 | b5eb123bf5 | b5eb123bf5 | b5eb123bf5 | identical |
+| `pnp.csv` | cafdcdc7ce | cafdcdc7ce | cafdcdc7ce | cafdcdc7ce | identical |
+| `protected_power_entry.kicad_pcb` | 02d5529935 | e8859f6285 | 7b905a7a01 | 44803d5838 | identical after zone-fill ids |
+
+The four PCB files differ in 458 lines, every one a `uuid` line, the id KiCad
+gives each filled-zone polygon when it refills a pour. With those masked, the
+four files hash the same (5d388a1913), so the copper is the same. That is four
+exports from one source, on one machine, with one router build; it is not a
+claim about other machines or router versions. Each export took 21 to 24
+minutes.
+
+```
+synth export-kicad protected_power_entry.synth --out <dir> --router kicad-routing-tools
+```
 
 ## Files
 
