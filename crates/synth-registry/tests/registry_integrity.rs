@@ -129,3 +129,27 @@ fn a_decoupling_rule_names_a_pin_the_part_has() {
         }
     }
 }
+
+#[test]
+fn no_two_active_parts_share_a_manufacturer_part_number() {
+    use std::collections::BTreeMap;
+    let dir = workspace_root().join("registry").join("parts");
+    let registry = synth_registry::load_dir(&dir).expect("seed registry must load without errors");
+    let mut by_mpn: BTreeMap<String, Vec<String>> = BTreeMap::new();
+    for (_, part) in registry.iter() {
+        if part.lifecycle != synth_registry::Lifecycle::Active {
+            continue;
+        }
+        if let Some(mpn) = part.mpn.as_deref().filter(|m| !m.trim().is_empty()) {
+            by_mpn
+                .entry(mpn.to_ascii_lowercase())
+                .or_default()
+                .push(part.id.0.clone());
+        }
+    }
+    let duplicates: Vec<_> = by_mpn.iter().filter(|(_, ids)| ids.len() > 1).collect();
+    assert!(
+        duplicates.is_empty(),
+        "one canonical active id per physical part; mark the others obsolete with a substitute: {duplicates:?}"
+    );
+}

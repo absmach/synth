@@ -1,0 +1,46 @@
+id = "apds9301_real"
+kind = "ic"
+description = "Imported from KiCad stock symbol"
+kicad_symbol = "Sensor_Optical:APDS-9301"
+kicad_footprint = "OptoDevice:Broadcom_APDS-9301"
+
+[footprint_dimensions]
+width_mm = 3.1
+height_mm = 3.8
+courtyard_margin_mm = 0.25
+
+[provenance]
+source = "imported"
+reviewed_by = ""
+
+[[pins]]
+name = "VDD"
+number = "1"
+electrical_type = "power_input"
+
+[[pins]]
+name = "GND"
+number = "2"
+electrical_type = "power_input"
+
+[[pins]]
+name = "ADR_SEL"
+number = "3"
+electrical_type = "input"
+
+[[pins]]
+name = "SCL"
+number = "4"
+electrical_type = "input"
+capabilities = ["i2c_scl"]
+
+[[pins]]
+name = "SDA"
+number = "5"
+electrical_type = "bidirectional"
+capabilities = ["i2c_sda"]
+
+[[pins]]
+name = "INT"
+number = "6"
+electrical_type = "unclassified"

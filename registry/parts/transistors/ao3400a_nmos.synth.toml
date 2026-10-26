@@ -1,0 +1,48 @@
+id = "ao3400a_nmos"
+kind = "transistor"
+description = "Alpha&Omega AO3400A 30 V N-channel MOSFET, SOT-23: ID 5.7 A at 25 C, Rds(on) under 26.5 mOhm at Vgs 10 V, 32 mOhm at 4.5 V and 48 mOhm at 2.5 V, Vgs +/-12 V"
+version = 0
+lifecycle = "active"
+signed_by = []
+substitutes = []
+mpn = "AO3400A"
+required_decoupling = []
+kicad_symbol = "Transistor_FET:AO3400A"
+kicad_footprint = "Package_TO_SOT_SMD:SOT-23"
+
+[[pins]]
+name = "g"
+number = "1"
+electrical_type = "input"
+capabilities = []
+required = false
+voltage_max_v = 12.0
+
+[[pins]]
+name = "s"
+number = "2"
+electrical_type = "passive"
+capabilities = []
+required = false
+
+[[pins]]
+name = "d"
+number = "3"
+electrical_type = "passive"
+capabilities = []
+required = false
+
+[operating_conditions]
+max_voltage_v = 30.0
+max_current_ma = 5700.0
+max_power_mw = 1400
+thermal_resistance_c_per_w = 125
+
+[footprint_dimensions]
+width_mm = 3.86
+height_mm = 3.4
+courtyard_margin_mm = 0.25
+
+[provenance]
+source = "authored"
+reviewed_by = ""

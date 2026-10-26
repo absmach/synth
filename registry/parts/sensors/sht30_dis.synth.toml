@@ -1,0 +1,62 @@
+id = "sht30_dis"
+kind = "ic"
+description = "Imported from KiCad stock symbol"
+kicad_symbol = "Sensor_Humidity:SHT30-DIS"
+kicad_footprint = "Sensor_Humidity:Sensirion_DFN-8-1EP_2.5x2.5mm_P0.5mm_EP1.1x1.7mm"
+
+[footprint_dimensions]
+width_mm = 3.4
+height_mm = 3.0
+courtyard_margin_mm = 0.25
+
+[provenance]
+source = "imported"
+reviewed_by = ""
+
+[[pins]]
+name = "SDA"
+number = "1"
+electrical_type = "bidirectional"
+capabilities = ["i2c_sda"]
+
+[[pins]]
+name = "ADDR"
+number = "2"
+electrical_type = "input"
+
+[[pins]]
+name = "ALERT"
+number = "3"
+electrical_type = "open_drain"
+
+[[pins]]
+name = "SCL"
+number = "4"
+electrical_type = "input"
+capabilities = ["i2c_scl"]
+
+[[pins]]
+name = "VDD"
+number = "5"
+electrical_type = "power_input"
+
+[[pins]]
+name = "RESET"
+number = "6"
+electrical_type = "input"
+capabilities = ["reset"]
+
+[[pins]]
+name = "R"
+number = "7"
+electrical_type = "passive"
+
+[[pins]]
+name = "VSS"
+number = "8"
+electrical_type = "power_input"
+
+[[pins]]
+name = "VSS_pin_9"
+number = "9"
+electrical_type = "passive"
