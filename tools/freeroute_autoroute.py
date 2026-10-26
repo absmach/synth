@@ -13,7 +13,6 @@ that was actually written, rather than taking it as the answer.
 from __future__ import annotations
 
 import argparse
-import gc
 import json
 import os
 import re
@@ -681,14 +680,6 @@ def main() -> int:
             [sys.executable, merger, merge_input, ses, args.output_board],
             check=True,
         )
-
-        # KiCad's SWIG bindings can leave the board wrapper returned by
-        # ExportSpecctraDSN alive while another board is loaded.  On KiCad 10
-        # that makes the second LoadBoard call return a bare SwigPyObject,
-        # which then fails when the stitch pass calls GetPads().  Release the
-        # export board before loading the merged result.
-        del export_board
-        gc.collect()
 
         try:
             stitched, unresolved = stitch_floating_pour(
