@@ -92,6 +92,46 @@ pub const ROUTE_REPORT_SCHEMA: &str = "synth.routing.v1";
 /// [`RouteRequest::report_path`] before this function returns, so a run
 /// that fails is as auditable as one that succeeds.
 pub fn route(request: &RouteRequest) -> RouteReport {
+    let mut report = route_once(request);
+    if request.engine != RouterEngine::KiCadRoutingTools {
+        return report;
+    }
+    // Whether the engine puts a via in a pad, or leaves a net open, depends on
+    // the order it routes the nets in, and the same board can route cleanly in
+    // one order and not in another. A board the independent validation rejected
+    // is therefore tried again in the engine's other orders before it is given
+    // up on; the first one that validates is kept.
+    for ordering in ORDERING_RETRIES.iter().take(ordering_retries()) {
+        if report.state != result::RouteState::ValidationFailed {
+            break;
+        }
+        eprintln!(
+            "note: the routed board was rejected ({} blocking); routing again with the {ordering} net order",
+            report
+                .validation
+                .as_ref()
+                .map_or(0, result::ValidationSummary::blocking_count)
+        );
+        let mut again = request.clone();
+        again.kicad_routing_tools.ordering = Some((*ordering).to_string());
+        report = route_once(&again);
+    }
+    report
+}
+
+/// The engine's net orders other than its default, in the order they are tried.
+const ORDERING_RETRIES: [&str; 3] = ["inside_out", "original", "bus"];
+
+/// How many of [`ORDERING_RETRIES`] a rejected board is tried with:
+/// `SYNTH_ROUTER_ORDERING_RETRIES`, three when absent, none when zero.
+fn ordering_retries() -> usize {
+    std::env::var("SYNTH_ROUTER_ORDERING_RETRIES")
+        .ok()
+        .and_then(|v| v.trim().parse::<usize>().ok())
+        .unwrap_or(ORDERING_RETRIES.len())
+}
+
+fn route_once(request: &RouteRequest) -> RouteReport {
     // The duplicate-run guard is taken first. Reporting "router
     // unavailable" while a run is already writing this candidate would name
     // the wrong problem, and the operator would go looking for a missing
