@@ -108,6 +108,72 @@ fn split_grounds_keep_their_names_and_each_zone_its_own_uuid() {
     }
 }
 
+/// A fence via of one split ground must sit inside that ground's own pour, not
+/// in the other half of the board where it would dangle.
+#[test]
+fn split_ground_fence_vias_stay_inside_their_own_pour() {
+    let pcb = export_pcb(SPLIT_GROUND_SOURCE, "fence");
+    let number = |text: &str, key: &str| -> Vec<f64> {
+        text.split(key)
+            .nth(1)
+            .map(|rest| {
+                rest.split(')')
+                    .next()
+                    .unwrap_or("")
+                    .split_whitespace()
+                    .filter_map(|word| word.parse().ok())
+                    .collect()
+            })
+            .unwrap_or_default()
+    };
+    let mut vias = 0;
+    for via in pcb
+        .split("(via\n")
+        .skip(1)
+        .chain(pcb.split("(via (").skip(1))
+    {
+        let via = via.split("(uuid").next().unwrap_or(via);
+        let net: usize = number(via, "(net ")[0] as usize;
+        let name = pcb
+            .lines()
+            .find_map(|line| line.trim().strip_prefix(&format!("(net {net} \"")))
+            .and_then(|rest| rest.split('"').next())
+            .unwrap_or("")
+            .to_string();
+        if name != "AGND" && name != "DGND" {
+            continue;
+        }
+        let at = number(via, "(at ");
+        let (mut lo, mut hi) = ((f64::MAX, f64::MAX), (f64::MIN, f64::MIN));
+        for zone in pcb
+            .split("(zone")
+            .skip(1)
+            .filter(|z| z.contains(&format!("(net_name \"{name}\")")))
+        {
+            for pair in zone.split("(xy ").skip(1) {
+                let xy: Vec<f64> = pair
+                    .split(')')
+                    .next()
+                    .unwrap_or("")
+                    .split_whitespace()
+                    .filter_map(|w| w.parse().ok())
+                    .collect();
+                lo = (lo.0.min(xy[0]), lo.1.min(xy[1]));
+                hi = (hi.0.max(xy[0]), hi.1.max(xy[1]));
+            }
+        }
+        assert!(
+            at[0] >= lo.0 - 0.01
+                && at[0] <= hi.0 + 0.01
+                && at[1] >= lo.1 - 0.01
+                && at[1] <= hi.1 + 0.01,
+            "{name} via at {at:?} is outside its pour {lo:?}..{hi:?}"
+        );
+        vias += 1;
+    }
+    assert!(vias > 0, "no ground fence vias found");
+}
+
 #[test]
 fn a_lone_ground_net_is_still_named_gnd() {
     let pcb = export_pcb(SINGLE_GROUND_SOURCE, "single");

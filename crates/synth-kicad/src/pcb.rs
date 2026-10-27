@@ -264,7 +264,9 @@ pub fn build_pcb(
         // through vias so the planes form one physical ground network. The
         // external routers preserve these source vias while replacing their
         // own routed segments and vias.
-        if board.layers >= 4 && plane_index == 0 {
+        // Each ground fences only the corners inside its own pour region: a corner via
+        // in another split ground's half is a dangling island of the wrong net.
+        if board.layers >= 4 {
             let outline = placement.board_outline;
             let inset = mm_to_nm(1.5);
             let holes: Vec<(Point, i64)> = board
@@ -292,6 +294,12 @@ pub fn build_pcb(
             for (stitch_index, (x_nm, y_nm, inward)) in points.into_iter().enumerate() {
                 let Point { x_nm, y_nm } =
                     clear_of_mounting_holes(Point::new(x_nm, y_nm), inward, &holes);
+                if region
+                    .as_deref()
+                    .is_some_and(|polygon| !convex_contains(polygon, Point::new(x_nm, y_nm)))
+                {
+                    continue;
+                }
                 children.push(build_ground_stitch_via(
                     x_nm,
                     y_nm,
@@ -925,6 +933,19 @@ fn net_centroid(
     #[allow(clippy::cast_possible_wrap)] // a board has far fewer pads than i64::MAX
     let count = centres.len() as i64;
     Some(synth_geometry::Point::new(sx / count, sy / count))
+}
+
+/// Whether `point` lies inside (or on) a convex polygon of either winding.
+fn convex_contains(polygon: &[synth_geometry::Point], point: synth_geometry::Point) -> bool {
+    let (mut pos, mut neg) = (false, false);
+    for i in 0..polygon.len() {
+        let (a, b) = (polygon[i], polygon[(i + 1) % polygon.len()]);
+        let cross = i128::from(b.x_nm - a.x_nm) * i128::from(point.y_nm - a.y_nm)
+            - i128::from(b.y_nm - a.y_nm) * i128::from(point.x_nm - a.x_nm);
+        pos |= cross > 0;
+        neg |= cross < 0;
+    }
+    !(pos && neg)
 }
 
 /// Sutherland–Hodgman clip of a convex polygon by the half-plane
