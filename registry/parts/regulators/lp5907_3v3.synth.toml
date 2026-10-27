@@ -57,3 +57,9 @@ net = "vout"
 value = "1uf"
 count = 1
 
+
+[provenance]
+source = "authored"
+datasheet_url = "https://www.ti.com/lit/ds/symlink/lp5907.pdf"
+reviewed_by = "Steve Munene"
+reviewed_at = "2026-10-27"
