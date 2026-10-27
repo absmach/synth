@@ -645,6 +645,73 @@ electrical_type = "passive"
     }
 
     #[test]
+    fn rtd_front_end_parts_match_their_datasheet_pinouts() {
+        use crate::ElectricalType::{
+            Analog, Clock, DoNotConnect, GroundReference, Input, Output, PowerInput, PowerOutput,
+        };
+        let dir = workspace_root().join("registry").join("parts");
+        let registry = load_dir(&dir).expect("seed registry must load");
+
+        // TI SBAS660C table 6 (RHB, 32-pin VQFN) and SBOS410I table 6 (D, 8-pin SOIC).
+        let ads = registry.lookup("ads124s08").expect("ads124s08");
+        let ref5025 = registry.lookup("ref5025").expect("ref5025");
+        for part in [ads, ref5025] {
+            assert!(
+                !part.is_unverified(),
+                "{} must be datasheet-verified",
+                part.id
+            );
+            assert!(
+                part.kicad_footprint.is_some(),
+                "{} needs a footprint",
+                part.id
+            );
+        }
+        assert_eq!(ads.pins.len(), 33, "32 pins plus the thermal pad");
+        for (name, number, ty) in [
+            ("aincom", "1", Analog),
+            ("ain0", "7", Analog),
+            ("cs_n", "9", Input),
+            ("dout_drdy", "12", Output),
+            ("clk", "17", Clock),
+            ("dgnd", "14", GroundReference),
+            ("dvdd", "16", PowerInput),
+            ("refout", "23", Analog),
+            ("nc", "25", DoNotConnect),
+            ("avdd", "26", PowerInput),
+            ("avss", "27", GroundReference),
+            ("refp1_ain6", "32", Analog),
+            ("ep", "33", GroundReference),
+        ] {
+            let pin = ads
+                .find_pin(name)
+                .unwrap_or_else(|| panic!("ads124s08 {name}"));
+            assert_eq!(
+                (pin.number.0.as_str(), pin.electrical_type),
+                (number, ty),
+                "{name}"
+            );
+        }
+        assert_eq!(ref5025.pins.len(), 8);
+        for (name, number, ty) in [
+            ("vin", "2", PowerInput),
+            ("temp", "3", Analog),
+            ("gnd", "4", GroundReference),
+            ("vout", "6", PowerOutput),
+            ("nc", "7", DoNotConnect),
+        ] {
+            let pin = ref5025
+                .find_pin(name)
+                .unwrap_or_else(|| panic!("ref5025 {name}"));
+            assert_eq!(
+                (pin.number.0.as_str(), pin.electrical_type),
+                (number, ty),
+                "{name}"
+            );
+        }
+    }
+
+    #[test]
     fn parses_footprint_dimensions_and_operating_conditions() {
         let toml = r#"
 id = "test_ic"
