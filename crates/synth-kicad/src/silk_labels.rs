@@ -25,6 +25,9 @@ pub(crate) const LABEL_STROKE_MM: f64 = 0.12;
 const CHAR_WIDTH_MM: f64 = LABEL_FONT_MM;
 /// Height of a line of text, with room for the stroke.
 const TEXT_HEIGHT_MM: f64 = LABEL_FONT_MM * 1.3;
+/// Two labels keep this far from each other: the fab's silkscreen clearance
+/// applies between text and text as it does between text and an outline.
+const LABEL_CLEARANCE_MM: f64 = 0.2;
 /// A label keeps this far from a neighbour's courtyard: a footprint draws its
 /// silkscreen on and just outside the courtyard, and the fab's silkscreen
 /// clearance applies to text and outline alike.
@@ -195,7 +198,11 @@ pub(crate) fn place_labels(
             others()
                 .chain(std::iter::once(grown(part.courtyard, 0.1)))
                 .map(|c| overlap_area(&c, &b))
-                .chain(taken.iter().map(|t| overlap_area(t, &b)))
+                .chain(
+                    taken
+                        .iter()
+                        .map(|t| overlap_area(&grown(*t, LABEL_CLEARANCE_MM), &b)),
+                )
                 .sum()
         };
         let pos = match from_design {
@@ -612,6 +619,19 @@ mod tests {
             !overlaps(b, part.courtyard),
             "the label {b:?} is over its own part {:?}",
             part.courtyard
+        );
+    }
+
+    #[test]
+    fn two_labels_keep_the_silkscreen_clearance_between_them() {
+        // Two parts side by side whose labels would otherwise sit 0.05 mm apart.
+        let parts = [resistor(1, "R1", 20.0, 20.0), resistor(2, "R2", 22.9, 20.0)];
+        let placed = place(&parts, outline());
+        let a = label_box(&parts[0], placed[&parts[0].id]);
+        let b = label_box(&parts[1], placed[&parts[1].id]);
+        assert!(
+            !overlaps(grown(a, LABEL_CLEARANCE_MM), b),
+            "labels {a:?} and {b:?} are closer than the silkscreen clearance"
         );
     }
 
