@@ -128,7 +128,35 @@ pub(crate) fn place_labels(
 ) -> HashMap<ComponentId, LabelPos> {
     let mut placed = HashMap::new();
     let mut taken: Vec<Rect> = Vec::new();
-    for part in parts {
+    // A label with few places to go is placed before one with many, so the
+    // crowded part of a board is settled while it still has free spots, and a
+    // label with a hard offset of its own comes first because it cannot move.
+    let free_spots = |part: &LabelPart| -> usize {
+        let hard = overrides.get(&part.id).is_some_and(|o| o.hard);
+        if hard {
+            return 0;
+        }
+        let others = || {
+            parts
+                .iter()
+                .filter(|o| o.id != part.id)
+                .map(|o| grown(o.courtyard, NEIGHBOUR_CLEARANCE_MM))
+        };
+        let mut candidates: Vec<LabelPos> = [Side::Above, Side::Below, Side::Left, Side::Right]
+            .map(|s| side_candidate(part, s))
+            .into();
+        candidates.extend(extra_candidates(part));
+        1 + candidates
+            .iter()
+            .filter(|p| {
+                let b = label_box(part, **p);
+                inside(outline, b) && !others().any(|c| c.intersects(&b))
+            })
+            .count()
+    };
+    let mut order: Vec<&LabelPart> = parts.iter().collect();
+    order.sort_by_key(|part| free_spots(part));
+    for part in order {
         let design = overrides.get(&part.id);
         let default = default_label(part);
         if design.and_then(|o| o.hide).unwrap_or(part.hidden) {
@@ -280,6 +308,41 @@ fn extra_candidates(part: &LabelPart) -> Vec<LabelPos> {
         (c.max.x_nm + gap + width / 2, c.max.y_nm + gap + height / 2),
     ] {
         out.push(local_label(part, Point::new(x, y), 0.0));
+    }
+    // The same four sides one and two label heights further out, for a part whose
+    // near ring is all taken: still beside the part, a little off it.
+    for ring in [1_i64, 2] {
+        let far = ring * (height * 2 / 3);
+        out.push(local_label(
+            part,
+            Point::new(mid_x, c.min.y_nm - gap - far - height / 2),
+            0.0,
+        ));
+        out.push(local_label(
+            part,
+            Point::new(mid_x, c.max.y_nm + gap + far + height / 2),
+            0.0,
+        ));
+        out.push(local_label(
+            part,
+            Point::new(c.min.x_nm - gap - far - width / 2, mid_y),
+            0.0,
+        ));
+        out.push(local_label(
+            part,
+            Point::new(c.max.x_nm + gap + far + width / 2, mid_y),
+            0.0,
+        ));
+        out.push(local_label(
+            part,
+            Point::new(c.min.x_nm - gap - far - height / 2, mid_y),
+            90.0,
+        ));
+        out.push(local_label(
+            part,
+            Point::new(c.max.x_nm + gap + far + height / 2, mid_y),
+            90.0,
+        ));
     }
     // Turned a quarter beside the part, where a long label would reach a neighbour
     // across.
@@ -509,6 +572,28 @@ mod tests {
         let b = label_box(&part, side_candidate(&part, Side::Above));
         let width = nm_to_mm(b.max.x_nm - b.min.x_nm);
         assert!((width - 3.0 * LABEL_FONT_MM).abs() < 1e-6, "{width}");
+    }
+
+    #[test]
+    fn the_label_with_the_fewest_free_spots_is_placed_first_and_labels_do_not_overlap() {
+        // Three parts in a row, so the middle one has neighbours on both sides and
+        // only the rows above and below to put its label; the outer two have
+        // the open ends as well. Each label has to stay clear of the others.
+        let parts = [
+            resistor(1, "R1", 20.0, 20.0),
+            resistor(2, "R2", 22.4, 20.0),
+            resistor(3, "R3", 24.8, 20.0),
+        ];
+        let placed = place(&parts, outline());
+        let boxes: Vec<Rect> = parts.iter().map(|p| label_box(p, placed[&p.id])).collect();
+        for (i, a) in boxes.iter().enumerate() {
+            for b in &boxes[i + 1..] {
+                assert!(!overlaps(*a, *b), "labels overlap: {a:?} {b:?}");
+            }
+            for p in &parts {
+                assert!(!overlaps(*a, p.courtyard), "a label sits on a part: {a:?}");
+            }
+        }
     }
 
     #[test]
