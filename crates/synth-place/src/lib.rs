@@ -5446,7 +5446,9 @@ fn far_test_points(board: &Board, placement: &Placement) -> Vec<FarTestPoint> {
                     .lookup(probe.component, probe.pin.0 as usize)
                     .unwrap_or((0, 0)),
             );
-            let mut nearest: Option<(f64, usize)> = None;
+            // The pad that comes closest to its own limit, which is wider
+            // beside a dense part (see [`support_part_limit_mm`]).
+            let mut closest: Option<(f64, f64, f64)> = None;
             // The pad the advice names: on the largest part of the net, which
             // is placed before the small ones, so a hint toward it holds. A
             // two-pin passive is itself moved after the test point is.
@@ -5469,25 +5471,23 @@ fn far_test_points(board: &Board, placement: &Placement) -> Vec<FarTestPoint> {
                     .component(other.component)
                     .and_then(|c| c.part.as_ref())
                     .map_or(0, |p| p.pins.len());
-                if nearest.is_none_or(|(best, _)| mm < best) {
-                    nearest = Some((mm, pins));
+                let limit = if pins >= DENSE_PART_PINS {
+                    TEST_POINT_MAX_MM + DENSE_PART_RING_MM / 2.0 + 0.5
+                } else {
+                    TEST_POINT_MAX_MM
+                };
+                if closest.is_none_or(|(excess, _, _)| mm - limit < excess) {
+                    closest = Some((mm - limit, mm, limit));
                 }
                 if anchor_pad.is_none_or(|(n, d, _)| pins > n || (pins == n && mm < d)) {
                     anchor_pad = Some((pins, mm, other));
                 }
             }
-            let (Some((mm, nearest_pins)), Some((_, _, endpoint))) = (nearest, anchor_pad) else {
+            let (Some((excess, mm, limit_mm)), Some((_, _, endpoint))) = (closest, anchor_pad)
+            else {
                 continue;
             };
-            // Beside a dense part the placer keeps its pin-escape ring free, so
-            // a test point cannot sit as close to its pads (see
-            // [`support_part_limit_mm`]).
-            let limit_mm = if nearest_pins >= DENSE_PART_PINS {
-                TEST_POINT_MAX_MM + DENSE_PART_RING_MM / 2.0 + 0.5
-            } else {
-                TEST_POINT_MAX_MM
-            };
-            if mm <= limit_mm {
+            if excess <= 0.0 {
                 continue;
             }
             let (Some(probe_part), Some(anchor)) = (
