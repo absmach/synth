@@ -76,6 +76,7 @@
 pub mod advisor;
 mod compact_gaps;
 pub use compact_gaps::{compact_by_gaps, courtyard_rect_probe, hpwl_probe, GapSpacing};
+mod alignment;
 pub mod board_family;
 pub mod cem;
 pub mod fitness;
@@ -5295,6 +5296,9 @@ fn mismatched_repeats(board: &Board, placement: &Placement) -> Vec<MismatchedCop
 /// The most mismatched-copy warnings one review lists; the rest are counted.
 const MAX_REPEAT_WARNINGS: usize = 6;
 
+/// The most alignment warnings one review lists; the rest are counted.
+const MAX_ALIGNMENT_WARNINGS: usize = 6;
+
 /// The most far-support-part warnings one review lists; the rest are counted.
 const MAX_SUPPORT_PART_WARNINGS: usize = 8;
 
@@ -6131,6 +6135,88 @@ pub fn describe_placement(board: &Board, placement: &Placement) -> PlacementDesc
     if omitted_copies > 0 {
         functional_warnings.push(format!(
             "{omitted_copies} more part(s) of repeated circuits are also laid out differently from the first copy"
+        ));
+    }
+
+    // Like parts that sit side by side read as a row or a column, so they
+    // should share one line. The advice names the coordinate that aligns them.
+    let mut misaligned = alignment::misaligned_like_parts(board, placement);
+    let omitted_aligned = misaligned.len().saturating_sub(MAX_ALIGNMENT_WARNINGS);
+    misaligned.truncate(MAX_ALIGNMENT_WARNINGS);
+    for m in misaligned {
+        let name = |c: ComponentId| {
+            board
+                .component(c)
+                .map_or_else(|| format!("#{}", c.0), |c| c.refdes.clone())
+        };
+        let (refdes, line, other) = (
+            name(m.id),
+            if m.row { "row" } else { "column" },
+            if m.row { "y" } else { "x" },
+        );
+        let here = placement.components.iter().find(|p| p.id == m.id);
+        let Some(here) = here else { continue };
+        let (x, y) = if m.row {
+            (synth_geometry::nm_to_mm(here.center.x_nm), m.line_mm)
+        } else {
+            (m.line_mm, synth_geometry::nm_to_mm(here.center.y_nm))
+        };
+        functional_warnings.push(format!(
+            "{refdes} is {:.2} mm off the {line} its {} like parts share; set {other} to {:.2} mm to align it",
+            m.off_mm,
+            m.members.len(),
+            m.line_mm
+        ));
+        recommended_actions.push(PlacementRecommendation {
+            action: "align_like_parts".into(),
+            refdes: refdes.clone(),
+            relative_to: None,
+            suggested_x_mm: Some(x),
+            suggested_y_mm: Some(y),
+            suggested_rotation_deg: None,
+            rationale: format!(
+                "pin {refdes} on the {line} its {} like parts share",
+                m.members.len()
+            ),
+        });
+    }
+    if omitted_aligned > 0 {
+        functional_warnings.push(format!(
+            "{omitted_aligned} more like part(s) sit off the row or column they share"
+        ));
+    }
+
+    // A small part far from everything it is wired to belongs beside one of
+    // them.
+    let mut stranded = alignment::isolated_parts(board, placement);
+    let omitted_stranded = stranded.len().saturating_sub(MAX_ALIGNMENT_WARNINGS);
+    stranded.truncate(MAX_ALIGNMENT_WARNINGS);
+    for s in stranded {
+        let name = |c: ComponentId| {
+            board
+                .component(c)
+                .map_or_else(|| format!("#{}", c.0), |c| c.refdes.clone())
+        };
+        let (refdes, neighbour) = (name(s.id), name(s.neighbour));
+        functional_warnings.push(format!(
+            "{refdes} sits {:.1} mm from the nearest part it is wired to ({neighbour}); place it beside {neighbour}",
+            s.mm
+        ));
+        recommended_actions.push(PlacementRecommendation {
+            action: "place_beside_neighbour".into(),
+            refdes: refdes.clone(),
+            relative_to: Some(neighbour.clone()),
+            suggested_x_mm: None,
+            suggested_y_mm: None,
+            suggested_rotation_deg: None,
+            rationale: format!(
+                "{refdes} is wired only to parts far from it; put it next to {neighbour}"
+            ),
+        });
+    }
+    if omitted_stranded > 0 {
+        functional_warnings.push(format!(
+            "{omitted_stranded} more small part(s) sit far from every part they are wired to"
         ));
     }
 
@@ -10520,6 +10606,86 @@ board "features_only" {
             mismatched_repeats(&board, &placement).is_empty(),
             "offsets from different anchors say nothing about the layout"
         );
+    }
+
+    #[test]
+    fn like_parts_in_a_row_that_miss_their_line_are_reported_with_the_line() {
+        let board = board_from_source(
+            r#"board "row" { layers 2
+                power "GND" 0v
+                component RA: resistor "r_generic_0603" value "1k"
+                component RB: resistor "r_generic_0603" value "1k"
+                component RC: resistor "r_generic_0603" value "1k"
+                component RD: resistor "r_generic_0603" value "1k"
+                net "GND" { RA.p2 RB.p2 RC.p2 RD.p2 }
+                net "NA" { RA.p1 }
+                net "NB" { RB.p1 }
+                net "NC" { RC.p1 }
+                net "ND" { RD.p1 }
+            }"#,
+            "row.synth",
+        );
+        let mut placement = place(&board).expect("place");
+        for (refdes, x, y) in [
+            ("RA", 10.0, 20.0),
+            ("RB", 13.0, 20.0),
+            ("RC", 16.0, 20.4),
+            ("RD", 19.0, 20.0),
+        ] {
+            move_part(&mut placement, &board, refdes, x, y);
+        }
+        let off = alignment::misaligned_like_parts(&board, &placement);
+        let rc = off
+            .iter()
+            .find(|m| board.component(m.id).is_some_and(|c| c.refdes == "RC"))
+            .expect("RC reported");
+        assert!(rc.row && (rc.line_mm - 20.0).abs() < 0.01 && (rc.off_mm - 0.4).abs() < 0.01);
+        assert_eq!(
+            off.len(),
+            1,
+            "only the part that misses its line is reported"
+        );
+
+        let desc = describe_placement(&board, &placement);
+        assert!(desc.visual_review.recommended_actions.iter().any(|a| {
+            a.action == "align_like_parts"
+                && a.refdes == "RC"
+                && a.suggested_y_mm.is_some_and(|y| (y - 20.0).abs() < 0.01)
+        }));
+
+        move_part(&mut placement, &board, "RC", 16.0, 20.0);
+        assert!(alignment::misaligned_like_parts(&board, &placement).is_empty());
+    }
+
+    #[test]
+    fn a_small_part_far_from_everything_it_is_wired_to_is_reported() {
+        let board = board_from_source(
+            r#"board "far" { layers 2
+                power "GND" 0v
+                component RA: resistor "r_generic_0603" value "1k"
+                component RB: resistor "r_generic_0603" value "1k"
+                net "GND" { RA.p2 RB.p2 }
+                net "LINK" { RA.p1 RB.p1 }
+            }"#,
+            "far.synth",
+        );
+        let mut placement = place(&board).expect("place");
+        move_part(&mut placement, &board, "RA", 10.0, 10.0);
+        move_part(&mut placement, &board, "RB", 30.0, 10.0);
+        let far = alignment::isolated_parts(&board, &placement);
+        assert_eq!(
+            far.len(),
+            2,
+            "both ends of the link are far from each other"
+        );
+        let desc = describe_placement(&board, &placement);
+        assert!(desc
+            .visual_review
+            .recommended_actions
+            .iter()
+            .any(|a| { a.action == "place_beside_neighbour" && a.relative_to.is_some() }));
+        move_part(&mut placement, &board, "RB", 14.0, 10.0);
+        assert!(alignment::isolated_parts(&board, &placement).is_empty());
     }
 
     #[test]
