@@ -12,7 +12,8 @@ courtyard_margin_mm = 0.25
 [provenance]
 source = "imported"
 datasheet_url = "https://www.st.com/resource/en/datasheet/stm32g030k8.pdf"
-reviewed_by = ""
+reviewed_by = "JeffMboya"
+reviewed_at = "2026-10-28"
 
 [[pins]]
 name = "PB9"

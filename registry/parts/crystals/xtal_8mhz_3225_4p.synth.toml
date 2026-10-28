@@ -44,4 +44,5 @@ courtyard_margin_mm = 0.25
 
 [provenance]
 source = "authored"
-reviewed_by = ""
+reviewed_by = "JeffMboya"
+reviewed_at = "2026-10-28"
