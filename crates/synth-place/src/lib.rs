@@ -6220,6 +6220,41 @@ pub fn describe_placement(board: &Board, placement: &Placement) -> PlacementDesc
         ));
     }
 
+    // A capacitor between a rail and ground does its work next to the part
+    // that draws on the rail.
+    let mut far_caps = alignment::rail_capacitors_far(board, placement);
+    let omitted_caps = far_caps.len().saturating_sub(MAX_ALIGNMENT_WARNINGS);
+    far_caps.truncate(MAX_ALIGNMENT_WARNINGS);
+    for c in far_caps {
+        let name = |c: ComponentId| {
+            board
+                .component(c)
+                .map_or_else(|| format!("#{}", c.0), |c| c.refdes.clone())
+        };
+        let (refdes, neighbour) = (name(c.id), name(c.neighbour));
+        functional_warnings.push(format!(
+            "{refdes} is {:.0} mm from the nearest part on its rail ({neighbour}); a rail capacitor belongs beside the part it serves",
+            c.mm
+        ));
+        recommended_actions.push(PlacementRecommendation {
+            action: "place_beside_neighbour".into(),
+            refdes: refdes.clone(),
+            relative_to: Some(neighbour.clone()),
+            suggested_x_mm: None,
+            suggested_y_mm: None,
+            suggested_rotation_deg: None,
+            rationale: format!(
+                "{refdes} sits on a rail {:.0} mm from {neighbour}; put it beside {neighbour}",
+                c.mm
+            ),
+        });
+    }
+    if omitted_caps > 0 {
+        functional_warnings.push(format!(
+            "{omitted_caps} more rail capacitor(s) sit far from the part they serve"
+        ));
+    }
+
     // The outline is fitted a rim away from every part that is not a flush
     // connector. A part standing inside that rim on a connector edge holds the
     // outline out and leaves the connectors short of the board edge.
@@ -10727,6 +10762,34 @@ board "features_only" {
             .any(|a| { a.action == "place_beside_neighbour" && a.relative_to.is_some() }));
         move_part(&mut placement, &board, "RB", 14.0, 10.0);
         assert!(alignment::isolated_parts(&board, &placement).is_empty());
+    }
+
+    #[test]
+    fn a_rail_capacitor_far_from_the_ic_on_its_rail_is_reported() {
+        let board = board_from_source(
+            r#"board "railcap" { layers 2
+                power "GND" 0v
+                power "VCC" 3.3v
+                component U1: mcu "stm32g030"
+                component C1: capacitor "c_generic_0603" value "100nF"
+                net "VCC" { U1.vdd C1.p1 }
+                net "GND" { U1.vss C1.p2 }
+            }"#,
+            "railcap.synth",
+        );
+        let mut placement = place(&board).expect("place");
+        move_part(&mut placement, &board, "U1", 20.0, 20.0);
+        move_part(&mut placement, &board, "C1", 45.0, 20.0);
+        let far = alignment::rail_capacitors_far(&board, &placement);
+        assert_eq!(far.len(), 1, "{far:?}");
+        let desc = describe_placement(&board, &placement);
+        assert!(desc.visual_review.recommended_actions.iter().any(|a| {
+            a.action == "place_beside_neighbour"
+                && a.refdes == "C1"
+                && a.relative_to.as_deref() == Some("U1")
+        }));
+        move_part(&mut placement, &board, "C1", 28.0, 20.0);
+        assert!(alignment::rail_capacitors_far(&board, &placement).is_empty());
     }
 
     #[test]

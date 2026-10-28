@@ -222,3 +222,72 @@ pub(crate) fn isolated_parts(board: &Board, placement: &Placement) -> Vec<Isolat
     found.sort_by(|a, b| b.mm.total_cmp(&a.mm));
     found
 }
+
+/// Centre-to-centre distance past which a capacitor on a supply rail counts as
+/// serving nothing near it.
+pub(crate) const RAIL_CAP_MM: f64 = 12.0;
+
+/// A capacitor between a supply rail and ground that sits far from every part
+/// that draws on the rail.
+///
+/// The parts that count as served are the integrated circuits (more pins than
+/// a small part) and inductors on the rail: a regulator's output capacitor
+/// stands by its inductor, a decoupling capacitor by its IC. Rails reach
+/// everywhere, so [`isolated_parts`] cannot see this: a capacitor wired only
+/// to rails has no signal neighbour. The nearest part it should stand beside
+/// is returned.
+pub(crate) fn rail_capacitors_far(board: &Board, placement: &Placement) -> Vec<Isolated> {
+    let centres: HashMap<ComponentId, (f64, f64)> = placement
+        .components
+        .iter()
+        .map(|p| (p.id, mm(p.center)))
+        .collect();
+    let serves = |id: ComponentId| {
+        board.component(id).is_some_and(|c| {
+            c.kind.as_str() == "inductor"
+                || c.part
+                    .as_ref()
+                    .is_some_and(|p| p.pins.len() > SMALL_PART_PINS)
+        })
+    };
+    let is_ground = |net: &synth_ir::Net| net.name.to_lowercase().contains("gnd");
+    let mut found = Vec::new();
+    for component in &board.components {
+        let id = component.id;
+        if component.kind.as_str() != "capacitor" {
+            continue;
+        }
+        let Some(here) = centres.get(&id) else {
+            continue;
+        };
+        let nets: Vec<&synth_ir::Net> = board
+            .nets
+            .iter()
+            .filter(|n| n.endpoints.iter().any(|e| e.component == id))
+            .collect();
+        let rail = nets
+            .iter()
+            .find(|n| crate::repeats::is_rail(board, n) && !is_ground(n));
+        if nets.len() != 2 || !nets.iter().any(|n| is_ground(n)) {
+            continue;
+        }
+        let Some(rail) = rail else { continue };
+        let nearest = rail
+            .endpoints
+            .iter()
+            .map(|e| e.component)
+            .filter(|c| *c != id && serves(*c))
+            .filter_map(|c| {
+                let at = centres.get(&c)?;
+                Some((c, (here.0 - at.0).hypot(here.1 - at.1)))
+            })
+            .min_by(|a, b| a.1.total_cmp(&b.1));
+        if let Some((neighbour, mm)) = nearest {
+            if mm > RAIL_CAP_MM {
+                found.push(Isolated { id, neighbour, mm });
+            }
+        }
+    }
+    found.sort_by(|a, b| b.mm.total_cmp(&a.mm));
+    found
+}
