@@ -2301,7 +2301,16 @@ fn build_footprint_instance(
         "effects",
         vec![Sexp::list(
             "font",
-            vec![Sexp::list("size", vec![num(1.0), num(1.0)])],
+            vec![
+                Sexp::list(
+                    "size",
+                    vec![
+                        num(silk_labels::LABEL_FONT_MM),
+                        num(silk_labels::LABEL_FONT_MM),
+                    ],
+                ),
+                Sexp::list("thickness", vec![num(silk_labels::LABEL_STROKE_MM)]),
+            ],
         )],
     ));
 

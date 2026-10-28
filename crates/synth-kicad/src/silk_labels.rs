@@ -15,12 +15,22 @@ use synth_ir::ComponentId;
 
 /// Gap between a footprint's dimensions and its label, the long-standing default.
 pub(crate) const DEFAULT_MARGIN_MM: f64 = 3.5;
-/// Width of one character at the 1 mm font the export uses.
-const CHAR_WIDTH_MM: f64 = 1.0;
+/// Size of a reference label's font, in millimetres. A little under the 1 mm
+/// KiCad starts from, so a label takes less of a crowded board.
+pub(crate) const LABEL_FONT_MM: f64 = 0.8;
+/// Stroke of a label's letters; KiCad's default is a fifth of the size, which
+/// reads heavy on a small label.
+pub(crate) const LABEL_STROKE_MM: f64 = 0.12;
+/// Width of one character at that font.
+const CHAR_WIDTH_MM: f64 = LABEL_FONT_MM;
 /// Height of a line of text, with room for the stroke.
-const TEXT_HEIGHT_MM: f64 = 1.3;
+const TEXT_HEIGHT_MM: f64 = LABEL_FONT_MM * 1.3;
+/// A label keeps this far from a neighbour's courtyard: a footprint draws its
+/// silkscreen on and just outside the courtyard, and the fab's silkscreen
+/// clearance applies to text and outline alike.
+const NEIGHBOUR_CLEARANCE_MM: f64 = 0.3;
 /// Gap between a part's courtyard and an alternative label position.
-const SIDE_GAP_MM: f64 = 0.3;
+const SIDE_GAP_MM: f64 = 0.35;
 /// A label keeps this far inside the board edge.
 const EDGE_CLEARANCE_MM: f64 = 0.2;
 
@@ -145,13 +155,16 @@ pub(crate) fn place_labels(
             parts
                 .iter()
                 .filter(|o| o.id != part.id)
-                .map(|o| o.courtyard)
+                .map(|o| grown(o.courtyard, NEIGHBOUR_CLEARANCE_MM))
         };
-        let fits = |pos: LabelPos| {
+        // How much of a candidate's box sits on neighbours' courtyards and
+        // already placed labels, in square nanometres: zero means it fits.
+        let clash = |pos: LabelPos| -> i128 {
             let b = label_box(part, pos);
-            inside(outline, b)
-                && !others().any(|c| c.intersects(&b))
-                && !taken.iter().any(|t| t.intersects(&b))
+            others()
+                .map(|c| overlap_area(&c, &b))
+                .chain(taken.iter().map(|t| overlap_area(t, &b)))
+                .sum()
         };
         let pos = match from_design {
             Some(forced) if hard => pulled_inside(part, outline, forced),
@@ -164,29 +177,24 @@ pub(crate) fn place_labels(
                             .map(|s| side_candidate(part, s)),
                     )
                     .chain(std::iter::once(default))
+                    .chain(extra_candidates(part))
                     .collect();
+                let on_board = |p: &LabelPos| inside(outline, label_box(part, *p));
+                // The first candidate that is on the board and clear of everything,
+                // in the order of preference; failing that the one on the board
+                // that clashes least, so a crowded spot is the least crowded one.
                 candidates
                     .iter()
                     .copied()
-                    .find(|&p| fits(p))
-                    .unwrap_or_else(|| {
-                        // Every side is blocked by a courtyard or a label. A label
-                        // past Edge.Cuts is worse than a crowded one, so keep the
-                        // box on the board, preferring a spot clear of the labels
-                        // already placed, and only then pull the default inside.
+                    .find(|p| on_board(p) && clash(*p) == 0)
+                    .or_else(|| {
                         candidates
                             .iter()
                             .copied()
-                            .filter(|&p| inside(outline, label_box(part, p)))
-                            .find(|&p| !taken.iter().any(|t| t.intersects(&label_box(part, p))))
-                            .or_else(|| {
-                                candidates
-                                    .iter()
-                                    .copied()
-                                    .find(|&p| inside(outline, label_box(part, p)))
-                            })
-                            .unwrap_or_else(|| pulled_inside(part, outline, default))
+                            .filter(on_board)
+                            .min_by_key(|p| clash(*p))
                     })
+                    .unwrap_or_else(|| pulled_inside(part, outline, default))
             }
         };
         taken.push(label_box(part, pos));
@@ -210,6 +218,82 @@ fn side_candidate(part: &LabelPart, side: Side) -> LabelPos {
         Side::Right => (court.max.x_nm + gap + width / 2, mid_y),
     };
     local_label(part, Point::new(x, y), 0.0)
+}
+
+/// `rect` grown by `by_mm` on every side.
+fn grown(rect: Rect, by_mm: f64) -> Rect {
+    let by = mm_to_nm(by_mm);
+    Rect::new(
+        Point::new(rect.min.x_nm - by, rect.min.y_nm - by),
+        Point::new(rect.max.x_nm + by, rect.max.y_nm + by),
+    )
+}
+
+/// The area two boxes share, in square nanometres; zero when they do not meet.
+fn overlap_area(a: &Rect, b: &Rect) -> i128 {
+    let w = (a.max.x_nm.min(b.max.x_nm) - a.min.x_nm.max(b.min.x_nm)).max(0);
+    let h = (a.max.y_nm.min(b.max.y_nm) - a.min.y_nm.max(b.min.y_nm)).max(0);
+    i128::from(w) * i128::from(h)
+}
+
+/// More places than the four sides: the label slid along each side, set on the
+/// corners, and turned a quarter beside a tall part, for a part whose four
+/// plain sides are all taken.
+fn extra_candidates(part: &LabelPart) -> Vec<LabelPos> {
+    let width = text_width_nm(&part.refdes);
+    let height = mm_to_nm(TEXT_HEIGHT_MM);
+    let gap = mm_to_nm(SIDE_GAP_MM);
+    let c = part.courtyard;
+    let (mid_x, mid_y) = ((c.min.x_nm + c.max.x_nm) / 2, (c.min.y_nm + c.max.y_nm) / 2);
+    let mut out = Vec::new();
+    // Along a side: shifted toward either end by a third of the length, and by
+    // half a text width past the corner.
+    for k in [-1_i64, 1] {
+        let slide_x = k * ((c.max.x_nm - c.min.x_nm) / 3 + width / 4);
+        let slide_y = k * ((c.max.y_nm - c.min.y_nm) / 3 + height);
+        out.push(local_label(
+            part,
+            Point::new(mid_x + slide_x, c.min.y_nm - gap - height / 2),
+            0.0,
+        ));
+        out.push(local_label(
+            part,
+            Point::new(mid_x + slide_x, c.max.y_nm + gap + height / 2),
+            0.0,
+        ));
+        out.push(local_label(
+            part,
+            Point::new(c.min.x_nm - gap - width / 2, mid_y + slide_y),
+            0.0,
+        ));
+        out.push(local_label(
+            part,
+            Point::new(c.max.x_nm + gap + width / 2, mid_y + slide_y),
+            0.0,
+        ));
+    }
+    // Corners.
+    for (x, y) in [
+        (c.min.x_nm - gap - width / 2, c.min.y_nm - gap - height / 2),
+        (c.max.x_nm + gap + width / 2, c.min.y_nm - gap - height / 2),
+        (c.min.x_nm - gap - width / 2, c.max.y_nm + gap + height / 2),
+        (c.max.x_nm + gap + width / 2, c.max.y_nm + gap + height / 2),
+    ] {
+        out.push(local_label(part, Point::new(x, y), 0.0));
+    }
+    // Turned a quarter beside the part, where a long label would reach a neighbour
+    // across.
+    out.push(local_label(
+        part,
+        Point::new(c.min.x_nm - gap - height / 2, mid_y),
+        90.0,
+    ));
+    out.push(local_label(
+        part,
+        Point::new(c.max.x_nm + gap + height / 2, mid_y),
+        90.0,
+    ));
+    out
 }
 
 /// A label at `angle_deg`, centred on a board-coordinate point.
@@ -378,12 +462,53 @@ mod tests {
         let b = label_box(&part, pos);
         let marker_box = label_box(&marker, placed[&marker.id]);
 
-        assert_eq!(pos, side_candidate(&part, Side::Left));
+        // Every plain side is blocked. The fallback takes the spot that touches
+        // the least, which is no worse than the left side it used to take.
+        let clash = |p: LabelPos| -> i128 {
+            let b = label_box(&part, p);
+            parts
+                .iter()
+                .filter(|o| o.id != part.id)
+                .map(|o| overlap_area(&grown(o.courtyard, NEIGHBOUR_CLEARANCE_MM), &b))
+                .sum()
+        };
+        assert!(
+            clash(pos) <= clash(side_candidate(&part, Side::Left)),
+            "the fallback {pos:?} clashes more than the left side"
+        );
         assert!(inside(outline(), b), "fallback label {b:?} off the board");
         assert!(
             !overlaps(b, marker_box),
             "fallback label {b:?} overlaps the placed label {marker_box:?}"
         );
+    }
+
+    #[test]
+    fn a_label_keeps_clear_of_the_margin_round_a_neighbours_courtyard() {
+        let part = resistor(1, "R1", 20.0, 20.0);
+        // A neighbour whose courtyard ends 0.15 mm above where the label would
+        // start: not overlapping, but inside the clearance a silkscreen needs.
+        let label_top = 20.0 - 0.5 - SIDE_GAP_MM - TEXT_HEIGHT_MM;
+        let mut neighbour = resistor(2, "U1", 20.0, label_top - 0.15 - 0.5);
+        neighbour.courtyard = rect(20.0, label_top - 0.15 - 0.5, 6.0, 1.0);
+        let parts = [part.clone(), neighbour.clone()];
+        let placed = place(&parts, outline());
+        let b = label_box(&part, placed[&part.id]);
+        assert!(
+            !overlaps(b, grown(neighbour.courtyard, NEIGHBOUR_CLEARANCE_MM)),
+            "label {b:?} sits inside the neighbour's silkscreen margin"
+        );
+        assert_ne!(placed[&part.id], side_candidate(&part, Side::Above));
+    }
+
+    #[test]
+    fn the_label_font_is_a_little_under_a_millimetre() {
+        assert!((LABEL_FONT_MM - 0.8).abs() < 1e-9);
+        // The placer measures labels at the size the export writes.
+        let part = resistor(1, "R12", 20.0, 20.0);
+        let b = label_box(&part, side_candidate(&part, Side::Above));
+        let width = nm_to_mm(b.max.x_nm - b.min.x_nm);
+        assert!((width - 3.0 * LABEL_FONT_MM).abs() < 1e-6, "{width}");
     }
 
     #[test]
