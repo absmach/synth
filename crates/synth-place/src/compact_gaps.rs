@@ -23,7 +23,7 @@ use super::{
     tight_edge_margin_mm, total_hpwl_nm, trim_outline_to_grid, Board, ComponentPlacement,
     Placement, Point, Rect,
 };
-use synth_geometry::mm_to_nm;
+use synth_geometry::{mm_to_nm, nm_to_mm};
 
 /// The spacing a compaction closes the layout to.
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -522,6 +522,83 @@ fn edge_gap_nm(rect: &Rect, outline: Rect, edge: usize) -> i64 {
     }
 }
 
+/// A part that holds a connector edge of the outline away from its connectors.
+#[derive(Debug, Clone)]
+pub(crate) struct HoldingOutline {
+    pub id: crate::ComponentId,
+    /// The edge index: left 0, top 1, right 2, bottom 3.
+    pub edge: usize,
+    /// How far the edge's flush connectors sit inside it because of this part.
+    pub connector_gap_mm: f64,
+    /// How far inward the part has to move for the outline to close up.
+    pub move_in_mm: f64,
+}
+
+/// A connector that is flush with an edge has to sit on it, but the outline is
+/// fitted a rim away from every other part, so a passive standing within that
+/// rim of the connectors' edge pushes the outline out and leaves the
+/// connectors short of it. Lists those parts, with the inward move that lets
+/// the edge return to the connectors.
+pub(crate) fn parts_holding_outline(board: &Board, placement: &Placement) -> Vec<HoldingOutline> {
+    let mut fitted = placement.clone();
+    let rim_mm = tight_edge_margin_mm(board);
+    fit_outline_with_margin_mm(board, &mut fitted, rim_mm);
+    let outline = fitted.board_outline;
+    let geom = geometry(board, &fitted);
+    let rects: Vec<Rect> = fitted
+        .components
+        .iter()
+        .zip(&geom)
+        .map(|(p, g)| geom_rect(p, g))
+        .collect();
+    let flush: Vec<Option<usize>> = fitted
+        .components
+        .iter()
+        .map(|p| flush_edge_index(board, p.id))
+        .collect();
+    let mut found = Vec::new();
+    for edge in 0..4 {
+        let Some(connector_gap) = (0..rects.len())
+            .filter(|&i| flush[i] == Some(edge))
+            .map(|i| edge_gap_nm(&rects[i], outline, edge))
+            .min()
+        else {
+            continue;
+        };
+        let held_mm = nm_to_mm(connector_gap) - SNAP_GAP_MM;
+        if held_mm < MIN_HELD_MM {
+            continue;
+        }
+        for (j, part) in fitted.components.iter().enumerate() {
+            let is_hole = board
+                .component(part.id)
+                .is_some_and(|c| c.kind.as_str() == "mounting_hole");
+            if flush[j].is_some() || is_hole {
+                continue;
+            }
+            let reach = nm_to_mm(edge_gap_nm(&rects[j], outline, edge));
+            if reach <= rim_mm + RIM_SLACK_MM {
+                found.push(HoldingOutline {
+                    id: part.id,
+                    edge,
+                    connector_gap_mm: nm_to_mm(connector_gap),
+                    move_in_mm: (held_mm * 10.0).ceil() / 10.0,
+                });
+            }
+        }
+    }
+    found
+}
+
+/// The gap a flush connector keeps to its edge when nothing holds it away.
+const SNAP_GAP_MM: f64 = 0.25;
+
+/// A connector edge counts as held off when its connectors sit this far further in.
+const MIN_HELD_MM: f64 = 0.3;
+
+/// A part this near the rim distance from the edge is the one that sets it.
+const RIM_SLACK_MM: f64 = 0.1;
+
 /// Fitting the outline round the corner holes can leave it further out than
 /// a connector row, so each flush connector returns to the gap it had to its
 /// edge, unless another part is in the way.
@@ -841,6 +918,47 @@ mod tests {
             checked += 1;
         }
         assert!(checked > 0, "the board has no flush connectors");
+    }
+
+    #[test]
+    fn a_passive_inside_the_rim_of_a_connector_edge_is_reported_and_clears_when_moved() {
+        let board = load_board("../../fixtures/designs/edge_jst_connectors.synth");
+        let mut placement = spread(&board);
+        let after = compact_by_gaps(
+            &board,
+            &placement,
+            GapSpacing {
+                gap_mm: 2.0,
+                dense_gap_mm: 2.0,
+            },
+        )
+        .expect("compacts");
+        placement = after;
+        let rects_now = rects(&board, &placement);
+        let by_refdes = |r: &str| {
+            placement
+                .components
+                .iter()
+                .position(|p| board.component(p.id).is_some_and(|c| c.refdes == r))
+                .expect(r)
+        };
+        let (j3, c1) = (by_refdes("J3"), by_refdes("C1"));
+        let half = (rects_now[c1].max.y_nm - rects_now[c1].min.y_nm) / 2;
+        // C1 stands with its far side level with the bottom connector's face.
+        placement.components[c1].center.y_nm = rects_now[j3].max.y_nm - half;
+        let held = parts_holding_outline(&board, &placement);
+        let id = placement.components[c1].id;
+        let hit = held.iter().find(|h| h.id == id).expect("C1 reported");
+        assert_eq!(hit.edge, 3);
+        assert!(hit.move_in_mm > 0.5, "{}", hit.move_in_mm);
+
+        placement.components[c1].center.y_nm -= mm_to_nm(4.0);
+        assert!(
+            parts_holding_outline(&board, &placement)
+                .iter()
+                .all(|h| h.id != id),
+            "C1 no longer holds the outline once it is 4 mm in"
+        );
     }
 
     fn area_of(placement: &Placement) -> f64 {

@@ -6220,6 +6220,47 @@ pub fn describe_placement(board: &Board, placement: &Placement) -> PlacementDesc
         ));
     }
 
+    // The outline is fitted a rim away from every part that is not a flush
+    // connector. A part standing inside that rim on a connector edge holds the
+    // outline out and leaves the connectors short of the board edge.
+    for h in compact_gaps::parts_holding_outline(board, placement)
+        .into_iter()
+        .take(MAX_ALIGNMENT_WARNINGS)
+    {
+        let Some(part) = board.component(h.id) else {
+            continue;
+        };
+        let Some(here) = placement.components.iter().find(|p| p.id == h.id) else {
+            continue;
+        };
+        let (side, dx, dy) = match h.edge {
+            0 => ("left", 1.0, 0.0),
+            1 => ("top", 0.0, 1.0),
+            2 => ("right", -1.0, 0.0),
+            _ => ("bottom", 0.0, -1.0),
+        };
+        let (x, y) = (
+            synth_geometry::nm_to_mm(here.center.x_nm) + dx * h.move_in_mm,
+            synth_geometry::nm_to_mm(here.center.y_nm) + dy * h.move_in_mm,
+        );
+        functional_warnings.push(format!(
+            "{} stands in the rim of the {side} edge and holds the outline {:.2} mm away from that edge's connectors; move it {:.1} mm inward, to ({x:.2}, {y:.2}) mm",
+            part.refdes, h.connector_gap_mm, h.move_in_mm
+        ));
+        recommended_actions.push(PlacementRecommendation {
+            action: "move_off_edge_rim".into(),
+            refdes: part.refdes.clone(),
+            relative_to: None,
+            suggested_x_mm: Some(x),
+            suggested_y_mm: Some(y),
+            suggested_rotation_deg: None,
+            rationale: format!(
+                "{} holds the {side} edge out; the connectors there return to the board edge once it moves in",
+                part.refdes
+            ),
+        });
+    }
+
     // Human-style first-pass review of dense connector composition. A
     // high-pin connector should be edge-mounted, oriented so its long pin
     // row follows that edge, and have a clear first escape corridor to the
