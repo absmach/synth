@@ -74,6 +74,8 @@
 )]
 
 pub mod advisor;
+mod compact_gaps;
+pub use compact_gaps::{compact_by_gaps, courtyard_rect_probe, hpwl_probe, GapSpacing};
 pub mod board_family;
 pub mod cem;
 pub mod fitness;
