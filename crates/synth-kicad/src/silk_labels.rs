@@ -141,6 +141,7 @@ pub(crate) fn place_labels(
                 .iter()
                 .filter(|o| o.id != part.id)
                 .map(|o| grown(o.courtyard, NEIGHBOUR_CLEARANCE_MM))
+                .chain(std::iter::once(grown(part.courtyard, 0.1)))
         };
         let mut candidates: Vec<LabelPos> = [Side::Above, Side::Below, Side::Left, Side::Right]
             .map(|s| side_candidate(part, s))
@@ -187,9 +188,12 @@ pub(crate) fn place_labels(
         };
         // How much of a candidate's box sits on neighbours' courtyards and
         // already placed labels, in square nanometres: zero means it fits.
+        // The part's own courtyard counts too: a label over its own part's body
+        // sits on that part's silkscreen outline.
         let clash = |pos: LabelPos| -> i128 {
             let b = label_box(part, pos);
             others()
+                .chain(std::iter::once(grown(part.courtyard, 0.1)))
                 .map(|c| overlap_area(&c, &b))
                 .chain(taken.iter().map(|t| overlap_area(t, &b)))
                 .sum()
@@ -594,6 +598,21 @@ mod tests {
                 assert!(!overlaps(*a, p.courtyard), "a label sits on a part: {a:?}");
             }
         }
+    }
+
+    #[test]
+    fn a_label_never_sits_on_its_own_part() {
+        // A wide connector at the top of a narrow board: the sides above it are off
+        // the board, and the least-bad spot must still not be over its own body.
+        let mut part = resistor(1, "J1", 20.0, 4.0);
+        part.courtyard = rect(20.0, 4.0, 12.0, 6.0);
+        let placed = place(std::slice::from_ref(&part), outline());
+        let b = label_box(&part, placed[&part.id]);
+        assert!(
+            !overlaps(b, part.courtyard),
+            "the label {b:?} is over its own part {:?}",
+            part.courtyard
+        );
     }
 
     #[test]
