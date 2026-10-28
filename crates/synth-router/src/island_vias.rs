@@ -1432,6 +1432,265 @@ fn uuid_for(via: &TieVia) -> String {
     )
 }
 
+/// Moves each via that sits in a pad of its own net off that pad, taking the
+/// tracks that end at it along, and returns how many it moved.
+///
+/// The engine puts a via at the edge of a pad now and then, and the release
+/// gate refuses a via in a pad. A via that is a few tenths of a millimetre from
+/// where it should be is not a reason to give up a board that otherwise routes:
+/// the nearest spot that keeps the via's hole off every pad and clear of other
+/// copper is found, the via and the track ends that met it move there, and the
+/// caller validates the result as it validates any candidate. A via with no
+/// such spot is left where it is.
+///
+/// # Errors
+/// Returns why the board could not be read or written.
+#[allow(clippy::cast_precision_loss)]
+pub fn move_vias_off_pads(candidate: &Path) -> Result<usize, String> {
+    let text = std::fs::read_to_string(candidate)
+        .map_err(|e| format!("could not read {}: {e}", candidate.display()))?;
+    let board = PcbBoard::parse(&text).map_err(|e| e.to_string())?;
+    let mut out = text.clone();
+    let mut moved = 0;
+    let mut taken: Vec<((f64, f64), f64)> = Vec::new();
+    for via in &board.vias {
+        let Some(net) = net_of(&board, via.net, via.net_name.as_ref()) else {
+            continue;
+        };
+        let in_pad = board.pads().any(|pad| {
+            pad.net == via.net
+                && (pad.kind == "thru_hole" || pad.layers.iter().any(|l| via.layers.contains(l)))
+                && pad.signed_distance_nm(via.at) <= (via.drill_nm / 2) as f64
+        });
+        if !in_pad {
+            continue;
+        }
+        let from = (via.at.x_mm(), via.at.y_mm());
+        let radius = nm_to_mm(via.size_nm) / 2.0;
+        let keepout = Keepout::from_board(&board, &net);
+        let attached: Vec<&crate::pcb_read::Segment> = board
+            .segments
+            .iter()
+            .filter(|segment| {
+                net_of(&board, segment.net, segment.net_name.as_ref()).as_deref() == Some(&net)
+                    && via.layers.contains(&segment.layer)
+                    && (near(segment.start, from) || near(segment.end, from))
+            })
+            .collect();
+        let others: Vec<((f64, f64), f64)> = taken.clone();
+        let Some(to) = nearest_free_spot(from, radius, &keepout, &others, |p| {
+            attached.iter().all(|segment| {
+                let far = if near(segment.start, from) {
+                    segment.end
+                } else {
+                    segment.start
+                };
+                let far = (far.x_mm(), far.y_mm());
+                // The track from where it was to the new spot must also be clear.
+                let half = nm_to_mm(segment.width_nm) / 2.0;
+                let steps = 8_u32;
+                (0..=steps).all(|i| {
+                    let t = f64::from(i) / f64::from(steps);
+                    let at = (far.0 + (p.0 - far.0) * t, far.1 + (p.1 - far.1) * t);
+                    keepout.track_clear(at, half)
+                })
+            })
+        }) else {
+            // Nowhere to put it. A via that carries no track and has a neighbour of
+            // its net close by, one the pad does not swallow, only joins the pours
+            // that the neighbour joins as well, so it can simply go.
+            let spare = attached.is_empty()
+                && board.vias.iter().any(|other| {
+                    other != via
+                        && net_of(&board, other.net, other.net_name.as_ref()).as_deref()
+                            == Some(&net)
+                        && (other.at.x_mm() - from.0).hypot(other.at.y_mm() - from.1) < 3.0
+                        && !board.pads().any(|pad| {
+                            pad.net == other.net
+                                && pad.signed_distance_nm(other.at) <= (other.drill_nm / 2) as f64
+                        })
+                });
+            if spare {
+                out = remove_via_in_text(&out, from);
+                moved += 1;
+            }
+            continue;
+        };
+        out = move_via_in_text(&out, from, to);
+        taken.push((to, radius));
+        moved += 1;
+    }
+    if moved > 0 {
+        std::fs::write(candidate, out)
+            .map_err(|e| format!("could not write {}: {e}", candidate.display()))?;
+    }
+    Ok(moved)
+}
+
+fn near(p: Point, at: (f64, f64)) -> bool {
+    (p.x_mm() - at.0).hypot(p.y_mm() - at.1) < 0.01
+}
+
+impl Keepout {
+    /// Whether a track of half width `half` passing through `p` keeps clear of
+    /// every pad, via and foreign track.
+    fn track_clear(&self, p: (f64, f64), half: f64) -> bool {
+        let need = half + TRACK_GAP_MM;
+        self.pads.iter().all(|pad| pad.distance(p) >= need - EPS)
+            && self
+                .tracks
+                .iter()
+                .all(|(a, b, other)| point_segment(p, *a, *b) >= need + other - EPS)
+    }
+}
+
+/// The track-to-copper gap a moved track keeps, a little over the board's
+/// usual 0.127 mm minimum.
+const TRACK_GAP_MM: f64 = 0.15;
+
+/// The nearest point within a millimetre of `from` where a via of `radius` with a
+/// hole of `hole` is clear of everything, and `accept` agrees.
+fn nearest_free_spot(
+    from: (f64, f64),
+    radius: f64,
+    keepout: &Keepout,
+    taken: &[((f64, f64), f64)],
+    accept: impl Fn((f64, f64)) -> bool,
+) -> Option<(f64, f64)> {
+    for step in 1..=12_u32 {
+        let r = f64::from(step) * 0.1;
+        for k in 0..24_u32 {
+            let angle = f64::from(k) * std::f64::consts::TAU / 24.0;
+            let p = (from.0 + r * angle.cos(), from.1 + r * angle.sin());
+            if keepout.clear_of_pads_only(p, radius, from)
+                && taken.iter().all(|(at, other)| {
+                    (at.0 - p.0).hypot(at.1 - p.1) >= radius + other + VIA_GAP_MM
+                })
+                && accept(p)
+            {
+                return Some(p);
+            }
+        }
+    }
+    None
+}
+
+impl Keepout {
+    /// A via of `radius` at `p` keeps [`VIA_GAP_MM`] from every pad, foreign
+    /// track and via other than the one being moved (which is at the same spot
+    /// it started from, so it would never be clear of itself).
+    fn clear_of_pads_only(&self, p: (f64, f64), radius: f64, ignore: (f64, f64)) -> bool {
+        let need = radius + VIA_GAP_MM;
+        self.pads.iter().all(|pad| pad.distance(p) >= need - EPS)
+            && self
+                .tracks
+                .iter()
+                .all(|(a, b, half)| point_segment(p, *a, *b) >= need + half - EPS)
+            && self.vias.iter().all(|(at, other)| {
+                (at.0 - ignore.0).hypot(at.1 - ignore.1) < 0.01
+                    || (at.0 - p.0).hypot(at.1 - p.1) >= need + other - EPS
+            })
+    }
+}
+
+/// `text` with the via at `from`, and the ends of the tracks that meet it, put
+/// at `to`.
+fn move_via_in_text(text: &str, from: (f64, f64), to: (f64, f64)) -> String {
+    let mut out = String::with_capacity(text.len());
+    let mut rest = text;
+    while let Some(start) = next_block(rest) {
+        out.push_str(&rest[..start]);
+        let block = &rest[start..];
+        let Some(end) = block_end(block) else {
+            out.push_str(block);
+            rest = "";
+            break;
+        };
+        let (head, body) = block.split_at(end);
+        out.push_str(&rewrite_points(head, from, to));
+        rest = body;
+    }
+    out.push_str(rest);
+    out
+}
+
+/// `text` without the via at `at`.
+fn remove_via_in_text(text: &str, at: (f64, f64)) -> String {
+    let mut out = String::with_capacity(text.len());
+    let mut rest = text;
+    while let Some(i) = rest.find("(via") {
+        let block = &rest[i..];
+        let Some(end) = block_end(block) else {
+            break;
+        };
+        let here = rewrite_points(&block[..end], at, (f64::NAN, f64::NAN)).contains("NaN");
+        if here {
+            // Take the line's leading whitespace with it.
+            let head = rest[..i].trim_end_matches([' ', '\t']);
+            out.push_str(head);
+            rest = block[end..].trim_start_matches('\n');
+        } else {
+            out.push_str(&rest[..i + end]);
+            rest = &block[end..];
+        }
+    }
+    out.push_str(rest);
+    out
+}
+
+/// The index of the next `(via` or `(segment` block in `text`.
+fn next_block(text: &str) -> Option<usize> {
+    let via = text.find("(via");
+    let segment = text.find("(segment");
+    match (via, segment) {
+        (Some(a), Some(b)) => Some(a.min(b)),
+        (a, b) => a.or(b),
+    }
+}
+
+/// The length of the balanced `(...)` block `text` starts with.
+fn block_end(text: &str) -> Option<usize> {
+    let mut depth = 0_i32;
+    for (i, c) in text.char_indices() {
+        match c {
+            '(' => depth += 1,
+            ')' => {
+                depth -= 1;
+                if depth == 0 {
+                    return Some(i + 1);
+                }
+            }
+            _ => {}
+        }
+    }
+    None
+}
+
+/// `block` with every `(at X Y)`, `(start X Y)` and `(end X Y)` at `from` put at `to`.
+fn rewrite_points(block: &str, from: (f64, f64), to: (f64, f64)) -> String {
+    let mut out = String::with_capacity(block.len());
+    let mut rest = block;
+    'scan: while !rest.is_empty() {
+        for tag in ["(at ", "(start ", "(end "] {
+            if let Some(after) = rest.strip_prefix(tag) {
+                let close = after.find(')').unwrap_or(after.len());
+                let mut numbers = after[..close].split_whitespace().map(str::parse::<f64>);
+                if let (Some(Ok(x)), Some(Ok(y))) = (numbers.next(), numbers.next()) {
+                    if (x - from.0).abs() < 0.002 && (y - from.1).abs() < 0.002 {
+                        let _ = write!(out, "{tag}{:.6} {:.6}", to.0, to.1);
+                        rest = &after[close..];
+                        continue 'scan;
+                    }
+                }
+            }
+        }
+        let c = rest.chars().next().unwrap_or(' ');
+        out.push(c);
+        rest = &rest[c.len_utf8()..];
+    }
+    out
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -2094,6 +2353,69 @@ mod tests {
             started.elapsed() < std::time::Duration::from_secs(20),
             "the search took {:?}",
             started.elapsed()
+        );
+    }
+
+    #[test]
+    #[allow(clippy::cast_precision_loss)]
+    fn a_via_in_a_pad_of_its_net_is_moved_off_it_with_the_track_that_meets_it() {
+        // A ground via 0.025 mm outside a ground pad's edge, with a track to a far pad.
+        let text = r#"(kicad_pcb
+          (layers (0 "F.Cu" signal) (2 "B.Cu" signal))
+          (net 0 "") (net 1 "GND") (net 2 "SIG")
+          (footprint "J" (at 10 10) (layer "F.Cu")
+            (pad "1" thru_hole rect (at 0 0) (size 1.8 1.8) (drill 0.8) (layers "*.Cu") (net 1 "GND")))
+          (via (at 9.0 10.0) (size 0.6) (drill 0.3) (layers "F.Cu" "B.Cu") (net 1))
+          (segment (start 9.0 10.0) (end 4.0 10.0) (width 0.25) (layer "F.Cu") (net 1))
+        )"#;
+        let dir = std::env::temp_dir().join(format!("via-repair-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("board.kicad_pcb");
+        std::fs::write(&path, text).unwrap();
+        assert_eq!(move_vias_off_pads(&path), Ok(1));
+        let moved = PcbBoard::parse(&std::fs::read_to_string(&path).unwrap()).unwrap();
+        let via = &moved.vias[0];
+        let pad = moved.pads().next().unwrap();
+        assert!(
+            pad.signed_distance_nm(via.at) > via.drill_nm as f64 / 2.0,
+            "the via is off the pad"
+        );
+        let seg = &moved.segments[0];
+        assert!(
+            (seg.start.x_mm() - via.at.x_mm()).hypot(seg.start.y_mm() - via.at.y_mm()) < 0.01,
+            "the track still meets the via"
+        );
+        assert_eq!(moved.footprints[0].pads.len(), 1, "nothing else changed");
+        // A second pass finds nothing to move.
+        assert_eq!(move_vias_off_pads(&path), Ok(0));
+    }
+
+    #[test]
+    fn a_via_with_no_room_to_move_is_dropped_when_a_neighbour_of_its_net_covers_for_it() {
+        // The via sits on a ground pad, boxed in by another net's pads, with a
+        // second ground via 1.5 mm away that is not in any pad.
+        let text = r#"(kicad_pcb
+          (layers (0 "F.Cu" signal) (2 "B.Cu" signal))
+          (net 0 "") (net 1 "GND") (net 2 "SIG")
+          (footprint "J" (at 10 10) (layer "F.Cu")
+            (pad "1" smd rect (at 0 0) (size 1.0 1.0) (layers "F.Cu") (net 1 "GND"))
+            (pad "2" smd rect (at 0 1.6) (size 3.0 1.2) (layers "F.Cu") (net 2 "SIG"))
+            (pad "3" smd rect (at 0 -1.6) (size 3.0 1.2) (layers "F.Cu") (net 2 "SIG"))
+            (pad "4" smd rect (at 1.6 0) (size 1.2 3.0) (layers "F.Cu") (net 2 "SIG"))
+            (pad "5" smd rect (at -1.6 0) (size 1.2 3.0) (layers "F.Cu") (net 2 "SIG")))
+          (via (at 10.0 10.0) (size 0.6) (drill 0.3) (layers "F.Cu" "B.Cu") (net 1))
+          (via (at 11.5 12.5) (size 0.6) (drill 0.3) (layers "F.Cu" "B.Cu") (net 1))
+        )"#;
+        let dir = std::env::temp_dir().join(format!("via-drop-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("board.kicad_pcb");
+        std::fs::write(&path, text).unwrap();
+        assert_eq!(move_vias_off_pads(&path), Ok(1));
+        let after = PcbBoard::parse(&std::fs::read_to_string(&path).unwrap()).unwrap();
+        assert_eq!(after.vias.len(), 1, "the covered-for via is gone");
+        assert!(
+            (after.vias[0].at.x_mm() - 11.5).abs() < 0.01,
+            "the other stays"
         );
     }
 

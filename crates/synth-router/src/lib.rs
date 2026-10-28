@@ -328,6 +328,13 @@ fn finalize(
     // promoted, because the island is a zone against itself and KiCad refuses it.
     let mut repair_blocking: Vec<String> = Vec::new();
     let mut repair_unavailable: Vec<String> = Vec::new();
+    // A via the engine left in a pad of its own net is moved off it, with the tracks
+    // that meet it, before the candidate is judged; the judging is unchanged.
+    match island_vias::move_vias_off_pads(&candidate.candidate_path) {
+        Ok(0) => {}
+        Ok(moved) => eprintln!("note: moved {moved} via(s) off the pads they sat in"),
+        Err(detail) => eprintln!("warning: vias in pads were not repaired: {detail}"),
+    }
     match island_vias::tie_islands(&candidate.candidate_path, &request.ground_nets) {
         Ok(outcome) => repair_blocking = outcome.unresolved,
         Err(detail) => {
