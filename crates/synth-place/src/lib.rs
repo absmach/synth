@@ -5401,10 +5401,13 @@ fn far_support_parts(board: &Board, placement: &Placement) -> Vec<FarSupportPart
     found
 }
 
-/// Farthest a test point may sit from the nearest pad on its net, centre to pad.
+/// Farthest a test point may sit from the nearest pad on its net, pad to pad.
 /// A probe point that is not beside what it measures is found by tracing, not by
 /// looking, and a long stub on a fast net changes the signal it probes.
 const TEST_POINT_MAX_MM: f64 = 5.0;
+
+/// The most far-test-point warnings one review lists; the rest are counted.
+const MAX_TEST_POINT_WARNINGS: usize = 6;
 
 /// A test point that is farther from every pad on its net than
 /// [`TEST_POINT_MAX_MM`].
@@ -5414,6 +5417,8 @@ struct FarTestPoint {
     /// The nearest pad's pin name, as a `near: <part>.<pin>` hint spells it.
     pin_name: String,
     mm: f64,
+    /// How far it may sit from the pad it probes: more beside a dense part.
+    limit_mm: f64,
 }
 
 /// Every test point whose nearest neighbour on its own net is farther than
@@ -5433,7 +5438,19 @@ fn far_test_points(board: &Board, placement: &Placement) -> Vec<FarTestPoint> {
             let Some(probe_placed) = by_id.get(&probe.component) else {
                 continue;
             };
-            let mut nearest: Option<(f64, &synth_ir::NetEndpoint)> = None;
+            // The probe's own pad, not its courtyard centre: a test-point
+            // footprint need not put its pad at the centre.
+            let probe_pad = apply_rotation(
+                **probe_placed,
+                pad_offsets
+                    .lookup(probe.component, probe.pin.0 as usize)
+                    .unwrap_or((0, 0)),
+            );
+            let mut nearest: Option<(f64, usize)> = None;
+            // The pad the advice names: on the largest part of the net, which
+            // is placed before the small ones, so a hint toward it holds. A
+            // two-pin passive is itself moved after the test point is.
+            let mut anchor_pad: Option<(usize, f64, &synth_ir::NetEndpoint)> = None;
             for other in net.endpoints.iter().filter(|e| {
                 board
                     .component(e.component)
@@ -5446,17 +5463,31 @@ fn far_test_points(board: &Board, placement: &Placement) -> Vec<FarTestPoint> {
                     .lookup(other.component, other.pin.0 as usize)
                     .unwrap_or((0, 0));
                 let pad = apply_rotation(**placed, offset);
-                let mm = synth_geometry::nm_to_mm(probe_placed.center.x_nm - pad.x_nm).hypot(
-                    synth_geometry::nm_to_mm(probe_placed.center.y_nm - pad.y_nm),
-                );
+                let mm = synth_geometry::nm_to_mm(probe_pad.x_nm - pad.x_nm)
+                    .hypot(synth_geometry::nm_to_mm(probe_pad.y_nm - pad.y_nm));
+                let pins = board
+                    .component(other.component)
+                    .and_then(|c| c.part.as_ref())
+                    .map_or(0, |p| p.pins.len());
                 if nearest.is_none_or(|(best, _)| mm < best) {
-                    nearest = Some((mm, other));
+                    nearest = Some((mm, pins));
+                }
+                if anchor_pad.is_none_or(|(n, d, _)| pins > n || (pins == n && mm < d)) {
+                    anchor_pad = Some((pins, mm, other));
                 }
             }
-            let Some((mm, endpoint)) = nearest else {
+            let (Some((mm, nearest_pins)), Some((_, _, endpoint))) = (nearest, anchor_pad) else {
                 continue;
             };
-            if mm <= TEST_POINT_MAX_MM {
+            // Beside a dense part the placer keeps its pin-escape ring free, so
+            // a test point cannot sit as close to its pads (see
+            // [`support_part_limit_mm`]).
+            let limit_mm = if nearest_pins >= DENSE_PART_PINS {
+                TEST_POINT_MAX_MM + DENSE_PART_RING_MM / 2.0 + 0.5
+            } else {
+                TEST_POINT_MAX_MM
+            };
+            if mm <= limit_mm {
                 continue;
             }
             let (Some(probe_part), Some(anchor)) = (
@@ -5475,6 +5506,7 @@ fn far_test_points(board: &Board, placement: &Placement) -> Vec<FarTestPoint> {
                 anchor: anchor.refdes.clone(),
                 pin_name,
                 mm,
+                limit_mm,
             });
         }
     }
@@ -6010,10 +6042,12 @@ pub fn describe_placement(board: &Board, placement: &Placement) -> PlacementDesc
     // A test point belongs beside the pad it probes.
     let mut far_probes = far_test_points(board, placement);
     far_probes.sort_by(|a, b| b.mm.total_cmp(&a.mm));
+    let omitted_probes = far_probes.len().saturating_sub(MAX_TEST_POINT_WARNINGS);
+    far_probes.truncate(MAX_TEST_POINT_WARNINGS);
     for far in far_probes {
         functional_warnings.push(format!(
             "{} is {:.0} mm from the nearest pad on its net ({} pin {}); keep a test point within {:.0} mm of what it probes",
-            far.refdes, far.mm, far.anchor, far.pin_name, TEST_POINT_MAX_MM
+            far.refdes, far.mm, far.anchor, far.pin_name, far.limit_mm
         ));
         recommended_actions.push(PlacementRecommendation {
             action: "place_test_point_near".into(),
@@ -6023,10 +6057,15 @@ pub fn describe_placement(board: &Board, placement: &Placement) -> PlacementDesc
             suggested_y_mm: None,
             suggested_rotation_deg: None,
             rationale: format!(
-                "add a hard `near: {}.{}` placement hint to {}: it places the test point at that pad",
+                "add a hard `near: {}.{}` placement hint to {}: it moves the test point beside that pad",
                 far.anchor, far.pin_name, far.refdes
             ),
         });
+    }
+    if omitted_probes > 0 {
+        functional_warnings.push(format!(
+            "{omitted_probes} more test point(s) are also farther from the pad they probe than allowed; fix the ones above first"
+        ));
     }
 
     // Copies of one circuit read as copies only when laid out alike. Compared
@@ -11609,13 +11648,206 @@ board "features_only" {
             synth_geometry::nm_to_mm(c1.y_nm),
         );
         let far = far_test_points(&board, &placement);
-        assert!(far.iter().any(|f| f.refdes == "TP1" && f.mm > 5.0));
+        assert!(far.iter().any(|f| f.refdes == "TP1" && f.mm > f.limit_mm));
         let desc = describe_placement(&board, &placement);
         assert!(desc
             .visual_review
             .recommended_actions
             .iter()
             .any(|a| a.action == "place_test_point_near" && a.refdes == "TP1"));
+    }
+
+    /// The feather board with a test point on C1's net, its footprint swapped
+    /// for one whose pad 1 is not at the courtyard centre.
+    fn feather_with_offset_test_point() -> Board {
+        let mut board = load_board_replacing(
+            FEATHER,
+            &[
+                (
+                    "component J2:",
+                    "component TP1: testpoint \"testpoint_pad_1_5\"\n  component J2:",
+                ),
+                (
+                    "connect J1.vbus -> C1.p1",
+                    "connect J1.vbus -> C1.p1\n  connect C1.p1 -> TP1.p1",
+                ),
+            ],
+        );
+        let tp = board
+            .components
+            .iter_mut()
+            .find(|c| c.refdes == "TP1")
+            .expect("TP1");
+        tp.part.as_mut().expect("part").kicad_footprint =
+            Some("Connector_PinHeader_2.54mm:PinHeader_1x02_P2.54mm_Vertical".into());
+        board
+    }
+
+    #[test]
+    fn a_test_point_is_measured_from_its_pad_not_its_centre() {
+        let board = feather_with_offset_test_point();
+        let mut placement = place(&board).expect("place");
+        for p in &mut placement.components {
+            p.rotation = Rotation::Zero;
+        }
+        let pad_offsets = build_pad_offset_lookup(&board);
+        let id = |refdes: &str| {
+            board
+                .components
+                .iter()
+                .find(|c| c.refdes == refdes)
+                .expect(refdes)
+                .id
+        };
+        let placed = |placement: &Placement, refdes: &str| {
+            *placement
+                .components
+                .iter()
+                .find(|p| p.id == id(refdes))
+                .expect(refdes)
+        };
+        let c1_pad = apply_rotation(
+            placed(&placement, "C1"),
+            pad_offsets.lookup(id("C1"), 0).unwrap_or((0, 0)),
+        );
+        let tp_offset = pad_offsets.lookup(id("TP1"), 0).expect("TP1 pad offset");
+        assert!(
+            tp_offset.0.abs() + tp_offset.1.abs() > mm_to_nm(1.0),
+            "the test point's pad must be off its centre: {tp_offset:?}"
+        );
+        // Put the test point's pad 4 mm from C1's pad: its centre is then
+        // farther than the 5 mm limit, its pad is not.
+        let target = Point::new(c1_pad.x_nm, c1_pad.y_nm + mm_to_nm(4.0));
+        move_part(
+            &mut placement,
+            &board,
+            "TP1",
+            synth_geometry::nm_to_mm(target.x_nm - tp_offset.0),
+            synth_geometry::nm_to_mm(target.y_nm - tp_offset.1),
+        );
+        for p in &mut placement.components {
+            p.rotation = Rotation::Zero;
+        }
+        let tp = placed(&placement, "TP1");
+        let centre_mm = synth_geometry::nm_to_mm(tp.center.x_nm - c1_pad.x_nm)
+            .hypot(synth_geometry::nm_to_mm(tp.center.y_nm - c1_pad.y_nm));
+        assert!(
+            centre_mm > TEST_POINT_MAX_MM,
+            "centre is {centre_mm:.2} mm away"
+        );
+        assert!(
+            far_test_points(&board, &placement).is_empty(),
+            "the pad is 4 mm from the pad it probes"
+        );
+    }
+
+    #[test]
+    fn following_the_named_hint_clears_the_test_point_warning() {
+        let board = load_board_replacing(
+            FEATHER,
+            &[
+                (
+                    "component J2:",
+                    "component TP1: testpoint \"testpoint_pad_1_5\"\n  component J2:",
+                ),
+                (
+                    "connect J1.vbus -> C1.p1",
+                    "connect J1.vbus -> C1.p1\n  connect C1.p1 -> TP1.p1",
+                ),
+            ],
+        );
+        let mut placement = place(&board).expect("place");
+        let c1 = centre_of(&board, &placement, "C1");
+        move_part(
+            &mut placement,
+            &board,
+            "TP1",
+            synth_geometry::nm_to_mm(c1.x_nm) + 40.0,
+            synth_geometry::nm_to_mm(c1.y_nm),
+        );
+        let far = far_test_points(&board, &placement)
+            .into_iter()
+            .find(|f| f.refdes == "TP1")
+            .expect("TP1 is far");
+        let hinted = board_with_external_hints(
+            &board,
+            &[ExternalHint {
+                component: Some("TP1".into()),
+                near: Some(format!("{}.{}", far.anchor, far.pin_name)),
+                priority: Some("hard".into()),
+                ..ExternalHint::default()
+            }],
+        );
+        let after = place(&hinted).expect("place with the hint");
+        assert!(
+            far_test_points(&hinted, &after)
+                .iter()
+                .all(|f| f.refdes != "TP1"),
+            "the named hint {}.{} must clear the warning (was {:.1} mm): {:?}",
+            far.anchor,
+            far.pin_name,
+            far.mm,
+            far_test_points(&hinted, &after)
+                .iter()
+                .map(|f| (f.refdes.clone(), f.mm))
+                .collect::<Vec<_>>()
+        );
+    }
+
+    #[test]
+    fn the_test_point_warnings_are_capped_and_the_rest_counted() {
+        let mut replacements = vec![(
+            "component J2:".to_string(),
+            format!(
+                "{}\n  component J2:",
+                (1..=8)
+                    .map(|n| format!("component TP{n}: testpoint \"testpoint_pad_1_5\""))
+                    .collect::<Vec<_>>()
+                    .join("\n  ")
+            ),
+        )];
+        replacements.push((
+            "connect J1.vbus -> C1.p1".to_string(),
+            format!(
+                "connect J1.vbus -> C1.p1\n  {}",
+                (1..=8)
+                    .map(|n| format!("connect C1.p1 -> TP{n}.p1"))
+                    .collect::<Vec<_>>()
+                    .join("\n  ")
+            ),
+        ));
+        let pairs: Vec<(&str, &str)> = replacements
+            .iter()
+            .map(|(a, b)| (a.as_str(), b.as_str()))
+            .collect();
+        let board = load_board_replacing(FEATHER, &pairs);
+        let mut placement = place(&board).expect("place");
+        let c1 = centre_of(&board, &placement, "C1");
+        for n in 1..=8 {
+            move_part(
+                &mut placement,
+                &board,
+                &format!("TP{n}"),
+                synth_geometry::nm_to_mm(c1.x_nm) + 20.0 + f64::from(n) * 2.0,
+                synth_geometry::nm_to_mm(c1.y_nm),
+            );
+        }
+        let total = far_test_points(&board, &placement).len();
+        assert!(total > MAX_TEST_POINT_WARNINGS, "{total} far test points");
+        let desc = describe_placement(&board, &placement);
+        let listed = desc
+            .functional_warnings
+            .iter()
+            .filter(|w| w.contains("of what it probes"))
+            .count();
+        assert_eq!(listed, MAX_TEST_POINT_WARNINGS);
+        assert!(desc
+            .functional_warnings
+            .iter()
+            .any(|w| w.starts_with(&format!(
+                "{} more test point",
+                total - MAX_TEST_POINT_WARNINGS
+            ))));
     }
 
     #[test]
