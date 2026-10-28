@@ -447,6 +447,7 @@ pub fn compact_by_gaps(
         .map(|p| is_dense_part(board, p.id))
         .collect();
     let original_outline = candidate.board_outline;
+    let edge_gaps = edge_gaps_nm(&candidate, &geom, &roles, original_outline);
     let hole_offsets = hole_corner_offsets(&candidate, &roles, original_outline);
     let parts_before = parts_envelope(&candidate, &geom, &roles)?;
 
@@ -493,7 +494,86 @@ pub fn compact_by_gaps(
     );
     fit_outline_with_margin_mm(board, &mut candidate, tight_edge_margin_mm(board));
     trim_outline_to_grid(board, &mut candidate);
+    snap_edge_connectors(&mut candidate, &geom, &roles, &edge_gaps);
     Some(candidate)
+}
+
+/// How far each flush connector's face sat from the edge it is flush with.
+fn edge_gaps_nm(placement: &Placement, geom: &[Geom], roles: &[Role], outline: Rect) -> Vec<i64> {
+    placement
+        .components
+        .iter()
+        .zip(geom)
+        .zip(roles)
+        .map(|((p, g), role)| match role {
+            Role::Edge(edge) => edge_gap_nm(&geom_rect(p, g), outline, *edge),
+            _ => 0,
+        })
+        .collect()
+}
+
+/// The distance from the face of `rect` to the outline edge of that index.
+fn edge_gap_nm(rect: &Rect, outline: Rect, edge: usize) -> i64 {
+    match edge {
+        0 => rect.min.x_nm - outline.min.x_nm,
+        1 => rect.min.y_nm - outline.min.y_nm,
+        2 => outline.max.x_nm - rect.max.x_nm,
+        _ => outline.max.y_nm - rect.max.y_nm,
+    }
+}
+
+/// Fitting the outline round the corner holes can leave it further out than
+/// a connector row, so each flush connector returns to the gap it had to its
+/// edge, unless another part is in the way.
+fn snap_edge_connectors(placement: &mut Placement, geom: &[Geom], roles: &[Role], gaps: &[i64]) {
+    let outline = placement.board_outline;
+    for i in 0..placement.components.len() {
+        let Role::Edge(edge) = roles[i] else { continue };
+        let rect = geom_rect(&placement.components[i], &geom[i]);
+        let excess = edge_gap_nm(&rect, outline, edge) - gaps[i];
+        if excess <= 0 {
+            continue;
+        }
+        let (axis, delta) = match edge {
+            0 => (Axis::X, -excess),
+            1 => (Axis::Y, -excess),
+            2 => (Axis::X, excess),
+            _ => (Axis::Y, excess),
+        };
+        let mut moved = rect;
+        match axis {
+            Axis::X => {
+                moved.min.x_nm += delta;
+                moved.max.x_nm += delta;
+            }
+            Axis::Y => {
+                moved.min.y_nm += delta;
+                moved.max.y_nm += delta;
+            }
+        }
+        let swept = Rect::new(
+            Point::new(
+                rect.min.x_nm.min(moved.min.x_nm),
+                rect.min.y_nm.min(moved.min.y_nm),
+            ),
+            Point::new(
+                rect.max.x_nm.max(moved.max.x_nm),
+                rect.max.y_nm.max(moved.max.y_nm),
+            ),
+        );
+        let blocked = (0..placement.components.len()).any(|j| {
+            j != i && {
+                let other = geom_rect(&placement.components[j], &geom[j]);
+                other.min.x_nm < swept.max.x_nm
+                    && other.max.x_nm > swept.min.x_nm
+                    && other.min.y_nm < swept.max.y_nm
+                    && other.max.y_nm > swept.min.y_nm
+            }
+        });
+        if !blocked {
+            shifted(placement, i, axis, delta);
+        }
+    }
 }
 
 /// Each hole's nearest corner of the original outline, and the hole's offset
@@ -735,6 +815,32 @@ mod tests {
                 assert!(!overlap(a, b), "courtyards overlap after compaction");
             }
         }
+    }
+
+    #[test]
+    fn a_flush_connector_stays_as_close_to_its_edge_as_it_was() {
+        let board = load_board("../../fixtures/designs/edge_jst_connectors.synth");
+        let before = spread(&board);
+        let spacing = GapSpacing {
+            gap_mm: 2.0,
+            dense_gap_mm: 2.0,
+        };
+        let after = compact_by_gaps(&board, &before, spacing).expect("compacts");
+        let (rects_before, rects_after) = (rects(&board, &before), rects(&board, &after));
+        let mut checked = 0;
+        for (i, p) in before.components.iter().enumerate() {
+            let Some(edge) = flush_edge_index(&board, p.id) else {
+                continue;
+            };
+            let was = edge_gap_nm(&rects_before[i], before.board_outline, edge);
+            let is = edge_gap_nm(&rects_after[i], after.board_outline, edge);
+            assert!(
+                is <= was,
+                "connector {i} sits {is} nm from edge {edge}, was {was}"
+            );
+            checked += 1;
+        }
+        assert!(checked > 0, "the board has no flush connectors");
     }
 
     fn area_of(placement: &Placement) -> f64 {
