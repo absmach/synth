@@ -32,9 +32,12 @@ fn a_polygon_courtyard_is_measured() {
 
 #[test]
 fn a_line_and_an_arc_are_measured_together_and_off_centre() {
-    // The only line is horizontal, so lines alone give a height of zero.
+    // The only line is horizontal, so lines alone give a height of zero. The arc
+    // runs from (-2, -1.5) over (0, 2) to (2, -1.5): its circle has radius
+    // 16.25 / 7 and reaches x = -2.32 and x = 2.32 on the way over, wider than the
+    // 4 mm its three points span.
     let (cx, cy, w, h) = courtyard_rect_from_text(TO92_MIXED).expect("a courtyard");
-    assert!(close(w, 4.0) && close(h, 3.5), "{w} x {h}");
+    assert!(close(w, 2.0 * 16.25 / 7.0) && close(h, 3.5), "{w} x {h}");
     assert!(close(cx, 0.0), "{cx}");
     assert!(
         cy > -1.5 && cy < 1.0,
