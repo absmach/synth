@@ -585,7 +585,122 @@ fn join_copper(
             .collect();
         join(&mut groups, &mut attached, &hit);
     }
+    join_through_copper(&mut groups, &pieces_of(board, net, regions, copper));
     (groups, attached, via_sizes)
+}
+
+/// One piece of a net's copper that is not a pour, with the pour regions it
+/// sits in.
+struct Piece {
+    layers: Vec<String>,
+    shape: PieceShape,
+    regions: Vec<usize>,
+}
+
+enum PieceShape {
+    Pad(PadBox),
+    Via((f64, f64), f64),
+    Track((f64, f64), (f64, f64)),
+}
+
+fn pieces_of(board: &PcbBoard, net: &str, regions: &[Region], copper: &[String]) -> Vec<Piece> {
+    let in_net =
+        |n: Option<u32>, name: Option<&String>| net_of(board, n, name).as_deref() == Some(net);
+    let hits = |layer: &str, p: (f64, f64)| -> Vec<usize> {
+        (0..regions.len())
+            .filter(|&i| regions[i].layer == layer && regions[i].contains(p))
+            .collect()
+    };
+    let mut pieces = Vec::new();
+    for pad in board.pads() {
+        if !in_net(pad.net, pad.net_name.as_ref()) {
+            continue;
+        }
+        let layers: Vec<String> = if pad.kind == "thru_hole" {
+            copper.to_vec()
+        } else {
+            pad.layers.clone()
+        };
+        let at = (pad.at.x_mm(), pad.at.y_mm());
+        let regions = layers.iter().flat_map(|l| hits(l, at)).collect();
+        pieces.push(Piece {
+            layers,
+            shape: PieceShape::Pad(PadBox::new(pad)),
+            regions,
+        });
+    }
+    for via in &board.vias {
+        if !in_net(via.net, via.net_name.as_ref()) {
+            continue;
+        }
+        let at = (via.at.x_mm(), via.at.y_mm());
+        let regions = via.layers.iter().flat_map(|l| hits(l, at)).collect();
+        pieces.push(Piece {
+            layers: via.layers.clone(),
+            shape: PieceShape::Via(at, nm_to_mm(via.size_nm) / 2.0),
+            regions,
+        });
+    }
+    for segment in &board.segments {
+        if !in_net(segment.net, segment.net_name.as_ref()) {
+            continue;
+        }
+        let (a, b) = (
+            (segment.start.x_mm(), segment.start.y_mm()),
+            (segment.end.x_mm(), segment.end.y_mm()),
+        );
+        let mut regions = hits(&segment.layer, a);
+        regions.extend(hits(&segment.layer, b));
+        pieces.push(Piece {
+            layers: vec![segment.layer.clone()],
+            shape: PieceShape::Track(a, b),
+            regions,
+        });
+    }
+    pieces
+}
+
+/// Joins the pour regions that the net's pads, vias and tracks connect through
+/// copper outside any pour: a track from a pad that sits in a sliver of pour to
+/// a pad or via that reaches the main one ties the sliver to it as surely as a
+/// via would. KiCad counts that as connected, so the repair must too.
+fn join_through_copper(groups: &mut Groups, pieces: &[Piece]) {
+    const TOUCH_MM: f64 = 0.02;
+    let base = groups.0.len();
+    groups.0.extend(base..base + pieces.len());
+    for (i, piece) in pieces.iter().enumerate() {
+        for &region in &piece.regions {
+            groups.union(region, base + i);
+        }
+    }
+    let shares_layer = |a: &Piece, b: &Piece| a.layers.iter().any(|l| b.layers.contains(l));
+    let ends = |shape: &PieceShape| -> Vec<(f64, f64)> {
+        match shape {
+            PieceShape::Track(a, b) => vec![*a, *b],
+            PieceShape::Via(at, _) => vec![*at],
+            PieceShape::Pad(_) => Vec::new(),
+        }
+    };
+    let on = |shape: &PieceShape, p: (f64, f64)| -> bool {
+        match shape {
+            PieceShape::Pad(pad) => pad.distance(p) <= TOUCH_MM,
+            PieceShape::Via(at, r) => (at.0 - p.0).hypot(at.1 - p.1) <= r + TOUCH_MM,
+            PieceShape::Track(a, b) => point_segment(p, *a, *b) <= TOUCH_MM,
+        }
+    };
+    for i in 0..pieces.len() {
+        for j in (i + 1)..pieces.len() {
+            let (a, b) = (&pieces[i], &pieces[j]);
+            if !shares_layer(a, b) {
+                continue;
+            }
+            let touching = ends(&a.shape).iter().any(|p| on(&b.shape, *p))
+                || ends(&b.shape).iter().any(|p| on(&a.shape, *p));
+            if touching {
+                groups.union(base + i, base + j);
+            }
+        }
+    }
 }
 
 /// The via size the net uses most, the larger on a tie. The smallest would
@@ -1597,6 +1712,27 @@ mod tests {
             started.elapsed() < std::time::Duration::from_secs(20),
             "the search took {:?}",
             started.elapsed()
+        );
+    }
+
+    /// An island that holds a pad or a track end is connected when a chain of its
+    /// own net's tracks leads from it to the main pour through copper that lies
+    /// in no pour: KiCad counts that as connected, so no tie via is wanted.
+    #[test]
+    fn an_island_reached_by_a_track_through_the_gap_is_not_tied_again() {
+        // Two tracks meet at (22.5, 7), in the gap between the pours: one ends in
+        // the island, the other in the main pour.
+        let linked = board(
+            r#"(segment (start 25 7) (end 22.5 7) (width 0.25) (layer "F.Cu") (net 1))
+               (segment (start 22.5 7) (end 15 7) (width 0.25) (layer "F.Cu") (net 1))"#,
+        );
+        assert!(
+            islands_to_tie(&linked).is_empty(),
+            "the island is already tied through the tracks"
+        );
+        assert!(
+            !islands_to_tie(&board("")).is_empty(),
+            "the same island without them is not"
         );
     }
 
