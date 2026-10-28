@@ -1,8 +1,13 @@
 id = "apds9301_real"
 kind = "ic"
-description = "Imported from KiCad stock symbol"
+description = "Broadcom APDS-9301 ambient light sensor, I2C; VDD 2.4 to 3.6 V; INT is an open-drain active-low output and needs a pull-up"
 kicad_symbol = "Sensor_Optical:APDS-9301"
 kicad_footprint = "OptoDevice:Broadcom_APDS-9301"
+
+[operating_conditions]
+min_voltage_v = 2.4
+max_voltage_v = 3.6
+max_current_ma = 0.6
 
 [footprint_dimensions]
 width_mm = 3.1
@@ -11,6 +16,7 @@ courtyard_margin_mm = 0.25
 
 [provenance]
 source = "imported"
+datasheet_url = "https://docs.broadcom.com/doc/AV02-2315EN"
 reviewed_by = "JeffMboya"
 reviewed_at = "2026-10-28"
 
@@ -44,4 +50,9 @@ capabilities = ["i2c_sda"]
 [[pins]]
 name = "INT"
 number = "6"
-electrical_type = "unclassified"
+electrical_type = "open_drain_low"
+
+[[required_decoupling]]
+net = "VDD"
+value = "100nf"
+count = 1

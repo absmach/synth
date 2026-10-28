@@ -45,5 +45,6 @@ courtyard_margin_mm = 0.25
 
 [provenance]
 source = "authored"
+datasheet_url = "https://media.digikey.com/pdf/Data%20Sheets/Alpha%20&%20Omega/AO3400A_ds.pdf"
 reviewed_by = "JeffMboya"
 reviewed_at = "2026-10-28"

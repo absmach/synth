@@ -1,10 +1,11 @@
 id = "xtal_8mhz_3225_4p"
 kind = "crystal"
-description = "8 MHz crystal, 3.2x2.5 mm 4-pad SMD; pads 1 and 3 are the crystal, 2 and 4 are ground. Load capacitance assumed 12 pF, confirm against the chosen part's datasheet"
+description = "NDK NX3225GD-8MHZ-STD-CRA-3 8 MHz crystal, 3.2x2.5 mm SMD, load capacitance 8 pF, +/-50 ppm; pads 1 and 3 are the crystal, 2 and 4 are ground"
 version = 0
 lifecycle = "active"
 signed_by = []
 substitutes = []
+mpn = "NX3225GD-8MHZ-STD-CRA-3"
 required_decoupling = []
 kicad_symbol = "Device:Crystal_GND24"
 kicad_footprint = "Crystal:Crystal_SMD_3225-4Pin_3.2x2.5mm"
@@ -44,5 +45,6 @@ courtyard_margin_mm = 0.25
 
 [provenance]
 source = "authored"
+datasheet_url = "https://mm.digikey.com/Volume0/opasdata/d220001/medias/docus/8882/NX3225GD-Datasheet.pdf"
 reviewed_by = "JeffMboya"
 reviewed_at = "2026-10-28"
