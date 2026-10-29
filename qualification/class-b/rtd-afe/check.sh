@@ -17,6 +17,12 @@ kicad-cli pcb drc --severity-all --refill-zones --format json -o "$B/reports/rtd
 kicad-cli sch erc --severity-all --format json -o "$B/reports/rtd_afe.kicad-erc.json" "$OUT/rtd_afe.kicad_sch" >/dev/null
 kicad-cli sch export netlist --format kicadsexpr -o "$B/reports/rtd_afe.net" "$OUT/rtd_afe.kicad_sch" >/dev/null
 for side in top bottom; do kicad-cli pcb render --side $side --width 1600 --height 1200 -o "$B/images/pcb-3d-$side.png" "$PCB" >/dev/null; done
+kicad-cli pcb render --side top --rotate -45,0,45 --perspective \
+  --width 1600 --height 1200 -o "$B/images/pcb-3d-angled.png" "$PCB" >/dev/null
+SCHEMATIC_PDF=$(mktemp --suffix=.pdf)
+kicad-cli sch export pdf -o "$SCHEMATIC_PDF" "$OUT/rtd_afe.kicad_sch" >/dev/null
+pdftoppm -png -r 150 -singlefile "$SCHEMATIC_PDF" "$B/images/schematic" >/dev/null
+rm -f "$SCHEMATIC_PDF"
 python3 -I - "$B/reports/rtd_afe.kicad-drc.json" "$PCB" <<'PY'
 import json, sys, pcbnew
 d = json.load(open(sys.argv[1]))

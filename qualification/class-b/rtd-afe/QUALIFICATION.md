@@ -11,8 +11,8 @@ reviewed. Do not call it proven, clean or production-ready.
 
 ## Board and stackup
 
-- Outline: 72.0 x 56.0 mm. Edge.Cuts runs x 0.55 to 72.54 mm,
-  y -0.21 to 55.78 mm (71.99 x 55.99 mm).
+- Outline: 66.1 x 53.1 mm. Edge.Cuts runs x 0.5 to 66.59 mm,
+  y -0.21 to 52.88 mm (66.09 x 53.09 mm).
 - Four copper layers, 1.6 mm: F.Cu, In1.Cu, In2.Cu, B.Cu. There is no
   explicit stackup block in the exported board; the fab house must choose the
   prepreg/core. No controlled-impedance stackup was requested.
@@ -65,21 +65,25 @@ The first export in this worktree (before the label overrides and the UUID
 fix below) reported 0 errors, 0 unconnected items and 12 warnings: three
 `silk_overlap` and nine `silk_over_copper`. All were reference labels:
 C_DV1's label sat on U2's bottom pads; R_AV's label sat on C_VI; C_VI's label
-sat on C_DVB. The delivered board has the labels moved with hard sidecar
-overrides (`C_DV1` vertical along U2's right edge, `R_AV` up-right of R_AV,
-`C_VI` right of C_VI). `kicad-cli` DRC on the delivered board reports none.
+sat on C_DVB. The delivered board has the labels moved with sidecar overrides
+and three hidden refdes (C_VI, C_DVB, C_IO1). `kicad-cli` DRC on the delivered
+board reports none.
 
-### The AGND island run
+### The compact rework and the ground islands
 
-One intermediate run, with a 1 mm move of C_IO2 that was later reverted, ended
-with 0 errors, 0 warnings and 1 unconnected item: the F.Cu and B.Cu AGND zones
-were listed against each other, with an island near (33.84, 25.25) mm and no
-0.6 mm spot for a stitching via. That run is not committed and its artifacts
-were overwritten. The committed placement is the one that routed clean in
-8:33. This is a reproducibility caveat, not a board defect: FreeRouting's
-result and Synth's ground stitching are sensitive to placement. `check.sh`
-re-routes from scratch and asserts the result; it is the same check that
-failed on the intermediate placement.
+The original 72 x 56 mm placement was too sparse. Dense re-placements at
+58 x 47, 60 x 49, 64 x 49 and 67 x 49 mm all failed Synth's ground-island
+repair: the split AGND/DGND pours fragmented around U2 and the stitching
+search could not find a 0.6 mm via spot, so the export refused the board. The
+delivered layout keeps the proven analog/digital core and moves the USB
+cluster, J2, J3 and the mounting holes inward; it is 66.1 x 53.1 mm.
+
+One leftover DGND island on C_IO1.2 remained after the first old-core route.
+Moving C_IO1 from (41.75, 40) to (43.5, 36.5) cleared it; the delivered board
+has 0 open nets in both Synth's connectivity report and KiCad's DRC. The
+intermediate failures are a reproducibility caveat: FreeRouting and Synth's
+ground stitching are sensitive to placement, and `check.sh` re-routes from
+scratch.
 
 ## ERC findings and dispositions
 
@@ -193,27 +197,28 @@ coordinates above are the measured ones.
 
 ## Measured layout numbers
 
-- 354 track segments, 77 vias: 22 AGND, 26 DGND, 29 signal. 732.5 mm of track.
+- 348 track segments, 74 vias: 20 AGND, 25 DGND, 29 signal. 703.8 mm of track.
 - 41 nets, 0 open. All AGND/DGND pads are in one cluster per net (the DRC has no
   unconnected items; the tie check above covers the split).
 - Analog nets, all F.Cu only, no via:
 
 | Net | Length |
 | --- | --- |
-| RTD_FP | 25.23 mm |
-| RTD_SP | 6.98 mm |
-| AIN1 | 19.78 mm |
-| RTD_SN | 6.79 mm |
-| AIN2 | 27.78 mm |
-| RTD_FN | 4.17 mm |
+| RTD_FP | 28.45 mm |
+| RTD_SP | 4.48 mm |
+| AIN1 | 25.08 mm |
+| RTD_SN | 4.29 mm |
+| AIN2 | 27.27 mm |
+| RTD_FN | 3.68 mm |
 | VREF | 10.64 mm |
 
-- SPI_SCK is 16.14 mm with 2 vias; SPI_MOSI/MISO/CS 16.4/16.6/15.6 mm with
-  2 vias each. QSPI_SS/SCLK/SD0..SD3 are 11.8 to 18.6 mm.
-- USB: the RP2350-side nets (after the 27R) are 8.28 mm (DP) and 12.23 mm (DN);
-  the connector-side nets (before the 27R) are 21.63 mm each. Total path
-  29.91 mm (DP) and 33.86 mm (DN), 2 vias each, full speed. The pair is not
-  routed as a coupled pair and has no controlled impedance.
+- SPI_SCK is 16.16 mm with 2 vias; SPI_MOSI/MISO/CS 16.7/16.9/15.6 mm with
+  2 vias each. QSPI_SS/SCLK/SD0..SD3 are 12.4 to 18.7 mm.
+- USB: the RP2350-side nets (after the 27R) are 11.47 mm (DP) and 8.85 mm (DN);
+  the connector-side nets (before the 27R) are 17.08 mm and 17.07 mm. Total path
+  28.55 mm (DP) and 25.92 mm (DN), 2.63 mm of skew, full speed. DP changes layer
+  with 2 vias; DN stays on F.Cu. The pair is not routed as a coupled pair and
+  has no controlled impedance.
 - Board outline and stackup above; 54 footprints.
 
 ## Left to a human
@@ -234,10 +239,11 @@ Nothing below is signed off. The list is deliberately blunt.
 - **USB/ESD**: no VBUS fuse, TVS or reverse-polarity protection; CC1/CC2 have no
   TVS; the shield is tied directly to DGND; D1/D2 have no MPN. USB-C and ESD
   compliance were not checked.
-- **Mechanical**: the bottom mounting holes are 2.8 mm from the cut edge
-  (1.5 mm of material around a 2.5 mm hole) while the top pair is 4.2 mm from
-  the edge; the enclosure, screw-head clearance, connector overhang and header
-  orientation were not checked. Synth places no board-name or revision silk.
+- **Mechanical**: the bottom mounting holes are 3.9 mm from the cut edge
+  (1.3 mm of material around a 2.5 mm hole), the top pair 4.2 mm, the left pair
+  3.5 mm and the right pair 2.6 mm; the enclosure, screw-head clearance,
+  connector overhang and header orientation were not checked. Synth places no
+  board-name or revision silk.
 - **Fabrication/DFM**: no fab house has seen the Gerbers, drill, BOM or PnP.
   The 0.4 mm QFN-60, the 0.5 mm VQFN-32 and the 0.5 mm USB-C need a fab
   capability check; the four-layer stackup is the default, not a controlled
@@ -263,12 +269,12 @@ Nothing below is signed off. The list is deliberately blunt.
    `inlined_body_blocks_carry_unique_deterministic_uuids`. After the fix the
    board has 1094 items, 1094 unique UUIDs, and the DRC warnings name the real
    neighbours. This is what made the zero-warning result trustworthy.
-2. **Ground stitching is placement-sensitive (not fixed).** An intermediate
-   placement produced an unconnected AGND F.Cu/B.Cu pair with no legal 0.6 mm
-   stitching-via spot. A different placement routed clean. The check now catches
-   it (it failed the run), but the stitching search is not robust to a crowded
-   pour. The committed placement is the one that passed; a future placement
-   change can bring the island back.
+2. **Ground stitching is placement-sensitive (not fixed).** Four denser
+   placements (58 x 47, 60 x 49, 64 x 49 and 67 x 49 mm) left AGND/DGND islands
+   that the 0.6 mm stitching-via search could not tie, so the export refused
+   them. The delivered 66 x 53 mm layout keeps the original core and passes;
+   moving C_IO1 to (43.5, 36.5) cleared the last DGND island. A future
+   placement change can bring the islands back, and `check.sh` catches it.
 3. **BOM omits component attributes (not fixed).** `bom.csv` has value, kind,
    symbol, footprint, LCSC and MPN, but not `dielectric`, `voltage` or
    `tolerance`, which are present in the `.synth` source. For this board that
@@ -283,13 +289,13 @@ Inputs and outputs of the committed run:
 | File | SHA-256 |
 | --- | --- |
 | `rtd_afe.synth` | `c7641ede7eeef4a5f09324f46160bc0b91eed6e3310a25f005b520d91d5facf1` |
-| `rtd_afe.placement.layout.toml` | `28a65895b8e527912ea253ff7f9c28958a3fed54f610e1c249e6f8724aac4797` |
-| `kicad/rtd_afe.kicad_pcb` | `cec1f31f2575c8935d8203ef092b1129bfcd016ca8fb8461ddbe47b55e8c4ce6` |
+| `rtd_afe.placement.layout.toml` | `008c5711c18b9c8a6e522d08fc48b2e1652f34f4b80da1ffe59d2bfbf1b7eedc` |
+| `kicad/rtd_afe.kicad_pcb` | `b0b6ad982d5e85e801cadef71939aa9ef9055aa607fadda0fbccde0ce8b0026a` |
 | `kicad/rtd_afe.kicad_sch` | `e81a9a0ebf18d5fd93cef8b224df16134033824da6402abbb8f845048dbd89c4` |
-| `reports/rtd_afe.kicad-drc.json` | `8ffd5aaae159d772b20d856694a3e808d93ab671bfbeab521a591e96beb305b0` |
-| `reports/rtd_afe.kicad-erc.json` | `db8491b2bbe011af24ded22a23cfbc60094eee6852a6a4484b238c147f91501b` |
-| `reports/release.json` | `6351c2c16c09311c015f4573e951b8623b9a45f688d5ea672c8bf59bfc36bec4` |
-| `reports/rtd_afe.routing.json` | `da04e647f0d3e837d4ff52cebdd6e1010a78aae02ff0be9790ca7522b47812fa` |
+| `reports/rtd_afe.kicad-drc.json` | `a89a811e92052d9f4c9f01a615ab105068a8ab3c63346391460dbb1e338cb7ba` |
+| `reports/rtd_afe.kicad-erc.json` | `57e6a7226048ef0bec0400e8f7f333bf52bf135538dc963057d897df0158119a` |
+| `reports/release.json` | `d91078adf03eb506e1654565dad50a27fa56ed3cea1026f6a7eef14cdeba9692` |
+| `reports/rtd_afe.routing.json` | `cf9d5d482859175d75c9666df42d6fd6576cb056a54ce24aff49e43e8ce69516` |
 
 The release, routing and netlist reports had the absolute paths of the machine
 that produced them cut to repository-relative ones, matching the usb-uart
