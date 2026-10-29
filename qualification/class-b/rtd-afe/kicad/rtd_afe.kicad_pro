@@ -1,0 +1,293 @@
+{
+  "board": {
+    "design_settings": {
+      "defaults": {
+        "min_clearance": 0.127,
+        "min_copper_edge_clearance": 0.3,
+        "min_hole_clearance": 0.2,
+        "min_through_hole_diameter": 0.3,
+        "min_track_width": 0.127,
+        "min_via_annular_width": 0.13,
+        "min_via_diameter": 0.56
+      },
+      "rules": {
+        "min_clearance": 0.127,
+        "min_copper_edge_clearance": 0.3,
+        "min_hole_clearance": 0.2,
+        "min_through_hole_diameter": 0.3,
+        "min_track_width": 0.127,
+        "min_via_annular_width": 0.13,
+        "min_via_diameter": 0.56
+      }
+    }
+  },
+  "boards": [],
+  "meta": {
+    "filename": "rtd_afe.kicad_pro",
+    "uuid": "ce758c7c-6e95-51c6-821b-f5f75e2cc224",
+    "version": 1
+  },
+  "net_settings": {
+    "classes": [
+      {
+        "bus_width": 12,
+        "clearance": 0.127,
+        "diff_pair_gap": 0.25,
+        "diff_pair_via_gap": 0.25,
+        "diff_pair_width": 0.2,
+        "line_style": 0,
+        "microvia_diameter": 0.3,
+        "microvia_drill": 0.1,
+        "name": "Power",
+        "pcb_color": "rgba(213, 94, 0, 1.000)",
+        "priority": 0,
+        "schematic_color": "rgba(213, 94, 0, 1.000)",
+        "track_width": 0.2,
+        "via_diameter": 0.6,
+        "via_drill": 0.3,
+        "wire_width": 6
+      },
+      {
+        "bus_width": 12,
+        "clearance": 0.127,
+        "diff_pair_gap": 0.25,
+        "diff_pair_via_gap": 0.25,
+        "diff_pair_width": 0.2,
+        "line_style": 0,
+        "microvia_diameter": 0.3,
+        "microvia_drill": 0.1,
+        "name": "Ground",
+        "pcb_color": "rgba(51, 51, 51, 1.000)",
+        "priority": 1,
+        "schematic_color": "rgba(51, 51, 51, 1.000)",
+        "track_width": 0.2,
+        "via_diameter": 0.6,
+        "via_drill": 0.3,
+        "wire_width": 6
+      },
+      {
+        "bus_width": 12,
+        "clearance": 0.127,
+        "diff_pair_gap": 0.25,
+        "diff_pair_via_gap": 0.25,
+        "diff_pair_width": 0.2,
+        "line_style": 0,
+        "microvia_diameter": 0.3,
+        "microvia_drill": 0.1,
+        "name": "SPI",
+        "pcb_color": "rgba(0, 158, 115, 1.000)",
+        "priority": 2,
+        "schematic_color": "rgba(0, 158, 115, 1.000)",
+        "track_width": 0.2,
+        "via_diameter": 0.6,
+        "via_drill": 0.3,
+        "wire_width": 6
+      },
+      {
+        "bus_width": 12,
+        "clearance": 0.127,
+        "diff_pair_gap": 0.25,
+        "diff_pair_via_gap": 0.25,
+        "diff_pair_width": 0.2,
+        "line_style": 0,
+        "microvia_diameter": 0.3,
+        "microvia_drill": 0.1,
+        "name": "USB",
+        "pcb_color": "rgba(67, 191, 102, 1.000)",
+        "priority": 3,
+        "schematic_color": "rgba(67, 191, 102, 1.000)",
+        "track_width": 0.242,
+        "via_diameter": 0.6,
+        "via_drill": 0.3,
+        "wire_width": 6
+      },
+      {
+        "bus_width": 12,
+        "clearance": 0.127,
+        "diff_pair_gap": 0.25,
+        "diff_pair_via_gap": 0.25,
+        "diff_pair_width": 0.2,
+        "line_style": 0,
+        "microvia_diameter": 0.3,
+        "microvia_drill": 0.1,
+        "name": "Clock",
+        "pcb_color": "rgba(230, 159, 0, 1.000)",
+        "priority": 4,
+        "schematic_color": "rgba(230, 159, 0, 1.000)",
+        "track_width": 0.2,
+        "via_diameter": 0.6,
+        "via_drill": 0.3,
+        "wire_width": 6
+      },
+      {
+        "bus_width": 12,
+        "clearance": 0.127,
+        "diff_pair_gap": 0.25,
+        "diff_pair_via_gap": 0.25,
+        "diff_pair_width": 0.2,
+        "line_style": 0,
+        "microvia_diameter": 0.3,
+        "microvia_drill": 0.1,
+        "name": "Reset",
+        "pcb_color": "rgba(192, 57, 43, 1.000)",
+        "priority": 5,
+        "schematic_color": "rgba(192, 57, 43, 1.000)",
+        "track_width": 0.2,
+        "via_diameter": 0.6,
+        "via_drill": 0.3,
+        "wire_width": 6
+      },
+      {
+        "bus_width": 12,
+        "clearance": 0.127,
+        "diff_pair_gap": 0.25,
+        "diff_pair_via_gap": 0.25,
+        "diff_pair_width": 0.2,
+        "line_style": 0,
+        "microvia_diameter": 0.3,
+        "microvia_drill": 0.1,
+        "name": "Default",
+        "pcb_color": "rgba(0, 0, 0, 1.000)",
+        "priority": 2147483647,
+        "schematic_color": "rgba(0, 0, 0, 1.000)",
+        "track_width": 0.2,
+        "via_diameter": 0.6,
+        "via_drill": 0.3,
+        "wire_width": 6
+      }
+    ],
+    "meta": {
+      "version": 4
+    },
+    "net_colors": null,
+    "netclass_assignments": {
+      "+3V3": "Power",
+      "+3V3A": "Power",
+      "+3V3_RP_A": "Power",
+      "/ADC_RESET_N": "Reset",
+      "/AGND": "Clock",
+      "/QSPI_SCLK": "SPI",
+      "/QSPI_SD0": "SPI",
+      "/QSPI_SD1": "SPI",
+      "/QSPI_SD2": "SPI",
+      "/QSPI_SD3": "SPI",
+      "/QSPI_SS": "SPI",
+      "/SPI_CS": "SPI",
+      "/SPI_MISO": "SPI",
+      "/SPI_MOSI": "SPI",
+      "/SPI_SCK": "SPI",
+      "/USB_DN": "USB",
+      "/USB_DN_C": "USB",
+      "/USB_DP": "USB",
+      "/USB_DP_C": "USB",
+      "/XIN": "Clock",
+      "ADC_RESET_N": "Reset",
+      "AGND": "Clock",
+      "CC1": "USB",
+      "CC2": "USB",
+      "DGND": "Ground",
+      "DVDD_1V1": "Power",
+      "QSPI_SCLK": "SPI",
+      "QSPI_SD0": "SPI",
+      "QSPI_SD1": "SPI",
+      "QSPI_SD2": "SPI",
+      "QSPI_SD3": "SPI",
+      "QSPI_SS": "SPI",
+      "RUN": "Reset",
+      "SPI_CS": "SPI",
+      "SPI_MISO": "SPI",
+      "SPI_MOSI": "SPI",
+      "SPI_SCK": "SPI",
+      "USB_DN": "USB",
+      "USB_DN_C": "USB",
+      "USB_DP": "USB",
+      "USB_DP_C": "USB",
+      "VBUS": "Power",
+      "VREF": "Power",
+      "VREG_LX": "Power",
+      "XIN": "Clock",
+      "XOUT": "Clock"
+    },
+    "netclass_patterns": [
+      {
+        "netclass": "SPI",
+        "pattern": "/*/SPI_MOSI"
+      },
+      {
+        "netclass": "SPI",
+        "pattern": "/*/SPI_CS"
+      },
+      {
+        "netclass": "SPI",
+        "pattern": "/*/SPI_SCK"
+      },
+      {
+        "netclass": "SPI",
+        "pattern": "/*/SPI_MISO"
+      },
+      {
+        "netclass": "Reset",
+        "pattern": "/*/ADC_RESET_N"
+      },
+      {
+        "netclass": "Clock",
+        "pattern": "/*/XIN"
+      },
+      {
+        "netclass": "SPI",
+        "pattern": "/*/QSPI_SS"
+      },
+      {
+        "netclass": "SPI",
+        "pattern": "/*/QSPI_SCLK"
+      },
+      {
+        "netclass": "SPI",
+        "pattern": "/*/QSPI_SD0"
+      },
+      {
+        "netclass": "SPI",
+        "pattern": "/*/QSPI_SD1"
+      },
+      {
+        "netclass": "SPI",
+        "pattern": "/*/QSPI_SD2"
+      },
+      {
+        "netclass": "SPI",
+        "pattern": "/*/QSPI_SD3"
+      },
+      {
+        "netclass": "USB",
+        "pattern": "/*/USB_DP_C"
+      },
+      {
+        "netclass": "USB",
+        "pattern": "/*/USB_DP"
+      },
+      {
+        "netclass": "USB",
+        "pattern": "/*/USB_DN_C"
+      },
+      {
+        "netclass": "USB",
+        "pattern": "/*/USB_DN"
+      },
+      {
+        "netclass": "Clock",
+        "pattern": "/*/AGND"
+      }
+    ]
+  },
+  "schematic": {
+    "annotate_start_num": 0,
+    "drawing": {},
+    "variants": []
+  },
+  "sheets": [
+    [
+      "b999385b-5cb0-57df-8610-0c339174ef3a",
+      ""
+    ]
+  ]
+}
