@@ -1,7 +1,7 @@
 id = "balun_2g4"
 kind = "filter"
 description = "2.4 GHz balun + matching network, integrated SMD"
-kicad_footprint = "RF_Converter:Johanson_0805"
+kicad_footprint = "RF_Converter:Balun_Johanson_0896BM15A0001"
 
 [footprint_dimensions]
 width_mm = 5.0
