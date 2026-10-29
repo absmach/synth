@@ -4,7 +4,7 @@
   "gates": {
     "routing_and_drc": {
       "passed": false,
-      "evidence": "DRC: 0 unconnected pads (all 16 nets connected). 6 DRC violations: 2 hole_clearance (vias inside aQFN-73 EP pad, fundamental limitation), 2 clearance (manual escape tracks near pads), 2 silk_over_copper (warnings, from footprint silkscreen). No errors on routed nets. All violations from manual via-in-pad escape segments."
+      "evidence": "DRC: 0 unconnected pads (all 16 nets connected). 6 DRC violations: 2 hole_clearance (vias inside aQFN-73 EP pad, manufacturer copper-to-hole 0.2mm vs 0.175mm actual), 2 clearance (manual escape tracks near pads), 2 silk_over_copper (warnings from footprint silkscreen). KiCad 10.0.7. Command: kicad-cli pcb drc --refill-zones."
     },
     "erc_dispositioned": {
       "passed": false,
@@ -20,7 +20,7 @@
     },
     "fabrication_review": {
       "passed": false,
-      "evidence": "via-in-pad at U1 (aQFN-73) requires resin-filled vias (jlc-filled-via manufacturer). JLCPCB confirmation pending."
+      "evidence": "via-in-pad at U1 (aQFN-73) requires resin-filled vias (jlc-filled-via manufacturer). JLCPCB confirmation pending. Hole-clearance violations from via-in-pad geometry."
     },
     "component_review": {
       "passed": false,
