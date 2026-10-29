@@ -34,7 +34,7 @@ electrical_type = "input"
 [[pins]]
 name = "ALERT"
 number = "3"
-electrical_type = "open_drain"
+electrical_type = "open_drain_low"
 
 [[pins]]
 name = "SCL"

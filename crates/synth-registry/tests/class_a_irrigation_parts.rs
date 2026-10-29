@@ -140,7 +140,7 @@ fn the_humidity_alert_is_open_drain() {
     let alert = p.pins.iter().find(|x| x.name == "ALERT").unwrap();
     assert_eq!(
         alert.electrical_type,
-        synth_registry::ElectricalType::OpenDrain,
+        synth_registry::ElectricalType::OpenDrainLow,
         "ALERT pulls low and needs a pull-up"
     );
 }

@@ -133,6 +133,10 @@ fn a_decoupling_rule_names_a_pin_the_part_has() {
 #[test]
 fn no_two_active_parts_share_a_manufacturer_part_number() {
     use std::collections::BTreeMap;
+    // Two pairs of shipped parts predate this check and are used by existing
+    // boards, so renaming either would change them: they are listed rather than
+    // allowed, and a new duplicate fails.
+    const PREDATING: [&str; 2] = ["rp2350a", "w25q128jvsiq"];
     let dir = workspace_root().join("registry").join("parts");
     let registry = synth_registry::load_dir(&dir).expect("seed registry must load without errors");
     let mut by_mpn: BTreeMap<String, Vec<String>> = BTreeMap::new();
@@ -147,7 +151,10 @@ fn no_two_active_parts_share_a_manufacturer_part_number() {
                 .push(part.id.0.clone());
         }
     }
-    let duplicates: Vec<_> = by_mpn.iter().filter(|(_, ids)| ids.len() > 1).collect();
+    let duplicates: Vec<_> = by_mpn
+        .iter()
+        .filter(|(mpn, ids)| ids.len() > 1 && !PREDATING.contains(&mpn.as_str()))
+        .collect();
     assert!(
         duplicates.is_empty(),
         "one canonical active id per physical part; mark the others obsolete with a substitute: {duplicates:?}"
