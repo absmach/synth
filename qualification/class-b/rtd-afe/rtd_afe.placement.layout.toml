@@ -1,0 +1,346 @@
+schema_version = 2
+forced_net_labels = []
+fit_sheet = false
+
+[components.H1]
+x = 4.0
+y = 4.0
+rotation = 0
+priority = "hard"
+
+[components.H2]
+x = 70.0
+y = 4.0
+rotation = 0
+priority = "hard"
+
+[components.H3]
+x = 4.0
+y = 53.0
+rotation = 0
+priority = "hard"
+
+[components.H4]
+x = 70.0
+y = 53.0
+rotation = 0
+priority = "hard"
+
+[components.U2]
+x = 50.0
+y = 33.25
+rotation = 0
+priority = "hard"
+
+[components.U4]
+x = 43.5
+y = 18.0
+rotation = 0
+priority = "hard"
+
+[components.J1]
+x = 61.25
+y = 5.75
+rotation = 180
+priority = "hard"
+
+[components.U5]
+x = 68.0
+y = 17.0
+rotation = 0
+priority = "hard"
+
+[components.Y1]
+x = 48.5
+y = 43.5
+rotation = 0
+priority = "hard"
+
+[components.J3]
+x = 58.0
+y = 52.0
+rotation = 90
+priority = "hard"
+
+[components.C_FL]
+relative_to = "U4"
+dx = 0.0
+dy = -5.0
+rotation = 0
+priority = "hard"
+
+[components.R_DP]
+x = 49.0
+y = 22.0
+rotation = 0
+priority = "hard"
+
+[components.R_DN]
+x = 52.5
+y = 22.0
+rotation = 0
+priority = "hard"
+
+[components.C_VI]
+x = 56.5
+y = 27.5
+rotation = 0
+priority = "hard"
+
+[components.L1]
+x = 52.5
+y = 26.25
+rotation = 90
+priority = "hard"
+
+[components.C_DVB]
+x = 56.5
+y = 24.5
+rotation = 0
+priority = "hard"
+
+[components.R_AV]
+x = 57.5
+y = 30.25
+rotation = 0
+priority = "hard"
+
+[components.C_AVF]
+x = 61.0
+y = 30.25
+rotation = 0
+priority = "hard"
+
+[components.C_IO1]
+x = 41.75
+y = 40.0
+rotation = 0
+priority = "hard"
+
+[components.C_IO2]
+x = 45.25
+y = 38.5
+rotation = 0
+priority = "hard"
+
+[components.C_DV1]
+x = 52.25
+y = 38.5
+rotation = 0
+priority = "hard"
+
+[components.C_IO3]
+x = 56.0
+y = 38.0
+rotation = 0
+priority = "hard"
+
+[components.C_DV2]
+x = 59.0
+y = 32.0
+rotation = 0
+priority = "hard"
+
+[components.C_IO4]
+x = 59.0
+y = 35.0
+rotation = 0
+priority = "hard"
+
+[components.C_X1]
+x = 44.5
+y = 43.5
+rotation = 0
+priority = "hard"
+
+[components.C_X2]
+x = 52.5
+y = 43.5
+rotation = 0
+priority = "hard"
+
+[components.R_X]
+x = 51.0
+y = 40.5
+rotation = 0
+priority = "hard"
+
+[components.R_RUN]
+x = 58.0
+y = 40.5
+rotation = 0
+priority = "hard"
+
+[components.R_CC1]
+x = 65.0
+y = 12.0
+rotation = 0
+priority = "hard"
+
+[components.R_CC2]
+x = 57.0
+y = 12.0
+rotation = 0
+priority = "hard"
+
+[components.D1]
+x = 58.5
+y = 16.0
+rotation = 0
+priority = "hard"
+
+[components.D2]
+x = 62.0
+y = 16.0
+rotation = 0
+priority = "hard"
+
+[components.C_L1]
+x = 64.5
+y = 20.0
+rotation = 0
+priority = "hard"
+
+[components.C_L2]
+x = 69.0
+y = 21.5
+rotation = 0
+priority = "hard"
+
+[components.J2]
+x = 25.0
+y = 52.5
+rotation = 270
+priority = "hard"
+
+[components.U1]
+x = 30.0
+y = 26.0
+rotation = 90
+priority = "hard"
+
+[components.U3]
+x = 19.5
+y = 25.0
+rotation = 0
+priority = "hard"
+
+[components.R_TIE]
+x = 41.5
+y = 36.5
+rotation = 0
+priority = "hard"
+
+[components.R_S2]
+x = 24.0
+y = 45.0
+rotation = 90
+priority = "hard"
+
+[components.R_S1]
+x = 27.0
+y = 45.0
+rotation = 90
+priority = "hard"
+
+[components.C_D]
+x = 30.0
+y = 41.5
+rotation = 0
+priority = "hard"
+
+[components.C_CM2]
+x = 23.5
+y = 40.0
+rotation = 0
+priority = "hard"
+
+[components.C_CM1]
+x = 27.0
+y = 38.5
+rotation = 0
+priority = "hard"
+
+[components.C_F]
+x = 31.5
+y = 49.0
+rotation = 0
+priority = "hard"
+
+[components.R_BIAS]
+x = 20.0
+y = 48.0
+rotation = 90
+priority = "hard"
+
+[components.C_IO]
+x = 38.0
+y = 25.0
+rotation = 0
+priority = "hard"
+
+[components.C_DV]
+x = 38.0
+y = 22.5
+rotation = 0
+priority = "hard"
+
+[components.R_RST]
+x = 38.0
+y = 29.5
+rotation = 0
+priority = "hard"
+
+[components.C_AV1]
+x = 23.25
+y = 21.25
+rotation = 0
+priority = "hard"
+
+[components.C_AV2]
+x = 21.5
+y = 19.0
+rotation = 0
+priority = "hard"
+
+[components.C_RO]
+x = 30.0
+y = 19.5
+rotation = 0
+priority = "hard"
+
+[components.C_RV]
+x = 24.5
+y = 30.0
+rotation = 90
+priority = "hard"
+
+[components.C_RI]
+x = 14.0
+y = 18.0
+rotation = 0
+priority = "hard"
+
+[components.L2]
+x = 26.0
+y = 14.0
+rotation = 0
+priority = "hard"
+
+[labels.C_DV1]
+dx = 3.0
+dy = -4.0
+angle = 90.0
+priority = "hard"
+
+[labels.R_AV]
+dx = 3.0
+dy = -2.0
+angle = 0.0
+priority = "hard"
+
+[labels.C_VI]
+dx = 3.5
+dy = -1.25
+angle = 0.0
+priority = "hard"
