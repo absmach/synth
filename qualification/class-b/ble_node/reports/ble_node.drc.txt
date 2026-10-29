@@ -1,140 +1,24 @@
 ** Drc report for ble_node.kicad_pcb **
-** Created on 2026-10-29T16:49:56 **
+** Created on 2026-10-29T18:09:03 **
 ** Report includes: Errors, Warnings **
 
-** Found 35 DRC violations **
-[tracks_crossing]: Tracks crossing
-    Local override; error
-    @(31.4000 mm, 24.7000 mm): Track [+3V3] on F.Cu, length 6.9296 mm
-    @(33.0000 mm, 20.2100 mm): Track [net_16] on F.Cu, length 9.6000 mm
-[clearance]: Clearance violation (zone clearance 0.1500 mm; actual 0.0000 mm)
-    Local override; error
-    @(51.4600 mm, 17.1900 mm): Via [net_7] on F.Cu - B.Cu
-    @(3.2000 mm, 3.2000 mm): Zone [GND] on B.Cu, priority 1
-[hole_clearance]: Hole clearance violation (rule 'manufacturer copper to hole' clearance 0.2000 mm; actual 0.0000 mm)
-    Rule: manufacturer copper to hole; error
-    @(51.4600 mm, 17.1900 mm): Via [net_7] on F.Cu - B.Cu
-    @(3.2000 mm, 3.2000 mm): Zone [GND] on B.Cu, priority 1
-[clearance]: Clearance violation (zone clearance 0.1500 mm; actual 0.0000 mm)
-    Local override; error
-    @(51.4600 mm, 17.1900 mm): Via [net_7] on F.Cu - B.Cu
-    @(3.2000 mm, 3.2000 mm): Zone [GND] on In1.Cu, priority 1
-[hole_clearance]: Hole clearance violation (rule 'manufacturer copper to hole' clearance 0.2000 mm; actual 0.0000 mm)
-    Rule: manufacturer copper to hole; error
-    @(51.4600 mm, 17.1900 mm): Via [net_7] on F.Cu - B.Cu
-    @(3.2000 mm, 3.2000 mm): Zone [GND] on In1.Cu, priority 1
-[tracks_crossing]: Tracks crossing
-    Local override; error
-    @(32.2000 mm, 21.7000 mm): Track [net_8] on F.Cu, length 8.0610 mm
-    @(33.0000 mm, 20.2100 mm): Track [net_16] on F.Cu, length 9.6000 mm
-[clearance]: Clearance violation (zone clearance 0.1500 mm; actual 0.0000 mm)
-    Local override; error
-    @(51.4600 mm, 17.1900 mm): Via [net_7] on F.Cu - B.Cu
-    @(3.2000 mm, 3.2000 mm): Zone [GND] on In2.Cu, priority 1
-[hole_clearance]: Hole clearance violation (rule 'manufacturer copper to hole' clearance 0.2000 mm; actual 0.0000 mm)
-    Rule: manufacturer copper to hole; error
-    @(51.4600 mm, 17.1900 mm): Via [net_7] on F.Cu - B.Cu
-    @(3.2000 mm, 3.2000 mm): Zone [GND] on In2.Cu, priority 1
-[clearance]: Clearance violation (zone clearance 0.1500 mm; actual 0.0000 mm)
-    Local override; error
-    @(39.0500 mm, 23.9600 mm): Track [net_7] on B.Cu, length 3.9600 mm
-    @(3.2000 mm, 3.2000 mm): Zone [GND] on B.Cu, priority 1
-[clearance]: Clearance violation (zone clearance 0.1500 mm; actual 0.0000 mm)
-    Local override; error
-    @(51.4600 mm, 20.0000 mm): Track [net_7] on B.Cu, length 2.8100 mm
-    @(3.2000 mm, 3.2000 mm): Zone [GND] on B.Cu, priority 1
-[clearance]: Clearance violation (zone clearance 0.1500 mm; actual 0.0000 mm)
-    Local override; error
-    @(39.0500 mm, 20.0000 mm): Track [net_7] on B.Cu, length 12.4100 mm
-    @(3.2000 mm, 3.2000 mm): Zone [GND] on B.Cu, priority 1
+** Found 6 DRC violations **
 [clearance]: Clearance violation ( clearance 0.1270 mm; actual 0.0750 mm)
     Local override; error
     @(39.0500 mm, 23.9600 mm): Via [net_7] on F.Cu - B.Cu
-    @(38.5500 mm, 23.9600 mm): Pad AC11 [<no net>] of U1 on F.Cu
+    @(39.5500 mm, 23.9600 mm): Pad AC15 [<no net>] of U1 on F.Cu
 [clearance]: Clearance violation ( clearance 0.1270 mm; actual 0.0250 mm)
     Local override; error
     @(39.0500 mm, 21.2100 mm): Pad EP [<no net>] of U1 on F.Cu
     @(36.3000 mm, 20.2100 mm): Via [net_16] on F.Cu - B.Cu
-[clearance]: Clearance violation (zone clearance 0.1500 mm; actual 0.0000 mm)
-    Local override; error
-    @(33.0000 mm, 29.8100 mm): Track [net_16] on F.Cu, length 1.5800 mm
-    @(3.2000 mm, 3.2000 mm): Zone [GND] on F.Cu, priority 1
-[clearance]: Clearance violation (zone clearance 0.1500 mm; actual 0.0000 mm)
-    Local override; error
-    @(39.0500 mm, 23.9600 mm): Via [net_7] on F.Cu - B.Cu
-    @(3.2000 mm, 3.2000 mm): Zone [GND] on B.Cu, priority 1
-[clearance]: Clearance violation ( clearance 0.1270 mm; actual 0.0615 mm)
-    Local override; error
-    @(36.3000 mm, 20.2100 mm): Track [net_16] on F.Cu, length 3.3000 mm
-    @(35.8000 mm, 19.9600 mm): Pad G1 [net_15] of U1 on F.Cu
-[clearance]: Clearance violation (zone clearance 0.1500 mm; actual 0.0000 mm)
-    Local override; error
-    @(36.3000 mm, 20.2100 mm): Via [net_16] on F.Cu - B.Cu
-    @(3.2000 mm, 3.2000 mm): Zone [GND] on B.Cu, priority 1
-[clearance]: Clearance violation (zone clearance 0.1500 mm; actual 0.0000 mm)
-    Local override; error
-    @(33.0000 mm, 20.2100 mm): Track [net_16] on F.Cu, length 9.6000 mm
-    @(3.2000 mm, 3.2000 mm): Zone [GND] on F.Cu, priority 1
-[hole_clearance]: Hole clearance violation (rule 'manufacturer copper to hole' clearance 0.2000 mm; actual 0.0000 mm)
-    Rule: manufacturer copper to hole; error
-    @(36.3000 mm, 20.2100 mm): Via [net_16] on F.Cu - B.Cu
-    @(3.2000 mm, 3.2000 mm): Zone [GND] on B.Cu, priority 1
-[clearance]: Clearance violation (zone clearance 0.1500 mm; actual 0.0000 mm)
-    Local override; error
-    @(36.3000 mm, 20.2100 mm): Track [net_16] on F.Cu, length 3.3000 mm
-    @(3.2000 mm, 3.2000 mm): Zone [GND] on F.Cu, priority 1
-[clearance]: Clearance violation (zone clearance 0.1500 mm; actual 0.0000 mm)
-    Local override; error
-    @(36.3000 mm, 20.2100 mm): Via [net_16] on F.Cu - B.Cu
-    @(3.2000 mm, 3.2000 mm): Zone [GND] on In1.Cu, priority 1
-[tracks_crossing]: Tracks crossing
-    Local override; error
-    @(34.6250 mm, 12.7500 mm): Track [ANT_FEED] on F.Cu, length 10.6250 mm
-    @(36.3000 mm, 20.2100 mm): Track [net_16] on F.Cu, length 3.3000 mm
-[hole_clearance]: Hole clearance violation (rule 'manufacturer copper to hole' clearance 0.2000 mm; actual 0.0000 mm)
-    Rule: manufacturer copper to hole; error
-    @(39.0500 mm, 23.9600 mm): Via [net_7] on F.Cu - B.Cu
-    @(3.2000 mm, 3.2000 mm): Zone [GND] on B.Cu, priority 1
-[hole_clearance]: Hole clearance violation (rule 'manufacturer copper to hole' clearance 0.2000 mm; actual 0.0000 mm)
-    Rule: manufacturer copper to hole; error
-    @(36.3000 mm, 20.2100 mm): Via [net_16] on F.Cu - B.Cu
-    @(3.2000 mm, 3.2000 mm): Zone [GND] on In1.Cu, priority 1
-[clearance]: Clearance violation (zone clearance 0.1500 mm; actual 0.0000 mm)
-    Local override; error
-    @(36.3000 mm, 20.2100 mm): Via [net_16] on F.Cu - B.Cu
-    @(3.2000 mm, 3.2000 mm): Zone [GND] on In2.Cu, priority 1
-[clearance]: Clearance violation (zone clearance 0.1500 mm; actual 0.0000 mm)
-    Local override; error
-    @(39.0500 mm, 23.9600 mm): Via [net_7] on F.Cu - B.Cu
-    @(3.2000 mm, 3.2000 mm): Zone [GND] on In1.Cu, priority 1
-[hole_clearance]: Hole clearance violation (rule 'manufacturer copper to hole' clearance 0.2000 mm; actual 0.0000 mm)
-    Rule: manufacturer copper to hole; error
-    @(36.3000 mm, 20.2100 mm): Via [net_16] on F.Cu - B.Cu
-    @(3.2000 mm, 3.2000 mm): Zone [GND] on In2.Cu, priority 1
-[hole_clearance]: Hole clearance violation (rule 'manufacturer copper to hole' clearance 0.2000 mm; actual 0.0000 mm)
-    Rule: manufacturer copper to hole; error
-    @(39.0500 mm, 23.9600 mm): Via [net_7] on F.Cu - B.Cu
-    @(3.2000 mm, 3.2000 mm): Zone [GND] on In1.Cu, priority 1
-[clearance]: Clearance violation (zone clearance 0.1500 mm; actual 0.0000 mm)
-    Local override; error
-    @(39.0500 mm, 23.9600 mm): Via [net_7] on F.Cu - B.Cu
-    @(3.2000 mm, 3.2000 mm): Zone [GND] on In2.Cu, priority 1
-[hole_clearance]: Hole clearance violation (rule 'manufacturer copper to hole' clearance 0.2000 mm; actual 0.0000 mm)
-    Rule: manufacturer copper to hole; error
-    @(39.0500 mm, 23.9600 mm): Via [net_7] on F.Cu - B.Cu
-    @(3.2000 mm, 3.2000 mm): Zone [GND] on In2.Cu, priority 1
-[clearance]: Clearance violation ( clearance 0.1270 mm; actual 0.0465 mm)
-    Local override; error
-    @(35.8000 mm, 20.0000 mm): Track [net_15] on F.Cu, length 0.7071 mm
-    @(36.3000 mm, 20.2100 mm): Track [net_16] on F.Cu, length 3.3000 mm
-[hole_clearance]: Hole clearance violation (rule 'manufacturer copper to hole' clearance 0.2000 mm; actual 0.1750 mm)
-    Rule: manufacturer copper to hole; error
-    @(39.0500 mm, 21.2100 mm): Pad EP [<no net>] of U1 on F.Cu
-    @(39.0500 mm, 23.9600 mm): Via [net_7] on F.Cu - B.Cu
 [hole_clearance]: Hole clearance violation (rule 'manufacturer copper to hole' clearance 0.2000 mm; actual 0.1750 mm)
     Rule: manufacturer copper to hole; error
     @(39.0500 mm, 21.2100 mm): Pad EP [<no net>] of U1 on F.Cu
     @(36.3000 mm, 20.2100 mm): Via [net_16] on F.Cu - B.Cu
+[hole_clearance]: Hole clearance violation (rule 'manufacturer copper to hole' clearance 0.2000 mm; actual 0.1750 mm)
+    Rule: manufacturer copper to hole; error
+    @(39.0500 mm, 21.2100 mm): Pad EP [<no net>] of U1 on F.Cu
+    @(39.0500 mm, 23.9600 mm): Via [net_7] on F.Cu - B.Cu
 [silk_over_copper]: Silkscreen clipped by solder mask
     Local override; warning
     @(12.4500 mm, 7.7100 mm): Reference field of D_ESD_DP

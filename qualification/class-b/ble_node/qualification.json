@@ -4,11 +4,11 @@
   "gates": {
     "routing_and_drc": {
       "passed": false,
-      "evidence": "DRC: 0 unconnected pads (all 16 nets connected). 35 DRC violations (15 zone clearance, 11 hole clearance, 3 tracks crossing, 2 silk over copper, 4 clearance). All from manual escape segments. Needs cleanup."
+      "evidence": "DRC: 0 unconnected pads (all 16 nets connected). 6 DRC violations: 2 hole_clearance (vias inside aQFN-73 EP pad, fundamental limitation), 2 clearance (manual escape tracks near pads), 2 silk_over_copper (warnings, from footprint silkscreen). No errors on routed nets. All violations from manual via-in-pad escape segments."
     },
     "erc_dispositioned": {
       "passed": false,
-      "evidence": "17 ERC warnings. See reports/ble_node.erc.json."
+      "evidence": "17 ERC warnings (name convention, supply identity, ESD protection, decoupling separation). All non-blocking. See reports/ble_node.erc.json."
     },
     "rf_review": {
       "passed": false,

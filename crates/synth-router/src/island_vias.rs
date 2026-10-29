@@ -139,7 +139,7 @@ fn run_rounds(
             dielectric_reach_mm(&text),
             &Ground::new(ground_nets),
         );
-        last_unresolved = plan.unresolved.clone();
+        last_unresolved.clone_from(&plan.unresolved);
         if plan.vias.is_empty() {
             return Ok(TieOutcome {
                 added,
