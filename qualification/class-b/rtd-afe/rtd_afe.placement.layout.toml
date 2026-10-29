@@ -3,7 +3,7 @@ forced_net_labels = []
 fit_sheet = false
 
 [components.H1]
-x = 4.0
+x = 7.0
 y = 4.0
 rotation = 0
 priority = "hard"
@@ -15,14 +15,14 @@ rotation = 0
 priority = "hard"
 
 [components.H3]
-x = 4.0
-y = 49.0
+x = 7.0
+y = 47.0
 rotation = 0
 priority = "hard"
 
 [components.H4]
 x = 64.0
-y = 49.0
+y = 47.0
 rotation = 0
 priority = "hard"
 
@@ -112,8 +112,8 @@ rotation = 0
 priority = "hard"
 
 [components.C_IO1]
-x = 43.5
-y = 36.5
+x = 42.0
+y = 35.0
 rotation = 0
 priority = "hard"
 
@@ -208,19 +208,19 @@ rotation = 0
 priority = "hard"
 
 [components.J2]
-x = 25.0
-y = 50.0
+x = 21.0
+y = 48.0
 rotation = 270
 priority = "hard"
 
 [components.U1]
-x = 30.0
+x = 26.0
 y = 26.0
 rotation = 90
 priority = "hard"
 
 [components.U3]
-x = 19.5
+x = 15.5
 y = 25.0
 rotation = 0
 priority = "hard"
@@ -232,44 +232,44 @@ rotation = 0
 priority = "hard"
 
 [components.R_S2]
-x = 24.0
-y = 45.0
+x = 20.0
+y = 43.5
 rotation = 90
 priority = "hard"
 
 [components.R_S1]
-x = 27.0
-y = 45.0
+x = 23.0
+y = 43.5
 rotation = 90
 priority = "hard"
 
 [components.C_D]
-x = 30.0
-y = 41.5
-rotation = 0
-priority = "hard"
-
-[components.C_CM2]
-x = 23.5
+x = 26.0
 y = 40.0
 rotation = 0
 priority = "hard"
 
-[components.C_CM1]
-x = 27.0
+[components.C_CM2]
+x = 19.5
 y = 38.5
 rotation = 0
 priority = "hard"
 
+[components.C_CM1]
+x = 23.0
+y = 37.0
+rotation = 0
+priority = "hard"
+
 [components.C_F]
-x = 36.0
-y = 48.0
+x = 34.0
+y = 46.0
 rotation = 0
 priority = "hard"
 
 [components.R_BIAS]
-x = 18.0
-y = 48.0
+x = 14.0
+y = 46.0
 rotation = 90
 priority = "hard"
 
@@ -292,37 +292,37 @@ rotation = 0
 priority = "hard"
 
 [components.C_AV1]
-x = 23.25
-y = 21.25
+x = 19.2
+y = 21.2
 rotation = 0
 priority = "hard"
 
 [components.C_AV2]
-x = 21.5
+x = 17.5
 y = 19.0
 rotation = 0
 priority = "hard"
 
 [components.C_RO]
-x = 30.0
+x = 26.0
 y = 19.5
 rotation = 0
 priority = "hard"
 
 [components.C_RV]
-x = 24.5
+x = 20.5
 y = 30.0
 rotation = 90
 priority = "hard"
 
 [components.C_RI]
-x = 14.0
+x = 10.0
 y = 18.0
 rotation = 0
 priority = "hard"
 
 [components.L2]
-x = 26.0
+x = 22.0
 y = 14.0
 rotation = 0
 priority = "hard"
