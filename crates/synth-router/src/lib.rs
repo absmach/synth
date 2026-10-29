@@ -51,6 +51,7 @@ pub mod failure;
 pub mod freerouting;
 pub mod island_vias;
 pub mod kicad_routing_tools;
+pub mod label_vias;
 pub mod outcomes;
 pub mod pcb_read;
 pub mod process;
@@ -358,6 +359,16 @@ fn finalize(
     // a rejected candidate is left on disk as review material, and the
     // delivered path still holds the un-routed export.
     if state.is_fabrication_ready() {
+        // The labels were placed before the router put its vias down; move any
+        // that now sit on a via or a pad. Silkscreen only: the copper the
+        // candidate was validated on is untouched.
+        match label_vias::keep_labels_off_copper(&candidate.candidate_path) {
+            Ok(label_vias::LabelMoves { moved: 0, hidden: 0 }) => {}
+            Ok(label_vias::LabelMoves { moved, hidden }) => eprintln!(
+                "note: moved {moved} reference label(s) off vias and pads; {hidden} hidden because no clear spot was within reach"
+            ),
+            Err(detail) => eprintln!("warning: reference labels were not checked: {detail}"),
+        }
         // Deliver the zones filled so KiCad opens the board with the
         // connectivity it was validated with. A refill that fails leaves
         // the routed, unfilled board in place.

@@ -34,6 +34,8 @@ const LABEL_CLEARANCE_MM: f64 = 0.2;
 const NEIGHBOUR_CLEARANCE_MM: f64 = 0.3;
 /// Gap between a part's courtyard and an alternative label position.
 const SIDE_GAP_MM: f64 = 0.35;
+/// A label keeps this far from copper it must stay off, such as a via.
+const KEEP_CLEAR_MARGIN_MM: f64 = 0.15;
 /// A label keeps this far inside the board edge.
 const EDGE_CLEARANCE_MM: f64 = 0.2;
 
@@ -123,11 +125,14 @@ fn text_width_nm(refdes: &str) -> i64 {
 /// courtyard and clear of the labels already placed. A part with no fitting
 /// candidate takes the first candidate that at least stays on the board, clear
 /// of the labels already placed; only when none does is the default pulled
-/// inside the board.
+/// inside the board. `keep_clear` is copper a label must not sit on whatever
+/// part it belongs to, such as a routed via: a fabricator reports silkscreen
+/// over a drilled hole, and the router adds those vias after the parts are placed.
 pub(crate) fn place_labels(
     parts: &[LabelPart],
     outline: Rect,
     overrides: &HashMap<ComponentId, LabelOverride>,
+    keep_clear: &[Rect],
 ) -> HashMap<ComponentId, LabelPos> {
     let mut placed = HashMap::new();
     let mut taken: Vec<Rect> = Vec::new();
@@ -197,6 +202,7 @@ pub(crate) fn place_labels(
             let b = label_box(part, pos);
             others()
                 .chain(std::iter::once(grown(part.courtyard, 0.1)))
+                .chain(keep_clear.iter().map(|c| grown(*c, KEEP_CLEAR_MARGIN_MM)))
                 .map(|c| overlap_area(&c, &b))
                 .chain(
                     taken
@@ -470,7 +476,7 @@ mod tests {
     }
 
     fn place(parts: &[LabelPart], outline: Rect) -> HashMap<ComponentId, LabelPos> {
-        place_labels(parts, outline, &HashMap::new())
+        place_labels(parts, outline, &HashMap::new(), &[])
     }
 
     fn outline() -> Rect {
@@ -486,6 +492,37 @@ mod tests {
         let part = resistor(1, "R1", 20.0, 20.0);
         let placed = place(std::slice::from_ref(&part), outline());
         assert_eq!(placed[&part.id], side_candidate(&part, Side::Above));
+    }
+
+    #[test]
+    fn a_label_keeps_off_a_via_in_the_spot_it_would_take() {
+        let part = resistor(1, "R1", 20.0, 20.0);
+        let above = side_candidate(&part, Side::Above);
+        let box_above = label_box(&part, above);
+        let via = Rect::new(
+            Point::new(box_above.min.x_nm + mm_to_nm(0.3), box_above.min.y_nm),
+            Point::new(
+                box_above.min.x_nm + mm_to_nm(0.9),
+                box_above.min.y_nm + mm_to_nm(0.6),
+            ),
+        );
+        let without = place_labels(std::slice::from_ref(&part), outline(), &HashMap::new(), &[]);
+        assert_eq!(
+            without[&part.id], above,
+            "no via: the label takes the side above"
+        );
+        let with = place_labels(
+            std::slice::from_ref(&part),
+            outline(),
+            &HashMap::new(),
+            &[via],
+        );
+        let b = label_box(&part, with[&part.id]);
+        assert!(
+            !overlaps(b, via),
+            "the label {b:?} still covers the via {via:?}"
+        );
+        assert!(inside(outline(), b), "the label left the board");
     }
 
     #[test]
@@ -531,7 +568,7 @@ mod tests {
         right.courtyard = rect(22.3, 2.0, 2.0, 2.0);
 
         let parts = [marker.clone(), part.clone(), left, right];
-        let placed = place_labels(&parts, outline(), &overrides(9, hard));
+        let placed = place_labels(&parts, outline(), &overrides(9, hard), &[]);
         let pos = placed[&part.id];
         let b = label_box(&part, pos);
         let marker_box = label_box(&marker, placed[&marker.id]);
@@ -773,7 +810,7 @@ mod tests {
     fn a_soft_offset_is_used_when_it_fits() {
         let part = resistor(1, "R1", 20.0, 20.0);
         let parts = std::slice::from_ref(&part);
-        let pos = place_labels(parts, outline(), &overrides(1, soft((0.0, 3.0))))[&part.id];
+        let pos = place_labels(parts, outline(), &overrides(1, soft((0.0, 3.0))), &[])[&part.id];
         let b = label_box(&part, pos);
         let (mid_x, mid_y) = ((b.min.x_nm + b.max.x_nm) / 2, (b.min.y_nm + b.max.y_nm) / 2);
         assert_eq!((mid_x, mid_y), (mm_to_nm(20.0), mm_to_nm(23.0)));
@@ -785,7 +822,7 @@ mod tests {
         let mut neighbour = resistor(2, "U1", 20.0, 23.0);
         neighbour.courtyard = rect(20.0, 23.0, 8.0, 2.0);
         let parts = [part.clone(), neighbour.clone()];
-        let pos = place_labels(&parts, outline(), &overrides(1, soft((0.0, 3.0))))[&part.id];
+        let pos = place_labels(&parts, outline(), &overrides(1, soft((0.0, 3.0))), &[])[&part.id];
         let b = label_box(&part, pos);
         assert!(
             !overlaps(b, neighbour.courtyard),
@@ -803,7 +840,7 @@ mod tests {
             hard: true,
             ..soft((0.0, 3.0))
         };
-        let pos = place_labels(&parts, outline(), &overrides(1, hard))[&part.id];
+        let pos = place_labels(&parts, outline(), &overrides(1, hard), &[])[&part.id];
         let b = label_box(&part, pos);
         let mid = ((b.min.x_nm + b.max.x_nm) / 2, (b.min.y_nm + b.max.y_nm) / 2);
         assert_eq!(mid, (mm_to_nm(20.0), mm_to_nm(23.0)));
@@ -821,7 +858,7 @@ mod tests {
             angle_deg: 45.0,
             ..soft((0.0, 3.0))
         };
-        let pos = place_labels(&parts, outline(), &overrides(1, turned))[&part.id];
+        let pos = place_labels(&parts, outline(), &overrides(1, turned), &[])[&part.id];
         let b = label_box(&part, pos);
         assert!(
             !overlaps(b, neighbour.courtyard),
@@ -846,6 +883,7 @@ mod tests {
                 std::slice::from_ref(&part),
                 outline(),
                 &overrides(1, turned),
+                &[],
             );
             let pos = placed[&part.id];
             assert_eq!(pos.angle_deg, angle_deg, "the angle was changed");
@@ -865,8 +903,12 @@ mod tests {
             hard: true,
             ..soft((0.0, -25.0))
         };
-        let pos =
-            place_labels(std::slice::from_ref(&part), outline(), &overrides(1, hard))[&part.id];
+        let pos = place_labels(
+            std::slice::from_ref(&part),
+            outline(),
+            &overrides(1, hard),
+            &[],
+        )[&part.id];
         let b = label_box(&part, pos);
         assert!(inside(outline(), b), "label {b:?} off the board");
         assert_eq!(
@@ -887,14 +929,24 @@ mod tests {
             hide: Some(false),
             hard: false,
         };
-        let shown = place_labels(std::slice::from_ref(&part), outline(), &overrides(1, show));
+        let shown = place_labels(
+            std::slice::from_ref(&part),
+            outline(),
+            &overrides(1, show),
+            &[],
+        );
         assert!(!shown[&part.id].hidden);
         let hide = LabelOverride {
             hide: Some(true),
             ..show
         };
         let plain = resistor(1, "R1", 20.0, 20.0);
-        let hidden = place_labels(std::slice::from_ref(&plain), outline(), &overrides(1, hide));
+        let hidden = place_labels(
+            std::slice::from_ref(&plain),
+            outline(),
+            &overrides(1, hide),
+            &[],
+        );
         assert!(hidden[&plain.id].hidden);
     }
 
