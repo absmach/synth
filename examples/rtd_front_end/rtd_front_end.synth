@@ -1,0 +1,107 @@
+// RTD Analog Front End Board
+//   2-layer board for PT100/PT1000 RTD temperature measurement
+//   Wheatstone bridge + opamp signal conditioning + filter
+//   Output: 0-3.3V analog signal for ADC
+//
+// Class B qualification design
+
+board "rtd_front_end" {
+  layers 2
+  manufacturer "jlcpcb"
+  revision "A"
+  company "Synth QualiBoard"
+
+  // ---- Power Input ------------------------------------------------------
+  group "POWER INPUT" color "#c2410c" {
+    component J_PWR: connector "header_1x2" value "3V3/GND"
+    component C_PWR: capacitor "c_generic_0603" value "100nF"
+    component C_BULK: capacitor "c_generic_0805" value "10uF"
+    notes "" {
+      "3.3V power input from host system."
+      "Bulk + decoupling capacitors."
+    }
+  }
+
+  connect J_PWR.p1 -> C_BULK.p1
+  connect J_PWR.p2 -> C_BULK.p2
+  connect J_PWR.p1 -> C_PWR.p1
+  connect J_PWR.p2 -> C_PWR.p2
+
+  // ---- RTD Sensor Interface ---------------------------------------------
+  group "RTD SENSOR" color "#6a3d9a" {
+    component J_RTD: connector "header_1x2" value "RTD Probe"
+    component R_REF: resistor "r_generic_0603" value "1k"   // reference resistor
+    component R_RTD: resistor "r_generic_0603" value "100"  // PT100 at 0C (nominal)
+    notes "" {
+      "RTD (PT100/PT1000) 2-wire interface."
+      "Voltage divider: R_REF + R_RTD."
+      "R_REF = 1k for PT100 (or 4.7k for PT1000)."
+    }
+  }
+
+  // Voltage divider: VREF -> R_REF -> R_RTD -> GND
+  connect J_PWR.p1 -> R_REF.p1
+  connect R_REF.p2 -> R_RTD.p1
+  connect R_RTD.p2 -> J_PWR.p2
+  connect R_REF.p2 -> J_RTD.p1
+  connect R_RTD.p2 -> J_RTD.p2
+
+  // ---- Opamp Signal Conditioning ----------------------------------------
+  group "OPAMP AMPLIFIER" color "#0072b2" {
+    component U1: opamp "lm358_dual" value "LM358"
+    component R_GAIN1: resistor "r_generic_0603" value "10k"
+    component R_GAIN2: resistor "r_generic_0603" value "100k"
+    component C_FILTER: capacitor "c_generic_0603" value "100nF"
+    component R_FILTER: resistor "r_generic_0603" value "10k"
+    notes "" {
+      "LM358 dual opamp: buffer + gain stage."
+      "Gain = 1 + R_GAIN2/R_GAIN1 = 11x."
+      "Low-pass filter: R_FILTER + C_FILTER, fc ~160 Hz."
+    }
+  }
+
+  // Opamp power
+  connect J_PWR.p1 -> U1.vcc_pos
+  connect J_PWR.p2 -> U1.vcc_neg
+
+  // Opamp decoupling
+  connect J_PWR.p1 -> C_PWR.p1
+  connect J_PWR.p2 -> C_PWR.p2
+
+  // Buffer: input from RTD divider midpoint
+  connect R_REF.p2 -> U1.in_a_pos
+  connect U1.out_a -> U1.in_a_neg
+
+  // Gain stage
+  connect U1.out_a -> R_GAIN1.p1
+  connect R_GAIN1.p2 -> U1.in_b_neg
+  connect R_GAIN2.p1 -> U1.in_b_neg
+  connect R_GAIN2.p2 -> U1.out_b
+  connect J_PWR.p2 -> U1.in_b_pos  // bias (simplified)
+
+  // Low-pass filter on output
+  connect U1.out_b -> R_FILTER.p1
+  connect R_FILTER.p2 -> C_FILTER.p1
+  connect C_FILTER.p2 -> J_PWR.p2
+
+  // ---- Output Connector --------------------------------------------------
+  group "OUTPUT" color "#33a02c" {
+    component J_OUT: connector "header_1x2" value "ADC Out"
+    notes "" {
+      "Analog output to host ADC."
+      "0-3.3V range, filtered."
+    }
+  }
+
+  connect R_FILTER.p2 -> J_OUT.p1
+  connect J_PWR.p2 -> J_OUT.p2
+
+  // ---- Power Rail -------------------------------------------------------
+  power "+3V3" 3.3v {
+    J_PWR.p1
+  }
+
+  power "GND" 0v {
+    J_PWR.p2
+  }
+}
