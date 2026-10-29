@@ -43,7 +43,8 @@ board "ble_node" {
     component C_VBUS: capacitor "c_generic_0805" value "10uF"
     component C_LDO_IN: capacitor "c_generic_0603" value "1uF"
     component C_LDO_OUT: capacitor "c_generic_0603" value "1uF"
-    component D_ESD: diode "esd_usb"
+    component D_ESD_DP: diode "esd_usb"
+    component D_ESD_DN: diode "esd_usb"
     component L_FB1: inductor "ferrite_bead_0603"
     notes "" {
       "USB-C 5V input -> LP5907-3.3 low-noise LDO -> 3.3V rail."
@@ -69,10 +70,11 @@ board "ble_node" {
   connect J1.cc2 -> R_CC2.p1
   connect R_CC2.p2 -> J1.gnd
 
-  // USB ESD protection on data lines
-  connect J1.dp -> D_ESD.io
-  connect J1.gnd -> D_ESD.gnd
-  connect J1.dn -> D_ESD.io  // note: simplified, real design uses separate ESD for DN
+  // USB ESD protection on data lines (separate channels for DP and DN)
+  connect J1.dp -> D_ESD_DP.io
+  connect J1.gnd -> D_ESD_DP.gnd
+  connect J1.dn -> D_ESD_DN.io
+  connect J1.gnd -> D_ESD_DN.gnd
 
   // ---- nRF52840 MCU -----------------------------------------------------
   group "nRF52840 MCU" color "#0072b2" {
@@ -161,13 +163,13 @@ board "ble_node" {
   }
 
   // ---- BME280 Environmental Sensor on I2C -------------------------------
-  group "BME680 ENVIRONMENT SENSOR" color "#33a02c" {
-    component U2: sensor "bme680_env" value "BME680"
+  group "BME280 ENVIRONMENT SENSOR" color "#33a02c" {
+    component U2: sensor "bme280" value "BME280"
     component C_SENS: capacitor "c_generic_0603" value "100nF" { placement_hint { near: "U2" priority: hard } }
     component R_I2C_SDA: resistor "r_generic_0603" value "4.7k" { placement_hint { near: "U2" priority: hard } }
     component R_I2C_SCL: resistor "r_generic_0603" value "4.7k" { placement_hint { near: "U2" priority: hard } }
     notes "" {
-      "BME680: temp, humidity, pressure, gas/VOC."
+      "BME280: temp, humidity, pressure (I2C, addr 0x76)."
       "I2C address 0x76 (SDO tied low, CSB high)."
       "4.7k pull-ups for 400 kHz I2C at 3.3V."
     }

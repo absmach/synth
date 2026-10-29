@@ -1653,11 +1653,12 @@
 		(property
 			"Value"
 			"LM358"
-			(at 200.66 83.82 0)
+			(at 189.23 57.15 0)
 			(effects
 				(font
 					(size 1.27 1.27)
 				)
+				(justify right)
 			)
 		)
 		(property
@@ -1780,7 +1781,7 @@
 	)
 	(symbol
 		(lib_id "Device:R_US")
-		(at 236.22 33.02 90)
+		(at 165.1 33.02 180)
 		(unit 1)
 		(in_bom yes)
 		(on_board yes)
@@ -1788,27 +1789,29 @@
 		(property
 			"Reference"
 			"R_GAIN1"
-			(at 236.22 37.56 90)
+			(at 169.64 31.75 0)
 			(effects
 				(font
 					(size 1.27 1.27)
 				)
+				(justify right)
 			)
 		)
 		(property
 			"Value"
 			"10k"
-			(at 236.22 28.48 90)
+			(at 169.64 34.29 0)
 			(effects
 				(font
 					(size 1.27 1.27)
 				)
+				(justify right)
 			)
 		)
 		(property
 			"Footprint"
 			"Resistor_SMD:R_0603_1608Metric"
-			(at 236.22 33.02 0)
+			(at 165.1 33.02 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -1819,7 +1822,7 @@
 		(property
 			"Datasheet"
 			""
-			(at 236.22 33.02 0)
+			(at 165.1 33.02 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -1830,7 +1833,7 @@
 		(property
 			"MPN"
 			""
-			(at 236.22 33.02 0)
+			(at 165.1 33.02 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -1841,7 +1844,7 @@
 		(property
 			"LCSC"
 			""
-			(at 236.22 33.02 0)
+			(at 165.1 33.02 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -1852,7 +1855,7 @@
 	)
 	(symbol
 		(lib_id "Device:R_US")
-		(at 165.1 58.42 270)
+		(at 165.1 55.88 270)
 		(unit 1)
 		(in_bom yes)
 		(on_board yes)
@@ -1860,7 +1863,7 @@
 		(property
 			"Reference"
 			"R_GAIN2"
-			(at 165.1 53.88 90)
+			(at 165.1 60.42 90)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -1870,7 +1873,7 @@
 		(property
 			"Value"
 			"100k"
-			(at 165.1 62.96 90)
+			(at 165.1 51.34 90)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -1880,7 +1883,7 @@
 		(property
 			"Footprint"
 			"Resistor_SMD:R_0603_1608Metric"
-			(at 165.1 58.42 0)
+			(at 165.1 55.88 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -1891,7 +1894,7 @@
 		(property
 			"Datasheet"
 			""
-			(at 165.1 58.42 0)
+			(at 165.1 55.88 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -1902,7 +1905,7 @@
 		(property
 			"MPN"
 			""
-			(at 165.1 58.42 0)
+			(at 165.1 55.88 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -1913,7 +1916,7 @@
 		(property
 			"LCSC"
 			""
-			(at 165.1 58.42 0)
+			(at 165.1 55.88 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -2142,6 +2145,72 @@
 	)
 	(wire
 		(pts
+			(xy 165.1 36.83)
+			(xy 165.1 49.53)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "a81fac64-c8ce-5355-88f9-3fd6cdee7c6c")
+	)
+	(wire
+		(pts
+			(xy 165.1 49.53)
+			(xy 177.8 49.53)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "80642075-c93c-5173-bfba-a6b24ed2c6f2")
+	)
+	(wire
+		(pts
+			(xy 177.8 49.53)
+			(xy 177.8 58.42)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "d68cf704-ecfc-5596-91d6-8b92283eda1f")
+	)
+	(wire
+		(pts
+			(xy 177.8 58.42)
+			(xy 193.04 58.42)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "354cc076-7665-5431-98f5-584f94a312f2")
+	)
+	(wire
+		(pts
+			(xy 165.1 49.53)
+			(xy 168.91 49.53)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "afa512c8-5332-598d-9620-f227d566f7f3")
+	)
+	(wire
+		(pts
+			(xy 168.91 49.53)
+			(xy 168.91 55.88)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "4a023332-aaa0-530f-9ca6-65cf926a3fd6")
+	)
+	(wire
+		(pts
 			(xy 73.66 34.29)
 			(xy 73.66 41.91)
 		)
@@ -2238,6 +2307,12 @@
 			(type default)
 		)
 		(uuid "bea494c8-21c1-5a37-b7a9-a231c3f4e8ab")
+	)
+	(junction
+		(at 165.1 49.53)
+		(diameter 0)
+		(color 0 0 0 0)
+		(uuid "6aa0ca8c-75cd-5ba5-af22-bd05e8768eba")
 	)
 	(wire
 		(pts
@@ -2432,11 +2507,12 @@
 		(property
 			"Value"
 			"+3V3"
-			(at 198.12 21.59 0)
+			(at 175.9 55.88 0)
 			(effects
 				(font
 					(size 1.27 1.27)
 				)
+				(justify right)
 			)
 		)
 	)
@@ -2687,26 +2763,26 @@
 	)
 	(wire
 		(pts
-			(xy 193.04 53.34)
-			(xy 190.5 53.34)
+			(xy 165.1 29.21)
+			(xy 165.1 26.67)
 		)
 		(stroke
 			(width 0)
 			(type default)
 		)
-		(uuid "694f6c6e-ba03-52a2-8f4b-f2e2fd6c56f1")
+		(uuid "928eeb33-9bf0-5cda-81e7-4d0040b5d5cf")
 	)
 	(symbol
 		(lib_id "synth:VCC_NEG")
-		(at 190.5 53.34 0)
+		(at 165.1 26.67 0)
 		(unit 1)
 		(in_bom no)
 		(on_board no)
-		(uuid "96c3215b-5b6c-58c4-a3d3-a5eaf90221a0")
+		(uuid "a778c09b-26b4-5b68-9639-23a70247bef1")
 		(property
 			"Reference"
-			"#PWR9064"
-			(at 190.5 53.34 0)
+			"#PWR5825"
+			(at 165.1 26.67 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -2717,12 +2793,11 @@
 		(property
 			"Value"
 			"VCC_NEG"
-			(at 188.6 50.8 0)
+			(at 165.1 22.86 0)
 			(effects
 				(font
 					(size 1.27 1.27)
 				)
-				(justify right)
 			)
 		)
 	)
@@ -2758,12 +2833,11 @@
 		(property
 			"Value"
 			"VCC_NEG"
-			(at 255.9 34.29 0)
+			(at 254 33.02 0)
 			(effects
 				(font
 					(size 1.27 1.27)
 				)
-				(justify left)
 			)
 		)
 	)
@@ -2959,122 +3033,31 @@
 	)
 	(wire
 		(pts
-			(xy 232.41 33.02)
-			(xy 227.33 33.02)
+			(xy 193.04 53.34)
+			(xy 187.96 53.34)
 		)
 		(stroke
 			(width 0)
 			(type default)
 		)
-		(uuid "6fad40e4-a6ea-54fe-ab27-a31e00c88310")
+		(uuid "60c1d07e-e679-50b4-bcf0-3faf51afc40c")
 	)
 	(global_label
 		"OUT_A"
 		(shape output)
-		(at 227.33 33.02 180)
+		(at 187.96 53.34 180)
 		(effects
 			(font
 				(size 1.15 1.15)
 			)
 			(justify right)
 		)
-		(uuid "59437a89-19dd-5783-b840-2a2bb493dfca")
+		(uuid "6b102016-0cc6-54ae-9d23-81b112c62ff6")
 	)
 	(wire
 		(pts
-			(xy 240.03 33.02)
-			(xy 245.11 33.02)
-		)
-		(stroke
-			(width 0)
-			(type default)
-		)
-		(uuid "365ff519-8252-5af4-8d89-ef954101d3c9")
-	)
-	(wire
-		(pts
-			(xy 245.11 33.02)
-			(xy 245.11 27.94)
-		)
-		(stroke
-			(width 0)
-			(type default)
-		)
-		(uuid "4d96033e-d047-5205-8517-8c9f0500530e")
-	)
-	(global_label
-		"IN_B_NEG"
-		(shape output)
-		(at 245.11 27.94 0)
-		(effects
-			(font
-				(size 1.15 1.15)
-			)
-			(justify left)
-		)
-		(uuid "77cd7176-80de-5c40-becb-0e7636871d33")
-	)
-	(wire
-		(pts
-			(xy 193.04 58.42)
-			(xy 187.96 58.42)
-		)
-		(stroke
-			(width 0)
-			(type default)
-		)
-		(uuid "02daa468-a2e7-5f03-8a51-3ba2079cfabe")
-	)
-	(wire
-		(pts
-			(xy 187.96 58.42)
-			(xy 187.96 63.5)
-		)
-		(stroke
-			(width 0)
-			(type default)
-		)
-		(uuid "5723bb12-fdb0-5bc4-bb08-32209d5fe503")
-	)
-	(global_label
-		"IN_B_NEG"
-		(shape output)
-		(at 187.96 63.5 180)
-		(effects
-			(font
-				(size 1.15 1.15)
-			)
-			(justify right)
-		)
-		(uuid "300e1710-1a0f-57dd-8320-abd040c215dc")
-	)
-	(wire
-		(pts
-			(xy 168.91 58.42)
-			(xy 173.99 58.42)
-		)
-		(stroke
-			(width 0)
-			(type default)
-		)
-		(uuid "aa2e1c3b-c18e-5e81-8e9b-5513b6f46a64")
-	)
-	(global_label
-		"IN_B_NEG"
-		(shape output)
-		(at 173.99 58.42 0)
-		(effects
-			(font
-				(size 1.15 1.15)
-			)
-			(justify left)
-		)
-		(uuid "0ff36fa8-08b2-5640-8d57-dac976729441")
-	)
-	(wire
-		(pts
-			(xy 161.29 58.42)
-			(xy 156.21 58.42)
+			(xy 161.29 55.88)
+			(xy 156.21 55.88)
 		)
 		(stroke
 			(width 0)
@@ -3085,7 +3068,7 @@
 	(global_label
 		"OUT_B"
 		(shape output)
-		(at 156.21 58.42 180)
+		(at 156.21 55.88 180)
 		(effects
 			(font
 				(size 1.15 1.15)
@@ -3153,7 +3136,7 @@
 	)
 	(text
 		"POWER INPUT"
-		(at 64.766 75.5 0)
+		(at 64.7078 75.5 0)
 		(effects
 			(font
 				(size 2.54 2.54)
@@ -3165,7 +3148,7 @@
 	)
 	(text
 		"RTD SENSOR"
-		(at 65.9725 17.08 0)
+		(at 65.9143 17.08 0)
 		(effects
 			(font
 				(size 2.54 2.54)
@@ -3177,7 +3160,7 @@
 	)
 	(text
 		"OPAMP AMPLIFIER"
-		(at 196.567 15.81 0)
+		(at 196.5088 15.81 0)
 		(effects
 			(font
 				(size 2.54 2.54)
@@ -3189,7 +3172,7 @@
 	)
 	(text
 		"OUTPUT"
-		(at 70.7985 127.57 0)
+		(at 70.7403 127.57 0)
 		(effects
 			(font
 				(size 2.54 2.54)
@@ -3288,7 +3271,7 @@
 		(uuid "6dc2f2da-878a-5a61-b119-58e9d2548971")
 	)
 	(text
-		"LM358 dual opamp: buffer + gain stage."
+		"LM358 dual opamp: buffer + non-inverting gain stage."
 		(at 149.67 90.82 0)
 		(effects
 			(font
@@ -3296,10 +3279,10 @@
 			)
 			(justify left bottom)
 		)
-		(uuid "8bb81765-95d4-569e-9b00-5be939b9c0b9")
+		(uuid "4b45251c-b182-5408-aca1-31bf0c2343b4")
 	)
 	(text
-		"Gain = 1 + R_GAIN2/R_GAIN1 = 11x."
+		"Gain = 1 + R_GAIN2/R_GAIN1 = 1 + 100k/10k = 11x."
 		(at 149.67 93.36 0)
 		(effects
 			(font
@@ -3307,7 +3290,7 @@
 			)
 			(justify left bottom)
 		)
-		(uuid "21a026fd-df3f-52fd-93bf-b17d0cb6665a")
+		(uuid "2cfc8226-515e-59cf-8037-23e3f52e8800")
 	)
 	(text
 		"Low-pass filter: R_FILTER + C_FILTER, fc ~160 Hz."
@@ -3321,6 +3304,17 @@
 		(uuid "abeb24f4-ea17-54e6-a4a0-893ac3a18ec3")
 	)
 	(text
+		"Output: 0-3.3V range for 0-300C (RTD divider 0.33-1.65V x 11 = 3.6-18V, clamped by rail)."
+		(at 149.67 98.44 0)
+		(effects
+			(font
+				(size 1 1)
+			)
+			(justify left bottom)
+		)
+		(uuid "6d9f59c3-271a-5684-b57f-8b552260f803")
+	)
+	(text
 		""
 		(at 17.56 149.75 0)
 		(effects
@@ -3329,7 +3323,7 @@
 			)
 			(justify left bottom)
 		)
-		(uuid "843a78dd-22e8-593e-94b5-33cb1989a647")
+		(uuid "67a7d52d-9543-53de-9569-c0b5aad1d610")
 	)
 	(text
 		"Analog output to host ADC."
@@ -3340,7 +3334,7 @@
 			)
 			(justify left bottom)
 		)
-		(uuid "5e7fc68c-9d00-51dc-95f1-340793dc964a")
+		(uuid "f0baeb02-9a94-56a3-9bbb-13cdd6b2661e")
 	)
 	(text
 		"0-3.3V range, filtered."
@@ -3351,12 +3345,12 @@
 			)
 			(justify left bottom)
 		)
-		(uuid "801f5aee-4a70-5fa3-aa2b-b2d9c3fb721c")
+		(uuid "691de590-0520-54d7-8970-b959d7217782")
 	)
 	(polyline
 		(pts
-			(xy 144.075 70.6692)
-			(xy 144.075 123.0884)
+			(xy 143.9586 70.6692)
+			(xy 143.9586 123.0884)
 		)
 		(stroke
 			(width 0.254)
@@ -3368,7 +3362,7 @@
 	(polyline
 		(pts
 			(xy 12 123.0884)
-			(xy 144.075 123.0884)
+			(xy 143.9586 123.0884)
 		)
 		(stroke
 			(width 0.254)
@@ -3379,8 +3373,8 @@
 	)
 	(polyline
 		(pts
-			(xy 144.075 12)
-			(xy 144.075 70.4152)
+			(xy 143.9586 12)
+			(xy 143.9586 70.4152)
 		)
 		(stroke
 			(width 0.254)
@@ -3392,7 +3386,7 @@
 	(polyline
 		(pts
 			(xy 12 70.4152)
-			(xy 144.075 70.4152)
+			(xy 143.9586 70.4152)
 		)
 		(stroke
 			(width 0.254)
@@ -3403,7 +3397,7 @@
 	)
 	(polyline
 		(pts
-			(xy 144.329 166)
+			(xy 144.2126 166)
 			(xy 177 166)
 		)
 		(stroke
@@ -3415,8 +3409,8 @@
 	)
 	(polyline
 		(pts
-			(xy 144.075 123.3424)
-			(xy 144.075 198)
+			(xy 143.9586 123.3424)
+			(xy 143.9586 198)
 		)
 		(stroke
 			(width 0.254)

@@ -1,0 +1,13 @@
+Designator,Val,Package,Mid X,Mid Y,Rotation,Layer
+"C_BULK","10uF","Capacitor_SMD:C_0805_2012Metric",16.270,15.230,0,"Top"
+"C_FILTER","100nF","Capacitor_SMD:C_0603_1608Metric",15.770,19.730,0,"Top"
+"C_PWR","100nF","Capacitor_SMD:C_0603_1608Metric",21.770,2.730,0,"Top"
+"J_OUT","ADC Out","Connector_PinHeader_2.54mm:PinHeader_1x02_P2.54mm_Vertical",8.270,18.730,0,"Top"
+"J_PWR","3V3/GND","Connector_PinHeader_2.54mm:PinHeader_1x02_P2.54mm_Vertical",2.770,18.730,0,"Top"
+"J_RTD","RTD Probe","Connector_PinHeader_2.54mm:PinHeader_1x02_P2.54mm_Vertical",24.270,14.230,0,"Top"
+"R_FILTER","10k","Resistor_SMD:R_0603_1608Metric",16.270,10.230,270,"Top"
+"R_GAIN1","10k","Resistor_SMD:R_0603_1608Metric",16.270,1.730,0,"Top"
+"R_GAIN2","100k","Resistor_SMD:R_0603_1608Metric",15.270,23.730,0,"Top"
+"R_REF","1k","Resistor_SMD:R_0603_1608Metric",16.270,5.730,0,"Top"
+"R_RTD","100","Resistor_SMD:R_0603_1608Metric",21.770,6.730,0,"Top"
+"U1","LM358","Package_DIP:DIP-8_W7.62mm",6.270,9.230,0,"Top"
