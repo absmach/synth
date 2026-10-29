@@ -363,9 +363,17 @@ fn finalize(
         // that now sit on a via or a pad. Silkscreen only: the copper the
         // candidate was validated on is untouched.
         match label_vias::keep_labels_off_copper(&candidate.candidate_path) {
-            Ok(label_vias::LabelMoves { moved: 0, hidden: 0 }) => {}
-            Ok(label_vias::LabelMoves { moved, hidden }) => eprintln!(
-                "note: moved {moved} reference label(s) off vias and pads; {hidden} hidden because no clear spot was within reach"
+            Ok(label_vias::LabelMoves {
+                moved: 0,
+                hidden: 0,
+                trimmed: 0,
+            }) => {}
+            Ok(label_vias::LabelMoves {
+                moved,
+                hidden,
+                trimmed,
+            }) => eprintln!(
+                "note: moved {moved} reference label(s) off vias and pads; {hidden} hidden because no clear spot was within reach; {trimmed} outline line(s) cut back from vias"
             ),
             Err(detail) => eprintln!("warning: reference labels were not checked: {detail}"),
         }

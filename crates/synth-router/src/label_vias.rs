@@ -10,6 +10,11 @@
 //! clear of every via, every pad and every other label, and is still on the
 //! board. A label with no such spot within reach is left where it is and
 //! hidden and counted, so the caller can say so.
+//!
+//! A part's outline can cross a via just as a label can. The same pass cuts
+//! the part of any silkscreen line that comes within the clearance of a via
+//! out of it, and drops the pieces too short to see, so no silkscreen is left
+//! over a hole.
 
 // Board coordinates are nanometres well inside f64's exact range, and the
 // counts and sample steps are small and positive.
@@ -43,6 +48,9 @@ const MAX_SHIFT_MM: f64 = 6.4;
 /// Spacing of the points a label box is checked at.
 const SAMPLE_MM: f64 = 0.3;
 
+/// The shortest piece of an outline line worth keeping after a cut.
+const MIN_PIECE_MM: f64 = 0.25;
+
 /// What a pass did.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub struct LabelMoves {
@@ -51,6 +59,8 @@ pub struct LabelMoves {
     /// Labels on a via or a pad with no clear spot within reach, hidden so
     /// that no silkscreen is left over a hole.
     pub hidden: usize,
+    /// Silkscreen outline lines cut short where they crossed a via.
+    pub trimmed: usize,
 }
 
 /// A label's box in board millimetres: `(min_x, min_y, max_x, max_y)`.
@@ -191,7 +201,179 @@ fn keep_labels_off_copper_with(
             moves.moved += 1;
         }
     }
+    let (out, trimmed) = trim_outlines_off_vias(&out, &scene.vias);
+    moves.trimmed = trimmed;
     (out, moves)
+}
+
+/// Cut the silkscreen outline lines of every footprint back from the vias
+/// they cross. Returns the new text and the number of lines changed.
+fn trim_outlines_off_vias(text: &str, vias: &[((f64, f64), f64)]) -> (String, usize) {
+    let mut edits: Vec<(std::ops::Range<usize>, String)> = Vec::new();
+    let mut base = 0;
+    while let Some(i) = text[base..].find("(footprint") {
+        let start = base + i;
+        let len = block_len(&text[start..]).unwrap_or(text.len() - start);
+        base = start + len.max(1);
+        let fp = &text[start..start + len];
+        let Some(at) = fp.find("(at ") else {
+            continue;
+        };
+        let at_body = &fp[at + "(at".len()..];
+        let Some(close) = at_body.find(')') else {
+            continue;
+        };
+        let nums: Vec<f64> = at_body[..close]
+            .split_whitespace()
+            .filter_map(|n| n.parse().ok())
+            .collect();
+        let (Some(&ox), Some(&oy)) = (nums.first(), nums.get(1)) else {
+            continue;
+        };
+        let rotation = quarter_turn(nums.get(2).copied().unwrap_or(0.0));
+        let to_board = |(x, y): (f64, f64)| {
+            let (dx, dy) = rotation.rotate_offset(mm_to_nm(x), mm_to_nm(y));
+            (ox + dx as f64 / NM_PER_MM, oy + dy as f64 / NM_PER_MM)
+        };
+        let mut scan = 0;
+        while let Some(g) = fp[scan..].find("(fp_line") {
+            let line_start = scan + g;
+            let end = block_len(&fp[line_start..]).unwrap_or(fp.len() - line_start);
+            scan = line_start + end.max(1);
+            let line = &fp[line_start..line_start + end];
+            if !(line.contains("\"F.SilkS\"") || line.contains("\"B.SilkS\"")) {
+                continue;
+            }
+            let (Some(a), Some(b)) = (block_point(line, "(start"), block_point(line, "(end"))
+            else {
+                continue;
+            };
+            let width = block_number(line, "(width").unwrap_or(0.12);
+            let cuts = cut_intervals(to_board(a), to_board(b), vias, width / 2.0);
+            if cuts.is_empty() {
+                continue;
+            }
+            let pieces = kept_pieces(&cuts, (b.0 - a.0).hypot(b.1 - a.1));
+            let at_t = |t: f64| (a.0 + (b.0 - a.0) * t, a.1 + (b.1 - a.1) * t);
+            let replacement: String = pieces
+                .iter()
+                .enumerate()
+                .map(|(n, &(t0, t1))| piece_text(line, at_t(t0), at_t(t1), n))
+                .collect::<Vec<_>>()
+                .join("\n\t");
+            edits.push((start + line_start..start + line_start + end, replacement));
+        }
+    }
+    let count = edits.len();
+    let mut out = text.to_string();
+    for (range, replacement) in edits.into_iter().rev() {
+        out.replace_range(range, &replacement);
+    }
+    (out, count)
+}
+
+/// The parameters `[t0, t1]` along `a`..`b` that lie within a via's clearance
+/// (its radius, the silkscreen clearance and half the line width), merged.
+fn cut_intervals(
+    a: (f64, f64),
+    b: (f64, f64),
+    vias: &[((f64, f64), f64)],
+    half_width: f64,
+) -> Vec<(f64, f64)> {
+    let (dx, dy) = (b.0 - a.0, b.1 - a.1);
+    let len2 = dx * dx + dy * dy;
+    if len2 < 1e-12 {
+        return Vec::new();
+    }
+    let mut cuts: Vec<(f64, f64)> = vias
+        .iter()
+        .filter_map(|&((vx, vy), r)| {
+            let reach = r + CLEARANCE_MM + half_width;
+            let (fx, fy) = (a.0 - vx, a.1 - vy);
+            let qb = 2.0 * (fx * dx + fy * dy);
+            let qc = fx * fx + fy * fy - reach * reach;
+            let disc = qb * qb - 4.0 * len2 * qc;
+            if disc <= 0.0 {
+                return None;
+            }
+            let root = disc.sqrt();
+            let (t0, t1) = ((-qb - root) / (2.0 * len2), (-qb + root) / (2.0 * len2));
+            (t1 > 0.0 && t0 < 1.0).then_some((t0.max(0.0), t1.min(1.0)))
+        })
+        .collect();
+    cuts.sort_by(|x, y| x.0.total_cmp(&y.0));
+    let mut merged: Vec<(f64, f64)> = Vec::new();
+    for cut in cuts {
+        match merged.last_mut() {
+            Some(last) if cut.0 <= last.1 => last.1 = last.1.max(cut.1),
+            _ => merged.push(cut),
+        }
+    }
+    merged
+}
+
+/// The parts of a line of `length_mm` left after the cuts that are long
+/// enough to keep, as parameter intervals.
+fn kept_pieces(cuts: &[(f64, f64)], length_mm: f64) -> Vec<(f64, f64)> {
+    let mut pieces = Vec::new();
+    let mut from = 0.0;
+    for &(t0, t1) in cuts {
+        pieces.push((from, t0));
+        from = t1;
+    }
+    pieces.push((from, 1.0));
+    pieces
+        .into_iter()
+        .filter(|(t0, t1)| (t1 - t0) * length_mm >= MIN_PIECE_MM)
+        .collect()
+}
+
+/// A copy of the line block with new end points. Every piece after the first
+/// gets its own uuid, derived from the line's so the file stays deterministic.
+fn piece_text(line: &str, start: (f64, f64), end: (f64, f64), n: usize) -> String {
+    let mut text = line.to_string();
+    for (key, to) in [("(start", start), ("(end", end)] {
+        if let Some(k) = text.find(key) {
+            if let Some(close) = text[k..].find(')') {
+                text.replace_range(
+                    k..k + close,
+                    &format!("{key} {} {}", number(to.0), number(to.1)),
+                );
+            }
+        }
+    }
+    if n > 0 {
+        if let Some(u) = text.rfind("(uuid \"") {
+            let body = u + "(uuid \"".len();
+            if let Some(close) = text[body..].find('"') {
+                let mut id: Vec<char> = text[body..body + close].chars().collect();
+                if let Some(last) = id.last_mut() {
+                    let digit = last.to_digit(16).unwrap_or(0);
+                    *last = char::from_digit((digit + n as u32) % 16, 16).unwrap_or('0');
+                }
+                text.replace_range(body..body + close, &id.into_iter().collect::<String>());
+            }
+        }
+    }
+    text
+}
+
+/// The two numbers after `key` in a block.
+fn block_point(block: &str, key: &str) -> Option<(f64, f64)> {
+    let k = block.find(key)?;
+    let body = &block[k + key.len()..];
+    let v: Vec<f64> = body[..body.find(')')?]
+        .split_whitespace()
+        .filter_map(|n| n.parse().ok())
+        .collect();
+    Some((*v.first()?, *v.get(1)?))
+}
+
+/// The number after `key` in a block.
+fn block_number(block: &str, key: &str) -> Option<f64> {
+    let k = block.find(key)?;
+    let body = &block[k + key.len()..];
+    body[..body.find(')')?].trim().parse().ok()
 }
 
 /// What a label may not sit on: the board's vias and pads, its silkscreen and its edge.
@@ -621,7 +803,8 @@ mod tests {
             moves,
             LabelMoves {
                 moved: 1,
-                hidden: 0
+                hidden: 0,
+                trimmed: 0
             }
         );
         let reread = PcbBoard::parse(&out).expect("still parses");
@@ -772,6 +955,61 @@ mod tests {
         );
         let (out, moves) = run(&text);
         assert_eq!(moves, LabelMoves::default());
+        assert_eq!(out, text);
+    }
+
+    /// A resistor whose outline line runs along y = 22 from x = 18 to 22,
+    /// with the given extra board text after it.
+    fn outlined(extra: &str) -> String {
+        let text = board_text(extra);
+        text.replacen(
+            "    (pad \"1\"",
+            "    (fp_line (start -2 2) (end 2 2) (stroke (width 0.12) (type solid)) (layer \"F.SilkS\") (uuid \"00000000-0000-0000-0000-000000000010\"))\n    (pad \"1\"",
+            1,
+        )
+    }
+
+    fn outline_lines(text: &str) -> Vec<(f64, f64, f64, f64)> {
+        let mut out = Vec::new();
+        let mut rest = text;
+        while let Some(i) = rest.find("(fp_line") {
+            let block = &rest[i..];
+            let len = block_len(block).expect("closed");
+            let (a, b) = (
+                block_point(&block[..len], "(start").expect("start"),
+                block_point(&block[..len], "(end").expect("end"),
+            );
+            out.push((a.0, a.1, b.0, b.1));
+            rest = &block[len..];
+        }
+        out
+    }
+
+    #[test]
+    fn an_outline_line_across_a_via_is_cut_back_from_it() {
+        let text =
+            outlined(r#"  (via (at 20 22) (size 0.6) (drill 0.3) (layers "F.Cu" "B.Cu") (net 1))"#);
+        let (out, moves) = run(&text);
+        assert_eq!(moves.trimmed, 1);
+        let lines = outline_lines(&out);
+        assert_eq!(lines.len(), 2, "one piece each side of the via: {lines:?}");
+        let reach = 0.3 + CLEARANCE_MM + 0.06;
+        assert!((lines[0].0 + 2.0).abs() < 1e-6 && (lines[0].2 + reach).abs() < 1e-6);
+        assert!((lines[1].0 - reach).abs() < 1e-6 && (lines[1].2 - 2.0).abs() < 1e-6);
+        assert_eq!(
+            out.matches("(uuid \"00000000-0000-0000-0000-000000000010\")")
+                .count(),
+            1,
+            "the second piece has its own uuid"
+        );
+    }
+
+    #[test]
+    fn an_outline_line_clear_of_every_via_is_left_alone() {
+        let text =
+            outlined(r#"  (via (at 30 30) (size 0.6) (drill 0.3) (layers "F.Cu" "B.Cu") (net 1))"#);
+        let (out, moves) = run(&text);
+        assert_eq!(moves.trimmed, 0);
         assert_eq!(out, text);
     }
 }
