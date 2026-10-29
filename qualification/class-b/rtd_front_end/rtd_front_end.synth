@@ -53,13 +53,13 @@ board "rtd_front_end" {
   group "OPAMP AMPLIFIER" color "#0072b2" {
     component U1: opamp "lm358_dual" value "LM358"
     component R_GAIN1: resistor "r_generic_0603" value "10k"
-    component R_GAIN2: resistor "r_generic_0603" value "40k"   // gain = 1 + 40k/10k = 5x
+    component R_GAIN2: resistor "r_generic_0603" value "30k"   // gain = 1 + 30k/10k = 4x
     component C_FILTER: capacitor "c_generic_0603" value "100nF"
     component R_FILTER: resistor "r_generic_0603" value "10k"
     notes "" {
       "LM358 dual opamp: buffer + non-inverting gain stage."
-      "Gain = 1 + R_GAIN2/R_GAIN1 = 1 + 40k/10k = 5x."
-      "PT100: 100-212 ohm over 0-300C. Divider: 0.30-0.58V. x5 = 1.5-2.9V (fits 0-3.3V)."
+      "Gain = 1 + R_GAIN2/R_GAIN1 = 1 + 30k/10k = 4x."
+      "PT100: 100-212 ohm over 0-300C. Divider: 0.30-0.58V. x4 = 1.2-2.3V (fits LM358 2.5V max output at 3.3V supply)."
       "Low-pass filter: R_FILTER + C_FILTER, fc ~160 Hz."
     }
   }
