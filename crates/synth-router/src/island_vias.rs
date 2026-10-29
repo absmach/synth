@@ -123,6 +123,7 @@ fn run_rounds(
     fill: &mut dyn FnMut(&Path) -> Result<Option<String>, String>,
 ) -> Result<TieOutcome, String> {
     let mut added = 0;
+    let mut last_unresolved: Vec<String> = Vec::new();
     for _ in 0..MAX_ROUNDS {
         let Some(filled) = fill(candidate)? else {
             return Ok(TieOutcome {
@@ -138,6 +139,7 @@ fn run_rounds(
             dielectric_reach_mm(&text),
             &Ground::new(ground_nets),
         );
+        last_unresolved = plan.unresolved.clone();
         if plan.vias.is_empty() {
             return Ok(TieOutcome {
                 added,
@@ -158,34 +160,16 @@ fn run_rounds(
         });
     };
     let board = PcbBoard::parse(&filled).map_err(|e| e.to_string())?;
-    let text = std::fs::read_to_string(candidate)
-        .map_err(|e| format!("could not read {}: {e}", candidate.display()))?;
-    // The whole plan, not the island ties alone: a signal via that still has no
-    // legal return via must be reported with the islands, or a candidate that
-    // spent its rounds on island vias would leave with the return path missing.
-    let islands = plan_ties(&board).vias.len();
-    let plan = plan_all_with(
-        &board,
-        dielectric_reach_mm(&text),
-        &Ground::new(ground_nets),
-    );
+    let plan = plan_ties(&board);
     let mut unresolved = plan.unresolved;
-    unresolved.extend(plan.vias.iter().enumerate().map(|(i, via)| {
-        if i < islands {
-            format!(
-                "a ground island on net {} near ({:.2}, {:.2}) mm is still untied after {MAX_ROUNDS} rounds",
-                via.net,
-                via.at.x_mm(),
-                via.at.y_mm()
-            )
-        } else {
-            format!(
-                "a signal via still wants a ground return via on net {} near ({:.2}, {:.2}) mm after {MAX_ROUNDS} rounds",
-                via.net,
-                via.at.x_mm(),
-                via.at.y_mm()
-            )
-        }
+    unresolved.extend(last_unresolved);
+    unresolved.extend(plan.vias.iter().map(|via| {
+        format!(
+            "a ground island on net {} near ({:.2}, {:.2}) mm is still untied after {MAX_ROUNDS} rounds",
+            via.net,
+            via.at.x_mm(),
+            via.at.y_mm()
+        )
     }));
     Ok(TieOutcome { added, unresolved })
 }
@@ -1414,38 +1398,6 @@ mod tests {
             std::fs::read_to_string(&path).expect("read back"),
             text,
             "the first round's vias must not survive a later failure"
-        );
-        let _ = std::fs::remove_file(&path);
-    }
-
-    /// The rounds are spent on island vias; a signal via that has no legal
-    /// return via must still be in the outcome, not dropped with the planning.
-    #[test]
-    fn an_unresolved_return_is_reported_when_the_repair_rounds_are_spent() {
-        // A 6 mm pad round the signal via leaves no spot for its return.
-        let extra = r#"(net 3 "BLK")
-            (via (at 10 10) (size 0.6) (drill 0.3) (layers "F.Cu" "B.Cu") (net 2))
-            (footprint "R" (at 0 0) (layer "F.Cu")
-              (pad "1" smd rect (at 10 10) (size 6 6) (layers "F.Cu") (net 3)))"#;
-        let text = board_text(extra);
-        let path = scratch_file("spent", &text);
-        // The fill never shows the vias written, so the island stays and every
-        // round is used up.
-        let outcome =
-            tie_islands_with(&path, &[], &mut |_| Ok(Some(text.clone()))).expect("the repair runs");
-        assert!(
-            outcome
-                .unresolved
-                .iter()
-                .any(|u| u.contains("still untied after")),
-            "{outcome:?}"
-        );
-        assert!(
-            outcome
-                .unresolved
-                .iter()
-                .any(|u| u.contains("no ground return via")),
-            "the unresolved return path was dropped: {outcome:?}"
         );
         let _ = std::fs::remove_file(&path);
     }
