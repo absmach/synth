@@ -1,0 +1,22 @@
+{
+  "qualified": false,
+  "meaning": "reports/release.json production_status and release_ready only say the route passed Synth's router and DRC gates. They are not review sign-off.",
+  "gates": {
+    "routing_and_drc": {
+      "passed": true,
+      "evidence": "DRC: 0 unconnected pads, 0 errors on kicad-cli pcb drc."
+    },
+    "erc_dispositioned": {
+      "passed": true,
+      "evidence": "1 ERC warning (supply identity). Non-blocking. See reports/rtd_front_end.erc.json."
+    },
+    "analog_review": {
+      "passed": false,
+      "evidence": "LM358 non-inverting gain stage (gain=11x), RC low-pass filter (fc~160Hz). No independent analog expert review. Class-B scope (ADS124S08, REF5025, RP2350, 4-wire RTD) not implemented - parts not available in registry. Current design is simplified 2-layer LM358 divider board."
+    },
+    "class_b_scope": {
+      "passed": false,
+      "evidence": "Parent Class-B requirement calls for ADS124S08, REF5025, RP2350, 4-wire RTD, AGND/DGND single-point tie. These parts are not in the Synth registry. Current implementation is a simplified 2-layer board. Either implement full Class-B board or split as separate example."
+    }
+  }
+}

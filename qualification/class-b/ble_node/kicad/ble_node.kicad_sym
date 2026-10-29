@@ -389,7 +389,7 @@
 			)
 		)
 	)
-	(symbol "Sensor:BME680"
+	(symbol "Sensor:BME280"
 		(exclude_from_sim no)
 		(in_bom yes)
 		(on_board yes)
@@ -405,7 +405,7 @@
 				)
 			)
 		)
-		(property "Value" "BME680"
+		(property "Value" "BME280"
 			(at 7.62 11.43 0)
 			(show_name no)
 			(do_not_autoplace no)
@@ -415,8 +415,8 @@
 				)
 			)
 		)
-		(property "Footprint" "Package_LGA:Bosch_LGA-8_3x3mm_P0.8mm_ClockwisePinNumbering"
-			(at 36.83 -11.43 0)
+		(property "Footprint" "Package_LGA:Bosch_LGA-8_2.5x2.5mm_P0.65mm_ClockwisePinNumbering"
+			(at 38.1 -11.43 0)
 			(show_name no)
 			(do_not_autoplace no)
 			(hide yes)
@@ -426,7 +426,7 @@
 				)
 			)
 		)
-		(property "Datasheet" "https://ae-bst.resource.bosch.com/media/_tech/media/datasheets/BST-BME680-DS001.pdf"
+		(property "Datasheet" "https://www.bosch-sensortec.com/media/boschsensortec/downloads/datasheets/bst-bme280-ds002.pdf"
 			(at 0 -5.08 0)
 			(show_name no)
 			(do_not_autoplace no)
@@ -437,7 +437,7 @@
 				)
 			)
 		)
-		(property "Description" "4-in-1 sensor, gas, humidity, pressure, temperature, I2C and SPI interface, 1.71-3.6V, LGA-8"
+		(property "Description" "3-in-1 sensor, humidity, pressure, temperature, I2C and SPI interface, 1.71-3.6V, LGA-8"
 			(at 0 0 0)
 			(show_name no)
 			(do_not_autoplace no)
@@ -448,7 +448,7 @@
 				)
 			)
 		)
-		(property "ki_keywords" "Bosch gas pressure humidity temperature environment environmental measurement digital"
+		(property "ki_keywords" "Bosch pressure humidity temperature environment environmental measurement digital"
 			(at 0 0 0)
 			(show_name no)
 			(do_not_autoplace no)
@@ -459,7 +459,7 @@
 				)
 			)
 		)
-		(property "ki_fp_filters" "*LGA*3x3mm*P0.8mm*Clockwise*"
+		(property "ki_fp_filters" "*LGA*2.5x2.5mm*P0.65mm*Clockwise*"
 			(at 0 0 0)
 			(show_name no)
 			(do_not_autoplace no)
@@ -470,7 +470,7 @@
 				)
 			)
 		)
-		(symbol "BME680_0_1"
+		(symbol "BME280_0_1"
 			(rectangle
 				(start -10.16 10.16)
 				(end 10.16 -10.16)
@@ -483,7 +483,7 @@
 				)
 			)
 		)
-		(symbol "BME680_1_1"
+		(symbol "BME280_1_1"
 			(pin power_in line
 				(at -2.54 -15.24 90)
 				(length 5.08)
@@ -1684,7 +1684,7 @@
 		(property
 			"Reference"
 			"U"
-			(at 0 12.7 0)
+			(at 0 10.16 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -1693,8 +1693,8 @@
 		)
 		(property
 			"Value"
-			"nrf52840_i2c"
-			(at 0 15.24 0)
+			"nrf52840"
+			(at 0 12.7 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -1726,8 +1726,8 @@
 		(symbol
 			"NRF52840-QIAA_0_1"
 			(rectangle
-				(start -7.62 -10.16)
-				(end 7.62 10.16)
+				(start -7.62 -7.62)
+				(end 7.62 7.62)
 				(stroke
 					(width 0.254)
 					(type default)
@@ -1742,7 +1742,7 @@
 			(pin
 				power_in
 				line
-				(at -2.54 12.7 270)
+				(at -2.54 10.16 270)
 				(length 2.54)
 				(name
 					"vdd"
@@ -1764,7 +1764,7 @@
 			(pin
 				power_in
 				line
-				(at -2.54 -12.7 90)
+				(at -2.54 -10.16 90)
 				(length 2.54)
 				(name
 					"vss"
@@ -1786,10 +1786,10 @@
 			(pin
 				bidirectional
 				line
-				(at -10.16 7.62 0)
+				(at -10.16 5.08 0)
 				(length 2.54)
 				(name
-					"sda"
+					"p0_06"
 					(effects
 						(font
 							(size 1.27 1.27)
@@ -1808,10 +1808,10 @@
 			(pin
 				bidirectional
 				line
-				(at -10.16 5.08 0)
+				(at -10.16 2.54 0)
 				(length 2.54)
 				(name
-					"scl"
+					"p0_08"
 					(effects
 						(font
 							(size 1.27 1.27)
@@ -1830,7 +1830,7 @@
 			(pin
 				bidirectional
 				line
-				(at -10.16 2.54 0)
+				(at -10.16 0 0)
 				(length 2.54)
 				(name
 					"p0_26"
@@ -1852,7 +1852,7 @@
 			(pin
 				bidirectional
 				line
-				(at -10.16 0 0)
+				(at -10.16 -2.54 0)
 				(length 2.54)
 				(name
 					"p0_27"
@@ -1874,7 +1874,7 @@
 			(pin
 				passive
 				line
-				(at -10.16 -2.54 0)
+				(at 10.16 5.08 180)
 				(length 2.54)
 				(name
 					"ant"
@@ -1896,7 +1896,7 @@
 			(pin
 				input
 				line
-				(at -10.16 -5.08 0)
+				(at 10.16 2.54 180)
 				(length 2.54)
 				(name
 					"reset"

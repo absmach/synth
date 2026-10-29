@@ -54,9 +54,10 @@ board "rtd_front_end" {
     component C_FILTER: capacitor "c_generic_0603" value "100nF"
     component R_FILTER: resistor "r_generic_0603" value "10k"
     notes "" {
-      "LM358 dual opamp: buffer + gain stage."
-      "Gain = 1 + R_GAIN2/R_GAIN1 = 11x."
+      "LM358 dual opamp: buffer + non-inverting gain stage."
+      "Gain = 1 + R_GAIN2/R_GAIN1 = 1 + 100k/10k = 11x."
       "Low-pass filter: R_FILTER + C_FILTER, fc ~160 Hz."
+      "Output: 0-3.3V range for 0-300C (RTD divider 0.33-1.65V x 11 = 3.6-18V, clamped by rail)."
     }
   }
 
@@ -72,12 +73,12 @@ board "rtd_front_end" {
   connect R_REF.p2 -> U1.in_a_pos
   connect U1.out_a -> U1.in_a_neg
 
-  // Gain stage
-  connect U1.out_a -> R_GAIN1.p1
-  connect R_GAIN1.p2 -> U1.in_b_neg
+  // Non-inverting gain stage: gain = 1 + R_GAIN2/R_GAIN1 = 11x
+  connect U1.out_a -> U1.in_b_pos
+  connect R_GAIN1.p1 -> U1.in_b_neg
+  connect R_GAIN1.p2 -> J_PWR.p2
   connect R_GAIN2.p1 -> U1.in_b_neg
   connect R_GAIN2.p2 -> U1.out_b
-  connect J_PWR.p2 -> U1.in_b_pos  // bias (simplified)
 
   // Low-pass filter on output
   connect U1.out_b -> R_FILTER.p1

@@ -12,7 +12,8 @@ C_SENS,100nF,capacitor,"Generic 0603 MLCC, X7R/X5R, any value",Device:C,Capacito
 C_VBUS,10uF,capacitor,"Generic 0805 MLCC, X7R/X5R, any value",Device:C,Capacitor_SMD:C_0805_2012Metric,,
 C_XTAL1,12pF,capacitor,"Generic 0603 MLCC, X7R/X5R, any value",Device:C,Capacitor_SMD:C_0603_1608Metric,,
 C_XTAL2,12pF,capacitor,"Generic 0603 MLCC, X7R/X5R, any value",Device:C,Capacitor_SMD:C_0603_1608Metric,,
-D_ESD,(no value),diode,"USB-line ESD protection (TVS diode array), bidirectional",Device:D_TVS,Diode_SMD:D_SOD-323,,
+D_ESD_DN,(no value),diode,"USB-line ESD protection (TVS diode array), bidirectional",Device:D_TVS,Diode_SMD:D_SOD-323,,
+D_ESD_DP,(no value),diode,"USB-line ESD protection (TVS diode array), bidirectional",Device:D_TVS,Diode_SMD:D_SOD-323,,
 J1,TYPE-C-31-M-12,connector,"USB-C receptacle, 24-pin SMD. Modelled here with primary and mirrored power/ground/data pins for full pad coverage.",Connector:USB_C_Receptacle,Connector_USB:USB_C_Receptacle_HRO_TYPE-C-31-M-12,C165948,TYPE-C-31-M-12
 J_SWD,SWD Header,connector,"1x5 through-hole pin header, 2.54 mm pitch (SWD); datasheet_url is the product page of the Harwin M20 series, no manufacturer PDF link was verifiable",Connector_Generic:Conn_01x05,Connector_PinHeader_2.54mm:PinHeader_1x05_P2.54mm_Vertical,,
 L_FB1,(no value),inductor,"0603 ferrite bead, 600Ω @ 100MHz — EMI suppression",Device:Ferrite_Bead,Inductor_SMD:L_0603_1608Metric,,
@@ -23,7 +24,7 @@ R_I2C_SCL,4.7k,resistor,"Generic 0603 thick-film resistor, any value",Device:R_U
 R_I2C_SDA,4.7k,resistor,"Generic 0603 thick-film resistor, any value",Device:R_US,Resistor_SMD:R_0603_1608Metric,,
 R_RESET,10k,resistor,"Generic 0603 thick-film resistor, any value",Device:R_US,Resistor_SMD:R_0603_1608Metric,,
 SW_RESET,(no value),switch,Generic SPST tactile button,Switch:SW_Push,Button_Switch_SMD:SW_SPST_PTS645Sx43SMTR92,,
-U1,nRF52840-QIAA,mcu,"Nordic nRF52840 ARM Cortex-M4F with BLE 5, I2C-capable GPIO naming",RF_Module:NRF52840-QIAA,Package_DFN_QFN:Nordic_AQFN-73-1EP_7x7mm_P0.5mm,C190794,NRF52840-QIAA-R
-U2,BME680,sensor,"Bosch BME680 environmental sensor: T/RH/P/VOC, I²C",Sensor:BME680,Package_LGA:Bosch_LGA-8_2.5x2.5mm_P0.65mm_ClockwisePinNumbering,,
+U1,nRF52840-QIAA,mcu,"Nordic nRF52840 ARM Cortex-M4F with BLE 5/Thread/Zigbee, aQFN-73 7x7mm",RF_Module:NRF52840-QIAA,Package_DFN_QFN:Nordic_AQFN-73-1EP_7x7mm_P0.5mm,C190794,NRF52840-QIAA-R
+U2,BME280,sensor,"Bosch BME280 temperature/humidity/pressure sensor, I2C/SPI",Sensor:BME280,Package_LGA:Bosch_LGA-8_2.5x2.5mm_P0.65mm_ClockwisePinNumbering,C92489,BME280
 U_LDO,LP5907-3.3,regulator,"TI LP5907 3.3V low-noise LDO, 250mA, SOT-23-5",Regulator_Linear:LP5907MFX-3.3,Package_TO_SOT_SMD:SOT-23-5,C83437,LP5907MFX-3.3
 X1,32 MHz,crystal,"Generic quartz crystal, 2-pin SMD",Device:Crystal,Crystal:Crystal_SMD_3225-4Pin_3.2x2.5mm,,
