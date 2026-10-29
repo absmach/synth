@@ -3,20 +3,20 @@
   "meaning": "reports/release.json production_status and release_ready only say the route passed Synth's router and DRC gates. They are not review sign-off.",
   "gates": {
     "routing_and_drc": {
-      "passed": true,
-      "evidence": "DRC: 0 unconnected pads, 0 errors on kicad-cli pcb drc. 2 nets manually escaped via resin-filled via-in-pad (jlc-filled-via profile)."
+      "passed": false,
+      "evidence": "DRC: 0 unconnected pads (all 16 nets connected). 35 DRC violations (15 zone clearance, 11 hole clearance, 3 tracks crossing, 2 silk over copper, 4 clearance). All from manual escape segments. Needs cleanup."
     },
     "erc_dispositioned": {
       "passed": false,
-      "evidence": "17 ERC warnings (name convention, supply identity, ESD protection, decoupling separation). All non-blocking. See reports/ble_node.erc.json."
+      "evidence": "17 ERC warnings. See reports/ble_node.erc.json."
     },
     "rf_review": {
       "passed": false,
-      "evidence": "50 ohm feed: 0.145mm trace width computed from 4-layer stackup (microstrip, 0.1mm FR4, er=4.3). Exported as RF50 net class. Antenna keepout 8mm. Matching network values (3.9nH/1.0pF) per Nordic reference design. No independent RF expert review."
+      "evidence": "50 ohm feed: 0.145mm trace width computed from 4-layer stackup. Exported as RF50 net class. No independent RF expert review."
     },
     "usb_si_review": {
       "passed": false,
-      "evidence": "USB 2.0 Full Speed. ESD protection on separate D+/D- channels. No controlled impedance on USB pair."
+      "evidence": "USB 2.0 Full Speed. Separate ESD protection on D+/D-. No controlled impedance on USB pair."
     },
     "fabrication_review": {
       "passed": false,
@@ -24,11 +24,7 @@
     },
     "component_review": {
       "passed": false,
-      "evidence": "BME280 substituted for BME680 (BME280 not in registry; BME680 is superset with gas sensing). Balun footprint corrected to real KiCad part. All parts need independent review."
-    },
-    "bme280_requirement": {
-      "passed": true,
-      "evidence": "Issue #365 specifies BME280. Registry had no BME280 part; authored bme280 synth.toml with same pinout as BME680 minus gas sensing. Used bme280 in design."
+      "evidence": "BME280 substituted for BME680. Balun footprint uses synthesized (original part had non-existent footprint). All parts need independent review."
     }
   }
 }
