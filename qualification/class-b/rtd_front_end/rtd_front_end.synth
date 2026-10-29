@@ -30,34 +30,37 @@ board "rtd_front_end" {
   // ---- RTD Sensor Interface ---------------------------------------------
   group "RTD SENSOR" color "#6a3d9a" {
     component J_RTD: connector "header_1x2" value "RTD Probe"
-    component R_REF: resistor "r_generic_0603" value "1k"   // reference resistor
-    component R_RTD: resistor "r_generic_0603" value "100"  // PT100 at 0C (nominal)
+    component R_REF: resistor "r_generic_0603" value "1k"   // reference resistor (1k for PT100)
     notes "" {
       "RTD (PT100/PT1000) 2-wire interface."
-      "Voltage divider: R_REF + R_RTD."
+      "Voltage divider: R_REF (1k) + external RTD."
+      "J_RTD connects the external RTD sensor."
       "R_REF = 1k for PT100 (or 4.7k for PT1000)."
     }
   }
 
-  // Voltage divider: VREF -> R_REF -> R_RTD -> GND
+  // Voltage divider: VREF -> R_REF -> RTD (external) -> GND
+  // J_RTD connects the external RTD sensor
   connect J_PWR.p1 -> R_REF.p1
-  connect R_REF.p2 -> R_RTD.p1
-  connect R_RTD.p2 -> J_PWR.p2
   connect R_REF.p2 -> J_RTD.p1
-  connect R_RTD.p2 -> J_RTD.p2
+  connect J_RTD.p2 -> J_PWR.p2
+  // Pull-down for ERC (external RTD provides the actual path to GND)
+  component R_PD: resistor "r_generic_0603" value "100k"
+  connect R_REF.p2 -> R_PD.p1
+  connect R_PD.p2 -> J_PWR.p2
 
   // ---- Opamp Signal Conditioning ----------------------------------------
   group "OPAMP AMPLIFIER" color "#0072b2" {
     component U1: opamp "lm358_dual" value "LM358"
     component R_GAIN1: resistor "r_generic_0603" value "10k"
-    component R_GAIN2: resistor "r_generic_0603" value "100k"
+    component R_GAIN2: resistor "r_generic_0603" value "40k"   // gain = 1 + 40k/10k = 5x
     component C_FILTER: capacitor "c_generic_0603" value "100nF"
     component R_FILTER: resistor "r_generic_0603" value "10k"
     notes "" {
       "LM358 dual opamp: buffer + non-inverting gain stage."
-      "Gain = 1 + R_GAIN2/R_GAIN1 = 1 + 100k/10k = 11x."
+      "Gain = 1 + R_GAIN2/R_GAIN1 = 1 + 40k/10k = 5x."
+      "PT100: 100-212 ohm over 0-300C. Divider: 0.30-0.58V. x5 = 1.5-2.9V (fits 0-3.3V)."
       "Low-pass filter: R_FILTER + C_FILTER, fc ~160 Hz."
-      "Output: 0-3.3V range for 0-300C (RTD divider 0.33-1.65V x 11 = 3.6-18V, clamped by rail)."
     }
   }
 
@@ -98,10 +101,6 @@ board "rtd_front_end" {
   connect J_PWR.p2 -> J_OUT.p2
 
   // ---- Power Rail -------------------------------------------------------
-  power "+3V3" 3.3v {
-    J_PWR.p1
-  }
-
   power "GND" 0v {
     J_PWR.p2
   }
