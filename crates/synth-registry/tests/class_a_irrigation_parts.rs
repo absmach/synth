@@ -5,13 +5,14 @@
 
 use std::path::Path;
 
-const IDS: [&str; 6] = [
+const IDS: [&str; 7] = [
     "stm32g030k8_lqfp32",
     "sht30_dis",
     "apds9301_real",
     "xtal_8mhz_3225_4p",
     "ao3400a_nmos",
     "header_1x5",
+    "24lc256_soic8",
 ];
 
 fn part(id: &str) -> synth_registry::Part {
@@ -97,29 +98,26 @@ fn caps(p: &synth_registry::Part, pin: &str) -> String {
 #[test]
 fn the_mcu_pins_carry_the_bus_functions_of_the_datasheets_alternate_function_tables() {
     // DS12991 Rev 6, tables 13 and 14: I2C1 on PB6/PB7 and PB8/PB9, USART1 on PB6/PB7,
-    // SPI1 on PA5/PA6/PA7 (SCK/MISO/MOSI), I2C2 on PB10/PB11.
+    // SPI1 on PA5/PA6/PA7 (SCK/MISO/MOSI). The LQFP32 package has no PB10.
     let p = part("stm32g030k8_lqfp32");
     for (pin, wanted) in [
         ("PB6", ["Gpio", "I2cScl", "UartTx"].as_slice()),
         ("PB7", ["Gpio", "I2cSda", "UartRx"].as_slice()),
         ("PB8", ["Gpio", "I2cScl"].as_slice()),
         ("PB9", ["Gpio", "I2cSda"].as_slice()),
-        ("PB10", ["I2cScl"].as_slice()),
         ("PA5", ["SpiSck"].as_slice()),
         ("PA6", ["SpiMiso"].as_slice()),
         ("PA7", ["SpiMosi"].as_slice()),
     ] {
-        let c = if pin == "PB10" {
-            None
-        } else {
-            Some(caps(&p, pin))
-        };
-        if let Some(c) = c {
-            for cap in wanted {
-                assert!(c.contains(cap), "{pin} should be {cap}: {c}");
-            }
+        let c = caps(&p, pin);
+        for cap in wanted {
+            assert!(c.contains(cap), "{pin} should be {cap}: {c}");
         }
     }
+    assert!(
+        p.find_pin("PB10").is_none(),
+        "the LQFP32 package has no PB10 pin"
+    );
     // A pin with no I2C function in the tables must not claim one.
     assert!(!caps(&p, "PA5").contains("I2c"));
     assert!(caps(&p, "NRST").contains("Reset"));
@@ -156,4 +154,17 @@ fn the_mosfet_carries_its_datasheet_ratings() {
     assert_eq!(oc.thermal_resistance_c_per_w, Some(125.0));
     let gate = p.pins.iter().find(|x| x.name == "g").unwrap();
     assert_eq!(gate.voltage_max_v, Some(12.0), "the gate takes +/-12 V");
+}
+
+#[test]
+fn the_canonical_mp2307_limits_are_the_datasheets() {
+    // MPS MP2307 datasheet: "3A, 23V, 340kHz"; recommended input 4.75 V to 23 V.
+    // The description and the operating limits must agree with each other.
+    let p = part("mp2307_buck");
+    let description = p.description.as_deref().unwrap_or_default();
+    assert!(description.contains("3A"), "{description}");
+    let limits = p.operating_conditions.as_ref().expect("operating limits");
+    assert_eq!(limits.max_current_ma, Some(3000.0));
+    assert_eq!(limits.min_voltage_v, Some(4.75));
+    assert_eq!(limits.max_voltage_v, Some(23.0));
 }
