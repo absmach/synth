@@ -13,8 +13,9 @@
 //!
 //! A part's outline can cross a via just as a label can. The same pass cuts
 //! the part of any silkscreen line that comes within the clearance of a via
-//! out of it, and drops the pieces too short to see, so no silkscreen is left
-//! over a hole.
+//! or a pad out of it, and drops the pieces too short to see, so no
+//! silkscreen is left over a hole or too close to copper. Silkscreen strokes
+//! and text thinner than a fabricator can print are drawn at the minimum.
 
 // Board coordinates are nanometres well inside f64's exact range, and the
 // counts and sample steps are small and positive.
@@ -50,6 +51,10 @@ const SAMPLE_MM: f64 = 0.3;
 
 /// The shortest piece of an outline line worth keeping after a cut.
 const MIN_PIECE_MM: f64 = 0.25;
+/// The thinnest silkscreen stroke or text a fabricator prints (JLCPCB lists 0.15 mm).
+const MIN_SILK_WIDTH_MM: f64 = 0.15;
+/// Spacing of the points an outline line is checked at against pads.
+const PAD_SAMPLE_MM: f64 = 0.04;
 
 /// What a pass did.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
@@ -61,6 +66,8 @@ pub struct LabelMoves {
     pub hidden: usize,
     /// Silkscreen outline lines cut short where they crossed a via.
     pub trimmed: usize,
+    /// Silkscreen strokes and texts drawn thinner than the minimum, widened.
+    pub widened: usize,
 }
 
 /// A label's box in board millimetres: `(min_x, min_y, max_x, max_y)`.
@@ -201,14 +208,20 @@ fn keep_labels_off_copper_with(
             moves.moved += 1;
         }
     }
-    let (out, trimmed) = trim_outlines_off_vias(&out, &scene.vias);
+    let (out, widened) = widen_silkscreen(&out);
+    moves.widened = widened;
+    let (out, trimmed) = trim_outlines_off_copper(&out, board, &scene.vias);
     moves.trimmed = trimmed;
     (out, moves)
 }
 
-/// Cut the silkscreen outline lines of every footprint back from the vias
-/// they cross. Returns the new text and the number of lines changed.
-fn trim_outlines_off_vias(text: &str, vias: &[((f64, f64), f64)]) -> (String, usize) {
+/// Cut the silkscreen outline lines of every footprint back from the vias and
+/// pads they cross or come too near. Returns the new text and the number of lines changed.
+fn trim_outlines_off_copper(
+    text: &str,
+    board: &PcbBoard,
+    vias: &[((f64, f64), f64)],
+) -> (String, usize) {
     let mut edits: Vec<(std::ops::Range<usize>, String)> = Vec::new();
     let mut base = 0;
     while let Some(i) = text[base..].find("(footprint") {
@@ -249,7 +262,13 @@ fn trim_outlines_off_vias(text: &str, vias: &[((f64, f64), f64)]) -> (String, us
                 continue;
             };
             let width = block_number(line, "(width").unwrap_or(0.12);
-            let cuts = cut_intervals(to_board(a), to_board(b), vias, width / 2.0);
+            let (ba, bb) = (to_board(a), to_board(b));
+            let cuts = merge_intervals(
+                cut_intervals(ba, bb, vias, width / 2.0)
+                    .into_iter()
+                    .chain(pad_cut_intervals(ba, bb, board, width / 2.0))
+                    .collect(),
+            );
             if cuts.is_empty() {
                 continue;
             }
@@ -285,7 +304,7 @@ fn cut_intervals(
     if len2 < 1e-12 {
         return Vec::new();
     }
-    let mut cuts: Vec<(f64, f64)> = vias
+    let cuts: Vec<(f64, f64)> = vias
         .iter()
         .filter_map(|&((vx, vy), r)| {
             let reach = r + CLEARANCE_MM + half_width;
@@ -301,6 +320,11 @@ fn cut_intervals(
             (t1 > 0.0 && t0 < 1.0).then_some((t0.max(0.0), t1.min(1.0)))
         })
         .collect();
+    merge_intervals(cuts)
+}
+
+/// Sort and merge overlapping parameter intervals.
+fn merge_intervals(mut cuts: Vec<(f64, f64)>) -> Vec<(f64, f64)> {
     cuts.sort_by(|x, y| x.0.total_cmp(&y.0));
     let mut merged: Vec<(f64, f64)> = Vec::new();
     for cut in cuts {
@@ -310,6 +334,110 @@ fn cut_intervals(
         }
     }
     merged
+}
+
+/// The parameters along `a`..`b` where the line's edge would come within the
+/// silkscreen clearance of a pad, found by sampling the signed distance to
+/// every pad near the line.
+fn pad_cut_intervals(
+    a: (f64, f64),
+    b: (f64, f64),
+    board: &PcbBoard,
+    half_width: f64,
+) -> Vec<(f64, f64)> {
+    let reach = CLEARANCE_MM + half_width;
+    let near: Vec<_> = board
+        .pads()
+        .filter(|p| {
+            let r = p.size_nm.0.max(p.size_nm.1) as f64 / NM_PER_MM / 2.0 + reach;
+            let (px, py) = (p.at.x_mm(), p.at.y_mm());
+            px >= a.0.min(b.0) - r
+                && px <= a.0.max(b.0) + r
+                && py >= a.1.min(b.1) - r
+                && py <= a.1.max(b.1) + r
+        })
+        .collect();
+    if near.is_empty() {
+        return Vec::new();
+    }
+    let length = (b.0 - a.0).hypot(b.1 - a.1);
+    let steps = ((length / PAD_SAMPLE_MM).ceil() as u32).max(1);
+    let step = 1.0 / f64::from(steps);
+    let mut cuts = Vec::new();
+    for k in 0..=steps {
+        let t = f64::from(k) * step;
+        let at = Point::new(
+            mm_to_nm(a.0 + (b.0 - a.0) * t),
+            mm_to_nm(a.1 + (b.1 - a.1) * t),
+        );
+        if near
+            .iter()
+            .any(|p| p.signed_distance_nm(at) < reach * NM_PER_MM)
+        {
+            cuts.push(((t - step).max(0.0), (t + step).min(1.0)));
+        }
+    }
+    cuts
+}
+
+/// Draw every silkscreen stroke and text thinner than the minimum at the
+/// minimum. Returns the new text and how many were widened.
+fn widen_silkscreen(text: &str) -> (String, usize) {
+    let mut out = String::with_capacity(text.len());
+    let mut rest = text;
+    let mut widened = 0;
+    while let Some(i) = [
+        "(fp_line",
+        "(fp_arc",
+        "(fp_circle",
+        "(fp_rect",
+        "(property",
+        "(fp_text",
+    ]
+    .iter()
+    .filter_map(|k| rest.find(k))
+    .min()
+    {
+        let (head, tail) = rest.split_at(i);
+        out.push_str(head);
+        let len = block_len(tail).unwrap_or(tail.len());
+        let block = &tail[..len];
+        let on_silk = block.contains("\"F.SilkS\"") || block.contains("\"B.SilkS\"");
+        if on_silk {
+            let (changed, n) = widen_block(block);
+            out.push_str(&changed);
+            widened += n;
+        } else {
+            out.push_str(block);
+        }
+        rest = &tail[len..];
+    }
+    out.push_str(rest);
+    (out, widened)
+}
+
+/// Raise the `(width ..)` and `(thickness ..)` values in one block to the minimum.
+fn widen_block(block: &str) -> (String, usize) {
+    let mut out = block.to_string();
+    let mut count = 0;
+    for key in ["(width ", "(thickness "] {
+        let mut from = 0;
+        while let Some(k) = out[from..].find(key) {
+            let start = from + k + key.len();
+            let Some(close) = out[start..].find(')') else {
+                break;
+            };
+            let value: Option<f64> = out[start..start + close].trim().parse().ok();
+            from = start + close;
+            if let Some(v) = value.filter(|v| *v > 0.0 && *v < MIN_SILK_WIDTH_MM - 1e-9) {
+                let _ = v;
+                out.replace_range(start..start + close, &number(MIN_SILK_WIDTH_MM));
+                count += 1;
+                from = start + number(MIN_SILK_WIDTH_MM).len();
+            }
+        }
+    }
+    (out, count)
 }
 
 /// The parts of a line of `length_mm` left after the cuts that are long
@@ -804,7 +932,8 @@ mod tests {
             LabelMoves {
                 moved: 1,
                 hidden: 0,
-                trimmed: 0
+                trimmed: 0,
+                widened: 0
             }
         );
         let reread = PcbBoard::parse(&out).expect("still parses");
@@ -993,7 +1122,7 @@ mod tests {
         assert_eq!(moves.trimmed, 1);
         let lines = outline_lines(&out);
         assert_eq!(lines.len(), 2, "one piece each side of the via: {lines:?}");
-        let reach = 0.3 + CLEARANCE_MM + 0.06;
+        let reach = 0.3 + CLEARANCE_MM + MIN_SILK_WIDTH_MM / 2.0;
         assert!((lines[0].0 + 2.0).abs() < 1e-6 && (lines[0].2 + reach).abs() < 1e-6);
         assert!((lines[1].0 - reach).abs() < 1e-6 && (lines[1].2 - 2.0).abs() < 1e-6);
         assert_eq!(
@@ -1010,6 +1139,62 @@ mod tests {
             outlined(r#"  (via (at 30 30) (size 0.6) (drill 0.3) (layers "F.Cu" "B.Cu") (net 1))"#);
         let (out, moves) = run(&text);
         assert_eq!(moves.trimmed, 0);
-        assert_eq!(out, text);
+        assert_eq!(outline_lines(&out), outline_lines(&text));
+    }
+
+    /// An outline line `y` below the resistor's centre, width 0.12 mm.
+    fn outlined_at(y: f64, extra: &str) -> String {
+        outlined(extra).replace(
+            "(start -2 2) (end 2 2)",
+            &format!("(start -2 {y}) (end 2 {y})"),
+        )
+    }
+
+    #[test]
+    fn a_thin_silkscreen_stroke_is_drawn_at_the_minimum_width() {
+        let text = outlined_at(2.0, "");
+        let (out, moves) = run(&text);
+        assert_eq!(moves.widened, 1);
+        assert!(out.contains("(width 0.15)"), "{out}");
+        assert!(!out.contains("(width 0.12)"));
+        // Already wide enough: untouched, and idempotent.
+        let (again, moves) = run(&out);
+        assert_eq!(moves.widened, 0);
+        assert_eq!(again, out);
+    }
+
+    #[test]
+    fn thin_reference_text_on_the_silkscreen_is_thickened_too() {
+        let text = board_text("").replace(
+            "(property \"Reference\" \"R1\" (at 0 -2) (layer \"F.SilkS\"))",
+            "(property \"Reference\" \"R1\" (at 0 -2) (layer \"F.SilkS\") (effects (font (size 1 1) (thickness 0.12))))",
+        );
+        let (out, moves) = run(&text);
+        assert_eq!(moves.widened, 1);
+        assert!(out.contains("(thickness 0.15)"), "{out}");
+    }
+
+    #[test]
+    fn an_outline_line_beside_a_pad_is_cut_back_from_it() {
+        // 0.6 mm below the centre the line runs 0.125 mm from both pads: closer
+        // than the silkscreen clearance once its own width is counted.
+        let text = outlined_at(0.6, "");
+        let (out, moves) = run(&text);
+        assert_eq!(moves.trimmed, 1);
+        let lines = outline_lines(&out);
+        // A stub beyond each pad and the piece between them, which keeps the
+        // clearance (the gap between the pads is wider than the clearance).
+        assert_eq!(lines.len(), 3, "{lines:?}");
+        assert!(lines[0].2 < -1.0, "{lines:?}");
+        assert!(lines[1].0 > -0.5 && lines[1].2 < 0.5, "{lines:?}");
+        assert!(lines[2].0 > 1.0, "{lines:?}");
+    }
+
+    #[test]
+    fn an_outline_line_clear_of_the_pads_is_not_cut() {
+        let text = outlined_at(2.0, "");
+        let (out, moves) = run(&text);
+        assert_eq!(moves.trimmed, 0);
+        assert_eq!(outline_lines(&out).len(), 1);
     }
 }
