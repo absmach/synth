@@ -28,9 +28,9 @@ QUALIFICATION.md are closed.
   D1/D2 SOD-323 TVS on D+/D-. U5 TI LP5907-3.3 LDO (250 mA) makes +3V3 from
   VBUS.
 - L2 600 ohm at 100 MHz ferrite bead isolates +3V3A for U1 and U3.
-- Four M2.5 non-plated mounting holes at (4, 4), (70, 4), (4, 53) and
-  (70, 53) mm.
-- 72.0 x 56.0 mm, 4 layers, 1.6 mm. Board source `rtd_afe.synth`, placement
+- Four M2.5 non-plated mounting holes at (4, 4), (64, 4), (4, 49) and
+  (64, 49) mm.
+- 66.1 x 53.1 mm, 4 layers, 1.6 mm. Board source `rtd_afe.synth`, placement
   sidecar `rtd_afe.placement.layout.toml` (board millimetres). The schematic has
   no sidecar; the compiler lays it out by group.
 
@@ -78,13 +78,16 @@ can bridge the split.
 Status: routed with FreeRouting 2.4.1 on Java 25, KiCad 10.0.7, Synth at the
 worktree this directory was exported from. The route is not reviewed.
 
-- Analog left, digital right. U1 at (30, 26) mm, U3 at (19.5, 25) mm, J2 at the
-  bottom left. U2 at (50, 33.25) mm, U4 above it, the crystal below, J1 and U5
-  on the top right. The reference trace VREF is 10.6 mm on F.Cu with no via.
+- Analog left, digital right. The analog/digital core is the original
+  placement: U1 at (30, 26) mm, U3 at (19.5, 25) mm, U2 at (50, 33.25) mm, U4
+  at (43.5, 18) mm. The USB cluster moved inward: J1 at (55, 5.75) mm, U5 at
+  (62, 17) mm. J2 is at (25, 50) mm and J3 at (56, 48) mm. The reference trace
+  VREF is 10.6 mm on F.Cu with no via.
 - All six RTD/input nets and VREF are on F.Cu only, with no layer change. The
   digital SPI, QSPI, SWD and USB nets change between F.Cu and B.Cu.
-- 354 track segments, 77 vias (22 on AGND, 26 on DGND, 29 signal), 732.5 mm of
-  copper. 41 nets, 0 open.
+- 348 track segments, 74 vias (20 on AGND, 25 on DGND, 29 signal), 703.8 mm of
+  copper. 41 nets, 0 open. Synth's routing record counts 71 routed vias; the
+  other three are ground stitching.
 - `kicad-cli pcb drc --severity-all --refill-zones`: 0 errors, 0 warnings, 0
   unconnected items. `pcbnew.LoadBoard` reopens the board. The AGND/DGND tie
   check passes with R_TIE as the only bridge.
@@ -93,9 +96,10 @@ worktree this directory was exported from. The route is not reviewed.
   are the digital interface and DC support nets (SPI, QSPI, USB, ADC_DRDY/START,
   RUN, XOUT_R, REFOUT); no RTD, AIN or VREF net is flagged. See
   QUALIFICATION.md.
-- Silkscreen: 0 DRC warnings. C_DV1, R_AV and C_VI have hard label overrides in
-  the sidecar; without them their auto-placed labels sat on U2 pads, C_VI and
-  C_DVB. The C_DV1 label is vertical, along U2's right edge.
+- Silkscreen: 0 DRC warnings. C_DV1, R_AV and C_L1 have hard label overrides in
+  the sidecar; C_VI, C_DVB and C_IO1 have their reference label hidden because
+  the compact refdes field had no clear spot. Their refdes are in the BOM, PnP
+  and schematic. C_DV1 is vertical, along U2's right edge.
 
 ## Checks
 
@@ -136,7 +140,8 @@ netlist/PCB parity is clean.
   Gerbers and drill files.
 - `reports/`: `release.json`, the delivered DRC and ERC reports, the KiCad
   netlist, the FreeRouting routing record and the connectivity report.
-- `images/`: 3D top and bottom views (`kicad-cli pcb render`).
+- `images/`: 3D top, bottom and angled views and the schematic
+  (`kicad-cli pcb render` and `kicad-cli sch export pdf`).
 - `rtd_afe.synth`, `rtd_afe.placement.layout.toml`: the design sources.
 - `check.sh`: the acceptance check above.
 - `SHA256SUMS`: hashes of the artifacts.
@@ -168,9 +173,17 @@ fabrication approval or a component review.
   register map, USB descriptors and calibration are all unwritten/untested.
 - Synth has no free-text silkscreen primitive, so the board name and revision
   are not on the copper. Header pin functions are not labelled on the silk.
-- The bottom mounting holes are 2.8 mm from the cut edge (1.5 mm of material
-  around the 2.5 mm hole); the top pair is 4.2 mm from the edge. The asymmetry
-  needs a mechanical check.
+- The board is 66.1 x 53.1 mm, compacted from 72 x 56 mm. Denser placements
+  (58 x 47 and 64 x 49 mm) could not be delivered: Synth's ground-island repair
+  left AGND/DGND islands that KiCad refuses. The committed layout keeps the
+  proven analog/digital core and moves the USB cluster, J2, J3 and the holes
+  inward. It is the densest placement that routes clean on this toolchain.
+- Three decoupling capacitors (C_VI, C_DVB, C_IO1) have their reference label
+  hidden because the refdes field has no clear spot in the compact layout. The
+  refdes are still in the BOM, PnP and schematic.
+- The bottom mounting holes are 3.9 mm from the cut edge (1.3 mm of material
+  around the 2.5 mm hole); the top pair is 4.2 mm from the edge, the left pair
+  3.5 mm and the right pair 2.6 mm. The asymmetry needs a mechanical check.
 - The KiCad ERC library-name warnings remain (see above). They do not affect
   the netlist.
 

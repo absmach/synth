@@ -9,20 +9,20 @@ rotation = 0
 priority = "hard"
 
 [components.H2]
-x = 70.0
+x = 64.0
 y = 4.0
 rotation = 0
 priority = "hard"
 
 [components.H3]
 x = 4.0
-y = 53.0
+y = 49.0
 rotation = 0
 priority = "hard"
 
 [components.H4]
-x = 70.0
-y = 53.0
+x = 64.0
+y = 49.0
 rotation = 0
 priority = "hard"
 
@@ -39,13 +39,13 @@ rotation = 0
 priority = "hard"
 
 [components.J1]
-x = 61.25
-y = 5.75
+x = 55.0
+y = 5.8
 rotation = 180
 priority = "hard"
 
 [components.U5]
-x = 68.0
+x = 62.0
 y = 17.0
 rotation = 0
 priority = "hard"
@@ -57,8 +57,8 @@ rotation = 0
 priority = "hard"
 
 [components.J3]
-x = 58.0
-y = 52.0
+x = 56.0
+y = 48.0
 rotation = 90
 priority = "hard"
 
@@ -112,8 +112,8 @@ rotation = 0
 priority = "hard"
 
 [components.C_IO1]
-x = 41.75
-y = 40.0
+x = 43.5
+y = 36.5
 rotation = 0
 priority = "hard"
 
@@ -172,44 +172,44 @@ rotation = 0
 priority = "hard"
 
 [components.R_CC1]
-x = 65.0
+x = 59.0
 y = 12.0
 rotation = 0
 priority = "hard"
 
 [components.R_CC2]
-x = 57.0
+x = 51.0
 y = 12.0
 rotation = 0
 priority = "hard"
 
 [components.D1]
-x = 58.5
+x = 52.5
 y = 16.0
 rotation = 0
 priority = "hard"
 
 [components.D2]
-x = 62.0
+x = 56.0
 y = 16.0
 rotation = 0
 priority = "hard"
 
 [components.C_L1]
-x = 64.5
+x = 58.5
 y = 20.0
 rotation = 0
 priority = "hard"
 
 [components.C_L2]
-x = 69.0
+x = 63.0
 y = 21.5
 rotation = 0
 priority = "hard"
 
 [components.J2]
 x = 25.0
-y = 52.5
+y = 50.0
 rotation = 270
 priority = "hard"
 
@@ -262,13 +262,13 @@ rotation = 0
 priority = "hard"
 
 [components.C_F]
-x = 31.5
-y = 49.0
+x = 36.0
+y = 48.0
 rotation = 0
 priority = "hard"
 
 [components.R_BIAS]
-x = 20.0
+x = 18.0
 y = 48.0
 rotation = 90
 priority = "hard"
@@ -340,7 +340,16 @@ angle = 0.0
 priority = "hard"
 
 [labels.C_VI]
-dx = 3.5
-dy = -1.25
+hide = true
+
+[labels.C_DVB]
+hide = true
+
+[labels.C_L1]
+dx = 0.0
+dy = 1.879
 angle = 0.0
 priority = "hard"
+
+[labels.C_IO1]
+hide = true
