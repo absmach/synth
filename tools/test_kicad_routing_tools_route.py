@@ -126,5 +126,68 @@ class RetryTest(unittest.TestCase):
         self.assertNotEqual(code, 0)
 
 
+FANOUT_STUB = """\\
+import sys
+from pathlib import Path
+
+here = Path(__file__).parent
+with (here / "fanout.log").open("a") as log:
+    log.write(" ".join(sys.argv[1:]) + "\\n")
+Path(sys.argv[sys.argv.index("--output") + 1]).write_text("(kicad_pcb)")
+"""
+
+
+def load_adapter():
+    import importlib.util
+
+    spec = importlib.util.spec_from_file_location("krt_adapter", ADAPTER)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def run_fanout(components, required, allow_via_in_pad=False):
+    """Call `_fanout` against a stub engine; return (board routed next, escapes run)."""
+    adapter = load_adapter()
+    with tempfile.TemporaryDirectory() as tmp:
+        repo = Path(tmp) / "krt"
+        (repo / "py_router").mkdir(parents=True)
+        (repo / "py_router" / "bga_fanout.py").write_text(FANOUT_STUB)
+        board = Path(tmp) / "in.kicad_pcb"
+        board.write_text("(kicad_pcb)")
+        routed = adapter._fanout(
+            sys.executable, repo, board, components, "underpad", 0.127, None, None,
+            "standard", False, "none", allow_via_in_pad, set(required),
+        )
+        log = repo / "py_router" / "fanout.log"
+        calls = log.read_text().splitlines() if log.exists() else []
+        return routed.name, [
+            (line.split("--component ")[1].split()[0],
+             line.split("--escape-method ")[1].split()[0])
+            for line in calls
+        ]
+
+
+class FanoutTest(unittest.TestCase):
+    def test_a_declared_channel_escape_runs_without_via_in_pad(self):
+        # U1 takes the under-pad default and is skipped; U2 asked for channel,
+        # which puts no via in a pad, so it is escaped and nothing fails.
+        routed, escapes = run_fanout(["U1", "U2:channel:"], required=["U2"])
+        self.assertEqual(escapes, [("U2", "channel")])
+        self.assertNotEqual(routed, "in.kicad_pcb")
+
+    def test_a_declared_underpad_escape_without_via_in_pad_fails_the_route(self):
+        with self.assertRaises(RuntimeError):
+            run_fanout(["U1:underpad:"], required=["U1"])
+
+    def test_nothing_to_escape_leaves_the_board_untouched(self):
+        routed, escapes = run_fanout(["U1"], required=[])
+        self.assertEqual((routed, escapes), ("in.kicad_pcb", []))
+
+    def test_via_in_pad_permits_the_under_pad_default(self):
+        _, escapes = run_fanout(["U1"], required=[], allow_via_in_pad=True)
+        self.assertEqual(escapes, [("U1", "underpad")])
+
+
 if __name__ == "__main__":
     unittest.main()

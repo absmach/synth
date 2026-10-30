@@ -91,6 +91,7 @@ pub fn component(id: u32, refdes: &str, part: Part) -> Component {
         dnp: false,
         properties: std::collections::BTreeMap::default(),
         placement_hint: None,
+        escape: None,
         group: None,
         sheet: None,
         source_span: Span::new(0, 0),

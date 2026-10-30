@@ -238,6 +238,26 @@ impl Default for KiCadRoutingToolsOptions {
     }
 }
 
+/// One package to escape before the general router sees the board, and how.
+///
+/// Carried by reference designator, which is what the engine takes and what
+/// the design wrote. A request here is not a claim that the package needs an
+/// escape — a design may ask for one on a part the geometry would not have
+/// selected, and that is the point of being able to say so.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct EscapeRequest {
+    /// Reference designator of the package to escape.
+    pub refdes: String,
+    /// Engine the design asked for, as the engine spells it. `None` leaves
+    /// the choice to the adapter's default.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub method: Option<String>,
+    /// Copper layers the escape may route onto. Empty leaves it to the
+    /// engine, which distributes across whatever the board has.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub layers: Vec<String>,
+}
+
 /// Fabrication policy decisions that are not derivable from the board.
 ///
 /// Via-in-pad is the one that matters, and it is two facts rather than one:
@@ -370,6 +390,30 @@ impl RouteRequest {
         unmet
     }
 
+    /// Take the per-package escape intent the board declared.
+    ///
+    /// Lives here for the reason [`Self::use_board_process_requirements`]
+    /// does: there are four routing entry points, and an intent honoured by
+    /// one of them is a declaration the other three ignore.
+    pub fn use_board_escapes(&mut self, board: &synth_ir::Board) {
+        self.escapes.clear();
+        self.escapes_off.clear();
+        for component in &board.components {
+            let Some(intent) = &component.escape else {
+                continue;
+            };
+            if intent.off {
+                self.escapes_off.push(component.refdes.clone());
+                continue;
+            }
+            self.escapes.push(EscapeRequest {
+                refdes: component.refdes.clone(),
+                method: intent.method.map(|m| m.as_source().to_string()),
+                layers: intent.layers.clone(),
+            });
+        }
+    }
+
     /// Adopt the fabrication floor a manufacturer profile imposes.
     ///
     /// Keeps whatever via-in-pad permission was already granted: an operator
@@ -400,6 +444,14 @@ pub struct RouteRequest {
     pub kicad_routing_tools: KiCadRoutingToolsOptions,
     /// Fabrication policy applied during independent validation.
     pub policy: FabricationPolicy,
+    /// Packages the design asked to have escaped, and how. Empty means the
+    /// design said nothing, and the dense grid arrays are escaped anyway.
+    #[serde(default)]
+    pub escapes: Vec<EscapeRequest>,
+    /// Packages the design asked to leave unescaped (`escape { off }`),
+    /// which overrides geometric selection.
+    #[serde(default)]
+    pub escapes_off: Vec<String>,
     /// Name of the manufacturing profile the board was exported against,
     /// recorded in provenance.
     pub profile_name: String,
@@ -597,6 +649,8 @@ impl RouteRequest {
             limits: RouterLimits::default(),
             freerouting: FreeroutingOptions::default(),
             kicad_routing_tools: KiCadRoutingToolsOptions::default(),
+            escapes: Vec::new(),
+            escapes_off: Vec::new(),
             policy: FabricationPolicy::default(),
             profile_name: "unspecified".to_string(),
             input_hash: String::new(),
