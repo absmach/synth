@@ -19,8 +19,8 @@ expression: board
         "lifecycle": "active",
         "signed_by": [],
         "substitutes": [],
-        "mpn": null,
-        "lcsc_pn": null,
+        "mpn": "PZ254V-11-04P",
+        "lcsc_pn": "C492403",
         "pins": [
           {
             "name": "p1",

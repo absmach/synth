@@ -3,6 +3,9 @@ kind = "connector"
 description = "1x4 through-hole pin header, 2.54mm pitch"
 kicad_symbol = "Connector_Generic:Conn_01x04"
 kicad_footprint = "Connector_PinHeader_2.54mm:PinHeader_1x04_P2.54mm_Vertical"
+# XFCN 1x4 2.54 mm straight.
+mpn = "PZ254V-11-04P"
+lcsc_pn = "C492403"
 
 [footprint_dimensions]
 width_mm = 3.54

@@ -8131,14 +8131,29 @@ board "features" {
 
         for feature in ["H1", "H2", "H3", "H4", "FID1", "FID2"] {
             let rect = courtyards[feature];
-            let band = mm_to_nm(6.0);
+            // The tolerance is the feature's own extent, not a constant.
+            // `place_board_features` searches a band of `max(w, h) + gap`
+            // around the envelope and packs against courtyards inflated by
+            // the placer's extra margin, while the rect measured here is the
+            // raw courtyard — so the furthest in a legally banded feature can
+            // sit grows with the part. A literal 6 mm silently assumed a
+            // 2.5 mm mounting hole; the same hole read from its own
+            // `fp_circle` courtyard is 5.5 mm, and 6 mm then fails a
+            // placement that is on the border exactly as intended.
+            //
+            // What the test is for is still caught: placed with the circuit
+            // rather than against it, these landed at the quadrant centres,
+            // 17 mm in on the Class-C SDRAM card.
+            let extent_nm = (rect.width_nm()).max(rect.height_nm());
+            let band = extent_nm + mm_to_nm(3.0);
             let on_border = rect.min.x_nm <= circuit.min.x_nm + band
                 || rect.max.x_nm >= circuit.max.x_nm - band
                 || rect.min.y_nm <= circuit.min.y_nm + band
                 || rect.max.y_nm >= circuit.max.y_nm - band;
             assert!(
                 on_border,
-                "{feature} is not within 6 mm of an edge of the circuit envelope"
+                "{feature} is not within {} mm of an edge of the circuit envelope",
+                synth_geometry::nm_to_mm(band)
             );
         }
     }

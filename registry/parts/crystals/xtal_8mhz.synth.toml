@@ -3,6 +3,9 @@ kind = "crystal"
 description = "8MHz quartz crystal, HC-49S/SMD"
 kicad_symbol = "Device:Crystal"
 kicad_footprint = "Crystal:Crystal_SMD_3225-4Pin_3.2x2.5mm"
+# YXC 8 MHz, 12 pF load, 3225 4-pad.
+mpn = "X32258MOB4SI"
+lcsc_pn = "C2682775"
 
 [footprint_dimensions]
 width_mm = 4.2
