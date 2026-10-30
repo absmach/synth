@@ -592,6 +592,26 @@ impl PadBox {
             .fold(f64::MAX, f64::min)
     }
 
+    /// Whether the two pads' rectangles touch or overlap. Exact: two turned
+    /// rectangles are apart only if some edge direction of either separates
+    /// their projections.
+    fn overlaps(&self, other: &PadBox) -> bool {
+        let axes = [
+            (self.cos, self.sin),
+            (-self.sin, self.cos),
+            (other.cos, other.sin),
+            (-other.sin, other.cos),
+        ];
+        axes.iter().all(|&(ax, ay)| {
+            let radius = |pad: &PadBox| {
+                pad.half.0 * (ax * pad.cos + ay * pad.sin).abs()
+                    + pad.half.1 * (-ax * pad.sin + ay * pad.cos).abs()
+            };
+            let centres = ((other.at.0 - self.at.0) * ax + (other.at.1 - self.at.1) * ay).abs();
+            centres <= radius(self) + radius(other) + 1e-9
+        })
+    }
+
     /// Distance from `p` to the pad's rectangle, zero inside it.
     fn distance(&self, p: (f64, f64)) -> f64 {
         let (dx, dy) = (p.0 - self.at.0, p.1 - self.at.1);
@@ -835,7 +855,9 @@ fn pieces_of(board: &PcbBoard, net: &str, regions: &[Region], copper: &[String])
 /// a pad or via that reaches the main one ties the sliver to it as surely as a
 /// via would. KiCad counts that as connected, so the repair must too.
 fn join_through_copper(groups: &mut Groups, pieces: &[Piece]) {
-    const TOUCH_MM: f64 = 0.02;
+    // Copper joins only where it touches or overlaps: a nanometre of slack for
+    // the rounding of coordinates written in millimetres, not a real gap.
+    const TOUCH_MM: f64 = 1e-6;
     let base = groups.0.len();
     groups.0.extend(base..base + pieces.len());
     for (i, piece) in pieces.iter().enumerate() {
@@ -921,7 +943,15 @@ fn copper_gap(first: &PieceShape, second: &PieceShape) -> f64 {
         (Via(centre, radius), Pad(pad)) | (Pad(pad), Via(centre, radius)) => {
             pad.distance(*centre) - radius
         }
-        (Pad(_), Pad(_)) => f64::MAX,
+        // Two pads are one piece of copper where they overlap, as the pads of a
+        // stacked, thermal or exposed-pad footprint do; apart, they never join.
+        (Pad(a), Pad(b)) => {
+            if a.overlaps(b) {
+                0.0
+            } else {
+                f64::MAX
+            }
+        }
     }
 }
 
@@ -2138,6 +2168,79 @@ mod tests {
             assert!(exact <= walked + 1e-9, "exact {exact} walked {walked}");
             assert!(walked - exact < 1e-3, "exact {exact} walked {walked}");
         }
+    }
+
+    fn piece(shape: PieceShape) -> Piece {
+        Piece {
+            layers: vec!["F.Cu".to_string()],
+            shape,
+            regions: Vec::new(),
+        }
+    }
+
+    fn joined(pieces: &[Piece]) -> bool {
+        let mut groups = Groups(Vec::new());
+        join_through_copper(&mut groups, pieces);
+        let root = groups.find(0);
+        (0..pieces.len()).all(|k| groups.find(k) == root)
+    }
+
+    /// Copper 10 micrometres apart is two pieces of copper, not one: the old
+    /// 20 micrometre slack joined them and hid the via that restores the
+    /// connection.
+    #[test]
+    fn a_real_gap_of_ten_micrometres_between_tracks_is_not_a_connection() {
+        // Collinear tracks, 0.2 mm wide, whose copper ends 0.01 mm apart.
+        let apart = [
+            piece(PieceShape::Track((0.0, 0.0), (1.0, 0.0), 0.1)),
+            piece(PieceShape::Track((1.21, 0.0), (2.0, 0.0), 0.1)),
+        ];
+        assert!(!joined(&apart), "a 0.01 mm gap is a gap");
+        let overlapping = [
+            piece(PieceShape::Track((0.0, 0.0), (1.0, 0.0), 0.1)),
+            piece(PieceShape::Track((1.15, 0.0), (2.0, 0.0), 0.1)),
+        ];
+        assert!(joined(&overlapping), "overlapping copper is connected");
+        let touching = [
+            piece(PieceShape::Track((0.0, 0.0), (1.0, 0.0), 0.1)),
+            piece(PieceShape::Track((1.2, 0.0), (2.0, 0.0), 0.1)),
+        ];
+        assert!(joined(&touching), "copper that touches is connected");
+    }
+
+    /// Same-net pads that overlap are one piece of copper, as those of a
+    /// stacked, thermal or exposed-pad footprint are.
+    #[test]
+    fn overlapping_same_net_pads_are_joined_and_pads_apart_are_not() {
+        let pad = |x: f64, y: f64, degrees: f64| {
+            PieceShape::Pad(PadBox {
+                at: (x, y),
+                half: (0.5, 0.5),
+                cos: degrees.to_radians().cos(),
+                sin: degrees.to_radians().sin(),
+            })
+        };
+        assert!(joined(&[
+            piece(pad(0.0, 0.0, 0.0)),
+            piece(pad(0.8, 0.0, 0.0))
+        ]));
+        assert!(
+            !joined(&[piece(pad(0.0, 0.0, 0.0)), piece(pad(1.1, 0.0, 0.0))]),
+            "pads 0.1 mm apart are two pads"
+        );
+        assert!(
+            joined(&[piece(pad(0.0, 0.0, 0.0)), piece(pad(1.0, 0.0, 0.0))]),
+            "pads that touch edge to edge are connected"
+        );
+        // A pad turned 45 degrees reaches 0.707 mm along the axis.
+        assert!(joined(&[
+            piece(pad(0.0, 0.0, 0.0)),
+            piece(pad(1.1, 0.0, 45.0))
+        ]));
+        assert!(!joined(&[
+            piece(pad(0.0, 0.0, 0.0)),
+            piece(pad(1.3, 0.0, 45.0))
+        ]));
     }
 
     /// A large net is joined in time that follows its size: twelve thousand vias
