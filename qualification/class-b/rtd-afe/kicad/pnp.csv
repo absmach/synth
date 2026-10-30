@@ -31,7 +31,7 @@ Designator,Val,Package,Mid X,Mid Y,Rotation,Layer
 "H3","mounting_hole","MountingHole:MountingHole_2.5mm",6.000,40.000,0,"Top"
 "H4","mounting_hole","MountingHole:MountingHole_2.5mm",49.000,40.000,0,"Top"
 "J1","TYPE-C-31-M-12","Connector_USB:USB_C_Receptacle_HRO_TYPE-C-31-M-12",39.500,6.000,180,"Top"
-"J2","PT100","Connector_PinHeader_2.54mm:PinHeader_1x04_P2.54mm_Vertical",15.500,40.000,270,"Top"
+"J2","PT100","Connector_PinHeader_2.54mm:PinHeader_1x04_P2.54mm_Vertical",15.500,41.500,270,"Top"
 "J3","SWD","Connector_PinHeader_2.54mm:PinHeader_1x03_P2.54mm_Vertical",41.500,41.500,90,"Top"
 "L1","3.3uH","Inductor_SMD:L_0805_2012Metric",43.500,20.500,90,"Top"
 "L2","600R@100MHz","Inductor_SMD:L_0603_1608Metric",30.500,24.500,180,"Top"

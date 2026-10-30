@@ -84,19 +84,24 @@ worktree this directory was exported from. The route is not reviewed.
   The digital core is U2 at (38, 27) mm, U4 at (33, 18.8) mm and Y1 at
   (37, 36.5) mm. J1 is at (39.5, 6.0) mm on the top edge, U5 at (47.5, 17) mm
   and J3 at (41.5, 41.5) mm on the bottom edge.
+- J2 and J3 are both at y = 41.5 mm; their bodies end 0.8 mm from the bottom
+  edge. J1 is at (39.5, 6.0) mm on the top edge, 12 mm right of the board
+  centre. Centering J1 was attempted; every clean-route candidate left an
+  AGND or DGND pour sliver at U2's 0.4 mm pad row that the island repair could
+  not stitch, so the committed board keeps J1 over the digital cluster.
 - The RTD/input nets and VREF are on F.Cu only, with no layer change. QSPI also
   stays on F.Cu. The SPI, SWD, USB_DN and XIN nets change layers; see the SI
   warnings below.
-- 349 track segments, 61 vias (18 on AGND, 25 on DGND, 18 signal), 597.1 mm of
-  copper. 41 nets, 0 open. The router records 58 vias; the other three are
+- 339 track segments, 64 vias (19 on AGND, 25 on DGND, 20 signal), 586.6 mm of
+  copper. 41 nets, 0 open. The router records 60 vias; the other four are
   source ground stitching.
 - `kicad-cli pcb drc --severity-all --refill-zones`: 0 errors, 0 warnings, 0
   unconnected items. `pcbnew.LoadBoard` reopens the board. The AGND/DGND tie
   check passes with R_TIE as the only bridge.
-- Synth's signal-integrity pass: 21 non-blocking warnings, 3 crosstalk findings
-  and 18 layer changes with no ground-return via within 0.64 mm. The flagged
-  nets are SPI, SWD, USB_DN, XIN, RUN, ADC_DRDY and REFOUT; no RTD, AIN or
-  VREF net is flagged. See QUALIFICATION.md.
+- Synth's signal-integrity pass: 21 non-blocking warnings, 1 crosstalk finding
+  (USB_DN/VBUS) and 20 layer changes with no ground-return via within 0.64 mm.
+  The flagged nets are SPI, SWD, USB_DN, XIN, RUN, ADC_DRDY and REFOUT; no RTD,
+  AIN or VREF net is flagged. See QUALIFICATION.md.
 - Silkscreen: 0 DRC warnings. U1 has a hard label override at (24, 34.5) mm;
   24 passives and both TVS diodes have their reference label hidden because the
   compact refdes field has no clear spot. Their refdes remain in the BOM, PnP and

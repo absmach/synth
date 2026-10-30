@@ -30,7 +30,7 @@ priority = "hard"
 # --- Analog front end: left column, AGND pour -------------------------------
 [components.J2]
 x = 15.5
-y = 40.0
+y = 41.5
 rotation = 270
 priority = "hard"
 

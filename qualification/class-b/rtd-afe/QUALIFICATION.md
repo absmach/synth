@@ -56,7 +56,7 @@ Versions: KiCad 10.0.7, FreeRouting 2.4.1 on OpenJDK 25.0.4.1, Synth
 | Synth signal integrity | 21 warnings, 0 blocking | `reports/release.json` |
 
 The delivered board is `kicad/rtd_afe.kicad_pcb`
-(`3a8ffaee8f9f79b4b8dfd182510eb3b32360e2324773de84a5b57e036c5e9717`).
+(`fbbddee2b226e3bfbcdef405d1c3e717c4ba3332d2f1cd434c3032d322813089`).
 The schematic is `kicad/rtd_afe.kicad_sch`
 (`e81a9a0ebf18d5fd93cef8b224df16134033824da6402abbb8f845048dbd89c4`).
 
@@ -92,6 +92,15 @@ puts J1/J2/J3 on the edges. It is 50.1 x 44.1 mm and routes with 0 open nets,
 densest arrangement; it is one successful FreeRouting run, and `check.sh`
 re-routes from scratch.
 
+J2 and J3 are level at y = 41.5 mm, with their bodies 0.8 mm from the bottom
+edge. J1 stays at (39.5, 6.0) mm, 12 mm right of the board centre. Exact
+centering (x = 27.5) was tried with the USB cluster, R_TIE and the analog
+decoupling moved to compensate; every route left one unconnected AGND or DGND
+pour sliver at U2's 0.4 mm pad row, and the 0.6 mm stitching search could not
+tie it. The export refuses such a board, so the clean layout keeps J1 over the
+digital cluster. Centering it needs a ground-pour or U2 break-out change, not
+a placement nudge.
+
 ## ERC findings and dispositions
 
 `reports/rtd_afe.kicad-erc.json` has two warnings and no errors:
@@ -106,13 +115,12 @@ connectivity findings. A human should confirm that disposition.
 
 ## Synth signal-integrity warnings
 
-`reports/release.json` lists 21 non-blocking signal-integrity findings: 3
-crosstalk findings (net pairs 8/10, 20/33 and 32/33) and 18 layer changes with
-no ground-return via within 0.64 mm. The net pairs are SPI_MOSI/SPI_SCK,
-SWDIO/VBUS and USB_DN/VBUS. The layer changes are on REFOUT, SPI_MOSI/CS/SCK/
-MISO, ADC_DRDY, XIN, RUN, SWCLK and USB_DN_C. No RTD_FP/RTD_SP/RTD_SN/RTD_FN,
-AIN1, AIN2 or VREF finding appears. The six RTD/input nets and VREF are on
-F.Cu only; QSPI and USB_DP also stay on F.Cu.
+`reports/release.json` lists 21 non-blocking signal-integrity findings: 1
+crosstalk finding (net pair 32/33, USB_DN/VBUS) and 20 layer changes with no
+ground-return via within 0.64 mm. The layer changes are on REFOUT, SPI_MOSI/CS/
+SCK/MISO, ADC_DRDY, XIN, RUN, SWCLK, SWDIO and USB_DN_C. No RTD_FP/RTD_SP/
+RTD_SN/RTD_FN, AIN1, AIN2 or VREF finding appears. The six RTD/input nets and
+VREF are on F.Cu only; QSPI and USB_DP also stay on F.Cu.
 
 The XIN and USB_DN_C layer changes are the two an SI reviewer should look at
 first: XIN is a high-impedance crystal net and USB_DN is half of the full-speed
@@ -204,27 +212,27 @@ coordinates above are the measured ones.
 
 ## Measured layout numbers
 
-- 349 track segments, 61 vias: 18 AGND, 25 DGND, 18 signal. 597.1 mm of track.
+- 339 track segments, 64 vias: 19 AGND, 25 DGND, 20 signal. 586.6 mm of track.
 - 41 nets, 0 open. All AGND/DGND pads are in one cluster per net (the DRC has no
   unconnected items; the tie check above covers the split).
 - Analog nets, all F.Cu only, no via:
 
 | Net | Length |
 | --- | --- |
-| RTD_FP | 9.79 mm |
-| RTD_SP | 2.67 mm |
+| RTD_FP | 11.04 mm |
+| RTD_SP | 4.17 mm |
 | AIN1 | 8.72 mm |
-| RTD_SN | 2.67 mm |
+| RTD_SN | 4.17 mm |
 | AIN2 | 15.56 mm |
-| RTD_FN | 7.13 mm |
+| RTD_FN | 8.32 mm |
 | VREF | 4.74 mm |
 
-- SPI_SCK is 14.65 mm; SPI_MOSI/MISO/CS are 17.22/15.37/15.60 mm. All four SPI
-  nets change layer (two vias each). QSPI_SS/SCLK/SD0..SD3 are 11.91/4.80/3.23/
-  10.31/7.40/6.25 mm and stay on F.Cu.
-- USB: the RP2350-side nets are 10.66 mm (DP) and 10.80 mm (DN); the
-  connector-side nets are 11.42 mm and 8.45 mm. Total path 22.08 mm (DP) and
-  19.25 mm (DN), 2.83 mm of skew, full speed. DP stays on F.Cu; DN uses two
+- SPI_SCK is 14.07 mm; SPI_MOSI/MISO/CS are 18.41/16.33/16.16 mm. All four SPI
+  nets change layer (two vias each). QSPI_SS/SCLK/SD0..SD3 are 13.00/4.80/3.23/
+  10.26/7.40/6.25 mm and stay on F.Cu.
+- USB: the RP2350-side nets are 10.66 mm (DP) and 12.48 mm (DN); the
+  connector-side nets are 11.42 mm and 8.44 mm. Total path 22.08 mm (DP) and
+  20.92 mm (DN), 1.16 mm of skew, full speed. DP stays on F.Cu; DN uses two
   vias. The pair is not routed as a coupled pair and has no controlled
   impedance.
 - Crystal: XIN 12.24 mm, XOUT 9.45 mm, XOUT_R 6.76 mm. XIN changes layer; that
@@ -315,13 +323,13 @@ Inputs and outputs of the committed run:
 | File | SHA-256 |
 | --- | --- |
 | `rtd_afe.synth` | `c7641ede7eeef4a5f09324f46160bc0b91eed6e3310a25f005b520d91d5facf1` |
-| `rtd_afe.placement.layout.toml` | `699f1e4d6793cd1d8b570d76ece90a7e83df6934c7fd0a955ebc9e8cb3bb2ff1` |
-| `kicad/rtd_afe.kicad_pcb` | `3a8ffaee8f9f79b4b8dfd182510eb3b32360e2324773de84a5b57e036c5e9717` |
+| `rtd_afe.placement.layout.toml` | `fec4d607bc4cd91ce9a0402f9ef51e53c85fd74cd73735c123aae70e4106f90a` |
+| `kicad/rtd_afe.kicad_pcb` | `fbbddee2b226e3bfbcdef405d1c3e717c4ba3332d2f1cd434c3032d322813089` |
 | `kicad/rtd_afe.kicad_sch` | `e81a9a0ebf18d5fd93cef8b224df16134033824da6402abbb8f845048dbd89c4` |
-| `reports/rtd_afe.kicad-drc.json` | `4e2dcd4fd0c6ad526750a1ba9c3f5d4a49fbefb7c40e5ba651a3e19eafa24320` |
-| `reports/rtd_afe.kicad-erc.json` | `ebb1ca49cbfe83cf10a116fb26ccf286733c712c81c314535c5c379093a9db76` |
-| `reports/release.json` | `230c05bf0053a73010cb53ad6291b43986e884557bd49d83474a469b59b3129c` |
-| `reports/rtd_afe.routing.json` | `e53d4eae525b8b5dcd962abe4feaeb4e8e9596b263284c6f63f3c55bacc743bd` |
+| `reports/rtd_afe.kicad-drc.json` | `68fa27ad6b73a14224587c2ccc45cc4d69190b7479cba336419ba0766cb9db97` |
+| `reports/rtd_afe.kicad-erc.json` | `e37d2abc1d0b13aa12e02441a49684d5d9fafe7ef19668337aab67918156cd17` |
+| `reports/release.json` | `add3895d2e8a8e5498d824351ee778356a880d882ebce53331bec4f7258dc383` |
+| `reports/rtd_afe.routing.json` | `4fb4f5a0f2b9f65c72ae46b9990e96ebdc21f0a66cddc01b016a2bd61803f3d2` |
 
 The release, routing and netlist reports had the absolute paths of the machine
 that produced them cut to repository-relative ones, matching the usb-uart
