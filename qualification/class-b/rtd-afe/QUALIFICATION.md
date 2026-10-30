@@ -6,8 +6,9 @@ qualification sign-off. `reports/release.json`'s `release_ready` and
 its own `gate_scope` says so. Every review gate below that needs a human is
 still open.
 
-The board is not fabricated, not powered, not measured and not independently
-reviewed. Do not call it proven, clean or production-ready.
+The board is not fabricated, not powered and not measured. The SI/PI/RF review
+is in progress with the designated reviewer; do not call it proven, clean or
+production-ready.
 
 ## Board and stackup
 
@@ -144,7 +145,7 @@ warnings. They are not part of the DRC acceptance bar, but they are not hidden:
 | `E-SYNTH-POWER-004` on VBUS: 7 load endpoints, 1 capacitor | Heuristic. C_L1 (2.2 uF) is the LDO input capacitor. There is no separate VBUS bulk capacitor, fuse or TVS; that is a real gap, see the USB section. |
 | `W-SYNTH-ANOMALY-001` | Statistical topology heuristic (score -2.43 against a 0 boundary); no action. |
 | `W-SYNTH-SUPPLY-002` x10 | Generic parts (passives, headers, ESD) have no distributor identity. |
-| `W-SYNTH-PART-UNVERIFIED` | Y1, the 12 MHz crystal, has no reviewer. This is the release override. |
+| `W-SYNTH-PART-UNVERIFIED` | Y1, the 12 MHz crystal, has no part-level reviewer. This is the release override. |
 | `E-SYNTH-CONNECT-007` x2 | `SPI_MISO` and `ADC_DRDY` join a `bidirectional` MCU pin to an ADC `output`. Normal SPI/ready wiring; the MCU pin is only an input in those modes. |
 | `E-SYNTH-ESD-001` x3 | VBUS has no reverse-polarity protection and CC1/CC2 have no TVS. Real gaps; see USB. |
 | `E-SYNTH-SCHEM-003` x11 | Decoupling-cap symbol bodies are more than 25 mm from their IC bodies in the compiler-drawn schematic. A schematic-drawing warning, not the PCB. |
@@ -258,12 +259,12 @@ coordinates above are the measured ones.
 
 Nothing below is signed off. The list is deliberately blunt.
 
-- **SI/PI/RF expert**: review the 24-bit analog layout, the AGND/DGND split and
-  its single tie, the ADC reference decoupling, the RC filter against the chosen
-  ADC data rate, the IDAC output's 10 nF load and settling, the PGA
-  common-mode range at the chosen gain, the unused-input termination, and the
-  18 layer-change warnings on the digital and crystal nets. None of these were
-  simulated or measured.
+- **SI/PI/RF review (designated reviewer)**: the 24-bit analog layout, the
+  AGND/DGND split and its single tie, the ADC reference decoupling, the RC
+  filter against the chosen ADC data rate, the IDAC output's 10 nF load and
+  settling, the PGA common-mode range at the chosen gain, the unused-input
+  termination, and the 20 layer-change warnings on the digital and crystal
+  nets. None of these were simulated or measured.
 - **Metrology/analog**: the measurement is not ratiometric. The IDAC's absolute
   accuracy and drift, the REF5025 grade and drift, the 1 k filter resistors and
   the PT100 wiring resistance set the accuracy; there is no calibration or
@@ -286,9 +287,11 @@ Nothing below is signed off. The list is deliberately blunt.
 - **Firmware**: the RP2350 boot, QSPI flash, ADC gain/data-rate/IDAC registers,
   USB descriptors and the PT100 conversion/calibration do not exist in this
   repository. Nothing was powered.
-- **Independent sign-off**: no part reviewer, no board reviewer and no
-  second-person check of this record. The only automated checks are the datasheet
-  pin tests, the KiCad DRC/ERC and the tie assertion.
+- **Independent sign-off**: the board review is with the designated reviewer.
+  Part-level reviews are only the three registry entries in the table (U1, U3,
+  U5); Y1 still has none. There has been no second-person check of this record
+  and no hardware measurement. The only automated checks are the datasheet pin
+  tests, the KiCad DRC/ERC and the tie assertion.
 
 ## Synth defects hit in this work
 

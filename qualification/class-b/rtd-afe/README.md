@@ -1,10 +1,11 @@
 # PT100 4-wire RTD analog front end (SYN-363)
 
 Status: design, placement and a FreeRouting route that passes Synth's routing and
-DRC gates. The board is **not fabricated and not tested on hardware**. It is also
-not ready to fabricate: the 12 MHz crystal part has no reviewer, no part has an
-independent review, and the analog accuracy has not been measured. The evidence
-and the open items are in [QUALIFICATION.md](QUALIFICATION.md).
+DRC gates. The board is **not fabricated and not tested on hardware**. The
+SI/PI/RF review is being carried out by the designated reviewer; the automated
+evidence and the open items are in [QUALIFICATION.md](QUALIFICATION.md). The 12
+MHz crystal part still has no part-level reviewer, and the analog accuracy has
+not been measured.
 
 Intended use: a bench or lab 4-wire PT100 front end with a USB readout. It is a
 demonstration of a split-ground mixed-signal board, not an instrument. Do not
@@ -79,7 +80,8 @@ no copper item can bridge the split.
 ## Placement and routing
 
 Status: routed with FreeRouting 2.4.1 on Java 25, KiCad 10.0.7, Synth at the
-worktree this directory was exported from. The route is not reviewed.
+worktree this directory was exported from. The route is under review by the
+designated reviewer.
 
 - Analog left, digital right. The analog block is J2 and the RC filter at the
   bottom-left, U1 at (20, 29) mm, U3 at (11, 29) mm and L2 at (30.5, 24.5) mm.
