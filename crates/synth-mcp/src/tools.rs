@@ -221,6 +221,7 @@ pub fn list_tools() -> Vec<McpToolInfo> {
                     "layout_file_path": { "type": "string", "description": "Optional agent or human PCB placement sidecar (<design>.placement.layout.toml; board millimetres); exact component positions and rotations are applied to placement and routing. Omit for auto-placement." },
                     "schematic_layout_file_path": { "type": "string", "description": "Optional schematic layout sidecar (<design>.schematic.layout.toml; sheet millimetres); component positions on the exported sheet. Omit for auto-layout. Distinct from layout_file_path: the two files hold the same schema but different coordinate spaces, so passing one where the other is expected silently misplaces parts." },
                     "allow_incomplete": { "type": "boolean", "description": "Export a clearly labelled draft even when routing is incomplete or DRC has violations. Defaults to false; never use this output for fabrication." },
+                    "place_route_budget_secs": { "type": "integer", "minimum": 0, "description": "Wall-clock budget in seconds for place_route_iterate (0 or absent: 900). Every routing run is capped at what is left, a share for the final route is kept back, and the result's placement_search says how many candidates were routed and whether the budget cut the search short. A router_timeout_secs under 30 starts no candidate run (a run that short cannot finish), only the final route. A whole number of seconds; anything else is refused." },
                     "place_route_iterate": { "type": "boolean", "description": "Choose the placement by routing each candidate and keeping the one that routes best, instead of the export path's route-free estimate. Opt-in: costs one extra route per candidate, and falls back to the normal choice when there is one candidate or the engine is unavailable." },
                     "router": { "type": "string", "description": "External engine: \"kicad-routing-tools\" (default, external checkout) or \"freerouting\" (managed)" },
                     "freerouting_jar": { "type": "string", "description": "Path to the FreeRouting JAR" },
@@ -2800,72 +2801,130 @@ fn execute_review_schematic(
     }))
 }
 
-/// Route each candidate placement and return the one that routes best.
-///
-/// `None` means "keep the export's own choice": there is one candidate, or the
-/// engine is unavailable, so the opt-in flag never turns a valid export into a
-/// failure. Mirrors the CLI's `--place-route-iterate`.
 /// Lower-is-better route-quality key (`RouteReport::layout_cost`).
 type RouteCost = (u8, usize, usize, usize, u64);
 
+/// The placement search's budget in seconds, from the call. Absent, null or `0`
+/// is the default, as `router_timeout_secs: 0` is "no override"; anything that
+/// is not a whole, non-negative number of seconds is refused instead of being
+/// quietly replaced by the default.
+fn place_route_budget_secs(args: &Value) -> Result<u64, String> {
+    match &args["place_route_budget_secs"] {
+        Value::Null => Ok(0),
+        value => value.as_u64().ok_or_else(|| {
+            format!("place_route_budget_secs must be a whole number of seconds, not {value}")
+        }),
+    }
+}
+
+/// What the placement search did, for the export result, so a search the budget
+/// cut short is not mistaken for one that routed every candidate.
+fn placement_search_report(
+    routed: usize,
+    total: usize,
+    truncated_by_budget: bool,
+    hard_net_pass: &str,
+    budget: &synth_router::search_budget::SearchBudget,
+) -> Value {
+    serde_json::json!({
+        "candidates_routed": routed,
+        "candidates_total": total,
+        "truncated_by_budget": truncated_by_budget,
+        "hard_net_pass": hard_net_pass,
+        "budget_secs": budget.total().as_secs(),
+        "elapsed_secs": budget.elapsed().as_secs(),
+    })
+}
+
+/// Route each candidate placement and return the one that routes best, with a
+/// report of what the search did.
+///
+/// `None` means "keep the export's own choice": there is one candidate, or the
+/// engine is unavailable, so the opt-in flag never turns a valid export into a
+/// failure. Every routing run is capped at what is left of `budget`, with the
+/// final route's share kept back. Mirrors the CLI's `--place-route-iterate`.
 fn select_placement_by_route(
     board: &synth_ir::Board,
     sidecars: &synth_kicad::Sidecars,
     args: &Value,
     engine: synth_router::RouterEngine,
-) -> Result<Option<synth_place::Placement>, String> {
+    budget: &mut synth_router::search_budget::SearchBudget,
+) -> Result<(Option<synth_place::Placement>, Value), String> {
     let candidates = synth_kicad::placement_candidates(board, sidecars)
         .map_err(|e| format!("could not enumerate placement candidates: {e}"))?;
     if candidates.len() < 2 {
-        return Ok(None);
+        let report = placement_search_report(0, candidates.len(), false, "not_needed", budget);
+        return Ok((None, report));
     }
-    let mut best: Option<(RouteCost, synth_place::Placement, Vec<String>)> = None;
-    for (index, candidate) in candidates.iter().enumerate() {
-        let Some((cost, order)) =
-            evaluate_candidate_mcp(board, sidecars, args, engine, candidate, index)?
-        else {
-            return Ok(None);
-        };
-        if best
-            .as_ref()
-            .is_none_or(|(previous, _, _)| cost < *previous)
-        {
-            best = Some((cost, candidate.clone(), order));
-        }
-    }
+    // A run is never given longer than the router's own timeout.
+    let requested = routing_request(args, engine).limits.wall_clock;
+    let Some(search) = synth_router::search_budget::route_candidates(
+        &candidates,
+        budget,
+        requested,
+        |candidate, index, clock| {
+            evaluate_candidate_mcp(board, sidecars, args, engine, candidate, index, clock)
+        },
+    )?
+    else {
+        let report = placement_search_report(0, candidates.len(), false, "not_run", budget);
+        return Ok((None, report));
+    };
+    let (routed, total, mut truncated) = (search.routed, search.total, search.cut_short);
+    let mut best = search.best;
 
     // Hardest-net grouping, as the CLI loop does: pull each hard net's parts
-    // toward the component carrying most of its pins and keep it if better.
+    // toward the component carrying most of its pins and keep it if better. It
+    // is one more routing run, so it gets what is left, or is skipped.
+    let mut hard_net_pass = "not_needed";
     if let Some((best_cost, _, order)) = best.clone() {
         if !order.is_empty() {
             let hints = synth_place::hard_net_proximity_hints(board, &order);
             if !hints.is_empty() {
-                let hinted = synth_place::with_hard_net_hints(board, &hints);
-                if let Ok(grouped) = synth_kicad::placement_candidates(&hinted, sidecars) {
-                    if let Some(candidate) = grouped.into_iter().next() {
-                        if let Some((cost, _)) = evaluate_candidate_mcp(
-                            board,
-                            sidecars,
-                            args,
-                            engine,
-                            &candidate,
-                            usize::MAX,
-                        )? {
-                            if cost < best_cost {
-                                best = Some((cost, candidate, order));
+                if let Some(limit) = budget.candidate_limit(requested) {
+                    hard_net_pass = "run";
+                    let hinted = synth_place::with_hard_net_hints(board, &hints);
+                    if let Ok(grouped) = synth_kicad::placement_candidates(&hinted, sidecars) {
+                        if let Some(candidate) = grouped.into_iter().next() {
+                            let began = std::time::Instant::now();
+                            let evaluated = evaluate_candidate_mcp(
+                                board,
+                                sidecars,
+                                args,
+                                engine,
+                                &candidate,
+                                usize::MAX,
+                                budget.run_clock(limit),
+                            )?;
+                            budget.note_run(began.elapsed());
+                            match evaluated {
+                                synth_router::search_budget::Attempt::Routed(evaluated) => {
+                                    if evaluated.cost < best_cost {
+                                        best = Some((evaluated.cost, candidate, order));
+                                    }
+                                }
+                                synth_router::search_budget::Attempt::NoTime => {
+                                    hard_net_pass = "skipped_for_budget";
+                                    truncated = true;
+                                }
+                                synth_router::search_budget::Attempt::EngineUnavailable => {}
                             }
                         }
                     }
+                } else {
+                    hard_net_pass = "skipped_for_budget";
+                    truncated = true;
                 }
             }
         }
     }
-    Ok(best.map(|(_, placement, _)| placement))
+    let report = placement_search_report(routed, total, truncated, hard_net_pass, budget);
+    Ok((best.map(|(_, placement, _)| placement), report))
 }
 
 /// Export `candidate` to a scratch directory and route it, returning the route
-/// cost and the report's recommended net order. `None` when the engine is
-/// unavailable.
+/// cost and the report's recommended net order, or says that the engine is
+/// unavailable or that the export left no time to route.
 fn evaluate_candidate_mcp(
     board: &synth_ir::Board,
     sidecars: &synth_kicad::Sidecars,
@@ -2873,7 +2932,10 @@ fn evaluate_candidate_mcp(
     engine: synth_router::RouterEngine,
     candidate: &synth_place::Placement,
     index: usize,
-) -> Result<Option<(RouteCost, Vec<String>)>, String> {
+    clock: synth_router::search_budget::RunClock,
+) -> Result<synth_router::search_budget::Attempt<RouteCost>, String> {
+    // The clock started before this export, so the router gets what the export
+    // left of the run's limit, and is not started when too little is left.
     let scratch = std::env::temp_dir().join(format!(
         "synth-mcp-place-route-{}-{index}",
         std::process::id()
@@ -2881,8 +2943,13 @@ fn evaluate_candidate_mcp(
     let _ = std::fs::remove_dir_all(&scratch);
     let res = synth_kicad::export_with_placement(board, &scratch, sidecars, candidate)
         .map_err(|e| format!("candidate export failed: {e}"))?;
+    let Some(router_secs) = clock.router_timeout_secs() else {
+        let _ = std::fs::remove_dir_all(&scratch);
+        return Ok(synth_router::search_budget::Attempt::NoTime);
+    };
     let mut request = routing_request(args, engine);
     request.ground_nets = synth_drc::ground_net_names(board);
+    request.limits = request.limits.with_wall_clock(router_secs);
     request.board_path.clone_from(&res.pcb_path);
     request.out_dir.clone_from(&res.out_dir);
     request.stem = synth_router::sanitize_stem(&board.name);
@@ -2902,12 +2969,14 @@ fn evaluate_candidate_mcp(
     let report = synth_router::route(&request);
     let _ = std::fs::remove_dir_all(&scratch);
     if report.state == synth_router::RouteState::RouterUnavailable {
-        return Ok(None);
+        return Ok(synth_router::search_budget::Attempt::EngineUnavailable);
     }
-    Ok(Some((
-        report.layout_cost(),
-        report.recommended_routing_order.clone(),
-    )))
+    Ok(synth_router::search_budget::Attempt::Routed(
+        synth_router::search_budget::Evaluated {
+            cost: report.layout_cost(),
+            order: report.recommended_routing_order.clone(),
+        },
+    ))
 }
 
 /// Signal/power-integrity rules run on the routed board, read back from disk.
@@ -3071,8 +3140,18 @@ fn execute_export(args: &Value, default_registry: Option<&Path>) -> Result<Value
     // Opt-in place→route→re-place: route the candidate placements and keep the
     // one that routes best, then install it for the real export. Falls back to
     // the normal choice when there is one candidate or the engine is down.
+    // The budget is checked for a bad value whether or not the search runs, so a
+    // typo is not silently ignored; it starts when the search does.
+    let budget_secs = place_route_budget_secs(args)?;
+    let mut search_budget = None;
+    let mut placement_search = None;
     let chosen = if args["place_route_iterate"].as_bool().unwrap_or(false) {
-        select_placement_by_route(&board, &sidecars, args, engine)?
+        let mut budget = synth_router::search_budget::SearchBudget::start(budget_secs);
+        let (placement, report) =
+            select_placement_by_route(&board, &sidecars, args, engine, &mut budget)?;
+        placement_search = Some(report);
+        search_budget = Some(budget);
+        placement
     } else {
         None
     };
@@ -3087,6 +3166,21 @@ fn execute_export(args: &Value, default_registry: Option<&Path>) -> Result<Value
 
     let mut request = routing_request(args, engine);
     request.ground_nets = synth_drc::ground_net_names(&board);
+    // The final route counts against the search budget: it gets what is left, or
+    // is not started when nothing is.
+    if let Some(budget) = &search_budget {
+        let Some(limit) = budget.final_limit(request.limits.wall_clock) else {
+            return Err(serde_json::json!({
+                "status": "placement_search_out_of_budget",
+                "routing_status": "not_run",
+                "reason": "The placement search used the whole place_route_budget_secs, so the final route was not started",
+                "placement_search": placement_search,
+                "hint": "Raise place_route_budget_secs or use fewer candidates, then retry."
+            })
+            .to_string());
+        };
+        request.limits = request.limits.with_wall_clock(limit.as_secs());
+    }
     request.board_path.clone_from(&res.pcb_path);
     request.out_dir.clone_from(&res.out_dir);
     request.stem = synth_router::sanitize_stem(&board.name);
@@ -3104,6 +3198,9 @@ fn execute_export(args: &Value, default_registry: Option<&Path>) -> Result<Value
     let route_complete = routing.is_fabrication_ready();
     if !route_complete && !allow_incomplete {
         let mut payload = with_process_warnings(route_report_payload(&routing), &process_warnings);
+        if let Some(search) = &placement_search {
+            payload["placement_search"] = search.clone();
+        }
         payload["hint"] = serde_json::Value::String(format!(
             "The board is not fabrication-ready. Fix the findings in the routing run \
              record and retry, or set allow_incomplete=true to emit an explicitly \
@@ -3199,6 +3296,9 @@ fn execute_export(args: &Value, default_registry: Option<&Path>) -> Result<Value
         "aesthetic_violations_omitted": capped.omitted,
         "aesthetic_findings_path": findings_path
     });
+    if let Some(search) = placement_search {
+        result["placement_search"] = search;
+    }
     if let Some(notice) = sidecar_migration_notice(file_name) {
         result["sidecar_migration"] = serde_json::json!(notice);
     }
@@ -6080,6 +6180,55 @@ mod tests {
                 "/nowhere/board.schematic.layout.toml"
             ))
         );
+    }
+
+    /// The budget is a whole number of seconds; 0 or absent is the default, as for
+    /// `router_timeout_secs`. A float, a string or a negative number is refused,
+    /// not turned into the default.
+    #[test]
+    fn the_placement_budget_is_a_whole_number_of_seconds_and_zero_is_the_default() {
+        let secs = |value: serde_json::Value| {
+            super::place_route_budget_secs(&serde_json::json!({ "place_route_budget_secs": value }))
+        };
+        assert_eq!(
+            super::place_route_budget_secs(&serde_json::json!({})),
+            Ok(0)
+        );
+        assert_eq!(secs(serde_json::json!(null)), Ok(0));
+        assert_eq!(secs(serde_json::json!(0)), Ok(0), "zero is no override");
+        assert_eq!(secs(serde_json::json!(120)), Ok(120));
+        for bad in [
+            serde_json::json!(1800.5),
+            serde_json::json!(-5),
+            serde_json::json!("900"),
+            serde_json::json!(true),
+        ] {
+            let why = secs(bad.clone()).expect_err("an invalid budget is refused");
+            assert!(why.contains("whole number of seconds"), "{bad}: {why}");
+        }
+    }
+
+    /// The export result says whether the budget cut the placement search short.
+    #[test]
+    fn the_search_report_says_how_far_the_search_got() {
+        let budget = synth_router::search_budget::SearchBudget::start(120);
+        let report = super::placement_search_report(2, 5, true, "skipped_for_budget", &budget);
+        assert_eq!(report["candidates_routed"], 2);
+        assert_eq!(report["candidates_total"], 5);
+        assert_eq!(report["truncated_by_budget"], true);
+        assert_eq!(report["hard_net_pass"], "skipped_for_budget");
+        assert_eq!(report["budget_secs"], 120);
+    }
+
+    #[test]
+    fn the_export_description_names_the_budget_and_the_search_report() {
+        let export = super::list_tools()
+            .into_iter()
+            .find(|tool| tool.name == "synth_export")
+            .expect("synth_export is listed");
+        let budget = export.input_schema["properties"]["place_route_budget_secs"].to_string();
+        assert!(budget.contains("placement_search"), "{budget}");
+        assert!(budget.contains("whole number"), "{budget}");
     }
 
     use super::row_flow_hint;
