@@ -39,13 +39,13 @@ required = true
 name = "p0_06"
 number = "L1"
 electrical_type = "bidirectional"
-capabilities = ["gpio", "uart_tx"]
+capabilities = ["gpio", "uart_tx", "i2c_sda"]
 
 [[pins]]
 name = "p0_08"
 number = "N1"
 electrical_type = "bidirectional"
-capabilities = ["gpio", "uart_rx"]
+capabilities = ["gpio", "uart_rx", "i2c_scl"]
 
 [[pins]]
 name = "p0_26"

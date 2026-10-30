@@ -1,0 +1,42 @@
+** Drc report for ble_node.kicad_pcb **
+** Created on 2026-10-29T22:35:49 **
+** Report includes: Errors, Warnings **
+
+** Found 6 DRC violations **
+[clearance]: Clearance violation ( clearance 0.1270 mm; actual 0.0750 mm)
+    Local override; error
+    @(39.0500 mm, 23.9600 mm): Via [net_7] on F.Cu - B.Cu
+    @(39.5500 mm, 23.9600 mm): Pad AC15 [<no net>] of U1 on F.Cu
+[clearance]: Clearance violation ( clearance 0.1270 mm; actual 0.0250 mm)
+    Local override; error
+    @(39.0500 mm, 21.2100 mm): Pad EP [<no net>] of U1 on F.Cu
+    @(36.3000 mm, 20.2100 mm): Via [net_16] on F.Cu - B.Cu
+[hole_clearance]: Hole clearance violation (rule 'manufacturer copper to hole' clearance 0.2000 mm; actual 0.1750 mm)
+    Rule: manufacturer copper to hole; error
+    @(39.0500 mm, 21.2100 mm): Pad EP [<no net>] of U1 on F.Cu
+    @(36.3000 mm, 20.2100 mm): Via [net_16] on F.Cu - B.Cu
+[hole_clearance]: Hole clearance violation (rule 'manufacturer copper to hole' clearance 0.2000 mm; actual 0.1750 mm)
+    Rule: manufacturer copper to hole; error
+    @(39.0500 mm, 21.2100 mm): Pad EP [<no net>] of U1 on F.Cu
+    @(39.0500 mm, 23.9600 mm): Via [net_7] on F.Cu - B.Cu
+[silk_over_copper]: Silkscreen clipped by solder mask
+    Local override; warning
+    @(12.4500 mm, 7.7100 mm): Reference field of D_ESD_DP
+    @(12.7300 mm, 7.1000 mm): PTH pad SH [GND] of J1
+[silk_over_copper]: Silkscreen clipped by solder mask
+    Local override; warning
+    @(10.5000 mm, 17.3200 mm): Reference field of C_LDO_IN
+    @(11.0950 mm, 17.4300 mm): Pad 1 [net_10] of L_MATCH1 on F.Cu
+
+** Found 0 unconnected pads **
+
+** Found 0 Footprint errors **
+
+** Ignored checks **
+    - Footprint has no courtyard defined
+    - Track endpoint not centered on via
+    - Tuning profile track geometries
+    - Footprint doesn't match symbol's footprint filters
+    - Footprint component type doesn't match footprint pads
+
+** End of Report **
