@@ -1,13 +1,19 @@
 id = "header_1x5"
 kind = "connector"
-description = "1x5 through-hole pin header, 2.54 mm pitch (SWD); datasheet_url is the product page of the Harwin M20 series, no manufacturer PDF link was verifiable"
+description = "Harwin M20-9990546: 2.54 mm pitch single-row vertical PC-tail pin header, 5 contacts, 100% tin over nickel, 0.64 mm square pins, brass contacts, PA6T UL94V-0 housing, 3 A per contact, -40 to +105 C (Harwin M20-999 customer information sheet DRG-00479 and component specification C001, November 2022). Hand-fitted SWD header; the recommended mounting hole is 1.02 +/- 0.05 mm"
 version = 0
+mpn = "M20-9990546"
+lcsc_pn = "C3328227"
 lifecycle = "active"
 signed_by = []
 substitutes = []
 required_decoupling = []
 kicad_symbol = "Connector_Generic:Conn_01x05"
 kicad_footprint = "Connector_PinHeader_2.54mm:PinHeader_1x05_P2.54mm_Vertical"
+
+[operating_conditions]
+# Per contact, Harwin component specification C001 section 2.2.
+max_current_ma = 3000.0
 
 [footprint_dimensions]
 width_mm = 3.54
@@ -51,6 +57,6 @@ required = false
 
 [provenance]
 source = "authored"
-datasheet_url = "https://no.rs-online.com/web/p/pcb-headers/6812997"
+datasheet_url = "https://content.harwin.com/asset/640f59f4-1860-40fe-82ef-f2a104ffa7d8/DRG-00479-Technical-Drawing-Datasheet-M20-999-pdf.pdf"
 reviewed_by = "JeffMboya"
 reviewed_at = "2026-10-28"

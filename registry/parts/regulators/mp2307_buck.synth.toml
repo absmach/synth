@@ -1,24 +1,32 @@
 id = "mp2307_buck"
 kind = "regulator"
-description = "MPS MP2307 3A step-down switching regulator, SO-8"
-kicad_footprint = "Package_SO:SOIC-8-1EP_3.9x4.9mm_P1.27mm_EP2.4x3.4mm"
+description = "MPS MP2307DN-LF 3A, 23V, 340kHz synchronous step-down converter, SOIC8N with exposed pad (pin 9, tied to pin 4 GND), lead-free tube; the tape-and-reel code is MP2307DN-LF-Z (see mp2307_buck_ep). Pin map, ratings and the capacitor values below are from the MP2307 datasheet Rev. 1.9: input 4.75 to 23 V, 3 A, 340 kHz; BS needs 0.01 uF or more from SW; the typical-performance conditions use C1 = 2 x 10 uF, C2 = 22 uF, L = 10 uH"
+mpn = "MP2307DN-LF"
+kicad_footprint = "Package_SO:SOIC-8-1EP_3.9x4.9mm_P1.27mm_EP2.41x3.3mm"
 
 [footprint_dimensions]
-width_mm = 5.0
-height_mm = 5.0
+width_mm = 7.4
+height_mm = 5.4
 courtyard_margin_mm = 0.25
 
 [operating_conditions]
-min_voltage_v = 3.5
-max_voltage_v = 15.0
-max_current_ma = 800.0
+min_voltage_v = 4.75
+max_voltage_v = 23.0
+max_current_ma = 3000.0
 max_power_mw = 500
 thermal_resistance_c_per_w = 50
+
+[provenance]
+source = "authored"
+datasheet_url = "https://www.monolithicpower.com/pub/media/document/MP2307_r1.3.pdf"
+reviewed_by = "JeffMboya"
+reviewed_at = "2026-10-30"
 
 [[pins]]
 name = "bs"
 number = "1"
 electrical_type = "passive"
+required = true
 
 [[pins]]
 name = "in"
@@ -50,6 +58,7 @@ required = true
 name = "comp"
 number = "6"
 electrical_type = "passive"
+required = true
 
 [[pins]]
 name = "en"
@@ -62,8 +71,32 @@ name = "ss"
 number = "8"
 electrical_type = "passive"
 
+# The exposed pad is pin 9 on the footprint; the datasheet says to connect it
+# to pin 4 (GND).
+[[pins]]
+name = "ep"
+number = "9"
+electrical_type = "power_input"
+required = true
+
+# Input capacitance of the datasheet's typical-performance conditions
+# (C1 = 2 x 10 uF).
 [[required_decoupling]]
 net = "in"
-value = "22uf"
+value = "10uf"
+count = 2
+
+# BS needs 0.01 uF or more from SW (datasheet pin 1 description).
+[[required_decoupling]]
+net = "bs"
+to = "sw"
+value = "10nf"
 count = 1
 
+# The output capacitor sits behind the inductor on SW; the datasheet's typical
+# application uses a 22 uF ceramic.
+[[required_decoupling]]
+net = "sw"
+through = "inductor"
+value = "22uf"
+count = 1

@@ -8,6 +8,9 @@ board "power_011_feedback_resistor_to_ground" {
   component L1: inductor "l_generic_1210" value "10uH"
   component R1: resistor "r_generic_0402" value "31.6k"
   component R2: resistor "r_generic_0402" value "10k"
+  component C3: capacitor "c_generic_0402" value "10nF"
+  component R4: resistor "r_generic_0402" value "10k"
+  component C4: capacitor "c_generic_0402" value "3.3nF"
   component R3: resistor "r_generic_0402" value "1k"
 
   connect J1.p1 -> U1.in
@@ -22,4 +25,10 @@ board "power_011_feedback_resistor_to_ground" {
   connect U1.fb -> R3.p1
   connect R3.p2 -> U1.gnd
   connect J1.p1 -> U1.en
+  connect U1.bs -> C3.p1
+  connect C3.p2 -> U1.sw
+  connect U1.comp -> R4.p1
+  connect R4.p2 -> C4.p1
+  connect C4.p2 -> U1.gnd
+  connect U1.ep -> U1.gnd
 }
