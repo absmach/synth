@@ -362,12 +362,36 @@ pub fn build_pcb(
     // Every pad on the board, so a generated stitching via can be kept clear of
     // one: a via dropped on another net's pad is a short. Computed once, and
     // only when a plane is actually going to be emitted.
-    let mut obstacles: Vec<(synth_geometry::Point, i64)> =
-        if board.netclasses.iter().any(|class| class.plane) && !power_layers.is_empty() {
-            all_pad_obstacles(board, placement)
-        } else {
-            Vec::new()
-        };
+    let plane_wanted = board.netclasses.iter().any(|class| class.plane) && !power_layers.is_empty();
+    let pad_rects = if plane_wanted {
+        all_pad_rects(board, placement)
+    } else {
+        Vec::new()
+    };
+    let mut placed_vias: Vec<(synth_geometry::Point, i64)> = Vec::new();
+    // Whether a stitching via may go *in* a pad rather than beside it.
+    //
+    // Both halves, because a board cannot approve its own fabrication: it has
+    // to have declared `requires via_in_pad`, and the tier it named has to
+    // offer the process. ERC already refuses the required-but-not-offered
+    // combination with E-SYNTH-PROCESS-002, so reaching here with both true is
+    // the only way the permission is live.
+    //
+    // Without this an interior supply ball on a fine-pitch array cannot be
+    // stitched at all: its neighbours are a pitch away on every side, and a
+    // beside-pad via needs more clearance than that leaves. The export failed
+    // and told the user to "allow via-in-pad explicitly", which nothing could
+    // do — the CLI's flag is a router option and never reached here.
+    let process = synth_drc::ManufacturerProfile::from_name(
+        board.manufacturer.as_deref().unwrap_or("jlc-standard"),
+    );
+    let via_in_pad_allowed = board
+        .required_processes
+        .contains(&synth_ir::ProcessRequirement::ViaInPad)
+        && process.via_in_pad;
+    // The via is the process's own: its drill at least the minimum and its pad
+    // the drill plus two minimum annular rings.
+    let plane_via = PlaneVia::for_process(&process);
     // One rail per layer. Pouring every plane net on every power layer puts
     // two rails at the same priority on the same copper, which is the
     // starvation described above with ground swapped out for a second rail:
@@ -421,44 +445,70 @@ pub fn build_pcb(
                     None,
                 ));
             }
-            for (pad, origin, layer) in plane_pad_targets(board, placement, net) {
-                let Some(via) = plane_via_offset(pad, origin, placement.board_outline, &obstacles)
-                else {
-                    return Err(PlaneFanoutError {
-                        net: net.name.clone(),
-                        detail: format!(
-                            "no legal stitching-via position beside the pad at ({:.2}, {:.2}) mm \
-                             on {layer:?}: every candidate is outside the board or within \
-                             clearance of another pad or via. Move the part, widen the board, or \
-                             allow via-in-pad explicitly.",
-                            nm_to_mm(pad.x_nm),
-                            nm_to_mm(pad.y_nm),
-                        ),
-                    });
+            for target in plane_pad_targets(board, placement, net) {
+                let (pad, layer) = (target.centre, target.layer);
+                let beside = plane_via_offset(
+                    pad,
+                    target.origin,
+                    placement.board_outline,
+                    &PlaneCopper {
+                        pads: &pad_rects,
+                        vias: &placed_vias,
+                    },
+                    &plane_via,
+                );
+                let chosen = match beside {
+                    Some(at) => Ok(at),
+                    None if via_in_pad_allowed => plane_via_in_pad(
+                        &target,
+                        &plane_via,
+                        &InPadRules {
+                            pads: &pad_rects,
+                            vias: &placed_vias,
+                            clearance_nm: process.min_copper_clearance_nm,
+                            drill_to_copper_nm: process.min_drill_to_copper_nm,
+                        },
+                    ),
+                    None => Err(ViaRefusal::NoRoomBesidePad),
                 };
-                obstacles.push((via, PLANE_VIA_RADIUS_NM));
+                let via = match chosen {
+                    Ok(at) => at,
+                    Err(refusal) => {
+                        return Err(PlaneFanoutError {
+                            net: net.name.clone(),
+                            detail: plane_via_refusal(&refusal, pad, layer, &plane_via),
+                        });
+                    }
+                };
+                placed_vias.push((via, plane_via.pad_radius_nm));
                 children.push(build_plane_via(
                     via.x_nm,
                     via.y_nm,
+                    &plane_via,
                     pcb_net,
                     project,
                     plane_via_index,
                 ));
                 plane_via_index += 1;
-                children.push(build_segment(
-                    &Segment {
-                        net: net.id,
-                        layer,
-                        start: pad,
-                        end: via,
-                        width_nm: PLANE_STUB_WIDTH_NM,
-                    },
-                    plane_stub_index,
-                    &net_id_lookup,
-                    project,
-                    board.layers,
-                ));
-                plane_stub_index += 1;
+                // A via in the pad needs no fanout stub: the two are the same
+                // point, and a zero-length segment is not a track. Only an
+                // offset via is reached by one.
+                if via != pad {
+                    children.push(build_segment(
+                        &Segment {
+                            net: net.id,
+                            layer,
+                            start: pad,
+                            end: via,
+                            width_nm: PLANE_STUB_WIDTH_NM,
+                        },
+                        plane_stub_index,
+                        &net_id_lookup,
+                        project,
+                        board.layers,
+                    ));
+                    plane_stub_index += 1;
+                }
             }
         }
     }
@@ -509,8 +559,31 @@ fn build_via(
     )
 }
 
-/// Board-space targets for a declared power plane: one
-/// `(pad centre, footprint origin, pad layer)` per pad the net connects.
+/// The pads of a part as the exported board has them: the real footprint's when
+/// the part names a KiCad footprint the library can supply, the exporter's
+/// synthesized pads otherwise. Sizing a stitching via against the synthesized
+/// strip of a BGA would judge it against pads that are not on the board.
+fn part_pads(
+    part: &synth_registry::Part,
+) -> Option<Vec<synth_layout::kicad_footprint_loader::Pad>> {
+    part.kicad_footprint
+        .as_deref()
+        .and_then(synth_layout::kicad_footprint_loader::pads)
+        .filter(|pads| !pads.is_empty())
+        .or_else(|| synth_layout::kicad_footprint_loader::synth_part_pads(part))
+}
+
+/// One pad a power plane must be stitched to.
+struct PlanePad {
+    centre: synth_geometry::Point,
+    origin: synth_geometry::Point,
+    layer: Layer,
+    /// Width and height of the pad's copper in board axes, in nanometres.
+    size_nm: (i64, i64),
+}
+
+/// Board-space targets for a declared power plane: one [`PlanePad`] per pad the
+/// net connects.
 ///
 /// The plane is on the inner layers while its pads are on the outer copper, so
 /// each pad needs a via through the plane, reached by a short stub. This
@@ -518,11 +591,7 @@ fn build_via(
 /// footprint: the pad's local offset, rotated by the placement and translated
 /// by the footprint origin.
 #[allow(clippy::similar_names)] // dx_nm/dy_nm are the natural names for an axis pair
-fn plane_pad_targets(
-    board: &Board,
-    placement: &Placement,
-    net: &synth_ir::Net,
-) -> Vec<(synth_geometry::Point, synth_geometry::Point, Layer)> {
+fn plane_pad_targets(board: &Board, placement: &Placement, net: &synth_ir::Net) -> Vec<PlanePad> {
     let mut out = Vec::new();
     for endpoint in &net.endpoints {
         let Some(component) = board.component(endpoint.component) else {
@@ -541,7 +610,7 @@ fn plane_pad_targets(
         let Some(pin) = part.pins.get(endpoint.pin.0 as usize) else {
             continue;
         };
-        let Some(pads) = synth_layout::kicad_footprint_loader::synth_part_pads(part) else {
+        let Some(pads) = part_pads(part) else {
             continue;
         };
         let origin = synth_place::footprint_origin(Some(part), placed);
@@ -553,14 +622,63 @@ fn plane_pad_targets(
                 .rotation
                 .rotate_offset(mm_to_nm(pad.center_mm.0), mm_to_nm(pad.center_mm.1));
             let center = synth_geometry::Point::new(origin.x_nm + dx_nm, origin.y_nm + dy_nm);
-            out.push((center, origin, placed.layer));
+            let (w_nm, h_nm) = (mm_to_nm(pad.size_mm.0), mm_to_nm(pad.size_mm.1));
+            out.push(PlanePad {
+                centre: center,
+                origin,
+                layer: placed.layer,
+                size_nm: if placed.rotation.swaps_extents() {
+                    (h_nm, w_nm)
+                } else {
+                    (w_nm, h_nm)
+                },
+            });
         }
     }
     out
 }
 
-/// Stitching-via pad radius in nanometres (a 0.6 mm via).
+/// Stitching-via pad radius in nanometres (a 0.6 mm via): the least the
+/// exporter uses, raised by [`PlaneVia::for_process`] when a process needs a
+/// wider ring.
 const PLANE_VIA_RADIUS_NM: i64 = 300_000;
+
+/// Drill of a stitching via in nanometres, at least the process's floor.
+const PLANE_VIA_DRILL_NM: i64 = 300_000;
+
+/// The via a plane stitching uses, from the manufacturer's own limits: the
+/// drill is at least the process minimum and the pad is at least the drill
+/// plus two minimum annular rings.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct PlaneVia {
+    pad_radius_nm: i64,
+    drill_nm: i64,
+}
+
+impl PlaneVia {
+    fn for_process(profile: &synth_drc::ManufacturerProfile) -> Self {
+        let drill_nm = PLANE_VIA_DRILL_NM.max(profile.min_drill_diameter_nm);
+        let ring_pad_nm = drill_nm + 2 * profile.min_annular_ring_nm;
+        Self {
+            pad_radius_nm: PLANE_VIA_RADIUS_NM.max((ring_pad_nm + 1) / 2),
+            drill_nm,
+        }
+    }
+}
+
+/// Why no stitching via could be placed for a pad.
+#[derive(Debug, Clone, PartialEq, Eq)]
+enum ViaRefusal {
+    /// Every position beside the pad is outside the board or within clearance of
+    /// another pad or via, and the board did not declare via-in-pad.
+    NoRoomBesidePad,
+    /// Via-in-pad is permitted, but the pad is too small to hold the via's
+    /// annulus: the via would be wider than the copper it is meant to sit in.
+    PadTooSmall { pad_nm: (i64, i64), via_nm: i64 },
+    /// Via-in-pad is permitted and the via fits, but the copper of a neighbouring
+    /// pad or via is too close to it or to its drilled hole.
+    Crowded,
+}
 
 /// Fabrication copper clearance, in nanometres, used to keep a generated via
 /// legal against the nearest pad or other via.
@@ -570,12 +688,48 @@ const PLANE_VIA_FAB_CLEARANCE_NM: i64 = 200_000;
 /// nanometres (via radius plus the fabrication edge clearance).
 const PLANE_EDGE_MARGIN_NM: i64 = 1_000_000;
 
-/// Every copper pad on the board as `(centre, circumscribed radius)`, in board
-/// space. Used to keep a generated plane stitching via off a neighbouring pad:
-/// a via dropped onto another net's pad is a short, and the exporter has to
-/// avoid it rather than rely on the router's DRC to catch it later.
+/// The error text for a pad no stitching via could be placed for, naming the
+/// pad and what would let it through.
+fn plane_via_refusal(
+    refusal: &ViaRefusal,
+    pad: synth_geometry::Point,
+    layer: Layer,
+    via: &PlaneVia,
+) -> String {
+    let at = format!(
+        "the pad at ({:.2}, {:.2}) mm on {layer:?}",
+        nm_to_mm(pad.x_nm),
+        nm_to_mm(pad.y_nm)
+    );
+    match refusal {
+        ViaRefusal::NoRoomBesidePad => format!(
+            "no legal stitching-via position beside {at}: every candidate is outside the board or \
+             within clearance of another pad or via. Move the part, widen the board, or declare \
+             `requires via_in_pad` on a manufacturer that offers it, which lets the via go in the pad."
+        ),
+        ViaRefusal::PadTooSmall { pad_nm, via_nm } => format!(
+            "{at} is {:.2} x {:.2} mm and a stitching via needs a {:.2} mm pad (a {:.2} mm drill plus \
+             two annular rings) inside it, so via-in-pad cannot hold it on this process. Use a \
+             manufacturer tier with a finer drill, a larger pad, or another way to reach the plane.",
+            nm_to_mm(pad_nm.0),
+            nm_to_mm(pad_nm.1),
+            nm_to_mm(*via_nm),
+            nm_to_mm(via.drill_nm),
+        ),
+        ViaRefusal::Crowded => format!(
+            "{at} can hold the stitching via, but copper of a neighbouring pad or via is within \
+             the process's clearance of the via or of its hole. Move the part or widen the pitch."
+        ),
+    }
+}
+
+/// Every copper pad on the board as `(centre, half width, half height)` in board
+/// axes, in nanometres. A via beside a pad, and a via in one, are both judged
+/// against the pads' real shapes: a circle round a rectangular pad over-reports
+/// the copper along its diagonal, and made an ordinary pair of capacitors
+/// unstitchable.
 #[allow(clippy::similar_names)] // dx_nm/dy_nm are the natural names for an axis pair
-fn all_pad_obstacles(board: &Board, placement: &Placement) -> Vec<(synth_geometry::Point, i64)> {
+fn all_pad_rects(board: &Board, placement: &Placement) -> Vec<(synth_geometry::Point, (i64, i64))> {
     let mut out = Vec::new();
     for component in &board.components {
         let Some(part) = component.part.as_ref() else {
@@ -588,7 +742,7 @@ fn all_pad_obstacles(board: &Board, placement: &Placement) -> Vec<(synth_geometr
         else {
             continue;
         };
-        let Some(pads) = synth_layout::kicad_footprint_loader::synth_part_pads(part) else {
+        let Some(pads) = part_pads(part) else {
             continue;
         };
         let origin = synth_place::footprint_origin(Some(part), placed);
@@ -596,52 +750,99 @@ fn all_pad_obstacles(board: &Board, placement: &Placement) -> Vec<(synth_geometr
             let (dx_nm, dy_nm) = placed
                 .rotation
                 .rotate_offset(mm_to_nm(pad.center_mm.0), mm_to_nm(pad.center_mm.1));
-            let (w_mm, h_mm) = pad.size_mm;
-            let radius_nm = mm_to_nm(((w_mm / 2.0).powi(2) + (h_mm / 2.0).powi(2)).sqrt());
+            let (w_nm, h_nm) = (mm_to_nm(pad.size_mm.0), mm_to_nm(pad.size_mm.1));
+            let half = if placed.rotation.swaps_extents() {
+                (h_nm / 2, w_nm / 2)
+            } else {
+                (w_nm / 2, h_nm / 2)
+            };
             out.push((
                 synth_geometry::Point::new(origin.x_nm + dx_nm, origin.y_nm + dy_nm),
-                radius_nm,
+                half,
             ));
         }
     }
     out
 }
 
-/// Squared distance from the segment `a`–`b` to the point `p`, in nanometres
-/// squared.
-///
-/// Used to test a whole fanout stub against an obstacle, not only its endpoint:
-/// the minimum distance from the segment to the obstacle centre is what a
-/// clearance check needs.
-fn segment_clearance_nm_sq(
-    a: synth_geometry::Point,
-    b: synth_geometry::Point,
+/// Distance in nanometres from `p` to the axis-aligned rectangle centred on
+/// `centre` with half sizes `half`, zero inside it.
+#[allow(clippy::cast_precision_loss)] // nanometres on a board are far below 2^52
+fn point_to_rect_nm(
     p: synth_geometry::Point,
-) -> i64 {
-    let abx = b.x_nm - a.x_nm;
-    let aby = b.y_nm - a.y_nm;
-    let apx = p.x_nm - a.x_nm;
-    let apy = p.y_nm - a.y_nm;
-    let denom = abx * abx + aby * aby;
-    let (cx, cy) = if denom == 0 {
-        (a.x_nm, a.y_nm)
-    } else {
-        // Integer projection: t is clamped to [0, denom], so the closest point
-        // stays on the segment. i128 avoids the i64 overflow of t * ab.
-        let t = (apx * abx + apy * aby).clamp(0, denom);
-        let tx = (i128::from(t) * i128::from(abx)) / i128::from(denom);
-        let ty = (i128::from(t) * i128::from(aby)) / i128::from(denom);
-        (
-            a.x_nm + i64::try_from(tx).unwrap_or(0),
-            a.y_nm + i64::try_from(ty).unwrap_or(0),
-        )
-    };
-    let dx = p.x_nm - cx;
-    let dy = p.y_nm - cy;
-    dx * dx + dy * dy
+    centre: synth_geometry::Point,
+    half: (i64, i64),
+) -> f64 {
+    let dx = ((p.x_nm - centre.x_nm).abs() - half.0).max(0) as f64;
+    let dy = ((p.y_nm - centre.y_nm).abs() - half.1).max(0) as f64;
+    dx.hypot(dy)
 }
 
-/// Where a power pad's stitching via goes.
+/// Distance in nanometres from the segment `a`–`b` to the axis-aligned
+/// rectangle centred on `centre` with half sizes `half`; zero when they touch.
+/// Exact: the segment is clipped to the rectangle, and otherwise the nearest
+/// approach is at an end of the segment or at a corner of the rectangle.
+#[allow(clippy::cast_precision_loss)] // nanometres on a board are far below 2^52
+fn segment_to_rect_nm(
+    a: synth_geometry::Point,
+    b: synth_geometry::Point,
+    centre: synth_geometry::Point,
+    half: (i64, i64),
+) -> f64 {
+    let (a, b) = (
+        ((a.x_nm - centre.x_nm) as f64, (a.y_nm - centre.y_nm) as f64),
+        ((b.x_nm - centre.x_nm) as f64, (b.y_nm - centre.y_nm) as f64),
+    );
+    let (hx, hy) = (half.0 as f64, half.1 as f64);
+    // Liang-Barsky clip of the segment to the rectangle.
+    let (dx, dy) = (b.0 - a.0, b.1 - a.1);
+    let (mut t0, mut t1) = (0.0_f64, 1.0_f64);
+    let mut clipped = true;
+    for (p, q) in [
+        (-dx, a.0 + hx),
+        (dx, hx - a.0),
+        (-dy, a.1 + hy),
+        (dy, hy - a.1),
+    ] {
+        if p.abs() < 1e-9 {
+            if q < 0.0 {
+                clipped = false;
+                break;
+            }
+        } else {
+            let r = q / p;
+            if p < 0.0 {
+                t0 = t0.max(r);
+            } else {
+                t1 = t1.min(r);
+            }
+            if t0 > t1 {
+                clipped = false;
+                break;
+            }
+        }
+    }
+    if clipped {
+        return 0.0;
+    }
+    let to_rect = |p: (f64, f64)| (p.0.abs() - hx).max(0.0).hypot((p.1.abs() - hy).max(0.0));
+    let to_segment = |c: (f64, f64)| {
+        let len2 = dx * dx + dy * dy;
+        let t = if len2 == 0.0 {
+            0.0
+        } else {
+            (((c.0 - a.0) * dx + (c.1 - a.1) * dy) / len2).clamp(0.0, 1.0)
+        };
+        (c.0 - (a.0 + t * dx)).hypot(c.1 - (a.1 + t * dy))
+    };
+    [(-hx, -hy), (hx, -hy), (hx, hy), (-hx, hy)]
+        .iter()
+        .map(|&c| to_segment(c))
+        .chain([to_rect(a), to_rect(b)])
+        .fold(f64::MAX, f64::min)
+}
+
+/// Where a power pad's stitching via goes, beside the pad.
 ///
 /// The preferred spot is [`PLANE_VIA_OFFSET_NM`] from the pad, away from the
 /// footprint origin along the dominant axis so the direction is stable, and the
@@ -649,14 +850,18 @@ fn segment_clearance_nm_sq(
 /// via-in-pad. That preference is only a first choice: 1 mm along one axis can
 /// land outside Edge.Cuts or on a neighbouring pad, so candidate positions are
 /// tried (four axes, three distances) and the first that stays inside the board
-/// and clear of every pad and already-placed via is used. `None` when no side
-/// location is legal — a pad boxed in on every side — so the caller can stop
-/// rather than silently fall back to via-in-pad.
+/// and clear of every pad and already-placed via is used.
+///
+/// `None` when no side location is legal: a pad boxed in on every side. What
+/// happens then is [`plane_via_in_pad`]'s business, and only on a board that
+/// declared the process.
+#[allow(clippy::cast_precision_loss)] // nanometres on a board are far below 2^52
 fn plane_via_offset(
     pad: synth_geometry::Point,
     origin: synth_geometry::Point,
     outline: synth_geometry::Rect,
-    obstacles: &[(synth_geometry::Point, i64)],
+    copper: &PlaneCopper<'_>,
+    via: &PlaneVia,
 ) -> Option<synth_geometry::Point> {
     let inset = PLANE_EDGE_MARGIN_NM;
     let usable = synth_geometry::Rect::new(
@@ -681,44 +886,124 @@ fn plane_via_offset(
     // The whole fanout stub is checked, not only the via endpoint: a stub from
     // the pad to a nearby candidate can cut across another pad even when the via
     // itself is clear. The stub body is held to its own half-width, the via at
-    // its end to the via radius.
+    // its end to the via radius, each against the pads' real rectangles.
     let stub_half_nm = PLANE_STUB_WIDTH_NM / 2;
-    let clear_of_obstacles = |candidate: synth_geometry::Point| -> bool {
-        obstacles
-            .iter()
-            .filter(|(centre, _)| *centre != pad)
-            .all(|(centre, radius_nm)| {
-                let seg_need = stub_half_nm + PLANE_VIA_FAB_CLEARANCE_NM + radius_nm;
-                let via_need = PLANE_VIA_RADIUS_NM + PLANE_VIA_FAB_CLEARANCE_NM + radius_nm;
-                let vdx = candidate.x_nm - centre.x_nm;
-                let vdy = candidate.y_nm - centre.y_nm;
-                segment_clearance_nm_sq(pad, candidate, *centre) >= seg_need * seg_need
-                    && vdx * vdx + vdy * vdy >= via_need * via_need
-            })
+    let clear_of_copper = |candidate: synth_geometry::Point| -> bool {
+        let pads_clear =
+            copper
+                .pads
+                .iter()
+                .filter(|(centre, _)| *centre != pad)
+                .all(|(centre, half)| {
+                    segment_to_rect_nm(pad, candidate, *centre, *half)
+                        >= (stub_half_nm + PLANE_VIA_FAB_CLEARANCE_NM) as f64
+                        && point_to_rect_nm(candidate, *centre, *half)
+                            >= (via.pad_radius_nm + PLANE_VIA_FAB_CLEARANCE_NM) as f64
+                });
+        let vias_clear = copper.vias.iter().all(|(other, radius)| {
+            let (vx, vy) = (
+                (candidate.x_nm - other.x_nm) as f64,
+                (candidate.y_nm - other.y_nm) as f64,
+            );
+            vx.hypot(vy) >= (via.pad_radius_nm + PLANE_VIA_FAB_CLEARANCE_NM + radius) as f64
+        });
+        pads_clear && vias_clear
     };
     for distance in distances {
         for (ux, uy) in axes {
             let candidate =
                 synth_geometry::Point::new(pad.x_nm + ux * distance, pad.y_nm + uy * distance);
-            if usable.contains(candidate) && clear_of_obstacles(candidate) {
+            if usable.contains(candidate) && clear_of_copper(candidate) {
                 return Some(candidate);
             }
         }
     }
-    // Boxed in on every side: report it rather than quietly place a via-in-pad.
     None
+}
+
+/// The pads (by real rectangle) and the stitching vias a new via has to keep
+/// clear of.
+struct PlaneCopper<'a> {
+    pads: &'a [PadRect],
+    vias: &'a [(synth_geometry::Point, i64)],
+}
+
+/// A pad's centre and half sizes in board axes, in nanometres.
+type PadRect = (synth_geometry::Point, (i64, i64));
+
+/// The copper a via in a pad has to keep clear of: every other pad's real
+/// shape, every via already placed, and the process's limits.
+struct InPadRules<'a> {
+    pads: &'a [PadRect],
+    vias: &'a [(synth_geometry::Point, i64)],
+    /// Least copper-to-copper clearance of the process.
+    clearance_nm: i64,
+    /// Least clearance from a drilled hole's edge to another net's copper.
+    drill_to_copper_nm: i64,
+}
+
+/// Puts the stitching via in the pad it stitches, for a pad no position beside
+/// it suits, if the pad can hold it.
+///
+/// A board that declared via-in-pad is allowed the process, not told that every
+/// pad suits it: the via's annulus (its drill plus the process's annular rings)
+/// has to fit inside the pad's copper, or the via would be wider than the pad it
+/// is meant to sit in; the pads and vias round it must stay the process's
+/// clearance from the via's copper and its hole's edge from their copper. A pad
+/// that fails is reported with the reason, so the caller can tell the user what
+/// to change.
+#[allow(clippy::cast_precision_loss)] // nanometres on a board are far below 2^52
+fn plane_via_in_pad(
+    pad: &PlanePad,
+    via: &PlaneVia,
+    rules: &InPadRules<'_>,
+) -> Result<synth_geometry::Point, ViaRefusal> {
+    let via_nm = 2 * via.pad_radius_nm;
+    if pad.size_nm.0.min(pad.size_nm.1) < via_nm {
+        return Err(ViaRefusal::PadTooSmall {
+            pad_nm: pad.size_nm,
+            via_nm,
+        });
+    }
+    let at = pad.centre;
+    let clear_of_pads =
+        rules
+            .pads
+            .iter()
+            .filter(|(centre, _)| *centre != at)
+            .all(|(centre, half)| {
+                let gap = point_to_rect_nm(at, *centre, *half);
+                gap >= (via.pad_radius_nm + rules.clearance_nm) as f64
+                    && gap >= (via.drill_nm / 2 + rules.drill_to_copper_nm) as f64
+            });
+    let clear_of_vias = rules.vias.iter().all(|(other, radius)| {
+        let (dx, dy) = ((at.x_nm - other.x_nm) as f64, (at.y_nm - other.y_nm) as f64);
+        dx.hypot(dy) >= (via.pad_radius_nm + radius + rules.clearance_nm) as f64
+    });
+    if clear_of_pads && clear_of_vias {
+        Ok(at)
+    } else {
+        Err(ViaRefusal::Crowded)
+    }
 }
 
 /// A through via beside a power pad, joining the outer pad (through the fanout
 /// stub) to the inner power plane.
-fn build_plane_via(x_nm: i64, y_nm: i64, pcb_net: u32, project: &Uuid, idx: usize) -> Sexp {
+fn build_plane_via(
+    x_nm: i64,
+    y_nm: i64,
+    via: &PlaneVia,
+    pcb_net: u32,
+    project: &Uuid,
+    idx: usize,
+) -> Sexp {
     let via_uuid = derive_entity_uuid(project, "plane-via", &idx.to_string());
     Sexp::list(
         "via",
         vec![
             Sexp::list("at", vec![num(nm_to_mm(x_nm)), num(nm_to_mm(y_nm))]),
-            Sexp::list("size", vec![num(GROUND_VIA_RADIUS_MM * 2.0)]),
-            Sexp::list("drill", vec![num(0.3)]),
+            Sexp::list("size", vec![num(nm_to_mm(2 * via.pad_radius_nm))]),
+            Sexp::list("drill", vec![num(nm_to_mm(via.drill_nm))]),
             Sexp::list("layers", vec![Sexp::str("F.Cu"), Sexp::str("B.Cu")]),
             Sexp::list("net", vec![Sexp::atom(pcb_net.to_string())]),
             str_pair("uuid", via_uuid.to_string()),
@@ -899,7 +1184,7 @@ fn ground_zone_region(
     let net = board.net(net_id)?;
     let centres: Vec<synth_geometry::Point> = plane_pad_targets(board, placement, net)
         .into_iter()
-        .map(|(centre, _, _)| centre)
+        .map(|target| target.centre)
         .collect();
     if centres.len() < 2 {
         return Some(board_polygon);
@@ -941,9 +1226,9 @@ fn net_centroid(
         return None;
     }
     let (mut sx, mut sy) = (0_i64, 0_i64);
-    for (centre, _, _) in &centres {
-        sx += centre.x_nm;
-        sy += centre.y_nm;
+    for target in &centres {
+        sx += target.centre.x_nm;
+        sy += target.centre.y_nm;
     }
     #[allow(clippy::cast_possible_wrap)] // a board has far fewer pads than i64::MAX
     let count = centres.len() as i64;
@@ -2843,11 +3128,24 @@ mod tests {
         // A small pad 0.4 mm along +x. The +x via endpoint at 1 mm is clear of
         // it on its own, but the stub from the pad to that endpoint runs
         // straight through it.
-        let blocker = (Point::new(400_000, 0), 50_000);
-        let obstacles = vec![(pad, 50_000), blocker];
-        let via = plane_via_offset(pad, origin, outline, &obstacles)
+        let pads = vec![
+            (pad, (50_000, 50_000)),
+            (Point::new(400_000, 0), (50_000, 50_000)),
+        ];
+        let copper = PlaneCopper {
+            pads: &pads,
+            vias: &[],
+        };
+        let via = plane_via_offset(pad, origin, outline, &copper, &default_via())
             .expect("an off-axis candidate is legal");
         assert_eq!(via, Point::new(0, PLANE_VIA_OFFSET_NM));
+    }
+
+    fn default_via() -> PlaneVia {
+        PlaneVia {
+            pad_radius_nm: PLANE_VIA_RADIUS_NM,
+            drill_nm: PLANE_VIA_DRILL_NM,
+        }
     }
 
     fn part_from_toml(id: &str, dims: &str) -> synth_registry::Part {
@@ -3708,5 +4006,219 @@ mod tests {
                 String::from_utf8_lossy(&output.stderr)
             );
         }
+    }
+}
+
+#[cfg(test)]
+mod plane_via_in_pad_tests {
+    use super::{
+        plane_via_in_pad, plane_via_offset, InPadRules, Layer, PadRect, PlaneCopper, PlanePad,
+        PlaneVia, ViaRefusal, PLANE_VIA_DRILL_NM, PLANE_VIA_RADIUS_NM,
+    };
+    use synth_geometry::{Point, Rect};
+
+    const PITCH_NM: i64 = 800_000;
+
+    fn via() -> PlaneVia {
+        PlaneVia {
+            pad_radius_nm: PLANE_VIA_RADIUS_NM,
+            drill_nm: PLANE_VIA_DRILL_NM,
+        }
+    }
+
+    fn pad_at(size_nm: i64) -> PlanePad {
+        PlanePad {
+            centre: Point::new(50_000_000, 50_000_000),
+            origin: Point::new(47_000_000, 47_000_000),
+            layer: Layer::Top,
+            size_nm: (size_nm, size_nm),
+        }
+    }
+
+    fn outline() -> Rect {
+        Rect::new(Point::new(0, 0), Point::new(100_000_000, 100_000_000))
+    }
+
+    /// The eight neighbours of a pad on the 0.8 mm grid this whole problem comes
+    /// from, as rectangles of the given size.
+    fn ring(pad: Point, size_nm: i64) -> Vec<PadRect> {
+        [
+            (1, 0),
+            (-1, 0),
+            (0, 1),
+            (0, -1),
+            (1, 1),
+            (-1, -1),
+            (1, -1),
+            (-1, 1),
+        ]
+        .iter()
+        .map(|(dx, dy)| {
+            (
+                Point::new(pad.x_nm + dx * PITCH_NM, pad.y_nm + dy * PITCH_NM),
+                (size_nm / 2, size_nm / 2),
+            )
+        })
+        .collect()
+    }
+
+    fn rules<'a>(pads: &'a [(Point, (i64, i64))], vias: &'a [(Point, i64)]) -> InPadRules<'a> {
+        InPadRules {
+            pads,
+            vias,
+            clearance_nm: 127_000,
+            drill_to_copper_nm: 200_000,
+        }
+    }
+
+    /// A pad ringed by neighbours on all four sides, close enough that no
+    /// offset candidate clears them: an interior supply ball on a fine-pitch
+    /// array. A beside-pad via needs more room than that leaves.
+    #[test]
+    fn a_boxed_in_pad_has_no_position_beside_it() {
+        let pad = pad_at(700_000);
+        let pads = ring(pad.centre, 700_000);
+        let copper = PlaneCopper {
+            pads: &pads,
+            vias: &[],
+        };
+        assert_eq!(
+            plane_via_offset(pad.centre, pad.origin, outline(), &copper, &via()),
+            None
+        );
+    }
+
+    /// A pad that can hold the via takes it, with the neighbours clear of its
+    /// copper and its hole.
+    #[test]
+    fn a_pad_that_holds_the_via_takes_it() {
+        let pad = pad_at(700_000);
+        let rects = ring(pad.centre, 350_000);
+        assert_eq!(
+            plane_via_in_pad(&pad, &via(), &rules(&rects, &[])),
+            Ok(pad.centre),
+            "a 0.7 mm pad holds a 0.6 mm via"
+        );
+    }
+
+    /// The 0.35 mm pads of a 0.8 mm BGA are narrower than the 0.6 mm via the
+    /// process needs: the annulus does not fit in the pad, so the pad is
+    /// reported, not quietly given a via wider than itself.
+    #[test]
+    fn a_pad_narrower_than_the_via_is_reported_with_both_sizes() {
+        let pad = pad_at(350_000);
+        let rects = ring(pad.centre, 350_000);
+        assert_eq!(
+            plane_via_in_pad(&pad, &via(), &rules(&rects, &[])),
+            Err(ViaRefusal::PadTooSmall {
+                pad_nm: (350_000, 350_000),
+                via_nm: 600_000
+            })
+        );
+    }
+
+    /// A rectangular pad is as wide as its narrow side.
+    #[test]
+    fn a_long_thin_pad_is_judged_by_its_narrow_side() {
+        let mut pad = pad_at(700_000);
+        pad.size_nm = (3_000_000, 400_000);
+        assert!(matches!(
+            plane_via_in_pad(&pad, &via(), &rules(&[], &[])),
+            Err(ViaRefusal::PadTooSmall { .. })
+        ));
+    }
+
+    /// A pad of another net close enough that the via's copper is inside the
+    /// process's clearance of it is a refusal, whatever the pad's own size.
+    #[test]
+    fn a_neighbour_within_clearance_of_the_via_is_refused() {
+        let pad = pad_at(700_000);
+        // 0.45 mm from the via's edge is plenty; 0.05 mm is not.
+        let near = vec![(
+            Point::new(
+                pad.centre.x_nm + 300_000 + 50_000 + 200_000,
+                pad.centre.y_nm,
+            ),
+            (200_000, 200_000),
+        )];
+        assert_eq!(
+            plane_via_in_pad(&pad, &via(), &rules(&near, &[])),
+            Err(ViaRefusal::Crowded)
+        );
+    }
+
+    /// An earlier stitching via counts as copper too.
+    #[test]
+    fn an_earlier_via_too_close_is_refused() {
+        let pad = pad_at(700_000);
+        let vias = vec![(
+            Point::new(pad.centre.x_nm + 700_000, pad.centre.y_nm),
+            PLANE_VIA_RADIUS_NM,
+        )];
+        assert_eq!(
+            plane_via_in_pad(&pad, &via(), &rules(&[], &vias)),
+            Err(ViaRefusal::Crowded),
+            "two 0.6 mm vias 0.7 mm apart are 0.1 mm clear, under the 0.127 mm rule"
+        );
+    }
+
+    /// The permission is a fallback, not a preference: a pad with room beside
+    /// it still gets an offset via.
+    #[test]
+    fn a_pad_with_room_still_gets_an_offset_via() {
+        let pad = pad_at(700_000);
+        let copper = PlaneCopper {
+            pads: &[],
+            vias: &[],
+        };
+        let beside = plane_via_offset(pad.centre, pad.origin, outline(), &copper, &via())
+            .expect("a position");
+        assert_ne!(
+            beside, pad.centre,
+            "an uncrowded pad does not need via-in-pad"
+        );
+    }
+
+    /// The via follows the manufacturer's limits, not a fixed 0.6 / 0.3 mm.
+    #[test]
+    fn a_pad_pair_of_two_ordinary_capacitors_is_still_stitched_beside_the_pads() {
+        // Two 0603 pads of one capacitor, 1.65 mm apart and 0.8 x 0.95 mm each:
+        // the pads of the board a declared plane is wired to in the export tests.
+        // Circles round them left no legal spot; their rectangles leave one.
+        let pad = Point::new(1_230_000, 2_000_000);
+        let origin = Point::new(2_055_000, 2_000_000);
+        let pads: Vec<PadRect> = vec![
+            (pad, (400_000, 475_000)),
+            (Point::new(2_880_000, 2_000_000), (400_000, 475_000)),
+        ];
+        let copper = PlaneCopper {
+            pads: &pads,
+            vias: &[],
+        };
+        let outline = Rect::new(Point::new(0, 0), Point::new(20_000_000, 20_000_000));
+        let via_at = plane_via_offset(pad, origin, outline, &copper, &via());
+        assert!(via_at.is_some(), "a legal spot exists beside the pad");
+    }
+
+    #[test]
+    fn the_via_is_drawn_from_the_process_limits() {
+        let mut profile = synth_drc::ManufacturerProfile::jlc_standard();
+        assert_eq!(
+            PlaneVia::for_process(&profile),
+            PlaneVia {
+                pad_radius_nm: 300_000,
+                drill_nm: 300_000
+            }
+        );
+        // A process with a coarser drill and a wider ring needs a bigger via.
+        profile.min_drill_diameter_nm = 400_000;
+        profile.min_annular_ring_nm = 200_000;
+        assert_eq!(
+            PlaneVia::for_process(&profile),
+            PlaneVia {
+                pad_radius_nm: 400_000,
+                drill_nm: 400_000
+            }
+        );
     }
 }
