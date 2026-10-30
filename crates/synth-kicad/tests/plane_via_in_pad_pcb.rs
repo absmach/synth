@@ -26,14 +26,32 @@ fn workspace_root() -> PathBuf {
         .unwrap()
 }
 
+/// Where Synth looks for the stock footprint libraries on Linux when
+/// `KICAD_FOOTPRINT_DIR` is not set, which is where the distribution package
+/// puts them and where CI installs them.
+const DEFAULT_FOOTPRINT_DIR: &str = "/usr/share/kicad/footprints";
+
+/// The directories a footprint library can be in: the variable, then the
+/// default install directory, the same order Synth's own loader uses.
+fn footprint_dirs(variable: Option<&str>) -> Vec<PathBuf> {
+    variable
+        .map(PathBuf::from)
+        .into_iter()
+        .chain(std::iter::once(PathBuf::from(DEFAULT_FOOTPRINT_DIR)))
+        .collect()
+}
+
 /// Whether a test that needs the KiCad footprint library (and, for the DRC,
 /// `kicad-cli`) can run. A missing input is a failure unless the run says, with
 /// `SYNTH_ALLOW_MISSING_KICAD=1`, that it should be skipped.
 fn kicad_ready(footprint: &str, needs_cli: bool) -> bool {
-    let missing = if !std::env::var("KICAD_FOOTPRINT_DIR")
-        .is_ok_and(|dir| Path::new(&dir).join(footprint).exists())
+    let missing = if !footprint_dirs(std::env::var("KICAD_FOOTPRINT_DIR").ok().as_deref())
+        .iter()
+        .any(|dir| dir.join(footprint).exists())
     {
-        Some(format!("KICAD_FOOTPRINT_DIR with {footprint}"))
+        Some(format!(
+            "KICAD_FOOTPRINT_DIR, or {DEFAULT_FOOTPRINT_DIR}, with {footprint}"
+        ))
     } else if needs_cli && Command::new("kicad-cli").arg("version").output().is_err() {
         Some("kicad-cli on PATH".to_string())
     } else {
@@ -286,4 +304,20 @@ fn vias_in(pcb: &str) -> Vec<(f64, f64)> {
         rest = &block[4..];
     }
     out
+}
+
+#[test]
+fn the_default_install_directory_is_searched_when_the_variable_is_unset() {
+    assert_eq!(
+        footprint_dirs(None),
+        vec![PathBuf::from(DEFAULT_FOOTPRINT_DIR)]
+    );
+    assert_eq!(
+        footprint_dirs(Some("/opt/kicad/footprints")),
+        vec![
+            PathBuf::from("/opt/kicad/footprints"),
+            PathBuf::from(DEFAULT_FOOTPRINT_DIR)
+        ],
+        "the variable wins, and the default install directory is still tried"
+    );
 }
