@@ -309,6 +309,29 @@ fn with_repair_findings(
     verdict
 }
 
+/// Say what the post-routing silkscreen pass did, when it did anything.
+fn report_silkscreen_pass(result: Result<label_vias::LabelMoves, String>) {
+    match result {
+        Ok(label_vias::LabelMoves {
+            moved: 0,
+            hidden: 0,
+            trimmed: 0,
+            widened: 0,
+            dropped: 0,
+        }) => {}
+        Ok(label_vias::LabelMoves {
+            moved,
+            hidden,
+            trimmed,
+            widened,
+            dropped,
+        }) => eprintln!(
+            "note: moved {moved} reference label(s) off vias and pads; {hidden} hidden because no clear spot was within reach; {trimmed} outline line(s) cut back from vias and pads; {dropped} silkscreen circle(s) dropped; {widened} silkscreen stroke(s) widened to 0.18 mm"
+        ),
+        Err(detail) => eprintln!("warning: reference labels were not checked: {detail}"),
+    }
+}
+
 /// Promote a router-produced candidate into a report, installing it only if
 /// it survives independent validation.
 ///
@@ -362,23 +385,9 @@ fn finalize(
         // The labels were placed before the router put its vias down; move any
         // that now sit on a via or a pad. Silkscreen only: the copper the
         // candidate was validated on is untouched.
-        match label_vias::keep_labels_off_copper(&candidate.candidate_path) {
-            Ok(label_vias::LabelMoves {
-                moved: 0,
-                hidden: 0,
-                trimmed: 0,
-                widened: 0,
-            }) => {}
-            Ok(label_vias::LabelMoves {
-                moved,
-                hidden,
-                trimmed,
-                widened,
-            }) => eprintln!(
-                "note: moved {moved} reference label(s) off vias and pads; {hidden} hidden because no clear spot was within reach; {trimmed} outline line(s) cut back from vias and pads; {widened} silkscreen stroke(s) widened to 0.18 mm"
-            ),
-            Err(detail) => eprintln!("warning: reference labels were not checked: {detail}"),
-        }
+        report_silkscreen_pass(label_vias::keep_labels_off_copper(
+            &candidate.candidate_path,
+        ));
         // Deliver the zones filled so KiCad opens the board with the
         // connectivity it was validated with. A refill that fails leaves
         // the routed, unfilled board in place.

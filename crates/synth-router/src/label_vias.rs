@@ -70,6 +70,9 @@ pub struct LabelMoves {
     pub trimmed: usize,
     /// Silkscreen strokes and texts drawn thinner than the minimum, widened.
     pub widened: usize,
+    /// Silkscreen circles that came within the clearance of a pad or a via, such
+    /// as the ring a test point draws round its own pad, dropped.
+    pub dropped: usize,
 }
 
 /// A label's box in board millimetres: `(min_x, min_y, max_x, max_y)`.
@@ -214,6 +217,8 @@ fn keep_labels_off_copper_with(
     moves.widened = widened;
     let (out, trimmed) = trim_outlines_off_copper(&out, board, &scene.vias);
     moves.trimmed = trimmed;
+    let (out, dropped) = drop_circles_off_copper(&out, board, &scene.vias);
+    moves.dropped = dropped;
     (out, moves)
 }
 
@@ -289,6 +294,106 @@ fn trim_outlines_off_copper(
     let mut out = text.to_string();
     for (range, replacement) in edits.into_iter().rev() {
         out.replace_range(range, &replacement);
+    }
+    (out, count)
+}
+
+/// Whether a footprint's silkscreen circle comes within the silkscreen
+/// clearance of a pad or a via. `to_board` maps footprint coordinates to the board.
+fn circle_hugs_copper(
+    circle: &str,
+    board: &PcbBoard,
+    vias: &[((f64, f64), f64)],
+    to_board: &dyn Fn((f64, f64)) -> (f64, f64),
+) -> bool {
+    const SAMPLES: u32 = 64;
+    let (Some(c), Some(e)) = (block_point(circle, "(center"), block_point(circle, "(end")) else {
+        return false;
+    };
+    let radius = (e.0 - c.0).hypot(e.1 - c.1);
+    let width = block_number(circle, "(width")
+        .unwrap_or(0.12)
+        .max(MIN_SILK_WIDTH_MM);
+    let reach = CLEARANCE_MM + width / 2.0;
+    (0..SAMPLES).any(|k| {
+        let a = f64::from(k) * std::f64::consts::TAU / f64::from(SAMPLES);
+        let on = to_board((c.0 + radius * a.cos(), c.1 + radius * a.sin()));
+        let at = Point::new(mm_to_nm(on.0), mm_to_nm(on.1));
+        board
+            .pads()
+            .any(|p| p.signed_distance_nm(at) < reach * NM_PER_MM)
+            || vias
+                .iter()
+                .any(|(v, r)| (v.0 - on.0).hypot(v.1 - on.1) < r + reach)
+    })
+}
+
+/// Drop every silkscreen circle of a footprint that comes within the silkscreen
+/// clearance of a pad or a via. A circle is not cut like a line: the ring a test
+/// point draws round its own pad sits a tenth of a millimetre off it, closer
+/// than any fabricator prints, and without the ring the pad and its reference
+/// still mark the point. Returns the new text and the number of circles dropped.
+fn drop_circles_off_copper(
+    text: &str,
+    board: &PcbBoard,
+    vias: &[((f64, f64), f64)],
+) -> (String, usize) {
+    let mut ranges: Vec<std::ops::Range<usize>> = Vec::new();
+    let mut base = 0;
+    while let Some(i) = text[base..].find("(footprint") {
+        let start = base + i;
+        let len = block_len(&text[start..]).unwrap_or(text.len() - start);
+        base = start + len.max(1);
+        let fp = &text[start..start + len];
+        let Some(at) = fp.find("(at ") else {
+            continue;
+        };
+        let at_body = &fp[at + "(at".len()..];
+        let Some(close) = at_body.find(')') else {
+            continue;
+        };
+        let nums: Vec<f64> = at_body[..close]
+            .split_whitespace()
+            .filter_map(|n| n.parse().ok())
+            .collect();
+        let (Some(&ox), Some(&oy)) = (nums.first(), nums.get(1)) else {
+            continue;
+        };
+        let rotation = quarter_turn(nums.get(2).copied().unwrap_or(0.0));
+        let to_board = |(x, y): (f64, f64)| {
+            let (dx, dy) = rotation.rotate_offset(mm_to_nm(x), mm_to_nm(y));
+            (ox + dx as f64 / NM_PER_MM, oy + dy as f64 / NM_PER_MM)
+        };
+        let mut scan = 0;
+        while let Some(g) = fp[scan..].find("(fp_circle") {
+            let circle_start = scan + g;
+            let end = block_len(&fp[circle_start..]).unwrap_or(fp.len() - circle_start);
+            scan = circle_start + end.max(1);
+            let circle = &fp[circle_start..circle_start + end];
+            if !(circle.contains("\"F.SilkS\"") || circle.contains("\"B.SilkS\"")) {
+                continue;
+            }
+            if circle_hugs_copper(circle, board, vias, &to_board) {
+                ranges.push(start + circle_start..start + circle_start + end);
+            }
+        }
+    }
+    let count = ranges.len();
+    let mut out = text.to_string();
+    for range in ranges.into_iter().rev() {
+        // Take the tab that indented the circle with it, so no blank line stays.
+        let begin = out[..range.start]
+            .rfind(|ch: char| ch != '\t' && ch != ' ')
+            .map_or(0, |at| at + 1);
+        let from = if out[begin..range.start]
+            .chars()
+            .all(|ch| ch == '\t' || ch == ' ')
+        {
+            begin
+        } else {
+            range.start
+        };
+        out.replace_range(from..range.end, "");
     }
     (out, count)
 }
@@ -935,7 +1040,8 @@ mod tests {
                 moved: 1,
                 hidden: 0,
                 trimmed: 0,
-                widened: 0
+                widened: 0,
+                dropped: 0
             }
         );
         let reread = PcbBoard::parse(&out).expect("still parses");
@@ -1190,6 +1296,25 @@ mod tests {
         assert!(lines[0].2 < -1.0, "{lines:?}");
         assert!(lines[1].0 > -0.5 && lines[1].2 < 0.5, "{lines:?}");
         assert!(lines[2].0 > 1.0, "{lines:?}");
+    }
+
+    /// A test point's ring sits 0.11 mm off its own pad; the ring goes, a ring
+    /// well clear of every pad stays.
+    #[test]
+    fn a_silkscreen_circle_hugging_a_pad_is_dropped_and_a_distant_one_is_kept() {
+        let ring = |r: &str| {
+            format!(
+                "    (fp_circle (center 0 0) (end {r} 0) (stroke (width 0.12) (type solid)) (layer \"F.SilkS\") (fill none) (uuid \"00000000-0000-0000-0000-000000000020\"))\n    (pad \"1\""
+            )
+        };
+        let hugging = board_text("").replacen("    (pad \"1\"", &ring("1.3"), 1);
+        let (out, moves) = run(&hugging);
+        assert_eq!(moves.dropped, 1, "{out}");
+        assert!(!out.contains("(fp_circle"), "{out}");
+        let distant = board_text("").replacen("    (pad \"1\"", &ring("4"), 1);
+        let (out, moves) = run(&distant);
+        assert_eq!(moves.dropped, 0);
+        assert!(out.contains("(fp_circle"));
     }
 
     #[test]
