@@ -4101,7 +4101,10 @@ fn execute_describe_placement(
         .map_err(|e| format!("Placement failed: {e}"))?;
 
     let desc = synth_place::describe_placement(&board, &placement);
-    serde_json::to_value(desc).map_err(|e| format!("Serialization error: {e}"))
+    let mut value = serde_json::to_value(desc).map_err(|e| format!("Serialization error: {e}"))?;
+    value["fitness"] = serde_json::to_value(synth_place::fitness(&board, &placement))
+        .map_err(|e| format!("Fitness serialization error: {e}"))?;
+    Ok(value)
 }
 
 fn execute_read_layout_overrides(args: &Value) -> Result<Value, String> {
@@ -5716,6 +5719,19 @@ electrical_type = "input"
 
         assert_eq!(result["candidates"][0]["candidate_index"], 0);
         assert_eq!(result["selected_candidate_index"], 0);
+    }
+
+    #[test]
+    fn describe_placement_includes_fitness() {
+        let source = include_str!("../../../fixtures/designs/component_cap_only.synth");
+        let result = call_tool(
+            "synth_describe_placement",
+            &json!({ "source": source }),
+            None,
+        )
+        .expect("describe_placement should return a report");
+        assert!(result["fitness"]["metrics"].is_array(), "{result}");
+        assert!(result["fitness"]["score"].is_number(), "{result}");
     }
 }
 
