@@ -1556,6 +1556,7 @@ fn route_design_externally_with(
 
     let mut request = prepared.unwrap_or_else(|| routing_request(args, engine));
     request.ground_nets = synth_drc::ground_net_names(&board);
+    request.return_via_critical_nets = Some(synth_drc::return_path_critical_net_names(&board));
     request.engine = engine;
     request.board_path.clone_from(&res.pcb_path);
     request.out_dir.clone_from(&res.out_dir);
@@ -2883,6 +2884,7 @@ fn evaluate_candidate_mcp(
         .map_err(|e| format!("candidate export failed: {e}"))?;
     let mut request = routing_request(args, engine);
     request.ground_nets = synth_drc::ground_net_names(board);
+    request.return_via_critical_nets = Some(synth_drc::return_path_critical_net_names(board));
     request.board_path.clone_from(&res.pcb_path);
     request.out_dir.clone_from(&res.out_dir);
     request.stem = synth_router::sanitize_stem(&board.name);
@@ -3087,6 +3089,7 @@ fn execute_export(args: &Value, default_registry: Option<&Path>) -> Result<Value
 
     let mut request = routing_request(args, engine);
     request.ground_nets = synth_drc::ground_net_names(&board);
+    request.return_via_critical_nets = Some(synth_drc::return_path_critical_net_names(&board));
     request.board_path.clone_from(&res.pcb_path);
     request.out_dir.clone_from(&res.out_dir);
     request.stem = synth_router::sanitize_stem(&board.name);
@@ -4274,6 +4277,7 @@ fn execute_route_with_constraints(
     let engine = resolve_router(args)?;
     let mut routed = routing_request(args, engine);
     routed.ground_nets = synth_drc::ground_net_names(&board);
+    routed.return_via_critical_nets = Some(synth_drc::return_path_critical_net_names(&board));
     // The tightest requested width and clearance become the floor the
     // independent check enforces, so an engine that routed below them is
     // rejected rather than trusted.

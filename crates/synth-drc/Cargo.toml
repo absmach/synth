@@ -22,6 +22,7 @@ synth-ir = { workspace = true }
 synth-layout = { workspace = true }
 synth-place = { workspace = true }
 synth-pcb = { workspace = true }
+synth-registry = { workspace = true }
 rayon = { workspace = true }
 
 [dev-dependencies]
@@ -29,4 +30,3 @@ synth-parser = { workspace = true }
 # The native maze router survives only for the migration and benchmark
 # tests in this crate; nothing in the production DRC path invokes it.
 synth-route = { workspace = true }
-synth-registry = { workspace = true }

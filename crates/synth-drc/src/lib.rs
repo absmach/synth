@@ -69,7 +69,7 @@ mod signal_integrity;
 /// The IPC-2221 width a `current` needs. Re-exported so the exporter can size
 /// a high-current net's trace for the router.
 pub use signal_integrity::required_width_nm;
-pub use signal_integrity::{ground_net_names, is_ground_name};
+pub use signal_integrity::{ground_net_names, is_ground_name, return_path_critical_net_names};
 
 use serde::{Deserialize, Serialize};
 use synth_geometry::Point;
@@ -366,6 +366,29 @@ mod tests {
         let ground = ground_net_names(&board);
         assert!(ground.iter().any(|n| n == "POWER_RETURN"), "{ground:?}");
         assert!(!ground.iter().any(|n| n == "SIGNAL"), "{ground:?}");
+    }
+
+    /// A layer change only costs a fast edge a loop, so the nets a missing return
+    /// via must hold a board back for are the ones that carry one: a clock, a
+    /// differential pin, a switching node. A plain GPIO line is not one.
+    #[test]
+    fn only_fast_nets_are_critical_for_a_return_via() {
+        let board = board_from_source(
+            r#"board "returns" { layers 2
+                component U1: mcu "rp2350"
+                component X1: crystal "osc_smd_25mhz"
+                component L1: inductor "l_generic_1210" value "10uH"
+                component C1: capacitor "c_generic_0603" value "100nF"
+                component R1: resistor "r_generic_0603" value "10k"
+                net "CLK_OUT" { X1.out R1.p1 }
+                net "SW_NODE" { L1.p1 C1.p1 }
+                net "SLOW_GPIO" { U1.gp0 R1.p2 }
+            }"#,
+        );
+        let critical = return_path_critical_net_names(&board);
+        assert!(critical.iter().any(|n| n == "CLK_OUT"), "{critical:?}");
+        assert!(critical.iter().any(|n| n == "SW_NODE"), "{critical:?}");
+        assert!(!critical.iter().any(|n| n == "SLOW_GPIO"), "{critical:?}");
     }
 
     fn load_board(path: &str) -> Board {

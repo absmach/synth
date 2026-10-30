@@ -77,6 +77,9 @@ pub struct TieOutcome {
     /// spot holds a via, or the rounds ran out. Each is a reason the board must
     /// not be delivered, because KiCad refuses a zone against itself.
     pub unresolved: Vec<String>,
+    /// Signal vias on a slow net that no ground return via could be placed for:
+    /// listed for the review, not a reason to hold the board back.
+    pub advisory: Vec<String>,
 }
 
 /// Fill the candidate's zones, tie every island and give every layer change a
@@ -96,7 +99,16 @@ pub struct TieOutcome {
 /// Returns why the board could not be filled, read or written. A caller must
 /// treat that as the repair not having run, never as nothing to repair.
 pub fn tie_islands(candidate: &Path, ground_nets: &[String]) -> Result<TieOutcome, String> {
-    tie_islands_with(candidate, ground_nets, &mut |path| {
+    tie_islands_for(candidate, &Ground::new(ground_nets))
+}
+
+/// [`tie_islands`] for a [`Ground`] that may also say which nets must keep a
+/// return via, so a slow net with no room for one is an advisory.
+///
+/// # Errors
+/// As [`tie_islands`].
+pub fn tie_islands_for(candidate: &Path, ground: &Ground) -> Result<TieOutcome, String> {
+    tie_islands_with(candidate, ground, &mut |path| {
         crate::zone_fill::filled_text(path)
     })
 }
@@ -105,12 +117,12 @@ pub fn tie_islands(candidate: &Path, ground_nets: &[String]) -> Result<TieOutcom
 /// tested without KiCad.
 fn tie_islands_with(
     candidate: &Path,
-    ground_nets: &[String],
+    ground: &Ground,
     fill: &mut dyn FnMut(&Path) -> Result<Option<String>, String>,
 ) -> Result<TieOutcome, String> {
     let original = std::fs::read_to_string(candidate)
         .map_err(|e| format!("could not read {}: {e}", candidate.display()))?;
-    run_rounds(candidate, ground_nets, fill).inspect_err(|_| {
+    run_rounds(candidate, ground, fill).inspect_err(|_| {
         // Each round writes the candidate; a later failure must not leave an
         // earlier round's vias in a file that was never checked.
         let _ = std::fs::write(candidate, &original);
@@ -119,7 +131,7 @@ fn tie_islands_with(
 
 fn run_rounds(
     candidate: &Path,
-    ground_nets: &[String],
+    ground: &Ground,
     fill: &mut dyn FnMut(&Path) -> Result<Option<String>, String>,
 ) -> Result<TieOutcome, String> {
     let mut added = 0;
@@ -127,7 +139,7 @@ fn run_rounds(
         let Some(filled) = fill(candidate)? else {
             return Ok(TieOutcome {
                 added,
-                unresolved: Vec::new(),
+                ..TieOutcome::default()
             });
         };
         let board = PcbBoard::parse(&filled).map_err(|e| e.to_string())?;
@@ -136,12 +148,13 @@ fn run_rounds(
         let plan = plan_all_with(
             &board,
             dielectric_reach_mm(&text, board.copper_layers().len()),
-            &Ground::new(ground_nets),
+            ground,
         );
         if plan.vias.is_empty() {
             return Ok(TieOutcome {
                 added,
                 unresolved: plan.unresolved,
+                advisory: plan.advisory,
             });
         }
         let tied = with_vias(&text, &board, &plan.vias)?;
@@ -154,7 +167,7 @@ fn run_rounds(
     let Some(filled) = fill(candidate)? else {
         return Ok(TieOutcome {
             added,
-            unresolved: Vec::new(),
+            ..TieOutcome::default()
         });
     };
     let board = PcbBoard::parse(&filled).map_err(|e| e.to_string())?;
@@ -167,7 +180,7 @@ fn run_rounds(
     let plan = plan_all_with(
         &board,
         dielectric_reach_mm(&text, board.copper_layers().len()),
-        &Ground::new(ground_nets),
+        ground,
     );
     let mut unresolved = plan.unresolved;
     unresolved.extend(plan.vias.iter().enumerate().map(|(i, via)| {
@@ -187,7 +200,11 @@ fn run_rounds(
             )
         }
     }));
-    Ok(TieOutcome { added, unresolved })
+    Ok(TieOutcome {
+        added,
+        unresolved,
+        advisory: plan.advisory,
+    })
 }
 
 /// A poured polygon on one layer.
@@ -293,6 +310,8 @@ pub struct TiePlan {
     pub vias: Vec<TieVia>,
     /// Copper-bearing islands no via fits in: a finding, not a success.
     pub unresolved: Vec<String>,
+    /// Slow-net signal vias with no room for a return via: advisories.
+    pub advisory: Vec<String>,
 }
 
 /// The vias that would tie each unjoined, copper-bearing island of every
@@ -393,6 +412,7 @@ pub fn plan_all_with(board: &PcbBoard, reach_mm: f64, ground: &Ground) -> TiePla
     let stitched = stitch(board, reach_mm, &plan.vias, ground);
     plan.vias.extend(stitched.vias);
     plan.unresolved.extend(stitched.unresolved);
+    plan.advisory.extend(stitched.advisory);
     plan
 }
 
@@ -403,6 +423,10 @@ pub fn plan_all_with(board: &PcbBoard, reach_mm: f64, ground: &Ground) -> TiePla
 #[derive(Debug, Clone, Default)]
 pub struct Ground {
     named: BTreeSet<String>,
+    /// The nets that must keep a return via. `None` is every signal net, which
+    /// is the strict reading; `Some` lets any other net go without one as an
+    /// advisory.
+    critical: Option<BTreeSet<String>>,
 }
 
 impl Ground {
@@ -410,7 +434,20 @@ impl Ground {
     pub fn new(names: &[String]) -> Self {
         Self {
             named: names.iter().cloned().collect(),
+            critical: None,
         }
+    }
+
+    /// Only `critical` nets are held to a return via: a layer change on any
+    /// other net with no room for one is listed, not blocking.
+    #[must_use]
+    pub fn with_critical(mut self, critical: &[String]) -> Self {
+        self.critical = Some(critical.iter().cloned().collect());
+        self
+    }
+
+    fn needs_return(&self, net: &str) -> bool {
+        self.critical.as_ref().is_none_or(|set| set.contains(net))
     }
 
     fn is_ground(&self, net: &str) -> bool {
@@ -422,6 +459,7 @@ impl Ground {
 struct Stitched {
     vias: Vec<TieVia>,
     unresolved: Vec<String>,
+    advisory: Vec<String>,
 }
 
 /// A pad's copper as a rectangle turned to the pad's own angle.
@@ -849,6 +887,7 @@ fn stitch(board: &PcbBoard, reach_mm: f64, planned: &[TieVia], ground_nets: &Gro
     let none = || Stitched {
         vias: Vec::new(),
         unresolved: Vec::new(),
+        advisory: Vec::new(),
     };
     let pours = pours(board);
     let Some((net, regions)) = pours
@@ -898,17 +937,19 @@ fn stitch(board: &PcbBoard, reach_mm: f64, planned: &[TieVia], ground_nets: &Gro
     let room_both = |p: (f64, f64)| room(first, p) && room(last, p);
     // Built once: the signal vias and the keep-out do not change over the loop.
     let keepout = Keepout::from_board(board, net);
-    let signals: Vec<(f64, f64, f64)> = board
+    let signals: Vec<(f64, f64, String)> = board
         .vias
         .iter()
-        .filter(|via| net_of_via(via).is_some() && !is_ground(via))
-        .map(|via| (via.at.x_mm(), via.at.y_mm(), nm_to_mm(via.size_nm) / 2.0))
+        .filter(|via| !is_ground(via))
+        .filter_map(|via| Some((via.at.x_mm(), via.at.y_mm(), net_of_via(via)?)))
         .collect();
 
     let apart = nm_to_mm(size_nm) + VIA_GAP_MM;
     let mut out = Vec::new();
     let mut unresolved = Vec::new();
-    for &(vx, vy, _) in &signals {
+    let mut advisory = Vec::new();
+    for (vx, vy, signal_net) in &signals {
+        let (vx, vy) = (*vx, *vy);
         if ground
             .iter()
             .any(|g| (g.0 - vx).abs() <= reach_mm && (g.1 - vy).abs() <= reach_mm)
@@ -932,15 +973,20 @@ fn stitch(board: &PcbBoard, reach_mm: f64, planned: &[TieVia], ground_nets: &Gro
                 size_nm,
                 drill_nm,
             });
-        } else {
+        } else if ground_nets.needs_return(signal_net) {
             unresolved.push(format!(
                 "the signal via at ({vx:.2}, {vy:.2}) mm has no ground return via within {reach_mm:.2} mm, and no spot in the {net} pour holds one clear of the pads, vias and tracks beside it"
+            ));
+        } else {
+            advisory.push(format!(
+                "net {signal_net} changes layers at ({vx:.2}, {vy:.2}) mm with no ground return via within {reach_mm:.2} mm and no spot in the {net} pour for one; the net carries no fast edge, so the loop is left as an advisory"
             ));
         }
     }
     Stitched {
         vias: out,
         unresolved,
+        advisory,
     }
 }
 
@@ -1263,6 +1309,34 @@ mod tests {
         assert!((at.0 - 10.0).hypot(at.1 - 10.0) >= 0.8, "{at:?}");
     }
 
+    /// The return-path rule is advisory in the DRC because a missing return via
+    /// only matters to a fast edge. A slow net with no room for one is listed for
+    /// the review; a net that rides a fast edge still holds the board back.
+    #[test]
+    fn a_slow_net_with_no_room_for_a_return_via_is_an_advisory_and_a_critical_net_is_not() {
+        let blocker = r#"(footprint "R" (at 0 0) (layer "F.Cu")
+            (pad "1" smd rect (at 10 10) (size 6 6) (layers "F.Cu") (net 3)))"#;
+        let board = stitched_board(blocker);
+
+        let slow = Ground::default().with_critical(&["CLK".to_string()]);
+        let plan = plan_all_with(&board, REACH, &slow);
+        assert!(plan.unresolved.is_empty(), "{plan:?}");
+        assert_eq!(plan.advisory.len(), 1, "{plan:?}");
+        assert!(plan.advisory[0].contains("net SIG"), "{plan:?}");
+
+        let fast = Ground::default().with_critical(&["SIG".to_string()]);
+        let plan = plan_all_with(&board, REACH, &fast);
+        assert!(plan.advisory.is_empty(), "{plan:?}");
+        assert_eq!(plan.unresolved.len(), 1, "{plan:?}");
+
+        let strict = plan_all_with(&board, REACH, &Ground::default());
+        assert_eq!(
+            strict.unresolved.len(),
+            1,
+            "no list means every net: {strict:?}"
+        );
+    }
+
     /// A signal via that cannot be given a return must be reported, not skipped:
     /// W-SYNTH-DRC-016 is a warning, so a silent skip would let the candidate be
     /// promoted with the return path still missing.
@@ -1458,7 +1532,7 @@ mod tests {
         let text = board_text("");
         let path = scratch_file("restore", &text);
         let mut rounds = 0;
-        let result = tie_islands_with(&path, &[], &mut |_| {
+        let result = tie_islands_with(&path, &Ground::default(), &mut |_| {
             rounds += 1;
             if rounds == 1 {
                 Ok(Some(text.clone()))
@@ -1492,8 +1566,8 @@ mod tests {
         let path = scratch_file("spent", &text);
         // The fill never shows the vias written, so the island stays and every
         // round is used up.
-        let outcome =
-            tie_islands_with(&path, &[], &mut |_| Ok(Some(text.clone()))).expect("the repair runs");
+        let outcome = tie_islands_with(&path, &Ground::default(), &mut |_| Ok(Some(text.clone())))
+            .expect("the repair runs");
         assert!(
             outcome
                 .unresolved
@@ -1521,7 +1595,7 @@ mod tests {
         );
         let path = scratch_file("clean", &clean);
         let mut fills = 0;
-        let outcome = tie_islands_with(&path, &[], &mut |_| {
+        let outcome = tie_islands_with(&path, &Ground::default(), &mut |_| {
             fills += 1;
             Ok(Some(clean.clone()))
         })
@@ -1532,7 +1606,7 @@ mod tests {
         let text = board_text("");
         let path = scratch_file("island", &text);
         let mut fills = 0;
-        let outcome = tie_islands_with(&path, &[], &mut |path| {
+        let outcome = tie_islands_with(&path, &Ground::default(), &mut |path| {
             fills += 1;
             // The first fill is the island's; the second is of the tied board.
             let now = std::fs::read_to_string(path).expect("read");

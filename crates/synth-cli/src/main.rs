@@ -4849,6 +4849,7 @@ fn build_route_request(
     }
     request.routing_order = routing_order.to_vec();
     request.ground_nets = synth_drc::ground_net_names(board);
+    request.return_via_critical_nets = Some(synth_drc::return_path_critical_net_names(board));
     request.preserve_baseline()?;
     Ok(request)
 }

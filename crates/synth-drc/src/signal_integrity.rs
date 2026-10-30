@@ -561,6 +561,58 @@ pub(crate) fn net_name_or_pin_is_ground(board: &Board, net: &Net) -> bool {
         })
 }
 
+/// Names of the nets whose layer changes the return-path repair must not leave
+/// without a ground via: the nets a fast edge or a sensitive signal rides on.
+///
+/// A net is one when a pin on it is differential, a clock, RF or analog; when it
+/// is half of a declared `diff_pair`; or when it joins an inductor, which makes
+/// it a switching node. Any other signal changes layers with a slow edge, where
+/// the loop a missing return via leaves costs little, so a layer change there is
+/// an advisory and not a reason to hold the board back.
+#[must_use]
+pub fn return_path_critical_net_names(board: &Board) -> Vec<String> {
+    use synth_registry::ElectricalType;
+    let mut critical: std::collections::BTreeSet<NetId> = std::collections::BTreeSet::new();
+    for net in &board.nets {
+        let rides_fast = net.endpoints.iter().any(|endpoint| {
+            let Some(component) = board.component(endpoint.component) else {
+                return false;
+            };
+            component.kind == "inductor"
+                || component
+                    .part
+                    .as_ref()
+                    .and_then(|part| part.pins.get(endpoint.pin.0 as usize))
+                    .is_some_and(|pin| {
+                        matches!(
+                            pin.electrical_type,
+                            ElectricalType::DifferentialPositive
+                                | ElectricalType::DifferentialNegative
+                                | ElectricalType::Clock
+                                | ElectricalType::Rf
+                                | ElectricalType::Analog
+                        )
+                    })
+        });
+        if rides_fast {
+            critical.insert(net.id);
+        }
+    }
+    for pair in &board.diff_pairs {
+        for (_, leg) in board.diff_pair_legs(pair) {
+            if let Some(net) = leg {
+                critical.insert(net.id);
+            }
+        }
+    }
+    board
+        .nets
+        .iter()
+        .filter(|net| critical.contains(&net.id))
+        .map(|net| net.name.clone())
+        .collect()
+}
+
 /// Whether a net or pin name is a ground: it contains `gnd` or `vss`, or is
 /// `0v`, in any case. The one rule the return-path check, the exporter's plane
 /// classifier and the router's ground-via passes share, so `VSSA` and `VSS_IO`
