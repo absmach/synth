@@ -14,8 +14,10 @@ min_voltage_v = 1.8
 max_voltage_v = 3.6
 max_current_ma = 50.0
 
-# Pin names and numbers come from the stock symbol the part names, which
-# extends `24LC16`, cross-checked against the 8 pads of the SOIC-8 footprint.
+# Pin numbers follow the SOIC-8 pinout this I2C EEPROM family shares with the
+# 24LC256 (A0 A1 A2 GND SDA SCL WP VCC), cross-checked against the 8 pads of
+# the footprint. Not from the symbol: KiCad 10 ships no
+# `Memory_EEPROM:AT24C512`, so the name above resolves to nothing.
 #
 # The previous map had `vdd` on pad 1, `gnd` on 2, `sda` on 3 and `scl` on 4.
 # On this package those four pads are A0, A1, A2 and GND, so a board wired to
