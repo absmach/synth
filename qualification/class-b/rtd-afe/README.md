@@ -153,8 +153,11 @@ netlist/PCB parity is clean.
   Gerbers and drill files.
 - `reports/`: `release.json`, the delivered DRC and ERC reports, the KiCad
   netlist, the FreeRouting routing record and the connectivity report.
-- `images/`: 3D top, bottom and angled views and the schematic
-  (`kicad-cli pcb render` and `kicad-cli sch export pdf`).
+- `images/`: 3D top, bottom and angled views, the four copper layers
+  (F.Cu, In1.Cu, In2.Cu, B.Cu) and the schematic. The copper image is rendered
+  from the committed board with `kicad-cli pcb export pdf` and `pdftoppm`; the
+  3D views with `kicad-cli pcb render`, the schematic with
+  `kicad-cli sch export pdf`.
 - `rtd_afe.synth`, `rtd_afe.placement.layout.toml`: the design sources.
 - `check.sh`: the acceptance check above.
 - `cut_outline.py`: the post-export notch cut that `check.sh` applies before
