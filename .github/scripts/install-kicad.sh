@@ -121,3 +121,9 @@ echo "stock libraries: $(ls -1 "$symbols_dir" | wc -l) symbol, $(ls -1d "${footp
 mkdir -p "$HOME/.config/kicad/${want_major_minor}"
 cp /usr/share/kicad/template/sym-lib-table "$HOME/.config/kicad/${want_major_minor}/sym-lib-table"
 cp /usr/share/kicad/template/fp-lib-table "$HOME/.config/kicad/${want_major_minor}/fp-lib-table"
+
+# Tests that need a stock footprint library read it from here, the directory the
+# libraries were just checked in; later steps of the job inherit it.
+if [ -n "${GITHUB_ENV:-}" ]; then
+  echo "KICAD_FOOTPRINT_DIR=${footprints_dir}" >> "$GITHUB_ENV"
+fi
