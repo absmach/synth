@@ -127,9 +127,10 @@ electrical_type = "bidirectional"
 capabilities = ["gpio", "spi_cs"]
 
 [[pins]]
-name = "NC_PA9"
+name = "PA9"
 number = "19"
 electrical_type = "bidirectional"
+capabilities = ["gpio", "uart_tx", "spi_miso", "i2c_scl"]
 
 [[pins]]
 name = "PC6"
@@ -138,9 +139,10 @@ electrical_type = "bidirectional"
 capabilities = ["gpio"]
 
 [[pins]]
-name = "NC_PA10"
+name = "PA10"
 number = "21"
 electrical_type = "bidirectional"
+capabilities = ["gpio", "spi_mosi", "uart_rx", "i2c_sda"]
 
 [[pins]]
 name = "PA9_PA11"

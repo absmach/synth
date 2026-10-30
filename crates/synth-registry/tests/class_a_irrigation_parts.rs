@@ -5,7 +5,7 @@
 
 use std::path::Path;
 
-const IDS: [&str; 7] = [
+const IDS: [&str; 8] = [
     "stm32g030k8_lqfp32",
     "sht30_dis",
     "apds9301_real",
@@ -13,6 +13,7 @@ const IDS: [&str; 7] = [
     "ao3400a_nmos",
     "header_1x5",
     "24lc256_soic8",
+    "mp2307_buck",
 ];
 
 fn part(id: &str) -> synth_registry::Part {
@@ -167,4 +168,93 @@ fn the_canonical_mp2307_limits_are_the_datasheets() {
     assert_eq!(limits.max_current_ma, Some(3000.0));
     assert_eq!(limits.min_voltage_v, Some(4.75));
     assert_eq!(limits.max_voltage_v, Some(23.0));
+}
+
+#[test]
+fn the_mcu_has_pa9_and_pa10_on_lqfp32_pins_19_and_21_with_their_alternate_functions() {
+    // DS12991 Rev 4, table 12 (pin assignment): LQFP32 pin 19 is PA9 and pin 21 is PA10.
+    // Table 13 (port A alternate functions): PA9 is USART1_TX (AF1), SPI2_MISO (AF4) and
+    // I2C1_SCL (AF6); PA10 is SPI2_MOSI (AF0), USART1_RX (AF1) and I2C1_SDA (AF6).
+    let p = part("stm32g030k8_lqfp32");
+    for (name, number, wanted) in [
+        (
+            "PA9",
+            "19",
+            ["Gpio", "UartTx", "SpiMiso", "I2cScl"].as_slice(),
+        ),
+        (
+            "PA10",
+            "21",
+            ["Gpio", "SpiMosi", "UartRx", "I2cSda"].as_slice(),
+        ),
+    ] {
+        let pin = p
+            .find_pin(name)
+            .unwrap_or_else(|| panic!("the LQFP32 package has a {name} pin"));
+        assert_eq!(pin.number.0, number, "{name} is on LQFP32 pin {number}");
+        let c = caps(&p, name);
+        for cap in wanted {
+            assert!(c.contains(cap), "{name} should be {cap}: {c}");
+        }
+    }
+    assert!(
+        p.pins.iter().all(|x| !x.name.starts_with("NC_")),
+        "no LQFP32 pin of this part is a no-connect"
+    );
+}
+
+#[test]
+fn the_canonical_mp2307_is_an_exact_part_with_its_power_network_constraints() {
+    let p = part("mp2307_buck");
+    // The datasheet's ordering note: -LF for lead-free, -Z for tape and reel; the reel
+    // code is the Hub's `mp2307_buck_ep`, so the two do not share an MPN.
+    assert_eq!(p.mpn.as_deref(), Some("MP2307DN-LF"));
+    // Pin 9 is the exposed pad; the footprint has a pad 9 for it.
+    let ep = p.pins.iter().find(|x| x.number.0 == "9").expect("a pin 9");
+    assert_eq!(ep.name, "ep");
+    assert!(ep.required, "the exposed pad is connected, to GND");
+    assert!(p
+        .kicad_footprint
+        .as_deref()
+        .is_some_and(|f| f.contains("EP2.41x3.3")));
+    let wants = |net: &str, to: Option<&str>, through: Option<&str>, value: &str, count: u32| {
+        p.required_decoupling.iter().any(|d| {
+            d.net == net
+                && d.to.as_deref() == to
+                && d.through.as_deref() == through
+                && d.value.eq_ignore_ascii_case(value)
+                && d.count == count
+        })
+    };
+    // Datasheet Rev. 1.9: BS needs 0.01 uF or more from SW; C1 = 2 x 10 uF; C2 = 22 uF
+    // behind the inductor.
+    assert!(
+        wants("bs", Some("sw"), None, "10nf", 1),
+        "bootstrap capacitor"
+    );
+    assert!(wants("in", None, None, "10uf", 2), "input capacitors");
+    assert!(
+        wants("sw", None, Some("inductor"), "22uf", 1),
+        "output capacitor"
+    );
+}
+
+#[test]
+fn the_swd_header_is_an_exact_harwin_part_with_its_contact_rating() {
+    // Harwin M20-999 customer information sheet (DRG-00479) and component specification
+    // C001: M20-9990546 is the 5-contact, 2.54 mm, 100% tin vertical PC-tail header, 3 A per contact.
+    let p = part("header_1x5");
+    assert_eq!(p.mpn.as_deref(), Some("M20-9990546"));
+    assert_eq!(p.lcsc_pn.as_deref(), Some("C3328227"));
+    assert_eq!(p.pins.len(), 5);
+    let oc = p.operating_conditions.as_ref().expect("a contact rating");
+    assert_eq!(oc.max_current_ma, Some(3000.0), "3 A per contact");
+    let url = p
+        .provenance
+        .as_ref()
+        .and_then(|v| v.datasheet_url.as_deref());
+    assert!(
+        url.is_some_and(|u| u.starts_with("https://content.harwin.com/")),
+        "the manufacturer's own document, not a reseller page: {url:?}"
+    );
 }
