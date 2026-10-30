@@ -51,6 +51,7 @@ pub mod failure;
 pub mod freerouting;
 pub mod island_vias;
 pub mod kicad_routing_tools;
+pub mod label_vias;
 pub mod outcomes;
 pub mod pcb_read;
 pub mod process;
@@ -91,6 +92,46 @@ pub const ROUTE_REPORT_SCHEMA: &str = "synth.routing.v1";
 /// [`RouteRequest::report_path`] before this function returns, so a run
 /// that fails is as auditable as one that succeeds.
 pub fn route(request: &RouteRequest) -> RouteReport {
+    let mut report = route_once(request);
+    if request.engine != RouterEngine::KiCadRoutingTools {
+        return report;
+    }
+    // Whether the engine puts a via in a pad, or leaves a net open, depends on
+    // the order it routes the nets in, and the same board can route cleanly in
+    // one order and not in another. A board the independent validation rejected
+    // is therefore tried again in the engine's other orders before it is given
+    // up on; the first one that validates is kept.
+    for ordering in ORDERING_RETRIES.iter().take(ordering_retries()) {
+        if report.state != result::RouteState::ValidationFailed {
+            break;
+        }
+        eprintln!(
+            "note: the routed board was rejected ({} blocking); routing again with the {ordering} net order",
+            report
+                .validation
+                .as_ref()
+                .map_or(0, result::ValidationSummary::blocking_count)
+        );
+        let mut again = request.clone();
+        again.kicad_routing_tools.ordering = Some((*ordering).to_string());
+        report = route_once(&again);
+    }
+    report
+}
+
+/// The engine's net orders other than its default, in the order they are tried.
+const ORDERING_RETRIES: [&str; 3] = ["inside_out", "original", "bus"];
+
+/// How many of [`ORDERING_RETRIES`] a rejected board is tried with:
+/// `SYNTH_ROUTER_ORDERING_RETRIES`, three when absent, none when zero.
+fn ordering_retries() -> usize {
+    std::env::var("SYNTH_ROUTER_ORDERING_RETRIES")
+        .ok()
+        .and_then(|v| v.trim().parse::<usize>().ok())
+        .unwrap_or(ORDERING_RETRIES.len())
+}
+
+fn route_once(request: &RouteRequest) -> RouteReport {
     // The duplicate-run guard is taken first. Reporting "router
     // unavailable" while a run is already writing this candidate would name
     // the wrong problem, and the operator would go looking for a missing
@@ -287,6 +328,13 @@ fn finalize(
     // promoted, because the island is a zone against itself and KiCad refuses it.
     let mut repair_blocking: Vec<String> = Vec::new();
     let mut repair_unavailable: Vec<String> = Vec::new();
+    // A via the engine left in a pad of its own net is moved off it, with the tracks
+    // that meet it, before the candidate is judged; the judging is unchanged.
+    match island_vias::move_vias_off_pads(&candidate.candidate_path) {
+        Ok(0) => {}
+        Ok(moved) => eprintln!("note: moved {moved} via(s) off the pads they sat in"),
+        Err(detail) => eprintln!("warning: vias in pads were not repaired: {detail}"),
+    }
     match island_vias::tie_islands(&candidate.candidate_path, &request.ground_nets) {
         Ok(outcome) => repair_blocking = outcome.unresolved,
         Err(detail) => {
@@ -310,6 +358,16 @@ fn finalize(
     // a rejected candidate is left on disk as review material, and the
     // delivered path still holds the un-routed export.
     if state.is_fabrication_ready() {
+        // The labels were placed before the router put its vias down; move any
+        // that now sit on a via or a pad. Silkscreen only: the copper the
+        // candidate was validated on is untouched.
+        match label_vias::keep_labels_off_copper(&candidate.candidate_path) {
+            Ok(label_vias::LabelMoves { moved: 0, hidden: 0 }) => {}
+            Ok(label_vias::LabelMoves { moved, hidden }) => eprintln!(
+                "note: moved {moved} reference label(s) off vias and pads; {hidden} hidden because no clear spot was within reach"
+            ),
+            Err(detail) => eprintln!("warning: reference labels were not checked: {detail}"),
+        }
         // Deliver the zones filled so KiCad opens the board with the
         // connectivity it was validated with. A refill that fails leaves
         // the routed, unfilled board in place.

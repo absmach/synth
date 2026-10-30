@@ -244,6 +244,31 @@ impl Region {
         inside
     }
 
+    /// Whether a track from `a` to `b`, `half` wide each side, has copper in
+    /// the polygon: an end inside it, or the track's body reaching an edge. A
+    /// track can cross a thin pour with both ends outside and still be joined
+    /// to it.
+    fn touches_segment(&self, a: (f64, f64), b: (f64, f64), half: f64) -> bool {
+        if a.0.min(b.0) - half > self.max.0
+            || a.0.max(b.0) + half < self.min.0
+            || a.1.min(b.1) - half > self.max.1
+            || a.1.max(b.1) + half < self.min.1
+        {
+            return false;
+        }
+        if self.contains(a) || self.contains(b) {
+            return true;
+        }
+        let mut j = self.ring.len() - 1;
+        for i in 0..self.ring.len() {
+            if segment_distance(a, b, self.ring[j], self.ring[i]) <= half {
+                return true;
+            }
+            j = i;
+        }
+        false
+    }
+
     /// Distance from `p` to the nearest edge of the polygon, holes included.
     fn edge_distance(&self, p: (f64, f64)) -> f64 {
         let mut best = f64::MAX;
@@ -265,6 +290,27 @@ fn point_segment(p: (f64, f64), a: (f64, f64), b: (f64, f64)) -> f64 {
         (((p.0 - a.0) * dx + (p.1 - a.1) * dy) / len2).clamp(0.0, 1.0)
     };
     (p.0 - (a.0 + t * dx)).hypot(p.1 - (a.1 + t * dy))
+}
+
+/// Whether segments `p1p2` and `q1q2` cross.
+fn segments_cross(p1: (f64, f64), p2: (f64, f64), q1: (f64, f64), q2: (f64, f64)) -> bool {
+    let side = |a: (f64, f64), b: (f64, f64), c: (f64, f64)| {
+        (b.0 - a.0) * (c.1 - a.1) - (b.1 - a.1) * (c.0 - a.0)
+    };
+    let (d1, d2) = (side(q1, q2, p1), side(q1, q2, p2));
+    let (d3, d4) = (side(p1, p2, q1), side(p1, p2, q2));
+    ((d1 > 0.0) != (d2 > 0.0)) && ((d3 > 0.0) != (d4 > 0.0))
+}
+
+/// The shortest distance between two segments; zero when they cross.
+fn segment_distance(p1: (f64, f64), p2: (f64, f64), q1: (f64, f64), q2: (f64, f64)) -> f64 {
+    if segments_cross(p1, p2, q1, q2) {
+        return 0.0;
+    }
+    point_segment(p1, q1, q2)
+        .min(point_segment(p2, q1, q2))
+        .min(point_segment(q1, p1, p2))
+        .min(point_segment(q2, p1, p2))
 }
 
 struct Groups(Vec<usize>);
@@ -579,13 +625,165 @@ fn join_copper(
         if net_of(board, segment.net, segment.net_name.as_ref()).as_deref() != Some(net) {
             continue;
         }
-        let hit: Vec<usize> = [segment.start, segment.end]
-            .iter()
-            .flat_map(|end| containing(&segment.layer, *end))
+        let (a, b) = (
+            (segment.start.x_mm(), segment.start.y_mm()),
+            (segment.end.x_mm(), segment.end.y_mm()),
+        );
+        let half = nm_to_mm(segment.width_nm) / 2.0;
+        let hit: Vec<usize> = (0..regions.len())
+            .filter(|&i| {
+                regions[i].layer == segment.layer && regions[i].touches_segment(a, b, half)
+            })
             .collect();
         join(&mut groups, &mut attached, &hit);
     }
+    join_through_copper(&mut groups, &pieces_of(board, net, regions, copper));
     (groups, attached, via_sizes)
+}
+
+/// One piece of a net's copper that is not a pour, with the pour regions it
+/// sits in.
+struct Piece {
+    layers: Vec<String>,
+    shape: PieceShape,
+    regions: Vec<usize>,
+}
+
+enum PieceShape {
+    Pad(PadBox),
+    Via((f64, f64), f64),
+    /// Both ends and the half width of the copper.
+    Track((f64, f64), (f64, f64), f64),
+}
+
+fn pieces_of(board: &PcbBoard, net: &str, regions: &[Region], copper: &[String]) -> Vec<Piece> {
+    let in_net =
+        |n: Option<u32>, name: Option<&String>| net_of(board, n, name).as_deref() == Some(net);
+    let hits = |layer: &str, p: (f64, f64)| -> Vec<usize> {
+        (0..regions.len())
+            .filter(|&i| regions[i].layer == layer && regions[i].contains(p))
+            .collect()
+    };
+    let mut pieces = Vec::new();
+    for pad in board.pads() {
+        if !in_net(pad.net, pad.net_name.as_ref()) {
+            continue;
+        }
+        let layers: Vec<String> = if pad.kind == "thru_hole" {
+            copper.to_vec()
+        } else {
+            pad.layers.clone()
+        };
+        let at = (pad.at.x_mm(), pad.at.y_mm());
+        let regions = layers.iter().flat_map(|l| hits(l, at)).collect();
+        pieces.push(Piece {
+            layers,
+            shape: PieceShape::Pad(PadBox::new(pad)),
+            regions,
+        });
+    }
+    for via in &board.vias {
+        if !in_net(via.net, via.net_name.as_ref()) {
+            continue;
+        }
+        let at = (via.at.x_mm(), via.at.y_mm());
+        let regions = via.layers.iter().flat_map(|l| hits(l, at)).collect();
+        pieces.push(Piece {
+            layers: via.layers.clone(),
+            shape: PieceShape::Via(at, nm_to_mm(via.size_nm) / 2.0),
+            regions,
+        });
+    }
+    for segment in &board.segments {
+        if !in_net(segment.net, segment.net_name.as_ref()) {
+            continue;
+        }
+        let (a, b) = (
+            (segment.start.x_mm(), segment.start.y_mm()),
+            (segment.end.x_mm(), segment.end.y_mm()),
+        );
+        let half = nm_to_mm(segment.width_nm) / 2.0;
+        let regions = (0..regions.len())
+            .filter(|&i| {
+                regions[i].layer == segment.layer && regions[i].touches_segment(a, b, half)
+            })
+            .collect();
+        pieces.push(Piece {
+            layers: vec![segment.layer.clone()],
+            shape: PieceShape::Track(a, b, half),
+            regions,
+        });
+    }
+    pieces
+}
+
+/// Joins the pour regions that the net's pads, vias and tracks connect through
+/// copper outside any pour: a track from a pad that sits in a sliver of pour to
+/// a pad or via that reaches the main one ties the sliver to it as surely as a
+/// via would. KiCad counts that as connected, so the repair must too.
+fn join_through_copper(groups: &mut Groups, pieces: &[Piece]) {
+    const TOUCH_MM: f64 = 0.02;
+    let base = groups.0.len();
+    groups.0.extend(base..base + pieces.len());
+    for (i, piece) in pieces.iter().enumerate() {
+        for &region in &piece.regions {
+            groups.union(region, base + i);
+        }
+    }
+    let shares_layer = |a: &Piece, b: &Piece| a.layers.iter().any(|l| b.layers.contains(l));
+    for i in 0..pieces.len() {
+        for j in (i + 1)..pieces.len() {
+            let (a, b) = (&pieces[i], &pieces[j]);
+            if shares_layer(a, b) && copper_gap(&a.shape, &b.shape) <= TOUCH_MM {
+                groups.union(base + i, base + j);
+            }
+        }
+    }
+}
+
+/// The clear distance between two pieces' copper, by their real widths; zero or
+/// less when they overlap. Pads join only through a track or a via.
+#[allow(
+    clippy::cast_precision_loss,
+    clippy::cast_possible_truncation,
+    clippy::cast_sign_loss
+)]
+fn copper_gap(first: &PieceShape, second: &PieceShape) -> f64 {
+    use PieceShape::{Pad, Track, Via};
+    // A track against a pad box: the pad's distance at points along the track.
+    let track_pad = |start: (f64, f64), end: (f64, f64), half: f64, pad: &PadBox| -> f64 {
+        let length = (end.0 - start.0).hypot(end.1 - start.1);
+        let steps = ((length / 0.05).ceil() as usize).max(1);
+        (0..=steps)
+            .map(|step| {
+                let along = step as f64 / steps as f64;
+                pad.distance((
+                    start.0 + along * (end.0 - start.0),
+                    start.1 + along * (end.1 - start.1),
+                ))
+            })
+            .fold(f64::MAX, f64::min)
+            - half
+    };
+    match (first, second) {
+        (Track(a_start, a_end, a_half), Track(b_start, b_end, b_half)) => {
+            segment_distance(*a_start, *a_end, *b_start, *b_end) - a_half - b_half
+        }
+        (Track(start, end, half), Via(centre, radius))
+        | (Via(centre, radius), Track(start, end, half)) => {
+            point_segment(*centre, *start, *end) - half - radius
+        }
+        (Via(a_centre, a_radius), Via(b_centre, b_radius)) => {
+            (a_centre.0 - b_centre.0).hypot(a_centre.1 - b_centre.1) - a_radius - b_radius
+        }
+        (Track(start, end, half), Pad(pad)) | (Pad(pad), Track(start, end, half)) => {
+            track_pad(*start, *end, *half, pad)
+        }
+        (Via(centre, radius), Pad(pad)) | (Pad(pad), Via(centre, radius)) => {
+            pad.distance(*centre) - radius
+        }
+        (Pad(_), Pad(_)) => f64::MAX,
+    }
 }
 
 /// The via size the net uses most, the larger on a tie. The smallest would
@@ -1011,6 +1209,265 @@ fn uuid_for(via: &TieVia) -> String {
         (b >> 48) & 0xfff,
         b & 0xffff_ffff_ffff
     )
+}
+
+/// Moves each via that sits in a pad of its own net off that pad, taking the
+/// tracks that end at it along, and returns how many it moved.
+///
+/// The engine puts a via at the edge of a pad now and then, and the release
+/// gate refuses a via in a pad. A via that is a few tenths of a millimetre from
+/// where it should be is not a reason to give up a board that otherwise routes:
+/// the nearest spot that keeps the via's hole off every pad and clear of other
+/// copper is found, the via and the track ends that met it move there, and the
+/// caller validates the result as it validates any candidate. A via with no
+/// such spot is left where it is.
+///
+/// # Errors
+/// Returns why the board could not be read or written.
+#[allow(clippy::cast_precision_loss)]
+pub fn move_vias_off_pads(candidate: &Path) -> Result<usize, String> {
+    let text = std::fs::read_to_string(candidate)
+        .map_err(|e| format!("could not read {}: {e}", candidate.display()))?;
+    let board = PcbBoard::parse(&text).map_err(|e| e.to_string())?;
+    let mut out = text.clone();
+    let mut moved = 0;
+    let mut taken: Vec<((f64, f64), f64)> = Vec::new();
+    for via in &board.vias {
+        let Some(net) = net_of(&board, via.net, via.net_name.as_ref()) else {
+            continue;
+        };
+        let in_pad = board.pads().any(|pad| {
+            pad.net == via.net
+                && (pad.kind == "thru_hole" || pad.layers.iter().any(|l| via.layers.contains(l)))
+                && pad.signed_distance_nm(via.at) <= (via.drill_nm / 2) as f64
+        });
+        if !in_pad {
+            continue;
+        }
+        let from = (via.at.x_mm(), via.at.y_mm());
+        let radius = nm_to_mm(via.size_nm) / 2.0;
+        let keepout = Keepout::from_board(&board, &net);
+        let attached: Vec<&crate::pcb_read::Segment> = board
+            .segments
+            .iter()
+            .filter(|segment| {
+                net_of(&board, segment.net, segment.net_name.as_ref()).as_deref() == Some(&net)
+                    && via.layers.contains(&segment.layer)
+                    && (near(segment.start, from) || near(segment.end, from))
+            })
+            .collect();
+        let others: Vec<((f64, f64), f64)> = taken.clone();
+        let Some(to) = nearest_free_spot(from, radius, &keepout, &others, |p| {
+            attached.iter().all(|segment| {
+                let far = if near(segment.start, from) {
+                    segment.end
+                } else {
+                    segment.start
+                };
+                let far = (far.x_mm(), far.y_mm());
+                // The track from where it was to the new spot must also be clear.
+                let half = nm_to_mm(segment.width_nm) / 2.0;
+                let steps = 8_u32;
+                (0..=steps).all(|i| {
+                    let t = f64::from(i) / f64::from(steps);
+                    let at = (far.0 + (p.0 - far.0) * t, far.1 + (p.1 - far.1) * t);
+                    keepout.track_clear(at, half)
+                })
+            })
+        }) else {
+            // Nowhere to put it. A via that carries no track and has a neighbour of
+            // its net close by, one the pad does not swallow, only joins the pours
+            // that the neighbour joins as well, so it can simply go.
+            let spare = attached.is_empty()
+                && board.vias.iter().any(|other| {
+                    other != via
+                        && net_of(&board, other.net, other.net_name.as_ref()).as_deref()
+                            == Some(&net)
+                        && (other.at.x_mm() - from.0).hypot(other.at.y_mm() - from.1) < 3.0
+                        && !board.pads().any(|pad| {
+                            pad.net == other.net
+                                && pad.signed_distance_nm(other.at) <= (other.drill_nm / 2) as f64
+                        })
+                });
+            if spare {
+                out = remove_via_in_text(&out, from);
+                moved += 1;
+            }
+            continue;
+        };
+        out = move_via_in_text(&out, from, to);
+        taken.push((to, radius));
+        moved += 1;
+    }
+    if moved > 0 {
+        std::fs::write(candidate, out)
+            .map_err(|e| format!("could not write {}: {e}", candidate.display()))?;
+    }
+    Ok(moved)
+}
+
+fn near(p: Point, at: (f64, f64)) -> bool {
+    (p.x_mm() - at.0).hypot(p.y_mm() - at.1) < 0.01
+}
+
+impl Keepout {
+    /// Whether a track of half width `half` passing through `p` keeps clear of
+    /// every pad, via and foreign track.
+    fn track_clear(&self, p: (f64, f64), half: f64) -> bool {
+        let need = half + TRACK_GAP_MM;
+        self.pads.iter().all(|pad| pad.distance(p) >= need - EPS)
+            && self
+                .tracks
+                .iter()
+                .all(|(a, b, other)| point_segment(p, *a, *b) >= need + other - EPS)
+    }
+}
+
+/// The track-to-copper gap a moved track keeps, a little over the board's
+/// usual 0.127 mm minimum.
+const TRACK_GAP_MM: f64 = 0.15;
+
+/// The nearest point within a millimetre of `from` where a via of `radius` with a
+/// hole of `hole` is clear of everything, and `accept` agrees.
+fn nearest_free_spot(
+    from: (f64, f64),
+    radius: f64,
+    keepout: &Keepout,
+    taken: &[((f64, f64), f64)],
+    accept: impl Fn((f64, f64)) -> bool,
+) -> Option<(f64, f64)> {
+    for step in 1..=12_u32 {
+        let r = f64::from(step) * 0.1;
+        for k in 0..24_u32 {
+            let angle = f64::from(k) * std::f64::consts::TAU / 24.0;
+            let p = (from.0 + r * angle.cos(), from.1 + r * angle.sin());
+            if keepout.clear_of_pads_only(p, radius, from)
+                && taken.iter().all(|(at, other)| {
+                    (at.0 - p.0).hypot(at.1 - p.1) >= radius + other + VIA_GAP_MM
+                })
+                && accept(p)
+            {
+                return Some(p);
+            }
+        }
+    }
+    None
+}
+
+impl Keepout {
+    /// A via of `radius` at `p` keeps [`VIA_GAP_MM`] from every pad, foreign
+    /// track and via other than the one being moved (which is at the same spot
+    /// it started from, so it would never be clear of itself).
+    fn clear_of_pads_only(&self, p: (f64, f64), radius: f64, ignore: (f64, f64)) -> bool {
+        let need = radius + VIA_GAP_MM;
+        self.pads.iter().all(|pad| pad.distance(p) >= need - EPS)
+            && self
+                .tracks
+                .iter()
+                .all(|(a, b, half)| point_segment(p, *a, *b) >= need + half - EPS)
+            && self.vias.iter().all(|(at, other)| {
+                (at.0 - ignore.0).hypot(at.1 - ignore.1) < 0.01
+                    || (at.0 - p.0).hypot(at.1 - p.1) >= need + other - EPS
+            })
+    }
+}
+
+/// `text` with the via at `from`, and the ends of the tracks that meet it, put
+/// at `to`.
+fn move_via_in_text(text: &str, from: (f64, f64), to: (f64, f64)) -> String {
+    let mut out = String::with_capacity(text.len());
+    let mut rest = text;
+    while let Some(start) = next_block(rest) {
+        out.push_str(&rest[..start]);
+        let block = &rest[start..];
+        let Some(end) = block_end(block) else {
+            out.push_str(block);
+            rest = "";
+            break;
+        };
+        let (head, body) = block.split_at(end);
+        out.push_str(&rewrite_points(head, from, to));
+        rest = body;
+    }
+    out.push_str(rest);
+    out
+}
+
+/// `text` without the via at `at`.
+fn remove_via_in_text(text: &str, at: (f64, f64)) -> String {
+    let mut out = String::with_capacity(text.len());
+    let mut rest = text;
+    while let Some(i) = rest.find("(via") {
+        let block = &rest[i..];
+        let Some(end) = block_end(block) else {
+            break;
+        };
+        let here = rewrite_points(&block[..end], at, (f64::NAN, f64::NAN)).contains("NaN");
+        if here {
+            // Take the line's leading whitespace with it.
+            let head = rest[..i].trim_end_matches([' ', '\t']);
+            out.push_str(head);
+            rest = block[end..].trim_start_matches('\n');
+        } else {
+            out.push_str(&rest[..i + end]);
+            rest = &block[end..];
+        }
+    }
+    out.push_str(rest);
+    out
+}
+
+/// The index of the next `(via` or `(segment` block in `text`.
+fn next_block(text: &str) -> Option<usize> {
+    let via = text.find("(via");
+    let segment = text.find("(segment");
+    match (via, segment) {
+        (Some(a), Some(b)) => Some(a.min(b)),
+        (a, b) => a.or(b),
+    }
+}
+
+/// The length of the balanced `(...)` block `text` starts with.
+fn block_end(text: &str) -> Option<usize> {
+    let mut depth = 0_i32;
+    for (i, c) in text.char_indices() {
+        match c {
+            '(' => depth += 1,
+            ')' => {
+                depth -= 1;
+                if depth == 0 {
+                    return Some(i + 1);
+                }
+            }
+            _ => {}
+        }
+    }
+    None
+}
+
+/// `block` with every `(at X Y)`, `(start X Y)` and `(end X Y)` at `from` put at `to`.
+fn rewrite_points(block: &str, from: (f64, f64), to: (f64, f64)) -> String {
+    let mut out = String::with_capacity(block.len());
+    let mut rest = block;
+    'scan: while !rest.is_empty() {
+        for tag in ["(at ", "(start ", "(end "] {
+            if let Some(after) = rest.strip_prefix(tag) {
+                let close = after.find(')').unwrap_or(after.len());
+                let mut numbers = after[..close].split_whitespace().map(str::parse::<f64>);
+                if let (Some(Ok(x)), Some(Ok(y))) = (numbers.next(), numbers.next()) {
+                    if (x - from.0).abs() < 0.002 && (y - from.1).abs() < 0.002 {
+                        let _ = write!(out, "{tag}{:.6} {:.6}", to.0, to.1);
+                        rest = &after[close..];
+                        continue 'scan;
+                    }
+                }
+            }
+        }
+        let c = rest.chars().next().unwrap_or(' ');
+        out.push(c);
+        rest = &rest[c.len_utf8()..];
+    }
+    out
 }
 
 #[cfg(test)]
@@ -1598,6 +2055,164 @@ mod tests {
             "the search took {:?}",
             started.elapsed()
         );
+    }
+
+    #[test]
+    #[allow(clippy::cast_precision_loss)]
+    fn a_via_in_a_pad_of_its_net_is_moved_off_it_with_the_track_that_meets_it() {
+        // A ground via 0.025 mm outside a ground pad's edge, with a track to a far pad.
+        let text = r#"(kicad_pcb
+          (layers (0 "F.Cu" signal) (2 "B.Cu" signal))
+          (net 0 "") (net 1 "GND") (net 2 "SIG")
+          (footprint "J" (at 10 10) (layer "F.Cu")
+            (pad "1" thru_hole rect (at 0 0) (size 1.8 1.8) (drill 0.8) (layers "*.Cu") (net 1 "GND")))
+          (via (at 9.0 10.0) (size 0.6) (drill 0.3) (layers "F.Cu" "B.Cu") (net 1))
+          (segment (start 9.0 10.0) (end 4.0 10.0) (width 0.25) (layer "F.Cu") (net 1))
+        )"#;
+        let dir = std::env::temp_dir().join(format!("via-repair-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("board.kicad_pcb");
+        std::fs::write(&path, text).unwrap();
+        assert_eq!(move_vias_off_pads(&path), Ok(1));
+        let moved = PcbBoard::parse(&std::fs::read_to_string(&path).unwrap()).unwrap();
+        let via = &moved.vias[0];
+        let pad = moved.pads().next().unwrap();
+        assert!(
+            pad.signed_distance_nm(via.at) > via.drill_nm as f64 / 2.0,
+            "the via is off the pad"
+        );
+        let seg = &moved.segments[0];
+        assert!(
+            (seg.start.x_mm() - via.at.x_mm()).hypot(seg.start.y_mm() - via.at.y_mm()) < 0.01,
+            "the track still meets the via"
+        );
+        assert_eq!(moved.footprints[0].pads.len(), 1, "nothing else changed");
+        // A second pass finds nothing to move.
+        assert_eq!(move_vias_off_pads(&path), Ok(0));
+    }
+
+    #[test]
+    fn a_via_with_no_room_to_move_is_dropped_when_a_neighbour_of_its_net_covers_for_it() {
+        // The via sits on a ground pad, boxed in by another net's pads, with a
+        // second ground via 1.5 mm away that is not in any pad.
+        let text = r#"(kicad_pcb
+          (layers (0 "F.Cu" signal) (2 "B.Cu" signal))
+          (net 0 "") (net 1 "GND") (net 2 "SIG")
+          (footprint "J" (at 10 10) (layer "F.Cu")
+            (pad "1" smd rect (at 0 0) (size 1.0 1.0) (layers "F.Cu") (net 1 "GND"))
+            (pad "2" smd rect (at 0 1.6) (size 3.0 1.2) (layers "F.Cu") (net 2 "SIG"))
+            (pad "3" smd rect (at 0 -1.6) (size 3.0 1.2) (layers "F.Cu") (net 2 "SIG"))
+            (pad "4" smd rect (at 1.6 0) (size 1.2 3.0) (layers "F.Cu") (net 2 "SIG"))
+            (pad "5" smd rect (at -1.6 0) (size 1.2 3.0) (layers "F.Cu") (net 2 "SIG")))
+          (via (at 10.0 10.0) (size 0.6) (drill 0.3) (layers "F.Cu" "B.Cu") (net 1))
+          (via (at 11.5 12.5) (size 0.6) (drill 0.3) (layers "F.Cu" "B.Cu") (net 1))
+        )"#;
+        let dir = std::env::temp_dir().join(format!("via-drop-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("board.kicad_pcb");
+        std::fs::write(&path, text).unwrap();
+        assert_eq!(move_vias_off_pads(&path), Ok(1));
+        let after = PcbBoard::parse(&std::fs::read_to_string(&path).unwrap()).unwrap();
+        assert_eq!(after.vias.len(), 1, "the covered-for via is gone");
+        assert!(
+            (after.vias[0].at.x_mm() - 11.5).abs() < 0.01,
+            "the other stays"
+        );
+    }
+
+    /// An island that holds a pad or a track end is connected when a chain of its
+    /// own net's tracks leads from it to the main pour through copper that lies
+    /// in no pour: KiCad counts that as connected, so no tie via is wanted.
+    #[test]
+    fn an_island_reached_by_a_track_through_the_gap_is_not_tied_again() {
+        // Two tracks meet at (22.5, 7), in the gap between the pours: one ends in
+        // the island, the other in the main pour.
+        let linked = board(
+            r#"(segment (start 25 7) (end 22.5 7) (width 0.25) (layer "F.Cu") (net 1))
+               (segment (start 22.5 7) (end 15 7) (width 0.25) (layer "F.Cu") (net 1))"#,
+        );
+        assert!(
+            islands_to_tie(&linked).is_empty(),
+            "the island is already tied through the tracks"
+        );
+        assert!(
+            !islands_to_tie(&board("")).is_empty(),
+            "the same island without them is not"
+        );
+    }
+
+    /// A track that crosses a pour with both ends outside it is joined to it in
+    /// KiCad, and so is whatever the track leads to.
+    #[test]
+    fn a_track_crossing_the_island_with_both_ends_outside_it_joins_it() {
+        // (22, 3) lies in the gap and (38, 3) beyond the island's far edge; the
+        // body crosses the island at x 25 to 35. A second track leads from the
+        // gap to the main pour.
+        let crossing = board(
+            r#"(segment (start 22 3) (end 38 3) (width 0.25) (layer "F.Cu") (net 1))
+               (segment (start 22 3) (end 15 3) (width 0.25) (layer "F.Cu") (net 1))"#,
+        );
+        assert!(islands_to_tie(&crossing).is_empty());
+        assert!(!islands_to_tie(&board("")).is_empty());
+    }
+
+    /// Track copper has width: a track whose end stops short of the island's own
+    /// track by less than their half widths overlaps it, though the centre
+    /// lines never meet.
+    #[test]
+    fn tracks_joined_by_their_width_not_their_centre_lines_are_connected() {
+        // The island's track starts at x 25; this one ends at 24.9, 0.1 away
+        // centre to centre and 0.025 inside each other's copper.
+        let linked =
+            board(r#"(segment (start 24.9 7) (end 15 7) (width 0.25) (layer "F.Cu") (net 1))"#);
+        assert!(islands_to_tie(&linked).is_empty());
+    }
+
+    /// A track that stops at the edge of a pad is on it, and the pad's own copper
+    /// leads on to the island.
+    #[test]
+    fn a_track_ending_at_a_pad_edge_is_joined_through_the_pad() {
+        // The pad spans x 22.5 to 24.9, ending 0.1 short of the island's track;
+        // the track from the main pour reaches the pad's left edge.
+        let linked = board(
+            r#"(segment (start 22.5 7) (end 15 7) (width 0.25) (layer "F.Cu") (net 1))
+               (footprint "R" (at 0 0) (layer "F.Cu")
+                 (pad "1" smd rect (at 23.7 7) (size 2.4 1) (layers "F.Cu") (net 1)))"#,
+        );
+        assert!(islands_to_tie(&linked).is_empty());
+    }
+
+    /// Two vias that overlap join the tracks on their two sides, on a board whose
+    /// back pour does not reach the gap.
+    #[test]
+    fn a_via_chain_joins_the_island_to_the_main_pour() {
+        let text = |extra: &str| {
+            format!(
+                r#"(kicad_pcb
+                  (layers (0 "F.Cu" signal) (2 "B.Cu" signal))
+                  (net 0 "")
+                  (net 1 "GND")
+                  (segment (start 25 7) (end 30 7) (width 0.25) (layer "F.Cu") (net 1))
+                  (via (at 5 5) (size 0.6) (drill 0.3) (layers "F.Cu" "B.Cu") (net 1))
+                  {extra}
+                  (zone (net 1) (net_name "GND") (layer "F.Cu") (fill yes)
+                    (polygon (pts (xy 0 0) (xy 40 0) (xy 40 20) (xy 0 20)))
+                    (filled_polygon (layer "F.Cu") (pts (xy 0 0) (xy 20 0) (xy 20 20) (xy 0 20)))
+                    (filled_polygon (layer "F.Cu") (pts (xy 25 0) (xy 35 0) (xy 35 20) (xy 25 20))))
+                  (zone (net 1) (net_name "GND") (layer "B.Cu") (fill yes)
+                    (polygon (pts (xy 0 0) (xy 40 0) (xy 40 20) (xy 0 20)))
+                    (filled_polygon (layer "B.Cu") (pts (xy 0 0) (xy 20 0) (xy 20 20) (xy 0 20)))))
+                "#
+            )
+        };
+        let chain = PcbBoard::parse(&text(
+            r#"(segment (start 22 12) (end 15 12) (width 0.25) (layer "F.Cu") (net 1))
+               (via (at 22 12) (size 0.6) (drill 0.3) (layers "F.Cu" "B.Cu") (net 1))
+               (via (at 22.4 12) (size 0.6) (drill 0.3) (layers "F.Cu" "B.Cu") (net 1))
+               (segment (start 22.4 12) (end 26 12) (width 0.25) (layer "F.Cu") (net 1))"#,
+        ))
+        .expect("parses");
+        assert!(islands_to_tie(&chain).is_empty());
     }
 
     #[test]

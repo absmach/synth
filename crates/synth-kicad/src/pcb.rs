@@ -38,7 +38,7 @@
 use std::collections::HashMap;
 use std::fmt::Write as _;
 
-use synth_geometry::{mm_to_nm, nm_to_mm, Layer, Point, Rotation};
+use synth_geometry::{mm_to_nm, nm_to_mm, Layer, Point, Rect, Rotation};
 use synth_ir::{Board, ComponentId, Stackup, StackupLayer};
 use synth_pcb::{Routing, Segment};
 use synth_place::{ComponentPlacement, Placement};
@@ -144,6 +144,7 @@ pub fn build_pcb(
         &label_parts(board, &placements_by_id),
         placement.board_outline,
         &label_overrides_by_id(board, label_overrides),
+        &via_copper(routing),
     );
     for component in &board.components {
         let Some(part) = component.part.as_ref() else {
@@ -485,6 +486,21 @@ fn inner_plane_layers(layer_count: u32) -> Vec<&'static str> {
 }
 
 /// Emit a single `(via ...)` block.
+/// The copper of every routed via as a box, so a reference label can keep off it.
+fn via_copper(routing: &Routing) -> Vec<Rect> {
+    routing
+        .vias
+        .iter()
+        .map(|via| {
+            let half = via.pad_diameter_nm / 2;
+            Rect::new(
+                Point::new(via.at.x_nm - half, via.at.y_nm - half),
+                Point::new(via.at.x_nm + half, via.at.y_nm + half),
+            )
+        })
+        .collect()
+}
+
 fn build_via(
     via: &synth_pcb::Via,
     idx: usize,
@@ -2014,7 +2030,16 @@ fn build_footprint_instance(
         "effects",
         vec![Sexp::list(
             "font",
-            vec![Sexp::list("size", vec![num(1.0), num(1.0)])],
+            vec![
+                Sexp::list(
+                    "size",
+                    vec![
+                        num(silk_labels::LABEL_FONT_MM),
+                        num(silk_labels::LABEL_FONT_MM),
+                    ],
+                ),
+                Sexp::list("thickness", vec![num(silk_labels::LABEL_STROKE_MM)]),
+            ],
         )],
     ));
 

@@ -360,7 +360,7 @@ pub fn list_tools() -> Vec<McpToolInfo> {
         },
         McpToolInfo {
             name: "synth_compact_layout".into(),
-            description: "Compact a pinned placement sidecar until the router no longer closes. Each call makes ONE attempt: it scales the layout inward (3 % a step), exports it into out_dir/step_<permille> with the full release gates (every net routed, KiCad DRC clean, no via in a pad), and records pass or fail in out_dir/compact.json. After the first failure it bisects between the last good and the failed scale. Call it again until `done` is true; then the best passing layout has been written to the sidecar (the original is kept as <sidecar>.pre-compact). Takes file_path, layout_file_path, out_dir and the router options of synth_export, plus optional step_percent (default 3) and min_scale_percent (default 60). Connectors stay flush because the outline is refitted round each attempt.".into(),
+            description: "Compact a pinned placement sidecar until the router no longer closes. Each call makes ONE attempt: it scales the layout inward (3 % a step), exports it into out_dir/step_<permille> with the full release gates (every net routed, KiCad DRC clean, no via in a pad), and records pass or fail in out_dir/compact.json. After the first failure it bisects between the last good and the failed scale. Call it again until `done` is true; then the best passing layout has been written to the sidecar (the original is kept as <sidecar>.pre-compact). Takes file_path, layout_file_path, out_dir and the router options of synth_export, plus optional step_percent (default 3) and min_scale_percent (default 60). With mode `gap` the layout is not scaled: each attempt slides every part toward the top-left until the next one is `gap` away (step_mm, min_gap_mm and dense_gap_mm; the attempt directory step_<n> is the gap in hundredths of a millimetre), which closes lanes of empty space that scaling leaves. Connectors stay flush because the outline is refitted round each attempt.".into(),
             input_schema: serde_json::json!({
                 "type": "object",
                 "properties": {
@@ -369,6 +369,10 @@ pub fn list_tools() -> Vec<McpToolInfo> {
                     "out_dir": { "type": "string", "description": "Working directory; holds compact.json and one export per attempt" },
                     "step_percent": { "type": "number", "description": "Scale step in percent before the first failure, 0.1 to 50 (default 3)" },
                     "min_scale_percent": { "type": "number", "description": "Never scale below this (default 60)" },
+                    "mode": { "type": "string", "enum": ["scale", "gap"], "description": "scale (default) shrinks every distance by a share; gap slides each part toward the top-left until the next one is `gap` away, closing lanes of empty space. In gap mode an attempt's name step_<n> is the gap in hundredths of a millimetre (1000 is the layout as pinned) and step_mm, min_gap_mm and dense_gap_mm replace step_percent and min_scale_percent." },
+                    "step_mm": { "type": "number", "description": "Gap mode: how much the target gap shrinks between attempts, 0.1 to 9 mm (default 1)" },
+                    "min_gap_mm": { "type": "number", "description": "Gap mode: never go below this gap, 0.5 to 10 mm (default 2)" },
+                    "dense_gap_mm": { "type": "number", "description": "Gap mode: the gap kept next to a part with many pins, 0.5 to 10 mm (default 3.5)" },
                     "toward": { "type": "string", "description": "Where the layout is pulled to: center (default), a side (left, right, top, bottom) or a corner (bottom_right, top_left, ...). The side or corner named stays put and the opposite side comes in, so empty space against one side is taken from that side. Use a fresh out_dir when you change it." },
                     "router": { "type": "string", "description": "External engine, as synth_export" }
                 },
@@ -3352,24 +3356,61 @@ fn compact_sidecar_changed(
 /// outside 0-100 %, makes the search meaningless. Each is refused with the
 /// reason, before anything is exported.
 fn compact_scales(args: &Value) -> Result<(i64, i64), String> {
-    let percent = |key: &str, default: f64, min: f64, max: f64| -> Result<i64, String> {
+    let number = |key: &str, default: f64, min: f64, max: f64, unit: &str| -> Result<f64, String> {
         let value = match &args[key] {
             Value::Null => default,
             other => other
                 .as_f64()
-                .ok_or_else(|| format!("'{key}' must be a number of percent"))?,
+                .ok_or_else(|| format!("'{key}' must be a number of {unit}"))?,
         };
         if !value.is_finite() || value < min || value > max {
             return Err(format!(
-                "'{key}' must be between {min} and {max} percent, got {value}"
+                "'{key}' must be between {min} and {max} {unit}, got {value}"
             ));
         }
-        #[allow(clippy::cast_possible_truncation)]
-        Ok((value * 10.0).round() as i64)
+        Ok(value)
     };
-    let step = percent("step_percent", 3.0, 0.1, 50.0)?;
-    let floor = percent("min_scale_percent", 60.0, 1.0, 100.0)?;
-    Ok((step, floor))
+    #[allow(clippy::cast_possible_truncation)]
+    if compact_gap_mode(args)? {
+        // An attempt is the gap in hundredths of a millimetre; 1000 is the
+        // layout as pinned, so the first step down is a 9 mm gap.
+        let step = number("step_mm", 1.0, 0.1, 9.0, "mm")?;
+        let floor = number("min_gap_mm", 2.0, 0.5, 10.0, "mm")?;
+        return Ok((
+            (step * 100.0).round() as i64,
+            (floor * 100.0).round() as i64,
+        ));
+    }
+    let step = number("step_percent", 3.0, 0.1, 50.0, "percent")?;
+    let floor = number("min_scale_percent", 60.0, 1.0, 100.0, "percent")?;
+    #[allow(clippy::cast_possible_truncation)]
+    Ok(((step * 10.0).round() as i64, (floor * 10.0).round() as i64))
+}
+
+/// Whether the call asks for gap compaction, and a mode name it is allowed to.
+fn compact_gap_mode(args: &Value) -> Result<bool, String> {
+    match args["mode"].as_str() {
+        None | Some("scale") => Ok(false),
+        Some("gap") => Ok(true),
+        Some(other) => Err(format!("'mode' must be scale or gap, not '{other}'")),
+    }
+}
+
+/// The gap and the gap next to a dense part for one gap-mode attempt.
+fn compact_gap_spacing(args: &Value, permille: i64) -> Result<synth_place::GapSpacing, String> {
+    let dense = match &args["dense_gap_mm"] {
+        Value::Null => 3.5,
+        other => other
+            .as_f64()
+            .filter(|v| v.is_finite() && (0.5..=10.0).contains(v))
+            .ok_or("'dense_gap_mm' must be between 0.5 and 10 mm")?,
+    };
+    #[allow(clippy::cast_precision_loss)]
+    let gap_mm = permille as f64 / 100.0;
+    Ok(synth_place::GapSpacing {
+        gap_mm,
+        dense_gap_mm: dense.max(gap_mm),
+    })
 }
 
 /// `synth_compact_layout`: one attempt of the compaction loop. See the tool
@@ -3470,6 +3511,8 @@ fn execute_compact_layout(args: &Value, default_registry: Option<&Path>) -> Resu
     let identity = permille == 1000;
     let candidate = if identity {
         Some(start.clone())
+    } else if compact_gap_mode(args)? {
+        synth_place::compact_by_gaps(&board, &start, compact_gap_spacing(args, permille)?)
     } else {
         synth_place::scale_layout_toward(&board, &start, factor, toward)
     };
@@ -5991,6 +6034,38 @@ mod tests {
         assert!(!backup.exists(), "the start backup belongs to the old run");
         assert_eq!(std::fs::read_to_string(&sidecar).unwrap(), "current");
         let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn gap_mode_reads_its_own_arguments_and_refuses_bad_ones() {
+        use super::{compact_gap_spacing, compact_scales};
+        let gap = |extra: serde_json::Value| {
+            let mut args = serde_json::json!({ "mode": "gap" });
+            args.as_object_mut()
+                .unwrap()
+                .extend(extra.as_object().unwrap().clone());
+            args
+        };
+        assert_eq!(compact_scales(&gap(serde_json::json!({}))), Ok((100, 200)));
+        assert_eq!(
+            compact_scales(&gap(serde_json::json!({ "step_mm": 0.5, "min_gap_mm": 3 }))),
+            Ok((50, 300))
+        );
+        for bad in [
+            serde_json::json!({ "step_mm": 0 }),
+            serde_json::json!({ "step_mm": 12 }),
+            serde_json::json!({ "min_gap_mm": 0.1 }),
+            serde_json::json!({ "min_gap_mm": 20 }),
+        ] {
+            assert!(compact_scales(&gap(bad.clone())).is_err(), "{bad}");
+        }
+        assert!(compact_scales(&serde_json::json!({ "mode": "grid" })).is_err());
+        // The dense gap never falls below the gap itself.
+        let spacing = compact_gap_spacing(&gap(serde_json::json!({ "dense_gap_mm": 2 })), 500)
+            .expect("spacing");
+        assert!((spacing.gap_mm - 5.0).abs() < 1e-9);
+        assert!((spacing.dense_gap_mm - 5.0).abs() < 1e-9);
+        assert!(compact_gap_spacing(&gap(serde_json::json!({ "dense_gap_mm": 0 })), 300).is_err());
     }
 
     #[test]

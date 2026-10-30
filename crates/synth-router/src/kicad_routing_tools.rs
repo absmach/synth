@@ -153,6 +153,9 @@ pub fn build_command(
     if options.strict_sizes {
         args.push("--strict-sizes".to_string());
     }
+    if let Some(ordering) = &options.ordering {
+        args.extend(["--ordering".to_string(), ordering.clone()]);
+    }
     args
 }
 
@@ -453,6 +456,7 @@ mod tests {
                 fab_overrides: Some(PathBuf::from("/tmp/fab-floor.txt")),
                 same_net_pad_clearance_mm: 0.25,
                 strict_sizes: true,
+                ordering: None,
             },
             ..request()
         };
@@ -464,6 +468,15 @@ mod tests {
             "{joined}"
         );
         assert!(joined.contains("--strict-sizes"), "{joined}");
+        assert!(!joined.contains("--ordering"), "{joined}");
+    }
+
+    #[test]
+    fn a_chosen_net_order_reaches_the_engine() {
+        let mut request = request();
+        request.kicad_routing_tools.ordering = Some("inside_out".to_string());
+        let joined = argv(&request);
+        assert!(joined.contains("--ordering inside_out"), "{joined}");
     }
 
     #[test]

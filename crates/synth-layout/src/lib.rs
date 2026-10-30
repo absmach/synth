@@ -1098,8 +1098,9 @@ pub fn is_board_feature_kind(kind: &str) -> bool {
 }
 
 /// The region a component belongs to: its declared `group`, else the
-/// implicit [`MOUNTING_REGION`] for a mechanical/test part, else
-/// `None` (the trailing ungrouped region).
+/// implicit [`MOUNTING_REGION`] for a mechanical/test part, else the implicit
+/// [`UNGROUPED_REGION`] when the design groups its circuits, else `None` (the
+/// trailing ungrouped region of a design with no groups).
 ///
 /// Public so consumers that reason about regions (the
 /// `E-SYNTH-SCHEM-013` contiguity check) resolve a component to its
@@ -1109,8 +1110,32 @@ pub fn effective_group(board: &Board, id: ComponentId) -> Option<&str> {
     if let Some(group) = component.group.as_deref() {
         return Some(group);
     }
-    let kind = component.part.as_ref().map(|p| p.kind.as_str())?;
-    is_board_feature_kind(kind).then_some(MOUNTING_REGION)
+    let kind = component.part.as_ref().map(|p| p.kind.as_str());
+    if kind.is_some_and(is_board_feature_kind) {
+        return Some(MOUNTING_REGION);
+    }
+    // A design that groups its circuits keeps one page of tiled regions only
+    // while every part is in one. A single stray part gave the floorplan up and
+    // sent the whole schematic into a tall column that split into a sheet per
+    // group, so the parts left out of every group share a region of their own.
+    uses_groups(board).then_some(UNGROUPED_REGION)
+}
+
+/// The region for the parts of a grouped design that name no group.
+pub const UNGROUPED_REGION: &str = "OTHER";
+
+/// A design that has put its circuits into groups: at least two different
+/// declared groups. One group alone is a label on a part, not a floorplan.
+fn uses_groups(board: &Board) -> bool {
+    let mut first: Option<&str> = None;
+    for component in &board.components {
+        match (component.group.as_deref(), first) {
+            (Some(group), None) => first = Some(group),
+            (Some(group), Some(seen)) if group != seen => return true,
+            _ => {}
+        }
+    }
+    false
 }
 
 /// Groups made only of parts with no pins (mounting holes, fiducials, logos).
@@ -9811,12 +9836,32 @@ mod documentation_tests {
     }
 
     #[test]
-    fn parts_outside_every_region_keep_the_packed_boxes() {
-        let layout = layout(&resistor_groups(&FOUR_REGIONS, 1));
+    fn a_part_outside_every_region_joins_an_implicit_region_and_the_floorplan_still_runs() {
+        let b = resistor_groups(&FOUR_REGIONS, 1);
+        let stray = b.components.last().expect("a part").id;
+        assert_eq!(effective_group(&b, stray), Some(UNGROUPED_REGION));
+        let layout = layout(&b);
         assert!(
-            boxes_area(&layout) < 0.9 * area(&page_frame(layout.sheet_size)),
-            "boxes fill the frame although a part belongs to no region"
+            layout
+                .group_boxes
+                .iter()
+                .any(|g| g.group == UNGROUPED_REGION),
+            "the stray part has no box: {:?}",
+            layout.group_boxes
         );
+        // The boxes are cut from the frame, as they are when every part is in a
+        // region, not packed to their content and left loose.
+        assert!(
+            boxes_area(&layout) >= 0.9 * area(&page_frame(layout.sheet_size)),
+            "the boxes do not fill the frame"
+        );
+    }
+
+    #[test]
+    fn one_group_alone_does_not_make_the_rest_a_region() {
+        let b = resistor_groups(&[("Only", 3)], 2);
+        let stray = b.components.last().expect("a part").id;
+        assert_eq!(effective_group(&b, stray), None);
     }
 
     #[test]

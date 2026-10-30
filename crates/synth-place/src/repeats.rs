@@ -58,7 +58,11 @@ fn is_hub(board: &Board, id: ComponentId) -> bool {
 /// A supply or ground net, by the project's own classification (the power
 /// domains and the pin types), or one so widely shared that it distributes
 /// power whatever it is called.
-fn is_rail(board: &Board, domains: &synth_ir::PowerDomainMap, net: &synth_ir::Net) -> bool {
+pub(crate) fn is_rail(
+    board: &Board,
+    domains: &synth_ir::PowerDomainMap,
+    net: &synth_ir::Net,
+) -> bool {
     crate::is_supply_net(board, domains, net) || net.endpoints.len() > RAIL_FANOUT
 }
 

@@ -260,11 +260,8 @@ fn should_keep_block(block: &str) -> bool {
     true
 }
 
-/// Return `(width_mm, height_mm)` of the footprint's courtyard
-/// (the keep-out rectangle the placer must respect). Reads
-/// `(fp_rect ...)` blocks on layer `F.CrtYd`; if a footprint
-/// draws its courtyard with multiple `(fp_line ...)` segments
-/// instead, the bbox of the line endpoints is returned. Returns
+/// The footprint's courtyard (the keep-out rectangle the placer must respect):
+/// the box around everything drawn on `F.CrtYd`. Returns
 /// `None` when:
 /// - KiCad isn't installed locally;
 /// - the footprint file doesn't exist;
@@ -273,57 +270,23 @@ fn should_keep_block(block: &str) -> bool {
 ///
 /// Return `(center_offset_x_mm, center_offset_y_mm, width_mm, height_mm)` of the footprint's courtyard.
 pub fn courtyard_rect(lib_id: &str) -> Option<(f64, f64, f64, f64)> {
-    let text = read_footprint(lib_id)?;
-    let mut min_x = f64::INFINITY;
-    let mut max_x = f64::NEG_INFINITY;
-    let mut min_y = f64::INFINITY;
-    let mut max_y = f64::NEG_INFINITY;
-    let mut found = false;
+    courtyard_rect_from_text(&read_footprint(lib_id)?)
+}
 
-    let mut pos = 0;
-    while let Some(block_start) = find_next_block(&text, pos, &["(fp_rect", "(fp_line"]) {
-        let Some(block_end) = balanced_paren_end(&text, block_start) else {
-            break;
-        };
-        let block = &text[block_start..block_end];
-        if block_contains_layer(block, "F.CrtYd") {
-            if block.starts_with("(fp_rect") {
-                if let Some((sx, sy)) = xy_after(block, "(start ") {
-                    if let Some((ex, ey)) = xy_after(block, "(end ") {
-                        min_x = min_x.min(sx).min(ex);
-                        max_x = max_x.max(sx).max(ex);
-                        min_y = min_y.min(sy).min(ey);
-                        max_y = max_y.max(sy).max(ey);
-                        found = true;
-                    }
-                }
-            } else if block.starts_with("(fp_line") {
-                if let Some((sx, sy)) = xy_after(block, "(start ") {
-                    min_x = min_x.min(sx);
-                    max_x = max_x.max(sx);
-                    min_y = min_y.min(sy);
-                    max_y = max_y.max(sy);
-                    found = true;
-                }
-                if let Some((ex, ey)) = xy_after(block, "(end ") {
-                    min_x = min_x.min(ex);
-                    max_x = max_x.max(ex);
-                    min_y = min_y.min(ey);
-                    max_y = max_y.max(ey);
-                    found = true;
-                }
-            }
-        }
-        pos = block_end;
-    }
-    if !found {
-        return None;
-    }
-    let w = max_x - min_x;
-    let h = max_y - min_y;
-    let cx = f64::midpoint(min_x, max_x);
-    let cy = f64::midpoint(min_y, max_y);
-    Some((cx, cy, w, h))
+/// [`courtyard_rect`] for a footprint file's text: `(center_x, center_y, width,
+/// height)` of everything drawn on `F.CrtYd`, lines, rectangles, arcs, circles
+/// and polygons alike. A footprint whose courtyard is a circle or a polygon,
+/// such as a radial capacitor or a mounting hole, is measured whole instead of
+/// being taken for one with no courtyard.
+#[must_use]
+pub fn courtyard_rect_from_text(text: &str) -> Option<(f64, f64, f64, f64)> {
+    let (min_x, min_y, max_x, max_y) = courtyard_extent_from_text(text)?;
+    Some((
+        f64::midpoint(min_x, max_x),
+        f64::midpoint(min_y, max_y),
+        max_x - min_x,
+        max_y - min_y,
+    ))
 }
 
 /// Every `(xy x y)` point in `block`.
