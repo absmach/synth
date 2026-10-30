@@ -123,7 +123,6 @@ fn run_rounds(
     fill: &mut dyn FnMut(&Path) -> Result<Option<String>, String>,
 ) -> Result<TieOutcome, String> {
     let mut added = 0;
-    let mut last_unresolved: Vec<String> = Vec::new();
     for _ in 0..MAX_ROUNDS {
         let Some(filled) = fill(candidate)? else {
             return Ok(TieOutcome {
@@ -136,10 +135,9 @@ fn run_rounds(
             .map_err(|e| format!("could not read {}: {e}", candidate.display()))?;
         let plan = plan_all_with(
             &board,
-            dielectric_reach_mm(&text),
+            dielectric_reach_mm(&text, board.copper_layers().len()),
             &Ground::new(ground_nets),
         );
-        last_unresolved.clone_from(&plan.unresolved);
         if plan.vias.is_empty() {
             return Ok(TieOutcome {
                 added,
@@ -160,16 +158,34 @@ fn run_rounds(
         });
     };
     let board = PcbBoard::parse(&filled).map_err(|e| e.to_string())?;
-    let plan = plan_ties(&board);
+    let text = std::fs::read_to_string(candidate)
+        .map_err(|e| format!("could not read {}: {e}", candidate.display()))?;
+    // The whole plan, not the island ties alone: a signal via that still has no
+    // legal return via must be reported with the islands, or a candidate that
+    // spent its rounds on island vias would leave with the return path missing.
+    let islands = plan_ties(&board).vias.len();
+    let plan = plan_all_with(
+        &board,
+        dielectric_reach_mm(&text, board.copper_layers().len()),
+        &Ground::new(ground_nets),
+    );
     let mut unresolved = plan.unresolved;
-    unresolved.extend(last_unresolved);
-    unresolved.extend(plan.vias.iter().map(|via| {
-        format!(
-            "a ground island on net {} near ({:.2}, {:.2}) mm is still untied after {MAX_ROUNDS} rounds",
-            via.net,
-            via.at.x_mm(),
-            via.at.y_mm()
-        )
+    unresolved.extend(plan.vias.iter().enumerate().map(|(i, via)| {
+        if i < islands {
+            format!(
+                "a ground island on net {} near ({:.2}, {:.2}) mm is still untied after {MAX_ROUNDS} rounds",
+                via.net,
+                via.at.x_mm(),
+                via.at.y_mm()
+            )
+        } else {
+            format!(
+                "a signal via still wants a ground return via on net {} near ({:.2}, {:.2}) mm after {MAX_ROUNDS} rounds",
+                via.net,
+                via.at.x_mm(),
+                via.at.y_mm()
+            )
+        }
     }));
     Ok(TieOutcome { added, unresolved })
 }
@@ -734,7 +750,7 @@ fn escape_net_name(name: &str) -> String {
 /// How far from a signal via W-SYNTH-DRC-016 looks for a ground via, along either
 /// axis: the thickest dielectric in the board's stackup, as the rule takes it.
 /// A board with no stackup gets the rule's own window on a 1.6 mm board.
-fn dielectric_reach_mm(text: &str) -> f64 {
+fn dielectric_reach_mm(text: &str, copper_layers: usize) -> f64 {
     fn block_end(text: &str) -> usize {
         let mut depth = 0_i32;
         for (index, byte) in text.bytes().enumerate() {
@@ -752,10 +768,10 @@ fn dielectric_reach_mm(text: &str) -> f64 {
         text.len()
     }
     let Some(start) = text.find("(stackup") else {
-        return DEFAULT_REACH_MM;
+        return default_reach_mm(copper_layers);
     };
     let stackup = &text[start..start + block_end(&text[start..])];
-    let mut thickest = 0.0_f64;
+    let mut dielectrics = Vec::new();
     let mut rest = stackup;
     while let Some(index) = rest.find("(layer ") {
         let layer = &rest[index..index + block_end(&rest[index..])];
@@ -769,12 +785,42 @@ fn dielectric_reach_mm(text: &str) -> f64 {
                     .take_while(|c| c.is_ascii_digit() || *c == '.')
                     .collect();
                 if let Ok(value) = number.parse::<f64>() {
-                    thickest = thickest.max(value);
+                    dielectrics.push(value);
                 }
             }
         }
         rest = &rest[index + layer.len().max(1)..];
     }
+    // The rule reads each copper layer's height: the one dielectric beside an
+    // outer layer, the mean of the two around an inner layer.
+    let mut thickest = 0.0_f64;
+    for (index, below) in dielectrics.iter().enumerate() {
+        let above = if index == 0 {
+            None
+        } else {
+            dielectrics.get(index - 1)
+        };
+        thickest = thickest.max(above.map_or(*below, |above| (above + below) / 2.0));
+    }
+    if let Some(last) = dielectrics.last() {
+        thickest = thickest.max(*last);
+    }
+    if thickest > 0.0 {
+        thickest
+    } else {
+        default_reach_mm(copper_layers)
+    }
+}
+
+/// The window of the default stackup for a board of `copper_layers`, as the
+/// rule computes it for a board that declares none.
+#[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
+fn default_reach_mm(copper_layers: usize) -> f64 {
+    let thickest = synth_geometry::StackupProfile::default_for_layers(copper_layers as u32)
+        .layers
+        .iter()
+        .map(|geometry| geometry.dielectric_height.to_mm())
+        .fold(0.0_f64, f64::max);
     if thickest > 0.0 {
         thickest
     } else {
@@ -859,7 +905,6 @@ fn stitch(board: &PcbBoard, reach_mm: f64, planned: &[TieVia], ground_nets: &Gro
         .map(|via| (via.at.x_mm(), via.at.y_mm(), nm_to_mm(via.size_nm) / 2.0))
         .collect();
 
-    let steps = (window / RETURN_STEP_MM).floor() as i32;
     let apart = nm_to_mm(size_nm) + VIA_GAP_MM;
     let mut out = Vec::new();
     let mut unresolved = Vec::new();
@@ -872,7 +917,7 @@ fn stitch(board: &PcbBoard, reach_mm: f64, planned: &[TieVia], ground_nets: &Gro
         }
         let best = nearest_return_spot(
             (vx, vy),
-            steps,
+            window,
             apart,
             &ground,
             &room_both,
@@ -904,20 +949,25 @@ fn stitch(board: &PcbBoard, reach_mm: f64, planned: &[TieVia], ground_nets: &Gro
 /// obstacle.
 fn nearest_return_spot(
     from: (f64, f64),
-    steps: i32,
+    window: f64,
     apart: f64,
     ground: &[(f64, f64)],
     room: &dyn Fn((f64, f64)) -> bool,
     keepout: &Keepout,
     radius: f64,
 ) -> Option<(f64, f64)> {
+    // The grid, plus the window's own edges: a via and its return need `apart`
+    // between centres, which inside a narrow window is only reached out on the
+    // diagonal, past the last whole grid step.
+    let steps = (window / RETURN_STEP_MM).floor() as i32;
+    let offsets: Vec<f64> = (-steps..=steps)
+        .map(|i| f64::from(i) * RETURN_STEP_MM)
+        .chain([-window, window])
+        .collect();
     let mut best: Option<(f64, (f64, f64))> = None;
-    for ix in -steps..=steps {
-        for iy in -steps..=steps {
-            let p = (
-                from.0 + f64::from(ix) * RETURN_STEP_MM,
-                from.1 + f64::from(iy) * RETURN_STEP_MM,
-            );
+    for &dx in &offsets {
+        for &dy in &offsets {
+            let p = (from.0 + dx, from.1 + dy);
             let distance = (p.0 - from.0).hypot(p.1 - from.1);
             if best.is_some_and(|(d, _)| distance >= d) {
                 continue;
@@ -1196,6 +1246,23 @@ mod tests {
         );
     }
 
+    /// A 0.6 mm via needs 0.8 mm between centres, so inside a window of 0.64 mm
+    /// along either axis the only room is out on the diagonal, past the last
+    /// grid step. The thin 4-layer stackup the buck board declares has exactly
+    /// that window.
+    #[test]
+    fn a_tight_window_still_gets_a_return_via_on_the_diagonal() {
+        const TIGHT: f64 = 0.64;
+        let vias = stitch_vias(&stitched_board(""), TIGHT, &[]);
+        assert_eq!(vias.len(), 1, "{vias:?}");
+        let at = at_mm(&vias[0]);
+        assert!(
+            (at.0 - 10.0).abs() <= TIGHT && (at.1 - 10.0).abs() <= TIGHT,
+            "{at:?}"
+        );
+        assert!((at.0 - 10.0).hypot(at.1 - 10.0) >= 0.8, "{at:?}");
+    }
+
     /// A signal via that cannot be given a return must be reported, not skipped:
     /// W-SYNTH-DRC-016 is a warning, so a silent skip would let the candidate be
     /// promoted with the return path still missing.
@@ -1327,9 +1394,19 @@ mod tests {
                     (layer "B.Cu" (type "copper") (thickness 0.035)))"#
             )
         };
-        assert!((dielectric_reach_mm(&stackup("1.51")) - 1.51).abs() < 1e-9);
-        assert!((dielectric_reach_mm(&stackup("1.0")) - 1.0).abs() < 1e-9);
-        assert!((dielectric_reach_mm("(kicad_pcb)") - DEFAULT_REACH_MM).abs() < 1e-9);
+        assert!((dielectric_reach_mm(&stackup("1.51"), 2) - 1.51).abs() < 1e-9);
+        assert!((dielectric_reach_mm(&stackup("1.0"), 2) - 1.0).abs() < 1e-9);
+        let jlc = r#"(stackup (layer "F.Cu" (type "copper") (thickness 0.035))
+            (layer "dielectric 1" (type "prepreg") (thickness 0.2104))
+            (layer "In1.Cu" (type "copper") (thickness 0.0152))
+            (layer "dielectric 2" (type "core") (thickness 1.065))
+            (layer "In2.Cu" (type "copper") (thickness 0.0152))
+            (layer "dielectric 3" (type "prepreg") (thickness 0.2104))
+            (layer "B.Cu" (type "copper") (thickness 0.035)))"#;
+        assert!((dielectric_reach_mm(jlc, 4) - 0.6377).abs() < 1e-9);
+        // No stackup: the rule falls back to the default profile of the layer count,
+        // whose widest height is half of the prepreg and core on a four-layer board.
+        assert!((dielectric_reach_mm("(kicad_pcb)", 4) - 0.6377).abs() < 1e-9);
         let ground = r#"(via (at 11.2 10) (size 0.6) (drill 0.3) (layers "F.Cu" "B.Cu") (net 1))"#;
         let board = stitched_board(ground);
         assert!(
@@ -1398,6 +1475,38 @@ mod tests {
             std::fs::read_to_string(&path).expect("read back"),
             text,
             "the first round's vias must not survive a later failure"
+        );
+        let _ = std::fs::remove_file(&path);
+    }
+
+    /// The rounds are spent on island vias; a signal via that has no legal
+    /// return via must still be in the outcome, not dropped with the planning.
+    #[test]
+    fn an_unresolved_return_is_reported_when_the_repair_rounds_are_spent() {
+        // A 6 mm pad round the signal via leaves no spot for its return.
+        let extra = r#"(net 3 "BLK")
+            (via (at 10 10) (size 0.6) (drill 0.3) (layers "F.Cu" "B.Cu") (net 2))
+            (footprint "R" (at 0 0) (layer "F.Cu")
+              (pad "1" smd rect (at 10 10) (size 6 6) (layers "F.Cu") (net 3)))"#;
+        let text = board_text(extra);
+        let path = scratch_file("spent", &text);
+        // The fill never shows the vias written, so the island stays and every
+        // round is used up.
+        let outcome =
+            tie_islands_with(&path, &[], &mut |_| Ok(Some(text.clone()))).expect("the repair runs");
+        assert!(
+            outcome
+                .unresolved
+                .iter()
+                .any(|u| u.contains("still untied after")),
+            "{outcome:?}"
+        );
+        assert!(
+            outcome
+                .unresolved
+                .iter()
+                .any(|u| u.contains("no ground return via")),
+            "the unresolved return path was dropped: {outcome:?}"
         );
         let _ = std::fs::remove_file(&path);
     }
