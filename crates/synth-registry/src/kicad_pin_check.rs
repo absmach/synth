@@ -209,13 +209,19 @@ fn first_quoted_after(block: &str, key: &str) -> Option<String> {
 /// `passive`, `unspecified` and `free` agree with anything, because KiCad uses
 /// them for stacked grounds, exposed pads and crystal terminals alike. A pin
 /// the part declares `do_not_connect` is asserting that the pad stays
-/// floating, which no symbol type contradicts.
+/// floating, which no symbol type contradicts. And a pin the part declares
+/// `passive` is neither a rail nor a driver, so it is neither side of either
+/// contradiction: `lmr33640` declares its internal-LDO `VCC` passive on
+/// purpose, so that nothing treats a bias pin as a rail to load.
 #[must_use]
 pub fn roles_agree(declared: ElectricalType, symbol_types: &BTreeSet<String>) -> bool {
     const SYMBOL_SUPPLY: [&str; 2] = ["power_in", "power_out"];
     const AGREES_WITH_ANYTHING: [&str; 3] = ["passive", "unspecified", "free"];
 
-    if declared == ElectricalType::DoNotConnect {
+    if matches!(
+        declared,
+        ElectricalType::DoNotConnect | ElectricalType::Passive
+    ) {
         return true;
     }
     if symbol_types
@@ -360,6 +366,19 @@ mod tests {
         // A number carrying several types agrees if any of them does.
         let stacked = BTreeSet::from(["power_in".to_string(), "passive".to_string()]);
         assert!(roles_agree(ElectricalType::PowerInput, &stacked));
+    }
+
+    #[test]
+    fn a_passive_pin_agrees_with_every_symbol_type() {
+        // Passive claims to be neither a rail nor a driver, so a symbol
+        // supply pin under it is not a rail meeting a signal.
+        for kind in ["power_in", "power_out", "output", "input"] {
+            let symbol = BTreeSet::from([kind.to_string()]);
+            assert!(
+                roles_agree(ElectricalType::Passive, &symbol),
+                "passive should agree with {kind}"
+            );
+        }
     }
 
     #[test]
