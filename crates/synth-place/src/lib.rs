@@ -6491,8 +6491,11 @@ fn refine_placement<S: ::std::hash::BuildHasher>(
             let undo = current.clone();
             apply_recommendation(board, &mut current, action, rotation_overrides);
             // The validator rejects a part inside a keepout, so a move that
-            // would put one there is dropped.
-            if keepout_overlaps(board, &current) > hits {
+            // would put one there is dropped. So is one that pushes a part into
+            // the perimeter channel the outline was fitted with.
+            if keepout_overlaps(board, &current) > hits
+                || enters_edge_margin(board, &undo, &current, &action.refdes)
+            {
                 current = undo;
             }
         }
@@ -7567,6 +7570,46 @@ fn shorten_wires(board: &Board, mut placement: Placement) -> Placement {
         }
     }
     placement
+}
+
+/// Whether moving `refdes` from `before` to `after` takes a connector or IC
+/// closer to the outline than the fitted edge margin.
+///
+/// The outline is fitted with that margin round every such part, but a review
+/// recommendation sets a coordinate directly: separating two courtyards can
+/// push one of them into the perimeter channel, and a soft-hinted connector
+/// then ends up nearly flush. A passive keeps its own smaller rim, an
+/// edge-flush connector and a board feature their own, so none is judged here.
+/// A part already inside the margin may still move, as long as it does not
+/// get closer.
+fn enters_edge_margin(board: &Board, before: &Placement, after: &Placement, refdes: &str) -> bool {
+    let Some(component) = board.components.iter().find(|c| c.refdes == refdes) else {
+        return false;
+    };
+    if is_passive(component)
+        || is_edge_flush_connector(component)
+        || synth_layout::is_board_feature_kind(&component.kind)
+    {
+        return false;
+    }
+    let gap = |placement: &Placement| {
+        placement
+            .components
+            .iter()
+            .find(|placed| placed.id == component.id)
+            .map(|placed| {
+                let rect = sidecar_courtyard_rect(board, component, placed);
+                let outline = placement.board_outline;
+                (rect.min.x_nm - outline.min.x_nm)
+                    .min(outline.max.x_nm - rect.max.x_nm)
+                    .min(rect.min.y_nm - outline.min.y_nm)
+                    .min(outline.max.y_nm - rect.max.y_nm)
+            })
+    };
+    match (gap(before), gap(after)) {
+        (Some(before), Some(after)) => after < fitted_edge_margin_nm(board) && after < before,
+        _ => false,
+    }
 }
 
 /// Pull every movable part back inside the copper edge clearance. The review

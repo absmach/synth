@@ -2,11 +2,26 @@ id = "tmp117_temperature"
 kind = "sensor"
 description = "TI TMP117 high-accuracy temperature sensor, I²C"
 kicad_symbol = "Sensor_Temperature:TMP117xxDRV"
-kicad_footprint = "Package_TO_SOT_SMD:SOT-563"
+# The symbol the part names is `TMP117xxDRV`, and DRV is TI's code for the
+# 2.00 x 2.00 mm six-pin WSON with an exposed pad. The footprint said
+# `SOT-563`, a 1.6 x 1.2 mm leaded package that is a different part in a
+# different body, so every exported land, pad position and courtyard was
+# taken from the wrong outline.
+#
+# Pad 7 is the exposed thermal pad, declared `footprint_only` because the
+# stock symbol has no pin for it: `TMP117xxDRV` extends `TMP102xxDRL`, which
+# stops at pin 6. That flag is what lets this part name the right footprint
+# and still account for every copper pad; without it the two were mutually
+# exclusive.
+#
+# It is not `required`. The datasheet has the pad not connected to device
+# ground and asks for it to be left unsoldered for best measurement accuracy,
+# and says that if it is soldered it must be left floating or grounded.
+kicad_footprint = "Package_SON:WSON-6-1EP_2x2mm_P0.65mm_EP1x1.6mm"
 
 [footprint_dimensions]
-width_mm = 1.6
-height_mm = 1.6
+width_mm = 2.0
+height_mm = 2.0
 courtyard_margin_mm = 0.25
 
 [operating_conditions]
@@ -39,6 +54,26 @@ number = "1"
 electrical_type = "bidirectional"
 capabilities = ["i2c_scl"]
 required = true
+
+# ALERT and ADD0 are the remaining two pads of the package. ADD0 selects the
+# device address and has no default: left unconnected the address is whatever a
+# floating input decides, so a board straps it. ALERT is an open-drain output a
+# design may leave unused.
+[[pins]]
+name = "alert"
+number = "3"
+electrical_type = "open_drain_low"
+
+[[pins]]
+name = "add0"
+number = "4"
+electrical_type = "input"
+
+[[pins]]
+name = "ep"
+number = "7"
+electrical_type = "passive"
+footprint_only = true
 
 [[required_decoupling]]
 net = "vdd"

@@ -534,6 +534,13 @@ fn validate_part(path: &Path, part: &Part) -> Result<(), LoadError> {
     if let Some(lib_id) = part.kicad_symbol.as_deref() {
         if let Some(kicad_numbers) = crate::kicad_pin_check::kicad_pin_numbers(lib_id) {
             for pin in &part.pins {
+                // A footprint-only pad has no symbol pin by definition, so
+                // this check has nothing to compare it against. Skipping it
+                // is what lets a part name a package with an exposed pad and
+                // still declare every copper pad it has.
+                if pin.footprint_only {
+                    continue;
+                }
                 if !kicad_numbers.contains(&pin.number.0) {
                     return Err(LoadError::KicadPinMismatch {
                         path: path.to_path_buf(),
@@ -635,6 +642,70 @@ electrical_type = "passive"
             LoadError::KicadPinMismatch {
                 registry_number, ..
             } => assert_eq!(registry_number, "99"),
+            other => panic!("expected KicadPinMismatch, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn a_footprint_only_pad_may_be_absent_from_the_symbol() {
+        // The exposed-pad case. `Device:R` has pins 1 and 2; pad 3 exists on
+        // no symbol, which is exactly the situation a thermal pad is in.
+        // Declared `footprint_only`, it loads; the pin beside it proves the
+        // flag is doing the work rather than the check having been dropped.
+        if crate::kicad_pin_check::kicad_pin_numbers("Device:R").is_none() {
+            eprintln!("skipping footprint-only test: KiCad symbol library not present");
+            return;
+        }
+        let toml = r#"
+id = "padded_resistor"
+kind = "resistor"
+kicad_symbol = "Device:R"
+[[pins]]
+name = "p1"
+number = "1"
+electrical_type = "passive"
+[[pins]]
+name = "ep"
+number = "3"
+electrical_type = "passive"
+footprint_only = true
+"#;
+        let registry = load_from_strs(&[("padded_resistor.synth.toml", toml)])
+            .expect("a footprint-only pad must not be checked against the symbol");
+        let part = registry.lookup("padded_resistor").expect("part");
+        let ep = part.find_pin("ep").expect("ep pin");
+        assert!(ep.footprint_only, "the flag must survive the load");
+        assert_eq!(ep.number.0, "3");
+    }
+
+    #[test]
+    fn a_pad_that_is_not_footprint_only_is_still_checked() {
+        // The same part without the flag must still be rejected, or the
+        // mechanism would be a way to silence the check rather than to
+        // describe a pad.
+        if crate::kicad_pin_check::kicad_pin_numbers("Device:R").is_none() {
+            eprintln!("skipping footprint-only control: KiCad symbol library not present");
+            return;
+        }
+        let toml = r#"
+id = "padded_resistor"
+kind = "resistor"
+kicad_symbol = "Device:R"
+[[pins]]
+name = "p1"
+number = "1"
+electrical_type = "passive"
+[[pins]]
+name = "ep"
+number = "3"
+electrical_type = "passive"
+"#;
+        let err = load_from_strs(&[("padded_resistor.synth.toml", toml)])
+            .expect_err("pad 3 is on no symbol and claims to be a symbol pin");
+        match err {
+            LoadError::KicadPinMismatch {
+                registry_number, ..
+            } => assert_eq!(registry_number, "3"),
             other => panic!("expected KicadPinMismatch, got {other:?}"),
         }
     }

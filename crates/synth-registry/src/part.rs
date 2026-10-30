@@ -260,6 +260,24 @@ pub struct Pin {
     #[serde(default)]
     pub required: bool,
 
+    /// `true` for a copper pad the footprint has and the symbol does not:
+    /// an exposed thermal pad, a mounting lug, a shield tab.
+    ///
+    /// Such a pad is real copper and must be declared, or it is copper under
+    /// the package that no pin map accounts for -- `E-SYNTH-QUAL-002`. But it
+    /// has no symbol pin to agree with, so the usual rule that every declared
+    /// number exists on the symbol cannot apply to it. Both checks skip these
+    /// pins; the pad checks do not.
+    ///
+    /// `tmp117_temperature` is why this exists: its package is a WSON-6 whose
+    /// pad 7 is the thermal pad, and the stock `TMP117xxDRV` symbol extends
+    /// `TMP102xxDRL`, which stops at pin 6. Before this the part could name
+    /// the right footprint or declare every pad, but not both.
+    ///
+    /// Not serialised when false, so adding it moved no IR snapshot.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub footprint_only: bool,
+
     /// Unit or gate identifier for multi-unit components (e.g. `"A"`, `"B"` for dual op-amps).
     #[serde(default)]
     pub unit: Option<String>,

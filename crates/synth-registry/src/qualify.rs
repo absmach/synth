@@ -726,9 +726,13 @@ fn check_symbol_pin_coverage(part: &Part, symbols: &dyn SymbolFacts) -> Check {
         );
     };
 
+    // Footprint-only pads are excluded for the same reason the loader skips
+    // them: there is no symbol pin for them to match, and demanding one would
+    // make an exposed pad unqualifiable rather than merely undeclared.
     let missing: Vec<&str> = part
         .pins
         .iter()
+        .filter(|p| !p.footprint_only)
         .map(|p| p.number.0.trim())
         .filter(|n| !n.is_empty() && !symbol_pins.contains(*n))
         .collect();
@@ -1066,6 +1070,7 @@ mod tests {
             electrical_type: ElectricalType::Bidirectional,
             capabilities: Vec::new(),
             required: false,
+            footprint_only: false,
             unit: None,
             voltage_max_v: None,
             voltage_min_v: None,
