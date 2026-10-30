@@ -2,7 +2,7 @@
 	(version "E")
 	(design
 		(source "qualification/class-b/rtd-afe/kicad/rtd_afe.kicad_sch")
-		(date "2026-10-30T13:58:50")
+		(date "2026-10-30T15:50:18")
 		(tool "Eeschema 10.0.7-10.0.7~ubuntu24.04.1")
 		(sheet
 			(number "1")
