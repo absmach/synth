@@ -1297,6 +1297,24 @@ fn capability_limits(limits: &[CapabilityLimit]) -> Vec<serde_json::Value> {
         .collect()
 }
 
+/// One manufacturer profile as the capability list reports it. The minimums are
+/// read from the profile the validators and the exporter use, so the list cannot
+/// report a constraint the checks no longer apply.
+fn manufacturer_profile_entry(name: &str, layers: &[u32]) -> serde_json::Value {
+    let profile = synth_drc::ManufacturerProfile::from_name(name);
+    let mut entry = serde_json::json!({
+        "name": name,
+        "layers": layers,
+        "min_trace_width_mm": synth_geometry::nm_to_mm(profile.min_trace_width_nm),
+        "min_clearance_mm": synth_geometry::nm_to_mm(profile.min_copper_clearance_nm),
+        "min_drill_mm": synth_geometry::nm_to_mm(profile.min_drill_diameter_nm),
+    });
+    if synth_drc::ManufacturerProfile::OFFERING_VIA_IN_PAD.contains(&name) {
+        entry["offers"] = serde_json::json!(["via_in_pad"]);
+    }
+    entry
+}
+
 fn capability_descriptor() -> serde_json::Value {
     let board_families = synth_place::board_family::PROFILES
         .iter()
@@ -1330,10 +1348,10 @@ fn capability_descriptor() -> serde_json::Value {
             {"name": "kicad_export", "evidence": ["artifact_hashes", "archive_sha256"]}
         ],
         "manufacturer_profiles": [
-            {"name": "jlc-standard", "layers": [2, 4], "min_trace_width_mm": 0.127, "min_clearance_mm": 0.127, "min_drill_mm": 0.3},
-            {"name": "pcbway-standard", "layers": [2, 4], "min_trace_width_mm": 0.15, "min_clearance_mm": 0.15, "min_drill_mm": 0.3},
-            {"name": "oshpark-4layer", "layers": [4], "min_trace_width_mm": 0.125, "min_clearance_mm": 0.125, "min_drill_mm": 0.25},
-            {"name": "jlc-filled-via", "layers": [2, 4], "min_trace_width_mm": 0.127, "min_clearance_mm": 0.127, "min_drill_mm": 0.3, "offers": ["via_in_pad"]}
+            manufacturer_profile_entry("jlc-standard", &[2, 4]),
+            manufacturer_profile_entry("pcbway-standard", &[2, 4]),
+            manufacturer_profile_entry("oshpark-4layer", &[4]),
+            manufacturer_profile_entry("jlc-filled-via", &[2, 4]),
         ],
         "language": {
             "syntax_version": "1.0",
@@ -5771,6 +5789,43 @@ fn render(
 
 #[cfg(test)]
 mod tests {
+
+    #[test]
+    fn the_capability_list_reports_each_profiles_own_minimums() {
+        let descriptor = capability_descriptor();
+        let profiles = descriptor["manufacturer_profiles"]
+            .as_array()
+            .expect("a profile list");
+        assert_eq!(profiles.len(), 4);
+        for entry in profiles {
+            let name = entry["name"].as_str().expect("a name");
+            let profile = synth_drc::ManufacturerProfile::from_name(name);
+            let drill = synth_geometry::nm_to_mm(profile.min_drill_diameter_nm);
+            assert!(
+                (entry["min_drill_mm"].as_f64().unwrap() - drill).abs() < 1e-9,
+                "{name}: the list says {} mm, the profile {drill} mm",
+                entry["min_drill_mm"]
+            );
+        }
+        let jlc = profiles
+            .iter()
+            .find(|p| p["name"] == "jlc-standard")
+            .unwrap();
+        assert_eq!(
+            jlc["min_drill_mm"].as_f64(),
+            Some(0.2),
+            "JLCPCB's preferred hole"
+        );
+        let filled = profiles
+            .iter()
+            .find(|p| p["name"] == "jlc-filled-via")
+            .unwrap();
+        assert_eq!(filled["offers"], serde_json::json!(["via_in_pad"]));
+        assert!(profiles
+            .iter()
+            .filter(|p| p["name"] != "jlc-filled-via")
+            .all(|p| p.get("offers").is_none()));
+    }
     use super::*;
 
     /// The request every `route` caller builds carries the nets the DRC calls

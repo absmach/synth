@@ -937,7 +937,7 @@ mod tests {
         r.vias.push(Via {
             net: NetId(7),
             at: Point::new(mm_to_nm(10.0), mm_to_nm(10.0)),
-            drill_nm: mm_to_nm(0.2),
+            drill_nm: mm_to_nm(0.15),
             pad_diameter_nm: mm_to_nm(0.5),
         });
         let vs = check_min_drill_diameter(&r, &jlc());

@@ -3257,8 +3257,8 @@ mod tests {
     #[test]
     fn the_via_minimum_is_the_profiles_not_a_fixed_figure() {
         let jlc = build_setup(&synth_drc::ManufacturerProfile::jlc_standard()).to_string_pretty();
-        assert!(jlc.contains("(via_min_size 0.56)"), "{jlc}");
-        assert!(jlc.contains("(via_min_drill 0.3)"), "{jlc}");
+        assert!(jlc.contains("(via_min_size 0.46)"), "{jlc}");
+        assert!(jlc.contains("(via_min_drill 0.2)"), "{jlc}");
         let pcbway =
             build_setup(&synth_drc::ManufacturerProfile::pcbway_standard()).to_string_pretty();
         assert!(pcbway.contains("(via_min_size 0.6)"), "{pcbway}");

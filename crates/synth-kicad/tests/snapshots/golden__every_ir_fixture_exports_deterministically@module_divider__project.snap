@@ -9,19 +9,19 @@ expression: project
         "min_clearance": 0.127,
         "min_copper_edge_clearance": 0.3,
         "min_hole_clearance": 0.2,
-        "min_through_hole_diameter": 0.3,
+        "min_through_hole_diameter": 0.2,
         "min_track_width": 0.127,
         "min_via_annular_width": 0.13,
-        "min_via_diameter": 0.56
+        "min_via_diameter": 0.46
       },
       "rules": {
         "min_clearance": 0.127,
         "min_copper_edge_clearance": 0.3,
         "min_hole_clearance": 0.2,
-        "min_through_hole_diameter": 0.3,
+        "min_through_hole_diameter": 0.2,
         "min_track_width": 0.127,
         "min_via_annular_width": 0.13,
-        "min_via_diameter": 0.56
+        "min_via_diameter": 0.46
       }
     }
   },
