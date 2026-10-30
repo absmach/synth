@@ -38,8 +38,6 @@ const TEXT_HEIGHT_MM: f64 = 1.3;
 /// Silkscreen keeps this far from copper it must stay off: JLCPCB's 0.15 mm
 /// minimum plus 0.1 mm for the text strokes and pad shapes a box check rounds.
 const CLEARANCE_MM: f64 = 0.25;
-/// The most silkscreen segments a label may cross when no spot is clear of them.
-const MAX_CROSSED_SEGMENTS: usize = 4;
 /// A label keeps this far from silkscreen it should not cross.
 const SILK_CLEARANCE_MM: f64 = 0.1;
 /// A label this close to another label or to a part's outline counts as over it.
@@ -79,6 +77,9 @@ pub struct LabelMoves {
 
 /// A label's box in board millimetres: `(min_x, min_y, max_x, max_y)`.
 type Box2 = (f64, f64, f64, f64);
+
+/// Where a hidden label sits for the labels still to be placed: nowhere on the board.
+const HIDDEN_BOX: Box2 = (-1.0e6, -1.0e6, -1.0e6, -1.0e6);
 
 /// One visible reference label.
 struct Label {
@@ -148,13 +149,12 @@ pub fn keep_labels_off_copper(candidate: &Path) -> Result<LabelMoves, String> {
 }
 
 fn keep_labels_off_copper_in(text: &str, board: &PcbBoard) -> (String, LabelMoves) {
-    keep_labels_off_copper_with(text, board, MAX_CROSSED_SEGMENTS, MAX_SHIFT_MM)
+    keep_labels_off_copper_with(text, board, MAX_SHIFT_MM)
 }
 
 fn keep_labels_off_copper_with(
     text: &str,
     board: &PcbBoard,
-    max_crossed: usize,
     reach_mm: f64,
 ) -> (String, LabelMoves) {
     let mut out = text.to_string();
@@ -212,10 +212,11 @@ fn keep_labels_off_copper_with(
         if !on_copper && !in_the_way {
             continue;
         }
-        let Some((dx, dy, angle)) = scene.find_spot(label, &others, max_crossed, reach_mm) else {
-            // A label on a hole is worse than none; one that only grazes silkscreen stays.
-            if on_copper && hide_label(&mut out, &label.reference) {
+        let Some((dx, dy, angle)) = scene.find_spot(label, &others, reach_mm) else {
+            // A label on a hole, or over silkscreen with nowhere clear to go, is worse than none.
+            if hide_label(&mut out, &label.reference) {
                 moves.hidden += 1;
+                placed[index] = HIDDEN_BOX;
             }
             continue;
         };
@@ -687,55 +688,33 @@ struct Scene<'a> {
 impl Scene<'_> {
     /// The nearest spot clear of every via, pad and other label and on the
     /// board, trying the label as it is and turned a quarter before moving
-    /// further out: one that crosses no silkscreen, or failing that the one
-    /// that crosses the fewest segments, if that is only a line or two of a
-    /// part's outline, since a label on a hole is the worse of the two. A spot
-    /// clear of vias but not pads is never taken. `None` when there is none.
-    fn find_spot(
-        &self,
-        label: &Label,
-        others: &[Box2],
-        max_crossed: usize,
-        reach_mm: f64,
-    ) -> Option<(f64, f64, f64)> {
+    /// further out, and crossing no silkscreen, since KiCad reports any such
+    /// crossing as `silk_overlap`. A spot clear of vias but not pads is never
+    /// taken. `None` when there is none.
+    fn find_spot(&self, label: &Label, others: &[Box2], reach_mm: f64) -> Option<(f64, f64, f64)> {
         let centre = label.centre();
         let turned = if label.local.2.rem_euclid(180.0) < 45.0 {
             90.0
         } else {
             0.0
         };
-        let candidates = || {
-            candidate_shifts(reach_mm).flat_map(move |(dx, dy)| {
+        candidate_shifts(reach_mm)
+            .flat_map(move |(dx, dy)| {
                 [label.local.2, turned]
                     .into_iter()
                     .filter_map(move |angle| {
                         let b = label.bounds_at((centre.0 + dx, centre.1 + dy), angle);
                         let free = !others.iter().any(|o| boxes_touch(*o, b, CLEARANCE_MM))
                             && self.edge.is_none_or(|e| inside(e, b))
-                            && clear_of_copper(self.board, &self.vias, b);
-                        free.then(|| {
-                            let crossed = self
+                            && clear_of_copper(self.board, &self.vias, b)
+                            && !self
                                 .silk
                                 .iter()
-                                .filter(|s| segment_hits_box(**s, b, SILK_CLEARANCE_MM))
-                                .count();
-                            (dx, dy, angle, crossed)
-                        })
+                                .any(|s| segment_hits_box(*s, b, SILK_CLEARANCE_MM));
+                        free.then_some((dx, dy, angle))
                     })
             })
-        };
-        candidates()
-            .find(|c| c.3 == 0)
-            .or_else(|| {
-                candidates().filter(|c| c.3 <= max_crossed).fold(
-                    None,
-                    |best: Option<(f64, f64, f64, usize)>, c| match best {
-                        Some(b) if b.3 <= c.3 => Some(b),
-                        _ => Some(c),
-                    },
-                )
-            })
-            .map(|(dx, dy, angle, _)| (dx, dy, angle))
+            .next()
     }
 }
 
@@ -1443,6 +1422,26 @@ mod tests {
         let crosses =
             (cx - 0.9 < 22.0 && cx + 0.9 > 18.0) && (cy - 0.65 < 18.0 && cy + 0.65 > 18.0);
         assert!(!crosses, "the label is clear of the outline: ({cx}, {cy})");
+    }
+
+    #[test]
+    fn a_label_across_an_outline_with_no_clear_spot_is_hidden() {
+        // A wall of outline lines all round R1's reference, so every spot crosses one.
+        let mut lines = String::new();
+        for i in 0..60 {
+            writeln!(
+                lines,
+                "    (fp_line (start 0 {y}) (end 40 {y}) (stroke (width 0.12) (type solid)) (layer \"F.SilkS\") (uuid \"00000000-0000-0000-0000-0000000001{i:02}\"))",
+                y = 5.0 + f64::from(i) * 0.5
+            )
+            .expect("write to a string");
+        }
+        let wall = format!(
+            "  (footprint \"Connector:J\"\n    (layer \"F.Cu\")\n    (at 0 0)\n    (property \"Reference\" \"J1\" (at 0 -2) (layer \"F.SilkS\"))\n{lines}  )"
+        );
+        let (out, moves) = run(&board_text(&wall));
+        assert_eq!(moves.hidden, 1, "R1's label is hidden: {out}");
+        assert!(find_label(&out, "R1").is_none());
     }
 
     #[test]
