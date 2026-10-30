@@ -5411,6 +5411,7 @@ const MAX_TEST_POINT_WARNINGS: usize = 6;
 
 /// A test point that is farther from every pad on its net than
 /// [`TEST_POINT_MAX_MM`].
+#[derive(Debug)]
 struct FarTestPoint {
     refdes: String,
     anchor: String,
@@ -5449,10 +5450,13 @@ fn far_test_points(board: &Board, placement: &Placement) -> Vec<FarTestPoint> {
             // The pad that comes closest to its own limit, which is wider
             // beside a dense part (see [`support_part_limit_mm`]).
             let mut closest: Option<(f64, f64, f64)> = None;
-            // The pad the advice names: on the largest part of the net, which
-            // is placed before the small ones, so a hint toward it holds. A
-            // two-pin passive is itself moved after the test point is.
-            let mut anchor_pad: Option<(usize, f64, &synth_ir::NetEndpoint)> = None;
+            // The pad the advice names, and the pad the warning reports: on the
+            // largest part of the net, which is placed before the small ones,
+            // so a hint toward it holds. A two-pin passive is itself moved
+            // after the test point is. The warning fires when even the nearest
+            // pad is past its limit, but it states this pad's distance, so
+            // the distance reported is the one the advice then reduces.
+            let mut anchor_pad: Option<(usize, f64, f64, &synth_ir::NetEndpoint)> = None;
             for other in net.endpoints.iter().filter(|e| {
                 board
                     .component(e.component)
@@ -5479,11 +5483,11 @@ fn far_test_points(board: &Board, placement: &Placement) -> Vec<FarTestPoint> {
                 if closest.is_none_or(|(excess, _, _)| mm - limit < excess) {
                     closest = Some((mm - limit, mm, limit));
                 }
-                if anchor_pad.is_none_or(|(n, d, _)| pins > n || (pins == n && mm < d)) {
-                    anchor_pad = Some((pins, mm, other));
+                if anchor_pad.is_none_or(|(n, d, ..)| pins > n || (pins == n && mm < d)) {
+                    anchor_pad = Some((pins, mm, limit, other));
                 }
             }
-            let (Some((excess, mm, limit_mm)), Some((_, _, endpoint))) = (closest, anchor_pad)
+            let (Some((excess, _, _)), Some((_, mm, limit_mm, endpoint))) = (closest, anchor_pad)
             else {
                 continue;
             };
@@ -11791,6 +11795,103 @@ board "features_only" {
                 .iter()
                 .map(|f| (f.refdes.clone(), f.mm))
                 .collect::<Vec<_>>()
+        );
+    }
+
+    /// The distance the warning reports is the distance to the pad the advice
+    /// names. A small part's pad can be the nearest while the largest part's pad
+    /// is the one the hint targets; the warning must state the targeted pad's
+    /// distance, and following the advice clears it.
+    #[test]
+    fn the_warning_states_the_distance_to_the_pad_the_advice_names() {
+        let board = load_board_replacing(
+            FEATHER,
+            &[
+                (
+                    "component J2:",
+                    "component TP1: testpoint \"testpoint_pad_1_5\"\n  component J2:",
+                ),
+                (
+                    "connect J1.vbus -> C1.p1",
+                    "connect J1.vbus -> C1.p1\n  connect C1.p1 -> TP1.p1",
+                ),
+            ],
+        );
+        let mut placement = place(&board).expect("place");
+        let c1 = centre_of(&board, &placement, "C1");
+        // Just past the limit of the nearest pad.
+        move_part(
+            &mut placement,
+            &board,
+            "TP1",
+            synth_geometry::nm_to_mm(c1.x_nm) + TEST_POINT_MAX_MM + 2.0,
+            synth_geometry::nm_to_mm(c1.y_nm),
+        );
+        let far = far_test_points(&board, &placement)
+            .into_iter()
+            .find(|f| f.refdes == "TP1")
+            .expect("TP1 is beyond its limit");
+        // The reported distance is measured to the named pad.
+        let pad_offsets = build_pad_offset_lookup(&board);
+        let by_name = |refdes: &str| {
+            board
+                .components
+                .iter()
+                .find(|c| c.refdes == refdes)
+                .expect("component")
+        };
+        let named = by_name(&far.anchor);
+        let pin = named
+            .part
+            .as_ref()
+            .and_then(|p| p.pins.iter().position(|x| x.name == far.pin_name))
+            .expect("named pin");
+        let placed = |refdes: &str| {
+            placement
+                .components
+                .iter()
+                .find(|p| p.id == by_name(refdes).id)
+                .expect("placed")
+        };
+        let pad_at = |refdes: &str, index: usize| {
+            apply_rotation(
+                *placed(refdes),
+                pad_offsets
+                    .lookup(by_name(refdes).id, index)
+                    .unwrap_or((0, 0)),
+            )
+        };
+        let probe_index = by_name("TP1")
+            .part
+            .as_ref()
+            .and_then(|p| p.pins.iter().position(|x| x.name == "p1"))
+            .unwrap_or(0);
+        let (a, b) = (pad_at("TP1", probe_index), pad_at(&far.anchor, pin));
+        let measured = synth_geometry::nm_to_mm(a.x_nm - b.x_nm)
+            .hypot(synth_geometry::nm_to_mm(a.y_nm - b.y_nm));
+        assert!(
+            (measured - far.mm).abs() < 0.05,
+            "the warning says {:.2} mm to {}.{} but it is {:.2} mm: {far:?}",
+            far.mm,
+            far.anchor,
+            far.pin_name,
+            measured
+        );
+        let hinted = board_with_external_hints(
+            &board,
+            &[ExternalHint {
+                component: Some("TP1".into()),
+                near: Some(format!("{}.{}", far.anchor, far.pin_name)),
+                priority: Some("hard".into()),
+                ..ExternalHint::default()
+            }],
+        );
+        let after = place(&hinted).expect("place with the hint");
+        assert!(
+            far_test_points(&hinted, &after)
+                .iter()
+                .all(|f| f.refdes != "TP1"),
+            "following the advice must clear the warning: {far:?}"
         );
     }
 
