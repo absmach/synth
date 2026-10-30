@@ -133,7 +133,7 @@ fn split_ground_fence_vias_stay_inside_their_own_pour() {
         .chain(pcb.split("(via (").skip(1))
     {
         let via = via.split("(uuid").next().unwrap_or(via);
-        let net: usize = number(via, "(net ")[0] as usize;
+        let net = number(via, "(net ")[0];
         let name = pcb
             .lines()
             .find_map(|line| line.trim().strip_prefix(&format!("(net {net} \"")))
