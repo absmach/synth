@@ -2,7 +2,7 @@ schema_version = 2
 forced_net_labels = []
 fit_sheet = false
 
-# Mounting holes, symmetric about the intended 50 x 44 mm outline.
+# Mounting holes. The top-left notch is cut in check.sh; H1 stays on the left tab.
 [components.H1]
 x = 6.0
 y = 4.0
@@ -412,3 +412,8 @@ hide = true
 [labels.R_S2]
 hide = true
 
+[labels.C_AV1]
+hide = true
+
+[labels.R_CC2]
+hide = true

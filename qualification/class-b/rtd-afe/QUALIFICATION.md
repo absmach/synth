@@ -11,22 +11,26 @@ reviewed. Do not call it proven, clean or production-ready.
 
 ## Board and stackup
 
-- Outline: 50.1 x 44.1 mm. Edge.Cuts runs x 2.50 to 52.59 mm,
-  y -0.01 to 44.08 mm (50.09 x 44.09 mm).
+- Outline: 50.1 x 44.1 mm bounding box, 1880 mm² after the top-left notch.
+  Edge.Cuts runs x 2.50 to 52.59 mm, y -0.01 to 44.08 mm, with the rectangle
+  x 10.0 to 26.4 mm, y -0.01 to 20.0 mm cut away. The left tab (x 2.5 to
+  10 mm) keeps H1 and the top-left ground fence via.
 - Four copper layers, 1.6 mm: F.Cu, In1.Cu, In2.Cu, B.Cu. There is no
   explicit stackup block in the exported board; the fab house must choose the
   prepreg/core. No controlled-impedance stackup was requested.
 - AGND and DGND pours are declared on all four layers. AGND has priority 2,
   DGND priority 1, so AGND wins where the two zone outlines overlap. The filled
   boundary runs between the analog column and the MCU. The four mounting holes
-  have 5.6 x 5.6 mm all-layer rule areas around them.
+  have 5.6 x 5.6 mm all-layer rule areas around them; the notch removes the
+  empty top-left pour, not any pad.
 - 54 footprints, 41 nets. The analog chain (J2, the RC filter, U1, U3, L2) is
   on the left and bottom-left; the MCU, flash, crystal, USB-C and LDO are on the
   right and top-right.
 
 ## Check results
 
-Commands, from the repository root (`check.sh` does all of this):
+Commands, from the repository root (`check.sh` does all of this, plus the
+`cut_outline.py` notch cut and the Gerber/drill re-export from the cut board):
 
 ```
 export XDG_DATA_HOME=$(mktemp -d)
@@ -56,7 +60,7 @@ Versions: KiCad 10.0.7, FreeRouting 2.4.1 on OpenJDK 25.0.4.1, Synth
 | Synth signal integrity | 21 warnings, 0 blocking | `reports/release.json` |
 
 The delivered board is `kicad/rtd_afe.kicad_pcb`
-(`fbbddee2b226e3bfbcdef405d1c3e717c4ba3332d2f1cd434c3032d322813089`).
+(`6756ea9138ded218d78ea34cd50ac4041390aaee65fa68692a6832f62205ecc5`).
 The schematic is `kicad/rtd_afe.kicad_sch`
 (`e81a9a0ebf18d5fd93cef8b224df16134033824da6402abbb8f845048dbd89c4`).
 
@@ -76,7 +80,7 @@ original sidecar did, disables that pass; the floorplan then exported exactly
 as written. This is recorded under Synth defects below.
 
 The first clean route still had 56 silkscreen warnings because reference labels
-sat on neighbouring pads. One label was moved (`U1` at (24, 34.5) mm) and 24
+sat on neighbouring pads. One label was moved (`U1` at (24, 34.5) mm) and 26
 passives and both TVS diodes had their reference label hidden; the delivered
 board has 0 silk warnings. Two ground islands from the first attempt were
 cleared by placing `C_X1` at (34.5, 40.5) mm and `R_TIE` at (31.4, 31.5) mm so
@@ -87,19 +91,20 @@ their ground pads sit on the correct side of the AGND/DGND bisector.
 The earlier 58 x 47, 60 x 49, 64 x 49 and 67 x 49 mm attempts failed on Synth's
 ground-island repair: the split pours fragmented around U2. This rework groups
 the analog chain at the left, the MCU/flash/crystal and USB at the right, and
-puts J1/J2/J3 on the edges. It is 50.1 x 44.1 mm and routes with 0 open nets,
-0 DRC errors, 0 warnings and 0 unconnected items. That does not prove it is the
-densest arrangement; it is one successful FreeRouting run, and `check.sh`
-re-routes from scratch.
+puts J1/J2/J3 on the edges. It is 50.1 x 44.1 mm with a 16.4 x 20 mm notch,
+1880 mm², and routes with 0 open nets, 0 DRC errors, 0 warnings and 0
+unconnected items. That does not prove it is the densest arrangement; it is one
+successful FreeRouting run, and `check.sh` re-routes from scratch.
 
 J2 and J3 are level at y = 41.5 mm, with their bodies 0.8 mm from the bottom
-edge. J1 stays at (39.5, 6.0) mm, 12 mm right of the board centre. Exact
-centering (x = 27.5) was tried with the USB cluster, R_TIE and the analog
-decoupling moved to compensate; every route left one unconnected AGND or DGND
-pour sliver at U2's 0.4 mm pad row, and the 0.6 mm stitching search could not
-tie it. The export refuses such a board, so the clean layout keeps J1 over the
-digital cluster. Centering it needs a ground-pour or U2 break-out change, not
-a placement nudge.
+edge. J1 is at (39.5, 6.0) mm on the main top edge, which runs x 26.4..52.59 mm
+after the notch, so J1 is centred on that edge. Centering J1 on the rectangle
+(x = 27.5) was tried first; it left an unconnected DGND pour sliver at U2's
+0.4 mm pad row, and the stitching search could not tie it. The notch removes
+the empty top-left corner instead, keeping the proven route and making J1 the
+centre of the remaining top edge. It is cut in `check.sh`, because SynthSpec
+has no non-rectangular outline primitive; the Gerbers and drill files are
+re-exported from the cut board.
 
 ## ERC findings and dispositions
 
@@ -243,9 +248,10 @@ coordinates above are the measured ones.
   3.70, C_IO2 4.81, C_RI 5.04, C_IO4 5.48, C_IO 5.76, C_AVF 6.36, C_AV2 6.71,
   C_DVB 6.54 (its inductor L1 is 1.5 mm away). The six parts over 5 mm are a
   compactness trade-off, not reviewed.
-- 24 reference labels are hidden: C_AVF, C_CM1, C_CM2, C_D, C_DV, C_DV1, C_DV2,
-  C_IO, C_IO1, C_IO2, C_IO3, C_IO4, C_RV, C_VI, D1, D2, R_AV, R_BIAS, R_DN,
-  R_DP, R_S1, R_S2, R_TIE, R_X. They remain in the BOM, PnP and schematic.
+- 26 reference labels are hidden: C_AV1, C_AVF, C_CM1, C_CM2, C_D, C_DV, C_DV1,
+  C_DV2, C_IO, C_IO1, C_IO2, C_IO3, C_IO4, C_RV, C_VI, D1, D2, R_AV, R_BIAS,
+  R_CC2, R_DN, R_DP, R_S1, R_S2, R_TIE, R_X. They remain in the BOM, PnP and
+  schematic.
 - Board outline and stackup above; 54 footprints.
 
 ## Left to a human
@@ -268,9 +274,10 @@ Nothing below is signed off. The list is deliberately blunt.
   compliance were not checked.
 - **Mechanical**: the mounting holes are 3.5 mm from the left edge, 3.6 mm from
   the right (1.2 to 1.3 mm of material around a 2.5 mm hole), 4.0 mm from the
-  top and 4.1 mm from the bottom; the enclosure, screw-head clearance,
-  connector overhang and header orientation were not checked. Synth places no
-  board-name or revision silk.
+  top and 4.1 mm from the bottom. H1 sits on the 7.5 mm left tab, 1.25 mm from
+  the notch edge; tab strength, the enclosure, screw-head clearance, connector
+  overhang and header orientation were not checked. Synth places no board-name
+  or revision silk.
 - **Fabrication/DFM**: no fab house has seen the Gerbers, drill, BOM or PnP.
   The 0.4 mm QFN-60, the 0.5 mm VQFN-32 and the 0.5 mm USB-C need a fab
   capability check; the four-layer stackup is the default, not a controlled
@@ -315,6 +322,13 @@ Nothing below is signed off. The list is deliberately blunt.
    hides the C0G filter requirement and the 0.1 % resistors from an assembler.
 5. **No free-text silkscreen (not fixed).** The board name, revision and header
    pin functions cannot be put on the silk; only reference labels exist.
+6. **No non-rectangular outline primitive (not fixed).** SynthSpec only emits a
+   fitted rectangle; the placement diagnostics call `board_outline` future
+   work. The top-left notch is therefore cut by `check.sh` after export, and
+   the Gerbers and drill files are re-exported from the cut board. The
+   `.synth` source alone still describes a rectangle, so a plain
+   `synth export-kicad` does not reproduce the delivered outline. A
+   source-level outline/cutout primitive is the proper fix.
 
 ## Reproducibility
 
@@ -323,13 +337,15 @@ Inputs and outputs of the committed run:
 | File | SHA-256 |
 | --- | --- |
 | `rtd_afe.synth` | `c7641ede7eeef4a5f09324f46160bc0b91eed6e3310a25f005b520d91d5facf1` |
-| `rtd_afe.placement.layout.toml` | `fec4d607bc4cd91ce9a0402f9ef51e53c85fd74cd73735c123aae70e4106f90a` |
-| `kicad/rtd_afe.kicad_pcb` | `fbbddee2b226e3bfbcdef405d1c3e717c4ba3332d2f1cd434c3032d322813089` |
+| `rtd_afe.placement.layout.toml` | `11d4cb06bbaacb2229cf965ff3928f620293ea9057522f0ab56c057363bd84dd` |
+| `check.sh` | `a68f2e3f4bda23a0ff0314dbbc796ae4b4a9cfc0f288837f145ee1e5835ec90e` |
+| `cut_outline.py` | `0a525fb5486439012bac05a6d0a10f63762ed04993a4a419d7bab40479ac4fda` |
+| `kicad/rtd_afe.kicad_pcb` | `6756ea9138ded218d78ea34cd50ac4041390aaee65fa68692a6832f62205ecc5` |
 | `kicad/rtd_afe.kicad_sch` | `e81a9a0ebf18d5fd93cef8b224df16134033824da6402abbb8f845048dbd89c4` |
-| `reports/rtd_afe.kicad-drc.json` | `68fa27ad6b73a14224587c2ccc45cc4d69190b7479cba336419ba0766cb9db97` |
-| `reports/rtd_afe.kicad-erc.json` | `e37d2abc1d0b13aa12e02441a49684d5d9fafe7ef19668337aab67918156cd17` |
-| `reports/release.json` | `add3895d2e8a8e5498d824351ee778356a880d882ebce53331bec4f7258dc383` |
-| `reports/rtd_afe.routing.json` | `4fb4f5a0f2b9f65c72ae46b9990e96ebdc21f0a66cddc01b016a2bd61803f3d2` |
+| `reports/rtd_afe.kicad-drc.json` | `18a2ac24afdca4cfd96250b33499e31643a3bf5012741d1093ca7454093a9521` |
+| `reports/rtd_afe.kicad-erc.json` | `b20f426c3d7bc6209f1e2a85d49d586cfce4ac84b5b66091d985a5bdffe7207d` |
+| `reports/release.json` | `a40757cb764605c1b122fa5bac865e61fa3aed876a2bdfe6b3dec694e984d066` |
+| `reports/rtd_afe.routing.json` | `245dababd5beba0ff2c616483d49e99f369454c47efb6d53a2e458e088aeaa08` |
 
 The release, routing and netlist reports had the absolute paths of the machine
 that produced them cut to repository-relative ones, matching the usb-uart
