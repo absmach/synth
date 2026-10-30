@@ -217,7 +217,7 @@ fn keep_labels_off_copper_with(
     moves.widened = widened;
     let (out, trimmed) = trim_outlines_off_copper(&out, board, &scene.vias);
     moves.trimmed = trimmed;
-    let (out, dropped) = drop_circles_off_copper(&out, board, &scene.vias);
+    let (out, dropped) = drop_shapes_off_copper(&out, board, &scene.vias);
     moves.dropped = dropped;
     (out, moves)
 }
@@ -328,12 +328,56 @@ fn circle_hugs_copper(
     })
 }
 
-/// Drop every silkscreen circle of a footprint that comes within the silkscreen
-/// clearance of a pad or a via. A circle is not cut like a line: the ring a test
+/// Whether a footprint's silkscreen polygon, such as a pin-1 triangle, comes
+/// within the silkscreen clearance of a pad or a via. Its edges are sampled.
+fn polygon_hugs_copper(
+    polygon: &str,
+    board: &PcbBoard,
+    vias: &[((f64, f64), f64)],
+    to_board: &dyn Fn((f64, f64)) -> (f64, f64),
+) -> bool {
+    let mut corners: Vec<(f64, f64)> = Vec::new();
+    let mut rest = polygon;
+    while let Some(i) = rest.find("(xy ") {
+        rest = &rest[i + "(xy ".len()..];
+        let Some(close) = rest.find(')') else { break };
+        let nums: Vec<f64> = rest[..close]
+            .split_whitespace()
+            .filter_map(|n| n.parse().ok())
+            .collect();
+        if let (Some(&x), Some(&y)) = (nums.first(), nums.get(1)) {
+            corners.push((x, y));
+        }
+    }
+    let width = block_number(polygon, "(width")
+        .unwrap_or(0.12)
+        .max(MIN_SILK_WIDTH_MM);
+    let reach = CLEARANCE_MM + width / 2.0;
+    corners
+        .iter()
+        .zip(corners.iter().cycle().skip(1))
+        .any(|(&a, &b)| {
+            let steps = (((b.0 - a.0).hypot(b.1 - a.1) / PAD_SAMPLE_MM).ceil() as u32).max(1);
+            (0..=steps).any(|k| {
+                let t = f64::from(k) / f64::from(steps);
+                let on = to_board((a.0 + (b.0 - a.0) * t, a.1 + (b.1 - a.1) * t));
+                let at = Point::new(mm_to_nm(on.0), mm_to_nm(on.1));
+                board
+                    .pads()
+                    .any(|p| p.signed_distance_nm(at) < reach * NM_PER_MM)
+                    || vias
+                        .iter()
+                        .any(|(v, r)| (v.0 - on.0).hypot(v.1 - on.1) < r + reach)
+            })
+        })
+}
+
+/// Drop every silkscreen circle and polygon of a footprint that comes within the
+/// silkscreen clearance of a pad or a via. A circle is not cut like a line: the ring a test
 /// point draws round its own pad sits a tenth of a millimetre off it, closer
 /// than any fabricator prints, and without the ring the pad and its reference
 /// still mark the point. Returns the new text and the number of circles dropped.
-fn drop_circles_off_copper(
+fn drop_shapes_off_copper(
     text: &str,
     board: &PcbBoard,
     vias: &[((f64, f64), f64)],
@@ -364,24 +408,32 @@ fn drop_circles_off_copper(
             let (dx, dy) = rotation.rotate_offset(mm_to_nm(x), mm_to_nm(y));
             (ox + dx as f64 / NM_PER_MM, oy + dy as f64 / NM_PER_MM)
         };
-        let mut scan = 0;
-        while let Some(g) = fp[scan..].find("(fp_circle") {
-            let circle_start = scan + g;
-            let end = block_len(&fp[circle_start..]).unwrap_or(fp.len() - circle_start);
-            scan = circle_start + end.max(1);
-            let circle = &fp[circle_start..circle_start + end];
-            if !(circle.contains("\"F.SilkS\"") || circle.contains("\"B.SilkS\"")) {
-                continue;
-            }
-            if circle_hugs_copper(circle, board, vias, &to_board) {
-                ranges.push(start + circle_start..start + circle_start + end);
+        for (keyword, polygon) in [("(fp_circle", false), ("(fp_poly", true)] {
+            let mut scan = 0;
+            while let Some(g) = fp[scan..].find(keyword) {
+                let shape_start = scan + g;
+                let end = block_len(&fp[shape_start..]).unwrap_or(fp.len() - shape_start);
+                scan = shape_start + end.max(1);
+                let shape = &fp[shape_start..shape_start + end];
+                if !(shape.contains("\"F.SilkS\"") || shape.contains("\"B.SilkS\"")) {
+                    continue;
+                }
+                let hugs = if polygon {
+                    polygon_hugs_copper(shape, board, vias, &to_board)
+                } else {
+                    circle_hugs_copper(shape, board, vias, &to_board)
+                };
+                if hugs {
+                    ranges.push(start + shape_start..start + shape_start + end);
+                }
             }
         }
     }
+    ranges.sort_by_key(|range| range.start);
     let count = ranges.len();
     let mut out = text.to_string();
     for range in ranges.into_iter().rev() {
-        // Take the tab that indented the circle with it, so no blank line stays.
+        // Take the tab that indented the shape with it, so no blank line stays.
         let begin = out[..range.start]
             .rfind(|ch: char| ch != '\t' && ch != ' ')
             .map_or(0, |at| at + 1);
@@ -1315,6 +1367,27 @@ mod tests {
         let (out, moves) = run(&distant);
         assert_eq!(moves.dropped, 0);
         assert!(out.contains("(fp_circle"));
+    }
+
+    /// A pin-1 triangle drawn over a pad is dropped; one clear of every pad stays.
+    #[test]
+    fn a_silkscreen_polygon_on_a_pad_is_dropped_and_a_distant_one_is_kept() {
+        let triangle = |dx: f64| {
+            format!(
+                "    (fp_poly (pts (xy {a} -0.6) (xy {b} -0.6) (xy {c} -1.0)) (stroke (width 0.12) (type solid)) (fill solid) (layer \"F.SilkS\") (uuid \"00000000-0000-0000-0000-000000000030\"))\n    (pad \"1\"",
+                a = dx - 0.4,
+                b = dx + 0.4,
+                c = dx
+            )
+        };
+        let on_pad = board_text("").replacen("    (pad \"1\"", &triangle(-0.825), 1);
+        let (out, moves) = run(&on_pad);
+        assert_eq!(moves.dropped, 1, "{out}");
+        assert!(!out.contains("(fp_poly"), "{out}");
+        let distant = board_text("").replacen("    (pad \"1\"", &triangle(3.0), 1);
+        let (out, moves) = run(&distant);
+        assert_eq!(moves.dropped, 0, "{out}");
+        assert!(out.contains("(fp_poly"));
     }
 
     #[test]
