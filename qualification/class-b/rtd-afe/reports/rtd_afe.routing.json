@@ -40,22 +40,22 @@
       "threads": "4",
       "wall_clock_secs": "1200"
     },
-    "input_hash": "04b1e41dd5d12b893170b571e7636a9b5a820cc8c3fbbe09ce5b7aba8a7ca0d3",
+    "input_hash": "5c80222bd2bbfb4c638ce2b3cfbabb8b2bab5d583fde32b2944a504903930a7d",
     "output_hash": "",
     "source_revision": null,
-    "duration_ms": 260030
+    "duration_ms": 232237
   },
   "statistics": {
     "connected_nets": 41,
     "open_nets": 0,
     "open_net_names": [],
-    "segments": 349,
-    "vias": 58,
-    "wire_length_mm": 597.070609,
+    "segments": 339,
+    "vias": 60,
+    "wire_length_mm": 586.561581,
     "pad_escape_rejections": 0,
     "engine_findings": {
-      "claimed_imported_segments": "349",
-      "claimed_imported_vias": "58"
+      "claimed_imported_segments": "339",
+      "claimed_imported_vias": "60"
     }
   },
   "artifacts": {
