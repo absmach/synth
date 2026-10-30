@@ -42,6 +42,8 @@ const CLEARANCE_MM: f64 = 0.25;
 const MAX_CROSSED_SEGMENTS: usize = 4;
 /// A label keeps this far from silkscreen it should not cross.
 const SILK_CLEARANCE_MM: f64 = 0.1;
+/// A label this close to another label or to a part's outline counts as over it.
+const OVERLAP_MARGIN_MM: f64 = 0.05;
 /// A label keeps this far inside the board edge.
 const EDGE_CLEARANCE_MM: f64 = 0.2;
 /// Distance between the spots tried, and how far a label may be moved.
@@ -191,17 +193,28 @@ fn keep_labels_off_copper_with(
         .map(|l| l.bounds_at(l.centre(), l.local.2))
         .collect();
     for (index, label) in labels.iter().enumerate() {
-        if clear_of_copper(board, &scene.vias, placed[index]) {
-            continue;
-        }
         let others: Vec<Box2> = placed
             .iter()
             .enumerate()
             .filter(|(i, _)| *i != index)
             .map(|(_, b)| *b)
             .collect();
+        let on_copper = !clear_of_copper(board, &scene.vias, placed[index]);
+        // KiCad's `silk_overlap`: a label over another label or across a part's
+        // outline is moved too, though it touches no copper.
+        let in_the_way = others
+            .iter()
+            .any(|o| boxes_touch(*o, placed[index], OVERLAP_MARGIN_MM))
+            || scene
+                .silk
+                .iter()
+                .any(|s| segment_hits_box(*s, placed[index], OVERLAP_MARGIN_MM));
+        if !on_copper && !in_the_way {
+            continue;
+        }
         let Some((dx, dy, angle)) = scene.find_spot(label, &others, max_crossed, reach_mm) else {
-            if hide_label(&mut out, &label.reference) {
+            // A label on a hole is worse than none; one that only grazes silkscreen stays.
+            if on_copper && hide_label(&mut out, &label.reference) {
                 moves.hidden += 1;
             }
             continue;
@@ -1388,6 +1401,48 @@ mod tests {
         let (out, moves) = run(&distant);
         assert_eq!(moves.dropped, 0, "{out}");
         assert!(out.contains("(fp_poly"));
+    }
+
+    /// A second resistor one millimetre to the right, whose reference lands on
+    /// the first one's.
+    const NEIGHBOUR: &str = r#"  (footprint "Resistor_SMD:R_0603_1608Metric"
+    (layer "F.Cu")
+    (at 21 20)
+    (property "Reference" "R2" (at 0 -2) (layer "F.SilkS"))
+    (pad "1" smd roundrect (at -0.825 0) (size 0.8 0.95) (layers "F.Cu" "F.Paste" "F.Mask") (net 1 "N1"))
+    (pad "2" smd roundrect (at 0.825 0) (size 0.8 0.95) (layers "F.Cu" "F.Paste" "F.Mask") (net 1 "N1"))
+  )"#;
+
+    #[test]
+    fn a_label_over_another_label_is_moved_though_it_touches_no_copper() {
+        let (out, moves) = run(&board_text(NEIGHBOUR));
+        assert_eq!(moves.moved, 1, "one of the two moves: {out}");
+        let (x1, y1, _) = label_at(&out);
+        let (x2, y2, _) = find_label(&out, "R2").expect("R2's label").values;
+        // Board centres: R1 at (20, 20), R2 at (21, 20); a label is 1.8 x 1.3 mm.
+        let (dx, dy) = ((20.0 + x1) - (21.0 + x2), (20.0 + y1) - (20.0 + y2));
+        assert!(
+            dx.abs() >= 1.8 || dy.abs() >= 1.3,
+            "the two labels no longer overlap: ({dx}, {dy})"
+        );
+    }
+
+    #[test]
+    fn a_label_across_another_parts_outline_is_moved_off_it() {
+        // A part outline running through where R1's reference sits, y = 18.
+        let outline = r#"  (footprint "Connector:J"
+    (layer "F.Cu")
+    (at 0 0)
+    (property "Reference" "J1" (at 0 -2) (layer "F.SilkS"))
+    (fp_line (start 18 18) (end 22 18) (stroke (width 0.12) (type solid)) (layer "F.SilkS") (uuid "00000000-0000-0000-0000-000000000040"))
+  )"#;
+        let (out, moves) = run(&board_text(outline));
+        assert_eq!(moves.moved, 1, "R1's label moves: {out}");
+        let (x, y, _) = label_at(&out);
+        let (cx, cy) = (20.0 + x, 20.0 + y);
+        let crosses =
+            (cx - 0.9 < 22.0 && cx + 0.9 > 18.0) && (cy - 0.65 < 18.0 && cy + 0.65 > 18.0);
+        assert!(!crosses, "the label is clear of the outline: ({cx}, {cy})");
     }
 
     #[test]
