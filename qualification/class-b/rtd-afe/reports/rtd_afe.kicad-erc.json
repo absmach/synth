@@ -1,0 +1,68 @@
+{
+    "$schema": "https://schemas.kicad.org/erc.v1.json",
+    "coordinate_units": "mm",
+    "date": "2026-10-30T16:33:28",
+    "ignored_checks": [
+        {
+            "description": "Global label only appears once in the schematic",
+            "key": "single_global_label"
+        },
+        {
+            "description": "Four connection points are joined together",
+            "key": "four_way_junction"
+        },
+        {
+            "description": "SPICE model issue",
+            "key": "simulation_model_issue"
+        },
+        {
+            "description": "Assigned footprint doesn't match footprint filters",
+            "key": "footprint_filter"
+        }
+    ],
+    "included_severities": [
+        "error",
+        "warning",
+        "exclusion"
+    ],
+    "kicad_version": "10.0.7",
+    "sheets": [
+        {
+            "path": "/",
+            "uuid_path": "/b999385b-5cb0-57df-8610-0c339174ef3a",
+            "violations": [
+                {
+                    "description": "Symbol 'Ferrite_Bead' not found in symbol library 'Device'",
+                    "items": [
+                        {
+                            "description": "Symbol L2 [Ferrite_Bead]",
+                            "pos": {
+                                "x": 335.28,
+                                "y": 93.98
+                            },
+                            "uuid": "4898b3b4-4e08-5d09-84c1-7f2c615b6831"
+                        }
+                    ],
+                    "severity": "warning",
+                    "type": "lib_symbol_issues"
+                },
+                {
+                    "description": "Symbol 'REF5025ID' doesn't match copy in library 'Reference_Voltage'",
+                    "items": [
+                        {
+                            "description": "Symbol U3 [REF5025ID]",
+                            "pos": {
+                                "x": 444.5,
+                                "y": 33.02
+                            },
+                            "uuid": "1c679915-884b-5ed7-a9a1-16c5ce90aba2"
+                        }
+                    ],
+                    "severity": "warning",
+                    "type": "lib_symbol_mismatch"
+                }
+            ]
+        }
+    ],
+    "source": "rtd_afe.kicad_sch"
+}

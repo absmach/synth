@@ -662,6 +662,175 @@ electrical_type = "passive"
     }
 
     #[test]
+    fn rtd_front_end_parts_match_their_datasheet_pinouts() {
+        use crate::ElectricalType::{
+            Analog, Clock, DoNotConnect, GroundReference, Input, Output, PowerInput, PowerOutput,
+        };
+        let dir = workspace_root().join("registry").join("parts");
+        let registry = load_dir(&dir).expect("seed registry must load");
+
+        // TI SBAS660C table 6 (RHB, 32-pin VQFN) and SBOS410I table 6 (D, 8-pin SOIC).
+        let ads = registry.lookup("ads124s08").expect("ads124s08");
+        let ref5025 = registry.lookup("ref5025").expect("ref5025");
+        for part in [ads, ref5025] {
+            assert!(
+                !part.is_unverified(),
+                "{} must be datasheet-verified",
+                part.id
+            );
+            assert!(
+                part.kicad_footprint.is_some(),
+                "{} needs a footprint",
+                part.id
+            );
+        }
+        assert_eq!(ads.pins.len(), 33, "32 pins plus the thermal pad");
+        for (name, number, ty) in [
+            ("aincom", "1", Analog),
+            ("ain0", "7", Analog),
+            ("cs_n", "9", Input),
+            ("dout_drdy", "12", Output),
+            ("clk", "17", Clock),
+            ("dgnd", "14", GroundReference),
+            ("dvdd", "16", PowerInput),
+            ("refout", "23", Analog),
+            ("nc", "25", DoNotConnect),
+            ("avdd", "26", PowerInput),
+            ("avss", "27", GroundReference),
+            ("refp1_ain6", "32", Analog),
+            ("ep", "33", GroundReference),
+        ] {
+            let pin = ads
+                .find_pin(name)
+                .unwrap_or_else(|| panic!("ads124s08 {name}"));
+            assert_eq!(
+                (pin.number.0.as_str(), pin.electrical_type),
+                (number, ty),
+                "{name}"
+            );
+        }
+        assert_eq!(ref5025.pins.len(), 8);
+        for (name, number, ty) in [
+            ("vin", "2", PowerInput),
+            ("temp", "3", Analog),
+            ("gnd", "4", GroundReference),
+            ("vout", "6", PowerOutput),
+            ("nc", "7", DoNotConnect),
+        ] {
+            let pin = ref5025
+                .find_pin(name)
+                .unwrap_or_else(|| panic!("ref5025 {name}"));
+            assert_eq!(
+                (pin.number.0.as_str(), pin.electrical_type),
+                (number, ty),
+                "{name}"
+            );
+        }
+    }
+
+    #[test]
+    fn ble_node_parts_match_their_datasheet_pinouts() {
+        use crate::ElectricalType::{Bidirectional, Input, Passive, PowerInput, PowerOutput};
+        let dir = workspace_root().join("registry").join("parts");
+        let registry = load_dir(&dir).expect("seed registry must load");
+
+        // Bosch BST-BME280-DS002 table 35 (LGA-8), TI SNVS798Q table 4-2 (SOT-23),
+        // Abracon ABM11W bottom view (pads 2 and 4 GND).
+        let bme = registry.lookup("bme280").expect("bme280");
+        let ldo = registry.lookup("lp5907_3v3").expect("lp5907_3v3");
+        let xtal = registry.lookup("xtal_32mhz_nrf").expect("xtal_32mhz_nrf");
+        for part in [bme, ldo, xtal] {
+            assert!(
+                !part.is_unverified(),
+                "{} must be datasheet-verified",
+                part.id
+            );
+            assert!(
+                part.kicad_footprint.is_some(),
+                "{} needs a footprint",
+                part.id
+            );
+            assert!(
+                part.provenance
+                    .as_ref()
+                    .and_then(|p| p.datasheet_url.as_ref())
+                    .is_some(),
+                "{} needs a datasheet url",
+                part.id
+            );
+        }
+        for (part, expected) in [
+            (
+                bme,
+                vec![
+                    ("gnd_1", "1", PowerInput),
+                    ("csb", "2", Input),
+                    ("sda", "3", Bidirectional),
+                    ("scl", "4", Input),
+                    ("sdo", "5", Input),
+                    ("vddio", "6", PowerInput),
+                    ("gnd_7", "7", PowerInput),
+                    ("vdd", "8", PowerInput),
+                ],
+            ),
+            (
+                ldo,
+                vec![
+                    ("vin", "1", PowerInput),
+                    ("gnd", "2", PowerInput),
+                    ("en", "3", Input),
+                    ("vout", "5", PowerOutput),
+                ],
+            ),
+            (
+                xtal,
+                vec![
+                    ("xtal_a", "1", Passive),
+                    ("gnd_2", "2", Passive),
+                    ("xtal_b", "3", Passive),
+                    ("gnd_4", "4", Passive),
+                ],
+            ),
+        ] {
+            for (name, number, ty) in expected {
+                let pin = part
+                    .find_pin(name)
+                    .unwrap_or_else(|| panic!("{} {name}", part.id));
+                assert_eq!(
+                    (pin.number.0.as_str(), pin.electrical_type),
+                    (number, ty),
+                    "{} {name}",
+                    part.id
+                );
+            }
+        }
+        assert_eq!(bme.pins.len(), 8);
+        assert!(bme
+            .find_pin("sda")
+            .unwrap()
+            .capabilities
+            .contains(&PinCapability::I2cSda));
+        assert!(bme
+            .find_pin("scl")
+            .unwrap()
+            .capabilities
+            .contains(&PinCapability::I2cScl));
+        // nRF52840 PS table 64 MHz crystal (HFXO): CL max 12 pF; Nordic BOM: CL 8 pF, C1 = C2 = 12 pF.
+        assert!(
+            ldo.operating_conditions.as_ref().unwrap().max_voltage_v >= Some(5.0),
+            "LDO must take a USB 5 V input"
+        );
+        for pin in ["xtal_a", "xtal_b"] {
+            let rule = xtal
+                .required_decoupling
+                .iter()
+                .find(|r| r.net == pin)
+                .unwrap_or_else(|| panic!("{pin} load capacitor"));
+            assert_eq!((rule.value.as_str(), rule.count), ("12pf", 1), "{pin}");
+        }
+    }
+
+    #[test]
     fn parses_footprint_dimensions_and_operating_conditions() {
         let toml = r#"
 id = "test_ic"

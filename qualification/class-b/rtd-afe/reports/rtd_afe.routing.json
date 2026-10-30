@@ -1,0 +1,144 @@
+{
+  "schema_version": "synth.routing.v1",
+  "state": "routed",
+  "engine": "freerouting",
+  "capability": {
+    "engine": "freerouting",
+    "available": true,
+    "version": "freerouting-2.4.1",
+    "runtime_version": "openjdk version \"25.0.4.1\" 2026-08-18 LTS",
+    "detail": null,
+    "failure": null
+  },
+  "provenance": {
+    "engine": "freerouting",
+    "engine_version": "freerouting-2.4.1.jar",
+    "runtime_version": "openjdk version \"25.0.4.1\" 2026-08-18 LTS",
+    "profile": "jlcpcb",
+    "command": [
+      "/usr/bin/python3",
+      "tools/freeroute_autoroute.py",
+      "qualification/class-b/rtd-afe/kicad/rtd_afe.synth.kicad_pcb",
+      "qualification/class-b/rtd-afe/kicad/rtd_afe.freerouting.kicad_pcb",
+      "--jar",
+      "tools/freerouting/freerouting-2.4.1.jar",
+      "--java",
+      "tools/jre25/bin/java",
+      "--passes",
+      "40",
+      "--threads",
+      "4",
+      "--ses-output",
+      "qualification/class-b/rtd-afe/kicad/rtd_afe.freerouting.ses",
+      "--report",
+      "qualification/class-b/rtd-afe/kicad/rtd_afe.freerouting.json",
+      "--clean-netlist"
+    ],
+    "settings": {
+      "clean_netlist": "true",
+      "passes": "40",
+      "threads": "4",
+      "wall_clock_secs": "1200"
+    },
+    "input_hash": "ca0fe98e391eb068db88fd5490820a321df967e44997c9fa9beba88a90205a37",
+    "output_hash": "",
+    "source_revision": null,
+    "duration_ms": 241451
+  },
+  "statistics": {
+    "connected_nets": 41,
+    "open_nets": 0,
+    "open_net_names": [],
+    "segments": 339,
+    "vias": 60,
+    "wire_length_mm": 586.561581,
+    "pad_escape_rejections": 0,
+    "engine_findings": {
+      "claimed_imported_segments": "339",
+      "claimed_imported_vias": "60"
+    }
+  },
+  "artifacts": {
+    "baseline": "qualification/class-b/rtd-afe/kicad/rtd_afe.synth.kicad_pcb",
+    "candidate": "qualification/class-b/rtd-afe/kicad/rtd_afe.freerouting.kicad_pcb",
+    "delivered": "qualification/class-b/rtd-afe/kicad/rtd_afe.kicad_pcb",
+    "session_log": "qualification/class-b/rtd-afe/kicad/rtd_afe.freerouting.log",
+    "ses": "qualification/class-b/rtd-afe/kicad/rtd_afe.freerouting.ses",
+    "router_report": "qualification/class-b/rtd-afe/kicad/rtd_afe.freerouting.json",
+    "connectivity_report": null,
+    "drc_report": null
+  },
+  "validation": {
+    "fabrication_ready": true,
+    "topology": {
+      "missing_footprints": [],
+      "extra_footprints": [],
+      "missing_nets": [],
+      "missing_layers": [],
+      "missing_pads": [],
+      "renet_pads": [],
+      "outline_present": true
+    },
+    "connectivity": {
+      "connected_nets": 41,
+      "open_nets": 0,
+      "open": [],
+      "unconnected_pads": [],
+      "via_in_pad": [],
+      "undersized_vias": [],
+      "undersized_tracks": []
+    },
+    "kicad_drc": {
+      "errors": 0,
+      "unconnected": 0,
+      "warnings": 0
+    },
+    "blocking_reasons": [],
+    "unavailable_checks": []
+  },
+  "failure": null,
+  "escape": [
+    {
+      "refdes": "U2",
+      "package": "Package_DFN_QFN:QFN-60-1EP_7x7mm_P0.4mm_EP3.4x3.4mm",
+      "pads": 61,
+      "pitch_mm": 0.4,
+      "gap_mm": 0.2,
+      "via_span_mm": 0.687,
+      "max_drill_mm": 0.013,
+      "layers": 4,
+      "suggested_layers": null,
+      "limit": "track",
+      "detail": "adjacent pins are 0.400 mm apart and the pads leave 0.200 mm between them; a fabrication-floor via needs 0.687 mm between centres, so the drill that would fit is 0.013 mm; even a minimum track needs 0.254 mm of gap",
+      "remediation": "use via-in-pad if the process allows, or choose a coarser-pitch part"
+    },
+    {
+      "refdes": "J1",
+      "package": "Connector_USB:USB_C_Receptacle_HRO_TYPE-C-31-M-12",
+      "pads": 22,
+      "pitch_mm": 0.5,
+      "gap_mm": 0.2,
+      "via_span_mm": 0.687,
+      "max_drill_mm": 0.113,
+      "layers": 4,
+      "suggested_layers": null,
+      "limit": "track",
+      "detail": "adjacent pins are 0.500 mm apart and the pads leave 0.200 mm between them; a fabrication-floor via needs 0.687 mm between centres, so the drill that would fit is 0.113 mm; even a minimum track needs 0.254 mm of gap",
+      "remediation": "use via-in-pad if the process allows, or choose a coarser-pitch part"
+    },
+    {
+      "refdes": "U1",
+      "package": "Package_DFN_QFN:Texas_RHB0032M_VQFN-32-1EP_5x5mm_P0.5mm_EP2.1x2.1mm",
+      "pads": 33,
+      "pitch_mm": 0.5,
+      "gap_mm": 0.0,
+      "via_span_mm": 0.687,
+      "max_drill_mm": 0.113,
+      "layers": 4,
+      "suggested_layers": null,
+      "limit": "track",
+      "detail": "adjacent pins are 0.500 mm apart and the pads leave 0.000 mm between them; a fabrication-floor via needs 0.687 mm between centres, so the drill that would fit is 0.113 mm; even a minimum track needs 0.254 mm of gap",
+      "remediation": "use via-in-pad if the process allows, or choose a coarser-pitch part"
+    }
+  ]
+}

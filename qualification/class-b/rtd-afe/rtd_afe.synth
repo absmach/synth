@@ -1,0 +1,237 @@
+// SYN-363: PT100 4-wire RTD analog front end. ADS124S08 24-bit delta-sigma ADC, IDAC excitation,
+// REF5025 2.5 V reference, RP2350 over SPI, USB-C readout.
+//
+// Signal chain: J2 (F+, S+, S-, F-) -> RC input filter -> ADS124S08 AIN0..AIN2.
+// IDAC1 sources 1 mA out of AIN0 into F+, through the PT100 and F- into R_BIAS (1k) to AGND.
+// R_BIAS sets the RTD common-mode near 1.1 V, inside the PGA input range. REF5025 is the
+// absolute reference (REFP0/REFN0); the measurement is not ratiometric to the IDAC.
+// Grounds: AGND (analog) and DGND (digital) are joined at exactly one point, R_TIE, next to U1.
+board "rtd_afe" {
+  layers 4
+  manufacturer "jlcpcb"
+  revision "A"
+
+  netclass "USB" {
+    trace_width 0.242mm
+    clearance 0.127mm
+  }
+
+  power "VBUS" 5v
+  power "+3V3" 3.3v
+  power "+3V3A" 3.3v
+
+  component H1: mounting_hole "mounting_hole_m2_5"
+  component H2: mounting_hole "mounting_hole_m2_5"
+  component H3: mounting_hole "mounting_hole_m2_5"
+  component H4: mounting_hole "mounting_hole_m2_5"
+
+  group "RTD INPUT" color "#c2410c" {
+    component J2: connector "header_1x4" value "PT100"
+    component R_S1: resistor "r_generic_0603" value "1k" tolerance "0.1%"
+    component R_S2: resistor "r_generic_0603" value "1k" tolerance "0.1%"
+    component C_D: capacitor "c_generic_0603" value "100nF" dielectric "C0G" voltage "50V"
+    component C_CM1: capacitor "c_generic_0603" value "10nF" dielectric "C0G" voltage "50V"
+    component C_CM2: capacitor "c_generic_0603" value "10nF" dielectric "C0G" voltage "50V"
+    component C_F: capacitor "c_generic_0603" value "10nF" dielectric "C0G" voltage "50V"
+    component R_BIAS: resistor "r_generic_0603" value "1k" tolerance "0.1%"
+    notes "" {
+      "J2 pin 1 F+, pin 2 S+, pin 3 S-, pin 4 F-. PT100 4-wire; force pair carries the 1 mA IDAC current, sense pair reads the RTD."
+      "R_S1/R_S2 1k with C_D 100nF across the pair and C_CM1/C_CM2 10nF to AGND: differential corner 1/(2pi*2k*110nF) about 720 Hz, common-mode corner about 16 kHz."
+      "C_D is 10x each C_CM so a capacitor mismatch turns into little differential error (TI input filter rule). C0G so the filter does not move the reading."
+      "C_F 10nF decouples the force node F+ (IDAC output). R_BIAS 1k returns the IDAC current to AGND and lifts the RTD common-mode to about 1.1 V."
+    }
+  }
+
+  group "ADC" color "#0072b2" {
+    component U1: ic "ads124s08"
+    component C_AV1: capacitor "c_generic_0603" value "330nF" dielectric "X7R" voltage "10V"
+    component C_AV2: capacitor "c_generic_0805" value "10uF" dielectric "X7R" voltage "10V"
+    component C_DV: capacitor "c_generic_0603" value "100nF" dielectric "X7R" voltage "10V"
+    component C_IO: capacitor "c_generic_0603" value "100nF" dielectric "X7R" voltage "10V"
+    component C_RO: capacitor "c_generic_0603" value "1uF" dielectric "X7R" voltage "10V"
+    component R_RST: resistor "r_generic_0603" value "10k"
+    notes "" {
+      "AVDD from +3V3A (ferrite-filtered), DVDD and IOVDD from +3V3. AVSS, AVSS_SW, REFN0, REFCOM, the exposed pad and DGND (pin 14) are on AGND: the ADC returns its own digital supply current to AGND and sits at the single tie. CLK is tied to that ground to use the internal oscillator."
+      "REFOUT has 1 uF to AGND for the unused internal reference. RESET has a 10k pull-up to +3V3 and is also driven by the MCU."
+      "AINCOM, AIN3..AIN11, REFP1/REFN1, GPIOs and pin 25 are left open."
+    }
+  }
+
+  group "REFERENCE" color "#7c3aed" {
+    component U3: ic "ref5025"
+    component C_RI: capacitor "c_generic_0603" value "1uF" dielectric "X7R" voltage "10V"
+    component C_RV: capacitor "c_generic_0603" value "1uF" dielectric "X7R" voltage "10V"
+    notes "" {
+      "REF5025 2.5 V, VIN from +3V3A, VOUT straight to REFP0 with 1 uF at the reference pin, GND to AGND. TEMP, TRIM/NR, DNC and NC pins are open."
+    }
+  }
+
+  group "ANALOG SUPPLY" color "#0a7d4a" {
+    component L2: inductor "ferrite_bead_0603" value "600R@100MHz"
+    notes "" {
+      "L2 filters +3V3 into the +3V3A analog rail for the ADC and the reference. Its DC resistance and the ADC/REF supply current are not computed here."
+    }
+  }
+
+  group "MCU" color "#b45309" {
+    component U2: mcu "rp2350"
+    component U4: ic "w25q128_flash"
+    component Y1: crystal "ecs_120_20_33_tr" value "12MHz"
+    component C_X1: capacitor "c_generic_0603" value "33pF" dielectric "C0G" voltage "50V"
+    component C_X2: capacitor "c_generic_0603" value "33pF" dielectric "C0G" voltage "50V"
+    component R_X: resistor "r_generic_0603" value "1k"
+    component R_RUN: resistor "r_generic_0603" value "10k"
+    component L1: inductor "l_generic_0805" value "3.3uH"
+    component R_AV: resistor "r_generic_0603" value "33"
+    component C_AVF: capacitor "c_generic_0603" value "4.7uF" dielectric "X7R" voltage "10V"
+    component C_IO1: capacitor "c_generic_0603" value "100nF" dielectric "X7R" voltage "10V"
+    component C_IO2: capacitor "c_generic_0603" value "100nF" dielectric "X7R" voltage "10V"
+    component C_IO3: capacitor "c_generic_0603" value "100nF" dielectric "X7R" voltage "10V"
+    component C_IO4: capacitor "c_generic_0603" value "100nF" dielectric "X7R" voltage "10V"
+    component C_DV1: capacitor "c_generic_0603" value "100nF" dielectric "X7R" voltage "10V"
+    component C_DV2: capacitor "c_generic_0603" value "100nF" dielectric "X7R" voltage "10V"
+    component C_DVB: capacitor "c_generic_0805" value "4.7uF" dielectric "X7R" voltage "10V"
+    component C_VI: capacitor "c_generic_0603" value "4.7uF" dielectric "X7R" voltage "10V"
+    component C_FL: capacitor "c_generic_0603" value "100nF" dielectric "X7R" voltage "10V"
+    component J3: connector "header_1x3" value "SWD"
+    notes "" {
+      "RP2350 runs from its on-chip regulator: VREG_VIN on +3V3, VREG_LX through L1 3.3uH to the 1.1 V DVDD net, VREG_FB on that net."
+      "VREG_AVDD and ADC_AVDD are fed from +3V3 through R_AV 33R and C_AVF 4.7uF."
+      "U4 W25Q128 on the QSPI pins is the boot flash. Y1 ECS-120-20-33-TR 12 MHz, CL 20 pF: 2x 33 pF load caps (33/2 + about 3 pF stray = 19.5 pF), R_X 1k on XOUT."
+      "J3 SWD: pin 1 SWCLK, pin 2 SWDIO, pin 3 DGND. RUN has a 10k pull-up to +3V3."
+    }
+  }
+
+  group "USB-C READOUT" color "#be123c" {
+    component J1: connector "usb_c_receptacle"
+    component R_CC1: resistor "r_generic_0603" value "5.1k"
+    component R_CC2: resistor "r_generic_0603" value "5.1k"
+    component R_DP: resistor "r_generic_0603" value "27"
+    component R_DN: resistor "r_generic_0603" value "27"
+    component D1: diode "esd_usb" value "ESD"
+    component D2: diode "esd_usb" value "ESD"
+    component U5: regulator "lp5907_3v3" value "LDO"
+    component C_L1: capacitor "c_generic_0603" value "2.2uF" dielectric "X7R" voltage "16V"
+    component C_L2: capacitor "c_generic_0603" value "2.2uF" dielectric "X7R" voltage "16V"
+    notes "" {
+      "USB 2.0 device port, VBUS 5 V in. CC1/CC2 5.1k so a host sources 5 V. 27R series on D+/D-, ESD diodes at the connector."
+      "VBUS feeds U5 LP5907-3.3 (250 mA) which makes the +3V3 digital rail. No VBUS fuse or TVS: see QUALIFICATION.md."
+      "The RTD board is a bus-powered USB device: it draws a few tens of mA. No USB-C PD."
+    }
+  }
+
+  group "GROUND TIE" color "#475569" {
+    component R_TIE: resistor "r_generic_0603" value "0R"
+    notes "" {
+      "R_TIE is the one and only AGND-DGND connection, next to U1. Remove it and the two grounds are open."
+    }
+  }
+
+  net "VBUS" {
+    J1.vbus, J1.vbus_b4, J1.vbus_a9, J1.vbus_b9, U5.vin, U5.en, C_L1.p1
+  }
+
+  net "+3V3" {
+    U5.vout, C_L2.p1, L2.p1, R_AV.p1,
+    U1.dvdd, C_DV.p1, U1.iovdd, C_IO.p1, R_RST.p1,
+    U2.iovdd, U2.iovdd2, U2.iovdd3, U2.iovdd4, U2.iovdd5, U2.iovdd6,
+    C_IO1.p1, C_IO2.p1, C_IO3.p1, C_IO4.p1,
+    U2.qspi_iovdd, U2.usb_otp_vdd, U2.vreg_vin, C_VI.p1,
+    U4.vcc, C_FL.p1, R_RUN.p1
+  }
+
+  net "+3V3A" {
+    L2.p2, C_AV2.p1, C_AV1.p1, U1.avdd, U3.vin, C_RI.p1
+  }
+
+  net "+3V3_RP_A" {
+    R_AV.p2, C_AVF.p1, U2.vreg_avdd, U2.adc_avdd
+  }
+
+  net "DVDD_1V1" {
+    L1.p2, U2.dvdd, U2.dvdd2, U2.dvdd3, U2.vreg_fb,
+    C_DV1.p1, C_DV2.p1, C_DVB.p1
+  }
+
+  net "VREG_LX" {
+    U2.vreg_lx, L1.p1
+  }
+
+  net "VREF" {
+    U3.vout, C_RV.p1, U1.refp0
+  }
+
+  net "AGND" {
+    U1.avss, U1.avss_sw, U1.ep, U1.refn0, U1.refcom, C_RO.p2,
+    U1.dgnd, U1.clk, C_DV.p2, C_IO.p2,
+    U3.gnd, C_RI.p2, C_RV.p2,
+    C_AV1.p2, C_AV2.p2,
+    C_CM1.p2, C_CM2.p2, C_F.p2, R_BIAS.p2,
+    R_TIE.p1
+  }
+
+  net "DGND" {
+    R_TIE.p2,
+    U2.gnd, U2.vreg_pgnd,
+    C_IO1.p2, C_IO2.p2, C_IO3.p2, C_IO4.p2,
+    C_DV1.p2, C_DV2.p2, C_DVB.p2, C_VI.p2, C_AVF.p2,
+    C_X1.p2, C_X2.p2, Y1.gnd_2, Y1.gnd_4, U4.gnd, C_FL.p2,
+    J3.p3, U5.gnd, C_L1.p2, C_L2.p2,
+    J1.gnd, J1.gnd_a12, J1.gnd_b1, J1.gnd_b12, J1.shld,
+    R_CC1.p2, R_CC2.p2, D1.gnd, D2.gnd
+  }
+
+  // RTD input
+  connect J2.p1 -> U1.ain0 as "RTD_FP"
+  connect J2.p1 -> C_F.p1 as "RTD_FP"
+  connect J2.p2 -> R_S1.p1 as "RTD_SP"
+  connect R_S1.p2 -> U1.ain1 as "AIN1"
+  connect R_S1.p2 -> C_D.p1 as "AIN1"
+  connect R_S1.p2 -> C_CM1.p1 as "AIN1"
+  connect J2.p3 -> R_S2.p1 as "RTD_SN"
+  connect R_S2.p2 -> U1.ain2 as "AIN2"
+  connect R_S2.p2 -> C_D.p2 as "AIN2"
+  connect R_S2.p2 -> C_CM2.p1 as "AIN2"
+  connect J2.p4 -> R_BIAS.p1 as "RTD_FN"
+  connect U1.refout -> C_RO.p1 as "REFOUT"
+
+  // SPI0 on the RP2350 silicon: GPIO0 RX (MISO), GPIO1 CSn, GPIO2 SCK, GPIO3 TX (MOSI).
+  // The registry part lists gp0 as spi_mosi and gp3 as spi_miso, the other way round; the wiring follows the silicon.
+  // SPI and ADC control
+  connect U2.gp3 -> U1.din as "SPI_MOSI"
+  connect U2.gp1 -> U1.cs_n as "SPI_CS"
+  connect U2.gp2 -> U1.sclk as "SPI_SCK"
+  connect U2.gp0 -> U1.dout_drdy as "SPI_MISO"
+  connect U2.gp4 -> U1.drdy_n as "ADC_DRDY"
+  connect U2.gp5 -> U1.start_sync as "ADC_START"
+  connect U2.gp6 -> U1.reset_n as "ADC_RESET_N"
+  connect U1.reset_n -> R_RST.p2 as "ADC_RESET_N"
+
+  // RP2350 support
+  connect U2.xin -> Y1.xtal_a as "XIN"
+  connect Y1.xtal_a -> C_X1.p1 as "XIN"
+  connect U2.xout -> R_X.p1 as "XOUT"
+  connect R_X.p2 -> Y1.xtal_b as "XOUT_R"
+  connect Y1.xtal_b -> C_X2.p1 as "XOUT_R"
+  connect U2.run -> R_RUN.p2 as "RUN"
+  connect U2.swclk -> J3.p1 as "SWCLK"
+  connect U2.swdio -> J3.p2 as "SWDIO"
+  connect U2.qspi_ss -> U4.cs as "QSPI_SS"
+  connect U2.qspi_sclk -> U4.clk as "QSPI_SCLK"
+  connect U2.qspi_sd0 -> U4.io0 as "QSPI_SD0"
+  connect U2.qspi_sd1 -> U4.io1 as "QSPI_SD1"
+  connect U2.qspi_sd2 -> U4.io2 as "QSPI_SD2"
+  connect U2.qspi_sd3 -> U4.io3 as "QSPI_SD3"
+
+  // USB
+  connect J1.cc1 -> R_CC1.p1 as "CC1"
+  connect J1.cc2 -> R_CC2.p1 as "CC2"
+  connect J1.dp -> J1.dp_b6 as "USB_DP_C" class "USB"
+  connect J1.dp -> D1.io as "USB_DP_C"
+  connect J1.dp -> R_DP.p1 as "USB_DP_C"
+  connect R_DP.p2 -> U2.usb_dp as "USB_DP" class "USB"
+  connect J1.dn -> J1.dn_b7 as "USB_DN_C" class "USB"
+  connect J1.dn -> D2.io as "USB_DN_C"
+  connect J1.dn -> R_DN.p1 as "USB_DN_C"
+  connect R_DN.p2 -> U2.usb_dn as "USB_DN" class "USB"
+}
