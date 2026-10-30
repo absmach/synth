@@ -30,9 +30,11 @@ QUALIFICATION.md are closed.
 - L2 600 ohm at 100 MHz ferrite bead isolates +3V3A for U1 and U3.
 - Four M2.5 non-plated mounting holes at (6, 4), (49, 4), (6, 40) and
   (49, 40) mm.
-- 50.1 x 44.1 mm, 4 layers, 1.6 mm. Board source `rtd_afe.synth`, placement
-  sidecar `rtd_afe.placement.layout.toml` (board millimetres). The schematic has
-  no sidecar; the compiler lays it out by group.
+- 50.1 x 44.1 mm bounding box, 4 layers, 1.6 mm. The top-left notch
+  (x 10..26.4 mm, y 0..20 mm) is cut in `check.sh`; the remaining area is
+  1880 mm². Board source `rtd_afe.synth`, placement sidecar
+  `rtd_afe.placement.layout.toml` (board millimetres). The schematic has no
+  sidecar; the compiler lays it out by group.
 
 ## Signal chain
 
@@ -82,13 +84,16 @@ worktree this directory was exported from. The route is not reviewed.
 - Analog left, digital right. The analog block is J2 and the RC filter at the
   bottom-left, U1 at (20, 29) mm, U3 at (11, 29) mm and L2 at (30.5, 24.5) mm.
   The digital core is U2 at (38, 27) mm, U4 at (33, 18.8) mm and Y1 at
-  (37, 36.5) mm. J1 is at (39.5, 6.0) mm on the top edge, U5 at (47.5, 17) mm
-  and J3 at (41.5, 41.5) mm on the bottom edge.
+  (37, 36.5) mm. U5 is at (47.5, 17) mm and J3 at (41.5, 41.5) mm on the
+  bottom edge.
 - J2 and J3 are both at y = 41.5 mm; their bodies end 0.8 mm from the bottom
-  edge. J1 is at (39.5, 6.0) mm on the top edge, 12 mm right of the board
-  centre. Centering J1 was attempted; every clean-route candidate left an
-  AGND or DGND pour sliver at U2's 0.4 mm pad row that the island repair could
-  not stitch, so the committed board keeps J1 over the digital cluster.
+  edge. J1 is at (39.5, 6.0) mm on the main top edge, which runs x 26.4..52.6
+  mm after the notch, so J1 is centred on that edge. The left tab keeps H1 and
+  the top-left ground fence via.
+- The notch is a post-export cut in `check.sh` because SynthSpec has no
+  non-rectangular outline primitive. The Gerbers and drill files are
+  re-exported from the cut board; a plain `synth export-kicad` still produces
+  the rectangle.
 - The RTD/input nets and VREF are on F.Cu only, with no layer change. QSPI also
   stays on F.Cu. The SPI, SWD, USB_DN and XIN nets change layers; see the SI
   warnings below.
@@ -103,7 +108,7 @@ worktree this directory was exported from. The route is not reviewed.
   The flagged nets are SPI, SWD, USB_DN, XIN, RUN, ADC_DRDY and REFOUT; no RTD,
   AIN or VREF net is flagged. See QUALIFICATION.md.
 - Silkscreen: 0 DRC warnings. U1 has a hard label override at (24, 34.5) mm;
-  24 passives and both TVS diodes have their reference label hidden because the
+  26 passives and both TVS diodes have their reference label hidden because the
   compact refdes field has no clear spot. Their refdes remain in the BOM, PnP and
   schematic; the full list is in QUALIFICATION.md.
 
@@ -150,6 +155,8 @@ netlist/PCB parity is clean.
   (`kicad-cli pcb render` and `kicad-cli sch export pdf`).
 - `rtd_afe.synth`, `rtd_afe.placement.layout.toml`: the design sources.
 - `check.sh`: the acceptance check above.
+- `cut_outline.py`: the post-export notch cut that `check.sh` applies before
+  the DRC and fab export.
 - `SHA256SUMS`: hashes of the artifacts.
 
 The reports are as the commands produce them, except that the absolute paths of
@@ -179,16 +186,23 @@ fabrication approval or a component review.
   register map, USB descriptors and calibration are all unwritten/untested.
 - Synth has no free-text silkscreen primitive, so the board name and revision
   are not on the copper. Header pin functions are not labelled on the silk.
-- The board is 50.1 x 44.1 mm, compacted from the earlier 63.1 x 51.1 mm. The
-  arranged floorplan groups the analog chain at the left, the MCU/flash/crystal
-  and USB at the right, and puts the USB-C, PT100 and SWD connectors on the
-  edges. It is one successful FreeRouting run, not a proven densest layout.
-- 24 passives and D1/D2 have their reference label hidden because the refdes
+- The board is 50.1 x 44.1 mm (1880 mm²) with a 16.4 x 20 mm notch cut from
+  the empty top-left, compacted from the earlier 63.1 x 51.1 mm. The arranged
+  floorplan groups the analog chain at the left, the MCU/flash/crystal and USB
+  at the right, and puts them on the edges. It is one successful FreeRouting
+  run, not a proven densest layout.
+- The notch is a post-export cut in `check.sh`: SynthSpec has no
+  non-rectangular outline primitive, so the `.synth` source alone still
+  describes a rectangle. A source-level outline/cutout primitive should replace
+  this workaround.
+- 26 passives and D1/D2 have their reference label hidden because the refdes
   field has no clear spot in the compact layout. The refdes are still in the
   BOM, PnP and schematic; the full list is in QUALIFICATION.md.
-- The mounting holes are 3.5 mm from the left edge, 3.6 mm from the right (1.2
-  to 1.3 mm of material around a 2.5 mm hole), 4.0 mm from the top and 4.1 mm
-  from the bottom. The remaining asymmetry is a mechanical check item.
+- The mounting holes are 3.5 mm from the left edge, 3.6 mm from the right
+  (1.2 to 1.3 mm of material around a 2.5 mm hole), 4.0 mm from the top and
+  4.1 mm from the bottom. H1 sits on the 7.5 mm left tab, 1.25 mm from the
+  notch edge. The enclosure, tab strength and screw-head clearance are
+  mechanical check items.
 - The KiCad ERC library-name warnings remain (see above). They do not affect
   the netlist.
 

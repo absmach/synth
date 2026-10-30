@@ -10,6 +10,14 @@ rm -rf "$OUT" "$B/reports" "$B/images"
 $SYNTH export-kicad "$B/rtd_afe.synth" --out "$OUT" --router free-routing \
   --allow-unverified-parts --validate-erc --pnp --gerbers --drill >/dev/null
 PCB=$OUT/rtd_afe.kicad_pcb
+# Synth has no non-rectangular outline primitive. Cut the empty top-left
+# corner, then re-export the fabrication files from the cut board so the
+# Gerbers and drill match the delivered Edge.Cuts.
+python3 -I "$B/cut_outline.py" "$PCB" 10.0 26.4 20.0
+kicad-cli pcb export gerbers --output "$OUT/gerbers" --no-protel-ext \
+  --subtract-soldermask "$PCB" >/dev/null
+kicad-cli pcb export drill --output "$OUT/drill" --format excellon \
+  --excellon-separate-th --generate-map --map-format pdf "$PCB" >/dev/null
 mkdir -p "$B/reports" "$B/images"
 mv "$OUT"/release.json "$OUT"/rtd_afe.routing.json "$OUT"/rtd_afe.connectivity.json "$B/reports/"
 rm -f "$OUT"/rtd_afe.freerouting.* "$OUT"/rtd_afe.synth.kicad_* "$OUT"/rtd_afe.drc.json

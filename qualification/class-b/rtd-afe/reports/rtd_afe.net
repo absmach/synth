@@ -2,7 +2,7 @@
 	(version "E")
 	(design
 		(source "qualification/class-b/rtd-afe/kicad/rtd_afe.kicad_sch")
-		(date "2026-10-30T15:50:18")
+		(date "2026-10-30T16:33:29")
 		(tool "Eeschema 10.0.7-10.0.7~ubuntu24.04.1")
 		(sheet
 			(number "1")
@@ -5600,7 +5600,7 @@
 		(net
 			(code "1")
 			(name "+3V3")
-			(class "Default")
+			(class "Power")
 			(node
 				(ref "C_DV")
 				(pin "1")
@@ -5749,7 +5749,7 @@
 		(net
 			(code "2")
 			(name "+3V3A")
-			(class "Default")
+			(class "Power")
 			(node
 				(ref "C_AV1")
 				(pin "1")
@@ -6000,7 +6000,7 @@
 		(net
 			(code "15")
 			(name "AGND")
-			(class "Default")
+			(class "Power")
 			(node
 				(ref "C_AV1")
 				(pin "2")
@@ -6165,7 +6165,7 @@
 		(net
 			(code "18")
 			(name "DGND")
-			(class "Default")
+			(class "Power")
 			(node
 				(ref "C_AVF")
 				(pin "2")
@@ -6613,7 +6613,7 @@
 		(net
 			(code "33")
 			(name "USB_DN")
-			(class "Default")
+			(class "USB")
 			(node
 				(ref "R_DN")
 				(pin "2")
@@ -6629,7 +6629,7 @@
 		(net
 			(code "34")
 			(name "USB_DN_C")
-			(class "Default")
+			(class "USB")
 			(node
 				(ref "D2")
 				(pin "1")
@@ -6657,7 +6657,7 @@
 		(net
 			(code "35")
 			(name "USB_DP")
-			(class "Default")
+			(class "USB")
 			(node
 				(ref "R_DP")
 				(pin "2")
@@ -6673,7 +6673,7 @@
 		(net
 			(code "36")
 			(name "USB_DP_C")
-			(class "Default")
+			(class "USB")
 			(node
 				(ref "D1")
 				(pin "1")
@@ -6701,7 +6701,7 @@
 		(net
 			(code "37")
 			(name "VBUS")
-			(class "Default")
+			(class "Power")
 			(node
 				(ref "C_L1")
 				(pin "1")
