@@ -38,7 +38,7 @@ required = false
 [[pins]]
 name = "v3"
 number = "4"
-electrical_type = "passive"
+electrical_type = "power_output"
 capabilities = []
 required = true
 

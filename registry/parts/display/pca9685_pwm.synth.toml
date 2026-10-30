@@ -14,30 +14,154 @@ min_voltage_v = 1.8
 max_voltage_v = 5.0
 max_current_ma = 100.0
 
-[[pins]]
-name = "vdd"
-number = "1"
-electrical_type = "power_input"
-required = true
+# Pin names and numbers come from the stock KiCad symbol this part names,
+# cross-checked against the footprint it names. The previous map had four
+# pins -- vdd, gnd, sda, scl -- on pads 1-4, which on this package are
+# general-purpose pins, so nothing it declared was where it said it was.
 
 [[pins]]
-name = "gnd"
+name = "a0"
+number = "1"
+electrical_type = "input"
+
+[[pins]]
+name = "a1"
 number = "2"
+electrical_type = "input"
+
+[[pins]]
+name = "a2"
+number = "3"
+electrical_type = "input"
+
+[[pins]]
+name = "a3"
+number = "4"
+electrical_type = "input"
+
+[[pins]]
+name = "a4"
+number = "5"
+electrical_type = "input"
+
+[[pins]]
+name = "led0"
+number = "6"
+electrical_type = "output"
+
+[[pins]]
+name = "led1"
+number = "7"
+electrical_type = "output"
+
+[[pins]]
+name = "led2"
+number = "8"
+electrical_type = "output"
+
+[[pins]]
+name = "led3"
+number = "9"
+electrical_type = "output"
+
+[[pins]]
+name = "led4"
+number = "10"
+electrical_type = "output"
+
+[[pins]]
+name = "led5"
+number = "11"
+electrical_type = "output"
+
+[[pins]]
+name = "led6"
+number = "12"
+electrical_type = "output"
+
+[[pins]]
+name = "led7"
+number = "13"
+electrical_type = "output"
+
+[[pins]]
+name = "vss"
+number = "14"
 electrical_type = "power_input"
+
+[[pins]]
+name = "led8"
+number = "15"
+electrical_type = "output"
+
+[[pins]]
+name = "led9"
+number = "16"
+electrical_type = "output"
+
+[[pins]]
+name = "led10"
+number = "17"
+electrical_type = "output"
+
+[[pins]]
+name = "led11"
+number = "18"
+electrical_type = "output"
+
+[[pins]]
+name = "led12"
+number = "19"
+electrical_type = "output"
+
+[[pins]]
+name = "led13"
+number = "20"
+electrical_type = "output"
+
+[[pins]]
+name = "led14"
+number = "21"
+electrical_type = "output"
+
+[[pins]]
+name = "led15"
+number = "22"
+electrical_type = "output"
+
+[[pins]]
+name = "oe"
+number = "23"
+electrical_type = "input"
+
+[[pins]]
+name = "a5"
+number = "24"
+electrical_type = "input"
+
+[[pins]]
+name = "extclk"
+number = "25"
+electrical_type = "input"
+
+[[pins]]
+name = "scl"
+number = "26"
+electrical_type = "input"
+capabilities = ["i2c_scl"]
 required = true
 
 [[pins]]
 name = "sda"
-number = "3"
+number = "27"
 electrical_type = "bidirectional"
 capabilities = ["i2c_sda"]
 required = true
 
 [[pins]]
-name = "scl"
-number = "4"
-electrical_type = "bidirectional"
-capabilities = ["i2c_scl"]
+name = "vdd"
+number = "28"
+electrical_type = "power_input"
 required = true
 
 [[required_decoupling]]
