@@ -375,7 +375,7 @@ fn finalize(
                 trimmed,
                 widened,
             }) => eprintln!(
-                "note: moved {moved} reference label(s) off vias and pads; {hidden} hidden because no clear spot was within reach; {trimmed} outline line(s) cut back from vias and pads; {widened} silkscreen stroke(s) widened to 0.15 mm"
+                "note: moved {moved} reference label(s) off vias and pads; {hidden} hidden because no clear spot was within reach; {trimmed} outline line(s) cut back from vias and pads; {widened} silkscreen stroke(s) widened to 0.18 mm"
             ),
             Err(detail) => eprintln!("warning: reference labels were not checked: {detail}"),
         }

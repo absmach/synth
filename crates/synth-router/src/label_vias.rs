@@ -35,8 +35,9 @@ use crate::pcb_read::{mm_to_nm, PcbBoard, Point, NM_PER_MM};
 const CHAR_WIDTH_MM: f64 = 0.9;
 /// Height of a line of label text, with room for the stroke.
 const TEXT_HEIGHT_MM: f64 = 1.3;
-/// Silkscreen keeps this far from copper it must stay off.
-const CLEARANCE_MM: f64 = 0.15;
+/// Silkscreen keeps this far from copper it must stay off: JLCPCB's 0.15 mm
+/// minimum plus 0.1 mm for the text strokes and pad shapes a box check rounds.
+const CLEARANCE_MM: f64 = 0.25;
 /// The most silkscreen segments a label may cross when no spot is clear of them.
 const MAX_CROSSED_SEGMENTS: usize = 4;
 /// A label keeps this far from silkscreen it should not cross.
@@ -51,8 +52,9 @@ const SAMPLE_MM: f64 = 0.3;
 
 /// The shortest piece of an outline line worth keeping after a cut.
 const MIN_PIECE_MM: f64 = 0.25;
-/// The thinnest silkscreen stroke or text a fabricator prints (JLCPCB lists 0.15 mm).
-const MIN_SILK_WIDTH_MM: f64 = 0.15;
+/// The thinnest silkscreen stroke or text drawn: JLCPCB prints 0.15 mm and its
+/// DFM check warns at exactly that, so strokes go a little wider.
+const MIN_SILK_WIDTH_MM: f64 = 0.18;
 /// Spacing of the points an outline line is checked at against pads.
 const PAD_SAMPLE_MM: f64 = 0.04;
 
@@ -1155,7 +1157,7 @@ mod tests {
         let text = outlined_at(2.0, "");
         let (out, moves) = run(&text);
         assert_eq!(moves.widened, 1);
-        assert!(out.contains("(width 0.15)"), "{out}");
+        assert!(out.contains("(width 0.18)"), "{out}");
         assert!(!out.contains("(width 0.12)"));
         // Already wide enough: untouched, and idempotent.
         let (again, moves) = run(&out);
@@ -1171,7 +1173,7 @@ mod tests {
         );
         let (out, moves) = run(&text);
         assert_eq!(moves.widened, 1);
-        assert!(out.contains("(thickness 0.15)"), "{out}");
+        assert!(out.contains("(thickness 0.18)"), "{out}");
     }
 
     #[test]
