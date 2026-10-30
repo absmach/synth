@@ -1,0 +1,88 @@
+refdes,value,kind,description,kicad_symbol,kicad_footprint,lcsc_pn,mpn
+C1,10uF,capacitor,"Generic 0805 MLCC, X7R/X5R, any value",Device:C,Capacitor_SMD:C_0805_2012Metric,,
+C10,100nF,capacitor,"Generic 0603 MLCC, X7R/X5R, any value",Device:C,Capacitor_SMD:C_0603_1608Metric,,
+C11,100nF,capacitor,"Generic 0603 MLCC, X7R/X5R, any value",Device:C,Capacitor_SMD:C_0603_1608Metric,,
+C12,100nF,capacitor,"Generic 0603 MLCC, X7R/X5R, any value",Device:C,Capacitor_SMD:C_0603_1608Metric,,
+C13,4.7uF,capacitor,"Generic 0603 MLCC, X7R/X5R, any value",Device:C,Capacitor_SMD:C_0603_1608Metric,,
+C14,100nF,capacitor,"Generic 0603 MLCC, X7R/X5R, any value",Device:C,Capacitor_SMD:C_0603_1608Metric,,
+C2,10uF,capacitor,"Generic 0805 MLCC, X7R/X5R, any value",Device:C,Capacitor_SMD:C_0805_2012Metric,,
+C3,47uF,capacitor,"47µF 16V tantalum capacitor, polarised, 3528 case",Device:C_Polarized,Capacitor_Tantalum_SMD:CP_EIA-3528-21_Kemet-B,,
+C4,10uF,capacitor,"Generic 0805 MLCC, X7R/X5R, any value",Device:C,Capacitor_SMD:C_0805_2012Metric,,
+C5,100nF,capacitor,"Generic 0603 MLCC, X7R/X5R, any value",Device:C,Capacitor_SMD:C_0603_1608Metric,,
+C6,100nF,capacitor,"Generic 0603 MLCC, X7R/X5R, any value",Device:C,Capacitor_SMD:C_0603_1608Metric,,
+C7,4.7uF,capacitor,"Generic 0603 MLCC, X7R/X5R, any value",Device:C,Capacitor_SMD:C_0603_1608Metric,,
+C8,100nF,capacitor,"Generic 0603 MLCC, X7R/X5R, any value",Device:C,Capacitor_SMD:C_0603_1608Metric,,
+C9,100nF,capacitor,"Generic 0603 MLCC, X7R/X5R, any value",Device:C,Capacitor_SMD:C_0603_1608Metric,,
+D1,1N5819,diode,"Generic Schottky diode (SS14-class), low forward voltage",Device:D_Schottky,Diode_SMD:D_SOD-123,C8224,1N5819
+D10,PRTR5V0U2X,diode,"Nexperia PRTR5V0U2X ultra low capacitance (1 pF) 2-line rail-to-rail ESD protection for USB 2.0 data lines, SOT143B",Power_Protection:PRTR5V0U2X,Package_TO_SOT_SMD:SOT-143,,PRTR5V0U2X
+D11,PRTR5V0U2X,diode,"Nexperia PRTR5V0U2X ultra low capacitance (1 pF) 2-line rail-to-rail ESD protection for USB 2.0 data lines, SOT143B",Power_Protection:PRTR5V0U2X,Package_TO_SOT_SMD:SOT-143,,PRTR5V0U2X
+D12,PRTR5V0U2X,diode,"Nexperia PRTR5V0U2X ultra low capacitance (1 pF) 2-line rail-to-rail ESD protection for USB 2.0 data lines, SOT143B",Power_Protection:PRTR5V0U2X,Package_TO_SOT_SMD:SOT-143,,PRTR5V0U2X
+D13,PRTR5V0U2X,diode,"Nexperia PRTR5V0U2X ultra low capacitance (1 pF) 2-line rail-to-rail ESD protection for USB 2.0 data lines, SOT143B",Power_Protection:PRTR5V0U2X,Package_TO_SOT_SMD:SOT-143,,PRTR5V0U2X
+D14,1N5819,diode,"Generic Schottky diode (SS14-class), low forward voltage",Device:D_Schottky,Diode_SMD:D_SOD-123,C8224,1N5819
+D15,GREEN,diode,"Green LED, 0603 package, ~2.2V Vf",Device:LED,LED_SMD:LED_0603_1608Metric,C72043,0603-GREEN
+D16,AMBER,diode,"Amber surface-mount LED, 0603",Device:LED,LED_SMD:LED_0603_1608Metric,,
+D17,RED,diode,"Red LED, 0603 package, ~2.0V Vf",Device:LED,LED_SMD:LED_0603_1608Metric,C2286,0603-RED
+D18,GREEN,diode,"Lite-On LTST-C190KGKT green AlInGaP LED, 0603, Vf 1.9 to 2.4V at 20mA",Device:LED,LED_SMD:LED_0603_1608Metric,,LTST-C190KGKT
+D2,1N5819,diode,"Generic Schottky diode (SS14-class), low forward voltage",Device:D_Schottky,Diode_SMD:D_SOD-123,C8224,1N5819
+D3,PTVS6V0S1UR,diode,"Nexperia PTVS6V0S1UR 400 W unidirectional TVS, 6.0 V standoff, SOD123W, for VBUS and CC",Device:D_Zener,Diode_SMD:Nexperia_CFP3_SOD-123W,,PTVS6V0S1UR
+D4,PTVS6V0S1UR,diode,"Nexperia PTVS6V0S1UR 400 W unidirectional TVS, 6.0 V standoff, SOD123W, for VBUS and CC",Device:D_Zener,Diode_SMD:Nexperia_CFP3_SOD-123W,,PTVS6V0S1UR
+D5,PRTR5V0U2X,diode,"Nexperia PRTR5V0U2X ultra low capacitance (1 pF) 2-line rail-to-rail ESD protection for USB 2.0 data lines, SOT143B",Power_Protection:PRTR5V0U2X,Package_TO_SOT_SMD:SOT-143,,PRTR5V0U2X
+D6,PRTR5V0U2X,diode,"Nexperia PRTR5V0U2X ultra low capacitance (1 pF) 2-line rail-to-rail ESD protection for USB 2.0 data lines, SOT143B",Power_Protection:PRTR5V0U2X,Package_TO_SOT_SMD:SOT-143,,PRTR5V0U2X
+D7,PRTR5V0U2X,diode,"Nexperia PRTR5V0U2X ultra low capacitance (1 pF) 2-line rail-to-rail ESD protection for USB 2.0 data lines, SOT143B",Power_Protection:PRTR5V0U2X,Package_TO_SOT_SMD:SOT-143,,PRTR5V0U2X
+D8,PRTR5V0U2X,diode,"Nexperia PRTR5V0U2X ultra low capacitance (1 pF) 2-line rail-to-rail ESD protection for USB 2.0 data lines, SOT143B",Power_Protection:PRTR5V0U2X,Package_TO_SOT_SMD:SOT-143,,PRTR5V0U2X
+D9,PRTR5V0U2X,diode,"Nexperia PRTR5V0U2X ultra low capacitance (1 pF) 2-line rail-to-rail ESD protection for USB 2.0 data lines, SOT143B",Power_Protection:PRTR5V0U2X,Package_TO_SOT_SMD:SOT-143,,PRTR5V0U2X
+F1,0.5A hold,fuse,"Resettable polyfuse (PPTC), 2-pin",Device:Polyfuse,Fuse:Fuse_Bourns_MF-RG300,,
+F2,0.5A hold,fuse,"Resettable polyfuse (PPTC), 2-pin",Device:Polyfuse,Fuse:Fuse_Bourns_MF-RG300,,
+H1,(no value),mounting_hole,M2.5 non-plated mounting hole (NPTH) for a board corner,Mechanical:MountingHole,MountingHole:MountingHole_2.5mm,,
+H2,(no value),mounting_hole,M2.5 non-plated mounting hole (NPTH) for a board corner,Mechanical:MountingHole,MountingHole:MountingHole_2.5mm,,
+H3,(no value),mounting_hole,M2.5 non-plated mounting hole (NPTH) for a board corner,Mechanical:MountingHole,MountingHole:MountingHole_2.5mm,,
+H4,(no value),mounting_hole,M2.5 non-plated mounting hole (NPTH) for a board corner,Mechanical:MountingHole,MountingHole:MountingHole_2.5mm,,
+J1,JST S2B-XH-A-1,connector,"JST XH-series 2-pin wire-to-board connector, 2.0mm pitch",Connector_Generic:Conn_01x02,Connector_JST:JST_XH_S2B-XH-A-1_1x02_P2.50mm_Horizontal,,
+J2,TYPE-C-31-M-12,connector,"USB-C receptacle, 24-pin SMD. Modelled here with primary and mirrored power/ground/data pins for full pad coverage.",Connector:USB_C_Receptacle,Connector_USB:USB_C_Receptacle_HRO_TYPE-C-31-M-12,C165948,TYPE-C-31-M-12
+J3,JST S4B-PH-K-S,connector,"JST PH-series 4-pin wire-to-board connector, 2.0mm pitch",Connector_Generic:Conn_01x04,Connector_JST:JST_PH_S4B-PH-K_1x04_P2.00mm_Horizontal,,
+J4,SWD,connector,"1x5 through-hole pin header, 2.54 mm pitch (SWD)",Connector_Generic:Conn_01x05,Connector_PinHeader_2.54mm:PinHeader_1x05_P2.54mm_Vertical,,
+J5,GPIO,connector,"1x12 through-hole pin header, 2.54 mm pitch (GPIO)",Connector_Generic:Conn_01x12,Connector_PinHeader_2.54mm:PinHeader_1x12_P2.54mm_Vertical,,
+Q1,IRLML6244,transistor,"IR IRLML6244 logic-level N-channel MOSFET, SOT-23",Transistor_FET:IRLML6244,Package_TO_SOT_SMD:SOT-23,,
+R1,5.1k,resistor,"Generic 0603 thick-film resistor, any value",Device:R_US,Resistor_SMD:R_0603_1608Metric,,
+R10,4.7k,resistor,"Generic 0603 thick-film resistor, any value",Device:R_US,Resistor_SMD:R_0603_1608Metric,,
+R11,330,resistor,"Generic 0603 thick-film resistor, any value",Device:R_US,Resistor_SMD:R_0603_1608Metric,,
+R12,1k,resistor,"Generic 0603 thick-film resistor, any value",Device:R_US,Resistor_SMD:R_0603_1608Metric,,
+R13,100,resistor,"Generic 0603 thick-film resistor, any value",Device:R_US,Resistor_SMD:R_0603_1608Metric,,
+R14,100,resistor,"Generic 0603 thick-film resistor, any value",Device:R_US,Resistor_SMD:R_0603_1608Metric,,
+R15,330,resistor,"Generic 0603 thick-film resistor, any value",Device:R_US,Resistor_SMD:R_0603_1608Metric,,
+R16,330,resistor,"Generic 0603 thick-film resistor, any value",Device:R_US,Resistor_SMD:R_0603_1608Metric,,
+R17,330,resistor,"Generic 0603 thick-film resistor, any value",Device:R_US,Resistor_SMD:R_0603_1608Metric,,
+R18,330,resistor,"Generic 0603 thick-film resistor, any value",Device:R_US,Resistor_SMD:R_0603_1608Metric,,
+R19,330,resistor,"Generic 0603 thick-film resistor, any value",Device:R_US,Resistor_SMD:R_0603_1608Metric,,
+R2,5.1k,resistor,"Generic 0603 thick-film resistor, any value",Device:R_US,Resistor_SMD:R_0603_1608Metric,,
+R20,330,resistor,"Generic 0603 thick-film resistor, any value",Device:R_US,Resistor_SMD:R_0603_1608Metric,,
+R21,330,resistor,"Generic 0603 thick-film resistor, any value",Device:R_US,Resistor_SMD:R_0603_1608Metric,,
+R22,330,resistor,"Generic 0603 thick-film resistor, any value",Device:R_US,Resistor_SMD:R_0603_1608Metric,,
+R23,100,resistor,"Generic 0805 thick-film resistor, any value",Device:R_US,Resistor_SMD:R_0805_2012Metric,,
+R24,680,resistor,"Generic 0603 thick-film resistor, any value",Device:R_US,Resistor_SMD:R_0603_1608Metric,,
+R25,680,resistor,"Generic 0603 thick-film resistor, any value",Device:R_US,Resistor_SMD:R_0603_1608Metric,,
+R26,1k,resistor,"Generic 0603 thick-film resistor, any value",Device:R_US,Resistor_SMD:R_0603_1608Metric,,
+R27,1k,resistor,"Generic 0603 thick-film resistor, any value",Device:R_US,Resistor_SMD:R_0603_1608Metric,,
+R28,10k,resistor,"Generic 0603 thick-film resistor, any value",Device:R_US,Resistor_SMD:R_0603_1608Metric,,
+R3,10k,resistor,"Generic 0603 thick-film resistor, any value",Device:R_US,Resistor_SMD:R_0603_1608Metric,,
+R4,1k,resistor,"Generic 0603 thick-film resistor, any value",Device:R_US,Resistor_SMD:R_0603_1608Metric,,
+R5,100k,resistor,"Generic 0603 thick-film resistor, any value",Device:R_US,Resistor_SMD:R_0603_1608Metric,,
+R6,10k,resistor,"Generic 0603 thick-film resistor, any value",Device:R_US,Resistor_SMD:R_0603_1608Metric,,
+R7,1k,resistor,"Generic 0603 thick-film resistor, any value",Device:R_US,Resistor_SMD:R_0603_1608Metric,,
+R8,100k,resistor,"Generic 0603 thick-film resistor, any value",Device:R_US,Resistor_SMD:R_0603_1608Metric,,
+R9,4.7k,resistor,"Generic 0603 thick-film resistor, any value",Device:R_US,Resistor_SMD:R_0603_1608Metric,,
+SW1,RESET,switch,Generic SPST tactile button,Switch:SW_Push,Button_Switch_SMD:SW_SPST_PTS645Sx43SMTR92,,
+TP1,+5V_PROT,testpoint,"SMD test point pad, 1.5 mm — probe point for a net",Connector:TestPoint,TestPoint:TestPoint_Pad_D1.5mm,,
+TP2,+3V3,testpoint,"SMD test point pad, 1.5 mm — probe point for a net",Connector:TestPoint,TestPoint:TestPoint_Pad_D1.5mm,,
+TP3,GND,testpoint,"SMD test point pad, 1.5 mm — probe point for a net",Connector:TestPoint,TestPoint:TestPoint_Pad_D1.5mm,,
+TP4,I2C_SDA,testpoint,"SMD test point pad, 1.5 mm — probe point for a net",Connector:TestPoint,TestPoint:TestPoint_Pad_D1.5mm,,
+TP5,I2C_SCL,testpoint,"SMD test point pad, 1.5 mm — probe point for a net",Connector:TestPoint,TestPoint:TestPoint_Pad_D1.5mm,,
+TP6,UART_TX,testpoint,"SMD test point pad, 1.5 mm — probe point for a net",Connector:TestPoint,TestPoint:TestPoint_Pad_D1.5mm,,
+TP7,UART_RX,testpoint,"SMD test point pad, 1.5 mm — probe point for a net",Connector:TestPoint,TestPoint:TestPoint_Pad_D1.5mm,,
+TP8,VIN_FUSED,testpoint,"SMD test point pad, 1.5 mm — probe point for a net",Connector:TestPoint,TestPoint:TestPoint_Pad_D1.5mm,,
+TP9,GND,testpoint,"SMD test point pad, 1.5 mm — probe point for a net",Connector:TestPoint,TestPoint:TestPoint_Pad_D1.5mm,,
+U1,AMS1117-3.3,regulator,"AMS1117-3.3 fixed 3.3V LDO regulator, SOT-223 — common JLC stock",Regulator_Linear:AMS1117-3.3,Package_TO_SOT_SMD:SOT-223-3_TabPin2,C6186,AMS1117-3.3
+U2,STM32G030F6P6,mcu,"STMicro STM32G030F6P6 Cortex-M0+ 64 MHz, 32 KB flash, 8 KB RAM, TSSOP-20. Pin map checked against KiCad MCU_ST_STM32G0:STM32G030F6Px",MCU_ST_STM32G0:STM32G030F6Px,Package_SO:TSSOP-20_4.4x6.5mm_P0.65mm,,STM32G030F6P6
+U3,BME680,sensor,"Bosch BME680 T/RH/P/gas sensor, 3.0x3.0 mm 8-pin LGA, I2C/SPI. Pins checked against KiCad Sensor:BME680; footprint is the 3x3 mm 0.8 mm pitch one whose KiCad description cites the BME680 datasheet",Sensor:BME680,Package_LGA:Bosch_LGA-8_3x3mm_P0.8mm_ClockwisePinNumbering,,BME680
+U4,CH340C,ic,"WCH CH340C USB to UART bridge with internal oscillator (no crystal), SOP-16. Pin map checked against KiCad Interface_USB:CH340C",Interface_USB:CH340C,Package_SO:SOIC-16_3.9x9.9mm_P1.27mm,,CH340C
+U5,24LC256-I/SN,memory,"Microchip 24LC256-I/SN 256 Kbit I2C EEPROM, SOIC-8. Pin map checked against KiCad Memory_EEPROM:24LC256",Memory_EEPROM:24LC256,Package_SO:SOIC-8_3.9x4.9mm_P1.27mm,C7611,24LC256-I/SN

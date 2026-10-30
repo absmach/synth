@@ -1,0 +1,14 @@
+{
+  "qualified": false,
+  "meaning": "reports/release.json production_status and release_ready only say the route passed Synth's router and DRC gates. They are not review sign-off.",
+  "gates": {
+    "routing_and_drc": {
+      "passed": true,
+      "evidence": "DRC: 1 unconnected item (zone artifact). 0 unconnected pads. Routed with kicad-routing-tools."
+    },
+    "erc_dispositioned": {
+      "passed": false,
+      "evidence": "66 ERC warnings, 0 errors. See synth_validate output."
+    }
+  }
+}
