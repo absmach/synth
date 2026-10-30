@@ -12,3 +12,4 @@ Protected power entry board with reverse-polarity and over-current protection.
 ## Status
 - Validation: 0 errors, 56 warnings
 - Routing: 2 unconnected nets (+12V_PROT, +3V3) - needs fix
+test
