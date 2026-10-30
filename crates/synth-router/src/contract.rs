@@ -376,9 +376,17 @@ impl RouteRequest {
     /// override is a promise about the panel, not a profile rule, so it is not
     /// reset here. The *capability* is rebuilt from the new profile, because
     /// that one does describe the process being named.
-    pub fn use_profile_floor(&mut self, manufacturer: &str) {
+    ///
+    /// Resolved against the board's copper count, as every other consumer of
+    /// the profile is: a tier the fabricator does not sell at that count
+    /// gives the conservative floor, so a 2-layer board naming `jlc-advanced`
+    /// is not routed and gated against a 0.2 mm drill nobody will drill.
+    pub fn use_profile_floor(&mut self, manufacturer: &str, layers: u32) {
         let allow_via_in_pad = self.policy.allow_via_in_pad;
-        self.policy = FabricationPolicy::from_profile_name(manufacturer);
+        self.policy = FabricationPolicy::from_profile(&synth_drc::ManufacturerProfile::for_layers(
+            manufacturer,
+            layers,
+        ));
         self.policy.allow_via_in_pad = allow_via_in_pad;
         self.profile_name = manufacturer.to_string();
     }
@@ -876,10 +884,31 @@ mod tests {
             RouterEngine::KiCadRoutingTools,
         );
 
-        request.use_profile_floor("jlc-filled-via");
+        request.use_profile_floor("jlc-filled-via", 2);
         assert!(request.policy.process_fills_via_in_pad);
 
-        request.use_profile_floor("jlcpcb");
+        request.use_profile_floor("jlcpcb", 2);
+        assert!(!request.policy.process_fills_via_in_pad);
+    }
+
+    /// The router resolves the tier against the copper count as the exporter
+    /// and DRC do. `jlc-advanced` is not sold on two layers, so a 2-layer
+    /// board naming it is routed and gated against the standard floor, not
+    /// against a 0.2 mm drill and a fill nobody agreed to.
+    #[test]
+    fn the_profile_floor_is_resolved_against_the_layer_count() {
+        let mut request = RouteRequest::new(
+            std::path::Path::new("board.kicad_pcb"),
+            std::path::Path::new("out"),
+            RouterEngine::KiCadRoutingTools,
+        );
+
+        request.use_profile_floor("jlc-advanced", 4);
+        assert_eq!(request.policy.min_drill_diameter_nm, 200_000);
+        assert!(request.policy.process_fills_via_in_pad);
+
+        request.use_profile_floor("jlc-advanced", 2);
+        assert_eq!(request.policy.min_drill_diameter_nm, 300_000);
         assert!(!request.policy.process_fills_via_in_pad);
     }
 
@@ -898,7 +927,7 @@ mod tests {
             .required_processes
             .insert(synth_ir::ProcessRequirement::ViaInPad);
 
-        request.use_profile_floor("jlc-filled-via");
+        request.use_profile_floor("jlc-filled-via", 2);
         let unmet = request.use_board_process_requirements(&board);
 
         assert!(unmet.is_empty());
@@ -917,7 +946,7 @@ mod tests {
             .required_processes
             .insert(synth_ir::ProcessRequirement::ViaInPad);
 
-        request.use_profile_floor("jlcpcb");
+        request.use_profile_floor("jlcpcb", 2);
         let unmet = request.use_board_process_requirements(&board);
 
         assert_eq!(unmet, vec![synth_ir::ProcessRequirement::ViaInPad]);
@@ -943,7 +972,7 @@ mod tests {
 
         // The operator's flag, applied before the floor as the CLI applies it.
         request.policy.allow_via_in_pad = true;
-        request.use_profile_floor("jlcpcb");
+        request.use_profile_floor("jlcpcb", 2);
         let unmet = request.use_board_process_requirements(&board);
 
         assert!(
@@ -969,7 +998,7 @@ mod tests {
         );
 
         request.policy.allow_via_in_pad = true;
-        request.use_profile_floor("jlcpcb");
+        request.use_profile_floor("jlcpcb", 2);
 
         assert!(request.policy.allow_via_in_pad);
         assert!(!request.policy.process_fills_via_in_pad);

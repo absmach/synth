@@ -1091,7 +1091,10 @@ fn placement_score(board: &Board, placement: &synth_place::Placement) -> usize {
 /// The profile of the manufacturer the board declares, resolved as the router
 /// resolves it, so the exported rules and the router work to the same numbers.
 pub(crate) fn manufacturer_profile(board: &Board) -> synth_drc::ManufacturerProfile {
-    synth_drc::ManufacturerProfile::from_name(board.manufacturer.as_deref().unwrap_or_default())
+    synth_drc::ManufacturerProfile::for_layers(
+        board.manufacturer.as_deref().unwrap_or_default(),
+        board.layers,
+    )
 }
 
 /// The project's custom DRC rules (`<board>.kicad_dru`), from the board's
