@@ -237,6 +237,7 @@ pub(crate) const RAIL_CAP_MM: f64 = 12.0;
 /// to rails has no signal neighbour. The nearest part it should stand beside
 /// is returned.
 pub(crate) fn rail_capacitors_far(board: &Board, placement: &Placement) -> Vec<Isolated> {
+    let domains = synth_ir::infer_power_domains(board);
     let centres: HashMap<ComponentId, (f64, f64)> = placement
         .components
         .iter()
@@ -267,7 +268,7 @@ pub(crate) fn rail_capacitors_far(board: &Board, placement: &Placement) -> Vec<I
             .collect();
         let rail = nets
             .iter()
-            .find(|n| crate::repeats::is_rail(board, n) && !is_ground(n));
+            .find(|n| crate::repeats::is_rail(board, &domains, n) && !is_ground(n));
         if nets.len() != 2 || !nets.iter().any(|n| is_ground(n)) {
             continue;
         }
