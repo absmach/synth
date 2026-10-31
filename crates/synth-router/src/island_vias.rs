@@ -505,10 +505,13 @@ struct Stitched {
     unresolved: Vec<String>,
 }
 
-/// A pad's copper as a rectangle turned to the pad's own angle.
+/// A pad's copper as a rounded rectangle turned to the pad's own angle: `half`
+/// is the half-size of its bounding rectangle and `radius` the radius of its
+/// corners, zero for a rectangle, half the shorter side for an oval or a circle.
 struct PadBox {
     at: (f64, f64),
     half: (f64, f64),
+    radius: f64,
     cos: f64,
     sin: f64,
 }
@@ -516,12 +519,38 @@ struct PadBox {
 impl PadBox {
     fn new(pad: &crate::pcb_read::Pad) -> Self {
         let angle = pad.angle_deg.to_radians();
+        let half = (nm_to_mm(pad.size_nm.0) / 2.0, nm_to_mm(pad.size_nm.1) / 2.0);
+        let short = half.0.min(half.1);
+        // The corner radius the PCB reader's signed distance uses.
+        let radius = match pad.shape.as_str() {
+            "circle" | "oval" => short,
+            "roundrect" => (pad.corner_ratio * 2.0 * short).clamp(0.0, short),
+            _ => 0.0,
+        };
         Self {
             at: (pad.at.x_mm(), pad.at.y_mm()),
-            half: (nm_to_mm(pad.size_nm.0) / 2.0, nm_to_mm(pad.size_nm.1) / 2.0),
+            half,
+            radius,
             cos: angle.cos(),
             sin: angle.sin(),
         }
+    }
+
+    /// The half-size of the rectangle the corners are rounded about: the pad's
+    /// copper is that rectangle grown by `radius` on every side.
+    fn inner(&self) -> (f64, f64) {
+        (self.half.0 - self.radius, self.half.1 - self.radius)
+    }
+
+    /// The pad's inner rectangle's corners on the board.
+    fn inner_corners(&self) -> [(f64, f64); 4] {
+        let (hx, hy) = self.inner();
+        [(-hx, -hy), (hx, -hy), (hx, hy), (-hx, hy)].map(|(x, y)| {
+            (
+                self.at.0 + x * self.cos - y * self.sin,
+                self.at.1 + x * self.sin + y * self.cos,
+            )
+        })
     }
 
     /// The pad's axis-aligned bounds `(min, max)`.
@@ -545,13 +574,21 @@ impl PadBox {
         )
     }
 
-    /// The shortest distance between the pad's rectangle and the segment from
-    /// `a` to `b`, zero when they touch or cross. Exact: the segment is taken
-    /// into the pad's axes, where the pad is a box, and is either clipped by it
-    /// or nearest to it at one of its ends or one of the pad's corners.
+    /// The shortest distance between the pad's copper and the segment from `a`
+    /// to `b`, zero when they touch or cross. Exact: the copper is the inner
+    /// rectangle grown by the corner radius, so it is the inner rectangle's
+    /// distance less that radius.
     fn segment_distance(&self, a: (f64, f64), b: (f64, f64)) -> f64 {
+        (self.box_segment_distance(a, b) - self.radius).max(0.0)
+    }
+
+    /// The shortest distance between the inner rectangle and the segment from
+    /// `a` to `b`. Exact: the segment is taken into the pad's axes, where the
+    /// rectangle is a box, and is either clipped by it or nearest to it at one
+    /// of its ends or one of the rectangle's corners.
+    fn box_segment_distance(&self, a: (f64, f64), b: (f64, f64)) -> f64 {
         let (a, b) = (self.local(a), self.local(b));
-        let (hx, hy) = self.half;
+        let (hx, hy) = self.inner();
         // Liang-Barsky clip of the segment to the box.
         let (dx, dy) = (b.0 - a.0, b.1 - a.1);
         let (mut t0, mut t1) = (0.0_f64, 1.0_f64);
@@ -592,27 +629,42 @@ impl PadBox {
             .fold(f64::MAX, f64::min)
     }
 
-    /// Whether the two pads' rectangles touch or overlap. Exact: two turned
-    /// rectangles are apart only if some edge direction of either separates
-    /// their projections.
+    /// Whether the two pads' copper touch or overlap: their inner rectangles
+    /// are no further apart than the two corner radii.
     fn overlaps(&self, other: &PadBox) -> bool {
+        self.inner_gap(other) <= self.radius + other.radius + 1e-9
+    }
+
+    /// The distance between the two pads' inner rectangles, zero when they touch
+    /// or overlap. Exact: two turned rectangles are apart only if some edge
+    /// direction of either separates their projections, and then the nearest
+    /// pair is a corner of one against an edge of the other.
+    fn inner_gap(&self, other: &PadBox) -> f64 {
+        let (own, theirs) = (self.inner(), other.inner());
         let axes = [
             (self.cos, self.sin),
             (-self.sin, self.cos),
             (other.cos, other.sin),
             (-other.sin, other.cos),
         ];
-        axes.iter().all(|&(ax, ay)| {
-            let radius = |pad: &PadBox| {
-                pad.half.0 * (ax * pad.cos + ay * pad.sin).abs()
-                    + pad.half.1 * (-ax * pad.sin + ay * pad.cos).abs()
+        let touching = axes.iter().all(|&(ax, ay)| {
+            let reach = |pad: &PadBox, half: (f64, f64)| {
+                half.0 * (ax * pad.cos + ay * pad.sin).abs()
+                    + half.1 * (-ax * pad.sin + ay * pad.cos).abs()
             };
             let centres = ((other.at.0 - self.at.0) * ax + (other.at.1 - self.at.1) * ay).abs();
-            centres <= radius(self) + radius(other) + 1e-9
-        })
+            centres <= reach(self, own) + reach(other, theirs) + 1e-9
+        });
+        if touching {
+            return 0.0;
+        }
+        let corners = other.inner_corners();
+        (0..4)
+            .map(|i| self.box_segment_distance(corners[i], corners[(i + 1) % 4]))
+            .fold(f64::MAX, f64::min)
     }
 
-    /// Distance from `p` to the pad's rectangle, zero inside it.
+    /// Distance from `p` to the pad's copper, zero inside it.
     fn distance(&self, p: (f64, f64)) -> f64 {
         let (dx, dy) = (p.0 - self.at.0, p.1 - self.at.1);
         // Into the pad's own axes.
@@ -620,9 +672,9 @@ impl PadBox {
             dx * self.cos + dy * self.sin,
             -dx * self.sin + dy * self.cos,
         );
-        (x.abs() - self.half.0)
-            .max(0.0)
-            .hypot((y.abs() - self.half.1).max(0.0))
+        let (hx, hy) = self.inner();
+        let to_inner = (x.abs() - hx).max(0.0).hypot((y.abs() - hy).max(0.0));
+        (to_inner - self.radius).max(0.0)
     }
 }
 
@@ -1411,11 +1463,88 @@ mod tests {
         )
     }
 
+    /// A pad of `shape` and size in mm, upright at the origin, as the reader would have it.
+    fn shaped_pad(shape: &str, size: (f64, f64), corner_ratio: f64) -> PadBox {
+        PadBox::new(&crate::pcb_read::Pad {
+            footprint: "U1".to_string(),
+            number: "1".to_string(),
+            kind: "smd".to_string(),
+            shape: shape.to_string(),
+            at: crate::pcb_read::Point::new(0, 0),
+            size_nm: ((size.0 * 1e6) as i64, (size.1 * 1e6) as i64),
+            angle_deg: 0.0,
+            corner_ratio,
+            layers: vec!["F.Cu".to_string()],
+            net: None,
+            net_name: None,
+        })
+    }
+
+    /// A via that sits in the empty corner of a rounded pad's bounding rectangle
+    /// is clear of the pad's copper, not touching it; one on the copper joins.
+    #[test]
+    fn a_via_in_the_corner_of_a_rounded_pads_rectangle_stays_apart_from_its_copper() {
+        let via = |x: f64, y: f64| PieceShape::Via((x, y), 0.1);
+        for (shape, size, ratio, corner, on_copper) in [
+            ("circle", (2.0, 2.0), 0.0, (1.0, 1.0), (1.05, 0.0)),
+            ("oval", (2.0, 1.0), 0.0, (1.0, 0.5), (1.05, 0.0)),
+            ("roundrect", (2.0, 2.0), 0.25, (1.0, 1.0), (1.05, 0.0)),
+        ] {
+            let pad = PieceShape::Pad(shaped_pad(shape, size, ratio));
+            assert!(
+                copper_gap(&pad, &via(corner.0, corner.1)) > 0.05,
+                "{shape}: the corner of the rectangle is not copper"
+            );
+            assert!(
+                copper_gap(&pad, &via(on_copper.0, on_copper.1)) <= 0.0,
+                "{shape}: a via on the copper joins it"
+            );
+        }
+        // The same corner is on a plain rectangular pad.
+        let square = PieceShape::Pad(shaped_pad("rect", (2.0, 2.0), 0.0));
+        assert!(copper_gap(&square, &via(1.0, 1.0)) <= 0.0);
+    }
+
+    /// A track in the empty corner of a rounded pad's rectangle misses the pad.
+    #[test]
+    fn a_track_across_the_corner_of_a_rounded_pads_rectangle_misses_the_pad() {
+        // The line x + y = 1.9 clears a 2 mm circle (its nearest point is 1.343 from
+        // the centre, 0.343 off the rim) but cuts the corner of its 2 x 2 rectangle.
+        let (a, b) = ((0.5, 1.4), (1.4, 0.5));
+        let circle = shaped_pad("circle", (2.0, 2.0), 0.0);
+        let square = shaped_pad("rect", (2.0, 2.0), 0.0);
+        assert!(circle.segment_distance(a, b) > 0.3);
+        assert_eq!(square.segment_distance(a, b), 0.0);
+        assert!(circle.distance((1.0, 1.0)) > 0.4 && square.distance((1.0, 1.0)) == 0.0);
+    }
+
+    /// Two round pads whose rectangles overlap at the corners but whose rims do not touch stay apart.
+    #[test]
+    fn two_circular_pads_apart_across_their_corners_do_not_overlap() {
+        let a = shaped_pad("circle", (1.0, 1.0), 0.0);
+        let mut b = shaped_pad("circle", (1.0, 1.0), 0.0);
+        b.at = (0.9, 0.9);
+        assert!(!a.overlaps(&b), "the rims are 0.27 mm apart");
+        let (a, mut b) = (
+            shaped_pad("rect", (1.0, 1.0), 0.0),
+            shaped_pad("rect", (1.0, 1.0), 0.0),
+        );
+        b.at = (0.9, 0.9);
+        assert!(a.overlaps(&b), "the squares overlap");
+        let (a, mut b) = (
+            shaped_pad("circle", (1.0, 1.0), 0.0),
+            shaped_pad("circle", (1.0, 1.0), 0.0),
+        );
+        b.at = (0.7, 0.7);
+        assert!(a.overlaps(&b), "the rims cross at 0.99 mm centre to centre");
+    }
+
     #[test]
     fn a_pad_is_measured_in_its_own_rotated_axes() {
         let pad = PadBox {
             at: (0.0, 0.0),
             half: (1.0, 0.5),
+            radius: 0.0,
             cos: 0.0,
             sin: 1.0,
         };
@@ -1430,6 +1559,7 @@ mod tests {
         let pad = PadBox {
             at: (0.0, 0.0),
             half: (2.0, 0.25),
+            radius: 0.0,
             cos: std::f64::consts::FRAC_1_SQRT_2,
             sin: std::f64::consts::FRAC_1_SQRT_2,
         };
@@ -2132,6 +2262,7 @@ mod tests {
         let pad = PadBox {
             at: (0.0, 0.0),
             half: (0.5, 0.5),
+            radius: 0.0,
             cos: 1.0,
             sin: 0.0,
         };
@@ -2148,6 +2279,7 @@ mod tests {
         let turned = PadBox {
             at: (1.0, 2.0),
             half: (0.4, 0.15),
+            radius: 0.0,
             cos: 0.6,
             sin: 0.8,
         };
@@ -2216,6 +2348,7 @@ mod tests {
             PieceShape::Pad(PadBox {
                 at: (x, y),
                 half: (0.5, 0.5),
+                radius: 0.0,
                 cos: degrees.to_radians().cos(),
                 sin: degrees.to_radians().sin(),
             })
