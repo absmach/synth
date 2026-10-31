@@ -1,0 +1,99 @@
+id = "mp2307dn_buck_ep"
+kind = "regulator"
+description = "MPS MP2307DN 3A 23V synchronous step-down converter, SO-8 with exposed pad (pad 9 to GND)"
+version = 0
+lifecycle = "active"
+signed_by = []
+substitutes = []
+mpn = "MP2307DN-LF-Z"
+lcsc_pn = "C18921"
+kicad_footprint = "Package_SO:SOIC-8-1EP_3.9x4.9mm_P1.27mm_EP2.41x3.3mm"
+
+[[pins]]
+name = "bs"
+number = "1"
+electrical_type = "passive"
+capabilities = []
+required = false
+
+[[pins]]
+name = "in"
+number = "2"
+electrical_type = "power_input"
+capabilities = []
+required = true
+
+[[pins]]
+name = "sw"
+number = "3"
+electrical_type = "passive"
+capabilities = ["switch_node"]
+required = true
+
+[[pins]]
+name = "gnd"
+number = "4"
+electrical_type = "power_input"
+capabilities = []
+required = true
+
+[[pins]]
+name = "fb"
+number = "5"
+electrical_type = "input"
+capabilities = ["feedback"]
+required = true
+
+[[pins]]
+name = "comp"
+number = "6"
+electrical_type = "passive"
+capabilities = []
+required = false
+
+[[pins]]
+name = "en"
+number = "7"
+electrical_type = "input"
+capabilities = []
+required = true
+
+[[pins]]
+name = "ss"
+number = "8"
+electrical_type = "passive"
+capabilities = []
+required = false
+
+[[pins]]
+name = "ep"
+number = "9"
+electrical_type = "power_input"
+capabilities = []
+required = true
+
+[operating_conditions]
+min_voltage_v = 4.75
+max_voltage_v = 23.0
+max_current_ma = 3000.0
+
+[footprint_dimensions]
+width_mm = 7.4
+height_mm = 5.4
+courtyard_margin_mm = 0.25
+
+[provenance]
+source = "authored"
+datasheet_url = "https://www.monolithicpower.com/pub/media/document/MP2307_r1.3.pdf"
+reviewed_by = "JeffMboya"
+reviewed_at = "2026-10-28"
+
+[[required_decoupling]]
+net = "in"
+value = "10uf"
+count = 2
+
+[[required_decoupling]]
+net = "in"
+value = "100nf"
+count = 1

@@ -1,0 +1,72 @@
+id = "sht30_dis"
+kind = "ic"
+description = "Sensirion SHT30-DIS-B digital humidity and temperature sensor, I2C, DFN-8; VDD 2.15 to 5.5 V, 100 nF on VDD"
+kicad_symbol = "Sensor_Humidity:SHT30-DIS"
+kicad_footprint = "Sensor_Humidity:Sensirion_DFN-8-1EP_2.5x2.5mm_P0.5mm_EP1.1x1.7mm"
+
+[operating_conditions]
+min_voltage_v = 2.15
+max_voltage_v = 5.5
+max_current_ma = 1.5
+
+[footprint_dimensions]
+width_mm = 3.4
+height_mm = 3.0
+courtyard_margin_mm = 0.25
+
+[provenance]
+source = "imported"
+datasheet_url = "https://sensirion.com/file/datasheet_sht3x_digital"
+reviewed_by = "JeffMboya"
+reviewed_at = "2026-10-28"
+
+[[pins]]
+name = "SDA"
+number = "1"
+electrical_type = "bidirectional"
+
+[[pins]]
+name = "ADDR"
+number = "2"
+electrical_type = "input"
+
+[[pins]]
+name = "ALERT"
+number = "3"
+electrical_type = "output"
+
+[[pins]]
+name = "SCL"
+number = "4"
+electrical_type = "input"
+
+[[pins]]
+name = "VDD"
+number = "5"
+electrical_type = "power_input"
+
+[[pins]]
+name = "RESET"
+number = "6"
+electrical_type = "input"
+capabilities = ["reset"]
+
+[[pins]]
+name = "R"
+number = "7"
+electrical_type = "passive"
+
+[[pins]]
+name = "VSS"
+number = "8"
+electrical_type = "power_input"
+
+[[pins]]
+name = "VSS_pin_9"
+number = "9"
+electrical_type = "passive"
+
+[[required_decoupling]]
+net = "VDD"
+value = "100nf"
+count = 1

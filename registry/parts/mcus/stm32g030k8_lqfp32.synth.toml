@@ -1,0 +1,191 @@
+id = "stm32g030k8_lqfp32"
+kind = "ic"
+description = "ST STM32G030K8T6 Cortex-M0+ MCU, 64 KB flash, LQFP-32; VDD 2.0 to 3.6 V per DS12991, 100 nF plus 4.7 uF on VDD"
+kicad_symbol = "MCU_ST_STM32G0:STM32G030K8Tx"
+kicad_footprint = "Package_QFP:LQFP-32_7x7mm_P0.8mm"
+
+[operating_conditions]
+min_voltage_v = 2.0
+max_voltage_v = 3.6
+max_current_ma = 100.0
+
+[footprint_dimensions]
+width_mm = 10.36
+height_mm = 10.36
+courtyard_margin_mm = 0.25
+
+[provenance]
+source = "imported"
+datasheet_url = "https://www.st.com/resource/en/datasheet/stm32g030k8.pdf"
+reviewed_by = "JeffMboya"
+reviewed_at = "2026-10-28"
+
+[[pins]]
+name = "PB9"
+number = "1"
+electrical_type = "bidirectional"
+
+[[pins]]
+name = "PC14"
+number = "2"
+electrical_type = "bidirectional"
+
+[[pins]]
+name = "PC15"
+number = "3"
+electrical_type = "bidirectional"
+
+[[pins]]
+name = "VDD"
+number = "4"
+electrical_type = "power_input"
+
+[[pins]]
+name = "VSS"
+number = "5"
+electrical_type = "power_input"
+
+[[pins]]
+name = "NRST"
+number = "6"
+electrical_type = "input"
+
+[[pins]]
+name = "PA0"
+number = "7"
+electrical_type = "bidirectional"
+
+[[pins]]
+name = "PA1"
+number = "8"
+electrical_type = "bidirectional"
+
+[[pins]]
+name = "PA2"
+number = "9"
+electrical_type = "bidirectional"
+
+[[pins]]
+name = "PA3"
+number = "10"
+electrical_type = "bidirectional"
+
+[[pins]]
+name = "PA4"
+number = "11"
+electrical_type = "bidirectional"
+
+[[pins]]
+name = "PA5"
+number = "12"
+electrical_type = "bidirectional"
+
+[[pins]]
+name = "PA6"
+number = "13"
+electrical_type = "bidirectional"
+
+[[pins]]
+name = "PA7"
+number = "14"
+electrical_type = "bidirectional"
+
+[[pins]]
+name = "PB0"
+number = "15"
+electrical_type = "bidirectional"
+
+[[pins]]
+name = "PB1"
+number = "16"
+electrical_type = "bidirectional"
+
+[[pins]]
+name = "PB2"
+number = "17"
+electrical_type = "bidirectional"
+
+[[pins]]
+name = "PA8"
+number = "18"
+electrical_type = "bidirectional"
+
+[[pins]]
+name = "NC_PA9"
+number = "19"
+electrical_type = "bidirectional"
+
+[[pins]]
+name = "PC6"
+number = "20"
+electrical_type = "bidirectional"
+
+[[pins]]
+name = "NC_PA10"
+number = "21"
+electrical_type = "bidirectional"
+
+[[pins]]
+name = "PA9_PA11"
+number = "22"
+electrical_type = "bidirectional"
+
+[[pins]]
+name = "PA10_PA12"
+number = "23"
+electrical_type = "bidirectional"
+
+[[pins]]
+name = "PA13"
+number = "24"
+electrical_type = "bidirectional"
+
+[[pins]]
+name = "PA14"
+number = "25"
+electrical_type = "bidirectional"
+
+[[pins]]
+name = "PA15"
+number = "26"
+electrical_type = "bidirectional"
+
+[[pins]]
+name = "PB3"
+number = "27"
+electrical_type = "bidirectional"
+
+[[pins]]
+name = "PB4"
+number = "28"
+electrical_type = "bidirectional"
+
+[[pins]]
+name = "PB5"
+number = "29"
+electrical_type = "bidirectional"
+
+[[pins]]
+name = "PB6"
+number = "30"
+electrical_type = "bidirectional"
+
+[[pins]]
+name = "PB7"
+number = "31"
+electrical_type = "bidirectional"
+
+[[pins]]
+name = "PB8"
+number = "32"
+electrical_type = "bidirectional"
+
+[[required_decoupling]]
+net = "VDD"
+value = "100nf"
+count = 1
+
+[[required_decoupling]]
+net = "VDD"
+value = "4.7uf"
+count = 1

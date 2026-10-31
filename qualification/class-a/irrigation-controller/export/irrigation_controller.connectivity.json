@@ -1,0 +1,28 @@
+{
+  "fabrication_ready": true,
+  "topology": {
+    "missing_footprints": [],
+    "extra_footprints": [],
+    "missing_nets": [],
+    "missing_layers": [],
+    "missing_pads": [],
+    "renet_pads": [],
+    "outline_present": true
+  },
+  "connectivity": {
+    "connected_nets": 45,
+    "open_nets": 0,
+    "open": [],
+    "unconnected_pads": [],
+    "via_in_pad": [],
+    "undersized_vias": [],
+    "undersized_tracks": []
+  },
+  "kicad_drc": {
+    "errors": 0,
+    "unconnected": 0,
+    "warnings": 128
+  },
+  "blocking_reasons": [],
+  "unavailable_checks": []
+}

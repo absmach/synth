@@ -33,7 +33,7 @@ pub struct ManufacturerProfile {
     /// board outline, in nanometers.
     pub min_copper_to_edge_nm: i64,
     /// Minimum drilled hole diameter (vias + through-hole pad
-    /// drills), in nanometers. JLC's standard tier is 0.3 mm;
+    /// drills), in nanometers. JLC's standard tier is 0.2 mm;
     /// going below that incurs the "min hole size 0.2 mm"
     /// surcharge.
     pub min_drill_diameter_nm: i64,
@@ -86,8 +86,9 @@ const fn default_ir_drop_budget_mv() -> i64 {
 impl ManufacturerProfile {
     /// JLCPCB's standard hobbyist tier (no surcharge):
     /// 0.127 mm trace, 0.127 mm clearance, 0.3 mm board edge,
-    /// 0.3 mm drill, 0.13 mm annular ring, 0.2 mm drill-to-
-    /// copper. V1's default; the `synth drc` CLI uses this
+    /// 0.2 mm drill (JLCPCB's preferred minimum via hole on two layers; its
+    /// capabilities page allows 0.15 mm), 0.13 mm annular ring, 0.2 mm
+    /// drill-to-copper. V1's default; the `synth drc` CLI uses this
     /// when no `--profile <path>` flag is supplied.
     #[must_use]
     pub fn jlc_standard() -> Self {
@@ -96,7 +97,7 @@ impl ManufacturerProfile {
             min_trace_width_nm: mm_to_nm(0.127),
             min_copper_clearance_nm: mm_to_nm(0.127),
             min_copper_to_edge_nm: mm_to_nm(0.3),
-            min_drill_diameter_nm: mm_to_nm(0.3),
+            min_drill_diameter_nm: mm_to_nm(0.2),
             min_annular_ring_nm: mm_to_nm(0.13),
             min_drill_to_copper_nm: mm_to_nm(0.2),
             crosstalk_run_multiple: default_crosstalk_run_multiple(),
@@ -266,7 +267,7 @@ mod tests {
         assert_eq!(p.min_trace_width_nm, mm_to_nm(0.127));
         assert_eq!(p.min_copper_clearance_nm, mm_to_nm(0.127));
         assert_eq!(p.min_copper_to_edge_nm, mm_to_nm(0.3));
-        assert_eq!(p.min_drill_diameter_nm, mm_to_nm(0.3));
+        assert_eq!(p.min_drill_diameter_nm, mm_to_nm(0.2));
         assert_eq!(p.min_annular_ring_nm, mm_to_nm(0.13));
         assert_eq!(p.min_drill_to_copper_nm, mm_to_nm(0.2));
     }

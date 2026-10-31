@@ -1,0 +1,192 @@
+{
+ "routed_single": [
+  "+12V_VALVE",
+  "+3V3",
+  "BUCK_BS",
+  "BUCK_COMP",
+  "BUCK_COMPC",
+  "BUCK_EN",
+  "BUCK_FB",
+  "BUCK_SS",
+  "BUCK_SW",
+  "FLOW_IN",
+  "FLOW_PULSE",
+  "I2C_SCL",
+  "I2C_SDA",
+  "LED_N12_A",
+  "LED_N33_A",
+  "LED_PWR_A",
+  "LED_VALVE_A",
+  "LED_VALVE_DRV",
+  "NRST",
+  "OSC_IN",
+  "OSC_OUT",
+  "Q1_GATE",
+  "SNUB1",
+  "SNUB2",
+  "SOIL1_ADC",
+  "SOIL1_EXC",
+  "SOIL1_EXC_EN",
+  "SOIL1_PROBE",
+  "SOIL1_SENSE",
+  "SOIL2_ADC",
+  "SOIL2_EXC",
+  "SOIL2_EXC_EN",
+  "SOIL2_PROBE",
+  "SOIL2_SENSE",
+  "SWCLK",
+  "SWDIO",
+  "VALVE1_GATE",
+  "VALVE1_GATE_Q",
+  "VALVE1_SW",
+  "VALVE2_GATE",
+  "VALVE2_GATE_Q",
+  "VALVE2_SW",
+  "VIN_12V_RAW",
+  "VIN_FUSED"
+ ],
+ "failed_single": [],
+ "open_single": [],
+ "failed_multipoint": [],
+ "multipoint_nets": 25,
+ "multipoint_pads_connected": 157,
+ "multipoint_pads_total": 157,
+ "multipoint_edges_routed": 132,
+ "multipoint_edges_failed": 0,
+ "ripup_success_pairs": [],
+ "rerouted_pairs": [],
+ "single_ended_target_swaps": [],
+ "layer_swaps": 0,
+ "successful": 44,
+ "failed": 0,
+ "total_time": 0.91,
+ "total_iterations": 799238,
+ "total_vias": 85,
+ "cleanup_disconnected": [],
+ "min_clearance_used": 0.127,
+ "design_rules": {
+  "escalation_policy": "board",
+  "fab_tier": "auto",
+  "board_floors": {
+   "clearance": 0.127,
+   "track_width": 0.127,
+   "via_diameter": 0.46,
+   "via_drill": 0.2,
+   "annular": 0.13,
+   "board_edge": 0.3
+  },
+  "count": 6,
+  "nets": [
+   9,
+   11,
+   17
+  ],
+  "narrowed": [
+   {
+    "net": 11,
+    "net_name": null,
+    "kind": "track_width",
+    "requested": 0.8,
+    "delivered": 0.6055,
+    "site": "terminal neck",
+    "count": 1
+   },
+   {
+    "net": 17,
+    "net_name": null,
+    "kind": "track_width",
+    "requested": 0.4,
+    "delivered": 0.1998,
+    "site": "terminal neck",
+    "count": 1
+   },
+   {
+    "net": 9,
+    "net_name": null,
+    "kind": "track_width",
+    "requested": 0.8,
+    "delivered": 0.7262,
+    "site": "terminal neck",
+    "count": 1
+   },
+   {
+    "net": 11,
+    "net_name": null,
+    "kind": "track_width",
+    "requested": 0.8,
+    "delivered": 0.7098,
+    "site": "terminal neck",
+    "count": 1
+   },
+   {
+    "net": 11,
+    "net_name": null,
+    "kind": "track_width",
+    "requested": 0.8,
+    "delivered": 0.6055,
+    "site": "terminal neck",
+    "count": 1
+   },
+   {
+    "net": 11,
+    "net_name": null,
+    "kind": "track_width",
+    "requested": 0.8,
+    "delivered": 0.7098,
+    "site": "terminal neck",
+    "count": 1
+   }
+  ],
+  "min_delivered": {
+   "track_width": 0.1998
+  },
+  "fab_tier_escalations": 0,
+  "fab_tier_contexts": [],
+  "fab_tier_target": "board_floors",
+  "unsupported_rules": []
+ },
+ "plane_fragility": {
+  "source": "zone_outlines",
+  "islands": 0,
+  "refill_status": "no_kicad_python",
+  "why": "no python with pcbnew found; set KICAD_PYTHON to KiCad's bundled interpreter",
+  "machine_dependent": false
+ },
+ "oracle_check": "disabled",
+ "pad_pairs_connected": 151,
+ "pad_pairs_total": 151,
+ "scope": "merged",
+ "env_knobs": {
+  "KICAD_FOOTPRINT_DIR": "/home/synth/.local/share/flatpak/runtime/org.kicad.KiCad.Library.Footprints/x86_64/stable/a56ef6f3370ad1997739e050a2025b43893cc8ac3efaa1fff212806714f2d54f/files/footprints",
+  "KICAD_ROUTING_TOOLS_REPO": "/home/synth/krt",
+  "KICAD_SYMBOL_DIR": "/home/synth/.local/share/flatpak/runtime/org.kicad.KiCad.Library.Symbols/x86_64/stable/3a924b56e06b39f412abb4658eb067570651f94fe9b0dbc3bc671fb75562d253/files/symbols"
+ },
+ "oracle_reconnect": {
+  "available": true,
+  "reason": "ok",
+  "why": "the oracle ran",
+  "rounds": 0,
+  "links_routed": 0,
+  "links_failed": 0,
+  "remaining": 0
+ },
+ "regrade": {
+  "board": "file",
+  "graded_nets": 45,
+  "seconds": 0.81,
+  "unowned_broken": [],
+  "recovered": [],
+  "broken_by_run": []
+ },
+ "via_in_pad": {
+  "count": 0,
+  "sites": [],
+  "stamped": 0,
+  "restored": 0,
+  "protected": 0,
+  "unstampable": 0,
+  "site_created": 0,
+  "unprotected": [],
+  "note": "via-in-pad requires IPC-4761 Type VII (filled + capped + plated); state it on the fab drawing or solder wicks into the barrel"
+ }
+}

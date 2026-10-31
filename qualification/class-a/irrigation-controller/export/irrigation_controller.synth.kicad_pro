@@ -1,0 +1,148 @@
+{
+  "board": {
+    "design_settings": {
+      "defaults": {
+        "min_clearance": 0.127,
+        "min_copper_edge_clearance": 0.3,
+        "min_hole_clearance": 0.2,
+        "min_through_hole_diameter": 0.2,
+        "min_track_width": 0.127,
+        "min_via_annular_width": 0.13,
+        "min_via_diameter": 0.46
+      },
+      "rules": {
+        "min_clearance": 0.127,
+        "min_copper_edge_clearance": 0.3,
+        "min_hole_clearance": 0.2,
+        "min_through_hole_diameter": 0.2,
+        "min_track_width": 0.127,
+        "min_via_annular_width": 0.13,
+        "min_via_diameter": 0.46
+      }
+    }
+  },
+  "boards": [],
+  "meta": {
+    "filename": "irrigation_controller.kicad_pro",
+    "uuid": "3e0e3aa2-ae55-5160-b936-bda058b96cdb",
+    "version": 1
+  },
+  "net_settings": {
+    "classes": [
+      {
+        "bus_width": 12,
+        "clearance": 0.127,
+        "diff_pair_gap": 0.25,
+        "diff_pair_via_gap": 0.25,
+        "diff_pair_width": 0.2,
+        "line_style": 0,
+        "microvia_diameter": 0.3,
+        "microvia_drill": 0.1,
+        "name": "Ground",
+        "pcb_color": "rgba(51, 51, 51, 1.000)",
+        "priority": 0,
+        "schematic_color": "rgba(51, 51, 51, 1.000)",
+        "track_width": 0.2,
+        "via_diameter": 0.6,
+        "via_drill": 0.3,
+        "wire_width": 6
+      },
+      {
+        "bus_width": 12,
+        "clearance": 0.127,
+        "diff_pair_gap": 0.25,
+        "diff_pair_via_gap": 0.25,
+        "diff_pair_width": 0.2,
+        "line_style": 0,
+        "microvia_diameter": 0.3,
+        "microvia_drill": 0.1,
+        "name": "Default",
+        "pcb_color": "rgba(0, 0, 0, 1.000)",
+        "priority": 2147483647,
+        "schematic_color": "rgba(0, 0, 0, 1.000)",
+        "track_width": 0.2,
+        "via_diameter": 0.6,
+        "via_drill": 0.2,
+        "wire_width": 6
+      },
+      {
+        "bus_width": 12,
+        "clearance": 0.25,
+        "diff_pair_gap": 0.25,
+        "diff_pair_via_gap": 0.25,
+        "diff_pair_width": 0.2,
+        "line_style": 0,
+        "microvia_diameter": 0.3,
+        "microvia_drill": 0.1,
+        "name": "PWR12",
+        "pcb_color": "rgba(144, 67, 191, 1.000)",
+        "priority": 2,
+        "schematic_color": "rgba(144, 67, 191, 1.000)",
+        "track_width": 0.8,
+        "via_diameter": 0.6,
+        "via_drill": 0.2,
+        "wire_width": 6
+      },
+      {
+        "bus_width": 12,
+        "clearance": 0.2,
+        "diff_pair_gap": 0.25,
+        "diff_pair_via_gap": 0.25,
+        "diff_pair_width": 0.2,
+        "line_style": 0,
+        "microvia_diameter": 0.3,
+        "microvia_drill": 0.1,
+        "name": "PWR33",
+        "pcb_color": "rgba(191, 142, 67, 1.000)",
+        "priority": 3,
+        "schematic_color": "rgba(191, 142, 67, 1.000)",
+        "track_width": 0.4,
+        "via_diameter": 0.6,
+        "via_drill": 0.2,
+        "wire_width": 6
+      }
+    ],
+    "meta": {
+      "version": 4
+    },
+    "net_colors": null,
+    "netclass_assignments": {
+      "+12V_VALVE": "PWR12",
+      "+3V3": "PWR33",
+      "/BUCK_SW": "PWR12",
+      "/VALVE1_SW": "PWR12",
+      "/VALVE2_SW": "PWR12",
+      "BUCK_SW": "PWR12",
+      "GND": "Ground",
+      "VALVE1_SW": "PWR12",
+      "VALVE2_SW": "PWR12",
+      "VIN_12V_RAW": "PWR12",
+      "VIN_FUSED": "PWR12"
+    },
+    "netclass_patterns": [
+      {
+        "netclass": "PWR12",
+        "pattern": "/*/BUCK_SW"
+      },
+      {
+        "netclass": "PWR12",
+        "pattern": "/*/VALVE1_SW"
+      },
+      {
+        "netclass": "PWR12",
+        "pattern": "/*/VALVE2_SW"
+      }
+    ]
+  },
+  "schematic": {
+    "annotate_start_num": 0,
+    "drawing": {},
+    "variants": []
+  },
+  "sheets": [
+    [
+      "33ebc9e3-0681-554a-ac8a-89a67d5a6adc",
+      ""
+    ]
+  ]
+}

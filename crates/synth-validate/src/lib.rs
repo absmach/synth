@@ -4387,9 +4387,21 @@ mod tests {
 
     #[test]
     fn a_via_at_the_tier_floor_is_accepted() {
-        // JLC standard: 0.3 mm drill, 0.13 mm ring. 0.56 over 0.30 is exactly
+        // JLC standard: 0.2 mm drill, 0.13 mm ring. 0.46 over 0.20 is exactly
         // the smallest via the tier permits, which the escape arithmetic uses.
-        let board = board_with_via(Some("jlcpcb"), Some(0.56), Some(0.30));
+        let board = board_with_via(Some("jlcpcb"), Some(0.46), Some(0.20));
+
+        assert!(DeclaredViaGeometryRule
+            .check(&board, "test.synth")
+            .is_empty());
+    }
+
+    #[test]
+    fn a_via_with_a_0_2_mm_drill_and_a_0_2_mm_ring_is_accepted() {
+        // JLC standard: 0.2 mm is its preferred minimum via hole, and a 0.6 mm
+        // pad over it leaves a 0.2 mm ring, which clears the 0.13 mm floor and
+        // the 0.20 mm ring its DFM check asks for.
+        let board = board_with_via(Some("jlcpcb"), Some(0.60), Some(0.20));
 
         assert!(DeclaredViaGeometryRule
             .check(&board, "test.synth")

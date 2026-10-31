@@ -1,0 +1,34 @@
+id = "smaj13a_tvs"
+kind = "diode"
+description = "Littelfuse SMAJ13A 400 W unidirectional TVS, 13 V standoff, 14.4-15.9 V breakdown, 21.5 V max clamp at 18.6 A, DO-214AC (SMA)"
+version = 0
+lifecycle = "active"
+signed_by = []
+substitutes = []
+mpn = "SMAJ13A"
+required_decoupling = []
+kicad_symbol = "Device:D_Zener"
+kicad_footprint = "Diode_SMD:D_SMA"
+
+[[pins]]
+name = "cathode"
+number = "1"
+electrical_type = "passive"
+capabilities = []
+required = false
+
+[[pins]]
+name = "anode"
+number = "2"
+electrical_type = "passive"
+capabilities = []
+required = false
+
+[footprint_dimensions]
+width_mm = 6.5
+height_mm = 3.0
+courtyard_margin_mm = 0.25
+
+[provenance]
+source = "authored"
+datasheet_url = "https://datasheet.lcsc.com/lcsc/2304140030_Littelfuse-SMAJ13A_C148214.pdf"

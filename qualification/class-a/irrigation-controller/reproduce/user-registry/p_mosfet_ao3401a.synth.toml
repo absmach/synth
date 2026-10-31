@@ -1,0 +1,46 @@
+id = "p_mosfet_ao3401a"
+kind = "transistor"
+description = "Alpha and Omega AO3401A P-channel MOSFET, 30 V, 4 A, SOT-23"
+version = 0
+lifecycle = "active"
+signed_by = []
+substitutes = []
+mpn = "AO3401A"
+required_decoupling = []
+kicad_symbol = "Transistor_FET:Si2301CDS"
+kicad_footprint = "Package_TO_SOT_SMD:SOT-23"
+
+[[pins]]
+name = "g"
+number = "1"
+electrical_type = "input"
+capabilities = []
+required = true
+
+[[pins]]
+name = "s"
+number = "2"
+electrical_type = "passive"
+capabilities = []
+required = true
+
+[[pins]]
+name = "d"
+number = "3"
+electrical_type = "passive"
+capabilities = []
+required = true
+
+[footprint_dimensions]
+width_mm = 3.35
+height_mm = 2.5
+courtyard_margin_mm = 0.25
+
+[operating_conditions]
+min_voltage_v = 1.8
+max_voltage_v = 30.0
+max_current_ma = 4000.0
+
+[provenance]
+source = "authored"
+datasheet_url = "https://aosmd.com/sites/default/files/res/data_sheets/AO3401A.pdf"

@@ -1,0 +1,106 @@
+{
+  "schema_version": "synth.routing.v1",
+  "state": "routed",
+  "engine": "kicad-routing-tools",
+  "capability": {
+    "engine": "kicad-routing-tools",
+    "available": true,
+    "version": "9399bfb2",
+    "runtime_version": "Python 3.12.3",
+    "detail": null,
+    "failure": null
+  },
+  "provenance": {
+    "engine": "kicad-routing-tools",
+    "engine_version": "9399bfb2",
+    "runtime_version": null,
+    "profile": "jlcpcb",
+    "command": [
+      "/home/synth/krtvenv/bin/python",
+      "/home/synth/pt/pc1p/tools/kicad_routing_tools_route.py",
+      "/home/synth/runs/fin7-repro/out1/irrigation_controller.synth.kicad_pcb",
+      "/home/synth/runs/fin7-repro/out1/irrigation_controller.kicadroutingtools.kicad_pcb",
+      "--repo",
+      "/home/synth/krt",
+      "--python",
+      "/home/synth/krtvenv/bin/python",
+      "--stats",
+      "/home/synth/runs/fin7-repro/out1/irrigation_controller.krt-stats.json",
+      "--escalation",
+      "board",
+      "--fab-tier",
+      "auto",
+      "--same-net-pad-clearance",
+      "0.1000",
+      "--strict-sizes",
+      "--ordering",
+      "inside_out"
+    ],
+    "settings": {
+      "allow_via_in_pad": "false",
+      "escalation": "board",
+      "fab_tier": "auto",
+      "strict_sizes": "true",
+      "wall_clock_secs": "900"
+    },
+    "input_hash": "a69d4b99fbf43ac4b087a13d899aa4a9feca99d3e7a2595f36d95ba8cbc79080",
+    "output_hash": "",
+    "source_revision": null,
+    "duration_ms": 40077
+  },
+  "statistics": {
+    "connected_nets": 45,
+    "open_nets": 0,
+    "open_net_names": [],
+    "segments": 578,
+    "vias": 87,
+    "wire_length_mm": 1337.687323,
+    "pad_escape_rejections": 0,
+    "engine_findings": {
+      "claimed_successful": "44",
+      "claimed_total_vias": "85",
+      "claimed_via_in_pad": "0",
+      "engine_policy_verdict": "rejected",
+      "rules_below_board_floor": "none reported"
+    }
+  },
+  "artifacts": {
+    "baseline": "/home/synth/runs/fin7-repro/out1/irrigation_controller.synth.kicad_pcb",
+    "candidate": "/home/synth/runs/fin7-repro/out1/irrigation_controller.kicadroutingtools.kicad_pcb",
+    "delivered": "/home/synth/runs/fin7-repro/out1/irrigation_controller.kicad_pcb",
+    "session_log": "/home/synth/runs/fin7-repro/out1/irrigation_controller.kicadroutingtools.log",
+    "ses": null,
+    "router_report": "/home/synth/runs/fin7-repro/out1/irrigation_controller.krt-stats.json",
+    "connectivity_report": null,
+    "drc_report": null
+  },
+  "validation": {
+    "fabrication_ready": true,
+    "topology": {
+      "missing_footprints": [],
+      "extra_footprints": [],
+      "missing_nets": [],
+      "missing_layers": [],
+      "missing_pads": [],
+      "renet_pads": [],
+      "outline_present": true
+    },
+    "connectivity": {
+      "connected_nets": 45,
+      "open_nets": 0,
+      "open": [],
+      "unconnected_pads": [],
+      "via_in_pad": [],
+      "undersized_vias": [],
+      "undersized_tracks": []
+    },
+    "kicad_drc": {
+      "errors": 0,
+      "unconnected": 0,
+      "warnings": 128
+    },
+    "blocking_reasons": [],
+    "unavailable_checks": []
+  },
+  "failure": null
+}

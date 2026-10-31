@@ -1,0 +1,331 @@
+// Two-zone irrigation controller, 12 V DC in, STM32G030K8 (LQFP-32), 2-layer JLCPCB.
+// Design assumptions (not verified on hardware):
+//   Input 12 V nominal, 10.8 to 13.0 V maximum. Each valve output is a 12 V DC solenoid, coil current at most 0.5 A (stated assumption).
+//   Total protected-rail load <= 1.1 A (two valves + flow sensor + buck); F1 holds 1.5 A at 23 C.
+//   Soil probes: resistive 2-electrode, 1 k to 200 k in soil. Flow meter: Hall, open-collector, 5 to 18 V supply, <= 2 kHz.
+board "irrigation_controller" {
+  layers 2
+  manufacturer "jlcpcb"
+
+  netclass "PWR12" { trace_width 0.8mm clearance 0.25mm via_diameter 0.6mm via_drill 0.2mm }
+  netclass "PWR33" { trace_width 0.4mm clearance 0.2mm via_diameter 0.6mm via_drill 0.2mm }
+  netclass "Default" { via_diameter 0.6mm via_drill 0.2mm }
+
+  power "VIN_12V_RAW" 12v class "PWR12"
+  power "VIN_FUSED" 12v class "PWR12"
+  power "+12V_VALVE" 12v class "PWR12"
+  power "+3V3" 3.3v class "PWR33"
+
+  // ---- A: power input, protection, buck -------------------------------------------------------
+  group "POWER INPUT" color "#c2410c" {
+    component J1: connector "jst_xh_2pin" { placement_hint { edge: left priority: hard } }
+    component F1: fuse "polyfuse_1r5a"
+    component Q1: transistor "p_mosfet_ao3401a"
+    component R_QG: resistor "r_generic_0603" value "10k"
+    component D_QG: diode "d_zener_5v1"
+    component D_TVS: diode "smaj13a_tvs"
+    component C_BULK: capacitor "c_electrolytic_100uf" value "100uF 25V"
+    component TP_VIN: testpoint "testpoint_pad_1_5"
+    component TP_12V: testpoint "testpoint_pad_1_5"
+    notes "" {
+      "J1 JST XH S2B-XH-A: pin1 VIN_12V_RAW, pin2 GND. Mate with XHP-2 housing.  Pin 1 is the +12 V pin."
+      "F1 1.5 A hold PPTC, then Q1 AO3401A P-FET (30 V Vds, 12 V Vgs max, 4 A) reverse-polarity switch (body diode to start, Vgs clamped to -5.1 V by D_QG)."
+      "Q1 gate check: the 5.1 V zener D_QG across source and gate limits Vgs to about 5.1 V, within the AO3401A 12 V gate-source rating. The drain sees at most the TVS clamp of 21.5 V (D_TVS is upstream of Q1), below the AO3401A 30 V drain-source rating by 8.5 V."
+      "D_TVS SMAJ13A (Littelfuse, 400 W, VR 13.0 V, VBR 14.40 to 15.90 V at 1 mA, IR 1 uA maximum at VR, VC 21.5 V at IPP 18.6 A) sits on VIN_FUSED, before Q1: its cathode joins the fused input net on the Q1 drain side and its anode is on GND, so a surge is clamped before it reaches Q1, the buck or any capacitor. A reversed supply forward-biases D_TVS, which conducts and opens F1; Q1 then isolates the protected rail."
+      "TVS check: the supply maximum is 13.0 V, equal to the 13.0 V standoff VR, so leakage at the maximum input is the datasheet IR of 1 uA maximum, and 13.0 V is 1.4 V below the 14.40 V minimum breakdown. Worst-case clamp 21.5 V is below the MP2307 recommended input maximum 23 V by 1.5 V and its absolute maximum 26 V by 4.5 V, below the AO3401A 30 V Vds by 8.5 V, and below the 25 V rating of C_BULK, C_IN1, C_IN2 and C_N7 by 3.5 V."
+    }
+  }
+  group "BUCK 3V3" color "#b45309" {
+    component U1: regulator "mp2307dn_buck_ep"
+    component C_IN1: capacitor "c_generic_0805" value "10uF 25V"
+    component C_IN2: capacitor "c_generic_0805" value "10uF 25V"
+    component C_BS: capacitor "c_generic_0603" value "10nF"
+    component L1: inductor "l_1210_10uh"
+    component C_OUT1: capacitor "c_generic_1206" value "22uF 10V"
+    component C_OUT2: capacitor "c_generic_1206" value "22uF 10V"
+    component R_FBT: resistor "r_generic_0603" value "26.1k"
+    component R_FBB: resistor "r_generic_0603" value "10k"
+    component R_COMP: resistor "r_generic_0603" value "9.1k"
+    component C_COMP: capacitor "c_generic_0603" value "2.2nF"
+    component C_SS: capacitor "c_generic_0603" value "100nF"
+    component R_EN: resistor "r_generic_0603" value "100k"
+    component TP_3V3: testpoint "testpoint_pad_1_5"
+    component TP_GND: testpoint "testpoint_pad_1_5"
+    notes "" {
+      "MP2307 (internal sync rectifier, 340 kHz). Vout = 0.925 V x (1 + 26.1k/10k) = 3.34 V."
+      "L1 10 uH: ripple about 0.7 A p-p at 12 V in; confirm L1 saturation current against its datasheet."
+    }
+  }
+
+  // ---- C: MCU, clock, reset, debug ------------------------------------------------------------
+  group "MCU" color "#0072b2" {
+    component U2: mcu "stm32g030k8_lqfp32"
+    component C_VDD1: capacitor "c_generic_0603" value "100nF"
+    component C_VDD2: capacitor "c_generic_0805" value "4.7uF"
+    component Y1: crystal "xtal_8mhz_3225_4p"
+    component C_X1: capacitor "c_generic_0603" value "6.2pF"
+    component C_X2: capacitor "c_generic_0603" value "6.2pF"
+    component R_NRST: resistor "r_generic_0603" value "10k"
+    component C_NRST: capacitor "c_generic_0603" value "100nF"
+    component SW_RESET: switch "spst_tactile"
+    component J_SWD: connector "header_1x5" { placement_hint { edge: right priority: hard } }
+    component TP_NRST: testpoint "testpoint_pad_1_5"
+    component TP_SWDIO: testpoint "testpoint_pad_1_5"
+    component TP_SWCLK: testpoint "testpoint_pad_1_5"
+    notes "" {
+      "J_SWD pin1 +3V3, pin2 SWDIO, pin3 GND, pin4 SWCLK, pin5 NRST. No USB bootloader; program over SWD."
+      "HSE 8 MHz on PC14/PC15 (OSC_IN/OSC_OUT). Crystal NDK NX3225GD-8MHZ-STD-CRA-3, CL 8 pF. CL = (C1 x C2)/(C1 + C2) + Cstray with Cstray 5 pF, so C1 = C2 = 2 x (8 - 5) = 6 pF. Nearest standard value (E24) 6.2 pF: CL = 6.2/2 + 5 = 8.1 pF, 0.1 pF from 8 pF (limit 0.5 pF). Cstray 5 pF is an assumption, not measured."
+      "Boot: PA14 (SWCLK) is BOOT0; default option bytes boot from flash."
+    }
+  }
+
+  // ---- B: valve drivers -----------------------------------------------------------------------
+  group "VALVE 1" color "#7c3aed" {
+    component J_VALVE1: connector "jst_xh_2pin" { placement_hint { edge: top priority: hard } }
+    component Q_V1: transistor "ao3400a_nmos"
+    component R_G1: resistor "r_generic_0603" value "100"
+    component R_PD1: resistor "r_generic_0603" value "100k"
+    component D_FLY1: diode "d_schottky"
+    component R_SN1: resistor "r_generic_0603" value "100"
+    component C_SN1: capacitor "c_generic_0603" value "10nF"
+    notes "" {
+      "J_VALVE1 pin1 +12V_VALVE, pin2 VALVE1_SW (low-side). Flyback cathode to +12V_VALVE."
+      "Load: 12 V DC solenoid, coil current at most 0.5 A. AO3400A carries 0.5 A (rated far above, needs datasheet value sourcing for the exact figure), flyback diode 1N5819-class (1 A class), VALVE1_SW is class PWR12 (0.8 mm, about 8x the width a 0.5 A / 10 C rise needs)."
+    }
+  }
+  group "VALVE 2" color "#6d28d9" {
+    component J_VALVE2: connector "jst_xh_2pin" { placement_hint { edge: top priority: hard } }
+    component Q_V2: transistor "ao3400a_nmos"
+    component R_G2: resistor "r_generic_0603" value "100"
+    component R_PD2: resistor "r_generic_0603" value "100k"
+    component D_FLY2: diode "d_schottky"
+    component R_SN2: resistor "r_generic_0603" value "100"
+    component C_SN2: capacitor "c_generic_0603" value "10nF"
+    component TP_V2: testpoint "testpoint_pad_1_5"
+    component C_B3: capacitor "c_generic_0603" value "100nF"
+    component R_B3: resistor "r_generic_0603" value "47k"
+    notes "" {
+      "J_VALVE2 pin1 +12V_VALVE, pin2 VALVE2_SW (low-side). Flyback cathode to +12V_VALVE."
+      "Load: 12 V DC solenoid, coil current at most 0.5 A. Same checks as valve 1: MOSFET, flyback diode and PWR12 tracks carry 0.5 A."
+      "R_SN2 100 ohm in series with C_SN2 10 nF is an RC snubber across the valve 2 coil connector. TP_V2 probes VALVE2_SW. C_B3 100 nF bypasses +12V_VALVE beside the valve 2 driver; R_B3 47 k bleeds the 12 V rail: 13.0 V / 47 k = 0.277 mA, 3.6 mW."
+    }
+  }
+
+  // ---- D: soil-moisture interfaces ------------------------------------------------------------
+  group "SOIL 1" color "#15803d" {
+    component J_SOIL1: connector "jst_ph_3pin" { placement_hint { edge: bottom priority: hard } }
+    component Q_E1: transistor "p_mosfet_si2301"
+    component R_EPU1: resistor "r_generic_0603" value "100k"
+    component R_S1: resistor "r_generic_0603" value "1k"
+    component R_D1: resistor "r_generic_0603" value "10k"
+    component R_F1: resistor "r_generic_0603" value "1k"
+    component C_F1: capacitor "c_generic_0603" value "10nF"
+    component TP_SOIL1: testpoint "testpoint_pad_1_5"
+    notes "" {
+      "J_SOIL1 pin1 excitation, pin2 sense, pin3 GND. Probe between pins 1 and 2. Excitation off by default (gate pulled to +3V3)."
+    }
+  }
+  group "SOIL 2" color "#166534" {
+    component J_SOIL2: connector "jst_ph_3pin" { placement_hint { edge: bottom priority: hard } }
+    component Q_E2: transistor "p_mosfet_si2301"
+    component R_EPU2: resistor "r_generic_0603" value "100k"
+    component R_S2: resistor "r_generic_0603" value "1k"
+    component R_D2: resistor "r_generic_0603" value "10k"
+    component R_F2: resistor "r_generic_0603" value "1k"
+    component C_F2: capacitor "c_generic_0603" value "10nF"
+    component TP_SOIL2: testpoint "testpoint_pad_1_5"
+    notes "" {
+      "J_SOIL2 pin1 excitation, pin2 sense, pin3 GND. Probe between pins 1 and 2. Excitation off by default (gate pulled to +3V3)."
+    }
+  }
+
+  // ---- Flow meter -----------------------------------------------------------------------------
+  group "FLOW" color "#0e7490" {
+    component J_FLOW: connector "jst_ph_3pin" { placement_hint { edge: bottom priority: hard } }
+    component R_FPU: resistor "r_generic_0603" value "10k"
+    component R_FS: resistor "r_generic_0603" value "2.2k"
+    component D_FZ: diode "d_zener_3v3"
+    component C_FL: capacitor "c_generic_0603" value "10nF"
+    component TP_FLOW: testpoint "testpoint_pad_1_5"
+    notes "" {
+      "J_FLOW pin1 +12V_VALVE sensor supply, pin2 GND, pin3 pulse. Open-collector assumed; 3.3 V zener D_FZ (cathode on FLOW_PULSE, anode on GND) behind R_FS 2.2 k clamps a push-pull output to the STM32G030 input range. Current at a 13.0 V sensor output: (13.0 - 3.3) / 2.2 k = 4.41 mA (12 V: 3.95 mA), about 3.3 V x 4.41 mA = 14.5 mW in the zener, far below a 500 mW SOD-123 zener class rating (exact rating needs datasheet sourcing). With the line open the 10 k pull-up R_FPU on +3V3 holds it at 3.3 V, so R_FPU adds at most 3.3 V / 10 k = 0.33 mA."
+    }
+  }
+
+  // ---- I2C ------------------------------------------------------------------------------------
+  group "I2C SENSORS" color "#a16207" {
+    component U4: sensor "apds9301_real"
+    component U5: memory "eeprom_24lc256_sn"
+    component C_U4: capacitor "c_generic_0603" value "100nF"
+    component C_U5: capacitor "c_generic_0603" value "100nF"
+    component R_SDA: resistor "r_generic_0603" value "4.7k"
+    component R_SCL: resistor "r_generic_0603" value "4.7k"
+    component J_I2C: connector "jst_ph_4pin" { placement_hint { edge: right priority: hard } }
+    notes "" {
+      "Addresses: APDS-9301 0x29 (ADR_SEL low), 24LC256 0x50 (A2..A0 low). No collisions. An SHT30 breakout attaches to J_I2C at address 0x44, which stays free; the on-board SHT30 was removed because its 0.5 mm DFN cannot be escaped on two layers."
+      "J_I2C pin1 GND, pin2 +3V3, pin3 SDA, pin4 SCL. 3.3 V only, no 5 V; external load <= 100 mA."
+    }
+  }
+
+  // ---- Indicators -----------------------------------------------------------------------------
+  group "LEDS" color "#be123c" {
+    component D_PWR: led "ltst_c190kgkt"
+    component R_PWR: resistor "r_generic_0603" value "680"
+    component D_VALVE: led "led_amber_0603"
+    component R_LV: resistor "r_generic_0603" value "680"
+    component R_N3: resistor "r_generic_0603" value "2.2k"
+    component D_N1: led "led_amber_0603"
+    component R_N4: resistor "r_generic_0603" value "680"
+    component D_N2: led "ltst_c190kgkt"
+    notes "" {
+      "D_PWR lit when +3V3 is present. D_VALVE lit when firmware commands either valve on."
+      "D_N1 lit when +12V_VALVE is present (R_N3), D_N2 lit when +3V3 is present (R_N4)."
+      "LED currents are I = (V - Vf) / R; the Vf of the selected LEDs is not yet read from their datasheets (needs sourcing), so the upper bound with Vf = 0 is given and the real current is lower. D_PWR, R_PWR 680: at most 3.3 V / 680 = 4.85 mA. D_VALVE, R_LV 680, driven from MCU pin PA7 at 3.3 V: at most 4.85 mA, which the pin must source (needs the STM32G030 pin current limit sourced). D_N2, R_N4 680 on +3V3: at most 4.85 mA. D_N1, R_N3 2.2 k on +12V_VALVE: at most 13.0 V / 2.2 k = 5.9 mA at 13.0 V, 12 V / 2.2 k = 5.5 mA nominal, about 77 mW in R_N3 at 13.0 V, within a 0603 resistor rating only if that rating is confirmed (needs sourcing)."
+    }
+  }
+
+  // ---- rail decoupling and bleeders (the 5 V TVS diodes on the flow pulse and on the 3.3 V rail were removed) ----
+  group "3V3 RAIL DECOUPLING" color "#4d7c0f" {
+    component C_N1: capacitor "c_generic_0603" value "100nF"
+    component C_N2: capacitor "c_generic_0603" value "100nF"
+    component C_N3: capacitor "c_generic_0603" value "100nF"
+    component C_N4: capacitor "c_generic_0603" value "100nF"
+    component C_N5: capacitor "c_generic_0805" value "10uF"
+    component C_N6: capacitor "c_generic_0805" value "4.7uF"
+    component C_N8: capacitor "c_generic_0603" value "100nF"
+    component C_N10: capacitor "c_generic_0805" value "4.7uF"
+    component C_N11: capacitor "c_generic_0603" value "100nF"
+    component C_N12: capacitor "c_generic_0603" value "100nF"
+    component C_N13: capacitor "c_generic_0603" value "100nF"
+    component C_N14: capacitor "c_generic_0805" value "4.7uF"
+    component R_N1: resistor "r_generic_0603" value "100k"
+    component R_N2: resistor "r_generic_0603" value "47k"
+    component C_B2: capacitor "c_generic_0603" value "100nF"
+    component C_B4: capacitor "c_generic_0603" value "100nF"
+    component C_B5: capacitor "c_generic_0805" value "4.7uF"
+    component R_B2: resistor "r_generic_0603" value "100k"
+    component R_B4: resistor "r_generic_0603" value "47k"
+    component TP_SDA: testpoint "testpoint_pad_1_5"
+    component TP_SCL: testpoint "testpoint_pad_1_5"
+    component C_B8: capacitor "c_generic_0805" value "4.7uF"
+    notes "" {
+      "+3V3 bulk and high-frequency decoupling; R_N1 and R_N2 are bleeders across +3V3."
+      "C_B8 4.7 uF adds bulk decoupling to +3V3 beside the MCU. C_B2 and C_B4 100 nF plus C_B5 4.7 uF add high-frequency and bulk decoupling to +3V3 near the I2C parts. R_B2 100 k and R_B4 47 k are bleeders across +3V3 (3.3 V / 100 k = 33 uA and 3.3 V / 47 k = 70 uA); R_N1 100 k and R_N2 47 k give the same 33 uA and 70 uA, so the four bleeders draw 206 uA in total, 0.68 mW. TP_SDA and TP_SCL probe the I2C bus."
+    }
+  }
+  group "12V RAIL DECOUPLING" color "#92400e" {
+    component C_N7: capacitor "c_generic_0805" value "10uF 25V"
+    component C_N9: capacitor "c_generic_0603" value "100nF"
+    component R_N5: resistor "r_generic_0603" value "100k"
+    component R_N6: resistor "r_generic_0603" value "100k"
+    component R_B1: resistor "r_generic_0603" value "100k"
+    component C_B1: capacitor "c_generic_0603" value "100nF"
+    component TP_V1: testpoint "testpoint_pad_1_5"
+    notes "" {
+      "+12V_VALVE decoupling and bleeders."
+      "R_B1 bleeds C_BULK (100 k, 13.0 V / 100 k = 0.130 mA). R_N5 and R_N6 are 100 k bleeders on the same rail, 0.130 mA each. Resistive bleed of the +12V_VALVE rail: R_N5, R_N6, R_B1 (100 k each) and R_B3 (47 k) in parallel are 19.5 k, 0.67 mA at 13.0 V; with R_EN 100 k to the buck enable 16.3 k. C_BULK 100 uF plus about 30 uF of other capacitance on the rail (C_IN1, C_IN2 10 uF each, C_N7 10 uF, small 100 nF parts) is about 130 uF, so the time constant is 16.3 k x 130 uF = 2.1 s and the rail is below 5 % (3 tau) in about 6 s, ignoring the faster discharge through the buck, LED and valve loads. C_B1 is 100 nF high-frequency bypass on +12V_VALVE. R_SN1 100 ohm in series with C_SN1 10 nF is an RC snubber across the valve 1 coil connector. TP_V1 is a test point on VALVE1_SW."
+    }
+  }
+  group "TEST POINTS AND MOUNTING" color "#475569" {
+    component TP_N1: testpoint "testpoint_pad_1_5"
+    component TP_N2: testpoint "testpoint_pad_1_5"
+    component H1: mounting_hole "mounting_hole_m2_5"
+    component H2: mounting_hole "mounting_hole_m2_5"
+    component H3: mounting_hole "mounting_hole_m2_5"
+    component H4: mounting_hole "mounting_hole_m2_5"
+    notes "" {
+      "TP_N1 on +3V3, TP_N2 on GND."
+      "Four M2.5 mounting holes at the corners."
+    }
+  }
+
+  // ================= nets =====================================================================
+  net "GND" {
+    J1.p2 D_TVS.anode C_BULK.p2 R_QG.p2 C_IN1.p2 C_IN2.p2 U1.gnd U1.ep C_OUT1.p2 C_OUT2.p2 R_FBB.p2 C_COMP.p2 C_SS.p2
+    TP_GND.p1
+    U2.VSS C_VDD1.p2 C_VDD2.p2 Y1.gnd_2 Y1.gnd_4 C_X1.p2 C_X2.p2 C_NRST.p2 SW_RESET.p2 J_SWD.p3
+    Q_V1.s Q_V2.s R_PD1.p2 R_PD2.p2
+    J_SOIL1.p3 R_D1.p2 C_F1.p2 J_SOIL2.p3 R_D2.p2 C_F2.p2
+    J_FLOW.p2 C_FL.p2 D_FZ.anode
+    U4.GND U4.ADR_SEL C_U4.p2 U5.GND U5.A0 U5.A1 U5.A2 U5.WP C_U5.p2 J_I2C.p1
+    D_PWR.cathode D_VALVE.cathode
+    C_N1.p2 C_N2.p2 C_N3.p2 C_N4.p2 C_N5.p2 C_N6.p2 R_N1.p2 R_N2.p2
+    D_N1.cathode D_N2.cathode C_N7.p2 R_N5.p2
+    C_N8.p2 C_N9.p2 C_N10.p2 R_N6.p2
+    C_N11.p2 C_N12.p2 C_N13.p2 C_N14.p2 TP_N2.p1
+    R_B1.p2 C_B1.p2 C_B3.p2 R_B3.p2
+    C_B2.p2 C_B4.p2 C_B5.p2 R_B2.p2 R_B4.p2 C_B8.p2
+  }
+  net "SNUB2" { R_SN2.p2 C_SN2.p1 }
+  net "SNUB1" { R_SN1.p2 C_SN1.p1 }
+  net "LED_N12_A" { R_N3.p2 D_N1.anode }
+  net "LED_N33_A" { R_N4.p2 D_N2.anode }
+  net "VIN_12V_RAW" class "PWR12" { J1.p1 F1.p1 }
+  net "VIN_FUSED" class "PWR12" { F1.p2 Q1.d D_TVS.cathode TP_VIN.p1 }
+  net "Q1_GATE" { Q1.g R_QG.p1 D_QG.anode }
+  net "+12V_VALVE" class "PWR12" {
+    Q1.s D_QG.cathode C_BULK.p1 TP_12V.p1
+    C_IN1.p1 C_IN2.p1 U1.in R_EN.p1
+    J_VALVE1.p1 D_FLY1.cathode J_VALVE2.p1 D_FLY2.cathode J_FLOW.p1
+    R_N3.p1 C_N7.p1 R_N5.p1 C_N9.p1 R_N6.p1
+    R_B1.p1 C_B1.p1 R_SN1.p1 R_SN2.p1 C_B3.p1 R_B3.p1
+  }
+  net "BUCK_EN" { U1.en R_EN.p2 }
+  net "BUCK_SW" class "PWR12" { U1.sw C_BS.p2 L1.p1 }
+  net "BUCK_BS" { U1.bs C_BS.p1 }
+  net "BUCK_FB" { U1.fb R_FBT.p2 R_FBB.p1 }
+  net "BUCK_COMP" { U1.comp R_COMP.p1 }
+  net "BUCK_COMPC" { R_COMP.p2 C_COMP.p1 }
+  net "BUCK_SS" { U1.ss C_SS.p1 }
+  net "+3V3" class "PWR33" {
+    L1.p2 C_OUT1.p1 C_OUT2.p1 R_FBT.p1 TP_3V3.p1
+    U2.VDD C_VDD1.p1 C_VDD2.p1 R_NRST.p1 J_SWD.p1
+    R_EPU1.p1 Q_E1.s R_EPU2.p1 Q_E2.s R_FPU.p1
+    U4.VDD C_U4.p1 U5.VCC C_U5.p1 R_SDA.p1 R_SCL.p1 J_I2C.p2
+    R_PWR.p1
+    C_N1.p1 C_N2.p1 C_N3.p1 C_N4.p1 C_N5.p1 C_N6.p1 R_N1.p1 R_N2.p1 R_N4.p1 C_N8.p1 C_N10.p1
+    C_N11.p1 C_N12.p1 C_N13.p1 C_N14.p1 TP_N1.p1
+    C_B2.p1 C_B4.p1 C_B5.p1 R_B2.p1 R_B4.p1 C_B8.p1
+  }
+
+  // MCU
+  net "NRST" { U2.NRST R_NRST.p2 C_NRST.p1 SW_RESET.p1 J_SWD.p5 TP_NRST.p1 }
+  net "OSC_IN" { U2.PC14 Y1.xtal_a C_X1.p1 }
+  net "OSC_OUT" { U2.PC15 Y1.xtal_b C_X2.p1 }
+  net "SWDIO" { U2.PA13 J_SWD.p2 TP_SWDIO.p1 }
+  net "SWCLK" { U2.PA14 J_SWD.p4 TP_SWCLK.p1 }
+
+  // Valves (gates on the MCU top side, facing the valve drivers)
+  net "VALVE1_GATE" { U2.PB3 R_G1.p1 }
+  net "VALVE1_GATE_Q" { R_G1.p2 Q_V1.g R_PD1.p1 }
+  net "VALVE1_SW" class "PWR12" { Q_V1.d D_FLY1.anode J_VALVE1.p2 C_SN1.p2 TP_V1.p1 }
+  net "VALVE2_GATE" { U2.PB4 R_G2.p1 }
+  net "VALVE2_GATE_Q" { R_G2.p2 Q_V2.g R_PD2.p1 }
+  net "VALVE2_SW" class "PWR12" { Q_V2.d D_FLY2.anode J_VALVE2.p2 C_SN2.p2 TP_V2.p1 }
+
+  // Soil 1 (ADC PA2, excitation enable PA4: MCU bottom side)
+  net "SOIL1_EXC_EN" { U2.PA4 Q_E1.g R_EPU1.p2 }
+  net "SOIL1_EXC" { Q_E1.d R_S1.p1 }
+  net "SOIL1_PROBE" { R_S1.p2 J_SOIL1.p1 }
+  net "SOIL1_SENSE" { J_SOIL1.p2 R_D1.p1 R_F1.p1 }
+  net "SOIL1_ADC" { R_F1.p2 C_F1.p1 U2.PA2 TP_SOIL1.p1 }
+  // Soil 2 (ADC PA3, excitation enable PA5)
+  net "SOIL2_EXC_EN" { U2.PA5 Q_E2.g R_EPU2.p2 }
+  net "SOIL2_EXC" { Q_E2.d R_S2.p1 }
+  net "SOIL2_PROBE" { R_S2.p2 J_SOIL2.p1 }
+  net "SOIL2_SENSE" { J_SOIL2.p2 R_D2.p1 R_F2.p1 }
+  net "SOIL2_ADC" { R_F2.p2 C_F2.p1 U2.PA3 TP_SOIL2.p1 }
+
+  // Flow
+  net "FLOW_IN" { J_FLOW.p3 R_FPU.p2 R_FS.p1 }
+  net "FLOW_PULSE" { R_FS.p2 D_FZ.cathode C_FL.p1 U2.PA6 TP_FLOW.p1 }
+
+  // I2C
+  net "I2C_SDA" { U2.PB7 U4.SDA U5.SDA R_SDA.p2 J_I2C.p3 TP_SDA.p1 }
+  net "I2C_SCL" { U2.PB6 U4.SCL U5.SCL R_SCL.p2 J_I2C.p4 TP_SCL.p1 }
+
+  // LEDs
+  net "LED_PWR_A" { R_PWR.p2 D_PWR.anode }
+  net "LED_VALVE_DRV" { U2.PA7 R_LV.p1 }
+  net "LED_VALVE_A" { R_LV.p2 D_VALVE.anode }
+}

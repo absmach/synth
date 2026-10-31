@@ -1,0 +1,28 @@
+id = "l_1210_6r8uh"
+kind = "inductor"
+description = "Taiyo Yuden CBC3225T6R8MR 6.8 uH wirewound inductor, 1210"
+# LCSC C223222.
+mpn = "CBC3225T6R8MR"
+lcsc_pn = "C223222"
+kicad_symbol = "Device:L"
+kicad_footprint = "Inductor_SMD:L_1210_3225Metric"
+
+[footprint_dimensions]
+width_mm = 4.56
+height_mm = 3.16
+courtyard_margin_mm = 0.25
+
+# Rated current from the LCSC listing; confirm against the datasheet. Note that
+# it is a rated current, not a saturation current.
+[operating_conditions]
+max_current_ma = 940
+
+[[pins]]
+name = "p1"
+number = "1"
+electrical_type = "passive"
+
+[[pins]]
+name = "p2"
+number = "2"
+electrical_type = "passive"
