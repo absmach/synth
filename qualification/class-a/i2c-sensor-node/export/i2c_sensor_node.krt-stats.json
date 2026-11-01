@@ -49,7 +49,7 @@
  "layer_swaps": 0,
  "successful": 34,
  "failed": 0,
- "total_time": 1.82,
+ "total_time": 1.84,
  "total_iterations": 587641,
  "total_vias": 66,
  "cleanup_disconnected": [],
@@ -257,7 +257,7 @@
  "regrade": {
   "board": "file",
   "graded_nets": 35,
-  "seconds": 1.0,
+  "seconds": 0.93,
   "unowned_broken": [],
   "recovered": [],
   "broken_by_run": []

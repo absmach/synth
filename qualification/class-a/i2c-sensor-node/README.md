@@ -77,8 +77,8 @@ The source and sidecar in this directory were exported three times with `synth e
 | file | export 1 | export 2 | export 3 | |
 |---|---|---|---|---|
 | `i2c_sensor_node.synth.kicad_pcb` (un-routed) | 37a9b29833 | 37a9b29833 | 37a9b29833 | identical |
-| `i2c_sensor_node.kicad_pcb` | 0ec135766a | 6fd8a8b590 | 281f24b8a8 | identical after the router's and KiCad's random ids |
-| `i2c_sensor_node.kicad_sch` and its sheets | 745cb48598 | 745cb48598 | 745cb48598 | identical |
+| `i2c_sensor_node.kicad_pcb` | 34178c2fa3 | 0de7e93c23 | f2779b74e9 | identical after the router's and KiCad's random ids |
+| `i2c_sensor_node.kicad_sch` and its sheets | 5c212dd7a5 | 5c212dd7a5 | 5c212dd7a5 | identical |
 | `i2c_sensor_node.kicad_pro` | 3a3bf024b2 | 3a3bf024b2 | 3a3bf024b2 | identical |
 | `i2c_sensor_node.kicad_sym` | 57046d2a5c | 57046d2a5c | 57046d2a5c | identical |
 | `bom.csv` | ec31ca8c8a | ec31ca8c8a | ec31ca8c8a | identical |
@@ -95,12 +95,11 @@ With the random ids masked the routed board is `masked)` in all three exports ([
 | Three identical exports | Above. |
 | Every external line of J3 protected | TX goes through R11 (330 ohm) and D7, a 3.3 V zener (BZT52C3V3, 500 mW); RX through R12 (1 k) and D24. A 5 V fault: (5 - 3.3) / 330 = 5.2 mA and (5 - 3.3) / 1000 = 1.7 mA, so 17 mW and 5.6 mW in the zener. The 3.3 V sense line has D14 (1N5819HW) and 100 ohm: 3 mA maximum, 30 mA into a short. The zener's leakage and clamp figures are from its listing, not an opened datasheet. |
 | Net classes declared and applied | Declared (PWR, V33, GNDC, SIG) and assigned to 39 nets; the exported board's tracks use them as listed above, with the router narrowing tracks near pads. |
-| AMS1117 thermal | P = (5.0 - 3.3) x 0.1 A = 0.17 W at the 100 mA budget, 0.51 W at 300 mA, under the 600 mW SOT-223 limit; thetaJA 150 C/W gives 25.5 C and 76.5 C of rise, so the ambient may reach 99 C and 48 C at the 125 C junction limit. Figures are from a second-source copy of the AMS1117 datasheet. |
+| AMS1117 thermal | P = (5.0 - 3.3) x 0.1 A = 0.17 W at the 100 mA budget and 0.51 W at 300 mA. The datasheet gives thetaJA = 90 C/W for the SOT-223 (45 to 59 C/W with 1000 to 2500 mm2 of copper, its Table 1), so the rise is 15.3 C and 45.9 C and the ambient may reach 109 C and 79 C at the 125 C junction limit. The input is rated 15 V absolute maximum and D4 clamps at 10.3 V; the output needs a 22 uF tantalum for stability and C3 is 47 uF. |
 | Every part has distributor identity | [`fab/i2c_sensor_node_bom_orderable.csv`](fab/i2c_sensor_node_bom_orderable.csv): manufacturer, MPN, package, rating, datasheet or page, distributor and order number for every line; the exports use no `--allow-unverified-parts`. |
 | Schematic readability and silk overlaps | The schematic has one sheet per functional group; the DRC reports no `silk_overlap`. |
 
 ## Open items
 
 - JLCPCB PCB and SMT DFM, and the quote: the package in [`fab/`](fab/) is ready to upload (no order is placed).
-- The AMS1117 figures come from a second-source copy of its datasheet; the Advanced Monolithic Systems PDF was not reachable. That datasheet asks for an output tantalum with an ESR of at most 0.5 ohm; C3 (KEMET T491B476K010AT) lists 1 ohm.
 - Decoupling distance: every decoupling capacitor except C5 and C6 sits more than 4 mm from the supply pin it serves (4.3 to 16.4 mm in the table above; the review's limit is 4 mm). Placing them at the pins left the router unable to connect the MCU's GPIO and SWD nets in every attempt.

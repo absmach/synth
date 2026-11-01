@@ -18,14 +18,14 @@
     "command": [
       "/home/synth/krtvenv/bin/python",
       "/home/synth/pt/pcv/tools/kicad_routing_tools_route.py",
-      "/home/synth/runs/c2lockA-repro/out1/i2c_sensor_node.synth.kicad_pcb",
-      "/home/synth/runs/c2lockA-repro/out1/i2c_sensor_node.kicadroutingtools.kicad_pcb",
+      "/home/synth/runs/c2lockB-repro/out1/i2c_sensor_node.synth.kicad_pcb",
+      "/home/synth/runs/c2lockB-repro/out1/i2c_sensor_node.kicadroutingtools.kicad_pcb",
       "--repo",
       "/home/synth/krt",
       "--python",
       "/home/synth/krtvenv/bin/python",
       "--stats",
-      "/home/synth/runs/c2lockA-repro/out1/i2c_sensor_node.krt-stats.json",
+      "/home/synth/runs/c2lockB-repro/out1/i2c_sensor_node.krt-stats.json",
       "--escalation",
       "board",
       "--fab-tier",
@@ -44,7 +44,7 @@
     "input_hash": "37a9b298330895d18a8db66826acef27d058423e9f198b5c6ebfc1e3101a4ac4",
     "output_hash": "",
     "source_revision": null,
-    "duration_ms": 156524
+    "duration_ms": 155807
   },
   "statistics": {
     "connected_nets": 35,
@@ -63,12 +63,12 @@
     }
   },
   "artifacts": {
-    "baseline": "/home/synth/runs/c2lockA-repro/out1/i2c_sensor_node.synth.kicad_pcb",
-    "candidate": "/home/synth/runs/c2lockA-repro/out1/i2c_sensor_node.kicadroutingtools.kicad_pcb",
-    "delivered": "/home/synth/runs/c2lockA-repro/out1/i2c_sensor_node.kicad_pcb",
-    "session_log": "/home/synth/runs/c2lockA-repro/out1/i2c_sensor_node.kicadroutingtools.log",
+    "baseline": "/home/synth/runs/c2lockB-repro/out1/i2c_sensor_node.synth.kicad_pcb",
+    "candidate": "/home/synth/runs/c2lockB-repro/out1/i2c_sensor_node.kicadroutingtools.kicad_pcb",
+    "delivered": "/home/synth/runs/c2lockB-repro/out1/i2c_sensor_node.kicad_pcb",
+    "session_log": "/home/synth/runs/c2lockB-repro/out1/i2c_sensor_node.kicadroutingtools.log",
     "ses": null,
-    "router_report": "/home/synth/runs/c2lockA-repro/out1/i2c_sensor_node.krt-stats.json",
+    "router_report": "/home/synth/runs/c2lockB-repro/out1/i2c_sensor_node.krt-stats.json",
     "connectivity_report": null,
     "drc_report": null
   },

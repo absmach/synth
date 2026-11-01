@@ -112,6 +112,14 @@ expression: board
           "min_voltage_v": null,
           "max_voltage_v": 50.0,
           "max_current_ma": null
+        },
+        "provenance": {
+          "source": "seed",
+          "generator": null,
+          "datasheet_url": null,
+          "reviewed_by": "JeffMboya",
+          "reviewed_at": "2026-11-01",
+          "upstream_lcsc_pn": null
         }
       },
       "value": "10kohm",
@@ -170,6 +178,14 @@ expression: board
           "min_voltage_v": null,
           "max_voltage_v": 50.0,
           "max_current_ma": null
+        },
+        "provenance": {
+          "source": "seed",
+          "generator": null,
+          "datasheet_url": null,
+          "reviewed_by": "JeffMboya",
+          "reviewed_at": "2026-11-01",
+          "upstream_lcsc_pn": null
         }
       },
       "value": "4.7kohm",
@@ -228,6 +244,14 @@ expression: board
           "min_voltage_v": null,
           "max_voltage_v": 50.0,
           "max_current_ma": null
+        },
+        "provenance": {
+          "source": "seed",
+          "generator": null,
+          "datasheet_url": null,
+          "reviewed_by": "JeffMboya",
+          "reviewed_at": "2026-11-01",
+          "upstream_lcsc_pn": null
         }
       },
       "value": "22kohm",
@@ -286,6 +310,14 @@ expression: board
           "min_voltage_v": null,
           "max_voltage_v": 50.0,
           "max_current_ma": null
+        },
+        "provenance": {
+          "source": "seed",
+          "generator": null,
+          "datasheet_url": null,
+          "reviewed_by": "JeffMboya",
+          "reviewed_at": "2026-11-01",
+          "upstream_lcsc_pn": null
         }
       },
       "value": "4.7kohm",

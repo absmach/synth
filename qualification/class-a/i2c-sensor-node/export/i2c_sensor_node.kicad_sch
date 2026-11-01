@@ -3894,7 +3894,7 @@
 		(uuid "d295b2c1-7df2-580a-87dc-7eac16fd9bf8")
 	)
 	(text
-		"Load budget on +3V3: 100 mA maximum (the regulator is rated 1 A)."
+		"Load budget on +3V3: 100 mA maximum (the regulator is rated 800 mA)."
 		(at 20 48.7 0)
 		(effects
 			(font
@@ -3902,10 +3902,10 @@
 			)
 			(justify left bottom)
 		)
-		(uuid "ddedca31-f267-54f5-8a77-d1894eeae4a7")
+		(uuid "21a64a65-1c7f-5c6e-9168-f4107f6a2e4c")
 	)
 	(text
-		"Dissipation P = (Vin - Vout) x I, with Vin taken as 5.0 V (the JST input, before the fuse and the Schottky D1): P = (5.0 - 3.3) x 0.100 A = 0.17 W at the 100 mA budget and 0.51 W at 300 mA, under the 600 mW SOT-223 limit."
+		"Dissipation P = (Vin - Vout) x I, with Vin taken as 5.0 V (the JST input, before the fuse and the Schottky D1): P = (5.0 - 3.3) x 0.100 A = 0.17 W at the 100 mA budget and 0.51 W at 300 mA."
 		(at 20 51.24 0)
 		(effects
 			(font
@@ -3913,10 +3913,10 @@
 			)
 			(justify left bottom)
 		)
-		(uuid "56ead586-dd7d-5d17-8130-f4034f4997ea")
+		(uuid "c4c72463-72a7-54eb-a81b-abb7c7a2d79a")
 	)
 	(text
-		"Junction rise = P x thetaJA, with thetaJA = 150 C/W for the SOT-223 (AMS1117 datasheet, Slkor-published copy): 0.17 W x 150 = 25.5 C at 100 mA and 0.51 W x 150 = 76.5 C at 300 mA. With the 125 C junction limit the ambient may reach 99 C at 100 mA and 48 C at 300 mA. Synth's W-SYNTH-THERMAL-001 estimate (1360 mW) comes from the declared load sum."
+		"Junction rise = P x thetaJA. The AMS1117 datasheet gives thetaJA = 90 C/W for the SOT-223 and 45 to 59 C/W with 1000 to 2500 mm2 of copper on both sides (Table 1): 0.17 W x 90 = 15.3 C at 100 mA and 0.51 W x 90 = 45.9 C at 300 mA. The junction limit is 125 C, so the ambient may reach 109 C at 100 mA and 79 C at 300 mA. Synth's W-SYNTH-THERMAL-001 estimate (1360 mW) comes from the declared load sum."
 		(at 20 53.78 0)
 		(effects
 			(font
@@ -3924,10 +3924,10 @@
 			)
 			(justify left bottom)
 		)
-		(uuid "1c1d674f-9d72-5f7a-9c22-dd3e4a82bf9d")
+		(uuid "b1aa3612-5417-5d00-bc83-159d845c6a8e")
 	)
 	(text
-		"Dropout is 1.3 V typical and 1.4 V maximum at 1 A (datasheet). With 5.0 V less the drops of F1 and D1 at the regulator, a 4.75 V supply leaves the +3V3 rail between 3.1 V and 3.3 V, inside the supply range of the MCU (2.0 to 3.6 V) and the BME680 (1.71 to 3.6 V)."
+		"Dropout is 1.1 V typical and 1.3 V maximum at 800 mA and lower at light load (datasheet). If the input falls below 3.3 V plus the dropout, +3V3 follows it down, inside the supply range of the MCU (2.0 to 3.6 V) and the BME680 (1.71 to 3.6 V)."
 		(at 20 56.32 0)
 		(effects
 			(font
@@ -3935,10 +3935,10 @@
 			)
 			(justify left bottom)
 		)
-		(uuid "d2425a07-1b40-5f0d-855a-667c484e99d6")
+		(uuid "f0511ac1-bc7c-50a2-b5d6-cb3e647810ba")
 	)
 	(text
-		"Output capacitor: the datasheet asks for at least 10 uF of tantalum with an ESR not above 0.5 ohm. C3 is 47 uF tantalum (ESR 1 ohm per its LCSC listing) with the 10 uF ceramic C4 and the 100 nF C5 in parallel."
+		"Input: the AMS1117 is rated 15 V absolute maximum at its input; D4 (PTVS6V0S1UR, 6 V standoff) clamps at 10.3 V maximum at 38.8 A (distributor listings). Quiescent current is 5 mA typical and 10 mA maximum (datasheet)."
 		(at 20 58.86 0)
 		(effects
 			(font
@@ -3946,10 +3946,10 @@
 			)
 			(justify left bottom)
 		)
-		(uuid "dd60cd4c-f130-5a56-96df-14e49be56d33")
+		(uuid "88833f1e-19ad-5daa-9868-8ac6d16697ff")
 	)
 	(text
-		"Ceramic capacitance falls with DC bias: C4 (10 uF 0805) is taken at 50 % and 30 % of nominal (5 uF and 3 uF); the 47 uF tantalum C3 meets the 10 uF minimum alone."
+		"Output capacitor: the datasheet's stability rule is a 22 uF solid tantalum on the output. C3 is 47 uF tantalum (KEMET T491B476K010AT) with the 10 uF ceramic C4 and the 100 nF C5 in parallel."
 		(at 20 61.4 0)
 		(effects
 			(font
@@ -3957,32 +3957,32 @@
 			)
 			(justify left bottom)
 		)
-		(uuid "823b7053-1077-541a-b6cb-3dfa424de90e")
+		(uuid "9ef44970-90df-523e-a3b5-b77246362a0f")
 	)
 	(text
-		""
+		"Ceramic capacitance falls with DC bias: C4 (10 uF 0805) is taken at 50 % and 30 % of nominal (5 uF and 3 uF); the 47 uF tantalum C3 exceeds the 22 uF the datasheet asks for."
 		(at 20 63.94 0)
-		(effects
-			(font
-				(size 2 2)
-			)
-			(justify left bottom)
-		)
-		(uuid "1317a226-ae58-5491-98d2-d7f5347a012d")
-	)
-	(text
-		"J4: 1 = 3V3_REF (sense only), 2 = SWDIO, 3 = SWCLK, 4 = GND, 5 = NRST."
-		(at 20 67.94 0)
 		(effects
 			(font
 				(size 1 1)
 			)
 			(justify left bottom)
 		)
-		(uuid "28fbc33c-0796-5750-8b05-2e1acd91ca9e")
+		(uuid "95af8a3f-1b16-57bf-81b4-3b586d415280")
 	)
 	(text
-		"PA14 is SWCLK and BOOT0. Default option bytes (nBOOT_SEL=1) ignore the pin; blank flash enters the ROM bootloader. There is no BOOT0 strap on this board."
+		""
+		(at 20 66.48 0)
+		(effects
+			(font
+				(size 2 2)
+			)
+			(justify left bottom)
+		)
+		(uuid "f3eb3fd1-09cb-5331-ba67-c6ec070cd361")
+	)
+	(text
+		"J4: 1 = 3V3_REF (sense only), 2 = SWDIO, 3 = SWCLK, 4 = GND, 5 = NRST."
 		(at 20 70.48 0)
 		(effects
 			(font
@@ -3990,10 +3990,10 @@
 			)
 			(justify left bottom)
 		)
-		(uuid "56f07222-8d4f-5b88-9976-55c2d7264523")
+		(uuid "1cb6ee17-b818-5a82-8721-b6b81e62dacf")
 	)
 	(text
-		"D8/D9 (SWDIO/SWCLK) and D19 (NRST) are 3.3 V zeners, cathode on the signal, anode on GND; a 5 V clamp would exceed the STM32 input maximum."
+		"PA14 is SWCLK and BOOT0. Default option bytes (nBOOT_SEL=1) ignore the pin; blank flash enters the ROM bootloader. There is no BOOT0 strap on this board."
 		(at 20 73.02 0)
 		(effects
 			(font
@@ -4001,10 +4001,10 @@
 			)
 			(justify left bottom)
 		)
-		(uuid "f1d2e765-2c17-5feb-b876-d76abfb6fdd4")
+		(uuid "cb0bbee3-6bfe-5ea2-9f5a-eccf55960abe")
 	)
 	(text
-		"Fault current: a 5 V fault on SWDIO/SWCLK through R13/R14 (100R): (5 - 3.3) / 100 = 17 mA, and 24 V is not expected. A 500 mW SOD-123 zener carries that (about 56 mW). NRST has the 10k pull-up and 1k DTR path: (5 - 3.3) / 1k = 1.7 mA."
+		"D8/D9 (SWDIO/SWCLK) and D19 (NRST) are 3.3 V zeners, cathode on the signal, anode on GND; a 5 V clamp would exceed the STM32 input maximum."
 		(at 20 75.56 0)
 		(effects
 			(font
@@ -4012,10 +4012,10 @@
 			)
 			(justify left bottom)
 		)
-		(uuid "318b85c0-13f9-5c5b-9582-6bce5546187a")
+		(uuid "c47f3fc3-be5d-5817-afd5-0129bf58ddb7")
 	)
 	(text
-		"Caveat: a 3.3 V zener leaks near its knee at the 3.3 V rail; the leakage into NRST (10k pull-up) and the SWD lines (100R) depends on the zener's datasheet leakage at 3.3 V: needs sourcing (the registry part has no MPN yet)."
+		"Fault current: a 5 V fault on SWDIO/SWCLK through R13/R14 (100R): (5 - 3.3) / 100 = 17 mA, and 24 V is not expected. A 500 mW SOD-123 zener carries that (about 56 mW). NRST has the 10k pull-up and 1k DTR path: (5 - 3.3) / 1k = 1.7 mA."
 		(at 20 78.1 0)
 		(effects
 			(font
@@ -4023,32 +4023,32 @@
 			)
 			(justify left bottom)
 		)
-		(uuid "7e3cdd28-c940-5fba-bf1f-a7ba10a45c3d")
+		(uuid "f5eb9da3-40dd-5387-9605-c0bf9d7566ce")
 	)
 	(text
-		""
+		"Caveat: a 3.3 V zener leaks near its knee at the 3.3 V rail; the leakage into NRST (10k pull-up) and the SWD lines (100R) depends on the zener's datasheet leakage at 3.3 V: needs sourcing (the registry part has no MPN yet)."
 		(at 20 80.64 0)
-		(effects
-			(font
-				(size 2 2)
-			)
-			(justify left bottom)
-		)
-		(uuid "880c03ae-a518-51de-a206-587a5f6be1d8")
-	)
-	(text
-		"BME680 SDO low = 0x76, CSB high = I2C. 24LC256 A2:A0 low = 0x50. No collision."
-		(at 20 84.64 0)
 		(effects
 			(font
 				(size 1 1)
 			)
 			(justify left bottom)
 		)
-		(uuid "4280eba6-3def-58dc-90a8-c376392810cf")
+		(uuid "7c158460-05df-5c39-bdc6-556e703cbb24")
 	)
 	(text
-		"One pull-up pair, 4.7k each, for the whole bus."
+		""
+		(at 20 83.18 0)
+		(effects
+			(font
+				(size 2 2)
+			)
+			(justify left bottom)
+		)
+		(uuid "c0a825ad-8415-5833-ab03-27b6c452b76d")
+	)
+	(text
+		"BME680 SDO low = 0x76, CSB high = I2C. 24LC256 A2:A0 low = 0x50. No collision."
 		(at 20 87.18 0)
 		(effects
 			(font
@@ -4056,32 +4056,32 @@
 			)
 			(justify left bottom)
 		)
-		(uuid "b486934c-c87a-53aa-957c-e212884fdadc")
+		(uuid "68608ca1-16b3-50de-b1bd-564cb6a517c0")
 	)
 	(text
-		""
+		"One pull-up pair, 4.7k each, for the whole bus."
 		(at 20 89.72 0)
-		(effects
-			(font
-				(size 2 2)
-			)
-			(justify left bottom)
-		)
-		(uuid "5f5d2aea-0bd9-5b94-bb09-be137f0cc43f")
-	)
-	(text
-		"J3: 1 GND, 2 UART_TX (MCU out), 3 UART_RX (MCU in), 4 3V3_REF (sense only, 3 mA max)."
-		(at 20 93.72 0)
 		(effects
 			(font
 				(size 1 1)
 			)
 			(justify left bottom)
 		)
-		(uuid "4ff187f5-848c-5dbf-9833-56b669801a94")
+		(uuid "44c2db21-d51b-59a5-8fa9-238240992913")
 	)
 	(text
-		"Host must use 3.3 V logic. D7 (TX) and D24 (RX) are 3.3 V zeners, cathode on the MCU side of the series resistor, anode on GND."
+		""
+		(at 20 92.26 0)
+		(effects
+			(font
+				(size 2 2)
+			)
+			(justify left bottom)
+		)
+		(uuid "652554da-d129-5427-8a4f-272cf8d4de9c")
+	)
+	(text
+		"J3: 1 GND, 2 UART_TX (MCU out), 3 UART_RX (MCU in), 4 3V3_REF (sense only, 3 mA max)."
 		(at 20 96.26 0)
 		(effects
 			(font
@@ -4089,10 +4089,10 @@
 			)
 			(justify left bottom)
 		)
-		(uuid "2330fefd-4b2b-55c1-b18d-d5291b02fb73")
+		(uuid "2d7831a1-4f23-51dc-9db9-ab08183c48c1")
 	)
 	(text
-		"Fault current with a 5 V host line on J3: TX (5 - 3.3) / 330 = 5.2 mA, zener power 3.3 V x 5.2 mA = 17 mW; RX (5 - 3.3) / 1k = 1.7 mA, 5.6 mW. A 12 V fault on TX would be (12 - 3.3) / 330 = 26 mA, 86 mW in the zener and 0.23 W in R11, which exceeds an 0603 rating (0.1 W typical, needs sourcing): the connector is specified for 3.3 V to 5 V only."
+		"Host must use 3.3 V logic. D7 (TX) and D24 (RX) are 3.3 V zeners, cathode on the MCU side of the series resistor, anode on GND."
 		(at 20 98.8 0)
 		(effects
 			(font
@@ -4100,10 +4100,10 @@
 			)
 			(justify left bottom)
 		)
-		(uuid "0b21cf43-b04d-5fa3-ae82-28d465c81252")
+		(uuid "599f7fb4-40a8-504b-bc05-f9bc7a9138fc")
 	)
 	(text
-		"The MCU pin sees the zener clamp (3.3 V at the zener test current, datasheet value needs sourcing), below the STM32G030 absolute maximum of VDD + 4 V = 7.3 V (datasheet figure, needs sourcing)."
+		"Fault current with a 5 V host line on J3: TX (5 - 3.3) / 330 = 5.2 mA, zener power 3.3 V x 5.2 mA = 17 mW; RX (5 - 3.3) / 1k = 1.7 mA, 5.6 mW. A 12 V fault on TX would be (12 - 3.3) / 330 = 26 mA, 86 mW in the zener and 0.23 W in R11, which exceeds an 0603 rating (0.1 W typical, needs sourcing): the connector is specified for 3.3 V to 5 V only."
 		(at 20 101.34 0)
 		(effects
 			(font
@@ -4111,10 +4111,10 @@
 			)
 			(justify left bottom)
 		)
-		(uuid "d34a0db8-effa-5dca-be14-2d155ab38873")
+		(uuid "4c9a6196-6860-5dee-b5bb-7bc51ee65331")
 	)
 	(text
-		"Open: a 3.3 V zener conducts at its knee near 3.3 V, so leakage into the UART lines at logic-high is needs sourcing from the zener datasheet (registry part has no MPN)."
+		"The MCU pin sees the zener clamp (3.3 V at the zener test current, datasheet value needs sourcing), below the STM32G030 absolute maximum of VDD + 4 V = 7.3 V (datasheet figure, needs sourcing)."
 		(at 20 103.88 0)
 		(effects
 			(font
@@ -4122,32 +4122,32 @@
 			)
 			(justify left bottom)
 		)
-		(uuid "22439b19-927b-58a7-98ee-d54fdf7bef60")
+		(uuid "2d87261b-ca9e-50af-94ad-1e27e043344e")
 	)
 	(text
-		""
+		"Open: a 3.3 V zener conducts at its knee near 3.3 V, so leakage into the UART lines at logic-high is needs sourcing from the zener datasheet (registry part has no MPN)."
 		(at 20 106.42 0)
-		(effects
-			(font
-				(size 2 2)
-			)
-			(justify left bottom)
-		)
-		(uuid "bb74455e-5d5a-540e-88af-d8a13b313a56")
-	)
-	(text
-		"J5: 1 3V3_REF, 2 GND, 3 PA0, 4 PA1, 5 PA4, 6 GND, 7 PA5, 8 PA6, 9 PA7, 10 GND, 11 PB0, 12 PB9."
-		(at 20 110.42 0)
 		(effects
 			(font
 				(size 1 1)
 			)
 			(justify left bottom)
 		)
-		(uuid "cba78d69-b57c-5779-bf5a-696c845528f7")
+		(uuid "5bda9c27-4ef2-55d9-9bfe-e1d765ffdbba")
 	)
 	(text
-		"3V3_REF = +3V3 through D14 (blocks back-drive) and 100R: sense or reference only, 3 mA max (about 2.7 V at 3 mA), 30 mA into a short."
+		""
+		(at 20 108.96 0)
+		(effects
+			(font
+				(size 2 2)
+			)
+			(justify left bottom)
+		)
+		(uuid "c8b53942-b6db-5188-8f91-76139da2e7f6")
+	)
+	(text
+		"J5: 1 3V3_REF, 2 GND, 3 PA0, 4 PA1, 5 PA4, 6 GND, 7 PA5, 8 PA6, 9 PA7, 10 GND, 11 PB0, 12 PB9."
 		(at 20 112.96 0)
 		(effects
 			(font
@@ -4155,10 +4155,10 @@
 			)
 			(justify left bottom)
 		)
-		(uuid "7ad476a4-5526-5fc7-9cdf-191d6e1ad5e7")
+		(uuid "32249a8a-0025-55f9-a722-1ddc5f5fe20e")
 	)
 	(text
-		"D10..D13 and D20..D23 are eight 3.3 V zeners, one per GPIO line, cathode on the MCU side of the 330R series resistor, anode on GND."
+		"3V3_REF = +3V3 through D14 (blocks back-drive) and 100R: sense or reference only, 3 mA max (about 2.7 V at 3 mA), 30 mA into a short."
 		(at 20 115.5 0)
 		(effects
 			(font
@@ -4166,10 +4166,10 @@
 			)
 			(justify left bottom)
 		)
-		(uuid "c1dcdbf4-f193-575e-ab00-48b866bed19c")
+		(uuid "50594a78-ca81-57e7-b1b2-33a20f5bd6be")
 	)
 	(text
-		"Fault current with a 5 V source on a header pin: (5 - 3.3) / 330 = 5.2 mA, zener power 3.3 V x 5.2 mA = 17 mW, resistor power 5.2 mA squared x 330 = 8.9 mW. A 12 V fault is 26 mA, 86 mW zener and 0.23 W in the 0603 resistor (0.1 W typical, needs sourcing): the header is specified for 3.3 V to 5 V only."
+		"D10..D13 and D20..D23 are eight 3.3 V zeners, one per GPIO line, cathode on the MCU side of the 330R series resistor, anode on GND."
 		(at 20 118.04 0)
 		(effects
 			(font
@@ -4177,10 +4177,10 @@
 			)
 			(justify left bottom)
 		)
-		(uuid "8a492441-387c-5f28-960b-32962d84cbe1")
+		(uuid "f6fc5b42-e88e-506d-bf54-355d476b0f5f")
 	)
 	(text
-		"Zener leakage at logic-high near 3.3 V and ADC input error from it (PA0, PA1, PA4, PA6, PA7, PB0 are analog-capable): needs sourcing from the zener datasheet."
+		"Fault current with a 5 V source on a header pin: (5 - 3.3) / 330 = 5.2 mA, zener power 3.3 V x 5.2 mA = 17 mW, resistor power 5.2 mA squared x 330 = 8.9 mW. A 12 V fault is 26 mA, 86 mW zener and 0.23 W in the 0603 resistor (0.1 W typical, needs sourcing): the header is specified for 3.3 V to 5 V only."
 		(at 20 120.58 0)
 		(effects
 			(font
@@ -4188,32 +4188,43 @@
 			)
 			(justify left bottom)
 		)
-		(uuid "a8585823-620d-5cd2-831a-1ef8292ac677")
+		(uuid "632fc288-2154-5416-8561-d118cb60cf78")
 	)
 	(text
-		""
+		"Zener leakage at logic-high near 3.3 V and ADC input error from it (PA0, PA1, PA4, PA6, PA7, PB0 are analog-capable): needs sourcing from the zener datasheet."
 		(at 20 123.12 0)
-		(effects
-			(font
-				(size 2 2)
-			)
-			(justify left bottom)
-		)
-		(uuid "c6eeb372-464d-539d-b508-9078e1ceb0c9")
-	)
-	(text
-		"H2, H3: two M2.5 non-plated mounting holes at opposite (diagonal) corners."
-		(at 20 127.12 0)
 		(effects
 			(font
 				(size 1 1)
 			)
 			(justify left bottom)
 		)
-		(uuid "8c22047c-791c-5239-8f65-8baafeb2d58d")
+		(uuid "750746e2-4815-5a4a-b1e2-eba089e370bf")
+	)
+	(text
+		""
+		(at 20 125.66 0)
+		(effects
+			(font
+				(size 2 2)
+			)
+			(justify left bottom)
+		)
+		(uuid "a96429a3-7d94-5601-9e79-5aae8a706daf")
+	)
+	(text
+		"H2, H3: two M2.5 non-plated mounting holes at opposite (diagonal) corners."
+		(at 20 129.66 0)
+		(effects
+			(font
+				(size 1 1)
+			)
+			(justify left bottom)
+		)
+		(uuid "bd20c413-f454-5432-9be6-d3b5373ce244")
 	)
 	(sheet
-		(at 20.32 152.4)
+		(at 20.32 154.94)
 		(size 80.01 59.69)
 		(stroke
 			(width 0.254)
@@ -4226,7 +4237,7 @@
 		(property
 			"Sheetname"
 			"5V INPUT: FUSE THEN DIODE"
-			(at 20.32 149.86 0)
+			(at 20.32 152.4 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -4237,7 +4248,7 @@
 		(property
 			"Sheetfile"
 			"i2c_sensor_node_5V_INPUT__FUSE_THEN_DIODE.kicad_sch"
-			(at 20.32 149.86 0)
+			(at 20.32 152.4 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -4256,7 +4267,7 @@
 		)
 	)
 	(sheet
-		(at 125.33 152.4)
+		(at 125.33 154.94)
 		(size 80.01 59.69)
 		(stroke
 			(width 0.254)
@@ -4269,7 +4280,7 @@
 		(property
 			"Sheetname"
 			"3V3 REGULATOR"
-			(at 125.33 149.86 0)
+			(at 125.33 152.4 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -4280,7 +4291,7 @@
 		(property
 			"Sheetfile"
 			"i2c_sensor_node_3V3_REGULATOR.kicad_sch"
-			(at 125.33 149.86 0)
+			(at 125.33 152.4 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -4299,7 +4310,7 @@
 		)
 	)
 	(sheet
-		(at 230.34 152.4)
+		(at 230.34 154.94)
 		(size 180.34 59.69)
 		(stroke
 			(width 0.254)
@@ -4312,7 +4323,7 @@
 		(property
 			"Sheetname"
 			"STM32G030 MCU"
-			(at 230.34 149.86 0)
+			(at 230.34 152.4 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -4323,7 +4334,7 @@
 		(property
 			"Sheetfile"
 			"i2c_sensor_node_STM32G030_MCU.kicad_sch"
-			(at 230.34 149.86 0)
+			(at 230.34 152.4 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -4334,7 +4345,7 @@
 		(pin
 			"3V3_REF"
 			bidirectional
-			(at 243.84 212.09 270)
+			(at 243.84 214.63 270)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -4345,7 +4356,7 @@
 		(pin
 			"GPIO_PA0_MCU"
 			bidirectional
-			(at 256.54 212.09 270)
+			(at 256.54 214.63 270)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -4356,7 +4367,7 @@
 		(pin
 			"GPIO_PA1_MCU"
 			bidirectional
-			(at 269.24 212.09 270)
+			(at 269.24 214.63 270)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -4367,7 +4378,7 @@
 		(pin
 			"GPIO_PA4_MCU"
 			bidirectional
-			(at 281.94 212.09 270)
+			(at 281.94 214.63 270)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -4378,7 +4389,7 @@
 		(pin
 			"GPIO_PA5_MCU"
 			bidirectional
-			(at 294.64 212.09 270)
+			(at 294.64 214.63 270)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -4389,7 +4400,7 @@
 		(pin
 			"GPIO_PA6_MCU"
 			bidirectional
-			(at 307.34 212.09 270)
+			(at 307.34 214.63 270)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -4400,7 +4411,7 @@
 		(pin
 			"GPIO_PA7_MCU"
 			bidirectional
-			(at 320.04 212.09 270)
+			(at 320.04 214.63 270)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -4411,7 +4422,7 @@
 		(pin
 			"GPIO_PB0_MCU"
 			bidirectional
-			(at 334.01 212.09 270)
+			(at 334.01 214.63 270)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -4422,7 +4433,7 @@
 		(pin
 			"GPIO_PB9_MCU"
 			bidirectional
-			(at 346.71 212.09 270)
+			(at 346.71 214.63 270)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -4433,7 +4444,7 @@
 		(pin
 			"I2C_SCL"
 			bidirectional
-			(at 359.41 212.09 270)
+			(at 359.41 214.63 270)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -4444,7 +4455,7 @@
 		(pin
 			"I2C_SDA"
 			bidirectional
-			(at 372.11 212.09 270)
+			(at 372.11 214.63 270)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -4455,7 +4466,7 @@
 		(pin
 			"U2_RX"
 			bidirectional
-			(at 384.81 212.09 270)
+			(at 384.81 214.63 270)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -4466,7 +4477,7 @@
 		(pin
 			"U2_TX"
 			bidirectional
-			(at 397.51 212.09 270)
+			(at 397.51 214.63 270)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -4485,7 +4496,7 @@
 		)
 	)
 	(sheet
-		(at 435.68 152.4)
+		(at 435.68 154.94)
 		(size 80.01 59.69)
 		(stroke
 			(width 0.254)
@@ -4498,7 +4509,7 @@
 		(property
 			"Sheetname"
 			"I2C SENSING"
-			(at 435.68 149.86 0)
+			(at 435.68 152.4 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -4509,7 +4520,7 @@
 		(property
 			"Sheetfile"
 			"i2c_sensor_node_I2C_SENSING.kicad_sch"
-			(at 435.68 149.86 0)
+			(at 435.68 152.4 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -4520,7 +4531,7 @@
 		(pin
 			"I2C_SCL"
 			bidirectional
-			(at 462.28 212.09 270)
+			(at 462.28 214.63 270)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -4531,7 +4542,7 @@
 		(pin
 			"I2C_SDA"
 			bidirectional
-			(at 488.95 212.09 270)
+			(at 488.95 214.63 270)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -4550,7 +4561,7 @@
 		)
 	)
 	(sheet
-		(at 540.69 152.4)
+		(at 540.69 154.94)
 		(size 80.01 59.69)
 		(stroke
 			(width 0.254)
@@ -4563,7 +4574,7 @@
 		(property
 			"Sheetname"
 			"UART BREAKOUT"
-			(at 540.69 149.86 0)
+			(at 540.69 152.4 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -4574,7 +4585,7 @@
 		(property
 			"Sheetfile"
 			"i2c_sensor_node_UART_BREAKOUT.kicad_sch"
-			(at 540.69 149.86 0)
+			(at 540.69 152.4 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -4585,7 +4596,7 @@
 		(pin
 			"3V3_REF"
 			bidirectional
-			(at 560.07 212.09 270)
+			(at 560.07 214.63 270)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -4596,7 +4607,7 @@
 		(pin
 			"U2_RX"
 			bidirectional
-			(at 580.39 212.09 270)
+			(at 580.39 214.63 270)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -4607,7 +4618,7 @@
 		(pin
 			"U2_TX"
 			bidirectional
-			(at 600.71 212.09 270)
+			(at 600.71 214.63 270)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -4626,7 +4637,7 @@
 		)
 	)
 	(sheet
-		(at 645.7 152.4)
+		(at 645.7 154.94)
 		(size 132.08 59.69)
 		(stroke
 			(width 0.254)
@@ -4639,7 +4650,7 @@
 		(property
 			"Sheetname"
 			"GPIO HEADER"
-			(at 645.7 149.86 0)
+			(at 645.7 152.4 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -4650,7 +4661,7 @@
 		(property
 			"Sheetfile"
 			"i2c_sensor_node_GPIO_HEADER.kicad_sch"
-			(at 645.7 149.86 0)
+			(at 645.7 152.4 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -4661,7 +4672,7 @@
 		(pin
 			"3V3_REF"
 			bidirectional
-			(at 659.13 212.09 270)
+			(at 659.13 214.63 270)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -4672,7 +4683,7 @@
 		(pin
 			"GPIO_PA0_MCU"
 			bidirectional
-			(at 671.83 212.09 270)
+			(at 671.83 214.63 270)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -4683,7 +4694,7 @@
 		(pin
 			"GPIO_PA1_MCU"
 			bidirectional
-			(at 685.8 212.09 270)
+			(at 685.8 214.63 270)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -4694,7 +4705,7 @@
 		(pin
 			"GPIO_PA4_MCU"
 			bidirectional
-			(at 698.5 212.09 270)
+			(at 698.5 214.63 270)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -4705,7 +4716,7 @@
 		(pin
 			"GPIO_PA5_MCU"
 			bidirectional
-			(at 711.2 212.09 270)
+			(at 711.2 214.63 270)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -4716,7 +4727,7 @@
 		(pin
 			"GPIO_PA6_MCU"
 			bidirectional
-			(at 725.17 212.09 270)
+			(at 725.17 214.63 270)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -4727,7 +4738,7 @@
 		(pin
 			"GPIO_PA7_MCU"
 			bidirectional
-			(at 737.87 212.09 270)
+			(at 737.87 214.63 270)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -4738,7 +4749,7 @@
 		(pin
 			"GPIO_PB0_MCU"
 			bidirectional
-			(at 751.84 212.09 270)
+			(at 751.84 214.63 270)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -4749,7 +4760,7 @@
 		(pin
 			"GPIO_PB9_MCU"
 			bidirectional
-			(at 764.54 212.09 270)
+			(at 764.54 214.63 270)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -4768,7 +4779,7 @@
 		)
 	)
 	(sheet
-		(at 802.78 152.4)
+		(at 802.78 154.94)
 		(size 80.01 59.69)
 		(stroke
 			(width 0.254)
@@ -4781,7 +4792,7 @@
 		(property
 			"Sheetname"
 			"MOUNTING"
-			(at 802.78 149.86 0)
+			(at 802.78 152.4 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -4792,7 +4803,7 @@
 		(property
 			"Sheetfile"
 			"i2c_sensor_node_MOUNTING.kicad_sch"
-			(at 802.78 149.86 0)
+			(at 802.78 152.4 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -4812,596 +4823,596 @@
 	)
 	(wire
 		(pts
-			(xy 243.84 212.09)
-			(xy 243.84 217.17)
+			(xy 243.84 214.63)
+			(xy 243.84 219.71)
 		)
 		(stroke
 			(width 0)
 			(type default)
 		)
-		(uuid "3b7738bc-28c1-552f-9b13-f93eb5224c4e")
+		(uuid "022fb705-a96e-54b9-9f15-a83b2f1128e3")
 	)
 	(wire
 		(pts
-			(xy 256.54 212.09)
-			(xy 256.54 217.17)
+			(xy 256.54 214.63)
+			(xy 256.54 219.71)
 		)
 		(stroke
 			(width 0)
 			(type default)
 		)
-		(uuid "4a657eb2-7836-515b-b98f-3fe7940dffd5")
+		(uuid "c2f078b6-2b98-5bf0-a123-ce5999f97517")
 	)
 	(wire
 		(pts
-			(xy 269.24 212.09)
-			(xy 269.24 217.17)
+			(xy 269.24 214.63)
+			(xy 269.24 219.71)
 		)
 		(stroke
 			(width 0)
 			(type default)
 		)
-		(uuid "ad641e78-21da-5499-92d7-89afb0dd2f5c")
+		(uuid "05c3457a-855f-5fd7-bb20-a64d17eb6f0d")
 	)
 	(wire
 		(pts
-			(xy 281.94 212.09)
-			(xy 281.94 217.17)
+			(xy 281.94 214.63)
+			(xy 281.94 219.71)
 		)
 		(stroke
 			(width 0)
 			(type default)
 		)
-		(uuid "fa753d3f-3e5d-5826-be2c-74ed86625897")
+		(uuid "22ee7391-6c77-51ce-ad40-ae99b07715cb")
 	)
 	(wire
 		(pts
-			(xy 294.64 212.09)
-			(xy 294.64 217.17)
+			(xy 294.64 214.63)
+			(xy 294.64 219.71)
 		)
 		(stroke
 			(width 0)
 			(type default)
 		)
-		(uuid "066a0d43-aca5-5a22-937e-9c16a15bc663")
+		(uuid "8fe5b32d-f889-5755-b385-628289d5576d")
 	)
 	(wire
 		(pts
-			(xy 307.34 212.09)
-			(xy 307.34 217.17)
+			(xy 307.34 214.63)
+			(xy 307.34 219.71)
 		)
 		(stroke
 			(width 0)
 			(type default)
 		)
-		(uuid "e6a49121-d047-5cb6-9f7e-528ed6fbaa22")
+		(uuid "27969873-d95a-518e-814b-78b65ba0e39a")
 	)
 	(wire
 		(pts
-			(xy 320.04 212.09)
-			(xy 320.04 217.17)
+			(xy 320.04 214.63)
+			(xy 320.04 219.71)
 		)
 		(stroke
 			(width 0)
 			(type default)
 		)
-		(uuid "26785344-b8c8-56d4-be80-0352069667be")
+		(uuid "f9f03d2a-c91e-512d-abd4-1466e6d35c5e")
 	)
 	(wire
 		(pts
-			(xy 334.01 212.09)
-			(xy 334.01 217.17)
+			(xy 334.01 214.63)
+			(xy 334.01 219.71)
 		)
 		(stroke
 			(width 0)
 			(type default)
 		)
-		(uuid "9a9e096c-654d-5d33-95d4-66c141641ca4")
+		(uuid "205d5397-c93a-56a7-b20f-faaf6a7dca55")
 	)
 	(wire
 		(pts
-			(xy 346.71 212.09)
-			(xy 346.71 217.17)
+			(xy 346.71 214.63)
+			(xy 346.71 219.71)
 		)
 		(stroke
 			(width 0)
 			(type default)
 		)
-		(uuid "234c053f-22a0-52b5-ae75-02201b8ea97c")
+		(uuid "9030f967-ef3f-50c7-be84-68a0047c9980")
 	)
 	(wire
 		(pts
-			(xy 359.41 212.09)
-			(xy 359.41 217.17)
+			(xy 359.41 214.63)
+			(xy 359.41 219.71)
 		)
 		(stroke
 			(width 0)
 			(type default)
 		)
-		(uuid "0cd9d215-9b4e-5790-a26b-f5a76d965e67")
+		(uuid "7b11fa93-07a2-57b2-b059-85c94ff6386e")
 	)
 	(wire
 		(pts
-			(xy 372.11 212.09)
-			(xy 372.11 217.17)
+			(xy 372.11 214.63)
+			(xy 372.11 219.71)
 		)
 		(stroke
 			(width 0)
 			(type default)
 		)
-		(uuid "01638822-9189-5f85-9fa9-3b90632ea2c7")
+		(uuid "665da085-0e20-5c72-b76f-ae05869eb418")
 	)
 	(wire
 		(pts
-			(xy 384.81 212.09)
-			(xy 384.81 217.17)
+			(xy 384.81 214.63)
+			(xy 384.81 219.71)
 		)
 		(stroke
 			(width 0)
 			(type default)
 		)
-		(uuid "2b98c76e-9f49-5f7f-9917-e9b83ebcb2b1")
+		(uuid "98869302-c2de-5615-8a55-84718cd2d694")
 	)
 	(wire
 		(pts
-			(xy 397.51 212.09)
-			(xy 397.51 217.17)
+			(xy 397.51 214.63)
+			(xy 397.51 219.71)
 		)
 		(stroke
 			(width 0)
 			(type default)
 		)
-		(uuid "0e9ff606-3379-5ff9-97cc-662219ae7777")
+		(uuid "6c7802f4-c8fd-5e76-b553-4b45cb0a353b")
 	)
 	(wire
 		(pts
-			(xy 462.28 212.09)
-			(xy 462.28 217.17)
+			(xy 462.28 214.63)
+			(xy 462.28 219.71)
 		)
 		(stroke
 			(width 0)
 			(type default)
 		)
-		(uuid "7826d20d-20d4-5efd-ab62-465d1f82a5a7")
+		(uuid "fb3020d9-dab3-5739-865b-1ad91ea9afc3")
 	)
 	(wire
 		(pts
-			(xy 488.95 212.09)
-			(xy 488.95 217.17)
+			(xy 488.95 214.63)
+			(xy 488.95 219.71)
 		)
 		(stroke
 			(width 0)
 			(type default)
 		)
-		(uuid "761811db-9ee5-5ab3-914b-542aebc81103")
+		(uuid "fb5ed875-0868-571e-88c1-df7036384fc1")
 	)
 	(wire
 		(pts
-			(xy 560.07 212.09)
-			(xy 560.07 217.17)
+			(xy 560.07 214.63)
+			(xy 560.07 219.71)
 		)
 		(stroke
 			(width 0)
 			(type default)
 		)
-		(uuid "1c25b91e-79bc-5b5f-8fe2-5590f4478b8f")
+		(uuid "03653547-19ca-5051-a78e-0398712a9a8c")
 	)
 	(wire
 		(pts
-			(xy 580.39 212.09)
-			(xy 580.39 217.17)
+			(xy 580.39 214.63)
+			(xy 580.39 219.71)
 		)
 		(stroke
 			(width 0)
 			(type default)
 		)
-		(uuid "7658df5f-d7aa-50da-80f6-67f52c322805")
+		(uuid "0a912618-f46d-52b0-9b2b-2128aceac110")
 	)
 	(wire
 		(pts
-			(xy 600.71 212.09)
-			(xy 600.71 217.17)
+			(xy 600.71 214.63)
+			(xy 600.71 219.71)
 		)
 		(stroke
 			(width 0)
 			(type default)
 		)
-		(uuid "3e575796-25f2-5176-ae2b-3ca964b74525")
+		(uuid "2ac0fd79-3cc7-5bac-90ff-b9f2746a1a10")
 	)
 	(wire
 		(pts
-			(xy 659.13 212.09)
-			(xy 659.13 217.17)
+			(xy 659.13 214.63)
+			(xy 659.13 219.71)
 		)
 		(stroke
 			(width 0)
 			(type default)
 		)
-		(uuid "faa552e2-3aeb-5140-ba30-a631614915d9")
+		(uuid "2255c0eb-c3c1-565c-a76d-c2da1ad3d456")
 	)
 	(wire
 		(pts
-			(xy 671.83 212.09)
-			(xy 671.83 217.17)
+			(xy 671.83 214.63)
+			(xy 671.83 219.71)
 		)
 		(stroke
 			(width 0)
 			(type default)
 		)
-		(uuid "413593cd-543f-5d85-be5b-5a9c6ca0c2d7")
+		(uuid "d7419054-d963-5304-8170-991c98a74d76")
 	)
 	(wire
 		(pts
-			(xy 685.8 212.09)
-			(xy 685.8 217.17)
+			(xy 685.8 214.63)
+			(xy 685.8 219.71)
 		)
 		(stroke
 			(width 0)
 			(type default)
 		)
-		(uuid "bbf339a9-9721-5e1d-9312-8ae1fe70961a")
+		(uuid "59817970-6374-5728-9d1a-27d154f72d7a")
 	)
 	(wire
 		(pts
-			(xy 698.5 212.09)
-			(xy 698.5 217.17)
+			(xy 698.5 214.63)
+			(xy 698.5 219.71)
 		)
 		(stroke
 			(width 0)
 			(type default)
 		)
-		(uuid "905af0bb-c671-5d60-af2b-7300ba50084e")
+		(uuid "e7e19c3d-5e79-59b8-ab9f-d743d190e63f")
 	)
 	(wire
 		(pts
-			(xy 711.2 212.09)
-			(xy 711.2 217.17)
+			(xy 711.2 214.63)
+			(xy 711.2 219.71)
 		)
 		(stroke
 			(width 0)
 			(type default)
 		)
-		(uuid "6b15c10b-db0c-5c7f-86e6-d07deac99145")
+		(uuid "31c067dc-f974-54ed-ae40-0b9fce2e674a")
 	)
 	(wire
 		(pts
-			(xy 725.17 212.09)
-			(xy 725.17 217.17)
+			(xy 725.17 214.63)
+			(xy 725.17 219.71)
 		)
 		(stroke
 			(width 0)
 			(type default)
 		)
-		(uuid "7ea58ba1-890b-5c2e-952a-d54571359ebd")
+		(uuid "ebe5d007-03e3-5960-8241-97ce185afb4e")
 	)
 	(wire
 		(pts
-			(xy 737.87 212.09)
-			(xy 737.87 217.17)
+			(xy 737.87 214.63)
+			(xy 737.87 219.71)
 		)
 		(stroke
 			(width 0)
 			(type default)
 		)
-		(uuid "903575b0-6ff3-5221-80cd-ae6ec4236195")
+		(uuid "39a25590-6464-5ea7-94e4-ddf5866bad62")
 	)
 	(wire
 		(pts
-			(xy 751.84 212.09)
-			(xy 751.84 217.17)
+			(xy 751.84 214.63)
+			(xy 751.84 219.71)
 		)
 		(stroke
 			(width 0)
 			(type default)
 		)
-		(uuid "dfb27d17-510a-58a7-a1e8-7e159c3f722b")
+		(uuid "18bad6cd-74e7-51e5-a100-a3a7b686cf3a")
 	)
 	(wire
 		(pts
-			(xy 764.54 212.09)
-			(xy 764.54 217.17)
+			(xy 764.54 214.63)
+			(xy 764.54 219.71)
 		)
 		(stroke
 			(width 0)
 			(type default)
 		)
-		(uuid "f3d2d458-f783-537a-aa05-5d39cb245d75")
+		(uuid "d0330455-cb38-5bad-9027-dde7861ae1ed")
 	)
 	(label
 		"3V3_REF"
-		(at 243.84 217.17 0)
+		(at 243.84 219.71 0)
 		(effects
 			(font
 				(size 1.27 1.27)
 			)
 			(justify left)
 		)
-		(uuid "3e4e3d7e-8055-596d-9273-787ef69dc90a")
+		(uuid "2f0948f0-6ccd-5bdb-ba9b-df8e1dd32380")
 	)
 	(label
 		"GPIO_PA0_MCU"
-		(at 256.54 217.17 0)
+		(at 256.54 219.71 0)
 		(effects
 			(font
 				(size 1.27 1.27)
 			)
 			(justify left)
 		)
-		(uuid "b173f9ff-5ea3-5615-814c-9a5d973487f3")
+		(uuid "b92b4c81-e655-5c02-b530-fb6087090675")
 	)
 	(label
 		"GPIO_PA1_MCU"
-		(at 269.24 217.17 0)
+		(at 269.24 219.71 0)
 		(effects
 			(font
 				(size 1.27 1.27)
 			)
 			(justify left)
 		)
-		(uuid "b7a057df-b93e-5721-b51d-9a13b0f4f17b")
+		(uuid "dbfc4b84-4dbd-53d0-8916-a8902affd0d3")
 	)
 	(label
 		"GPIO_PA4_MCU"
-		(at 281.94 217.17 0)
+		(at 281.94 219.71 0)
 		(effects
 			(font
 				(size 1.27 1.27)
 			)
 			(justify left)
 		)
-		(uuid "4b60665a-1243-5448-a809-5a19d2734f07")
+		(uuid "ca51ba94-66c0-5f87-81fd-97586b77a0e1")
 	)
 	(label
 		"GPIO_PA5_MCU"
-		(at 294.64 217.17 0)
+		(at 294.64 219.71 0)
 		(effects
 			(font
 				(size 1.27 1.27)
 			)
 			(justify left)
 		)
-		(uuid "898e3f76-3eec-542a-9aa9-ec715073a760")
+		(uuid "41151766-c0fb-589d-a872-897686e7fc2a")
 	)
 	(label
 		"GPIO_PA6_MCU"
-		(at 307.34 217.17 0)
+		(at 307.34 219.71 0)
 		(effects
 			(font
 				(size 1.27 1.27)
 			)
 			(justify left)
 		)
-		(uuid "b2b6eb19-0ae5-54b6-b345-1a343d13693f")
+		(uuid "db545912-521b-568a-80fe-0d6b5d340b55")
 	)
 	(label
 		"GPIO_PA7_MCU"
-		(at 320.04 217.17 0)
+		(at 320.04 219.71 0)
 		(effects
 			(font
 				(size 1.27 1.27)
 			)
 			(justify left)
 		)
-		(uuid "75652953-d3e9-57d0-acac-0724f2d2c457")
+		(uuid "4bd42c50-c3dd-5905-8b79-4b4e0a25ed29")
 	)
 	(label
 		"GPIO_PB0_MCU"
-		(at 334.01 217.17 0)
+		(at 334.01 219.71 0)
 		(effects
 			(font
 				(size 1.27 1.27)
 			)
 			(justify left)
 		)
-		(uuid "499820b9-37f2-5ea9-8f1e-ec348c69101a")
+		(uuid "c56f7ca4-9d2d-5caa-8e59-1c4ab7b0a2b2")
 	)
 	(label
 		"GPIO_PB9_MCU"
-		(at 346.71 217.17 0)
+		(at 346.71 219.71 0)
 		(effects
 			(font
 				(size 1.27 1.27)
 			)
 			(justify left)
 		)
-		(uuid "5e65c3a9-1d7e-5b9e-9e8e-d20b75815f46")
+		(uuid "4fe9efb9-c9e2-5024-be31-ba2cb2f53096")
 	)
 	(label
 		"I2C_SCL"
-		(at 359.41 217.17 0)
+		(at 359.41 219.71 0)
 		(effects
 			(font
 				(size 1.27 1.27)
 			)
 			(justify left)
 		)
-		(uuid "6f6afe9e-2a53-5119-9308-c15b2e62397c")
+		(uuid "e9ef307a-ea1d-5182-ad87-0c69bf2a46c9")
 	)
 	(label
 		"I2C_SDA"
-		(at 372.11 217.17 0)
+		(at 372.11 219.71 0)
 		(effects
 			(font
 				(size 1.27 1.27)
 			)
 			(justify left)
 		)
-		(uuid "582c5294-3f4b-5c93-abef-091807872ac5")
+		(uuid "19b12031-4b94-53e8-8646-1969eb2009fc")
 	)
 	(label
 		"U2_RX"
-		(at 384.81 217.17 0)
+		(at 384.81 219.71 0)
 		(effects
 			(font
 				(size 1.27 1.27)
 			)
 			(justify left)
 		)
-		(uuid "987ce6b4-c9cf-5e95-beeb-c2155a33e362")
+		(uuid "f48325cb-a468-5518-9387-0178b064c856")
 	)
 	(label
 		"U2_TX"
-		(at 397.51 217.17 0)
+		(at 397.51 219.71 0)
 		(effects
 			(font
 				(size 1.27 1.27)
 			)
 			(justify left)
 		)
-		(uuid "b91ccf30-3a69-50f2-87e8-ba415cce06e7")
+		(uuid "69c5662c-fc9d-59bd-a4d9-ebde8f456052")
 	)
 	(label
 		"I2C_SCL"
-		(at 462.28 217.17 0)
+		(at 462.28 219.71 0)
 		(effects
 			(font
 				(size 1.27 1.27)
 			)
 			(justify left)
 		)
-		(uuid "0de4bbf4-94cf-5b8f-bbdd-48c9b96f4d61")
+		(uuid "f16f7bc2-b756-5e80-934c-58dd1ffa80bf")
 	)
 	(label
 		"I2C_SDA"
-		(at 488.95 217.17 0)
+		(at 488.95 219.71 0)
 		(effects
 			(font
 				(size 1.27 1.27)
 			)
 			(justify left)
 		)
-		(uuid "4f6a546f-b154-5ff9-b88b-23044c34d6e2")
+		(uuid "73ff8b0c-99ea-5611-9b9b-254a12a8a8ce")
 	)
 	(label
 		"3V3_REF"
-		(at 560.07 217.17 0)
+		(at 560.07 219.71 0)
 		(effects
 			(font
 				(size 1.27 1.27)
 			)
 			(justify left)
 		)
-		(uuid "7f8bb582-c860-50b8-9621-e0af9360ff7e")
+		(uuid "6544ecb8-5df1-584c-9386-9fe1c571a92d")
 	)
 	(label
 		"U2_RX"
-		(at 580.39 217.17 0)
+		(at 580.39 219.71 0)
 		(effects
 			(font
 				(size 1.27 1.27)
 			)
 			(justify left)
 		)
-		(uuid "75cc7816-298d-5854-96ca-335691ef19aa")
+		(uuid "e436cb8d-5bb9-5276-8e7d-9291fe9faadd")
 	)
 	(label
 		"U2_TX"
-		(at 600.71 217.17 0)
+		(at 600.71 219.71 0)
 		(effects
 			(font
 				(size 1.27 1.27)
 			)
 			(justify left)
 		)
-		(uuid "fa90e9b1-42ed-5b03-b221-578dfb2fd9ae")
+		(uuid "ab80c98d-d181-5d70-b83d-91ee24a98519")
 	)
 	(label
 		"3V3_REF"
-		(at 659.13 217.17 0)
+		(at 659.13 219.71 0)
 		(effects
 			(font
 				(size 1.27 1.27)
 			)
 			(justify left)
 		)
-		(uuid "c54d9717-3e8a-5889-8bc7-dee02e38e7a4")
+		(uuid "6d37cdae-7958-5af7-9c0e-b0170639a899")
 	)
 	(label
 		"GPIO_PA0_MCU"
-		(at 671.83 217.17 0)
+		(at 671.83 219.71 0)
 		(effects
 			(font
 				(size 1.27 1.27)
 			)
 			(justify left)
 		)
-		(uuid "2e80819c-5f69-53b3-98d5-4d8991acf3bd")
+		(uuid "aa24228c-4fd5-5d76-948e-57993ec2d19e")
 	)
 	(label
 		"GPIO_PA1_MCU"
-		(at 685.8 217.17 0)
+		(at 685.8 219.71 0)
 		(effects
 			(font
 				(size 1.27 1.27)
 			)
 			(justify left)
 		)
-		(uuid "1ef56e23-2239-531b-91cc-e91ab23ae2c3")
+		(uuid "96443cd7-b069-59b8-b5a9-01fedc395afc")
 	)
 	(label
 		"GPIO_PA4_MCU"
-		(at 698.5 217.17 0)
+		(at 698.5 219.71 0)
 		(effects
 			(font
 				(size 1.27 1.27)
 			)
 			(justify left)
 		)
-		(uuid "7ad1c619-6d89-5258-bd41-c42fed629fda")
+		(uuid "3a064eb6-f055-59c9-be30-2ca84174c6f3")
 	)
 	(label
 		"GPIO_PA5_MCU"
-		(at 711.2 217.17 0)
+		(at 711.2 219.71 0)
 		(effects
 			(font
 				(size 1.27 1.27)
 			)
 			(justify left)
 		)
-		(uuid "ab4b74f5-a90c-519d-9a17-57be97ffa3b6")
+		(uuid "aff03413-c0c8-5be9-ac9b-ed9988a0affc")
 	)
 	(label
 		"GPIO_PA6_MCU"
-		(at 725.17 217.17 0)
+		(at 725.17 219.71 0)
 		(effects
 			(font
 				(size 1.27 1.27)
 			)
 			(justify left)
 		)
-		(uuid "bcb7e55d-7d12-5f51-a126-e57e3c3cda57")
+		(uuid "c6554933-f08b-52de-b6f4-25fed29a951f")
 	)
 	(label
 		"GPIO_PA7_MCU"
-		(at 737.87 217.17 0)
+		(at 737.87 219.71 0)
 		(effects
 			(font
 				(size 1.27 1.27)
 			)
 			(justify left)
 		)
-		(uuid "70d9f1d9-8085-5ff4-865d-df9cbd5f57fe")
+		(uuid "55753d11-4277-564f-9a06-0879fb78b206")
 	)
 	(label
 		"GPIO_PB0_MCU"
-		(at 751.84 217.17 0)
+		(at 751.84 219.71 0)
 		(effects
 			(font
 				(size 1.27 1.27)
 			)
 			(justify left)
 		)
-		(uuid "559abef5-1f56-57e7-ace0-99394c01fdd9")
+		(uuid "0153d6c3-6214-56c1-87c1-797d047fe0a5")
 	)
 	(label
 		"GPIO_PB9_MCU"
-		(at 764.54 217.17 0)
+		(at 764.54 219.71 0)
 		(effects
 			(font
 				(size 1.27 1.27)
 			)
 			(justify left)
 		)
-		(uuid "b94d24d2-0cb7-5c42-8310-e32c6fac2e43")
+		(uuid "c08321ed-d970-5313-ade8-5ca06f10db28")
 	)
 )

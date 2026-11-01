@@ -105,7 +105,7 @@
     "engine_version": "9399bfb2",
     "state": "routed",
     "input_hash": "37a9b298330895d18a8db66826acef27d058423e9f198b5c6ebfc1e3101a4ac4",
-    "run_record": "/home/synth/runs/c2lockA-repro/out1/i2c_sensor_node.routing.json"
+    "run_record": "/home/synth/runs/c2lockB-repro/out1/i2c_sensor_node.routing.json"
   },
   "signal_integrity": {
     "blocking": 0,

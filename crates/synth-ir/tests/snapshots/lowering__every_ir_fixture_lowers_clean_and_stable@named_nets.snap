@@ -81,6 +81,14 @@ expression: board
           "max_current_ma": 800.0,
           "max_power_mw": 1360.0,
           "thermal_resistance_c_per_w": 60.0
+        },
+        "provenance": {
+          "source": "seed",
+          "generator": null,
+          "datasheet_url": null,
+          "reviewed_by": "JeffMboya",
+          "reviewed_at": "2026-11-01",
+          "upstream_lcsc_pn": null
         }
       },
       "source_span": {
@@ -137,6 +145,14 @@ expression: board
           "min_voltage_v": null,
           "max_voltage_v": 50.0,
           "max_current_ma": null
+        },
+        "provenance": {
+          "source": "seed",
+          "generator": null,
+          "datasheet_url": null,
+          "reviewed_by": "JeffMboya",
+          "reviewed_at": "2026-11-01",
+          "upstream_lcsc_pn": null
         }
       },
       "value": "10u",
@@ -194,6 +210,14 @@ expression: board
           "min_voltage_v": null,
           "max_voltage_v": 50.0,
           "max_current_ma": null
+        },
+        "provenance": {
+          "source": "seed",
+          "generator": null,
+          "datasheet_url": null,
+          "reviewed_by": "JeffMboya",
+          "reviewed_at": "2026-11-01",
+          "upstream_lcsc_pn": null
         }
       },
       "value": "10u",
@@ -251,6 +275,14 @@ expression: board
           "min_voltage_v": null,
           "max_voltage_v": 50.0,
           "max_current_ma": null
+        },
+        "provenance": {
+          "source": "seed",
+          "generator": null,
+          "datasheet_url": null,
+          "reviewed_by": "JeffMboya",
+          "reviewed_at": "2026-11-01",
+          "upstream_lcsc_pn": null
         }
       },
       "value": "10u",
@@ -308,6 +340,14 @@ expression: board
           "min_voltage_v": null,
           "max_voltage_v": 50.0,
           "max_current_ma": null
+        },
+        "provenance": {
+          "source": "seed",
+          "generator": null,
+          "datasheet_url": null,
+          "reviewed_by": "JeffMboya",
+          "reviewed_at": "2026-11-01",
+          "upstream_lcsc_pn": null
         }
       },
       "value": "10u",
