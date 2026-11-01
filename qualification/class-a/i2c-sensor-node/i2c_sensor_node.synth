@@ -44,10 +44,10 @@ board "i2c_sensor_node" {
   stackup { copper 0.035mm insulator 0.1mm er 4.4 material "FR4" copper 0.0175mm insulator 1.265mm er 4.6 material "FR4" copper 0.0175mm insulator 0.1mm er 4.4 material "FR4" copper 0.035mm }
 
   // ---- net classes (widths from current, see design notes) ------------------
-  netclass "PWR"  { trace_width 0.5mm clearance 0.2mm via_diameter 0.6mm via_drill 0.3mm color "#d55e00" }
-  netclass "V33"  { trace_width 0.4mm clearance 0.2mm via_diameter 0.6mm via_drill 0.3mm color "#e69f00" }
-  netclass "GNDC" { trace_width 0.4mm clearance 0.2mm via_diameter 0.6mm via_drill 0.3mm color "#000000" }
-  netclass "SIG"  { trace_width 0.25mm clearance 0.2mm via_diameter 0.6mm via_drill 0.3mm color "#0072b2" }
+  netclass "PWR"  { trace_width 0.5mm clearance 0.2mm via_diameter 0.6mm via_drill 0.2mm color "#d55e00" }
+  netclass "V33"  { trace_width 0.4mm clearance 0.2mm via_diameter 0.6mm via_drill 0.2mm color "#e69f00" }
+  netclass "GNDC" { trace_width 0.4mm clearance 0.2mm via_diameter 0.6mm via_drill 0.2mm color "#000000" }
+  netclass "SIG"  { trace_width 0.25mm clearance 0.2mm via_diameter 0.6mm via_drill 0.2mm color "#0072b2" }
 
   // ---- A1: JST 5 V input and its protection chain --------------------------
   group "5V INPUT: FUSE THEN DIODE" color "#c2410c" {
@@ -125,7 +125,7 @@ board "i2c_sensor_node" {
 
   // ---- F: UART break-out ----------------------------------------------------
   group "UART BREAKOUT" color "#9333ea" {
-    component J3: connector "jst_ph_4pin" value "JST S4B-PH-K-S" { placement_hint { edge: right priority: hard } }    component R11: resistor "r_generic_0603" value "330" { placement_hint { near: "J3" priority: soft } }
+    component J3: connector "jst_ph_4pin" value "JST S4B-PH-K-S" { placement_hint { edge: left priority: hard } }    component R11: resistor "r_generic_0603" value "330" { placement_hint { near: "J3" priority: soft } }
     component R12: resistor "r_generic_0603" value "1k" { placement_hint { near: "J3" priority: soft } }
     component D7: diode "d_zener_3v3" value "3.3V zener" { placement_hint { near: "R11" priority: soft } }
     component D24: diode "d_zener_3v3" value "3.3V zener" { placement_hint { near: "R12" priority: soft } }
