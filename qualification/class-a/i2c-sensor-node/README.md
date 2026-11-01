@@ -35,7 +35,7 @@ KiCad 10.0.7 on a 16-vCPU server; Synth built from commit `cfec42751ffd898cd4425
 | Routing | 35 nets connected, 508 track segments, 69 vias |
 | KiCad DRC (`--refill-zones --severity-all`, with the footprint library table) | 0 errors, 0 unconnected; warnings: 53 `lib_footprint_mismatch` ([`reports/kicad_drc.json`](reports/kicad_drc.json)) |
 | KiCad ERC | 126 `lib_symbol_issues`, 1 `pin_to_pin` ([`reports/kicad_erc.json`](reports/kicad_erc.json)) |
-| Gerber and drill content hash | `f1d9f718f6` (identical across the three exports) |
+| Gerber and drill content hash | `169492d786` (identical across the three exports) |
 
 Connector distance to the board edge (courtyard to Edge.Cuts, measured on the exported board):
 
@@ -83,7 +83,7 @@ The source and sidecar in this directory were exported three times with `synth e
 | `i2c_sensor_node.kicad_sym` | 57046d2a5c | 57046d2a5c | 57046d2a5c | identical |
 | `bom.csv` | ec31ca8c8a | ec31ca8c8a | ec31ca8c8a | identical |
 | `pnp.csv` | d377cf29b9 | d377cf29b9 | d377cf29b9 | identical |
-| Gerber and drill content | f1d9f718f6 | f1d9f718f6 | f1d9f718f6 | identical |
+| Gerber and drill content | 169492d786 | 169492d786 | 169492d786 | identical |
 
 With the random ids masked the routed board is `masked)` in all three exports ([`reproduce/compare_exports.py`](reproduce/compare_exports.py) does the masking). [`reproduce/reproduce.sh`](reproduce/reproduce.sh) rebuilds Synth at the pinned commit, exports three times and compares, then builds the fabrication package.
 
