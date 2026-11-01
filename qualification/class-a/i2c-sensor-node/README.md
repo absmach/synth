@@ -105,4 +105,3 @@ With the random ids masked the routed board is `masked)` in all three exports ([
 - The AMS1117 figures come from a second-source copy of its datasheet; the Advanced Monolithic Systems PDF was not reachable. That datasheet asks for an output tantalum with an ESR of at most 0.5 ohm; C3 (KEMET T491B476K010AT) lists 1 ohm.
 - Decoupling distance: every decoupling capacitor except C5 and C6 sits more than 4 mm from the supply pin it serves (4.3 to 16.4 mm in the table above; the review's limit is 4 mm). Placing them at the pins left the router unable to connect the MCU's GPIO and SWD nets in every attempt.
 - The input TVS (Nexperia PTVS6V0S1UR) has no LCSC listing; it is sourced from Farnell.
-- Several registry parts have no recorded reviewer.
