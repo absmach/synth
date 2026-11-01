@@ -101,5 +101,6 @@ With the random ids masked the routed board is `masked)` in all three exports ([
 
 ## Open items
 
-- JLCPCB PCB and SMT DFM, and the quote: the package in [`fab/`](fab/) is ready to upload (no order is placed).
+- JLCPCB PCB DFM of the package of this README (2026-11-01 18:28, Gerber content hash `169492d786`, four layers, 93.4 x 67.7 mm, report in [`reports/`](reports/)): 0 Danger items; silkscreen to pad, silkscreen to hole, via to pad and sharp-corner checks have no finding; trace width 0.2 mm, pad spacing 0.21 mm, through-hole to SMD 3.7 mm and silkscreen line width 0.18 mm are good. Warnings: annular ring 0.13 mm (100), negative solder-mask expansion 0.04 mm (48), solder-mask opening exposing a trace 0.15 mm (1).
+- JLCPCB SMT DFM and the quote: the package in [`fab/`](fab/) is ready to upload (no order is placed).
 - Decoupling distance: every decoupling capacitor except C5 and C6 sits more than 4 mm from the supply pin it serves (4.3 to 16.4 mm in the table above; the review's limit is 4 mm). Placing them at the pins left the router unable to connect the MCU's GPIO and SWD nets in every attempt.
