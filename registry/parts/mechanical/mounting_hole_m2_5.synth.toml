@@ -10,3 +10,8 @@ kicad_footprint = "MountingHole:MountingHole_2.5mm"
 width_mm = 2.5
 height_mm = 2.5
 courtyard_margin_mm = 1.5
+
+[provenance]
+source = "seed"
+reviewed_by = "JeffMboya"
+reviewed_at = "2026-11-01"

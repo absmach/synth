@@ -27,3 +27,5 @@ electrical_type = "passive"
 
 [provenance]
 datasheet_url = "https://assets.nexperia.com/documents/data-sheet/PTVSXS1UR_SER.pdf"
+reviewed_by = "JeffMboya"
+reviewed_at = "2026-11-01"

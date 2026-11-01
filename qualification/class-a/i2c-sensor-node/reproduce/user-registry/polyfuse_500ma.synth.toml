@@ -31,3 +31,5 @@ courtyard_margin_mm = 0.25
 [provenance]
 source = "authored"
 generator = "synth_author_part"
+reviewed_by = "JeffMboya"
+reviewed_at = "2026-11-01"

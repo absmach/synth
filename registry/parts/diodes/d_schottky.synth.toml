@@ -17,6 +17,8 @@ max_current_ma = 1000.0
 
 [provenance]
 datasheet_url = "https://www.diodes.com/datasheet/download/1N5819HW.pdf"
+reviewed_by = "JeffMboya"
+reviewed_at = "2026-11-01"
 
 [[pins]]
 name = "anode"
