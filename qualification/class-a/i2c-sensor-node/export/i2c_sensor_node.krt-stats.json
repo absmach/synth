@@ -1,0 +1,276 @@
+{
+ "routed_single": [
+  "I2C_SCL",
+  "I2C_SDA",
+  "+3V3",
+  "LED_PWR",
+  "UART_RX",
+  "REF_D",
+  "VIN_5V_FUSED",
+  "VIN_5V_RAW",
+  "+5V_PROT",
+  "UART_TX",
+  "SWDIO_MCU",
+  "GPIO_PA0",
+  "GPIO_PB0",
+  "GPIO_PB9",
+  "SWDIO",
+  "GPIO_PA0_MCU",
+  "GPIO_PA1_MCU",
+  "GPIO_PA1",
+  "GPIO_PA5_MCU",
+  "GPIO_PA7",
+  "GPIO_PA6",
+  "SWCLK",
+  "GPIO_PA7_MCU",
+  "SWCLK_MCU",
+  "GPIO_PA5",
+  "GPIO_PB9_MCU",
+  "NRST",
+  "GPIO_PA6_MCU",
+  "GPIO_PA4",
+  "GPIO_PA4_MCU",
+  "GPIO_PB0_MCU",
+  "3V3_REF",
+  "U2_TX",
+  "U2_RX"
+ ],
+ "failed_single": [],
+ "open_single": [],
+ "failed_multipoint": [],
+ "multipoint_nets": 1,
+ "multipoint_pads_connected": 80,
+ "multipoint_pads_total": 80,
+ "multipoint_edges_routed": 6,
+ "multipoint_edges_failed": 0,
+ "ripup_success_pairs": [],
+ "rerouted_pairs": [],
+ "single_ended_target_swaps": [],
+ "layer_swaps": 0,
+ "successful": 34,
+ "failed": 0,
+ "total_time": 1.82,
+ "total_iterations": 587641,
+ "total_vias": 66,
+ "cleanup_disconnected": [],
+ "min_clearance_used": 0.127,
+ "design_rules": {
+  "escalation_policy": "board",
+  "fab_tier": "auto",
+  "board_floors": {
+   "clearance": 0.127,
+   "track_width": 0.127,
+   "via_diameter": 0.46,
+   "via_drill": 0.2,
+   "annular": 0.13,
+   "board_edge": 0.3
+  },
+  "count": 15,
+  "nets": [
+   21,
+   25,
+   33
+  ],
+  "narrowed": [
+   {
+    "net": 25,
+    "net_name": null,
+    "kind": "track_width",
+    "requested": 0.25,
+    "delivered": 0.2,
+    "site": "fine-pitch tap",
+    "count": 1
+   },
+   {
+    "net": 25,
+    "net_name": null,
+    "kind": "track_width",
+    "requested": 0.25,
+    "delivered": 0.2,
+    "site": "fine-pitch tap",
+    "count": 1
+   },
+   {
+    "net": 25,
+    "net_name": null,
+    "kind": "via_diameter",
+    "requested": 0.6,
+    "delivered": 0.46,
+    "site": "last-resort via-in-pad",
+    "count": 1
+   },
+   {
+    "net": 25,
+    "net_name": null,
+    "kind": "via_diameter",
+    "requested": 0.6,
+    "delivered": 0.46,
+    "site": "via-in-pad clamp (floor)",
+    "count": 1
+   },
+   {
+    "net": 25,
+    "net_name": null,
+    "kind": "track_width",
+    "requested": 0.25,
+    "delivered": 0.2,
+    "site": "fine-pitch tap",
+    "count": 1
+   },
+   {
+    "net": 25,
+    "net_name": null,
+    "kind": "track_width",
+    "requested": 0.25,
+    "delivered": 0.2,
+    "site": "fine-pitch tap",
+    "count": 1
+   },
+   {
+    "net": 21,
+    "net_name": null,
+    "kind": "track_width",
+    "requested": 0.25,
+    "delivered": 0.2,
+    "site": "fine-pitch tap",
+    "count": 1
+   },
+   {
+    "net": 21,
+    "net_name": null,
+    "kind": "track_width",
+    "requested": 0.25,
+    "delivered": 0.2,
+    "site": "fine-pitch tap",
+    "count": 1
+   },
+   {
+    "net": 21,
+    "net_name": null,
+    "kind": "via_diameter",
+    "requested": 0.6,
+    "delivered": 0.46,
+    "site": "last-resort via-in-pad",
+    "count": 1
+   },
+   {
+    "net": 21,
+    "net_name": null,
+    "kind": "track_width",
+    "requested": 0.25,
+    "delivered": 0.2,
+    "site": "fine-pitch tap",
+    "count": 1
+   },
+   {
+    "net": 21,
+    "net_name": null,
+    "kind": "track_width",
+    "requested": 0.25,
+    "delivered": 0.2,
+    "site": "fine-pitch tap",
+    "count": 1
+   },
+   {
+    "net": 21,
+    "net_name": null,
+    "kind": "via_diameter",
+    "requested": 0.6,
+    "delivered": 0.46,
+    "site": "last-resort via-in-pad",
+    "count": 1
+   },
+   {
+    "net": 33,
+    "net_name": null,
+    "kind": "via_diameter",
+    "requested": 0.6,
+    "delivered": 0.46,
+    "site": "via-in-pad clamp (floor)",
+    "count": 1
+   },
+   {
+    "net": 33,
+    "net_name": null,
+    "kind": "via_diameter",
+    "requested": 0.6,
+    "delivered": 0.46,
+    "site": "via-in-pad clamp (floor)",
+    "count": 1
+   },
+   {
+    "net": 33,
+    "net_name": null,
+    "kind": "via_diameter",
+    "requested": 0.6,
+    "delivered": 0.46,
+    "site": "via-in-pad clamp (floor)",
+    "count": 1
+   }
+  ],
+  "min_delivered": {
+   "track_width": 0.2,
+   "via_diameter": 0.46
+  },
+  "fab_tier_escalations": 4,
+  "fab_tier_contexts": [
+   "plane tap U2.13",
+   "plane tap U2.5",
+   "plane tap U2.5",
+   "plane tap U2.5"
+  ],
+  "fab_tier_target": "board_floors",
+  "unsupported_rules": []
+ },
+ "plane_fragility": {
+  "source": "zone_outlines",
+  "islands": 0,
+  "refill_status": "no_kicad_python",
+  "why": "no python with pcbnew found; set KICAD_PYTHON to KiCad's bundled interpreter",
+  "machine_dependent": false
+ },
+ "oracle_check": "disabled",
+ "pad_pairs_connected": 78,
+ "pad_pairs_total": 78,
+ "power_trace_ampacity": [
+  {
+   "net": "NRST",
+   "bottleneck_width_mm": 0.2,
+   "bottleneck_layer": "F.Cu",
+   "copper_oz": 1.0000000000000002,
+   "max_current_a": 0.74,
+   "max_current_ipc2152_a": 0.74,
+   "temp_rise_c": 10.0,
+   "trace_length_mm": 61.1
+  }
+ ],
+ "scope": "merged",
+ "board_scoped_keys": [
+  "power_trace_ampacity",
+  "min_clearance_used"
+ ],
+ "env_knobs": {
+  "KICAD_FOOTPRINT_DIR": "/home/synth/.local/share/flatpak/runtime/org.kicad.KiCad.Library.Footprints/x86_64/stable/a56ef6f3370ad1997739e050a2025b43893cc8ac3efaa1fff212806714f2d54f/files/footprints",
+  "KICAD_ROUTING_TOOLS_REPO": "/home/synth/krt",
+  "KICAD_SYMBOL_DIR": "/home/synth/.local/share/flatpak/runtime/org.kicad.KiCad.Library.Symbols/x86_64/stable/3a924b56e06b39f412abb4658eb067570651f94fe9b0dbc3bc671fb75562d253/files/symbols"
+ },
+ "regrade": {
+  "board": "file",
+  "graded_nets": 35,
+  "seconds": 1.0,
+  "unowned_broken": [],
+  "recovered": [],
+  "broken_by_run": []
+ },
+ "via_in_pad": {
+  "count": 0,
+  "sites": [],
+  "stamped": 0,
+  "restored": 0,
+  "protected": 0,
+  "unstampable": 0,
+  "site_created": 0,
+  "unprotected": [],
+  "note": "via-in-pad requires IPC-4761 Type VII (filled + capped + plated); state it on the fab drawing or solder wicks into the barrel"
+ }
+}

@@ -1,0 +1,33 @@
+id = "polyfuse_500ma"
+kind = "fuse"
+description = "Resettable polyfuse (PPTC), 0.5 A hold, 2-pin, 1812. Generic: MPN needs sourcing."
+version = 0
+lifecycle = "active"
+signed_by = []
+substitutes = []
+required_decoupling = []
+kicad_symbol = "Device:Polyfuse"
+kicad_footprint = "Fuse:Fuse_1812_4532Metric"
+
+[[pins]]
+name = "p1"
+number = "1"
+electrical_type = "passive"
+capabilities = []
+required = false
+
+[[pins]]
+name = "p2"
+number = "2"
+electrical_type = "passive"
+capabilities = []
+required = false
+
+[footprint_dimensions]
+width_mm = 5.4
+height_mm = 3.4
+courtyard_margin_mm = 0.25
+
+[provenance]
+source = "authored"
+generator = "synth_author_part"
