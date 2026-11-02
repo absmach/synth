@@ -1,0 +1,204 @@
+id = "lan8720a"
+kind = "ic"
+description = "Microchip LAN8720A 10BASE-T/100BASE-TX Ethernet PHY, RMII, 24-QFN 4x4 mm"
+# The QFN (punch) package. Its exposed pad is 2.50 mm nominal (2.40-2.60,
+# DS00002165B section 6.1), which is the footprint below; the sawn SQFN
+# (-ABC order codes) is drawn separately and is not this part.
+mpn = "LAN8720A-CP-TR"
+kicad_symbol = "Interface_Ethernet:LAN8720A"
+# The stock symbol names the ThermalVias variant; the plain pad is the same
+# land pattern without through-holes in the paddle, which a default
+# fabrication tier does not have to plug.
+kicad_footprint = "Package_DFN_QFN:VQFN-24-1EP_4x4mm_P0.5mm_EP2.5x2.5mm"
+
+[footprint_dimensions]
+width_mm = 4.0
+height_mm = 4.0
+courtyard_margin_mm = 0.25
+
+# VDD1A/VDD2A take 3.0-3.6 V (section 5.2); 49 mA is the 100BASE-TX maximum
+# with traffic across all rails.
+[operating_conditions]
+min_voltage_v = 3.0
+max_voltage_v = 3.6
+max_current_ma = 49.0
+
+# Not yet reviewed against the datasheet by a person: no `reviewed_by`, so
+# a fab export treats it as unverified until someone signs it off.
+[provenance]
+datasheet_url = "https://ww1.microchip.com/downloads/en/DeviceDoc/00002165B.pdf"
+
+# Pins are Table 2-8 of DS00002165B, and match the stock symbol pin for pin.
+# A pin whose name carries a strap (`led1_regoff`, `rxd0_mode0`) is sampled at
+# reset and then used for its run-time function.
+[[pins]]
+name = "vdd2a"
+number = "1"
+electrical_type = "power_input"
+required = true
+
+[[pins]]
+name = "led2_nintsel"
+number = "2"
+electrical_type = "bidirectional"
+
+[[pins]]
+name = "led1_regoff"
+number = "3"
+electrical_type = "bidirectional"
+
+[[pins]]
+name = "xtal2"
+number = "4"
+electrical_type = "clock"
+capabilities = ["clock_output"]
+
+[[pins]]
+name = "xtal1_clkin"
+number = "5"
+electrical_type = "clock"
+capabilities = ["clock_input"]
+required = true
+
+# The internal 1.2 V regulator's output, which needs only its own decoupling
+# unless REGOFF is strapped high. Passive, like the nRF52840's DEC1 and the
+# MPU-6050's REGOUT: it is neither a rail the board supplies nor one it may
+# load.
+[[pins]]
+name = "vddcr"
+number = "6"
+electrical_type = "passive"
+required = true
+
+[[pins]]
+name = "rxd1_mode1"
+number = "7"
+electrical_type = "bidirectional"
+
+[[pins]]
+name = "rxd0_mode0"
+number = "8"
+electrical_type = "bidirectional"
+
+[[pins]]
+name = "vddio"
+number = "9"
+electrical_type = "power_input"
+required = true
+
+[[pins]]
+name = "rxer_phyad0"
+number = "10"
+electrical_type = "bidirectional"
+
+[[pins]]
+name = "crs_dv_mode2"
+number = "11"
+electrical_type = "bidirectional"
+
+[[pins]]
+name = "mdio"
+number = "12"
+electrical_type = "bidirectional"
+
+[[pins]]
+name = "mdc"
+number = "13"
+electrical_type = "input"
+
+[[pins]]
+name = "nint_refclko"
+number = "14"
+electrical_type = "bidirectional"
+
+[[pins]]
+name = "nrst"
+number = "15"
+electrical_type = "input"
+capabilities = ["reset"]
+required = true
+
+[[pins]]
+name = "txen"
+number = "16"
+electrical_type = "input"
+
+[[pins]]
+name = "txd0"
+number = "17"
+electrical_type = "input"
+
+[[pins]]
+name = "txd1"
+number = "18"
+electrical_type = "input"
+
+[[pins]]
+name = "vdd1a"
+number = "19"
+electrical_type = "power_input"
+required = true
+
+# The two MDI channels. With auto-MDIX either channel can transmit; the names
+# follow the datasheet's default assignment.
+[[pins]]
+name = "txn"
+number = "20"
+electrical_type = "differential_negative"
+capabilities = ["diff_pair_negative"]
+required = true
+
+[[pins]]
+name = "txp"
+number = "21"
+electrical_type = "differential_positive"
+capabilities = ["diff_pair_positive"]
+required = true
+
+[[pins]]
+name = "rxn"
+number = "22"
+electrical_type = "differential_negative"
+capabilities = ["diff_pair_negative"]
+required = true
+
+[[pins]]
+name = "rxp"
+number = "23"
+electrical_type = "differential_positive"
+capabilities = ["diff_pair_positive"]
+required = true
+
+# 12.1 kOhm 1% to ground sets the transmit current.
+[[pins]]
+name = "rbias"
+number = "24"
+electrical_type = "passive"
+required = true
+
+# The exposed pad is the only ground ("must be connected to ground").
+[[pins]]
+name = "vss"
+number = "25"
+electrical_type = "power_input"
+required = true
+
+[[required_decoupling]]
+net = "vddio"
+value = "100nf"
+count = 1
+
+[[required_decoupling]]
+net = "vdd1a"
+value = "100nf"
+count = 1
+
+[[required_decoupling]]
+net = "vdd2a"
+value = "100nf"
+count = 1
+
+[[required_decoupling]]
+net = "vddcr"
+value = "1uf"
+count = 1

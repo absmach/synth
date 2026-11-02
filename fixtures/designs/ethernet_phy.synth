@@ -1,0 +1,118 @@
+// 10/100 Ethernet PHY module: a LAN8720A driving a HanRun HR911105A MagJack,
+// with the RMII side brought out to a header for the host MAC. The two MDI
+// channels are 100 ohm differential pairs from the PHY to the jack's
+// magnetics; the 49.9 ohm resistors are the PHY's line terminations to the
+// analog rail, as in the LAN8720A application diagram (DS00002165B 7.1).
+board "ethernet_phy" {
+  layers 4
+  // The JLC 7628 four-layer build, so the 100 ohm pairs are derived on the
+  // outer-layer microstrip rather than left unverified.
+  stackup {
+    copper 0.035mm
+    insulator 0.2104mm er 4.4 material "FR4"
+    copper 0.0152mm
+    insulator 1.065mm er 4.6 material "FR4"
+    copper 0.0152mm
+    insulator 0.2104mm er 4.4 material "FR4"
+    copper 0.035mm
+  }
+
+  // ---- Host header: power in, RMII and management out --------------------
+  component J2: connector "header_1x20"
+  connect J2.p1 -> U1.vddio as "3V3"
+  connect J2.p2 -> U1.vss as "GND"
+
+  connect J2.p3  -> U1.txen
+  connect J2.p4  -> U1.txd0
+  connect J2.p5  -> U1.txd1
+  connect J2.p6  -> U1.rxd0_mode0
+  connect J2.p7  -> U1.rxd1_mode1
+  connect J2.p8  -> U1.crs_dv_mode2
+  connect J2.p9  -> U1.rxer_phyad0
+  connect J2.p10 -> U1.mdc
+  connect J2.p11 -> U1.mdio
+  connect J2.p12 -> U1.nint_refclko
+  connect J2.p13 -> U1.nrst
+
+  // ---- PHY ---------------------------------------------------------------
+  component U1: ic "lan8720a"
+  component C1: capacitor "c_generic_0603" value "100nF" { placement_hint { near: "U1" priority: hard } }
+  component C2: capacitor "c_generic_0603" value "100nF" { placement_hint { near: "U1" priority: hard } }
+  component C3: capacitor "c_generic_0603" value "100nF" { placement_hint { near: "U1" priority: hard } }
+  component C4: capacitor "c_generic_0603" value "1uF"   { placement_hint { near: "U1" priority: hard } }
+  component C5: capacitor "c_generic_0603" value "470pF" { placement_hint { near: "U1" priority: hard } }
+  component R1: resistor  "r_generic_0603" value "12.1k" { placement_hint { near: "U1" priority: hard } }
+  component R2: resistor  "r_generic_0603" value "1.5k"
+  component R3: resistor  "r_generic_0603" value "10k"
+
+  connect U1.vddio -> U1.vdd1a
+  connect U1.vddio -> U1.vdd2a
+  connect U1.vddio -> C1.p1
+  connect U1.vss   -> C1.p2
+  connect U1.vdd1a -> C2.p1
+  connect U1.vss   -> C2.p2
+  connect U1.vdd2a -> C3.p1
+  connect U1.vss   -> C3.p2
+  connect U1.vddcr -> C4.p1 as "VDDCR"
+  connect U1.vss   -> C4.p2
+  connect U1.vddcr -> C5.p1
+  connect U1.vss   -> C5.p2
+
+  // 12.1k 1% bias, MDIO pull-up, reset pull-up.
+  connect U1.rbias -> R1.p1
+  connect R1.p2    -> U1.vss
+  connect U1.mdio  -> R2.p1
+  connect R2.p2    -> U1.vddio
+  connect U1.nrst  -> R3.p1
+  connect R3.p2    -> U1.vddio
+
+  // 25 MHz crystal with balanced load capacitors.
+  component Y1: crystal   "xtal_generic"   value "25MHz" { placement_hint { near: "U1" priority: hard } }
+  component C6: capacitor "c_generic_0603" value "15pF"
+  component C7: capacitor "c_generic_0603" value "15pF"
+  connect U1.xtal1_clkin -> Y1.p1
+  connect U1.xtal2       -> Y1.p2
+  connect Y1.p1 -> C6.p1
+  connect Y1.p2 -> C7.p1
+  connect C6.p2 -> U1.vss
+  connect C7.p2 -> U1.vss
+  connect Y1.case_1 -> U1.vss
+  connect Y1.case_2 -> U1.vss
+
+  // ---- MDI: PHY to MagJack ----------------------------------------------
+  component J1: connector "rj45_hr911105a"
+  component R4: resistor  "r_generic_0402" value "49.9"
+  component R5: resistor  "r_generic_0402" value "49.9"
+  component R6: resistor  "r_generic_0402" value "49.9"
+  component R7: resistor  "r_generic_0402" value "49.9"
+  component C8: capacitor "c_generic_0603" value "100nF"
+
+  connect U1.txp -> J1.td_p as "ETH_TXP"
+  connect U1.txn -> J1.td_n as "ETH_TXN"
+  connect U1.rxp -> J1.rd_p as "ETH_RXP"
+  connect U1.rxn -> J1.rd_n as "ETH_RXN"
+
+  connect U1.txp -> R4.p1
+  connect U1.txn -> R5.p1
+  connect U1.rxp -> R6.p1
+  connect U1.rxn -> R7.p1
+  connect R4.p2 -> U1.vdd2a
+  connect R5.p2 -> U1.vdd2a
+  connect R6.p2 -> U1.vdd2a
+  connect R7.p2 -> U1.vdd2a
+
+  // Centre taps on the analog rail, decoupled at the jack.
+  connect J1.tct -> U1.vdd2a
+  connect J1.rct -> U1.vdd2a
+  connect J1.tct -> C8.p1
+  connect C8.p2  -> U1.vss
+  connect J1.chs_gnd -> U1.vss
+  connect J1.shield  -> U1.vss
+
+  diff_pair ETH_TXP ETH_TXN {
+    impedance 100ohm
+  }
+  diff_pair ETH_RXP ETH_RXN {
+    impedance 100ohm
+  }
+}
