@@ -29,6 +29,11 @@ struct BoardSpec {
     expect_fab: Option<String>,
     #[serde(default)]
     expect_source_codes: Vec<String>,
+    /// SHA-256 over the board's inputs, as computed by [`fixture_sha256`].
+    /// The verdicts above are only meaningful for the fixture they were
+    /// measured on, so a board whose source changes must be re-measured.
+    #[serde(default)]
+    fixture_sha256: String,
     #[serde(default)]
     rationale: String,
 }
@@ -53,6 +58,7 @@ struct BoardResult {
     manufacturing_stderr: Vec<String>,
     #[serde(skip_serializing_if = "Vec::is_empty")]
     source_codes: Vec<String>,
+    fixture_sha256: String,
     #[serde(skip_serializing_if = "BTreeMap::is_empty")]
     deterministic_artifacts: BTreeMap<String, String>,
     agrees: bool,
@@ -123,6 +129,52 @@ fn registry_manifest_sha256() -> String {
     out
 }
 
+/// The files a board is compiled from: the `.synth` source and the layout
+/// sidecars beside it (`<stem>.placement.layout.toml`,
+/// `<stem>.schematic.layout.toml`), which move parts and so move results.
+fn fixture_files(board: &Path) -> Vec<PathBuf> {
+    let stem = board
+        .file_stem()
+        .and_then(|s| s.to_str())
+        .unwrap_or_default();
+    let sidecar_prefix = format!("{stem}.");
+    let mut files = vec![board.to_path_buf()];
+    if let Some(dir) = board.parent().and_then(|d| std::fs::read_dir(d).ok()) {
+        files.extend(dir.filter_map(Result::ok).map(|e| e.path()).filter(|p| {
+            p.file_name()
+                .and_then(|n| n.to_str())
+                .is_some_and(|n| n.starts_with(&sidecar_prefix) && n.ends_with(".layout.toml"))
+        }));
+    }
+    files.sort();
+    files
+}
+
+/// SHA-256 over a board's inputs, pinned per row as `fixture_sha256`.
+///
+/// This is the half of drift detection that can be pinned. The outputs cannot
+/// (see [`deterministic_artifacts`]), but the inputs are ours: each file is
+/// hashed under its name and length, so renaming, adding or deleting a sidecar
+/// moves the hash as surely as editing one.
+fn fixture_sha256(board: &Path) -> String {
+    use sha2::Digest as _;
+    use std::fmt::Write as _;
+    let mut hasher = sha2::Sha256::new();
+    for file in fixture_files(board) {
+        let bytes = std::fs::read(&file).unwrap_or_else(|e| panic!("read {}: {e}", file.display()));
+        let name = file.file_name().unwrap_or_default().to_string_lossy();
+        hasher.update(name.as_bytes());
+        hasher.update([0]);
+        hasher.update((bytes.len() as u64).to_le_bytes());
+        hasher.update(&bytes);
+    }
+    let mut out = String::with_capacity(64);
+    for byte in hasher.finalize() {
+        let _ = write!(out, "{byte:02x}");
+    }
+    out
+}
+
 fn stage_status(report: &serde_json::Value, stage: &str) -> String {
     report["stages"][stage]["status"]
         .as_str()
@@ -171,7 +223,8 @@ fn source_codes(report: &serde_json::Value) -> Vec<String> {
 /// So these hashes answer "was this the same output as last time?" when a
 /// human compares two runs' artifacts; they do not fail the build. What this
 /// matrix actually gates on is `expect`, `expect_fab` and
-/// `expect_source_codes` — the declared verdicts, compared exactly.
+/// `expect_source_codes` — the declared verdicts, compared exactly — and
+/// `fixture_sha256`, which pins the inputs those verdicts were measured on.
 fn deterministic_artifacts(report: &serde_json::Value) -> BTreeMap<String, String> {
     const STABLE: [&str; 3] = [".kicad_sch", ".kicad_pcb", "bom.csv"];
     report["stages"]["manufacturing"]["artifacts"]
@@ -289,6 +342,14 @@ fn run_board(spec: &BoardSpec, fab: bool) -> BoardResult {
     let codes = source_codes(&report);
     let mut disagreements = Vec::new();
 
+    let fixture = fixture_sha256(&board);
+    if fixture != spec.fixture_sha256 {
+        disagreements.push(format!(
+            "the board's inputs changed since its verdicts were measured \
+             (fixture_sha256 is now {fixture})"
+        ));
+    }
+
     // "unestablished" means this board has not yet been observed in the
     // reference environment, which is CI with KiCad installed. Several rules —
     // E-SYNTH-PIN-001 among them — only run when footprints are readable, so a
@@ -355,6 +416,7 @@ fn run_board(spec: &BoardSpec, fab: bool) -> BoardResult {
         manufacturing_stderr,
         manufacturing,
         source_codes: codes,
+        fixture_sha256: fixture,
         deterministic_artifacts: deterministic_artifacts(&report),
         agrees: disagreements.is_empty(),
         actual,
@@ -497,6 +559,18 @@ fn the_matrix_is_well_formed() {
             "{}: {} does not exist",
             spec.id,
             spec.path
+        );
+        // An edit to a board's source or layout sidecars makes every verdict
+        // on its row a claim about a different board. Checked here, in the
+        // normal shards, so an accidental fixture change fails on the pull
+        // request that made it rather than waiting for the release gate.
+        let fixture = fixture_sha256(&root.join(&spec.path));
+        assert_eq!(
+            spec.fixture_sha256, fixture,
+            "{}: the board's inputs no longer match the ones its verdicts were \
+             measured on. Re-run the matrix, update expect/expect_fab/\
+             expect_source_codes if they moved, then set fixture_sha256 = \"{fixture}\"",
+            spec.id
         );
         assert!(
             ["pass", "fail", "unestablished"].contains(&spec.expect.as_str()),
