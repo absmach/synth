@@ -18,9 +18,12 @@ pub(crate) const DEFAULT_MARGIN_MM: f64 = 3.5;
 /// Size of a reference label's font, in millimetres. A little under the 1 mm
 /// KiCad starts from, so a label takes less of a crowded board.
 pub(crate) const LABEL_FONT_MM: f64 = 0.8;
-/// Stroke of a label's letters; KiCad's default is a fifth of the size, which
-/// reads heavy on a small label.
-pub(crate) const LABEL_STROKE_MM: f64 = 0.12;
+/// Stroke of a label's letters: the thinnest the router's silkscreen pass
+/// leaves on a board. JLCPCB prints 0.15 mm and its DFM check warns at exactly
+/// that, so a label drawn thinner would be one an unrouted export ships and a
+/// routed one widens.
+pub(crate) const LABEL_STROKE_MM: f64 = 0.18;
+const _: () = assert!(LABEL_STROKE_MM >= 0.15, "under JLCPCB's silkscreen minimum");
 /// Width of one character at that font.
 const CHAR_WIDTH_MM: f64 = LABEL_FONT_MM;
 /// Height of a line of text, with room for the stroke.
