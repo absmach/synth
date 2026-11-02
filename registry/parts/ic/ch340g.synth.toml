@@ -17,6 +17,7 @@ courtyard_margin_mm = 0.25
 min_voltage_v = 2.9
 max_voltage_v = 5.3
 max_current_ma = 20.0
+power_budget = false
 
 [[pins]]
 name = "gnd"

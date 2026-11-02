@@ -680,10 +680,23 @@ impl PowerBudgetRule {
 /// `pass__power_004_sufficient_decoupling` reported two overruns on a board
 /// that is fine.
 fn part_supplies_a_rail(part: &synth_registry::Part) -> bool {
-    matches!(
-        part.kind.to_ascii_lowercase().as_str(),
-        "regulator" | "charger"
-    )
+    let Some(oc) = part.operating_conditions.as_ref() else {
+        return false;
+    };
+    let Some(_max_ma) = oc.max_current_ma else {
+        return false;
+    };
+    // An explicit answer wins over inference.
+    if let Some(budget) = oc.power_budget {
+        if !budget {
+            return false;
+        }
+    }
+    // Otherwise a part supplies a rail when it has a power_output pin,
+    // preserving the previous generic behaviour for any supply kind.
+    part.pins
+        .iter()
+        .any(|p| p.electrical_type == synth_registry::ElectricalType::PowerOutput)
 }
 
 impl ErcRule for PowerBudgetRule {
