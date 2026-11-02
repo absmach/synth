@@ -31,11 +31,8 @@ QUALIFICATION.md are closed.
 - L2 600 ohm at 100 MHz ferrite bead isolates +3V3A for U1 and U3.
 - Four M2.5 non-plated mounting holes at (6, 4), (49, 4), (6, 40) and
   (49, 40) mm.
-- 50.1 x 44.1 mm bounding box, 4 layers, 1.586 mm declared stackup (1.6 mm
-  nominal FR4). The top-left notch
-  (x 10..26.4 mm, y 0..20 mm) is part of the closed board outline in the
-  placement sidecar (`[[outline]]`); the remaining area is 1880 mm². Board
-  source `rtd_afe.synth`, placement sidecar
+- 52.1 x 45.1 mm rectangular board, 2349 mm², 4 layers, 1.586 mm declared
+  stackup (1.6 mm nominal FR4). Board source `rtd_afe.synth`, placement sidecar
   `rtd_afe.placement.layout.toml` (board millimetres). The schematic has no
   sidecar; the compiler lays it out by group.
 
@@ -87,27 +84,27 @@ designated reviewer.
   (30.5, 23.5) mm. The digital core is U2 at (38, 27) mm, U4 at (33, 18.8) mm
   and Y1 at (37, 36.5) mm. U5 is at (47.5, 17) mm and J3 at (41.5, 41.5) mm on
   the bottom edge.
-- J2 and J3 are both at y = 41.5 mm; their bodies end 0.8 mm from the bottom
-  edge. J1 is at (39.5, 6.0) mm on the main top edge, which runs x 26.4..52.6
-  mm after the notch, so J1 is centred on that edge. The left tab keeps H1 and
-  the top-left ground fence via.
-- The closed outline lives in `rtd_afe.placement.layout.toml` as `[[outline]]`
-  (board millimetres). The exporter replaces the fitted rectangle with it, so
-  `synth export-kicad` alone reproduces the notch; there is no post-export cut.
+- J2 and J3 are both at y = 41.5 mm; their bodies end about 0.8 mm from the
+  bottom edge. J1 is at (39.5, 6.0) mm on the plain top edge. Centering it on
+  the rectangle (x = 27.0) fragmented U2's ground escape, so the proven
+  position is kept; J1 is not centred on this outline.
+- There is no notch and no `[[outline]]` path: the board is the exporter's
+  fitted rectangle, so a normal `synth export-kicad` needs no post-export cut.
 - The RTD/input nets and VREF are on F.Cu only, with no layer change. QSPI also
   stays on F.Cu. The SPI, SWD, USB and XIN nets change layers; see the SI
   warnings below.
-- 384 track segments, 61 vias (41 on GND, 20 signal), 590.5 mm of copper. 40
-  nets, 0 open. The router records 58 vias; the other three are source ground
+- 374 track segments, 62 vias (41 on GND, 21 signal), 566.3 mm of copper. 40
+  nets, 0 open. The router records 58 vias; the other four are source ground
   stitching.
 - `kicad-cli pcb drc --severity-all --refill-zones`: 0 errors, 0 warnings, 0
   unconnected items. `pcbnew.LoadBoard` reopens the board and `check.sh` confirms
   one GND plane with no AGND or DGND net.
-- Synth's signal-integrity pass: 19 non-blocking warnings, of which 17 are layer
-  changes with no ground-return via within 0.64 mm and 2 are crosstalk pairs.
+- Synth's signal-integrity pass: 22 non-blocking warnings, of which 19 are layer
+  changes with no ground-return via within 0.64 mm and 3 are crosstalk pairs.
   The layer-change nets are REFOUT, SPI_MOSI/CS/SCK/MISO, ADC_DRDY, XIN, RUN,
-  SWCLK, USB_DP_C and USB_DN_C; the crosstalk pairs are SWDIO/VBUS and
-  QSPI_SS/QSPI_SD2. No RTD, AIN or VREF net is flagged. See QUALIFICATION.md.
+  SWCLK, SWDIO, +3V3_RP_A, USB_DP_C and USB_DN_C; the crosstalk pairs are
+  REFOUT/SPI_CS, SPI_CS/SPI_SCK and USB_DP_C/USB_DN_C. No RTD, AIN or VREF net
+  is flagged. See QUALIFICATION.md.
 - Silkscreen: 0 DRC warnings. U1 has a hard label override at (24, 34.5) mm;
   25 passives/TVS and H1/H2/H3/J1 have their reference label hidden because the
   compact refdes field has no clear spot. Their refdes remain in the BOM, PnP and
@@ -139,7 +136,7 @@ Current result:
 | KiCad ERC (errors / warnings) | 0 / 2 |
 | Synth routing state | routed, 0 open nets |
 | Synth release | `production_status: untrusted`, `release_ready: false` (unverified crystal override; not a fab approval) |
-| Synth SI warnings | 19, none blocking |
+| Synth SI warnings | 22, none blocking |
 
 The 2 ERC warnings are library-comparison warnings, not connectivity errors:
 the registry uses the old name `Device:Ferrite_Bead` (KiCad 10's library has
@@ -179,9 +176,10 @@ component review.
   the source, so the C0G filter caps and the 0.1 % resistors are visible to an
   assembler. Empty cells mean the source does not declare that attribute.
 - There are no test points. A 12-pad set (rails, reference, USB and SWD) was
-  placed on the 50.1 x 44.1 mm board; that route failed on edge clearance, a
-  QSPI supply clearance and two GND pour islands, so it is not in this board.
-  Fitting the full set needs a larger outline or a different placement.
+  placed on the earlier 50.1 x 44.1 mm board; that route failed on edge
+  clearance, a QSPI supply clearance and two GND pour islands, so it is not in
+  this board. The rectangle adds area, but the set has not been re-placed and
+  rerouted.
 - No VBUS current budget was measured. The LDO is 250 mA; the RP2350 datasheet
   peak plus the ADC, reference and flash is expected to be below it, but this
   was not checked against the loads.
@@ -194,22 +192,19 @@ component review.
   register map, USB descriptors and calibration are all unwritten/untested.
 - Synth has no free-text silkscreen primitive, so the board name and revision
   are not on the copper. Header pin functions are not labelled on the silk.
-- The board is 50.1 x 44.1 mm (1880 mm²) with a 16.4 x 20 mm notch in the
-  empty top-left, compacted from the earlier 63.1 x 51.1 mm. The arranged
-  floorplan groups the analog chain at the left, the MCU/flash/crystal and USB
-  at the right, and puts them on the edges. It is one successful FreeRouting
-  run, not a proven densest layout.
-- The outline is a placement-sidecar construct (`[[outline]]`), not a `.synth`
-  statement. A normal `synth export-kicad` applies it; a future `.synth`
-  outline statement would put the geometry in the same file as the netlist.
+- The board is 52.1 x 45.1 mm (2349 mm²), compacted from the earlier
+  63.1 x 51.1 mm. The arranged floorplan groups the analog chain at the left,
+  the MCU/flash/crystal and USB at the right, and puts them on the edges. J1 is
+  not centred on the top edge; centering it fragmented U2's ground escape. It
+  is one successful FreeRouting run, not a proven densest layout.
+- The sidecar still supports an explicit `[[outline]]`, but this board does
+  not use one; the fitted rectangle is a plain reproducible outline.
 - 25 passives/TVS and H1/H2/H3/J1 have their reference label hidden because the
   refdes field has no clear spot in the compact layout. The refdes are still in
   the BOM, PnP and schematic; the full list is in QUALIFICATION.md.
-- The mounting holes leave 2.25 to 2.83 mm of material around a 2.5 mm hole,
-  3.5 to 3.6 mm from the side edges and 4.0 to 4.1 mm from the top/bottom
-  edges. H1 sits on the 7.5 mm left tab, 2.75 mm from the notch edge; J2/J3
-  are 0.78 mm from the bottom edge and J1 1.27 mm from the top. The enclosure,
-  tab strength and screw-head clearance are mechanical check items; the
+- The mounting holes leave 2.84 to 3.75 mm of material around a 2.5 mm hole.
+  J2/J3 are about 0.79 mm from the bottom edge and J1 2.26 mm from the top.
+  The enclosure and screw-head clearance are mechanical check items; the
   measured table is in QUALIFICATION.md.
 - The KiCad ERC library-name warnings remain (see above). They do not affect
   the netlist.
