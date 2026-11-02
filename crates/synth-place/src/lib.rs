@@ -173,6 +173,39 @@ pub fn footprint_origin(
     Point::new(placement.center.x_nm - rot_x, placement.center.y_nm - rot_y)
 }
 
+/// The internal courtyard centre for a footprint whose origin is `origin`:
+/// the inverse of [`footprint_origin`].
+///
+/// A PCB placement sidecar is written in the space every placement is
+/// published in — the footprint origin `synth place`, the MCP
+/// `component_placements` and the exported board's `(at x y)` all carry. It
+/// was read as a courtyard centre, so pinning a part at the position the last
+/// run reported moved it by its courtyard offset, and by the same offset again
+/// on every re-pin: a connector whose origin sits on a pin never reached a
+/// fixed point (absmach/synth#133).
+#[must_use]
+pub fn courtyard_center_from_origin(
+    part: Option<&synth_registry::Part>,
+    origin: Point,
+    rotation: Rotation,
+) -> Point {
+    let (offset_x_mm, offset_y_mm) = part.map_or((0.0, 0.0), |p| {
+        synth_layout::pcb_courtyard_geometry_for_part(p).0
+    });
+    let (rot_x, rot_y) = rotation.rotate_offset(mm_to_nm(offset_x_mm), mm_to_nm(offset_y_mm));
+    Point::new(origin.x_nm + rot_x, origin.y_nm + rot_y)
+}
+
+/// A sidecar entry's rotation in degrees as a [`Rotation`].
+fn sidecar_rotation(degrees: u32) -> Rotation {
+    match degrees {
+        90 => Rotation::Ninety,
+        180 => Rotation::OneEighty,
+        270 => Rotation::TwoSeventy,
+        _ => Rotation::Zero,
+    }
+}
+
 /// Convert an internal placement into the stable external coordinate space.
 ///
 /// Use this for every placement payload that leaves the process — the CLI's
@@ -496,13 +529,12 @@ pub fn apply_sidecar_overrides(
                 continue;
             }
             if let Some(p) = placement.components.iter_mut().find(|c| c.id == comp.id) {
-                p.center = Point::new(mm_to_nm(sidecar_comp.x), mm_to_nm(sidecar_comp.y));
-                p.rotation = match sidecar_comp.rotation {
-                    90 => Rotation::Ninety,
-                    180 => Rotation::OneEighty,
-                    270 => Rotation::TwoSeventy,
-                    _ => Rotation::Zero,
-                };
+                p.rotation = sidecar_rotation(sidecar_comp.rotation);
+                p.center = courtyard_center_from_origin(
+                    comp.part.as_ref(),
+                    Point::new(mm_to_nm(sidecar_comp.x), mm_to_nm(sidecar_comp.y)),
+                    p.rotation,
+                );
             }
         }
     }
@@ -510,6 +542,7 @@ pub fn apply_sidecar_overrides(
     // Resolve relative entries after absolute anchors. Repeated bounded
     // passes support short chains while leaving cyclic/missing anchors at
     // their automatic placement instead of producing invalid coordinates.
+    // `dx`/`dy` run between footprint origins, like the absolute entries.
     for _ in 0..sidecar.components.len() {
         let mut changed = false;
         for comp in &board.components {
@@ -519,37 +552,36 @@ pub fn apply_sidecar_overrides(
             let Some(anchor_refdes) = sidecar_comp.relative_to.as_deref() else {
                 continue;
             };
-            let Some(anchor_id) = board
+            let Some(anchor) = board
                 .components
                 .iter()
                 .find(|candidate| candidate.refdes == anchor_refdes)
-                .map(|candidate| candidate.id)
             else {
                 continue;
             };
-            let Some(anchor_center) = placement
+            let Some(anchor_origin) = placement
                 .components
                 .iter()
-                .find(|candidate| candidate.id == anchor_id)
-                .map(|candidate| candidate.center)
+                .find(|candidate| candidate.id == anchor.id)
+                .map(|candidate| footprint_origin(anchor.part.as_ref(), candidate))
             else {
                 continue;
             };
             if let Some(p) = placement.components.iter_mut().find(|c| c.id == comp.id) {
-                let center = Point::new(
-                    anchor_center.x_nm + mm_to_nm(sidecar_comp.dx),
-                    anchor_center.y_nm + mm_to_nm(sidecar_comp.dy),
+                let rotation = sidecar_rotation(sidecar_comp.rotation);
+                let center = courtyard_center_from_origin(
+                    comp.part.as_ref(),
+                    Point::new(
+                        anchor_origin.x_nm + mm_to_nm(sidecar_comp.dx),
+                        anchor_origin.y_nm + mm_to_nm(sidecar_comp.dy),
+                    ),
+                    rotation,
                 );
-                if p.center != center {
+                if p.center != center || p.rotation != rotation {
                     changed = true;
                 }
                 p.center = center;
-                p.rotation = match sidecar_comp.rotation {
-                    90 => Rotation::Ninety,
-                    180 => Rotation::OneEighty,
-                    270 => Rotation::TwoSeventy,
-                    _ => Rotation::Zero,
-                };
+                p.rotation = rotation;
             }
         }
         if !changed {
@@ -1405,7 +1437,8 @@ fn nearest_local_slot(
 
 /// Run placement with the optional PCB-placement sidecar.
 ///
-/// `sidecar_path` holds **board millimetres** and must come from
+/// `sidecar_path` holds **board millimetres at the footprint origin** (the
+/// space [`to_external`] publishes) and must come from
 /// `synth_layout::placement_sidecar_path` (or an explicit
 /// `layout_file_path`). The schematic sidecar is a different file in sheet
 /// millimetres and must not be passed here; see
@@ -1492,16 +1525,16 @@ pub fn place_with_tuning_and_sidecar_seeded<S: ::std::hash::BuildHasher>(
                     if entry.relative_to.is_some() {
                         return None;
                     }
+                    let rotation = sidecar_rotation(entry.rotation);
                     Some((
                         component.id,
                         (
-                            Point::new(mm_to_nm(entry.x), mm_to_nm(entry.y)),
-                            match entry.rotation {
-                                90 => Rotation::Ninety,
-                                180 => Rotation::OneEighty,
-                                270 => Rotation::TwoSeventy,
-                                _ => Rotation::Zero,
-                            },
+                            courtyard_center_from_origin(
+                                component.part.as_ref(),
+                                Point::new(mm_to_nm(entry.x), mm_to_nm(entry.y)),
+                                rotation,
+                            ),
+                            rotation,
                         ),
                     ))
                 })

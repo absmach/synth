@@ -457,15 +457,15 @@ pub fn list_tools() -> Vec<McpToolInfo> {
         },
         McpToolInfo {
             name: "synth_write_layout_override".into(),
-            description: "Write or update a component placement override or forced net label in a sidecar file. Pass layout_file_path = <design>.placement.layout.toml for PCB footprints (board millimetres, consumed by synth_place_with_hints / synth_route / synth_describe_placement) or <design>.schematic.layout.toml for schematic sheet positions (sheet millimetres, consumed by synth_render_schematic / synth_export). The two share a schema but not a coordinate space, so the wrong file misplaces parts silently. Preserves existing overrides. Prefer relative_to with dx_mm/dy_mm for agent revisions so the arrangement remains robust when the board is resized.".into(),
+            description: "Write or update a component placement override or forced net label in a sidecar file. Pass layout_file_path = <design>.placement.layout.toml for PCB footprints (board millimetres at the footprint origin, the same (at x y) the exported board and component_placements report, consumed by synth_place_with_hints / synth_route / synth_describe_placement) or <design>.schematic.layout.toml for schematic sheet positions (sheet millimetres, consumed by synth_render_schematic / synth_export). The two share a schema but not a coordinate space, so the wrong file misplaces parts silently. Preserves existing overrides. Prefer relative_to with dx_mm/dy_mm for agent revisions so the arrangement remains robust when the board is resized.".into(),
             input_schema: serde_json::json!({
                 "type": "object",
                 "properties": {
                     "layout_file_path": { "type": "string", "description": "Path to the sidecar TOML. Use <design>.placement.layout.toml for PCB footprints (board mm) or <design>.schematic.layout.toml for schematic positions (sheet mm)." },
                     "refdes":           { "type": "string", "description": "Component refdes e.g. 'U1'" },
-                    "x_mm":             { "type": "number", "description": "Absolute X position in mm; omit when using relative_to" },
-                    "y_mm":             { "type": "number", "description": "Absolute Y position in mm; omit when using relative_to" },
-                    "relative_to":     { "type": "string", "description": "Optional anchor refdes; position becomes anchor center plus dx_mm/dy_mm" },
+                    "x_mm":             { "type": "number", "description": "Absolute X position in mm; omit when using relative_to. In a placement sidecar this is the footprint origin, as component_placements reports it" },
+                    "y_mm":             { "type": "number", "description": "Absolute Y position in mm; omit when using relative_to. In a placement sidecar this is the footprint origin, as component_placements reports it" },
+                    "relative_to":     { "type": "string", "description": "Optional anchor refdes; position becomes the anchor's position plus dx_mm/dy_mm (footprint origins in a placement sidecar)" },
                     "dx_mm":            { "type": "number", "description": "Relative X offset from relative_to in mm" },
                     "dy_mm":            { "type": "number", "description": "Relative Y offset from relative_to in mm" },
                     "rotation":         { "type": "integer", "description": "Rotation in degrees (0, 90, 180, 270)" },
@@ -3688,9 +3688,18 @@ fn execute_compact_layout(args: &Value, default_registry: Option<&Path>) -> Resu
                     dx: 0.0,
                     dy: 0.0,
                 });
+            // A placement sidecar holds footprint origins, the space the
+            // exported board uses, not the placer's courtyard centres.
+            let origin = synth_place::footprint_origin(comp.part.as_ref(), p);
             entry.relative_to = None;
-            entry.x = synth_geometry::nm_to_mm(p.center.x_nm);
-            entry.y = synth_geometry::nm_to_mm(p.center.y_nm);
+            entry.x = synth_geometry::nm_to_mm(origin.x_nm);
+            entry.y = synth_geometry::nm_to_mm(origin.y_nm);
+            entry.rotation = match p.rotation {
+                synth_geometry::Rotation::Zero => 0,
+                synth_geometry::Rotation::Ninety => 90,
+                synth_geometry::Rotation::OneEighty => 180,
+                synth_geometry::Rotation::TwoSeventy => 270,
+            };
         }
         std::fs::create_dir_all(&step_dir).map_err(|e| format!("Cannot create step dir: {e}"))?;
         let step_sidecar = step_dir.join("layout.placement.layout.toml");

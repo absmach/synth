@@ -769,8 +769,8 @@ pub fn schematic_sidecar_path(design: &std::path::Path) -> Option<std::path::Pat
     SidecarKind::Schematic.resolve(design)
 }
 
-/// The PCB-placement sidecar for `design`, if it has one: board millimetres,
-/// applied by `synth_place::place_with_sidecar`.
+/// The PCB-placement sidecar for `design`, if it has one: board millimetres at
+/// each footprint's origin, applied by `synth_place::place_with_sidecar`.
 ///
 /// Falls back to the deprecated shared `<design>.layout.toml`, which is why
 /// this and [`schematic_sidecar_path`] can return *different* files for the
