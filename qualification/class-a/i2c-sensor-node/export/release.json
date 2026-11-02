@@ -107,7 +107,7 @@
     "engine_version": "9399bfb2",
     "state": "routed",
     "input_hash": "8682c0ba360db33dfb42d49620a1c78dccb9b9b25033d9044c2002a3fdf9367d",
-    "run_record": "/home/synth/runs/c2fin5-repro/out1/i2c_sensor_node.routing.json"
+    "run_record": "/home/synth/runs/c2fin6-repro/out1/i2c_sensor_node.routing.json"
   },
   "signal_integrity": {
     "blocking": 0,

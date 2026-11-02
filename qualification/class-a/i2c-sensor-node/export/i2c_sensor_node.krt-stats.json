@@ -504,7 +504,7 @@
  "regrade": {
   "board": "file",
   "graded_nets": 35,
-  "seconds": 0.83,
+  "seconds": 0.88,
   "unowned_broken": [],
   "recovered": [],
   "broken_by_run": []

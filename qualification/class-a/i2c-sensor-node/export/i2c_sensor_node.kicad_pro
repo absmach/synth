@@ -127,10 +127,23 @@
     "netclass_assignments": {
       "+3V3": "V33",
       "+5V_PROT": "PWR",
+      "/3V3_REF": "V33",
+      "/GPIO_PA0_MCU": "SIG",
+      "/GPIO_PA1_MCU": "SIG",
+      "/GPIO_PA4_MCU": "SIG",
+      "/GPIO_PA5_MCU": "SIG",
+      "/GPIO_PA6_MCU": "SIG",
+      "/GPIO_PA7_MCU": "SIG",
+      "/GPIO_PB0_MCU": "SIG",
+      "/GPIO_PB9_MCU": "SIG",
+      "/I2C_SCL": "SIG",
+      "/I2C_SDA": "SIG",
       "/NRST": "SIG",
       "/REF_D": "V33",
       "/SWCLK": "SIG",
       "/SWDIO": "SIG",
+      "/U2_RX": "SIG",
+      "/U2_TX": "SIG",
       "3V3_REF": "V33",
       "GND": "GNDC",
       "GPIO_PA0": "SIG",
@@ -179,8 +192,60 @@
         "pattern": "/*/SWDIO"
       },
       {
+        "netclass": "SIG",
+        "pattern": "/*/I2C_SDA"
+      },
+      {
+        "netclass": "SIG",
+        "pattern": "/*/I2C_SCL"
+      },
+      {
+        "netclass": "SIG",
+        "pattern": "/*/U2_TX"
+      },
+      {
+        "netclass": "SIG",
+        "pattern": "/*/U2_RX"
+      },
+      {
         "netclass": "V33",
         "pattern": "/*/REF_D"
+      },
+      {
+        "netclass": "V33",
+        "pattern": "/*/3V3_REF"
+      },
+      {
+        "netclass": "SIG",
+        "pattern": "/*/GPIO_PA0_MCU"
+      },
+      {
+        "netclass": "SIG",
+        "pattern": "/*/GPIO_PA1_MCU"
+      },
+      {
+        "netclass": "SIG",
+        "pattern": "/*/GPIO_PA4_MCU"
+      },
+      {
+        "netclass": "SIG",
+        "pattern": "/*/GPIO_PA5_MCU"
+      },
+      {
+        "netclass": "SIG",
+        "pattern": "/*/GPIO_PA6_MCU"
+      },
+      {
+        "netclass": "SIG",
+        "pattern": "/*/GPIO_PA7_MCU"
+      },
+      {
+        "netclass": "SIG",
+        "pattern": "/*/GPIO_PB0_MCU"
+      },
+      {
+        "netclass": "SIG",
+        "pattern": "/*/GPIO_PB9_MCU"
       }
     ]
   },
@@ -193,34 +258,6 @@
     [
       "2c6a02ee-c397-579a-9b9c-0c39aee43605",
       ""
-    ],
-    [
-      "9bd08dd1-911e-5b61-924f-fc3d3bb577de",
-      "i2c_sensor_node_5V_INPUT__FUSE_THEN_DIODE.kicad_sch"
-    ],
-    [
-      "5fc0ae38-69eb-5c4c-b34a-430987070e0f",
-      "i2c_sensor_node_3V3_REGULATOR.kicad_sch"
-    ],
-    [
-      "46b9dad1-2c0d-5551-8684-c06ffd47574c",
-      "i2c_sensor_node_STM32G030_MCU.kicad_sch"
-    ],
-    [
-      "795f7f85-86b2-53d6-b097-710df173a7c4",
-      "i2c_sensor_node_I2C_SENSING.kicad_sch"
-    ],
-    [
-      "e9aa692e-bfa4-567d-8ff3-f8c49684bd47",
-      "i2c_sensor_node_UART_BREAKOUT.kicad_sch"
-    ],
-    [
-      "e055151e-2518-5b04-8748-1f1e66db5b64",
-      "i2c_sensor_node_GPIO_HEADER.kicad_sch"
-    ],
-    [
-      "27be2476-0c73-57d5-972e-cdfff45a4caf",
-      "i2c_sensor_node_MOUNTING.kicad_sch"
     ]
   ]
 }

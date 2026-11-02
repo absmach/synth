@@ -56,9 +56,10 @@ board "i2c_sensor_node" {
     component D1: diode     "d_schottky" value "1N5819" { placement_hint { near: "F1" priority: soft } }
     component D4: diode     "ptvs6v0s1ur" value "PTVS6V0S1UR" { placement_hint { near: "D1" priority: soft } }
     notes "" {
-      "J1 pin 1 = +5 V, pin 2 = GND. Mates with JST XHP-2 housing."
-      "Order: fuse first (fault current meets a limiter), diode second (reversed supply meets a blocker)."
-      "D4 clamps transients on +5V_PROT, behind D1 so a reversed supply never forward-biases it."
+      "J1 pin 1 = +5 V, pin 2 = GND (JST XHP-2). Fuse first, then the"
+      "reverse-polarity diode D1."
+      "D4 clamps transients on +5V_PROT, behind D1 so a reversed supply never"
+      "forward-biases it."
     }
   }
 
@@ -73,15 +74,10 @@ board "i2c_sensor_node" {
     component D15: diode     "ltst_c190kgkt" value "GREEN" { placement_hint { near: "U2" priority: soft } }
     component R24: resistor  "r_generic_0603" value "680" { placement_hint { near: "D15" priority: soft } }
     notes "" {
-      "AMS1117 tab is VOUT (pin 2): the tab pad is the +3V3 copper area."
-      "Power LED (Lite-On LTST-C190KGKT, VF 1.9 to 2.4 V at 20 mA): (3.3 V - 2.4 V) / 680 R = 1.3 mA up to (3.3 V - 1.9 V) / 680 R = 2.1 mA."
-      "Load budget on +3V3: 100 mA maximum (the regulator is rated 800 mA)."
-      "Dissipation P = (Vin - Vout) x I, with Vin taken as 5.0 V (the JST input, before the fuse and the Schottky D1): P = (5.0 - 3.3) x 0.100 A = 0.17 W at the 100 mA budget and 0.51 W at 300 mA."
-      "Junction rise = P x thetaJA. The AMS1117 datasheet gives thetaJA = 90 C/W for the SOT-223 and 45 to 59 C/W with 1000 to 2500 mm2 of copper on both sides (Table 1): 0.17 W x 90 = 15.3 C at 100 mA and 0.51 W x 90 = 45.9 C at 300 mA. The junction limit is 125 C, so the ambient may reach 109 C at 100 mA and 79 C at 300 mA. Synth's W-SYNTH-THERMAL-001 estimate (1360 mW) comes from the declared load sum."
-      "Dropout is 1.1 V typical and 1.3 V maximum at 800 mA and lower at light load (datasheet). If the input falls below 3.3 V plus the dropout, +3V3 follows it down, inside the supply range of the MCU (2.0 to 3.6 V) and the BME680 (1.71 to 3.6 V)."
-      "Input: the AMS1117 is rated 15 V absolute maximum at its input; D4 (PTVS6V0S1UR, 6 V standoff) clamps at 10.3 V maximum at 38.8 A (distributor listings). Quiescent current is 5 mA typical and 10 mA maximum (datasheet)."
-      "Output capacitor: the datasheet's stability rule is a 22 uF solid tantalum on the output. C3 is 47 uF tantalum (KEMET T491B476K010AT) with the 10 uF ceramic C4 and the 100 nF C5 in parallel."
-      "Ceramic capacitance falls with DC bias: C4 (10 uF 0805) is taken at 50 % and 30 % of nominal (5 uF and 3 uF); the 47 uF tantalum C3 exceeds the 22 uF the datasheet asks for."
+      "AMS1117 tab is VOUT. Load budget 100 mA: P = (5.0 - 3.3) x 0.1 A ="
+      "0.17 W, thetaJA 90 C/W gives a 15 C rise (125 C limit)."
+      "LED (VF 1.9 to 2.4 V): 1.3 to 2.1 mA through 680 R. C3 is 47 uF"
+      "tantalum (22 uF required)."
     }
   }
 
@@ -100,11 +96,10 @@ board "i2c_sensor_node" {
     component D9: diode "d_zener_3v3" value "3.3V zener" { placement_hint { near: "J4" priority: soft } }
     component D19: diode "d_zener_3v3" value "3.3V zener" { placement_hint { near: "J4" priority: soft } }
     notes "" {
-      "J4: 1 = 3V3_REF (sense only), 2 = SWDIO, 3 = SWCLK, 4 = GND, 5 = NRST."
-      "PA14 is SWCLK and BOOT0. Default option bytes (nBOOT_SEL=1) ignore the pin; blank flash enters the ROM bootloader. There is no BOOT0 strap on this board."
-      "D8/D9 (SWDIO/SWCLK) and D19 (NRST) are 3.3 V zeners, cathode on the signal, anode on GND; a 5 V clamp would exceed the STM32 input maximum."
-      "Fault current: a 5 V fault on SWDIO/SWCLK through R13/R14 (100R): (5 - 3.3) / 100 = 17 mA, and 24 V is not expected. A 500 mW SOD-123 zener carries that (about 56 mW). NRST has the 10k pull-up and 1k DTR path: (5 - 3.3) / 1k = 1.7 mA."
-      "Caveat: a 3.3 V zener leaks near its knee at the 3.3 V rail; the leakage into NRST (10k pull-up) and the SWD lines (100R) depends on the zener's datasheet leakage at 3.3 V: needs sourcing (the registry part has no MPN yet)."
+      "J4: 1 = 3V3_REF, 2 = SWDIO, 3 = SWCLK, 4 = GND, 5 = NRST. PA14 is"
+      "SWCLK and BOOT0."
+      "D8, D9, D19 are 3.3 V zeners; a 5 V fault through 100 R is (5 - 3.3) /"
+      "100 = 17 mA, 56 mW."
     }
   }
 
@@ -118,7 +113,8 @@ board "i2c_sensor_node" {
     component R9:  resistor  "r_generic_0603" value "4.7k" { placement_hint { near: "U5" priority: soft } }
     component R10: resistor  "r_generic_0603" value "4.7k" { placement_hint { near: "U5" priority: soft } }
     notes "" {
-      "BME680 SDO low = 0x76, CSB high = I2C. 24LC256 A2:A0 low = 0x50. No collision."
+      "BME680 SDO low = 0x76, CSB high = I2C. 24LC256 A2:A0 low = 0x50. No"
+      "collision."
       "One pull-up pair, 4.7k each, for the whole bus."
     }
   }
@@ -130,11 +126,10 @@ board "i2c_sensor_node" {
     component D7: diode "d_zener_3v3" value "3.3V zener" { placement_hint { near: "R11" priority: soft } }
     component D24: diode "d_zener_3v3" value "3.3V zener" { placement_hint { near: "R12" priority: soft } }
     notes "" {
-      "J3: 1 GND, 2 UART_TX (MCU out), 3 UART_RX (MCU in), 4 3V3_REF (sense only, 3 mA max)."
-      "Host must use 3.3 V logic. D7 (TX) and D24 (RX) are 3.3 V zeners, cathode on the MCU side of the series resistor, anode on GND."
-      "Fault current with a 5 V host line on J3: TX (5 - 3.3) / 330 = 5.2 mA, zener power 3.3 V x 5.2 mA = 17 mW; RX (5 - 3.3) / 1k = 1.7 mA, 5.6 mW. A 12 V fault on TX would be (12 - 3.3) / 330 = 26 mA, 86 mW in the zener and 0.23 W in R11, which exceeds an 0603 rating (0.1 W typical, needs sourcing): the connector is specified for 3.3 V to 5 V only."
-      "The MCU pin sees the zener clamp (3.3 V at the zener test current, datasheet value needs sourcing), below the STM32G030 absolute maximum of VDD + 4 V = 7.3 V (datasheet figure, needs sourcing)."
-      "Open: a 3.3 V zener conducts at its knee near 3.3 V, so leakage into the UART lines at logic-high is needs sourcing from the zener datasheet (registry part has no MPN)."
+      "J3: 1 GND, 2 UART_TX, 3 UART_RX, 4 3V3_REF (3 mA max). Host logic 3.3"
+      "V to 5 V."
+      "D7, D24 are 3.3 V zeners behind 330 R and 1 k: a 5 V fault is 5.2 mA"
+      "(17 mW) and 1.7 mA (5.6 mW)."
     }
   }
 
@@ -160,11 +155,10 @@ board "i2c_sensor_node" {
     component D14: diode "d_schottky" value "1N5819" { placement_hint { near: "J5" priority: soft } }
     component R23: resistor "r_generic_0805" value "100" { placement_hint { near: "D14" priority: soft } }
     notes "" {
-      "J5: 1 3V3_REF, 2 GND, 3 PA0, 4 PA1, 5 PA4, 6 GND, 7 PA5, 8 PA6, 9 PA7, 10 GND, 11 PB0, 12 PB9."
-      "3V3_REF = +3V3 through D14 (blocks back-drive) and 100R: sense or reference only, 3 mA max (about 2.7 V at 3 mA), 30 mA into a short."
-      "D10..D13 and D20..D23 are eight 3.3 V zeners, one per GPIO line, cathode on the MCU side of the 330R series resistor, anode on GND."
-      "Fault current with a 5 V source on a header pin: (5 - 3.3) / 330 = 5.2 mA, zener power 3.3 V x 5.2 mA = 17 mW, resistor power 5.2 mA squared x 330 = 8.9 mW. A 12 V fault is 26 mA, 86 mW zener and 0.23 W in the 0603 resistor (0.1 W typical, needs sourcing): the header is specified for 3.3 V to 5 V only."
-      "Zener leakage at logic-high near 3.3 V and ADC input error from it (PA0, PA1, PA4, PA6, PA7, PB0 are analog-capable): needs sourcing from the zener datasheet."
+      "J5: 1 3V3_REF, 2 GND, 3 PA0, 4 PA1, 5 PA4, 6 GND, 7 PA5, 8 PA6, 9 PA7,"
+      "10 GND, 11 PB0, 12 PB9."
+      "D10..D13, D20..D23: one 3.3 V zener per line behind 330 R; a 5 V fault"
+      "is 5.2 mA, 17 mW. 3V3_REF is +3V3 through D14 and 100 R, 3 mA max."
     }
   }
 
@@ -173,7 +167,8 @@ board "i2c_sensor_node" {
     component H2: mounting_hole "mounting_hole_m2_5"
     component H3: mounting_hole "mounting_hole_m2_5"
     notes "" {
-      "H2, H3: two M2.5 non-plated mounting holes at opposite (diagonal) corners."
+      "H2, H3: two M2.5 non-plated mounting holes at opposite (diagonal)"
+      "corners."
     }
   }
 

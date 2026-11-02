@@ -34,7 +34,7 @@ KiCad 10.0.7 on a 16-vCPU server; Synth built from commit `cfec42751ffd898cd4425
 | Parts | 57 (including the two mounting holes) |
 | Routing | 35 nets connected, 602 track segments, 73 vias |
 | KiCad DRC (`--refill-zones --severity-all`, with the footprint library table) | 0 errors, 0 unconnected; warnings: 52 `lib_footprint_mismatch` ([`reports/kicad_drc.json`](reports/kicad_drc.json)) |
-| KiCad ERC | 126 `lib_symbol_issues`, 1 `pin_to_pin` ([`reports/kicad_erc.json`](reports/kicad_erc.json)) |
+| KiCad ERC | 121 `lib_symbol_issues`, 1 `pin_to_pin` ([`reports/kicad_erc.json`](reports/kicad_erc.json)) |
 | Gerber and drill content hash | `2600d19420` (identical across the three exports) |
 
 Connector distance to the board edge (courtyard to Edge.Cuts, measured on the exported board):
@@ -62,7 +62,7 @@ Decoupling capacitors, pad to the supply pin they serve (pad to supply pin):
 Net classes (PWR 0.5 mm, V33 0.4 mm, SIG 0.25 mm, GNDC 0.4 mm, Default 0.2 mm; vias 0.6 mm over a 0.2 mm drill), as exported:
 
     classes {'PWR': (0.5, 0.6, 0.2), 'SIG': (0.25, 0.6, 0.2), 'V33': (0.4, 0.6, 0.2), 'GNDC': (0.4, 0.6, 0.2), 'Default': (0.2, 0.6, 0.3)}
-    assignments 39 patterns 4
+    assignments 52 patterns 17
     SIG {0.25: 229, 0.2: 75, 0.21000000000000002: 34, 0.22: 33, 0.23: 34, 0.24: 32, 0.127: 8}
     V33 {0.4: 85, 0.36000000000000004: 1, 0.32: 1, 0.28: 1, 0.24000000000000002: 1, 0.2: 2}
     PWR {0.5: 23}
@@ -77,10 +77,10 @@ The source and sidecar in this directory were exported three times with `synth e
 | file | export 1 | export 2 | export 3 | |
 |---|---|---|---|---|
 | `i2c_sensor_node.synth.kicad_pcb` (un-routed) | 8682c0ba36 | 8682c0ba36 | 8682c0ba36 | identical |
-| `i2c_sensor_node.kicad_pcb` | 6521596634 | e653e4f541 | 04445f92bd | identical after the router's and KiCad's random ids |
-| `i2c_sensor_node.kicad_sch` and its sheets | 5c212dd7a5 | 5c212dd7a5 | 5c212dd7a5 | identical |
-| `i2c_sensor_node.kicad_pro` | 7f734c6c03 | 7f734c6c03 | 7f734c6c03 | identical |
-| `i2c_sensor_node.kicad_sym` | 57046d2a5c | 57046d2a5c | 57046d2a5c | identical |
+| `i2c_sensor_node.kicad_pcb` | bb30873e4f | 27eb415e9c | 88fbbccab8 | identical after the router's and KiCad's random ids |
+| `i2c_sensor_node.kicad_sch` (one A1 sheet) | ed3e118032 | ed3e118032 | ed3e118032 | identical |
+| `i2c_sensor_node.kicad_pro` | d385dd6371 | d385dd6371 | d385dd6371 | identical |
+| `i2c_sensor_node.kicad_sym` | f8b593e51b | f8b593e51b | f8b593e51b | identical |
 | `bom.csv` | ec31ca8c8a | ec31ca8c8a | ec31ca8c8a | identical |
 | `pnp.csv` | 706483f12e | 706483f12e | 706483f12e | identical |
 | Gerber and drill content | 2600d19420 | 2600d19420 | 2600d19420 | identical |
@@ -97,4 +97,4 @@ With the random ids masked the routed board is `cb7909f3f9` in all three exports
 | Net classes declared and applied | Declared (PWR, V33, GNDC, SIG) and assigned to 39 nets; the exported board's tracks use them as listed above, with the router narrowing tracks near pads. |
 | AMS1117 thermal | P = (5.0 - 3.3) x 0.1 A = 0.17 W at the 100 mA budget and 0.51 W at 300 mA. The datasheet gives thetaJA = 90 C/W for the SOT-223 (45 to 59 C/W with 1000 to 2500 mm2 of copper, its Table 1), so the rise is 15.3 C and 45.9 C and the ambient may reach 109 C and 79 C at the 125 C junction limit. The input is rated 15 V absolute maximum and D4 clamps at 10.3 V; the output needs a 22 uF tantalum for stability and C3 is 47 uF. The registry part `ams1117_3v3` carries the datasheet figures: thetaJA 90 C/W and 1.2 W guaranteed power dissipation (its Note 2). |
 | Every part has distributor identity | [`fab/i2c_sensor_node_bom_orderable.csv`](fab/i2c_sensor_node_bom_orderable.csv): manufacturer, MPN, package, rating, datasheet or page, distributor and order number for every line; the exports use no `--allow-unverified-parts`. |
-| Schematic readability and silk overlaps | The schematic has one sheet per functional group; the DRC reports no `silk_overlap`. |
+| Schematic readability and silk overlaps | The schematic is one A1 sheet with seven named groups, each with its notes, and no `OTHER` region; the DRC reports no `silk_overlap`. |
