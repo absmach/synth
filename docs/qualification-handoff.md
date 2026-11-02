@@ -85,7 +85,7 @@ Stage budgets are configurable when a board needs more time:
 `SYNTH_CHECK_SOURCE_TIMEOUT_SECS`, `SYNTH_CHECK_DRC_TIMEOUT_SECS`,
 `SYNTH_CHECK_FAB_TIMEOUT_SECS`.
 
-### Why no artifact hash is pinned
+### Why no output hash is pinned
 
 The matrix records the `.kicad_sch`, `.kicad_pcb` and `bom.csv` hashes in
 `results.json` and **compares none of them**. They are there so a human can
@@ -106,6 +106,24 @@ in both directions, so a board that acquires a new error-level diagnostic
 fails even while every code already written down keeps firing, and a board
 that stops reporting one fails too. A board's error-level output is a
 declaration, not a floor.
+
+### The inputs are pinned
+
+The outputs cannot be pinned, but the inputs can. Every row carries a
+`fixture_sha256`: a SHA-256 over the board's `.synth` source and the layout
+sidecars beside it (`<stem>.placement.layout.toml`,
+`<stem>.schematic.layout.toml`), each hashed under its file name and length.
+The verdicts on a row were measured on exactly those bytes, so an edit to
+any of them — deliberate or not — makes the row a claim about a different
+board.
+
+`the_matrix_is_well_formed` checks the hash in the normal test shards, so an
+accidental fixture change fails on the pull request that made it, without
+waiting for the release gate; the release gate checks it as well. When the
+change is deliberate, re-run the matrix, correct any verdict that moved, and
+only then write the new hash the failure prints. Registry edits are not part
+of a board's fixture: they are attributed through the registry manifest hash
+in `results.json`, and caught by the verdicts they change.
 
 ## What automation cannot prove
 

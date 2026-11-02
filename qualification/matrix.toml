@@ -16,6 +16,7 @@ fab_command = "synth check <board> --fab --json"
 [[board]]
 id = "hello"
 path = "fixtures/designs/hello.synth"
+fixture_sha256 = "a1047d5b79020d3b100c389ff4e97ebce5d15cf9badad9b15b41ab6d2b474706"
 class = "A"
 status = "experimental"
 expect = "fail"
@@ -25,6 +26,7 @@ rationale = "`board \"hello\" { layers 2 }` — no components, no nets. It is he
 [[board]]
 id = "env_logger"
 path = "examples/env_logger/env_logger.synth"
+fixture_sha256 = "b89025f6eb05df789c317eb875f0efb6df86a85c61d48bf708b76972ec0f50d1"
 class = "A"
 status = "experimental"
 expect = "fail"
@@ -34,6 +36,7 @@ rationale = "USB-C power, an AMS1117 LDO, an MCU, a BME680 on I2C and a debug he
 [[board]]
 id = "sensor_logger"
 path = "examples/sensor_logger/sensor_logger.synth"
+fixture_sha256 = "6dad544533dcb92fe94d46a32ea64ae44f342c69996c70af73df734b761a8c4a"
 class = "A"
 status = "experimental"
 expect = "fail"
@@ -43,6 +46,7 @@ rationale = "Dual I2C sensors, SPI flash and status LEDs: a larger Class-A digit
 [[board]]
 id = "placement_and_diff_pair"
 path = "examples/placement_and_diff_pair/placement_and_diff_pair.synth"
+fixture_sha256 = "bfa9d000e2bd58a7fbbf595fba8459c2c6afc2a6168f6d943d06bdf88e7e6414"
 class = "C"
 status = "experimental"
 expect = "fail"
@@ -52,6 +56,7 @@ rationale = "Differential-pair constraints, placement hints and keepouts: the Cl
 [[board]]
 id = "ref_ldo_sensor"
 path = "fixtures/kicad-reference/ref_ldo_sensor.synth"
+fixture_sha256 = "b437a5bc4946514aebf9934d3e4bc50d1b91845270613d184c0ee4fa38b68ba7"
 class = "A"
 status = "unsupported"
 expect = "fail"
@@ -62,6 +67,7 @@ rationale = "Negative test, imported from a KiCad reference project. Four generi
 [[board]]
 id = "ref_crystal_mcu"
 path = "fixtures/kicad-reference/ref_crystal_mcu.synth"
+fixture_sha256 = "58a4c49a16c15d0df9f07329bfdad81ecab9fccd6070db7be27ccd3d77b07f6c"
 class = "A"
 status = "unsupported"
 expect = "fail"
@@ -76,6 +82,7 @@ rationale = "Negative test. Two connections name pins their part does not declar
 [[board]]
 id = "ref_usb_cdc"
 path = "fixtures/kicad-reference/ref_usb_cdc.synth"
+fixture_sha256 = "e8d47b6b67991eee715919ac18bd7c94757958c754c33f1eb9c697a3888f07b0"
 class = "B"
 status = "unsupported"
 expect = "fail"
@@ -90,6 +97,7 @@ rationale = "Negative test at the Class-B interface envelope: a USB CDC bridge. 
 [[board]]
 id = "secure_tracker"
 path = "fixtures/kicad-reference/secure_tracker.synth"
+fixture_sha256 = "1f7e2153d26790713cf073ab6bcc953ef8f18e8c0ed013fd60533168ec393935"
 class = "D"
 status = "unsupported"
 expect = "fail"
@@ -104,6 +112,7 @@ rationale = "Negative test and the corpus's only Class-D entry: the largest impo
 [[board]]
 id = "buck"
 path = "qualification/class-b/buck/buck.synth"
+fixture_sha256 = "1ddfc86b649f25bc25465f82145a3d96baf623ff1fc32bfa3c830650cd100b14"
 class = "B"
 status = "experimental"
 expect = "pass"
