@@ -148,9 +148,10 @@ fn an_unknown_method_is_reported_rather_than_dropped() {
 
 /// A layer the board does not have is a typo, and typos have to fail here.
 ///
-/// Passed through, the name reaches the escape engine, the fanout fails at
-/// route time, and the package is routed unescaped behind a stderr warning —
-/// the same silent fallback the unknown-method check exists to prevent.
+/// Passed through, the name reaches the escape engine and the fanout fails at
+/// route time, which fails the route late and as an escape failure rather than
+/// as the typo it is — the same late failure the unknown-method check exists
+/// to prevent.
 #[test]
 fn a_layer_the_board_does_not_have_is_reported() {
     let (_, codes) = lower(
