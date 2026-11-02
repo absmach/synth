@@ -1,0 +1,18 @@
+{
+  "qualified": false,
+  "meaning": "reports/release.json production_status and release_ready only say the route passed Synth's router and DRC gates. They are not review sign-off.",
+  "gates": {
+    "routing_and_drc": {
+      "passed": false,
+      "evidence": "DRC: 197 unconnected pads. 3 open nets (+3V3, USB_DP, VIN_5V_FUSED). Routing failed due to placement issues (connectors not flush, support parts too far from pads). Placement requires revision."
+    },
+    "erc_dispositioned": {
+      "passed": false,
+      "evidence": "66 ERC warnings, 0 errors. See synth_validate output."
+    },
+    "placement_review": {
+      "passed": false,
+      "evidence": "Visual review requires revision: J1/J2/J3 not flush with board edges, 14+ support parts too far from served pads, decoupling caps too far from MCU."
+    }
+  }
+}

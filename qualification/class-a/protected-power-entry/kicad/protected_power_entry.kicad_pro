@@ -1,0 +1,260 @@
+{
+  "board": {
+    "design_settings": {
+      "defaults": {
+        "min_clearance": 0.127,
+        "min_copper_edge_clearance": 0.3,
+        "min_hole_clearance": 0.2,
+        "min_through_hole_diameter": 0.3,
+        "min_track_width": 0.127,
+        "min_via_annular_width": 0.13,
+        "min_via_diameter": 0.56
+      },
+      "rules": {
+        "min_clearance": 0.127,
+        "min_copper_edge_clearance": 0.3,
+        "min_hole_clearance": 0.2,
+        "min_through_hole_diameter": 0.3,
+        "min_track_width": 0.127,
+        "min_via_annular_width": 0.13,
+        "min_via_diameter": 0.56
+      }
+    }
+  },
+  "boards": [],
+  "meta": {
+    "filename": "protected_power_entry.kicad_pro",
+    "uuid": "e22602cb-c699-51bb-a09d-a1ea58e92f79",
+    "version": 1
+  },
+  "net_settings": {
+    "classes": [
+      {
+        "bus_width": 12,
+        "clearance": 0.25,
+        "diff_pair_gap": 0.25,
+        "diff_pair_via_gap": 0.25,
+        "diff_pair_width": 0.2,
+        "line_style": 0,
+        "microvia_diameter": 0.3,
+        "microvia_drill": 0.1,
+        "name": "PWR12",
+        "pcb_color": "rgba(144, 67, 191, 1.000)",
+        "priority": 0,
+        "schematic_color": "rgba(144, 67, 191, 1.000)",
+        "track_width": 0.8,
+        "via_diameter": 0.8,
+        "via_drill": 0.4,
+        "wire_width": 6
+      },
+      {
+        "bus_width": 12,
+        "clearance": 0.2,
+        "diff_pair_gap": 0.25,
+        "diff_pair_via_gap": 0.25,
+        "diff_pair_width": 0.2,
+        "line_style": 0,
+        "microvia_diameter": 0.3,
+        "microvia_drill": 0.1,
+        "name": "SIG",
+        "pcb_color": "rgba(154, 67, 191, 1.000)",
+        "priority": 1,
+        "schematic_color": "rgba(154, 67, 191, 1.000)",
+        "track_width": 0.25,
+        "via_diameter": 0.6,
+        "via_drill": 0.3,
+        "wire_width": 6
+      },
+      {
+        "bus_width": 12,
+        "clearance": 0.25,
+        "diff_pair_gap": 0.25,
+        "diff_pair_via_gap": 0.25,
+        "diff_pair_width": 0.2,
+        "line_style": 0,
+        "microvia_diameter": 0.3,
+        "microvia_drill": 0.1,
+        "name": "PWR5",
+        "pcb_color": "rgba(191, 67, 131, 1.000)",
+        "priority": 2,
+        "schematic_color": "rgba(191, 67, 131, 1.000)",
+        "track_width": 1.0,
+        "via_diameter": 0.8,
+        "via_drill": 0.4,
+        "wire_width": 6
+      },
+      {
+        "bus_width": 12,
+        "clearance": 0.25,
+        "diff_pair_gap": 0.25,
+        "diff_pair_via_gap": 0.25,
+        "diff_pair_width": 0.2,
+        "line_style": 0,
+        "microvia_diameter": 0.3,
+        "microvia_drill": 0.1,
+        "name": "PGND",
+        "pcb_color": "rgba(67, 191, 154, 1.000)",
+        "priority": 3,
+        "schematic_color": "rgba(67, 191, 154, 1.000)",
+        "track_width": 0.8,
+        "via_diameter": 0.8,
+        "via_drill": 0.4,
+        "wire_width": 6
+      },
+      {
+        "bus_width": 12,
+        "clearance": 0.25,
+        "diff_pair_gap": 0.25,
+        "diff_pair_via_gap": 0.25,
+        "diff_pair_width": 0.2,
+        "line_style": 0,
+        "microvia_diameter": 0.3,
+        "microvia_drill": 0.1,
+        "name": "PWR3",
+        "pcb_color": "rgba(67, 191, 131, 1.000)",
+        "priority": 4,
+        "schematic_color": "rgba(67, 191, 131, 1.000)",
+        "track_width": 0.5,
+        "via_diameter": 0.8,
+        "via_drill": 0.4,
+        "wire_width": 6
+      },
+      {
+        "bus_width": 12,
+        "clearance": 0.127,
+        "diff_pair_gap": 0.25,
+        "diff_pair_via_gap": 0.25,
+        "diff_pair_width": 0.2,
+        "line_style": 0,
+        "microvia_diameter": 0.3,
+        "microvia_drill": 0.1,
+        "name": "Default",
+        "pcb_color": "rgba(0, 0, 0, 1.000)",
+        "priority": 2147483647,
+        "schematic_color": "rgba(0, 0, 0, 1.000)",
+        "track_width": 0.2,
+        "via_diameter": 0.6,
+        "via_drill": 0.3,
+        "wire_width": 6
+      }
+    ],
+    "meta": {
+      "version": 4
+    },
+    "net_colors": null,
+    "netclass_assignments": {
+      "+12V_PROT": "PWR12",
+      "+3V3": "PWR3",
+      "+5V": "PWR5",
+      "+5V_SW": "PWR5",
+      "/3V3_REF": "SIG",
+      "/BUCK_BS": "SIG",
+      "/BUCK_CRC": "SIG",
+      "/BUCK_SW": "PWR5",
+      "/EN_HDR": "SIG",
+      "/LOAD_EN": "SIG",
+      "/S3_DIV": "SIG",
+      "/S5_DIV": "SIG",
+      "/SENSE_12V": "SIG",
+      "/SENSE_3V3": "SIG",
+      "/SENSE_5V": "SIG",
+      "/VIN_12V_FUSED": "PWR12",
+      "/VIN_12V_RAW": "PWR12",
+      "3V3_REF": "SIG",
+      "BUCK_BS": "SIG",
+      "BUCK_COMP": "SIG",
+      "BUCK_CRC": "SIG",
+      "BUCK_EN": "SIG",
+      "BUCK_FB": "SIG",
+      "BUCK_SS": "SIG",
+      "BUCK_SW": "PWR5",
+      "EN_HDR": "SIG",
+      "FLT_A": "SIG",
+      "GND": "PGND",
+      "LED12_A": "SIG",
+      "LED3V3_A": "SIG",
+      "LED5SW_A": "SIG",
+      "LED5_A": "SIG",
+      "LED_IN_A": "SIG",
+      "LED_IN_B": "SIG",
+      "LOAD_EN": "SIG",
+      "LS_CT": "SIG",
+      "OUT_5V": "PWR5",
+      "OUT_5V_SW": "PWR5",
+      "PFET_GATE": "SIG",
+      "S12_DIV": "SIG",
+      "S3_DIV": "SIG",
+      "S5_DIV": "SIG",
+      "SENSE_12V": "SIG",
+      "SENSE_3V3": "SIG",
+      "SENSE_5V": "SIG",
+      "VIN_12V_FUSED": "PWR12",
+      "VIN_12V_RAW": "PWR12"
+    },
+    "netclass_patterns": [
+      {
+        "netclass": "PWR12",
+        "pattern": "/*/VIN_12V_RAW"
+      },
+      {
+        "netclass": "PWR12",
+        "pattern": "/*/VIN_12V_FUSED"
+      },
+      {
+        "netclass": "PWR5",
+        "pattern": "/*/BUCK_SW"
+      },
+      {
+        "netclass": "SIG",
+        "pattern": "/*/BUCK_BS"
+      },
+      {
+        "netclass": "SIG",
+        "pattern": "/*/BUCK_CRC"
+      },
+      {
+        "netclass": "SIG",
+        "pattern": "/*/LOAD_EN"
+      },
+      {
+        "netclass": "SIG",
+        "pattern": "/*/EN_HDR"
+      },
+      {
+        "netclass": "SIG",
+        "pattern": "/*/3V3_REF"
+      },
+      {
+        "netclass": "SIG",
+        "pattern": "/*/SENSE_12V"
+      },
+      {
+        "netclass": "SIG",
+        "pattern": "/*/S5_DIV"
+      },
+      {
+        "netclass": "SIG",
+        "pattern": "/*/SENSE_5V"
+      },
+      {
+        "netclass": "SIG",
+        "pattern": "/*/S3_DIV"
+      },
+      {
+        "netclass": "SIG",
+        "pattern": "/*/SENSE_3V3"
+      }
+    ]
+  },
+  "schematic": {
+    "annotate_start_num": 0,
+    "drawing": {},
+    "variants": []
+  },
+  "sheets": [
+    [
+      "fd63b700-2ccd-5c00-a068-019bb06d2915",
+      ""
+    ]
+  ]
+}

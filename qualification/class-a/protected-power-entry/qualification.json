@@ -1,0 +1,14 @@
+{
+  "qualified": false,
+  "meaning": "reports/release.json production_status and release_ready only say the route passed Synth's router and DRC gates. They are not review sign-off.",
+  "gates": {
+    "routing_and_drc": {
+      "passed": true,
+      "evidence": "DRC: 0 unconnected pads (all nets connected). 37 DRC violations: 25 silk_overlap, 9 silk_over_copper, 2 track_dangling, 1 courtyards_overlap (all silkscreen/courtyard warnings, no electrical errors). Routed with kicad-routing-tools."
+    },
+    "erc_dispositioned": {
+      "passed": false,
+      "evidence": "56 ERC warnings, 0 errors. See synth_validate output."
+    }
+  }
+}
