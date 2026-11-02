@@ -192,14 +192,28 @@ pub fn analyse(board: &PcbBoard, policy: &FabricationPolicy) -> Vec<PackageEscap
 }
 
 /// [`grid_arrays`] for the request's exported baseline board.
+///
+/// Empty for a baseline that cannot be read. That is only safe because the
+/// caller that acts on it refuses such a baseline first; see
+/// [`read_baseline`].
 #[must_use]
 pub fn grid_arrays_in_baseline(request: &crate::contract::RouteRequest) -> Vec<String> {
-    let Ok(text) = std::fs::read_to_string(request.baseline_path()) else {
-        return Vec::new();
-    };
-    PcbBoard::parse(&text)
+    read_baseline(request)
         .map(|board| grid_arrays(&board))
         .unwrap_or_default()
+}
+
+/// The request's exported baseline board, or why it cannot be read.
+///
+/// # Errors
+/// Returns a description naming the path when the baseline is missing,
+/// unreadable, or does not parse as a board.
+pub fn read_baseline(request: &crate::contract::RouteRequest) -> Result<PcbBoard, String> {
+    let path = request.baseline_path();
+    let text = std::fs::read_to_string(&path)
+        .map_err(|error| format!("the baseline {} cannot be read: {error}", path.display()))?;
+    PcbBoard::parse(&text)
+        .map_err(|error| format!("the baseline {} does not parse: {error}", path.display()))
 }
 
 /// Packages worth handing to a dedicated escape engine: dense grid arrays.

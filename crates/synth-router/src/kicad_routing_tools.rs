@@ -339,6 +339,7 @@ pub fn route(request: &RouteRequest) -> Result<Candidate, RouterFailure> {
         let _ = std::fs::create_dir_all(parent);
     }
 
+    check_baseline(request)?;
     let argv = build_command(request, &python, &helper, &repo);
     let start = std::time::Instant::now();
     let invocation = crate::process::run(
@@ -475,6 +476,23 @@ pub fn route(request: &RouteRequest) -> Result<Candidate, RouterFailure> {
     }
 
     Ok(candidate)
+}
+
+/// Refuse a baseline the escape stage cannot read.
+///
+/// Which packages are escaped is decided from the baseline, so one that is
+/// missing or does not parse would otherwise yield an empty plan, and every
+/// dense package on the board would reach the general router with nothing
+/// said about it. The engine is never started on such a board.
+fn check_baseline(request: &RouteRequest) -> Result<(), RouterFailure> {
+    crate::escape::read_baseline(request)
+        .map(drop)
+        .map_err(|detail| {
+            RouterFailure::io(
+                RouterEngine::KiCadRoutingTools,
+                format!("cannot decide which packages to escape: {detail}"),
+            )
+        })
 }
 
 /// The failure for a run the helper stopped at the escape stage.
@@ -806,6 +824,40 @@ mod tests {
         // And the clearance, which the adapter would otherwise default to
         // 0.1 mm — under this board's own 0.127 mm floor.
         assert!(joined.contains("--escape-clearance 0.1270"), "{joined}");
+    }
+
+    /// The escape plan is read off the baseline, so a baseline that cannot be
+    /// read must stop the run rather than produce an empty plan.
+    #[test]
+    fn a_baseline_the_escape_stage_cannot_read_fails_the_route() {
+        let missing = request();
+        let failure = check_baseline(&missing).expect_err("a missing baseline must fail");
+        assert_eq!(failure.stage, RouterStage::Baseline);
+        assert_eq!(failure.reason, RouterFailureReason::Io);
+        assert!(
+            failure.detail.contains("cannot be read"),
+            "{}",
+            failure.detail
+        );
+
+        let (malformed, dir) = with_baseline(&grid_pads(11, 11, 0.8));
+        std::fs::write(malformed.baseline_path(), "(kicad_sch (version 1))").expect("write");
+        let failure = check_baseline(&malformed).expect_err("a malformed baseline must fail");
+        std::fs::remove_dir_all(&dir).ok();
+        assert_eq!(failure.reason, RouterFailureReason::Io);
+        assert!(
+            failure.detail.contains("does not parse"),
+            "{}",
+            failure.detail
+        );
+    }
+
+    #[test]
+    fn a_readable_baseline_passes_the_escape_check() {
+        let (request, dir) = with_baseline(&grid_pads(1, 2, 2.54));
+        let checked = check_baseline(&request);
+        std::fs::remove_dir_all(&dir).ok();
+        assert!(checked.is_ok(), "{checked:?}");
     }
 
     fn invocation(exit_code: Option<i32>, stderr: &str) -> crate::process::Invocation {
