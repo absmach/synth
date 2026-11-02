@@ -171,3 +171,122 @@ fn the_ground_stitching_vias_keep_the_default_when_nothing_is_declared() {
         "{vias:?}"
     );
 }
+
+/// The drill tools and the via-pad apertures of the fabrication files a
+/// four-layer `jlcpcb` board exports, through the same `kicad-cli` calls a fab
+/// package makes. The board's only copper holes are vias: the ground stitching
+/// vias and the fanout vias of a `PWR` plane. `None` when `kicad-cli` is absent.
+fn fabricated_vias(label: &str, extra: &str) -> Option<(Vec<String>, Vec<String>)> {
+    let source = format!(
+        r#"board "{label}" {{
+  manufacturer "jlcpcb"
+  layers 4
+  netclass "PWR" {{ plane {extra} }}
+  netclass "Default" {{ {extra} }}
+  component C1: capacitor "c_generic_0603" value "100nF"
+  component C2: capacitor "c_generic_0603" value "100nF"
+  component C3: capacitor "c_generic_0603" value "100nF"
+  connect C1.p1 -> C2.p1 as "GND"
+  connect C2.p1 -> C3.p1
+  connect C1.p2 -> C2.p2 as "VBUS" class "PWR"
+  connect C2.p2 -> C3.p2
+}}
+"#
+    );
+    let registry = synth_registry::load_dir(&workspace_root().join("registry").join("parts"))
+        .expect("seed registry must load");
+    let parsed = synth_parser::parse(&source, format!("{label}.synth"));
+    assert!(parsed.diagnostics.is_empty(), "{:?}", parsed.diagnostics);
+    let lowered = synth_ir::lower(&parsed.ast.unwrap(), &registry, &format!("{label}.synth"));
+    assert!(lowered.diagnostics.is_empty(), "{:?}", lowered.diagnostics);
+    let tmp = tempdir(label);
+    let result = synth_kicad::export(&lowered.board.unwrap(), &tmp).expect("export");
+    let request = synth_kicad::FabRequest {
+        gerbers: true,
+        drill: true,
+        step: false,
+    };
+    let artifacts = match synth_kicad::run_fab(&result.pcb_path, &tmp, &request) {
+        Ok(artifacts) => artifacts,
+        Err(synth_kicad::FabError::NotFound) => {
+            eprintln!("kicad-cli unavailable; skipping the fabricated via test");
+            return None;
+        }
+        Err(e) => panic!("fabrication export failed: {e}"),
+    };
+    let read_dir = |dir: &Path, suffix: &str| -> String {
+        let path = fs::read_dir(dir)
+            .unwrap()
+            .map(|entry| entry.unwrap().path())
+            .find(|p| p.to_string_lossy().ends_with(suffix))
+            .unwrap_or_else(|| panic!("no *{suffix} in {}", dir.display()));
+        fs::read_to_string(path).unwrap()
+    };
+    // Excellon tool definitions, `T1C0.200`: one per distinct plated hole.
+    let pth = read_dir(artifacts.drill_dir.as_deref().unwrap(), "-PTH.drl");
+    let drills = pth
+        .lines()
+        .filter(|line| line.starts_with('T') && line.contains('C'))
+        .filter_map(|line| line.split_once('C').map(|(_, d)| d.to_string()))
+        .collect();
+    // The aperture each `ViaPad` attribute introduces on the front copper,
+    // `%ADD11C,0.600000*%`.
+    let front = read_dir(artifacts.gerbers_dir.as_deref().unwrap(), "-F_Cu.gbr");
+    let mut pads = Vec::new();
+    let mut lines = front.lines();
+    while let Some(line) = lines.next() {
+        if line.contains("AperFunction,ViaPad") {
+            if let Some(aperture) = lines.next() {
+                let (_, diameter) = aperture
+                    .split_once("C,")
+                    .unwrap_or_else(|| panic!("a round via pad: {aperture}"));
+                pads.push(diameter.trim_end_matches("*%").to_string());
+            }
+        }
+    }
+    let _ = fs::remove_dir_all(&tmp);
+    Some((drills, pads))
+}
+
+fn mm(figure: &str) -> f64 {
+    figure
+        .parse()
+        .unwrap_or_else(|_| panic!("a figure in mm: {figure}"))
+}
+
+/// The Gerbers and the drill file, not only the board's net classes, carry the
+/// declared via: every plated hole is drilled at 0.2 mm under a 0.6 mm pad, so
+/// every via has the 0.20 mm ring JLCPCB's DFM check asks for, where the
+/// 0.6 / 0.3 mm default leaves the 0.15 mm ring it warns about.
+#[test]
+fn the_fabricated_vias_carry_the_declared_0_2_mm_drill() {
+    let Some((drills, pads)) =
+        fabricated_vias("fab-declared", "via_diameter 0.6mm via_drill 0.2mm")
+    else {
+        return;
+    };
+    assert!(
+        !drills.is_empty() && !pads.is_empty(),
+        "{drills:?} {pads:?}"
+    );
+    assert!(
+        drills.iter().all(|d| (mm(d) - 0.2).abs() < 1e-6),
+        "every plated hole is the declared 0.2 mm drill: {drills:?}"
+    );
+    assert!(
+        pads.iter().all(|p| (mm(p) - 0.6).abs() < 1e-6),
+        "every via pad is the declared 0.6 mm: {pads:?}"
+    );
+}
+
+#[test]
+fn the_fabricated_vias_keep_the_0_3_mm_default_when_nothing_is_declared() {
+    let Some((drills, pads)) = fabricated_vias("fab-undeclared", "") else {
+        return;
+    };
+    assert!(
+        drills.iter().all(|d| (mm(d) - 0.3).abs() < 1e-6),
+        "{drills:?}"
+    );
+    assert!(pads.iter().all(|p| (mm(p) - 0.6).abs() < 1e-6), "{pads:?}");
+}
