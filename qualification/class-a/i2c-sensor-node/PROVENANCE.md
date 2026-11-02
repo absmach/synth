@@ -26,7 +26,7 @@ The board is the output of an agent driving `synth mcp` from a prompt, followed 
 
 ## Generated artifacts and hashes
 
-The README's reproducibility table has the first ten characters of SHA-256 of each exported file for the three exports. The routed board file carries random ids from the router and KiCad, so its three raw hashes differ and are compared after masking those ids; every other file listed, and the Gerber content, is byte-identical. The Gerber content hash is in [`fab/GERBER_CONTENT_SHA256`](fab/GERBER_CONTENT_SHA256) and the file hashes in [`fab/SHA256SUMS`](fab/SHA256SUMS).
+The README's reproducibility table has the first ten characters of SHA-256 of each exported file for the three exports. The routed board file carries random ids from the router and KiCad, so its three raw hashes differ and are compared after masking those ids; the schematic, project, symbol, BOM, placement and un-routed board files are byte-identical, and the Gerber, drill and job files differ in the creation time in their headers, so they are compared by a content hash with that time masked. The Gerber content hash is in [`fab/GERBER_CONTENT_SHA256`](fab/GERBER_CONTENT_SHA256) and the file hashes in [`fab/SHA256SUMS`](fab/SHA256SUMS).
 
 ## Validation commands and results
 

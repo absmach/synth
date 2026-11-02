@@ -35,7 +35,7 @@ KiCad 10.0.7 on a 16-vCPU server; Synth built from commit `aaa8d193fe9573c554a5e
 | Routing | 35 nets connected, 602 track segments, 73 vias |
 | KiCad DRC (`--refill-zones --severity-all`, with the footprint library table) | 0 errors, 0 unconnected; warnings: 52 `lib_footprint_mismatch` ([`reports/kicad_drc.json`](reports/kicad_drc.json)) |
 | KiCad ERC | 121 `lib_symbol_issues`, 1 `pin_to_pin` ([`reports/kicad_erc.json`](reports/kicad_erc.json)) |
-| Gerber and drill content hash | `1c1755660b` (byte-identical across the three exports) |
+| Gerber and drill content hash | `1c1755660b` (identical across the three exports once the creation time in the Gerber headers is masked) |
 
 Connector distance to the board edge (courtyard to Edge.Cuts, measured on the exported board):
 
@@ -76,14 +76,14 @@ The source and sidecar in this directory were exported three times with `synth e
 
 | file | export 1 | export 2 | export 3 | |
 |---|---|---|---|---|
-| `i2c_sensor_node.synth.kicad_pcb` (un-routed) | ba85e901ff | ba85e901ff | ba85e901ff | identical |
-| `i2c_sensor_node.kicad_pcb` | c76451a264 | 1d288a6a22 | 691a25cd42 | identical after the router's and KiCad's random ids |
-| `i2c_sensor_node.kicad_sch` (one A1 sheet) | ed3e118032 | ed3e118032 | ed3e118032 | identical |
-| `i2c_sensor_node.kicad_pro` | 8b000fbbf8 | 8b000fbbf8 | 8b000fbbf8 | identical |
-| `i2c_sensor_node.kicad_sym` | f8b593e51b | f8b593e51b | f8b593e51b | identical |
-| `bom.csv` | ec31ca8c8a | ec31ca8c8a | ec31ca8c8a | identical |
-| `pnp.csv` | 706483f12e | 706483f12e | 706483f12e | identical |
-| Gerber and drill content | 1c1755660b | 1c1755660b | 1c1755660b | identical |
+| `i2c_sensor_node.synth.kicad_pcb` (un-routed) | ba85e901ff | ba85e901ff | ba85e901ff | byte-identical |
+| `i2c_sensor_node.kicad_pcb` | c76451a264 | 1d288a6a22 | 691a25cd42 | not byte-identical; identical after the router's and KiCad's random ids are masked (normalized) |
+| `i2c_sensor_node.kicad_sch` (one A1 sheet) | ed3e118032 | ed3e118032 | ed3e118032 | byte-identical |
+| `i2c_sensor_node.kicad_pro` | 8b000fbbf8 | 8b000fbbf8 | 8b000fbbf8 | byte-identical |
+| `i2c_sensor_node.kicad_sym` | f8b593e51b | f8b593e51b | f8b593e51b | byte-identical |
+| `bom.csv` | ec31ca8c8a | ec31ca8c8a | ec31ca8c8a | byte-identical |
+| `pnp.csv` | 706483f12e | 706483f12e | 706483f12e | byte-identical |
+| Gerber and drill content | 1c1755660b | 1c1755660b | 1c1755660b | identical after the creation time in the headers is masked (normalized) |
 
 With the random ids masked the routed board is `52980d7667` in all three exports ([`reproduce/compare_exports.py`](reproduce/compare_exports.py) does the masking). [`reproduce/reproduce.sh`](reproduce/reproduce.sh) is supplemental tooling, not the evidence of how the board was made (see [`PROVENANCE.md`](PROVENANCE.md)); it rebuilds Synth at the pinned commit, exports three times and compares, then builds the fabrication package.
 
@@ -102,7 +102,7 @@ BOM matching of the same package in JLCPCB's assembly flow, PCB assembled qty 5,
 | Point | State |
 |---|---|
 | A plain default export is valid; no optional flag, no split ground pour | The exports use `synth export-kicad` with the router options only (no `--allow-incomplete`, no `--krt-allow-via-in-pad`). The ground net GND is poured on all four layers as one net. |
-| Three exports agree | Above: the schematic, project, symbol, BOM, placement and un-routed board files and the Gerber content are byte-identical; the routed board is identical after the router's and KiCad's random ids are masked. |
+| Three exports agree | Byte-identical across the three exports: `kicad_sch`, `kicad_pro`, `kicad_sym`, `bom.csv`, `pnp.csv` and the un-routed `synth.kicad_pcb`. Not byte-identical but equal after normalization: the routed `kicad_pcb` (the router and KiCad write random ids; compared with those masked, so geometrically equivalent) and the Gerber, drill and job files (the headers carry the creation time; compared by the content hash with it masked). |
 | Every external line of J3 protected | TX goes through R11 (330 ohm) and D7, a 3.3 V zener (BZT52C3V3, 500 mW); RX through R12 (1 k) and D24. A 5 V fault: (5 - 3.3) / 330 = 5.2 mA and (5 - 3.3) / 1000 = 1.7 mA, so 17 mW and 5.6 mW in the zener. The 3.3 V sense line has D14 (1N5819HW) and 100 ohm: 3 mA maximum, 30 mA into a short. The zener's leakage and clamp figures are from its listing, not an opened datasheet. |
 | Net classes declared and applied | Declared (PWR, V33, GNDC, SIG) and assigned to 39 nets; the exported board's tracks use them as listed above, with the router narrowing tracks near pads. |
 | AMS1117 thermal | P = (5.0 - 3.3) x 0.1 A = 0.17 W at the 100 mA budget and 0.51 W at 300 mA. The datasheet gives thetaJA = 90 C/W for the SOT-223 (45 to 59 C/W with 1000 to 2500 mm2 of copper, its Table 1), so the rise is 15.3 C and 45.9 C and the ambient may reach 109 C and 79 C at the 125 C junction limit. The input is rated 15 V absolute maximum and D4 clamps at 10.3 V; the output needs a 22 uF tantalum for stability and C3 is 47 uF. The registry part `ams1117_3v3` carries the datasheet figures: thetaJA 90 C/W and 1.2 W guaranteed power dissipation (its Note 2). |
