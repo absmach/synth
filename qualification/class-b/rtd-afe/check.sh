@@ -6,6 +6,8 @@
 set -euo pipefail
 B=$(cd "$(dirname "$0")" && pwd); OUT=${OUT:-$B/kicad}; SYNTH=${SYNTH:-target/debug/synth}
 export XDG_DATA_HOME=$(mktemp -d)
+# Stamp the tree that produced the package; an unset variable stays unset.
+export SYNTH_SOURCE_REVISION=${SYNTH_SOURCE_REVISION:-$(git -C "$B/../../.." rev-parse HEAD 2>/dev/null || true)}
 rm -rf "$OUT" "$B/reports" "$B/images"
 $SYNTH export-kicad "$B/rtd_afe.synth" --out "$OUT" --router free-routing \
   --allow-unverified-parts --validate-erc --pnp --gerbers --drill >/dev/null

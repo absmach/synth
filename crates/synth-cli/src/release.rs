@@ -220,6 +220,10 @@ pub struct ReleaseManifest {
     pub schema_version: String,
     pub tool_version: String,
     pub input: String,
+    /// Commit named by `SYNTH_SOURCE_REVISION` when the package was built.
+    /// `None` means the caller did not name one.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub source_revision: Option<String>,
     pub fab_requested: bool,
     pub production_status: ProductionStatus,
     pub release_ready: bool,
@@ -270,6 +274,25 @@ fn gate_scope() -> String {
         .to_string()
 }
 
+/// The input path as a checkout-relative path where possible, so a package
+/// does not record the absolute directory of the machine that built it.
+fn display_input(input: &Path) -> String {
+    std::env::current_dir()
+        .ok()
+        .and_then(|cwd| input.strip_prefix(cwd).ok())
+        .unwrap_or(input)
+        .display()
+        .to_string()
+}
+
+/// The source revision a caller names in `SYNTH_SOURCE_REVISION`. An empty
+/// value names none, so an unset or blank variable is not stamped as a commit.
+fn revision_from(value: Option<String>) -> Option<String> {
+    value
+        .map(|v| v.trim().to_string())
+        .filter(|v| !v.is_empty())
+}
+
 impl ReleaseManifest {
     pub fn new(
         tool_version: &str,
@@ -283,7 +306,8 @@ impl ReleaseManifest {
         Self {
             schema_version: SCHEMA_VERSION.to_string(),
             tool_version: tool_version.to_string(),
-            input: input.display().to_string(),
+            input: display_input(input),
+            source_revision: revision_from(std::env::var("SYNTH_SOURCE_REVISION").ok()),
             fab_requested,
             production_status: if clean {
                 ProductionStatus::Production
@@ -520,6 +544,27 @@ mod tests {
             overrides,
             Vec::new(),
         )
+    }
+
+    #[test]
+    fn an_input_under_the_current_directory_is_recorded_relative() {
+        let cwd = std::env::current_dir().expect("cwd");
+        let absolute = cwd.join("qualification/class-b/rtd-afe/rtd_afe.synth");
+        assert_eq!(
+            display_input(&absolute),
+            "qualification/class-b/rtd-afe/rtd_afe.synth"
+        );
+        assert_eq!(display_input(Path::new("board.synth")), "board.synth");
+    }
+
+    #[test]
+    fn a_named_source_revision_is_kept_and_a_blank_one_is_not() {
+        assert_eq!(
+            revision_from(Some(" abc123\n".into())).as_deref(),
+            Some("abc123")
+        );
+        assert_eq!(revision_from(Some("  ".into())), None);
+        assert_eq!(revision_from(None), None);
     }
 
     fn unverified() -> OverrideRecord {

@@ -8,7 +8,7 @@ MHz crystal part still has no part-level reviewer, and the analog accuracy has
 not been measured.
 
 Intended use: a bench or lab 4-wire PT100 front end with a USB readout. It is a
-demonstration of a split-ground mixed-signal board, not an instrument. Do not
+compact mixed-signal board on a single ground plane, not an instrument. Do not
 use it for a product or a safety function until the review items in
 QUALIFICATION.md are closed.
 
@@ -18,7 +18,7 @@ QUALIFICATION.md are closed.
   F-. The force pair carries the excitation current; the sense pair reads the
   element.
 - Input filter: R_S1/R_S2 1k 0.1 %, C_D 100 nF C0G across the pair, C_CM1/C_CM2
-  10 nF C0G to AGND, C_F 10 nF C0G on F+.
+  10 nF C0G to GND, C_F 10 nF C0G on F+.
 - U1 TI ADS124S08 24-bit delta-sigma ADC (VQFN-32, exposed pad) with the
   internal PGA and IDAC1. AIN0 is the force output, AIN1/AIN2 the differential
   sense input. The firmware is expected to select 1 mA excitation.
@@ -31,7 +31,8 @@ QUALIFICATION.md are closed.
 - L2 600 ohm at 100 MHz ferrite bead isolates +3V3A for U1 and U3.
 - Four M2.5 non-plated mounting holes at (6, 4), (49, 4), (6, 40) and
   (49, 40) mm.
-- 50.1 x 44.1 mm bounding box, 4 layers, 1.6 mm. The top-left notch
+- 50.1 x 44.1 mm bounding box, 4 layers, 1.586 mm declared stackup (1.6 mm
+  nominal FR4). The top-left notch
   (x 10..26.4 mm, y 0..20 mm) is part of the closed board outline in the
   placement sidecar (`[[outline]]`); the remaining area is 1880 mm². Board
   source `rtd_afe.synth`, placement sidecar
@@ -61,22 +62,19 @@ difference is only the equivalent capacitance assumed there (110 nF instead of
 settings and are not in this repository.
 
 Excitation and common mode: IDAC1 sources 1 mA into AIN0/F+, through the PT100,
-out of F- and through R_BIAS 1k to AGND. R_BIAS lifts the RTD common mode to
+out of F- and through R_BIAS 1k to GND. R_BIAS lifts the RTD common mode to
 about 1.0 V plus the RTD drop (about 1.1 V at 100 ohm, 1.25 V at 250 ohm). The
 gain-dependent PGA common-mode limit was not re-checked against SBAS660C in this
 work; see QUALIFICATION.md.
 
-## Grounds
+## Ground
 
-AGND and DGND are separate pours on all four copper layers. AGND is the higher
-priority pour where the two outlines overlap; the boundary runs between the
-analog column and the MCU. The ADC's AVSS, AVSS_SW, REFN0, REFCOM, exposed pad,
-DGND pin (14) and CLK pin (17) return to AGND; the MCU, flash, USB and LDO return
-to DGND. R_TIE (0R, 0603) at (31.4, 31.5) mm is the only component with pads on
-both nets; its AGND pad sits on the analog side of the generated bisector and
-its DGND pad on the digital side. The check script proves with pcbnew that it is
-the only such footprint; because a track, via or zone carries exactly one net,
-no copper item can bridge the split.
+One GND plane on all four copper layers. There is no AGND/DGND split and no tie
+resistor. The ADC's AVSS, AVSS_SW, REFN0, REFCOM, exposed pad, DGND pin (14) and
+CLK pin (17) return to the same plane as the MCU, flash, USB and LDO. `check.sh`
+asserts with pcbnew that the board has `GND` and no `AGND` or `DGND` net. The
+return-via warnings on the digital nets are listed in QUALIFICATION.md for the
+SI review.
 
 ## Placement and routing
 
@@ -84,11 +82,11 @@ Status: routed with FreeRouting 2.4.1 on Java 25, KiCad 10.0.7, Synth at the
 worktree this directory was exported from. The route is under review by the
 designated reviewer.
 
-- Analog left, digital right. The analog block is J2 and the RC filter at the
-  bottom-left, U1 at (20, 29) mm, U3 at (11, 29) mm and L2 at (30.5, 24.5) mm.
-  The digital core is U2 at (38, 27) mm, U4 at (33, 18.8) mm and Y1 at
-  (37, 36.5) mm. U5 is at (47.5, 17) mm and J3 at (41.5, 41.5) mm on the
-  bottom edge.
+- Analog left, digital right. The analog block is J2 at (15.5, 41.5) mm and the
+  RC filter at the bottom-left, U1 at (20, 29) mm, U3 at (11, 29) mm and L2 at
+  (30.5, 23.5) mm. The digital core is U2 at (38, 27) mm, U4 at (33, 18.8) mm
+  and Y1 at (37, 36.5) mm. U5 is at (47.5, 17) mm and J3 at (41.5, 41.5) mm on
+  the bottom edge.
 - J2 and J3 are both at y = 41.5 mm; their bodies end 0.8 mm from the bottom
   edge. J1 is at (39.5, 6.0) mm on the main top edge, which runs x 26.4..52.6
   mm after the notch, so J1 is centred on that edge. The left tab keeps H1 and
@@ -99,18 +97,19 @@ designated reviewer.
 - The RTD/input nets and VREF are on F.Cu only, with no layer change. QSPI also
   stays on F.Cu. The SPI, SWD, USB and XIN nets change layers; see the SI
   warnings below.
-- 340 track segments, 65 vias (15 on AGND, 28 on DGND, 22 signal), 557.8 mm of
-  copper. 41 nets, 0 open. The router records 62 vias; the other three are
-  source ground stitching.
+- 384 track segments, 61 vias (41 on GND, 20 signal), 590.5 mm of copper. 40
+  nets, 0 open. The router records 58 vias; the other three are source ground
+  stitching.
 - `kicad-cli pcb drc --severity-all --refill-zones`: 0 errors, 0 warnings, 0
-  unconnected items. `pcbnew.LoadBoard` reopens the board. The AGND/DGND tie
-  check passes with R_TIE as the only bridge.
-- Synth's signal-integrity pass: 22 non-blocking warnings, 0 crosstalk findings
-  and 22 layer changes with no ground-return via within 0.64 mm. The flagged
-  nets are REFOUT, SPI, ADC_DRDY, XIN, RUN, SWCLK, CC1, USB_DP_C and USB_DN_C;
-  no RTD, AIN or VREF net is flagged. See QUALIFICATION.md.
+  unconnected items. `pcbnew.LoadBoard` reopens the board and `check.sh` confirms
+  one GND plane with no AGND or DGND net.
+- Synth's signal-integrity pass: 19 non-blocking warnings, of which 17 are layer
+  changes with no ground-return via within 0.64 mm and 2 are crosstalk pairs.
+  The layer-change nets are REFOUT, SPI_MOSI/CS/SCK/MISO, ADC_DRDY, XIN, RUN,
+  SWCLK, USB_DP_C and USB_DN_C; the crosstalk pairs are SWDIO/VBUS and
+  QSPI_SS/QSPI_SD2. No RTD, AIN or VREF net is flagged. See QUALIFICATION.md.
 - Silkscreen: 0 DRC warnings. U1 has a hard label override at (24, 34.5) mm;
-  26 passives and both TVS diodes have their reference label hidden because the
+  25 passives/TVS and H1/H2/H3/J1 have their reference label hidden because the
   compact refdes field has no clear spot. Their refdes remain in the BOM, PnP and
   schematic; the full list is in QUALIFICATION.md.
 
@@ -125,9 +124,10 @@ qualification/class-b/rtd-afe/check.sh
 
 `check.sh` exports and autoroutes the board into `kicad/`, then runs
 `kicad-cli pcb drc --severity-all --refill-zones` and `kicad-cli sch erc` on the
-result, renders the 3D views, and loads the board in pcbnew to check the tie.
-It needs `tools/freerouting/freerouting-2.4.1.jar` and `tools/jre25/` (both
-git-excluded; symlink them from a configured Synth worktree).
+result, renders the 3D views, and loads the board in pcbnew to check that it has
+one GND plane. It needs `tools/freerouting/freerouting-2.4.1.jar` and
+`tools/jre25/` (both git-excluded; symlink them from a configured Synth
+worktree).
 
 Current result:
 
@@ -135,11 +135,11 @@ Current result:
 | --- | --- |
 | KiCad DRC (errors / warnings / unconnected) | 0 / 0 / 0 |
 | pcbnew reopen | OK |
-| AGND/DGND tie | R_TIE only |
+| Ground | one GND plane; no AGND or DGND net |
 | KiCad ERC (errors / warnings) | 0 / 2 |
 | Synth routing state | routed, 0 open nets |
 | Synth release | `production_status: untrusted`, `release_ready: false` (unverified crystal override; not a fab approval) |
-| Synth SI warnings | 22, none blocking |
+| Synth SI warnings | 19, none blocking |
 
 The 2 ERC warnings are library-comparison warnings, not connectivity errors:
 the registry uses the old name `Device:Ferrite_Bead` (KiCad 10's library has
@@ -171,12 +171,16 @@ fabrication approval or a component review.
 ## Known limits and gaps
 
 - No VBUS fuse, TVS or reverse-polarity protection. D1/D2 protect only D+/D-.
-  CC1/CC2 have no TVS. The USB shield is tied directly to DGND.
+  CC1/CC2 have no TVS. The USB shield is tied directly to GND.
 - D1/D2 are the generic `esd_usb` part: no manufacturer part number or
   datasheet. The BOM's `ESD` value is a placeholder.
-- The BOM carries values, not dielectric or tolerance. The C0G filter caps and
-  the 0.1 % resistors are properties of the `.synth` source; an assembler that
-  reads only `bom.csv` would not see them.
+- The BOM carries `dielectric`, `voltage`, `tolerance` and `power` columns from
+  the source, so the C0G filter caps and the 0.1 % resistors are visible to an
+  assembler. Empty cells mean the source does not declare that attribute.
+- There are no test points. A 12-pad set (rails, reference, USB and SWD) was
+  placed on the 50.1 x 44.1 mm board; that route failed on edge clearance, a
+  QSPI supply clearance and two GND pour islands, so it is not in this board.
+  Fitting the full set needs a larger outline or a different placement.
 - No VBUS current budget was measured. The LDO is 250 mA; the RP2350 datasheet
   peak plus the ADC, reference and flash is expected to be below it, but this
   was not checked against the loads.
@@ -197,14 +201,15 @@ fabrication approval or a component review.
 - The outline is a placement-sidecar construct (`[[outline]]`), not a `.synth`
   statement. A normal `synth export-kicad` applies it; a future `.synth`
   outline statement would put the geometry in the same file as the netlist.
-- 26 passives and D1/D2 have their reference label hidden because the refdes
-  field has no clear spot in the compact layout. The refdes are still in the
-  BOM, PnP and schematic; the full list is in QUALIFICATION.md.
-- The mounting holes are 3.5 mm from the left edge, 3.6 mm from the right
-  (1.2 to 1.3 mm of material around a 2.5 mm hole), 4.0 mm from the top and
-  4.1 mm from the bottom. H1 sits on the 7.5 mm left tab, 1.25 mm from the
-  notch edge. The enclosure, tab strength and screw-head clearance are
-  mechanical check items.
+- 25 passives/TVS and H1/H2/H3/J1 have their reference label hidden because the
+  refdes field has no clear spot in the compact layout. The refdes are still in
+  the BOM, PnP and schematic; the full list is in QUALIFICATION.md.
+- The mounting holes leave 2.25 to 2.83 mm of material around a 2.5 mm hole,
+  3.5 to 3.6 mm from the side edges and 4.0 to 4.1 mm from the top/bottom
+  edges. H1 sits on the 7.5 mm left tab, 2.75 mm from the notch edge; J2/J3
+  are 0.78 mm from the bottom edge and J1 1.27 mm from the top. The enclosure,
+  tab strength and screw-head clearance are mechanical check items; the
+  measured table is in QUALIFICATION.md.
 - The KiCad ERC library-name warnings remain (see above). They do not affect
   the netlist.
 
