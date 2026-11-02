@@ -373,13 +373,13 @@ Inputs and outputs of the committed run:
 | --- | --- |
 | `rtd_afe.synth` | `b7c0aebf36d67b62a749bbe78fddff50d586ddb84002a628ffe504ae7122859e` |
 | `rtd_afe.placement.layout.toml` | `6e9b83c0969759a2a6df866e53553b70c3646490254362002253d70469d786e1` |
-| `check.sh` | `ecbc3275a7a4cf491550f99a38e3bee992770b094b106d7e0e6cf730a66a144e` |
+| `check.sh` | `39bd0d10444b8f55238be5b1c675b86eef36f26d1054896f1b57b286f37168d1` |
 | `kicad/rtd_afe.kicad_pcb` | `3a98c4656d43e61a4c81889b03e74d61eb20fabad1d08d2af27b2598499dda74` |
 | `kicad/rtd_afe.kicad_sch` | `c7300d22238d8d4991b3ba453599ffdb96a833de3c83bdc132542ea662537812` |
-| `reports/rtd_afe.kicad-drc.json` | `518780bad2dbe797e405a9b99da6622d5465b16890e24180cce5a9964a6f9ef9` |
-| `reports/rtd_afe.kicad-erc.json` | `15068d202bbe4575752d96ee8081921000650c7c98b63584276dcf3599aceb11` |
-| `reports/release.json` | `772ea51440ebe3e60e96a108ec3d09cefc957d260125dfc87651a88ced51eda5` |
-| `reports/rtd_afe.routing.json` | `5c048b3b4a6a6bf3a66c1193613fe70de2291b124560bed1c1814d4008506ae6` |
+| `reports/rtd_afe.kicad-drc.json` | `605461330f28d51c069a59d4e70113496e40234576f247bc95c40285d99c9b61` |
+| `reports/rtd_afe.kicad-erc.json` | `61826e81dcbae8011d3c7491d8df352ffa2d16de56548b602f2702186cd71674` |
+| `reports/release.json` | `234170a679a98704cadcd7f7f0e98e8b9855e59b38678885dd25cebf335d050f` |
+| `reports/rtd_afe.routing.json` | `a83de382445a79c178aff9795a670755bfa1d8f532cd55039db23490e9a890b6` |
 
 `check.sh` sets `SYNTH_SOURCE_REVISION` from the checked-out commit, and both
 `release.json` and the routing provenance record it. It also rewrites the
