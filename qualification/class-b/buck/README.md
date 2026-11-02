@@ -1,9 +1,10 @@
 # 24 V in, 3.3 V out buck with input parts (PTC, reverse-block diode, TVS) (SYN-67)
 
 Status: designed, placed by a hand-pinned sidecar, routed, DRC and ERC counted, Gerber and drill files
-generated. Not fabricated, not powered, no hardware test. Both parts that carry registry review records
-are signed: `lmr38010` and `ltst_c190kgkt` were reviewed by Steve Munene on 2026-10-29, and the fab package
-reports `release_ready: true`. The review evidence for both is below.
+generated. Not fabricated, not powered, no hardware test. Every part on the board that carries a
+registry review record is signed; the last two, `lmr38010` and `ltst_c190kgkt`, were reviewed by Steve Munene
+on 2026-10-29 and their review records are below. The fab package reports `release_ready: true`, which covers
+Synth's routing and export gates only, not fabrication.
 Intended for 24 V +10% in and 1 A out. The converter is rated 1 A, and the PTC and the input connector are
 further limits (see Limits). No surge test was run. The TVS clamp (48.4 V at 12.4 A) is below the
 converter's 85 V absolute maximum; a sustained overvoltage is limited by the PTC and the 50 V capacitors.
@@ -17,7 +18,7 @@ feedback, power-good and thermal copper, plus a negative variant that the feedba
 ## What
 
 - `buck.synth`, negative `buck_neg_fb_sw.synth`, the placement sidecar `buck.placement.layout.toml`, hashes in `SHA256SUMS`, matrix and `#38` traceability in `QUALIFICATION.md`, evidence in `kicad/`, `reports/`, `images/`.
-- `kicad/`: the KiCad project, BOM, pick-and-place, `gerbers/` (22 Gerbers plus the job file, 4 copper layers) and `drill/` (PTH and NPTH). `reports/`: `release.json` (source/DRC gate) and `release-fab.json` (fab package, untrusted), DRC, ERC, routing and connectivity.
+- `kicad/`: the KiCad project, BOM, pick-and-place, `gerbers/` (22 Gerbers plus the job file, 4 copper layers) and `drill/` (PTH and NPTH). `reports/`: `release.json` (source/DRC gate) and `release-fab.json` (fab package), DRC, ERC, routing and connectivity.
 - Chain: J1 (JST XH) -> F1 PTC -> D1 SS36 Schottky (reverse block) -> VIN node.
   VIN node: D2 SMBJ30A TVS, C1 47 uF bulk, C2 10 uF, C3 220 nF (on the U1 VIN pin), U1 LMR38010, UVLO divider.
 - U1 -> L1 6.8 uH -> C5, C6, C9 (3x 22 uF, 25 V X7R) -> J2. C4 100 nF boot. R_RT 33k from RT/SYNC to GND sets 800 kHz. U1 has no VCC pin, so there is no VCC capacitor.
@@ -110,7 +111,7 @@ Read from the datasheet above on 2026-10-29. Registry file `registry/parts/diode
 - Circuit: D3 from +3V3 through R_LED 470 ohm: (3.3 - 2.4 to 1.9) / 470 = 1.9 to 3.0 mA, well under 30 mA. D4 likewise through R_PGLED.
 - Not checked: availability, LCSC number, the Lite-On temperature derating curve against the board temperature.
 
-Not signed. `reviewed_by` stays empty until the maintainer has read the datasheet and signs it in the registry file.
+Reviewed by Steve Munene on 2026-10-29; `reviewed_by` and `reviewed_at` are set in the registry file.
 
 ### Review record: U1 TI LMR38010SDDAR
 
@@ -122,7 +123,7 @@ Read from SNVSBM3B (text copy), 2026-10-29. Registry file `registry/parts/regula
 - Application: Cin at least 4.7 uF plus 100-220 nF (C2 10 uF, C3 220 nF); inductor above the Eq 11 minimum (1.03 uH against 6.8 uH); PG pull-up and EN divider as in the sections above.
 - Not checked: availability, LCSC number.
 
-Not signed. `reviewed_by` stays empty until the maintainer has read the datasheet and signs it in the registry file.
+Reviewed by Steve Munene on 2026-10-29; `reviewed_by` and `reviewed_at` are set in the registry file.
 
 ## Limits and honesty notes
 
@@ -179,7 +180,7 @@ The export routes with FreeRouting 2.4.1 on OpenJDK 25.0.4.1; the routed board i
 | validate, negative | exit 1, 1 error (E-SYNTH-POWER-011), the same 14 warnings | same on `buck_neg_fb_sw.synth` |
 | routing | `routed`, 13 nets connected, 0 open, 97 segments (all F.Cu), 21 vias, 200.08 mm | `reports/buck.routing.json` `statistics`; the PCB file also holds 97 segments and 21 vias |
 | Synth routing check | kicad_drc 0 errors, 0 unconnected, 0 warnings | `reports/buck.routing.json` `validation` |
-| Release gate | `release_ready` true, `production_status` production, 0 signal-integrity findings (0 `W-SYNTH-DRC-016`); with `--gerbers --drill` the same board reports `release_ready` false and `untrusted` because 2 parts have no reviewer (`lmr38010`, `ltst_c190kgkt`: "2 part(s) have no reviewer") | `reports/release.json`, `reports/release-fab.json` |
+| Release gate | `release_ready` true, `production_status` production, 0 signal-integrity findings (0 `W-SYNTH-DRC-016`); with `--gerbers --drill` the same board also reports `release_ready` true and `production`, and its `reviewer_state` lists `lmr38010` and `ltst_c190kgkt` as reviewed (Steve Munene, 2026-10-29) | `reports/release.json`, `reports/release-fab.json` |
 | DRC | 0 errors, 0 unconnected, 0 warnings | `kicad-cli pcb drc ... -o reports/buck.kicad-drc.json` |
 | ERC | 0 violations | `kicad-cli sch erc ... -o reports/buck.kicad-erc.json` |
 | Schematic netlist | 13 nets: the source's 7 `net` blocks plus the 6 further names its 10 `connect` statements create (`+3V3` joins an existing net), node for node | `kicad-cli sch export netlist --format kicadsexpr -o /tmp/buck.net $B/kicad/buck.kicad_sch` |
@@ -240,8 +241,8 @@ together with the `#38` checklist traceability for this board. Its row for the c
 
 ## Not true yet
 
-- Not fabricable on this evidence: two parts have no reviewer, nothing was built, no surge test was run. The
-  fab package says so itself (`release_ready: false`, `production_status: untrusted`).
+- Not fabricable on this evidence: nothing was built and no surge test was run. The fab package's
+  `release_ready: true` covers only Synth's routing and export gates (its `gate_scope`), not fabrication.
 - Layout: current loop area, return-current paths and EMI were not analysed. The layer changes are the 21 GND
   vias; no signal net changes layer (all 97 segments are on F.Cu).
 - Six thermal vias, where TI asks for at least 4 x 3 (9.5.1.1).
@@ -253,7 +254,7 @@ together with the `#38` checklist traceability for this board. Its row for the c
 
 - Nothing powered, measured or thermally tested. Efficiency (85%) and the 0.58 W loss are assumptions.
 - The MCP placement review (`synth_describe_placement`) was not rerun on the hand-pinned placement.
-- No reviewer on `lmr38010` and `ltst_c190kgkt`. Availability, LCSC numbers and assembly not checked. Generic passives have no MPN or manufacturer sheet.
+- Availability, LCSC numbers and assembly not checked. Generic passives have no MPN or manufacturer sheet.
 - PTC behaviour with the TVS in a surge, and inrush into C1 and the output caps, are not analysed.
 - The Gerbers and drill files were not opened in a fab's DFM tool and no fab accepted them; the via-in-pad process was not confirmed with a fab.
 - `synth check` on this board was not run to a verdict: it selects KiCadRoutingTools, which was not installed (the DRC stage reports `unknown`).
