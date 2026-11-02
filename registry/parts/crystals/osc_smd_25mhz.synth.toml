@@ -53,3 +53,8 @@ net = "vcc"
 value = "100nf"
 count = 1
 
+[provenance]
+source = "authored"
+datasheet_url = "https://www.sitime.com/support/resource-library/datasheets/sit8008-datasheet"
+reviewed_by = "rodneyosodo"
+reviewed_at = "2026-11-02"
