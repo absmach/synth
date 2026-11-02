@@ -14,7 +14,9 @@
     "open_nets": 0,
     "open": [],
     "unconnected_pads": [],
-    "via_in_pad": [],
+    "via_in_pad": [
+      "via at (26.800, 26.730) mm C_DV.2"
+    ],
     "undersized_vias": [],
     "undersized_tracks": []
   },
