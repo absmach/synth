@@ -75,8 +75,8 @@ repository.
 
 | # | Claim | Evidence | Result |
 | --- | --- | --- | --- |
-| A1 | The source parses, resolves and lowers | `synth validate buck.synth` | Exit 0, 0 errors, 14 warnings: 3 `W-SYNTH-PART-UNVERIFIED` (U1, D3, D4), 3 `E-SYNTH-SCHEM-003`, 1 `E-SYNTH-SCHEM-004`, 4 `E-SYNTH-SCHEM-005`, 1 `W-SYNTH-ANOMALY-001`, 2 `W-SYNTH-SUPPLY-002` |
-| A2 | Regulator feedback is not taken from the switch node | `E-SYNTH-POWER-011` on `buck_neg_fb_sw.synth` | The twin exits 1 with the error and the same 14 warnings; the good board does not raise it. The rule follows one series resistor only, so a longer feedback path is not checked |
+| A1 | The source parses, resolves and lowers | `synth validate buck.synth` | Exit 0, 0 errors, 11 warnings: 3 `E-SYNTH-SCHEM-003`, 1 `E-SYNTH-SCHEM-004`, 4 `E-SYNTH-SCHEM-005`, 1 `W-SYNTH-ANOMALY-001`, 2 `W-SYNTH-SUPPLY-002` |
+| A2 | Regulator feedback is not taken from the switch node | `E-SYNTH-POWER-011` on `buck_neg_fb_sw.synth` | The twin exits 1 with the error and the same 11 warnings; the good board does not raise it. The rule follows one series resistor only, so a longer feedback path is not checked |
 | A3 | Every net is connected end to end | `reports/buck.connectivity.json`, `reports/buck.routing.json` | 13 nets, 0 open, 0 unconnected pads, 97 segments (all F.Cu), 21 vias in the routing statistics and in the PCB file, 200.08 mm of copper. The only via-in-pad are the six declared thermal vias (`via_in_pad` list in the connectivity report) |
 | A4 | No KiCad DRC rule violation on the delivered board | `kicad-cli pcb drc --refill-zones`, `reports/buck.kicad-drc.json` | 0 errors, 0 unconnected, 0 warnings |
 | A5 | The route passes Synth's source/DRC gate | `reports/release.json` (`synth export-kicad`, no fab flags) | `release_ready` true, `production_status` production, state `routed`, 0 signal-integrity findings (blocking 0, warnings 0) |

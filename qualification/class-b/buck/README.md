@@ -27,7 +27,7 @@ feedback, power-good and thermal copper, plus a negative variant that the feedba
   Vout = 1.0 x (1 + 100k/43.2k) = 3.315 V typical, 3.26 to 3.36 V over Vref 0.985 to 1.015 V (ideal resistors).
 - Power-good: U1 pin 6 is open drain, pulled up to +3V3 through R_PG 100k and brought out on J2 pin 3. D4 (green, "PG FAULT") and R_PGLED 470 R run from +3V3 to PG, so the LED lights while PG is low and stays dark while power is good.
 - Thermal: U1 pin 9 is a 2.41 x 3.1 mm exposed pad soldered to the F.Cu GND pour, with a 2 x 3 array of six GND vias in the pad (see Thermal). The board is `manufacturer "jlc-filled-via"` with `requires via_in_pad` (resin-filled and capped vias).
-- Negative file: identical except R_FB_T and C7 hang from SW. It emits E-SYNTH-POWER-011 and the same 14 warnings as the good board.
+- Negative file: identical except R_FB_T and C7 hang from SW. It emits E-SYNTH-POWER-011 and the same 11 warnings as the good board.
 - Board: 70.99 x 33.99 mm (2413 mm2, Edge.Cuts line centres), 4 layers, GND pours on all layers. Power tracks 0.5 mm, signal 0.127 mm.
 - Two M2.5 non-plated mounting holes (H1, H2) in opposite corners.
 
@@ -176,8 +176,8 @@ The export routes with FreeRouting 2.4.1 on OpenJDK 25.0.4.1; the routed board i
 
 | Number | Value | Command |
 | --- | --- | --- |
-| validate, good board | exit 0, 0 errors, 14 warnings (3 W-SYNTH-PART-UNVERIFIED, 3 E-SYNTH-SCHEM-003, 1 E-SYNTH-SCHEM-004, 4 E-SYNTH-SCHEM-005, 1 W-SYNTH-ANOMALY-001, 2 W-SYNTH-SUPPLY-002) | `synth validate $B/buck.synth 2>&1 \| grep -o '^warning: \[[A-Z0-9-]*\]' \| sort \| uniq -c` |
-| validate, negative | exit 1, 1 error (E-SYNTH-POWER-011), the same 14 warnings | same on `buck_neg_fb_sw.synth` |
+| validate, good board | exit 0, 0 errors, 11 warnings (3 E-SYNTH-SCHEM-003, 1 E-SYNTH-SCHEM-004, 4 E-SYNTH-SCHEM-005, 1 W-SYNTH-ANOMALY-001, 2 W-SYNTH-SUPPLY-002) | `synth validate $B/buck.synth 2>&1 \| grep -o '^warning: \[[A-Z0-9-]*\]' \| sort \| uniq -c` |
+| validate, negative | exit 1, 1 error (E-SYNTH-POWER-011), the same 11 warnings | same on `buck_neg_fb_sw.synth` |
 | routing | `routed`, 13 nets connected, 0 open, 97 segments (all F.Cu), 21 vias, 200.08 mm | `reports/buck.routing.json` `statistics`; the PCB file also holds 97 segments and 21 vias |
 | Synth routing check | kicad_drc 0 errors, 0 unconnected, 0 warnings | `reports/buck.routing.json` `validation` |
 | Release gate | `release_ready` true, `production_status` production, 0 signal-integrity findings (0 `W-SYNTH-DRC-016`); with `--gerbers --drill` the same board also reports `release_ready` true and `production`, and its `reviewer_state` lists `lmr38010` and `ltst_c190kgkt` as reviewed (Steve Munene, 2026-10-29) | `reports/release.json`, `reports/release-fab.json` |
