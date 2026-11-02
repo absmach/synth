@@ -388,6 +388,22 @@ mod tests {
         }
     }
 
+    /// `jlc-filled-via` is only offered on 2- and 4-layer builds, so a 6-layer
+    /// board must not receive its via-in-pad capability.
+    #[test]
+    fn jlc_filled_via_is_offered_on_two_and_four_layers_only() {
+        let filled = ManufacturerProfile::jlc_filled_via();
+        assert_eq!(filled.supported_layers, vec![2, 4]);
+        assert!(filled.supports_layers(2));
+        assert!(filled.supports_layers(4));
+        assert!(!filled.supports_layers(6));
+
+        let standard = ManufacturerProfile::jlc_standard();
+        let resolved = ManufacturerProfile::for_layers("jlc-filled-via", 6);
+        assert_eq!(resolved.name, standard.name);
+        assert!(!resolved.via_in_pad);
+    }
+
     /// The direct DRC path must not grant a process the board cannot buy.
     ///
     /// `E-SYNTH-PROCESS-006` reports the mismatch, but it only fires through
