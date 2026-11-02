@@ -35,8 +35,8 @@ board "sensor_logger" {
   // ESD protection on USB DP/DN.
   // USB-C sink: 5.1k Rd on each CC pin, or a compliant source never turns
   // VBUS on.
-  component R9:  resistor  "r_generic_0603" value "5.1k"
-  component R10: resistor  "r_generic_0603" value "5.1k"
+  component R9:  resistor  "r_generic_0603" value "5.1k" { placement_hint { near: "J1" priority: hard } }
+  component R10: resistor  "r_generic_0603" value "5.1k" { placement_hint { near: "J1" priority: hard } }
   connect J1.cc1 -> R9.p1
   connect J1.gnd -> R9.p2
   connect J1.cc2 -> R10.p1
