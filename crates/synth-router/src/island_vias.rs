@@ -2256,6 +2256,46 @@ mod tests {
         );
     }
 
+    /// A round pad reaching the main pour's corner only with its bounding
+    /// rectangle is clear of it; its rim on the pour joins it.
+    #[test]
+    fn a_round_pad_joins_a_pour_by_its_rim_not_its_bounding_rectangle() {
+        // The main pour's corner is (20, 20). A 2 mm pad at (20.9, 20.9) has its
+        // rectangle over the corner but its rim 0.27 mm off it; at (20.6, 20.6)
+        // the rim covers it. A track leads from the pad into the island.
+        let pad = |shape: &str, at: f64| {
+            board(&format!(
+                r#"(footprint "R" (at 0 0) (layer "F.Cu")
+                     (pad "1" smd {shape} (at {at} {at}) (size 2 2) (layers "F.Cu") (net 1)))
+                   (segment (start {at} {at}) (end 26 19.5) (width 0.25) (layer "F.Cu") (net 1))"#
+            ))
+        };
+        assert!(
+            !islands_to_tie(&pad("circle", 20.9)).is_empty(),
+            "the corner of the circle's rectangle is not copper"
+        );
+        assert!(
+            islands_to_tie(&pad("rect", 20.9)).is_empty(),
+            "a square pad there covers the pour's corner"
+        );
+        assert!(
+            islands_to_tie(&pad("circle", 20.6)).is_empty(),
+            "the circle's rim on the pour joins it"
+        );
+    }
+
+    /// An oval and a rounded rectangle meet a track at their rims, exactly.
+    #[test]
+    fn a_track_touching_a_rounded_pads_rim_joins_it() {
+        let track = |y: f64| PieceShape::Track((-2.0, y), (2.0, y), 0.1);
+        for (shape, size, ratio) in [("oval", (2.0, 1.0), 0.0), ("roundrect", (2.0, 1.0), 0.25)] {
+            let pad = PieceShape::Pad(shaped_pad(shape, size, ratio));
+            // The flat side is at y 0.5: the track's edge on it touches.
+            assert!(copper_gap(&pad, &track(0.6)).abs() < 1e-9, "{shape}");
+            assert!(copper_gap(&pad, &track(0.61)) > 0.0, "{shape}");
+        }
+    }
+
     /// The segment-to-pad distance is exact, not read off points along the track.
     #[test]
     fn a_segment_crossing_a_pad_corner_is_zero_away_however_short_the_overlap() {
