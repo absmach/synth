@@ -749,8 +749,15 @@ fn check_symbol_pin_coverage(part: &Part, symbols: &dyn SymbolFacts) -> Check {
         findings.push(Finding::blocking(
             "E-SYNTH-QUAL-005",
             "footprint_only pin exists on the KiCad symbol",
-            format!("footprint-only pins of `{}` to be absent from `{lib_id}`", part.id.0),
-            format!("{} mislabelled: {}", mislabelled.len(), sample(&mislabelled)),
+            format!(
+                "footprint-only pins of `{}` to be absent from `{lib_id}`",
+                part.id.0
+            ),
+            format!(
+                "{} mislabelled: {}",
+                mislabelled.len(),
+                sample(&mislabelled)
+            ),
         ));
     }
     if !missing.is_empty() {
