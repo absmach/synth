@@ -154,13 +154,13 @@ rotation = 0
 priority = "hard"
 
 [components.R_RST]
-x = 24.5
+x = 24.8
 y = 27.0
 rotation = 90
 priority = "hard"
 
 [components.C_DV]
-x = 26.0
+x = 26.8
 y = 27.5
 rotation = 90
 priority = "hard"
@@ -173,7 +173,7 @@ priority = "hard"
 
 [components.L2]
 x = 30.5
-y = 24.5
+y = 23.5
 rotation = 180
 priority = "hard"
 
@@ -253,7 +253,7 @@ priority = "hard"
 
 [components.L1]
 x = 43.5
-y = 20.5
+y = 20.0
 rotation = 90
 priority = "hard"
 
@@ -264,13 +264,13 @@ rotation = 0
 priority = "hard"
 
 [components.C_VI]
-x = 44.0
+x = 45.0
 y = 24.2
 rotation = 0
 priority = "hard"
 
 [components.C_DV2]
-x = 44.0
+x = 44.5
 y = 26.5
 rotation = 0
 priority = "hard"
@@ -361,11 +361,6 @@ rotation = 90
 priority = "hard"
 
 # --- Ground tie, straddling the AGND/DGND boundary next to U1 ---------------
-[components.R_TIE]
-x = 31.4
-y = 31.5
-rotation = 0
-priority = "hard"
 
 # Reference labels: moved where a clear spot exists, hidden where the compact
 # refdes field has none. Every hidden refdes is still in the BOM, PnP and schematic.
@@ -411,8 +406,6 @@ hide = true
 [labels.C_DV1]
 hide = true
 
-[labels.R_TIE]
-hide = true
 
 [labels.C_IO]
 hide = true

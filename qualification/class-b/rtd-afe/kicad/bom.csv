@@ -31,7 +31,7 @@ H2,(no value),mounting_hole,M2.5 non-plated mounting hole (NPTH) for a board cor
 H3,(no value),mounting_hole,M2.5 non-plated mounting hole (NPTH) for a board corner,Mechanical:MountingHole,MountingHole:MountingHole_2.5mm,,
 H4,(no value),mounting_hole,M2.5 non-plated mounting hole (NPTH) for a board corner,Mechanical:MountingHole,MountingHole:MountingHole_2.5mm,,
 J1,TYPE-C-31-M-12,connector,"USB-C receptacle, 24-pin SMD. Modelled here with primary and mirrored power/ground/data pins for full pad coverage.",Connector:USB_C_Receptacle,Connector_USB:USB_C_Receptacle_HRO_TYPE-C-31-M-12,C165948,TYPE-C-31-M-12
-J2,PT100,connector,"1x4 through-hole pin header, 2.54mm pitch",Connector_Generic:Conn_01x04,Connector_PinHeader_2.54mm:PinHeader_1x04_P2.54mm_Vertical,,
+J2,PT100,connector,"1x4 through-hole pin header, 2.54mm pitch",Connector_Generic:Conn_01x04,Connector_PinHeader_2.54mm:PinHeader_1x04_P2.54mm_Vertical,C492403,PZ254V-11-04P
 J3,SWD,connector,"1x3 through-hole pin header, 2.54mm pitch",Connector_Generic:Conn_01x03,Connector_PinHeader_2.54mm:PinHeader_1x03_P2.54mm_Vertical,,
 L1,3.3uH,inductor,"Generic 0805 wirewound inductor, any value",Device:L,Inductor_SMD:L_0805_2012Metric,,
 L2,600R@100MHz,inductor,"0603 ferrite bead, 600Ω @ 100MHz — EMI suppression",Device:Ferrite_Bead,Inductor_SMD:L_0603_1608Metric,,
@@ -45,7 +45,6 @@ R_RST,10k,resistor,"Generic 0603 thick-film resistor, any value",Device:R_US,Res
 R_RUN,10k,resistor,"Generic 0603 thick-film resistor, any value",Device:R_US,Resistor_SMD:R_0603_1608Metric,,
 R_S1,1k,resistor,"Generic 0603 thick-film resistor, any value",Device:R_US,Resistor_SMD:R_0603_1608Metric,,
 R_S2,1k,resistor,"Generic 0603 thick-film resistor, any value",Device:R_US,Resistor_SMD:R_0603_1608Metric,,
-R_TIE,0R,resistor,"Generic 0603 thick-film resistor, any value",Device:R_US,Resistor_SMD:R_0603_1608Metric,,
 R_X,1k,resistor,"Generic 0603 thick-film resistor, any value",Device:R_US,Resistor_SMD:R_0603_1608Metric,,
 U1,ADS124S08IRHBR,ic,"TI ADS124S08 24-bit delta-sigma ADC, 12 inputs, PGA, 2.5 V reference, dual IDACs, SPI, VQFN-32 (RHB0032M, 5x5 mm, exposed pad)",,Package_DFN_QFN:Texas_RHB0032M_VQFN-32-1EP_5x5mm_P0.5mm_EP2.1x2.1mm,,ADS124S08IRHBR
 U2,RP2350A,mcu,"Raspberry Pi RP2350 dual-core MCU, QFN-60",MCU_RaspberryPi:RP2350A,Package_DFN_QFN:QFN-60-1EP_7x7mm_P0.4mm_EP3.4x3.4mm,C14663,RP2350A

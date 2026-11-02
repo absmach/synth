@@ -2,7 +2,7 @@
 # SYN-363 acceptance check. Run from the repo root: qualification/class-b/rtd-afe/check.sh
 # Exports + autoroutes the board, then proves with KiCad itself (not Synth's gate):
 #   1. DRC clean including unconnected items, 2. the .kicad_pcb reopens in pcbnew,
-#   3. AGND and DGND each exist and are joined at exactly one tie (R_TIE).
+#   3. GND is one plane: no AGND/DGND split and no tie resistor.
 set -euo pipefail
 B=$(cd "$(dirname "$0")" && pwd); OUT=${OUT:-$B/kicad}; SYNTH=${SYNTH:-target/debug/synth}
 export XDG_DATA_HOME=$(mktemp -d)
@@ -32,10 +32,7 @@ print(f"DRC errors={len(v)} unconnected={len(u)} warnings={sum(x['severity']=='w
 assert not v and not u, (v[:3], u[:3])
 b = pcbnew.LoadBoard(sys.argv[2])  # reopen
 nets = b.GetNetsByName()
-assert nets.has_key("AGND") and nets.has_key("DGND"), "AGND/DGND missing"
-ties = [f for f in b.GetFootprints()
-        if {p.GetNetname() for p in f.Pads()} >= {"AGND", "DGND"}]
-assert [f.GetReference() for f in ties] == ["R_TIE"], [f.GetReference() for f in ties]
-# no copper (track, via or zone) may carry both nets: net is per-item, so only pads can tie
-print("reopen ok; AGND/DGND tied only at", ties[0].GetReference())
+assert nets.has_key("GND"), "GND missing"
+assert not nets.has_key("AGND") and not nets.has_key("DGND"), "split ground nets remain"
+print("reopen ok; single GND plane")
 PY

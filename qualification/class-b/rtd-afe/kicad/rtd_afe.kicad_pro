@@ -165,7 +165,6 @@
       "+3V3A": "Power",
       "+3V3_RP_A": "Power",
       "/ADC_RESET_N": "Reset",
-      "/AGND": "Clock",
       "/QSPI_SCLK": "SPI",
       "/QSPI_SD0": "SPI",
       "/QSPI_SD1": "SPI",
@@ -182,11 +181,10 @@
       "/USB_DP_C": "USB",
       "/XIN": "Clock",
       "ADC_RESET_N": "Reset",
-      "AGND": "Clock",
       "CC1": "USB",
       "CC2": "USB",
-      "DGND": "Ground",
       "DVDD_1V1": "Power",
+      "GND": "Ground",
       "QSPI_SCLK": "SPI",
       "QSPI_SD0": "SPI",
       "QSPI_SD1": "SPI",
@@ -272,10 +270,6 @@
       {
         "netclass": "USB",
         "pattern": "/*/USB_DN"
-      },
-      {
-        "netclass": "Clock",
-        "pattern": "/*/AGND"
       }
     ]
   },

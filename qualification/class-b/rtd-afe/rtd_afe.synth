@@ -2,10 +2,10 @@
 // REF5025 2.5 V reference, RP2350 over SPI, USB-C readout.
 //
 // Signal chain: J2 (F+, S+, S-, F-) -> RC input filter -> ADS124S08 AIN0..AIN2.
-// IDAC1 sources 1 mA out of AIN0 into F+, through the PT100 and F- into R_BIAS (1k) to AGND.
+// IDAC1 sources 1 mA out of AIN0 into F+, through the PT100 and F- into R_BIAS (1k) to GND.
 // R_BIAS sets the RTD common-mode near 1.1 V, inside the PGA input range. REF5025 is the
 // absolute reference (REFP0/REFN0); the measurement is not ratiometric to the IDAC.
-// Grounds: AGND (analog) and DGND (digital) are joined at exactly one point, R_TIE, next to U1.
+// Ground: one GND plane on all four layers; there is no analog/digital split and no tie resistor.
 board "rtd_afe" {
   layers 4
   manufacturer "jlcpcb"
@@ -36,9 +36,9 @@ board "rtd_afe" {
     component R_BIAS: resistor "r_generic_0603" value "1k" tolerance "0.1%"
     notes "" {
       "J2 pin 1 F+, pin 2 S+, pin 3 S-, pin 4 F-. PT100 4-wire; force pair carries the 1 mA IDAC current, sense pair reads the RTD."
-      "R_S1/R_S2 1k with C_D 100nF across the pair and C_CM1/C_CM2 10nF to AGND: differential corner 1/(2pi*2k*110nF) about 720 Hz, common-mode corner about 16 kHz."
+      "R_S1/R_S2 1k with C_D 100nF across the pair and C_CM1/C_CM2 10nF to GND: differential corner 1/(2pi*2k*110nF) about 720 Hz, common-mode corner about 16 kHz."
       "C_D is 10x each C_CM so a capacitor mismatch turns into little differential error (TI input filter rule). C0G so the filter does not move the reading."
-      "C_F 10nF decouples the force node F+ (IDAC output). R_BIAS 1k returns the IDAC current to AGND and lifts the RTD common-mode to about 1.1 V."
+      "C_F 10nF decouples the force node F+ (IDAC output). R_BIAS 1k returns the IDAC current to GND and lifts the RTD common-mode to about 1.1 V."
     }
   }
 
@@ -51,8 +51,8 @@ board "rtd_afe" {
     component C_RO: capacitor "c_generic_0603" value "1uF" dielectric "X7R" voltage "10V"
     component R_RST: resistor "r_generic_0603" value "10k"
     notes "" {
-      "AVDD from +3V3A (ferrite-filtered), DVDD and IOVDD from +3V3. AVSS, AVSS_SW, REFN0, REFCOM, the exposed pad and DGND (pin 14) are on AGND: the ADC returns its own digital supply current to AGND and sits at the single tie. CLK is tied to that ground to use the internal oscillator."
-      "REFOUT has 1 uF to AGND for the unused internal reference. RESET has a 10k pull-up to +3V3 and is also driven by the MCU."
+      "AVDD from +3V3A (ferrite-filtered), DVDD and IOVDD from +3V3. AVSS, AVSS_SW, REFN0, REFCOM, the exposed pad and DGND (pin 14) are on GND: the ADC returns its own digital supply current to the same plane. CLK is tied to that ground to use the internal oscillator."
+      "REFOUT has 1 uF to GND for the unused internal reference. RESET has a 10k pull-up to +3V3 and is also driven by the MCU."
       "AINCOM, AIN3..AIN11, REFP1/REFN1, GPIOs and pin 25 are left open."
     }
   }
@@ -62,7 +62,7 @@ board "rtd_afe" {
     component C_RI: capacitor "c_generic_0603" value "1uF" dielectric "X7R" voltage "10V"
     component C_RV: capacitor "c_generic_0603" value "1uF" dielectric "X7R" voltage "10V"
     notes "" {
-      "REF5025 2.5 V, VIN from +3V3A, VOUT straight to REFP0 with 1 uF at the reference pin, GND to AGND. TEMP, TRIM/NR, DNC and NC pins are open."
+      "REF5025 2.5 V, VIN from +3V3A, VOUT straight to REFP0 with 1 uF at the reference pin, GND to GND. TEMP, TRIM/NR, DNC and NC pins are open."
     }
   }
 
@@ -98,7 +98,7 @@ board "rtd_afe" {
       "RP2350 runs from its on-chip regulator: VREG_VIN on +3V3, VREG_LX through L1 3.3uH to the 1.1 V DVDD net, VREG_FB on that net."
       "VREG_AVDD and ADC_AVDD are fed from +3V3 through R_AV 33R and C_AVF 4.7uF."
       "U4 W25Q128 on the QSPI pins is the boot flash. Y1 ECS-120-20-33-TR 12 MHz, CL 20 pF: 2x 33 pF load caps (33/2 + about 3 pF stray = 19.5 pF), R_X 1k on XOUT."
-      "J3 SWD: pin 1 SWCLK, pin 2 SWDIO, pin 3 DGND. RUN has a 10k pull-up to +3V3."
+      "J3 SWD: pin 1 SWCLK, pin 2 SWDIO, pin 3 GND. RUN has a 10k pull-up to +3V3."
     }
   }
 
@@ -117,13 +117,6 @@ board "rtd_afe" {
       "USB 2.0 device port, VBUS 5 V in. CC1/CC2 5.1k so a host sources 5 V. 27R series on D+/D-, ESD diodes at the connector."
       "VBUS feeds U5 LP5907-3.3 (250 mA) which makes the +3V3 digital rail. No VBUS fuse or TVS: see QUALIFICATION.md."
       "The RTD board is a bus-powered USB device: it draws a few tens of mA. No USB-C PD."
-    }
-  }
-
-  group "GROUND TIE" color "#475569" {
-    component R_TIE: resistor "r_generic_0603" value "0R"
-    notes "" {
-      "R_TIE is the one and only AGND-DGND connection, next to U1. Remove it and the two grounds are open."
     }
   }
 
@@ -161,17 +154,12 @@ board "rtd_afe" {
     U3.vout, C_RV.p1, U1.refp0
   }
 
-  net "AGND" {
+  net "GND" {
     U1.avss, U1.avss_sw, U1.ep, U1.refn0, U1.refcom, C_RO.p2,
     U1.dgnd, U1.clk, C_DV.p2, C_IO.p2,
     U3.gnd, C_RI.p2, C_RV.p2,
     C_AV1.p2, C_AV2.p2,
     C_CM1.p2, C_CM2.p2, C_F.p2, R_BIAS.p2,
-    R_TIE.p1
-  }
-
-  net "DGND" {
-    R_TIE.p2,
     U2.gnd, U2.vreg_pgnd,
     C_IO1.p2, C_IO2.p2, C_IO3.p2, C_IO4.p2,
     C_DV1.p2, C_DV2.p2, C_DVB.p2, C_VI.p2, C_AVF.p2,
