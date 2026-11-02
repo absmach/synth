@@ -1294,6 +1294,51 @@ fn segment_len(seg: &[(f64, f64)]) -> f64 {
     (seg[1].0 - seg[0].0).hypot(seg[1].1 - seg[0].1)
 }
 
+#[allow(dead_code)]
+fn point_to_segment_mm(p: (f64, f64), a: (f64, f64), b: (f64, f64)) -> f64 {
+    let (dx, dy) = (b.0 - a.0, b.1 - a.1);
+    let len_sq = dx * dx + dy * dy;
+    let t = if len_sq == 0.0 {
+        0.0
+    } else {
+        (((p.0 - a.0) * dx + (p.1 - a.1) * dy) / len_sq).clamp(0.0, 1.0)
+    };
+    (p.0 - (a.0 + t * dx)).hypot(p.1 - (a.1 + t * dy))
+}
+
+#[allow(dead_code)]
+fn wire_name_label_at(seg: &[(f64, f64)], others: &[&[(f64, f64)]]) -> (f64, f64) {
+    const STEP_MM: f64 = 1.27;
+    const CLEAR_MM: f64 = 0.5;
+    let at = |t: f64| {
+        (
+            seg[0].0 + (seg[1].0 - seg[0].0) * t,
+            seg[0].1 + (seg[1].1 - seg[0].1) * t,
+        )
+    };
+    let clear = |p: (f64, f64)| {
+        others
+            .iter()
+            .all(|other| point_to_segment_mm(p, other[0], other[1]) > CLEAR_MM)
+    };
+    let len = segment_len(seg);
+    let steps = if len > 0.0 {
+        (len / STEP_MM) as i32 / 2
+    } else {
+        0
+    };
+    for step in 0..=steps {
+        let shift = f64::from(step) * STEP_MM / len.max(f64::EPSILON);
+        for t in [0.5 - shift, 0.5 + shift] {
+            if (0.0..=1.0).contains(&t) && clear(at(t)) {
+                return at(t);
+            }
+        }
+    }
+    at(0.5)
+}
+
+
 /// A local label at `at_mm`, text anchored left. Same-named local
 /// labels on one sheet are electrically connected, which is how the
 /// root joins its cross-sheet endpoints to the labelled sheet-pin
@@ -2386,97 +2431,6 @@ fn body_is_blocked(
     on_a_wire || on_a_flag || on_a_stub
 }
 
-/// The angle to write for a symbol of `kind` so its body points along `body`.
-/// KiCad turns counter-clockwise on the sheet, so a triangle that points down
-/// ends up pointing right at 90 and left at 270, and an arrow that points up
-/// the other way round.
-fn power_symbol_angle(kind: synth_layout::PowerFlagKind, body: Body) -> f64 {
-    if body.0 == 0.0 {
-        return 0.0;
-    }
-    if (kind == synth_layout::PowerFlagKind::Gnd) == (body.0 > 0.0) {
-        90.0
-    } else {
-        270.0
-    }
-}
-
-/// What a power symbol at (`x`, `y`) draws: from its point to the tip of the
-/// triangle or arrow, as wide as the symbol across the body.
-fn power_flag_rect(x: f64, y: f64, body: Body) -> field_clear::Rect {
-    let (tip_x, tip_y) = (x + body.0 * POWER_TIP_MM, y + body.1 * POWER_TIP_MM);
-    let (half_x, half_y) = (
-        POWER_FLAG_HALF_MM * body.1.abs(),
-        POWER_FLAG_HALF_MM * body.0.abs(),
-    );
-    field_clear::Rect {
-        x0: x.min(tip_x) - half_x,
-        y0: y.min(tip_y) - half_y,
-        x1: x.max(tip_x) + half_x,
-        y1: y.max(tip_y) + half_y,
-    }
-}
-
-/// How the symbol of `flag`, drawn at `at` on a stub that leaves its pin along
-/// `dx`, points.
-///
-/// Unturned, a ground triangle drops one pin pitch below its stub, so beside a
-/// column of pins it ends on the next pin's row: across that pin's wire, number
-/// and flag, and its name finds no free spot nearer than the pin after that.
-/// Turned to point along the stub it stays in its own pin's row. It is only
-/// turned when the unturned body would land on a wire of another net or on a
-/// net label (a power net never has one), so a sheet where nothing is in the
-/// way keeps the usual symbol.
-fn power_body(
-    board: &Board,
-    layout: &synth_layout::Layout,
-    placements: &HashMap<ComponentId, &ComponentPlacement>,
-    flag: &synth_layout::PowerFlag,
-    at: (f64, f64),
-    dx: f64,
-) -> Body {
-    let unturned = upright(flag.kind);
-    if dx == 0.0 {
-        return unturned;
-    }
-    let rect = power_flag_rect(at.0, at.1, unturned);
-    if body_is_blocked(board, layout, placements, flag, &rect) {
-        (dx.signum(), 0.0)
-    } else {
-        unturned
-    }
-}
-
-/// Whether a symbol body drawn as `rect` would land on a wire or a label of
-/// another net, or on the stub of another rail's flag. On a header the arrow
-/// of one pin ends on the stub of the pin above it.
-fn body_is_blocked(
-    board: &Board,
-    layout: &synth_layout::Layout,
-    placements: &HashMap<ComponentId, &ComponentPlacement>,
-    flag: &synth_layout::PowerFlag,
-    rect: &field_clear::Rect,
-) -> bool {
-    let on_a_wire = layout
-        .wires
-        .iter()
-        .filter(|wire| wire.net != flag.net)
-        .flat_map(|wire| wire.points.windows(2))
-        .any(|seg| rect.overlaps(&wire_rect(seg[0], seg[1])));
-    let on_a_flag = label_rects(board, layout, placements)
-        .iter()
-        .any(|label| rect.overlaps(label));
-    let on_a_stub = layout
-        .power_flags
-        .iter()
-        .filter(|other| other.net != flag.net)
-        .filter_map(|other| pin_terminal_xy(board, other.component, other.pin, placements))
-        .any(|(x, y, sx, sy)| {
-            let end = (x + sx * POWER_FLAG_STUB_LEN, y + sy * POWER_FLAG_STUB_LEN);
-            rect.overlaps(&wire_rect((x, y), end))
-        });
-    on_a_wire || on_a_flag || on_a_stub
-}
 
 /// The box of the group each component belongs to, so its text can stay
 /// inside it and out of the title band at its top.

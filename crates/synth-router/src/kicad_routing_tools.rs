@@ -24,6 +24,13 @@ use crate::freerouting::Candidate;
 use crate::result::{RouteArtifacts, RouteStatistics, RouterProvenance};
 
 /// The helper script that drives the external `py_router/route.py`.
+fn remove_previous_candidate(candidate: &Path) {
+    for extension in ["kicad_pcb", "kicad_pro", "kicad_prl", "kicad_dru"] {
+        let _ = std::fs::remove_file(candidate.with_extension(extension));
+    }
+}
+
+
 pub const HELPER: &str = "kicad_routing_tools_route.py";
 
 /// KiCadRoutingTools' own JSON route summary, as written by the engine.
