@@ -2,7 +2,7 @@
 
 A field sensor node: an STM32G030F6P6 microcontroller reads a Bosch BME680 (temperature, humidity, pressure and gas) and a 24LC256 EEPROM over one I2C bus. It runs from a 5 V input on a JST XH connector through a 0.5 A resettable fuse and a Schottky diode, with an AMS1117-3.3 making the 3.3 V rail. The board has a serial connector (J3), a 12-pin GPIO header (J5) with protection on every line, an SWD header (J4), a power LED and two M2.5 mounting holes. Four copper layers on the JLCPCB 1.6 mm stackup, 86.99 x 51.0 mm, 57 parts.
 
-The design is `i2c_sensor_node.synth` with its placement sidecar `i2c_sensor_node.placement.layout.toml`. It was made with `synth mcp` from a prompt, then checked and exported with `synth export-kicad`.
+The design is `i2c_sensor_node.synth` with its placement sidecar `i2c_sensor_node.placement.layout.toml`. It was made with `synth mcp` from a prompt, then checked and exported with `synth export-kicad`. [`PROVENANCE.md`](PROVENANCE.md) is the record of that path: the exact prompt, the agent's tool-call trace, the Synth revisions, the registry inputs, the artifact hashes and the validation commands with their results.
 
 ## What the board is
 
@@ -35,7 +35,7 @@ KiCad 10.0.7 on a 16-vCPU server; Synth built from commit `aaa8d193fe9573c554a5e
 | Routing | 35 nets connected, 602 track segments, 73 vias |
 | KiCad DRC (`--refill-zones --severity-all`, with the footprint library table) | 0 errors, 0 unconnected; warnings: 52 `lib_footprint_mismatch` ([`reports/kicad_drc.json`](reports/kicad_drc.json)) |
 | KiCad ERC | 121 `lib_symbol_issues`, 1 `pin_to_pin` ([`reports/kicad_erc.json`](reports/kicad_erc.json)) |
-| Gerber and drill content hash | `1c1755660b` (identical across the three exports) |
+| Gerber and drill content hash | `1c1755660b` (byte-identical across the three exports) |
 
 Connector distance to the board edge (courtyard to Edge.Cuts, measured on the exported board):
 
@@ -85,7 +85,7 @@ The source and sidecar in this directory were exported three times with `synth e
 | `pnp.csv` | 706483f12e | 706483f12e | 706483f12e | identical |
 | Gerber and drill content | 1c1755660b | 1c1755660b | 1c1755660b | identical |
 
-With the random ids masked the routed board is `52980d7667` in all three exports ([`reproduce/compare_exports.py`](reproduce/compare_exports.py) does the masking). [`reproduce/reproduce.sh`](reproduce/reproduce.sh) rebuilds Synth at the pinned commit, exports three times and compares, then builds the fabrication package.
+With the random ids masked the routed board is `52980d7667` in all three exports ([`reproduce/compare_exports.py`](reproduce/compare_exports.py) does the masking). [`reproduce/reproduce.sh`](reproduce/reproduce.sh) is supplemental tooling, not the evidence of how the board was made (see [`PROVENANCE.md`](PROVENANCE.md)); it rebuilds Synth at the pinned commit, exports three times and compares, then builds the fabrication package.
 
 ## JLCPCB
 
@@ -102,7 +102,7 @@ BOM matching of the same package in JLCPCB's assembly flow, PCB assembled qty 5,
 | Point | State |
 |---|---|
 | A plain default export is valid; no optional flag, no split ground pour | The exports use `synth export-kicad` with the router options only (no `--allow-incomplete`, no `--krt-allow-via-in-pad`). The ground net GND is poured on all four layers as one net. |
-| Three identical exports | Above. |
+| Three exports agree | Above: the schematic, project, symbol, BOM, placement and un-routed board files and the Gerber content are byte-identical; the routed board is identical after the router's and KiCad's random ids are masked. |
 | Every external line of J3 protected | TX goes through R11 (330 ohm) and D7, a 3.3 V zener (BZT52C3V3, 500 mW); RX through R12 (1 k) and D24. A 5 V fault: (5 - 3.3) / 330 = 5.2 mA and (5 - 3.3) / 1000 = 1.7 mA, so 17 mW and 5.6 mW in the zener. The 3.3 V sense line has D14 (1N5819HW) and 100 ohm: 3 mA maximum, 30 mA into a short. The zener's leakage and clamp figures are from its listing, not an opened datasheet. |
 | Net classes declared and applied | Declared (PWR, V33, GNDC, SIG) and assigned to 39 nets; the exported board's tracks use them as listed above, with the router narrowing tracks near pads. |
 | AMS1117 thermal | P = (5.0 - 3.3) x 0.1 A = 0.17 W at the 100 mA budget and 0.51 W at 300 mA. The datasheet gives thetaJA = 90 C/W for the SOT-223 (45 to 59 C/W with 1000 to 2500 mm2 of copper, its Table 1), so the rise is 15.3 C and 45.9 C and the ambient may reach 109 C and 79 C at the 125 C junction limit. The input is rated 15 V absolute maximum and D4 clamps at 10.3 V; the output needs a 22 uF tantalum for stability and C3 is 47 uF. The registry part `ams1117_3v3` carries the datasheet figures: thetaJA 90 C/W and 1.2 W guaranteed power dissipation (its Note 2). |

@@ -1,0 +1,40 @@
+# From prompt to PCB
+
+The board is the output of an agent driving `synth mcp` from a prompt, followed by searches and scripts that drive the same MCP tools and Synth's exporter. This file is the record of that path. [`reproduce/`](reproduce/) is supplemental tooling that rebuilds the exports from the committed source; it is not the evidence that the board was made this way.
+
+## The prompt and the agent trace
+
+| | |
+|---|---|
+| Prompt | [`agent-run/prompt.md`](agent-run/prompt.md), exactly as given to the agent run `c2a4` |
+| Tool-call trace | [`agent-run/tool-calls.md`](agent-run/tool-calls.md): every call of that run, in order (41 calls: `synth_export`, `synth_validate`, `synth_describe_placement`, `synth_place_with_hints`, and file reads and edits of the source and sidecar); `allow_incomplete` was never passed |
+| Later steps | the compaction, the placement-advice and release searches, the THT-to-SMD spot search and the sidecar edits are scripts in [`agent-run/tools/`](agent-run/tools/) that drive `synth mcp` (`compact_drive.py`, `make_room_search_pcv.py`, `apply_advice_par6_pcv.py`, `describe_pl.py`) or the sidecar (`set_pos.py`, `tht_fix_spot.py`, `pcb2sidecar.py`); [`agent-run/exports.md`](agent-run/exports.md) records the three final exports |
+
+## Versions
+
+| | |
+|---|---|
+| Synth, agent run and searches | commit `cfec42751ffd898cd4425322247e56b77951ed0e`, the merge of Synth pull requests #370, #388 and #394 |
+| Synth, final exports | commit `aaa8d193fe9573c554a5ed4a4a1c26a492030c8d` (branch `SYN-case2-binary` of `JeffMboya/synth`): the same merge plus the stitching-via fix of #388. `synth --version` prints `synth-cli 0.1.1`; `synth mcp --stdio` is the same binary |
+| KiCadRoutingTools | `9399bfb29e072bfe60b10d9cdae20c274fc2a17a` |
+| KiCad | 10.0.7 (library tables for DRC and ERC), on a 16-vCPU server |
+
+## Inputs
+
+- Source and sidecar: [`i2c_sensor_node.synth`](i2c_sensor_node.synth) and [`i2c_sensor_node.placement.layout.toml`](i2c_sensor_node.placement.layout.toml).
+- User registry: [`reproduce/user-registry/`](reproduce/user-registry/), the parts the exports ran with.
+
+## Generated artifacts and hashes
+
+The README's reproducibility table has the first ten characters of SHA-256 of each exported file for the three exports. The routed board file carries random ids from the router and KiCad, so its three raw hashes differ and are compared after masking those ids; every other file listed, and the Gerber content, is byte-identical. The Gerber content hash is in [`fab/GERBER_CONTENT_SHA256`](fab/GERBER_CONTENT_SHA256) and the file hashes in [`fab/SHA256SUMS`](fab/SHA256SUMS).
+
+## Validation commands and results
+
+| Command | Result file |
+|---|---|
+| `synth export-kicad i2c_sensor_node.synth --out <dir> --router kicad-routing-tools ...`, three times into empty directories | [`export/`](export/), with `release.json` and `i2c_sensor_node.routing.json` |
+| `kicad-cli pcb drc --refill-zones --severity-all --format json` with the KiCad footprint library table | [`reports/kicad_drc.json`](reports/kicad_drc.json) |
+| `kicad-cli sch erc --severity-all --format json` | [`reports/kicad_erc.json`](reports/kicad_erc.json) |
+| [`reproduce/compare_exports.py`](reproduce/compare_exports.py) on the three exports | the hash table in the README |
+| [`agent-run/tools/fab_package.sh`](agent-run/tools/fab_package.sh) | [`fab/`](fab/) |
+| JLCPCB PCB DFM, SMT DFM and quote on the package in `fab/` | [`reports/`](reports/) |
