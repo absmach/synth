@@ -565,8 +565,8 @@ pub(crate) fn net_name_or_pin_is_ground(board: &Board, net: &Net) -> bool {
 /// without a ground via: the nets a fast edge or a sensitive signal rides on.
 ///
 /// A net is one when a pin on it is differential, a clock, RF or analog; when it
-/// is half of a declared `diff_pair`; or when it joins an inductor, which makes
-/// it a switching node. Any other signal changes layers with a slow edge, where
+/// joins a bare crystal's terminal; when it is half of a declared `diff_pair`;
+/// or when it joins an inductor, which makes it a switching node. Any other signal changes layers with a slow edge, where
 /// the loop a missing return via leaves costs little, so a layer change there is
 /// an advisory and not a reason to hold the board back.
 #[must_use]
@@ -578,20 +578,23 @@ pub fn return_path_critical_net_names(board: &Board) -> Vec<String> {
             let Some(component) = board.component(endpoint.component) else {
                 return false;
             };
+            let crystal = component.kind == "crystal";
             component.kind == "inductor"
                 || component
                     .part
                     .as_ref()
                     .and_then(|part| part.pins.get(endpoint.pin.0 as usize))
-                    .is_some_and(|pin| {
-                        matches!(
-                            pin.electrical_type,
-                            ElectricalType::DifferentialPositive
-                                | ElectricalType::DifferentialNegative
-                                | ElectricalType::Clock
-                                | ElectricalType::Rf
-                                | ElectricalType::Analog
-                        )
+                    .is_some_and(|pin| match pin.electrical_type {
+                        ElectricalType::DifferentialPositive
+                        | ElectricalType::DifferentialNegative
+                        | ElectricalType::Clock
+                        | ElectricalType::Rf
+                        | ElectricalType::Analog => true,
+                        // A bare crystal's terminals are passive, and the
+                        // oscillator pins they meet are often typed plain input
+                        // and output, so the crystal itself marks the net.
+                        ElectricalType::Passive => crystal,
+                        _ => false,
                     })
         });
         if rides_fast {

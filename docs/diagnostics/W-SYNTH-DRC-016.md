@@ -20,7 +20,8 @@ not checked either, because the distance is a property of the dielectric.
 
 The router's return-via repair holds a board back for a missing return via
 only on a net that rides a fast edge: a differential or clock pin, an RF or
-analog pin, a declared `diff_pair`, or a switching node at an inductor. On any
+analog pin, a bare crystal's terminal, a declared `diff_pair`, or a switching
+node at an inductor. On any
 other net a layer change with no room for a return via is listed in the route
 report's `advisories`, with the net and the position, and does not block.
 

@@ -391,6 +391,27 @@ mod tests {
         assert!(!critical.iter().any(|n| n == "SLOW_GPIO"), "{critical:?}");
     }
 
+    /// A bare crystal's terminals are passive and the RP2350's `xin` and `xout`
+    /// are typed input and output, so no pin type marks the oscillator loop; the
+    /// crystal on the net does.
+    #[test]
+    fn a_net_on_a_bare_crystals_terminal_is_critical_for_a_return_via() {
+        let board = board_from_source(
+            r#"board "xtal" { layers 2
+                component U1: mcu "rp2350"
+                component Y1: crystal "xtal_generic"
+                component R1: resistor "r_generic_0603" value "10k"
+                net "XIN" { U1.xin Y1.p1 }
+                net "XOUT" { U1.xout Y1.p2 }
+                net "SLOW_GPIO" { U1.gp0 R1.p1 }
+            }"#,
+        );
+        let critical = return_path_critical_net_names(&board);
+        assert!(critical.iter().any(|n| n == "XIN"), "{critical:?}");
+        assert!(critical.iter().any(|n| n == "XOUT"), "{critical:?}");
+        assert!(!critical.iter().any(|n| n == "SLOW_GPIO"), "{critical:?}");
+    }
+
     fn load_board(path: &str) -> Board {
         let source = std::fs::read_to_string(path).expect("read fixture");
         let file = path.to_string();
