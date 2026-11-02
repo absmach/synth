@@ -2340,14 +2340,7 @@ fn place_with_outline<S: ::std::hash::BuildHasher>(
         let Some(comp) = board.component(id) else {
             return false;
         };
-        if is_keepout_anchor(id) {
-            return true;
-        }
-        match comp.kind.as_str() {
-            "mcu" | "processor" | "sensor" | "connector" | "ic" | "regulator" | "power"
-            | "memory" => true,
-            _ => comp.part.as_ref().is_some_and(|p| p.pins.len() > 2),
-        }
+        is_keepout_anchor(id) || is_macro_kind(comp)
     };
 
     let net_degree = compute_net_degree(board);
@@ -5401,6 +5394,27 @@ fn far_support_parts(board: &Board, placement: &Placement) -> Vec<FarSupportPart
     found
 }
 
+/// A part the placer treats as a macro by what it is: placed before the small
+/// parts, so a hard `near:` hint toward it is honoured.
+fn is_macro_kind(comp: &synth_ir::Component) -> bool {
+    match comp.kind.as_str() {
+        "mcu" | "processor" | "sensor" | "connector" | "ic" | "regulator" | "power" | "memory" => {
+            true
+        }
+        _ => comp.part.as_ref().is_some_and(|p| p.pins.len() > 2),
+    }
+}
+
+/// A part already placed when a `near:`-hinted part looks for it: a macro, or
+/// a part with a hint of its own that is not itself `near` something.
+fn holds_a_near_hint(comp: &synth_ir::Component) -> bool {
+    is_macro_kind(comp)
+        || comp
+            .placement_hint
+            .as_ref()
+            .is_some_and(|h| h.near.is_none())
+}
+
 /// Farthest a test point may sit from the nearest pad on its net, pad to pad.
 /// A probe point that is not beside what it measures is found by tracing, not by
 /// looking, and a long stub on a fast net changes the signal it probes.
@@ -5415,15 +5429,15 @@ const MAX_TEST_POINT_WARNINGS: usize = 6;
 struct FarTestPoint {
     refdes: String,
     anchor: String,
-    /// The nearest pad's pin name, as a `near: <part>.<pin>` hint spells it.
+    /// The named pad's pin name, as a `near: <part>.<pin>` hint spells it.
     pin_name: String,
     mm: f64,
-    /// How far it may sit from the pad it probes: more beside a dense part.
+    /// How far it may sit from the named pad: more beside a dense part.
     limit_mm: f64,
 }
 
-/// Every test point whose nearest neighbour on its own net is farther than
-/// [`TEST_POINT_MAX_MM`]. Stated by kind and connectivity, so it names no part.
+/// Every test point that no pad on its own net is within reach of, named
+/// against the pad a hint can move it beside. Stated by kind and connectivity, so it names no part.
 /// Mounting holes and fiducials carry no net and are not test points.
 fn far_test_points(board: &Board, placement: &Placement) -> Vec<FarTestPoint> {
     let pad_offsets = build_pad_offset_lookup(board);
@@ -5447,16 +5461,18 @@ fn far_test_points(board: &Board, placement: &Placement) -> Vec<FarTestPoint> {
                     .lookup(probe.component, probe.pin.0 as usize)
                     .unwrap_or((0, 0)),
             );
-            // The pad that comes closest to its own limit, which is wider
-            // beside a dense part (see [`support_part_limit_mm`]).
-            let mut closest: Option<(f64, f64, f64)> = None;
-            // The pad the advice names, and the pad the warning reports: on the
-            // largest part of the net, which is placed before the small ones,
-            // so a hint toward it holds. A two-pin passive is itself moved
-            // after the test point is. The warning fires when even the nearest
-            // pad is past its limit, but it states this pad's distance, so
-            // the distance reported is the one the advice then reduces.
-            let mut anchor_pad: Option<(usize, f64, f64, &synth_ir::NetEndpoint)> = None;
+            // The warning fires when no pad on the net is within its limit,
+            // which is wider beside a dense part (see
+            // [`support_part_limit_mm`]). It reports, and its advice names,
+            // one pad: the one closest to its limit among the pads a `near:`
+            // hint can hold the test point beside. A hint holds only toward a
+            // part placed before the test point; an unhinted passive is packed
+            // after it, so a hint toward the passive's pad is not honoured.
+            // Every pad is past its limit, so the named one is too, and
+            // following the advice brings the test point within that pad's
+            // limit, which clears the warning.
+            let mut any_within = false;
+            let mut target: Option<(bool, f64, f64, f64, &synth_ir::NetEndpoint)> = None;
             for other in net.endpoints.iter().filter(|e| {
                 board
                     .component(e.component)
@@ -5471,29 +5487,28 @@ fn far_test_points(board: &Board, placement: &Placement) -> Vec<FarTestPoint> {
                 let pad = apply_rotation(**placed, offset);
                 let mm = synth_geometry::nm_to_mm(probe_pad.x_nm - pad.x_nm)
                     .hypot(synth_geometry::nm_to_mm(probe_pad.y_nm - pad.y_nm));
-                let pins = board
-                    .component(other.component)
-                    .and_then(|c| c.part.as_ref())
-                    .map_or(0, |p| p.pins.len());
+                let Some(part) = board.component(other.component) else {
+                    continue;
+                };
+                let pins = part.part.as_ref().map_or(0, |p| p.pins.len());
                 let limit = if pins >= DENSE_PART_PINS {
                     TEST_POINT_MAX_MM + DENSE_PART_RING_MM / 2.0 + 0.5
                 } else {
                     TEST_POINT_MAX_MM
                 };
-                if closest.is_none_or(|(excess, _, _)| mm - limit < excess) {
-                    closest = Some((mm - limit, mm, limit));
-                }
-                if anchor_pad.is_none_or(|(n, d, ..)| pins > n || (pins == n && mm < d)) {
-                    anchor_pad = Some((pins, mm, limit, other));
+                any_within |= mm <= limit;
+                let holds = holds_a_near_hint(part);
+                let excess = mm - limit;
+                if target.is_none_or(|(h, e, ..)| (holds && !h) || (holds == h && excess < e)) {
+                    target = Some((holds, excess, mm, limit, other));
                 }
             }
-            let (Some((excess, _, _)), Some((_, mm, limit_mm, endpoint))) = (closest, anchor_pad)
-            else {
+            if any_within {
+                continue;
+            }
+            let Some((_, _, mm, limit_mm, endpoint)) = target else {
                 continue;
             };
-            if excess <= 0.0 {
-                continue;
-            }
             let (Some(probe_part), Some(anchor)) = (
                 board.component(probe.component),
                 board.component(endpoint.component),
@@ -6050,7 +6065,7 @@ pub fn describe_placement(board: &Board, placement: &Placement) -> PlacementDesc
     far_probes.truncate(MAX_TEST_POINT_WARNINGS);
     for far in far_probes {
         functional_warnings.push(format!(
-            "{} is {:.0} mm from the nearest pad on its net ({} pin {}); keep a test point within {:.0} mm of what it probes",
+            "{} is {:.0} mm from {} pin {}, and no pad on its net is nearer than its limit; keep a test point within {:.0} mm of what it probes",
             far.refdes, far.mm, far.anchor, far.pin_name, far.limit_mm
         ));
         recommended_actions.push(PlacementRecommendation {
@@ -11798,10 +11813,12 @@ board "features_only" {
         );
     }
 
-    /// The distance the warning reports is the distance to the pad the advice
-    /// names. A small part's pad can be the nearest while the largest part's pad
-    /// is the one the hint targets; the warning must state the targeted pad's
-    /// distance, and following the advice clears it.
+    /// The warning reports the distance to the pad its advice names. Beside a
+    /// small passive on a net that also reaches larger parts, the passive's pad
+    /// is the nearest, but a hint toward it is not honoured (the passive is
+    /// placed after the test point), so the advice names the nearest pad a hint
+    /// holds toward, states that pad's distance, and following it clears the
+    /// warning.
     #[test]
     fn the_warning_states_the_distance_to_the_pad_the_advice_names() {
         let board = load_board_replacing(
@@ -11841,6 +11858,10 @@ board "features_only" {
                 .expect("component")
         };
         let named = by_name(&far.anchor);
+        assert!(
+            holds_a_near_hint(named) && !holds_a_near_hint(by_name("C1")),
+            "the advice names a part a hint holds toward, not the passive: {far:?}"
+        );
         let pin = named
             .part
             .as_ref()
@@ -11876,6 +11897,58 @@ board "features_only" {
             far.anchor,
             far.pin_name,
             measured
+        );
+        // The passive's pad is nearer than the named one, and no pad a hint
+        // holds toward is nearer to its limit than the named one.
+        let c1_index = by_name("C1")
+            .part
+            .as_ref()
+            .and_then(|p| p.pins.iter().position(|x| x.name == "p1"))
+            .expect("C1.p1");
+        let c1_pad = pad_at("C1", c1_index);
+        let c1_mm = synth_geometry::nm_to_mm(a.x_nm - c1_pad.x_nm)
+            .hypot(synth_geometry::nm_to_mm(a.y_nm - c1_pad.y_nm));
+        assert!(c1_mm < far.mm, "C1 is {c1_mm:.2} mm, {far:?}");
+        let net = board
+            .nets
+            .iter()
+            .find(|n| n.endpoints.iter().any(|e| e.component == by_name("TP1").id))
+            .expect("TP1's net");
+        for ep in &net.endpoints {
+            let Some(part) = board.component(ep.component) else {
+                continue;
+            };
+            if part.kind == "testpoint" || !holds_a_near_hint(part) {
+                continue;
+            }
+            let pad = pad_at(&part.refdes, ep.pin.0 as usize);
+            let mm = synth_geometry::nm_to_mm(a.x_nm - pad.x_nm)
+                .hypot(synth_geometry::nm_to_mm(a.y_nm - pad.y_nm));
+            let pins = part.part.as_ref().map_or(0, |p| p.pins.len());
+            let limit = if pins >= DENSE_PART_PINS {
+                TEST_POINT_MAX_MM + DENSE_PART_RING_MM / 2.0 + 0.5
+            } else {
+                TEST_POINT_MAX_MM
+            };
+            assert!(
+                mm - limit >= far.mm - far.limit_mm - 1e-6,
+                "{}.{} is nearer to its limit than the named pad: {far:?}",
+                part.refdes,
+                ep.pin.0
+            );
+        }
+        let desc = describe_placement(&board, &placement);
+        let warning = desc
+            .functional_warnings
+            .iter()
+            .find(|w| w.starts_with("TP1 is "))
+            .expect("TP1 warning");
+        assert!(
+            warning.contains(&format!(
+                "{:.0} mm from {} pin {}",
+                far.mm, far.anchor, far.pin_name
+            )),
+            "{warning}"
         );
         let hinted = board_with_external_hints(
             &board,
