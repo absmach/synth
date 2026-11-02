@@ -1725,6 +1725,168 @@ fn rewrite_points(block: &str, from: (f64, f64), to: (f64, f64)) -> String {
     out
 }
 
+/// Drops each track that is shorter than its own width and has one end in nothing,
+/// and returns how many it dropped.
+///
+/// The engine now and then leaves a sliver of track at the end of a branch: a
+/// piece too short to carry anything, whose far end touches no track, via, pad or
+/// pour of its net. KiCad reports it as an unconnected track end. Taking it away
+/// cannot disconnect anything, because an end that touches nothing joins nothing;
+/// a track with both ends in copper, and one longer than it is wide, are left
+/// alone. The caller validates the result as it validates any candidate.
+///
+/// # Errors
+/// Returns why the board could not be read or written.
+#[allow(clippy::cast_precision_loss)]
+pub fn drop_dangling_stubs(candidate: &Path) -> Result<usize, String> {
+    let text = std::fs::read_to_string(candidate)
+        .map_err(|e| format!("could not read {}: {e}", candidate.display()))?;
+    let board = PcbBoard::parse(&text).map_err(|e| e.to_string())?;
+    let mut alive = vec![true; board.segments.len()];
+    loop {
+        let mut dropped = false;
+        for (i, segment) in board.segments.iter().enumerate() {
+            if !alive[i] {
+                continue;
+            }
+            let (a, b) = (
+                (segment.start.x_mm(), segment.start.y_mm()),
+                (segment.end.x_mm(), segment.end.y_mm()),
+            );
+            let width = nm_to_mm(segment.width_nm);
+            if (b.0 - a.0).hypot(b.1 - a.1) >= width {
+                continue;
+            }
+            let free = |p: (f64, f64)| !end_touches_copper(&board, &alive, i, p);
+            if free(a) != free(b) {
+                alive[i] = false;
+                dropped = true;
+            }
+        }
+        if !dropped {
+            break;
+        }
+    }
+    let mut out = text.clone();
+    let mut count = 0;
+    for (i, segment) in board.segments.iter().enumerate() {
+        if alive[i] {
+            continue;
+        }
+        let ends = (
+            (segment.start.x_mm(), segment.start.y_mm()),
+            (segment.end.x_mm(), segment.end.y_mm()),
+        );
+        let next = remove_segment_in_text(&out, ends, &segment.layer);
+        if next != out {
+            out = next;
+            count += 1;
+        }
+    }
+    if count > 0 {
+        std::fs::write(candidate, out)
+            .map_err(|e| format!("could not write {}: {e}", candidate.display()))?;
+    }
+    Ok(count)
+}
+
+/// Whether the end of track `index` at `p` touches copper of its own net: the end
+/// of another live track on the layer, a via, a pad, or a pour that covers the point.
+#[allow(clippy::cast_precision_loss)]
+fn end_touches_copper(board: &PcbBoard, alive: &[bool], index: usize, p: (f64, f64)) -> bool {
+    let segment = &board.segments[index];
+    let Some(net) = net_of(board, segment.net, segment.net_name.as_ref()) else {
+        return true;
+    };
+    let half = nm_to_mm(segment.width_nm) / 2.0;
+    let at = Point::new(mm_to_nm(p.0), mm_to_nm(p.1));
+    // Tracks join end to end, as KiCad counts them: a track that merely overlaps
+    // another's copper leaves its own end unconnected.
+    let track = board.segments.iter().enumerate().any(|(j, other)| {
+        j != index
+            && alive[j]
+            && other.layer == segment.layer
+            && net_of(board, other.net, other.net_name.as_ref()).as_deref() == Some(net.as_str())
+            && [other.start, other.end]
+                .iter()
+                .any(|end| (end.x_mm() - p.0).hypot(end.y_mm() - p.1) < 0.01)
+    });
+    let via = board.vias.iter().any(|via| {
+        net_of(board, via.net, via.net_name.as_ref()).as_deref() == Some(net.as_str())
+            && via.layers.contains(&segment.layer)
+            && (via.at.x_mm() - p.0).hypot(via.at.y_mm() - p.1)
+                <= nm_to_mm(via.size_nm) / 2.0 + half
+    });
+    let pad = board.pads().any(|pad| {
+        net_of(board, pad.net, pad.net_name.as_ref()).as_deref() == Some(net.as_str())
+            && (pad.kind == "thru_hole" || pad.layers.contains(&segment.layer))
+            && pad.signed_distance_nm(at) <= half * NM_PER_MM
+    });
+    let pour = board.zones.iter().any(|zone| {
+        net_of(board, zone.net, zone.net_name.as_ref()).as_deref() == Some(net.as_str())
+            && zone
+                .outlines
+                .iter()
+                .any(|(layer, outline)| layer == &segment.layer && polygon_contains(outline, p))
+    });
+    track || via || pad || pour
+}
+
+/// Whether `p` is inside the closed polygon `outline` (even-odd).
+fn polygon_contains(outline: &[Point], p: (f64, f64)) -> bool {
+    let mut inside = false;
+    let mut j = outline.len().saturating_sub(1);
+    for i in 0..outline.len() {
+        let (xi, yi) = (outline[i].x_mm(), outline[i].y_mm());
+        let (xj, yj) = (outline[j].x_mm(), outline[j].y_mm());
+        if (yi > p.1) != (yj > p.1) && p.0 < (xj - xi) * (p.1 - yi) / (yj - yi) + xi {
+            inside = !inside;
+        }
+        j = i;
+    }
+    inside
+}
+
+/// `text` without the track on `layer` between `ends`.
+fn remove_segment_in_text(text: &str, ends: ((f64, f64), (f64, f64)), layer: &str) -> String {
+    let mut out = String::with_capacity(text.len());
+    let mut rest = text;
+    while let Some(i) = rest.find("(segment") {
+        let block = &rest[i..];
+        let Some(end) = block_end(block) else {
+            break;
+        };
+        let body = &block[..end];
+        let numbers = |tag: &str| -> Option<(f64, f64)> {
+            let after = &body[body.find(tag)? + tag.len()..];
+            let mut values = after[..after.find(')')?]
+                .split_whitespace()
+                .map(str::parse::<f64>);
+            Some((values.next()?.ok()?, values.next()?.ok()?))
+        };
+        let same = numbers("(start ")
+            .zip(numbers("(end "))
+            .is_some_and(|(a, b)| {
+                (a.0 - ends.0 .0).abs() < 0.002
+                    && (a.1 - ends.0 .1).abs() < 0.002
+                    && (b.0 - ends.1 .0).abs() < 0.002
+                    && (b.1 - ends.1 .1).abs() < 0.002
+            })
+            && body.contains(&format!("\"{layer}\""));
+        if same {
+            // Take the line's leading whitespace with it.
+            let head = rest[..i].trim_end_matches([' ', '\t']);
+            out.push_str(head);
+            rest = block[end..].trim_start_matches('\n');
+        } else {
+            out.push_str(&rest[..i + end]);
+            rest = &block[end..];
+        }
+    }
+    out.push_str(rest);
+    out
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -2643,5 +2805,84 @@ mod tests {
             "joining {} pieces took {elapsed:?}",
             pieces.len()
         );
+    }
+    /// A board with a 3 mm track of net 1 that ends in a via at (0, 0), a pad of
+    /// net 1 at (10, 0) and a pour of net 1 over (20..30, -5..5), and `extra`.
+    fn stub_text(extra: &str) -> String {
+        format!(
+            r#"(kicad_pcb
+              (layers (0 "F.Cu" signal) (2 "B.Cu" signal))
+              (net 0 "")
+              (net 1 "RAIL")
+              (footprint "R" (layer "F.Cu") (at 10 0)
+                (pad "1" smd rect (at 0 0) (size 1.0 1.0) (layers "F.Cu") (net 1 "RAIL")))
+              (via (at 0 0) (size 0.6) (drill 0.3) (layers "F.Cu" "B.Cu") (net 1))
+              (segment (start 0 0) (end 3 0) (width 0.4) (layer "F.Cu") (net 1))
+              (zone (net 1) (net_name "RAIL") (layer "F.Cu") (fill yes)
+                (polygon (pts (xy 20 -5) (xy 30 -5) (xy 30 5) (xy 20 5))))
+              {extra}
+            )"#
+        )
+    }
+
+    /// The segments left in `text` after the prune, and how many it dropped.
+    fn pruned(text: &str, name: &str) -> (usize, usize) {
+        let dir = std::env::temp_dir().join(format!("stub-prune-{}-{name}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("board.kicad_pcb");
+        std::fs::write(&path, text).unwrap();
+        let dropped = drop_dangling_stubs(&path).unwrap();
+        let after = PcbBoard::parse(&std::fs::read_to_string(&path).unwrap()).unwrap();
+        (dropped, after.segments.len())
+    }
+
+    /// A sliver shorter than its own width that leaves a junction and ends in nothing
+    /// carries nothing and is dropped; the track it hangs from stays.
+    #[test]
+    fn a_sliver_of_track_that_ends_in_nothing_is_dropped() {
+        let text =
+            stub_text(r#"(segment (start 3 0) (end 3 0.07) (width 0.4) (layer "F.Cu") (net 1))"#);
+        assert_eq!(pruned(&text, "sliver"), (1, 1));
+    }
+
+    /// An end in a via, a pad or a pour of the net is joined to it, so the track
+    /// is not a stub, however short.
+    #[test]
+    fn a_short_track_ending_in_a_via_a_pad_or_a_pour_is_kept() {
+        for (name, extra) in [
+            (
+                "via",
+                r#"(segment (start 3 0) (end 3 0.3) (width 0.4) (layer "F.Cu") (net 1))
+                   (via (at 3 0.3) (size 0.6) (drill 0.3) (layers "F.Cu" "B.Cu") (net 1))"#,
+            ),
+            (
+                "pad",
+                r#"(segment (start 3 0) (end 9.8 0) (width 0.4) (layer "F.Cu") (net 1))
+                   (segment (start 9.8 0) (end 9.85 0) (width 0.4) (layer "F.Cu") (net 1))"#,
+            ),
+            (
+                "pour",
+                r#"(segment (start 3 0) (end 19.95 0) (width 0.4) (layer "F.Cu") (net 1))
+                   (segment (start 19.95 0) (end 20.2 0) (width 0.4) (layer "F.Cu") (net 1))"#,
+            ),
+        ] {
+            let text = stub_text(extra);
+            let before = PcbBoard::parse(&text).unwrap().segments.len();
+            assert_eq!(pruned(&text, name), (0, before), "{name}");
+        }
+    }
+
+    /// A track longer than it is wide is a branch of the router's, not a sliver,
+    /// and so is a track with copper at both ends.
+    #[test]
+    fn a_long_dead_end_and_a_track_between_two_junctions_are_kept() {
+        let long =
+            stub_text(r#"(segment (start 3 0) (end 3 2) (width 0.4) (layer "F.Cu") (net 1))"#);
+        assert_eq!(pruned(&long, "long"), (0, 2));
+        let bridge = stub_text(
+            r#"(segment (start 3 0) (end 3 0.2) (width 0.4) (layer "F.Cu") (net 1))
+               (segment (start 3 0.2) (end 0 0.2) (width 0.4) (layer "F.Cu") (net 1))"#,
+        );
+        assert_eq!(pruned(&bridge, "bridge"), (0, 3));
     }
 }
