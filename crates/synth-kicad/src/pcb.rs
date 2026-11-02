@@ -206,6 +206,7 @@ pub fn build_pcb(
             project,
             // Past every stitch via the exporter itself places, so the uuids stay distinct.
             FIXED_VIA_UUID_BASE + idx,
+            stitch_via_size(board),
         ));
     }
 
@@ -320,6 +321,7 @@ pub fn build_pcb(
                     *pcb_net,
                     project,
                     plane_index * 4 + stitch_index,
+                    stitch_via_size(board),
                 ));
             }
         }
@@ -1114,14 +1116,43 @@ fn clear_of_mounting_holes(via: Point, inward: i64, holes: &[(Point, i64)]) -> P
 /// Uuid index of the first sidecar-fixed via, clear of the stitch vias the exporter derives.
 const FIXED_VIA_UUID_BASE: usize = 1_000_000;
 
-fn build_ground_stitch_via(x_nm: i64, y_nm: i64, pcb_net: u32, project: &Uuid, idx: usize) -> Sexp {
+/// The via a generated ground stitch uses: the board's `Default` net class when
+/// it declares one, otherwise the 0.6 / 0.3 mm every class falls back to, so a
+/// board that asks for a 0.2 mm drill gets it on the stitching vias too.
+fn stitch_via_size(board: &Board) -> (f64, f64) {
+    board
+        .netclasses
+        .iter()
+        .find(|class| class.name == "Default")
+        .map_or(
+            (
+                synth_ir::NetClass::DEFAULT_VIA_DIAMETER.to_mm(),
+                synth_ir::NetClass::DEFAULT_VIA_DRILL.to_mm(),
+            ),
+            |class| {
+                (
+                    class.effective_via_diameter().to_mm(),
+                    class.effective_via_drill().to_mm(),
+                )
+            },
+        )
+}
+
+fn build_ground_stitch_via(
+    x_nm: i64,
+    y_nm: i64,
+    pcb_net: u32,
+    project: &Uuid,
+    idx: usize,
+    (via_size_mm, via_drill_mm): (f64, f64),
+) -> Sexp {
     let via_uuid = derive_entity_uuid(project, "ground-stitch-via", &idx.to_string());
     Sexp::list(
         "via",
         vec![
             Sexp::list("at", vec![num(nm_to_mm(x_nm)), num(nm_to_mm(y_nm))]),
-            Sexp::list("size", vec![num(0.6)]),
-            Sexp::list("drill", vec![num(0.3)]),
+            Sexp::list("size", vec![num(via_size_mm)]),
+            Sexp::list("drill", vec![num(via_drill_mm)]),
             Sexp::list("layers", vec![Sexp::str("F.Cu"), Sexp::str("B.Cu")]),
             Sexp::list("net", vec![Sexp::atom(pcb_net.to_string())]),
             str_pair("uuid", via_uuid.to_string()),

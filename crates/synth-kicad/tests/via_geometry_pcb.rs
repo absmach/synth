@@ -99,3 +99,75 @@ fn a_board_that_declares_no_via_keeps_the_0_6_over_0_3_default() {
     assert_eq!(default["via_diameter"].as_f64(), Some(0.6));
     assert_eq!(default["via_drill"].as_f64(), Some(0.3));
 }
+
+/// The ground net's vias in a four-layer `jlcpcb` board that declares a 0.6 / 0.2 mm
+/// `Default` class: the exporter stitches the ground pours with them.
+fn ground_vias(extra: &str) -> Vec<(String, String)> {
+    let source = format!(
+        r#"board "stitch" {{
+  manufacturer "jlcpcb"
+  layers 4
+  component C1: capacitor "c_generic_0603" value "100nF"
+  component C2: capacitor "c_generic_0603" value "100nF"
+  component C3: capacitor "c_generic_0603" value "100nF"
+  component R1: resistor "r_generic_0603" value "10k"
+  connect R1.p1 -> C1.p1
+  connect C1.p2 -> C2.p2 as "AGND"
+  connect C2.p2 -> C3.p2
+  connect R1.p2 -> C2.p1
+{extra}}}
+"#
+    );
+    let registry = synth_registry::load_dir(&workspace_root().join("registry").join("parts"))
+        .expect("seed registry must load");
+    let parsed = synth_parser::parse(&source, "stitch.synth");
+    assert!(parsed.diagnostics.is_empty(), "{:?}", parsed.diagnostics);
+    let lowered = synth_ir::lower(&parsed.ast.unwrap(), &registry, "stitch.synth");
+    assert!(lowered.diagnostics.is_empty(), "{:?}", lowered.diagnostics);
+    let tmp = tempdir("stitch");
+    let result = synth_kicad::export(&lowered.board.unwrap(), &tmp).expect("export");
+    let pcb = fs::read_to_string(&result.pcb_path).expect(".kicad_pcb written");
+    let mut vias = Vec::new();
+    for chunk in pcb.split("(via").skip(1) {
+        let size = chunk
+            .split("(size ")
+            .nth(1)
+            .and_then(|s| s.split(')').next());
+        let drill = chunk
+            .split("(drill ")
+            .nth(1)
+            .and_then(|s| s.split(')').next());
+        if let (Some(size), Some(drill)) = (size, drill) {
+            vias.push((size.to_string(), drill.to_string()));
+        }
+    }
+    vias
+}
+
+#[test]
+fn the_ground_stitching_vias_follow_a_declared_default_drill() {
+    let vias = ground_vias(
+        r#"  netclass "Default" { via_diameter 0.6mm via_drill 0.2mm }
+"#,
+    );
+    assert!(
+        vias.len() >= 4,
+        "a four-layer ground pour is stitched at the four corners: {vias:?}"
+    );
+    assert!(
+        vias.iter()
+            .all(|(size, drill)| size == "0.6" && drill == "0.2"),
+        "every via carries the declared 0.6 / 0.2 mm: {vias:?}"
+    );
+}
+
+#[test]
+fn the_ground_stitching_vias_keep_the_default_when_nothing_is_declared() {
+    let vias = ground_vias("");
+    assert!(vias.len() >= 4, "{vias:?}");
+    assert!(
+        vias.iter()
+            .all(|(size, drill)| size == "0.6" && drill == "0.3"),
+        "{vias:?}"
+    );
+}
