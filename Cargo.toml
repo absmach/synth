@@ -68,7 +68,7 @@ rayon = "1.12"
 # Deterministic rasterization for the schematic visual-feedback loop
 # (synth-render). Pinned exactly: a resvg bump that moves one antialiased
 # edge would read as visual drift in a stored baseline.
-resvg = "=0.48.1"
+resvg = "=0.49.0"
 image = { version = "0.25", default-features = false, features = ["png"] }
 base64 = "0.23"
 
