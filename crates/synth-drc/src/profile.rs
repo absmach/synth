@@ -489,24 +489,28 @@ mod tests {
     }
 
     #[test]
-    fn the_esp32_module_paddle_vias_fit_the_advanced_tier_and_not_the_standard_one() {
+    fn the_esp32_module_paddle_vias_fit_both_jlc_tiers() {
         // Every KiCad ESP32-WROOM-32 variant drills twelve 0.2 mm holes in
-        // the ground paddle, on 0.6 mm pads.
+        // the ground paddle, on 0.6 mm pads. The standard tier takes the 0.2 mm
+        // drill its capabilities page prefers, so the paddle fits it too.
         let paddle_drill = mm_to_nm(0.2);
         let paddle_ring = mm_to_nm((0.6 - 0.2) / 2.0);
 
-        let standard = ManufacturerProfile::jlc_standard();
-        assert!(
-            paddle_drill < standard.min_drill_diameter_nm,
-            "the standard floor is what the board was violating"
-        );
-
-        let advanced = ManufacturerProfile::jlc_advanced();
-        assert!(paddle_drill >= advanced.min_drill_diameter_nm);
-        assert!(
-            paddle_ring >= advanced.min_annular_ring_nm,
-            "the ring was never the problem, so it did not move"
-        );
+        for profile in [
+            ManufacturerProfile::jlc_standard(),
+            ManufacturerProfile::jlc_advanced(),
+        ] {
+            assert!(
+                paddle_drill >= profile.min_drill_diameter_nm,
+                "{}",
+                profile.name
+            );
+            assert!(
+                paddle_ring >= profile.min_annular_ring_nm,
+                "{}",
+                profile.name
+            );
+        }
     }
 
     #[test]
@@ -527,7 +531,7 @@ mod tests {
             let p = ManufacturerProfile::from_name(loose);
             assert_eq!(p.name, "jlc-standard", "{loose} should not buy a tier");
             assert!(!p.via_in_pad);
-            assert_eq!(p.min_drill_diameter_nm, mm_to_nm(0.3));
+            assert_eq!(p.min_drill_diameter_nm, mm_to_nm(0.2));
         }
     }
 
