@@ -1,0 +1,29 @@
+id = "polyfuse_1r1a"
+kind = "fuse"
+description = "Bourns MF-MSMF110/16-2 resettable fuse, 1.1 A hold, 16 V, 1812"
+# For a 12 V input. LCSC C210834.
+mpn = "MF-MSMF110/16-2"
+lcsc_pn = "C210834"
+kicad_symbol = "Device:Polyfuse"
+kicad_footprint = "Fuse:Fuse_1812_4532Metric"
+
+[footprint_dimensions]
+width_mm = 4.5
+height_mm = 3.2
+courtyard_margin_mm = 0.25
+
+# Hold current and maximum voltage from the LCSC listing; confirm against the
+# manufacturer's datasheet before relying on either.
+[operating_conditions]
+max_voltage_v = 16.0
+max_current_ma = 1100
+
+[[pins]]
+name = "p1"
+number = "1"
+electrical_type = "passive"
+
+[[pins]]
+name = "p2"
+number = "2"
+electrical_type = "passive"

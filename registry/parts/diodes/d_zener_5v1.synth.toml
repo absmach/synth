@@ -3,6 +3,9 @@ kind = "diode"
 description = "5.1V Zener diode, SOD-123"
 kicad_symbol = "Device:D_Zener"
 kicad_footprint = "Diode_SMD:D_SOD-123"
+# MCC, 500 mW, 4.8-5.4 V, SOD-123.
+mpn = "BZT52C5V1-TP"
+lcsc_pn = "C78728"
 
 [footprint_dimensions]
 width_mm = 4.2

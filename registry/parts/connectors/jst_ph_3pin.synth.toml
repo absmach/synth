@@ -3,6 +3,8 @@ kind = "connector"
 description = "JST PH-series 3-pin wire-to-board connector, 2.0mm pitch"
 kicad_symbol = "Connector_Generic:Conn_01x03"
 kicad_footprint = "Connector_JST:JST_PH_S3B-PH-K_1x03_P2.00mm_Horizontal"
+mpn = "S3B-PH-K-S(LF)(SN)"
+lcsc_pn = "C157929"
 
 [footprint_dimensions]
 width_mm = 1.0

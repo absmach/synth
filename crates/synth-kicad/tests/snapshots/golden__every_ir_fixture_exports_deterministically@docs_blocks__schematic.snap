@@ -597,7 +597,7 @@ expression: schematic
 		)
 		(property
 			"Value"
-			"(no value)"
+			"PZ254V-11-04P"
 			(at 128.27 41.91 0)
 			(effects
 				(font
@@ -630,7 +630,7 @@ expression: schematic
 		)
 		(property
 			"MPN"
-			""
+			"PZ254V-11-04P"
 			(at 124.46 40.64 0)
 			(effects
 				(font
@@ -641,7 +641,7 @@ expression: schematic
 		)
 		(property
 			"LCSC"
-			""
+			"C492403"
 			(at 124.46 40.64 0)
 			(effects
 				(font

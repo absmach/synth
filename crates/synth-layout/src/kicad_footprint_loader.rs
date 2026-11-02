@@ -264,8 +264,9 @@ fn should_keep_block(block: &str) -> bool {
 /// (the keep-out rectangle the placer must respect). Reads
 /// `(fp_rect ...)` blocks on layer `F.CrtYd`; if a footprint
 /// draws its courtyard with multiple `(fp_line ...)` segments
-/// instead, the bbox of the line endpoints is returned. Returns
-/// `None` when:
+/// instead, the bbox of the line endpoints is returned, and a
+/// `(fp_circle ...)` courtyard contributes the bbox of the circle.
+/// Returns `None` when:
 /// - KiCad isn't installed locally;
 /// - the footprint file doesn't exist;
 /// - the footprint has no `F.CrtYd` geometry (rare; almost every
@@ -273,7 +274,13 @@ fn should_keep_block(block: &str) -> bool {
 ///
 /// Return `(center_offset_x_mm, center_offset_y_mm, width_mm, height_mm)` of the footprint's courtyard.
 pub fn courtyard_rect(lib_id: &str) -> Option<(f64, f64, f64, f64)> {
-    let text = read_footprint(lib_id)?;
+    courtyard_rect_from_text(&read_footprint(lib_id)?)
+}
+
+/// The geometry half of [`courtyard_rect`], over a footprint's text.
+///
+/// Separate so the parsing can be tested without an installed library.
+fn courtyard_rect_from_text(text: &str) -> Option<(f64, f64, f64, f64)> {
     let mut min_x = f64::INFINITY;
     let mut max_x = f64::NEG_INFINITY;
     let mut min_y = f64::INFINITY;
@@ -281,8 +288,10 @@ pub fn courtyard_rect(lib_id: &str) -> Option<(f64, f64, f64, f64)> {
     let mut found = false;
 
     let mut pos = 0;
-    while let Some(block_start) = find_next_block(&text, pos, &["(fp_rect", "(fp_line"]) {
-        let Some(block_end) = balanced_paren_end(&text, block_start) else {
+    while let Some(block_start) =
+        find_next_block(text, pos, &["(fp_rect", "(fp_line", "(fp_circle"])
+    {
+        let Some(block_end) = balanced_paren_end(text, block_start) else {
             break;
         };
         let block = &text[block_start..block_end];
@@ -294,6 +303,26 @@ pub fn courtyard_rect(lib_id: &str) -> Option<(f64, f64, f64, f64)> {
                         max_x = max_x.max(sx).max(ex);
                         min_y = min_y.min(sy).min(ey);
                         max_y = max_y.max(sy).max(ey);
+                        found = true;
+                    }
+                }
+            } else if block.starts_with("(fp_circle") {
+                // A round courtyard is still a courtyard. Every mounting
+                // hole, fiducial and test point KiCad ships draws one this
+                // way, and reading nothing from them left the placer with no
+                // area to reserve: `MountingHole_2.5mm` is a 2.5 mm hole
+                // inside a 5.5 mm courtyard, and packing neighbours against
+                // the hole put them 1.5 mm a side too close.
+                //
+                // `(center ...)` plus `(end ...)` on the circumference, so
+                // the radius is the distance between them.
+                if let Some((ccx, ccy)) = xy_after(block, "(center ") {
+                    if let Some((ex, ey)) = xy_after(block, "(end ") {
+                        let r = (ex - ccx).hypot(ey - ccy);
+                        min_x = min_x.min(ccx - r);
+                        max_x = max_x.max(ccx + r);
+                        min_y = min_y.min(ccy - r);
+                        max_y = max_y.max(ccy + r);
                         found = true;
                     }
                 }
@@ -1023,5 +1052,101 @@ mod integration_tests {
                 "{lib_id}: h {h:.3} vs expected {expected_h:.3}"
             );
         }
+    }
+}
+
+#[cfg(test)]
+mod courtyard_rect_tests {
+    use super::courtyard_rect_from_text;
+
+    /// `MountingHole:MountingHole_2.5mm`, trimmed to the two circles it draws:
+    /// the hole on `F.SilkS` and the courtyard on `F.CrtYd`, radius 2.75 mm.
+    const MOUNTING_HOLE: &str = r#"
+(footprint "MountingHole_2.5mm"
+	(fp_circle
+		(center 0 0)
+		(end 2.5 0)
+		(stroke (width 0.15) (type solid))
+		(fill no)
+		(layer "F.SilkS")
+	)
+	(fp_circle
+		(center 0 0)
+		(end 2.75 0)
+		(stroke (width 0.05) (type solid))
+		(fill no)
+		(layer "F.CrtYd")
+	)
+)
+"#;
+
+    /// A rectangular courtyard, which is what most footprints draw.
+    const RECT_COURTYARD: &str = r#"
+(footprint "R_0603"
+	(fp_rect
+		(start -1.48 -0.73)
+		(end 1.48 0.73)
+		(stroke (width 0.05) (type solid))
+		(fill no)
+		(layer "F.CrtYd")
+	)
+)
+"#;
+
+    /// A footprint with no courtyard at all.
+    const NO_COURTYARD: &str = r#"
+(footprint "bare"
+	(fp_line
+		(start -1 -1)
+		(end 1 1)
+		(stroke (width 0.1) (type solid))
+		(layer "F.SilkS")
+	)
+)
+"#;
+
+    /// The courtyard circle is 5.5 mm across, and that is the area a
+    /// neighbour has to be packed against. Reading nothing from it — which is
+    /// what happened before — left the placer reserving the 2.5 mm hole from
+    /// the registry instead, so parts landed 1.5 mm a side too close and
+    /// `kicad-cli pcb drc` reported `courtyards_overlap`.
+    #[test]
+    fn a_circular_courtyard_is_read_as_its_bounding_box() {
+        let (cx, cy, w, h) = courtyard_rect_from_text(MOUNTING_HOLE).expect("courtyard");
+        assert!(
+            (w - 5.5).abs() < 1e-9 && (h - 5.5).abs() < 1e-9,
+            "a radius 2.75 mm courtyard is 5.5 mm across, got {w} x {h}"
+        );
+        assert!(
+            cx.abs() < 1e-9 && cy.abs() < 1e-9,
+            "centred on the origin, got ({cx}, {cy})"
+        );
+    }
+
+    /// Only `F.CrtYd` counts: the silkscreen circle in the same footprint is
+    /// 5.0 mm across and must not widen the answer.
+    #[test]
+    fn a_silkscreen_circle_does_not_count_as_courtyard() {
+        let (_, _, w, _) = courtyard_rect_from_text(MOUNTING_HOLE).expect("courtyard");
+        assert!(
+            (w - 5.5).abs() < 1e-9,
+            "the F.SilkS circle must be ignored, got {w}"
+        );
+    }
+
+    /// A rectangle keeps answering the way it always did.
+    #[test]
+    fn a_rectangular_courtyard_is_unchanged() {
+        let (cx, cy, w, h) = courtyard_rect_from_text(RECT_COURTYARD).expect("courtyard");
+        assert!(
+            (w - 2.96).abs() < 1e-9 && (h - 1.46).abs() < 1e-9,
+            "{w} x {h}"
+        );
+        assert!(cx.abs() < 1e-9 && cy.abs() < 1e-9, "({cx}, {cy})");
+    }
+
+    #[test]
+    fn a_footprint_with_no_courtyard_still_answers_none() {
+        assert!(courtyard_rect_from_text(NO_COURTYARD).is_none());
     }
 }

@@ -3,6 +3,9 @@ kind = "transistor"
 description = "IR IRLML6244 logic-level N-channel MOSFET, SOT-23"
 kicad_symbol = "Transistor_FET:IRLML6244"
 kicad_footprint = "Package_TO_SOT_SMD:SOT-23"
+# Infineon, 20 V N-channel.
+mpn = "IRLML6244TRPBF"
+lcsc_pn = "C143946"
 
 [footprint_dimensions]
 width_mm = 3.35

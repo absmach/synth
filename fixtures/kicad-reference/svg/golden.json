@@ -8,50 +8,50 @@
     "distinct_texts": 131
   },
   "ref_crystal_mcu": {
-    "sha256": "8418a0a39f532863e759b43ddc397769e699d0f3f59ff7eb216449377ea08242",
+    "sha256": "a4dc920870f5b9f4c904cef9572feb5b4bb2a07dc946772e9effeae4010dea55",
     "width": "297.0022mm",
     "height": "210.0072mm",
-    "paths": 8666,
-    "texts": 212,
+    "paths": 8843,
+    "texts": 220,
     "distinct_texts": 188
   },
   "ref_ldo_sensor": {
-    "sha256": "58be31e77ae2bc7347ecc5d4125bdcbf22dae473a6fa0997b4a1ff5b589b9f3f",
+    "sha256": "ea9b96ba8fe30f5e96583443942e342a6f229dc1faac0a63bbbced405452f622",
     "width": "297.0022mm",
     "height": "210.0072mm",
-    "paths": 4014,
+    "paths": 4019,
     "texts": 115,
     "distinct_texts": 94
   },
   "ref_led_driver": {
-    "sha256": "8165dd6127b3ccf8b8f99908927444fff89a9488a00933b99873a5f269189df9",
+    "sha256": "f7ae93fff307f7fc0a5f78df0e792a889df8993191eceb2e118aad3582d62453",
     "width": "297.0022mm",
     "height": "210.0072mm",
-    "paths": 8513,
-    "texts": 203,
+    "paths": 8690,
+    "texts": 211,
     "distinct_texts": 188
   },
   "ref_secure_element": {
-    "sha256": "e77d77bf634785b3a6b2def077ff1385b3bf15fef5ebea38d6aadeeb6f8d9aa3",
+    "sha256": "c9f7dadcd16dd90e8f1ab20cccfd3ac4c1580e92641c031c52f0f82960659fce",
     "width": "297.0022mm",
     "height": "210.0072mm",
-    "paths": 9766,
-    "texts": 235,
+    "paths": 9943,
+    "texts": 243,
     "distinct_texts": 202
   },
   "ref_spi_flash": {
-    "sha256": "80855f1cb165436610e6328857884478822bb64e0395977bba40d8e838b5b6e5",
+    "sha256": "8e647d6e5e8d2c5f8eae6d849867960eb820436d97253d64a79bb5dda1329bd7",
     "width": "297.0022mm",
     "height": "210.0072mm",
-    "paths": 9075,
-    "texts": 221,
+    "paths": 9252,
+    "texts": 229,
     "distinct_texts": 204
   },
   "ref_uart_bridge": {
-    "sha256": "b5a94e0027c513cfc3fd3660e54d106d7b54fcd0036a693cb36fffea86df8170",
+    "sha256": "e0dfada9f41e566068a92e885321d444fc8fd89183a61a66f46ad15e88852cb8",
     "width": "419.9890mm",
     "height": "297.0022mm",
-    "paths": 18165,
+    "paths": 18170,
     "texts": 448,
     "distinct_texts": 314
   },
@@ -64,11 +64,11 @@
     "distinct_texts": 240
   },
   "secure_tracker": {
-    "sha256": "d4a460125b42056b8165f30c5cae49e98e52a4f38638ebc397767d4cc769e887",
+    "sha256": "840c154b56d21280dba668539d4f14590b5894d065ad1975f70ef11432f46247",
     "width": "419.9890mm",
     "height": "297.0022mm",
-    "paths": 25989,
-    "texts": 685,
+    "paths": 26167,
+    "texts": 692,
     "distinct_texts": 456
   },
   "sensor_logger": {
