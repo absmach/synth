@@ -15,6 +15,16 @@ PCB=$OUT/rtd_afe.kicad_pcb
 mkdir -p "$B/reports" "$B/images"
 mv "$OUT"/release.json "$OUT"/rtd_afe.routing.json "$OUT"/rtd_afe.connectivity.json "$B/reports/"
 rm -f "$OUT"/rtd_afe.freerouting.* "$OUT"/rtd_afe.synth.kicad_* "$OUT"/rtd_afe.drc.json
+# The run records name the checkout they were built in; keep only the
+# repository-relative part so the committed evidence is portable.
+REPO=$(cd "$B/../../.." && pwd)
+python3 -I - "$REPO" "$B/reports/release.json" "$B/reports/rtd_afe.routing.json" <<'PY'
+import pathlib, sys
+root = sys.argv[1] + "/"
+for name in sys.argv[2:]:
+    path = pathlib.Path(name)
+    path.write_text(path.read_text().replace(root, ""))
+PY
 kicad-cli pcb drc --severity-all --refill-zones --format json -o "$B/reports/rtd_afe.kicad-drc.json" "$PCB" >/dev/null
 kicad-cli sch erc --severity-all --format json -o "$B/reports/rtd_afe.kicad-erc.json" "$OUT/rtd_afe.kicad_sch" >/dev/null
 kicad-cli sch export netlist --format kicadsexpr -o "$B/reports/rtd_afe.net" "$OUT/rtd_afe.kicad_sch" >/dev/null
