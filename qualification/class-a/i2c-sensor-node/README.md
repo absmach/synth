@@ -2,7 +2,7 @@
 
 A field sensor node: an STM32G030F6P6 microcontroller reads a Bosch BME680 (temperature, humidity, pressure and gas) and a 24LC256 EEPROM over one I2C bus. It runs from a 5 V input on a JST XH connector through a 0.5 A resettable fuse and a Schottky diode, with an AMS1117-3.3 making the 3.3 V rail. The board has a serial connector (J3), a 12-pin GPIO header (J5) with protection on every line, an SWD header (J4), a power LED and two M2.5 mounting holes. Four copper layers on the JLCPCB 1.6 mm stackup, 86.99 x 51.0 mm, 57 parts.
 
-The design is `i2c_sensor_node.synth` with its placement sidecar `i2c_sensor_node.placement.layout.toml`. It was made with `synth mcp` from a prompt, then checked and exported with `synth export-kicad`. [`PROVENANCE.md`](PROVENANCE.md) is the record of that path: the exact prompt, the agent's tool-call trace, the Synth revisions, the registry inputs, the artifact hashes and the validation commands with their results.
+The design is `i2c_sensor_node.synth` with its placement sidecar `i2c_sensor_node.placement.layout.toml`. It was made with `synth mcp` from a prompt, then exported through the Synth MCP server (the `synth_export` tool) and checked with KiCad. [`PROVENANCE.md`](PROVENANCE.md) is the record of that path: the exact prompt, the agent's tool-call trace, the Synth revisions, the registry inputs, the artifact hashes and the validation commands with their results.
 
 ## What the board is
 
@@ -34,7 +34,8 @@ KiCad 10.0.7 on a 16-vCPU server; Synth built from commit `aaa8d193fe9573c554a5e
 | Parts | 57 (including the two mounting holes) |
 | Routing | 35 nets connected, 602 track segments, 73 vias |
 | KiCad DRC (`--refill-zones --severity-all`, with the footprint library table) | 0 errors, 0 unconnected; warnings: 52 `lib_footprint_mismatch` ([`reports/kicad_drc.json`](reports/kicad_drc.json)) |
-| KiCad ERC | 121 `lib_symbol_issues`, 1 `pin_to_pin` ([`reports/kicad_erc.json`](reports/kicad_erc.json)) |
+| KiCad ERC, design diagnostics | 1 `pin_to_pin` warning, 0 errors ([`reports/kicad_erc.json`](reports/kicad_erc.json)): `U3` pin 5 (`SDO`) is tied to ground to select I2C address 0x76. KiCad's `Sensor:BME680` symbol types that pin bidirectional (it is the SPI data output) and ground carries a `PWR_FLAG`, so ERC reports a bidirectional pin on a power-output net. In I2C mode the pin is a static input and nothing drives it. |
+| KiCad ERC, library configuration | 121 `lib_symbol_issues` warnings: the exporter's embedded symbols against the library copies |
 | Gerber and drill content hash | `1c1755660b` (identical across the three exports once the creation time in the Gerber headers is masked) |
 
 Connector distance to the board edge (courtyard to Edge.Cuts, measured on the exported board):
@@ -72,12 +73,12 @@ Net classes (PWR 0.5 mm, V33 0.4 mm, SIG 0.25 mm, GNDC 0.4 mm, Default 0.2 mm; v
 
 ## Reproducibility
 
-The source and sidecar in this directory were exported three times with `synth export-kicad`, each into an empty directory, router included. Each cell is the first ten characters of a SHA-256.
+The source and sidecar in this directory were exported three times through the Synth MCP server (`synth mcp --stdio`, the `synth_export` tool, the call an agent makes), each into an empty directory, router included. The server, the request, the response and the hash of every file written are recorded in [`agent-run/mcp-final-export/`](agent-run/mcp-final-export/). Each cell is the first ten characters of a SHA-256.
 
 | file | export 1 | export 2 | export 3 | |
 |---|---|---|---|---|
 | `i2c_sensor_node.synth.kicad_pcb` (un-routed) | ba85e901ff | ba85e901ff | ba85e901ff | byte-identical |
-| `i2c_sensor_node.kicad_pcb` | c76451a264 | 1d288a6a22 | 691a25cd42 | not byte-identical; identical after the router's and KiCad's random ids are masked (normalized) |
+| `i2c_sensor_node.kicad_pcb` | a9b536801a | d4c52627eb | 82ba348a26 | not byte-identical; identical after the router's and KiCad's random ids are masked (normalized) |
 | `i2c_sensor_node.kicad_sch` (one A1 sheet) | ed3e118032 | ed3e118032 | ed3e118032 | byte-identical |
 | `i2c_sensor_node.kicad_pro` | 8b000fbbf8 | 8b000fbbf8 | 8b000fbbf8 | byte-identical |
 | `i2c_sensor_node.kicad_sym` | f8b593e51b | f8b593e51b | f8b593e51b | byte-identical |
@@ -97,15 +98,49 @@ Quote with assembly for the same package ([`reports/jlcpcb_quote_2026-11-02.md`]
 
 BOM matching of the same package in JLCPCB's assembly flow, PCB assembled qty 5, estimated total $69.9405 ([`reports/jlcpcb_assembly_bom_match_2026-11-02.xlsx`](reports/jlcpcb_assembly_bom_match_2026-11-02.xlsx)): 55 lines, 53 matched to a JLCPCB part (21 Basic, 33 Extended library types among the 54 lines with a library type), `SW1` confirmed, and `J4`, the SWD pin header, a through-hole part that JLCPCB does not assemble and that is fitted by hand; the assembly package covers every other line.
 
+## Return paths
+
+The release report ([`export/release.json`](export/release.json)) lists 62 `W-SYNTH-DRC-016` findings, 0 of them blocking: a signal or power track changes layer at a via with no ground-return via within 0.68 mm. They are on 25 nets, by the net of the via at each finding's position (0 findings sit at a position with no via of the routed board):
+
+| Net | Findings |
+|---|---|
+| `+3V3` | 12 |
+| `I2C_SCL` | 5 |
+| `GPIO_PA0_MCU` | 4 |
+| `GPIO_PB0_MCU` | 4 |
+| `I2C_SDA` | 3 |
+| `GPIO_PA7_MCU` | 3 |
+| `GPIO_PB9_MCU` | 3 |
+| `U2_RX` | 3 |
+| `SWDIO_MCU` | 2 |
+| `SWCLK_MCU` | 2 |
+| `GPIO_PA6_MCU` | 2 |
+| `GPIO_PA1_MCU` | 2 |
+| `GPIO_PA4_MCU` | 2 |
+| `GPIO_PA5_MCU` | 2 |
+| `U2_TX` | 2 |
+| `NRST` | 2 |
+| `GPIO_PA4` | 1 |
+| `GPIO_PA5` | 1 |
+| `GPIO_PA6` | 1 |
+| `GPIO_PB0` | 1 |
+| `GPIO_PB9` | 1 |
+| `UART_TX` | 1 |
+| `3V3_REF` | 1 |
+| `SWCLK` | 1 |
+| `SWDIO` | 1 |
+
+Synth's release gate blocks a missing return via only on fast nets (clocks, differential pairs, switching nodes). The board has none, so these are advisories and the board released under that rule. The router looks for a ground via beside each layer change and reports the places where no spot in the ground pour is clear of pads, vias and tracks. The limitation is documented here and covered by the PCB review sign-off below.
+
 ## PCB review sign-off
 
-PCB review sign-off required by #39: JeffMboya, 2026-11-02, on the package in `fab/` (Gerber content hash `1c1755660b`).
+PCB review sign-off required by #39: JeffMboya, 2026-11-02, on the package in `fab/` (Gerber content hash `1c1755660b`) and on the return-path limitation described above.
 
 ## Review points (Sammy, case 2) and the state of each
 
 | Point | State |
 |---|---|
-| A plain default export is valid; no optional flag, no split ground pour | The exports use `synth export-kicad` with the router options only (no `--allow-incomplete`, no `--krt-allow-via-in-pad`). The ground net GND is poured on all four layers as one net. |
+| A plain default export is valid; no optional flag, no split ground pour | The exports call `synth_export` with the source, the sidecar and the output directory only (no `allow_incomplete`, no via-in-pad override). The ground net GND is poured on all four layers as one net. |
 | Three exports agree | Byte-identical across the three exports: `kicad_sch`, `kicad_pro`, `kicad_sym`, `bom.csv`, `pnp.csv` and the un-routed `synth.kicad_pcb`. Not byte-identical but equal after normalization: the routed `kicad_pcb` (the router and KiCad write random ids; compared with those masked, so geometrically equivalent) and the Gerber, drill and job files (the headers carry the creation time; compared by the content hash with it masked). |
 | Every external line of J3 protected | TX goes through R11 (330 ohm) and D7, a 3.3 V zener (BZT52C3V3, 500 mW); RX through R12 (1 k) and D24. A 5 V fault: (5 - 3.3) / 330 = 5.2 mA and (5 - 3.3) / 1000 = 1.7 mA, so 17 mW and 5.6 mW in the zener. The 3.3 V sense line has D14 (1N5819HW) and 100 ohm: 3 mA maximum, 30 mA into a short. The zener's leakage and clamp figures are from its listing, not an opened datasheet. |
 | Net classes declared and applied | Declared (PWR, V33, GNDC, SIG) and assigned to 39 nets; the exported board's tracks use them as listed above, with the router narrowing tracks near pads. |

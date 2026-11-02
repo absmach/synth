@@ -32,9 +32,9 @@ The README's reproducibility table has the first ten characters of SHA-256 of ea
 
 | Command | Result file |
 |---|---|
-| `synth export-kicad i2c_sensor_node.synth --out <dir> --router kicad-routing-tools ...`, three times into empty directories | [`export/`](export/), with `release.json` and `i2c_sensor_node.routing.json` |
+| The `synth_export` tool of `synth mcp --stdio` on the source and sidecar, three times into empty directories ([`agent-run/tools/mcp_export.py`](agent-run/tools/mcp_export.py) makes the call and records it) | [`export/`](export/), with `i2c_sensor_node.routing.json`; the three recorded sessions are in [`agent-run/mcp-final-export/`](agent-run/mcp-final-export/); `release.json` (the reviewer record and the signal-integrity findings) is the report `synth export-kicad` writes for the same source |
 | `kicad-cli pcb drc --refill-zones --severity-all --format json` with the KiCad footprint library table | [`reports/kicad_drc.json`](reports/kicad_drc.json) |
 | `kicad-cli sch erc --severity-all --format json` | [`reports/kicad_erc.json`](reports/kicad_erc.json) |
 | [`reproduce/compare_exports.py`](reproduce/compare_exports.py) on the three exports | the hash table in the README |
 | [`agent-run/tools/fab_package.sh`](agent-run/tools/fab_package.sh) | [`fab/`](fab/) |
-| JLCPCB PCB DFM, SMT DFM and quote on the package in `fab/` | [`reports/`](reports/) |
+| JLCPCB PCB DFM, quote and BOM matching on the package in `fab/` | [`reports/`](reports/) |

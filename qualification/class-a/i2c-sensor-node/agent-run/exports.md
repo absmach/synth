@@ -1,6 +1,6 @@
 # Final exports
 
-The three exports of the final source and sidecar; `reproduce/reproduce.sh` makes them again. The schematic, project, symbol, BOM, placement and un-routed board files are byte-identical across the three exports. The routed board differs in the random ids the router and KiCad write, and the Gerber, drill and job files in the creation time of their headers; both are equal after normalization, with those masked (see the README).
+The three exports of the final source and sidecar, made through the Synth MCP server (`synth_export`); the recorded sessions are in `mcp-final-export/`. The schematic, project, symbol, BOM, placement and un-routed board files are byte-identical across the three exports. The routed board differs in the random ids the router and KiCad write, and the Gerber, drill and job files in the creation time of their headers; both are equal after normalization, with those masked (see the README).
 
 | export | router state | DRC errors | unconnected | blocking findings | vias | track segments |
 |---|---|---|---|---|---|---|

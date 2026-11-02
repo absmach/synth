@@ -27,23 +27,33 @@
     },
     {
       "part_id": "c_generic_0603",
-      "reviewed": false
+      "reviewed_by": "JeffMboya",
+      "reviewed_at": "2026-11-02",
+      "reviewed": true
     },
     {
       "part_id": "c_generic_0805",
-      "reviewed": false
+      "reviewed_by": "JeffMboya",
+      "reviewed_at": "2026-11-02",
+      "reviewed": true
     },
     {
       "part_id": "c_tantalum_47uf",
-      "reviewed": false
+      "reviewed_by": "JeffMboya",
+      "reviewed_at": "2026-11-02",
+      "reviewed": true
     },
     {
       "part_id": "d_schottky",
-      "reviewed": false
+      "reviewed_by": "JeffMboya",
+      "reviewed_at": "2026-11-02",
+      "reviewed": true
     },
     {
       "part_id": "d_zener_3v3",
-      "reviewed": false
+      "reviewed_by": "JeffMboya",
+      "reviewed_at": "2026-11-02",
+      "reviewed": true
     },
     {
       "part_id": "header_1x12",
@@ -59,11 +69,15 @@
     },
     {
       "part_id": "jst_ph_4pin",
-      "reviewed": false
+      "reviewed_by": "JeffMboya",
+      "reviewed_at": "2026-11-02",
+      "reviewed": true
     },
     {
       "part_id": "jst_xh_2pin",
-      "reviewed": false
+      "reviewed_by": "JeffMboya",
+      "reviewed_at": "2026-11-02",
+      "reviewed": true
     },
     {
       "part_id": "ltst_c190kgkt",
@@ -73,27 +87,39 @@
     },
     {
       "part_id": "mounting_hole_m2_5",
-      "reviewed": false
+      "reviewed_by": "JeffMboya",
+      "reviewed_at": "2026-11-02",
+      "reviewed": true
     },
     {
       "part_id": "polyfuse_500ma",
-      "reviewed": false
+      "reviewed_by": "JeffMboya",
+      "reviewed_at": "2026-11-01",
+      "reviewed": true
     },
     {
       "part_id": "ptvs6v0s1ur",
-      "reviewed": false
+      "reviewed_by": "JeffMboya",
+      "reviewed_at": "2026-11-02",
+      "reviewed": true
     },
     {
       "part_id": "r_generic_0603",
-      "reviewed": false
+      "reviewed_by": "JeffMboya",
+      "reviewed_at": "2026-11-02",
+      "reviewed": true
     },
     {
       "part_id": "r_generic_0805",
-      "reviewed": false
+      "reviewed_by": "JeffMboya",
+      "reviewed_at": "2026-11-02",
+      "reviewed": true
     },
     {
       "part_id": "spst_tactile",
-      "reviewed": false
+      "reviewed_by": "JeffMboya",
+      "reviewed_at": "2026-11-02",
+      "reviewed": true
     },
     {
       "part_id": "stm32g030f6p6",
@@ -107,7 +133,7 @@
     "engine_version": "9399bfb2",
     "state": "routed",
     "input_hash": "ba85e901ff3563dc8a8ce2a6cbd8ad8e8fd7e938240f6dd795c4d19aa60cf75d",
-    "run_record": "/home/synth/runs/c2fin8-repro/out1/i2c_sensor_node.routing.json"
+    "run_record": "/home/synth/runs/c2fin11-repro/out1/i2c_sensor_node.routing.json"
   },
   "signal_integrity": {
     "blocking": 0,
