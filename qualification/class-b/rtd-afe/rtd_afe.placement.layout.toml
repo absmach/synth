@@ -50,7 +50,9 @@ y = 40.0
 rotation = 0
 priority = "hard"
 
-# --- Analog front end: left column, AGND pour -------------------------------
+# --- Analog front end: left column ------------------------------------------
+# The input filter stays next to J2 and U1; the reference and analog-supply
+# support parts sit in the top-left, which used to be 24 x 22 mm of bare board.
 [components.J2]
 x = 15.5
 y = 41.5
@@ -106,8 +108,8 @@ rotation = 90
 priority = "hard"
 
 [components.U3]
-x = 11.0
-y = 29.0
+x = 12.0
+y = 12.0
 rotation = 0
 priority = "hard"
 
@@ -118,14 +120,14 @@ rotation = 90
 priority = "hard"
 
 [components.C_RI]
-x = 8.0
-y = 23.5
+x = 7.5
+y = 18.5
 rotation = 0
 priority = "hard"
 
 [components.C_AV1]
-x = 17.0
-y = 24.3
+x = 20.0
+y = 23.0
 rotation = 0
 priority = "hard"
 
@@ -136,14 +138,14 @@ rotation = 0
 priority = "hard"
 
 [components.C_RO]
-x = 21.0
-y = 24.0
+x = 23.5
+y = 13.5
 rotation = 0
 priority = "hard"
 
 [components.R_RST]
-x = 24.8
-y = 27.0
+x = 26.0
+y = 17.5
 rotation = 90
 priority = "hard"
 
@@ -160,12 +162,12 @@ rotation = 90
 priority = "hard"
 
 [components.L2]
-x = 30.5
-y = 23.5
+x = 20.0
+y = 9.5
 rotation = 180
 priority = "hard"
 
-# --- MCU, flash, crystal: right column, DGND pour ---------------------------
+# --- MCU, flash, crystal: right column --------------------------------------
 [components.U2]
 x = 38.0
 y = 27.0
@@ -325,8 +327,8 @@ rotation = 0
 priority = "hard"
 
 [components.R_CC2]
-x = 32.0
-y = 10.5
+x = 28.5
+y = 9.0
 rotation = 0
 priority = "hard"
 
