@@ -4186,7 +4186,8 @@ mod plane_via_in_pad_tests {
         );
     }
 
-    /// The via follows the manufacturer's limits, not a fixed 0.6 / 0.3 mm.
+    /// The pads of an ordinary capacitor, judged as rectangles, leave room for
+    /// a via beside them.
     #[test]
     fn a_pad_pair_of_two_ordinary_capacitors_is_still_stitched_beside_the_pads() {
         // Two 0603 pads of one capacitor, 1.65 mm apart and 0.8 x 0.95 mm each:
@@ -4207,6 +4208,7 @@ mod plane_via_in_pad_tests {
         assert!(via_at.is_some(), "a legal spot exists beside the pad");
     }
 
+    /// The via follows the manufacturer's limits, not a fixed 0.6 / 0.3 mm.
     #[test]
     fn the_via_is_drawn_from_the_process_limits() {
         let mut profile = synth_drc::ManufacturerProfile::jlc_standard();
