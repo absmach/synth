@@ -128,20 +128,39 @@ def _fanout(python: str, repo: Path, board: Path, components: list[str],
     fanout = repo / "py_router" / "bga_fanout.py"
     current = board
 
-    if planes.is_file() and pairs:
-        poured = board.with_suffix(".poured.kicad_pcb")
-        command = [python, str(planes), str(current), str(poured)]
-        command.append("--nets")
-        command.extend(net for net, _ in pairs)
-        command.append("--plane-layers")
-        command.extend(layer for _, layer in pairs)
-        print("pouring planes:", " ".join(command), flush=True)
-        if subprocess.run(command, check=False).returncode == 0 and poured.is_file():
-            current = poured
+    if pairs:
+        if not planes.is_file():
+            if required:
+                raise RuntimeError(
+                    "declared escape requires route_planes.py, which is not "
+                    "available under the repository; the board cannot be "
+                    "poured, so the declared escape cannot run"
+                )
+            print(f"warning: no route_planes.py under {repo}; skipping pour", file=sys.stderr)
         else:
-            print("warning: plane pour failed; fanning out on unpoured fill", file=sys.stderr)
+            poured = board.with_suffix(".poured.kicad_pcb")
+            command = [python, str(planes), str(current), str(poured)]
+            command.append("--nets")
+            command.extend(net for net, _ in pairs)
+            command.append("--plane-layers")
+            command.extend(layer for _, layer in pairs)
+            print("pouring planes:", " ".join(command), flush=True)
+            if subprocess.run(command, check=False).returncode == 0 and poured.is_file():
+                current = poured
+            else:
+                if required:
+                    raise RuntimeError(
+                        "declared escape requires the plane pour, which failed; "
+                        "refusing to run the escape on unpoured fill"
+                    )
+                print("warning: plane pour failed; fanning out on unpoured fill", file=sys.stderr)
 
     if not fanout.is_file():
+        if required:
+            raise RuntimeError(
+                "declared escape requires bga_fanout.py, which is not "
+                "available under the repository; the declared escape cannot run"
+            )
         print(f"warning: no bga_fanout.py under {repo}; skipping escape", file=sys.stderr)
         return current
 
