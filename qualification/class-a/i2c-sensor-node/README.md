@@ -95,7 +95,7 @@ SMT DFM of the package in `fab/` (BOM, CPL and the Gerbers of content hash `1c17
 
 Quote with assembly for the same package ([`reports/jlcpcb_quote_2026-11-02.md`](reports/jlcpcb_quote_2026-11-02.md)): PCB $8.00 and Standard PCBA $140.17, $148.17 before shipping.
 
-BOM matching of the same package in JLCPCB's assembly flow, PCB assembled qty 5, estimated total $69.9405 ([`reports/jlcpcb_assembly_bom_match_2026-11-02.xlsx`](reports/jlcpcb_assembly_bom_match_2026-11-02.xlsx)): 55 lines, 53 matched to a JLCPCB part (21 Basic, 33 Extended library types among the 54 lines with a library type), `SW1` matched but unconfirmed (its comment differs from the matched part's) and `J4`, the SWD pin header, fitted by hand.
+BOM matching of the same package in JLCPCB's assembly flow, PCB assembled qty 5, estimated total $69.9405 ([`reports/jlcpcb_assembly_bom_match_2026-11-02.xlsx`](reports/jlcpcb_assembly_bom_match_2026-11-02.xlsx)): 55 lines, 53 matched to a JLCPCB part (21 Basic, 33 Extended library types among the 54 lines with a library type), `SW1` confirmed, and `J4`, the SWD pin header, a through-hole part that JLCPCB does not assemble and that is fitted by hand; the assembly package covers every other line.
 
 ## Review points (Sammy, case 2) and the state of each
 
