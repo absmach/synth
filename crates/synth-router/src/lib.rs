@@ -55,6 +55,7 @@ pub mod outcomes;
 pub mod pcb_read;
 pub mod process;
 pub mod result;
+pub mod search_budget;
 pub mod validate;
 pub mod zone_fill;
 
