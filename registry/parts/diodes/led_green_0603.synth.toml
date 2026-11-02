@@ -1,4 +1,5 @@
 id = "led_green_0603"
+lifecycle = "obsolete"
 kind = "led"
 description = "LITEON LTST-C190KGKT yellow-green (574 nm) LED, 0603 package, ~2.0V Vf"
 mpn = "LTST-C190KGKT"
