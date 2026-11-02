@@ -1,7 +1,6 @@
 id = "m24m02_eeprom"
 kind = "memory"
 description = "STM M24M02 256KB I²C EEPROM"
-kicad_symbol = "Memory_EEPROM:M24M02-DR"
 kicad_footprint = "Package_SO:SOIC-8_3.9x4.9mm_P1.27mm"
 
 [footprint_dimensions]
@@ -14,10 +13,13 @@ min_voltage_v = 1.8
 max_voltage_v = 3.6
 max_current_ma = 50.0
 
-# Pin numbers follow the SOIC-8 pinout this I2C EEPROM family shares with the
-# 24LC256 (pads 4 to 8 are GND SDA SCL WC VCC), cross-checked against the 8
-# pads of the footprint. Not from the symbol: KiCad 10 ships no
-# `Memory_EEPROM:M24M02-DR`, so the name above resolves to nothing.
+# Pins are ST's SO8N pinout for the M24M02-DR (DS7025): 1 DU, 2 DU, 3 E2,
+# 4 VSS, 5 SDA, 6 SCL, 7 WC, 8 VCC, cross-checked against the 8 pads of the
+# footprint. A DU pin takes no signal and, if connected, goes to VSS; only E2
+# is a chip-enable, since the 2-Mbit array uses the other two address bits.
+# KiCad 10 ships no M24M02 symbol, so none is named and the exporter draws one
+# from these pins: a stock 24LCxx symbol would print A0 and A1 on the two DU
+# pins and invite a board to strap them high.
 #
 # The previous map had `vdd` on pad 1, `gnd` on 2, `sda` on 3 and `scl` on 4.
 # On this package those four pads are A0, A1, A2 and GND, so a board wired to
@@ -25,17 +27,17 @@ max_current_ma = 50.0
 # four names keep their meaning and move to the pads that carry it.
 
 [[pins]]
-name = "a0"
+name = "du"
 number = "1"
-electrical_type = "input"
+electrical_type = "passive"
 
 [[pins]]
-name = "a1"
+name = "du_2"
 number = "2"
-electrical_type = "input"
+electrical_type = "passive"
 
 [[pins]]
-name = "a2"
+name = "e2"
 number = "3"
 electrical_type = "input"
 
@@ -69,8 +71,6 @@ name = "vdd"
 number = "8"
 electrical_type = "power_input"
 required = true
-# ST names pads 1-3 DU/E1/E2 on this device; they are the address and
-# don't-use pins either way, and the pads they sit on are what matters.
 
 [[required_decoupling]]
 net = "vdd"
