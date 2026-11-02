@@ -1,9 +1,9 @@
 # 24 V in, 3.3 V out buck with input parts (PTC, reverse-block diode, TVS) (SYN-67)
 
 Status: designed, placed by a hand-pinned sidecar, routed, DRC and ERC counted, Gerber and drill files
-generated. Not fabricated, not powered, no hardware test. Two parts on the board have no reviewer
-(`lmr38010`, `ltst_c190kgkt`), so the fab package reports `release_ready: false` by design. The review
-evidence for both is below and is a draft for the maintainer, not a sign-off.
+generated. Not fabricated, not powered, no hardware test. Both parts that carry registry review records
+are signed: `lmr38010` and `ltst_c190kgkt` were reviewed by Steve Munene on 2026-10-29, and the fab package
+reports `release_ready: true`. The review evidence for both is below.
 Intended for 24 V +10% in and 1 A out. The converter is rated 1 A, and the PTC and the input connector are
 further limits (see Limits). No surge test was run. The TVS clamp (48.4 V at 12.4 A) is below the
 converter's 85 V absolute maximum; a sustained overvoltage is limited by the PTC and the 50 V capacitors.

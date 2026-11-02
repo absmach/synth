@@ -162,7 +162,7 @@ Source: https://optoelectronics.liteon.com/upload/download/DS22-2000-074/LTST-C1
 
 Circuit check: D3 from +3V3 through R_LED 470 ohm carries (3.3 - 2.4 to 1.9) / 470 = 1.9 to 3.0 mA, far below 30 mA. D4 through R_PGLED likewise.
 
-Not signed. `reviewed_by` stays empty until the maintainer has read the datasheet and signs it in the registry file.
+Reviewed by Steve Munene on 2026-10-29; `reviewed_by` and `reviewed_at` are set in the registry file.
 
 ### Review record: U1 TI LMR38010SDDAR
 
@@ -174,7 +174,7 @@ Source: https://www.ti.com/lit/ds/symlink/lmr38010.pdf, SNVSBM3B (text copy), re
 - Application: Cin at least 4.7 uF plus 100-220 nF (met); Eq 11 inductance minimum 1.03 uH (met by 6.8 uH); R_RT 33k for 800 kHz from the RT table under Figure 8-4; VREF 1.0 V unchanged so the feedback divider is unchanged.
 - `RthetaJA` 42.9 C/W is not valid for design (datasheet text); not used.
 
-Not signed. `reviewed_by` stays empty until the maintainer has read the datasheet and signs it in the registry file.
+Reviewed by Steve Munene on 2026-10-29; `reviewed_by` and `reviewed_at` are set in the registry file.
 
 Rows A2, A9 and B1 to B8 are the ones that decide whether this board meets a Class B bar (#38
 treats missing SI/PI/RF evidence as a failure). They are open or bounded, not closed.
