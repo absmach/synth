@@ -162,11 +162,12 @@ netlist/PCB parity is clean.
 - `check.sh`: the acceptance check above.
 - `SHA256SUMS`: hashes of the artifacts.
 
-The reports are as the commands produce them, except that the absolute paths of
-this machine were cut to repository-relative ones in `release.json`,
-`rtd_afe.routing.json` and `rtd_afe.net`. `release.json` is Synth's own format
-(`synth.release.v1`); its `gate_scope` says it is a router/DRC gate, not a
-fabrication approval or a component review.
+The reports are as the commands produce them, except that `check.sh` rewrites
+the checkout path in `release.json` and `rtd_afe.routing.json` to a
+repository-relative one and stamps `source_revision` from the checked-out
+commit. `release.json` is Synth's own format (`synth.release.v1`); its
+`gate_scope` says it is a router/DRC gate, not a fabrication approval or a
+component review.
 
 ## Known limits and gaps
 

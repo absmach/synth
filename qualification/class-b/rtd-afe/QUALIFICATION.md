@@ -381,11 +381,13 @@ Inputs and outputs of the committed run:
 | `reports/release.json` | `772ea51440ebe3e60e96a108ec3d09cefc957d260125dfc87651a88ced51eda5` |
 | `reports/rtd_afe.routing.json` | `5c048b3b4a6a6bf3a66c1193613fe70de2291b124560bed1c1814d4008506ae6` |
 
-The release, routing and netlist reports had the absolute paths of the machine
-that produced them cut to repository-relative ones, matching the usb-uart
-board's convention; `source_revision` is null because Synth did not stamp it.
-All other reports are as the tools wrote them. `SHA256SUMS` covers the rest of
-the deliverables.
+`check.sh` sets `SYNTH_SOURCE_REVISION` from the checked-out commit, and both
+`release.json` and the routing provenance record it. It also rewrites the
+checkout path in `release.json` and `rtd_afe.routing.json` to a
+repository-relative one, matching the usb-uart board's convention. The
+`source_revision` names the source commit; the later artifact commit only adds
+the regenerated files. All other reports are as the tools wrote them.
+`SHA256SUMS` covers the rest of the deliverables.
 
 The failed attempts described above did **not** route clean; the committed
 placement did. I did not run the final inputs three times to claim a
