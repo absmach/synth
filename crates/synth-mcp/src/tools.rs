@@ -1571,6 +1571,7 @@ fn route_design_externally_with(
             .manufacturer
             .clone()
             .unwrap_or_else(|| "jlc-standard".to_string()),
+        board.layers,
     );
     request.use_board_escapes(&board);
     let process_warnings = grant_processes(&mut request, &board);
@@ -2964,6 +2965,7 @@ fn evaluate_candidate_mcp(
             .manufacturer
             .clone()
             .unwrap_or_else(|| "jlc-standard".to_string()),
+        board.layers,
     );
     // Each candidate is scored by routing it, so it has to be routed the way
     // the board asked: without the escape intent a declared `escape { off }`
@@ -3059,8 +3061,9 @@ fn routed_signal_integrity(board: &synth_ir::Board, pcb_path: &Path) -> Vec<synt
         vias,
         ..synth_pcb::Routing::default()
     };
-    let profile = synth_drc::ManufacturerProfile::from_name(
+    let profile = synth_drc::ManufacturerProfile::for_layers(
         board.manufacturer.as_deref().unwrap_or("jlc-standard"),
+        board.layers,
     );
     let stackup = synth_geometry::StackupProfile::for_board(board);
     synth_drc::check_signal_integrity(board, &routing, &profile, Some(&stackup))
@@ -3199,6 +3202,7 @@ fn execute_export(args: &Value, default_registry: Option<&Path>) -> Result<Value
             .manufacturer
             .clone()
             .unwrap_or_else(|| "jlc-standard".to_string()),
+        board.layers,
     );
     request.use_board_escapes(&board);
     let process_warnings = grant_processes(&mut request, &board);
