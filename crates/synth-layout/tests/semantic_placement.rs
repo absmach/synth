@@ -31,6 +31,7 @@ fn pin(name: &str, et: ElectricalType) -> Pin {
         electrical_type: et,
         capabilities: Vec::new(),
         required: false,
+        footprint_only: false,
         unit: None,
         voltage_max_v: None,
         voltage_min_v: None,

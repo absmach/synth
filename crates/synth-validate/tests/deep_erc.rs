@@ -1046,6 +1046,7 @@ fn multi_unit_rails_split_is_an_error() {
             electrical_type: et,
             capabilities: Vec::new(),
             required: false,
+            footprint_only: false,
             unit: unit.map(str::to_string),
             voltage_max_v: None,
             voltage_min_v: None,
