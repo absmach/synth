@@ -31,10 +31,18 @@ use synth_geometry::Rotation;
 
 use crate::pcb_read::{mm_to_nm, PcbBoard, Point, NM_PER_MM};
 
-/// Width of one character of a label at the 1 mm font the export uses.
-const CHAR_WIDTH_MM: f64 = 0.9;
-/// Height of a line of label text, with room for the stroke.
-const TEXT_HEIGHT_MM: f64 = 1.3;
+/// The font size of a label that does not write one: KiCad's default.
+const DEFAULT_FONT_MM: f64 = 1.0;
+/// Width of one character of a label, as a share of its font size.
+const CHAR_WIDTH_PER_FONT: f64 = 0.9;
+/// Height of a line of label text, with room for the stroke, as a share of
+/// its font size.
+const LINE_HEIGHT_PER_FONT: f64 = 1.3;
+/// Width of one character and height of a line at the default font.
+#[cfg(test)]
+const CHAR_WIDTH_MM: f64 = DEFAULT_FONT_MM * CHAR_WIDTH_PER_FONT;
+#[cfg(test)]
+const TEXT_HEIGHT_MM: f64 = DEFAULT_FONT_MM * LINE_HEIGHT_PER_FONT;
 /// Silkscreen keeps this far from copper it must stay off: JLCPCB's 0.15 mm
 /// minimum plus 0.1 mm for the text strokes and pad shapes a box check rounds.
 const CLEARANCE_MM: f64 = 0.25;
@@ -89,6 +97,8 @@ struct Label {
     /// Footprint-local offset and text angle, as written in the file.
     local: (f64, f64, f64),
     text_w: f64,
+    /// Height of the text's line, by the font the label is drawn in.
+    text_h: f64,
 }
 
 impl Label {
@@ -121,8 +131,8 @@ impl Label {
     /// Axis-aligned bounds of the text turned by `angle_deg`, centred on `at`.
     fn bounds_at(&self, at: (f64, f64), angle_deg: f64) -> Box2 {
         let (sin, cos) = angle_deg.to_radians().sin_cos();
-        let w = self.text_w * cos.abs() + TEXT_HEIGHT_MM * sin.abs();
-        let h = self.text_w * sin.abs() + TEXT_HEIGHT_MM * cos.abs();
+        let w = self.text_w * cos.abs() + self.text_h * sin.abs();
+        let h = self.text_w * sin.abs() + self.text_h * cos.abs();
         (
             at.0 - w / 2.0,
             at.1 - h / 2.0,
@@ -169,7 +179,8 @@ fn keep_labels_off_copper_with(
                 origin: (fp.at.x_mm(), fp.at.y_mm()),
                 rotation: quarter_turn(fp.rotation_deg),
                 local: found.values,
-                text_w: fp.reference.chars().count() as f64 * CHAR_WIDTH_MM,
+                text_w: fp.reference.chars().count() as f64 * found.font.0 * CHAR_WIDTH_PER_FONT,
+                text_h: found.font.1 * LINE_HEIGHT_PER_FONT,
             })
         })
         .collect();
@@ -933,6 +944,9 @@ struct Found {
     /// Byte range of the text between `(at` and its closing parenthesis.
     range: std::ops::Range<usize>,
     values: (f64, f64, f64),
+    /// The width and height of the label's font, or the default when it
+    /// writes none.
+    font: (f64, f64),
 }
 
 /// The `(at ...)` of the visible `Reference` property of `reference`.
@@ -966,9 +980,22 @@ fn find_label(text: &str, reference: &str) -> Option<Found> {
             .collect();
         let (x, y) = (*numbers.first()?, *numbers.get(1)?);
         let angle = numbers.get(2).copied().unwrap_or(0.0);
+        let font = block
+            .find("(size")
+            .and_then(|i| {
+                let body = &block[i + "(size".len()..];
+                let sizes: Vec<f64> = body[..body.find(')')?]
+                    .split_whitespace()
+                    .filter_map(|t| t.parse().ok())
+                    .collect();
+                // KiCad writes the height first: `(size HEIGHT WIDTH)`.
+                Some((*sizes.get(1)?, *sizes.first()?))
+            })
+            .unwrap_or((DEFAULT_FONT_MM, DEFAULT_FONT_MM));
         return Some(Found {
             range: body_start..body_end,
             values: (x, y, angle),
+            font,
         });
     }
     None
@@ -1073,6 +1100,26 @@ mod tests {
     }
 
     #[test]
+    fn a_label_is_measured_at_the_font_it_is_drawn_in() {
+        // The label's box starts at y = 17.35 at the default 1 mm font and at
+        // y = 17.48 at the export's 0.8 mm one; the via's copper ends at 17.18,
+        // so only the larger box is within the 0.25 mm clearance.
+        let via = r#"  (via (at 20 16.88) (size 0.6) (drill 0.3) (layers "F.Cu" "B.Cu") (net 1))"#;
+        let (_, moves) = run(&board_text(via));
+        assert_eq!(moves.moved, 1, "a 1 mm label reaches the via");
+
+        let small = board_text(via).replace(
+            r#"(property "Reference" "R1" (at 0 -2) (layer "F.SilkS"))"#,
+            r#"(property "Reference" "R1" (at 0 -2) (layer "F.SilkS")
+      (effects (font (size 0.8 0.8) (thickness 0.18))))"#,
+        );
+        assert_eq!(find_label(&small, "R1").expect("label").font, (0.8, 0.8));
+        let (out, moves) = run(&small);
+        assert_eq!(moves.moved, 0, "a 0.8 mm label is clear of it");
+        assert_eq!(out, small);
+    }
+
+    #[test]
     fn a_label_over_a_via_is_moved_clear_of_it() {
         let text = board_text(
             r#"  (via (at 20 18) (size 0.6) (drill 0.3) (layers "F.Cu" "B.Cu") (net 1))"#,
@@ -1096,6 +1143,7 @@ mod tests {
             rotation: Rotation::Zero,
             local: (x, y, angle),
             text_w: 2.0 * CHAR_WIDTH_MM,
+            text_h: TEXT_HEIGHT_MM,
         };
         let b = label.bounds_at(label.centre(), angle);
         assert!(
@@ -1137,6 +1185,7 @@ mod tests {
             rotation: Rotation::Zero,
             local: (x, y, angle),
             text_w: 2.0 * CHAR_WIDTH_MM,
+            text_h: TEXT_HEIGHT_MM,
         };
         let b = label.bounds_at(label.centre(), angle);
         assert!(
