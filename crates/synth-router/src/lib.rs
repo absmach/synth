@@ -309,12 +309,15 @@ fn with_repair_findings(
     mut verdict: validate::FabricationVerdict,
     blocking: Vec<String>,
     unavailable: Vec<String>,
+    advisory: Vec<String>,
 ) -> validate::FabricationVerdict {
     if !blocking.is_empty() || !unavailable.is_empty() {
         verdict.fabrication_ready = false;
         verdict.blocking_reasons.extend(blocking);
         verdict.unavailable_checks.extend(unavailable);
     }
+    // An advisory is listed for the review and never changes the verdict.
+    verdict.advisories.extend(advisory);
     verdict
 }
 
@@ -397,12 +400,12 @@ fn finalize(
     if let Err(detail) = &silkscreen {
         repair_unavailable.push(format!("silkscreen repair did not run: {detail}"));
     }
-    let mut verdict = with_repair_findings(
+    let verdict = with_repair_findings(
         validate_candidate(request, &candidate),
         repair_blocking,
         repair_unavailable,
+        repair_advisory,
     );
-    verdict.advisories.extend(repair_advisory);
 
     let state = RouteReport::state_for_verdict(&verdict);
 
@@ -608,6 +611,7 @@ mod repair_tests {
             FabricationVerdict::ready(),
             Vec::new(),
             vec!["pour island repair did not run: kicad-cli missing".to_string()],
+            Vec::new(),
         );
         assert!(!verdict.fabrication_ready);
         assert_eq!(verdict.unavailable_checks.len(), 1);
@@ -624,6 +628,7 @@ mod repair_tests {
             FabricationVerdict::ready(),
             vec!["an island of net GND holds copper but is tied to nothing".to_string()],
             Vec::new(),
+            Vec::new(),
         );
         assert!(!verdict.fabrication_ready);
         assert_eq!(verdict.blocking_reasons.len(), 1);
@@ -635,8 +640,30 @@ mod repair_tests {
 
     #[test]
     fn a_clean_repair_leaves_the_verdict_as_it_was() {
-        let verdict = with_repair_findings(FabricationVerdict::ready(), Vec::new(), Vec::new());
+        let verdict = with_repair_findings(
+            FabricationVerdict::ready(),
+            Vec::new(),
+            Vec::new(),
+            Vec::new(),
+        );
         assert!(verdict.fabrication_ready);
+        assert_eq!(RouteReport::state_for_verdict(&verdict), RouteState::Routed);
+    }
+
+    /// A slow net's missing return via is W-SYNTH-DRC-016's advisory: it is
+    /// carried to the report for the review, and a clean board stays routed.
+    #[test]
+    fn a_return_via_advisory_is_reported_and_does_not_hold_the_board_back() {
+        let advisory = "net SLOW changes layers at (1.00, 2.00) mm with no ground return via";
+        let verdict = with_repair_findings(
+            FabricationVerdict::ready(),
+            Vec::new(),
+            Vec::new(),
+            vec![advisory.to_string()],
+        );
+        assert!(verdict.fabrication_ready);
+        assert!(!verdict.has_blocking_findings());
+        assert_eq!(verdict.advisories, vec![advisory.to_string()]);
         assert_eq!(RouteReport::state_for_verdict(&verdict), RouteState::Routed);
     }
 }

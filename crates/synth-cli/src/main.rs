@@ -5935,6 +5935,10 @@ mod tests {
         .expect("request");
         let _ = std::fs::remove_dir_all(&dir);
         assert_eq!(request.ground_nets, vec!["POWER_RETURN".to_string()]);
+        // A GPIO into a capacitor carries no fast edge, so the request names the
+        // fast nets (here none) and the router lists SIGNAL's layer change as an
+        // advisory instead of falling back to holding every net to a return via.
+        assert_eq!(request.return_via_critical_nets, Some(Vec::new()));
     }
 
     /// A stage that writes more than a pipe holds must still be read.
