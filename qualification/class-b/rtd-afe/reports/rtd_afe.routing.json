@@ -14,7 +14,7 @@
     "engine": "freerouting",
     "engine_version": "freerouting-2.4.1.jar",
     "runtime_version": "openjdk version \"25.0.4.1\" 2026-08-18 LTS",
-    "profile": "jlcpcb",
+    "profile": "jlc-filled-via",
     "command": [
       "/usr/bin/python3",
       "tools/freeroute_autoroute.py",
@@ -32,7 +32,8 @@
       "qualification/class-b/rtd-afe/kicad/rtd_afe.freerouting.ses",
       "--report",
       "qualification/class-b/rtd-afe/kicad/rtd_afe.freerouting.json",
-      "--clean-netlist"
+      "--clean-netlist",
+      "--allow-via-in-pad"
     ],
     "settings": {
       "clean_netlist": "true",
@@ -40,22 +41,22 @@
       "threads": "4",
       "wall_clock_secs": "1200"
     },
-    "input_hash": "64ec69c95d072644c4e29f32f943fe149c8228e3a82e58a981240166440b91e1",
+    "input_hash": "b998e2131b3c392a7fb7209cbd7e1df9ebcf6678457544009cdb5ae2385e7c1c",
     "output_hash": "",
-    "source_revision": "bcc89cdab11e79297e6a78bfa79ccbea97bff249",
-    "duration_ms": 79235
+    "source_revision": "32d3d038983c75faa10071d46bd1119bfe1f8a07",
+    "duration_ms": 271508
   },
   "statistics": {
     "connected_nets": 40,
     "open_nets": 0,
     "open_net_names": [],
-    "segments": 374,
-    "vias": 58,
-    "wire_length_mm": 566.287853,
+    "segments": 388,
+    "vias": 61,
+    "wire_length_mm": 600.159157,
     "pad_escape_rejections": 0,
     "engine_findings": {
-      "claimed_imported_segments": "374",
-      "claimed_imported_vias": "58"
+      "claimed_imported_segments": "388",
+      "claimed_imported_vias": "61"
     }
   },
   "artifacts": {
@@ -84,7 +85,9 @@
       "open_nets": 0,
       "open": [],
       "unconnected_pads": [],
-      "via_in_pad": [],
+      "via_in_pad": [
+        "via at (26.800, 26.730) mm C_DV.2"
+      ],
       "undersized_vias": [],
       "undersized_tracks": []
     },

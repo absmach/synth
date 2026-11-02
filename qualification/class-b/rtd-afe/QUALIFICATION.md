@@ -373,10 +373,10 @@ Inputs and outputs of the committed run:
 | `check.sh` | `39bd0d10444b8f55238be5b1c675b86eef36f26d1054896f1b57b286f37168d1` |
 | `kicad/rtd_afe.kicad_pcb` | `8f83bc8e002ce991e90a9f09f803993f2f42113f50172eb7d4c69f422337d680` |
 | `kicad/rtd_afe.kicad_sch` | `c7300d22238d8d4991b3ba453599ffdb96a833de3c83bdc132542ea662537812` |
-| `reports/rtd_afe.kicad-drc.json` | `db49b55b995db61de3291b8ba90eb32db814726cc7355041ff8ecc81e73f7544` |
-| `reports/rtd_afe.kicad-erc.json` | `8251694cc79cfd240d1b9814f2112f7537cc19f67d0733efde18726adce9de02` |
-| `reports/release.json` | `9d11e73a44552002ae36dc5f6a5352745b4b26a14864a49222d8673b39959c97` |
-| `reports/rtd_afe.routing.json` | `71e1274705863d728684fc2c5e51f5bbba124a8498e3a74e5d645c2ddefd288d` |
+| `reports/rtd_afe.kicad-drc.json` | `208b90aa44a72b5d634a51464e407cd8772f9684b5c507e1c643ad26568421a0` |
+| `reports/rtd_afe.kicad-erc.json` | `826cbdcf7c8578375c89a9965ee9f622fc62778e2f174b6b1266f3cdb89f00fe` |
+| `reports/release.json` | `f0852a992b5ddc7e97fe66ca2582f26e36a7af34c704e767c0d42ff9f0ef195a` |
+| `reports/rtd_afe.routing.json` | `bccc01451ae6e22a63dfa0f2d165fac673ae1af94f4eac42881ddc4d0063d49a` |
 
 `check.sh` sets `SYNTH_SOURCE_REVISION` from the checked-out commit, and both
 `release.json` and the routing provenance record it. It also rewrites the
