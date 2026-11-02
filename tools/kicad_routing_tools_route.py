@@ -36,6 +36,10 @@ from pathlib import Path
 # router refused this board" from "the router broke".
 POLICY_REJECTED = 3
 
+# Exit code used when a package the board needs escaped was not escaped, so
+# the general router never ran. No output board is written.
+ESCAPE_FAILED = 4
+
 # Engine via penalty for the first attempt; its own default is 75.
 KEEP_LAYER_VIA_COST = 1000
 
@@ -76,10 +80,15 @@ def _fanout(python: str, repo: Path, board: Path, components: list[str],
     the general-purpose router, which is how a 0.8 mm grid ends up with a
     stub on every lane.
 
-    A stage that fails is not fatal. The un-fanned board still routes, just
-    worse, and reporting that honestly beats refusing to route at all — the
-    caller sees the stage's own error and the stats still describe whatever
-    copper came back.
+    A stage that fails is fatal, for every package the plan escapes and not
+    just the declared ones. Each package here either was declared or is a
+    grid array, and a grid array handed to the general router is the
+    stub-on-every-lane board this stage exists to prevent; routing on
+    would return copper that looks like a candidate but lacks the escape it
+    needs. The pour is held to the same rule because the fanout's plane-drop
+    vias are placed against its fill. The one skip that remains is the
+    via-in-pad gate below, which is the board's fabrication rules declining
+    an under-pad escape rather than a stage failing at one.
 
     The fabrication floor travels with every stage. `--fab-tier auto` is
     documented to escalate to an advanced tier when a fine-pitch escape needs
@@ -128,44 +137,38 @@ def _fanout(python: str, repo: Path, board: Path, components: list[str],
     fanout = repo / "py_router" / "bga_fanout.py"
     current = board
 
+    escaping = ", ".join(refdes for refdes, _, _ in plan)
     if pairs:
         if not planes.is_file():
-            if required:
-                raise RuntimeError(
-                    "declared escape requires route_planes.py, which is not "
-                    "available under the repository; the board cannot be "
-                    "poured, so the declared escape cannot run"
-                )
-            print(f"warning: no route_planes.py under {repo}; skipping pour", file=sys.stderr)
-        else:
-            poured = board.with_suffix(".poured.kicad_pcb")
-            command = [python, str(planes), str(current), str(poured)]
-            command.append("--nets")
-            command.extend(net for net, _ in pairs)
-            command.append("--plane-layers")
-            command.extend(layer for _, layer in pairs)
-            print("pouring planes:", " ".join(command), flush=True)
-            if subprocess.run(command, check=False).returncode == 0 and poured.is_file():
-                current = poured
-            else:
-                if required:
-                    raise RuntimeError(
-                        "declared escape requires the plane pour, which failed; "
-                        "refusing to run the escape on unpoured fill"
-                    )
-                print("warning: plane pour failed; fanning out on unpoured fill", file=sys.stderr)
+            raise RuntimeError(
+                f"escaping {escaping} needs route_planes.py, which is not under "
+                f"{repo}; the board cannot be poured, so the escape cannot run"
+            )
+        poured = board.with_suffix(".poured.kicad_pcb")
+        # A pour left by an earlier run is not evidence this one succeeded.
+        poured.unlink(missing_ok=True)
+        command = [python, str(planes), str(current), str(poured)]
+        command.append("--nets")
+        command.extend(net for net, _ in pairs)
+        command.append("--plane-layers")
+        command.extend(layer for _, layer in pairs)
+        print("pouring planes:", " ".join(command), flush=True)
+        if subprocess.run(command, check=False).returncode != 0 or not poured.is_file():
+            raise RuntimeError(
+                f"the plane pour before escaping {escaping} failed; refusing to "
+                "run the escape on unpoured fill"
+            )
+        current = poured
 
     if not fanout.is_file():
-        if required:
-            raise RuntimeError(
-                "declared escape requires bga_fanout.py, which is not "
-                "available under the repository; the declared escape cannot run"
-            )
-        print(f"warning: no bga_fanout.py under {repo}; skipping escape", file=sys.stderr)
-        return current
+        raise RuntimeError(
+            f"escaping {escaping} needs bga_fanout.py, which is not under "
+            f"{repo}; the escape cannot run"
+        )
 
     for index, (refdes, want_method, want_layers) in enumerate(plan):
         fanned = board.with_suffix(f".fanned{index}.kicad_pcb")
+        fanned.unlink(missing_ok=True)
         command = [
             python, str(fanout), str(current),
             "--component", refdes,
@@ -185,16 +188,13 @@ def _fanout(python: str, repo: Path, board: Path, components: list[str],
         if strict_sizes:
             command.append("--strict-sizes")
         print(f"escaping {refdes}:", " ".join(command), flush=True)
-        if subprocess.run(command, check=False).returncode == 0 and fanned.is_file():
-            current = fanned
-        else:
-            if refdes in required:
-                raise RuntimeError(
-                    f"declared escape of {refdes} failed; the board asked for "
-                    "it explicitly, so the route fails rather than silently "
-                    "handing the package to the general router"
-                )
-            print(f"warning: fanout of {refdes} failed; routing it unescaped", file=sys.stderr)
+        if subprocess.run(command, check=False).returncode != 0 or not fanned.is_file():
+            origin = "declared" if refdes in required else "grid-array"
+            raise RuntimeError(
+                f"{origin} escape of {refdes} failed; the route fails rather "
+                "than handing the package to the general router unescaped"
+            )
+        current = fanned
 
     return current
 
@@ -305,8 +305,9 @@ def main() -> int:
         "underpad is the one that escapes fully populated arrays.",
     )
     parser.add_argument("--escape-clearance", type=float, default=0.1)
-    # Packages the design declared an escape for. Failing one of these fails
-    # the route; failing a geometrically selected one only warns.
+    # Packages the design declared an escape for. A failed escape fails the
+    # route either way; a declared one also may not be skipped for want of
+    # via-in-pad, where a geometrically selected one is skipped with a warning.
     parser.add_argument("--escape-required", action="append", default=[])
     parser.add_argument("--escape-via-size", type=float)
     parser.add_argument("--escape-via-drill", type=float)
@@ -318,8 +319,14 @@ def main() -> int:
     args.output_board.parent.mkdir(parents=True, exist_ok=True)
     stats = args.stats or args.output_board.with_suffix(".krt-stats.json")
     board_to_route = args.input_board
+    # Cleared before the escape, not just before routing: an escape that fails
+    # must leave no board or summary behind for the caller to mistake for
+    # this run's.
+    stats.unlink(missing_ok=True)
+    args.output_board.unlink(missing_ok=True)
     if args.fanout_component:
-        board_to_route = _fanout(
+        try:
+            board_to_route = _fanout(
             args.python,
             args.repo,
             args.input_board,
@@ -333,7 +340,10 @@ def main() -> int:
             args.escalation,
             args.allow_via_in_pad,
             {r.split(":", 1)[0] for r in (args.escape_required or [])},
-        )
+            )
+        except RuntimeError as error:
+            print(f"error: {error}", file=sys.stderr)
+            return ESCAPE_FAILED
     command = [
         args.python,
         str(route),

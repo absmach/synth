@@ -189,7 +189,6 @@ class FanoutTest(unittest.TestCase):
         self.assertEqual(escapes, [("U1", "underpad")])
 
 
-
 class FailClosedPrerequisiteTest(unittest.TestCase):
     def test_missing_route_planes_fails_when_declared(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -233,6 +232,186 @@ class FailClosedPrerequisiteTest(unittest.TestCase):
                     None, None, "standard", False, "none", False, {"U1"},
                 )
 
+
+    def test_missing_bga_fanout_fails_a_grid_array_too(self):
+        # Nothing was declared; U1 was selected because it is a grid. Routing
+        # it unescaped is the result the stage exists to prevent.
+        with tempfile.TemporaryDirectory() as tmp:
+            repo = Path(tmp) / "krt"
+            (repo / "py_router").mkdir(parents=True)
+            board = Path(tmp) / "in.kicad_pcb"
+            board.write_text("(kicad_pcb)")
+            adapter = load_adapter()
+            with self.assertRaises(RuntimeError):
+                adapter._fanout(
+                    sys.executable, repo, board, ["U1:channel:"], "underpad", 0.127,
+                    None, None, "standard", False, "none", False, set(),
+                )
+
+
+# Each stage stub logs its argv, then behaves as `<stage>.json` says:
+# `{"exit": n, "write": bool}`. Absent, it succeeds and writes its output.
+STAGE_STUB = """\\
+import json, sys
+from pathlib import Path
+
+here = Path(__file__).parent
+name = Path(__file__).stem
+with (here / (name + ".log")).open("a") as log:
+    log.write(" ".join(sys.argv[1:]) + "\\n")
+plan_file = here / (name + ".json")
+plan = json.loads(plan_file.read_text()) if plan_file.exists() else {}
+if plan.get("write", True):
+    out = sys.argv[sys.argv.index("--output") + 1] if "--output" in sys.argv else sys.argv[2]
+    Path(out).write_text("(kicad_pcb)")
+sys.exit(plan.get("exit", 0))
+"""
+
+PLANE_BOARD = '(kicad_pcb (zone (net 1) (net_name "GND") (layer "In1.Cu")))'
+
+
+def run_staged(fanout_components, extra=(), planes=None, fanout=None,
+               missing=(), board_text=PLANE_BOARD, stale=()):
+    """Run the whole adapter with stub pour, fanout and route stages.
+
+    `planes`/`fanout` configure those stubs; `missing` names stages to leave
+    out of the checkout; `stale` names stage outputs a previous run left.
+    Returns (exit code, stderr, {stage: [argv lines]}, output board exists)."""
+    with tempfile.TemporaryDirectory() as tmp:
+        repo = Path(tmp) / "krt"
+        router = repo / "py_router"
+        router.mkdir(parents=True)
+        (router / "route.py").write_text(STUB)
+        (router / "summaries.json").write_text(json.dumps([CLEAN]))
+        for stage, plan in (("route_planes", planes), ("bga_fanout", fanout)):
+            if stage in missing:
+                continue
+            (router / f"{stage}.py").write_text(STAGE_STUB)
+            if plan is not None:
+                (router / f"{stage}.json").write_text(json.dumps(plan))
+        board = Path(tmp) / "in.kicad_pcb"
+        board.write_text(board_text)
+        for name in stale:
+            (Path(tmp) / name).write_text("(kicad_pcb)")
+        output = Path(tmp) / "out.kicad_pcb"
+        command = [
+            sys.executable, str(ADAPTER), str(board), str(output),
+            "--repo", str(repo), "--python", sys.executable,
+            "--fab-tier", "standard",
+        ]
+        for spec in fanout_components:
+            command.extend(("--fanout-component", spec))
+        command.extend(extra)
+        done = subprocess.run(command, capture_output=True, text=True, check=False)
+        logs = {}
+        for stage, log in (("planes", "route_planes.log"), ("fanout", "bga_fanout.log"),
+                           ("route", "calls.log")):
+            path = router / log
+            logs[stage] = path.read_text().splitlines() if path.exists() else []
+        return done.returncode, done.stderr, logs, output.exists()
+
+
+class StagedAdapterTest(unittest.TestCase):
+    """The adapter end to end: pour, escape, route, against stub stages."""
+
+    FLOORS = ("--escape-clearance", "0.2", "--escape-via-size", "0.6",
+              "--escape-via-drill", "0.3", "--allow-via-in-pad")
+
+    def test_the_route_runs_on_the_escaped_board_with_the_floor_applied(self):
+        code, _, logs, routed = run_staged(["U1"], extra=self.FLOORS)
+        self.assertEqual((code, routed), (0, True))
+        # The pour is given the zone's net and its single layer.
+        self.assertEqual(len(logs["planes"]), 1)
+        self.assertIn("--nets GND --plane-layers In1.Cu", logs["planes"][0])
+        # The escape runs on the poured board, at the board's floors.
+        self.assertEqual(len(logs["fanout"]), 1)
+        escape = logs["fanout"][0]
+        self.assertIn("in.poured.kicad_pcb --component U1", escape)
+        for expected in ("--escape-method underpad", "--clearance 0.2",
+                         "--via-size 0.6 --via-drill 0.3", "--fab-tier standard",
+                         "--strict-sizes"):
+            self.assertIn(expected, escape)
+        # And the general router is handed the escaped board, not the input.
+        self.assertEqual(logs["route"][0].split()[0].rsplit("/", 1)[1],
+                         "in.fanned0.kicad_pcb")
+
+    def assert_escape_failed(self, code, stderr, logs, routed):
+        self.assertEqual(code, 4, stderr)
+        self.assertEqual(logs["route"], [], "the general router must not run")
+        self.assertFalse(routed, "a failed escape must leave no output board")
+        self.assertIn("error: ", stderr)
+
+    def test_a_failed_pour_fails_the_route(self):
+        self.assert_escape_failed(*run_staged(["U1"], extra=self.FLOORS,
+                                              planes={"exit": 1}))
+
+    def test_a_pour_that_writes_nothing_fails_the_route(self):
+        self.assert_escape_failed(*run_staged(["U1"], extra=self.FLOORS,
+                                              planes={"write": False}))
+
+    def test_a_missing_pour_stage_fails_the_route(self):
+        self.assert_escape_failed(*run_staged(["U1"], extra=self.FLOORS,
+                                              missing=("route_planes",)))
+
+    def test_a_failed_grid_array_escape_fails_the_route(self):
+        self.assert_escape_failed(*run_staged(["U1"], extra=self.FLOORS,
+                                              fanout={"exit": 1}))
+
+    def test_a_failed_declared_escape_fails_the_route(self):
+        self.assert_escape_failed(*run_staged(
+            ["U1:channel:"], extra=("--escape-required", "U1"), fanout={"exit": 1}))
+
+    def test_an_escape_that_writes_nothing_fails_the_route(self):
+        self.assert_escape_failed(*run_staged(["U1"], extra=self.FLOORS,
+                                              fanout={"write": False}))
+
+    def test_a_previous_runs_escape_is_not_taken_for_this_ones(self):
+        # The stub exits 0 without writing; a leftover from an earlier run
+        # sits where its output would go.
+        self.assert_escape_failed(*run_staged(
+            ["U1"], extra=self.FLOORS, fanout={"write": False},
+            stale=("in.fanned0.kicad_pcb", "in.poured.kicad_pcb")))
+
+    def test_a_missing_escape_stage_fails_the_route(self):
+        self.assert_escape_failed(*run_staged(["U1"], extra=self.FLOORS,
+                                              missing=("bga_fanout",)))
+
+    def test_a_board_without_planes_escapes_without_pouring(self):
+        code, _, logs, routed = run_staged(["U1:channel:"], missing=("route_planes",),
+                                           board_text="(kicad_pcb)")
+        self.assertEqual((code, routed), (0, True))
+        self.assertEqual(len(logs["fanout"]), 1)
+
+    def test_under_pad_without_via_in_pad_skips_a_grid_array(self):
+        # The board's own rules decline the escape; nothing failed, so the
+        # route runs, on the input board, and says why on stderr.
+        code, stderr, logs, routed = run_staged(["U1"])
+        self.assertEqual((code, routed), (0, True))
+        self.assertEqual((logs["planes"], logs["fanout"]), ([], []))
+        self.assertIn("skipping under-pad escape of U1", stderr)
+        self.assertEqual(logs["route"][0].split()[0].rsplit("/", 1)[1], "in.kicad_pcb")
+
+    def test_under_pad_without_via_in_pad_fails_a_declared_escape(self):
+        self.assert_escape_failed(*run_staged(["U1:underpad:"],
+                                              extra=("--escape-required", "U1")))
+
+    def test_a_stale_output_board_does_not_survive_a_failed_escape(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            repo = Path(tmp) / "krt"
+            (repo / "py_router").mkdir(parents=True)
+            (repo / "py_router" / "route.py").write_text(STUB)
+            board = Path(tmp) / "in.kicad_pcb"
+            board.write_text("(kicad_pcb)")
+            output = Path(tmp) / "out.kicad_pcb"
+            output.write_text("(kicad_pcb) from an earlier run")
+            done = subprocess.run(
+                [sys.executable, str(ADAPTER), str(board), str(output),
+                 "--repo", str(repo), "--python", sys.executable,
+                 "--fanout-component", "U1:channel:"],
+                capture_output=True, text=True, check=False,
+            )
+            self.assertEqual(done.returncode, 4, done.stderr)
+            self.assertFalse(output.exists())
 
 
 if __name__ == "__main__":

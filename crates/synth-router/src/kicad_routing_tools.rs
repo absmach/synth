@@ -26,6 +26,11 @@ use crate::result::{RouteArtifacts, RouteStatistics, RouterProvenance};
 /// The helper script that drives the external `py_router/route.py`.
 pub const HELPER: &str = "kicad_routing_tools_route.py";
 
+/// The helper's exit status when a package it was told to escape was not
+/// escaped. Mirrors `ESCAPE_FAILED` in the helper; the general router never
+/// ran, so there is no board.
+pub const ESCAPE_FAILED_EXIT: i32 = 4;
+
 /// KiCadRoutingTools' own JSON route summary, as written by the engine.
 ///
 /// Fields the engine may omit are optional; the fields Synth relies on
@@ -219,11 +224,12 @@ pub fn build_command(
             args.extend(["--fanout-component".to_string(), spec]);
         }
         // Which of those the design asked for, as opposed to which the
-        // geometry selected. A declared escape that cannot be performed is a
-        // failed route: the board said how this package leaves its pads, and
-        // quietly handing it to the maze router instead answers a question
-        // nobody asked. An inferred one may still degrade to a warning,
-        // because nothing was promised about it.
+        // geometry selected. An escape stage that fails fails the route for
+        // either, because a grid array handed to the maze router unescaped
+        // is the board this stage exists to prevent. The difference is the
+        // via-in-pad gate: a declared under-pad escape the board cannot
+        // fabricate fails, where a selected one is skipped, since the board's
+        // own rules declined it and nothing was promised about it.
         let off: std::collections::BTreeSet<&str> =
             request.escapes_off.iter().map(String::as_str).collect();
         for escape in &request.escapes {
@@ -406,6 +412,9 @@ pub fn route(request: &RouteRequest) -> Result<Candidate, RouterFailure> {
     // and is kept for review rather than discarded.
     let has_board = request.candidate_path().is_file();
     if !has_board {
+        if let Some(failure) = escape_failure(&invocation) {
+            return Err(failure);
+        }
         crate::freerouting::check_process_outcome(
             RouterEngine::KiCadRoutingTools,
             HELPER,
@@ -466,6 +475,41 @@ pub fn route(request: &RouteRequest) -> Result<Candidate, RouterFailure> {
     }
 
     Ok(candidate)
+}
+
+/// The failure for a run the helper stopped at the escape stage.
+///
+/// Reported as a rejection with the helper's own reason rather than as a
+/// crash, because the helper decided not to route; the reason is its last
+/// `error:` line, not the first line of output, which is whatever the pour
+/// or the fanout printed before it failed.
+fn escape_failure(invocation: &crate::process::Invocation) -> Option<RouterFailure> {
+    if invocation.timed_out
+        || invocation.cancelled
+        || invocation.exit_code != Some(ESCAPE_FAILED_EXIT)
+    {
+        return None;
+    }
+    let reason = invocation
+        .stderr
+        .lines()
+        .rev()
+        .find_map(|line| line.trim().strip_prefix("error: "))
+        .unwrap_or("a required escape did not run");
+    Some(
+        RouterFailure::for_stage(
+            RouterEngine::KiCadRoutingTools,
+            RouterStage::Route,
+            RouterFailureReason::Rejected,
+            format!("{reason}; the baseline export is preserved unchanged"),
+        )
+        .with_exit_code(invocation.exit_code)
+        .with_remediation(
+            "the retained session log has the pour or fanout stage's own error; install \
+             the missing KiCadRoutingTools stage, declare a method the board can \
+             fabricate in the package's `escape` block, or declare `escape { off }`",
+        ),
+    )
 }
 
 /// Both resolvers are shared with capability discovery so the path an engine
@@ -627,8 +671,8 @@ mod tests {
     #[test]
     fn a_declared_escape_is_marked_required_and_an_inferred_one_is_not() {
         let (mut request, dir) = with_baseline(&grid_pads(11, 11, 0.8));
-        // U1 is selected by geometry alone: no declaration, so a failed
-        // escape may degrade to the general router.
+        // U1 is selected by geometry alone: no declaration, so the board's
+        // via-in-pad rule may still skip it.
         let joined = argv(&request);
         assert!(joined.contains("--fanout-component U1"), "{joined}");
         assert!(
@@ -762,6 +806,49 @@ mod tests {
         // And the clearance, which the adapter would otherwise default to
         // 0.1 mm — under this board's own 0.127 mm floor.
         assert!(joined.contains("--escape-clearance 0.1270"), "{joined}");
+    }
+
+    fn invocation(exit_code: Option<i32>, stderr: &str) -> crate::process::Invocation {
+        crate::process::Invocation {
+            command: Vec::new(),
+            stdout: "pouring planes: python route_planes.py in out\n".to_string(),
+            stderr: stderr.to_string(),
+            exit_code,
+            timed_out: false,
+            cancelled: false,
+            output_truncated: false,
+            cwd: PathBuf::new(),
+        }
+    }
+
+    /// A stopped escape is a rejection carrying the helper's own reason, not
+    /// a crash named after whatever the child stage printed first.
+    #[test]
+    fn a_failed_escape_is_reported_with_the_helpers_reason() {
+        let stderr = "Traceback (most recent call last):\n  boom\n\
+                      error: grid-array escape of U1 failed; the route fails\n";
+        let failure = escape_failure(&invocation(Some(ESCAPE_FAILED_EXIT), stderr))
+            .expect("exit 4 is an escape failure");
+        assert_eq!(failure.reason, RouterFailureReason::Rejected);
+        assert_eq!(failure.stage, RouterStage::Route);
+        assert_eq!(failure.exit_code, Some(ESCAPE_FAILED_EXIT));
+        assert!(
+            failure.detail.starts_with("grid-array escape of U1 failed"),
+            "{}",
+            failure.detail
+        );
+    }
+
+    #[test]
+    fn only_the_escape_exit_status_is_an_escape_failure() {
+        assert!(escape_failure(&invocation(Some(1), "error: crashed\n")).is_none());
+        assert!(escape_failure(&invocation(Some(0), "")).is_none());
+        let mut timed_out = invocation(Some(ESCAPE_FAILED_EXIT), "");
+        timed_out.timed_out = true;
+        assert!(
+            escape_failure(&timed_out).is_none(),
+            "a timeout is reported as a timeout"
+        );
     }
 
     /// A board with nothing dense on it must not ask for an escape at all,
