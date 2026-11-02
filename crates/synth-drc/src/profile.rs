@@ -192,6 +192,8 @@ impl ManufacturerProfile {
         Self {
             name: "jlc-filled-via".to_string(),
             via_in_pad: true,
+            // JLCPCB offers the filled-via process on 2- and 4-layer builds.
+            supported_layers: vec![2, 4],
             ..Self::jlc_standard()
         }
     }
