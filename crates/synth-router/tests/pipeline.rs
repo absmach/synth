@@ -156,7 +156,8 @@ fn which(binary: &str) -> Option<PathBuf> {
 /// A two-pad net routed end to end: the fully-routed board.
 ///
 /// Written by hand so the reader's tests do not depend on the exporter's
-/// output being correct.
+/// output being correct. The reference labels sit clear of the pads, so the
+/// silkscreen pass after routing leaves the board as the router wrote it.
 const ROUTED_BOARD: &str = r#"(kicad_pcb
   (version 20260206)
   (generator "synth-eda")
@@ -165,12 +166,12 @@ const ROUTED_BOARD: &str = r#"(kicad_pcb
   (net 1 "SIG")
   (footprint "Resistor_SMD:R_0603_1608Metric"
     (layer "F.Cu") (at 10 20)
-    (property "Reference" "R1" (at 0 -1) (layer "F.SilkS"))
+    (property "Reference" "R1" (at 0 -1.5) (layer "F.SilkS"))
     (pad "1" smd roundrect (at -0.825 0) (size 0.8 0.95)
       (layers "F.Cu" "F.Paste" "F.Mask") (net 1 "SIG")))
   (footprint "Resistor_SMD:R_0603_1608Metric"
     (layer "F.Cu") (at 20 20)
-    (property "Reference" "R2" (at 0 -1) (layer "F.SilkS"))
+    (property "Reference" "R2" (at 0 -1.5) (layer "F.SilkS"))
     (pad "1" smd roundrect (at 0.825 0) (size 0.8 0.95)
       (layers "F.Cu" "F.Paste" "F.Mask") (net 1 "SIG")))
   (segment (start 9.175 20) (end 20.825 20) (width 0.25) (layer "F.Cu") (net 1))
@@ -193,12 +194,12 @@ const PARTIAL_BOARD: &str = r#"(kicad_pcb
   (net 1 "SIG")
   (footprint "Resistor_SMD:R_0603_1608Metric"
     (layer "F.Cu") (at 10 20)
-    (property "Reference" "R1" (at 0 -1) (layer "F.SilkS"))
+    (property "Reference" "R1" (at 0 -1.5) (layer "F.SilkS"))
     (pad "1" smd roundrect (at -0.825 0) (size 0.8 0.95)
       (layers "F.Cu" "F.Paste" "F.Mask") (net 1 "SIG")))
   (footprint "Resistor_SMD:R_0603_1608Metric"
     (layer "F.Cu") (at 20 20)
-    (property "Reference" "R2" (at 0 -1) (layer "F.SilkS"))
+    (property "Reference" "R2" (at 0 -1.5) (layer "F.SilkS"))
     (pad "1" smd roundrect (at 0.825 0) (size 0.8 0.95)
       (layers "F.Cu" "F.Paste" "F.Mask") (net 1 "SIG")))
   (gr_line (start 0 0) (end 30 0) (layer "Edge.Cuts") (width 0.1))
@@ -221,7 +222,7 @@ const MISSING_FOOTPRINT_BOARD: &str = r#"(kicad_pcb
   (net 1 "SIG")
   (footprint "Resistor_SMD:R_0603_1608Metric"
     (layer "F.Cu") (at 10 20)
-    (property "Reference" "R1" (at 0 -1) (layer "F.SilkS"))
+    (property "Reference" "R1" (at 0 -1.5) (layer "F.SilkS"))
     (pad "1" smd roundrect (at -0.825 0) (size 0.8 0.95)
       (layers "F.Cu" "F.Paste" "F.Mask") (net 1 "SIG")))
   (segment (start 9.175 20) (end 20.825 20) (width 0.25) (layer "F.Cu") (net 1))
@@ -241,12 +242,12 @@ const UNDERSIZED_BOARD: &str = r#"(kicad_pcb
   (net 1 "SIG")
   (footprint "Resistor_SMD:R_0603_1608Metric"
     (layer "F.Cu") (at 10 20)
-    (property "Reference" "R1" (at 0 -1) (layer "F.SilkS"))
+    (property "Reference" "R1" (at 0 -1.5) (layer "F.SilkS"))
     (pad "1" smd roundrect (at -0.825 0) (size 0.8 0.95)
       (layers "F.Cu" "F.Paste" "F.Mask") (net 1 "SIG")))
   (footprint "Resistor_SMD:R_0603_1608Metric"
     (layer "F.Cu") (at 20 20)
-    (property "Reference" "R2" (at 0 -1) (layer "F.SilkS"))
+    (property "Reference" "R2" (at 0 -1.5) (layer "F.SilkS"))
     (pad "1" smd roundrect (at 0.825 0) (size 0.8 0.95)
       (layers "F.Cu" "F.Paste" "F.Mask") (net 1 "SIG")))
   (segment (start 9.175 20) (end 20.825 20) (width 0.05) (layer "F.Cu") (net 1))
@@ -731,6 +732,70 @@ fn an_unreadable_candidate_is_reported_as_an_unperformed_check() {
         "an unreadable board is a check that could not run: {validation:?}"
     );
     assert_board(&scratch.file("demo.kicad_pcb"), PARTIAL_BOARD);
+}
+
+#[test]
+fn a_label_the_router_left_on_a_pad_is_moved_before_the_board_is_judged() {
+    let scratch = Scratch::new("label_on_pad");
+    // The stub writes a `'static` board; this one is built once per test run.
+    let on_pad: &'static str = Box::leak(
+        ROUTED_BOARD
+            .replacen(
+                r#"(property "Reference" "R1" (at 0 -1.5)"#,
+                r#"(property "Reference" "R1" (at 0 -0.5)"#,
+                1,
+            )
+            .into_boxed_str(),
+    );
+    let router = StubRouter::new("label_on_pad_router", Behaviour::Write(on_pad));
+    let (jar, java) = stub_engine_files(&scratch);
+    let _env = router.activate(&jar, &java);
+
+    let report = synth_router::route(&request_for(&scratch, 120));
+    if kicad_cli_available() {
+        assert_eq!(report.state, RouteState::Routed, "{:?}", report.validation);
+    } else {
+        assert_eq!(report.state, RouteState::ReviewRequired);
+    }
+
+    // Only R1's label line differs from what the router wrote: the pass is
+    // silkscreen only, and it ran on the board the validation judged.
+    let delivered = std::fs::read_to_string(scratch.file("demo.kicad_pcb")).expect("delivered");
+    let changed: Vec<(&str, &str)> = on_pad
+        .lines()
+        .zip(delivered.lines())
+        .filter(|(written, got)| written != got)
+        .collect();
+    assert_eq!(changed.len(), 1, "{changed:?}");
+    assert!(changed[0].0.contains(r#""R1" (at 0 -0.5)"#), "{changed:?}");
+    assert!(changed[0].1.contains(r#""Reference" "R1""#), "{changed:?}");
+    assert_eq!(on_pad.lines().count(), delivered.lines().count());
+}
+
+#[test]
+fn a_rejected_candidate_is_judged_with_its_labels_already_off_the_pads() {
+    // The pass runs before the verdict, not after it, so even a board that is
+    // rejected and left as review material shows the silkscreen it was judged on.
+    let scratch = Scratch::new("label_on_pad_rejected");
+    let on_pad: &'static str = Box::leak(
+        PARTIAL_BOARD
+            .replacen(
+                r#"(property "Reference" "R1" (at 0 -1.5)"#,
+                r#"(property "Reference" "R1" (at 0 -0.5)"#,
+                1,
+            )
+            .into_boxed_str(),
+    );
+    let router = StubRouter::new("label_on_pad_rejected_router", Behaviour::Write(on_pad));
+    let (jar, java) = stub_engine_files(&scratch);
+    let _env = router.activate(&jar, &java);
+
+    let report = synth_router::route(&request_for(&scratch, 120));
+    assert_eq!(report.state, RouteState::ValidationFailed);
+    let candidate = std::fs::read_to_string(scratch.file("demo.freerouting.kicad_pcb"))
+        .expect("the rejected candidate is kept");
+    assert!(!candidate.contains(r#""R1" (at 0 -0.5)"#), "{candidate}");
+    assert!(candidate.contains(r#""Reference" "R1""#), "{candidate}");
 }
 
 #[test]

@@ -369,6 +369,12 @@ fn finalize(
             repair_unavailable.push(format!("pour island repair did not run: {detail}"));
         }
     }
+    // The labels were placed before the router put its vias down; move any that
+    // now sit on a via or a pad. Silkscreen only, and before the candidate is
+    // judged, so the board that is delivered is the one that was validated.
+    report_silkscreen_pass(label_vias::keep_labels_off_copper(
+        &candidate.candidate_path,
+    ));
     let verdict = with_repair_findings(
         validate_candidate(request, &candidate),
         repair_blocking,
@@ -382,12 +388,6 @@ fn finalize(
     // a rejected candidate is left on disk as review material, and the
     // delivered path still holds the un-routed export.
     if state.is_fabrication_ready() {
-        // The labels were placed before the router put its vias down; move any
-        // that now sit on a via or a pad. Silkscreen only: the copper the
-        // candidate was validated on is untouched.
-        report_silkscreen_pass(label_vias::keep_labels_off_copper(
-            &candidate.candidate_path,
-        ));
         // Deliver the zones filled so KiCad opens the board with the
         // connectivity it was validated with. A refill that fails leaves
         // the routed, unfilled board in place.
