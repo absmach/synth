@@ -493,6 +493,7 @@ fn walk(dir: &Path, out: &mut Vec<PathBuf>) -> Result<(), LoadError> {
     Ok(())
 }
 
+#[allow(clippy::too_many_lines)]
 fn validate_part(path: &Path, part: &Part) -> Result<(), LoadError> {
     // id must match filename stem (without the `.synth.toml` suffix).
     let expected_id = path
