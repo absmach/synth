@@ -445,3 +445,15 @@ hide = true
 
 [labels.R_CC2]
 hide = true
+
+[labels.H1]
+hide = true
+
+[labels.H2]
+hide = true
+
+[labels.H3]
+hide = true
+
+[labels.J1]
+hide = true

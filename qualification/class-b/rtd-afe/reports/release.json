@@ -97,7 +97,7 @@
     "engine": "freerouting",
     "engine_version": "freerouting-2.4.1.jar",
     "state": "routed",
-    "input_hash": "b64ec7f5652f1586b69dbcef20ac54a6f679c9472810d3d3dc88e1ed12c1aceb",
+    "input_hash": "49b7783c24c8cdfdeafcce912a6221ed8a76190263103de122f7b46589f374eb",
     "run_record": "/home/steve/work/synth-classb/qualification/class-b/rtd-afe/kicad/rtd_afe.routing.json"
   },
   "signal_integrity": {

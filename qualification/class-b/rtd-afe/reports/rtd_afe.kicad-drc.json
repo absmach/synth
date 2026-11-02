@@ -1,7 +1,7 @@
 {
     "$schema": "https://schemas.kicad.org/drc.v1.json",
     "coordinate_units": "mm",
-    "date": "2026-11-02T17:10:45",
+    "date": "2026-11-02T17:27:10",
     "ignored_checks": [
         {
             "description": "Footprint has no courtyard defined",
@@ -33,98 +33,5 @@
     "schematic_parity": [],
     "source": "rtd_afe.kicad_pcb",
     "unconnected_items": [],
-    "violations": [
-        {
-            "description": "Silkscreen clipped by solder mask",
-            "items": [
-                {
-                    "description": "Reference field of H3",
-                    "pos": {
-                        "x": 6.0,
-                        "y": 36.3
-                    },
-                    "uuid": "58eb2965-436a-573b-838d-ad0b284d7811"
-                },
-                {
-                    "description": "Pad 1 [RTD_FN] of R_BIAS on F.Cu",
-                    "pos": {
-                        "x": 6.5,
-                        "y": 35.325
-                    },
-                    "uuid": "d2900dd0-5650-570c-bdb4-226054630fda"
-                }
-            ],
-            "severity": "warning",
-            "type": "silk_over_copper"
-        },
-        {
-            "description": "Silkscreen clipped by board edge",
-            "items": [
-                {
-                    "description": "Segment on Edge.Cuts",
-                    "pos": {
-                        "x": 2.5,
-                        "y": -0.01
-                    },
-                    "uuid": "6bb7b2fb-f9da-5428-a390-bd2aae51f67d"
-                },
-                {
-                    "description": "Reference field of H1",
-                    "pos": {
-                        "x": 6.0,
-                        "y": 0.3
-                    },
-                    "uuid": "9882037a-30a9-5977-b498-80318aa26543"
-                }
-            ],
-            "severity": "warning",
-            "type": "silk_edge_clearance"
-        },
-        {
-            "description": "Silkscreen clipped by board edge",
-            "items": [
-                {
-                    "description": "Segment on Edge.Cuts",
-                    "pos": {
-                        "x": 26.4,
-                        "y": -0.01
-                    },
-                    "uuid": "affdc7f0-5922-5c30-a430-e1fefbe6e28c"
-                },
-                {
-                    "description": "Reference field of H2",
-                    "pos": {
-                        "x": 49.0,
-                        "y": 0.3
-                    },
-                    "uuid": "8058b988-21cf-5db5-969a-5e1b13e640fb"
-                }
-            ],
-            "severity": "warning",
-            "type": "silk_edge_clearance"
-        },
-        {
-            "description": "Silkscreen clipped by board edge",
-            "items": [
-                {
-                    "description": "Segment on Edge.Cuts",
-                    "pos": {
-                        "x": 26.4,
-                        "y": -0.01
-                    },
-                    "uuid": "affdc7f0-5922-5c30-a430-e1fefbe6e28c"
-                },
-                {
-                    "description": "Reference field of J1",
-                    "pos": {
-                        "x": 39.5,
-                        "y": 0.34
-                    },
-                    "uuid": "dfda35a2-fc0f-5a08-b6af-81bab9c8155d"
-                }
-            ],
-            "severity": "warning",
-            "type": "silk_edge_clearance"
-        }
-    ]
+    "violations": []
 }
