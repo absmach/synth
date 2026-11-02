@@ -12,19 +12,16 @@ production-ready.
 
 ## Board and stackup
 
-- Outline: 50.1 x 44.1 mm bounding box, 1880 mm² after the top-left notch.
-  The closed path is in `rtd_afe.placement.layout.toml` as `[[outline]]`; the
-  exporter uses it instead of the fitted rectangle. Edge.Cuts runs x 2.50 to
-  52.59 mm, y -0.01 to 44.08 mm, with the rectangle x 10.0 to 26.4 mm,
-  y -0.01 to 20.0 mm cut away. The left tab (x 2.5 to 10 mm) keeps H1 and the
-  top-left ground fence via.
+- Outline: 52.1 x 45.1 mm rectangle, 2349 mm². The board uses the exporter's
+  fitted outline; there is no `[[outline]]` path and no post-export cut.
+  Edge.Cuts runs x 1.00 to 53.09 mm, y -1.00 to 44.09 mm.
 - Four copper layers with an explicit 1.5862 mm FR4 stackup: 0.035 mm copper,
   0.2104 mm prepreg (er 4.4), 0.0152 mm copper, 1.065 mm core (er 4.6),
   0.0152 mm copper, 0.2104 mm prepreg (er 4.4), 0.035 mm copper. No
   controlled-impedance stackup was requested.
 - One `GND` zone on each of the four copper layers. There is no AGND/DGND split
   and no tie resistor. The four mounting holes have 5.6 x 5.6 mm all-layer rule
-  areas around them; the notch removes the empty top-left pour, not any pad.
+  areas around them.
 - 53 footprints, 40 nets. The analog chain (J2, the RC filter, U1, U3, L2) is
   on the left and bottom-left; the MCU, flash, crystal, USB-C and LDO are on the
   right and top-right.
@@ -37,20 +34,19 @@ screw head, cable or mating connector was measured.
 
 | Item | Measured | Status |
 | --- | --- | --- |
-| Board | 50.1 x 44.1 mm bounding box; notch x 10.0..26.4, y 0..20.0; left tab 7.5 mm wide | from `[[outline]]` |
-| H1 | centre (6, 4); 3.50 mm from left edge, 4.01 from top, 4.00 from notch edge; 2.25/2.76/2.75 mm of material | tab strength not checked |
-| H2 | centre (49, 4); 3.59 mm from right edge, 4.01 from top; 2.34/2.76 mm of material | not checked |
-| H3 | centre (6, 40); 3.50 mm from left edge, 4.08 from bottom; 2.25/2.83 mm of material | not checked |
-| H4 | centre (49, 40); 3.59 mm from right edge, 4.08 from bottom; 2.34/2.83 mm of material | not checked |
-| J1 | body bbox x 34.16..44.84, y 1.26..10.73; 1.27 mm from top edge; centred on the main top edge (39.5 against 39.495) | overhang/enclosure not checked |
-| J2 | body bbox x 9.89..21.11, y 39.70..43.30; 0.78 mm from bottom edge | mating fit not checked |
-| J3 | body bbox x 37.16..45.84, y 39.70..43.30; 0.78 mm from bottom edge | mating fit not checked |
+| Board | 52.1 x 45.1 mm rectangle, 2349 mm² | fitted outline |
+| H1 | centre (6, 4); 5.00 mm from left edge, 5.00 from top; 3.75/3.75 mm of material | not checked |
+| H2 | centre (49, 4); 4.09 mm from right edge, 5.00 from top; 2.84/3.75 mm of material | not checked |
+| H3 | centre (6, 40); 5.00 mm from left edge, 4.09 from bottom; 3.75/2.84 mm of material | not checked |
+| H4 | centre (49, 40); 4.09 mm from right edge, 4.09 from bottom; 2.84/2.84 mm of material | not checked |
+| J1 | body bbox x 34.16..44.84, y 1.26..10.73; 2.26 mm from top edge; at x = 39.5, 12.45 mm right of the board centre | overhang/enclosure not checked |
+| J2 | body bbox x 9.89..21.11, y 39.70..43.30; 0.79 mm from bottom edge | mating fit not checked |
+| J3 | body bbox x 37.16..45.84, y 39.70..43.30; 0.79 mm from bottom edge | mating fit not checked |
 
 The mounting holes are non-plated, 2.5 mm, with 5.6 x 5.6 mm all-layer rule
-areas. The tab carries H1 and the top-left ground fence via; it is the only
-7.5 mm-wide connection between the left strip and the rest of the board above
-y = 20 mm, so its strength and the screw-head clearance are open mechanical
-items.
+areas. J1 is not centred: centring it at x = 27.0 fragmented U2's ground escape
+in every attempt, so the proven position is kept. The enclosure and screw-head
+clearance are open mechanical items.
 
 ## Check results
 
@@ -81,10 +77,10 @@ Versions: KiCad 10.0.7, FreeRouting 2.4.1 on OpenJDK 25.0.4.1, Synth
 | KiCad ERC | 0 errors, 2 warnings | `reports/rtd_afe.kicad-erc.json` |
 | Synth routing | routed, 40 connected nets, 0 open | `reports/rtd_afe.routing.json` |
 | Synth release | `production_status: untrusted`, `release_ready: false` | `reports/release.json`; the unverified-crystal override, not a DRC failure |
-| Synth signal integrity | 19 warnings, 0 blocking | `reports/release.json` |
+| Synth signal integrity | 22 warnings, 0 blocking | `reports/release.json` |
 
 The delivered board is `kicad/rtd_afe.kicad_pcb`
-(`3a98c4656d43e61a4c81889b03e74d61eb20fabad1d08d2af27b2598499dda74`).
+(`8d50540ad9f56a374de6b0257955aace8f8af95ec44a5a03bfdab8f4813bd074`).
 The schematic is `kicad/rtd_afe.kicad_sch`
 (`c7300d22238d8d4991b3ba453599ffdb96a833de3c83bdc132542ea662537812`).
 
@@ -94,7 +90,7 @@ The earlier 58 x 47, 60 x 49, 64 x 49 and 67 x 49 mm attempts failed on Synth's
 ground-island repair: the split pours fragmented around U2. The compact rework
 grouped the analog chain at the left, the MCU/flash/crystal and USB at the
 right, and put J1/J2/J3 on the edges. On the merged toolchain the split-ground
-version of this 50.1 x 44.1 mm board still left two DGND pour islands near
+version of this compact board still left two DGND pour islands near
 (32.55, 32.75) and (41.45, 24.03) mm; no 0.6 mm tie via fitted. Replacing the
 split with one GND plane removed the islands. The route then closed after three
 placement moves that opened tight pockets: C_DV2 to (44.5, 26.5), L1 to
@@ -102,11 +98,12 @@ placement moves that opened tight pockets: C_DV2 to (44.5, 26.5), L1 to
 positions adjusted at the same time. The delivered board has 0 errors, 0
 warnings and 0 unconnected items.
 
-A 12-test-point variant was then placed on the same outline: VREF, GND, +3V3A,
-VBUS, +3V3, +3V3_RP_A, DVDD_1V1, RUN, USB_DP, USB_DN, SWDIO and SWCLK. Its
-route failed on a TP6 edge clearance, a QSPI_SS/+3V3 clearance at U4 and two GND
-pour islands, so the test points are not in the delivered board. Fitting the
-full set needs a larger outline or a different placement; see the README.
+A 12-test-point variant was then placed on the earlier notched outline: VREF,
+GND, +3V3A, VBUS, +3V3, +3V3_RP_A, DVDD_1V1, RUN, USB_DP, USB_DN, SWDIO and
+SWCLK. Its route failed on a TP6 edge clearance, a QSPI_SS/+3V3 clearance at U4
+and two GND pour islands, so the test points are not in the delivered board.
+The plain rectangle adds area, but the set has not been re-placed and rerouted;
+see the README.
 
 The branch placer exposed a sidecar trap: a floorplan whose entries are all
 absolute is passed through `close_pinned_bands`, which slides the pinned parts
@@ -122,20 +119,18 @@ silk warnings.
 
 ### The compact rework
 
-This rework is 50.1 x 44.1 mm with a 16.4 x 20 mm notch, 1880 mm², and routes
-with 0 open nets, 0 DRC errors, 0 warnings and 0 unconnected items. That does
-not prove it is the densest arrangement; it is one successful FreeRouting run,
-and `check.sh` re-routes from scratch.
+This rework is a 52.1 x 45.1 mm rectangle, 2349 mm², and routes with 0 open
+nets, 0 DRC errors, 0 warnings and 0 unconnected items. That does not prove it
+is the densest arrangement; it is one successful FreeRouting run, and
+`check.sh` re-routes from scratch.
 
-J2 and J3 are level at y = 41.5 mm, with their bodies 0.8 mm from the bottom
-edge. J1 is at (39.5, 6.0) mm on the main top edge, which runs x 26.4..52.59 mm
-after the notch, so J1 is centred on that edge. Centering J1 on the full
-rectangle (x = 27.5) was tried first; it left an unconnected ground pour sliver
-at U2's 0.4 mm pad row, and the stitching search could not tie it. The notch
-removes the empty top-left corner instead, keeping the proven route and making J1
-the centre of the remaining top edge. The outline is a closed `[[outline]]` path
-in the placement sidecar; the exporter uses it, so a normal `synth export-kicad`
-reproduces the notch without a post-export cut.
+The earlier notched outline is gone. A plain rectangle is reproducible from the
+fitted outline, so there is no post-export cut and no `[[outline]]` path. J2
+and J3 are level at y = 41.5 mm, with their bodies 0.79 mm from the bottom
+edge. J1 is at (39.5, 6.0) mm on the top edge. Centering it on the rectangle
+(x = 27.0) was tried; every centered attempt fragmented U2's ground escape
+around pad 47, so the proven position is kept and J1 is not centred. Making it
+centred needs a larger relayout, not a nudge.
 
 ## ERC findings and dispositions
 
@@ -151,18 +146,19 @@ connectivity findings. A human should confirm that disposition.
 
 ## Synth signal-integrity warnings
 
-`reports/release.json` lists 19 non-blocking signal-integrity findings: 17 are
-layer changes with no ground-return via within 0.64 mm, and 2 are crosstalk
-pairs. The layer changes are on REFOUT, SPI_MOSI/CS/SCK/MISO, ADC_DRDY, XIN, RUN,
-SWCLK, USB_DP_C and USB_DN_C. The crosstalk pairs are SWDIO/VBUS (2.7 mm
-parallel, 0.156 mm apart) and QSPI_SS/QSPI_SD2 (2.9 mm, 0.194 mm apart). No
-RTD_FP/RTD_SP/RTD_SN/RTD_FN, AIN1, AIN2 or VREF finding appears. The six
-RTD/input nets and VREF are on F.Cu only; QSPI also stays on F.Cu.
+`reports/release.json` lists 22 non-blocking signal-integrity findings: 19 are
+layer changes with no ground-return via within 0.64 mm, and 3 are crosstalk
+pairs. The layer changes are on REFOUT, SPI_MOSI/CS/SCK/MISO, ADC_DRDY, XIN,
+RUN, SWCLK, SWDIO, +3V3_RP_A, USB_DP_C and USB_DN_C. The crosstalk pairs are
+REFOUT/SPI_CS (3.8 mm parallel, 0.160 mm apart), SPI_CS/SPI_SCK (3.7 mm,
+0.131 mm) and USB_DP_C/USB_DN_C (4.3 mm, 0.129 mm). No RTD_FP/RTD_SP/RTD_SN/
+RTD_FN, AIN1, AIN2 or VREF finding appears. The six RTD/input nets and VREF are
+on F.Cu only; QSPI also stays on F.Cu.
 
 The XIN and USB connector-side layer changes are the ones an SI reviewer should
 look at first: XIN is a high-impedance crystal net and the USB pair changes
-layers on both sides. The USB path is also not length-matched: the MCU-side and
-connector-side lengths add to 24.13 mm on DP and 19.40 mm on DN, a 4.73 mm
+layers on both sides. The USB path is not length-matched: the MCU-side and
+connector-side lengths add to 22.08 mm on DP and 19.22 mm on DN, a 2.86 mm
 difference. A return via next to each layer change would help; this was not
 added, because it is a layout change that needs an SI review first.
 
@@ -242,8 +238,8 @@ measurement was made; this is the main item for the analog/SI review.
 
 ## Measured layout numbers
 
-- 384 track segments, 61 vias: 41 GND, 20 signal. 590.5 mm of track. 40 nets, 0
-  open. The router records 58 vias; the other three are source ground
+- 374 track segments, 62 vias: 41 GND, 21 signal. 566.3 mm of track. 40 nets, 0
+  open. The router records 58 vias; the other four are source ground
   stitching.
 - Analog nets, all F.Cu only, no via:
 
@@ -257,14 +253,14 @@ measurement was made; this is the main item for the analog/SI review.
 | RTD_FN | 8.32 mm |
 | VREF | 4.83 mm |
 
-- SPI_SCK is 16.79 mm; SPI_MOSI/MISO/CS are 14.62/17.44/16.65 mm. All four SPI
+- SPI_SCK is 17.25 mm; SPI_MOSI/MISO/CS are 15.65/16.41/16.18 mm. All four SPI
   nets change layer (two vias each). QSPI_SS/SCLK/SD0..SD3 are
-  11.87/4.80/3.23/10.26/7.39/6.22 mm and stay on F.Cu.
-- USB: the RP2350-side nets are 12.71 mm (DP) and 10.83 mm (DN); the
-  connector-side nets are 11.42 mm and 8.57 mm. Total path 24.13 mm (DP) and
-  19.40 mm (DN), 4.73 mm of mismatch, full speed. Both sides change layers; the
+  11.57/4.80/3.23/11.01/7.39/6.24 mm and stay on F.Cu.
+- USB: the RP2350-side nets are 10.66 mm (DP) and 10.65 mm (DN); the
+  connector-side nets are 11.42 mm and 8.57 mm. Total path 22.08 mm (DP) and
+  19.22 mm (DN), 2.86 mm of mismatch, full speed. Both sides change layers; the
   pair is not routed as a coupled pair and has no controlled impedance.
-- Crystal: XIN 12.57 mm, XOUT 14.21 mm, XOUT_R 8.38 mm. XIN changes layer; that
+- Crystal: XIN 12.47 mm, XOUT 21.33 mm, XOUT_R 6.74 mm. XIN changes layer; that
   is one of the SI warnings above.
 - 29 reference labels are hidden: C_AV1, C_AVF, C_CM1, C_CM2, C_D, C_DV, C_DV1,
   C_DV2, C_IO, C_IO1, C_IO2, C_IO3, C_IO4, C_RV, C_VI, D1, D2, H1, H2, H3, J1,
@@ -279,8 +275,8 @@ Nothing below is signed off. The list is deliberately blunt.
 - **SI/PI/RF review (designated reviewer)**: the 24-bit analog layout, the
   single ground plane, the ADC reference decoupling, the RC filter against the
   chosen ADC data rate, the IDAC output's 10 nF load and settling, the PGA
-  common-mode range at the chosen gain, the unused-input termination, the 17
-  layer-change warnings, the two crosstalk pairs, and the 4.73 mm USB length
+  common-mode range at the chosen gain, the unused-input termination, the 19
+  layer-change warnings, the three crosstalk pairs, and the 2.86 mm USB length
   mismatch. None of these were simulated or measured.
 - **Metrology/analog**: the measurement is not ratiometric. The IDAC's absolute
   accuracy and drift, the REF5025 grade and drift, the 1 k filter resistors and
@@ -291,15 +287,15 @@ Nothing below is signed off. The list is deliberately blunt.
   TVS; the shield is tied directly to GND; D1/D2 have no MPN. USB-C and ESD
   compliance were not checked.
 - **Mechanical**: the measured margins are in the table above. In short, the
-  mounting holes leave 2.25 to 2.83 mm of material around a 2.5 mm hole, the
-  bottom connectors are 0.78 mm from the edge, J1 is 1.27 mm from the top edge,
-  and H1 sits on the 7.5 mm tab 2.75 mm from the notch edge. Tab strength, the
-  enclosure, screw-head clearance, connector overhang and header orientation
-  were not checked. Synth places no board-name or revision silk.
+  mounting holes leave 2.84 to 3.75 mm of material around a 2.5 mm hole, the
+  bottom connectors are 0.79 mm from the edge, J1 is 2.26 mm from the top edge,
+  and J1 is 12.45 mm right of the board centre. J1 centring, the enclosure,
+  screw-head clearance, connector overhang and header orientation were not
+  checked. Synth places no board-name or revision silk.
 - **Test points**: none are fitted. The 12-pad set was tried and did not route
-  on this outline; a bench bring-up therefore has to probe component pads or a
-  harness. A larger board or a reduced set is a design decision, not an
-  exporter limitation.
+  on the earlier notched outline; a bench bring-up therefore has to probe
+  component pads or a harness. The rectangle adds area but the set has not been
+  re-placed, so this remains a design task, not an exporter limitation.
 - **Fabrication/DFM**: no fab house has seen the Gerbers, drill, BOM or PnP.
   The 0.4 mm QFN-60, the 0.5 mm VQFN-32 and the 0.5 mm USB-C need a fab
   capability check; the four-layer stackup is declared by the source, not a
@@ -348,22 +344,23 @@ Nothing below is signed off. The list is deliberately blunt.
 5. **No free-text silkscreen (not fixed).** The board name, revision and header
    pin functions cannot be put on the silk; only reference labels exist.
 6. **The board outline lives in the placement sidecar, not the `.synth` source
-   (not fixed).** The notch is an `[[outline]]` path in
-   `rtd_afe.placement.layout.toml`, consumed by the normal exporter; a plain
-   `synth export-kicad` reproduces it. A `.synth` outline statement would keep
-   the geometry in the same file as the netlist, but the sidecar is part of the
-   committed source pair and no post-export step is needed.
+   (fixed for this board).** The earlier notch was an `[[outline]]` path in
+   `rtd_afe.placement.layout.toml`. The final board is a plain fitted rectangle,
+   so the sidecar carries no outline and a normal `synth export-kicad` needs no
+   post-export cut. The feature remains for boards that need a non-rectangular
+   outline; a `.synth` outline statement is still not implemented.
 7. **Return-via misses blocked a whole candidate (fixed).** The island repair
    reported a signal via with no ground return as an unresolved island, so a
    route with clean connectivity could not be promoted. A missing return via is
    the existing `W-SYNTH-DRC-016` SI warning, so it is now advisory; an untied
    copper island still blocks. The regression test is
    `an_unreturned_signal_via_is_advisory_not_blocking`.
-8. **Source ground fence ignored the sidecar outline (fixed).** The fence vias
-   were placed against the placer's fitted rectangle, so three of them landed
-   on or outside the notch edge after the custom outline was applied
-   (0.0/0.26 mm copper-to-edge). The fence now follows the `[[outline]]` path and
-   skips any point outside it; the delivered board has no edge-clearance error.
+8. **Source ground fence ignored the sidecar outline (fixed, historical).** On
+   the earlier notched layout the fence vias were placed against the fitted
+   rectangle, so three landed on or outside the notch edge (0.0/0.26 mm
+   copper-to-edge). The fence now follows an `[[outline]]` path and skips points
+   outside it; the final rectangular board has no custom outline and no
+   edge-clearance error.
 
 ## Reproducibility
 
@@ -372,14 +369,14 @@ Inputs and outputs of the committed run:
 | File | SHA-256 |
 | --- | --- |
 | `rtd_afe.synth` | `b7c0aebf36d67b62a749bbe78fddff50d586ddb84002a628ffe504ae7122859e` |
-| `rtd_afe.placement.layout.toml` | `6e9b83c0969759a2a6df866e53553b70c3646490254362002253d70469d786e1` |
+| `rtd_afe.placement.layout.toml` | `c9282ccc527befe3fd3249e48dca6d0f7c8eb19aba465515c70c5b44fe330013` |
 | `check.sh` | `39bd0d10444b8f55238be5b1c675b86eef36f26d1054896f1b57b286f37168d1` |
-| `kicad/rtd_afe.kicad_pcb` | `3a98c4656d43e61a4c81889b03e74d61eb20fabad1d08d2af27b2598499dda74` |
+| `kicad/rtd_afe.kicad_pcb` | `8d50540ad9f56a374de6b0257955aace8f8af95ec44a5a03bfdab8f4813bd074` |
 | `kicad/rtd_afe.kicad_sch` | `c7300d22238d8d4991b3ba453599ffdb96a833de3c83bdc132542ea662537812` |
-| `reports/rtd_afe.kicad-drc.json` | `605461330f28d51c069a59d4e70113496e40234576f247bc95c40285d99c9b61` |
-| `reports/rtd_afe.kicad-erc.json` | `61826e81dcbae8011d3c7491d8df352ffa2d16de56548b602f2702186cd71674` |
-| `reports/release.json` | `234170a679a98704cadcd7f7f0e98e8b9855e59b38678885dd25cebf335d050f` |
-| `reports/rtd_afe.routing.json` | `a83de382445a79c178aff9795a670755bfa1d8f532cd55039db23490e9a890b6` |
+| `reports/rtd_afe.kicad-drc.json` | `dcb588d9e8a4821842db0cf268f5b5e37e5a50c635437e17d9f7494a99d1e23a` |
+| `reports/rtd_afe.kicad-erc.json` | `5da71f177819aa32e0afa46e937019e087564f310f8b8831397956bec0a6bd03` |
+| `reports/release.json` | `674180c62eebc0f7c96f8099600a1f657624b4aba54e6603c4bba13f2f4af912` |
+| `reports/rtd_afe.routing.json` | `2dcf492696bf21b3b2c41aad6aa09e60b7d40979d892890541589d98762e840f` |
 
 `check.sh` sets `SYNTH_SOURCE_REVISION` from the checked-out commit, and both
 `release.json` and the routing provenance record it. It also rewrites the
