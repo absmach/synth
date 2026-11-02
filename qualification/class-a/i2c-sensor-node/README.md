@@ -87,6 +87,12 @@ The source and sidecar in this directory were exported three times with `synth e
 
 With the random ids masked the routed board is `cb7909f3f9` in all three exports ([`reproduce/compare_exports.py`](reproduce/compare_exports.py) does the masking). [`reproduce/reproduce.sh`](reproduce/reproduce.sh) rebuilds Synth at the pinned commit, exports three times and compares, then builds the fabrication package.
 
+## JLCPCB
+
+PCB DFM of the package of this README (2026-11-02 09:11, Gerber content hash `2600d19420`, four layers, 8.7 x 5.1 cm, report in [`reports/`](reports/jlcpcb_pcb_dfm_2026-11-02_09-11_2600d19420.pdf)): 0 Danger items. Trace spacing 0.25 mm, pad spacing 0.21 mm, plated-hole to trace 0.35 mm, through-hole to SMD 3.77 mm, solder-mask opening near a trace 0.17 mm and silkscreen line width 0.18 mm are good; silkscreen to pad, silkscreen to hole, via to pad and sharp corners have no finding.
+
+PCB quote of the same Gerbers (2026-11-02, [`reports/jlcpcb_pcb_quote_2026-11-02.md`](reports/jlcpcb_pcb_quote_2026-11-02.md)): $8.00 for the PCB at 3 to 4 days with no extra charge, DHL Express shipping $41.80 for 0.20 kg.
+
 ## Review points (Sammy, case 2) and the state of each
 
 | Point | State |
