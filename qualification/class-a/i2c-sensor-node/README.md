@@ -97,6 +97,10 @@ Quote with assembly for the same package ([`reports/jlcpcb_quote_2026-11-02.md`]
 
 BOM matching of the same package in JLCPCB's assembly flow, PCB assembled qty 5, estimated total $69.9405 ([`reports/jlcpcb_assembly_bom_match_2026-11-02.xlsx`](reports/jlcpcb_assembly_bom_match_2026-11-02.xlsx)): 55 lines, 53 matched to a JLCPCB part (21 Basic, 33 Extended library types among the 54 lines with a library type), `SW1` confirmed, and `J4`, the SWD pin header, a through-hole part that JLCPCB does not assemble and that is fitted by hand; the assembly package covers every other line.
 
+## PCB review sign-off
+
+PCB review sign-off required by #39: JeffMboya, 2026-11-02, on the package in `fab/` (Gerber content hash `1c1755660b`).
+
 ## Review points (Sammy, case 2) and the state of each
 
 | Point | State |
