@@ -2,6 +2,41 @@ schema_version = 2
 forced_net_labels = []
 fit_sheet = false
 
+# Explicit closed board outline, board millimetres. The top-left notch is
+# part of the design source; a normal synth export reproduces it.
+
+[[outline]]
+x = 2.5
+y = -0.01
+
+[[outline]]
+x = 10.0
+y = -0.01
+
+[[outline]]
+x = 10.0
+y = 20.0
+
+[[outline]]
+x = 26.4
+y = 20.0
+
+[[outline]]
+x = 26.4
+y = -0.01
+
+[[outline]]
+x = 52.59
+y = -0.01
+
+[[outline]]
+x = 52.59
+y = 44.08
+
+[[outline]]
+x = 2.5
+y = 44.08
+
 # Mounting holes. The top-left notch is cut in check.sh; H1 stays on the left tab.
 [components.H1]
 x = 6.0

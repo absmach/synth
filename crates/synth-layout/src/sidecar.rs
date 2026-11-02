@@ -213,6 +213,14 @@ pub struct SidecarLayout {
     /// sees them as existing copper of their net.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub vias: Vec<SidecarVia>,
+    /// Explicit closed board outline in board millimetres, in path order.
+    ///
+    /// Empty keeps the placer's fitted rectangle. A non-empty list replaces
+    /// the rectangle in the exported Edge.Cuts, so a notch or other
+    /// non-rectangular outline is part of the design source and is reproduced
+    /// by a normal export.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub outline: Vec<SidecarPoint>,
     /// Force the sheet to the smallest size that fits the drawing, with the
     /// drawing centred on it.
     /// Applied *after* the auto-layout, because the pipeline re-derives
@@ -220,6 +228,13 @@ pub struct SidecarLayout {
     /// discard a persisted fit.
     #[serde(default)]
     pub fit_sheet: bool,
+}
+
+/// One vertex of an explicit board outline, in board millimetres.
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq)]
+pub struct SidecarPoint {
+    pub x: f64,
+    pub y: f64,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -1019,6 +1034,20 @@ mod forced_label_tests {
             "board.placement.layout.toml"
         );
         let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn explicit_outline_parses_and_round_trips() {
+        let text = "schema_version = 2\n\
+                    [[outline]]\nx = 2.5\ny = -0.01\n\
+                    [[outline]]\nx = 10.0\ny = -0.01\n\
+                    [[outline]]\nx = 10.0\ny = 20.0\n\
+                    [[outline]]\nx = 26.4\ny = 20.0\n";
+        let sidecar: SidecarLayout = toml::from_str(text).expect("outline parses");
+        assert_eq!(sidecar.outline.len(), 4);
+        assert_eq!(sidecar.outline[1], SidecarPoint { x: 10.0, y: -0.01 });
+        let written = toml::to_string(&sidecar).expect("outline serializes");
+        assert!(written.contains("[[outline]]"));
     }
 
     #[test]

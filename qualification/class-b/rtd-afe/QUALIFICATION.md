@@ -13,9 +13,11 @@ production-ready.
 ## Board and stackup
 
 - Outline: 50.1 x 44.1 mm bounding box, 1880 mm² after the top-left notch.
-  Edge.Cuts runs x 2.50 to 52.59 mm, y -0.01 to 44.08 mm, with the rectangle
-  x 10.0 to 26.4 mm, y -0.01 to 20.0 mm cut away. The left tab (x 2.5 to
-  10 mm) keeps H1 and the top-left ground fence via.
+  The closed path is in `rtd_afe.placement.layout.toml` as `[[outline]]`; the
+  exporter uses it instead of the fitted rectangle. Edge.Cuts runs x 2.50 to
+  52.59 mm, y -0.01 to 44.08 mm, with the rectangle x 10.0 to 26.4 mm,
+  y -0.01 to 20.0 mm cut away. The left tab (x 2.5 to 10 mm) keeps H1 and the
+  top-left ground fence via.
 - Four copper layers, 1.6 mm: F.Cu, In1.Cu, In2.Cu, B.Cu. There is no
   explicit stackup block in the exported board; the fab house must choose the
   prepreg/core. No controlled-impedance stackup was requested.
@@ -30,8 +32,7 @@ production-ready.
 
 ## Check results
 
-Commands, from the repository root (`check.sh` does all of this, plus the
-`cut_outline.py` notch cut and the Gerber/drill re-export from the cut board):
+Commands, from the repository root (`check.sh` does all of this):
 
 ```
 export XDG_DATA_HOME=$(mktemp -d)
@@ -61,7 +62,7 @@ Versions: KiCad 10.0.7, FreeRouting 2.4.1 on OpenJDK 25.0.4.1, Synth
 | Synth signal integrity | 21 warnings, 0 blocking | `reports/release.json` |
 
 The delivered board is `kicad/rtd_afe.kicad_pcb`
-(`6756ea9138ded218d78ea34cd50ac4041390aaee65fa68692a6832f62205ecc5`).
+(`6003d80214b98327bd5f5caa17a36ddf8c93c5fae1e82b95d07ab967ba4fff54`).
 The schematic is `kicad/rtd_afe.kicad_sch`
 (`e81a9a0ebf18d5fd93cef8b224df16134033824da6402abbb8f845048dbd89c4`).
 
@@ -103,9 +104,9 @@ after the notch, so J1 is centred on that edge. Centering J1 on the rectangle
 (x = 27.5) was tried first; it left an unconnected DGND pour sliver at U2's
 0.4 mm pad row, and the stitching search could not tie it. The notch removes
 the empty top-left corner instead, keeping the proven route and making J1 the
-centre of the remaining top edge. It is cut in `check.sh`, because SynthSpec
-has no non-rectangular outline primitive; the Gerbers and drill files are
-re-exported from the cut board.
+centre of the remaining top edge. The outline is a closed `[[outline]]` path in
+the placement sidecar; the exporter uses it, so a normal `synth export-kicad`
+reproduces the notch without a post-export cut.
 
 ## ERC findings and dispositions
 
@@ -121,19 +122,19 @@ connectivity findings. A human should confirm that disposition.
 
 ## Synth signal-integrity warnings
 
-`reports/release.json` lists 21 non-blocking signal-integrity findings: 1
-crosstalk finding (net pair 32/33, USB_DN/VBUS) and 20 layer changes with no
-ground-return via within 0.64 mm. The layer changes are on REFOUT, SPI_MOSI/CS/
-SCK/MISO, ADC_DRDY, XIN, RUN, SWCLK, SWDIO and USB_DN_C. No RTD_FP/RTD_SP/
-RTD_SN/RTD_FN, AIN1, AIN2 or VREF finding appears. The six RTD/input nets and
-VREF are on F.Cu only; QSPI and USB_DP also stay on F.Cu.
+`reports/release.json` lists 22 non-blocking signal-integrity findings: all 22
+are layer changes with no ground-return via within 0.64 mm; there is no
+crosstalk finding on this route. The layer changes are on REFOUT, SPI_MOSI/CS/
+SCK/MISO, ADC_DRDY, XIN, RUN, SWCLK, CC1, USB_DP_C and USB_DN_C. No RTD_FP/
+RTD_SP/RTD_SN/RTD_FN, AIN1, AIN2 or VREF finding appears. The six RTD/input
+nets and VREF are on F.Cu only; QSPI also stays on F.Cu.
 
-The XIN and USB_DN_C layer changes are the two an SI reviewer should look at
-first: XIN is a high-impedance crystal net and USB_DN is half of the full-speed
-pair (USB_DP stays on F.Cu). On this split-ground board the return current also
-has to cross from an AGND-referenced region to a DGND-referenced one. A return
-via next to each layer change would help; this was not added, because it is a
-layout change that needs an SI review first.
+The XIN and USB connector-side layer changes are the ones an SI reviewer should
+look at first: XIN is a high-impedance crystal net and the USB pair changes
+layers on both sides. On this split-ground board the return current also has to
+cross from an AGND-referenced region to a DGND-referenced one. A return via next
+to each layer change would help; this was not added, because it is a layout
+change that needs an SI review first.
 
 ## Synth validate warnings
 
@@ -218,7 +219,7 @@ coordinates above are the measured ones.
 
 ## Measured layout numbers
 
-- 339 track segments, 64 vias: 19 AGND, 25 DGND, 20 signal. 586.6 mm of track.
+- 340 track segments, 65 vias: 15 AGND, 28 DGND, 22 signal. 557.8 mm of track.
 - 41 nets, 0 open. All AGND/DGND pads are in one cluster per net (the DRC has no
   unconnected items; the tie check above covers the split).
 - Analog nets, all F.Cu only, no via:
@@ -233,15 +234,14 @@ coordinates above are the measured ones.
 | RTD_FN | 8.32 mm |
 | VREF | 4.74 mm |
 
-- SPI_SCK is 14.07 mm; SPI_MOSI/MISO/CS are 18.41/16.33/16.16 mm. All four SPI
-  nets change layer (two vias each). QSPI_SS/SCLK/SD0..SD3 are 13.00/4.80/3.23/
-  10.26/7.40/6.25 mm and stay on F.Cu.
-- USB: the RP2350-side nets are 10.66 mm (DP) and 12.48 mm (DN); the
-  connector-side nets are 11.42 mm and 8.44 mm. Total path 22.08 mm (DP) and
-  20.92 mm (DN), 1.16 mm of skew, full speed. DP stays on F.Cu; DN uses two
-  vias. The pair is not routed as a coupled pair and has no controlled
-  impedance.
-- Crystal: XIN 12.24 mm, XOUT 9.45 mm, XOUT_R 6.76 mm. XIN changes layer; that
+- SPI_SCK is 14.34 mm; SPI_MOSI/MISO/CS are 15.82/16.68/15.78 mm. All four SPI
+  nets change layer (two vias each). QSPI_SS/SCLK/SD0..SD3 are 11.90/4.80/3.23/
+  10.20/7.40/6.25 mm and stay on F.Cu.
+- USB: the RP2350-side nets are 10.20 mm (DP) and 12.50 mm (DN); the
+  connector-side nets are 11.22 mm and 8.40 mm. Total path 21.42 mm (DP) and
+  20.90 mm (DN), 0.52 mm of skew, full speed. Both sides change layers; the
+  pair is not routed as a coupled pair and has no controlled impedance.
+- Crystal: XIN 12.24 mm, XOUT 10.66 mm, XOUT_R 8.34 mm. XIN changes layer; that
   is one of the SI warnings above.
 - Support-part proximity, measured from the part's supply pad to the pin it
   serves: C_DV2 1.78, C_VI 1.77, C_FL 2.04, C_RV 2.19, C_IO3 2.54, C_L2 2.66,
@@ -263,7 +263,7 @@ Nothing below is signed off. The list is deliberately blunt.
   AGND/DGND split and its single tie, the ADC reference decoupling, the RC
   filter against the chosen ADC data rate, the IDAC output's 10 nF load and
   settling, the PGA common-mode range at the chosen gain, the unused-input
-  termination, and the 20 layer-change warnings on the digital and crystal
+  termination, and the 22 layer-change warnings on the digital and crystal
   nets. None of these were simulated or measured.
 - **Metrology/analog**: the measurement is not ratiometric. The IDAC's absolute
   accuracy and drift, the REF5025 grade and drift, the 1 k filter resistors and
@@ -325,13 +325,12 @@ Nothing below is signed off. The list is deliberately blunt.
    hides the C0G filter requirement and the 0.1 % resistors from an assembler.
 5. **No free-text silkscreen (not fixed).** The board name, revision and header
    pin functions cannot be put on the silk; only reference labels exist.
-6. **No non-rectangular outline primitive (not fixed).** SynthSpec only emits a
-   fitted rectangle; the placement diagnostics call `board_outline` future
-   work. The top-left notch is therefore cut by `check.sh` after export, and
-   the Gerbers and drill files are re-exported from the cut board. The
-   `.synth` source alone still describes a rectangle, so a plain
-   `synth export-kicad` does not reproduce the delivered outline. A
-   source-level outline/cutout primitive is the proper fix.
+6. **The board outline lives in the placement sidecar, not the `.synth` source
+   (not fixed).** The notch is an `[[outline]]` path in
+   `rtd_afe.placement.layout.toml`, consumed by the normal exporter; a plain
+   `synth export-kicad` reproduces it. A `.synth` outline statement would keep
+   the geometry in the same file as the netlist, but the sidecar is part of the
+   committed source pair and no post-export step is needed.
 
 ## Reproducibility
 
@@ -340,15 +339,14 @@ Inputs and outputs of the committed run:
 | File | SHA-256 |
 | --- | --- |
 | `rtd_afe.synth` | `c7641ede7eeef4a5f09324f46160bc0b91eed6e3310a25f005b520d91d5facf1` |
-| `rtd_afe.placement.layout.toml` | `11d4cb06bbaacb2229cf965ff3928f620293ea9057522f0ab56c057363bd84dd` |
-| `check.sh` | `a68f2e3f4bda23a0ff0314dbbc796ae4b4a9cfc0f288837f145ee1e5835ec90e` |
-| `cut_outline.py` | `0a525fb5486439012bac05a6d0a10f63762ed04993a4a419d7bab40479ac4fda` |
-| `kicad/rtd_afe.kicad_pcb` | `6756ea9138ded218d78ea34cd50ac4041390aaee65fa68692a6832f62205ecc5` |
+| `rtd_afe.placement.layout.toml` | `65c1691674b6d7f09a9498e47cdf8ef443f3771370daf30c6b79b7471e07ea96` |
+| `check.sh` | `1b97e94a14150c16d7d7a4326e3f00d9bfbb1e10734ed3a6c35252271f936858` |
+| `kicad/rtd_afe.kicad_pcb` | `6003d80214b98327bd5f5caa17a36ddf8c93c5fae1e82b95d07ab967ba4fff54` |
 | `kicad/rtd_afe.kicad_sch` | `e81a9a0ebf18d5fd93cef8b224df16134033824da6402abbb8f845048dbd89c4` |
-| `reports/rtd_afe.kicad-drc.json` | `18a2ac24afdca4cfd96250b33499e31643a3bf5012741d1093ca7454093a9521` |
-| `reports/rtd_afe.kicad-erc.json` | `b20f426c3d7bc6209f1e2a85d49d586cfce4ac84b5b66091d985a5bdffe7207d` |
-| `reports/release.json` | `a40757cb764605c1b122fa5bac865e61fa3aed876a2bdfe6b3dec694e984d066` |
-| `reports/rtd_afe.routing.json` | `245dababd5beba0ff2c616483d49e99f369454c47efb6d53a2e458e088aeaa08` |
+| `reports/rtd_afe.kicad-drc.json` | `08f793a0f05dc889c10865536eaf8a86eb3b9227bc9cb86224cf9569b53a7114` |
+| `reports/rtd_afe.kicad-erc.json` | `852330906c43ca928bd94a83fe3b8fce2d3f67826adb5396c27e79cc05ab8793` |
+| `reports/release.json` | `0f0ffda0e4b178542dec7eac990fc71fbb0fc76774c2c675a7dde70bc50d063d` |
+| `reports/rtd_afe.routing.json` | `5bae379c9362804fb156ebf80d02e0b8a499ae30946812d8173b8158180312fe` |
 
 The release, routing and netlist reports had the absolute paths of the machine
 that produced them cut to repository-relative ones, matching the usb-uart
