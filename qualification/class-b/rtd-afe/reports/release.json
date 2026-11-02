@@ -94,116 +94,121 @@
     "engine": "freerouting",
     "engine_version": "freerouting-2.4.1.jar",
     "state": "routed",
-    "input_hash": "ca0fe98e391eb068db88fd5490820a321df967e44997c9fa9beba88a90205a37",
+    "input_hash": "5f9a5c8be6da84846957d120aed6aec1a19fe35c8290fc9b6211f1a078dee112",
     "run_record": "qualification/class-b/rtd-afe/kicad/rtd_afe.routing.json"
   },
   "signal_integrity": {
     "blocking": 0,
-    "warnings": 21,
+    "warnings": 22,
     "findings": [
       {
-        "code": "W-SYNTH-DRC-013",
-        "message": "nets 32 and 33 run parallel for 5.3 mm on F.Cu 0.130 mm apart, within a dielectric height; risk of crosstalk",
+        "code": "W-SYNTH-DRC-016",
+        "message": "net 7 changes layers at (27.30, 29.24) mm with no ground return via within 0.64 mm, so the return current has to jump reference planes",
         "blocking": false
       },
       {
         "code": "W-SYNTH-DRC-016",
-        "message": "net 7 changes layers at (23.54, 30.25) mm with no ground return via within 0.64 mm, so the return current has to jump reference planes",
+        "message": "net 7 changes layers at (27.55, 25.91) mm with no ground return via within 0.64 mm, so the return current has to jump reference planes",
         "blocking": false
       },
       {
         "code": "W-SYNTH-DRC-016",
-        "message": "net 7 changes layers at (24.43, 24.48) mm with no ground return via within 0.64 mm, so the return current has to jump reference planes",
+        "message": "net 8 changes layers at (24.10, 30.75) mm with no ground return via within 0.64 mm, so the return current has to jump reference planes",
         "blocking": false
       },
       {
         "code": "W-SYNTH-DRC-016",
-        "message": "net 8 changes layers at (27.55, 29.22) mm with no ground return via within 0.64 mm, so the return current has to jump reference planes",
+        "message": "net 8 changes layers at (32.17, 25.39) mm with no ground return via within 0.64 mm, so the return current has to jump reference planes",
         "blocking": false
       },
       {
         "code": "W-SYNTH-DRC-016",
-        "message": "net 8 changes layers at (28.39, 25.54) mm with no ground return via within 0.64 mm, so the return current has to jump reference planes",
+        "message": "net 9 changes layers at (25.04, 29.26) mm with no ground return via within 0.64 mm, so the return current has to jump reference planes",
         "blocking": false
       },
       {
         "code": "W-SYNTH-DRC-016",
-        "message": "net 9 changes layers at (29.39, 28.92) mm with no ground return via within 0.64 mm, so the return current has to jump reference planes",
+        "message": "net 9 changes layers at (33.52, 25.44) mm with no ground return via within 0.64 mm, so the return current has to jump reference planes",
         "blocking": false
       },
       {
         "code": "W-SYNTH-DRC-016",
-        "message": "net 9 changes layers at (32.58, 25.77) mm with no ground return via within 0.64 mm, so the return current has to jump reference planes",
+        "message": "net 10 changes layers at (23.82, 29.13) mm with no ground return via within 0.64 mm, so the return current has to jump reference planes",
         "blocking": false
       },
       {
         "code": "W-SYNTH-DRC-016",
-        "message": "net 10 changes layers at (23.89, 29.14) mm with no ground return via within 0.64 mm, so the return current has to jump reference planes",
+        "message": "net 10 changes layers at (24.59, 24.66) mm with no ground return via within 0.64 mm, so the return current has to jump reference planes",
         "blocking": false
       },
       {
         "code": "W-SYNTH-DRC-016",
-        "message": "net 10 changes layers at (26.67, 24.04) mm with no ground return via within 0.64 mm, so the return current has to jump reference planes",
+        "message": "net 11 changes layers at (26.50, 29.26) mm with no ground return via within 0.64 mm, so the return current has to jump reference planes",
         "blocking": false
       },
       {
         "code": "W-SYNTH-DRC-016",
-        "message": "net 11 changes layers at (24.49, 28.70) mm with no ground return via within 0.64 mm, so the return current has to jump reference planes",
+        "message": "net 11 changes layers at (27.10, 26.87) mm with no ground return via within 0.64 mm, so the return current has to jump reference planes",
         "blocking": false
       },
       {
         "code": "W-SYNTH-DRC-016",
-        "message": "net 11 changes layers at (27.32, 26.65) mm with no ground return via within 0.64 mm, so the return current has to jump reference planes",
+        "message": "net 12 changes layers at (29.36, 31.64) mm with no ground return via within 0.64 mm, so the return current has to jump reference planes",
         "blocking": false
       },
       {
         "code": "W-SYNTH-DRC-016",
-        "message": "net 12 changes layers at (29.57, 31.73) mm with no ground return via within 0.64 mm, so the return current has to jump reference planes",
+        "message": "net 12 changes layers at (33.18, 27.37) mm with no ground return via within 0.64 mm, so the return current has to jump reference planes",
         "blocking": false
       },
       {
         "code": "W-SYNTH-DRC-016",
-        "message": "net 12 changes layers at (35.82, 26.00) mm with no ground return via within 0.64 mm, so the return current has to jump reference planes",
+        "message": "net 15 changes layers at (39.51, 36.94) mm with no ground return via within 0.64 mm, so the return current has to jump reference planes",
         "blocking": false
       },
       {
         "code": "W-SYNTH-DRC-016",
-        "message": "net 15 changes layers at (39.06, 32.81) mm with no ground return via within 0.64 mm, so the return current has to jump reference planes",
+        "message": "net 15 changes layers at (37.42, 31.61) mm with no ground return via within 0.64 mm, so the return current has to jump reference planes",
         "blocking": false
       },
       {
         "code": "W-SYNTH-DRC-016",
-        "message": "net 15 changes layers at (38.32, 29.16) mm with no ground return via within 0.64 mm, so the return current has to jump reference planes",
+        "message": "net 18 changes layers at (38.40, 34.31) mm with no ground return via within 0.64 mm, so the return current has to jump reference planes",
         "blocking": false
       },
       {
         "code": "W-SYNTH-DRC-016",
-        "message": "net 18 changes layers at (38.40, 31.87) mm with no ground return via within 0.64 mm, so the return current has to jump reference planes",
+        "message": "net 19 changes layers at (38.89, 31.79) mm with no ground return via within 0.64 mm, so the return current has to jump reference planes",
         "blocking": false
       },
       {
         "code": "W-SYNTH-DRC-016",
-        "message": "net 19 changes layers at (38.86, 33.58) mm with no ground return via within 0.64 mm, so the return current has to jump reference planes",
+        "message": "net 26 changes layers at (44.11, 10.68) mm with no ground return via within 0.64 mm, so the return current has to jump reference planes",
         "blocking": false
       },
       {
         "code": "W-SYNTH-DRC-016",
-        "message": "net 20 changes layers at (33.23, 16.20) mm with no ground return via within 0.64 mm, so the return current has to jump reference planes",
+        "message": "net 26 changes layers at (40.55, 11.10) mm with no ground return via within 0.64 mm, so the return current has to jump reference planes",
         "blocking": false
       },
       {
         "code": "W-SYNTH-DRC-016",
-        "message": "net 20 changes layers at (32.50, 22.98) mm with no ground return via within 0.64 mm, so the return current has to jump reference planes",
+        "message": "net 29 changes layers at (38.59, 14.50) mm with no ground return via within 0.64 mm, so the return current has to jump reference planes",
         "blocking": false
       },
       {
         "code": "W-SYNTH-DRC-016",
-        "message": "net 31 changes layers at (39.33, 16.17) mm with no ground return via within 0.64 mm, so the return current has to jump reference planes",
+        "message": "net 29 changes layers at (38.44, 22.50) mm with no ground return via within 0.64 mm, so the return current has to jump reference planes",
         "blocking": false
       },
       {
         "code": "W-SYNTH-DRC-016",
-        "message": "net 31 changes layers at (38.97, 24.48) mm with no ground return via within 0.64 mm, so the return current has to jump reference planes",
+        "message": "net 31 changes layers at (39.91, 14.54) mm with no ground return via within 0.64 mm, so the return current has to jump reference planes",
+        "blocking": false
+      },
+      {
+        "code": "W-SYNTH-DRC-016",
+        "message": "net 31 changes layers at (38.87, 24.49) mm with no ground return via within 0.64 mm, so the return current has to jump reference planes",
         "blocking": false
       }
     ]

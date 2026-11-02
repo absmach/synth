@@ -83,6 +83,7 @@ pub fn build_pcb(
     project: &Uuid,
     label_overrides: &HashMap<String, synth_layout::sidecar::SidecarLabel>,
     fixed_vias: &[synth_layout::sidecar::SidecarVia],
+    outline: &[synth_layout::sidecar::SidecarPoint],
 ) -> Result<Sexp, PlaneFanoutError> {
     let placements_by_id: HashMap<ComponentId, &ComponentPlacement> =
         placement.components.iter().map(|p| (p.id, p)).collect();
@@ -128,10 +129,9 @@ pub fn build_pcb(
     }
     children.extend(build_netclasses(&net_table, board));
 
-    // Edge.Cuts board outline. Four gr_line segments tracing
-    // `placement.board_outline`. Slice 1B uses an axis-aligned
-    // rectangle; later slices accept user-defined outlines.
-    children.extend(build_edge_cuts(placement, project));
+    // Edge.Cuts board outline. A sidecar outline replaces the fitted
+    // rectangle, so a non-rectangular board is part of the design source.
+    children.extend(build_edge_cuts(placement, outline, project));
 
     // Footprint instances. Components with a real `kicad_footprint`
     // reference it directly; components without one (e.g. a brand-new
@@ -2102,7 +2102,42 @@ fn build_netclasses(net_table: &[(u32, String)], board: &Board) -> Vec<Sexp> {
     classes
 }
 
-fn build_edge_cuts(placement: &Placement, project: &Uuid) -> Vec<Sexp> {
+fn build_edge_cuts(
+    placement: &Placement,
+    outline: &[synth_layout::sidecar::SidecarPoint],
+    project: &Uuid,
+) -> Vec<Sexp> {
+    let line = |start: (f64, f64), end: (f64, f64), tag: &str, segment: usize| {
+        let line_uuid = derive_entity_uuid(project, "edge_cut", &format!("{tag}/{segment}"));
+        Sexp::list(
+            "gr_line",
+            vec![
+                Sexp::list("start", vec![num(start.0), num(start.1)]),
+                Sexp::list("end", vec![num(end.0), num(end.1)]),
+                Sexp::list(
+                    "stroke",
+                    vec![
+                        Sexp::list("width", vec![num(EDGE_CUT_WIDTH_MM)]),
+                        Sexp::list("type", vec![Sexp::atom("solid")]),
+                    ],
+                ),
+                Sexp::list("layer", vec![Sexp::str("Edge.Cuts")]),
+                str_pair("uuid", line_uuid.to_string()),
+            ],
+        )
+    };
+
+    if outline.len() >= 3 {
+        return outline
+            .iter()
+            .enumerate()
+            .map(|(i, start)| {
+                let end = &outline[(i + 1) % outline.len()];
+                line((start.x, start.y), (end.x, end.y), "outline", i)
+            })
+            .collect();
+    }
+
     let r = placement.board_outline;
     let min_x = nm_to_mm(r.min.x_nm);
     let min_y = nm_to_mm(r.min.y_nm);
@@ -2116,25 +2151,8 @@ fn build_edge_cuts(placement: &Placement, project: &Uuid) -> Vec<Sexp> {
     ];
     corners
         .iter()
-        .map(|(start, end, tag)| {
-            let line_uuid = derive_entity_uuid(project, "edge_cut", tag);
-            Sexp::list(
-                "gr_line",
-                vec![
-                    Sexp::list("start", vec![num(start.0), num(start.1)]),
-                    Sexp::list("end", vec![num(end.0), num(end.1)]),
-                    Sexp::list(
-                        "stroke",
-                        vec![
-                            Sexp::list("width", vec![num(EDGE_CUT_WIDTH_MM)]),
-                            Sexp::list("type", vec![Sexp::atom("solid")]),
-                        ],
-                    ),
-                    Sexp::list("layer", vec![Sexp::str("Edge.Cuts")]),
-                    str_pair("uuid", line_uuid.to_string()),
-                ],
-            )
-        })
+        .enumerate()
+        .map(|(i, (start, end, tag))| line(*start, *end, tag, i))
         .collect()
 }
 
@@ -4068,6 +4086,7 @@ mod tests {
             &Uuid::nil(),
             &HashMap::new(),
             &vias,
+            &[],
         )
         .expect("export")
         .to_string_pretty();
@@ -4092,6 +4111,7 @@ mod tests {
             &Uuid::nil(),
             &HashMap::new(),
             &unknown,
+            &[],
         )
         .expect_err("an unknown net is refused");
         assert_eq!(error.net, "NOPE");
@@ -4139,8 +4159,16 @@ mod tests {
             pad_escape_rejections: 0,
         };
         let project = Uuid::nil();
-        let pcb_sexp = build_pcb(&board, &placement, &routing, &project, &HashMap::new(), &[])
-            .expect("plane fanout");
+        let pcb_sexp = build_pcb(
+            &board,
+            &placement,
+            &routing,
+            &project,
+            &HashMap::new(),
+            &[],
+            &[],
+        )
+        .expect("plane fanout");
         let pcb_str = pcb_sexp.to_string_pretty();
 
         let tmp_path =

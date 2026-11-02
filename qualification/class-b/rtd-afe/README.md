@@ -32,8 +32,9 @@ QUALIFICATION.md are closed.
 - Four M2.5 non-plated mounting holes at (6, 4), (49, 4), (6, 40) and
   (49, 40) mm.
 - 50.1 x 44.1 mm bounding box, 4 layers, 1.6 mm. The top-left notch
-  (x 10..26.4 mm, y 0..20 mm) is cut in `check.sh`; the remaining area is
-  1880 mm². Board source `rtd_afe.synth`, placement sidecar
+  (x 10..26.4 mm, y 0..20 mm) is part of the closed board outline in the
+  placement sidecar (`[[outline]]`); the remaining area is 1880 mm². Board
+  source `rtd_afe.synth`, placement sidecar
   `rtd_afe.placement.layout.toml` (board millimetres). The schematic has no
   sidecar; the compiler lays it out by group.
 
@@ -92,23 +93,22 @@ designated reviewer.
   edge. J1 is at (39.5, 6.0) mm on the main top edge, which runs x 26.4..52.6
   mm after the notch, so J1 is centred on that edge. The left tab keeps H1 and
   the top-left ground fence via.
-- The notch is a post-export cut in `check.sh` because SynthSpec has no
-  non-rectangular outline primitive. The Gerbers and drill files are
-  re-exported from the cut board; a plain `synth export-kicad` still produces
-  the rectangle.
+- The closed outline lives in `rtd_afe.placement.layout.toml` as `[[outline]]`
+  (board millimetres). The exporter replaces the fitted rectangle with it, so
+  `synth export-kicad` alone reproduces the notch; there is no post-export cut.
 - The RTD/input nets and VREF are on F.Cu only, with no layer change. QSPI also
-  stays on F.Cu. The SPI, SWD, USB_DN and XIN nets change layers; see the SI
+  stays on F.Cu. The SPI, SWD, USB and XIN nets change layers; see the SI
   warnings below.
-- 339 track segments, 64 vias (19 on AGND, 25 on DGND, 20 signal), 586.6 mm of
-  copper. 41 nets, 0 open. The router records 60 vias; the other four are
+- 340 track segments, 65 vias (15 on AGND, 28 on DGND, 22 signal), 557.8 mm of
+  copper. 41 nets, 0 open. The router records 62 vias; the other three are
   source ground stitching.
 - `kicad-cli pcb drc --severity-all --refill-zones`: 0 errors, 0 warnings, 0
   unconnected items. `pcbnew.LoadBoard` reopens the board. The AGND/DGND tie
   check passes with R_TIE as the only bridge.
-- Synth's signal-integrity pass: 21 non-blocking warnings, 1 crosstalk finding
-  (USB_DN/VBUS) and 20 layer changes with no ground-return via within 0.64 mm.
-  The flagged nets are SPI, SWD, USB_DN, XIN, RUN, ADC_DRDY and REFOUT; no RTD,
-  AIN or VREF net is flagged. See QUALIFICATION.md.
+- Synth's signal-integrity pass: 22 non-blocking warnings, 0 crosstalk findings
+  and 22 layer changes with no ground-return via within 0.64 mm. The flagged
+  nets are REFOUT, SPI, ADC_DRDY, XIN, RUN, SWCLK, CC1, USB_DP_C and USB_DN_C;
+  no RTD, AIN or VREF net is flagged. See QUALIFICATION.md.
 - Silkscreen: 0 DRC warnings. U1 has a hard label override at (24, 34.5) mm;
   26 passives and both TVS diodes have their reference label hidden because the
   compact refdes field has no clear spot. Their refdes remain in the BOM, PnP and
@@ -139,7 +139,7 @@ Current result:
 | KiCad ERC (errors / warnings) | 0 / 2 |
 | Synth routing state | routed, 0 open nets |
 | Synth release | `production_status: untrusted`, `release_ready: false` (unverified crystal override; not a fab approval) |
-| Synth SI warnings | 21, none blocking |
+| Synth SI warnings | 22, none blocking |
 
 The 2 ERC warnings are library-comparison warnings, not connectivity errors:
 the registry uses the old name `Device:Ferrite_Bead` (KiCad 10's library has
@@ -160,8 +160,6 @@ netlist/PCB parity is clean.
   `kicad-cli sch export pdf`.
 - `rtd_afe.synth`, `rtd_afe.placement.layout.toml`: the design sources.
 - `check.sh`: the acceptance check above.
-- `cut_outline.py`: the post-export notch cut that `check.sh` applies before
-  the DRC and fab export.
 - `SHA256SUMS`: hashes of the artifacts.
 
 The reports are as the commands produce them, except that the absolute paths of
@@ -191,15 +189,14 @@ fabrication approval or a component review.
   register map, USB descriptors and calibration are all unwritten/untested.
 - Synth has no free-text silkscreen primitive, so the board name and revision
   are not on the copper. Header pin functions are not labelled on the silk.
-- The board is 50.1 x 44.1 mm (1880 mm²) with a 16.4 x 20 mm notch cut from
-  the empty top-left, compacted from the earlier 63.1 x 51.1 mm. The arranged
+- The board is 50.1 x 44.1 mm (1880 mm²) with a 16.4 x 20 mm notch in the
+  empty top-left, compacted from the earlier 63.1 x 51.1 mm. The arranged
   floorplan groups the analog chain at the left, the MCU/flash/crystal and USB
   at the right, and puts them on the edges. It is one successful FreeRouting
   run, not a proven densest layout.
-- The notch is a post-export cut in `check.sh`: SynthSpec has no
-  non-rectangular outline primitive, so the `.synth` source alone still
-  describes a rectangle. A source-level outline/cutout primitive should replace
-  this workaround.
+- The outline is a placement-sidecar construct (`[[outline]]`), not a `.synth`
+  statement. A normal `synth export-kicad` applies it; a future `.synth`
+  outline statement would put the geometry in the same file as the netlist.
 - 26 passives and D1/D2 have their reference label hidden because the refdes
   field has no clear spot in the compact layout. The refdes are still in the
   BOM, PnP and schematic; the full list is in QUALIFICATION.md.
