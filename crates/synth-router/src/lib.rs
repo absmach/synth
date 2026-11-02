@@ -469,6 +469,7 @@ fn finalize(
             kicad_drc: verdict.kicad_drc,
             blocking_reasons: verdict.blocking_reasons,
             unavailable_checks: verdict.unavailable_checks,
+            advisories: verdict.advisories,
         }),
         failure: None,
         escape: Vec::new(),

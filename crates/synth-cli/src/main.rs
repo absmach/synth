@@ -5347,6 +5347,14 @@ fn print_route_report(report: &synth_router::RouteReport) {
     {
         eprintln!("  not checked: {check}");
     }
+    for advisory in report
+        .validation
+        .as_ref()
+        .map(|v| v.advisories.clone())
+        .unwrap_or_default()
+    {
+        eprintln!("  advisory: {advisory}");
+    }
     if let Some(counts) = report.validation.as_ref().and_then(|v| v.kicad_drc) {
         eprintln!(
             "  kicad-cli pcb drc: {} error(s), {} unconnected, {} warning(s)",

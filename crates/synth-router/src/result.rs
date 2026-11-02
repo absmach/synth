@@ -291,6 +291,10 @@ pub struct ValidationSummary {
     /// Required checks that could not be performed.
     #[serde(default)]
     pub unavailable_checks: Vec<String>,
+    /// Findings listed for the review that do not hold the board back: a layer
+    /// change on a slow net with no room for a ground return via.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub advisories: Vec<String>,
 }
 
 impl ValidationSummary {
