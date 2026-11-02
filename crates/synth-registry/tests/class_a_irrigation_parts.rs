@@ -172,7 +172,7 @@ fn the_canonical_mp2307_limits_are_the_datasheets() {
 
 #[test]
 fn the_mcu_has_pa9_and_pa10_on_lqfp32_pins_19_and_21_with_their_alternate_functions() {
-    // DS12991 Rev 4, table 12 (pin assignment): LQFP32 pin 19 is PA9 and pin 21 is PA10.
+    // DS12991 Rev 6, table 12 (pin assignment): LQFP32 pin 19 is PA9 and pin 21 is PA10.
     // Table 13 (port A alternate functions): PA9 is USART1_TX (AF1), SPI2_MISO (AF4) and
     // I2C1_SCL (AF6); PA10 is SPI2_MOSI (AF0), USART1_RX (AF1) and I2C1_SDA (AF6).
     let p = part("stm32g030k8_lqfp32");
@@ -201,6 +201,28 @@ fn the_mcu_has_pa9_and_pa10_on_lqfp32_pins_19_and_21_with_their_alternate_functi
         p.pins.iter().all(|x| !x.name.starts_with("NC_")),
         "no LQFP32 pin of this part is a no-connect"
     );
+}
+
+#[test]
+fn the_mcu_has_pa11_and_pa12_on_lqfp32_pins_22_and_23_with_their_own_functions() {
+    // DS12991 Rev 6, table 12: LQFP32 pins 22 and 23 are PA11 [PA9] and PA12 [PA10],
+    // PA11 and PA12 unless SYSCFG_CFGR1 remaps them. PA11 is SPI1_MISO, USART1_CTS and
+    // I2C2_SCL; PA12 is SPI1_MOSI, USART1_RTS_DE_CK and I2C2_SDA. Neither has a USART TX or RX.
+    let p = part("stm32g030k8_lqfp32");
+    for (name, number, wanted) in [
+        ("PA11", "22", ["Gpio", "SpiMiso", "I2cScl"].as_slice()),
+        ("PA12", "23", ["Gpio", "SpiMosi", "I2cSda"].as_slice()),
+    ] {
+        let pin = p
+            .find_pin(name)
+            .unwrap_or_else(|| panic!("the LQFP32 package has a {name} pin"));
+        assert_eq!(pin.number.0, number, "{name} is on LQFP32 pin {number}");
+        let c = caps(&p, name);
+        for cap in wanted {
+            assert!(c.contains(cap), "{name} should be {cap}: {c}");
+        }
+        assert!(!c.contains("Uart"), "{name} has no USART TX or RX: {c}");
+    }
 }
 
 #[test]

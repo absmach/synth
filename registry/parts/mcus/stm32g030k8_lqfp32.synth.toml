@@ -144,17 +144,20 @@ number = "21"
 electrical_type = "bidirectional"
 capabilities = ["gpio", "spi_mosi", "uart_rx", "i2c_sda"]
 
+# DS12991 table 12 names pins 22 and 23 PA11 [PA9] and PA12 [PA10]: PA11 and
+# PA12 by default, PA9 and PA10 only after a SYSCFG_CFGR1 remap. The capabilities
+# are the default pins' own; PA9 and PA10 already have pins 19 and 21.
 [[pins]]
-name = "PA9_PA11"
+name = "PA11"
 number = "22"
 electrical_type = "bidirectional"
-capabilities = ["gpio", "uart_tx", "spi_miso", "i2c_scl"]
+capabilities = ["gpio", "spi_miso", "i2c_scl"]
 
 [[pins]]
-name = "PA10_PA12"
+name = "PA12"
 number = "23"
 electrical_type = "bidirectional"
-capabilities = ["gpio", "spi_mosi", "uart_rx", "i2c_sda"]
+capabilities = ["gpio", "spi_mosi", "i2c_sda"]
 
 [[pins]]
 name = "PA13"
