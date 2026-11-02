@@ -1,7 +1,8 @@
 {
   "schema_version": "synth.release.v1",
   "tool_version": "synth-cli 0.1.1",
-  "input": "/home/steve/work/synth-classb/qualification/class-b/rtd-afe/rtd_afe.synth",
+  "input": "qualification/class-b/rtd-afe/rtd_afe.synth",
+  "source_revision": "ccaa71fad25a27a20482fe6b6cb8cb2bd73a4d54",
   "fab_requested": true,
   "production_status": "untrusted",
   "release_ready": false,
@@ -98,7 +99,7 @@
     "engine_version": "freerouting-2.4.1.jar",
     "state": "routed",
     "input_hash": "49b7783c24c8cdfdeafcce912a6221ed8a76190263103de122f7b46589f374eb",
-    "run_record": "/home/steve/work/synth-classb/qualification/class-b/rtd-afe/kicad/rtd_afe.routing.json"
+    "run_record": "qualification/class-b/rtd-afe/kicad/rtd_afe.routing.json"
   },
   "signal_integrity": {
     "blocking": 0,
