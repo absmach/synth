@@ -129,6 +129,7 @@ rationale = "Negative test and the corpus's only Class-D entry: the largest impo
 [[board]]
 id = "i2c_sensor_node"
 path = "qualification/class-a/i2c-sensor-node/i2c_sensor_node.synth"
+fixture_sha256 = "47b6d03d282ccb3db9859a1dcd4df13eb1dfba4d5b5e4bb6bb94a7551670acbe"
 class = "A"
 status = "experimental"
 expect = "pass"
@@ -138,6 +139,7 @@ rationale = "A JST-fed 5 V input, a 3V3 LDO, an STM32G030 reading an environment
 [[board]]
 id = "irrigation_controller"
 path = "qualification/class-a/irrigation-controller/irrigation_controller.synth"
+fixture_sha256 = "39e9dab85f7bf93b2ff80effa3be672d8d62dc74eb31744ef975c2b019c7928a"
 class = "A"
 status = "experimental"
 expect = "pass"
@@ -147,6 +149,7 @@ rationale = "Two soil-moisture probes, a flow meter, two solenoid valve outputs 
 [[board]]
 id = "negative_broken_mcu_board"
 path = "qualification/class-a/negative-broken-mcu-board/negative_broken_mcu_board.synth"
+fixture_sha256 = "bcd85846f5995fc5134350dfaace26bca3280b1a9e704045cbf7bb07946439a5"
 class = "A"
 status = "unsupported"
 expect = "fail"
@@ -157,6 +160,7 @@ rationale = "Negative test, written to be wrong on purpose so the diagnostics ca
 [[board]]
 id = "protected_power_entry"
 path = "qualification/class-a/protected-power-entry/protected_power_entry.synth"
+fixture_sha256 = "75267839b52a6ef7554233b09184b9713c9b53ec8904c5b143e0b1f0129b5194"
 class = "A"
 status = "experimental"
 expect = "pass"
@@ -166,6 +170,7 @@ rationale = "12 V in, a reverse-polarity P-FET, resettable over-current, a TVS c
 [[board]]
 id = "rp2350_debug_target"
 path = "qualification/class-a/rp2350-debug-target/rp2350_debug_target.synth"
+fixture_sha256 = "8b7d19192928a5ba1cbb290dda4cc389d2668976976b3346fcfdc381ad1ef7ee"
 class = "A"
 status = "experimental"
 expect = "fail"
@@ -175,6 +180,7 @@ rationale = "USB-C power into a 3V3 LDO, the RP2350's own crystal, a tactile res
 [[board]]
 id = "dual_usb_compute"
 path = "qualification/class-c/dual-usb-compute/dual_usb_compute.synth"
+fixture_sha256 = "b0d1b229bab388e2ed4c749b3c479b6447bd6f9aeecea1d9ed58cc8ad25cc434"
 class = "C"
 status = "experimental"
 expect = "fail"
@@ -184,6 +190,7 @@ rationale = "Two RP2350s on their own USB 2.0 pairs, a shared QSPI boot flash, a
 [[board]]
 id = "ice40_hdmi_video"
 path = "qualification/class-c/ice40-hdmi-video/ice40_hdmi_video.synth"
+fixture_sha256 = "c42dae61398123f6a58749a588ad1049c8698a100100f43d78d4910ab867e2ac"
 class = "C"
 status = "experimental"
 expect = "fail"
@@ -193,6 +200,7 @@ rationale = "A Lattice iCE40 HX4K in a 121-ball 0.8 mm BGA driving an HDMI Type-
 [[board]]
 id = "multirail_compute"
 path = "qualification/class-c/multirail-compute/multirail_compute.synth"
+fixture_sha256 = "094f3346a20d901968f4b0ec1ee785d15e9291fd7a0ee2c86855ddae0c8eb1e3"
 class = "C"
 status = "experimental"
 expect = "fail"
@@ -202,8 +210,19 @@ rationale = "An ESP32-WROOM-32 on four supply rails from one 12 V input, with an
 [[board]]
 id = "sdram_memory"
 path = "qualification/class-c/sdram-memory/sdram_memory.synth"
+fixture_sha256 = "b5933d95cb70f7f95e318644284d5081fb39c64f721087b26232579103209c4e"
 class = "C"
 status = "experimental"
 expect = "fail"
 expect_fab = "fail"
 rationale = "Two ISSI IS42S16400J SDRAM dice on four layers sharing one series-damped address and command bus, bringing a 32-bit data bus to a pair of dual-row carrier connectors, with serial presence detect and thermal sense: Class-C case 2, declared bus skew budgets. This row was `unestablished` because the release command reported the source stage as a parse failure that was not one: `synth check` ran the stage as a child process without reading its pipes, so a stage emitting more than the 64 KiB a pipe holds deadlocked and lost its output, and this board emits 137626 bytes. #246 fixed that, so there is now an honest verdict to record. The source stage passes; DRC fails on the board's own declared rules, and manufacturing fails behind it."
+
+[[board]]
+id = "buck"
+path = "qualification/class-b/buck/buck.synth"
+fixture_sha256 = "1ddfc86b649f25bc25465f82145a3d96baf623ff1fc32bfa3c830650cd100b14"
+class = "B"
+status = "experimental"
+expect = "pass"
+expect_fab = "fail"
+rationale = "24 V in, 3.3 V out buck (LMR38010) with a PTC, reverse-block Schottky and TVS on the input, an EN divider, feedback, power-good and a thermal via array under the exposed pad. The FreeRouting copper is complete and `kicad-cli pcb drc` reports 0 errors and 0 warnings, so source and DRC pass. Every part with a registry record is reviewed. Manufacturing still fails under `synth check --fab`, which routes with KiCadRoutingTools: that copper leaves 11 signal vias without a ground return via (W-SYNTH-DRC-016), so the release is validation_failed. The board stays `experimental`: no human has signed off its artifacts."
