@@ -43,10 +43,7 @@ pub enum ExportError {
         #[source]
         source: synth_place::PlaceError,
     },
-    #[error(
-        "power-plane fanout failed: net `{net}`: {detail}. A declared plane needs a \
-         stitching via beside each pad; none could be placed without via-in-pad."
-    )]
+    #[error("power-plane fanout failed: net `{net}`: {detail}")]
     PlaneFanout { net: String, detail: String },
 }
 
