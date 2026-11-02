@@ -134,13 +134,15 @@ fn the_i2c_parts_declare_their_bus_pins() {
 }
 
 #[test]
-fn the_humidity_alert_is_open_drain() {
+fn the_humidity_alert_is_a_driven_active_high_output() {
+    // SHT3x-DIS datasheet section 3.5: ALERT switches high when alert conditions are
+    // met and sources current (table 3, IOH); unused, it must be left floating.
     let p = part("sht30_dis");
     let alert = p.pins.iter().find(|x| x.name == "ALERT").unwrap();
     assert_eq!(
         alert.electrical_type,
-        synth_registry::ElectricalType::OpenDrainLow,
-        "ALERT pulls low and needs a pull-up"
+        synth_registry::ElectricalType::Output,
+        "ALERT drives high itself and needs no pull-up"
     );
 }
 

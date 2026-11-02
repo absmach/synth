@@ -34,7 +34,9 @@ electrical_type = "input"
 [[pins]]
 name = "ALERT"
 number = "3"
-electrical_type = "open_drain_low"
+# Datasheet section 3.5: the pin switches high when alert conditions are met and
+# sources the IOH of table 3; leave it floating if unused. It drives, so no pull-up.
+electrical_type = "output"
 
 [[pins]]
 name = "SCL"
