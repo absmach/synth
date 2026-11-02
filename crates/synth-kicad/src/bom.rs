@@ -151,6 +151,7 @@ mod tests {
             dnp,
             properties: std::collections::BTreeMap::new(),
             placement_hint: None,
+            escape: None,
             group: None,
             sheet: None,
             source_span: synth_diagnostics::Span::new(0, 0),

@@ -15,12 +15,12 @@
 use std::collections::BTreeMap;
 use synth_ast::{
     BindStmt, BoardAst, BusDeclStmt, CompanyStmt, ComponentDeclAst, ConnectionAst, DiffPairAttr,
-    DiffPairStmt, EndpointAst, GroupAttr, GroupStmt, ImportAst, InterfaceDeclStmt, KeepoutAttr,
-    KeepoutStmt, LayersStmt, LegendsStmt, ManufacturerStmt, ModuleDeclStmt, NetDeclAst,
-    NetclassAttr, NetclassStmt, NotesDeclAst, ParamDeclAst, PlacementHintAst, PlacementHintAttr,
-    PortBindingAst, PortDeclAst, PowerDeclAst, ProgramAst, RequiresStmt, RevisionStmt,
-    SchematicOverflowAst, SchematicPaperAst, SchematicStmt, SheetStmt, StackupLayerAst,
-    StackupStmt, StatementAst, UseStmt, ValueWithUnit, VariantDeclStmt,
+    DiffPairStmt, EndpointAst, EscapeAst, GroupAttr, GroupStmt, ImportAst, InterfaceDeclStmt,
+    KeepoutAttr, KeepoutStmt, LayersStmt, LegendsStmt, ManufacturerStmt, ModuleDeclStmt,
+    NetDeclAst, NetclassAttr, NetclassStmt, NotesDeclAst, ParamDeclAst, PlacementHintAst,
+    PlacementHintAttr, PortBindingAst, PortDeclAst, PowerDeclAst, ProgramAst, RequiresStmt,
+    RevisionStmt, SchematicOverflowAst, SchematicPaperAst, SchematicStmt, SheetStmt,
+    StackupLayerAst, StackupStmt, StatementAst, UseStmt, ValueWithUnit, VariantDeclStmt,
 };
 
 use synth_diagnostics::{
@@ -542,6 +542,7 @@ impl Parser {
         let mut properties: BTreeMap<String, String> = BTreeMap::new();
         let mut dnp = false;
         let mut placement_hint = None;
+        let mut escape = None;
         loop {
             if self.parse_component_attribute(&mut value, &mut properties, &mut dnp) {
                 continue;
@@ -549,6 +550,9 @@ impl Parser {
             match self.peek_kind() {
                 TokenKind::KwPlacementHint => {
                     placement_hint = self.parse_placement_hint();
+                }
+                TokenKind::Ident(name) if name == "escape" => {
+                    escape = self.parse_escape();
                 }
                 TokenKind::LBrace => {
                     self.bump(); // consume `{`
@@ -558,6 +562,9 @@ impl Parser {
                             TokenKind::RBrace | TokenKind::Eof => break,
                             TokenKind::KwPlacementHint => {
                                 placement_hint = self.parse_placement_hint();
+                            }
+                            TokenKind::Ident(name) if name == "escape" => {
+                                escape = self.parse_escape();
                             }
                             _ => {
                                 if !self.parse_component_attribute(
@@ -569,8 +576,8 @@ impl Parser {
                                         self.peek().span,
                                         "E-SYNTH-PARSE-029",
                                         "unexpected keyword inside component body",
-                                        "`placement_hint`, `tolerance`, `voltage`, `power_rating`, \
-                                         `dielectric`, or `dnp`",
+                                        "`placement_hint`, `escape`, `tolerance`, `voltage`, \
+                                         `power_rating`, `dielectric`, or `dnp`",
                                         self.describe_current(),
                                         None,
                                     );
@@ -595,6 +602,95 @@ impl Parser {
             dnp,
             properties,
             placement_hint,
+            escape,
+            span: Span::new(start, end),
+        })
+    }
+
+    /// `escape { method underpad  layers "In1.Cu", "In2.Cu" }`, or
+    /// `escape { off }`.
+    ///
+    /// Attribute names are taken as identifiers rather than reserved
+    /// keywords, so a design already using `escape`, `method` or `off` as a
+    /// name keeps parsing — the same treatment `current`, `plane` and
+    /// `color` get inside a netclass.
+    fn parse_escape(&mut self) -> Option<EscapeAst> {
+        let start = self.peek().span.byte_start;
+        self.bump(); // consume `escape`
+        if !matches!(self.peek_kind(), TokenKind::LBrace) {
+            self.emit(
+                self.peek().span,
+                "E-SYNTH-PARSE-003",
+                "expected `{` to open escape body",
+                "`{`",
+                self.describe_current(),
+                None,
+            );
+            return None;
+        }
+        self.bump(); // consume `{`
+
+        let mut method = None;
+        let mut layers = Vec::new();
+        let mut off = false;
+        loop {
+            self.skip_error_tokens();
+            match self.peek_kind() {
+                TokenKind::RBrace | TokenKind::Eof => break,
+                TokenKind::Ident(name) if name == "method" => {
+                    self.bump();
+                    if matches!(self.peek_kind(), TokenKind::Colon) {
+                        self.bump();
+                    }
+                    method = self.expect_ident(
+                        "E-SYNTH-PARSE-040",
+                        "expected an escape method (`channel` or `underpad`)",
+                    );
+                }
+                // `layers` is a reserved keyword — `layers 4` declares the
+                // board's copper count — so it arrives as KwLayers, not as an
+                // identifier like `method` and `off` do.
+                TokenKind::KwLayers => {
+                    self.bump();
+                    if matches!(self.peek_kind(), TokenKind::Colon) {
+                        self.bump();
+                    }
+                    while let TokenKind::StringLit(_) = self.peek_kind() {
+                        if let Some(layer) =
+                            self.expect_string("E-SYNTH-PARSE-040", "expected a copper layer name")
+                        {
+                            layers.push(layer);
+                        }
+                        if matches!(self.peek_kind(), TokenKind::Comma) {
+                            self.bump();
+                        }
+                    }
+                }
+                TokenKind::Ident(name) if name == "off" => {
+                    self.bump();
+                    off = true;
+                }
+                _ => {
+                    self.emit(
+                        self.peek().span,
+                        "E-SYNTH-PARSE-040",
+                        "unexpected attribute inside escape",
+                        "`method <channel|underpad>`, `layers \"<layer>\", …`, or `off`",
+                        self.describe_current(),
+                        None,
+                    );
+                    self.bump();
+                }
+            }
+        }
+        if matches!(self.peek_kind(), TokenKind::RBrace) {
+            self.bump();
+        }
+        let end = self.last_offset();
+        Some(EscapeAst {
+            method,
+            layers,
+            off,
             span: Span::new(start, end),
         })
     }

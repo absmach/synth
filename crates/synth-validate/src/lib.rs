@@ -4513,6 +4513,7 @@ mod tests {
                 dnp: false,
                 properties: std::collections::BTreeMap::new(),
                 placement_hint: None,
+                escape: None,
                 group: None,
                 sheet: None,
                 source_span: Span::new(0, 0),
@@ -4641,6 +4642,7 @@ mod tests {
             dnp: false,
             properties: std::collections::BTreeMap::new(),
             placement_hint: None,
+            escape: None,
             group: None,
             sheet: None,
             source_span: Span::new(0, 0),
@@ -4699,6 +4701,7 @@ mod tests {
         }
     }
 
+    #[allow(clippy::too_many_lines)] // one literal board, spelled out field by field
     fn decoupling_test_board(cap_value: Option<&str>) -> Board {
         use synth_diagnostics::Span;
         use synth_ir::{Net, NetEndpoint, NetId};
@@ -4753,6 +4756,7 @@ mod tests {
                     dnp: false,
                     properties: std::collections::BTreeMap::new(),
                     placement_hint: None,
+                    escape: None,
                     group: None,
                     sheet: None,
                     source_span: Span::new(0, 0),
@@ -4766,6 +4770,7 @@ mod tests {
                     dnp: false,
                     properties: std::collections::BTreeMap::new(),
                     placement_hint: None,
+                    escape: None,
                     group: None,
                     sheet: None,
                     source_span: Span::new(0, 0),
@@ -4848,6 +4853,7 @@ mod tests {
                     dnp: false,
                     properties: std::collections::BTreeMap::new(),
                     placement_hint: None,
+                    escape: None,
                     group: None,
                     sheet: None,
                     source_span: Span::new(0, 0),
@@ -4982,6 +4988,7 @@ mod tests {
                 dnp: false,
                 properties: std::collections::BTreeMap::new(),
                 placement_hint: None,
+                escape: None,
                 group: None,
                 sheet: None,
                 source_span: Span::new(0, 0),
@@ -5125,6 +5132,7 @@ mod tests {
                 dnp: false,
                 properties: std::collections::BTreeMap::new(),
                 placement_hint: None,
+                escape: None,
                 group: None,
                 sheet: None,
                 source_span: Span::new(0, 0),
@@ -5190,6 +5198,7 @@ mod tests {
                 dnp: false,
                 properties: std::collections::BTreeMap::new(),
                 placement_hint: None,
+                escape: None,
                 group: Some("Power".into()),
                 sheet: None,
                 source_span: Span::new(0, 0),

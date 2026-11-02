@@ -69,6 +69,7 @@ fn component(id: u32, refdes: &str, p: Part) -> Component {
         dnp: false,
         properties: std::collections::BTreeMap::new(),
         placement_hint: None,
+        escape: None,
         group: None,
         sheet: None,
         source_span: synth_diagnostics::Span::new(0, 0),
