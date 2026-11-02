@@ -40,10 +40,10 @@
       "threads": "4",
       "wall_clock_secs": "1200"
     },
-    "input_hash": "b64ec7f5652f1586b69dbcef20ac54a6f679c9472810d3d3dc88e1ed12c1aceb",
+    "input_hash": "49b7783c24c8cdfdeafcce912a6221ed8a76190263103de122f7b46589f374eb",
     "output_hash": "",
     "source_revision": null,
-    "duration_ms": 64542
+    "duration_ms": 58277
   },
   "statistics": {
     "connected_nets": 40,
@@ -91,7 +91,7 @@
     "kicad_drc": {
       "errors": 0,
       "unconnected": 0,
-      "warnings": 4
+      "warnings": 0
     },
     "blocking_reasons": [],
     "unavailable_checks": []
