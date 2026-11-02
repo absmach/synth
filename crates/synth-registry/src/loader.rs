@@ -692,21 +692,7 @@ footprint_only = true
             eprintln!("skipping footprint-only guard test: KiCad symbol library not present");
             return;
         }
-        let toml = r#"
-id = "bogus_footprint_only"
-kind = "resistor"
-kicad_symbol = "Device:R"
-[[pins]]
-name = "p1"
-number = "1"
-electrical_type = "passive"
-[[pins]]
-name = "ep"
-number = "1"
-electrical_type = "passive"
-footprint_only = true
-"#;
-        // duplicate number would be caught first; use a distinct present number
+        // use a number present on the symbol (2), not a duplicate
         let toml = r#"
 id = "bogus_footprint_only"
 kind = "resistor"
