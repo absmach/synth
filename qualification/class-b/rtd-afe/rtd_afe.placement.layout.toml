@@ -2,7 +2,30 @@ schema_version = 2
 forced_net_labels = []
 fit_sheet = false
 
-# Mounting holes.
+
+# Plain rectangle: no notch, no post-export cut.
+[[outline]]
+x = 2.5
+y = -0.01
+
+[[outline]]
+x = 52.59
+y = -0.01
+
+[[outline]]
+x = 52.59
+y = 44.08
+
+[[outline]]
+x = 2.5
+y = 44.08
+
+[[vias]]
+x = 26.8
+y = 26.73
+net = "GND"
+
+
 [components.H1]
 x = 6.0
 y = 4.0

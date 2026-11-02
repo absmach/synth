@@ -8,7 +8,7 @@
 // Ground: one GND plane on all four layers; there is no analog/digital split and no tie resistor.
 board "rtd_afe" {
   layers 4
-  manufacturer "jlcpcb"
+  manufacturer "jlc-filled-via"
   revision "A"
 
   netclass "USB" {
@@ -19,6 +19,7 @@ board "rtd_afe" {
   power "VBUS" 5v
   power "+3V3" 3.3v
   power "+3V3A" 3.3v
+  requires via_in_pad
 
   component H1: mounting_hole "mounting_hole_m2_5"
   component H2: mounting_hole "mounting_hole_m2_5"
