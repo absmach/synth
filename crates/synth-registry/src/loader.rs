@@ -683,6 +683,55 @@ footprint_only = true
     }
 
     #[test]
+    fn a_footprint_only_pin_must_not_exist_on_the_symbol() {
+        // The inverse of the exposed-pad case: when the flag is set on a
+        // number the symbol actually carries, the loader must reject it,
+        // otherwise a real symbol pin could be marked footprint-only and
+        // bypass pin validation.
+        if crate::kicad_pin_check::kicad_pin_numbers("Device:R").is_none() {
+            eprintln!("skipping footprint-only guard test: KiCad symbol library not present");
+            return;
+        }
+        let toml = r#"
+id = "bogus_footprint_only"
+kind = "resistor"
+kicad_symbol = "Device:R"
+[[pins]]
+name = "p1"
+number = "1"
+electrical_type = "passive"
+[[pins]]
+name = "ep"
+number = "1"
+electrical_type = "passive"
+footprint_only = true
+"#;
+        // duplicate number would be caught first; use a distinct present number
+        let toml = r#"
+id = "bogus_footprint_only"
+kind = "resistor"
+kicad_symbol = "Device:R"
+[[pins]]
+name = "p1"
+number = "1"
+electrical_type = "passive"
+[[pins]]
+name = "ep"
+number = "2"
+electrical_type = "passive"
+footprint_only = true
+"#;
+        let err = load_from_strs(&[("bogus_footprint_only.synth.toml", toml)])
+            .expect_err("pad 2 is on the symbol and must not be footprint-only");
+        match err {
+            LoadError::KicadPinMismatch {
+                registry_number, ..
+            } => assert_eq!(registry_number, "2"),
+            other => panic!("expected KicadPinMismatch, got {other:?}"),
+        }
+    }
+
+    #[test]
     fn a_pad_that_is_not_footprint_only_is_still_checked() {
         // The same part without the flag must still be rejected, or the
         // mechanism would be a way to silence the check rather than to
