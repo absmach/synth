@@ -91,7 +91,7 @@ With the random ids masked the routed board is `52980d7667` in all three exports
 
 PCB DFM of the package of this README (2026-11-02 13:06, Gerber content hash `1c1755660b`, four layers, 8.7 x 5.1 cm, report in [`reports/`](reports/jlcpcb_pcb_dfm_2026-11-02_13-06_1c1755660b.pdf)): 0 Danger items. Trace spacing 0.25 mm, pad spacing 0.21 mm, annular ring 0.20 mm (100 rings), through-hole to SMD 3.77 mm, solder-mask opening near a trace 0.17 mm and silkscreen line width 0.18 mm are good; silkscreen to pad, silkscreen to hole, via to pad and sharp corners have no finding.
 
-SMT DFM of the same package (BOM, CPL and Gerbers of `fab/`, run by JeffMboya on 2026-11-02 in JLCPCB's assembly flow, no order placed): every check good.
+SMT DFM of the package in `fab/` (BOM, CPL and the Gerbers of content hash `1c1755660b`, JLCPCB assembly flow, 2026-11-02, no order placed): every check good.
 
 Quote with assembly for the same package ([`reports/jlcpcb_quote_2026-11-02.md`](reports/jlcpcb_quote_2026-11-02.md)): PCB $8.00 and Standard PCBA $140.17, $148.17 before shipping.
 
