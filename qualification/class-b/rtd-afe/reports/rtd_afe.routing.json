@@ -17,21 +17,21 @@
     "profile": "jlcpcb",
     "command": [
       "/usr/bin/python3",
-      "tools/freeroute_autoroute.py",
-      "qualification/class-b/rtd-afe/kicad/rtd_afe.synth.kicad_pcb",
-      "qualification/class-b/rtd-afe/kicad/rtd_afe.freerouting.kicad_pcb",
+      "/home/steve/work/synth-classb/tools/freeroute_autoroute.py",
+      "/home/steve/work/synth-classb/qualification/class-b/rtd-afe/kicad/rtd_afe.synth.kicad_pcb",
+      "/home/steve/work/synth-classb/qualification/class-b/rtd-afe/kicad/rtd_afe.freerouting.kicad_pcb",
       "--jar",
-      "tools/freerouting/freerouting-2.4.1.jar",
+      "/home/steve/work/synth-classb/tools/freerouting/freerouting-2.4.1.jar",
       "--java",
-      "tools/jre25/bin/java",
+      "/home/steve/work/synth-classb/tools/jre25/bin/java",
       "--passes",
       "40",
       "--threads",
       "4",
       "--ses-output",
-      "qualification/class-b/rtd-afe/kicad/rtd_afe.freerouting.ses",
+      "/home/steve/work/synth-classb/qualification/class-b/rtd-afe/kicad/rtd_afe.freerouting.ses",
       "--report",
-      "qualification/class-b/rtd-afe/kicad/rtd_afe.freerouting.json",
+      "/home/steve/work/synth-classb/qualification/class-b/rtd-afe/kicad/rtd_afe.freerouting.json",
       "--clean-netlist"
     ],
     "settings": {
@@ -40,31 +40,31 @@
       "threads": "4",
       "wall_clock_secs": "1200"
     },
-    "input_hash": "5f9a5c8be6da84846957d120aed6aec1a19fe35c8290fc9b6211f1a078dee112",
+    "input_hash": "b64ec7f5652f1586b69dbcef20ac54a6f679c9472810d3d3dc88e1ed12c1aceb",
     "output_hash": "",
     "source_revision": null,
-    "duration_ms": 257038
+    "duration_ms": 64542
   },
   "statistics": {
-    "connected_nets": 41,
+    "connected_nets": 40,
     "open_nets": 0,
     "open_net_names": [],
-    "segments": 340,
-    "vias": 62,
-    "wire_length_mm": 557.825294,
+    "segments": 384,
+    "vias": 58,
+    "wire_length_mm": 590.50829,
     "pad_escape_rejections": 0,
     "engine_findings": {
-      "claimed_imported_segments": "340",
-      "claimed_imported_vias": "62"
+      "claimed_imported_segments": "384",
+      "claimed_imported_vias": "58"
     }
   },
   "artifacts": {
-    "baseline": "qualification/class-b/rtd-afe/kicad/rtd_afe.synth.kicad_pcb",
-    "candidate": "qualification/class-b/rtd-afe/kicad/rtd_afe.freerouting.kicad_pcb",
-    "delivered": "qualification/class-b/rtd-afe/kicad/rtd_afe.kicad_pcb",
-    "session_log": "qualification/class-b/rtd-afe/kicad/rtd_afe.freerouting.log",
-    "ses": "qualification/class-b/rtd-afe/kicad/rtd_afe.freerouting.ses",
-    "router_report": "qualification/class-b/rtd-afe/kicad/rtd_afe.freerouting.json",
+    "baseline": "/home/steve/work/synth-classb/qualification/class-b/rtd-afe/kicad/rtd_afe.synth.kicad_pcb",
+    "candidate": "/home/steve/work/synth-classb/qualification/class-b/rtd-afe/kicad/rtd_afe.freerouting.kicad_pcb",
+    "delivered": "/home/steve/work/synth-classb/qualification/class-b/rtd-afe/kicad/rtd_afe.kicad_pcb",
+    "session_log": "/home/steve/work/synth-classb/qualification/class-b/rtd-afe/kicad/rtd_afe.freerouting.log",
+    "ses": "/home/steve/work/synth-classb/qualification/class-b/rtd-afe/kicad/rtd_afe.freerouting.ses",
+    "router_report": "/home/steve/work/synth-classb/qualification/class-b/rtd-afe/kicad/rtd_afe.freerouting.json",
     "connectivity_report": null,
     "drc_report": null
   },
@@ -80,7 +80,7 @@
       "outline_present": true
     },
     "connectivity": {
-      "connected_nets": 41,
+      "connected_nets": 40,
       "open_nets": 0,
       "open": [],
       "unconnected_pads": [],
@@ -91,7 +91,7 @@
     "kicad_drc": {
       "errors": 0,
       "unconnected": 0,
-      "warnings": 0
+      "warnings": 4
     },
     "blocking_reasons": [],
     "unavailable_checks": []
