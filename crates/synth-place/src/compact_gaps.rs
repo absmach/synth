@@ -44,8 +44,8 @@ struct Geom {
 }
 
 /// The courtyard of the stock M2.5 mounting-hole footprint is a circle of
-/// 5.5 mm; the footprint loader reads a circle as no courtyard and falls back
-/// to the 2.5 mm hole, which would let a part sit inside the hole's keep-out.
+/// 5.5 mm. Where the KiCad library is not installed the size falls back to the
+/// part's 2.5 mm hole, which would let a part sit inside the hole's keep-out.
 const MOUNTING_HOLE_COURTYARD_MM: f64 = 5.6;
 
 fn geometry(board: &Board, placement: &Placement) -> Vec<Geom> {
