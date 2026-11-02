@@ -189,5 +189,51 @@ class FanoutTest(unittest.TestCase):
         self.assertEqual(escapes, [("U1", "underpad")])
 
 
+
+class FailClosedPrerequisiteTest(unittest.TestCase):
+    def test_missing_route_planes_fails_when_declared(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            repo = Path(tmp) / "krt"
+            (repo / "py_router").mkdir(parents=True)
+            (repo / "py_router" / "bga_fanout.py").write_text(FANOUT_STUB)
+            board = Path(tmp) / "in.kicad_pcb"
+            board.write_text('(kicad_pcb (zone (net_name "GND") "F.Cu"))')
+            adapter = load_adapter()
+            with self.assertRaises(RuntimeError):
+                adapter._fanout(
+                    sys.executable, repo, board, ["U1:channel:"], "underpad", 0.127,
+                    None, None, "standard", False, "none", False, {"U1"},
+                )
+
+    def test_failing_route_planes_fails_when_declared(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            repo = Path(tmp) / "krt"
+            (repo / "py_router").mkdir(parents=True)
+            (repo / "py_router" / "route_planes.py").write_text("import sys; sys.exit(1)")
+            (repo / "py_router" / "bga_fanout.py").write_text(FANOUT_STUB)
+            board = Path(tmp) / "in.kicad_pcb"
+            board.write_text('(kicad_pcb (zone (net_name "GND") "F.Cu"))')
+            adapter = load_adapter()
+            with self.assertRaises(RuntimeError):
+                adapter._fanout(
+                    sys.executable, repo, board, ["U1:channel:"], "underpad", 0.127,
+                    None, None, "standard", False, "none", False, {"U1"},
+                )
+
+    def test_missing_bga_fanout_fails_when_declared(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            repo = Path(tmp) / "krt"
+            (repo / "py_router").mkdir(parents=True)
+            board = Path(tmp) / "in.kicad_pcb"
+            board.write_text("(kicad_pcb)")
+            adapter = load_adapter()
+            with self.assertRaises(RuntimeError):
+                adapter._fanout(
+                    sys.executable, repo, board, ["U1:channel:"], "underpad", 0.127,
+                    None, None, "standard", False, "none", False, {"U1"},
+                )
+
+
+
 if __name__ == "__main__":
     unittest.main()
