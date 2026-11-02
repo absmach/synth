@@ -10765,6 +10765,37 @@ board "features_only" {
     }
 
     #[test]
+    fn advice_that_ties_on_distance_comes_out_in_the_same_order_every_run() {
+        // Both ends of the link are equally far apart, so only the order the
+        // parts are walked in decides which is listed first, and the list is
+        // cut at a fixed length.
+        let board = board_from_source(
+            r#"board "far" { layers 2
+                power "GND" 0v
+                component RA: resistor "r_generic_0603" value "1k"
+                component RB: resistor "r_generic_0603" value "1k"
+                net "GND" { RA.p2 RB.p2 }
+                net "LINK" { RA.p1 RB.p1 }
+            }"#,
+            "far.synth",
+        );
+        let mut placement = place(&board).expect("place");
+        move_part(&mut placement, &board, "RA", 10.0, 10.0);
+        move_part(&mut placement, &board, "RB", 30.0, 10.0);
+        let order = || -> Vec<ComponentId> {
+            alignment::isolated_parts(&board, &placement)
+                .iter()
+                .map(|f| f.id)
+                .collect()
+        };
+        let first = order();
+        assert_eq!(first.len(), 2);
+        for _ in 0..16 {
+            assert_eq!(order(), first);
+        }
+    }
+
+    #[test]
     fn a_rail_capacitor_far_from_the_ic_on_its_rail_is_reported() {
         let board = board_from_source(
             r#"board "railcap" { layers 2

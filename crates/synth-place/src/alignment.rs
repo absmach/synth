@@ -11,7 +11,7 @@
 //! line by more than [`ALIGN_TOLERANCE_MM`] is reported with the coordinate
 //! that would put it on the line.
 
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 
 use synth_geometry::{nm_to_mm, Point};
 use synth_ir::{Board, ComponentId};
@@ -77,7 +77,7 @@ fn mm(p: Point) -> (f64, f64) {
 /// Like parts that sit side by side but not on one line, each with the
 /// coordinate that would align it.
 pub(crate) fn misaligned_like_parts(board: &Board, placement: &Placement) -> Vec<Misaligned> {
-    let mut by_key: HashMap<String, Vec<(ComponentId, (f64, f64))>> = HashMap::new();
+    let mut by_key: BTreeMap<String, Vec<(ComponentId, (f64, f64))>> = BTreeMap::new();
     for p in &placement.components {
         if let Some(key) = key_of(board, p.id) {
             by_key.entry(key).or_default().push((p.id, mm(p.center)));
@@ -94,7 +94,7 @@ pub(crate) fn misaligned_like_parts(board: &Board, placement: &Placement) -> Vec
                 }
             }
         }
-        let mut clusters: HashMap<usize, Vec<(ComponentId, (f64, f64))>> = HashMap::new();
+        let mut clusters: BTreeMap<usize, Vec<(ComponentId, (f64, f64))>> = BTreeMap::new();
         for (i, member) in members.iter().enumerate() {
             let root = find(&mut parent, i);
             clusters.entry(root).or_default().push(*member);
@@ -180,7 +180,7 @@ pub(crate) fn isolated_parts(board: &Board, placement: &Placement) -> Vec<Isolat
         .iter()
         .map(|p| (p.id, mm(p.center)))
         .collect();
-    let mut neighbours: HashMap<ComponentId, Vec<ComponentId>> = HashMap::new();
+    let mut neighbours: BTreeMap<ComponentId, Vec<ComponentId>> = BTreeMap::new();
     for net in board
         .nets
         .iter()
