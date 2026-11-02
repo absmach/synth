@@ -94,15 +94,12 @@ pub const ROUTE_REPORT_SCHEMA: &str = "synth.routing.v1";
 /// that fails is as auditable as one that succeeds.
 pub fn route(request: &RouteRequest) -> RouteReport {
     let mut report = route_once(request);
-    if request.engine != RouterEngine::KiCadRoutingTools {
-        return report;
-    }
     // Whether the engine puts a via in a pad, or leaves a net open, depends on
     // the order it routes the nets in, and the same board can route cleanly in
     // one order and not in another. A board the independent validation rejected
     // is therefore tried again in the engine's other orders before it is given
     // up on; the first one that validates is kept.
-    for ordering in ORDERING_RETRIES.iter().take(ordering_retries()) {
+    for ordering in retry_orderings(request) {
         if report.state != result::RouteState::ValidationFailed {
             break;
         }
@@ -122,6 +119,18 @@ pub fn route(request: &RouteRequest) -> RouteReport {
 
 /// The engine's net orders other than its default, in the order they are tried.
 const ORDERING_RETRIES: [&str; 3] = ["inside_out", "original", "bus"];
+
+/// The net orders a rejected board is routed again in: none for an engine
+/// without orders, and none when the caller chose the order, which a retry
+/// would silently replace.
+fn retry_orderings(request: &RouteRequest) -> &'static [&'static str] {
+    if request.engine != RouterEngine::KiCadRoutingTools
+        || request.kicad_routing_tools.ordering.is_some()
+    {
+        return &[];
+    }
+    &ORDERING_RETRIES[..ordering_retries().min(ORDERING_RETRIES.len())]
+}
 
 /// How many of [`ORDERING_RETRIES`] a rejected board is tried with:
 /// `SYNTH_ROUTER_ORDERING_RETRIES`, three when absent, none when zero.
@@ -658,5 +667,23 @@ mod order_tests {
     #[test]
     fn a_clean_run_recommends_nothing() {
         assert!(recommended_order(&[]).is_empty());
+    }
+
+    #[test]
+    fn a_net_order_the_caller_chose_is_not_retried_in_another() {
+        let dir = std::env::temp_dir();
+        let mut request = RouteRequest::new(
+            &dir.join("demo.kicad_pcb"),
+            &dir,
+            RouterEngine::KiCadRoutingTools,
+        );
+        if std::env::var_os("SYNTH_ROUTER_ORDERING_RETRIES").is_none() {
+            assert_eq!(retry_orderings(&request), ORDERING_RETRIES);
+        }
+        request.kicad_routing_tools.ordering = Some("bus".to_string());
+        assert!(retry_orderings(&request).is_empty());
+        request.kicad_routing_tools.ordering = None;
+        request.engine = RouterEngine::Freerouting;
+        assert!(retry_orderings(&request).is_empty());
     }
 }
