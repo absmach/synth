@@ -729,6 +729,16 @@ fn check_symbol_pin_coverage(part: &Part, symbols: &dyn SymbolFacts) -> Check {
     // Footprint-only pads are excluded for the same reason the loader skips
     // them: there is no symbol pin for them to match, and demanding one would
     // make an exposed pad unqualifiable rather than merely undeclared.
+    // A footprint-only pin that *does* exist on the symbol is mislabelled:
+    // the pad is not footprint-only, and the flag would be silencing a check
+    // that should run.
+    let mislabelled: Vec<&str> = part
+        .pins
+        .iter()
+        .filter(|p| p.footprint_only)
+        .map(|p| p.number.0.trim())
+        .filter(|n| !n.is_empty() && symbol_pins.contains(*n))
+        .collect();
     let missing: Vec<&str> = part
         .pins
         .iter()
@@ -737,18 +747,27 @@ fn check_symbol_pin_coverage(part: &Part, symbols: &dyn SymbolFacts) -> Check {
         .filter(|n| !n.is_empty() && !symbol_pins.contains(*n))
         .collect();
 
-    if missing.is_empty() {
-        return Check::pass(NAME);
+    let mut findings = Vec::new();
+    if !mislabelled.is_empty() {
+        findings.push(Finding::blocking(
+            "E-SYNTH-QUAL-005",
+            "footprint_only pin exists on the KiCad symbol",
+            format!("footprint-only pins of `{}` to be absent from `{lib_id}`", part.id.0),
+            format!("{} mislabelled: {}", mislabelled.len(), sample(&mislabelled)),
+        ));
     }
-    Check::from_findings(
-        NAME,
-        vec![Finding::blocking(
+    if !missing.is_empty() {
+        findings.push(Finding::blocking(
             "E-SYNTH-QUAL-005",
             "declared pin number does not exist on the KiCad symbol",
             format!("every pin of `{}` to exist on `{lib_id}`", part.id.0),
             format!("{} unmatched: {}", missing.len(), sample(&missing)),
-        )],
-    )
+        ));
+    }
+    if findings.is_empty() {
+        return Check::pass(NAME);
+    }
+    Check::from_findings(NAME, findings)
 }
 
 /// Dimension values judged on their own, with no footprint involved.
