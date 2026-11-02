@@ -25,7 +25,7 @@ The design is `i2c_sensor_node.synth` with its placement sidecar `i2c_sensor_nod
 
 ## Measured results
 
-KiCad 10.0.7 on a 16-vCPU server; Synth built from commit `cfec42751ffd898cd4425322247e56b77951ed0e` (branch `SYN-case2-binary` of `JeffMboya/synth`, the merge of Synth pull requests #370, #388 and #394); KiCadRoutingTools `9399bfb29e072bfe60b10d9cdae20c274fc2a17a`. The figures below are from the first of the three exports in [`export/`](export/).
+KiCad 10.0.7 on a 16-vCPU server; Synth built from commit `aaa8d193fe9573c554a5ed4a4a1c26a492030c8d` (branch `SYN-case2-binary` of `JeffMboya/synth`, the merge of Synth pull requests #370, #388 and #394); KiCadRoutingTools `9399bfb29e072bfe60b10d9cdae20c274fc2a17a`. The figures below are from the first of the three exports in [`export/`](export/).
 
 | Item | Result |
 |---|---|
@@ -35,7 +35,7 @@ KiCad 10.0.7 on a 16-vCPU server; Synth built from commit `cfec42751ffd898cd4425
 | Routing | 35 nets connected, 602 track segments, 73 vias |
 | KiCad DRC (`--refill-zones --severity-all`, with the footprint library table) | 0 errors, 0 unconnected; warnings: 52 `lib_footprint_mismatch` ([`reports/kicad_drc.json`](reports/kicad_drc.json)) |
 | KiCad ERC | 121 `lib_symbol_issues`, 1 `pin_to_pin` ([`reports/kicad_erc.json`](reports/kicad_erc.json)) |
-| Gerber and drill content hash | `2600d19420` (identical across the three exports) |
+| Gerber and drill content hash | `1c1755660b` (identical across the three exports) |
 
 Connector distance to the board edge (courtyard to Edge.Cuts, measured on the exported board):
 
@@ -61,7 +61,7 @@ Decoupling capacitors, pad to the supply pin they serve (pad to supply pin):
 
 Net classes (PWR 0.5 mm, V33 0.4 mm, SIG 0.25 mm, GNDC 0.4 mm, Default 0.2 mm; vias 0.6 mm over a 0.2 mm drill), as exported:
 
-    classes {'PWR': (0.5, 0.6, 0.2), 'SIG': (0.25, 0.6, 0.2), 'V33': (0.4, 0.6, 0.2), 'GNDC': (0.4, 0.6, 0.2), 'Default': (0.2, 0.6, 0.3)}
+    classes {'PWR': (0.5, 0.6, 0.2), 'SIG': (0.25, 0.6, 0.2), 'V33': (0.4, 0.6, 0.2), 'GNDC': (0.4, 0.6, 0.2), 'Default': (0.2, 0.6, 0.2)}
     assignments 52 patterns 17
     SIG {0.25: 229, 0.2: 75, 0.21000000000000002: 34, 0.22: 33, 0.23: 34, 0.24: 32, 0.127: 8}
     V33 {0.4: 85, 0.36000000000000004: 1, 0.32: 1, 0.28: 1, 0.24000000000000002: 1, 0.2: 2}
@@ -76,22 +76,16 @@ The source and sidecar in this directory were exported three times with `synth e
 
 | file | export 1 | export 2 | export 3 | |
 |---|---|---|---|---|
-| `i2c_sensor_node.synth.kicad_pcb` (un-routed) | 8682c0ba36 | 8682c0ba36 | 8682c0ba36 | identical |
-| `i2c_sensor_node.kicad_pcb` | bb30873e4f | 27eb415e9c | 88fbbccab8 | identical after the router's and KiCad's random ids |
+| `i2c_sensor_node.synth.kicad_pcb` (un-routed) | ba85e901ff | ba85e901ff | ba85e901ff | identical |
+| `i2c_sensor_node.kicad_pcb` | c76451a264 | 1d288a6a22 | 691a25cd42 | identical after the router's and KiCad's random ids |
 | `i2c_sensor_node.kicad_sch` (one A1 sheet) | ed3e118032 | ed3e118032 | ed3e118032 | identical |
-| `i2c_sensor_node.kicad_pro` | d385dd6371 | d385dd6371 | d385dd6371 | identical |
+| `i2c_sensor_node.kicad_pro` | 8b000fbbf8 | 8b000fbbf8 | 8b000fbbf8 | identical |
 | `i2c_sensor_node.kicad_sym` | f8b593e51b | f8b593e51b | f8b593e51b | identical |
 | `bom.csv` | ec31ca8c8a | ec31ca8c8a | ec31ca8c8a | identical |
 | `pnp.csv` | 706483f12e | 706483f12e | 706483f12e | identical |
-| Gerber and drill content | 2600d19420 | 2600d19420 | 2600d19420 | identical |
+| Gerber and drill content | 1c1755660b | 1c1755660b | 1c1755660b | identical |
 
-With the random ids masked the routed board is `cb7909f3f9` in all three exports ([`reproduce/compare_exports.py`](reproduce/compare_exports.py) does the masking). [`reproduce/reproduce.sh`](reproduce/reproduce.sh) rebuilds Synth at the pinned commit, exports three times and compares, then builds the fabrication package.
-
-## JLCPCB
-
-PCB DFM of the package of this README (2026-11-02 09:11, Gerber content hash `2600d19420`, four layers, 8.7 x 5.1 cm, report in [`reports/`](reports/jlcpcb_pcb_dfm_2026-11-02_09-11_2600d19420.pdf)): 0 Danger items. Trace spacing 0.25 mm, pad spacing 0.21 mm, plated-hole to trace 0.35 mm, through-hole to SMD 3.77 mm, solder-mask opening near a trace 0.17 mm and silkscreen line width 0.18 mm are good; silkscreen to pad, silkscreen to hole, via to pad and sharp corners have no finding.
-
-PCB quote of the same Gerbers (2026-11-02, [`reports/jlcpcb_pcb_quote_2026-11-02.md`](reports/jlcpcb_pcb_quote_2026-11-02.md)): $8.00 for the PCB at 3 to 4 days with no extra charge, DHL Express shipping $41.80 for 0.20 kg.
+With the random ids masked the routed board is `52980d7667` in all three exports ([`reproduce/compare_exports.py`](reproduce/compare_exports.py) does the masking). [`reproduce/reproduce.sh`](reproduce/reproduce.sh) rebuilds Synth at the pinned commit, exports three times and compares, then builds the fabrication package.
 
 ## Review points (Sammy, case 2) and the state of each
 

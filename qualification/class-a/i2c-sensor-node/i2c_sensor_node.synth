@@ -48,6 +48,7 @@ board "i2c_sensor_node" {
   netclass "V33"  { trace_width 0.4mm clearance 0.2mm via_diameter 0.6mm via_drill 0.2mm color "#e69f00" }
   netclass "GNDC" { trace_width 0.4mm clearance 0.2mm via_diameter 0.6mm via_drill 0.2mm color "#000000" }
   netclass "SIG"  { trace_width 0.25mm clearance 0.2mm via_diameter 0.6mm via_drill 0.2mm color "#0072b2" }
+  netclass "Default" { via_diameter 0.6mm via_drill 0.2mm }
 
   // ---- A1: JST 5 V input and its protection chain --------------------------
   group "5V INPUT: FUSE THEN DIODE" color "#c2410c" {

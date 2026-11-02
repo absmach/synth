@@ -122,14 +122,6 @@
 	(net 34 "+5V_PROT")
 	(net 35 "+3V3")
 	(net_class
-		"Default"
-		"Default net class"
-		(clearance 0.127)
-		(trace_width 0.127)
-		(via_dia 0.6)
-		(via_drill 0.3)
-	)
-	(net_class
 		"PWR"
 		"Synth netclass PWR"
 		(clearance 0.2)
@@ -195,6 +187,14 @@
 		(add_net "GPIO_PB0")
 		(add_net "GPIO_PB9_MCU")
 		(add_net "GPIO_PB9")
+	)
+	(net_class
+		"Default"
+		"Synth netclass Default"
+		(clearance 0.127)
+		(trace_width 0.127)
+		(via_dia 0.6)
+		(via_drill 0.2)
 	)
 	(gr_line
 		(start 0.4 0.5)
@@ -14236,7 +14236,7 @@
 	(via
 		(at 1.9 2)
 		(size 0.6)
-		(drill 0.3)
+		(drill 0.2)
 		(layers "F.Cu" "B.Cu")
 		(net 33)
 		(uuid "48f6631a-db63-57a9-8730-fb8c4fec3e96")
@@ -14244,7 +14244,7 @@
 	(via
 		(at 85.89 2)
 		(size 0.6)
-		(drill 0.3)
+		(drill 0.2)
 		(layers "F.Cu" "B.Cu")
 		(net 33)
 		(uuid "64e8dfab-a7fd-5dd5-b1be-e489efde80b9")
@@ -14252,7 +14252,7 @@
 	(via
 		(at 85.89 50)
 		(size 0.6)
-		(drill 0.3)
+		(drill 0.2)
 		(layers "F.Cu" "B.Cu")
 		(net 33)
 		(uuid "3f1c4251-9a29-5342-a212-d233227ace93")
@@ -14260,7 +14260,7 @@
 	(via
 		(at 1.9 50)
 		(size 0.6)
-		(drill 0.3)
+		(drill 0.2)
 		(layers "F.Cu" "B.Cu")
 		(net 33)
 		(uuid "cb6fd16d-e5a4-5ea0-9da6-1f427a149993")

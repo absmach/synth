@@ -1,7 +1,7 @@
 {
     "$schema": "https://schemas.kicad.org/erc.v1.json",
     "coordinate_units": "mm",
-    "date": "2026-11-02T05:24:01",
+    "date": "2026-11-02T07:28:56",
     "ignored_checks": [
         {
             "description": "Global label only appears once in the schematic",
@@ -1225,7 +1225,7 @@
                                 "x": 657.86,
                                 "y": 149.86
                             },
-                            "uuid": "57f4af4d-1154-426c-aee6-a3b22a17063e"
+                            "uuid": "f60965fb-1478-4641-aa43-ac8dbe262deb"
                         },
                         {
                             "description": "Symbol #FLG8824 Pin 1 [Power output, Line]",
@@ -1233,7 +1233,7 @@
                                 "x": 685.8,
                                 "y": 58.42
                             },
-                            "uuid": "e3e65743-0450-43be-a771-b5544da3328f"
+                            "uuid": "0c6c7b4f-9467-4576-9d93-f984070c7577"
                         }
                     ],
                     "severity": "warning",
