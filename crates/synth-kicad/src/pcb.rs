@@ -297,7 +297,26 @@ pub fn build_pcb(
         // Each ground fences only the corners inside its own pour region: a corner via
         // in another split ground's half is a dangling island of the wrong net.
         if board.layers >= 4 {
-            let outline = placement.board_outline;
+            // The source fence follows the delivered outline, not the placer's
+            // fitted rectangle: a sidecar notch moves the edge inward and
+            // would leave these vias on (or outside) Edge.Cuts.
+            let outline_points = outline;
+            let fence_outline = if outline_points.len() >= 3 {
+                let (mut min_x, mut min_y) = (i64::MAX, i64::MAX);
+                let (mut max_x, mut max_y) = (i64::MIN, i64::MIN);
+                for point in outline_points {
+                    let x = mm_to_nm(point.x);
+                    let y = mm_to_nm(point.y);
+                    min_x = min_x.min(x);
+                    min_y = min_y.min(y);
+                    max_x = max_x.max(x);
+                    max_y = max_y.max(y);
+                }
+                synth_geometry::Rect::new(Point::new(min_x, min_y), Point::new(max_x, max_y))
+            } else {
+                placement.board_outline
+            };
+            let outline = fence_outline;
             let inset = mm_to_nm(1.5);
             let holes: Vec<(Point, i64)> = board
                 .components
@@ -327,6 +346,11 @@ pub fn build_pcb(
                 if region
                     .as_deref()
                     .is_some_and(|polygon| !convex_contains(polygon, Point::new(x_nm, y_nm)))
+                {
+                    continue;
+                }
+                if !outline_points.is_empty()
+                    && !custom_outline_contains(outline_points, Point::new(x_nm, y_nm))
                 {
                     continue;
                 }
@@ -1398,6 +1422,23 @@ fn convex_contains(polygon: &[synth_geometry::Point], point: synth_geometry::Poi
         neg |= cross < 0;
     }
     !(pos && neg)
+}
+
+/// Whether `point` lies inside the closed sidecar outline, including a notch.
+fn custom_outline_contains(points: &[synth_layout::sidecar::SidecarPoint], point: Point) -> bool {
+    let x = nm_to_mm(point.x_nm);
+    let y = nm_to_mm(point.y_nm);
+    let mut inside = false;
+    let mut j = points.len() - 1;
+    for i in 0..points.len() {
+        let (xi, yi) = (points[i].x, points[i].y);
+        let (xj, yj) = (points[j].x, points[j].y);
+        if (yi > y) != (yj > y) && x < (xj - xi) * (y - yi) / (yj - yi) + xi {
+            inside = !inside;
+        }
+        j = i;
+    }
+    inside
 }
 
 /// Sutherland–Hodgman clip of a convex polygon by the half-plane
