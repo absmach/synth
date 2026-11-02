@@ -128,14 +128,14 @@ number = "21"
 electrical_type = "passive"
 
 [[pins]]
-name = "1v2o"
+name = "core_1v2"
 number = "22"
 electrical_type = "output"
 
 [[pins]]
 name = "rsvd"
 number = "23"
-electrical_type = "input"
+electrical_type = "do_not_connect"
 
 [[pins]]
 name = "spdled"
@@ -219,27 +219,27 @@ capabilities = ["reset"]
 [[pins]]
 name = "rsvd_2"
 number = "38"
-electrical_type = "input"
+electrical_type = "do_not_connect"
 
 [[pins]]
 name = "rsvd_3"
 number = "39"
-electrical_type = "input"
+electrical_type = "do_not_connect"
 
 [[pins]]
 name = "rsvd_4"
 number = "40"
-electrical_type = "input"
+electrical_type = "do_not_connect"
 
 [[pins]]
 name = "rsvd_5"
 number = "41"
-electrical_type = "input"
+electrical_type = "do_not_connect"
 
 [[pins]]
 name = "rsvd_6"
 number = "42"
-electrical_type = "input"
+electrical_type = "do_not_connect"
 
 [[pins]]
 name = "pmode2"

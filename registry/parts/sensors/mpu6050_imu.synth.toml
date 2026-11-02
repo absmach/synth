@@ -147,6 +147,12 @@ electrical_type = "bidirectional"
 capabilities = ["i2c_sda"]
 required = true
 
+[[pins]]
+name = "ep"
+number = "25"
+electrical_type = "ground_reference"
+footprint_only = true
+
 [[required_decoupling]]
 net = "vdd"
 value = "100nf"

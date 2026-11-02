@@ -534,11 +534,15 @@ fn validate_part(path: &Path, part: &Part) -> Result<(), LoadError> {
     if let Some(lib_id) = part.kicad_symbol.as_deref() {
         if let Some(kicad_numbers) = crate::kicad_pin_check::kicad_pin_numbers(lib_id) {
             for pin in &part.pins {
-                // A footprint-only pad has no symbol pin by definition, so
-                // this check has nothing to compare it against. Skipping it
-                // is what lets a part name a package with an exposed pad and
-                // still declare every copper pad it has.
                 if pin.footprint_only {
+                    if kicad_numbers.contains(&pin.number.0) {
+                        return Err(LoadError::KicadPinMismatch {
+                            path: path.to_path_buf(),
+                            kicad_symbol: lib_id.to_string(),
+                            registry_pin: pin.name.clone(),
+                            registry_number: pin.number.0.clone(),
+                        });
+                    }
                     continue;
                 }
                 if !kicad_numbers.contains(&pin.number.0) {
