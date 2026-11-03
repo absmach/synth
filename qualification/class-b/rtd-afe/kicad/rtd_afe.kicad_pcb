@@ -4745,7 +4745,7 @@
 		)
 		(property
 			"MPN"
-			""
+			"BLM18AG601SN1D"
 			(at 0 0 0)
 			(layer "F.Fab")
 			(hide yes)
@@ -4758,7 +4758,7 @@
 		)
 		(property
 			"LCSC"
-			""
+			"C19330"
 			(at 0 0 0)
 			(layer "F.Fab")
 			(hide yes)
@@ -10303,7 +10303,7 @@
 		)
 		(property
 			"MPN"
-			""
+			"ESD5V0B03-323"
 			(at 0 0 0)
 			(layer "F.Fab")
 			(hide yes)
@@ -10316,7 +10316,7 @@
 		)
 		(property
 			"LCSC"
-			""
+			"C521915"
 			(at 0 0 0)
 			(layer "F.Fab")
 			(hide yes)
@@ -10620,7 +10620,7 @@
 		)
 		(property
 			"MPN"
-			""
+			"ESD5V0B03-323"
 			(at 0 0 0)
 			(layer "F.Fab")
 			(hide yes)
@@ -10633,7 +10633,7 @@
 		)
 		(property
 			"LCSC"
-			""
+			"C521915"
 			(at 0 0 0)
 			(layer "F.Fab")
 			(hide yes)
@@ -10936,7 +10936,7 @@
 		)
 		(property
 			"MPN"
-			"LP5907MFX-3.3"
+			"LP5907MFX-3.3/NOPB"
 			(at 0 0 0)
 			(layer "F.Fab")
 			(hide yes)
@@ -10949,7 +10949,7 @@
 		)
 		(property
 			"LCSC"
-			"C83437"
+			"C80670"
 			(at 0 0 0)
 			(layer "F.Fab")
 			(hide yes)

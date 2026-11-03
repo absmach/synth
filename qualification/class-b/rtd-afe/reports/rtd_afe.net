@@ -2,7 +2,7 @@
 	(version "E")
 	(design
 		(source "qualification/class-b/rtd-afe/kicad/rtd_afe.kicad_sch")
-		(date "2026-11-03T19:05:49")
+		(date "2026-11-03T20:13:07")
 		(tool "Eeschema 10.0.7-10.0.7~ubuntu24.04.1")
 		(sheet
 			(number "1")
@@ -2012,11 +2012,9 @@
 			(footprint "Diode_SMD:D_SOD-323")
 			(fields
 				(field
-					(name "MPN")
-				)
+					(name "MPN") "ESD5V0B03-323")
 				(field
-					(name "LCSC")
-				)
+					(name "LCSC") "C521915")
 				(field
 					(name "Footprint") "Diode_SMD:D_SOD-323")
 				(field
@@ -2033,11 +2031,11 @@
 			)
 			(property
 				(name "MPN")
-				(value "")
+				(value "ESD5V0B03-323")
 			)
 			(property
 				(name "LCSC")
-				(value "")
+				(value "C521915")
 			)
 			(property
 				(name "Sheetname")
@@ -2080,11 +2078,9 @@
 			(footprint "Diode_SMD:D_SOD-323")
 			(fields
 				(field
-					(name "MPN")
-				)
+					(name "MPN") "ESD5V0B03-323")
 				(field
-					(name "LCSC")
-				)
+					(name "LCSC") "C521915")
 				(field
 					(name "Footprint") "Diode_SMD:D_SOD-323")
 				(field
@@ -2101,11 +2097,11 @@
 			)
 			(property
 				(name "MPN")
-				(value "")
+				(value "ESD5V0B03-323")
 			)
 			(property
 				(name "LCSC")
-				(value "")
+				(value "C521915")
 			)
 			(property
 				(name "Sheetname")
@@ -2736,11 +2732,9 @@
 			(footprint "Inductor_SMD:L_0603_1608Metric")
 			(fields
 				(field
-					(name "MPN")
-				)
+					(name "MPN") "BLM18AG601SN1D")
 				(field
-					(name "LCSC")
-				)
+					(name "LCSC") "C19330")
 				(field
 					(name "Footprint") "Inductor_SMD:L_0603_1608Metric")
 				(field
@@ -2757,11 +2751,11 @@
 			)
 			(property
 				(name "MPN")
-				(value "")
+				(value "BLM18AG601SN1D")
 			)
 			(property
 				(name "LCSC")
-				(value "")
+				(value "C19330")
 			)
 			(property
 				(name "Sheetname")
@@ -4113,9 +4107,9 @@
 			(datasheet "https://www.ti.com/lit/ds/symlink/lp5907.pdf")
 			(fields
 				(field
-					(name "MPN") "LP5907MFX-3.3")
+					(name "MPN") "LP5907MFX-3.3/NOPB")
 				(field
-					(name "LCSC") "C83437")
+					(name "LCSC") "C80670")
 				(field
 					(name "Footprint") "Package_TO_SOT_SMD:SOT-23-5")
 				(field
@@ -4131,11 +4125,11 @@
 			)
 			(property
 				(name "MPN")
-				(value "LP5907MFX-3.3")
+				(value "LP5907MFX-3.3/NOPB")
 			)
 			(property
 				(name "LCSC")
-				(value "C83437")
+				(value "C80670")
 			)
 			(property
 				(name "Sheetname")
