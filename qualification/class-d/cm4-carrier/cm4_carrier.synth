@@ -2,8 +2,13 @@
 // 12 V in -> 5 V (4 A) -> 3V3 / 1V8, CM4 200-pin interface, USB hub, GbE, HDMI,
 // microSD, 2x 22-pin FFC, 40-pin GPIO, RTC. See README.md for what Synth does not check.
 board "cm4_carrier" {
-  layers 4
-  manufacturer "jlc-filled-via"
+  // 6 layers: F/B signal, In1/In4 ground planes, In2/In3 signal. The CM4
+  // DF40 is 0.4 mm pitch; two signal layers cannot escape it at the JLCPCB
+  // filled-via floor.
+  layers 6
+  // JLCPCB's 6-layer filled-via process; the plain jlc-filled-via tier is
+  // offered only on 2- and 4-layer builds.
+  manufacturer "jlc-advanced"
   revision "A"
   requires via_in_pad
 
@@ -11,7 +16,11 @@ board "cm4_carrier" {
     copper 0.035mm
     insulator 0.2mm er 4.2 material "FR4"
     copper 0.035mm
-    insulator 1.06mm er 4.2 material "FR4"
+    insulator 0.33mm er 4.2 material "FR4"
+    copper 0.035mm
+    insulator 0.33mm er 4.2 material "FR4"
+    copper 0.035mm
+    insulator 0.33mm er 4.2 material "FR4"
     copper 0.035mm
     insulator 0.2mm er 4.2 material "FR4"
     copper 0.035mm
@@ -123,8 +132,14 @@ board "cm4_carrier" {
   }
   sheet "CM4" {
     group "CM4 MODULE" color "#334155" {
-      component J_CM4A: connector "hirose_df40c_100ds_0v4_51" value "CM4_A" { placement_hint { region: centre priority: hard } }
-      component J_CM4B: connector "hirose_df40c_100ds_0v4_51_b" value "CM4_B" { placement_hint { region: centre priority: hard } }
+      component J_CM4A: connector "hirose_df40c_100ds_0v4_51" value "CM4_A" {
+        placement_hint { region: centre priority: hard }
+        escape { method channel layers "In2.Cu", "In3.Cu" }
+      }
+      component J_CM4B: connector "hirose_df40c_100ds_0v4_51_b" value "CM4_B" {
+        placement_hint { region: centre priority: hard }
+        escape { method channel layers "In2.Cu", "In3.Cu" }
+      }
       component TP_CM4_3V3: testpoint "testpoint_pad_1_5" value "CM4_3V3" 
       component TP_CM4_1V8: testpoint "testpoint_pad_1_5" value "CM4_1V8" 
       component TP_RUN_PG: testpoint "testpoint_pad_1_5" value "RUN_PG" 

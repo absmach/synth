@@ -21,6 +21,15 @@ and export code.
 | `synth check --fab` | `synth check qualification/class-d/cm4-carrier/cm4_carrier.synth --fab --json` | **FAIL** — same upstream block; no manufacturing stage |
 | Board test | `cargo test -p synth-cli --test cm4_carrier_board` | **PARTIAL** — the two IR tests pass; the mounting-hole test exports the board with the stub router and did not finish in the test budget |
 
+## Routing attempt (6-layer)
+
+KiCadRoutingTools on the 6-layer board (CM4 escape on `In2.Cu`/`In3.Cu`,
+0.2 mm drill / 0.46 mm via) completed with **39 unconnected items and 545
+DRC violations**. The violations are at the CM4 DF40: the 0.46 mm via cannot
+fit the 0.4 mm pad pitch, so the fanout places vias between pads with 0.07 mm
+clearance against the 0.2 mm rule. The committed PCB remains the unrouted
+6-layer placement; a routed-board DRC is still missing.
+
 ## `synth check` JSON
 
 ```

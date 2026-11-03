@@ -19,7 +19,7 @@
 - `README.md`, `QUALIFICATION.md`, `qualification.json`, `BOM_sourcing.md`.
 - `agent-run/` (this report, prompt, tool calls, design notes, pin map,
   netlist, power budget, assembly, bring-up, verification).
-- `kicad/` — four-sheet schematic, embedded symbols, project, DRC rules, unrouted PCB, BOM and PnP.
+- `kicad/` — four-sheet schematic, embedded symbols, project, DRC rules, unrouted 6-layer PCB, BOM and PnP.
 - `reports/cm4_carrier.kicad-erc.json` — 1 error, 66 warnings; `reports/cm4_carrier.kicad-drc.json` — unrouted board, 0 violations / 360 unconnected.
 - `images/schematic/*.svg` — the four schematic sheets.
 - `qualification/matrix.toml` row, class "D", status "experimental".
@@ -31,7 +31,7 @@
 | `synth check` passes | **blocked** | `synth check --json` -> `source: fail` (validate timeout), `drc: unknown`; `synth validate` exits 124 at 600 s |
 | `--fab` recorded honestly | **blocked** | `synth check --fab --json` -> no manufacturing stage; the PCB is unrouted |
 | ERC zero errors with `kicad-cli` | **not met (1 error)** | 1 `RTC_BAT` power-flag error in `reports/cm4_carrier.kicad-erc.json`; Synth ERC is 0 errors |
-| DRC report committed | **done (unrouted)** | `reports/cm4_carrier.kicad-drc.json`; 0 violations / 360 unconnected on the placed, unrouted board |
+| DRC report committed | **done (unrouted)** | `reports/cm4_carrier.kicad-drc.json`; 0 violations / 360 unconnected on the placed, unrouted 6-layer board. The KRT route attempt left 39 unconnected / 545 violations at the CM4 via pitch |
 | Every used CM4 pin traced to a datasheet row | **done** | `agent-run/PIN_MAPPING.md`, 143 used pins, Table 6 page per pin; test passes |
 | Rail table with source, load, limit, margin | **done** | `agent-run/POWER_BUDGET.md`; E-SYNTH-POWER-009/010 clean |
 | README "Not verified by Synth" | **done** | `README.md` |

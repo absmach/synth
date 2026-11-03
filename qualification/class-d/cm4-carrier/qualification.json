@@ -44,7 +44,7 @@
     },
     "fabrication_review": {
       "passed": false,
-      "evidence": "manufacturer \"jlc-filled-via\" and requires via_in_pad. JLCPCB has not confirmed filled/capped vias for this stackup. The DF40 0.4 mm pitch and the 100-pin connector escape were not DFM-reviewed."
+      "evidence": "manufacturer \"jlc-advanced\" (6-layer filled-via tier) and requires via_in_pad. JLCPCB has not confirmed filled/capped vias for this stackup. The DF40 0.4 mm pitch and the 100-pin connector escape were not DFM-reviewed. This is a deliberate 6-layer deviation from #407's 4-layer constraint; the user approved it."
     },
     "cm4_mechanical_fit": {
       "passed": false,

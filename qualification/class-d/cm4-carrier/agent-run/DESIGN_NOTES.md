@@ -109,18 +109,21 @@ reading of the issue.
 
 ## Stackup and placement
 
-- **4 layers, 1.6 mm.** 0.035 mm copper, 0.2 mm prepreg, 1.06 mm core,
-  0.2 mm prepreg, 0.035 mm copper. The prepreg thickness is what the
-  impedance estimate uses; the fab's actual prepreg may differ.
+- **6 layers, 1.6 mm.** F.Cu/B.Cu signal, In1.Cu/In4.Cu ground planes,
+  In2.Cu/In3.Cu signal. 0.035 mm copper; 0.2 / 0.33 / 0.33 / 0.33 / 0.2 mm
+  insulators. The prepreg thickness is what the impedance estimate uses; the
+  fab's actual prepreg may differ. This is a deliberate deviation from #407's
+  "4 layers": the CM4 DF40 is 0.4 mm pitch, and two signal layers cannot
+  escape it at the JLCPCB floor. The user approved the 6-layer change.
+  `jlc-advanced` is the 6-layer filled-via tier (the plain `jlc-filled-via`
+  profile is 2/4-layer only).
 - **Placement sidecar, not auto-placement.** The automatic placer exits 1 on
-  this board (185 components, ten edge-hard connectors). Every component is
+  this board (184 components, ten edge-hard connectors). Every component is
   pinned in `cm4_carrier.placement.layout.toml` with `priority = "hard"`, so
   the exporter uses the sidecar. The arrangement is a shelf-packed first
-  pass, not an optimized layout; the router has not accepted it.
+  pass, not an optimized layout.
 - **Board size.** The sidecar keeps the large parts inside a 100 × 80 mm
-  envelope; the exporter refits Edge.Cuts around the placed courtyards, so
-  the final outline is whatever the placement produces. It was not measured
-  because no PCB exported.
+  envelope; the exported Edge.Cuts is exactly 100 × 80 mm.
 
 ## Pinout gaps (read this before trusting the netlist)
 
@@ -183,6 +186,18 @@ and `Connector_RJ.3dshapes/RJ45_UDE_RB1-125B8G1A.step` are absent), so those
 two connectors appear as pads and silkscreen only in the 3D renders. Their
 orientation is set by the footprint courtyards and silkscreen, and the DRC
 reports no courtyard overlap or edge violation.
+
+## Routing attempt (6-layer)
+
+KiCadRoutingTools was run on the 6-layer board with the CM4 `channel` escape
+declared on `In2.Cu`/`In3.Cu`, a 0.2 mm drill / 0.46 mm via and 0.127 mm
+clearance. It completed with **39 unconnected items and 545 DRC violations**.
+The violations are concentrated at `J_CM4A`/`J_CM4B`: a 0.46 mm via is wider
+than the 0.4 mm pad pitch, so the fanout places vias between pads with as
+little as 0.07 mm clearance against the 0.2 mm rule. The 6-layer stackup gave
+the signals four layers but did not change the via arithmetic. The board is
+not fabrication-ready; a 0.1 mm-drill HDI microvia process or a custom
+dogbone fanout is required before the CM4 interface can be routed.
 
 ## What was not done
 

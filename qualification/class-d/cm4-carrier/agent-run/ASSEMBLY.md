@@ -44,17 +44,18 @@ Not assembled. This is the assembly intent, not a build record.
 ## Special fabrication needs
 
 - **Via-in-pad, filled and capped.** The three buck exposed pads and the
-  fine-pitch escapes need vias in pads. `manufacturer "jlc-filled-via"` and
+  fine-pitch escapes need vias in pads. `manufacturer "jlc-advanced"` and
   `requires via_in_pad`; the board cannot be built on a process without
-  resin-filled, capped vias.
+  resin-filled, capped vias. `jlc-advanced` is the 6-layer JLCPCB tier.
 - **0.4 mm pitch DF40.** Two 100-pin connectors; the escape is the hardest
-  geometry on the board. The router's escape report and the fab's capability
-  were not checked.
+  geometry on the board. The CM4 connectors declare a `channel` escape onto
+  `In2.Cu`/`In3.Cu`; the 6-layer stackup is what makes it possible.
 - **0.5 mm pitch FFC and DFN/QFN.** Two 22-pin FFC connectors, a QFN-36 hub
   and a DFN-10 RTC. Stencil aperture and paste volume are not specified here.
-- **4-layer 1.6 mm stackup.** The `.synth` declares 0.035 mm copper, 0.2 mm
-  prepreg, 1.06 mm core, 0.2 mm prepreg, 0.035 mm copper. The fab's actual
-  prepreg may differ; the impedance targets are estimates.
+- **6-layer 1.6 mm stackup.** The `.synth` declares F/B signal, In1/In4
+  ground planes and In2/In3 signal; 0.035 mm copper and 0.2 / 0.33 / 0.33 /
+  0.33 / 0.2 mm insulators. The fab's actual prepreg may differ; the
+  impedance targets are estimates.
 - **Through-hole connectors.** The USB-A, headers, tactile switch and the
   RJ45/HDMI shield tabs need wave or hand soldering if the assembly house
   only does SMD reflow.

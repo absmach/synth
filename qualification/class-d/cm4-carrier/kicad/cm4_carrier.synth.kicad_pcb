@@ -10,7 +10,9 @@
 	(layers
 		(0 "F.Cu" signal)
 		(4 "In1.Cu" power)
-		(6 "In2.Cu" power)
+		(6 "In2.Cu" signal)
+		(8 "In3.Cu" signal)
+		(10 "In4.Cu" power)
 		(2 "B.Cu" signal)
 		(32 "B.Adhes" user "B.Adhesive")
 		(33 "F.Adhes" user "F.Adhesive")
@@ -53,7 +55,7 @@
 			(layer
 				"dielectric 2"
 				(type "dielectric")
-				(thickness 1.06)
+				(thickness 0.33)
 				(material "FR4")
 				(epsilon_r 4.2)
 			)
@@ -64,6 +66,30 @@
 			)
 			(layer
 				"dielectric 3"
+				(type "dielectric")
+				(thickness 0.33)
+				(material "FR4")
+				(epsilon_r 4.2)
+			)
+			(layer
+				"In3.Cu"
+				(type "copper")
+				(thickness 0.035)
+			)
+			(layer
+				"dielectric 4"
+				(type "dielectric")
+				(thickness 0.33)
+				(material "FR4")
+				(epsilon_r 4.2)
+			)
+			(layer
+				"In4.Cu"
+				(type "copper")
+				(thickness 0.035)
+			)
+			(layer
+				"dielectric 5"
 				(type "dielectric")
 				(thickness 0.2)
 				(material "FR4")
@@ -82,8 +108,8 @@
 		(allow_soldermask_bridges_in_footprints yes)
 		(trace_min 0.127)
 		(clearance_min 0.127)
-		(via_min_size 0.56)
-		(via_min_drill 0.3)
+		(via_min_size 0.46)
+		(via_min_drill 0.2)
 	)
 	(net 0 "")
 	(net 1 "VIN_12V")
@@ -44947,8 +44973,8 @@
 	(zone
 		(net 158)
 		(net_name "GND")
-		(layer "In2.Cu")
-		(uuid "b7e131ca-135b-5b69-85c4-4215419d612c")
+		(layer "In4.Cu")
+		(uuid "60dc8788-9739-5fb8-948a-81b164e35cc5")
 		(priority 1)
 		(hatch edge 0.5)
 		(connect_pads
@@ -45031,7 +45057,7 @@
 	(zone
 		(net 0)
 		(net_name "")
-		(layers "F.Cu" "In1.Cu" "In2.Cu" "B.Cu")
+		(layers "F.Cu" "In1.Cu" "In2.Cu" "In3.Cu" "In4.Cu" "B.Cu")
 		(uuid "cf66dad4-9dfb-5419-8f8f-80e3a64f5736")
 		(name "H1 screw head")
 		(hatch edge 0.5)
@@ -45074,7 +45100,7 @@
 	(zone
 		(net 0)
 		(net_name "")
-		(layers "F.Cu" "In1.Cu" "In2.Cu" "B.Cu")
+		(layers "F.Cu" "In1.Cu" "In2.Cu" "In3.Cu" "In4.Cu" "B.Cu")
 		(uuid "aa401562-22ca-5503-8f06-60f0bd9cc66b")
 		(name "H2 screw head")
 		(hatch edge 0.5)
@@ -45117,7 +45143,7 @@
 	(zone
 		(net 0)
 		(net_name "")
-		(layers "F.Cu" "In1.Cu" "In2.Cu" "B.Cu")
+		(layers "F.Cu" "In1.Cu" "In2.Cu" "In3.Cu" "In4.Cu" "B.Cu")
 		(uuid "341d4548-bf18-5986-9b0b-b8d3a22b4112")
 		(name "H3 screw head")
 		(hatch edge 0.5)
@@ -45160,7 +45186,7 @@
 	(zone
 		(net 0)
 		(net_name "")
-		(layers "F.Cu" "In1.Cu" "In2.Cu" "B.Cu")
+		(layers "F.Cu" "In1.Cu" "In2.Cu" "In3.Cu" "In4.Cu" "B.Cu")
 		(uuid "5416e73c-fcc9-538b-bf73-a55e9b85444f")
 		(name "H4 screw head")
 		(hatch edge 0.5)
