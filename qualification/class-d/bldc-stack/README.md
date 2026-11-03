@@ -34,9 +34,11 @@ amplifiers, and makes 12 V with an LMR38010 buck.
 
 The J_B2B pinout and the four mounting holes need a common frame. Both boards
 use holes at (3, 3), (67, 3), (3, 52) and (67, 52) mm and J_B2B at (64, 31) mm.
-The fitted outline is about 72 x 58 mm, not the 60 x 50 mm the issue suggests;
+The fitted control outline is about 71 x 60 mm, not the 60 x 50 mm the issue suggests;
 the extra area is the terminal blocks and the 2 x 10 connector. This is a
-documented deviation, not a hidden one.
+documented deviation, not a hidden one. The passive reference labels are hidden
+on the silkscreen (the sidecar `[labels]` table) so the auto-placed text does not
+collide; every part is still in the BOM and the pick-and-place.
 
 ## Cross-board check: what Synth actually does
 

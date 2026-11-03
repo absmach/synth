@@ -75,8 +75,8 @@
   "routing": {
     "engine": "freerouting",
     "state": "validation_failed",
-    "input_hash": "96d7d7044f233b5c3c55ab1bbcdc304b135d6ba9ccd5bec30afdc5e892d7ff5b",
-    "run_record": "reports/control.routing.json",
+    "input_hash": "bd22c58c4f26609025156109a7f0c1e0c7aaf0380d06af75f1bdf3d8b0f0b3d8",
+    "run_record": "/tmp/opencode/ctl-bal3/bldc_control.routing.json",
     "reasons": [
       "inspect the retained session log for the engine's own error; the baseline export is unchanged"
     ]
