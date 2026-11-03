@@ -1473,3 +1473,481 @@ rotation = 0
 source = "agent"
 priority = "hard"
 timestamp = "2026-11-03T00:00:00+00:00"
+
+[labels.R_G1]
+hide = true
+
+[labels.C1]
+hide = true
+
+[labels.C2]
+hide = true
+
+[labels.C3]
+hide = true
+
+[labels.C_AUX]
+hide = true
+
+[labels.R_UV_T]
+hide = true
+
+[labels.R_UV_B]
+hide = true
+
+[labels.C_VCC]
+hide = true
+
+[labels.C_BOOT]
+hide = true
+
+[labels.C_OUT1]
+hide = true
+
+[labels.C_OUT2]
+hide = true
+
+[labels.C_OUT3]
+hide = true
+
+[labels.R_FB_T]
+hide = true
+
+[labels.R_FB_B]
+hide = true
+
+[labels.C_FF]
+hide = true
+
+[labels.R_PG]
+hide = true
+
+[labels.R_PWR]
+hide = true
+
+[labels.C_IN2_1]
+hide = true
+
+[labels.C_IN2_2]
+hide = true
+
+[labels.R_RT2]
+hide = true
+
+[labels.C_BOOT2]
+hide = true
+
+[labels.C_OUT4]
+hide = true
+
+[labels.C_OUT5]
+hide = true
+
+[labels.C_OUT6]
+hide = true
+
+[labels.R_FB2_T]
+hide = true
+
+[labels.R_FB2_B]
+hide = true
+
+[labels.C_FF2]
+hide = true
+
+[labels.R_PG2]
+hide = true
+
+[labels.R_3V3]
+hide = true
+
+[labels.C_IN3_1]
+hide = true
+
+[labels.C_IN3_2]
+hide = true
+
+[labels.R_RT3]
+hide = true
+
+[labels.C_BOOT3]
+hide = true
+
+[labels.C_OUT7]
+hide = true
+
+[labels.C_OUT8]
+hide = true
+
+[labels.C_OUT9]
+hide = true
+
+[labels.R_FB3_T]
+hide = true
+
+[labels.R_FB3_B]
+hide = true
+
+[labels.C_FF3]
+hide = true
+
+[labels.R_PG3]
+hide = true
+
+[labels.C_GEN]
+hide = true
+
+[labels.R_GEN]
+hide = true
+
+[labels.R_LED_PWR]
+hide = true
+
+[labels.R_ACT]
+hide = true
+
+[labels.R_ETH]
+hide = true
+
+[labels.R_ETH2]
+hide = true
+
+[labels.C_X1]
+hide = true
+
+[labels.C_X2]
+hide = true
+
+[labels.R_RBIAS]
+hide = true
+
+[labels.C_HUB1]
+hide = true
+
+[labels.C_HUB2]
+hide = true
+
+[labels.C_HUB3]
+hide = true
+
+[labels.C_HUB4]
+hide = true
+
+[labels.C_CRFILT]
+hide = true
+
+[labels.C_PLLFILT]
+hide = true
+
+[labels.R_CFG0]
+hide = true
+
+[labels.R_CFG1]
+hide = true
+
+[labels.R_LOCAL]
+hide = true
+
+[labels.R_OCS1]
+hide = true
+
+[labels.R_OCS2]
+hide = true
+
+[labels.R_OCS3]
+hide = true
+
+[labels.R_OCS4]
+hide = true
+
+[labels.R_RESET]
+hide = true
+
+[labels.C_RESET]
+hide = true
+
+[labels.R_VBUS]
+hide = true
+
+[labels.C_USB1]
+hide = true
+
+[labels.C_USB2]
+hide = true
+
+[labels.C_USB3]
+hide = true
+
+[labels.C_USB4]
+hide = true
+
+[labels.C_USB1B]
+hide = true
+
+[labels.C_USB2B]
+hide = true
+
+[labels.C_USB3B]
+hide = true
+
+[labels.C_USB4B]
+hide = true
+
+[labels.C_CT1]
+hide = true
+
+[labels.C_CT2]
+hide = true
+
+[labels.C_CT3]
+hide = true
+
+[labels.C_CT4]
+hide = true
+
+[labels.C_TCT]
+hide = true
+
+[labels.C_HDMI1]
+hide = true
+
+[labels.C_HDMI2]
+hide = true
+
+[labels.C_HDMI_CT]
+hide = true
+
+[labels.R_HDMI_SDA]
+hide = true
+
+[labels.R_HDMI_SCL]
+hide = true
+
+[labels.R_HDMI_SDA_MCU]
+hide = true
+
+[labels.R_HDMI_SCL_MCU]
+hide = true
+
+[labels.R_OE]
+hide = true
+
+[labels.C_HDMI_VCCA]
+hide = true
+
+[labels.C_HDMI_VCCB]
+hide = true
+
+[labels.C_SD1]
+hide = true
+
+[labels.C_SD_IN]
+hide = true
+
+[labels.C_SD2]
+hide = true
+
+[labels.C_SD_CT]
+hide = true
+
+[labels.R_SD_CMD]
+hide = true
+
+[labels.R_SD_DAT0]
+hide = true
+
+[labels.R_SD_DAT1]
+hide = true
+
+[labels.R_SD_DAT2]
+hide = true
+
+[labels.R_SD_DAT3]
+hide = true
+
+[labels.R_SD_PWR]
+hide = true
+
+[labels.C_CAM]
+hide = true
+
+[labels.C_DSI]
+hide = true
+
+[labels.C_RTC]
+hide = true
+
+[labels.R_RTC_SDA]
+hide = true
+
+[labels.R_RTC_SCL]
+hide = true
+
+[labels.R_RTC_INT]
+hide = true
+
+[labels.Q1]
+hide = true
+
+[labels.D1]
+hide = true
+
+[labels.L_FB1]
+hide = true
+
+[labels.L1]
+hide = true
+
+[labels.D_PWR]
+hide = true
+
+[labels.L2]
+hide = true
+
+[labels.D_3V3]
+hide = true
+
+[labels.L3]
+hide = true
+
+[labels.Q_LED]
+hide = true
+
+[labels.D_PWR_CM4]
+hide = true
+
+[labels.D_ACT]
+hide = true
+
+[labels.D_ETH]
+hide = true
+
+[labels.D_ETH2]
+hide = true
+
+[labels.Y1]
+hide = true
+
+[labels.U5]
+hide = true
+
+[labels.U6]
+hide = true
+
+[labels.U7]
+hide = true
+
+[labels.U8]
+hide = true
+
+[labels.D_USB1]
+hide = true
+
+[labels.D_USB2]
+hide = true
+
+[labels.D_USB3]
+hide = true
+
+[labels.D_USB4]
+hide = true
+
+[labels.D_USB_UP]
+hide = true
+
+[labels.D_ETH_ESD1]
+hide = true
+
+[labels.D_ETH_ESD2]
+hide = true
+
+[labels.D_ETH_ESD3]
+hide = true
+
+[labels.D_ETH_ESD4]
+hide = true
+
+[labels.D_HDMI1]
+hide = true
+
+[labels.D_HDMI2]
+hide = true
+
+[labels.D_HDMI3]
+hide = true
+
+[labels.D_HDMI4]
+hide = true
+
+[labels.D_HDMI5]
+hide = true
+
+[labels.D_SD1]
+hide = true
+
+[labels.D_SD2]
+hide = true
+
+[labels.D_SD3]
+hide = true
+
+[labels.Y2]
+hide = true
+
+[labels.D_RTC1]
+hide = true
+
+[labels.D_RTC2]
+hide = true
+
+[labels.D_FAN]
+hide = true
+
+[labels.J_CM4A]
+hide = true
+
+[labels.J_CM4B]
+hide = true
+
+[labels.J_CAM]
+hide = true
+
+[labels.J_DSI]
+hide = true
+
+[labels.J_SD]
+hide = true
+
+[labels.TP_5V]
+hide = true
+
+[labels.TP_3V3]
+hide = true
+
+[labels.TP_1V8]
+hide = true
+
+[labels.TP_CM4_3V3]
+hide = true
+
+[labels.TP_CM4_1V8]
+hide = true
+
+[labels.TP_RUN_PG]
+hide = true
+
+[labels.TP_NEXTRST]
+hide = true
+
+[labels.TP_GLOBAL_EN]
+hide = true
+
+[labels.TP_PG5V]
+hide = true
+
+[labels.TP_PG3V3]
+hide = true
+
+[labels.TP_PG1V8]
+hide = true
+
