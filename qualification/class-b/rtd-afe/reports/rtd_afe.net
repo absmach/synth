@@ -2,7 +2,7 @@
 	(version "E")
 	(design
 		(source "qualification/class-b/rtd-afe/kicad/rtd_afe.kicad_sch")
-		(date "2026-11-03T10:25:40")
+		(date "2026-11-03T18:07:58")
 		(tool "Eeschema 10.0.7-10.0.7~ubuntu24.04.1")
 		(sheet
 			(number "1")
@@ -60,11 +60,9 @@
 			(footprint "Capacitor_SMD:C_0603_1608Metric")
 			(fields
 				(field
-					(name "MPN")
-				)
+					(name "MPN") "0603B334K500NT")
 				(field
-					(name "LCSC")
-				)
+					(name "LCSC") "C188679")
 				(field
 					(name "Dielectric") "X7R")
 				(field
@@ -85,11 +83,11 @@
 			)
 			(property
 				(name "MPN")
-				(value "")
+				(value "0603B334K500NT")
 			)
 			(property
 				(name "LCSC")
-				(value "")
+				(value "C188679")
 			)
 			(property
 				(name "Dielectric")
@@ -140,11 +138,9 @@
 			(footprint "Capacitor_SMD:C_0805_2012Metric")
 			(fields
 				(field
-					(name "MPN")
-				)
+					(name "MPN") "TCC0805X7R106K160FT")
 				(field
-					(name "LCSC")
-				)
+					(name "LCSC") "C380347")
 				(field
 					(name "Dielectric") "X7R")
 				(field
@@ -165,11 +161,11 @@
 			)
 			(property
 				(name "MPN")
-				(value "")
+				(value "TCC0805X7R106K160FT")
 			)
 			(property
 				(name "LCSC")
-				(value "")
+				(value "C380347")
 			)
 			(property
 				(name "Dielectric")
@@ -220,11 +216,9 @@
 			(footprint "Capacitor_SMD:C_0603_1608Metric")
 			(fields
 				(field
-					(name "MPN")
-				)
+					(name "MPN") "TCC0603X7R475K100CT")
 				(field
-					(name "LCSC")
-				)
+					(name "LCSC") "C18185770")
 				(field
 					(name "Dielectric") "X7R")
 				(field
@@ -245,11 +239,11 @@
 			)
 			(property
 				(name "MPN")
-				(value "")
+				(value "TCC0603X7R475K100CT")
 			)
 			(property
 				(name "LCSC")
-				(value "")
+				(value "C18185770")
 			)
 			(property
 				(name "Dielectric")
@@ -300,11 +294,9 @@
 			(footprint "Capacitor_SMD:C_0603_1608Metric")
 			(fields
 				(field
-					(name "MPN")
-				)
+					(name "MPN") "0603N103J500CT")
 				(field
-					(name "LCSC")
-				)
+					(name "LCSC") "C2894187")
 				(field
 					(name "Dielectric") "C0G")
 				(field
@@ -325,11 +317,11 @@
 			)
 			(property
 				(name "MPN")
-				(value "")
+				(value "0603N103J500CT")
 			)
 			(property
 				(name "LCSC")
-				(value "")
+				(value "C2894187")
 			)
 			(property
 				(name "Dielectric")
@@ -380,11 +372,9 @@
 			(footprint "Capacitor_SMD:C_0603_1608Metric")
 			(fields
 				(field
-					(name "MPN")
-				)
+					(name "MPN") "0603N103J500CT")
 				(field
-					(name "LCSC")
-				)
+					(name "LCSC") "C2894187")
 				(field
 					(name "Dielectric") "C0G")
 				(field
@@ -405,11 +395,11 @@
 			)
 			(property
 				(name "MPN")
-				(value "")
+				(value "0603N103J500CT")
 			)
 			(property
 				(name "LCSC")
-				(value "")
+				(value "C2894187")
 			)
 			(property
 				(name "Dielectric")
@@ -540,11 +530,9 @@
 			(footprint "Capacitor_SMD:C_0603_1608Metric")
 			(fields
 				(field
-					(name "MPN")
-				)
+					(name "MPN") "CC0603KRX7R9BB104")
 				(field
-					(name "LCSC")
-				)
+					(name "LCSC") "C14663")
 				(field
 					(name "Dielectric") "X7R")
 				(field
@@ -565,11 +553,11 @@
 			)
 			(property
 				(name "MPN")
-				(value "")
+				(value "CC0603KRX7R9BB104")
 			)
 			(property
 				(name "LCSC")
-				(value "")
+				(value "C14663")
 			)
 			(property
 				(name "Dielectric")
@@ -620,11 +608,9 @@
 			(footprint "Capacitor_SMD:C_0603_1608Metric")
 			(fields
 				(field
-					(name "MPN")
-				)
+					(name "MPN") "CC0603KRX7R9BB104")
 				(field
-					(name "LCSC")
-				)
+					(name "LCSC") "C14663")
 				(field
 					(name "Dielectric") "X7R")
 				(field
@@ -645,11 +631,11 @@
 			)
 			(property
 				(name "MPN")
-				(value "")
+				(value "CC0603KRX7R9BB104")
 			)
 			(property
 				(name "LCSC")
-				(value "")
+				(value "C14663")
 			)
 			(property
 				(name "Dielectric")
@@ -700,11 +686,9 @@
 			(footprint "Capacitor_SMD:C_0603_1608Metric")
 			(fields
 				(field
-					(name "MPN")
-				)
+					(name "MPN") "CC0603KRX7R9BB104")
 				(field
-					(name "LCSC")
-				)
+					(name "LCSC") "C14663")
 				(field
 					(name "Dielectric") "X7R")
 				(field
@@ -725,11 +709,11 @@
 			)
 			(property
 				(name "MPN")
-				(value "")
+				(value "CC0603KRX7R9BB104")
 			)
 			(property
 				(name "LCSC")
-				(value "")
+				(value "C14663")
 			)
 			(property
 				(name "Dielectric")
@@ -780,11 +764,9 @@
 			(footprint "Capacitor_SMD:C_0805_2012Metric")
 			(fields
 				(field
-					(name "MPN")
-				)
+					(name "MPN") "CC0805KKX7R8BB475")
 				(field
-					(name "LCSC")
-				)
+					(name "LCSC") "C354262")
 				(field
 					(name "Dielectric") "X7R")
 				(field
@@ -805,11 +787,11 @@
 			)
 			(property
 				(name "MPN")
-				(value "")
+				(value "CC0805KKX7R8BB475")
 			)
 			(property
 				(name "LCSC")
-				(value "")
+				(value "C354262")
 			)
 			(property
 				(name "Dielectric")
@@ -860,11 +842,9 @@
 			(footprint "Capacitor_SMD:C_0603_1608Metric")
 			(fields
 				(field
-					(name "MPN")
-				)
+					(name "MPN") "0603N103J500CT")
 				(field
-					(name "LCSC")
-				)
+					(name "LCSC") "C2894187")
 				(field
 					(name "Dielectric") "C0G")
 				(field
@@ -885,11 +865,11 @@
 			)
 			(property
 				(name "MPN")
-				(value "")
+				(value "0603N103J500CT")
 			)
 			(property
 				(name "LCSC")
-				(value "")
+				(value "C2894187")
 			)
 			(property
 				(name "Dielectric")
@@ -940,11 +920,9 @@
 			(footprint "Capacitor_SMD:C_0603_1608Metric")
 			(fields
 				(field
-					(name "MPN")
-				)
+					(name "MPN") "CC0603KRX7R9BB104")
 				(field
-					(name "LCSC")
-				)
+					(name "LCSC") "C14663")
 				(field
 					(name "Dielectric") "X7R")
 				(field
@@ -965,11 +943,11 @@
 			)
 			(property
 				(name "MPN")
-				(value "")
+				(value "CC0603KRX7R9BB104")
 			)
 			(property
 				(name "LCSC")
-				(value "")
+				(value "C14663")
 			)
 			(property
 				(name "Dielectric")
@@ -1020,11 +998,9 @@
 			(footprint "Capacitor_SMD:C_0603_1608Metric")
 			(fields
 				(field
-					(name "MPN")
-				)
+					(name "MPN") "CC0603KRX7R9BB104")
 				(field
-					(name "LCSC")
-				)
+					(name "LCSC") "C14663")
 				(field
 					(name "Dielectric") "X7R")
 				(field
@@ -1045,11 +1021,11 @@
 			)
 			(property
 				(name "MPN")
-				(value "")
+				(value "CC0603KRX7R9BB104")
 			)
 			(property
 				(name "LCSC")
-				(value "")
+				(value "C14663")
 			)
 			(property
 				(name "Dielectric")
@@ -1100,11 +1076,9 @@
 			(footprint "Capacitor_SMD:C_0603_1608Metric")
 			(fields
 				(field
-					(name "MPN")
-				)
+					(name "MPN") "CC0603KRX7R9BB104")
 				(field
-					(name "LCSC")
-				)
+					(name "LCSC") "C14663")
 				(field
 					(name "Dielectric") "X7R")
 				(field
@@ -1125,11 +1099,11 @@
 			)
 			(property
 				(name "MPN")
-				(value "")
+				(value "CC0603KRX7R9BB104")
 			)
 			(property
 				(name "LCSC")
-				(value "")
+				(value "C14663")
 			)
 			(property
 				(name "Dielectric")
@@ -1180,11 +1154,9 @@
 			(footprint "Capacitor_SMD:C_0603_1608Metric")
 			(fields
 				(field
-					(name "MPN")
-				)
+					(name "MPN") "CC0603KRX7R9BB104")
 				(field
-					(name "LCSC")
-				)
+					(name "LCSC") "C14663")
 				(field
 					(name "Dielectric") "X7R")
 				(field
@@ -1205,11 +1177,11 @@
 			)
 			(property
 				(name "MPN")
-				(value "")
+				(value "CC0603KRX7R9BB104")
 			)
 			(property
 				(name "LCSC")
-				(value "")
+				(value "C14663")
 			)
 			(property
 				(name "Dielectric")
@@ -1260,11 +1232,9 @@
 			(footprint "Capacitor_SMD:C_0603_1608Metric")
 			(fields
 				(field
-					(name "MPN")
-				)
+					(name "MPN") "CC0603KRX7R9BB104")
 				(field
-					(name "LCSC")
-				)
+					(name "LCSC") "C14663")
 				(field
 					(name "Dielectric") "X7R")
 				(field
@@ -1285,11 +1255,11 @@
 			)
 			(property
 				(name "MPN")
-				(value "")
+				(value "CC0603KRX7R9BB104")
 			)
 			(property
 				(name "LCSC")
-				(value "")
+				(value "C14663")
 			)
 			(property
 				(name "Dielectric")
@@ -1340,11 +1310,9 @@
 			(footprint "Capacitor_SMD:C_0603_1608Metric")
 			(fields
 				(field
-					(name "MPN")
-				)
+					(name "MPN") "CC0603KRX7R9BB104")
 				(field
-					(name "LCSC")
-				)
+					(name "LCSC") "C14663")
 				(field
 					(name "Dielectric") "X7R")
 				(field
@@ -1365,11 +1333,11 @@
 			)
 			(property
 				(name "MPN")
-				(value "")
+				(value "CC0603KRX7R9BB104")
 			)
 			(property
 				(name "LCSC")
-				(value "")
+				(value "C14663")
 			)
 			(property
 				(name "Dielectric")
@@ -1420,11 +1388,9 @@
 			(footprint "Capacitor_SMD:C_0603_1608Metric")
 			(fields
 				(field
-					(name "MPN")
-				)
+					(name "MPN") "0603B225K160NT")
 				(field
-					(name "LCSC")
-				)
+					(name "LCSC") "C43922")
 				(field
 					(name "Dielectric") "X7R")
 				(field
@@ -1445,11 +1411,11 @@
 			)
 			(property
 				(name "MPN")
-				(value "")
+				(value "0603B225K160NT")
 			)
 			(property
 				(name "LCSC")
-				(value "")
+				(value "C43922")
 			)
 			(property
 				(name "Dielectric")
@@ -1500,11 +1466,9 @@
 			(footprint "Capacitor_SMD:C_0603_1608Metric")
 			(fields
 				(field
-					(name "MPN")
-				)
+					(name "MPN") "0603B225K160NT")
 				(field
-					(name "LCSC")
-				)
+					(name "LCSC") "C43922")
 				(field
 					(name "Dielectric") "X7R")
 				(field
@@ -1525,11 +1489,11 @@
 			)
 			(property
 				(name "MPN")
-				(value "")
+				(value "0603B225K160NT")
 			)
 			(property
 				(name "LCSC")
-				(value "")
+				(value "C43922")
 			)
 			(property
 				(name "Dielectric")
@@ -1580,11 +1544,9 @@
 			(footprint "Capacitor_SMD:C_0603_1608Metric")
 			(fields
 				(field
-					(name "MPN")
-				)
+					(name "MPN") "0603B105K160NT")
 				(field
-					(name "LCSC")
-				)
+					(name "LCSC") "C93816")
 				(field
 					(name "Dielectric") "X7R")
 				(field
@@ -1605,11 +1567,11 @@
 			)
 			(property
 				(name "MPN")
-				(value "")
+				(value "0603B105K160NT")
 			)
 			(property
 				(name "LCSC")
-				(value "")
+				(value "C93816")
 			)
 			(property
 				(name "Dielectric")
@@ -1660,11 +1622,9 @@
 			(footprint "Capacitor_SMD:C_0603_1608Metric")
 			(fields
 				(field
-					(name "MPN")
-				)
+					(name "MPN") "0603B105K160NT")
 				(field
-					(name "LCSC")
-				)
+					(name "LCSC") "C93816")
 				(field
 					(name "Dielectric") "X7R")
 				(field
@@ -1685,11 +1645,11 @@
 			)
 			(property
 				(name "MPN")
-				(value "")
+				(value "0603B105K160NT")
 			)
 			(property
 				(name "LCSC")
-				(value "")
+				(value "C93816")
 			)
 			(property
 				(name "Dielectric")
@@ -1740,11 +1700,9 @@
 			(footprint "Capacitor_SMD:C_0603_1608Metric")
 			(fields
 				(field
-					(name "MPN")
-				)
+					(name "MPN") "0603B105K160NT")
 				(field
-					(name "LCSC")
-				)
+					(name "LCSC") "C93816")
 				(field
 					(name "Dielectric") "X7R")
 				(field
@@ -1765,11 +1723,11 @@
 			)
 			(property
 				(name "MPN")
-				(value "")
+				(value "0603B105K160NT")
 			)
 			(property
 				(name "LCSC")
-				(value "")
+				(value "C93816")
 			)
 			(property
 				(name "Dielectric")
@@ -1820,11 +1778,9 @@
 			(footprint "Capacitor_SMD:C_0603_1608Metric")
 			(fields
 				(field
-					(name "MPN")
-				)
+					(name "MPN") "TCC0603X7R475K100CT")
 				(field
-					(name "LCSC")
-				)
+					(name "LCSC") "C18185770")
 				(field
 					(name "Dielectric") "X7R")
 				(field
@@ -1845,11 +1801,11 @@
 			)
 			(property
 				(name "MPN")
-				(value "")
+				(value "TCC0603X7R475K100CT")
 			)
 			(property
 				(name "LCSC")
-				(value "")
+				(value "C18185770")
 			)
 			(property
 				(name "Dielectric")
@@ -1900,11 +1856,9 @@
 			(footprint "Capacitor_SMD:C_0603_1608Metric")
 			(fields
 				(field
-					(name "MPN")
-				)
+					(name "MPN") "CL10C330JB8NNNC")
 				(field
-					(name "LCSC")
-				)
+					(name "LCSC") "C1663")
 				(field
 					(name "Dielectric") "C0G")
 				(field
@@ -1925,11 +1879,11 @@
 			)
 			(property
 				(name "MPN")
-				(value "")
+				(value "CL10C330JB8NNNC")
 			)
 			(property
 				(name "LCSC")
-				(value "")
+				(value "C1663")
 			)
 			(property
 				(name "Dielectric")
@@ -1980,11 +1934,9 @@
 			(footprint "Capacitor_SMD:C_0603_1608Metric")
 			(fields
 				(field
-					(name "MPN")
-				)
+					(name "MPN") "CL10C330JB8NNNC")
 				(field
-					(name "LCSC")
-				)
+					(name "LCSC") "C1663")
 				(field
 					(name "Dielectric") "C0G")
 				(field
@@ -2005,11 +1957,11 @@
 			)
 			(property
 				(name "MPN")
-				(value "")
+				(value "CL10C330JB8NNNC")
 			)
 			(property
 				(name "LCSC")
-				(value "")
+				(value "C1663")
 			)
 			(property
 				(name "Dielectric")
@@ -2647,11 +2599,9 @@
 			(footprint "Connector_PinHeader_2.54mm:PinHeader_1x03_P2.54mm_Vertical")
 			(fields
 				(field
-					(name "MPN")
-				)
+					(name "MPN") "PZ254V-11-03P")
 				(field
-					(name "LCSC")
-				)
+					(name "LCSC") "C2937625")
 				(field
 					(name "Footprint") "Connector_PinHeader_2.54mm:PinHeader_1x03_P2.54mm_Vertical")
 				(field
@@ -2668,11 +2618,11 @@
 			)
 			(property
 				(name "MPN")
-				(value "")
+				(value "PZ254V-11-03P")
 			)
 			(property
 				(name "LCSC")
-				(value "")
+				(value "C2937625")
 			)
 			(property
 				(name "Sheetname")
@@ -2802,8 +2752,8 @@
 			)
 			(libsource
 				(lib "Device")
-				(part "Ferrite_Bead")
-				(description "")
+				(part "FerriteBead")
+				(description "Ferrite bead")
 			)
 			(property
 				(name "MPN")
@@ -2820,6 +2770,14 @@
 			(property
 				(name "Sheetfile")
 				(value "rtd_afe.kicad_sch")
+			)
+			(property
+				(name "ki_keywords")
+				(value "L ferrite bead inductor filter")
+			)
+			(property
+				(name "ki_fp_filters")
+				(value "Inductor_* L_* *Ferrite*")
 			)
 			(sheetpath
 				(names "/")
@@ -2846,11 +2804,9 @@
 			(footprint "Resistor_SMD:R_0603_1608Metric")
 			(fields
 				(field
-					(name "MPN")
-				)
+					(name "MPN") "FRC0603F33R0TS")
 				(field
-					(name "LCSC")
-				)
+					(name "LCSC") "C2909394")
 				(field
 					(name "Footprint") "Resistor_SMD:R_0603_1608Metric")
 				(field
@@ -2867,11 +2823,11 @@
 			)
 			(property
 				(name "MPN")
-				(value "")
+				(value "FRC0603F33R0TS")
 			)
 			(property
 				(name "LCSC")
-				(value "")
+				(value "C2909394")
 			)
 			(property
 				(name "Sheetname")
@@ -2914,11 +2870,9 @@
 			(footprint "Resistor_SMD:R_0603_1608Metric")
 			(fields
 				(field
-					(name "MPN")
-				)
+					(name "MPN") "RT0603BRD071KL")
 				(field
-					(name "LCSC")
-				)
+					(name "LCSC") "C110776")
 				(field
 					(name "Tolerance") "0.1%")
 				(field
@@ -2937,11 +2891,11 @@
 			)
 			(property
 				(name "MPN")
-				(value "")
+				(value "RT0603BRD071KL")
 			)
 			(property
 				(name "LCSC")
-				(value "")
+				(value "C110776")
 			)
 			(property
 				(name "Tolerance")
@@ -2988,11 +2942,9 @@
 			(footprint "Resistor_SMD:R_0603_1608Metric")
 			(fields
 				(field
-					(name "MPN")
-				)
+					(name "MPN") "0603WAF5101T5E")
 				(field
-					(name "LCSC")
-				)
+					(name "LCSC") "C23186")
 				(field
 					(name "Footprint") "Resistor_SMD:R_0603_1608Metric")
 				(field
@@ -3009,11 +2961,11 @@
 			)
 			(property
 				(name "MPN")
-				(value "")
+				(value "0603WAF5101T5E")
 			)
 			(property
 				(name "LCSC")
-				(value "")
+				(value "C23186")
 			)
 			(property
 				(name "Sheetname")
@@ -3056,11 +3008,9 @@
 			(footprint "Resistor_SMD:R_0603_1608Metric")
 			(fields
 				(field
-					(name "MPN")
-				)
+					(name "MPN") "0603WAF5101T5E")
 				(field
-					(name "LCSC")
-				)
+					(name "LCSC") "C23186")
 				(field
 					(name "Footprint") "Resistor_SMD:R_0603_1608Metric")
 				(field
@@ -3077,11 +3027,11 @@
 			)
 			(property
 				(name "MPN")
-				(value "")
+				(value "0603WAF5101T5E")
 			)
 			(property
 				(name "LCSC")
-				(value "")
+				(value "C23186")
 			)
 			(property
 				(name "Sheetname")
@@ -3124,11 +3074,9 @@
 			(footprint "Resistor_SMD:R_0603_1608Metric")
 			(fields
 				(field
-					(name "MPN")
-				)
+					(name "MPN") "0603WAF270JT5E")
 				(field
-					(name "LCSC")
-				)
+					(name "LCSC") "C25190")
 				(field
 					(name "Footprint") "Resistor_SMD:R_0603_1608Metric")
 				(field
@@ -3145,11 +3093,11 @@
 			)
 			(property
 				(name "MPN")
-				(value "")
+				(value "0603WAF270JT5E")
 			)
 			(property
 				(name "LCSC")
-				(value "")
+				(value "C25190")
 			)
 			(property
 				(name "Sheetname")
@@ -3192,11 +3140,9 @@
 			(footprint "Resistor_SMD:R_0603_1608Metric")
 			(fields
 				(field
-					(name "MPN")
-				)
+					(name "MPN") "0603WAF270JT5E")
 				(field
-					(name "LCSC")
-				)
+					(name "LCSC") "C25190")
 				(field
 					(name "Footprint") "Resistor_SMD:R_0603_1608Metric")
 				(field
@@ -3213,11 +3159,11 @@
 			)
 			(property
 				(name "MPN")
-				(value "")
+				(value "0603WAF270JT5E")
 			)
 			(property
 				(name "LCSC")
-				(value "")
+				(value "C25190")
 			)
 			(property
 				(name "Sheetname")
@@ -3260,11 +3206,9 @@
 			(footprint "Resistor_SMD:R_0603_1608Metric")
 			(fields
 				(field
-					(name "MPN")
-				)
+					(name "MPN") "0603WAF1002T5E")
 				(field
-					(name "LCSC")
-				)
+					(name "LCSC") "C25804")
 				(field
 					(name "Footprint") "Resistor_SMD:R_0603_1608Metric")
 				(field
@@ -3281,11 +3225,11 @@
 			)
 			(property
 				(name "MPN")
-				(value "")
+				(value "0603WAF1002T5E")
 			)
 			(property
 				(name "LCSC")
-				(value "")
+				(value "C25804")
 			)
 			(property
 				(name "Sheetname")
@@ -3328,11 +3272,9 @@
 			(footprint "Resistor_SMD:R_0603_1608Metric")
 			(fields
 				(field
-					(name "MPN")
-				)
+					(name "MPN") "0603WAF1002T5E")
 				(field
-					(name "LCSC")
-				)
+					(name "LCSC") "C25804")
 				(field
 					(name "Footprint") "Resistor_SMD:R_0603_1608Metric")
 				(field
@@ -3349,11 +3291,11 @@
 			)
 			(property
 				(name "MPN")
-				(value "")
+				(value "0603WAF1002T5E")
 			)
 			(property
 				(name "LCSC")
-				(value "")
+				(value "C25804")
 			)
 			(property
 				(name "Sheetname")
@@ -3396,11 +3338,9 @@
 			(footprint "Resistor_SMD:R_0603_1608Metric")
 			(fields
 				(field
-					(name "MPN")
-				)
+					(name "MPN") "RT0603BRD071KL")
 				(field
-					(name "LCSC")
-				)
+					(name "LCSC") "C110776")
 				(field
 					(name "Tolerance") "0.1%")
 				(field
@@ -3419,11 +3359,11 @@
 			)
 			(property
 				(name "MPN")
-				(value "")
+				(value "RT0603BRD071KL")
 			)
 			(property
 				(name "LCSC")
-				(value "")
+				(value "C110776")
 			)
 			(property
 				(name "Tolerance")
@@ -3470,11 +3410,9 @@
 			(footprint "Resistor_SMD:R_0603_1608Metric")
 			(fields
 				(field
-					(name "MPN")
-				)
+					(name "MPN") "RT0603BRD071KL")
 				(field
-					(name "LCSC")
-				)
+					(name "LCSC") "C110776")
 				(field
 					(name "Tolerance") "0.1%")
 				(field
@@ -3493,11 +3431,11 @@
 			)
 			(property
 				(name "MPN")
-				(value "")
+				(value "RT0603BRD071KL")
 			)
 			(property
 				(name "LCSC")
-				(value "")
+				(value "C110776")
 			)
 			(property
 				(name "Tolerance")
@@ -3544,11 +3482,9 @@
 			(footprint "Resistor_SMD:R_0603_1608Metric")
 			(fields
 				(field
-					(name "MPN")
-				)
+					(name "MPN") "0603WAF1001T5E")
 				(field
-					(name "LCSC")
-				)
+					(name "LCSC") "C21190")
 				(field
 					(name "Footprint") "Resistor_SMD:R_0603_1608Metric")
 				(field
@@ -3565,11 +3501,11 @@
 			)
 			(property
 				(name "MPN")
-				(value "")
+				(value "0603WAF1001T5E")
 			)
 			(property
 				(name "LCSC")
-				(value "")
+				(value "C21190")
 			)
 			(property
 				(name "Sheetname")
@@ -4675,30 +4611,36 @@
 		)
 		(libpart
 			(lib "Device")
-			(part "Ferrite_Bead")
+			(part "FerriteBead")
+			(description "Ferrite bead")
+			(footprints
+				(fp "Inductor_*")
+				(fp "L_*")
+				(fp "*Ferrite*")
+			)
 			(fields
 				(field
-					(name "Reference") "L")
+					(name "Reference") "FB")
 				(field
-					(name "Value") "ferrite_bead_0603")
+					(name "Value") "FerriteBead")
 				(field
-					(name "Footprint") "Inductor_SMD:L_0603_1608Metric")
+					(name "Footprint")
+				)
 				(field
 					(name "Datasheet")
 				)
 				(field
-					(name "Description")
-				)
+					(name "Description") "Ferrite bead")
 			)
 			(pins
 				(pin
 					(num "1")
-					(name "p1")
+					(name "")
 					(type "passive")
 				)
 				(pin
 					(num "2")
-					(name "p2")
+					(name "")
 					(type "passive")
 				)
 			)
@@ -5579,7 +5521,6 @@
 			(node
 				(ref "L2")
 				(pin "1")
-				(pinfunction "p1_1")
 				(pintype "passive")
 			)
 			(node
@@ -5698,7 +5639,6 @@
 			(node
 				(ref "L2")
 				(pin "2")
-				(pinfunction "p2_2")
 				(pintype "passive")
 			)
 			(node

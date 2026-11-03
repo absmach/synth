@@ -71,19 +71,19 @@ Versions: KiCad 10.0.7, FreeRouting 2.4.1 on OpenJDK 25.0.4.1, Synth
 
 | Check | Result | Evidence |
 | --- | --- | --- |
-| KiCad DRC, all severities | 0 errors, 0 warnings, 0 unconnected items | `reports/rtd_afe.kicad-drc.json` (`violations: []`, `unconnected_items: []`) |
+| KiCad DRC, all severities | 0 errors, 47 warnings, 0 unconnected items | `reports/rtd_afe.kicad-drc.json` (all 47 are `lib_footprint_mismatch`; `unconnected_items: []`) |
 | Schematic/PCB parity | empty | same DRC report |
 | pcbnew reopen | OK | `check.sh` loads the board with `pcbnew.LoadBoard` |
 | Ground | one `GND` plane; `AGND` and `DGND` are absent | `check.sh` asserts it; see below |
-| KiCad ERC | 0 errors, 2 warnings | `reports/rtd_afe.kicad-erc.json` |
+| KiCad ERC | 0 errors, 1 warning | `reports/rtd_afe.kicad-erc.json` |
 | Synth routing | routed, 40 connected nets, 0 open | `reports/rtd_afe.routing.json` |
 | Synth release | `production_status: untrusted`, `release_ready: false` | `reports/release.json`; the unverified-crystal override, not a DRC failure |
 | Synth signal integrity | 18 warnings, 0 blocking | `reports/release.json` |
 
 The delivered board is `kicad/rtd_afe.kicad_pcb`
-(`1e4803cf715aae28da268f55e4807c76ca4e8c9588d6ae888d606d704743043a`).
+(`ed06039e52e1ec9a72fafea0f3b1772fe2497282d554f5f01d9611a7d176768c`).
 The schematic is `kicad/rtd_afe.kicad_sch`
-(`a62c2c13e5b8d4b7b8eab384d74847606bdc9a2810b87a07f0006f68f027198f`).
+(`e61fde7f274ebf1bb58eefbb3c94e629d8b6a7402477d52c63bb6558daccedf2`).
 
 ### DRC history
 
@@ -121,8 +121,8 @@ hid 25 passives/TVS and H1/H2/H3/J1; the delivered board had 0 silk warnings.
 
 This rework fits the outline to the placement instead of spreading the parts
 over a fixed 50.1 x 44.1 mm rectangle. The board is now 40.1 x 44.2 mm
-(1772 mm²) and routes with 0 open nets, 0 DRC errors, 0 warnings and 0
-unconnected items. That does not prove it is the densest arrangement; it is one
+(1772 mm²) and routes with 0 open nets, 0 DRC errors, 0 unconnected items
+(47 library-mismatch warnings, see the table above). That does not prove it is the densest arrangement; it is one
 successful FreeRouting run, and `check.sh` re-routes from scratch.
 
 The largest bare rectangle inside the outline is 7 x 8 mm (56 mm²), down from
@@ -143,20 +143,21 @@ trade this revision makes for the centred connector.
 The RTD and AIN lengths change with the re-pack: RTD_FP 16.78 mm, RTD_SP
 6.75 mm, AIN1 12.39 mm, RTD_SN 6.94 mm, AIN2 13.55 mm, RTD_FN 15.46 mm. VREF is
 17.88 mm on F.Cu with no via and C_RV stays at REFP0. J2 and J3 are level at
-y = 41.7 mm, 0.71 mm from the bottom edge. One via-in-pad at C_DV.2 keeps the
-outline's GND pour tied, and one source stitching via sits beside U2 pad 47.
+y = 41.7 mm, 0.71 mm from the bottom edge. There is no via-in-pad in this route;
+one source stitching via sits beside U2 pad 47.
 
 ## ERC findings and dispositions
 
-`reports/rtd_afe.kicad-erc.json` has two warnings and no errors:
+`reports/rtd_afe.kicad-erc.json` has one warning and no errors:
 
 | Warning | Disposition |
 | --- | --- |
-| `lib_symbol_issues`: Symbol `Ferrite_Bead` not found in `Device` | The registry part uses `Device:Ferrite_Bead`; KiCad 10's library has `Device:FerriteBead`. The schematic embeds its own symbol and the netlist is correct. The registry data is stale; not changed here to keep this change set to this board. |
 | `lib_symbol_mismatch`: Symbol `REF5025ID` does not match the copy in `Reference_Voltage` | The embedded symbol is generated from the registry pins, so its drawing differs from the installed library copy. Pin numbers and electrical types match the reviewed part; the netlist and PCB parity are clean. Cosmetic. |
 
-Both are library-comparison warnings from an embedded-symbol export, not
-connectivity findings. A human should confirm that disposition.
+It is a library-comparison warning from an embedded-symbol export, not a
+connectivity finding. The registry now uses `Device:FerriteBead`, so the earlier
+`Ferrite_Bead` warning is gone. The 47 DRC `lib_footprint_mismatch` warnings are
+the same kind of finding for footprints. A human should confirm that disposition.
 
 ## Synth signal-integrity warnings
 
@@ -229,6 +230,10 @@ The BOM (`kicad/bom.csv`) now carries `dielectric`, `voltage`, `tolerance` and
 `power` columns copied from the structured attributes in `rtd_afe.synth`, so the
 C0G filter capacitors and the 0.1 % resistors are visible to an assembler that
 reads only the BOM. Empty cells mean the source did not declare that attribute.
+
+## Sourcing pins
+
+The listed passives and J3 are now pinned in `rtd_afe.synth` by explicit `lcsc_pn` and `mpn`, and `kicad/bom.csv` carries them (parts with different LCSC numbers stay on separate BOM lines). C_D, L1, L2, D1, D2, U5, Y1 and U2 are still unpinned and are matched by JLCPCB by value. That is unsafe: JLCPCB matched the wrong dielectric and values in a DFM test.
 
 ## Single ground plane
 
@@ -314,9 +319,9 @@ Nothing below is signed off. The list is deliberately blunt.
 - **Fabrication/DFM**: no fab house has seen the Gerbers, drill, BOM or PnP.
   The 0.4 mm QFN-60, the 0.5 mm VQFN-32 and the 0.5 mm USB-C need a fab
   capability check; the four-layer stackup is declared by the source, not a
-  controlled-impedance quote. The board requires one via-in-pad at C_DV.2 and
-  must be ordered with filled and capped vias (`requires via_in_pad`,
-  manufacturer `jlc-filled-via`); JLCPCB has not accepted that process. Assembly
+  controlled-impedance quote. The source declares `requires via_in_pad`
+  (manufacturer `jlc-filled-via`); this route has no via inside a pad, but a
+  re-route can bring one back and JLCPCB has not accepted that process. Assembly
   of the generic passives needs the C0G/tolerance attributes from the source,
   not just the BOM values.
 - **Firmware**: the RP2350 boot, QSPI flash, ADC gain/data-rate/IDAC registers,

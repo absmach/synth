@@ -2,7 +2,7 @@
   "schema_version": "synth.release.v1",
   "tool_version": "synth-cli 0.1.1",
   "input": "qualification/class-b/rtd-afe/rtd_afe.synth",
-  "source_revision": "28f7f1ec3aef55fa2881fdfbfaad6c1b6896b562",
+  "source_revision": "cf4d8dd7bdc3d1be90ad30b893fb4fc08ae48e14",
   "fab_requested": true,
   "production_status": "untrusted",
   "release_ready": false,
@@ -98,11 +98,8 @@
     "engine": "freerouting",
     "engine_version": "freerouting-2.4.1.jar",
     "state": "routed",
-    "input_hash": "05929bcd286fb4e8592dea8797a3b5e56a92b1f5b680d6bb8252d344e0d86a45",
-    "run_record": "qualification/class-b/rtd-afe/kicad/rtd_afe.routing.json",
-    "fabrication_notes": [
-      "via at (16.500, 22.300) mm C_DV.2: via-in-pad, order with filled and capped vias"
-    ]
+    "input_hash": "548e7cd37624579cc292dbea6c0a23948fab2b6832616e50e95e4f15eef8ed44",
+    "run_record": "qualification/class-b/rtd-afe/kicad/rtd_afe.routing.json"
   },
   "signal_integrity": {
     "blocking": 0,
