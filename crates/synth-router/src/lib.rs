@@ -366,7 +366,10 @@ fn finalize(
     match island_vias::move_vias_off_pads(&candidate.candidate_path) {
         Ok(0) => {}
         Ok(moved) => eprintln!("note: moved {moved} via(s) off the pads they sat in"),
-        Err(detail) => eprintln!("warning: vias in pads were not repaired: {detail}"),
+        Err(detail) => {
+            eprintln!("warning: vias in pads were not repaired: {detail}");
+            repair_unavailable.push(format!("via-in-pad repair did not run: {detail}"));
+        }
     }
     match island_vias::tie_islands(&candidate.candidate_path, &request.ground_nets) {
         Ok(outcome) => repair_blocking = outcome.unresolved,
@@ -381,9 +384,11 @@ fn finalize(
     // The labels were placed before the router put its vias down; move any that
     // now sit on a via or a pad. Silkscreen only, and before the candidate is
     // judged, so the board that is delivered is the one that was validated.
-    report_silkscreen_pass(label_vias::keep_labels_off_copper(
-        &candidate.candidate_path,
-    ));
+    let silkscreen = label_vias::keep_labels_off_copper(&candidate.candidate_path);
+    report_silkscreen_pass(silkscreen.clone());
+    if let Err(detail) = &silkscreen {
+        repair_unavailable.push(format!("silkscreen repair did not run: {detail}"));
+    }
     let verdict = with_repair_findings(
         validate_candidate(request, &candidate),
         repair_blocking,
