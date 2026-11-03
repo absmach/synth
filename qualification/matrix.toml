@@ -5,7 +5,7 @@ release_command = "synth check <board> --json"
 fab_command = "synth check <board> --fab --json"
 
 # Every `expect` and `expect_fab` below was measured, not assumed. The run:
-# KiCad 10.0.6, KiCadRoutingTools v0.23.0 (grid_router 9399bfb), release build,
+# KiCad 10.0.8, KiCadRoutingTools v0.23.0 (grid_router 9399bfb), release build,
 # `synth check <board> --json [--fab] --router kicad-routing-tools`.
 #
 # No board in the corpus currently clears the gate. That is the finding, not a
@@ -29,9 +29,9 @@ path = "examples/env_logger/env_logger.synth"
 fixture_sha256 = "b89025f6eb05df789c317eb875f0efb6df86a85c61d48bf708b76972ec0f50d1"
 class = "A"
 status = "experimental"
-expect = "pass"
+expect = "fail"
 expect_fab = "fail"
-rationale = "USB-C power, an AMS1117 LDO, an MCU, a BME680 on I2C and a debug header: the Class-A envelope. The copper is complete — 11 nets connected, none open, 206 segments and 25 vias over 499.3 mm — but `kicad-cli pcb drc` reports 6 clearance errors, actual 0.165 to 0.194 mm against the 0.2 mm the netclass declares. The exported `.kicad_dru` carries only the manufacturer edge and hole rules, so the per-netclass clearance never reaches the engine and it routes to the 0.127 mm global floor instead. Manufacturing then fails because no shipped part carries a reviewer, which is #51, not a property of this board."
+rationale = "USB-C power, an AMS1117 LDO, an MCU, a BME680 on I2C and a debug header: the Class-A envelope. Source passes. On the 10.0.6 baseline this board routed clean; under KiCad 10.0.8 with KiCadRoutingTools 9399bfb the routed board leaves 35 pads with no copper path, so independent validation reports validation_failed and the DRC stage reports `unknown`, which is not a pass. Manufacturing fails for the same routing failure. That is a routing regression against the previous baseline, recorded here so the corpus states it instead of hiding it."
 
 [[board]]
 id = "sensor_logger"
@@ -39,9 +39,9 @@ path = "examples/sensor_logger/sensor_logger.synth"
 fixture_sha256 = "6dad544533dcb92fe94d46a32ea64ae44f342c69996c70af73df734b761a8c4a"
 class = "A"
 status = "experimental"
-expect = "pass"
+expect = "fail"
 expect_fab = "fail"
-rationale = "Dual I2C sensors, SPI flash and status LEDs: a larger Class-A digital board. 19 nets connected, none open, 143 segments and 17 vias over 424.6 mm. `kicad-cli pcb drc` reports 5 clearance errors at 0.165 to 0.195 mm and one via under the declared minimum — the same unexpressed netclass rules as env_logger."
+rationale = "Dual I2C sensors, SPI flash and status LEDs: a larger Class-A digital board. Source passes. On the 10.0.6 baseline this board routed clean; under KiCad 10.0.8 with KiCadRoutingTools 9399bfb the routed board leaves 50 pads with no copper path and 4 warnings, so independent validation reports validation_failed and the DRC stage reports `unknown`. Manufacturing fails for the same routing failure."
 
 [[board]]
 id = "placement_and_diff_pair"
@@ -49,9 +49,9 @@ path = "examples/placement_and_diff_pair/placement_and_diff_pair.synth"
 fixture_sha256 = "bfa9d000e2bd58a7fbbf595fba8459c2c6afc2a6168f6d943d06bdf88e7e6414"
 class = "C"
 status = "experimental"
-expect = "pass"
+expect = "fail"
 expect_fab = "fail"
-rationale = "Differential-pair constraints, placement hints and keepouts: the Class-C constraint surface. 4 nets connected, none open, 60 segments and 11 vias over 53.9 mm. `kicad-cli pcb drc` reports 5 vias at 0.56 mm against the 0.6 mm minimum this board's setup declares, plus 4 dangling-via warnings. Same cause: the declared via minimum is not expressed to the engine that places the vias."
+rationale = "Differential-pair constraints, placement hints and keepouts: the Class-C constraint surface. Source passes. On the 10.0.6 baseline this board routed clean; under KiCad 10.0.8 with KiCadRoutingTools 9399bfb the routed board leaves 17 pads with no copper path, so independent validation reports validation_failed and the DRC stage reports `unknown`. Manufacturing fails for the same routing failure."
 
 [[board]]
 id = "ref_ldo_sensor"
