@@ -98,9 +98,9 @@ designated reviewer.
   fragmented U2's ground escape when moved on the wider outline.
 - The sidecar carries a plain rectangular `[[outline]]` (x 2.50..42.59,
   y -0.01..43.20); there is no notch and no post-export cut.
-- The RTD/input nets and VREF are on F.Cu only, with no layer change. QSPI also
-  stays on F.Cu. The SPI, SWD, USB, crystal and ADC-control nets change layers;
-  see the SI warnings below.
+- The RTD/input nets and VREF are on F.Cu only, with no layer change. QSPI is
+  mostly on F.Cu, with SD0/SD1/SD3 changing layer. The SPI, USB, crystal and
+  ADC-control nets change layers; see the SI warnings below.
 - 372 track segments, 66 vias (47 on GND, 25 signal), 624.9 mm of copper. 40
   nets, 0 open. The router records 66 vias; the other six are source ground
   stitching.
