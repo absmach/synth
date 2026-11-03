@@ -1,0 +1,31 @@
+id = "c_electrolytic_470uf_50v"
+kind = "capacitor"
+version = 0
+lifecycle = "active"
+description = "Panasonic EEU-FR1H471 470 uF 50 V +/-20 % 105 C radial aluminium electrolytic, 12.5 mm x 20 mm, 5 mm lead spacing, polarised (pin 1 is +)"
+mpn = "EEU-FR1H471"
+lcsc_pn = "C1589760"
+kicad_symbol = "Device:C_Polarized"
+kicad_footprint = "Capacitor_THT:CP_Radial_D12.5mm_P5.00mm"
+
+[footprint_dimensions]
+width_mm = 12.5
+height_mm = 12.5
+courtyard_margin_mm = 0.25
+
+[operating_conditions]
+max_voltage_v = 50.0
+
+[[pins]]
+name = "p1"
+number = "1"
+electrical_type = "passive"
+[[pins]]
+name = "p2"
+number = "2"
+electrical_type = "passive"
+
+[provenance]
+source = "authored"
+generator = "hand-written from the Panasonic EEU-FR1H471 datasheet"
+datasheet_url = "https://industrial.panasonic.com/ww/products/pt/aluminum-cap-lead/models/EEUFR1H471"

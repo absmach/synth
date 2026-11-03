@@ -1,0 +1,35 @@
+id = "terminal_block_mkds_3pin"
+kind = "connector"
+version = 0
+lifecycle = "active"
+description = "Phoenix Contact MKDS 1,5/3-5,08 screw terminal block, 3 positions, 5.08 mm pitch, 17.5 A, 400 V, 1.5 mm2, horizontal through-hole. No LCSC listing found; DigiKey 277-1264-ND"
+mpn = "1715734"
+kicad_symbol = "Connector:Screw_Terminal_01x03"
+kicad_footprint = "TerminalBlock_Phoenix:TerminalBlock_Phoenix_MKDS-1,5-3-5.08_1x03_P5.08mm_Horizontal"
+
+[footprint_dimensions]
+width_mm = 15.24
+height_mm = 10.0
+courtyard_margin_mm = 0.25
+
+[operating_conditions]
+max_voltage_v = 400.0
+max_current_ma = 17500.0
+
+[[pins]]
+name = "p1"
+number = "1"
+electrical_type = "passive"
+[[pins]]
+name = "p2"
+number = "2"
+electrical_type = "passive"
+[[pins]]
+name = "p3"
+number = "3"
+electrical_type = "passive"
+
+[provenance]
+source = "authored"
+generator = "hand-written from the Phoenix Contact MKDS 1,5/3-5,08 datasheet"
+datasheet_url = "https://www.phoenixcontact.com/us/products/1715734/pdf"
