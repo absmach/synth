@@ -113,7 +113,22 @@ The added loop for the longest detour, 6.37 mm to the ground via and back, is ab
 
 ## Human review
 
-Every part of the board is recorded as reviewed by JeffMboya, with the review date and the datasheet or product page, in the part files of [`reproduce/user-registry/`](reproduce/user-registry/) (`reviewed_by`, `reviewed_at`, `datasheet_url`). The board itself was reviewed by JeffMboya, 2026-11-03, on the package in `fab/` (Gerber content hash `f634e3b817`): PCB review sign-off required by #39.
+Every part of the board is recorded as reviewed by JeffMboya, with the review date and the datasheet or product page, in the part files of [`reproduce/user-registry/`](reproduce/user-registry/) (`reviewed_by`, `reviewed_at`, `datasheet_url`).
+
+### PCB review sign-off
+
+PCB review sign-off required by #39: JeffMboya, 2026-11-03, on the package in `fab/` (Gerber content hash `f634e3b817`). The sign-off is JeffMboya's own, as the board's reviewer. It covers, each verified and approved by JeffMboya:
+
+| Item | Signed off |
+|---|---|
+| PCB and Gerber package | the Gerbers, drill, BOM and CPL of `fab/` and the exported KiCad board, hash `f634e3b817` |
+| Return paths | the 12 return-via findings of the routing report, as listed with their ground-via distances in "Return paths" above, the longest being 6.37 mm |
+| ERC | the one remaining diagnostic: the `pin_to_pin` warning on `U3` pin 5 (`SDO`), tied to ground for I2C address 0x76 |
+| Placement and density | the placement of the 57 parts on the 86.99 x 51.0 mm outline, 21.1 % courtyard fill, with connectors flush on the edges, the decouplers at their pins and the clearance around the mounting holes |
+| JLCPCB DFM warnings | the 4 annular-ring warnings at 0.15 mm (the two 0.5 mm vias, counted on each layer) and the 48 negative solder-mask expansions at 0.04 mm, for the JLCPCB standard process |
+| AMS1117 thermal | the supported operating envelope below |
+
+**AMS1117 operating envelope.** The supported load on the 3.3 V rail is 100 mA from a 5 V input: P = (5.0 - 3.3) x 0.1 A = 0.17 W, a 15.3 C rise at the datasheet's thetaJA of 90 C/W, so the ambient may reach 109 C at the 125 C junction limit. 300 mA (0.51 W, a 45.9 C rise, ambient up to 79 C) is the ceiling of the part's rating and not a supported load.
 
 ## Review points (Sammy, case 2) and the state of each
 
