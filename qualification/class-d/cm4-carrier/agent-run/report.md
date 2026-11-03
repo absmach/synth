@@ -3,7 +3,7 @@
 ## Branch and commits
 
 - Branch: `syn-407-cm4-carrier`, based on upstream `a437fac`.
-- Commits: see the commit that added this file; the board commit precedes it.
+- Commits: `9413c017` (board source, parts, tests, qualification and agent-run docs) and the follow-up docs commit that adds this line.
 
 ## What is in the tree
 
