@@ -57,6 +57,8 @@ Group layout in the source: INPUT PROTECTION (J1, F1, D1, D2), INPUT FILTER (C1,
 - No comparison with a human reference design (#68). No independent mixed-signal/RF reviewer (#38).
 - Sustained overvoltage is limited by F1 (Vmax 33 V) and the 50 V capacitors (1.6 V margin at the 48.4 V clamp). Not tested.
 
+- Source inconsistency: the `buck.synth` header comment says "There are no vias in the pad", but the placement sidecar has six `[[vias]]` (QUALIFICATION and the sidecar agree). This document follows the sidecar.
+
 ## 6. Not verified (for this reconstruction)
 
 - Every datasheet figure above is as recorded in README/QUALIFICATION; the datasheets are not committed and were not re-read.
