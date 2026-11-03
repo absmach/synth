@@ -11,7 +11,7 @@ Designator,Val,Package,Mid X,Mid Y,Rotation,Layer
 "C7","4.7uF","Capacitor_SMD:C_0603_1608Metric",42.430,39.680,0,"Top"
 "C8","100nF","Capacitor_SMD:C_0603_1608Metric",41.490,34.980,0,"Top"
 "D1","1N5819","Diode_SMD:D_SOD-123",17.000,30.000,0,"Top"
-"D10","3.3V zener","Diode_SMD:D_SOD-123",50.500,26.500,0,"Top"
+"D10","3.3V zener","Diode_SMD:D_SOD-123",49.700,26.500,0,"Top"
 "D11","3.3V zener","Diode_SMD:D_SOD-123",55.500,30.000,0,"Top"
 "D12","3.3V zener","Diode_SMD:D_SOD-123",4.300,33.100,0,"Top"
 "D13","3.3V zener","Diode_SMD:D_SOD-123",43.500,21.500,0,"Top"

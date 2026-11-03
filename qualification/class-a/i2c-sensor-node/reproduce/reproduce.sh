@@ -8,9 +8,9 @@
 # 10.0.7 for the fabrication package. Each export takes about 8 minutes.
 #
 # The versions it uses are in pins.env. Synth is built from branch
-# SYN-case2-binary of that repository at the pinned commit: it carries the
-# silkscreen, via and label changes that this board needs and that are not in
-# absmach/synth's main yet (see the README's list of pull requests). The parts the
+# case-binary-v4 of that repository at the pinned commit: the merge of Synth
+# pull requests #370, #388 and #394, which carry the silkscreen, via, label and
+# return-via changes this board uses. The parts the
 # design uses that are not in that checkout's registry are in user-registry/.
 set -euo pipefail
 

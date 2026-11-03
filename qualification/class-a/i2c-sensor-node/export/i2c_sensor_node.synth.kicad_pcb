@@ -3,15 +3,13 @@
 	(generator "synth-eda")
 	(generator_version "10.0")
 	(general
-		(thickness 1.57)
+		(thickness 1.6)
 		(legacy_teardrops no)
 	)
 	(paper "A4")
 	(layers
 		(0 "F.Cu" signal)
-		(4 "In1.Cu" power)
-		(6 "In2.Cu" power)
-		(2 "B.Cu" signal)
+		(31 "B.Cu" signal)
 		(32 "B.Adhes" user "B.Adhesive")
 		(33 "F.Adhes" user "F.Adhesive")
 		(34 "B.Paste" user)
@@ -32,49 +30,6 @@
 		(49 "F.Fab" user)
 	)
 	(setup
-		(stackup
-			(layer
-				"F.Cu"
-				(type "copper")
-				(thickness 0.035)
-			)
-			(layer
-				"dielectric 1"
-				(type "dielectric")
-				(thickness 0.1)
-				(material "FR4")
-				(epsilon_r 4.4)
-			)
-			(layer
-				"In1.Cu"
-				(type "copper")
-				(thickness 0.0175)
-			)
-			(layer
-				"dielectric 2"
-				(type "dielectric")
-				(thickness 1.265)
-				(material "FR4")
-				(epsilon_r 4.6)
-			)
-			(layer
-				"In2.Cu"
-				(type "copper")
-				(thickness 0.0175)
-			)
-			(layer
-				"dielectric 3"
-				(type "dielectric")
-				(thickness 0.1)
-				(material "FR4")
-				(epsilon_r 4.4)
-			)
-			(layer
-				"B.Cu"
-				(type "copper")
-				(thickness 0.035)
-			)
-		)
 		(last_trace_width 0.127)
 		(trace_clearance 0.127)
 		(pad_to_mask_clearance 0)
@@ -250,7 +205,7 @@
 			(effects
 				(font
 					(size 0.8 0.8)
-					(thickness 0.12)
+					(thickness 0.18)
 				)
 			)
 		)
@@ -631,7 +586,7 @@
 			(effects
 				(font
 					(size 0.8 0.8)
-					(thickness 0.12)
+					(thickness 0.18)
 				)
 			)
 		)
@@ -810,7 +765,7 @@
 			(effects
 				(font
 					(size 0.8 0.8)
-					(thickness 0.12)
+					(thickness 0.18)
 				)
 			)
 		)
@@ -1126,7 +1081,7 @@
 			(effects
 				(font
 					(size 0.8 0.8)
-					(thickness 0.12)
+					(thickness 0.18)
 				)
 			)
 		)
@@ -1430,7 +1385,7 @@
 			(effects
 				(font
 					(size 0.8 0.8)
-					(thickness 0.12)
+					(thickness 0.18)
 				)
 			)
 		)
@@ -1724,7 +1679,7 @@
 			(effects
 				(font
 					(size 0.8 0.8)
-					(thickness 0.12)
+					(thickness 0.18)
 				)
 			)
 		)
@@ -1903,7 +1858,7 @@
 			(effects
 				(font
 					(size 0.8 0.8)
-					(thickness 0.12)
+					(thickness 0.18)
 				)
 			)
 		)
@@ -2082,7 +2037,7 @@
 			(effects
 				(font
 					(size 0.8 0.8)
-					(thickness 0.12)
+					(thickness 0.18)
 				)
 			)
 		)
@@ -2305,7 +2260,7 @@
 			(effects
 				(font
 					(size 0.8 0.8)
-					(thickness 0.12)
+					(thickness 0.18)
 				)
 			)
 		)
@@ -2484,7 +2439,7 @@
 			(effects
 				(font
 					(size 0.8 0.8)
-					(thickness 0.12)
+					(thickness 0.18)
 				)
 			)
 		)
@@ -2663,7 +2618,7 @@
 			(effects
 				(font
 					(size 0.8 0.8)
-					(thickness 0.12)
+					(thickness 0.18)
 				)
 			)
 		)
@@ -2886,7 +2841,7 @@
 			(effects
 				(font
 					(size 0.8 0.8)
-					(thickness 0.12)
+					(thickness 0.18)
 				)
 			)
 		)
@@ -3065,7 +3020,7 @@
 			(effects
 				(font
 					(size 0.8 0.8)
-					(thickness 0.12)
+					(thickness 0.18)
 				)
 			)
 		)
@@ -3486,7 +3441,7 @@
 			(effects
 				(font
 					(size 0.8 0.8)
-					(thickness 0.12)
+					(thickness 0.18)
 				)
 			)
 		)
@@ -3665,7 +3620,7 @@
 			(effects
 				(font
 					(size 0.8 0.8)
-					(thickness 0.12)
+					(thickness 0.18)
 				)
 			)
 		)
@@ -3844,7 +3799,7 @@
 			(effects
 				(font
 					(size 0.8 0.8)
-					(thickness 0.12)
+					(thickness 0.18)
 				)
 			)
 		)
@@ -4023,7 +3978,7 @@
 			(effects
 				(font
 					(size 0.8 0.8)
-					(thickness 0.12)
+					(thickness 0.18)
 				)
 			)
 		)
@@ -4202,7 +4157,7 @@
 			(effects
 				(font
 					(size 0.8 0.8)
-					(thickness 0.12)
+					(thickness 0.18)
 				)
 			)
 		)
@@ -4525,7 +4480,7 @@
 			(effects
 				(font
 					(size 0.8 0.8)
-					(thickness 0.12)
+					(thickness 0.18)
 				)
 			)
 		)
@@ -4801,7 +4756,7 @@
 			(effects
 				(font
 					(size 0.8 0.8)
-					(thickness 0.12)
+					(thickness 0.18)
 				)
 			)
 		)
@@ -4980,7 +4935,7 @@
 			(effects
 				(font
 					(size 0.8 0.8)
-					(thickness 0.12)
+					(thickness 0.18)
 				)
 			)
 		)
@@ -5159,7 +5114,7 @@
 			(effects
 				(font
 					(size 0.8 0.8)
-					(thickness 0.12)
+					(thickness 0.18)
 				)
 			)
 		)
@@ -5475,7 +5430,7 @@
 			(effects
 				(font
 					(size 0.8 0.8)
-					(thickness 0.12)
+					(thickness 0.18)
 				)
 			)
 		)
@@ -5791,7 +5746,7 @@
 			(effects
 				(font
 					(size 0.8 0.8)
-					(thickness 0.12)
+					(thickness 0.18)
 				)
 			)
 		)
@@ -6107,7 +6062,7 @@
 			(effects
 				(font
 					(size 0.8 0.8)
-					(thickness 0.12)
+					(thickness 0.18)
 				)
 			)
 		)
@@ -6346,7 +6301,7 @@
 			(effects
 				(font
 					(size 0.8 0.8)
-					(thickness 0.12)
+					(thickness 0.18)
 				)
 			)
 		)
@@ -6719,7 +6674,7 @@
 			(effects
 				(font
 					(size 0.8 0.8)
-					(thickness 0.12)
+					(thickness 0.18)
 				)
 			)
 		)
@@ -6898,7 +6853,7 @@
 			(effects
 				(font
 					(size 0.8 0.8)
-					(thickness 0.12)
+					(thickness 0.18)
 				)
 			)
 		)
@@ -7077,7 +7032,7 @@
 			(effects
 				(font
 					(size 0.8 0.8)
-					(thickness 0.12)
+					(thickness 0.18)
 				)
 			)
 		)
@@ -7256,7 +7211,7 @@
 			(effects
 				(font
 					(size 0.8 0.8)
-					(thickness 0.12)
+					(thickness 0.18)
 				)
 			)
 		)
@@ -7435,7 +7390,7 @@
 			(effects
 				(font
 					(size 0.8 0.8)
-					(thickness 0.12)
+					(thickness 0.18)
 				)
 			)
 		)
@@ -7614,7 +7569,7 @@
 			(effects
 				(font
 					(size 0.8 0.8)
-					(thickness 0.12)
+					(thickness 0.18)
 				)
 			)
 		)
@@ -8056,7 +8011,7 @@
 			(effects
 				(font
 					(size 0.8 0.8)
-					(thickness 0.12)
+					(thickness 0.18)
 				)
 			)
 		)
@@ -8235,7 +8190,7 @@
 			(effects
 				(font
 					(size 0.8 0.8)
-					(thickness 0.12)
+					(thickness 0.18)
 				)
 			)
 		)
@@ -8414,7 +8369,7 @@
 			(effects
 				(font
 					(size 0.8 0.8)
-					(thickness 0.12)
+					(thickness 0.18)
 				)
 			)
 		)
@@ -8730,7 +8685,7 @@
 			(effects
 				(font
 					(size 0.8 0.8)
-					(thickness 0.12)
+					(thickness 0.18)
 				)
 			)
 		)
@@ -9046,7 +9001,7 @@
 			(effects
 				(font
 					(size 0.8 0.8)
-					(thickness 0.12)
+					(thickness 0.18)
 				)
 			)
 		)
@@ -9378,7 +9333,7 @@
 			(effects
 				(font
 					(size 0.8 0.8)
-					(thickness 0.12)
+					(thickness 0.18)
 				)
 			)
 		)
@@ -9557,7 +9512,7 @@
 			(effects
 				(font
 					(size 0.8 0.8)
-					(thickness 0.12)
+					(thickness 0.18)
 				)
 			)
 		)
@@ -9736,7 +9691,7 @@
 			(effects
 				(font
 					(size 0.8 0.8)
-					(thickness 0.12)
+					(thickness 0.18)
 				)
 			)
 		)
@@ -9915,7 +9870,7 @@
 			(effects
 				(font
 					(size 0.8 0.8)
-					(thickness 0.12)
+					(thickness 0.18)
 				)
 			)
 		)
@@ -10094,7 +10049,7 @@
 			(effects
 				(font
 					(size 0.8 0.8)
-					(thickness 0.12)
+					(thickness 0.18)
 				)
 			)
 		)
@@ -10273,7 +10228,7 @@
 			(effects
 				(font
 					(size 0.8 0.8)
-					(thickness 0.12)
+					(thickness 0.18)
 				)
 			)
 		)
@@ -10452,7 +10407,7 @@
 			(effects
 				(font
 					(size 0.8 0.8)
-					(thickness 0.12)
+					(thickness 0.18)
 				)
 			)
 		)
@@ -10631,7 +10586,7 @@
 			(effects
 				(font
 					(size 0.8 0.8)
-					(thickness 0.12)
+					(thickness 0.18)
 				)
 			)
 		)
@@ -10800,7 +10755,7 @@
 		"Diode_SMD:D_SOD-123"
 		(layer "F.Cu")
 		(uuid "0147f34d-377e-5112-98db-37376be03f03")
-		(at 50.5 26.5)
+		(at 49.7 26.5)
 		(property
 			"Reference"
 			"D10"
@@ -10810,7 +10765,7 @@
 			(effects
 				(font
 					(size 0.8 0.8)
-					(thickness 0.12)
+					(thickness 0.18)
 				)
 			)
 		)
@@ -11126,7 +11081,7 @@
 			(effects
 				(font
 					(size 0.8 0.8)
-					(thickness 0.12)
+					(thickness 0.18)
 				)
 			)
 		)
@@ -11442,7 +11397,7 @@
 			(effects
 				(font
 					(size 0.8 0.8)
-					(thickness 0.12)
+					(thickness 0.18)
 				)
 			)
 		)
@@ -11758,7 +11713,7 @@
 			(effects
 				(font
 					(size 0.8 0.8)
-					(thickness 0.12)
+					(thickness 0.18)
 				)
 			)
 		)
@@ -12074,7 +12029,7 @@
 			(effects
 				(font
 					(size 0.8 0.8)
-					(thickness 0.12)
+					(thickness 0.18)
 				)
 			)
 		)
@@ -12390,7 +12345,7 @@
 			(effects
 				(font
 					(size 0.8 0.8)
-					(thickness 0.12)
+					(thickness 0.18)
 				)
 			)
 		)
@@ -12706,7 +12661,7 @@
 			(effects
 				(font
 					(size 0.8 0.8)
-					(thickness 0.12)
+					(thickness 0.18)
 				)
 			)
 		)
@@ -13022,7 +12977,7 @@
 			(effects
 				(font
 					(size 0.8 0.8)
-					(thickness 0.12)
+					(thickness 0.18)
 				)
 			)
 		)
@@ -13338,7 +13293,7 @@
 			(effects
 				(font
 					(size 0.8 0.8)
-					(thickness 0.12)
+					(thickness 0.18)
 				)
 			)
 		)
@@ -13654,7 +13609,7 @@
 			(effects
 				(font
 					(size 0.8 0.8)
-					(thickness 0.12)
+					(thickness 0.18)
 				)
 			)
 		)
@@ -13833,7 +13788,7 @@
 			(effects
 				(font
 					(size 0.8 0.8)
-					(thickness 0.12)
+					(thickness 0.18)
 				)
 			)
 		)
@@ -13988,7 +13943,7 @@
 			(effects
 				(font
 					(size 0.8 0.8)
-					(thickness 0.12)
+					(thickness 0.18)
 				)
 			)
 		)
@@ -14158,58 +14113,6 @@
 	(zone
 		(net 33)
 		(net_name "GND")
-		(layer "In1.Cu")
-		(uuid "c3fd288f-90fa-5647-81ae-f5e0b5ffed0b")
-		(priority 1)
-		(hatch edge 0.5)
-		(connect_pads
-			yes
-			(clearance 0.15)
-		)
-		(fill
-			yes
-			(thermal_gap 0.2)
-			(thermal_bridge_width 0.25)
-			(island_removal_mode 0)
-		)
-		(polygon
-			(pts
-				(xy 0.9 1)
-				(xy 86.89 1)
-				(xy 86.89 51)
-				(xy 0.9 51)
-			)
-		)
-	)
-	(zone
-		(net 33)
-		(net_name "GND")
-		(layer "In2.Cu")
-		(uuid "4c225ff1-2429-5144-8fd6-29e5fba10bc4")
-		(priority 1)
-		(hatch edge 0.5)
-		(connect_pads
-			yes
-			(clearance 0.15)
-		)
-		(fill
-			yes
-			(thermal_gap 0.2)
-			(thermal_bridge_width 0.25)
-			(island_removal_mode 0)
-		)
-		(polygon
-			(pts
-				(xy 0.9 1)
-				(xy 86.89 1)
-				(xy 86.89 51)
-				(xy 0.9 51)
-			)
-		)
-	)
-	(zone
-		(net 33)
-		(net_name "GND")
 		(layer "B.Cu")
 		(uuid "c70db684-62b5-59e0-83f7-94eed8946d1f")
 		(priority 1)
@@ -14233,42 +14136,10 @@
 			)
 		)
 	)
-	(via
-		(at 1.9 2)
-		(size 0.6)
-		(drill 0.2)
-		(layers "F.Cu" "B.Cu")
-		(net 33)
-		(uuid "48f6631a-db63-57a9-8730-fb8c4fec3e96")
-	)
-	(via
-		(at 85.89 2)
-		(size 0.6)
-		(drill 0.2)
-		(layers "F.Cu" "B.Cu")
-		(net 33)
-		(uuid "64e8dfab-a7fd-5dd5-b1be-e489efde80b9")
-	)
-	(via
-		(at 85.89 50)
-		(size 0.6)
-		(drill 0.2)
-		(layers "F.Cu" "B.Cu")
-		(net 33)
-		(uuid "3f1c4251-9a29-5342-a212-d233227ace93")
-	)
-	(via
-		(at 1.9 50)
-		(size 0.6)
-		(drill 0.2)
-		(layers "F.Cu" "B.Cu")
-		(net 33)
-		(uuid "cb6fd16d-e5a4-5ea0-9da6-1f427a149993")
-	)
 	(zone
 		(net 0)
 		(net_name "")
-		(layers "F.Cu" "In1.Cu" "In2.Cu" "B.Cu")
+		(layers "F.Cu" "B.Cu")
 		(uuid "3d91d740-8ce2-5f77-b84d-a761be9b87fc")
 		(name "H2 screw head")
 		(hatch edge 0.5)
@@ -14311,7 +14182,7 @@
 	(zone
 		(net 0)
 		(net_name "")
-		(layers "F.Cu" "In1.Cu" "In2.Cu" "B.Cu")
+		(layers "F.Cu" "B.Cu")
 		(uuid "f9ddabda-ef9b-5750-8913-21e06190b50c")
 		(name "H3 screw head")
 		(hatch edge 0.5)

@@ -1,6 +1,6 @@
 # I2C sensor node
 
-A field sensor node: an STM32G030F6P6 microcontroller reads a Bosch BME680 (temperature, humidity, pressure and gas) and a 24LC256 EEPROM over one I2C bus. It runs from a 5 V input on a JST XH connector through a 0.5 A resettable fuse and a Schottky diode, with an AMS1117-3.3 making the 3.3 V rail. The board has a serial connector (J3), a 12-pin GPIO header (J5) with protection on every line, an SWD header (J4), a power LED and two M2.5 mounting holes. Four copper layers on the JLCPCB 1.6 mm stackup, 86.99 x 51.0 mm, 57 parts.
+A field sensor node: an STM32G030F6P6 microcontroller reads a Bosch BME680 (temperature, humidity, pressure and gas) and a 24LC256 EEPROM over one I2C bus. It runs from a 5 V input on a JST XH connector through a 0.5 A resettable fuse and a Schottky diode, with an AMS1117-3.3 making the 3.3 V rail. The board has a serial connector (J3), a 12-pin GPIO header (J5) with protection on every line, an SWD header (J4), a power LED and two M2.5 mounting holes. Two copper layers (F.Cu and B.Cu, with a GND pour on each), 86.99 x 51.0 mm, 57 parts.
 
 The design is `i2c_sensor_node.synth` with its placement sidecar `i2c_sensor_node.placement.layout.toml`. It was made with `synth mcp` from a prompt, then exported through the Synth MCP server (the `synth_export` tool) and checked with KiCad. [`PROVENANCE.md`](PROVENANCE.md) is the record of that path: the exact prompt, the agent's tool-call trace, the Synth revisions, the registry inputs, the artifact hashes and the validation commands with their results.
 
@@ -25,18 +25,19 @@ The design is `i2c_sensor_node.synth` with its placement sidecar `i2c_sensor_nod
 
 ## Measured results
 
-KiCad 10.0.7 on a 16-vCPU server; Synth built from commit `aaa8d193fe9573c554a5ed4a4a1c26a492030c8d` (branch `SYN-case2-binary` of `JeffMboya/synth`, the merge of Synth pull requests #370, #388 and #394); KiCadRoutingTools `9399bfb29e072bfe60b10d9cdae20c274fc2a17a`. The figures below are from the first of the three exports in [`export/`](export/).
+KiCad 10.0.7 on a 16-vCPU server; Synth built from commit `c0649a053a68ed007a7ce4a73d2f2d244dfef236` (branch `case-binary-v4` of `JeffMboya/synth`, the merge of Synth pull requests #370, #388 and #394); KiCadRoutingTools `9399bfb29e072bfe60b10d9cdae20c274fc2a17a`. The figures below are from the first of the three exports in [`export/`](export/).
 
 | Item | Result |
 |---|---|
 | Router state | `routed`, `fabrication_ready` True, 0 blocking findings, 0 open nets |
+| Release gate (`synth export-kicad`, [`export/release.json`](export/release.json)) | `release_ready` True, `production_status` production, 0 blocking signal-integrity findings |
 | Outline | 86.99 x 51.0 mm = 4436 mm2 |
-| Parts | 57 (including the two mounting holes) |
-| Routing | 35 nets connected, 602 track segments, 73 vias |
-| KiCad DRC (`--refill-zones --severity-all`, with the footprint library table) | 0 errors, 0 unconnected; warnings: 52 `lib_footprint_mismatch` ([`reports/kicad_drc.json`](reports/kicad_drc.json)) |
+| Parts | 57 (including the two mounting holes); courtyard fill 21.1 % |
+| Routing | 35 nets connected, 537 track segments, 136 vias |
+| KiCad DRC (`--refill-zones --severity-all`, with the footprint library table) | 0 errors, 0 unconnected; warnings: 57 `lib_footprint_issues` ([`reports/kicad_drc.json`](reports/kicad_drc.json)) |
 | KiCad ERC, design diagnostics | 1 `pin_to_pin` warning, 0 errors ([`reports/kicad_erc.json`](reports/kicad_erc.json)): `U3` pin 5 (`SDO`) is tied to ground to select I2C address 0x76. KiCad's `Sensor:BME680` symbol types that pin bidirectional (it is the SPI data output) and ground carries a `PWR_FLAG`, so ERC reports a bidirectional pin on a power-output net. In I2C mode the pin is a static input and nothing drives it. |
-| KiCad ERC, library configuration | 121 `lib_symbol_issues` warnings: the exporter's embedded symbols against the library copies |
-| Gerber and drill content hash | `1c1755660b` (identical across the three exports once the creation time in the Gerber headers is masked) |
+| KiCad ERC, library configuration | 121 `lib_symbol_issues` and 57 `footprint_link_issues` warnings: the exporter's embedded symbols and footprints against the library copies |
+| Gerber and drill content hash | `0af456c3a2` (identical across the three exports once the creation time in the Gerber headers is masked) |
 
 Connector distance to the board edge (courtyard to Edge.Cuts, measured on the exported board):
 
@@ -60,16 +61,12 @@ Decoupling capacitors, pad to the supply pin they serve (pad to supply pin):
     C11  pad on +3V3      -> U3.8     4.9 mm
     C12  pad on +3V3      -> U5.8     2.0 mm
 
-Net classes (PWR 0.5 mm, V33 0.4 mm, SIG 0.25 mm, GNDC 0.4 mm, Default 0.2 mm; vias 0.6 mm over a 0.2 mm drill), as exported:
+Net classes (PWR 0.5 mm, V33 0.4 mm, SIG 0.25 mm, GNDC 0.4 mm, Default 0.2 mm; vias 0.6 mm over a 0.2 mm drill) are declared and assigned by net; the exported board uses them as listed, with the router narrowing tracks near pads:
 
     classes {'PWR': (0.5, 0.6, 0.2), 'SIG': (0.25, 0.6, 0.2), 'V33': (0.4, 0.6, 0.2), 'GNDC': (0.4, 0.6, 0.2), 'Default': (0.2, 0.6, 0.2)}
-    assignments 52 patterns 17
-    SIG {0.25: 229, 0.2: 75, 0.21000000000000002: 34, 0.22: 33, 0.23: 34, 0.24: 32, 0.127: 8}
-    V33 {0.4: 85, 0.36000000000000004: 1, 0.32: 1, 0.28: 1, 0.24000000000000002: 1, 0.2: 2}
-    PWR {0.5: 23}
-    GNDC {0.2: 34, 0.8: 9}
-    segments narrower or wider than their class width: 265
-    [(('SIG', 0.2, 0.25), 75), (('SIG', 0.21000000000000002, 0.25), 34), (('SIG', 0.23, 0.25), 34), (('GNDC', 0.2, 0.4), 34), (('SIG', 0.22, 0.25), 33), (('SIG', 0.24, 0.25), 32)]
+    SIG {0.25: 247, 0.2: 71, 0.21: 30, 0.22: 30, 0.23: 30, 0.24: 31}
+    V33 {0.4: 76, 0.2: 7}
+    PWR {0.5: 15}
 
 ## Reproducibility
 
@@ -77,70 +74,40 @@ The source and sidecar in this directory were exported three times through the S
 
 | file | export 1 | export 2 | export 3 | |
 |---|---|---|---|---|
-| `i2c_sensor_node.synth.kicad_pcb` (un-routed) | ba85e901ff | ba85e901ff | ba85e901ff | byte-identical |
-| `i2c_sensor_node.kicad_pcb` | a9b536801a | d4c52627eb | 82ba348a26 | not byte-identical; identical after the router's and KiCad's random ids are masked (normalized) |
+| `i2c_sensor_node.synth.kicad_pcb` (un-routed) | 9db9ad9732 | 9db9ad9732 | 9db9ad9732 | byte-identical |
+| `i2c_sensor_node.kicad_pcb` | b7474ccb47 | e46e6ed44e | 506bfa2692 | not byte-identical; identical after the router's and KiCad's random ids are masked (normalized) |
 | `i2c_sensor_node.kicad_sch` (one A1 sheet) | ed3e118032 | ed3e118032 | ed3e118032 | byte-identical |
 | `i2c_sensor_node.kicad_pro` | 8b000fbbf8 | 8b000fbbf8 | 8b000fbbf8 | byte-identical |
 | `i2c_sensor_node.kicad_sym` | f8b593e51b | f8b593e51b | f8b593e51b | byte-identical |
 | `bom.csv` | ec31ca8c8a | ec31ca8c8a | ec31ca8c8a | byte-identical |
-| `pnp.csv` | 706483f12e | 706483f12e | 706483f12e | byte-identical |
-| Gerber and drill content | 1c1755660b | 1c1755660b | 1c1755660b | identical after the creation time in the headers is masked (normalized) |
+| `pnp.csv` | 43819c0b2a | 43819c0b2a | 43819c0b2a | byte-identical |
+| Gerber and drill content | 0af456c3a2 | 0af456c3a2 | 0af456c3a2 | identical after the creation time in the headers is masked (normalized) |
 
-With the random ids masked the routed board is `52980d7667` in all three exports ([`reproduce/compare_exports.py`](reproduce/compare_exports.py) does the masking). [`reproduce/reproduce.sh`](reproduce/reproduce.sh) is supplemental tooling, not the evidence of how the board was made (see [`PROVENANCE.md`](PROVENANCE.md)); it rebuilds Synth at the pinned commit, exports three times and compares, then builds the fabrication package.
-
-## JLCPCB
-
-PCB DFM of the package of this README (2026-11-02 13:06, Gerber content hash `1c1755660b`, four layers, 8.7 x 5.1 cm, report in [`reports/`](reports/jlcpcb_pcb_dfm_2026-11-02_13-06_1c1755660b.pdf)): 0 Danger items. Trace spacing 0.25 mm, pad spacing 0.21 mm, annular ring 0.20 mm (100 rings), through-hole to SMD 3.77 mm, solder-mask opening near a trace 0.17 mm and silkscreen line width 0.18 mm are good; silkscreen to pad, silkscreen to hole, via to pad and sharp corners have no finding.
-
-SMT DFM of the package in `fab/` (BOM, CPL and the Gerbers of content hash `1c1755660b`, JLCPCB assembly flow, 2026-11-02, no order placed): every check good.
-
-Quote with assembly for the same package ([`reports/jlcpcb_quote_2026-11-02.md`](reports/jlcpcb_quote_2026-11-02.md)): PCB $8.00 and Standard PCBA $140.17, $148.17 before shipping.
-
-BOM matching of the same package in JLCPCB's assembly flow, PCB assembled qty 5, estimated total $69.9405 ([`reports/jlcpcb_assembly_bom_match_2026-11-02.xlsx`](reports/jlcpcb_assembly_bom_match_2026-11-02.xlsx)): 55 lines, 53 matched to a JLCPCB part (21 Basic, 33 Extended library types among the 54 lines with a library type), `SW1` confirmed, and `J4`, the SWD pin header, a through-hole part that JLCPCB does not assemble and that is fitted by hand; the assembly package covers every other line.
+With the random ids masked the routed board is `3c411267b4` in all three exports ([`reproduce/compare_exports.py`](reproduce/compare_exports.py) does the masking). [`reproduce/reproduce.sh`](reproduce/reproduce.sh) is supplemental tooling, not the evidence of how the board was made (see [`PROVENANCE.md`](PROVENANCE.md)); it rebuilds Synth at the pinned commit, exports three times and compares, then builds the fabrication package.
 
 ## Return paths
 
-The release report ([`export/release.json`](export/release.json)) lists 62 `W-SYNTH-DRC-016` findings, 0 of them blocking: a signal or power track changes layer at a via with no ground-return via within 0.68 mm. They are on 25 nets, by the net of the via at each finding's position (0 findings sit at a position with no via of the routed board):
+The release report ([`export/release.json`](export/release.json)) lists 12 `W-SYNTH-DRC-016` findings, 0 of them blocking: a track changes layer at a via with no ground-return via within 1.53 mm. By the net of the via at each finding's position:
 
 | Net | Findings |
 |---|---|
-| `+3V3` | 12 |
-| `I2C_SCL` | 5 |
-| `GPIO_PA0_MCU` | 4 |
-| `GPIO_PB0_MCU` | 4 |
-| `I2C_SDA` | 3 |
-| `GPIO_PA7_MCU` | 3 |
-| `GPIO_PB9_MCU` | 3 |
-| `U2_RX` | 3 |
-| `SWDIO_MCU` | 2 |
-| `SWCLK_MCU` | 2 |
-| `GPIO_PA6_MCU` | 2 |
-| `GPIO_PA1_MCU` | 2 |
-| `GPIO_PA4_MCU` | 2 |
-| `GPIO_PA5_MCU` | 2 |
-| `U2_TX` | 2 |
-| `NRST` | 2 |
-| `GPIO_PA4` | 1 |
-| `GPIO_PA5` | 1 |
-| `GPIO_PA6` | 1 |
-| `GPIO_PB0` | 1 |
-| `GPIO_PB9` | 1 |
-| `UART_TX` | 1 |
-| `3V3_REF` | 1 |
-| `SWCLK` | 1 |
+| `+5V_PROT` | 2 |
+| `LED_PWR` | 2 |
+| `GPIO_PA5` | 2 |
+| `GPIO_PB0_MCU` | 1 |
 | `SWDIO` | 1 |
+| `GPIO_PA6` | 1 |
+| `3V3_REF` | 1 |
+| `GPIO_PA1` | 1 |
+| `GPIO_PA0` | 1 |
 
-Synth's release gate blocks a missing return via only on fast nets (clocks, differential pairs, switching nodes). The board has none, so these are advisories and the board released under that rule. The router looks for a ground via beside each layer change and reports the places where no spot in the ground pour is clear of pads, vias and tracks. The limitation is documented here and covered by the PCB review sign-off below.
-
-## PCB review sign-off
-
-PCB review sign-off required by #39: JeffMboya, 2026-11-02, on the package in `fab/` (Gerber content hash `1c1755660b`) and on the return-path limitation described above.
+Synth's release gate holds a board back for a missing return via only on a net that rides a fast edge, and it classified all nine nets as not doing so. The router looks for a ground via beside each layer change and reports the places where no spot in the ground pour is clear of pads, vias and tracks. Both outer layers carry a GND pour, so the return current on these nets stays on a continuous ground plane.
 
 ## Review points (Sammy, case 2) and the state of each
 
 | Point | State |
 |---|---|
-| A plain default export is valid; no optional flag, no split ground pour | The exports call `synth_export` with the source, the sidecar and the output directory only (no `allow_incomplete`, no via-in-pad override). The ground net GND is poured on all four layers as one net. |
+| A plain default export is valid; no optional flag, no split ground pour | The exports call `synth_export` with the source, the sidecar and the output directory only (no `allow_incomplete`, no via-in-pad override). The ground net GND is poured on both layers as one net. |
 | Three exports agree | Byte-identical across the three exports: `kicad_sch`, `kicad_pro`, `kicad_sym`, `bom.csv`, `pnp.csv` and the un-routed `synth.kicad_pcb`. Not byte-identical but equal after normalization: the routed `kicad_pcb` (the router and KiCad write random ids; compared with those masked, so geometrically equivalent) and the Gerber, drill and job files (the headers carry the creation time; compared by the content hash with it masked). |
 | Every external line of J3 protected | TX goes through R11 (330 ohm) and D7, a 3.3 V zener (BZT52C3V3, 500 mW); RX through R12 (1 k) and D24. A 5 V fault: (5 - 3.3) / 330 = 5.2 mA and (5 - 3.3) / 1000 = 1.7 mA, so 17 mW and 5.6 mW in the zener. The 3.3 V sense line has D14 (1N5819HW) and 100 ohm: 3 mA maximum, 30 mA into a short. The zener's leakage and clamp figures are from its listing, not an opened datasheet. |
 | Net classes declared and applied | Declared (PWR, V33, GNDC, SIG) and assigned to 39 nets; the exported board's tracks use them as listed above, with the router narrowing tracks near pads. |

@@ -38,10 +38,9 @@
 // Pins 16 and 17 are left unconnected (no-connect); the rest are used.
 
 board "i2c_sensor_node" {
-  layers 4
+  layers 2
   manufacturer "jlcpcb"
   revision "A"
-  stackup { copper 0.035mm insulator 0.1mm er 4.4 material "FR4" copper 0.0175mm insulator 1.265mm er 4.6 material "FR4" copper 0.0175mm insulator 0.1mm er 4.4 material "FR4" copper 0.035mm }
 
   // ---- net classes (widths from current, see design notes) ------------------
   netclass "PWR"  { trace_width 0.5mm clearance 0.2mm via_diameter 0.6mm via_drill 0.2mm color "#d55e00" }

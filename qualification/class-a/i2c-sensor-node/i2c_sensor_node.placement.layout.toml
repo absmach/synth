@@ -291,8 +291,8 @@ dx = 0.0
 dy = 0.0
 
 [components.D10]
-x = 50.5
-y = 26.5
+x = 49.70
+y = 26.50
 rotation = 0
 source = "agent"
 priority = "hard"

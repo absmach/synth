@@ -15,7 +15,7 @@ The board is the output of an agent driving `synth mcp` from a prompt, followed 
 | | |
 |---|---|
 | Synth, agent run and searches | commit `cfec42751ffd898cd4425322247e56b77951ed0e`, the merge of Synth pull requests #370, #388 and #394 |
-| Synth, final exports | commit `aaa8d193fe9573c554a5ed4a4a1c26a492030c8d` (branch `SYN-case2-binary` of `JeffMboya/synth`): the same merge plus the stitching-via fix of #388. `synth --version` prints `synth-cli 0.1.1`; `synth mcp --stdio` is the same binary |
+| Synth, final exports | commit `c0649a053a68ed007a7ce4a73d2f2d244dfef236` (branch `case-binary-v4` of `JeffMboya/synth`): the merge of Synth pull requests #370, #388 and #394. `synth --version` prints `synth-cli 0.1.1`; `synth mcp --stdio` is the same binary |
 | KiCadRoutingTools | `9399bfb29e072bfe60b10d9cdae20c274fc2a17a` |
 | KiCad | 10.0.7 (library tables for DRC and ERC), on a 16-vCPU server |
 
@@ -37,4 +37,3 @@ The README's reproducibility table has the first ten characters of SHA-256 of ea
 | `kicad-cli sch erc --severity-all --format json` | [`reports/kicad_erc.json`](reports/kicad_erc.json) |
 | [`reproduce/compare_exports.py`](reproduce/compare_exports.py) on the three exports | the hash table in the README |
 | [`agent-run/tools/fab_package.sh`](agent-run/tools/fab_package.sh) | [`fab/`](fab/) |
-| JLCPCB PCB DFM, quote and BOM matching on the package in `fab/` | [`reports/`](reports/) |
