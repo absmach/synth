@@ -146,7 +146,7 @@ Failed or incomplete:
   board.
 - The power PCB and BOM are missing because the export did not finish.
 - DRC cannot be run to a verdict; the un-routed control board has 97
-  unconnected pads and 12 silkscreen warnings.
+  unconnected pads and 0 warnings.
 - `synth check` is `fail`; `--fab` is `fail`.
 - No thermal, SI/PI, EMC, safety, fab or hardware test was done.
 
