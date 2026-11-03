@@ -293,7 +293,7 @@ fn the_fabricated_vias_keep_the_0_3_mm_default_when_nothing_is_declared() {
 
 #[test]
 fn a_non_default_class_declaring_0_2_over_0_6_carries_that_via() {
-    let (pcb, classes) = export(
+    let (_pcb, classes) = export(
         "nondefault",
         r#"  netclass "RAIL" { via_diameter 0.6mm via_drill 0.2mm }
 "#,
