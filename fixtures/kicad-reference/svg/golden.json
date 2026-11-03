@@ -24,10 +24,10 @@
     "distinct_texts": 94
   },
   "ref_led_driver": {
-    "sha256": "f7ae93fff307f7fc0a5f78df0e792a889df8993191eceb2e118aad3582d62453",
+    "sha256": "6759114822c4914c0c11960d3739475abb8234832db3a68770f29df063d14203",
     "width": "297.0022mm",
     "height": "210.0072mm",
-    "paths": 8690,
+    "paths": 8688,
     "texts": 211,
     "distinct_texts": 188
   },
