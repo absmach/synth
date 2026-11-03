@@ -84,6 +84,12 @@ The source and sidecar in this directory were exported three times through the S
 
 With the random ids masked the routed board is `f584510bfc` in all three exports ([`reproduce/compare_exports.py`](reproduce/compare_exports.py) does the masking). [`reproduce/reproduce.sh`](reproduce/reproduce.sh) is supplemental tooling, not the evidence of how the board was made (see [`PROVENANCE.md`](PROVENANCE.md)); it rebuilds Synth at the pinned commit, exports three times and compares, then builds the fabrication package.
 
+## JLCPCB
+
+PCB DFM of the package of this README (JLCDFM, 2026-11-03 12:11, Gerber content hash `f634e3b817`, two layers, 8.7 x 5.1 cm, report in [`reports/`](reports/jlcdfm_pcb_dfm_2026-11-03_12-11_f634e3b817.pdf)): 0 Danger items. Trace width 0.2 mm, pad spacing 0.34 mm, through-hole to trace 0.75 mm, through-hole to SMD 3.77 mm, solder-mask opening near a trace 0.19 mm (53 openings) and silkscreen line width 0.18 mm are good. Warnings: annular ring 0.15 mm on 4 pads of the report (96 good; the two 0.5 mm vias, once per copper layer) and 48 negative solder-mask expansions (0.04 mm).
+
+Quote with assembly for the same package ([`reports/jlcpcb_quote_2026-11-03.md`](reports/jlcpcb_quote_2026-11-03.md), Standard PCBA, no order placed): PCB $4.00 and PCBA $138.87, $142.87 in total.
+
 ## Return paths
 
 The routing report ([`export/i2c_sensor_node.routing.json`](export/i2c_sensor_node.routing.json)) lists 12 non-blocking return-via findings: a track changes layer at a via with no ground-return via within 1.53 mm. Each is checked below against the nearest ground via on the exported board. Both outer layers carry a GND pour, so the return current stays on a continuous plane; the finding is only that the current's path to a stitching via is longer than the rule's window.
