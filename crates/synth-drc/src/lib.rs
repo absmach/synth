@@ -70,6 +70,7 @@ mod signal_integrity;
 /// a high-current net's trace for the router.
 pub use signal_integrity::required_width_nm;
 pub use signal_integrity::{ground_net_names, is_ground_name, return_path_critical_net_names};
+pub use signal_integrity::{return_via_window_nm, RETURN_VIA_CLEARANCE_NM};
 
 use serde::{Deserialize, Serialize};
 use synth_geometry::Point;
@@ -935,6 +936,56 @@ mod tests {
         };
         assert!(
             super::signal_integrity::check_return_path_vias(&board, &returned, &stackup).is_empty()
+        );
+    }
+
+    #[test]
+    fn the_return_via_window_is_never_narrower_than_a_via_beside_a_via() {
+        let mut board = load_board("../../examples/env_logger/env_logger.synth");
+        board.stackup = Some(four_layer_stackup());
+        let stackup = StackupProfile::for_board(&board);
+        let ground = board
+            .nets
+            .iter()
+            .find(|net| super::signal_integrity::net_name_or_pin_is_ground(&board, net))
+            .expect("env_logger must have a ground net")
+            .id;
+        let signal = board
+            .nets
+            .iter()
+            .find(|net| !super::signal_integrity::net_name_or_pin_is_ground(&board, net))
+            .expect("env_logger must have a signal net")
+            .id;
+        let via = |net: NetId, x: i64| synth_pcb::Via {
+            net,
+            at: synth_geometry::Point::new(x, 0),
+            drill_nm: 200_000,
+            pad_diameter_nm: 600_000,
+        };
+        // The stackup's thickest dielectric is 0.64 mm, and a 0.6 mm via with
+        // 0.2 mm of clearance cannot sit nearer than 0.8 mm to another: a
+        // ground via at 0.75 mm is as close as the process allows only if the
+        // window reaches it, and 0.9 mm is outside.
+        assert_eq!(
+            super::signal_integrity::return_via_window_nm(640_000, 600_000),
+            800_000
+        );
+        let at = |x: i64| Routing {
+            vias: vec![via(signal, 0), via(ground, x)],
+            ..Routing::default()
+        };
+        assert!(
+            super::signal_integrity::check_return_path_vias(&board, &at(790_000), &stackup)
+                .is_empty()
+        );
+        assert_eq!(
+            super::signal_integrity::check_return_path_vias(&board, &at(900_000), &stackup).len(),
+            1
+        );
+        // A thick dielectric keeps its own, larger window.
+        assert_eq!(
+            super::signal_integrity::return_via_window_nm(1_530_000, 600_000),
+            1_530_000
         );
     }
 

@@ -145,11 +145,7 @@ fn run_rounds(
         let board = PcbBoard::parse(&filled).map_err(|e| e.to_string())?;
         let text = std::fs::read_to_string(candidate)
             .map_err(|e| format!("could not read {}: {e}", candidate.display()))?;
-        let plan = plan_all_with(
-            &board,
-            dielectric_reach_mm(&text, board.copper_layers().len()),
-            ground,
-        );
+        let plan = plan_all_with(&board, return_via_window_mm(&text, &board), ground);
         if plan.vias.is_empty() {
             return Ok(TieOutcome {
                 added,
@@ -177,11 +173,7 @@ fn run_rounds(
     // legal return via must be reported with the islands, or a candidate that
     // spent its rounds on island vias would leave with the return path missing.
     let islands = plan_ties(&board).vias.len();
-    let plan = plan_all_with(
-        &board,
-        dielectric_reach_mm(&text, board.copper_layers().len()),
-        ground,
-    );
+    let plan = plan_all_with(&board, return_via_window_mm(&text, &board), ground);
     let mut unresolved = plan.unresolved;
     unresolved.extend(plan.vias.iter().enumerate().map(|(i, via)| {
         if i < islands {
@@ -1120,6 +1112,20 @@ fn with_vias(text: &str, board: &PcbBoard, vias: &[TieVia]) -> Result<String, St
 /// in it would otherwise end the string early and break the file.
 fn escape_net_name(name: &str) -> String {
     name.replace('\\', "\\\\").replace('"', "\\\"")
+}
+
+/// The window W-SYNTH-DRC-016 looks in for a ground return via: the stackup's
+/// reach, floored at the least distance a ground via can sit from a signal via
+/// of the board's widest via pad. The rule applies the same floor.
+fn return_via_window_mm(text: &str, board: &PcbBoard) -> f64 {
+    let pad_nm = board
+        .vias
+        .iter()
+        .map(|via| via.size_nm)
+        .max()
+        .unwrap_or(DEFAULT_VIA_SIZE_NM);
+    let reach_nm = mm_to_nm(dielectric_reach_mm(text, board.copper_layers().len()));
+    nm_to_mm(synth_drc::return_via_window_nm(reach_nm, pad_nm))
 }
 
 /// How far from a signal via W-SYNTH-DRC-016 looks for a ground via, along either

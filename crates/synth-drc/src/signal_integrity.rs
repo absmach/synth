@@ -446,6 +446,21 @@ pub fn check_edge_coupling(
         .collect()
 }
 
+/// Copper clearance assumed between a signal via and the ground via beside it,
+/// for the least distance at which the two can sit.
+pub const RETURN_VIA_CLEARANCE_NM: i64 = 200_000;
+
+/// The window around a signal via in which W-SYNTH-DRC-016 looks for a ground
+/// return via, along either axis: the stackup's thickest dielectric, never
+/// smaller than the least distance at which a ground via can sit beside the
+/// signal via, its pad width plus the copper clearance. A stackup with a thin
+/// prepreg would otherwise leave a window that holds a ground via only in a
+/// corner, however much room the board has.
+#[must_use]
+pub fn return_via_window_nm(stackup_reach_nm: i64, via_pad_nm: i64) -> i64 {
+    stackup_reach_nm.max(via_pad_nm + RETURN_VIA_CLEARANCE_NM)
+}
+
 /// Return-path via check. Code: `W-SYNTH-DRC-016` — a **warning**.
 ///
 /// A via that takes a signal to another layer needs a ground return via close
@@ -483,6 +498,13 @@ pub fn check_return_path_vias(
         .map(|layer| layer.dielectric_height.0)
         .max()
         .unwrap_or_else(|| mm_to_nm(1.6));
+    let via_pad_nm = routing
+        .vias
+        .iter()
+        .map(|via| via.pad_diameter_nm)
+        .max()
+        .unwrap_or_else(|| mm_to_nm(0.6));
+    let radius_nm = return_via_window_nm(radius_nm, via_pad_nm);
     let mut out = Vec::new();
     for via in &routing.vias {
         if is_ground(via.net) {
