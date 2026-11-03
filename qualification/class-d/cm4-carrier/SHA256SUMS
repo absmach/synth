@@ -1,12 +1,12 @@
 # Local manifest of the committed artifacts. These are NOT CI golden hashes:
-# no CI run exists for this branch (it was not pushed).
+# no CI run is recorded for this branch.
 # Generated with: find . -type f ! -name '*.md' ! -name SHA256SUMS -print0 | sort -z | xargs -0 sha256sum
-9e9553783b4bf72736f97939626b2b81c7a5c7ba8e540b3e0df965373068c83f  ./cm4_carrier.placement.layout.toml
+0112385a18ad915a42199af053e503de1a44f2cbfd00aa168e8d564f7bfe8f20  ./cm4_carrier.placement.layout.toml
 e58adcc092d560849f5d53ef4512d61c616f3c6bc1cd2eb620b7ce262cbfe428  ./cm4_carrier.synth
-9a1b61b456e35e2e209f620c55f777008b384baf426e243bcef362cca11638d6  ./images/pcb-3d-angled.png
-20120bf875a448a974546a306c5edb7fbf266a5c21ffe39983f1ec42388aadd4  ./images/pcb-3d-top.png
-35347c4becc3eff783fe98483817c6d26633bc681c2c8011da1253f7e83b1a2b  ./images/pcb-bottom-copper.png
-7415b68a91b6e4b1cca3412d75a7c322d45247408da292dcccc226faf9785480  ./images/pcb-top-copper.png
+f83cbf4f57392dd0d661131991a37de5bceb9bf2cb36f1e03a407e3f752847b0  ./images/pcb-3d-angled.png
+91411950c939716845fd8005447dae1ea2417001cabbc717cf771cc06388f831  ./images/pcb-3d-top.png
+836b2e99a4e2af667dd663ca5dd0e7230342465e821e928d3ed1f0e2183e6a44  ./images/pcb-bottom-copper.png
+1681f60c877da550147abd481935d25cdb6f01165000a322844b5d81066e1f64  ./images/pcb-top-copper.png
 77e14ac4e8b2241f512190ea3b2aa027240d35b491a57714877d9a39387965ac  ./images/schematic/cm4_carrier-CM4.svg
 58e296ad6c3b4fae3cf95be1c135a693fb2e957a615129b5e417538e3c088f6f  ./images/schematic/cm4_carrier-Interfaces.svg
 6049e8807b458bf8c32e8e0a05041df1d8e5f6772d2908a31cde0fb9a35f562e  ./images/schematic/cm4_carrier-Peripherals.svg
@@ -19,19 +19,18 @@ b6efda85865cf5bbdf5e90f2afea9cc6379490bbcfd074e5768dfafdc8ce4b70  ./images/schem
 ef72eefe391bccdc3b1f97cd9b1b90d1cbfa4b98801e150294d60f5657b4f740  ./images/schematic/schematic-root.png
 41c65ebfca08bbb731cd138ef5e0d45136524a39b1cd6665a09bdd819bb13693  ./kicad/bom.csv
 a6fe61619cdf0dbe90fc726dc32f7cc8e9889833d6b1d5aec574d3f1b7b802d9  ./kicad/cm4_carrier.kicad_dru
-7449ec0668cde20c106c1cddca22ba942d5f5902afb57b67d7d3114026985095  ./kicad/cm4_carrier.kicad_pcb
-c1380f2c2862980de1358ad424c215236ce1a6dac0204ff2eafd6b5cbe5d9937  ./kicad/cm4_carrier.kicad_prl
+6b932d310f1b33bca276ce7c48ca589eb06977831e2d973ecd46bf022b9250da  ./kicad/cm4_carrier.kicad_pcb
 074d97ce689d7845b1cc1d0c310621c44c30e4b2fdb8cd324eca8d8c75d5ccd6  ./kicad/cm4_carrier.kicad_pro
 49a46a887d05157aee96636c9ef72ba7290a02166ac72195c3b57ec6277931a2  ./kicad/cm4_carrier.kicad_sch
 72d35b0d74b7d4d0ccc35078d1e2df2def8ffa1bda8f0d2d69e4939c9418bcec  ./kicad/cm4_carrier.kicad_sym
-7449ec0668cde20c106c1cddca22ba942d5f5902afb57b67d7d3114026985095  ./kicad/cm4_carrier.synth.kicad_pcb
+6b932d310f1b33bca276ce7c48ca589eb06977831e2d973ecd46bf022b9250da  ./kicad/cm4_carrier.synth.kicad_pcb
 48bc0492e57011675cf6b425d9b9870f4ae8954a5b29335a92bb11ea0c355794  ./kicad/cm4_carrier_CM4.kicad_sch
 d5a62bea3b44814ad742064ff7cf7772b53bf9863b0463dac7830cf062045f57  ./kicad/cm4_carrier_Interfaces.kicad_sch
 3ebd890e832997aafa3f2dcc84e5dae40efdbd5155ebe0dad0ad8391fb76387c  ./kicad/cm4_carrier_Peripherals.kicad_sch
 4f40680f17feed0aad497f73e916f5155ddb898b375b20e1589b0bef7cd70b51  ./kicad/cm4_carrier_Power.kicad_sch
-b36fce48829af61dc9ca99c2a65fea8747093b494d6c55fbd06a81dc7d112c49  ./kicad/pnp.csv
+1ee93d799094919b2bdc3f4f4e11bc242082ff26504737182c280304488049cb  ./kicad/pnp.csv
 a050bb53cedd2a3d11762888826b86f7e7e45c9cf9ab79f21a1f0246faf61abe  ./kicad/sym-lib-table
 48da4c08c2d75c6db4d9973e0dd30c511e461394c0f6b0c9dbb933f81f509ca5  ./qualification.json
-ef1ef1b6f58c17e0fb4802d2583b914e3be4e9c489fd2cc13970a984acf8f969  ./reports/cm4_carrier.kicad-drc.json
+a0bfc62f8fd83c1791650c4ceeb45f956d023d233bb329f2402fb83babfda31f  ./reports/cm4_carrier.kicad-drc.json
 394658cf0c348cf21bcbfc916dc259a620b1139abe7ff1383a8af7b838901c5b  ./reports/cm4_carrier.kicad-erc.json
 d5cde1e5e2f635e56cb0d7806c0e7b5f6193fd35094f62c67b7da7fc1f3b6e1f  ./reports/registry-qualify.txt

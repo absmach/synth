@@ -40,9 +40,9 @@ cargo test -p synth-cli --test cm4_carrier_board
 | A5 | Warning list | export stderr | `W-SYNTH-PART-UNVERIFIED` for every authored part; `E-SYNTH-CONNECT-008` (2 floating inputs); `E-SYNTH-CONNECT-009` (4 open-drain LED nets); `E-SYNTH-NAME-008` (2 single-use labels); `E-SYNTH-POWER-004` (5 residual-energy warnings); `E-SYNTH-IMPEDANCE-001`/`W-SYNTH-IMPEDANCE-001` (geometry/inner-layer advisories); `E-SYNTH-SCHEM-001/003` (schematic readability). None is blocking |
 | A6 | `synth validate` completes | `synth validate $B/cm4_carrier.synth` | **Blocked**: the schematic layout does not finish within 10 minutes on this board. The same ERC runs clean inside `export-kicad` (A3). See `agent-run/VERIFICATION_REPORT.md` |
 | A7 | `synth place` completes | `synth place $B/cm4_carrier.synth` | **Blocked**: exits 1 with no placement (the automatic placer cannot place 185 components with ten edge-hard connectors). The committed placement sidecar pins every component |
-| A8 | Export completes | `synth export-kicad ... --allow-incomplete --router free-routing` | **Partial**: the 45-minute budget wrote the four-sheet schematic at about 28 minutes, then ran out before the PCB. `kicad/` has the schematic; no `.kicad_pcb` |
+| A8 | Export completes | `synth export-kicad ... --pcb-only --allow-incomplete` | **Partial**: the full export still exceeds the 45-minute budget, but `--pcb-only` writes the PCB/BOM/PnP in seconds from the placement sidecar. `kicad/` has the four-sheet schematic and the unrouted `.kicad_pcb` |
 | A9 | ERC on the exported schematic | `kicad-cli sch erc` | **Fail (1 error, 66 warnings)** in `reports/cm4_carrier.kicad-erc.json`. The single error is the `RTC_BAT` power flag (`#PWR2153`). The source adds `power "RTC_BAT" 3v`; export16 is the re-run |
-| A10 | DRC on the exported PCB | `kicad-cli pcb drc` | **Unrouted**: 153 violations, 359 unconnected items on `kicad/cm4_carrier.kicad_pcb`. The board is placed, not routed |
+| A10 | DRC on the exported PCB | `kicad-cli pcb drc` | **Unrouted**: 0 violations, 360 unconnected items on `kicad/cm4_carrier.kicad_pcb`. The board is placed, not routed; the unconnected items are the unrouted nets |
 | A11 | `synth check` | `synth check --json` | **Fail**: `source: fail` because the `validate` child times out at 120 s; `drc: unknown` |
 | A12 | `synth check --fab` | `synth check --fab --json` | **Fail**: `source: fail`, `drc: unknown`, `manufacturing: unknown` |
 | A13 | Determinism | two exports of the same inputs | Not run: no export completed |
@@ -88,7 +88,7 @@ reviewer. No reviewer is invented.
 | `synth check` passes | **blocked** | A11: `synth validate` does not finish; `check` reports `source: fail`, `drc: unknown` |
 | `--fab` recorded honestly | **blocked** | A12: same upstream block; no fab package exists |
 | ERC zero errors with `kicad-cli` | **not met (1 error)** | A9: the only error is `RTC_BAT`; export16 is the re-run with the power declaration |
-| DRC report committed | **done (unrouted)** | A10: `reports/cm4_carrier.kicad-drc.json`, 153 violations / 359 unconnected. A routed-board DRC is still missing |
+| DRC report committed | **done (unrouted)** | A10: `reports/cm4_carrier.kicad-drc.json`, 0 violations / 360 unconnected. A routed-board DRC is still missing |
 | Every used CM4 pin traced to a datasheet row | **done** | `agent-run/PIN_MAPPING.md` (143 used pins, Table 6 page per pin); test A4 |
 | Rail table with source, load, limit, margin | **done** | `agent-run/POWER_BUDGET.md`; E-SYNTH-POWER-009/010 clean (A3) |
 | README "Not verified by Synth" | **done** | `README.md` |

@@ -151,11 +151,38 @@ The board is dense and the automatic reference-label rule (`silk_labels.rs`)
 falls back to a stacked label when every side of a part is blocked. Rather
 than ship colliding text, the placement sidecar hides the crowded refdes:
 all passives (`R*`, `C*`), ESD arrays and LEDs (`D*`), transistors (`Q*`),
-inductors and crystals (`L*`, `Y*`), the small load switches (`U5`–`U8`), the
-CM4/FFC/microSD connector labels and all test points. The ICs (`U1`–`U4`,
-`U9`–`U12`), the remaining connectors, the switch and the mounting holes keep
-their labels. The rule itself is unchanged; a future revision can make its
-fallback hide a label instead of stacking it.
+inductors and crystals (`L*`, `Y*`), the small load switches (`U5`–`U8`),
+`U11`, the CM4/FFC/microSD/fan connector labels, the mounting holes
+(`H1`–`H4`) and all test points. The visible labels are the power ICs and
+inductors (`U1`–`U4`, `F1`), the hub and level shifters (`U9`, `U10`), the
+RTC (`U12`), the switch (`SW1`), the battery (`J_BT1`) and the remaining
+connectors (`J1`, `J_USB1/2`, `J_ETH`, `J_HDMI`, `J_GPIO1/2`, `J_VREF`,
+`J_BOOT`). With those hidden the KiCad DRC reports **0 violations** (the
+board is unrouted, so 360 unconnected items remain). The rule itself is
+unchanged; a future revision can make its fallback hide a label instead of
+stacking it.
+
+## Connector orientation
+
+The edge connectors are placed by courtyard centre and rotated so the cable
+entry faces off the board:
+
+| Ref | Edge | Rotation | Mating face |
+| --- | --- | --- | --- |
+| `J_ETH` | right | 90° | +X (right) |
+| `J_HDMI` | right | 90° | +X (right) |
+| `J_USB1` | right | 180° | +X (right) |
+| `J_USB2` | bottom | 90° | +Y (bottom) |
+
+The values are KiCad footprint rotations, the same value stored in the
+placement sidecar. The HDMI flange sits on the board edge at
+`x = 100`; the visible shell top ends about 2 mm inboard, which is how the
+Amphenol 10029449 is drawn. The USB-A and RJ45 3D models are not shipped in
+the KiCad 10 library (`Connector_USB.3dshapes/USB_A_CUI_UJ2-ADH-TH_Horizontal_Stacked.step`
+and `Connector_RJ.3dshapes/RJ45_UDE_RB1-125B8G1A.step` are absent), so those
+two connectors appear as pads and silkscreen only in the 3D renders. Their
+orientation is set by the footprint courtyards and silkscreen, and the DRC
+reports no courtyard overlap or edge violation.
 
 ## What was not done
 
