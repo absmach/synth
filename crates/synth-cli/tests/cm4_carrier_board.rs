@@ -142,7 +142,9 @@ fn the_cm4_pin_map_matches_the_datasheet_tables() {
     for pin in ["p77", "p79", "p81", "p83", "p85", "p87"] {
         assert_eq!(net_of(&ir, "J_CM4A", pin), "+5V", "J_CM4A.{pin}");
     }
-    for pin in ["p1", "p2", "p7", "p8", "p13", "p14", "p22", "p23", "p32", "p33"] {
+    for pin in [
+        "p1", "p2", "p7", "p8", "p13", "p14", "p22", "p23", "p32", "p33",
+    ] {
         assert_eq!(net_of(&ir, "J_CM4A", pin), "GND", "J_CM4A.{pin}");
     }
     for pin in ["p7", "p8", "p13", "p14", "p19", "p20", "p25", "p26"] {
