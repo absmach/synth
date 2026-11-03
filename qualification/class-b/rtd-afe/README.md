@@ -105,8 +105,9 @@ designated reviewer.
 - 371 track segments, 77 vias (52 on GND, 25 signal), 654.8 mm of copper. 40
   nets, 0 open. The router records 67 of the vias; the other ten are source
   ground stitching.
-- `kicad-cli pcb drc --severity-all --refill-zones`: 0 errors, 0 warnings, 0
-  unconnected items. `pcbnew.LoadBoard` reopens the board and `check.sh` confirms
+- `kicad-cli pcb drc --severity-all --refill-zones`: 0 errors, 47 warnings (all
+  `lib_footprint_mismatch`: the exported footprints differ from KiCad 10's library
+  copies), 0 unconnected items. `pcbnew.LoadBoard` reopens the board and `check.sh` confirms
   one GND plane with no AGND or DGND net.
 - Synth's signal-integrity pass: 18 non-blocking warnings, 15 layer changes with
   no ground-return via within 0.64 mm and 3 parallel-run warnings. The parallel
@@ -138,18 +139,18 @@ Current result:
 
 | Check | Result |
 | --- | --- |
-| KiCad DRC (errors / warnings / unconnected) | 0 / 0 / 0 |
+| KiCad DRC (errors / warnings / unconnected) | 0 / 47 / 0 |
 | pcbnew reopen | OK |
 | Ground | one GND plane; no AGND or DGND net |
-| KiCad ERC (errors / warnings) | 0 / 2 |
+| KiCad ERC (errors / warnings) | 0 / 1 |
 | Synth routing state | routed, 0 open nets |
 | Synth release | `production_status: untrusted`, `release_ready: false` (unverified crystal override; not a fab approval) |
 | Synth SI warnings | 18, none blocking |
 
-The 2 ERC warnings are library-comparison warnings, not connectivity errors:
-the registry uses the old name `Device:Ferrite_Bead` (KiCad 10's library has
-`Device:FerriteBead`), and the embedded REF5025ID symbol differs from the
-installed library copy. The exported schematic embeds its own symbols and the
+The ERC warning and the 47 DRC warnings are library-comparison warnings, not
+connectivity errors: the embedded REF5025ID symbol differs from the installed
+library copy, and the exported footprints (for example `R_0603_1608Metric`)
+differ from the `Resistor_SMD`/`Capacitor_SMD` library copies. The exported schematic embeds its own symbols and the
 netlist/PCB parity is clean.
 
 ## Committed artifacts
@@ -181,10 +182,10 @@ component review.
 - The BOM carries `dielectric`, `voltage`, `tolerance` and `power` columns from
   the source, so the C0G filter caps and the 0.1 % resistors are visible to an
   assembler. Empty cells mean the source does not declare that attribute.
-- One via-in-pad is required at C_DV.2 (GND) to keep the 40.1 x 44.2 mm
-  outline clean. The source declares `requires via_in_pad` and the manufacturer
-  profile is `jlc-filled-via`; the board must be ordered with filled and capped
-  vias. This is an open DFM item.
+- The source still declares `requires via_in_pad` and the manufacturer profile
+  `jlc-filled-via`, but this route has no via inside any pad (checked with
+  pcbnew), so `release.json` lists no filled-via note. A re-route can bring it
+  back; check before ordering.
 - There are no test points. The 12-pad set (rails, reference, USB and SWD) was
   tried on the earlier outline; every routing attempt left GND islands. The
   top-left area it used now holds the reference cluster.

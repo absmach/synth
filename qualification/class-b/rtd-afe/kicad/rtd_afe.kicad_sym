@@ -1406,89 +1406,143 @@
 		)
 		(embedded_fonts no)
 	)
-	(symbol
-		"Device:Ferrite_Bead"
-		(pin_names
-			(offset 0.508)
-		)
+	(symbol "Device:FerriteBead"
 		(pin_numbers
 			(hide yes)
 		)
+		(pin_names
+			(offset 0)
+		)
+		(exclude_from_sim no)
 		(in_bom yes)
 		(on_board yes)
-		(property
-			"Reference"
-			"L"
-			(at 7.62 -2.54 0)
+		(in_pos_files yes)
+		(duplicate_pin_numbers_are_jumpers no)
+		(property "Reference" "FB"
+			(at -3.81 0.635 90)
+			(show_name no)
+			(do_not_autoplace no)
 			(effects
 				(font
 					(size 1.27 1.27)
 				)
 			)
 		)
-		(property
-			"Value"
-			"ferrite_bead_0603"
-			(at 7.62 2.54 0)
+		(property "Value" "FerriteBead"
+			(at 3.81 0 90)
+			(show_name no)
+			(do_not_autoplace no)
 			(effects
 				(font
 					(size 1.27 1.27)
 				)
 			)
 		)
-		(property
-			"Footprint"
-			"Inductor_SMD:L_0603_1608Metric"
+		(property "Footprint" ""
+			(at -1.778 0 90)
+			(show_name no)
+			(do_not_autoplace no)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Datasheet" ""
 			(at 0 0 0)
+			(show_name no)
+			(do_not_autoplace no)
+			(hide yes)
 			(effects
 				(font
 					(size 1.27 1.27)
 				)
-				(hide yes)
 			)
 		)
-		(property
-			"Datasheet"
-			""
+		(property "Description" "Ferrite bead"
 			(at 0 0 0)
+			(show_name no)
+			(do_not_autoplace no)
+			(hide yes)
 			(effects
 				(font
 					(size 1.27 1.27)
 				)
-				(hide yes)
 			)
 		)
-		(symbol
-			"Ferrite_Bead_0_1"
-			(rectangle
-				(start -5.08 -2)
-				(end 5.08 2)
+		(property "ki_keywords" "L ferrite bead inductor filter"
+			(at 0 0 0)
+			(show_name no)
+			(do_not_autoplace no)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "ki_fp_filters" "Inductor_* L_* *Ferrite*"
+			(at 0 0 0)
+			(show_name no)
+			(do_not_autoplace no)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(symbol "FerriteBead_0_1"
+			(polyline
+				(pts
+					(xy -2.7686 0.4064) (xy -1.7018 2.2606) (xy 2.7686 -0.3048) (xy 1.6764 -2.159) (xy -2.7686 0.4064)
+				)
 				(stroke
-					(width 0.254)
+					(width 0)
 					(type default)
 				)
 				(fill
-					(type background)
+					(type none)
+				)
+			)
+			(polyline
+				(pts
+					(xy 0 1.27) (xy 0 1.2954)
+				)
+				(stroke
+					(width 0)
+					(type default)
+				)
+				(fill
+					(type none)
+				)
+			)
+			(polyline
+				(pts
+					(xy 0 -1.27) (xy 0 -1.2192)
+				)
+				(stroke
+					(width 0)
+					(type default)
+				)
+				(fill
+					(type none)
 				)
 			)
 		)
-		(symbol
-			"Ferrite_Bead_1_1"
-			(pin
-				passive
-				line
-				(at -7.62 0 0)
+		(symbol "FerriteBead_1_1"
+			(pin passive line
+				(at 0 3.81 270)
 				(length 2.54)
-				(name
-					"p1"
+				(name ""
 					(effects
 						(font
 							(size 1.27 1.27)
 						)
 					)
 				)
-				(number
-					"1"
+				(number "1"
 					(effects
 						(font
 							(size 1.27 1.27)
@@ -1496,21 +1550,17 @@
 					)
 				)
 			)
-			(pin
-				passive
-				line
-				(at 7.62 0 180)
+			(pin passive line
+				(at 0 -3.81 90)
 				(length 2.54)
-				(name
-					"p2"
+				(name ""
 					(effects
 						(font
 							(size 1.27 1.27)
 						)
 					)
 				)
-				(number
-					"2"
+				(number "2"
 					(effects
 						(font
 							(size 1.27 1.27)
@@ -1519,6 +1569,7 @@
 				)
 			)
 		)
+		(embedded_fonts no)
 	)
 	(symbol "Connector_Generic:Conn_01x03"
 		(pin_names
