@@ -209,3 +209,40 @@ fn the_gpio_header_is_the_raspberry_pi_40_pin_map() {
     assert_eq!(net_of(&ir, "J_CM4A", "p24"), "GPIO26");
     assert_eq!(net_of(&ir, "U12", "int"), "GPIO26");
 }
+
+/// `--pcb-only` writes the PCB side without running the schematic layout.
+/// This is the escape hatch for boards whose schematic layout is too slow to
+/// reach the copper: the placement sidecar is loaded directly and the PCB is
+/// written before the router runs.
+#[test]
+fn pcb_only_export_writes_the_pcb_without_a_schematic() {
+    let dir = std::env::temp_dir().join(format!("synth_cm4_pcb_only_{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).expect("scratch dir");
+    let _lock = stub_router::serialised();
+    let _router = stub_router::install(&dir);
+
+    let out = dir.join("out");
+    Command::new(env!("CARGO_BIN_EXE_synth"))
+        .args([
+            "export-kicad",
+            SOURCE,
+            "--out",
+            out.to_str().expect("utf-8 path"),
+            "--pcb-only",
+            "--allow-incomplete",
+            "--router",
+            "kicad-routing-tools",
+        ])
+        .output()
+        .expect("run synth export-kicad --pcb-only");
+
+    assert!(
+        out.join("cm4_carrier.kicad_pcb").is_file(),
+        "the PCB is written without the schematic layout"
+    );
+    assert!(
+        !out.join("cm4_carrier.kicad_sch").exists(),
+        "--pcb-only must not write a schematic"
+    );
+}

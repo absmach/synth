@@ -8,9 +8,10 @@ What is here:
 
 What is missing and why:
 
-- `cm4_carrier.kicad-drc.json` — no PCB was exported. The export wrote the
-  schematic at about 29 minutes and was killed at the 30-minute test budget
-  before the PCB/routing stage.
+- `cm4_carrier.kicad-drc.json` — `kicad-cli pcb drc --severity-all
+  --refill-zones` on the **unrouted** PCB: 484 violations, 359 unconnected
+  items. The unconnected items are the unrouted nets; this is not a routed
+  board.
 - `cm4_carrier.routing.json`, `.connectivity.json`, `.drc.json` — no routing
   run.
 - `release.json`, `release-fab.json` — no release or fab package.

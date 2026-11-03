@@ -5,6 +5,11 @@
   `cm4_carrier-Interfaces.svg`, `cm4_carrier-Peripherals.svg`. These are
   vector images, not PNG; no PNG rasterizer is installed in this
   environment.
-- Top copper, bottom copper and 3D renders are **missing**: they need a
-  `.kicad_pcb`, and the PCB export did not finish. See
+- `pcb-3d-top.png`, `pcb-3d-angled.png` — `kicad-cli pcb render` of the
+  **unrouted** placement (the board is placed, not routed).
+- `pcb-top-copper.png`, `pcb-bottom-copper.png` — `kicad-cli pcb export pdf`
+  plots of the same unrouted board. They show pads and the outline, not
+  traces; there is no routed copper yet.
+- The PCB was produced with `synth export-kicad --pcb-only`, which writes the
+  PCB side without the slow schematic layout. See
   `../agent-run/VERIFICATION_REPORT.md`.

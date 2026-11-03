@@ -134,6 +134,12 @@ enum Command {
         /// Run KiCad schematic ERC (`kicad-cli sch erc`) on the exported schematic.
         #[arg(long)]
         validate_erc: bool,
+        /// Write the PCB-side artifacts only (project, DRC rules,
+        /// `.kicad_pcb`, BOM and PnP) and skip the schematic layout and
+        /// `.kicad_sch`. Use this when the schematic layout is the slow
+        /// stage and the copper is what is needed.
+        #[arg(long)]
+        pcb_only: bool,
         #[arg(long, value_name = "FILE")]
         verification_report: Option<PathBuf>,
         /// Force export even if Synth ERC validation produces error diagnostics.
@@ -949,6 +955,7 @@ fn main() -> ExitCode {
             cost_report,
             corrections,
             validate_erc,
+            pcb_only,
             verification_report,
             force,
             safe,
@@ -985,6 +992,7 @@ fn main() -> ExitCode {
                 step,
             },
             validate_erc,
+            pcb_only,
             verification_report.as_deref(),
             force,
             safe,
@@ -4006,6 +4014,7 @@ fn export_kicad(
     corrections_path: Option<&Path>,
     fab: synth_kicad::FabRequest,
     validate_erc: bool,
+    pcb_only: bool,
     verification_report: Option<&Path>,
     force: bool,
     safe: bool,
@@ -4186,15 +4195,22 @@ fn export_kicad(
     // printed alongside the rule-based ERC; never blocks export.
     // Thresholds come from the design's `<design>.synth.erc.toml`
     // `[schematic]` section when present (Phase E), else the defaults.
-    let pre_layout = synth_layout::layout_with_sidecar(board, sidecar);
-    let pre_sheets = synth_layout::sheets::layout_sheets(board, pre_layout.clone(), sidecar);
-    let mut schem_diags = synth_kicad::check_schem_erc_sheets_with_config(
-        board,
-        &pre_sheets,
-        schem_erc_config_for(input),
-    );
-    synth_kicad::attach_schem_erc_locations(&mut schem_diags, board, &input.display().to_string());
-    write_diagnostics_to_stderr(&schem_diags)?;
+    // `--pcb-only` has no schematic to review, so the layout is skipped.
+    if !pcb_only {
+        let pre_layout = synth_layout::layout_with_sidecar(board, sidecar);
+        let pre_sheets = synth_layout::sheets::layout_sheets(board, pre_layout.clone(), sidecar);
+        let mut schem_diags = synth_kicad::check_schem_erc_sheets_with_config(
+            board,
+            &pre_sheets,
+            schem_erc_config_for(input),
+        );
+        synth_kicad::attach_schem_erc_locations(
+            &mut schem_diags,
+            board,
+            &input.display().to_string(),
+        );
+        write_diagnostics_to_stderr(&schem_diags)?;
+    }
 
     if let Some(notice) = synth_layout::SidecarKind::Schematic.migration_notice(input) {
         eprintln!("warning: {notice}");
@@ -4234,9 +4250,15 @@ fn export_kicad(
     } else {
         (None, Vec::new())
     };
-    let result = match &chosen_placement {
-        Some(placement) => synth_kicad::export_with_placement(board, out_dir, &sidecars, placement),
-        None => synth_kicad::export_with_sidecars(board, out_dir, &sidecars),
+    let result = if pcb_only {
+        synth_kicad::export_pcb_only(board, out_dir, &sidecars)
+    } else {
+        match &chosen_placement {
+            Some(placement) => {
+                synth_kicad::export_with_placement(board, out_dir, &sidecars, placement)
+            }
+            None => synth_kicad::export_with_sidecars(board, out_dir, &sidecars),
+        }
     }
     .map_err(|e| anyhow::anyhow!("kicad export failed: {e}"))?;
 
@@ -4393,7 +4415,7 @@ fn export_kicad(
 
     // Slice 3: Run KiCad ERC if requested
     let mut has_kicad_erc_errs = false;
-    if validate_erc {
+    if validate_erc && !pcb_only {
         eprintln!(
             "running kicad-cli sch erc on {}",
             result.schematic_path.display()
