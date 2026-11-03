@@ -30,7 +30,6 @@ fn remove_previous_candidate(candidate: &Path) {
     }
 }
 
-
 pub const HELPER: &str = "kicad_routing_tools_route.py";
 
 /// KiCadRoutingTools' own JSON route summary, as written by the engine.

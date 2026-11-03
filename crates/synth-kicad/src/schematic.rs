@@ -1338,7 +1338,6 @@ fn wire_name_label_at(seg: &[(f64, f64)], others: &[&[(f64, f64)]]) -> (f64, f64
     at(0.5)
 }
 
-
 /// A local label at `at_mm`, text anchored left. Same-named local
 /// labels on one sheet are electrically connected, which is how the
 /// root joins its cross-sheet endpoints to the labelled sheet-pin
@@ -2430,7 +2429,6 @@ fn body_is_blocked(
         });
     on_a_wire || on_a_flag || on_a_stub
 }
-
 
 /// The box of the group each component belongs to, so its text can stay
 /// inside it and out of the title band at its top.
