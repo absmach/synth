@@ -54,8 +54,8 @@ synth check control --fab      -> fail (source pass, drc unknown, manufacturing 
 4. **Part review.** The ten authored parts have `reviewed_by = ""` by design.
    The seed parts used here (AMS1117, THVD1450D, STM32G030K8, PTVS, 2N3904,
    SMBJ30A, generic passives) were not re-reviewed in this branch.
-5. **No LCSC numbers** for the Phoenix terminal blocks; DigiKey numbers are
-   recorded. Generic passives have no MPN.
+5. **LCSC numbers** for the Phoenix terminal blocks are C480516/C480520 (found
+   with Firecrawl/JLCPCB). Generic passives still have no MPN.
 6. **No hardware.** Nothing was powered, programmed or measured. The bring-up
    steps are written, not run.
 7. **No thermal/SI/PI/EMC/safety analysis.** The AMS1117 warning is a

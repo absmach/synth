@@ -58,7 +58,7 @@
     },
     "connector_review": {
       "passed": false,
-      "evidence": "The 2.5 A/contact rating is from the LCSC listings; the 50% derating and the current table are hand calculations. No connector datasheet was read beyond the listing, and no stack-height, keying or creepage check was done."
+      "evidence": "The 2.5 A/contact rating is from the LCSC product pages; the Phoenix terminal-block datasheets were read with Firecrawl on 2026-11-03 (17.5 A, 400 V III/2, 5.08 mm, LCSC C480516/C480520). The 50% derating and the current table are hand calculations; no stack-height, keying or creepage check was done."
     },
     "fabrication_review": {
       "passed": false,

@@ -149,3 +149,26 @@ Failed or incomplete:
   unconnected pads.
 - `synth check` is `fail`; `--fab` is `fail`.
 - No thermal, SI/PI, EMC, safety, fab or hardware test was done.
+
+## 9. Datasheets fetched with Firecrawl (2026-11-03)
+
+The terminal-block and connector evidence was a distributor listing; it was
+replaced with Firecrawl extracts:
+
+```
+firecrawl scrape https://www.phoenixcontact.com/us/products/1715721/pdf
+firecrawl scrape https://www.phoenixcontact.com/us/products/1715734/pdf
+firecrawl scrape https://www.lcsc.com/product-detail/C5116480.html
+firecrawl scrape https://www.lcsc.com/product-detail/C30867.html
+firecrawl scrape https://www.onsemi.com/pdf/datasheet/2n3903-d.pdf
+firecrawl scrape --alexandria jlcpcb-com/electronic-components/search_parts
+  {"query":"1715721"} -> C480516
+  {"query":"1715734"} -> C480520
+```
+
+Results: Phoenix MKDS 1,5/2-5,08 and 3-5,08 are 17.5 A, 400 V (III/2), 5.08 mm,
+1.5 mm², 0.9 x 0.9 mm solder pin, linear pinning; LCSC C480516/C480520. The
+2 x 10 header/socket are 2.5 A/contact, 2.54 mm (the LCSC "datasheet" PDF is a
+3D model; the product page has the table). The 2N3904 is 40 V VCEO and 200 mA,
+so the registry entry was corrected from 5 V/100 mA. The extracts are in
+`datasheets/`. No reviewer was added; `reviewed_by` stays empty.

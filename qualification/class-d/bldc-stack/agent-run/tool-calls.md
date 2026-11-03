@@ -28,6 +28,22 @@ The place/render/export gates in this branch were therefore driven with the
 worktree's `synth` binary and the Rust test, not the stale MCP server. The test
 calls `synth_mcp::call_tool` from the branch, which is the code the PR ships.
 
+## Firecrawl calls (datasheet follow-up)
+
+| # | Command | Result |
+| --- | --- | --- |
+| 1 | `firecrawl scrape https://www.phoenixcontact.com/us/products/1715721/pdf` | Fetched the Phoenix MKDS 1,5/2-5,08 datasheet; 17.5 A, 400 V (III/2), 5.08 mm, 1.5 mm², 0.9 x 0.9 mm pin |
+| 2 | `firecrawl scrape https://www.phoenixcontact.com/us/products/1715734/pdf` | Fetched the 3-position datasheet; same ratings and pin geometry |
+| 3 | `firecrawl scrape https://www.lcsc.com/product-detail/C5116480.html` | ZHOURI 2 x 10 header: 2.5 A/contact, 2.54 mm, 20 pins |
+| 4 | `firecrawl scrape https://www.lcsc.com/product-detail/C30867.html` | BOOMELE 2 x 10 socket: 2.5 A/contact, 2.54 mm, 20 pins |
+| 5 | `firecrawl scrape https://www.onsemi.com/pdf/datasheet/2n3903-d.pdf` | 2N3904: VCEO 40 V, IC 200 mA, TO-92 pin 1 emitter |
+| 6 | `firecrawl scrape --alexandria jlcpcb-com/electronic-components/search_parts {"query":"1715721"}` | Exact match, LCSC C480516, 17.5 A, 5.08 mm |
+| 7 | same for `1715734` | Exact match, LCSC C480520, 17.5 A, 5.08 mm |
+
+The first attempt at the 2-pin and both LCSC pages timed out with
+`ETIMEDOUT`/`ENETUNREACH`; the retry succeeded. The LCSC datasheet PDFs are 3D
+models, not dimensional drawings, so the product-page spec table is the evidence.
+
 ## CLI and KiCad commands
 
 | # | Command | Result |

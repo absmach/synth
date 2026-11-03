@@ -52,6 +52,6 @@ Sourcing notes and the missing LCSC numbers: `BOM_sourcing.md`.
 
 - No Gerbers, drill files or pick-and-place exist for a routed board; the
   routing stage failed before copper (see `VERIFICATION_REPORT.md`).
-- No part was purchased. The two Phoenix terminal blocks have no LCSC number
-  and must come from a distributor; the generic passives have no MPN.
+- No part was purchased. The two Phoenix terminal blocks are LCSC C480516/C480520; the generic passives
+  still have no MPN.
 - No stencil, paste or reflow profile was defined.

@@ -1,9 +1,15 @@
 # sha256 of the design artifacts. Check: grep -v "^#" SHA256SUMS | sha256sum -c -   (from this folder)
 # Generated locally on 2026-11-03; no CI golden set exists for this new board.
-ca75b72848e8073ea2e014b1f215837670ddb5a42ef02bb88402160f269b1430  BOM_sourcing.md
+f26b10da287814a3f5a00592e630ce5af72137556d3aa05c265d521deb2c6a96  BOM_sourcing.md
 095628b33da88fb708f9db0c282ac4493051b9c8ef428cf35e3ea1e670f11ed8  control.placement.layout.toml
 a249ba3edeae3bf49ca1aa9935ca35d7361fb133ebf435c31a223a673c9b02b9  control.synth
 1533688fe96dfe48bd4cc1751b7dde76fd213d785041ed6e68be4c252951a89d  control_neg_swap.synth
+cdc9c825bc8b2096142b999d3a66a5986f4adf088ddbf8718a6f1e182589c45b  datasheets/README.md
+d60243b27350f0b776fbbf3b9e14a76469a4b40e8b64919c4881131f5097fd79  datasheets/boomele-2.54-2x10p.md
+386a60bf00c38b67394ecb34ba502c869ce2b2608b417823bc004794f9682ba2  datasheets/onsemi-2n3904.md
+50c21912431b7f820373286ee41bb2dd44be7744878d326d50856d3af80908ec  datasheets/phoenix-1715721.md
+0f7eb62b620be4a3b274ca75120ff156a51f2b1fe545a8abbdcae3be2db887d4  datasheets/phoenix-1715734.md
+528b5a082bd2f521c452ebdbd0c17391fa24a0d02157683498c879ad4b6b0c2f  datasheets/zhouri-2.54-2x10.md
 63e190ed91f3c2e3c7e7ee3687998e6a5480cca17e7f9561493362d063c26a4b  images/pcb-control-3d-angled.png
 1b98fb41140608edbf8fd99d6d5f9b39c97437421e6df9bc7bca75d676480b88  images/pcb-control-3d-bottom.png
 80df3e8b492c51d69badf1329ec85bed43b66ee05576d414ffe850a246ce2181  images/pcb-control-3d-top.png

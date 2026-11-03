@@ -2,8 +2,9 @@ id = "terminal_block_mkds_3pin"
 kind = "connector"
 version = 0
 lifecycle = "active"
-description = "Phoenix Contact MKDS 1,5/3-5,08 screw terminal block, 3 positions, 5.08 mm pitch, 17.5 A, 400 V, 1.5 mm2, horizontal through-hole. No LCSC listing found; DigiKey 277-1264-ND"
+description = "Phoenix Contact MKDS 1,5/3-5,08 screw terminal block, 3 positions, 5.08 mm pitch, 17.5 A, 400 V (III/2), 1.5 mm2, 0.9 x 0.9 mm solder pin, linear pinning, horizontal through-hole; LCSC C480520, DigiKey 277-1264-ND. The JLCPCB listing states 250 V, the Phoenix datasheet 400 V (III/2); the 24 V rail is below both"
 mpn = "1715734"
+lcsc_pn = "C480520"
 kicad_symbol = "Connector:Screw_Terminal_01x03"
 kicad_footprint = "TerminalBlock_Phoenix:TerminalBlock_Phoenix_MKDS-1,5-3-5.08_1x03_P5.08mm_Horizontal"
 
@@ -31,5 +32,5 @@ electrical_type = "passive"
 
 [provenance]
 source = "authored"
-generator = "hand-written from the Phoenix Contact MKDS 1,5/3-5,08 datasheet"
+generator = "hand-written from the Phoenix Contact MKDS 1,5/3-5,08 datasheet (1715734), read 2026-11-03 via Firecrawl; Phoenix online catalogue 2026, no revision number printed"
 datasheet_url = "https://www.phoenixcontact.com/us/products/1715734/pdf"

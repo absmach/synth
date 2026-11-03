@@ -80,7 +80,7 @@ directly, which is the code the branch ships. This is recorded in
 ## Connector current and derating
 
 J_B2B is a 2 x 10, 2.54 mm pin header (ZHOURI C5116480) and socket (BOOMELE
-C30867), rated 2.5 A per contact (LCSC listing). The bracket uses a 50 %
+C30867), rated 2.5 A per contact (LCSC product pages and the datasheet extracts in `datasheets/`, read 2026-11-03 with Firecrawl). The bracket uses a 50 %
 derating, 1.25 A per contact. No contact carries more than 0.13 A.
 
 | J_B2B pin | Net | Direction | Worst-case current | Against 1.25 A |
@@ -133,12 +133,16 @@ temperature; a real thermal review has to close it.
 | Q_REV, Q_GE IRF4905PBF | Infineon IRF4905 | -55 V, -74 A, 20 mOhm | authored; TO-220 |
 | U_CS1/2 MCP6022-I/SN | Microchip DS20001685E | 10 MHz, 2.5-5.5 V, SOIC-8 | authored; the registry's DIP part was not used |
 | U_BUCK LMR38010SDDAR | TI SNVSBM3B | 4.2-80 V, 1 A, VREF 1.0 V, 85 V abs max | reviewed registry part |
-| J_B2B plug/socket | ZHOURI C5116480 / BOOMELE C30867 | 2 x 10, 2.54 mm, 2.5 A/contact | authored; drawings are the LCSC listings |
-| J_PWR/J_MOTOR MKDS 1,5/5.08 | Phoenix Contact 1715721/1715734 | 17.5 A, 400 V, 1.5 mm2 | authored; no LCSC listing found |
+| J_B2B plug/socket | ZHOURI C5116480 / BOOMELE C30867 | 2 x 10, 2.54 mm, 2.5 A/contact | authored; LCSC product pages read 2026-11-03 with Firecrawl; the linked PDFs are 3D models |
+| J_PWR/J_MOTOR MKDS 1,5/5.08 | Phoenix Contact 1715721/1715734 | 17.5 A, 400 V (III/2), 5.08 mm, 0.9 x 0.9 mm pin | authored; LCSC C480516/C480520; datasheets read 2026-11-03 with Firecrawl; JLC lists 250 V |
 | C_BULK1/2 EEU-FR1H471 | Panasonic | 470 uF, 50 V, 12.5 x 20 mm | authored; 50 V is 2.1x the 24 V rail |
 | D_TVS SMBJ30A | Vishay 88392 | VWM 30 V, VBR 33.3-36.8 V, VC 48.4 V | registry part |
 | BZT52C15 | Diodes BZT52Cxx | 15 V, 500 mW, SOD-123 | authored; gate-source clamp |
+| Q_FAULT/Q_GE_CTRL 2N3904 | onsemi 2N3903/2N3904 | 40 V VCEO, 200 mA, TO-92 | registry entry corrected from 5 V/100 mA |
 | Passives | generic registry parts | values in the sources | no MPN, no datasheet |
+
+The Firecrawl text extracts for the terminal blocks, the 2 x 10 connectors and the
+2N3904 are in `datasheets/`; the PDFs themselves are not committed.
 
 ## Routing failure (recorded, not hidden)
 

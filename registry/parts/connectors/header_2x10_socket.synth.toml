@@ -100,5 +100,5 @@ electrical_type = "passive"
 
 [provenance]
 source = "authored"
-generator = "hand-written from the LCSC C30867 listing and the KiCad Conn_02x10_Odd_Even convention"
+generator = "hand-written from the LCSC C30867 product page and datasheet PDF, read 2026-11-03 via Firecrawl; the LCSC PDF is a 3D model, the ratings are the product-page table; KiCad Conn_02x10_Odd_Even convention"
 datasheet_url = "https://www.lcsc.com/product-detail/C30867.html"

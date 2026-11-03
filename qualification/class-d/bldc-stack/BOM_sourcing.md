@@ -30,22 +30,23 @@ not a substitute for the BOM.
 | Q_UH..Q_WL | BSC030N08NS5, TDSON-8 | BSC030N08NS5ATMA1 | C501507 | authored; 80 V 100 A |
 | Q_REV, Q_GE | IRF4905PBF, TO-220 | IRF4905PBF | C2564 | authored |
 | U_CS1/2 | MCP6022-I/SN, SOIC-8 | MCP6022-I/SN | C34047 | authored |
-| Q_FAULT, Q_GE_CTRL | 2N3904, TO-92 | 2N3904 | — | seed part |
+| Q_FAULT, Q_GE_CTRL | 2N3904, TO-92 | 2N3904 | C20505 | seed part; datasheet read 2026-11-03, 40 V/200 mA |
 | D_TVS | SMBJ30A, SMB | SMBJ30A | — | seed part |
 | D_REV_Z | BZT52C15, SOD-123 | BZT52C15 | C2104 | authored |
 | D_BOOT_U/V/W | 1N5819HW-7-F, SOD-123 | 1N5819HW-7-F | — | seed part |
 | C_BULK1/2 | 470 uF 50 V radial, 12.5 x 20 mm | EEU-FR1H471 | C1589760 | authored |
-| J_PWR | MKDS 1,5/2-5,08, 2-pin | 1715721 | — | authored; **no LCSC listing found**, DigiKey 277-1263-ND |
-| J_MOTOR | MKDS 1,5/3-5,08, 3-pin | 1715734 | — | authored; **no LCSC listing found**, DigiKey 277-1264-ND |
+| J_PWR | MKDS 1,5/2-5,08, 2-pin | 1715721 | C480516 | authored; datasheet read 2026-11-03 with Firecrawl; DigiKey 277-1263-ND |
+| J_MOTOR | MKDS 1,5/3-5,08, 3-pin | 1715734 | C480520 | authored; datasheet read 2026-11-03 with Firecrawl; DigiKey 277-1264-ND |
 | J_B2B | 2 x 10, 2.54 mm socket | 2.54-2*10P | C30867 | authored; 2.5 A/contact |
 | R_SH_U/V/W | 2512 5 mOhm 1 % | — | — | generic seed part; 1 W assumed, not in a datasheet |
 | R_*, C_*, L_* | 0603/1206 passives and 6.8 uH inductor | — | — | generic seed parts; L_BUCK is Bourns SRN6045TA-6R8M |
 
 ## Sourcing gaps
 
-- The Phoenix MKDS terminal blocks have no LCSC listing that could be verified.
-  They are available from DigiKey/Mouser; the 3-pin motor terminal is the one
-  part a JLC assembly order cannot place from the LCSC catalogue.
+- The Phoenix MKDS terminal blocks are LCSC C480516 (2-pin) and C480520
+  (3-pin), matched by MPN in the JLCPCB catalogue. JLC's listing says 250 V
+  while Phoenix says 400 V (III/2); the 24 V rail is below both. DigiKey
+  277-1263-ND / 277-1264-ND remain the distributor cross-reference.
 - The generic passives have no MPN or LCSC number. This is the same gap the
   Class-B boards carry; a buyer has to choose equivalents by value, dielectric
   and voltage.

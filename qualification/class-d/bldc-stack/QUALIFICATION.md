@@ -50,6 +50,7 @@ copper in this environment (see A9); routing is therefore not evidence.
 | A12 | The mapping file is the only cross-board source of truth | `interboard_mappings.json` and the test | The test loads that file; no pin mapping is duplicated in the sources |
 | A13 | The netlist matches the source | `synth dump-ir` / the exported netlist | Control: 61 components, 40 nets. Power: 111 components, 53 nets. Net names and members are in `agent-run/NETLIST.md` |
 | A14 | Hashes of the delivered files | `SHA256SUMS` | Generated locally with `sha256sum`; no CI golden set exists for this new board |
+| A15 | The missing datasheets were fetched and read | `datasheets/`, Firecrawl 2026-11-03 | Phoenix 1715721/1715734 (17.5 A, 400 V III/2, 5.08 mm), LCSC C5116480/C30867 (2.5 A/contact), onsemi 2N3904 (40 V, 200 mA); LCSC C480516/C480520 found for the terminal blocks |
 
 ## B. Not proven: needs expert review
 
