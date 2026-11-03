@@ -2,10 +2,11 @@
 
 Status: source, parts, placement sidecar and tests are in the tree. The
 board is **not fabricated, not powered and not hardware-tested**. The
-schematic/PCB export is blocked by Synth's schematic layout on a board this
-size (see `QUALIFICATION.md` and `agent-run/VERIFICATION_REPORT.md`); the
-committed `kicad/`, `reports/` and `images/` are only present when the
-export finished. `qualification.json` stays `"qualified": false`.
+schematic export takes about 30 minutes on this board and the PCB export did
+not finish; `kicad/` therefore has the four-sheet schematic but no
+`.kicad_pcb`, and `images/` has the schematic SVGs but no copper or 3D
+renders. See `QUALIFICATION.md` and `agent-run/VERIFICATION_REPORT.md`.
+`qualification.json` stays `"qualified": false`.
 
 This is Class D board 1 of 4 under #41. It asks whether Synth can produce an
 auditable carrier for a Linux compute module with many high pin-count
@@ -65,7 +66,7 @@ notes and in `agent-run/PIN_MAPPING.md`.
 
 Highlights:
 
-- Ethernet: 4 pairs on CM4 pins 3–12 to the Pulse JXD6-0001NL GbE magjack.
+- Ethernet: 4 pairs on CM4 pins 3–12 to the UDE RB1-125B8G1A GbE magjack (TD1–TD4).
 - USB 2.0: CM4 pins 105/103 to the USB2514B upstream port.
 - HDMI0: 4 TMDS pairs, CEC, HPD, DDC on CM4 pins 151–200 (the second
   connector). HDMI1 is NC.
@@ -86,10 +87,11 @@ USB-A receptacles (Same Sky UJ2-ADH-3-TH) give four ports.
 
 ## Ethernet
 
-Pulse JXD6-0001NL 1000BASE-T magjack, 1:1. The four CM4 pairs go to the
-transformer pins; TCT and RCT are each decoupled to GND with 100 nF, following
-the CM4IO board reference. The CM4 Ethernet LED outputs drive board LEDs
-(active low). Shield to GND.
+UDE RB1-125B8G1A 10/100/1000BASE-T magjack, 1:1, through-hole. The four CM4
+pairs go to TD1–TD4; the single centre tap (R1) is decoupled to GND with
+100 nF, following the CM4IO board reference. The magjack's own LEDs are not
+used; the CM4 Ethernet LED outputs drive the board LEDs (active low). Shield
+and R10 to GND.
 
 ## HDMI
 
@@ -123,7 +125,7 @@ The connector +5V is switched by a TPS22918 with 1 µF + 100 nF.
 | TI LMR38010 | https://www.ti.com/lit/ds/symlink/lmr38010.pdf | SNVSBM3B | 4.2–80 V in, 1 A, VREF 1.0 V, PG open drain |
 | Microchip USB2514B | https://ww1.microchip.com/downloads/en/DeviceDoc/00001692C.pdf | DS00001692C | 36-pin SQFN pin list, CFG_SEL table 5-1, 24 MHz crystal, 12 kΩ RBIAS |
 | NXP PCF85063ATL | https://www.nxp.com/docs/en/data-sheet/PCF85063A.pdf | Rev. 7.3, 2026-07-14 | DFN2626-10 pinout, I2C, 0.9–5.5 V, 32.768 kHz |
-| Pulse JXD6-0001NL | https://productfinder.pulseeng.com/product/JXD6-0001NL | product page | 1000BASE-T, 1:1, 10 pins + shield |
+| UDE RB1-125B8G1A | https://www.lcsc.com/datasheet/C363353.pdf | RB115260-00, 2015-11-04 | 10/100/1000BASE-T, 1:1, 4 pairs + one centre tap, through-hole |
 | Same Sky UJ2-ADH-3-TH | https://www.cuidevices.com/product/resource/uj2-adh-th.pdf | 1.04, 2024-09-12 | dual stacked USB-A, 8 contacts + shield |
 | Molex 47219-2001 | https://www.farnell.com/datasheets/2213824.pdf | SD-47219-001 | 8 contacts, hinge, no card-detect switch |
 | Hirose FH12-22S-0.5SH(55) | https://www.hirose.com/en/product/p/CL0586-0532-7-55 | product page | 22 positions, 0.5 mm, 0.5 A |
@@ -134,12 +136,12 @@ The connector +5V is switched by a TPS22918 with 1 µF + 100 nF.
 
 ## Known export defects
 
-- The first exported schematic has 13 KiCad ERC errors: five TPS22918
-  QOD-to-VOUT pin-type conflicts, two unconnected FFC mounting pads, the
-  Q_LED gate input, one U4 XTALOUT/PWR_FLAG association and one
-  power-pin-not-driven flag. The source now removes the QOD ties, ties the
-  FFC MP pads to GND and types the CM4 PI_LED_nPWR pin as an output; the
-  re-export result is in `agent-run/VERIFICATION_REPORT.md`.
+- The corrected-source schematic has **one** KiCad ERC error: the
+  `RTC_BAT` power flag (`#PWR2153`). The source adds
+  `power "RTC_BAT" 3v`; export16 is the re-run. The 13 errors in the first
+  pre-GbE schematic (QOD/VOUT, FFC MP, Q_LED, U4 XTALOUT/PWR_FLAG) are gone;
+  those were schematic-layout defects, not netlist defects. See
+  `agent-run/VERIFICATION_REPORT.md`.
 - The custom power rails `+5V_AUX`, `RTC_VDD`, `CM4_3V3` and `CM4_1V8` have
   power flags in the schematic but no symbols in the embedded
   `cm4_carrier.kicad_sym`; KiCad reports 72 `lib_symbol_issues` warnings.

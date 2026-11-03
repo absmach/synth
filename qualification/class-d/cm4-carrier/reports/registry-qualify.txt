@@ -30,10 +30,10 @@ usb_a_stacked_cui_uj2_adh_th [fail]
     found:    reviewed_by is empty
 1 part(s): 0 qualified, 1 blocked, 0 unproven
 1 qualified part(s) carry review findings; these are reported, not fatal
-rj45_pulse_jxd6_0001nl [fail]
+rj45_ude_rb1_125b8g1a [fail]
   review E-SYNTH-QUAL-016: footprint names a 3D model file that is not installed
     expected: a KiCad footprint whose 3D model file is installed
-    found:    `Connector_RJ:RJ45_Pulse_JXD6-0001NL_Horizontal` names `RJ45_Pulse_JXD6-0001NL_Horizontal.step`
+    found:    `Connector_RJ:RJ45_UDE_RB1-125B8G1A` names `RJ45_UDE_RB1-125B8G1A.step`
   blocking E-SYNTH-QUAL-008: part has no reviewer
     expected: [provenance].reviewed_by to name whoever checked this part against its datasheet
     found:    reviewed_by is empty

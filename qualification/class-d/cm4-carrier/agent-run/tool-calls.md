@@ -106,7 +106,7 @@ CLI equivalents, which run the same compiler/ERC/layout/export code.
     5-1, crystal section 7.1, strapping.
 32. NXP PCF85063A Rev. 7.3 — read the DFN2626-10 pinout, I2C, supply range,
     CLKOE.
-33. Pulse JXD6-0001NL product page — 1000BASE-T, 1:1, 10 pins + shield.
+33. Pulse JXD6-0001NL product page — **100BASE-TX**, not 1000BASE-T; this was the wrong part class.
 34. Same Sky UJ2-ADH-TH 1.04 — dual stacked USB-A, 8 contacts + shield.
 35. Molex 47219-2001 SD-47219-001 — 8 contacts, hinge, no card detect.
 36. Hirose FH12-22S-0.5SH(55) product page — 22 positions, 0.5 mm, 0.5 A.
@@ -114,6 +114,31 @@ CLI equivalents, which run the same compiler/ERC/layout/export code.
 38. Keystone 1058 catalogue page — CR2032/CR2025 SMD holder.
 39. KDS DST310S LCSC page — 32.768 kHz, 12.5 pF.
 40. PTTC SMD1812P260TF/16 LCSC page — 2.6 A hold, 16 V.
+
+## Firecrawl datasheet retrieval (follow-up)
+
+The user asked for the missing component datasheets through Firecrawl. The CLI
+was not installed; `npx -y firecrawl-cli@latest` (v1.26.24) was used, with
+stored credentials.
+
+51. `firecrawl scrape https://ecsxtal.com/store/pdf/ECX-33Q.pdf` — ECS ECX-33Q
+    datasheet. Confirmed 3.2 x 2.5 mm, 6–20 pF load, and the pad map:
+    **1/3 = crystal, 2/4 = GND**. The board's 24 MHz part had 1/2 = crystal,
+    3/4 = GND; fixed.
+52. `firecrawl scrape https://productfinder.pulseeng.com/product/JXD6-0001NL`
+    — product page says **SPEED 100BASE-TX**. The JXD6 is not a GbE part.
+53. `firecrawl scrape https://productfinder.pulseeng.com/doc_type/WEB301/doc_num/JXD6-0001NL/doc_part/JXD6-0001NL.pdf`
+    — datasheet confirms 100BASE-TX, two transformers (P4–P5, P6–P7).
+54. `firecrawl scrape https://productfinder.pulseeng.com/product/JXD0-0001NL`
+    — 1000BASE-T, but **THT** and a different footprint.
+55. `firecrawl search "RB1-125B8G1A"` and
+    `firecrawl scrape https://www.lcsc.com/product-detail/C363353.html` —
+    UDE RB1-125B8G1A, LCSC C363353, 10/100/1000BASE-T, THT.
+56. `firecrawl scrape https://www.lcsc.com/datasheet/C363353.pdf` — UDE
+    RB115260-00 datasheet confirms 10/100/1000 Base-T, four pairs (TD1–TD4),
+    one common centre tap, through-hole. Replaced the JXD6 with this part.
+57. `synth registry qualify --part rj45_ude_rb1_125b8g1a` — pin/pad coverage
+    passes; only `E-SYNTH-QUAL-008` (no reviewer) remains.
 
 ## Part authoring
 
@@ -150,4 +175,4 @@ CLI equivalents, which run the same compiler/ERC/layout/export code.
     with all 185 components pinned.
 49. Wrote `README.md`, `QUALIFICATION.md`, `qualification.json`,
     `BOM_sourcing.md`, `agent-run/*`.
-50. `kicad-cli sch erc` on the first exported schematic — 13 errors, see 23.
+50. `kicad-cli sch erc` on the first exported schematic — 13 errors, see 23. The corrected-source export15 schematic has 1 error (`RTC_BAT` power flag), 66 warnings.

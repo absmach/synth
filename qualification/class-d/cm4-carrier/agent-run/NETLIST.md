@@ -61,16 +61,15 @@ the datasheet signal names.
 | `LED_ETH_A` |  |  | R_ETH.p2, D_ETH.anode |
 | `ETH_LED_SPD` |  |  | J_CM4A.p17, D_ETH2.cathode |
 | `LED_ETH2_A` |  |  | R_ETH2.p2, D_ETH2.anode |
-| `ETH0_P` | ETH |  | J_CM4A.p12, J_ETH.td_p, D_ETH_ESD1.io1 |
-| `ETH0_N` | ETH |  | J_CM4A.p10, J_ETH.td_n, D_ETH_ESD1.io2 |
-| `ETH1_P` | ETH |  | J_CM4A.p4, J_ETH.rd_p, D_ETH_ESD2.io1 |
-| `ETH1_N` | ETH |  | J_CM4A.p6, J_ETH.rd_n, D_ETH_ESD2.io2 |
-| `ETH2_P` | ETH |  | J_CM4A.p11, J_ETH.pair2_p, D_ETH_ESD3.io1 |
-| `ETH2_N` | ETH |  | J_CM4A.p9, J_ETH.pair2_n, D_ETH_ESD3.io2 |
-| `ETH3_P` | ETH |  | J_CM4A.p3, J_ETH.pair3_p, D_ETH_ESD4.io1 |
-| `ETH3_N` | ETH |  | J_CM4A.p5, J_ETH.pair3_n, D_ETH_ESD4.io2 |
-| `ETH_TCT` |  |  | J_ETH.tct, C_TCT.p1 |
-| `ETH_RCT` |  |  | J_ETH.rct, C_RCT.p1 |
+| `ETH0_P` | ETH |  | J_CM4A.p12, J_ETH.td1_p, D_ETH_ESD1.io1 |
+| `ETH0_N` | ETH |  | J_CM4A.p10, J_ETH.td1_n, D_ETH_ESD1.io2 |
+| `ETH1_P` | ETH |  | J_CM4A.p4, J_ETH.td2_p, D_ETH_ESD2.io1 |
+| `ETH1_N` | ETH |  | J_CM4A.p6, J_ETH.td2_n, D_ETH_ESD2.io2 |
+| `ETH2_P` | ETH |  | J_CM4A.p11, J_ETH.td3_p, D_ETH_ESD3.io1 |
+| `ETH2_N` | ETH |  | J_CM4A.p9, J_ETH.td3_n, D_ETH_ESD3.io2 |
+| `ETH3_P` | ETH |  | J_CM4A.p3, J_ETH.td4_p, D_ETH_ESD4.io1 |
+| `ETH3_N` | ETH |  | J_CM4A.p5, J_ETH.td4_n, D_ETH_ESD4.io2 |
+| `ETH_TCT` |  |  | J_ETH.ct, C_TCT.p1 |
 | `USB_UP_P` | USB |  | J_CM4B.p5, U4.usbdp_up, D_USB_UP.io1 |
 | `USB_UP_N` | USB |  | J_CM4B.p3, U4.usbdm_up, D_USB_UP.io2 |
 | `USB1_P` | USB |  | U4.usbdp_dn1, J_USB1.d1_plus, D_USB1.io1 |
@@ -81,10 +80,10 @@ the datasheet signal names.
 | `USB3_N` | USB |  | U4.usbdm_dn3, J_USB2.d1_minus, D_USB3.io2 |
 | `USB4_P` | USB |  | U4.usbdp_dn4, J_USB2.d2_plus, D_USB4.io1 |
 | `USB4_N` | USB |  | U4.usbdm_dn4, J_USB2.d2_minus, D_USB4.io2 |
-| `USB_VBUS1` | PWR |  | U5.vout, U5.qod, J_USB1.vbus1, C_USB1.p1, C_USB1B.p1, D_USB1.vcc |
-| `USB_VBUS2` | PWR |  | U6.vout, U6.qod, J_USB1.vbus2, C_USB2.p1, C_USB2B.p1, D_USB2.vcc |
-| `USB_VBUS3` | PWR |  | U7.vout, U7.qod, J_USB2.vbus1, C_USB3.p1, C_USB3B.p1, D_USB3.vcc |
-| `USB_VBUS4` | PWR |  | U8.vout, U8.qod, J_USB2.vbus2, C_USB4.p1, C_USB4B.p1, D_USB4.vcc |
+| `USB_VBUS1` | PWR |  | U5.vout, J_USB1.vbus1, C_USB1.p1, C_USB1B.p1, D_USB1.vcc |
+| `USB_VBUS2` | PWR |  | U6.vout, J_USB1.vbus2, C_USB2.p1, C_USB2B.p1, D_USB2.vcc |
+| `USB_VBUS3` | PWR |  | U7.vout, J_USB2.vbus1, C_USB3.p1, C_USB3B.p1, D_USB3.vcc |
+| `USB_VBUS4` | PWR |  | U8.vout, J_USB2.vbus2, C_USB4.p1, C_USB4B.p1, D_USB4.vcc |
 | `USB_ON1` |  |  | U4.prtpwr1, U5.on |
 | `USB_ON2` |  |  | U4.prtpwr2, U6.on |
 | `USB_ON3` |  |  | U4.prtpwr3, U7.on |
@@ -121,7 +120,7 @@ the datasheet signal names.
 | `HDMI_SCL_MCU` |  |  | J_CM4B.p100, U9.a2, R_HDMI_SCL_MCU.p2 |
 | `HDMI_SDA_CONN` |  |  | J_HDMI.sda, U9.b1, D_HDMI5.io1, R_HDMI_SDA.p1 |
 | `HDMI_SCL_CONN` |  |  | J_HDMI.scl, U9.b2, D_HDMI5.io2, R_HDMI_SCL.p1 |
-| `HDMI_5V` | PWR |  | U10.vout, U10.qod, J_HDMI.vcc_5v, C_HDMI1.p1, C_HDMI2.p1 |
+| `HDMI_5V` | PWR |  | U10.vout, J_HDMI.vcc_5v, C_HDMI1.p1, C_HDMI2.p1 |
 | `HDMI_CT` |  |  | U10.ct, C_HDMI_CT.p1 |
 | `HDMI_OE` |  |  | U9.oe, R_OE.p2 |
 | `SD_CLK` | SD |  | J_CM4A.p57, J_SD.clk, D_SD1.io1 |
@@ -130,7 +129,7 @@ the datasheet signal names.
 | `SD_DAT1` | SD |  | J_CM4A.p67, J_SD.dat1, D_SD2.io2, R_SD_DAT1.p2 |
 | `SD_DAT2` | SD |  | J_CM4A.p69, J_SD.dat2, D_SD3.io1, R_SD_DAT2.p2 |
 | `SD_DAT3` | SD |  | J_CM4A.p61, J_SD.dat3_cd, D_SD3.io2, R_SD_DAT3.p2 |
-| `SD_VDD` | PWR |  | U11.vout, U11.qod, J_SD.vdd, C_SD1.p1, C_SD2.p1, R_SD_CMD.p1, R_SD_DAT0.p1, R_SD_DAT1.p1, R_SD_DAT2.p1, R_SD_DAT3.p1, D_SD1.vcc, D_SD2.vcc, D_SD3.vcc |
+| `SD_VDD` | PWR |  | U11.vout, J_SD.vdd, C_SD1.p1, C_SD2.p1, R_SD_CMD.p1, R_SD_DAT0.p1, R_SD_DAT1.p1, R_SD_DAT2.p1, R_SD_DAT3.p1, D_SD1.vcc, D_SD2.vcc, D_SD3.vcc |
 | `SD_PWR_ON` |  |  | J_CM4A.p75, U11.on, R_SD_PWR.p2 |
 | `SD_CT` |  |  | U11.ct, C_SD_CT.p1 |
 | `CAM_D0_P` | CAM |  | J_CM4B.p30, J_CAM.p3 |
@@ -180,28 +179,28 @@ the datasheet signal names.
 | `GPIO26` |  |  | J_CM4A.p24, J_GPIO1.p19, U12.int, R_RTC_INT.p2 |
 | `GPIO20` |  |  | J_CM4A.p27, J_GPIO2.p19 |
 | `GPIO21` |  |  | J_CM4A.p25, J_GPIO2.p20 |
-| `GND` | PWR |  | J1.p2, D1.anode, C1.p2, C2.p2, C3.p2, U1.gnd, U1.pad, R_UV_B.p2, C_VCC.p2, C_OUT1.p2, C_OUT2.p2, C_OUT3.p2, R_FB_B.p2, D_PWR.cathode, R_PWR.p2, U2.gnd, U2.pad, R_RT2.p2, C_OUT4.p2, C_OUT5.p2, C_OUT6.p2, R_FB2_B.p2, D_3V3.cathode, R_3V3.p2, C_IN2_1.p2, C_IN2_2.p2, U3.gnd, U3.pad, R_RT3.p2, C_OUT7.p2, C_OUT8.p2, C_OUT9.p2, R_FB3_B.p2, C_IN3_1.p2, C_IN3_2.p2, C_AUX.p2, U4.vss, C_HUB1.p2, C_HUB2.p2, C_HUB3.p2, C_HUB4.p2, C_CRFILT.p2, C_PLLFILT.p2, R_RBIAS.p2, R_CFG0.p2, R_CFG1.p2, R_LOCAL.p2, C_RESET.p2, C_X1.p2, C_X2.p2, Y1.gnd1, Y1.gnd2, U5.gnd, U6.gnd, U7.gnd, U8.gnd, C_USB1.p2, C_USB2.p2, C_USB3.p2, C_USB4.p2, C_USB1B.p2, C_USB2B.p2, C_USB3B.p2, C_USB4B.p2, C_CT1.p2, C_CT2.p2, C_CT3.p2, C_CT4.p2, D_USB1.gnd, D_USB2.gnd, D_USB3.gnd, D_USB4.gnd, D_USB_UP.gnd, J_USB1.gnd1, J_USB1.gnd2, J_USB1.shield, J_USB2.gnd1, J_USB2.gnd2, J_USB2.shield, J_ETH.shield, C_TCT.p2, C_RCT.p2, D_ETH_ESD1.gnd, D_ETH_ESD2.gnd, D_ETH_ESD3.gnd, D_ETH_ESD4.gnd, J_HDMI.gnd, J_HDMI.shield, J_HDMI.d2_shield, J_HDMI.d1_shield, J_HDMI.d0_shield, J_HDMI.ck_shield, D_HDMI1.gnd, D_HDMI2.gnd, D_HDMI3.gnd, D_HDMI4.gnd, D_HDMI5.gnd, U9.gnd, C_HDMI_VCCA.p2, C_HDMI_VCCB.p2, U10.gnd, C_HDMI1.p2, C_HDMI2.p2, C_HDMI_CT.p2, J_SD.vss, J_SD.shield, U11.gnd, C_SD1.p2, C_SD2.p2, C_SD_IN.p2, C_SD_CT.p2, D_SD1.gnd, D_SD2.gnd, D_SD3.gnd, J_CAM.p1, J_CAM.p4, J_CAM.p7, J_CAM.p10, J_CAM.p13, J_CAM.p16, J_CAM.p19, C_CAM.p2, J_DSI.p1, J_DSI.p4, J_DSI.p7, J_DSI.p10, J_DSI.p13, J_DSI.p16, J_DSI.p19, C_DSI.p2, U12.vss, U12.ep, C_RTC.p2, J_BT1.minus, SW1.p2, C_GEN.p2, J_BOOT.p2, Q_LED.source, J_CM4B.p1, J_FAN.p2, D_FAN.anode, J_GPIO1.p5, J_GPIO1.p13, J_GPIO1.p20, J_GPIO2.p3, J_GPIO2.p7, J_GPIO2.p10, J_GPIO2.p15, J_GPIO2.p17, J_CM4A.p1, J_CM4A.p2, J_CM4A.p7, J_CM4A.p8, J_CM4A.p13, J_CM4A.p14, J_CM4A.p22, J_CM4A.p23, J_CM4A.p32, J_CM4A.p33, J_CM4A.p42, J_CM4A.p43, J_CM4A.p52, J_CM4A.p53, J_CM4A.p59, J_CM4A.p60, J_CM4A.p65, J_CM4A.p66, J_CM4A.p71, J_CM4A.p74, J_CM4A.p98, J_CM4B.p7, J_CM4B.p8, J_CM4B.p13, J_CM4B.p14, J_CM4B.p19, J_CM4B.p20, J_CM4B.p25, J_CM4B.p26, J_CM4B.p31, J_CM4B.p32, J_CM4B.p37, J_CM4B.p38, J_CM4B.p44, J_CM4B.p50, J_CM4B.p55, J_CM4B.p56, J_CM4B.p61, J_CM4B.p62, J_CM4B.p67, J_CM4B.p68, J_CM4B.p73, J_CM4B.p74, J_CM4B.p79, J_CM4B.p80, J_CM4B.p85, J_CM4B.p86, J_CM4B.p91, J_CM4B.p92, J_CM4B.p97, J_CM4B.p98 |
+| `GND` | PWR |  | J1.p2, D1.anode, C1.p2, C2.p2, C3.p2, U1.gnd, U1.pad, R_UV_B.p2, C_VCC.p2, C_OUT1.p2, C_OUT2.p2, C_OUT3.p2, R_FB_B.p2, D_PWR.cathode, R_PWR.p2, U2.gnd, U2.pad, R_RT2.p2, C_OUT4.p2, C_OUT5.p2, C_OUT6.p2, R_FB2_B.p2, D_3V3.cathode, R_3V3.p2, C_IN2_1.p2, C_IN2_2.p2, U3.gnd, U3.pad, R_RT3.p2, C_OUT7.p2, C_OUT8.p2, C_OUT9.p2, R_FB3_B.p2, C_IN3_1.p2, C_IN3_2.p2, C_AUX.p2, U4.vss, C_HUB1.p2, C_HUB2.p2, C_HUB3.p2, C_HUB4.p2, C_CRFILT.p2, C_PLLFILT.p2, R_RBIAS.p2, R_CFG0.p2, R_CFG1.p2, R_LOCAL.p2, C_RESET.p2, C_X1.p2, C_X2.p2, Y1.gnd1, Y1.gnd2, U5.gnd, U6.gnd, U7.gnd, U8.gnd, C_USB1.p2, C_USB2.p2, C_USB3.p2, C_USB4.p2, C_USB1B.p2, C_USB2B.p2, C_USB3B.p2, C_USB4B.p2, C_CT1.p2, C_CT2.p2, C_CT3.p2, C_CT4.p2, D_USB1.gnd, D_USB2.gnd, D_USB3.gnd, D_USB4.gnd, D_USB_UP.gnd, J_USB1.gnd1, J_USB1.gnd2, J_USB1.shield, J_USB2.gnd1, J_USB2.gnd2, J_USB2.shield, J_ETH.shield, J_ETH.gnd, C_TCT.p2, D_ETH_ESD1.gnd, D_ETH_ESD2.gnd, D_ETH_ESD3.gnd, D_ETH_ESD4.gnd, J_HDMI.gnd, J_HDMI.shield, J_HDMI.d2_shield, J_HDMI.d1_shield, J_HDMI.d0_shield, J_HDMI.ck_shield, D_HDMI1.gnd, D_HDMI2.gnd, D_HDMI3.gnd, D_HDMI4.gnd, D_HDMI5.gnd, U9.gnd, C_HDMI_VCCA.p2, C_HDMI_VCCB.p2, U10.gnd, C_HDMI1.p2, C_HDMI2.p2, C_HDMI_CT.p2, J_SD.vss, J_SD.shield, U11.gnd, C_SD1.p2, C_SD2.p2, C_SD_IN.p2, C_SD_CT.p2, D_SD1.gnd, D_SD2.gnd, D_SD3.gnd, J_CAM.p1, J_CAM.p4, J_CAM.p7, J_CAM.p10, J_CAM.p13, J_CAM.p16, J_CAM.p19, J_CAM.mp, C_CAM.p2, J_DSI.p1, J_DSI.p4, J_DSI.p7, J_DSI.p10, J_DSI.p13, J_DSI.p16, J_DSI.p19, J_DSI.mp, C_DSI.p2, U12.vss, U12.ep, C_RTC.p2, J_BT1.minus, SW1.p2, C_GEN.p2, J_BOOT.p2, Q_LED.source, J_CM4B.p1, J_FAN.p2, D_FAN.anode, J_GPIO1.p5, J_GPIO1.p13, J_GPIO1.p20, J_GPIO2.p3, J_GPIO2.p7, J_GPIO2.p10, J_GPIO2.p15, J_GPIO2.p17, J_CM4A.p1, J_CM4A.p2, J_CM4A.p7, J_CM4A.p8, J_CM4A.p13, J_CM4A.p14, J_CM4A.p22, J_CM4A.p23, J_CM4A.p32, J_CM4A.p33, J_CM4A.p42, J_CM4A.p43, J_CM4A.p52, J_CM4A.p53, J_CM4A.p59, J_CM4A.p60, J_CM4A.p65, J_CM4A.p66, J_CM4A.p71, J_CM4A.p74, J_CM4A.p98, J_CM4B.p7, J_CM4B.p8, J_CM4B.p13, J_CM4B.p14, J_CM4B.p19, J_CM4B.p20, J_CM4B.p25, J_CM4B.p26, J_CM4B.p31, J_CM4B.p32, J_CM4B.p37, J_CM4B.p38, J_CM4B.p44, J_CM4B.p50, J_CM4B.p55, J_CM4B.p56, J_CM4B.p61, J_CM4B.p62, J_CM4B.p67, J_CM4B.p68, J_CM4B.p73, J_CM4B.p74, J_CM4B.p79, J_CM4B.p80, J_CM4B.p85, J_CM4B.p86, J_CM4B.p91, J_CM4B.p92, J_CM4B.p97, J_CM4B.p98 |
 
 ## Diff pairs
 
-| Pair | Impedance | Members |
-|---|---|---|
-| ETH0_P / ETH0_N | 100 ohm | see nets |
-| ETH1_P / ETH1_N | 100 ohm | see nets |
-| ETH2_P / ETH2_N | 100 ohm | see nets |
-| ETH3_P / ETH3_N | 100 ohm | see nets |
-| USB_UP_P / USB_UP_N | 90 ohm | see nets |
-| USB1_P / USB1_N | 90 ohm | see nets |
-| USB2_P / USB2_N | 90 ohm | see nets |
-| USB3_P / USB3_N | 90 ohm | see nets |
-| USB4_P / USB4_N | 90 ohm | see nets |
-| HDMI_D2_P / HDMI_D2_N | 100 ohm | see nets |
-| HDMI_D1_P / HDMI_D1_N | 100 ohm | see nets |
-| HDMI_D0_P / HDMI_D0_N | 100 ohm | see nets |
-| HDMI_CK_P / HDMI_CK_N | 100 ohm | see nets |
-| CAM_D0_P / CAM_D0_N | 100 ohm | see nets |
-| CAM_D1_P / CAM_D1_N | 100 ohm | see nets |
-| CAM_CK_P / CAM_CK_N | 100 ohm | see nets |
-| DSI_D0_P / DSI_D0_N | 100 ohm | see nets |
-| DSI_D1_P / DSI_D1_N | 100 ohm | see nets |
-| DSI_CK_P / DSI_CK_N | 100 ohm | see nets |
+| Pair | Impedance |
+|---|---|
+| ETH0_P / ETH0_N | 100 ohm |
+| ETH1_P / ETH1_N | 100 ohm |
+| ETH2_P / ETH2_N | 100 ohm |
+| ETH3_P / ETH3_N | 100 ohm |
+| USB_UP_P / USB_UP_N | 90 ohm |
+| USB1_P / USB1_N | 90 ohm |
+| USB2_P / USB2_N | 90 ohm |
+| USB3_P / USB3_N | 90 ohm |
+| USB4_P / USB4_N | 90 ohm |
+| HDMI_D2_P / HDMI_D2_N | 100 ohm |
+| HDMI_D1_P / HDMI_D1_N | 100 ohm |
+| HDMI_D0_P / HDMI_D0_N | 100 ohm |
+| HDMI_CK_P / HDMI_CK_N | 100 ohm |
+| CAM_D0_P / CAM_D0_N | 100 ohm |
+| CAM_D1_P / CAM_D1_N | 100 ohm |
+| CAM_CK_P / CAM_CK_N | 100 ohm |
+| DSI_D0_P / DSI_D0_N | 100 ohm |
+| DSI_D1_P / DSI_D1_N | 100 ohm |
+| DSI_CK_P / DSI_CK_N | 100 ohm |

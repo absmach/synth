@@ -33,6 +33,7 @@ board "cm4_carrier" {
   power "+3V3" 3.3v
   power "+1V8" 1.8v
   power "RTC_VDD" 3v
+  power "RTC_BAT" 3v
   power "CM4_3V3" 3.3v
   power "CM4_1V8" 1.8v
 
@@ -221,9 +222,8 @@ board "cm4_carrier" {
       }
     }
     group "ETHERNET" color "#0d9488" {
-      component J_ETH: connector "rj45_pulse_jxd6_0001nl" value "GbE" { placement_hint { edge: right priority: hard } }
+      component J_ETH: connector "rj45_ude_rb1_125b8g1a" value "GbE" { placement_hint { edge: right priority: hard } }
       component C_TCT: capacitor "c_generic_0603" value "100nF" { placement_hint { near: "J_ETH" priority: hard } }
-      component C_RCT: capacitor "c_generic_0603" value "100nF" { placement_hint { near: "J_ETH" priority: hard } }
       component D_ETH_ESD1: diode "prtr5v0u2x" value "TVS" 
       component D_ETH_ESD2: diode "prtr5v0u2x" value "TVS" 
       component D_ETH_ESD3: diode "prtr5v0u2x" value "TVS" 
@@ -442,34 +442,31 @@ board "cm4_carrier" {
     R_ETH2.p2, D_ETH2.anode
   }
   net "ETH0_P" class "ETH" {
-    J_CM4A.p12, J_ETH.td_p, D_ETH_ESD1.io1
+    J_CM4A.p12, J_ETH.td1_p, D_ETH_ESD1.io1
   }
   net "ETH0_N" class "ETH" {
-    J_CM4A.p10, J_ETH.td_n, D_ETH_ESD1.io2
+    J_CM4A.p10, J_ETH.td1_n, D_ETH_ESD1.io2
   }
   net "ETH1_P" class "ETH" {
-    J_CM4A.p4, J_ETH.rd_p, D_ETH_ESD2.io1
+    J_CM4A.p4, J_ETH.td2_p, D_ETH_ESD2.io1
   }
   net "ETH1_N" class "ETH" {
-    J_CM4A.p6, J_ETH.rd_n, D_ETH_ESD2.io2
+    J_CM4A.p6, J_ETH.td2_n, D_ETH_ESD2.io2
   }
   net "ETH2_P" class "ETH" {
-    J_CM4A.p11, J_ETH.pair2_p, D_ETH_ESD3.io1
+    J_CM4A.p11, J_ETH.td3_p, D_ETH_ESD3.io1
   }
   net "ETH2_N" class "ETH" {
-    J_CM4A.p9, J_ETH.pair2_n, D_ETH_ESD3.io2
+    J_CM4A.p9, J_ETH.td3_n, D_ETH_ESD3.io2
   }
   net "ETH3_P" class "ETH" {
-    J_CM4A.p3, J_ETH.pair3_p, D_ETH_ESD4.io1
+    J_CM4A.p3, J_ETH.td4_p, D_ETH_ESD4.io1
   }
   net "ETH3_N" class "ETH" {
-    J_CM4A.p5, J_ETH.pair3_n, D_ETH_ESD4.io2
+    J_CM4A.p5, J_ETH.td4_n, D_ETH_ESD4.io2
   }
   net "ETH_TCT" {
-    J_ETH.tct, C_TCT.p1
-  }
-  net "ETH_RCT" {
-    J_ETH.rct, C_RCT.p1
+    J_ETH.ct, C_TCT.p1
   }
   net "USB_UP_P" class "USB" {
     J_CM4B.p5, U4.usbdp_up, D_USB_UP.io1
@@ -799,7 +796,7 @@ board "cm4_carrier" {
     J_CM4A.p25, J_GPIO2.p20
   }
   net "GND" class "PWR" {
-    J1.p2, D1.anode, C1.p2, C2.p2, C3.p2, U1.gnd, U1.pad, R_UV_B.p2, C_VCC.p2, C_OUT1.p2, C_OUT2.p2, C_OUT3.p2, R_FB_B.p2, D_PWR.cathode, R_PWR.p2, U2.gnd, U2.pad, R_RT2.p2, C_OUT4.p2, C_OUT5.p2, C_OUT6.p2, R_FB2_B.p2, D_3V3.cathode, R_3V3.p2, C_IN2_1.p2, C_IN2_2.p2, U3.gnd, U3.pad, R_RT3.p2, C_OUT7.p2, C_OUT8.p2, C_OUT9.p2, R_FB3_B.p2, C_IN3_1.p2, C_IN3_2.p2, C_AUX.p2, U4.vss, C_HUB1.p2, C_HUB2.p2, C_HUB3.p2, C_HUB4.p2, C_CRFILT.p2, C_PLLFILT.p2, R_RBIAS.p2, R_CFG0.p2, R_CFG1.p2, R_LOCAL.p2, C_RESET.p2, C_X1.p2, C_X2.p2, Y1.gnd1, Y1.gnd2, U5.gnd, U6.gnd, U7.gnd, U8.gnd, C_USB1.p2, C_USB2.p2, C_USB3.p2, C_USB4.p2, C_USB1B.p2, C_USB2B.p2, C_USB3B.p2, C_USB4B.p2, C_CT1.p2, C_CT2.p2, C_CT3.p2, C_CT4.p2, D_USB1.gnd, D_USB2.gnd, D_USB3.gnd, D_USB4.gnd, D_USB_UP.gnd, J_USB1.gnd1, J_USB1.gnd2, J_USB1.shield, J_USB2.gnd1, J_USB2.gnd2, J_USB2.shield, J_ETH.shield, C_TCT.p2, C_RCT.p2, D_ETH_ESD1.gnd, D_ETH_ESD2.gnd, D_ETH_ESD3.gnd, D_ETH_ESD4.gnd, J_HDMI.gnd, J_HDMI.shield, J_HDMI.d2_shield, J_HDMI.d1_shield, J_HDMI.d0_shield, J_HDMI.ck_shield, D_HDMI1.gnd, D_HDMI2.gnd, D_HDMI3.gnd, D_HDMI4.gnd, D_HDMI5.gnd, U9.gnd, C_HDMI_VCCA.p2, C_HDMI_VCCB.p2, U10.gnd, C_HDMI1.p2, C_HDMI2.p2, C_HDMI_CT.p2, J_SD.vss, J_SD.shield, U11.gnd, C_SD1.p2, C_SD2.p2, C_SD_IN.p2, C_SD_CT.p2, D_SD1.gnd, D_SD2.gnd, D_SD3.gnd, J_CAM.p1, J_CAM.p4, J_CAM.p7, J_CAM.p10, J_CAM.p13, J_CAM.p16, J_CAM.p19, J_CAM.mp, C_CAM.p2, J_DSI.p1, J_DSI.p4, J_DSI.p7, J_DSI.p10, J_DSI.p13, J_DSI.p16, J_DSI.p19, J_DSI.mp, C_DSI.p2, U12.vss, U12.ep, C_RTC.p2, J_BT1.minus, SW1.p2, C_GEN.p2, J_BOOT.p2, Q_LED.source, J_CM4B.p1, J_FAN.p2, D_FAN.anode, J_GPIO1.p5, J_GPIO1.p13, J_GPIO1.p20, J_GPIO2.p3, J_GPIO2.p7, J_GPIO2.p10, J_GPIO2.p15, J_GPIO2.p17, J_CM4A.p1, J_CM4A.p2, J_CM4A.p7, J_CM4A.p8, J_CM4A.p13, J_CM4A.p14, J_CM4A.p22, J_CM4A.p23, J_CM4A.p32, J_CM4A.p33, J_CM4A.p42, J_CM4A.p43, J_CM4A.p52, J_CM4A.p53, J_CM4A.p59, J_CM4A.p60, J_CM4A.p65, J_CM4A.p66, J_CM4A.p71, J_CM4A.p74, J_CM4A.p98, J_CM4B.p7, J_CM4B.p8, J_CM4B.p13, J_CM4B.p14, J_CM4B.p19, J_CM4B.p20, J_CM4B.p25, J_CM4B.p26, J_CM4B.p31, J_CM4B.p32, J_CM4B.p37, J_CM4B.p38, J_CM4B.p44, J_CM4B.p50, J_CM4B.p55, J_CM4B.p56, J_CM4B.p61, J_CM4B.p62, J_CM4B.p67, J_CM4B.p68, J_CM4B.p73, J_CM4B.p74, J_CM4B.p79, J_CM4B.p80, J_CM4B.p85, J_CM4B.p86, J_CM4B.p91, J_CM4B.p92, J_CM4B.p97, J_CM4B.p98
+    J1.p2, D1.anode, C1.p2, C2.p2, C3.p2, U1.gnd, U1.pad, R_UV_B.p2, C_VCC.p2, C_OUT1.p2, C_OUT2.p2, C_OUT3.p2, R_FB_B.p2, D_PWR.cathode, R_PWR.p2, U2.gnd, U2.pad, R_RT2.p2, C_OUT4.p2, C_OUT5.p2, C_OUT6.p2, R_FB2_B.p2, D_3V3.cathode, R_3V3.p2, C_IN2_1.p2, C_IN2_2.p2, U3.gnd, U3.pad, R_RT3.p2, C_OUT7.p2, C_OUT8.p2, C_OUT9.p2, R_FB3_B.p2, C_IN3_1.p2, C_IN3_2.p2, C_AUX.p2, U4.vss, C_HUB1.p2, C_HUB2.p2, C_HUB3.p2, C_HUB4.p2, C_CRFILT.p2, C_PLLFILT.p2, R_RBIAS.p2, R_CFG0.p2, R_CFG1.p2, R_LOCAL.p2, C_RESET.p2, C_X1.p2, C_X2.p2, Y1.gnd1, Y1.gnd2, U5.gnd, U6.gnd, U7.gnd, U8.gnd, C_USB1.p2, C_USB2.p2, C_USB3.p2, C_USB4.p2, C_USB1B.p2, C_USB2B.p2, C_USB3B.p2, C_USB4B.p2, C_CT1.p2, C_CT2.p2, C_CT3.p2, C_CT4.p2, D_USB1.gnd, D_USB2.gnd, D_USB3.gnd, D_USB4.gnd, D_USB_UP.gnd, J_USB1.gnd1, J_USB1.gnd2, J_USB1.shield, J_USB2.gnd1, J_USB2.gnd2, J_USB2.shield, J_ETH.shield, J_ETH.gnd, C_TCT.p2, D_ETH_ESD1.gnd, D_ETH_ESD2.gnd, D_ETH_ESD3.gnd, D_ETH_ESD4.gnd, J_HDMI.gnd, J_HDMI.shield, J_HDMI.d2_shield, J_HDMI.d1_shield, J_HDMI.d0_shield, J_HDMI.ck_shield, D_HDMI1.gnd, D_HDMI2.gnd, D_HDMI3.gnd, D_HDMI4.gnd, D_HDMI5.gnd, U9.gnd, C_HDMI_VCCA.p2, C_HDMI_VCCB.p2, U10.gnd, C_HDMI1.p2, C_HDMI2.p2, C_HDMI_CT.p2, J_SD.vss, J_SD.shield, U11.gnd, C_SD1.p2, C_SD2.p2, C_SD_IN.p2, C_SD_CT.p2, D_SD1.gnd, D_SD2.gnd, D_SD3.gnd, J_CAM.p1, J_CAM.p4, J_CAM.p7, J_CAM.p10, J_CAM.p13, J_CAM.p16, J_CAM.p19, J_CAM.mp, C_CAM.p2, J_DSI.p1, J_DSI.p4, J_DSI.p7, J_DSI.p10, J_DSI.p13, J_DSI.p16, J_DSI.p19, J_DSI.mp, C_DSI.p2, U12.vss, U12.ep, C_RTC.p2, J_BT1.minus, SW1.p2, C_GEN.p2, J_BOOT.p2, Q_LED.source, J_CM4B.p1, J_FAN.p2, D_FAN.anode, J_GPIO1.p5, J_GPIO1.p13, J_GPIO1.p20, J_GPIO2.p3, J_GPIO2.p7, J_GPIO2.p10, J_GPIO2.p15, J_GPIO2.p17, J_CM4A.p1, J_CM4A.p2, J_CM4A.p7, J_CM4A.p8, J_CM4A.p13, J_CM4A.p14, J_CM4A.p22, J_CM4A.p23, J_CM4A.p32, J_CM4A.p33, J_CM4A.p42, J_CM4A.p43, J_CM4A.p52, J_CM4A.p53, J_CM4A.p59, J_CM4A.p60, J_CM4A.p65, J_CM4A.p66, J_CM4A.p71, J_CM4A.p74, J_CM4A.p98, J_CM4B.p7, J_CM4B.p8, J_CM4B.p13, J_CM4B.p14, J_CM4B.p19, J_CM4B.p20, J_CM4B.p25, J_CM4B.p26, J_CM4B.p31, J_CM4B.p32, J_CM4B.p37, J_CM4B.p38, J_CM4B.p44, J_CM4B.p50, J_CM4B.p55, J_CM4B.p56, J_CM4B.p61, J_CM4B.p62, J_CM4B.p67, J_CM4B.p68, J_CM4B.p73, J_CM4B.p74, J_CM4B.p79, J_CM4B.p80, J_CM4B.p85, J_CM4B.p86, J_CM4B.p91, J_CM4B.p92, J_CM4B.p97, J_CM4B.p98
   }
 
   diff_pair ETH0_P ETH0_N { impedance 100ohm }

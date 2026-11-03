@@ -13,13 +13,30 @@ and export code.
 | Synth ERC (blocking) | `synth export-kicad ... --allow-incomplete --router free-routing` | **PASS** — 0 errors; 100+ warnings. The ERC runs before the export and the export proceeded to layout |
 | `synth validate` | `synth validate qualification/class-d/cm4-carrier/cm4_carrier.synth` | **FAIL (timeout)** — exit 124 at 120 s, 300 s and 600 s. The schematic layout does not finish |
 | `synth place` | `synth place qualification/class-d/cm4-carrier/cm4_carrier.synth` | **FAIL** — timeout at 120 s; a 900 s run exits 1 with a null placement |
-| Schematic export | `synth export-kicad ... --out /tmp/opencode/cm4/export13 --allow-incomplete --router free-routing` | **PARTIAL** — exit 124 at 1800 s. The four-sheet schematic, `.kicad_sym`, `.kicad_pro` and `.kicad_dru` were written at about 29 minutes; the PCB was not written |
-| KiCad ERC | `kicad-cli sch erc --severity-all --format json -o reports/cm4_carrier.kicad-erc.json kicad/cm4_carrier.kicad_sch` | **FAIL** — 93 violations: 13 errors, 80 warnings |
+| Schematic export | `synth export-kicad ... --out /tmp/opencode/cm4/export15 --allow-incomplete --router free-routing` | **PARTIAL** — exit 124 at 2700 s. The corrected-source four-sheet schematic, `.kicad_sym`, `.kicad_pro`, `.kicad_dru` and `sym-lib-table` were written at about 28 minutes; the PCB was not written |
+| KiCad ERC | `kicad-cli sch erc --severity-all --format json -o reports/cm4_carrier.kicad-erc.json kicad/cm4_carrier.kicad_sch` | **FAIL (1 error)** — 67 violations: 1 error, 66 warnings on the corrected-source schematic |
 | PCB export | same export | **NOT RUN** — killed before the PCB |
 | KiCad DRC | `kicad-cli pcb drc ...` | **NOT RUN** — no PCB |
 | `synth check` | `synth check qualification/class-d/cm4-carrier/cm4_carrier.synth --json` | **FAIL** — `drc: unknown`; the DRC stage calls `synth validate`, which times out |
 | `synth check --fab` | `synth check qualification/class-d/cm4-carrier/cm4_carrier.synth --fab --json` | **FAIL** — same upstream block; no manufacturing stage |
 | Board test | `cargo test -p synth-cli --test cm4_carrier_board` | **PARTIAL** — the two IR tests pass; the mounting-hole test exports the board with the stub router and did not finish in the test budget |
+
+## `synth check` JSON
+
+```
+synth check ... --json
+  status: fail
+  stages: source=fail (validate child timed out, parse_error: true),
+          drc=unknown
+synth check ... --fab --json
+  status: fail
+  stages: source=fail, drc=unknown,
+          manufacturing=unknown ("upstream source or DRC gate failed")
+```
+
+The `check` command's `validate` child has a 120 s budget; this board's
+schematic layout is about 30 minutes, so the source stage is a timeout, not a
+diagnostic failure.
 
 ## Synth ERC warning counts
 
@@ -42,32 +59,27 @@ run had 100+):
 None of these is blocking in Synth. The KiCad ERC errors below are real
 pin-type/unconnected findings.
 
-## KiCad ERC errors (13)
+## KiCad ERC errors (1)
 
-1. **5 × `pin_to_pin`: TPS22918 QOD (open collector) connected to VOUT
-   (power output).** U5, U6, U7, U8, U10, U11. The QOD pin is a discharge
-   FET; the KiCad symbol types it open collector. The final source removes
-   the QOD-to-VOUT tie (QOD left floating, as the datasheet allows) and the
-   re-export is expected to clear these.
-2. **1 × `pin_to_pin`: U4 XTALOUT (output) and `#FLG2712` (power output).**
-   The PWR_FLAG is in the Power sheet; the ERC associates it with the
-   `HUB_XTAL2` global label. This looks like a cross-sheet association, not
-   a short. Not fixed.
-3. **2 × `pin_not_connected` + 2 × `power_pin_not_driven`: J_CAM/J_DSI
-   mounting pad `MP`.** The FFC part's MP pad was `ground_reference` but not
-   in a net. The final source ties `J_CAM.mp` and `J_DSI.mp` to GND; the
-   re-export is expected to clear these.
-4. **1 × `pin_not_driven`: Q_LED gate.** The CM4 `PI_LED_nPWR` pin was typed
-   `open_drain_low`; the 2N7000 gate is an input. The final source types the
-   CM4 pin `output`; the re-export is expected to clear this.
-5. **1 × `power_pin_not_driven`: `#PWR2153` input power pin.** A power
-   symbol on a rail the exporter did not flag. Not identified further; the
-   re-export may move it.
+The corrected-source schematic has **one** error:
 
-The 78 `lib_symbol_issues` warnings are "the current configuration does not
-include the symbol library 'synth'": the exported schematic embeds its
-symbols, so this is a library-table warning, not a design fault. The
-`Si2301CDS` warning is the P-FET symbol standing in for the DMP3098L.
+- **`power_pin_not_driven` at `#PWR2153`.** The symbol is `RTC_BAT`, the
+  coin-cell side of D_RTC2. The battery symbol's pin is passive, so the net
+  has no power output. The final source adds `power "RTC_BAT" 3v`; the
+  exporter then adds a PWR_FLAG. Export16 is the re-run.
+
+The 13 errors in the first (pre-GbE, pre-crystal-fix) schematic were five
+TPS22918 QOD/VOUT conflicts, one U4 XTALOUT/PWR_FLAG association, two FFC MP
+pads, the Q_LED gate and the RTC_BAT flag. The QOD, FFC and Q_LED findings
+were schematic-layout defects: the source netlist already had the right
+connections. They are gone in the corrected schematic.
+
+The 66 `lib_symbol_issues` warnings are mostly "the current configuration
+does not include the symbol library 'synth'" / missing custom power symbols
+(`+5V_AUX`, `RTC_VDD`, `CM4_3V3`, `CM4_1V8`, `USB_VBUS*`). The exported
+schematic embeds its symbols; the custom power symbols are the exporter's
+known gap for non-standard rail names. The `Si2301CDS` warning is the P-FET
+symbol standing in for the DMP3098L.
 
 ## What was not run
 
@@ -88,7 +100,7 @@ timeout 1800 synth export-kicad $B/cm4_carrier.synth \
   --out /tmp/cm4 --allow-incomplete --router free-routing # exit 124
 kicad-cli sch erc --severity-all --format json \
   -o $B/reports/cm4_carrier.kicad-erc.json \
-  $B/kicad/cm4_carrier.kicad_sch                          # 13 errors
+  $B/kicad/cm4_carrier.kicad_sch                          # 1 error
 ```
 
 The block is in Synth's schematic layout, not in the netlist: `dump-ir` and

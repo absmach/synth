@@ -15,7 +15,7 @@
 - `agent-run/` (this report, prompt, tool calls, design notes, pin map,
   netlist, power budget, assembly, bring-up, verification).
 - `kicad/` — four-sheet schematic, embedded symbols, project, DRC rules.
-- `reports/cm4_carrier.kicad-erc.json` — 13 errors, 80 warnings.
+- `reports/cm4_carrier.kicad-erc.json` — 1 error, 66 warnings.
 - `images/schematic/*.svg` — the four schematic sheets.
 - `qualification/matrix.toml` row, class "D", status "experimental".
 
@@ -25,7 +25,7 @@
 | --- | --- | --- |
 | `synth check` passes | **blocked** | `synth check --json` -> `source: fail` (validate timeout), `drc: unknown`; `synth validate` exits 124 at 600 s |
 | `--fab` recorded honestly | **blocked** | `synth check --fab --json` -> no manufacturing stage; no PCB |
-| ERC zero errors with `kicad-cli` | **not met** | 13 errors in `reports/cm4_carrier.kicad-erc.json`; Synth ERC is 0 errors |
+| ERC zero errors with `kicad-cli` | **not met (1 error)** | 1 `RTC_BAT` power-flag error in `reports/cm4_carrier.kicad-erc.json`; Synth ERC is 0 errors |
 | DRC report committed | **blocked** | no PCB |
 | Every used CM4 pin traced to a datasheet row | **done** | `agent-run/PIN_MAPPING.md`, 143 used pins, Table 6 page per pin; test passes |
 | Rail table with source, load, limit, margin | **done** | `agent-run/POWER_BUDGET.md`; E-SYNTH-POWER-009/010 clean |
@@ -41,11 +41,31 @@ synth export-kicad ... --allow-incomplete               ERC 0 errors, 100+ warni
 synth validate cm4_carrier.synth                        exit 124 (timeout, 600 s)
 synth place cm4_carrier.synth                           exit 1 (null placement, 900 s)
 synth export-kicad ... --router free-routing            exit 124 (schematic written, no PCB)
-kicad-cli sch erc ...                                  93 violations: 13 errors, 80 warnings
+kicad-cli sch erc ...                                  67 violations: 1 error, 66 warnings
 synth check --json                                      fail, drc: unknown
 synth check --fab --json                                fail, no manufacturing stage
 cargo test -p synth-cli --test cm4_carrier_board        2 passed, 1 ignored
 ```
+
+## Firecrawl datasheet follow-up
+
+The user asked for the missing component datasheets through Firecrawl. Two
+real design errors were found and fixed in the source:
+
+- **Ethernet was 100BASE-TX, not GbE.** The Pulse JXD6-0001NL product page
+  and datasheet say 100BASE-TX; it is not a GbE part. Replaced with the UDE
+  RB1-125B8G1A (10/100/1000BASE-T, LCSC C363353, through-hole, stock KiCad
+  symbol/footprint). The four CM4 pairs now go to TD1–TD4 and the single
+  centre tap to GND through 100 nF.
+- **24 MHz crystal pad map was wrong.** The ECS ECX-33Q datasheet says pads
+  1/3 are the crystal and 2/4 are GND. The first revision had 1/2 crystal and
+  3/4 GND, which would have put XTALOUT on a ground pad. Fixed.
+
+The re-export (`export15`) wrote the corrected-source schematic at about
+28 minutes and ran out of its 45-minute budget before the PCB. `kicad/` and
+`images/` are that corrected-source schematic. Its KiCad ERC still has 13
+errors (the source netlist is correct; the errors are in the schematic
+layout/power-symbol placement).
 
 ## Gaps and assumptions
 
@@ -58,10 +78,11 @@ cargo test -p synth-cli --test cm4_carrier_board        2 passed, 1 ignored
    component, but the exporter still spends ~29 minutes on the schematic.
 3. **No PCB, no routing, no DRC, no Gerber, no BOM.** The export was killed
    at the 30-minute budget after writing the schematic.
-4. **KiCad ERC has 13 errors.** The clear ones (TPS22918 QOD/VOUT, FFC MP
-   pads, Q_LED gate) are fixed in the source and a re-export is running; the
-   result was not available at commit time. The U4 XTALOUT/PWR_FLAG and
-   `#PWR2153` findings are not fully explained.
+4. **KiCad ERC has 1 error.** The only remaining error is the `RTC_BAT`
+   power flag; the source adds `power "RTC_BAT" 3v` and export16 is the
+   re-run. The earlier QOD/VOUT, FFC MP and Q_LED findings were schematic
+   layout defects, not netlist defects, and are gone in the corrected
+   schematic.
 5. **The CM4 has no VBAT pin.** The issue's "diode to CM4 VBAT" is
    unimplementable; the board uses a standalone PCF85063ATL with a CR2032.
    This is a documented deviation, not a datasheet guess.

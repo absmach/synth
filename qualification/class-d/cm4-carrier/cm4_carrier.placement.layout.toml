@@ -1027,7 +1027,7 @@ priority = "hard"
 timestamp = "2026-11-03T00:00:00+00:00"
 
 [components.J_ETH]
-x = 90.00
+x = 88.00
 y = 18.00
 rotation = 270
 source = "agent"
@@ -1036,22 +1036,14 @@ timestamp = "2026-11-03T00:00:00+00:00"
 
 [components.C_TCT]
 x = 79.73
-y = 28.62
-rotation = 0
-source = "agent"
-priority = "hard"
-timestamp = "2026-11-03T00:00:00+00:00"
-
-[components.C_RCT]
-x = 83.88
-y = 28.62
+y = 29.80
 rotation = 0
 source = "agent"
 priority = "hard"
 timestamp = "2026-11-03T00:00:00+00:00"
 
 [components.D_ETH_ESD1]
-x = 88.73
+x = 84.29
 y = 30.67
 rotation = 0
 source = "agent"
@@ -1059,7 +1051,7 @@ priority = "hard"
 timestamp = "2026-11-03T00:00:00+00:00"
 
 [components.D_ETH_ESD2]
-x = 93.17
+x = 88.73
 y = 30.67
 rotation = 0
 source = "agent"
@@ -1067,15 +1059,15 @@ priority = "hard"
 timestamp = "2026-11-03T00:00:00+00:00"
 
 [components.D_ETH_ESD3]
-x = 79.85
-y = 33.01
+x = 93.17
+y = 30.67
 rotation = 0
 source = "agent"
 priority = "hard"
 timestamp = "2026-11-03T00:00:00+00:00"
 
 [components.D_ETH_ESD4]
-x = 84.29
+x = 79.85
 y = 33.01
 rotation = 0
 source = "agent"

@@ -64,12 +64,17 @@ reading of the issue.
 
 ## Ethernet
 
-- **Pulse JXD6-0001NL, not the Abracon ARJP11A.** The issue asks for GbE.
-  The ARJP11A is a 10/100 magjack; the JXD6-0001NL is 1000BASE-T with four
-  transformer pairs and a stock KiCad symbol/footprint.
-- **TCT/RCT to GND through 100 nF.** The CM4IO board reference ties the
-  magjack center taps to GND through 100 nF; this board follows that. The
-  CM4 datasheet says a standard 1:1 magjack is all that is needed.
+- **UDE RB1-125B8G1A, not the Abracon ARJP11A or Pulse JXD6.** The issue
+  asks for GbE. The ARJP11A is 10/100. The Pulse JXD6-0001NL was the first
+  choice, but its datasheet and product page say **100BASE-TX**; it is not a
+  GbE part. The UDE RB1-125B8G1A datasheet (RB115260-00) says
+  10/100/1000BASE-T, has four transformer pairs (TD1–TD4) and one common
+  centre tap, and has a stock KiCad symbol and footprint. It is through-hole,
+  not SMT.
+- **Centre tap to GND through 100 nF.** The UDE part has one common centre
+  tap (R1). The CM4IO board reference ties the magjack centre tap to GND
+  through 100 nF; this board follows that. The CM4 datasheet says a standard
+  1:1 magjack is all that is needed.
 
 ## HDMI
 
@@ -119,11 +124,13 @@ reading of the issue.
 
 ## Pinout gaps (read this before trusting the netlist)
 
-- **Pulse JXD6-0001NL pair order.** The KiCad symbol names the TD/RD pairs
-  but leaves pins 1/2 and 9/10 unnamed. The board maps CM4 Pair2 to 1/2 and
-  Pair3 to 9/10 by convention; the Pulse datasheet's transformer drawing was
-  not read pin by pin. A swapped pair may be correctable by the CM4 PHY's
-  pair-polarity/skew correction, but that is not a substitute for checking.
+- **UDE RB1-125B8G1A pair order.** The KiCad symbol names TD1–TD4 on
+  R2–R9 and the common centre tap on R1. The board maps CM4 Pair0–3 to
+  TD1–TD4 in order. The UDE datasheet is a drawing; the pair order was read
+  from the symbol names, not traced through the transformer drawing.
+- **24 MHz crystal pad map.** The ECS ECX-33Q datasheet says pad 1/3 are the
+  crystal and pad 2/4 are GND. The first revision had pad 2 as the second
+  crystal electrode; the part now declares 1/3 crystal and 2/4 GND.
 - **Molex 47219-2001 pin numbers.** The KiCad `Micro_SD_Card` symbol names
   DAT2/DAT3/CMD/VDD/CLK/VSS/DAT0/DAT1 on pads 1–8. The Molex SD-47219-001
   drawing was not read pin by pin; the mapping is the standard microSD

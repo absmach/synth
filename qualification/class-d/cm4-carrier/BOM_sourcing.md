@@ -13,7 +13,7 @@ was looked up, not a part that was electrically or mechanically qualified.
 | J_CM4A, J_CM4B | Hirose DF40C-100DS-0.4V(51) | C597931 | DF40C-100DS-0.4V(58) (LCSC not checked) | https://www.hirose.com/en/product/p/CL0684-4033-4-51 | 100-pin, 0.4 mm, 0.3 A/contact, 1.5 mm mated height |
 | U4 | Microchip USB2514B-AEZC | C633338 | USB2514B-I/M2 (C220679) | https://ww1.microchip.com/downloads/en/DeviceDoc/00001692C.pdf | 36-pin SQFN 6x6 |
 | J_USB1, J_USB2 | Same Sky UJ2-ADH-3-TH | C6731588 | UJ2-ADH-1-TH (LCSC not checked) | https://www.cuidevices.com/product/resource/uj2-adh-th.pdf | dual stacked USB-A, 8 contacts + shield |
-| J_ETH | Pulse JXD6-0001NL | C5359047 | JXD0-0001NL (C5375613; different pinout) | https://productfinder.pulseeng.com/product/JXD6-0001NL | 1000BASE-T magjack, 1:1 |
+| J_ETH | UDE RB1-125B8G1A | C363353 | Pulse JXD0-0001NL (C5375613; 1000BASE-T, THT, different footprint) | https://www.lcsc.com/datasheet/C363353.pdf | 10/100/1000BASE-T magjack, 1:1, through-hole; the JXD6-0001NL is 100BASE-TX and is not a GbE substitute |
 | J_SD | Molex 47219-2001 | C164170 | Hirose DM3AT-SF-PEJM5 (LCSC not checked) | https://www.farnell.com/datasheets/2213824.pdf | 8 contacts, hinge, no card detect |
 | J_CAM, J_DSI | Hirose FH12-22S-0.5SH(55) | C597981 | FH12-22S-0.5SH(59) (LCSC not checked) | https://www.hirose.com/en/product/p/CL0586-0532-7-55 | 22-pin, 0.5 mm, bottom contact |
 | J_BT1 | Keystone 1058 | not found | QIJEY CR2032-BS-5-1 (C70379; footprint differs) | https://www.keyelco.com/product.cfm/product_id/14028 | CR2032/CR2025 SMD holder; LCSC number not found |

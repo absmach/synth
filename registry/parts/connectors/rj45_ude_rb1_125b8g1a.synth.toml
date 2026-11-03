@@ -1,0 +1,111 @@
+id = "rj45_ude_rb1_125b8g1a"
+kind = "connector"
+version = 0
+lifecycle = "active"
+description = "UDE RB1-125B8G1A 10/100/1000BASE-T RJ45 jack with integrated 1:1 magnetics, through-hole, shielded, green/yellow LEDs"
+mpn = "RB1-125B8G1A"
+lcsc_pn = "C363353"
+kicad_symbol = "Connector:RJ45_RB1-125B8G1A"
+kicad_footprint = "Connector_RJ:RJ45_UDE_RB1-125B8G1A"
+
+[footprint_dimensions]
+width_mm = 19.05
+height_mm = 22.78
+courtyard_margin_mm = 0.25
+mating_face = "bottom"
+
+[operating_conditions]
+min_voltage_v = 0.0
+max_voltage_v = 5.5
+max_current_ma = 1000.0
+
+# KiCad symbol pin names: R1 CT, R2-R9 TD1-TD4, R10 GND, L1-L4 LEDs, SH shield.
+# Datasheet: UDE RB115260-00, 10/100/1000 Base-T, through hole.
+[[pins]]
+name = "ct"
+number = "R1"
+electrical_type = "passive"
+
+[[pins]]
+name = "td1_p"
+number = "R2"
+electrical_type = "differential_positive"
+capabilities = ["diff_pair_positive"]
+
+[[pins]]
+name = "td1_n"
+number = "R3"
+electrical_type = "differential_negative"
+capabilities = ["diff_pair_negative"]
+
+[[pins]]
+name = "td2_p"
+number = "R4"
+electrical_type = "differential_positive"
+capabilities = ["diff_pair_positive"]
+
+[[pins]]
+name = "td2_n"
+number = "R5"
+electrical_type = "differential_negative"
+capabilities = ["diff_pair_negative"]
+
+[[pins]]
+name = "td3_p"
+number = "R6"
+electrical_type = "differential_positive"
+capabilities = ["diff_pair_positive"]
+
+[[pins]]
+name = "td3_n"
+number = "R7"
+electrical_type = "differential_negative"
+capabilities = ["diff_pair_negative"]
+
+[[pins]]
+name = "td4_p"
+number = "R8"
+electrical_type = "differential_positive"
+capabilities = ["diff_pair_positive"]
+
+[[pins]]
+name = "td4_n"
+number = "R9"
+electrical_type = "differential_negative"
+capabilities = ["diff_pair_negative"]
+
+[[pins]]
+name = "gnd"
+number = "R10"
+electrical_type = "ground_reference"
+
+[[pins]]
+name = "led1_a"
+number = "L1"
+electrical_type = "passive"
+
+[[pins]]
+name = "led1_k"
+number = "L2"
+electrical_type = "passive"
+
+[[pins]]
+name = "led2_a"
+number = "L3"
+electrical_type = "passive"
+
+[[pins]]
+name = "led2_k"
+number = "L4"
+electrical_type = "passive"
+
+[[pins]]
+name = "shield"
+number = "SH"
+electrical_type = "ground_reference"
+
+[provenance]
+source = "authored"
+datasheet_url = "https://www.lcsc.com/datasheet/C363353.pdf"
+revision = "UDE RB115260-00, 2015-11-04"
+reviewed_by = ""
