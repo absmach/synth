@@ -17,9 +17,9 @@
     "profile": "jlcpcb",
     "command": [],
     "settings": {},
-    "input_hash": "bd22c58c4f26609025156109a7f0c1e0c7aaf0380d06af75f1bdf3d8b0f0b3d8",
+    "input_hash": "2092835f2769a36f872c5806d17fe0f7168680fdbde92338e371ea4c417485d1",
     "output_hash": "",
-    "source_revision": "7ff508df9e83310f8178c57181c931310d7b37d4",
+    "source_revision": "88792c67b4bc114eeabd4d5a1d93333e06fc338b",
     "duration_ms": 0
   },
   "statistics": {
@@ -33,7 +33,7 @@
     "engine_findings": {}
   },
   "artifacts": {
-    "baseline": "/tmp/opencode/ctl-bal3/bldc_control.synth.kicad_pcb",
+    "baseline": "/tmp/opencode/ctl-shrink2/bldc_control.synth.kicad_pcb",
     "candidate": null,
     "delivered": null,
     "session_log": null,

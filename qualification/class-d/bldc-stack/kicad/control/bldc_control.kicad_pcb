@@ -191,8 +191,8 @@
 		(add_net "VBUS_SENSE")
 	)
 	(gr_line
-		(start 1.19 -1.95)
-		(end 72.18 -1.95)
+		(start -3.58 -1.95)
+		(end 57.41 -1.95)
 		(stroke
 			(width 0.1)
 			(type solid)
@@ -201,8 +201,8 @@
 		(uuid "681518eb-dbd4-5408-af24-1dacf7274b1d")
 	)
 	(gr_line
-		(start 72.18 -1.95)
-		(end 72.18 57.58)
+		(start 57.41 -1.95)
+		(end 57.41 47.95)
 		(stroke
 			(width 0.1)
 			(type solid)
@@ -211,8 +211,8 @@
 		(uuid "73e36fe7-48a0-5231-92e7-507f33d9f753")
 	)
 	(gr_line
-		(start 72.18 57.58)
-		(end 1.19 57.58)
+		(start 57.41 47.95)
+		(end -3.58 47.95)
 		(stroke
 			(width 0.1)
 			(type solid)
@@ -221,8 +221,8 @@
 		(uuid "e3f0864e-25b7-5653-ace1-4dbb863654a6")
 	)
 	(gr_line
-		(start 1.19 57.58)
-		(end 1.19 -1.95)
+		(start -3.58 47.95)
+		(end -3.58 -1.95)
 		(stroke
 			(width 0.1)
 			(type solid)
@@ -234,7 +234,7 @@
 		"MountingHole:MountingHole_2.5mm"
 		(layer "F.Cu")
 		(uuid "7483a1ef-6357-5c05-aea0-1e00af76696d")
-		(at 49.875 3)
+		(at 3 3)
 		(property
 			"Reference"
 			"H1"
@@ -388,7 +388,7 @@
 		"MountingHole:MountingHole_2.5mm"
 		(layer "F.Cu")
 		(uuid "7b06c7e3-dcaa-5af0-983c-8912efa8f914")
-		(at 67.75 3)
+		(at 53 3)
 		(property
 			"Reference"
 			"H2"
@@ -542,11 +542,11 @@
 		"MountingHole:MountingHole_2.5mm"
 		(layer "F.Cu")
 		(uuid "c228eca0-a213-55fd-a9b5-a84d7e735c69")
-		(at 31.25 52)
+		(at 3 43)
 		(property
 			"Reference"
 			"H3"
-			(at 0 3.7 0)
+			(at 0 -3.7 0)
 			(layer "F.SilkS")
 			(uuid "b73b724f-bb65-5fbd-8066-4ee24f6718cf")
 			(effects
@@ -696,7 +696,7 @@
 		"MountingHole:MountingHole_2.5mm"
 		(layer "F.Cu")
 		(uuid "b0108a8a-ed14-56dd-87b2-cadce6d51f93")
-		(at 67.75 52)
+		(at 53 43)
 		(property
 			"Reference"
 			"H4"
@@ -850,11 +850,11 @@
 		"Connector_PinHeader_2.54mm:PinHeader_2x10_P2.54mm_Vertical"
 		(layer "F.Cu")
 		(uuid "18760bb3-9163-5a9c-9b11-bccdcd9dd5d2")
-		(at 62.725 19.57)
+		(at 48.725 9.57)
 		(property
 			"Reference"
 			"J_B2B"
-			(at 1.275 -2.72 0)
+			(at 1.275 25.58 0)
 			(layer "F.SilkS")
 			(uuid "c0469829-6aba-5fd4-a9a1-566acbe32fba")
 			(effects
@@ -1263,7 +1263,7 @@
 		"Package_TO_SOT_SMD:SOT-223-3_TabPin2"
 		(layer "F.Cu")
 		(uuid "5f7257d9-9c72-5ce4-90f2-1127affe755b")
-		(at 57.25 8)
+		(at 40 4)
 		(property
 			"Reference"
 			"U_LDO"
@@ -1556,7 +1556,7 @@
 		"Capacitor_SMD:C_1206_3216Metric"
 		(layer "F.Cu")
 		(uuid "d722616b-8dcf-5b62-ac91-320cd3557e2d")
-		(at 50.375 7.5)
+		(at 33 3.5)
 		(property
 			"Reference"
 			"C_LDO_IN"
@@ -1735,7 +1735,7 @@
 		"Capacitor_SMD:C_0603_1608Metric"
 		(layer "F.Cu")
 		(uuid "21013d55-3f12-519f-8d1e-4646baf36a66")
-		(at 63.375 3.5)
+		(at 34 1.5)
 		(property
 			"Reference"
 			"C_LDO_IN2"
@@ -1914,7 +1914,7 @@
 		"Capacitor_SMD:C_0603_1608Metric"
 		(layer "F.Cu")
 		(uuid "cccf9e3c-e89b-582f-8e38-b9f2acac5bcb")
-		(at 63.375 5.5)
+		(at 46 4)
 		(property
 			"Reference"
 			"C_LDO_OUT"
@@ -2093,7 +2093,7 @@
 		"Inductor_SMD:L_0603_1608Metric"
 		(layer "F.Cu")
 		(uuid "74dca880-e947-54ec-82bd-bf76aa3af68b")
-		(at 69 7)
+		(at 48 1)
 		(property
 			"Reference"
 			"L_B3V3"
@@ -2272,7 +2272,7 @@
 		"Capacitor_SMD:C_0603_1608Metric"
 		(layer "F.Cu")
 		(uuid "aa852970-8a41-582e-89d9-a54cd46915a0")
-		(at 69 9.5)
+		(at 48.5 5.5)
 		(property
 			"Reference"
 			"C_B2B"
@@ -2451,7 +2451,7 @@
 		"Package_QFP:LQFP-32_7x7mm_P0.8mm"
 		(layer "F.Cu")
 		(uuid "f05b3df9-965e-5c67-b5a8-6a25e59777d4")
-		(at 42.25 26)
+		(at 22 16)
 		(property
 			"Reference"
 			"U1"
@@ -3081,7 +3081,7 @@
 		"Capacitor_SMD:C_0603_1608Metric"
 		(layer "F.Cu")
 		(uuid "71363490-5ca1-5573-8be7-79cdd3eb03d9")
-		(at 49.5 20)
+		(at 27 10)
 		(property
 			"Reference"
 			"C_VDD1"
@@ -3260,7 +3260,7 @@
 		"Capacitor_SMD:C_0603_1608Metric"
 		(layer "F.Cu")
 		(uuid "417ebabf-3117-5365-aaa5-68656f8b29c2")
-		(at 55.75 22.5)
+		(at 29 14.5)
 		(property
 			"Reference"
 			"C_VDD2"
@@ -3439,7 +3439,7 @@
 		"Resistor_SMD:R_0603_1608Metric"
 		(layer "F.Cu")
 		(uuid "47f33852-316e-581b-b440-2a241b6aef87")
-		(at 31.875 31)
+		(at 14 23)
 		(property
 			"Reference"
 			"R_NRST"
@@ -3618,7 +3618,7 @@
 		"Capacitor_SMD:C_0603_1608Metric"
 		(layer "F.Cu")
 		(uuid "397be05a-ff0b-5bd7-9bc0-728da8d92530")
-		(at 31.875 33.5)
+		(at 14 25)
 		(property
 			"Reference"
 			"C_NRST"
@@ -3797,11 +3797,11 @@
 		"Button_Switch_SMD:SW_SPST_PTS645Sx43SMTR92"
 		(layer "F.Cu")
 		(uuid "0e73ea50-eaf4-5f52-a327-31c711b77ed9")
-		(at 28.375 38)
+		(at 7 26.5)
 		(property
 			"Reference"
 			"SW_BOOT"
-			(at 0 4.35 0)
+			(at 0 -4.35 0)
 			(layer "F.SilkS")
 			(uuid "2a8e6599-6ab1-54ee-a39a-2a01dd5afb22")
 			(effects
@@ -4119,7 +4119,7 @@
 		"Resistor_SMD:R_0603_1608Metric"
 		(layer "F.Cu")
 		(uuid "13609f9c-03a2-5088-a05b-70b61ff8d705")
-		(at 48 37.5)
+		(at 14 28)
 		(property
 			"Reference"
 			"R_BOOT"
@@ -4298,7 +4298,7 @@
 		"Resistor_SMD:R_0603_1608Metric"
 		(layer "F.Cu")
 		(uuid "c00a0c3d-2eef-5a3f-a85e-43bea33c8b80")
-		(at 51.125 36)
+		(at 18 25.5)
 		(property
 			"Reference"
 			"R_FAULT"
@@ -4477,7 +4477,7 @@
 		"Capacitor_SMD:C_0603_1608Metric"
 		(layer "F.Cu")
 		(uuid "e34ad728-72f1-5cb6-8696-e5e5430d3870")
-		(at 51.125 38.5)
+		(at 17 29)
 		(property
 			"Reference"
 			"C_FAULT"
@@ -4656,7 +4656,7 @@
 		"Resistor_SMD:R_0603_1608Metric"
 		(layer "F.Cu")
 		(uuid "e162603c-e517-5dd4-b2ea-f414cb591fee")
-		(at 48 36)
+		(at 15 26.5)
 		(property
 			"Reference"
 			"R_GATE_EN"
@@ -4835,7 +4835,7 @@
 		"Connector_PinHeader_2.54mm:PinHeader_1x03_P2.54mm_Vertical"
 		(layer "F.Cu")
 		(uuid "0869266d-e57d-5c27-a139-a5bcda4cca01")
-		(at 2.96 13.5 90)
+		(at -1.54 10 90)
 		(property
 			"Reference"
 			"J_HALL_U"
@@ -5094,7 +5094,7 @@
 		"Connector_PinHeader_2.54mm:PinHeader_1x03_P2.54mm_Vertical"
 		(layer "F.Cu")
 		(uuid "29b00524-919b-529c-9db5-87604c8545ba")
-		(at 3.46 21 90)
+		(at -1.54 17 90)
 		(property
 			"Reference"
 			"J_HALL_V"
@@ -5353,11 +5353,11 @@
 		"Connector_PinHeader_2.54mm:PinHeader_1x03_P2.54mm_Vertical"
 		(layer "F.Cu")
 		(uuid "286ed4bc-e447-5775-8815-5f27ca513dfe")
-		(at 3.46 29 90)
+		(at -1.54 21 90)
 		(property
 			"Reference"
 			"J_HALL_W"
-			(at 2.72 2.54 0)
+			(at -5.27 0 -90)
 			(layer "F.SilkS")
 			(uuid "5356b9dd-0ae9-55b5-8a13-4e53abe6573b")
 			(effects
@@ -5612,7 +5612,7 @@
 		"Resistor_SMD:R_0603_1608Metric"
 		(layer "F.Cu")
 		(uuid "e3ef084a-444c-5cdb-8c5f-cf8eaf298122")
-		(at 62.75 13)
+		(at 6.5 7)
 		(property
 			"Reference"
 			"R_HALL_U"
@@ -5791,7 +5791,7 @@
 		"Resistor_SMD:R_0603_1608Metric"
 		(layer "F.Cu")
 		(uuid "0634c8c1-8f0f-5381-a47b-75b61d2e8468")
-		(at 25.625 21)
+		(at 6.5 14)
 		(property
 			"Reference"
 			"R_HALL_V"
@@ -5970,7 +5970,7 @@
 		"Resistor_SMD:R_0603_1608Metric"
 		(layer "F.Cu")
 		(uuid "7d384c83-ea1b-5836-afa2-c5f4bf0e26b9")
-		(at 25.625 29)
+		(at 7 20.5)
 		(property
 			"Reference"
 			"R_HALL_W"
@@ -6149,7 +6149,7 @@
 		"Resistor_SMD:R_0603_1608Metric"
 		(layer "F.Cu")
 		(uuid "caf9fc4b-9ce2-58be-8d94-d5d92d936015")
-		(at 65.875 13)
+		(at 9.5 8)
 		(property
 			"Reference"
 			"R_HALL_SU"
@@ -6328,7 +6328,7 @@
 		"Resistor_SMD:R_0603_1608Metric"
 		(layer "F.Cu")
 		(uuid "dabdfcb1-e822-5686-b95a-cd75d45aec4e")
-		(at 28.75 21)
+		(at 9.5 15)
 		(property
 			"Reference"
 			"R_HALL_SV"
@@ -6507,7 +6507,7 @@
 		"Resistor_SMD:R_0603_1608Metric"
 		(layer "F.Cu")
 		(uuid "b7ca16c2-9329-5227-9e9d-0c82102f39d6")
-		(at 28.75 29)
+		(at 9.5 22)
 		(property
 			"Reference"
 			"R_HALL_SW"
@@ -6686,7 +6686,7 @@
 		"Capacitor_SMD:C_0603_1608Metric"
 		(layer "F.Cu")
 		(uuid "0fb1f255-f5a6-5fb6-8fd6-21fe6df720f9")
-		(at 69 13)
+		(at 12 6.5)
 		(property
 			"Reference"
 			"C_HALL_U"
@@ -6865,7 +6865,7 @@
 		"Capacitor_SMD:C_0603_1608Metric"
 		(layer "F.Cu")
 		(uuid "3436b6dd-4181-5982-bcca-120bbfcfae59")
-		(at 31.875 21)
+		(at 12 13.5)
 		(property
 			"Reference"
 			"C_HALL_V"
@@ -7044,7 +7044,7 @@
 		"Capacitor_SMD:C_0603_1608Metric"
 		(layer "F.Cu")
 		(uuid "22072aba-1615-5b16-88cd-5e506a6b6f37")
-		(at 31.875 29)
+		(at 12 20.5)
 		(property
 			"Reference"
 			"C_HALL_W"
@@ -7223,7 +7223,7 @@
 		"Connector_PinHeader_2.54mm:PinHeader_1x04_P2.54mm_Vertical"
 		(layer "F.Cu")
 		(uuid "deb26ebd-dbeb-5add-b9c9-4e17cc731cec")
-		(at 3.69 44.5 90)
+		(at -1.81 36 90)
 		(property
 			"Reference"
 			"J_ENC"
@@ -7490,7 +7490,7 @@
 		"Resistor_SMD:R_0603_1608Metric"
 		(layer "F.Cu")
 		(uuid "536e6b18-4fd1-5629-9a64-2ab80a29712c")
-		(at 32.5 44)
+		(at 7 31)
 		(property
 			"Reference"
 			"R_ENC_A"
@@ -7669,7 +7669,7 @@
 		"Resistor_SMD:R_0603_1608Metric"
 		(layer "F.Cu")
 		(uuid "7154a193-153e-5cc2-9d59-719fdd1fe897")
-		(at 29.5 47)
+		(at 8 33)
 		(property
 			"Reference"
 			"R_ENC_B"
@@ -7848,7 +7848,7 @@
 		"Capacitor_SMD:C_0603_1608Metric"
 		(layer "F.Cu")
 		(uuid "83067b0c-6d04-50cf-8f02-b404f704fbf8")
-		(at 35.625 44)
+		(at 11 31)
 		(property
 			"Reference"
 			"C_ENC_A"
@@ -8027,7 +8027,7 @@
 		"Capacitor_SMD:C_0603_1608Metric"
 		(layer "F.Cu")
 		(uuid "10d422f6-ce4b-5179-a3cb-5f15678db282")
-		(at 32.625 47)
+		(at 11 32.5)
 		(property
 			"Reference"
 			"C_ENC_B"
@@ -8206,11 +8206,11 @@
 		"Package_SO:SOIC-8_3.9x4.9mm_P1.27mm"
 		(layer "F.Cu")
 		(uuid "bf163a92-7cd8-5606-bc3c-d9d989e7fce8")
-		(at 50.375 44.5)
+		(at 36 34)
 		(property
 			"Reference"
 			"U_RS485"
-			(at 0 -3.65 0)
+			(at -7.5 0 0)
 			(layer "F.SilkS")
 			(uuid "09b9f820-a7b2-575d-81d7-0c01fee97715")
 			(effects
@@ -8578,7 +8578,7 @@
 		"Capacitor_SMD:C_0603_1608Metric"
 		(layer "F.Cu")
 		(uuid "6d2f8670-44e5-5709-932f-7f9b2f65d17f")
-		(at 45 43)
+		(at 30.5 32.5)
 		(property
 			"Reference"
 			"C_RS485"
@@ -8757,7 +8757,7 @@
 		"Resistor_SMD:R_0603_1608Metric"
 		(layer "F.Cu")
 		(uuid "da3116e3-4796-5712-8b13-bb3d59ab2864")
-		(at 55.75 42)
+		(at 38.5 30.5)
 		(property
 			"Reference"
 			"R_TERM"
@@ -8936,7 +8936,7 @@
 		"Resistor_SMD:R_0603_1608Metric"
 		(layer "F.Cu")
 		(uuid "a93c42ac-04d4-503b-ad0c-251a082e00f7")
-		(at 55.75 43.5)
+		(at 41.5 33.5)
 		(property
 			"Reference"
 			"R_RS485_RX"
@@ -9115,11 +9115,11 @@
 		"Diode_SMD:Nexperia_CFP3_SOD-123W"
 		(layer "F.Cu")
 		(uuid "e34b1f96-6f06-53e1-9349-d537b2c6156c")
-		(at 55 40)
+		(at 34.5 25.5)
 		(property
 			"Reference"
 			"D_RS485_A"
-			(at 0 -2.05 0)
+			(at 7.05 0 0)
 			(layer "F.SilkS")
 			(uuid "cd098b3f-08d9-524f-900c-0e01fd21033f")
 			(effects
@@ -9418,11 +9418,11 @@
 		"Diode_SMD:Nexperia_CFP3_SOD-123W"
 		(layer "F.Cu")
 		(uuid "4e96512d-cc70-5409-b01a-087046fb01af")
-		(at 55 37.5)
+		(at 38 28)
 		(property
 			"Reference"
 			"D_RS485_B"
-			(at 0 -2.05 0)
+			(at -7.05 0 0)
 			(layer "F.SilkS")
 			(uuid "d726dc32-7784-5e16-a6bf-5b1019416419")
 			(effects
@@ -9721,11 +9721,11 @@
 		"Connector_PinHeader_2.54mm:PinHeader_1x03_P2.54mm_Vertical"
 		(layer "F.Cu")
 		(uuid "31c42e43-a9be-5260-99a1-fb3ec4fa1e26")
-		(at 46 49.46)
+		(at 35.5 38.96)
 		(property
 			"Reference"
 			"J_RS485"
-			(at 5.57 2.54 0)
+			(at 0 7.8 0)
 			(layer "F.SilkS")
 			(uuid "a469d193-bbe6-58c9-b9e1-4f1e0a5ee402")
 			(effects
@@ -9980,11 +9980,11 @@
 		"Connector_PinHeader_2.54mm:PinHeader_1x04_P2.54mm_Vertical"
 		(layer "F.Cu")
 		(uuid "8636249e-a355-5c20-879b-2e277aa76608")
-		(at 36 48.19)
+		(at 24 37.19)
 		(property
 			"Reference"
 			"J_SWD"
-			(at 0 -2.72 0)
+			(at -4.57 3.81 0)
 			(layer "F.SilkS")
 			(uuid "9c4b04c1-633a-5cb0-b812-af2bc34fe526")
 			(effects
@@ -10247,11 +10247,11 @@
 		"LED_SMD:LED_0603_1608Metric"
 		(layer "F.Cu")
 		(uuid "6c9dc96d-2773-5343-a091-b5206cafc494")
-		(at 51.125 40.5)
+		(at 16.5 34.5)
 		(property
 			"Reference"
 			"D_LED_STATUS"
-			(at 0 1.68 0)
+			(at 0 -1.68 0)
 			(layer "F.SilkS")
 			(uuid "84dbcf1b-85ba-50bc-b401-341d158a7152")
 			(effects
@@ -10469,7 +10469,7 @@
 		"Resistor_SMD:R_0603_1608Metric"
 		(layer "F.Cu")
 		(uuid "99c03c65-5d41-5fc2-af58-4edeb3af5deb")
-		(at 38.75 42.5)
+		(at 13.5 35)
 		(property
 			"Reference"
 			"R_LED_STATUS"
@@ -10648,11 +10648,11 @@
 		"LED_SMD:LED_0603_1608Metric"
 		(layer "F.Cu")
 		(uuid "02e3069b-755a-50f9-8404-e63246f825dd")
-		(at 41.875 43.5)
+		(at 16.5 37.5)
 		(property
 			"Reference"
 			"D_LED_FAULT"
-			(at 0 -4.23 0)
+			(at 0 -1.68 0)
 			(layer "F.SilkS")
 			(uuid "f4f73019-07e1-5525-9ecc-12354aa12e0e")
 			(effects
@@ -10870,7 +10870,7 @@
 		"Resistor_SMD:R_0603_1608Metric"
 		(layer "F.Cu")
 		(uuid "f1282aba-41af-5156-a82f-2e61206327a8")
-		(at 38.75 44)
+		(at 13.5 38)
 		(property
 			"Reference"
 			"R_LED_FAULT"
@@ -11049,7 +11049,7 @@
 		"Resistor_SMD:R_0603_1608Metric"
 		(layer "F.Cu")
 		(uuid "79868e7d-2626-5902-b5af-a2e861d422b1")
-		(at 52.625 21)
+		(at 30.5 10)
 		(property
 			"Reference"
 			"R_ISENSE_U"
@@ -11228,7 +11228,7 @@
 		"Resistor_SMD:R_0603_1608Metric"
 		(layer "F.Cu")
 		(uuid "c565da41-8910-5591-b46e-b59b1432a8fd")
-		(at 52.625 24)
+		(at 30.5 13)
 		(property
 			"Reference"
 			"R_ISENSE_V"
@@ -11407,7 +11407,7 @@
 		"Resistor_SMD:R_0603_1608Metric"
 		(layer "F.Cu")
 		(uuid "6c6fb6af-3554-57f4-8c70-8e3d69a4b528")
-		(at 52.625 27)
+		(at 30.5 16)
 		(property
 			"Reference"
 			"R_ISENSE_W"
@@ -11586,7 +11586,7 @@
 		"Capacitor_SMD:C_0603_1608Metric"
 		(layer "F.Cu")
 		(uuid "81166862-14be-51c7-a68f-33d67cfe6de3")
-		(at 55.75 21)
+		(at 33.5 9.5)
 		(property
 			"Reference"
 			"C_ISENSE_U"
@@ -11765,7 +11765,7 @@
 		"Capacitor_SMD:C_0603_1608Metric"
 		(layer "F.Cu")
 		(uuid "c5f6c7d6-accf-5059-89cd-4f8e55502a7a")
-		(at 55.75 24)
+		(at 33.5 12.5)
 		(property
 			"Reference"
 			"C_ISENSE_V"
@@ -11944,7 +11944,7 @@
 		"Capacitor_SMD:C_0603_1608Metric"
 		(layer "F.Cu")
 		(uuid "5930ffb1-c9b0-5b0f-b334-4e67d3641a97")
-		(at 55.75 27)
+		(at 33.5 15.5)
 		(property
 			"Reference"
 			"C_ISENSE_W"
@@ -12123,7 +12123,7 @@
 		"Resistor_SMD:R_0603_1608Metric"
 		(layer "F.Cu")
 		(uuid "96d96dbc-1916-58d3-862b-318f97f2a622")
-		(at 52.625 30)
+		(at 30.5 19)
 		(property
 			"Reference"
 			"R_VBUS_S"
@@ -12302,7 +12302,7 @@
 		"Capacitor_SMD:C_0603_1608Metric"
 		(layer "F.Cu")
 		(uuid "6b02bd99-9dcf-50d4-89dd-5d49778bc229")
-		(at 55.75 30)
+		(at 33.5 18.5)
 		(property
 			"Reference"
 			"C_VBUS_S"
@@ -12481,7 +12481,7 @@
 		"Resistor_SMD:R_0603_1608Metric"
 		(layer "F.Cu")
 		(uuid "986caf7f-36df-5359-b29f-0d807d74d1fd")
-		(at 52.625 33)
+		(at 30.5 22)
 		(property
 			"Reference"
 			"R_12V_T"
@@ -12660,7 +12660,7 @@
 		"Resistor_SMD:R_0603_1608Metric"
 		(layer "F.Cu")
 		(uuid "796c65b2-bcd5-50da-a766-7d8076c8711a")
-		(at 55.75 35.5)
+		(at 30.5 24.5)
 		(property
 			"Reference"
 			"R_12V_B"
@@ -12839,7 +12839,7 @@
 		"Capacitor_SMD:C_0603_1608Metric"
 		(layer "F.Cu")
 		(uuid "bcb48ff6-4a8d-5142-be29-c6e90605fec9")
-		(at 55.75 33)
+		(at 33.5 21.5)
 		(property
 			"Reference"
 			"C_12V_S"
@@ -13033,10 +13033,10 @@
 		)
 		(polygon
 			(pts
-				(xy 1.69 -1.45)
-				(xy 71.68 -1.45)
-				(xy 71.68 57.08)
-				(xy 1.69 57.08)
+				(xy -3.08 -1.45)
+				(xy 56.91 -1.45)
+				(xy 56.91 47.45)
+				(xy -3.08 47.45)
 			)
 		)
 	)
@@ -13059,10 +13059,10 @@
 		)
 		(polygon
 			(pts
-				(xy 1.69 -1.45)
-				(xy 71.68 -1.45)
-				(xy 71.68 57.08)
-				(xy 1.69 57.08)
+				(xy -3.08 -1.45)
+				(xy 56.91 -1.45)
+				(xy 56.91 47.45)
+				(xy -3.08 47.45)
 			)
 		)
 	)
@@ -13085,10 +13085,10 @@
 		)
 		(polygon
 			(pts
-				(xy 1.69 -1.45)
-				(xy 71.68 -1.45)
-				(xy 71.68 57.08)
-				(xy 1.69 57.08)
+				(xy -3.08 -1.45)
+				(xy 56.91 -1.45)
+				(xy 56.91 47.45)
+				(xy -3.08 47.45)
 			)
 		)
 	)
@@ -13111,15 +13111,15 @@
 		)
 		(polygon
 			(pts
-				(xy 1.69 -1.45)
-				(xy 71.68 -1.45)
-				(xy 71.68 57.08)
-				(xy 1.69 57.08)
+				(xy -3.08 -1.45)
+				(xy 56.91 -1.45)
+				(xy 56.91 47.45)
+				(xy -3.08 47.45)
 			)
 		)
 	)
 	(via
-		(at 2.69 -0.45)
+		(at -2.08 -0.45)
 		(size 0.6)
 		(drill 0.3)
 		(layers "F.Cu" "B.Cu")
@@ -13127,7 +13127,7 @@
 		(uuid "b2f238df-0446-5da4-9f16-1a4006841bae")
 	)
 	(via
-		(at 70.68 -0.45)
+		(at 55.91 -0.45)
 		(size 0.6)
 		(drill 0.3)
 		(layers "F.Cu" "B.Cu")
@@ -13135,7 +13135,7 @@
 		(uuid "cef758d4-653e-536e-beb7-a4b7925707dd")
 	)
 	(via
-		(at 70.68 56.08)
+		(at 55.91 46.45)
 		(size 0.6)
 		(drill 0.3)
 		(layers "F.Cu" "B.Cu")
@@ -13143,7 +13143,7 @@
 		(uuid "0108df65-d211-5827-8492-d2818a8bb146")
 	)
 	(via
-		(at 2.69 56.08)
+		(at -2.08 46.45)
 		(size 0.6)
 		(drill 0.3)
 		(layers "F.Cu" "B.Cu")
@@ -13166,30 +13166,30 @@
 		)
 		(polygon
 			(pts
-				(xy 52.625 3)
-				(xy 52.5313 3.7118)
-				(xy 52.2566 4.375)
-				(xy 51.8195 4.9445)
-				(xy 51.25 5.3816)
-				(xy 50.5868 5.6563)
-				(xy 49.875 5.75)
-				(xy 49.1632 5.6563)
-				(xy 48.5 5.3816)
-				(xy 47.9305 4.9445)
-				(xy 47.4934 4.375)
-				(xy 47.2187 3.7118)
-				(xy 47.125 3)
-				(xy 47.2187 2.2882)
-				(xy 47.4934 1.625)
-				(xy 47.9305 1.0555)
-				(xy 48.5 0.6184)
-				(xy 49.1632 0.3437)
-				(xy 49.875 0.25)
-				(xy 50.5868 0.3437)
-				(xy 51.25 0.6184)
-				(xy 51.8195 1.0555)
-				(xy 52.2566 1.625)
-				(xy 52.5313 2.2882)
+				(xy 5.75 3)
+				(xy 5.6563 3.7118)
+				(xy 5.3816 4.375)
+				(xy 4.9445 4.9445)
+				(xy 4.375 5.3816)
+				(xy 3.7118 5.6563)
+				(xy 3 5.75)
+				(xy 2.2882 5.6563)
+				(xy 1.625 5.3816)
+				(xy 1.0555 4.9445)
+				(xy 0.6184 4.375)
+				(xy 0.3437 3.7118)
+				(xy 0.25 3)
+				(xy 0.3437 2.2882)
+				(xy 0.6184 1.625)
+				(xy 1.0555 1.0555)
+				(xy 1.625 0.6184)
+				(xy 2.2882 0.3437)
+				(xy 3 0.25)
+				(xy 3.7118 0.3437)
+				(xy 4.375 0.6184)
+				(xy 4.9445 1.0555)
+				(xy 5.3816 1.625)
+				(xy 5.6563 2.2882)
 			)
 		)
 	)
@@ -13209,30 +13209,30 @@
 		)
 		(polygon
 			(pts
-				(xy 70.5 3)
-				(xy 70.4063 3.7118)
-				(xy 70.1316 4.375)
-				(xy 69.6945 4.9445)
-				(xy 69.125 5.3816)
-				(xy 68.4618 5.6563)
-				(xy 67.75 5.75)
-				(xy 67.0382 5.6563)
-				(xy 66.375 5.3816)
-				(xy 65.8055 4.9445)
-				(xy 65.3684 4.375)
-				(xy 65.0937 3.7118)
-				(xy 65 3)
-				(xy 65.0937 2.2882)
-				(xy 65.3684 1.625)
-				(xy 65.8055 1.0555)
-				(xy 66.375 0.6184)
-				(xy 67.0382 0.3437)
-				(xy 67.75 0.25)
-				(xy 68.4618 0.3437)
-				(xy 69.125 0.6184)
-				(xy 69.6945 1.0555)
-				(xy 70.1316 1.625)
-				(xy 70.4063 2.2882)
+				(xy 55.75 3)
+				(xy 55.6563 3.7118)
+				(xy 55.3816 4.375)
+				(xy 54.9445 4.9445)
+				(xy 54.375 5.3816)
+				(xy 53.7118 5.6563)
+				(xy 53 5.75)
+				(xy 52.2882 5.6563)
+				(xy 51.625 5.3816)
+				(xy 51.0555 4.9445)
+				(xy 50.6184 4.375)
+				(xy 50.3437 3.7118)
+				(xy 50.25 3)
+				(xy 50.3437 2.2882)
+				(xy 50.6184 1.625)
+				(xy 51.0555 1.0555)
+				(xy 51.625 0.6184)
+				(xy 52.2882 0.3437)
+				(xy 53 0.25)
+				(xy 53.7118 0.3437)
+				(xy 54.375 0.6184)
+				(xy 54.9445 1.0555)
+				(xy 55.3816 1.625)
+				(xy 55.6563 2.2882)
 			)
 		)
 	)
@@ -13252,30 +13252,30 @@
 		)
 		(polygon
 			(pts
-				(xy 34 52)
-				(xy 33.9063 52.7118)
-				(xy 33.6316 53.375)
-				(xy 33.1945 53.9445)
-				(xy 32.625 54.3816)
-				(xy 31.9618 54.6563)
-				(xy 31.25 54.75)
-				(xy 30.5382 54.6563)
-				(xy 29.875 54.3816)
-				(xy 29.3055 53.9445)
-				(xy 28.8684 53.375)
-				(xy 28.5937 52.7118)
-				(xy 28.5 52)
-				(xy 28.5937 51.2882)
-				(xy 28.8684 50.625)
-				(xy 29.3055 50.0555)
-				(xy 29.875 49.6184)
-				(xy 30.5382 49.3437)
-				(xy 31.25 49.25)
-				(xy 31.9618 49.3437)
-				(xy 32.625 49.6184)
-				(xy 33.1945 50.0555)
-				(xy 33.6316 50.625)
-				(xy 33.9063 51.2882)
+				(xy 5.75 43)
+				(xy 5.6563 43.7118)
+				(xy 5.3816 44.375)
+				(xy 4.9445 44.9445)
+				(xy 4.375 45.3816)
+				(xy 3.7118 45.6563)
+				(xy 3 45.75)
+				(xy 2.2882 45.6563)
+				(xy 1.625 45.3816)
+				(xy 1.0555 44.9445)
+				(xy 0.6184 44.375)
+				(xy 0.3437 43.7118)
+				(xy 0.25 43)
+				(xy 0.3437 42.2882)
+				(xy 0.6184 41.625)
+				(xy 1.0555 41.0555)
+				(xy 1.625 40.6184)
+				(xy 2.2882 40.3437)
+				(xy 3 40.25)
+				(xy 3.7118 40.3437)
+				(xy 4.375 40.6184)
+				(xy 4.9445 41.0555)
+				(xy 5.3816 41.625)
+				(xy 5.6563 42.2882)
 			)
 		)
 	)
@@ -13295,30 +13295,30 @@
 		)
 		(polygon
 			(pts
-				(xy 70.5 52)
-				(xy 70.4063 52.7118)
-				(xy 70.1316 53.375)
-				(xy 69.6945 53.9445)
-				(xy 69.125 54.3816)
-				(xy 68.4618 54.6563)
-				(xy 67.75 54.75)
-				(xy 67.0382 54.6563)
-				(xy 66.375 54.3816)
-				(xy 65.8055 53.9445)
-				(xy 65.3684 53.375)
-				(xy 65.0937 52.7118)
-				(xy 65 52)
-				(xy 65.0937 51.2882)
-				(xy 65.3684 50.625)
-				(xy 65.8055 50.0555)
-				(xy 66.375 49.6184)
-				(xy 67.0382 49.3437)
-				(xy 67.75 49.25)
-				(xy 68.4618 49.3437)
-				(xy 69.125 49.6184)
-				(xy 69.6945 50.0555)
-				(xy 70.1316 50.625)
-				(xy 70.4063 51.2882)
+				(xy 55.75 43)
+				(xy 55.6563 43.7118)
+				(xy 55.3816 44.375)
+				(xy 54.9445 44.9445)
+				(xy 54.375 45.3816)
+				(xy 53.7118 45.6563)
+				(xy 53 45.75)
+				(xy 52.2882 45.6563)
+				(xy 51.625 45.3816)
+				(xy 51.0555 44.9445)
+				(xy 50.6184 44.375)
+				(xy 50.3437 43.7118)
+				(xy 50.25 43)
+				(xy 50.3437 42.2882)
+				(xy 50.6184 41.625)
+				(xy 51.0555 41.0555)
+				(xy 51.625 40.6184)
+				(xy 52.2882 40.3437)
+				(xy 53 40.25)
+				(xy 53.7118 40.3437)
+				(xy 54.375 40.6184)
+				(xy 54.9445 41.0555)
+				(xy 55.3816 41.625)
+				(xy 55.6563 42.2882)
 			)
 		)
 	)

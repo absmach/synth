@@ -16,7 +16,7 @@
     },
     "routing_and_drc": {
       "passed": false,
-      "evidence": "No routed copper exists. `synth export-kicad --router free-routing` fails in tools/freeroute_autoroute.py with a KiCad PROPERTY_ENUM assert before the route stage; the same failure reproduces on the committed Class-B buck board. The un-routed control PCB reports 0 DRC errors, 97 unconnected pads and 27 warnings."
+      "evidence": "No routed copper exists. `synth export-kicad --router free-routing` fails in tools/freeroute_autoroute.py with a KiCad PROPERTY_ENUM assert before the route stage; the same failure reproduces on the committed Class-B buck board. The un-routed control PCB reports 0 DRC errors, 97 unconnected pads and 12 warnings."
     },
     "erc_dispositioned": {
       "passed": false,

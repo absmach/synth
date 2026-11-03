@@ -49,8 +49,8 @@ synth check control --fab      -> fail (source pass, drc unknown, manufacturing 
 2. **Power PCB and BOM missing.** The power export wrote the schematic, project,
    symbol and library table but no PCB or BOM; it was killed after 28 minutes at
    about 96 % CPU. This is a deliverable gap.
-3. **Board size.** Both boards use a common ~71 x 60 mm frame, not the issue's
-   ~60 x 50 mm; the terminal blocks and the 2 x 10 connector do not fit smaller.
+3. **Board size.** The control outline is 60.99 x 49.90 mm, matching the issue.
+   The power sidecar uses the same 60 x 50 frame; it has no exported PCB.
 4. **Part review.** The ten authored parts have `reviewed_by = ""` by design.
    The seed parts used here (AMS1117, THVD1450D, STM32G030K8, PTVS, 2N3904,
    SMBJ30A, generic passives) were not re-reviewed in this branch.
