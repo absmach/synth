@@ -29,9 +29,9 @@ QUALIFICATION.md are closed.
   D1/D2 SOD-323 TVS on D+/D-. U5 TI LP5907-3.3 LDO (250 mA) makes +3V3 from
   VBUS.
 - L2 600 ohm at 100 MHz ferrite bead isolates +3V3A for U1 and U3.
-- Four M2.5 non-plated mounting holes at (6, 4), (49, 4), (6, 40) and
-  (49, 40) mm.
-- 50.1 x 44.1 mm rectangular board, 2209 mm², 4 layers, 1.586 mm declared
+- Four M2.5 non-plated mounting holes at (6, 3.5), (39, 3.5), (6, 40) and
+  (39, 40) mm.
+- 40.1 x 43.2 mm rectangular board, 1732 mm², 4 layers, 1.586 mm declared
   stackup (1.6 mm nominal FR4). Board source `rtd_afe.synth`, placement sidecar
   `rtd_afe.placement.layout.toml` (board millimetres). The schematic has no
   sidecar; the compiler lays it out by group.
@@ -79,40 +79,44 @@ Status: routed with FreeRouting 2.4.1 on Java 25, KiCad 10.0.7, Synth at the
 worktree this directory was exported from. The route is under review by the
 designated reviewer.
 
-- Analog left, digital right. The input chain is J2 at (15.5, 41.5) mm, the RC
-  filter at the bottom-left and U1 at (20, 29) mm. The reference cluster fills
-  what used to be bare board above it: U3 at (12, 12) mm, C_RI at (7.5, 18.5) mm,
-  L2 at (20, 9.5) mm, C_RO at (23.5, 13.5) mm and R_RST at (26, 17.5) mm, with
-  R_CC2 at (28.5, 9) mm. The digital core is U2 at (38, 27) mm, U4 at
-  (33, 18.8) mm and Y1 at (37, 36.5) mm. U5 is at (47.5, 17) mm and J3 at
-  (41.5, 41.5) mm on the bottom edge.
-- The largest bare rectangle drops from 19 x 19 mm (361 mm²) to 24 x 5 mm
-  (120 mm²), which is the top margin. The RTD input chain did not move; VREF is
-  the one analog net that grew, from 4.83 mm to 21.38 mm, because the reference
-  moved to the top-left. It stays on F.Cu with no via and C_RV stays at REFP0.
-- J2 and J3 are both at y = 41.5 mm; their bodies end about 0.78 mm from the
-  bottom edge. J1 is at (39.5, 6.0) mm on the plain top edge, 1.27 mm from it.
-  The board centre is x = 27.55, so J1 is not centred; centering it fragmented
-  U2's ground escape.
-- The sidecar carries a plain rectangular `[[outline]]` (x 2.50..52.59,
-  y -0.01..44.08); there is no notch and no post-export cut.
+- Analog left, digital right, packed rather than spread. The input chain is J2
+  at (14.8, 40.6) mm, the RC filter just above it and U1 at (12, 24) mm. The
+  reference and support parts sit in the top-left: U3 at (10.5, 10.5) mm, C_RI at
+  (4.8, 10.2) mm, L2 at (17, 10) mm, C_RO at (16, 12.5) mm and R_RST at
+  (18.5, 14.5) mm, with R_CC2 at (21, 11.5) mm. The digital core is U2 at
+  (28, 28.5) mm, U4 at (22, 19.8) mm and Y1 at (28, 35) mm. U5 is at
+  (36.5, 10.5) mm and J3 at (28, 40.6) mm on the bottom edge.
+- The outline is fitted to the placement: 40.1 x 43.2 mm, 1732 mm². The largest
+  bare rectangle is 13 x 4 mm (52 mm²), down from 19 x 19 mm (361 mm²) on the
+  50.1 x 44.1 mm rectangle. The board is not a scaled copy: the groups were
+  re-packed, so the RTD and AIN lengths changed (RTD_FP 16.78 mm, AIN1
+  12.39 mm, AIN2 13.55 mm) and VREF is 18.06 mm on F.Cu, still with C_RV at
+  REFP0.
+- J2 and J3 are both at y = 40.6 mm; their bodies end about 0.80 mm from the
+  bottom edge. J1 is at (28, 6.0) mm on the top edge, 1.27 mm from it and
+  5.50 mm right of the board centre (x = 22.5); it keeps the offset that
+  fragmented U2's ground escape when moved on the wider outline.
+- The sidecar carries a plain rectangular `[[outline]]` (x 2.50..42.59,
+  y -0.01..43.20); there is no notch and no post-export cut.
 - The RTD/input nets and VREF are on F.Cu only, with no layer change. QSPI also
   stays on F.Cu. The SPI, SWD, USB, crystal and ADC-control nets change layers;
   see the SI warnings below.
-- 373 track segments, 67 vias (50 on GND, 27 signal), 664.1 mm of copper. 40
-  nets, 0 open. The router records 67 vias; the other ten are source ground
+- 372 track segments, 66 vias (47 on GND, 25 signal), 624.9 mm of copper. 40
+  nets, 0 open. The router records 66 vias; the other six are source ground
   stitching.
 - `kicad-cli pcb drc --severity-all --refill-zones`: 0 errors, 0 warnings, 0
   unconnected items. `pcbnew.LoadBoard` reopens the board and `check.sh` confirms
   one GND plane with no AGND or DGND net.
-- Synth's signal-integrity pass: 20 non-blocking warnings, 18 layer changes with
-  no ground-return via within 0.64 mm and 2 parallel-run warnings. The flagged
-  nets are REFOUT, SPI_MOSI/CS/SCK/MISO, ADC_DRDY, ADC_START, XIN, XOUT_R, RUN,
-  SWDIO and USB_DP_C/DN_C; the USB pair run is the intended coupled segment. No
-  RTD, AIN or VREF net is flagged. See QUALIFICATION.md.
-- Silkscreen: 0 DRC warnings. U1 has a hard label override at (24, 34.5) mm;
-  25 passives/TVS and H1/H2/H3/J1 have their reference label hidden because the
-  compact refdes field has no clear spot. Their refdes remain in the BOM, PnP and
+- Synth's signal-integrity pass: 22 non-blocking warnings, 20 layer changes with
+  no ground-return via within 0.64 mm and 2 parallel-run warnings. The layer
+  changes are on REFOUT, SPI_MOSI/CS/SCK/MISO, ADC_DRDY, ADC_START, XOUT_R, RUN,
+  QSPI_SD0/SD1/SD3 and DVDD_1V1. The parallel runs are SWCLK/VBUS (2.9 mm at
+  0.129 mm) and USB_DP_C/USB_DN_C (5.5 mm at 0.168 mm); the USB pair run is the
+  intended coupled segment. No RTD, AIN or VREF net is flagged. See
+  QUALIFICATION.md.
+- Silkscreen: 0 DRC warnings. U1 has a hard label override at (16, 29.5) mm;
+  27 passives/TVS and H1/H2/H3/J1/J3 have their reference label hidden because
+  the compact refdes field has no clear spot. Their refdes remain in the BOM, PnP and
   schematic; the full list is in QUALIFICATION.md.
 
 ## Checks
@@ -178,7 +182,7 @@ component review.
 - The BOM carries `dielectric`, `voltage`, `tolerance` and `power` columns from
   the source, so the C0G filter caps and the 0.1 % resistors are visible to an
   assembler. Empty cells mean the source does not declare that attribute.
-- One via-in-pad is required at C_DV.2 (GND) to keep the 50.1 x 44.1 mm
+- One via-in-pad is required at C_DV.2 (GND) to keep the 40.1 x 43.2 mm
   outline clean. The source declares `requires via_in_pad` and the manufacturer
   profile is `jlc-filled-via`; the board must be ordered with filled and capped
   vias. This is an open DFM item.
@@ -197,18 +201,18 @@ component review.
   register map, USB descriptors and calibration are all unwritten/untested.
 - Synth has no free-text silkscreen primitive, so the board name and revision
   are not on the copper. Header pin functions are not labelled on the silk.
-- The board is 50.1 x 44.1 mm (2209 mm²), compacted from the earlier
-  63.1 x 51.1 mm. The arranged floorplan groups the analog chain at the left,
-  the MCU/flash/crystal and USB at the right, and puts them on the edges. J1 is
-  not centred on the top edge; centering it fragmented U2's ground escape. It
-  is one successful FreeRouting run, not a proven densest layout.
+- The board is 40.1 x 43.2 mm (1732 mm²), down from the 50.1 x 44.1 mm
+  rectangle and the earlier 63.1 x 51.1 mm. The floorplan packs the analog chain
+  and reference at the left and the MCU/flash/crystal and USB at the right, with
+  the groups interlocking vertically instead of sitting in two sparse columns.
+  It is one successful FreeRouting run, not a proven densest layout.
 - The sidecar carries a plain rectangular `[[outline]]`, not a notch; the
   exporter reproduces it without a post-export cut.
-- 25 passives/TVS and H1/H2/H3/J1 have their reference label hidden because the
-  refdes field has no clear spot in the compact layout. The refdes are still in
+- 27 passives/TVS and H1/H2/H3/J1/J3 have their reference label hidden because
+  the refdes field has no clear spot in the compact layout. The refdes are still in
   the BOM, PnP and schematic; the full list is in QUALIFICATION.md.
-- The mounting holes leave 2.25 to 2.83 mm of material around a 2.5 mm hole.
-  J2/J3 are about 0.78 mm from the bottom edge and J1 1.27 mm from the top.
+- The mounting holes leave 1.95 to 2.34 mm of material around a 2.5 mm hole.
+  J2/J3 are about 0.80 mm from the bottom edge and J1 1.27 mm from the top.
   The enclosure and screw-head clearance are mechanical check items; the
   measured table is in QUALIFICATION.md.
 - The KiCad ERC library-name warnings remain (see above). They do not affect

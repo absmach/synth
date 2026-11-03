@@ -12,8 +12,8 @@ production-ready.
 
 ## Board and stackup
 
-- Outline: 50.1 x 44.1 mm rectangle, 2209 mm². A plain rectangular
-  `[[outline]]` runs x 2.50 to 52.59 mm, y -0.01 to 44.08 mm; there is no notch
+- Outline: 40.1 x 43.2 mm rectangle, 1732 mm². A plain rectangular
+  `[[outline]]` runs x 2.50 to 42.59 mm, y -0.01 to 43.20 mm; there is no notch
   and no post-export cut.
 - Four copper layers with an explicit 1.5862 mm FR4 stackup: 0.035 mm copper,
   0.2104 mm prepreg (er 4.4), 0.0152 mm copper, 1.065 mm core (er 4.6),
@@ -25,7 +25,8 @@ production-ready.
 - 53 footprints, 40 nets. The input chain (J2, the RC filter, U1) is in the
   bottom-left; the reference and analog-supply support (U3, C_RI, L2, C_RO,
   R_RST, R_CC2) fill the top-left; the MCU, flash, crystal, USB-C and LDO are on
-  the right and top-right.
+  the right. The analog and digital groups interlock in y rather than sitting in
+  two sparse columns.
 
 ### Mechanical geometry
 
@@ -35,19 +36,19 @@ screw head, cable or mating connector was measured.
 
 | Item | Measured | Status |
 | --- | --- | --- |
-| Board | 50.1 x 44.1 mm rectangle, 2209 mm² | sidecar `[[outline]]` |
-| H1 | centre (6, 4); 3.50 mm from left edge, 4.01 from top; 2.25/2.76 mm of material | not checked |
-| H2 | centre (49, 4); 3.59 mm from right edge, 4.01 from top; 2.34/2.76 mm of material | not checked |
-| H3 | centre (6, 40); 3.50 mm from left edge, 4.08 from bottom; 2.25/2.83 mm of material | not checked |
-| H4 | centre (49, 40); 3.59 mm from right edge, 4.08 from bottom; 2.34/2.83 mm of material | not checked |
-| J1 | body bbox x 34.16..44.84, y 1.26..10.73; 1.27 mm from top edge; at x = 39.5, 11.95 mm right of the board centre | overhang/enclosure not checked |
-| J2 | body bbox x 9.89..21.11, y 39.70..43.30; 0.78 mm from bottom edge | mating fit not checked |
-| J3 | body bbox x 37.16..45.84, y 39.70..43.30; 0.78 mm from bottom edge | mating fit not checked |
+| Board | 40.1 x 43.2 mm rectangle, 1732 mm² | sidecar `[[outline]]` |
+| H1 | centre (6, 3.5); 3.50 mm from left edge, 3.51 from top; 2.25/2.26 mm of material | not checked |
+| H2 | centre (39, 3.5); 3.59 mm from right edge, 3.51 from top; 2.34/2.26 mm of material | not checked |
+| H3 | centre (6, 40); 3.50 mm from left edge, 3.20 from bottom; 2.25/1.95 mm of material | not checked |
+| H4 | centre (39, 40); 3.59 mm from right edge, 3.20 from bottom; 2.34/1.95 mm of material | not checked |
+| J1 | body bbox x 22.66..33.34, y 1.26..10.73; 1.27 mm from top edge; at x = 28, 5.50 mm right of the board centre | overhang/enclosure not checked |
+| J2 | body bbox x 9.20..20.41, y 38.80..42.40; 0.80 mm from bottom edge | mating fit not checked |
+| J3 | body bbox x 23.66..32.34, y 38.80..42.40; 0.80 mm from bottom edge | mating fit not checked |
 
 The mounting holes are non-plated, 2.5 mm, with 5.6 x 5.6 mm all-layer rule
-areas. J1 is not centred: centring it at x = 27.0 fragmented U2's ground escape
-in every attempt, so the proven position is kept. The enclosure and screw-head
-clearance are open mechanical items.
+areas. J1 is not centred: it keeps the offset that fragmented U2's ground escape
+when it was moved on the wider outline. The enclosure and screw-head clearance
+are open mechanical items.
 
 ## Check results
 
@@ -118,35 +119,29 @@ sat on neighbouring pads. U1's label was moved to (24, 34.5) mm; 25 passives/TVS
 and H1/H2/H3/J1 have their reference label hidden; the delivered board has 0
 silk warnings.
 
-### The compact rework
+### The compact re-place
 
-This rework is a 50.1 x 44.1 mm rectangle, 2209 mm², and routes with 0 open
-nets, 0 DRC errors, 0 warnings and 0 unconnected items. That does not prove it
-is the densest arrangement; it is one successful FreeRouting run, and
-`check.sh` re-routes from scratch.
+This rework fits the outline to the placement instead of spreading the parts
+over a fixed 50.1 x 44.1 mm rectangle. The board is now 40.1 x 43.2 mm
+(1732 mm²) and routes with 0 open nets, 0 DRC errors, 0 warnings and 0
+unconnected items. That does not prove it is the densest arrangement; it is one
+successful FreeRouting run, and `check.sh` re-routes from scratch.
 
-The notch is gone; the sidecar carries a plain rectangular `[[outline]]`, so a
-normal export needs no post-export cut. J2 and J3 are level at y = 41.5 mm,
-with their bodies 0.78 mm from the bottom edge. J1 is at (39.5, 6.0) mm on the
-top edge. Centering it on the rectangle (x = 27.55) was tried; every centered
-attempt fragmented U2's ground escape around pad 47, so the proven position is
-kept and J1 is not centred. Making it centred needs a larger relayout, not a
-nudge. One via-in-pad at C_DV.2 keeps the tighter outline's GND pour tied.
+The largest bare rectangle inside the outline is 13 x 4 mm (52 mm²), down from
+19 x 19 mm (361 mm²) on the rectangle. The groups were re-packed, not scaled:
+J2 is at (14.8, 40.6), the filter just above it, U1 at (12, 24); the reference
+block is at the top-left (U3 at (10.5, 10.5), C_RI at (4.8, 10.2), L2 at (17, 10),
+C_RO at (16, 12.5), R_RST at (18.5, 14.5), R_CC2 at (21, 11.5)); the digital
+block moved left and down (U2 at (28, 28.5), U4 at (22, 19.8), Y1 at (28, 35)).
+The analog and digital groups now overlap in y, so the old 11 mm channel is
+gone.
 
-### The top-left re-place
-
-The rectangle left a bare area above the analog chain; the largest empty
-rectangle inside it was 19 x 19 mm (361 mm²). The reference and its support now
-sit there: U3 (12, 12), C_RI (7.5, 18.5), L2 (20, 9.5), C_RO (23.5, 13.5), R_RST
-(26, 17.5) and R_CC2 (28.5, 9). C_AV1 moved to (20, 23) to keep the VREF
-corridor free. The largest empty rectangle is now 24 x 5 mm (120 mm²), the top
-margin.
-
-The RTD input chain (J2, R_S1/R_S2, C_D, C_CM1/C_CM2, C_F, R_BIAS, U1) did not
-move, so the RTD and AIN lengths are unchanged. VREF is the one analog net that
-grew, from 4.83 mm to 21.38 mm, because U3 is now at the top-left. It stays on
-F.Cu with no via and C_RV stays at REFP0; the extra run is the cost of the
-denser left column and is an open item for the reference-routing review.
+The RTD and AIN lengths change with the re-pack: RTD_FP 16.78 mm, RTD_SP
+6.75 mm, AIN1 12.39 mm, RTD_SN 6.94 mm, AIN2 13.55 mm, RTD_FN 15.46 mm. VREF is
+18.06 mm on F.Cu with no via and C_RV stays at REFP0. J2 and J3 are level at
+y = 40.6 mm, 0.80 mm from the bottom edge. J1 is at (28, 6.0) mm on the top
+edge, 5.50 mm right of the board centre. One via-in-pad at C_DV.2 keeps the
+tighter outline's GND pour tied.
 
 ## ERC findings and dispositions
 
@@ -162,21 +157,21 @@ connectivity findings. A human should confirm that disposition.
 
 ## Synth signal-integrity warnings
 
-`reports/release.json` lists 20 non-blocking signal-integrity findings: 18
+`reports/release.json` lists 22 non-blocking signal-integrity findings: 20
 layer changes with no ground-return via within 0.64 mm and 2 parallel-run
 warnings. The layer changes are on REFOUT, SPI_MOSI/CS/SCK/MISO, ADC_DRDY,
-ADC_START, XIN, XOUT_R, RUN and SWDIO. The parallel-run findings are
-REFOUT/SPI_CS (5.6 mm at 0.182 mm) and USB_DP_C/USB_DN_C (5.1 mm at 0.168 mm);
-the USB pair is the intended coupled segment. No RTD_FP/RTD_SP/RTD_SN/RTD_FN,
-AIN1, AIN2 or VREF finding appears. The six RTD/input nets and VREF are on F.Cu
-only; QSPI is also on F.Cu.
+ADC_START, XOUT_R, RUN, QSPI_SD0/SD1/SD3 and DVDD_1V1. The parallel-run
+findings are SWCLK/VBUS (2.9 mm at 0.129 mm) and USB_DP_C/USB_DN_C (5.5 mm at
+0.168 mm); the USB pair is the intended coupled segment. No RTD_FP/RTD_SP/RTD_SN/
+RTD_FN, AIN1, AIN2 or VREF finding appears. The six RTD/input nets and VREF are
+on F.Cu only; QSPI is mostly on F.Cu, with SD0/SD1/SD3 changing layer.
 
-The XIN and USB layer changes are the ones an SI reviewer should look at first:
-XIN is a high-impedance crystal net and the USB pair changes layers on both
-sides. The USB path is not length-matched: the MCU-side and connector-side
-lengths add to 21.05 mm on DP and 19.32 mm on DN, a 1.73 mm difference. A return
-via next to each layer change would help; this was not added, because it is a
-layout change that needs an SI review first.
+The SWCLK/VBUS parallel run and the USB layer changes are the ones an SI
+reviewer should look at first: a 1 MHz clock beside the 5 V rail, and the USB
+pair changing layers on both sides. The USB path is not length-matched: the
+MCU-side and connector-side lengths add to 23.20 mm on DP and 21.35 mm on DN, a
+1.85 mm difference. A return via next to each layer change would help; this was
+not added, because it is a layout change that needs an SI review first.
 
 ## Synth validate warnings
 
@@ -254,33 +249,33 @@ measurement was made; this is the main item for the analog/SI review.
 
 ## Measured layout numbers
 
-- 373 track segments, 67 vias: 50 GND, 27 signal. 664.1 mm of track. 40 nets, 0
-  open. The router records 67 vias; the other ten are source ground stitching.
+- 372 track segments, 66 vias: 47 GND, 25 signal. 624.9 mm of track. 40 nets, 0
+  open. The router records 66 vias; the other six are source ground stitching.
 - Analog nets, all F.Cu only, no via:
 
 | Net | Length |
 | --- | --- |
-| RTD_FP | 11.02 mm |
-| RTD_SP | 4.17 mm |
-| AIN1 | 9.23 mm |
-| RTD_SN | 4.17 mm |
-| AIN2 | 14.05 mm |
-| RTD_FN | 8.32 mm |
-| VREF | 21.38 mm |
+| RTD_FP | 16.78 mm |
+| RTD_SP | 6.75 mm |
+| AIN1 | 12.39 mm |
+| RTD_SN | 6.94 mm |
+| AIN2 | 13.55 mm |
+| RTD_FN | 15.46 mm |
+| VREF | 18.06 mm |
 
-- SPI_SCK is 18.97 mm; SPI_MOSI/MISO/CS are 14.46/19.46/17.01 mm. All four SPI
+- SPI_SCK is 14.97 mm; SPI_MOSI/MISO/CS are 11.36/11.16/16.32 mm. All four SPI
   nets change layer. QSPI_SS/SCLK/SD0..SD3 are
-  11.23/4.80/3.23/9.21/7.39/6.22 mm; QSPI stays on F.Cu.
-- USB: the RP2350-side nets are 10.34 mm (DP) and 11.25 mm (DN); the
-  connector-side nets are 10.71 mm and 8.07 mm. Total path 21.05 mm (DP) and
-  19.32 mm (DN), a 1.73 mm mismatch, full speed. Both sides change layers; the
+  9.80/5.70/4.44/9.03/9.44/7.13 mm; SD0, SD1 and SD3 change layer.
+- USB: the RP2350-side nets are 11.87 mm (DP) and 11.37 mm (DN); the
+  connector-side nets are 11.33 mm and 9.98 mm. Total path 23.20 mm (DP) and
+  21.35 mm (DN), a 1.85 mm mismatch, full speed. Both sides change layers; the
   pair is not routed as a coupled pair and has no controlled impedance.
-- Crystal: XIN 12.24 mm, XOUT 4.99 mm, XOUT_R 7.12 mm. XIN and XOUT_R change
-  layer; that is in the SI warnings above.
-- 29 reference labels are hidden: C_AV1, C_AVF, C_CM1, C_CM2, C_D, C_DV, C_DV1,
-  C_DV2, C_IO, C_IO1, C_IO2, C_IO3, C_IO4, C_RV, C_VI, D1, D2, H1, H2, H3, J1,
-  R_AV, R_BIAS, R_CC2, R_DN, R_DP, R_S1, R_S2, R_X. They remain in the BOM, PnP
-  and schematic.
+- Crystal: XIN 13.52 mm, XOUT 7.46 mm, XOUT_R 10.17 mm. XOUT_R changes layer;
+  that is in the SI warnings above.
+- 32 reference labels are hidden: C_AV1, C_AVF, C_CM1, C_CM2, C_D, C_DV, C_DV1,
+  C_DV2, C_IO, C_IO1, C_IO2, C_IO3, C_IO4, C_L2, C_RO, C_RV, C_VI, D1, D2, H1,
+  H2, H3, J1, J3, R_AV, R_BIAS, R_CC2, R_DN, R_DP, R_S1, R_S2, R_X. They remain
+  in the BOM, PnP and schematic.
 - Board outline and stackup above; 53 footprints.
 
 ## Left to a human
@@ -288,11 +283,11 @@ measurement was made; this is the main item for the analog/SI review.
 Nothing below is signed off. The list is deliberately blunt.
 
 - **SI/PI/RF review (designated reviewer)**: the 24-bit analog layout, the
-  single ground plane, the 21.38 mm VREF run from U3 to C_RV, the RC filter
+  single ground plane, the 18.06 mm VREF run from U3 to C_RV, the RC filter
   against the chosen ADC data rate, the IDAC output's 10 nF load and settling,
   the PGA common-mode range at the chosen gain, the unused-input termination, the
-  18 layer-change warnings and the 1.73 mm USB length mismatch. None of these
-  were simulated or measured.
+  20 layer-change warnings, the SWCLK/VBUS parallel run and the 1.85 mm USB
+  length mismatch. None of these were simulated or measured.
 - **Metrology/analog**: the measurement is not ratiometric. The IDAC's absolute
   accuracy and drift, the REF5025 grade and drift, the 1 k filter resistors and
   the PT100 wiring resistance set the accuracy; there is no calibration or
@@ -302,9 +297,9 @@ Nothing below is signed off. The list is deliberately blunt.
   TVS; the shield is tied directly to GND; D1/D2 have no MPN. USB-C and ESD
   compliance were not checked.
 - **Mechanical**: the measured margins are in the table above. In short, the
-  mounting holes leave 2.25 to 2.83 mm of material around a 2.5 mm hole, the
-  bottom connectors are 0.78 mm from the edge, J1 is 1.27 mm from the top edge,
-  and J1 is 11.95 mm right of the board centre. J1 centring, the enclosure,
+  mounting holes leave 1.95 to 2.34 mm of material around a 2.5 mm hole, the
+  bottom connectors are 0.80 mm from the edge, J1 is 1.27 mm from the top edge,
+  and J1 is 5.50 mm right of the board centre. J1 centring, the enclosure,
   screw-head clearance, connector overhang and header orientation were not
   checked. Synth places no board-name or revision silk.
 - **Test points**: none are fitted. The 12-pad set was tried on the earlier
