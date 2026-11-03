@@ -70,6 +70,9 @@ pub fn part_to_toml(part: &Part, header: &[&str]) -> String {
         if let Some(v) = c.max_current_ma {
             let _ = writeln!(out, "max_current_ma = {v}");
         }
+        if let Some(v) = c.power_budget {
+            let _ = writeln!(out, "power_budget = {v}");
+        }
         for (key, value) in [
             ("breakdown_voltage_v", c.breakdown_voltage_v),
             ("breakdown_voltage_min_v", c.breakdown_voltage_min_v),
@@ -233,7 +236,7 @@ impl PinCapability {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{Lifecycle, Part, PartId, PinNumber};
+    use crate::{Lifecycle, OperatingConditions, Part, PartId, PinNumber};
 
     fn sample() -> Part {
         Part {
@@ -310,6 +313,22 @@ mod tests {
         let text = part_to_toml(&sample(), &[]);
         assert!(text.contains("source = \"generated\""), "{text}");
         assert!(text.contains("reviewed_by = \"\""), "{text}");
+    }
+
+    #[test]
+    fn power_budget_survives_overlay_round_trip() {
+        let mut part = sample();
+        part.operating_conditions = Some(OperatingConditions {
+            power_budget: Some(false),
+            ..Default::default()
+        });
+        let text = part_to_toml(&part, &[]);
+        assert!(text.contains("power_budget = false"), "{text}");
+        let back: Part = toml::from_str(&text).expect("emitted TOML must parse");
+        assert_eq!(
+            back.operating_conditions.as_ref().and_then(|c| c.power_budget),
+            Some(false)
+        );
     }
 
     #[test]
