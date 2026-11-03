@@ -179,6 +179,27 @@ copper and drills unchanged in that part (one footprint was diffed; the others w
 shows the same warnings. These are not hidden: the `reports/` DRC file lists all
 47. A human should confirm this disposition.
 
+## Status against Synth main's return-via gate
+
+The committed evidence was produced at source revision `ee3027c6`, before
+main's current router was merged into this branch. Main's router now treats
+layer changes on fast-edge nets as blocking unless a ground-return via sits
+within 0.80 mm. Re-running `check.sh` on the merged branch (merge commit
+`efa65151`) ends in routing state `validation_failed`, with 12 blocking
+findings of the form "signal via at (x, y) mm has no ground return via within
+0.80 mm, and no spot in the GND pour holds one clear of the pads, vias and
+tracks beside it". The vias are at (15.47, 26.34), (16.60, 24.77),
+(14.53, 28.93), (15.50, 23.66), (25.46, 30.00), (25.04, 24.91),
+(25.32, 23.89), (23.95, 8.05), (27.55, 27.30), (25.51, 28.31),
+(29.11, 27.31) and (30.04, 27.20). KiCad DRC on that run still showed 0 errors,
+0 unconnected items and the same 47 library-comparison warnings. The result is
+deterministic.
+
+So the committed board and reports have not been regenerated under main's
+current router, and a fresh export of this source will not pass that gate until
+the return vias are added or the nets are classified. This is the same gap as
+the 15 layer-change warnings below. It is open work, not a pass.
+
 ## Synth signal-integrity warnings
 
 `reports/release.json` lists 18 non-blocking signal-integrity findings: 15
