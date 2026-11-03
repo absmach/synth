@@ -9,7 +9,7 @@ A net belongs to a `netclass` that declares `layers`, and the routed copper puts
 
 The export writes the pin as a KiCad custom DRC rule and the router is asked to keep the class on its layers, but neither of those is evidence that it did. This check reads the routed copper. The case it exists for is a controlled-impedance pair pinned to the outer layer its width and gap were derived for: routed on an inner layer it is stripline, the derived geometry no longer gives the target impedance, and nothing else would say so.
 
-A via is not judged by itself. A through via spans every layer, and a net routed only on its allowed layers uses one only to change between them, which its tracks already show.
+A via on a class with two or more layers is how the net changes between them, which its tracks already show. A class pinned to a single layer has no layer to change to, and a through via puts copper on every layer, so any via on such a net is reported too.
 
 ## Minimal reproduction
 
