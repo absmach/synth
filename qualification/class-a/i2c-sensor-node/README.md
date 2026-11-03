@@ -103,6 +103,10 @@ The release report ([`export/release.json`](export/release.json)) lists 12 `W-SY
 
 Synth's release gate holds a board back for a missing return via only on a net that rides a fast edge, and it classified all nine nets as not doing so. The router looks for a ground via beside each layer change and reports the places where no spot in the ground pour is clear of pads, vias and tracks. Both outer layers carry a GND pour, so the return current on these nets stays on a continuous ground plane.
 
+## Human review
+
+Every part of the board is recorded as reviewed by JeffMboya, with the review date and the datasheet or product page, in the part files of [`reproduce/user-registry/`](reproduce/user-registry/) (`reviewed_by`, `reviewed_at`, `datasheet_url`). The release report ([`export/release.json`](export/release.json)) lists every part as reviewed.
+
 ## Review points (Sammy, case 2) and the state of each
 
 | Point | State |
