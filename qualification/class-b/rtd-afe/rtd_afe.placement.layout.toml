@@ -411,6 +411,12 @@ hide = true
 [labels.C_L2]
 hide = true
 
+[labels.C_FL]
+hide = true
+
+[labels.R_RST]
+hide = true
+
 [labels.J3]
 hide = true
 
