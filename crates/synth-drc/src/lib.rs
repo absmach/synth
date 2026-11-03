@@ -416,21 +416,58 @@ mod tests {
         assert!(critical.iter().any(|n| n == "UNCLASSIFIED"), "{critical:?}");
     }
 
-    /// A `slow` class cannot quiet a net whose own pins prove a fast edge.
+    /// A `slow` class cannot quiet a net whose own pins prove a fast edge:
+    /// clock, differential, RF, analog, crystal and inductor nets stay
+    /// critical however they are declared.
     #[test]
-    fn a_slow_class_does_not_downgrade_a_clock() {
+    fn a_slow_class_does_not_downgrade_a_fast_net() {
         let board = board_from_source(
             r#"board "returns" { layers 2
                 netclass "QUIET" { edge_rate slow }
                 component U1: mcu "rp2350"
                 component X1: crystal "osc_smd_25mhz"
+                component Y1: crystal "xtal_generic"
+                component L1: inductor "l_generic_1210" value "10uH"
+                component J1: connector "micro_usb_b"
+                component ANT1: antenna "ant_chip_2g4"
+                component A1: opamp "mcp6022_dual"
+                component C1: capacitor "c_generic_0603" value "100nF"
                 component R1: resistor "r_generic_0603" value "10k"
-                net "XIN" class "QUIET" { U1.xin X1.p1 }
                 net "CLK_OUT" class "QUIET" { X1.out R1.p1 }
+                net "USB_DP" class "QUIET" { J1.dp U1.gp1 }
+                net "USB_DN" class "QUIET" { J1.dn U1.gp2 }
+                net "RF_FEED" class "QUIET" { ANT1.feed C1.p1 }
+                net "SENSE" class "QUIET" { A1.out_a R1.p2 }
+                net "XIN" class "QUIET" { U1.xin Y1.p1 }
+                net "SW_NODE" class "QUIET" { L1.p1 C1.p2 }
             }"#,
         );
         let critical = return_path_critical_net_names(&board);
-        assert!(critical.iter().any(|n| n == "CLK_OUT"), "{critical:?}");
+        for net in [
+            "CLK_OUT", "USB_DP", "USB_DN", "RF_FEED", "SENSE", "XIN", "SW_NODE",
+        ] {
+            assert!(critical.iter().any(|n| n == net), "{net}: {critical:?}");
+        }
+    }
+
+    /// A declared differential pair holds both legs critical even when the
+    /// pins are typed plain and the class claims a slow edge.
+    #[test]
+    fn a_slow_class_does_not_downgrade_a_declared_diff_pair() {
+        let board = board_from_source(
+            r#"board "returns" { layers 2
+                netclass "QUIET" { edge_rate slow }
+                component U1: mcu "rp2350"
+                component R1: resistor "r_generic_0603" value "10k"
+                component R2: resistor "r_generic_0603" value "10k"
+                net "PAIR_P" class "QUIET" { U1.gp0 R1.p1 }
+                net "PAIR_N" class "QUIET" { U1.gp1 R2.p1 }
+                diff_pair "PAIR_P" "PAIR_N" { impedance 90ohm }
+            }"#,
+        );
+        let critical = return_path_critical_net_names(&board);
+        assert!(critical.iter().any(|n| n == "PAIR_P"), "{critical:?}");
+        assert!(critical.iter().any(|n| n == "PAIR_N"), "{critical:?}");
     }
 
     /// A bare crystal's terminals are passive and the RP2350's `xin` and `xout`
