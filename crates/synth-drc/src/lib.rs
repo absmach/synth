@@ -369,11 +369,12 @@ mod tests {
         assert!(!ground.iter().any(|n| n == "SIGNAL"), "{ground:?}");
     }
 
-    /// A layer change only costs a fast edge a loop, so the nets a missing return
-    /// via must hold a board back for are the ones that carry one: a clock, a
-    /// differential pin, a switching node. A plain GPIO line is not one.
+    /// An unclassified net is critical. A generic GPIO pin is typed like any
+    /// other output, so it proves nothing about the edge rate; the same pin
+    /// can carry a fast SPI, USB or timer signal. Only a class that declares
+    /// `edge_rate slow` may be downgraded to an advisory.
     #[test]
-    fn only_fast_nets_are_critical_for_a_return_via() {
+    fn an_unclassified_net_is_critical_for_a_return_via() {
         let board = board_from_source(
             r#"board "returns" { layers 2
                 component U1: mcu "rp2350"
@@ -389,7 +390,47 @@ mod tests {
         let critical = return_path_critical_net_names(&board);
         assert!(critical.iter().any(|n| n == "CLK_OUT"), "{critical:?}");
         assert!(critical.iter().any(|n| n == "SW_NODE"), "{critical:?}");
-        assert!(!critical.iter().any(|n| n == "SLOW_GPIO"), "{critical:?}");
+        assert!(critical.iter().any(|n| n == "SLOW_GPIO"), "{critical:?}");
+    }
+
+    /// The declaration the reviewer asked for: a class saying its nets change
+    /// slowly is the one piece of evidence that allows an advisory. A fast
+    /// class, and a net in no class, stay critical.
+    #[test]
+    fn a_net_class_declaring_a_slow_edge_is_the_only_downgrade() {
+        let board = board_from_source(
+            r#"board "returns" { layers 2
+                netclass "I2C" { edge_rate slow }
+                netclass "SPI" { edge_rate fast }
+                component U1: mcu "rp2350"
+                component C1: capacitor "c_generic_0603" value "100nF"
+                component R1: resistor "r_generic_0603" value "10k"
+                net "I2C_SDA" class "I2C" { U1.gp0 C1.p1 }
+                net "SPI_SCK" class "SPI" { U1.gp1 C1.p2 }
+                net "UNCLASSIFIED" { U1.gp2 R1.p1 }
+            }"#,
+        );
+        let critical = return_path_critical_net_names(&board);
+        assert!(!critical.iter().any(|n| n == "I2C_SDA"), "{critical:?}");
+        assert!(critical.iter().any(|n| n == "SPI_SCK"), "{critical:?}");
+        assert!(critical.iter().any(|n| n == "UNCLASSIFIED"), "{critical:?}");
+    }
+
+    /// A `slow` class cannot quiet a net whose own pins prove a fast edge.
+    #[test]
+    fn a_slow_class_does_not_downgrade_a_clock() {
+        let board = board_from_source(
+            r#"board "returns" { layers 2
+                netclass "QUIET" { edge_rate slow }
+                component U1: mcu "rp2350"
+                component X1: crystal "osc_smd_25mhz"
+                component R1: resistor "r_generic_0603" value "10k"
+                net "XIN" class "QUIET" { U1.xin X1.p1 }
+                net "CLK_OUT" class "QUIET" { X1.out R1.p1 }
+            }"#,
+        );
+        let critical = return_path_critical_net_names(&board);
+        assert!(critical.iter().any(|n| n == "CLK_OUT"), "{critical:?}");
     }
 
     /// A bare crystal's terminals are passive and the RP2350's `xin` and `xout`
@@ -410,7 +451,8 @@ mod tests {
         let critical = return_path_critical_net_names(&board);
         assert!(critical.iter().any(|n| n == "XIN"), "{critical:?}");
         assert!(critical.iter().any(|n| n == "XOUT"), "{critical:?}");
-        assert!(!critical.iter().any(|n| n == "SLOW_GPIO"), "{critical:?}");
+        // Unclassified, so it blocks too: a plain pin does not prove a slow edge.
+        assert!(critical.iter().any(|n| n == "SLOW_GPIO"), "{critical:?}");
     }
 
     fn load_board(path: &str) -> Board {
@@ -703,6 +745,7 @@ mod tests {
             plane: false,
             max_length: None,
             max_skew: None,
+            edge_rate: None,
             source_span: synth_diagnostics::Span::new(0, 0),
         });
         let net = board.nets[0].id;
@@ -748,6 +791,7 @@ mod tests {
             plane: false,
             max_length: None,
             max_skew: None,
+            edge_rate: None,
             source_span: synth_diagnostics::Span::new(0, 0),
         });
         let stackup = StackupProfile::for_board(&board);
@@ -1006,6 +1050,7 @@ mod tests {
             via_drill: None,
             max_length: None,
             max_skew: None,
+            edge_rate: None,
             source_span: synth_diagnostics::Span::new(0, 0),
         });
         let stackup = StackupProfile::for_board(&board);
@@ -1077,6 +1122,7 @@ mod tests {
             via_drill: None,
             max_length: Some(synth_ir::Length::from_mm(10.0)),
             max_skew: None,
+            edge_rate: None,
             source_span: synth_diagnostics::Span::new(0, 0),
         });
         let net = board.nets[0].id;
@@ -1105,6 +1151,7 @@ mod tests {
             plane: false,
             max_length: None,
             max_skew: Some(synth_ir::Length::from_mm(1.0)),
+            edge_rate: None,
             via_diameter: None,
             via_drill: None,
             source_span: synth_diagnostics::Span::new(0, 0),
@@ -1151,6 +1198,7 @@ mod tests {
             plane: false,
             max_length: None,
             max_skew: None,
+            edge_rate: None,
             via_diameter: None,
             via_drill: None,
             source_span: synth_diagnostics::Span::new(0, 0),

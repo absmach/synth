@@ -721,6 +721,50 @@ mod tests {
         );
     }
 
+    /// The report is the only record an operator sees after a run. A blocking
+    /// return-via finding and an advisory one must stay in their own fields,
+    /// so a consumer cannot mistake the advisory for a pass or the blocker for
+    /// a note.
+    #[test]
+    fn blocking_and_advisory_return_via_findings_serialize_separately() {
+        let report = RouteReport {
+            schema_version: crate::ROUTE_REPORT_SCHEMA.to_string(),
+            state: RouteState::ValidationFailed,
+            engine: RouterEngine::KiCadRoutingTools,
+            capability: None,
+            provenance: RouterProvenance::default(),
+            statistics: RouteStatistics::default(),
+            artifacts: RouteArtifacts::default(),
+            validation: Some(ValidationSummary {
+                fabrication_ready: false,
+                topology: crate::validate::TopologyReport::default(),
+                connectivity: crate::validate::ConnectivityReport::default(),
+                kicad_drc: None,
+                blocking_reasons: vec!["net CLK changes layers with no ground return via".into()],
+                unavailable_checks: Vec::new(),
+                advisories: vec!["net I2C changes layers with no ground return via".into()],
+            }),
+            escape: Vec::new(),
+            recommended_routing_order: Vec::new(),
+            failure: None,
+        };
+
+        let text = serde_json::to_string(&report).expect("serialise");
+        let value: serde_json::Value = serde_json::from_str(&text).expect("value");
+        assert_eq!(
+            value["validation"]["blocking_reasons"][0],
+            "net CLK changes layers with no ground return via"
+        );
+        assert_eq!(
+            value["validation"]["advisories"][0],
+            "net I2C changes layers with no ground return via"
+        );
+        let back: RouteReport = serde_json::from_str(&text).expect("deserialise");
+        let validation = back.validation.expect("validation survives the round trip");
+        assert_eq!(validation.blocking_reasons.len(), 1);
+        assert_eq!(validation.advisories.len(), 1);
+    }
+
     #[test]
     fn a_report_discards_paths_that_do_not_exist() {
         // A report claiming an artifact exists when it does not is worse

@@ -1394,7 +1394,7 @@ fn capability_descriptor() -> serde_json::Value {
                 "notes": "No fabricator presets are shipped; every value is declared by the design. A diff_pair impedance derives its net class trace width (and, for a true pair, its gap) from the first copper and insulator layers."
             },
             "routing_constraints": {
-                "netclass": ["trace_width", "clearance", "color", "impedance", "current", "plane", "max_length", "max_skew", "via_diameter", "via_drill"],
+                "netclass": ["trace_width", "clearance", "color", "impedance", "current", "plane", "max_length", "max_skew", "via_diameter", "via_drill", "edge_rate"],
                 "diff_pair": ["impedance", "max_skew", "couple"],
                 "keepout": ["radius"],
                 "component": ["placement_hint", "escape"],
@@ -5943,10 +5943,13 @@ mod tests {
         .expect("request");
         let _ = std::fs::remove_dir_all(&dir);
         assert_eq!(request.ground_nets, vec!["POWER_RETURN".to_string()]);
-        // A GPIO into a capacitor carries no fast edge, so the request names the
-        // fast nets (here none) and the router lists SIGNAL's layer change as an
-        // advisory instead of falling back to holding every net to a return via.
-        assert_eq!(request.return_via_critical_nets, Some(Vec::new()));
+        // SIGNAL is in no netclass and its GPIO pin could carry any edge rate,
+        // so the request holds it to a return via rather than downgrading it.
+        // Only a netclass declaring `edge_rate slow` is listed as an advisory.
+        assert_eq!(
+            request.return_via_critical_nets,
+            Some(vec!["SIGNAL".to_string()])
+        );
     }
 
     /// A stage that writes more than a pipe holds must still be read.

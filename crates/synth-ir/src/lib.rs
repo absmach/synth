@@ -33,8 +33,8 @@ pub mod units;
 pub(crate) mod test_support;
 
 pub use board::{
-    Board, Component, ComponentId, Couple, DiffPair, EscapeIntent, EscapeMethod, Group, Keepout,
-    Net, NetClass, NetEndpoint, NetId, Note, PinId, PlacementConstraint, PlacementEdge,
+    Board, Component, ComponentId, Couple, DiffPair, EdgeRate, EscapeIntent, EscapeMethod, Group,
+    Keepout, Net, NetClass, NetEndpoint, NetId, Note, PinId, PlacementConstraint, PlacementEdge,
     PlacementPriority, PlacementRegion, PlacementSide, ProcessRequirement, SchematicOverflow,
     SchematicPaper, Stackup, StackupLayer, Variant,
 };

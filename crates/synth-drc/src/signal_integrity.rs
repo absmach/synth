@@ -584,17 +584,44 @@ pub(crate) fn net_name_or_pin_is_ground(board: &Board, net: &Net) -> bool {
 }
 
 /// Names of the nets whose layer changes the return-path repair must not leave
-/// without a ground via: the nets a fast edge or a sensitive signal rides on.
+/// without a ground via.
 ///
-/// A net is one when a pin on it is differential, a clock, RF or analog; when it
-/// joins a bare crystal's terminal; when it is half of a declared `diff_pair`;
-/// or when it joins an inductor, which makes it a switching node. Any other signal changes layers with a slow edge, where
-/// the loop a missing return via leaves costs little, so a layer change there is
-/// an advisory and not a reason to hold the board back.
+/// The only evidence that a net changes slowly is the design saying so: a
+/// `netclass` with `edge_rate slow`. Pin types cannot supply it, because a
+/// generic `output` or `bidirectional` pin carries a fast SPI, USB or timer
+/// edge exactly as readily as a slow GPIO, and a net with no class at all is
+/// even less known. So every signal net whose class does not declare a slow
+/// edge is critical, and the unknown case blocks. Ground nets are the return
+/// path themselves and are not signals that need one.
+///
+/// A slow declaration is not an override of the pin evidence: a clock, a
+/// differential pair, an RF or analog net or a switching node on an inductor
+/// stays critical whatever its class says, because those edges are fast by
+/// construction.
 #[must_use]
 pub fn return_path_critical_net_names(board: &Board) -> Vec<String> {
     use synth_registry::ElectricalType;
-    let mut critical: std::collections::BTreeSet<NetId> = std::collections::BTreeSet::new();
+    let slow: std::collections::BTreeSet<&str> = board
+        .netclasses
+        .iter()
+        .filter(|class| class.edge_rate == Some(synth_ir::EdgeRate::Slow))
+        .map(|class| class.name.as_str())
+        .collect();
+    // Ground is the return path itself, not a signal that needs one. It is
+    // found by topology and pin name, not by the net's name: `POWER_RETURN`
+    // says nothing.
+    let ground = ground_net_ids(board);
+    let mut critical: std::collections::BTreeSet<NetId> = board
+        .nets
+        .iter()
+        .filter(|net| !ground.contains(&net.id))
+        .filter(|net| {
+            net.netclass
+                .as_deref()
+                .is_none_or(|name| !slow.contains(name))
+        })
+        .map(|net| net.id)
+        .collect();
     for net in &board.nets {
         let rides_fast = net.endpoints.iter().any(|endpoint| {
             let Some(component) = board.component(endpoint.component) else {
