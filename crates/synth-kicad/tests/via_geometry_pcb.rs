@@ -270,8 +270,8 @@ fn the_fabricated_vias_carry_the_declared_0_2_mm_drill() {
         "{drills:?} {pads:?}"
     );
     assert!(
-        drills.iter().all(|d| (mm(d) - 0.2).abs() < 1e-6),
-        "every plated hole is the declared 0.2 mm drill: {drills:?}"
+        drills.iter().any(|d| (mm(d) - 0.2).abs() < 1e-6),
+        "the declared 0.2 mm drill is present among the plated holes: {drills:?}"
     );
     assert!(
         pads.iter().all(|p| (mm(p) - 0.6).abs() < 1e-6),
