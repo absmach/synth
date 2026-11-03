@@ -145,12 +145,13 @@ fn run_rounds(
         let board = PcbBoard::parse(&filled).map_err(|e| e.to_string())?;
         let text = std::fs::read_to_string(candidate)
             .map_err(|e| format!("could not read {}: {e}", candidate.display()))?;
-        let fallback = declared_via_size(candidate);
+        let fallback = declared_via_size(candidate, ground.primary().unwrap_or("GND"))
+            .unwrap_or((DEFAULT_VIA_SIZE_NM, DEFAULT_VIA_DRILL_NM));
         let plan = plan_all_with(
             &board,
             return_via_window_mm(&text, &board),
             ground,
-            fallback,
+            Some(fallback),
         );
         if plan.vias.is_empty() {
             return Ok(TieOutcome {
@@ -510,6 +511,9 @@ pub fn plan_all_with(
 #[derive(Debug, Clone, Default)]
 pub struct Ground {
     named: BTreeSet<String>,
+    /// The first net the caller listed, which names the class a stitching
+    /// via takes its size from.
+    primary: Option<String>,
     /// The nets that must keep a return via. `None` is every signal net, which
     /// is the strict reading; `Some` lets any other net go without one as an
     /// advisory.
@@ -521,8 +525,15 @@ impl Ground {
     pub fn new(names: &[String]) -> Self {
         Self {
             named: names.iter().cloned().collect(),
+            primary: names.first().cloned(),
             critical: None,
         }
+    }
+
+    /// The first ground net the caller listed, if any.
+    #[must_use]
+    pub fn primary(&self) -> Option<&str> {
+        self.primary.as_deref()
     }
 
     /// Only `critical` nets are held to a return via: a layer change on any
@@ -973,13 +984,35 @@ fn copper_gap(first: &PieceShape, second: &PieceShape) -> f64 {
 /// so an island repair on a board that declared a smaller drill uses it
 /// instead of the 0.6 / 0.3 mm fallback. Returns None when the file is missing
 /// or unreadable.
-fn declared_via_size(candidate: &Path) -> Option<(i64, i64)> {
+fn declared_via_size(candidate: &Path, net: &str) -> Option<(i64, i64)> {
     let pro = candidate.with_extension("kicad_pro");
     let text = std::fs::read_to_string(&pro).ok()?;
     let value: serde_json::Value = serde_json::from_str(&text).ok()?;
-    let classes = value.get("net_settings")?.get("classes")?.as_array()?;
+    let ns = value.get("net_settings")?;
+    let classes = ns.get("classes")?.as_array()?;
+    let mut class_name = "Default".to_string();
+    if let Some(patterns) = ns.get("netclass_patterns").and_then(|v| v.as_array()) {
+        for pat in patterns {
+            if let (Some(name), Some(pattern)) = (
+                pat.get("netclass").and_then(|v| v.as_str()),
+                pat.get("pattern").and_then(|v| v.as_str()),
+            ) {
+                if net == pattern || net.contains(pattern) {
+                    class_name = name.to_string();
+                    break;
+                }
+            }
+        }
+    }
     for class in classes {
-        if class.get("name")?.as_str()? == "Default" {
+        if class.get("name").and_then(|v| v.as_str()) == Some(&class_name) {
+            let dia = class.get("via_diameter")?.as_f64()?;
+            let drill = class.get("via_drill")?.as_f64()?;
+            return Some(((dia * 1_000_000.0) as i64, (drill * 1_000_000.0) as i64));
+        }
+    }
+    for class in classes {
+        if class.get("name").and_then(|v| v.as_str()) == Some("Default") {
             let dia = class.get("via_diameter")?.as_f64()?;
             let drill = class.get("via_drill")?.as_f64()?;
             return Some(((dia * 1_000_000.0) as i64, (drill * 1_000_000.0) as i64));

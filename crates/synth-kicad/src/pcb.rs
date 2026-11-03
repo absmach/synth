@@ -206,7 +206,14 @@ pub fn build_pcb(
             project,
             // Past every stitch via the exporter itself places, so the uuids stay distinct.
             FIXED_VIA_UUID_BASE + idx,
-            stitch_via_size(board, None),
+            stitch_via_size(
+                board,
+                board
+                    .nets
+                    .iter()
+                    .find(|n| n.name == via.net)
+                    .and_then(|n| n.netclass.as_deref()),
+            ),
         ));
     }
 
