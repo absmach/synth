@@ -1184,7 +1184,7 @@ fn execute_validate(args: &Value, default_registry: Option<&Path>) -> Result<Val
                 // `synth_validate` gets no feedback on layout quality
                 // until it exports, by which point the sheet is built.
                 let global = synth_layout::layout(board);
-                let sheets = synth_layout::sheets::layout_sheets(board, global);
+                let sheets = synth_layout::sheets::layout_sheets(board, global, None);
                 let mut schem = synth_kicad::check_schem_erc_sheets(board, &sheets);
                 synth_kicad::attach_schem_erc_locations(&mut schem, board, file_name);
                 diagnostics.extend(schem);
@@ -2744,11 +2744,13 @@ fn execute_review_schematic(
     let mut diagnostics = compiled.diagnostics;
     diagnostics.extend(synth_validate::run_erc(&compiled.board, &file_name));
 
-    let layout = synth_layout::layout_with_sidecar(
+    let sidecar_path = resolve_schematic_sidecar(args, &file_name);
+    let layout = synth_layout::layout_with_sidecar(&compiled.board, sidecar_path.as_deref());
+    let sheets_layout = synth_layout::sheets::layout_sheets(
         &compiled.board,
-        resolve_schematic_sidecar(args, &file_name).as_deref(),
+        layout.clone(),
+        sidecar_path.as_deref(),
     );
-    let sheets_layout = synth_layout::sheets::layout_sheets(&compiled.board, layout.clone());
     let mut schem = synth_kicad::check_schem_erc_sheets(&compiled.board, &sheets_layout);
     synth_kicad::attach_schem_erc_locations(&mut schem, &compiled.board, &file_name);
     diagnostics.extend(schem);
@@ -3266,7 +3268,8 @@ fn execute_export(args: &Value, default_registry: Option<&Path>) -> Result<Value
     // file does not contain.
     let aesthetic = {
         let global = synth_layout::layout_with_sidecar(&board, schematic_sidecar.as_deref());
-        let sheets = synth_layout::sheets::layout_sheets(&board, global);
+        let sheets =
+            synth_layout::sheets::layout_sheets(&board, global, schematic_sidecar.as_deref());
         let mut found = synth_kicad::check_schem_erc_sheets(&board, &sheets);
         // Whole diagnostics, not just `{code, title}`: a title alone
         // ("decoupling capacitor separation") does not say *which*

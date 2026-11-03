@@ -3230,7 +3230,11 @@ fn validate(
                     // low fill for a drawing that is fine.
                     let global =
                         synth_layout::layout_with_sidecar(board, schematic_sidecar.as_deref());
-                    let sheets = synth_layout::sheets::layout_sheets(board, global);
+                    let sheets = synth_layout::sheets::layout_sheets(
+                        board,
+                        global,
+                        schematic_sidecar.as_deref(),
+                    );
                     let mut schem = synth_kicad::check_schem_erc_sheets(board, &sheets);
                     synth_kicad::attach_schem_erc_locations(&mut schem, board, &file);
                     diagnostics.extend(schem);
@@ -4165,7 +4169,7 @@ fn export_kicad(
     // Thresholds come from the design's `<design>.synth.erc.toml`
     // `[schematic]` section when present (Phase E), else the defaults.
     let pre_layout = synth_layout::layout_with_sidecar(board, sidecar);
-    let pre_sheets = synth_layout::sheets::layout_sheets(board, pre_layout.clone());
+    let pre_sheets = synth_layout::sheets::layout_sheets(board, pre_layout.clone(), sidecar);
     let mut schem_diags = synth_kicad::check_schem_erc_sheets_with_config(
         board,
         &pre_sheets,

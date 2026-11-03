@@ -475,7 +475,7 @@ mod tests {
             vec![],
         );
         let global = layout_at(&[(0, 50.0, 50.0), (1, 100.0, 50.0)]);
-        let sheets = layout_sheets(&b, global);
+        let sheets = layout_sheets(&b, global, None);
         assert_eq!(sheets.len(), 1, "small boards keep the single-file path");
         assert_eq!(sheets[0].name, None);
     }
@@ -489,7 +489,7 @@ mod tests {
             vec![],
         );
         let global = layout_at(&[(0, 50.0, 50.0), (1, 900.0, 50.0), (2, 1700.0, 50.0)]);
-        let sheets = layout_sheets(&b, global);
+        let sheets = layout_sheets(&b, global, None);
         assert_eq!(
             sheets.len(),
             1,
@@ -517,7 +517,7 @@ mod tests {
             (2, 1400.0, 50.0),
             (3, 1500.0, 50.0),
         ]);
-        let sheets = layout_sheets(&b, global);
+        let sheets = layout_sheets(&b, global, None);
         assert_eq!(sheets.len(), 3, "root + A + B");
         assert_eq!(sheets[0].name, None);
         let names: Vec<_> = sheets[1..].iter().map(|s| s.name.clone()).collect();
@@ -541,8 +541,8 @@ mod tests {
             vec![],
         );
         let mk = || layout_at(&[(0, 50.0, 50.0), (1, 800.0, 50.0), (2, 900.0, 50.0)]);
-        let a = layout_sheets(&b, mk());
-        let z = layout_sheets(&b, mk());
+        let a = layout_sheets(&b, mk(), None);
+        let z = layout_sheets(&b, mk(), None);
         assert_eq!(a, z, "split output must be byte-deterministic");
     }
 
@@ -624,7 +624,7 @@ mod tests {
             .board
             .unwrap();
         let global = synth_layout::layout(&board);
-        let sheets = synth_layout::sheets::layout_sheets(&board, global);
+        let sheets = synth_layout::sheets::layout_sheets(&board, global, None);
         assert!(
             sheets.len() > 1,
             "board must be large enough to split, got {} sheet(s)",
@@ -695,7 +695,7 @@ mod tests {
         // board genuinely splits and this test exercises a multi-sheet
         // root rather than a single sheet.
         let global = layout_at(&[(0, 50.0, 50.0), (1, 1400.0, 50.0), (2, 1500.0, 50.0)]);
-        let sheets = layout_sheets(&b, global);
+        let sheets = layout_sheets(&b, global, None);
         assert!(sheets.len() > 1, "precondition: the board splits");
         let project = crate::uuid_v5::project_namespace(&b.name);
         let root_uuid = derive_entity_uuid(&project, "sheet", "root");
