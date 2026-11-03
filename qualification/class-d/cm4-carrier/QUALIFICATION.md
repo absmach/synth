@@ -42,7 +42,7 @@ cargo test -p synth-cli --test cm4_carrier_board
 | A7 | `synth place` completes | `synth place $B/cm4_carrier.synth` | **Blocked**: exits 1 with no placement (the automatic placer cannot place 185 components with ten edge-hard connectors). The committed placement sidecar pins every component |
 | A8 | Export completes | `synth export-kicad ... --allow-incomplete --router free-routing` | **Partial**: the 45-minute budget wrote the four-sheet schematic at about 28 minutes, then ran out before the PCB. `kicad/` has the schematic; no `.kicad_pcb` |
 | A9 | ERC on the exported schematic | `kicad-cli sch erc` | **Fail (1 error, 66 warnings)** in `reports/cm4_carrier.kicad-erc.json`. The single error is the `RTC_BAT` power flag (`#PWR2153`). The source adds `power "RTC_BAT" 3v`; export16 is the re-run |
-| A10 | DRC on the exported PCB | `kicad-cli pcb drc` | Not run: no PCB was exported |
+| A10 | DRC on the exported PCB | `kicad-cli pcb drc` | **Unrouted**: 484 violations, 359 unconnected items on `kicad/cm4_carrier.kicad_pcb`. The board is placed, not routed |
 | A11 | `synth check` | `synth check --json` | **Fail**: `source: fail` because the `validate` child times out at 120 s; `drc: unknown` |
 | A12 | `synth check --fab` | `synth check --fab --json` | **Fail**: `source: fail`, `drc: unknown`, `manufacturing: unknown` |
 | A13 | Determinism | two exports of the same inputs | Not run: no export completed |
@@ -88,7 +88,7 @@ reviewer. No reviewer is invented.
 | `synth check` passes | **blocked** | A11: `synth validate` does not finish; `check` reports `source: fail`, `drc: unknown` |
 | `--fab` recorded honestly | **blocked** | A12: same upstream block; no fab package exists |
 | ERC zero errors with `kicad-cli` | **not met (1 error)** | A9: the only error is `RTC_BAT`; export16 is the re-run with the power declaration |
-| DRC report committed | **blocked** | A10: no PCB exported |
+| DRC report committed | **done (unrouted)** | A10: `reports/cm4_carrier.kicad-drc.json`, 484 violations / 359 unconnected. A routed-board DRC is still missing |
 | Every used CM4 pin traced to a datasheet row | **done** | `agent-run/PIN_MAPPING.md` (143 used pins, Table 6 page per pin); test A4 |
 | Rail table with source, load, limit, margin | **done** | `agent-run/POWER_BUDGET.md`; E-SYNTH-POWER-009/010 clean (A3) |
 | README "Not verified by Synth" | **done** | `README.md` |
