@@ -224,6 +224,12 @@ pub struct KiCadRoutingToolsOptions {
     pub same_net_pad_clearance_mm: f64,
     /// Enforce the board's declared minimum track/via sizes strictly.
     pub strict_sizes: bool,
+    /// The engine's net ordering (`mps`, `inside_out`, `original`, `bus`), or
+    /// the engine's own default when absent. Which one routes a board without a
+    /// via in a pad is not predictable, so a failed run is retried with the
+    /// others (see `route`).
+    #[serde(default)]
+    pub ordering: Option<String>,
 }
 
 impl Default for KiCadRoutingToolsOptions {
@@ -234,6 +240,7 @@ impl Default for KiCadRoutingToolsOptions {
             fab_overrides: None,
             same_net_pad_clearance_mm: 0.1,
             strict_sizes: true,
+            ordering: None,
         }
     }
 }
