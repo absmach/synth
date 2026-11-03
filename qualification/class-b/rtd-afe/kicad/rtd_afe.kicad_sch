@@ -8266,7 +8266,7 @@
 		)
 		(property
 			"MPN"
-			""
+			"BLM18AG601SN1D"
 			(at 347.98 30.48 0)
 			(effects
 				(font
@@ -8277,7 +8277,7 @@
 		)
 		(property
 			"LCSC"
-			""
+			"C19330"
 			(at 347.98 30.48 0)
 			(effects
 				(font
@@ -10470,7 +10470,7 @@
 		)
 		(property
 			"MPN"
-			""
+			"ESD5V0B03-323"
 			(at 342.9 91.44 0)
 			(effects
 				(font
@@ -10481,7 +10481,7 @@
 		)
 		(property
 			"LCSC"
-			""
+			"C521915"
 			(at 342.9 91.44 0)
 			(effects
 				(font
@@ -10542,7 +10542,7 @@
 		)
 		(property
 			"MPN"
-			""
+			"ESD5V0B03-323"
 			(at 342.9 106.68 0)
 			(effects
 				(font
@@ -10553,7 +10553,7 @@
 		)
 		(property
 			"LCSC"
-			""
+			"C521915"
 			(at 342.9 106.68 0)
 			(effects
 				(font
@@ -10616,7 +10616,7 @@
 		)
 		(property
 			"MPN"
-			"LP5907MFX-3.3"
+			"LP5907MFX-3.3/NOPB"
 			(at 431.8 99.06 0)
 			(effects
 				(font
@@ -10627,7 +10627,7 @@
 		)
 		(property
 			"LCSC"
-			"C83437"
+			"C80670"
 			(at 431.8 99.06 0)
 			(effects
 				(font
