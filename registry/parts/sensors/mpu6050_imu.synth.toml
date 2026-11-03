@@ -14,9 +14,13 @@ width_mm = 4.0
 height_mm = 4.0
 courtyard_margin_mm = 0.25
 
+# VDD 2.375-3.46 V (PS-MPU-6000A rev 3.1, section 3, "Primary Differences
+# between MPU-6000 and MPU-6050"); VLOGIC may go to
+# 1.71 V but never above VDD. The 5.0 V maximum recorded before would have
+# accepted a rail that damages the part.
 [operating_conditions]
-min_voltage_v = 1.8
-max_voltage_v = 5.0
+min_voltage_v = 2.375
+max_voltage_v = 3.46
 max_current_ma = 100.0
 
 # Pin names and numbers come from the stock KiCad symbol this part names,
@@ -131,10 +135,13 @@ name = "resv_2"
 number = "21"
 electrical_type = "do_not_connect"
 
+# CLKOUT, the system clock output (PS-MPU-6000A rev 3.1, section 7.1). The
+# stock symbol marks pin 22 reserved, but the datasheet reserves only 19 and
+# 21; leaving it unconnected is still fine.
 [[pins]]
-name = "resv_3"
+name = "clkout"
 number = "22"
-electrical_type = "do_not_connect"
+electrical_type = "output"
 
 [[pins]]
 name = "scl"
