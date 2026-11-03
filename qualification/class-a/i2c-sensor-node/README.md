@@ -90,6 +90,19 @@ PCB DFM of the package of this README (JLCDFM, 2026-11-03 12:11, Gerber content 
 
 Quote with assembly for the same package ([`reports/jlcpcb_quote_2026-11-03.md`](reports/jlcpcb_quote_2026-11-03.md), Standard PCBA, no order placed): PCB $4.00 and PCBA $138.87, $142.87 in total.
 
+## Power copper and the routing report
+
+The routing report ([`export/i2c_sensor_node.routing.json`](export/i2c_sensor_node.routing.json)) records `engine_policy_verdict: rejected` next to `fabrication_ready: true`. The two statements are about different checks. The routing engine runs with its strict-size policy, which rejects any feature smaller than its net class declares, and it reported 54 features on 6 nets below the requested size, the narrowest track 0.2 mm and the smallest via 0.46 mm. Synth records that verdict and then checks the delivered board itself: connectivity (35 of 35 nets), the process floor of 0.127 mm for track width and clearance, KiCad DRC with the library tables (0 errors, 0 unconnected) and the return-via rule. The board passes all of them, so the delivered board is valid. The 75 vias the engine counted are its routing vias; the file holds 136 because Synth's exporter and repair passes add the ground vias.
+
+Measured on the exported file, the segments narrower than their class width are on the signal lines (`SIG` declared 0.25 mm, narrowed to 0.2 to 0.24 mm) and on the 3.3 V rail:
+
+| Net | Declared | Narrower segments | Narrowest | Load |
+|---|---|---|---|---|
+| `SIG` lines (the SWD, GPIO, UART, I2C and reset nets) | 0.25 mm | 0.2 to 0.24 mm, from 2 to 32 segments per net, 2 to 12 mm in all | 0.2 mm | at most 10 mA (a 3.3 V line behind its 330 ohm series resistor); 5.2 mA in a 5 V fault |
+| `+3V3` | 0.4 mm | 7 of 0.2 mm, 4.9 mm in all, the longest 1.7 mm | 0.2 mm | the 100 mA budget of the 3.3 V rail |
+
+A 0.2 mm outer track of 1 oz copper carries 0.74 A at a 10 C rise (IPC-2221), so the 100 mA of the 3.3 V rail raises it by about 0.1 C and a 10 mA signal line by far less.
+
 ## Return paths
 
 The routing report ([`export/i2c_sensor_node.routing.json`](export/i2c_sensor_node.routing.json)) lists 12 non-blocking return-via findings: a track changes layer at a via with no ground-return via within 1.53 mm. Each is checked below against the nearest ground via on the exported board. Both outer layers carry a GND pour, so the return current stays on a continuous plane; the finding is only that the current's path to a stitching via is longer than the rule's window.
