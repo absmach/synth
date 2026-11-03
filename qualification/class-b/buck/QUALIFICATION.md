@@ -43,9 +43,10 @@ Tool versions used: KiCad 10.0.7, FreeRouting 2.4.1 on OpenJDK 25.0.4.1 (from `r
 Synth 0.1.1, on 2026-10-29. `SYNTH_SOURCE_REVISION` makes `buck.routing.json` record `source_revision`: it holds
 `a79570cd84d7c9dcc67931593a42fc3836b76065`, the commit the reports were regenerated from (the copper is byte-identical to the previous run, whose revision was `a9c7546`). The JSON reports were generated with a relative board path and the
 repository root prefix was stripped with `sed`; `out/` is a scratch directory and is not committed. A different
-router version can give different copper. `reports/registry-qualify.txt` was regenerated for the 8 registry parts on the board
+router version can give different copper. `reports/registry-qualify.txt` was regenerated for the 9 registry parts on the board
 with `synth registry qualify --part <id>` (`lmr38010`, `l_bourns_srn6045ta_6r8m`, `ss36`, `smbj30a`,
-`mf_msmf110_33x`, `jst_b2b_xh_a_2pin`, `jst_b4b_xh_a_4pin`, `c_electrolytic_smd_8x10`): all eight qualify (`lmr38010` was reviewed on 2026-10-29).
+`mf_msmf110_33x`, `jst_b2b_xh_a_2pin`, `jst_b4b_xh_a_4pin`, `c_electrolytic_smd_8x10`,
+`ltst_c190kgkt`): all nine qualify (`lmr38010` and `ltst_c190kgkt` were reviewed on 2026-10-29).
 
 ## Artifact hashes
 
@@ -75,8 +76,8 @@ repository.
 
 | # | Claim | Evidence | Result |
 | --- | --- | --- | --- |
-| A1 | The source parses, resolves and lowers | `synth validate buck.synth` | Exit 0, 0 errors, 14 warnings: 3 `W-SYNTH-PART-UNVERIFIED` (U1, D3, D4), 3 `E-SYNTH-SCHEM-003`, 1 `E-SYNTH-SCHEM-004`, 4 `E-SYNTH-SCHEM-005`, 1 `W-SYNTH-ANOMALY-001`, 2 `W-SYNTH-SUPPLY-002` |
-| A2 | Regulator feedback is not taken from the switch node | `E-SYNTH-POWER-011` on `buck_neg_fb_sw.synth` | The twin exits 1 with the error and the same 14 warnings; the good board does not raise it. The rule follows one series resistor only, so a longer feedback path is not checked |
+| A1 | The source parses, resolves and lowers | `synth validate buck.synth` | Exit 0, 0 errors, 11 warnings: 3 `E-SYNTH-SCHEM-003`, 1 `E-SYNTH-SCHEM-004`, 4 `E-SYNTH-SCHEM-005`, 1 `W-SYNTH-ANOMALY-001`, 2 `W-SYNTH-SUPPLY-002` |
+| A2 | Regulator feedback is not taken from the switch node | `E-SYNTH-POWER-011` on `buck_neg_fb_sw.synth` | The twin exits 1 with the error and the same 11 warnings; the good board does not raise it. The rule follows one series resistor only, so a longer feedback path is not checked |
 | A3 | Every net is connected end to end | `reports/buck.connectivity.json`, `reports/buck.routing.json` | 13 nets, 0 open, 0 unconnected pads, 97 segments (all F.Cu), 21 vias in the routing statistics and in the PCB file, 200.08 mm of copper. The only via-in-pad are the six declared thermal vias (`via_in_pad` list in the connectivity report) |
 | A4 | No KiCad DRC rule violation on the delivered board | `kicad-cli pcb drc --refill-zones`, `reports/buck.kicad-drc.json` | 0 errors, 0 unconnected, 0 warnings |
 | A5 | The route passes Synth's source/DRC gate | `reports/release.json` (`synth export-kicad`, no fab flags) | `release_ready` true, `production_status` production, state `routed`, 0 signal-integrity findings (blocking 0, warnings 0) |
@@ -133,7 +134,7 @@ My own measurement on the final files:
 | B5 | Switch-node loop area, return paths, EMI and ripple | Only pad-edge gaps were measured (table above). No loop area, inductance, ripple or EMI result. The input capacitors are 0.82 and 1.46 mm from the VIN pad but their ground pads are 2.69 and 5.35 mm from the GND pad, a longer ground leg than VIN leg. Not analysed further | Requires expert review |
 | B6 | Analog placement separation and grounding | `synth capability list` declares `split_ground_planes` unsupported: each ground net gets one unsplit zone. R_FB_T is 3.55 mm and R_FB_B 3.79 mm from U1 pin 5; R_FB_B's ground is 11.31 mm from U1 pin 1 and reaches it through the plane. R_FB_T's FB pad is 2.58 mm from L1 pad 1 (SW). Whether that is acceptable is for a reviewer | Requires expert review |
 | B7 | Reverse-polarity block, PTC margin, UVLO thresholds, output voltage | All by hand calculation from datasheet numbers (README): PTC 0.162 A at 24 V and 0.240 A at the UVLO stop voltage against Ihold 0.63 A at 70 C; UVLO start 18.4 V (16.2 to 20.6) and stop 16.2 V (14.0 to 17.9); Vout 3.315 V. No bench measurement | Requires expert review |
-| B8 | Part pins and footprints against the manufacturer drawings | `synth registry qualify --part <id>` (`reports/registry-qualify.txt`): all 8 registry parts qualify (`lmr38010`, `l_bourns_srn6045ta_6r8m`, `ss36`, `smbj30a`, `mf_msmf110_33x`, `jst_b2b_xh_a_2pin`, `jst_b4b_xh_a_4pin`, `c_electrolytic_smd_8x10`; reviewer Steve Munene, 2026-10-28), each compared with its manufacturer datasheet. `lmr38010` was reviewed on 2026-10-29 and now qualifies too. Five of the seven were compared for pin function, polarity and land pattern against the stock KiCad footprint; the KiCad pads differ from the datasheet land patterns in places (the SS36 and SMBJ30A pads sit wider apart than Vishay's reference, the SRN6045TA pads are 0.55 mm longer inward, the MF-MSMF110/33X pads are 1.125 mm long against Bourns' 1.68 mm). The electrolytic (Honor Elec RVT1H470M0810, JLCPCB C2895739) was checked for value, voltage, size and part number; its datasheet does not state the polarity marking or a land pattern, so pin 1 as + follows the KiCad `CP_Elec_8x10` convention and is not verified. `mf_msmf110_33x` also reports `E-SYNTH-QUAL-016` as a review finding (its footprint names a 3D model that is not installed). The two JST headers were checked for pitch, hole diameter, pad diameter and the 3 A / 250 V rating; pin-1 polarity is not stated in the catalogue. The generic passives have no MPN. Review records for the two unreviewed parts follow | Requires expert review |
+| B8 | Part pins and footprints against the manufacturer drawings | `synth registry qualify --part <id>` (`reports/registry-qualify.txt`): all 9 registry parts qualify (`lmr38010`, `l_bourns_srn6045ta_6r8m`, `ss36`, `smbj30a`, `mf_msmf110_33x`, `jst_b2b_xh_a_2pin`, `jst_b4b_xh_a_4pin`, `c_electrolytic_smd_8x10`, `ltst_c190kgkt`; reviewer Steve Munene, 2026-10-28), each compared with its manufacturer datasheet. `lmr38010` was reviewed on 2026-10-29 and now qualifies too. Five of the seven were compared for pin function, polarity and land pattern against the stock KiCad footprint; the KiCad pads differ from the datasheet land patterns in places (the SS36 and SMBJ30A pads sit wider apart than Vishay's reference, the SRN6045TA pads are 0.55 mm longer inward, the MF-MSMF110/33X pads are 1.125 mm long against Bourns' 1.68 mm). The electrolytic (Honor Elec RVT1H470M0810, JLCPCB C2895739) was checked for value, voltage, size and part number; its datasheet does not state the polarity marking or a land pattern, so pin 1 as + follows the KiCad `CP_Elec_8x10` convention and is not verified. `mf_msmf110_33x` also reports `E-SYNTH-QUAL-016` as a review finding (its footprint names a 3D model that is not installed). The two JST headers were checked for pitch, hole diameter, pad diameter and the 3 A / 250 V rating; pin-1 polarity is not stated in the catalogue. The generic passives have no MPN. `ltst_c190kgkt` is now included in that report (qualified), with its review record signed on 2026-10-29 | Requires expert review |
 | B9 | Compactness | Outline 70.99 x 33.99 mm (2413 mm2). The earlier auto placement of the LMR33640 version was 60.75 x 31.855 mm (1935 mm2); before that 70.99 x 31.125 mm (2210 mm2, a hand layout) and 58.0 x 32.6 mm (1891 mm2, the SOT-23-6 version). The outline follows the pinned part positions and the corner holes. I did not isolate the cause of the growth from 1935 mm2 | Not a defect; not compared |
 | B10 | Keepouts and shielding | The language has keepouts; none was declared under the switch node or the inductor in this design, and none was checked | Unsupported here |
 | B11 | Power sequencing, soft-start and inrush | The converter has internal soft start and a 4 ms power-good delay. Inrush into C1 and the output capacitors, and the sequencing of the PG signal against the output, were not analysed or measured | Unverified |
@@ -162,7 +163,7 @@ Source: https://optoelectronics.liteon.com/upload/download/DS22-2000-074/LTST-C1
 
 Circuit check: D3 from +3V3 through R_LED 470 ohm carries (3.3 - 2.4 to 1.9) / 470 = 1.9 to 3.0 mA, far below 30 mA. D4 through R_PGLED likewise.
 
-Not signed. `reviewed_by` stays empty until the maintainer has read the datasheet and signs it in the registry file.
+Reviewed by Steve Munene on 2026-10-29; `reviewed_by` and `reviewed_at` are set in the registry file.
 
 ### Review record: U1 TI LMR38010SDDAR
 
@@ -174,7 +175,7 @@ Source: https://www.ti.com/lit/ds/symlink/lmr38010.pdf, SNVSBM3B (text copy), re
 - Application: Cin at least 4.7 uF plus 100-220 nF (met); Eq 11 inductance minimum 1.03 uH (met by 6.8 uH); R_RT 33k for 800 kHz from the RT table under Figure 8-4; VREF 1.0 V unchanged so the feedback divider is unchanged.
 - `RthetaJA` 42.9 C/W is not valid for design (datasheet text); not used.
 
-Not signed. `reviewed_by` stays empty until the maintainer has read the datasheet and signs it in the registry file.
+Reviewed by Steve Munene on 2026-10-29; `reviewed_by` and `reviewed_at` are set in the registry file.
 
 Rows A2, A9 and B1 to B8 are the ones that decide whether this board meets a Class B bar (#38
 treats missing SI/PI/RF evidence as a failure). They are open or bounded, not closed.
@@ -198,7 +199,7 @@ Every line of `#38`'s "Check exactly" list, against this board.
 | ERC and DRC | 0 violations on ERC, 0 errors and 0 warnings on DRC | A4, A7 |
 | Schematic correctness | Netlist equals the source net for net; readability scored, not tidy | A8, B15 |
 | BOM correctness | 27 components, one BOM row each, no MPN or LCSC on the generic parts | A6, B14 |
-| Footprint correctness | 8 of 8 registry parts qualify; the LED footprint differs from the datasheet pad recommendation | B8 |
+| Footprint correctness | 9 of 9 registry parts qualify; the LED footprint differs from the datasheet pad recommendation | B8 |
 | Manufacturing exports | Gerbers, drill, BOM and pick-and-place generated and hashed; not fabricated | A10, B14 |
 | KiCad reopenability | Loaded headlessly by KiCad 10.0.7 for every export used here; not opened in the GUI | A11 |
 | Which claims Synth proves | Section A, and only section A | A1-A18 |
