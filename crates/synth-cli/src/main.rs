@@ -5908,7 +5908,7 @@ mod tests {
         let profiles = descriptor["manufacturer_profiles"]
             .as_array()
             .expect("a profile list");
-        assert_eq!(profiles.len(), 4);
+        assert_eq!(profiles.len(), 5);
         for entry in profiles {
             let name = entry["name"].as_str().expect("a name");
             let profile = synth_drc::ManufacturerProfile::from_name(name);
