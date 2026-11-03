@@ -25,6 +25,16 @@ x = 17.5
 y = 21.2
 net = "GND"
 
+[[vias]]
+x = 30.4
+y = 24.2
+net = "GND"
+
+[[vias]]
+x = 18.0
+y = 25.2
+net = "GND"
+
 
 [components.H1]
 x = 6.0
