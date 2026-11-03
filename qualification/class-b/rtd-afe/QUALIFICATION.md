@@ -78,7 +78,7 @@ Versions: KiCad 10.0.7, FreeRouting 2.4.1 on OpenJDK 25.0.4.1, Synth
 | KiCad ERC | 0 errors, 2 warnings | `reports/rtd_afe.kicad-erc.json` |
 | Synth routing | routed, 40 connected nets, 0 open | `reports/rtd_afe.routing.json` |
 | Synth release | `production_status: untrusted`, `release_ready: false` | `reports/release.json`; the unverified-crystal override, not a DRC failure |
-| Synth signal integrity | 19 warnings, 0 blocking | `reports/release.json` |
+| Synth signal integrity | 18 warnings, 0 blocking | `reports/release.json` |
 
 The delivered board is `kicad/rtd_afe.kicad_pcb`
 (`8f83bc8e002ce991e90a9f09f803993f2f42113f50172eb7d4c69f422337d680`).
@@ -252,8 +252,9 @@ measurement was made; this is the main item for the analog/SI review.
 
 ## Measured layout numbers
 
-- 371 track segments, 67 vias: 52 GND, 25 signal. 654.8 mm of track. 40 nets, 0
-  open. The router records 67 vias; the other ten are source ground stitching.
+- 371 track segments, 77 vias: 52 GND, 25 signal. 654.8 mm of track. 40 nets, 0
+  open. The router records 67 of the vias; the other ten are source ground
+  stitching.
 - Analog nets, all F.Cu only, no via:
 
 | Net | Length |

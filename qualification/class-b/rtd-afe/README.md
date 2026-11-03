@@ -102,9 +102,9 @@ designated reviewer.
 - The RTD/input nets and VREF are on F.Cu only, with no layer change. QSPI is
   mostly on F.Cu, with SD0/SD1/SD3 changing layer. The SPI, USB, crystal and
   ADC-control nets change layers; see the SI warnings below.
-- 371 track segments, 67 vias (52 on GND, 25 signal), 654.8 mm of copper. 40
-  nets, 0 open. The router records 67 vias; the other ten are source ground
-  stitching.
+- 371 track segments, 77 vias (52 on GND, 25 signal), 654.8 mm of copper. 40
+  nets, 0 open. The router records 67 of the vias; the other ten are source
+  ground stitching.
 - `kicad-cli pcb drc --severity-all --refill-zones`: 0 errors, 0 warnings, 0
   unconnected items. `pcbnew.LoadBoard` reopens the board and `check.sh` confirms
   one GND plane with no AGND or DGND net.
@@ -144,7 +144,7 @@ Current result:
 | KiCad ERC (errors / warnings) | 0 / 2 |
 | Synth routing state | routed, 0 open nets |
 | Synth release | `production_status: untrusted`, `release_ready: false` (unverified crystal override; not a fab approval) |
-| Synth SI warnings | 19, none blocking |
+| Synth SI warnings | 18, none blocking |
 
 The 2 ERC warnings are library-comparison warnings, not connectivity errors:
 the registry uses the old name `Device:Ferrite_Bead` (KiCad 10's library has
