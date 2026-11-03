@@ -1,4 +1,4 @@
-Reconstructed from committed files; this board was not built by an agent run.
+Design notes reconstructed from the committed files. The board was built by an agent; `prompt.md` is the cleaned brief it was given (same text as the website showcase), not the exact text that was run. No tool-call log or report was saved.
 
 # USB-C dual UART + RS-485 adapter (SYN-66): design notes
 
