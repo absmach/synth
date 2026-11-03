@@ -77,53 +77,64 @@ attributable to the thing that laid the copper.
 Results land in `target/qualification/results.json`, and CI uploads them as an
 artifact on every run, passing or failing. The file records the KiCad version,
 a SHA-256 of the registry manifest, every stage status per board, the
-error-level diagnostics each board reported, and hashes for the deterministic
-artifacts — so a result that changes is attributable to a compiler change, a
+error-level diagnostics each board reported, and hashes for the schematic,
+board and BOM — so a result that changes is attributable to a compiler change, a
 registry edit, or a different KiCad, rather than being a mystery.
 
 Stage budgets are configurable when a board needs more time:
 `SYNTH_CHECK_SOURCE_TIMEOUT_SECS`, `SYNTH_CHECK_DRC_TIMEOUT_SECS`,
 `SYNTH_CHECK_FAB_TIMEOUT_SECS`.
 
-### Why no output hash is pinned
+### Which output hashes are pinned
 
-The matrix records the `.kicad_sch`, `.kicad_pcb` and `bom.csv` hashes in
-`results.json` and **compares none of them**. They are there so a human can
-ask whether two runs produced the same output, and so a result is attributable
-to something; they do not fail the build.
+The schematic and the BOM are. Each row carries `expect_artifacts`, the
+SHA-256 of the `.kicad_sch` and `bom.csv` the manufacturing stage wrote for
+that board, and the fab job compares them exactly in both directions: a pinned
+file that changed or was not written fails, and so does a schematic or BOM the
+board now produces that no row declares. Both files are written by this
+compiler from the board and the registry alone, and CI runs on different
+commits produce the same bytes for them, so a moved hash means the board now
+compiles to something else. A board whose source stage fails never reaches
+manufacturing and pins nothing.
 
-Two reasons they are not pinned. `kicad-cli` stamps a per-run timestamp into
-Gerber headers, so those files are not byte-reproducible at all (see the
-determinism note in `crates/synth-kicad/src/fab.rs`). And the `.kicad_pcb`
-carries the copper an external routing engine laid, so its hash moves when
-that engine is upgraded even though no board, part or compiler changed.
-Pinning it would make the gate fail for a reason no reviewer could act on,
-which trains people to ignore it.
+The routed `.kicad_pcb` is not pinned, and neither are Gerbers. `kicad-cli`
+stamps a per-run timestamp into Gerber headers, so those files are not
+byte-reproducible at all (see the determinism note in
+`crates/synth-kicad/src/fab.rs`). The `.kicad_pcb` carries the copper an
+external routing engine laid; its hash differs between CI runs whose
+schematics, BOMs and registry are identical. Pinning it would fail the gate for
+a reason no reviewer could act on, which trains people to ignore it. Its hash
+is still recorded in `results.json` for a human to compare across runs, and
+the routed board is judged by the DRC and manufacturing verdicts instead.
 
-What the matrix gates on instead is the declared verdict: `expect`,
-`expect_fab`, and `expect_source_codes`. The last is compared as an exact set
-in both directions, so a board that acquires a new error-level diagnostic
-fails even while every code already written down keeps firing, and a board
-that stops reporting one fails too. A board's error-level output is a
-declaration, not a floor.
+The matrix also gates on the declared verdict: `expect`, `expect_fab`, and
+`expect_source_codes`. The last is compared as an exact set in both
+directions, so a board that acquires a new error-level diagnostic fails even
+while every code already written down keeps firing, and a board that stops
+reporting one fails too. A board's error-level output is a declaration, not a
+floor.
 
 ### The inputs are pinned
 
-The outputs cannot be pinned, but the inputs can. Every row carries a
-`fixture_sha256`: a SHA-256 over the board's `.synth` source and the layout
-sidecars beside it (`<stem>.placement.layout.toml`,
+Every row carries a `fixture_sha256`: a SHA-256 over the board's `.synth`
+source and the layout sidecars beside it (`<stem>.placement.layout.toml`,
 `<stem>.schematic.layout.toml`), each hashed under its file name and length.
 The verdicts on a row were measured on exactly those bytes, so an edit to
 any of them — deliberate or not — makes the row a claim about a different
 board.
 
-`the_matrix_is_well_formed` checks the hash in the normal test shards, so an
-accidental fixture change fails on the pull request that made it, without
-waiting for the release gate; the release gate checks it as well. When the
-change is deliberate, re-run the matrix, correct any verdict that moved, and
-only then write the new hash the failure prints. Registry edits are not part
-of a board's fixture: they are attributed through the registry manifest hash
-in `results.json`, and caught by the verdicts they change.
+The registry is pinned once for the whole corpus, as
+`[baseline] registry_manifest_sha256`: the SHA-256 of `synth registry
+manifest`. Every board compiles against the registry, so a part edit can move
+any verdict or artifact in the matrix.
+
+`the_matrix_is_well_formed` and
+`the_registry_is_the_one_the_matrix_was_measured_against` check them in the
+normal test shards, so an accidental fixture or registry change fails on the
+pull request that made it, without waiting for the release gate; the release
+gate checks the fixtures as well. When the change is deliberate, re-run the
+matrix, correct any verdict or `expect_artifacts` entry that moved, and only
+then write the new hash the failure prints.
 
 ## What automation cannot prove
 

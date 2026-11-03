@@ -11,7 +11,18 @@ const SYNTH: &str = env!("CARGO_BIN_EXE_synth");
 #[derive(Debug, Deserialize)]
 struct Matrix {
     schema_version: String,
+    baseline: Baseline,
     board: Vec<BoardSpec>,
+}
+
+/// What the whole corpus was measured against, pinned so a change to it fails
+/// the pull request that made it.
+#[derive(Debug, Deserialize)]
+struct Baseline {
+    /// SHA-256 of `synth registry manifest`, as [`registry_manifest_sha256`]
+    /// computes it. Every board compiles against the registry, so a part edit
+    /// can move any verdict or artifact below; it has to be declared here.
+    registry_manifest_sha256: String,
 }
 
 #[derive(Debug, Deserialize)]
@@ -34,6 +45,11 @@ struct BoardSpec {
     /// measured on, so a board whose source changes must be re-measured.
     #[serde(default)]
     fixture_sha256: String,
+    /// Expected SHA-256 of each pinned artifact the manufacturing stage
+    /// writes, keyed by its path in the export (see [`PINNED_ARTIFACTS`]).
+    /// Compared exactly under `--fab`, in both directions.
+    #[serde(default)]
+    expect_artifacts: BTreeMap<String, String>,
     #[serde(default)]
     rationale: String,
 }
@@ -210,21 +226,30 @@ fn source_codes(report: &serde_json::Value) -> Vec<String> {
         .unwrap_or_default()
 }
 
-/// Artifact hashes for the files that are byte-deterministic, **recorded for
-/// attribution and not compared against anything**.
+/// The artifacts whose hashes are pinned per board as `expect_artifacts`.
 ///
-/// Two separate reasons nothing is pinned here. `kicad-cli` stamps a per-run
-/// timestamp into Gerber headers, so those are not reproducible at all. And
-/// the `.kicad_pcb` carries the copper an external routing engine laid, so its
-/// hash moves when that engine is upgraded even though no board, part or
-/// compiler changed — pinning it would make the gate fail for a reason no
-/// reviewer could act on, which is how a gate teaches people to ignore it.
+/// The schematic and the BOM are written by this compiler from the board and
+/// the registry alone, so they are byte-stable: CI runs on different commits
+/// produce the same hashes. A change to either is a change to what the board
+/// is, and fails the fab job until someone declares it.
 ///
-/// So these hashes answer "was this the same output as last time?" when a
-/// human compares two runs' artifacts; they do not fail the build. What this
-/// matrix actually gates on is `expect`, `expect_fab` and
-/// `expect_source_codes` — the declared verdicts, compared exactly — and
-/// `fixture_sha256`, which pins the inputs those verdicts were measured on.
+/// The `.kicad_pcb` is not pinned. It carries the copper an external routing
+/// engine laid, and its hash moves between runs whose boards, parts and
+/// compiler output are otherwise identical; pinning it would fail the gate for
+/// a reason no reviewer could act on. Gerbers carry a per-run timestamp from
+/// `kicad-cli` and are not reproducible at all. Both are recorded in
+/// `deterministic_artifacts` for a human to compare across runs, and the
+/// routed board is judged by the DRC and manufacturing verdicts instead.
+const PINNED_ARTIFACTS: [&str; 2] = [".kicad_sch", "bom.csv"];
+
+fn is_pinned_artifact(path: &str) -> bool {
+    PINNED_ARTIFACTS.iter().any(|s| path.ends_with(s))
+}
+
+/// Hashes of the schematic, board and BOM the manufacturing stage wrote.
+///
+/// The pinned ones (see [`PINNED_ARTIFACTS`]) are compared against
+/// `expect_artifacts`; the `.kicad_pcb` is recorded for attribution only.
 fn deterministic_artifacts(report: &serde_json::Value) -> BTreeMap<String, String> {
     const STABLE: [&str; 3] = [".kicad_sch", ".kicad_pcb", "bom.csv"];
     report["stages"]["manufacturing"]["artifacts"]
@@ -403,6 +428,14 @@ fn run_board(spec: &BoardSpec, fab: bool) -> BoardResult {
         }
     }
 
+    let artifacts = deterministic_artifacts(&report);
+    // Only a fab run writes artifacts, so only a fab run can compare them. Both
+    // directions are drift: a pinned file that changed or vanished, and a
+    // pinned kind of file the board now produces that nobody declared.
+    if fab {
+        disagreements.extend(artifact_drift(&spec.expect_artifacts, &artifacts));
+    }
+
     BoardResult {
         id: spec.id.clone(),
         class: spec.class.clone(),
@@ -417,12 +450,39 @@ fn run_board(spec: &BoardSpec, fab: bool) -> BoardResult {
         manufacturing,
         source_codes: codes,
         fixture_sha256: fixture,
-        deterministic_artifacts: deterministic_artifacts(&report),
+        deterministic_artifacts: artifacts,
         agrees: disagreements.is_empty(),
         actual,
         gate,
         disagreements,
     }
+}
+
+/// How the pinned artifacts a run produced differ from the ones declared.
+fn artifact_drift(
+    expected: &BTreeMap<String, String>,
+    observed: &BTreeMap<String, String>,
+) -> Vec<String> {
+    let mut drift = Vec::new();
+    for (path, hash) in expected {
+        match observed.get(path) {
+            Some(actual) if actual == hash => {}
+            Some(actual) => drift.push(format!(
+                "artifact {path} changed (expect_artifacts has {hash}, the run wrote {actual})"
+            )),
+            None => drift.push(format!(
+                "artifact {path} is pinned in expect_artifacts but the run did not write it"
+            )),
+        }
+    }
+    for (path, actual) in observed {
+        if is_pinned_artifact(path) && !expected.contains_key(path) {
+            drift.push(format!(
+                "artifact {path} was written but is not pinned (its hash is {actual})"
+            ));
+        }
+    }
+    drift
 }
 
 /// The release-blocking matrix.
@@ -601,6 +661,18 @@ fn the_matrix_is_well_formed() {
                 spec.id
             );
         }
+        for (path, hash) in &spec.expect_artifacts {
+            assert!(
+                is_pinned_artifact(path),
+                "{}: expect_artifacts pins {path}, which is not one of {PINNED_ARTIFACTS:?}",
+                spec.id
+            );
+            assert!(
+                hash.len() == 64 && hash.bytes().all(|b| b.is_ascii_hexdigit()),
+                "{}: expect_artifacts has {hash} for {path}, which is not a SHA-256",
+                spec.id
+            );
+        }
         if let Some(fab) = spec.expect_fab.as_deref() {
             assert!(
                 ["pass", "fail", "unknown", "unestablished"].contains(&fab),
@@ -649,4 +721,53 @@ fn the_matrix_is_well_formed() {
         matrix.board.iter().any(|b| b.status == "unsupported"),
         "the corpus needs at least one negative case"
     );
+}
+
+/// A registry edit can move any board's verdicts and artifacts, so it is
+/// pinned and checked here, in the normal shards, where the pull request that
+/// made the edit is the one that fails.
+#[test]
+fn the_registry_is_the_one_the_matrix_was_measured_against() {
+    let matrix = load_matrix();
+    let registry = registry_manifest_sha256();
+    assert_eq!(
+        matrix.baseline.registry_manifest_sha256, registry,
+        "the registry no longer matches the one the matrix was measured against. \
+         Re-run the matrix, update any verdicts or expect_artifacts that moved, \
+         then set [baseline] registry_manifest_sha256 = \"{registry}\""
+    );
+}
+
+#[test]
+fn a_changed_pinned_artifact_is_drift() {
+    let pinned = BTreeMap::from([("b.kicad_sch".to_string(), "a".repeat(64))]);
+    let observed = BTreeMap::from([("b.kicad_sch".to_string(), "b".repeat(64))]);
+    let drift = artifact_drift(&pinned, &observed);
+    assert_eq!(drift.len(), 1, "{drift:?}");
+    assert!(drift[0].contains("changed"), "{drift:?}");
+}
+
+#[test]
+fn a_missing_or_undeclared_pinned_artifact_is_drift() {
+    let pinned = BTreeMap::from([("bom.csv".to_string(), "a".repeat(64))]);
+    let observed = BTreeMap::from([("b.kicad_sch".to_string(), "b".repeat(64))]);
+    let drift = artifact_drift(&pinned, &observed);
+    assert_eq!(drift.len(), 2, "{drift:?}");
+    assert!(
+        drift.iter().any(|d| d.contains("did not write")),
+        "{drift:?}"
+    );
+    assert!(drift.iter().any(|d| d.contains("not pinned")), "{drift:?}");
+}
+
+#[test]
+fn an_unpinned_board_file_is_not_drift() {
+    // The routed board moves with the external engine; it is recorded, never
+    // compared.
+    let observed = BTreeMap::from([
+        ("b.kicad_sch".to_string(), "a".repeat(64)),
+        ("b.kicad_pcb".to_string(), "b".repeat(64)),
+    ]);
+    let pinned = BTreeMap::from([("b.kicad_sch".to_string(), "a".repeat(64))]);
+    assert!(artifact_drift(&pinned, &observed).is_empty());
 }

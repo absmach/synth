@@ -1,5 +1,11 @@
 schema_version = "synth.qualification.v1"
 
+# Pinned so that a part edit fails the pull request that made it: every board
+# compiles against the registry, so any of the verdicts or artifacts below can
+# move with it. `synth registry manifest | sha256sum`.
+[baseline]
+registry_manifest_sha256 = "5ef7ebdaec1ae2137f5b57a88755f21b109362c60b1f5ac587b71238468b3cd9"
+
 [matrix]
 release_command = "synth check <board> --json"
 fab_command = "synth check <board> --fab --json"
@@ -17,6 +23,7 @@ fab_command = "synth check <board> --fab --json"
 id = "hello"
 path = "fixtures/designs/hello.synth"
 fixture_sha256 = "a1047d5b79020d3b100c389ff4e97ebce5d15cf9badad9b15b41ab6d2b474706"
+expect_artifacts = { "bom.csv" = "9ad8239fa3db9939c350c38e50ed1882b2852568e60b5202404ce06d526b6d18", "hello.kicad_sch" = "fe346fc3e44404875d97955d0ec0e0bbf52afe9a41df4a1bf54278548d2a9972" }
 class = "A"
 status = "experimental"
 expect = "fail"
@@ -27,6 +34,7 @@ rationale = "`board \"hello\" { layers 2 }` — no components, no nets. It is he
 id = "env_logger"
 path = "examples/env_logger/env_logger.synth"
 fixture_sha256 = "b89025f6eb05df789c317eb875f0efb6df86a85c61d48bf708b76972ec0f50d1"
+expect_artifacts = { "bom.csv" = "f370dec99c97f8a3a13439d4ca05b2c5d8233b0a4f69a43c400abf50f2c68bba", "env_logger.kicad_sch" = "086e8ae14f4520da5a25e8c272552e5bb31a8f8a6dd14e163d9a7ac4ca0cccbf" }
 class = "A"
 status = "experimental"
 expect = "fail"
@@ -37,6 +45,7 @@ rationale = "USB-C power, an AMS1117 LDO, an MCU, a BME680 on I2C and a debug he
 id = "sensor_logger"
 path = "examples/sensor_logger/sensor_logger.synth"
 fixture_sha256 = "6dad544533dcb92fe94d46a32ea64ae44f342c69996c70af73df734b761a8c4a"
+expect_artifacts = { "bom.csv" = "3bb1ce88bc2248ce75496627619739b297a7035eb6c9e79bff0de2c1c273d420", "sensor_logger.kicad_sch" = "0f611c1e317275a13c2d8ee935794d8759eaac360e590da730c49efc7968a498" }
 class = "A"
 status = "experimental"
 expect = "fail"
@@ -47,6 +56,7 @@ rationale = "Dual I2C sensors, SPI flash and status LEDs: a larger Class-A digit
 id = "placement_and_diff_pair"
 path = "examples/placement_and_diff_pair/placement_and_diff_pair.synth"
 fixture_sha256 = "bfa9d000e2bd58a7fbbf595fba8459c2c6afc2a6168f6d943d06bdf88e7e6414"
+expect_artifacts = { "bom.csv" = "d810f3dd56bd1af9d938226640bb2a306a1e19a44a02b5d9d48d379cef5a3cad", "placement_and_diff_pair.kicad_sch" = "4f573711743a4bc5a1aea5509dc204ffe021c9f76298e355410bab40361937b1" }
 class = "C"
 status = "experimental"
 expect = "fail"
@@ -113,6 +123,7 @@ rationale = "Negative test and the corpus's only Class-D entry: the largest impo
 id = "buck"
 path = "qualification/class-b/buck/buck.synth"
 fixture_sha256 = "1ddfc86b649f25bc25465f82145a3d96baf623ff1fc32bfa3c830650cd100b14"
+expect_artifacts = { "bom.csv" = "2a4faa316306140a1e6178fcf388840e6913b05edd23a92547fcd7f0b80dadce", "buck.kicad_sch" = "0c4bf60be83892bc186e555484b0b65c9c6ab9aa0d2b5c99a2e6fcc7bb77bc45" }
 class = "B"
 status = "experimental"
 expect = "fail"
