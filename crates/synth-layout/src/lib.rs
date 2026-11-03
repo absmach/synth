@@ -586,6 +586,25 @@ fn pack_regions(sizes: &[(f64, f64)], target_w: f64, gap: f64) -> Vec<(f64, f64)
     offsets
 }
 
+/// Cut a region's columns into shelves no wider than `target`, in reading
+/// order. Returns the shelf index of each column in `start..end`.
+///
+/// A shelf break never reorders columns, so power still flows left-to-right
+/// along a shelf and top-to-bottom between them.
+fn shelf_columns(col_x: &[f64], start: usize, end: usize, target: f64) -> Vec<usize> {
+    let mut shelf_of = vec![0_usize; end.saturating_sub(start)];
+    let mut shelf = 0_usize;
+    let mut shelf_start_x = col_x[start];
+    for col in start..end {
+        if col > start && col_x[col] - shelf_start_x > target {
+            shelf += 1;
+            shelf_start_x = col_x[col];
+        }
+        shelf_of[col - start] = shelf;
+    }
+    shelf_of
+}
+
 /// Target sheet aspect ratio (width/height) for cluster packing.
 /// 1.4 ≈ A4 landscape.
 const TARGET_ASPECT: f64 = 1.4;
@@ -4394,19 +4413,84 @@ fn place_clusters(board: &Board, clusters: &[Cluster]) -> Layout {
                         );
                     }
                 } else {
-                    for col in start..end {
-                        for &cluster_idx in &col_groups[col] {
-                            let anchor_x = snap_grid(col_x_local[col]);
-                            let anchor_y = snap_grid((bk_units[cluster_idx] - bk_min) * row_pitch);
-                            place_cluster_into(
-                                board,
-                                &clusters[cluster_idx],
-                                anchor_x,
-                                anchor_y,
-                                grid_w,
-                                &mut local,
-                                &mut occupied,
-                            );
+                    // Fold a region that is wider than the candidate page
+                    // onto shelves, the same way the single-region path
+                    // does. A group whose clusters all sit side by side (the
+                    // CM4 module's test-point row) otherwise pins the page
+                    // to A0 while only its top edge is used.
+                    let shelf_target = region_target_w.max(grid_w);
+                    let shelf_of = shelf_columns(&col_x_local, start, end, shelf_target);
+                    let shelf = shelf_of.iter().copied().max().unwrap_or(0);
+                    if shelf == 0 {
+                        for col in start..end {
+                            for &cluster_idx in &col_groups[col] {
+                                let anchor_x = snap_grid(col_x_local[col]);
+                                let anchor_y =
+                                    snap_grid((bk_units[cluster_idx] - bk_min) * row_pitch);
+                                place_cluster_into(
+                                    board,
+                                    &clusters[cluster_idx],
+                                    anchor_x,
+                                    anchor_y,
+                                    grid_w,
+                                    &mut local,
+                                    &mut occupied,
+                                );
+                            }
+                        }
+                    } else {
+                        let region_bk_min = (start..end)
+                            .flat_map(|col| col_groups[col].iter().copied())
+                            .map(|idx| bk_units[idx])
+                            .fold(f64::INFINITY, f64::min);
+                        let mut shelf_y = 0.0_f64;
+                        for shelf_idx in 0..=shelf {
+                            let mut local_shelf: Vec<ComponentPlacement> = Vec::new();
+                            let mut shelf_occupied: std::collections::HashSet<(i64, i64)> =
+                                std::collections::HashSet::new();
+                            let base_x = (start..end)
+                                .filter(|&col| shelf_of[col - start] == shelf_idx)
+                                .map(|col| col_x_local[col])
+                                .fold(f64::INFINITY, f64::min);
+                            for col in start..end {
+                                if shelf_of[col - start] != shelf_idx {
+                                    continue;
+                                }
+                                for &cluster_idx in &col_groups[col] {
+                                    let anchor_x = snap_grid(col_x_local[col] - base_x);
+                                    let anchor_y = snap_grid(
+                                        (bk_units[cluster_idx] - region_bk_min) * row_pitch,
+                                    );
+                                    place_cluster_into(
+                                        board,
+                                        &clusters[cluster_idx],
+                                        anchor_x,
+                                        anchor_y,
+                                        grid_w,
+                                        &mut local_shelf,
+                                        &mut shelf_occupied,
+                                    );
+                                }
+                            }
+                            if local_shelf.is_empty() {
+                                continue;
+                            }
+                            let (local_min_x, _, local_min_y, local_max_y) =
+                                body_bbox_of(board, &local_shelf)
+                                    .unwrap_or((0.0, 0.0, 0.0, row_pitch));
+                            let dx = snap_grid(-local_min_x);
+                            let dy = snap_grid(shelf_y - local_min_y);
+                            for mut place in local_shelf {
+                                place.center_mm.0 += dx;
+                                place.center_mm.1 += dy;
+                                let key = (
+                                    (place.center_mm.0 * 10.0).round() as i64,
+                                    (place.center_mm.1 * 10.0).round() as i64,
+                                );
+                                occupied.insert(key);
+                                local.push(place);
+                            }
+                            shelf_y += (local_max_y - local_min_y) + WIRE_MARGIN;
                         }
                     }
                 }
@@ -10114,9 +10198,23 @@ mod documentation_tests {
 
 #[cfg(test)]
 mod region_packing_tests {
-    use super::pack_regions;
+    use super::{pack_regions, shelf_columns};
 
     const GAP: f64 = 10.0;
+
+    #[test]
+    fn a_wide_band_is_cut_into_shelves_at_the_target() {
+        // Columns at 0, 100, …, 500, each ~100 mm wide. A 250 mm shelf holds
+        // three; the remaining three continue on the next shelf in order.
+        let x = [0.0, 100.0, 200.0, 300.0, 400.0, 500.0];
+        assert_eq!(shelf_columns(&x, 0, 6, 250.0), vec![0, 0, 0, 1, 1, 1]);
+    }
+
+    #[test]
+    fn a_band_that_fits_stays_on_one_shelf() {
+        let x = [0.0, 100.0, 200.0];
+        assert_eq!(shelf_columns(&x, 0, 3, 400.0), vec![0, 0, 0]);
+    }
 
     fn overlaps(a: ((f64, f64), (f64, f64)), b: ((f64, f64), (f64, f64))) -> bool {
         let ((ax, ay), (aw, ah)) = a;
