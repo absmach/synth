@@ -1,7 +1,10 @@
 id = "bme680_env"
-lcsc_pn = "C125972"
 kind = "sensor"
-description = "Bosch BME680 environmental sensor: T/RH/P/VOC, I²C"
+description = "DEPRECATED, use bme680_lga8, which carries provenance and a reviewer. This entry draws a 2.5 x 2.5 mm LGA and allows 5 V; the BME680 is a 3.0 x 3.0 mm LGA rated to 3.6 V"
+lifecycle = "obsolete"
+substitutes = ["bme680_lga8"]
+mpn = "BME680"
+lcsc_pn = "C125972"
 kicad_symbol = "Sensor:BME680"
 kicad_footprint = "Package_LGA:Bosch_LGA-8_2.5x2.5mm_P0.65mm_ClockwisePinNumbering"
 
