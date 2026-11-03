@@ -5928,15 +5928,14 @@ mod tests {
             Some(0.2),
             "JLCPCB's preferred hole"
         );
-        let filled = profiles
-            .iter()
-            .find(|p| p["name"] == "jlc-filled-via")
-            .unwrap();
-        assert_eq!(filled["offers"], serde_json::json!(["via_in_pad"]));
-        assert!(profiles
-            .iter()
-            .filter(|p| p["name"] != "jlc-filled-via")
-            .all(|p| p.get("offers").is_none()));
+        for entry in profiles {
+            let name = entry["name"].as_str().expect("a name");
+            if synth_drc::ManufacturerProfile::OFFERING_VIA_IN_PAD.contains(&name) {
+                assert_eq!(entry["offers"], serde_json::json!(["via_in_pad"]), "{name}");
+            } else {
+                assert!(entry.get("offers").is_none(), "{name}");
+            }
+        }
     }
     use super::*;
 
