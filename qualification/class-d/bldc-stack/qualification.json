@@ -50,7 +50,7 @@
     },
     "part_review": {
       "passed": false,
-      "evidence": "Every authored part has reviewed_by = \"\" by design, so W-SYNTH-PART-UNVERIFIED fires and `synth registry qualify` blocks on E-SYNTH-QUAL-008. No reviewer has checked the nine new parts against their datasheets."
+      "evidence": "Every authored part has reviewed_by = \"\" by design, so W-SYNTH-PART-UNVERIFIED fires and `synth registry qualify` blocks on E-SYNTH-QUAL-008. No reviewer has checked the ten authored parts against their datasheets."
     },
     "thermal_and_power": {
       "passed": false,
