@@ -19,3 +19,5 @@ mf_msmf110_33x [pass]
 1 part(s): 1 qualified, 0 blocked, 0 unproven
 == c_electrolytic_smd_8x10
 1 part(s): 1 qualified, 0 blocked, 0 unproven
+== ltst_c190kgkt
+1 part(s): 1 qualified, 0 blocked, 0 unproven
