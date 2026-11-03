@@ -34,7 +34,7 @@ amplifiers, and makes 12 V with an LMR38010 buck.
 
 The J_B2B pinout and the four mounting holes need a common frame. Both boards
 use holes at (3, 3), (67, 3), (3, 52) and (67, 52) mm and J_B2B at (64, 31) mm.
-The fitted control outline is **60.99 x 49.90 mm**, the issue's ~60 x 50 mm. Both
+The fitted control outline is **60.99 x 48.99 mm**, the issue's ~60 x 50 mm. Both
 boards use the same four holes at (3, 3), (53, 3), (3, 43) and (53, 43) mm and
 J_B2B at (50, 21) mm. The power sidecar packs its 111 parts into the same 60 x 50
 frame; it has no exported PCB, so it is a placement record, not a rendered board.
