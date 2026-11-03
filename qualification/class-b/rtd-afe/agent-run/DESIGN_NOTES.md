@@ -1,4 +1,4 @@
-Reconstructed from committed files; this board was not built by an agent run.
+Design notes reconstructed from the committed files. The board was built by agents from the briefs in `prompt.md`, copied verbatim from the session transcripts. No tool-call log or report was saved.
 
 # DESIGN_NOTES: PT100 4-wire RTD analog front end (rtd-afe, SYN-363)
 
