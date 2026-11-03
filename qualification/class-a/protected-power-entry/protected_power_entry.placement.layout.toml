@@ -210,8 +210,8 @@ dx = 0.0
 dy = 0.0
 
 [components.R9]
-x = 11.1
-y = 64.5
+x = 11.18
+y = 63.99
 rotation = 90
 source = "agent"
 priority = "hard"
@@ -255,8 +255,8 @@ dx = 0.0
 dy = 0.0
 
 [components.TP10]
-x = 31.5
-y = 67.5
+x = 32.2
+y = 67.28
 rotation = 0
 source = "agent"
 priority = "hard"
@@ -534,8 +534,8 @@ dx = 0.0
 dy = 0.0
 
 [components.C8]
-x = 71.0
-y = 49.0
+x = 71.57
+y = 49.21
 rotation = 0
 source = "agent"
 priority = "hard"

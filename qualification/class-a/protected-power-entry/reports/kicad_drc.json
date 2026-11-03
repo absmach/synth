@@ -1,7 +1,7 @@
 {
     "$schema": "https://schemas.kicad.org/drc.v1.json",
     "coordinate_units": "mm",
-    "date": "2026-11-03T10:23:07",
+    "date": "2026-11-03T10:57:30",
     "ignored_checks": [
         {
             "description": "Footprint has no courtyard defined",
@@ -340,8 +340,8 @@
                 {
                     "description": "Footprint C8",
                     "pos": {
-                        "x": 71.0,
-                        "y": 49.0
+                        "x": 71.57,
+                        "y": 51.71
                     },
                     "uuid": "ba62eb01-8682-5a78-b512-d896ede85d90"
                 }
@@ -370,8 +370,8 @@
                 {
                     "description": "Footprint C10",
                     "pos": {
-                        "x": 63.75,
-                        "y": 47.8
+                        "x": 64.25,
+                        "y": 48.3
                     },
                     "uuid": "8ed2b042-3ee6-5d84-83b0-b9ae89aacc08"
                 }
@@ -640,8 +640,8 @@
                 {
                     "description": "Footprint J2",
                     "pos": {
-                        "x": 10.61,
-                        "y": 68.5
+                        "x": 11.11,
+                        "y": 69.0
                     },
                     "uuid": "0ca4cfce-c8af-5114-829c-a0e0f602416f"
                 }
@@ -655,8 +655,8 @@
                 {
                     "description": "Footprint R9",
                     "pos": {
-                        "x": 11.1,
-                        "y": 64.5
+                        "x": 11.18,
+                        "y": 63.99
                     },
                     "uuid": "1170f00a-ecfa-5577-ab9d-6bc402db0be0"
                 }
@@ -1225,8 +1225,8 @@
                 {
                     "description": "Footprint TP10",
                     "pos": {
-                        "x": 31.5,
-                        "y": 67.5
+                        "x": 32.2,
+                        "y": 67.28
                     },
                     "uuid": "9ddb28ad-4e16-52c9-94be-eeabe460d3fe"
                 }

@@ -4,19 +4,19 @@
  "output_sha256_prefix16": {
   "../g3/aesthetic_findings.json": "6b43e0c0ab3e4dea",
   "../g3/bom.csv": "3f8d22508c8c5e38",
-  "../g3/pnp.csv": "6634d914145aa1a8",
-  "../g3/protected_power_entry.drc.json": "13de3cdb1ba82b7c",
+  "../g3/pnp.csv": "ff3d390f90705902",
+  "../g3/protected_power_entry.drc.json": "ef06e11872f7ea5e",
   "../g3/protected_power_entry.kicad_dru": "a6fe61619cdf0dbe",
-  "../g3/protected_power_entry.kicad_pcb": "bdd6b58cec04fab4",
+  "../g3/protected_power_entry.kicad_pcb": "71fe953cbc1cc5ea",
   "../g3/protected_power_entry.kicad_pro": "4501c3986cb54760",
   "../g3/protected_power_entry.kicad_sch": "52ed9ba2d34c603c",
   "../g3/protected_power_entry.kicad_sym": "a908cb05026d5d57",
   "../g3/protected_power_entry.kicadroutingtools.kicad_prl": "121835a8f2276f4e",
   "../g3/protected_power_entry.kicadroutingtools.kicad_pro": "9df9fbfd8404fd82",
-  "../g3/protected_power_entry.kicadroutingtools.log": "70d6f577d0438974",
-  "../g3/protected_power_entry.krt-stats.json": "c644ec355e0f401a",
-  "../g3/protected_power_entry.routing.json": "c7992c643f01b57f",
-  "../g3/protected_power_entry.synth.kicad_pcb": "beb3e80fc635e3f2",
+  "../g3/protected_power_entry.kicadroutingtools.log": "3ec78fa4b8043cf0",
+  "../g3/protected_power_entry.krt-stats.json": "69e23ac9f40af04f",
+  "../g3/protected_power_entry.routing.json": "d60a2acd5c83cbb9",
+  "../g3/protected_power_entry.synth.kicad_pcb": "b4f983c62c960fe1",
   "../g3/protected_power_entry.synth.kicad_pro": "4501c3986cb54760",
   "../g3/sym-lib-table": "ff0e1cb3fad71b8c"
  },
@@ -50,7 +50,7 @@
   "status": "success",
   "warning": null
  },
- "seconds": 433,
+ "seconds": 441,
  "server": {
   "name": "synth-mcp",
   "version": "0.1.1"

@@ -49,22 +49,22 @@
       "strict_sizes": "true",
       "wall_clock_secs": "1200"
     },
-    "input_hash": "beb3e80fc635e3f22d703dc856b56c41b5d88a706ff1bceb8dd0a8c6643bdf2e",
+    "input_hash": "b4f983c62c960fe182af3d6c02585b6c3a010337ef2e478190bc94a600767947",
     "output_hash": "",
     "source_revision": null,
-    "duration_ms": 68041
+    "duration_ms": 75392
   },
   "statistics": {
     "connected_nets": 34,
     "open_nets": 0,
     "open_net_names": [],
-    "segments": 302,
-    "vias": 24,
-    "wire_length_mm": 855.358069,
+    "segments": 326,
+    "vias": 26,
+    "wire_length_mm": 868.542672,
     "pad_escape_rejections": 0,
     "engine_findings": {
       "claimed_successful": "33",
-      "claimed_total_vias": "21",
+      "claimed_total_vias": "20",
       "claimed_via_in_pad": "0",
       "engine_policy_verdict": "rejected",
       "rules_below_board_floor": "none reported"
@@ -108,9 +108,7 @@
     "blocking_reasons": [],
     "unavailable_checks": [],
     "advisories": [
-      "net S5_DIV changes layers at (35.20, 63.90) mm with no ground return via within 1.53 mm and no spot in the GND pour for one; the net carries no fast edge, so the loop is left as an advisory",
-      "net +12V_PROT changes layers at (60.10, 33.80) mm with no ground return via within 1.53 mm and no spot in the GND pour for one; the net carries no fast edge, so the loop is left as an advisory",
-      "net S3_DIV changes layers at (48.90, 66.90) mm with no ground return via within 1.53 mm and no spot in the GND pour for one; the net carries no fast edge, so the loop is left as an advisory"
+      "net +12V_PROT changes layers at (60.10, 33.80) mm with no ground return via within 1.53 mm and no spot in the GND pour for one; the net carries no fast edge, so the loop is left as an advisory"
     ]
   },
   "failure": null

@@ -5488,7 +5488,7 @@
 		(property
 			"Reference"
 			"R4"
-			(at -2.0267 1.88 0)
+			(at -2.35 0 0)
 			(layer "F.SilkS")
 			(uuid "47e79c63-58eb-5c4e-be9d-5a46dab27fcd")
 			(effects
@@ -6021,7 +6021,7 @@
 		"Capacitor_SMD:C_1206_3216Metric"
 		(layer "F.Cu")
 		(uuid "ba62eb01-8682-5a78-b512-d896ede85d90")
-		(at 71 49)
+		(at 71.57 51.71)
 		(property
 			"Reference"
 			"C8"
@@ -6379,7 +6379,7 @@
 		"Capacitor_THT:CP_Radial_D6.3mm_P2.50mm"
 		(layer "F.Cu")
 		(uuid "8ed2b042-3ee6-5d84-83b0-b9ae89aacc08")
-		(at 63.75 47.8)
+		(at 64.25 48.3)
 		(property
 			"Reference"
 			"C10"
@@ -13113,11 +13113,11 @@
 		"Connector_PinHeader_2.54mm:PinHeader_1x08_P2.54mm_Vertical"
 		(layer "F.Cu")
 		(uuid "0ca4cfce-c8af-5114-829c-a0e0f602416f")
-		(at 10.61 68.5 90)
+		(at 11.11 69 90)
 		(property
 			"Reference"
 			"J2"
-			(at -2.64 8.89 0)
+			(at 2.64 8.89 0)
 			(layer "F.SilkS")
 			(uuid "37cc8c9d-b0e5-5ab2-99de-9c168f85b450")
 			(effects
@@ -13413,7 +13413,7 @@
 		"Resistor_SMD:R_0603_1608Metric"
 		(layer "F.Cu")
 		(uuid "1170f00a-ecfa-5577-ab9d-6bc402db0be0")
-		(at 11.1 64.5 90)
+		(at 11.18 63.99 90)
 		(property
 			"Reference"
 			"R9"
@@ -20766,7 +20766,7 @@
 		"TestPoint:TestPoint_Pad_D1.5mm"
 		(layer "F.Cu")
 		(uuid "9ddb28ad-4e16-52c9-94be-eeabe460d3fe")
-		(at 31.5 67.5)
+		(at 32.2 67.28)
 		(property
 			"Reference"
 			"TP10"
