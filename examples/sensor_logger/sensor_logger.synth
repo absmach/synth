@@ -72,6 +72,7 @@ board "sensor_logger" {
   component U4: sensor     "bme680_lga8"
   component C7: capacitor  "c_generic_0603" value "100nF" { placement_hint { near: "U3" priority: hard } }
   component C8: capacitor  "c_generic_0603" value "100nF" { placement_hint { near: "U4" priority: hard } }
+  component C10: capacitor "c_generic_0603" value "100nF" { placement_hint { near: "U4" priority: hard } } // VDDIO
   component R2: resistor   "r_generic_0603" value "4.7k"  // SDA pullup
   component R3: resistor   "r_generic_0603" value "4.7k"  // SCL pullup
 
@@ -94,6 +95,8 @@ board "sensor_logger" {
   // The BME680's I/O supply and second ground pad must be tied, not left open
   connect U4.vdd -> U4.vddio
   connect U4.gnd -> U4.gnd2
+  connect U4.vddio -> C10.p1
+  connect U4.gnd2  -> C10.p2
   connect U2.pc4_sda -> R2.p1
   connect R2.p2      -> U2.vcc
   connect U2.pc5_scl -> R3.p1
