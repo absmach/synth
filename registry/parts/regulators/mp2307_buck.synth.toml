@@ -1,4 +1,5 @@
 id = "mp2307_buck"
+mpn = "MP2307DN-LF"
 kind = "regulator"
 description = "MPS MP2307 3A step-down switching regulator, SO-8"
 # `SOIC-8-1EP_3.9x4.9mm_P1.27mm_EP2.4x3.4mm` does not exist in any KiCad
@@ -110,4 +111,10 @@ net = "sw"
 through = "inductor"
 value = "22uf"
 count = 1
+
+[provenance]
+source = "authored"
+datasheet_url = "https://www.monolithicpower.com/pub/media/document/MP2307_r1.3.pdf"
+reviewed_by = "JeffMboya"
+reviewed_at = "2026-10-30"
 
