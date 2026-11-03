@@ -1,0 +1,36 @@
+id = "polyfuse_2r6a_16v"
+kind = "fuse"
+version = 0
+lifecycle = "active"
+description = "PTTC SMD1812P260TF/16 resettable PPTC fuse, 2.6 A hold, 16 V, 1812"
+mpn = "SMD1812P260TF/16"
+lcsc_pn = "C438899"
+kicad_symbol = "Device:Polyfuse"
+kicad_footprint = "Fuse:Fuse_1812_4532Metric"
+
+[footprint_dimensions]
+width_mm = 4.5
+height_mm = 3.2
+courtyard_margin_mm = 0.25
+
+[operating_conditions]
+max_voltage_v = 16.0
+max_current_ma = 2600.0
+
+[[pins]]
+name = "p1"
+number = "1"
+electrical_type = "passive"
+required = true
+
+[[pins]]
+name = "p2"
+number = "2"
+electrical_type = "passive"
+required = true
+
+[provenance]
+source = "authored"
+datasheet_url = "https://www.lcsc.com/product-detail/C438899.html"
+revision = "LCSC product page, checked 2026-11-03"
+reviewed_by = ""

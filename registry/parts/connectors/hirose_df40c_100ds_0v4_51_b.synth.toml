@@ -1,0 +1,613 @@
+id = "hirose_df40c_100ds_0v4_51_b"
+kind = "connector"
+version = 0
+lifecycle = "active"
+description = "Hirose DF40C-100DS-0.4V(51) 100-pin 0.4 mm board-to-board receptacle, CM4 pins 101-200 side. Pin names pN are the connector pad numbers; pad N is CM4 pin 100+N."
+mpn = "DF40C-100DS-0.4V(51)"
+lcsc_pn = "C597931"
+kicad_footprint = "Connector_Hirose_DF40:Hirose_DF40C-100DS-0.4V_2x50_P0.4mm"
+
+[footprint_dimensions]
+width_mm = 26.0
+height_mm = 4.2
+courtyard_margin_mm = 0.25
+
+[operating_conditions]
+min_voltage_v = 0.0
+max_voltage_v = 5.5
+max_current_ma = 0.0
+
+[[pins]]
+name = "p1"
+number = "1"
+electrical_type = "input"
+
+[[pins]]
+name = "p2"
+number = "2"
+electrical_type = "input"
+
+[[pins]]
+name = "p3"
+number = "3"
+electrical_type = "differential_negative"
+capabilities = ["diff_pair_negative"]
+
+[[pins]]
+name = "p4"
+number = "4"
+electrical_type = "passive"
+
+[[pins]]
+name = "p5"
+number = "5"
+electrical_type = "differential_positive"
+capabilities = ["diff_pair_positive"]
+
+[[pins]]
+name = "p6"
+number = "6"
+electrical_type = "passive"
+
+[[pins]]
+name = "p7"
+number = "7"
+electrical_type = "passive"
+required = true
+
+[[pins]]
+name = "p8"
+number = "8"
+electrical_type = "passive"
+required = true
+
+[[pins]]
+name = "p9"
+number = "9"
+electrical_type = "output"
+
+[[pins]]
+name = "p10"
+number = "10"
+electrical_type = "differential_positive"
+capabilities = ["diff_pair_positive"]
+
+[[pins]]
+name = "p11"
+number = "11"
+electrical_type = "passive"
+
+[[pins]]
+name = "p12"
+number = "12"
+electrical_type = "differential_negative"
+capabilities = ["diff_pair_negative"]
+
+[[pins]]
+name = "p13"
+number = "13"
+electrical_type = "passive"
+required = true
+
+[[pins]]
+name = "p14"
+number = "14"
+electrical_type = "passive"
+required = true
+
+[[pins]]
+name = "p15"
+number = "15"
+electrical_type = "differential_negative"
+capabilities = ["diff_pair_negative"]
+
+[[pins]]
+name = "p16"
+number = "16"
+electrical_type = "differential_positive"
+capabilities = ["diff_pair_positive"]
+
+[[pins]]
+name = "p17"
+number = "17"
+electrical_type = "differential_positive"
+capabilities = ["diff_pair_positive"]
+
+[[pins]]
+name = "p18"
+number = "18"
+electrical_type = "differential_negative"
+capabilities = ["diff_pair_negative"]
+
+[[pins]]
+name = "p19"
+number = "19"
+electrical_type = "passive"
+required = true
+
+[[pins]]
+name = "p20"
+number = "20"
+electrical_type = "passive"
+required = true
+
+[[pins]]
+name = "p21"
+number = "21"
+electrical_type = "differential_negative"
+capabilities = ["diff_pair_negative"]
+
+[[pins]]
+name = "p22"
+number = "22"
+electrical_type = "differential_positive"
+capabilities = ["diff_pair_positive"]
+
+[[pins]]
+name = "p23"
+number = "23"
+electrical_type = "differential_positive"
+capabilities = ["diff_pair_positive"]
+
+[[pins]]
+name = "p24"
+number = "24"
+electrical_type = "differential_negative"
+capabilities = ["diff_pair_negative"]
+
+[[pins]]
+name = "p25"
+number = "25"
+electrical_type = "passive"
+required = true
+
+[[pins]]
+name = "p26"
+number = "26"
+electrical_type = "passive"
+required = true
+
+[[pins]]
+name = "p27"
+number = "27"
+electrical_type = "differential_negative"
+capabilities = ["diff_pair_negative"]
+
+[[pins]]
+name = "p28"
+number = "28"
+electrical_type = "differential_negative"
+capabilities = ["diff_pair_negative"]
+
+[[pins]]
+name = "p29"
+number = "29"
+electrical_type = "differential_positive"
+capabilities = ["diff_pair_positive"]
+
+[[pins]]
+name = "p30"
+number = "30"
+electrical_type = "differential_positive"
+capabilities = ["diff_pair_positive"]
+
+[[pins]]
+name = "p31"
+number = "31"
+electrical_type = "passive"
+required = true
+
+[[pins]]
+name = "p32"
+number = "32"
+electrical_type = "passive"
+required = true
+
+[[pins]]
+name = "p33"
+number = "33"
+electrical_type = "differential_negative"
+capabilities = ["diff_pair_negative"]
+
+[[pins]]
+name = "p34"
+number = "34"
+electrical_type = "differential_negative"
+capabilities = ["diff_pair_negative"]
+
+[[pins]]
+name = "p35"
+number = "35"
+electrical_type = "differential_positive"
+capabilities = ["diff_pair_positive"]
+
+[[pins]]
+name = "p36"
+number = "36"
+electrical_type = "differential_positive"
+capabilities = ["diff_pair_positive"]
+
+[[pins]]
+name = "p37"
+number = "37"
+electrical_type = "passive"
+required = true
+
+[[pins]]
+name = "p38"
+number = "38"
+electrical_type = "passive"
+required = true
+
+[[pins]]
+name = "p39"
+number = "39"
+electrical_type = "differential_negative"
+capabilities = ["diff_pair_negative"]
+
+[[pins]]
+name = "p40"
+number = "40"
+electrical_type = "differential_negative"
+capabilities = ["diff_pair_negative"]
+
+[[pins]]
+name = "p41"
+number = "41"
+electrical_type = "differential_positive"
+capabilities = ["diff_pair_positive"]
+
+[[pins]]
+name = "p42"
+number = "42"
+electrical_type = "differential_positive"
+capabilities = ["diff_pair_positive"]
+
+[[pins]]
+name = "p43"
+number = "43"
+electrical_type = "input"
+
+[[pins]]
+name = "p44"
+number = "44"
+electrical_type = "passive"
+required = true
+
+[[pins]]
+name = "p45"
+number = "45"
+electrical_type = "bidirectional"
+
+[[pins]]
+name = "p46"
+number = "46"
+electrical_type = "differential_positive"
+capabilities = ["diff_pair_positive"]
+
+[[pins]]
+name = "p47"
+number = "47"
+electrical_type = "bidirectional"
+
+[[pins]]
+name = "p48"
+number = "48"
+electrical_type = "differential_negative"
+capabilities = ["diff_pair_negative"]
+
+[[pins]]
+name = "p49"
+number = "49"
+electrical_type = "input"
+
+[[pins]]
+name = "p50"
+number = "50"
+electrical_type = "passive"
+required = true
+
+[[pins]]
+name = "p51"
+number = "51"
+electrical_type = "input"
+
+[[pins]]
+name = "p52"
+number = "52"
+electrical_type = "differential_positive"
+capabilities = ["diff_pair_positive"]
+
+[[pins]]
+name = "p53"
+number = "53"
+electrical_type = "input"
+
+[[pins]]
+name = "p54"
+number = "54"
+electrical_type = "differential_negative"
+capabilities = ["diff_pair_negative"]
+
+[[pins]]
+name = "p55"
+number = "55"
+electrical_type = "passive"
+required = true
+
+[[pins]]
+name = "p56"
+number = "56"
+electrical_type = "passive"
+required = true
+
+[[pins]]
+name = "p57"
+number = "57"
+electrical_type = "differential_negative"
+capabilities = ["diff_pair_negative"]
+
+[[pins]]
+name = "p58"
+number = "58"
+electrical_type = "differential_positive"
+capabilities = ["diff_pair_positive"]
+
+[[pins]]
+name = "p59"
+number = "59"
+electrical_type = "differential_positive"
+capabilities = ["diff_pair_positive"]
+
+[[pins]]
+name = "p60"
+number = "60"
+electrical_type = "differential_negative"
+capabilities = ["diff_pair_negative"]
+
+[[pins]]
+name = "p61"
+number = "61"
+electrical_type = "passive"
+required = true
+
+[[pins]]
+name = "p62"
+number = "62"
+electrical_type = "passive"
+required = true
+
+[[pins]]
+name = "p63"
+number = "63"
+electrical_type = "differential_negative"
+capabilities = ["diff_pair_negative"]
+
+[[pins]]
+name = "p64"
+number = "64"
+electrical_type = "differential_positive"
+capabilities = ["diff_pair_positive"]
+
+[[pins]]
+name = "p65"
+number = "65"
+electrical_type = "differential_positive"
+capabilities = ["diff_pair_positive"]
+
+[[pins]]
+name = "p66"
+number = "66"
+electrical_type = "differential_negative"
+capabilities = ["diff_pair_negative"]
+
+[[pins]]
+name = "p67"
+number = "67"
+electrical_type = "passive"
+required = true
+
+[[pins]]
+name = "p68"
+number = "68"
+electrical_type = "passive"
+required = true
+
+[[pins]]
+name = "p69"
+number = "69"
+electrical_type = "differential_negative"
+capabilities = ["diff_pair_negative"]
+
+[[pins]]
+name = "p70"
+number = "70"
+electrical_type = "differential_positive"
+capabilities = ["diff_pair_positive"]
+
+[[pins]]
+name = "p71"
+number = "71"
+electrical_type = "differential_positive"
+capabilities = ["diff_pair_positive"]
+
+[[pins]]
+name = "p72"
+number = "72"
+electrical_type = "differential_negative"
+capabilities = ["diff_pair_negative"]
+
+[[pins]]
+name = "p73"
+number = "73"
+electrical_type = "passive"
+required = true
+
+[[pins]]
+name = "p74"
+number = "74"
+electrical_type = "passive"
+required = true
+
+[[pins]]
+name = "p75"
+number = "75"
+electrical_type = "differential_negative"
+capabilities = ["diff_pair_negative"]
+
+[[pins]]
+name = "p76"
+number = "76"
+electrical_type = "differential_positive"
+capabilities = ["diff_pair_positive"]
+
+[[pins]]
+name = "p77"
+number = "77"
+electrical_type = "differential_positive"
+capabilities = ["diff_pair_positive"]
+
+[[pins]]
+name = "p78"
+number = "78"
+electrical_type = "differential_negative"
+capabilities = ["diff_pair_negative"]
+
+[[pins]]
+name = "p79"
+number = "79"
+electrical_type = "passive"
+required = true
+
+[[pins]]
+name = "p80"
+number = "80"
+electrical_type = "passive"
+required = true
+
+[[pins]]
+name = "p81"
+number = "81"
+electrical_type = "differential_negative"
+capabilities = ["diff_pair_negative"]
+
+[[pins]]
+name = "p82"
+number = "82"
+electrical_type = "differential_positive"
+capabilities = ["diff_pair_positive"]
+
+[[pins]]
+name = "p83"
+number = "83"
+electrical_type = "differential_positive"
+capabilities = ["diff_pair_positive"]
+
+[[pins]]
+name = "p84"
+number = "84"
+electrical_type = "differential_negative"
+capabilities = ["diff_pair_negative"]
+
+[[pins]]
+name = "p85"
+number = "85"
+electrical_type = "passive"
+required = true
+
+[[pins]]
+name = "p86"
+number = "86"
+electrical_type = "passive"
+required = true
+
+[[pins]]
+name = "p87"
+number = "87"
+electrical_type = "differential_negative"
+capabilities = ["diff_pair_negative"]
+
+[[pins]]
+name = "p88"
+number = "88"
+electrical_type = "differential_positive"
+capabilities = ["diff_pair_positive"]
+
+[[pins]]
+name = "p89"
+number = "89"
+electrical_type = "differential_positive"
+capabilities = ["diff_pair_positive"]
+
+[[pins]]
+name = "p90"
+number = "90"
+electrical_type = "differential_negative"
+capabilities = ["diff_pair_negative"]
+
+[[pins]]
+name = "p91"
+number = "91"
+electrical_type = "passive"
+required = true
+
+[[pins]]
+name = "p92"
+number = "92"
+electrical_type = "passive"
+required = true
+
+[[pins]]
+name = "p93"
+number = "93"
+electrical_type = "differential_negative"
+capabilities = ["diff_pair_negative"]
+
+[[pins]]
+name = "p94"
+number = "94"
+electrical_type = "differential_negative"
+capabilities = ["diff_pair_negative"]
+
+[[pins]]
+name = "p95"
+number = "95"
+electrical_type = "differential_positive"
+capabilities = ["diff_pair_positive"]
+
+[[pins]]
+name = "p96"
+number = "96"
+electrical_type = "differential_positive"
+capabilities = ["diff_pair_positive"]
+
+[[pins]]
+name = "p97"
+number = "97"
+electrical_type = "passive"
+required = true
+
+[[pins]]
+name = "p98"
+number = "98"
+electrical_type = "passive"
+required = true
+
+[[pins]]
+name = "p99"
+number = "99"
+electrical_type = "bidirectional"
+capabilities = ["i2c_sda"]
+
+[[pins]]
+name = "p100"
+number = "100"
+electrical_type = "bidirectional"
+capabilities = ["i2c_scl"]
+
+
+[provenance]
+source = "authored"
+datasheet_url = "https://www.hirose.com/en/product/p/CL0684-4033-4-51"
+revision = "DF40 series catalogue, checked 2026-11-03"
+reviewed_by = ""

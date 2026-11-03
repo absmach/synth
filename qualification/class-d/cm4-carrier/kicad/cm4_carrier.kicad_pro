@@ -1,0 +1,384 @@
+{
+  "board": {
+    "design_settings": {
+      "defaults": {
+        "min_clearance": 0.127,
+        "min_copper_edge_clearance": 0.3,
+        "min_hole_clearance": 0.2,
+        "min_through_hole_diameter": 0.3,
+        "min_track_width": 0.127,
+        "min_via_annular_width": 0.13,
+        "min_via_diameter": 0.56
+      },
+      "rules": {
+        "min_clearance": 0.127,
+        "min_copper_edge_clearance": 0.3,
+        "min_hole_clearance": 0.2,
+        "min_through_hole_diameter": 0.3,
+        "min_track_width": 0.127,
+        "min_via_annular_width": 0.13,
+        "min_via_diameter": 0.56
+      }
+    }
+  },
+  "boards": [],
+  "meta": {
+    "filename": "cm4_carrier.kicad_pro",
+    "uuid": "7a6b7856-84dd-5744-be21-f16a5a89cbe1",
+    "version": 1
+  },
+  "net_settings": {
+    "classes": [
+      {
+        "bus_width": 12,
+        "clearance": 0.127,
+        "diff_pair_gap": 0.25,
+        "diff_pair_via_gap": 0.25,
+        "diff_pair_width": 0.2,
+        "line_style": 0,
+        "microvia_diameter": 0.3,
+        "microvia_drill": 0.1,
+        "name": "Power",
+        "pcb_color": "rgba(213, 94, 0, 1.000)",
+        "priority": 0,
+        "schematic_color": "rgba(213, 94, 0, 1.000)",
+        "track_width": 0.2,
+        "via_diameter": 0.6,
+        "via_drill": 0.3,
+        "wire_width": 6
+      },
+      {
+        "bus_width": 12,
+        "clearance": 0.15,
+        "diff_pair_gap": 0.25,
+        "diff_pair_via_gap": 0.25,
+        "diff_pair_width": 0.2,
+        "line_style": 0,
+        "microvia_diameter": 0.3,
+        "microvia_drill": 0.1,
+        "name": "I2C",
+        "pcb_color": "rgba(173, 67, 191, 1.000)",
+        "priority": 1,
+        "schematic_color": "rgba(173, 67, 191, 1.000)",
+        "track_width": 0.15,
+        "via_diameter": 0.6,
+        "via_drill": 0.3,
+        "wire_width": 6
+      },
+      {
+        "bus_width": 12,
+        "clearance": 0.15,
+        "diff_pair_gap": 0.15,
+        "diff_pair_via_gap": 0.25,
+        "diff_pair_width": 0.2,
+        "line_style": 0,
+        "microvia_diameter": 0.3,
+        "microvia_drill": 0.1,
+        "name": "USB",
+        "pcb_color": "rgba(67, 191, 102, 1.000)",
+        "priority": 2,
+        "schematic_color": "rgba(67, 191, 102, 1.000)",
+        "track_width": 0.2,
+        "via_diameter": 0.6,
+        "via_drill": 0.3,
+        "wire_width": 6
+      },
+      {
+        "bus_width": 12,
+        "clearance": 0.127,
+        "diff_pair_gap": 0.25,
+        "diff_pair_via_gap": 0.25,
+        "diff_pair_width": 0.2,
+        "line_style": 0,
+        "microvia_diameter": 0.3,
+        "microvia_drill": 0.1,
+        "name": "Default",
+        "pcb_color": "rgba(0, 0, 0, 1.000)",
+        "priority": 2147483647,
+        "schematic_color": "rgba(0, 0, 0, 1.000)",
+        "track_width": 0.2,
+        "via_diameter": 0.6,
+        "via_drill": 0.3,
+        "wire_width": 6
+      },
+      {
+        "bus_width": 12,
+        "clearance": 0.2,
+        "diff_pair_gap": 0.25,
+        "diff_pair_via_gap": 0.25,
+        "diff_pair_width": 0.2,
+        "line_style": 0,
+        "microvia_diameter": 0.3,
+        "microvia_drill": 0.1,
+        "name": "PWR",
+        "pcb_color": "rgba(191, 67, 171, 1.000)",
+        "priority": 4,
+        "schematic_color": "rgba(191, 67, 171, 1.000)",
+        "track_width": 0.5,
+        "via_diameter": 0.6,
+        "via_drill": 0.3,
+        "wire_width": 6
+      },
+      {
+        "bus_width": 12,
+        "clearance": 0.15,
+        "diff_pair_gap": 0.15,
+        "diff_pair_via_gap": 0.25,
+        "diff_pair_width": 0.2,
+        "line_style": 0,
+        "microvia_diameter": 0.3,
+        "microvia_drill": 0.1,
+        "name": "ETH",
+        "pcb_color": "rgba(191, 67, 175, 1.000)",
+        "priority": 5,
+        "schematic_color": "rgba(191, 67, 175, 1.000)",
+        "track_width": 0.2,
+        "via_diameter": 0.6,
+        "via_drill": 0.3,
+        "wire_width": 6
+      },
+      {
+        "bus_width": 12,
+        "clearance": 0.15,
+        "diff_pair_gap": 0.15,
+        "diff_pair_via_gap": 0.25,
+        "diff_pair_width": 0.2,
+        "line_style": 0,
+        "microvia_diameter": 0.3,
+        "microvia_drill": 0.1,
+        "name": "HDMI",
+        "pcb_color": "rgba(191, 67, 185, 1.000)",
+        "priority": 6,
+        "schematic_color": "rgba(191, 67, 185, 1.000)",
+        "track_width": 0.2,
+        "via_diameter": 0.6,
+        "via_drill": 0.3,
+        "wire_width": 6
+      },
+      {
+        "bus_width": 12,
+        "clearance": 0.15,
+        "diff_pair_gap": 0.25,
+        "diff_pair_via_gap": 0.25,
+        "diff_pair_width": 0.2,
+        "line_style": 0,
+        "microvia_diameter": 0.3,
+        "microvia_drill": 0.1,
+        "name": "SD",
+        "pcb_color": "rgba(67, 191, 154, 1.000)",
+        "priority": 7,
+        "schematic_color": "rgba(67, 191, 154, 1.000)",
+        "track_width": 0.15,
+        "via_diameter": 0.6,
+        "via_drill": 0.3,
+        "wire_width": 6
+      },
+      {
+        "bus_width": 12,
+        "clearance": 0.15,
+        "diff_pair_gap": 0.15,
+        "diff_pair_via_gap": 0.25,
+        "diff_pair_width": 0.15,
+        "line_style": 0,
+        "microvia_diameter": 0.3,
+        "microvia_drill": 0.1,
+        "name": "CAM",
+        "pcb_color": "rgba(67, 125, 191, 1.000)",
+        "priority": 8,
+        "schematic_color": "rgba(67, 125, 191, 1.000)",
+        "track_width": 0.15,
+        "via_diameter": 0.6,
+        "via_drill": 0.3,
+        "wire_width": 6
+      },
+      {
+        "bus_width": 12,
+        "clearance": 0.15,
+        "diff_pair_gap": 0.15,
+        "diff_pair_via_gap": 0.25,
+        "diff_pair_width": 0.15,
+        "line_style": 0,
+        "microvia_diameter": 0.3,
+        "microvia_drill": 0.1,
+        "name": "DSI",
+        "pcb_color": "rgba(77, 191, 67, 1.000)",
+        "priority": 9,
+        "schematic_color": "rgba(77, 191, 67, 1.000)",
+        "track_width": 0.15,
+        "via_diameter": 0.6,
+        "via_drill": 0.3,
+        "wire_width": 6
+      }
+    ],
+    "meta": {
+      "version": 4
+    },
+    "net_colors": null,
+    "netclass_assignments": {
+      "+1V8": "PWR",
+      "+3V3": "PWR",
+      "+5V": "PWR",
+      "+5V_AUX": "PWR",
+      "/HDMI_SCL_CONN": "I2C",
+      "/HDMI_SDA_CONN": "I2C",
+      "/SW_1V8": "PWR",
+      "/SW_3V3": "PWR",
+      "/SW_5V": "PWR",
+      "/USB1_N": "USB",
+      "/USB1_P": "USB",
+      "/USB2_N": "USB",
+      "/USB2_P": "USB",
+      "/USB3_N": "USB",
+      "/USB3_P": "USB",
+      "/USB4_N": "USB",
+      "/USB4_P": "USB",
+      "CAM_CK_N": "CAM",
+      "CAM_CK_P": "CAM",
+      "CAM_D0_N": "CAM",
+      "CAM_D0_P": "CAM",
+      "CAM_D1_N": "CAM",
+      "CAM_D1_P": "CAM",
+      "CM4_3V3": "Power",
+      "DSI_CK_N": "DSI",
+      "DSI_CK_P": "DSI",
+      "DSI_D0_N": "DSI",
+      "DSI_D0_P": "DSI",
+      "DSI_D1_N": "DSI",
+      "DSI_D1_P": "DSI",
+      "ETH0_N": "ETH",
+      "ETH0_P": "ETH",
+      "ETH1_N": "ETH",
+      "ETH1_P": "ETH",
+      "ETH2_N": "ETH",
+      "ETH2_P": "ETH",
+      "ETH3_N": "ETH",
+      "ETH3_P": "ETH",
+      "GND": "PWR",
+      "HDMI_5V": "PWR",
+      "HDMI_CK_N": "HDMI",
+      "HDMI_CK_P": "HDMI",
+      "HDMI_D0_N": "HDMI",
+      "HDMI_D0_P": "HDMI",
+      "HDMI_D1_N": "HDMI",
+      "HDMI_D1_P": "HDMI",
+      "HDMI_D2_N": "HDMI",
+      "HDMI_D2_P": "HDMI",
+      "HDMI_SCL_CONN": "I2C",
+      "HDMI_SCL_MCU": "I2C",
+      "HDMI_SDA_CONN": "I2C",
+      "HDMI_SDA_MCU": "I2C",
+      "RTC_BAT": "Power",
+      "RTC_VDD": "PWR",
+      "SCL0": "I2C",
+      "SDA0": "I2C",
+      "SD_CLK": "SD",
+      "SD_CMD": "SD",
+      "SD_DAT0": "SD",
+      "SD_DAT1": "SD",
+      "SD_DAT2": "SD",
+      "SD_DAT3": "SD",
+      "SD_VDD": "PWR",
+      "SW_1V8": "PWR",
+      "SW_3V3": "PWR",
+      "SW_5V": "PWR",
+      "USB1_N": "USB",
+      "USB1_P": "USB",
+      "USB2_N": "USB",
+      "USB2_P": "USB",
+      "USB3_N": "USB",
+      "USB3_P": "USB",
+      "USB4_N": "USB",
+      "USB4_P": "USB",
+      "USB_UP_N": "USB",
+      "USB_UP_P": "USB",
+      "USB_VBUS1": "PWR",
+      "USB_VBUS2": "PWR",
+      "USB_VBUS3": "PWR",
+      "USB_VBUS4": "PWR",
+      "VIN_12V": "PWR",
+      "VIN_FUSED": "PWR",
+      "VIN_PROT": "PWR"
+    },
+    "netclass_patterns": [
+      {
+        "netclass": "PWR",
+        "pattern": "/*/SW_5V"
+      },
+      {
+        "netclass": "PWR",
+        "pattern": "/*/SW_3V3"
+      },
+      {
+        "netclass": "PWR",
+        "pattern": "/*/SW_1V8"
+      },
+      {
+        "netclass": "USB",
+        "pattern": "/*/USB1_P"
+      },
+      {
+        "netclass": "USB",
+        "pattern": "/*/USB1_N"
+      },
+      {
+        "netclass": "USB",
+        "pattern": "/*/USB2_P"
+      },
+      {
+        "netclass": "USB",
+        "pattern": "/*/USB2_N"
+      },
+      {
+        "netclass": "USB",
+        "pattern": "/*/USB3_P"
+      },
+      {
+        "netclass": "USB",
+        "pattern": "/*/USB3_N"
+      },
+      {
+        "netclass": "USB",
+        "pattern": "/*/USB4_P"
+      },
+      {
+        "netclass": "USB",
+        "pattern": "/*/USB4_N"
+      },
+      {
+        "netclass": "I2C",
+        "pattern": "/*/HDMI_SDA_CONN"
+      },
+      {
+        "netclass": "I2C",
+        "pattern": "/*/HDMI_SCL_CONN"
+      }
+    ]
+  },
+  "schematic": {
+    "annotate_start_num": 0,
+    "drawing": {},
+    "variants": []
+  },
+  "sheets": [
+    [
+      "7e69c29b-c8ee-5ba6-9157-99a1037a835e",
+      ""
+    ],
+    [
+      "33c17d3d-b9a9-50a6-8201-5213dc5febe6",
+      "cm4_carrier_Power.kicad_sch"
+    ],
+    [
+      "59eae9a7-37c0-5d34-8eb4-9789fc0bd28e",
+      "cm4_carrier_CM4.kicad_sch"
+    ],
+    [
+      "614a25c4-e82d-5ce9-b623-a5f12ec35aa9",
+      "cm4_carrier_Interfaces.kicad_sch"
+    ],
+    [
+      "d3cdf12a-3ed8-5143-b6ae-e972d4c5f74d",
+      "cm4_carrier_Peripherals.kicad_sch"
+    ]
+  ]
+}

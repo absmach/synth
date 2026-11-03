@@ -1,0 +1,42 @@
+id = "xtal_24mhz_3225"
+kind = "crystal"
+version = 0
+lifecycle = "active"
+description = "24.000 MHz parallel-resonant fundamental crystal, 12 pF load, 3225 4-pin"
+mpn = "ECS-240-12-33Q-JES-TR"
+lcsc_pn = ""
+kicad_symbol = "Device:Crystal_GND24"
+kicad_footprint = "Crystal:Crystal_SMD_3225-4Pin_3.2x2.5mm"
+
+[footprint_dimensions]
+width_mm = 3.2
+height_mm = 2.5
+courtyard_margin_mm = 0.25
+
+[[pins]]
+name = "p1"
+number = "1"
+electrical_type = "passive"
+required = true
+
+[[pins]]
+name = "p2"
+number = "2"
+electrical_type = "passive"
+required = true
+
+[[pins]]
+name = "gnd1"
+number = "3"
+electrical_type = "ground_reference"
+
+[[pins]]
+name = "gnd2"
+number = "4"
+electrical_type = "ground_reference"
+
+[provenance]
+source = "authored"
+datasheet_url = "https://ecsxtal.com/store/pdf/ECX-33Q.pdf"
+revision = "ECS ECX-33Q series, checked 2026-11-03; LCSC number not found"
+reviewed_by = ""

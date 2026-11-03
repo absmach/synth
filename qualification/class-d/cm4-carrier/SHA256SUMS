@@ -1,0 +1,20 @@
+# Local manifest of the committed artifacts. These are NOT CI golden hashes:
+# no CI run exists for this branch (it was not pushed).
+# Generated with: find . -type f ! -name '*.md' ! -name SHA256SUMS -print0 | sort -z | xargs -0 sha256sum
+d3ab939ec2d1dfdc8ee57c336c74e5c326cbfaa8c95c10886dcd50728326be5a  ./cm4_carrier.placement.layout.toml
+c74a87dd6e3f416f2336127c22148cf507f3bf89c928135c4f9ca713a2559a34  ./cm4_carrier.synth
+2d1d1d3e9455f7ea21c4cb93081f0d70bfa9fac75ef726c58cadccabdf942cba  ./images/schematic/cm4_carrier-CM4.svg
+6285e50db2b1e81a23a62a8b25cb1039f7878f28596bc80577f3ce5bcf935eaa  ./images/schematic/cm4_carrier-Interfaces.svg
+5cdcfc827b7eb35abe0c7719fd89ff2d31d2e2e27848a59355646933c33b2bb9  ./images/schematic/cm4_carrier-Peripherals.svg
+47a8e3149d50a5a8633fa46b1e8b31f51c9083b8817292134f15bdcefe2f382d  ./images/schematic/cm4_carrier-Power.svg
+39e6ebb129dd80e7bbe4921dba8ed22ac41157e799d6bc415481615400d3bc4d  ./images/schematic/cm4_carrier.svg
+a6fe61619cdf0dbe90fc726dc32f7cc8e9889833d6b1d5aec574d3f1b7b802d9  ./kicad/cm4_carrier.kicad_dru
+074d97ce689d7845b1cc1d0c310621c44c30e4b2fdb8cd324eca8d8c75d5ccd6  ./kicad/cm4_carrier.kicad_pro
+51432aee7574d6cd0b7da5c8cda0071d2f181b9424e85240731ee8d56199654c  ./kicad/cm4_carrier.kicad_sch
+908911fe9046af074fce839d300b327acbd7963333dd72d7002c35527ed2b96c  ./kicad/cm4_carrier.kicad_sym
+254c2b03af23cad3ce5addf92f31cdf1629b097649b7712d8c99f38b117bb76e  ./kicad/cm4_carrier_CM4.kicad_sch
+8f997a0ae259d3a8caa03085c15b48d23bd5e9c8be9fdb9d96b6113859dd1203  ./kicad/cm4_carrier_Interfaces.kicad_sch
+a0dbbbf5efddea40f3c25baf999aa1ffc9eb09abffb8efce0c94a85af4efc9fa  ./kicad/cm4_carrier_Peripherals.kicad_sch
+639e8f5a031f691f511677ef419edb22a1361b7259f7c8cc855c59865e9b114c  ./kicad/cm4_carrier_Power.kicad_sch
+48da4c08c2d75c6db4d9973e0dd30c511e461394c0f6b0c9dbb933f81f509ca5  ./qualification.json
+1b53c2393ba12052421b0695ec25a2bf2d04272a8dd86efa693420b6d820725a  ./reports/cm4_carrier.kicad-erc.json

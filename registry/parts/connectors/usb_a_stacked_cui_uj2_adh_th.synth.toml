@@ -1,0 +1,75 @@
+id = "usb_a_stacked_cui_uj2_adh_th"
+kind = "connector"
+version = 0
+lifecycle = "active"
+description = "Same Sky (CUI) UJ2-ADH-3-TH dual stacked USB 2.0 Type-A receptacle, through-hole, 8 contacts plus shield"
+mpn = "UJ2-ADH-3-TH"
+lcsc_pn = "C6731588"
+kicad_symbol = "Connector:USB_A_Stacked"
+kicad_footprint = "Connector_USB:USB_A_CUI_UJ2-ADH-TH_Horizontal_Stacked"
+
+[footprint_dimensions]
+width_mm = 14.5
+height_mm = 17.0
+courtyard_margin_mm = 0.25
+mating_face = "top"
+
+[operating_conditions]
+min_voltage_v = 0.0
+max_voltage_v = 5.5
+max_current_ma = 1000.0
+
+[[pins]]
+name = "vbus1"
+number = "1"
+electrical_type = "power_input"
+required = true
+
+[[pins]]
+name = "d1_minus"
+number = "2"
+electrical_type = "bidirectional"
+
+[[pins]]
+name = "d1_plus"
+number = "3"
+electrical_type = "bidirectional"
+
+[[pins]]
+name = "gnd1"
+number = "4"
+electrical_type = "power_input"
+required = true
+
+[[pins]]
+name = "vbus2"
+number = "5"
+electrical_type = "power_input"
+required = true
+
+[[pins]]
+name = "d2_minus"
+number = "6"
+electrical_type = "bidirectional"
+
+[[pins]]
+name = "d2_plus"
+number = "7"
+electrical_type = "bidirectional"
+
+[[pins]]
+name = "gnd2"
+number = "8"
+electrical_type = "power_input"
+required = true
+
+[[pins]]
+name = "shield"
+number = "SH"
+electrical_type = "ground_reference"
+
+[provenance]
+source = "authored"
+datasheet_url = "https://www.cuidevices.com/product/resource/uj2-adh-th.pdf"
+revision = "1.04, 2024-09-12"
+reviewed_by = ""

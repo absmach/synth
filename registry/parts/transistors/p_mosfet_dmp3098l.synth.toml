@@ -1,0 +1,40 @@
+id = "p_mosfet_dmp3098l"
+kind = "transistor"
+version = 0
+lifecycle = "active"
+description = "Diodes DMP3098L -30 V, -3.8 A P-channel enhancement MOSFET, SOT-23, Vgs +/-20 V, Rds(on) 56 mOhm at -10 V"
+mpn = "DMP3098L-7"
+lcsc_pn = "C150492"
+kicad_symbol = "Transistor_FET:Si2301CDS"
+kicad_footprint = "Package_TO_SOT_SMD:SOT-23"
+
+[footprint_dimensions]
+width_mm = 3.0
+height_mm = 1.4
+courtyard_margin_mm = 0.25
+
+[operating_conditions]
+min_voltage_v = 0.0
+max_voltage_v = 30.0
+max_current_ma = 3800.0
+
+[[pins]]
+name = "g"
+number = "1"
+electrical_type = "input"
+
+[[pins]]
+name = "s"
+number = "2"
+electrical_type = "passive"
+
+[[pins]]
+name = "d"
+number = "3"
+electrical_type = "passive"
+
+[provenance]
+source = "authored"
+datasheet_url = "https://www.diodes.com/datasheet/download/DMP3098L.pdf"
+revision = "DMP3098L Rev. 08-1"
+reviewed_by = ""

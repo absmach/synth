@@ -1,0 +1,62 @@
+{
+  "qualified": false,
+  "meaning": "This file stays false until every gate below is true. A tool-checked gate may be true with evidence; a gate that needs a human reviewer stays false and names no reviewer. No hardware was built or powered.",
+  "gates": {
+    "cm4_pin_map": {
+      "passed": true,
+      "evidence": "agent-run/PIN_MAPPING.md lists every used CM4 pin against datasheet Table 6 (pages 16-22). crates/synth-cli/tests/cm4_carrier_board.rs checks +5V pins 77/79/81/83/85/87, GND pins on both connectors, Ethernet pairs 0/1, USB 105/103, HDMI0 TMDS2 170/172, SD_CLK/CMD/DAT0 and the 40-pin header power/ground/GPIO2/GPIO21/GPIO26 nets. The test passes."
+    },
+    "power_budget": {
+      "passed": true,
+      "evidence": "Synth ERC E-SYNTH-POWER-009 and E-SYNTH-POWER-010 are clean in the export ERC run (0 errors). agent-run/POWER_BUDGET.md records the consumer-by-consumer sum. The +5V margin depends on the CM4's typical 1.4 A, not a datasheet maximum."
+    },
+    "erc_dispositioned": {
+      "passed": false,
+      "evidence": "Synth ERC has zero blocking diagnostics but more than 100 warnings: W-SYNTH-PART-UNVERIFIED for every authored part, E-SYNTH-CONNECT-008/009, E-SYNTH-NAME-008, E-SYNTH-POWER-004, E-SYNTH-IMPEDANCE-001 and E-SYNTH-SCHEM-001/003. passed stays false until a human dispositions them. No kicad-cli ERC was possible because no schematic exported."
+    },
+    "routing_and_drc": {
+      "passed": false,
+      "evidence": "Blocked. `synth validate` does not finish on this board (more than 10 minutes); `synth place` exits 1 with no placement; `synth export-kicad --allow-incomplete --router free-routing` runs the schematic layout for more than 30 minutes at 97% CPU and writes no artifacts. No routed PCB, DRC report or routing record exists."
+    },
+    "gnd_pour_connectivity": {
+      "passed": false,
+      "evidence": "No PCB was exported, so no GND connectivity check was run."
+    },
+    "power_up_sequencing": {
+      "passed": false,
+      "evidence": "Designed in, not simulated or measured. PG_5V -> U2.EN, PG_3V3 -> U3.EN, PG_1V8 -> test point. The CM4 sequence is from datasheet section 5.1 (page 25). No timing was captured."
+    },
+    "si_pi_review": {
+      "passed": false,
+      "evidence": "No independent review. USB, HDMI, GbE, CSI/DSI and the 200-pin DF40 are high-speed; the diff pairs are declared with 100 ohm (Ethernet/HDMI/CAM/DSI) and 90 ohm (USB) targets but no coupled routing, length matching, reference-plane or eye-diagram evidence exists. Synth's impedance check is a closed-form estimate."
+    },
+    "emc_review": {
+      "passed": false,
+      "evidence": "No emissions, immunity, ESD or surge test. The SMAJ15A TVS and 0603 ferrite bead are datasheet choices."
+    },
+    "thermal_review": {
+      "passed": false,
+      "evidence": "No thermal simulation or measurement. The LMR33640 at 4 A and the two LMR38010s at 1 A have exposed pads on GND copper with via-in-pad, but the board was not powered."
+    },
+    "component_and_manufacturer_review": {
+      "passed": false,
+      "evidence": "Every authored part has reviewed_by = \"\" (CM4 connectors, USB2514B, USB-A, magjack, microSD, FFC, coin cell, RTC, 24 MHz and 32.768 kHz crystals, DMP3098L, PTC). The existing reviewed parts are reused. No reviewer has signed the authored parts."
+    },
+    "fabrication_review": {
+      "passed": false,
+      "evidence": "manufacturer \"jlc-filled-via\" and requires via_in_pad. JLCPCB has not confirmed filled/capped vias for this stackup. The DF40 0.4 mm pitch and the 100-pin connector escape were not DFM-reviewed."
+    },
+    "cm4_mechanical_fit": {
+      "passed": false,
+      "evidence": "The 1.5 mm mated height and module outline are from the Hirose and CM4 datasheets. No module was fitted and no mechanical tolerance check was done."
+    },
+    "reproducible_from_clean_checkout": {
+      "passed": false,
+      "evidence": "Not run. No export completed, so there are no two hashes to compare."
+    },
+    "jlcpcb_dfm": {
+      "passed": false,
+      "evidence": "No Gerber, BOM or CPL was generated or uploaded."
+    }
+  }
+}

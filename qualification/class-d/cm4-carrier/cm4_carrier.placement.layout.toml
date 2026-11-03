@@ -1,0 +1,1483 @@
+schema_version = 2
+forced_net_labels = []
+fit_sheet = false
+
+[components.J1]
+x = 8.00
+y = 70.00
+rotation = 90
+source = "agent"
+priority = "hard"
+timestamp = "2026-11-03T00:00:00+00:00"
+
+[components.F1]
+x = 6.50
+y = 55.85
+rotation = 0
+source = "agent"
+priority = "hard"
+timestamp = "2026-11-03T00:00:00+00:00"
+
+[components.Q1]
+x = 12.05
+y = 54.95
+rotation = 0
+source = "agent"
+priority = "hard"
+timestamp = "2026-11-03T00:00:00+00:00"
+
+[components.R_G1]
+x = 16.11
+y = 54.98
+rotation = 0
+source = "agent"
+priority = "hard"
+timestamp = "2026-11-03T00:00:00+00:00"
+
+[components.D1]
+x = 24.30
+y = 55.15
+rotation = 0
+source = "agent"
+priority = "hard"
+timestamp = "2026-11-03T00:00:00+00:00"
+
+[components.C1]
+x = 19.81
+y = 66.10
+rotation = 90
+source = "agent"
+priority = "hard"
+timestamp = "2026-11-03T00:00:00+00:00"
+
+[components.C2]
+x = 12.67
+y = 58.76
+rotation = 0
+source = "agent"
+priority = "hard"
+timestamp = "2026-11-03T00:00:00+00:00"
+
+[components.C3]
+x = 18.19
+y = 57.33
+rotation = 0
+source = "agent"
+priority = "hard"
+timestamp = "2026-11-03T00:00:00+00:00"
+
+[components.L_FB1]
+x = 5.73
+y = 54.98
+rotation = 0
+source = "agent"
+priority = "hard"
+timestamp = "2026-11-03T00:00:00+00:00"
+
+[components.C_AUX]
+x = 12.67
+y = 55.40
+rotation = 0
+source = "agent"
+priority = "hard"
+timestamp = "2026-11-03T00:00:00+00:00"
+
+[components.U1]
+x = 18.00
+y = 58.00
+rotation = 0
+source = "agent"
+priority = "hard"
+timestamp = "2026-11-03T00:00:00+00:00"
+
+[components.R_UV_T]
+x = 18.19
+y = 54.98
+rotation = 0
+source = "agent"
+priority = "hard"
+timestamp = "2026-11-03T00:00:00+00:00"
+
+[components.R_UV_B]
+x = 5.73
+y = 57.33
+rotation = 0
+source = "agent"
+priority = "hard"
+timestamp = "2026-11-03T00:00:00+00:00"
+
+[components.C_VCC]
+x = 9.88
+y = 58.51
+rotation = 0
+source = "agent"
+priority = "hard"
+timestamp = "2026-11-03T00:00:00+00:00"
+
+[components.C_BOOT]
+x = 5.73
+y = 59.68
+rotation = 0
+source = "agent"
+priority = "hard"
+timestamp = "2026-11-03T00:00:00+00:00"
+
+[components.L1]
+x = 26.00
+y = 58.00
+rotation = 0
+source = "agent"
+priority = "hard"
+timestamp = "2026-11-03T00:00:00+00:00"
+
+[components.C_OUT1]
+x = 12.67
+y = 62.12
+rotation = 0
+source = "agent"
+priority = "hard"
+timestamp = "2026-11-03T00:00:00+00:00"
+
+[components.C_OUT2]
+x = 18.79
+y = 62.12
+rotation = 0
+source = "agent"
+priority = "hard"
+timestamp = "2026-11-03T00:00:00+00:00"
+
+[components.C_OUT3]
+x = 5.73
+y = 62.04
+rotation = 0
+source = "agent"
+priority = "hard"
+timestamp = "2026-11-03T00:00:00+00:00"
+
+[components.R_FB_T]
+x = 24.41
+y = 63.21
+rotation = 0
+source = "agent"
+priority = "hard"
+timestamp = "2026-11-03T00:00:00+00:00"
+
+[components.R_FB_B]
+x = 5.73
+y = 65.56
+rotation = 0
+source = "agent"
+priority = "hard"
+timestamp = "2026-11-03T00:00:00+00:00"
+
+[components.C_FF]
+x = 9.88
+y = 65.56
+rotation = 0
+source = "agent"
+priority = "hard"
+timestamp = "2026-11-03T00:00:00+00:00"
+
+[components.R_PG]
+x = 14.03
+y = 65.56
+rotation = 0
+source = "agent"
+priority = "hard"
+timestamp = "2026-11-03T00:00:00+00:00"
+
+[components.D_PWR]
+x = 18.19
+y = 65.56
+rotation = 0
+source = "agent"
+priority = "hard"
+timestamp = "2026-11-03T00:00:00+00:00"
+
+[components.R_PWR]
+x = 22.34
+y = 65.56
+rotation = 0
+source = "agent"
+priority = "hard"
+timestamp = "2026-11-03T00:00:00+00:00"
+
+[components.TP_5V]
+x = 8.60
+y = 55.00
+rotation = 0
+source = "agent"
+priority = "hard"
+timestamp = "2026-11-03T00:00:00+00:00"
+
+[components.U2]
+x = 36.00
+y = 58.00
+rotation = 0
+source = "agent"
+priority = "hard"
+timestamp = "2026-11-03T00:00:00+00:00"
+
+[components.C_IN2_1]
+x = 34.55
+y = 62.12
+rotation = 0
+source = "agent"
+priority = "hard"
+timestamp = "2026-11-03T00:00:00+00:00"
+
+[components.C_IN2_2]
+x = 33.73
+y = 54.98
+rotation = 0
+source = "agent"
+priority = "hard"
+timestamp = "2026-11-03T00:00:00+00:00"
+
+[components.R_RT2]
+x = 37.88
+y = 54.98
+rotation = 0
+source = "agent"
+priority = "hard"
+timestamp = "2026-11-03T00:00:00+00:00"
+
+[components.C_BOOT2]
+x = 39.96
+y = 63.21
+rotation = 0
+source = "agent"
+priority = "hard"
+timestamp = "2026-11-03T00:00:00+00:00"
+
+[components.L2]
+x = 44.00
+y = 58.00
+rotation = 0
+source = "agent"
+priority = "hard"
+timestamp = "2026-11-03T00:00:00+00:00"
+
+[components.C_OUT4]
+x = 34.55
+y = 65.48
+rotation = 0
+source = "agent"
+priority = "hard"
+timestamp = "2026-11-03T00:00:00+00:00"
+
+[components.C_OUT5]
+x = 40.67
+y = 67.16
+rotation = 0
+source = "agent"
+priority = "hard"
+timestamp = "2026-11-03T00:00:00+00:00"
+
+[components.C_OUT6]
+x = 33.73
+y = 69.09
+rotation = 0
+source = "agent"
+priority = "hard"
+timestamp = "2026-11-03T00:00:00+00:00"
+
+[components.R_FB2_T]
+x = 37.88
+y = 70.27
+rotation = 0
+source = "agent"
+priority = "hard"
+timestamp = "2026-11-03T00:00:00+00:00"
+
+[components.R_FB2_B]
+x = 42.03
+y = 70.27
+rotation = 0
+source = "agent"
+priority = "hard"
+timestamp = "2026-11-03T00:00:00+00:00"
+
+[components.C_FF2]
+x = 33.73
+y = 72.62
+rotation = 0
+source = "agent"
+priority = "hard"
+timestamp = "2026-11-03T00:00:00+00:00"
+
+[components.R_PG2]
+x = 37.88
+y = 72.62
+rotation = 0
+source = "agent"
+priority = "hard"
+timestamp = "2026-11-03T00:00:00+00:00"
+
+[components.D_3V3]
+x = 42.03
+y = 72.62
+rotation = 0
+source = "agent"
+priority = "hard"
+timestamp = "2026-11-03T00:00:00+00:00"
+
+[components.R_3V3]
+x = 33.73
+y = 54.98
+rotation = 0
+source = "agent"
+priority = "hard"
+timestamp = "2026-11-03T00:00:00+00:00"
+
+[components.TP_3V3]
+x = 33.00
+y = 55.00
+rotation = 0
+source = "agent"
+priority = "hard"
+timestamp = "2026-11-03T00:00:00+00:00"
+
+[components.U3]
+x = 54.00
+y = 58.00
+rotation = 0
+source = "agent"
+priority = "hard"
+timestamp = "2026-11-03T00:00:00+00:00"
+
+[components.C_IN3_1]
+x = 50.55
+y = 62.12
+rotation = 0
+source = "agent"
+priority = "hard"
+timestamp = "2026-11-03T00:00:00+00:00"
+
+[components.C_IN3_2]
+x = 49.73
+y = 54.98
+rotation = 0
+source = "agent"
+priority = "hard"
+timestamp = "2026-11-03T00:00:00+00:00"
+
+[components.R_RT3]
+x = 53.88
+y = 54.98
+rotation = 0
+source = "agent"
+priority = "hard"
+timestamp = "2026-11-03T00:00:00+00:00"
+
+[components.C_BOOT3]
+x = 49.73
+y = 57.33
+rotation = 0
+source = "agent"
+priority = "hard"
+timestamp = "2026-11-03T00:00:00+00:00"
+
+[components.L3]
+x = 62.00
+y = 58.00
+rotation = 0
+source = "agent"
+priority = "hard"
+timestamp = "2026-11-03T00:00:00+00:00"
+
+[components.C_OUT7]
+x = 56.67
+y = 63.80
+rotation = 0
+source = "agent"
+priority = "hard"
+timestamp = "2026-11-03T00:00:00+00:00"
+
+[components.C_OUT8]
+x = 50.55
+y = 65.48
+rotation = 0
+source = "agent"
+priority = "hard"
+timestamp = "2026-11-03T00:00:00+00:00"
+
+[components.C_OUT9]
+x = 55.96
+y = 66.74
+rotation = 0
+source = "agent"
+priority = "hard"
+timestamp = "2026-11-03T00:00:00+00:00"
+
+[components.R_FB3_T]
+x = 49.73
+y = 69.09
+rotation = 0
+source = "agent"
+priority = "hard"
+timestamp = "2026-11-03T00:00:00+00:00"
+
+[components.R_FB3_B]
+x = 53.88
+y = 69.09
+rotation = 0
+source = "agent"
+priority = "hard"
+timestamp = "2026-11-03T00:00:00+00:00"
+
+[components.C_FF3]
+x = 58.03
+y = 69.09
+rotation = 0
+source = "agent"
+priority = "hard"
+timestamp = "2026-11-03T00:00:00+00:00"
+
+[components.R_PG3]
+x = 49.73
+y = 72.62
+rotation = 0
+source = "agent"
+priority = "hard"
+timestamp = "2026-11-03T00:00:00+00:00"
+
+[components.TP_1V8]
+x = 52.60
+y = 71.80
+rotation = 0
+source = "agent"
+priority = "hard"
+timestamp = "2026-11-03T00:00:00+00:00"
+
+[components.J_CM4A]
+x = 50.00
+y = 38.00
+rotation = 0
+source = "agent"
+priority = "hard"
+timestamp = "2026-11-03T00:00:00+00:00"
+
+[components.J_CM4B]
+x = 50.00
+y = 44.00
+rotation = 0
+source = "agent"
+priority = "hard"
+timestamp = "2026-11-03T00:00:00+00:00"
+
+[components.TP_CM4_3V3]
+x = 65.00
+y = 33.00
+rotation = 0
+source = "agent"
+priority = "hard"
+timestamp = "2026-11-03T00:00:00+00:00"
+
+[components.TP_CM4_1V8]
+x = 68.60
+y = 33.00
+rotation = 0
+source = "agent"
+priority = "hard"
+timestamp = "2026-11-03T00:00:00+00:00"
+
+[components.TP_RUN_PG]
+x = 71.00
+y = 33.00
+rotation = 0
+source = "agent"
+priority = "hard"
+timestamp = "2026-11-03T00:00:00+00:00"
+
+[components.TP_NEXTRST]
+x = 74.60
+y = 33.00
+rotation = 0
+source = "agent"
+priority = "hard"
+timestamp = "2026-11-03T00:00:00+00:00"
+
+[components.TP_GLOBAL_EN]
+x = 77.00
+y = 33.00
+rotation = 0
+source = "agent"
+priority = "hard"
+timestamp = "2026-11-03T00:00:00+00:00"
+
+[components.TP_PG5V]
+x = 80.60
+y = 33.00
+rotation = 0
+source = "agent"
+priority = "hard"
+timestamp = "2026-11-03T00:00:00+00:00"
+
+[components.TP_PG3V3]
+x = 83.00
+y = 33.00
+rotation = 0
+source = "agent"
+priority = "hard"
+timestamp = "2026-11-03T00:00:00+00:00"
+
+[components.TP_PG1V8]
+x = 86.60
+y = 33.00
+rotation = 0
+source = "agent"
+priority = "hard"
+timestamp = "2026-11-03T00:00:00+00:00"
+
+[components.J_VREF]
+x = 50.00
+y = 76.00
+rotation = 0
+source = "agent"
+priority = "hard"
+timestamp = "2026-11-03T00:00:00+00:00"
+
+[components.J_BOOT]
+x = 58.00
+y = 76.00
+rotation = 0
+source = "agent"
+priority = "hard"
+timestamp = "2026-11-03T00:00:00+00:00"
+
+[components.SW1]
+x = 66.00
+y = 76.00
+rotation = 0
+source = "agent"
+priority = "hard"
+timestamp = "2026-11-03T00:00:00+00:00"
+
+[components.C_GEN]
+x = 90.64
+y = 32.98
+rotation = 0
+source = "agent"
+priority = "hard"
+timestamp = "2026-11-03T00:00:00+00:00"
+
+[components.R_GEN]
+x = 90.64
+y = 35.33
+rotation = 0
+source = "agent"
+priority = "hard"
+timestamp = "2026-11-03T00:00:00+00:00"
+
+[components.Q_LED]
+x = 66.05
+y = 36.60
+rotation = 0
+source = "agent"
+priority = "hard"
+timestamp = "2026-11-03T00:00:00+00:00"
+
+[components.R_LED_PWR]
+x = 71.96
+y = 36.51
+rotation = 0
+source = "agent"
+priority = "hard"
+timestamp = "2026-11-03T00:00:00+00:00"
+
+[components.D_PWR_CM4]
+x = 76.11
+y = 36.51
+rotation = 0
+source = "agent"
+priority = "hard"
+timestamp = "2026-11-03T00:00:00+00:00"
+
+[components.D_ACT]
+x = 80.26
+y = 36.51
+rotation = 0
+source = "agent"
+priority = "hard"
+timestamp = "2026-11-03T00:00:00+00:00"
+
+[components.R_ACT]
+x = 84.41
+y = 36.51
+rotation = 0
+source = "agent"
+priority = "hard"
+timestamp = "2026-11-03T00:00:00+00:00"
+
+[components.D_ETH]
+x = 88.57
+y = 37.68
+rotation = 0
+source = "agent"
+priority = "hard"
+timestamp = "2026-11-03T00:00:00+00:00"
+
+[components.R_ETH]
+x = 92.72
+y = 37.68
+rotation = 0
+source = "agent"
+priority = "hard"
+timestamp = "2026-11-03T00:00:00+00:00"
+
+[components.D_ETH2]
+x = 71.96
+y = 38.86
+rotation = 0
+source = "agent"
+priority = "hard"
+timestamp = "2026-11-03T00:00:00+00:00"
+
+[components.R_ETH2]
+x = 76.11
+y = 38.86
+rotation = 0
+source = "agent"
+priority = "hard"
+timestamp = "2026-11-03T00:00:00+00:00"
+
+[components.H1]
+x = 5.00
+y = 5.00
+rotation = 0
+source = "agent"
+priority = "hard"
+timestamp = "2026-11-03T00:00:00+00:00"
+
+[components.H2]
+x = 95.00
+y = 5.00
+rotation = 0
+source = "agent"
+priority = "hard"
+timestamp = "2026-11-03T00:00:00+00:00"
+
+[components.H3]
+x = 5.00
+y = 75.00
+rotation = 0
+source = "agent"
+priority = "hard"
+timestamp = "2026-11-03T00:00:00+00:00"
+
+[components.H4]
+x = 95.00
+y = 75.00
+rotation = 0
+source = "agent"
+priority = "hard"
+timestamp = "2026-11-03T00:00:00+00:00"
+
+[components.U4]
+x = 52.00
+y = 24.00
+rotation = 0
+source = "agent"
+priority = "hard"
+timestamp = "2026-11-03T00:00:00+00:00"
+
+[components.Y1]
+x = 52.00
+y = 18.00
+rotation = 0
+source = "agent"
+priority = "hard"
+timestamp = "2026-11-03T00:00:00+00:00"
+
+[components.C_X1]
+x = 43.73
+y = 10.98
+rotation = 0
+source = "agent"
+priority = "hard"
+timestamp = "2026-11-03T00:00:00+00:00"
+
+[components.C_X2]
+x = 47.88
+y = 10.98
+rotation = 0
+source = "agent"
+priority = "hard"
+timestamp = "2026-11-03T00:00:00+00:00"
+
+[components.R_RBIAS]
+x = 52.03
+y = 10.98
+rotation = 0
+source = "agent"
+priority = "hard"
+timestamp = "2026-11-03T00:00:00+00:00"
+
+[components.C_HUB1]
+x = 56.19
+y = 10.98
+rotation = 0
+source = "agent"
+priority = "hard"
+timestamp = "2026-11-03T00:00:00+00:00"
+
+[components.C_HUB2]
+x = 60.34
+y = 10.98
+rotation = 0
+source = "agent"
+priority = "hard"
+timestamp = "2026-11-03T00:00:00+00:00"
+
+[components.C_HUB3]
+x = 64.49
+y = 10.98
+rotation = 0
+source = "agent"
+priority = "hard"
+timestamp = "2026-11-03T00:00:00+00:00"
+
+[components.C_HUB4]
+x = 44.55
+y = 14.76
+rotation = 0
+source = "agent"
+priority = "hard"
+timestamp = "2026-11-03T00:00:00+00:00"
+
+[components.C_CRFILT]
+x = 49.96
+y = 13.33
+rotation = 0
+source = "agent"
+priority = "hard"
+timestamp = "2026-11-03T00:00:00+00:00"
+
+[components.C_PLLFILT]
+x = 54.11
+y = 13.33
+rotation = 0
+source = "agent"
+priority = "hard"
+timestamp = "2026-11-03T00:00:00+00:00"
+
+[components.R_CFG0]
+x = 58.26
+y = 13.33
+rotation = 0
+source = "agent"
+priority = "hard"
+timestamp = "2026-11-03T00:00:00+00:00"
+
+[components.R_CFG1]
+x = 62.41
+y = 13.33
+rotation = 0
+source = "agent"
+priority = "hard"
+timestamp = "2026-11-03T00:00:00+00:00"
+
+[components.R_LOCAL]
+x = 56.19
+y = 15.68
+rotation = 0
+source = "agent"
+priority = "hard"
+timestamp = "2026-11-03T00:00:00+00:00"
+
+[components.R_OCS1]
+x = 60.34
+y = 15.68
+rotation = 0
+source = "agent"
+priority = "hard"
+timestamp = "2026-11-03T00:00:00+00:00"
+
+[components.R_OCS2]
+x = 64.49
+y = 15.68
+rotation = 0
+source = "agent"
+priority = "hard"
+timestamp = "2026-11-03T00:00:00+00:00"
+
+[components.R_OCS3]
+x = 43.73
+y = 18.04
+rotation = 0
+source = "agent"
+priority = "hard"
+timestamp = "2026-11-03T00:00:00+00:00"
+
+[components.R_OCS4]
+x = 47.88
+y = 18.04
+rotation = 0
+source = "agent"
+priority = "hard"
+timestamp = "2026-11-03T00:00:00+00:00"
+
+[components.R_RESET]
+x = 56.19
+y = 18.04
+rotation = 0
+source = "agent"
+priority = "hard"
+timestamp = "2026-11-03T00:00:00+00:00"
+
+[components.C_RESET]
+x = 60.34
+y = 18.04
+rotation = 0
+source = "agent"
+priority = "hard"
+timestamp = "2026-11-03T00:00:00+00:00"
+
+[components.R_VBUS]
+x = 64.49
+y = 18.04
+rotation = 0
+source = "agent"
+priority = "hard"
+timestamp = "2026-11-03T00:00:00+00:00"
+
+[components.U5]
+x = 44.30
+y = 23.65
+rotation = 0
+source = "agent"
+priority = "hard"
+timestamp = "2026-11-03T00:00:00+00:00"
+
+[components.U6]
+x = 58.10
+y = 23.65
+rotation = 0
+source = "agent"
+priority = "hard"
+timestamp = "2026-11-03T00:00:00+00:00"
+
+[components.U7]
+x = 63.62
+y = 23.65
+rotation = 0
+source = "agent"
+priority = "hard"
+timestamp = "2026-11-03T00:00:00+00:00"
+
+[components.U8]
+x = 44.30
+y = 28.33
+rotation = 0
+source = "agent"
+priority = "hard"
+timestamp = "2026-11-03T00:00:00+00:00"
+
+[components.C_USB1]
+x = 57.99
+y = 27.47
+rotation = 0
+source = "agent"
+priority = "hard"
+timestamp = "2026-11-03T00:00:00+00:00"
+
+[components.C_USB2]
+x = 62.67
+y = 27.47
+rotation = 0
+source = "agent"
+priority = "hard"
+timestamp = "2026-11-03T00:00:00+00:00"
+
+[components.C_USB3]
+x = 50.97
+y = 28.94
+rotation = 0
+source = "agent"
+priority = "hard"
+timestamp = "2026-11-03T00:00:00+00:00"
+
+[components.C_USB4]
+x = 55.65
+y = 30.42
+rotation = 0
+source = "agent"
+priority = "hard"
+timestamp = "2026-11-03T00:00:00+00:00"
+
+[components.C_USB1B]
+x = 60.34
+y = 30.97
+rotation = 0
+source = "agent"
+priority = "hard"
+timestamp = "2026-11-03T00:00:00+00:00"
+
+[components.C_USB2B]
+x = 64.49
+y = 30.97
+rotation = 0
+source = "agent"
+priority = "hard"
+timestamp = "2026-11-03T00:00:00+00:00"
+
+[components.C_USB3B]
+x = 43.73
+y = 10.98
+rotation = 0
+source = "agent"
+priority = "hard"
+timestamp = "2026-11-03T00:00:00+00:00"
+
+[components.C_USB4B]
+x = 43.73
+y = 10.98
+rotation = 0
+source = "agent"
+priority = "hard"
+timestamp = "2026-11-03T00:00:00+00:00"
+
+[components.C_CT1]
+x = 43.73
+y = 10.98
+rotation = 0
+source = "agent"
+priority = "hard"
+timestamp = "2026-11-03T00:00:00+00:00"
+
+[components.C_CT2]
+x = 43.73
+y = 10.98
+rotation = 0
+source = "agent"
+priority = "hard"
+timestamp = "2026-11-03T00:00:00+00:00"
+
+[components.C_CT3]
+x = 43.73
+y = 10.98
+rotation = 0
+source = "agent"
+priority = "hard"
+timestamp = "2026-11-03T00:00:00+00:00"
+
+[components.C_CT4]
+x = 43.73
+y = 10.98
+rotation = 0
+source = "agent"
+priority = "hard"
+timestamp = "2026-11-03T00:00:00+00:00"
+
+[components.D_USB1]
+x = 43.85
+y = 11.95
+rotation = 0
+source = "agent"
+priority = "hard"
+timestamp = "2026-11-03T00:00:00+00:00"
+
+[components.D_USB2]
+x = 43.85
+y = 11.95
+rotation = 0
+source = "agent"
+priority = "hard"
+timestamp = "2026-11-03T00:00:00+00:00"
+
+[components.D_USB3]
+x = 43.85
+y = 11.95
+rotation = 0
+source = "agent"
+priority = "hard"
+timestamp = "2026-11-03T00:00:00+00:00"
+
+[components.D_USB4]
+x = 43.85
+y = 11.95
+rotation = 0
+source = "agent"
+priority = "hard"
+timestamp = "2026-11-03T00:00:00+00:00"
+
+[components.D_USB_UP]
+x = 43.85
+y = 11.95
+rotation = 0
+source = "agent"
+priority = "hard"
+timestamp = "2026-11-03T00:00:00+00:00"
+
+[components.J_USB1]
+x = 91.00
+y = 54.00
+rotation = 90
+source = "agent"
+priority = "hard"
+timestamp = "2026-11-03T00:00:00+00:00"
+
+[components.J_USB2]
+x = 91.00
+y = 70.00
+rotation = 90
+source = "agent"
+priority = "hard"
+timestamp = "2026-11-03T00:00:00+00:00"
+
+[components.J_ETH]
+x = 90.00
+y = 18.00
+rotation = 270
+source = "agent"
+priority = "hard"
+timestamp = "2026-11-03T00:00:00+00:00"
+
+[components.C_TCT]
+x = 79.73
+y = 28.62
+rotation = 0
+source = "agent"
+priority = "hard"
+timestamp = "2026-11-03T00:00:00+00:00"
+
+[components.C_RCT]
+x = 83.88
+y = 28.62
+rotation = 0
+source = "agent"
+priority = "hard"
+timestamp = "2026-11-03T00:00:00+00:00"
+
+[components.D_ETH_ESD1]
+x = 88.73
+y = 30.67
+rotation = 0
+source = "agent"
+priority = "hard"
+timestamp = "2026-11-03T00:00:00+00:00"
+
+[components.D_ETH_ESD2]
+x = 93.17
+y = 30.67
+rotation = 0
+source = "agent"
+priority = "hard"
+timestamp = "2026-11-03T00:00:00+00:00"
+
+[components.D_ETH_ESD3]
+x = 79.85
+y = 33.01
+rotation = 0
+source = "agent"
+priority = "hard"
+timestamp = "2026-11-03T00:00:00+00:00"
+
+[components.D_ETH_ESD4]
+x = 84.29
+y = 33.01
+rotation = 0
+source = "agent"
+priority = "hard"
+timestamp = "2026-11-03T00:00:00+00:00"
+
+[components.J_HDMI]
+x = 90.00
+y = 38.00
+rotation = 270
+source = "agent"
+priority = "hard"
+timestamp = "2026-11-03T00:00:00+00:00"
+
+[components.U9]
+x = 75.50
+y = 40.45
+rotation = 0
+source = "agent"
+priority = "hard"
+timestamp = "2026-11-03T00:00:00+00:00"
+
+[components.D_HDMI1]
+x = 73.85
+y = 46.97
+rotation = 0
+source = "agent"
+priority = "hard"
+timestamp = "2026-11-03T00:00:00+00:00"
+
+[components.D_HDMI2]
+x = 78.29
+y = 46.97
+rotation = 0
+source = "agent"
+priority = "hard"
+timestamp = "2026-11-03T00:00:00+00:00"
+
+[components.D_HDMI3]
+x = 73.85
+y = 39.95
+rotation = 0
+source = "agent"
+priority = "hard"
+timestamp = "2026-11-03T00:00:00+00:00"
+
+[components.D_HDMI4]
+x = 73.85
+y = 39.95
+rotation = 0
+source = "agent"
+priority = "hard"
+timestamp = "2026-11-03T00:00:00+00:00"
+
+[components.D_HDMI5]
+x = 73.85
+y = 39.95
+rotation = 0
+source = "agent"
+priority = "hard"
+timestamp = "2026-11-03T00:00:00+00:00"
+
+[components.U10]
+x = 74.30
+y = 39.95
+rotation = 0
+source = "agent"
+priority = "hard"
+timestamp = "2026-11-03T00:00:00+00:00"
+
+[components.C_HDMI1]
+x = 82.09
+y = 39.95
+rotation = 90
+source = "agent"
+priority = "hard"
+timestamp = "2026-11-03T00:00:00+00:00"
+
+[components.C_HDMI2]
+x = 82.03
+y = 43.68
+rotation = 0
+source = "agent"
+priority = "hard"
+timestamp = "2026-11-03T00:00:00+00:00"
+
+[components.C_HDMI_CT]
+x = 82.39
+y = 48.03
+rotation = 90
+source = "agent"
+priority = "hard"
+timestamp = "2026-11-03T00:00:00+00:00"
+
+[components.R_HDMI_SDA]
+x = 73.73
+y = 38.98
+rotation = 0
+source = "agent"
+priority = "hard"
+timestamp = "2026-11-03T00:00:00+00:00"
+
+[components.R_HDMI_SCL]
+x = 73.73
+y = 38.98
+rotation = 0
+source = "agent"
+priority = "hard"
+timestamp = "2026-11-03T00:00:00+00:00"
+
+[components.R_HDMI_SDA_MCU]
+x = 73.73
+y = 38.98
+rotation = 0
+source = "agent"
+priority = "hard"
+timestamp = "2026-11-03T00:00:00+00:00"
+
+[components.R_HDMI_SCL_MCU]
+x = 73.73
+y = 38.98
+rotation = 0
+source = "agent"
+priority = "hard"
+timestamp = "2026-11-03T00:00:00+00:00"
+
+[components.R_OE]
+x = 73.73
+y = 38.98
+rotation = 0
+source = "agent"
+priority = "hard"
+timestamp = "2026-11-03T00:00:00+00:00"
+
+[components.C_HDMI_VCCA]
+x = 73.73
+y = 38.98
+rotation = 0
+source = "agent"
+priority = "hard"
+timestamp = "2026-11-03T00:00:00+00:00"
+
+[components.C_HDMI_VCCB]
+x = 73.73
+y = 38.98
+rotation = 0
+source = "agent"
+priority = "hard"
+timestamp = "2026-11-03T00:00:00+00:00"
+
+[components.J_SD]
+x = 8.00
+y = 42.00
+rotation = 90
+source = "agent"
+priority = "hard"
+timestamp = "2026-11-03T00:00:00+00:00"
+
+[components.U11]
+x = 20.10
+y = 33.95
+rotation = 0
+source = "agent"
+priority = "hard"
+timestamp = "2026-11-03T00:00:00+00:00"
+
+[components.C_SD1]
+x = 6.55
+y = 33.40
+rotation = 0
+source = "agent"
+priority = "hard"
+timestamp = "2026-11-03T00:00:00+00:00"
+
+[components.C_SD_IN]
+x = 11.96
+y = 32.98
+rotation = 0
+source = "agent"
+priority = "hard"
+timestamp = "2026-11-03T00:00:00+00:00"
+
+[components.C_SD2]
+x = 24.41
+y = 32.98
+rotation = 0
+source = "agent"
+priority = "hard"
+timestamp = "2026-11-03T00:00:00+00:00"
+
+[components.C_SD_CT]
+x = 24.41
+y = 35.33
+rotation = 0
+source = "agent"
+priority = "hard"
+timestamp = "2026-11-03T00:00:00+00:00"
+
+[components.R_SD_CMD]
+x = 18.19
+y = 37.68
+rotation = 0
+source = "agent"
+priority = "hard"
+timestamp = "2026-11-03T00:00:00+00:00"
+
+[components.R_SD_DAT0]
+x = 22.34
+y = 37.68
+rotation = 0
+source = "agent"
+priority = "hard"
+timestamp = "2026-11-03T00:00:00+00:00"
+
+[components.R_SD_DAT1]
+x = 18.19
+y = 40.04
+rotation = 0
+source = "agent"
+priority = "hard"
+timestamp = "2026-11-03T00:00:00+00:00"
+
+[components.R_SD_DAT2]
+x = 22.34
+y = 40.04
+rotation = 0
+source = "agent"
+priority = "hard"
+timestamp = "2026-11-03T00:00:00+00:00"
+
+[components.R_SD_DAT3]
+x = 18.19
+y = 43.56
+rotation = 0
+source = "agent"
+priority = "hard"
+timestamp = "2026-11-03T00:00:00+00:00"
+
+[components.R_SD_PWR]
+x = 22.34
+y = 43.56
+rotation = 0
+source = "agent"
+priority = "hard"
+timestamp = "2026-11-03T00:00:00+00:00"
+
+[components.D_SD1]
+x = 19.17
+y = 47.99
+rotation = 0
+source = "agent"
+priority = "hard"
+timestamp = "2026-11-03T00:00:00+00:00"
+
+[components.D_SD2]
+x = 23.61
+y = 47.99
+rotation = 0
+source = "agent"
+priority = "hard"
+timestamp = "2026-11-03T00:00:00+00:00"
+
+[components.D_SD3]
+x = 5.85
+y = 33.95
+rotation = 0
+source = "agent"
+priority = "hard"
+timestamp = "2026-11-03T00:00:00+00:00"
+
+[components.J_CAM]
+x = 8.00
+y = 26.00
+rotation = 90
+source = "agent"
+priority = "hard"
+timestamp = "2026-11-03T00:00:00+00:00"
+
+[components.J_DSI]
+x = 8.00
+y = 16.00
+rotation = 90
+source = "agent"
+priority = "hard"
+timestamp = "2026-11-03T00:00:00+00:00"
+
+[components.C_CAM]
+x = 5.73
+y = 4.98
+rotation = 0
+source = "agent"
+priority = "hard"
+timestamp = "2026-11-03T00:00:00+00:00"
+
+[components.C_DSI]
+x = 9.88
+y = 4.98
+rotation = 0
+source = "agent"
+priority = "hard"
+timestamp = "2026-11-03T00:00:00+00:00"
+
+[components.J_GPIO1]
+x = 34.00
+y = 6.00
+rotation = 90
+source = "agent"
+priority = "hard"
+timestamp = "2026-11-03T00:00:00+00:00"
+
+[components.J_GPIO2]
+x = 38.00
+y = 6.00
+rotation = 90
+source = "agent"
+priority = "hard"
+timestamp = "2026-11-03T00:00:00+00:00"
+
+[components.U12]
+x = 30.00
+y = 14.00
+rotation = 0
+source = "agent"
+priority = "hard"
+timestamp = "2026-11-03T00:00:00+00:00"
+
+[components.Y2]
+x = 30.00
+y = 20.00
+rotation = 0
+source = "agent"
+priority = "hard"
+timestamp = "2026-11-03T00:00:00+00:00"
+
+[components.J_BT1]
+x = 18.00
+y = 14.00
+rotation = 0
+source = "agent"
+priority = "hard"
+timestamp = "2026-11-03T00:00:00+00:00"
+
+[components.D_RTC1]
+x = 4.85
+y = 6.35
+rotation = 90
+source = "agent"
+priority = "hard"
+timestamp = "2026-11-03T00:00:00+00:00"
+
+[components.D_RTC2]
+x = 4.85
+y = 11.99
+rotation = 90
+source = "agent"
+priority = "hard"
+timestamp = "2026-11-03T00:00:00+00:00"
+
+[components.C_RTC]
+x = 4.98
+y = 18.19
+rotation = 90
+source = "agent"
+priority = "hard"
+timestamp = "2026-11-03T00:00:00+00:00"
+
+[components.R_RTC_SDA]
+x = 4.98
+y = 22.34
+rotation = 90
+source = "agent"
+priority = "hard"
+timestamp = "2026-11-03T00:00:00+00:00"
+
+[components.R_RTC_SCL]
+x = 5.73
+y = 4.98
+rotation = 0
+source = "agent"
+priority = "hard"
+timestamp = "2026-11-03T00:00:00+00:00"
+
+[components.R_RTC_INT]
+x = 5.73
+y = 4.98
+rotation = 0
+source = "agent"
+priority = "hard"
+timestamp = "2026-11-03T00:00:00+00:00"
+
+[components.J_FAN]
+x = 74.00
+y = 76.00
+rotation = 0
+source = "agent"
+priority = "hard"
+timestamp = "2026-11-03T00:00:00+00:00"
+
+[components.D_FAN]
+x = 70.35
+y = 74.85
+rotation = 0
+source = "agent"
+priority = "hard"
+timestamp = "2026-11-03T00:00:00+00:00"
