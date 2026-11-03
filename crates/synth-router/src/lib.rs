@@ -51,6 +51,7 @@ pub mod failure;
 pub mod freerouting;
 pub mod island_vias;
 pub mod kicad_routing_tools;
+pub mod label_vias;
 pub mod outcomes;
 pub mod pcb_read;
 pub mod process;
@@ -92,6 +93,55 @@ pub const ROUTE_REPORT_SCHEMA: &str = "synth.routing.v1";
 /// [`RouteRequest::report_path`] before this function returns, so a run
 /// that fails is as auditable as one that succeeds.
 pub fn route(request: &RouteRequest) -> RouteReport {
+    let mut report = route_once(request);
+    // Whether the engine puts a via in a pad, or leaves a net open, depends on
+    // the order it routes the nets in, and the same board can route cleanly in
+    // one order and not in another. A board the independent validation rejected
+    // is therefore tried again in the engine's other orders before it is given
+    // up on; the first one that validates is kept.
+    for ordering in retry_orderings(request) {
+        if report.state != result::RouteState::ValidationFailed {
+            break;
+        }
+        eprintln!(
+            "note: the routed board was rejected ({} blocking); routing again with the {ordering} net order",
+            report
+                .validation
+                .as_ref()
+                .map_or(0, result::ValidationSummary::blocking_count)
+        );
+        let mut again = request.clone();
+        again.kicad_routing_tools.ordering = Some((*ordering).to_string());
+        report = route_once(&again);
+    }
+    report
+}
+
+/// The engine's net orders other than its default, in the order they are tried.
+const ORDERING_RETRIES: [&str; 3] = ["inside_out", "original", "bus"];
+
+/// The net orders a rejected board is routed again in: none for an engine
+/// without orders, and none when the caller chose the order, which a retry
+/// would silently replace.
+fn retry_orderings(request: &RouteRequest) -> &'static [&'static str] {
+    if request.engine != RouterEngine::KiCadRoutingTools
+        || request.kicad_routing_tools.ordering.is_some()
+    {
+        return &[];
+    }
+    &ORDERING_RETRIES[..ordering_retries().min(ORDERING_RETRIES.len())]
+}
+
+/// How many of [`ORDERING_RETRIES`] a rejected board is tried with:
+/// `SYNTH_ROUTER_ORDERING_RETRIES`, three when absent, none when zero.
+fn ordering_retries() -> usize {
+    std::env::var("SYNTH_ROUTER_ORDERING_RETRIES")
+        .ok()
+        .and_then(|v| v.trim().parse::<usize>().ok())
+        .unwrap_or(ORDERING_RETRIES.len())
+}
+
+fn route_once(request: &RouteRequest) -> RouteReport {
     // The duplicate-run guard is taken first. Reporting "router
     // unavailable" while a run is already writing this candidate would name
     // the wrong problem, and the operator would go looking for a missing
@@ -259,13 +309,39 @@ fn with_repair_findings(
     mut verdict: validate::FabricationVerdict,
     blocking: Vec<String>,
     unavailable: Vec<String>,
+    advisory: Vec<String>,
 ) -> validate::FabricationVerdict {
     if !blocking.is_empty() || !unavailable.is_empty() {
         verdict.fabrication_ready = false;
         verdict.blocking_reasons.extend(blocking);
         verdict.unavailable_checks.extend(unavailable);
     }
+    // An advisory is listed for the review and never changes the verdict.
+    verdict.advisories.extend(advisory);
     verdict
+}
+
+/// Say what the post-routing silkscreen pass did, when it did anything.
+fn report_silkscreen_pass(result: Result<label_vias::LabelMoves, String>) {
+    match result {
+        Ok(label_vias::LabelMoves {
+            moved: 0,
+            hidden: 0,
+            trimmed: 0,
+            widened: 0,
+            dropped: 0,
+        }) => {}
+        Ok(label_vias::LabelMoves {
+            moved,
+            hidden,
+            trimmed,
+            widened,
+            dropped,
+        }) => eprintln!(
+            "note: moved {moved} reference label(s) off vias and pads; {hidden} hidden because no clear spot was within reach; {trimmed} outline line(s) cut back from vias and pads; {dropped} silkscreen circle(s) and polygon(s) dropped; {widened} silkscreen stroke(s) widened to 0.18 mm"
+        ),
+        Err(detail) => eprintln!("warning: reference labels were not checked: {detail}"),
+    }
 }
 
 /// Promote a router-produced candidate into a report, installing it only if
@@ -288,8 +364,26 @@ fn finalize(
     // promoted, because the island is a zone against itself and KiCad refuses it.
     let mut repair_blocking: Vec<String> = Vec::new();
     let mut repair_unavailable: Vec<String> = Vec::new();
-    match island_vias::tie_islands(&candidate.candidate_path, &request.ground_nets) {
-        Ok(outcome) => repair_blocking = outcome.unresolved,
+    // A via the engine left in a pad of its own net is moved off it, with the tracks
+    // that meet it, before the candidate is judged; the judging is unchanged.
+    match island_vias::move_vias_off_pads(&candidate.candidate_path) {
+        Ok(0) => {}
+        Ok(moved) => eprintln!("note: moved {moved} via(s) off the pads they sat in"),
+        Err(detail) => {
+            eprintln!("warning: vias in pads were not repaired: {detail}");
+            repair_unavailable.push(format!("via-in-pad repair did not run: {detail}"));
+        }
+    }
+    let mut repair_advisory: Vec<String> = Vec::new();
+    let mut ground = island_vias::Ground::new(&request.ground_nets);
+    if let Some(critical) = &request.return_via_critical_nets {
+        ground = ground.with_critical(critical);
+    }
+    match island_vias::tie_islands_for(&candidate.candidate_path, &ground) {
+        Ok(outcome) => {
+            repair_blocking = outcome.unresolved;
+            repair_advisory = outcome.advisory;
+        }
         Err(detail) => {
             eprintln!(
                 "warning: pour islands were not checked in {}: {detail}",
@@ -298,10 +392,19 @@ fn finalize(
             repair_unavailable.push(format!("pour island repair did not run: {detail}"));
         }
     }
+    // The labels were placed before the router put its vias down; move any that
+    // now sit on a via or a pad. Silkscreen only, and before the candidate is
+    // judged, so the board that is delivered is the one that was validated.
+    let silkscreen = label_vias::keep_labels_off_copper(&candidate.candidate_path);
+    report_silkscreen_pass(silkscreen.clone());
+    if let Err(detail) = &silkscreen {
+        repair_unavailable.push(format!("silkscreen repair did not run: {detail}"));
+    }
     let verdict = with_repair_findings(
         validate_candidate(request, &candidate),
         repair_blocking,
         repair_unavailable,
+        repair_advisory,
     );
 
     let state = RouteReport::state_for_verdict(&verdict);
@@ -366,6 +469,7 @@ fn finalize(
             kicad_drc: verdict.kicad_drc,
             blocking_reasons: verdict.blocking_reasons,
             unavailable_checks: verdict.unavailable_checks,
+            advisories: verdict.advisories,
         }),
         failure: None,
         escape: Vec::new(),
@@ -508,6 +612,7 @@ mod repair_tests {
             FabricationVerdict::ready(),
             Vec::new(),
             vec!["pour island repair did not run: kicad-cli missing".to_string()],
+            Vec::new(),
         );
         assert!(!verdict.fabrication_ready);
         assert_eq!(verdict.unavailable_checks.len(), 1);
@@ -524,6 +629,7 @@ mod repair_tests {
             FabricationVerdict::ready(),
             vec!["an island of net GND holds copper but is tied to nothing".to_string()],
             Vec::new(),
+            Vec::new(),
         );
         assert!(!verdict.fabrication_ready);
         assert_eq!(verdict.blocking_reasons.len(), 1);
@@ -535,8 +641,30 @@ mod repair_tests {
 
     #[test]
     fn a_clean_repair_leaves_the_verdict_as_it_was() {
-        let verdict = with_repair_findings(FabricationVerdict::ready(), Vec::new(), Vec::new());
+        let verdict = with_repair_findings(
+            FabricationVerdict::ready(),
+            Vec::new(),
+            Vec::new(),
+            Vec::new(),
+        );
         assert!(verdict.fabrication_ready);
+        assert_eq!(RouteReport::state_for_verdict(&verdict), RouteState::Routed);
+    }
+
+    /// A slow net's missing return via is W-SYNTH-DRC-016's advisory: it is
+    /// carried to the report for the review, and a clean board stays routed.
+    #[test]
+    fn a_return_via_advisory_is_reported_and_does_not_hold_the_board_back() {
+        let advisory = "net SLOW changes layers at (1.00, 2.00) mm with no ground return via";
+        let verdict = with_repair_findings(
+            FabricationVerdict::ready(),
+            Vec::new(),
+            Vec::new(),
+            vec![advisory.to_string()],
+        );
+        assert!(verdict.fabrication_ready);
+        assert!(!verdict.has_blocking_findings());
+        assert_eq!(verdict.advisories, vec![advisory.to_string()]);
         assert_eq!(RouteReport::state_for_verdict(&verdict), RouteState::Routed);
     }
 }
@@ -581,5 +709,23 @@ mod order_tests {
     #[test]
     fn a_clean_run_recommends_nothing() {
         assert!(recommended_order(&[]).is_empty());
+    }
+
+    #[test]
+    fn a_net_order_the_caller_chose_is_not_retried_in_another() {
+        let dir = std::env::temp_dir();
+        let mut request = RouteRequest::new(
+            &dir.join("demo.kicad_pcb"),
+            &dir,
+            RouterEngine::KiCadRoutingTools,
+        );
+        if std::env::var_os("SYNTH_ROUTER_ORDERING_RETRIES").is_none() {
+            assert_eq!(retry_orderings(&request), ORDERING_RETRIES);
+        }
+        request.kicad_routing_tools.ordering = Some("bus".to_string());
+        assert!(retry_orderings(&request).is_empty());
+        request.kicad_routing_tools.ordering = None;
+        request.engine = RouterEngine::Freerouting;
+        assert!(retry_orderings(&request).is_empty());
     }
 }

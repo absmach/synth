@@ -45,8 +45,8 @@ use synth_diagnostics::{
 use synth_registry::{Part, PinCapability, Registry};
 
 use crate::board::{
-    Board, Component, ComponentId, Couple, DiffPair, Keepout, Net, NetClass, NetEndpoint, NetId,
-    Note, PinId, PlacementEdge, PlacementRegion, PlacementSide, ProcessRequirement,
+    Board, Component, ComponentId, Couple, DiffPair, EdgeRate, Keepout, Net, NetClass, NetEndpoint,
+    NetId, Note, PinId, PlacementEdge, PlacementRegion, PlacementSide, ProcessRequirement,
     SchematicOverflow, SchematicPaper, Stackup, StackupLayer, Variant,
 };
 use crate::units::{ConversionError, Current, DielectricConstant, Impedance, Length, Voltage};
@@ -503,7 +503,16 @@ impl<'a> LowerCtx<'a> {
         sheet: Option<&str>,
     ) -> Component {
         let part_id = decl.part.as_deref().unwrap_or("");
-        let part = registry.lookup(part_id).cloned();
+        let mut part = registry.lookup(part_id).cloned();
+        // Per-instance sourcing overrides the (shared) registry part's.
+        if let Some(part) = part.as_mut() {
+            if let Some(v) = decl.properties.get("lcsc_pn") {
+                part.lcsc_pn = Some(v.clone());
+            }
+            if let Some(v) = decl.properties.get("mpn") {
+                part.mpn = Some(v.clone());
+            }
+        }
 
         if part.is_none() {
             let mut b = DiagnosticBuilder::new("E-SYNTH-COMP-001", Severity::Error, "unknown part")
@@ -716,6 +725,7 @@ impl<'a> LowerCtx<'a> {
         let mut plane = false;
         let mut max_length: Option<Length> = None;
         let mut max_skew: Option<Length> = None;
+        let mut edge_rate: Option<EdgeRate> = None;
         for attr in &n.attrs {
             match attr {
                 NetclassAttr::TraceWidth(v) => match Length::try_from(v) {
@@ -751,6 +761,9 @@ impl<'a> LowerCtx<'a> {
                     Ok(l) => max_skew = Some(l),
                     Err(e) => self.emit_unit_error(&e, "netclass max_skew"),
                 },
+                // The parser accepts only `slow`/`fast`, so this is a
+                // belt-and-braces fallback to the unknown (fast) default.
+                NetclassAttr::EdgeRate { rate, .. } => edge_rate = EdgeRate::parse(rate),
                 NetclassAttr::Color(hex) => match parse_hex_color(hex) {
                     Some(rgb) => color = Some(rgb),
                     None => self.diagnostics.push(
@@ -788,6 +801,7 @@ impl<'a> LowerCtx<'a> {
             plane,
             max_length,
             max_skew,
+            edge_rate,
             source_span: n.span,
         }
     }

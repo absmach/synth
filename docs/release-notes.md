@@ -9,6 +9,7 @@
   - `impedance <value>ohm` — a single-ended controlled-impedance target, checked against the routed width.
   - `current <value>A` — the net current, checked against the routed width by the IPC-2221 ampacity curve.
   - `plane` — flood a copper plane for the class's nets on the inner layers (see below).
+- `netclass` also gained `edge_rate slow|fast`. The return-via repair now holds every net that is not declared slow to a return via, because a generic output pin can carry a fast SPI, USB or timer edge; only a class declaring `edge_rate slow` may downgrade a missing return via to an advisory, and a slow class never downgrades a clock, differential, RF, analog or switching net.
 - New DRC codes:
 
   | Code | Meaning |

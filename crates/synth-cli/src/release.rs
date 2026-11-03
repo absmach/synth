@@ -541,6 +541,7 @@ mod tests {
             kicad_drc: None,
             blocking_reasons: Vec::new(),
             unavailable_checks: Vec::new(),
+            advisories: Vec::new(),
         }
     }
 
