@@ -2915,7 +2915,12 @@ fn build_symbol_unit(
     // dielectric) as hidden symbol fields, so KiCad BOM tooling and the
     // derating checks read them from the schematic. Same convention as
     // the MPN/LCSC fields above.
+    // `lcsc_pn`/`mpn` are instance overrides already folded into the part
+    // above, so they are not stamped a second time.
     for (name, value) in &component.properties {
+        if matches!(name.as_str(), "lcsc_pn" | "mpn") {
+            continue;
+        }
         fields.push(Sexp::list(
             "property",
             vec![

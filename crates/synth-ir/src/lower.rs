@@ -503,7 +503,16 @@ impl<'a> LowerCtx<'a> {
         sheet: Option<&str>,
     ) -> Component {
         let part_id = decl.part.as_deref().unwrap_or("");
-        let part = registry.lookup(part_id).cloned();
+        let mut part = registry.lookup(part_id).cloned();
+        // Per-instance sourcing overrides the (shared) registry part's.
+        if let Some(part) = part.as_mut() {
+            if let Some(v) = decl.properties.get("lcsc_pn") {
+                part.lcsc_pn = Some(v.clone());
+            }
+            if let Some(v) = decl.properties.get("mpn") {
+                part.mpn = Some(v.clone());
+            }
+        }
 
         if part.is_none() {
             let mut b = DiagnosticBuilder::new("E-SYNTH-COMP-001", Severity::Error, "unknown part")

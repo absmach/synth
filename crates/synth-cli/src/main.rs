@@ -1352,7 +1352,7 @@ fn capability_descriptor() -> serde_json::Value {
         "language": {
             "syntax_version": "1.0",
             "statements": ["board", "import", "layers", "manufacturer", "revision", "schematic", "component", "connect", "net", "power", "module", "interface", "bus", "use", "bind", "netclass", "keepout", "stackup", "requires", "group", "sheet", "variant"],
-            "attributes": ["company", "legends", "notes", "dnp", "prefix", "param", "as", "class", "diff_pair", "impedance", "trace_width", "clearance", "radius", "copper", "insulator", "er", "material", "value", "tolerance", "voltage", "power_rating", "dielectric", "description"],
+            "attributes": ["company", "legends", "notes", "dnp", "prefix", "param", "as", "class", "diff_pair", "impedance", "trace_width", "clearance", "radius", "copper", "insulator", "er", "material", "value", "tolerance", "voltage", "power_rating", "dielectric", "description", "lcsc_pn", "mpn"],
             "endpoint_forms": ["component.pin", "named_net", "bus.member"]
         },
         "geometry_and_constraints": {
