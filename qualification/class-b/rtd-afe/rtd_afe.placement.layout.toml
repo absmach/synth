@@ -162,8 +162,8 @@ rotation = 90
 priority = "hard"
 
 [components.L2]
-x = 17.0
-y = 10.0
+x = 13.0
+y = 6.5
 rotation = 180
 priority = "hard"
 
@@ -291,7 +291,7 @@ priority = "hard"
 
 # --- USB-C readout: top edge, short pair to the MCU -------------------------
 [components.J1]
-x = 28.0
+x = 22.55
 y = 6.0
 rotation = 180
 priority = "hard"
