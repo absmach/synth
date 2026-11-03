@@ -30,7 +30,7 @@ plan = json.loads((here / "summaries.json").read_text())
 step = plan[min(count, len(plan) - 1)]
 if not isinstance(step, dict) or "summary" not in step:
     step = {"summary": step}
-if step["summary"] is not None:
+if step["summary"] is not None and "--json-out" in sys.argv:
     Path(sys.argv[sys.argv.index("--json-out") + 1]).write_text(json.dumps(step["summary"]))
 if step.get("board", True):
     Path(sys.argv[2]).write_text("(kicad_pcb)")
@@ -38,7 +38,7 @@ sys.exit(step.get("exit", 0))
 """
 
 
-def run_adapter(summaries):
+def run_adapter(summaries, extra=(), calls_out=None):
     """Run the adapter against the stub; return (exit code, via costs requested).
 
     Each step is a summary, or `{"summary": ..., "exit": n, "board": bool}`;
@@ -60,12 +60,15 @@ def run_adapter(summaries):
                 str(repo),
                 "--python",
                 sys.executable,
+                *extra,
             ],
             capture_output=True,
             text=True,
             check=False,
         )
         calls = (repo / "py_router" / "calls.log").read_text().splitlines()
+        if calls_out is not None:
+            calls_out.extend(calls)
         costs = [
             line.split("--via-cost ")[1].split()[0] if "--via-cost" in line else "default"
             for line in calls
@@ -280,6 +283,27 @@ class NoGridClearanceTest(unittest.TestCase):
     def test_a_board_whose_package_escaped_nothing_passes_kicad_drc_with_no_clearance_errors(self):
         errors = clearance_errors_after_the_adapter()
         self.assertEqual(errors, [], f"{len(errors)} clearance error(s) after an escape that did nothing")
+
+
+class LayerPinTest(unittest.TestCase):
+    def test_pinned_nets_are_routed_first_on_their_layers(self):
+        calls = []
+        code, _ = run_adapter(
+            [CLEAN],
+            extra=["--net-layers", "ETH_TXP=F.Cu,B.Cu", "--net-layers", "ETH_TXN=F.Cu,B.Cu"],
+            calls_out=calls,
+        )
+        self.assertEqual(code, 0)
+        self.assertIn("--nets ETH_TXP ETH_TXN --layers F.Cu B.Cu", calls[0])
+        self.assertNotIn("--json-out", calls[0])
+        # The general pass starts from the board the pinned pass wrote.
+        self.assertIn("out.pinned0.kicad_pcb", calls[1].split()[0])
+        self.assertIn("--nets * !ETH_TXP !ETH_TXN", calls[1])
+
+    def test_no_pin_means_no_pinned_pass(self):
+        calls = []
+        run_adapter([CLEAN], calls_out=calls)
+        self.assertNotIn("--layers", " ".join(calls))
 
 
 class RetryTest(unittest.TestCase):

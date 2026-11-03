@@ -408,7 +408,8 @@ pub fn list_tools() -> Vec<McpToolInfo> {
                                 "edge":       { "type": "string", "enum": ["top","bottom","left","right"] },
                                 "near":       { "type": "string", "description": "Anchor component refdes" },
                                 "side":       { "type": "string", "enum": ["above","below","left","right"] },
-                                "priority":   { "type": "string", "enum": ["hard","soft"] }
+                                "priority":   { "type": "string", "enum": ["hard","soft"] },
+                                "rotation":   { "type": "integer", "enum": [0, 90, 180, 270], "description": "Orientation in degrees the placer keeps, e.g. the suggested angle from a rotate_connector_parallel_to_edge review finding" }
                             }
                         }
                     }
@@ -1061,8 +1062,8 @@ fn execute_language_reference(_args: &Value) -> Value {
                     "example": "net \"I2C_SCL\" { U1.scl U2.pb6 }"
                 },
                 {
-                    "form": "netclass \"<name>\" { [trace_width <value><unit>] [clearance <value><unit>] [via_diameter <value><unit>] [via_drill <value><unit>] [color \"#rrggbb\"] }",
-                    "description": "Routing and colour class. Nets are auto-classified (Power, Ground, I2C, SPI, UART, USB, Clock, Reset) and coloured from a fixed palette; a declared class joined with `class \"<name>\"` overrides both. `color` sets the schematic wire/label hue and the PCB net colour.",
+                    "form": "netclass \"<name>\" { [trace_width <value><unit>] [clearance <value><unit>] [via_diameter <value><unit>] [via_drill <value><unit>] [layers \"<layer>\", …] [color \"#rrggbb\"] }",
+                    "description": "Routing and colour class. Nets are auto-classified (Power, Ground, I2C, SPI, UART, USB, Clock, Reset) and coloured from a fixed palette; a declared class joined with `class \"<name>\"` overrides both. `color` sets the schematic wire/label hue and the PCB net colour. `layers` pins the class's nets to KiCad copper layers (`\"F.Cu\"`, `\"In1.Cu\"`, `\"B.Cu\"`): the router keeps them there, the export writes it as a KiCad custom rule, and copper elsewhere is E-SYNTH-DRC-023. Pin a controlled-impedance pair to outer layers to clear W-SYNTH-IMPEDANCE-001.",
                     "example": "netclass \"PWR\" { trace_width 0.4mm clearance 0.25mm color \"#d55e00\" }"
                 },
                 {
@@ -1531,7 +1532,7 @@ fn route_design_externally_with(
     let placement_sidecar = resolve_placement_sidecar(args, file_name);
     let placement = synth_place::place_with_sidecar(&board, placement_sidecar.as_deref())
         .map_err(|e| format!("Placement failed: {e}"))?;
-    let description = synth_place::describe_placement(&board, &placement);
+    let description = synth_place::describe_placement_external(&board, &placement);
     if description.visual_review.requires_revision
         && !args["allow_placement_warnings"].as_bool().unwrap_or(false)
     {
@@ -1579,6 +1580,7 @@ fn route_design_externally_with(
         board.layers,
     );
     request.use_board_escapes(&board);
+    request.use_board_layer_pins(&board);
     let process_warnings = grant_processes(&mut request, &board);
     request.input_hash = sha256_of(&res.pcb_path);
     request.preserve_baseline().map_err(|f| f.to_string())?;
@@ -2979,6 +2981,7 @@ fn evaluate_candidate_mcp(
     // the board asked: without the escape intent a declared `escape { off }`
     // or a chosen method would change the winner.
     request.use_board_escapes(board);
+    request.use_board_layer_pins(board);
     // Granting only. Reporting belongs to the run the caller keeps: this is
     // reached from `select_placement_by_route` inside `execute_export`, which
     // grants again for the chosen placement and puts any unmet requirement in
@@ -3214,6 +3217,7 @@ fn execute_export(args: &Value, default_registry: Option<&Path>) -> Result<Value
         board.layers,
     );
     request.use_board_escapes(&board);
+    request.use_board_layer_pins(&board);
     let process_warnings = grant_processes(&mut request, &board);
     request.input_hash = sha256_of(&res.pcb_path);
     request.preserve_baseline().map_err(|f| f.to_string())?;
@@ -4022,7 +4026,8 @@ fn execute_place_with_hints(
                     synth_place::apply_sidecar_overrides(&board, &mut placement, &sidecar);
                 }
             }
-            let placement_description = synth_place::describe_placement(&board, &placement);
+            let placement_description =
+                synth_place::describe_placement_external(&board, &placement);
 
             // Placement is an independently useful stage. Routing and DRC
             // can be expensive and are exposed through their own gates; do
@@ -4273,7 +4278,7 @@ fn execute_describe_placement(
     let placement = synth_place::place_with_sidecar(&board, sidecar_path)
         .map_err(|e| format!("Placement failed: {e}"))?;
 
-    let desc = synth_place::describe_placement(&board, &placement);
+    let desc = synth_place::describe_placement_external(&board, &placement);
     let mut value = serde_json::to_value(desc).map_err(|e| format!("Serialization error: {e}"))?;
     value["fitness"] = serde_json::to_value(synth_place::fitness(&board, &placement))
         .map_err(|e| format!("Fitness serialization error: {e}"))?;

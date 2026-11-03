@@ -582,32 +582,25 @@ pub struct NetClass {
     /// bus/group length-match budget checked across the class.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub max_skew: Option<Length>,
-    /// How fast the class's nets switch (`edge_rate slow`). `None` is the
-    /// unknown case and is treated as fast: a generic output pin can carry a
-    /// fast edge, so only a class that says `slow` may lose its return via as
-    /// an advisory. Used by `synth_drc::return_path_critical_net_names`.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub edge_rate: Option<EdgeRate>,
+    /// Copper layers the class's nets may be routed on (`layers "F.Cu"`),
+    /// KiCad names. Empty means every copper layer. The export writes it as a
+    /// custom DRC rule, the router honours it, and routed copper off these
+    /// layers is a blocking DRC violation.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub layers: Vec<String>,
     pub source_span: Span,
 }
 
-/// The edge rate a netclass declares (`edge_rate slow` / `edge_rate fast`).
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
-pub enum EdgeRate {
-    Fast,
-    Slow,
-}
-
-impl EdgeRate {
-    /// Parse `slow` or `fast`, case-insensitively.
+impl NetClass {
+    /// Whether the class pins its nets to outer copper only, where
+    /// controlled impedance is derived as microstrip.
     #[must_use]
-    pub fn parse(text: &str) -> Option<Self> {
-        match text.to_ascii_lowercase().as_str() {
-            "fast" => Some(Self::Fast),
-            "slow" => Some(Self::Slow),
-            _ => None,
-        }
+    pub fn outer_layers_only(&self) -> bool {
+        !self.layers.is_empty()
+            && self
+                .layers
+                .iter()
+                .all(|layer| layer == "F.Cu" || layer == "B.Cu")
     }
 }
 

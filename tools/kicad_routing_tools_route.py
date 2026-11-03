@@ -342,6 +342,39 @@ def _perimeter(python: str, repo: Path, board: Path, components: list[str],
     return current
 
 
+def _route_pinned(python: str, route: Path, board: Path, output: Path,
+                  net_layers: list[str], base: list[str]) -> Path:
+    """Route each `NET=LAYER[,LAYER]` pin on its own layers, grouped by layer set.
+
+    The general pass that follows excludes these nets by name, so it neither
+    routes them nor rips them to make room. A pinned net this pass cannot
+    finish stays open and fails the route, rather than being finished on a
+    layer the design ruled out.
+    """
+    groups: dict[tuple[str, ...], list[str]] = {}
+    for spec in net_layers:
+        net, _, layers = spec.rpartition("=")
+        wanted = tuple(l for l in layers.split(",") if l)
+        if not net or not wanted:
+            print(f"warning: ignoring malformed --net-layers {spec!r}", file=sys.stderr)
+            continue
+        groups.setdefault(wanted, []).append(net)
+    current = board
+    for index, (layers, nets) in enumerate(sorted(groups.items())):
+        staged = output.with_name(f"{output.stem}.pinned{index}{output.suffix}")
+        staged.unlink(missing_ok=True)
+        command = [python, str(route), str(current), str(staged), "--nets", *nets,
+                   "--layers", *layers, *base]
+        print("routing pinned nets:", " ".join(command), flush=True)
+        completed = subprocess.run(command, check=False)
+        if staged.is_file():
+            current = staged
+        if completed.returncode:
+            print(f"warning: the pinned pass for {', '.join(nets)} on "
+                  f"{', '.join(layers)} exited {completed.returncode}", file=sys.stderr)
+    return current
+
+
 def _load_summary(stats: Path) -> dict:
     """Read the engine's JSON summary, or explain why it could not be read."""
     if not stats.is_file():
@@ -459,6 +492,10 @@ def main() -> int:
     )
     parser.add_argument("--escape-via-size", type=float)
     parser.add_argument("--escape-via-drill", type=float)
+    # A net the design pinned to copper layers (`netclass { layers … }`),
+    # routed on those layers before the general pass. Repeatable.
+    parser.add_argument("--net-layers", action="append", default=[],
+                        metavar="NET=LAYER[,LAYER]")
     args = parser.parse_args()
 
     route = args.repo / "py_router" / "route.py"
@@ -492,6 +529,22 @@ def main() -> int:
         except RuntimeError as error:
             print(f"error: {error}", file=sys.stderr)
             return ESCAPE_FAILED
+    if args.net_layers:
+        pinned_base = [
+            "--ordering", args.ordering,
+            "--escalation", args.escalation,
+            "--same-net-pad-clearance",
+            str(-1 if args.allow_via_in_pad else args.same_net_pad_clearance),
+            "--fab-tier", args.fab_tier,
+        ]
+        if args.fab_overrides:
+            pinned_base.extend(("--fab-overrides", str(args.fab_overrides)))
+        if args.strict_sizes:
+            pinned_base.append("--strict-sizes")
+        board_to_route = _route_pinned(
+            args.python, route, board_to_route, args.output_board,
+            args.net_layers, pinned_base,
+        )
     command = [
         args.python,
         str(route),
@@ -499,6 +552,11 @@ def main() -> int:
         str(args.output_board),
         "--nets",
         "*",
+        # Hands off the pinned nets: KRT reads a '!'-negated name as neither
+        # routed nor a rip candidate, so the general pass cannot rip one and
+        # re-route it on a layer its class rules out. One the pinned pass
+        # could not finish stays open and fails the route.
+        *(f"!{spec.rpartition('=')[0]}" for spec in args.net_layers),
         "--ordering",
         args.ordering,
         "--stats",

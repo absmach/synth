@@ -754,22 +754,6 @@ impl Parser {
             }
             return true;
         }
-        // Per-instance sourcing. Plain identifiers, not reserved words, so a
-        // design that already uses `mpn` as a name keeps parsing. Stored
-        // lowercase, which never collides with the capitalised KiCad fields.
-        if let TokenKind::Ident(name) = self.peek_kind() {
-            if name == "lcsc_pn" || name == "mpn" {
-                let key = name.clone();
-                self.bump();
-                if let Some(s) = self.expect_string(
-                    "E-SYNTH-PARSE-002",
-                    "expected a quoted value after the field keyword",
-                ) {
-                    properties.insert(key, s);
-                }
-                return true;
-            }
-        }
         if matches!(self.peek_kind(), TokenKind::KwDnp) {
             self.bump(); // consume `dnp`
             *dnp = true;
@@ -1361,6 +1345,34 @@ impl Parser {
         })
     }
 
+    /// The layer list after a netclass's `layers`, `None` when it names none
+    /// (having reported that).
+    fn parse_netclass_layers(&mut self) -> Option<NetclassAttr> {
+        let mut layers = Vec::new();
+        while let TokenKind::StringLit(_) = self.peek_kind() {
+            if let Some(layer) =
+                self.expect_string("E-SYNTH-PARSE-019", "expected a copper layer name")
+            {
+                layers.push(layer);
+            }
+            if matches!(self.peek_kind(), TokenKind::Comma) {
+                self.bump();
+            }
+        }
+        if layers.is_empty() {
+            self.emit(
+                self.peek().span,
+                "E-SYNTH-PARSE-019",
+                "netclass layers names no layer",
+                "`layers \"<layer>\", …`",
+                self.describe_current(),
+                None,
+            );
+            return None;
+        }
+        Some(NetclassAttr::Layers { layers })
+    }
+
     /// One attribute inside a `netclass { … }` body.
     ///
     /// Lifted out of [`Self::parse_netclass`] so the loop there stays short
@@ -1433,30 +1445,6 @@ impl Parser {
                     return Some(NetclassAttr::ViaDrill(v));
                 }
             }
-            // The signal's edge rate, which decides whether a missing ground
-            // return via is an advisory or holds the board back. Contextual,
-            // like `current` and `plane`, so the words keep working as names.
-            TokenKind::Ident(name) if name == "edge_rate" => {
-                self.bump();
-                let span = self.peek().span;
-                match self.expect_ident("E-SYNTH-PARSE-028", "expected `edge_rate` value") {
-                    Some(rate) if matches!(rate.to_ascii_lowercase().as_str(), "slow" | "fast") => {
-                        return Some(NetclassAttr::EdgeRate {
-                            rate: rate.to_ascii_lowercase(),
-                            span,
-                        });
-                    }
-                    Some(rate) => self.emit(
-                        span,
-                        "E-SYNTH-PARSE-019",
-                        "unexpected value for `edge_rate` inside netclass",
-                        "`slow` or `fast`",
-                        format!("`{rate}`"),
-                        None,
-                    ),
-                    None => {}
-                }
-            }
             TokenKind::Ident(name) if name == "color" => {
                 self.bump();
                 if let Some(hex) = self.expect_string(
@@ -1466,12 +1454,18 @@ impl Parser {
                     return Some(NetclassAttr::Color(hex));
                 }
             }
+            // `layers` is the reserved keyword `layers 4` uses, as inside
+            // `escape { … }`, and takes the same quoted, comma-separated list.
+            TokenKind::KwLayers => {
+                self.bump();
+                return self.parse_netclass_layers();
+            }
             _ => {
                 self.emit(
                     self.peek().span,
                     "E-SYNTH-PARSE-019",
                     "unexpected attribute inside netclass",
-                    "`trace_width <value><unit>`, `clearance <value><unit>`, `impedance <value><unit>`, `current <value><unit>`, `max_length <value><unit>`, `max_skew <value><unit>`, `via_diameter <value><unit>`, `via_drill <value><unit>`, `edge_rate slow|fast`, `plane`, or `color \"#rrggbb\"`",
+                    "`trace_width <value><unit>`, `clearance <value><unit>`, `impedance <value><unit>`, `current <value><unit>`, `max_length <value><unit>`, `max_skew <value><unit>`, `via_diameter <value><unit>`, `via_drill <value><unit>`, `layers \"<layer>\", …`, `plane`, or `color \"#rrggbb\"`",
                     self.describe_current(),
                     None,
                 );
@@ -3035,29 +3029,6 @@ mod tests {
     }
 
     #[test]
-    fn parse_component_instance_sourcing() {
-        let res = parse(
-            lex(
-                r#"board "b" { component R1: resistor "r_generic_0603" value "1k" lcsc_pn "C110776" mpn "RT0603BRD071KL" }"#,
-            ),
-            "test.synth".into(),
-        );
-        assert!(res.diagnostics.is_empty(), "{:?}", res.diagnostics);
-        let ast = res.ast.unwrap();
-        let StatementAst::Component(c) = &ast.board.statements[0] else {
-            panic!("Expected component statement")
-        };
-        assert_eq!(
-            c.properties.get("lcsc_pn").map(String::as_str),
-            Some("C110776")
-        );
-        assert_eq!(
-            c.properties.get("mpn").map(String::as_str),
-            Some("RT0603BRD071KL")
-        );
-    }
-
-    #[test]
     fn parse_component_unit_literal_value() {
         // Phase D4 (syntax half): `value 10kohm` / `value 100nF`
         // normalise to the display string, and units are
@@ -3488,51 +3459,34 @@ mod tests {
     }
 
     #[test]
-    fn parse_netclass_edge_rate_attribute() {
-        // Contextual, not a keyword: the words must keep working as names.
+    fn parse_netclass_layers_attribute() {
         let src = r#"board "b" {
-            netclass "I2C" {
-                edge_rate slow
-            }
-            netclass "SPI" {
-                edge_rate fast
+            netclass "ETH" {
+                impedance 50ohm
+                layers "F.Cu", "B.Cu"
             }
         }"#;
-        let tokens = lex(src);
-        let res = parse(tokens, "test.synth".into());
-        assert!(
-            res.diagnostics.is_empty(),
-            "Diagnostics should be empty: {:?}",
-            res.diagnostics
-        );
+        let res = parse(lex(src), "test.synth".into());
+        assert!(res.diagnostics.is_empty(), "{:?}", res.diagnostics);
         let ast = res.ast.unwrap();
-        let StatementAst::Netclass(slow) = &ast.board.statements[0] else {
+        let StatementAst::Netclass(n) = &ast.board.statements[0] else {
             panic!("Expected netclass statement")
         };
         assert!(
-            slow.attrs
-                .iter()
-                .any(|a| matches!(a, NetclassAttr::EdgeRate { rate, .. } if rate == "slow")),
-            "edge_rate attr must parse: {:?}",
-            slow.attrs
-        );
-        let StatementAst::Netclass(fast) = &ast.board.statements[1] else {
-            panic!("Expected netclass statement")
-        };
-        assert!(
-            fast.attrs
-                .iter()
-                .any(|a| matches!(a, NetclassAttr::EdgeRate { rate, .. } if rate == "fast")),
-            "edge_rate attr must parse: {:?}",
-            fast.attrs
+            n.attrs.iter().any(|a| matches!(
+                a,
+                NetclassAttr::Layers { layers } if layers == &["F.Cu".to_string(), "B.Cu".to_string()]
+            )),
+            "layers attr must parse: {:?}",
+            n.attrs
         );
     }
 
     #[test]
-    fn an_unknown_edge_rate_is_rejected() {
+    fn parse_netclass_layers_without_a_layer_is_an_error() {
         let src = r#"board "b" {
-            netclass "I2C" {
-                edge_rate sometimes
+            netclass "ETH" {
+                layers
             }
         }"#;
         let res = parse(lex(src), "test.synth".into());
@@ -3540,7 +3494,7 @@ mod tests {
             res.diagnostics
                 .iter()
                 .any(|d| d.code == "E-SYNTH-PARSE-019"),
-            "an unknown edge rate must be rejected: {:?}",
+            "{:?}",
             res.diagnostics
         );
     }

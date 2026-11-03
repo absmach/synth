@@ -1370,7 +1370,7 @@ fn capability_descriptor() -> serde_json::Value {
         "language": {
             "syntax_version": "1.0",
             "statements": ["board", "import", "layers", "manufacturer", "revision", "schematic", "component", "connect", "net", "power", "module", "interface", "bus", "use", "bind", "netclass", "keepout", "stackup", "requires", "group", "sheet", "variant"],
-            "attributes": ["company", "legends", "notes", "dnp", "prefix", "param", "as", "class", "diff_pair", "impedance", "trace_width", "clearance", "radius", "copper", "insulator", "er", "material", "value", "tolerance", "voltage", "power_rating", "dielectric", "description", "lcsc_pn", "mpn"],
+            "attributes": ["company", "legends", "notes", "dnp", "prefix", "param", "as", "class", "diff_pair", "impedance", "trace_width", "clearance", "radius", "copper", "insulator", "er", "material", "value", "tolerance", "voltage", "power_rating", "dielectric", "description"],
             "endpoint_forms": ["component.pin", "named_net", "bus.member"]
         },
         "geometry_and_constraints": {
@@ -1412,7 +1412,7 @@ fn capability_descriptor() -> serde_json::Value {
                 "notes": "No fabricator presets are shipped; every value is declared by the design. A diff_pair impedance derives its net class trace width (and, for a true pair, its gap) from the first copper and insulator layers."
             },
             "routing_constraints": {
-                "netclass": ["trace_width", "clearance", "color", "impedance", "current", "plane", "max_length", "max_skew", "via_diameter", "via_drill", "edge_rate"],
+                "netclass": ["trace_width", "clearance", "color", "impedance", "current", "plane", "max_length", "max_skew", "via_diameter", "via_drill", "layers"],
                 "diff_pair": ["impedance", "max_skew", "couple"],
                 "keepout": ["radius"],
                 "component": ["placement_hint", "escape"],
@@ -4842,6 +4842,7 @@ fn build_route_request(
     request.kicad_routing_tools.same_net_pad_clearance_mm = options.same_net_pad_clearance;
     request.policy.allow_via_in_pad = options.allow_via_in_pad;
     request.use_board_escapes(board);
+    request.use_board_layer_pins(board);
     request.use_profile_floor(
         &board
             .manufacturer
@@ -4915,7 +4916,6 @@ fn build_route_request(
     }
     request.routing_order = routing_order.to_vec();
     request.ground_nets = synth_drc::ground_net_names(board);
-    request.return_via_critical_nets = Some(synth_drc::return_path_critical_net_names(board));
     request.preserve_baseline()?;
     Ok(request)
 }
@@ -5368,14 +5368,6 @@ fn print_route_report(report: &synth_router::RouteReport) {
         .unwrap_or_default()
     {
         eprintln!("  not checked: {check}");
-    }
-    for advisory in report
-        .validation
-        .as_ref()
-        .map(|v| v.advisories.clone())
-        .unwrap_or_default()
-    {
-        eprintln!("  advisory: {advisory}");
     }
     if let Some(counts) = report.validation.as_ref().and_then(|v| v.kicad_drc) {
         eprintln!(
@@ -6001,13 +5993,6 @@ mod tests {
         .expect("request");
         let _ = std::fs::remove_dir_all(&dir);
         assert_eq!(request.ground_nets, vec!["POWER_RETURN".to_string()]);
-        // SIGNAL is in no netclass and its GPIO pin could carry any edge rate,
-        // so the request holds it to a return via rather than downgrading it.
-        // Only a netclass declaring `edge_rate slow` is listed as an advisory.
-        assert_eq!(
-            request.return_via_critical_nets,
-            Some(vec!["SIGNAL".to_string()])
-        );
     }
 
     /// A stage that writes more than a pipe holds must still be read.

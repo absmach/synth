@@ -80,6 +80,11 @@ board "ethernet_phy" {
   connect Y1.case_2 -> U1.vss
 
   // ---- MDI: PHY to MagJack ----------------------------------------------
+  // The pairs' 100 ohm is derived as outer-layer microstrip, so the class
+  // keeps them on outer copper; on an inner layer the claim would not hold.
+  netclass "ETH" {
+    layers "F.Cu", "B.Cu"
+  }
   component J1: connector "rj45_hr911105a"
   component R4: resistor  "r_generic_0402" value "49.9"
   component R5: resistor  "r_generic_0402" value "49.9"
@@ -87,10 +92,10 @@ board "ethernet_phy" {
   component R7: resistor  "r_generic_0402" value "49.9"
   component C8: capacitor "c_generic_0603" value "100nF"
 
-  connect U1.txp -> J1.td_p as "ETH_TXP"
-  connect U1.txn -> J1.td_n as "ETH_TXN"
-  connect U1.rxp -> J1.rd_p as "ETH_RXP"
-  connect U1.rxn -> J1.rd_n as "ETH_RXN"
+  connect U1.txp -> J1.td_p as "ETH_TXP" class "ETH"
+  connect U1.txn -> J1.td_n as "ETH_TXN" class "ETH"
+  connect U1.rxp -> J1.rd_p as "ETH_RXP" class "ETH"
+  connect U1.rxn -> J1.rd_n as "ETH_RXN" class "ETH"
 
   connect U1.txp -> R4.p1
   connect U1.txn -> R5.p1

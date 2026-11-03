@@ -4616,6 +4616,7 @@ mod tests {
             impedance: None,
             current: None,
             plane: false,
+            layers: Vec::new(),
             source_span: Span::new(0, 0),
         }];
         board
