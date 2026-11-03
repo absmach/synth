@@ -105,6 +105,50 @@ The routing report lists 1 non-blocking return-via finding: a track changes laye
 
 `+12V_PROT` carries the buck's input current, 1.55 A at 10.8 V, upstream of the input capacitors `C2` to `C4` that supply the switching current. The added loop for the 2.69 mm detour is about 5.4 nH; with a ripple of 20 % of the input current, 0.3 A in 1 us, V = L x di/dt = 5.4 nH x 0.3 A / 1 us = 1.6 mV.
 
+## Routing report and the delivered board
+
+The routing report ([`export/protected_power_entry.routing.json`](export/protected_power_entry.routing.json)) is written when the router finishes. Synth then repairs the candidate before it judges it, and the delivered board ([`export/protected_power_entry.kicad_pcb`](export/protected_power_entry.kicad_pcb)) is the repaired one. The counts of the two files, from the same export:
+
+| Count | Routing report | Delivered board | What accounts for the difference |
+|---|---|---|---|
+| Track segments | 289 | 288 | Synth prunes one dangling stub before the board is judged |
+| Vias | 27 | 44 (24 ground, 20 signal and power) | The router's own count, `claimed_total_vias`, is 20 and equals the 20 signal and power vias of the delivered board; Synth adds the further ground vias after the router reports, to tie ground-pour islands and for the return-via repair: 44 - 27 = 17 |
+| Connected nets | 34 | 34 | The engine routes 33 single-ended nets (`claimed_successful: 33`, all 33 of 33 in its log) and the `GND` pour completes the 34th |
+
+The README's measurements are the delivered board's. Open nets: 0, in both files.
+
+## Warnings and their disposition
+
+All figures are for the released artifact, Gerber content hash `968acf6483`, DRC and ERC with the footprint and symbol library tables configured ([`reports/`](reports/)). Each warning is accepted by JeffMboya's sign-off below, for the reason given.
+
+**DRC: 80 `lib_footprint_mismatch` warnings, 0 errors, 0 unconnected.** Every one is a footprint whose silkscreen differs from its library copy, because Synth cuts silkscreen back from vias and pads so the silkscreen stays 0.25 mm clear of copper (JLCPCB's minimum is 0.15 mm). The pads, courtyard and fabrication outline of each are identical to the library file, checked by [`footprint_diff.py`](agent-run/tools/footprint_diff.py):
+
+| Footprint | Warnings | Differs from the library in |
+|---|---|---|
+| `Capacitor_SMD:C_0603_1608Metric` | 9 | `F.SilkS`: 9 |
+| `Capacitor_SMD:C_1206_3216Metric` | 8 | `F.SilkS`: 8 |
+| `Capacitor_THT:CP_Radial_D6.3mm_P2.50mm` | 3 | `F.SilkS`: 3 |
+| `Connector_JST:JST_XH_S2B-XH-A-1_1x02_P2.50mm_Horizontal` | 4 | `F.SilkS`: 4 |
+| `Connector_PinHeader_2.54mm:PinHeader_1x08_P2.54mm_Vertical` | 1 | `F.SilkS`: 1 |
+| `Diode_SMD:D_SMA` | 1 | `F.SilkS`: 1 |
+| `Diode_SMD:D_SOD-123` | 6 | `F.SilkS`: 6 |
+| `Fuse:Fuse_1812_4532Metric` | 3 | `F.SilkS`: 3 |
+| `Inductor_SMD:L_Bourns_SRN6045TA` | 1 | `F.SilkS`: 1 |
+| `LED_SMD:LED_0603_1608Metric` | 6 | `F.SilkS`: 6 |
+| `Package_SO:SOIC-8-1EP_3.9x4.9mm_P1.27mm_EP2.41x3.3mm` | 1 | `F.SilkS`: 1 |
+| `Package_TO_SOT_SMD:SOT-223-3_TabPin2` | 1 | `F.SilkS`: 1 |
+| `Package_TO_SOT_SMD:SOT-23` | 1 | `F.SilkS`: 1 |
+| `Package_TO_SOT_SMD:SOT-23-6` | 1 | `F.SilkS`: 1 |
+| `Resistor_SMD:R_0603_1608Metric` | 24 | `F.SilkS`: 24 |
+| `TestPoint:TestPoint_Pad_D1.5mm` | 10 | `F.SilkS`: 10 |
+
+**ERC: 2 warnings, 0 errors.**
+
+| Warning | Why it is acceptable |
+|---|---|
+| `lib_symbol_issues`: symbol `Si2301CDS` not found in `Transistor_FET` (`Q1`) | The part's registry entry names a symbol that KiCad's library does not contain, so the exporter draws its own symbol. Its three pins (gate, source, drain) are connected as the schematic shows and the pin numbers match the SOT-23 footprint. |
+| `label_multiple_wires`: the `BUCK_EN` label sits on a 25.4 mm wire where a second wire meets it | Both wires carry `BUCK_EN`, so the label names one net. The netlist is unchanged by it. |
+
 ## Reproducibility
 
 The source and sidecar in this directory were exported three times through the Synth MCP server (`synth mcp --stdio`, the `synth_export` tool, the call an agent makes), each into an empty directory, router included. The server, the request, the response and the hash of every file written are recorded in [`agent-run/mcp-final-export/`](agent-run/mcp-final-export/). Each cell is the first ten characters of a SHA-256.
@@ -137,7 +181,7 @@ PCB review sign-off required by #39: JeffMboya, 2026-11-03, on the package in `f
 | Item | Signed off |
 |---|---|
 | PCB and Gerber package | the Gerbers, drill, BOM and CPL of `fab/` and the exported KiCad board, hash `968acf6483` |
-| Return paths | the 1 return-via finding of the routing report, `+12V_PROT` (2.69 mm to the nearest ground via), as checked in "Return paths" above |
+| Return paths | the 1 return-via finding of the routing report, `+12V_PROT` (2.69 mm to the nearest ground via), as checked in "Return paths" above; JeffMboya accepts this arrangement for the buck's switching-current loop: the switching current is supplied by `C2` to `C4` at the regulator pins, and the 2.69 mm detour adds about 5.4 nH, 1.6 mV at the buck's ripple current |
 | ERC | the 2 warnings: `Si2301CDS` absent from KiCad 10.0.7's `Transistor_FET` library (`Q1`) and the `BUCK_EN` label on a wire of its own net |
 | DRC | the 80 `lib_footprint_mismatch` warnings, each a footprint whose silkscreen differs from the library copy while its pads, courtyard and fabrication outline match it |
 | Power copper | the declared and exported widths: every power track of the export is at its declared class width, `+5V` 0.6 mm against the 0.53 mm that 1.5 A needs, with no narrowed section and no `rejected` engine verdict; the nearest through-hole to SMD pad pair at 2.13 mm |
