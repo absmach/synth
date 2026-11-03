@@ -15,7 +15,7 @@ The board is the output of an agent driving `synth mcp` from a prompt, followed 
 | | |
 |---|---|
 | Synth, agent run and searches | commit `cfec42751ffd898cd4425322247e56b77951ed0e`, the merge of Synth pull requests #370, #388 and #394 |
-| Synth, final exports | commit `c0649a053a68ed007a7ce4a73d2f2d244dfef236` (branch `case-binary-v4` of `JeffMboya/synth`): the merge of Synth pull requests #370, #388 and #394. `synth --version` prints `synth-cli 0.1.1`; `synth mcp --stdio` is the same binary |
+| Synth, final exports | commit `6207bba6549dd0a235274a84084cd8cf3fb2b58e` (branch `case-binary-v4` of `JeffMboya/synth`): the merge of Synth pull requests #370, #388 and #394. `synth --version` prints `synth-cli 0.1.1`; `synth mcp --stdio` is the same binary |
 | KiCadRoutingTools | `9399bfb29e072bfe60b10d9cdae20c274fc2a17a` |
 | KiCad | 10.0.7 (library tables for DRC and ERC), on a 16-vCPU server |
 
@@ -32,8 +32,7 @@ The README's reproducibility table has the first ten characters of SHA-256 of ea
 
 | Command | Result file |
 |---|---|
-| The `synth_export` tool of `synth mcp --stdio` on the source and sidecar, three times into empty directories ([`agent-run/tools/mcp_export.py`](agent-run/tools/mcp_export.py) makes the call and records it) | [`export/`](export/), with `i2c_sensor_node.routing.json`; the three recorded sessions are in [`agent-run/mcp-final-export/`](agent-run/mcp-final-export/); `release.json` (the reviewer record and the signal-integrity findings) is the report `synth export-kicad` writes for the same source |
-| `kicad-cli pcb drc --refill-zones --severity-all --format json` with the KiCad footprint library table | [`reports/kicad_drc.json`](reports/kicad_drc.json) |
-| `kicad-cli sch erc --severity-all --format json` | [`reports/kicad_erc.json`](reports/kicad_erc.json) |
+| The `synth_export` tool of `synth mcp --stdio` on the source and sidecar, three times into empty directories ([`agent-run/tools/mcp_export.py`](agent-run/tools/mcp_export.py) makes the call and records it) | [`export/`](export/), with `i2c_sensor_node.routing.json`; the three recorded sessions are in [`agent-run/mcp-final-export/`](agent-run/mcp-final-export/) |
+| [`agent-run/tools/library_check.sh`](agent-run/tools/library_check.sh): `kicad-cli pcb drc --refill-zones --severity-all` and `kicad-cli sch erc --severity-all` with the footprint and symbol library tables configured ([`reports/fp-lib-table`](reports/fp-lib-table), [`reports/sym-lib-table`](reports/sym-lib-table)); [`agent-run/tools/footprint_diff.py`](agent-run/tools/footprint_diff.py) compares each footprint DRC reports as differing with its library file | [`reports/kicad_drc.json`](reports/kicad_drc.json), [`reports/kicad_erc.json`](reports/kicad_erc.json), [`reports/footprint_diff.txt`](reports/footprint_diff.txt) |
 | [`reproduce/compare_exports.py`](reproduce/compare_exports.py) on the three exports | the hash table in the README |
 | [`agent-run/tools/fab_package.sh`](agent-run/tools/fab_package.sh) | [`fab/`](fab/) |

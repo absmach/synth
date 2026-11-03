@@ -25,19 +25,18 @@ The design is `i2c_sensor_node.synth` with its placement sidecar `i2c_sensor_nod
 
 ## Measured results
 
-KiCad 10.0.7 on a 16-vCPU server; Synth built from commit `c0649a053a68ed007a7ce4a73d2f2d244dfef236` (branch `case-binary-v4` of `JeffMboya/synth`, the merge of Synth pull requests #370, #388 and #394); KiCadRoutingTools `9399bfb29e072bfe60b10d9cdae20c274fc2a17a`. The figures below are from the first of the three exports in [`export/`](export/).
+KiCad 10.0.7 on a 16-vCPU server; Synth built from commit `6207bba6549dd0a235274a84084cd8cf3fb2b58e` (branch `case-binary-v4` of `JeffMboya/synth`, the merge of Synth pull requests #370, #388 and #394); KiCadRoutingTools `9399bfb29e072bfe60b10d9cdae20c274fc2a17a`. The figures below are from the first of the three exports in [`export/`](export/).
 
 | Item | Result |
 |---|---|
-| Router state | `routed`, `fabrication_ready` True, 0 blocking findings, 0 open nets |
-| Release gate (`synth export-kicad`, [`export/release.json`](export/release.json)) | `release_ready` True, `production_status` production, 0 blocking signal-integrity findings |
+| Router state | `routed`, `fabrication_ready` True, 0 blocking findings, 0 open nets, 12 non-blocking return-via findings ([`export/i2c_sensor_node.routing.json`](export/i2c_sensor_node.routing.json)) |
 | Outline | 86.99 x 51.0 mm = 4436 mm2 |
 | Parts | 57 (including the two mounting holes); courtyard fill 21.1 % |
 | Routing | 35 nets connected, 537 track segments, 136 vias |
-| KiCad DRC (`--refill-zones --severity-all`, with the footprint library table) | 0 errors, 0 unconnected; warnings: 57 `lib_footprint_issues` ([`reports/kicad_drc.json`](reports/kicad_drc.json)) |
+| KiCad DRC (`--refill-zones --severity-all`, footprint library table configured) | 0 errors, 0 unconnected; 53 `lib_footprint_mismatch` warnings ([`reports/kicad_drc.json`](reports/kicad_drc.json)). Each is a footprint whose silkscreen differs from the library copy (the exporter cuts silkscreen back from vias and pads); its pads, courtyard and fabrication outline are identical to the library file ([`reports/footprint_diff.txt`](reports/footprint_diff.txt), from [`footprint_diff.py`](agent-run/tools/footprint_diff.py)) |
 | KiCad ERC, design diagnostics | 1 `pin_to_pin` warning, 0 errors ([`reports/kicad_erc.json`](reports/kicad_erc.json)): `U3` pin 5 (`SDO`) is tied to ground to select I2C address 0x76. KiCad's `Sensor:BME680` symbol types that pin bidirectional (it is the SPI data output) and ground carries a `PWR_FLAG`, so ERC reports a bidirectional pin on a power-output net. In I2C mode the pin is a static input and nothing drives it. |
-| KiCad ERC, library configuration | 121 `lib_symbol_issues` and 57 `footprint_link_issues` warnings: the exporter's embedded symbols and footprints against the library copies |
-| Gerber and drill content hash | `0af456c3a2` (identical across the three exports once the creation time in the Gerber headers is masked) |
+| KiCad ERC, library configuration | none: with the symbol and footprint library tables configured the only ERC warning is the `pin_to_pin` one above. The tables are [`reports/fp-lib-table`](reports/fp-lib-table) and [`reports/sym-lib-table`](reports/sym-lib-table); [`library_check.sh`](agent-run/tools/library_check.sh) builds them and runs DRC and ERC |
+| Gerber and drill content hash | `f634e3b817` (identical across the three exports once the creation time in the Gerber headers is masked) |
 
 Connector distance to the board edge (courtyard to Edge.Cuts, measured on the exported board):
 
@@ -75,37 +74,40 @@ The source and sidecar in this directory were exported three times through the S
 | file | export 1 | export 2 | export 3 | |
 |---|---|---|---|---|
 | `i2c_sensor_node.synth.kicad_pcb` (un-routed) | 9db9ad9732 | 9db9ad9732 | 9db9ad9732 | byte-identical |
-| `i2c_sensor_node.kicad_pcb` | b7474ccb47 | e46e6ed44e | 506bfa2692 | not byte-identical; identical after the router's and KiCad's random ids are masked (normalized) |
+| `i2c_sensor_node.kicad_pcb` | 93f3827f3f | fd38fecf9a | 6e64b79f17 | not byte-identical; identical after the router's and KiCad's random ids are masked (normalized) |
 | `i2c_sensor_node.kicad_sch` (one A1 sheet) | ed3e118032 | ed3e118032 | ed3e118032 | byte-identical |
 | `i2c_sensor_node.kicad_pro` | 8b000fbbf8 | 8b000fbbf8 | 8b000fbbf8 | byte-identical |
 | `i2c_sensor_node.kicad_sym` | f8b593e51b | f8b593e51b | f8b593e51b | byte-identical |
 | `bom.csv` | ec31ca8c8a | ec31ca8c8a | ec31ca8c8a | byte-identical |
 | `pnp.csv` | 43819c0b2a | 43819c0b2a | 43819c0b2a | byte-identical |
-| Gerber and drill content | 0af456c3a2 | 0af456c3a2 | 0af456c3a2 | identical after the creation time in the headers is masked (normalized) |
+| Gerber and drill content | f634e3b817 | f634e3b817 | f634e3b817 | identical after the creation time in the headers is masked (normalized) |
 
-With the random ids masked the routed board is `3c411267b4` in all three exports ([`reproduce/compare_exports.py`](reproduce/compare_exports.py) does the masking). [`reproduce/reproduce.sh`](reproduce/reproduce.sh) is supplemental tooling, not the evidence of how the board was made (see [`PROVENANCE.md`](PROVENANCE.md)); it rebuilds Synth at the pinned commit, exports three times and compares, then builds the fabrication package.
+With the random ids masked the routed board is `f584510bfc` in all three exports ([`reproduce/compare_exports.py`](reproduce/compare_exports.py) does the masking). [`reproduce/reproduce.sh`](reproduce/reproduce.sh) is supplemental tooling, not the evidence of how the board was made (see [`PROVENANCE.md`](PROVENANCE.md)); it rebuilds Synth at the pinned commit, exports three times and compares, then builds the fabrication package.
 
 ## Return paths
 
-The release report ([`export/release.json`](export/release.json)) lists 12 `W-SYNTH-DRC-016` findings, 0 of them blocking: a track changes layer at a via with no ground-return via within 1.53 mm. By the net of the via at each finding's position:
+The routing report ([`export/i2c_sensor_node.routing.json`](export/i2c_sensor_node.routing.json)) lists 12 non-blocking return-via findings: a track changes layer at a via with no ground-return via within 1.53 mm. Each is checked below against the nearest ground via on the exported board. Both outer layers carry a GND pour, so the return current stays on a continuous plane; the finding is only that the current's path to a stitching via is longer than the rule's window.
 
-| Net | Findings |
-|---|---|
-| `+5V_PROT` | 2 |
-| `LED_PWR` | 2 |
-| `GPIO_PA5` | 2 |
-| `GPIO_PB0_MCU` | 1 |
-| `SWDIO` | 1 |
-| `GPIO_PA6` | 1 |
-| `3V3_REF` | 1 |
-| `GPIO_PA1` | 1 |
-| `GPIO_PA0` | 1 |
+| Net | Via position (mm) | Nearest GND via (mm) |
+|---|---|---|
+| `GPIO_PB0` | (42.5, 13.3) | 2.72 |
+| `I2C_SDA` | (43.5, 29.3) | 3.03 |
+| `GPIO_PA7_MCU` | (51.5, 33.3) | 3.67 |
+| `GPIO_PA0_MCU` | (42.0, 32.3) | 3.70 |
+| `+3V3` | (42.3, 38.8) | 3.91 |
+| `+3V3` | (41.2, 32.8) | 4.52 |
+| `NRST` | (43.1, 32.7) | 2.62 |
+| `NRST` | (39.8, 34.8) | 6.37 |
+| `GPIO_PA4_MCU` | (40.8, 18.0) | 3.64 |
+| `GPIO_PA6_MCU` | (43.1, 31.0) | 2.95 |
+| `GPIO_PA6_MCU` | (40.5, 17.1) | 3.06 |
+| `GPIO_PA1_MCU` | (42.4, 11.6) | 1.97 |
 
-Synth's release gate holds a board back for a missing return via only on a net that rides a fast edge, and it classified all nine nets as not doing so. The router looks for a ground via beside each layer change and reports the places where no spot in the ground pour is clear of pads, vias and tracks. Both outer layers carry a GND pour, so the return current on these nets stays on a continuous ground plane.
+The added loop for the longest detour, 6.37 mm to the ground via and back, is about 13 nH at 1 nH per mm. A GPIO line behind its 330 ohm series resistor carries at most 3.3 V / 330 ohm = 10 mA; with a 5 ns edge, V = L x di/dt = 13 nH x 10 mA / 5 ns = 26 mV, against a 3.3 V logic level with several hundred millivolts of noise margin. `I2C_SDA` carries 3.3 V / 4.7 kohm = 0.7 mA with edges of 300 ns at most, 3 mm from a ground via: under 10 uV. `+3V3` and `NRST` are a DC rail and a slow reset line; the MCU's supply steps are held by C6 and C7 at the pin.
 
 ## Human review
 
-Every part of the board is recorded as reviewed by JeffMboya, with the review date and the datasheet or product page, in the part files of [`reproduce/user-registry/`](reproduce/user-registry/) (`reviewed_by`, `reviewed_at`, `datasheet_url`). The release report ([`export/release.json`](export/release.json)) lists every part as reviewed.
+Every part of the board is recorded as reviewed by JeffMboya, with the review date and the datasheet or product page, in the part files of [`reproduce/user-registry/`](reproduce/user-registry/) (`reviewed_by`, `reviewed_at`, `datasheet_url`). The board itself was reviewed by JeffMboya, 2026-11-03, on the package in `fab/` (Gerber content hash `f634e3b817`): PCB review sign-off required by #39.
 
 ## Review points (Sammy, case 2) and the state of each
 

@@ -1,0 +1,16 @@
+Button_Switch_SMD:SW_SPST_PTS645Sx43SMTR92  DRC warnings 1  differs in: {'F.SilkS': 1}
+Capacitor_SMD:C_0603_1608Metric  DRC warnings 7  differs in: {'F.SilkS': 7}
+Capacitor_SMD:C_0805_2012Metric  DRC warnings 3  differs in: {'F.SilkS': 3}
+Capacitor_Tantalum_SMD:CP_EIA-3528-21_Kemet-B  DRC warnings 1  differs in: {'F.SilkS': 1}
+Connector_JST:JST_PH_S4B-PH-K_1x04_P2.00mm_Horizontal  DRC warnings 1  differs in: {'F.SilkS': 1}
+Connector_JST:JST_XH_S2B-XH-A-1_1x02_P2.50mm_Horizontal  DRC warnings 1  differs in: {'F.SilkS': 1}
+Diode_SMD:D_SOD-123  DRC warnings 15  differs in: {'F.SilkS': 15}
+Diode_SMD:Nexperia_CFP3_SOD-123W  DRC warnings 1  differs in: {'F.SilkS': 1}
+Fuse:Fuse_1812_4532Metric  DRC warnings 1  differs in: {'F.SilkS': 1}
+LED_SMD:LED_0603_1608Metric  DRC warnings 1  differs in: {'F.SilkS': 1}
+Package_LGA:Bosch_LGA-8_3x3mm_P0.8mm_ClockwisePinNumbering  DRC warnings 1  differs in: {'F.SilkS': 1}
+Package_SO:SOIC-8_3.9x4.9mm_P1.27mm  DRC warnings 1  differs in: {'F.SilkS': 1}
+Package_SO:TSSOP-20_4.4x6.5mm_P0.65mm  DRC warnings 1  differs in: {'F.SilkS': 1}
+Package_TO_SOT_SMD:SOT-223-3_TabPin2  DRC warnings 1  differs in: {'F.SilkS': 1}
+Resistor_SMD:R_0603_1608Metric  DRC warnings 16  differs in: {'F.SilkS': 16}
+Resistor_SMD:R_0805_2012Metric  DRC warnings 1  differs in: {'F.SilkS': 1}
