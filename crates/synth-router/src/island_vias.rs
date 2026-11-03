@@ -452,12 +452,11 @@ pub fn plan_ties(board: &PcbBoard, declared: &ViaDeclarations) -> TiePlan {
         let (size_nm, drill_nm) = usual_via(
             &via_sizes,
             declared
-                .get(net.as_str())
-                .copied()
+                .via(net.as_str())
                 .unwrap_or((DEFAULT_VIA_SIZE_NM, DEFAULT_VIA_DRILL_NM)),
         );
         let need = nm_to_mm(size_nm) / 2.0 + EDGE_SLACK_MM;
-        let keepout = Keepout::from_board(board, net);
+        let keepout = Keepout::from_board(board, net, declared.gap_mm());
 
         let via = TieVia {
             net: net.clone(),
@@ -505,7 +504,7 @@ pub fn plan_all_with(
     declared: &ViaDeclarations,
 ) -> TiePlan {
     let mut plan = plan_ties(board, declared);
-    let stitched = stitch(board, reach_mm, &plan.vias, ground);
+    let stitched = stitch(board, reach_mm, &plan.vias, ground, declared);
     plan.vias.extend(stitched.vias);
     plan.unresolved.extend(stitched.unresolved);
     plan.advisory.extend(stitched.advisory);
@@ -673,12 +672,14 @@ struct Keepout {
     tracks: Vec<Segment>,
     /// `(centre, radius)` of each via.
     vias: Vec<((f64, f64), f64)>,
+    /// The copper a via keeps between its pad and every obstacle.
+    gap_mm: f64,
 }
 
 impl Keepout {
     /// The obstacles on `board` for a via of net `own`. Tracks of `own` are not
     /// obstacles, since a via may sit on its own net's copper.
-    fn from_board(board: &PcbBoard, own: &str) -> Self {
+    fn from_board(board: &PcbBoard, own: &str, gap_mm: f64) -> Self {
         let mut pads = Vec::new();
         for footprint in &board.footprints {
             for pad in &footprint.pads {
@@ -704,13 +705,18 @@ impl Keepout {
             .iter()
             .map(|via| ((via.at.x_mm(), via.at.y_mm()), nm_to_mm(via.size_nm) / 2.0))
             .collect();
-        Self { pads, tracks, vias }
+        Self {
+            pads,
+            tracks,
+            vias,
+            gap_mm,
+        }
     }
 
-    /// Whether a via of `radius` mm at `p` keeps [`VIA_GAP_MM`] of copper from
-    /// every obstacle.
+    /// Whether a via of `radius` mm at `p` keeps the gap of copper from every
+    /// obstacle.
     fn clear(&self, p: (f64, f64), radius: f64) -> bool {
-        let need = radius + VIA_GAP_MM;
+        let need = radius + self.gap_mm;
         self.pads.iter().all(|pad| pad.distance(p) >= need - EPS)
             && self
                 .tracks
@@ -978,18 +984,59 @@ fn copper_gap(first: &PieceShape, second: &PieceShape) -> f64 {
     }
 }
 
-/// The via each poured net's own class declares, by net name. A net with no
-/// entry takes the board's `Default` class, or the 0.6 / 0.3 mm fallback.
-pub type ViaDeclarations = BTreeMap<String, (i64, i64)>;
+/// What the board's net classes declare, read from the `.kicad_pro` beside the
+/// candidate: the via each poured net's own class takes, by net name, and the
+/// widest copper clearance any class asks for. A net with no entry takes the
+/// board's `Default` class, or the 0.6 / 0.3 mm fallback.
+#[derive(Debug, Clone, Default)]
+pub struct ViaDeclarations {
+    vias: BTreeMap<String, (i64, i64)>,
+    clearance_mm: Option<f64>,
+}
+
+impl ViaDeclarations {
+    #[must_use]
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    fn via(&self, net: &str) -> Option<(i64, i64)> {
+        self.vias.get(net).copied()
+    }
+
+    /// The copper kept between a new via's pad and other copper: the fixed
+    /// 0.2 mm, or the widest clearance a class declares when that is larger,
+    /// because KiCad holds two nets apart by the larger of their classes.
+    fn gap_mm(&self) -> f64 {
+        self.clearance_mm.map_or(VIA_GAP_MM, |c| c.max(VIA_GAP_MM))
+    }
+}
 
 /// The via size each poured net's own class declares, read from the
 /// `.kicad_pro` beside the candidate, so an island repair gives every net the
 /// geometry of its own class and not that of the first ground net listed.
 fn declared_vias(candidate: &Path, board: &PcbBoard) -> ViaDeclarations {
-    pours(board)
-        .keys()
-        .filter_map(|net| declared_via_size(candidate, net).map(|via| (net.clone(), via)))
-        .collect()
+    ViaDeclarations {
+        vias: pours(board)
+            .keys()
+            .filter_map(|net| declared_via_size(candidate, net).map(|via| (net.clone(), via)))
+            .collect(),
+        clearance_mm: declared_clearance_mm(candidate),
+    }
+}
+
+/// The widest copper clearance any net class of the `.kicad_pro` beside a
+/// board declares, in mm. None when the file is missing or unreadable.
+fn declared_clearance_mm(candidate: &Path) -> Option<f64> {
+    let text = std::fs::read_to_string(candidate.with_extension("kicad_pro")).ok()?;
+    let value: serde_json::Value = serde_json::from_str(&text).ok()?;
+    value
+        .get("net_settings")?
+        .get("classes")?
+        .as_array()?
+        .iter()
+        .filter_map(|class| class.get("clearance").and_then(serde_json::Value::as_f64))
+        .reduce(f64::max)
 }
 
 /// Read a net's class via size from the `.kicad_pro` beside a board, so an
@@ -1299,10 +1346,23 @@ fn default_reach_mm(copper_layers: usize) -> f64 {
 /// it, so neighbours share one.
 #[must_use]
 pub fn stitch_vias(board: &PcbBoard, reach_mm: f64, planned: &[TieVia]) -> Vec<TieVia> {
-    stitch(board, reach_mm, planned, &Ground::default()).vias
+    stitch(
+        board,
+        reach_mm,
+        planned,
+        &Ground::default(),
+        &ViaDeclarations::new(),
+    )
+    .vias
 }
 
-fn stitch(board: &PcbBoard, reach_mm: f64, planned: &[TieVia], ground_nets: &Ground) -> Stitched {
+fn stitch(
+    board: &PcbBoard,
+    reach_mm: f64,
+    planned: &[TieVia],
+    ground_nets: &Ground,
+    declared: &ViaDeclarations,
+) -> Stitched {
     let none = || Stitched {
         vias: Vec::new(),
         unresolved: Vec::new(),
@@ -1355,7 +1415,7 @@ fn stitch(board: &PcbBoard, reach_mm: f64, planned: &[TieVia], ground_nets: &Gro
     };
     let room_both = |p: (f64, f64)| room(first, p) && room(last, p);
     // Built once: the signal vias and the keep-out do not change over the loop.
-    let keepout = Keepout::from_board(board, net);
+    let keepout = Keepout::from_board(board, net, declared.gap_mm());
     let signals: Vec<(f64, f64, String)> = board
         .vias
         .iter()
@@ -1363,7 +1423,7 @@ fn stitch(board: &PcbBoard, reach_mm: f64, planned: &[TieVia], ground_nets: &Gro
         .filter_map(|via| Some((via.at.x_mm(), via.at.y_mm(), net_of_via(via)?)))
         .collect();
 
-    let apart = nm_to_mm(size_nm) + VIA_GAP_MM;
+    let apart = nm_to_mm(size_nm) + declared.gap_mm();
     let mut out = Vec::new();
     let mut unresolved = Vec::new();
     let mut advisory = Vec::new();
@@ -1513,7 +1573,7 @@ pub fn move_vias_off_pads(candidate: &Path) -> Result<usize, String> {
         }
         let from = (via.at.x_mm(), via.at.y_mm());
         let radius = nm_to_mm(via.size_nm) / 2.0;
-        let keepout = Keepout::from_board(&board, &net);
+        let keepout = Keepout::from_board(&board, &net, VIA_GAP_MM);
         let attached: Vec<&crate::pcb_read::Segment> = board
             .segments
             .iter()
@@ -1610,7 +1670,7 @@ fn nearest_free_spot(
             let p = (from.0 + r * angle.cos(), from.1 + r * angle.sin());
             if keepout.clear_of_pads_only(p, radius, from)
                 && taken.iter().all(|(at, other)| {
-                    (at.0 - p.0).hypot(at.1 - p.1) >= radius + other + VIA_GAP_MM
+                    (at.0 - p.0).hypot(at.1 - p.1) >= radius + other + keepout.gap_mm
                 })
                 && accept(p)
             {
@@ -1622,11 +1682,11 @@ fn nearest_free_spot(
 }
 
 impl Keepout {
-    /// A via of `radius` at `p` keeps [`VIA_GAP_MM`] from every pad, foreign
-    /// track and via other than the one being moved (which is at the same spot
-    /// it started from, so it would never be clear of itself).
+    /// A via of `radius` at `p` keeps the gap from every pad, foreign track and
+    /// via other than the one being moved (which is at the same spot it started
+    /// from, so it would never be clear of itself).
     fn clear_of_pads_only(&self, p: (f64, f64), radius: f64, ignore: (f64, f64)) -> bool {
-        let need = radius + VIA_GAP_MM;
+        let need = radius + self.gap_mm;
         self.pads.iter().all(|pad| pad.distance(p) >= need - EPS)
             && self
                 .tracks
@@ -2397,6 +2457,33 @@ mod tests {
             "the first round's vias must not survive a later failure"
         );
         let _ = std::fs::remove_file(&path);
+    }
+
+    /// A class that asks for 0.25 mm of copper clearance holds a new via 0.25 mm
+    /// from a foreign track, not the fixed 0.2 mm: KiCad keeps two nets apart by
+    /// the larger of their classes, so a via placed at 0.2 mm fails the board's
+    /// own DRC.
+    #[test]
+    fn a_via_keeps_the_widest_clearance_a_net_class_declares() {
+        let board =
+            board(r#"(segment (start 5 10) (end 15 10) (width 0.25) (layer "F.Cu") (net 2))"#);
+        // A 0.6 mm via 0.65 mm from the track's axis: 0.65 - 0.125 - 0.3 = 0.225 mm of copper.
+        let spot = (10.0, 10.65);
+        let default = ViaDeclarations::new();
+        let wide = ViaDeclarations {
+            clearance_mm: Some(0.25),
+            ..ViaDeclarations::new()
+        };
+        assert!((default.gap_mm() - VIA_GAP_MM).abs() < 1e-9);
+        assert!((wide.gap_mm() - 0.25).abs() < 1e-9);
+        assert!(Keepout::from_board(&board, "GND", default.gap_mm()).clear(spot, 0.3));
+        assert!(!Keepout::from_board(&board, "GND", wide.gap_mm()).clear(spot, 0.3));
+        // A class asking for less than the fixed gap does not loosen it.
+        let narrow = ViaDeclarations {
+            clearance_mm: Some(0.127),
+            ..ViaDeclarations::new()
+        };
+        assert!((narrow.gap_mm() - VIA_GAP_MM).abs() < 1e-9);
     }
 
     /// Two ground nets in two classes with different vias, and an island on
