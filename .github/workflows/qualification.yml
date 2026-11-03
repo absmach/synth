@@ -56,7 +56,11 @@ jobs:
   # grow without someone declaring it.
   matrix:
     name: Qualification matrix
-    runs-on: ubuntu-latest
+    # Pinned, not ubuntu-latest: that label now resolves to 26.04, whose apt
+    # reads the KiCad 10 PPA through an index that carries no KiCad, so the
+    # archive's 9.0 is installed and cannot read a board this build exports.
+    # The shared installer asserts the version instead of trusting it.
+    runs-on: ubuntu-24.04
 
     steps:
       - name: Checkout Code
@@ -72,11 +76,10 @@ jobs:
 
       - name: Install kicad-cli and the stock symbol/footprint libraries
         run: |
-          sudo add-apt-repository --yes ppa:kicad/kicad-10.0-releases
-          sudo apt-get update
-          sudo apt-get install --yes --no-install-recommends \
-            kicad kicad-symbols kicad-footprints
-          kicad-cli version
+          # The shared installer refuses anything but KiCad 10 and checks the
+          # library content too: a partially-fetched PPA can leave the binary
+          # on 10.0 while kicad-symbols still comes from the archive.
+          .github/scripts/install-kicad.sh
           mkdir -p "$HOME/.config/kicad/10.0"
           cp /usr/share/kicad/template/sym-lib-table "$HOME/.config/kicad/10.0/sym-lib-table"
           cp /usr/share/kicad/template/fp-lib-table "$HOME/.config/kicad/10.0/fp-lib-table"
@@ -141,7 +144,8 @@ jobs:
   # blocks on real drift without asserting a guess.
   fab:
     name: Qualification matrix (manufacturing)
-    runs-on: ubuntu-latest
+    # See the note on the matrix job: 26.04 has no KiCad 10 from the PPA.
+    runs-on: ubuntu-24.04
 
     steps:
       - name: Checkout Code
@@ -157,11 +161,10 @@ jobs:
 
       - name: Install kicad-cli and the stock symbol/footprint libraries
         run: |
-          sudo add-apt-repository --yes ppa:kicad/kicad-10.0-releases
-          sudo apt-get update
-          sudo apt-get install --yes --no-install-recommends \
-            kicad kicad-symbols kicad-footprints
-          kicad-cli version
+          # The shared installer refuses anything but KiCad 10 and checks the
+          # library content too: a partially-fetched PPA can leave the binary
+          # on 10.0 while kicad-symbols still comes from the archive.
+          .github/scripts/install-kicad.sh
           mkdir -p "$HOME/.config/kicad/10.0"
           cp /usr/share/kicad/template/sym-lib-table "$HOME/.config/kicad/10.0/sym-lib-table"
           cp /usr/share/kicad/template/fp-lib-table "$HOME/.config/kicad/10.0/fp-lib-table"
