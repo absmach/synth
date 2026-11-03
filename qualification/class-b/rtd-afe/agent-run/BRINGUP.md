@@ -13,7 +13,7 @@ Equipment: bench supply or USB host with current limit, DMM, scope, a 100 ohm pr
    - U5 EN is tied to VBUS, so it starts at once.
 3. +3V3 rail.
    - Measure U5 pin 5 / C_L2.p1. Expected 3.3 V (LP5907-3.3 output; tolerance not verified). Ripple limit: not verified.
-   - U5 temperature after 10 min: registry max_power 200 mW; derived dissipation 1.7 V x I. Limit: not verified.
+   - U5 temperature after a settling time (duration: not verified): registry max_power 200 mW; derived dissipation 1.7 V x I. Limit: not verified.
 4. Analog supplies.
    - +3V3A at U3 pin 2 and U1 pin 26. Expected about 3.3 V minus the L2 drop (L2 DC resistance not recorded: not verified).
    - +3V3_RP_A at U2 pins 44/46. Expected about 3.3 V minus the drop across R_AV 33R.
@@ -30,7 +30,7 @@ Equipment: bench supply or USB host with current limit, DMM, scope, a 100 ohm pr
    - Verify SPI MISO/MOSI direction by this read; the `.synth` flags that the registry lists gp0/gp3 the other way round.
    - Confirm DRDY toggles on U2 GPIO4 after START (U2 GPIO5 / ADC_START). Data rate: firmware setting, not verified.
 8. Excitation.
-   - Enable IDAC1 at 1 mA on AIN0 and put a 100 ohm resistor across the force path (J2 pins 1 and 4, S+/S- linked to the same resistor). Expected drop across R_BIAS about 1.0 V (1 mA x 1k) and RTD common mode about 1.1 V at 100 ohm (README). Tolerance: not verified.
+   - Enable IDAC1 at 1 mA on AIN0 and put a 100 ohm resistor across the force path (suggested wiring, not from the files: J2 pins 1 and 4, S+/S- linked to the same resistor). Expected drop across R_BIAS about 1.0 V (1 mA x 1k) and RTD common mode about 1.1 V at 100 ohm (README). Tolerance: not verified.
 9. Measurement.
    - With 100 ohm on J2, read AIN1-AIN2 with the reference VREF. Expected ratio from 1 mA x 100 ohm = 100 mV differential; the reading tolerance, noise and drift are not verified (README: no accuracy measurement, no calibration).
    - Repeat with a PT100 at a known temperature. Expected resistance: not verified here (use the IEC 60751 table; not part of the sources).
