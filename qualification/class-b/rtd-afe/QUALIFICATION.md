@@ -81,7 +81,7 @@ Versions: KiCad 10.0.7, FreeRouting 2.4.1 on OpenJDK 25.0.4.1, Synth
 | Synth signal integrity | 18 warnings, 0 blocking | `reports/release.json` |
 
 The delivered board is `kicad/rtd_afe.kicad_pcb`
-(`8f83bc8e002ce991e90a9f09f803993f2f42113f50172eb7d4c69f422337d680`).
+(`1e4803cf715aae28da268f55e4807c76ca4e8c9588d6ae888d606d704743043a`).
 The schematic is `kicad/rtd_afe.kicad_sch`
 (`a62c2c13e5b8d4b7b8eab384d74847606bdc9a2810b87a07f0006f68f027198f`).
 
@@ -382,19 +382,12 @@ Nothing below is signed off. The list is deliberately blunt.
 
 ## Reproducibility
 
-Inputs and outputs of the committed run:
+Hashes of the committed inputs and outputs are in `SHA256SUMS` (the single
+source of truth; this file no longer copies them, so they cannot drift). Verify with:
 
-| File | SHA-256 |
-| --- | --- |
-| `rtd_afe.synth` | `ff510751599c4ee591d4096b4281254fc8c63358d8110bbb831d84f38317692e` |
-| `rtd_afe.placement.layout.toml` | `7400215633f5e0d3897c88afd4ef303287965bee2632ab99ceac9f95ad49bb10` |
-| `check.sh` | `39bd0d10444b8f55238be5b1c675b86eef36f26d1054896f1b57b286f37168d1` |
-| `kicad/rtd_afe.kicad_pcb` | `8f83bc8e002ce991e90a9f09f803993f2f42113f50172eb7d4c69f422337d680` |
-| `kicad/rtd_afe.kicad_sch` | `c7300d22238d8d4991b3ba453599ffdb96a833de3c83bdc132542ea662537812` |
-| `reports/rtd_afe.kicad-drc.json` | `208b90aa44a72b5d634a51464e407cd8772f9684b5c507e1c643ad26568421a0` |
-| `reports/rtd_afe.kicad-erc.json` | `826cbdcf7c8578375c89a9965ee9f622fc62778e2f174b6b1266f3cdb89f00fe` |
-| `reports/release.json` | `f0852a992b5ddc7e97fe66ca2582f26e36a7af34c704e767c0d42ff9f0ef195a` |
-| `reports/rtd_afe.routing.json` | `bccc01451ae6e22a63dfa0f2d165fac673ae1af94f4eac42881ddc4d0063d49a` |
+```sh
+grep -v '^#' SHA256SUMS | sha256sum -c -
+```
 
 `check.sh` sets `SYNTH_SOURCE_REVISION` from the checked-out commit, and both
 `release.json` and the routing provenance record it. It also rewrites the
@@ -402,7 +395,7 @@ checkout path in `release.json`, `rtd_afe.routing.json` and `rtd_afe.net` to a
 repository-relative one, matching the usb-uart board's convention. The
 `source_revision` names the source commit; the later artifact commit only adds
 the regenerated files. All other reports are as the tools wrote them.
-`SHA256SUMS` covers the rest of the deliverables.
+`SHA256SUMS` covers all deliverables.
 
 The failed attempts described above did **not** route clean; the committed
 placement did. I did not run the final inputs three times to claim a
