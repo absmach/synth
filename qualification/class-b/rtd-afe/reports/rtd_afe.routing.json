@@ -41,22 +41,22 @@
       "threads": "4",
       "wall_clock_secs": "1200"
     },
-    "input_hash": "b998e2131b3c392a7fb7209cbd7e1df9ebcf6678457544009cdb5ae2385e7c1c",
+    "input_hash": "9db060c3f524e436f8e1911a31006324dededa0661d1134c6f4df9ade113a4e8",
     "output_hash": "",
-    "source_revision": "32d3d038983c75faa10071d46bd1119bfe1f8a07",
-    "duration_ms": 271508
+    "source_revision": "e7372cae4a8f6ce2d926de4409e76d4d2ad3d53e",
+    "duration_ms": 64600
   },
   "statistics": {
     "connected_nets": 40,
     "open_nets": 0,
     "open_net_names": [],
-    "segments": 388,
-    "vias": 61,
-    "wire_length_mm": 600.159157,
+    "segments": 373,
+    "vias": 67,
+    "wire_length_mm": 664.111403,
     "pad_escape_rejections": 0,
     "engine_findings": {
-      "claimed_imported_segments": "388",
-      "claimed_imported_vias": "61"
+      "claimed_imported_segments": "373",
+      "claimed_imported_vias": "67"
     }
   },
   "artifacts": {

@@ -79,11 +79,17 @@ Status: routed with FreeRouting 2.4.1 on Java 25, KiCad 10.0.7, Synth at the
 worktree this directory was exported from. The route is under review by the
 designated reviewer.
 
-- Analog left, digital right. The analog block is J2 at (15.5, 41.5) mm and the
-  RC filter at the bottom-left, U1 at (20, 29) mm, U3 at (11, 29) mm and L2 at
-  (30.5, 23.5) mm. The digital core is U2 at (38, 27) mm, U4 at (33, 18.8) mm
-  and Y1 at (37, 36.5) mm. U5 is at (47.5, 17) mm and J3 at (41.5, 41.5) mm on
-  the bottom edge.
+- Analog left, digital right. The input chain is J2 at (15.5, 41.5) mm, the RC
+  filter at the bottom-left and U1 at (20, 29) mm. The reference cluster fills
+  what used to be bare board above it: U3 at (12, 12) mm, C_RI at (7.5, 18.5) mm,
+  L2 at (20, 9.5) mm, C_RO at (23.5, 13.5) mm and R_RST at (26, 17.5) mm, with
+  R_CC2 at (28.5, 9) mm. The digital core is U2 at (38, 27) mm, U4 at
+  (33, 18.8) mm and Y1 at (37, 36.5) mm. U5 is at (47.5, 17) mm and J3 at
+  (41.5, 41.5) mm on the bottom edge.
+- The largest bare rectangle drops from 19 x 19 mm (361 mm²) to 24 x 5 mm
+  (120 mm²), which is the top margin. The RTD input chain did not move; VREF is
+  the one analog net that grew, from 4.83 mm to 21.38 mm, because the reference
+  moved to the top-left. It stays on F.Cu with no via and C_RV stays at REFP0.
 - J2 and J3 are both at y = 41.5 mm; their bodies end about 0.78 mm from the
   bottom edge. J1 is at (39.5, 6.0) mm on the plain top edge, 1.27 mm from it.
   The board centre is x = 27.55, so J1 is not centred; centering it fragmented
@@ -91,19 +97,19 @@ designated reviewer.
 - The sidecar carries a plain rectangular `[[outline]]` (x 2.50..52.59,
   y -0.01..44.08); there is no notch and no post-export cut.
 - The RTD/input nets and VREF are on F.Cu only, with no layer change. QSPI also
-  stays on F.Cu. The SPI, SWD, USB and XIN nets change layers; see the SI
-  warnings below.
-- 388 track segments, 67 vias (43 on GND, 24 signal), 600.2 mm of copper. 40
-  nets, 0 open. The router records 61 vias; the other six are source ground
+  stays on F.Cu. The SPI, SWD, USB, crystal and ADC-control nets change layers;
+  see the SI warnings below.
+- 373 track segments, 67 vias (50 on GND, 27 signal), 664.1 mm of copper. 40
+  nets, 0 open. The router records 67 vias; the other ten are source ground
   stitching.
 - `kicad-cli pcb drc --severity-all --refill-zones`: 0 errors, 0 warnings, 0
   unconnected items. `pcbnew.LoadBoard` reopens the board and `check.sh` confirms
   one GND plane with no AGND or DGND net.
-- Synth's signal-integrity pass: 19 non-blocking warnings, all layer changes
-  with no ground-return via within 0.64 mm; there is no crosstalk finding. The
-  flagged nets are REFOUT, SPI_MOSI/CS/SCK/MISO, ADC_DRDY, XIN, RUN, SWCLK,
-  SWDIO, QSPI_SD0, USB_DP_C and USB_DN_C. No RTD, AIN or VREF net is flagged.
-  See QUALIFICATION.md.
+- Synth's signal-integrity pass: 20 non-blocking warnings, 18 layer changes with
+  no ground-return via within 0.64 mm and 2 parallel-run warnings. The flagged
+  nets are REFOUT, SPI_MOSI/CS/SCK/MISO, ADC_DRDY, ADC_START, XIN, XOUT_R, RUN,
+  SWDIO and USB_DP_C/DN_C; the USB pair run is the intended coupled segment. No
+  RTD, AIN or VREF net is flagged. See QUALIFICATION.md.
 - Silkscreen: 0 DRC warnings. U1 has a hard label override at (24, 34.5) mm;
   25 passives/TVS and H1/H2/H3/J1 have their reference label hidden because the
   compact refdes field has no clear spot. Their refdes remain in the BOM, PnP and
@@ -149,18 +155,16 @@ netlist/PCB parity is clean.
   Gerbers and drill files.
 - `reports/`: `release.json`, the delivered DRC and ERC reports, the KiCad
   netlist, the FreeRouting routing record and the connectivity report.
-- `images/`: 3D top, bottom and angled views, the four copper layers
-  (F.Cu, In1.Cu, In2.Cu, B.Cu) and the schematic. The copper image is rendered
-  from the committed board with `kicad-cli pcb export pdf` and `pdftoppm`; the
-  3D views with `kicad-cli pcb render`, the schematic with
-  `kicad-cli sch export pdf`.
+- `images/`: 3D top, bottom and angled views and the schematic. The 3D views
+  are rendered with `kicad-cli pcb render`, the schematic with
+  `kicad-cli sch export pdf` and `pdftoppm`.
 - `rtd_afe.synth`, `rtd_afe.placement.layout.toml`: the design sources.
 - `check.sh`: the acceptance check above.
 - `SHA256SUMS`: hashes of the artifacts.
 
 The reports are as the commands produce them, except that `check.sh` rewrites
-the checkout path in `release.json` and `rtd_afe.routing.json` to a
-repository-relative one and stamps `source_revision` from the checked-out
+the checkout path in `release.json`, `rtd_afe.routing.json` and `rtd_afe.net` to
+a repository-relative one and stamps `source_revision` from the checked-out
 commit. `release.json` is Synth's own format (`synth.release.v1`); its
 `gate_scope` says it is a router/DRC gate, not a fabrication approval or a
 component review.
@@ -179,8 +183,8 @@ component review.
   profile is `jlc-filled-via`; the board must be ordered with filled and capped
   vias. This is an open DFM item.
 - There are no test points. The 12-pad set (rails, reference, USB and SWD) was
-  placed in the free top-left area; every routing attempt left GND islands, so
-  it is not in this board.
+  tried on the earlier outline; every routing attempt left GND islands. The
+  top-left area it used now holds the reference cluster.
 - No VBUS current budget was measured. The LDO is 250 mA; the RP2350 datasheet
   peak plus the ADC, reference and flash is expected to be below it, but this
   was not checked against the loads.

@@ -22,9 +22,10 @@ production-ready.
 - One `GND` zone on each of the four copper layers. There is no AGND/DGND split
   and no tie resistor. The four mounting holes have 5.6 x 5.6 mm all-layer rule
   areas around them.
-- 53 footprints, 40 nets. The analog chain (J2, the RC filter, U1, U3, L2) is
-  on the left and bottom-left; the MCU, flash, crystal, USB-C and LDO are on the
-  right and top-right.
+- 53 footprints, 40 nets. The input chain (J2, the RC filter, U1) is in the
+  bottom-left; the reference and analog-supply support (U3, C_RI, L2, C_RO,
+  R_RST, R_CC2) fill the top-left; the MCU, flash, crystal, USB-C and LDO are on
+  the right and top-right.
 
 ### Mechanical geometry
 
@@ -132,6 +133,21 @@ attempt fragmented U2's ground escape around pad 47, so the proven position is
 kept and J1 is not centred. Making it centred needs a larger relayout, not a
 nudge. One via-in-pad at C_DV.2 keeps the tighter outline's GND pour tied.
 
+### The top-left re-place
+
+The rectangle left a bare area above the analog chain; the largest empty
+rectangle inside it was 19 x 19 mm (361 mm²). The reference and its support now
+sit there: U3 (12, 12), C_RI (7.5, 18.5), L2 (20, 9.5), C_RO (23.5, 13.5), R_RST
+(26, 17.5) and R_CC2 (28.5, 9). C_AV1 moved to (20, 23) to keep the VREF
+corridor free. The largest empty rectangle is now 24 x 5 mm (120 mm²), the top
+margin.
+
+The RTD input chain (J2, R_S1/R_S2, C_D, C_CM1/C_CM2, C_F, R_BIAS, U1) did not
+move, so the RTD and AIN lengths are unchanged. VREF is the one analog net that
+grew, from 4.83 mm to 21.38 mm, because U3 is now at the top-left. It stays on
+F.Cu with no via and C_RV stays at REFP0; the extra run is the cost of the
+denser left column and is an open item for the reference-routing review.
+
 ## ERC findings and dispositions
 
 `reports/rtd_afe.kicad-erc.json` has two warnings and no errors:
@@ -146,19 +162,21 @@ connectivity findings. A human should confirm that disposition.
 
 ## Synth signal-integrity warnings
 
-`reports/release.json` lists 19 non-blocking signal-integrity findings, all
-layer changes with no ground-return via within 0.64 mm; there is no crosstalk
-finding. The layer changes are on REFOUT, SPI_MOSI/CS/SCK/MISO, ADC_DRDY, XIN,
-RUN, SWCLK, SWDIO, QSPI_SD0, USB_DP_C and USB_DN_C. No RTD_FP/RTD_SP/RTD_SN/
-RTD_FN, AIN1, AIN2 or VREF finding appears. The six RTD/input nets and VREF are
-on F.Cu only; QSPI is mostly on F.Cu except one SD0 layer change.
+`reports/release.json` lists 20 non-blocking signal-integrity findings: 18
+layer changes with no ground-return via within 0.64 mm and 2 parallel-run
+warnings. The layer changes are on REFOUT, SPI_MOSI/CS/SCK/MISO, ADC_DRDY,
+ADC_START, XIN, XOUT_R, RUN and SWDIO. The parallel-run findings are
+REFOUT/SPI_CS (5.6 mm at 0.182 mm) and USB_DP_C/USB_DN_C (5.1 mm at 0.168 mm);
+the USB pair is the intended coupled segment. No RTD_FP/RTD_SP/RTD_SN/RTD_FN,
+AIN1, AIN2 or VREF finding appears. The six RTD/input nets and VREF are on F.Cu
+only; QSPI is also on F.Cu.
 
-The XIN and USB connector-side layer changes are the ones an SI reviewer should
-look at first: XIN is a high-impedance crystal net and the USB pair changes
-layers on both sides. The USB path is not length-matched: the MCU-side and
-connector-side lengths add to 28.18 mm on DP and 19.67 mm on DN, an 8.51 mm
-difference. A return via next to each layer change would help; this was not
-added, because it is a layout change that needs an SI review first.
+The XIN and USB layer changes are the ones an SI reviewer should look at first:
+XIN is a high-impedance crystal net and the USB pair changes layers on both
+sides. The USB path is not length-matched: the MCU-side and connector-side
+lengths add to 21.05 mm on DP and 19.32 mm on DN, a 1.73 mm difference. A return
+via next to each layer change would help; this was not added, because it is a
+layout change that needs an SI review first.
 
 ## Synth validate warnings
 
@@ -236,8 +254,8 @@ measurement was made; this is the main item for the analog/SI review.
 
 ## Measured layout numbers
 
-- 388 track segments, 67 vias: 43 GND, 24 signal. 600.2 mm of track. 40 nets, 0
-  open. The router records 61 vias; the other six are source ground stitching.
+- 373 track segments, 67 vias: 50 GND, 27 signal. 664.1 mm of track. 40 nets, 0
+  open. The router records 67 vias; the other ten are source ground stitching.
 - Analog nets, all F.Cu only, no via:
 
 | Net | Length |
@@ -246,19 +264,19 @@ measurement was made; this is the main item for the analog/SI review.
 | RTD_SP | 4.17 mm |
 | AIN1 | 9.23 mm |
 | RTD_SN | 4.17 mm |
-| AIN2 | 14.06 mm |
+| AIN2 | 14.05 mm |
 | RTD_FN | 8.32 mm |
-| VREF | 4.83 mm |
+| VREF | 21.38 mm |
 
-- SPI_SCK is 16.95 mm; SPI_MOSI/MISO/CS are 17.17/16.00/18.67 mm. All four SPI
-  nets change layer (two vias each). QSPI_SS/SCLK/SD0..SD3 are
-  11.29/4.80/3.23/10.25/7.44/6.22 mm; QSPI_SD0 changes layer once.
-- USB: the RP2350-side nets are 16.76 mm (DP) and 11.10 mm (DN); the
-  connector-side nets are 11.42 mm and 8.57 mm. Total path 28.18 mm (DP) and
-  19.67 mm (DN), 8.51 mm of mismatch, full speed. Both sides change layers; the
+- SPI_SCK is 18.97 mm; SPI_MOSI/MISO/CS are 14.46/19.46/17.01 mm. All four SPI
+  nets change layer. QSPI_SS/SCLK/SD0..SD3 are
+  11.23/4.80/3.23/9.21/7.39/6.22 mm; QSPI stays on F.Cu.
+- USB: the RP2350-side nets are 10.34 mm (DP) and 11.25 mm (DN); the
+  connector-side nets are 10.71 mm and 8.07 mm. Total path 21.05 mm (DP) and
+  19.32 mm (DN), a 1.73 mm mismatch, full speed. Both sides change layers; the
   pair is not routed as a coupled pair and has no controlled impedance.
-- Crystal: XIN 12.57 mm, XOUT 16.20 mm, XOUT_R 8.38 mm. XIN changes layer; that
-  is one of the SI warnings above.
+- Crystal: XIN 12.24 mm, XOUT 4.99 mm, XOUT_R 7.12 mm. XIN and XOUT_R change
+  layer; that is in the SI warnings above.
 - 29 reference labels are hidden: C_AV1, C_AVF, C_CM1, C_CM2, C_D, C_DV, C_DV1,
   C_DV2, C_IO, C_IO1, C_IO2, C_IO3, C_IO4, C_RV, C_VI, D1, D2, H1, H2, H3, J1,
   R_AV, R_BIAS, R_CC2, R_DN, R_DP, R_S1, R_S2, R_X. They remain in the BOM, PnP
@@ -270,11 +288,11 @@ measurement was made; this is the main item for the analog/SI review.
 Nothing below is signed off. The list is deliberately blunt.
 
 - **SI/PI/RF review (designated reviewer)**: the 24-bit analog layout, the
-  single ground plane, the ADC reference decoupling, the RC filter against the
-  chosen ADC data rate, the IDAC output's 10 nF load and settling, the PGA
-  common-mode range at the chosen gain, the unused-input termination, the 19
-  layer-change warnings and the 8.51 mm USB length mismatch. There is no
-  crosstalk finding. None of these were simulated or measured.
+  single ground plane, the 21.38 mm VREF run from U3 to C_RV, the RC filter
+  against the chosen ADC data rate, the IDAC output's 10 nF load and settling,
+  the PGA common-mode range at the chosen gain, the unused-input termination, the
+  18 layer-change warnings and the 1.73 mm USB length mismatch. None of these
+  were simulated or measured.
 - **Metrology/analog**: the measurement is not ratiometric. The IDAC's absolute
   accuracy and drift, the REF5025 grade and drift, the 1 k filter resistors and
   the PT100 wiring resistance set the accuracy; there is no calibration or
@@ -289,10 +307,11 @@ Nothing below is signed off. The list is deliberately blunt.
   and J1 is 11.95 mm right of the board centre. J1 centring, the enclosure,
   screw-head clearance, connector overhang and header orientation were not
   checked. Synth places no board-name or revision silk.
-- **Test points**: none are fitted. The 12-pad set was tried in the free
-  top-left area of this 50.1 x 44.1 mm outline and left GND islands, so it is
-  not in this board. A bench bring-up has to probe component pads or a harness;
-  the set is a future layout task.
+- **Test points**: none are fitted. The 12-pad set was tried on the earlier
+  outline and left GND islands; the top-left area it used now holds the
+  reference cluster, so a new set needs a different location and a fresh route.
+  A bench bring-up has to probe component pads or a harness; the set is a future
+  layout task.
 - **Fabrication/DFM**: no fab house has seen the Gerbers, drill, BOM or PnP.
   The 0.4 mm QFN-60, the 0.5 mm VQFN-32 and the 0.5 mm USB-C need a fab
   capability check; the four-layer stackup is declared by the source, not a
@@ -380,7 +399,7 @@ Inputs and outputs of the committed run:
 
 `check.sh` sets `SYNTH_SOURCE_REVISION` from the checked-out commit, and both
 `release.json` and the routing provenance record it. It also rewrites the
-checkout path in `release.json` and `rtd_afe.routing.json` to a
+checkout path in `release.json`, `rtd_afe.routing.json` and `rtd_afe.net` to a
 repository-relative one, matching the usb-uart board's convention. The
 `source_revision` names the source commit; the later artifact commit only adds
 the regenerated files. All other reports are as the tools wrote them.
