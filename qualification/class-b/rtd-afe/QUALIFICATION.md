@@ -115,9 +115,8 @@ did, disables that pass; the floorplan then exported exactly as written. This is
 recorded under Synth defects below.
 
 The first clean route still had 56 silkscreen warnings because reference labels
-sat on neighbouring pads. U1's label was moved to (24, 34.5) mm; 25 passives/TVS
-and H1/H2/H3/J1 have their reference label hidden; the delivered board has 0
-silk warnings.
+sat on neighbouring pads. That revision moved U1's label to (24, 34.5) mm and
+hid 25 passives/TVS and H1/H2/H3/J1; the delivered board had 0 silk warnings.
 
 ### The compact re-place
 
