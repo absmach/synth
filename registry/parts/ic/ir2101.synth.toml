@@ -36,7 +36,7 @@ required = true
 [[pins]]
 name = "com"
 number = "4"
-electrical_type = "power_input"
+electrical_type = "ground_reference"
 required = true
 [[pins]]
 name = "lo"

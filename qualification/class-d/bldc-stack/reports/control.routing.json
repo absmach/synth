@@ -1,0 +1,54 @@
+{
+  "schema_version": "synth.routing.v1",
+  "state": "validation_failed",
+  "engine": "freerouting",
+  "capability": {
+    "engine": "freerouting",
+    "available": true,
+    "version": "freerouting-2.4.1",
+    "runtime_version": "openjdk version \"21.0.12.1\" 2026-08-18",
+    "detail": null,
+    "failure": null
+  },
+  "provenance": {
+    "engine": "freerouting",
+    "engine_version": null,
+    "runtime_version": null,
+    "profile": "jlcpcb",
+    "command": [],
+    "settings": {},
+    "input_hash": "96d7d7044f233b5c3c55ab1bbcdc304b135d6ba9ccd5bec30afdc5e892d7ff5b",
+    "output_hash": "",
+    "source_revision": "1051b3178b93581775989d6a5cb931141d9bdbfa",
+    "duration_ms": 0
+  },
+  "statistics": {
+    "connected_nets": 0,
+    "open_nets": 0,
+    "open_net_names": [],
+    "segments": 0,
+    "vias": 0,
+    "wire_length_mm": 0.0,
+    "pad_escape_rejections": 0,
+    "engine_findings": {}
+  },
+  "artifacts": {
+    "baseline": "/tmp/opencode/ctl-export4/bldc_control.synth.kicad_pcb",
+    "candidate": null,
+    "delivered": null,
+    "session_log": null,
+    "ses": null,
+    "router_report": null,
+    "connectivity_report": null,
+    "drc_report": null
+  },
+  "validation": null,
+  "failure": {
+    "engine": "freerouting",
+    "reason": "crashed",
+    "stage": "route",
+    "exit_code": 1,
+    "detail": "tools/freeroute_autoroute.py exited 1: ./kicad/include/properties/property.h(607): assert \"m_choices.GetCount() > 0\" failed in PROPERTY_ENUM(): No enum choices defined",
+    "remediation": "inspect the retained session log for the engine's own error; the baseline export is unchanged"
+  }
+}

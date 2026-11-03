@@ -1,0 +1,275 @@
+// SYN-408: BLDC stack, control board (bldc_control).
+//
+// 12 V logic rail from the power board -> LM1117-3.3 -> 3.3 V.
+// STM32G030K8 LQFP32: three phase PWM pairs (TIM1 CH1-3, TIM3 CH1-3),
+// three Hall inputs, four ADC channels, USART1 on PB6/PB7 for RS-485.
+// J_B2B carries the six gate-drive lines, three current-sense inputs,
+// the bus and 12 V sense lines, GATE_EN, FAULT_N, 3.3 V, 12 V and ground.
+board "bldc_control_neg_swap" {
+  layers 4
+  manufacturer "jlcpcb"
+  revision "A"
+
+  stackup {
+    copper 0.035mm
+    insulator 0.2mm er 4.4 material "FR4"
+    copper 0.035mm
+    insulator 0.9mm er 4.4 material "FR4"
+    copper 0.035mm
+    insulator 0.2mm er 4.4 material "FR4"
+    copper 0.035mm
+  }
+
+  netclass "PWR" {
+    trace_width 0.5mm
+    clearance 0.2mm
+  }
+
+  netclass "SENSE" {
+    trace_width 0.2mm
+    clearance 0.2mm
+  }
+
+  power "+12V_LOGIC" 12v
+  power "+3V3" 3.3v
+  power "+3V3_B2B" 3.3v
+
+  component H1: mounting_hole "mounting_hole_m2_5" { placement_hint { region: top_left priority: hard } }
+  component H2: mounting_hole "mounting_hole_m2_5" { placement_hint { region: top_right priority: hard } }
+  component H3: mounting_hole "mounting_hole_m2_5" { placement_hint { region: bottom_left priority: hard } }
+  component H4: mounting_hole "mounting_hole_m2_5" { placement_hint { region: bottom_right priority: hard } }
+
+  group "BOARD-TO-BOARD" color "#c2410c" {
+    component J_B2B: connector "header_2x10" value "CTRL" { placement_hint { edge: right priority: hard } }
+    notes "" {
+      "J_B2B pinout (control plug, mates with the power-board socket):"
+      "1 PWM_UH, 2 PWM_UL, 3 PWM_VH, 4 PWM_VL, 5 PWM_WH, 6 PWM_WL,"
+      "7 ISENSE_U, 8 ISENSE_V, 9 ISENSE_W, 10 VBUS_SENSE, 11 GATE_EN,"
+      "12 FAULT_N, 13 +3V3, 14 +12V_LOGIC, 15-20 GND."
+      "2.54 mm 2x10, 2.5 A per contact; every signal is far below that."
+    }
+  }
+
+  group "3V3 LDO" color "#0072b2" {
+    component U_LDO: regulator "ams1117_3v3" value "AMS1117-3.3"
+    component C_LDO_IN: capacitor "c_generic_1206" value "10uF" dielectric "X7R" voltage "50V"
+    component C_LDO_IN2: capacitor "c_generic_0603" value "100nF" dielectric "X7R" voltage "50V"
+    component C_LDO_OUT: capacitor "c_generic_0603" value "10uF" dielectric "X7R" voltage "16V"
+    component L_B3V3: inductor "ferrite_bead_0603" value "600ohm@100MHz"
+    component C_B2B: capacitor "c_generic_0603" value "100nF" dielectric "X7R" voltage "16V"
+    notes "" {
+      "12 V logic rail -> AMS1117-3.3. At 100 mA the loss is (12 - 3.3) x 0.1 = 0.87 W;"
+      "the SOT-223 tab is VOUT, so the copper under it is 3.3 V, not ground."
+      "Dropout is 1.3 V max at 800 mA; 12 V leaves ample headroom."
+      "L_B3V3 isolates the board-to-board 3.3 V pin from the local rail."
+    }
+  }
+
+  group "MCU" color "#0a7d4a" {
+    component U1: mcu "stm32g030k8_lqfp32" value "STM32G030K8T6"
+    component C_VDD1: capacitor "c_generic_0603" value "100nF" dielectric "X7R" voltage "16V"
+    component C_VDD2: capacitor "c_generic_0603" value "4.7uF" dielectric "X7R" voltage "16V"
+    component R_NRST: resistor "r_generic_0603" value "10k"
+    component C_NRST: capacitor "c_generic_0603" value "100nF" dielectric "X7R" voltage "16V"
+    component SW_BOOT: switch "spst_tactile" value "BOOT"
+    component R_BOOT: resistor "r_generic_0603" value "1k"
+    component R_FAULT: resistor "r_generic_0603" value "10k"
+    component C_FAULT: capacitor "c_generic_0603" value "100nF" dielectric "X7R" voltage "16V"
+    component R_GATE_EN: resistor "r_generic_0603" value "10k"
+    notes "" {
+      "STM32G030K8T6, LQFP-32. VDD 3.3 V with 100 nF + 4.7 uF."
+      "PA14 is SWCLK on this package and also BOOT0; the boot button pulls it"
+      "high through 1k, so a debugger driving SWCLK low is not shorted."
+      "PWM: PA8/PA9/PA10 = TIM1 CH1/2/3, PB4/PB5/PB0 = TIM3 CH1/2/3."
+      "USART1: PB6 TX, PB7 RX, PB8 DE/RE. ADC: PA0/PA1/PA2/PA7, PB1."
+    }
+  }
+
+  group "HALL INPUTS" color "#7c3aed" {
+    component J_HALL_U: connector "header_1x3" value "HALL_U" { placement_hint { edge: left priority: hard } }
+    component J_HALL_V: connector "header_1x3" value "HALL_V" { placement_hint { edge: left priority: hard } }
+    component J_HALL_W: connector "header_1x3" value "HALL_W" { placement_hint { edge: left priority: hard } }
+    component R_HALL_U: resistor "r_generic_0603" value "10k"
+    component R_HALL_V: resistor "r_generic_0603" value "10k"
+    component R_HALL_W: resistor "r_generic_0603" value "10k"
+    component R_HALL_SU: resistor "r_generic_0603" value "1k"
+    component R_HALL_SV: resistor "r_generic_0603" value "1k"
+    component R_HALL_SW: resistor "r_generic_0603" value "1k"
+    component C_HALL_U: capacitor "c_generic_0603" value "100nF" dielectric "X7R" voltage "16V"
+    component C_HALL_V: capacitor "c_generic_0603" value "100nF" dielectric "X7R" voltage "16V"
+    component C_HALL_W: capacitor "c_generic_0603" value "100nF" dielectric "X7R" voltage "16V"
+    notes "" {
+      "Each Hall connector: pin 1 +3V3, pin 2 output, pin 3 GND."
+      "10k pull-up, 1k series and 100 nF at the MCU pin: fc = 1/(2 pi 1k 100n) = 1.6 kHz."
+      "Outputs go to PA4, PA5 and PA6."
+    }
+  }
+
+  group "ENCODER" color "#9333ea" {
+    component J_ENC: connector "header_1x4" value "ENC" { placement_hint { edge: left priority: hard } }
+    component R_ENC_A: resistor "r_generic_0603" value "10k"
+    component R_ENC_B: resistor "r_generic_0603" value "10k"
+    component C_ENC_A: capacitor "c_generic_0603" value "100nF" dielectric "X7R" voltage "16V"
+    component C_ENC_B: capacitor "c_generic_0603" value "100nF" dielectric "X7R" voltage "16V"
+    notes "" {
+      "J_ENC: 1 +3V3, 2 A, 3 B, 4 GND. Open-collector encoder assumed,"
+      "so A and B have 10k pull-ups and 100 nF to ground (fc = 160 Hz)."
+    }
+  }
+
+  group "RS-485" color "#0d9488" {
+    component U_RS485: ic "thvd1450d" value "THVD1450D"
+    component C_RS485: capacitor "c_generic_0603" value "100nF" dielectric "X7R" voltage "16V"
+    component R_TERM: resistor "r_generic_0603" value "120ohm" tolerance "1%"
+    component R_RS485_RX: resistor "r_generic_0603" value "1k"
+    component D_RS485_A: diode "ptvs6v0s1ur" value "ESD_A"
+    component D_RS485_B: diode "ptvs6v0s1ur" value "ESD_B"
+    component J_RS485: connector "header_1x3" value "RS485" { placement_hint { edge: bottom priority: hard } }
+    notes "" {
+      "USART1 PB6/PB7, DE and /RE tied to PB8. 120 ohm termination across A/B."
+      "PTVS6V0S1UR clamps A and B to ground; the THVD1450 already has 18 kV"
+      "IEC contact ESD, so these are a second stage, not the primary clamp."
+    }
+  }
+
+  group "DEBUG" color "#475569" {
+    component J_SWD: connector "header_1x4" value "SWD" { placement_hint { edge: bottom priority: hard } }
+    notes "" {
+      "J_SWD: 1 +3V3, 2 SWDIO (PA13), 3 SWCLK (PA14), 4 GND."
+      "No NRST on the header; the boot button shares PA14."
+    }
+  }
+
+  group "STATUS LEDS" color "#be123c" {
+    component D_LED_STATUS: led "ltst_c190kgkt" value "STATUS"
+    component R_LED_STATUS: resistor "r_generic_0603" value "470"
+    component D_LED_FAULT: led "ltst_c190krkt" value "FAULT"
+    component R_LED_FAULT: resistor "r_generic_0603" value "470"
+    notes "" {
+      "PB2 drives the green status LED, PB3 the red fault LED, both active high."
+      "(3.3 - 2.1) / 470 = 2.6 mA."
+    }
+  }
+
+  group "SENSE" color "#b45309" {
+    component R_ISENSE_U: resistor "r_generic_0603" value "1k"
+    component R_ISENSE_V: resistor "r_generic_0603" value "1k"
+    component R_ISENSE_W: resistor "r_generic_0603" value "1k"
+    component C_ISENSE_U: capacitor "c_generic_0603" value "100nF" dielectric "X7R" voltage "16V"
+    component C_ISENSE_V: capacitor "c_generic_0603" value "100nF" dielectric "X7R" voltage "16V"
+    component C_ISENSE_W: capacitor "c_generic_0603" value "100nF" dielectric "X7R" voltage "16V"
+    component R_VBUS_S: resistor "r_generic_0603" value "1k"
+    component C_VBUS_S: capacitor "c_generic_0603" value "100nF" dielectric "X7R" voltage "16V"
+    component R_12V_T: resistor "r_generic_0603" value "100k" tolerance "1%"
+    component R_12V_B: resistor "r_generic_0603" value "22k" tolerance "1%"
+    component C_12V_S: capacitor "c_generic_0603" value "100nF" dielectric "X7R" voltage "16V"
+    notes "" {
+      "ISENSE_U/V/W arrive as 0-2 V from the power-board amplifiers; 1k + 100 nF"
+      "at PA0/PA1/PA2 (fc = 1.6 kHz)."
+      "VBUS_SENSE is divided on the power board; 1k + 100 nF at PA7."
+      "12 V rail sense: 100k/22k gives 12 x 22/122 = 2.16 V at PB1."
+    }
+  }
+
+  group "MECHANICAL" color "#64748b" {
+    notes "" {
+      "Four M2.5 non-plated holes. H1-H4 are at the same board coordinates"
+      "as the power board so the two boards stack."
+    }
+  }
+
+  net "+12V_LOGIC" class "PWR" {
+    J_B2B.p14, U_LDO.vin, C_LDO_IN.p1, C_LDO_IN2.p1, R_12V_T.p1
+  }
+
+  net "+3V3" class "PWR" {
+    U_LDO.vout, C_LDO_OUT.p1, L_B3V3.p1,
+    U1.VDD, C_VDD1.p1, C_VDD2.p1, R_NRST.p1,
+    R_HALL_U.p2, R_HALL_V.p2, R_HALL_W.p2,
+    J_HALL_U.p1, J_HALL_V.p1, J_HALL_W.p1,
+    J_ENC.p1, R_ENC_A.p2, R_ENC_B.p2,
+    J_SWD.p1, SW_BOOT.p1,
+    U_RS485.vcc, C_RS485.p1,
+    R_LED_STATUS.p1, R_LED_FAULT.p1,
+    R_BOOT.p1, R_FAULT.p1
+  }
+
+  net "+3V3_B2B" class "PWR" {
+    L_B3V3.p2, C_B2B.p1, J_B2B.p13
+  }
+
+  net "GND" class "PWR" {
+    J_B2B.p15, J_B2B.p16, J_B2B.p17, J_B2B.p18, J_B2B.p19, J_B2B.p20,
+    U_LDO.gnd, C_LDO_IN.p2, C_LDO_IN2.p2, C_LDO_OUT.p2, C_B2B.p2,
+    U1.VSS, C_VDD1.p2, C_VDD2.p2, C_NRST.p2,
+    J_HALL_U.p3, J_HALL_V.p3, J_HALL_W.p3,
+    C_HALL_U.p2, C_HALL_V.p2, C_HALL_W.p2,
+    J_ENC.p4, C_ENC_A.p2, C_ENC_B.p2,
+    U_RS485.gnd, C_RS485.p2, D_RS485_A.anode, D_RS485_B.anode,
+    J_RS485.p3, J_SWD.p4,
+    D_LED_STATUS.cathode, D_LED_FAULT.cathode,
+    C_ISENSE_U.p2, C_ISENSE_V.p2, C_ISENSE_W.p2,
+    C_VBUS_S.p2, R_12V_B.p2, C_12V_S.p2,
+    R_GATE_EN.p2, C_FAULT.p2
+  }
+
+  net "PWM_UH" { U1.PA8, J_B2B.p2 }
+  net "PWM_UL" { U1.PA9, J_B2B.p1 }
+  net "PWM_VH" { U1.PA10, J_B2B.p3 }
+  net "PWM_VL" { U1.PB4, J_B2B.p4 }
+  net "PWM_WH" { U1.PB5, J_B2B.p5 }
+  net "PWM_WL" { U1.PB0, J_B2B.p6 }
+
+  net "ISENSE_U" class "SENSE" { R_ISENSE_U.p1, J_B2B.p7 }
+  net "ISENSE_V" class "SENSE" { R_ISENSE_V.p1, J_B2B.p8 }
+  net "ISENSE_W" class "SENSE" { R_ISENSE_W.p1, J_B2B.p9 }
+  net "VBUS_SENSE" class "SENSE" { R_VBUS_S.p1, J_B2B.p10 }
+
+  connect R_ISENSE_U.p2 -> U1.PA0 as "ISENSE_U_ADC"
+  connect R_ISENSE_V.p2 -> U1.PA1 as "ISENSE_V_ADC"
+  connect R_ISENSE_W.p2 -> U1.PA2 as "ISENSE_W_ADC"
+  connect R_VBUS_S.p2 -> U1.PA7 as "VBUS_SENSE_ADC"
+  connect R_ISENSE_U.p2 -> C_ISENSE_U.p1 as "ISENSE_U_ADC"
+  connect R_ISENSE_V.p2 -> C_ISENSE_V.p1 as "ISENSE_V_ADC"
+  connect R_ISENSE_W.p2 -> C_ISENSE_W.p1 as "ISENSE_W_ADC"
+  connect R_VBUS_S.p2 -> C_VBUS_S.p1 as "VBUS_SENSE_ADC"
+
+  connect R_12V_T.p2 -> R_12V_B.p1 as "SENSE_12V"
+  connect R_12V_T.p2 -> C_12V_S.p1 as "SENSE_12V"
+  connect R_12V_B.p1 -> U1.PB1 as "SENSE_12V"
+
+  net "GATE_EN" { U1.PB9, J_B2B.p11, R_GATE_EN.p1 }
+  net "FAULT_N" { U1.PC14, J_B2B.p12, R_FAULT.p2, C_FAULT.p1 }
+
+  net "HALL_U" { J_HALL_U.p2, R_HALL_U.p1, R_HALL_SU.p1 }
+  net "HALL_V" { J_HALL_V.p2, R_HALL_V.p1, R_HALL_SV.p1 }
+  net "HALL_W" { J_HALL_W.p2, R_HALL_W.p1, R_HALL_SW.p1 }
+  connect R_HALL_SU.p2 -> U1.PA4 as "HALL_U_MCU"
+  connect R_HALL_SV.p2 -> U1.PA5 as "HALL_V_MCU"
+  connect R_HALL_SW.p2 -> U1.PA6 as "HALL_W_MCU"
+  connect R_HALL_SU.p2 -> C_HALL_U.p1 as "HALL_U_MCU"
+  connect R_HALL_SV.p2 -> C_HALL_V.p1 as "HALL_V_MCU"
+  connect R_HALL_SW.p2 -> C_HALL_W.p1 as "HALL_W_MCU"
+
+  net "ENC_A" { J_ENC.p2, R_ENC_A.p1, C_ENC_A.p1, U1.PA11 }
+  net "ENC_B" { J_ENC.p3, R_ENC_B.p1, C_ENC_B.p1, U1.PA12 }
+
+  net "RS485_TX" { U1.PB6, U_RS485.di }
+  net "RS485_RX" { U_RS485.ro, R_RS485_RX.p1 }
+  connect R_RS485_RX.p2 -> U1.PB7 as "RS485_RX_MCU"
+  net "RS485_DE" { U1.PB8, U_RS485.de, U_RS485.re_n }
+  net "RS485_A" { U_RS485.a, R_TERM.p1, D_RS485_A.cathode, J_RS485.p1 }
+  net "RS485_B" { U_RS485.b, R_TERM.p2, D_RS485_B.cathode, J_RS485.p2 }
+
+  connect U1.NRST -> R_NRST.p2 as "NRST"
+  connect U1.NRST -> C_NRST.p1 as "NRST"
+  connect SW_BOOT.p2 -> R_BOOT.p2 as "BOOT"
+  connect R_BOOT.p2 -> U1.PA14 as "BOOT"
+  connect U1.PA13 -> J_SWD.p2 as "SWDIO"
+  connect U1.PA14 -> J_SWD.p3 as "BOOT"
+
+  connect U1.PB2 -> R_LED_STATUS.p2 as "LED_STATUS"
+  connect R_LED_STATUS.p2 -> D_LED_STATUS.anode as "LED_STATUS"
+  connect U1.PB3 -> R_LED_FAULT.p2 as "LED_FAULT"
+  connect R_LED_FAULT.p2 -> D_LED_FAULT.anode as "LED_FAULT"
+}

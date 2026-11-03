@@ -4547,7 +4547,10 @@ fn load_multiboard_board(
     let (source, file_name) = match (entry["source"].as_str(), path) {
         (Some(source), _) => (
             source.to_string(),
-            entry["file_path"].as_str().unwrap_or("board.synth").to_string(),
+            entry["file_path"]
+                .as_str()
+                .unwrap_or("board.synth")
+                .to_string(),
         ),
         (None, Some(path)) => (
             std::fs::read_to_string(path)

@@ -1,0 +1,36 @@
+id = "bzt52c15"
+kind = "diode"
+version = 0
+lifecycle = "active"
+description = "BZT52C15 15 V +/-5 % 500 mW zener diode, SOD-123 (gate-source clamp for the reverse-polarity P-FET). Vz 13.8 to 15.6 V at Izt 5 mA"
+mpn = "BZT52C15"
+lcsc_pn = "C2104"
+kicad_symbol = "Device:D_Zener"
+kicad_footprint = "Diode_SMD:D_SOD-123"
+
+[footprint_dimensions]
+width_mm = 4.7
+height_mm = 2.3
+courtyard_margin_mm = 0.25
+
+[[pins]]
+name = "cathode"
+number = "1"
+electrical_type = "passive"
+[[pins]]
+name = "anode"
+number = "2"
+electrical_type = "passive"
+
+[operating_conditions]
+max_current_ma = 150.0
+max_power_mw = 500
+breakdown_voltage_v = 15.0
+breakdown_voltage_min_v = 13.8
+breakdown_voltage_max_v = 15.6
+breakdown_test_current_ma = 5.0
+
+[provenance]
+source = "authored"
+generator = "hand-written from the Diodes Incorporated BZT52C series datasheet"
+datasheet_url = "https://www.diodes.com/datasheet/download/BZT52Cxx.pdf"

@@ -68,15 +68,15 @@ electrical_type = "passive"
 [[pins]]
 name = "p13"
 number = "13"
-electrical_type = "passive"
+electrical_type = "power_input"
 [[pins]]
 name = "p14"
 number = "14"
-electrical_type = "passive"
+electrical_type = "power_input"
 [[pins]]
 name = "p15"
 number = "15"
-electrical_type = "passive"
+electrical_type = "ground_reference"
 [[pins]]
 name = "p16"
 number = "16"

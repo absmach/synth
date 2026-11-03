@@ -1,0 +1,399 @@
+// SYN-408: BLDC stack, power stage (bldc_power).
+//
+// 24 V / 10 A input -> P-FET reverse protection -> TVS + bulk -> three
+// half bridges (BSC030N08NS5) driven by three IR2101 high/low drivers.
+// Low-side 5 mOhm shunts -> MCP6022 gain-40 amplifiers -> J_B2B.
+// A 12 V LMR38010 buck derived from VBUS feeds the gate drivers and the
+// control board's LDO. FAULT_N is an overcurrent comparator on phase W.
+board "bldc_power" {
+  layers 4
+  manufacturer "jlcpcb"
+  revision "A"
+
+  stackup {
+    copper 0.07mm
+    insulator 0.2mm er 4.4 material "FR4"
+    copper 0.035mm
+    insulator 0.9mm er 4.4 material "FR4"
+    copper 0.035mm
+    insulator 0.2mm er 4.4 material "FR4"
+    copper 0.07mm
+  }
+
+  netclass "PWR" {
+    trace_width 2mm
+    clearance 0.3mm
+  }
+
+  netclass "PHASE" {
+    trace_width 2mm
+    clearance 0.3mm
+  }
+
+  netclass "GATE" {
+    trace_width 0.3mm
+    clearance 0.2mm
+  }
+
+  netclass "SENSE" {
+    trace_width 0.25mm
+    clearance 0.2mm
+  }
+
+  power "VBUS" 24v
+  power "+12V" 12v
+  power "+12V_GD" 12v
+  power "+12V_B2B" 12v
+  power "+3V3" 3.3v
+
+  component H1: mounting_hole "mounting_hole_m2_5" { placement_hint { region: top_left priority: hard } }
+  component H2: mounting_hole "mounting_hole_m2_5" { placement_hint { region: top_right priority: hard } }
+  component H3: mounting_hole "mounting_hole_m2_5" { placement_hint { region: bottom_left priority: hard } }
+  component H4: mounting_hole "mounting_hole_m2_5" { placement_hint { region: bottom_right priority: hard } }
+
+  group "24V INPUT" color "#c2410c" {
+    component J_PWR: connector "terminal_block_mkds_2pin" value "24V_IN" { placement_hint { edge: left priority: hard } }
+    component Q_REV: transistor "irf4905" value "IRF4905"
+    component R_REV_G1: resistor "r_generic_0603" value "22k"
+    component R_REV_G2: resistor "r_generic_0603" value "10k"
+    component D_REV_Z: diode "bzt52c15" value "15V"
+    component D_TVS: diode "smbj30a" value "SMBJ30A"
+    component C_BULK1: capacitor "c_electrolytic_470uf_50v" value "470uF" voltage "50V"
+    component C_BULK2: capacitor "c_electrolytic_470uf_50v" value "470uF" voltage "50V"
+    component C_IN1: capacitor "c_generic_1206" value "10uF" dielectric "X7R" voltage "50V"
+    component C_IN2: capacitor "c_generic_1206" value "10uF" dielectric "X7R" voltage "50V"
+    component C_IN3: capacitor "c_generic_0603" value "100nF" dielectric "X7R" voltage "50V"
+    notes "" {
+      "J_PWR 1 = +24 V, 2 = GND. Q_REV is a P-FET reverse-polarity block:"
+      "drain to input, source to VBUS. R_REV_G1/G2 22k/10k hold VGS near -16.5 V"
+      "at 24 V; D_REV_Z clamps VGS at 15 V during a TVS clamp."
+      "D_TVS SMBJ30A: VWM 30 V, VBR 33.3-36.8 V, clamp 48.4 V at 12.4 A."
+      "C_BULK1/2 are 470 uF 50 V (24 V x 1.5 = 36 V minimum rating)."
+      "No fuse is fitted; the 24 V feed must be externally limited to 10 A."
+    }
+  }
+
+  group "3-PHASE BRIDGE" color "#0072b2" {
+    component Q_UH: transistor "bsc030n08ns5" value "80V 100A"
+    component Q_UL: transistor "bsc030n08ns5" value "80V 100A"
+    component Q_VH: transistor "bsc030n08ns5" value "80V 100A"
+    component Q_VL: transistor "bsc030n08ns5" value "80V 100A"
+    component Q_WH: transistor "bsc030n08ns5" value "80V 100A"
+    component Q_WL: transistor "bsc030n08ns5" value "80V 100A"
+    component R_SH_U: resistor "r_generic_2512" value "5mR" tolerance "1%"
+    component R_SH_V: resistor "r_generic_2512" value "5mR" tolerance "1%"
+    component R_SH_W: resistor "r_generic_2512" value "5mR" tolerance "1%"
+    notes "" {
+      "BSC030N08NS5: 80 V, 100 A, 3.0 mOhm max at VGS 10 V, PG-TDSON-8."
+      "Each half bridge has three source pins in parallel; the drain pad is pin 5."
+      "Low-side shunt 5 mOhm: 50 mV at 10 A, 0.5 W in a 2512 (1 W part)."
+      "Phase copper is 2 mm wide on 2 oz outer layers; see NETLIST.md."
+    }
+  }
+
+  group "GATE DRIVE" color "#0a7d4a" {
+    component U_GD_U: ic "ir2101" value "IR2101"
+    component U_GD_V: ic "ir2101" value "IR2101"
+    component U_GD_W: ic "ir2101" value "IR2101"
+    component D_BOOT_U: diode "d_schottky" value "1N5819HW"
+    component D_BOOT_V: diode "d_schottky" value "1N5819HW"
+    component D_BOOT_W: diode "d_schottky" value "1N5819HW"
+    component C_BOOT_U: capacitor "c_generic_0603" value "100nF" dielectric "X7R" voltage "50V"
+    component C_BOOT_V: capacitor "c_generic_0603" value "100nF" dielectric "X7R" voltage "50V"
+    component C_BOOT_W: capacitor "c_generic_0603" value "100nF" dielectric "X7R" voltage "50V"
+    component C_GD_U: capacitor "c_generic_0603" value "100nF" dielectric "X7R" voltage "25V"
+    component C_GD_V: capacitor "c_generic_0603" value "100nF" dielectric "X7R" voltage "25V"
+    component C_GD_W: capacitor "c_generic_0603" value "100nF" dielectric "X7R" voltage "25V"
+    component C_GD_BULK: capacitor "c_generic_1206" value "10uF" dielectric "X7R" voltage "25V"
+    component R_GH_U: resistor "r_generic_0603" value "10R"
+    component R_GH_V: resistor "r_generic_0603" value "10R"
+    component R_GH_W: resistor "r_generic_0603" value "10R"
+    component R_GL_U: resistor "r_generic_0603" value "10R"
+    component R_GL_V: resistor "r_generic_0603" value "10R"
+    component R_GL_W: resistor "r_generic_0603" value "10R"
+    component R_GS_UH: resistor "r_generic_0603" value "10k"
+    component R_GS_VH: resistor "r_generic_0603" value "10k"
+    component R_GS_WH: resistor "r_generic_0603" value "10k"
+    component R_GS_UL: resistor "r_generic_0603" value "10k"
+    component R_GS_VL: resistor "r_generic_0603" value "10k"
+    component R_GS_WL: resistor "r_generic_0603" value "10k"
+    component R_HIN_U: resistor "r_generic_0603" value "10k"
+    component R_HIN_V: resistor "r_generic_0603" value "10k"
+    component R_HIN_W: resistor "r_generic_0603" value "10k"
+    component R_LIN_U: resistor "r_generic_0603" value "10k"
+    component R_LIN_V: resistor "r_generic_0603" value "10k"
+    component R_LIN_W: resistor "r_generic_0603" value "10k"
+    component Q_GE: transistor "irf4905" value "IRF4905"
+    component Q_GE_CTRL: transistor "npn_bjt_2n3904" value "2N3904"
+    component R_GE_PU: resistor "r_generic_0603" value "10k"
+    component R_GE_B: resistor "r_generic_0603" value "10k"
+    component R_GE_BD: resistor "r_generic_0603" value "10k"
+    notes "" {
+      "IR2101: VCC 12 V, COM GND, HIN/LIN 3.3 V logic, HO/LO through 10 R."
+      "Bootstrap: 1N5819HW from +12V_GD to VB, 100 nF from VB to VS."
+      "HIN and LIN have 10k pulldowns so a floating MCU keeps both outputs low."
+      "Q_GE is a 12 V load switch for the drivers, controlled by GATE_EN:"
+      "Q_GE_CTRL pulls the P-FET gate low, R_GE_PU holds it off."
+      "IR2101 logic: HIN and LIN high together turns both outputs off;"
+      "dead time is the MCU's responsibility and is not checked by Synth."
+    }
+  }
+
+  group "CURRENT SENSE" color "#b45309" {
+    component U_CS1: opamp "mcp6022_soic" value "MCP6022"
+    component U_CS2: opamp "mcp6022_soic" value "MCP6022"
+    component R_CS_U_IN: resistor "r_generic_0603" value "1k" tolerance "1%"
+    component R_CS_V_IN: resistor "r_generic_0603" value "1k" tolerance "1%"
+    component R_CS_W_IN: resistor "r_generic_0603" value "1k" tolerance "1%"
+    component R_CS_U_G: resistor "r_generic_0603" value "1k" tolerance "1%"
+    component R_CS_V_G: resistor "r_generic_0603" value "1k" tolerance "1%"
+    component R_CS_W_G: resistor "r_generic_0603" value "1k" tolerance "1%"
+    component R_CS_U_F: resistor "r_generic_0603" value "39k" tolerance "1%"
+    component R_CS_V_F: resistor "r_generic_0603" value "39k" tolerance "1%"
+    component R_CS_W_F: resistor "r_generic_0603" value "39k" tolerance "1%"
+    component C_CS_U_IN: capacitor "c_generic_0603" value "100nF" dielectric "X7R" voltage "16V"
+    component C_CS_V_IN: capacitor "c_generic_0603" value "100nF" dielectric "X7R" voltage "16V"
+    component C_CS_W_IN: capacitor "c_generic_0603" value "100nF" dielectric "X7R" voltage "16V"
+    component C_CS_U_F: capacitor "c_generic_0603" value "100pF" dielectric "C0G" voltage "16V"
+    component C_CS_V_F: capacitor "c_generic_0603" value "100pF" dielectric "C0G" voltage "16V"
+    component C_CS_W_F: capacitor "c_generic_0603" value "100pF" dielectric "C0G" voltage "16V"
+    component R_IS_OUT_U: resistor "r_generic_0603" value "1k"
+    component R_IS_OUT_V: resistor "r_generic_0603" value "1k"
+    component R_IS_OUT_W: resistor "r_generic_0603" value "1k"
+    component C_IS_OUT_U: capacitor "c_generic_0603" value "100nF" dielectric "X7R" voltage "16V"
+    component C_IS_OUT_V: capacitor "c_generic_0603" value "100nF" dielectric "X7R" voltage "16V"
+    component C_IS_OUT_W: capacitor "c_generic_0603" value "100nF" dielectric "X7R" voltage "16V"
+    notes "" {
+      "Non-inverting gain: 1 + 39k/1k = 40. 10 A x 5 mOhm = 50 mV -> 2.0 V."
+      "MCP6022 GBW 10 MHz, so the closed-loop band is about 250 kHz."
+      "1k + 100 nF at the + input gives fc = 1.6 kHz; the 100 pF across"
+      "39k adds a 41 kHz pole, above the current-loop bandwidth."
+      "The spare MCP6022 channel compares ISENSE_W with 1.65 V (about 8.25 A)"
+      "and pulls FAULT_N low through Q_FAULT."
+    }
+  }
+
+  group "12V BUCK" color "#7c3aed" {
+    component U_BUCK: regulator "lmr38010" value "LMR38010"
+    component L_BUCK: inductor "l_bourns_srn6045ta_6r8m" value "6.8uH"
+    component C_BUCK_IN: capacitor "c_generic_1206" value "10uF" dielectric "X7R" voltage "50V"
+    component C_BUCK_IN2: capacitor "c_generic_0603" value "220nF" dielectric "X7R" voltage "50V"
+    component C_BUCK_OUT1: capacitor "c_generic_1206" value "22uF" dielectric "X7R" voltage "25V"
+    component C_BUCK_OUT2: capacitor "c_generic_1206" value "22uF" dielectric "X7R" voltage "25V"
+    component C_BUCK_OUT3: capacitor "c_generic_0603" value "100nF" dielectric "X7R" voltage "25V"
+    component C_BUCK_BOOT: capacitor "c_generic_0603" value "100nF" dielectric "X7R" voltage "16V"
+    component C_BUCK_FF: capacitor "c_generic_0603" value "100pF" dielectric "C0G" voltage "16V"
+    component R_BUCK_RT: resistor "r_generic_0603" value "33k" tolerance "1%"
+    component R_BUCK_FB_T: resistor "r_generic_0603" value "110k" tolerance "1%"
+    component R_BUCK_FB_B: resistor "r_generic_0603" value "10k" tolerance "1%"
+    component L_12B2B: inductor "ferrite_bead_0603" value "600ohm@100MHz"
+    component C_12B2B: capacitor "c_generic_0603" value "100nF" dielectric "X7R" voltage "25V"
+    notes "" {
+      "LMR38010 (85 V absolute maximum, above the 48.4 V TVS clamp), 1 A."
+      "Vout = 1.0 V x (1 + 110k/10k) = 12.0 V."
+      "R_RT 33k sets 800 kHz; L 6.8 uH keeps the ripple below 0.3 A at 12 V/1 A."
+      "L_12B2B isolates the board-to-board 12 V pin from the buck output."
+    }
+  }
+
+  group "BUS SENSE" color "#0d9488" {
+    component R_VBUS_S1: resistor "r_generic_0603" value "100k" tolerance "1%"
+    component R_VBUS_S2: resistor "r_generic_0603" value "13k" tolerance "1%"
+    component C_VBUS_S: capacitor "c_generic_0603" value "100nF" dielectric "X7R" voltage "16V"
+    notes "" {
+      "VBUS divider: 24 x 13/113 = 2.76 V; 26.4 V gives 3.04 V."
+      "This is the only 24 V signal leaving the power board."
+    }
+  }
+
+  group "OVER-CURRENT FLAG" color "#be123c" {
+    component R_REF_T: resistor "r_generic_0603" value "10k" tolerance "1%"
+    component R_REF_B: resistor "r_generic_0603" value "10k" tolerance "1%"
+    component C_REF: capacitor "c_generic_0603" value "100nF" dielectric "X7R" voltage "16V"
+    component R_FAULT_B: resistor "r_generic_0603" value "10k"
+    component R_FAULT_SENSE: resistor "r_generic_0603" value "1k"
+    component R_FAULT_PU: resistor "r_generic_0603" value "10k"
+    component Q_FAULT: transistor "npn_bjt_2n3904" value "2N3904"
+    notes "" {
+      "Reference: 3.3 V x 10k/(10k+10k) = 1.65 V, about 8.25 A on the 5 mOhm shunt."
+      "U_CS2 channel B output high on overcurrent -> Q_FAULT pulls FAULT_N low."
+      "R_FAULT_PU 10k keeps FAULT_N high if the control board is absent."
+    }
+  }
+
+  group "BOARD-TO-BOARD" color "#475569" {
+    component J_B2B: connector "header_2x10_socket" value "PWR" { placement_hint { edge: right priority: hard } }
+    component J_MOTOR: connector "terminal_block_mkds_3pin" value "MOTOR" { placement_hint { edge: left priority: hard } }
+    component C_3V3: capacitor "c_generic_0603" value "100nF" dielectric "X7R" voltage "16V"
+    component C_3V3_2: capacitor "c_generic_1206" value "10uF" dielectric "X7R" voltage "16V"
+    notes "" {
+      "J_B2B socket pinout (mates with the control-board plug):"
+      "1 PWM_UH, 2 PWM_UL, 3 PWM_VH, 4 PWM_VL, 5 PWM_WH, 6 PWM_WL,"
+      "7 ISENSE_U, 8 ISENSE_V, 9 ISENSE_W, 10 VBUS_SENSE, 11 GATE_EN,"
+      "12 FAULT_N, 13 +3V3, 14 +12V_LOGIC, 15-20 GND."
+      "J_MOTOR: 1 U, 2 V, 3 W."
+    }
+  }
+
+  group "MECHANICAL" color "#64748b" {
+    notes "" {
+      "Four M2.5 non-plated holes at the same board coordinates as the control board."
+    }
+  }
+
+  net "+24V_IN" class "PWR" { J_PWR.p1, Q_REV.drain }
+  net "GATE_REV" { Q_REV.gate, R_REV_G1.p2, R_REV_G2.p1, D_REV_Z.anode }
+
+  net "VBUS" class "PWR" {
+    Q_REV.source, R_REV_G1.p1, D_REV_Z.cathode, D_TVS.cathode,
+    C_BULK1.p1, C_BULK2.p1, C_IN1.p1, C_IN2.p1, C_IN3.p1,
+    Q_UH.drain, Q_VH.drain, Q_WH.drain,
+    U_BUCK.vin, U_BUCK.en, C_BUCK_IN.p1, C_BUCK_IN2.p1,
+    R_VBUS_S1.p1
+  }
+
+  net "GND" class "PWR" {
+    J_PWR.p2, R_REV_G2.p2, D_TVS.anode,
+    C_BULK1.p2, C_BULK2.p2, C_IN1.p2, C_IN2.p2, C_IN3.p2,
+    R_SH_U.p2, R_SH_V.p2, R_SH_W.p2,
+    U_GD_U.com, U_GD_V.com, U_GD_W.com,
+    C_GD_U.p2, C_GD_V.p2, C_GD_W.p2, C_GD_BULK.p2,
+    R_HIN_U.p2, R_HIN_V.p2, R_HIN_W.p2,
+    R_LIN_U.p2, R_LIN_V.p2, R_LIN_W.p2,
+    Q_GE_CTRL.emitter, R_GE_BD.p2,
+    U_CS1.vss, U_CS2.vss,
+    R_CS_U_G.p2, R_CS_V_G.p2, R_CS_W_G.p2,
+    C_CS_U_IN.p2, C_CS_V_IN.p2, C_CS_W_IN.p2,
+    C_IS_OUT_U.p2, C_IS_OUT_V.p2, C_IS_OUT_W.p2,
+    R_REF_B.p2, C_REF.p2, Q_FAULT.emitter,
+    U_BUCK.gnd, U_BUCK.pad, C_BUCK_IN.p2, C_BUCK_IN2.p2,
+    C_BUCK_OUT1.p2, C_BUCK_OUT2.p2, C_BUCK_OUT3.p2,
+    R_BUCK_RT.p2, R_BUCK_FB_B.p2, C_12B2B.p2,
+    C_3V3.p2, C_3V3_2.p2,
+    J_B2B.p15, J_B2B.p16, J_B2B.p17, J_B2B.p18, J_B2B.p19, J_B2B.p20
+  }
+
+  net "PHASE_U" class "PHASE" {
+    Q_UH.source, Q_UH.source_2, Q_UH.source_3,
+    Q_UL.drain, U_GD_U.vs, C_BOOT_U.p2, R_GS_UH.p2, J_MOTOR.p1
+  }
+  net "PHASE_V" class "PHASE" {
+    Q_VH.source, Q_VH.source_2, Q_VH.source_3,
+    Q_VL.drain, U_GD_V.vs, C_BOOT_V.p2, R_GS_VH.p2, J_MOTOR.p2
+  }
+  net "PHASE_W" class "PHASE" {
+    Q_WH.source, Q_WH.source_2, Q_WH.source_3,
+    Q_WL.drain, U_GD_W.vs, C_BOOT_W.p2, R_GS_WH.p2, J_MOTOR.p3
+  }
+
+  net "SHUNT_U" class "PWR" {
+    Q_UL.source, Q_UL.source_2, Q_UL.source_3,
+    R_GS_UL.p2, R_SH_U.p1, R_CS_U_IN.p1
+  }
+  net "SHUNT_V" class "PWR" {
+    Q_VL.source, Q_VL.source_2, Q_VL.source_3,
+    R_GS_VL.p2, R_SH_V.p1, R_CS_V_IN.p1
+  }
+  net "SHUNT_W" class "PWR" {
+    Q_WL.source, Q_WL.source_2, Q_WL.source_3,
+    R_GS_WL.p2, R_SH_W.p1, R_CS_W_IN.p1
+  }
+
+  connect U_GD_U.ho -> R_GH_U.p1 as "GH_U"
+  connect R_GH_U.p2 -> Q_UH.gate as "GH_U"
+  connect R_GS_UH.p1 -> Q_UH.gate as "GH_U"
+  connect U_GD_U.lo -> R_GL_U.p1 as "GL_U"
+  connect R_GL_U.p2 -> Q_UL.gate as "GL_U"
+  connect R_GS_UL.p1 -> Q_UL.gate as "GL_U"
+  connect U_GD_V.ho -> R_GH_V.p1 as "GH_V"
+  connect R_GH_V.p2 -> Q_VH.gate as "GH_V"
+  connect R_GS_VH.p1 -> Q_VH.gate as "GH_V"
+  connect U_GD_V.lo -> R_GL_V.p1 as "GL_V"
+  connect R_GL_V.p2 -> Q_VL.gate as "GL_V"
+  connect R_GS_VL.p1 -> Q_VL.gate as "GL_V"
+  connect U_GD_W.ho -> R_GH_W.p1 as "GH_W"
+  connect R_GH_W.p2 -> Q_WH.gate as "GH_W"
+  connect R_GS_WH.p1 -> Q_WH.gate as "GH_W"
+  connect U_GD_W.lo -> R_GL_W.p1 as "GL_W"
+  connect R_GL_W.p2 -> Q_WL.gate as "GL_W"
+  connect R_GS_WL.p1 -> Q_WL.gate as "GL_W"
+
+  connect D_BOOT_U.cathode -> U_GD_U.vb as "BOOT_U"
+  connect C_BOOT_U.p1 -> U_GD_U.vb as "BOOT_U"
+  connect D_BOOT_V.cathode -> U_GD_V.vb as "BOOT_V"
+  connect C_BOOT_V.p1 -> U_GD_V.vb as "BOOT_V"
+  connect D_BOOT_W.cathode -> U_GD_W.vb as "BOOT_W"
+  connect C_BOOT_W.p1 -> U_GD_W.vb as "BOOT_W"
+
+  net "PWM_UH" { J_B2B.p1, U_GD_U.hin, R_HIN_U.p1 }
+  net "PWM_UL" { J_B2B.p2, U_GD_U.lin, R_LIN_U.p1 }
+  net "PWM_VH" { J_B2B.p3, U_GD_V.hin, R_HIN_V.p1 }
+  net "PWM_VL" { J_B2B.p4, U_GD_V.lin, R_LIN_V.p1 }
+  net "PWM_WH" { J_B2B.p5, U_GD_W.hin, R_HIN_W.p1 }
+  net "PWM_WL" { J_B2B.p6, U_GD_W.lin, R_LIN_W.p1 }
+
+  net "CS_U_IN" { R_CS_U_IN.p2, C_CS_U_IN.p1, U_CS1.in_a_pos }
+  net "CS_V_IN" { R_CS_V_IN.p2, C_CS_V_IN.p1, U_CS1.in_b_pos }
+  net "CS_W_IN" { R_CS_W_IN.p2, C_CS_W_IN.p1, U_CS2.in_a_pos }
+  net "CS_U_FB" { R_CS_U_G.p1, R_CS_U_F.p2, C_CS_U_F.p2, U_CS1.in_a_neg }
+  net "CS_V_FB" { R_CS_V_G.p1, R_CS_V_F.p2, C_CS_V_F.p2, U_CS1.in_b_neg }
+  net "CS_W_FB" { R_CS_W_G.p1, R_CS_W_F.p2, C_CS_W_F.p2, U_CS2.in_a_neg }
+
+  connect U_CS1.out_a -> R_CS_U_F.p1 as "CS_U_OUT"
+  connect U_CS1.out_a -> C_CS_U_F.p1 as "CS_U_OUT"
+  connect U_CS1.out_a -> R_IS_OUT_U.p1 as "CS_U_OUT"
+  connect U_CS1.out_b -> R_CS_V_F.p1 as "CS_V_OUT"
+  connect U_CS1.out_b -> C_CS_V_F.p1 as "CS_V_OUT"
+  connect U_CS1.out_b -> R_IS_OUT_V.p1 as "CS_V_OUT"
+  connect U_CS2.out_a -> R_CS_W_F.p1 as "CS_W_OUT"
+  connect U_CS2.out_a -> C_CS_W_F.p1 as "CS_W_OUT"
+  connect U_CS2.out_a -> R_IS_OUT_W.p1 as "CS_W_OUT"
+
+  connect R_IS_OUT_U.p2 -> J_B2B.p7 as "ISENSE_U"
+  connect R_IS_OUT_U.p2 -> C_IS_OUT_U.p1 as "ISENSE_U"
+  connect R_IS_OUT_V.p2 -> J_B2B.p8 as "ISENSE_V"
+  connect R_IS_OUT_V.p2 -> C_IS_OUT_V.p1 as "ISENSE_V"
+  connect R_IS_OUT_W.p2 -> J_B2B.p9 as "ISENSE_W"
+  connect R_IS_OUT_W.p2 -> C_IS_OUT_W.p1 as "ISENSE_W"
+
+  connect U_CS2.in_b_pos -> R_FAULT_SENSE.p2 as "FAULT_SENSE"
+  connect U_CS2.out_a -> R_FAULT_SENSE.p1 as "CS_W_OUT"
+  connect U_CS2.out_b -> R_FAULT_B.p1 as "FAULT_DRIVE"
+  connect R_FAULT_B.p2 -> Q_FAULT.base as "FAULT_DRIVE"
+  connect Q_FAULT.collector -> R_FAULT_PU.p2 as "FAULT_N"
+  connect Q_FAULT.collector -> J_B2B.p12 as "FAULT_N"
+
+  net "VREF" { R_REF_T.p2, R_REF_B.p1, C_REF.p1, U_CS2.in_b_neg }
+
+  net "GATE_EN" { J_B2B.p11, R_GE_B.p1 }
+  connect R_GE_B.p2 -> Q_GE_CTRL.base as "GE_DRIVE"
+  connect R_GE_BD.p1 -> Q_GE_CTRL.base as "GE_DRIVE"
+  connect Q_GE_CTRL.collector -> Q_GE.gate as "GE_GATE"
+  connect R_GE_PU.p2 -> Q_GE.gate as "GE_GATE"
+
+  net "+12V" class "PWR" {
+    L_BUCK.p2, C_BUCK_OUT1.p1, C_BUCK_OUT2.p1, C_BUCK_OUT3.p1,
+    R_BUCK_FB_T.p1, C_BUCK_FF.p1, Q_GE.source, R_GE_PU.p1, L_12B2B.p1
+  }
+  net "+12V_GD" class "PWR" {
+    Q_GE.drain, C_GD_BULK.p1, C_GD_U.p1, C_GD_V.p1, C_GD_W.p1,
+    U_GD_U.vcc, U_GD_V.vcc, U_GD_W.vcc,
+    D_BOOT_U.anode, D_BOOT_V.anode, D_BOOT_W.anode
+  }
+  net "+12V_B2B" class "PWR" { L_12B2B.p2, C_12B2B.p1, J_B2B.p14 }
+
+  connect U_BUCK.sw -> L_BUCK.p1 as "SW_BUCK"
+  connect U_BUCK.sw -> C_BUCK_BOOT.p2 as "SW_BUCK"
+  connect U_BUCK.boot -> C_BUCK_BOOT.p1 as "BOOT_BUCK"
+  connect U_BUCK.rt_sync -> R_BUCK_RT.p1 as "RT_BUCK"
+  connect U_BUCK.fb -> R_BUCK_FB_T.p2 as "FB_BUCK"
+  connect U_BUCK.fb -> R_BUCK_FB_B.p1 as "FB_BUCK"
+  connect U_BUCK.fb -> C_BUCK_FF.p2 as "FB_BUCK"
+
+  net "VBUS_SENSE" { R_VBUS_S1.p2, R_VBUS_S2.p1, C_VBUS_S.p1, J_B2B.p10 }
+
+  net "+3V3" class "PWR" {
+    J_B2B.p13, C_3V3.p1, C_3V3_2.p1,
+    U_CS1.vdd, U_CS2.vdd, R_REF_T.p1, R_FAULT_PU.p1
+  }
+}

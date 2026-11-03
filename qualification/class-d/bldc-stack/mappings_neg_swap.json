@@ -1,0 +1,175 @@
+{
+  "project_name": "bldc_stack",
+  "boards": [
+    {
+      "name": "bldc_control",
+      "path": "qualification/class-d/bldc-stack/control.synth"
+    },
+    {
+      "name": "bldc_power",
+      "path": "qualification/class-d/bldc-stack/power.synth"
+    }
+  ],
+  "interboard_mappings": [
+    {
+      "from_board": "bldc_control",
+      "from_refdes": "J_B2B",
+      "from_pin": "1",
+      "to_board": "bldc_power",
+      "to_refdes": "J_B2B",
+      "to_pin": "2"
+    },
+    {
+      "from_board": "bldc_control",
+      "from_refdes": "J_B2B",
+      "from_pin": "2",
+      "to_board": "bldc_power",
+      "to_refdes": "J_B2B",
+      "to_pin": "1"
+    },
+    {
+      "from_board": "bldc_control",
+      "from_refdes": "J_B2B",
+      "from_pin": "3",
+      "to_board": "bldc_power",
+      "to_refdes": "J_B2B",
+      "to_pin": "3"
+    },
+    {
+      "from_board": "bldc_control",
+      "from_refdes": "J_B2B",
+      "from_pin": "4",
+      "to_board": "bldc_power",
+      "to_refdes": "J_B2B",
+      "to_pin": "4"
+    },
+    {
+      "from_board": "bldc_control",
+      "from_refdes": "J_B2B",
+      "from_pin": "5",
+      "to_board": "bldc_power",
+      "to_refdes": "J_B2B",
+      "to_pin": "5"
+    },
+    {
+      "from_board": "bldc_control",
+      "from_refdes": "J_B2B",
+      "from_pin": "6",
+      "to_board": "bldc_power",
+      "to_refdes": "J_B2B",
+      "to_pin": "6"
+    },
+    {
+      "from_board": "bldc_control",
+      "from_refdes": "J_B2B",
+      "from_pin": "7",
+      "to_board": "bldc_power",
+      "to_refdes": "J_B2B",
+      "to_pin": "7"
+    },
+    {
+      "from_board": "bldc_control",
+      "from_refdes": "J_B2B",
+      "from_pin": "8",
+      "to_board": "bldc_power",
+      "to_refdes": "J_B2B",
+      "to_pin": "8"
+    },
+    {
+      "from_board": "bldc_control",
+      "from_refdes": "J_B2B",
+      "from_pin": "9",
+      "to_board": "bldc_power",
+      "to_refdes": "J_B2B",
+      "to_pin": "9"
+    },
+    {
+      "from_board": "bldc_control",
+      "from_refdes": "J_B2B",
+      "from_pin": "10",
+      "to_board": "bldc_power",
+      "to_refdes": "J_B2B",
+      "to_pin": "10"
+    },
+    {
+      "from_board": "bldc_control",
+      "from_refdes": "J_B2B",
+      "from_pin": "11",
+      "to_board": "bldc_power",
+      "to_refdes": "J_B2B",
+      "to_pin": "11"
+    },
+    {
+      "from_board": "bldc_control",
+      "from_refdes": "J_B2B",
+      "from_pin": "12",
+      "to_board": "bldc_power",
+      "to_refdes": "J_B2B",
+      "to_pin": "12"
+    },
+    {
+      "from_board": "bldc_control",
+      "from_refdes": "J_B2B",
+      "from_pin": "13",
+      "to_board": "bldc_power",
+      "to_refdes": "J_B2B",
+      "to_pin": "13"
+    },
+    {
+      "from_board": "bldc_control",
+      "from_refdes": "J_B2B",
+      "from_pin": "14",
+      "to_board": "bldc_power",
+      "to_refdes": "J_B2B",
+      "to_pin": "14"
+    },
+    {
+      "from_board": "bldc_control",
+      "from_refdes": "J_B2B",
+      "from_pin": "15",
+      "to_board": "bldc_power",
+      "to_refdes": "J_B2B",
+      "to_pin": "15"
+    },
+    {
+      "from_board": "bldc_control",
+      "from_refdes": "J_B2B",
+      "from_pin": "16",
+      "to_board": "bldc_power",
+      "to_refdes": "J_B2B",
+      "to_pin": "16"
+    },
+    {
+      "from_board": "bldc_control",
+      "from_refdes": "J_B2B",
+      "from_pin": "17",
+      "to_board": "bldc_power",
+      "to_refdes": "J_B2B",
+      "to_pin": "17"
+    },
+    {
+      "from_board": "bldc_control",
+      "from_refdes": "J_B2B",
+      "from_pin": "18",
+      "to_board": "bldc_power",
+      "to_refdes": "J_B2B",
+      "to_pin": "18"
+    },
+    {
+      "from_board": "bldc_control",
+      "from_refdes": "J_B2B",
+      "from_pin": "19",
+      "to_board": "bldc_power",
+      "to_refdes": "J_B2B",
+      "to_pin": "19"
+    },
+    {
+      "from_board": "bldc_control",
+      "from_refdes": "J_B2B",
+      "from_pin": "20",
+      "to_board": "bldc_power",
+      "to_refdes": "J_B2B",
+      "to_pin": "20"
+    }
+  ]
+}

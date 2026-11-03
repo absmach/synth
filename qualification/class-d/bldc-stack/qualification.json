@@ -1,0 +1,76 @@
+{
+  "qualified": false,
+  "meaning": "reports/release-control.json and reports/release-power.json say release_ready only when Synth's own routing and export gates pass. They are not review sign-off. This file stays false until every gate below is true.",
+  "gates": {
+    "multiboard_mapping": {
+      "passed": true,
+      "evidence": "crates/synth-cli/tests/bldc_stack_board.rs: 20 of 20 J_B2B pins matched, 100%, no diagnostics; every pin of the connector appears exactly once."
+    },
+    "negative_mappings": {
+      "passed": true,
+      "evidence": "Swap (mappings_neg_swap.json), drop (mappings_neg_drop.json), 12V/3.3V exchange (mappings_neg_voltage.json) and a source-level pin swap (control_neg_swap.synth) each return status warning with E-SYNTH-MULTIBOARD-003, -004 or -005."
+    },
+    "mechanical_alignment": {
+      "passed": true,
+      "evidence": "Sidecar comparison in the same test: J_B2B and H1-H4 are at identical board coordinates on both boards with 0.000 mm X/Y mismatch and equal rotation."
+    },
+    "routing_and_drc": {
+      "passed": false,
+      "evidence": "No routed copper exists. `synth export-kicad --router free-routing` fails in tools/freeroute_autoroute.py with a KiCad PROPERTY_ENUM assert before the route stage; the same failure reproduces on the committed Class-B buck board. The un-routed control PCB reports 0 DRC errors, 97 unconnected pads and 112 warnings."
+    },
+    "erc_dispositioned": {
+      "passed": false,
+      "evidence": "kicad-cli sch erc reports 0 errors on both schematics: 6 warnings on control (4 isolated_pin_label, 2 no_connect_connected) and 15 on power (14 lib_symbol_mismatch, 1 label_multiple_wires). passed stays false until a human reviewer accepts the dispositions.",
+      "findings": [
+        {
+          "count": 4,
+          "severity": "warning",
+          "type": "isolated_pin_label",
+          "disposition": "The labels sit on one-pin stubs generated for the schematic; the PCB netlist still joins the source's nets. Not a design change."
+        },
+        {
+          "count": 2,
+          "severity": "warning",
+          "type": "no_connect_connected",
+          "disposition": "A pin marked no-connect is touched by a wire in the generated drawing. The source netlist is the authority; a reviewer should confirm the two pins."
+        },
+        {
+          "count": 14,
+          "severity": "warning",
+          "type": "lib_symbol_mismatch",
+          "disposition": "The embedded MCP6022, BSC030N08NS5 and 2N3904 symbols are flattened copies of library symbols that use `extends`; KiCad reports the copy differs from the library. The embedded copy is the one the project uses."
+        },
+        {
+          "count": 1,
+          "severity": "warning",
+          "type": "label_multiple_wires",
+          "disposition": "The GATE_REV label touches more than one wire segment of the same net."
+        }
+      ]
+    },
+    "part_review": {
+      "passed": false,
+      "evidence": "Every authored part has reviewed_by = \"\" by design, so W-SYNTH-PART-UNVERIFIED fires and `synth registry qualify` blocks on E-SYNTH-QUAL-008. No reviewer has checked the nine new parts against their datasheets."
+    },
+    "thermal_and_power": {
+      "passed": false,
+      "evidence": "The AMS1117-3.3 estimate is 0.73 W in a 60 C/W package, about 107 C junction at 25 C ambient (W-SYNTH-THERMAL-001). No thermal measurement, no junction-temperature calculation for the MOSFETs, and no current-loop or EMI analysis."
+    },
+    "connector_review": {
+      "passed": false,
+      "evidence": "The 2.5 A/contact rating is from the LCSC listings; the 50% derating and the current table are hand calculations. No connector datasheet was read beyond the listing, and no stack-height, keying or creepage check was done."
+    },
+    "fabrication_review": {
+      "passed": false,
+      "evidence": "No Gerbers or drill files were generated because routing failed. No fab accepted the board, and 2 oz outer copper, via-in-pad and the 10 A terminals were not quoted."
+    },
+    "hardware_test": {
+      "passed": false,
+      "evidence": "not powered, not programmed, not measured"
+    },
+    "reproducible_hashes": {
+      "passed": false,
+      "evidence": "SHA256SUMS was generated locally on 2026-11-03. No CI run has produced a golden set for this board, and the routed artifact does not exist."
+    }
+  }
+}

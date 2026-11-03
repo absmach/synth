@@ -66,6 +66,7 @@ impl MultiBoardProject {
     /// two pins sit in compatible voltage domains. It is a structural check of
     /// the mapping, not an electrical simulation.
     #[must_use]
+    #[allow(clippy::too_many_lines)]
     pub fn validate_multiboard_system(&self) -> MultiBoardValidationResult {
         let mut matched_pins = 0;
         let mut diagnostics = Vec::new();
@@ -150,8 +151,9 @@ impl MultiBoardProject {
                 continue;
             }
 
-            let from_comp = from_comp.expect("checked");
-            let to_comp = to_comp.expect("checked");
+            let (Some(from_comp), Some(to_comp)) = (from_comp, to_comp) else {
+                continue;
+            };
             let mut mapping_ok = true;
 
             let from_pin = pin_index(from_comp, &mapping.from_pin);
@@ -231,6 +233,49 @@ impl MultiBoardProject {
                                     mapping.to_board,
                                     mapping.to_refdes,
                                     mapping.to_pin
+                                ),
+                            )
+                            .build(),
+                        );
+                        mapping_ok = false;
+                    }
+                }
+
+                // The pins can carry the same designator and still be wired
+                // to different signals in the two sources. Compare the nets
+                // too, but only for signal nets: rails are allowed to be
+                // named after their destination (for example +3V3_B2B against
+                // +3V3 behind a ferrite) as long as their voltages agree.
+                if let (Some(from_net), Some(to_net)) = (
+                    net_at_pin(from_board, from_comp.id, from_pin),
+                    net_at_pin(to_board, to_comp.id, to_pin),
+                ) {
+                    let signalish = |domain: Option<&PowerDomainKind>| {
+                        !matches!(
+                            domain,
+                            Some(PowerDomainKind::Rail { .. } | PowerDomainKind::Ground)
+                        )
+                    };
+                    if signalish(domains[from_index].get(from_net.id))
+                        && signalish(domains[to_index].get(to_net.id))
+                        && !from_net.auto_named
+                        && !to_net.auto_named
+                        && !from_net.name.eq_ignore_ascii_case(&to_net.name)
+                    {
+                        diagnostics.push(
+                            DiagnosticBuilder::new(
+                                "E-SYNTH-MULTIBOARD-003",
+                                Severity::Error,
+                                format!(
+                                    "Mapped pins carry different nets: '{}.{}.{}' is '{}' but '{}.{}.{}' is '{}'",
+                                    mapping.from_board,
+                                    mapping.from_refdes,
+                                    mapping.from_pin,
+                                    from_net.name,
+                                    mapping.to_board,
+                                    mapping.to_refdes,
+                                    mapping.to_pin,
+                                    to_net.name
                                 ),
                             )
                             .build(),
@@ -353,7 +398,7 @@ fn pin_index(component: &crate::board::Component, pin: &str) -> Option<PinId> {
         .map(|index| PinId(index as u32))
 }
 
-fn pin_name<'a>(component: &'a crate::board::Component, pin: PinId) -> Option<&'a str> {
+fn pin_name(component: &crate::board::Component, pin: PinId) -> Option<&str> {
     component
         .part
         .as_ref()?
@@ -362,10 +407,18 @@ fn pin_name<'a>(component: &'a crate::board::Component, pin: PinId) -> Option<&'
         .map(|p| p.name.as_str())
 }
 
+fn net_at_pin(board: &Board, component: ComponentId, pin: PinId) -> Option<&crate::board::Net> {
+    board
+        .nets_containing(component, pin)
+        .next()
+        .map(|(_, net)| net)
+}
+
 /// Compare the inferred power domains of the nets at the two mapped pins.
 ///
 /// Returns a human-readable reason when the domains cannot be the same
 /// signal. Unknown domains are left alone: the check refuses to guess.
+#[allow(clippy::too_many_arguments, clippy::match_same_arms)]
 fn domain_conflict(
     from_board: &Board,
     from_domains: &crate::power_domains::PowerDomainMap,
