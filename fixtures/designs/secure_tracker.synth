@@ -9,7 +9,10 @@ board "secure_tracker" {
   // Primary active components
   component U1: mcu "rp2350"
   component U2: secure_element "atecc608"
-  component U3: modem "bg95"
+  // The corrected BG95 footprint is much larger than the placeholder it
+  // replaced, and the placer groups it beside the antenna it feeds. Hold it
+  // in the opposite corner so its courtyard clears the antenna keepout.
+  component U3: modem "bg95" { placement_hint { region: top_left priority: hard } }
   component U4: charger "bq24074"
 
   // Connectors & Antennas
