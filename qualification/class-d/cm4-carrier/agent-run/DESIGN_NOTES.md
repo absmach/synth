@@ -117,6 +117,27 @@ reading of the issue.
   the final outline is whatever the placement produces. It was not measured
   because no PCB exported.
 
+## Pinout gaps (read this before trusting the netlist)
+
+- **Pulse JXD6-0001NL pair order.** The KiCad symbol names the TD/RD pairs
+  but leaves pins 1/2 and 9/10 unnamed. The board maps CM4 Pair2 to 1/2 and
+  Pair3 to 9/10 by convention; the Pulse datasheet's transformer drawing was
+  not read pin by pin. A swapped pair may be correctable by the CM4 PHY's
+  pair-polarity/skew correction, but that is not a substitute for checking.
+- **Molex 47219-2001 pin numbers.** The KiCad `Micro_SD_Card` symbol names
+  DAT2/DAT3/CMD/VDD/CLK/VSS/DAT0/DAT1 on pads 1–8. The Molex SD-47219-001
+  drawing was not read pin by pin; the mapping is the standard microSD
+  mapping, not a datasheet-confirmed one.
+- **Same Sky UJ2-ADH-3-TH pin numbers.** The KiCad `USB_A_Stacked` symbol
+  names VBUS/D−/D+/GND for ports 1 and 2 on pins 1–8. The CUI/Same Sky
+  drawing was not read pin by pin.
+- **CM4 DF40 pad numbering.** The DF40C-100DS footprint pads 1–100 are
+  assumed to be the CM4's pin numbers in order. The Hirose drawing and the
+  CM4 mating plug were not cross-checked; this is the single highest-risk
+  assumption on the board.
+- **HDMI-A pin numbers.** The existing `hdmi_a_receptacle` part and its
+  KiCad symbol were reused; the Amphenol drawing was not re-read.
+
 ## What was not done
 
 - No schematic or PCB export completed; the schematic layout runs for more

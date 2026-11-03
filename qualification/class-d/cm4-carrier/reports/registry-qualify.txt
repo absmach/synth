@@ -1,0 +1,94 @@
+hirose_df40c_100ds_0v4_51 [fail]
+  review E-SYNTH-QUAL-016: footprint names a 3D model file that is not installed
+    expected: a KiCad footprint whose 3D model file is installed
+    found:    `Connector_Hirose_DF40:Hirose_DF40C-100DS-0.4V_2x50_P0.4mm` names `Hirose_DF40C-100DS-0.4V_2x50_P0.4mm.step`
+  blocking E-SYNTH-QUAL-008: part has no reviewer
+    expected: [provenance].reviewed_by to name whoever checked this part against its datasheet
+    found:    reviewed_by is empty
+1 part(s): 0 qualified, 1 blocked, 0 unproven
+1 qualified part(s) carry review findings; these are reported, not fatal
+hirose_df40c_100ds_0v4_51_b [fail]
+  review E-SYNTH-QUAL-016: footprint names a 3D model file that is not installed
+    expected: a KiCad footprint whose 3D model file is installed
+    found:    `Connector_Hirose_DF40:Hirose_DF40C-100DS-0.4V_2x50_P0.4mm` names `Hirose_DF40C-100DS-0.4V_2x50_P0.4mm.step`
+  blocking E-SYNTH-QUAL-008: part has no reviewer
+    expected: [provenance].reviewed_by to name whoever checked this part against its datasheet
+    found:    reviewed_by is empty
+1 part(s): 0 qualified, 1 blocked, 0 unproven
+1 qualified part(s) carry review findings; these are reported, not fatal
+usb2514b [fail]
+  blocking E-SYNTH-QUAL-008: part has no reviewer
+    expected: [provenance].reviewed_by to name whoever checked this part against its datasheet
+    found:    reviewed_by is empty
+1 part(s): 0 qualified, 1 blocked, 0 unproven
+usb_a_stacked_cui_uj2_adh_th [fail]
+  review E-SYNTH-QUAL-016: footprint names a 3D model file that is not installed
+    expected: a KiCad footprint whose 3D model file is installed
+    found:    `Connector_USB:USB_A_CUI_UJ2-ADH-TH_Horizontal_Stacked` names `USB_A_CUI_UJ2-ADH-TH_Horizontal_Stacked.step`
+  blocking E-SYNTH-QUAL-008: part has no reviewer
+    expected: [provenance].reviewed_by to name whoever checked this part against its datasheet
+    found:    reviewed_by is empty
+1 part(s): 0 qualified, 1 blocked, 0 unproven
+1 qualified part(s) carry review findings; these are reported, not fatal
+rj45_pulse_jxd6_0001nl [fail]
+  review E-SYNTH-QUAL-016: footprint names a 3D model file that is not installed
+    expected: a KiCad footprint whose 3D model file is installed
+    found:    `Connector_RJ:RJ45_Pulse_JXD6-0001NL_Horizontal` names `RJ45_Pulse_JXD6-0001NL_Horizontal.step`
+  blocking E-SYNTH-QUAL-008: part has no reviewer
+    expected: [provenance].reviewed_by to name whoever checked this part against its datasheet
+    found:    reviewed_by is empty
+1 part(s): 0 qualified, 1 blocked, 0 unproven
+1 qualified part(s) carry review findings; these are reported, not fatal
+microsd_molex_47219_2001 [fail]
+  review E-SYNTH-QUAL-016: footprint names a 3D model file that is not installed
+    expected: a KiCad footprint whose 3D model file is installed
+    found:    `Connector_Card:microSD_HC_Molex_47219-2001` names `microSD_HC_Molex_47219-2001.step`
+  blocking E-SYNTH-QUAL-008: part has no reviewer
+    expected: [provenance].reviewed_by to name whoever checked this part against its datasheet
+    found:    reviewed_by is empty
+1 part(s): 0 qualified, 1 blocked, 0 unproven
+1 qualified part(s) carry review findings; these are reported, not fatal
+ffc_22p_hirose_fh12_22s_0_5sh [fail]
+  blocking E-SYNTH-QUAL-008: part has no reviewer
+    expected: [provenance].reviewed_by to name whoever checked this part against its datasheet
+    found:    reviewed_by is empty
+1 part(s): 0 qualified, 1 blocked, 0 unproven
+coin_cell_keystone_1058 [fail]
+  blocking E-SYNTH-QUAL-008: part has no reviewer
+    expected: [provenance].reviewed_by to name whoever checked this part against its datasheet
+    found:    reviewed_by is empty
+1 part(s): 0 qualified, 1 blocked, 0 unproven
+pcf85063atl [fail]
+  review E-SYNTH-QUAL-016: footprint names a 3D model file that is not installed
+    expected: a KiCad footprint whose 3D model file is installed
+    found:    `Package_DFN_QFN:DFN-10-1EP_2.6x2.6mm_P0.5mm_EP1.3x2.2mm` names `DFN-10-1EP_2.6x2.6mm_P0.5mm_EP1.3x2.2mm.step`
+  blocking E-SYNTH-QUAL-008: part has no reviewer
+    expected: [provenance].reviewed_by to name whoever checked this part against its datasheet
+    found:    reviewed_by is empty
+1 part(s): 0 qualified, 1 blocked, 0 unproven
+1 qualified part(s) carry review findings; these are reported, not fatal
+xtal_32k768_3215 [fail]
+  blocking E-SYNTH-QUAL-008: part has no reviewer
+    expected: [provenance].reviewed_by to name whoever checked this part against its datasheet
+    found:    reviewed_by is empty
+1 part(s): 0 qualified, 1 blocked, 0 unproven
+xtal_24mhz_3225 [fail]
+  blocking E-SYNTH-QUAL-008: part has no reviewer
+    expected: [provenance].reviewed_by to name whoever checked this part against its datasheet
+    found:    reviewed_by is empty
+1 part(s): 0 qualified, 1 blocked, 0 unproven
+p_mosfet_dmp3098l [fail]
+  blocking E-SYNTH-QUAL-008: part has no reviewer
+    expected: [provenance].reviewed_by to name whoever checked this part against its datasheet
+    found:    reviewed_by is empty
+  unknown symbol_pin_coverage: symbol `Transistor_FET:Si2301CDS` could not be read; install KiCad or set KICAD_SYMBOL_DIR
+1 part(s): 0 qualified, 1 blocked, 0 unproven
+polyfuse_2r6a_16v [fail]
+  review E-SYNTH-QUAL-016: footprint names a 3D model file that is not installed
+    expected: a KiCad footprint whose 3D model file is installed
+    found:    `Fuse:Fuse_1812_4532Metric` names `Fuse_1812_4532Metric.step`
+  blocking E-SYNTH-QUAL-008: part has no reviewer
+    expected: [provenance].reviewed_by to name whoever checked this part against its datasheet
+    found:    reviewed_by is empty
+1 part(s): 0 qualified, 1 blocked, 0 unproven
+1 qualified part(s) carry review findings; these are reported, not fatal

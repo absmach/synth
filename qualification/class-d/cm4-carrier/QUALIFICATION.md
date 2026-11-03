@@ -43,8 +43,8 @@ cargo test -p synth-cli --test cm4_carrier_board
 | A8 | Export completes | `synth export-kicad ... --allow-incomplete --router free-routing` | **Blocked/timeout**: the schematic layout for 185 components and 158 signal nets runs for more than 30 minutes at 97 % CPU. No `kicad/` artifacts are committed |
 | A9 | ERC on the exported schematic | `kicad-cli sch erc` | Not run: no schematic was exported |
 | A10 | DRC on the exported PCB | `kicad-cli pcb drc` | Not run: no PCB was exported |
-| A11 | `synth check` | `synth check --json` | **Fail**: its `drc` stage calls `synth validate`, which does not finish; the stage is `unknown` |
-| A12 | `synth check --fab` | `synth check --fab --json` | **Fail**: same upstream block |
+| A11 | `synth check` | `synth check --json` | **Fail**: `source: fail` because the `validate` child times out at 120 s; `drc: unknown` |
+| A12 | `synth check --fab` | `synth check --fab --json` | **Fail**: `source: fail`, `drc: unknown`, `manufacturing: unknown` |
 | A13 | Determinism | two exports of the same inputs | Not run: no export completed |
 
 ## B. Not checked by any tool here
@@ -85,7 +85,7 @@ reviewer. No reviewer is invented.
 
 | Item | State | Evidence |
 | --- | --- | --- |
-| `synth check` passes | **blocked** | A11: `synth validate` does not finish; `check` reports `drc: unknown` |
+| `synth check` passes | **blocked** | A11: `synth validate` does not finish; `check` reports `source: fail`, `drc: unknown` |
 | `--fab` recorded honestly | **blocked** | A12: same upstream block; no fab package exists |
 | ERC zero errors with `kicad-cli` | **blocked** | A9: no schematic exported. Synth ERC is zero errors (A3) |
 | DRC report committed | **blocked** | A10: no PCB exported |

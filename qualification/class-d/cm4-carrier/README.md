@@ -132,6 +132,20 @@ The connector +5V is switched by a TPS22918 with 1 µF + 100 nF.
 | KDS DST310S | https://www.lcsc.com/product-detail/C93232.html | LCSC page | 32.768 kHz, 12.5 pF, SMD3215 |
 | PTTC SMD1812P260TF/16 | https://www.lcsc.com/product-detail/C438899.html | LCSC page | 2.6 A hold, 16 V |
 
+## Known export defects
+
+- The first exported schematic has 13 KiCad ERC errors: five TPS22918
+  QOD-to-VOUT pin-type conflicts, two unconnected FFC mounting pads, the
+  Q_LED gate input, one U4 XTALOUT/PWR_FLAG association and one
+  power-pin-not-driven flag. The source now removes the QOD ties, ties the
+  FFC MP pads to GND and types the CM4 PI_LED_nPWR pin as an output; the
+  re-export result is in `agent-run/VERIFICATION_REPORT.md`.
+- The custom power rails `+5V_AUX`, `RTC_VDD`, `CM4_3V3` and `CM4_1V8` have
+  power flags in the schematic but no symbols in the embedded
+  `cm4_carrier.kicad_sym`; KiCad reports 72 `lib_symbol_issues` warnings.
+  This is an exporter limitation for non-standard rail names.
+- No PCB was exported, so there is no top/bottom copper or 3D image.
+
 ## Not verified by Synth
 
 Synth does not check any of the following, and this board has not been

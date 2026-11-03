@@ -23,7 +23,7 @@
 
 | Item | State | Proof |
 | --- | --- | --- |
-| `synth check` passes | **blocked** | `synth check --json` -> `drc: unknown`; `synth validate` exits 124 at 600 s |
+| `synth check` passes | **blocked** | `synth check --json` -> `source: fail` (validate timeout), `drc: unknown`; `synth validate` exits 124 at 600 s |
 | `--fab` recorded honestly | **blocked** | `synth check --fab --json` -> no manufacturing stage; no PCB |
 | ERC zero errors with `kicad-cli` | **not met** | 13 errors in `reports/cm4_carrier.kicad-erc.json`; Synth ERC is 0 errors |
 | DRC report committed | **blocked** | no PCB |
