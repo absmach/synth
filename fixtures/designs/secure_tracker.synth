@@ -131,6 +131,6 @@ board "secure_tracker" {
   }
 
   keepout antenna {
-    radius 20mm
+    radius 15mm
   }
 }
