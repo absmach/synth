@@ -3,7 +3,7 @@
 # Generated with: find . -type f ! -name '*.md' ! -name SHA256SUMS -print0 | sort -z | xargs -0 sha256sum
 0112385a18ad915a42199af053e503de1a44f2cbfd00aa168e8d564f7bfe8f20  ./cm4_carrier.placement.layout.toml
 e58adcc092d560849f5d53ef4512d61c616f3c6bc1cd2eb620b7ce262cbfe428  ./cm4_carrier.synth
-f83cbf4f57392dd0d661131991a37de5bceb9bf2cb36f1e03a407e3f752847b0  ./images/pcb-3d-angled.png
+9c68aba271d03053a9567902321d6b68a071d79c877da2dbcaab394a7d580589  ./images/pcb-3d-angled.png
 91411950c939716845fd8005447dae1ea2417001cabbc717cf771cc06388f831  ./images/pcb-3d-top.png
 836b2e99a4e2af667dd663ca5dd0e7230342465e821e928d3ed1f0e2183e6a44  ./images/pcb-bottom-copper.png
 1681f60c877da550147abd481935d25cdb6f01165000a322844b5d81066e1f64  ./images/pcb-top-copper.png
