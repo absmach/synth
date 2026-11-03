@@ -9,7 +9,7 @@ board "protected_power_entry" {
 
   netclass "PWR12" { trace_width 0.6mm clearance 0.25mm via_diameter 0.6mm via_drill 0.2mm }
   netclass "SWNODE" { trace_width 0.6mm clearance 0.25mm via_diameter 0.6mm via_drill 0.2mm }
-  netclass "PWR5"  { trace_width 1.0mm clearance 0.25mm via_diameter 0.6mm via_drill 0.2mm }
+  netclass "PWR5"  { trace_width 0.6mm clearance 0.25mm via_diameter 0.6mm via_drill 0.2mm }
   netclass "PWR3"  { trace_width 0.5mm clearance 0.25mm via_diameter 0.6mm via_drill 0.2mm }
   netclass "PGND"  { trace_width 0.8mm clearance 0.25mm via_diameter 0.6mm via_drill 0.2mm }
   netclass "SIG"   { trace_width 0.25mm clearance 0.2mm via_diameter 0.6mm via_drill 0.2mm }
@@ -53,7 +53,7 @@ board "protected_power_entry" {
     notes "" {
       "FB divider: 0.925 V x (1 + 44.2k/10k) = 5.01 V (0.925 V reference from the MP2307 datasheet)."
       "Input current at the 3 A regulator limit and 10.8 V in: 15 W / (0.9 x 10.8 V) = 1.55 A. PWR12 and SWNODE 0.6 mm carry about 1.65 A (IPC-2221, 1 oz external, 10 C rise)."
-      "BUCK_SW is a short run of under 10 mm beside U1 and L1; PWR5 1.0 mm carries the 5 V trunk."
+      "BUCK_SW is a short run of under 10 mm beside U1 and L1; PWR5 0.6 mm carries the 5 V trunk (1.5 A needs 0.53 mm, IPC-2221, 1 oz external, 10 C rise)."
       "EN divider 100k/33k: buck starts above about 4.8 V in."
     }
   }
@@ -73,7 +73,7 @@ board "protected_power_entry" {
     component C18: capacitor "c_generic_0603" value "100nF" { placement_hint { near: "U2.vout" priority: hard } }
     notes "" {
       "LOAD_EN default is OFF (R7 pull-down). High (above 1.0 V) turns +5V_SW on."
-      "AMS1117 thermal: (5 - 3.3) V x 0.5 A = 0.85 W; at 90 C/W (AMS datasheet, SOT-223) the junction rises 76 C, so 0.5 A holds to 48 C ambient (125 C limit); the load limit is (125 C - ambient) / (90 C/W x 1.7 V): 0.36 A at 70 C."
+      "AMS1117 thermal: the supported load is 0.35 A. (5 - 3.3) V x 0.35 A = 0.60 W; at 90 C/W (AMS datasheet, SOT-223) the junction rises 54 C, so 0.35 A holds to 71 C ambient (125 C limit); the load limit is (125 C - ambient) / (90 C/W x 1.7 V): 0.36 A at 70 C."
     }
   }
 

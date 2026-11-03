@@ -99,7 +99,7 @@
 		"PWR5"
 		"Synth netclass PWR5"
 		(clearance 0.25)
-		(trace_width 1)
+		(trace_width 0.6)
 		(via_dia 0.6)
 		(via_drill 0.2)
 		(add_net "OUT_5V")
@@ -5126,7 +5126,7 @@
 		"Capacitor_SMD:C_0603_1608Metric"
 		(layer "F.Cu")
 		(uuid "fa3d4fbb-3aa4-5c7f-93af-11ea434973ff")
-		(at 71 40)
+		(at 71.8 40)
 		(property
 			"Reference"
 			"C7"

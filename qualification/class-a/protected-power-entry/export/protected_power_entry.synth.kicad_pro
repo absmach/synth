@@ -96,7 +96,7 @@
         "pcb_color": "rgba(191, 67, 131, 1.000)",
         "priority": 3,
         "schematic_color": "rgba(191, 67, 131, 1.000)",
-        "track_width": 1.0,
+        "track_width": 0.6,
         "via_diameter": 0.6,
         "via_drill": 0.2,
         "wire_width": 6
@@ -171,7 +171,6 @@
       "/BUCK_SW": "SWNODE",
       "/EN_HDR": "SIG",
       "/LOAD_EN": "SIG",
-      "/LS_CT": "SIG",
       "/S3_DIV": "SIG",
       "/S5_DIV": "SIG",
       "/SENSE_12V": "SIG",
@@ -230,10 +229,6 @@
       {
         "netclass": "SIG",
         "pattern": "/*/BUCK_CRC"
-      },
-      {
-        "netclass": "SIG",
-        "pattern": "/*/LS_CT"
       },
       {
         "netclass": "SIG",

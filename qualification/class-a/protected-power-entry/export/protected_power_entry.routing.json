@@ -49,24 +49,23 @@
       "strict_sizes": "true",
       "wall_clock_secs": "1200"
     },
-    "input_hash": "b4f983c62c960fe182af3d6c02585b6c3a010337ef2e478190bc94a600767947",
+    "input_hash": "df006c77f0f7876562986e411b8d0c6e51c3e44dc423d5835b1f5281ca7d8220",
     "output_hash": "",
     "source_revision": null,
-    "duration_ms": 75392
+    "duration_ms": 58712
   },
   "statistics": {
     "connected_nets": 34,
     "open_nets": 0,
     "open_net_names": [],
-    "segments": 326,
-    "vias": 26,
-    "wire_length_mm": 868.542672,
+    "segments": 289,
+    "vias": 27,
+    "wire_length_mm": 873.40038,
     "pad_escape_rejections": 0,
     "engine_findings": {
       "claimed_successful": "33",
       "claimed_total_vias": "20",
       "claimed_via_in_pad": "0",
-      "engine_policy_verdict": "rejected",
       "rules_below_board_floor": "none reported"
     }
   },

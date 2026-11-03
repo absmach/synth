@@ -309,8 +309,8 @@ dx = 0.0
 dy = 0.0
 
 [components.C7]
-x = 71.0
-y = 40.0
+x = 71.80
+y = 40.00
 rotation = 0
 source = "agent"
 priority = "hard"

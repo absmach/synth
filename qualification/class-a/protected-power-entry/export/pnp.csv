@@ -16,7 +16,7 @@ Designator,Val,Package,Mid X,Mid Y,Rotation,Layer
 "C4","100nF","Capacitor_SMD:C_0603_1608Metric",60.200,29.200,90,"Top"
 "C5","10nF","Capacitor_SMD:C_0603_1608Metric",58.600,33.400,90,"Top"
 "C6","100nF","Capacitor_SMD:C_0603_1608Metric",68.500,29.500,90,"Top"
-"C7","2.2nF","Capacitor_SMD:C_0603_1608Metric",71.000,40.000,0,"Top"
+"C7","2.2nF","Capacitor_SMD:C_0603_1608Metric",71.800,40.000,0,"Top"
 "C8","22uF 10V","Capacitor_SMD:C_1206_3216Metric",71.570,51.710,0,"Top"
 "C9","22uF 10V","Capacitor_SMD:C_1206_3216Metric",76.000,49.000,0,"Top"
 "D1","SMAJ13A","Diode_SMD:D_SMA",36.000,28.000,0,"Top"

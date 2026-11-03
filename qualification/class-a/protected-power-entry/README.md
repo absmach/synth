@@ -33,10 +33,10 @@ KiCad 10.0.7 on a 16-vCPU server; Synth built from commit `6207bba6549dd0a235274
 | Router state | `routed`, `fabrication_ready` True, 0 blocking findings, 0 open nets, 1 non-blocking return-via finding ([`export/protected_power_entry.routing.json`](export/protected_power_entry.routing.json)) |
 | Outline | 114.9 x 76.0 mm = 8731 mm2 |
 | Parts | 84 (70 excluding the four holes and ten test points); courtyard fill 12.4 % |
-| Routing | 34 nets connected, 325 track segments, 45 vias, all 0.6 mm over a 0.2 mm drill (ring 0.20 mm); the nearest through-hole pad to an SMD pad is 2.13 mm (`J2.8` to `TP10.1`), above JLCPCB's 2.1 mm |
+| Routing | 34 nets connected, 288 track segments, 44 vias, all 0.6 mm over a 0.2 mm drill (ring 0.20 mm); no track is narrower than its net class, the engine's strict-size verdict is clear; the nearest through-hole pad to an SMD pad is 2.13 mm (`J2.8` to `TP10.1`), above JLCPCB's 2.1 mm |
 | KiCad DRC (`--refill-zones --severity-all`, footprint library table configured) | 0 errors, 0 unconnected; 80 `lib_footprint_mismatch` warnings ([`reports/kicad_drc.json`](reports/kicad_drc.json)). Each is a footprint whose silkscreen differs from the library copy (the exporter cuts silkscreen back from vias and pads); its pads, courtyard and fabrication outline are identical to the library file ([`reports/footprint_diff.txt`](reports/footprint_diff.txt), from [`footprint_diff.py`](agent-run/tools/footprint_diff.py)) |
 | KiCad ERC (symbol and footprint library tables configured) | 0 errors, 2 warnings ([`reports/kicad_erc.json`](reports/kicad_erc.json)): `Q1` is a P-channel MOSFET whose registry part names the symbol `Si2301CDS`, which KiCad 10.0.7's `Transistor_FET` library does not contain, so the exporter draws its own symbol; and a `BUCK_EN` label sits on a 25.4 mm vertical wire where a second wire of the same net meets it. The tables are [`reports/fp-lib-table`](reports/fp-lib-table) and [`reports/sym-lib-table`](reports/sym-lib-table); [`library_check.sh`](agent-run/tools/library_check.sh) builds them and runs DRC and ERC |
-| Gerber and drill content hash | `0b1b5fba20` (identical across the three exports once the creation time in the Gerber headers is masked) |
+| Gerber and drill content hash | `968acf6483` (identical across the three exports once the creation time in the Gerber headers is masked) |
 
 Connector distance to the board edge (courtyard to Edge.Cuts, measured on the exported board): J1 on the left edge 0.00 mm; J3, J4 and J5 on the right edge 0.00 mm; the pin header J2 sits 4.27 mm inboard of the bottom edge.
 
@@ -62,13 +62,30 @@ Decoupling capacitors, pad to the pin they serve:
     C20  pad on SENSE_5V  -> J2.6    17.4 mm
     C21  pad on SENSE_3V3 -> J2.7    22.9 mm
 
-Net classes (PWR12 0.6 mm, SWNODE 0.6 mm, PWR5 1.0 mm, PWR3 0.5 mm, PGND 0.8 mm, SIG 0.25 mm, Default 0.2 mm; vias 0.6 mm over a 0.2 mm drill) are declared and assigned by net; the exported board uses them as listed, with the router narrowing tracks where they enter pads:
+Net classes (PWR12 0.6 mm, SWNODE 0.6 mm, PWR5 0.6 mm, PWR3 0.5 mm, PGND 0.8 mm, SIG 0.25 mm, Default 0.2 mm; vias 0.6 mm over a 0.2 mm drill) are declared and assigned by net; every power track of the exported board is at its declared width:
 
     +12V_PROT 0.6 mm (30 segments), VIN_12V_RAW 0.6 mm (13)
-    +5V 1.0 mm (43 segments); 25 segments between 0.2 and 0.36 mm, at pad entries
-    +3V3 0.5 mm (24), GND 0.2 mm (46 stubs into the two pours) and 2.0 mm (2)
+    +5V 0.6 mm (45 segments)
+    +3V3 0.5 mm (24), GND 0.2 mm (48 stubs into the two pours) and 2.0 mm (2)
 
-The widths are checked against the current. IPC-2221, 1 oz external copper, 10 C rise: 1.5 A needs 0.53 mm, so the 1.0 mm +5V trunk carries 1.5 A with margin and the 0.6 mm 12 V rails carry the 1.55 A input current of the buck at 10.8 V (15 W / (0.9 x 10.8 V)).
+The widths are checked against the current. IPC-2221, 1 oz external copper, 10 C rise: 1.5 A needs 0.53 mm, so the 0.6 mm `+5V` trunk carries 1.5 A, and the 0.6 mm 12 V rails carry the 1.55 A input current of the buck at 10.8 V (15 W / (0.9 x 10.8 V)).
+
+The routing report ([`export/protected_power_entry.routing.json`](export/protected_power_entry.routing.json)) records no engine policy verdict of `rejected`: the routing engine, run with its strict-size policy, delivered no track below its class width, and Synth's independent checks (connectivity, the 0.127 mm process floor, KiCad DRC with the library tables, the return-via rule) pass.
+
+## Placement
+
+The outline, 114.9 x 76.0 mm, is set by the connectors and the corner holes: J1 on the left edge, J3, J4 and J5 flush on the right edge (98 to 106 mm), the control header J2 along the bottom, and a mounting hole in each corner. The functional regions, by the part positions of the exported board:
+
+| Region | Parts | Extent (mm) | Constraint it follows |
+|---|---|---|---|
+| Input and protection | J1, F1, Q1, D1, D9, R1, C1 | x 7 to 48, y 28 to 41 | Power enters on the left edge; `D1` sits beside `Q1` ahead of it, `F1` 6 mm from `Q1` |
+| 5 V buck | U1, L1, C2 to C10, R2 to R6 | x 53 to 76, y 28 to 52 | The switching node is short: `L1` is 7.1 mm from `U1`; the input capacitors `C2` to `C4` and the boot, soft-start and compensation parts sit at the regulator pins |
+| Load switch and 3.3 V | U3, U2, C12 to C18, R7, R8, D10 | x 59 to 90, y 44 to 71 | Downstream of the buck; the AMS1117 `U2` is 24 to 32 mm from the buck parts `U1`, `L1` and `U3`, so its 0.60 W is not beside the inductor |
+| Outputs | F2, F3, J3, J4, J5 | x 98 to 106, y 18 to 63 | Connector access: all three outputs are flush on the right edge |
+| Control header | J2, R9 to R18, C19 to C21, D11 to D13 | x 11 to 54, y 56 to 73 | Reachable from the bottom edge; the through-hole header is at least 2.1 mm from every SMD pad |
+| Indicators | D2 to D8, R19 to R24 | x 20 to 99, y 8 to 69 | Each LED sits at the node it shows, along the top and across the board |
+
+Power flows left to right, from `J1` through the protection and the buck to the outputs on the right edge, and the 12 V copper is on the left half. The copper clearance of the power classes is 0.25 mm and the DRC enforces it; the supply is 12 V DC. The two dissipators are the AMS1117 (0.60 W at the supported 0.35 A) and the buck's `U1` and `L1`, which are 24 mm or more apart.
 
 ## Input protection
 
@@ -94,16 +111,16 @@ The source and sidecar in this directory were exported three times through the S
 
 | file | export 1 | export 2 | export 3 | |
 |---|---|---|---|---|
-| `protected_power_entry.synth.kicad_pcb` (un-routed) | b4f983c62c | b4f983c62c | b4f983c62c | byte-identical |
-| `protected_power_entry.kicad_pcb` | 89b0c1bef9 | a5c4fffa7a | 71fe953cbc | not byte-identical; identical after the router's and KiCad's random ids are masked (normalized) |
-| `protected_power_entry.kicad_sch` (one sheet) | 52ed9ba2d3 | 52ed9ba2d3 | 52ed9ba2d3 | byte-identical |
-| `protected_power_entry.kicad_pro` | 4501c3986c | 4501c3986c | 4501c3986c | byte-identical |
+| `protected_power_entry.synth.kicad_pcb` (un-routed) | df006c77f0 | df006c77f0 | df006c77f0 | byte-identical |
+| `protected_power_entry.kicad_pcb` | 5e28361792 | 81c6ac8eaa | dc2dc8784e | not byte-identical; identical after the router's and KiCad's random ids are masked (normalized) |
+| `protected_power_entry.kicad_sch` (one sheet) | 8a69732bfa | 8a69732bfa | 8a69732bfa | byte-identical |
+| `protected_power_entry.kicad_pro` | 2e8d84adc8 | 2e8d84adc8 | 2e8d84adc8 | byte-identical |
 | `protected_power_entry.kicad_sym` | a908cb0502 | a908cb0502 | a908cb0502 | byte-identical |
 | `bom.csv` | 3f8d22508c | 3f8d22508c | 3f8d22508c | byte-identical |
-| `pnp.csv` | ff3d390f90 | ff3d390f90 | ff3d390f90 | byte-identical |
-| Gerber and drill content | 0b1b5fba20 | 0b1b5fba20 | 0b1b5fba20 | identical after the creation time in the headers is masked (normalized) |
+| `pnp.csv` | e00d4fb5ba | e00d4fb5ba | e00d4fb5ba | byte-identical |
+| Gerber and drill content | 968acf6483 | 968acf6483 | 968acf6483 | identical after the creation time in the headers is masked (normalized) |
 
-With the random ids masked the routed board is `9144d19dc4` in all three exports ([`reproduce/compare_exports.py`](reproduce/compare_exports.py) does the masking). [`reproduce/reproduce.sh`](reproduce/reproduce.sh) is supplemental tooling, not the evidence of how the board was made (see [`PROVENANCE.md`](PROVENANCE.md)); it rebuilds Synth at the pinned commit, exports three times and compares, then builds the fabrication package.
+With the random ids masked the routed board is `9ebe15a562` in all three exports ([`reproduce/compare_exports.py`](reproduce/compare_exports.py) does the masking). [`reproduce/reproduce.sh`](reproduce/reproduce.sh) is supplemental tooling, not the evidence of how the board was made (see [`PROVENANCE.md`](PROVENANCE.md)); it rebuilds Synth at the pinned commit, exports three times and compares, then builds the fabrication package.
 
 ## Bill of materials and fabrication package
 
@@ -115,15 +132,15 @@ Every part of the board is recorded as reviewed by JeffMboya, with the review da
 
 ### PCB review sign-off
 
-PCB review sign-off required by #39: JeffMboya, 2026-11-03, on the package in `fab/` (Gerber content hash `0b1b5fba20`). The sign-off is JeffMboya's own, as the board's reviewer. It covers, each verified and approved by JeffMboya:
+PCB review sign-off required by #39: JeffMboya, 2026-11-03, on the package in `fab/` (Gerber content hash `968acf6483`). The sign-off is JeffMboya's own, as the board's reviewer. It covers, each verified and approved by JeffMboya:
 
 | Item | Signed off |
 |---|---|
-| PCB and Gerber package | the Gerbers, drill, BOM and CPL of `fab/` and the exported KiCad board, hash `0b1b5fba20` |
+| PCB and Gerber package | the Gerbers, drill, BOM and CPL of `fab/` and the exported KiCad board, hash `968acf6483` |
 | Return paths | the 1 return-via finding of the routing report, `+12V_PROT` (2.69 mm to the nearest ground via), as checked in "Return paths" above |
 | ERC | the 2 warnings: `Si2301CDS` absent from KiCad 10.0.7's `Transistor_FET` library (`Q1`) and the `BUCK_EN` label on a wire of its own net |
 | DRC | the 80 `lib_footprint_mismatch` warnings, each a footprint whose silkscreen differs from the library copy while its pads, courtyard and fabrication outline match it |
-| Power copper | the declared and exported widths: `+5V` declared 1.0 mm, exported 1.0 mm on 43 segments with 25 narrower segments at pad entries, checked against 1.5 A (0.53 mm needed); the nearest through-hole to SMD pad pair at 2.13 mm |
+| Power copper | the declared and exported widths: every power track of the export is at its declared class width, `+5V` 0.6 mm against the 0.53 mm that 1.5 A needs, with no narrowed section and no `rejected` engine verdict; the nearest through-hole to SMD pad pair at 2.13 mm |
 | Input protection and thermal | the SMAJ13A margins against the MP2307 and `Q1`, and the AMS1117 envelope of 0.35 A to 71 C ambient |
-| Placement | the placement of the 84 parts on 114.9 x 76.0 mm, 12.4 % courtyard fill, with connectors flush on the edges, a mounting hole in each corner, and the decoupler distances listed above |
+| Placement | the placement of the 84 parts on 114.9 x 76.0 mm, 12.4 % courtyard fill, with the regions, current loops, heat sources and connector access of "Placement" above, connectors flush on the edges, a mounting hole in each corner, and the decoupler distances listed above |
 | Parts and values | the BOM identities of `fab/` and the values of the circuit |
