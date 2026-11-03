@@ -145,13 +145,12 @@ fn run_rounds(
         let board = PcbBoard::parse(&filled).map_err(|e| e.to_string())?;
         let text = std::fs::read_to_string(candidate)
             .map_err(|e| format!("could not read {}: {e}", candidate.display()))?;
-        let fallback = declared_via_size(candidate, ground.primary().unwrap_or("GND"))
-            .unwrap_or((DEFAULT_VIA_SIZE_NM, DEFAULT_VIA_DRILL_NM));
+        let declared = declared_vias(candidate, &board);
         let plan = plan_all_with(
             &board,
             return_via_window_mm(&text, &board),
             ground,
-            Some(fallback),
+            &declared,
         );
         if plan.vias.is_empty() {
             return Ok(TieOutcome {
@@ -179,8 +178,14 @@ fn run_rounds(
     // The whole plan, not the island ties alone: a signal via that still has no
     // legal return via must be reported with the islands, or a candidate that
     // spent its rounds on island vias would leave with the return path missing.
-    let islands = plan_ties(&board, None).vias.len();
-    let plan = plan_all_with(&board, return_via_window_mm(&text, &board), ground, None);
+    let declared = declared_vias(candidate, &board);
+    let islands = plan_ties(&board, &declared).vias.len();
+    let plan = plan_all_with(
+        &board,
+        return_via_window_mm(&text, &board),
+        ground,
+        &declared,
+    );
     let mut unresolved = plan.unresolved;
     unresolved.extend(plan.vias.iter().enumerate().map(|(i, via)| {
         if i < islands {
@@ -398,7 +403,7 @@ pub struct TiePlan {
 /// poured net to that net's main pour. `board` must carry fills.
 #[must_use]
 pub fn islands_to_tie(board: &PcbBoard) -> Vec<TieVia> {
-    plan_ties(board, None).vias
+    plan_ties(board, &ViaDeclarations::new()).vias
 }
 
 /// Every poured polygon of the board, by net.
@@ -421,7 +426,7 @@ fn pours(board: &PcbBoard) -> BTreeMap<String, Vec<Region>> {
 
 /// The vias that tie the islands of `board`, and the islands that cannot be tied.
 #[must_use]
-pub fn plan_ties(board: &PcbBoard, via_fallback: Option<(i64, i64)>) -> TiePlan {
+pub fn plan_ties(board: &PcbBoard, declared: &ViaDeclarations) -> TiePlan {
     let mut regions: BTreeMap<String, Vec<Region>> = pours(board);
     let copper = board.copper_layers();
     let mut plan = TiePlan::default();
@@ -446,7 +451,10 @@ pub fn plan_ties(board: &PcbBoard, via_fallback: Option<(i64, i64)>) -> TiePlan 
 
         let (size_nm, drill_nm) = usual_via(
             &via_sizes,
-            via_fallback.unwrap_or((DEFAULT_VIA_SIZE_NM, DEFAULT_VIA_DRILL_NM)),
+            declared
+                .get(net.as_str())
+                .copied()
+                .unwrap_or((DEFAULT_VIA_SIZE_NM, DEFAULT_VIA_DRILL_NM)),
         );
         let need = nm_to_mm(size_nm) / 2.0 + EDGE_SLACK_MM;
         let keepout = Keepout::from_board(board, net);
@@ -485,7 +493,7 @@ pub fn plan_ties(board: &PcbBoard, via_fallback: Option<(i64, i64)>) -> TiePlan 
 /// planned knowing where the tie vias will go, so neither lands on the other.
 #[must_use]
 pub fn plan_all(board: &PcbBoard, reach_mm: f64) -> TiePlan {
-    plan_all_with(board, reach_mm, &Ground::default(), None)
+    plan_all_with(board, reach_mm, &Ground::default(), &ViaDeclarations::new())
 }
 
 /// [`plan_all`] with the nets the design's DRC calls ground.
@@ -494,9 +502,9 @@ pub fn plan_all_with(
     board: &PcbBoard,
     reach_mm: f64,
     ground: &Ground,
-    via_fallback: Option<(i64, i64)>,
+    declared: &ViaDeclarations,
 ) -> TiePlan {
-    let mut plan = plan_ties(board, via_fallback);
+    let mut plan = plan_ties(board, declared);
     let stitched = stitch(board, reach_mm, &plan.vias, ground);
     plan.vias.extend(stitched.vias);
     plan.unresolved.extend(stitched.unresolved);
@@ -511,9 +519,6 @@ pub fn plan_all_with(
 #[derive(Debug, Clone, Default)]
 pub struct Ground {
     named: BTreeSet<String>,
-    /// The first net the caller listed, which names the class a stitching
-    /// via takes its size from.
-    primary: Option<String>,
     /// The nets that must keep a return via. `None` is every signal net, which
     /// is the strict reading; `Some` lets any other net go without one as an
     /// advisory.
@@ -525,15 +530,8 @@ impl Ground {
     pub fn new(names: &[String]) -> Self {
         Self {
             named: names.iter().cloned().collect(),
-            primary: names.first().cloned(),
             critical: None,
         }
-    }
-
-    /// The first ground net the caller listed, if any.
-    #[must_use]
-    pub fn primary(&self) -> Option<&str> {
-        self.primary.as_deref()
     }
 
     /// Only `critical` nets are held to a return via: a layer change on any
@@ -980,10 +978,24 @@ fn copper_gap(first: &PieceShape, second: &PieceShape) -> f64 {
     }
 }
 
-/// Read the Default net class's via size from the `.kicad_pro` beside a board,
-/// so an island repair on a board that declared a smaller drill uses it
-/// instead of the 0.6 / 0.3 mm fallback. Returns None when the file is missing
-/// or unreadable.
+/// The via each poured net's own class declares, by net name. A net with no
+/// entry takes the board's `Default` class, or the 0.6 / 0.3 mm fallback.
+pub type ViaDeclarations = BTreeMap<String, (i64, i64)>;
+
+/// The via size each poured net's own class declares, read from the
+/// `.kicad_pro` beside the candidate, so an island repair gives every net the
+/// geometry of its own class and not that of the first ground net listed.
+fn declared_vias(candidate: &Path, board: &PcbBoard) -> ViaDeclarations {
+    pours(board)
+        .keys()
+        .filter_map(|net| declared_via_size(candidate, net).map(|via| (net.clone(), via)))
+        .collect()
+}
+
+/// Read a net's class via size from the `.kicad_pro` beside a board, so an
+/// island repair on a board that declared a smaller drill uses it instead of
+/// the 0.6 / 0.3 mm fallback. The `Default` class answers for a net no class
+/// pattern names. Returns None when the file is missing or unreadable.
 fn declared_via_size(candidate: &Path, net: &str) -> Option<(i64, i64)> {
     let pro = candidate.with_extension("kicad_pro");
     let text = std::fs::read_to_string(&pro).ok()?;
@@ -1993,7 +2005,7 @@ mod tests {
             (polygon (pts (xy 0 0) (xy 40 0) (xy 40 20) (xy 0 20)))
             (filled_polygon (layer "B.Cu") (pts (xy 0 0) (xy 40 0) (xy 40 20) (xy 0 20)))))"#;
         let board = PcbBoard::parse(text).expect("board must parse");
-        let plan = plan_ties(&board, None);
+        let plan = plan_ties(&board, &ViaDeclarations::new());
         assert!(
             plan.vias.is_empty() && plan.unresolved.is_empty(),
             "{plan:?}"
@@ -2015,7 +2027,7 @@ mod tests {
             (polygon (pts (xy 0 0) (xy 40 0) (xy 40 20) (xy 0 20)))
             (filled_polygon (layer "B.Cu") (pts (xy 0 0) (xy 40 0) (xy 40 20) (xy 0 20)))))"#;
         let board = PcbBoard::parse(text).expect("board must parse");
-        let plan = plan_ties(&board, None);
+        let plan = plan_ties(&board, &ViaDeclarations::new());
         assert!(plan.vias.is_empty());
         assert_eq!(
             plan.unresolved.len(),
@@ -2153,17 +2165,17 @@ mod tests {
         let board = stitched_board(blocker);
 
         let slow = Ground::default().with_critical(&["CLK".to_string()]);
-        let plan = plan_all_with(&board, REACH, &slow, None);
+        let plan = plan_all_with(&board, REACH, &slow, &ViaDeclarations::new());
         assert!(plan.unresolved.is_empty(), "{plan:?}");
         assert_eq!(plan.advisory.len(), 1, "{plan:?}");
         assert!(plan.advisory[0].contains("net SIG"), "{plan:?}");
 
         let fast = Ground::default().with_critical(&["SIG".to_string()]);
-        let plan = plan_all_with(&board, REACH, &fast, None);
+        let plan = plan_all_with(&board, REACH, &fast, &ViaDeclarations::new());
         assert!(plan.advisory.is_empty(), "{plan:?}");
         assert_eq!(plan.unresolved.len(), 1, "{plan:?}");
 
-        let strict = plan_all_with(&board, REACH, &Ground::default(), None);
+        let strict = plan_all_with(&board, REACH, &Ground::default(), &ViaDeclarations::new());
         assert_eq!(
             strict.unresolved.len(),
             1,
@@ -2202,7 +2214,7 @@ mod tests {
             "by name alone nothing here is ground"
         );
         let ground = Ground::new(&["POWER_RETURN".to_string()]);
-        let plan = plan_all_with(&board, REACH, &ground, None);
+        let plan = plan_all_with(&board, REACH, &ground, &ViaDeclarations::new());
         assert_eq!(plan.vias.len(), 1, "{plan:?}");
         assert_eq!(plan.vias[0].net, "POWER_RETURN");
     }
@@ -2334,7 +2346,7 @@ mod tests {
     fn a_planned_tie_via_serves_as_the_return_for_a_signal_via_beside_it() {
         let signal = r#"(via (at 30 9.6) (size 0.6) (drill 0.3) (layers "F.Cu" "B.Cu") (net 2))"#;
         let board = board(signal);
-        let tie = plan_ties(&board, None);
+        let tie = plan_ties(&board, &ViaDeclarations::new());
         assert_eq!(tie.vias.len(), 1, "{tie:?}");
         let tie_at = at_mm(&tie.vias[0]);
         let all = plan_all(&board, REACH);
@@ -2385,6 +2397,69 @@ mod tests {
             "the first round's vias must not survive a later failure"
         );
         let _ = std::fs::remove_file(&path);
+    }
+
+    /// Two ground nets in two classes with different vias, and an island on
+    /// each with no via of its own: the repair gives every island the via its
+    /// own class declares, not the first ground net's.
+    #[test]
+    fn each_island_via_takes_the_via_its_own_netclass_declares() {
+        let pour = |net: u32, name: &str, y0: u32| {
+            let y1 = y0 + 20;
+            format!(
+                r#"(segment (start 25 {y}) (end 30 {y}) (width 0.25) (layer "F.Cu") (net {net}))
+                (zone (net {net}) (net_name "{name}") (layer "F.Cu") (fill yes)
+                  (polygon (pts (xy 0 {y0}) (xy 40 {y0}) (xy 40 {y1}) (xy 0 {y1})))
+                  (filled_polygon (layer "F.Cu") (pts (xy 0 {y0}) (xy 20 {y0}) (xy 20 {y1}) (xy 0 {y1})))
+                  (filled_polygon (layer "F.Cu") (pts (xy 25 {y0}) (xy 35 {y0}) (xy 35 {y1}) (xy 25 {y1}))))
+                (zone (net {net}) (net_name "{name}") (layer "B.Cu") (fill yes)
+                  (polygon (pts (xy 0 {y0}) (xy 40 {y0}) (xy 40 {y1}) (xy 0 {y1})))
+                  (filled_polygon (layer "B.Cu") (pts (xy 0 {y0}) (xy 40 {y0}) (xy 40 {y1}) (xy 0 {y1}))))"#,
+                y = y0 + 7
+            )
+        };
+        let text = format!(
+            r#"(kicad_pcb
+              (layers (0 "F.Cu" signal) (2 "B.Cu" signal))
+              (net 0 "")
+              (net 1 "GND_A")
+              (net 2 "GND_B")
+              {}
+              {})"#,
+            pour(1, "GND_A", 0),
+            pour(2, "GND_B", 30),
+        );
+        let path = scratch_file("two-classes", &text);
+        let project = r#"{"net_settings": {
+              "classes": [
+                {"name": "Default", "via_diameter": 0.6, "via_drill": 0.2},
+                {"name": "CLASS_A", "via_diameter": 0.6, "via_drill": 0.3},
+                {"name": "CLASS_B", "via_diameter": 0.8, "via_drill": 0.4}],
+              "netclass_patterns": [
+                {"netclass": "CLASS_A", "pattern": "GND_A"},
+                {"netclass": "CLASS_B", "pattern": "GND_B"}]}}"#;
+        std::fs::write(path.with_extension("kicad_pro"), project).expect("write the project");
+        let ground = Ground::new(&["GND_A".to_string(), "GND_B".to_string()]);
+        let mut fills = 0;
+        let outcome = tie_islands_with(&path, &ground, &mut |_| {
+            fills += 1;
+            Ok((fills == 1).then(|| text.clone()))
+        })
+        .expect("the repair runs");
+        assert_eq!(outcome.added, 2, "one via for each island: {outcome:?}");
+        let tied = PcbBoard::parse(&std::fs::read_to_string(&path).expect("read the tied board"))
+            .expect("the tied board parses");
+        let sized = |net: u32| -> Vec<(i64, i64)> {
+            tied.vias
+                .iter()
+                .filter(|via| via.net == Some(net))
+                .map(|via| (via.size_nm, via.drill_nm))
+                .collect()
+        };
+        assert_eq!(sized(1), vec![(600_000, 300_000)], "GND_A takes CLASS_A");
+        assert_eq!(sized(2), vec![(800_000, 400_000)], "GND_B takes CLASS_B");
+        let _ = std::fs::remove_file(&path);
+        let _ = std::fs::remove_file(path.with_extension("kicad_pro"));
     }
 
     /// The rounds are spent on island vias; a signal via that has no legal
@@ -2499,7 +2574,7 @@ mod tests {
         );
         let board = PcbBoard::parse(&text).expect("parses");
         let started = std::time::Instant::now();
-        let plan = plan_ties(&board, None);
+        let plan = plan_ties(&board, &ViaDeclarations::new());
         assert_eq!(plan.vias.len(), 1, "{plan:?}");
         assert!(
             started.elapsed() < std::time::Duration::from_secs(20),
