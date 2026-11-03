@@ -1138,7 +1138,14 @@ fn stitch_via_size(board: &Board) -> (f64, f64) {
         )
 }
 
-fn build_ground_stitch_via(x_nm: i64, y_nm: i64, pcb_net: u32, project: &Uuid, idx: usize, (via_size_mm, via_drill_mm): (f64, f64)) -> Sexp {
+fn build_ground_stitch_via(
+    x_nm: i64,
+    y_nm: i64,
+    pcb_net: u32,
+    project: &Uuid,
+    idx: usize,
+    (via_size_mm, via_drill_mm): (f64, f64),
+) -> Sexp {
     let via_uuid = derive_entity_uuid(project, "ground-stitch-via", &idx.to_string());
     Sexp::list(
         "via",
