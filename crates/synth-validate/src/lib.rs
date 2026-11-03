@@ -167,6 +167,7 @@ fn all_rules(config: &ErcConfig) -> Vec<Box<dyn ErcRule>> {
         Box::new(PowerDomainMismatchRule),
         Box::new(SupplyChainRule),
         Box::new(SourcingIdentityRule),
+        Box::new(InstanceLcscFormatRule),
         Box::new(UnverifiedPartRule),
         Box::new(DividerRatioRule),
         Box::new(GenericPassiveValueRule),
@@ -3700,6 +3701,53 @@ impl ErcRule for SourcingIdentityRule {
 }
 
 // -----------------------------------------------------------------------------
+// E-SYNTH-SUPPLY-003 — malformed per-instance LCSC part number
+// -----------------------------------------------------------------------------
+
+/// A component's own `lcsc_pn "…"` must look like an LCSC part number
+/// (`C` followed by digits). Registry-supplied values are not checked here.
+struct InstanceLcscFormatRule;
+
+impl ErcRule for InstanceLcscFormatRule {
+    fn code(&self) -> &'static str {
+        "E-SYNTH-SUPPLY-003"
+    }
+
+    fn category(&self) -> ErcCategory {
+        ErcCategory::Board
+    }
+
+    fn check(&self, board: &Board, file: &str) -> Vec<Diagnostic> {
+        board
+            .components
+            .iter()
+            .filter_map(|component| {
+                let lcsc = component.properties.get("lcsc_pn")?;
+                if synth_supply::types::looks_like_lcsc_part_number(lcsc) {
+                    return None;
+                }
+                Some(
+                    DiagnosticBuilder::new(
+                        self.code(),
+                        Severity::Error,
+                        "malformed LCSC part number",
+                    )
+                    .location(Location::from_span(file.to_string(), component.source_span))
+                    .primary_entity(EntityRef::Component {
+                        id: component.refdes.clone(),
+                    })
+                    .expected("an LCSC part number: `C` followed by digits, e.g. `C110776`")
+                    .found(format!("{} has `lcsc_pn \"{lcsc}\"`", component.describe()))
+                    .message("fix the `lcsc_pn` on this component declaration")
+                    .explanation_url(format!("synth.docs/diagnostics/{}", self.code()))
+                    .build(),
+                )
+            })
+            .collect()
+    }
+}
+
+// -----------------------------------------------------------------------------
 // W-SYNTH-PART-UNVERIFIED — component uses a part without review
 // -----------------------------------------------------------------------------
 
@@ -5042,6 +5090,26 @@ mod tests {
         let diags = SourcingIdentityRule.check(&board, "test.synth");
         assert_eq!(diags.len(), 1, "{diags:?}");
         assert_eq!(diags[0].code, "W-SYNTH-SUPPLY-002");
+    }
+
+    #[test]
+    fn malformed_instance_lcsc_errors_supply_003() {
+        let mut board = identity_test_board(vec![(
+            identity_test_part("r_generic_0603", None, None),
+            "R1",
+        )]);
+        board.components[0]
+            .properties
+            .insert("lcsc_pn".into(), "110776".into());
+        let diags = InstanceLcscFormatRule.check(&board, "test.synth");
+        assert_eq!(diags.len(), 1, "{diags:?}");
+        assert_eq!(diags[0].code, "E-SYNTH-SUPPLY-003");
+        board.components[0]
+            .properties
+            .insert("lcsc_pn".into(), "C110776".into());
+        assert!(InstanceLcscFormatRule
+            .check(&board, "test.synth")
+            .is_empty());
     }
 
     #[test]

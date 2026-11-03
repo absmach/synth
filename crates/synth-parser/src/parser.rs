@@ -754,6 +754,22 @@ impl Parser {
             }
             return true;
         }
+        // Per-instance sourcing. Plain identifiers, not reserved words, so a
+        // design that already uses `mpn` as a name keeps parsing. Stored
+        // lowercase, which never collides with the capitalised KiCad fields.
+        if let TokenKind::Ident(name) = self.peek_kind() {
+            if name == "lcsc_pn" || name == "mpn" {
+                let key = name.clone();
+                self.bump();
+                if let Some(s) = self.expect_string(
+                    "E-SYNTH-PARSE-002",
+                    "expected a quoted value after the field keyword",
+                ) {
+                    properties.insert(key, s);
+                }
+                return true;
+            }
+        }
         if matches!(self.peek_kind(), TokenKind::KwDnp) {
             self.bump(); // consume `dnp`
             *dnp = true;
@@ -2991,6 +3007,29 @@ mod tests {
         assert_eq!(
             c.properties.get("Dielectric").map(String::as_str),
             Some("X7R")
+        );
+    }
+
+    #[test]
+    fn parse_component_instance_sourcing() {
+        let res = parse(
+            lex(
+                r#"board "b" { component R1: resistor "r_generic_0603" value "1k" lcsc_pn "C110776" mpn "RT0603BRD071KL" }"#,
+            ),
+            "test.synth".into(),
+        );
+        assert!(res.diagnostics.is_empty(), "{:?}", res.diagnostics);
+        let ast = res.ast.unwrap();
+        let StatementAst::Component(c) = &ast.board.statements[0] else {
+            panic!("Expected component statement")
+        };
+        assert_eq!(
+            c.properties.get("lcsc_pn").map(String::as_str),
+            Some("C110776")
+        );
+        assert_eq!(
+            c.properties.get("mpn").map(String::as_str),
+            Some("RT0603BRD071KL")
         );
     }
 

@@ -78,6 +78,20 @@ already the rail-declaration statement keyword (`power "+3V3" 3.3v`);
 the parser would otherwise swallow a following `power` line as a
 component attribute.
 
+### Per-instance part numbers
+
+```synth
+component R_BIAS: resistor "r_generic_0603" value "1k" lcsc_pn "C110776" mpn "RT0603BRD071KL"
+```
+
+A generic part such as `r_generic_0603` is shared by every 0603 resistor, so
+one registry `lcsc_pn` cannot be right for all values. `lcsc_pn` and `mpn`
+pin the exact part on one instance. The instance value overrides the
+registry part's; where it is absent the registry value is the fallback. It
+flows to `bom.csv`, the JLCPCB BOM/CPL bundle (components with different LCSC
+numbers get separate BOM lines), and the hidden `MPN`/`LCSC` schematic fields.
+A malformed `lcsc_pn` is `E-SYNTH-SUPPLY-003`.
+
 ### What the data unlocks
 
 `E-SYNTH-CAP-001` (warning) uses the new fields: a Class-II ceramic
