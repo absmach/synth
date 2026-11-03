@@ -96,8 +96,8 @@ version of this compact board still left two DGND pour islands near
 split with one GND plane removed the islands. The route then closed after three
 placement moves that opened tight pockets: C_DV2 to (44.5, 26.5), L1 to
 (43.5, 20.0) and C_VI to (45.0, 24.2), with the related R_RST/C_DV and L2
-positions adjusted at the same time. The delivered board has 0 errors, 0
-warnings and 0 unconnected items.
+positions adjusted at the same time. The delivered board has 0 errors and 0
+unconnected items; its 47 library-comparison warnings are dispositioned below.
 
 A 12-test-point variant was then placed on the earlier notched outline: VREF,
 GND, +3V3A, VBUS, +3V3, +3V3_RP_A, DVDD_1V1, RUN, USB_DP, USB_DN, SWDIO and
@@ -156,8 +156,28 @@ one source stitching via sits beside U2 pad 47.
 
 It is a library-comparison warning from an embedded-symbol export, not a
 connectivity finding. The registry now uses `Device:FerriteBead`, so the earlier
-`Ferrite_Bead` warning is gone. The 47 DRC `lib_footprint_mismatch` warnings are
-the same kind of finding for footprints. A human should confirm that disposition.
+`Ferrite_Bead` warning is gone.
+
+### KiCad DRC: 47 `lib_footprint_mismatch` warnings
+
+`reports/rtd_afe.kicad-drc.json` has 0 errors, 0 unconnected items and 47
+warnings, all `lib_footprint_mismatch`:
+
+| Footprint | Count | Disposition |
+| --- | --- | --- |
+| `C_0603_1608Metric` (`Capacitor_SMD`) | 23 | Embedded footprint differs from the library copy; cause below. |
+| `R_0603_1608Metric` (`Resistor_SMD`) | 11 | Same. |
+| `C_0805_2012Metric` (`Capacitor_SMD`) | 2 | Same. |
+| ICs, diode, ferrite, inductor and other footprints | 11 | Same. |
+
+Cause: the exporter redraws each reference label at 0.8 mm text with an 0.18 mm
+stroke (`LABEL_STROKE_MM`, commit a5821e5e) and removes library silkscreen lines
+that would clip a pad or via. The previous committed board was exported before
+that change and showed 0 warnings; a footprint diff of one part shows the label
+size and stroke changed and two library silkscreen lines were dropped, with pads,
+copper and drills unchanged in that part (one footprint was diffed; the others were not). Any board exported from the same Synth revision
+shows the same warnings. These are not hidden: the `reports/` DRC file lists all
+47. A human should confirm this disposition.
 
 ## Synth signal-integrity warnings
 

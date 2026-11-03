@@ -148,10 +148,13 @@ Current result:
 | Synth SI warnings | 18, none blocking |
 
 The ERC warning and the 47 DRC warnings are library-comparison warnings, not
-connectivity errors: the embedded REF5025ID symbol differs from the installed
-library copy, and the exported footprints (for example `R_0603_1608Metric`)
-differ from the `Resistor_SMD`/`Capacitor_SMD` library copies. The exported schematic embeds its own symbols and the
-netlist/PCB parity is clean.
+connectivity errors. The embedded REF5025ID symbol differs from the installed
+library copy. The 47 DRC warnings are `lib_footprint_mismatch`: Synth's exporter
+now redraws each footprint's reference label at 0.8 mm with an 0.18 mm stroke
+and trims silkscreen that would clip a pad or via, so the embedded footprint
+differs from the `Resistor_SMD`/`Capacitor_SMD` library copy. No copper, pad or
+drill is changed. The exported schematic embeds its own symbols and the
+netlist/PCB parity is clean. This disposition has not been reviewed by a human.
 
 ## Committed artifacts
 
