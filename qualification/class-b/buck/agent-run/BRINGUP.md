@@ -12,11 +12,11 @@ Equipment assumed (not part of the files): current-limited bench supply 0-30 V, 
 
 ## 1. Reverse polarity
 
-4. Supply 5 V current limit 100 mA, reversed on J1. Expect: no current into the board beyond D1 leakage (SS36 IR 0.5 mA at 25 C max, 60 V rating). Pass if VIN stays near 0 V and the supply current is below 1 mA.
+4. Supply 5 V with a 100 mA current limit (tester's choice, not from the files), reversed on J1. Expect: no current into the board beyond D1 leakage (SS36 IR 0.5 mA at 25 C max, 60 V rating). Pass if VIN stays near 0 V and the supply current stays near the SS36 leakage (the 1 mA threshold is the tester's choice, not from the files).
 
 ## 2. UVLO and start-up (no load)
 
-5. Raise supply from 0 V, limit 0.3 A. Expect +3V3 to stay off below about 18.4 V (typ; range 16.2 to 20.6 V).
+5. Raise supply from 0 V, limit 0.3 A (tester's choice, not from the files). Expect +3V3 to stay off below about 18.4 V (typ; range 16.2 to 20.6 V).
 6. At 24 V expect +3V3 = 3.315 V typ (3.26 to 3.36 V). D3 lit (about 1.9 to 3.0 mA).
 7. Lower the supply: expect shutdown near 16.2 V (typ; range 14.0 to 17.9 V). EN at 28 V in would be 1.90 V (calculation).
 8. At 24 V measure EN: about 24 x 100k / 1.47M = 1.63 V (arithmetic).
@@ -24,7 +24,7 @@ Equipment assumed (not part of the files): current-limited bench supply 0-30 V, 
 ## 3. Power good
 
 9. At start-up PG is low for about 4 ms after EN asserts, then high (3.3 V, via R_PG). Scope PG against +3V3.
-10. D4 "PG FAULT": expect dark while power is good, lit (about 2.55 mA, PG near 0.2-0.4 V) while PG is low (during start-up or a fault).
+10. D4 "PG FAULT": expect dark while power is good, lit (about 2.55 mA, PG near 0.4 V per `buck.synth`) while PG is low (during start-up or a fault).
 11. Thresholds: rising 110/112/114 % and falling 90/92/94 % of VFB, 40 us glitch filter (datasheet figures per README). To test, trim load or inject at FB; pass criteria beyond these figures: not verified.
 
 ## 4. Switching and output
@@ -36,7 +36,7 @@ Equipment assumed (not part of the files): current-limited bench supply 0-30 V, 
 
 ## 5. Thermal
 
-16. Run 1 A for 30 minutes at 24 V. Expected loss about 0.58 W (assumption). Record U1 case temperature. Pass limit: not verified (no RthetaJA valid for design).
+16. Run 1 A for 30 minutes at 24 V (load and duration are the tester's choice, not from the files). Expected loss about 0.58 W (assumption). Record U1 case temperature. Pass limit: not verified (no RthetaJA valid for design).
 
 ## 6. Input protection (do only with a suitable current-limited setup)
 
