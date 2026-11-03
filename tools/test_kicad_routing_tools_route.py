@@ -213,6 +213,16 @@ class FanoutTest(unittest.TestCase):
         # router carries the escape copper, not just the intent to escape.
         self.assertEqual(load_adapter()._copper_by_net(output), {"U1_N0": 1})
 
+    def test_an_inferred_package_with_nothing_to_escape_leaves_the_board_as_exported(self):
+        # bga_fanout on a SOIC with an exposed pad: ran, requested no ball, wrote
+        # the board back with the project's clearances rewritten. Routing that
+        # board is routing at 0.127 mm and being judged at the class clearance.
+        routed, escapes, _ = run_fanout(
+            ["U1"], required=[],
+            plan={"requested": 0, "escaped": 0, "failed": 0, "copper": 0})
+        self.assertEqual(escapes, [("U1", "channel")])
+        self.assertEqual(routed, "in.kicad_pcb")
+
     def test_via_in_pad_permits_the_under_pad_default(self):
         _, escapes, _ = run_fanout(["U1"], required=[], allow_via_in_pad=True)
         self.assertEqual(escapes, [("U1", "underpad")])

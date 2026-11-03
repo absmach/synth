@@ -244,6 +244,7 @@ def _fanout(python: str, repo: Path, board: Path, components: list[str],
             f"{repo}; the escape cannot run"
         )
 
+    asked = 0
     for index, (refdes, want_method, want_layers) in enumerate(plan):
         fanned = board.with_suffix(f".fanned{index}.kicad_pcb")
         fanned.unlink(missing_ok=True)
@@ -275,9 +276,21 @@ def _fanout(python: str, repo: Path, board: Path, components: list[str],
                 f"{origin} escape of {refdes} failed; the route fails rather "
                 "than handing the package to the general router unescaped"
             )
-        _verify_escape(refdes, origin, _escape_summary(done.stdout), current, fanned)
+        summary = _escape_summary(done.stdout)
+        _verify_escape(refdes, origin, summary, current, fanned)
+        asked += int((summary or {}).get("requested") or 0)
         current = fanned
 
+    # An inferred package the engine found nothing to escape (a SOIC with an
+    # exposed pad reads as a lattice) leaves no escape copper to keep. What the
+    # stage did write is the plane pour's stubs and the engine's rewrite of the
+    # project's clearances to its own 0.127 mm, and the board the general router
+    # then receives is judged against the classes it was exported with.
+    # Declared packages stay on the verified path above.
+    if not asked and not required:
+        print("the escape stage escaped nothing; routing the board as exported",
+              flush=True)
+        return board
     return current
 
 
