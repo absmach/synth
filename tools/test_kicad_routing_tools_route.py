@@ -170,10 +170,10 @@ def run_fanout(components, required, allow_via_in_pad=False):
 
 class FanoutTest(unittest.TestCase):
     def test_a_declared_channel_escape_runs_without_via_in_pad(self):
-        # U1 takes the under-pad default and is skipped; U2 asked for channel,
-        # which puts no via in a pad, so it is escaped and nothing fails.
+        # U1 takes the under-pad default and falls back to channel (no via in a
+        # pad needed); U2 asked for channel. Both escape, nothing fails.
         routed, escapes = run_fanout(["U1", "U2:channel:"], required=["U2"])
-        self.assertEqual(escapes, [("U2", "channel")])
+        self.assertEqual(escapes, [("U1", "channel"), ("U2", "channel")])
         self.assertNotEqual(routed, "in.kicad_pcb")
 
     def test_a_declared_underpad_escape_without_via_in_pad_fails_the_route(self):
@@ -181,8 +181,11 @@ class FanoutTest(unittest.TestCase):
             run_fanout(["U1:underpad:"], required=["U1"])
 
     def test_nothing_to_escape_leaves_the_board_untouched(self):
+        # With under-pad unavailable, an inferred grid falls back to channel
+        # escape rather than leaving the board untouched.
         routed, escapes = run_fanout(["U1"], required=[])
-        self.assertEqual((routed, escapes), ("in.kicad_pcb", []))
+        self.assertEqual(escapes, [("U1", "channel")])
+        self.assertNotEqual(routed, "in.kicad_pcb")
 
     def test_via_in_pad_permits_the_under_pad_default(self):
         _, escapes = run_fanout(["U1"], required=[], allow_via_in_pad=True)
@@ -382,14 +385,16 @@ class StagedAdapterTest(unittest.TestCase):
         self.assertEqual((code, routed), (0, True))
         self.assertEqual(len(logs["fanout"]), 1)
 
-    def test_under_pad_without_via_in_pad_skips_a_grid_array(self):
-        # The board's own rules decline the escape; nothing failed, so the
-        # route runs, on the input board, and says why on stderr.
+    def test_under_pad_without_via_in_pad_falls_back_to_channel_escape(self):
+        # The board's own rules decline under-pad escape, so an inferred grid
+        # falls back to channel escape instead of routing the unescaped board.
         code, stderr, logs, routed = run_staged(["U1"])
         self.assertEqual((code, routed), (0, True))
-        self.assertEqual((logs["planes"], logs["fanout"]), ([], []))
-        self.assertIn("skipping under-pad escape of U1", stderr)
-        self.assertEqual(logs["route"][0].split()[0].rsplit("/", 1)[1], "in.kicad_pcb")
+        self.assertEqual(len(logs["fanout"]), 1)
+        self.assertIn("falling back to channel escape", stderr)
+        parts = logs["fanout"][0].split()
+        idx = parts.index("--escape-method")
+        self.assertEqual(parts[idx + 1], "channel")
 
     def test_under_pad_without_via_in_pad_fails_a_declared_escape(self):
         self.assert_escape_failed(*run_staged(["U1:underpad:"],

@@ -122,12 +122,16 @@ def _fanout(python: str, repo: Path, board: Path, components: list[str],
                     "board does not permit. Declare `requires via_in_pad` and "
                     "choose a tier that offers it, or escape it another way."
                 )
+            # An inferred grid whose default is under-pad cannot silently skip:
+            # the general router would then receive the unescaped board and
+            # produce a routed-looking candidate with no verified package escape.
+            # Fall back to channel escape, which needs no via in a pad.
             print(
-                f"skipping under-pad escape of {refdes}: the board does not "
-                "permit via-in-pad, so it routes unescaped",
+                f"under-pad escape of {refdes} is not permitted on this board; "
+                "falling back to channel escape",
                 file=sys.stderr,
             )
-            continue
+            want_method = "channel"
         plan.append((refdes, want_method, want_layers))
     if not plan:
         return board
