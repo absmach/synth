@@ -43,8 +43,8 @@
     },
     "input_hash": "548e7cd37624579cc292dbea6c0a23948fab2b6832616e50e95e4f15eef8ed44",
     "output_hash": "",
-    "source_revision": "cf4d8dd7bdc3d1be90ad30b893fb4fc08ae48e14",
-    "duration_ms": 728778
+    "source_revision": "c7b70e9badd23c33a824fdf483e97f28caef4f28",
+    "duration_ms": 549592
   },
   "statistics": {
     "connected_nets": 40,

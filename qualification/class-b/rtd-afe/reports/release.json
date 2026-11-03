@@ -2,7 +2,7 @@
   "schema_version": "synth.release.v1",
   "tool_version": "synth-cli 0.1.1",
   "input": "qualification/class-b/rtd-afe/rtd_afe.synth",
-  "source_revision": "cf4d8dd7bdc3d1be90ad30b893fb4fc08ae48e14",
+  "source_revision": "c7b70e9badd23c33a824fdf483e97f28caef4f28",
   "fab_requested": true,
   "production_status": "untrusted",
   "release_ready": false,
