@@ -220,13 +220,16 @@ pub struct KiCadRoutingToolsOptions {
     /// `escalation` permits falling back to the fabrication floor.
     #[serde(default)]
     pub fab_overrides: Option<PathBuf>,
-    /// Net ordering for the router (`mps`, `inside_out`, `original`, `bus`).
-    #[serde(default)]
-    pub ordering: Option<String>,
     /// Minimum same-net pad clearance for a KRT via, in millimetres.
     pub same_net_pad_clearance_mm: f64,
     /// Enforce the board's declared minimum track/via sizes strictly.
     pub strict_sizes: bool,
+    /// The engine's net ordering (`mps`, `inside_out`, `original`, `bus`), or
+    /// the engine's own default when absent. Which one routes a board without a
+    /// via in a pad is not predictable, so a failed run is retried with the
+    /// others (see `route`).
+    #[serde(default)]
+    pub ordering: Option<String>,
 }
 
 impl Default for KiCadRoutingToolsOptions {
@@ -235,9 +238,9 @@ impl Default for KiCadRoutingToolsOptions {
             escalation: KrtEscalation::Board,
             fab_tier: "auto".to_string(),
             fab_overrides: None,
-            ordering: None,
             same_net_pad_clearance_mm: 0.1,
             strict_sizes: true,
+            ordering: None,
         }
     }
 }
@@ -505,6 +508,11 @@ pub struct RouteRequest {
     /// rule, to find the ground pour and the signal vias that need a return.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub ground_nets: Vec<String>,
+    /// The nets whose layer changes must keep a ground return via: differential,
+    /// clock, RF, analog and switching nets. `None` holds every signal net to
+    /// it; `Some` lists any other net's missing return via as an advisory.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub return_via_critical_nets: Option<Vec<String>>,
     /// Nets the design pins to copper layers (`netclass { layers … }`), by
     /// name, with the layers each may use. An engine that supports the
     /// constraint routes these on their layers before anything else and the
@@ -705,6 +713,7 @@ impl RouteRequest {
             source_revision: revision_from(std::env::var("SYNTH_SOURCE_REVISION").ok()),
             routing_order: Vec::new(),
             ground_nets: Vec::new(),
+            return_via_critical_nets: None,
             net_layers: Vec::new(),
         }
     }

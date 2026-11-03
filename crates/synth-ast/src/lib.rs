@@ -711,6 +711,14 @@ pub enum NetclassAttr {
     /// Length the class's nets may differ from each other (`max_skew 1mm`), a
     /// bus/group length-match budget.
     MaxSkew(ValueWithUnit),
+    /// How fast the class's nets switch (`edge_rate slow` or `edge_rate fast`).
+    /// A slow net may lose a ground return via with an advisory; an
+    /// undeclared net is treated as fast, because a generic output or
+    /// bidirectional pin carries a fast SPI, USB or timer edge too.
+    EdgeRate {
+        rate: String,
+        span: Span,
+    },
     /// Copper layers the class's nets may be routed on
     /// (`layers "F.Cu", "B.Cu"`), KiCad names. Pins a controlled-impedance
     /// pair to the outer layer its impedance was derived for. A struct

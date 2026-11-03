@@ -394,7 +394,10 @@ fn finalize(
     }
     repair_unavailable.extend(repair_dropped_stubs(&candidate.candidate_path));
     let mut repair_advisory: Vec<String> = Vec::new();
-    let ground = island_vias::Ground::new(&request.ground_nets);
+    let mut ground = island_vias::Ground::new(&request.ground_nets);
+    if let Some(critical) = &request.return_via_critical_nets {
+        ground = ground.with_critical(critical);
+    }
     match island_vias::tie_islands_for(&candidate.candidate_path, &ground) {
         Ok(outcome) => {
             repair_blocking = outcome.unresolved;
