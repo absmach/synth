@@ -446,6 +446,21 @@ pub fn check_edge_coupling(
         .collect()
 }
 
+/// Copper clearance assumed between a signal via and the ground via beside it,
+/// for the least distance at which the two can sit.
+pub const RETURN_VIA_CLEARANCE_NM: i64 = 200_000;
+
+/// The window around a signal via in which W-SYNTH-DRC-016 looks for a ground
+/// return via, along either axis: the stackup's thickest dielectric, never
+/// smaller than the least distance at which a ground via can sit beside the
+/// signal via, its pad width plus the copper clearance. A stackup with a thin
+/// prepreg would otherwise leave a window that holds a ground via only in a
+/// corner, however much room the board has.
+#[must_use]
+pub fn return_via_window_nm(stackup_reach_nm: i64, via_pad_nm: i64) -> i64 {
+    stackup_reach_nm.max(via_pad_nm + RETURN_VIA_CLEARANCE_NM)
+}
+
 /// Return-path via check. Code: `W-SYNTH-DRC-016` — a **warning**.
 ///
 /// A via that takes a signal to another layer needs a ground return via close
@@ -483,6 +498,13 @@ pub fn check_return_path_vias(
         .map(|layer| layer.dielectric_height.0)
         .max()
         .unwrap_or_else(|| mm_to_nm(1.6));
+    let via_pad_nm = routing
+        .vias
+        .iter()
+        .map(|via| via.pad_diameter_nm)
+        .max()
+        .unwrap_or_else(|| mm_to_nm(0.6));
+    let radius_nm = return_via_window_nm(radius_nm, via_pad_nm);
     let mut out = Vec::new();
     for via in &routing.vias {
         if is_ground(via.net) {
@@ -559,6 +581,88 @@ pub(crate) fn net_name_or_pin_is_ground(board: &Board, net: &Net) -> bool {
                 .and_then(|part| part.pins.get(endpoint.pin.0 as usize))
                 .is_some_and(|pin| is_ground_name(&pin.name))
         })
+}
+
+/// Names of the nets whose layer changes the return-path repair must not leave
+/// without a ground via.
+///
+/// The only evidence that a net changes slowly is the design saying so: a
+/// `netclass` with `edge_rate slow`. Pin types cannot supply it, because a
+/// generic `output` or `bidirectional` pin carries a fast SPI, USB or timer
+/// edge exactly as readily as a slow GPIO, and a net with no class at all is
+/// even less known. So every signal net whose class does not declare a slow
+/// edge is critical, and the unknown case blocks. Ground nets are the return
+/// path themselves and are not signals that need one.
+///
+/// A slow declaration is not an override of the pin evidence: a clock, a
+/// differential pair, an RF or analog net or a switching node on an inductor
+/// stays critical whatever its class says, because those edges are fast by
+/// construction.
+#[must_use]
+pub fn return_path_critical_net_names(board: &Board) -> Vec<String> {
+    use synth_registry::ElectricalType;
+    let slow: std::collections::BTreeSet<&str> = board
+        .netclasses
+        .iter()
+        .filter(|class| class.edge_rate == Some(synth_ir::EdgeRate::Slow))
+        .map(|class| class.name.as_str())
+        .collect();
+    // Ground is the return path itself, not a signal that needs one. It is
+    // found by topology and pin name, not by the net's name: `POWER_RETURN`
+    // says nothing.
+    let ground = ground_net_ids(board);
+    let mut critical: std::collections::BTreeSet<NetId> = board
+        .nets
+        .iter()
+        .filter(|net| !ground.contains(&net.id))
+        .filter(|net| {
+            net.netclass
+                .as_deref()
+                .is_none_or(|name| !slow.contains(name))
+        })
+        .map(|net| net.id)
+        .collect();
+    for net in &board.nets {
+        let rides_fast = net.endpoints.iter().any(|endpoint| {
+            let Some(component) = board.component(endpoint.component) else {
+                return false;
+            };
+            let crystal = component.kind == "crystal";
+            component.kind == "inductor"
+                || component
+                    .part
+                    .as_ref()
+                    .and_then(|part| part.pins.get(endpoint.pin.0 as usize))
+                    .is_some_and(|pin| match pin.electrical_type {
+                        ElectricalType::DifferentialPositive
+                        | ElectricalType::DifferentialNegative
+                        | ElectricalType::Clock
+                        | ElectricalType::Rf
+                        | ElectricalType::Analog => true,
+                        // A bare crystal's terminals are passive, and the
+                        // oscillator pins they meet are often typed plain input
+                        // and output, so the crystal itself marks the net.
+                        ElectricalType::Passive => crystal,
+                        _ => false,
+                    })
+        });
+        if rides_fast {
+            critical.insert(net.id);
+        }
+    }
+    for pair in &board.diff_pairs {
+        for (_, leg) in board.diff_pair_legs(pair) {
+            if let Some(net) = leg {
+                critical.insert(net.id);
+            }
+        }
+    }
+    board
+        .nets
+        .iter()
+        .filter(|net| critical.contains(&net.id))
+        .map(|net| net.name.clone())
+        .collect()
 }
 
 /// Whether a net or pin name is a ground: it contains `gnd` or `vss`, or is

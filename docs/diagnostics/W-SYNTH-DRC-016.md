@@ -18,6 +18,18 @@ rule judges a via against the same ground the planes are built from. A board
 with no ground net is not checked, and a board without a declared `stackup` is
 not checked either, because the distance is a property of the dielectric.
 
+The router's return-via repair holds a board back for a missing return via on
+every signal net unless the design declares the net slow: a `netclass` with
+`edge_rate slow`. A generic `output` or `bidirectional` pin carries a fast SPI,
+USB or timer edge as readily as a slow GPIO, so pin type cannot prove a slow
+edge and an unclassified net stays blocking. One that is slow by declaration is
+listed in the route report's `advisories`, with the net and the position, and
+does not block.
+
+A `slow` declaration cannot downgrade a net whose own pins prove a fast edge: a
+differential or clock pin, an RF or analog pin, a bare crystal's terminal, a
+declared `diff_pair`, or a switching node at an inductor stays blocking.
+
 The rule is advisory: whether a discontinuity matters depends on the edge rate
 and the signalling scheme, which geometry alone cannot decide. As a `W-` code it
 never blocks a release.

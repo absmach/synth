@@ -1566,6 +1566,7 @@ fn route_design_externally_with(
 
     let mut request = prepared.unwrap_or_else(|| routing_request(args, engine));
     request.ground_nets = synth_drc::ground_net_names(&board);
+    request.return_via_critical_nets = Some(synth_drc::return_path_critical_net_names(&board));
     request.engine = engine;
     request.board_path.clone_from(&res.pcb_path);
     request.out_dir.clone_from(&res.out_dir);
@@ -2960,6 +2961,7 @@ fn evaluate_candidate_mcp(
     };
     let mut request = routing_request(args, engine);
     request.ground_nets = synth_drc::ground_net_names(board);
+    request.return_via_critical_nets = Some(synth_drc::return_path_critical_net_names(board));
     request.limits = request.limits.with_wall_clock(router_secs);
     request.board_path.clone_from(&res.pcb_path);
     request.out_dir.clone_from(&res.out_dir);
@@ -3183,6 +3185,7 @@ fn execute_export(args: &Value, default_registry: Option<&Path>) -> Result<Value
 
     let mut request = routing_request(args, engine);
     request.ground_nets = synth_drc::ground_net_names(&board);
+    request.return_via_critical_nets = Some(synth_drc::return_path_critical_net_names(&board));
     // The final route counts against the search budget: it gets what is left, or
     // is not started when nothing is.
     if let Some(budget) = &search_budget {
@@ -4435,6 +4438,7 @@ fn execute_route_with_constraints(
     let engine = resolve_router(args)?;
     let mut routed = routing_request(args, engine);
     routed.ground_nets = synth_drc::ground_net_names(&board);
+    routed.return_via_critical_nets = Some(synth_drc::return_path_critical_net_names(&board));
     // The tightest requested width and clearance become the floor the
     // independent check enforces, so an engine that routed below them is
     // rejected rather than trusted.
