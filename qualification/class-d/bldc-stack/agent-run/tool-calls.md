@@ -49,7 +49,7 @@ models, not dimensional drawings, so the product-page spec table is the evidence
 | # | Command | Result |
 | --- | --- | --- |
 | 1 | `synth registry qualify --part <9 authored parts>` | Every part passes pin/pad, symbol, dimension and provenance checks; each is blocked on `E-SYNTH-QUAL-008` because `reviewed_by` is empty, as required. |
-| 2 | `synth validate control.synth` | Exit 0, 0 errors, 21 warnings |
+| 2 | `synth validate control.synth` | Exit 0, 0 errors, 20 warningss |
 | 3 | `synth validate power.synth` | Exit 0, 0 errors, 42 warnings |
 | 4 | `synth dump-ir control.synth` | 61 components, 40 nets |
 | 5 | `synth dump-ir power.synth` | 111 components, 53 nets |
@@ -58,6 +58,6 @@ models, not dimensional drawings, so the product-page spec table is the evidence
 | 8 | `synth export-kicad power.synth ... --router free-routing` | Was killed after 28 minutes at about 96 % CPU with no PCB written; the export path itself was spinning, not an external router. The schematic, project, symbol and library table were written; the PCB and BOM were not. |
 | 9 | `kicad-cli sch erc` control | 0 errors, 6 warnings (4 isolated_pin_label, 2 no_connect_connected) |
 | 10 | `kicad-cli sch erc` power | 0 errors, 15 warnings (14 lib_symbol_mismatch, 1 label_multiple_wires) |
-| 11 | `kicad-cli pcb drc` control, un-routed | 0 errors, 97 unconnected pads, 1 warning (silk_overlap); no copper to route |
+| 11 | `kicad-cli pcb drc` control, un-routed | 0 errors, 97 unconnected pads, 0 warnings; no copper to route |
 | 12 | `synth check control --json` | See `VERIFICATION_REPORT.md`; the source stage passes, the routing stage fails on the same FreeRouting environment |
 | 13 | `synth check control --fab --json` | Fails in the manufacturing stage; no fab package |

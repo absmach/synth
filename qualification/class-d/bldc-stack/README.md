@@ -33,11 +33,19 @@ amplifiers, and makes 12 V with an LMR38010 buck.
 ## Board size
 
 The J_B2B pinout and the four mounting holes need a common frame. Both boards
-use holes at (3, 3), (67, 3), (3, 52) and (67, 52) mm and J_B2B at (64, 31) mm.
-The fitted control outline is **60.99 x 48.99 mm**, the issue's ~60 x 50 mm. Both
-boards use the same four holes at (3, 3), (53, 3), (3, 43) and (53, 43) mm and
-J_B2B at (50, 21) mm. The power sidecar packs its 111 parts into the same 60 x 50
-frame; it has no exported PCB, so it is a placement record, not a rendered board.
+use holes at (3, 3), (53, 3), (3, 27) and (53, 27) mm and J_B2B at (48, 15) mm.
+The fitted control outline is **61.99 x 36.97 mm**. J_B2B is 25.4 mm long, so the
+board height is the connector plus the exporter's edge margin, which is what the
+board was asked to be. The power sidecar packs its 111 parts into a 60 x 50
+record with the same holes and J_B2B; it has no exported PCB, so it is a
+placement record, not a rendered board.
+
+The holes sit about 4 mm inside Edge.Cuts because Synth's dense-board exporter
+keeps a 4 mm perimeter channel around the outermost courtyards and mounting
+holes; it is not a coordinate chosen in the source, and there is no per-board
+outline/size statement that would override it. Moving the holes outward moves
+the fitted edge outward with them and makes the board larger, not tighter.
+
 The passive reference labels are hidden on the silkscreen (the sidecar `[labels]`
 table) so the auto-placed text does not collide; every part is still in the BOM
 and the pick-and-place.

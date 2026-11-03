@@ -36,7 +36,7 @@ copper in this environment (see A9); routing is therefore not evidence.
 
 | # | Claim | Evidence | Result |
 | --- | --- | --- | --- |
-| A1 | The control source parses, resolves, lowers and passes Synth ERC | `synth validate control.synth` | Exit 0, 0 errors, 21 warnings: 10 `W-SYNTH-SUPPLY-002`, 5 `W-SYNTH-PART-UNVERIFIED`, 2 `E-SYNTH-SCHEM-005`, 1 each `W-SYNTH-THERMAL-001`, `E-SYNTH-POWER-004`, `W-SYNTH-ANOMALY-001`, `E-SYNTH-SCHEM-004` |
+| A1 | The control source parses, resolves, lowers and passes Synth ERC | `synth validate control.synth` | Exit 0, 0 errors, 20 warningss: 10 `W-SYNTH-SUPPLY-002`, 5 `W-SYNTH-PART-UNVERIFIED`, 2 `E-SYNTH-SCHEM-005`, 1 each `W-SYNTH-THERMAL-001`, `E-SYNTH-POWER-004`, `W-SYNTH-ANOMALY-001`, `E-SYNTH-SCHEM-004` |
 | A2 | The power source parses, resolves, lowers and passes Synth ERC | `synth validate power.synth` | Exit 0, 0 errors, 42 warnings: 22 `W-SYNTH-PART-UNVERIFIED`, 6 `E-SYNTH-SCHEM-005`, 5 `W-SYNTH-SUPPLY-002`, 5 `E-SYNTH-SCHEM-003`, 3 `E-SYNTH-SCHEM-001`, 1 `W-SYNTH-ANOMALY-001` |
 | A3 | Every J_B2B pin is mapped exactly once | `cargo test -p synth-cli --test bldc_stack_board`, test `every_j_b2b_pin_is_matched_once` | `status: ok`, 20 total, 20 matched, 100 %, no diagnostics |
 | A4 | A swapped mapping is rejected | `mappings_neg_swap.json` | `warning`, `E-SYNTH-MULTIBOARD-003` |
@@ -45,7 +45,7 @@ copper in this environment (see A9); routing is therefore not evidence.
 | A7 | A swapped source pin is rejected | `control_neg_swap.synth` | `warning`, `E-SYNTH-MULTIBOARD-003` |
 | A8 | Connector and mounting holes align | Sidecars, test `the_connector_and_mounting_holes_line_up` | J_B2B and H1-H4 are at identical coordinates on both boards, 0.000 mm and the same rotation |
 | A9 | Copper is routed | `synth export-kicad --router free-routing` | **Failed.** `tools/freeroute_autoroute.py` exits 1 with a KiCad `PROPERTY_ENUM` assert before routing; the same failure occurs on the committed Class-B buck board. `release_ready: false`, `validation_failed` |
-| A10 | The exported projects load in KiCad | `kicad-cli sch erc` and `kicad-cli pcb drc` on the delivered files | Control: 0 ERC errors, 6 warnings (4 `isolated_pin_label`, 2 `no_connect_connected`). Power: 0 ERC errors, 15 warnings (14 `lib_symbol_mismatch`, 1 `label_multiple_wires`). DRC on the un-routed control PCB: 0 errors, 97 unconnected pads, 1 warning (silk_overlap); no routed copper exists |
+| A10 | The exported projects load in KiCad | `kicad-cli sch erc` and `kicad-cli pcb drc` on the delivered files | Control: 0 ERC errors, 6 warnings (4 `isolated_pin_label`, 2 `no_connect_connected`). Power: 0 ERC errors, 15 warnings (14 `lib_symbol_mismatch`, 1 `label_multiple_wires`). DRC on the un-routed control PCB: 0 errors, 97 unconnected pads, 0 warnings; no routed copper exists |
 | A11 | Every authored part has a datasheet, an MPN and a real KiCad footprint | `synth registry qualify --part <id>` | All authored parts pass pin/pad, symbol, dimension and provenance checks; each is blocked on `E-SYNTH-QUAL-008` "part has no reviewer", which is intentional: `reviewed_by = ""` |
 | A12 | The mapping file is the only cross-board source of truth | `interboard_mappings.json` and the test | The test loads that file; no pin mapping is duplicated in the sources |
 | A13 | The netlist matches the source | `synth dump-ir` / the exported netlist | Control: 61 components, 40 nets. Power: 111 components, 53 nets. Net names and members are in `agent-run/NETLIST.md` |

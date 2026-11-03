@@ -100,8 +100,8 @@ ground and a pour. The stackup block is in both sources.
 
 The placement is hand-pinned in the two sidecars. J_B2B and H1-H4 are at the
 same coordinates on both boards, so the mechanical test can enforce 0.1 mm. The
-control board is 60.99 x 48.99 mm and the power sidecar packs the same 60 x 50
-frame. Passive reference labels are hidden on the silkscreen (sidecar `[labels]`) so the auto text does not collide; the references remain in the BOM and pick-and-place. The placement was not optimized for loop area: the automatic placer
+control board is 61.99 x 36.97 mm, the height of J_B2B plus the exporter edge
+margin; the power sidecar uses the same holes and J_B2B in a 60 x 50 record. Passive reference labels are hidden on the silkscreen (sidecar `[labels]`) so the auto text does not collide; the references remain in the BOM and pick-and-place. The placement was not optimized for loop area: the automatic placer
 produced 86 x 62 mm (control) and 154 x 105 mm (power), so a hand layout was
 used instead. A reviewer should move the input capacitors and the shunts closer
 to their switching loops before calling the layout production-ready.
