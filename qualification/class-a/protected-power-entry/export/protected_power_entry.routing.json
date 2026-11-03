@@ -1,0 +1,117 @@
+{
+  "schema_version": "synth.routing.v1",
+  "state": "routed",
+  "engine": "kicad-routing-tools",
+  "capability": {
+    "engine": "kicad-routing-tools",
+    "available": true,
+    "version": "9399bfb2",
+    "runtime_version": "Python 3.12.3",
+    "detail": null,
+    "failure": null
+  },
+  "provenance": {
+    "engine": "kicad-routing-tools",
+    "engine_version": "9399bfb2",
+    "runtime_version": null,
+    "profile": "jlcpcb",
+    "command": [
+      "/home/synth/krtvenv/bin/python",
+      "/home/synth/pt/cbv5/tools/kicad_routing_tools_route.py",
+      "/home/synth/runs/c3v5/g1/protected_power_entry.synth.kicad_pcb",
+      "/home/synth/runs/c3v5/g1/protected_power_entry.kicadroutingtools.kicad_pcb",
+      "--repo",
+      "/home/synth/krt",
+      "--python",
+      "/home/synth/krtvenv/bin/python",
+      "--stats",
+      "/home/synth/runs/c3v5/g1/protected_power_entry.krt-stats.json",
+      "--escalation",
+      "board",
+      "--fab-tier",
+      "advanced",
+      "--same-net-pad-clearance",
+      "0.1000",
+      "--strict-sizes",
+      "--escape-via-drill",
+      "0.2000",
+      "--escape-via-size",
+      "0.4600",
+      "--escape-clearance",
+      "0.1270",
+      "--fanout-component",
+      "U1"
+    ],
+    "settings": {
+      "allow_via_in_pad": "false",
+      "escalation": "board",
+      "fab_tier": "auto",
+      "strict_sizes": "true",
+      "wall_clock_secs": "1200"
+    },
+    "input_hash": "beb3e80fc635e3f22d703dc856b56c41b5d88a706ff1bceb8dd0a8c6643bdf2e",
+    "output_hash": "",
+    "source_revision": null,
+    "duration_ms": 68041
+  },
+  "statistics": {
+    "connected_nets": 34,
+    "open_nets": 0,
+    "open_net_names": [],
+    "segments": 302,
+    "vias": 24,
+    "wire_length_mm": 855.358069,
+    "pad_escape_rejections": 0,
+    "engine_findings": {
+      "claimed_successful": "33",
+      "claimed_total_vias": "21",
+      "claimed_via_in_pad": "0",
+      "engine_policy_verdict": "rejected",
+      "rules_below_board_floor": "none reported"
+    }
+  },
+  "artifacts": {
+    "baseline": "/home/synth/runs/c3v5/g1/protected_power_entry.synth.kicad_pcb",
+    "candidate": "/home/synth/runs/c3v5/g1/protected_power_entry.kicadroutingtools.kicad_pcb",
+    "delivered": "/home/synth/runs/c3v5/g1/protected_power_entry.kicad_pcb",
+    "session_log": "/home/synth/runs/c3v5/g1/protected_power_entry.kicadroutingtools.log",
+    "ses": null,
+    "router_report": "/home/synth/runs/c3v5/g1/protected_power_entry.krt-stats.json",
+    "connectivity_report": null,
+    "drc_report": null
+  },
+  "validation": {
+    "fabrication_ready": true,
+    "topology": {
+      "missing_footprints": [],
+      "extra_footprints": [],
+      "missing_nets": [],
+      "missing_layers": [],
+      "missing_pads": [],
+      "renet_pads": [],
+      "outline_present": true
+    },
+    "connectivity": {
+      "connected_nets": 34,
+      "open_nets": 0,
+      "open": [],
+      "unconnected_pads": [],
+      "via_in_pad": [],
+      "undersized_vias": [],
+      "undersized_tracks": []
+    },
+    "kicad_drc": {
+      "errors": 0,
+      "unconnected": 0,
+      "warnings": 84
+    },
+    "blocking_reasons": [],
+    "unavailable_checks": [],
+    "advisories": [
+      "net S5_DIV changes layers at (35.20, 63.90) mm with no ground return via within 1.53 mm and no spot in the GND pour for one; the net carries no fast edge, so the loop is left as an advisory",
+      "net +12V_PROT changes layers at (60.10, 33.80) mm with no ground return via within 1.53 mm and no spot in the GND pour for one; the net carries no fast edge, so the loop is left as an advisory",
+      "net S3_DIV changes layers at (48.90, 66.90) mm with no ground return via within 1.53 mm and no spot in the GND pour for one; the net carries no fast edge, so the loop is left as an advisory"
+    ]
+  },
+  "failure": null
+}

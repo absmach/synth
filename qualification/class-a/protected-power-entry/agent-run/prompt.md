@@ -1,486 +1,91 @@
-Protected Power Hub PCB — Complete Electrical and Physical Design Specification
+Protected Power Hub PCB — Make the Seed Board Release, Compact It, and Meet the Review Checklist (No Fill) (Synth MCP)
 
-1. Objective and execution environment
+1. State of the board
 
-Design a complete, production-oriented two-layer Protected Power Hub: a 12 V protected power-entry and distribution PCB with regulated 5 V and 3.3 V outputs using Synth MCP tools and export the finished design to KiCad.
+Your workspace holds the seed board: protected_power_entry.synth and its placement sidecar, README.md (what the board is) and user-registry/ (parts the board uses). It is an 84-part two-layer 12 V protected input (fuse, Si2301 FET with source-gate clamp, TVS after the fuse) with an MP2307 buck to 5 V, a TPS22918 switched 5 V, an AMS1117 3.3 V rail, a control header and LEDs; it has no MCU, USB-C or SWD by design. The seed outline is about 110.5 x 72.5 mm (the committed board) and its release state against the current Synth build is unknown: export it first and record what blocks. user-registry/ holds the parts the shipped registry lacks, including polyfuse_1r5a, smaj15a_tvs and smaj13a_tvs (SMAJ13A: VR 13.0 V, VC 21.5 V at 18.6 A); the README describes the board as committed. Do not use a registry_path override: the workspace's user-registry is picked up automatically. The router is chaotic: a small layout change can break or fix a net, a via placed in a pad or a pour island, so work in small steps and keep only steps that release.
 
-Board name: protected_power_entry
+The only tools are the Synth MCP and Read, Write and Edit. Do not invent tool results, part numbers, datasheet values or URLs; a value you are not certain of is written "needs sourcing".
 
-Native Synth project: protected_power_entry.synth
+2. Goals, in order
 
-The board must be a real, electrically connected, routed PCB design, not just a schematic or conceptual layout.
+G1. Make the seed board release (release_ready, route_complete, 0 DRC errors, no via in a pad, no pour island): follow the placement review's advice actions (synth_place_with_hints, run_routing=false) and the export findings, move parts by role, pin coordinates in the sidecar, re-route, export into a fresh folder each time. Never pass allow_incomplete=true. Never edit exported KiCad files.
+G2. Compact: keep the outline no larger than the seed's (110.5 x 72.5 mm) and compact it in steps. Connectors flush with their board edge within 0.3 mm (pin headers may sit inboard); four mounting holes at the corners, clear of parts and copper. Do not call synth_compact_layout.
+G3. No fill. Jeff has decided the Hub is NOT filled: add no parts to fill voids and skip any fill step. Only parts a review item below needs may be added or changed, each wired to a real function.
+G4. Meet this review checklist (a reviewer found these on a similar board; avoid every one):
+ - No clamp or TVS whose worst-case clamp exceeds the absolute maximum of what it protects (no 5 V TVS on a 3.3 V signal; none across a regulated 3.3 V rail; use a 3.3 V zener behind a series resistor and write the current calculation). An input TVS's maximum clamp stays below the regulator's maximum input.
+ - Every fine-pitch part has a verified land pattern and an escape the router actually produced; if a part cannot be escaped on the two-layer standard tier, do not use it.
+ - Buck feedback divider gives the stated rail from the datasheet reference, the compensation network is complete, input and output capacitors at the regulator pins.
+ - Crystal load capacitors are computed from the crystal's load capacitance and a stated stray capacitance, with the arithmetic in the notes.
+ - Current assumptions are written (load currents per output) and the MOSFET, diode and track width carry them with margin; declared netclasses are assigned to nets.
+ - Return paths: a ground via next to each signal via on a two-layer board, or the advisory is listed with its reason.
+ - Distances: debug header within 15 mm of the processor, reset button within 8 mm of the reset pin, decoupling at its pins, test points beside their circuit, identical circuits laid out alike.
+ - Every part is in a named functional group so the schematic has no OTHER region; no decorative text; silkscreen findings cleared.
+ - Orderable BOM: manufacturer, MPN, package, rating for every part from the registry; "needs sourcing" rather than a guessed number.
 
-Use the available Synth MCP tools to create the project, place real components, establish nets, generate the PCB, position components, route copper, run validation, and export the results to KiCad.
+3. Procedure
 
-The only available agent tools are Synth MCP and Read, Write, and Edit. Do not assume shell access, web access, or external tool access. Discover the available Synth operations from their actual tool descriptions and server instructions.
+1. Read the files and this brief; export the unchanged board into export_start/ and record what blocks the release.
+2. G1 in small steps, then G4 items that change parts, then G3 in batches, then G4 distances. Every step exports into a fresh folder and is kept only if it releases.
+3. Finish with the best released state in a fresh export/ with the .synth and sidecar beside it; run kicad-cli pcb drc and report every warning.
 
-Do not invent Synth commands, component library entries, successful tool operations, or validation results.
+4. Report (REPORT_PASS.md)
 
-If a required operation is unavailable, complete the remaining supported work and document the limitation.
+Per goal: what changed, measured results from the exported files (outline, fill, connector gaps, DRC, release flags, part count), the checklist item by item with the measured result, "needs sourcing" parts, and anything you could not do with the measured reason.
 
-This board is a qualification board: it will be reviewed by an independent PCB reviewer, and the way it was made is part of what is reviewed. Work only through the Synth tools. Where Synth does something wrong, report it exactly rather than working around it silently.
+Begin by reading the files and exporting the unchanged board.
 
-2. Required system functionality
 
-The board is a protected power entry that is reviewed as a power stage, and it is the complete chain from a protected input to usable outputs. It must include:
+PCB layout quality rules (mandatory, applies to every board)
 
-A 12 V DC input through a connector rated for the current: a screw terminal or a JST connector, which you choose and justify.
-Reverse-polarity protection using a P-channel MOSFET.
-Input over-current protection using a fuse that you choose from the load budget and justify (resettable or replaceable), placed where it can be reached.
-Transient suppression using a TVS, and input filtering.
-An MP2307 buck regulator that produces a 5 V rail.
-A TPS22918 load switch with soft start that produces a switched 5 V output.
-A 3.3 V rail for logic that a host board would add.
-Separate protected output connectors for the 5 V, the switched 5 V and the 3.3 V.
-A control header that a host can use: a hardware enable for the switched output, a fault-status output if the design has a real source for one, and scaled samples of the rails for a host ADC.
-Monitoring: test points on the raw input, the fused input, the protected 12 V rail, every output and ground; a power LED for each rail; a fault indicator. Add input current sensing only if you can do it correctly.
-Clearly labelled, physically accessible external connectors.
-A fully routed two-layer PCB suitable for JLCPCB manufacturing.
-A complete schematic, BOM, PCB layout, and verification report.
+Keep the full functionality, the component set, the connectors and the mounting holes. Add no decorative text: no board name, no revision text, no functional headings, no logos. Silkscreen carries only what identifies parts, connectors and test points. Four rules, in this order: compactness (no unnecessary gaps between related parts), grouping (the parts of one circuit sit together), consistency (repeated parts, connectors and identical circuits are aligned and oriented alike), functionality (never trade electrical performance, manufacturability or serviceability for looks). Every gap that remains must have an electrical, mechanical or manufacturing reason.
 
-Do not silently omit any requirement.
+Work by role, not by name. Decide each circuit's role from its connectivity, then place by these rules:
+1. Support parts hug the part they serve. A decoupling capacitor sits within a few millimetres of the supply pin it decouples, a crystal and its load capacitors beside the clock pins, a reset or boot network beside the pin it drives, pull-ups and dividers beside the node they set, a flyback or clamp diode beside the switch it protects. Do not leave a support part standing alone in open board area. After every placement, read the placement review: when it says a support part is too far from a pin and names a hint such as `near: U2.vcc`, write exactly that hard `near` hint for that part in the source and place again, and repeat until the warnings clear or you can say why one cannot. The review lists the worst eight; after you fix them, place again to see the next ones.
+2. The power entry owns a corner or an end. The input connector, its protection, the reverse-polarity part and the regulator form one contiguous block; each regulator has its inductor and its input and output capacitors touching it, laid out as its guidance asks, with a tight switching loop. The block must not crowd the processor or the sensitive inputs.
+3. The main processor sits near the middle of the board unless routing says otherwise, with its decoupling in a tight ring and its programming or debug header, reset button and boot parts close to it and reachable. Memory and other parts wired mainly to it sit directly adjacent.
+4. A peripheral circuit sits beside the connector it serves. When a driver, interface IC or protection network is wired mainly to one connector, place the whole circuit directly beside that connector, on that connector's edge, with its resistors and capacitors around it.
+5. Identical circuits are placed alike. When two or more circuits use the same part types and the same connectivity (several output drivers, several identical sensor interfaces), give them the same internal layout, the same orientation, and the same pitch along the edge, so the copies read as copies. Align their connectors on one baseline with even spacing. After every placement, read the placement review: when it says a part of one copy is laid out differently from the same part in the first copy and gives coordinates, pin that part at exactly those coordinates (and rotation) in your placement sidecar and place again, until the copies match or you can say why they cannot.
+6. External connectors sit flush on the board edge, the edge their mating face points to, with even spacing between connectors on the same edge. Pin headers may sit a few millimetres inboard. Leave plug and cable clearance.
+7. Test points sit with the circuit they measure, within a few millimetres of a part on their net; test points for one interface (debug, programming) form one aligned row by that interface. Keep them probe-accessible and out of the processor's escape area. Ground test points are easy to reach.
+8. Orientation and alignment. Put like parts (resistors, capacitors, diodes) on shared rows or columns inside a block, give equivalent transistors matching orientation, align IC edges and connector centres on common horizontal and vertical lines, and keep pin-1 marks identifiable. Do not rotate arbitrarily and do not force one orientation where it worsens the electrical layout.
+9. Indicators. Status LEDs with their resistors form one row at an edge, near the part whose state they show.
+10. Silkscreen. Each reference designator sits beside its part, in the same orientation and size for the same kind of part, clear of pads, copper and other bodies. Where Synth cannot place text, say so in the report instead of working around it.
+11. Routing. Route after placement is final: short and direct, 45-degree bends, widths for the current, return paths preserved, noisy and sensitive nets apart, little congestion near the processor, continuous ground pour, no isolated copper islands.
+12. Outline and holes. Keep the mounting holes with clearance and no part under the hardware. Keep part and copper setbacks from the edge. Shrink the outline only when the placement truly allows it.
+13. Validation and report. Run ERC and DRC, confirm every schematic connection and the component count are unchanged, review the board in 2D and 3D, and report measured numbers: each decoupling capacitor's distance to its pin, each connector's gap to the board edge, each test point's distance to its circuit, and for every group of identical circuits whether their layouts match. Say plainly what you could not do.
 
-This board has no microcontroller, no USB-C programming path and no SWD header. That is a stated exception to the Class A rule that every board has them: the board is a power stage, and nothing on it is programmable. The control header satisfies the GPIO requirement and the indicators satisfy the indicator requirement. Do not add a microcontroller.
+14. Release exports only. A qualification board is a release export. Never set allow_incomplete=true on synth_export or any other tool: it switches off the release gate (footprint guarantee, routing and signal-integrity checks) and labels the board a draft. If the export is blocked, read the finding and fix its cause with the Synth tools (for a part whose footprint is not in the KiCad library, use synth_resolve_footprints and name one KiCad really ships; for a routing finding, change the placement or the part). Only if you truly cannot clear a blocker, stop and report that blocker exactly, instead of exporting a draft.
 
-The order of the protection chain is the claim being reviewed. A TVS placed in front of the fuse has nothing to limit the fault current it conducts, so the transient suppressor must sit after the fuse. It must also not conduct in the reverse-polarity case: a unidirectional TVS across a supply conducts like a diode when the supply is reversed. Place each protection element so that normal operation, a reversed supply, an over-current fault and a transient each meet the right part, and justify the position of every one.
+15. Compact after the layout is final. When your placement review has no remaining warnings you can fix and a release export has passed, call synth_compact_layout with file_path set to your .synth file, layout_file_path set to your placement sidecar and out_dir set to a folder named compact in your workspace. Each call makes one attempt and returns its attempts so far; call it again with the same arguments until it returns done true. It scales your layout inward, exports every attempt through the release gates, and keeps the tightest layout that still routes with clean DRC; your original sidecar is kept beside it as .pre-compact. Then export once more from the installed sidecar into your export folder, read the result, and report the final outline size and the attempts list (scale, size, passed or failed and why). Never edit the sidecar by hand to undo or tune the result.
 
-3. First inspect Synth and establish the design
+16. REVIEW OF THIS BOARD (Sammy, 2026-10-29), each item is a blocker, fix it, do not justify what can be fixed:
+16a. Power geometry: the source declares 0.8/1.0 mm power widths and 0.8/0.4 mm vias but the earlier export used 0.6/0.3 mm vias and narrowed power routes. Make the exported board use the declared widths and vias (apply the netclasses to the nets and confirm in the exported file), or revise the envelope with the current arithmetic and say so. Report declared against exported widths and vias.
+16b. Every critical power-path part has a datasheet-checked identity and land pattern: the MP2307 exposed-pad footprint, the TPS22918 pin map, the inductor ratings, the compensation network and the protection parts. Verify each against the manufacturer datasheet (WebSearch; cite the page), never from memory; where a part cannot be verified say 'needs sourcing'. Do not invent part numbers or reviewers.
+16c. Input transient and thermal: define the surge case (source impedance, surge level) and show the protection keeps the MP2307 within its 23 V recommended input: a TVS whose worst-case clamp at the stated surge current is below 23 V and whose standoff is at or above the maximum input, placed BEFORE the series input MOSFET so it is clamped before reaching it, with the MOSFET drain-source rating above the clamp (SMAJ15A clamps 24.4 V, which is above the MP2307 limit: choose another arrangement and show the arithmetic). AMS1117: write its dissipation for the real load and give a validated thermal design (copper area and datasheet thermal resistance) or a lower stated load limit.
+16d. Use the corrected registry entry for the Schottky diode (the merged fix): the 1N5819 identity must match its SOD-123 footprint. Reconcile every artifact total (vias, segments, lengths) so the README, the report and the exported files describe one revision: generate them all from the final export.
 
-Before creating the circuit:
+17. LESSONS FROM THE IRRIGATION BOARD REVIEW (also blockers): (a) schematic and PCB renders and all hashes come from the same final export; no OTHER schematic region; every part in a named group. (b) Each decoupling capacitor sits at the supply pin it serves (within 4 mm) on the released layout; name any that cannot and why. (c) Silkscreen: no reference label and no outline line over a via, hole or pad, no decorative text. (d) Every value in the notes (LED currents, pull-ups, bleeders) is computed from the selected part's datasheet, not assumed. (e) Connectors flush with the board edge within 0.3 mm (pin headers may sit inboard), four mounting holes clear of parts. (f) No through-hole pad within about 2.1 mm of an SMD pad where the layout allows. (g) Every fitted part has manufacturer, MPN, package, rating and a datasheet or distributor page, found by search, never invented; never use --allow-unverified-parts. (h) A plain default export must be valid with no optional flag. At the end report rule by rule which are met and which are not, with numbers measured from your own export.
 
-Inspect the available Synth MCP tools and determine their actual capabilities.
-Determine how the environment represents projects, components, footprints, nets, net classes, schematics, PCB placement, stackup, routing, validation, and KiCad export.
-Create or open the project using the exact name given above.
-Inspect available component libraries and verify the parts required for the design. Prefer registry parts that already carry a manufacturer part number and an LCSC number; import or author a part only when none fits, and say so.
-Establish a component and signal plan before placing components.
-Implement the design incrementally, inspecting the result after each major subsystem.
 
-Use the following implementation order:
+18. RELEASE COMES FIRST (rules from the later boards; they override anything above that conflicts):
+18a. Mounting holes: four at the corners if the board releases with them; if four do not release, two on opposite (diagonal) corners. Never fewer than two.
+18b. Test points and other optional parts (status LEDs, spare footprints, extra headers) are kept only if the board still releases with them beside their circuit; one that blocks the release is dropped. Required functions (fuse, reverse-polarity FET, input protection, both regulators and their input and output capacitors at the pins, the switched output, the control header) are never dropped.
+18c. A placement-review advice action is applied only if the board still releases after it. Do not force an action that breaks a net; leave it.
+18d. Describe the board as it is in every note you write: no list of removed or dropped parts anywhere in the files you produce.
 
-Load assumptions and the supply budget.
-Input connector, fuse, reverse-polarity protection and transient suppression.
-The 5 V buck regulator.
-The load switch and the 3.3 V regulator.
-The control header, monitoring and fault indication.
-Output connectors, indicators and test points.
-Schematic connectivity verification.
-PCB placement and routing.
-ERC, DRC, and unresolved-issue review.
-KiCad export and final artifact verification.
+19. INPUT PROTECTION CHAIN (the same lesson as the irrigation controller): the supply range is 10.8 to 13.0 V. The TVS is a Littelfuse SMAJ13A (registry part smaj13a_tvs: standoff 13.0 V at or above the 13.0 V maximum input; 1 uA maximum leakage at the standoff; 21.5 V maximum clamp at 18.6 A) with its cathode on the fused input BEFORE the series P-channel FET, so a transient is clamped before it reaches the FET. The FET is the AO3401A (registry part p_mosfet_ao3401a, 30 V drain-source), because the 21.5 V clamp is above the Si2301's 20 V rating. The clamp stays below the MP2307's 23 V recommended input and its 26 V absolute maximum, and below the FET's 30 V. A reversed supply forward-biases the TVS and the polyfuse opens; say so in the notes. Recompute every note that used the old 15 V figures.
 
-Do not route the PCB before the essential schematic connectivity and pin assignments are established.
+20. FABRICATION RULES: vias are 0.6 mm over a 0.2 mm drill (annular ring 0.2 mm) except where a netclass declares larger power vias that the router honours; the exported board's tracks and vias must carry the declared netclass widths where the router can place them. Keep every SMD pad at least 2.4 mm (pad edge to pad edge) from every through-hole pad. Silkscreen is cut back from vias and pads by the exporter; do not add silkscreen graphics.
 
-4. Load assumptions
+21. DISTANCES BY THE REVIEW'S OWN MEASURE: after every release read the placement review (synth_describe_placement) and fix a distance it names (a decoupling capacitor within 4 mm centre to supply pin, a rail capacitor within 6 mm of the regulator pin, a support part within the review's stated limit) by moving the one part, keeping the move only if the board still releases and the through-hole gap in 20 holds.
 
-Before selecting any rating, document the assumptions the design rests on: a nominal 12 V supply with a provisional continuous range of 9 to 16 V, the maximum load on the 5 V output, the maximum load on the switched 5 V output, the maximum load on the 3.3 V output, the transient environment you protect against, and whether the connectors are hot-plugged.
+22. STARTING POINT: the workspace holds a board that already releases (QOD pin left floating, which the TPS22918 datasheet lists as an option; ERC has no errors). Do not redesign it. Your job is only to bring the placement review's named distances inside their limits, one part (or one small group) at a time, keeping a change only if the board still releases: the input decoupling capacitors within 4 mm of the regulator input pin; the rail capacitors within 6 mm of the pin they serve; signal series resistors within 10 mm of the connector pin they serve; each fuse beside the connector it protects; the feedback pull-up beside the regulator feedback pin; test points within 5 mm of the part they probe. The board is 12.5 % filled, so there is room: use placement actions, pinned positions and hard near hints. Export only into fresh directories, never with allow_incomplete, and stop when no further named distance can be fixed while still releasing.
 
-Start from these provisional targets: 5 V (including the switched output) up to 1.5 A and 3.3 V up to 0.5 A. They are goals, not ratings. If the 3.3 V rail is made from the 5 V rail by a linear regulator, its load is part of the 5 V budget and its dissipation is (5 V minus 3.3 V) times its current; show both. The MP2307 is a 3 A part, so the sum of everything it supplies, with margin, must stay below that. If you can show by calculation that more is supportable, or that less is all the parts allow, say so and use the number you can defend.
-
-Do not claim a maximum output current that the thermal and ampacity calculations, the connector ratings and the fuse do not support. Report any unknown as an unresolved product specification.
-
-5. Input connector and protection chain
-
-Input connector J1
-
-Use a mechanically suitable, keyed JST connector with a verified footprint and a documented mating connector. Define the pinout explicitly: pin 1 the 12 V input, pin 2 ground. Verify the actual pin numbering against the footprint. Clearly mark polarity on the PCB.
-
-Protection and power path
-
-Implement a chain in which the fuse comes first and the transient suppressor after it:
-
-J1 → F1 1.5 A polyfuse → reverse-polarity P-channel MOSFET → protected 12 V rail
-
-with the SMAJ15A placed so that it does not conduct when the input is reversed, and so that a transient meets the fuse's impedance.
-
-Reverse-polarity MOSFET
-
-Use a Si2301-class P-channel MOSFET in the usual orientation for reverse-polarity protection. Verify its pin numbering, its drain-source voltage rating, its on-resistance at the gate voltage you will actually have, and above all its absolute-maximum gate-source voltage.
-
-The gate must be held so that the gate-source voltage stays inside that absolute maximum over the whole input range, including the top of the tolerance and during a transient. A gate resistor to ground alone will not do this at 12 V on a part rated for far less. Do not copy a gate-clamp value from anywhere without checking it against the part's own limit; choose the clamp from the datasheet, put it across the gate and source, and show by calculation that it works for both a normal and a reversed supply.
-
-Transient suppressor
-
-Verify the SMAJ15A's standoff voltage, breakdown voltage and clamping voltage. The standoff must be above the highest normal input, and the clamping voltage at the rated surge current must be compared with the absolute-maximum input voltage of everything downstream, which includes the buck regulator and the MOSFET. If the clamp exceeds a downstream rating, say so in the report; do not claim the chain is safe.
-
-Input capacitors
-
-Provide input capacitors rated for the voltage and ripple, placed where the buck regulator needs them.
-
-Keep the raw input, the fused input, the protected 12 V rail, the 5 V rail and the 3.3 V rail as distinct named nets.
-
-6. 5 V buck regulator
-
-Use an MP2307 buck regulator.
-
-Implement every external component it needs: input capacitors, the inductor, the output capacitors, the feedback resistors, the bootstrap capacitor, the compensation network, the soft-start capacitor and the enable circuit, as its datasheet specifies. The part has an exposed pad that its datasheet requires to be tied to ground; connect it, and give it the copper to dissipate heat.
-
-Calculate the feedback divider from the part's actual reference voltage for a 5 V output. Verify the inductor's value, saturation current and rating against the ripple current at the worst-case input voltage. Verify the output capacitance and ripple, the switching frequency and the startup behaviour. Verify that the catch-diode requirement, if the part has one, is met.
-
-Keep the switch node's copper small and away from sensitive nodes, and route it: the switch node is the net a previous board of this kind left unrouted, and it must be a routed net here.
-
-Name the output +5V. Provide test points for the 5 V rail and for the switch node.
-
-7. Load switch and 3.3 V regulator
-
-Load switch
-
-Use a TPS22918 load switch with soft start on the 5 V output, producing +5V_SW. Verify its pinout, its on-resistance, its input and output capacitor requirements, and how its slew-rate or soft-start capacitor sets the turn-on time. Calculate the inrush current into the maximum load capacitance and show that it is acceptable.
-
-Define its enable input explicitly: what level turns it on, what the default state is with nothing connected, and how a carrier board or a test point can turn it off. Provide a pull to the default state and a test point or connector pin for control.
-
-3.3 V regulator
-
-Use an AMS1117 regulator to produce +3V3 from the 5 V rail, for logic a carrier board would add. Verify its pinout (including that its tab is the output), its input and output capacitor requirements, its dropout voltage and its thermal limits. Calculate its dissipation at the worst-case input and load, and the temperature rise on the copper you give it.
-
-Calculate the total load on each rail and show the margin against each regulator's rating.
-
-Provide bulk output capacitance on the 5 V and 3.3 V rails sized for a load step, check it against the regulators' stability requirements, and say what happens at power-up and power-down: which rail comes up first, whether the 3.3 V rail can be present before the 5 V rail has settled, and what the load switch does while the buck is starting.
-
-8. Control header, monitoring and fault indication
-
-Control header
-
-Provide a labelled header for a host board. It carries: the enable input of the switched output, a fault-status output if there is a real source for one, scaled and clamped samples of the protected 12 V rail, the 5 V rail and the 3.3 V rail for a host ADC, a 3.3 V reference pin and ground. Label every pin and state its voltage range and what drives it. Every pin must be 3.3 V compatible and protected as the GPIO block below requires.
-
-Enable
-
-Define what level turns the switched output on, what the default is with nothing connected, and what the host can do. The load switch's enable pin has a voltage limit of its own; check it, and do not let a header pin present more than it allows.
-
-Fault status
-
-Do not invent a fault signal. Establish from the datasheets whether any part on the board produces one: a power-good or fault output of the buck, of the load switch, or a comparator you add across the fuse or the protected rail. If one exists, bring it to the header with the pull-up it needs and say what it means. If none does, say so, and leave the line off the header rather than wire it to nothing.
-
-Current sensing
-
-Add input current sensing only if you can do it correctly: a shunt in the protected path, its value and dissipation at the fuse's hold current, an amplifier or a filtered sense node, and the range at the header. If you do not add it, say so in the report.
-
-Indicators
-
-Provide a power LED for each of the input, the protected 12 V rail, the 5 V rail, the 3.3 V rail and the switched output, and a fault indicator if there is a fault signal, each with a resistor you calculate.
-
-9. Output connectors and test points
-
-Provide output connectors for the switched 5 V and the 3.3 V. Define each pinout explicitly, with ground and the supply, verify the numbering against the footprint, and label them. State the maximum current each connector and its mating part are rated for, and compare it with what the board can deliver.
-
-Provide test points for: the raw input, the fused input, the protected 12 V rail, the 5 V rail, the switched 5 V, the 3.3 V rail, the buck switch node, the load switch's enable, and ground (at least two). Place them where they can be reached with a probe or a multimeter without touching a neighbouring high-current pad.
-
-10. Grounding and power distribution
-
-Use a common ground with deliberate current-return routing. Keep the buck regulator's switching current loop (input capacitor, regulator, inductor, output capacitor) short and compact, and keep its return currents out of the connectors' ground paths and out of the sample nodes of the control header. Use as continuous a bottom-layer ground pour as you can.
-
-Say what copper area you give the regulator's exposed pad and the 3.3 V regulator's tab, and what temperature rise that implies at the full load.
-
-The ground connection between every part of the board must be explicit and electrically continuous.
-
-Do not create arbitrary isolated ground nets that leave the circuit electrically disconnected.
-
-11. Physical board organization
-
-Use a deliberate placement strategy.
-
-Region A: Input and protection
-
-Place the input connector at one board edge, with the fuse, the reverse-polarity MOSFET and the TVS immediately inside it, so that the surge path is short, and the fuse where it can be reached.
-
-Region B: Converters
-
-Place the buck regulator, its inductor and its capacitors close together with the switching loop compact, then the load switch and the 3.3 V regulator after it. Keep the feedback nodes away from the switch node.
-
-Region C: Outputs and control
-
-Place the output connectors at the opposite edge, near their power distribution, and the control header at an accessible edge, away from the switching nodes.
-
-Placement priorities, in order: connector accessibility and mechanical fit; the order of the protection chain; the buck's switching loop; thermal copper for the regulators; the control header's signal integrity; test-point accessibility; silkscreen readability; visual neatness.
-
-Do not sacrifice electrical performance merely to achieve a symmetrical layout.
-
-12. PCB stack-up, copper, and routing
-
-Use a two-layer PCB suitable for JLCPCB.
-
-Prefer: top layer for components and most routing; bottom layer a largely continuous ground pour, with unavoidable signal routing only where necessary.
-
-Do not split a ground plane into arbitrary islands. A ground pour that is cut into pieces by tracks leaves islands with no connection; check the result.
-
-Use appropriately sized copper for every power and high-current path. Calculate trace widths from current, copper thickness, acceptable temperature rise, and the expected load.
-
-Declare a net class for every group of nets that needs its own trace width, clearance or via size. Assign the class to each net explicitly, by name, in the source. After the export, read the routed `.kicad_pcb` and confirm that each power net was actually routed at its declared width; a class that was declared but not applied is a defect to report, not a success.
-
-Use conservative clearances and via sizes compatible with ordinary prototype manufacturing.
-
-Route in priority order: power input and protection, the highest-current loops, then supply distribution, then clock and reset where present, then sensitive signals, then the remaining low-speed signals. This ordering is a routing priority, not permission to create a poor ground return.
-
-Use short, direct routes for sensitive signals. Avoid unnecessary vias on sensitive signals.
-
-Wherever a signal changes layers, a ground via should be close to it so the return current can follow; check the signal-integrity findings the export returns and report any that remain.
-
-Ensure every external connector's signal and power pins reach the correct circuit.
-
-Do not leave unrouted nets, dangling tracks, accidental shorts, or copper-clearance violations.
-
-If a signal cannot be routed cleanly, revise component placement before adding excessive vias or compromising the ground plane.
-
-Every net on the power path carries the load current and must be routed at a width its class declares, including the nets on either side of the fuse and the switch node.
-
-JLCPCB rules
-
-Use the selected JLCPCB fabrication capabilities as the manufacturing constraint.
-
-Set explicit design-rule values for trace width, clearance, via diameter, drill diameter, annular ring, copper-to-board-edge clearance, and solder-mask requirements.
-
-Prefer margins above the manufacturer's absolute minimum wherever practical.
-
-Do not assume a minimum trace width is appropriate for a power path.
-
-13. Connectors, mechanical design, and silkscreen
-
-Every externally used connector must be reachable from the board edge and must have a verified footprint.
-
-Use distinct connector reference designators and readable labels.
-
-Provide mounting holes if the board dimensions permit them.
-
-Keep connectors, mounting holes, and components clear of one another.
-
-Check connector insertion direction, mating clearance, cable access, and component height. Connectors must open outward, away from the board.
-
-Avoid silkscreen over pads, solder-mask openings, mounting holes, or component bodies.
-
-Say plainly in the report if Synth gives you no way to place silkscreen text; do not claim labels exist that the exported board does not carry.
-
-Do not invent an enclosure dimension. Use a practical board outline and report its final dimensions.
-
-14. Component selection and design calculations
-
-For every critical component, verify the exact part number, package, footprint, pin numbering, operating limits, and suitability. Do not copy a rating or a component value from a description without checking it against the part's own limits: a protection device that is wrong for the part it protects is worse than none.
-
-Pay particular attention to:
-
-The reverse-polarity MOSFET, above all its gate-source limit.
-The fuse and its hold and trip currents against the load.
-The TVS and its clamping voltage against everything downstream.
-The MP2307, its inductor and its exposed pad.
-The TPS22918 and its enable and soft-start.
-The 3.3 V regulator and its dissipation.
-The connectors and their current ratings.
-
-Calculate rather than guess every value that sets a behaviour. Show the arithmetic in the report.
-
-Name a manufacturer part number for every component and an LCSC number where the registry carries one. Do not invent LCSC numbers; list in the report every part that lacks one.
-
-Use documented assumptions if a load, cable, or supply specification is missing.
-
-Do not claim the design supports an unspecified load.
-
-15. Power and status indicators (mandatory on every board)
-
-Every board has a power indicator and status indicators, each with a current-limiting resistor calculated from the supply voltage, the LED's forward voltage and the current you want. Provide a power LED for each rail and a fault indicator, as the control-header section requires, each with a resistor calculated from the rail voltage and the LED's forward voltage.
-
-Keep each indicator's current inside the power budget, give each a different colour or a different label, and make them visible when the board is mounted. Put each on a pin or a rail that does not conflict with the programming, boot, oscillator or bus functions, and say in the report what each one means.
-
-16. GPIO, analog and expansion headers (mandatory on every board)
-
-Every board provides clearly labelled, physically accessible expansion connectors. Every pin of the control header is a GPIO in the sense this rule means: a line a host board connects to. Expose the enable, the fault output (if it exists) and the scaled rail samples, beside 3.3 V and ground, and protect each as described here. Label every pin and state its voltage range and what drives it.
-
-For each exposed pin record: the device pin name, the package pin number, the board header position, the logical signal name, any special function, and any electrical restriction. Do not expose a pin as general-purpose if it is reserved for essential circuitry or cannot safely do the job.
-
-Use one consistent connector pitch and a practical mechanical arrangement. Identify pin 1 and the connector orientation. Put ground pins beside groups of signals. Assign each pin one documented function; do not give one physical pin two functions without saying so.
-
-Every exposed signal must be protected for what a user can do to a header: series resistance and, where the pin can meet a cable or a hand, a clamp or ESD device, chosen so that the device's pin stays inside its allowed voltage range. Prevent a higher-voltage signal from reaching a lower-voltage input without level compatibility. Show the arithmetic.
-
-Provide a complete pin-mapping table as a deliverable (see the deliverables section).
-
-17. Power input and output protection (mandatory on every board)
-
-Every board protects its power on the way in and on the way out. Design both deliberately and justify each element.
-
-Power input. The input is a connector rated for the board's input current, with the chain you justify: fuse, reverse-polarity MOSFET and TVS.
-Protect against reverse polarity wherever an external supply can be connected the wrong way round. Provide over-current protection sized from the load budget, and transient or ESD protection suited to how the connector is used (hot-plug, long cable, user contact). Prevent unsafe back-feeding into the source. If more than one power source is possible, implement a deliberate selection or OR-ing circuit and define what happens when two are connected at once; never join two regulated sources directly. Place each protection element so that normal operation, a reversed supply, an over-current fault and a transient each meet the right part.
-
-Power output. Each output connector is an output of this board. Give each a stated current limit and say how it behaves on a short circuit: the load switch's limit, the buck's limit, a fuse or the regulator's own. Say what each connector and its mating part are rated for, and compare it with what the board can deliver.
-Every power pin that leaves the board, and every supply a user can reach through a header, needs limits you can state: a maximum current, what happens on a short circuit (current limit, fuse, or foldback), and protection against a voltage being driven back into it. Do not advertise a rail as a general-purpose supply without defining its current limit.
-
-Show the protection chain in the report as a sequence, and state for each element which fault it answers.
-
-18. Power budget and power documentation
-
-Calculate the power budget and document it. Include: every input voltage range; every output rail voltage; the maximum recommended input current; each regulator's current limit and dissipation at the worst-case input and load; the estimated consumption of every part; the current available to external loads; the power-source selection behaviour; and the expected thermal limits and the copper area you give each hot part. Include the load switch's current limit, the buck's current limit and the heat in the 3.3 V regulator.
-
-Do not assume a regulator can deliver its advertised maximum under every operating condition. Do not advertise a rail's current without the calculation behind it.
-
-19. Footprint and library validation
-
-Before finalizing each component:
-
-1. Confirm the manufacturer's part number.
-2. Verify the package against the datasheet or the symbol.
-3. Verify the symbol pin numbers.
-4. Verify the footprint pad numbers.
-5. Verify the pad-to-pin mapping.
-6. Verify connector orientation.
-7. Check physical dimensions and courtyard clearance.
-8. Check availability and lifecycle where reliable information is available.
-
-Do not select a footprint merely because its name resembles the component's name. Pay particular attention to connectors, the main IC, regulators and programming connectors, where a wrong pad mapping makes the board unusable. If a footprint cannot be verified, flag it as unresolved instead of declaring the board fabrication-ready.
-
-20. Bill of materials
-
-Produce a complete BOM with: reference designator, quantity, description, manufacturer, manufacturer part number, package, value or rating, footprint, a datasheet reference where available, assembly notes, and sourcing notes where verifiable.
-
-Avoid vague entries such as "5 V regulator" or "USB connector" without an exact part. Every BOM line must be in the schematic and have a valid footprint, and every schematic component must be in the BOM, excluding only documented PCB-only features. Do not invent manufacturer or LCSC numbers; list in the report every part that lacks one.
-
-21. Bring-up plan and firmware
-
-Provide a practical plan for confirming that the fabricated board works. Document, in order: how to inspect the unpowered board for shorts; how to check resistance between each rail and ground; how to power the board safely for the first time; how to verify each regulated rail; how to check the reverse-polarity protection on a current-limited bench supply; how to confirm the enable and the soft start with a probe; how to check each output with a resistive load; how to verify the protection behaviour without exposing the board to destructive conditions.
-
-This board has no programmable device, so there is no firmware; say so, and give the bring-up procedure alone.
-
-Clearly distinguish checks that were run in this session from tests that need hardware. Do not claim hardware operation has been confirmed.
-
-22. Schematic and netlist verification
-
-The schematic must contain all required components and electrical connections.
-
-Use meaningful net names, including:
-
-VIN_12V_RAW
-VIN_12V_FUSED
-+12V_PROT
-+5V
-+5V_SW
-+3V3
-GND
-BUCK_SW
-BUCK_FB
-BUCK_COMP
-PFET_GATE
-LOAD_EN
-SENSE_12V
-SENSE_5V
-SENSE_3V3
-
-These names describe intended functions. Verify that each name is used consistently and that the actual electrical connections match the architecture.
-
-Inspect the netlist or equivalent connectivity representation before PCB routing.
-
-Verify every connector pin against its intended net.
-
-Check for:
-
-Missing ground connections, including the buck's exposed pad.
-Incorrect power-rail connections.
-A TVS in front of the fuse, or one that conducts when the input is reversed.
-A MOSFET placed the wrong way round for reverse-polarity protection.
-A gate-source voltage beyond the MOSFET's absolute maximum.
-Floating required pins, especially the load switch's enable.
-A header pin that can present more than the part behind it allows.
-Accidental short circuits.
-Incorrect footprint pad numbering.
-Missing decoupling or protection components.
-
-Correct every actionable error before proceeding.
-
-23. Automated verification, quality gates and export
-
-Before declaring the design complete, run every relevant check the Synth tools support.
-
-Electrical checks: the electrical-rule check; missing or conflicting power connections; unconnected required pins; short circuits; incorrect connector pin mapping; incorrect power polarity; supply-voltage compatibility; regulator current and thermal suitability; and the presence of decoupling and protection components.
-
-PCB checks: the design-rule check; unrouted connections; copper shorts; clearance violations, including to the board edge; missing footprints; footprint and pad mapping mismatches; overlapping components; invalid drill or via dimensions; silkscreen conflicts; and manufacturing-constraint violations.
-
-Functional checks: the main device can be powered; the programming method can program it in principle; every header exposes the intended signal; and every interface you advertise is supported by the hardware.
-
-Required closure process: run the checks, inspect the results, correct the errors, rerun, and repeat until no blocking issue remains or a concrete tool limitation prevents it. Do not suppress a warning merely to get a clean report; document the reason for any warning you accept. A result too long to read in one call must be read in parts, and a result you have not read is not reported.
-
-A successful DRC does not prove the circuit is correct, and a successful ERC does not prove the board works. Review the design as well as running the checks.
-
-When the placement review gives a distance guideline, for example that a reset button or crystal sits too far from its MCU or a connector is not at an edge, act on it with placement hints and rerun the review; if you leave one, say why.
-
-Look at the rendered schematic and confirm that the functional regions do not overlap and nothing is outside the sheet.
-
-Export the design to KiCad with routing as a release export, using `allow_incomplete` only to inspect a failing result and saying so. Confirm the exported files exist and contain the design. Do not call the board manufacturing-ready if it has blocking errors, a missing footprint, an unverified critical mapping or an unresolved power-stage concern.
-
-24. Required deliverables (the twelve)
-
-Create and save the actual design artifacts using the Synth tools' supported project and export operations, and write the documents yourself with the Write tool into the working directory beside the project. Deliver all twelve:
-
-1. Native design project: the editable source, named as given above.
-2. Schematic: complete and readable, exported to KiCad.
-3. PCB layout: components placed and every track routed, exported to KiCad.
-4. Netlist or connectivity report: as the tools support, or a written net-by-net table if not.
-5. Bill of materials: with exact component identities.
-6. Pin-mapping table: device pins, header positions and functions.
-7. Power budget: input limits, rail voltages, current limits and estimated consumption.
-8. Design notes: architecture, assumptions and the important selections, with the calculations.
-9. Firmware example: a minimal bring-up program where the board has a programmable device; otherwise the bring-up procedure alone, and say so.
-10. Verification report: the actual ERC and DRC results, unresolved issues and accepted warnings, with the justification for each warning you accept.
-11. Manufacturing files: Gerber layers, drill files and board outline if the tools can write them. If they cannot, say so; do not claim they exist.
-12. Assembly documentation: component placement and orientation information if the tools support it, and the BOM and pick-and-place data they do write.
-
-Save every artifact to a valid location and report its actual path. Never fabricate a file path or a download link.
-
-25. Required final report
-
-When the work is complete, give a concise but detailed engineering report.
-
-A. Board summary: the board name and revision, the main device, the supply voltages, the available rails, the dimensions and the layer count.
-
-B. Implemented functionality. Mark each function as one of: implemented and verified in the design; implemented but not fully verified; not implemented; blocked by a tool or component limitation. Cover every function this board has, including its GPIO and expansion headers and its power input and output protection.
-
-C. Validation results: the actual ERC result, the actual DRC result, the unrouted nets, the known electrical risks, the footprint validation and the manufacturing readiness. Do not report zero errors unless the output supports it.
-
-D. Remaining risks: every unresolved component, circuit, layout, firmware, manufacturing or hardware-testing issue.
-
-E. Artifact locations: the actual path of each of the twelve deliverables.
-
-Include as well:
-
-Component list and the load assumptions.
-Protection chain with the position of each element justified.
-The MOSFET's gate-source calculation for a normal and a reversed supply.
-TVS standoff and clamp against downstream ratings.
-Buck design: feedback divider, inductor, capacitors, thermal.
-Load switch design: soft-start time and inrush.
-3.3 V regulator dissipation and the 5 V budget.
-Control header: pinout, voltage ranges, and whether a fault signal exists.
-PCB dimensions and layer arrangement.
-Component-placement rationale.
-Routing strategy, including the switch node.
-ERC results.
-DRC results.
-Unrouted-net count.
-Unresolved issues and assumptions.
-The stated exception: no MCU, USB-C programming or SWD.
-Native Synth project location.
-KiCad export locations.
-
-Clearly distinguish between: implemented in the design; verified by automated checks; verified by inspection or calculation; not verified on physical hardware; blocked or unresolved.
-
-Do not claim that a physical prototype has been tested.
-
-26. Execution rules
-
-Begin by inspecting the Synth MCP environment and identifying its supported design capabilities.
-Use the Synth tools to do the actual work wherever they support it.
-Make sensible engineering decisions without asking unnecessary questions.
-Document assumptions that materially affect electrical compatibility, manufacturability or function.
-Prefer readily available, well-documented components.
-Use exact datasheet-backed specifications and calculate values instead of guessing them.
-Verify every important pin mapping and electrical connection.
-Do not leave required power, reset, clock or programming pins unresolved.
-Do not invent components, library entries, footprints, tool capabilities, verification results or generated files.
-Do not stop after producing a conceptual schematic if PCB creation and routing are supported.
-Do not describe an unrouted or unverified PCB as fabrication-ready.
-If blocked, complete all safe, supported work and explain the remaining blocker clearly.
-
-27. Final execution instruction
-
-Begin by inspecting Synth MCP and the available component libraries.
-
-Then implement the actual design in the prescribed order.
-
-Do not stop after producing a conceptual schematic if Synth supports PCB creation and routing.
-
-If a critical requirement cannot be implemented or verified, explain the exact blocker and finish all remaining supported work.
-
-The final deliverable must be the actual protected_power_entry design, exported to KiCad, with routing and validation results documented.
+23. THIS PASS (it replaces item 22's task list; item 22's rules about keeping a change only if the board still releases still hold). The workspace board releases and carries reviewed parts in user-registry. Bring every distance the placement review (synth_describe_placement) names inside its limit, one part or one small group at a time, by role:
+ a. Each input decoupling capacitor of a regulator sits within 4 mm of the supply pin it serves, and each regulator output capacitor within 6 mm of the output pin (centre to pin, the review's own measure).
+ b. Each resettable fuse sits beside the connector it protects, and the input fuse beside the reverse-polarity switch.
+ c. Each test point sits within 5 mm of a pad on its net.
+ d. Identical circuits are laid out alike: the three sense-line networks at the control header keep the same relative layout; do not trade one for another.
+ e. Keep the declared net-class widths: after each release read the exported track widths of the power nets (VIN_12V_RAW, VIN_12V_FUSED, +12V_PROT, BUCK_SW, +5V, +5V_SW, +3V3) and prefer layouts where the router does not neck a power track below its declared width over long runs; report the share of each power net routed narrower than declared.
+ f. Do NOT call synth_compact_layout in this pass. Compaction is a separate later step.
+ g. Never pass allow_incomplete. Every export goes into a fresh directory. Finish with a released export in export/ and a note of every named distance still outside its limit, with the measured value.

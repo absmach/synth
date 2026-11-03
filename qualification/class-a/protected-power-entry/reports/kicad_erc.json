@@ -1,0 +1,76 @@
+{
+    "$schema": "https://schemas.kicad.org/erc.v1.json",
+    "coordinate_units": "mm",
+    "date": "2026-11-03T10:23:11",
+    "ignored_checks": [
+        {
+            "description": "Global label only appears once in the schematic",
+            "key": "single_global_label"
+        },
+        {
+            "description": "Four connection points are joined together",
+            "key": "four_way_junction"
+        },
+        {
+            "description": "SPICE model issue",
+            "key": "simulation_model_issue"
+        },
+        {
+            "description": "Assigned footprint doesn't match footprint filters",
+            "key": "footprint_filter"
+        }
+    ],
+    "included_severities": [
+        "error",
+        "warning",
+        "exclusion"
+    ],
+    "kicad_version": "10.0.7",
+    "sheets": [
+        {
+            "path": "/",
+            "uuid_path": "/fd63b700-2ccd-5c00-a068-019bb06d2915",
+            "violations": [
+                {
+                    "description": "Symbol 'Si2301CDS' not found in symbol library 'Transistor_FET'",
+                    "items": [
+                        {
+                            "description": "Symbol Q1 [Si2301CDS]",
+                            "pos": {
+                                "x": 91.44,
+                                "y": 50.8
+                            },
+                            "uuid": "83736f42-f40f-5aa9-8dea-94e784645c62"
+                        }
+                    ],
+                    "severity": "warning",
+                    "type": "lib_symbol_issues"
+                },
+                {
+                    "description": "Label connects more than one wire at 6350000, 946150",
+                    "items": [
+                        {
+                            "description": "Label 'BUCK_EN'",
+                            "pos": {
+                                "x": 635.0,
+                                "y": 94.615
+                            },
+                            "uuid": "22b86187-a87d-5465-84fa-98e5fa899023"
+                        },
+                        {
+                            "description": "Vertical Wire, length 25.40 mm",
+                            "pos": {
+                                "x": 635.0,
+                                "y": 76.2
+                            },
+                            "uuid": "66cabe22-2b2f-569a-96eb-02017236e672"
+                        }
+                    ],
+                    "severity": "warning",
+                    "type": "label_multiple_wires"
+                }
+            ]
+        }
+    ],
+    "source": "protected_power_entry.kicad_sch"
+}

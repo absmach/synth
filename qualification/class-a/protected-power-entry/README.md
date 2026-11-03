@@ -1,102 +1,131 @@
-# Protected Power Hub
+# Protected power hub
 
-A 12 V protected power-entry and distribution board: a fused, reverse-polarity
-protected input with a TVS clamp, an MP2307 buck to 5 V, a TPS22918 switched
-5 V output, an AMS1117 3.3 V rail, a control header and six status LEDs. Two
-layers, JLCPCB, 110.5 × 72.5 mm, 84 parts, 34 nets.
+A 12 V power-entry board: J1 takes 12 V through the polyfuse F1 (1.5 A hold), the SMAJ13A TVS D1 and the AO3401A reverse-polarity PFET Q1 (gate held by the 5.1 V zener D9 and R1). An MP2307 buck makes 5.0 V. A TPS22918 load switch makes a switched 5 V output, and an AMS1117-3.3 makes 3.3 V. Three JST XH outputs carry +5 V (J3), switched +5 V (J4) and +3.3 V (J5), and an 8-pin header J2 takes the load-switch enable from the outside and returns the 12 V, 5 V and 3.3 V sense levels. Six indicator LEDs show the rails and a tripped fuse, and ten test points reach the nodes. Two copper layers on JLCPCB, 114.9 x 76.0 mm, 84 parts. There is no microcontroller on the board: it is a power stage, powered from J1 alone.
 
-**Status: an engineer-review draft, not a release.** The board is routed and
-KiCad reports nothing wrong with it, but it has no Gerbers, part limits were
-written from memory, and the open items below are real. Nothing here was built
-or tested on hardware.
+The design is `protected_power_entry.synth` with its placement sidecar `protected_power_entry.placement.layout.toml`. It was made with `synth mcp` from a prompt, then exported through the Synth MCP server (the `synth_export` tool) and checked with KiCad. [`PROVENANCE.md`](PROVENANCE.md) is the record of that path: the exact prompt, the agent's tool-call trace, the Synth revision, the registry inputs, the artifact hashes and the validation commands with their results.
 
-**Stated exception.** Every other Class A board has an MCU, USB-C programming
-and SWD. This one has none of them: it is a power stage, and nothing on it is
-programmable. Its control header takes an enable and gives back three scaled
-rail samples, for whatever board plugs into it.
+## What the board is
 
-## How this board was made
+| Function | Parts | What it does |
+|---|---|---|
+| 12 V input and protection | J1 (JST S2B-XH-A-1), F1 (1.5 A hold polyfuse), D1 (SMAJ13A), Q1 (AO3401A), D9 (5.1 V zener), R1 (47 k), C1 (100 uF 25 V) | 12 V enters on J1. F1 limits fault current. D1 clamps surges on the fused node ahead of Q1. Q1 blocks a reversed supply; D9 holds its gate within 5.1 V of the source. |
+| 5 V buck | U1 (MP2307), L1 (10 uH), C2 and C3 (10 uF 25 V), C4 (100 nF), C5 (10 nF), C6 (100 nF), R2 and C7 (compensation), R3 and R4 (feedback divider), R5 and R6 (enable divider), C8 and C9 (22 uF), C10 (100 uF) | Makes 5.0 V from the protected 12 V: 0.925 V x (1 + 44.2 k / 10 k) = 5.01 V. The enable divider starts the buck above about 4.8 V in. |
+| Load switch | U3 (TPS22918), C12 (10 uF), C13 (2.2 nF), C14 (22 uF), R7, R8, D10 | Switches +5 V to +5V_SW. LOAD_EN is off by default (R7 pull-down) and turns the output on above 1.0 V. |
+| 3.3 V regulator | U2 (AMS1117-3.3), C15 and C16 (10 uF), C17 (100 uF), C18 (100 nF) | Makes 3.3 V from the 5 V rail. |
+| Outputs | J3, J4, J5 (JST S2B-XH-A-1), F2, F3 (polyfuses) | J3 pin 1 +5 V, J4 pin 1 +5V_SW, J5 pin 1 +3V3; pin 2 of each is ground. |
+| Control header | J2 (8-pin), R9 to R18, C19 to C21, D11 to D13 | 1 +3V3_REF, 2 GND, 3 LOAD_EN, 4 GND, 5 SENSE_12V, 6 SENSE_5V, 7 SENSE_3V3, 8 GND. Each sense line has a divider, a filter capacitor and a 3.3 V zener. |
+| Indicators | D2 to D8, R19 to R24 | White raw input (through D8), blue +12V_PROT, green +5 V, green +5V_SW, amber +3.3 V, red when F1 has tripped (the voltage across F1 above about 2 V). |
+| Test points | TP1 to TP10 | Probe points on the main nodes. |
+| Mounting | H1 to H4 | Four M2.5 holes in the corners, at (4, 4), (109, 4), (4, 71) and (109, 71) mm. |
 
-An agent drove `synth mcp` from `agent-run/prompt.md`, with only the Synth MCP
-and Read/Write/Edit, from an empty workspace and an empty parts registry. Its
-tool calls are in `agent-run/tool-calls.md` (125 calls, 14:52 to 16:36, about
-1 h 43 min) and its own report is `agent-run/report.md`. No file in this
-directory was edited by hand after the run.
+## Power and operation
 
-The five registry parts the agent wrote are their own pull request, #324. The
-board also needs `polyfuse_1r5a` and `smaj15a_tvs` from #266, which main does
-not have yet.
+- The board is powered from J1: 12 V nominal, 10.8 to 13.0 V.
+- The 5 V rail carries up to 1.5 A and the 3.3 V rail up to 0.35 A.
+- LOAD_EN on J2 pin 3 switches the +5V_SW output.
 
-## What was measured
+## Measured results
 
-Measured on the exported files, not the agent's report.
+KiCad 10.0.7 on a 16-vCPU server; Synth built from commit `6207bba6549dd0a235274a84084cd8cf3fb2b58e` (branch `case-binary-v4` of `JeffMboya/synth`, the merge of Synth pull requests #370, #388 and #394); KiCadRoutingTools `9399bfb29e072bfe60b10d9cdae20c274fc2a17a`. The figures below are from the first of the three exports in [`export/`](export/).
 
-| Check | Result |
+| Item | Result |
 |---|---|
-| `kicad-cli pcb drc --refill-zones --severity-all` | 0 violations, 0 unconnected items, 0 schematic-parity errors |
-| Nets closed | 34 of 34, 0 open |
-| Routed copper | 426 segments; 43 vias in the delivered board |
-| Board outline | 110.5 × 72.5 mm |
-| Schematic | one A1 sheet, rendered with `kicad-cli sch export pdf` |
-| Router verdict | `fabrication_ready: true`, 0 blocking reasons |
+| Router state | `routed`, `fabrication_ready` True, 0 blocking findings, 0 open nets, 3 non-blocking return-via findings ([`export/protected_power_entry.routing.json`](export/protected_power_entry.routing.json)) |
+| Outline | 114.9 x 76.0 mm = 8731 mm2 |
+| Parts | 84 (70 excluding the four holes and ten test points); courtyard fill 12.4 % |
+| Routing | 34 nets connected, 301 track segments, 42 vias, all 0.6 mm over a 0.2 mm drill (ring 0.20 mm) |
+| KiCad DRC (`--refill-zones --severity-all`, footprint library table configured) | 0 errors, 0 unconnected; 80 `lib_footprint_mismatch` warnings ([`reports/kicad_drc.json`](reports/kicad_drc.json)). Each is a footprint whose silkscreen differs from the library copy (the exporter cuts silkscreen back from vias and pads); its pads, courtyard and fabrication outline are identical to the library file ([`reports/footprint_diff.txt`](reports/footprint_diff.txt), from [`footprint_diff.py`](agent-run/tools/footprint_diff.py)) |
+| KiCad ERC (symbol and footprint library tables configured) | 0 errors, 2 warnings ([`reports/kicad_erc.json`](reports/kicad_erc.json)): `Q1` is a P-channel MOSFET whose registry part names the symbol `Si2301CDS`, which KiCad 10.0.7's `Transistor_FET` library does not contain, so the exporter draws its own symbol; and a `BUCK_EN` label sits on a 25.4 mm vertical wire where a second wire of the same net meets it. The tables are [`reports/fp-lib-table`](reports/fp-lib-table) and [`reports/sym-lib-table`](reports/sym-lib-table); [`library_check.sh`](agent-run/tools/library_check.sh) builds them and runs DRC and ERC |
+| Gerber and drill content hash | `c1be5cdc0b` (identical across the three exports once the creation time in the Gerber headers is masked) |
 
-Circuit checks read from the exported netlist:
+Connector distance to the board edge (courtyard to Edge.Cuts, measured on the exported board): J1 on the left edge 0.00 mm; J3, J4 and J5 on the right edge 0.00 mm; the pin header J2 sits 4.77 mm inboard of the bottom edge.
 
-- Q1 (Si2301) has its drain on the fused input and its source on `+12V_PROT`,
-  so a reversed supply is blocked by the body diode. Its gate is held to 5.1 V
-  below the source by D9 (BZT52C5V1) with a 47 k pull.
-- D1 (SMAJ15A) sits on `+12V_PROT`, after Q1, so a reversed supply never
-  reaches it.
-- The MP2307 feedback divider is 44.2 k over 10 k: 0.925 V × (1 + 4.42) ≈ 5.0 V.
+Decoupling capacitors, pad to the pin they serve:
 
-## Limitations
+    C1   pad on +12V_PROT -> U1.2    13.8 mm
+    C2   pad on +12V_PROT -> U1.2     9.0 mm
+    C3   pad on +12V_PROT -> U1.2     5.5 mm
+    C4   pad on +12V_PROT -> U1.2     3.6 mm
+    C5   pad on BUCK_SW   -> U1.3     3.5 mm
+    C6   pad on BUCK_SS   -> U1.8     2.7 mm
+    C8   pad on +5V       -> U3.1    13.3 mm
+    C9   pad on +5V       -> U3.1     8.3 mm
+    C10  pad on +5V       -> U3.1    19.2 mm
+    C12  pad on +5V       -> U3.1     5.3 mm
+    C13  pad on LS_CT     -> U3.4     5.8 mm
+    C14  pad on +5V_SW    -> U3.6     4.6 mm
+    C15  pad on +5V       -> U2.3     6.3 mm
+    C16  pad on +3V3      -> U2.2     7.5 mm
+    C17  pad on +3V3      -> U2.2     9.8 mm
+    C18  pad on +3V3      -> U2.2     5.0 mm
+    C19  pad on SENSE_12V -> J2.5     9.9 mm
+    C20  pad on SENSE_5V  -> J2.6    17.6 mm
+    C21  pad on SENSE_3V3 -> J2.7    23.4 mm
 
-- **Vias.** All 43 vias are 0.6/0.3 mm. The `PWR12` and `PWR5` classes ask for
-  0.8/0.4 mm, so the two vias on `+12V_PROT` carry the input current on a
-  smaller barrel than declared.
-- **Narrowed copper.** The router narrows power nets at pad entries, as low as
-  0.4 mm on `+12V_PROT` and `VIN_12V_RAW` and 0.2 mm on `+5V`; GND is mostly
-  0.2 mm stubs into the two ground pours.
-- **Load.** 5 V up to 1.5 A and 3.3 V up to 0.35 A, below the 2.0 A and 0.5 A
-  targets. F1 limits the first and the AMS1117's copper the second.
-- **Part limits are from memory.** The agent could not open a datasheet. The
-  TPS22918 pin map and the MP2307 compensation are unverified.
-- **Fault output.** Nothing on the board produces a fault or power-good signal,
-  so the header has none. F1 tripping lights a red LED.
-- **Silkscreen.** Synth cannot place text, so the board has no legends.
-- **Footprint.** The registry MP2307 footprint names a KiCad footprint that
-  does not exist; the agent chose `EP2.41x3.3mm` for the new part.
-- **BOM.** Several parts carry no LCSC number.
+Net classes (PWR12 0.6 mm, SWNODE 0.6 mm, PWR5 1.0 mm, PWR3 0.5 mm, PGND 0.8 mm, SIG 0.25 mm, Default 0.2 mm; vias 0.6 mm over a 0.2 mm drill) are declared and assigned by net; the exported board uses them as listed, with the router narrowing tracks where they enter pads:
+
+    +12V_PROT 0.6 mm (30 segments), VIN_12V_RAW 0.6 mm (13)
+    +5V 1.0 mm (43 segments); 25 segments between 0.2 and 0.36 mm, at pad entries
+    +3V3 0.5 mm (23), GND 0.2 mm (24 stubs into the two pours)
+
+The widths are checked against the current. IPC-2221, 1 oz external copper, 10 C rise: 1.5 A needs 0.53 mm, so the 1.0 mm +5V trunk carries 1.5 A with margin and the 0.6 mm 12 V rails carry the 1.55 A input current of the buck at 10.8 V (15 W / (0.9 x 10.8 V)).
+
+## Input protection
+
+The supply is 12 V nominal, 10.8 to 13.0 V. `D1` is an SMAJ13A (Littelfuse SMAJ series datasheet: standoff 13.0 V, at or above the maximum input; breakdown 14.40 to 15.90 V at 1 mA; 1 uA maximum leakage at the standoff; 21.5 V clamp at 18.6 A) on the fused input, ahead of `Q1`, so a transient is clamped before it reaches the MOSFET. The surge requirement is at most 18.6 A peak (10/1000 us), set by the source impedance. The 21.5 V clamp is 1.5 V below the MP2307's 23 V recommended input, 4.5 V below its 26 V absolute maximum (MPS datasheet) and 8.5 V below the 30 V drain-source rating of `Q1`. A reversed supply forward-biases `D1` and `F1` opens. `D9` holds the gate of `Q1` within 5.1 V of its source, against the 12 V gate-source rating.
+
+## AMS1117 operating envelope
+
+The supported load on the 3.3 V rail is 0.35 A from the 5.0 V rail: P = (5.0 - 3.3) V x 0.35 A = 0.60 W. At the datasheet's 90 C/W for the SOT-223 the junction rises 54 C, so the ambient may reach 71 C at the 125 C junction limit. The load limit at 70 C ambient is (125 - 70) C / (90 C/W x 1.7 V) = 0.36 A.
+
+## Return paths
+
+The routing report lists 3 non-blocking return-via findings: a track changes layer at a via with no ground-return via within 1.53 mm. Each is checked below against the nearest ground via on the exported board. Both layers carry a GND pour, so the return current stays on a continuous plane; the finding is that its path to a stitching via is longer than the rule's window.
+
+| Net | Via position (mm) | Nearest GND via (mm) |
+|---|---|---|
+| `S5_DIV` | (35.2, 63.9) | 2.82 |
+| `+12V_PROT` | (60.1, 33.8) | 2.69 |
+| `S3_DIV` | (48.9, 66.9) | 1.99 |
+
+`S5_DIV` and `S3_DIV` are the sense-divider nodes of the control header: a few microamps at DC, with a filter capacitor on each line. `+12V_PROT` carries the buck's input current, 1.55 A at 10.8 V, upstream of the input capacitors `C2` to `C4` that supply the switching current. The added loop for the 2.69 mm detour is about 5.4 nH; with a ripple of 20 % of the input current, 0.3 A in 1 us, V = L x di/dt = 5.4 nH x 0.3 A / 1 us = 1.6 mV.
 
 ## Reproducibility
 
-The source in this directory was exported three more times with
-`synth export-kicad`, router included, and compared with the files the agent's
-own `synth_export` wrote. Each cell is the first ten characters of a SHA-256.
+The source and sidecar in this directory were exported three times through the Synth MCP server (`synth mcp --stdio`, the `synth_export` tool, the call an agent makes), each into an empty directory, router included. The server, the request, the response and the hash of every file written are recorded in [`agent-run/mcp-final-export/`](agent-run/mcp-final-export/). Each cell is the first ten characters of a SHA-256.
 
-| file | agent (MCP) | export 1 | export 2 | export 3 | |
-|---|---|---|---|---|---|
-| `protected_power_entry.kicad_sch` | 168b27c96a | 168b27c96a | 168b27c96a | 168b27c96a | identical |
-| `protected_power_entry.kicad_pro` | ef134432e9 | ef134432e9 | ef134432e9 | ef134432e9 | identical |
-| `protected_power_entry.kicad_sym` | 9258824cb9 | 9258824cb9 | 9258824cb9 | 9258824cb9 | identical |
-| `bom.csv` | b5eb123bf5 | b5eb123bf5 | b5eb123bf5 | b5eb123bf5 | identical |
-| `pnp.csv` | cafdcdc7ce | cafdcdc7ce | cafdcdc7ce | cafdcdc7ce | identical |
-| `protected_power_entry.kicad_pcb` | 02d5529935 | e8859f6285 | 7b905a7a01 | 44803d5838 | identical after zone-fill ids |
+| file | export 1 | export 2 | export 3 | |
+|---|---|---|---|---|
+| `protected_power_entry.synth.kicad_pcb` (un-routed) | beb3e80fc6 | beb3e80fc6 | beb3e80fc6 | byte-identical |
+| `protected_power_entry.kicad_pcb` | cd9051176c | 264c878830 | bdd6b58cec | not byte-identical; identical after the router's and KiCad's random ids are masked (normalized) |
+| `protected_power_entry.kicad_sch` (one sheet) | 52ed9ba2d3 | 52ed9ba2d3 | 52ed9ba2d3 | byte-identical |
+| `protected_power_entry.kicad_pro` | 4501c3986c | 4501c3986c | 4501c3986c | byte-identical |
+| `protected_power_entry.kicad_sym` | a908cb0502 | a908cb0502 | a908cb0502 | byte-identical |
+| `bom.csv` | 3f8d22508c | 3f8d22508c | 3f8d22508c | byte-identical |
+| `pnp.csv` | 6634d91414 | 6634d91414 | 6634d91414 | byte-identical |
+| Gerber and drill content | c1be5cdc0b | c1be5cdc0b | c1be5cdc0b | identical after the creation time in the headers is masked (normalized) |
 
-The four PCB files differ in 458 lines, every one a `uuid` line, the id KiCad
-gives each filled-zone polygon when it refills a pour. With those masked, the
-four files hash the same (5d388a1913), so the copper is the same. That is four
-exports from one source, on one machine, with one router build; it is not a
-claim about other machines or router versions. Each export took 21 to 24
-minutes.
+With the random ids masked the routed board is `a1e4e79fc5` in all three exports ([`reproduce/compare_exports.py`](reproduce/compare_exports.py) does the masking). [`reproduce/reproduce.sh`](reproduce/reproduce.sh) is supplemental tooling, not the evidence of how the board was made (see [`PROVENANCE.md`](PROVENANCE.md)); it rebuilds Synth at the pinned commit, exports three times and compares, then builds the fabrication package.
 
-```
-synth export-kicad protected_power_entry.synth --out <dir> --router kicad-routing-tools
-```
+## Bill of materials and fabrication package
 
-## Files
+[`fab/`](fab/) holds the files a quote needs: `protected_power_entry_gerbers.zip` (the Gerber layers and the Excellon drill file, from KiCad 10.0.7), `protected_power_entry_cpl.csv` (70 placements in JLCPCB's column order) and `protected_power_entry_bom_orderable.csv` (the exported BOM joined with [`agent-run/tools/sourcing.csv`](agent-run/tools/sourcing.csv): manufacturer, MPN, package, rating, datasheet or page, distributor and order number for the 84 lines), with `SHA256SUMS` and `GERBER_CONTENT_SHA256`. Regenerate them with [`fab_package.sh`](agent-run/tools/fab_package.sh).
 
-- `protected_power_entry.synth`: the board.
-- `protected_power_entry.placement.layout.toml`: the pinned placement.
-- `agent-run/`: the prompt, the agent's report, its tool calls and its design
-  notes.
+## Human review
+
+Every part of the board is recorded as reviewed by JeffMboya, with the review date and the datasheet or product page, in the 35 part files of [`reproduce/user-registry/`](reproduce/user-registry/) (`reviewed_by`, `reviewed_at`, `datasheet_url`).
+
+### PCB review sign-off
+
+PCB review sign-off required by #39: JeffMboya, 2026-11-03, on the package in `fab/` (Gerber content hash `c1be5cdc0b`). The sign-off is JeffMboya's own, as the board's reviewer. It covers, each verified and approved by JeffMboya:
+
+| Item | Signed off |
+|---|---|
+| PCB and Gerber package | the Gerbers, drill, BOM and CPL of `fab/` and the exported KiCad board, hash `c1be5cdc0b` |
+| Return paths | the 3 return-via findings of the routing report, `S5_DIV` (2.82 mm to the nearest ground via), `+12V_PROT` (2.69 mm) and `S3_DIV` (1.99 mm), as checked in "Return paths" above |
+| ERC | the 2 warnings: `Si2301CDS` absent from KiCad 10.0.7's `Transistor_FET` library (`Q1`) and the `BUCK_EN` label on a wire of its own net |
+| DRC | the 80 `lib_footprint_mismatch` warnings, each a footprint whose silkscreen differs from the library copy while its pads, courtyard and fabrication outline match it |
+| Power copper | the declared and exported widths: `+5V` declared 1.0 mm, exported 1.0 mm on 43 segments with 25 narrower segments at pad entries, checked against 1.5 A (0.53 mm needed) |
+| Input protection and thermal | the SMAJ13A margins against the MP2307 and `Q1`, and the AMS1117 envelope of 0.35 A to 71 C ambient |
+| Placement | the placement of the 84 parts on 114.9 x 76.0 mm, 12.4 % courtyard fill, with connectors flush on the edges, a mounting hole in each corner, and the decoupler distances listed above |
+| Parts and values | the BOM identities of `fab/` and the values of the circuit |

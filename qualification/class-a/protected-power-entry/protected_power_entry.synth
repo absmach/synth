@@ -1,5 +1,5 @@
 // protected_power_entry rev A
-// 12 V input -> F1 -> Q1 (reverse polarity) -> +12V_PROT (TVS D1 after Q1)
+// 12 V input -> F1 (TVS D1 on the fused node) -> Q1 (reverse polarity) -> +12V_PROT
 //   -> MP2307 buck -> +5V -> { TPS22918 -> +5V_SW, AMS1117-3.3 -> +3V3 }
 // No MCU, no USB-C, no SWD: a power stage, nothing on it is programmable.
 board "protected_power_entry" {
@@ -7,75 +7,82 @@ board "protected_power_entry" {
   manufacturer "jlcpcb"
   revision "A"
 
-  netclass "PWR12" { trace_width 0.8mm clearance 0.25mm via_diameter 0.8mm via_drill 0.4mm }
-  netclass "PWR5"  { trace_width 1.0mm clearance 0.25mm via_diameter 0.8mm via_drill 0.4mm }
-  netclass "PWR3"  { trace_width 0.5mm clearance 0.25mm via_diameter 0.8mm via_drill 0.4mm }
-  netclass "PGND"  { trace_width 0.8mm clearance 0.25mm via_diameter 0.8mm via_drill 0.4mm }
-  netclass "SIG"   { trace_width 0.25mm clearance 0.2mm via_diameter 0.6mm via_drill 0.3mm }
+  netclass "PWR12" { trace_width 0.6mm clearance 0.25mm via_diameter 0.6mm via_drill 0.2mm }
+  netclass "SWNODE" { trace_width 0.6mm clearance 0.25mm via_diameter 0.6mm via_drill 0.2mm }
+  netclass "PWR5"  { trace_width 1.0mm clearance 0.25mm via_diameter 0.6mm via_drill 0.2mm }
+  netclass "PWR3"  { trace_width 0.5mm clearance 0.25mm via_diameter 0.6mm via_drill 0.2mm }
+  netclass "PGND"  { trace_width 0.8mm clearance 0.25mm via_diameter 0.6mm via_drill 0.2mm }
+  netclass "SIG"   { trace_width 0.25mm clearance 0.2mm via_diameter 0.6mm via_drill 0.2mm }
+  netclass "Default" { via_diameter 0.6mm via_drill 0.2mm }
 
   group "INPUT AND PROTECTION" color "#c2410c" {
-    component J1: connector "jst_xh_2pin"
+    component J1: connector "jst_xh_2pin" { placement_hint { edge: left priority: hard } }
     component F1: fuse "polyfuse_1r5a"
-    component Q1: transistor "p_mosfet_si2301"
+    component Q1: transistor "p_mosfet_ao3401a"
     component D9: diode "d_zener_5v1"
     component R1: resistor "r_generic_0603" value "47k"
-    component D1: diode "smaj15a_tvs"
-    component C1: capacitor "c_electrolytic_100uf" value "100uF 25V"
+    component D1: diode "smaj13a_tvs" { placement_hint { near: "Q1.d" priority: hard } }
+    component C1: capacitor "c_electrolytic_100uf" value "100uF 25V" { placement_hint { near: "U1.in" priority: hard } }
     notes "" {
       "J1 pin 1 = +12 V, pin 2 = GND (JST S2B-XH-A, mate with XHP-2)."
-      "Chain: J1 > F1 > Q1 > +12V_PROT; D1 sits after Q1 so it never sees a reversed supply."
-      "Q1 source = load side, drain = input side. D9 holds |Vgs| to 5.1 V (Si2301 abs max 8 V)."
+      "Supply range 10.8 to 13.0 V. Chain: J1 > F1 > (D1 TVS to GND) > Q1 > +12V_PROT."
+      "D1 SMAJ13A (Littelfuse): standoff 13.0 V, at or above the 13.0 V maximum input; leakage 1 uA max at 13.0 V; clamp 21.5 V max at 18.6 A."
+      "D1 clamps on VIN_12V_FUSED before Q1: 21.5 V is below Q1 AO3401A 30 V drain-source, MP2307 23 V recommended input and 26 V absolute maximum."
+      "A reversed supply forward-biases D1 and F1 opens."
+      "Q1 source = load side, drain = input side. D9 5.1 V zener limits |Vgs| through R1 47k; Q1 AO3401A (Alpha & Omega): 30 V drain-source, 12 V gate-source maximum, so the 5.1 V zener leaves 6.9 V of margin."
     }
   }
 
   group "5V BUCK" color "#0072b2" {
     component U1: regulator "mp2307_buck_ep"
-    component L1: inductor "l_power_10uh_6045"
-    component C2: capacitor "c_generic_1206" value "10uF 25V"
-    component C3: capacitor "c_generic_1206" value "10uF 25V"
-    component C4: capacitor "c_generic_0603" value "100nF"
-    component C5: capacitor "c_generic_0603" value "10nF"
-    component C6: capacitor "c_generic_0603" value "100nF"
+    component L1: inductor "l_power_10uh_6045" { placement_hint { near: "U1.sw" priority: hard } }
+    component C2: capacitor "c_generic_1206" value "10uF 25V" { placement_hint { near: "U1.in" priority: hard } }
+    component C3: capacitor "c_generic_1206" value "10uF 25V" { placement_hint { near: "U1.in" priority: hard } }
+    component C4: capacitor "c_generic_0603" value "100nF" { placement_hint { near: "U1.in" priority: hard } }
+    component C5: capacitor "c_generic_0603" value "10nF" { placement_hint { near: "U1.bs" priority: hard } }
+    component C6: capacitor "c_generic_0603" value "100nF" { placement_hint { near: "U1.ss" priority: hard } }
     component R2: resistor "r_generic_0603" value "10k"
     component C7: capacitor "c_generic_0603" value "2.2nF"
-    component R3: resistor "r_generic_0603" value "44.2k"
+    component R3: resistor "r_generic_0603" value "44.2k" { placement_hint { near: "U1.fb" priority: hard } }
     component R4: resistor "r_generic_0603" value "10k"
-    component R5: resistor "r_generic_0603" value "100k"
+    component R5: resistor "r_generic_0603" value "100k" { placement_hint { near: "U1.en" priority: hard } }
     component R6: resistor "r_generic_0603" value "33k"
-    component C8: capacitor "c_generic_1206" value "22uF 10V"
-    component C9: capacitor "c_generic_1206" value "22uF 10V"
-    component C10: capacitor "c_electrolytic_100uf" value "100uF 25V"
+    component C8: capacitor "c_generic_1206" value "22uF 10V" { placement_hint { near: "L1.p2" priority: hard } }
+    component C9: capacitor "c_generic_1206" value "22uF 10V" { placement_hint { near: "L1.p2" priority: hard } }
+    component C10: capacitor "c_electrolytic_100uf" value "100uF 25V" { placement_hint { near: "L1.p2" priority: hard } }
     notes "" {
-      "FB divider: 0.925 V x (1 + 44.2k/10k) = 5.01 V."
+      "FB divider: 0.925 V x (1 + 44.2k/10k) = 5.01 V (0.925 V reference from the MP2307 datasheet)."
+      "Input current at the 3 A regulator limit and 10.8 V in: 15 W / (0.9 x 10.8 V) = 1.55 A. PWR12 and SWNODE 0.6 mm carry about 1.65 A (IPC-2221, 1 oz external, 10 C rise)."
+      "BUCK_SW is a short run of under 10 mm beside U1 and L1; PWR5 1.0 mm carries the 5 V trunk."
       "EN divider 100k/33k: buck starts above about 4.8 V in."
     }
   }
 
   group "LOAD SWITCH AND 3V3" color "#0a7d4a" {
     component U3: regulator "tps22918_sot23_6"
-    component C12: capacitor "c_generic_1206" value "10uF 10V"
-    component C13: capacitor "c_generic_0603" value "2.2nF"
-    component C14: capacitor "c_generic_1206" value "22uF 10V"
+    component C12: capacitor "c_generic_1206" value "10uF 10V" { placement_hint { near: "U3.vin" priority: hard } }
+    component C13: capacitor "c_generic_0603" value "2.2nF" { placement_hint { near: "U3.ct" priority: hard } }
+    component C14: capacitor "c_generic_1206" value "22uF 10V" { placement_hint { near: "U3.vout" priority: hard } }
     component R7: resistor "r_generic_0603" value "100k"
     component R8: resistor "r_generic_0603" value "1k"
     component D10: diode "d_zener_5v1"
     component U2: regulator "ams1117_3v3" value "AMS1117-3.3"
-    component C15: capacitor "c_generic_1206" value "10uF 10V"
-    component C16: capacitor "c_generic_1206" value "10uF 10V"
-    component C17: capacitor "c_electrolytic_100uf" value "100uF 25V"
-    component C18: capacitor "c_generic_0603" value "100nF"
+    component C15: capacitor "c_generic_1206" value "10uF 10V" { placement_hint { near: "U2.vin" priority: hard } }
+    component C16: capacitor "c_generic_1206" value "10uF 10V" { placement_hint { near: "U2.vout" priority: hard } }
+    component C17: capacitor "c_electrolytic_100uf" value "100uF 25V" { placement_hint { near: "U2.vout" priority: hard } }
+    component C18: capacitor "c_generic_0603" value "100nF" { placement_hint { near: "U2.vout" priority: hard } }
     notes "" {
       "LOAD_EN default is OFF (R7 pull-down). High (above 1.0 V) turns +5V_SW on."
-      "AMS1117 dissipation: (5 - 3.3) V x 0.5 A = 0.85 W worst case."
+      "AMS1117 thermal: (5 - 3.3) V x 0.5 A = 0.85 W; at 90 C/W (AMS datasheet, SOT-223) the junction rises 76 C, so 0.5 A holds to 48 C ambient (125 C limit); the load limit is (125 C - ambient) / (90 C/W x 1.7 V): 0.36 A at 70 C."
     }
   }
 
   group "OUTPUTS" color "#7c3aed" {
     component F2: fuse "polyfuse_1r5a"
     component F3: fuse "polyfuse_1r5a"
-    component J3: connector "jst_xh_2pin"
-    component J4: connector "jst_xh_2pin"
-    component J5: connector "jst_xh_2pin"
+    component J3: connector "jst_xh_2pin" { placement_hint { edge: right priority: hard } }
+    component J4: connector "jst_xh_2pin" { placement_hint { edge: right priority: hard } }
+    component J5: connector "jst_xh_2pin" { placement_hint { edge: right priority: hard } }
     notes "" {
       "J3 pin 1 = +5V, J4 pin 1 = +5V_SW, J5 pin 1 = +3V3; pin 2 of each = GND."
     }
@@ -96,7 +103,7 @@ board "protected_power_entry" {
     component D12: diode "bzt52c3v3"
     component R16: resistor "r_generic_0603" value "10k"
     component R17: resistor "r_generic_0603" value "10k"
-    component R18: resistor "r_generic_0603" value "1k"
+    component R18: resistor "r_generic_0603" value "1k" { placement_hint { near: "J2.p7" priority: hard } }
     component C21: capacitor "c_generic_0603" value "100nF"
     component D13: diode "bzt52c3v3"
     notes "" {
@@ -127,14 +134,14 @@ board "protected_power_entry" {
 
   group "TEST POINTS" color "#475569" {
     component TP1: testpoint "testpoint_pad_1_5"
-    component TP2: testpoint "testpoint_pad_1_5"
-    component TP3: testpoint "testpoint_pad_1_5"
-    component TP4: testpoint "testpoint_pad_1_5"
-    component TP5: testpoint "testpoint_pad_1_5"
-    component TP6: testpoint "testpoint_pad_1_5"
-    component TP7: testpoint "testpoint_pad_1_5"
-    component TP8: testpoint "testpoint_pad_1_5"
-    component TP9: testpoint "testpoint_pad_1_5"
+    component TP2: testpoint "testpoint_pad_1_5" { placement_hint { near: "Q1.d" priority: hard } }
+    component TP3: testpoint "testpoint_pad_1_5" { placement_hint { near: "U1.in" priority: hard } }
+    component TP4: testpoint "testpoint_pad_1_5" { placement_hint { near: "U3.vin" priority: hard } }
+    component TP5: testpoint "testpoint_pad_1_5" { placement_hint { near: "U3.vout" priority: hard } }
+    component TP6: testpoint "testpoint_pad_1_5" { placement_hint { near: "U2.vout" priority: hard } }
+    component TP7: testpoint "testpoint_pad_1_5" { placement_hint { near: "U1.sw" priority: hard } }
+    component TP8: testpoint "testpoint_pad_1_5" { placement_hint { near: "U3.on" priority: hard } }
+    component TP9: testpoint "testpoint_pad_1_5" { placement_hint { near: "U1.gnd" priority: hard } }
     component TP10: testpoint "testpoint_pad_1_5"
     component H1: mounting_hole "mounting_hole_m2_5"
     component H2: mounting_hole "mounting_hole_m2_5"
@@ -153,13 +160,13 @@ board "protected_power_entry" {
     D2.cathode D3.cathode D4.cathode D5.cathode D6.cathode
   }
   power "+12V_PROT" 12v class "PWR12" {
-    Q1.s D9.cathode D1.cathode C1.p1 C2.p1 C3.p1 C4.p1 U1.in R5.p1 TP3.p1 R20.p1 R10.p1
+    Q1.s D9.cathode C1.p1 C2.p1 C3.p1 C4.p1 U1.in R5.p1 TP3.p1 R20.p1 R10.p1
   }
   power "+5V" 5v class "PWR5" {
     L1.p2 C8.p1 C9.p1 C10.p1 R3.p1 F2.p1 U3.vin C12.p1 U2.vin C15.p1 TP4.p1 R21.p1 R13.p1
   }
   power "+5V_SW" 5v class "PWR5" {
-    U3.vout U3.qod C14.p1 F3.p1 TP5.p1 R22.p1
+    U3.vout C14.p1 F3.p1 TP5.p1 R22.p1
   }
   power "+3V3" 3.3v class "PWR3" {
     U2.vout C16.p1 C17.p1 C18.p1 J5.p1 TP6.p1 R9.p1 R23.p1 R16.p1
@@ -167,11 +174,11 @@ board "protected_power_entry" {
 
   // ---- protection chain ----------------------------------------------------
   net "VIN_12V_RAW"   class "PWR12" { J1.p1 F1.p1 TP1.p1 R19.p1 R24.p1 }
-  net "VIN_12V_FUSED" class "PWR12" { F1.p2 Q1.d TP2.p1 D7.cathode }
+  net "VIN_12V_FUSED" class "PWR12" { F1.p2 Q1.d D1.cathode TP2.p1 D7.cathode }
   net "PFET_GATE" class "SIG" { Q1.g D9.anode R1.p1 }
 
   // ---- buck ----------------------------------------------------------------
-  net "BUCK_SW" class "PWR5" { U1.sw L1.p1 C5.p2 TP7.p1 }
+  net "BUCK_SW" class "SWNODE" { U1.sw L1.p1 C5.p2 TP7.p1 }
   net "BUCK_BS"   class "SIG" { U1.bs C5.p1 }
   net "BUCK_FB"   class "SIG" { U1.fb R3.p2 R4.p1 }
   net "BUCK_COMP" class "SIG" { U1.comp R2.p1 }
