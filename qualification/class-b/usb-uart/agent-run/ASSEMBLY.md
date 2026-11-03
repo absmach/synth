@@ -5,7 +5,7 @@ Sources: `../kicad/bom.csv`, `../dfm/`, `../qualification.json` (`jlcpcb_dfm`), 
 ## Board
 2 layers, 1.6 mm default thickness (no declared stackup), 40.99 x 32.23 mm, manufacturer jlcpcb, revision A. Quote selection recorded for the earlier revision: FR-4 TG135, 1 oz outer copper, HASL with lead, green mask, white silkscreen, 5 boards; Economic assembly, top side.
 
-## BOM (bom.csv, 28 lines by ref)
+## BOM (bom.csv: 36 refs; JLCPCB groups them into 28 lines, per qualification.json)
 | Refs | Part | MPN / LCSC |
 | --- | --- | --- |
 | U1 | CH342F QFN-24 | CH342F / C2841530 |
