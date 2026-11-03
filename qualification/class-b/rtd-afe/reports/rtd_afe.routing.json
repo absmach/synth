@@ -41,22 +41,22 @@
       "threads": "4",
       "wall_clock_secs": "1200"
     },
-    "input_hash": "7ff7dea2bebc42bcbecc769c384b0b69a673b87c9c7edd12f62dd0f6c1adbb77",
+    "input_hash": "05929bcd286fb4e8592dea8797a3b5e56a92b1f5b680d6bb8252d344e0d86a45",
     "output_hash": "",
-    "source_revision": "df54c77655de5a1fee5c308592378ee545c7ea4c",
-    "duration_ms": 339126
+    "source_revision": "28f7f1ec3aef55fa2881fdfbfaad6c1b6896b562",
+    "duration_ms": 250829
   },
   "statistics": {
     "connected_nets": 40,
     "open_nets": 0,
     "open_net_names": [],
-    "segments": 372,
-    "vias": 66,
-    "wire_length_mm": 624.930312,
+    "segments": 371,
+    "vias": 67,
+    "wire_length_mm": 654.849645,
     "pad_escape_rejections": 0,
     "engine_findings": {
-      "claimed_imported_segments": "372",
-      "claimed_imported_vias": "66"
+      "claimed_imported_segments": "371",
+      "claimed_imported_vias": "67"
     }
   },
   "artifacts": {
@@ -86,7 +86,7 @@
       "open": [],
       "unconnected_pads": [],
       "via_in_pad": [
-        "via at (17.500, 21.200) mm C_DV.2"
+        "via at (16.500, 22.300) mm C_DV.2"
       ],
       "undersized_vias": [],
       "undersized_tracks": []
