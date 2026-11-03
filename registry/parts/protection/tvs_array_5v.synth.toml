@@ -1,38 +1,38 @@
 id = "tvs_array_5v"
 kind = "diode"
-description = "TVS diode array, 5V, 4 channels, SOT-363"
-kicad_footprint = "Package_TO_SOT_SMD:SOT-363_SC-70-6"
-# THIS PART IS NOT ATTESTED, AND #157 IS NOT CLAIMED RESOLVED FOR IT.
+description = "onsemi SRV05-4 4-line surge/ESD protection array, 5 V working voltage, TSOP-6 (SOT-23-6 footprint compatible)"
+mpn = "SRV05-4MR6T1G"
+kicad_symbol = "Power_Protection:SRV05-4"
+kicad_footprint = "Package_TO_SOT_SMD:SOT-23-6"
+# Pins are the "Pin Configuration and Schematic" of onsemi SRV05-4/D, Rev. 4
+# (October 2024): 1 I/O, 2 VN, 3 I/O, 4 I/O, 5 VP, 6 I/O. The applications
+# section says the same: "Data lines are connected at pins 1, 3, 4 and 6. The
+# negative reference is connected at pin 2", and the positive reference (VCC)
+# at pin 5. The stock symbol numbers its pins IO1=1, VN=2, IO2=3, IO3=4, VP=5,
+# IO4=6, which this map follows pin for pin.
 #
-# kicad_symbol is unmapped because no stock KiCad symbol matches this pin
-# model. Checked: the library's SC-70-6 arrays are `SP0505BAJT` and
-# `PESD5V0L5UY`, both five channels on a common anode, and the 5.0 V
-# four-channel parts (`PESD5V0L4UF/UG/UW`) are five-pin packages -- SOT-886,
-# SOT-353 and SOT-665. None is four channels with a separate Vcc and ground,
-# which is what the boards here wire. So the export falls back to a
-# synthesized rectangle rather than a real symbol.
+# The datasheet's TSOP-6 (case 318G) is "Footprint Compatible with SOT-23 6
+# Lead", the footprint the stock symbol names. It has six pads and no exposed
+# pad.
 #
-# Closing this needs a named device with a datasheet, not a better guess, and
-# it will move the boards that use it onto whatever topology that device has.
+# The previous entry named no device and put `vcc` on pad 6 by elimination
+# over a SOT-363. The pin names keep their meaning, so a board that wired
+# ch1-ch4, gnd and vcc keeps working; the pads move to this device's.
 #
-# Where this pin map comes from, since the synthesized symbol means it is
-# the only place the pad functions are recorded: the part names no device --
-# no `mpn`, no `lcsc_pn` -- so there is no datasheet pinout to cite. `vcc`
-# is pad 6 by elimination: `SOT-363_SC-70-6` has pads 1 to 6, the other five
-# assignments below are unchanged, and 6 is the one left. The five it was
-# deduced from are themselves unattested, and stay that way until the part
-# names a device and a reviewer. That is what `[provenance]` is for, and
-# what E-SYNTH-QUAL-008 blocks every part in this registry on today.
+# The procurement identifier (LCSC) is left out until it is checked against
+# the distributor listing for this exact MPN.
 
 [footprint_dimensions]
-# Courtyard extent of that footprint; the body is 2.0 x 1.25 mm.
-width_mm = 2.9
-height_mm = 2.2
+# Courtyard extent of SOT-23-6, as the other SOT-23-6 parts here record it.
+width_mm = 4.1
+height_mm = 3.4
 courtyard_margin_mm = 0.25
 
+# max_voltage_v is the 5.0 V working peak reverse voltage (VRWM), not a clamp
+# or an absolute maximum, as for the other TVS parts here. No steady current is
+# recorded: the 12 A IPP (8 x 20 us) is a surge rating, not a draw.
 [operating_conditions]
-max_voltage_v = 100.0
-max_current_ma = 1000.0
+max_voltage_v = 5.0
 
 [[pins]]
 name = "ch1"
@@ -40,31 +40,32 @@ number = "1"
 electrical_type = "passive"
 
 [[pins]]
-name = "ch2"
+name = "gnd"
 number = "2"
 electrical_type = "passive"
 
 [[pins]]
-name = "ch3"
+name = "ch2"
 number = "3"
 electrical_type = "passive"
 
 [[pins]]
-name = "ch4"
-number = "5"
-electrical_type = "passive"
-
-[[pins]]
-name = "gnd"
+name = "ch3"
 number = "4"
 electrical_type = "passive"
 
 [[pins]]
 name = "vcc"
+number = "5"
+electrical_type = "passive"
+
+[[pins]]
+name = "ch4"
 number = "6"
 electrical_type = "passive"
 
+# Not attested: reviewed_by and reviewed_at are recorded by the independent
+# reviewer who checks this map against the datasheet, not by its author.
 [provenance]
 source = "authored"
-reviewed_by = "rodneyosodo"
-reviewed_at = "2026-11-02"
+datasheet_url = "https://www.onsemi.com/download/data-sheet/pdf/srv05-4-d.pdf"
