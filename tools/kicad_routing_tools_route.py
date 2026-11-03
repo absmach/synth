@@ -67,6 +67,77 @@ def _plane_zones(board: Path) -> list[tuple[str, str]]:
     return pairs
 
 
+def _copper_by_net(text: str) -> dict[str, int]:
+    """How many tracks, arcs and vias each net carries in a board file.
+
+    A track names its net either by number, resolved through the board's
+    `(net N "NAME")` table, or by name directly, depending on the KiCad
+    version that wrote it; both are read.
+    """
+    names = dict(re.findall(r'\(net (\d+) "([^"]*)"\)', text))
+    counts: dict[str, int] = {}
+    for item in re.finditer(r'\((?:segment|arc|via)\b(.*?)\(uuid', " ".join(text.split())):
+        body = item.group(1)
+        named = re.search(r'\(net "([^"]*)"\)', body)
+        numbered = re.search(r'\(net (\d+)\)', body)
+        net = named.group(1) if named else names.get(numbered.group(1)) if numbered else None
+        if net:
+            counts[net] = counts.get(net, 0) + 1
+    return counts
+
+
+def _escape_summary(stdout: str) -> dict | None:
+    """The `JSON_SUMMARY:` ledger bga_fanout prints last, or None."""
+    for line in reversed(stdout.splitlines()):
+        if line.startswith("JSON_SUMMARY:"):
+            try:
+                return json.loads(line.split(":", 1)[1])
+            except json.JSONDecodeError:
+                return None
+    return None
+
+
+def _verify_escape(refdes: str, origin: str, summary: dict | None,
+                   before: Path, after: Path) -> None:
+    """Fail unless the fanout escaped every ball it was asked to, in copper.
+
+    bga_fanout exits 0 when it drops balls it could not escape, so its exit
+    status says only that it ran. Its ledger says what it escaped, and the
+    board it wrote has to show it: each net it counts as escaped gains copper
+    the input did not have. A package that keeps any ball unescaped would
+    reach the general router as the stub-on-every-lane board this stage
+    exists to prevent, so it fails the route, declared or inferred.
+    """
+    if summary is None:
+        raise RuntimeError(
+            f"{origin} escape of {refdes} wrote no JSON_SUMMARY, so what it "
+            "escaped cannot be verified; the route fails rather than trusting it"
+        )
+    failed = int(summary.get("failed") or 0)
+    if failed:
+        nets = ", ".join(summary.get("unescaped_nets") or []) or "unnamed"
+        raise RuntimeError(
+            f"{origin} escape of {refdes} left {failed} of "
+            f"{summary.get('requested', '?')} requested ball(s) unescaped ({nets}); "
+            "the route fails rather than handing them to the general router"
+        )
+    escaped = int(summary.get("escaped") or 0)
+    before_counts = _copper_by_net(before.read_text())
+    gained = {
+        net
+        for net, count in _copper_by_net(after.read_text()).items()
+        if count > before_counts.get(net, 0)
+    }
+    if len(gained) < escaped:
+        raise RuntimeError(
+            f"{origin} escape of {refdes} reports {escaped} escaped net(s), but "
+            f"the board it wrote adds copper to only {len(gained)}; the escape "
+            "geometry is not there"
+        )
+    print(f"verified escape of {refdes}: {escaped} net(s), copper added on {len(gained)}",
+          flush=True)
+
+
 def _fanout(python: str, repo: Path, board: Path, components: list[str],
             method: str, clearance: float, via_size: float | None,
             via_drill: float | None, fab_tier: str, strict_sizes: bool,
@@ -86,9 +157,12 @@ def _fanout(python: str, repo: Path, board: Path, components: list[str],
     stub-on-every-lane board this stage exists to prevent; routing on
     would return copper that looks like a candidate but lacks the escape it
     needs. The pour is held to the same rule because the fanout's plane-drop
-    vias are placed against its fill. The one skip that remains is the
-    via-in-pad gate below, which is the board's fabrication rules declining
-    an under-pad escape rather than a stage failing at one.
+    vias are placed against its fill. A package whose default is under-pad
+    escape on a board that forbids via-in-pad falls back to channel escape,
+    which needs no via in a pad, rather than skipping: skipping would hand
+    the unescaped package to the general router exactly as a failed stage
+    would. Every escape is then held to its own ledger (see `_verify_escape`),
+    because bga_fanout exits 0 even when it drops balls it could not escape.
 
     The fabrication floor travels with every stage. `--fab-tier auto` is
     documented to escalate to an advanced tier when a fine-pitch escape needs
@@ -192,12 +266,16 @@ def _fanout(python: str, repo: Path, board: Path, components: list[str],
         if strict_sizes:
             command.append("--strict-sizes")
         print(f"escaping {refdes}:", " ".join(command), flush=True)
-        if subprocess.run(command, check=False).returncode != 0 or not fanned.is_file():
-            origin = "declared" if refdes in required else "grid-array"
+        origin = "declared" if refdes in required else "grid-array"
+        done = subprocess.run(command, check=False, stdout=subprocess.PIPE, text=True)
+        sys.stdout.write(done.stdout)
+        sys.stdout.flush()
+        if done.returncode != 0 or not fanned.is_file():
             raise RuntimeError(
                 f"{origin} escape of {refdes} failed; the route fails rather "
                 "than handing the package to the general router unescaped"
             )
+        _verify_escape(refdes, origin, _escape_summary(done.stdout), current, fanned)
         current = fanned
 
     return current
