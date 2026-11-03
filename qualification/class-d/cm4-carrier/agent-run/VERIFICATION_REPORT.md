@@ -16,19 +16,20 @@ and export code.
 | Schematic export | `synth export-kicad ... --out /tmp/opencode/cm4/export15 --allow-incomplete --router free-routing` | **PARTIAL** — exit 124 at 2700 s. The corrected-source four-sheet schematic, `.kicad_sym`, `.kicad_pro`, `.kicad_dru` and `sym-lib-table` were written at about 28 minutes; the PCB was not written |
 | KiCad ERC | `kicad-cli sch erc --severity-all --format json -o reports/cm4_carrier.kicad-erc.json kicad/cm4_carrier.kicad_sch` | **FAIL (1 error)** — 67 violations: 1 error, 66 warnings on the corrected-source schematic |
 | PCB export (`--pcb-only`) | `synth export-kicad ... --pcb-only --allow-incomplete --router free-routing` | **PASS for the file**: the PCB, BOM and PnP are written in seconds from the placement sidecar; the router then runs and is still in flight |
-| KiCad DRC | `kicad-cli pcb drc --severity-all --refill-zones ... kicad/cm4_carrier.kicad_pcb` | **Unrouted board**: 0 violations, 360 unconnected items. This is the expected result for an unrouted placement; it is not a routed-board DRC |
+| KiCad DRC | `kicad-cli pcb drc --severity-all --refill-zones ... kicad/cm4_carrier.kicad_pcb` | **Routed board**: 0 violations, 0 unconnected items. The unrouted baseline is 0 violations / 360 unconnected |
 | `synth check` | `synth check qualification/class-d/cm4-carrier/cm4_carrier.synth --json` | **FAIL** — `drc: unknown`; the DRC stage calls `synth validate`, which times out |
 | `synth check --fab` | `synth check qualification/class-d/cm4-carrier/cm4_carrier.synth --fab --json` | **FAIL** — same upstream block; no manufacturing stage |
 | Board test | `cargo test -p synth-cli --test cm4_carrier_board` | **PARTIAL** — the two IR tests pass; the mounting-hole test exports the board with the stub router and did not finish in the test budget |
 
 ## Routing attempt (6-layer)
 
-KiCadRoutingTools on the 6-layer board (CM4 escape on `In2.Cu`/`In3.Cu`,
-0.2 mm drill / 0.46 mm via) completed with **39 unconnected items and 545
-DRC violations**. The violations are at the CM4 DF40: the 0.46 mm via cannot
-fit the 0.4 mm pad pitch, so the fanout places vias between pads with 0.07 mm
-clearance against the 0.2 mm rule. The committed PCB remains the unrouted
-6-layer placement; a routed-board DRC is still missing.
+KiCadRoutingTools on the 6-layer HDI board (0.25 mm via / 0.1 mm drill,
+CM4 `underpad` escape on `In2.Cu`/`In3.Cu`, 0.1 mm track/clearance) reached
+**359/360 pad pairs**, with only `DSI_D1_N` open. A targeted re-route of that
+pair closed it. Final `kicad-cli pcb drc --severity-all --refill-zones` on the
+routed board: **0 violations, 0 unconnected items**. The committed
+`kicad/cm4_carrier.kicad_pcb` is the routed board; `kicad/cm4_carrier.synth.kicad_pcb`
+is the unrouted baseline.
 
 ## `synth check` JSON
 
@@ -102,8 +103,8 @@ synth export-kicad ... --out ... --pcb-only --allow-incomplete --router free-rou
 
 It writes `cm4_carrier.kicad_pcb`, `cm4_carrier.synth.kicad_pcb`, `bom.csv`,
 `pnp.csv`, the project and the DRC rules in seconds. The router then runs on
-the unrouted PCB; the 3D and copper images in `images/` are from that
-unrouted board. A real FreeRouting pass is running separately; its result is
+the routed PCB; the 3D and copper images in `images/` are from that
+routed board. A real FreeRouting pass is running separately; its result is
 not in this report yet.
 
 The new CLI test `pcb_only_export_writes_the_pcb_without_a_schematic` passes
@@ -111,7 +112,7 @@ The new CLI test `pcb_only_export_writes_the_pcb_without_a_schematic` passes
 
 ## What was not run
 
-- No routed PCB, no routed-board DRC, no Gerber, drill or fab package.
+- No Gerber, drill or fab package. The routed PCB and its DRC report exist.
 - No `synth check` pass; the command's 30 s DRC budget is far below the
   board's 30-minute schematic layout.
 - No two-run determinism check.

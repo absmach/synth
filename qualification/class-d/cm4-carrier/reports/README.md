@@ -7,9 +7,8 @@ What is here:
   `RTC_BAT` power flag; see `../agent-run/VERIFICATION_REPORT.md`.
 
 - `cm4_carrier.kicad-drc.json` — `kicad-cli pcb drc --severity-all
-  --refill-zones` on the **unrouted** PCB: 0 violations, 360 unconnected
-  items. The unconnected items are the unrouted nets; this is not a routed
-  board.
+  --refill-zones` on the **routed** 6-layer HDI PCB: 0 violations, 0
+  unconnected items.
 
 What is missing and why:
 
@@ -21,5 +20,5 @@ What is missing and why:
   open by design.
 
 The `kicad/` directory contains the four-sheet schematic, the embedded symbol
-library, the project file, the DRC rule file, the **unrouted** `.kicad_pcb`,
-`bom.csv` and `pnp.csv`.
+library, the project file, the DRC rule file, the **routed** `.kicad_pcb`,
+`bom.csv` and `pnp.csv`. `cm4_carrier.synth.kicad_pcb` is the unrouted baseline.

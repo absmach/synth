@@ -29,7 +29,7 @@ expression: project
   "meta": {
     "filename": "single_mcu.kicad_pro",
     "uuid": "145ebac4-376d-5d33-9b19-9919a7480054",
-    "version": 1
+    "version": 3
   },
   "net_settings": {
     "classes": [

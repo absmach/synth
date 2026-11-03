@@ -323,10 +323,13 @@ pub fn export_pcb_only(
         "boards": [],
         "meta": {
             "filename": format!("{stem}.kicad_pro"),
-            "version": 1,
+            "version": 3,
             "uuid": project_namespace.to_string(),
         },
-        "net_settings": {},
+        // The classes carry the clearances and widths the router and
+        // `kicad-cli pcb drc` must agree on. There is no schematic layout on
+        // this path, but the classes come from the board, not the sheets.
+        "net_settings": build_net_settings(board, std::iter::empty()),
         "schematic": {
             "annotate_start_num": 0,
             "drawing": {},
@@ -471,7 +474,7 @@ fn export_inner(
         "boards": [],
         "meta": {
             "filename": format!("{stem}.kicad_pro"),
-            "version": 1,
+            "version": 3,
             "uuid": project_namespace.to_string(),
         },
         "net_settings": net_settings,
@@ -732,7 +735,7 @@ pub fn export_schematic_only(
         "boards": [],
         "meta": {
             "filename": format!("{stem}.kicad_pro"),
-            "version": 1,
+            "version": 3,
             "uuid": project_namespace.to_string(),
         },
         "net_settings": net_settings,
@@ -1750,7 +1753,7 @@ mod tests {
         let sch_path = dir.join(format!("{stem}.kicad_sch"));
         std::fs::write(&sch_path, &sch).unwrap();
         let pro = serde_json::to_string_pretty(&json!({
-            "meta": { "filename": format!("{stem}.kicad_pro"), "version": 1,
+            "meta": { "filename": format!("{stem}.kicad_pro"), "version": 3,
                       "uuid": project.to_string() },
             "net_settings": build_net_settings(&board, std::iter::once(&synth_layout::layout(&board))),
             "sheets": [],

@@ -2,22 +2,22 @@
   "board": {
     "design_settings": {
       "defaults": {
-        "min_clearance": 0.127,
-        "min_copper_edge_clearance": 0.3,
-        "min_hole_clearance": 0.2,
-        "min_through_hole_diameter": 0.3,
-        "min_track_width": 0.127,
-        "min_via_annular_width": 0.13,
-        "min_via_diameter": 0.56
+        "min_clearance": 0.1,
+        "min_copper_edge_clearance": 0.2,
+        "min_hole_clearance": 0.15,
+        "min_through_hole_diameter": 0.1,
+        "min_track_width": 0.1,
+        "min_via_annular_width": 0.075,
+        "min_via_diameter": 0.25
       },
       "rules": {
-        "min_clearance": 0.127,
-        "min_copper_edge_clearance": 0.3,
-        "min_hole_clearance": 0.2,
-        "min_through_hole_diameter": 0.3,
-        "min_track_width": 0.127,
-        "min_via_annular_width": 0.13,
-        "min_via_diameter": 0.56
+        "min_clearance": 0.1,
+        "min_copper_edge_clearance": 0.2,
+        "min_hole_clearance": 0.15,
+        "min_through_hole_diameter": 0.1,
+        "min_track_width": 0.1,
+        "min_via_annular_width": 0.075,
+        "min_via_diameter": 0.25
       }
     }
   },
@@ -25,13 +25,13 @@
   "meta": {
     "filename": "cm4_carrier.kicad_pro",
     "uuid": "7a6b7856-84dd-5744-be21-f16a5a89cbe1",
-    "version": 1
+    "version": 3
   },
   "net_settings": {
     "classes": [
       {
         "bus_width": 12,
-        "clearance": 0.127,
+        "clearance": 0.1,
         "diff_pair_gap": 0.25,
         "diff_pair_via_gap": 0.25,
         "diff_pair_width": 0.2,
@@ -49,7 +49,7 @@
       },
       {
         "bus_width": 12,
-        "clearance": 0.15,
+        "clearance": 0.1,
         "diff_pair_gap": 0.25,
         "diff_pair_via_gap": 0.25,
         "diff_pair_width": 0.2,
@@ -67,8 +67,8 @@
       },
       {
         "bus_width": 12,
-        "clearance": 0.15,
-        "diff_pair_gap": 0.15,
+        "clearance": 0.1,
+        "diff_pair_gap": 0.1,
         "diff_pair_via_gap": 0.25,
         "diff_pair_width": 0.2,
         "line_style": 0,
@@ -85,7 +85,7 @@
       },
       {
         "bus_width": 12,
-        "clearance": 0.127,
+        "clearance": 0.1,
         "diff_pair_gap": 0.25,
         "diff_pair_via_gap": 0.25,
         "diff_pair_width": 0.2,
@@ -103,7 +103,7 @@
       },
       {
         "bus_width": 12,
-        "clearance": 0.2,
+        "clearance": 0.1,
         "diff_pair_gap": 0.25,
         "diff_pair_via_gap": 0.25,
         "diff_pair_width": 0.2,
@@ -121,8 +121,8 @@
       },
       {
         "bus_width": 12,
-        "clearance": 0.15,
-        "diff_pair_gap": 0.15,
+        "clearance": 0.1,
+        "diff_pair_gap": 0.1,
         "diff_pair_via_gap": 0.25,
         "diff_pair_width": 0.2,
         "line_style": 0,
@@ -139,8 +139,8 @@
       },
       {
         "bus_width": 12,
-        "clearance": 0.15,
-        "diff_pair_gap": 0.15,
+        "clearance": 0.1,
+        "diff_pair_gap": 0.1,
         "diff_pair_via_gap": 0.25,
         "diff_pair_width": 0.2,
         "line_style": 0,
@@ -157,7 +157,7 @@
       },
       {
         "bus_width": 12,
-        "clearance": 0.15,
+        "clearance": 0.1,
         "diff_pair_gap": 0.25,
         "diff_pair_via_gap": 0.25,
         "diff_pair_width": 0.2,
@@ -175,8 +175,8 @@
       },
       {
         "bus_width": 12,
-        "clearance": 0.15,
-        "diff_pair_gap": 0.15,
+        "clearance": 0.1,
+        "diff_pair_gap": 0.1,
         "diff_pair_via_gap": 0.25,
         "diff_pair_width": 0.15,
         "line_style": 0,
@@ -193,8 +193,8 @@
       },
       {
         "bus_width": 12,
-        "clearance": 0.15,
-        "diff_pair_gap": 0.15,
+        "clearance": 0.1,
+        "diff_pair_gap": 0.1,
         "diff_pair_via_gap": 0.25,
         "diff_pair_width": 0.15,
         "line_style": 0,
@@ -219,19 +219,6 @@
       "+3V3": "PWR",
       "+5V": "PWR",
       "+5V_AUX": "PWR",
-      "/HDMI_SCL_CONN": "I2C",
-      "/HDMI_SDA_CONN": "I2C",
-      "/SW_1V8": "PWR",
-      "/SW_3V3": "PWR",
-      "/SW_5V": "PWR",
-      "/USB1_N": "USB",
-      "/USB1_P": "USB",
-      "/USB2_N": "USB",
-      "/USB2_P": "USB",
-      "/USB3_N": "USB",
-      "/USB3_P": "USB",
-      "/USB4_N": "USB",
-      "/USB4_P": "USB",
       "CAM_CK_N": "CAM",
       "CAM_CK_P": "CAM",
       "CAM_D0_N": "CAM",
@@ -299,60 +286,7 @@
       "VIN_FUSED": "PWR",
       "VIN_PROT": "PWR"
     },
-    "netclass_patterns": [
-      {
-        "netclass": "PWR",
-        "pattern": "/*/SW_5V"
-      },
-      {
-        "netclass": "PWR",
-        "pattern": "/*/SW_3V3"
-      },
-      {
-        "netclass": "PWR",
-        "pattern": "/*/SW_1V8"
-      },
-      {
-        "netclass": "USB",
-        "pattern": "/*/USB1_P"
-      },
-      {
-        "netclass": "USB",
-        "pattern": "/*/USB1_N"
-      },
-      {
-        "netclass": "USB",
-        "pattern": "/*/USB2_P"
-      },
-      {
-        "netclass": "USB",
-        "pattern": "/*/USB2_N"
-      },
-      {
-        "netclass": "USB",
-        "pattern": "/*/USB3_P"
-      },
-      {
-        "netclass": "USB",
-        "pattern": "/*/USB3_N"
-      },
-      {
-        "netclass": "USB",
-        "pattern": "/*/USB4_P"
-      },
-      {
-        "netclass": "USB",
-        "pattern": "/*/USB4_N"
-      },
-      {
-        "netclass": "I2C",
-        "pattern": "/*/HDMI_SDA_CONN"
-      },
-      {
-        "netclass": "I2C",
-        "pattern": "/*/HDMI_SCL_CONN"
-      }
-    ]
+    "netclass_patterns": []
   },
   "schematic": {
     "annotate_start_num": 0,
@@ -363,22 +297,6 @@
     [
       "7e69c29b-c8ee-5ba6-9157-99a1037a835e",
       ""
-    ],
-    [
-      "33c17d3d-b9a9-50a6-8201-5213dc5febe6",
-      "cm4_carrier_Power.kicad_sch"
-    ],
-    [
-      "59eae9a7-37c0-5d34-8eb4-9789fc0bd28e",
-      "cm4_carrier_CM4.kicad_sch"
-    ],
-    [
-      "614a25c4-e82d-5ce9-b623-a5f12ec35aa9",
-      "cm4_carrier_Interfaces.kicad_sch"
-    ],
-    [
-      "d3cdf12a-3ed8-5143-b6ae-e972d4c5f74d",
-      "cm4_carrier_Peripherals.kicad_sch"
     ]
   ]
 }

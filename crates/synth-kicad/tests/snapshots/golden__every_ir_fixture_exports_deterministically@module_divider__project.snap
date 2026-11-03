@@ -29,7 +29,7 @@ expression: project
   "meta": {
     "filename": "module_divider.kicad_pro",
     "uuid": "c71344eb-9e04-5540-bc3c-923f5b68b08e",
-    "version": 1
+    "version": 3
   },
   "net_settings": {
     "classes": [

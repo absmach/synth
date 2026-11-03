@@ -29,7 +29,7 @@ expression: project
   "meta": {
     "filename": "named_nets.kicad_pro",
     "uuid": "2acbf012-b83b-59f0-b12a-5f7bde7bb35c",
-    "version": 1
+    "version": 3
   },
   "net_settings": {
     "classes": [

@@ -6,10 +6,10 @@
   vector images, not PNG; no PNG rasterizer is installed in this
   environment.
 - `pcb-3d-top.png`, `pcb-3d-angled.png` — `kicad-cli pcb render` of the
-  **unrouted 6-layer** placement (the board is placed, not routed).
+  **routed 6-layer HDI** board.
 - `pcb-top-copper.png`, `pcb-bottom-copper.png` — `kicad-cli pcb export pdf`
-  plots of the same unrouted 6-layer board. They show pads and the outline, not
-  traces; there is no routed copper yet.
+  plots of the same routed 6-layer HDI board. They show the routed copper and
+  the GND planes.
 - The PCB was produced with `synth export-kicad --pcb-only`, which writes the
   PCB side without the slow schematic layout. See
   `../agent-run/VERIFICATION_REPORT.md`.

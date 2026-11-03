@@ -44,12 +44,15 @@ Not assembled. This is the assembly intent, not a build record.
 ## Special fabrication needs
 
 - **Via-in-pad, filled and capped.** The three buck exposed pads and the
-  fine-pitch escapes need vias in pads. `manufacturer "jlc-advanced"` and
-  `requires via_in_pad`; the board cannot be built on a process without
-  resin-filled, capped vias. `jlc-advanced` is the 6-layer JLCPCB tier.
+  fine-pitch escapes need vias in pads. `manufacturer "jlc-hdi"` and `requires via_in_pad`; the board cannot be
+  built on a process without resin-filled, capped vias and 0.1 mm laser
+  microvias. `jlc-hdi` is the 6-layer HDI tier: 0.1 mm drill, 0.075 mm
+  annular ring, 0.25 mm via, 0.1 mm track/clearance.
 - **0.4 mm pitch DF40.** Two 100-pin connectors; the escape is the hardest
-  geometry on the board. The CM4 connectors declare a `channel` escape onto
-  `In2.Cu`/`In3.Cu`; the 6-layer stackup is what makes it possible.
+  geometry on the board. The CM4 connectors declare an `underpad` escape onto `In2.Cu`/`In3.Cu`;
+  the 0.25 mm via in the 0.2 x 0.7 mm pad is the HDI feature that makes it
+  possible. The fab drawing must state IPC-4761 Type VII (filled + capped +
+  plated) for these vias.
 - **0.5 mm pitch FFC and DFN/QFN.** Two 22-pin FFC connectors, a QFN-36 hub
   and a DFN-10 RTC. Stencil aperture and paste volume are not specified here.
 - **6-layer 1.6 mm stackup.** The `.synth` declares F/B signal, In1/In4

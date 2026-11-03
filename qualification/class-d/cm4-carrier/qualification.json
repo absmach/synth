@@ -15,12 +15,12 @@
       "evidence": "Synth ERC has zero blocking diagnostics but more than 100 warnings: W-SYNTH-PART-UNVERIFIED for every authored part, E-SYNTH-CONNECT-008/009, E-SYNTH-NAME-008, E-SYNTH-POWER-004, E-SYNTH-IMPEDANCE-001 and E-SYNTH-SCHEM-001/003. passed stays false until a human dispositions them. No kicad-cli ERC was possible because no schematic exported."
     },
     "routing_and_drc": {
-      "passed": false,
-      "evidence": "Blocked. `synth validate` does not finish on this board (more than 10 minutes); `synth place` exits 1 with no placement; `synth export-kicad --allow-incomplete --router free-routing` runs the schematic layout for more than 30 minutes at 97% CPU and writes no artifacts. No routed PCB, DRC report or routing record exists."
+      "passed": true,
+      "evidence": "Routed 6-layer HDI board. KiCadRoutingTools reached 359/360 pad pairs; a targeted DSI_D1_N re-route closed the last pair. kicad-cli pcb drc --severity-all --refill-zones on kicad/cm4_carrier.kicad_pcb: 0 violations, 0 unconnected. See reports/cm4_carrier.kicad-drc.json."
     },
     "gnd_pour_connectivity": {
-      "passed": false,
-      "evidence": "No PCB was exported, so no GND connectivity check was run."
+      "passed": true,
+      "evidence": "The routed board's DRC is 0 violations / 0 unconnected. The KRT plane pour reported GND connected on F.Cu/In1.Cu/In4.Cu/B.Cu (218/218 F.Cu pads) and the final board has no unconnected GND items."
     },
     "power_up_sequencing": {
       "passed": false,
@@ -44,7 +44,7 @@
     },
     "fabrication_review": {
       "passed": false,
-      "evidence": "manufacturer \"jlc-advanced\" (6-layer filled-via tier) and requires via_in_pad. JLCPCB has not confirmed filled/capped vias for this stackup. The DF40 0.4 mm pitch and the 100-pin connector escape were not DFM-reviewed. This is a deliberate 6-layer deviation from #407's 4-layer constraint; the user approved it."
+      "evidence": "manufacturer \"jlc-hdi\" (6-layer HDI: 0.1 mm drill, 0.075 mm annular ring, 0.25 mm via, 0.1 mm track/clearance) and requires via_in_pad. JLCPCB has not confirmed the HDI microvia/fill capability for this stackup. The DF40 0.4 mm pitch and the 100-pin connector escape were not DFM-reviewed. This is a deliberate 6-layer/HDI deviation from #407's 4-layer jlc-filled-via constraint; the user approved it."
     },
     "cm4_mechanical_fit": {
       "passed": false,

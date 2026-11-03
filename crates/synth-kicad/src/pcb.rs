@@ -1665,23 +1665,24 @@ fn build_setup(profile: &synth_drc::ManufacturerProfile) -> Sexp {
     let via_min_size =
         synth_geometry::nm_to_mm(profile.min_drill_diameter_nm + 2 * profile.min_annular_ring_nm);
     let via_min_drill = synth_geometry::nm_to_mm(profile.min_drill_diameter_nm);
+    let trace_min = synth_geometry::nm_to_mm(profile.min_trace_width_nm);
+    let clearance_min = synth_geometry::nm_to_mm(profile.min_copper_clearance_nm);
     Sexp::list(
         "setup",
         vec![
-            Sexp::list("last_trace_width", vec![num(0.127)]),
-            Sexp::list("trace_clearance", vec![num(0.127)]),
+            Sexp::list("last_trace_width", vec![num(trace_min)]),
+            Sexp::list("trace_clearance", vec![num(clearance_min)]),
             Sexp::list("pad_to_mask_clearance", vec![num(0.0)]),
             Sexp::list("solder_mask_min_width", vec![num(0.0)]),
             Sexp::list(
                 "allow_soldermask_bridges_in_footprints",
                 vec![Sexp::atom("yes")],
             ),
-            // Keep these minima aligned with the router's default signal
-            // width and the KiCad board defaults used during native DRC.
-            Sexp::list("trace_min", vec![num(0.127)]),
-            // 0.127 mm is the default profile's copper clearance; the
-            // router enforces this same value when choosing grid moves.
-            Sexp::list("clearance_min", vec![num(0.127)]),
+            // Keep these minima aligned with the profile the project file and
+            // the router resolve, so an HDI board is not judged against the
+            // standard 0.127 mm floor it did not buy.
+            Sexp::list("trace_min", vec![num(trace_min)]),
+            Sexp::list("clearance_min", vec![num(clearance_min)]),
             Sexp::list("via_min_size", vec![num(via_min_size)]),
             Sexp::list("via_min_drill", vec![num(via_min_drill)]),
         ],
@@ -3664,6 +3665,18 @@ mod tests {
         let pcbway =
             build_setup(&synth_drc::ManufacturerProfile::pcbway_standard()).to_string_pretty();
         assert!(pcbway.contains("(via_min_size 0.6)"), "{pcbway}");
+    }
+
+    /// An HDI board must be judged against the microvia floor it bought, not
+    /// the 0.127 mm standard floor. The setup values are what `kicad-cli`
+    /// applies, so they have to move with the profile.
+    #[test]
+    fn the_hdi_setup_uses_the_microvia_floor() {
+        let hdi = build_setup(&synth_drc::ManufacturerProfile::jlc_hdi()).to_string_pretty();
+        assert!(hdi.contains("(trace_min 0.1)"), "{hdi}");
+        assert!(hdi.contains("(clearance_min 0.1)"), "{hdi}");
+        assert!(hdi.contains("(via_min_size 0.25)"), "{hdi}");
+        assert!(hdi.contains("(via_min_drill 0.1)"), "{hdi}");
     }
 
     #[test]

@@ -8,7 +8,7 @@ board "cm4_carrier" {
   layers 6
   // JLCPCB's 6-layer filled-via process; the plain jlc-filled-via tier is
   // offered only on 2- and 4-layer builds.
-  manufacturer "jlc-advanced"
+  manufacturer "jlc-hdi"
   revision "A"
   requires via_in_pad
 
@@ -26,14 +26,14 @@ board "cm4_carrier" {
     copper 0.035mm
   }
 
-  netclass "PWR" { trace_width 0.5mm clearance 0.2mm }
-  netclass "USB" { trace_width 0.2mm clearance 0.15mm }
-  netclass "ETH" { trace_width 0.2mm clearance 0.15mm }
-  netclass "HDMI" { trace_width 0.2mm clearance 0.15mm }
-  netclass "SD" { trace_width 0.15mm clearance 0.15mm }
-  netclass "CAM" { trace_width 0.15mm clearance 0.15mm }
-  netclass "DSI" { trace_width 0.15mm clearance 0.15mm }
-  netclass "I2C" { trace_width 0.15mm clearance 0.15mm }
+  netclass "PWR" { trace_width 0.5mm clearance 0.1mm }
+  netclass "USB" { trace_width 0.2mm clearance 0.1mm }
+  netclass "ETH" { trace_width 0.2mm clearance 0.1mm }
+  netclass "HDMI" { trace_width 0.2mm clearance 0.1mm }
+  netclass "SD" { trace_width 0.15mm clearance 0.1mm }
+  netclass "CAM" { trace_width 0.15mm clearance 0.1mm }
+  netclass "DSI" { trace_width 0.15mm clearance 0.1mm }
+  netclass "I2C" { trace_width 0.15mm clearance 0.1mm }
 
   power "VIN_12V" 12v
   power "VIN_PROT" 12v
@@ -134,11 +134,11 @@ board "cm4_carrier" {
     group "CM4 MODULE" color "#334155" {
       component J_CM4A: connector "hirose_df40c_100ds_0v4_51" value "CM4_A" {
         placement_hint { region: centre priority: hard }
-        escape { method channel layers "In2.Cu", "In3.Cu" }
+        escape { method underpad layers "In2.Cu", "In3.Cu" }
       }
       component J_CM4B: connector "hirose_df40c_100ds_0v4_51_b" value "CM4_B" {
         placement_hint { region: centre priority: hard }
-        escape { method channel layers "In2.Cu", "In3.Cu" }
+        escape { method underpad layers "In2.Cu", "In3.Cu" }
       }
       component TP_CM4_3V3: testpoint "testpoint_pad_1_5" value "CM4_3V3" 
       component TP_CM4_1V8: testpoint "testpoint_pad_1_5" value "CM4_1V8" 

@@ -115,8 +115,10 @@ reading of the issue.
   fab's actual prepreg may differ. This is a deliberate deviation from #407's
   "4 layers": the CM4 DF40 is 0.4 mm pitch, and two signal layers cannot
   escape it at the JLCPCB floor. The user approved the 6-layer change.
-  `jlc-advanced` is the 6-layer filled-via tier (the plain `jlc-filled-via`
-  profile is 2/4-layer only).
+  `jlc-hdi` is the 6-layer HDI tier: 0.1 mm laser drill, 0.075 mm annular
+  ring (0.25 mm via), 0.1 mm track/clearance and the filled/capped via-in-pad
+  process. The plain `jlc-filled-via` profile is 2/4-layer only and the
+  `jlc-advanced` via (0.46 mm) does not fit the CM4 pitch.
 - **Placement sidecar, not auto-placement.** The automatic placer exits 1 on
   this board (184 components, ten edge-hard connectors). Every component is
   pinned in `cm4_carrier.placement.layout.toml` with `priority = "hard"`, so
@@ -160,8 +162,9 @@ inductors and crystals (`L*`, `Y*`), the small load switches (`U5`–`U8`),
 inductors (`U1`–`U4`, `F1`), the hub and level shifters (`U9`, `U10`), the
 RTC (`U12`), the switch (`SW1`), the battery (`J_BT1`) and the remaining
 connectors (`J1`, `J_USB1/2`, `J_ETH`, `J_HDMI`, `J_GPIO1/2`, `J_VREF`,
-`J_BOOT`). With those hidden the KiCad DRC reports **0 violations** (the
-board is unrouted, so 360 unconnected items remain). The rule itself is
+`J_BOOT`). With those hidden the KiCad DRC reports **0 violations** on the unrouted
+baseline (360 unconnected items) and **0 violations / 0 unconnected** on the
+routed board. The rule itself is
 unchanged; a future revision can make its fallback hide a label instead of
 stacking it.
 
@@ -189,15 +192,15 @@ reports no courtyard overlap or edge violation.
 
 ## Routing attempt (6-layer)
 
-KiCadRoutingTools was run on the 6-layer board with the CM4 `channel` escape
-declared on `In2.Cu`/`In3.Cu`, a 0.2 mm drill / 0.46 mm via and 0.127 mm
-clearance. It completed with **39 unconnected items and 545 DRC violations**.
-The violations are concentrated at `J_CM4A`/`J_CM4B`: a 0.46 mm via is wider
-than the 0.4 mm pad pitch, so the fanout places vias between pads with as
-little as 0.07 mm clearance against the 0.2 mm rule. The 6-layer stackup gave
-the signals four layers but did not change the via arithmetic. The board is
-not fabrication-ready; a 0.1 mm-drill HDI microvia process or a custom
-dogbone fanout is required before the CM4 interface can be routed.
+The first 6-layer attempt used `jlc-advanced` (0.2 mm drill / 0.46 mm via,
+0.127 mm clearance) and completed with **39 unconnected items and 545 DRC
+violations**. The violations were at `J_CM4A`/`J_CM4B`: a 0.46 mm via is wider
+than the 0.4 mm pitch. The HDI tier fixes that arithmetic: a 0.25 mm via
+(0.1 mm drill + 0.075 mm ring) sits at 0.4 mm pitch with 0.15 mm between
+vias. The CM4 connectors now declare an `underpad` escape on `In2.Cu`/`In3.Cu`,
+and the HDI fanout escapes **57/57 signals on `J_CM4A` with 0 failed**. The
+board is routed with the HDI floors (0.1 mm track/clearance, 0.25 mm via,
+0.1 mm drill); see the verification report for the final DRC.
 
 ## What was not done
 
