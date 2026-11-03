@@ -4401,47 +4401,111 @@ fn place_with_outline<S: ::std::hash::BuildHasher>(
         // paths such as USB series resistors and reset networks: a broad
         // courtyard halo can be legal while still forcing an unnecessarily
         // long or impossible route.
-        if let Some(comp) = board.component(id)
-            && let Some(hint) = &comp.placement_hint
-            && hint.priority == synth_ir::PlacementPriority::Hard
-            && !dense_connector_edge_override
-            && let Some(anchor_refdes) = hint.near.as_deref()
-        {
-            let (anchor_id, anchor_pin) =
-                resolve_near_target(board, anchor_refdes).unwrap_or((ComponentId(u32::MAX), None));
-            if let Some(anchor) = board.component(anchor_id)
-                && let Some((_, anchor_point, anchor_rect)) = placed
-                    .iter()
-                    .find(|(placed_id, _, _)| *placed_id == anchor.id)
-            {
-                // Pad offsets are expressed relative to the
-                // placement anchor, not the courtyard centre,
-                // so the synthetic placement below must carry
-                // the anchor.
-                let anchor_center = *anchor_point;
-                let _ = anchor_rect;
-                let anchor_rotation = resolved_rotation_overrides
-                    .get(&anchor.id)
-                    .copied()
-                    .or_else(|| {
-                        child_module_map
-                            .get(&anchor.id)
-                            .map(|(_, _, rotation)| *rotation)
-                    })
-                    .or_else(|| fp_targets.get(&anchor.id).map(|target| target.rotation))
-                    .unwrap_or(Rotation::Zero);
-                let anchor_placement = ComponentPlacement {
-                    id: anchor.id,
-                    center: anchor_center,
-                    rotation: anchor_rotation,
-                    layer: Layer::Top,
-                };
-                // A `near` that names a pin aims at that pin's pad. Otherwise any
-                // net the two share will do, and the first is
-                // as good as any.
-                'direct_net: for net in &board.nets {
-                    if !net.endpoints.iter().any(|ep| ep.component == id) {
-                        continue;
+        if let Some(comp) = board.component(id) {
+            if let Some(hint) = &comp.placement_hint {
+                if hint.priority == synth_ir::PlacementPriority::Hard
+                    && !dense_connector_edge_override
+                {
+                    if let Some(anchor_refdes) = hint.near.as_deref() {
+                        let (anchor_id, anchor_pin) = resolve_near_target(board, anchor_refdes)
+                            .unwrap_or((ComponentId(u32::MAX), None));
+                        if let Some(anchor) = board.component(anchor_id) {
+                            if let Some((_, anchor_point, anchor_rect)) = placed
+                                .iter()
+                                .find(|(placed_id, _, _)| *placed_id == anchor.id)
+                            {
+                                // Pad offsets are expressed relative to the
+                                // placement anchor, not the courtyard centre,
+                                // so the synthetic placement below must carry
+                                // the anchor.
+                                let anchor_center = *anchor_point;
+                                let _ = anchor_rect;
+                                let anchor_rotation = resolved_rotation_overrides
+                                    .get(&anchor.id)
+                                    .copied()
+                                    .or_else(|| {
+                                        child_module_map
+                                            .get(&anchor.id)
+                                            .map(|(_, _, rotation)| *rotation)
+                                    })
+                                    .or_else(|| {
+                                        fp_targets.get(&anchor.id).map(|target| target.rotation)
+                                    })
+                                    .unwrap_or(Rotation::Zero);
+                                let anchor_placement = ComponentPlacement {
+                                    id: anchor.id,
+                                    center: anchor_center,
+                                    rotation: anchor_rotation,
+                                    layer: Layer::Top,
+                                };
+                                // A `near` that names a pin aims at that pin's pad. Otherwise any
+                                // net the two share will do, and the first is
+                                // as good as any.
+                                'direct_net: for net in &board.nets {
+                                    if !net.endpoints.iter().any(|ep| ep.component == id) {
+                                        continue;
+                                    }
+                                    // The named pin, not merely the anchor's first pin on
+                                    // the net: a sensor's vdd, vddio and csb can all sit on
+                                    // one rail.
+                                    let Some(anchor_endpoint) = net.endpoints.iter().find(|ep| {
+                                        ep.component == anchor.id
+                                            && anchor_pin.is_none_or(|pin| ep.pin == pin)
+                                    }) else {
+                                        continue;
+                                    };
+                                    let Some(anchor_offset) = pad_offsets
+                                        .lookup(anchor.id, anchor_endpoint.pin.0 as usize)
+                                    else {
+                                        continue;
+                                    };
+                                    let Some(component_endpoint) =
+                                        net.endpoints.iter().find(|ep| ep.component == id)
+                                    else {
+                                        continue;
+                                    };
+                                    let Some(component_offset) =
+                                        pad_offsets.lookup(id, component_endpoint.pin.0 as usize)
+                                    else {
+                                        continue;
+                                    };
+                                    let anchor_pad =
+                                        apply_rotation(anchor_placement, anchor_offset);
+                                    let dx = anchor_pad.x_nm - anchor_center.x_nm;
+                                    let dy = anchor_pad.y_nm - anchor_center.y_nm;
+                                    let (outward_x, outward_y) = if dx.abs() >= dy.abs() {
+                                        (dx.signum(), 0)
+                                    } else {
+                                        (0, dy.signum())
+                                    };
+                                    let (component_pad_x, component_pad_y) = rotation
+                                        .rotate_offset(component_offset.0, component_offset.1);
+                                    let clearance = mm_to_nm(1.0);
+                                    if is_macro(id)
+                                        && !matches!(comp.kind.as_str(), "connector" | "jack")
+                                    {
+                                        // Macro packages need room for a
+                                        // breakout corridor. Target twice
+                                        // the anchor-pad vector so the body
+                                        // sits outside the anchor courtyard;
+                                        // the candidate search then resolves
+                                        // the exact legal grid slot.
+                                        target_point = Point::new(
+                                            anchor_center.x_nm + dx * 3,
+                                            anchor_center.y_nm + dy * 3,
+                                        );
+                                    } else {
+                                        target_point = Point::new(
+                                            anchor_pad.x_nm + outward_x * clearance
+                                                - component_pad_x,
+                                            anchor_pad.y_nm + outward_y * clearance
+                                                - component_pad_y,
+                                        );
+                                    }
+                                    break 'direct_net;
+                                }
+                            }
+                        }
                     }
                     // The named pin, not merely the anchor's first pin on
                     // the net: a sensor's vdd, vddio and csb can all sit on
