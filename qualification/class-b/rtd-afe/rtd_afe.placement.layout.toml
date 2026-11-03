@@ -14,25 +14,20 @@ y = -0.01
 
 [[outline]]
 x = 42.5
-y = 43.2
+y = 44.2
 
 [[outline]]
 x = 2.5
-y = 43.2
+y = 44.2
 
 [[vias]]
-x = 17.5
-y = 21.2
+x = 16.5
+y = 22.3
 net = "GND"
 
 [[vias]]
 x = 30.4
-y = 24.2
-net = "GND"
-
-[[vias]]
-x = 18.0
-y = 25.2
+y = 25.3
 net = "GND"
 
 
@@ -50,13 +45,13 @@ priority = "hard"
 
 [components.H3]
 x = 6.0
-y = 40.0
+y = 40.7
 rotation = 0
 priority = "hard"
 
 [components.H4]
 x = 39.0
-y = 40.0
+y = 40.7
 rotation = 0
 priority = "hard"
 
@@ -65,109 +60,109 @@ priority = "hard"
 # support parts sit in the top-left, which used to be 24 x 22 mm of bare board.
 [components.J2]
 x = 14.8
-y = 40.6
+y = 41.7
 rotation = 270
 priority = "hard"
 
 [components.R_S1]
 x = 12.5
-y = 34.5
+y = 35.6
 rotation = 90
 priority = "hard"
 
 [components.R_S2]
 x = 9.5
-y = 34.5
+y = 35.6
 rotation = 90
 priority = "hard"
 
 [components.C_D]
 x = 12.0
-y = 31.0
+y = 32.1
 rotation = 0
 priority = "hard"
 
 [components.C_CM1]
 x = 15.5
-y = 31.0
+y = 32.1
 rotation = 0
 priority = "hard"
 
 [components.C_CM2]
 x = 8.5
-y = 31.0
+y = 32.1
 rotation = 0
 priority = "hard"
 
 [components.C_F]
 x = 16.0
-y = 34.5
+y = 35.6
 rotation = 0
 priority = "hard"
 
 [components.R_BIAS]
 x = 4.5
-y = 27.0
+y = 28.1
 rotation = 90
 priority = "hard"
 
 [components.U1]
 x = 12.0
-y = 24.0
+y = 25.1
 rotation = 90
 priority = "hard"
 
 [components.U3]
 x = 10.5
-y = 10.5
+y = 11.6
 rotation = 0
 priority = "hard"
 
 [components.C_RV]
 x = 7.0
-y = 23.7
+y = 24.8
 rotation = 90
 priority = "hard"
 
 [components.C_RI]
 x = 4.8
-y = 10.2
+y = 11.3
 rotation = 0
 priority = "hard"
 
 [components.C_AV1]
 x = 11.0
-y = 16.5
+y = 17.6
 rotation = 0
 priority = "hard"
 
 [components.C_AV2]
 x = 6.5
-y = 16.5
+y = 17.6
 rotation = 0
 priority = "hard"
 
 [components.C_RO]
 x = 16.0
-y = 12.5
+y = 13.6
 rotation = 0
 priority = "hard"
 
 [components.R_RST]
-x = 18.5
-y = 14.5
+x = 19.8
+y = 14.0
 rotation = 90
 priority = "hard"
 
 [components.C_DV]
 x = 16.5
-y = 22.0
+y = 23.1
 rotation = 90
 priority = "hard"
 
 [components.C_IO]
 x = 17.0
-y = 26.0
+y = 27.1
 rotation = 90
 priority = "hard"
 
@@ -180,7 +175,7 @@ priority = "hard"
 # --- MCU, flash, crystal: right column --------------------------------------
 [components.U2]
 x = 28.0
-y = 28.5
+y = 29.6
 rotation = 0
 priority = "hard"
 
@@ -192,38 +187,38 @@ priority = "hard"
 
 [components.C_FL]
 relative_to = "U4"
-dx = 0.0
+dx = 1.5
 dy = -4.0
 rotation = 0
 priority = "hard"
 
 [components.J3]
 x = 28.0
-y = 40.6
+y = 41.7
 rotation = 90
 priority = "hard"
 
 [components.Y1]
 x = 28.0
-y = 35.0
+y = 36.3
 rotation = 0
 priority = "hard"
 
 [components.C_X1]
 x = 23.5
-y = 37.8
+y = 38.3
 rotation = 0
 priority = "hard"
 
 [components.C_X2]
 x = 32.0
-y = 37.8
+y = 38.3
 rotation = 0
 priority = "hard"
 
 [components.R_X]
 x = 24.0
-y = 34.7
+y = 35.3
 rotation = 90
 priority = "hard"
 
