@@ -145,7 +145,13 @@ fn run_rounds(
         let board = PcbBoard::parse(&filled).map_err(|e| e.to_string())?;
         let text = std::fs::read_to_string(candidate)
             .map_err(|e| format!("could not read {}: {e}", candidate.display()))?;
-        let plan = plan_all_with(&board, return_via_window_mm(&text, &board), ground);
+        let fallback = declared_via_size(candidate);
+        let plan = plan_all_with(
+            &board,
+            return_via_window_mm(&text, &board),
+            ground,
+            fallback,
+        );
         if plan.vias.is_empty() {
             return Ok(TieOutcome {
                 added,
@@ -172,8 +178,8 @@ fn run_rounds(
     // The whole plan, not the island ties alone: a signal via that still has no
     // legal return via must be reported with the islands, or a candidate that
     // spent its rounds on island vias would leave with the return path missing.
-    let islands = plan_ties(&board).vias.len();
-    let plan = plan_all_with(&board, return_via_window_mm(&text, &board), ground);
+    let islands = plan_ties(&board, None).vias.len();
+    let plan = plan_all_with(&board, return_via_window_mm(&text, &board), ground, None);
     let mut unresolved = plan.unresolved;
     unresolved.extend(plan.vias.iter().enumerate().map(|(i, via)| {
         if i < islands {
@@ -391,7 +397,7 @@ pub struct TiePlan {
 /// poured net to that net's main pour. `board` must carry fills.
 #[must_use]
 pub fn islands_to_tie(board: &PcbBoard) -> Vec<TieVia> {
-    plan_ties(board).vias
+    plan_ties(board, None).vias
 }
 
 /// Every poured polygon of the board, by net.
@@ -414,7 +420,7 @@ fn pours(board: &PcbBoard) -> BTreeMap<String, Vec<Region>> {
 
 /// The vias that tie the islands of `board`, and the islands that cannot be tied.
 #[must_use]
-pub fn plan_ties(board: &PcbBoard) -> TiePlan {
+pub fn plan_ties(board: &PcbBoard, via_fallback: Option<(i64, i64)>) -> TiePlan {
     let mut regions: BTreeMap<String, Vec<Region>> = pours(board);
     let copper = board.copper_layers();
     let mut plan = TiePlan::default();
@@ -437,7 +443,10 @@ pub fn plan_ties(board: &PcbBoard) -> TiePlan {
             .filter(|&i| groups.find(i) == main)
             .collect();
 
-        let (size_nm, drill_nm) = usual_via(&via_sizes);
+        let (size_nm, drill_nm) = usual_via(
+            &via_sizes,
+            via_fallback.unwrap_or((DEFAULT_VIA_SIZE_NM, DEFAULT_VIA_DRILL_NM)),
+        );
         let need = nm_to_mm(size_nm) / 2.0 + EDGE_SLACK_MM;
         let keepout = Keepout::from_board(board, net);
 
@@ -475,13 +484,18 @@ pub fn plan_ties(board: &PcbBoard) -> TiePlan {
 /// planned knowing where the tie vias will go, so neither lands on the other.
 #[must_use]
 pub fn plan_all(board: &PcbBoard, reach_mm: f64) -> TiePlan {
-    plan_all_with(board, reach_mm, &Ground::default())
+    plan_all_with(board, reach_mm, &Ground::default(), None)
 }
 
 /// [`plan_all`] with the nets the design's DRC calls ground.
 #[must_use]
-pub fn plan_all_with(board: &PcbBoard, reach_mm: f64, ground: &Ground) -> TiePlan {
-    let mut plan = plan_ties(board);
+pub fn plan_all_with(
+    board: &PcbBoard,
+    reach_mm: f64,
+    ground: &Ground,
+    via_fallback: Option<(i64, i64)>,
+) -> TiePlan {
+    let mut plan = plan_ties(board, via_fallback);
     let stitched = stitch(board, reach_mm, &plan.vias, ground);
     plan.vias.extend(stitched.vias);
     plan.unresolved.extend(stitched.unresolved);
@@ -955,9 +969,28 @@ fn copper_gap(first: &PieceShape, second: &PieceShape) -> f64 {
     }
 }
 
+/// Read the Default net class's via size from the `.kicad_pro` beside a board,
+/// so an island repair on a board that declared a smaller drill uses it
+/// instead of the 0.6 / 0.3 mm fallback. Returns None when the file is missing
+/// or unreadable.
+fn declared_via_size(candidate: &Path) -> Option<(i64, i64)> {
+    let pro = candidate.with_extension("kicad_pro");
+    let text = std::fs::read_to_string(&pro).ok()?;
+    let value: serde_json::Value = serde_json::from_str(&text).ok()?;
+    let classes = value.get("net_settings")?.get("classes")?.as_array()?;
+    for class in classes {
+        if class.get("name")?.as_str()? == "Default" {
+            let dia = class.get("via_diameter")?.as_f64()?;
+            let drill = class.get("via_drill")?.as_f64()?;
+            return Some(((dia * 1_000_000.0) as i64, (drill * 1_000_000.0) as i64));
+        }
+    }
+    None
+}
+
 /// The via size the net uses most, the larger on a tie. The smallest would
 /// copy a router's one escalated via, which is under the board's own minimum.
-fn usual_via(sizes: &[(i64, i64)]) -> (i64, i64) {
+fn usual_via(sizes: &[(i64, i64)], fallback: (i64, i64)) -> (i64, i64) {
     let mut counts: BTreeMap<(i64, i64), usize> = BTreeMap::new();
     for &size in sizes {
         *counts.entry(size).or_default() += 1;
@@ -965,9 +998,7 @@ fn usual_via(sizes: &[(i64, i64)]) -> (i64, i64) {
     counts
         .into_iter()
         .max_by_key(|&(size, count)| (count, size))
-        .map_or((DEFAULT_VIA_SIZE_NM, DEFAULT_VIA_DRILL_NM), |(size, _)| {
-            size
-        })
+        .map_or(fallback, |(size, _)| size)
 }
 
 fn join(groups: &mut Groups, attached: &mut [bool], hit: &[usize]) {
@@ -1255,7 +1286,7 @@ fn stitch(board: &PcbBoard, reach_mm: f64, planned: &[TieVia], ground_nets: &Gro
         .filter(|via| is_ground(via))
         .map(|via| (via.size_nm, via.drill_nm))
         .collect();
-    let (size_nm, drill_nm) = usual_via(&sizes);
+    let (size_nm, drill_nm) = usual_via(&sizes, (DEFAULT_VIA_SIZE_NM, DEFAULT_VIA_DRILL_NM));
     let need = nm_to_mm(size_nm) / 2.0 + EDGE_SLACK_MM;
     let radius = nm_to_mm(size_nm) / 2.0;
     let window = (reach_mm - REACH_MARGIN_MM).max(0.0);
@@ -1735,8 +1766,14 @@ mod tests {
     #[test]
     fn the_usual_via_wins_over_one_escalated_via() {
         let sizes = [(560_000, 300_000), (600_000, 300_000), (600_000, 300_000)];
-        assert_eq!(usual_via(&sizes), (600_000, 300_000));
-        assert_eq!(usual_via(&[]), (DEFAULT_VIA_SIZE_NM, DEFAULT_VIA_DRILL_NM));
+        assert_eq!(
+            usual_via(&sizes, (DEFAULT_VIA_SIZE_NM, DEFAULT_VIA_DRILL_NM)),
+            (600_000, 300_000)
+        );
+        assert_eq!(
+            usual_via(&[], (DEFAULT_VIA_SIZE_NM, DEFAULT_VIA_DRILL_NM)),
+            (DEFAULT_VIA_SIZE_NM, DEFAULT_VIA_DRILL_NM)
+        );
     }
 
     #[test]
@@ -1761,7 +1798,7 @@ mod tests {
             (polygon (pts (xy 0 0) (xy 40 0) (xy 40 20) (xy 0 20)))
             (filled_polygon (layer "B.Cu") (pts (xy 0 0) (xy 40 0) (xy 40 20) (xy 0 20)))))"#;
         let board = PcbBoard::parse(text).expect("board must parse");
-        let plan = plan_ties(&board);
+        let plan = plan_ties(&board, None);
         assert!(
             plan.vias.is_empty() && plan.unresolved.is_empty(),
             "{plan:?}"
@@ -1783,7 +1820,7 @@ mod tests {
             (polygon (pts (xy 0 0) (xy 40 0) (xy 40 20) (xy 0 20)))
             (filled_polygon (layer "B.Cu") (pts (xy 0 0) (xy 40 0) (xy 40 20) (xy 0 20)))))"#;
         let board = PcbBoard::parse(text).expect("board must parse");
-        let plan = plan_ties(&board);
+        let plan = plan_ties(&board, None);
         assert!(plan.vias.is_empty());
         assert_eq!(
             plan.unresolved.len(),
@@ -1921,17 +1958,17 @@ mod tests {
         let board = stitched_board(blocker);
 
         let slow = Ground::default().with_critical(&["CLK".to_string()]);
-        let plan = plan_all_with(&board, REACH, &slow);
+        let plan = plan_all_with(&board, REACH, &slow, None);
         assert!(plan.unresolved.is_empty(), "{plan:?}");
         assert_eq!(plan.advisory.len(), 1, "{plan:?}");
         assert!(plan.advisory[0].contains("net SIG"), "{plan:?}");
 
         let fast = Ground::default().with_critical(&["SIG".to_string()]);
-        let plan = plan_all_with(&board, REACH, &fast);
+        let plan = plan_all_with(&board, REACH, &fast, None);
         assert!(plan.advisory.is_empty(), "{plan:?}");
         assert_eq!(plan.unresolved.len(), 1, "{plan:?}");
 
-        let strict = plan_all_with(&board, REACH, &Ground::default());
+        let strict = plan_all_with(&board, REACH, &Ground::default(), None);
         assert_eq!(
             strict.unresolved.len(),
             1,
@@ -1970,7 +2007,7 @@ mod tests {
             "by name alone nothing here is ground"
         );
         let ground = Ground::new(&["POWER_RETURN".to_string()]);
-        let plan = plan_all_with(&board, REACH, &ground);
+        let plan = plan_all_with(&board, REACH, &ground, None);
         assert_eq!(plan.vias.len(), 1, "{plan:?}");
         assert_eq!(plan.vias[0].net, "POWER_RETURN");
     }
@@ -2102,7 +2139,7 @@ mod tests {
     fn a_planned_tie_via_serves_as_the_return_for_a_signal_via_beside_it() {
         let signal = r#"(via (at 30 9.6) (size 0.6) (drill 0.3) (layers "F.Cu" "B.Cu") (net 2))"#;
         let board = board(signal);
-        let tie = plan_ties(&board);
+        let tie = plan_ties(&board, None);
         assert_eq!(tie.vias.len(), 1, "{tie:?}");
         let tie_at = at_mm(&tie.vias[0]);
         let all = plan_all(&board, REACH);
@@ -2267,7 +2304,7 @@ mod tests {
         );
         let board = PcbBoard::parse(&text).expect("parses");
         let started = std::time::Instant::now();
-        let plan = plan_ties(&board);
+        let plan = plan_ties(&board, None);
         assert_eq!(plan.vias.len(), 1, "{plan:?}");
         assert!(
             started.elapsed() < std::time::Duration::from_secs(20),

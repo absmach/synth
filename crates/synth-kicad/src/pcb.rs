@@ -206,7 +206,7 @@ pub fn build_pcb(
             project,
             // Past every stitch via the exporter itself places, so the uuids stay distinct.
             FIXED_VIA_UUID_BASE + idx,
-            stitch_via_size(board),
+            stitch_via_size(board, None),
         ));
     }
 
@@ -321,7 +321,14 @@ pub fn build_pcb(
                     *pcb_net,
                     project,
                     plane_index * 4 + stitch_index,
-                    stitch_via_size(board),
+                    stitch_via_size(
+                        board,
+                        board
+                            .nets
+                            .iter()
+                            .find(|n| n.name == *net_name)
+                            .and_then(|n| n.netclass.as_deref()),
+                    ),
                 ));
             }
         }
@@ -1119,11 +1126,18 @@ const FIXED_VIA_UUID_BASE: usize = 1_000_000;
 /// The via a generated ground stitch uses: the board's `Default` net class when
 /// it declares one, otherwise the 0.6 / 0.3 mm every class falls back to, so a
 /// board that asks for a 0.2 mm drill gets it on the stitching vias too.
-fn stitch_via_size(board: &Board) -> (f64, f64) {
+fn stitch_via_size(board: &Board, class_name: Option<&str>) -> (f64, f64) {
+    let name = class_name.unwrap_or("Default");
     board
         .netclasses
         .iter()
-        .find(|class| class.name == "Default")
+        .find(|class| class.name == name)
+        .or_else(|| {
+            board
+                .netclasses
+                .iter()
+                .find(|class| class.name == "Default")
+        })
         .map_or(
             (
                 synth_ir::NetClass::DEFAULT_VIA_DIAMETER.to_mm(),

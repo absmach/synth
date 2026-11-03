@@ -290,3 +290,21 @@ fn the_fabricated_vias_keep_the_0_3_mm_default_when_nothing_is_declared() {
     );
     assert!(pads.iter().all(|p| (mm(p) - 0.6).abs() < 1e-6), "{pads:?}");
 }
+
+#[test]
+fn a_non_default_class_declaring_0_2_over_0_6_carries_that_via() {
+    let (pcb, classes) = export(
+        "nondefault",
+        r#"  netclass "RAIL" { via_diameter 0.6mm via_drill 0.2mm }
+"#,
+    );
+    let rail = class(&classes, "RAIL");
+    let (diameter, drill) = (
+        rail["via_diameter"].as_f64().unwrap(),
+        rail["via_drill"].as_f64().unwrap(),
+    );
+    assert!(
+        (diameter - 0.6).abs() < 1e-9 && (drill - 0.2).abs() < 1e-9,
+        "the project carries the declared via on the non-default class: {diameter} over {drill}"
+    );
+}
