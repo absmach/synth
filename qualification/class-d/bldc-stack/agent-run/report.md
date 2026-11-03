@@ -7,7 +7,8 @@ Branch `syn-408-bldc-stack`, based on `upstream/main` at `7cadbb59`
 
 - `dcaf8d8f` feat(ir): check mapped pins, coverage and voltage domains across boards
 - `1051b317` feat(registry): author bldc power-stage, connector and op-amp parts
-- (this commit) feat(qualification): add the class-D BLDC stack
+- `d040ec15` feat(qualification): add the class-D BLDC stack
+- one final commit: `fix(qualification): use repo-relative paths in the BLDC reports`
 
 The worktree is `/home/steve/work/synth-408`; nothing was pushed and no PR was
 opened.

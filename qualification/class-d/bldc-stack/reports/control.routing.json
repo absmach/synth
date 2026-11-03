@@ -33,7 +33,7 @@
     "engine_findings": {}
   },
   "artifacts": {
-    "baseline": "/tmp/opencode/ctl-export4/bldc_control.synth.kicad_pcb",
+    "baseline": "kicad/control/bldc_control.kicad_pcb",
     "candidate": null,
     "delivered": null,
     "session_log": null,
