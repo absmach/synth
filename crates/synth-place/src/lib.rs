@@ -2897,14 +2897,15 @@ fn place_with_outline<S: ::std::hash::BuildHasher>(
                                     if !net.endpoints.iter().any(|ep| ep.component == id) {
                                         continue;
                                     }
-                                    let Some(anchor_endpoint) =
-                                        net.endpoints.iter().find(|ep| ep.component == anchor.id)
-                                    else {
+                                    // The named pin, not merely the anchor's first pin on
+                                    // the net: a sensor's vdd, vddio and csb can all sit on
+                                    // one rail.
+                                    let Some(anchor_endpoint) = net.endpoints.iter().find(|ep| {
+                                        ep.component == anchor.id
+                                            && anchor_pin.is_none_or(|pin| ep.pin == pin)
+                                    }) else {
                                         continue;
                                     };
-                                    if anchor_pin.is_some_and(|pin| anchor_endpoint.pin != pin) {
-                                        continue;
-                                    }
                                     let Some(anchor_offset) = pad_offsets
                                         .lookup(anchor.id, anchor_endpoint.pin.0 as usize)
                                     else {
@@ -3096,6 +3097,22 @@ fn place_with_outline<S: ::std::hash::BuildHasher>(
                 .then(a.x_nm.cmp(&b.x_nm))
         });
 
+        // The part a hard `near` hint seats this passive beside. The halo
+        // below keeps a routing channel between neighbours; between a
+        // decoupling capacitor and the pin it decouples there is nothing to
+        // route through, so against its anchor only the courtyard counts.
+        let near_anchor = if is_passive && pad_extra_nm > 0 && !dense_connector_edge_override {
+            board
+                .component(id)
+                .and_then(|c| c.placement_hint.as_ref())
+                .filter(|h| h.priority == synth_ir::PlacementPriority::Hard)
+                .and_then(|h| h.near.as_deref())
+                .and_then(|near| resolve_near_target(board, near))
+                .map(|(anchor, _)| anchor)
+        } else {
+            None
+        };
+
         let mut tried = 0_usize;
         let mut found: Option<Point> = None;
         let start_idx = grid_start_indices[order_idx];
@@ -3113,14 +3130,27 @@ fn place_with_outline<S: ::std::hash::BuildHasher>(
             // Centre-only on purpose: the strict test here costs secure_tracker
             // a routed net, and the strict gates in the passes after this one
             // already keep a courtyard from entering a keepout.
-            if placed.iter().all(|(_, _, r)| !candidate.intersects(r))
-                && !intersects_keepout(candidate, id, board, board_outline, |pid| {
-                    placed
-                        .iter()
-                        .find(|(placed_id, _, _)| *placed_id == pid)
-                        .map(|(_, _, r)| *r)
-                })
-            {
+            let tight = courtyard_rect_at_anchor(
+                *pt,
+                rotation,
+                unrot_half_w,
+                unrot_half_h,
+                courtyard_offset,
+                0,
+            );
+            if placed.iter().all(|(placed_id, _, r)| {
+                let own = if Some(*placed_id) == near_anchor {
+                    &tight
+                } else {
+                    &candidate
+                };
+                !own.intersects(r)
+            }) && !intersects_keepout(candidate, id, board, board_outline, |pid| {
+                placed
+                    .iter()
+                    .find(|(placed_id, _, _)| *placed_id == pid)
+                    .map(|(_, _, r)| *r)
+            }) {
                 found = Some(*pt);
                 grid_start_indices[order_idx] = cell_idx;
                 break;
