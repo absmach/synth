@@ -253,7 +253,9 @@ reads only the BOM. Empty cells mean the source did not declare that attribute.
 
 ## Sourcing pins
 
-The listed passives and J3 are now pinned in `rtd_afe.synth` by explicit `lcsc_pn` and `mpn`, and `kicad/bom.csv` carries them (parts with different LCSC numbers stay on separate BOM lines). C_D, L1, L2, D1, D2, U5, Y1 and U2 are still unpinned and are matched by JLCPCB by value. That is unsafe: JLCPCB matched the wrong dielectric and values in a DFM test.
+The listed passives, J3, U5 (C80670, TI LP5907MFX-3.3/NOPB), L2 (C19330, BLM18AG601SN1D) and D1/D2 (C521915, ESD5V0B03-323) are now pinned in `rtd_afe.synth` by explicit `lcsc_pn` and `mpn`, and `kicad/bom.csv` carries them (parts with different LCSC numbers stay on separate BOM lines). C_D, L1, Y1 and U2 are still unpinned and are matched by JLCPCB by value. That is unsafe: JLCPCB matched the wrong dielectric and values in a DFM test.
+
+Not reviewed: the ESD5V0B03-323 datasheet used for D1/D2 has NOT been reviewed. Its capacitance (0.3 pF) and its pinout for USB D+/D- are unconfirmed. The registry LCSC number for `lp5907_3v3` (C83437) was wrong; the pinned C80670 is the TI LP5907MFX-3.3/NOPB. No reviewer has signed off these pins.
 
 ## Single ground plane
 
