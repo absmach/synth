@@ -45,7 +45,8 @@ Synth 0.1.1, on 2026-10-29. `SYNTH_SOURCE_REVISION` makes `buck.routing.json` re
 repository root prefix was stripped with `sed`; `out/` is a scratch directory and is not committed. A different
 router version can give different copper. `reports/registry-qualify.txt` was regenerated for the 9 registry parts on the board
 with `synth registry qualify --part <id>` (`lmr38010`, `l_bourns_srn6045ta_6r8m`, `ss36`, `smbj30a`,
-`mf_msmf110_33x`, `jst_b2b_xh_a_2pin`, `jst_b4b_xh_a_4pin`, `c_electrolytic_smd_8x10`): all eight qualify (`lmr38010` was reviewed on 2026-10-29).
+`mf_msmf110_33x`, `jst_b2b_xh_a_2pin`, `jst_b4b_xh_a_4pin`, `c_electrolytic_smd_8x10`,
+`ltst_c190kgkt`): all nine qualify (`lmr38010` and `ltst_c190kgkt` were reviewed on 2026-10-29).
 
 ## Artifact hashes
 
@@ -198,7 +199,7 @@ Every line of `#38`'s "Check exactly" list, against this board.
 | ERC and DRC | 0 violations on ERC, 0 errors and 0 warnings on DRC | A4, A7 |
 | Schematic correctness | Netlist equals the source net for net; readability scored, not tidy | A8, B15 |
 | BOM correctness | 27 components, one BOM row each, no MPN or LCSC on the generic parts | A6, B14 |
-| Footprint correctness | 8 of 8 registry parts qualify; the LED footprint differs from the datasheet pad recommendation | B8 |
+| Footprint correctness | 9 of 9 registry parts qualify; the LED footprint differs from the datasheet pad recommendation | B8 |
 | Manufacturing exports | Gerbers, drill, BOM and pick-and-place generated and hashed; not fabricated | A10, B14 |
 | KiCad reopenability | Loaded headlessly by KiCad 10.0.7 for every export used here; not opened in the GUI | A11 |
 | Which claims Synth proves | Section A, and only section A | A1-A18 |
