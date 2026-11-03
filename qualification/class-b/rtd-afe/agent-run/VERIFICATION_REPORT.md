@@ -38,5 +38,6 @@ Reviewed (Steve Munene, 2026-10-27): ads124s08, ref5025, lp5907_3v3. Not reviewe
 - Independent sign-off: none; no second-person check, no hardware measurement: open.
 - Reproducibility: committed board is one successful run, not proven byte-identical on re-run.
 
-## Discrepancy found while copying
-QUALIFICATION.md's "DRC/hash" text lists `kicad/rtd_afe.kicad_pcb` as `8f83bc8e...d680` and `rtd_afe.kicad_sch` as `a62c2c13...` in one place and `c7300d22...` in another. The committed files hash differently: `SHA256SUMS` and a fresh `sha256sum` give pcb `1e4803cf...043a`, sch `a62c2c13...198f`, `rtd_afe.placement.layout.toml` `7efac08d...a6ac` (QUALIFICATION.md Reproducibility table says `74002156...`). The Reproducibility table in QUALIFICATION.md is stale against the committed files; `SHA256SUMS` matches them. The reports and the release.json hash in that table also differ from `SHA256SUMS`. Which run produced the committed reports: not verified beyond `release.json` `source_revision` `28f7f1ec3aef55fa2881fdfbfaad6c1b6896b562`.
+## Discrepancy found while copying (resolved)
+QUALIFICATION.md's Reproducibility table and an inline PCB hash were stale against the committed files; `SHA256SUMS` matched the files. Commit `4db6fe0` replaced the table with a pointer to `SHA256SUMS` and corrected the inline PCB hash (`1e4803cf...043a`). Nothing was re-run for this document. Which run produced the committed reports: not verified beyond `release.json` `source_revision` `28f7f1ec3aef55fa2881fdfbfaad6c1b6896b562`.
+
