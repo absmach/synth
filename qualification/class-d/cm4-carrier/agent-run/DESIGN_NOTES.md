@@ -145,6 +145,18 @@ reading of the issue.
 - **HDMI-A pin numbers.** The existing `hdmi_a_receptacle` part and its
   KiCad symbol were reused; the Amphenol drawing was not re-read.
 
+## Silkscreen labels
+
+The board is dense and the automatic reference-label rule (`silk_labels.rs`)
+falls back to a stacked label when every side of a part is blocked. Rather
+than ship colliding text, the placement sidecar hides the crowded refdes:
+all passives (`R*`, `C*`), ESD arrays and LEDs (`D*`), transistors (`Q*`),
+inductors and crystals (`L*`, `Y*`), the small load switches (`U5`–`U8`), the
+CM4/FFC/microSD connector labels and all test points. The ICs (`U1`–`U4`,
+`U9`–`U12`), the remaining connectors, the switch and the mounting holes keep
+their labels. The rule itself is unchanged; a future revision can make its
+fallback hide a label instead of stacking it.
+
 ## What was not done
 
 - No schematic or PCB export completed; the schematic layout runs for more
