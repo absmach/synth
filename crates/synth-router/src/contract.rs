@@ -502,9 +502,11 @@ pub struct RouteRequest {
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub ground_nets: Vec<String>,
     /// Nets the design pins to copper layers (`netclass { layers … }`), by
-    /// name, with the layers each may use. The engine routes these on their
-    /// layers before anything else; the routed copper is checked against the
-    /// same pin afterwards (`E-SYNTH-DRC-023`).
+    /// name, with the layers each may use. An engine that supports the
+    /// constraint routes these on their layers before anything else and the
+    /// routed copper is checked against the same pin afterwards
+    /// (`E-SYNTH-DRC-023`). FreeRouting does not support it and refuses a
+    /// request that carries one, rather than silently ignoring the pin.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub net_layers: Vec<NetLayers>,
 }

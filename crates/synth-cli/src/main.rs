@@ -5325,6 +5325,21 @@ fn route_externally(
                 engine.as_str(),
                 request.baseline_path().display()
             );
+        } else if report
+            .failure
+            .as_ref()
+            .is_some_and(|f| f.reason == synth_router::RouterFailureReason::Unsupported)
+        {
+            // No copper was produced: the engine refused a constraint it
+            // cannot honour. Saying "failed validation" would imply a board
+            // exists and was rejected.
+            eprintln!(
+                "error: {} cannot honour this routing request; the exported board at {} is the \
+                 un-routed baseline and is preserved for review. See {}.",
+                engine.as_str(),
+                request.baseline_path().display(),
+                request.report_path().display()
+            );
         } else if report.state == synth_router::RouteState::ValidationFailed {
             eprintln!(
                 "error: the routed board failed independent validation; see {}.",

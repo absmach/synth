@@ -33,7 +33,7 @@
 ### Layer pins
 
 - `netclass "ETH" { layers "F.Cu", "B.Cu" }` pins the class's nets to those copper layers. A name the board does not have is `E-SYNTH-NETCLASS-001`.
-- The export writes the pin as KiCad custom rules (`disallow track` on every other copper layer, and `disallow via` for a single-layer class), KiCadRoutingTools routes pinned nets on their layers before the general pass and keeps it from ripping them, and routed copper off the pinned layers is the blocking `E-SYNTH-DRC-023`. FreeRouting takes no per-net layer input, so on that engine the pin is enforced by the gates only.
+- The export writes the pin as KiCad custom rules (`disallow track` on every other copper layer, and `disallow via` for a single-layer class), KiCadRoutingTools routes pinned nets on their layers before the general pass and keeps it from ripping them, and routed copper off the pinned layers is the blocking `E-SYNTH-DRC-023`. FreeRouting takes no per-net layer input, so it refuses a request that carries a pin (`unsupported`) instead of routing the net where it likes and leaving the violation to post-route DRC.
 - A controlled-impedance pair, or single-ended class, pinned to outer copper no longer raises `W-SYNTH-IMPEDANCE-001`.
 - `synth_place_with_hints` takes a `rotation` (0, 90, 180, 270) per hint, so a `rotate_connector_parallel_to_edge` review finding can be followed without a layout override.
 
