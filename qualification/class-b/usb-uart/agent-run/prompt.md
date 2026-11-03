@@ -62,3 +62,24 @@ Board: **2 layers**, manufacturer profile JLCPCB, no declared stackup (the expor
 ### Report back
 
 The validate result (counts by code and what remains), the measured distances table, the DRC counts, the routing statistics, every decision you made on the open points and why, and every doubt or thing you could not verify.
+
+## Differences between this brief and the committed board
+
+Found by comparing this brief with the committed files and the session transcripts. Where no instruction could be found, the entry says so.
+
+- **J1 position.** The brief says "centred along" the top edge. The committed board has J1 at x = 22.0 mm on an outline whose centre is x = 22.295 mm, about 0.3 mm off centre, flush with the top edge (0.01 mm courtyard gap). The request to centre it is from the 2026-10-14 session ("make sure the usb is aligned well in the middle of the board"). The 0.3 mm offset has no recorded cause.
+- **H3 and H4.** In the `.synth` source their hints are `bottom_left` and `bottom_right`. The mid-height position (y = 21.0 mm) is set only by the placement sidecar. The change to put the holes on the side edges was asked for on 2026-10-23 ("the holes were wrongly placed so it should be at the edges").
+- **J3 and J4.** The committed header row is at x = 7.36 (J_VIO), 16.46 (J2), 26.0 (J3) and 35.1 mm (J4), y = 29.9 mm. J3 and J4 were moved 1 mm left from 27.0 and 36.1 mm so the GND pour stayed in one piece. This was a router and DRC result, not an instruction.
+- **TX LEDs.** The cathode sits on the TX line, so the LED is dark while the line idles high. This came from a reviewer comment. The decision message in the session transcript could not be found. The LED currents (about 3 mA at 3.3 V, 6.6 mA at 5 V) are an estimate.
+- **Layer count.** The brief asks for 2 layers. An earlier revision had 4 layers whose inner layers carried no routing. No instruction for the change was found.
+- **A and B surge protection.** Left out on 2026-10-27 ("okay leave it out"). The brief already says so.
+
+## What the brief cannot reproduce
+
+- The hand-pinned part coordinates in the placement sidecar, including R1, R2 and R3.
+- The label overrides for D7, R7, R_TERM, J4, J_VIO and U1.
+- The routed result. FreeRouting is not bit-for-bit repeatable and was sensitive to placement.
+
+## Outcome of the committed board (not an input)
+
+2 layers, 40.99 x 32.23 mm, 273 track segments, 43 vias, 515.4 mm of copper. The README gives the U1 pad via at (23.900, 17.300) while `reports/release.json` and the routing record give (23.800, 17.300). The two disagree in the repository.
