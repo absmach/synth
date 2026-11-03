@@ -326,7 +326,9 @@ mod tests {
         assert!(text.contains("power_budget = false"), "{text}");
         let back: Part = toml::from_str(&text).expect("emitted TOML must parse");
         assert_eq!(
-            back.operating_conditions.as_ref().and_then(|c| c.power_budget),
+            back.operating_conditions
+                .as_ref()
+                .and_then(|c| c.power_budget),
             Some(false)
         );
     }
