@@ -4,6 +4,7 @@ version = 0
 lifecycle = "active"
 description = "Lite-On LTST-C190KGKT green AlInGaP LED, 0603, Vf 1.9 to 2.4V at 20mA"
 mpn = "LTST-C190KGKT"
+lcsc_pn = "C125094"
 kicad_symbol = "Device:LED"
 kicad_footprint = "LED_SMD:LED_0603_1608Metric"
 

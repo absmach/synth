@@ -160,3 +160,57 @@ fn no_two_active_parts_share_a_manufacturer_part_number() {
         "one canonical active id per physical part; mark the others obsolete with a substitute: {duplicates:?}"
     );
 }
+
+/// An obsolete entry is a retired name for a part, not a part to buy: it must
+/// point at an active substitute, so the procurement identity lives on an
+/// entry that is still offered.
+#[test]
+fn every_obsolete_part_names_an_active_substitute() {
+    let dir = workspace_root().join("registry").join("parts");
+    let registry = synth_registry::load_dir(&dir).expect("seed registry must load without errors");
+    for (_, part) in registry.iter() {
+        if part.lifecycle != synth_registry::Lifecycle::Obsolete {
+            continue;
+        }
+        assert!(
+            part.substitutes.iter().any(|id| registry
+                .lookup(id.as_str())
+                .is_some_and(|s| s.lifecycle == synth_registry::Lifecycle::Active)),
+            "obsolete part {} names no active substitute: {:?}",
+            part.id,
+            part.substitutes
+        );
+    }
+}
+
+/// The sensor-logger reference board is the one a JLCPCB quote is taken from,
+/// so none of its components may be an obsolete registry entry.
+#[test]
+fn the_sensor_logger_builds_no_obsolete_part() {
+    let dir = workspace_root().join("registry").join("parts");
+    let registry = synth_registry::load_dir(&dir).expect("seed registry must load without errors");
+    let source = std::fs::read_to_string(
+        workspace_root().join("examples/sensor_logger/sensor_logger.synth"),
+    )
+    .expect("read sensor_logger.synth");
+    let mut checked = 0;
+    for line in source.lines().map(str::trim) {
+        if !line.starts_with("component ") {
+            continue;
+        }
+        let Some(id) = line.split('"').nth(1) else {
+            continue;
+        };
+        let part = registry
+            .lookup(id)
+            .unwrap_or_else(|| panic!("sensor_logger names unknown part {id}"));
+        assert_ne!(
+            part.lifecycle,
+            synth_registry::Lifecycle::Obsolete,
+            "sensor_logger builds obsolete part {id}; use {:?}",
+            part.substitutes
+        );
+        checked += 1;
+    }
+    assert!(checked > 0, "no components found in sensor_logger.synth");
+}
