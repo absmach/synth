@@ -3,7 +3,12 @@
 ## Branch and commits
 
 - Branch: `syn-407-cm4-carrier`, based on upstream `a437fac`.
-- Commits: `9413c017` (board source, parts, tests, qualification and agent-run docs) and the follow-up docs commit that adds this line.
+- Commits: `9413c017` (board source, parts, tests, qualification and agent-run
+  docs), `10fa9d47` (report commit line), `fe6fdbb9` (test formatting),
+  `5242b037` (gate blocks and pinout gaps) and `3621bfc0` (GbE magjack and
+  24 MHz crystal pad-map fixes).
+- Draft PR: https://github.com/absmach/synth/pull/417 (base `main`, head
+  `nyagamunene:syn-407-cm4-carrier`).
 
 ## What is in the tree
 
