@@ -23,7 +23,11 @@ concurrency:
 jobs:
   lint-and-build:
     name: Lint and Build
-    runs-on: ubuntu-latest
+    # Pinned, not ubuntu-latest: that label is moving to 26.04 (resolute), whose
+    # apt reads the KiCad 10 PPA through its amd64v3 index, which carries no
+    # KiCad, so it offers the archive's 9.0 and install-kicad.sh rightly
+    # refuses it. Move once 26.04 resolves KiCad 10 from the PPA.
+    runs-on: ubuntu-24.04
 
     steps:
       - name: Checkout Code
@@ -68,7 +72,11 @@ jobs:
 
   test:
     name: Test shard ${{ matrix.shard }}/3
-    runs-on: ubuntu-latest
+    # Pinned, not ubuntu-latest: that label is moving to 26.04 (resolute), whose
+    # apt reads the KiCad 10 PPA through its amd64v3 index, which carries no
+    # KiCad, so it offers the archive's 9.0 and install-kicad.sh rightly
+    # refuses it. Move once 26.04 resolves KiCad 10 from the PPA.
+    runs-on: ubuntu-24.04
 
     strategy:
       fail-fast: false
@@ -110,7 +118,11 @@ jobs:
   # `crates/synth-route/tests/routability_report.rs` runs in the matrix above.
   routability-gate:
     name: Routability Gate (release)
-    runs-on: ubuntu-latest
+    # Pinned, not ubuntu-latest: that label is moving to 26.04 (resolute), whose
+    # apt reads the KiCad 10 PPA through its amd64v3 index, which carries no
+    # KiCad, so it offers the archive's 9.0 and install-kicad.sh rightly
+    # refuses it. Move once 26.04 resolves KiCad 10 from the PPA.
+    runs-on: ubuntu-24.04
 
     steps:
       - name: Checkout Code
