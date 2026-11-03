@@ -99,16 +99,16 @@ priority = "hard"
 timestamp = "2026-11-03T23:00:00+00:00"
 
 [components.C_VDD1]
-x = 33
-y = 12
+x = 31
+y = 6.5
 rotation = 0
 source = "agent"
 priority = "hard"
 timestamp = "2026-11-03T23:00:00+00:00"
 
 [components.C_VDD2]
-x = 35
-y = 14.5
+x = 31
+y = 9
 rotation = 0
 source = "agent"
 priority = "hard"
@@ -131,40 +131,40 @@ priority = "hard"
 timestamp = "2026-11-03T23:00:00+00:00"
 
 [components.SW_BOOT]
-x = 15
-y = 28
+x = 14
+y = 29
 rotation = 0
 source = "agent"
 priority = "hard"
 timestamp = "2026-11-03T23:00:00+00:00"
 
 [components.R_BOOT]
-x = 19
-y = 28
+x = 18
+y = 29
 rotation = 0
 source = "agent"
 priority = "hard"
 timestamp = "2026-11-03T23:00:00+00:00"
 
 [components.R_FAULT]
-x = 23
-y = 28
+x = 26
+y = 29
 rotation = 0
 source = "agent"
 priority = "hard"
 timestamp = "2026-11-03T23:00:00+00:00"
 
 [components.C_FAULT]
-x = 23
-y = 30
+x = 26
+y = 31
 rotation = 0
 source = "agent"
 priority = "hard"
 timestamp = "2026-11-03T23:00:00+00:00"
 
 [components.R_GATE_EN]
-x = 21
-y = 28
+x = 20
+y = 29
 rotation = 0
 source = "agent"
 priority = "hard"
@@ -268,7 +268,7 @@ timestamp = "2026-11-03T23:00:00+00:00"
 
 [components.J_ENC]
 x = 8
-y = 28
+y = 29
 rotation = 90
 source = "agent"
 priority = "hard"
@@ -323,39 +323,39 @@ priority = "hard"
 timestamp = "2026-11-03T23:00:00+00:00"
 
 [components.R_TERM]
-x = 43
-y = 22
+x = 43.5
+y = 20
 rotation = 0
 source = "agent"
 priority = "hard"
 timestamp = "2026-11-03T23:00:00+00:00"
 
 [components.R_RS485_RX]
-x = 43
-y = 24.5
+x = 43.5
+y = 22.5
 rotation = 0
 source = "agent"
 priority = "hard"
 timestamp = "2026-11-03T23:00:00+00:00"
 
 [components.D_RS485_A]
-x = 41
-y = 18
+x = 43
+y = 17
 rotation = 0
 source = "agent"
 priority = "hard"
 timestamp = "2026-11-03T23:00:00+00:00"
 
 [components.D_RS485_B]
-x = 41
-y = 16
+x = 43
+y = 13
 rotation = 0
 source = "agent"
 priority = "hard"
 timestamp = "2026-11-03T23:00:00+00:00"
 
 [components.J_RS485]
-x = 40
+x = 41
 y = 29
 rotation = 0
 source = "agent"
@@ -363,7 +363,7 @@ priority = "hard"
 timestamp = "2026-11-03T23:00:00+00:00"
 
 [components.J_SWD]
-x = 30
+x = 32
 y = 29
 rotation = 0
 source = "agent"
@@ -372,15 +372,15 @@ timestamp = "2026-11-03T23:00:00+00:00"
 
 [components.D_LED_STATUS]
 x = 24
-y = 27
+y = 26
 rotation = 0
 source = "agent"
 priority = "hard"
 timestamp = "2026-11-03T23:00:00+00:00"
 
 [components.R_LED_STATUS]
-x = 21.5
-y = 27
+x = 22
+y = 26
 rotation = 0
 source = "agent"
 priority = "hard"
@@ -388,15 +388,15 @@ timestamp = "2026-11-03T23:00:00+00:00"
 
 [components.D_LED_FAULT]
 x = 24
-y = 29.5
+y = 30.5
 rotation = 0
 source = "agent"
 priority = "hard"
 timestamp = "2026-11-03T23:00:00+00:00"
 
 [components.R_LED_FAULT]
-x = 21.5
-y = 29.5
+x = 22
+y = 30.5
 rotation = 0
 source = "agent"
 priority = "hard"
@@ -655,5 +655,13 @@ hide = true
 priority = "hard"
 
 [labels.C_12V_S]
+hide = true
+priority = "hard"
+
+[labels.D_RS485_A]
+hide = true
+priority = "hard"
+
+[labels.D_RS485_B]
 hide = true
 priority = "hard"

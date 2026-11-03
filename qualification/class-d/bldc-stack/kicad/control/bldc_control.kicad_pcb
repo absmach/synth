@@ -3093,7 +3093,7 @@
 		"Capacitor_SMD:C_0603_1608Metric"
 		(layer "F.Cu")
 		(uuid "71363490-5ca1-5573-8be7-79cdd3eb03d9")
-		(at 31.5 10.5)
+		(at 31 6.5)
 		(property
 			"Reference"
 			"C_VDD1"
@@ -3273,7 +3273,7 @@
 		"Capacitor_SMD:C_0603_1608Metric"
 		(layer "F.Cu")
 		(uuid "417ebabf-3117-5365-aaa5-68656f8b29c2")
-		(at 35 15.5)
+		(at 31 9)
 		(property
 			"Reference"
 			"C_VDD2"
@@ -3813,11 +3813,11 @@
 		"Button_Switch_SMD:SW_SPST_PTS645Sx43SMTR92"
 		(layer "F.Cu")
 		(uuid "0e73ea50-eaf4-5f52-a327-31c711b77ed9")
-		(at 15 28)
+		(at 14 29)
 		(property
 			"Reference"
 			"SW_BOOT"
-			(at 0 5.6567 0)
+			(at 0 -4.27 0)
 			(layer "F.SilkS")
 			(uuid "2a8e6599-6ab1-54ee-a39a-2a01dd5afb22")
 			(effects
@@ -4136,7 +4136,7 @@
 		"Resistor_SMD:R_0603_1608Metric"
 		(layer "F.Cu")
 		(uuid "13609f9c-03a2-5088-a05b-70b61ff8d705")
-		(at 22 25)
+		(at 21 27.5)
 		(property
 			"Reference"
 			"R_BOOT"
@@ -4316,7 +4316,7 @@
 		"Resistor_SMD:R_0603_1608Metric"
 		(layer "F.Cu")
 		(uuid "c00a0c3d-2eef-5a3f-a85e-43bea33c8b80")
-		(at 24.5 28)
+		(at 26 29)
 		(property
 			"Reference"
 			"R_FAULT"
@@ -4496,7 +4496,7 @@
 		"Capacitor_SMD:C_0603_1608Metric"
 		(layer "F.Cu")
 		(uuid "e34ad728-72f1-5cb6-8696-e5e5430d3870")
-		(at 22 31)
+		(at 25 32)
 		(property
 			"Reference"
 			"C_FAULT"
@@ -4676,7 +4676,7 @@
 		"Resistor_SMD:R_0603_1608Metric"
 		(layer "F.Cu")
 		(uuid "e162603c-e517-5dd4-b2ea-f414cb591fee")
-		(at 25 24)
+		(at 21 29)
 		(property
 			"Reference"
 			"R_GATE_EN"
@@ -7256,11 +7256,11 @@
 		"Connector_PinHeader_2.54mm:PinHeader_1x04_P2.54mm_Vertical"
 		(layer "F.Cu")
 		(uuid "deb26ebd-dbeb-5add-b9c9-4e17cc731cec")
-		(at 0.19 32 90)
+		(at -0.81 32 90)
 		(property
 			"Reference"
 			"J_ENC"
-			(at 0 -2.64 90)
+			(at -2.22 11.74 0)
 			(layer "F.SilkS")
 			(uuid "e7bb55c1-1bc0-52e2-b93e-c964c53b3c5d")
 			(effects
@@ -7704,7 +7704,7 @@
 		"Resistor_SMD:R_0603_1608Metric"
 		(layer "F.Cu")
 		(uuid "7154a193-153e-5cc2-9d59-719fdd1fe897")
-		(at 7.5 25.5)
+		(at 10 19)
 		(property
 			"Reference"
 			"R_ENC_B"
@@ -8064,7 +8064,7 @@
 		"Capacitor_SMD:C_0603_1608Metric"
 		(layer "F.Cu")
 		(uuid "10d422f6-ce4b-5179-a3cb-5f15678db282")
-		(at 8 24)
+		(at 9 24)
 		(property
 			"Reference"
 			"C_ENC_B"
@@ -8248,7 +8248,7 @@
 		(property
 			"Reference"
 			"U_RS485"
-			(at 0 -5.95 0)
+			(at -5.2633 0 90)
 			(layer "F.SilkS")
 			(uuid "09b9f820-a7b2-575d-81d7-0c01fee97715")
 			(effects
@@ -8617,7 +8617,7 @@
 		"Capacitor_SMD:C_0603_1608Metric"
 		(layer "F.Cu")
 		(uuid "6d2f8670-44e5-5709-932f-7f9b2f65d17f")
-		(at 34.5 23)
+		(at 35.5 25.5)
 		(property
 			"Reference"
 			"C_RS485"
@@ -8797,7 +8797,7 @@
 		"Resistor_SMD:R_0603_1608Metric"
 		(layer "F.Cu")
 		(uuid "da3116e3-4796-5712-8b13-bb3d59ab2864")
-		(at 43 27)
+		(at 42.5 18.5)
 		(property
 			"Reference"
 			"R_TERM"
@@ -8977,7 +8977,7 @@
 		"Resistor_SMD:R_0603_1608Metric"
 		(layer "F.Cu")
 		(uuid "a93c42ac-04d4-503b-ad0c-251a082e00f7")
-		(at 43 25.5)
+		(at 39.5 18.5)
 		(property
 			"Reference"
 			"R_RS485_RX"
@@ -9157,13 +9157,14 @@
 		"Diode_SMD:Nexperia_CFP3_SOD-123W"
 		(layer "F.Cu")
 		(uuid "e34b1f96-6f06-53e1-9349-d537b2c6156c")
-		(at 41 18)
+		(at 42.5 16.5)
 		(property
 			"Reference"
 			"D_RS485_A"
-			(at 3.12 0 90)
+			(at 0 -4.6 0)
 			(layer "F.SilkS")
 			(uuid "cd098b3f-08d9-524f-900c-0e01fd21033f")
+			(hide yes)
 			(effects
 				(font
 					(size 0.8 0.8)
@@ -9461,13 +9462,14 @@
 		"Diode_SMD:Nexperia_CFP3_SOD-123W"
 		(layer "F.Cu")
 		(uuid "4e96512d-cc70-5409-b01a-087046fb01af")
-		(at 40 12)
+		(at 42.5 12.5)
 		(property
 			"Reference"
 			"D_RS485_B"
-			(at 3.12 0 90)
+			(at 0 -4.6 0)
 			(layer "F.SilkS")
 			(uuid "d726dc32-7784-5e16-a6bf-5b1019416419")
+			(hide yes)
 			(effects
 				(font
 					(size 0.8 0.8)
@@ -9765,7 +9767,7 @@
 		"Connector_PinHeader_2.54mm:PinHeader_1x03_P2.54mm_Vertical"
 		(layer "F.Cu")
 		(uuid "31c42e43-a9be-5260-99a1-fb3ec4fa1e26")
-		(at 39.5 26.96)
+		(at 40.5 26.96)
 		(property
 			"Reference"
 			"J_RS485"
@@ -10025,7 +10027,7 @@
 		"Connector_PinHeader_2.54mm:PinHeader_1x04_P2.54mm_Vertical"
 		(layer "F.Cu")
 		(uuid "8636249e-a355-5c20-879b-2e277aa76608")
-		(at 30 25.19)
+		(at 32 25.19)
 		(property
 			"Reference"
 			"J_SWD"
@@ -10293,11 +10295,11 @@
 		"LED_SMD:LED_0603_1608Metric"
 		(layer "F.Cu")
 		(uuid "6c9dc96d-2773-5343-a091-b5206cafc494")
-		(at 24.5 26.5)
+		(at 25 25)
 		(property
 			"Reference"
 			"D_LED_STATUS"
-			(at 2.35 0 90)
+			(at 0 -1.6 0)
 			(layer "F.SilkS")
 			(uuid "84dbcf1b-85ba-50bc-b401-341d158a7152")
 			(effects
@@ -10516,7 +10518,7 @@
 		"Resistor_SMD:R_0603_1608Metric"
 		(layer "F.Cu")
 		(uuid "99c03c65-5d41-5fc2-af58-4edeb3af5deb")
-		(at 19 23.5)
+		(at 22 26)
 		(property
 			"Reference"
 			"R_LED_STATUS"
@@ -10696,7 +10698,7 @@
 		"LED_SMD:LED_0603_1608Metric"
 		(layer "F.Cu")
 		(uuid "02e3069b-755a-50f9-8404-e63246f825dd")
-		(at 24.5 29.5)
+		(at 25 30.5)
 		(property
 			"Reference"
 			"D_LED_FAULT"
@@ -10919,7 +10921,7 @@
 		"Resistor_SMD:R_0603_1608Metric"
 		(layer "F.Cu")
 		(uuid "f1282aba-41af-5156-a82f-2e61206327a8")
-		(at 18.5 32.5)
+		(at 22 30.5)
 		(property
 			"Reference"
 			"R_LED_FAULT"
@@ -12179,7 +12181,7 @@
 		"Resistor_SMD:R_0603_1608Metric"
 		(layer "F.Cu")
 		(uuid "96d96dbc-1916-58d3-862b-318f97f2a622")
-		(at 35 14)
+		(at 31.5 11)
 		(property
 			"Reference"
 			"R_VBUS_S"
@@ -12359,7 +12361,7 @@
 		"Capacitor_SMD:C_0603_1608Metric"
 		(layer "F.Cu")
 		(uuid "6b02bd99-9dcf-50d4-89dd-5d49778bc229")
-		(at 36 12.5)
+		(at 37.5 13)
 		(property
 			"Reference"
 			"C_VBUS_S"
@@ -12539,7 +12541,7 @@
 		"Resistor_SMD:R_0603_1608Metric"
 		(layer "F.Cu")
 		(uuid "986caf7f-36df-5359-b29f-0d807d74d1fd")
-		(at 35 17)
+		(at 37.5 14.5)
 		(property
 			"Reference"
 			"R_12V_T"
@@ -12899,7 +12901,7 @@
 		"Capacitor_SMD:C_0603_1608Metric"
 		(layer "F.Cu")
 		(uuid "bcb48ff6-4a8d-5142-be29-c6e90605fec9")
-		(at 39.5 14)
+		(at 37.5 16)
 		(property
 			"Reference"
 			"C_12V_S"
