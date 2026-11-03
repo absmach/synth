@@ -49,3 +49,27 @@ Placement: pin every part in the sidecar. Put the input chain below U1 so VIN do
 ### What to write down
 
 Report the measured size, layer count, net count, segment and via count, copper length, DRC and ERC results, and the router and its version. List what is not verified: no expert signal-integrity, power-integrity or RF review; no thermal measurement or junction-temperature estimate; no loop-stability or load-transient result; no input or output ripple measurement; no surge test and no IEC 61000-4-5 claim; no DC-bias data for the ceramics; no LCSC numbers or MPN for the generic passives; and no fabrication. State that the six filled vias in the pad are not confirmed with a fab. Do not present Synth's release gate as a manufacturing sign-off.
+
+## Differences between this brief and the committed board
+
+Found by comparing this brief with the committed files and the session transcripts. No requirement in the brief contradicts the board. The committed board adds the following, which the brief does not state.
+
+- **Part identities.** F1 MF-MSMF110/33X, D1 SS36, D2 SMBJ30A, C1 Honor RVT1H470M0810 (C2895739), D3 and D4 Lite-On LTST-C190KGKT, J1 B2B-XH-A and J2 B4B-XH-A.
+- **Values and grades.** C7 is C0G, C4 is 16 V X7R, and the UVLO, feedback and R_RT resistors are 1 %.
+- **Netclasses.** PWR is 0.5 mm wide with 0.2 mm clearance. Signals are 0.127 mm.
+- **Regulator.** The board uses the LMR38010 (85 V absolute maximum). An earlier revision used the LMR33640 (38 V absolute maximum), which the SMBJ30A clamp (48.4 V) exceeded, so a review required the change (commit 32dcd430, 2026-10-29). No user message for it was found.
+- **LEDs.** The power and fault LEDs were added on 2026-10-26 ("fault LED plus the 3V3 power LED").
+- **Connectors.** J1 and J2 are on the board edge with no hole in front of them, because a cable plugs into them (2026-10-26).
+- **Placement.** The committed layout is hand-pinned (J1 at 7, 22; U1 at 33, 16; L1 at 43.5, 13.8; C5, C6 and C9 at x = 49 mm). The hand layout was restored after an auto-placer trial (commit 41450b03, 2026-10-28). No user message for that was found.
+- **Thermal vias.** Six 0.3 mm GND vias in a 2 x 3 array under the exposed pad, 1.2 mm pitch, 0.6 mm pad (commit 32dcd430). No user message for them was found.
+
+## What the brief cannot reproduce
+
+- The exact sidecar coordinates.
+- The routed result, which depends on placement and on FreeRouting.
+
+## Outcome of the committed board (not an input)
+
+4 layers, 70.99 x 33.99 mm, 13 nets, 97 track segments, 21 vias, 200.08 mm of copper. `release.json` has `release_ready: true`, but `release-fab.json` has `release_ready: false` because `lmr38010` and `ltst_c190kgkt` have no reviewer. That is a routing and export gate, not a sign-off.
+
+Two statements in the board's own files disagree with the board: a note in `buck.synth` says there are no vias in the exposed pad (there are six), and the README and the sidecar give different U1 pin orders for VIN and EN.
