@@ -145,6 +145,7 @@ pub fn build_pcb(
         &label_parts(board, &placements_by_id),
         placement.board_outline,
         &label_overrides_by_id(board, label_overrides),
+        &[],
     );
     for component in &board.components {
         let Some(part) = component.part.as_ref() else {
@@ -3829,6 +3830,8 @@ mod tests {
                 plane: false,
                 max_length: None,
                 max_skew: None,
+                edge_rate: None,
+
                 layers: Vec::new(),
                 source_span: Span::new(0, 0),
             }],
@@ -3920,6 +3923,8 @@ mod tests {
             impedance: None,
             current: None,
             plane: false,
+            edge_rate: None,
+
             layers: Vec::new(),
             source_span: Span::new(0, 0),
         }];

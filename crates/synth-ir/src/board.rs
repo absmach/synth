@@ -582,25 +582,34 @@ pub struct NetClass {
     /// bus/group length-match budget checked across the class.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub max_skew: Option<Length>,
-    /// Copper layers the class's nets may be routed on (`layers "F.Cu"`),
-    /// KiCad names. Empty means every copper layer. The export writes it as a
-    /// custom DRC rule, the router honours it, and routed copper off these
-    /// layers is a blocking DRC violation.
+    /// Copper layers this class's nets are constrained to (`layers F.Cu, B.Cu`).
+    /// Empty means all layers.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub layers: Vec<String>,
+    /// How fast the class's nets switch (`edge_rate slow`). `None` is the
+    /// unknown case and is treated as fast.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub edge_rate: Option<EdgeRate>,
     pub source_span: Span,
 }
 
-impl NetClass {
-    /// Whether the class pins its nets to outer copper only, where
-    /// controlled impedance is derived as microstrip.
+/// The edge rate a netclass declares (`edge_rate slow` / `edge_rate fast`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum EdgeRate {
+    Fast,
+    Slow,
+}
+
+impl EdgeRate {
+    /// Parse `slow` or `fast`, case-insensitively.
     #[must_use]
-    pub fn outer_layers_only(&self) -> bool {
-        !self.layers.is_empty()
-            && self
-                .layers
-                .iter()
-                .all(|layer| layer == "F.Cu" || layer == "B.Cu")
+    pub fn parse(text: &str) -> Option<Self> {
+        match text.to_ascii_lowercase().as_str() {
+            "fast" => Some(Self::Fast),
+            "slow" => Some(Self::Slow),
+            _ => None,
+        }
     }
 }
 
@@ -676,6 +685,16 @@ impl NetClass {
     #[must_use]
     pub fn declares_via_geometry(&self) -> bool {
         self.via_diameter.is_some() || self.via_drill.is_some()
+    }
+
+    /// Whether this class's nets are constrained to outer copper only.
+    #[must_use]
+    pub fn outer_layers_only(&self) -> bool {
+        !self.layers.is_empty()
+            && self
+                .layers
+                .iter()
+                .all(|layer| layer == "F.Cu" || layer == "B.Cu")
     }
 }
 

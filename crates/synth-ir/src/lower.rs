@@ -827,6 +827,7 @@ impl<'a> LowerCtx<'a> {
             max_length,
             max_skew,
             layers,
+            edge_rate: None,
             source_span: n.span,
         }
     }

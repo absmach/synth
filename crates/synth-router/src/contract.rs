@@ -220,6 +220,9 @@ pub struct KiCadRoutingToolsOptions {
     /// `escalation` permits falling back to the fabrication floor.
     #[serde(default)]
     pub fab_overrides: Option<PathBuf>,
+    /// Net ordering for the router (`mps`, `inside_out`, `original`, `bus`).
+    #[serde(default)]
+    pub ordering: Option<String>,
     /// Minimum same-net pad clearance for a KRT via, in millimetres.
     pub same_net_pad_clearance_mm: f64,
     /// Enforce the board's declared minimum track/via sizes strictly.
@@ -232,6 +235,7 @@ impl Default for KiCadRoutingToolsOptions {
             escalation: KrtEscalation::Board,
             fab_tier: "auto".to_string(),
             fab_overrides: None,
+            ordering: None,
             same_net_pad_clearance_mm: 0.1,
             strict_sizes: true,
         }
