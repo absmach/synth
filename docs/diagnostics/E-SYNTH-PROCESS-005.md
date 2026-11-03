@@ -10,11 +10,10 @@ four-layer board has `F.Cu`, `In1.Cu`, `In2.Cu` and `B.Cu`; a two-layer board
 has only the outer pair.
 
 An error rather than a name passed through, for the same reason an unknown
-`method` is an error. Left alone the name reaches the escape engine, the
-fanout fails at route time, and the package is routed unescaped behind a
-warning on stderr. A dense array routed without its escape is not a board with
-a cosmetic problem — it comes back with a stub on every lane — and the failure
-would read as ordinary routing difficulty rather than as a typo.
+`method` is an error. Left alone the name reaches the escape engine and the
+fanout fails at route time, which fails the route — after the board has been
+exported and the router started, and as a failed escape stage rather than as
+the typo it is.
 
 The check runs after the whole board is read, not where the block appears, so
 `layers` may be declared anywhere in the file.

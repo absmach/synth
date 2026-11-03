@@ -26,6 +26,11 @@ use crate::result::{RouteArtifacts, RouteStatistics, RouterProvenance};
 /// The helper script that drives the external `py_router/route.py`.
 pub const HELPER: &str = "kicad_routing_tools_route.py";
 
+/// The helper's exit status when a package it was told to escape was not
+/// escaped. Mirrors `ESCAPE_FAILED` in the helper; the general router never
+/// ran, so there is no board.
+pub const ESCAPE_FAILED_EXIT: i32 = 4;
+
 /// KiCadRoutingTools' own JSON route summary, as written by the engine.
 ///
 /// Fields the engine may omit are optional; the fields Synth relies on
@@ -219,11 +224,12 @@ pub fn build_command(
             args.extend(["--fanout-component".to_string(), spec]);
         }
         // Which of those the design asked for, as opposed to which the
-        // geometry selected. A declared escape that cannot be performed is a
-        // failed route: the board said how this package leaves its pads, and
-        // quietly handing it to the maze router instead answers a question
-        // nobody asked. An inferred one may still degrade to a warning,
-        // because nothing was promised about it.
+        // geometry selected. An escape stage that fails fails the route for
+        // either, because a grid array handed to the maze router unescaped
+        // is the board this stage exists to prevent. The difference is the
+        // via-in-pad gate: a declared under-pad escape the board cannot
+        // fabricate fails, where a selected one is skipped, since the board's
+        // own rules declined it and nothing was promised about it.
         let off: std::collections::BTreeSet<&str> =
             request.escapes_off.iter().map(String::as_str).collect();
         for escape in &request.escapes {
@@ -333,6 +339,7 @@ pub fn route(request: &RouteRequest) -> Result<Candidate, RouterFailure> {
         let _ = std::fs::create_dir_all(parent);
     }
 
+    check_baseline(request)?;
     let argv = build_command(request, &python, &helper, &repo);
     let start = std::time::Instant::now();
     let invocation = crate::process::run(
@@ -406,6 +413,9 @@ pub fn route(request: &RouteRequest) -> Result<Candidate, RouterFailure> {
     // and is kept for review rather than discarded.
     let has_board = request.candidate_path().is_file();
     if !has_board {
+        if let Some(failure) = escape_failure(&invocation) {
+            return Err(failure);
+        }
         crate::freerouting::check_process_outcome(
             RouterEngine::KiCadRoutingTools,
             HELPER,
@@ -466,6 +476,58 @@ pub fn route(request: &RouteRequest) -> Result<Candidate, RouterFailure> {
     }
 
     Ok(candidate)
+}
+
+/// Refuse a baseline the escape stage cannot read.
+///
+/// Which packages are escaped is decided from the baseline, so one that is
+/// missing or does not parse would otherwise yield an empty plan, and every
+/// dense package on the board would reach the general router with nothing
+/// said about it. The engine is never started on such a board.
+fn check_baseline(request: &RouteRequest) -> Result<(), RouterFailure> {
+    crate::escape::read_baseline(request)
+        .map(drop)
+        .map_err(|detail| {
+            RouterFailure::io(
+                RouterEngine::KiCadRoutingTools,
+                format!("cannot decide which packages to escape: {detail}"),
+            )
+        })
+}
+
+/// The failure for a run the helper stopped at the escape stage.
+///
+/// Reported as a rejection with the helper's own reason rather than as a
+/// crash, because the helper decided not to route; the reason is its last
+/// `error:` line, not the first line of output, which is whatever the pour
+/// or the fanout printed before it failed.
+fn escape_failure(invocation: &crate::process::Invocation) -> Option<RouterFailure> {
+    if invocation.timed_out
+        || invocation.cancelled
+        || invocation.exit_code != Some(ESCAPE_FAILED_EXIT)
+    {
+        return None;
+    }
+    let reason = invocation
+        .stderr
+        .lines()
+        .rev()
+        .find_map(|line| line.trim().strip_prefix("error: "))
+        .unwrap_or("a required escape did not run");
+    Some(
+        RouterFailure::for_stage(
+            RouterEngine::KiCadRoutingTools,
+            RouterStage::Route,
+            RouterFailureReason::Rejected,
+            format!("{reason}; the baseline export is preserved unchanged"),
+        )
+        .with_exit_code(invocation.exit_code)
+        .with_remediation(
+            "the retained session log has the pour or fanout stage's own error; install \
+             the missing KiCadRoutingTools stage, declare a method the board can \
+             fabricate in the package's `escape` block, or declare `escape { off }`",
+        ),
+    )
 }
 
 /// Both resolvers are shared with capability discovery so the path an engine
@@ -627,8 +689,8 @@ mod tests {
     #[test]
     fn a_declared_escape_is_marked_required_and_an_inferred_one_is_not() {
         let (mut request, dir) = with_baseline(&grid_pads(11, 11, 0.8));
-        // U1 is selected by geometry alone: no declaration, so a failed
-        // escape may degrade to the general router.
+        // U1 is selected by geometry alone: no declaration, so the board's
+        // via-in-pad rule may still skip it.
         let joined = argv(&request);
         assert!(joined.contains("--fanout-component U1"), "{joined}");
         assert!(
@@ -762,6 +824,83 @@ mod tests {
         // And the clearance, which the adapter would otherwise default to
         // 0.1 mm — under this board's own 0.127 mm floor.
         assert!(joined.contains("--escape-clearance 0.1270"), "{joined}");
+    }
+
+    /// The escape plan is read off the baseline, so a baseline that cannot be
+    /// read must stop the run rather than produce an empty plan.
+    #[test]
+    fn a_baseline_the_escape_stage_cannot_read_fails_the_route() {
+        let missing = request();
+        let failure = check_baseline(&missing).expect_err("a missing baseline must fail");
+        assert_eq!(failure.stage, RouterStage::Baseline);
+        assert_eq!(failure.reason, RouterFailureReason::Io);
+        assert!(
+            failure.detail.contains("cannot be read"),
+            "{}",
+            failure.detail
+        );
+
+        let (malformed, dir) = with_baseline(&grid_pads(11, 11, 0.8));
+        std::fs::write(malformed.baseline_path(), "(kicad_sch (version 1))").expect("write");
+        let failure = check_baseline(&malformed).expect_err("a malformed baseline must fail");
+        std::fs::remove_dir_all(&dir).ok();
+        assert_eq!(failure.reason, RouterFailureReason::Io);
+        assert!(
+            failure.detail.contains("does not parse"),
+            "{}",
+            failure.detail
+        );
+    }
+
+    #[test]
+    fn a_readable_baseline_passes_the_escape_check() {
+        let (request, dir) = with_baseline(&grid_pads(1, 2, 2.54));
+        let checked = check_baseline(&request);
+        std::fs::remove_dir_all(&dir).ok();
+        assert!(checked.is_ok(), "{checked:?}");
+    }
+
+    fn invocation(exit_code: Option<i32>, stderr: &str) -> crate::process::Invocation {
+        crate::process::Invocation {
+            command: Vec::new(),
+            stdout: "pouring planes: python route_planes.py in out\n".to_string(),
+            stderr: stderr.to_string(),
+            exit_code,
+            timed_out: false,
+            cancelled: false,
+            output_truncated: false,
+            cwd: PathBuf::new(),
+        }
+    }
+
+    /// A stopped escape is a rejection carrying the helper's own reason, not
+    /// a crash named after whatever the child stage printed first.
+    #[test]
+    fn a_failed_escape_is_reported_with_the_helpers_reason() {
+        let stderr = "Traceback (most recent call last):\n  boom\n\
+                      error: grid-array escape of U1 failed; the route fails\n";
+        let failure = escape_failure(&invocation(Some(ESCAPE_FAILED_EXIT), stderr))
+            .expect("exit 4 is an escape failure");
+        assert_eq!(failure.reason, RouterFailureReason::Rejected);
+        assert_eq!(failure.stage, RouterStage::Route);
+        assert_eq!(failure.exit_code, Some(ESCAPE_FAILED_EXIT));
+        assert!(
+            failure.detail.starts_with("grid-array escape of U1 failed"),
+            "{}",
+            failure.detail
+        );
+    }
+
+    #[test]
+    fn only_the_escape_exit_status_is_an_escape_failure() {
+        assert!(escape_failure(&invocation(Some(1), "error: crashed\n")).is_none());
+        assert!(escape_failure(&invocation(Some(0), "")).is_none());
+        let mut timed_out = invocation(Some(ESCAPE_FAILED_EXIT), "");
+        timed_out.timed_out = true;
+        assert!(
+            escape_failure(&timed_out).is_none(),
+            "a timeout is reported as a timeout"
+        );
     }
 
     /// A board with nothing dense on it must not ask for an escape at all,

@@ -301,9 +301,9 @@ pub fn lower(ast: &ProgramAst, registry: &Registry, file: &str) -> LowerResult {
     // After the walk rather than in `lower_escape`, because the layer count
     // is a statement like any other and a board may declare it after the
     // component that names a layer. An unknown name has to fail here: left
-    // alone it reaches the engine, the fanout fails at route time, and the
-    // package is routed unescaped behind a stderr warning — the silent
-    // fallback the unknown-method check exists to prevent.
+    // alone it reaches the engine and the fanout fails at route time, which
+    // fails the route late and as an escape failure rather than as the typo
+    // it is — the late failure the unknown-method check exists to prevent.
     let copper = copper_layer_names(layers);
     for component in &components {
         let Some(escape) = component.escape.as_ref() else {
