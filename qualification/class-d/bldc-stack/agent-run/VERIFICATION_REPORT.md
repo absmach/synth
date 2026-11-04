@@ -74,9 +74,15 @@ validation_failed: freerouting routing failed at route stage (crashed):
   tools/freeroute_autoroute.py exited 1:
   ./kicad/include/properties/property.h(607): assert "m_choices.GetCount() > 0"
   failed in PROPERTY_ENUM(): No enum choices defined
-kicad-cli pcb drc: errors 0, unconnected pads 97, warnings 12
+kicad-cli pcb drc: errors 0, unconnected pads 97, warnings 0
 wrote release.json
 ```
+
+The control source declares `outline 60mm x 30mm`, so Edge.Cuts is exactly
+0-60 x 0-30 mm; the mounting holes keep their sidecar coordinates on the edge
+and J_B2B is flush with the right edge. The four corner ground-fence vias are
+gone; the two remaining plane-stitching vias sit at the top and bottom edge
+midpoints, clear of every hole.
 
 The same command on the committed `qualification/class-b/buck/buck.synth` fails
 with the identical assert, so the failure is environmental, not caused by this
@@ -92,9 +98,7 @@ a pass.
 
 ```
 $ kicad-cli sch erc --severity-all --format json ... control
-Found 6 violations: 0 errors, 6 warnings
-  4 isolated_pin_label
-  2 no_connect_connected
+Found 0 violations: 0 errors, 0 warnings
 
 $ kicad-cli sch erc --severity-all --format json ... power
 Found 15 violations: 0 errors, 15 warnings

@@ -1004,6 +1004,11 @@ fn execute_language_reference(_args: &Value) -> Value {
                     "example": "layers 4"
                 },
                 {
+                    "form": "outline <width><unit> x <height><unit>",
+                    "description": "Fixes the board rectangle: the exported Edge.Cuts is exactly this size, with its bottom-left corner at board coordinate (0, 0). At most one per board; omit it and the exporter fits the edge round the placed parts. Placement-sidecar x/y are millimetres from that origin. A mounting hole may sit on the edge (its drill must stay inside), and a part that does not fit is a placement diagnostic, not a larger board.",
+                    "example": "outline 60mm x 30mm"
+                },
+                {
                     "form": "manufacturer \"<name>\"",
                     "description": "Selects the DRC/manufacturing profile. At most one per board.",
                     "example": "manufacturer \"jlcpcb\""
@@ -5986,6 +5991,28 @@ mod language_reference_tests {
     fn language_reference_is_listed() {
         let names: Vec<String> = list_tools().into_iter().map(|t| t.name).collect();
         assert!(names.contains(&"synth_language_reference".to_string()));
+    }
+
+    #[test]
+    fn language_reference_documents_an_outline_that_parses() {
+        let result = execute_language_reference(&serde_json::json!({}));
+        let entry = result["grammar"]["statements"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|s| {
+                s["form"]
+                    .as_str()
+                    .unwrap_or_default()
+                    .starts_with("outline")
+            })
+            .expect("outline statement documented");
+        let source = format!(
+            "board \"b\" {{\n layers 2\n {}\n}}",
+            entry["example"].as_str().unwrap()
+        );
+        let parse = synth_parser::parse(&source, "outline_example.synth".to_string());
+        assert!(parse.diagnostics.is_empty(), "{:?}", parse.diagnostics);
     }
 
     #[test]

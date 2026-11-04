@@ -3,32 +3,32 @@ forced_net_labels = []
 fit_sheet = false
 
 [components.H1]
-x = 3
-y = 3
+x = 2
+y = 2
 rotation = 0
 source = "agent"
 priority = "hard"
 timestamp = "2026-11-03T23:30:00+00:00"
 
 [components.H2]
-x = 53
-y = 3
+x = 51
+y = 2
 rotation = 0
 source = "agent"
 priority = "hard"
 timestamp = "2026-11-03T23:30:00+00:00"
 
 [components.H3]
-x = 3
-y = 27
+x = 2
+y = 28
 rotation = 0
 source = "agent"
 priority = "hard"
 timestamp = "2026-11-03T23:30:00+00:00"
 
 [components.H4]
-x = 53
-y = 27
+x = 51
+y = 28
 rotation = 0
 source = "agent"
 priority = "hard"
@@ -859,7 +859,7 @@ priority = "hard"
 timestamp = "2026-11-03T23:30:00+00:00"
 
 [components.J_B2B]
-x = 48
+x = 57.21
 y = 15
 rotation = 0
 source = "agent"

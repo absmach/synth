@@ -67,6 +67,7 @@ fn board(name: &str, component: Component, nets: Vec<(&str, Option<f64>, Vec<Pin
         })
         .collect();
     Board {
+        outline: None,
         schematic_overflow: None,
         schematic_paper: None,
         groups: Vec::new(),

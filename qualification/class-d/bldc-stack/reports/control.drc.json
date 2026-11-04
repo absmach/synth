@@ -1,7 +1,7 @@
 {
     "$schema": "https://schemas.kicad.org/drc.v1.json",
     "coordinate_units": "mm",
-    "date": "2026-11-03T21:01:34",
+    "date": "2026-11-04T15:43:24",
     "ignored_checks": [
         {
             "description": "Footprint has no courtyard defined",
@@ -37,20 +37,20 @@
             "description": "Missing connection between items",
             "items": [
                 {
-                    "description": "Pad 2 [GND] of R_12V_B on F.Cu",
+                    "description": "Pad 2 [ISENSE_U_ADC] of R_ISENSE_U on F.Cu",
                     "pos": {
-                        "x": 35.825,
-                        "y": 18.5
+                        "x": 42.825,
+                        "y": 7.0
                     },
-                    "uuid": "168a5433-e154-59cb-870c-cd190b7b9a35"
+                    "uuid": "2f82eaf7-4473-54ba-93a9-8b06bc2b4554"
                 },
                 {
                     "description": "Pad 7 [ISENSE_U_ADC] of U1 on F.Cu",
                     "pos": {
-                        "x": 23.825,
-                        "y": 19.0
+                        "x": 22.825,
+                        "y": 15.5
                     },
-                    "uuid": "ba5b2f54-0ef0-5f23-ac62-d186363e27cb"
+                    "uuid": "ced526f4-38f3-5fff-b3f7-c7e305fbc223"
                 }
             ],
             "severity": "error",
@@ -60,20 +60,20 @@
             "description": "Missing connection between items",
             "items": [
                 {
-                    "description": "Pad 1 [SENSE_12V] of C_12V_S on F.Cu",
+                    "description": "Pad 1 [ISENSE_U_ADC] of C_ISENSE_U on F.Cu",
                     "pos": {
-                        "x": 36.725,
-                        "y": 16.0
+                        "x": 44.225,
+                        "y": 6.5
                     },
-                    "uuid": "bf0f41c5-d728-5288-b1a7-2419f0be4fb5"
+                    "uuid": "6740cbf3-8ea9-5d57-a2bd-d462e57381d0"
                 },
                 {
-                    "description": "Pad 2 [GND] of R_12V_B on F.Cu",
+                    "description": "Pad 2 [ISENSE_U_ADC] of R_ISENSE_U on F.Cu",
                     "pos": {
-                        "x": 35.825,
-                        "y": 18.5
+                        "x": 42.825,
+                        "y": 7.0
                     },
-                    "uuid": "168a5433-e154-59cb-870c-cd190b7b9a35"
+                    "uuid": "2f82eaf7-4473-54ba-93a9-8b06bc2b4554"
                 }
             ],
             "severity": "error",
@@ -83,20 +83,20 @@
             "description": "Missing connection between items",
             "items": [
                 {
-                    "description": "Pad 2 [GND] of R_12V_B on F.Cu",
+                    "description": "Pad 1 [ISENSE_V_ADC] of C_ISENSE_V on F.Cu",
                     "pos": {
-                        "x": 35.825,
-                        "y": 18.5
+                        "x": 42.225,
+                        "y": 8.5
                     },
-                    "uuid": "168a5433-e154-59cb-870c-cd190b7b9a35"
+                    "uuid": "a0958670-ee5b-5946-a83e-a27427a56b53"
                 },
                 {
                     "description": "Pad 8 [ISENSE_V_ADC] of U1 on F.Cu",
                     "pos": {
-                        "x": 23.825,
-                        "y": 19.8
+                        "x": 22.825,
+                        "y": 16.3
                     },
-                    "uuid": "db01ddbc-5fe0-57a7-8f9c-32082cdd1067"
+                    "uuid": "d42d9c56-8453-5783-854e-ec4a7418ddb6"
                 }
             ],
             "severity": "error",
@@ -106,20 +106,20 @@
             "description": "Missing connection between items",
             "items": [
                 {
-                    "description": "Pad 1 [SENSE_12V] of C_12V_S on F.Cu",
+                    "description": "Pad 2 [ISENSE_V_ADC] of R_ISENSE_V on F.Cu",
                     "pos": {
-                        "x": 36.725,
-                        "y": 16.0
+                        "x": 42.825,
+                        "y": 10.0
                     },
-                    "uuid": "bf0f41c5-d728-5288-b1a7-2419f0be4fb5"
+                    "uuid": "ebb64fc6-134b-5639-af27-43a2ce7b34d0"
                 },
                 {
-                    "description": "Pad 2 [GND] of R_12V_B on F.Cu",
+                    "description": "Pad 1 [ISENSE_V_ADC] of C_ISENSE_V on F.Cu",
                     "pos": {
-                        "x": 35.825,
-                        "y": 18.5
+                        "x": 42.225,
+                        "y": 8.5
                     },
-                    "uuid": "168a5433-e154-59cb-870c-cd190b7b9a35"
+                    "uuid": "a0958670-ee5b-5946-a83e-a27427a56b53"
                 }
             ],
             "severity": "error",
@@ -129,20 +129,20 @@
             "description": "Missing connection between items",
             "items": [
                 {
-                    "description": "Pad 2 [GND] of R_12V_B on F.Cu",
+                    "description": "Pad 1 [ISENSE_W_ADC] of C_ISENSE_W on F.Cu",
                     "pos": {
-                        "x": 35.825,
-                        "y": 18.5
+                        "x": 42.225,
+                        "y": 11.5
                     },
-                    "uuid": "168a5433-e154-59cb-870c-cd190b7b9a35"
+                    "uuid": "e717fcc0-7811-58a9-81d5-67acb93d7582"
                 },
                 {
                     "description": "Pad 9 [ISENSE_W_ADC] of U1 on F.Cu",
                     "pos": {
-                        "x": 25.2,
-                        "y": 21.175
+                        "x": 24.2,
+                        "y": 17.675
                     },
-                    "uuid": "f625b7fc-2277-5d7e-a56e-8612cf69c59e"
+                    "uuid": "71d7b051-6a8d-5cc0-b099-f485a733e595"
                 }
             ],
             "severity": "error",
@@ -152,20 +152,20 @@
             "description": "Missing connection between items",
             "items": [
                 {
-                    "description": "Pad 1 [SENSE_12V] of C_12V_S on F.Cu",
+                    "description": "Pad 2 [ISENSE_W_ADC] of R_ISENSE_W on F.Cu",
                     "pos": {
-                        "x": 36.725,
-                        "y": 16.0
+                        "x": 42.825,
+                        "y": 13.0
                     },
-                    "uuid": "bf0f41c5-d728-5288-b1a7-2419f0be4fb5"
+                    "uuid": "b0df82b7-c496-5396-b122-112479ab447e"
                 },
                 {
-                    "description": "Pad 2 [GND] of R_12V_B on F.Cu",
+                    "description": "Pad 1 [ISENSE_W_ADC] of C_ISENSE_W on F.Cu",
                     "pos": {
-                        "x": 35.825,
-                        "y": 18.5
+                        "x": 42.225,
+                        "y": 11.5
                     },
-                    "uuid": "168a5433-e154-59cb-870c-cd190b7b9a35"
+                    "uuid": "e717fcc0-7811-58a9-81d5-67acb93d7582"
                 }
             ],
             "severity": "error",
@@ -174,21 +174,67 @@
         {
             "description": "Missing connection between items",
             "items": [
-                {
-                    "description": "Pad 2 [GND] of R_12V_B on F.Cu",
-                    "pos": {
-                        "x": 35.825,
-                        "y": 18.5
-                    },
-                    "uuid": "168a5433-e154-59cb-870c-cd190b7b9a35"
-                },
                 {
                     "description": "Pad 14 [VBUS_SENSE_ADC] of U1 on F.Cu",
                     "pos": {
-                        "x": 29.2,
-                        "y": 21.175
+                        "x": 28.2,
+                        "y": 17.675
                     },
-                    "uuid": "2e6b5c3d-a0dd-54e3-90e8-39876ad8333e"
+                    "uuid": "927d9ff2-222d-54ce-864e-f48613214cab"
+                },
+                {
+                    "description": "Pad 2 [VBUS_SENSE_ADC] of R_VBUS_S on F.Cu",
+                    "pos": {
+                        "x": 42.825,
+                        "y": 16.0
+                    },
+                    "uuid": "57bc7d54-5097-5778-a659-e47dadcbc994"
+                }
+            ],
+            "severity": "error",
+            "type": "unconnected_items"
+        },
+        {
+            "description": "Missing connection between items",
+            "items": [
+                {
+                    "description": "Pad 2 [VBUS_SENSE_ADC] of R_VBUS_S on F.Cu",
+                    "pos": {
+                        "x": 42.825,
+                        "y": 16.0
+                    },
+                    "uuid": "57bc7d54-5097-5778-a659-e47dadcbc994"
+                },
+                {
+                    "description": "Pad 1 [VBUS_SENSE_ADC] of C_VBUS_S on F.Cu",
+                    "pos": {
+                        "x": 44.225,
+                        "y": 15.5
+                    },
+                    "uuid": "a6e7ab7b-d0ee-5f00-ab1d-8f97c29e51ba"
+                }
+            ],
+            "severity": "error",
+            "type": "unconnected_items"
+        },
+        {
+            "description": "Missing connection between items",
+            "items": [
+                {
+                    "description": "Pad 1 [SENSE_12V] of R_12V_B on F.Cu",
+                    "pos": {
+                        "x": 41.175,
+                        "y": 21.5
+                    },
+                    "uuid": "c0b16587-8bc2-513f-8fa1-ac7fa18218a6"
+                },
+                {
+                    "description": "Pad 2 [SENSE_12V] of R_12V_T on F.Cu",
+                    "pos": {
+                        "x": 42.825,
+                        "y": 19.0
+                    },
+                    "uuid": "30efe41b-85fb-5f18-a09a-b7192b589a62"
                 }
             ],
             "severity": "error",
@@ -200,41 +246,18 @@
                 {
                     "description": "Pad 1 [SENSE_12V] of C_12V_S on F.Cu",
                     "pos": {
-                        "x": 36.725,
-                        "y": 16.0
+                        "x": 41.725,
+                        "y": 17.5
                     },
-                    "uuid": "bf0f41c5-d728-5288-b1a7-2419f0be4fb5"
+                    "uuid": "cf0da8fa-b057-5446-a641-2b2f40149d3a"
                 },
-                {
-                    "description": "Pad 2 [GND] of R_12V_B on F.Cu",
-                    "pos": {
-                        "x": 35.825,
-                        "y": 18.5
-                    },
-                    "uuid": "168a5433-e154-59cb-870c-cd190b7b9a35"
-                }
-            ],
-            "severity": "error",
-            "type": "unconnected_items"
-        },
-        {
-            "description": "Missing connection between items",
-            "items": [
                 {
                     "description": "Pad 16 [SENSE_12V] of U1 on F.Cu",
                     "pos": {
-                        "x": 30.8,
-                        "y": 21.175
+                        "x": 29.8,
+                        "y": 17.675
                     },
-                    "uuid": "52a14c0f-fd77-5241-ab4f-8954676c1366"
-                },
-                {
-                    "description": "Pad 1 [SENSE_12V] of R_12V_B on F.Cu",
-                    "pos": {
-                        "x": 34.175,
-                        "y": 18.5
-                    },
-                    "uuid": "1563e67f-1c32-5d36-8127-bc5667cbf3b5"
+                    "uuid": "c2e0be24-b685-518a-a221-ab829a4d2ae3"
                 }
             ],
             "severity": "error",
@@ -244,20 +267,20 @@
             "description": "Missing connection between items",
             "items": [
                 {
-                    "description": "Pad 1 [SENSE_12V] of R_12V_B on F.Cu",
+                    "description": "Pad 2 [SENSE_12V] of R_12V_T on F.Cu",
                     "pos": {
-                        "x": 34.175,
-                        "y": 18.5
+                        "x": 42.825,
+                        "y": 19.0
                     },
-                    "uuid": "1563e67f-1c32-5d36-8127-bc5667cbf3b5"
+                    "uuid": "30efe41b-85fb-5f18-a09a-b7192b589a62"
                 },
                 {
                     "description": "Pad 1 [SENSE_12V] of C_12V_S on F.Cu",
                     "pos": {
-                        "x": 36.725,
-                        "y": 16.0
+                        "x": 41.725,
+                        "y": 17.5
                     },
-                    "uuid": "bf0f41c5-d728-5288-b1a7-2419f0be4fb5"
+                    "uuid": "cf0da8fa-b057-5446-a641-2b2f40149d3a"
                 }
             ],
             "severity": "error",
@@ -267,66 +290,20 @@
             "description": "Missing connection between items",
             "items": [
                 {
-                    "description": "Pad 1 [SENSE_12V] of C_12V_S on F.Cu",
+                    "description": "Pad 2 [HALL_U_MCU] of R_HALL_SU on F.Cu",
                     "pos": {
-                        "x": 36.725,
-                        "y": 16.0
+                        "x": 15.825,
+                        "y": 8.0
                     },
-                    "uuid": "bf0f41c5-d728-5288-b1a7-2419f0be4fb5"
-                },
-                {
-                    "description": "Pad 2 [GND] of R_12V_B on F.Cu",
-                    "pos": {
-                        "x": 35.825,
-                        "y": 18.5
-                    },
-                    "uuid": "168a5433-e154-59cb-870c-cd190b7b9a35"
-                }
-            ],
-            "severity": "error",
-            "type": "unconnected_items"
-        },
-        {
-            "description": "Missing connection between items",
-            "items": [
-                {
-                    "description": "Pad 1 [SENSE_12V] of C_12V_S on F.Cu",
-                    "pos": {
-                        "x": 36.725,
-                        "y": 16.0
-                    },
-                    "uuid": "bf0f41c5-d728-5288-b1a7-2419f0be4fb5"
-                },
-                {
-                    "description": "Pad 2 [GND] of R_12V_B on F.Cu",
-                    "pos": {
-                        "x": 35.825,
-                        "y": 18.5
-                    },
-                    "uuid": "168a5433-e154-59cb-870c-cd190b7b9a35"
-                }
-            ],
-            "severity": "error",
-            "type": "unconnected_items"
-        },
-        {
-            "description": "Missing connection between items",
-            "items": [
-                {
-                    "description": "Pad 2 [GND] of R_12V_B on F.Cu",
-                    "pos": {
-                        "x": 35.825,
-                        "y": 18.5
-                    },
-                    "uuid": "168a5433-e154-59cb-870c-cd190b7b9a35"
+                    "uuid": "eedcb4cd-aa90-5de9-8a29-e3fb8d90c37e"
                 },
                 {
                     "description": "Pad 11 [HALL_U_MCU] of U1 on F.Cu",
                     "pos": {
-                        "x": 26.8,
-                        "y": 21.175
+                        "x": 25.8,
+                        "y": 17.675
                     },
-                    "uuid": "91b0f7e8-59de-5cbe-98c8-7dbaaa672bce"
+                    "uuid": "68671294-17b5-5731-8adf-ee0f70daed30"
                 }
             ],
             "severity": "error",
@@ -336,20 +313,43 @@
             "description": "Missing connection between items",
             "items": [
                 {
-                    "description": "Pad 1 [SENSE_12V] of C_12V_S on F.Cu",
+                    "description": "Pad 1 [HALL_U_MCU] of C_HALL_U on F.Cu",
                     "pos": {
-                        "x": 36.725,
-                        "y": 16.0
+                        "x": 16.725,
+                        "y": 6.5
                     },
-                    "uuid": "bf0f41c5-d728-5288-b1a7-2419f0be4fb5"
+                    "uuid": "6defb1b9-2ff3-5faf-8e18-22ecf0c171b5"
                 },
                 {
-                    "description": "Pad 2 [GND] of R_12V_B on F.Cu",
+                    "description": "Pad 2 [HALL_U_MCU] of R_HALL_SU on F.Cu",
                     "pos": {
-                        "x": 35.825,
-                        "y": 18.5
+                        "x": 15.825,
+                        "y": 8.0
                     },
-                    "uuid": "168a5433-e154-59cb-870c-cd190b7b9a35"
+                    "uuid": "eedcb4cd-aa90-5de9-8a29-e3fb8d90c37e"
+                }
+            ],
+            "severity": "error",
+            "type": "unconnected_items"
+        },
+        {
+            "description": "Missing connection between items",
+            "items": [
+                {
+                    "description": "Pad 1 [HALL_V_MCU] of C_HALL_V on F.Cu",
+                    "pos": {
+                        "x": 16.725,
+                        "y": 13.5
+                    },
+                    "uuid": "1ab0a28e-a057-5b2e-847c-e672ea2e6199"
+                },
+                {
+                    "description": "Pad 2 [HALL_V_MCU] of R_HALL_SV on F.Cu",
+                    "pos": {
+                        "x": 15.825,
+                        "y": 15.0
+                    },
+                    "uuid": "f87cc3f4-6d65-5212-bdd5-099efe8d0f85"
                 }
             ],
             "severity": "error",
@@ -361,18 +361,18 @@
                 {
                     "description": "Pad 12 [HALL_V_MCU] of U1 on F.Cu",
                     "pos": {
-                        "x": 27.6,
-                        "y": 21.175
+                        "x": 26.6,
+                        "y": 17.675
                     },
-                    "uuid": "69d8cb06-1e62-5e79-8fd1-a28fde863eee"
+                    "uuid": "5a825324-a03d-53a0-a2e4-c23877135e0b"
                 },
                 {
-                    "description": "Pad 1 [SENSE_12V] of C_12V_S on F.Cu",
+                    "description": "Pad 1 [HALL_V_MCU] of C_HALL_V on F.Cu",
                     "pos": {
-                        "x": 36.725,
-                        "y": 16.0
+                        "x": 16.725,
+                        "y": 13.5
                     },
-                    "uuid": "bf0f41c5-d728-5288-b1a7-2419f0be4fb5"
+                    "uuid": "1ab0a28e-a057-5b2e-847c-e672ea2e6199"
                 }
             ],
             "severity": "error",
@@ -382,20 +382,20 @@
             "description": "Missing connection between items",
             "items": [
                 {
-                    "description": "Pad 1 [SENSE_12V] of C_12V_S on F.Cu",
+                    "description": "Pad 1 [HALL_W_MCU] of C_HALL_W on F.Cu",
                     "pos": {
-                        "x": 36.725,
-                        "y": 16.0
+                        "x": 16.725,
+                        "y": 20.5
                     },
-                    "uuid": "bf0f41c5-d728-5288-b1a7-2419f0be4fb5"
+                    "uuid": "bb66b811-b5a9-53a4-b407-03d27f83c336"
                 },
                 {
-                    "description": "Pad 2 [GND] of R_12V_B on F.Cu",
+                    "description": "Pad 2 [HALL_W_MCU] of R_HALL_SW on F.Cu",
                     "pos": {
-                        "x": 35.825,
-                        "y": 18.5
+                        "x": 15.825,
+                        "y": 22.0
                     },
-                    "uuid": "168a5433-e154-59cb-870c-cd190b7b9a35"
+                    "uuid": "9559c607-88f5-5afc-af2c-3841543bbd25"
                 }
             ],
             "severity": "error",
@@ -407,18 +407,18 @@
                 {
                     "description": "Pad 13 [HALL_W_MCU] of U1 on F.Cu",
                     "pos": {
-                        "x": 28.4,
-                        "y": 21.175
+                        "x": 27.4,
+                        "y": 17.675
                     },
-                    "uuid": "638f4717-d9df-5fb1-845c-5d60b5acc887"
+                    "uuid": "012e4446-6eb5-5450-be24-4113277fa4f2"
                 },
                 {
-                    "description": "Pad 1 [SENSE_12V] of C_12V_S on F.Cu",
+                    "description": "Pad 1 [HALL_W_MCU] of C_HALL_W on F.Cu",
                     "pos": {
-                        "x": 36.725,
-                        "y": 16.0
+                        "x": 16.725,
+                        "y": 20.5
                     },
-                    "uuid": "bf0f41c5-d728-5288-b1a7-2419f0be4fb5"
+                    "uuid": "bb66b811-b5a9-53a4-b407-03d27f83c336"
                 }
             ],
             "severity": "error",
@@ -430,18 +430,18 @@
                 {
                     "description": "Pad 31 [RS485_RX_MCU] of U1 on F.Cu",
                     "pos": {
-                        "x": 26.0,
-                        "y": 12.825
+                        "x": 25.0,
+                        "y": 9.325
                     },
-                    "uuid": "3fa9a2d3-eee4-5b2a-ac45-a31ad49e7541"
+                    "uuid": "9c3fbd29-41b8-55fc-a567-80b483258f47"
                 },
                 {
-                    "description": "Pad 2 [GND] of R_12V_B on F.Cu",
+                    "description": "Pad 2 [RS485_RX_MCU] of R_RS485_RX on F.Cu",
                     "pos": {
-                        "x": 35.825,
-                        "y": 18.5
+                        "x": 52.325,
+                        "y": 17.5
                     },
-                    "uuid": "168a5433-e154-59cb-870c-cd190b7b9a35"
+                    "uuid": "7e9e7346-0977-522e-acd3-7d29dc646f33"
                 }
             ],
             "severity": "error",
@@ -451,43 +451,43 @@
             "description": "Missing connection between items",
             "items": [
                 {
-                    "description": "Pad 2 [GND] of R_12V_B on F.Cu",
+                    "description": "Pad 1 [NRST] of C_NRST on F.Cu",
                     "pos": {
-                        "x": 35.825,
-                        "y": 18.5
+                        "x": 12.225,
+                        "y": 11.0
                     },
-                    "uuid": "168a5433-e154-59cb-870c-cd190b7b9a35"
+                    "uuid": "492dacf3-b913-5e2f-91bb-2a64e923c325"
                 },
-                {
-                    "description": "Pad 1 [SENSE_12V] of C_12V_S on F.Cu",
-                    "pos": {
-                        "x": 36.725,
-                        "y": 16.0
-                    },
-                    "uuid": "bf0f41c5-d728-5288-b1a7-2419f0be4fb5"
-                }
-            ],
-            "severity": "error",
-            "type": "unconnected_items"
-        },
-        {
-            "description": "Missing connection between items",
-            "items": [
                 {
                     "description": "Pad 6 [NRST] of U1 on F.Cu",
                     "pos": {
-                        "x": 23.825,
-                        "y": 18.2
+                        "x": 22.825,
+                        "y": 14.7
                     },
-                    "uuid": "7ae132f5-7fca-53c7-8f18-b7f42b5942ac"
+                    "uuid": "0fca1944-e052-562a-ad26-8fab164575f4"
+                }
+            ],
+            "severity": "error",
+            "type": "unconnected_items"
+        },
+        {
+            "description": "Missing connection between items",
+            "items": [
+                {
+                    "description": "Pad 2 [NRST] of R_NRST on F.Cu",
+                    "pos": {
+                        "x": 12.825,
+                        "y": 9.5
+                    },
+                    "uuid": "1b839142-a978-584e-828f-7baa284d18a0"
                 },
                 {
-                    "description": "Pad 2 [GND] of R_12V_B on F.Cu",
+                    "description": "Pad 1 [NRST] of C_NRST on F.Cu",
                     "pos": {
-                        "x": 35.825,
-                        "y": 18.5
+                        "x": 12.225,
+                        "y": 11.0
                     },
-                    "uuid": "168a5433-e154-59cb-870c-cd190b7b9a35"
+                    "uuid": "492dacf3-b913-5e2f-91bb-2a64e923c325"
                 }
             ],
             "severity": "error",
@@ -499,18 +499,18 @@
                 {
                     "description": "Pad 2 [BOOT] of SW_BOOT on F.Cu",
                     "pos": {
-                        "x": 10.02,
-                        "y": 31.25
+                        "x": 24.02,
+                        "y": 24.75
                     },
                     "uuid": "004556c4-09a4-4100-ac9e-aee8c7e174d3"
                 },
                 {
-                    "description": "Pad 2 [BOOT] of SW_BOOT on F.Cu",
+                    "description": "PTH pad 3 [BOOT] of J_SWD",
                     "pos": {
-                        "x": 17.98,
-                        "y": 31.25
+                        "x": 23.77,
+                        "y": 28.0
                     },
-                    "uuid": "8b1a4e7c-2c57-45f5-a14c-d56aeb1bb5f3"
+                    "uuid": "e450df97-0b5a-5c07-9fe9-6c89e0d136af"
                 }
             ],
             "severity": "error",
@@ -520,20 +520,43 @@
             "description": "Missing connection between items",
             "items": [
                 {
-                    "description": "Pad 2 [GND] of R_12V_B on F.Cu",
+                    "description": "Pad 25 [BOOT] of U1 on F.Cu",
                     "pos": {
-                        "x": 35.825,
-                        "y": 18.5
+                        "x": 29.8,
+                        "y": 9.325
                     },
-                    "uuid": "168a5433-e154-59cb-870c-cd190b7b9a35"
+                    "uuid": "c1a872d9-5880-5d39-898e-28482e0a3aac"
+                },
+                {
+                    "description": "Pad 2 [BOOT] of R_BOOT on F.Cu",
+                    "pos": {
+                        "x": 17.825,
+                        "y": 9.5
+                    },
+                    "uuid": "3cdee667-3173-57f6-89f3-136c90584f62"
+                }
+            ],
+            "severity": "error",
+            "type": "unconnected_items"
+        },
+        {
+            "description": "Missing connection between items",
+            "items": [
+                {
+                    "description": "Pad 2 [BOOT] of SW_BOOT on F.Cu",
+                    "pos": {
+                        "x": 31.98,
+                        "y": 24.75
+                    },
+                    "uuid": "8b1a4e7c-2c57-45f5-a14c-d56aeb1bb5f3"
                 },
                 {
                     "description": "Pad 2 [BOOT] of SW_BOOT on F.Cu",
                     "pos": {
-                        "x": 17.98,
-                        "y": 31.25
+                        "x": 24.02,
+                        "y": 24.75
                     },
-                    "uuid": "8b1a4e7c-2c57-45f5-a14c-d56aeb1bb5f3"
+                    "uuid": "004556c4-09a4-4100-ac9e-aee8c7e174d3"
                 }
             ],
             "severity": "error",
@@ -543,43 +566,20 @@
             "description": "Missing connection between items",
             "items": [
                 {
-                    "description": "Pad 2 [GND] of R_12V_B on F.Cu",
+                    "description": "Pad 2 [BOOT] of SW_BOOT on F.Cu",
                     "pos": {
-                        "x": 35.825,
-                        "y": 18.5
+                        "x": 31.98,
+                        "y": 24.75
                     },
-                    "uuid": "168a5433-e154-59cb-870c-cd190b7b9a35"
+                    "uuid": "8b1a4e7c-2c57-45f5-a14c-d56aeb1bb5f3"
                 },
                 {
                     "description": "Pad 25 [BOOT] of U1 on F.Cu",
                     "pos": {
-                        "x": 30.8,
-                        "y": 12.825
+                        "x": 29.8,
+                        "y": 9.325
                     },
-                    "uuid": "c9e9edc4-6a2c-514c-af59-035846d828b2"
-                }
-            ],
-            "severity": "error",
-            "type": "unconnected_items"
-        },
-        {
-            "description": "Missing connection between items",
-            "items": [
-                {
-                    "description": "PTH pad 3 [BOOT] of J_SWD",
-                    "pos": {
-                        "x": 32.0,
-                        "y": 30.27
-                    },
-                    "uuid": "fc878d36-36af-5a92-8041-492dab62d780"
-                },
-                {
-                    "description": "Pad 2 [GND] of R_12V_B on F.Cu",
-                    "pos": {
-                        "x": 35.825,
-                        "y": 18.5
-                    },
-                    "uuid": "168a5433-e154-59cb-870c-cd190b7b9a35"
+                    "uuid": "c1a872d9-5880-5d39-898e-28482e0a3aac"
                 }
             ],
             "severity": "error",
@@ -591,18 +591,18 @@
                 {
                     "description": "PTH pad 2 [SWDIO] of J_SWD",
                     "pos": {
-                        "x": 32.0,
-                        "y": 27.73
+                        "x": 21.23,
+                        "y": 28.0
                     },
-                    "uuid": "6f4e74ff-d6df-5477-a043-31660cdb7d4c"
+                    "uuid": "c6e7f2fd-4c77-5b8a-b157-ff606612c6fb"
                 },
                 {
                     "description": "Pad 24 [SWDIO] of U1 on F.Cu",
                     "pos": {
-                        "x": 32.175,
-                        "y": 14.2
+                        "x": 31.175,
+                        "y": 10.7
                     },
-                    "uuid": "9e70b49d-87d2-54d5-8421-a374e0fdc745"
+                    "uuid": "26dc44e0-6ed8-5aa4-9745-ae0514bdd7e6"
                 }
             ],
             "severity": "error",
@@ -612,20 +612,20 @@
             "description": "Missing connection between items",
             "items": [
                 {
-                    "description": "Pad 2 [GND] of R_12V_B on F.Cu",
+                    "description": "Pad 2 [LED_STATUS] of D_LED_STATUS on F.Cu",
                     "pos": {
-                        "x": 35.825,
-                        "y": 18.5
+                        "x": 20.7875,
+                        "y": 16.0
                     },
-                    "uuid": "168a5433-e154-59cb-870c-cd190b7b9a35"
+                    "uuid": "cdcf1766-fae5-5dec-b874-dbf078166651"
                 },
                 {
-                    "description": "Pad 2 [LED_FAULT] of D_LED_FAULT on F.Cu",
+                    "description": "Pad 2 [LED_STATUS] of R_LED_STATUS on F.Cu",
                     "pos": {
-                        "x": 25.7875,
-                        "y": 30.5
+                        "x": 17.825,
+                        "y": 16.5
                     },
-                    "uuid": "989b4925-2df2-5648-b014-efee437d497b"
+                    "uuid": "76826e95-5d8c-5f8e-b6b5-2629b5fbad17"
                 }
             ],
             "severity": "error",
@@ -634,21 +634,21 @@
         {
             "description": "Missing connection between items",
             "items": [
-                {
-                    "description": "Pad 2 [LED_FAULT] of D_LED_FAULT on F.Cu",
-                    "pos": {
-                        "x": 25.7875,
-                        "y": 30.5
-                    },
-                    "uuid": "989b4925-2df2-5648-b014-efee437d497b"
-                },
                 {
                     "description": "Pad 17 [LED_STATUS] of U1 on F.Cu",
                     "pos": {
-                        "x": 32.175,
-                        "y": 19.8
+                        "x": 31.175,
+                        "y": 16.3
                     },
-                    "uuid": "19a0c604-f278-5bf1-8617-e34d96fdf4b2"
+                    "uuid": "5700d689-4069-5856-9ac7-f2422f9b4de3"
+                },
+                {
+                    "description": "Pad 2 [LED_STATUS] of D_LED_STATUS on F.Cu",
+                    "pos": {
+                        "x": 20.7875,
+                        "y": 16.0
+                    },
+                    "uuid": "cdcf1766-fae5-5dec-b874-dbf078166651"
                 }
             ],
             "severity": "error",
@@ -658,20 +658,20 @@
             "description": "Missing connection between items",
             "items": [
                 {
-                    "description": "Pad 2 [GND] of R_12V_B on F.Cu",
+                    "description": "Pad 2 [LED_FAULT] of R_LED_FAULT on F.Cu",
                     "pos": {
-                        "x": 35.825,
+                        "x": 17.825,
                         "y": 18.5
                     },
-                    "uuid": "168a5433-e154-59cb-870c-cd190b7b9a35"
+                    "uuid": "1da99fcd-2029-5bee-a5bb-c889f85fdcaa"
                 },
                 {
                     "description": "Pad 2 [LED_FAULT] of D_LED_FAULT on F.Cu",
                     "pos": {
-                        "x": 25.7875,
-                        "y": 30.5
+                        "x": 20.7875,
+                        "y": 18.0
                     },
-                    "uuid": "989b4925-2df2-5648-b014-efee437d497b"
+                    "uuid": "dc1e70cc-af3a-5d79-8319-238ab7e6a3aa"
                 }
             ],
             "severity": "error",
@@ -683,18 +683,18 @@
                 {
                     "description": "Pad 2 [LED_FAULT] of D_LED_FAULT on F.Cu",
                     "pos": {
-                        "x": 25.7875,
-                        "y": 30.5
+                        "x": 20.7875,
+                        "y": 18.0
                     },
-                    "uuid": "989b4925-2df2-5648-b014-efee437d497b"
+                    "uuid": "dc1e70cc-af3a-5d79-8319-238ab7e6a3aa"
                 },
                 {
                     "description": "Pad 27 [LED_FAULT] of U1 on F.Cu",
                     "pos": {
-                        "x": 29.2,
-                        "y": 12.825
+                        "x": 28.2,
+                        "y": 9.325
                     },
-                    "uuid": "00af315a-adb8-53b9-9246-2268dbc1bd2d"
+                    "uuid": "42735aa3-daa3-58d7-bd46-6f3264e50d89"
                 }
             ],
             "severity": "error",
@@ -703,21 +703,21 @@
         {
             "description": "Missing connection between items",
             "items": [
-                {
-                    "description": "Pad 1 [SENSE_12V] of C_12V_S on F.Cu",
-                    "pos": {
-                        "x": 36.725,
-                        "y": 16.0
-                    },
-                    "uuid": "bf0f41c5-d728-5288-b1a7-2419f0be4fb5"
-                },
                 {
                     "description": "Pad 1 [+12V_LOGIC] of C_LDO_IN on F.Cu",
                     "pos": {
-                        "x": 9.525,
-                        "y": 7.0
+                        "x": 19.525,
+                        "y": 3.0
                     },
-                    "uuid": "0ffa9c3c-27ea-5ef6-a098-926961c2e870"
+                    "uuid": "7a22e553-a649-5808-bb1f-60b3ea4940d8"
+                },
+                {
+                    "description": "Pad 1 [+12V_LOGIC] of C_LDO_IN2 on F.Cu",
+                    "pos": {
+                        "x": 19.725,
+                        "y": 5.0
+                    },
+                    "uuid": "bc848ca2-7dd4-5c3b-acb3-a0d5eda5d4d0"
                 }
             ],
             "severity": "error",
@@ -726,21 +726,21 @@
         {
             "description": "Missing connection between items",
             "items": [
+                {
+                    "description": "Pad 1 [+12V_LOGIC] of C_LDO_IN2 on F.Cu",
+                    "pos": {
+                        "x": 19.725,
+                        "y": 5.0
+                    },
+                    "uuid": "bc848ca2-7dd4-5c3b-acb3-a0d5eda5d4d0"
+                },
                 {
                     "description": "Pad 3 [+12V_LOGIC] of U_LDO on F.Cu",
                     "pos": {
-                        "x": 14.85,
-                        "y": 8.3
+                        "x": 24.85,
+                        "y": 6.8
                     },
                     "uuid": "5046df04-2b74-45a5-867e-e33a5e51e59c"
-                },
-                {
-                    "description": "Pad 1 [+12V_LOGIC] of C_LDO_IN on F.Cu",
-                    "pos": {
-                        "x": 9.525,
-                        "y": 7.0
-                    },
-                    "uuid": "0ffa9c3c-27ea-5ef6-a098-926961c2e870"
                 }
             ],
             "severity": "error",
@@ -750,20 +750,20 @@
             "description": "Missing connection between items",
             "items": [
                 {
-                    "description": "Pad 1 [SENSE_12V] of R_12V_B on F.Cu",
+                    "description": "Pad 1 [+12V_LOGIC] of R_12V_T on F.Cu",
                     "pos": {
-                        "x": 34.175,
-                        "y": 18.5
+                        "x": 41.175,
+                        "y": 19.0
                     },
-                    "uuid": "1563e67f-1c32-5d36-8127-bc5667cbf3b5"
+                    "uuid": "a7ef64e0-462f-5480-b877-0c7ed6605973"
                 },
                 {
                     "description": "PTH pad 14 [+12V_LOGIC] of J_B2B",
                     "pos": {
-                        "x": 49.265,
+                        "x": 58.475,
                         "y": 18.81
                     },
-                    "uuid": "47483c33-9dda-5432-87a9-5ef1fcda76ac"
+                    "uuid": "f6a1b269-93f1-5215-a4a4-53b1fa4e6d41"
                 }
             ],
             "severity": "error",
@@ -773,18 +773,18 @@
             "description": "Missing connection between items",
             "items": [
                 {
-                    "description": "Pad 1 [SENSE_12V] of R_12V_B on F.Cu",
+                    "description": "Pad 1 [+12V_LOGIC] of R_12V_T on F.Cu",
                     "pos": {
-                        "x": 34.175,
-                        "y": 18.5
+                        "x": 41.175,
+                        "y": 19.0
                     },
-                    "uuid": "1563e67f-1c32-5d36-8127-bc5667cbf3b5"
+                    "uuid": "a7ef64e0-462f-5480-b877-0c7ed6605973"
                 },
                 {
                     "description": "Pad 3 [+12V_LOGIC] of U_LDO on F.Cu",
                     "pos": {
-                        "x": 14.85,
-                        "y": 8.3
+                        "x": 24.85,
+                        "y": 6.8
                     },
                     "uuid": "5046df04-2b74-45a5-867e-e33a5e51e59c"
                 }
@@ -796,20 +796,20 @@
             "description": "Missing connection between items",
             "items": [
                 {
-                    "description": "PTH pad 1 [RS485_A] of J_RS485",
+                    "description": "PTH pad 1 [+3V3] of J_HALL_U",
                     "pos": {
-                        "x": 40.5,
-                        "y": 26.96
+                        "x": 3.46,
+                        "y": 7.0
                     },
-                    "uuid": "2d5804d7-851d-5501-9d10-c4f609285c21"
+                    "uuid": "ae946d56-15e5-5bd1-8a18-79ef3fcbfa94"
                 },
                 {
-                    "description": "PTH pad 1 [RS485_A] of J_RS485",
+                    "description": "PTH pad 1 [+3V3] of J_HALL_V",
                     "pos": {
-                        "x": 40.5,
-                        "y": 26.96
+                        "x": 3.46,
+                        "y": 14.0
                     },
-                    "uuid": "2d5804d7-851d-5501-9d10-c4f609285c21"
+                    "uuid": "60d18a0d-e8cf-565e-aed0-3f9259d5fdce"
                 }
             ],
             "severity": "error",
@@ -819,20 +819,20 @@
             "description": "Missing connection between items",
             "items": [
                 {
-                    "description": "PTH pad 1 [RS485_A] of J_RS485",
+                    "description": "PTH pad 1 [+3V3] of J_HALL_V",
                     "pos": {
-                        "x": 40.5,
-                        "y": 26.96
+                        "x": 3.46,
+                        "y": 14.0
                     },
-                    "uuid": "2d5804d7-851d-5501-9d10-c4f609285c21"
+                    "uuid": "60d18a0d-e8cf-565e-aed0-3f9259d5fdce"
                 },
                 {
-                    "description": "PTH pad 1 [RS485_A] of J_RS485",
+                    "description": "PTH pad 1 [+3V3] of J_HALL_W",
                     "pos": {
-                        "x": 40.5,
-                        "y": 26.96
+                        "x": 3.46,
+                        "y": 21.0
                     },
-                    "uuid": "2d5804d7-851d-5501-9d10-c4f609285c21"
+                    "uuid": "29b94c93-fcc2-5b78-aa73-8017eaef05e0"
                 }
             ],
             "severity": "error",
@@ -842,388 +842,250 @@
             "description": "Missing connection between items",
             "items": [
                 {
-                    "description": "PTH pad 1 [RS485_A] of J_RS485",
+                    "description": "Pad 2 [+3V3] of R_ENC_A on F.Cu",
                     "pos": {
-                        "x": 40.5,
-                        "y": 26.96
+                        "x": 8.325,
+                        "y": 24.0
                     },
-                    "uuid": "2d5804d7-851d-5501-9d10-c4f609285c21"
+                    "uuid": "9dc22029-23cb-5868-99d8-1964d875cf50"
                 },
+                {
+                    "description": "PTH pad 1 [+3V3] of J_ENC",
+                    "pos": {
+                        "x": 7.19,
+                        "y": 27.5
+                    },
+                    "uuid": "d77620da-681e-5b7b-b634-bb2b1781cc9c"
+                }
+            ],
+            "severity": "error",
+            "type": "unconnected_items"
+        },
+        {
+            "description": "Missing connection between items",
+            "items": [
+                {
+                    "description": "Pad 2 [+3V3] of R_ENC_A on F.Cu",
+                    "pos": {
+                        "x": 8.325,
+                        "y": 24.0
+                    },
+                    "uuid": "9dc22029-23cb-5868-99d8-1964d875cf50"
+                },
+                {
+                    "description": "PTH pad 1 [+3V3] of J_HALL_W",
+                    "pos": {
+                        "x": 3.46,
+                        "y": 21.0
+                    },
+                    "uuid": "29b94c93-fcc2-5b78-aa73-8017eaef05e0"
+                }
+            ],
+            "severity": "error",
+            "type": "unconnected_items"
+        },
+        {
+            "description": "Missing connection between items",
+            "items": [
+                {
+                    "description": "Pad 2 [+3V3] of R_ENC_B on F.Cu",
+                    "pos": {
+                        "x": 11.325,
+                        "y": 24.0
+                    },
+                    "uuid": "a91a6360-6de9-5222-9046-86c7fd328b3d"
+                },
+                {
+                    "description": "Pad 2 [+3V3] of R_ENC_A on F.Cu",
+                    "pos": {
+                        "x": 8.325,
+                        "y": 24.0
+                    },
+                    "uuid": "9dc22029-23cb-5868-99d8-1964d875cf50"
+                }
+            ],
+            "severity": "error",
+            "type": "unconnected_items"
+        },
+        {
+            "description": "Missing connection between items",
+            "items": [
+                {
+                    "description": "Pad 2 [+3V3] of R_ENC_B on F.Cu",
+                    "pos": {
+                        "x": 11.325,
+                        "y": 24.0
+                    },
+                    "uuid": "a91a6360-6de9-5222-9046-86c7fd328b3d"
+                },
+                {
+                    "description": "Pad 2 [+3V3] of R_HALL_W on F.Cu",
+                    "pos": {
+                        "x": 12.825,
+                        "y": 21.0
+                    },
+                    "uuid": "6aa60e4e-f1ea-59ea-90ac-7ccc3d629c2e"
+                }
+            ],
+            "severity": "error",
+            "type": "unconnected_items"
+        },
+        {
+            "description": "Missing connection between items",
+            "items": [
+                {
+                    "description": "Pad 2 [+3V3] of R_HALL_U on F.Cu",
+                    "pos": {
+                        "x": 12.825,
+                        "y": 7.0
+                    },
+                    "uuid": "029b3b9b-cab6-5e6c-8f36-c12dafd5f802"
+                },
+                {
+                    "description": "Pad 1 [+3V3] of R_NRST on F.Cu",
+                    "pos": {
+                        "x": 11.175,
+                        "y": 9.5
+                    },
+                    "uuid": "336ae678-a996-5798-93c5-74f88d6f14c0"
+                }
+            ],
+            "severity": "error",
+            "type": "unconnected_items"
+        },
+        {
+            "description": "Missing connection between items",
+            "items": [
+                {
+                    "description": "Pad 2 [+3V3] of R_HALL_V on F.Cu",
+                    "pos": {
+                        "x": 12.825,
+                        "y": 14.0
+                    },
+                    "uuid": "7e5113b9-1cda-5163-a0ee-4f3279d2b148"
+                },
+                {
+                    "description": "Pad 1 [+3V3] of R_NRST on F.Cu",
+                    "pos": {
+                        "x": 11.175,
+                        "y": 9.5
+                    },
+                    "uuid": "336ae678-a996-5798-93c5-74f88d6f14c0"
+                }
+            ],
+            "severity": "error",
+            "type": "unconnected_items"
+        },
+        {
+            "description": "Missing connection between items",
+            "items": [
+                {
+                    "description": "Pad 1 [+3V3] of R_BOOT on F.Cu",
+                    "pos": {
+                        "x": 16.175,
+                        "y": 9.5
+                    },
+                    "uuid": "18186d27-158d-50d6-81f2-1826f897a231"
+                },
+                {
+                    "description": "Pad 2 [+3V3] of R_HALL_U on F.Cu",
+                    "pos": {
+                        "x": 12.825,
+                        "y": 7.0
+                    },
+                    "uuid": "029b3b9b-cab6-5e6c-8f36-c12dafd5f802"
+                }
+            ],
+            "severity": "error",
+            "type": "unconnected_items"
+        },
+        {
+            "description": "Missing connection between items",
+            "items": [
+                {
+                    "description": "Pad 1 [+3V3] of R_LED_STATUS on F.Cu",
+                    "pos": {
+                        "x": 16.175,
+                        "y": 16.5
+                    },
+                    "uuid": "b6ebd13d-bca4-5c90-b40d-5d4da0c95a79"
+                },
+                {
+                    "description": "Pad 2 [+3V3] of R_HALL_V on F.Cu",
+                    "pos": {
+                        "x": 12.825,
+                        "y": 14.0
+                    },
+                    "uuid": "7e5113b9-1cda-5163-a0ee-4f3279d2b148"
+                }
+            ],
+            "severity": "error",
+            "type": "unconnected_items"
+        },
+        {
+            "description": "Missing connection between items",
+            "items": [
+                {
+                    "description": "Pad 1 [+3V3] of R_LED_FAULT on F.Cu",
+                    "pos": {
+                        "x": 16.175,
+                        "y": 18.5
+                    },
+                    "uuid": "181a9955-b276-5a9a-8483-dae56b482a37"
+                },
+                {
+                    "description": "Pad 1 [+3V3] of R_LED_STATUS on F.Cu",
+                    "pos": {
+                        "x": 16.175,
+                        "y": 16.5
+                    },
+                    "uuid": "b6ebd13d-bca4-5c90-b40d-5d4da0c95a79"
+                }
+            ],
+            "severity": "error",
+            "type": "unconnected_items"
+        },
+        {
+            "description": "Missing connection between items",
+            "items": [
+                {
+                    "description": "Pad 1 [+3V3] of R_LED_FAULT on F.Cu",
+                    "pos": {
+                        "x": 16.175,
+                        "y": 18.5
+                    },
+                    "uuid": "181a9955-b276-5a9a-8483-dae56b482a37"
+                },
+                {
+                    "description": "Pad 2 [+3V3] of R_HALL_W on F.Cu",
+                    "pos": {
+                        "x": 12.825,
+                        "y": 21.0
+                    },
+                    "uuid": "6aa60e4e-f1ea-59ea-90ac-7ccc3d629c2e"
+                }
+            ],
+            "severity": "error",
+            "type": "unconnected_items"
+        },
+        {
+            "description": "Missing connection between items",
+            "items": [
                 {
                     "description": "PTH pad 1 [+3V3] of J_SWD",
                     "pos": {
-                        "x": 32.0,
-                        "y": 25.19
+                        "x": 18.69,
+                        "y": 28.0
                     },
-                    "uuid": "14b43033-141a-5ccd-9c5f-cbb7fcdbea1e"
-                }
-            ],
-            "severity": "error",
-            "type": "unconnected_items"
-        },
-        {
-            "description": "Missing connection between items",
-            "items": [
-                {
-                    "description": "Pad 2 [GND] of R_12V_B on F.Cu",
-                    "pos": {
-                        "x": 35.825,
-                        "y": 18.5
-                    },
-                    "uuid": "168a5433-e154-59cb-870c-cd190b7b9a35"
+                    "uuid": "a71fb1d3-1ff7-53ea-8766-afb888b66040"
                 },
                 {
-                    "description": "Pad 2 [GND] of R_12V_B on F.Cu",
+                    "description": "Pad 2 [+3V3] of R_ENC_B on F.Cu",
                     "pos": {
-                        "x": 35.825,
-                        "y": 18.5
+                        "x": 11.325,
+                        "y": 24.0
                     },
-                    "uuid": "168a5433-e154-59cb-870c-cd190b7b9a35"
-                }
-            ],
-            "severity": "error",
-            "type": "unconnected_items"
-        },
-        {
-            "description": "Missing connection between items",
-            "items": [
-                {
-                    "description": "Pad 2 [GND] of R_12V_B on F.Cu",
-                    "pos": {
-                        "x": 35.825,
-                        "y": 18.5
-                    },
-                    "uuid": "168a5433-e154-59cb-870c-cd190b7b9a35"
-                },
-                {
-                    "description": "PTH pad 1 [RS485_A] of J_RS485",
-                    "pos": {
-                        "x": 40.5,
-                        "y": 26.96
-                    },
-                    "uuid": "2d5804d7-851d-5501-9d10-c4f609285c21"
-                }
-            ],
-            "severity": "error",
-            "type": "unconnected_items"
-        },
-        {
-            "description": "Missing connection between items",
-            "items": [
-                {
-                    "description": "Pad 2 [GND] of R_12V_B on F.Cu",
-                    "pos": {
-                        "x": 35.825,
-                        "y": 18.5
-                    },
-                    "uuid": "168a5433-e154-59cb-870c-cd190b7b9a35"
-                },
-                {
-                    "description": "Pad 2 [GND] of R_12V_B on F.Cu",
-                    "pos": {
-                        "x": 35.825,
-                        "y": 18.5
-                    },
-                    "uuid": "168a5433-e154-59cb-870c-cd190b7b9a35"
-                }
-            ],
-            "severity": "error",
-            "type": "unconnected_items"
-        },
-        {
-            "description": "Missing connection between items",
-            "items": [
-                {
-                    "description": "Pad 2 [GND] of R_12V_B on F.Cu",
-                    "pos": {
-                        "x": 35.825,
-                        "y": 18.5
-                    },
-                    "uuid": "168a5433-e154-59cb-870c-cd190b7b9a35"
-                },
-                {
-                    "description": "Pad 2 [GND] of R_12V_B on F.Cu",
-                    "pos": {
-                        "x": 35.825,
-                        "y": 18.5
-                    },
-                    "uuid": "168a5433-e154-59cb-870c-cd190b7b9a35"
-                }
-            ],
-            "severity": "error",
-            "type": "unconnected_items"
-        },
-        {
-            "description": "Missing connection between items",
-            "items": [
-                {
-                    "description": "Pad 1 [+3V3] of SW_BOOT on F.Cu",
-                    "pos": {
-                        "x": 10.02,
-                        "y": 26.75
-                    },
-                    "uuid": "2b993251-80f5-41bd-9281-36b84f34eeea"
-                },
-                {
-                    "description": "Pad 2 [GND] of R_12V_B on F.Cu",
-                    "pos": {
-                        "x": 35.825,
-                        "y": 18.5
-                    },
-                    "uuid": "168a5433-e154-59cb-870c-cd190b7b9a35"
-                }
-            ],
-            "severity": "error",
-            "type": "unconnected_items"
-        },
-        {
-            "description": "Missing connection between items",
-            "items": [
-                {
-                    "description": "Pad 2 [GND] of R_12V_B on F.Cu",
-                    "pos": {
-                        "x": 35.825,
-                        "y": 18.5
-                    },
-                    "uuid": "168a5433-e154-59cb-870c-cd190b7b9a35"
-                },
-                {
-                    "description": "Pad 2 [GND] of R_12V_B on F.Cu",
-                    "pos": {
-                        "x": 35.825,
-                        "y": 18.5
-                    },
-                    "uuid": "168a5433-e154-59cb-870c-cd190b7b9a35"
-                }
-            ],
-            "severity": "error",
-            "type": "unconnected_items"
-        },
-        {
-            "description": "Missing connection between items",
-            "items": [
-                {
-                    "description": "Pad 2 [+3V3] of U_LDO on F.Cu",
-                    "pos": {
-                        "x": 14.85,
-                        "y": 6.0
-                    },
-                    "uuid": "553b4aa3-b4fc-45ee-9bbe-5eb8183ee7d8"
-                },
-                {
-                    "description": "Pad 2 [GND] of R_12V_B on F.Cu",
-                    "pos": {
-                        "x": 35.825,
-                        "y": 18.5
-                    },
-                    "uuid": "168a5433-e154-59cb-870c-cd190b7b9a35"
-                }
-            ],
-            "severity": "error",
-            "type": "unconnected_items"
-        },
-        {
-            "description": "Missing connection between items",
-            "items": [
-                {
-                    "description": "Pad 1 [SENSE_12V] of R_12V_B on F.Cu",
-                    "pos": {
-                        "x": 34.175,
-                        "y": 18.5
-                    },
-                    "uuid": "1563e67f-1c32-5d36-8127-bc5667cbf3b5"
-                },
-                {
-                    "description": "Pad 2 [GND] of R_12V_B on F.Cu",
-                    "pos": {
-                        "x": 35.825,
-                        "y": 18.5
-                    },
-                    "uuid": "168a5433-e154-59cb-870c-cd190b7b9a35"
-                }
-            ],
-            "severity": "error",
-            "type": "unconnected_items"
-        },
-        {
-            "description": "Missing connection between items",
-            "items": [
-                {
-                    "description": "Pad 1 [+3V3] of SW_BOOT on F.Cu",
-                    "pos": {
-                        "x": 17.98,
-                        "y": 26.75
-                    },
-                    "uuid": "5169a90d-f287-4bcf-9c7e-172780d9ec0b"
-                },
-                {
-                    "description": "Pad 1 [SENSE_12V] of R_12V_B on F.Cu",
-                    "pos": {
-                        "x": 34.175,
-                        "y": 18.5
-                    },
-                    "uuid": "1563e67f-1c32-5d36-8127-bc5667cbf3b5"
-                }
-            ],
-            "severity": "error",
-            "type": "unconnected_items"
-        },
-        {
-            "description": "Missing connection between items",
-            "items": [
-                {
-                    "description": "Pad 1 [SENSE_12V] of R_12V_B on F.Cu",
-                    "pos": {
-                        "x": 34.175,
-                        "y": 18.5
-                    },
-                    "uuid": "1563e67f-1c32-5d36-8127-bc5667cbf3b5"
-                },
-                {
-                    "description": "Pad 1 [SENSE_12V] of R_12V_B on F.Cu",
-                    "pos": {
-                        "x": 34.175,
-                        "y": 18.5
-                    },
-                    "uuid": "1563e67f-1c32-5d36-8127-bc5667cbf3b5"
-                }
-            ],
-            "severity": "error",
-            "type": "unconnected_items"
-        },
-        {
-            "description": "Missing connection between items",
-            "items": [
-                {
-                    "description": "Pad 1 [SENSE_12V] of R_12V_B on F.Cu",
-                    "pos": {
-                        "x": 34.175,
-                        "y": 18.5
-                    },
-                    "uuid": "1563e67f-1c32-5d36-8127-bc5667cbf3b5"
-                },
-                {
-                    "description": "Pad 1 [+3V3] of SW_BOOT on F.Cu",
-                    "pos": {
-                        "x": 17.98,
-                        "y": 26.75
-                    },
-                    "uuid": "5169a90d-f287-4bcf-9c7e-172780d9ec0b"
-                }
-            ],
-            "severity": "error",
-            "type": "unconnected_items"
-        },
-        {
-            "description": "Missing connection between items",
-            "items": [
-                {
-                    "description": "Pad 1 [SENSE_12V] of R_12V_B on F.Cu",
-                    "pos": {
-                        "x": 34.175,
-                        "y": 18.5
-                    },
-                    "uuid": "1563e67f-1c32-5d36-8127-bc5667cbf3b5"
-                },
-                {
-                    "description": "Pad 1 [SENSE_12V] of R_12V_B on F.Cu",
-                    "pos": {
-                        "x": 34.175,
-                        "y": 18.5
-                    },
-                    "uuid": "1563e67f-1c32-5d36-8127-bc5667cbf3b5"
-                }
-            ],
-            "severity": "error",
-            "type": "unconnected_items"
-        },
-        {
-            "description": "Missing connection between items",
-            "items": [
-                {
-                    "description": "Pad 2 [+3V3] of U_LDO on F.Cu",
-                    "pos": {
-                        "x": 21.15,
-                        "y": 6.0
-                    },
-                    "uuid": "118e82e2-9099-4e46-a269-1e2cb8448d5e"
-                },
-                {
-                    "description": "Pad 2 [+3V3] of U_LDO on F.Cu",
-                    "pos": {
-                        "x": 14.85,
-                        "y": 6.0
-                    },
-                    "uuid": "553b4aa3-b4fc-45ee-9bbe-5eb8183ee7d8"
-                }
-            ],
-            "severity": "error",
-            "type": "unconnected_items"
-        },
-        {
-            "description": "Missing connection between items",
-            "items": [
-                {
-                    "description": "Pad 1 [SENSE_12V] of R_12V_B on F.Cu",
-                    "pos": {
-                        "x": 34.175,
-                        "y": 18.5
-                    },
-                    "uuid": "1563e67f-1c32-5d36-8127-bc5667cbf3b5"
-                },
-                {
-                    "description": "Pad 1 [SENSE_12V] of R_12V_B on F.Cu",
-                    "pos": {
-                        "x": 34.175,
-                        "y": 18.5
-                    },
-                    "uuid": "1563e67f-1c32-5d36-8127-bc5667cbf3b5"
-                }
-            ],
-            "severity": "error",
-            "type": "unconnected_items"
-        },
-        {
-            "description": "Missing connection between items",
-            "items": [
-                {
-                    "description": "Pad 1 [SENSE_12V] of C_12V_S on F.Cu",
-                    "pos": {
-                        "x": 36.725,
-                        "y": 16.0
-                    },
-                    "uuid": "bf0f41c5-d728-5288-b1a7-2419f0be4fb5"
-                },
-                {
-                    "description": "Pad 1 [+3V3] of L_B3V3 on F.Cu",
-                    "pos": {
-                        "x": 25.2125,
-                        "y": 5.0
-                    },
-                    "uuid": "44bf8237-a741-54c2-9f8f-fb48d9ea241e"
-                }
-            ],
-            "severity": "error",
-            "type": "unconnected_items"
-        },
-        {
-            "description": "Missing connection between items",
-            "items": [
-                {
-                    "description": "Pad 1 [SENSE_12V] of C_12V_S on F.Cu",
-                    "pos": {
-                        "x": 36.725,
-                        "y": 16.0
-                    },
-                    "uuid": "bf0f41c5-d728-5288-b1a7-2419f0be4fb5"
-                },
-                {
-                    "description": "Pad 2 [+3V3] of U_LDO on F.Cu",
-                    "pos": {
-                        "x": 21.15,
-                        "y": 6.0
-                    },
-                    "uuid": "118e82e2-9099-4e46-a269-1e2cb8448d5e"
+                    "uuid": "a91a6360-6de9-5222-9046-86c7fd328b3d"
                 }
             ],
             "severity": "error",
@@ -1235,18 +1097,202 @@
                 {
                     "description": "Pad 4 [+3V3] of U1 on F.Cu",
                     "pos": {
-                        "x": 23.825,
-                        "y": 16.6
+                        "x": 22.825,
+                        "y": 13.1
                     },
-                    "uuid": "8e055f04-b30b-53e6-a22f-f77069cad089"
+                    "uuid": "3058140f-456f-52eb-8498-cf6cc5f42dda"
                 },
                 {
-                    "description": "Pad 1 [SENSE_12V] of R_12V_B on F.Cu",
+                    "description": "Pad 1 [+3V3] of R_LED_STATUS on F.Cu",
                     "pos": {
-                        "x": 34.175,
-                        "y": 18.5
+                        "x": 16.175,
+                        "y": 16.5
                     },
-                    "uuid": "1563e67f-1c32-5d36-8127-bc5667cbf3b5"
+                    "uuid": "b6ebd13d-bca4-5c90-b40d-5d4da0c95a79"
+                }
+            ],
+            "severity": "error",
+            "type": "unconnected_items"
+        },
+        {
+            "description": "Missing connection between items",
+            "items": [
+                {
+                    "description": "Pad 1 [+3V3] of SW_BOOT on F.Cu",
+                    "pos": {
+                        "x": 24.02,
+                        "y": 20.25
+                    },
+                    "uuid": "2b993251-80f5-41bd-9281-36b84f34eeea"
+                },
+                {
+                    "description": "Pad 4 [+3V3] of U1 on F.Cu",
+                    "pos": {
+                        "x": 22.825,
+                        "y": 13.1
+                    },
+                    "uuid": "3058140f-456f-52eb-8498-cf6cc5f42dda"
+                }
+            ],
+            "severity": "error",
+            "type": "unconnected_items"
+        },
+        {
+            "description": "Missing connection between items",
+            "items": [
+                {
+                    "description": "Pad 1 [+3V3] of SW_BOOT on F.Cu",
+                    "pos": {
+                        "x": 24.02,
+                        "y": 20.25
+                    },
+                    "uuid": "2b993251-80f5-41bd-9281-36b84f34eeea"
+                },
+                {
+                    "description": "Pad 1 [+3V3] of SW_BOOT on F.Cu",
+                    "pos": {
+                        "x": 31.98,
+                        "y": 20.25
+                    },
+                    "uuid": "5169a90d-f287-4bcf-9c7e-172780d9ec0b"
+                }
+            ],
+            "severity": "error",
+            "type": "unconnected_items"
+        },
+        {
+            "description": "Missing connection between items",
+            "items": [
+                {
+                    "description": "Pad 2 [+3V3] of U_LDO on F.Cu",
+                    "pos": {
+                        "x": 24.85,
+                        "y": 4.5
+                    },
+                    "uuid": "553b4aa3-b4fc-45ee-9bbe-5eb8183ee7d8"
+                },
+                {
+                    "description": "Pad 2 [+3V3] of U_LDO on F.Cu",
+                    "pos": {
+                        "x": 31.15,
+                        "y": 4.5
+                    },
+                    "uuid": "118e82e2-9099-4e46-a269-1e2cb8448d5e"
+                }
+            ],
+            "severity": "error",
+            "type": "unconnected_items"
+        },
+        {
+            "description": "Missing connection between items",
+            "items": [
+                {
+                    "description": "Pad 1 [+3V3] of C_LDO_OUT on F.Cu",
+                    "pos": {
+                        "x": 33.225,
+                        "y": 4.0
+                    },
+                    "uuid": "8ee4f093-b7ee-51b8-84a2-39fd760d4d87"
+                },
+                {
+                    "description": "Pad 2 [+3V3] of U_LDO on F.Cu",
+                    "pos": {
+                        "x": 31.15,
+                        "y": 4.5
+                    },
+                    "uuid": "118e82e2-9099-4e46-a269-1e2cb8448d5e"
+                }
+            ],
+            "severity": "error",
+            "type": "unconnected_items"
+        },
+        {
+            "description": "Missing connection between items",
+            "items": [
+                {
+                    "description": "Pad 1 [+3V3] of C_VDD1 on F.Cu",
+                    "pos": {
+                        "x": 33.225,
+                        "y": 10.0
+                    },
+                    "uuid": "f4394062-7b6e-5419-94dd-23d21b9554d9"
+                },
+                {
+                    "description": "Pad 1 [+3V3] of C_VDD2 on F.Cu",
+                    "pos": {
+                        "x": 33.225,
+                        "y": 12.5
+                    },
+                    "uuid": "ce5b8919-2eec-5bd5-a8d2-fd33ffe81872"
+                }
+            ],
+            "severity": "error",
+            "type": "unconnected_items"
+        },
+        {
+            "description": "Missing connection between items",
+            "items": [
+                {
+                    "description": "Pad 1 [+3V3] of C_VDD2 on F.Cu",
+                    "pos": {
+                        "x": 33.225,
+                        "y": 12.5
+                    },
+                    "uuid": "ce5b8919-2eec-5bd5-a8d2-fd33ffe81872"
+                },
+                {
+                    "description": "Pad 1 [+3V3] of SW_BOOT on F.Cu",
+                    "pos": {
+                        "x": 31.98,
+                        "y": 20.25
+                    },
+                    "uuid": "5169a90d-f287-4bcf-9c7e-172780d9ec0b"
+                }
+            ],
+            "severity": "error",
+            "type": "unconnected_items"
+        },
+        {
+            "description": "Missing connection between items",
+            "items": [
+                {
+                    "description": "Pad 1 [+3V3] of R_FAULT on F.Cu",
+                    "pos": {
+                        "x": 35.175,
+                        "y": 24.5
+                    },
+                    "uuid": "e76794b6-4010-58e7-8480-3830ad109482"
+                },
+                {
+                    "description": "Pad 1 [+3V3] of SW_BOOT on F.Cu",
+                    "pos": {
+                        "x": 31.98,
+                        "y": 20.25
+                    },
+                    "uuid": "5169a90d-f287-4bcf-9c7e-172780d9ec0b"
+                }
+            ],
+            "severity": "error",
+            "type": "unconnected_items"
+        },
+        {
+            "description": "Missing connection between items",
+            "items": [
+                {
+                    "description": "Pad 1 [+3V3] of R_FAULT on F.Cu",
+                    "pos": {
+                        "x": 35.175,
+                        "y": 24.5
+                    },
+                    "uuid": "e76794b6-4010-58e7-8480-3830ad109482"
+                },
+                {
+                    "description": "Pad 1 [+3V3] of C_RS485 on F.Cu",
+                    "pos": {
+                        "x": 42.225,
+                        "y": 24.5
+                    },
+                    "uuid": "647dc247-2726-5795-85f4-33de05babe0e"
                 }
             ],
             "severity": "error",
@@ -1258,18 +1304,18 @@
                 {
                     "description": "Pad 1 [+3V3] of L_B3V3 on F.Cu",
                     "pos": {
-                        "x": 25.2125,
+                        "x": 36.2125,
                         "y": 5.0
                     },
-                    "uuid": "44bf8237-a741-54c2-9f8f-fb48d9ea241e"
+                    "uuid": "2365527b-e60e-5f9c-8cd1-4587f5c2db1f"
                 },
                 {
-                    "description": "Pad 1 [SENSE_12V] of C_12V_S on F.Cu",
+                    "description": "Pad 1 [+3V3] of C_LDO_OUT on F.Cu",
                     "pos": {
-                        "x": 36.725,
-                        "y": 16.0
+                        "x": 33.225,
+                        "y": 4.0
                     },
-                    "uuid": "bf0f41c5-d728-5288-b1a7-2419f0be4fb5"
+                    "uuid": "8ee4f093-b7ee-51b8-84a2-39fd760d4d87"
                 }
             ],
             "severity": "error",
@@ -1279,20 +1325,20 @@
             "description": "Missing connection between items",
             "items": [
                 {
-                    "description": "Pad 1 [SENSE_12V] of C_12V_S on F.Cu",
+                    "description": "Pad 1 [+3V3] of L_B3V3 on F.Cu",
                     "pos": {
-                        "x": 36.725,
-                        "y": 16.0
+                        "x": 36.2125,
+                        "y": 5.0
                     },
-                    "uuid": "bf0f41c5-d728-5288-b1a7-2419f0be4fb5"
+                    "uuid": "2365527b-e60e-5f9c-8cd1-4587f5c2db1f"
                 },
                 {
-                    "description": "Pad 1 [SENSE_12V] of C_12V_S on F.Cu",
+                    "description": "Pad 1 [+3V3] of C_VDD1 on F.Cu",
                     "pos": {
-                        "x": 36.725,
-                        "y": 16.0
+                        "x": 33.225,
+                        "y": 10.0
                     },
-                    "uuid": "bf0f41c5-d728-5288-b1a7-2419f0be4fb5"
+                    "uuid": "f4394062-7b6e-5419-94dd-23d21b9554d9"
                 }
             ],
             "severity": "error",
@@ -1302,66 +1348,20 @@
             "description": "Missing connection between items",
             "items": [
                 {
-                    "description": "PTH pad 1 [+3V3] of J_SWD",
+                    "description": "Pad 1 [+3V3] of C_RS485 on F.Cu",
                     "pos": {
-                        "x": 32.0,
-                        "y": 25.19
+                        "x": 42.225,
+                        "y": 24.5
                     },
-                    "uuid": "14b43033-141a-5ccd-9c5f-cbb7fcdbea1e"
-                },
-                {
-                    "description": "Pad 1 [SENSE_12V] of R_12V_B on F.Cu",
-                    "pos": {
-                        "x": 34.175,
-                        "y": 18.5
-                    },
-                    "uuid": "1563e67f-1c32-5d36-8127-bc5667cbf3b5"
-                }
-            ],
-            "severity": "error",
-            "type": "unconnected_items"
-        },
-        {
-            "description": "Missing connection between items",
-            "items": [
-                {
-                    "description": "Pad 1 [SENSE_12V] of C_12V_S on F.Cu",
-                    "pos": {
-                        "x": 36.725,
-                        "y": 16.0
-                    },
-                    "uuid": "bf0f41c5-d728-5288-b1a7-2419f0be4fb5"
-                },
-                {
-                    "description": "PTH pad 1 [+3V3] of J_SWD",
-                    "pos": {
-                        "x": 32.0,
-                        "y": 25.19
-                    },
-                    "uuid": "14b43033-141a-5ccd-9c5f-cbb7fcdbea1e"
-                }
-            ],
-            "severity": "error",
-            "type": "unconnected_items"
-        },
-        {
-            "description": "Missing connection between items",
-            "items": [
-                {
-                    "description": "Pad 1 [SENSE_12V] of C_12V_S on F.Cu",
-                    "pos": {
-                        "x": 36.725,
-                        "y": 16.0
-                    },
-                    "uuid": "bf0f41c5-d728-5288-b1a7-2419f0be4fb5"
+                    "uuid": "647dc247-2726-5795-85f4-33de05babe0e"
                 },
                 {
                     "description": "Pad 8 [+3V3] of U_RS485 on F.Cu",
                     "pos": {
-                        "x": 42.475,
-                        "y": 20.095
+                        "x": 50.475,
+                        "y": 19.095
                     },
-                    "uuid": "d8242f67-d255-54ca-a386-f47fb2e400c8"
+                    "uuid": "1f72407a-9b20-5e3a-a325-08344b76c4f5"
                 }
             ],
             "severity": "error",
@@ -1371,43 +1371,43 @@
             "description": "Missing connection between items",
             "items": [
                 {
-                    "description": "Pad 2 [+3V3_B2B] of L_B3V3 on F.Cu",
+                    "description": "Pad 1 [+3V3_B2B] of C_B2B on F.Cu",
                     "pos": {
-                        "x": 26.7875,
-                        "y": 5.0
+                        "x": 36.225,
+                        "y": 9.0
                     },
-                    "uuid": "89087db8-54c4-5e5c-ba11-298bc9d1ab91"
+                    "uuid": "ff5c694c-c284-5c89-addd-101038a3199b"
                 },
-                {
-                    "description": "Pad 1 [SENSE_12V] of C_12V_S on F.Cu",
-                    "pos": {
-                        "x": 36.725,
-                        "y": 16.0
-                    },
-                    "uuid": "bf0f41c5-d728-5288-b1a7-2419f0be4fb5"
-                }
-            ],
-            "severity": "error",
-            "type": "unconnected_items"
-        },
-        {
-            "description": "Missing connection between items",
-            "items": [
                 {
                     "description": "PTH pad 13 [+3V3_B2B] of J_B2B",
                     "pos": {
-                        "x": 46.725,
+                        "x": 55.935,
                         "y": 18.81
                     },
-                    "uuid": "f4efee26-b579-502e-9b06-6b5ccfa6b8fc"
-                },
+                    "uuid": "3bbc4ea4-5ff9-5569-9b84-9f8094cdace8"
+                }
+            ],
+            "severity": "error",
+            "type": "unconnected_items"
+        },
+        {
+            "description": "Missing connection between items",
+            "items": [
                 {
                     "description": "Pad 2 [+3V3_B2B] of L_B3V3 on F.Cu",
                     "pos": {
-                        "x": 26.7875,
+                        "x": 37.7875,
                         "y": 5.0
                     },
-                    "uuid": "89087db8-54c4-5e5c-ba11-298bc9d1ab91"
+                    "uuid": "1e547c93-f4a1-5216-a99b-ea9defa1e492"
+                },
+                {
+                    "description": "Pad 1 [+3V3_B2B] of C_B2B on F.Cu",
+                    "pos": {
+                        "x": 36.225,
+                        "y": 9.0
+                    },
+                    "uuid": "ff5c694c-c284-5c89-addd-101038a3199b"
                 }
             ],
             "severity": "error",
@@ -1419,18 +1419,18 @@
                 {
                     "description": "Pad 18 [PWM_UH] of U1 on F.Cu",
                     "pos": {
-                        "x": 32.175,
-                        "y": 19.0
+                        "x": 31.175,
+                        "y": 15.5
                     },
-                    "uuid": "6061ba2d-055f-5fa3-a588-548ad8aa804c"
+                    "uuid": "f40bad5c-c52a-5f78-94c8-cb4ebef98575"
                 },
                 {
                     "description": "PTH pad 1 [PWM_UH] of J_B2B",
                     "pos": {
-                        "x": 46.725,
+                        "x": 55.935,
                         "y": 3.57
                     },
-                    "uuid": "dcdba582-d7b9-5d31-97e2-f82c07d58670"
+                    "uuid": "207545b2-6492-5196-9170-8b511a5a8120"
                 }
             ],
             "severity": "error",
@@ -1442,18 +1442,18 @@
                 {
                     "description": "Pad 19 [PWM_UL] of U1 on F.Cu",
                     "pos": {
-                        "x": 32.175,
-                        "y": 18.2
+                        "x": 31.175,
+                        "y": 14.7
                     },
-                    "uuid": "c2d66c65-5532-5087-86a4-0fb73a3afc93"
+                    "uuid": "2aa12c4c-5e50-5f08-85d4-efd6b3cfb393"
                 },
                 {
                     "description": "PTH pad 2 [PWM_UL] of J_B2B",
                     "pos": {
-                        "x": 49.265,
+                        "x": 58.475,
                         "y": 3.57
                     },
-                    "uuid": "382acbf5-18f7-50ef-ad58-349703cf8f9a"
+                    "uuid": "fefb1b54-d811-546f-8f49-63b5fafeac8c"
                 }
             ],
             "severity": "error",
@@ -1465,18 +1465,18 @@
                 {
                     "description": "Pad 21 [PWM_VH] of U1 on F.Cu",
                     "pos": {
-                        "x": 32.175,
-                        "y": 16.6
+                        "x": 31.175,
+                        "y": 13.1
                     },
-                    "uuid": "39f5818d-4b9b-5be3-8fe8-08e8032ee48c"
+                    "uuid": "22a67492-9c13-5a28-8ef3-ae875327c20e"
                 },
                 {
                     "description": "PTH pad 3 [PWM_VH] of J_B2B",
                     "pos": {
-                        "x": 46.725,
+                        "x": 55.935,
                         "y": 6.11
                     },
-                    "uuid": "827a6307-ea6b-5f0b-bf5e-fad9c58ce469"
+                    "uuid": "91b03514-8bf9-512f-bb0f-ac778370f645"
                 }
             ],
             "severity": "error",
@@ -1488,18 +1488,18 @@
                 {
                     "description": "Pad 28 [PWM_VL] of U1 on F.Cu",
                     "pos": {
-                        "x": 28.4,
-                        "y": 12.825
+                        "x": 27.4,
+                        "y": 9.325
                     },
-                    "uuid": "66e3b313-d970-5323-b684-d9dc873a55bb"
+                    "uuid": "2680412d-ce7b-564b-b440-5b3420631eb9"
                 },
                 {
                     "description": "PTH pad 4 [PWM_VL] of J_B2B",
                     "pos": {
-                        "x": 49.265,
+                        "x": 58.475,
                         "y": 6.11
                     },
-                    "uuid": "901a5b8b-9c6a-5dbd-bd89-d161a137ce0f"
+                    "uuid": "2860ede3-bd3b-58f5-87e0-26877a15d5a2"
                 }
             ],
             "severity": "error",
@@ -1511,18 +1511,18 @@
                 {
                     "description": "Pad 29 [PWM_WH] of U1 on F.Cu",
                     "pos": {
-                        "x": 27.6,
-                        "y": 12.825
+                        "x": 26.6,
+                        "y": 9.325
                     },
-                    "uuid": "93c2d45b-65f3-5534-ba61-05dc52eec756"
+                    "uuid": "03626883-c8fb-5666-bc91-a0cb0090fecf"
                 },
                 {
                     "description": "PTH pad 5 [PWM_WH] of J_B2B",
                     "pos": {
-                        "x": 46.725,
+                        "x": 55.935,
                         "y": 8.65
                     },
-                    "uuid": "287ddd69-5f8f-553d-88c9-ede752bb99ab"
+                    "uuid": "0ed8e3a0-51f6-5f97-b7e4-ea136118b327"
                 }
             ],
             "severity": "error",
@@ -1534,18 +1534,18 @@
                 {
                     "description": "Pad 15 [PWM_WL] of U1 on F.Cu",
                     "pos": {
-                        "x": 30.0,
-                        "y": 21.175
+                        "x": 29.0,
+                        "y": 17.675
                     },
-                    "uuid": "d213f216-5bfd-5873-997f-0d34974218fe"
+                    "uuid": "30442daa-1c5f-5917-bda9-b18ab60b7746"
                 },
                 {
                     "description": "PTH pad 6 [PWM_WL] of J_B2B",
                     "pos": {
-                        "x": 49.265,
+                        "x": 58.475,
                         "y": 8.65
                     },
-                    "uuid": "048311b9-b02f-5251-aca9-5596ec574a4a"
+                    "uuid": "32d19909-c74a-5cc8-a213-0045ddd7edc8"
                 }
             ],
             "severity": "error",
@@ -1555,20 +1555,20 @@
             "description": "Missing connection between items",
             "items": [
                 {
-                    "description": "Pad 1 [SENSE_12V] of R_12V_B on F.Cu",
+                    "description": "Pad 1 [ISENSE_U] of R_ISENSE_U on F.Cu",
                     "pos": {
-                        "x": 34.175,
-                        "y": 18.5
+                        "x": 41.175,
+                        "y": 7.0
                     },
-                    "uuid": "1563e67f-1c32-5d36-8127-bc5667cbf3b5"
+                    "uuid": "8b90cd31-1330-536d-a187-726166cd7a16"
                 },
                 {
                     "description": "PTH pad 7 [ISENSE_U] of J_B2B",
                     "pos": {
-                        "x": 46.725,
+                        "x": 55.935,
                         "y": 11.19
                     },
-                    "uuid": "4fb3c452-d14e-52f2-af5e-01d3f7f6d1cc"
+                    "uuid": "3715ae95-2a32-5292-b75c-f91aa12476a8"
                 }
             ],
             "severity": "error",
@@ -1578,20 +1578,20 @@
             "description": "Missing connection between items",
             "items": [
                 {
-                    "description": "Pad 1 [SENSE_12V] of R_12V_B on F.Cu",
+                    "description": "Pad 1 [ISENSE_V] of R_ISENSE_V on F.Cu",
                     "pos": {
-                        "x": 34.175,
-                        "y": 18.5
+                        "x": 41.175,
+                        "y": 10.0
                     },
-                    "uuid": "1563e67f-1c32-5d36-8127-bc5667cbf3b5"
+                    "uuid": "7314ed94-ff10-5015-b46c-717716300928"
                 },
                 {
                     "description": "PTH pad 8 [ISENSE_V] of J_B2B",
                     "pos": {
-                        "x": 49.265,
+                        "x": 58.475,
                         "y": 11.19
                     },
-                    "uuid": "9c16403f-d023-5d3d-88bd-74bce1d533a9"
+                    "uuid": "2b3a42bc-d7b6-5e6b-9a53-d35d86259e6a"
                 }
             ],
             "severity": "error",
@@ -1601,20 +1601,20 @@
             "description": "Missing connection between items",
             "items": [
                 {
-                    "description": "Pad 1 [SENSE_12V] of R_12V_B on F.Cu",
+                    "description": "Pad 1 [ISENSE_W] of R_ISENSE_W on F.Cu",
                     "pos": {
-                        "x": 34.175,
-                        "y": 18.5
+                        "x": 41.175,
+                        "y": 13.0
                     },
-                    "uuid": "1563e67f-1c32-5d36-8127-bc5667cbf3b5"
+                    "uuid": "a95d0467-1f99-58bb-b460-b90326adc0b0"
                 },
                 {
                     "description": "PTH pad 9 [ISENSE_W] of J_B2B",
                     "pos": {
-                        "x": 46.725,
+                        "x": 55.935,
                         "y": 13.73
                     },
-                    "uuid": "60274f29-cf3a-58cd-a11a-8c0def48874f"
+                    "uuid": "b8b238d3-fa47-57ce-a1e1-313c41148e37"
                 }
             ],
             "severity": "error",
@@ -1624,20 +1624,20 @@
             "description": "Missing connection between items",
             "items": [
                 {
-                    "description": "Pad 1 [SENSE_12V] of R_12V_B on F.Cu",
+                    "description": "Pad 1 [VBUS_SENSE] of R_VBUS_S on F.Cu",
                     "pos": {
-                        "x": 34.175,
-                        "y": 18.5
+                        "x": 41.175,
+                        "y": 16.0
                     },
-                    "uuid": "1563e67f-1c32-5d36-8127-bc5667cbf3b5"
+                    "uuid": "6ff638f9-c85b-51da-8504-1b4d9aed1369"
                 },
                 {
                     "description": "PTH pad 10 [VBUS_SENSE] of J_B2B",
                     "pos": {
-                        "x": 49.265,
+                        "x": 58.475,
                         "y": 13.73
                     },
-                    "uuid": "0042aff2-a93e-51c3-ad77-f8e157a9cc2c"
+                    "uuid": "ed33e47a-d5fe-5421-91aa-2140bf150524"
                 }
             ],
             "severity": "error",
@@ -1649,18 +1649,18 @@
                 {
                     "description": "Pad 1 [GATE_EN] of U1 on F.Cu",
                     "pos": {
-                        "x": 23.825,
-                        "y": 14.2
+                        "x": 22.825,
+                        "y": 10.7
                     },
-                    "uuid": "eddeca44-e48b-5761-9f8e-c9343099152a"
+                    "uuid": "05850ba9-73db-5270-ad92-05148ac8cbf6"
                 },
                 {
-                    "description": "Pad 1 [SENSE_12V] of R_12V_B on F.Cu",
+                    "description": "Pad 1 [GATE_EN] of R_GATE_EN on F.Cu",
                     "pos": {
-                        "x": 34.175,
-                        "y": 18.5
+                        "x": 20.175,
+                        "y": 21.5
                     },
-                    "uuid": "1563e67f-1c32-5d36-8127-bc5667cbf3b5"
+                    "uuid": "d1218471-9a33-58a9-bff6-619a7a3b359f"
                 }
             ],
             "severity": "error",
@@ -1672,18 +1672,18 @@
                 {
                     "description": "PTH pad 11 [GATE_EN] of J_B2B",
                     "pos": {
-                        "x": 46.725,
+                        "x": 55.935,
                         "y": 16.27
                     },
-                    "uuid": "5de09ba3-a035-5b7c-b09f-dd46303f59c7"
+                    "uuid": "f93df557-b32d-5d75-95df-68a9c40a9727"
                 },
                 {
                     "description": "Pad 1 [GATE_EN] of U1 on F.Cu",
                     "pos": {
-                        "x": 23.825,
-                        "y": 14.2
+                        "x": 22.825,
+                        "y": 10.7
                     },
-                    "uuid": "eddeca44-e48b-5761-9f8e-c9343099152a"
+                    "uuid": "05850ba9-73db-5270-ad92-05148ac8cbf6"
                 }
             ],
             "severity": "error",
@@ -1692,44 +1692,21 @@
         {
             "description": "Missing connection between items",
             "items": [
-                {
-                    "description": "Pad 1 [SENSE_12V] of C_12V_S on F.Cu",
-                    "pos": {
-                        "x": 36.725,
-                        "y": 16.0
-                    },
-                    "uuid": "bf0f41c5-d728-5288-b1a7-2419f0be4fb5"
-                },
-                {
-                    "description": "Pad 2 [GND] of R_12V_B on F.Cu",
-                    "pos": {
-                        "x": 35.825,
-                        "y": 18.5
-                    },
-                    "uuid": "168a5433-e154-59cb-870c-cd190b7b9a35"
-                }
-            ],
-            "severity": "error",
-            "type": "unconnected_items"
-        },
-        {
-            "description": "Missing connection between items",
-            "items": [
-                {
-                    "description": "Pad 2 [GND] of R_12V_B on F.Cu",
-                    "pos": {
-                        "x": 35.825,
-                        "y": 18.5
-                    },
-                    "uuid": "168a5433-e154-59cb-870c-cd190b7b9a35"
-                },
                 {
                     "description": "Pad 2 [FAULT_N] of U1 on F.Cu",
                     "pos": {
-                        "x": 23.825,
-                        "y": 15.0
+                        "x": 22.825,
+                        "y": 11.5
                     },
-                    "uuid": "4fabd654-6504-59a9-9e06-da18c6516729"
+                    "uuid": "9a3310d0-33e9-52c8-8e9b-5f3a4a3510b6"
+                },
+                {
+                    "description": "Pad 2 [FAULT_N] of R_FAULT on F.Cu",
+                    "pos": {
+                        "x": 36.825,
+                        "y": 24.5
+                    },
+                    "uuid": "8c660a1c-918d-55b2-9c87-d6bed5ad9349"
                 }
             ],
             "severity": "error",
@@ -1738,44 +1715,136 @@
         {
             "description": "Missing connection between items",
             "items": [
+                {
+                    "description": "Pad 2 [FAULT_N] of R_FAULT on F.Cu",
+                    "pos": {
+                        "x": 36.825,
+                        "y": 24.5
+                    },
+                    "uuid": "8c660a1c-918d-55b2-9c87-d6bed5ad9349"
+                },
+                {
+                    "description": "Pad 1 [FAULT_N] of C_FAULT on F.Cu",
+                    "pos": {
+                        "x": 38.225,
+                        "y": 24.0
+                    },
+                    "uuid": "2ddbe352-ed01-5d0f-92c0-aaa5f5706cf8"
+                }
+            ],
+            "severity": "error",
+            "type": "unconnected_items"
+        },
+        {
+            "description": "Missing connection between items",
+            "items": [
+                {
+                    "description": "Pad 1 [FAULT_N] of C_FAULT on F.Cu",
+                    "pos": {
+                        "x": 38.225,
+                        "y": 24.0
+                    },
+                    "uuid": "2ddbe352-ed01-5d0f-92c0-aaa5f5706cf8"
+                },
                 {
                     "description": "PTH pad 12 [FAULT_N] of J_B2B",
                     "pos": {
-                        "x": 49.265,
+                        "x": 58.475,
                         "y": 16.27
                     },
-                    "uuid": "72143802-8986-5c0c-9b62-28eb7387a32a"
+                    "uuid": "b7053e04-83c4-533e-b6c5-c82c3d545e46"
+                }
+            ],
+            "severity": "error",
+            "type": "unconnected_items"
+        },
+        {
+            "description": "Missing connection between items",
+            "items": [
+                {
+                    "description": "Pad 1 [HALL_U] of R_HALL_U on F.Cu",
+                    "pos": {
+                        "x": 11.175,
+                        "y": 7.0
+                    },
+                    "uuid": "c2edd1c7-9ed0-5e8c-98c7-a65e8c7b9f9b"
                 },
                 {
-                    "description": "Pad 2 [FAULT_N] of U1 on F.Cu",
+                    "description": "PTH pad 2 [HALL_U] of J_HALL_U",
                     "pos": {
-                        "x": 23.825,
+                        "x": 6.0,
+                        "y": 7.0
+                    },
+                    "uuid": "55253d14-0da3-566b-959f-5f7b2b90894f"
+                }
+            ],
+            "severity": "error",
+            "type": "unconnected_items"
+        },
+        {
+            "description": "Missing connection between items",
+            "items": [
+                {
+                    "description": "Pad 1 [HALL_U] of R_HALL_SU on F.Cu",
+                    "pos": {
+                        "x": 14.175,
+                        "y": 8.0
+                    },
+                    "uuid": "022d94ab-280d-5bec-a75a-45bf34b00f40"
+                },
+                {
+                    "description": "Pad 1 [HALL_U] of R_HALL_U on F.Cu",
+                    "pos": {
+                        "x": 11.175,
+                        "y": 7.0
+                    },
+                    "uuid": "c2edd1c7-9ed0-5e8c-98c7-a65e8c7b9f9b"
+                }
+            ],
+            "severity": "error",
+            "type": "unconnected_items"
+        },
+        {
+            "description": "Missing connection between items",
+            "items": [
+                {
+                    "description": "Pad 1 [HALL_V] of R_HALL_V on F.Cu",
+                    "pos": {
+                        "x": 11.175,
+                        "y": 14.0
+                    },
+                    "uuid": "01dea7f1-ccbf-59ec-b44d-fa4a2d3f6be1"
+                },
+                {
+                    "description": "PTH pad 2 [HALL_V] of J_HALL_V",
+                    "pos": {
+                        "x": 6.0,
+                        "y": 14.0
+                    },
+                    "uuid": "4be10225-9b50-524e-9856-98a2a39ec946"
+                }
+            ],
+            "severity": "error",
+            "type": "unconnected_items"
+        },
+        {
+            "description": "Missing connection between items",
+            "items": [
+                {
+                    "description": "Pad 1 [HALL_V] of R_HALL_SV on F.Cu",
+                    "pos": {
+                        "x": 14.175,
                         "y": 15.0
                     },
-                    "uuid": "4fabd654-6504-59a9-9e06-da18c6516729"
-                }
-            ],
-            "severity": "error",
-            "type": "unconnected_items"
-        },
-        {
-            "description": "Missing connection between items",
-            "items": [
-                {
-                    "description": "PTH pad 2 [RS485_B] of J_RS485",
-                    "pos": {
-                        "x": 40.5,
-                        "y": 29.5
-                    },
-                    "uuid": "b3e4afde-ecd9-5d4e-af6b-5f7344e96556"
+                    "uuid": "be7984ed-36b9-5a0e-9b64-70ea1c2bea37"
                 },
                 {
-                    "description": "Pad 1 [SENSE_12V] of R_12V_B on F.Cu",
+                    "description": "Pad 1 [HALL_V] of R_HALL_V on F.Cu",
                     "pos": {
-                        "x": 34.175,
-                        "y": 18.5
+                        "x": 11.175,
+                        "y": 14.0
                     },
-                    "uuid": "1563e67f-1c32-5d36-8127-bc5667cbf3b5"
+                    "uuid": "01dea7f1-ccbf-59ec-b44d-fa4a2d3f6be1"
                 }
             ],
             "severity": "error",
@@ -1785,20 +1854,20 @@
             "description": "Missing connection between items",
             "items": [
                 {
-                    "description": "Pad 1 [SENSE_12V] of R_12V_B on F.Cu",
+                    "description": "Pad 1 [HALL_W] of R_HALL_W on F.Cu",
                     "pos": {
-                        "x": 34.175,
-                        "y": 18.5
+                        "x": 11.175,
+                        "y": 21.0
                     },
-                    "uuid": "1563e67f-1c32-5d36-8127-bc5667cbf3b5"
+                    "uuid": "fa2de0b8-a41b-5ede-aa5d-1bbd8cc14ca4"
                 },
                 {
-                    "description": "Pad 1 [SENSE_12V] of R_12V_B on F.Cu",
+                    "description": "PTH pad 2 [HALL_W] of J_HALL_W",
                     "pos": {
-                        "x": 34.175,
-                        "y": 18.5
+                        "x": 6.0,
+                        "y": 21.0
                     },
-                    "uuid": "1563e67f-1c32-5d36-8127-bc5667cbf3b5"
+                    "uuid": "014e3b48-9493-5d7c-bd7c-7fcdcaf96084"
                 }
             ],
             "severity": "error",
@@ -1808,20 +1877,20 @@
             "description": "Missing connection between items",
             "items": [
                 {
-                    "description": "Pad 1 [SENSE_12V] of R_12V_B on F.Cu",
+                    "description": "Pad 1 [HALL_W] of R_HALL_SW on F.Cu",
                     "pos": {
-                        "x": 34.175,
-                        "y": 18.5
+                        "x": 14.175,
+                        "y": 22.0
                     },
-                    "uuid": "1563e67f-1c32-5d36-8127-bc5667cbf3b5"
+                    "uuid": "c168b87e-80e6-5009-bfe5-b47a29d1fbdb"
                 },
                 {
-                    "description": "PTH pad 2 [RS485_B] of J_RS485",
+                    "description": "Pad 1 [HALL_W] of R_HALL_W on F.Cu",
                     "pos": {
-                        "x": 40.5,
-                        "y": 29.5
+                        "x": 11.175,
+                        "y": 21.0
                     },
-                    "uuid": "b3e4afde-ecd9-5d4e-af6b-5f7344e96556"
+                    "uuid": "fa2de0b8-a41b-5ede-aa5d-1bbd8cc14ca4"
                 }
             ],
             "severity": "error",
@@ -1831,20 +1900,20 @@
             "description": "Missing connection between items",
             "items": [
                 {
-                    "description": "Pad 1 [SENSE_12V] of R_12V_B on F.Cu",
+                    "description": "Pad 1 [ENC_A] of R_ENC_A on F.Cu",
                     "pos": {
-                        "x": 34.175,
-                        "y": 18.5
+                        "x": 6.675,
+                        "y": 24.0
                     },
-                    "uuid": "1563e67f-1c32-5d36-8127-bc5667cbf3b5"
+                    "uuid": "1551231c-1d7b-5dee-a982-a1a78f15f903"
                 },
                 {
-                    "description": "Pad 1 [SENSE_12V] of R_12V_B on F.Cu",
+                    "description": "PTH pad 2 [ENC_A] of J_ENC",
                     "pos": {
-                        "x": 34.175,
-                        "y": 18.5
+                        "x": 9.73,
+                        "y": 27.5
                     },
-                    "uuid": "1563e67f-1c32-5d36-8127-bc5667cbf3b5"
+                    "uuid": "d5fc915a-918a-5169-899a-39ff04eff88e"
                 }
             ],
             "severity": "error",
@@ -1854,20 +1923,20 @@
             "description": "Missing connection between items",
             "items": [
                 {
-                    "description": "Pad 1 [SENSE_12V] of R_12V_B on F.Cu",
+                    "description": "Pad 1 [ENC_A] of C_ENC_A on F.Cu",
                     "pos": {
-                        "x": 34.175,
-                        "y": 18.5
+                        "x": 11.225,
+                        "y": 22.5
                     },
-                    "uuid": "1563e67f-1c32-5d36-8127-bc5667cbf3b5"
+                    "uuid": "12b69b28-5778-5fbd-82d1-8f24e3652d1b"
                 },
                 {
-                    "description": "PTH pad 2 [RS485_B] of J_RS485",
+                    "description": "Pad 1 [ENC_A] of R_ENC_A on F.Cu",
                     "pos": {
-                        "x": 40.5,
-                        "y": 29.5
+                        "x": 6.675,
+                        "y": 24.0
                     },
-                    "uuid": "b3e4afde-ecd9-5d4e-af6b-5f7344e96556"
+                    "uuid": "1551231c-1d7b-5dee-a982-a1a78f15f903"
                 }
             ],
             "severity": "error",
@@ -1877,89 +1946,20 @@
             "description": "Missing connection between items",
             "items": [
                 {
-                    "description": "Pad 1 [SENSE_12V] of R_12V_B on F.Cu",
+                    "description": "Pad 1 [ENC_A] of C_ENC_A on F.Cu",
                     "pos": {
-                        "x": 34.175,
-                        "y": 18.5
+                        "x": 11.225,
+                        "y": 22.5
                     },
-                    "uuid": "1563e67f-1c32-5d36-8127-bc5667cbf3b5"
+                    "uuid": "12b69b28-5778-5fbd-82d1-8f24e3652d1b"
                 },
-                {
-                    "description": "Pad 1 [SENSE_12V] of R_12V_B on F.Cu",
-                    "pos": {
-                        "x": 34.175,
-                        "y": 18.5
-                    },
-                    "uuid": "1563e67f-1c32-5d36-8127-bc5667cbf3b5"
-                }
-            ],
-            "severity": "error",
-            "type": "unconnected_items"
-        },
-        {
-            "description": "Missing connection between items",
-            "items": [
-                {
-                    "description": "PTH pad 2 [SWDIO] of J_SWD",
-                    "pos": {
-                        "x": 32.0,
-                        "y": 27.73
-                    },
-                    "uuid": "6f4e74ff-d6df-5477-a043-31660cdb7d4c"
-                },
-                {
-                    "description": "Pad 1 [SENSE_12V] of C_12V_S on F.Cu",
-                    "pos": {
-                        "x": 36.725,
-                        "y": 16.0
-                    },
-                    "uuid": "bf0f41c5-d728-5288-b1a7-2419f0be4fb5"
-                }
-            ],
-            "severity": "error",
-            "type": "unconnected_items"
-        },
-        {
-            "description": "Missing connection between items",
-            "items": [
-                {
-                    "description": "Pad 1 [SENSE_12V] of R_12V_B on F.Cu",
-                    "pos": {
-                        "x": 34.175,
-                        "y": 18.5
-                    },
-                    "uuid": "1563e67f-1c32-5d36-8127-bc5667cbf3b5"
-                },
-                {
-                    "description": "Pad 1 [SENSE_12V] of C_12V_S on F.Cu",
-                    "pos": {
-                        "x": 36.725,
-                        "y": 16.0
-                    },
-                    "uuid": "bf0f41c5-d728-5288-b1a7-2419f0be4fb5"
-                }
-            ],
-            "severity": "error",
-            "type": "unconnected_items"
-        },
-        {
-            "description": "Missing connection between items",
-            "items": [
                 {
                     "description": "Pad 22 [ENC_A] of U1 on F.Cu",
                     "pos": {
-                        "x": 32.175,
-                        "y": 15.8
+                        "x": 31.175,
+                        "y": 12.3
                     },
-                    "uuid": "2e0226c9-7723-591f-ac3d-f186dc02dea2"
-                },
-                {
-                    "description": "Pad 1 [SENSE_12V] of R_12V_B on F.Cu",
-                    "pos": {
-                        "x": 34.175,
-                        "y": 18.5
-                    },
-                    "uuid": "1563e67f-1c32-5d36-8127-bc5667cbf3b5"
+                    "uuid": "e76c08fe-0f68-5c69-bb25-d23e5d1b6dc7"
                 }
             ],
             "severity": "error",
@@ -1969,20 +1969,20 @@
             "description": "Missing connection between items",
             "items": [
                 {
-                    "description": "PTH pad 3 [BOOT] of J_SWD",
+                    "description": "Pad 1 [ENC_B] of R_ENC_B on F.Cu",
                     "pos": {
-                        "x": 32.0,
-                        "y": 30.27
+                        "x": 9.675,
+                        "y": 24.0
                     },
-                    "uuid": "fc878d36-36af-5a92-8041-492dab62d780"
+                    "uuid": "edf13d13-0715-58f9-91f9-74e5ca2ee85b"
                 },
                 {
-                    "description": "Pad 1 [SENSE_12V] of C_12V_S on F.Cu",
+                    "description": "PTH pad 3 [ENC_B] of J_ENC",
                     "pos": {
-                        "x": 36.725,
-                        "y": 16.0
+                        "x": 12.27,
+                        "y": 27.5
                     },
-                    "uuid": "bf0f41c5-d728-5288-b1a7-2419f0be4fb5"
+                    "uuid": "f53034da-a17b-55d5-9e83-dba2e4f852fd"
                 }
             ],
             "severity": "error",
@@ -1992,20 +1992,20 @@
             "description": "Missing connection between items",
             "items": [
                 {
-                    "description": "Pad 1 [SENSE_12V] of R_12V_B on F.Cu",
+                    "description": "PTH pad 3 [ENC_B] of J_ENC",
                     "pos": {
-                        "x": 34.175,
-                        "y": 18.5
+                        "x": 12.27,
+                        "y": 27.5
                     },
-                    "uuid": "1563e67f-1c32-5d36-8127-bc5667cbf3b5"
+                    "uuid": "f53034da-a17b-55d5-9e83-dba2e4f852fd"
                 },
                 {
-                    "description": "Pad 1 [SENSE_12V] of C_12V_S on F.Cu",
+                    "description": "Pad 1 [ENC_B] of C_ENC_B on F.Cu",
                     "pos": {
-                        "x": 36.725,
-                        "y": 16.0
+                        "x": 14.725,
+                        "y": 24.0
                     },
-                    "uuid": "bf0f41c5-d728-5288-b1a7-2419f0be4fb5"
+                    "uuid": "311e2eef-d5d7-5230-85d7-c66fa1a77dd0"
                 }
             ],
             "severity": "error",
@@ -2014,21 +2014,21 @@
         {
             "description": "Missing connection between items",
             "items": [
+                {
+                    "description": "Pad 1 [ENC_B] of C_ENC_B on F.Cu",
+                    "pos": {
+                        "x": 14.725,
+                        "y": 24.0
+                    },
+                    "uuid": "311e2eef-d5d7-5230-85d7-c66fa1a77dd0"
+                },
                 {
                     "description": "Pad 23 [ENC_B] of U1 on F.Cu",
                     "pos": {
-                        "x": 32.175,
-                        "y": 15.0
+                        "x": 31.175,
+                        "y": 11.5
                     },
-                    "uuid": "0f796954-d85f-5e8f-bc9f-53a981cffe01"
-                },
-                {
-                    "description": "Pad 1 [SENSE_12V] of R_12V_B on F.Cu",
-                    "pos": {
-                        "x": 34.175,
-                        "y": 18.5
-                    },
-                    "uuid": "1563e67f-1c32-5d36-8127-bc5667cbf3b5"
+                    "uuid": "8ea28f3a-4990-5640-9780-32f5cc1ff30f"
                 }
             ],
             "severity": "error",
@@ -2040,18 +2040,18 @@
                 {
                     "description": "Pad 30 [RS485_TX] of U1 on F.Cu",
                     "pos": {
-                        "x": 26.8,
-                        "y": 12.825
+                        "x": 25.8,
+                        "y": 9.325
                     },
-                    "uuid": "e2d92f7a-8e48-53bc-90e9-f8c70c1b619c"
+                    "uuid": "0afd35fa-e636-5a60-a012-14535d4b36a7"
                 },
                 {
                     "description": "Pad 4 [RS485_TX] of U_RS485 on F.Cu",
                     "pos": {
-                        "x": 37.525,
-                        "y": 23.905
+                        "x": 45.525,
+                        "y": 22.905
                     },
-                    "uuid": "63bea77e-516f-5e92-a8e4-a04de839c61f"
+                    "uuid": "23ae5c06-ac9d-56c7-b47c-ba7388f06ea5"
                 }
             ],
             "severity": "error",
@@ -2063,18 +2063,18 @@
                 {
                     "description": "Pad 1 [RS485_RX] of U_RS485 on F.Cu",
                     "pos": {
-                        "x": 37.525,
-                        "y": 20.095
+                        "x": 45.525,
+                        "y": 19.095
                     },
-                    "uuid": "a05f359e-059e-5755-8556-92c824656457"
+                    "uuid": "a1a3fd89-268e-53ca-afa3-37f18b61b2df"
                 },
                 {
-                    "description": "Pad 1 [SENSE_12V] of R_12V_B on F.Cu",
+                    "description": "Pad 1 [RS485_RX] of R_RS485_RX on F.Cu",
                     "pos": {
-                        "x": 34.175,
-                        "y": 18.5
+                        "x": 50.675,
+                        "y": 17.5
                     },
-                    "uuid": "1563e67f-1c32-5d36-8127-bc5667cbf3b5"
+                    "uuid": "dcd41530-af68-5022-86ba-8268d5bf0efd"
                 }
             ],
             "severity": "error",
@@ -2086,18 +2086,18 @@
                 {
                     "description": "Pad 2 [RS485_DE] of U_RS485 on F.Cu",
                     "pos": {
-                        "x": 37.525,
-                        "y": 21.365
+                        "x": 45.525,
+                        "y": 20.365
                     },
-                    "uuid": "4a8667bc-c9ba-54fc-a9d3-32cbac8af951"
+                    "uuid": "e92d773e-9de9-5f26-ab1c-fd38c682b3eb"
                 },
                 {
                     "description": "Pad 32 [RS485_DE] of U1 on F.Cu",
                     "pos": {
-                        "x": 25.2,
-                        "y": 12.825
+                        "x": 24.2,
+                        "y": 9.325
                     },
-                    "uuid": "d21e1067-95a6-5720-9c6c-e3c092b9062c"
+                    "uuid": "cfffd34f-3965-5db6-930e-9363843e891b"
                 }
             ],
             "severity": "error",
@@ -2109,18 +2109,18 @@
                 {
                     "description": "Pad 3 [RS485_DE] of U_RS485 on F.Cu",
                     "pos": {
-                        "x": 37.525,
-                        "y": 22.635
+                        "x": 45.525,
+                        "y": 21.635
                     },
-                    "uuid": "70d8edc6-9071-51dd-a472-3e147e90347b"
+                    "uuid": "baa77e10-92b0-5376-b6db-486efa94ecdc"
                 },
                 {
                     "description": "Pad 2 [RS485_DE] of U_RS485 on F.Cu",
                     "pos": {
-                        "x": 37.525,
-                        "y": 21.365
+                        "x": 45.525,
+                        "y": 20.365
                     },
-                    "uuid": "4a8667bc-c9ba-54fc-a9d3-32cbac8af951"
+                    "uuid": "e92d773e-9de9-5f26-ab1c-fd38c682b3eb"
                 }
             ],
             "severity": "error",
@@ -2132,18 +2132,18 @@
                 {
                     "description": "PTH pad 1 [RS485_A] of J_RS485",
                     "pos": {
-                        "x": 40.5,
-                        "y": 26.96
+                        "x": 39.46,
+                        "y": 27.5
                     },
-                    "uuid": "2d5804d7-851d-5501-9d10-c4f609285c21"
+                    "uuid": "e00fd295-2628-5607-ac96-e6d92aaace9a"
                 },
                 {
                     "description": "Pad 6 [RS485_A] of U_RS485 on F.Cu",
                     "pos": {
-                        "x": 42.475,
-                        "y": 22.635
+                        "x": 50.475,
+                        "y": 21.635
                     },
-                    "uuid": "a3e54fb0-4ed9-596e-a6c9-1af9cb216066"
+                    "uuid": "a076448b-65eb-5f4e-a1e1-d5e561de8aab"
                 }
             ],
             "severity": "error",
@@ -2153,18 +2153,41 @@
             "description": "Missing connection between items",
             "items": [
                 {
-                    "description": "Pad 1 [SENSE_12V] of R_12V_B on F.Cu",
+                    "description": "Pad 6 [RS485_A] of U_RS485 on F.Cu",
                     "pos": {
-                        "x": 34.175,
-                        "y": 18.5
+                        "x": 50.475,
+                        "y": 21.635
                     },
-                    "uuid": "1563e67f-1c32-5d36-8127-bc5667cbf3b5"
+                    "uuid": "a076448b-65eb-5f4e-a1e1-d5e561de8aab"
+                },
+                {
+                    "description": "Pad 1 [RS485_A] of R_TERM on F.Cu",
+                    "pos": {
+                        "x": 51.675,
+                        "y": 16.0
+                    },
+                    "uuid": "33459e6f-e162-52a4-b500-3c1deb60581d"
+                }
+            ],
+            "severity": "error",
+            "type": "unconnected_items"
+        },
+        {
+            "description": "Missing connection between items",
+            "items": [
+                {
+                    "description": "Pad 1 [RS485_A] of R_TERM on F.Cu",
+                    "pos": {
+                        "x": 51.675,
+                        "y": 16.0
+                    },
+                    "uuid": "33459e6f-e162-52a4-b500-3c1deb60581d"
                 },
                 {
                     "description": "Pad 1 [RS485_B] of D_RS485_B on F.Cu",
                     "pos": {
-                        "x": 41.1,
-                        "y": 12.5
+                        "x": 46.6,
+                        "y": 10.0
                     },
                     "uuid": "ce9054a2-fe12-48a1-8277-195ce9f4e0d1"
                 }
@@ -2176,66 +2199,20 @@
             "description": "Missing connection between items",
             "items": [
                 {
-                    "description": "Pad 6 [RS485_A] of U_RS485 on F.Cu",
-                    "pos": {
-                        "x": 42.475,
-                        "y": 22.635
-                    },
-                    "uuid": "a3e54fb0-4ed9-596e-a6c9-1af9cb216066"
-                },
-                {
-                    "description": "Pad 1 [SENSE_12V] of R_12V_B on F.Cu",
-                    "pos": {
-                        "x": 34.175,
-                        "y": 18.5
-                    },
-                    "uuid": "1563e67f-1c32-5d36-8127-bc5667cbf3b5"
-                }
-            ],
-            "severity": "error",
-            "type": "unconnected_items"
-        },
-        {
-            "description": "Missing connection between items",
-            "items": [
-                {
-                    "description": "Pad 7 [RS485_B] of U_RS485 on F.Cu",
-                    "pos": {
-                        "x": 42.475,
-                        "y": 21.365
-                    },
-                    "uuid": "b16fa97e-a624-5925-a493-a8919d2e0844"
-                },
-                {
-                    "description": "Pad 2 [GND] of R_12V_B on F.Cu",
-                    "pos": {
-                        "x": 35.825,
-                        "y": 18.5
-                    },
-                    "uuid": "168a5433-e154-59cb-870c-cd190b7b9a35"
-                }
-            ],
-            "severity": "error",
-            "type": "unconnected_items"
-        },
-        {
-            "description": "Missing connection between items",
-            "items": [
-                {
-                    "description": "Pad 7 [RS485_B] of U_RS485 on F.Cu",
-                    "pos": {
-                        "x": 42.475,
-                        "y": 21.365
-                    },
-                    "uuid": "b16fa97e-a624-5925-a493-a8919d2e0844"
-                },
-                {
                     "description": "PTH pad 2 [RS485_B] of J_RS485",
                     "pos": {
-                        "x": 40.5,
-                        "y": 29.5
+                        "x": 42.0,
+                        "y": 27.5
                     },
-                    "uuid": "b3e4afde-ecd9-5d4e-af6b-5f7344e96556"
+                    "uuid": "2a319547-9606-55d2-9958-6987997fdd5a"
+                },
+                {
+                    "description": "Pad 7 [RS485_B] of U_RS485 on F.Cu",
+                    "pos": {
+                        "x": 50.475,
+                        "y": 20.365
+                    },
+                    "uuid": "1d6aca33-bc90-507f-a9a7-f6b07639844d"
                 }
             ],
             "severity": "error",
@@ -2245,18 +2222,41 @@
             "description": "Missing connection between items",
             "items": [
                 {
-                    "description": "Pad 2 [GND] of R_12V_B on F.Cu",
+                    "description": "Pad 7 [RS485_B] of U_RS485 on F.Cu",
                     "pos": {
-                        "x": 35.825,
-                        "y": 18.5
+                        "x": 50.475,
+                        "y": 20.365
                     },
-                    "uuid": "168a5433-e154-59cb-870c-cd190b7b9a35"
+                    "uuid": "1d6aca33-bc90-507f-a9a7-f6b07639844d"
+                },
+                {
+                    "description": "Pad 2 [RS485_B] of R_TERM on F.Cu",
+                    "pos": {
+                        "x": 53.325,
+                        "y": 16.0
+                    },
+                    "uuid": "34de45eb-4e83-59cb-9881-6dfae642049b"
+                }
+            ],
+            "severity": "error",
+            "type": "unconnected_items"
+        },
+        {
+            "description": "Missing connection between items",
+            "items": [
+                {
+                    "description": "Pad 2 [RS485_B] of R_TERM on F.Cu",
+                    "pos": {
+                        "x": 53.325,
+                        "y": 16.0
+                    },
+                    "uuid": "34de45eb-4e83-59cb-9881-6dfae642049b"
                 },
                 {
                     "description": "Pad 1 [RS485_B] of D_RS485_B on F.Cu",
                     "pos": {
-                        "x": 41.1,
-                        "y": 12.5
+                        "x": 46.6,
+                        "y": 10.0
                     },
                     "uuid": "ce9054a2-fe12-48a1-8277-195ce9f4e0d1"
                 }

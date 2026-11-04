@@ -776,6 +776,7 @@ mod tests {
     /// on what it declares.
     fn empty_board() -> synth_ir::Board {
         synth_ir::Board {
+            outline: None,
             name: "t".to_string(),
             layers: 4,
             manufacturer: None,

@@ -32,19 +32,23 @@ amplifiers, and makes 12 V with an LMR38010 buck.
 
 ## Board size
 
-The J_B2B pinout and the four mounting holes need a common frame. Both boards
-use holes at (3, 3), (53, 3), (3, 27) and (53, 27) mm and J_B2B at (48, 15) mm.
-The fitted control outline is **61.99 x 36.97 mm**. J_B2B is 25.4 mm long, so the
-board height is the connector plus the exporter's edge margin, which is what the
-board was asked to be. The power sidecar packs its 111 parts into a 60 x 50
-record with the same holes and J_B2B; it has no exported PCB, so it is a
-placement record, not a rendered board.
+The J_B2B pinout and the four mounting holes need a common frame. Both sidecars
+place J_B2B at (57.21, 15) mm and the holes at (2, 2), (51, 2), (2, 28) and
+(51, 28) mm. The power sidecar is a placement record with the same interface;
+it has no exported PCB, so it is not a rendered board.
 
-The holes sit about 4 mm inside Edge.Cuts because Synth's dense-board exporter
-keeps a 4 mm perimeter channel around the outermost courtyards and mounting
-holes; it is not a coordinate chosen in the source, and there is no per-board
-outline/size statement that would override it. Moving the holes outward moves
-the fitted edge outward with them and makes the board larger, not tighter.
+The control board declares `outline 60mm x 30mm`, so Edge.Cuts is exactly
+**60 x 30 mm** with its origin at (0, 0) and no fitted margin. J_B2B is 25.4 mm
+long, so the board height is the connector plus 2.3 mm at each end, and the
+connector body is flush with the right edge. The holes sit on the edge: a 2 mm
+centre with a 1.25 mm drill leaves a 0.75 mm rim. The right-hand pair is on the
+top and bottom edges at x = 51 mm because the 25.4 mm connector owns the whole
+right edge; a hole cannot share that edge without sitting under the connector.
+
+The four-layer ground planes are stitched by two 0.6 mm vias at the top and
+bottom edge midpoints, away from every mounting hole. A copper zone on each
+layer is not an electrical connection between layers; without these vias the
+planes are unstitched before routing.
 
 The passive reference labels are hidden on the silkscreen (the sidecar `[labels]`
 table) so the auto-placed text does not collide; every part is still in the BOM

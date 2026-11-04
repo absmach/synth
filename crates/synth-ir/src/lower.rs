@@ -36,7 +36,7 @@ use std::collections::HashMap;
 
 use synth_ast::{
     ComponentDeclAst, DiffPairAttr, DiffPairStmt, EndpointAst, EndpointRefKind, KeepoutAttr,
-    KeepoutStmt, NetclassStmt, ProgramAst, SchematicOverflowAst, SchematicPaperAst,
+    KeepoutStmt, NetclassStmt, OutlineStmt, ProgramAst, SchematicOverflowAst, SchematicPaperAst,
     StackupLayerAst, StackupStmt, StatementAst, ValueWithUnit,
 };
 use synth_diagnostics::{
@@ -45,9 +45,9 @@ use synth_diagnostics::{
 use synth_registry::{Part, PinCapability, Registry};
 
 use crate::board::{
-    Board, Component, ComponentId, Couple, DiffPair, EdgeRate, Keepout, Net, NetClass, NetEndpoint,
-    NetId, Note, PinId, PlacementEdge, PlacementRegion, PlacementSide, ProcessRequirement,
-    SchematicOverflow, SchematicPaper, Stackup, StackupLayer, Variant,
+    Board, BoardOutline, Component, ComponentId, Couple, DiffPair, EdgeRate, Keepout, Net,
+    NetClass, NetEndpoint, NetId, Note, PinId, PlacementEdge, PlacementRegion, PlacementSide,
+    ProcessRequirement, SchematicOverflow, SchematicPaper, Stackup, StackupLayer, Variant,
 };
 use crate::units::{ConversionError, Current, DielectricConstant, Impedance, Length, Voltage};
 
@@ -161,6 +161,7 @@ pub fn lower(ast: &ProgramAst, registry: &Registry, file: &str) -> LowerResult {
     let mut notes: Vec<Note> = Vec::new();
     let mut keepouts: Vec<Keepout> = Vec::new();
     let mut stackup: Option<Stackup> = None;
+    let mut outline: Option<BoardOutline> = None;
     let mut netclasses: Vec<NetClass> = Vec::new();
     // Declared `group` regions with their header attributes (Phase D1),
     // in first-declaration order.
@@ -253,6 +254,7 @@ pub fn lower(ast: &ProgramAst, registry: &Registry, file: &str) -> LowerResult {
             }
             StatementAst::Keepout(k) => keepouts.push(ctx.lower_keepout(k)),
             StatementAst::Stackup(st) => stackup = Some(ctx.lower_stackup(st)),
+            StatementAst::Outline(st) => outline = ctx.lower_outline(st),
             StatementAst::Netclass(n) => netclasses.push(ctx.lower_netclass(n)),
             StatementAst::Group(g) => {
                 if !groups.iter().any(|existing| existing.name == g.name) {
@@ -353,6 +355,7 @@ pub fn lower(ast: &ProgramAst, registry: &Registry, file: &str) -> LowerResult {
         notes,
         keepouts,
         stackup,
+        outline,
         netclasses,
         buses,
         modules,
@@ -952,6 +955,30 @@ impl<'a> LowerCtx<'a> {
             couple,
             source_span: d.span,
         }
+    }
+
+    /// Lower a declared board rectangle. A dimension with the wrong unit is
+    /// reported here; the parser already rejected a non-positive literal.
+    fn lower_outline(&mut self, st: &OutlineStmt) -> Option<BoardOutline> {
+        let width = match Length::try_from(&st.width) {
+            Ok(width) => width,
+            Err(e) => {
+                self.emit_unit_error(&e, "outline width");
+                return None;
+            }
+        };
+        let height = match Length::try_from(&st.height) {
+            Ok(height) => height,
+            Err(e) => {
+                self.emit_unit_error(&e, "outline height");
+                return None;
+            }
+        };
+        Some(BoardOutline {
+            width,
+            height,
+            source_span: st.span,
+        })
     }
 
     fn lower_stackup(&mut self, st: &StackupStmt) -> Stackup {
