@@ -234,6 +234,13 @@ warnings. They are not part of the DRC acceptance bar, but they are not hidden:
 | `E-SYNTH-SCHEM-003` x11 | Decoupling-cap symbol bodies are more than 25 mm from their IC bodies in the compiler-drawn schematic. A schematic-drawing warning, not the PCB. |
 | `E-SYNTH-SCHEM-004`, `E-SYNTH-SCHEM-005` | One 119.4 mm drawn wire and one 4-way junction in the compiler-drawn schematic. Drawing only. |
 
+## JLCDFM findings accepted
+
+JLCDFM on the Gerbers of this board (2026-11-04) reports:
+
+- **Slot width check, 4 danger items.** These are the four shield slots of J1 (TYPE-C-31-M-12, LCSC C165948), drilled 0.60 x 1.70 mm (two) and 0.60 x 1.20 mm (two) with 0.90 mm pads. The Korean Hroparts datasheet "Recommended P.C.B. layout (component side)" shows the same 0.60 mm slot, 0.90 mm pad and 1.70 mm drill length, with a layout tolerance of +/- 0.05 mm. The KiCad library footprint matches the datasheet, so the slots are left at 0.60 mm. JLCDFM's danger threshold for slot width is below 0.61 mm; the flag is a generic fabrication limit and is accepted here. If JLCPCB engineering queries the slots, the answer is this datasheet dimension.
+- **Trace width, 72 warnings (0.13 mm).** These are the router's default 0.127 mm (5 mil) signal width, which JLCDFM rates as a warning below 0.13 mm. JLCPCB's stated minimum trace width for this stackup is lower, so the board is manufacturable; the warnings are not changed.
+
 ## Per-part datasheet review
 
 "Reviewed" below means the registry's `provenance.reviewed_by` is set by Steve
