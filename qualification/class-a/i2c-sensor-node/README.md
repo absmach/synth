@@ -87,11 +87,11 @@ With the random ids masked the routed board is `4aa8fa857b` in all three exports
 
 ## JLCPCB
 
-PCB DFM of the package of this README (JLCDFM, 2026-11-04 11:54, Gerber content hash `daa736de85`, two layers, 8.4 x 5 cm, report in [`reports/`](reports/jlcdfm_pcb_dfm_2026-11-04_11-54_daa736de85.pdf)): 0 Danger items. Good: through-hole to trace 0.34 mm, through-hole to SMD 3.98 mm (against the 2.1 mm JLCPCB reports as Danger), silkscreen line width 0.18 mm, no silkscreen over a pad or a hole, no via in a pad. Warnings: trace width 0.13 mm on 8 tracks (92 good), the 0.127 mm stubs at the pads of U2 described below; annular ring 0.13 mm on 4 pads (96 good); negative solder-mask expansion 0.04 mm on 48 openings; one solder-mask opening 0.1 mm from a trace; one pad spacing of 0.12 mm (47 good); one sharp trace corner; and 2 unconnected trace ends, the two dead-end branches in the DRC list.
+PCB DFM of the package of this README (JLCDFM, 2026-11-04 11:54, Gerber content hash `daa736de85`, two layers, 8.4 x 5 cm, report in [`reports/`](reports/jlcdfm_pcb_dfm_2026-11-04_11-54_daa736de85.pdf)): 0 Danger items. Through-hole to trace is 0.34 mm, through-hole to SMD 3.98 mm (against the 2.1 mm JLCPCB reports as Danger), silkscreen line width 0.18 mm, with no silkscreen over a pad or a hole and no via in a pad.
 
 Quote with assembly for the same package ([`reports/jlcpcb_quote_2026-11-04.md`](reports/jlcpcb_quote_2026-11-04.md), Standard PCBA, no order placed): PCB $4.00 and PCBA $138.86, $142.86 in total.
 
-In the orderable BOM of `fab/`, `U2` is the STM32G030F6P6TR (the tape-and-reel orderable code of the same TSSOP-20 part, JLCPCB listing `C529330`) and `SW1` is the C&K PTS645SM43SMTR92 LFS (JLCPCB listing `C221880`); `J4`, the SWD header, is hand-fitted from Farnell 1022253.
+JLCPCB's BOM tool on the orderable BOM of `fab/` ([`reports/jlcpcb_assembly_bom_matching_2026-11-04.md`](reports/jlcpcb_assembly_bom_matching_2026-11-04.md)): 54 of the 55 lines match the BOM's manufacturer part numbers, `U2` (STM32G030F6P6TR, `C529330`) and `SW1` (C&K PTS645SM43SMTR92LFS, `C221880`) with 5 in the tool's Source column against a quantity of 5. `J5` (Harwin M20-9991246, `C5439732`) matches with 0 in the Source column; `J4`, the SWD header, has no match and is hand-fitted from Farnell 1022253.
 
 ## Power copper and the routing report
 
@@ -144,7 +144,6 @@ PCB review sign-off required by #39: JeffMboya, 2026-11-04, on the package in `f
 | KiCad DRC warnings | the 55 `lib_footprint_mismatch` warnings, silkscreen only, and the 2 `track_dangling` warnings, dead-end branches near U2 that join nothing and carry no current |
 | Narrow copper at U2 | the 0.127 mm stubs at the pads of U2, at the process floor, carrying at most the 100 mA budget (0.53 A capacity at a 10 C rise) |
 | Placement and density | the placement of the 57 parts on the 84.0 x 50.0 mm outline, 22.4 % courtyard fill, with connectors flush on the edges (the SWD header 0.43 mm in), the decouplers at their pins and the clearance around the mounting holes |
-| JLCPCB DFM warnings | the warnings listed under "JLCPCB" above (trace width 0.13 mm, annular ring 0.13 mm, negative solder-mask expansion 0.04 mm, one mask opening 0.1 mm from a trace, one pad spacing 0.12 mm, one sharp corner and 2 unconnected trace ends), for the JLCPCB standard process |
 | AMS1117 thermal | the supported operating envelope below |
 
 ### AMS1117 operating envelope
