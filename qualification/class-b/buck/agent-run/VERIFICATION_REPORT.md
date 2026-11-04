@@ -1,3 +1,5 @@
+> **Retrospective documentation reconstruction, not reproducible prompt-to-PCB evidence.** The exact prompt, ordered tool calls, model and tool versions, and export session report were not saved. This board is **not Class-B qualified** and is outside the qualification set: `synth check --fab` fails, thermal and via-in-pad, sourcing, DFM and independent sign-off are open (see `VERIFICATION_REPORT.md`).
+
 # Verification report: buck rev A
 
 Verdicts copied from the committed reports and `../QUALIFICATION.md`. Nothing was rerun for this document. Tools recorded: KiCad 10.0.7, FreeRouting 2.4.1, Synth 0.1.1, 2026-10-29 (`../reports/buck.routing.json`, `../reports/buck.kicad-drc.json`).
@@ -10,11 +12,11 @@ Verdicts copied from the committed reports and `../QUALIFICATION.md`. Nothing wa
 |---|---|---|
 | `synth validate buck.synth` (A1) | exit 0, 0 errors, 14 warnings (3 W-SYNTH-PART-UNVERIFIED, 3 E-SYNTH-SCHEM-003, 1 E-SYNTH-SCHEM-004, 4 E-SYNTH-SCHEM-005, 1 W-SYNTH-ANOMALY-001, 2 W-SYNTH-SUPPLY-002) | QUALIFICATION.md, README.md (not a committed report) |
 | Negative twin (A2) | `buck_neg_fb_sw.synth` exits 1 with E-SYNTH-POWER-011; good board does not raise it | QUALIFICATION.md |
-| Connectivity (A3) | 13 nets connected, 0 open, 0 unconnected pads, 97 segments, 21 vias, 200.08 mm; `fabrication_ready: true`; `blocking_reasons: []` | `reports/buck.connectivity.json`, `reports/buck.routing.json` |
+| Connectivity (A3) | 13 nets connected, 0 open, 0 unconnected pads, 97 segments, 21 vias, 200.08 mm; `fabrication_ready: true`; `blocking_reasons: []` (FreeRouting copper only; the `--fab` check in A18 fails and overrides this for qualification) | `reports/buck.connectivity.json`, `reports/buck.routing.json` |
 | KiCad DRC (A4) | 0 violations, 0 unconnected, 0 schematic-parity items; KiCad 10.0.7, 2026-10-29T13:51:01, severities error/warning/exclusion | `reports/buck.kicad-drc.json` |
 | KiCad ERC (A7) | 0 violations on the sheet | `reports/buck.kicad-erc.json` |
 | Release gate, no fab (A5) | `release_ready: true`, `production_status: production`, state `routed`, signal integrity 0 blocking / 0 warnings / no findings | `reports/release.json` |
-| Release gate, fab package (A6) | `release_ready: true`, `production_status: production`, `fab_requested: true`, state `routed`, signal integrity 0 findings; reviewer_state lists `lmr38010` and `ltst_c190kgkt` as reviewed (Steve Munene, 2026-10-29) | `reports/release-fab.json` |
+| Release gate, fab package (A6) | `release_ready: true`, `production_status: production`, `fab_requested: true`, state `routed`, signal integrity 0 findings; reviewer_state lists `lmr38010` and `ltst_c190kgkt` as reviewed (Steve Munene, 2026-10-29; the author, not an independent reviewer) | `reports/release-fab.json` |
 | Netlist vs source (A8) | 13 nets, 27 components, node for node | QUALIFICATION.md |
 | Registry qualify (B8) | 8 of 8 registry parts qualify (`lmr38010`, `l_bourns_srn6045ta_6r8m`, `ss36`, `smbj30a`, `mf_msmf110_33x`, `jst_b2b_xh_a_2pin`, `jst_b4b_xh_a_4pin`, `c_electrolytic_smd_8x10`); `mf_msmf110_33x` carries review finding E-SYNTH-QUAL-016 (3D model not installed) | `reports/registry-qualify.txt` |
 | Return-via proximity (A9) | 0 W-SYNTH-DRC-016 in both release files; a proximity test, not a return-path analysis | `reports/release.json`, `reports/release-fab.json` |
