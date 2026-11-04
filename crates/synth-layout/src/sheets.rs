@@ -227,6 +227,37 @@ fn split_layout_with_pinned(
                     &note_homes,
                 )
             };
+            // `power_nets` are excluded from hierarchical stubs below, and
+            // the cross-sheet wire is dropped, so a page that touches a power
+            // net must carry a power symbol of its own. The global classifier
+            // flags every endpoint, but make that guarantee here: a sheet
+            // whose only endpoints are passive pins (a decoupling bank with
+            // its regulator on another page) would otherwise lose the net.
+            for net in &power_nets {
+                if !cross_net.contains(net) || layout.power_flags.iter().any(|f| f.net == *net) {
+                    continue;
+                }
+                let Some(flag) = global.power_flags.iter().find(|f| f.net == *net) else {
+                    continue;
+                };
+                let Some(endpoint) = board
+                    .net(*net)
+                    .into_iter()
+                    .flat_map(|net| net.endpoints.iter())
+                    .find(|e| {
+                        members.contains(&e.component) && board.pin(e.component, e.pin).is_some()
+                    })
+                else {
+                    continue;
+                };
+                layout.power_flags.push(crate::PowerFlag {
+                    net: *net,
+                    component: endpoint.component,
+                    pin: endpoint.pin,
+                    kind: flag.kind,
+                    label: flag.label.clone(),
+                });
+            }
             // A wire survives only on its net's home sheet: nets touching
             // several partitions lose their wires everywhere (hierarchical
             // stubs take over).
@@ -1515,5 +1546,89 @@ mod tests {
             );
             assert_eq!(sheet.layout.power_flags.len(), 1);
         }
+    }
+
+    #[test]
+    fn a_passive_only_sheet_keeps_the_global_power_symbol() {
+        use synth_registry::ElectricalType as Et;
+        let out = RegPin {
+            name: "vout".to_string(),
+            number: PinNumber("1".to_string()),
+            electrical_type: Et::PowerOutput,
+            capabilities: Vec::new(),
+            required: false,
+            footprint_only: false,
+            unit: None,
+            voltage_max_v: None,
+            voltage_min_v: None,
+            voltage_nominal_v: None,
+        };
+        let b = board(
+            vec![
+                component(0, "U1", Some("Driver"), vec![out]),
+                component(1, "C1", Some("Load"), vec![pin("p1")]),
+            ],
+            vec![net(0, "VCC", &[(0, 0), (1, 0)])],
+        );
+        let mut global = layout(vec![placed(0, 30.0, 30.0), placed(1, 1200.0, 30.0)], vec![]);
+        global.power_flags = crate::classify_power_flags(&b);
+        assert_eq!(global.power_flags.len(), 2);
+        let sheets = split_layout(&b, &global, &plan_sheets(&b));
+        let load = sheets
+            .iter()
+            .find(|s| s.name.as_deref() == Some("Load"))
+            .expect("the Load sheet");
+        assert_eq!(
+            load.layout
+                .power_flags
+                .iter()
+                .filter(|f| f.net == NetId(0) && f.component == ComponentId(1))
+                .count(),
+            1,
+            "the passive-only Load sheet lost the VCC symbol: {:?}",
+            load.layout.power_flags
+        );
+        // The pinned path copies the global flags instead of re-laying out;
+        // it must keep the same local symbol.
+        let pinned = split_layout_with_pinned(&b, &global, &plan_sheets(&b), true);
+        let load = pinned
+            .iter()
+            .find(|s| s.name.as_deref() == Some("Load"))
+            .expect("the pinned Load sheet");
+        assert_eq!(
+            load.layout
+                .power_flags
+                .iter()
+                .filter(|f| f.net == NetId(0) && f.component == ComponentId(1))
+                .count(),
+            1,
+            "the pinned Load sheet lost the VCC symbol: {:?}",
+            load.layout.power_flags
+        );
+        // Even a global layout that flags only the driver must not leave the
+        // passive-only page without a symbol.
+        let mut partial = layout(vec![placed(0, 30.0, 30.0), placed(1, 1200.0, 30.0)], vec![]);
+        partial.power_flags = vec![crate::PowerFlag {
+            net: NetId(0),
+            component: ComponentId(0),
+            pin: PinId(0),
+            kind: crate::PowerFlagKind::Vcc,
+            label: "VCC".to_string(),
+        }];
+        let sheets = split_layout(&b, &partial, &plan_sheets(&b));
+        let load = sheets
+            .iter()
+            .find(|s| s.name.as_deref() == Some("Load"))
+            .expect("the partial-flag Load sheet");
+        assert_eq!(
+            load.layout
+                .power_flags
+                .iter()
+                .filter(|f| f.net == NetId(0) && f.component == ComponentId(1))
+                .count(),
+            1,
+            "a partial global flag set left the Load sheet isolated: {:?}",
+            load.layout.power_flags
+        );
     }
 }
