@@ -20,7 +20,7 @@ The design is `protected_power_entry.synth` with its placement sidecar `protecte
 
 ## Power and operation
 
-- The board is powered from J1: 12 V nominal, 10.8 to 13.0 V.
+- The board is powered from J1: 12 V nominal, 12 V +/-5 % (10.8 to 12.6 V).
 - The 5 V rail carries up to 1.5 A and the 3.3 V rail up to 0.35 A.
 - LOAD_EN on J2 pin 3 switches the +5V_SW output.
 
@@ -89,7 +89,7 @@ Power flows left to right, from `J1` through the protection and the buck to the 
 
 ## Input protection
 
-The supply is 12 V nominal, 10.8 to 13.0 V. `D1` is an SMAJ13A (Littelfuse SMAJ series datasheet: standoff 13.0 V, at or above the maximum input; breakdown 14.40 to 15.90 V at 1 mA; 1 uA maximum leakage at the standoff; 21.5 V clamp at 18.6 A) on the fused input, ahead of `Q1`, so a transient is clamped before it reaches the MOSFET. The surge requirement is at most 18.6 A peak (10/1000 us), set by the source impedance. The 21.5 V clamp is 1.5 V below the MP2307's 23 V recommended input, 4.5 V below its 26 V absolute maximum (MPS datasheet) and 8.5 V below the 30 V drain-source rating of `Q1`. A reversed supply forward-biases `D1` and `F1` opens. `D9` holds the gate of `Q1` within 5.1 V of its source, against the 12 V gate-source rating.
+The supply is 12 V nominal, 12 V +/-5 % (10.8 to 12.6 V), and 12.6 V is the qualified maximum. `D1` is an SMAJ13A (Littelfuse SMAJ series datasheet: standoff 13.0 V, 0.4 V (3.2 %) above the maximum input; breakdown 14.40 to 15.90 V at 1 mA, 1.8 V above the maximum input; 1 uA maximum leakage at the standoff, lower at 12.6 V; 21.5 V clamp at 18.6 A) on the fused input, ahead of `Q1`, so a transient is clamped before it reaches the MOSFET. The surge requirement is at most 18.6 A peak (10/1000 us), set by the source impedance. The 21.5 V clamp is 1.5 V below the MP2307's 23 V recommended input, 4.5 V below its 26 V absolute maximum (MPS datasheet) and 8.5 V below the 30 V drain-source rating of `Q1`. A reversed supply forward-biases `D1` and `F1` opens. `D9` holds the gate of `Q1` within 5.1 V of its source, against the 12 V gate-source rating.
 
 ## AMS1117 operating envelope
 

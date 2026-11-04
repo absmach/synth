@@ -25,8 +25,8 @@ board "protected_power_entry" {
     component C1: capacitor "c_electrolytic_100uf" value "100uF 25V" { placement_hint { near: "U1.in" priority: hard } }
     notes "" {
       "J1 pin 1 = +12 V, pin 2 = GND (JST S2B-XH-A, mate with XHP-2)."
-      "Supply range 10.8 to 13.0 V. Chain: J1 > F1 > (D1 TVS to GND) > Q1 > +12V_PROT."
-      "D1 SMAJ13A (Littelfuse): standoff 13.0 V, at or above the 13.0 V maximum input; leakage 1 uA max at 13.0 V; clamp 21.5 V max at 18.6 A."
+      "Supply range 12 V +/-5 %, 10.8 to 12.6 V, qualified maximum 12.6 V. Chain: J1 > F1 > (D1 TVS to GND) > Q1 > +12V_PROT."
+      "D1 SMAJ13A (Littelfuse): standoff 13.0 V, 0.4 V above the 12.6 V maximum input; leakage 1 uA max at 13.0 V, lower at 12.6 V; clamp 21.5 V max at 18.6 A."
       "D1 clamps on VIN_12V_FUSED before Q1: 21.5 V is below Q1 AO3401A 30 V drain-source, MP2307 23 V recommended input and 26 V absolute maximum."
       "A reversed supply forward-biases D1 and F1 opens."
       "Q1 source = load side, drain = input side. D9 5.1 V zener limits |Vgs| through R1 47k; Q1 AO3401A (Alpha & Omega): 30 V drain-source, 12 V gate-source maximum, so the 5.1 V zener leaves 6.9 V of margin."
