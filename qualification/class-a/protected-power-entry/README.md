@@ -173,3 +173,18 @@ With the random ids masked the routed board is `9ebe15a562` in all three exports
 ## Human review
 
 Every part of the board is recorded as reviewed by JeffMboya, with the review date and the datasheet or product page, in the 35 part files of [`reproduce/user-registry/`](reproduce/user-registry/) (`reviewed_by`, `reviewed_at`, `datasheet_url`).
+
+### PCB review sign-off
+
+PCB review sign-off required by #39: JeffMboya, 2026-11-04, on the package in `fab/` (Gerber content hash `76a311a42f`). The sign-off is JeffMboya's own. Jeff Mboya is the independent PCB reviewer as well as the author of this pull request. It covers, each verified and approved by JeffMboya:
+
+| Item | Signed off |
+|---|---|
+| PCB and Gerber package | the Gerbers, drill, BOM and CPL of `fab/` and the exported KiCad board, hash `76a311a42f` |
+| Return paths | the 1 return-via advisory of the routing report, `+12V_PROT` (2.69 mm to the nearest ground via), as checked in "Return paths" above; JeffMboya accepts this arrangement for the buck's switching-current loop: the switching current is supplied by `C2` to `C4` at the regulator pins, and the 2.69 mm detour adds about 5.4 nH, 1.6 mV at the buck's ripple current; and the `edge_rate slow` declaration of the `PWR12`, `PWR5` and `PWR3` net classes |
+| ERC | the 2 warnings: `Si2301CDS` absent from KiCad 10.0.6's `Transistor_FET` library (`Q1`) and the `BUCK_EN` label on a wire of its own net |
+| DRC | the 80 `lib_footprint_mismatch` warnings, each a footprint whose silkscreen differs from the library copy while its pads, courtyard and fabrication outline match it |
+| Power copper | the declared and exported widths: every power track of the export is at its declared class width, `+5V` 0.6 mm against the 0.53 mm that 1.5 A needs, with no narrowed section and no `rejected` engine verdict; the nearest through-hole to SMD pad pair at 2.13 mm |
+| Input protection and thermal | the qualified input of 12 V +/-5 % (10.8 to 12.6 V, maximum 12.6 V), the SMAJ13A margins against the MP2307 and `Q1` with its 13.0 V standoff as the upper bound of the checks, and the AMS1117 envelope of 0.35 A to 71 C ambient |
+| Placement | the placement of the 84 parts on 114.9 x 76.0 mm, 12.4 % courtyard fill, with the regions, current loops, heat sources and connector access of "Placement" above, connectors flush on the edges, a mounting hole in each corner, and the decoupler distances listed above |
+| Parts and values | the BOM identities of `fab/`, including `D9` and `D10` (Micro Commercial Components BZT52C5V1-TP, JLCPCB listing `C78728`), and the values of the circuit |
