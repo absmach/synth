@@ -1,3 +1,5 @@
+> **Retrospective documentation reconstruction, not reproducible prompt-to-PCB evidence.** The exact prompt, ordered tool calls, model and tool versions, and export session report were not saved. This board is **not Class-B qualified** (`qualified: false`). Interface limits: USB is bench-only (25.11 mm DP/DN skew, no coupled pair, no controlled impedance, no independent SI review); RS-485 is short-cable, point-to-point or last-node bench use only (no A/B surge protection, 120 ohm termination always fitted). The JLCPCB DFM record is for the previous revision and the final files were not re-uploaded.
+
 Design notes reconstructed from the committed files. The board was built by an agent; `prompt.md` is the cleaned brief it was given (same text as the website showcase), not the exact text that was run. No tool-call log or report was saved.
 
 # USB-C dual UART + RS-485 adapter (SYN-66): design notes

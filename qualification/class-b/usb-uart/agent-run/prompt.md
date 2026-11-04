@@ -82,4 +82,4 @@ Found by comparing this brief with the committed files and the session transcrip
 
 ## Outcome of the committed board (not an input)
 
-2 layers, 40.99 x 32.23 mm, 273 track segments, 43 vias, 515.4 mm of copper. The README gives the U1 pad via at (23.900, 17.300) while `reports/release.json` and the routing record give (23.800, 17.300). The two disagree in the repository.
+2 layers, 40.99 x 32.23 mm, 273 track segments, 43 vias, 515.4 mm of copper. The README previously gave the U1 pad via at (23.900, 17.300); it now matches the PCB, `reports/release.json` and the routing record at (23.800, 17.300).

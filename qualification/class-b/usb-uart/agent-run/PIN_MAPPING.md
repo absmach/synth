@@ -31,7 +31,7 @@ Named nets: VBUS, +3V3, VIO, GND. Connect-statement nets are named in the Net co
 | 22 | DSR0 | MODEM_IDLE |
 | 23 | DTR0/TNOW0 | TNOW0 (U3.DE, U3./RE, R_TNOW) |
 | 24 | DCD0 | MODEM_IDLE |
-| 25 | EP | GND (via-in-pad at about (23.9, 17.3) mm per README.md) |
+| 25 | EP | GND (via-in-pad at (23.8, 17.3) mm per the PCB and `reports/release.json`) |
 
 ## U3 THVD1450D (SOIC-8) - datasheet https://www.ti.com/lit/gpn/THVD1450 (README.md: SLLSEY3E)
 | Pin | Name | Net |
