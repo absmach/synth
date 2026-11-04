@@ -645,6 +645,11 @@ fn component_edge_bounds(
     courtyard: Rect,
 ) -> Rect {
     if component.kind != "mounting_hole" {
+        // An edge connector is docked to Edge.Cuts: its courtyard often
+        // overhangs, but its copper is what has to stay on the board.
+        if is_edge_flush_connector(component) {
+            return exported_pad_bounds(component, placed).unwrap_or(courtyard);
+        }
         return courtyard;
     }
     let radius_nm = component

@@ -50,6 +50,10 @@ bottom edge midpoints, away from every mounting hole. A copper zone on each
 layer is not an electrical connection between layers; without these vias the
 planes are unstitched before routing.
 
+The three Hall connectors are vertical 1x3 headers in a column on the left, with
+their filter parts in the same three rows. The three headers on the bottom edge
+(J_ENC, J_SWD, J_RS485) share one pin-row height.
+
 The passive reference labels are hidden on the silkscreen (the sidecar `[labels]`
 table) so the auto-placed text does not collide; every part is still in the BOM
 and the pick-and-place.
