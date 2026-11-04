@@ -130,6 +130,14 @@ expression: board
           "min_voltage_v": null,
           "max_voltage_v": 50.0,
           "max_current_ma": null
+        },
+        "provenance": {
+          "source": "seed",
+          "generator": null,
+          "datasheet_url": null,
+          "reviewed_by": "JeffMboya",
+          "reviewed_at": "2026-11-01",
+          "upstream_lcsc_pn": null
         }
       },
       "source_span": {
@@ -186,6 +194,14 @@ expression: board
           "min_voltage_v": null,
           "max_voltage_v": 50.0,
           "max_current_ma": null
+        },
+        "provenance": {
+          "source": "seed",
+          "generator": null,
+          "datasheet_url": null,
+          "reviewed_by": "JeffMboya",
+          "reviewed_at": "2026-11-01",
+          "upstream_lcsc_pn": null
         }
       },
       "dnp": true,
@@ -243,6 +259,14 @@ expression: board
           "min_voltage_v": null,
           "max_voltage_v": 50.0,
           "max_current_ma": null
+        },
+        "provenance": {
+          "source": "seed",
+          "generator": null,
+          "datasheet_url": null,
+          "reviewed_by": "JeffMboya",
+          "reviewed_at": "2026-11-01",
+          "upstream_lcsc_pn": null
         }
       },
       "group": "Input",
