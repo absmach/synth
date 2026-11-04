@@ -137,6 +137,10 @@ fn no_two_active_parts_share_a_manufacturer_part_number() {
     // boards, so renaming either would change them: they are listed rather than
     // allowed, and a new duplicate fails.
     const PREDATING: [&str; 2] = ["rp2350a", "w25q128jvsiq"];
+    // The CM4 DF40 is one physical 100-pin connector split into two logical
+    // 100-pin halves (J_CM4A/J_CM4B) because the CM4 pin table is published in
+    // two halves. Both IDs are active on the carrier; they are not two parts.
+    const SPLIT_PARTS: [&str; 1] = ["df40c-100ds-0.4v(51)"];
     let dir = workspace_root().join("registry").join("parts");
     let registry = synth_registry::load_dir(&dir).expect("seed registry must load without errors");
     let mut by_mpn: BTreeMap<String, Vec<String>> = BTreeMap::new();
@@ -153,7 +157,11 @@ fn no_two_active_parts_share_a_manufacturer_part_number() {
     }
     let duplicates: Vec<_> = by_mpn
         .iter()
-        .filter(|(mpn, ids)| ids.len() > 1 && !PREDATING.contains(&mpn.as_str()))
+        .filter(|(mpn, ids)| {
+            ids.len() > 1
+                && !PREDATING.contains(&mpn.as_str())
+                && !SPLIT_PARTS.contains(&mpn.as_str())
+        })
         .collect();
     assert!(
         duplicates.is_empty(),
