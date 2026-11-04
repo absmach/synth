@@ -362,7 +362,9 @@ pub fn plan_multisheet(
 mod tests {
     use super::*;
     use synth_diagnostics::Span;
-    use synth_ir::{Component, ComponentId, Net};
+    use synth_ir::{
+        Component, ComponentId, Net, NetEndpoint, NetId, PinId, SchematicOverflow, SchematicPaper,
+    };
     use synth_layout::sheets::layout_sheets;
     use synth_layout::{ComponentPlacement, Layout, Rotation, SheetSize};
     use synth_registry::{ElectricalType, Lifecycle, Part, PartId, Pin as RegPin, PinNumber};
@@ -468,6 +470,73 @@ mod tests {
         }
     }
 
+    /// A power net spanning two sheets must keep a power symbol on a sheet
+    /// that holds only passive pins of it: the split drops the cross-sheet
+    /// wire and skips hierarchical stubs for power nets, so the symbol is
+    /// the only connection.
+    #[test]
+    fn a_cross_sheet_power_net_exports_a_power_symbol_on_a_passive_only_sheet() {
+        use synth_registry::ElectricalType as Et;
+        let power_out = RegPin {
+            name: "vcc".to_string(),
+            number: PinNumber("1".to_string()),
+            electrical_type: Et::PowerOutput,
+            capabilities: Vec::new(),
+            required: false,
+            footprint_only: false,
+            unit: None,
+            voltage_max_v: None,
+            voltage_min_v: None,
+            voltage_nominal_v: None,
+        };
+        let mut components = Vec::new();
+        for id in 0..40 {
+            components.push(component(id, Some("A")));
+        }
+        for id in 40..80 {
+            components.push(component(id, Some("B")));
+        }
+        components[0].refdes = "U1".to_string();
+        components[0].part = Some(part(vec![power_out]));
+        components[40].refdes = "C1".to_string();
+        components[40].part = Some(part(vec![pin("p1")]));
+        let mut b = board(
+            components,
+            vec![Net {
+                id: NetId(0),
+                name: "VCC".to_string(),
+                auto_named: false,
+                endpoints: vec![
+                    NetEndpoint {
+                        component: ComponentId(0),
+                        pin: PinId(0),
+                        source_span: Span::new(0, 0),
+                    },
+                    NetEndpoint {
+                        component: ComponentId(40),
+                        pin: PinId(0),
+                        source_span: Span::new(0, 0),
+                    },
+                ],
+                netclass: None,
+                voltage: None,
+            }],
+        );
+        // A tiny requested page forces the split without a huge fixture.
+        b.schematic_paper = Some(SchematicPaper::A5);
+        b.schematic_overflow = Some(SchematicOverflow::Hierarchy);
+        let dir = tempfile::tempdir().expect("temp dir");
+        let out = crate::export_schematic_only(&b, dir.path(), None).expect("export");
+        assert!(out.sheet_count >= 3, "root + A + B");
+        let a = std::fs::read_to_string(dir.path().join("test_A.kicad_sch")).expect("A sheet");
+        let load = std::fs::read_to_string(dir.path().join("test_B.kicad_sch")).expect("B sheet");
+        assert!(a.contains("power:VCC"), "driver sheet lost VCC:\n{a}");
+        assert!(
+            load.contains("power:VCC"),
+            "passive-only sheet lost VCC:\n{load}"
+        );
+    }
+
     #[test]
     fn small_board_stays_single_file() {
         let b = board(
@@ -475,7 +544,7 @@ mod tests {
             vec![],
         );
         let global = layout_at(&[(0, 50.0, 50.0), (1, 100.0, 50.0)]);
-        let sheets = layout_sheets(&b, global);
+        let sheets = layout_sheets(&b, global, None);
         assert_eq!(sheets.len(), 1, "small boards keep the single-file path");
         assert_eq!(sheets[0].name, None);
     }
@@ -489,7 +558,7 @@ mod tests {
             vec![],
         );
         let global = layout_at(&[(0, 50.0, 50.0), (1, 900.0, 50.0), (2, 1700.0, 50.0)]);
-        let sheets = layout_sheets(&b, global);
+        let sheets = layout_sheets(&b, global, None);
         assert_eq!(
             sheets.len(),
             1,
@@ -517,7 +586,7 @@ mod tests {
             (2, 1400.0, 50.0),
             (3, 1500.0, 50.0),
         ]);
-        let sheets = layout_sheets(&b, global);
+        let sheets = layout_sheets(&b, global, None);
         assert_eq!(sheets.len(), 3, "root + A + B");
         assert_eq!(sheets[0].name, None);
         let names: Vec<_> = sheets[1..].iter().map(|s| s.name.clone()).collect();
@@ -541,8 +610,8 @@ mod tests {
             vec![],
         );
         let mk = || layout_at(&[(0, 50.0, 50.0), (1, 800.0, 50.0), (2, 900.0, 50.0)]);
-        let a = layout_sheets(&b, mk());
-        let z = layout_sheets(&b, mk());
+        let a = layout_sheets(&b, mk(), None);
+        let z = layout_sheets(&b, mk(), None);
         assert_eq!(a, z, "split output must be byte-deterministic");
     }
 
@@ -624,7 +693,7 @@ mod tests {
             .board
             .unwrap();
         let global = synth_layout::layout(&board);
-        let sheets = synth_layout::sheets::layout_sheets(&board, global);
+        let sheets = synth_layout::sheets::layout_sheets(&board, global, None);
         assert!(
             sheets.len() > 1,
             "board must be large enough to split, got {} sheet(s)",
@@ -695,7 +764,7 @@ mod tests {
         // board genuinely splits and this test exercises a multi-sheet
         // root rather than a single sheet.
         let global = layout_at(&[(0, 50.0, 50.0), (1, 1400.0, 50.0), (2, 1500.0, 50.0)]);
-        let sheets = layout_sheets(&b, global);
+        let sheets = layout_sheets(&b, global, None);
         assert!(sheets.len() > 1, "precondition: the board splits");
         let project = crate::uuid_v5::project_namespace(&b.name);
         let root_uuid = derive_entity_uuid(&project, "sheet", "root");

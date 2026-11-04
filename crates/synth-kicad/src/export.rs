@@ -277,7 +277,8 @@ fn export_inner(
     // before) or one file per sheet boundary (large boards only).
     // The project file below lists every sheet, so it comes after.
     let global_layout = synth_layout::layout_with_sidecar(board, sidecars.schematic_path());
-    let sheets = synth_layout::sheets::layout_sheets(board, global_layout);
+    let sheets =
+        synth_layout::sheets::layout_sheets(board, global_layout, sidecars.schematic_path());
     let project_namespace = uuid_v5::project_namespace(&board.name);
     // Project file (.kicad_pro): minimal JSON. KiCad fills in the
     // rest on first open; the deterministic root keeps diffs stable.
@@ -552,7 +553,7 @@ pub fn export_schematic_only(
     let library_path = out_dir.join(format!("{stem}.kicad_sym"));
 
     let global_layout = synth_layout::layout_with_sidecar(board, schematic_sidecar);
-    let sheets = synth_layout::sheets::layout_sheets(board, global_layout);
+    let sheets = synth_layout::sheets::layout_sheets(board, global_layout, schematic_sidecar);
     let project_namespace = uuid_v5::project_namespace(&board.name);
 
     let mut sheet_entries = vec![vec![

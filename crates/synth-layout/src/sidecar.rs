@@ -301,12 +301,21 @@ pub struct ForcedNetLabel {
     pub source: OverrideSource,
 }
 
+/// True when `path` is a schematic sidecar that pins at least one component.
+///
+/// A sidecar with only a page fit or forced labels leaves the layout free to
+/// re-pack; one with component positions is a drawing the author arranged by
+/// hand, so the multi-sheet split must keep it as it is.
+pub fn has_component_overrides(path: Option<&Path>) -> bool {
+    path.and_then(SidecarLayout::load_from_file)
+        .is_some_and(|sidecar| !sidecar.components.is_empty())
+}
+
 impl SidecarLayout {
     pub fn load_from_file(path: &Path) -> Option<Self> {
         let content = std::fs::read_to_string(path).ok()?;
         toml::from_str(&content).ok()
     }
-
     pub fn save_to_file(&self, path: &Path) -> std::io::Result<()> {
         let content = toml::to_string_pretty(self)
             .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, e))?;
