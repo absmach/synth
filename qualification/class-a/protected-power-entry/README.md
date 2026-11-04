@@ -74,6 +74,8 @@ The routing report ([`export/protected_power_entry.routing.json`](export/protect
 
 ## Placement
 
+The courtyard fill of 12.4 % is tracked in [absmach/synth#427](https://github.com/absmach/synth/issues/427).
+
 The outline, 114.9 x 76.0 mm, is set by the connectors and the corner holes: J1 on the left edge, J3, J4 and J5 flush on the right edge (98 to 106 mm), the control header J2 along the bottom, and a mounting hole in each corner. The functional regions, by the part positions of the exported board:
 
 | Region | Parts | Extent (mm) | Constraint it follows |
@@ -96,6 +98,8 @@ The supply is 12 V nominal, 12 V +/-5 % (10.8 to 12.6 V), and 12.6 V is the qual
 The supported load on the 3.3 V rail is 0.35 A from the 5.0 V rail: P = (5.0 - 3.3) V x 0.35 A = 0.60 W. At the datasheet's 90 C/W for the SOT-223 the junction rises 54 C, so the ambient may reach 71 C at the 125 C junction limit. The load limit at 70 C ambient is (125 - 70) C / (90 C/W x 1.7 V) = 0.36 A.
 
 ## Return paths
+
+Ground-return vias at layer changes are tracked in [absmach/synth#280](https://github.com/absmach/synth/issues/280).
 
 The routing report lists 1 non-blocking return-via advisory: a track changes layer at a via with no ground-return via within 1.53 mm and no spot in the GND pour for one. The rule treats a net as fast unless its net class declares `edge_rate slow`; `PWR12`, `PWR5` and `PWR3` declare it, because they are supply rails held by capacitors with no switching edge, while `SWNODE` (the buck's switching node) does not, and nets with analog, clock or differential pins stay critical whatever their class says. It is checked below against the nearest ground via on the exported board. Both layers carry a GND pour, so the return current stays on a continuous plane; the finding is that its path to a stitching via is longer than the rule's window.
 
@@ -121,7 +125,7 @@ The README's measurements are the delivered board's. Open nets: 0, in both files
 
 All figures are for the released artifact, Gerber content hash `76a311a42f`, DRC and ERC with the footprint and symbol library tables configured ([`reports/`](reports/)). Each warning is accepted by JeffMboya's sign-off below, for the reason given.
 
-**DRC: 80 `lib_footprint_mismatch` warnings, 0 errors, 0 unconnected.** Every one is a footprint whose silkscreen differs from its library copy, because Synth cuts silkscreen back from vias and pads so the silkscreen stays 0.25 mm clear of copper (JLCPCB's minimum is 0.15 mm). The pads, courtyard and fabrication outline of each are identical to the library file, checked by [`footprint_diff.py`](agent-run/tools/footprint_diff.py):
+**DRC: 80 `lib_footprint_mismatch` warnings, 0 errors, 0 unconnected.** Every one is a footprint whose silkscreen differs from its library copy, because Synth cuts silkscreen back from vias and pads so the silkscreen stays 0.25 mm clear of copper ([absmach/synth#425](https://github.com/absmach/synth/issues/425)) (JLCPCB's minimum is 0.15 mm). The pads, courtyard and fabrication outline of each are identical to the library file, checked by [`footprint_diff.py`](agent-run/tools/footprint_diff.py):
 
 | Footprint | Warnings | Differs from the library in |
 |---|---|---|
@@ -146,8 +150,8 @@ All figures are for the released artifact, Gerber content hash `76a311a42f`, DRC
 
 | Warning | Why it is acceptable |
 |---|---|
-| `lib_symbol_issues`: symbol `Si2301CDS` not found in `Transistor_FET` (`Q1`) | The part's registry entry names a symbol that KiCad's library does not contain, so the exporter draws its own symbol. Its three pins (gate, source, drain) are connected as the schematic shows and the pin numbers match the SOT-23 footprint. |
-| `label_multiple_wires`: the `BUCK_EN` label sits on a 25.4 mm wire where a second wire meets it | Both wires carry `BUCK_EN`, so the label names one net. The netlist is unchanged by it. |
+| `lib_symbol_issues`: symbol `Si2301CDS` not found in `Transistor_FET` (`Q1`) | The part's registry entry names a symbol that KiCad's library does not contain, so the exporter draws its own symbol ([absmach/synth#96](https://github.com/absmach/synth/issues/96)). Its three pins (gate, source, drain) are connected as the schematic shows and the pin numbers match the SOT-23 footprint. |
+| `label_multiple_wires`: the `BUCK_EN` label sits on a 25.4 mm wire where a second wire meets it | Both wires carry `BUCK_EN`, so the label names one net. The netlist is unchanged by it ([absmach/synth#426](https://github.com/absmach/synth/issues/426)). |
 
 ## Reproducibility
 
