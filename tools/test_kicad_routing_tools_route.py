@@ -75,6 +75,76 @@ def run_adapter(summaries):
 CLEAN = {"successful": 2, "failed": 0}
 
 
+QFN_STUB = """\\
+import json, sys
+from pathlib import Path
+
+here = Path(__file__).parent
+with (here / "perimeter.log").open("a") as log:
+    log.write(" ".join(sys.argv[1:]) + "\\n")
+plan = json.loads((here / "perimeter.json").read_text()) if (here / "perimeter.json").exists() else {}
+if plan.get("exit", 0):
+    sys.exit(plan["exit"])
+out = Path(sys.argv[sys.argv.index("--output") + 1])
+out.write_text(Path(sys.argv[1]).read_text() + "(perimeter-stubs)")
+print("JSON_SUMMARY: " + json.dumps({
+    "requested": plan.get("requested", 17), "escaped": plan.get("escaped", 17),
+    "failed": plan.get("failed", 0), "unescaped_nets": []}))
+"""
+
+
+def run_perimeter(plan=None, summaries=None):
+    """Run the adapter with one perimeter package; return (exit code, last route input, qfn calls)."""
+    with tempfile.TemporaryDirectory() as tmp:
+        repo = Path(tmp) / "krt"
+        (repo / "py_router").mkdir(parents=True)
+        (repo / "py_router" / "route.py").write_text(STUB)
+        (repo / "py_router" / "qfn_fanout.py").write_text(QFN_STUB)
+        (repo / "py_router" / "summaries.json").write_text(
+            json.dumps(summaries or [{"summary": CLEAN}]))
+        if plan is not None:
+            (repo / "py_router" / "perimeter.json").write_text(json.dumps(plan))
+        board = Path(tmp) / "in.kicad_pcb"
+        board.write_text("(kicad_pcb)")
+        done = subprocess.run(
+            [sys.executable, str(ADAPTER), str(board), str(Path(tmp) / "out.kicad_pcb"),
+             "--repo", str(repo), "--python", sys.executable,
+             "--perimeter-component", "U2"],
+            capture_output=True, text=True, check=False,
+        )
+        routed = (repo / "py_router" / "calls.log").read_text().splitlines()[-1].split()[0]
+        log = repo / "py_router" / "perimeter.log"
+        return done.returncode, Path(routed).name, log.read_text().splitlines() if log.exists() else []
+
+
+FAILED = {"summary": {"successful": 1, "failed": 1}}
+
+
+class PerimeterTest(unittest.TestCase):
+    def test_a_board_that_routes_plainly_is_never_fanned_out(self):
+        code, routed, calls = run_perimeter()
+        self.assertEqual(code, 0)
+        self.assertEqual(calls, [], "the stubs must not touch a board that routed")
+        self.assertEqual(routed, "in.kicad_pcb")
+
+    def test_a_board_that_fails_plainly_is_routed_again_with_the_stubs(self):
+        code, routed, calls = run_perimeter(summaries=[FAILED, FAILED, {"summary": CLEAN}])
+        self.assertEqual(code, 0)
+        self.assertEqual(len(calls), 1)
+        self.assertIn("--component U2", calls[0])
+        self.assertNotEqual(routed, "in.kicad_pcb", "the retry must route the fanned board")
+
+    def test_the_stage_leaves_the_projects_clearances_alone(self):
+        _, _, calls = run_perimeter(summaries=[FAILED, FAILED, {"summary": CLEAN}])
+        self.assertIn("--no-fix-drc-settings", calls[0])
+
+    def test_a_perimeter_fanout_that_fails_leaves_the_failed_route_as_it_was(self):
+        code, routed, calls = run_perimeter({"exit": 1}, summaries=[FAILED])
+        self.assertNotEqual(code, 0)
+        self.assertEqual(len(calls), 1)
+        self.assertEqual(routed, "in.kicad_pcb")
+
+
 class RetryTest(unittest.TestCase):
     def test_a_clean_high_via_cost_attempt_is_not_retried(self):
         code, costs = run_adapter([CLEAN])

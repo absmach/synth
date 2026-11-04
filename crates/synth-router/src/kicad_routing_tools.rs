@@ -193,7 +193,8 @@ pub fn build_command(
     // 0.8 mm clears the 0.687 mm two vias need between centres. Needing an
     // escape and failing one are different questions.
     let candidates = escape_plan(request);
-    if !candidates.is_empty() {
+    let escaping = !candidates.is_empty();
+    if escaping {
         // Escape with the smallest via the declared process permits, not with
         // the engine's default. Measured without this, the escape placed 11
         // vias under the fabrication minimum drill — the independent gate
@@ -237,6 +238,21 @@ pub fn build_command(
                 args.extend(["--escape-required".to_string(), escape.refdes.clone()]);
             }
         }
+    }
+    let perimeter = perimeter_plan(request);
+    if !perimeter.is_empty() && !escaping {
+        // The stub is routed to the board's clearance floor, not the adapter's
+        // own 0.1 mm default, for the reason the grid-array escape is.
+        args.extend([
+            "--escape-clearance".to_string(),
+            format!(
+                "{:.4}",
+                synth_ir::Length(request.policy.min_clearance_nm).to_mm()
+            ),
+        ]);
+    }
+    for refdes in perimeter {
+        args.extend(["--perimeter-component".to_string(), refdes]);
     }
     if let Some(ordering) = &options.ordering {
         args.extend(["--ordering".to_string(), ordering.clone()]);
@@ -292,6 +308,19 @@ fn escape_plan(request: &RouteRequest) -> Vec<String> {
         }
     }
     plan
+}
+
+/// Fine-pitch perimeter packages to give an escape stub before routing.
+///
+/// A package the design declared `escape { off }` on is left alone, and one
+/// that is a grid array is escaped by [`escape_plan`] instead.
+fn perimeter_plan(request: &RouteRequest) -> Vec<String> {
+    let off: std::collections::BTreeSet<&str> =
+        request.escapes_off.iter().map(String::as_str).collect();
+    crate::escape::fine_pitch_perimeter_in_baseline(request)
+        .into_iter()
+        .filter(|refdes| !off.contains(refdes.as_str()))
+        .collect()
 }
 
 /// Run KiCadRoutingTools over the request's baseline.
@@ -818,6 +847,45 @@ mod tests {
             y += pitch;
         }
         pads
+    }
+
+    /// A row of 0.65 mm pads in two rows' worth of pitch: a TSSOP-style body.
+    #[allow(clippy::cast_precision_loss)]
+    fn perimeter_pads(count: usize, pitch: f64) -> String {
+        use std::fmt::Write as _;
+        let mut pads = String::new();
+        for n in 1..=count {
+            let x = (n - 1) as f64 * pitch;
+            let _ = write!(
+                pads,
+                "    (pad \"{n}\" smd roundrect (at {x:.4} 0) (size 0.400 1.500)\n      \
+                 (layers \"F.Cu\" \"F.Paste\" \"F.Mask\") (net {n} \"N{n}\"))\n"
+            );
+        }
+        pads
+    }
+
+    /// A fine-pitch perimeter package is not a grid array, so the grid-array
+    /// stage never saw it and the maze router met its pads with no stub.
+    /// It is handed to the adapter's perimeter stage, routed to the board's
+    /// clearance floor rather than the adapter's own default, and a coarse
+    /// package is not.
+    #[test]
+    fn a_fine_pitch_perimeter_package_is_handed_to_the_perimeter_stage() {
+        let (request, dir) = with_baseline(&perimeter_pads(20, 0.65));
+        let joined = argv(&request);
+        std::fs::remove_dir_all(&dir).ok();
+        assert!(joined.contains("--perimeter-component U1"), "{joined}");
+        assert!(joined.contains("--escape-clearance"), "{joined}");
+        assert!(
+            !joined.contains("--fanout-component"),
+            "a row is not a grid array: {joined}"
+        );
+
+        let (request, dir) = with_baseline(&perimeter_pads(8, 1.27));
+        let joined = argv(&request);
+        std::fs::remove_dir_all(&dir).ok();
+        assert!(!joined.contains("--perimeter-component"), "{joined}");
     }
 
     /// The escape engine is driven from the baseline, so the flags only

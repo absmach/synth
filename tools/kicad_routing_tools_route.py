@@ -294,6 +294,54 @@ def _fanout(python: str, repo: Path, board: Path, components: list[str],
     return current
 
 
+def _perimeter(python: str, repo: Path, board: Path, components: list[str],
+               clearance: float) -> Path:
+    """Fan the pads of fine-pitch perimeter packages out, for a second routing attempt.
+
+    A TSSOP at 0.65 mm leaves a maze router a gap it finds on one pose of a
+    board and loses on a pose 3 % smaller. A stub on every pad gives it a
+    terminal on the grid instead. It is a retry, not a first step: the same
+    stubs turned a board that routed into one with a net open. This is
+    advisory where the grid-array stage is not: a package whose stubs cannot be written is routed as it was,
+    which is how these boards routed before the stage existed.
+
+    The engine rewrites the project's clearances to its own floor unless told
+    not to, so it is told not to: the board is judged against the classes it
+    was exported with.
+    """
+    fanout = repo / "py_router" / "qfn_fanout.py"
+    if not fanout.is_file():
+        print(f"warning: {fanout} is absent; perimeter packages are routed unescaped",
+              file=sys.stderr)
+        return board
+    current = board
+    for index, refdes in enumerate(components):
+        fanned = board.with_suffix(f".perimeter{index}.kicad_pcb")
+        fanned.unlink(missing_ok=True)
+        command = [
+            python, str(fanout), str(current),
+            "--component", refdes,
+            "--output", str(fanned),
+            "--clearance", str(clearance),
+            "--no-fix-drc-settings",
+        ]
+        print(f"escaping {refdes} (perimeter):", " ".join(command), flush=True)
+        done = subprocess.run(command, check=False, stdout=subprocess.PIPE, text=True)
+        sys.stdout.write(done.stdout)
+        sys.stdout.flush()
+        summary = _escape_summary(done.stdout)
+        if done.returncode != 0 or not fanned.is_file() or summary is None:
+            print(f"warning: perimeter escape of {refdes} did not complete; "
+                  "routing it unescaped", file=sys.stderr)
+            continue
+        if int(summary.get("failed") or 0):
+            print(f"warning: perimeter escape of {refdes} left "
+                  f"{summary.get('failed')} pad(s) unescaped", file=sys.stderr)
+        if int(summary.get("escaped") or 0):
+            current = fanned
+    return current
+
+
 def _load_summary(stats: Path) -> dict:
     """Read the engine's JSON summary, or explain why it could not be read."""
     if not stats.is_file():
@@ -404,6 +452,11 @@ def main() -> int:
     # route either way; a declared one also may not be skipped for want of
     # via-in-pad, where a geometrically selected one is skipped with a warning.
     parser.add_argument("--escape-required", action="append", default=[])
+    parser.add_argument(
+        "--perimeter-component", action="append", default=[],
+        help="Fine-pitch perimeter package (QFN, QFP, TSSOP) to fan out with a "
+             "surface stub before routing; advisory, unlike --fanout-component.",
+    )
     parser.add_argument("--escape-via-size", type=float)
     parser.add_argument("--escape-via-drill", type=float)
     args = parser.parse_args()
@@ -481,6 +534,23 @@ def main() -> int:
         stats.unlink(missing_ok=True)
         args.output_board.unlink(missing_ok=True)
         completed = subprocess.run(command, check=False)
+    # A fine-pitch package whose pads the maze router could not leave is given
+    # a stub on every pad and the board is routed once more. Only after a plain
+    # route has failed: a stub commits each pad's first lane, and a board that
+    # routed without one came back from the stage with a net open and a via in
+    # a pad.
+    if (completed.returncode or _failed_nets(stats)) and args.perimeter_component:
+        fanned = _perimeter(
+            args.python, args.repo, board_to_route, args.perimeter_component,
+            args.escape_clearance,
+        )
+        if fanned != board_to_route:
+            print("retrying KiCadRoutingTools with the perimeter packages fanned out",
+                  flush=True)
+            stats.unlink(missing_ok=True)
+            args.output_board.unlink(missing_ok=True)
+            command[2] = str(fanned)
+            completed = subprocess.run(command, check=False)
 
     policy_ok = completed.returncode == 0
     if completed.returncode:
