@@ -91,7 +91,18 @@ Power flows left to right, from `J1` through the protection and the buck to the 
 
 ## Input protection
 
-The supply is 12 V nominal, 12 V +/-5 % (10.8 to 12.6 V), and 12.6 V is the qualified maximum. `D1` is an SMAJ13A (Littelfuse SMAJ series datasheet: standoff 13.0 V, 0.4 V (3.2 %) above the maximum input; breakdown 14.40 to 15.90 V at 1 mA, 1.8 V above the maximum input; 1 uA maximum leakage at the standoff, lower at 12.6 V; 21.5 V clamp at 18.6 A) on the fused input, ahead of `Q1`, so a transient is clamped before it reaches the MOSFET. The surge requirement is at most 18.6 A peak (10/1000 us), set by the source impedance. The 21.5 V clamp is 1.5 V below the MP2307's 23 V recommended input, 4.5 V below its 26 V absolute maximum (MPS datasheet) and 8.5 V below the 30 V drain-source rating of `Q1`. A reversed supply forward-biases `D1` and `F1` opens. `D9` holds the gate of `Q1` within 5.1 V of its source, against the 12 V gate-source rating.
+The supply is 12 V nominal, 12 V +/-5 % (10.8 to 12.6 V), and 12.6 V is the qualified maximum. `D1` is an SMAJ13A (Littelfuse SMAJ series datasheet: standoff 13.0 V, 0.4 V (3.2 %) above the maximum input; breakdown 14.40 to 15.90 V at 1 mA, 1.8 V above the maximum input; 1 uA maximum leakage at the standoff, lower at 12.6 V; 21.5 V clamp at 18.6 A) on the fused input, ahead of `Q1`, so a transient is clamped before it reaches the MOSFET. The surge requirement is at most 18.6 A peak (10/1000 us), set by the source impedance. The 21.5 V clamp is 1.5 V below the MP2307's 23 V recommended input, 4.5 V below its 26 V absolute maximum (MPS datasheet) and 8.5 V below the 30 V drain-source rating of `Q1`. A reversed supply forward-biases `D1` and `F1` opens.
+
+Worst case against the datasheet limits, which are minimum and maximum values that already include the part tolerance:
+
+| Condition | Value | Limit | Margin |
+|---|---|---|---|
+| Supply at +5 % | 12.6 V | `D1` standoff 13.0 V minimum | 0.4 V (3.2 %); leakage at most 1 uA |
+| Supply raised to 13.0 V | 13.0 V | `D1` breakdown 14.40 V minimum at 1 mA | 1.4 V (10.8 %) |
+| Surge at the rated 18.6 A | 21.5 V clamp | MP2307 23 V recommended input | 1.5 V (6.5 %) |
+| Surge at the rated 18.6 A | 21.5 V clamp | MP2307 26 V absolute maximum, `Q1` 30 V | 4.5 V (17 %), 8.5 V (28 %) |
+
+The qualified envelope is a supply of at most 12.6 V and a surge of at most 18.6 A (10/1000 us); a source that can exceed either is outside it. The clamp is lower at smaller surge currents. `D9` holds the gate of `Q1` within 5.1 V of its source, against the 12 V gate-source rating.
 
 ## AMS1117 operating envelope
 
@@ -119,7 +130,7 @@ The routing report ([`export/protected_power_entry.routing.json`](export/protect
 | Vias | 27 | 44 (24 ground, 20 signal and power) | The router's own count, `claimed_total_vias`, is 20 and equals the 20 signal and power vias of the delivered board; Synth adds the further ground vias after the router reports, to tie ground-pour islands and for the return-via repair: 44 - 27 = 17 |
 | Connected nets | 34 | 34 | The engine routes 33 single-ended nets (`claimed_successful: 33`, all 33 of 33 in its log) and the `GND` pour completes the 34th |
 
-The README's measurements are the delivered board's. Open nets: 0, in both files.
+[`reports/delivered_board_counts.json`](reports/delivered_board_counts.json), made by [`delivered_counts.py`](agent-run/tools/delivered_counts.py) from the delivered board `protected_power_entry.kicad_pcb` (hash `4564963f46`), sets the board's own counts beside the report's: 288 segments, 44 vias (all 0.6 mm over a 0.2 mm drill), 873.4 mm of track, 0 DRC errors and 0 unconnected. The README's measurements are the delivered board's. Open nets: 0, in both files.
 
 ## Warnings and their disposition
 
@@ -172,7 +183,9 @@ With the random ids masked the routed board is `9ebe15a562` in all three exports
 
 ## Bill of materials and fabrication package
 
-[`fab/`](fab/) holds the files a quote needs: `protected_power_entry_gerbers.zip` (the Gerber layers and the Excellon drill file, from KiCad 10.0.6), `protected_power_entry_cpl.csv` (70 placements in JLCPCB's column order) and `protected_power_entry_bom_orderable.csv` (the exported BOM joined with [`agent-run/tools/sourcing.csv`](agent-run/tools/sourcing.csv): manufacturer, MPN, package, rating, datasheet or page, distributor and order number for the 84 lines), with `SHA256SUMS` and `GERBER_CONTENT_SHA256`. Regenerate them with [`fab_package.sh`](agent-run/tools/fab_package.sh).
+[`fab/`](fab/) holds the files a quote needs: `protected_power_entry_gerbers.zip` (the Gerber layers and the Excellon drill file, from KiCad 10.0.6), `protected_power_entry_cpl.csv` (70 placements in JLCPCB's column order) `protected_power_entry.step` (the board's STEP model, below) and `protected_power_entry_bom_orderable.csv` (the exported BOM joined with [`agent-run/tools/sourcing.csv`](agent-run/tools/sourcing.csv): manufacturer, MPN, package, rating, datasheet or page, distributor and order number for the 84 lines), with `SHA256SUMS` and `GERBER_CONTENT_SHA256`. The STEP model is exported by [`step_export.sh`](agent-run/tools/step_export.sh) with KiCad 10.0.6's `kicad-cli pcb export step` and checked by [`step_check.py`](agent-run/tools/step_check.py) ([`reports/step_check.txt`](reports/step_check.txt)): the ISO 10303-21 framing is complete, all 36,367 entities resolve with no dangling reference, and it holds 13 distinct solids (identical models are shared) for the 70 footprints that name a model. KiCad's STEP writer numbers its entities differently on every run, so the file hash in `SHA256SUMS` is not reproducible; the geometry hash, the sorted point coordinates rounded to 0.001 mm, is `8e6d75a3bf` for all three exports and for repeated exports of one board. KiCad's stock 3D library has no model for `TestPoint_Pad_D1.5mm` (10 test points), `MountingHole_2.5mm` (4 holes), `Fuse_1812_4532Metric` (3 fuses) or the MP2307's `SOIC-8-1EP` with a 2.41 x 3.3 mm pad (`U1`), so those 18 are not in the STEP. The STEP was not reopened in a CAD tool.
+
+Regenerate them with [`fab_package.sh`](agent-run/tools/fab_package.sh).
 
 ## JLCPCB
 
@@ -192,7 +205,7 @@ PCB review sign-off required by #39: JeffMboya, 2026-11-04, on the package in `f
 
 | Item | Signed off |
 |---|---|
-| PCB and Gerber package | the Gerbers, drill, BOM and CPL of `fab/` and the exported KiCad board, hash `76a311a42f` |
+| PCB and Gerber package | the Gerbers, drill, BOM and CPL of `fab/` and the exported KiCad board, hash `76a311a42f`, and the STEP model of `fab/` (geometry hash `8e6d75a3bf`) |
 | Return paths | the 1 return-via advisory of the routing report, `+12V_PROT` (2.69 mm to the nearest ground via), as checked in "Return paths" above; JeffMboya accepts this arrangement for the buck's switching-current loop: the switching current is supplied by `C2` to `C4` at the regulator pins, and the 2.69 mm detour adds about 5.4 nH, 1.6 mV at the buck's ripple current; and the `edge_rate slow` declaration of the `PWR12`, `PWR5` and `PWR3` net classes |
 | ERC | the 2 warnings: `Si2301CDS` absent from KiCad 10.0.6's `Transistor_FET` library (`Q1`) and the `BUCK_EN` label on a wire of its own net |
 | DRC | the 80 `lib_footprint_mismatch` warnings, each a footprint whose silkscreen differs from the library copy while its pads, courtyard and fabrication outline match it |
