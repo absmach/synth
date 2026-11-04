@@ -174,6 +174,8 @@ With the random ids masked the routed board is `9ebe15a562` in all three exports
 
 PCB DFM of the package of this README (JLCDFM, 2026-11-04 14:23, Gerber content hash `76a311a42f`, two layers, 11.49 x 7.6 cm, report in [`reports/`](reports/jlcdfm_pcb_dfm_2026-11-04_14-23_76a311a42f.pdf)): 0 Danger items. Trace width 0.25 mm, pad spacing 0.32 mm, annular ring 0.2 mm, silkscreen line width 0.18 mm and silkscreen to pad 0.25 mm are good, with no silkscreen over a hole and no via in a pad.
 
+BOM matching of the same package in the JLCPCB assembly flow ([`reports/jlcpcb_assembly_bom_matching_2026-11-04.md`](reports/jlcpcb_assembly_bom_matching_2026-11-04.md), original [`.xlsx`](reports/jlcpcb_assembly_bom_matching_2026-11-04.xlsx)): 65 of 70 lines match a part in JLCPCB stock. The three radial through-hole electrolytics C1, C10 and C17 (NIC NRSZ101M25V6.3X11F) and the 1x8 header J2 are through-hole parts fitted by hand; JLCPCB matched C1, C10 and C17 to an SMD part with 0 in stock and J2 to nothing. R3 (44.2k, `0603WAF4422T5E`, `C23056`) is matched with 0 in stock.
+
 Quote with assembly for the same package ([`reports/jlcpcb_quote_2026-11-04.md`](reports/jlcpcb_quote_2026-11-04.md), Standard PCBA, no order placed): PCB $8.80 and PCBA $130.21, $139.01 in total.
 
 ## Human review
