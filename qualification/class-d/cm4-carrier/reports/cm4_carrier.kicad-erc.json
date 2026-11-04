@@ -1,7 +1,7 @@
 {
     "$schema": "https://schemas.kicad.org/erc.v1.json",
     "coordinate_units": "mm",
-    "date": "2026-11-03T17:20:17",
+    "date": "2026-11-04T18:32:41",
     "ignored_checks": [
         {
             "description": "Global label only appears once in the schematic",
@@ -32,15 +32,15 @@
             "uuid_path": "/7e69c29b-c8ee-5ba6-9157-99a1037a835e",
             "violations": [
                 {
-                    "description": "Symbol '+5V_AUX' not found in symbol library 'synth'",
+                    "description": "Symbol 'VIN_PROT' not found in symbol library 'synth'",
                     "items": [
                         {
-                            "description": "Symbol #PWR1812 [+5V_AUX]",
+                            "description": "Symbol #PWR8020 [VIN_PROT]",
                             "pos": {
-                                "x": 30.48,
-                                "y": 144.78
+                                "x": 27.94,
+                                "y": 307.34
                             },
-                            "uuid": "7ffaee60-d324-579c-bf0b-f385e921edb4"
+                            "uuid": "56080013-df87-5922-8d9e-5d4ac89ce154"
                         }
                     ],
                     "severity": "warning",
@@ -50,12 +50,12 @@
                     "description": "Symbol '+5V_AUX' not found in symbol library 'synth'",
                     "items": [
                         {
-                            "description": "Symbol #PWR6411 [+5V_AUX]",
+                            "description": "Symbol #PWR4271 [+5V_AUX]",
                             "pos": {
-                                "x": 38.1,
-                                "y": 113.03
+                                "x": 40.64,
+                                "y": 229.87
                             },
-                            "uuid": "206208e2-085e-5691-ac83-998427e59243"
+                            "uuid": "ade42498-61a9-51b0-90fe-3289437c828f"
                         }
                     ],
                     "severity": "warning",
@@ -65,12 +65,12 @@
                     "description": "Symbol '+5V_AUX' not found in symbol library 'synth'",
                     "items": [
                         {
-                            "description": "Symbol #PWR3654 [+5V_AUX]",
+                            "description": "Symbol #PWR7935 [+5V_AUX]",
                             "pos": {
-                                "x": 50.8,
-                                "y": 144.78
+                                "x": 46.99,
+                                "y": 386.08
                             },
-                            "uuid": "44ff6867-20eb-532e-a13e-3168dbfa80e6"
+                            "uuid": "d9230a7b-9de4-55fa-be9c-37eb59ed7a6f"
                         }
                     ],
                     "severity": "warning",
@@ -82,8 +82,8 @@
                         {
                             "description": "Symbol #PWR3141 [VIN_PROT]",
                             "pos": {
-                                "x": 99.06,
-                                "y": 30.48
+                                "x": 68.58,
+                                "y": 85.09
                             },
                             "uuid": "ec5a1a28-bb8e-52be-b767-3232bf936805"
                         }
@@ -97,8 +97,8 @@
                         {
                             "description": "Symbol Q1 [Si2301CDS]",
                             "pos": {
-                                "x": 111.76,
-                                "y": 29.21
+                                "x": 81.28,
+                                "y": 83.82
                             },
                             "uuid": "7e177184-5504-5395-874f-7ec1eb0a2001"
                         }
@@ -112,8 +112,8 @@
                         {
                             "description": "Symbol #PWR7800 [VIN_PROT]",
                             "pos": {
-                                "x": 152.4,
-                                "y": 22.86
+                                "x": 81.28,
+                                "y": 110.49
                             },
                             "uuid": "e02a4c28-39ed-5532-890a-9fc18bab4f10"
                         }
@@ -125,10 +125,25 @@
                     "description": "Symbol 'VIN_PROT' not found in symbol library 'synth'",
                     "items": [
                         {
+                            "description": "Symbol #PWR4167 [VIN_PROT]",
+                            "pos": {
+                                "x": 99.06,
+                                "y": 379.73
+                            },
+                            "uuid": "32314b74-85c9-54fb-a67d-5f67a9ba0707"
+                        }
+                    ],
+                    "severity": "warning",
+                    "type": "lib_symbol_issues"
+                },
+                {
+                    "description": "Symbol 'VIN_PROT' not found in symbol library 'synth'",
+                    "items": [
+                        {
                             "description": "Symbol #PWR7123 [VIN_PROT]",
                             "pos": {
-                                "x": 193.04,
-                                "y": 22.86
+                                "x": 124.46,
+                                "y": 92.71
                             },
                             "uuid": "487c3585-37a4-58df-8bee-88d623df05ab"
                         }
@@ -140,25 +155,10 @@
                     "description": "Symbol 'VIN_PROT' not found in symbol library 'synth'",
                     "items": [
                         {
-                            "description": "Symbol #PWR8381 [VIN_PROT]",
-                            "pos": {
-                                "x": 240.03,
-                                "y": 29.21
-                            },
-                            "uuid": "e7457477-e81e-5393-a775-37504a6750ad"
-                        }
-                    ],
-                    "severity": "warning",
-                    "type": "lib_symbol_issues"
-                },
-                {
-                    "description": "Symbol 'VIN_PROT' not found in symbol library 'synth'",
-                    "items": [
-                        {
                             "description": "Symbol #PWR5745 [VIN_PROT]",
                             "pos": {
-                                "x": 274.32,
-                                "y": 22.86
+                                "x": 124.46,
+                                "y": 158.75
                             },
                             "uuid": "469e4a2e-8c59-58b8-8183-dda55525b4e9"
                         }
@@ -170,10 +170,25 @@
                     "description": "Symbol 'VIN_PROT' not found in symbol library 'synth'",
                     "items": [
                         {
+                            "description": "Symbol #PWR8381 [VIN_PROT]",
+                            "pos": {
+                                "x": 130.81,
+                                "y": 132.08
+                            },
+                            "uuid": "e7457477-e81e-5393-a775-37504a6750ad"
+                        }
+                    ],
+                    "severity": "warning",
+                    "type": "lib_symbol_issues"
+                },
+                {
+                    "description": "Symbol 'VIN_PROT' not found in symbol library 'synth'",
+                    "items": [
+                        {
                             "description": "Symbol #PWR1543 [VIN_PROT]",
                             "pos": {
-                                "x": 314.96,
-                                "y": 22.86
+                                "x": 165.1,
+                                "y": 135.89
                             },
                             "uuid": "6bcfc857-c534-542b-8cb6-e1477c6fcbaf"
                         }
@@ -185,57 +200,12 @@
                     "description": "Symbol '+5V_AUX' not found in symbol library 'synth'",
                     "items": [
                         {
-                            "description": "Symbol #PWR7935 [+5V_AUX]",
+                            "description": "Symbol #PWR1812 [+5V_AUX]",
                             "pos": {
-                                "x": 396.24,
-                                "y": 58.42
+                                "x": 452.12,
+                                "y": 212.09
                             },
-                            "uuid": "d9230a7b-9de4-55fa-be9c-37eb59ed7a6f"
-                        }
-                    ],
-                    "severity": "warning",
-                    "type": "lib_symbol_issues"
-                },
-                {
-                    "description": "Symbol '+5V_AUX' not found in symbol library 'synth'",
-                    "items": [
-                        {
-                            "description": "Symbol #PWR4271 [+5V_AUX]",
-                            "pos": {
-                                "x": 436.88,
-                                "y": 45.72
-                            },
-                            "uuid": "ade42498-61a9-51b0-90fe-3289437c828f"
-                        }
-                    ],
-                    "severity": "warning",
-                    "type": "lib_symbol_issues"
-                },
-                {
-                    "description": "Symbol 'VIN_PROT' not found in symbol library 'synth'",
-                    "items": [
-                        {
-                            "description": "Symbol #PWR8020 [VIN_PROT]",
-                            "pos": {
-                                "x": 464.82,
-                                "y": 46.99
-                            },
-                            "uuid": "56080013-df87-5922-8d9e-5d4ac89ce154"
-                        }
-                    ],
-                    "severity": "warning",
-                    "type": "lib_symbol_issues"
-                },
-                {
-                    "description": "Symbol 'VIN_PROT' not found in symbol library 'synth'",
-                    "items": [
-                        {
-                            "description": "Symbol #PWR4167 [VIN_PROT]",
-                            "pos": {
-                                "x": 535.94,
-                                "y": 45.72
-                            },
-                            "uuid": "32314b74-85c9-54fb-a67d-5f67a9ba0707"
+                            "uuid": "7ffaee60-d324-579c-bf0b-f385e921edb4"
                         }
                     ],
                     "severity": "warning",
@@ -247,8 +217,8 @@
                         {
                             "description": "Symbol #PWR6774 [+5V_AUX]",
                             "pos": {
-                                "x": 657.86,
-                                "y": 144.78
+                                "x": 452.12,
+                                "y": 440.69
                             },
                             "uuid": "365c8df2-63a4-5a56-ba6f-1c429744b79e"
                         }
@@ -260,10 +230,25 @@
                     "description": "Symbol '+5V_AUX' not found in symbol library 'synth'",
                     "items": [
                         {
+                            "description": "Symbol #PWR6411 [+5V_AUX]",
+                            "pos": {
+                                "x": 459.74,
+                                "y": 180.34
+                            },
+                            "uuid": "206208e2-085e-5691-ac83-998427e59243"
+                        }
+                    ],
+                    "severity": "warning",
+                    "type": "lib_symbol_issues"
+                },
+                {
+                    "description": "Symbol '+5V_AUX' not found in symbol library 'synth'",
+                    "items": [
+                        {
                             "description": "Symbol #PWR9455 [+5V_AUX]",
                             "pos": {
-                                "x": 665.48,
-                                "y": 113.03
+                                "x": 459.74,
+                                "y": 408.94
                             },
                             "uuid": "d8cb1a01-84a9-50f2-8b6c-31292071b107"
                         }
@@ -275,10 +260,25 @@
                     "description": "Symbol '+5V_AUX' not found in symbol library 'synth'",
                     "items": [
                         {
+                            "description": "Symbol #PWR3654 [+5V_AUX]",
+                            "pos": {
+                                "x": 472.44,
+                                "y": 212.09
+                            },
+                            "uuid": "44ff6867-20eb-532e-a13e-3168dbfa80e6"
+                        }
+                    ],
+                    "severity": "warning",
+                    "type": "lib_symbol_issues"
+                },
+                {
+                    "description": "Symbol '+5V_AUX' not found in symbol library 'synth'",
+                    "items": [
+                        {
                             "description": "Symbol #PWR2305 [+5V_AUX]",
                             "pos": {
-                                "x": 678.18,
-                                "y": 144.78
+                                "x": 472.44,
+                                "y": 440.69
                             },
                             "uuid": "866b8c0c-4295-5e19-9615-e1bf531f07b9"
                         }
@@ -292,8 +292,8 @@
                         {
                             "description": "Symbol #PWR4915 [CM4_3V3]",
                             "pos": {
-                                "x": 33.02,
-                                "y": 234.95
+                                "x": 34.29,
+                                "y": 236.22
                             },
                             "uuid": "e25f75e0-3ccd-5aaa-8a06-b0053798181b"
                         }
@@ -307,8 +307,8 @@
                         {
                             "description": "Symbol #PWR9826 [CM4_3V3]",
                             "pos": {
-                                "x": 53.34,
-                                "y": 31.75
+                                "x": 54.61,
+                                "y": 33.02
                             },
                             "uuid": "bc6c7ede-9f3d-5181-8c27-05156c1c36ca"
                         }
@@ -322,8 +322,8 @@
                         {
                             "description": "Symbol #PWR7715 [CM4_3V3]",
                             "pos": {
-                                "x": 229.87,
-                                "y": 153.67
+                                "x": 231.14,
+                                "y": 154.94
                             },
                             "uuid": "51787584-0bf0-59dc-9d36-37f50e03d9eb"
                         }
@@ -338,7 +338,7 @@
                             "description": "Symbol #PWR5020 [USB_VBUS1]",
                             "pos": {
                                 "x": 35.56,
-                                "y": 53.34
+                                "y": 121.92
                             },
                             "uuid": "e61e163b-fb0a-51d4-a822-8e2507848b9c"
                         }
@@ -353,7 +353,7 @@
                             "description": "Symbol #PWR1084 [USB_VBUS2]",
                             "pos": {
                                 "x": 35.56,
-                                "y": 55.88
+                                "y": 124.46
                             },
                             "uuid": "cb3288f6-a21f-530f-a540-a6f4a27691a4"
                         }
@@ -367,8 +367,8 @@
                         {
                             "description": "Symbol #PWR4980 [USB_VBUS3]",
                             "pos": {
-                                "x": 81.28,
-                                "y": 53.34
+                                "x": 35.56,
+                                "y": 213.36
                             },
                             "uuid": "d6c0c40d-65a6-5760-9da4-95a75b6155dc"
                         }
@@ -382,8 +382,8 @@
                         {
                             "description": "Symbol #PWR6050 [USB_VBUS4]",
                             "pos": {
-                                "x": 81.28,
-                                "y": 55.88
+                                "x": 35.56,
+                                "y": 215.9
                             },
                             "uuid": "eb3f5685-9fe6-5908-9907-45826eba2b22"
                         }
@@ -397,25 +397,10 @@
                         {
                             "description": "Symbol #PWR8772 [USB_VBUS1]",
                             "pos": {
-                                "x": 114.3,
-                                "y": 74.93
+                                "x": 68.58,
+                                "y": 120.65
                             },
                             "uuid": "30edbf60-2445-52fd-819c-3f0627bffbb4"
-                        }
-                    ],
-                    "severity": "warning",
-                    "type": "lib_symbol_issues"
-                },
-                {
-                    "description": "Symbol 'USB_VBUS1' not found in symbol library 'synth'",
-                    "items": [
-                        {
-                            "description": "Symbol #PWR4835 [USB_VBUS1]",
-                            "pos": {
-                                "x": 127.0,
-                                "y": 60.96
-                            },
-                            "uuid": "bb07fd64-706b-5040-9285-83d3decbb6e3"
                         }
                     ],
                     "severity": "warning",
@@ -427,10 +412,25 @@
                         {
                             "description": "Symbol #PWR5956 [USB_VBUS2]",
                             "pos": {
-                                "x": 160.02,
-                                "y": 74.93
+                                "x": 68.58,
+                                "y": 212.09
                             },
                             "uuid": "f549644d-9a71-5c2f-b871-d77a66c453dc"
+                        }
+                    ],
+                    "severity": "warning",
+                    "type": "lib_symbol_issues"
+                },
+                {
+                    "description": "Symbol 'USB_VBUS1' not found in symbol library 'synth'",
+                    "items": [
+                        {
+                            "description": "Symbol #PWR4835 [USB_VBUS1]",
+                            "pos": {
+                                "x": 81.28,
+                                "y": 106.68
+                            },
+                            "uuid": "bb07fd64-706b-5040-9285-83d3decbb6e3"
                         }
                     ],
                     "severity": "warning",
@@ -442,70 +442,10 @@
                         {
                             "description": "Symbol #PWR3558 [USB_VBUS2]",
                             "pos": {
-                                "x": 172.72,
-                                "y": 60.96
+                                "x": 81.28,
+                                "y": 198.12
                             },
                             "uuid": "214b4732-6665-5256-b082-e1c938de1a16"
-                        }
-                    ],
-                    "severity": "warning",
-                    "type": "lib_symbol_issues"
-                },
-                {
-                    "description": "Symbol 'USB_VBUS3' not found in symbol library 'synth'",
-                    "items": [
-                        {
-                            "description": "Symbol #PWR6924 [USB_VBUS3]",
-                            "pos": {
-                                "x": 205.74,
-                                "y": 74.93
-                            },
-                            "uuid": "aa4b9c4f-7e5f-5117-905b-34899b916504"
-                        }
-                    ],
-                    "severity": "warning",
-                    "type": "lib_symbol_issues"
-                },
-                {
-                    "description": "Symbol 'USB_VBUS3' not found in symbol library 'synth'",
-                    "items": [
-                        {
-                            "description": "Symbol #PWR9612 [USB_VBUS3]",
-                            "pos": {
-                                "x": 218.44,
-                                "y": 60.96
-                            },
-                            "uuid": "7e8cb5ad-3605-5784-adfc-25528b45488c"
-                        }
-                    ],
-                    "severity": "warning",
-                    "type": "lib_symbol_issues"
-                },
-                {
-                    "description": "Symbol 'USB_VBUS4' not found in symbol library 'synth'",
-                    "items": [
-                        {
-                            "description": "Symbol #PWR1320 [USB_VBUS4]",
-                            "pos": {
-                                "x": 251.46,
-                                "y": 74.93
-                            },
-                            "uuid": "b9207d20-763f-5a2a-9b7b-64529ccad368"
-                        }
-                    ],
-                    "severity": "warning",
-                    "type": "lib_symbol_issues"
-                },
-                {
-                    "description": "Symbol 'USB_VBUS4' not found in symbol library 'synth'",
-                    "items": [
-                        {
-                            "description": "Symbol #PWR3298 [USB_VBUS4]",
-                            "pos": {
-                                "x": 264.16,
-                                "y": 60.96
-                            },
-                            "uuid": "61dbd86c-1aa8-5929-a828-73429134369a"
                         }
                     ],
                     "severity": "warning",
@@ -517,8 +457,8 @@
                         {
                             "description": "Symbol #PWR5869 [HDMI_5V]",
                             "pos": {
-                                "x": 457.2,
-                                "y": 154.94
+                                "x": 81.28,
+                                "y": 314.96
                             },
                             "uuid": "d1c7d13c-a866-5712-a8cd-130cb8f1848d"
                         }
@@ -532,10 +472,40 @@
                         {
                             "description": "Symbol #PWR9188 [HDMI_5V]",
                             "pos": {
-                                "x": 472.44,
-                                "y": 196.85
+                                "x": 96.52,
+                                "y": 356.87
                             },
                             "uuid": "a878556f-5e7f-5013-ac62-c8e708191874"
+                        }
+                    ],
+                    "severity": "warning",
+                    "type": "lib_symbol_issues"
+                },
+                {
+                    "description": "Symbol 'USB_VBUS3' not found in symbol library 'synth'",
+                    "items": [
+                        {
+                            "description": "Symbol #PWR6924 [USB_VBUS3]",
+                            "pos": {
+                                "x": 114.3,
+                                "y": 120.65
+                            },
+                            "uuid": "aa4b9c4f-7e5f-5117-905b-34899b916504"
+                        }
+                    ],
+                    "severity": "warning",
+                    "type": "lib_symbol_issues"
+                },
+                {
+                    "description": "Symbol 'USB_VBUS4' not found in symbol library 'synth'",
+                    "items": [
+                        {
+                            "description": "Symbol #PWR1320 [USB_VBUS4]",
+                            "pos": {
+                                "x": 114.3,
+                                "y": 212.09
+                            },
+                            "uuid": "b9207d20-763f-5a2a-9b7b-64529ccad368"
                         }
                     ],
                     "severity": "warning",
@@ -547,10 +517,40 @@
                         {
                             "description": "Symbol #PWR4617 [HDMI_5V]",
                             "pos": {
-                                "x": 492.76,
-                                "y": 196.85
+                                "x": 116.84,
+                                "y": 356.87
                             },
                             "uuid": "ab426d1e-2510-52f7-9e9b-217ad2753c81"
+                        }
+                    ],
+                    "severity": "warning",
+                    "type": "lib_symbol_issues"
+                },
+                {
+                    "description": "Symbol 'USB_VBUS3' not found in symbol library 'synth'",
+                    "items": [
+                        {
+                            "description": "Symbol #PWR9612 [USB_VBUS3]",
+                            "pos": {
+                                "x": 127.0,
+                                "y": 106.68
+                            },
+                            "uuid": "7e8cb5ad-3605-5784-adfc-25528b45488c"
+                        }
+                    ],
+                    "severity": "warning",
+                    "type": "lib_symbol_issues"
+                },
+                {
+                    "description": "Symbol 'USB_VBUS4' not found in symbol library 'synth'",
+                    "items": [
+                        {
+                            "description": "Symbol #PWR3298 [USB_VBUS4]",
+                            "pos": {
+                                "x": 127.0,
+                                "y": 198.12
+                            },
+                            "uuid": "61dbd86c-1aa8-5929-a828-73429134369a"
                         }
                     ],
                     "severity": "warning",
@@ -562,8 +562,8 @@
                         {
                             "description": "Symbol #PWR4225 [HDMI_5V]",
                             "pos": {
-                                "x": 515.62,
-                                "y": 182.88
+                                "x": 139.7,
+                                "y": 342.9
                             },
                             "uuid": "45286d2e-9aa0-55a0-939c-d7ddde9e69e9"
                         }
@@ -577,8 +577,8 @@
                         {
                             "description": "Symbol #PWR6673 [USB_VBUS1]",
                             "pos": {
-                                "x": 553.72,
-                                "y": 72.39
+                                "x": 419.1,
+                                "y": 118.11
                             },
                             "uuid": "02bd16ef-471d-5661-83f7-962a19f02cf9"
                         }
@@ -592,10 +592,25 @@
                         {
                             "description": "Symbol #PWR9062 [USB_VBUS2]",
                             "pos": {
-                                "x": 574.04,
-                                "y": 72.39
+                                "x": 439.42,
+                                "y": 118.11
                             },
                             "uuid": "de686628-a788-52d8-8526-d18d34d0549e"
+                        }
+                    ],
+                    "severity": "warning",
+                    "type": "lib_symbol_issues"
+                },
+                {
+                    "description": "Symbol 'USB_VBUS1' not found in symbol library 'synth'",
+                    "items": [
+                        {
+                            "description": "Symbol #PWR4937 [USB_VBUS1]",
+                            "pos": {
+                                "x": 444.5,
+                                "y": 48.26
+                            },
+                            "uuid": "f0abfa33-3144-553b-8d87-8780ebbc52e1"
                         }
                     ],
                     "severity": "warning",
@@ -607,8 +622,8 @@
                         {
                             "description": "Symbol #PWR2859 [USB_VBUS3]",
                             "pos": {
-                                "x": 594.36,
-                                "y": 72.39
+                                "x": 459.74,
+                                "y": 118.11
                             },
                             "uuid": "0031523f-f20f-518c-a10f-da593bf5aed3"
                         }
@@ -622,25 +637,10 @@
                         {
                             "description": "Symbol #PWR6215 [USB_VBUS4]",
                             "pos": {
-                                "x": 614.68,
-                                "y": 72.39
+                                "x": 480.06,
+                                "y": 118.11
                             },
                             "uuid": "9760ffe8-eae8-5871-a4fc-e438e42d4467"
-                        }
-                    ],
-                    "severity": "warning",
-                    "type": "lib_symbol_issues"
-                },
-                {
-                    "description": "Symbol 'USB_VBUS1' not found in symbol library 'synth'",
-                    "items": [
-                        {
-                            "description": "Symbol #PWR4937 [USB_VBUS1]",
-                            "pos": {
-                                "x": 822.96,
-                                "y": 48.26
-                            },
-                            "uuid": "f0abfa33-3144-553b-8d87-8780ebbc52e1"
                         }
                     ],
                     "severity": "warning",
@@ -652,8 +652,8 @@
                         {
                             "description": "Symbol #PWR5444 [USB_VBUS2]",
                             "pos": {
-                                "x": 868.68,
-                                "y": 48.26
+                                "x": 490.22,
+                                "y": 93.98
                             },
                             "uuid": "c213a1ad-c57e-5c9f-8f04-0af9d6aac22c"
                         }
@@ -667,8 +667,8 @@
                         {
                             "description": "Symbol #PWR8785 [USB_VBUS3]",
                             "pos": {
-                                "x": 914.4,
-                                "y": 48.26
+                                "x": 490.22,
+                                "y": 185.42
                             },
                             "uuid": "b93d1a97-fe2c-5f7f-ad01-862bf2a5d281"
                         }
@@ -682,8 +682,8 @@
                         {
                             "description": "Symbol #PWR7561 [USB_VBUS4]",
                             "pos": {
-                                "x": 960.12,
-                                "y": 48.26
+                                "x": 535.94,
+                                "y": 93.98
                             },
                             "uuid": "0e4b456c-c9e0-5014-8314-d5e66cfe2999"
                         }
@@ -697,8 +697,8 @@
                         {
                             "description": "Symbol #PWR6640 [SD_VDD]",
                             "pos": {
-                                "x": 312.42,
-                                "y": 147.32
+                                "x": 34.29,
+                                "y": 50.8
                             },
                             "uuid": "204f32de-7b2b-5404-b679-c7f78fb302f0"
                         }
@@ -712,8 +712,8 @@
                         {
                             "description": "Symbol #PWR8483 [SD_VDD]",
                             "pos": {
-                                "x": 360.68,
-                                "y": 158.75
+                                "x": 82.55,
+                                "y": 62.23
                             },
                             "uuid": "0befc88f-5c50-5b36-a1f5-402da590c6d3"
                         }
@@ -727,8 +727,8 @@
                         {
                             "description": "Symbol #PWR7254 [SD_VDD]",
                             "pos": {
-                                "x": 393.7,
-                                "y": 144.78
+                                "x": 115.57,
+                                "y": 48.26
                             },
                             "uuid": "f2c716cb-3bf3-55b4-ac44-405153e0c2be"
                         }
@@ -742,8 +742,8 @@
                         {
                             "description": "Symbol #PWR3858 [SD_VDD]",
                             "pos": {
-                                "x": 401.32,
-                                "y": 158.75
+                                "x": 123.19,
+                                "y": 62.23
                             },
                             "uuid": "077932e2-57d1-5281-bef4-b261889fbb42"
                         }
@@ -757,8 +757,8 @@
                         {
                             "description": "Symbol #PWR1861 [SD_VDD]",
                             "pos": {
-                                "x": 464.82,
-                                "y": 140.97
+                                "x": 146.05,
+                                "y": 44.45
                             },
                             "uuid": "a10e33bd-d400-5d1d-af2f-bc8eb457ab9d"
                         }
@@ -772,8 +772,8 @@
                         {
                             "description": "Symbol #PWR1304 [SD_VDD]",
                             "pos": {
-                                "x": 505.46,
-                                "y": 140.97
+                                "x": 146.05,
+                                "y": 95.25
                             },
                             "uuid": "9653e6c1-a4f5-5bc4-aad0-e854163f3ac8"
                         }
@@ -787,8 +787,8 @@
                         {
                             "description": "Symbol #PWR1673 [SD_VDD]",
                             "pos": {
-                                "x": 548.64,
-                                "y": 140.97
+                                "x": 189.23,
+                                "y": 31.75
                             },
                             "uuid": "5b5c9a83-f0ee-587e-96bc-a0f15c748a99"
                         }
@@ -802,8 +802,8 @@
                         {
                             "description": "Symbol #PWR6091 [SD_VDD]",
                             "pos": {
-                                "x": 591.82,
-                                "y": 140.97
+                                "x": 189.23,
+                                "y": 82.55
                             },
                             "uuid": "a5df8a5e-a05c-5f89-878f-8bc7d7187ccb"
                         }
@@ -817,8 +817,8 @@
                         {
                             "description": "Symbol #PWR1679 [SD_VDD]",
                             "pos": {
-                                "x": 635.0,
-                                "y": 140.97
+                                "x": 189.23,
+                                "y": 133.35
                             },
                             "uuid": "6b266eeb-fbf7-5644-94a3-e5f528af08ef"
                         }
@@ -830,25 +830,10 @@
                     "description": "Symbol 'SD_VDD' not found in symbol library 'synth'",
                     "items": [
                         {
-                            "description": "Symbol #PWR8090 [SD_VDD]",
-                            "pos": {
-                                "x": 718.82,
-                                "y": 132.08
-                            },
-                            "uuid": "fe06ac4b-2c9f-5a4a-a346-d1d84755cb72"
-                        }
-                    ],
-                    "severity": "warning",
-                    "type": "lib_symbol_issues"
-                },
-                {
-                    "description": "Symbol 'SD_VDD' not found in symbol library 'synth'",
-                    "items": [
-                        {
                             "description": "Symbol #PWR1555 [SD_VDD]",
                             "pos": {
-                                "x": 764.54,
-                                "y": 132.08
+                                "x": 232.41,
+                                "y": 35.56
                             },
                             "uuid": "df81dd8a-0333-58c4-a8ba-01a31cdf41bb"
                         }
@@ -860,10 +845,25 @@
                     "description": "Symbol 'SD_VDD' not found in symbol library 'synth'",
                     "items": [
                         {
+                            "description": "Symbol #PWR8090 [SD_VDD]",
+                            "pos": {
+                                "x": 232.41,
+                                "y": 86.36
+                            },
+                            "uuid": "fe06ac4b-2c9f-5a4a-a346-d1d84755cb72"
+                        }
+                    ],
+                    "severity": "warning",
+                    "type": "lib_symbol_issues"
+                },
+                {
+                    "description": "Symbol 'SD_VDD' not found in symbol library 'synth'",
+                    "items": [
+                        {
                             "description": "Symbol #PWR1032 [SD_VDD]",
                             "pos": {
-                                "x": 810.26,
-                                "y": 132.08
+                                "x": 278.13,
+                                "y": 22.86
                             },
                             "uuid": "96bb8097-0ac2-5b4a-88c8-da5f3760f6b0"
                         }
@@ -877,8 +877,8 @@
                         {
                             "description": "Symbol #PWR2153 [RTC_BAT]",
                             "pos": {
-                                "x": 934.72,
-                                "y": 53.34
+                                "x": 397.51,
+                                "y": 101.6
                             },
                             "uuid": "24ba6bd0-174a-5d53-a3c8-69fda85f4429"
                         }
@@ -892,8 +892,8 @@
                         {
                             "description": "Symbol #PWR2093 [RTC_VDD]",
                             "pos": {
-                                "x": 965.2,
-                                "y": 54.61
+                                "x": 427.99,
+                                "y": 102.87
                             },
                             "uuid": "91b8d658-d06a-514b-ad2b-d3153999cd95"
                         }
@@ -907,8 +907,8 @@
                         {
                             "description": "Symbol #PWR1293 [RTC_VDD]",
                             "pos": {
-                                "x": 967.74,
-                                "y": 24.13
+                                "x": 430.53,
+                                "y": 72.39
                             },
                             "uuid": "88e9e21b-fe86-5a58-bc85-d8091ec5b655"
                         }
@@ -922,8 +922,8 @@
                         {
                             "description": "Symbol #PWR4709 [RTC_VDD]",
                             "pos": {
-                                "x": 967.74,
-                                "y": 80.01
+                                "x": 430.53,
+                                "y": 128.27
                             },
                             "uuid": "fb569c8c-300f-58d1-9fdb-81f6cb79cead"
                         }
@@ -937,8 +937,8 @@
                         {
                             "description": "Symbol #PWR4459 [RTC_VDD]",
                             "pos": {
-                                "x": 975.36,
-                                "y": 44.45
+                                "x": 438.15,
+                                "y": 92.71
                             },
                             "uuid": "913a4e9c-4224-5a03-ba64-8999934edff3"
                         }
@@ -952,8 +952,8 @@
                         {
                             "description": "Symbol #PWR5685 [RTC_VDD]",
                             "pos": {
-                                "x": 988.06,
-                                "y": 24.13
+                                "x": 450.85,
+                                "y": 72.39
                             },
                             "uuid": "7392facd-43fc-58c3-8dc3-a6ef63b8f495"
                         }
@@ -967,8 +967,8 @@
                         {
                             "description": "Symbol #PWR1264 [RTC_VDD]",
                             "pos": {
-                                "x": 1055.37,
-                                "y": 60.96
+                                "x": 477.52,
+                                "y": 86.36
                             },
                             "uuid": "dc0c797b-66af-519c-b7d0-1e576dc2d640"
                         }
@@ -982,8 +982,8 @@
                         {
                             "description": "Symbol #PWR1398 [RTC_VDD]",
                             "pos": {
-                                "x": 1096.01,
-                                "y": 60.96
+                                "x": 477.52,
+                                "y": 170.18
                             },
                             "uuid": "bd9b3e64-9c12-50a7-a393-a50eca891cbe"
                         }
@@ -997,8 +997,8 @@
                         {
                             "description": "Symbol #PWR7141 [RTC_BAT]",
                             "pos": {
-                                "x": 1108.71,
-                                "y": 60.96
+                                "x": 490.22,
+                                "y": 170.18
                             },
                             "uuid": "f0dad031-4fb2-5ffc-b182-3772a1e7ac4d"
                         }
@@ -1012,8 +1012,8 @@
                         {
                             "description": "Symbol #PWR6631 [RTC_VDD]",
                             "pos": {
-                                "x": 1143.0,
-                                "y": 54.61
+                                "x": 527.05,
+                                "y": 80.01
                             },
                             "uuid": "4ca8b833-0538-583a-a516-98f81ac02247"
                         }
@@ -1026,7 +1026,31 @@
         {
             "path": "/Power/",
             "uuid_path": "/7e69c29b-c8ee-5ba6-9157-99a1037a835e/33c17d3d-b9a9-50a6-8201-5213dc5febe6",
-            "violations": []
+            "violations": [
+                {
+                    "description": "Both FB_5V and VCC_5V are attached to the same items; FB_5V will be used in the netlist",
+                    "items": [
+                        {
+                            "description": "Label 'FB_5V'",
+                            "pos": {
+                                "x": 55.88,
+                                "y": 314.96
+                            },
+                            "uuid": "5ae5ba4b-34ff-5f21-9ebf-04622eb31859"
+                        },
+                        {
+                            "description": "Label 'VCC_5V'",
+                            "pos": {
+                                "x": 52.705,
+                                "y": 321.31
+                            },
+                            "uuid": "912ffddd-fa11-5d97-b3e4-b0ccac4f8329"
+                        }
+                    ],
+                    "severity": "warning",
+                    "type": "multiple_net_names"
+                }
+            ]
         },
         {
             "path": "/CM4/",
@@ -1048,10 +1072,10 @@
                         {
                             "description": "Symbol #PWR2153 Pin 1 [Power input, Line]",
                             "pos": {
-                                "x": 934.72,
-                                "y": 53.34
+                                "x": 397.51,
+                                "y": 101.6
                             },
-                            "uuid": "1164724b-c4f4-424f-98fa-b3159093b921"
+                            "uuid": "789e5628-a31b-418a-9a69-14c89eed6c4a"
                         }
                     ],
                     "severity": "error",

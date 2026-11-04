@@ -14,7 +14,7 @@ and export code.
 | `synth validate` | `synth validate qualification/class-d/cm4-carrier/cm4_carrier.synth` | **FAIL (timeout)** — exit 124 at 120 s, 300 s and 600 s. The schematic layout does not finish |
 | `synth place` | `synth place qualification/class-d/cm4-carrier/cm4_carrier.synth` | **FAIL** — timeout at 120 s; a 900 s run exits 1 with a null placement |
 | Schematic export | `synth export-kicad ... --out /tmp/opencode/cm4/export15 --allow-incomplete --router free-routing` | **PARTIAL** — exit 124 at 2700 s. The corrected-source four-sheet schematic, `.kicad_sym`, `.kicad_pro`, `.kicad_dru` and `sym-lib-table` were written at about 28 minutes; the PCB was not written |
-| KiCad ERC | `kicad-cli sch erc --severity-all --format json -o reports/cm4_carrier.kicad-erc.json kicad/cm4_carrier.kicad_sch` | **FAIL (1 error)** — 67 violations: 1 error, 66 warnings on the corrected-source schematic |
+| KiCad ERC | `kicad-cli sch erc --severity-all --format json -o reports/cm4_carrier.kicad-erc.json kicad/cm4_carrier.kicad_sch` | **FAIL (1 error)** — 68 violations: 1 error, 67 warnings on the corrected-source schematic |
 | PCB export (`--pcb-only`) | `synth export-kicad ... --pcb-only --allow-incomplete --router free-routing` | **PASS for the file**: the PCB, BOM and PnP are written in seconds from the placement sidecar; the router then runs and is still in flight |
 | KiCad DRC | `kicad-cli pcb drc --severity-all --refill-zones ... kicad/cm4_carrier.kicad_pcb` | **Routed board**: 0 violations, 0 unconnected items. The unrouted baseline is 0 violations / 360 unconnected |
 | `synth check` | `synth check qualification/class-d/cm4-carrier/cm4_carrier.synth --json` | **FAIL** — `drc: unknown`; the DRC stage calls `synth validate`, which times out |

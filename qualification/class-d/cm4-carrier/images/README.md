@@ -2,9 +2,10 @@
 
 - `schematic/` — `kicad-cli sch export svg` of the four-sheet schematic:
   `cm4_carrier.svg` (root), `cm4_carrier-Power.svg`, `cm4_carrier-CM4.svg`,
-  `cm4_carrier-Interfaces.svg`, `cm4_carrier-Peripherals.svg`. These are
-  vector images, not PNG; no PNG rasterizer is installed in this
-  environment.
+  `cm4_carrier-Interfaces.svg`, `cm4_carrier-Peripherals.svg`. The PNGs are
+  `kicad-cli sch export pdf` + `pdftoppm -r 150` (root at 7243 px wide).
+  The SYN-420 sheet-fill layout gives Power/CM4/Interfaces A1 pages and
+  Peripherals an A2 page, at 91-93% content fill.
 - `pcb-3d-top.png`, `pcb-3d-angled.png` — `kicad-cli pcb render` of the
   **routed 6-layer HDI** board.
 - `pcb-top-copper.png`, `pcb-bottom-copper.png` — `kicad-cli pcb export pdf`

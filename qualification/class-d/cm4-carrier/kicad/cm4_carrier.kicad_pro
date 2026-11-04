@@ -219,6 +219,19 @@
       "+3V3": "PWR",
       "+5V": "PWR",
       "+5V_AUX": "PWR",
+      "/HDMI_SCL_CONN": "I2C",
+      "/HDMI_SDA_CONN": "I2C",
+      "/SW_3V3": "PWR",
+      "/SW_5V": "PWR",
+      "/USB1_N": "USB",
+      "/USB1_P": "USB",
+      "/USB2_N": "USB",
+      "/USB2_P": "USB",
+      "/USB3_N": "USB",
+      "/USB3_P": "USB",
+      "/USB4_N": "USB",
+      "/USB4_P": "USB",
+      "/VIN_12V": "PWR",
       "CAM_CK_N": "CAM",
       "CAM_CK_P": "CAM",
       "CAM_D0_N": "CAM",
@@ -286,7 +299,60 @@
       "VIN_FUSED": "PWR",
       "VIN_PROT": "PWR"
     },
-    "netclass_patterns": []
+    "netclass_patterns": [
+      {
+        "netclass": "PWR",
+        "pattern": "/*/VIN_12V"
+      },
+      {
+        "netclass": "PWR",
+        "pattern": "/*/SW_5V"
+      },
+      {
+        "netclass": "PWR",
+        "pattern": "/*/SW_3V3"
+      },
+      {
+        "netclass": "USB",
+        "pattern": "/*/USB1_P"
+      },
+      {
+        "netclass": "USB",
+        "pattern": "/*/USB1_N"
+      },
+      {
+        "netclass": "USB",
+        "pattern": "/*/USB2_P"
+      },
+      {
+        "netclass": "USB",
+        "pattern": "/*/USB2_N"
+      },
+      {
+        "netclass": "USB",
+        "pattern": "/*/USB3_P"
+      },
+      {
+        "netclass": "USB",
+        "pattern": "/*/USB3_N"
+      },
+      {
+        "netclass": "USB",
+        "pattern": "/*/USB4_P"
+      },
+      {
+        "netclass": "USB",
+        "pattern": "/*/USB4_N"
+      },
+      {
+        "netclass": "I2C",
+        "pattern": "/*/HDMI_SDA_CONN"
+      },
+      {
+        "netclass": "I2C",
+        "pattern": "/*/HDMI_SCL_CONN"
+      }
+    ]
   },
   "schematic": {
     "annotate_start_num": 0,
@@ -297,6 +363,22 @@
     [
       "7e69c29b-c8ee-5ba6-9157-99a1037a835e",
       ""
+    ],
+    [
+      "33c17d3d-b9a9-50a6-8201-5213dc5febe6",
+      "cm4_carrier_Power.kicad_sch"
+    ],
+    [
+      "59eae9a7-37c0-5d34-8eb4-9789fc0bd28e",
+      "cm4_carrier_CM4.kicad_sch"
+    ],
+    [
+      "614a25c4-e82d-5ce9-b623-a5f12ec35aa9",
+      "cm4_carrier_Interfaces.kicad_sch"
+    ],
+    [
+      "d3cdf12a-3ed8-5143-b6ae-e972d4c5f74d",
+      "cm4_carrier_Peripherals.kicad_sch"
     ]
   ]
 }

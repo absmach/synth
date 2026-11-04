@@ -204,8 +204,13 @@ board is routed with the HDI floors (0.1 mm track/clearance, 0.25 mm via,
 
 ## What was not done
 
-- No schematic or PCB export completed; the schematic layout runs for more
-  than 30 minutes at 97 % CPU on this board. This is a Synth capability
-  limit, not a design choice.
-- No routing, DRC, ERC-in-KiCad, Gerber, BOM or pick-and-place artifact.
+- `synth validate`/`synth check` still time out on the schematic layout
+  (about 28 minutes); the schematic and routed PCB were produced from the
+  `--pcb-only` baseline and the external router.
+- No Gerber, drill or fab package, and no two-run determinism check.
 - No hardware, no firmware, no measurement.
+- The KiCad ERC has one `RTC_BAT` power-pin error and 67 warnings; the source
+  netlist is correct.
+
+Fixed during review: the 24 MHz crystal pad map was corrected to the ECS
+ECX-33Q datasheet (1/3 crystal, 2/4 GND).

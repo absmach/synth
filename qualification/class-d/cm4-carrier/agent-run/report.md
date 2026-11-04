@@ -20,7 +20,7 @@
 - `agent-run/` (this report, prompt, tool calls, design notes, pin map,
   netlist, power budget, assembly, bring-up, verification).
 - `kicad/` — four-sheet schematic, embedded symbols, project, DRC rules, routed 6-layer HDI PCB, unrouted baseline, BOM and PnP.
-- `reports/cm4_carrier.kicad-erc.json` — 1 error, 66 warnings; `reports/cm4_carrier.kicad-drc.json` — routed board, 0 violations / 0 unconnected.
+- `reports/cm4_carrier.kicad-erc.json` — 1 error, 67 warnings; `reports/cm4_carrier.kicad-drc.json` — routed board, 0 violations / 0 unconnected.
 - `images/schematic/*.svg` — the four schematic sheets.
 - `qualification/matrix.toml` row, class "D", status "experimental".
 
@@ -46,7 +46,7 @@ synth export-kicad ... --allow-incomplete               ERC 0 errors, 100+ warni
 synth validate cm4_carrier.synth                        exit 124 (timeout, 600 s)
 synth place cm4_carrier.synth                           exit 1 (null placement, 900 s)
 synth export-kicad ... --router free-routing            exit 124 (schematic written, no PCB)
-kicad-cli sch erc ...                                  67 violations: 1 error, 66 warnings
+kicad-cli sch erc ...                                  68 violations: 1 error, 67 warnings
 synth check --json                                      fail, drc: unknown
 synth check --fab --json                                fail, no manufacturing stage
 cargo test -p synth-cli --test cm4_carrier_board        2 passed, 1 ignored
@@ -66,28 +66,24 @@ real design errors were found and fixed in the source:
   1/3 are the crystal and 2/4 are GND. The first revision had 1/2 crystal and
   3/4 GND, which would have put XTALOUT on a ground pad. Fixed.
 
-The re-export (`export15`) wrote the corrected-source schematic at about
-28 minutes and ran out of its 45-minute budget before the PCB. `kicad/` and
-`images/` are that corrected-source schematic. Its KiCad ERC still has 13
-errors (the source netlist is correct; the errors are in the schematic
-layout/power-symbol placement).
+The corrected-source export15 wrote the schematic at about 28 minutes and
+ran out of its 45-minute budget before the PCB. The final export (after the
+SYN-420 sheet-fill merge) re-drew the four sheets as A1/A2; `kicad/` and
+`images/` are that final schematic. Its KiCad ERC has 1 error and 67
+warnings; the earlier QOD/VOUT, FFC MP and Q_LED findings were schematic
+layout defects and are gone.
 
 ## Gaps and assumptions
 
-1. **Synth cannot lay out this board's schematic in a useful time.** The
-   netlist and ERC are fine; the schematic layout is the block. This is the
-   main reason the board is not releasable. The same 185 components with only
-   the GND net lay out in seconds; 158 signal nets do not finish in 30
-   minutes.
-2. **The automatic placer exits 1** with no placement. The sidecar pins every
-   component, but the exporter still spends ~29 minutes on the schematic.
-3. **No PCB, no routing, no DRC, no Gerber, no BOM.** The export was killed
-   at the 30-minute budget after writing the schematic.
-4. **KiCad ERC has 1 error.** The only remaining error is the `RTC_BAT`
-   power flag; the source adds `power "RTC_BAT" 3v` and export16 is the
-   re-run. The earlier QOD/VOUT, FFC MP and Q_LED findings were schematic
-   layout defects, not netlist defects, and are gone in the corrected
-   schematic.
+1. **Synth's schematic layout is slow (~28 minutes).** The SYN-420
+   sheet-fill layout now produces four A1/A2 sheets at 91-93% fill; the
+   `synth validate`/`synth check` budgets still time out.
+2. **The automatic placer exits 1.** The placement sidecar pins every
+   component.
+3. **No Gerber, drill or fab package, and no two-run determinism check.**
+   The routed PCB, DRC, BOM and PnP exist.
+4. **KiCad ERC has 1 error, 67 warnings.** The error is the `RTC_BAT` power
+   pin on the Peripherals sheet; the source netlist is correct.
 5. **The CM4 has no VBAT pin.** The issue's "diode to CM4 VBAT" is
    unimplementable; the board uses a standalone PCF85063ATL with a CR2032.
    This is a documented deviation, not a datasheet guess.

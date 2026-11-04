@@ -3,7 +3,7 @@
 What is here:
 
 - `cm4_carrier.kicad-erc.json` — `kicad-cli sch erc --severity-all` on the
-  exported schematic. 67 violations: 1 error, 66 warnings. The error is the
+  exported schematic. 68 violations: 1 error, 67 warnings. The error is the
   `RTC_BAT` power flag; see `../agent-run/VERIFICATION_REPORT.md`.
 
 - `cm4_carrier.kicad-drc.json` — `kicad-cli pcb drc --severity-all
