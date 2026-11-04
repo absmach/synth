@@ -961,7 +961,7 @@ mod tests {
     /// The router resolves the tier against the copper count as the exporter
     /// and DRC do. `jlc-advanced` is not sold on two layers, so a 2-layer
     /// board naming it is routed and gated against the standard floor, not
-    /// against a 0.2 mm drill and a fill nobody agreed to.
+    /// against a fill nobody agreed to.
     #[test]
     fn the_profile_floor_is_resolved_against_the_layer_count() {
         let mut request = RouteRequest::new(
@@ -975,7 +975,7 @@ mod tests {
         assert!(request.policy.process_fills_via_in_pad);
 
         request.use_profile_floor("jlc-advanced", 2);
-        assert_eq!(request.policy.min_drill_diameter_nm, 300_000);
+        assert_eq!(request.policy.min_drill_diameter_nm, 200_000);
         assert!(!request.policy.process_fills_via_in_pad);
     }
 

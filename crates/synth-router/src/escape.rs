@@ -265,6 +265,50 @@ pub fn grid_arrays(board: &PcbBoard) -> Vec<String> {
         .collect()
 }
 
+/// Pitch at or under which a perimeter package is escaped before routing.
+/// A TSSOP-20 at 0.65 mm leaves 0.25 mm between 0.4 mm pads, which a maze
+/// router with 0.2 mm tracks and 0.127 mm clearance cannot always leave
+/// through: the same board routed or failed on a 3 % change of scale.
+const PERIMETER_MAX_PITCH_MM: f64 = 0.65;
+
+/// Fine-pitch packages that are not lattices: dense rows of pads along the
+/// edge of the body (QFN, QFP, TSSOP, fine-pitch connectors).
+///
+/// [`grid_arrays`] asks whether a package is a lattice, and a perimeter
+/// package never is, so it reached the general router with every pad's escape
+/// left to chance. The engine's surface stub fan needs no via and no
+/// manufacturer allowance, so these are escaped on any board.
+///
+/// Returned in reference order, excluding the grid arrays.
+#[must_use]
+pub fn fine_pitch_perimeter(board: &PcbBoard) -> Vec<String> {
+    let grids = grid_arrays(board);
+    board
+        .footprints
+        .iter()
+        .filter_map(|footprint| {
+            let copper: Vec<&Pad> = footprint
+                .pads
+                .iter()
+                .filter(|pad| pad.layers.iter().any(|layer| layer.ends_with(".Cu")))
+                .collect();
+            if copper.len() < DENSE_MIN_PADS || grids.contains(&footprint.reference) {
+                return None;
+            }
+            let (pitch_nm, _) = closest_pair_nm(&copper)?;
+            (pitch_nm <= mm(PERIMETER_MAX_PITCH_MM) + 1_000).then(|| footprint.reference.clone())
+        })
+        .collect()
+}
+
+/// [`fine_pitch_perimeter`] for the request's exported baseline board.
+#[must_use]
+pub fn fine_pitch_perimeter_in_baseline(request: &crate::contract::RouteRequest) -> Vec<String> {
+    read_baseline(request)
+        .map(|board| fine_pitch_perimeter(&board))
+        .unwrap_or_default()
+}
+
 fn describe(
     pitch_nm: i64,
     gap_nm: i64,
@@ -431,6 +475,46 @@ mod tests {
             "0.8 mm clears the floor's via span, so nothing is blocked"
         );
         assert_eq!(grid_arrays(&board), vec!["U1".to_string()]);
+    }
+
+    /// A TSSOP-20 (0.65 mm) is a row on each side of the body, not a lattice:
+    /// it is escaped by the perimeter stage, and a coarser SOIC or a ball grid
+    /// is not.
+    #[test]
+    fn a_fine_pitch_perimeter_package_is_escaped_and_a_coarse_one_is_not() {
+        let tssop = board(&row(
+            20,
+            0.65,
+            0.4,
+            1.5,
+            "Package_SO:TSSOP-20_4.4x6.5mm_P0.65mm",
+        ));
+        assert_eq!(fine_pitch_perimeter(&tssop), vec!["U1".to_string()]);
+        assert!(grid_arrays(&tssop).is_empty(), "a row is not a lattice");
+
+        let soic = board(&row(
+            8,
+            1.27,
+            0.6,
+            1.5,
+            "Package_SO:SOIC-8_3.9x4.9mm_P1.27mm",
+        ));
+        assert!(
+            fine_pitch_perimeter(&soic).is_empty(),
+            "1.27 mm needs no stub"
+        );
+
+        let bga = board(&grid(11, 11, 0.8, 0.4, "Package_BGA:BGA-121_11x11"));
+        assert!(
+            fine_pitch_perimeter(&bga).is_empty(),
+            "a ball grid has its own stage"
+        );
+
+        let passive = board(&row(2, 0.5, 0.3, 0.3, "Resistor_SMD:R_0201"));
+        assert!(
+            fine_pitch_perimeter(&passive).is_empty(),
+            "two pads are never dense"
+        );
     }
 
     /// A single row is not a lattice however fine its pitch, so the pitch

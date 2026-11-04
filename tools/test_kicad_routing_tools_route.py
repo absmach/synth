@@ -8,6 +8,7 @@ from a script.
 """
 
 import json
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -73,6 +74,212 @@ def run_adapter(summaries):
 
 
 CLEAN = {"successful": 2, "failed": 0}
+
+
+QFN_STUB = """\\
+import json, sys
+from pathlib import Path
+
+here = Path(__file__).parent
+with (here / "perimeter.log").open("a") as log:
+    log.write(" ".join(sys.argv[1:]) + "\\n")
+plan = json.loads((here / "perimeter.json").read_text()) if (here / "perimeter.json").exists() else {}
+if plan.get("exit", 0):
+    sys.exit(plan["exit"])
+out = Path(sys.argv[sys.argv.index("--output") + 1])
+out.write_text(Path(sys.argv[1]).read_text() + "(perimeter-stubs)")
+print("JSON_SUMMARY: " + json.dumps({
+    "requested": plan.get("requested", 17), "escaped": plan.get("escaped", 17),
+    "failed": plan.get("failed", 0), "unescaped_nets": []}))
+"""
+
+
+def run_perimeter(plan=None, summaries=None):
+    """Run the adapter with one perimeter package; return (exit code, last route input, qfn calls)."""
+    with tempfile.TemporaryDirectory() as tmp:
+        repo = Path(tmp) / "krt"
+        (repo / "py_router").mkdir(parents=True)
+        (repo / "py_router" / "route.py").write_text(STUB)
+        (repo / "py_router" / "qfn_fanout.py").write_text(QFN_STUB)
+        (repo / "py_router" / "summaries.json").write_text(
+            json.dumps(summaries or [{"summary": CLEAN}]))
+        if plan is not None:
+            (repo / "py_router" / "perimeter.json").write_text(json.dumps(plan))
+        board = Path(tmp) / "in.kicad_pcb"
+        board.write_text("(kicad_pcb)")
+        done = subprocess.run(
+            [sys.executable, str(ADAPTER), str(board), str(Path(tmp) / "out.kicad_pcb"),
+             "--repo", str(repo), "--python", sys.executable,
+             "--perimeter-component", "U2"],
+            capture_output=True, text=True, check=False,
+        )
+        routed = (repo / "py_router" / "calls.log").read_text().splitlines()[-1].split()[0]
+        log = repo / "py_router" / "perimeter.log"
+        return done.returncode, Path(routed).name, log.read_text().splitlines() if log.exists() else []
+
+
+FAILED = {"summary": {"successful": 1, "failed": 1}}
+
+
+class PerimeterTest(unittest.TestCase):
+    def test_a_board_that_routes_plainly_is_never_fanned_out(self):
+        code, routed, calls = run_perimeter()
+        self.assertEqual(code, 0)
+        self.assertEqual(calls, [], "the stubs must not touch a board that routed")
+        self.assertEqual(routed, "in.kicad_pcb")
+
+    def test_a_board_that_fails_plainly_is_routed_again_with_the_stubs(self):
+        code, routed, calls = run_perimeter(summaries=[FAILED, FAILED, {"summary": CLEAN}])
+        self.assertEqual(code, 0)
+        self.assertEqual(len(calls), 1)
+        self.assertIn("--component U2", calls[0])
+        self.assertNotEqual(routed, "in.kicad_pcb", "the retry must route the fanned board")
+
+    def test_the_stage_leaves_the_projects_clearances_alone(self):
+        _, _, calls = run_perimeter(summaries=[FAILED, FAILED, {"summary": CLEAN}])
+        self.assertIn("--no-fix-drc-settings", calls[0])
+
+    def test_a_perimeter_fanout_that_fails_leaves_the_failed_route_as_it_was(self):
+        code, routed, calls = run_perimeter({"exit": 1}, summaries=[FAILED])
+        self.assertNotEqual(code, 0)
+        self.assertEqual(len(calls), 1)
+        self.assertEqual(routed, "in.kicad_pcb")
+
+
+# The defect this class reproduces: a package mistaken for a grid array (a
+# SOIC-8 with an exposed pad reads as three rows and three columns) was handed
+# to bga_fanout, which found nothing to escape and still rewrote every net
+# class's clearance in the project to its own 0.127 mm floor. The router then
+# routed at 0.127 mm and the board was judged at the 0.25 mm the classes
+# declare: 107 clearance errors on the Hub where the same export without the
+# stage had none. The two stubs below do exactly that, and KiCad grades the
+# result.
+DECLARED_CLEARANCE_MM = 0.25
+ENGINE_FLOOR_MM = 0.127
+
+NOGRID_BOARD = """(kicad_pcb
+  (version 20260206)
+  (generator "synth-eda")
+  (layers (0 "F.Cu" signal) (31 "B.Cu" signal) (44 "Edge.Cuts" user))
+  (net 0 "")
+  (net 1 "A")
+  (net 2 "B")
+  (footprint "Package_SO:SOIC-8-1EP_3.9x4.9mm_P1.27mm_EP2.41x3.3mm"
+    (layer "F.Cu")
+    (at 30 20)
+    (property "Reference" "U1" (at 0 -4) (layer "F.SilkS"))
+    (pad "1" smd roundrect (at -2.7 -1.905) (size 1.55 0.6) (layers "F.Cu" "F.Paste" "F.Mask"))
+    (pad "2" smd roundrect (at -2.7 -0.635) (size 1.55 0.6) (layers "F.Cu" "F.Paste" "F.Mask"))
+    (pad "3" smd roundrect (at -2.7 0.635) (size 1.55 0.6) (layers "F.Cu" "F.Paste" "F.Mask"))
+    (pad "4" smd roundrect (at -2.7 1.905) (size 1.55 0.6) (layers "F.Cu" "F.Paste" "F.Mask"))
+    (pad "5" smd roundrect (at 2.7 1.905) (size 1.55 0.6) (layers "F.Cu" "F.Paste" "F.Mask"))
+    (pad "6" smd roundrect (at 2.7 0.635) (size 1.55 0.6) (layers "F.Cu" "F.Paste" "F.Mask"))
+    (pad "7" smd roundrect (at 2.7 -0.635) (size 1.55 0.6) (layers "F.Cu" "F.Paste" "F.Mask"))
+    (pad "8" smd roundrect (at 2.7 -1.905) (size 1.55 0.6) (layers "F.Cu" "F.Paste" "F.Mask"))
+    (pad "9" smd rect (at 0 0) (size 2.41 3.3) (layers "F.Cu" "F.Mask"))
+    (pad "9" smd rect (at 0 -1.1) (size 1.0 1.0) (layers "F.Paste"))
+    (pad "9" smd rect (at 0 0) (size 1.0 1.0) (layers "F.Paste"))
+    (pad "9" smd rect (at 0 1.1) (size 1.0 1.0) (layers "F.Paste"))
+  )
+  (gr_line (start 0 0) (end 60 0) (layer "Edge.Cuts") (width 0.1))
+  (gr_line (start 0 0) (end 0 40) (layer "Edge.Cuts") (width 0.1))
+  (gr_line (start 60 0) (end 60 40) (layer "Edge.Cuts") (width 0.1))
+  (gr_line (start 0 40) (end 60 40) (layer "Edge.Cuts") (width 0.1))
+)
+"""
+
+
+def nogrid_project(clearance):
+    return json.dumps({
+        "meta": {"filename": "in.kicad_pro", "version": 3},
+        "net_settings": {
+            "classes": [{
+                "name": "Default", "clearance": clearance, "track_width": 0.2,
+                "via_diameter": 0.6, "via_drill": 0.3, "priority": 2147483647,
+            }],
+            "meta": {"version": 4}, "netclass_assignments": None, "netclass_patterns": [],
+        },
+    })
+
+
+# bga_fanout on a package that is not a lattice: it escapes nothing, writes the
+# board back, and rewrites the project's clearances to its own floor.
+NOGRID_FANOUT_STUB = """\
+import json, sys
+from pathlib import Path
+
+board = Path(sys.argv[1])
+out = Path(sys.argv[sys.argv.index("--output") + 1])
+out.write_text(board.read_text())
+project = json.loads(board.with_suffix(".kicad_pro").read_text())
+for netclass in project["net_settings"]["classes"]:
+    netclass["clearance"] = %r
+out.with_suffix(".kicad_pro").write_text(json.dumps(project))
+print("Warning: U1 doesn't appear to be a BGA")
+print("JSON_SUMMARY: " + json.dumps({"requested": 0, "escaped": 0, "failed": 0, "unescaped_nets": []}))
+""" % ENGINE_FLOOR_MM
+
+# A router that keeps the clearance of the project beside the board it is given:
+# it lays two parallel tracks exactly that far apart.
+NOGRID_ROUTE_STUB = """\
+import json, sys
+from pathlib import Path
+
+source = Path(sys.argv[1])
+out = Path(sys.argv[2])
+project = json.loads(source.with_suffix(".kicad_pro").read_text())
+gap = project["net_settings"]["classes"][0]["clearance"] + 0.01
+width = 0.2
+text = source.read_text().rstrip()
+assert text.endswith(")")
+tracks = (
+    f'(segment (start 8 10) (end 20 10) (width {width}) (layer "F.Cu") (net 1) (uuid "00000000-0000-0000-0000-000000000001"))\\n'
+    f'(segment (start 8 {10 + width + gap}) (end 20 {10 + width + gap}) (width {width}) (layer "F.Cu") (net 2) (uuid "00000000-0000-0000-0000-000000000002"))\\n'
+)
+out.write_text(text[:-1] + tracks + ")\\n")
+out.with_suffix(".kicad_pro").write_text(source.with_suffix(".kicad_pro").read_text())
+Path(sys.argv[sys.argv.index("--json-out") + 1]).write_text(json.dumps({"successful": 2, "failed": 0}))
+"""
+
+
+def clearance_errors_after_the_adapter():
+    """Run the adapter on the no-grid board and let KiCad grade the result.
+
+    The board is judged against the project it was exported with, as the
+    pipeline does, not against whatever an engine left beside its output."""
+    with tempfile.TemporaryDirectory() as tmp:
+        tmp = Path(tmp)
+        repo = tmp / "krt"
+        (repo / "py_router").mkdir(parents=True)
+        (repo / "py_router" / "bga_fanout.py").write_text(NOGRID_FANOUT_STUB)
+        (repo / "py_router" / "route.py").write_text(NOGRID_ROUTE_STUB)
+        board = tmp / "in.kicad_pcb"
+        board.write_text(NOGRID_BOARD)
+        board.with_suffix(".kicad_pro").write_text(nogrid_project(DECLARED_CLEARANCE_MM))
+        routed = tmp / "out.kicad_pcb"
+        done = subprocess.run(
+            [sys.executable, str(ADAPTER), str(board), str(routed),
+             "--repo", str(repo), "--python", sys.executable, "--fanout-component", "U1"],
+            capture_output=True, text=True, check=False,
+        )
+        assert done.returncode == 0, done.stdout + done.stderr
+        routed.with_suffix(".kicad_pro").write_text(board.with_suffix(".kicad_pro").read_text())
+        report = tmp / "drc.json"
+        drc = subprocess.run(
+            ["kicad-cli", "pcb", "drc", "--format", "json", "--severity-all",
+             "--output", str(report), str(routed)],
+            capture_output=True, text=True, check=False,
+        )
+        assert report.exists(), drc.stdout + drc.stderr
+        violations = json.loads(report.read_text()).get("violations", [])
+        return [v for v in violations if v.get("type") == "clearance"]
+
+
+@unittest.skipUnless(shutil.which("kicad-cli"), "needs kicad-cli to grade the board")
+class NoGridClearanceTest(unittest.TestCase):
+    def test_a_board_whose_package_escaped_nothing_passes_kicad_drc_with_no_clearance_errors(self):
+        errors = clearance_errors_after_the_adapter()
+        self.assertEqual(errors, [], f"{len(errors)} clearance error(s) after an escape that did nothing")
 
 
 class RetryTest(unittest.TestCase):
@@ -212,6 +419,16 @@ class FanoutTest(unittest.TestCase):
         # The reviewer's end-to-end condition: the board handed to the general
         # router carries the escape copper, not just the intent to escape.
         self.assertEqual(load_adapter()._copper_by_net(output), {"U1_N0": 1})
+
+    def test_an_inferred_package_with_nothing_to_escape_leaves_the_board_as_exported(self):
+        # bga_fanout on a SOIC with an exposed pad: ran, requested no ball, wrote
+        # the board back with the project's clearances rewritten. Routing that
+        # board is routing at 0.127 mm and being judged at the class clearance.
+        routed, escapes, _ = run_fanout(
+            ["U1"], required=[],
+            plan={"requested": 0, "escaped": 0, "failed": 0, "copper": 0})
+        self.assertEqual(escapes, [("U1", "channel")])
+        self.assertEqual(routed, "in.kicad_pcb")
 
     def test_via_in_pad_permits_the_under_pad_default(self):
         _, escapes, _ = run_fanout(["U1"], required=[], allow_via_in_pad=True)

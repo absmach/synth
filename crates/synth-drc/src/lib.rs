@@ -450,6 +450,47 @@ mod tests {
         }
     }
 
+    /// The inductor marks the switching node, not the rail its output
+    /// capacitors hold: a net on the inductor's filtered side, with a capacitor
+    /// to ground and no switch pin, is a rail that a slow declaration may quiet,
+    /// and the node the regulator switches stays critical.
+    #[test]
+    fn the_filtered_side_of_an_inductor_is_a_rail_and_the_switching_node_is_not() {
+        let board = board_from_source(
+            r#"board "buck" { layers 2
+                netclass "QUIET" { edge_rate slow }
+                component L1: inductor "l_generic_1210" value "10uH"
+                component C1: capacitor "c_generic_0603" value "100nF"
+                component C2: capacitor "c_generic_0603" value "100nF"
+                component R1: resistor "r_generic_0603" value "10k"
+                net "SW_NODE" class "QUIET" { L1.p1 C2.p1 }
+                net "BOOT" class "QUIET" { C2.p2 R1.p1 }
+                net "VOUT" class "QUIET" { L1.p2 C1.p1 }
+                net "GND" { C1.p2 R1.p2 }
+            }"#,
+        );
+        let critical = return_path_critical_net_names(&board);
+        assert!(critical.iter().any(|n| n == "SW_NODE"), "{critical:?}");
+        assert!(!critical.iter().any(|n| n == "VOUT"), "{critical:?}");
+    }
+
+    /// An inductor net with no capacitor to ground is not a filtered rail: it
+    /// stays critical even under a slow declaration.
+    #[test]
+    fn an_inductor_net_with_no_capacitor_to_ground_stays_critical() {
+        let board = board_from_source(
+            r#"board "choke" { layers 2
+                netclass "QUIET" { edge_rate slow }
+                component L1: inductor "l_generic_1210" value "10uH"
+                component R1: resistor "r_generic_0603" value "10k"
+                net "CHOKE" class "QUIET" { L1.p1 R1.p1 }
+                net "GND" { R1.p2 }
+            }"#,
+        );
+        let critical = return_path_critical_net_names(&board);
+        assert!(critical.iter().any(|n| n == "CHOKE"), "{critical:?}");
+    }
+
     /// A declared differential pair holds both legs critical even when the
     /// pins are typed plain and the class claims a slow edge.
     #[test]

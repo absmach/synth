@@ -344,6 +344,23 @@ fn report_silkscreen_pass(result: Result<label_vias::LabelMoves, String>) {
     }
 }
 
+/// A sliver of track that ends in nothing carries nothing and only trips KiCad's
+/// unconnected-end check; it goes before the candidate is judged. A prune that
+/// did not run leaves such a sliver in the board, so it is an unavailable check.
+fn repair_dropped_stubs(candidate: &Path) -> Vec<String> {
+    match island_vias::drop_dangling_stubs(candidate) {
+        Ok(0) => Vec::new(),
+        Ok(dropped) => {
+            eprintln!("note: dropped {dropped} track stub(s) that ended in nothing");
+            Vec::new()
+        }
+        Err(detail) => {
+            eprintln!("warning: track stubs were not pruned: {detail}");
+            vec![format!("track stub prune did not run: {detail}")]
+        }
+    }
+}
+
 /// Promote a router-produced candidate into a report, installing it only if
 /// it survives independent validation.
 ///
@@ -352,6 +369,7 @@ fn report_silkscreen_pass(result: Result<label_vias::LabelMoves, String>) {
 /// over-reports its own success cannot promote itself. A candidate that
 /// fails validation is still retained on disk as review material — it is
 /// just never installed over the baseline.
+#[allow(clippy::too_many_lines)]
 fn finalize(
     request: &RouteRequest,
     capability: Option<&RouterCapability>,
@@ -374,6 +392,7 @@ fn finalize(
             repair_unavailable.push(format!("via-in-pad repair did not run: {detail}"));
         }
     }
+    repair_unavailable.extend(repair_dropped_stubs(&candidate.candidate_path));
     let mut repair_advisory: Vec<String> = Vec::new();
     let mut ground = island_vias::Ground::new(&request.ground_nets);
     if let Some(critical) = &request.return_via_critical_nets {

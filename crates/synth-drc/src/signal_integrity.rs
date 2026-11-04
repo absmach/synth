@@ -600,7 +600,7 @@ pub(crate) fn net_name_or_pin_is_ground(board: &Board, net: &Net) -> bool {
 /// construction.
 #[must_use]
 pub fn return_path_critical_net_names(board: &Board) -> Vec<String> {
-    use synth_registry::ElectricalType;
+    use synth_registry::{ElectricalType, PinCapability};
     let slow: std::collections::BTreeSet<&str> = board
         .netclasses
         .iter()
@@ -623,29 +623,62 @@ pub fn return_path_critical_net_names(board: &Board) -> Vec<String> {
         .map(|net| net.id)
         .collect();
     for net in &board.nets {
-        let rides_fast = net.endpoints.iter().any(|endpoint| {
-            let Some(component) = board.component(endpoint.component) else {
-                return false;
-            };
-            let crystal = component.kind == "crystal";
-            component.kind == "inductor"
-                || component
-                    .part
-                    .as_ref()
-                    .and_then(|part| part.pins.get(endpoint.pin.0 as usize))
-                    .is_some_and(|pin| match pin.electrical_type {
-                        ElectricalType::DifferentialPositive
-                        | ElectricalType::DifferentialNegative
-                        | ElectricalType::Clock
-                        | ElectricalType::Rf
-                        | ElectricalType::Analog => true,
-                        // A bare crystal's terminals are passive, and the
-                        // oscillator pins they meet are often typed plain input
-                        // and output, so the crystal itself marks the net.
-                        ElectricalType::Passive => crystal,
-                        _ => false,
-                    })
+        let pin_of = |endpoint: &synth_ir::NetEndpoint| {
+            board
+                .component(endpoint.component)
+                .and_then(|component| component.part.as_ref())
+                .and_then(|part| part.pins.get(endpoint.pin.0 as usize))
+        };
+        // A pin that declares itself a switch node marks its net, whatever else
+        // sits on it.
+        let switch_pin = net.endpoints.iter().any(|endpoint| {
+            pin_of(endpoint)
+                .is_some_and(|pin| pin.capabilities.contains(&PinCapability::SwitchNode))
         });
+        // An inductor marks its net as a switching node, except on its filtered
+        // side: the net the output capacitors hold to ground carries the ripple
+        // current of the inductor as a rail, not a fast edge, and the node the
+        // regulator switches is the other one.
+        let on_inductor = net.endpoints.iter().any(|endpoint| {
+            board
+                .component(endpoint.component)
+                .is_some_and(|component| component.kind == "inductor")
+        });
+        let filtered_rail = on_inductor
+            && !switch_pin
+            && net.endpoints.iter().any(|endpoint| {
+                board
+                    .component(endpoint.component)
+                    .is_some_and(|component| component.kind == "capacitor")
+                    && board.nets.iter().any(|other| {
+                        other.id != net.id
+                            && ground.contains(&other.id)
+                            && other
+                                .endpoints
+                                .iter()
+                                .any(|e| e.component == endpoint.component)
+                    })
+            });
+        let rides_fast = switch_pin
+            || (on_inductor && !filtered_rail)
+            || net.endpoints.iter().any(|endpoint| {
+                let Some(component) = board.component(endpoint.component) else {
+                    return false;
+                };
+                let crystal = component.kind == "crystal";
+                pin_of(endpoint).is_some_and(|pin| match pin.electrical_type {
+                    ElectricalType::DifferentialPositive
+                    | ElectricalType::DifferentialNegative
+                    | ElectricalType::Clock
+                    | ElectricalType::Rf
+                    | ElectricalType::Analog => true,
+                    // A bare crystal's terminals are passive, and the
+                    // oscillator pins they meet are often typed plain input
+                    // and output, so the crystal itself marks the net.
+                    ElectricalType::Passive => crystal,
+                    _ => false,
+                })
+            });
         if rides_fast {
             critical.insert(net.id);
         }
