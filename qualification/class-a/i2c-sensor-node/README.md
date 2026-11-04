@@ -85,6 +85,12 @@ The source and sidecar in this directory were exported three times through the S
 
 With the random ids masked the routed board is `4aa8fa857b` in all three exports ([`reproduce/compare_exports.py`](reproduce/compare_exports.py) does the masking). [`reproduce/reproduce.sh`](reproduce/reproduce.sh) is supplemental tooling, not the evidence of how the board was made (see [`PROVENANCE.md`](PROVENANCE.md)); it rebuilds Synth at the pinned commit, exports three times and compares, then builds the fabrication package.
 
+## JLCPCB
+
+PCB DFM of the package of this README (JLCDFM, 2026-11-04 11:54, Gerber content hash `daa736de85`, two layers, 8.4 x 5 cm, report in [`reports/`](reports/jlcdfm_pcb_dfm_2026-11-04_11-54_daa736de85.pdf)): 0 Danger items. Good: through-hole to trace 0.34 mm, through-hole to SMD 3.98 mm (against the 2.1 mm JLCPCB reports as Danger), silkscreen line width 0.18 mm, no silkscreen over a pad or a hole, no via in a pad. Warnings: trace width 0.13 mm on 8 tracks (92 good), the 0.127 mm stubs at the pads of U2 described below; annular ring 0.13 mm on 4 pads (96 good); negative solder-mask expansion 0.04 mm on 48 openings; one solder-mask opening 0.1 mm from a trace; one pad spacing of 0.12 mm (47 good); one sharp trace corner; and 2 unconnected trace ends, the two dead-end branches in the DRC list.
+
+Quote with assembly for the same package ([`reports/jlcpcb_quote_2026-11-04.md`](reports/jlcpcb_quote_2026-11-04.md), Standard PCBA, no order placed): PCB $4.00 and PCBA $138.86, $142.86 in total.
+
 ## Power copper and the routing report
 
 The routing report ([`export/i2c_sensor_node.routing.json`](export/i2c_sensor_node.routing.json)) records `engine_policy_verdict: rejected` next to `fabrication_ready: true`. The two statements are about different checks. The routing engine runs with its strict-size policy, which rejects any feature smaller than its net class declares, and its own ledger lists 3 features on 1 net below the requested size (two fine-pitch taps with a narrowest track of 0.2 mm, and one via-in-pad clamp to 0.46 mm). Measured on the exported file, more tracks are narrower than their class: the engine also draws 0.127 mm stubs at the pads of U2 (28 segments, 26.5 mm in all), which its ledger does not list. Synth records the verdict and then checks the delivered board itself: connectivity (35 of 35 nets), the process floor of 0.127 mm for track width and clearance, KiCad DRC with the library tables (0 errors, 0 unconnected) and the return-via rule. The board passes all of them, so the delivered board is valid. The 80 vias the engine counted are its routing vias; the file holds 82 because Synth's exporter and repair passes add ground vias.
@@ -123,6 +129,21 @@ The added loop for the longest detour, 4.03 mm to the ground via and back, is ab
 ## Human review
 
 Every part of the board is recorded as reviewed by JeffMboya, with the review date and the datasheet or product page, in the part files of [`reproduce/user-registry/`](reproduce/user-registry/) (`reviewed_by`, `reviewed_at`, `datasheet_url`).
+
+### PCB review sign-off
+
+PCB review sign-off required by #39: JeffMboya, 2026-11-04, on the package in `fab/` (Gerber content hash `daa736de85`). The sign-off is JeffMboya's own, as the board's reviewer. It covers, each verified and approved by JeffMboya:
+
+| Item | Signed off |
+|---|---|
+| PCB and Gerber package | the Gerbers, drill, BOM and CPL of `fab/` and the exported KiCad board, hash `daa736de85` |
+| Return paths | the 12 return-via advisories of the routing report, as listed with their ground-via distances in "Return paths" above, the longest being 4.03 mm, and the `edge_rate slow` declaration of the `PWR`, `V33` and `SIG` net classes |
+| ERC | the one remaining diagnostic: the `pin_to_pin` warning on `U3` pin 5 (`SDO`), tied to ground for I2C address 0x76 |
+| KiCad DRC warnings | the 55 `lib_footprint_mismatch` warnings, silkscreen only, and the 2 `track_dangling` warnings, dead-end branches near U2 that join nothing and carry no current |
+| Narrow copper at U2 | the 0.127 mm stubs at the pads of U2, at the process floor, carrying at most the 100 mA budget (0.53 A capacity at a 10 C rise) |
+| Placement and density | the placement of the 57 parts on the 84.0 x 50.0 mm outline, 22.4 % courtyard fill, with connectors flush on the edges (the SWD header 0.43 mm in), the decouplers at their pins and the clearance around the mounting holes |
+| JLCPCB DFM warnings | the warnings listed under "JLCPCB" above (trace width 0.13 mm, annular ring 0.13 mm, negative solder-mask expansion 0.04 mm, one mask opening 0.1 mm from a trace, one pad spacing 0.12 mm, one sharp corner and 2 unconnected trace ends), for the JLCPCB standard process |
+| AMS1117 thermal | the supported operating envelope below |
 
 ### AMS1117 operating envelope
 
