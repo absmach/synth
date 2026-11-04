@@ -363,6 +363,7 @@ mod tests {
             source_span: Span::new(0, 0),
         };
         let board = Board {
+            outline: None,
             name: "fixture".into(),
             layers: 2,
             manufacturer: None,

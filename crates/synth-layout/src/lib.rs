@@ -6502,6 +6502,7 @@ mod barycenter_tests {
 
     fn board_with(components: Vec<Component>, nets: Vec<Net>) -> Board {
         Board {
+            outline: None,
             schematic_overflow: None,
             schematic_paper: None,
             groups: Vec::new(),
@@ -6738,6 +6739,7 @@ mod semantic_weights_tests {
 
     fn board(components: Vec<Component>, nets: Vec<Net>) -> Board {
         Board {
+            outline: None,
             schematic_overflow: None,
             schematic_paper: None,
             groups: Vec::new(),
@@ -7076,6 +7078,7 @@ mod soft_pin_swap_tests {
 
     fn board(components: Vec<Component>, nets: Vec<Net>) -> Board {
         Board {
+            outline: None,
             schematic_overflow: None,
             schematic_paper: None,
             groups: Vec::new(),
@@ -7328,6 +7331,7 @@ mod patterns_tests {
 
     fn board(components: Vec<Component>, nets: Vec<Net>) -> Board {
         Board {
+            outline: None,
             schematic_overflow: None,
             schematic_paper: None,
             groups: Vec::new(),
@@ -8137,6 +8141,7 @@ mod text_overlap_tests {
 
     fn empty_board() -> Board {
         Board {
+            outline: None,
             schematic_overflow: None,
             schematic_paper: None,
             groups: Vec::new(),
@@ -8271,6 +8276,7 @@ mod text_overlap_tests {
     /// A board whose content is far smaller than any standard page.
     fn paper_board(paper: Option<SchematicPaper>) -> Board {
         Board {
+            outline: None,
             schematic_overflow: None,
             schematic_paper: paper,
             ..empty_board()
@@ -8345,6 +8351,7 @@ mod text_overlap_tests {
 
     fn overflow_board(paper: Option<SchematicPaper>, overflow: Option<SchematicOverflow>) -> Board {
         Board {
+            outline: None,
             schematic_paper: paper,
             schematic_overflow: overflow,
             ..empty_board()
@@ -8676,6 +8683,7 @@ mod naming_tests {
 
     fn board(components: Vec<Component>, nets: Vec<Net>) -> Board {
         Board {
+            outline: None,
             schematic_overflow: None,
             schematic_paper: None,
             groups: Vec::new(),
@@ -8983,6 +8991,7 @@ mod documentation_tests {
 
     fn board_with_notes(components: Vec<Component>, nets: Vec<Net>, notes: Vec<Note>) -> Board {
         Board {
+            outline: None,
             schematic_overflow: None,
             schematic_paper: None,
             groups: Vec::new(),

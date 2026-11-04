@@ -17,9 +17,9 @@ use synth_ast::{
     BindStmt, BoardAst, BusDeclStmt, CompanyStmt, ComponentDeclAst, ConnectionAst, DiffPairAttr,
     DiffPairStmt, EndpointAst, EscapeAst, GroupAttr, GroupStmt, ImportAst, InterfaceDeclStmt,
     KeepoutAttr, KeepoutStmt, LayersStmt, LegendsStmt, ManufacturerStmt, ModuleDeclStmt,
-    NetDeclAst, NetclassAttr, NetclassStmt, NotesDeclAst, ParamDeclAst, PlacementHintAst,
-    PlacementHintAttr, PortBindingAst, PortDeclAst, PowerDeclAst, ProgramAst, RequiresStmt,
-    RevisionStmt, SchematicOverflowAst, SchematicPaperAst, SchematicStmt, SheetStmt,
+    NetDeclAst, NetclassAttr, NetclassStmt, NotesDeclAst, OutlineStmt, ParamDeclAst,
+    PlacementHintAst, PlacementHintAttr, PortBindingAst, PortDeclAst, PowerDeclAst, ProgramAst,
+    RequiresStmt, RevisionStmt, SchematicOverflowAst, SchematicPaperAst, SchematicStmt, SheetStmt,
     StackupLayerAst, StackupStmt, StatementAst, UseStmt, ValueWithUnit, VariantDeclStmt,
 };
 
@@ -305,6 +305,7 @@ impl Parser {
     fn parse_statement(&mut self) -> Option<StatementAst> {
         match self.peek_kind() {
             TokenKind::KwLayers => self.parse_layers().map(StatementAst::Layers),
+            TokenKind::KwOutline => self.parse_outline().map(StatementAst::Outline),
             TokenKind::KwManufacturer => self.parse_manufacturer().map(StatementAst::Manufacturer),
             TokenKind::KwRevision => self.parse_revision().map(StatementAst::Revision),
             TokenKind::KwCompany => self.parse_company().map(StatementAst::Company),
@@ -406,6 +407,56 @@ impl Parser {
             count: u32::try_from(n).unwrap(),
             span: Span::new(start, end),
         })
+    }
+
+    /// `outline <width> x <height>` — a fixed board rectangle whose
+    /// bottom-left corner is the board origin.
+    fn parse_outline(&mut self) -> Option<OutlineStmt> {
+        let start = self.peek().span.byte_start;
+        self.bump(); // consume `outline`
+        let width = self.expect_value()?;
+        let width = self.outline_dimension(width, "width")?;
+        if !matches!(self.peek_kind(), TokenKind::Ident(name) if name == "x") {
+            self.emit(
+                self.peek().span,
+                "E-SYNTH-PARSE-041",
+                "expected `x` between the outline width and height",
+                "`x`, e.g. `outline 60mm x 30mm`",
+                self.describe_current(),
+                None,
+            );
+            return None;
+        }
+        self.bump();
+        let height = self.expect_value()?;
+        let height = self.outline_dimension(height, "height")?;
+        let end = self.last_offset();
+        Some(OutlineStmt {
+            width,
+            height,
+            span: Span::new(start, end),
+        })
+    }
+
+    /// Reject a non-positive outline dimension where it was written; the
+    /// unit itself is checked during lowering.
+    fn outline_dimension(&mut self, value: ValueWithUnit, side: &str) -> Option<ValueWithUnit> {
+        if value.literal.parse::<f64>().is_ok_and(|v| v > 0.0) {
+            return Some(value);
+        }
+        self.emit(
+            value.span,
+            "E-SYNTH-PARSE-042",
+            "outline dimension must be positive",
+            "a positive length, e.g. `60mm`",
+            format!(
+                "`{}{}` as the outline {side}",
+                value.literal,
+                value.unit.as_str()
+            ),
+            None,
+        );
+        None
     }
 
     fn parse_manufacturer(&mut self) -> Option<ManufacturerStmt> {
@@ -2633,6 +2684,7 @@ impl Parser {
             match self.peek_kind() {
                 TokenKind::RBrace
                 | TokenKind::KwLayers
+                | TokenKind::KwOutline
                 | TokenKind::KwManufacturer
                 | TokenKind::KwComponent
                 | TokenKind::KwConnect
@@ -2676,6 +2728,7 @@ impl Parser {
             TokenKind::KwBoard => "`board`".to_string(),
             TokenKind::KwImport => "`import`".to_string(),
             TokenKind::KwLayers => "`layers`".to_string(),
+            TokenKind::KwOutline => "`outline`".to_string(),
             TokenKind::KwManufacturer => "`manufacturer`".to_string(),
             TokenKind::KwRevision => "`revision`".to_string(),
             TokenKind::KwCompany => "`company`".to_string(),
@@ -3236,6 +3289,67 @@ mod tests {
             .attrs
             .iter()
             .any(|attr| matches!(attr, PlacementHintAttr::Edge(edge, _) if edge == "right")));
+    }
+
+    #[test]
+    fn parse_outline_statement() {
+        let res = parse(
+            lex(r#"board "b" { outline 60mm x 30mm }"#),
+            "test.synth".into(),
+        );
+        assert!(res.diagnostics.is_empty(), "{:?}", res.diagnostics);
+        let ast = res.ast.expect("outline parses");
+        let StatementAst::Outline(outline) = &ast.board.statements[0] else {
+            panic!("expected an outline statement")
+        };
+        assert_eq!(outline.width.literal, "60");
+        assert_eq!(outline.width.unit, synth_ast::Unit::Mm);
+        assert_eq!(outline.height.literal, "30");
+    }
+
+    #[test]
+    fn outline_requires_an_x_between_the_dimensions() {
+        let res = parse(
+            lex(r#"board "b" { outline 60mm 30mm }"#),
+            "test.synth".into(),
+        );
+        assert!(
+            res.diagnostics
+                .iter()
+                .any(|d| d.code == "E-SYNTH-PARSE-041"),
+            "{:?}",
+            res.diagnostics
+        );
+    }
+
+    #[test]
+    fn outline_dimensions_need_a_unit() {
+        let res = parse(
+            lex(r#"board "b" { outline 60 x 30mm }"#),
+            "test.synth".into(),
+        );
+        assert!(
+            res.diagnostics
+                .iter()
+                .any(|d| d.code == "E-SYNTH-PARSE-026"),
+            "{:?}",
+            res.diagnostics
+        );
+    }
+
+    #[test]
+    fn a_zero_outline_dimension_is_rejected() {
+        let res = parse(
+            lex(r#"board "b" { outline 0mm x 30mm }"#),
+            "test.synth".into(),
+        );
+        assert!(
+            res.diagnostics
+                .iter()
+                .any(|d| d.code == "E-SYNTH-PARSE-042"),
+            "{:?}",
+            res.diagnostics
+        );
     }
 
     #[test]

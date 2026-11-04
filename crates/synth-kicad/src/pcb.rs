@@ -333,30 +333,13 @@ pub fn build_pcb(
                     Some((centre, mm_to_nm(width_mm / 2.0)))
                 })
                 .collect();
-            // Left corners slide right and right corners slide left.
-            let points = [
-                (outline.min.x_nm + inset, outline.min.y_nm + inset, 1),
-                (outline.max.x_nm - inset, outline.min.y_nm + inset, -1),
-                (outline.max.x_nm - inset, outline.max.y_nm - inset, -1),
-                (outline.min.x_nm + inset, outline.max.y_nm - inset, 1),
-            ];
-            for (stitch_index, (x_nm, y_nm, inward)) in points.into_iter().enumerate() {
-                let Point { x_nm, y_nm } =
-                    clear_of_mounting_holes(Point::new(x_nm, y_nm), inward, &holes);
-                if region
-                    .as_deref()
-                    .is_some_and(|polygon| !convex_contains(polygon, Point::new(x_nm, y_nm)))
-                {
-                    continue;
-                }
-                if !outline_points.is_empty()
-                    && !custom_outline_contains(outline_points, Point::new(x_nm, y_nm))
-                {
-                    continue;
-                }
+            for (stitch_index, point) in ground_fence_points(outline, inset, &holes)
+                .into_iter()
+                .enumerate()
+            {
                 children.push(build_ground_stitch_via(
-                    x_nm,
-                    y_nm,
+                    point.x_nm,
+                    point.y_nm,
                     *pcb_net,
                     project,
                     plane_index * 4 + stitch_index,
@@ -1213,8 +1196,47 @@ fn build_mounting_hole_keepout(
     )
 }
 
-/// Slide a corner fence via along the board edge, toward the inside (`inward`
-/// is +1 for a left-hand corner and -1 for a right-hand one), until it is out of
+/// The through vias that stitch the ground planes into one network: one at
+/// the midpoint of the top edge and one at the midpoint of the bottom edge,
+/// inset 1.5 mm.
+///
+/// They used to sit at the four corners, where a via lands beside a corner
+/// mounting hole and reads as a second hole in the 3D view. A midpoint is far
+/// from every corner, and one through via already ties every ground copper
+/// layer, so two points keep the planes connected. A midpoint that still
+/// lands in a mounting hole's keepout slides along its edge, away from the
+/// nearest hole, and never leaves the board.
+fn ground_fence_points(outline: Rect, inset_nm: i64, holes: &[(Point, i64)]) -> [Point; 2] {
+    let mid_x = outline.min.x_nm + (outline.max.x_nm - outline.min.x_nm) / 2;
+    // Slide away from the hole nearest the midpoint, not always to the right.
+    let inward = holes
+        .iter()
+        .min_by_key(|(centre, _)| (centre.x_nm - mid_x).abs())
+        .map_or(1, |(centre, _)| if centre.x_nm < mid_x { 1 } else { -1 });
+    let clamp_x = |point: Point| {
+        Point::new(
+            point
+                .x_nm
+                .clamp(outline.min.x_nm + inset_nm, outline.max.x_nm - inset_nm),
+            point.y_nm,
+        )
+    };
+    [
+        clamp_x(clear_of_mounting_holes(
+            Point::new(mid_x, outline.min.y_nm + inset_nm),
+            inward,
+            holes,
+        )),
+        clamp_x(clear_of_mounting_holes(
+            Point::new(mid_x, outline.max.y_nm - inset_nm),
+            inward,
+            holes,
+        )),
+    ]
+}
+
+/// Slide a fence via along a horizontal board edge, toward the inside (`inward`
+/// is +1 toward increasing x and -1 toward decreasing x), until it is out of
 /// every mounting hole's zone: the hole's radius plus the keepout. A via that is
 /// already clear is returned as it is. `holes` are `(centre, radius)`.
 fn clear_of_mounting_holes(via: Point, inward: i64, holes: &[(Point, i64)]) -> Point {
@@ -2603,7 +2625,14 @@ fn build_footprint_instance(
         let body = strip_footprint_head(body);
         let body = add_footprint_angle_to_pads(&body, pad_angle);
         let body_with_nets = inject_pad_nets(&body, component.id, pad_net_lookup);
-        let body_with_nets = ensure_body_uuids(&body_with_nets, project, lib_id, &component.refdes);
+        // `lib_id` alone is shared by every instance of the same footprint,
+        // so two mounting holes would mint the same pad UUIDs and confuse
+        // KiCad's DRC item identity. Scope the derivation to the instance.
+        let body_with_nets = ensure_body_uuids(
+            &body_with_nets,
+            project,
+            &format!("{lib_id}@{}", component.refdes),
+        );
         let has_model = body_with_nets.contains("(model ");
         children.push(Sexp::Raw(body_with_nets));
         has_model
@@ -3355,6 +3384,31 @@ mod tests {
     }
 
     #[test]
+    fn the_ground_fence_sits_at_edge_midpoints_not_corners() {
+        let outline =
+            synth_geometry::Rect::new(Point::new(0, 0), Point::new(mm_to_nm(60.0), mm_to_nm(30.0)));
+        let points = ground_fence_points(outline, mm_to_nm(1.5), &[]);
+        assert_eq!(points[0], Point::new(mm_to_nm(30.0), mm_to_nm(1.5)));
+        assert_eq!(points[1], Point::new(mm_to_nm(30.0), mm_to_nm(28.5)));
+    }
+
+    #[test]
+    fn a_midpoint_fence_via_slides_off_a_mounting_hole() {
+        let outline =
+            synth_geometry::Rect::new(Point::new(0, 0), Point::new(mm_to_nm(60.0), mm_to_nm(30.0)));
+        let hole = hole(30.0, 0.0, 1.25);
+        let points = ground_fence_points(outline, mm_to_nm(1.5), &[hole]);
+        assert_ne!(points[0].x_nm, mm_to_nm(30.0), "{:?}", points[0]);
+        assert!(
+            points[0].x_nm >= outline.min.x_nm + mm_to_nm(1.5)
+                && points[0].x_nm <= outline.max.x_nm - mm_to_nm(1.5),
+            "the slide stays on the board: {:?}",
+            points[0]
+        );
+        assert_eq!(points[0].y_nm, mm_to_nm(1.5));
+    }
+
+    #[test]
     fn a_via_clear_of_every_hole_stays_where_it_is() {
         let corner = Point::new(mm_to_nm(1.5), mm_to_nm(1.5));
         assert_eq!(clear_of_mounting_holes(corner, 1, &[]), corner);
@@ -3880,6 +3934,7 @@ mod tests {
         // Build a minimal Board whose nets have semantic names so the power-domain
         // engine classifies them correctly (GND → Ground, VCC → Rail via name heuristic).
         let board = Board {
+            outline: None,
             schematic_overflow: None,
             schematic_paper: None,
             groups: Vec::new(),
@@ -4012,6 +4067,7 @@ mod tests {
     fn declared_netclass_emitted_with_joined_nets() {
         use synth_ir::Length;
         let board = Board {
+            outline: None,
             schematic_overflow: None,
             schematic_paper: None,
             groups: Vec::new(),
@@ -4096,6 +4152,7 @@ mod tests {
     /// on what the classes declare.
     fn plain_test_board() -> Board {
         Board {
+            outline: None,
             schematic_overflow: None,
             schematic_paper: None,
             groups: Vec::new(),
@@ -4239,6 +4296,7 @@ mod tests {
     #[test]
     fn test_kicad_cli_roundtrip_valid_board() {
         let board = Board {
+            outline: None,
             schematic_overflow: None,
             schematic_paper: None,
             groups: Vec::new(),
