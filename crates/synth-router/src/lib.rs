@@ -419,6 +419,11 @@ fn finalize(
     if let Err(detail) = &silkscreen {
         repair_unavailable.push(format!("silkscreen repair did not run: {detail}"));
     }
+    // The candidate is final once the repairs are done; count what it holds
+    // before `install` moves it.
+    let delivered_board = std::fs::read_to_string(&candidate.candidate_path)
+        .ok()
+        .and_then(|text| pcb_read::PcbBoard::parse(&text).ok());
     let verdict = with_repair_findings(
         validate_candidate(request, &candidate),
         repair_blocking,
@@ -458,6 +463,9 @@ fn finalize(
     }
 
     let mut statistics = candidate.statistics.clone();
+    if let Some(board) = &delivered_board {
+        kicad_routing_tools::refresh_counts(&mut statistics, board);
+    }
     // The router's own open-net claim is kept for provenance, but the
     // connectivity pass is what fills the fields the report reports on.
     statistics.connected_nets = verdict.connectivity.connected_nets;
