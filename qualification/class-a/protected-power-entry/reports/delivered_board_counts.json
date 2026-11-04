@@ -1,0 +1,25 @@
+{
+  "board": "protected_power_entry.kicad_pcb",
+  "board_sha256_10": "d3ffa2c550",
+  "delivered_board": {
+    "segments": 288,
+    "vias": 44,
+    "via_size_drill_mm": {
+      "0.6/0.2": 44
+    },
+    "wire_length_mm": 873.4
+  },
+  "routing_report": {
+    "segments": 288,
+    "vias": 44,
+    "wire_length_mm": 873.4,
+    "connected_nets": 34,
+    "open_nets": 0,
+    "note": "connected_nets and open_nets are refreshed from the delivered board's validation; the others are not"
+  },
+  "kicad_drc": {
+    "errors": 0,
+    "unconnected": 0,
+    "warnings": 80
+  }
+}

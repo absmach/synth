@@ -1,0 +1,16 @@
+Capacitor_SMD:C_0603_1608Metric  DRC warnings 9  differs in: {'F.SilkS': 9}
+Capacitor_SMD:C_1206_3216Metric  DRC warnings 8  differs in: {'F.SilkS': 8}
+Capacitor_THT:CP_Radial_D6.3mm_P2.50mm  DRC warnings 3  differs in: {'F.SilkS': 3}
+Connector_JST:JST_XH_S2B-XH-A-1_1x02_P2.50mm_Horizontal  DRC warnings 4  differs in: {'F.SilkS': 4}
+Connector_PinHeader_2.54mm:PinHeader_1x08_P2.54mm_Vertical  DRC warnings 1  differs in: {'F.SilkS': 1}
+Diode_SMD:D_SMA  DRC warnings 1  differs in: {'F.SilkS': 1}
+Diode_SMD:D_SOD-123  DRC warnings 6  differs in: {'F.SilkS': 6}
+Fuse:Fuse_1812_4532Metric  DRC warnings 3  differs in: {'F.SilkS': 3}
+Inductor_SMD:L_Bourns_SRN6045TA  DRC warnings 1  differs in: {'F.SilkS': 1}
+LED_SMD:LED_0603_1608Metric  DRC warnings 6  differs in: {'F.SilkS': 6}
+Package_SO:SOIC-8-1EP_3.9x4.9mm_P1.27mm_EP2.41x3.3mm  DRC warnings 1  differs in: {'F.SilkS': 1}
+Package_TO_SOT_SMD:SOT-223-3_TabPin2  DRC warnings 1  differs in: {'F.SilkS': 1}
+Package_TO_SOT_SMD:SOT-23  DRC warnings 1  differs in: {'F.SilkS': 1}
+Package_TO_SOT_SMD:SOT-23-6  DRC warnings 1  differs in: {'F.SilkS': 1}
+Resistor_SMD:R_0603_1608Metric  DRC warnings 24  differs in: {'F.SilkS': 24}
+TestPoint:TestPoint_Pad_D1.5mm  DRC warnings 10  differs in: {'F.SilkS': 10}

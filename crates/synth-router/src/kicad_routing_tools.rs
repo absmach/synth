@@ -630,6 +630,18 @@ pub fn statistics_from(
     statistics
 }
 
+/// Replace the track and via counts with those of the board as it is now.
+///
+/// [`statistics_from`] reads the board the router wrote. Synth then repairs
+/// that candidate (it prunes dangling stubs and adds island ties and return
+/// vias), so the counts of the delivered board differ. The report describes
+/// the delivered board, so its counts are read again after the repairs.
+pub fn refresh_counts(statistics: &mut RouteStatistics, board: &crate::pcb_read::PcbBoard) {
+    statistics.segments = board.segments.len();
+    statistics.vias = board.vias.len();
+    statistics.wire_length_mm = board.wire_length_mm();
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1160,6 +1172,37 @@ mod tests {
             ..KrtReport::default()
         };
         assert!(report.below_floor().is_empty());
+    }
+
+    /// The repairs after the router add vias and drop stubs, so the counts of
+    /// the board the router wrote are not those of the board that is delivered.
+    #[test]
+    fn the_counts_are_those_of_the_board_after_the_repairs() {
+        let routed =
+            crate::pcb_read::PcbBoard::parse(crate::pcb_read::SAMPLE_BOARD).expect("parses");
+        let mut statistics = statistics_from(Some(&routed), None);
+        let (segments, vias) = (statistics.segments, statistics.vias);
+        assert_eq!((segments, vias), (routed.segments.len(), routed.vias.len()));
+
+        let repaired_text = crate::pcb_read::SAMPLE_BOARD
+            .replace(
+                "  (segment (start 15 20) (end 15 18) (width 0.25) (layer \"F.Cu\") (net 2))\n",
+                "",
+            )
+            .replace(
+                "  (via (at 15 18)",
+                "  (via (at 12 12) (size 0.8) (drill 0.4) (layers \"F.Cu\" \"B.Cu\") (net 1))\n  (via (at 15 18)",
+            );
+        let repaired = crate::pcb_read::PcbBoard::parse(&repaired_text).expect("parses");
+        refresh_counts(&mut statistics, &repaired);
+
+        assert_eq!(
+            statistics.segments,
+            segments - 1,
+            "the pruned stub is not counted"
+        );
+        assert_eq!(statistics.vias, vias + 1, "the added via is counted");
+        assert!((statistics.wire_length_mm - repaired.wire_length_mm()).abs() < 1e-9);
     }
 
     #[test]
