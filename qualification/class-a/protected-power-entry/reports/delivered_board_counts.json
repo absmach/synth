@@ -1,6 +1,6 @@
 {
   "board": "protected_power_entry.kicad_pcb",
-  "board_sha256_10": "4564963f46",
+  "board_sha256_10": "d3ffa2c550",
   "delivered_board": {
     "segments": 288,
     "vias": 44,
@@ -10,8 +10,8 @@
     "wire_length_mm": 873.4
   },
   "routing_report": {
-    "segments": 289,
-    "vias": 27,
+    "segments": 288,
+    "vias": 44,
     "wire_length_mm": 873.4,
     "connected_nets": 34,
     "open_nets": 0,

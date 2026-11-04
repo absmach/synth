@@ -13,7 +13,7 @@ The board is the output of an agent driving `synth mcp` from a prompt, followed 
 
 | | |
 |---|---|
-| Synth, final exports | commit `0ceb7b8071d40edadc0fff36584922d6f8c3f917` of `absmach/synth` (`upstream/main`, the merge of Synth pull request #388, with #370 and #394 before it). `synth --version` prints `synth-cli 0.1.1`; `synth mcp --stdio` is the same binary |
+| Synth, final exports | commit `7d418281f188b02a11c3ccf012f643c3aa784516` of `absmach/synth`: `upstream/main` at `0ceb7b80` (the merge of Synth pull request #388, with #370 and #394 before it) and the router fix of this pull request on top of it, which is retrievable as `refs/pull/269/head`. `synth --version` prints `synth-cli 0.1.1`; `synth mcp --stdio` is the same binary |
 | KiCadRoutingTools | `9399bfb29e072bfe60b10d9cdae20c274fc2a17a` |
 | KiCad | 10.0.6 (library tables for DRC and ERC) |
 

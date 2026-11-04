@@ -1,25 +1,29 @@
 #!/usr/bin/env python3
-"""step_models.py <out dir>: write the 3D models KiCad's stock library does not have, as STEP files.
+"""step_models.py <out dir> [3D library dir]: write the 3D models the board needs and KiCad's stock library lacks.
 
-Run with a Python that has OCP (OpenCASCADE), for example `pip install cadquery-ocp` in a venv.
-Each model is in millimetres with its origin at the footprint origin and +z up from the board surface.
-These are envelope models of the real parts, not manufacturer CAD:
+Run with a Python that has OCP (OpenCASCADE), for example `pip install cadquery-ocp` in a venv. The 3D library dir
+defaults to the user flatpak's KiCad 3D library. Each model is in millimetres with its origin at the footprint origin
+and +z up from the board surface:
 
-  TestPoint_Pad_D1.5mm.step    a 1.5 mm disc of copper, 0.05 mm proud of the board surface.
-  Fuse_1812_4532Metric.step    4.5 x 3.2 mm body, 1.25 mm high (JLCPCB listing of the Littelfuse 1812L150/16DR,
-                               C207070), with 0.6 mm end terminations at the pads.
-
+  TestPoint_Pad_D1.5mm.step    the footprint's 1.5 mm pad as 1 oz copper: a disc 0.035 mm thick.
+  Fuse_1812_4532Metric.step    the outline of the Littelfuse 1812L150/16DR as the JLCPCB listing of that part gives it
+                               (C207070): 4.73 mm long, 3.41 mm wide, 1.25 mm high, the datasheet's maxima.
+  SOIC-8-1EP_3.9x4.9mm_P1.27mm_EP2.41x3.3mm.step
+                               the library's SOIC-8-1EP_3.9x4.9mm_P1.27mm_EP2.41x3.81mm body and leads, with the exposed
+                               pad cut from 3.81 to the footprint's 3.3 mm (the pad is the 0.05 mm slab under the body).
+  Broadcom_APDS-9301.step      (irrigation controller) the APDS-9301's miniature ChipLED package, 2.60 x 2.20 mm and
+                               0.55 mm high, from its datasheet.
 
 A mounting hole has no body: the hole is drilled in the board solid of the STEP.
 """
 import sys
 from pathlib import Path
 
-from OCP.BRepAlgoAPI import BRepAlgoAPI_Fuse
+from OCP.BRepAlgoAPI import BRepAlgoAPI_Cut, BRepAlgoAPI_Fuse
 from OCP.BRepPrimAPI import BRepPrimAPI_MakeBox, BRepPrimAPI_MakeCylinder
 from OCP.gp import gp_Ax2, gp_Dir, gp_Pnt
 from OCP.IFSelect import IFSelect_RetDone
-from OCP.STEPControl import STEPControl_AsIs, STEPControl_Writer
+from OCP.STEPControl import STEPControl_AsIs, STEPControl_Reader, STEPControl_Writer
 
 
 def box(x0, y0, z0, x1, y1, z1):
@@ -45,16 +49,22 @@ def write(shape, path):
 
 
 out = Path(sys.argv[1])
-out.mkdir(parents=True, exist_ok=True)
-write(disc(0.75, 0.05), out / "TestPoint_Pad_D1.5mm.step")
-write(
-    fuse_all(
-        [
-            box(-1.65, -1.6, 0.0, 1.65, 1.6, 1.25),
-            box(-2.25, -1.6, 0.0, -1.65, 1.6, 1.25),
-            box(1.65, -1.6, 0.0, 2.25, 1.6, 1.25),
-        ]
-    ),
-    out / "Fuse_1812_4532Metric.step",
+library = Path(
+    sys.argv[2]
+    if len(sys.argv) > 2
+    else Path.home() / ".local/share/flatpak/runtime/org.kicad.KiCad.Library.Packages3D/x86_64/stable/active/files/3dmodels"
 )
+out.mkdir(parents=True, exist_ok=True)
+write(disc(0.75, 0.035), out / "TestPoint_Pad_D1.5mm.step")
+write(box(-2.365, -1.705, 0.0, 2.365, 1.705, 1.25), out / "Fuse_1812_4532Metric.step")
+
+reader = STEPControl_Reader()
+reader.ReadFile(str(library / "Package_SO.3dshapes/SOIC-8-1EP_3.9x4.9mm_P1.27mm_EP2.41x3.81mm.step"))
+reader.TransferRoots()
+soic = reader.OneShape()
+# The exposed pad is the slab under the body, z 0 to 0.05, 2.41 x 3.81 mm; cut it to 3.3 mm.
+for y0, y1 in ((1.65, 2.0), (-2.0, -1.65)):
+    soic = BRepAlgoAPI_Cut(soic, box(-1.3, y0, -0.01, 1.3, y1, 0.05)).Shape()
+write(soic, out / "SOIC-8-1EP_3.9x4.9mm_P1.27mm_EP2.41x3.3mm.step")
+write(box(-1.3, -1.1, 0.0, 1.3, 1.1, 0.55), out / "Broadcom_APDS-9301.step")
 print("wrote", *sorted(p.name for p in out.glob("*.step")))

@@ -17,15 +17,15 @@
     "profile": "jlcpcb",
     "command": [
       "/home/jeff/synth-local/krtvenv/bin/python",
-      "/home/jeff/synth-local/wt-escape/tools/kicad_routing_tools_route.py",
-      "/home/jeff/synth-local/work/hub-final/export1/protected_power_entry.synth.kicad_pcb",
-      "/home/jeff/synth-local/work/hub-final/export1/protected_power_entry.kicadroutingtools.kicad_pcb",
+      "/home/jeff/synth-local/wt-SYN-262-protected-power-entry/tools/kicad_routing_tools_route.py",
+      "/home/jeff/synth-local/work/hub-424/export1/protected_power_entry.synth.kicad_pcb",
+      "/home/jeff/synth-local/work/hub-424/export1/protected_power_entry.kicadroutingtools.kicad_pcb",
       "--repo",
       "/home/jeff/synth-local/krt",
       "--python",
       "/home/jeff/synth-local/krtvenv/bin/python",
       "--stats",
-      "/home/jeff/synth-local/work/hub-final/export1/protected_power_entry.krt-stats.json",
+      "/home/jeff/synth-local/work/hub-424/export1/protected_power_entry.krt-stats.json",
       "--escalation",
       "board",
       "--fab-tier",
@@ -52,15 +52,15 @@
     "input_hash": "df006c77f0f7876562986e411b8d0c6e51c3e44dc423d5835b1f5281ca7d8220",
     "output_hash": "",
     "source_revision": null,
-    "duration_ms": 230927
+    "duration_ms": 169241
   },
   "statistics": {
     "connected_nets": 34,
     "open_nets": 0,
     "open_net_names": [],
-    "segments": 289,
-    "vias": 27,
-    "wire_length_mm": 873.40038,
+    "segments": 288,
+    "vias": 44,
+    "wire_length_mm": 873.356221,
     "pad_escape_rejections": 0,
     "engine_findings": {
       "claimed_successful": "33",
@@ -70,12 +70,12 @@
     }
   },
   "artifacts": {
-    "baseline": "/home/jeff/synth-local/work/hub-final/export1/protected_power_entry.synth.kicad_pcb",
-    "candidate": "/home/jeff/synth-local/work/hub-final/export1/protected_power_entry.kicadroutingtools.kicad_pcb",
-    "delivered": "/home/jeff/synth-local/work/hub-final/export1/protected_power_entry.kicad_pcb",
-    "session_log": "/home/jeff/synth-local/work/hub-final/export1/protected_power_entry.kicadroutingtools.log",
+    "baseline": "/home/jeff/synth-local/work/hub-424/export1/protected_power_entry.synth.kicad_pcb",
+    "candidate": "/home/jeff/synth-local/work/hub-424/export1/protected_power_entry.kicadroutingtools.kicad_pcb",
+    "delivered": "/home/jeff/synth-local/work/hub-424/export1/protected_power_entry.kicad_pcb",
+    "session_log": "/home/jeff/synth-local/work/hub-424/export1/protected_power_entry.kicadroutingtools.log",
     "ses": null,
-    "router_report": "/home/jeff/synth-local/work/hub-final/export1/protected_power_entry.krt-stats.json",
+    "router_report": "/home/jeff/synth-local/work/hub-424/export1/protected_power_entry.krt-stats.json",
     "connectivity_report": null,
     "drc_report": null
   },

@@ -8,9 +8,11 @@
 # 10.0.6 for the fabrication package. Each export takes about 8 minutes.
 #
 # The versions it uses are in pins.env. Synth is built from absmach/synth at the
-# pinned commit, in upstream/main: the merge of Synth pull request #388, with
-# #370 and #394 before it, which carry the silkscreen, via, label and
-# return-via changes this board uses. The parts the design uses that are not in
+# pinned commit: upstream/main at 0ceb7b80 (the merge of Synth pull request #388,
+# with #370 and #394 before it, which carry the silkscreen, via, label and
+# return-via changes this board uses) and the router fix of pull request #269
+# (refs/pull/269/head), which counts the routing report's statistics after the
+# repair passes. The parts the design uses that are not in
 # that checkout's registry are in user-registry/.
 set -euo pipefail
 
@@ -28,6 +30,7 @@ kicad_now=$(kicad-cli version 2>/dev/null || true)
 mkdir -p "$work"
 [ -d "$work/synth/.git" ] || git clone --quiet "$SYNTH_REPO" "$work/synth"
 git -C "$work/synth" fetch --quiet origin
+git -C "$work/synth" fetch --quiet origin "refs/pull/269/head" || true
 git -C "$work/synth" checkout --quiet "$SYNTH_COMMIT"
 (cd "$work/synth" && cargo build --release -p synth-cli)
 
