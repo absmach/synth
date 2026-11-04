@@ -91,7 +91,7 @@ PCB DFM of the package of this README (JLCDFM, 2026-11-04 11:54, Gerber content 
 
 Quote with assembly for the same package ([`reports/jlcpcb_quote_2026-11-04.md`](reports/jlcpcb_quote_2026-11-04.md), Standard PCBA, no order placed): PCB $4.00 and PCBA $138.86, $142.86 in total.
 
-JLCPCB's BOM tool on the orderable BOM of `fab/` ([`reports/jlcpcb_assembly_bom_matching_2026-11-04.md`](reports/jlcpcb_assembly_bom_matching_2026-11-04.md)): 53 of the 55 lines match the BOM's manufacturer part numbers. `U2` (STM32G030F6P6, `C724040`) and `J5` (Harwin M20-9991246, `C5439732`) match with 0 in the tool's Source column against a quantity of 5; `SW1` is unconfirmed, because the tool offers a through-hole E-Switch part (`C5798268`) in place of the BOM's surface-mount C&K PTS645SM43SMTR92 LFS; `J4` (the SWD header) has no match and is hand-fitted from Farnell 1022253.
+In the orderable BOM of `fab/`, `U2` is the STM32G030F6P6TR (the tape-and-reel orderable code of the same TSSOP-20 part, JLCPCB listing `C529330`) and `SW1` is the C&K PTS645SM43SMTR92 LFS (JLCPCB listing `C221880`); `J4`, the SWD header, is hand-fitted from Farnell 1022253.
 
 ## Power copper and the routing report
 
