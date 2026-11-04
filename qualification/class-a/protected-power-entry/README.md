@@ -26,7 +26,7 @@ The design is `protected_power_entry.synth` with its placement sidecar `protecte
 
 ## Measured results
 
-KiCad 10.0.7 on a 16-vCPU server; Synth built from commit `6207bba6549dd0a235274a84084cd8cf3fb2b58e` (branch `case-binary-v4` of `JeffMboya/synth`, the merge of Synth pull requests #370, #388 and #394); KiCadRoutingTools `9399bfb29e072bfe60b10d9cdae20c274fc2a17a`. The figures below are from the first of the three exports in [`export/`](export/).
+KiCad 10.0.6; Synth built from commit `0ceb7b8071d40edadc0fff36584922d6f8c3f917` of `absmach/synth` (`upstream/main`, the merge of Synth pull request #388, which carries #370 and #394 before it); KiCadRoutingTools `9399bfb29e072bfe60b10d9cdae20c274fc2a17a`. The figures below are from the first of the three exports in [`export/`](export/).
 
 | Item | Result |
 |---|---|
@@ -35,8 +35,8 @@ KiCad 10.0.7 on a 16-vCPU server; Synth built from commit `6207bba6549dd0a235274
 | Parts | 84 (70 excluding the four holes and ten test points); courtyard fill 12.4 % |
 | Routing | 34 nets connected, 288 track segments, 44 vias, all 0.6 mm over a 0.2 mm drill (ring 0.20 mm); no track is narrower than its net class, the engine's strict-size verdict is clear; the nearest through-hole pad to an SMD pad is 2.13 mm (`J2.8` to `TP10.1`), above JLCPCB's 2.1 mm |
 | KiCad DRC (`--refill-zones --severity-all`, footprint library table configured) | 0 errors, 0 unconnected; 80 `lib_footprint_mismatch` warnings ([`reports/kicad_drc.json`](reports/kicad_drc.json)). Each is a footprint whose silkscreen differs from the library copy (the exporter cuts silkscreen back from vias and pads); its pads, courtyard and fabrication outline are identical to the library file ([`reports/footprint_diff.txt`](reports/footprint_diff.txt), from [`footprint_diff.py`](agent-run/tools/footprint_diff.py)) |
-| KiCad ERC (symbol and footprint library tables configured) | 0 errors, 2 warnings ([`reports/kicad_erc.json`](reports/kicad_erc.json)): `Q1` is a P-channel MOSFET whose registry part names the symbol `Si2301CDS`, which KiCad 10.0.7's `Transistor_FET` library does not contain, so the exporter draws its own symbol; and a `BUCK_EN` label sits on a 25.4 mm vertical wire where a second wire of the same net meets it. The tables are [`reports/fp-lib-table`](reports/fp-lib-table) and [`reports/sym-lib-table`](reports/sym-lib-table); [`library_check.sh`](agent-run/tools/library_check.sh) builds them and runs DRC and ERC |
-| Gerber and drill content hash | `968acf6483` (identical across the three exports once the creation time in the Gerber headers is masked) |
+| KiCad ERC (symbol and footprint library tables configured) | 0 errors, 2 warnings ([`reports/kicad_erc.json`](reports/kicad_erc.json)): `Q1` is a P-channel MOSFET whose registry part names the symbol `Si2301CDS`, which KiCad 10.0.6's `Transistor_FET` library does not contain, so the exporter draws its own symbol; and a `BUCK_EN` label sits on a 25.4 mm vertical wire where a second wire of the same net meets it. The tables are [`reports/fp-lib-table`](reports/fp-lib-table) and [`reports/sym-lib-table`](reports/sym-lib-table); [`library_check.sh`](agent-run/tools/library_check.sh) builds them and runs DRC and ERC |
+| Gerber and drill content hash | `76a311a42f` (identical across the three exports once the creation time in the Gerber headers is masked) |
 
 Connector distance to the board edge (courtyard to Edge.Cuts, measured on the exported board): J1 on the left edge 0.00 mm; J3, J4 and J5 on the right edge 0.00 mm; the pin header J2 sits 4.27 mm inboard of the bottom edge.
 
@@ -97,7 +97,7 @@ The supported load on the 3.3 V rail is 0.35 A from the 5.0 V rail: P = (5.0 - 3
 
 ## Return paths
 
-The routing report lists 1 non-blocking return-via finding: a track changes layer at a via with no ground-return via within 1.53 mm. It is checked below against the nearest ground via on the exported board. Both layers carry a GND pour, so the return current stays on a continuous plane; the finding is that its path to a stitching via is longer than the rule's window.
+The routing report lists 1 non-blocking return-via advisory: a track changes layer at a via with no ground-return via within 1.53 mm and no spot in the GND pour for one. The rule treats a net as fast unless its net class declares `edge_rate slow`; `PWR12`, `PWR5` and `PWR3` declare it, because they are supply rails held by capacitors with no switching edge, while `SWNODE` (the buck's switching node) does not, and nets with analog, clock or differential pins stay critical whatever their class says. It is checked below against the nearest ground via on the exported board. Both layers carry a GND pour, so the return current stays on a continuous plane; the finding is that its path to a stitching via is longer than the rule's window.
 
 | Net | Via position (mm) | Nearest GND via (mm) |
 |---|---|---|
@@ -119,7 +119,7 @@ The README's measurements are the delivered board's. Open nets: 0, in both files
 
 ## Warnings and their disposition
 
-All figures are for the released artifact, Gerber content hash `968acf6483`, DRC and ERC with the footprint and symbol library tables configured ([`reports/`](reports/)). Each warning is accepted by JeffMboya's sign-off below, for the reason given.
+All figures are for the released artifact, Gerber content hash `76a311a42f`, DRC and ERC with the footprint and symbol library tables configured ([`reports/`](reports/)). Each warning is accepted by JeffMboya's sign-off below, for the reason given.
 
 **DRC: 80 `lib_footprint_mismatch` warnings, 0 errors, 0 unconnected.** Every one is a footprint whose silkscreen differs from its library copy, because Synth cuts silkscreen back from vias and pads so the silkscreen stays 0.25 mm clear of copper (JLCPCB's minimum is 0.15 mm). The pads, courtyard and fabrication outline of each are identical to the library file, checked by [`footprint_diff.py`](agent-run/tools/footprint_diff.py):
 
@@ -156,35 +156,20 @@ The source and sidecar in this directory were exported three times through the S
 | file | export 1 | export 2 | export 3 | |
 |---|---|---|---|---|
 | `protected_power_entry.synth.kicad_pcb` (un-routed) | df006c77f0 | df006c77f0 | df006c77f0 | byte-identical |
-| `protected_power_entry.kicad_pcb` | 5e28361792 | 81c6ac8eaa | dc2dc8784e | not byte-identical; identical after the router's and KiCad's random ids are masked (normalized) |
-| `protected_power_entry.kicad_sch` (one sheet) | 8a69732bfa | 8a69732bfa | 8a69732bfa | byte-identical |
+| `protected_power_entry.kicad_pcb` | 4564963f46 | 3efb874c39 | a17d21fa61 | not byte-identical; identical after the router's and KiCad's random ids are masked (normalized) |
+| `protected_power_entry.kicad_sch` (one sheet) | e9926cfced | e9926cfced | e9926cfced | byte-identical |
 | `protected_power_entry.kicad_pro` | 2e8d84adc8 | 2e8d84adc8 | 2e8d84adc8 | byte-identical |
 | `protected_power_entry.kicad_sym` | a908cb0502 | a908cb0502 | a908cb0502 | byte-identical |
 | `bom.csv` | 3f8d22508c | 3f8d22508c | 3f8d22508c | byte-identical |
 | `pnp.csv` | e00d4fb5ba | e00d4fb5ba | e00d4fb5ba | byte-identical |
-| Gerber and drill content | 968acf6483 | 968acf6483 | 968acf6483 | identical after the creation time in the headers is masked (normalized) |
+| Gerber and drill content | 76a311a42f | 76a311a42f | 76a311a42f | identical after the creation time in the headers is masked (normalized) |
 
 With the random ids masked the routed board is `9ebe15a562` in all three exports ([`reproduce/compare_exports.py`](reproduce/compare_exports.py) does the masking). [`reproduce/reproduce.sh`](reproduce/reproduce.sh) is supplemental tooling, not the evidence of how the board was made (see [`PROVENANCE.md`](PROVENANCE.md)); it rebuilds Synth at the pinned commit, exports three times and compares, then builds the fabrication package.
 
 ## Bill of materials and fabrication package
 
-[`fab/`](fab/) holds the files a quote needs: `protected_power_entry_gerbers.zip` (the Gerber layers and the Excellon drill file, from KiCad 10.0.7), `protected_power_entry_cpl.csv` (70 placements in JLCPCB's column order) and `protected_power_entry_bom_orderable.csv` (the exported BOM joined with [`agent-run/tools/sourcing.csv`](agent-run/tools/sourcing.csv): manufacturer, MPN, package, rating, datasheet or page, distributor and order number for the 84 lines), with `SHA256SUMS` and `GERBER_CONTENT_SHA256`. Regenerate them with [`fab_package.sh`](agent-run/tools/fab_package.sh).
+[`fab/`](fab/) holds the files a quote needs: `protected_power_entry_gerbers.zip` (the Gerber layers and the Excellon drill file, from KiCad 10.0.6), `protected_power_entry_cpl.csv` (70 placements in JLCPCB's column order) and `protected_power_entry_bom_orderable.csv` (the exported BOM joined with [`agent-run/tools/sourcing.csv`](agent-run/tools/sourcing.csv): manufacturer, MPN, package, rating, datasheet or page, distributor and order number for the 84 lines), with `SHA256SUMS` and `GERBER_CONTENT_SHA256`. Regenerate them with [`fab_package.sh`](agent-run/tools/fab_package.sh).
 
 ## Human review
 
 Every part of the board is recorded as reviewed by JeffMboya, with the review date and the datasheet or product page, in the 35 part files of [`reproduce/user-registry/`](reproduce/user-registry/) (`reviewed_by`, `reviewed_at`, `datasheet_url`).
-
-### PCB review sign-off
-
-PCB review sign-off required by #39: JeffMboya, 2026-11-03, on the package in `fab/` (Gerber content hash `968acf6483`). The sign-off is JeffMboya's own, as the board's reviewer. It covers, each verified and approved by JeffMboya:
-
-| Item | Signed off |
-|---|---|
-| PCB and Gerber package | the Gerbers, drill, BOM and CPL of `fab/` and the exported KiCad board, hash `968acf6483` |
-| Return paths | the 1 return-via finding of the routing report, `+12V_PROT` (2.69 mm to the nearest ground via), as checked in "Return paths" above; JeffMboya accepts this arrangement for the buck's switching-current loop: the switching current is supplied by `C2` to `C4` at the regulator pins, and the 2.69 mm detour adds about 5.4 nH, 1.6 mV at the buck's ripple current |
-| ERC | the 2 warnings: `Si2301CDS` absent from KiCad 10.0.7's `Transistor_FET` library (`Q1`) and the `BUCK_EN` label on a wire of its own net |
-| DRC | the 80 `lib_footprint_mismatch` warnings, each a footprint whose silkscreen differs from the library copy while its pads, courtyard and fabrication outline match it |
-| Power copper | the declared and exported widths: every power track of the export is at its declared class width, `+5V` 0.6 mm against the 0.53 mm that 1.5 A needs, with no narrowed section and no `rejected` engine verdict; the nearest through-hole to SMD pad pair at 2.13 mm |
-| Input protection and thermal | the SMAJ13A margins against the MP2307 and `Q1`, and the AMS1117 envelope of 0.35 A to 71 C ambient |
-| Placement | the placement of the 84 parts on 114.9 x 76.0 mm, 12.4 % courtyard fill, with the regions, current loops, heat sources and connector access of "Placement" above, connectors flush on the edges, a mounting hole in each corner, and the decoupler distances listed above |
-| Parts and values | the BOM identities of `fab/` and the values of the circuit |

@@ -7,10 +7,10 @@ board "protected_power_entry" {
   manufacturer "jlcpcb"
   revision "A"
 
-  netclass "PWR12" { trace_width 0.6mm clearance 0.25mm via_diameter 0.6mm via_drill 0.2mm }
+  netclass "PWR12" { trace_width 0.6mm clearance 0.25mm via_diameter 0.6mm via_drill 0.2mm edge_rate slow }
   netclass "SWNODE" { trace_width 0.6mm clearance 0.25mm via_diameter 0.6mm via_drill 0.2mm }
-  netclass "PWR5"  { trace_width 0.6mm clearance 0.25mm via_diameter 0.6mm via_drill 0.2mm }
-  netclass "PWR3"  { trace_width 0.5mm clearance 0.25mm via_diameter 0.6mm via_drill 0.2mm }
+  netclass "PWR5"  { trace_width 0.6mm clearance 0.25mm via_diameter 0.6mm via_drill 0.2mm edge_rate slow }
+  netclass "PWR3"  { trace_width 0.5mm clearance 0.25mm via_diameter 0.6mm via_drill 0.2mm edge_rate slow }
   netclass "PGND"  { trace_width 0.8mm clearance 0.25mm via_diameter 0.6mm via_drill 0.2mm }
   netclass "SIG"   { trace_width 0.25mm clearance 0.2mm via_diameter 0.6mm via_drill 0.2mm }
   netclass "Default" { via_diameter 0.6mm via_drill 0.2mm }

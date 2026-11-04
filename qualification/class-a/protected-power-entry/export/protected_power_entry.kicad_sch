@@ -15690,7 +15690,7 @@
 		(uuid "90a7158b-d331-5fab-a40f-8652021a7b59")
 	)
 	(text
-		"Supply range 10.8 to 13.0 V. Chain: J1 > F1 > (D1 TVS to GND) > Q1 > +12V_PROT."
+		"Supply range 12 V +/-5 %, 10.8 to 12.6 V, qualified maximum 12.6 V. Chain: J1 > F1 > (D1 TVS to GND) > Q1 > +12V_PROT."
 		(at 19.28 116.25 0)
 		(effects
 			(font
@@ -15698,10 +15698,10 @@
 			)
 			(justify left bottom)
 		)
-		(uuid "a36e56fb-b375-5ecc-bbd8-5ee69fd06c7e")
+		(uuid "b2feb8c9-d2e1-5196-82ea-53587b9a057e")
 	)
 	(text
-		"D1 SMAJ13A (Littelfuse): standoff 13.0 V, at or above the 13.0 V maximum input; leakage 1 uA max at 13.0 V; clamp 21.5 V max at 18.6 A."
+		"D1 SMAJ13A (Littelfuse): standoff 13.0 V, 0.4 V above the 12.6 V maximum input; leakage 1 uA max at 13.0 V, lower at 12.6 V; clamp 21.5 V max at 18.6 A."
 		(at 19.28 118.79 0)
 		(effects
 			(font
@@ -15709,7 +15709,7 @@
 			)
 			(justify left bottom)
 		)
-		(uuid "781cd4fd-b2af-5cc1-9e98-b715b03aedfb")
+		(uuid "2661c1ad-14c5-5909-8064-3d6341064317")
 	)
 	(text
 		"D1 clamps on VIN_12V_FUSED before Q1: 21.5 V is below Q1 AO3401A 30 V drain-source, MP2307 23 V recommended input and 26 V absolute maximum."

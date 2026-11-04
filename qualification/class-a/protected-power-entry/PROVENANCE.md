@@ -13,9 +13,9 @@ The board is the output of an agent driving `synth mcp` from a prompt, followed 
 
 | | |
 |---|---|
-| Synth, final exports | commit `6207bba6549dd0a235274a84084cd8cf3fb2b58e` (branch `case-binary-v4` of `JeffMboya/synth`): the merge of Synth pull requests #370, #388 and #394. `synth --version` prints `synth-cli 0.1.1`; `synth mcp --stdio` is the same binary |
+| Synth, final exports | commit `0ceb7b8071d40edadc0fff36584922d6f8c3f917` of `absmach/synth` (`upstream/main`, the merge of Synth pull request #388, with #370 and #394 before it). `synth --version` prints `synth-cli 0.1.1`; `synth mcp --stdio` is the same binary |
 | KiCadRoutingTools | `9399bfb29e072bfe60b10d9cdae20c274fc2a17a` |
-| KiCad | 10.0.7 (library tables for DRC and ERC), on a 16-vCPU server |
+| KiCad | 10.0.6 (library tables for DRC and ERC) |
 
 ## Inputs
 
