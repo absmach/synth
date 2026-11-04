@@ -1,9 +1,12 @@
 # 24 V in, 3.3 V out buck with input parts (PTC, reverse-block diode, TVS) (SYN-67)
 
 Status: designed, placed by a hand-pinned sidecar, routed, DRC and ERC counted, Gerber and drill files
-generated. Not fabricated, not powered, no hardware test. Two parts on the board have no reviewer
-(`lmr38010`, `ltst_c190kgkt`), so the fab package reports `release_ready: false` by design. The review
-evidence for both is below and is a draft for the maintainer, not a sign-off.
+generated. Not fabricated, not powered, no hardware test. **Not Class-B qualified**: no independent
+review, and `synth check --fab` fails (11 signal vias without a ground-return via within 0.64 mm), so
+this board stays outside the Class-B qualification set. `lmr38010` and `ltst_c190kgkt` carry a
+registry review by the author (Steve Munene, 2026-10-29), which is not an independent sign-off; the
+release-gate success in `reports/release*.json` covers only Synth's routing and export gates.
+The review evidence for both parts is below.
 Intended for 24 V +10% in and 1 A out. The converter is rated 1 A, and the PTC and the input connector are
 further limits (see Limits). No surge test was run. The TVS clamp (48.4 V at 12.4 A) is below the
 converter's 85 V absolute maximum; a sustained overvoltage is limited by the PTC and the 50 V capacitors.
@@ -110,7 +113,7 @@ Read from the datasheet above on 2026-10-29. Registry file `registry/parts/diode
 - Circuit: D3 from +3V3 through R_LED 470 ohm: (3.3 - 2.4 to 1.9) / 470 = 1.9 to 3.0 mA, well under 30 mA. D4 likewise through R_PGLED.
 - Not checked: availability, LCSC number, the Lite-On temperature derating curve against the board temperature.
 
-Not signed. `reviewed_by` stays empty until the maintainer has read the datasheet and signs it in the registry file.
+Registry `reviewed_by` is "Steve Munene" (2026-10-29), the author. This is not an independent sign-off.
 
 ### Review record: U1 TI LMR38010SDDAR
 
@@ -122,7 +125,7 @@ Read from SNVSBM3B (text copy), 2026-10-29. Registry file `registry/parts/regula
 - Application: Cin at least 4.7 uF plus 100-220 nF (C2 10 uF, C3 220 nF); inductor above the Eq 11 minimum (1.03 uH against 6.8 uH); PG pull-up and EN divider as in the sections above.
 - Not checked: availability, LCSC number.
 
-Not signed. `reviewed_by` stays empty until the maintainer has read the datasheet and signs it in the registry file.
+Registry `reviewed_by` is "Steve Munene" (2026-10-29), the author. This is not an independent sign-off.
 
 ## Limits and honesty notes
 
@@ -171,7 +174,7 @@ datasheet.
 
 ## Measured results
 
-The export routes with FreeRouting 2.4.1 on OpenJDK 25.0.4.1; the routed board is written as `out/buck/buck.kicad_pcb` when Synth's gate passes (state `routed`). Numbers below are from the committed files, measured 2026-10-29. `reports/buck.routing.json` records `source_revision` a9c7546e4aeecee7719aa003f3699064bb30b912, the commit of the sources the board was built from.
+The export routes with FreeRouting 2.4.1 on OpenJDK 25.0.4.1; the routed board is written as `out/buck/buck.kicad_pcb` when Synth's gate passes (state `routed`). Numbers below are from the committed files, measured 2026-10-29. `reports/buck.routing.json` records `source_revision` a79570cd84d7c9dcc67931593a42fc3836b76065, the commit of the sources the board was built from.
 
 | Number | Value | Command |
 | --- | --- | --- |

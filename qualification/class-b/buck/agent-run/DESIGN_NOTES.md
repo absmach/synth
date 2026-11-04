@@ -1,3 +1,5 @@
+> **Retrospective documentation reconstruction, not reproducible prompt-to-PCB evidence.** The exact prompt, ordered tool calls, model and tool versions, and export session report were not saved. This board is **not Class-B qualified** and is outside the qualification set: `synth check --fab` fails, thermal and via-in-pad, sourcing, DFM and independent sign-off are open (see `VERIFICATION_REPORT.md`).
+
 Design notes reconstructed from the committed files. The board was built by an agent; `prompt.md` is the cleaned brief it was given (same text as the website showcase), not the exact text that was run. No tool-call log or report was saved.
 
 # buck rev A: design notes (24 V in, 3.3 V out, 1 A)
