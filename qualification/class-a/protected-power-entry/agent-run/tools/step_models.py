@@ -6,8 +6,10 @@ defaults to the user flatpak's KiCad 3D library. Each model is in millimetres wi
 and +z up from the board surface:
 
   TestPoint_Pad_D1.5mm.step    the footprint's 1.5 mm pad as 1 oz copper: a disc 0.035 mm thick.
-  Fuse_1812_4532Metric.step    the outline of the Littelfuse 1812L150/16DR as the JLCPCB listing of that part gives it
-                               (C207070): 4.73 mm long, 3.41 mm wide, 1.25 mm high, the datasheet's maxima.
+  Fuse_1812_4532Metric.step    the Littelfuse 1812L150/16DR at the middle of its datasheet ranges (1812L series datasheet,
+                               dimensions table, rows 1812L150/16): 4.55 mm long (A 4.37 to 4.73), 3.24 mm wide (B 3.07
+                               to 3.41), 1.00 mm thick (C 0.75 to 1.25), with end terminations 0.75 mm long (D 0.3 to 1.2),
+                               as three solids: the body and the two terminations.
   SOIC-8-1EP_3.9x4.9mm_P1.27mm_EP2.41x3.3mm.step
                                the library's SOIC-8-1EP_3.9x4.9mm_P1.27mm_EP2.41x3.81mm body and leads, with the exposed
                                pad cut from 3.81 to the footprint's 3.3 mm (the pad is the 0.05 mm slab under the body).
@@ -21,7 +23,9 @@ from pathlib import Path
 
 from OCP.BRepAlgoAPI import BRepAlgoAPI_Cut, BRepAlgoAPI_Fuse
 from OCP.BRepPrimAPI import BRepPrimAPI_MakeBox, BRepPrimAPI_MakeCylinder
+from OCP.BRep import BRep_Builder
 from OCP.gp import gp_Ax2, gp_Dir, gp_Pnt
+from OCP.TopoDS import TopoDS_Compound
 from OCP.IFSelect import IFSelect_RetDone
 from OCP.STEPControl import STEPControl_AsIs, STEPControl_Reader, STEPControl_Writer
 
@@ -56,7 +60,16 @@ library = Path(
 )
 out.mkdir(parents=True, exist_ok=True)
 write(disc(0.75, 0.035), out / "TestPoint_Pad_D1.5mm.step")
-write(box(-2.365, -1.705, 0.0, 2.365, 1.705, 1.25), out / "Fuse_1812_4532Metric.step")
+builder = BRep_Builder()
+fuse = TopoDS_Compound()
+builder.MakeCompound(fuse)
+for part in (
+    box(-1.525, -1.62, 0.0, 1.525, 1.62, 1.00),
+    box(-2.275, -1.62, 0.0, -1.525, 1.62, 1.00),
+    box(1.525, -1.62, 0.0, 2.275, 1.62, 1.00),
+):
+    builder.Add(fuse, part)
+write(fuse, out / "Fuse_1812_4532Metric.step")
 
 reader = STEPControl_Reader()
 reader.ReadFile(str(library / "Package_SO.3dshapes/SOIC-8-1EP_3.9x4.9mm_P1.27mm_EP2.41x3.81mm.step"))
