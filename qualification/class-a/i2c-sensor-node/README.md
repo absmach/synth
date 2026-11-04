@@ -91,7 +91,7 @@ PCB DFM of the package of this README (JLCDFM, 2026-11-04 11:54, Gerber content 
 
 Quote with assembly for the same package ([`reports/jlcpcb_quote_2026-11-04.md`](reports/jlcpcb_quote_2026-11-04.md), Standard PCBA, no order placed): PCB $4.00 and PCBA $138.86, $142.86 in total.
 
-JLCPCB's BOM tool on the orderable BOM of `fab/` ([`reports/jlcpcb_assembly_bom_matching_2026-11-04.md`](reports/jlcpcb_assembly_bom_matching_2026-11-04.md)): 54 of the 55 lines match the BOM's manufacturer part numbers, `U2` (STM32G030F6P6TR, `C529330`) and `SW1` (C&K PTS645SM43SMTR92LFS, `C221880`) with 5 in the tool's Source column against a quantity of 5. `J5` (Harwin M20-9991246, `C5439732`) matches with 0 in the Source column; `J4`, the SWD header, has no match and is hand-fitted from Farnell 1022253.
+In the orderable BOM of `fab/`, `U2` is the STM32G030F6P6TR (JLCPCB listing `C529330`), `SW1` the C&K PTS645SM43SMTR92LFS (`C221880`) and `J5` the XFCN PZ254V-11-12P 1x12 header (`C2840012`); `J4`, the SWD header, is hand-fitted from Farnell 1022253.
 
 ## Power copper and the routing report
 
