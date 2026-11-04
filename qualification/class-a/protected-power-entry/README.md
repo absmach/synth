@@ -107,7 +107,7 @@ The routing report lists 1 non-blocking return-via advisory: a track changes lay
 
 ## Routing report and the delivered board
 
-The routing report ([`export/protected_power_entry.routing.json`](export/protected_power_entry.routing.json)) is written when the router finishes. Synth then repairs the candidate before it judges it, and the delivered board ([`export/protected_power_entry.kicad_pcb`](export/protected_power_entry.kicad_pcb)) is the repaired one. The counts of the two files, from the same export:
+The routing report ([`export/protected_power_entry.routing.json`](export/protected_power_entry.routing.json)) is written when the router finishes. Synth then repairs the candidate before it judges it, and the delivered board ([`export/protected_power_entry.kicad_pcb`](export/protected_power_entry.kicad_pcb)) is the repaired one. The report's segment, via and wire-length counts are not refreshed after the repair passes ([absmach/synth#424](https://github.com/absmach/synth/issues/424)). The counts of the two files, from the same export:
 
 | Count | Routing report | Delivered board | What accounts for the difference |
 |---|---|---|---|
