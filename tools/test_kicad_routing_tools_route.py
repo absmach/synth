@@ -387,7 +387,7 @@ def run_fanout(components, required, allow_via_in_pad=False, plan=None):
         board.write_text("(kicad_pcb)")
         routed = adapter._fanout(
             sys.executable, repo, board, components, "underpad", 0.127, None, None,
-            "standard", False, "none", allow_via_in_pad, set(required),
+            "standard", False, "none", None, allow_via_in_pad, set(required),
         )
         log = repo / "py_router" / "fanout.log"
         calls = log.read_text().splitlines() if log.exists() else []
@@ -463,7 +463,7 @@ class FailClosedPrerequisiteTest(unittest.TestCase):
             with self.assertRaises(RuntimeError):
                 adapter._fanout(
                     sys.executable, repo, board, ["U1:channel:"], "underpad", 0.127,
-                    None, None, "standard", False, "none", False, {"U1"},
+                    None, None, "standard", False, "none", None, False, {"U1"},
                 )
 
     def test_failing_route_planes_fails_when_declared(self):
@@ -478,7 +478,7 @@ class FailClosedPrerequisiteTest(unittest.TestCase):
             with self.assertRaises(RuntimeError):
                 adapter._fanout(
                     sys.executable, repo, board, ["U1:channel:"], "underpad", 0.127,
-                    None, None, "standard", False, "none", False, {"U1"},
+                    None, None, "standard", False, "none", None, False, {"U1"},
                 )
 
     def test_missing_bga_fanout_fails_when_declared(self):
@@ -491,7 +491,7 @@ class FailClosedPrerequisiteTest(unittest.TestCase):
             with self.assertRaises(RuntimeError):
                 adapter._fanout(
                     sys.executable, repo, board, ["U1:channel:"], "underpad", 0.127,
-                    None, None, "standard", False, "none", False, {"U1"},
+                    None, None, "standard", False, "none", None, False, {"U1"},
                 )
 
 
@@ -507,7 +507,7 @@ class FailClosedPrerequisiteTest(unittest.TestCase):
             with self.assertRaises(RuntimeError):
                 adapter._fanout(
                     sys.executable, repo, board, ["U1:channel:"], "underpad", 0.127,
-                    None, None, "standard", False, "none", False, set(),
+                    None, None, "standard", False, "none", None, False, set(),
                 )
 
 
