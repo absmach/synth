@@ -174,6 +174,8 @@ With the random ids masked the routed board is `9ebe15a562` in all three exports
 
 PCB DFM of the package of this README (JLCDFM, 2026-11-04 14:23, Gerber content hash `76a311a42f`, two layers, 11.49 x 7.6 cm, report in [`reports/`](reports/jlcdfm_pcb_dfm_2026-11-04_14-23_76a311a42f.pdf)): 0 Danger items. Trace width 0.25 mm, pad spacing 0.32 mm, annular ring 0.2 mm, silkscreen line width 0.18 mm and silkscreen to pad 0.25 mm are good, with no silkscreen over a hole and no via in a pad.
 
+Quote with assembly for the same package ([`reports/jlcpcb_quote_2026-11-04.md`](reports/jlcpcb_quote_2026-11-04.md), Standard PCBA, no order placed): PCB $8.80 and PCBA $130.21, $139.01 in total.
+
 ## Human review
 
 Every part of the board is recorded as reviewed by JeffMboya, with the review date and the datasheet or product page, in the 35 part files of [`reproduce/user-registry/`](reproduce/user-registry/) (`reviewed_by`, `reviewed_at`, `datasheet_url`).
