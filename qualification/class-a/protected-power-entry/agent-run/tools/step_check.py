@@ -18,7 +18,7 @@ defined = set(re.findall(r"^#(\d+)\s*=", step, re.M))
 used = set(re.findall(r"#(\d+)", step.split("DATA;", 1)[1]))
 dangling = sorted(used - defined, key=int)
 solids = len(re.findall(r"MANIFOLD_SOLID_BREP", step))
-models = len(re.findall(r'\(model "', board))
+models = len(re.findall(r'\(model\s+"', board))
 points = collections.Counter(
     tuple(round(float(v), 3) for v in p.split(","))
     for p in re.findall(r"CARTESIAN_POINT\('[^']*',\(([^)]*)\)\)", step)
