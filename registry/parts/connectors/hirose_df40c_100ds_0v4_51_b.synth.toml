@@ -11,6 +11,7 @@ kicad_footprint = "Connector_Hirose_DF40:Hirose_DF40C-100DS-0.4V_2x50_P0.4mm"
 width_mm = 26.0
 height_mm = 4.2
 courtyard_margin_mm = 0.25
+mating_face = "top"
 
 [operating_conditions]
 min_voltage_v = 0.0

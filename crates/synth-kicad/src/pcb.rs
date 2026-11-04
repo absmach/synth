@@ -559,7 +559,11 @@ fn copper_layers(layer_count: u32) -> Vec<&'static str> {
 /// when a power plane is declared. Empty for a board with no inner layer.
 fn inner_plane_layers(layer_count: u32) -> Vec<&'static str> {
     match layer_count {
-        6 => vec!["In1.Cu", "In4.Cu"],
+        // A declared power plane takes the inner layers; a board with no
+        // power plane keeps In2/In3 free for signal (see
+        // `ground_plane_layers`). A 6-layer board with three rails needs three
+        // distinct inner layers, so all four are offered here.
+        6 => vec!["In1.Cu", "In2.Cu", "In3.Cu", "In4.Cu"],
         4 => vec!["In1.Cu", "In2.Cu"],
         _ => Vec::new(),
     }

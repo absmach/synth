@@ -12,6 +12,7 @@ kicad_footprint = "Battery:BatteryHolder_Keystone_1058_1x2032"
 width_mm = 23.0
 height_mm = 23.0
 courtyard_margin_mm = 0.25
+mating_face = "top"
 
 [operating_conditions]
 min_voltage_v = 0.0
