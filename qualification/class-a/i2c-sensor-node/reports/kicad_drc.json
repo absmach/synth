@@ -1,7 +1,7 @@
 {
     "$schema": "https://schemas.kicad.org/drc.v1.json",
     "coordinate_units": "mm",
-    "date": "2026-11-03T09:04:44",
+    "date": "2026-11-04T11:39:26",
     "ignored_checks": [
         {
             "description": "Footprint has no courtyard defined",
@@ -29,18 +29,48 @@
         "warning",
         "exclusion"
     ],
-    "kicad_version": "10.0.7",
+    "kicad_version": "10.0.6",
     "schematic_parity": [],
     "source": "i2c_sensor_node.kicad_pcb",
     "unconnected_items": [],
     "violations": [
+        {
+            "description": "Track has unconnected end",
+            "items": [
+                {
+                    "description": "Track [GPIO_PB9_MCU] on F.Cu, length 1.4674 mm",
+                    "pos": {
+                        "x": 43.35,
+                        "y": 30.225
+                    },
+                    "uuid": "bbef86d7-abe0-4622-8105-3ce165a45d4d"
+                }
+            ],
+            "severity": "warning",
+            "type": "track_dangling"
+        },
+        {
+            "description": "Track has unconnected end",
+            "items": [
+                {
+                    "description": "Track [GPIO_PA4_MCU] on F.Cu, length 1.9269 mm",
+                    "pos": {
+                        "x": 50.65,
+                        "y": 35.425
+                    },
+                    "uuid": "40a8b798-18c2-4d1d-a691-135a1b26da03"
+                }
+            ],
+            "severity": "warning",
+            "type": "track_dangling"
+        },
         {
             "description": "Footprint 'JST_XH_S2B-XH-A-1_1x02_P2.50mm_Horizontal' does not match copy in library 'Connector_JST'",
             "items": [
                 {
                     "description": "Footprint J1",
                     "pos": {
-                        "x": 8.5,
+                        "x": 9.325,
                         "y": 25.9
                     },
                     "uuid": "5367eda1-c7d2-5f24-b003-e6e993785b38"
@@ -55,7 +85,7 @@
                 {
                     "description": "Footprint F1",
                     "pos": {
-                        "x": 16.5,
+                        "x": 17.0,
                         "y": 25.5
                     },
                     "uuid": "23631b42-89ac-5f9a-94d5-a723d0bb73a0"
@@ -70,8 +100,8 @@
                 {
                     "description": "Footprint D1",
                     "pos": {
-                        "x": 17.0,
-                        "y": 30.0
+                        "x": 17.5,
+                        "y": 29.5
                     },
                     "uuid": "2afcbd78-99b2-5ca8-8a74-fe30e0e55623"
                 }
@@ -86,7 +116,7 @@
                     "description": "Footprint D4",
                     "pos": {
                         "x": 26.5,
-                        "y": 27.5
+                        "y": 27.0
                     },
                     "uuid": "6c4f7fde-c997-5d89-8f57-4f6b89edac65"
                 }
@@ -100,8 +130,8 @@
                 {
                     "description": "Footprint U1",
                     "pos": {
-                        "x": 24.85,
-                        "y": 22.05
+                        "x": 25.0,
+                        "y": 22.0
                     },
                     "uuid": "faffb7bd-8d1d-574f-9c67-456aab32400f"
                 }
@@ -115,8 +145,8 @@
                 {
                     "description": "Footprint C1",
                     "pos": {
-                        "x": 21.7,
-                        "y": 26.95
+                        "x": 22.0,
+                        "y": 27.0
                     },
                     "uuid": "ab1d74a4-29d5-5735-82f8-0710eaa077c6"
                 }
@@ -130,8 +160,8 @@
                 {
                     "description": "Footprint C2",
                     "pos": {
-                        "x": 21.7,
-                        "y": 29.35
+                        "x": 22.0,
+                        "y": 29.0
                     },
                     "uuid": "f6faaf28-0173-58ab-8456-f229727e5700"
                 }
@@ -146,7 +176,7 @@
                     "description": "Footprint C3",
                     "pos": {
                         "x": 26.5,
-                        "y": 16.45
+                        "y": 16.5
                     },
                     "uuid": "3cf146e9-6a83-5fcd-bd6c-01165207453f"
                 }
@@ -160,8 +190,8 @@
                 {
                     "description": "Footprint C4",
                     "pos": {
-                        "x": 15.65,
-                        "y": 21.93
+                        "x": 16.0,
+                        "y": 22.0
                     },
                     "uuid": "6760e9a5-2eba-54df-b75a-b77e75589114"
                 }
@@ -175,8 +205,8 @@
                 {
                     "description": "Footprint C5",
                     "pos": {
-                        "x": 33.43,
-                        "y": 21.68
+                        "x": 33.5,
+                        "y": 21.5
                     },
                     "uuid": "d4e40771-6efd-50d6-acf0-60b8c13b79a5"
                 }
@@ -191,7 +221,7 @@
                     "description": "Footprint D15",
                     "pos": {
                         "x": 33.0,
-                        "y": 28.0
+                        "y": 27.5
                     },
                     "uuid": "2728ea03-6c04-567b-b77e-7dc3a3ee79b1"
                 }
@@ -206,7 +236,7 @@
                     "description": "Footprint R24",
                     "pos": {
                         "x": 31.5,
-                        "y": 26.5
+                        "y": 26.0
                     },
                     "uuid": "28f1da86-b992-539e-bc59-a6285da7cb7e"
                 }
@@ -220,8 +250,8 @@
                 {
                     "description": "Footprint U2",
                     "pos": {
-                        "x": 47.3,
-                        "y": 32.95
+                        "x": 47.0,
+                        "y": 32.5
                     },
                     "uuid": "f5f15071-b625-5734-a015-f3086c2e1474"
                 }
@@ -235,8 +265,8 @@
                 {
                     "description": "Footprint C6",
                     "pos": {
-                        "x": 39.43,
-                        "y": 32.68
+                        "x": 39.5,
+                        "y": 32.0
                     },
                     "uuid": "74f7c331-def3-5596-ad59-847861254588"
                 }
@@ -250,8 +280,8 @@
                 {
                     "description": "Footprint C7",
                     "pos": {
-                        "x": 42.43,
-                        "y": 39.68
+                        "x": 42.0,
+                        "y": 39.0
                     },
                     "uuid": "cd560b0e-326d-5bc8-9a45-20e4bf3cbb3a"
                 }
@@ -265,8 +295,8 @@
                 {
                     "description": "Footprint R3",
                     "pos": {
-                        "x": 44.44,
-                        "y": 37.48
+                        "x": 44.0,
+                        "y": 37.0
                     },
                     "uuid": "593daf52-d943-5503-aece-2a1b924fb9f2"
                 }
@@ -280,8 +310,8 @@
                 {
                     "description": "Footprint C8",
                     "pos": {
-                        "x": 41.49,
-                        "y": 34.98
+                        "x": 41.5,
+                        "y": 34.5
                     },
                     "uuid": "a11bbc27-47e1-5f11-a240-7a4b34867511"
                 }
@@ -295,10 +325,25 @@
                 {
                     "description": "Footprint SW1",
                     "pos": {
-                        "x": 46.5,
-                        "y": 46.85
+                        "x": 46.0,
+                        "y": 46.0
                     },
                     "uuid": "5c5b9d01-db15-57ac-9d8c-9e90beb4f3dd"
+                }
+            ],
+            "severity": "warning",
+            "type": "lib_footprint_mismatch"
+        },
+        {
+            "description": "Footprint 'PinHeader_1x05_P2.54mm_Vertical' does not match copy in library 'Connector_PinHeader_2.54mm'",
+            "items": [
+                {
+                    "description": "Footprint J4",
+                    "pos": {
+                        "x": 23.72,
+                        "y": 48.5
+                    },
+                    "uuid": "bda7ceba-df05-539b-ad41-3ebab757763e"
                 }
             ],
             "severity": "warning",
@@ -310,8 +355,8 @@
                 {
                     "description": "Footprint R13",
                     "pos": {
-                        "x": 45.5,
-                        "y": 41.0
+                        "x": 45.0,
+                        "y": 40.0
                     },
                     "uuid": "2638d039-497a-5897-b773-08cf94550794"
                 }
@@ -325,8 +370,8 @@
                 {
                     "description": "Footprint R14",
                     "pos": {
-                        "x": 47.0,
-                        "y": 42.5
+                        "x": 46.5,
+                        "y": 41.5
                     },
                     "uuid": "d78d9a97-4598-54cc-942f-100bc48fe438"
                 }
@@ -340,8 +385,8 @@
                 {
                     "description": "Footprint D8",
                     "pos": {
-                        "x": 18.5,
-                        "y": 43.5
+                        "x": 19.0,
+                        "y": 42.5
                     },
                     "uuid": "e2411bb8-209b-5eb8-9f5d-94a70bc45f8e"
                 }
@@ -356,7 +401,7 @@
                     "description": "Footprint D9",
                     "pos": {
                         "x": 33.0,
-                        "y": 42.0
+                        "y": 41.5
                     },
                     "uuid": "610ac737-e6fb-54b3-b6a0-a53a5f8efd71"
                 }
@@ -370,8 +415,8 @@
                 {
                     "description": "Footprint D19",
                     "pos": {
-                        "x": 18.5,
-                        "y": 39.0
+                        "x": 19.0,
+                        "y": 38.5
                     },
                     "uuid": "b867a263-6460-5a4c-a59c-d5ea74a4cef7"
                 }
@@ -385,8 +430,8 @@
                 {
                     "description": "Footprint U3",
                     "pos": {
-                        "x": 69.2,
-                        "y": 21.2
+                        "x": 68.0,
+                        "y": 21.0
                     },
                     "uuid": "ca9ff5cc-53d0-5956-8d68-8d9f81f97efe"
                 }
@@ -400,8 +445,8 @@
                 {
                     "description": "Footprint U5",
                     "pos": {
-                        "x": 73.15,
-                        "y": 47.275
+                        "x": 72.0,
+                        "y": 46.5
                     },
                     "uuid": "611716e2-f91b-5577-83c5-8fcbc800b1da"
                 }
@@ -415,8 +460,8 @@
                 {
                     "description": "Footprint C10",
                     "pos": {
-                        "x": 73.0,
-                        "y": 22.39
+                        "x": 72.0,
+                        "y": 22.0
                     },
                     "uuid": "da9199fc-c693-5bd5-8df3-e0269c67fa03"
                 }
@@ -430,8 +475,8 @@
                 {
                     "description": "Footprint C11",
                     "pos": {
-                        "x": 66.43,
-                        "y": 26.68
+                        "x": 65.5,
+                        "y": 26.5
                     },
                     "uuid": "d3149024-733b-5d2d-9bb5-9d608d2a7586"
                 }
@@ -445,8 +490,8 @@
                 {
                     "description": "Footprint C12",
                     "pos": {
-                        "x": 75.62,
-                        "y": 43.57
+                        "x": 74.5,
+                        "y": 43.0
                     },
                     "uuid": "13a35c16-f3de-5c58-817a-54cfde2cc206"
                 }
@@ -460,8 +505,8 @@
                 {
                     "description": "Footprint R9",
                     "pos": {
-                        "x": 60.0,
-                        "y": 35.5
+                        "x": 59.0,
+                        "y": 35.0
                     },
                     "uuid": "fad46d09-c10d-5c18-b51f-dfcd358c43f7"
                 }
@@ -475,8 +520,8 @@
                 {
                     "description": "Footprint R10",
                     "pos": {
-                        "x": 58.5,
-                        "y": 34.0
+                        "x": 58.0,
+                        "y": 33.5
                     },
                     "uuid": "ab576d05-a9e4-535c-9852-f997750699c8"
                 }
@@ -490,7 +535,7 @@
                 {
                     "description": "Footprint J3",
                     "pos": {
-                        "x": 7.15,
+                        "x": 7.975,
                         "y": 41.0
                     },
                     "uuid": "bd811763-39b8-530f-a113-e6ceacee5bb9"
@@ -505,8 +550,8 @@
                 {
                     "description": "Footprint R11",
                     "pos": {
-                        "x": 14.0,
-                        "y": 41.0
+                        "x": 14.5,
+                        "y": 40.5
                     },
                     "uuid": "ca5b9423-e3be-54a5-8bc1-59075b5fe76f"
                 }
@@ -520,8 +565,8 @@
                 {
                     "description": "Footprint R12",
                     "pos": {
-                        "x": 14.0,
-                        "y": 44.5
+                        "x": 14.5,
+                        "y": 43.5
                     },
                     "uuid": "c4c6e518-1dd5-5965-849b-7745e94b96d5"
                 }
@@ -535,8 +580,8 @@
                 {
                     "description": "Footprint D7",
                     "pos": {
-                        "x": 52.0,
-                        "y": 39.0
+                        "x": 51.5,
+                        "y": 38.5
                     },
                     "uuid": "fea7fd26-6c33-54af-8ef4-78d3aee773d9"
                 }
@@ -550,10 +595,25 @@
                 {
                     "description": "Footprint D24",
                     "pos": {
-                        "x": 57.5,
-                        "y": 38.0
+                        "x": 57.0,
+                        "y": 37.5
                     },
                     "uuid": "b7bcbf62-ae7a-5aee-b2a3-004a95b4f7b4"
+                }
+            ],
+            "severity": "warning",
+            "type": "lib_footprint_mismatch"
+        },
+        {
+            "description": "Footprint 'PinHeader_1x12_P2.54mm_Vertical' does not match copy in library 'Connector_PinHeader_2.54mm'",
+            "items": [
+                {
+                    "description": "Footprint J5",
+                    "pos": {
+                        "x": 28.72,
+                        "y": 2.5
+                    },
+                    "uuid": "f8d17ec7-377b-5973-803a-85d17b57bbef"
                 }
             ],
             "severity": "warning",
@@ -566,7 +626,7 @@
                     "description": "Footprint R15",
                     "pos": {
                         "x": 42.5,
-                        "y": 8.5
+                        "y": 9.0
                     },
                     "uuid": "71c14253-634e-5df7-8e25-66dcf0cbd5d2"
                 }
@@ -640,8 +700,8 @@
                 {
                     "description": "Footprint R20",
                     "pos": {
-                        "x": 54.93,
-                        "y": 12.18
+                        "x": 54.5,
+                        "y": 12.5
                     },
                     "uuid": "dc8f194b-ee65-5948-a3f6-a24915f7cc7d"
                 }
@@ -670,8 +730,8 @@
                 {
                     "description": "Footprint R22",
                     "pos": {
-                        "x": 51.93,
-                        "y": 19.18
+                        "x": 51.5,
+                        "y": 19.0
                     },
                     "uuid": "17ec7370-d564-5838-96ea-12b10d23638b"
                 }
@@ -685,8 +745,8 @@
                 {
                     "description": "Footprint D10",
                     "pos": {
-                        "x": 49.7,
-                        "y": 26.5
+                        "x": 49.0,
+                        "y": 26.0
                     },
                     "uuid": "0147f34d-377e-5112-98db-37376be03f03"
                 }
@@ -715,8 +775,8 @@
                 {
                     "description": "Footprint D11",
                     "pos": {
-                        "x": 55.5,
-                        "y": 30.0
+                        "x": 55.0,
+                        "y": 29.5
                     },
                     "uuid": "7438ca76-25cf-562b-826f-1a229195f654"
                 }
@@ -730,8 +790,8 @@
                 {
                     "description": "Footprint D21",
                     "pos": {
-                        "x": 70.8,
-                        "y": 24.6
+                        "x": 69.5,
+                        "y": 24.5
                     },
                     "uuid": "af7bc08b-8741-53b1-9e27-61ac5560a59d"
                 }
@@ -745,8 +805,8 @@
                 {
                     "description": "Footprint D12",
                     "pos": {
-                        "x": 4.3,
-                        "y": 33.1
+                        "x": 35.5,
+                        "y": 33.0
                     },
                     "uuid": "6b06d6d4-0375-5d1d-89f7-8e1c6dba54aa"
                 }
@@ -760,8 +820,8 @@
                 {
                     "description": "Footprint D22",
                     "pos": {
-                        "x": 62.9,
-                        "y": 30.2
+                        "x": 62.0,
+                        "y": 30.0
                     },
                     "uuid": "27c1a7b0-5a07-5176-879f-366a2305d381"
                 }
@@ -775,7 +835,7 @@
                 {
                     "description": "Footprint D13",
                     "pos": {
-                        "x": 43.5,
+                        "x": 43.0,
                         "y": 21.5
                     },
                     "uuid": "e291b09b-549a-588c-bd67-e8b0c359f1aa"
@@ -790,8 +850,8 @@
                 {
                     "description": "Footprint D23",
                     "pos": {
-                        "x": 4.3,
-                        "y": 12.1
+                        "x": 38.5,
+                        "y": 12.5
                     },
                     "uuid": "1e97557e-3774-59a9-b694-9bac71d8f994"
                 }
@@ -805,7 +865,7 @@
                 {
                     "description": "Footprint D14",
                     "pos": {
-                        "x": 80.0,
+                        "x": 78.5,
                         "y": 22.0
                     },
                     "uuid": "fd7ba71c-9a39-536c-9e17-b47342bee16e"
@@ -820,8 +880,8 @@
                 {
                     "description": "Footprint R23",
                     "pos": {
-                        "x": 82.13,
-                        "y": 24.4
+                        "x": 80.5,
+                        "y": 24.5
                     },
                     "uuid": "c7df9a08-8666-5311-9024-b78877e8fc6c"
                 }

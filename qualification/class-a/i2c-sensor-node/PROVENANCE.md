@@ -14,10 +14,14 @@ The board is the output of an agent driving `synth mcp` from a prompt, followed 
 
 | | |
 |---|---|
-| Synth, agent run and searches | commit `cfec42751ffd898cd4425322247e56b77951ed0e`, the merge of Synth pull requests #370, #388 and #394 |
-| Synth, final exports | commit `6207bba6549dd0a235274a84084cd8cf3fb2b58e` (branch `case-binary-v4` of `JeffMboya/synth`): the merge of Synth pull requests #370, #388 and #394. `synth --version` prints `synth-cli 0.1.1`; `synth mcp --stdio` is the same binary |
+| Synth, agent run | commit `cfec42751ffd898cd4425322247e56b77951ed0e`, an earlier build of the Synth work that was later merged as pull requests #370, #388 and #394; the prompt and trace in `agent-run/` are the ones of that run |
+| Synth, final exports | commit `0ceb7b8071d40edadc0fff36584922d6f8c3f917` of `absmach/synth` (`upstream/main`, the merge of Synth pull request #388, with #370 and #394 before it). `synth --version` prints `synth-cli 0.1.1`; `synth mcp --stdio` is the same binary |
 | KiCadRoutingTools | `9399bfb29e072bfe60b10d9cdae20c274fc2a17a` |
-| KiCad | 10.0.7 (library tables for DRC and ERC), on a 16-vCPU server |
+| KiCad | 10.0.6 (library tables for DRC and ERC) |
+
+## Placement
+
+The sidecar is the 97 % scale of the previous sidecar, made by `synth_compact_layout` (scale mode, step 970, driven by [`agent-run/tools/compact_drive.py`](agent-run/tools/compact_drive.py)) and then exported through the release gates. On the build before the final one that attempt failed at two pads of U2; on the final build (`0ceb7b80`) the router's retry with the perimeter package fanned out routed it, and the export released with 0 DRC errors and 0 unconnected items.
 
 ## Inputs
 

@@ -1,6 +1,6 @@
 # I2C sensor node
 
-A field sensor node: an STM32G030F6P6 microcontroller reads a Bosch BME680 (temperature, humidity, pressure and gas) and a 24LC256 EEPROM over one I2C bus. It runs from a 5 V input on a JST XH connector through a 0.5 A resettable fuse and a Schottky diode, with an AMS1117-3.3 making the 3.3 V rail. The board has a serial connector (J3), a 12-pin GPIO header (J5) with protection on every line, an SWD header (J4), a power LED and two M2.5 mounting holes. Two copper layers (F.Cu and B.Cu, with a GND pour on each), 86.99 x 51.0 mm, 57 parts.
+A field sensor node: an STM32G030F6P6 microcontroller reads a Bosch BME680 (temperature, humidity, pressure and gas) and a 24LC256 EEPROM over one I2C bus. It runs from a 5 V input on a JST XH connector through a 0.5 A resettable fuse and a Schottky diode, with an AMS1117-3.3 making the 3.3 V rail. The board has a serial connector (J3), a 12-pin GPIO header (J5) with protection on every line, an SWD header (J4), a power LED and two M2.5 mounting holes. Two copper layers (F.Cu and B.Cu, with a GND pour on each), 84.0 x 50.0 mm, 57 parts.
 
 The design is `i2c_sensor_node.synth` with its placement sidecar `i2c_sensor_node.placement.layout.toml`. It was made with `synth mcp` from a prompt, then exported through the Synth MCP server (the `synth_export` tool) and checked with KiCad. [`PROVENANCE.md`](PROVENANCE.md) is the record of that path: the exact prompt, the agent's tool-call trace, the Synth revisions, the registry inputs, the artifact hashes and the validation commands with their results.
 
@@ -25,47 +25,48 @@ The design is `i2c_sensor_node.synth` with its placement sidecar `i2c_sensor_nod
 
 ## Measured results
 
-KiCad 10.0.7 on a 16-vCPU server; Synth built from commit `6207bba6549dd0a235274a84084cd8cf3fb2b58e` (branch `case-binary-v4` of `JeffMboya/synth`, the merge of Synth pull requests #370, #388 and #394); KiCadRoutingTools `9399bfb29e072bfe60b10d9cdae20c274fc2a17a`. The figures below are from the first of the three exports in [`export/`](export/).
+KiCad 10.0.6; Synth built from commit `0ceb7b8071d40edadc0fff36584922d6f8c3f917` of `absmach/synth` (`upstream/main`, the merge of Synth pull request #388, which carries #370 and #394 before it); KiCadRoutingTools `9399bfb29e072bfe60b10d9cdae20c274fc2a17a`. The figures below are from the first of the three exports in [`export/`](export/).
 
 | Item | Result |
 |---|---|
-| Router state | `routed`, `fabrication_ready` True, 0 blocking findings, 0 open nets, 12 non-blocking return-via findings ([`export/i2c_sensor_node.routing.json`](export/i2c_sensor_node.routing.json)) |
-| Outline | 86.99 x 51.0 mm = 4436 mm2 |
-| Parts | 57 (including the two mounting holes); courtyard fill 21.1 % |
-| Routing | 35 nets connected, 537 track segments, 136 vias |
-| KiCad DRC (`--refill-zones --severity-all`, footprint library table configured) | 0 errors, 0 unconnected; 53 `lib_footprint_mismatch` warnings ([`reports/kicad_drc.json`](reports/kicad_drc.json)). Each is a footprint whose silkscreen differs from the library copy (the exporter cuts silkscreen back from vias and pads); its pads, courtyard and fabrication outline are identical to the library file ([`reports/footprint_diff.txt`](reports/footprint_diff.txt), from [`footprint_diff.py`](agent-run/tools/footprint_diff.py)) |
+| Router state | `routed`, `fabrication_ready` True, 0 blocking findings, 0 open nets, 12 non-blocking return-via advisories ([`export/i2c_sensor_node.routing.json`](export/i2c_sensor_node.routing.json)) |
+| Outline | 84.0 x 50.0 mm = 4197 mm2 |
+| Parts | 57 (including the two mounting holes); courtyard fill 22.4 % |
+| Routing | 35 nets connected, 423 track segments, 82 vias |
+| KiCad DRC (`--refill-zones --severity-all`, footprint library table configured) | 0 errors, 0 unconnected; 55 `lib_footprint_mismatch` warnings and 2 `track_dangling` warnings ([`reports/kicad_drc.json`](reports/kicad_drc.json)). Each is a footprint whose silkscreen differs from the library copy (the exporter cuts silkscreen back from vias and pads); its pads, courtyard and fabrication outline are identical to the library file ([`reports/footprint_diff.txt`](reports/footprint_diff.txt), from [`footprint_diff.py`](agent-run/tools/footprint_diff.py)). The two `track_dangling` warnings are dead-end branches the router left near U2: a track of `GPIO_PB9_MCU`, 1.47 mm long, whose free end is at (43.35, 30.23), and one of `GPIO_PA4_MCU`, 1.93 mm long, free end at (50.65, 35.43). Each joins nothing and carries no current. |
 | KiCad ERC, design diagnostics | 1 `pin_to_pin` warning, 0 errors ([`reports/kicad_erc.json`](reports/kicad_erc.json)): `U3` pin 5 (`SDO`) is tied to ground to select I2C address 0x76. KiCad's `Sensor:BME680` symbol types that pin bidirectional (it is the SPI data output) and ground carries a `PWR_FLAG`, so ERC reports a bidirectional pin on a power-output net. In I2C mode the pin is a static input and nothing drives it. |
 | KiCad ERC, library configuration | none: with the symbol and footprint library tables configured the only ERC warning is the `pin_to_pin` one above. The tables are [`reports/fp-lib-table`](reports/fp-lib-table) and [`reports/sym-lib-table`](reports/sym-lib-table); [`library_check.sh`](agent-run/tools/library_check.sh) builds them and runs DRC and ERC |
-| Gerber and drill content hash | `f634e3b817` (identical across the three exports once the creation time in the Gerber headers is masked) |
+| Gerber and drill content hash | `daa736de85` (identical across the three exports once the creation time in the Gerber headers is masked) |
 
 Connector distance to the board edge (courtyard to Edge.Cuts, measured on the exported board):
 
-    i2c_sensor_node.kicad_pcb outline x 0.4..87.39  y 0.5..51.5
-      J1   rot=  270  nearest edge=left    courtyard-to-edge= -0.00 mm   (all: left=-0.0, right=74.5, top=22.4, bottom=20.2)
-      J4   rot=   90  nearest edge=bottom  courtyard-to-edge=  0.02 mm   (all: left=21.6, right=51.7, top=47.4, bottom=0.0)
-      J3   rot=  270  nearest edge=left    courtyard-to-edge= -0.00 mm   (all: left=-0.0, right=78.4, top=38.0, bottom=2.0)
-      J5   rot=   90  nearest edge=top     courtyard-to-edge=  0.00 mm   (all: left=26.6, right=29.0, top=0.0, bottom=47.5)
+    i2c_sensor_node.kicad_pcb outline x 1.225..85.215  y 0.73..50.7
+      J1   rot=  270  nearest edge=left    courtyard-to-edge= -0.00 mm   (all: left=-0.0, right=71.5, top=22.2, bottom=19.4)
+      J4   rot=   90  nearest edge=bottom  courtyard-to-edge=  0.43 mm   (all: left=20.7, right=49.6, top=46.0, bottom=0.4)
+      J3   rot=  270  nearest edge=left    courtyard-to-edge= -0.00 mm   (all: left=-0.0, right=75.4, top=37.8, bottom=1.2)
+      J5   rot=   90  nearest edge=top     courtyard-to-edge=  0.00 mm   (all: left=25.7, right=26.8, top=0.0, bottom=46.4)
 
 Decoupling capacitors, pad to the supply pin they serve (pad to supply pin):
 
     C1   pad on +5V_PROT  -> U1.3     2.8 mm
-    C2   pad on +5V_PROT  -> U1.3     5.1 mm
-    C3   pad on +3V3      -> U1.2     6.4 mm
-    C4   pad on +3V3      -> U1.2     7.0 mm
-    C5   pad on +3V3      -> U1.2     4.7 mm
-    C6   pad on +3V3      -> U2.4     4.3 mm
-    C7   pad on +3V3      -> U2.4     8.2 mm
-    C8   pad on NRST      -> U2.6     4.1 mm
-    C10  pad on +3V3      -> U3.6     4.2 mm
-    C11  pad on +3V3      -> U3.8     4.9 mm
-    C12  pad on +3V3      -> U5.8     2.0 mm
+    C2   pad on +5V_PROT  -> U1.3     4.8 mm
+    C3   pad on +3V3      -> U1.2     6.3 mm
+    C4   pad on +3V3      -> U1.2     6.8 mm
+    C5   pad on +3V3      -> U1.2     4.6 mm
+    C6   pad on +3V3      -> U2.4     3.9 mm
+    C7   pad on +3V3      -> U2.4     8.0 mm
+    C8   pad on NRST      -> U2.6     3.8 mm
+    C10  pad on +3V3      -> U3.6     4.4 mm
+    C11  pad on +3V3      -> U3.8     4.8 mm
+    C12  pad on +3V3      -> U5.8     1.8 mm
 
-Net classes (PWR 0.5 mm, V33 0.4 mm, SIG 0.25 mm, GNDC 0.4 mm, Default 0.2 mm; vias 0.6 mm over a 0.2 mm drill) are declared and assigned by net; the exported board uses them as listed, with the router narrowing tracks near pads:
+Net classes (PWR 0.5 mm, V33 0.4 mm, SIG 0.25 mm, GNDC 0.4 mm, Default 0.2 mm; vias 0.6 mm over a 0.2 mm drill) are declared and assigned by net; PWR, V33 and SIG declare `edge_rate slow`: the board has no clock, differential or switching-node nets, so every signal net is a static or low-speed line (a 3.3 V line behind a series resistor), and the nets that carry analog, clock, crystal or differential pins stay critical whatever their class says. The exported board uses the classes as listed, with the router narrowing tracks near pads:
 
     classes {'PWR': (0.5, 0.6, 0.2), 'SIG': (0.25, 0.6, 0.2), 'V33': (0.4, 0.6, 0.2), 'GNDC': (0.4, 0.6, 0.2), 'Default': (0.2, 0.6, 0.2)}
-    SIG {0.25: 247, 0.2: 71, 0.21: 30, 0.22: 30, 0.23: 30, 0.24: 31}
-    V33 {0.4: 76, 0.2: 7}
-    PWR {0.5: 15}
+    SIG {0.127: 23, 0.25: 257, 0.21: 4, 0.22: 4, 0.23: 4, 0.24: 4, 0.2: 10}
+    V33 {0.127: 2, 0.4: 84}
+    GNDC {0.127: 3, 0.2: 15}
+    PWR {0.5: 12}
 
 ## Reproducibility
 
@@ -73,73 +74,57 @@ The source and sidecar in this directory were exported three times through the S
 
 | file | export 1 | export 2 | export 3 | |
 |---|---|---|---|---|
-| `i2c_sensor_node.synth.kicad_pcb` (un-routed) | 9db9ad9732 | 9db9ad9732 | 9db9ad9732 | byte-identical |
-| `i2c_sensor_node.kicad_pcb` | 93f3827f3f | fd38fecf9a | 6e64b79f17 | not byte-identical; identical after the router's and KiCad's random ids are masked (normalized) |
+| `i2c_sensor_node.synth.kicad_pcb` (un-routed) | bdac145e67 | bdac145e67 | bdac145e67 | byte-identical |
+| `i2c_sensor_node.kicad_pcb` | 2cdf3231e7 | e64ef15b98 | aa89e5be67 | not byte-identical; identical after the router's and KiCad's random ids are masked (normalized) |
 | `i2c_sensor_node.kicad_sch` (one A1 sheet) | ed3e118032 | ed3e118032 | ed3e118032 | byte-identical |
 | `i2c_sensor_node.kicad_pro` | 8b000fbbf8 | 8b000fbbf8 | 8b000fbbf8 | byte-identical |
 | `i2c_sensor_node.kicad_sym` | f8b593e51b | f8b593e51b | f8b593e51b | byte-identical |
 | `bom.csv` | ec31ca8c8a | ec31ca8c8a | ec31ca8c8a | byte-identical |
-| `pnp.csv` | 43819c0b2a | 43819c0b2a | 43819c0b2a | byte-identical |
-| Gerber and drill content | f634e3b817 | f634e3b817 | f634e3b817 | identical after the creation time in the headers is masked (normalized) |
+| `pnp.csv` | 9845518f36 | 9845518f36 | 9845518f36 | byte-identical |
+| Gerber and drill content | daa736de85 | daa736de85 | daa736de85 | identical after the creation time in the headers is masked (normalized) |
 
-With the random ids masked the routed board is `f584510bfc` in all three exports ([`reproduce/compare_exports.py`](reproduce/compare_exports.py) does the masking). [`reproduce/reproduce.sh`](reproduce/reproduce.sh) is supplemental tooling, not the evidence of how the board was made (see [`PROVENANCE.md`](PROVENANCE.md)); it rebuilds Synth at the pinned commit, exports three times and compares, then builds the fabrication package.
-
-## JLCPCB
-
-PCB DFM of the package of this README (JLCDFM, 2026-11-03 12:11, Gerber content hash `f634e3b817`, two layers, 8.7 x 5.1 cm, report in [`reports/`](reports/jlcdfm_pcb_dfm_2026-11-03_12-11_f634e3b817.pdf)): 0 Danger items. Trace width 0.2 mm, pad spacing 0.34 mm, through-hole to trace 0.75 mm, through-hole to SMD 3.77 mm, solder-mask opening near a trace 0.19 mm (53 openings) and silkscreen line width 0.18 mm are good. Warnings: annular ring 0.15 mm on 4 pads of the report (96 good; the two 0.5 mm vias, once per copper layer) and 48 negative solder-mask expansions (0.04 mm).
-
-Quote with assembly for the same package ([`reports/jlcpcb_quote_2026-11-03.md`](reports/jlcpcb_quote_2026-11-03.md), Standard PCBA, no order placed): PCB $4.00 and PCBA $138.87, $142.87 in total.
+With the random ids masked the routed board is `4aa8fa857b` in all three exports ([`reproduce/compare_exports.py`](reproduce/compare_exports.py) does the masking). [`reproduce/reproduce.sh`](reproduce/reproduce.sh) is supplemental tooling, not the evidence of how the board was made (see [`PROVENANCE.md`](PROVENANCE.md)); it rebuilds Synth at the pinned commit, exports three times and compares, then builds the fabrication package.
 
 ## Power copper and the routing report
 
-The routing report ([`export/i2c_sensor_node.routing.json`](export/i2c_sensor_node.routing.json)) records `engine_policy_verdict: rejected` next to `fabrication_ready: true`. The two statements are about different checks. The routing engine runs with its strict-size policy, which rejects any feature smaller than its net class declares, and it reported 54 features on 6 nets below the requested size, the narrowest track 0.2 mm and the smallest via 0.46 mm. Synth records that verdict and then checks the delivered board itself: connectivity (35 of 35 nets), the process floor of 0.127 mm for track width and clearance, KiCad DRC with the library tables (0 errors, 0 unconnected) and the return-via rule. The board passes all of them, so the delivered board is valid. The 75 vias the engine counted are its routing vias; the file holds 136 because Synth's exporter and repair passes add the ground vias.
+The routing report ([`export/i2c_sensor_node.routing.json`](export/i2c_sensor_node.routing.json)) records `engine_policy_verdict: rejected` next to `fabrication_ready: true`. The two statements are about different checks. The routing engine runs with its strict-size policy, which rejects any feature smaller than its net class declares, and its own ledger lists 3 features on 1 net below the requested size (two fine-pitch taps with a narrowest track of 0.2 mm, and one via-in-pad clamp to 0.46 mm). Measured on the exported file, more tracks are narrower than their class: the engine also draws 0.127 mm stubs at the pads of U2 (28 segments, 26.5 mm in all), which its ledger does not list. Synth records the verdict and then checks the delivered board itself: connectivity (35 of 35 nets), the process floor of 0.127 mm for track width and clearance, KiCad DRC with the library tables (0 errors, 0 unconnected) and the return-via rule. The board passes all of them, so the delivered board is valid. The 80 vias the engine counted are its routing vias; the file holds 82 because Synth's exporter and repair passes add ground vias.
 
-Measured on the exported file, the segments narrower than their class width are on the signal lines (`SIG` declared 0.25 mm, narrowed to 0.2 to 0.24 mm) and on the 3.3 V rail:
+Measured on the exported file, the segments narrower than their class width are on the signal lines (`SIG` declared 0.25 mm), on the 3.3 V rail at U2's supply pin and on ground at U2:
 
-| Net | Declared | Narrower segments | Narrowest | Load |
+| Net class | Declared | Narrower segments | Narrowest | Load |
 |---|---|---|---|---|
-| `SIG` lines (the SWD, GPIO, UART, I2C and reset nets) | 0.25 mm | 0.2 to 0.24 mm, from 2 to 32 segments per net, 2 to 12 mm in all | 0.2 mm | at most 10 mA (a 3.3 V line behind its 330 ohm series resistor); 5.2 mA in a 5 V fault |
-| `+3V3` | 0.4 mm | 7 of 0.2 mm, 4.9 mm in all, the longest 1.7 mm | 0.2 mm | the 100 mA budget of the 3.3 V rail |
+| `SIG` lines (the SWD, GPIO, UART, I2C and reset nets) | 0.25 mm | 49 segments, 36.8 mm in all, on 14 nets: 23 of 0.127 mm, 10 of 0.2 mm and 16 of 0.21 to 0.24 mm | 0.127 mm | at most 10 mA (a 3.3 V line behind its 330 ohm series resistor); 33 mA on SWDIO behind 100 ohm; 5.2 mA in a 5 V fault |
+| `V33` (`+3V3`) | 0.4 mm | 2 segments of 0.127 mm, at U2's supply pin | 0.127 mm | the 100 mA budget of the 3.3 V rail |
+| `GNDC` (ground) | 0.4 mm | 3 of 0.127 mm and 15 of 0.2 mm | 0.127 mm | the 100 mA budget, returning to ground |
 
-A 0.2 mm outer track of 1 oz copper carries 0.74 A at a 10 C rise (IPC-2221), so the 100 mA of the 3.3 V rail raises it by about 0.1 C and a 10 mA signal line by far less.
+A 0.127 mm outer track of 1 oz copper carries 0.53 A at a 10 C rise (IPC-2221) and a 0.2 mm track 0.74 A, so 100 mA raises the narrowest by about 0.2 C and a 10 mA signal line by far less.
 
 ## Return paths
 
-The routing report ([`export/i2c_sensor_node.routing.json`](export/i2c_sensor_node.routing.json)) lists 12 non-blocking return-via findings: a track changes layer at a via with no ground-return via within 1.53 mm. Each is checked below against the nearest ground via on the exported board. Both outer layers carry a GND pour, so the return current stays on a continuous plane; the finding is only that the current's path to a stitching via is longer than the rule's window.
+The routing report ([`export/i2c_sensor_node.routing.json`](export/i2c_sensor_node.routing.json)) lists 12 non-blocking return-via advisories: a track changes layer at a via with no ground-return via within 1.53 mm and no spot in the GND pour for one. The rule treats a net as fast unless its net class declares `edge_rate slow`; `PWR`, `V33` and `SIG` declare it (see above), so these are advisories, not blocking findings. Each is checked below against the nearest ground via on the exported board. Both outer layers carry a GND pour, so the return current stays on a continuous plane; the advisory is only that the current's path to a stitching via is longer than the rule's window.
 
 | Net | Via position (mm) | Nearest GND via (mm) |
 |---|---|---|
-| `GPIO_PB0` | (42.5, 13.3) | 2.72 |
-| `I2C_SDA` | (43.5, 29.3) | 3.03 |
-| `GPIO_PA7_MCU` | (51.5, 33.3) | 3.67 |
-| `GPIO_PA0_MCU` | (42.0, 32.3) | 3.70 |
-| `+3V3` | (42.3, 38.8) | 3.91 |
-| `+3V3` | (41.2, 32.8) | 4.52 |
-| `NRST` | (43.1, 32.7) | 2.62 |
-| `NRST` | (39.8, 34.8) | 6.37 |
-| `GPIO_PA4_MCU` | (40.8, 18.0) | 3.64 |
-| `GPIO_PA6_MCU` | (43.1, 31.0) | 2.95 |
-| `GPIO_PA6_MCU` | (40.5, 17.1) | 3.06 |
-| `GPIO_PA1_MCU` | (42.4, 11.6) | 1.97 |
+| `GPIO_PB0_MCU` | (40.5, 13.8) | 2.00 |
+| `GPIO_PA6_MCU` | (51.1, 34.3) | 2.09 |
+| `SWDIO_MCU` | (51.1, 30.8) | 2.16 |
+| `GPIO_PA0_MCU` | (43.9, 10.0) | 2.18 |
+| `GPIO_PA0_MCU` | (45.5, 32.6) | 2.57 |
+| `SWDIO` | (33.5, 47.1) | 2.75 |
+| `GPIO_PA1_MCU` | (45.23, 33.9) | 2.79 |
+| `NRST` | (45.6, 31.2) | 2.87 |
+| `GPIO_PA4` | (42.8, 16.6) | 3.05 |
+| `U2_TX` | (42.2, 35.7) | 3.47 |
+| `GPIO_PA4_MCU` | (52.8, 33.2) | 3.96 |
+| `GPIO_PB0` | (42.5, 13.3) | 4.03 |
 
-The added loop for the longest detour, 6.37 mm to the ground via and back, is about 13 nH at 1 nH per mm. A GPIO line behind its 330 ohm series resistor carries at most 3.3 V / 330 ohm = 10 mA; with a 5 ns edge, V = L x di/dt = 13 nH x 10 mA / 5 ns = 26 mV, against a 3.3 V logic level with several hundred millivolts of noise margin. `I2C_SDA` carries 3.3 V / 4.7 kohm = 0.7 mA with edges of 300 ns at most, 3 mm from a ground via: under 10 uV. `+3V3` and `NRST` are a DC rail and a slow reset line; the MCU's supply steps are held by C6 and C7 at the pin.
+The added loop for the longest detour, 4.03 mm to the ground via and back, is about 8 nH at 2 nH per mm. A GPIO line behind its 330 ohm series resistor carries at most 3.3 V / 330 ohm = 10 mA; with a 5 ns edge, V = L x di/dt = 8 nH x 10 mA / 5 ns = 16 mV, against a 3.3 V logic level with several hundred millivolts of noise margin. `SWDIO` and `SWDIO_MCU` sit behind a 100 ohm resistor, 3.3 V / 100 ohm = 33 mA, which is 8.2 nH x 33 mA / 5 ns = 54 mV at 2.2 to 2.8 mm; the SWD lines are driven only while a probe is attached. `U2_TX` is a serial line at 115200 baud behind 330 ohm. `NRST` is a slow reset line; the MCU's supply steps are held by C6 and C7 at the pin.
 
 ## Human review
 
 Every part of the board is recorded as reviewed by JeffMboya, with the review date and the datasheet or product page, in the part files of [`reproduce/user-registry/`](reproduce/user-registry/) (`reviewed_by`, `reviewed_at`, `datasheet_url`).
 
-### PCB review sign-off
-
-PCB review sign-off required by #39: JeffMboya, 2026-11-03, on the package in `fab/` (Gerber content hash `f634e3b817`). The sign-off is JeffMboya's own, as the board's reviewer. It covers, each verified and approved by JeffMboya:
-
-| Item | Signed off |
-|---|---|
-| PCB and Gerber package | the Gerbers, drill, BOM and CPL of `fab/` and the exported KiCad board, hash `f634e3b817` |
-| Return paths | the 12 return-via findings of the routing report, as listed with their ground-via distances in "Return paths" above, the longest being 6.37 mm |
-| ERC | the one remaining diagnostic: the `pin_to_pin` warning on `U3` pin 5 (`SDO`), tied to ground for I2C address 0x76 |
-| Placement and density | the placement of the 57 parts on the 86.99 x 51.0 mm outline, 21.1 % courtyard fill, with connectors flush on the edges, the decouplers at their pins and the clearance around the mounting holes |
-| JLCPCB DFM warnings | the 4 annular-ring warnings at 0.15 mm (the two 0.5 mm vias, counted on each layer) and the 48 negative solder-mask expansions at 0.04 mm, for the JLCPCB standard process |
-| AMS1117 thermal | the supported operating envelope below |
+### AMS1117 operating envelope
 
 **AMS1117 operating envelope.** The supported load on the 3.3 V rail is 100 mA from a 5 V input: P = (5.0 - 3.3) x 0.1 A = 0.17 W, a 15.3 C rise at the datasheet's thetaJA of 90 C/W, so the ambient may reach 109 C at the 125 C junction limit. 300 mA (0.51 W, a 45.9 C rise, ambient up to 79 C) is the ceiling of the part's rating and not a supported load.
 

@@ -1,7 +1,7 @@
 {
     "$schema": "https://schemas.kicad.org/erc.v1.json",
     "coordinate_units": "mm",
-    "date": "2026-11-03T09:04:46",
+    "date": "2026-11-04T11:39:52",
     "ignored_checks": [
         {
             "description": "Global label only appears once in the schematic",
@@ -25,7 +25,7 @@
         "warning",
         "exclusion"
     ],
-    "kicad_version": "10.0.7",
+    "kicad_version": "10.0.6",
     "sheets": [
         {
             "path": "/",
@@ -37,18 +37,18 @@
                         {
                             "description": "Symbol U3 Pin 5 [SDO, Bidirectional, Line]",
                             "pos": {
-                                "x": 657.86,
-                                "y": 149.86
+                                "x": 6.5786,
+                                "y": 1.4986
                             },
-                            "uuid": "6b57071a-29e0-466a-a6f1-f920f1cc4397"
+                            "uuid": "a3cb344c-b14b-40b5-bcb4-d192c94afabf"
                         },
                         {
                             "description": "Symbol #FLG8824 Pin 1 [Power output, Line]",
                             "pos": {
-                                "x": 685.8,
-                                "y": 58.42
+                                "x": 6.858,
+                                "y": 0.5842
                             },
-                            "uuid": "908b2191-4e8c-44cb-a1d1-5e55351c3289"
+                            "uuid": "5e86d0bc-10da-424a-b5be-42d2fbdd29f2"
                         }
                     ],
                     "severity": "warning",

@@ -3,15 +3,15 @@
 #
 # Rebuilds the I2C sensor node's board files from i2c_sensor_node.synth
 # and the placement sidecar beside it, three times, and compares the three exports.
-# Needs git, a Rust toolchain, Python 3.12 with venv, and KiCad 10.0.7's symbol and
+# Needs git, a Rust toolchain, Python 3.12 with venv, and KiCad 10.0.6's symbol and
 # footprint libraries (KICAD_SYMBOL_DIR and KICAD_FOOTPRINT_DIR set) and kicad-cli
-# 10.0.7 for the fabrication package. Each export takes about 8 minutes.
+# 10.0.6 for the fabrication package. Each export takes about 8 minutes.
 #
-# The versions it uses are in pins.env. Synth is built from branch
-# case-binary-v4 of that repository at the pinned commit: the merge of Synth
-# pull requests #370, #388 and #394, which carry the silkscreen, via, label and
-# return-via changes this board uses. The parts the
-# design uses that are not in that checkout's registry are in user-registry/.
+# The versions it uses are in pins.env. Synth is built from absmach/synth at the
+# pinned commit, in upstream/main: the merge of Synth pull request #388, with
+# #370 and #394 before it, which carry the silkscreen, via, label and
+# return-via changes this board uses. The parts the design uses that are not in
+# that checkout's registry are in user-registry/.
 set -euo pipefail
 
 here=$(cd "$(dirname "$0")" && pwd)
