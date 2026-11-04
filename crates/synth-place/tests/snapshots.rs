@@ -115,25 +115,19 @@ const SECURE_TRACKER_BASELINE_OUTLINE_AREA_MM2_64_90_X_63_85: f64 = 64.90 * 63.8
 /// Correcting one courtyard by 1 mm took this board from 4143.9 mm2 to
 /// 5960.9 mm2, and nothing failed on it: the insta snapshot records whatever
 /// the placer does, so the non-monotonicity in #158 would be baked in
-/// silently. This bounds it against the area from before that change, which
-/// is what the placer should still produce.
+/// silently. This bounds it against the area from before that change.
 ///
-/// Ignored because it fails today, by design: #158 is the defect, this is the
-/// record of it, and removing the attribute is the check that it is fixed.
-/// The sweep in #158 shows the board oscillating between 64.90 and 93.90 mm
-/// wide as one part grows in 0.2 mm steps, so the figure to restore is a
-/// property of the placer rather than of this fixture.
-///
-/// It now fails in the other direction. Reading a rotated footprint's pads in
-/// KiCad's own sense moved this board to 91.00 x 60.94 mm, an area of
-/// 2818.0 mm2 — 32% *under* the baseline rather than 44% over it. A smaller
-/// board is not a defect on its own, and this assertion is two-sided on
-/// purpose: the complaint is that one correction of a single courtyard moves
-/// the outline by a third in either direction, not that the outline is large.
-/// Whether 2818.0 mm2 is the right answer or another swing of the same
-/// oscillation is the question #158 is still open on.
+/// The sweep in #158 had the board oscillating between 64.90 and 93.90 mm
+/// wide as one part grew in 0.2 mm steps. The cause was the canvas choice,
+/// not the search: the square and wider canvases finished within a couple of
+/// percent of each other in area while their widths differed by 18 mm, and
+/// selecting the strictly smallest flipped the aspect when a part changed by
+/// 0.2 mm. `choose_canvas` now requires a wider canvas to be 3% smaller
+/// before it displaces the square family; the 0.2 mm sweep is monotonic,
+/// 64.90 mm wide from 5.0 to 7.0 mm and 65.90 mm at 8.0. This guard is the
+/// regression check: the corrected output must stay near the area the board
+/// had before the correction.
 #[test]
-#[ignore = "fails until the placer non-monotonicity in #158 is fixed"]
 fn secure_tracker_outline_area_stays_within_baseline_tolerance() {
     let board = load_board("fixtures/kicad-reference/secure_tracker.synth");
     let placement = synth_place::place(&board).expect("place");
