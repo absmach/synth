@@ -1,0 +1,53 @@
+{
+  "schema_version": "synth.routing.v1",
+  "state": "validation_failed",
+  "engine": "freerouting",
+  "capability": {
+    "engine": "freerouting",
+    "available": true,
+    "version": "freerouting-2.4.1",
+    "runtime_version": "openjdk version \"21.0.12.1\" 2026-08-18",
+    "detail": null,
+    "failure": null
+  },
+  "provenance": {
+    "engine": "freerouting",
+    "engine_version": null,
+    "runtime_version": null,
+    "profile": "jlcpcb",
+    "command": [],
+    "settings": {},
+    "input_hash": "c7736ac18498370e66ce43e00b8e4f5951de3596caaae5084698334cc0d4b494",
+    "output_hash": "",
+    "source_revision": "3063d1e83e0692e78c4ba1e6ef4f35be63aa1de7",
+    "duration_ms": 0
+  },
+  "statistics": {
+    "connected_nets": 0,
+    "open_nets": 0,
+    "open_net_names": [],
+    "segments": 0,
+    "vias": 0,
+    "wire_length_mm": 0.0,
+    "pad_escape_rejections": 0,
+    "engine_findings": {}
+  },
+  "artifacts": {
+    "baseline": "/tmp/opencode/pwr-reframe/bldc_power.synth.kicad_pcb",
+    "candidate": null,
+    "delivered": null,
+    "session_log": null,
+    "ses": null,
+    "router_report": null,
+    "connectivity_report": null,
+    "drc_report": null
+  },
+  "validation": null,
+  "failure": {
+    "engine": "freerouting",
+    "reason": "timeout",
+    "stage": "route",
+    "detail": "freerouting did not finish within 1200s and was terminated; the baseline export at /tmp/opencode/pwr-reframe/bldc_power.synth.kicad_pcb is preserved",
+    "remediation": "raise the router budget (--router-timeout) or reduce the design; the baseline export is preserved and no partial board was installed"
+  }
+}

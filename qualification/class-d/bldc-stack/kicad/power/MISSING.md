@@ -2,11 +2,12 @@
 
 The power board now has `bldc_power.kicad_pcb`, `bom.csv` and `pnp.csv`. The
 export places the board, writes the un-routed baseline, and then hands it to
-FreeRouting. That routing run exceeded the 30-minute cap (53 nets on a
-71.9 x 52 mm board) and was stopped, so this directory has:
+FreeRouting. That routing run hit the 1200 s router budget (53 nets on a
+71.9 x 52 mm board) and was terminated, so this directory has:
 
 - no routed candidate;
-- no `reports/power.routing.json` or `reports/release-power.json`;
+- a `timeout` run record in `../../reports/power.routing.json` and a
+  `release_ready: false` manifest in `../../reports/release-power.json`;
 - no Gerbers, drill files or fab quote.
 
 The delivered PCB is an **un-routed placement record**, not a fabrication

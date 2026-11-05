@@ -212,8 +212,9 @@ nets, 532 segments, 84 vias and 0 KiCad DRC errors. The one open is a +3V3
 decoupling island of six pads around `U_LDO.2`, not a missing trace. The
 candidate therefore fails independent connectivity and is not installed; the
 delivered control PCB stays un-routed. The power board is exported un-routed
-for the 3D renders. Its FreeRouting run exceeded the 30-minute cap and was
-stopped, so there is no power routing record. `release_ready` is false in the
+for the 3D renders. Its FreeRouting run hit the 1200 s router budget and was
+terminated, so `reports/power.routing.json` records a `timeout` with no
+partial board installed; the delivered PCB is the preserved baseline. `release_ready` is false in the
 control project and `reports/control.routing.json` names the exact open.
 
 The power placement is DRC-clean: `kicad-cli pcb drc` reports 0 errors and 18
