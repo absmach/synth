@@ -19,7 +19,7 @@
 //!    never overwritten by a failed or partial run ([`RouteRequest::baseline`]);
 //! 2. the engine runs with a wall-clock budget, an output cap, and an
 //!    optional cancellation token ([`process`]);
-//! 3. the candidate board is re-read from disk ([`pcb_read`]) rather than
+//! 3. the candidate board is re-read from disk ([`pcb_read`], from `synth-drc`) rather than
 //!    trusted, and checked against the baseline it was routed from;
 //! 4. connectivity is re-derived from copper geometry — union-find over
 //!    pads, tracks, and vias — never read from the router's own bookkeeping
@@ -51,7 +51,6 @@ pub mod failure;
 pub mod freerouting;
 pub mod kicad_routing_tools;
 pub mod outcomes;
-pub mod pcb_read;
 pub mod process;
 pub mod result;
 pub mod validate;
@@ -68,6 +67,9 @@ pub use failure::{RouterFailure, RouterFailureReason, RouterStage};
 pub use result::{
     PortfolioRank, RouteReport, RouteState, RouteStatistics, RouterProvenance, ValidationSummary,
 };
+// The `.kicad_pcb` reader lives in `synth-drc`; this keeps the
+// `synth_router::pcb_read` path working for existing callers.
+pub use synth_drc::pcb_read;
 pub use validate::{
     validate_candidate, ConnectivityReport, FabricationVerdict, OpenConnection, TopologyReport,
 };
