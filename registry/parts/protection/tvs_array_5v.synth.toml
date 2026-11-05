@@ -64,8 +64,11 @@ name = "ch4"
 number = "6"
 electrical_type = "passive"
 
-# Not attested: reviewed_by and reviewed_at are recorded by the independent
-# reviewer who checks this map against the datasheet, not by its author.
+# Reviewed against onsemi SRV05-4/D Rev. 4: the pin map above, the
+# TSOP-6 (case 318G) to SOT-23-6 footprint compatibility, the six pad
+# functions and the 5.0 V working peak reverse voltage.
 [provenance]
 source = "authored"
 datasheet_url = "https://www.onsemi.com/download/data-sheet/pdf/srv05-4-d.pdf"
+reviewed_by = "rodneyosodo"
+reviewed_at = "2026-11-05"
