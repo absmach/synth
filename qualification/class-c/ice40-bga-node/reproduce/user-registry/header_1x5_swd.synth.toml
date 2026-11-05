@@ -1,0 +1,54 @@
+id = "header_1x5_swd"
+kind = "connector"
+description = "1x5 through-hole pin header, 2.54 mm pitch, vertical, for the SWD port. No current rating asserted."
+version = 0
+lifecycle = "active"
+signed_by = []
+substitutes = []
+required_decoupling = []
+kicad_symbol = "Connector_Generic:Conn_01x05"
+kicad_footprint = "Connector_PinHeader_2.54mm:PinHeader_1x05_P2.54mm_Vertical"
+
+[[pins]]
+name = "p1"
+number = "1"
+electrical_type = "passive"
+capabilities = []
+required = false
+
+[[pins]]
+name = "p2"
+number = "2"
+electrical_type = "passive"
+capabilities = []
+required = false
+
+[[pins]]
+name = "p3"
+number = "3"
+electrical_type = "passive"
+capabilities = []
+required = false
+
+[[pins]]
+name = "p4"
+number = "4"
+electrical_type = "passive"
+capabilities = []
+required = false
+
+[[pins]]
+name = "p5"
+number = "5"
+electrical_type = "passive"
+capabilities = []
+required = false
+
+[footprint_dimensions]
+width_mm = 3.04
+height_mm = 13.2
+courtyard_margin_mm = 0.25
+
+[provenance]
+source = "authored"
+generator = "synth_author_part"
