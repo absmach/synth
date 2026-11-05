@@ -62,6 +62,10 @@ pub struct ManufacturerProfile {
     /// nanometers. JLCPCB's published figure is 0.15 mm.
     #[serde(default = "default_min_pad_to_pad_nm")]
     pub min_pad_to_pad_nm: i64,
+    /// Pad spacing below this is a Danger; from here up to `min_pad_to_pad_nm`
+    /// it is a Warning. JLCDFM's scale is 0.10 mm and 0.15 mm.
+    #[serde(default = "default_pad_to_pad_danger_nm")]
+    pub pad_to_pad_danger_nm: i64,
     /// Minimum gap from a plated hole's edge to a trace of another net, in
     /// nanometers. JLCPCB's published minimum is 0.28 mm.
     #[serde(default = "default_min_pth_to_trace_nm")]
@@ -113,6 +117,14 @@ impl ManufacturerProfile {
     pub fn supports_layers(&self, layers: u32) -> bool {
         self.supported_layers.is_empty() || self.supported_layers.contains(&layers)
     }
+}
+
+fn default_pad_to_pad_danger_mm() -> f64 {
+    0.10
+}
+
+fn default_pad_to_pad_danger_nm() -> i64 {
+    mm_to_nm(default_pad_to_pad_danger_mm())
 }
 
 fn default_min_pad_to_pad_mm() -> f64 {
@@ -191,6 +203,7 @@ impl ManufacturerProfile {
             min_silk_to_hole_nm: default_min_silk_to_hole_nm(),
             min_silk_width_nm: default_min_silk_width_nm(),
             min_pad_to_pad_nm: default_min_pad_to_pad_nm(),
+            pad_to_pad_danger_nm: default_pad_to_pad_danger_nm(),
             min_pth_to_trace_nm: default_min_pth_to_trace_nm(),
             crosstalk_run_multiple: default_crosstalk_run_multiple(),
             ampacity_delta_t_milli_c: default_ampacity_delta_t_milli_c(),
@@ -219,6 +232,7 @@ impl ManufacturerProfile {
             min_silk_to_hole_nm: default_min_silk_to_hole_nm(),
             min_silk_width_nm: default_min_silk_width_nm(),
             min_pad_to_pad_nm: default_min_pad_to_pad_nm(),
+            pad_to_pad_danger_nm: default_pad_to_pad_danger_nm(),
             min_pth_to_trace_nm: default_min_pth_to_trace_nm(),
             crosstalk_run_multiple: default_crosstalk_run_multiple(),
             ampacity_delta_t_milli_c: default_ampacity_delta_t_milli_c(),
@@ -247,6 +261,7 @@ impl ManufacturerProfile {
             min_silk_to_hole_nm: default_min_silk_to_hole_nm(),
             min_silk_width_nm: default_min_silk_width_nm(),
             min_pad_to_pad_nm: default_min_pad_to_pad_nm(),
+            pad_to_pad_danger_nm: default_pad_to_pad_danger_nm(),
             min_pth_to_trace_nm: default_min_pth_to_trace_nm(),
             crosstalk_run_multiple: default_crosstalk_run_multiple(),
             ampacity_delta_t_milli_c: default_ampacity_delta_t_milli_c(),
@@ -394,6 +409,7 @@ impl ManufacturerProfile {
             min_silk_to_hole_nm: mm_to_nm(raw.min_silk_to_hole_mm),
             min_silk_width_nm: mm_to_nm(raw.min_silk_width_mm),
             min_pad_to_pad_nm: mm_to_nm(raw.min_pad_to_pad_mm),
+            pad_to_pad_danger_nm: mm_to_nm(raw.pad_to_pad_danger_mm),
             min_pth_to_trace_nm: mm_to_nm(raw.min_pth_to_trace_mm),
             crosstalk_run_multiple: raw.crosstalk_run_multiple,
             ampacity_delta_t_milli_c: raw.ampacity_delta_t_milli_c,
@@ -420,6 +436,8 @@ struct TomlProfile {
     min_silk_width_mm: f64,
     #[serde(default = "default_min_pad_to_pad_mm")]
     min_pad_to_pad_mm: f64,
+    #[serde(default = "default_pad_to_pad_danger_mm")]
+    pad_to_pad_danger_mm: f64,
     #[serde(default = "default_min_pth_to_trace_mm")]
     min_pth_to_trace_mm: f64,
     #[serde(default = "default_crosstalk_run_multiple")]
@@ -799,6 +817,7 @@ min_drill_to_copper_mm = 0.25
         assert_eq!(p.min_silk_to_hole_nm, mm_to_nm(0.15));
         assert_eq!(p.min_silk_width_nm, mm_to_nm(0.15));
         assert_eq!(p.min_pad_to_pad_nm, mm_to_nm(0.15));
+        assert_eq!(p.pad_to_pad_danger_nm, mm_to_nm(0.10));
         assert_eq!(p.min_pth_to_trace_nm, mm_to_nm(0.28));
     }
 
