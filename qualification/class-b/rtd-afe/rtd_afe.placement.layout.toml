@@ -163,7 +163,7 @@ priority = "hard"
 [components.C_IO]
 x = 17.0
 y = 27.1
-rotation = 90
+rotation = 270
 priority = "hard"
 
 [components.L2]
