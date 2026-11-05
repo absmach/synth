@@ -436,14 +436,60 @@ impl Pad {
         let qx = (dx * cos - dy * sin).abs();
         let qy = (dx * sin + dy * cos).abs();
         let (hx, hy) = (self.size_nm.0 as f64 / 2.0, self.size_nm.1 as f64 / 2.0);
-        let short = hx.min(hy);
-        let radius = match self.shape.as_str() {
+        let radius = self.corner_radius_nm();
+        let (ex, ey) = (qx - (hx - radius), qy - (hy - radius));
+        ex.max(0.0).hypot(ey.max(0.0)) + ex.max(ey).min(0.0) - radius
+    }
+
+    /// Corner radius of the pad's rounded box, in nanometres: zero for a
+    /// rectangle, half the shorter side for a circle or oval.
+    fn corner_radius_nm(&self) -> f64 {
+        let short = (self.size_nm.0.min(self.size_nm.1)) as f64 / 2.0;
+        match self.shape.as_str() {
             "circle" | "oval" => short,
             "roundrect" => (self.corner_ratio * 2.0 * short).clamp(0.0, short),
             _ => 0.0,
-        };
-        let (ex, ey) = (qx - (hx - radius), qy - (hy - radius));
-        ex.max(0.0).hypot(ey.max(0.0)) + ex.max(ey).min(0.0) - radius
+        }
+    }
+
+    /// Points around the pad's copper outline, no further apart than
+    /// `step_nm`, in board coordinates.
+    #[must_use]
+    pub fn outline_points_nm(&self, step_nm: f64) -> Vec<Point> {
+        let (hx, hy) = (self.size_nm.0 as f64 / 2.0, self.size_nm.1 as f64 / 2.0);
+        let radius = self.corner_radius_nm();
+        let (cx, cy) = (hx - radius, hy - radius);
+        // Corner arcs, counter-clockwise from the +x,+y corner, joined by
+        // the straight edges between them.
+        let arc_steps = ((radius * std::f64::consts::FRAC_PI_2 / step_nm).ceil() as i64).max(1);
+        let mut key: Vec<(f64, f64)> = Vec::new();
+        for (corner, (sx, sy)) in [(1.0, 1.0), (-1.0, 1.0), (-1.0, -1.0), (1.0, -1.0)]
+            .into_iter()
+            .enumerate()
+        {
+            let from = corner as f64 * std::f64::consts::FRAC_PI_2;
+            for i in 0..=arc_steps {
+                let a = from + std::f64::consts::FRAC_PI_2 * i as f64 / arc_steps as f64;
+                key.push((sx * cx + radius * a.cos(), sy * cy + radius * a.sin()));
+            }
+        }
+        let (sin, cos) = self.angle_deg.to_radians().sin_cos();
+        let mut points = Vec::new();
+        for (i, &(x0, y0)) in key.iter().enumerate() {
+            let (x1, y1) = key[(i + 1) % key.len()];
+            let pieces = (((x1 - x0).hypot(y1 - y0) / step_nm).ceil() as i64).max(1);
+            for k in 0..pieces {
+                let f = k as f64 / pieces as f64;
+                let (qx, qy) = (x0 + (x1 - x0) * f, y0 + (y1 - y0) * f);
+                // Pad frame to board frame (the inverse of `signed_distance_nm`).
+                points.push(Point::new(
+                    self.at.x_nm + (qx * cos + qy * sin).round() as i64,
+                    self.at.y_nm + (qy * cos - qx * sin).round() as i64,
+                ));
+            }
+        }
+        points.dedup();
+        points
     }
 
     /// Whether this pad carries copper on `layer`.
