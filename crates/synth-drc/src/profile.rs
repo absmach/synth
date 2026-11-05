@@ -259,6 +259,29 @@ impl ManufacturerProfile {
         }
     }
 
+    /// Whether [`Self::from_name`] resolves `name` on purpose.
+    ///
+    /// A name it does not recognise is not refused, it takes the
+    /// `jlc-standard` floor, so a misspelled tier (`jlcpcb_advanced` for
+    /// `jlc-advanced`) is judged against a floor the author did not choose
+    /// and nothing says so. This is the question a validator asks to say so.
+    /// A vendor written loosely (`jlcpcb`, `PCBWay standard`) is recognised:
+    /// that is the case the substring matching exists for.
+    #[must_use]
+    pub fn recognises_name(name: &str) -> bool {
+        let lower = name.to_ascii_lowercase();
+        [
+            Self::jlc_advanced().name,
+            Self::jlc_filled_via().name,
+            Self::jlc_standard().name,
+        ]
+        .contains(&lower)
+            || lower == "jlcpcb"
+            || lower == "jlc"
+            || lower.contains("pcbway")
+            || lower.contains("oshpark")
+    }
+
     /// Resolve a declared manufacturer for a board of `layers`, refusing to
     /// hand back a process the fabricator does not sell for that stackup.
     ///
