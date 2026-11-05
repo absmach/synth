@@ -10,8 +10,7 @@ height_mm = 1.9
 courtyard_margin_mm = 0.25
 
 [operating_conditions]
-max_voltage_v = 100.0
-max_current_ma = 1000.0
+max_voltage_v = 5.0
 
 [[pins]]
 name = "io"

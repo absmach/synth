@@ -23,3 +23,7 @@ electrical_type = "passive"
 name = "p3"
 number = "3"
 electrical_type = "passive"
+
+[provenance]
+reviewed_by = "Steve Munene"
+reviewed_at = "2026-11-05"
