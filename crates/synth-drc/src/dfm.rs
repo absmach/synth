@@ -17,7 +17,7 @@
 use std::collections::BTreeMap;
 
 use crate::pcb_read::NM_PER_MM;
-use crate::pcb_read::{Pad, PcbBoard, PcbParseError, Point};
+use crate::pcb_read::{entry_is_copper, Pad, PcbBoard, PcbParseError, Point, Via};
 use crate::ManufacturerProfile;
 
 /// How a fab's DFM tool would grade a finding.
@@ -89,6 +89,8 @@ pub fn check_dfm(
     let mut findings = silk_to_pad(&board, profile);
     findings.extend(silk_to_hole(&board, profile));
     findings.extend(silk_line_width(&board, profile));
+    findings.extend(pad_to_pad(&board, profile));
+    findings.extend(pth_to_trace(&board, profile));
     Ok(DfmReport {
         findings,
         unchecked_silk_text: board.silk_text_count(),
@@ -230,6 +232,148 @@ fn silk_line_width(board: &PcbBoard, profile: &ManufacturerProfile) -> Vec<DfmFi
         .collect()
 }
 
+/// Copper pads of different nets closer than the fab can etch apart, on the
+/// same side of the board. Pads of one net may sit close, and so may the
+/// pieces of one pin. A mounting hole carries no copper and is skipped.
+fn pad_to_pad(board: &PcbBoard, profile: &ManufacturerProfile) -> Vec<DfmFinding> {
+    let required_nm = profile.min_pad_to_pad_nm as f64;
+    // A via is copper on every layer it spans, so to the fab it is one more
+    // round pad.
+    let via_pads: Vec<Pad> = board.vias.iter().map(via_as_pad).collect();
+    let pads: Vec<&Pad> = board
+        .pads()
+        .filter(|p| p.kind != "np_thru_hole" && p.layers.iter().any(|l| entry_is_copper(l)))
+        .chain(via_pads.iter())
+        .collect();
+    let reach = |p: &Pad| (p.size_nm.0 as f64 / 2.0).hypot(p.size_nm.1 as f64 / 2.0);
+    let mut findings = Vec::new();
+    for (i, a) in pads.iter().enumerate() {
+        for b in &pads[i + 1..] {
+            let same_net = (connected_net(a).is_some() && connected_net(a) == connected_net(b))
+                || (!a.footprint.is_empty() && a.footprint == b.footprint && a.number == b.number);
+            if same_net || !share_copper_layer(a, b) {
+                continue;
+            }
+            let (dx, dy) = (
+                (a.at.x_nm - b.at.x_nm) as f64,
+                (a.at.y_nm - b.at.y_nm) as f64,
+            );
+            if dx.hypot(dy) > reach(a) + reach(b) + required_nm {
+                continue;
+            }
+            let (gap_nm, at) = pad_gap(a, b);
+            if gap_nm < required_nm {
+                findings.push(DfmFinding {
+                    rule: "pad_to_pad",
+                    severity: DfmSeverity::Danger,
+                    message: format!(
+                        "pads {} and {} are {:.3} mm apart, under the {:.3} mm minimum",
+                        a.id(),
+                        b.id(),
+                        gap_nm / NM_PER_MM,
+                        required_nm / NM_PER_MM
+                    ),
+                    at_mm: (at.x_mm(), at.y_mm()),
+                    measured_mm: gap_nm / NM_PER_MM,
+                    required_mm: required_nm / NM_PER_MM,
+                });
+            }
+        }
+    }
+    findings
+}
+
+/// A via's copper as a round pad, so spacing rules can treat it like one.
+fn via_as_pad(via: &Via) -> Pad {
+    Pad {
+        footprint: "via".to_string(),
+        number: format!("{:.3},{:.3}", via.at.x_mm(), via.at.y_mm()),
+        kind: "via".to_string(),
+        shape: "circle".to_string(),
+        at: via.at,
+        size_nm: (via.size_nm, via.size_nm),
+        angle_deg: 0.0,
+        corner_ratio: 0.0,
+        drill_nm: (via.drill_nm, via.drill_nm),
+        layers: via.layers.clone(),
+        net: via.net,
+        net_name: via.net_name.clone(),
+    }
+}
+
+/// The pad's net, or `None` when it has none or sits on KiCad's net 0, which
+/// means unconnected: two unconnected pads are separate copper, not one net.
+fn connected_net(pad: &Pad) -> Option<u32> {
+    pad.net.filter(|n| *n != 0)
+}
+
+/// Whether two pads have copper on a common layer; `*.Cu` is every layer.
+fn share_copper_layer(a: &Pad, b: &Pad) -> bool {
+    a.layers.iter().filter(|l| entry_is_copper(l)).any(|la| {
+        b.layers
+            .iter()
+            .any(|lb| la == lb || (la == "*.Cu" && entry_is_copper(lb)) || (lb == "*.Cu"))
+    })
+}
+
+/// The gap between two pads' outlines and a point on it: the nearest an
+/// outline sample of either pad comes to the other pad. Zero if they overlap.
+fn pad_gap(a: &Pad, b: &Pad) -> (f64, Point) {
+    let mut best = (f64::INFINITY, a.at);
+    for (from, to) in [(a, b), (b, a)] {
+        for p in from.outline_points_nm(SAMPLE_STEP_NM) {
+            let d = to.signed_distance_nm(p);
+            if d < best.0 {
+                best = (d, p);
+            }
+        }
+    }
+    (best.0.max(0.0), best.1)
+}
+
+/// A trace of another net too close to a plated hole's edge: drilling
+/// wanders, and a trace under the wall shorts or breaks. A hole goes through
+/// every layer, so a trace on any layer counts. One finding per hole, for its
+/// closest trace; the hole's own net may run up to it.
+fn pth_to_trace(board: &PcbBoard, profile: &ManufacturerProfile) -> Vec<DfmFinding> {
+    let required_nm = profile.min_pth_to_trace_nm as f64;
+    let mut findings = Vec::new();
+    for pad in board
+        .pads()
+        .filter(|p| p.kind == "thru_hole" && (p.drill_nm.0 > 0 || p.drill_nm.1 > 0))
+    {
+        let radius = pad.drill_nm.0.max(pad.drill_nm.1) as f64 / 2.0;
+        let closest = board
+            .segments
+            .iter()
+            .filter(|s| !(pad.net.is_some() && pad.net == s.net))
+            .map(|s| {
+                let d = distance_to_segment_nm(pad.at, &(s.start, s.end));
+                (d - radius - s.width_nm as f64 / 2.0).max(0.0)
+            })
+            .min_by(f64::total_cmp);
+        let Some(gap_nm) = closest else {
+            continue;
+        };
+        if gap_nm < required_nm {
+            findings.push(DfmFinding {
+                rule: "pth_to_trace",
+                severity: DfmSeverity::Danger,
+                message: format!(
+                    "a trace is {:.3} mm from the plated hole of pad {}, under the {:.3} mm minimum",
+                    gap_nm / NM_PER_MM,
+                    pad.id(),
+                    required_nm / NM_PER_MM
+                ),
+                at_mm: (pad.at.x_mm(), pad.at.y_mm()),
+                measured_mm: gap_nm / NM_PER_MM,
+                required_mm: required_nm / NM_PER_MM,
+            });
+        }
+    }
+    findings
+}
+
 /// The smallest distance from the pad's outline to a stroke's centreline,
 /// and the point on the stroke where it occurs. Negative inside the pad.
 fn nearest_sample(pad: &Pad, stroke: &(Point, Point)) -> (f64, Point) {
@@ -283,6 +427,7 @@ mod tests {
   (layers (0 "F.Cu" signal) (31 "B.Cu" signal) (44 "Edge.Cuts" user))
   (net 0 "")
   (net 1 "GND")
+  (net 2 "SIG")
   (footprint "Resistor_SMD:R_0603_1608Metric"
     (layer "F.Cu")
     (at 10 20)
@@ -556,6 +701,165 @@ mod tests {
             r#"(gr_text "SHOWN" (at 5 5) (layer "F.SilkS") (effects (font (size 1 1)) (hide no)))"#,
         );
         assert_eq!(report.unchecked_silk_text, 2, "the reference and this text");
+    }
+
+    /// A one-pad SMD footprint of the given shape and square size on `layer`.
+    fn pad_at(x: f64, y: f64, net: u32, shape: &str, size: f64, layer: &str) -> String {
+        let net_name = match net {
+            0 => "",
+            1 => "GND",
+            _ => "SIG",
+        };
+        format!(
+            r#"(footprint "Test:P" (layer "{layer}") (at {x} {y})
+    (pad "1" smd {shape} (at 0 0) (size {size} {size})
+      (layers "{layer}" "{}" "{}") (net {net} "{net_name}")))"#,
+            layer.replace("Cu", "Paste"),
+            layer.replace("Cu", "Mask")
+        )
+    }
+
+    #[test]
+    fn pads_of_different_nets_closer_than_the_floor_are_a_danger() {
+        // The base pad spans x 9.7..10.3; this one spans 10.4..11.0: 0.1 mm.
+        let report = run(&pad_at(10.7, 20.0, 2, "rect", 0.6, "F.Cu"));
+        assert_eq!(count(&report, "pad_to_pad"), 1, "{report:?}");
+        let finding = &report.findings[0];
+        assert_eq!(finding.severity, DfmSeverity::Danger);
+        assert!((finding.measured_mm - 0.1).abs() < 0.005, "{finding:?}");
+        assert!((finding.required_mm - 0.15).abs() < 1e-9, "{finding:?}");
+    }
+
+    #[test]
+    fn pads_with_room_between_them_are_not_reported() {
+        let report = run(&pad_at(10.9, 20.0, 2, "rect", 0.6, "F.Cu"));
+        assert_eq!(count(&report, "pad_to_pad"), 0, "{report:?}");
+    }
+
+    #[test]
+    fn pads_of_the_same_net_may_sit_close() {
+        let report = run(&pad_at(10.7, 20.0, 1, "rect", 0.6, "F.Cu"));
+        assert_eq!(count(&report, "pad_to_pad"), 0, "{report:?}");
+    }
+
+    #[test]
+    fn pads_on_opposite_sides_do_not_share_copper() {
+        let report = run(&pad_at(10.7, 20.0, 2, "rect", 0.6, "B.Cu"));
+        assert_eq!(count(&report, "pad_to_pad"), 0, "{report:?}");
+    }
+
+    #[test]
+    fn diagonal_round_pads_are_measured_on_their_curved_outline() {
+        // Centres 0.707 mm apart, radius 0.3 each: a 0.107 mm gap. Their
+        // bounding boxes overlap, so a box-to-box measure would say zero.
+        let report = run(&format!(
+            "{}\n  {}",
+            pad_at(20.0, 20.0, 1, "circle", 0.6, "F.Cu"),
+            pad_at(20.5, 20.5, 2, "circle", 0.6, "F.Cu")
+        ));
+        assert_eq!(count(&report, "pad_to_pad"), 1, "{report:?}");
+        let finding = report.findings.iter().find(|f| f.rule == "pad_to_pad");
+        assert!((finding.expect("finding").measured_mm - 0.107).abs() < 0.005);
+    }
+
+    #[test]
+    fn the_pieces_of_one_pin_may_sit_close_but_different_pins_may_not() {
+        let split = |second: &str| {
+            format!(
+                r#"(footprint "Test:EP" (layer "F.Cu") (at 30 30)
+    (property "Reference" "U9" (at 0 0) (layer "F.Fab"))
+    (pad "1" smd rect (at 0 0) (size 0.6 0.6) (layers "F.Cu"))
+    (pad "{second}" smd rect (at 0.7 0) (size 0.6 0.6) (layers "F.Cu")))"#
+            )
+        };
+        assert_eq!(count(&run(&split("1")), "pad_to_pad"), 0);
+        assert_eq!(count(&run(&split("2")), "pad_to_pad"), 1);
+    }
+
+    #[test]
+    fn a_via_is_copper_too_and_may_not_crowd_a_pad_of_another_net() {
+        // A 0.4 mm via of net 2 centred 0.55 mm from the base pad's centre: its
+        // copper edge is 0.05 mm from the pad edge.
+        let via = |x: f64, net: u32| {
+            format!(
+                r#"(via (at {x} 20) (size 0.4) (drill 0.2) (layers "F.Cu" "B.Cu") (net {net}))"#
+            )
+        };
+        let near = run(&via(10.55, 2));
+        assert_eq!(count(&near, "pad_to_pad"), 1, "{near:?}");
+        let finding = near.findings.iter().find(|f| f.rule == "pad_to_pad");
+        assert!((finding.expect("finding").measured_mm - 0.05).abs() < 0.005);
+        // Its own net, or room to spare, is fine.
+        assert_eq!(count(&run(&via(10.55, 1)), "pad_to_pad"), 0);
+        assert_eq!(count(&run(&via(11.2, 2)), "pad_to_pad"), 0);
+    }
+
+    #[test]
+    fn two_unconnected_pads_are_separate_copper_not_one_net() {
+        // KiCad's net 0 is "no net". The base pad is on net 1, so give both
+        // pads their own distinct pins on net 0.
+        let report = run(&format!(
+            "{}\n  {}",
+            pad_at(20.0, 20.0, 0, "rect", 0.6, "F.Cu"),
+            pad_at(20.7, 20.0, 0, "rect", 0.6, "F.Cu")
+        ));
+        assert_eq!(count(&report, "pad_to_pad"), 1, "{report:?}");
+    }
+
+    #[test]
+    fn a_through_hole_pad_meets_an_smd_pad_on_the_side_it_shares() {
+        // The SMD pad lists only F.Cu; the through-hole pad lists `*.Cu`.
+        let thru = r#"(footprint "Test:T" (layer "F.Cu") (at 10.7 20)
+    (pad "1" thru_hole rect (at 0 0) (size 0.6 0.6) (drill 0.3)
+      (layers "*.Cu" "*.Mask") (net 2 "SIG")))"#;
+        let report = run(thru);
+        assert_eq!(count(&report, "pad_to_pad"), 1, "{report:?}");
+    }
+
+    /// A plated 1.0 mm hole in a 1.6 mm pad at (20, 20), net 1.
+    const PTH: &str = r#"(footprint "Test:Thru" (layer "F.Cu") (at 20 20)
+    (pad "1" thru_hole circle (at 0 0) (size 1.6 1.6) (drill 1.0)
+      (layers "*.Cu" "*.Mask") (net 1 "GND")))"#;
+
+    fn trace(layer: &str, y: f64, net: u32) -> String {
+        format!(
+            r#"(segment (start 19 {y}) (end 21 {y}) (width 0.2) (layer "{layer}") (net {net}))"#
+        )
+    }
+
+    #[test]
+    fn a_trace_too_close_to_a_plated_hole_is_a_danger() {
+        // Trace centre 0.75 mm from the hole centre, less its 0.5 mm radius
+        // and the trace's 0.1 mm half width: a 0.15 mm gap against 0.28 mm.
+        let report = run(&format!("{PTH}\n  {}", trace("F.Cu", 20.75, 2)));
+        assert_eq!(count(&report, "pth_to_trace"), 1, "{report:?}");
+        let finding = report.findings.iter().find(|f| f.rule == "pth_to_trace");
+        let finding = finding.expect("finding");
+        assert_eq!(finding.severity, DfmSeverity::Danger);
+        assert!((finding.measured_mm - 0.15).abs() < 0.005, "{finding:?}");
+        assert!((finding.required_mm - 0.28).abs() < 1e-9, "{finding:?}");
+    }
+
+    #[test]
+    fn a_trace_with_room_around_the_hole_is_not_reported() {
+        let report = run(&format!("{PTH}\n  {}", trace("F.Cu", 21.0, 2)));
+        assert_eq!(count(&report, "pth_to_trace"), 0, "{report:?}");
+    }
+
+    #[test]
+    fn the_holes_own_net_may_run_up_to_it() {
+        let report = run(&format!("{PTH}\n  {}", trace("F.Cu", 20.75, 1)));
+        assert_eq!(count(&report, "pth_to_trace"), 0, "{report:?}");
+    }
+
+    #[test]
+    fn a_plated_hole_goes_through_so_a_back_trace_counts_and_is_reported_once() {
+        let report = run(&format!(
+            "{PTH}\n  {}\n  {}",
+            trace("B.Cu", 20.75, 2),
+            trace("F.Cu", 19.25, 2)
+        ));
+        assert_eq!(count(&report, "pth_to_trace"), 1, "one finding per hole");
     }
 
     #[test]
