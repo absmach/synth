@@ -72,3 +72,7 @@ required = true
 net = "vcc"
 value = "100nf"
 count = 1
+
+[provenance]
+reviewed_by = "Steve Munene"
+reviewed_at = "2026-11-05"
