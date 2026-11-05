@@ -901,6 +901,14 @@ fn silk_on_a_pad_is_recorded_without_blocking_a_plain_export() {
         "{:#}",
         run.stage("dfm")
     );
+    let detail = run.stage("dfm")["detail"]
+        .as_str()
+        .unwrap_or("")
+        .to_string();
+    assert!(
+        detail.contains("silk_to_pad danger") && detail.contains("silk text item(s) not measured"),
+        "the counts and what was not measured must be recorded: {detail}"
+    );
     assert_eq!(run.report.as_ref().expect("report")["release_ready"], false);
 }
 

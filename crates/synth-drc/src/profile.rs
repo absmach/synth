@@ -49,6 +49,15 @@ pub struct ManufacturerProfile {
     /// same side, in nanometers. JLCPCB's published figure is 0.15 mm.
     #[serde(default = "default_min_silk_to_pad_nm")]
     pub min_silk_to_pad_nm: i64,
+    /// Minimum gap between a silkscreen stroke's edge and a drilled hole,
+    /// on either side of the board, in nanometers. JLCPCB does not publish
+    /// this figure; 0.15 mm is assumed, to be calibrated against its DFM tool.
+    #[serde(default = "default_min_silk_to_hole_nm")]
+    pub min_silk_to_hole_nm: i64,
+    /// Minimum silkscreen stroke width, in nanometers. JLCPCB's published
+    /// figure is 0.15 mm; its DFM tool grades thinner silk a Warning.
+    #[serde(default = "default_min_silk_width_nm")]
+    pub min_silk_width_nm: i64,
     /// Dielectric heights of parallel run two traces must share before
     /// `W-SYNTH-DRC-013` calls it edge coupling. A process-neutral default;
     /// tighter than this and ordinary boards warn.
@@ -98,8 +107,24 @@ impl ManufacturerProfile {
     }
 }
 
+fn default_min_silk_width_mm() -> f64 {
+    0.15
+}
+
+fn default_min_silk_width_nm() -> i64 {
+    mm_to_nm(default_min_silk_width_mm())
+}
+
 fn default_min_silk_to_pad_mm() -> f64 {
     0.15
+}
+
+fn default_min_silk_to_hole_mm() -> f64 {
+    0.15
+}
+
+fn default_min_silk_to_hole_nm() -> i64 {
+    mm_to_nm(default_min_silk_to_hole_mm())
 }
 
 fn default_min_silk_to_pad_nm() -> i64 {
@@ -139,6 +164,8 @@ impl ManufacturerProfile {
             min_annular_ring_nm: mm_to_nm(0.13),
             min_drill_to_copper_nm: mm_to_nm(0.2),
             min_silk_to_pad_nm: default_min_silk_to_pad_nm(),
+            min_silk_to_hole_nm: default_min_silk_to_hole_nm(),
+            min_silk_width_nm: default_min_silk_width_nm(),
             crosstalk_run_multiple: default_crosstalk_run_multiple(),
             ampacity_delta_t_milli_c: default_ampacity_delta_t_milli_c(),
             ir_drop_budget_mv: default_ir_drop_budget_mv(),
@@ -163,6 +190,8 @@ impl ManufacturerProfile {
             min_annular_ring_nm: mm_to_nm(0.15),
             min_drill_to_copper_nm: mm_to_nm(0.2),
             min_silk_to_pad_nm: default_min_silk_to_pad_nm(),
+            min_silk_to_hole_nm: default_min_silk_to_hole_nm(),
+            min_silk_width_nm: default_min_silk_width_nm(),
             crosstalk_run_multiple: default_crosstalk_run_multiple(),
             ampacity_delta_t_milli_c: default_ampacity_delta_t_milli_c(),
             ir_drop_budget_mv: default_ir_drop_budget_mv(),
@@ -187,6 +216,8 @@ impl ManufacturerProfile {
             min_annular_ring_nm: mm_to_nm(0.125),
             min_drill_to_copper_nm: mm_to_nm(0.2),
             min_silk_to_pad_nm: default_min_silk_to_pad_nm(),
+            min_silk_to_hole_nm: default_min_silk_to_hole_nm(),
+            min_silk_width_nm: default_min_silk_width_nm(),
             crosstalk_run_multiple: default_crosstalk_run_multiple(),
             ampacity_delta_t_milli_c: default_ampacity_delta_t_milli_c(),
             ir_drop_budget_mv: default_ir_drop_budget_mv(),
@@ -330,6 +361,8 @@ impl ManufacturerProfile {
             min_annular_ring_nm: mm_to_nm(raw.min_annular_ring_mm),
             min_drill_to_copper_nm: mm_to_nm(raw.min_drill_to_copper_mm),
             min_silk_to_pad_nm: mm_to_nm(raw.min_silk_to_pad_mm),
+            min_silk_to_hole_nm: mm_to_nm(raw.min_silk_to_hole_mm),
+            min_silk_width_nm: mm_to_nm(raw.min_silk_width_mm),
             crosstalk_run_multiple: raw.crosstalk_run_multiple,
             ampacity_delta_t_milli_c: raw.ampacity_delta_t_milli_c,
             ir_drop_budget_mv: raw.ir_drop_budget_mv,
@@ -349,6 +382,10 @@ struct TomlProfile {
     min_drill_to_copper_mm: f64,
     #[serde(default = "default_min_silk_to_pad_mm")]
     min_silk_to_pad_mm: f64,
+    #[serde(default = "default_min_silk_to_hole_mm")]
+    min_silk_to_hole_mm: f64,
+    #[serde(default = "default_min_silk_width_mm")]
+    min_silk_width_mm: f64,
     #[serde(default = "default_crosstalk_run_multiple")]
     crosstalk_run_multiple: i64,
     #[serde(default = "default_ampacity_delta_t_milli_c")]
