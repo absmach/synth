@@ -136,16 +136,18 @@ The connector +5V is switched by a TPS22918 with 1 µF + 100 nF.
 
 ## Known export defects
 
-- The corrected-source schematic has **one** KiCad ERC error: the
-  `RTC_BAT` power flag (`#PWR2153`). The source adds
-  `power "RTC_BAT" 3v`; export16 is the re-run. The 13 errors in the first
-  pre-GbE schematic (QOD/VOUT, FFC MP, Q_LED, U4 XTALOUT/PWR_FLAG) are gone;
-  those were schematic-layout defects, not netlist defects. See
+- The corrected-source schematic has **zero** KiCad ERC errors and 67
+  warnings. The old `RTC_BAT` power-pin error is cleared by the generated
+  coin-cell symbol, whose `+` pin is a power output. The 13 errors in the
+  first pre-GbE schematic (QOD/VOUT, FFC MP, Q_LED, U4 XTALOUT/PWR_FLAG) are
+  gone; those were schematic-layout defects, not netlist defects. See
   `agent-run/VERIFICATION_REPORT.md`.
 - The custom power rails `+5V_AUX`, `RTC_VDD`, `CM4_3V3` and `CM4_1V8` have
   power flags in the schematic but no symbols in the embedded
-  `cm4_carrier.kicad_sym`; KiCad reports 72 `lib_symbol_issues` warnings.
-  This is an exporter limitation for non-standard rail names.
+  `cm4_carrier.kicad_sym`; KiCad reports 66 `lib_symbol_issues` warnings.
+  This is an exporter limitation for non-standard rail names. The other
+  warning is `multiple_net_names` (`FB_5V`/`VCC_5V`), a label-placement
+  issue to review.
 - No PCB was exported, so there is no top/bottom copper or 3D image.
 
 ## Not verified by Synth

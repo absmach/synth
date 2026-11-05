@@ -5,7 +5,6 @@ lifecycle = "active"
 description = "Keystone 1058 CR2032/CR2025 coin cell holder, surface mount"
 mpn = "1058"
 lcsc_pn = ""
-kicad_symbol = "Device:Battery_Cell"
 kicad_footprint = "Battery:BatteryHolder_Keystone_1058_1x2032"
 
 [footprint_dimensions]

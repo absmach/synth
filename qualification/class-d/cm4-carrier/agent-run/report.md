@@ -21,7 +21,7 @@
   netlist, power budget, assembly, bring-up, verification).
 - `kicad/` — four-sheet schematic, embedded symbols, project, DRC rules, routed 6-layer HDI PCB, unrouted baseline, BOM and PnP.
 - The manual fab package (Gerbers, drill files/maps, BOM and PnP) was generated locally and delivered to the user; it is not committed and not release evidence.
-- `reports/cm4_carrier.kicad-erc.json` — 1 error, 67 warnings; `reports/cm4_carrier.kicad-drc.json` — routed board, 0 violations / 0 unconnected.
+- `reports/cm4_carrier.kicad-erc.json` — 0 errors, 67 warnings; `reports/cm4_carrier.kicad-drc.json` — routed board, 0 violations / 0 unconnected.
 - `images/schematic/*.svg` — the four schematic sheets.
 - `qualification/matrix.toml` row, class "D", status "experimental".
 
@@ -31,7 +31,7 @@
 | --- | --- | --- |
 | `synth check` passes | **blocked** | `synth check --json` -> `source: fail` (validate timeout), `drc: unknown`; `synth validate` exits 124 at 600 s |
 | `--fab` recorded honestly | **blocked** | `synth check --fab --json` -> no manufacturing stage; a manual package was generated locally and delivered; it is not committed/release evidence |
-| ERC zero errors with `kicad-cli` | **not met (1 error)** | 1 `RTC_BAT` power-flag error in `reports/cm4_carrier.kicad-erc.json`; Synth ERC is 0 errors |
+| ERC zero errors with `kicad-cli` | **done (0 errors)** | `reports/cm4_carrier.kicad-erc.json`, 0 errors / 67 warnings; Synth ERC is 0 errors |
 | DRC report committed | **done (routed)** | `reports/cm4_carrier.kicad-drc.json`; 0 violations / 0 unconnected on the routed 6-layer HDI board |
 | Every used CM4 pin traced to a datasheet row | **done** | `agent-run/PIN_MAPPING.md`, 143 used pins, Table 6 page per pin; test passes |
 | Rail table with source, load, limit, margin | **done** | `agent-run/POWER_BUDGET.md`; E-SYNTH-POWER-009/010 clean |
@@ -47,7 +47,7 @@ synth export-kicad ... --allow-incomplete               ERC 0 errors, 100+ warni
 synth validate cm4_carrier.synth                        exit 124 (timeout, 600 s)
 synth place cm4_carrier.synth                           exit 1 (null placement, 900 s)
 synth export-kicad ... --router free-routing            exit 124 (schematic written, no PCB)
-kicad-cli sch erc ...                                  68 violations: 1 error, 67 warnings
+kicad-cli sch erc ...                                  67 violations: 0 errors, 67 warnings
 synth check --json                                      fail, drc: unknown
 synth check --fab --json                                fail, no manufacturing stage; manual package delivered locally; not committed/release evidence
 cargo test -p synth-cli --test cm4_carrier_board        2 passed, 1 ignored
@@ -70,7 +70,7 @@ real design errors were found and fixed in the source:
 The corrected-source export15 wrote the schematic at about 28 minutes and
 ran out of its 45-minute budget before the PCB. The final export (after the
 SYN-420 sheet-fill merge) re-drew the four sheets as A1/A2; `kicad/` and
-`images/` are that final schematic. Its KiCad ERC has 1 error and 67
+`images/` are that final schematic. Its KiCad ERC has 0 errors and 67
 warnings; the earlier QOD/VOUT, FFC MP and Q_LED findings were schematic
 layout defects and are gone.
 
@@ -85,8 +85,9 @@ layout defects and are gone.
    drill, BOM and PnP were generated manually and delivered to the user;
    they are not committed, uploaded or DFM-reviewed. The automated
    `synth check --fab` path is blocked by `synth validate`.
-4. **KiCad ERC has 1 error, 67 warnings.** The error is the `RTC_BAT` power
-   pin on the Peripherals sheet; the source netlist is correct.
+4. **KiCad ERC has 0 errors, 67 warnings.** The old `RTC_BAT` power-pin error
+   is cleared by the generated coin-cell symbol. The warnings are 66
+   `lib_symbol_issues` and one `multiple_net_names` (`FB_5V`/`VCC_5V`).
 5. **The CM4 has no VBAT pin.** The issue's "diode to CM4 VBAT" is
    unimplementable; the board uses a standalone PCF85063ATL with a CR2032.
    This is a documented deviation, not a datasheet guess.

@@ -14,7 +14,7 @@ and export code.
 | `synth validate` | `synth validate qualification/class-d/cm4-carrier/cm4_carrier.synth` | **FAIL (timeout)** — exit 124 at 120 s, 300 s and 600 s. The schematic layout does not finish |
 | `synth place` | `synth place qualification/class-d/cm4-carrier/cm4_carrier.synth` | **FAIL** — timeout at 120 s; a 900 s run exits 1 with a null placement |
 | Schematic export | `synth export-kicad ... --out /tmp/opencode/cm4/export15 --allow-incomplete --router free-routing` | **PARTIAL** — exit 124 at 2700 s. The corrected-source four-sheet schematic, `.kicad_sym`, `.kicad_pro`, `.kicad_dru` and `sym-lib-table` were written at about 28 minutes; the PCB was not written |
-| KiCad ERC | `kicad-cli sch erc --severity-all --format json -o reports/cm4_carrier.kicad-erc.json kicad/cm4_carrier.kicad_sch` | **FAIL (1 error)** — 68 violations: 1 error, 67 warnings on the corrected-source schematic |
+| KiCad ERC | `kicad-cli sch erc --severity-all --format json -o reports/cm4_carrier.kicad-erc.json kicad/cm4_carrier.kicad_sch` | **PASS (0 errors)** — 67 violations: 0 errors, 67 warnings on the corrected-source schematic |
 | PCB export (`--pcb-only`) | `synth export-kicad ... --pcb-only --allow-incomplete --router free-routing` | **PASS for the file**: the PCB, BOM and PnP are written in seconds from the placement sidecar; the router then runs and is still in flight |
 | KiCad DRC | `kicad-cli pcb drc --severity-all --refill-zones ... kicad/cm4_carrier.kicad_pcb` | **Routed board**: 0 violations, 0 unconnected items. The unrouted baseline is 0 violations / 360 unconnected |
 | `synth check` | `synth check qualification/class-d/cm4-carrier/cm4_carrier.synth --json` | **FAIL** — `drc: unknown`; the DRC stage calls `synth validate`, which times out |
@@ -69,14 +69,13 @@ run had 100+):
 None of these is blocking in Synth. The KiCad ERC errors below are real
 pin-type/unconnected findings.
 
-## KiCad ERC errors (1)
+## KiCad ERC errors (0)
 
-The corrected-source schematic has **one** error:
-
-- **`power_pin_not_driven` at `#PWR2153`.** The symbol is `RTC_BAT`, the
-  coin-cell side of D_RTC2. The battery symbol's pin is passive, so the net
-  has no power output. The final source adds `power "RTC_BAT" 3v`; the
-  exporter then adds a PWR_FLAG. Export16 is the re-run.
+The corrected-source schematic has **zero** errors. The old
+`power_pin_not_driven` at `RTC_BAT` is cleared by the generated coin-cell
+symbol, whose `+` pin is a power output. The 67 warnings are 66
+`lib_symbol_issues` (the exporter's custom power symbols) and one
+`multiple_net_names` (`FB_5V`/`VCC_5V`) to review.
 
 The 13 errors in the first (pre-GbE, pre-crystal-fix) schematic were five
 TPS22918 QOD/VOUT conflicts, one U4 XTALOUT/PWR_FLAG association, two FFC MP

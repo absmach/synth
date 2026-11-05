@@ -41,7 +41,7 @@ cargo test -p synth-cli --test cm4_carrier_board
 | A6 | `synth validate` completes | `synth validate $B/cm4_carrier.synth` | **Blocked**: the schematic layout does not finish within 10 minutes on this board. The same ERC runs clean inside `export-kicad` (A3). See `agent-run/VERIFICATION_REPORT.md` |
 | A7 | `synth place` completes | `synth place $B/cm4_carrier.synth` | **Blocked**: exits 1 with no placement (the automatic placer cannot place 185 components with ten edge-hard connectors). The committed placement sidecar pins every component |
 | A8 | Export completes | `synth export-kicad ... --pcb-only --allow-incomplete` | **Partial**: the full export still exceeds the 45-minute budget, but `--pcb-only` writes the PCB/BOM/PnP in seconds from the placement sidecar. `kicad/` has the four-sheet schematic, the routed `.kicad_pcb` and the unrouted baseline |
-| A9 | ERC on the exported schematic | `kicad-cli sch erc` | **Fail (1 error, 67 warnings)** in `reports/cm4_carrier.kicad-erc.json`. The single error is the `RTC_BAT` power pin on the Peripherals sheet. The source adds `power "RTC_BAT" 3v`; export16 is the re-run |
+| A9 | ERC on the exported schematic | `kicad-cli sch erc` | **Pass (0 errors, 67 warnings)** in `reports/cm4_carrier.kicad-erc.json`. The old `RTC_BAT` power-pin error is cleared by the generated coin-cell symbol (its `+` pin is a power output). The 67 warnings are 66 `lib_symbol_issues` and one `multiple_net_names` (`FB_5V`/`VCC_5V`) to review |
 | A10 | DRC on the exported PCB | `kicad-cli pcb drc` | **Routed**: 0 violations, 0 unconnected items on the 6-layer HDI `kicad/cm4_carrier.kicad_pcb`. The KRT route reached 359/360 pad pairs; a targeted `DSI_D1_N` re-route closed the last pair |
 | A11 | `synth check` | `synth check --json` | **Fail**: `source: fail` because the `validate` child times out at 120 s; `drc: unknown` |
 | A12 | `synth check --fab` | `synth check --fab --json` | **Fail**: `source: fail`, `drc: unknown`, `manufacturing: unknown`. A manual package was generated locally and delivered to the user; it is not committed and is not release evidence |
@@ -87,7 +87,7 @@ reviewer. No reviewer is invented.
 | --- | --- | --- |
 | `synth check` passes | **blocked** | A11: `synth validate` does not finish; `check` reports `source: fail`, `drc: unknown` |
 | `--fab` recorded honestly | **blocked** | A12: same upstream block; a manual package was generated locally and delivered; it is not committed/release evidence |
-| ERC zero errors with `kicad-cli` | **not met (1 error)** | A9: the only error is `RTC_BAT`; export16 is the re-run with the power declaration |
+| ERC zero errors with `kicad-cli` | **done (0 errors)** | A9: `reports/cm4_carrier.kicad-erc.json`, 0 errors / 67 warnings |
 | DRC report committed | **done (routed)** | A10: `reports/cm4_carrier.kicad-drc.json`, 0 violations / 0 unconnected on the routed 6-layer HDI board |
 | Every used CM4 pin traced to a datasheet row | **done** | `agent-run/PIN_MAPPING.md` (143 used pins, Table 6 page per pin); test A4 |
 | Rail table with source, load, limit, margin | **done** | `agent-run/POWER_BUDGET.md`; E-SYNTH-POWER-009/010 clean (A3) |

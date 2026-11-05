@@ -346,230 +346,120 @@
 		)
 		(embedded_fonts no)
 	)
-		(symbol "Device:Battery_Cell"
-		(pin_numbers
-			(hide yes)
-		)
-		(pin_names
-			(offset 0)
-			(hide yes)
-		)
-		(exclude_from_sim no)
-		(in_bom yes)
-		(on_board yes)
-		(in_pos_files yes)
-		(duplicate_pin_numbers_are_jumpers no)
-		(property "Reference" "BT"
-			(at 2.54 2.54 0)
-			(show_name no)
-			(do_not_autoplace no)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-				(justify left)
+		(symbol
+			"synth:coin_cell_keystone_1058"
+			(pin_names
+				(offset 0.508)
 			)
-		)
-		(property "Value" "Battery_Cell"
-			(at 2.54 0 0)
-			(show_name no)
-			(do_not_autoplace no)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-				(justify left)
+			(pin_numbers
+				(hide yes)
 			)
-		)
-		(property "Footprint" ""
-			(at 0 1.524 90)
-			(show_name no)
-			(do_not_autoplace no)
-			(hide yes)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-			)
-		)
-		(property "Datasheet" ""
-			(at 0 1.524 90)
-			(show_name no)
-			(do_not_autoplace no)
-			(hide yes)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-			)
-		)
-		(property "Description" "Single-cell battery"
-			(at 0 0 0)
-			(show_name no)
-			(do_not_autoplace no)
-			(hide yes)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-			)
-		)
-		(property "Sim.Device" "V"
-			(at 0 0 0)
-			(show_name no)
-			(do_not_autoplace no)
-			(hide yes)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-			)
-		)
-		(property "Sim.Type" "DC"
-			(at 0 0 0)
-			(show_name no)
-			(do_not_autoplace no)
-			(hide yes)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-			)
-		)
-		(property "Sim.Pins" "1=+ 2=-"
-			(at 0 0 0)
-			(show_name no)
-			(do_not_autoplace no)
-			(hide yes)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-			)
-		)
-		(property "ki_keywords" "battery cell"
-			(at 0 0 0)
-			(show_name no)
-			(do_not_autoplace no)
-			(hide yes)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-			)
-		)
-		(symbol "Battery_Cell_0_1"
-			(rectangle
-				(start -2.286 1.778)
-				(end 2.286 1.524)
-				(stroke
-					(width 0)
-					(type default)
-				)
-				(fill
-					(type outline)
-				)
-			)
-			(rectangle
-				(start -1.524 1.016)
-				(end 1.524 0.508)
-				(stroke
-					(width 0)
-					(type default)
-				)
-				(fill
-					(type outline)
-				)
-			)
-			(polyline
-				(pts
-					(xy 0 1.778) (xy 0 2.54)
-				)
-				(stroke
-					(width 0)
-					(type default)
-				)
-				(fill
-					(type none)
-				)
-			)
-			(polyline
-				(pts
-					(xy 0 0.762) (xy 0 0)
-				)
-				(stroke
-					(width 0)
-					(type default)
-				)
-				(fill
-					(type none)
-				)
-			)
-			(polyline
-				(pts
-					(xy 0.762 3.048) (xy 1.778 3.048)
-				)
-				(stroke
-					(width 0.254)
-					(type default)
-				)
-				(fill
-					(type none)
-				)
-			)
-			(polyline
-				(pts
-					(xy 1.27 3.556) (xy 1.27 2.54)
-				)
-				(stroke
-					(width 0.254)
-					(type default)
-				)
-				(fill
-					(type none)
-				)
-			)
-		)
-		(symbol "Battery_Cell_1_1"
-			(pin passive line
-				(at 0 5.08 270)
-				(length 2.54)
-				(name "+"
-					(effects
-						(font
-							(size 1.27 1.27)
-						)
-					)
-				)
-				(number "1"
-					(effects
-						(font
-							(size 1.27 1.27)
-						)
+			(in_bom yes)
+			(on_board yes)
+			(property
+				"Reference"
+				"J"
+				(at 0 7.62 0)
+				(effects
+					(font
+						(size 1.27 1.27)
 					)
 				)
 			)
-			(pin passive line
-				(at 0 -2.54 90)
-				(length 2.54)
-				(name "-"
-					(effects
-						(font
-							(size 1.27 1.27)
+			(property
+				"Value"
+				"coin_cell_keystone_1058"
+				(at 0 10.16 0)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+				)
+			)
+			(property
+				"Footprint"
+				"Battery:BatteryHolder_Keystone_1058_1x2032"
+				(at 0 0 0)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+					(hide yes)
+				)
+			)
+			(property
+				"Datasheet"
+				"https://www.keyelco.com/product.cfm/product_id/14028"
+				(at 0 0 0)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+					(hide yes)
+				)
+			)
+			(symbol
+				"coin_cell_keystone_1058_0_1"
+				(rectangle
+					(start -7.62 -5.08)
+					(end 7.62 5.08)
+					(stroke
+						(width 0.254)
+						(type default)
+					)
+					(fill
+						(type background)
+					)
+				)
+			)
+			(symbol
+				"coin_cell_keystone_1058_1_1"
+				(pin
+					power_out
+					line
+					(at -5.08 7.62 270)
+					(length 2.54)
+					(name
+						"plus"
+						(effects
+							(font
+								(size 1.27 1.27)
+							)
+						)
+					)
+					(number
+						"1"
+						(effects
+							(font
+								(size 1.27 1.27)
+							)
 						)
 					)
 				)
-				(number "2"
-					(effects
-						(font
-							(size 1.27 1.27)
+				(pin
+					power_in
+					line
+					(at -2.54 7.62 270)
+					(length 2.54)
+					(name
+						"minus"
+						(effects
+							(font
+								(size 1.27 1.27)
+							)
+						)
+					)
+					(number
+						"2"
+						(effects
+							(font
+								(size 1.27 1.27)
+							)
 						)
 					)
 				)
 			)
 		)
-		(embedded_fonts no)
-	)
 		(symbol "Device:D_Schottky"
 		(pin_numbers
 			(hide yes)
@@ -18574,7 +18464,7 @@
 	)
 	(symbol
 		(lib_id "Connector_Generic:Conn_01x20")
-		(at 227.33 226.06 0)
+		(at 222.25 226.06 0)
 		(unit 1)
 		(in_bom yes)
 		(on_board yes)
@@ -18582,7 +18472,7 @@
 		(property
 			"Reference"
 			"J_GPIO1"
-			(at 227.33 198.12 0)
+			(at 222.25 198.12 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -18592,7 +18482,7 @@
 		(property
 			"Value"
 			"GPIO_ODD"
-			(at 227.33 254 0)
+			(at 222.25 254 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -18602,7 +18492,7 @@
 		(property
 			"Footprint"
 			"Connector_PinHeader_2.54mm:PinHeader_1x20_P2.54mm_Vertical"
-			(at 227.33 226.06 0)
+			(at 222.25 226.06 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -18613,7 +18503,7 @@
 		(property
 			"Datasheet"
 			""
-			(at 227.33 226.06 0)
+			(at 222.25 226.06 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -18624,7 +18514,7 @@
 		(property
 			"MPN"
 			""
-			(at 227.33 226.06 0)
+			(at 222.25 226.06 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -18635,7 +18525,7 @@
 		(property
 			"LCSC"
 			""
-			(at 227.33 226.06 0)
+			(at 222.25 226.06 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -18656,7 +18546,7 @@
 	)
 	(symbol
 		(lib_id "Connector_Generic:Conn_01x20")
-		(at 227.33 297.18 0)
+		(at 222.25 297.18 0)
 		(unit 1)
 		(in_bom yes)
 		(on_board yes)
@@ -18664,7 +18554,7 @@
 		(property
 			"Reference"
 			"J_GPIO2"
-			(at 227.33 269.24 0)
+			(at 222.25 269.24 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -18674,7 +18564,7 @@
 		(property
 			"Value"
 			"GPIO_EVEN"
-			(at 231.14 298.45 0)
+			(at 226.06 298.45 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -18685,7 +18575,7 @@
 		(property
 			"Footprint"
 			"Connector_PinHeader_2.54mm:PinHeader_1x20_P2.54mm_Vertical"
-			(at 227.33 297.18 0)
+			(at 222.25 297.18 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -18696,7 +18586,7 @@
 		(property
 			"Datasheet"
 			""
-			(at 227.33 297.18 0)
+			(at 222.25 297.18 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -18707,7 +18597,7 @@
 		(property
 			"MPN"
 			""
-			(at 227.33 297.18 0)
+			(at 222.25 297.18 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -18718,7 +18608,7 @@
 		(property
 			"LCSC"
 			""
-			(at 227.33 297.18 0)
+			(at 222.25 297.18 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -18739,7 +18629,7 @@
 	)
 	(symbol
 		(lib_id "synth:pcf85063atl")
-		(at 440.69 109.22 0)
+		(at 443.23 109.22 0)
 		(unit 1)
 		(in_bom yes)
 		(on_board yes)
@@ -18747,7 +18637,7 @@
 		(property
 			"Reference"
 			"U12"
-			(at 440.69 93.98 0)
+			(at 443.23 93.98 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -18757,7 +18647,7 @@
 		(property
 			"Value"
 			"PCF85063A"
-			(at 452.12 110.49 0)
+			(at 454.66 110.49 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -18768,7 +18658,7 @@
 		(property
 			"Footprint"
 			"Package_DFN_QFN:DFN-10-1EP_2.6x2.6mm_P0.5mm_EP1.3x2.2mm"
-			(at 440.69 109.22 0)
+			(at 443.23 109.22 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -18779,7 +18669,7 @@
 		(property
 			"Datasheet"
 			"https://www.nxp.com/docs/en/data-sheet/PCF85063A.pdf"
-			(at 440.69 109.22 0)
+			(at 443.23 109.22 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -18790,7 +18680,7 @@
 		(property
 			"MPN"
 			"PCF85063ATL/1118"
-			(at 440.69 109.22 0)
+			(at 443.23 109.22 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -18801,7 +18691,7 @@
 		(property
 			"LCSC"
 			"C404360"
-			(at 440.69 109.22 0)
+			(at 443.23 109.22 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -18822,7 +18712,7 @@
 	)
 	(symbol
 		(lib_id "Device:Crystal")
-		(at 483.87 254 0)
+		(at 486.41 254 0)
 		(unit 1)
 		(in_bom yes)
 		(on_board yes)
@@ -18830,7 +18720,7 @@
 		(property
 			"Reference"
 			"Y2"
-			(at 483.87 249.46 0)
+			(at 486.41 249.46 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -18840,7 +18730,7 @@
 		(property
 			"Value"
 			"32.768kHz"
-			(at 483.87 258.54 0)
+			(at 486.41 258.54 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -18850,7 +18740,7 @@
 		(property
 			"Footprint"
 			"Crystal:Crystal_SMD_3215-2Pin_3.2x1.5mm"
-			(at 483.87 254 0)
+			(at 486.41 254 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -18861,7 +18751,7 @@
 		(property
 			"Datasheet"
 			"https://www.lcsc.com/product-detail/C93232.html"
-			(at 483.87 254 0)
+			(at 486.41 254 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -18872,7 +18762,7 @@
 		(property
 			"MPN"
 			"DST310S 32.768KHz"
-			(at 483.87 254 0)
+			(at 486.41 254 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -18883,7 +18773,7 @@
 		(property
 			"LCSC"
 			"C93232"
-			(at 483.87 254 0)
+			(at 486.41 254 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -18903,7 +18793,7 @@
 		)
 	)
 	(symbol
-		(lib_id "Device:Battery_Cell")
+		(lib_id "synth:coin_cell_keystone_1058")
 		(at 397.51 109.22 0)
 		(unit 1)
 		(in_bom yes)
@@ -18912,7 +18802,7 @@
 		(property
 			"Reference"
 			"J_BT1"
-			(at 402.336 107.95 0)
+			(at 407.67 107.95 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -18923,7 +18813,7 @@
 		(property
 			"Value"
 			"CR2032"
-			(at 402.336 110.49 0)
+			(at 407.67 110.49 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -18988,7 +18878,7 @@
 	)
 	(symbol
 		(lib_id "Device:D_Schottky")
-		(at 483.87 86.36 0)
+		(at 486.41 86.36 0)
 		(unit 1)
 		(in_bom yes)
 		(on_board yes)
@@ -18996,7 +18886,7 @@
 		(property
 			"Reference"
 			"D_RTC1"
-			(at 483.87 81.82 0)
+			(at 486.41 81.82 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -19006,7 +18896,7 @@
 		(property
 			"Value"
 			"3V3"
-			(at 483.87 90.9 0)
+			(at 486.41 90.9 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -19016,7 +18906,7 @@
 		(property
 			"Footprint"
 			"Diode_SMD:D_SOD-123"
-			(at 483.87 86.36 0)
+			(at 486.41 86.36 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -19027,7 +18917,7 @@
 		(property
 			"Datasheet"
 			"https://www.diodes.com/datasheet/download/1N5819HW.pdf"
-			(at 483.87 86.36 0)
+			(at 486.41 86.36 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -19038,7 +18928,7 @@
 		(property
 			"MPN"
 			"1N5819HW-7-F"
-			(at 483.87 86.36 0)
+			(at 486.41 86.36 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -19049,7 +18939,7 @@
 		(property
 			"LCSC"
 			"C82544"
-			(at 483.87 86.36 0)
+			(at 486.41 86.36 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -19070,7 +18960,7 @@
 	)
 	(symbol
 		(lib_id "Device:D_Schottky")
-		(at 483.87 170.18 0)
+		(at 486.41 170.18 0)
 		(unit 1)
 		(in_bom yes)
 		(on_board yes)
@@ -19078,7 +18968,7 @@
 		(property
 			"Reference"
 			"D_RTC2"
-			(at 483.87 165.64 0)
+			(at 486.41 165.64 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -19088,7 +18978,7 @@
 		(property
 			"Value"
 			"BAT"
-			(at 483.87 174.72 0)
+			(at 486.41 174.72 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -19098,7 +18988,7 @@
 		(property
 			"Footprint"
 			"Diode_SMD:D_SOD-123"
-			(at 483.87 170.18 0)
+			(at 486.41 170.18 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -19109,7 +18999,7 @@
 		(property
 			"Datasheet"
 			"https://www.diodes.com/datasheet/download/1N5819HW.pdf"
-			(at 483.87 170.18 0)
+			(at 486.41 170.18 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -19120,7 +19010,7 @@
 		(property
 			"MPN"
 			"1N5819HW-7-F"
-			(at 483.87 170.18 0)
+			(at 486.41 170.18 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -19131,7 +19021,7 @@
 		(property
 			"LCSC"
 			"C82544"
-			(at 483.87 170.18 0)
+			(at 486.41 170.18 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -19152,7 +19042,7 @@
 	)
 	(symbol
 		(lib_id "Device:C")
-		(at 430.53 134.62 0)
+		(at 433.07 134.62 0)
 		(unit 1)
 		(in_bom yes)
 		(on_board yes)
@@ -19160,7 +19050,7 @@
 		(property
 			"Reference"
 			"C_RTC"
-			(at 435.07 133.35 0)
+			(at 437.61 133.35 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -19171,7 +19061,7 @@
 		(property
 			"Value"
 			"100nF"
-			(at 435.07 135.89 0)
+			(at 437.61 135.89 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -19182,7 +19072,7 @@
 		(property
 			"Footprint"
 			"Capacitor_SMD:C_0603_1608Metric"
-			(at 430.53 134.62 0)
+			(at 433.07 134.62 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -19193,7 +19083,7 @@
 		(property
 			"Datasheet"
 			""
-			(at 430.53 134.62 0)
+			(at 433.07 134.62 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -19204,7 +19094,7 @@
 		(property
 			"MPN"
 			""
-			(at 430.53 134.62 0)
+			(at 433.07 134.62 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -19215,7 +19105,7 @@
 		(property
 			"LCSC"
 			""
-			(at 430.53 134.62 0)
+			(at 433.07 134.62 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -19236,7 +19126,7 @@
 	)
 	(symbol
 		(lib_id "Device:R_US")
-		(at 430.53 78.74 0)
+		(at 433.07 78.74 0)
 		(unit 1)
 		(in_bom yes)
 		(on_board yes)
@@ -19244,7 +19134,7 @@
 		(property
 			"Reference"
 			"R_RTC_SDA"
-			(at 435.07 77.47 0)
+			(at 437.61 77.47 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -19255,7 +19145,7 @@
 		(property
 			"Value"
 			"10k"
-			(at 435.07 80.01 0)
+			(at 437.61 80.01 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -19266,7 +19156,7 @@
 		(property
 			"Footprint"
 			"Resistor_SMD:R_0603_1608Metric"
-			(at 430.53 78.74 0)
+			(at 433.07 78.74 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -19277,7 +19167,7 @@
 		(property
 			"Datasheet"
 			""
-			(at 430.53 78.74 0)
+			(at 433.07 78.74 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -19288,7 +19178,7 @@
 		(property
 			"MPN"
 			""
-			(at 430.53 78.74 0)
+			(at 433.07 78.74 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -19299,7 +19189,7 @@
 		(property
 			"LCSC"
 			""
-			(at 430.53 78.74 0)
+			(at 433.07 78.74 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -19320,7 +19210,7 @@
 	)
 	(symbol
 		(lib_id "Device:R_US")
-		(at 450.85 78.74 0)
+		(at 453.39 78.74 0)
 		(unit 1)
 		(in_bom yes)
 		(on_board yes)
@@ -19328,7 +19218,7 @@
 		(property
 			"Reference"
 			"R_RTC_SCL"
-			(at 455.39 77.47 0)
+			(at 457.93 77.47 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -19339,7 +19229,7 @@
 		(property
 			"Value"
 			"10k"
-			(at 455.39 80.01 0)
+			(at 457.93 80.01 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -19350,7 +19240,7 @@
 		(property
 			"Footprint"
 			"Resistor_SMD:R_0603_1608Metric"
-			(at 450.85 78.74 0)
+			(at 453.39 78.74 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -19361,7 +19251,7 @@
 		(property
 			"Datasheet"
 			""
-			(at 450.85 78.74 0)
+			(at 453.39 78.74 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -19372,7 +19262,7 @@
 		(property
 			"MPN"
 			""
-			(at 450.85 78.74 0)
+			(at 453.39 78.74 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -19383,7 +19273,7 @@
 		(property
 			"LCSC"
 			""
-			(at 450.85 78.74 0)
+			(at 453.39 78.74 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -19404,7 +19294,7 @@
 	)
 	(symbol
 		(lib_id "Device:R_US")
-		(at 527.05 86.36 0)
+		(at 529.59 86.36 0)
 		(unit 1)
 		(in_bom yes)
 		(on_board yes)
@@ -19412,7 +19302,7 @@
 		(property
 			"Reference"
 			"R_RTC_INT"
-			(at 531.59 85.09 0)
+			(at 534.13 85.09 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -19423,7 +19313,7 @@
 		(property
 			"Value"
 			"10k"
-			(at 531.59 87.63 0)
+			(at 534.13 87.63 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -19434,7 +19324,7 @@
 		(property
 			"Footprint"
 			"Resistor_SMD:R_0603_1608Metric"
-			(at 527.05 86.36 0)
+			(at 529.59 86.36 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -19445,7 +19335,7 @@
 		(property
 			"Datasheet"
 			""
-			(at 527.05 86.36 0)
+			(at 529.59 86.36 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -19456,7 +19346,7 @@
 		(property
 			"MPN"
 			""
-			(at 527.05 86.36 0)
+			(at 529.59 86.36 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -19467,7 +19357,7 @@
 		(property
 			"LCSC"
 			""
-			(at 527.05 86.36 0)
+			(at 529.59 86.36 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -19488,7 +19378,7 @@
 	)
 	(symbol
 		(lib_id "Connector_Generic:Conn_01x02")
-		(at 400.05 25.4 0)
+		(at 394.97 25.4 0)
 		(unit 1)
 		(in_bom yes)
 		(on_board yes)
@@ -19496,7 +19386,7 @@
 		(property
 			"Reference"
 			"J_FAN"
-			(at 400.05 20.32 0)
+			(at 394.97 20.32 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -19506,7 +19396,7 @@
 		(property
 			"Value"
 			"FAN"
-			(at 400.05 30.48 0)
+			(at 394.97 30.48 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -19516,7 +19406,7 @@
 		(property
 			"Footprint"
 			"Connector_PinHeader_2.54mm:PinHeader_1x02_P2.54mm_Vertical"
-			(at 400.05 25.4 0)
+			(at 394.97 25.4 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -19527,7 +19417,7 @@
 		(property
 			"Datasheet"
 			"https://www.lcsc.com/datasheet/lcsc_datasheet_2407231541_hanxia-HX-PZ2-54-1x2P-ZZ_C32713268.pdf"
-			(at 400.05 25.4 0)
+			(at 394.97 25.4 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -19538,7 +19428,7 @@
 		(property
 			"MPN"
 			"HX PZ2.54-1x2P ZZ"
-			(at 400.05 25.4 0)
+			(at 394.97 25.4 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -19549,7 +19439,7 @@
 		(property
 			"LCSC"
 			"C32713268"
-			(at 400.05 25.4 0)
+			(at 394.97 25.4 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -19570,7 +19460,7 @@
 	)
 	(symbol
 		(lib_id "Device:D_Schottky")
-		(at 440.69 25.4 270)
+		(at 435.61 25.4 270)
 		(unit 1)
 		(in_bom yes)
 		(on_board yes)
@@ -19578,7 +19468,7 @@
 		(property
 			"Reference"
 			"D_FAN"
-			(at 445.23 24.13 90)
+			(at 440.15 24.13 90)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -19589,7 +19479,7 @@
 		(property
 			"Value"
 			"FLYBACK"
-			(at 445.23 26.67 90)
+			(at 440.15 26.67 90)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -19600,7 +19490,7 @@
 		(property
 			"Footprint"
 			"Diode_SMD:D_SOD-123"
-			(at 440.69 25.4 0)
+			(at 435.61 25.4 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -19611,7 +19501,7 @@
 		(property
 			"Datasheet"
 			"https://www.diodes.com/datasheet/download/1N5819HW.pdf"
-			(at 440.69 25.4 0)
+			(at 435.61 25.4 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -19622,7 +19512,7 @@
 		(property
 			"MPN"
 			"1N5819HW-7-F"
-			(at 440.69 25.4 0)
+			(at 435.61 25.4 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -19633,7 +19523,7 @@
 		(property
 			"LCSC"
 			"C82544"
-			(at 440.69 25.4 0)
+			(at 435.61 25.4 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -19654,8 +19544,8 @@
 	)
 	(wire
 		(pts
-			(xy 394.97 25.4)
-			(xy 392.43 25.4)
+			(xy 389.89 25.4)
+			(xy 387.35 25.4)
 		)
 		(stroke
 			(width 0)
@@ -19665,7 +19555,7 @@
 	)
 	(symbol
 		(lib_id "power:+5V")
-		(at 392.43 25.4 0)
+		(at 387.35 25.4 0)
 		(unit 1)
 		(in_bom no)
 		(on_board no)
@@ -19673,7 +19563,7 @@
 		(property
 			"Reference"
 			"#PWR4756"
-			(at 392.43 25.4 0)
+			(at 387.35 25.4 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -19684,7 +19574,7 @@
 		(property
 			"Value"
 			"+5V"
-			(at 392.43 21.59 0)
+			(at 387.35 21.59 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -19694,8 +19584,8 @@
 	)
 	(wire
 		(pts
-			(xy 440.69 21.59)
-			(xy 440.69 19.05)
+			(xy 435.61 21.59)
+			(xy 435.61 19.05)
 		)
 		(stroke
 			(width 0)
@@ -19705,7 +19595,7 @@
 	)
 	(symbol
 		(lib_id "power:+5V")
-		(at 440.69 19.05 0)
+		(at 435.61 19.05 0)
 		(unit 1)
 		(in_bom no)
 		(on_board no)
@@ -19713,7 +19603,7 @@
 		(property
 			"Reference"
 			"#PWR7484"
-			(at 440.69 19.05 0)
+			(at 435.61 19.05 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -19735,8 +19625,8 @@
 	)
 	(wire
 		(pts
-			(xy 222.25 274.32)
-			(xy 219.71 274.32)
+			(xy 217.17 274.32)
+			(xy 214.63 274.32)
 		)
 		(stroke
 			(width 0)
@@ -19746,7 +19636,7 @@
 	)
 	(symbol
 		(lib_id "power:+5V")
-		(at 219.71 274.32 0)
+		(at 214.63 274.32 0)
 		(unit 1)
 		(in_bom no)
 		(on_board no)
@@ -19754,7 +19644,7 @@
 		(property
 			"Reference"
 			"#PWR7648"
-			(at 219.71 274.32 0)
+			(at 214.63 274.32 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -19765,7 +19655,7 @@
 		(property
 			"Value"
 			"+5V"
-			(at 219.71 270.51 0)
+			(at 214.63 270.51 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -19775,8 +19665,8 @@
 	)
 	(wire
 		(pts
-			(xy 222.25 276.86)
-			(xy 219.71 276.86)
+			(xy 217.17 276.86)
+			(xy 214.63 276.86)
 		)
 		(stroke
 			(width 0)
@@ -19786,7 +19676,7 @@
 	)
 	(symbol
 		(lib_id "power:+5V")
-		(at 219.71 276.86 0)
+		(at 214.63 276.86 0)
 		(unit 1)
 		(in_bom no)
 		(on_board no)
@@ -19794,7 +19684,7 @@
 		(property
 			"Reference"
 			"#PWR4743"
-			(at 219.71 276.86 0)
+			(at 214.63 276.86 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -19805,7 +19695,7 @@
 		(property
 			"Value"
 			"+5V"
-			(at 217.81 274.32 0)
+			(at 212.73 274.32 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -20100,8 +19990,8 @@
 	)
 	(wire
 		(pts
-			(xy 487.68 86.36)
 			(xy 490.22 86.36)
+			(xy 492.76 86.36)
 		)
 		(stroke
 			(width 0)
@@ -20111,7 +20001,7 @@
 	)
 	(symbol
 		(lib_id "power:+3V3")
-		(at 490.22 86.36 0)
+		(at 492.76 86.36 0)
 		(unit 1)
 		(in_bom no)
 		(on_board no)
@@ -20119,7 +20009,7 @@
 		(property
 			"Reference"
 			"#PWR8645"
-			(at 490.22 86.36 0)
+			(at 492.76 86.36 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -20130,7 +20020,7 @@
 		(property
 			"Value"
 			"+3V3"
-			(at 492.12 83.82 0)
+			(at 494.66 83.82 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -20141,8 +20031,8 @@
 	)
 	(wire
 		(pts
-			(xy 222.25 203.2)
-			(xy 219.71 203.2)
+			(xy 217.17 203.2)
+			(xy 214.63 203.2)
 		)
 		(stroke
 			(width 0)
@@ -20152,7 +20042,7 @@
 	)
 	(symbol
 		(lib_id "power:+3V3")
-		(at 219.71 203.2 0)
+		(at 214.63 203.2 0)
 		(unit 1)
 		(in_bom no)
 		(on_board no)
@@ -20160,7 +20050,7 @@
 		(property
 			"Reference"
 			"#PWR4133"
-			(at 219.71 203.2 0)
+			(at 214.63 203.2 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -20171,7 +20061,7 @@
 		(property
 			"Value"
 			"+3V3"
-			(at 219.71 199.39 0)
+			(at 214.63 199.39 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -20181,8 +20071,8 @@
 	)
 	(wire
 		(pts
-			(xy 222.25 223.52)
-			(xy 219.71 223.52)
+			(xy 217.17 223.52)
+			(xy 214.63 223.52)
 		)
 		(stroke
 			(width 0)
@@ -20192,7 +20082,7 @@
 	)
 	(symbol
 		(lib_id "power:+3V3")
-		(at 219.71 223.52 90)
+		(at 214.63 223.52 90)
 		(unit 1)
 		(in_bom no)
 		(on_board no)
@@ -20200,7 +20090,7 @@
 		(property
 			"Reference"
 			"#PWR6386"
-			(at 219.71 223.52 90)
+			(at 214.63 223.52 90)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -20211,7 +20101,7 @@
 		(property
 			"Value"
 			"+3V3"
-			(at 215.9 201.3 90)
+			(at 210.82 201.3 90)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -20786,8 +20676,8 @@
 	)
 	(wire
 		(pts
-			(xy 438.15 95.25)
-			(xy 438.15 92.71)
+			(xy 440.69 95.25)
+			(xy 440.69 92.71)
 		)
 		(stroke
 			(width 0)
@@ -20797,7 +20687,7 @@
 	)
 	(symbol
 		(lib_id "synth:RTC_VDD")
-		(at 438.15 92.71 0)
+		(at 440.69 92.71 0)
 		(unit 1)
 		(in_bom no)
 		(on_board no)
@@ -20805,7 +20695,7 @@
 		(property
 			"Reference"
 			"#PWR4459"
-			(at 438.15 92.71 0)
+			(at 440.69 92.71 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -20816,7 +20706,7 @@
 		(property
 			"Value"
 			"RTC_VDD"
-			(at 438.15 88.9 0)
+			(at 440.69 88.9 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -20826,8 +20716,8 @@
 	)
 	(wire
 		(pts
+			(xy 433.07 102.87)
 			(xy 430.53 102.87)
-			(xy 427.99 102.87)
 		)
 		(stroke
 			(width 0)
@@ -20837,7 +20727,7 @@
 	)
 	(symbol
 		(lib_id "synth:RTC_VDD")
-		(at 427.99 102.87 90)
+		(at 430.53 102.87 90)
 		(unit 1)
 		(in_bom no)
 		(on_board no)
@@ -20845,7 +20735,7 @@
 		(property
 			"Reference"
 			"#PWR2093"
-			(at 427.99 102.87 90)
+			(at 430.53 102.87 90)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -20856,7 +20746,7 @@
 		(property
 			"Value"
 			"RTC_VDD"
-			(at 424.18 95.89 90)
+			(at 426.72 95.89 90)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -20867,8 +20757,8 @@
 	)
 	(wire
 		(pts
-			(xy 430.53 130.81)
-			(xy 430.53 128.27)
+			(xy 433.07 130.81)
+			(xy 433.07 128.27)
 		)
 		(stroke
 			(width 0)
@@ -20878,7 +20768,7 @@
 	)
 	(symbol
 		(lib_id "synth:RTC_VDD")
-		(at 430.53 128.27 0)
+		(at 433.07 128.27 0)
 		(unit 1)
 		(in_bom no)
 		(on_board no)
@@ -20886,7 +20776,7 @@
 		(property
 			"Reference"
 			"#PWR4709"
-			(at 430.53 128.27 0)
+			(at 433.07 128.27 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -20897,7 +20787,7 @@
 		(property
 			"Value"
 			"RTC_VDD"
-			(at 430.53 124.46 0)
+			(at 433.07 124.46 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -20907,8 +20797,8 @@
 	)
 	(wire
 		(pts
+			(xy 482.6 86.36)
 			(xy 480.06 86.36)
-			(xy 477.52 86.36)
 		)
 		(stroke
 			(width 0)
@@ -20918,7 +20808,7 @@
 	)
 	(symbol
 		(lib_id "synth:RTC_VDD")
-		(at 477.52 86.36 0)
+		(at 480.06 86.36 0)
 		(unit 1)
 		(in_bom no)
 		(on_board no)
@@ -20926,7 +20816,7 @@
 		(property
 			"Reference"
 			"#PWR1264"
-			(at 477.52 86.36 0)
+			(at 480.06 86.36 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -20937,7 +20827,7 @@
 		(property
 			"Value"
 			"RTC_VDD"
-			(at 475.62 83.82 0)
+			(at 478.16 83.82 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -20948,8 +20838,8 @@
 	)
 	(wire
 		(pts
+			(xy 482.6 170.18)
 			(xy 480.06 170.18)
-			(xy 477.52 170.18)
 		)
 		(stroke
 			(width 0)
@@ -20959,7 +20849,7 @@
 	)
 	(symbol
 		(lib_id "synth:RTC_VDD")
-		(at 477.52 170.18 0)
+		(at 480.06 170.18 0)
 		(unit 1)
 		(in_bom no)
 		(on_board no)
@@ -20967,7 +20857,7 @@
 		(property
 			"Reference"
 			"#PWR1398"
-			(at 477.52 170.18 0)
+			(at 480.06 170.18 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -20978,7 +20868,7 @@
 		(property
 			"Value"
 			"RTC_VDD"
-			(at 475.62 167.64 0)
+			(at 478.16 167.64 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -20989,8 +20879,8 @@
 	)
 	(wire
 		(pts
-			(xy 430.53 74.93)
-			(xy 430.53 72.39)
+			(xy 433.07 74.93)
+			(xy 433.07 72.39)
 		)
 		(stroke
 			(width 0)
@@ -21000,7 +20890,7 @@
 	)
 	(symbol
 		(lib_id "synth:RTC_VDD")
-		(at 430.53 72.39 0)
+		(at 433.07 72.39 0)
 		(unit 1)
 		(in_bom no)
 		(on_board no)
@@ -21008,7 +20898,7 @@
 		(property
 			"Reference"
 			"#PWR1293"
-			(at 430.53 72.39 0)
+			(at 433.07 72.39 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -21019,7 +20909,7 @@
 		(property
 			"Value"
 			"RTC_VDD"
-			(at 430.53 68.58 0)
+			(at 433.07 68.58 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -21029,8 +20919,8 @@
 	)
 	(wire
 		(pts
-			(xy 450.85 74.93)
-			(xy 450.85 72.39)
+			(xy 453.39 74.93)
+			(xy 453.39 72.39)
 		)
 		(stroke
 			(width 0)
@@ -21040,7 +20930,7 @@
 	)
 	(symbol
 		(lib_id "synth:RTC_VDD")
-		(at 450.85 72.39 0)
+		(at 453.39 72.39 0)
 		(unit 1)
 		(in_bom no)
 		(on_board no)
@@ -21048,7 +20938,7 @@
 		(property
 			"Reference"
 			"#PWR5685"
-			(at 450.85 72.39 0)
+			(at 453.39 72.39 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -21059,7 +20949,7 @@
 		(property
 			"Value"
 			"RTC_VDD"
-			(at 450.85 68.58 0)
+			(at 453.39 68.58 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -21069,8 +20959,8 @@
 	)
 	(wire
 		(pts
-			(xy 527.05 82.55)
-			(xy 527.05 80.01)
+			(xy 529.59 82.55)
+			(xy 529.59 80.01)
 		)
 		(stroke
 			(width 0)
@@ -21080,7 +20970,7 @@
 	)
 	(symbol
 		(lib_id "synth:RTC_VDD")
-		(at 527.05 80.01 0)
+		(at 529.59 80.01 0)
 		(unit 1)
 		(in_bom no)
 		(on_board no)
@@ -21088,7 +20978,7 @@
 		(property
 			"Reference"
 			"#PWR6631"
-			(at 527.05 80.01 0)
+			(at 529.59 80.01 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -21099,7 +20989,7 @@
 		(property
 			"Value"
 			"RTC_VDD"
-			(at 527.05 76.2 0)
+			(at 529.59 76.2 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -21109,8 +20999,8 @@
 	)
 	(wire
 		(pts
-			(xy 487.68 170.18)
 			(xy 490.22 170.18)
+			(xy 492.76 170.18)
 		)
 		(stroke
 			(width 0)
@@ -21120,7 +21010,7 @@
 	)
 	(symbol
 		(lib_id "synth:RTC_BAT")
-		(at 490.22 170.18 0)
+		(at 492.76 170.18 0)
 		(unit 1)
 		(in_bom no)
 		(on_board no)
@@ -21128,7 +21018,7 @@
 		(property
 			"Reference"
 			"#PWR7141"
-			(at 490.22 170.18 0)
+			(at 492.76 170.18 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -21139,7 +21029,7 @@
 		(property
 			"Value"
 			"RTC_BAT"
-			(at 492.12 167.64 0)
+			(at 494.66 167.64 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -21150,8 +21040,8 @@
 	)
 	(wire
 		(pts
-			(xy 397.51 104.14)
-			(xy 397.51 101.6)
+			(xy 392.43 101.6)
+			(xy 392.43 99.06)
 		)
 		(stroke
 			(width 0)
@@ -21161,7 +21051,7 @@
 	)
 	(symbol
 		(lib_id "synth:RTC_BAT")
-		(at 397.51 101.6 0)
+		(at 392.43 99.06 0)
 		(unit 1)
 		(in_bom no)
 		(on_board no)
@@ -21169,7 +21059,7 @@
 		(property
 			"Reference"
 			"#PWR2153"
-			(at 397.51 101.6 0)
+			(at 392.43 99.06 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -21180,7 +21070,7 @@
 		(property
 			"Value"
 			"RTC_BAT"
-			(at 397.51 97.79 0)
+			(at 392.43 95.25 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -22347,8 +22237,8 @@
 	)
 	(wire
 		(pts
-			(xy 438.15 123.19)
-			(xy 438.15 125.73)
+			(xy 440.69 123.19)
+			(xy 440.69 125.73)
 		)
 		(stroke
 			(width 0)
@@ -22358,7 +22248,7 @@
 	)
 	(symbol
 		(lib_id "power:GND")
-		(at 438.15 125.73 0)
+		(at 440.69 125.73 0)
 		(unit 1)
 		(in_bom no)
 		(on_board no)
@@ -22366,7 +22256,7 @@
 		(property
 			"Reference"
 			"#PWR2103"
-			(at 438.15 125.73 0)
+			(at 440.69 125.73 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -22377,7 +22267,7 @@
 		(property
 			"Value"
 			"GND"
-			(at 438.15 129.54 0)
+			(at 440.69 129.54 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -22387,8 +22277,8 @@
 	)
 	(wire
 		(pts
+			(xy 433.07 115.57)
 			(xy 430.53 115.57)
-			(xy 427.99 115.57)
 		)
 		(stroke
 			(width 0)
@@ -22398,7 +22288,7 @@
 	)
 	(symbol
 		(lib_id "power:GND")
-		(at 427.99 115.57 0)
+		(at 430.53 115.57 0)
 		(unit 1)
 		(in_bom no)
 		(on_board no)
@@ -22406,7 +22296,7 @@
 		(property
 			"Reference"
 			"#PWR1128"
-			(at 427.99 115.57 0)
+			(at 430.53 115.57 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -22417,7 +22307,7 @@
 		(property
 			"Value"
 			"GND"
-			(at 427.99 119.38 0)
+			(at 430.53 119.38 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -22427,8 +22317,8 @@
 	)
 	(wire
 		(pts
-			(xy 430.53 138.43)
-			(xy 430.53 140.97)
+			(xy 433.07 138.43)
+			(xy 433.07 140.97)
 		)
 		(stroke
 			(width 0)
@@ -22438,7 +22328,7 @@
 	)
 	(symbol
 		(lib_id "power:GND")
-		(at 430.53 140.97 0)
+		(at 433.07 140.97 0)
 		(unit 1)
 		(in_bom no)
 		(on_board no)
@@ -22446,7 +22336,7 @@
 		(property
 			"Reference"
 			"#PWR2561"
-			(at 430.53 140.97 0)
+			(at 433.07 140.97 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -22457,7 +22347,7 @@
 		(property
 			"Value"
 			"GND"
-			(at 430.53 144.78 0)
+			(at 433.07 144.78 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -22467,8 +22357,8 @@
 	)
 	(wire
 		(pts
-			(xy 397.51 111.76)
-			(xy 397.51 114.3)
+			(xy 394.97 101.6)
+			(xy 394.97 99.06)
 		)
 		(stroke
 			(width 0)
@@ -22476,9 +22366,20 @@
 		)
 		(uuid "b56d9cfd-b723-5752-9128-345dffafcf2e")
 	)
+	(wire
+		(pts
+			(xy 394.97 99.06)
+			(xy 397.51 99.06)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "c81ff5d1-7351-5912-bba6-00dbed6ef701")
+	)
 	(symbol
 		(lib_id "power:GND")
-		(at 397.51 114.3 0)
+		(at 397.51 99.06 0)
 		(unit 1)
 		(in_bom no)
 		(on_board no)
@@ -22486,7 +22387,7 @@
 		(property
 			"Reference"
 			"#PWR1364"
-			(at 397.51 114.3 0)
+			(at 397.51 99.06 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -22497,18 +22398,19 @@
 		(property
 			"Value"
 			"GND"
-			(at 397.51 118.11 0)
+			(at 399.41 101.6 0)
 			(effects
 				(font
 					(size 1.27 1.27)
 				)
+				(justify left)
 			)
 		)
 	)
 	(wire
 		(pts
-			(xy 394.97 27.94)
-			(xy 392.43 27.94)
+			(xy 389.89 27.94)
+			(xy 387.35 27.94)
 		)
 		(stroke
 			(width 0)
@@ -22518,7 +22420,7 @@
 	)
 	(symbol
 		(lib_id "power:GND")
-		(at 392.43 27.94 0)
+		(at 387.35 27.94 0)
 		(unit 1)
 		(in_bom no)
 		(on_board no)
@@ -22526,7 +22428,7 @@
 		(property
 			"Reference"
 			"#PWR9460"
-			(at 392.43 27.94 0)
+			(at 387.35 27.94 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -22537,7 +22439,7 @@
 		(property
 			"Value"
 			"GND"
-			(at 392.43 31.75 0)
+			(at 387.35 31.75 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -22547,8 +22449,8 @@
 	)
 	(wire
 		(pts
-			(xy 440.69 29.21)
-			(xy 440.69 31.75)
+			(xy 435.61 29.21)
+			(xy 435.61 31.75)
 		)
 		(stroke
 			(width 0)
@@ -22558,7 +22460,7 @@
 	)
 	(symbol
 		(lib_id "power:GND")
-		(at 440.69 31.75 0)
+		(at 435.61 31.75 0)
 		(unit 1)
 		(in_bom no)
 		(on_board no)
@@ -22566,7 +22468,7 @@
 		(property
 			"Reference"
 			"#PWR9390"
-			(at 440.69 31.75 0)
+			(at 435.61 31.75 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -22577,7 +22479,7 @@
 		(property
 			"Value"
 			"GND"
-			(at 440.69 35.56 0)
+			(at 435.61 35.56 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -22587,8 +22489,8 @@
 	)
 	(wire
 		(pts
-			(xy 222.25 213.36)
-			(xy 219.71 213.36)
+			(xy 217.17 213.36)
+			(xy 214.63 213.36)
 		)
 		(stroke
 			(width 0)
@@ -22598,7 +22500,7 @@
 	)
 	(symbol
 		(lib_id "power:GND")
-		(at 219.71 213.36 270)
+		(at 214.63 213.36 270)
 		(unit 1)
 		(in_bom no)
 		(on_board no)
@@ -22606,7 +22508,7 @@
 		(property
 			"Reference"
 			"#PWR4625"
-			(at 219.71 213.36 90)
+			(at 214.63 213.36 90)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -22617,7 +22519,7 @@
 		(property
 			"Value"
 			"GND"
-			(at 215.9 198.76 90)
+			(at 210.82 198.76 90)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -22628,8 +22530,8 @@
 	)
 	(wire
 		(pts
-			(xy 222.25 233.68)
-			(xy 219.71 233.68)
+			(xy 217.17 233.68)
+			(xy 214.63 233.68)
 		)
 		(stroke
 			(width 0)
@@ -22639,7 +22541,7 @@
 	)
 	(symbol
 		(lib_id "power:GND")
-		(at 219.71 233.68 270)
+		(at 214.63 233.68 270)
 		(unit 1)
 		(in_bom no)
 		(on_board no)
@@ -22647,7 +22549,7 @@
 		(property
 			"Reference"
 			"#PWR1851"
-			(at 219.71 233.68 90)
+			(at 214.63 233.68 90)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -22658,7 +22560,7 @@
 		(property
 			"Value"
 			"GND"
-			(at 215.9 253.36 90)
+			(at 210.82 253.36 90)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -22669,8 +22571,8 @@
 	)
 	(wire
 		(pts
-			(xy 222.25 251.46)
-			(xy 219.71 251.46)
+			(xy 217.17 251.46)
+			(xy 214.63 251.46)
 		)
 		(stroke
 			(width 0)
@@ -22680,7 +22582,7 @@
 	)
 	(symbol
 		(lib_id "power:GND")
-		(at 219.71 251.46 0)
+		(at 214.63 251.46 0)
 		(unit 1)
 		(in_bom no)
 		(on_board no)
@@ -22688,7 +22590,7 @@
 		(property
 			"Reference"
 			"#PWR9544"
-			(at 219.71 251.46 0)
+			(at 214.63 251.46 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -22699,7 +22601,7 @@
 		(property
 			"Value"
 			"GND"
-			(at 219.71 255.27 0)
+			(at 214.63 255.27 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -22709,8 +22611,8 @@
 	)
 	(wire
 		(pts
-			(xy 222.25 279.4)
-			(xy 219.71 279.4)
+			(xy 217.17 279.4)
+			(xy 214.63 279.4)
 		)
 		(stroke
 			(width 0)
@@ -22720,7 +22622,7 @@
 	)
 	(symbol
 		(lib_id "power:GND")
-		(at 219.71 279.4 270)
+		(at 214.63 279.4 270)
 		(unit 1)
 		(in_bom no)
 		(on_board no)
@@ -22728,7 +22630,7 @@
 		(property
 			"Reference"
 			"#PWR6166"
-			(at 219.71 279.4 90)
+			(at 214.63 279.4 90)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -22739,7 +22641,7 @@
 		(property
 			"Value"
 			"GND"
-			(at 215.9 277.5 90)
+			(at 210.82 277.5 90)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -22750,8 +22652,8 @@
 	)
 	(wire
 		(pts
-			(xy 222.25 289.56)
-			(xy 219.71 289.56)
+			(xy 217.17 289.56)
+			(xy 214.63 289.56)
 		)
 		(stroke
 			(width 0)
@@ -22761,7 +22663,7 @@
 	)
 	(symbol
 		(lib_id "power:GND")
-		(at 219.71 289.56 270)
+		(at 214.63 289.56 270)
 		(unit 1)
 		(in_bom no)
 		(on_board no)
@@ -22769,7 +22671,7 @@
 		(property
 			"Reference"
 			"#PWR9732"
-			(at 219.71 289.56 90)
+			(at 214.63 289.56 90)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -22780,7 +22682,7 @@
 		(property
 			"Value"
 			"GND"
-			(at 215.9 272.42 90)
+			(at 210.82 272.42 90)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -22791,8 +22693,8 @@
 	)
 	(wire
 		(pts
-			(xy 222.25 297.18)
-			(xy 219.71 297.18)
+			(xy 217.17 297.18)
+			(xy 214.63 297.18)
 		)
 		(stroke
 			(width 0)
@@ -22802,7 +22704,7 @@
 	)
 	(symbol
 		(lib_id "power:GND")
-		(at 219.71 297.18 270)
+		(at 214.63 297.18 270)
 		(unit 1)
 		(in_bom no)
 		(on_board no)
@@ -22810,7 +22712,7 @@
 		(property
 			"Reference"
 			"#PWR5248"
-			(at 219.71 297.18 90)
+			(at 214.63 297.18 90)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -22821,7 +22723,7 @@
 		(property
 			"Value"
 			"GND"
-			(at 215.9 269.88 90)
+			(at 210.82 269.88 90)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -22832,8 +22734,8 @@
 	)
 	(wire
 		(pts
-			(xy 222.25 309.88)
-			(xy 219.71 309.88)
+			(xy 217.17 309.88)
+			(xy 214.63 309.88)
 		)
 		(stroke
 			(width 0)
@@ -22843,7 +22745,7 @@
 	)
 	(symbol
 		(lib_id "power:GND")
-		(at 219.71 309.88 270)
+		(at 214.63 309.88 270)
 		(unit 1)
 		(in_bom no)
 		(on_board no)
@@ -22851,7 +22753,7 @@
 		(property
 			"Reference"
 			"#PWR8869"
-			(at 219.71 309.88 90)
+			(at 214.63 309.88 90)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -22862,7 +22764,7 @@
 		(property
 			"Value"
 			"GND"
-			(at 215.9 327.02 90)
+			(at 210.82 327.02 90)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -22873,8 +22775,8 @@
 	)
 	(wire
 		(pts
-			(xy 222.25 314.96)
-			(xy 219.71 314.96)
+			(xy 217.17 314.96)
+			(xy 214.63 314.96)
 		)
 		(stroke
 			(width 0)
@@ -22884,7 +22786,7 @@
 	)
 	(symbol
 		(lib_id "power:GND")
-		(at 219.71 314.96 270)
+		(at 214.63 314.96 270)
 		(unit 1)
 		(in_bom no)
 		(on_board no)
@@ -22892,7 +22794,7 @@
 		(property
 			"Reference"
 			"#PWR7785"
-			(at 219.71 314.96 90)
+			(at 214.63 314.96 90)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -22903,7 +22805,7 @@
 		(property
 			"Value"
 			"GND"
-			(at 215.9 329.56 90)
+			(at 210.82 329.56 90)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -22969,8 +22871,8 @@
 	)
 	(wire
 		(pts
-			(xy 430.53 100.33)
-			(xy 425.45 100.33)
+			(xy 433.07 100.33)
+			(xy 427.99 100.33)
 		)
 		(stroke
 			(width 0)
@@ -22980,7 +22882,7 @@
 	)
 	(label
 		"RTC_OSC1"
-		(at 425.45 100.33 180)
+		(at 427.99 100.33 180)
 		(effects
 			(font
 				(size 1.27 1.27)
@@ -22991,8 +22893,8 @@
 	)
 	(wire
 		(pts
-			(xy 480.06 254)
-			(xy 474.98 254)
+			(xy 482.6 254)
+			(xy 477.52 254)
 		)
 		(stroke
 			(width 0)
@@ -23002,7 +22904,7 @@
 	)
 	(label
 		"RTC_OSC1"
-		(at 474.98 254 180)
+		(at 477.52 254 180)
 		(effects
 			(font
 				(size 1.27 1.27)
@@ -23013,8 +22915,8 @@
 	)
 	(wire
 		(pts
-			(xy 450.85 100.33)
-			(xy 455.93 100.33)
+			(xy 453.39 100.33)
+			(xy 458.47 100.33)
 		)
 		(stroke
 			(width 0)
@@ -23024,7 +22926,7 @@
 	)
 	(label
 		"RTC_OSC2"
-		(at 455.93 100.33 0)
+		(at 458.47 100.33 0)
 		(effects
 			(font
 				(size 1.27 1.27)
@@ -23035,8 +22937,8 @@
 	)
 	(wire
 		(pts
-			(xy 487.68 254)
-			(xy 492.76 254)
+			(xy 490.22 254)
+			(xy 495.3 254)
 		)
 		(stroke
 			(width 0)
@@ -23046,7 +22948,7 @@
 	)
 	(label
 		"RTC_OSC2"
-		(at 492.76 254 0)
+		(at 495.3 254 0)
 		(effects
 			(font
 				(size 1.27 1.27)
@@ -23816,8 +23718,8 @@
 	)
 	(wire
 		(pts
-			(xy 430.53 110.49)
-			(xy 425.45 110.49)
+			(xy 433.07 110.49)
+			(xy 427.99 110.49)
 		)
 		(stroke
 			(width 0)
@@ -23828,7 +23730,7 @@
 	(hierarchical_label
 		"SCL0"
 		(shape bidirectional)
-		(at 425.45 110.49 180)
+		(at 427.99 110.49 180)
 		(effects
 			(font
 				(size 1.27 1.27)
@@ -23839,8 +23741,8 @@
 	)
 	(wire
 		(pts
-			(xy 450.85 82.55)
-			(xy 455.93 82.55)
+			(xy 453.39 82.55)
+			(xy 458.47 82.55)
 		)
 		(stroke
 			(width 0)
@@ -23851,7 +23753,7 @@
 	(hierarchical_label
 		"SCL0"
 		(shape bidirectional)
-		(at 455.93 82.55 0)
+		(at 458.47 82.55 0)
 		(effects
 			(font
 				(size 1.27 1.27)
@@ -23908,8 +23810,8 @@
 	)
 	(wire
 		(pts
-			(xy 430.53 107.95)
-			(xy 425.45 107.95)
+			(xy 433.07 107.95)
+			(xy 427.99 107.95)
 		)
 		(stroke
 			(width 0)
@@ -23920,7 +23822,7 @@
 	(hierarchical_label
 		"SDA0"
 		(shape bidirectional)
-		(at 425.45 107.95 180)
+		(at 427.99 107.95 180)
 		(effects
 			(font
 				(size 1.27 1.27)
@@ -23931,8 +23833,8 @@
 	)
 	(wire
 		(pts
-			(xy 430.53 82.55)
-			(xy 435.61 82.55)
+			(xy 433.07 82.55)
+			(xy 438.15 82.55)
 		)
 		(stroke
 			(width 0)
@@ -23943,7 +23845,7 @@
 	(hierarchical_label
 		"SDA0"
 		(shape bidirectional)
-		(at 435.61 82.55 0)
+		(at 438.15 82.55 0)
 		(effects
 			(font
 				(size 1.27 1.27)
@@ -23977,8 +23879,8 @@
 	)
 	(wire
 		(pts
-			(xy 222.25 205.74)
 			(xy 217.17 205.74)
+			(xy 212.09 205.74)
 		)
 		(stroke
 			(width 0)
@@ -23989,7 +23891,7 @@
 	(hierarchical_label
 		"GPIO2"
 		(shape bidirectional)
-		(at 217.17 205.74 180)
+		(at 212.09 205.74 180)
 		(effects
 			(font
 				(size 1.27 1.27)
@@ -24000,8 +23902,8 @@
 	)
 	(wire
 		(pts
-			(xy 222.25 208.28)
 			(xy 217.17 208.28)
+			(xy 212.09 208.28)
 		)
 		(stroke
 			(width 0)
@@ -24012,7 +23914,7 @@
 	(hierarchical_label
 		"GPIO3"
 		(shape bidirectional)
-		(at 217.17 208.28 180)
+		(at 212.09 208.28 180)
 		(effects
 			(font
 				(size 1.27 1.27)
@@ -24023,8 +23925,8 @@
 	)
 	(wire
 		(pts
-			(xy 222.25 210.82)
 			(xy 217.17 210.82)
+			(xy 212.09 210.82)
 		)
 		(stroke
 			(width 0)
@@ -24035,7 +23937,7 @@
 	(hierarchical_label
 		"GPIO4"
 		(shape bidirectional)
-		(at 217.17 210.82 180)
+		(at 212.09 210.82 180)
 		(effects
 			(font
 				(size 1.27 1.27)
@@ -24046,8 +23948,8 @@
 	)
 	(wire
 		(pts
-			(xy 222.25 281.94)
 			(xy 217.17 281.94)
+			(xy 212.09 281.94)
 		)
 		(stroke
 			(width 0)
@@ -24058,7 +23960,7 @@
 	(hierarchical_label
 		"GPIO14"
 		(shape bidirectional)
-		(at 217.17 281.94 180)
+		(at 212.09 281.94 180)
 		(effects
 			(font
 				(size 1.27 1.27)
@@ -24069,8 +23971,8 @@
 	)
 	(wire
 		(pts
-			(xy 222.25 284.48)
 			(xy 217.17 284.48)
+			(xy 212.09 284.48)
 		)
 		(stroke
 			(width 0)
@@ -24081,7 +23983,7 @@
 	(hierarchical_label
 		"GPIO15"
 		(shape bidirectional)
-		(at 217.17 284.48 180)
+		(at 212.09 284.48 180)
 		(effects
 			(font
 				(size 1.27 1.27)
@@ -24092,8 +23994,8 @@
 	)
 	(wire
 		(pts
-			(xy 222.25 215.9)
 			(xy 217.17 215.9)
+			(xy 212.09 215.9)
 		)
 		(stroke
 			(width 0)
@@ -24104,7 +24006,7 @@
 	(hierarchical_label
 		"GPIO17"
 		(shape bidirectional)
-		(at 217.17 215.9 180)
+		(at 212.09 215.9 180)
 		(effects
 			(font
 				(size 1.27 1.27)
@@ -24115,8 +24017,8 @@
 	)
 	(wire
 		(pts
-			(xy 222.25 287.02)
 			(xy 217.17 287.02)
+			(xy 212.09 287.02)
 		)
 		(stroke
 			(width 0)
@@ -24127,7 +24029,7 @@
 	(hierarchical_label
 		"GPIO18"
 		(shape bidirectional)
-		(at 217.17 287.02 180)
+		(at 212.09 287.02 180)
 		(effects
 			(font
 				(size 1.27 1.27)
@@ -24138,8 +24040,8 @@
 	)
 	(wire
 		(pts
-			(xy 222.25 218.44)
 			(xy 217.17 218.44)
+			(xy 212.09 218.44)
 		)
 		(stroke
 			(width 0)
@@ -24150,7 +24052,7 @@
 	(hierarchical_label
 		"GPIO27"
 		(shape bidirectional)
-		(at 217.17 218.44 180)
+		(at 212.09 218.44 180)
 		(effects
 			(font
 				(size 1.27 1.27)
@@ -24161,8 +24063,8 @@
 	)
 	(wire
 		(pts
-			(xy 222.25 220.98)
 			(xy 217.17 220.98)
+			(xy 212.09 220.98)
 		)
 		(stroke
 			(width 0)
@@ -24173,7 +24075,7 @@
 	(hierarchical_label
 		"GPIO22"
 		(shape bidirectional)
-		(at 217.17 220.98 180)
+		(at 212.09 220.98 180)
 		(effects
 			(font
 				(size 1.27 1.27)
@@ -24184,8 +24086,8 @@
 	)
 	(wire
 		(pts
-			(xy 222.25 292.1)
 			(xy 217.17 292.1)
+			(xy 212.09 292.1)
 		)
 		(stroke
 			(width 0)
@@ -24196,7 +24098,7 @@
 	(hierarchical_label
 		"GPIO23"
 		(shape bidirectional)
-		(at 217.17 292.1 180)
+		(at 212.09 292.1 180)
 		(effects
 			(font
 				(size 1.27 1.27)
@@ -24207,8 +24109,8 @@
 	)
 	(wire
 		(pts
-			(xy 222.25 294.64)
 			(xy 217.17 294.64)
+			(xy 212.09 294.64)
 		)
 		(stroke
 			(width 0)
@@ -24219,7 +24121,7 @@
 	(hierarchical_label
 		"GPIO24"
 		(shape bidirectional)
-		(at 217.17 294.64 180)
+		(at 212.09 294.64 180)
 		(effects
 			(font
 				(size 1.27 1.27)
@@ -24230,8 +24132,8 @@
 	)
 	(wire
 		(pts
-			(xy 222.25 226.06)
 			(xy 217.17 226.06)
+			(xy 212.09 226.06)
 		)
 		(stroke
 			(width 0)
@@ -24242,7 +24144,7 @@
 	(hierarchical_label
 		"GPIO10"
 		(shape bidirectional)
-		(at 217.17 226.06 180)
+		(at 212.09 226.06 180)
 		(effects
 			(font
 				(size 1.27 1.27)
@@ -24253,8 +24155,8 @@
 	)
 	(wire
 		(pts
-			(xy 222.25 228.6)
 			(xy 217.17 228.6)
+			(xy 212.09 228.6)
 		)
 		(stroke
 			(width 0)
@@ -24265,7 +24167,7 @@
 	(hierarchical_label
 		"GPIO9"
 		(shape bidirectional)
-		(at 217.17 228.6 180)
+		(at 212.09 228.6 180)
 		(effects
 			(font
 				(size 1.27 1.27)
@@ -24276,8 +24178,8 @@
 	)
 	(wire
 		(pts
-			(xy 222.25 299.72)
 			(xy 217.17 299.72)
+			(xy 212.09 299.72)
 		)
 		(stroke
 			(width 0)
@@ -24288,7 +24190,7 @@
 	(hierarchical_label
 		"GPIO25"
 		(shape bidirectional)
-		(at 217.17 299.72 180)
+		(at 212.09 299.72 180)
 		(effects
 			(font
 				(size 1.27 1.27)
@@ -24299,8 +24201,8 @@
 	)
 	(wire
 		(pts
-			(xy 222.25 231.14)
 			(xy 217.17 231.14)
+			(xy 212.09 231.14)
 		)
 		(stroke
 			(width 0)
@@ -24311,7 +24213,7 @@
 	(hierarchical_label
 		"GPIO11"
 		(shape bidirectional)
-		(at 217.17 231.14 180)
+		(at 212.09 231.14 180)
 		(effects
 			(font
 				(size 1.27 1.27)
@@ -24322,8 +24224,8 @@
 	)
 	(wire
 		(pts
-			(xy 222.25 302.26)
 			(xy 217.17 302.26)
+			(xy 212.09 302.26)
 		)
 		(stroke
 			(width 0)
@@ -24334,7 +24236,7 @@
 	(hierarchical_label
 		"GPIO8"
 		(shape bidirectional)
-		(at 217.17 302.26 180)
+		(at 212.09 302.26 180)
 		(effects
 			(font
 				(size 1.27 1.27)
@@ -24345,8 +24247,8 @@
 	)
 	(wire
 		(pts
-			(xy 222.25 304.8)
 			(xy 217.17 304.8)
+			(xy 212.09 304.8)
 		)
 		(stroke
 			(width 0)
@@ -24357,7 +24259,7 @@
 	(hierarchical_label
 		"GPIO7"
 		(shape bidirectional)
-		(at 217.17 304.8 180)
+		(at 212.09 304.8 180)
 		(effects
 			(font
 				(size 1.27 1.27)
@@ -24368,8 +24270,8 @@
 	)
 	(wire
 		(pts
-			(xy 222.25 236.22)
 			(xy 217.17 236.22)
+			(xy 212.09 236.22)
 		)
 		(stroke
 			(width 0)
@@ -24380,7 +24282,7 @@
 	(hierarchical_label
 		"ID_SD"
 		(shape bidirectional)
-		(at 217.17 236.22 180)
+		(at 212.09 236.22 180)
 		(effects
 			(font
 				(size 1.27 1.27)
@@ -24391,8 +24293,8 @@
 	)
 	(wire
 		(pts
-			(xy 222.25 307.34)
 			(xy 217.17 307.34)
+			(xy 212.09 307.34)
 		)
 		(stroke
 			(width 0)
@@ -24403,7 +24305,7 @@
 	(hierarchical_label
 		"ID_SC"
 		(shape bidirectional)
-		(at 217.17 307.34 180)
+		(at 212.09 307.34 180)
 		(effects
 			(font
 				(size 1.27 1.27)
@@ -24414,8 +24316,8 @@
 	)
 	(wire
 		(pts
-			(xy 222.25 238.76)
 			(xy 217.17 238.76)
+			(xy 212.09 238.76)
 		)
 		(stroke
 			(width 0)
@@ -24426,7 +24328,7 @@
 	(hierarchical_label
 		"GPIO5"
 		(shape bidirectional)
-		(at 217.17 238.76 180)
+		(at 212.09 238.76 180)
 		(effects
 			(font
 				(size 1.27 1.27)
@@ -24437,8 +24339,8 @@
 	)
 	(wire
 		(pts
-			(xy 222.25 241.3)
 			(xy 217.17 241.3)
+			(xy 212.09 241.3)
 		)
 		(stroke
 			(width 0)
@@ -24449,7 +24351,7 @@
 	(hierarchical_label
 		"GPIO6"
 		(shape bidirectional)
-		(at 217.17 241.3 180)
+		(at 212.09 241.3 180)
 		(effects
 			(font
 				(size 1.27 1.27)
@@ -24460,8 +24362,8 @@
 	)
 	(wire
 		(pts
-			(xy 222.25 312.42)
 			(xy 217.17 312.42)
+			(xy 212.09 312.42)
 		)
 		(stroke
 			(width 0)
@@ -24472,7 +24374,7 @@
 	(hierarchical_label
 		"GPIO12"
 		(shape bidirectional)
-		(at 217.17 312.42 180)
+		(at 212.09 312.42 180)
 		(effects
 			(font
 				(size 1.27 1.27)
@@ -24483,8 +24385,8 @@
 	)
 	(wire
 		(pts
-			(xy 222.25 243.84)
 			(xy 217.17 243.84)
+			(xy 212.09 243.84)
 		)
 		(stroke
 			(width 0)
@@ -24495,7 +24397,7 @@
 	(hierarchical_label
 		"GPIO13"
 		(shape bidirectional)
-		(at 217.17 243.84 180)
+		(at 212.09 243.84 180)
 		(effects
 			(font
 				(size 1.27 1.27)
@@ -24506,8 +24408,8 @@
 	)
 	(wire
 		(pts
-			(xy 222.25 246.38)
 			(xy 217.17 246.38)
+			(xy 212.09 246.38)
 		)
 		(stroke
 			(width 0)
@@ -24518,7 +24420,7 @@
 	(hierarchical_label
 		"GPIO19"
 		(shape bidirectional)
-		(at 217.17 246.38 180)
+		(at 212.09 246.38 180)
 		(effects
 			(font
 				(size 1.27 1.27)
@@ -24529,8 +24431,8 @@
 	)
 	(wire
 		(pts
-			(xy 222.25 317.5)
 			(xy 217.17 317.5)
+			(xy 212.09 317.5)
 		)
 		(stroke
 			(width 0)
@@ -24541,7 +24443,7 @@
 	(hierarchical_label
 		"GPIO16"
 		(shape bidirectional)
-		(at 217.17 317.5 180)
+		(at 212.09 317.5 180)
 		(effects
 			(font
 				(size 1.27 1.27)
@@ -24552,8 +24454,8 @@
 	)
 	(wire
 		(pts
-			(xy 222.25 248.92)
 			(xy 217.17 248.92)
+			(xy 212.09 248.92)
 		)
 		(stroke
 			(width 0)
@@ -24564,7 +24466,7 @@
 	(hierarchical_label
 		"GPIO26"
 		(shape bidirectional)
-		(at 217.17 248.92 180)
+		(at 212.09 248.92 180)
 		(effects
 			(font
 				(size 1.27 1.27)
@@ -24575,8 +24477,8 @@
 	)
 	(wire
 		(pts
-			(xy 430.53 105.41)
-			(xy 425.45 105.41)
+			(xy 433.07 105.41)
+			(xy 427.99 105.41)
 		)
 		(stroke
 			(width 0)
@@ -24587,7 +24489,7 @@
 	(hierarchical_label
 		"GPIO26"
 		(shape bidirectional)
-		(at 425.45 105.41 180)
+		(at 427.99 105.41 180)
 		(effects
 			(font
 				(size 1.27 1.27)
@@ -24598,8 +24500,8 @@
 	)
 	(wire
 		(pts
-			(xy 527.05 90.17)
-			(xy 532.13 90.17)
+			(xy 529.59 90.17)
+			(xy 534.67 90.17)
 		)
 		(stroke
 			(width 0)
@@ -24610,7 +24512,7 @@
 	(hierarchical_label
 		"GPIO26"
 		(shape bidirectional)
-		(at 532.13 90.17 0)
+		(at 534.67 90.17 0)
 		(effects
 			(font
 				(size 1.27 1.27)
@@ -24621,8 +24523,8 @@
 	)
 	(wire
 		(pts
-			(xy 222.25 320.04)
 			(xy 217.17 320.04)
+			(xy 212.09 320.04)
 		)
 		(stroke
 			(width 0)
@@ -24633,7 +24535,7 @@
 	(hierarchical_label
 		"GPIO20"
 		(shape bidirectional)
-		(at 217.17 320.04 180)
+		(at 212.09 320.04 180)
 		(effects
 			(font
 				(size 1.27 1.27)
@@ -24644,8 +24546,8 @@
 	)
 	(wire
 		(pts
-			(xy 222.25 322.58)
 			(xy 217.17 322.58)
+			(xy 212.09 322.58)
 		)
 		(stroke
 			(width 0)
@@ -24656,7 +24558,7 @@
 	(hierarchical_label
 		"GPIO21"
 		(shape bidirectional)
-		(at 217.17 322.58 180)
+		(at 212.09 322.58 180)
 		(effects
 			(font
 				(size 1.27 1.27)
@@ -24667,7 +24569,7 @@
 	)
 	(text
 		"MICROSD"
-		(at 189.4755 15.81 0)
+		(at 186.406 15.81 0)
 		(effects
 			(font
 				(size 2.54 2.54)
@@ -24679,7 +24581,7 @@
 	)
 	(text
 		"CAMERA / DSI"
-		(at 94.4345 193.04 0)
+		(at 92.8079 193.04 0)
 		(effects
 			(font
 				(size 2.54 2.54)
@@ -24691,7 +24593,7 @@
 	)
 	(text
 		"GPIO HEADER"
-		(at 277.879 193.61 0)
+		(at 273.1829 193.61 0)
 		(effects
 			(font
 				(size 2.54 2.54)
@@ -24703,7 +24605,7 @@
 	)
 	(text
 		"RTC"
-		(at 479.4285 65.34 0)
+		(at 476.359 65.34 0)
 		(effects
 			(font
 				(size 2.54 2.54)
@@ -24715,7 +24617,7 @@
 	)
 	(text
 		"FAN"
-		(at 479.4285 15.81 0)
+		(at 476.359 15.81 0)
 		(effects
 			(font
 				(size 2.54 2.54)
@@ -24804,7 +24706,7 @@
 	)
 	(text
 		""
-		(at 209.43 332.63 0)
+		(at 204.35 332.63 0)
 		(effects
 			(font
 				(size 2 2)
@@ -24815,7 +24717,7 @@
 	)
 	(text
 		"2x20 Raspberry Pi header pinout. J_GPIO1 is the odd pins, J_GPIO2 the even pins."
-		(at 209.43 336.63 0)
+		(at 204.35 336.63 0)
 		(effects
 			(font
 				(size 1 1)
@@ -24826,7 +24728,7 @@
 	)
 	(text
 		"All 28 CM4 GPIOs are brought out; GPIO26 also carries the RTC interrupt."
-		(at 209.43 339.17 0)
+		(at 204.35 339.17 0)
 		(effects
 			(font
 				(size 1 1)
@@ -24837,7 +24739,7 @@
 	)
 	(text
 		""
-		(at 385.974 266.59 0)
+		(at 380.64 266.59 0)
 		(effects
 			(font
 				(size 2 2)
@@ -24848,7 +24750,7 @@
 	)
 	(text
 		"PCF85063ATL with 32.768 kHz crystal; VDD is diode-ORed from +3V3 and the CR2032."
-		(at 385.974 270.59 0)
+		(at 380.64 270.59 0)
 		(effects
 			(font
 				(size 1 1)
@@ -24859,7 +24761,7 @@
 	)
 	(text
 		"I2C on SCL0/SDA0; INT on GPIO26. CLKOE tied low to save power."
-		(at 385.974 273.13 0)
+		(at 380.64 273.13 0)
 		(effects
 			(font
 				(size 1 1)
@@ -24870,7 +24772,7 @@
 	)
 	(text
 		""
-		(at 385.75 41.8 0)
+		(at 380.67 41.8 0)
 		(effects
 			(font
 				(size 2 2)
@@ -24881,7 +24783,7 @@
 	)
 	(text
 		"2-pin +5 V fan header with a Schottky flyback diode. Always on."
-		(at 385.75 45.8 0)
+		(at 380.67 45.8 0)
 		(effects
 			(font
 				(size 1 1)
@@ -24892,8 +24794,8 @@
 	)
 	(polyline
 		(pts
-			(xy 380.0319 12)
-			(xy 380.0319 189.2424)
+			(xy 373.893 12)
+			(xy 373.893 189.2424)
 		)
 		(stroke
 			(width 0.254)
@@ -24905,7 +24807,7 @@
 	(polyline
 		(pts
 			(xy 15.81 189.2424)
-			(xy 380.0319 189.2424)
+			(xy 373.893 189.2424)
 		)
 		(stroke
 			(width 0.254)
@@ -24928,8 +24830,8 @@
 	)
 	(polyline
 		(pts
-			(xy 202.0151 189.4964)
-			(xy 202.0151 408)
+			(xy 198.7619 189.4964)
+			(xy 198.7619 408)
 		)
 		(stroke
 			(width 0.254)
@@ -24964,8 +24866,8 @@
 	)
 	(polyline
 		(pts
-			(xy 380.0319 189.4964)
-			(xy 380.0319 408)
+			(xy 373.893 189.4964)
+			(xy 373.893 408)
 		)
 		(stroke
 			(width 0.254)
@@ -24976,7 +24878,7 @@
 	)
 	(polyline
 		(pts
-			(xy 585.81 61.3004)
+			(xy 585.81 60.9738)
 			(xy 585.81 376)
 		)
 		(stroke
@@ -24988,7 +24890,7 @@
 	)
 	(polyline
 		(pts
-			(xy 380.2859 376)
+			(xy 374.147 376)
 			(xy 474 376)
 		)
 		(stroke
@@ -25001,7 +24903,7 @@
 	(polyline
 		(pts
 			(xy 585.81 12)
-			(xy 585.81 61.0464)
+			(xy 585.81 60.7198)
 		)
 		(stroke
 			(width 0.254)
@@ -25012,8 +24914,8 @@
 	)
 	(polyline
 		(pts
-			(xy 380.2859 61.0464)
-			(xy 585.81 61.0464)
+			(xy 374.147 60.7198)
+			(xy 585.81 60.7198)
 		)
 		(stroke
 			(width 0.254)
@@ -25063,16 +24965,16 @@
 		(uuid "2d46dfc6-4d4e-5a38-8552-86a79dadc56b")
 	)
 	(no_connect
-		(at 430.53 113.03)
+		(at 433.07 113.03)
 		(uuid "7f71de89-1622-5434-9de7-291e0e308021")
 	)
 	(no_connect
-		(at 450.85 102.87)
+		(at 453.39 102.87)
 		(uuid "7f5b2f2a-7b19-566b-ac91-85c0405c2354")
 	)
 	(symbol
 		(lib_id "power:PWR_FLAG")
-		(at 438.15 92.71 0)
+		(at 440.69 92.71 0)
 		(unit 1)
 		(in_bom no)
 		(on_board no)
@@ -25080,7 +24982,7 @@
 		(property
 			"Reference"
 			"#FLG9609"
-			(at 438.15 92.71 0)
+			(at 440.69 92.71 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -25091,7 +24993,7 @@
 		(property
 			"Value"
 			"PWR_FLAG"
-			(at 438.15 92.71 0)
+			(at 440.69 92.71 0)
 			(effects
 				(font
 					(size 1.27 1.27)

@@ -211,8 +211,9 @@ board is routed with the HDI floors (0.1 mm track/clearance, 0.25 mm via,
   generated locally and delivered to the user (not committed, not release
   evidence). No two-run determinism check.
 - No hardware, no firmware, no measurement.
-- The KiCad ERC has one `RTC_BAT` power-pin error and 67 warnings; the source
-  netlist is correct.
+- The KiCad ERC has **0 errors** and 67 warnings; the old `RTC_BAT` power-pin
+  error is cleared by the generated coin-cell symbol. The warnings are 66
+  `lib_symbol_issues` and one `multiple_net_names` (`FB_5V`/`VCC_5V`).
 
 Fixed during review: the 24 MHz crystal pad map was corrected to the ECS
 ECX-33Q datasheet (1/3 crystal, 2/4 GND).

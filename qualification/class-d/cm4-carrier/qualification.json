@@ -12,7 +12,7 @@
     },
     "erc_dispositioned": {
       "passed": false,
-      "evidence": "Synth ERC has zero blocking diagnostics but more than 100 warnings: W-SYNTH-PART-UNVERIFIED for every authored part, E-SYNTH-CONNECT-008/009, E-SYNTH-NAME-008, E-SYNTH-POWER-004, E-SYNTH-IMPEDANCE-001 and E-SYNTH-SCHEM-001/003. passed stays false until a human dispositions them. No kicad-cli ERC was possible because no schematic exported."
+      "evidence": "Synth ERC has zero blocking diagnostics but more than 100 warnings: W-SYNTH-PART-UNVERIFIED for every authored part, E-SYNTH-CONNECT-008/009, E-SYNTH-NAME-008, E-SYNTH-POWER-004, E-SYNTH-IMPEDANCE-001 and E-SYNTH-SCHEM-001/003/004/005. KiCad ERC: 0 errors, 67 warnings (66 lib_symbol_issues, 1 multiple_net_names FB_5V/VCC_5V). passed stays false until a human dispositions the warnings."
     },
     "routing_and_drc": {
       "passed": true,

@@ -3,8 +3,10 @@
 What is here:
 
 - `cm4_carrier.kicad-erc.json` — `kicad-cli sch erc --severity-all` on the
-  exported schematic. 68 violations: 1 error, 67 warnings. The error is the
-  `RTC_BAT` power flag; see `../agent-run/VERIFICATION_REPORT.md`.
+  exported schematic. 67 violations: 0 errors, 67 warnings. The old
+  `RTC_BAT` power-pin error is cleared; the remaining warnings are 66
+  `lib_symbol_issues` and one `multiple_net_names` (`FB_5V`/`VCC_5V`). See
+  `../agent-run/VERIFICATION_REPORT.md`.
 
 - `cm4_carrier.kicad-drc.json` — `kicad-cli pcb drc --severity-all
   --refill-zones` on the **routed** 6-layer HDI PCB: 0 violations, 0
