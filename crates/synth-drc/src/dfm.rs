@@ -232,9 +232,11 @@ fn silk_line_width(board: &PcbBoard, profile: &ManufacturerProfile) -> Vec<DfmFi
         .collect()
 }
 
-/// Copper pads of different nets closer than the fab can etch apart, on the
-/// same side of the board. Pads of one net may sit close, and so may the
-/// pieces of one pin. A mounting hole carries no copper and is skipped.
+/// Pads and vias closer than the fab can etch apart, on the same side of the
+/// board, whatever their nets: the Gerbers the fab reads carry none, so two
+/// copper objects of one net are graded too. Same-net copper closer than
+/// the merge tolerance is one object and is left alone. A mounting hole
+/// carries no copper and is skipped.
 fn pad_to_pad(board: &PcbBoard, profile: &ManufacturerProfile) -> Vec<DfmFinding> {
     let required_nm = profile.min_pad_to_pad_nm as f64;
     // A via is copper on every layer it spans, so to the fab it is one more
@@ -249,9 +251,7 @@ fn pad_to_pad(board: &PcbBoard, profile: &ManufacturerProfile) -> Vec<DfmFinding
     let mut findings = Vec::new();
     for (i, a) in pads.iter().enumerate() {
         for b in &pads[i + 1..] {
-            let same_net = (connected_net(a).is_some() && connected_net(a) == connected_net(b))
-                || (!a.footprint.is_empty() && a.footprint == b.footprint && a.number == b.number);
-            if same_net || !share_copper_layer(a, b) {
+            if !share_copper_layer(a, b) {
                 continue;
             }
             let (dx, dy) = (
@@ -262,6 +262,11 @@ fn pad_to_pad(board: &PcbBoard, profile: &ManufacturerProfile) -> Vec<DfmFinding
                 continue;
             }
             let (gap_nm, at) = pad_gap(a, b);
+            // Copper of one net this close is one object once etched.
+            let one_net = connected_net(a).is_some() && connected_net(a) == connected_net(b);
+            if one_net && gap_nm < profile.copper_merge_below_nm as f64 {
+                continue;
+            }
             if let Some((severity, bound_nm)) = spacing_grade(gap_nm, profile) {
                 findings.push(DfmFinding {
                     rule: "pad_to_pad",
@@ -763,9 +768,27 @@ mod tests {
     }
 
     #[test]
-    fn pads_of_the_same_net_may_sit_close() {
-        let report = run(&pad_at(10.7, 20.0, 1, "rect", 0.6, "F.Cu"));
-        assert_eq!(count(&report, "pad_to_pad"), 0, "{report:?}");
+    fn separate_copper_is_graded_whatever_its_net_like_a_fab_sees_it() {
+        // A pad and a pad of its own net 0.09 mm apart: two etched objects
+        // with a sliver between them. JLCDFM reads Gerbers, which have no
+        // nets, and calls this a Danger.
+        let report = run(&pad_at(10.69, 20.0, 1, "rect", 0.6, "F.Cu"));
+        assert_eq!(count(&report, "pad_to_pad"), 1, "{report:?}");
+        assert_eq!(report.findings[0].severity, DfmSeverity::Danger);
+        // At 0.12 mm it is a Warning.
+        let warn = run(&pad_at(10.72, 20.0, 1, "rect", 0.6, "F.Cu"));
+        assert_eq!(warn.findings[0].severity, DfmSeverity::Warning, "{warn:?}");
+    }
+
+    #[test]
+    fn same_net_copper_closer_than_the_merge_tolerance_is_one_object() {
+        // 0.05 mm: the fab's copper runs together, so there is no gap to grade.
+        let merged = run(&pad_at(10.65, 20.0, 1, "rect", 0.6, "F.Cu"));
+        assert_eq!(count(&merged, "pad_to_pad"), 0, "{merged:?}");
+        // The same distance between different nets is a near short, not a merge.
+        let short = run(&pad_at(10.65, 20.0, 2, "rect", 0.6, "F.Cu"));
+        assert_eq!(count(&short, "pad_to_pad"), 1, "{short:?}");
+        assert_eq!(short.findings[0].severity, DfmSeverity::Danger);
     }
 
     #[test]
@@ -789,20 +812,6 @@ mod tests {
     }
 
     #[test]
-    fn the_pieces_of_one_pin_may_sit_close_but_different_pins_may_not() {
-        let split = |second: &str| {
-            format!(
-                r#"(footprint "Test:EP" (layer "F.Cu") (at 30 30)
-    (property "Reference" "U9" (at 0 0) (layer "F.Fab"))
-    (pad "1" smd rect (at 0 0) (size 0.6 0.6) (layers "F.Cu"))
-    (pad "{second}" smd rect (at 0.7 0) (size 0.6 0.6) (layers "F.Cu")))"#
-            )
-        };
-        assert_eq!(count(&run(&split("1")), "pad_to_pad"), 0);
-        assert_eq!(count(&run(&split("2")), "pad_to_pad"), 1);
-    }
-
-    #[test]
     fn a_via_is_copper_too_and_may_not_crowd_a_pad_of_another_net() {
         // A 0.4 mm via of net 2 centred 0.55 mm from the base pad's centre: its
         // copper edge is 0.05 mm from the pad edge.
@@ -815,9 +824,13 @@ mod tests {
         assert_eq!(count(&near, "pad_to_pad"), 1, "{near:?}");
         let finding = near.findings.iter().find(|f| f.rule == "pad_to_pad");
         assert!((finding.expect("finding").measured_mm - 0.05).abs() < 0.005);
-        // Its own net, or room to spare, is fine.
+        // Room to spare is fine. Its own net is merged when it is that close,
+        // and graded once there is a real gap (0.08 mm: a Danger).
         assert_eq!(count(&run(&via(10.55, 1)), "pad_to_pad"), 0);
         assert_eq!(count(&run(&via(11.2, 2)), "pad_to_pad"), 0);
+        let own_net = run(&via(10.58, 1));
+        assert_eq!(count(&own_net, "pad_to_pad"), 1, "{own_net:?}");
+        assert_eq!(own_net.findings[0].severity, DfmSeverity::Danger);
     }
 
     #[test]
@@ -886,6 +899,43 @@ mod tests {
             trace("F.Cu", 19.25, 2)
         ));
         assert_eq!(count(&report, "pth_to_trace"), 1, "one finding per hole");
+    }
+
+    #[test]
+    fn the_merge_tolerance_splits_a_same_net_gap_either_side_of_it() {
+        // Base pad right edge 10.3 mm. 0.065 mm: merged. 0.075 mm: graded.
+        assert_eq!(
+            count(
+                &run(&pad_at(10.665, 20.0, 1, "rect", 0.6, "F.Cu")),
+                "pad_to_pad"
+            ),
+            0
+        );
+        let graded = run(&pad_at(10.675, 20.0, 1, "rect", 0.6, "F.Cu"));
+        assert_eq!(count(&graded, "pad_to_pad"), 1, "{graded:?}");
+    }
+
+    #[test]
+    fn the_pieces_of_one_pin_are_separate_copper_and_graded_too() {
+        // A split pin: two pieces 0.1 mm apart. The fab sees two objects.
+        let split = r#"(footprint "Test:EP" (layer "F.Cu") (at 30 30)
+    (property "Reference" "U9" (at 0 0) (layer "F.Fab"))
+    (pad "1" smd rect (at 0 0) (size 0.6 0.6) (layers "F.Cu") (net 1 "GND"))
+    (pad "1" smd rect (at 0.7 0) (size 0.6 0.6) (layers "F.Cu") (net 1 "GND")))"#;
+        let report = run(split);
+        assert_eq!(count(&report, "pad_to_pad"), 1, "{report:?}");
+        assert_eq!(report.findings[0].severity, DfmSeverity::Warning);
+    }
+
+    #[test]
+    fn a_via_on_its_own_pad_is_one_object_but_on_another_nets_pad_it_is_a_short() {
+        let via_on_pad = |net: u32| {
+            format!(r#"(via (at 10 20) (size 0.4) (drill 0.2) (layers "F.Cu" "B.Cu") (net {net}))"#)
+        };
+        assert_eq!(count(&run(&via_on_pad(1)), "pad_to_pad"), 0);
+        let short = run(&via_on_pad(2));
+        assert_eq!(count(&short, "pad_to_pad"), 1, "{short:?}");
+        assert_eq!(short.findings[0].severity, DfmSeverity::Danger);
     }
 
     #[test]
