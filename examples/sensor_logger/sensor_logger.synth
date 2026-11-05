@@ -69,9 +69,10 @@ board "sensor_logger" {
 
   // ---- I2C bus + sensors + pullups ----------------------------------------
   component U3: sensor     "bmp280_pressure"
-  component U4: sensor     "bme680_env"
+  component U4: sensor     "bme680_lga8"
   component C7: capacitor  "c_generic_0603" value "100nF" { placement_hint { near: "U3" priority: hard } }
   component C8: capacitor  "c_generic_0603" value "100nF" { placement_hint { near: "U4" priority: hard } }
+  component C10: capacitor "c_generic_0603" value "100nF" { placement_hint { near: "U4" priority: hard } } // VDDIO
   component R2: resistor   "r_generic_0603" value "4.7k"  // SDA pullup
   component R3: resistor   "r_generic_0603" value "4.7k"  // SCL pullup
 
@@ -91,6 +92,11 @@ board "sensor_logger" {
   // BME680 interface mode select: CSB=VDD selects I2C; SDO=GND selects addr 0x76
   connect U4.vdd -> U4.csb
   connect U4.gnd -> U4.sdo
+  // The BME680's I/O supply and second ground pad must be tied, not left open
+  connect U4.vdd -> U4.vddio
+  connect U4.gnd -> U4.gnd2
+  connect U4.vddio -> C10.p1
+  connect U4.gnd2  -> C10.p2
   connect U2.pc4_sda -> R2.p1
   connect R2.p2      -> U2.vcc
   connect U2.pc5_scl -> R3.p1
@@ -122,7 +128,7 @@ board "sensor_logger" {
   component R4: resistor  "r_generic_0603" value "1k" { placement_hint { near: "U2" side: left } }
   component D3: diode     "led_red_0603" { placement_hint { near: "R4" } }
   component R5: resistor  "r_generic_0603" value "1k" { placement_hint { near: "U2" side: left } }
-  component D4: diode     "led_green_0603" { placement_hint { near: "R5" } }
+  component D4: diode     "ltst_c190kgkt" { placement_hint { near: "R5" } }
   component R6: resistor  "r_generic_0603" value "1k" { placement_hint { near: "U2" side: left } }
   component D5: diode     "led_blue_0603" { placement_hint { near: "R6" } }
 

@@ -24,10 +24,10 @@
     "distinct_texts": 94
   },
   "ref_led_driver": {
-    "sha256": "f7ae93fff307f7fc0a5f78df0e792a889df8993191eceb2e118aad3582d62453",
+    "sha256": "6759114822c4914c0c11960d3739475abb8234832db3a68770f29df063d14203",
     "width": "297.0022mm",
     "height": "210.0072mm",
-    "paths": 8690,
+    "paths": 8688,
     "texts": 211,
     "distinct_texts": 188
   },
@@ -72,10 +72,10 @@
     "distinct_texts": 461
   },
   "sensor_logger": {
-    "sha256": "4c8eb96a4eb8199d05a6b64715ff823972d48ffc5b80a01cadea3ae334398e19",
+    "sha256": "bb2fda381e2bcd683f515b12dd0b95bb74bbc7077932dee3e950634e91a926d7",
     "width": "297.0022mm",
     "height": "210.0072mm",
-    "paths": 13189,
+    "paths": 13219,
     "texts": 389,
     "distinct_texts": 223
   }
