@@ -1,7 +1,7 @@
 id = "at24c512_eeprom"
 kind = "memory"
 description = "Atmel AT24C512 64KB I²C EEPROM"
-kicad_symbol = "Memory_EEPROM:AT24C512"
+kicad_symbol = "Memory_EEPROM:24LC512"
 kicad_footprint = "Package_SO:SOIC-8_3.9x4.9mm_P1.27mm"
 
 [footprint_dimensions]
@@ -14,10 +14,17 @@ min_voltage_v = 1.8
 max_voltage_v = 3.6
 max_current_ma = 50.0
 
+[provenance]
+source = "authored"
+datasheet_url = "https://ww1.microchip.com/downloads/en/DeviceDoc/Atmel-8720G-SEEPROM-AT24C512C-Datasheet.pdf"
+reviewed_by = "JeffMboya"
+reviewed_at = "2026-11-05"
+
 # Pin numbers follow the SOIC-8 pinout this I2C EEPROM family shares with the
 # 24LC256 (A0 A1 A2 GND SDA SCL WP VCC), cross-checked against the 8 pads of
-# the footprint. Not from the symbol: KiCad 10 ships no
-# `Memory_EEPROM:AT24C512`, so the name above resolves to nothing.
+# the footprint. KiCad 10 ships no AT24C512 symbol; the 24LC512 it does ship
+# is the same 512-Kbit I2C EEPROM on the same pins and roles, so the symbol
+# checks run against it.
 #
 # The previous map had `vdd` on pad 1, `gnd` on 2, `sda` on 3 and `scl` on 4.
 # On this package those four pads are A0, A1, A2 and GND, so a board wired to

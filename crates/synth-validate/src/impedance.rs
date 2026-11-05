@@ -104,6 +104,16 @@ fn controlled(board: &Board) -> Vec<Controlled<'_>> {
     out
 }
 
+/// Whether `net` belongs to a netclass that keeps it on outer copper.
+fn pinned_outer(board: &Board, net: &Net) -> bool {
+    net.netclass.as_deref().is_some_and(|name| {
+        board
+            .netclasses
+            .iter()
+            .any(|class| class.name == name && class.outer_layers_only())
+    })
+}
+
 fn diagnostic(
     code: &str,
     severity: Severity,
@@ -327,6 +337,9 @@ impl ErcRule for InnerLayerNotVerifiedRule {
         controlled(board)
             .into_iter()
             .filter(|c| c.outer.is_some())
+            // Pinned to outer copper, the net cannot reach an inner layer:
+            // the microstrip derived above is the geometry it is routed on.
+            .filter(|c| !std::iter::once(c.net).chain(c.partner).all(|net| pinned_outer(board, net)))
             .map(|c| {
                 diagnostic(
                     self.code(),
@@ -335,7 +348,10 @@ impl ErcRule for InnerLayerNotVerifiedRule {
                     file,
                     &c,
                 )
-                .expected("a controlled-impedance net routed on an outer layer")
+                .expected(
+                    "a controlled-impedance net pinned to an outer layer, e.g. in a \
+                     `netclass { layers \"F.Cu\", \"B.Cu\" }`",
+                )
                 .found(format!(
                     "{} may be routed on an inner copper layer, where impedance is not \
                      verified; only outer-layer microstrip is derived and checked",

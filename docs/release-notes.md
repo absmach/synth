@@ -30,6 +30,13 @@
 - Independent validation now reads a zone's **poured** copper (`filled_polygon`), not only its outline, and records `plane_splits`: signal tracks whose adjacent plane layer pours copper but does not cover the track, so it has no return path under it. Advisory.
 - `E-SYNTH-STACKUP-004/005` and `E-SYNTH-IMPEDANCE-001/002` now cover a netclass's single-ended impedance too.
 
+### Layer pins
+
+- `netclass "ETH" { layers "F.Cu", "B.Cu" }` pins the class's nets to those copper layers. A name the board does not have is `E-SYNTH-NETCLASS-001`.
+- The export writes the pin as KiCad custom rules (`disallow track` on every other copper layer, and `disallow via` for a single-layer class), KiCadRoutingTools routes pinned nets on their layers before the general pass and keeps it from ripping them, and routed copper off the pinned layers is the blocking `E-SYNTH-DRC-023`. FreeRouting takes no per-net layer input, so it refuses a request that carries a pin (`unsupported`) instead of routing the net where it likes and leaving the violation to post-route DRC.
+- A controlled-impedance pair, or single-ended class, pinned to outer copper no longer raises `W-SYNTH-IMPEDANCE-001`.
+- `synth_place_with_hints` takes a `rotation` (0, 90, 180, 270) per hint, so a `rotate_connector_parallel_to_edge` review finding can be followed without a layout override.
+
 ### Planes
 
 - Ground and split-ground planes are still flooded automatically. A `netclass "PWR" { plane }` now floods a plane for each member net as well.

@@ -224,6 +224,10 @@ pub struct SidecarLayout {
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct SidecarPlacement {
+    /// Position in the file's own space: sheet millimetres in a schematic
+    /// sidecar; in a placement sidecar, board millimetres at the footprint
+    /// origin, the `(at x y)` the exported board carries, not the placer's
+    /// courtyard centre.
     #[serde(default)]
     pub x: f64,
     #[serde(default)]

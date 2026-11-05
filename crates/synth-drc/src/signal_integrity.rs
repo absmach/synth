@@ -877,6 +877,93 @@ pub fn check_group_skew(board: &Board, routing: &Routing) -> Vec<Violation> {
     violations
 }
 
+/// Layer-pin check. Code: `E-SYNTH-DRC-023`.
+///
+/// A net whose `netclass` declares `layers` must be routed only on those
+/// layers. The export states the pin as a KiCad custom rule and the router is
+/// asked to honour it, but neither is evidence: this reads the copper. A
+/// controlled-impedance pair pinned to the outer layer its width was derived
+/// for and routed on an inner one is the case it exists for, so it blocks.
+///
+/// A via on a class with two or more layers is how the net changes between
+/// them, which its segments already show. A class held to one layer has no
+/// layer to change to, and a through via puts copper on every layer, so any
+/// via on such a net is a violation of its own, whatever the segments say.
+#[must_use]
+pub fn check_layer_pins(board: &Board, routing: &Routing) -> Vec<Violation> {
+    let mut violations = Vec::new();
+    for class in &board.netclasses {
+        if class.layers.is_empty() {
+            continue;
+        }
+        for net in member_nets(board, class) {
+            if class.layers.len() == 1 {
+                violations.extend(single_layer_vias(routing, net, class));
+            }
+            let off: Vec<&Segment> = routing
+                .segments
+                .iter()
+                .filter(|s| s.net == net.id)
+                .filter(|s| !class.layers.iter().any(|layer| layer == s.layer.name()))
+                .collect();
+            let Some(first) = off.first() else {
+                continue;
+            };
+            let mut used: Vec<&str> = off.iter().map(|s| s.layer.name()).collect();
+            used.sort_unstable();
+            used.dedup();
+            violations.push(Violation {
+                code: "E-SYNTH-DRC-023".to_string(),
+                message: format!(
+                    "net `{}` is routed on {}, but netclass `{}` allows only {}",
+                    net.name,
+                    used.join(", "),
+                    class.name,
+                    class.layers.join(", "),
+                ),
+                witness: off.iter().flat_map(|s| [s.start, s.end]).collect(),
+                nets: vec![net.id],
+                components: Vec::new(),
+                pos_mm: Some((nm_to_mm(first.start.x_nm), nm_to_mm(first.start.y_nm))),
+                suggested_override: None,
+            });
+        }
+    }
+    violations
+}
+
+/// The `E-SYNTH-DRC-023` finding for vias on a net whose class allows one
+/// layer, or `None` when it has none.
+fn single_layer_vias(
+    routing: &Routing,
+    net: &Net,
+    class: &synth_ir::NetClass,
+) -> Option<Violation> {
+    let vias: Vec<Point> = routing
+        .vias
+        .iter()
+        .filter(|v| v.net == net.id)
+        .map(|v| v.at)
+        .collect();
+    let first = *vias.first()?;
+    Some(Violation {
+        code: "E-SYNTH-DRC-023".to_string(),
+        message: format!(
+            "net `{}` has {} via(s), but netclass `{}` allows only {}; a through via \
+             puts copper on every layer",
+            net.name,
+            vias.len(),
+            class.name,
+            class.layers.join(", "),
+        ),
+        witness: vias,
+        nets: vec![net.id],
+        components: Vec::new(),
+        pos_mm: Some((nm_to_mm(first.x_nm), nm_to_mm(first.y_nm))),
+        suggested_override: None,
+    })
+}
+
 /// Current a single via is assumed to carry, in amps (a 0.3 mm drill at a
 /// 10 °C rise, a conservative rule of thumb).
 const VIA_CURRENT_LIMIT_A: f64 = 1.5;

@@ -142,6 +142,28 @@ pub fn build_command(
 /// failure mode.
 #[allow(clippy::too_many_lines)]
 pub fn route(request: &RouteRequest) -> Result<Candidate, RouterFailure> {
+    // FreeRouting's command builder has no way to pin a net to layers: the
+    // Specctra round trip would route these nets wherever the engine likes
+    // and leave the violation to post-route DRC. Refusing the request here
+    // keeps a layer-pinned board from being reported as routed when it is
+    // not. KiCadRoutingTools does implement the pin.
+    if !request.net_layers.is_empty() {
+        let nets = request
+            .net_layers
+            .iter()
+            .map(|pin| pin.net.as_str())
+            .collect::<Vec<_>>()
+            .join(", ");
+        return Err(RouterFailure::for_stage(
+            RouterEngine::Freerouting,
+            RouterStage::Capability,
+            RouterFailureReason::Unsupported,
+            format!(
+                "FreeRouting cannot pin nets to copper layers, and the request pins {nets}; \
+                 use KiCadRoutingTools or drop the netclass `layers` constraint"
+            ),
+        ));
+    }
     let prerequisites = Prerequisite::resolve(request)?;
     run_with(request, &prerequisites)
 }
@@ -595,6 +617,33 @@ mod tests {
             output_truncated: false,
             cwd: PathBuf::from("/tmp"),
         }
+    }
+
+    /// FreeRouting's command builder has no flag for a net-to-layer pin, so a
+    /// layer-pinned board must be refused before the engine runs. Routing it
+    /// anyway would report a board as routed while the pin is ignored and the
+    /// violation is left to post-route DRC.
+    #[test]
+    fn a_layer_pinned_request_is_unsupported_not_routed() {
+        let mut request = request();
+        request.net_layers = vec![crate::contract::NetLayers {
+            net: "ETH_TXP".to_string(),
+            layers: vec!["F.Cu".to_string(), "B.Cu".to_string()],
+        }];
+        let failure = route(&request).expect_err("a layer pin must be refused");
+        assert_eq!(
+            failure.reason,
+            RouterFailureReason::Unsupported,
+            "{failure:?}"
+        );
+        assert_eq!(failure.stage, RouterStage::Capability, "{failure:?}");
+        assert!(!failure.reason.is_unavailable(), "the engine is installed");
+        assert!(failure.detail.contains("ETH_TXP"), "{}", failure.detail);
+        assert!(
+            failure.remediation.contains("KiCadRoutingTools"),
+            "{}",
+            failure.remediation
+        );
     }
 
     #[test]

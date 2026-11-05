@@ -30,6 +30,18 @@ board "x" {
 }
 ```
 
+A net is not reported when it is pinned to outer copper: every net of a single-ended class, or both legs of a pair, in a `netclass` whose `layers` are only `F.Cu` and/or `B.Cu`.
+
 ## Suggested fix
 
-Have the impedance of the routed net reviewed on the layer it uses, or use a two-layer board where every trace is outer-layer microstrip.
+Pin the net to the outer layer its impedance was derived for, by putting it (or both legs of the pair) in a netclass that declares the layers:
+
+```synth
+netclass "ETH" {
+  layers "F.Cu"
+}
+connect U1.txp -> J1.td_p as "ETH_TXP" class "ETH"
+connect U1.txn -> J1.td_n as "ETH_TXN" class "ETH"
+```
+
+The export writes the pin as a KiCad custom DRC rule, the router keeps the nets on those layers, and routed copper anywhere else is `E-SYNTH-DRC-023`. Otherwise, have the impedance of the routed net reviewed on the layer it uses, or use a two-layer board where every trace is outer-layer microstrip.

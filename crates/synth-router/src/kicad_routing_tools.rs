@@ -183,6 +183,15 @@ pub fn build_command(
     if options.strict_sizes {
         args.push("--strict-sizes".to_string());
     }
+    // A pinned net is routed on its own layers before the general pass, so
+    // the general router meets it as finished copper rather than free to
+    // move it onto a layer the design ruled out.
+    for pin in &request.net_layers {
+        args.extend([
+            "--net-layers".to_string(),
+            format!("{}={}", pin.net, pin.layers.join(",")),
+        ]);
+    }
     // Hand every dense grid array to the escape engine before the general
     // router sees the board. Left to the maze router, a 0.8 mm ball grid comes
     // back with a stub on every lane rather than an escape under every pad.
@@ -704,6 +713,21 @@ mod tests {
         }];
 
         assert_eq!(escape_plan(&request), vec!["U7"]);
+    }
+
+    #[test]
+    fn a_layer_pin_reaches_the_engine() {
+        let mut request = request();
+        request.net_layers = vec![crate::NetLayers {
+            net: "ETH_TXP".to_string(),
+            layers: vec!["F.Cu".to_string(), "B.Cu".to_string()],
+        }];
+        let joined = argv(&request);
+        assert!(
+            joined.contains("--net-layers ETH_TXP=F.Cu,B.Cu"),
+            "{joined}"
+        );
+        assert!(!argv(&super::tests::request()).contains("--net-layers"));
     }
 
     fn request() -> RouteRequest {

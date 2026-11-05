@@ -338,6 +338,36 @@ pub fn lower(ast: &ProgramAst, registry: &Registry, file: &str) -> LowerResult {
         }
     }
 
+    // `netclass { layers … }` against the same copper, for the same reason: a
+    // name the board does not have would reach the router and the DRC rule
+    // as a layer nothing can route on, and every member net would fail.
+    for class in &netclasses {
+        for layer in &class.layers {
+            if copper.iter().any(|known| known == layer) {
+                continue;
+            }
+            ctx.diagnostics.push(
+                DiagnosticBuilder::new(
+                    "E-SYNTH-NETCLASS-001",
+                    Severity::Error,
+                    "netclass layer is not on this board",
+                )
+                .location(Location::from_span(ctx.file.to_string(), class.source_span))
+                .expected(format!(
+                    "one of: {}",
+                    copper
+                        .iter()
+                        .map(|l| format!("`{l}`"))
+                        .collect::<Vec<_>>()
+                        .join(", ")
+                ))
+                .found(format!("`{layer}` in netclass `{}`", class.name))
+                .explanation_url("synth.docs/diagnostics/E-SYNTH-NETCLASS-001")
+                .build(),
+            );
+        }
+    }
+
     let board = Board {
         legends,
         schematic_paper,
@@ -726,6 +756,7 @@ impl<'a> LowerCtx<'a> {
         let mut max_length: Option<Length> = None;
         let mut max_skew: Option<Length> = None;
         let mut edge_rate: Option<EdgeRate> = None;
+        let mut layers: Vec<String> = Vec::new();
         for attr in &n.attrs {
             match attr {
                 NetclassAttr::TraceWidth(v) => match Length::try_from(v) {
@@ -764,6 +795,13 @@ impl<'a> LowerCtx<'a> {
                 // The parser accepts only `slow`/`fast`, so this is a
                 // belt-and-braces fallback to the unknown (fast) default.
                 NetclassAttr::EdgeRate { rate, .. } => edge_rate = EdgeRate::parse(rate),
+                NetclassAttr::Layers { layers: names } => {
+                    for name in names {
+                        if !layers.contains(name) {
+                            layers.push(name.clone());
+                        }
+                    }
+                }
                 NetclassAttr::Color(hex) => match parse_hex_color(hex) {
                     Some(rgb) => color = Some(rgb),
                     None => self.diagnostics.push(
@@ -802,6 +840,7 @@ impl<'a> LowerCtx<'a> {
             max_length,
             max_skew,
             edge_rate,
+            layers,
             source_span: n.span,
         }
     }

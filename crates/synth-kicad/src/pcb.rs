@@ -3855,6 +3855,7 @@ mod tests {
                 max_length: None,
                 max_skew: None,
                 edge_rate: None,
+                layers: Vec::new(),
                 source_span: Span::new(0, 0),
             }],
             buses: vec![],
@@ -3946,6 +3947,7 @@ mod tests {
             impedance: None,
             current: None,
             plane: false,
+            layers: Vec::new(),
             source_span: Span::new(0, 0),
         }];
 

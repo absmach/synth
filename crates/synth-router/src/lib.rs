@@ -64,8 +64,8 @@ use std::path::{Path, PathBuf};
 
 pub use capability::{discover, RouterCapability};
 pub use contract::{
-    FabricationPolicy, FreeroutingOptions, KiCadRoutingToolsOptions, KrtEscalation, RouteRequest,
-    RouterEngine, RouterLimits,
+    FabricationPolicy, FreeroutingOptions, KiCadRoutingToolsOptions, KrtEscalation, NetLayers,
+    RouteRequest, RouterEngine, RouterLimits,
 };
 pub use failure::{RouterFailure, RouterFailureReason, RouterStage};
 pub use result::{

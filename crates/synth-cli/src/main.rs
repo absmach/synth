@@ -1412,7 +1412,7 @@ fn capability_descriptor() -> serde_json::Value {
                 "notes": "No fabricator presets are shipped; every value is declared by the design. A diff_pair impedance derives its net class trace width (and, for a true pair, its gap) from the first copper and insulator layers."
             },
             "routing_constraints": {
-                "netclass": ["trace_width", "clearance", "color", "impedance", "current", "plane", "max_length", "max_skew", "via_diameter", "via_drill", "edge_rate"],
+                "netclass": ["trace_width", "clearance", "color", "impedance", "current", "plane", "max_length", "max_skew", "via_diameter", "via_drill", "edge_rate", "layers"],
                 "diff_pair": ["impedance", "max_skew", "couple"],
                 "keepout": ["radius"],
                 "component": ["placement_hint", "escape"],
@@ -4842,6 +4842,7 @@ fn build_route_request(
     request.kicad_routing_tools.same_net_pad_clearance_mm = options.same_net_pad_clearance;
     request.policy.allow_via_in_pad = options.allow_via_in_pad;
     request.use_board_escapes(board);
+    request.use_board_layer_pins(board);
     request.use_profile_floor(
         &board
             .manufacturer
@@ -5324,6 +5325,21 @@ fn route_externally(
                  un-routed baseline and is preserved for review.",
                 engine.as_str(),
                 request.baseline_path().display()
+            );
+        } else if report
+            .failure
+            .as_ref()
+            .is_some_and(|f| f.reason == synth_router::RouterFailureReason::Unsupported)
+        {
+            // No copper was produced: the engine refused a constraint it
+            // cannot honour. Saying "failed validation" would imply a board
+            // exists and was rejected.
+            eprintln!(
+                "error: {} cannot honour this routing request; the exported board at {} is the \
+                 un-routed baseline and is preserved for review. See {}.",
+                engine.as_str(),
+                request.baseline_path().display(),
+                request.report_path().display()
             );
         } else if report.state == synth_router::RouteState::ValidationFailed {
             eprintln!(

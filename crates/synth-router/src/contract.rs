@@ -421,6 +421,27 @@ impl RouteRequest {
         }
     }
 
+    /// Take the layer pins the board's netclasses declare.
+    ///
+    /// For the same reason as [`Self::use_board_escapes`]: every routing entry
+    /// point calls this, so no path routes a pinned net wherever it likes.
+    pub fn use_board_layer_pins(&mut self, board: &synth_ir::Board) {
+        self.net_layers = board
+            .nets
+            .iter()
+            .filter_map(|net| {
+                let class = board
+                    .netclasses
+                    .iter()
+                    .find(|c| Some(c.name.as_str()) == net.netclass.as_deref())?;
+                (!class.layers.is_empty()).then(|| NetLayers {
+                    net: net.name.clone(),
+                    layers: class.layers.clone(),
+                })
+            })
+            .collect();
+    }
+
     /// Adopt the fabrication floor a manufacturer profile imposes.
     ///
     /// Keeps whatever via-in-pad permission was already granted: an operator
@@ -492,6 +513,21 @@ pub struct RouteRequest {
     /// it; `Some` lists any other net's missing return via as an advisory.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub return_via_critical_nets: Option<Vec<String>>,
+    /// Nets the design pins to copper layers (`netclass { layers … }`), by
+    /// name, with the layers each may use. An engine that supports the
+    /// constraint routes these on their layers before anything else and the
+    /// routed copper is checked against the same pin afterwards
+    /// (`E-SYNTH-DRC-023`). FreeRouting does not support it and refuses a
+    /// request that carries one, rather than silently ignoring the pin.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub net_layers: Vec<NetLayers>,
+}
+
+/// One net's layer pin: the copper layers it may be routed on.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct NetLayers {
+    pub net: String,
+    pub layers: Vec<String>,
 }
 
 impl RouteRequest {
@@ -678,6 +714,7 @@ impl RouteRequest {
             routing_order: Vec::new(),
             ground_nets: Vec::new(),
             return_via_critical_nets: None,
+            net_layers: Vec::new(),
         }
     }
 }

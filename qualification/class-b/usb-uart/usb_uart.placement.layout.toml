@@ -43,7 +43,7 @@ priority = "hard"
 
 [components.J1]
 x = 22.0
-y = 4.15
+y = 3.59
 rotation = 180
 source = "agent"
 priority = "hard"
@@ -266,7 +266,7 @@ priority = "hard"
 timestamp = "2026-10-10T09:00:00+00:00"
 
 [components.J_VIO]
-x = 7.36
+x = 4.82
 y = 29.9
 rotation = 90
 source = "agent"
@@ -274,7 +274,7 @@ priority = "soft"
 timestamp = "2026-10-23T13:00:00+00:00"
 
 [components.J2]
-x = 16.46
+x = 13.92
 y = 29.9
 rotation = 90
 source = "agent"
@@ -282,7 +282,7 @@ priority = "soft"
 timestamp = "2026-10-23T13:00:00+00:00"
 
 [components.J3]
-x = 26.0
+x = 23.46
 y = 29.9
 rotation = 90
 source = "agent"
@@ -290,7 +290,7 @@ priority = "soft"
 timestamp = "2026-10-23T13:00:00+00:00"
 
 [components.J4]
-x = 35.1
+x = 32.56
 y = 29.9
 rotation = 90
 source = "agent"

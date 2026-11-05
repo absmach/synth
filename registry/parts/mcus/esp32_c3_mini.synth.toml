@@ -1,20 +1,45 @@
 id = "esp32_c3_mini"
 kind = "mcu"
-description = "Espressif ESP32-C3 RISC-V module with Wi-Fi/BT 5.0"
+description = "Espressif ESP32-C3-MINI-1 RISC-V Wi-Fi/BLE 5 module, PCB antenna, 13.2 x 16.6 mm LGA-53"
 mpn = "ESP32-C3-MINI-1-N4"
 lcsc_pn = "C2834457"
-kicad_symbol = "RF_Module:ESP32-C3-MINI-1"
-kicad_footprint = "RF_Module:ESP32-C3-MINI-1"
+# KiCad 10 ships no ESP32-C3-MINI-1 symbol, so none is named: the exporter
+# draws one from the pins below, which is truer than borrowing the C6-MINI-1
+# symbol and printing its IO names on a C3.
+#
+# The footprint is the stock ESP32-C6-MINI-1. Espressif gives the two modules
+# the same recommended land pattern (C3-MINI-1 datasheet v2.2 Figure 11-1, C6-MINI-1
+# datasheet v1.5 Figure 11-1: 13.2 x 16.6 mm, 48 x 0.8 x 0.4 mm pads, 4 x 0.7 mm
+# corner pads, a 5.4 mm centre pad) and the same pin numbering, 1-11 down the
+# left, 12-24 along the bottom, 25-35 up the right, 36-48 across the top,
+# 49 the centre pad and 50-53 the corners.
+#
+# Pins are from Table 3-1 of the ESP32-C3-MINI-1 datasheet
+# (https://www.espressif.com/sites/default/files/documentation/esp32-c3-mini-1_datasheet_en.pdf).
+# The ESP32-C3 routes I2C through its GPIO matrix, so every general-purpose
+# pin can be either I2C role and declares both (as ice40hx4k_bg121 does).
+#
+# USB D- and D+ are GPIO18 and GPIO19 on this silicon, so they are capabilities
+# of pins 26 and 27; the previous map invented separate pins 20 and 21 for
+# them and put vdd, en, io9, io18 and io19 on pads that carry something else.
+kicad_footprint = "RF_Module:ESP32-C6-MINI-1"
 
 [footprint_dimensions]
-width_mm = 5.0
-height_mm = 5.0
+width_mm = 13.2
+height_mm = 16.6
 courtyard_margin_mm = 0.25
 
+# VDD33 3.0-3.6 V (Table 6-2); 350 mA is the 802.11b TX peak (Table 6-4).
 [operating_conditions]
-min_voltage_v = 1.8
+min_voltage_v = 3.0
 max_voltage_v = 3.6
-max_current_ma = 150.0
+max_current_ma = 350.0
+
+[provenance]
+source = "authored"
+datasheet_url = "https://www.espressif.com/sites/default/files/documentation/esp32-c3-mini-1_datasheet_en.pdf"
+reviewed_by = "JeffMboya"
+reviewed_at = "2026-11-05"
 
 [[pins]]
 name = "gnd"
@@ -23,50 +48,305 @@ electrical_type = "power_input"
 required = true
 
 [[pins]]
-name = "vdd"
+name = "gnd_2"
 number = "2"
+electrical_type = "passive"
+required = true
+
+[[pins]]
+name = "vdd"
+number = "3"
 electrical_type = "power_input"
 required = true
 
 [[pins]]
+name = "nc"
+number = "4"
+electrical_type = "do_not_connect"
+
+[[pins]]
+name = "io2"
+number = "5"
+electrical_type = "bidirectional"
+capabilities = ["gpio", "boot_mode", "i2c_scl", "i2c_sda"]
+
+[[pins]]
+name = "io3"
+number = "6"
+electrical_type = "bidirectional"
+capabilities = ["gpio", "i2c_scl", "i2c_sda"]
+
+[[pins]]
+name = "nc_2"
+number = "7"
+electrical_type = "do_not_connect"
+
+[[pins]]
 name = "en"
-number = "3"
+number = "8"
 electrical_type = "input"
 capabilities = ["reset"]
 required = true
 
 [[pins]]
-name = "io9"
+name = "nc_3"
 number = "9"
+electrical_type = "do_not_connect"
+
+[[pins]]
+name = "nc_4"
+number = "10"
+electrical_type = "do_not_connect"
+
+[[pins]]
+name = "gnd_3"
+number = "11"
+electrical_type = "passive"
+required = true
+
+[[pins]]
+name = "io0"
+number = "12"
 electrical_type = "bidirectional"
-capabilities = ["gpio", "boot_mode"]
+capabilities = ["gpio", "i2c_scl", "i2c_sda"]
+
+[[pins]]
+name = "io1"
+number = "13"
+electrical_type = "bidirectional"
+capabilities = ["gpio", "i2c_scl", "i2c_sda"]
+
+[[pins]]
+name = "gnd_4"
+number = "14"
+electrical_type = "passive"
+required = true
+
+[[pins]]
+name = "nc_5"
+number = "15"
+electrical_type = "do_not_connect"
+
+[[pins]]
+name = "io10"
+number = "16"
+electrical_type = "bidirectional"
+capabilities = ["gpio", "i2c_scl", "i2c_sda"]
+
+[[pins]]
+name = "nc_6"
+number = "17"
+electrical_type = "do_not_connect"
+
+[[pins]]
+name = "io4"
+number = "18"
+electrical_type = "bidirectional"
+capabilities = ["gpio", "i2c_scl", "i2c_sda"]
+
+[[pins]]
+name = "io5"
+number = "19"
+electrical_type = "bidirectional"
+capabilities = ["gpio", "i2c_scl", "i2c_sda"]
+
+[[pins]]
+name = "io6"
+number = "20"
+electrical_type = "bidirectional"
+capabilities = ["gpio", "i2c_scl", "i2c_sda"]
+
+[[pins]]
+name = "io7"
+number = "21"
+electrical_type = "bidirectional"
+capabilities = ["gpio", "i2c_scl", "i2c_sda"]
+
+[[pins]]
+name = "io8"
+number = "22"
+electrical_type = "bidirectional"
+capabilities = ["gpio", "boot_mode", "i2c_scl", "i2c_sda"]
+
+[[pins]]
+name = "io9"
+number = "23"
+electrical_type = "bidirectional"
+capabilities = ["gpio", "boot_mode", "i2c_scl", "i2c_sda"]
+
+[[pins]]
+name = "nc_7"
+number = "24"
+electrical_type = "do_not_connect"
+
+[[pins]]
+name = "nc_8"
+number = "25"
+electrical_type = "do_not_connect"
 
 [[pins]]
 name = "io18"
-number = "18"
-electrical_type = "bidirectional"
-capabilities = ["gpio"]
+number = "26"
+electrical_type = "differential_negative"
+capabilities = ["gpio", "usb_dn"]
 
 [[pins]]
 name = "io19"
-number = "19"
-electrical_type = "bidirectional"
-capabilities = ["gpio"]
-
-[[pins]]
-name = "dn"
-number = "20"
-electrical_type = "differential_negative"
-capabilities = ["usb_dn"]
-
-[[pins]]
-name = "dp"
-number = "21"
+number = "27"
 electrical_type = "differential_positive"
-capabilities = ["usb_dp"]
+capabilities = ["gpio", "usb_dp"]
+
+[[pins]]
+name = "nc_9"
+number = "28"
+electrical_type = "do_not_connect"
+
+[[pins]]
+name = "nc_10"
+number = "29"
+electrical_type = "do_not_connect"
+
+[[pins]]
+name = "rxd0"
+number = "30"
+electrical_type = "bidirectional"
+capabilities = ["gpio", "uart_rx"]
+
+[[pins]]
+name = "txd0"
+number = "31"
+electrical_type = "bidirectional"
+capabilities = ["gpio", "uart_tx"]
+
+[[pins]]
+name = "nc_11"
+number = "32"
+electrical_type = "do_not_connect"
+
+[[pins]]
+name = "nc_12"
+number = "33"
+electrical_type = "do_not_connect"
+
+[[pins]]
+name = "nc_13"
+number = "34"
+electrical_type = "do_not_connect"
+
+[[pins]]
+name = "nc_14"
+number = "35"
+electrical_type = "do_not_connect"
+
+[[pins]]
+name = "gnd_5"
+number = "36"
+electrical_type = "passive"
+required = true
+
+[[pins]]
+name = "gnd_6"
+number = "37"
+electrical_type = "passive"
+required = true
+
+[[pins]]
+name = "gnd_7"
+number = "38"
+electrical_type = "passive"
+required = true
+
+[[pins]]
+name = "gnd_8"
+number = "39"
+electrical_type = "passive"
+required = true
+
+[[pins]]
+name = "gnd_9"
+number = "40"
+electrical_type = "passive"
+required = true
+
+[[pins]]
+name = "gnd_10"
+number = "41"
+electrical_type = "passive"
+required = true
+
+[[pins]]
+name = "gnd_11"
+number = "42"
+electrical_type = "passive"
+required = true
+
+[[pins]]
+name = "gnd_12"
+number = "43"
+electrical_type = "passive"
+required = true
+
+[[pins]]
+name = "gnd_13"
+number = "44"
+electrical_type = "passive"
+required = true
+
+[[pins]]
+name = "gnd_14"
+number = "45"
+electrical_type = "passive"
+required = true
+
+[[pins]]
+name = "gnd_15"
+number = "46"
+electrical_type = "passive"
+required = true
+
+[[pins]]
+name = "gnd_16"
+number = "47"
+electrical_type = "passive"
+required = true
+
+[[pins]]
+name = "gnd_17"
+number = "48"
+electrical_type = "passive"
+required = true
+
+[[pins]]
+name = "gnd_18"
+number = "49"
+electrical_type = "passive"
+required = true
+
+[[pins]]
+name = "gnd_19"
+number = "50"
+electrical_type = "passive"
+required = true
+
+[[pins]]
+name = "gnd_20"
+number = "51"
+electrical_type = "passive"
+required = true
+
+[[pins]]
+name = "gnd_21"
+number = "52"
+electrical_type = "passive"
+required = true
+
+[[pins]]
+name = "gnd_22"
+number = "53"
+electrical_type = "passive"
+required = true
 
 [[required_decoupling]]
 net = "vdd"
 value = "10uf"
 count = 1
-

@@ -547,10 +547,15 @@ published placement cannot drift apart. Emitting the internal courtyard
 centre here shifts every downstream consumer — notably the synth-ee
 placement visualisation — relative to the exported board.
 
-The persisted `<design>.placement.layout.toml` sidecar is a separate,
-schema-versioned board-millimetre contract consumed by
-`synth_write_layout_override`; treat it as its own coordinate space and
-never assume a value copied from one is valid in the other.
+The persisted `<design>.placement.layout.toml` sidecar is written in the same
+space: board millimetres at each footprint's origin, the `(at x y)` the
+exported board and `component_placements` report. A position copied from a
+run's output pins the part exactly there, so a sidecar pinned from the last run
+reproduces it. (It used to be read as the courtyard centre, which moved every
+part whose origin is off-centre — a connector whose origin sits on a pin — by
+its courtyard offset on each re-pin, so a fully pinned board never reached a
+fixed point.) A `relative_to` entry's `dx`/`dy` likewise run between footprint
+origins.
 
 Run the automatic placer first and read the outline it produces; use a
 placement sidecar only to fix specific parts. A sidecar entry gives that part
