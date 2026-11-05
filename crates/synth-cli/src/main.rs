@@ -4801,8 +4801,16 @@ fn dfm_stage(
                 .iter()
                 .map(|((rule, severity), n)| format!("{rule} {severity:?} {n}").to_lowercase())
                 .collect();
-            if !counts.is_empty() {
-                evidence.detail = Some(counts.join(", "));
+            let mut parts = counts;
+            if report.unchecked_silk_text > 0 {
+                parts.push(format!(
+                    "{} silk text item(s) not measured",
+                    report.unchecked_silk_text
+                ));
+            }
+            let detail = parts.join(", ");
+            if !detail.is_empty() {
+                evidence.detail = Some(detail);
             }
             (evidence, Some(report))
         }
