@@ -2,7 +2,7 @@
 	(version "E")
 	(design
 		(source "qualification/class-b/rtd-afe/kicad/rtd_afe.kicad_sch")
-		(date "2026-11-03T20:13:07")
+		(date "2026-11-05T16:34:42")
 		(tool "Eeschema 10.0.7-10.0.7~ubuntu24.04.1")
 		(sheet
 			(number "1")
@@ -2010,6 +2010,7 @@
 			(ref "D1")
 			(value "ESD")
 			(footprint "Diode_SMD:D_SOD-323")
+			(datasheet "https://datasheet.lcsc.com/datasheet/pdf/a868537aef07f89b854d39bc70b9a4b4.pdf")
 			(fields
 				(field
 					(name "MPN") "ESD5V0B03-323")
@@ -2018,8 +2019,7 @@
 				(field
 					(name "Footprint") "Diode_SMD:D_SOD-323")
 				(field
-					(name "Datasheet")
-				)
+					(name "Datasheet") "https://datasheet.lcsc.com/datasheet/pdf/a868537aef07f89b854d39bc70b9a4b4.pdf")
 				(field
 					(name "Description")
 				)
@@ -2076,6 +2076,7 @@
 			(ref "D2")
 			(value "ESD")
 			(footprint "Diode_SMD:D_SOD-323")
+			(datasheet "https://datasheet.lcsc.com/datasheet/pdf/a868537aef07f89b854d39bc70b9a4b4.pdf")
 			(fields
 				(field
 					(name "MPN") "ESD5V0B03-323")
@@ -2084,8 +2085,7 @@
 				(field
 					(name "Footprint") "Diode_SMD:D_SOD-323")
 				(field
-					(name "Datasheet")
-				)
+					(name "Datasheet") "https://datasheet.lcsc.com/datasheet/pdf/a868537aef07f89b854d39bc70b9a4b4.pdf")
 				(field
 					(name "Description")
 				)
@@ -2141,7 +2141,7 @@
 		(comp
 			(ref "H1")
 			(value "(no value)")
-			(footprint "MountingHole:MountingHole_2.5mm")
+			(footprint "MountingHole:MountingHole_2.7mm_M2.5")
 			(fields
 				(field
 					(name "MPN")
@@ -2150,7 +2150,7 @@
 					(name "LCSC")
 				)
 				(field
-					(name "Footprint") "MountingHole:MountingHole_2.5mm")
+					(name "Footprint") "MountingHole:MountingHole_2.7mm_M2.5")
 				(field
 					(name "Datasheet")
 				)
@@ -2202,7 +2202,7 @@
 		(comp
 			(ref "H2")
 			(value "(no value)")
-			(footprint "MountingHole:MountingHole_2.5mm")
+			(footprint "MountingHole:MountingHole_2.7mm_M2.5")
 			(fields
 				(field
 					(name "MPN")
@@ -2211,7 +2211,7 @@
 					(name "LCSC")
 				)
 				(field
-					(name "Footprint") "MountingHole:MountingHole_2.5mm")
+					(name "Footprint") "MountingHole:MountingHole_2.7mm_M2.5")
 				(field
 					(name "Datasheet")
 				)
@@ -2263,7 +2263,7 @@
 		(comp
 			(ref "H3")
 			(value "(no value)")
-			(footprint "MountingHole:MountingHole_2.5mm")
+			(footprint "MountingHole:MountingHole_2.7mm_M2.5")
 			(fields
 				(field
 					(name "MPN")
@@ -2272,7 +2272,7 @@
 					(name "LCSC")
 				)
 				(field
-					(name "Footprint") "MountingHole:MountingHole_2.5mm")
+					(name "Footprint") "MountingHole:MountingHole_2.7mm_M2.5")
 				(field
 					(name "Datasheet")
 				)
@@ -2324,7 +2324,7 @@
 		(comp
 			(ref "H4")
 			(value "(no value)")
-			(footprint "MountingHole:MountingHole_2.5mm")
+			(footprint "MountingHole:MountingHole_2.7mm_M2.5")
 			(fields
 				(field
 					(name "MPN")
@@ -2333,7 +2333,7 @@
 					(name "LCSC")
 				)
 				(field
-					(name "Footprint") "MountingHole:MountingHole_2.5mm")
+					(name "Footprint") "MountingHole:MountingHole_2.7mm_M2.5")
 				(field
 					(name "Datasheet")
 				)
@@ -2386,6 +2386,7 @@
 			(ref "J1")
 			(value "TYPE-C-31-M-12")
 			(footprint "Connector_USB:USB_C_Receptacle_HRO_TYPE-C-31-M-12")
+			(datasheet "https://datasheet.lcsc.com/datasheet/pdf/9e56b777c022540fcce7c7f67825f55e.pdf")
 			(fields
 				(field
 					(name "MPN") "TYPE-C-31-M-12")
@@ -2394,8 +2395,7 @@
 				(field
 					(name "Footprint") "Connector_USB:USB_C_Receptacle_HRO_TYPE-C-31-M-12")
 				(field
-					(name "Datasheet")
-				)
+					(name "Datasheet") "https://datasheet.lcsc.com/datasheet/pdf/9e56b777c022540fcce7c7f67825f55e.pdf")
 				(field
 					(name "Description")
 				)
@@ -3545,8 +3545,7 @@
 				(field
 					(name "MPN") "ADS124S08IRHBR")
 				(field
-					(name "LCSC")
-				)
+					(name "LCSC") "C2871942")
 				(field
 					(name "Footprint") "Package_DFN_QFN:Texas_RHB0032M_VQFN-32-1EP_5x5mm_P0.5mm_EP2.1x2.1mm")
 				(field
@@ -3566,7 +3565,7 @@
 			)
 			(property
 				(name "LCSC")
-				(value "")
+				(value "C2871942")
 			)
 			(property
 				(name "Sheetname")
@@ -3692,16 +3691,16 @@
 			(ref "U2")
 			(value "RP2350A")
 			(footprint "Package_DFN_QFN:QFN-60-1EP_7x7mm_P0.4mm_EP3.4x3.4mm")
+			(datasheet "https://datasheets.raspberrypi.com/rp2350/rp2350-datasheet.pdf")
 			(fields
 				(field
 					(name "MPN") "RP2350A")
 				(field
-					(name "LCSC") "C14663")
+					(name "LCSC") "C42411118")
 				(field
 					(name "Footprint") "Package_DFN_QFN:QFN-60-1EP_7x7mm_P0.4mm_EP3.4x3.4mm")
 				(field
-					(name "Datasheet")
-				)
+					(name "Datasheet") "https://datasheets.raspberrypi.com/rp2350/rp2350-datasheet.pdf")
 				(field
 					(name "Description")
 				)
@@ -3717,7 +3716,7 @@
 			)
 			(property
 				(name "LCSC")
-				(value "C14663")
+				(value "C42411118")
 			)
 			(property
 				(name "Sheetname")
@@ -3940,8 +3939,7 @@
 				(field
 					(name "MPN") "REF5025AIDR")
 				(field
-					(name "LCSC")
-				)
+					(name "LCSC") "C11341")
 				(field
 					(name "Footprint") "Package_SO:SOIC-8_3.9x4.9mm_P1.27mm")
 				(field
@@ -3961,7 +3959,7 @@
 			)
 			(property
 				(name "LCSC")
-				(value "")
+				(value "C11341")
 			)
 			(property
 				(name "Sheetname")
@@ -4019,14 +4017,14 @@
 		(comp
 			(ref "U4")
 			(value "W25Q128JVSIQ")
-			(footprint "Package_SO:SOIC-8_3.9x4.9mm_P1.27mm")
+			(footprint "Package_SO:SOIC-8_5.3x5.3mm_P1.27mm")
 			(fields
 				(field
 					(name "MPN") "W25Q128JVSIQ")
 				(field
 					(name "LCSC") "C97521")
 				(field
-					(name "Footprint") "Package_SO:SOIC-8_3.9x4.9mm_P1.27mm")
+					(name "Footprint") "Package_SO:SOIC-8_5.3x5.3mm_P1.27mm")
 				(field
 					(name "Datasheet")
 				)
@@ -6421,7 +6419,7 @@
 			(node
 				(ref "U2")
 				(pin "2")
-				(pinfunction "GPIO0_2")
+				(pinfunction "SPI_MISO_2")
 				(pintype "bidirectional")
 			)
 		)
@@ -6438,7 +6436,7 @@
 			(node
 				(ref "U2")
 				(pin "5")
-				(pinfunction "GPIO3_5")
+				(pinfunction "SPI_MOSI_5")
 				(pintype "bidirectional")
 			)
 		)

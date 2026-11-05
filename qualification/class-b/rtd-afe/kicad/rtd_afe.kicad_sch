@@ -3144,6 +3144,7 @@
 						)
 					)
 				)
+				(alternate "SPI_MISO" bidirectional line)
 			)
 			(pin bidirectional line
 				(at 25.4 35.56 180)
@@ -3200,6 +3201,7 @@
 						)
 					)
 				)
+				(alternate "SPI_MOSI" bidirectional line)
 			)
 			(pin bidirectional line
 				(at 25.4 27.94 180)
@@ -6337,7 +6339,7 @@
 		)
 		(property
 			"Footprint"
-			"MountingHole:MountingHole_2.5mm"
+			"MountingHole:MountingHole_2.7mm_M2.5"
 			(at 22.86 154.94 0)
 			(effects
 				(font
@@ -6409,7 +6411,7 @@
 		)
 		(property
 			"Footprint"
-			"MountingHole:MountingHole_2.5mm"
+			"MountingHole:MountingHole_2.7mm_M2.5"
 			(at 38.1 154.94 0)
 			(effects
 				(font
@@ -6481,7 +6483,7 @@
 		)
 		(property
 			"Footprint"
-			"MountingHole:MountingHole_2.5mm"
+			"MountingHole:MountingHole_2.7mm_M2.5"
 			(at 53.34 154.94 0)
 			(effects
 				(font
@@ -6553,7 +6555,7 @@
 		)
 		(property
 			"Footprint"
-			"MountingHole:MountingHole_2.5mm"
+			"MountingHole:MountingHole_2.7mm_M2.5"
 			(at 68.58 154.94 0)
 			(effects
 				(font
@@ -7364,7 +7366,7 @@
 		)
 		(property
 			"LCSC"
-			""
+			"C2871942"
 			(at 48.26 60.96 0)
 			(effects
 				(font
@@ -8011,7 +8013,7 @@
 		)
 		(property
 			"LCSC"
-			""
+			"C11341"
 			(at 408.94 190.5 0)
 			(effects
 				(font
@@ -8327,7 +8329,7 @@
 		)
 		(property
 			"Datasheet"
-			""
+			"https://datasheets.raspberrypi.com/rp2350/rp2350-datasheet.pdf"
 			(at 106.68 299.72 0)
 			(effects
 				(font
@@ -8349,7 +8351,7 @@
 		)
 		(property
 			"LCSC"
-			"C14663"
+			"C42411118"
 			(at 106.68 299.72 0)
 			(effects
 				(font
@@ -8357,6 +8359,11 @@
 				)
 				(hide yes)
 			)
+		)
+		(pin
+			"2"
+			(alternate "SPI_MISO")
+			(uuid "aa05d63f-03fb-5a6e-bcdb-3805cd86794c")
 		)
 		(pin
 			"3"
@@ -8367,6 +8374,11 @@
 			"4"
 			(alternate "SPI_SCK")
 			(uuid "90531165-a8f6-5cff-8ae0-ed24868e4dfe")
+		)
+		(pin
+			"5"
+			(alternate "SPI_MOSI")
+			(uuid "cb33b040-ed60-52f0-bb7d-f1acdb88321c")
 		)
 		(pin
 			"52"
@@ -8410,7 +8422,7 @@
 		)
 		(property
 			"Footprint"
-			"Package_SO:SOIC-8_3.9x4.9mm_P1.27mm"
+			"Package_SO:SOIC-8_5.3x5.3mm_P1.27mm"
 			(at 167.64 299.72 0)
 			(effects
 				(font
@@ -10085,7 +10097,7 @@
 		)
 		(property
 			"Datasheet"
-			""
+			"https://datasheet.lcsc.com/datasheet/pdf/9e56b777c022540fcce7c7f67825f55e.pdf"
 			(at 370.84 99.06 0)
 			(effects
 				(font
@@ -10459,7 +10471,7 @@
 		)
 		(property
 			"Datasheet"
-			""
+			"https://datasheet.lcsc.com/datasheet/pdf/a868537aef07f89b854d39bc70b9a4b4.pdf"
 			(at 342.9 91.44 0)
 			(effects
 				(font
@@ -10531,7 +10543,7 @@
 		)
 		(property
 			"Datasheet"
-			""
+			"https://datasheet.lcsc.com/datasheet/pdf/a868537aef07f89b854d39bc70b9a4b4.pdf"
 			(at 342.9 106.68 0)
 			(effects
 				(font

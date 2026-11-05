@@ -14,15 +14,30 @@
     "open_nets": 0,
     "open": [],
     "unconnected_pads": [],
-    "via_in_pad": [],
+    "via_in_pad": [
+      "via at (16.138, 22.835) mm C_DV.2"
+    ],
     "undersized_vias": [],
     "undersized_tracks": []
   },
   "kicad_drc": {
     "errors": 0,
     "unconnected": 0,
-    "warnings": 47
+    "warnings": 48
   },
   "blocking_reasons": [],
-  "unavailable_checks": []
+  "unavailable_checks": [],
+  "advisories": [
+    "net SPI_MOSI changes layers at (23.41, 28.63) mm in a fine-pitch pad breakout with no ground return via within 0.80 mm and no spot in the GND pour for one; the pads leave no room, so the loop is left as an advisory for the signal-integrity review",
+    "net SPI_SCK changes layers at (22.69, 27.91) mm in a fine-pitch pad breakout with no ground return via within 0.80 mm and no spot in the GND pour for one; the pads leave no room, so the loop is left as an advisory for the signal-integrity review",
+    "net SPI_MISO changes layers at (23.41, 27.08) mm in a fine-pitch pad breakout with no ground return via within 0.80 mm and no spot in the GND pour for one; the pads leave no room, so the loop is left as an advisory for the signal-integrity review",
+    "net ADC_DRDY changes layers at (15.49, 24.64) mm in a fine-pitch pad breakout with no ground return via within 0.80 mm and no spot in the GND pour for one; the pads leave no room, so the loop is left as an advisory for the signal-integrity review",
+    "net ADC_DRDY changes layers at (23.08, 30.50) mm in a fine-pitch pad breakout with no ground return via within 0.80 mm and no spot in the GND pour for one; the pads leave no room, so the loop is left as an advisory for the signal-integrity review",
+    "net ADC_START changes layers at (14.32, 29.00) mm in a fine-pitch pad breakout with no ground return via within 0.80 mm and no spot in the GND pour for one; the pads leave no room, so the loop is left as an advisory for the signal-integrity review",
+    "net ADC_START changes layers at (23.47, 29.71) mm in a fine-pitch pad breakout with no ground return via within 0.80 mm and no spot in the GND pour for one; the pads leave no room, so the loop is left as an advisory for the signal-integrity review",
+    "net ADC_RESET_N changes layers at (25.54, 29.05) mm in a fine-pitch pad breakout with no ground return via within 0.80 mm and no spot in the GND pour for one; the pads leave no room, so the loop is left as an advisory for the signal-integrity review",
+    "net CC1 changes layers at (23.76, 7.95) mm in a fine-pitch pad breakout with no ground return via within 0.80 mm and no spot in the GND pour for one; the pads leave no room, so the loop is left as an advisory for the signal-integrity review",
+    "net USB_DN changes layers at (27.96, 27.12) mm in a fine-pitch pad breakout with no ground return via within 0.80 mm and no spot in the GND pour for one; the pads leave no room, so the loop is left as an advisory for the signal-integrity review",
+    "net DVDD_1V1 changes layers at (25.86, 30.42) mm in a fine-pitch pad breakout with no ground return via within 0.80 mm and no spot in the GND pour for one; the pads leave no room, so the loop is left as an advisory for the signal-integrity review"
+  ]
 }

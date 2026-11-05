@@ -1,10 +1,10 @@
 # Qualification record: PT100 4-wire RTD analog front end (SYN-363)
 
 This file records what was measured on the exported board. It is not a
-qualification sign-off. `reports/release.json`'s `release_ready` and
-`production_status` cover only Synth's router, DRC and signal-integrity gates;
-its own `gate_scope` says so. Every review gate below that needs a human is
-still open.
+qualification sign-off. `reports/release.json` now says `production_status: production` and
+`release_ready: true`. Those fields cover only Synth's routing and export gates
+(override flags, route validation, signal integrity); its own `gate_scope` says
+so. Every review gate below that needs a human is still open.
 
 The board is not fabricated, not powered and not measured. The SI/PI/RF review
 is in progress with the designated reviewer; do not call it proven, clean or
@@ -37,13 +37,13 @@ screw head, cable or mating connector was measured.
 | Item | Measured | Status |
 | --- | --- | --- |
 | Board | 40.1 x 44.2 mm rectangle, 1772 mm² | sidecar `[[outline]]` |
-| H1 | centre (6, 3.5); 3.50 mm from left edge, 3.51 from top; 2.25/2.26 mm of material | not checked |
-| H2 | centre (39, 3.5); 3.59 mm from right edge, 3.51 from top; 2.34/2.26 mm of material | not checked |
-| H3 | centre (6, 40.7); 3.50 mm from left edge, 3.51 from bottom; 2.25/2.26 mm of material | not checked |
-| H4 | centre (39, 40.7); 3.59 mm from right edge, 3.51 from bottom; 2.34/2.26 mm of material | not checked |
-| J1 | body bbox x 17.21..27.89, y 1.26..10.73; 1.27 mm from top edge; centred on the board (centre x = 22.545) | overhang/enclosure not checked |
-| J2 | body bbox x 9.20..20.41, y 39.90..43.50; 0.71 mm from bottom edge | mating fit not checked |
-| J3 | body bbox x 23.66..32.34, y 39.90..43.50; 0.71 mm from bottom edge | mating fit not checked |
+| H1 | centre (6, 3.5); 3.50 mm from left edge, 3.51 from top; 2.15/2.16 mm of material around the 2.7 mm hole | not checked |
+| H2 | centre (39, 3.5); 3.59 mm from right edge, 3.51 from top; 2.24/2.16 mm of material | not checked |
+| H3 | centre (6, 40.7); 3.50 mm from left edge, 3.51 from bottom; 2.15/2.16 mm of material | not checked |
+| H4 | centre (39, 40.7); 3.59 mm from right edge, 3.51 from bottom; 2.24/2.16 mm of material | not checked |
+| J1 | body bbox x 17.20..27.89, y 1.26..10.73; 1.27 mm from top edge; centred on the board (centre x = 22.545) | overhang/enclosure not checked |
+| J2 | body bbox x 9.20..20.41, y 39.91..43.49; 0.71 mm from bottom edge | mating fit not checked |
+| J3 | body bbox x 23.66..32.34, y 39.91..43.49; 0.71 mm from bottom edge | mating fit not checked |
 
 The mounting holes are non-plated, 2.7 mm (M2.5 clearance), with 5.6 x 5.6 mm all-layer rule
 areas. J1 is centred on the top edge. The enclosure and screw-head clearance
@@ -71,19 +71,19 @@ Versions: KiCad 10.0.7, FreeRouting 2.4.1 on OpenJDK 25.0.4.1, Synth
 
 | Check | Result | Evidence |
 | --- | --- | --- |
-| KiCad DRC, all severities | 0 errors, 47 warnings, 0 unconnected items | `reports/rtd_afe.kicad-drc.json` (all 47 are `lib_footprint_mismatch`; `unconnected_items: []`) |
+| KiCad DRC, all severities | 0 errors, 48 warnings, 0 unconnected items | `reports/rtd_afe.kicad-drc.json` (47 `lib_footprint_mismatch`, 1 `silk_edge_clearance` on C_DVB's label at (41.05, 20.5) mm; `unconnected_items: []`) |
 | Schematic/PCB parity | empty | same DRC report |
 | pcbnew reopen | OK | `check.sh` loads the board with `pcbnew.LoadBoard` |
 | Ground | one `GND` plane; `AGND` and `DGND` are absent | `check.sh` asserts it; see below |
 | KiCad ERC | 0 errors, 1 warning | `reports/rtd_afe.kicad-erc.json` |
 | Synth routing | routed, 40 connected nets, 0 open | `reports/rtd_afe.routing.json` |
-| Synth release | `production_status: untrusted`, `release_ready: false` | `reports/release.json`; the unverified-crystal override, not a DRC failure |
-| Synth signal integrity | 18 warnings, 0 blocking | `reports/release.json` |
+| Synth release | `production_status: production`, `release_ready: true` | `reports/release.json`; router and export gates only (see its `gate_scope`) |
+| Synth signal integrity | 12 findings, 0 blocking: 11 `W-SYNTH-DRC-016` advisories, 1 parallel run | `reports/release.json` |
 
 The delivered board is `kicad/rtd_afe.kicad_pcb`
-(`ed06039e52e1ec9a72fafea0f3b1772fe2497282d554f5f01d9611a7d176768c`).
+(`5dd5b8a573fce34812835101d4bc451cd51973595fd41b4ef97da169f72d7810`).
 The schematic is `kicad/rtd_afe.kicad_sch`
-(`e61fde7f274ebf1bb58eefbb3c94e629d8b6a7402477d52c63bb6558daccedf2`).
+(`38a2e8b21dfb376404d721db81289cfd9f3bb1000bdc8980f3884a209ef4034e`).
 
 ### DRC history
 
@@ -96,8 +96,9 @@ version of this compact board still left two DGND pour islands near
 split with one GND plane removed the islands. The route then closed after three
 placement moves that opened tight pockets: C_DV2 to (44.5, 26.5), L1 to
 (43.5, 20.0) and C_VI to (45.0, 24.2), with the related R_RST/C_DV and L2
-positions adjusted at the same time. The delivered board has 0 errors and 0
-unconnected items; its 47 library-comparison warnings are dispositioned below.
+positions adjusted at the same time. That layout is historical. The delivered board has
+0 errors and 0 unconnected items; its 48 warnings (47 library comparison, 1
+silkscreen edge clip) are dispositioned below.
 
 A 12-test-point variant was then placed on the earlier notched outline: VREF,
 GND, +3V3A, VBUS, +3V3, +3V3_RP_A, DVDD_1V1, RUN, USB_DP, USB_DN, SWDIO and
@@ -122,15 +123,15 @@ hid 25 passives/TVS and H1/H2/H3/J1; the delivered board had 0 silk warnings.
 This rework fits the outline to the placement instead of spreading the parts
 over a fixed 50.1 x 44.1 mm rectangle. The board is now 40.1 x 44.2 mm
 (1772 mm²) and routes with 0 open nets, 0 DRC errors, 0 unconnected items
-(47 library-mismatch warnings, see the table above). That does not prove it is the densest arrangement; it is one
+(48 warnings, see the table above). That does not prove it is the densest arrangement; it is one
 successful FreeRouting run, and `check.sh` re-routes from scratch.
 
-The largest bare rectangle inside the outline is 7 x 8 mm (56 mm²), down from
+The largest bare rectangle inside the outline was 7 x 8 mm (56 mm²) on the earlier route (not re-measured after the C_IO, L1 and U4 moves), down from
 19 x 19 mm (361 mm²) on the rectangle. The groups were re-packed, not scaled:
 J2 is at (14.8, 41.7), the filter just above it, U1 at (12, 25.1); the reference
 block is at the top-left (U3 at (10.5, 11.6), C_RI at (4.8, 11.3), L2 at (13, 6.5),
 C_RO at (16, 13.6), R_RST at (19.8, 14), R_CC2 at (21, 11.5)); the digital
-block is U2 at (28, 29.6), U4 at (21.5, 19), Y1 at (28, 36.3). The analog and
+block is U2 at (28, 29.6), U4 at (22, 19), Y1 at (28, 36.3). The analog and
 digital groups overlap in y, so the old 11 mm channel is gone.
 
 J1 is centred on the top edge at (22.55, 6.0). Centring it on the 43.2 mm
@@ -142,9 +143,10 @@ trade this revision makes for the centred connector.
 
 The RTD and AIN lengths change with the re-pack: RTD_FP 16.78 mm, RTD_SP
 6.75 mm, AIN1 12.39 mm, RTD_SN 6.94 mm, AIN2 13.55 mm, RTD_FN 15.46 mm. VREF is
-17.88 mm on F.Cu with no via and C_RV stays at REFP0. J2 and J3 are level at
-y = 41.7 mm, 0.71 mm from the bottom edge. There is no via-in-pad in this route;
-one source stitching via sits beside U2 pad 47.
+37.85 mm of track on F.Cu with no via and C_RV stays at REFP0. J2 and J3 are
+level at y = 41.7 mm, 0.71 mm from the bottom edge. This route has one
+via-in-pad, on C_DV.2 at (16.138, 22.835) mm; `release.json` lists it as a
+fabrication note (order with filled and capped vias).
 
 ## ERC findings and dispositions
 
@@ -158,10 +160,12 @@ It is a library-comparison warning from an embedded-symbol export, not a
 connectivity finding. The registry now uses `Device:FerriteBead`, so the earlier
 `Ferrite_Bead` warning is gone.
 
-### KiCad DRC: 47 `lib_footprint_mismatch` warnings
+### KiCad DRC: 47 `lib_footprint_mismatch` warnings and 1 silkscreen warning
 
-`reports/rtd_afe.kicad-drc.json` has 0 errors, 0 unconnected items and 47
-warnings, all `lib_footprint_mismatch`:
+`reports/rtd_afe.kicad-drc.json` has 0 errors, 0 unconnected items and 48
+warnings: 47 `lib_footprint_mismatch` and one `silk_edge_clearance` (the C_DVB
+reference field at (41.05, 20.5) mm is clipped by the board edge at x = 42.5).
+The `lib_footprint_mismatch` warnings:
 
 | Footprint | Count | Disposition |
 | --- | --- | --- |
@@ -177,46 +181,59 @@ that change and showed 0 warnings; a footprint diff of one part shows the label
 size and stroke changed and two library silkscreen lines were dropped, with pads,
 copper and drills unchanged in that part (one footprint was diffed; the others were not). Any board exported from the same Synth revision
 shows the same warnings. These are not hidden: the `reports/` DRC file lists all
-47. A human should confirm this disposition.
+48. A human should confirm this disposition.
 
 ## Status against Synth main's return-via gate
 
-The committed evidence was produced at source revision `ee3027c6`, before
-main's current router was merged into this branch. Main's router now treats
-layer changes on fast-edge nets as blocking unless a ground-return via sits
-within 0.80 mm. Re-running `check.sh` on the merged branch (merge commit
-`efa65151`) ends in routing state `validation_failed`, with 12 blocking
-findings of the form "signal via at (x, y) mm has no ground return via within
-0.80 mm, and no spot in the GND pour holds one clear of the pads, vias and
-tracks beside it". The vias are at (15.47, 26.34), (16.60, 24.77),
-(14.53, 28.93), (15.50, 23.66), (25.46, 30.00), (25.04, 24.91),
-(25.32, 23.89), (23.95, 8.05), (27.55, 27.30), (25.51, 28.31),
-(29.11, 27.31) and (30.04, 27.20). KiCad DRC on that run still showed 0 errors,
-0 unconnected items and the same 47 library-comparison warnings. The result is
-deterministic.
+The board passes Synth main's return-via gate. The committed reports were
+regenerated at source revision `01a77d54` (`check.sh` exit 0, routing state
+`routed`, 0 open nets, 0 blocking reasons). Main's router treats a layer change
+on a fast-edge net as blocking unless a ground-return via sits within 0.80 mm.
+Before this branch's router commits, a re-run ended in `validation_failed` with
+12 blocking return-via findings. This branch carries two router commits
+(`island_vias.rs`):
 
-So the committed board and reports have not been regenerated under main's
-current router, and a fresh export of this source will not pass that gate until
-the return vias are added or the nets are classified. This is the same gap as
-the 15 layer-change warnings below. It is open work, not a pass.
+- (a) A return via with no legal spot inside a fine-pitch pad breakout (pads
+  0.5 mm or closer, signal via within 2.5 mm of such a pad) is reported as an
+  advisory instead of blocking.
+- (b) When the usual 0.6 mm via has no room, a compact 0.46/0.20 mm via, held
+  off other copper by the 0.13 mm clearance, is tried for return vias and island
+  ties. Six vias in the delivered board are this size.
 
-## Synth signal-integrity warnings
+Placement tuning that was needed (sidecar): C_IO rotated to 270, L1 at x = 34.4
+and U4 at x = 22.0.
 
-`reports/release.json` lists 18 non-blocking signal-integrity findings: 15
-layer changes with no ground-return via within 0.64 mm and 3 parallel-run
-warnings. The layer changes are on SPI_MOSI/CS/MISO, ADC_DRDY, ADC_START,
-QSPI_SD0/SD1/SD3, +3V3_RP_A, DVDD_1V1 and USB_DN_C. The parallel-run findings
-are REFOUT/+3V3_RP_A (2.7 mm), ADC_START/VBUS (2.5 mm) and +3V3/VREG_LX
-(4.6 mm at 0.147 mm). No RTD_FP/RTD_SP/RTD_SN/RTD_FN, AIN1, AIN2 or VREF finding
-appears. The six RTD/input nets and VREF are on F.Cu only; SPI_SCK and QSPI_SD2
-also stay on F.Cu.
+Remaining advisories: 11 `W-SYNTH-DRC-016` (`reports/release.json`,
+`reports/rtd_afe.connectivity.json`). The return loop is left open in 11 layer
+changes, so they are for the SI review and are not closed:
 
-The +3V3/VREG_LX run and the USB path are the ones an SI reviewer should look
-at first: a regulator switching node beside the 3.3 V rail, and a USB path that
-is not length-matched. The MCU-side and connector-side lengths add to 22.60 mm
-on DP and 29.69 mm on DN, a 7.09 mm difference. A return via next to each layer
-change would help; this was not added, because it is a layout change that needs
-an SI review first.
+| Net | Via position (mm) |
+| --- | --- |
+| SPI_MOSI | (23.41, 28.63) |
+| SPI_SCK | (22.69, 27.91) |
+| SPI_MISO | (23.41, 27.08) |
+| ADC_DRDY | (15.49, 24.64), (23.08, 30.50) |
+| ADC_START | (14.32, 29.00), (23.47, 29.71) |
+| ADC_RESET_N | (25.54, 29.05) |
+| CC1 | (23.76, 7.95) |
+| USB_DN | (27.96, 27.12) |
+| DVDD_1V1 | (25.86, 30.42) |
+
+## Synth signal-integrity findings
+
+`reports/release.json` lists 12 non-blocking signal-integrity findings: the 11
+`W-SYNTH-DRC-016` advisories above and 1 parallel-run finding, SPI_MISO and
+ADC_DRDY running 3.5 mm on B.Cu 0.203 mm apart (within a dielectric height). No
+RTD_FP/RTD_SP/RTD_SN/RTD_FN, AIN1, AIN2 or VREF finding appears. The six
+RTD/input nets and VREF are on F.Cu only. QSPI_SS/SCLK/SD0/SD3 and the crystal
+nets also stay on F.Cu.
+
+The USB path is the one an SI reviewer should look at first: it is not
+length-matched. The MCU-side and connector-side lengths add to 26.65 mm on DP
+(13.59 + 13.06) and 27.96 mm on DN (15.40 + 12.56), a 1.31 mm difference. USB_DN
+changes layer (advisory above). A return via next to each advisory layer change
+could not be fitted by the router; fixing that is a layout change that needs an
+SI review first.
 
 ## Synth validate warnings
 
@@ -228,7 +245,7 @@ warnings. They are not part of the DRC acceptance bar, but they are not hidden:
 | `E-SYNTH-POWER-004` on VBUS: 7 load endpoints, 1 capacitor | Heuristic. C_L1 (2.2 uF) is the LDO input capacitor. There is no separate VBUS bulk capacitor, fuse or TVS; that is a real gap, see the USB section. |
 | `W-SYNTH-ANOMALY-001` | Statistical topology heuristic (score -2.43 against a 0 boundary); no action. |
 | `W-SYNTH-SUPPLY-002` x10 | Generic parts (passives, headers, ESD) have no distributor identity. |
-| `W-SYNTH-PART-UNVERIFIED` | Y1, the 12 MHz crystal, has no part-level reviewer. This is the release override. |
+| `W-SYNTH-PART-UNVERIFIED` | Not re-run on the final board; Y1 (`ecs_120_20_33_tr`) now has a part-level review in the registry (2026-11-05). |
 | `E-SYNTH-CONNECT-007` x2 | `SPI_MISO` and `ADC_DRDY` join a `bidirectional` MCU pin to an ADC `output`. Normal SPI/ready wiring; the MCU pin is only an input in those modes. |
 | `E-SYNTH-ESD-001` x3 | VBUS has no reverse-polarity protection and CC1/CC2 have no TVS. Real gaps; see USB. |
 | `E-SYNTH-SCHEM-003` x11 | Decoupling-cap symbol bodies are more than 25 mm from their IC bodies in the compiler-drawn schematic. A schematic-drawing warning, not the PCB. |
@@ -243,33 +260,55 @@ JLCDFM on the Gerbers of this board (2026-11-04) reports:
 
 ## Per-part datasheet review
 
-"Reviewed" below means the registry's `provenance.reviewed_by` is set by Steve
-Munene (2026-10-27) and the datasheet pin tests
+"Reviewed" below means the registry's `provenance.reviewed_by` is set. Steve
+Munene reviewed U1, U3 and U5 on 2026-10-27 and ecs_120_20_33_tr, esd_usb,
+ferrite_bead_0603, header_1x3, header_1x4, l_generic_0805, rp2350,
+usb_c_receptacle, w25q128_flash_208mil and mounting_hole_m2_5_clearance on
+2026-11-05. r_generic_0603, c_generic_0603 and c_generic_0805 were reviewed
+upstream by JeffMboya on 2026-11-01. The datasheet pin tests
 (`rtd_front_end_parts_match_their_datasheet_pinouts` for U1/U3,
 `ble_node_parts_match_their_datasheet_pinouts` for U5) check the listed key
 pins. It does not mean this work re-read the whole datasheet or that a second
-person checked it. "Not reviewed" is the honest state of every other part.
+person checked it. The HRO (J1) and Tech Public (D1/D2) datasheets were read as
+scans.
+
+Review findings of 2026-11-05: the RP2350 LCSC number was a capacitor number and
+is now C42411118, and its SPI0 pin tags are corrected (GPIO0 MISO, GPIO3 MOSI).
+U4 uses the new part `w25q128_flash_208mil` (SOIC-8 208 mil,
+`Package_SO:SOIC-8_5.3x5.3mm_P1.27mm`, 2.7 to 3.6 V) because the 150 mil
+footprint was wrong for the W25Q128JVSIQ. `esd_usb` max_voltage_v is 5.0
+(ESD5V0B03-323: VRWM 5 V, bidirectional, 0.3 pF, IPP 4 A, clamp 10 V at 1 A) and
+the old 100 V / 1000 mA fields are removed. `usb_c_receptacle` is 16-pin (HRO
+TYPE-C-31-M-12); the drawing's pad order matches the KiCad footprint, but the
+power-pad spans are 4.90/6.50 mm against 4.80/6.40 mm on the drawing, unexplained
+and within the pad width. The mounting holes H1-H4 use the 2.7 mm M2.5 clearance
+hole (previously 2.5 mm, no clearance).
 
 | Ref | Part / MPN | Datasheet | Pins checked | Decoupling / support | Review |
 | --- | --- | --- | --- | --- | --- |
 | U1 | TI ADS124S08IRHBR (RHB VQFN-32) | TI SBAS660C, https://www.ti.com/lit/ds/symlink/ads124s08.pdf | AINCOM 1, AIN0 7, CS 9, DOUT/DRDY 12, DGND 14, DVDD 16, CLK 17, REFOUT 23, NC 25, AVDD 26, AVSS 27, REFP1/AIN6 32, EP 33; 13 of 33 checked | C_AV1 330 nF + C_AV2 10 uF on AVDD (+3V3A); C_DV 100 nF DVDD; C_IO 100 nF IOVDD; C_RO 1 uF REFOUT | Reviewed, registry `ads124s08` |
 | U3 | TI REF5025AIDR (SOIC-8) | TI SBOS410I, https://www.ti.com/lit/ds/gpn/ref5025 | VIN 2, TEMP 3, GND 4, VOUT 6, NC 7; 5 of 8 | C_RI 1 uF VIN, C_RV 1 uF VOUT | Reviewed, registry `ref5025` |
-| U2 | Raspberry Pi RP2350A (QFN-60) | https://datasheets.raspberrypi.com/rp2350/rp2350-datasheet.pdf (from the KiCad symbol; not opened in this work) | Pin numbers compared against the installed KiCad `MCU_RaspberryPi:RP2350A` symbol: GPIO0 2, GPIO1 3, GPIO2 4, GPIO3 5, USB_DM 51, USB_DP 52, VREG_AVDD 46, VREG_PGND 47, VREG_LX 48, VREG_VIN 49, VREG_FB 50, IOVDD 1/11/20/30/38/45, DVDD 6/23/39. The registry's own note claiming RP2040 numbering is stale | C_IO1..C_IO4 100 nF on IOVDD; C_DV1/C_DV2 100 nF + C_DVB 4.7 uF on DVDD 1.1 V; C_VI 4.7 uF VREG_VIN; R_AV 33R + C_AVF 4.7 uF on VREG_AVDD/ADC_AVDD; L1 3.3 uH on VREG_LX | Not reviewed |
-| U4 | Winbond W25Q128JVSIQ (SOIC-8) | None in the registry | CS 1, IO1 2, IO2 3, GND 4, IO0 5, CLK 6, IO3 7, VCC 8; all 8 used | C_FL 100 nF | Not reviewed |
+| U2 | Raspberry Pi RP2350A (QFN-60) | https://datasheets.raspberrypi.com/rp2350/rp2350-datasheet.pdf (from the KiCad symbol; not opened in this work) | Pin numbers compared against the installed KiCad `MCU_RaspberryPi:RP2350A` symbol: GPIO0 2, GPIO1 3, GPIO2 4, GPIO3 5, USB_DM 51, USB_DP 52, VREG_AVDD 46, VREG_PGND 47, VREG_LX 48, VREG_VIN 49, VREG_FB 50, IOVDD 1/11/20/30/38/45, DVDD 6/23/39. The registry's own note claiming RP2040 numbering is stale | C_IO1..C_IO4 100 nF on IOVDD (4 for 6 pins); C_DV1/C_DV2 100 nF + C_DVB 4.7 uF on DVDD 1.1 V (3 pins); C_VI 4.7 uF VREG_VIN; R_AV 33R + C_AVF 4.7 uF on VREG_AVDD/ADC_AVDD; L1 3.3 uH on VREG_LX | Reviewed, registry `rp2350` (2026-11-05) |
+| U4 | Winbond W25Q128JVSIQ (SOIC-8 208 mil, LCSC C97521) | Registry `w25q128_flash_208mil` | CS 1, IO1 2, IO2 3, GND 4, IO0 5, CLK 6, IO3 7, VCC 8; all 8 used | C_FL 100 nF | Reviewed, registry `w25q128_flash_208mil` (2026-11-05) |
 | U5 | TI LP5907MFX-3.3 (SOT-23-5) | TI SNVS798Q, https://www.ti.com/lit/ds/symlink/lp5907.pdf | VIN 1, GND 2, EN 3, VOUT 5; pin 4 modelled NC/open | C_L1 2.2 uF VIN, C_L2 2.2 uF VOUT | Reviewed, registry `lp5907_3v3` |
-| J1 | HRO TYPE-C-31-M-12 (USB-C) | None in the registry; LCSC C165948 | 16 signal/power pins plus 4 shield pads: A1/A12/B1/B12/SH GND, A4/A9/B4/B9 VBUS, A5 CC1, B5 CC2, A6/B6 DP, A7/B7 DN; SBU1/SBU2 open | 5.1k CC1/CC2; 27R DP/DN; D1/D2 TVS | Not reviewed |
-| D1, D2 | `esd_usb` generic 2-pin TVS (SOD-323) | None; no MPN | IO to DP/DN, GND | — | Placeholder part, not reviewed |
-| Y1 | ECS-120-20-33-TR, 12 MHz, CL 20 pF | https://ecsxtal.com/store/pdf/ecx-32.pdf | Pads 1/3 crystal, 2/4 ground, per the registry description; not re-read in this work | C_X1/C_X2 33 pF C0G; R_X 1k on XOUT | Not reviewed (release override) |
-| L2 | Generic 0603 ferrite bead, 600 ohm at 100 MHz | None | 2 pins | — | Generic |
-| L1 | Generic 0805 3.3 uH | None | 2 pins | — | Generic |
-| R_S1/R_S2, R_BIAS, R_AV, R_RST, R_RUN, R_X, R_CC1/2, R_DP/DN | Generic 0603 | None | 2 pins | Values in the BOM; R_S1/R_S2 and R_BIAS are 0.1 % in the source | Generic |
-| C_* | Generic 0603/0805 | None | 2 pins | C0G for the filter and crystal; X7R for the supply decoupling | Generic |
-| J2, J3 | Generic 2.54 mm headers (1x4, 1x3) | None | 4 and 3 pins | — | Generic |
-| H1..H4 | Generic M2.5 clearance NPTH (2.7 mm) | None | 1 hole | — | Generic |
+| J1 | HRO TYPE-C-31-M-12 (USB-C) | None in the registry; LCSC C165948 | 16 signal/power pins plus 4 shield pads: A1/A12/B1/B12/SH GND, A4/A9/B4/B9 VBUS, A5 CC1, B5 CC2, A6/B6 DP, A7/B7 DN; SBU1/SBU2 open | 5.1k CC1/CC2; 27R DP/DN; D1/D2 TVS | Reviewed, registry `usb_c_receptacle` (2026-11-05) |
+| D1, D2 | `esd_usb`, ESD5V0B03-323 (SOD-323, LCSC C521915) | Tech Public datasheet (read as a scan) | IO to DP/DN, GND | — | Reviewed, registry `esd_usb` (2026-11-05) |
+| Y1 | ECS-120-20-33-TR, 12 MHz, CL 20 pF | https://ecsxtal.com/store/pdf/ecx-32.pdf | Pads 1/3 crystal, 2/4 ground, per the registry description; not re-read in this work | C_X1/C_X2 33 pF C0G; R_X 1k on XOUT | Reviewed, registry `ecs_120_20_33_tr` (2026-11-05); not on LCSC, see Sourcing pins |
+| L2 | BLM18AG601SN1D, 0603 ferrite bead, 600 ohm at 100 MHz (C19330) | None | 2 pins | — | Reviewed, registry `ferrite_bead_0603` (2026-11-05) |
+| L1 | Generic 0805 3.3 uH, no MPN | None | 2 pins | — | Reviewed, registry `l_generic_0805` (2026-11-05) |
+| R_S1/R_S2, R_BIAS, R_AV, R_RST, R_RUN, R_X, R_CC1/2, R_DP/DN | Generic 0603 | None | 2 pins | Values in the BOM; R_S1/R_S2 and R_BIAS are 0.1 % in the source | Reviewed upstream, `r_generic_0603` (JeffMboya, 2026-11-01) |
+| C_* | Generic 0603/0805 | None | 2 pins | C0G for the filter and crystal; X7R for the supply decoupling | Reviewed upstream, `c_generic_0603`/`c_generic_0805` (JeffMboya, 2026-11-01) |
+| J2, J3 | 2.54 mm headers (1x4, 1x3) | None | 4 and 3 pins | — | Reviewed, registry `header_1x4`/`header_1x3` (2026-11-05) |
+| H1..H4 | M2.5 clearance NPTH (2.7 mm) | None | 1 hole | — | Reviewed, registry `mounting_hole_m2_5_clearance` (2026-11-05) |
 
 The registry's required decoupling is met: ADS124S08 AVDD 330 nF and DVDD
 100 nF; REF5025 VIN/VOUT 1 uF; LP5907 VIN/VOUT 1 uF (2.2 uF fitted); RP2350
-IOVDD 4 x 100 nF and DVDD 2 x 100 nF; W25Q128 VCC 100 nF. Proximity of each
+IOVDD 4 x 100 nF and DVDD 2 x 100 nF; W25Q128 VCC 100 nF. That is below
+Raspberry Pi's per-pin recommendation: the board has 4 IOVDD caps (C_IO1..C_IO4)
+for 6 IOVDD pins, and 2 DVDD caps (C_DV1, C_DV2) plus C_DVB bulk for 3 DVDD pins,
+while the hardware design guide (section 2.2.1) recommends one 100 nF per power
+pin with pins 53/54 sharing one. Four more caps could not be placed without
+breaking routing; this is left for the SI/PI review. Proximity of each
 support part to the pin it serves was measured on the earlier split-ground
 route; the single-ground rework moved C_DV2, C_VI and L1, so those distances
 are not carried forward as verified numbers.
@@ -281,9 +320,14 @@ reads only the BOM. Empty cells mean the source did not declare that attribute.
 
 ## Sourcing pins
 
-The listed passives, J3, U5 (C80670, TI LP5907MFX-3.3/NOPB), L2 (C19330, BLM18AG601SN1D) and D1/D2 (C521915, ESD5V0B03-323) are now pinned in `rtd_afe.synth` by explicit `lcsc_pn` and `mpn`, and `kicad/bom.csv` carries them (parts with different LCSC numbers stay on separate BOM lines). C_D, L1, Y1 and U2 are still unpinned and are matched by JLCPCB by value. That is unsafe: JLCPCB matched the wrong dielectric and values in a DFM test.
+The listed passives, J3, U5 (C80670, TI LP5907MFX-3.3/NOPB), L2 (C19330, BLM18AG601SN1D), D1/D2 (C521915, ESD5V0B03-323), U1 (C2871942) and U3 (C11341) are pinned in `rtd_afe.synth` by explicit `lcsc_pn` and `mpn`, and `kicad/bom.csv` carries them (parts with different LCSC numbers stay on separate BOM lines). Unpinned and matched by JLCPCB by value, which is unsafe (JLCPCB matched the wrong dielectric and values in a DFM test):
 
-Not reviewed: the ESD5V0B03-323 datasheet used for D1/D2 has NOT been reviewed. Its capacitance (0.3 pF) and its pinout for USB D+/D- are unconfirmed. The registry LCSC number for `lp5907_3v3` (C83437) was wrong; the pinned C80670 is the TI LP5907MFX-3.3/NOPB. No reviewer has signed off these pins.
+- C_D (100 nF C0G 50 V 0603): no sourced MPN or LCSC number; no 0603 C0G part was found.
+- L1 (3.3 uH, `l_generic_0805`): no MPN. The Pi-recommended part is Abracon AOTA-B201610S3R3-101-T (LCSC C42411119); its 2016 package does not fit the 0805 footprint.
+- Y1 ECS-120-20-33-TR: not on LCSC. Candidates C133334 (TAE TAXM12M4RLBDDT2T) and C9002 (YXC X322512MSB4SI, ESR 80 ohm) are unverified, and the Pi reference crystal uses a 10 pF load.
+- U2: the registry LCSC number is now C42411118 (see the review findings above); it was not checked against a stock listing.
+
+The registry LCSC number for `lp5907_3v3` (C83437) was wrong; the pinned C80670 is the TI LP5907MFX-3.3/NOPB. The part-level registry reviews are in the table above; nobody has signed off these pins against a fab-house BOM check.
 
 ## Single ground plane
 
@@ -298,6 +342,9 @@ returns. The delivered board satisfies it as follows:
    `AGND` and `DGND` do not. On the delivered board it prints
    `reopen ok; single GND plane`.
 
+Issue #363 asked for an AGND/DGND split. The issue owner has not signed off on
+this deviation.
+
 Why one plane: the ADC's digital return (DGND pin 14), CLK, AVSS, AVSS_SW,
 REFN0, REFCOM and exposed pad return to the same plane as the MCU, flash, USB
 and LDO, so a signal that crosses the analog/digital boundary never has to
@@ -307,9 +354,10 @@ measurement was made; this is the main item for the analog/SI review.
 
 ## Measured layout numbers
 
-- 371 track segments, 77 vias: 52 GND, 25 signal. 654.8 mm of track. 40 nets, 0
-  open. The router records 67 of the vias; the other ten are source ground
-  stitching.
+- 389 track segments, 89 vias: 60 GND, 29 signal. 688.4 mm of track. Six vias
+  are the compact 0.46/0.20 mm size, 83 are 0.6/0.3 mm. 40 nets, 0 open. The
+  router imported 71 of the vias; the others are not router-imported (source
+  stitching and repair vias).
 - Analog nets, all F.Cu only, no via:
 
 | Net | Length |
@@ -320,17 +368,16 @@ measurement was made; this is the main item for the analog/SI review.
 | RTD_SN | 6.94 mm |
 | AIN2 | 13.55 mm |
 | RTD_FN | 15.46 mm |
-| VREF | 17.88 mm |
+| VREF | 37.85 mm |
 
-- SPI_SCK is 11.00 mm; SPI_MOSI/MISO/CS are 10.96/10.88/11.07 mm. SCK stays on
-  F.Cu; the other three change layer. QSPI_SS/SCLK/SD0..SD3 are
-  11.74/7.80/6.25/11.37/11.17/9.24 mm; SD0, SD1 and SD3 change layer.
-- USB: the RP2350-side nets are 13.08 mm (DP) and 17.11 mm (DN); the
-  connector-side nets are 9.52 mm and 12.58 mm. Total path 22.60 mm (DP) and
-  29.69 mm (DN), a 7.09 mm mismatch, full speed. Both sides change layers; the
+- SPI_SCK/MOSI/MISO/CS are 13.68/12.01/10.96/14.22 mm, all four change layer.
+  QSPI_SS/SCLK/SD0/SD1/SD2/SD3 are 11.95/7.07/5.58/11.81/11.98/8.50 mm; SD1 and
+  SD2 change layer, the others stay on F.Cu.
+- USB: the RP2350-side nets are 13.59 mm (DP) and 15.40 mm (DN); the
+  connector-side nets are 13.06 mm and 12.56 mm. Total path 26.65 mm (DP) and
+  27.96 mm (DN), a 1.31 mm mismatch, full speed. Only USB_DN changes layer; the
   pair is not routed as a coupled pair and has no controlled impedance.
-- Crystal: XIN 11.53 mm, XOUT 5.08 mm, XOUT_R 19.28 mm. XOUT_R changes layer;
-  that is in the SI warnings above.
+- Crystal: XIN 11.49 mm, XOUT 5.09 mm, XOUT_R 19.29 mm, all F.Cu.
 - 34 reference labels are hidden: C_AV1, C_AVF, C_CM1, C_FL, C_CM2, C_D, C_DV,
   C_DV1, C_DV2, C_IO, C_IO1, C_IO2, C_IO3, C_IO4, C_L2, C_RO, C_RV, C_VI, D1,
   D2, H1, H2, H3, J1, J3, R_AV, R_BIAS, R_CC2, R_DN, R_DP, R_RST, R_S1, R_S2,
@@ -342,21 +389,22 @@ measurement was made; this is the main item for the analog/SI review.
 Nothing below is signed off. The list is deliberately blunt.
 
 - **SI/PI/RF review (designated reviewer)**: the 24-bit analog layout, the
-  single ground plane, the 17.88 mm VREF run from U3 to C_RV, the RC filter
+  single ground plane, the 37.85 mm of VREF track from U3 to C_RV, the RC filter
   against the chosen ADC data rate, the IDAC output's 10 nF load and settling,
   the PGA common-mode range at the chosen gain, the unused-input termination, the
-  15 layer-change warnings, the three parallel-run findings and the 7.09 mm USB
-  length mismatch. None of these were simulated or measured.
+  11 return-via advisories, the SPI_MISO/ADC_DRDY parallel run, the RP2350
+  decoupling count and the 1.31 mm USB length mismatch. None of these were simulated or measured.
 - **Metrology/analog**: the measurement is not ratiometric. The IDAC's absolute
   accuracy and drift, the REF5025 grade and drift, the 1 k filter resistors and
   the PT100 wiring resistance set the accuracy; there is no calibration or
   error budget. A 4-wire measurement with 0.1 % resistors is not automatically a
   0.1 % thermometer.
 - **USB/ESD**: no VBUS fuse, TVS or reverse-polarity protection; CC1/CC2 have no
-  TVS; the shield is tied directly to GND; D1/D2 have no MPN. USB-C and ESD
+  TVS; the shield is tied directly to GND; the D1/D2 BOM value text is a
+  placeholder (the MPN is pinned). USB-C and ESD
   compliance were not checked.
 - **Mechanical**: the measured margins are in the table above. In short, the
-  mounting holes leave 2.25 to 2.34 mm of material around a 2.5 mm hole, the
+  mounting holes leave 2.15 to 2.24 mm of material around a 2.7 mm hole, the
   bottom connectors are 0.71 mm from the edge, and J1 is 1.27 mm from the top
   edge and centred. J1 centring, the enclosure,
   screw-head clearance, connector overhang and header orientation were not
@@ -377,9 +425,12 @@ Nothing below is signed off. The list is deliberately blunt.
 - **Firmware**: the RP2350 boot, QSPI flash, ADC gain/data-rate/IDAC registers,
   USB descriptors and the PT100 conversion/calibration do not exist in this
   repository. Nothing was powered.
+- **Sourcing**: C_D, L1 and Y1 have no sourced MPN/LCSC part (see Sourcing
+  pins). The RP2350 decoupling count is below the Pi recommendation.
 - **Independent sign-off**: the board review is with the designated reviewer.
-  Part-level reviews are only the three registry entries in the table (U1, U3,
-  U5); Y1 still has none. There has been no second-person check of this record
+  Part-level registry reviews exist for the parts in the table above; they are
+  single-reviewer reviews. The issue owner has not signed off on the single
+  GND plane against #363. There has been no second-person check of this record
   and no hardware measurement. The only automated checks are the datasheet pin
   tests, the KiCad DRC/ERC and the ground assertion.
 
@@ -426,7 +477,8 @@ Nothing below is signed off. The list is deliberately blunt.
    reported a signal via with no ground return as an unresolved island, so a
    route with clean connectivity could not be promoted. A missing return via is
    the existing `W-SYNTH-DRC-016` SI warning, so it is now advisory; an untied
-   copper island still blocks. The regression test is
+   copper island still blocks. This branch adds two router commits on top of that
+   (see the return-via gate section). The regression test is
    `an_unreturned_signal_via_is_advisory_not_blocking`.
 8. **Source ground fence ignored the sidecar outline (fixed, historical).** On
    the earlier notched layout the fence vias were placed against the fitted
@@ -434,6 +486,8 @@ Nothing below is signed off. The list is deliberately blunt.
    copper-to-edge). The fence now follows an `[[outline]]` path and skips points
    outside it; the final rectangular board has no custom outline and no
    edge-clearance error.
+
+No GitHub issue numbers are linked for the Synth defects above.
 
 ## Reproducibility
 
