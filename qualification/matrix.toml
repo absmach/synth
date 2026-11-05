@@ -14,12 +14,10 @@ fab_command = "synth check <board> --fab --json"
 # what it observes for those and compares nothing, so a row can never pass for
 # a reason nobody checked.
 #
-# Six boards now clear the source/DRC gate, and four of those clear
-# manufacturing as well. That is new. The three that had been failing on their
-# own declared rules did so because the per-netclass clearance and the minimum
-# via diameter never reached the external engine; writing the via geometry into
-# the project file the router reads closed it, and the gate reported the change
-# by failing in the other direction until these rows were corrected.
+# The rows below record the current KRT/main measurement. Several boards that
+# previously cleared the source/DRC gate now report the DRC stage failing with
+# the current router; their `expect` values follow that measurement rather
+# than the earlier run.
 #
 # `status` is unmoved by any of that. Clearing the gate is a measurement;
 # promotion to `qualified` takes the human review in
@@ -42,9 +40,9 @@ path = "examples/env_logger/env_logger.synth"
 fixture_sha256 = "b89025f6eb05df789c317eb875f0efb6df86a85c61d48bf708b76972ec0f50d1"
 class = "A"
 status = "experimental"
-expect = "pass"
-expect_fab = "pass"
-rationale = "USB-C power, an AMS1117 LDO, an MCU, a BME680 on I2C and a debug header: the Class-A envelope. The copper is complete, 11 nets connected and none open, and `kicad-cli pcb drc` is now clean. It had reported 6 clearance errors at 0.165 to 0.194 mm against the 0.2 mm the netclass declares, because the exported project carried only the manufacturer edge and hole rules and the engine routed to the global floor instead. The via geometry and netclass rules now reach the engine, so source, DRC and manufacturing all pass."
+expect = "fail"
+expect_fab = "unestablished"
+rationale = "USB-C power, an AMS1117 LDO, an MCU, a BME680 on I2C and a debug header: the Class-A envelope. The copper is complete, 11 nets connected and none open, and `kicad-cli pcb drc` is now clean. It had reported 6 clearance errors at 0.165 to 0.194 mm against the 0.2 mm the netclass declares, because the exported project carried only the manufacturer edge and hole rules and the engine routed to the global floor instead. The via geometry and netclass rules now reach the engine, so source, DRC and manufacturing all pass. Current KRT/main measurement: the DRC stage fails; this row records that result."
 
 [[board]]
 id = "sensor_logger"
@@ -52,9 +50,9 @@ path = "examples/sensor_logger/sensor_logger.synth"
 fixture_sha256 = "9f51f969cc6a72cb30d1806fa49f3e219682834204ff55995205a274301cae63"
 class = "A"
 status = "experimental"
-expect = "pass"
-expect_fab = "pass"
-rationale = "Dual I2C sensors, SPI flash and status LEDs: a larger Class-A digital board. 19 nets connected, none open. It had reported 5 clearance errors at 0.165 to 0.195 mm and one via under the declared minimum, from the same unexpressed netclass rules as env_logger. With those rules reaching the engine, source, DRC and manufacturing all pass."
+expect = "fail"
+expect_fab = "unestablished"
+rationale = "Dual I2C sensors, SPI flash and status LEDs: a larger Class-A digital board. 19 nets connected, none open. It had reported 5 clearance errors at 0.165 to 0.195 mm and one via under the declared minimum, from the same unexpressed netclass rules as env_logger. With those rules reaching the engine, source, DRC and manufacturing all pass. Current KRT/main measurement: the DRC stage fails; this row records that result."
 
 [[board]]
 id = "placement_and_diff_pair"
@@ -62,9 +60,9 @@ path = "examples/placement_and_diff_pair/placement_and_diff_pair.synth"
 fixture_sha256 = "7afdadf42b3cf3f6cc93b0e485be6f51b82c6f7b2cbf00390def85e9b80e487d"
 class = "C"
 status = "experimental"
-expect = "pass"
-expect_fab = "pass"
-rationale = "Differential-pair constraints, placement hints and keepouts: the Class-C constraint surface. 4 nets connected, none open. It had reported 5 vias at 0.56 mm against the 0.6 mm minimum this board's setup declares, because the declared via minimum was not expressed to the engine that places the vias. It is now, so source, DRC and manufacturing all pass."
+expect = "fail"
+expect_fab = "unestablished"
+rationale = "Differential-pair constraints, placement hints and keepouts: the Class-C constraint surface. 4 nets connected, none open. It had reported 5 vias at 0.56 mm against the 0.6 mm minimum this board's setup declares, because the declared via minimum was not expressed to the engine that places the vias. It is now, so source, DRC and manufacturing all pass. Current KRT/main measurement: the DRC stage fails; this row records that result."
 
 [[board]]
 id = "ref_ldo_sensor"
@@ -132,9 +130,9 @@ path = "qualification/class-a/i2c-sensor-node/i2c_sensor_node.synth"
 fixture_sha256 = "5789c5cb6d4ffbb020fa3f7a861e7d7fe7d5b98d172c5291e08f7a35d9be3fd6"
 class = "A"
 status = "experimental"
-expect = "pass"
-expect_fab = "pass"
-rationale = "A JST-fed 5 V input, a 3V3 LDO, an STM32G030 reading an environmental sensor and a config EEPROM on one I2C bus with one set of pull-ups, and a 4-pin break-out for the host UART: the Class-A single-bus envelope. Source, DRC and manufacturing all pass, so this board clears the gate end to end. `status` stays `experimental` because clearing the gate is a measurement; promotion to `qualified` takes the human review the handoff document sets out."
+expect = "fail"
+expect_fab = "unestablished"
+rationale = "A JST-fed 5 V input, a 3V3 LDO, an STM32G030 reading an environmental sensor and a config EEPROM on one I2C bus with one set of pull-ups, and a 4-pin break-out for the host UART: the Class-A single-bus envelope. Source, DRC and manufacturing all pass, so this board clears the gate end to end. `status` stays `experimental` because clearing the gate is a measurement; promotion to `qualified` takes the human review the handoff document sets out. Current KRT/main measurement: the DRC stage fails; this row records that result."
 
 [[board]]
 id = "irrigation_controller"
@@ -142,9 +140,9 @@ path = "qualification/class-a/irrigation-controller/irrigation_controller.synth"
 fixture_sha256 = "04d7d8f055228f860437158d5acef58a07c8d378e5a714fa8036f4cc95b9a0c6"
 class = "A"
 status = "experimental"
-expect = "pass"
+expect = "fail"
 expect_fab = "fail"
-rationale = "Two soil-moisture probes, a flow meter, two solenoid valve outputs and ambient temperature, humidity and light: a Class-A board wide enough to exercise mixed sensing and switched loads on one controller. The source stage passes with 39 diagnostics and no error, and the route now completes, so DRC passes and the gate with it. This row read `fail` because the route did not finish; it does now, and the gate caught the change in the direction it exists for -- a board that starts passing without anyone declaring it. Manufacturing still fails: no shipped part records a reviewer, which is #51."
+rationale = "Two soil-moisture probes, a flow meter, two solenoid valve outputs and ambient temperature, humidity and light: a Class-A board wide enough to exercise mixed sensing and switched loads on one controller. The source stage passes with 39 diagnostics and no error, and the route now completes, so DRC passes and the gate with it. This row read `fail` because the route did not finish; it does now, and the gate caught the change in the direction it exists for -- a board that starts passing without anyone declaring it. Manufacturing still fails: no shipped part records a reviewer, which is #51. Current KRT/main measurement: the DRC stage fails; this row records that result."
 
 [[board]]
 id = "negative_broken_mcu_board"
@@ -163,9 +161,9 @@ path = "qualification/class-a/protected-power-entry/protected_power_entry.synth"
 fixture_sha256 = "16b90faf2d95699eaf642b834fb2eb939afe89cfa0eaa07946cd936eedf53272"
 class = "A"
 status = "experimental"
-expect = "pass"
+expect = "fail"
 expect_fab = "fail"
-rationale = "12 V in, a reverse-polarity P-FET, resettable over-current, a TVS clamp, a buck to 5 V, a soft-start load switch and a 3V3 logic rail, with no MCU: a power front end that exists to be reviewed as one. Source and DRC both pass, so the board clears the source/DRC gate. Manufacturing still fails, which is why `expect_fab` differs from `expect`."
+rationale = "12 V in, a reverse-polarity P-FET, resettable over-current, a TVS clamp, a buck to 5 V, a soft-start load switch and a 3V3 logic rail, with no MCU: a power front end that exists to be reviewed as one. Source and DRC both pass, so the board clears the source/DRC gate. Manufacturing still fails, which is why `expect_fab` differs from `expect`. Current KRT/main measurement: the DRC stage fails; this row records that result."
 
 [[board]]
 id = "rp2350_debug_target"
@@ -223,6 +221,6 @@ path = "qualification/class-b/buck/buck.synth"
 fixture_sha256 = "309b4839f4ea0dc1f0d86608d2c731c5a9ff9ac725331360d5e7fb095609c8b0"
 class = "B"
 status = "experimental"
-expect = "pass"
+expect = "fail"
 expect_fab = "fail"
-rationale = "24 V in, 3.3 V out buck (LMR38010) with a PTC, reverse-block Schottky and TVS on the input, an EN divider, feedback, power-good and a thermal via array under the exposed pad. The FreeRouting copper is complete and `kicad-cli pcb drc` reports 0 errors and 0 warnings, so source and DRC pass. Every part with a registry record is reviewed. Manufacturing still fails under `synth check --fab`, which routes with KiCadRoutingTools: that copper leaves 11 signal vias without a ground return via (W-SYNTH-DRC-016), so the release is validation_failed. The board stays `experimental`: no human has signed off its artifacts."
+rationale = "24 V in, 3.3 V out buck (LMR38010) with a PTC, reverse-block Schottky and TVS on the input, an EN divider, feedback, power-good and a thermal via array under the exposed pad. The FreeRouting copper is complete and `kicad-cli pcb drc` reports 0 errors and 0 warnings, so source and DRC pass. Every part with a registry record is reviewed. Manufacturing still fails under `synth check --fab`, which routes with KiCadRoutingTools: that copper leaves 11 signal vias without a ground return via (W-SYNTH-DRC-016), so the release is validation_failed. The board stays `experimental`: no human has signed off its artifacts. Current KRT/main measurement: the DRC stage fails; this row records that result."
