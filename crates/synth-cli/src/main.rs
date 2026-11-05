@@ -20,7 +20,7 @@ use std::process::Command as ProcessCommand;
 use std::process::ExitCode;
 
 use clap::{Parser, Subcommand, ValueEnum};
-use synth_diagnostics::NativeCheckStatus;
+use synth_diagnostics::{NativeCheckEvidence, NativeCheckStatus, UnknownReason};
 
 const EXIT_SUCCESS: u8 = 0;
 const EXIT_VALIDATION_ERRORS: u8 = 1;
@@ -4455,6 +4455,38 @@ fn export_kicad(
     }
     native.push(drc.evidence);
 
+    // Manufacturability is read from the board that ships. Every export
+    // records it; only a release export (fab files requested) is stopped by
+    // a Danger finding, since a Danger is something the fab will reject.
+    let (dfm_evidence, dfm_report) = dfm_stage(&delivered, &drc_profile);
+    let dfm_danger = dfm_report
+        .as_ref()
+        .map_or(0, synth_drc::dfm::DfmReport::danger_count);
+    let release_dfm_blocked = production && dfm_danger > 0;
+    if let Some(report) = &dfm_report {
+        if release_dfm_blocked {
+            for finding in &report.findings {
+                eprintln!(
+                    "[dfm] {:?}: [{}] {}",
+                    finding.severity, finding.rule, finding.message
+                );
+            }
+            eprintln!(
+                "error: release export blocked: DFM found {dfm_danger} Danger finding(s) ({}); \
+                 --force does not override this.",
+                dfm_evidence.detail.as_deref().unwrap_or_default()
+            );
+        } else if !report.findings.is_empty() {
+            eprintln!(
+                "warning: DFM found {} finding(s) a fab would flag ({}); see the verification \
+                 report. A release export is blocked by Danger findings.",
+                report.findings.len(),
+                dfm_evidence.detail.as_deref().unwrap_or_default()
+            );
+        }
+    }
+    native.push(dfm_evidence);
+
     let blocked_by_unknown: Vec<_> = native
         .iter()
         .filter(|e| e.status == NativeCheckStatus::Unknown)
@@ -4505,7 +4537,7 @@ fn export_kicad(
     )
     .with_synthetic_symbols(release::synthetic_symbol_parts(board))
     .with_signal_integrity(&synth_violations)
-    .with_release_blocked(release_drc_blocked)
+    .with_release_blocked(release_drc_blocked || release_dfm_blocked)
     .with_routing(Some(release::RoutingState::from_report(
         &routing,
         &run_record,
@@ -4559,6 +4591,7 @@ fn export_kicad(
         || (has_erc_errors && !force)
         || (has_kicad_drc_errors && !force)
         || release_drc_blocked
+        || release_dfm_blocked
         || has_kicad_erc_errs
         || !blocked_by_unknown.is_empty()
         // Fail-closed: an un-routed export is not fabricable, and neither
@@ -4724,6 +4757,55 @@ fn report_unavailable_check(evidence: &synth_diagnostics::NativeCheckEvidence) {
     }
     if let Some(stderr) = &evidence.stderr {
         eprintln!("  stderr: {}", stderr.replace('\n', "\n          "));
+    }
+}
+
+/// The manufacturability stage: what a fab's DFM tool would flag on the
+/// board that ships. A board that cannot be read is `unknown`, never clean.
+fn dfm_stage(
+    pcb: &Path,
+    profile: &synth_drc::ManufacturerProfile,
+) -> (NativeCheckEvidence, Option<synth_drc::dfm::DfmReport>) {
+    const STAGE: &str = "dfm";
+    const TOOL: &str = "synth-drc";
+    let text = match std::fs::read_to_string(pcb) {
+        Ok(text) => text,
+        Err(e) => {
+            let detail = format!("cannot read {}: {e}", pcb.display());
+            let evidence = NativeCheckEvidence::unknown(
+                STAGE,
+                TOOL,
+                Vec::new(),
+                UnknownReason::ReportUnreadable,
+                detail,
+            );
+            return (evidence, None);
+        }
+    };
+    match synth_drc::dfm::check_dfm(&text, profile) {
+        Err(e) => {
+            let evidence = NativeCheckEvidence::unknown(
+                STAGE,
+                TOOL,
+                Vec::new(),
+                UnknownReason::ReportMalformed,
+                e.to_string(),
+            );
+            (evidence, None)
+        }
+        Ok(report) => {
+            let mut evidence =
+                NativeCheckEvidence::concluded(STAGE, TOOL, Vec::new(), report.danger_count());
+            let counts: Vec<String> = report
+                .counts()
+                .iter()
+                .map(|((rule, severity), n)| format!("{rule} {severity:?} {n}").to_lowercase())
+                .collect();
+            if !counts.is_empty() {
+                evidence.detail = Some(counts.join(", "));
+            }
+            (evidence, Some(report))
+        }
     }
 }
 

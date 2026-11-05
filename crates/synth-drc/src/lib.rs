@@ -60,6 +60,7 @@
 #![forbid(unsafe_code)]
 #![allow(clippy::cast_possible_wrap, clippy::similar_names)]
 
+pub mod dfm;
 mod emc;
 mod geometry;
 pub mod kicad_cli;
