@@ -1,0 +1,123 @@
+# Three-channel high-side current and bus-voltage monitor, I2C.
+#
+# Pin names follow the datasheet's, with the signs spelled out: the symbol
+# writes them `IN+1` and `IN-1`, which is not an identifier. The six sense
+# pins are `analog` rather than the symbol's `input`, because what arrives on
+# them is a shunt voltage of a few tens of millivolts.
+#
+# Pad 17 is the package's exposed pad. It is declared so the pin map covers
+# every copper pad, and it is not `required`: TI's land pattern asks for it to
+# be soldered to a thermal land, and whether that land is ground is the
+# board's decision.
+id = "ina3221_power_monitor"
+kind = "sensor"
+description = "TI INA3221 three-channel high-side current and bus voltage monitor, I²C"
+mpn = "INA3221AIRGVR"
+kicad_symbol = "Power_Management:INA3221"
+kicad_footprint = "Package_DFN_QFN:Texas_RGV0016A_VQFN-16-1EP_4x4mm_P0.65mm_EP2.1x2.1mm"
+
+[footprint_dimensions]
+width_mm = 4.75
+height_mm = 4.75
+courtyard_margin_mm = 0.25
+
+[operating_conditions]
+min_voltage_v = 2.7
+max_voltage_v = 5.5
+max_current_ma = 1.0
+
+[[pins]]
+name = "in3_n"
+number = "1"
+electrical_type = "analog"
+
+[[pins]]
+name = "in3_p"
+number = "2"
+electrical_type = "analog"
+
+[[pins]]
+name = "gnd"
+number = "3"
+electrical_type = "power_input"
+required = true
+
+[[pins]]
+name = "vs"
+number = "4"
+electrical_type = "power_input"
+required = true
+
+[[pins]]
+name = "a0"
+number = "5"
+electrical_type = "input"
+
+[[pins]]
+name = "scl"
+number = "6"
+electrical_type = "input"
+capabilities = ["i2c_scl"]
+required = true
+
+[[pins]]
+name = "sda"
+number = "7"
+electrical_type = "bidirectional"
+capabilities = ["i2c_sda"]
+required = true
+
+[[pins]]
+name = "warning"
+number = "8"
+electrical_type = "open_drain_low"
+
+[[pins]]
+name = "critical"
+number = "9"
+electrical_type = "open_drain_low"
+
+[[pins]]
+name = "pv"
+number = "10"
+electrical_type = "open_drain_low"
+
+[[pins]]
+name = "in1_n"
+number = "11"
+electrical_type = "analog"
+
+[[pins]]
+name = "in1_p"
+number = "12"
+electrical_type = "analog"
+
+[[pins]]
+name = "tc"
+number = "13"
+electrical_type = "open_drain_low"
+
+[[pins]]
+name = "in2_n"
+number = "14"
+electrical_type = "analog"
+
+[[pins]]
+name = "in2_p"
+number = "15"
+electrical_type = "analog"
+
+[[pins]]
+name = "vpu"
+number = "16"
+electrical_type = "power_input"
+
+[[pins]]
+name = "ep"
+number = "17"
+electrical_type = "passive"
+
+[[required_decoupling]]
+net = "vs"
+value = "100nf"
+count = 1
