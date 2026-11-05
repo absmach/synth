@@ -384,7 +384,7 @@ fn finalize(
     let mut repair_unavailable: Vec<String> = Vec::new();
     // A via the engine left in a pad of its own net is moved off it, with the tracks
     // that meet it, before the candidate is judged; the judging is unchanged.
-    match island_vias::move_vias_off_pads(&candidate.candidate_path) {
+    match repair_vias_in_pads(&candidate.candidate_path, &request.policy) {
         Ok(0) => {}
         Ok(moved) => eprintln!("note: moved {moved} via(s) off the pads they sat in"),
         Err(detail) => {
@@ -500,6 +500,24 @@ fn finalize(
         escape: Vec::new(),
         recommended_routing_order,
     }
+}
+
+/// Move a via the engine left in a pad of its own net off that pad, unless the
+/// board may use one.
+///
+/// The release gate refuses a via in a pad only where via-in-pad is not
+/// allowed. Where the board requires it and the process fills and caps it, a
+/// via in a pad is what the escape was asked for, and moving it takes the pad's
+/// only connection with it: the track that met the via goes along and nothing
+/// joins the pad to the via's new spot.
+fn repair_vias_in_pads(
+    candidate: &Path,
+    policy: &crate::contract::FabricationPolicy,
+) -> Result<usize, String> {
+    if policy.allow_via_in_pad {
+        return Ok(0);
+    }
+    island_vias::move_vias_off_pads(candidate)
 }
 
 /// Take the open-net figures from the connectivity pass of the delivered
@@ -816,5 +834,52 @@ mod connectivity_report_tests {
         adopt_connectivity(&mut statistics, &ConnectivityReport::default());
         assert!(statistics.open_net_names.is_empty());
         assert_eq!(statistics.open_nets, 0);
+    }
+}
+
+#[cfg(test)]
+mod via_in_pad_repair_tests {
+    use super::*;
+    use crate::contract::FabricationPolicy;
+
+    /// A via in the pad of its own net, with a track that meets it.
+    const VIA_IN_PAD: &str = r#"(kicad_pcb
+      (layers (0 "F.Cu" signal) (2 "B.Cu" signal))
+      (net 0 "") (net 1 "GND")
+      (footprint "J" (at 10 10) (layer "F.Cu")
+        (pad "1" smd rect (at 0 0) (size 0.6 0.6) (layers "F.Cu") (net 1 "GND")))
+      (via (at 10 10) (size 0.6) (drill 0.3) (layers "F.Cu" "B.Cu") (net 1))
+      (segment (start 10 10) (end 4 10) (width 0.25) (layer "F.Cu") (net 1))
+    )"#;
+
+    fn board(name: &str) -> std::path::PathBuf {
+        let dir = std::env::temp_dir().join(format!("via-in-pad-{name}-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).expect("scratch");
+        let path = dir.join("board.kicad_pcb");
+        std::fs::write(&path, VIA_IN_PAD).expect("board");
+        path
+    }
+
+    /// Where the board may use via-in-pad the via is the pad's connection, so
+    /// it stays; moving it would leave the pad joined to nothing.
+    #[test]
+    fn a_via_in_a_pad_stays_where_via_in_pad_is_allowed() {
+        let path = board("allowed");
+        let policy = FabricationPolicy {
+            allow_via_in_pad: true,
+            ..FabricationPolicy::default()
+        };
+        assert_eq!(repair_vias_in_pads(&path, &policy), Ok(0));
+        assert_eq!(std::fs::read_to_string(&path).expect("read"), VIA_IN_PAD);
+    }
+
+    /// Where it may not, the gate refuses it and the repair still moves it.
+    #[test]
+    fn a_via_in_a_pad_is_moved_where_via_in_pad_is_not_allowed() {
+        let path = board("refused");
+        assert_eq!(
+            repair_vias_in_pads(&path, &FabricationPolicy::default()),
+            Ok(1)
+        );
     }
 }
