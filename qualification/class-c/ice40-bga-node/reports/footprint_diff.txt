@@ -1,0 +1,16 @@
+Capacitor_SMD:C_0402_1005Metric  DRC warnings 14  differs in: {'F.SilkS': 14}
+Capacitor_SMD:C_0603_1608Metric  DRC warnings 3  differs in: {'F.SilkS': 3}
+Capacitor_SMD:C_0805_2012Metric  DRC warnings 6  differs in: {'F.SilkS': 6}
+Connector_PinHeader_2.54mm:PinHeader_1x12_P2.54mm_Vertical  DRC warnings 1  differs in: {'F.SilkS': 1}
+Diode_SMD:Nexperia_CFP3_SOD-123W  DRC warnings 1  differs in: {'F.SilkS': 1}
+Fuse:Fuse_1206_3216Metric  DRC warnings 1  differs in: {'F.SilkS': 1}
+Inductor_SMD:L_0603_1608Metric  DRC warnings 1  differs in: {'F.SilkS': 1}
+LED_SMD:LED_0603_1608Metric  DRC warnings 4  differs in: {'F.SilkS': 4}
+Package_BGA:BGA-121_9.0x9.0mm_Layout11x11_P0.8mm_Ball0.4mm_Pad0.35mm_NSMD  DRC warnings 1  differs in: {'F.SilkS': 1}
+Package_SO:SOIC-8_5.3x5.3mm_P1.27mm  DRC warnings 1  differs in: {'F.SilkS': 1}
+Package_TO_SOT_SMD:SOT-223-3_TabPin2  DRC warnings 1  differs in: {'F.SilkS': 1}
+Package_TO_SOT_SMD:SOT-23  DRC warnings 1  differs in: {'F.SilkS': 1}
+Package_TO_SOT_SMD:TSOT-23-5  DRC warnings 1  differs in: {'F.SilkS': 1}
+Resistor_SMD:R_0402_1005Metric  DRC warnings 8  differs in: {'F.SilkS': 8}
+Resistor_SMD:R_0603_1608Metric  DRC warnings 5  differs in: {'F.SilkS': 5}
+TestPoint:TestPoint_Pad_D1.5mm  DRC warnings 5  differs in: {'F.SilkS': 5}

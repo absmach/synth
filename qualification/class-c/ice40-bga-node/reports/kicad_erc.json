@@ -1,0 +1,983 @@
+{
+    "$schema": "https://schemas.kicad.org/erc.v1.json",
+    "coordinate_units": "mm",
+    "date": "2026-11-05T21:12:23",
+    "ignored_checks": [
+        {
+            "description": "Global label only appears once in the schematic",
+            "key": "single_global_label"
+        },
+        {
+            "description": "Four connection points are joined together",
+            "key": "four_way_junction"
+        },
+        {
+            "description": "SPICE model issue",
+            "key": "simulation_model_issue"
+        },
+        {
+            "description": "Assigned footprint doesn't match footprint filters",
+            "key": "footprint_filter"
+        }
+    ],
+    "included_severities": [
+        "error",
+        "warning",
+        "exclusion"
+    ],
+    "kicad_version": "10.0.6",
+    "sheets": [
+        {
+            "path": "/",
+            "uuid_path": "/33ae73f8-73d1-5241-a3cf-dcf46a652423",
+            "violations": [
+                {
+                    "description": "Pin not connected",
+                    "items": [
+                        {
+                            "description": "Symbol U1 Pin K5 [IOB_79, Bidirectional, Line]",
+                            "pos": {
+                                "x": 0.3302,
+                                "y": 1.9304
+                            },
+                            "uuid": "77406127-00bd-43ae-93b3-ca04a44f9947"
+                        }
+                    ],
+                    "severity": "error",
+                    "type": "pin_not_connected"
+                },
+                {
+                    "description": "Pin not connected",
+                    "items": [
+                        {
+                            "description": "Symbol U1 Pin L5 [IOB_81_GBIN5, Bidirectional, Line]",
+                            "pos": {
+                                "x": 0.3302,
+                                "y": 1.9558
+                            },
+                            "uuid": "76410dd3-835a-4562-aeaa-6a1025625a39"
+                        }
+                    ],
+                    "severity": "error",
+                    "type": "pin_not_connected"
+                },
+                {
+                    "description": "Pin not connected",
+                    "items": [
+                        {
+                            "description": "Symbol U1 Pin K6 [IOB_82_GBIN4, Bidirectional, Line]",
+                            "pos": {
+                                "x": 0.3302,
+                                "y": 1.9812
+                            },
+                            "uuid": "afa5f6c4-f741-48e7-a127-c077887ab606"
+                        }
+                    ],
+                    "severity": "error",
+                    "type": "pin_not_connected"
+                },
+                {
+                    "description": "Pin not connected",
+                    "items": [
+                        {
+                            "description": "Symbol U1 Pin J7 [IOB_86, Bidirectional, Line]",
+                            "pos": {
+                                "x": 0.3302,
+                                "y": 2.0066
+                            },
+                            "uuid": "e124bf56-8e04-40d8-9ff9-40b094192b79"
+                        }
+                    ],
+                    "severity": "error",
+                    "type": "pin_not_connected"
+                },
+                {
+                    "description": "Pin not connected",
+                    "items": [
+                        {
+                            "description": "Symbol U1 Pin H7 [IOB_87, Bidirectional, Line]",
+                            "pos": {
+                                "x": 0.3302,
+                                "y": 2.032
+                            },
+                            "uuid": "8fc4deed-e1c1-42b6-a785-e5f88cf0e7e6"
+                        }
+                    ],
+                    "severity": "error",
+                    "type": "pin_not_connected"
+                },
+                {
+                    "description": "Pin not connected",
+                    "items": [
+                        {
+                            "description": "Symbol U1 Pin K7 [IOB_89, Bidirectional, Line]",
+                            "pos": {
+                                "x": 0.3302,
+                                "y": 2.0574
+                            },
+                            "uuid": "1321c3f7-adb4-4e6b-ad13-9ac789cf589b"
+                        }
+                    ],
+                    "severity": "error",
+                    "type": "pin_not_connected"
+                },
+                {
+                    "description": "Pin not connected",
+                    "items": [
+                        {
+                            "description": "Symbol U1 Pin J8 [IOB_91, Bidirectional, Line]",
+                            "pos": {
+                                "x": 0.3302,
+                                "y": 2.0828
+                            },
+                            "uuid": "6964261b-7a47-4596-a532-cee86a2ea003"
+                        }
+                    ],
+                    "severity": "error",
+                    "type": "pin_not_connected"
+                },
+                {
+                    "description": "Pin not connected",
+                    "items": [
+                        {
+                            "description": "Symbol U1 Pin F4 [IOL_13A, Bidirectional, Line]",
+                            "pos": {
+                                "x": 0.3556,
+                                "y": 2.0828
+                            },
+                            "uuid": "ae5a0113-c0df-403c-9525-f05530fb875e"
+                        }
+                    ],
+                    "severity": "error",
+                    "type": "pin_not_connected"
+                },
+                {
+                    "description": "Pin not connected",
+                    "items": [
+                        {
+                            "description": "Symbol U1 Pin F3 [IOL_13B_GBIN7, Bidirectional, Line]",
+                            "pos": {
+                                "x": 0.3556,
+                                "y": 2.1082
+                            },
+                            "uuid": "c4a08f7f-e39d-4d19-aea5-635077bf2e18"
+                        }
+                    ],
+                    "severity": "error",
+                    "type": "pin_not_connected"
+                },
+                {
+                    "description": "Pin not connected",
+                    "items": [
+                        {
+                            "description": "Symbol U1 Pin G1 [IOL_14A_GBIN6, Bidirectional, Line]",
+                            "pos": {
+                                "x": 0.3556,
+                                "y": 2.1336
+                            },
+                            "uuid": "a0da4e6d-bd2d-4e1b-980f-21cbf90e744e"
+                        }
+                    ],
+                    "severity": "error",
+                    "type": "pin_not_connected"
+                },
+                {
+                    "description": "Pin not connected",
+                    "items": [
+                        {
+                            "description": "Symbol U1 Pin G2 [IOL_14B, Bidirectional, Line]",
+                            "pos": {
+                                "x": 0.3556,
+                                "y": 2.159
+                            },
+                            "uuid": "761b53d4-02a0-4cc8-afc5-52935661605c"
+                        }
+                    ],
+                    "severity": "error",
+                    "type": "pin_not_connected"
+                },
+                {
+                    "description": "Pin not connected",
+                    "items": [
+                        {
+                            "description": "Symbol U1 Pin G3 [IOL_17A, Bidirectional, Line]",
+                            "pos": {
+                                "x": 0.3556,
+                                "y": 2.1844
+                            },
+                            "uuid": "59cc8078-71b5-40ad-961f-605eabaa9ee8"
+                        }
+                    ],
+                    "severity": "error",
+                    "type": "pin_not_connected"
+                },
+                {
+                    "description": "Pin not connected",
+                    "items": [
+                        {
+                            "description": "Symbol U1 Pin H3 [IOL_17B, Bidirectional, Line]",
+                            "pos": {
+                                "x": 0.3556,
+                                "y": 2.2098
+                            },
+                            "uuid": "c4306c07-e6cf-40f1-af8f-8bf28241ce43"
+                        }
+                    ],
+                    "severity": "error",
+                    "type": "pin_not_connected"
+                },
+                {
+                    "description": "Pin not connected",
+                    "items": [
+                        {
+                            "description": "Symbol U1 Pin H1 [IOL_18A, Bidirectional, Line]",
+                            "pos": {
+                                "x": 0.3556,
+                                "y": 2.2352
+                            },
+                            "uuid": "dbf27556-0467-4933-9794-f66d34712ed3"
+                        }
+                    ],
+                    "severity": "error",
+                    "type": "pin_not_connected"
+                },
+                {
+                    "description": "Pin not connected",
+                    "items": [
+                        {
+                            "description": "Symbol U1 Pin H2 [IOL_18B, Bidirectional, Line]",
+                            "pos": {
+                                "x": 0.3556,
+                                "y": 2.2606
+                            },
+                            "uuid": "4c60f6ee-b6cc-49f2-b50f-73a7b9804a09"
+                        }
+                    ],
+                    "severity": "error",
+                    "type": "pin_not_connected"
+                },
+                {
+                    "description": "Pin not connected",
+                    "items": [
+                        {
+                            "description": "Symbol U1 Pin J1 [IOL_23A, Bidirectional, Line]",
+                            "pos": {
+                                "x": 0.3556,
+                                "y": 2.286
+                            },
+                            "uuid": "99ad8e2c-d277-490b-ab9e-9e521b5f0146"
+                        }
+                    ],
+                    "severity": "error",
+                    "type": "pin_not_connected"
+                },
+                {
+                    "description": "Pin not connected",
+                    "items": [
+                        {
+                            "description": "Symbol U1 Pin K1 [IOL_23B, Bidirectional, Line]",
+                            "pos": {
+                                "x": 0.3556,
+                                "y": 2.3114
+                            },
+                            "uuid": "ab093759-68c5-4214-a811-1132b0b83b28"
+                        }
+                    ],
+                    "severity": "error",
+                    "type": "pin_not_connected"
+                },
+                {
+                    "description": "Pin not connected",
+                    "items": [
+                        {
+                            "description": "Symbol U1 Pin K2 [IOL_25A, Bidirectional, Line]",
+                            "pos": {
+                                "x": 0.3556,
+                                "y": 2.3368
+                            },
+                            "uuid": "0d07599b-2607-4ffd-9b65-5b3ef23c3e18"
+                        }
+                    ],
+                    "severity": "error",
+                    "type": "pin_not_connected"
+                },
+                {
+                    "description": "Pin not connected",
+                    "items": [
+                        {
+                            "description": "Symbol U1 Pin J2 [IOL_25B, Bidirectional, Line]",
+                            "pos": {
+                                "x": 0.3556,
+                                "y": 2.3622
+                            },
+                            "uuid": "537019c2-5e7b-4e75-9027-b894eb71a6d0"
+                        }
+                    ],
+                    "severity": "error",
+                    "type": "pin_not_connected"
+                },
+                {
+                    "description": "Pin not connected",
+                    "items": [
+                        {
+                            "description": "Symbol U1 Pin B10 [VPP_FAST, Power input, Line]",
+                            "pos": {
+                                "x": 0.4572,
+                                "y": 1.9558
+                            },
+                            "uuid": "2ee74e1b-baf5-44fe-b4a1-98a48bc38bdb"
+                        }
+                    ],
+                    "severity": "error",
+                    "type": "pin_not_connected"
+                },
+                {
+                    "description": "Input Power pin not driven by any Output Power pins",
+                    "items": [
+                        {
+                            "description": "Symbol U1 Pin B10 [VPP_FAST, Power input, Line]",
+                            "pos": {
+                                "x": 0.4572,
+                                "y": 1.9558
+                            },
+                            "uuid": "2ee74e1b-baf5-44fe-b4a1-98a48bc38bdb"
+                        }
+                    ],
+                    "severity": "error",
+                    "type": "power_pin_not_driven"
+                },
+                {
+                    "description": "Pin not connected",
+                    "items": [
+                        {
+                            "description": "Symbol #FLG9650 Pin 1 [Power output, Line]",
+                            "pos": {
+                                "x": 0.6604,
+                                "y": 1.5494
+                            },
+                            "uuid": "827ef8f0-67d7-4bb5-b8af-595da4304045"
+                        }
+                    ],
+                    "severity": "error",
+                    "type": "pin_not_connected"
+                },
+                {
+                    "description": "Input Power pin not driven by any Output Power pins",
+                    "items": [
+                        {
+                            "description": "Symbol #PWR1727 Pin 1 [Power input, Line]",
+                            "pos": {
+                                "x": 3.2766,
+                                "y": 0.9779
+                            },
+                            "uuid": "782501df-a13a-4fcf-bbb9-94254f2f6b3e"
+                        }
+                    ],
+                    "severity": "error",
+                    "type": "power_pin_not_driven"
+                },
+                {
+                    "description": "Both FA4 and LED_U2_R are attached to the same items; FA4 will be used in the netlist",
+                    "items": [
+                        {
+                            "description": "Global Label 'FA4'",
+                            "pos": {
+                                "x": 0.3048,
+                                "y": 1.8288
+                            },
+                            "uuid": "3283cbad-7f08-5eef-a3b3-e110d9b5b544"
+                        },
+                        {
+                            "description": "Global Label 'LED_U2_R'",
+                            "pos": {
+                                "x": 0.2794,
+                                "y": 1.8288
+                            },
+                            "uuid": "4d348a72-043d-5686-bc43-996aa9aa281f"
+                        }
+                    ],
+                    "severity": "warning",
+                    "type": "multiple_net_names"
+                },
+                {
+                    "description": "Unconnected \"no connection\" flag",
+                    "items": [
+                        {
+                            "description": "No Connect",
+                            "pos": {
+                                "x": 0.3302,
+                                "y": 1.4478
+                            },
+                            "uuid": "0d1e07a4-050f-5620-824e-231c59ab6989"
+                        }
+                    ],
+                    "severity": "warning",
+                    "type": "no_connect_dangling"
+                },
+                {
+                    "description": "Unconnected \"no connection\" flag",
+                    "items": [
+                        {
+                            "description": "No Connect",
+                            "pos": {
+                                "x": 0.3302,
+                                "y": 1.4732
+                            },
+                            "uuid": "57557918-9f7a-5c35-8b90-f563917af444"
+                        }
+                    ],
+                    "severity": "warning",
+                    "type": "no_connect_dangling"
+                },
+                {
+                    "description": "Unconnected \"no connection\" flag",
+                    "items": [
+                        {
+                            "description": "No Connect",
+                            "pos": {
+                                "x": 0.3302,
+                                "y": 1.4986
+                            },
+                            "uuid": "2499d842-09c7-5a25-a8ff-ec02d667a582"
+                        }
+                    ],
+                    "severity": "warning",
+                    "type": "no_connect_dangling"
+                },
+                {
+                    "description": "Unconnected \"no connection\" flag",
+                    "items": [
+                        {
+                            "description": "No Connect",
+                            "pos": {
+                                "x": 0.3302,
+                                "y": 1.524
+                            },
+                            "uuid": "74c71abe-29be-53e3-8de2-1acca3d7732a"
+                        }
+                    ],
+                    "severity": "warning",
+                    "type": "no_connect_dangling"
+                },
+                {
+                    "description": "Unconnected \"no connection\" flag",
+                    "items": [
+                        {
+                            "description": "No Connect",
+                            "pos": {
+                                "x": 0.3302,
+                                "y": 1.5494
+                            },
+                            "uuid": "d3faad0e-9a89-57ca-acb9-a94f1f3b50c0"
+                        }
+                    ],
+                    "severity": "warning",
+                    "type": "no_connect_dangling"
+                },
+                {
+                    "description": "Unconnected \"no connection\" flag",
+                    "items": [
+                        {
+                            "description": "No Connect",
+                            "pos": {
+                                "x": 0.3302,
+                                "y": 1.651
+                            },
+                            "uuid": "75f228d0-6c59-59cb-9b66-a6ee4d90cc25"
+                        }
+                    ],
+                    "severity": "warning",
+                    "type": "no_connect_dangling"
+                },
+                {
+                    "description": "Unconnected \"no connection\" flag",
+                    "items": [
+                        {
+                            "description": "No Connect",
+                            "pos": {
+                                "x": 0.3302,
+                                "y": 1.6764
+                            },
+                            "uuid": "dd409923-8e57-5fed-b245-9390ba029b63"
+                        }
+                    ],
+                    "severity": "warning",
+                    "type": "no_connect_dangling"
+                },
+                {
+                    "description": "Unconnected \"no connection\" flag",
+                    "items": [
+                        {
+                            "description": "No Connect",
+                            "pos": {
+                                "x": 0.3556,
+                                "y": 1.3462
+                            },
+                            "uuid": "81dacc81-0ca1-589a-bd04-eeba2e1a5c02"
+                        }
+                    ],
+                    "severity": "warning",
+                    "type": "no_connect_dangling"
+                },
+                {
+                    "description": "Unconnected \"no connection\" flag",
+                    "items": [
+                        {
+                            "description": "No Connect",
+                            "pos": {
+                                "x": 0.3556,
+                                "y": 1.3716
+                            },
+                            "uuid": "6ae67dda-81d5-5d07-b2a8-1e162075d124"
+                        }
+                    ],
+                    "severity": "warning",
+                    "type": "no_connect_dangling"
+                },
+                {
+                    "description": "Unconnected \"no connection\" flag",
+                    "items": [
+                        {
+                            "description": "No Connect",
+                            "pos": {
+                                "x": 0.3556,
+                                "y": 1.397
+                            },
+                            "uuid": "27a83c46-137c-5105-a8ef-a35a880ea186"
+                        }
+                    ],
+                    "severity": "warning",
+                    "type": "no_connect_dangling"
+                },
+                {
+                    "description": "A pin with a \"no connection\" flag is connected",
+                    "items": [
+                        {
+                            "description": "Symbol U1 Pin J11 [IOR_114, Bidirectional, Line]",
+                            "pos": {
+                                "x": 0.3556,
+                                "y": 1.5494
+                            },
+                            "uuid": "2c156e99-8e46-423b-accf-340336062e47"
+                        },
+                        {
+                            "description": "No Connect",
+                            "pos": {
+                                "x": 0.3556,
+                                "y": 1.5494
+                            },
+                            "uuid": "46321d3a-d9f9-59fc-8f8e-598a6d3ad786"
+                        }
+                    ],
+                    "severity": "warning",
+                    "type": "no_connect_connected"
+                },
+                {
+                    "description": "A pin with a \"no connection\" flag is connected",
+                    "items": [
+                        {
+                            "description": "Symbol U1 Pin K11 [IOR_115, Bidirectional, Line]",
+                            "pos": {
+                                "x": 0.3556,
+                                "y": 1.5748
+                            },
+                            "uuid": "c0d27f0e-3034-4dbe-9a53-41edf05fb1e9"
+                        },
+                        {
+                            "description": "No Connect",
+                            "pos": {
+                                "x": 0.3556,
+                                "y": 1.5748
+                            },
+                            "uuid": "4555399f-5178-5d62-8576-993740a21e28"
+                        }
+                    ],
+                    "severity": "warning",
+                    "type": "no_connect_connected"
+                },
+                {
+                    "description": "A pin with a \"no connection\" flag is connected",
+                    "items": [
+                        {
+                            "description": "Symbol U1 Pin H10 [IOR_116, Bidirectional, Line]",
+                            "pos": {
+                                "x": 0.3556,
+                                "y": 1.6002
+                            },
+                            "uuid": "99a18ab3-9e2a-4572-b8cd-101ef6116486"
+                        },
+                        {
+                            "description": "No Connect",
+                            "pos": {
+                                "x": 0.3556,
+                                "y": 1.6002
+                            },
+                            "uuid": "de28fb68-18ea-5c9a-9c5f-b76ab0e9de5e"
+                        }
+                    ],
+                    "severity": "warning",
+                    "type": "no_connect_connected"
+                },
+                {
+                    "description": "A pin with a \"no connection\" flag is connected",
+                    "items": [
+                        {
+                            "description": "Symbol U1 Pin J10 [IOR_117, Bidirectional, Line]",
+                            "pos": {
+                                "x": 0.3556,
+                                "y": 1.6256
+                            },
+                            "uuid": "df4eaf97-ebea-46cd-99ec-d3626ac4ef43"
+                        },
+                        {
+                            "description": "No Connect",
+                            "pos": {
+                                "x": 0.3556,
+                                "y": 1.6256
+                            },
+                            "uuid": "c132828e-dbde-59c9-abab-3b6630beca5f"
+                        }
+                    ],
+                    "severity": "warning",
+                    "type": "no_connect_connected"
+                },
+                {
+                    "description": "A pin with a \"no connection\" flag is connected",
+                    "items": [
+                        {
+                            "description": "Symbol U1 Pin G8 [IOR_118, Bidirectional, Line]",
+                            "pos": {
+                                "x": 0.3556,
+                                "y": 1.651
+                            },
+                            "uuid": "3afa522d-9d1a-4e23-9756-e7146db255ab"
+                        },
+                        {
+                            "description": "No Connect",
+                            "pos": {
+                                "x": 0.3556,
+                                "y": 1.651
+                            },
+                            "uuid": "ae9c686c-66db-59c3-8eb7-cf1e3331c30b"
+                        }
+                    ],
+                    "severity": "warning",
+                    "type": "no_connect_connected"
+                },
+                {
+                    "description": "A pin with a \"no connection\" flag is connected",
+                    "items": [
+                        {
+                            "description": "Symbol U1 Pin H11 [IOR_119, Bidirectional, Line]",
+                            "pos": {
+                                "x": 0.3556,
+                                "y": 1.6764
+                            },
+                            "uuid": "9410264d-d6d7-4218-bb9f-dea12c67ec83"
+                        },
+                        {
+                            "description": "No Connect",
+                            "pos": {
+                                "x": 0.3556,
+                                "y": 1.6764
+                            },
+                            "uuid": "e116d5d8-a82e-504a-9f65-bb5cc4d9ec7d"
+                        }
+                    ],
+                    "severity": "warning",
+                    "type": "no_connect_connected"
+                },
+                {
+                    "description": "A pin with a \"no connection\" flag is connected",
+                    "items": [
+                        {
+                            "description": "Symbol U1 Pin G10 [IOR_120, Bidirectional, Line]",
+                            "pos": {
+                                "x": 0.3556,
+                                "y": 1.7018
+                            },
+                            "uuid": "34a11918-6164-4fc6-87b4-3e3a2730e086"
+                        },
+                        {
+                            "description": "No Connect",
+                            "pos": {
+                                "x": 0.3556,
+                                "y": 1.7018
+                            },
+                            "uuid": "f8b7b9e6-ba41-557e-ac8c-532a6b97baec"
+                        }
+                    ],
+                    "severity": "warning",
+                    "type": "no_connect_connected"
+                },
+                {
+                    "description": "A pin with a \"no connection\" flag is connected",
+                    "items": [
+                        {
+                            "description": "Symbol U1 Pin G9 [IOR_128, Bidirectional, Line]",
+                            "pos": {
+                                "x": 0.3556,
+                                "y": 1.7272
+                            },
+                            "uuid": "e0ef2833-bbea-459c-8b71-14b53ae4bcd3"
+                        },
+                        {
+                            "description": "No Connect",
+                            "pos": {
+                                "x": 0.3556,
+                                "y": 1.7272
+                            },
+                            "uuid": "4fb0fc54-f766-5c31-8d81-e85ea4c7ee22"
+                        }
+                    ],
+                    "severity": "warning",
+                    "type": "no_connect_connected"
+                },
+                {
+                    "description": "A pin with a \"no connection\" flag is connected",
+                    "items": [
+                        {
+                            "description": "Symbol U1 Pin F9 [IOR_137, Bidirectional, Line]",
+                            "pos": {
+                                "x": 0.3556,
+                                "y": 1.8034
+                            },
+                            "uuid": "ecdbb50a-5230-4977-bf8b-3840a6b8c568"
+                        },
+                        {
+                            "description": "No Connect",
+                            "pos": {
+                                "x": 0.3556,
+                                "y": 1.8034
+                            },
+                            "uuid": "e8f21d8f-807d-5652-a7c0-af65fbaa13a9"
+                        }
+                    ],
+                    "severity": "warning",
+                    "type": "no_connect_connected"
+                },
+                {
+                    "description": "A pin with a \"no connection\" flag is connected",
+                    "items": [
+                        {
+                            "description": "Symbol U1 Pin E10 [IOR_141_GBIN2, Bidirectional, Line]",
+                            "pos": {
+                                "x": 0.3556,
+                                "y": 1.8542
+                            },
+                            "uuid": "f1869e42-7bf4-4211-81cd-e95fd491131d"
+                        },
+                        {
+                            "description": "No Connect",
+                            "pos": {
+                                "x": 0.3556,
+                                "y": 1.8542
+                            },
+                            "uuid": "63f7231d-7122-54c5-bcb2-52cc422b5586"
+                        }
+                    ],
+                    "severity": "warning",
+                    "type": "no_connect_connected"
+                },
+                {
+                    "description": "A pin with a \"no connection\" flag is connected",
+                    "items": [
+                        {
+                            "description": "Symbol U1 Pin E9 [IOR_144, Bidirectional, Line]",
+                            "pos": {
+                                "x": 0.3556,
+                                "y": 1.8796
+                            },
+                            "uuid": "6fac8edd-786e-4a6b-b199-1b44ee47b860"
+                        },
+                        {
+                            "description": "No Connect",
+                            "pos": {
+                                "x": 0.3556,
+                                "y": 1.8796
+                            },
+                            "uuid": "d9821df8-f1fd-5e1a-bfd7-6aa4952a5463"
+                        }
+                    ],
+                    "severity": "warning",
+                    "type": "no_connect_connected"
+                },
+                {
+                    "description": "A pin with a \"no connection\" flag is connected",
+                    "items": [
+                        {
+                            "description": "Symbol U1 Pin E8 [IOR_146, Bidirectional, Line]",
+                            "pos": {
+                                "x": 0.3556,
+                                "y": 1.905
+                            },
+                            "uuid": "c86296ff-bc36-4ed7-a2fc-688bceabd408"
+                        },
+                        {
+                            "description": "No Connect",
+                            "pos": {
+                                "x": 0.3556,
+                                "y": 1.905
+                            },
+                            "uuid": "80051c0c-a8e5-54ef-9021-6a387ef2fa38"
+                        }
+                    ],
+                    "severity": "warning",
+                    "type": "no_connect_connected"
+                },
+                {
+                    "description": "A pin with a \"no connection\" flag is connected",
+                    "items": [
+                        {
+                            "description": "Symbol U1 Pin D9 [IOR_147, Bidirectional, Line]",
+                            "pos": {
+                                "x": 0.3556,
+                                "y": 1.9304
+                            },
+                            "uuid": "037ef87c-dfdd-48b5-90cd-8fd2ae0d8a55"
+                        },
+                        {
+                            "description": "No Connect",
+                            "pos": {
+                                "x": 0.3556,
+                                "y": 1.9304
+                            },
+                            "uuid": "83120da8-ec72-578c-83e4-bed7febdefe7"
+                        }
+                    ],
+                    "severity": "warning",
+                    "type": "no_connect_connected"
+                },
+                {
+                    "description": "A pin with a \"no connection\" flag is connected",
+                    "items": [
+                        {
+                            "description": "Symbol U1 Pin E11 [IOR_148, Bidirectional, Line]",
+                            "pos": {
+                                "x": 0.3556,
+                                "y": 1.9558
+                            },
+                            "uuid": "7c1edc02-abe6-4aca-a1cf-b96d81e50aa2"
+                        },
+                        {
+                            "description": "No Connect",
+                            "pos": {
+                                "x": 0.3556,
+                                "y": 1.9558
+                            },
+                            "uuid": "c48ccfe6-b4ae-50b1-9fca-68bc2d47e682"
+                        }
+                    ],
+                    "severity": "warning",
+                    "type": "no_connect_connected"
+                },
+                {
+                    "description": "Unconnected wire endpoint",
+                    "items": [
+                        {
+                            "description": "Vertical Wire, length 0.0254 mm",
+                            "pos": {
+                                "x": 0.4572,
+                                "y": 1.4478
+                            },
+                            "uuid": "3c3dc30c-2441-5cd9-a8bd-5e003d4bdb4b"
+                        }
+                    ],
+                    "severity": "warning",
+                    "type": "unconnected_wire_endpoint"
+                },
+                {
+                    "description": "Symbol 'ICE40HX4K-BG121' doesn't match copy in library 'FPGA_Lattice'",
+                    "items": [
+                        {
+                            "description": "Symbol U1 [ICE40HX4K-BG121]",
+                            "pos": {
+                                "x": 0.4826,
+                                "y": 1.6256
+                            },
+                            "uuid": "360e8fb8-6688-5cbb-9d39-9b141e3fa320"
+                        }
+                    ],
+                    "severity": "warning",
+                    "type": "lib_symbol_mismatch"
+                },
+                {
+                    "description": "Symbol 'ICE40HX4K-BG121' doesn't match copy in library 'FPGA_Lattice'",
+                    "items": [
+                        {
+                            "description": "Symbol U1 [ICE40HX4K-BG121]",
+                            "pos": {
+                                "x": 0.4826,
+                                "y": 1.7526
+                            },
+                            "uuid": "590cffad-7f94-50ef-a47d-6c8ee3978fc3"
+                        }
+                    ],
+                    "severity": "warning",
+                    "type": "lib_symbol_mismatch"
+                },
+                {
+                    "description": "Symbol 'ICE40HX4K-BG121' doesn't match copy in library 'FPGA_Lattice'",
+                    "items": [
+                        {
+                            "description": "Symbol U1 [ICE40HX4K-BG121]",
+                            "pos": {
+                                "x": 0.4826,
+                                "y": 1.8796
+                            },
+                            "uuid": "99998c9e-539c-5a91-b650-9e4483afd013"
+                        }
+                    ],
+                    "severity": "warning",
+                    "type": "lib_symbol_mismatch"
+                },
+                {
+                    "description": "Symbol 'ICE40HX4K-BG121' doesn't match copy in library 'FPGA_Lattice'",
+                    "items": [
+                        {
+                            "description": "Symbol U1 [ICE40HX4K-BG121]",
+                            "pos": {
+                                "x": 0.4826,
+                                "y": 2.0066
+                            },
+                            "uuid": "fe2f2ceb-79c4-5b14-91b9-ab5a97be68a1"
+                        }
+                    ],
+                    "severity": "warning",
+                    "type": "lib_symbol_mismatch"
+                },
+                {
+                    "description": "Symbol 'ICE40HX4K-BG121' doesn't match copy in library 'FPGA_Lattice'",
+                    "items": [
+                        {
+                            "description": "Symbol U1 [ICE40HX4K-BG121]",
+                            "pos": {
+                                "x": 0.4826,
+                                "y": 2.1336
+                            },
+                            "uuid": "f46f0cb6-53b4-5f90-a71c-b275f1574e86"
+                        }
+                    ],
+                    "severity": "warning",
+                    "type": "lib_symbol_mismatch"
+                },
+                {
+                    "description": "Symbol 'Si2301CDS' not found in symbol library 'Transistor_FET'",
+                    "items": [
+                        {
+                            "description": "Symbol Q1 [Si2301CDS]",
+                            "pos": {
+                                "x": 1.7018,
+                                "y": 0.3048
+                            },
+                            "uuid": "200cbc40-f76d-585a-b863-a575cd35c76b"
+                        }
+                    ],
+                    "severity": "warning",
+                    "type": "lib_symbol_issues"
+                }
+            ]
+        }
+    ],
+    "source": "ice40_bga_node.kicad_sch"
+}

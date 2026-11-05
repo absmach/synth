@@ -1,0 +1,42 @@
+[
+  {
+    "permille": 1000,
+    "passed": true,
+    "width_mm": 46.99,
+    "height_mm": 43.99,
+    "fill_percent": 31.150601514660604,
+    "reason": "released"
+  },
+  {
+    "permille": 960,
+    "passed": true,
+    "width_mm": 44.99,
+    "height_mm": 41.99,
+    "fill_percent": 34.08505322105658,
+    "reason": "released"
+  },
+  {
+    "permille": 920,
+    "passed": true,
+    "width_mm": 43.99,
+    "height_mm": 40.99,
+    "fill_percent": 35.710338257475044,
+    "reason": "released"
+  },
+  {
+    "permille": 880,
+    "passed": false,
+    "width_mm": 41.99,
+    "height_mm": 39.9,
+    "fill_percent": 38.43324672720139,
+    "reason": "kicad-cli pcb drc reported 6 blocking violation(s): clearance: Clearance violation ( clearance 0.1270 mm; actual 0.0000 mm) (Pad 4 [<no net>] of U4 on F.Cu / Pad 1 [VCCPLL] of C22 on F.Cu); shorting_items: Items shorting two nets (nets +1V2"
+  },
+  {
+    "permille": 900,
+    "passed": false,
+    "width_mm": 42.99,
+    "height_mm": 39.99,
+    "fill_percent": 37.45475796723078,
+    "reason": "kicad-cli pcb drc reported 4 blocking violation(s): items_not_allowed: Items not allowed (keepout area 'H1 screw head') (Via [+3V3] on F.Cu - B.Cu); items_not_allowed: Items not allowed (Track [+3V3] on F.Cu, length 1.0000 mm); courtyards_o"
+  }
+]

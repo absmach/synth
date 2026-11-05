@@ -1,0 +1,8 @@
+board solid: =>[0:1:1:44] ; other unmatched top-level parts: 0
+components in the STEP 55; footprints with a body 55; mounting holes (no body) 2
+identities: match
+positions: worst x/y difference 0.0000 mm, worst rotation difference 0.000 deg, over 55 components
+outline: STEP 43.99 x 39.99 mm, Edge.Cuts 43.99 x 39.99 mm, thickness 1.37 mm
+holes by diameter, STEP: {1.0: 14, 2.5: 2}  PCB drills: {1.0: 14, 2.5: 2}
+body beyond courtyard by more than 0.25 mm: none
+PROBLEMS: none

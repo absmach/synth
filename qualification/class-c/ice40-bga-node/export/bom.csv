@@ -1,0 +1,58 @@
+refdes,value,kind,description,kicad_symbol,kicad_footprint,lcsc_pn,mpn
+C1,10uF,capacitor,"Generic 0805 MLCC, X7R/X5R, any value",Device:C,Capacitor_SMD:C_0805_2012Metric,,
+C10,100nF,capacitor,"Generic 0402 MLCC, X7R/X5R, any value",Device:C,Capacitor_SMD:C_0402_1005Metric,,
+C11,100nF,capacitor,"Generic 0402 MLCC, X7R/X5R, any value",Device:C,Capacitor_SMD:C_0402_1005Metric,,
+C12,100nF,capacitor,"Generic 0402 MLCC, X7R/X5R, any value",Device:C,Capacitor_SMD:C_0402_1005Metric,,
+C13,100nF,capacitor,"Generic 0402 MLCC, X7R/X5R, any value",Device:C,Capacitor_SMD:C_0402_1005Metric,,
+C14,100nF,capacitor,"Generic 0402 MLCC, X7R/X5R, any value",Device:C,Capacitor_SMD:C_0402_1005Metric,,
+C15,100nF,capacitor,"Generic 0402 MLCC, X7R/X5R, any value",Device:C,Capacitor_SMD:C_0402_1005Metric,,
+C16,100nF,capacitor,"Generic 0402 MLCC, X7R/X5R, any value",Device:C,Capacitor_SMD:C_0402_1005Metric,,
+C17,100nF,capacitor,"Generic 0402 MLCC, X7R/X5R, any value",Device:C,Capacitor_SMD:C_0402_1005Metric,,
+C18,100nF,capacitor,"Generic 0402 MLCC, X7R/X5R, any value",Device:C,Capacitor_SMD:C_0402_1005Metric,,
+C19,100nF,capacitor,"Generic 0402 MLCC, X7R/X5R, any value",Device:C,Capacitor_SMD:C_0402_1005Metric,,
+C2,10uF,capacitor,"Generic 0805 MLCC, X7R/X5R, any value",Device:C,Capacitor_SMD:C_0805_2012Metric,,
+C20,100nF,capacitor,"Generic 0402 MLCC, X7R/X5R, any value",Device:C,Capacitor_SMD:C_0402_1005Metric,,
+C21,100nF,capacitor,"Generic 0402 MLCC, X7R/X5R, any value",Device:C,Capacitor_SMD:C_0402_1005Metric,,
+C22,1uF,capacitor,"Generic 0603 MLCC, X7R/X5R, any value",Device:C,Capacitor_SMD:C_0603_1608Metric,,
+C26,100nF,capacitor,"Generic 0402 MLCC, X7R/X5R, any value",Device:C,Capacitor_SMD:C_0402_1005Metric,,
+C3,10uF,capacitor,"Generic 0805 MLCC, X7R/X5R, any value",Device:C,Capacitor_SMD:C_0805_2012Metric,,
+C4,10uF,capacitor,"Generic 0805 MLCC, X7R/X5R, any value",Device:C,Capacitor_SMD:C_0805_2012Metric,,
+C5,10uF,capacitor,"Generic 0805 MLCC, X7R/X5R, any value",Device:C,Capacitor_SMD:C_0805_2012Metric,,
+C6,1uF,capacitor,"Generic 0603 MLCC, X7R/X5R, any value",Device:C,Capacitor_SMD:C_0603_1608Metric,,
+C7,1uF,capacitor,"Generic 0603 MLCC, X7R/X5R, any value",Device:C,Capacitor_SMD:C_0603_1608Metric,,
+C8,4.7uF,capacitor,"Generic 0805 MLCC, X7R/X5R, any value",Device:C,Capacitor_SMD:C_0805_2012Metric,,
+C9,100nF,capacitor,"Generic 0402 MLCC, X7R/X5R, any value",Device:C,Capacitor_SMD:C_0402_1005Metric,,
+D1,PTVS6V0S1UR,diode,"Nexperia PTVS6V0S1UR 400 W unidirectional TVS, 6.0 V standoff, SOD123W, for VBUS and CC",Device:D_Zener,Diode_SMD:Nexperia_CFP3_SOD-123W,,PTVS6V0S1UR
+D2,0603-GREEN,led,"Green LED, 0603 package, ~2.2V Vf",Device:LED,LED_SMD:LED_0603_1608Metric,C72043,0603-GREEN
+D3,(no value),led,"Amber surface-mount LED, 0603",Device:LED,LED_SMD:LED_0603_1608Metric,,
+D4,0603-RED,led,"Red LED, 0603 package, ~2.0V Vf",Device:LED,LED_SMD:LED_0603_1608Metric,C2286,0603-RED
+D6,0603-RED,led,"Red LED, 0603 package, ~2.0V Vf",Device:LED,LED_SMD:LED_0603_1608Metric,C2286,0603-RED
+F1,MF-NSMF050-2,fuse,"Bourns MF-NSMF050-2 resettable fuse, 0.5 A hold, 13.2 V, 1206",Device:Polyfuse,Fuse:Fuse_1206_3216Metric,C75464,MF-NSMF050-2
+FB1,(no value),inductor,"0603 ferrite bead, 600Ω @ 100MHz — EMI suppression",Device:FerriteBead,Inductor_SMD:L_0603_1608Metric,,
+H1,(no value),mounting_hole,M2.5 non-plated mounting hole (NPTH) for a board corner,Mechanical:MountingHole,MountingHole:MountingHole_2.5mm,,
+H2,(no value),mounting_hole,M2.5 non-plated mounting hole (NPTH) for a board corner,Mechanical:MountingHole,MountingHole:MountingHole_2.5mm,,
+J1,HX PZ2.54-1x2P ZZ,connector,"1x2 through-hole pin header, 2.54mm pitch, for a jumper",Connector_Generic:Conn_01x02,Connector_PinHeader_2.54mm:PinHeader_1x02_P2.54mm_Vertical,C32713268,HX PZ2.54-1x2P ZZ
+J3,(no value),connector,"1x12 through-hole pin header, 2.54 mm pitch (GPIO); datasheet_url is the product page of the Harwin M20 series, no manufacturer PDF link was verifiable",Connector_Generic:Conn_01x12,Connector_PinHeader_2.54mm:PinHeader_1x12_P2.54mm_Vertical,,
+Q1,SI2301CDS-T1-GE3,transistor,"Vishay Si2301 P-channel power MOSFET, SOT-23",Transistor_FET:Si2301CDS,Package_TO_SOT_SMD:SOT-23,C10487,SI2301CDS-T1-GE3
+R10,1k,resistor,"Generic 0603 thick-film resistor, any value",Device:R_US,Resistor_SMD:R_0603_1608Metric,,
+R11,100,resistor,"Generic 0402 thick-film resistor, any value",Device:R_US,Resistor_SMD:R_0402_1005Metric,,
+R14,100,resistor,"Generic 0402 thick-film resistor, any value",Device:R_US,Resistor_SMD:R_0402_1005Metric,,
+R15,100,resistor,"Generic 0402 thick-film resistor, any value",Device:R_US,Resistor_SMD:R_0402_1005Metric,,
+R16,100,resistor,"Generic 0402 thick-film resistor, any value",Device:R_US,Resistor_SMD:R_0402_1005Metric,,
+R19,10k,resistor,"Generic 0402 thick-film resistor, any value",Device:R_US,Resistor_SMD:R_0402_1005Metric,,
+R20,10k,resistor,"Generic 0402 thick-film resistor, any value",Device:R_US,Resistor_SMD:R_0402_1005Metric,,
+R3,100k,resistor,"Generic 0603 thick-film resistor, any value",Device:R_US,Resistor_SMD:R_0603_1608Metric,,
+R4,10k,resistor,"Generic 0402 thick-film resistor, any value",Device:R_US,Resistor_SMD:R_0402_1005Metric,,
+R5,10k,resistor,"Generic 0402 thick-film resistor, any value",Device:R_US,Resistor_SMD:R_0402_1005Metric,,
+R7,1k,resistor,"Generic 0603 thick-film resistor, any value",Device:R_US,Resistor_SMD:R_0603_1608Metric,,
+R8,1k,resistor,"Generic 0603 thick-film resistor, any value",Device:R_US,Resistor_SMD:R_0603_1608Metric,,
+R9,1k,resistor,"Generic 0603 thick-film resistor, any value",Device:R_US,Resistor_SMD:R_0603_1608Metric,,
+TP1,(no value),testpoint,"SMD test point pad, 1.5 mm — probe point for a net",Connector:TestPoint,TestPoint:TestPoint_Pad_D1.5mm,,
+TP2,(no value),testpoint,"SMD test point pad, 1.5 mm — probe point for a net",Connector:TestPoint,TestPoint:TestPoint_Pad_D1.5mm,,
+TP3,(no value),testpoint,"SMD test point pad, 1.5 mm — probe point for a net",Connector:TestPoint,TestPoint:TestPoint_Pad_D1.5mm,,
+TP4,(no value),testpoint,"SMD test point pad, 1.5 mm — probe point for a net",Connector:TestPoint,TestPoint:TestPoint_Pad_D1.5mm,,
+TP5,(no value),testpoint,"SMD test point pad, 1.5 mm — probe point for a net",Connector:TestPoint,TestPoint:TestPoint_Pad_D1.5mm,,
+U1,ICE40HX4K-BG121,fpga,"Lattice iCE40 HX4K FPGA, 121-ball 0.8mm BGA. Copy of registry part ice40hx4k_bg121 with exactly one change: vpp_fast (B10) is a passive pin that is not required, so it can be left unconnected.",FPGA_Lattice:ICE40HX4K-BG121,Package_BGA:BGA-121_9.0x9.0mm_Layout11x11_P0.8mm_Ball0.4mm_Pad0.35mm_NSMD,,ICE40HX4K-BG121
+U2,W25Q128JVSIQ,memory,"Winbond W25Q128JVSIQ 128Mbit SPI NOR flash, SOIC-8 208 mil (5.3 mm body, 7.7 mm lead span, 1.27 mm pitch)",Memory_Flash:W25Q128JVS,Package_SO:SOIC-8_5.3x5.3mm_P1.27mm,C97521,W25Q128JVSIQ
+U3,AMS1117-3.3,regulator,"AMS1117-3.3 fixed 3.3V LDO regulator, SOT-223 — common JLC stock",Regulator_Linear:AMS1117-3.3,Package_TO_SOT_SMD:SOT-223-3_TabPin2,C6186,AMS1117-3.3
+U4,TLV70012-1.2,regulator,"TI TLV70012 1.2 V fixed LDO, 200 mA, 2.0 to 5.5 V input, SOT-23-THIN (DDC, TSOT-23-5). Pinout 1 IN, 2 GND, 3 EN, 4 NC, 5 OUT per TI TLV700xx datasheet SLVSA00; 1 uF input and output capacitors.",Regulator_Linear:TLV70012_SOT23-5,Package_TO_SOT_SMD:TSOT-23-5,,TLV70012DDCR
