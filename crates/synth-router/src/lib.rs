@@ -468,16 +468,7 @@ fn finalize(
     }
     // The router's own open-net claim is kept for provenance, but the
     // connectivity pass is what fills the fields the report reports on.
-    statistics.connected_nets = verdict.connectivity.connected_nets;
-    statistics.open_nets = verdict.connectivity.open_nets;
-    if statistics.open_net_names.is_empty() {
-        statistics.open_net_names = verdict
-            .connectivity
-            .open
-            .iter()
-            .map(|o| o.net.clone())
-            .collect();
-    }
+    adopt_connectivity(&mut statistics, &verdict.connectivity);
 
     let recommended_routing_order = recommended_order(&verdict.connectivity.open);
 
@@ -502,6 +493,23 @@ fn finalize(
         escape: Vec::new(),
         recommended_routing_order,
     }
+}
+
+/// Take the open-net figures from the connectivity pass of the delivered
+/// board, names included.
+///
+/// The engine's own list is a claim, and it is kept under `engine_findings`.
+/// Keeping it as the names while the counts came from the pass made the report
+/// disagree with itself: a router that named one net open while the pass found
+/// another left the count, the names and the validation pointing at different
+/// nets.
+fn adopt_connectivity(
+    statistics: &mut crate::result::RouteStatistics,
+    connectivity: &crate::validate::ConnectivityReport,
+) {
+    statistics.connected_nets = connectivity.connected_nets;
+    statistics.open_nets = connectivity.open_nets;
+    statistics.open_net_names = connectivity.open.iter().map(|o| o.net.clone()).collect();
 }
 
 /// Net names to try first on a retry, hardest first.
@@ -754,5 +762,52 @@ mod order_tests {
         request.kicad_routing_tools.ordering = None;
         request.engine = RouterEngine::Freerouting;
         assert!(retry_orderings(&request).is_empty());
+    }
+}
+
+#[cfg(test)]
+mod connectivity_report_tests {
+    use super::*;
+    use crate::result::RouteStatistics;
+    use crate::validate::{ConnectivityReport, OpenConnection};
+
+    /// The engine said `+3V3` was open; the delivered board's connectivity
+    /// pass found `+1V8`. The report names the net the pass found.
+    #[test]
+    fn the_open_net_names_are_those_of_the_connectivity_pass() {
+        let mut statistics = RouteStatistics {
+            open_nets: 1,
+            open_net_names: vec!["+3V3".to_string()],
+            ..RouteStatistics::default()
+        };
+        let connectivity = ConnectivityReport {
+            connected_nets: 37,
+            open_nets: 1,
+            open: vec![OpenConnection {
+                net: "+1V8".to_string(),
+                pad: "C13.1".to_string(),
+                island_size: 3,
+                pad_count: 8,
+            }],
+            ..ConnectivityReport::default()
+        };
+        adopt_connectivity(&mut statistics, &connectivity);
+        assert_eq!(statistics.open_net_names, vec!["+1V8".to_string()]);
+        assert_eq!(statistics.open_nets, 1);
+        assert_eq!(statistics.connected_nets, 37);
+    }
+
+    /// A router that claims an open net the pass finds connected must not
+    /// leave the name behind with a count of zero.
+    #[test]
+    fn a_claim_the_pass_does_not_confirm_leaves_no_name() {
+        let mut statistics = RouteStatistics {
+            open_nets: 1,
+            open_net_names: vec!["+3V3".to_string()],
+            ..RouteStatistics::default()
+        };
+        adopt_connectivity(&mut statistics, &ConnectivityReport::default());
+        assert!(statistics.open_net_names.is_empty());
+        assert_eq!(statistics.open_nets, 0);
     }
 }
