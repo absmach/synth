@@ -516,9 +516,12 @@ report --severity-error --severity-warning --refill-zones
 - **Review by rendering, not by imagination:** export board-layer
   SVGs/PNGs (`kicad-cli pcb export svg`, `pcb render`) and actually
   look; render specific regions to check 3D-model interference.
-- **Board outline:** rounded or chamfered corners by default;
-  confirm with the engineer. Double-sided assembly is an explicit
-  engineer decision, never a default.
+- **Board outline:** declare `outline <width> x <height>` when the
+  enclosure fixes the board size; Edge.Cuts is then exactly that
+  rectangle and the placer does not fit or tighten it. Without the
+  statement the exporter fits the edge round the parts; rounded or
+  chamfered corners are a manual edit. Double-sided assembly is an
+  explicit engineer decision, never a default.
 
 ### Placement JSON coordinate contract
 
@@ -560,7 +563,10 @@ courtyard uses, so the finished board is no larger than the floorplan the pins
 describe. `priority = "hard"` entries win over soft ones; a fully pinned
 floorplan skips the automatic search but still gets the band pass. A floorplan
 that uses a `relative_to` entry keeps its pinned coordinates exactly, because
-the band pass moves one part at a time.
+the band pass moves one part at a time. A board that declares `outline` is the
+exception: the rectangle is fixed, so the band pass, the pinned-outline
+widening and the final fit all stand down and the sidecar coordinates stay as
+written.
 
 ### Silkscreen reference labels
 

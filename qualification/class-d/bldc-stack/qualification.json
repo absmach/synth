@@ -1,0 +1,55 @@
+{
+  "qualified": false,
+  "meaning": "reports/release-control.json and reports/release-power.json say release_ready only when Synth's own routing and export gates pass. They are not review sign-off. This file stays false until every gate below is true.",
+  "gates": {
+    "multiboard_mapping": {
+      "passed": true,
+      "evidence": "crates/synth-cli/tests/bldc_stack_board.rs: 20 of 20 J_B2B pins matched, 100%, no diagnostics; every pin of the connector appears exactly once."
+    },
+    "negative_mappings": {
+      "passed": true,
+      "evidence": "Swap (mappings_neg_swap.json), drop (mappings_neg_drop.json), 12V/3.3V exchange (mappings_neg_voltage.json) and a source-level pin swap (control_neg_swap.synth) each return status warning with E-SYNTH-MULTIBOARD-003, -004 or -005."
+    },
+    "mechanical_alignment": {
+      "passed": true,
+      "evidence": "Sidecar comparison in the same test: J_B2B and H1-H4 are at identical board coordinates on both boards with 0.000 mm X/Y mismatch and equal rotation."
+    },
+    "routing_and_drc": {
+      "passed": false,
+      "evidence": "FreeRouting 2.4.1 is Java 25 bytecode; with Temurin 25 it closes 39 of 40 nets with 0 DRC errors and one open pad (38/40 on the 3.0 mm passive grid). KiCadRoutingTools closes 39 of 40 with 0 DRC errors but places 13 vias inside U1 pads and fails its ground-return/plane-split gate. No engine yet returns a fully connected, fabrication-clean board; the un-routed control PCB still reports 0 DRC errors, 97 unconnected pads and 0 warnings."
+    },
+    "erc_dispositioned": {
+      "passed": false,
+      "evidence": "kicad-cli sch erc reports 0 errors and 0 warnings on both schematics after the 2026-11-05 rerun. The gate stays false until a human reviewer signs the ERC result; there are no machine warnings left to disposition.",
+      "findings": []
+    },
+    "part_review": {
+      "passed": false,
+      "evidence": "Every authored part has reviewed_by = \"\" by design, so W-SYNTH-PART-UNVERIFIED fires and `synth registry qualify` blocks on E-SYNTH-QUAL-008. No reviewer has checked the ten authored parts against their datasheets."
+    },
+    "thermal_and_power": {
+      "passed": false,
+      "evidence": "The AMS1117-3.3 estimate is 0.73 W in a 60 C/W package, about 107 C junction at 25 C ambient (W-SYNTH-THERMAL-001). No thermal measurement, no junction-temperature calculation for the MOSFETs, and no current-loop or EMI analysis."
+    },
+    "connector_review": {
+      "passed": false,
+      "evidence": "The 2.5 A/contact rating is from the LCSC product pages; the Phoenix terminal-block datasheets were read with Firecrawl on 2026-11-03 (17.5 A, 400 V III/2, 5.08 mm, LCSC C480516/C480520). The 50% derating and the current table are hand calculations; no stack-height, keying or creepage check was done."
+    },
+    "fabrication_review": {
+      "passed": false,
+      "evidence": "No Gerbers or drill files were generated because routing failed. No fab accepted the board, and 2 oz outer copper, via-in-pad and the 10 A terminals were not quoted."
+    },
+    "hardware_test": {
+      "passed": false,
+      "evidence": "not powered, not programmed, not measured"
+    },
+    "reproducible_hashes": {
+      "passed": false,
+      "evidence": "SHA256SUMS was regenerated locally on 2026-11-05 and verifies. No CI run has produced a golden set for this board, and the routed artifact does not exist."
+    },
+    "board_outline": {
+      "passed": true,
+      "evidence": "crates/synth-cli/tests/board_outline.rs: a declared 60 x 30 fixture exports Edge.Cuts exactly at (0, 0)-(60, 30) mm, a mounting hole keeps its sidecar edge coordinate with no via in its corner, and a sidecar part outside the rectangle is E-SYNTH-PLACE-003."
+    }
+  }
+}

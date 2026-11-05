@@ -1,0 +1,65 @@
+id = "ir2101"
+kind = "ic"
+version = 0
+lifecycle = "active"
+description = "Infineon IR2101S high- and low-side gate driver, 600 V high side, 210 mA source / 360 mA sink, VCC 10-20 V, SOIC-8; 1 VCC, 2 HIN, 3 LIN, 4 COM, 5 LO, 6 VS, 7 HO, 8 VB"
+mpn = "IR2101STRPBF"
+lcsc_pn = "C2956"
+kicad_symbol = "Driver_FET:IR2101"
+kicad_footprint = "Package_SO:SOIC-8_3.9x4.9mm_P1.27mm"
+
+[footprint_dimensions]
+width_mm = 4.9
+height_mm = 3.9
+courtyard_margin_mm = 0.25
+
+[operating_conditions]
+min_voltage_v = 10.0
+max_voltage_v = 20.0
+max_current_ma = 360.0
+
+[[pins]]
+name = "vcc"
+number = "1"
+electrical_type = "power_input"
+required = true
+[[pins]]
+name = "hin"
+number = "2"
+electrical_type = "input"
+required = true
+[[pins]]
+name = "lin"
+number = "3"
+electrical_type = "input"
+required = true
+[[pins]]
+name = "com"
+number = "4"
+electrical_type = "ground_reference"
+required = true
+[[pins]]
+name = "lo"
+number = "5"
+electrical_type = "output"
+required = true
+[[pins]]
+name = "vs"
+number = "6"
+electrical_type = "passive"
+required = true
+[[pins]]
+name = "ho"
+number = "7"
+electrical_type = "output"
+required = true
+[[pins]]
+name = "vb"
+number = "8"
+electrical_type = "passive"
+required = true
+
+[provenance]
+source = "authored"
+generator = "hand-written from the Infineon IR2101 datasheet"
+datasheet_url = "https://www.infineon.com/assets/row/public/documents/24/49/infineon-ir2101-ds-en.pdf"

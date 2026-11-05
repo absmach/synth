@@ -84,7 +84,13 @@ install_freerouting() {
   mv "${tmp}" "${JAR_PATH}"
   info "installed ${JAR_PATH}"
   if ! command -v java >/dev/null 2>&1; then
-    warn "no java on PATH; FreeRouting needs a Java runtime (17+)"
+    warn "no java on PATH; FreeRouting 2.4.1 needs a Java 25 runtime"
+  else
+    java_major="$(java -version 2>&1 | sed -n 's/.*version "\([0-9]*\).*/\1/p' | head -1)"
+    if [ "${java_major:-0}" -lt 25 ]; then
+      warn "FreeRouting 2.4.1 is Java 25 bytecode; java on PATH is ${java_major:-unknown}." \
+           "Pass --freerouting-java <java25> or install a Java 25 JRE"
+    fi
   fi
 }
 

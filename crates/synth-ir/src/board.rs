@@ -76,6 +76,11 @@ pub struct Board {
     /// default thickness and carries no stackup section.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub stackup: Option<Stackup>,
+    /// Fixed board rectangle (`outline 60mm x 30mm`), bottom-left at the
+    /// board origin. `None` means Edge.Cuts is fitted round the placed parts,
+    /// which is the historical behaviour.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub outline: Option<BoardOutline>,
     /// Declared routing-constraint classes (`netclass "PWR" { … }`).
     /// Nets join a class via `class "PWR"` on their `net`, `power`,
     /// or `connect` statement; the PCB exporter emits one KiCad
@@ -107,6 +112,14 @@ pub struct Board {
     /// profile that offers it.
     #[serde(default, skip_serializing_if = "BTreeSet::is_empty")]
     pub required_processes: BTreeSet<ProcessRequirement>,
+    pub source_span: Span,
+}
+
+/// The board rectangle a design declares, in integer nanometres.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub struct BoardOutline {
+    pub width: Length,
+    pub height: Length,
     pub source_span: Span,
 }
 

@@ -1,0 +1,89 @@
+{
+  "schema_version": "synth.release.v1",
+  "tool_version": "synth-cli 0.1.1",
+  "input": "qualification/class-d/bldc-stack/control.synth",
+  "fab_requested": false,
+  "production_status": "untrusted",
+  "release_ready": false,
+  "gate_scope": "production_status and release_ready cover only Synth's routing and export gates: override flags, route validation and signal integrity. They are not a fabrication approval, a qualification result or a component review.",
+  "reviewer_state": [
+    {
+      "part_id": "ams1117_3v3",
+      "reviewed": false
+    },
+    {
+      "part_id": "c_generic_0603",
+      "reviewed": false
+    },
+    {
+      "part_id": "c_generic_1206",
+      "reviewed": false
+    },
+    {
+      "part_id": "ferrite_bead_0603",
+      "reviewed": false
+    },
+    {
+      "part_id": "header_1x3",
+      "reviewed": false
+    },
+    {
+      "part_id": "header_1x4",
+      "reviewed": false
+    },
+    {
+      "part_id": "header_2x10",
+      "reviewed": false
+    },
+    {
+      "part_id": "ltst_c190kgkt",
+      "reviewed_by": "Steve Munene",
+      "reviewed_at": "2026-10-29",
+      "reviewed": true
+    },
+    {
+      "part_id": "ltst_c190krkt",
+      "reviewed": false
+    },
+    {
+      "part_id": "mounting_hole_m2_5",
+      "reviewed": false
+    },
+    {
+      "part_id": "ptvs6v0s1ur",
+      "reviewed": false
+    },
+    {
+      "part_id": "r_generic_0603",
+      "reviewed": false
+    },
+    {
+      "part_id": "spst_tactile",
+      "reviewed": false
+    },
+    {
+      "part_id": "stm32g030k8_lqfp32",
+      "reviewed_by": "JeffMboya",
+      "reviewed_at": "2026-10-28",
+      "reviewed": true
+    },
+    {
+      "part_id": "thvd1450d",
+      "reviewed": false
+    }
+  ],
+  "routing": {
+    "engine": "freerouting",
+    "state": "validation_failed",
+    "input_hash": "341a1525f43eadc84fbba233cc4295784cf9b0549a6a86dde3826dbc36f2e77b",
+    "run_record": "/tmp/opencode/ctl-grid6/bldc_control.routing.json",
+    "reasons": [
+      "inspect the retained session log for the engine's own error; the baseline export is unchanged"
+    ]
+  },
+  "signal_integrity": {
+    "blocking": 0,
+    "warnings": 0,
+    "findings": []
+  }
+}

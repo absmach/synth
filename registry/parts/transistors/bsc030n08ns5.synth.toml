@@ -1,0 +1,50 @@
+id = "bsc030n08ns5"
+kind = "transistor"
+version = 0
+lifecycle = "active"
+description = "Infineon BSC030N08NS5 OptiMOS-5 N-channel MOSFET, 80 V VDS, 100 A, 3.0 mOhm max RDS(on) at VGS=10 V, PG-TDSON-8 (SuperSO8 5x6), pins 1-3 source, 4 gate, 5-8 drain"
+mpn = "BSC030N08NS5ATMA1"
+lcsc_pn = "C501507"
+kicad_symbol = "Transistor_FET:BSC030N08NS5"
+kicad_footprint = "Package_TO_SOT_SMD:TDSON-8-1"
+
+[footprint_dimensions]
+width_mm = 5.15
+height_mm = 6.15
+courtyard_margin_mm = 0.25
+
+[operating_conditions]
+max_voltage_v = 80.0
+max_current_ma = 100000.0
+max_power_mw = 139000
+
+[[pins]]
+name = "source"
+number = "1"
+electrical_type = "passive"
+required = true
+[[pins]]
+name = "source_2"
+number = "2"
+electrical_type = "passive"
+required = true
+[[pins]]
+name = "source_3"
+number = "3"
+electrical_type = "passive"
+required = true
+[[pins]]
+name = "gate"
+number = "4"
+electrical_type = "input"
+required = true
+[[pins]]
+name = "drain"
+number = "5"
+electrical_type = "passive"
+required = true
+
+[provenance]
+source = "authored"
+generator = "hand-written from the Infineon BSC030N08NS5 datasheet"
+datasheet_url = "https://www.infineon.com/assets/row/public/documents/24/49/infineon-bsc030n08ns5-datasheet-en.pdf"

@@ -231,6 +231,17 @@ pub enum PlaceError {
         tried: usize,
     },
 
+    /// A sidecar placed a part outside the board rectangle the source declared.
+    #[error(
+        "E-SYNTH-PLACE-003 `{refdes}` does not fit inside the declared \
+         outline {width_mm:.1} × {height_mm:.1} mm"
+    )]
+    OutsideOutline {
+        refdes: String,
+        width_mm: f64,
+        height_mm: f64,
+    },
+
     /// Hard placement hint conflicts with board constraints or courtyard space.
     #[error("E-SYNTH-PLACE-HINT-001 hard placement hint conflict for `{refdes}`")]
     HintConflict { refdes: String },
@@ -285,6 +296,28 @@ impl PlaceError {
                      {board_w_mm:.1} × {board_h_mm:.1} mm board, no position \
                      accommodates `{refdes}` without colliding with a previously \
                      placed component's courtyard."
+                ));
+                if let Some(span) = component_span(board, refdes) {
+                    builder = builder.location(Location::from_span(file, span));
+                }
+                vec![builder.build()]
+            }
+
+            Self::OutsideOutline {
+                refdes,
+                width_mm,
+                height_mm,
+            } => {
+                let mut builder = DiagnosticBuilder::new(
+                    "E-SYNTH-PLACE-003",
+                    Severity::Error,
+                    format!("{refdes} is outside the declared outline"),
+                )
+                .message(format!(
+                    "The sidecar places `{refdes}` outside the declared \
+                     {width_mm:.1} × {height_mm:.1} mm outline. A declared \
+                     outline is authoritative: move the part inside it or \
+                     enlarge the outline."
                 ));
                 if let Some(span) = component_span(board, refdes) {
                     builder = builder.location(Location::from_span(file, span));
@@ -559,8 +592,10 @@ pub fn apply_sidecar_overrides(
 
     // An outline sized for the automatic arrangement is not a verdict on a
     // coordinate the author chose, so widen it around the pinned parts before
-    // legalisation judges them against it.
-    expand_outline_for_pinned(board, placement, sidecar);
+    // legalisation judges them against it. A declared outline is the verdict.
+    if board.outline.is_none() {
+        expand_outline_for_pinned(board, placement, sidecar);
+    }
 
     // Agent/human overrides are authoritative only within the physical
     // placement contract. If an override collides with another courtyard,
@@ -592,11 +627,46 @@ pub fn apply_sidecar_overrides(
 /// The gap a part's courtyard keeps from Edge.Cuts: only a part whose hard
 /// hint docks it to an edge may touch the edge.
 fn courtyard_edge_inset_nm(component: &synth_ir::Component) -> i64 {
-    if is_edge_flush_connector(component) {
+    // A mounting hole is meant to sit on the edge; its courtyard is a DRC
+    // keepout around the screw head, not copper that has to stay on the board.
+    if is_edge_flush_connector(component) || component.kind == "mounting_hole" {
         0
     } else {
         mm_to_nm(COPPER_EDGE_CLEARANCE_MM)
     }
+}
+
+/// The part of a component that must stay inside Edge.Cuts. For a mounting
+/// hole that is the drill; its courtyard may overhang so the hole can sit on
+/// the edge.
+fn component_edge_bounds(
+    component: &synth_ir::Component,
+    placed: &ComponentPlacement,
+    courtyard: Rect,
+) -> Rect {
+    if component.kind != "mounting_hole" {
+        // An edge connector is docked to Edge.Cuts: its courtyard often
+        // overhangs, but its copper is what has to stay on the board.
+        if is_edge_flush_connector(component) {
+            return exported_pad_bounds(component, placed).unwrap_or(courtyard);
+        }
+        return courtyard;
+    }
+    let radius_nm = component
+        .part
+        .as_ref()
+        .and_then(|part| part.footprint_dimensions.as_ref())
+        .map_or(0, |dimensions| mm_to_nm(dimensions.width_mm / 2.0));
+    Rect::new(
+        Point::new(
+            placed.center.x_nm - radius_nm,
+            placed.center.y_nm - radius_nm,
+        ),
+        Point::new(
+            placed.center.x_nm + radius_nm,
+            placed.center.y_nm + radius_nm,
+        ),
+    )
 }
 
 fn expand_outline_for_pinned(
@@ -1182,6 +1252,59 @@ fn sidecar_courtyard_rect(
     rotated_courtyard_rect(placement, size)
 }
 
+/// A declared outline is a contract: a sidecar coordinate whose part does not
+/// fit inside it is reported, not silently slid inward by legalisation.
+///
+/// Only absolute entries are checked here. A `relative_to` entry is measured
+/// from an anchor that has not been placed yet; legalisation still keeps the
+/// final position on the board.
+fn validate_sidecar_inside_outline(
+    board: &Board,
+    sidecar: &synth_layout::sidecar::SidecarLayout,
+) -> Result<(), PlaceError> {
+    let Some(outline) = board.outline else {
+        return Ok(());
+    };
+    let board_rect = Rect::new(
+        Point::new(0, 0),
+        Point::new(outline.width.0, outline.height.0),
+    );
+    for component in &board.components {
+        let Some(entry) = sidecar.components.get(&component.refdes) else {
+            continue;
+        };
+        if entry.relative_to.is_some() {
+            continue;
+        }
+        let placed = ComponentPlacement {
+            id: component.id,
+            center: Point::new(mm_to_nm(entry.x), mm_to_nm(entry.y)),
+            rotation: match entry.rotation {
+                90 => Rotation::Ninety,
+                180 => Rotation::OneEighty,
+                270 => Rotation::TwoSeventy,
+                _ => Rotation::Zero,
+            },
+            layer: Layer::Top,
+        };
+        let courtyard = sidecar_courtyard_rect(board, component, &placed);
+        let bounds = component_edge_bounds(component, &placed, courtyard);
+        let inset = courtyard_edge_inset_nm(component);
+        if bounds.min.x_nm < board_rect.min.x_nm + inset
+            || bounds.min.y_nm < board_rect.min.y_nm + inset
+            || bounds.max.x_nm > board_rect.max.x_nm - inset
+            || bounds.max.y_nm > board_rect.max.y_nm - inset
+        {
+            return Err(PlaceError::OutsideOutline {
+                refdes: component.refdes.clone(),
+                width_mm: outline.width.to_mm(),
+                height_mm: outline.height.to_mm(),
+            });
+        }
+    }
+    Ok(())
+}
+
 fn sidecar_position_is_legal(
     board: &Board,
     placement: &Placement,
@@ -1195,10 +1318,11 @@ fn sidecar_position_is_legal(
     // outline, where the pad inside its courtyard is closer to the fab edge
     // rule than the profile allows.
     let edge_inset_nm = courtyard_edge_inset_nm(candidate_component);
-    if candidate_rect.min.x_nm < placement.board_outline.min.x_nm + edge_inset_nm
-        || candidate_rect.min.y_nm < placement.board_outline.min.y_nm + edge_inset_nm
-        || candidate_rect.max.x_nm > placement.board_outline.max.x_nm - edge_inset_nm
-        || candidate_rect.max.y_nm > placement.board_outline.max.y_nm - edge_inset_nm
+    let edge_bounds = component_edge_bounds(candidate_component, &candidate, candidate_rect);
+    if edge_bounds.min.x_nm < placement.board_outline.min.x_nm + edge_inset_nm
+        || edge_bounds.min.y_nm < placement.board_outline.min.y_nm + edge_inset_nm
+        || edge_bounds.max.x_nm > placement.board_outline.max.x_nm - edge_inset_nm
+        || edge_bounds.max.y_nm > placement.board_outline.max.y_nm - edge_inset_nm
     {
         return false;
     }
@@ -1474,6 +1598,10 @@ pub fn place_with_tuning_and_sidecar_seeded<S: ::std::hash::BuildHasher>(
         .filter(|path| path.exists())
         .and_then(synth_layout::sidecar::SidecarLayout::load_from_file);
 
+    if let Some(sidecar) = loaded.as_ref() {
+        validate_sidecar_inside_outline(board, sidecar)?;
+    }
+
     // The author's absolute entries become constraints the solver is given,
     // not corrections applied to its answer. The old order ran the whole
     // greedy placement first and only then moved the pinned parts, so a
@@ -1508,6 +1636,39 @@ pub fn place_with_tuning_and_sidecar_seeded<S: ::std::hash::BuildHasher>(
                 .collect()
         });
 
+    // A fully pinned board inside a declared outline has nothing to solve:
+    // the sidecar already states every coordinate, and running the solver
+    // only reproduces them more slowly. Legalisation still runs below.
+    if pinned.len() == board.components.len() {
+        if let Some(outline) = board.outline {
+            let mut components: Vec<ComponentPlacement> = board
+                .components
+                .iter()
+                .filter_map(|component| {
+                    let (center, rotation) = pinned.get(&component.id)?;
+                    Some(ComponentPlacement {
+                        id: component.id,
+                        center: *center,
+                        rotation: *rotation,
+                        layer: Layer::Top,
+                    })
+                })
+                .collect();
+            components.sort_by_key(|placed| placed.id.0);
+            let mut placement = Placement {
+                board_outline: Rect::new(
+                    Point::new(0, 0),
+                    Point::new(outline.width.0, outline.height.0),
+                ),
+                components,
+            };
+            if let Some(sidecar) = loaded.as_ref() {
+                apply_sidecar_overrides(board, &mut placement, sidecar);
+            }
+            return Ok(placement);
+        }
+    }
+
     let mut placement = place_with_tuning_impl(
         board,
         extra_margin_mm,
@@ -1519,10 +1680,13 @@ pub fn place_with_tuning_and_sidecar_seeded<S: ::std::hash::BuildHasher>(
     if let Some(sidecar) = loaded.as_ref() {
         apply_sidecar_overrides(board, &mut placement, sidecar);
         // The pinned coordinates are a floorplan, not a packing: they leave
-        // bands no courtyard uses. Slide them shut before the outline is fitted.
-        close_pinned_bands(board, &mut placement, sidecar);
+        // bands no courtyard uses. Slide them shut before the outline is
+        // fitted. A declared outline fixes the frame, so the floorplan stays.
+        if board.outline.is_none() {
+            close_pinned_bands(board, &mut placement, sidecar);
+        }
     }
-    if sidecar_path.is_some_and(std::path::Path::exists) {
+    if board.outline.is_none() && sidecar_path.is_some_and(std::path::Path::exists) {
         tighten_outline_after_sidecar(board, &mut placement);
     }
     Ok(placement)
@@ -1619,6 +1783,7 @@ pub fn place_with_dimensions(
         &courtyards_mm,
         &std::collections::HashMap::new(),
         false,
+        BOARD_MARGIN_MM,
         0,
         &PinnedPlacements::new(),
     )?;
@@ -1786,6 +1951,25 @@ fn place_with_tuning_impl<S: ::std::hash::BuildHasher>(
         })
         .collect();
 
+    // A declared `outline` is the board: solve inside it as given, with no
+    // fitting or compaction afterwards. Everything else keeps the historical
+    // auto-sized path.
+    if let Some(outline) = board.outline {
+        return place_with_outline(
+            board,
+            Rect::new(
+                Point::new(0, 0),
+                Point::new(outline.width.0, outline.height.0),
+            ),
+            &courtyards_mm,
+            rotation_overrides,
+            false,
+            COPPER_EDGE_CLEARANCE_MM,
+            seed,
+            pinned,
+        );
+    }
+
     let total_courtyard_mm2: f64 = courtyards_mm.iter().map(|(_, _, (w, h))| w * h).sum();
     let max_board_mm2 = 230.0 * 230.0;
     if total_courtyard_mm2 / FILL_RATIO > max_board_mm2 {
@@ -1828,6 +2012,7 @@ fn place_with_tuning_impl<S: ::std::hash::BuildHasher>(
             &courtyards_mm,
             rotation_overrides,
             true,
+            BOARD_MARGIN_MM,
             seed,
             pinned,
         ) {
@@ -2291,6 +2476,7 @@ fn place_with_outline<S: ::std::hash::BuildHasher>(
     courtyards_mm: &[(ComponentId, (f64, f64), (f64, f64))],
     rotation_overrides: &std::collections::HashMap<ComponentId, synth_geometry::Rotation, S>,
     tighten_outline: bool,
+    usable_margin_mm: f64,
     seed: u64,
     pinned: &PinnedPlacements,
 ) -> Result<Placement, PlaceError> {
@@ -2310,9 +2496,11 @@ fn place_with_outline<S: ::std::hash::BuildHasher>(
             .as_ref()
             .is_some_and(|part| part.id.0.to_ascii_lowercase().contains("rp2350"))
     });
-    // Usable area: board outline minus the page margin on every
-    // side. Components must keep their courtyards inside this.
-    let margin_nm = mm_to_nm(BOARD_MARGIN_MM);
+    // Usable area: board outline minus the caller's margin on every side.
+    // Components must keep their courtyards inside this. An automatic fit
+    // keeps the wider page margin; a declared outline states its own edge, so
+    // the caller passes only the copper clearance.
+    let margin_nm = mm_to_nm(usable_margin_mm);
     let usable = Rect::new(
         Point::new(margin_nm, margin_nm),
         Point::new(
@@ -7553,8 +7741,10 @@ pub fn scale_layout_toward(
     let _ = separate_overlaps_with(&mut candidate, &sizes, &pinned, true);
     // The outline the export itself fits round a placement, so the size
     // reported here is the size of the board that gets exported.
-    fit_outline_with_margin_mm(board, &mut candidate, tight_edge_margin_mm(board));
-    trim_outline_to_grid(board, &mut candidate);
+    if board.outline.is_none() {
+        fit_outline_with_margin_mm(board, &mut candidate, tight_edge_margin_mm(board));
+        trim_outline_to_grid(board, &mut candidate);
+    }
     Some(candidate)
 }
 

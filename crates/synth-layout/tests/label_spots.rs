@@ -84,6 +84,7 @@ fn board() -> Board {
         source_span: synth_diagnostics::Span::new(0, 0),
     };
     Board {
+        outline: None,
         required_processes: std::collections::BTreeSet::new(),
         schematic_overflow: None,
         schematic_paper: None,

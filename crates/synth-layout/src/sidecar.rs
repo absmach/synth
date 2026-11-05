@@ -615,6 +615,7 @@ hide = true
         use synth_diagnostics::Span;
         use synth_ir::{Board, Component, ComponentId};
         Board {
+            outline: None,
             schematic_overflow: None,
             schematic_paper: None,
             groups: Vec::new(),
@@ -755,6 +756,7 @@ mod forced_label_tests {
             source_span: Span::new(0, 0),
         };
         Board {
+            outline: None,
             schematic_overflow: None,
             schematic_paper: None,
             groups: Vec::new(),

@@ -752,71 +752,79 @@ fn place_candidates_with_margins(
         Err(error) => first_error = Some(error),
     }
 
-    // The hinted placement is not automatically the better one. A hint pins a
-    // part where the author asked, which can be worse for routing than where
-    // the solver would have put it; the export path has no router to ask, so
-    // it decides on legality first and on the route-aware estimate second.
-    // Only a candidate that is no less legal is allowed to win.
-    if hints_are_all_soft(board) {
-        let mut unhinted = board.clone();
-        for component in &mut unhinted.components {
-            component.placement_hint = None;
+    // A declared outline fixes the frame and, in the sidecar-driven flow, the
+    // floorplan too. Margin and seed sweeps only repack an auto-sized board,
+    // so skip them: they cost one full solve each and cannot change the result.
+    if board.outline.is_none() {
+        // The hinted placement is not automatically the better one. A hint pins a
+        // part where the author asked, which can be worse for routing than where
+        // the solver would have put it; the export path has no router to ask, so
+        // it decides on legality first and on the route-aware estimate second.
+        // Only a candidate that is no less legal is allowed to win.
+        if hints_are_all_soft(board) {
+            let mut unhinted = board.clone();
+            for component in &mut unhinted.components {
+                component.placement_hint = None;
+            }
+            if let Ok(candidate) = synth_place::place_with_tuning_and_sidecar(
+                &unhinted,
+                margin,
+                &rotation_overrides,
+                sidecar,
+            ) {
+                candidates.push(candidate);
+            }
         }
-        if let Ok(candidate) = synth_place::place_with_tuning_and_sidecar(
-            &unhinted,
-            margin,
-            &rotation_overrides,
-            sidecar,
-        ) {
-            candidates.push(candidate);
-        }
-    }
 
-    for &extra in extra_margins {
-        if let Ok(candidate) =
-            synth_place::place_with_tuning_and_sidecar(board, extra, &rotation_overrides, sidecar)
-        {
-            candidates.push(candidate);
+        for &extra in extra_margins {
+            if let Ok(candidate) = synth_place::place_with_tuning_and_sidecar(
+                board,
+                extra,
+                &rotation_overrides,
+                sidecar,
+            ) {
+                candidates.push(candidate);
+            }
         }
-    }
 
-    for &seed in extra_seeds {
-        if seed == 0 {
-            continue;
-        }
-        if let Ok(candidate) = synth_place::place_with_tuning_and_sidecar_seeded(
-            board,
-            margin,
-            &rotation_overrides,
-            sidecar,
-            seed,
-        ) {
-            candidates.push(candidate);
-        }
-    }
-
-    // A seeded tight-margin arrangement only helps a board whose parts have
-    // enough equal-degree peers for the seed to change the row structure. On a
-    // handful of parts the seed rediscovers the same packing while the tighter
-    // margin eats the channel between courtyards: the 3-part ldo_block routes
-    // cleanly at the canonical margins and fails as soon as a seeded tight
-    // candidate wins on area. Dense boards keep the seeded sweep.
-    if uses_seeded_tight_margins(board.components.len()) {
-        // The tight margins at alternate seeds never won a dense corpus
-        // board: their best lost to the base seed and to the 0.9 mm sweep, so
-        // only the base margins above and the tightest sweep below run.
-        for &seed in extra_seeds.iter().rev().take(TIGHTEST_SWEEP_SEEDS) {
+        for &seed in extra_seeds {
             if seed == 0 {
                 continue;
             }
             if let Ok(candidate) = synth_place::place_with_tuning_and_sidecar_seeded(
                 board,
-                TIGHTEST_SEEDED_MARGIN_MM,
+                margin,
                 &rotation_overrides,
                 sidecar,
                 seed,
             ) {
                 candidates.push(candidate);
+            }
+        }
+
+        // A seeded tight-margin arrangement only helps a board whose parts have
+        // enough equal-degree peers for the seed to change the row structure. On a
+        // handful of parts the seed rediscovers the same packing while the tighter
+        // margin eats the channel between courtyards: the 3-part ldo_block routes
+        // cleanly at the canonical margins and fails as soon as a seeded tight
+        // candidate wins on area. Dense boards keep the seeded sweep.
+        if uses_seeded_tight_margins(board.components.len()) {
+            // The tight margins at alternate seeds never won a dense corpus
+            // board: their best lost to the base seed and to the 0.9 mm sweep, so
+            // only the base margins above and the tightest sweep below run.
+            for &seed in extra_seeds.iter().rev().take(TIGHTEST_SWEEP_SEEDS) {
+                if seed == 0 {
+                    continue;
+                }
+                if let Ok(candidate) = synth_place::place_with_tuning_and_sidecar_seeded(
+                    board,
+                    TIGHTEST_SEEDED_MARGIN_MM,
+                    &rotation_overrides,
+                    sidecar,
+                    seed,
+                ) {
+                    candidates.push(candidate);
+                }
             }
         }
     }
@@ -827,14 +835,18 @@ fn place_candidates_with_margins(
     // that sets an edge takes the tighter passive rim: its pads still clear
     // the fab edge rule, and only the channel a connector or IC fans out
     // through has to stay wide.
-    for candidate in &mut candidates {
-        synth_place::fit_outline_with_passive_margin_mm(
-            board,
-            candidate,
-            synth_place::tight_edge_margin_mm(board),
-            synth_place::passive_edge_margin_mm(board),
-        );
-        synth_place::trim_outline_to_grid(board, candidate);
+    // A declared `outline` is the board the author asked for: fitting a tight
+    // rim round the parts would silently replace it.
+    if board.outline.is_none() {
+        for candidate in &mut candidates {
+            synth_place::fit_outline_with_passive_margin_mm(
+                board,
+                candidate,
+                synth_place::tight_edge_margin_mm(board),
+                synth_place::passive_edge_margin_mm(board),
+            );
+            synth_place::trim_outline_to_grid(board, candidate);
+        }
     }
 
     let mut distinct: Vec<synth_place::Placement> = Vec::with_capacity(candidates.len());

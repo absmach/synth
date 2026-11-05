@@ -577,6 +577,19 @@ pub fn list_tools() -> Vec<McpToolInfo> {
                 "type": "object",
                 "properties": {
                     "project_name": { "type": "string", "description": "Multi-board system project name (default: 'multi_board_system')" },
+                    "boards": {
+                        "type": "array",
+                        "description": "Boards to load before checking the mappings. Each entry needs a name (the value mappings use in from_board/to_board) and either a path or an inline source. Omit boards only when every mapping is expected to fail as an unknown board.",
+                        "items": {
+                            "type": "object",
+                            "properties": {
+                                "name":      { "type": "string", "description": "Board name used by from_board/to_board (defaults to the board's own name)" },
+                                "path":      { "type": "string", "description": "Path to the .synth source" },
+                                "file_path": { "type": "string", "description": "Alias for path" },
+                                "source":    { "type": "string", "description": "Inline .synth source (alternative to path)" }
+                            }
+                        }
+                    },
                     "interboard_mappings": {
                         "type": "array",
                         "description": "List of inter-board header pin mappings",
@@ -652,7 +665,7 @@ pub fn call_tool(
         "synth_import_part" => execute_import_part(args, default_registry),
         "synth_author_part" => execute_author_part(args, default_registry),
         "synth_search_registry_web" => execute_search_registry_web(args, default_registry),
-        "synth_export_multiboard" => execute_export_multiboard(args),
+        "synth_export_multiboard" => execute_export_multiboard(args, default_registry),
         "synth_multi_agent_synthesize" => Ok(serde_json::json!({
             "status": "dev_stub",
             "message": format!("Tool '{name}' is under active local development.")
@@ -989,6 +1002,11 @@ fn execute_language_reference(_args: &Value) -> Value {
                     "form": "layers <integer>",
                     "description": "Copper layer count (commonly 2 or 4). At most one per board.",
                     "example": "layers 4"
+                },
+                {
+                    "form": "outline <width><unit> x <height><unit>",
+                    "description": "Fixes the board rectangle: the exported Edge.Cuts is exactly this size, with its bottom-left corner at board coordinate (0, 0). At most one per board; omit it and the exporter fits the edge round the placed parts. Placement-sidecar x/y are millimetres from that origin. A mounting hole may sit on the edge (its drill must stay inside), and a part that does not fit is a placement diagnostic, not a larger board.",
+                    "example": "outline 60mm x 30mm"
                 },
                 {
                     "form": "manufacturer \"<name>\"",
@@ -4521,15 +4539,21 @@ fn execute_evaluate_thermal_si(args: &Value) -> Result<Value, String> {
     }))
 }
 
-// Kept as `Result<Value, String>` to match every other tool handler's
-// signature in the `call_tool` dispatch table, even though this one
-// never fails.
-#[allow(dead_code, clippy::unnecessary_wraps)]
-fn execute_export_multiboard(args: &Value) -> Result<Value, String> {
+fn execute_export_multiboard(
+    args: &Value,
+    default_registry: Option<&Path>,
+) -> Result<Value, String> {
     let name = args["project_name"]
         .as_str()
         .unwrap_or("multi_board_system");
     let mut project = synth_ir::MultiBoardProject::new(name);
+
+    if let Some(boards) = args["boards"].as_array() {
+        for entry in boards {
+            let board = load_multiboard_board(entry, args, default_registry)?;
+            project.add_board(board);
+        }
+    }
 
     if let Some(mappings) = args["interboard_mappings"].as_array() {
         for m in mappings {
@@ -4558,11 +4582,73 @@ fn execute_export_multiboard(args: &Value) -> Result<Value, String> {
     Ok(serde_json::json!({
         "status": if validation.is_clean { "ok" } else { "warning" },
         "project_name": name,
+        "boards": project.boards.iter().map(|b| b.name.clone()).collect::<Vec<_>>(),
         "total_mappings": validation.total_mappings,
         "matched_pins": validation.matched_pins,
         "matching_percentage": validation.matching_percentage,
         "diagnostics": validation.diagnostics
     }))
+}
+
+/// Load one board for `synth_export_multiboard` from `path`/`file_path` or an
+/// inline `source`. The optional `name` overrides the board's own name so the
+/// mapping's `from_board`/`to_board` values can be short and stable.
+fn load_multiboard_board(
+    entry: &Value,
+    args: &Value,
+    default_registry: Option<&Path>,
+) -> Result<synth_ir::Board, String> {
+    let path = entry["path"].as_str().or(entry["file_path"].as_str());
+    let (source, file_name) = match (entry["source"].as_str(), path) {
+        (Some(source), _) => (
+            source.to_string(),
+            entry["file_path"]
+                .as_str()
+                .unwrap_or("board.synth")
+                .to_string(),
+        ),
+        (None, Some(path)) => (
+            std::fs::read_to_string(path)
+                .map_err(|e| format!("Could not read board source '{path}': {e}"))?,
+            path.to_string(),
+        ),
+        (None, None) => {
+            return Err("Each board needs a 'path', 'file_path', or inline 'source'".to_string())
+        }
+    };
+
+    let parse = synth_parser::parse(&source, file_name.clone());
+    let ast = parse
+        .ast
+        .ok_or_else(|| format!("Parse failed for board '{file_name}'"))?;
+    let import_root = Path::new(&file_name)
+        .parent()
+        .map_or_else(|| PathBuf::from("."), Path::to_path_buf);
+    let loader = synth_ir::FsImportLoader { root: import_root };
+    let resolved = synth_ir::resolve_imports(&ast, &loader, &file_name);
+    let registry = load_registry_tiered(args, default_registry)
+        .map_err(|e| format!("Could not load registry: {e}"))?;
+    let lowered = synth_ir::lower(&resolved.program, &registry, &file_name);
+    let blocking: Vec<_> = resolved
+        .diagnostics
+        .iter()
+        .chain(lowered.diagnostics.iter())
+        .filter(|d| d.severity.is_blocking())
+        .map(|d| format!("[{}] {}", d.code, d.message.as_deref().unwrap_or("")))
+        .collect();
+    if !blocking.is_empty() {
+        return Err(format!(
+            "Board '{file_name}' has blocking diagnostics: {}",
+            blocking.join("; ")
+        ));
+    }
+    let mut board = lowered
+        .board
+        .ok_or_else(|| format!("Lowering failed for board '{file_name}'"))?;
+    if let Some(name) = entry["name"].as_str() {
+        board.name = name.to_string();
+    }
+    Ok(board)
 }
 
 fn execute_cloud_mcp_endpoint(args: &Value) -> Result<Value, String> {
@@ -5908,6 +5994,28 @@ mod language_reference_tests {
     fn language_reference_is_listed() {
         let names: Vec<String> = list_tools().into_iter().map(|t| t.name).collect();
         assert!(names.contains(&"synth_language_reference".to_string()));
+    }
+
+    #[test]
+    fn language_reference_documents_an_outline_that_parses() {
+        let result = execute_language_reference(&serde_json::json!({}));
+        let entry = result["grammar"]["statements"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|s| {
+                s["form"]
+                    .as_str()
+                    .unwrap_or_default()
+                    .starts_with("outline")
+            })
+            .expect("outline statement documented");
+        let source = format!(
+            "board \"b\" {{\n layers 2\n {}\n}}",
+            entry["example"].as_str().unwrap()
+        );
+        let parse = synth_parser::parse(&source, "outline_example.synth".to_string());
+        assert!(parse.diagnostics.is_empty(), "{:?}", parse.diagnostics);
     }
 
     #[test]
