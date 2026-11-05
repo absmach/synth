@@ -21,10 +21,10 @@ board "rtd_afe" {
   power "+3V3A" 3.3v
   requires via_in_pad
 
-  component H1: mounting_hole "mounting_hole_m2_5"
-  component H2: mounting_hole "mounting_hole_m2_5"
-  component H3: mounting_hole "mounting_hole_m2_5"
-  component H4: mounting_hole "mounting_hole_m2_5"
+  component H1: mounting_hole "mounting_hole_m2_5_clearance"
+  component H2: mounting_hole "mounting_hole_m2_5_clearance"
+  component H3: mounting_hole "mounting_hole_m2_5_clearance"
+  component H4: mounting_hole "mounting_hole_m2_5_clearance"
 
   group "RTD INPUT" color "#c2410c" {
     component J2: connector "header_1x4" value "PT100"
