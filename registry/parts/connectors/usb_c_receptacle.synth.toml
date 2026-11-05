@@ -114,3 +114,8 @@ electrical_type = "passive"
 name = "sbu2"
 number = "B8"
 electrical_type = "passive"
+
+[provenance]
+datasheet_url = "https://datasheet.lcsc.com/datasheet/pdf/9e56b777c022540fcce7c7f67825f55e.pdf"
+reviewed_by = "Steve Munene"
+reviewed_at = "2026-11-05"
