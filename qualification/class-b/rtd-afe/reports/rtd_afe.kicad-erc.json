@@ -1,0 +1,53 @@
+{
+    "$schema": "https://schemas.kicad.org/erc.v1.json",
+    "coordinate_units": "mm",
+    "date": "2026-11-05T16:34:42",
+    "ignored_checks": [
+        {
+            "description": "Global label only appears once in the schematic",
+            "key": "single_global_label"
+        },
+        {
+            "description": "Four connection points are joined together",
+            "key": "four_way_junction"
+        },
+        {
+            "description": "SPICE model issue",
+            "key": "simulation_model_issue"
+        },
+        {
+            "description": "Assigned footprint doesn't match footprint filters",
+            "key": "footprint_filter"
+        }
+    ],
+    "included_severities": [
+        "error",
+        "warning",
+        "exclusion"
+    ],
+    "kicad_version": "10.0.7",
+    "sheets": [
+        {
+            "path": "/",
+            "uuid_path": "/b999385b-5cb0-57df-8610-0c339174ef3a",
+            "violations": [
+                {
+                    "description": "Symbol 'REF5025ID' doesn't match copy in library 'Reference_Voltage'",
+                    "items": [
+                        {
+                            "description": "Symbol U3 [REF5025ID]",
+                            "pos": {
+                                "x": 408.94,
+                                "y": 190.5
+                            },
+                            "uuid": "1c679915-884b-5ed7-a9a1-16c5ce90aba2"
+                        }
+                    ],
+                    "severity": "warning",
+                    "type": "lib_symbol_mismatch"
+                }
+            ]
+        }
+    ],
+    "source": "rtd_afe.kicad_sch"
+}

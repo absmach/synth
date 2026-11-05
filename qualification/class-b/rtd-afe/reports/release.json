@@ -1,0 +1,187 @@
+{
+  "schema_version": "synth.release.v1",
+  "tool_version": "synth-cli 0.1.1",
+  "input": "qualification/class-b/rtd-afe/rtd_afe.synth",
+  "source_revision": "01a77d545c2ebab2d85a31b2ceff24ebcd1feacf",
+  "fab_requested": true,
+  "production_status": "production",
+  "release_ready": true,
+  "gate_scope": "production_status and release_ready cover only Synth's routing and export gates: override flags, route validation and signal integrity. They are not a fabrication approval, a qualification result or a component review.",
+  "reviewer_state": [
+    {
+      "part_id": "ads124s08",
+      "reviewed_by": "Steve Munene",
+      "reviewed_at": "2026-10-27",
+      "reviewed": true
+    },
+    {
+      "part_id": "c_generic_0603",
+      "reviewed_by": "JeffMboya",
+      "reviewed_at": "2026-11-01",
+      "reviewed": true
+    },
+    {
+      "part_id": "c_generic_0805",
+      "reviewed_by": "JeffMboya",
+      "reviewed_at": "2026-11-01",
+      "reviewed": true
+    },
+    {
+      "part_id": "ecs_120_20_33_tr",
+      "reviewed_by": "Steve Munene",
+      "reviewed_at": "2026-11-05",
+      "reviewed": true
+    },
+    {
+      "part_id": "esd_usb",
+      "reviewed_by": "Steve Munene",
+      "reviewed_at": "2026-11-05",
+      "reviewed": true
+    },
+    {
+      "part_id": "ferrite_bead_0603",
+      "reviewed_by": "Steve Munene",
+      "reviewed_at": "2026-11-05",
+      "reviewed": true
+    },
+    {
+      "part_id": "header_1x3",
+      "reviewed_by": "Steve Munene",
+      "reviewed_at": "2026-11-05",
+      "reviewed": true
+    },
+    {
+      "part_id": "header_1x4",
+      "reviewed_by": "Steve Munene",
+      "reviewed_at": "2026-11-05",
+      "reviewed": true
+    },
+    {
+      "part_id": "l_generic_0805",
+      "reviewed_by": "Steve Munene",
+      "reviewed_at": "2026-11-05",
+      "reviewed": true
+    },
+    {
+      "part_id": "lp5907_3v3",
+      "reviewed_by": "Steve Munene",
+      "reviewed_at": "2026-10-27",
+      "reviewed": true
+    },
+    {
+      "part_id": "mounting_hole_m2_5_clearance",
+      "reviewed_by": "Steve Munene",
+      "reviewed_at": "2026-11-05",
+      "reviewed": true
+    },
+    {
+      "part_id": "r_generic_0603",
+      "reviewed_by": "JeffMboya",
+      "reviewed_at": "2026-11-01",
+      "reviewed": true
+    },
+    {
+      "part_id": "ref5025",
+      "reviewed_by": "Steve Munene",
+      "reviewed_at": "2026-10-27",
+      "reviewed": true
+    },
+    {
+      "part_id": "rp2350",
+      "reviewed_by": "Steve Munene",
+      "reviewed_at": "2026-11-05",
+      "reviewed": true
+    },
+    {
+      "part_id": "usb_c_receptacle",
+      "reviewed_by": "Steve Munene",
+      "reviewed_at": "2026-11-05",
+      "reviewed": true
+    },
+    {
+      "part_id": "w25q128_flash_208mil",
+      "reviewed_by": "Steve Munene",
+      "reviewed_at": "2026-11-05",
+      "reviewed": true
+    }
+  ],
+  "synthetic_symbols": [
+    "ads124s08"
+  ],
+  "routing": {
+    "engine": "freerouting",
+    "engine_version": "freerouting-2.4.1.jar",
+    "state": "routed",
+    "input_hash": "abc91eecd10c5bd9b576dd8cc22d2cde488556172cdacb335d88c5cae58f2085",
+    "run_record": "qualification/class-b/rtd-afe/kicad/rtd_afe.routing.json",
+    "fabrication_notes": [
+      "via at (16.138, 22.835) mm C_DV.2: via-in-pad, order with filled and capped vias"
+    ]
+  },
+  "signal_integrity": {
+    "blocking": 0,
+    "warnings": 12,
+    "findings": [
+      {
+        "code": "W-SYNTH-DRC-013",
+        "message": "nets 10 and 11 run parallel for 3.5 mm on B.Cu 0.203 mm apart, within a dielectric height; risk of crosstalk",
+        "blocking": false
+      },
+      {
+        "code": "W-SYNTH-DRC-016",
+        "message": "net 7 changes layers at (23.41, 28.63) mm with no ground return via within 0.80 mm, so the return current has to jump reference planes",
+        "blocking": false
+      },
+      {
+        "code": "W-SYNTH-DRC-016",
+        "message": "net 9 changes layers at (22.69, 27.91) mm with no ground return via within 0.80 mm, so the return current has to jump reference planes",
+        "blocking": false
+      },
+      {
+        "code": "W-SYNTH-DRC-016",
+        "message": "net 10 changes layers at (23.41, 27.08) mm with no ground return via within 0.80 mm, so the return current has to jump reference planes",
+        "blocking": false
+      },
+      {
+        "code": "W-SYNTH-DRC-016",
+        "message": "net 11 changes layers at (15.49, 24.64) mm with no ground return via within 0.80 mm, so the return current has to jump reference planes",
+        "blocking": false
+      },
+      {
+        "code": "W-SYNTH-DRC-016",
+        "message": "net 11 changes layers at (23.08, 30.50) mm with no ground return via within 0.80 mm, so the return current has to jump reference planes",
+        "blocking": false
+      },
+      {
+        "code": "W-SYNTH-DRC-016",
+        "message": "net 12 changes layers at (14.32, 29.00) mm with no ground return via within 0.80 mm, so the return current has to jump reference planes",
+        "blocking": false
+      },
+      {
+        "code": "W-SYNTH-DRC-016",
+        "message": "net 12 changes layers at (23.47, 29.71) mm with no ground return via within 0.80 mm, so the return current has to jump reference planes",
+        "blocking": false
+      },
+      {
+        "code": "W-SYNTH-DRC-016",
+        "message": "net 13 changes layers at (25.54, 29.05) mm with no ground return via within 0.80 mm, so the return current has to jump reference planes",
+        "blocking": false
+      },
+      {
+        "code": "W-SYNTH-DRC-016",
+        "message": "net 26 changes layers at (23.76, 7.95) mm with no ground return via within 0.80 mm, so the return current has to jump reference planes",
+        "blocking": false
+      },
+      {
+        "code": "W-SYNTH-DRC-016",
+        "message": "net 31 changes layers at (27.96, 27.12) mm with no ground return via within 0.80 mm, so the return current has to jump reference planes",
+        "blocking": false
+      },
+      {
+        "code": "W-SYNTH-DRC-016",
+        "message": "net 36 changes layers at (25.86, 30.42) mm with no ground return via within 0.80 mm, so the return current has to jump reference planes",
+        "blocking": false
+      }
+    ]
+  }
+}

@@ -2,8 +2,10 @@
 
 //! Bill of materials CSV writer.
 //!
-//! Columns: `refdes,value,kind,description`. Fields containing
-//! commas, quotes, or newlines are RFC-4180 quoted. Output is
+//! Columns: `refdes,value,kind,description`, the KiCad symbol and
+//! footprint, supplier identities, and the source's structured
+//! `dielectric`, `voltage`, `tolerance` and `power` attributes. Fields
+//! containing commas, quotes, or newlines are RFC-4180 quoted. Output is
 //! sorted by refdes for diff stability.
 //!
 //! Do-not-populate parts are left out: a DNP line in the BOM would
@@ -31,6 +33,10 @@ pub fn build_bom_csv_for_variant(board: &Board, variant: &Variant) -> String {
 #[allow(clippy::type_complexity)]
 fn build_bom_csv_filtered(board: &Board, extra_dnp: &BTreeSet<&str>) -> String {
     let mut rows: Vec<(
+        String,
+        String,
+        String,
+        String,
         String,
         String,
         String,
@@ -78,6 +84,7 @@ fn build_bom_csv_filtered(board: &Board, extra_dnp: &BTreeSet<&str>) -> String {
                 .as_ref()
                 .and_then(|p| p.mpn.clone())
                 .unwrap_or_default();
+            let attribute = |key: &str| c.properties.get(key).cloned().unwrap_or_default();
             (
                 c.refdes.clone(),
                 value,
@@ -87,14 +94,35 @@ fn build_bom_csv_filtered(board: &Board, extra_dnp: &BTreeSet<&str>) -> String {
                 kicad_footprint,
                 lcsc_pn,
                 mpn,
+                attribute("Dielectric"),
+                attribute("Voltage"),
+                attribute("Tolerance"),
+                attribute("Power"),
             )
         })
         .collect();
     rows.sort();
 
     let mut out = String::new();
-    out.push_str("refdes,value,kind,description,kicad_symbol,kicad_footprint,lcsc_pn,mpn\n");
-    for (refdes, value, kind, description, kicad_symbol, kicad_footprint, lcsc_pn, mpn) in rows {
+    out.push_str(
+        "refdes,value,kind,description,kicad_symbol,kicad_footprint,lcsc_pn,mpn,\
+         dielectric,voltage,tolerance,power\n",
+    );
+    for (
+        refdes,
+        value,
+        kind,
+        description,
+        kicad_symbol,
+        kicad_footprint,
+        lcsc_pn,
+        mpn,
+        dielectric,
+        voltage,
+        tolerance,
+        power,
+    ) in rows
+    {
         write_field(&mut out, &refdes);
         out.push(',');
         write_field(&mut out, &value);
@@ -110,6 +138,14 @@ fn build_bom_csv_filtered(board: &Board, extra_dnp: &BTreeSet<&str>) -> String {
         write_field(&mut out, &lcsc_pn);
         out.push(',');
         write_field(&mut out, &mpn);
+        out.push(',');
+        write_field(&mut out, &dielectric);
+        out.push(',');
+        write_field(&mut out, &voltage);
+        out.push(',');
+        write_field(&mut out, &tolerance);
+        out.push(',');
+        write_field(&mut out, &power);
         out.push('\n');
     }
     out
@@ -190,6 +226,61 @@ mod tests {
         };
         let lite = build_bom_csv_for_variant(&board, &variant);
         assert!(lite.contains("R1") && !lite.contains("R2") && !lite.contains("R3"));
+    }
+
+    #[test]
+    fn structured_attributes_get_their_own_columns() {
+        use std::collections::BTreeMap;
+        use synth_ir::{Component, ComponentId};
+        let mut properties = BTreeMap::new();
+        properties.insert("Dielectric".to_string(), "C0G".to_string());
+        properties.insert("Voltage".to_string(), "50V".to_string());
+        properties.insert("Tolerance".to_string(), "0.1%".to_string());
+        let board = Board {
+            schematic_overflow: None,
+            schematic_paper: None,
+            groups: Vec::new(),
+            legends: false,
+            name: "b".to_string(),
+            layers: 2,
+            manufacturer: None,
+            revision: None,
+            company: None,
+            components: vec![Component {
+                id: ComponentId(0),
+                refdes: "C1".to_string(),
+                kind: "capacitor".to_string(),
+                part: None,
+                value: Some("100nF".to_string()),
+                dnp: false,
+                properties,
+                placement_hint: None,
+                escape: None,
+                group: None,
+                sheet: None,
+                source_span: synth_diagnostics::Span::new(0, 0),
+            }],
+            nets: vec![],
+            diff_pairs: vec![],
+            notes: vec![],
+            keepouts: vec![],
+            stackup: None,
+            netclasses: vec![],
+            buses: vec![],
+            modules: vec![],
+            variants: vec![],
+            required_processes: std::collections::BTreeSet::new(),
+            source_span: synth_diagnostics::Span::new(0, 0),
+        };
+        let csv = build_bom_csv(&board);
+        assert!(
+            csv.starts_with(
+                "refdes,value,kind,description,kicad_symbol,kicad_footprint,lcsc_pn,mpn,\
+                 dielectric,voltage,tolerance,power\n"
+            ),
+            "{csv}"
+        );
+        assert!(csv.contains(",C0G,50V,0.1%,"), "{csv}");
     }
 
     #[test]

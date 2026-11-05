@@ -37,3 +37,6 @@ name = "p4"
 number = "4"
 electrical_type = "passive"
 
+[provenance]
+reviewed_by = "Steve Munene"
+reviewed_at = "2026-11-05"

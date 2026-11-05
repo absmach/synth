@@ -75,13 +75,13 @@ expression: project
     },
     "net_colors": null,
     "netclass_assignments": {
-      "/MOSI": "SPI",
-      "MOSI": "SPI"
+      "/MISO": "SPI",
+      "MISO": "SPI"
     },
     "netclass_patterns": [
       {
         "netclass": "SPI",
-        "pattern": "/*/MOSI"
+        "pattern": "/*/MISO"
       }
     ]
   },

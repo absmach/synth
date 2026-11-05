@@ -40,10 +40,10 @@ fn instance_value_reaches_bom_csv_and_schematic_once() {
     let board = lower(TWO_RESISTORS);
     let (bom, _) = bom(&board);
     assert!(
-        row(&bom, "R1").ends_with(",C110776,RT0603BRD071KL"),
+        row(&bom, "R1").contains(",C110776,RT0603BRD071KL,"),
         "{bom}"
     );
-    assert!(row(&bom, "R2").ends_with(",C123,RT0603FRE0727RL"), "{bom}");
+    assert!(row(&bom, "R2").contains(",C123,RT0603FRE0727RL,"), "{bom}");
 }
 
 #[test]
