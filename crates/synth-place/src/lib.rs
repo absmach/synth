@@ -3108,7 +3108,10 @@ fn place_with_outline<S: ::std::hash::BuildHasher>(
                 .filter(|h| h.priority == synth_ir::PlacementPriority::Hard)
                 .and_then(|h| h.near.as_deref())
                 .and_then(|near| resolve_near_target(board, near))
-                .map(|(anchor, _)| anchor)
+                // Only a hint that names a pin sits the passive against that
+                // pin's pad; a component-level `near` still keeps the halo
+                // against its anchor, where there may be routing to do.
+                .and_then(|(anchor, pin)| pin.map(|_| anchor))
         } else {
             None
         };
