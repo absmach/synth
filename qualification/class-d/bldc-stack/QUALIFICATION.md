@@ -29,11 +29,17 @@ kicad-cli sch erc --severity-all --format json -o /tmp/power.erc.json $B/kicad/p
 cd $B && grep -v '^#' SHA256SUMS | sha256sum -c -
 ```
 
-Tool versions used: KiCad 10.0.7, FreeRouting 2.4.1, OpenJDK 21.0.12.1,
+FreeRouting 2.4.1 is Java 25 bytecode. Java 21 fails with
+`UnsupportedClassVersionError`; pass a Java 25 runtime with
+`--freerouting-java <path>` (Temurin 25 is what the 2026-11-05 run used).
+KiCadRoutingTools is the fallback when its Python environment is set up.
+
+Tool versions used: KiCad 10.0.7, FreeRouting 2.4.1, Temurin 25.0.5,
 Synth 0.1.1. The tool rows below were rerun on 2026-11-05 against the revised
-control layout (`outline 60mm x 30mm`, mounting holes on the edge, J_B2B flush,
+control layout (`outline 60mm x 32mm`, mounting holes on the edge, J_B2B flush,
 vertical Hall column). The FreeRouting adapter still fails before producing
-copper in this environment (see A9); routing is therefore not evidence.
+copper, but no route has yet passed the full gate (see A9); routing is
+therefore not evidence.
 
 ## A. Checked by tools
 
@@ -47,14 +53,14 @@ copper in this environment (see A9); routing is therefore not evidence.
 | A6 | A 12 V to 3.3 V exchange is rejected | `mappings_neg_voltage.json` | `warning`, `E-SYNTH-MULTIBOARD-003`/`005` |
 | A7 | A swapped source pin is rejected | `control_neg_swap.synth` | `warning`, `E-SYNTH-MULTIBOARD-003` |
 | A8 | Connector and mounting holes align | Sidecars, test `the_connector_and_mounting_holes_line_up` | J_B2B and H1-H4 are at identical coordinates on both boards, 0.000 mm and the same rotation |
-| A9 | Copper is routed | `synth export-kicad --router free-routing`; `synth check control.synth` | **Failed.** `tools/freeroute_autoroute.py` exits 1 with a KiCad `PROPERTY_ENUM` assert before routing; the same failure occurs on the committed Class-B buck board. `synth check` returns `status: fail` at the DRC stage because the default `kicad-routing-tools` checkout is not configured. `release_ready: false`, `validation_failed` |
+| A9 | Copper is routed | `synth export-kicad --router free-routing --freerouting-java <Java 25>`; `--router kicad-routing-tools` | **Partial, gate open.** The earlier failure was Java 21 running a Java 25 JAR. With Temurin 25, FreeRouting closes 39/40 nets with 0 DRC errors and one open pad (38/40 on the 3.0 mm passive grid). KiCadRoutingTools closes 39/40 with 0 DRC errors but places 13 vias inside U1 pads and fails its ground-return/plane-split gate. No engine yet returns a fully connected, fabrication-clean board. `release_ready: false`, `validation_failed` |
 | A10 | The exported projects load in KiCad | `kicad-cli sch erc` and `kicad-cli pcb drc` on the delivered files | Control: 0 ERC errors, 0 warnings. Power: 0 ERC errors, 0 warnings. DRC on the un-routed control PCB: 0 errors, 97 unconnected pads, 0 warnings; no routed copper exists |
 | A11 | Every authored part has a datasheet, an MPN and a real KiCad footprint | `synth registry qualify --part <id>` | All authored parts pass pin/pad, symbol, dimension and provenance checks; each is blocked on `E-SYNTH-QUAL-008` "part has no reviewer", which is intentional: `reviewed_by = ""` |
 | A12 | The mapping file is the only cross-board source of truth | `interboard_mappings.json` and the test | The test loads that file; no pin mapping is duplicated in the sources |
 | A13 | The netlist matches the source | `synth dump-ir` / the exported netlist | Control: 61 components, 40 nets. Power: 111 components, 53 nets. Net names and members are in `agent-run/NETLIST.md` |
 | A14 | Hashes of the delivered files | `SHA256SUMS` | Generated locally with `sha256sum`; no CI golden set exists for this new board |
 | A15 | The missing datasheets were fetched and read | `datasheets/`, Firecrawl 2026-11-03 | Phoenix 1715721/1715734 (17.5 A, 400 V III/2, 5.08 mm), LCSC C5116480/C30867 (2.5 A/contact), onsemi 2N3904 (40 V, 200 mA); LCSC C480516/C480520 found for the terminal blocks |
-| A16 | The control board is exactly 60 x 30 mm with the holes on the edge | `cargo test -p synth-cli --test board_outline` | Edge.Cuts extremes are `(0, 0)` and `(60, 30)`; the mounting hole keeps its sidecar edge coordinate and no ground via sits in its corner; a sidecar part outside the rectangle is `E-SYNTH-PLACE-003` |
+| A16 | A declared outline fixes Edge.Cuts and lets a mounting hole sit on the edge | `cargo test -p synth-cli --test board_outline` | On the 60 x 30 fixture, Edge.Cuts extremes are `(0, 0)` and `(60, 30)`; the mounting hole keeps its sidecar edge coordinate and no ground via sits in its corner; a sidecar part outside the rectangle is `E-SYNTH-PLACE-003` |
 
 ## B. Not proven: needs expert review
 
@@ -78,7 +84,7 @@ They are open, not closed.
 
 | Issue item | Verdict | Where |
 | --- | --- | --- |
-| Both boards pass `synth check` independently | Partial: both `synth validate` exit 0 with 0 errors; routing/`synth check` fails on the shared FreeRouting environment | A1, A2, A9 |
+| Both boards pass `synth check` independently | Partial: both `synth validate` exit 0 with 0 errors; the control board routes 39/40 nets, so `synth check` still fails | A1, A2, A9 |
 | Multiboard export reports 100 % matched pins | Done: 20/20 | A3 |
 | Three negative mapping cases fail | Done: swap, drop, voltage; plus a source swap | A4-A7 |
 | Connector current table with derating | Done in `README.md`; 2.5 A contact, 50 % bracket, highest pin 220 mA | README |

@@ -7,7 +7,7 @@
 // the bus and 12 V sense lines, GATE_EN, FAULT_N, 3.3 V, 12 V and ground.
 board "bldc_control" {
   layers 4
-  outline 60mm x 30mm
+  outline 60mm x 32mm
   manufacturer "jlcpcb"
   revision "A"
 

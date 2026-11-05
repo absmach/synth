@@ -33,13 +33,13 @@ amplifiers, and makes 12 V with an LMR38010 buck.
 ## Board size
 
 The J_B2B pinout and the four mounting holes need a common frame. Both sidecars
-place J_B2B at (57.21, 15) mm and the holes at (2, 2), (51, 2), (2, 28) and
-(51, 28) mm. The power sidecar is a placement record with the same interface;
+place J_B2B at (57.21, 16) mm and the holes at (2, 2), (51, 2), (2, 30) and
+(51, 30) mm. The power sidecar is a placement record with the same interface;
 it has no exported PCB, so it is not a rendered board.
 
-The control board declares `outline 60mm x 30mm`, so Edge.Cuts is exactly
-**60 x 30 mm** with its origin at (0, 0) and no fitted margin. J_B2B is 25.4 mm
-long, so the board height is the connector plus 2.3 mm at each end, and the
+The control board declares `outline 60mm x 32mm`, so Edge.Cuts is exactly
+**60 x 32 mm** with its origin at (0, 0) and no fitted margin. J_B2B is 25.4 mm
+long, so the board height is the connector plus 3.3 mm at each end, and the
 connector body is flush with the right edge. The holes sit on the edge: a 2 mm
 centre with a 1.25 mm drill leaves a 0.75 mm rim. The right-hand pair is on the
 top and bottom edges at x = 51 mm because the 25.4 mm connector owns the whole
@@ -52,7 +52,9 @@ planes are unstitched before routing.
 
 The three Hall connectors are vertical 1x3 headers in a column on the left, with
 their filter parts in the same three rows. The three headers on the bottom edge
-(J_ENC, J_SWD, J_RS485) share one pin-row height.
+(J_ENC, J_SWD, J_RS485) share one pin-row height. Every resistor, capacitor and
+inductor sits on a 3.0 mm grid (the KiCad 0603 courtyard is 2.96 mm wide, so a
+2.5 mm grid forced the legaliser to nudge parts off their slots).
 
 The passive reference labels are hidden on the silkscreen (the sidecar `[labels]`
 table) so the auto-placed text does not collide; every part is still in the BOM

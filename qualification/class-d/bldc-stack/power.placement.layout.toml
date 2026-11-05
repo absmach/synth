@@ -20,7 +20,7 @@ timestamp = "2026-11-03T23:30:00+00:00"
 
 [components.H3]
 x = 2
-y = 28
+y = 30
 rotation = 0
 source = "agent"
 priority = "hard"
@@ -28,7 +28,7 @@ timestamp = "2026-11-03T23:30:00+00:00"
 
 [components.H4]
 x = 51
-y = 28
+y = 30
 rotation = 0
 source = "agent"
 priority = "hard"
@@ -860,7 +860,7 @@ timestamp = "2026-11-03T23:30:00+00:00"
 
 [components.J_B2B]
 x = 57.21
-y = 15
+y = 16
 rotation = 0
 source = "agent"
 priority = "hard"

@@ -1,7 +1,7 @@
 # Verification report: BLDC stack (SYN-408)
 
 All commands below were rerun from the repository root on 2026-11-05 against
-the revised 60 x 30 mm control layout. The earlier run was on 2026-11-03. Both
+the revised 60 x 32 mm control layout. The earlier run was on 2026-11-03. Both
 used an empty `XDG_DATA_HOME` and
 `KICAD_SYMBOL_DIR=/usr/share/kicad/symbols`,
 `KICAD_FOOTPRINT_DIR=/usr/share/kicad/footprints`. KiCad 10.0.7, FreeRouting
@@ -70,28 +70,35 @@ mismatch, equal rotation.
 ```
 $ SYNTH_SOURCE_REVISION=$(git rev-parse HEAD) synth export-kicad \
     qualification/class-d/bldc-stack/control.synth --out <out> \
-    --allow-unverified-parts --validate-erc --router free-routing
+    --allow-unverified-parts --validate-erc --router free-routing \
+    --freerouting-java ~/.local/share/synth/jre25/jdk-25.0.5+8-jre/bin/java
 routing <out>/bldc_control.synth.kicad_pcb with freerouting
-validation_failed: freerouting routing failed at route stage (crashed):
-  tools/freeroute_autoroute.py exited 1:
-  ./kicad/include/properties/property.h(607): assert "m_choices.GetCount() > 0"
-  failed in PROPERTY_ENUM(): No enum choices defined
-kicad-cli pcb drc: errors 0, unconnected pads 97, warnings 0
-wrote release.json
+validation_failed: freerouting (39 connected net(s), 1 open, ...)
+kicad-cli pcb drc: errors 0, unconnected pads 1, warnings 55
 ```
 
-The control source declares `outline 60mm x 30mm`, so Edge.Cuts is exactly
-0-60 x 0-30 mm; the mounting holes keep their sidecar coordinates on the edge
+FreeRouting 2.4.1 is Java 25 bytecode. The earlier failure was Java 21
+(`UnsupportedClassVersionError`, reported alongside the KiCad
+`PROPERTY_ENUM` assert), not the board. With Temurin 25 the router produces
+copper: the best run closes 39 of 40 nets with 0 DRC errors and one open pad
+(`+12V_LOGIC` or `GATE_EN`, depending on placement). On the 3.0 mm passive grid
+it closes 38 of 40 (`+12V_LOGIC`, `+3V3`). KiCadRoutingTools closes 39 of 40
+with 0 DRC errors but places 13 vias inside U1 pads and fails its ground-return
+and plane-split gates, so it is not fabrication-clean. The routing gate remains
+open until one engine returns a fully connected, policy-clean board.
+
+The un-routed baseline still reports 0 DRC errors, 97 unconnected pads and
+0 warnings; that is placement evidence, not routed evidence.
+
+The control source declares `outline 60mm x 32mm`, so Edge.Cuts is exactly
+0-60 x 0-32 mm; the mounting holes keep their sidecar coordinates on the edge
 and J_B2B is flush with the right edge. The three Hall connectors are vertical
 1x3 headers in a column on the left, and the three bottom headers share one
 pin-row height. The four corner ground-fence vias are gone; the two remaining
 plane-stitching vias sit at the top and bottom edge midpoints, clear of every
 hole.
 
-The same command on the committed `qualification/class-b/buck/buck.synth` fails
-with the identical assert, so the failure is environmental, not caused by this
-board. No copper was produced. `release_ready` is false and `production_status`
-is `untrusted`.
+`release_ready` is false and `production_status` is `untrusted`.
 
 The power-board export was killed after 28 minutes at about 96 % CPU with no
 PCB written; it was stuck in the export path, not in an external router. Its schematic, project, symbol and library table were

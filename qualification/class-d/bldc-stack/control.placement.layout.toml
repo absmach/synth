@@ -20,7 +20,7 @@ timestamp = "2026-11-04T00:00:00+00:00"
 
 [components.H3]
 x = 2
-y = 28
+y = 30
 rotation = 0
 source = "agent"
 priority = "hard"
@@ -28,7 +28,7 @@ timestamp = "2026-11-04T00:00:00+00:00"
 
 [components.H4]
 x = 51
-y = 28
+y = 30
 rotation = 0
 source = "agent"
 priority = "hard"
@@ -36,7 +36,7 @@ timestamp = "2026-11-04T00:00:00+00:00"
 
 [components.J_B2B]
 x = 57.21
-y = 15
+y = 16
 rotation = 0
 source = "agent"
 priority = "hard"
@@ -51,16 +51,16 @@ priority = "hard"
 timestamp = "2026-11-04T00:00:00+00:00"
 
 [components.C_LDO_IN]
-x = 23
-y = 5
+x = 20
+y = 3
 rotation = 0
 source = "agent"
 priority = "hard"
 timestamp = "2026-11-04T00:00:00+00:00"
 
 [components.C_LDO_IN2]
-x = 20.5
-y = 5
+x = 15.5
+y = 3
 rotation = 0
 source = "agent"
 priority = "hard"
@@ -83,7 +83,7 @@ priority = "hard"
 timestamp = "2026-11-04T00:00:00+00:00"
 
 [components.C_B2B]
-x = 37
+x = 36
 y = 9
 rotation = 0
 source = "agent"
@@ -100,7 +100,7 @@ timestamp = "2026-11-04T00:00:00+00:00"
 
 [components.C_VDD1]
 x = 34
-y = 10
+y = 11
 rotation = 0
 source = "agent"
 priority = "hard"
@@ -108,23 +108,23 @@ timestamp = "2026-11-04T00:00:00+00:00"
 
 [components.C_VDD2]
 x = 34
-y = 12.5
+y = 14
 rotation = 0
 source = "agent"
 priority = "hard"
 timestamp = "2026-11-04T00:00:00+00:00"
 
 [components.R_NRST]
-x = 20
-y = 10.5
+x = 12
+y = 10
 rotation = 0
 source = "agent"
 priority = "hard"
 timestamp = "2026-11-04T00:00:00+00:00"
 
 [components.C_NRST]
-x = 20
-y = 13
+x = 15
+y = 10
 rotation = 0
 source = "agent"
 priority = "hard"
@@ -139,15 +139,15 @@ priority = "hard"
 timestamp = "2026-11-04T00:00:00+00:00"
 
 [components.R_BOOT]
-x = 20
-y = 15
+x = 18
+y = 10
 rotation = 0
 source = "agent"
 priority = "hard"
 timestamp = "2026-11-04T00:00:00+00:00"
 
 [components.R_FAULT]
-x = 36
+x = 35
 y = 24.5
 rotation = 0
 source = "agent"
@@ -155,7 +155,7 @@ priority = "hard"
 timestamp = "2026-11-04T00:00:00+00:00"
 
 [components.C_FAULT]
-x = 38.5
+x = 38
 y = 24.5
 rotation = 0
 source = "agent"
@@ -163,8 +163,8 @@ priority = "hard"
 timestamp = "2026-11-04T00:00:00+00:00"
 
 [components.R_GATE_EN]
-x = 20
-y = 23
+x = 18
+y = 22.5
 rotation = 0
 source = "agent"
 priority = "hard"
@@ -172,7 +172,7 @@ timestamp = "2026-11-04T00:00:00+00:00"
 
 [components.J_HALL_U]
 x = 7
-y = 5.5
+y = 5
 rotation = 0
 source = "agent"
 priority = "hard"
@@ -180,7 +180,7 @@ timestamp = "2026-11-04T00:00:00+00:00"
 
 [components.J_HALL_V]
 x = 7
-y = 14.5
+y = 15
 rotation = 0
 source = "agent"
 priority = "hard"
@@ -188,7 +188,7 @@ timestamp = "2026-11-04T00:00:00+00:00"
 
 [components.J_HALL_W]
 x = 7
-y = 23.5
+y = 25
 rotation = 0
 source = "agent"
 priority = "hard"
@@ -196,7 +196,7 @@ timestamp = "2026-11-04T00:00:00+00:00"
 
 [components.R_HALL_U]
 x = 12
-y = 5.5
+y = 5
 rotation = 0
 source = "agent"
 priority = "hard"
@@ -204,7 +204,7 @@ timestamp = "2026-11-04T00:00:00+00:00"
 
 [components.R_HALL_V]
 x = 12
-y = 14.5
+y = 15
 rotation = 0
 source = "agent"
 priority = "hard"
@@ -212,55 +212,55 @@ timestamp = "2026-11-04T00:00:00+00:00"
 
 [components.R_HALL_W]
 x = 12
-y = 23.5
+y = 25
 rotation = 0
 source = "agent"
 priority = "hard"
 timestamp = "2026-11-04T00:00:00+00:00"
 
 [components.R_HALL_SU]
-x = 14.5
-y = 5.5
+x = 15
+y = 5
 rotation = 0
 source = "agent"
 priority = "hard"
 timestamp = "2026-11-04T00:00:00+00:00"
 
 [components.R_HALL_SV]
-x = 14.5
-y = 14.5
+x = 15
+y = 15
 rotation = 0
 source = "agent"
 priority = "hard"
 timestamp = "2026-11-04T00:00:00+00:00"
 
 [components.R_HALL_SW]
-x = 14.5
-y = 23.5
+x = 15
+y = 25
 rotation = 0
 source = "agent"
 priority = "hard"
 timestamp = "2026-11-04T00:00:00+00:00"
 
 [components.C_HALL_U]
-x = 17
-y = 5.5
+x = 18
+y = 5
 rotation = 0
 source = "agent"
 priority = "hard"
 timestamp = "2026-11-04T00:00:00+00:00"
 
 [components.C_HALL_V]
-x = 17
-y = 14.5
+x = 18
+y = 15
 rotation = 0
 source = "agent"
 priority = "hard"
 timestamp = "2026-11-04T00:00:00+00:00"
 
 [components.C_HALL_W]
-x = 17
-y = 23.5
+x = 18
+y = 25
 rotation = 0
 source = "agent"
 priority = "hard"
@@ -275,32 +275,32 @@ priority = "hard"
 timestamp = "2026-11-04T00:00:00+00:00"
 
 [components.R_ENC_A]
-x = 10.5
-y = 21
+x = 12
+y = 17.5
 rotation = 0
 source = "agent"
 priority = "hard"
 timestamp = "2026-11-04T00:00:00+00:00"
 
 [components.R_ENC_B]
-x = 13
-y = 21
+x = 15
+y = 17.5
 rotation = 0
 source = "agent"
 priority = "hard"
 timestamp = "2026-11-04T00:00:00+00:00"
 
 [components.C_ENC_A]
-x = 10.5
-y = 23.5
+x = 18
+y = 17.5
 rotation = 0
 source = "agent"
 priority = "hard"
 timestamp = "2026-11-04T00:00:00+00:00"
 
 [components.C_ENC_B]
-x = 13
-y = 23.5
+x = 12
+y = 20
 rotation = 0
 source = "agent"
 priority = "hard"
@@ -315,7 +315,7 @@ priority = "hard"
 timestamp = "2026-11-04T00:00:00+00:00"
 
 [components.C_RS485]
-x = 43
+x = 42
 y = 24.5
 rotation = 0
 source = "agent"
@@ -332,7 +332,7 @@ timestamp = "2026-11-04T00:00:00+00:00"
 
 [components.R_RS485_RX]
 x = 52.5
-y = 18.5
+y = 19
 rotation = 0
 source = "agent"
 priority = "hard"
@@ -371,39 +371,39 @@ priority = "hard"
 timestamp = "2026-11-04T00:00:00+00:00"
 
 [components.D_LED_STATUS]
-x = 20.5
-y = 18
+x = 18
+y = 20
 rotation = 0
 source = "agent"
 priority = "hard"
 timestamp = "2026-11-04T00:00:00+00:00"
 
 [components.R_LED_STATUS]
-x = 18
-y = 18
+x = 15
+y = 20
 rotation = 0
 source = "agent"
 priority = "hard"
 timestamp = "2026-11-04T00:00:00+00:00"
 
 [components.D_LED_FAULT]
-x = 20.5
-y = 20.5
+x = 15
+y = 22.5
 rotation = 0
 source = "agent"
 priority = "hard"
 timestamp = "2026-11-04T00:00:00+00:00"
 
 [components.R_LED_FAULT]
-x = 18
-y = 20.5
+x = 12
+y = 22.5
 rotation = 0
 source = "agent"
 priority = "hard"
 timestamp = "2026-11-04T00:00:00+00:00"
 
 [components.R_ISENSE_U]
-x = 42
+x = 40
 y = 7
 rotation = 0
 source = "agent"
@@ -411,7 +411,7 @@ priority = "hard"
 timestamp = "2026-11-04T00:00:00+00:00"
 
 [components.R_ISENSE_V]
-x = 42
+x = 40
 y = 10
 rotation = 0
 source = "agent"
@@ -419,7 +419,7 @@ priority = "hard"
 timestamp = "2026-11-04T00:00:00+00:00"
 
 [components.R_ISENSE_W]
-x = 42
+x = 40
 y = 13
 rotation = 0
 source = "agent"
@@ -427,7 +427,7 @@ priority = "hard"
 timestamp = "2026-11-04T00:00:00+00:00"
 
 [components.C_ISENSE_U]
-x = 44.5
+x = 43
 y = 7
 rotation = 0
 source = "agent"
@@ -435,7 +435,7 @@ priority = "hard"
 timestamp = "2026-11-04T00:00:00+00:00"
 
 [components.C_ISENSE_V]
-x = 44.5
+x = 43
 y = 10
 rotation = 0
 source = "agent"
@@ -443,7 +443,7 @@ priority = "hard"
 timestamp = "2026-11-04T00:00:00+00:00"
 
 [components.C_ISENSE_W]
-x = 44.5
+x = 43
 y = 13
 rotation = 0
 source = "agent"
@@ -451,7 +451,7 @@ priority = "hard"
 timestamp = "2026-11-04T00:00:00+00:00"
 
 [components.R_VBUS_S]
-x = 42
+x = 40
 y = 16
 rotation = 0
 source = "agent"
@@ -459,7 +459,7 @@ priority = "hard"
 timestamp = "2026-11-04T00:00:00+00:00"
 
 [components.C_VBUS_S]
-x = 44.5
+x = 43
 y = 16
 rotation = 0
 source = "agent"
@@ -467,7 +467,7 @@ priority = "hard"
 timestamp = "2026-11-04T00:00:00+00:00"
 
 [components.R_12V_T]
-x = 42
+x = 40
 y = 19
 rotation = 0
 source = "agent"
@@ -475,15 +475,15 @@ priority = "hard"
 timestamp = "2026-11-04T00:00:00+00:00"
 
 [components.R_12V_B]
-x = 42
-y = 21.5
+x = 40
+y = 22
 rotation = 0
 source = "agent"
 priority = "hard"
 timestamp = "2026-11-04T00:00:00+00:00"
 
 [components.C_12V_S]
-x = 44
+x = 43
 y = 19
 rotation = 0
 source = "agent"
@@ -679,5 +679,9 @@ hide = true
 priority = "hard"
 
 [labels.J_ENC]
+hide = true
+priority = "hard"
+
+[labels.SW_BOOT]
 hide = true
 priority = "hard"
