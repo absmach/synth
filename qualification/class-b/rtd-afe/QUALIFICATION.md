@@ -45,7 +45,7 @@ screw head, cable or mating connector was measured.
 | J2 | body bbox x 9.20..20.41, y 39.90..43.50; 0.71 mm from bottom edge | mating fit not checked |
 | J3 | body bbox x 23.66..32.34, y 39.90..43.50; 0.71 mm from bottom edge | mating fit not checked |
 
-The mounting holes are non-plated, 2.5 mm, with 5.6 x 5.6 mm all-layer rule
+The mounting holes are non-plated, 2.7 mm (M2.5 clearance), with 5.6 x 5.6 mm all-layer rule
 areas. J1 is centred on the top edge. The enclosure and screw-head clearance
 are open mechanical items.
 
@@ -265,7 +265,7 @@ person checked it. "Not reviewed" is the honest state of every other part.
 | R_S1/R_S2, R_BIAS, R_AV, R_RST, R_RUN, R_X, R_CC1/2, R_DP/DN | Generic 0603 | None | 2 pins | Values in the BOM; R_S1/R_S2 and R_BIAS are 0.1 % in the source | Generic |
 | C_* | Generic 0603/0805 | None | 2 pins | C0G for the filter and crystal; X7R for the supply decoupling | Generic |
 | J2, J3 | Generic 2.54 mm headers (1x4, 1x3) | None | 4 and 3 pins | — | Generic |
-| H1..H4 | Generic M2.5 NPTH | None | 1 hole | — | Generic |
+| H1..H4 | Generic M2.5 clearance NPTH (2.7 mm) | None | 1 hole | — | Generic |
 
 The registry's required decoupling is met: ADS124S08 AVDD 330 nF and DVDD
 100 nF; REF5025 VIN/VOUT 1 uF; LP5907 VIN/VOUT 1 uF (2.2 uF fitted); RP2350

@@ -214,7 +214,7 @@ component review.
 - 29 passives/TVS and H1/H2/H3/J1/J3 have their reference label hidden because
   the refdes field has no clear spot in the compact layout. The refdes are still in
   the BOM, PnP and schematic; the full list is in QUALIFICATION.md.
-- The mounting holes leave 2.25 to 2.34 mm of material around a 2.5 mm hole.
+- The mounting holes leave 2.15 to 2.24 mm of material around a 2.7 mm hole, the ISO 273 fine clearance for M2.5.
   J2/J3 are about 0.71 mm from the bottom edge and J1 1.27 mm from the top.
   The enclosure and screw-head clearance are mechanical check items; the
   measured table is in QUALIFICATION.md.
