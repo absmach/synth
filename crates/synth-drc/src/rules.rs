@@ -307,6 +307,15 @@ pub fn check_min_annular_ring(routing: &Routing, profile: &ManufacturerProfile) 
             if ring_nm >= profile.min_annular_ring_nm {
                 return None;
             }
+            // A via no wider than the process's via-in-pad land is a filled
+            // and capped via, judged by the land the manufacturer's guide
+            // gives (drill plus 0.15 mm) and not by the plated-barrel ring.
+            if profile.via_in_pad_land_nm().is_some_and(|land| {
+                v.pad_diameter_nm <= land
+                    && v.pad_diameter_nm >= v.drill_nm + profile.via_in_pad_land_extra_nm
+            }) {
+                return None;
+            }
             Some(Violation {
                 code: "E-SYNTH-DRC-005".to_string(),
                 message: format!(
@@ -984,6 +993,37 @@ mod tests {
             pad_diameter_nm: mm_to_nm(0.6),
         });
         assert!(check_min_annular_ring(&r, &jlc()).is_empty());
+    }
+
+    /// JLCPCB's via-in-pad guide gives a filled and capped via's land as the
+    /// drill plus 0.15 mm, a 0.075 mm ring. On a tier that offers via-in-pad a
+    /// via at exactly that land is judged by the guide; on the standard tier,
+    /// and for a via wider than the land but short of the plain floor, the
+    /// plain ring floor still applies.
+    #[test]
+    fn a_via_at_the_via_in_pad_land_is_judged_by_the_guide_not_the_barrel_ring() {
+        let via = |pad_mm: f64| {
+            let mut r = empty_routing();
+            r.vias.push(Via {
+                net: NetId(2),
+                at: Point::new(0, 0),
+                drill_nm: mm_to_nm(0.2),
+                pad_diameter_nm: mm_to_nm(pad_mm),
+            });
+            r
+        };
+        let advanced = ManufacturerProfile::jlc_advanced();
+        assert!(check_min_annular_ring(&via(0.35), &advanced).is_empty());
+        assert_eq!(
+            check_min_annular_ring(&via(0.35), &jlc()).len(),
+            1,
+            "the standard tier does not fill and cap, so it keeps the floor"
+        );
+        assert_eq!(
+            check_min_annular_ring(&via(0.40), &advanced).len(),
+            1,
+            "a via wider than the land is an ordinary via"
+        );
     }
 
     #[test]

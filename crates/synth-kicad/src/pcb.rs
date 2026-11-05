@@ -715,7 +715,12 @@ impl PlaneVia {
     /// from two annular rings around a bare hole.
     fn for_via_in_pad(profile: &synth_drc::ManufacturerProfile) -> Self {
         let drill_nm = profile.min_drill_diameter_nm;
-        let land_nm = drill_nm + VIA_IN_PAD_LAND_EXTRA_NM;
+        let extra_nm = if profile.via_in_pad_land_extra_nm > 0 {
+            profile.via_in_pad_land_extra_nm
+        } else {
+            VIA_IN_PAD_LAND_EXTRA_NM
+        };
+        let land_nm = drill_nm + extra_nm;
         Self {
             pad_radius_nm: (land_nm + 1) / 2,
             drill_nm,

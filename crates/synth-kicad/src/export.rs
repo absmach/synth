@@ -1110,6 +1110,19 @@ fn design_rules(profile: &synth_drc::ManufacturerProfile, board: &Board) -> Stri
          (rule \"manufacturer copper to NPTH hole\"\n  (constraint edge_clearance (min {hole}mm))\n  (condition \"A.Pad_Type == 'NPTH, mechanical'\"))\n\
          (rule \"manufacturer copper to hole\"\n  (constraint hole_clearance (min {hole}mm)))\n"
     );
+    // A via no wider than the process's via-in-pad land is a filled and capped
+    // via: the manufacturer's guide gives its land as the drill plus 0.15 mm,
+    // which leaves less ring than the plain via floor the project states
+    // board-wide. KiCad applies the last matching rule, so it comes last.
+    if let Some(land_nm) = profile.via_in_pad_land_nm() {
+        use std::fmt::Write as _;
+        let land = synth_geometry::nm_to_mm(land_nm);
+        let ring = synth_geometry::nm_to_mm(profile.via_in_pad_land_extra_nm / 2);
+        let _ = writeln!(
+            rules,
+            "(rule \"filled and capped via in pad\"\n  (constraint annular_width (min {ring}mm))\n  (constraint via_diameter (min {land}mm))\n  (condition \"A.Type == 'Via' && A.Diameter <= {land}mm\"))"
+        );
+    }
     rules.push_str(&layer_pin_rules(board));
     rules
 }
@@ -1755,6 +1768,31 @@ mod tests {
             &board_from(r#"board "b" { layers 4 netclass "X" { } }"#),
         );
         assert!(!free.contains("netclass"), "{free}");
+    }
+
+    /// A via-in-pad tier states the guide's land for a filled and capped via
+    /// as a rule of its own, so KiCad does not hold it to the plain via ring
+    /// floor the project states board-wide. A tier without via-in-pad gets no
+    /// such rule.
+    #[test]
+    fn a_via_in_pad_tier_exports_the_filled_via_rule_and_a_plain_tier_does_not() {
+        let advanced = design_rules(
+            &synth_drc::ManufacturerProfile::jlc_advanced(),
+            &board_from(r#"board "b" { layers 6 }"#),
+        );
+        assert!(
+            advanced.contains("(constraint annular_width (min 0.075mm))"),
+            "{advanced}"
+        );
+        assert!(
+            advanced.contains("A.Type == 'Via' && A.Diameter <= 0.35mm"),
+            "{advanced}"
+        );
+        let standard = design_rules(
+            &synth_drc::ManufacturerProfile::jlc_standard(),
+            &board_from(r#"board "b" { layers 6 }"#),
+        );
+        assert!(!standard.contains("annular_width"), "{standard}");
     }
 
     /// The router resolves the board's declared manufacturer, so the exported
