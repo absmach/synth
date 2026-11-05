@@ -5,25 +5,18 @@ on:
     branches:
       - main
     paths: &qualification_paths
-      - "crates/synth-ast/**"
-      - "crates/synth-cli/**"
-      - "crates/synth-connectivity/**"
-      - "crates/synth-drc/**"
-      - "crates/synth-geometry/**"
-      - "crates/synth-ir/**"
-      - "crates/synth-kicad/**"
-      - "crates/synth-layout/**"
-      - "crates/synth-parser/**"
-      - "crates/synth-place/**"
-      - "crates/synth-registry/**"
-      - "crates/synth-route/**"
-      - "crates/synth-validate/**"
+      # All of them, not a list: synth-cli links most of the workspace, and a
+      # hand-kept list is how a router change ends up skipping this workflow.
+      - "crates/**"
       - "registry/**"
       - "qualification/**"
       - "examples/**"
       - "fixtures/designs/**"
       - "fixtures/kicad-reference/**"
       - ".github/workflows/qualification.yml"
+      # The jobs below install KiCad through these, and every result in the
+      # matrix depends on which KiCad and which libraries that leaves behind.
+      - ".github/scripts/**"
       # The release output is not only the tree under crates/. A dependency
       # bump, a feature change or a toolchain move can change what the
       # compiler emits for every board while touching none of the paths
@@ -134,7 +127,9 @@ jobs:
           path: |
             target/qualification/results.json
             target/qualification/registry.json
+            target/qualification/boards/
           if-no-files-found: warn
+          retention-days: 14
 
   # Blocking. The manufacturing stage needs a KiCad install to produce any
   # evidence at all, so this job established the first baseline and
@@ -197,10 +192,16 @@ jobs:
           SYNTH_CHECK_DRC_TIMEOUT_SECS: "300"
         run: cargo test --release -p synth-cli --test qualification_matrix -- --ignored --nocapture
 
+      # Everything a reviewer needs to inspect a failure without re-running it:
+      # per board, the check report and the schematic, routed PCBs, DRC report,
+      # Gerbers, drill files and verification evidence the export wrote.
       - name: Upload manufacturing baseline
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: qualification-results-fab
-          path: target/qualification/results.json
+          path: |
+            target/qualification/results.json
+            target/qualification/boards/
           if-no-files-found: warn
+          retention-days: 14

@@ -74,12 +74,20 @@ SYNTH_QUALIFY_FAB=1 cargo test --release -p synth-cli \
 not usable. The results file records which engine ran, so a result is
 attributable to the thing that laid the copper.
 
-Results land in `target/qualification/results.json`, and CI uploads them as an
-artifact on every run, passing or failing. The file records the KiCad version,
-a SHA-256 of the registry manifest, every stage status per board, the
+Results land in `target/qualification/results.json`. The file records the KiCad
+version, a SHA-256 of the registry manifest, every stage status per board, the
 error-level diagnostics each board reported, and hashes for the schematic,
 board and BOM — so a result that changes is attributable to a compiler change, a
 registry edit, or a different KiCad, rather than being a mystery.
+
+The output behind those results lands in `target/qualification/boards/<id>/`:
+`check.json` for every board, and under `--fab` the whole export in `release/`
+(schematic, PCBs, DRC report, Gerbers, drill files, STEP, pick-and-place) with
+the native evidence in `verification.json`. CI uploads the results and these
+directories on every run, passing or failing, and keeps them for 14 days, so a
+failure can be inspected without re-running it. `synth check --artifacts-dir
+<DIR>` is what keeps them; a board that fails at source never reaches the export
+and has only its `check.json`.
 
 Stage budgets are configurable when a board needs more time:
 `SYNTH_CHECK_SOURCE_TIMEOUT_SECS`, `SYNTH_CHECK_DRC_TIMEOUT_SECS`,
@@ -97,15 +105,34 @@ commits produce the same bytes for them, so a moved hash means the board now
 compiles to something else. A board whose source stage fails never reaches
 manufacturing and pins nothing.
 
-The routed `.kicad_pcb` is not pinned, and neither are Gerbers. `kicad-cli`
-stamps a per-run timestamp into Gerber headers, so those files are not
-byte-reproducible at all (see the determinism note in
-`crates/synth-kicad/src/fab.rs`). The `.kicad_pcb` carries the copper an
-external routing engine laid; its hash differs between CI runs whose
-schematics, BOMs and registry are identical. Pinning it would fail the gate for
-a reason no reviewer could act on, which trains people to ignore it. Its hash
-is still recorded in `results.json` for a human to compare across runs, and
-the routed board is judged by the DRC and manufacturing verdicts instead.
+The physical result is pinned too, but not by its bytes. A routed `.kicad_pcb`
+carries UUIDs the engine minted and tracks in the order it finished them, and
+`kicad-cli` stamps the time into every Gerber and drill file (see the
+determinism note in `crates/synth-kicad/src/fab.rs`), so raw hashes move on runs
+where nothing changed. Each row's `expect_geometry` holds hashes taken after
+normalizing that away, and the fab job compares them exactly in both directions:
+
+- One entry per `.kicad_pcb` in the export: UUIDs and zone fills removed, top-level
+  items sorted, each track's ends in a fixed order. Every board file is pinned,
+  not only `<board>.kicad_pcb`, because a board whose routing fails validation
+  exports the unrouted board under that name and the engine's copper survives
+  only in the intermediates beside it.
+- `gerbers` and `drill`, one entry each over the directory: the set of lines in
+  each file, with the time and tool version removed, a draw's `D01`/`D02` removed,
+  and copper zone-fill regions removed.
+
+Zone fills are out of the hash because the same pour can list an extra vertex
+along a straight edge depending on the order tracks were knocked out of it. A
+fill is derived from the zone outline, tracks, pads and clearances that remain in
+the hash, so what this cannot see is a change in how KiCad computes fills. The
+uploaded Gerbers are there for that.
+
+A moved hash means the copper, footprints, outline or fabrication output changed.
+The same run prints the `expect_geometry` line that would accept it; write that
+only once the change is understood. The pins were measured in CI, on the KiCad and
+routing engine it installs. A new engine tag legitimately moves them, and a KiCad
+release moves them if its footprint library changed; `results.json` records both
+versions. Raw hashes are still recorded in `results.json` for attribution.
 
 The matrix also gates on the declared verdict: `expect`, `expect_fab`, and
 `expect_source_codes`. The last is compared as an exact set in both
@@ -157,8 +184,9 @@ and no amount of green CI substitutes for them:
 Promoting a board from `experimental` to `qualified` takes a review, not a
 code change:
 
-1. Run the matrix with `SYNTH_QUALIFY_FAB=1` and attach
-   `target/qualification/results.json` to the review.
+1. Run the matrix with `SYNTH_QUALIFY_FAB=1`, or take the
+   `qualification-results-fab` artifact from CI, and attach `results.json` and
+   the board's directory under `boards/` to the review.
 2. Open the exported project in KiCad and run its own ERC and DRC.
 3. Have a reviewer with PCB experience work the table above, recording a
    verdict per area rather than one overall opinion.

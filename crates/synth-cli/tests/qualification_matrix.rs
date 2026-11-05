@@ -1,5 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
+#![allow(clippy::too_many_lines)]
+
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Path, PathBuf};
 use std::process::Command;
@@ -50,6 +52,11 @@ struct BoardSpec {
     /// Compared exactly under `--fab`, in both directions.
     #[serde(default)]
     expect_artifacts: BTreeMap<String, String>,
+    /// Expected normalized hash of each board file, plus the Gerbers and drill
+    /// files as one entry each (see [`normalized_artifacts`]). Compared exactly
+    /// under `--fab`, in both directions.
+    #[serde(default)]
+    expect_geometry: BTreeMap<String, String>,
     #[serde(default)]
     rationale: String,
 }
@@ -77,6 +84,8 @@ struct BoardResult {
     fixture_sha256: String,
     #[serde(skip_serializing_if = "BTreeMap::is_empty")]
     deterministic_artifacts: BTreeMap<String, String>,
+    #[serde(skip_serializing_if = "BTreeMap::is_empty")]
+    normalized_artifacts: BTreeMap<String, String>,
     agrees: bool,
     #[serde(skip_serializing_if = "Vec::is_empty")]
     disagreements: Vec<String>,
@@ -233,23 +242,291 @@ fn source_codes(report: &serde_json::Value) -> Vec<String> {
 /// produce the same hashes. A change to either is a change to what the board
 /// is, and fails the fab job until someone declares it.
 ///
-/// The `.kicad_pcb` is not pinned. It carries the copper an external routing
-/// engine laid, and its hash moves between runs whose boards, parts and
-/// compiler output are otherwise identical; pinning it would fail the gate for
-/// a reason no reviewer could act on. Gerbers carry a per-run timestamp from
-/// `kicad-cli` and are not reproducible at all. Both are recorded in
-/// `deterministic_artifacts` for a human to compare across runs, and the
-/// routed board is judged by the DRC and manufacturing verdicts instead.
+/// The bytes of a `.kicad_pcb` and of the Gerbers are not reproducible: the
+/// routing engine mints UUIDs and writes tracks in its own order, and
+/// `kicad-cli` stamps every Gerber with the time. What they describe is, so
+/// those are pinned as `expect_geometry` once normalized (see
+/// [`normalized_artifacts`]).
 const PINNED_ARTIFACTS: [&str; 2] = [".kicad_sch", "bom.csv"];
 
 fn is_pinned_artifact(path: &str) -> bool {
     PINNED_ARTIFACTS.iter().any(|s| path.ends_with(s))
 }
 
+/// Keys of `expect_geometry` that name a whole directory of the export rather
+/// than a board file.
+const FAB_OUTPUT_DIRS: [&str; 2] = ["gerbers", "drill"];
+
+fn is_geometry_key(key: &str) -> bool {
+    key.ends_with(".kicad_pcb") || FAB_OUTPUT_DIRS.contains(&key)
+}
+
+/// A board file reduced to what it describes, one top-level item per line.
+///
+/// UUIDs are minted per run. Tracks come out in whatever order the engine
+/// finished them, and either way round, so items are sorted and each track's
+/// ends are put in a fixed order. Zone fills are dropped: the same pour can list
+/// an extra vertex along a straight edge depending on the order the tracks were
+/// knocked out of it, and a fill is derived from the outline, tracks, pads and
+/// clearances that remain in the hash.
+fn normalized_pcb(text: &str) -> String {
+    let mut items: Vec<String> =
+        top_level_items(&without_forms(text, &["uuid", "tstamp", "filled_polygon"]))
+            .into_iter()
+            .map(|item| track_ends_in_order(&item))
+            .collect();
+    items.sort();
+    items.join("\n")
+}
+
+/// S-expression text with whitespace collapsed and the named forms removed.
+/// String literals pass through untouched.
+fn without_forms(text: &str, dropped: &[&str]) -> String {
+    let mut out = String::with_capacity(text.len());
+    let mut in_string = false;
+    let mut escaped = false;
+    // The depth at which the form being skipped opened, while skipping one.
+    let mut skipping: Option<usize> = None;
+    let mut depth = 0usize;
+    for (i, c) in text.char_indices() {
+        if in_string {
+            if skipping.is_none() {
+                out.push(c);
+            }
+            if escaped {
+                escaped = false;
+            } else if c == '\\' {
+                escaped = true;
+            } else if c == '"' {
+                in_string = false;
+            }
+            continue;
+        }
+        match c {
+            '"' => {
+                in_string = true;
+                if skipping.is_none() {
+                    out.push(c);
+                }
+            }
+            '(' => {
+                depth += 1;
+                if skipping.is_none() {
+                    let rest = &text[i + 1..];
+                    let name = rest
+                        .split(|c: char| c.is_whitespace() || c == '(' || c == ')')
+                        .next()
+                        .unwrap_or_default();
+                    if dropped.contains(&name) {
+                        skipping = Some(depth);
+                    } else {
+                        out.push(c);
+                    }
+                }
+            }
+            ')' => {
+                if skipping == Some(depth) {
+                    skipping = None;
+                } else if skipping.is_none() {
+                    while out.ends_with(' ') {
+                        out.pop();
+                    }
+                    out.push(c);
+                }
+                depth = depth.saturating_sub(1);
+            }
+            c if c.is_whitespace() => {
+                if skipping.is_none() && !out.ends_with([' ', '(']) {
+                    out.push(' ');
+                }
+            }
+            c => {
+                if skipping.is_none() {
+                    out.push(c);
+                }
+            }
+        }
+    }
+    out
+}
+
+/// The direct children of the root form, as written. Expects the output of
+/// [`without_forms`].
+fn top_level_items(text: &str) -> Vec<String> {
+    let mut items = Vec::new();
+    let mut in_string = false;
+    let mut escaped = false;
+    let mut depth = 0usize;
+    let mut start = 0usize;
+    for (i, c) in text.char_indices() {
+        if in_string {
+            if escaped {
+                escaped = false;
+            } else if c == '\\' {
+                escaped = true;
+            } else if c == '"' {
+                in_string = false;
+            }
+            continue;
+        }
+        match c {
+            '"' => in_string = true,
+            '(' => {
+                depth += 1;
+                if depth == 2 {
+                    start = i;
+                }
+            }
+            ')' => {
+                if depth == 2 {
+                    items.push(text[start..=i].to_string());
+                }
+                depth = depth.saturating_sub(1);
+            }
+            _ => {}
+        }
+    }
+    items
+}
+
+/// A track or arc with its `start` and `end` swapped if need be, so the same
+/// copper reads the same whichever way the engine drew it.
+fn track_ends_in_order(item: &str) -> String {
+    if !(item.starts_with("(segment ") || item.starts_with("(arc ")) {
+        return item.to_string();
+    }
+    let point = |tag: &str| -> Option<(usize, usize)> {
+        let at = item.find(tag)?;
+        let close = at + item[at..].find(')')?;
+        Some((at + tag.len(), close))
+    };
+    let (Some(start), Some(end)) = (point("(start "), point("(end ")) else {
+        return item.to_string();
+    };
+    let (a, b) = (&item[start.0..start.1], &item[end.0..end.1]);
+    if a <= b {
+        return item.to_string();
+    }
+    format!(
+        "{}{b}{}{a}{}",
+        &item[..start.0],
+        &item[start.1..end.0],
+        &item[end.1..]
+    )
+}
+
+/// A Gerber, job or drill file reduced to the set of things it puts on the
+/// layer.
+///
+/// The header's time and tool version go, so a run or a KiCad patch release does
+/// not read as a change of content. The lines are compared as a set because the
+/// file follows the board's track order, and a draw's `D01`/`D02` is dropped
+/// because it follows the track's direction. Copper regions are the same zone
+/// fills [`normalized_pcb`] drops, for the same reason.
+fn normalized_fab_output(name: &str, text: &str) -> String {
+    const VOLATILE: [&str; 5] = [
+        "CreationDate",
+        "GenerationSoftware",
+        "\"Version\"",
+        "Created by",
+        "DRILL file",
+    ];
+    let copper = name.ends_with("_Cu.gbr");
+    let mut in_region = false;
+    let mut lines = BTreeSet::new();
+    for line in text.lines() {
+        if copper && line == "G36*" {
+            in_region = true;
+        }
+        if !in_region && !VOLATILE.iter().any(|v| line.contains(v)) {
+            let line = line
+                .strip_suffix("D01*")
+                .or_else(|| line.strip_suffix("D02*"))
+                .unwrap_or(line);
+            lines.insert(line);
+        }
+        if line == "G37*" {
+            in_region = false;
+        }
+    }
+    lines.into_iter().collect::<Vec<_>>().join("\n")
+}
+
+fn sha256_hex(bytes: &[u8]) -> String {
+    use std::fmt::Write as _;
+    let mut out = String::with_capacity(64);
+    for byte in <sha2::Sha256 as sha2::Digest>::digest(bytes) {
+        let _ = write!(out, "{byte:02x}");
+    }
+    out
+}
+
+/// The files directly inside `dir`, sorted by name.
+fn sorted_files(dir: &Path) -> Vec<PathBuf> {
+    let mut files: Vec<PathBuf> = std::fs::read_dir(dir)
+        .map(|entries| {
+            entries
+                .filter_map(Result::ok)
+                .map(|e| e.path())
+                .filter(|p| p.is_file())
+                .collect()
+        })
+        .unwrap_or_default();
+    files.sort();
+    files
+}
+
+/// Hashes of the physical result in an export directory, normalized so they
+/// hold across runs: one per `.kicad_pcb`, and one each over the Gerbers and the
+/// drill files.
+///
+/// Every board file is hashed, not just `<board>.kicad_pcb`. A board whose
+/// routing fails validation exports the unrouted board under that name, and the
+/// engine's copper survives only in the intermediates beside it.
+fn normalized_artifacts(export: &Path) -> BTreeMap<String, String> {
+    let read = |path: &Path| {
+        String::from_utf8_lossy(&std::fs::read(path).unwrap_or_default()).into_owned()
+    };
+    let name = |path: &Path| {
+        path.file_name()
+            .unwrap_or_default()
+            .to_string_lossy()
+            .into_owned()
+    };
+    let mut hashes = BTreeMap::new();
+    for file in sorted_files(export) {
+        if name(&file).ends_with(".kicad_pcb") {
+            hashes.insert(
+                name(&file),
+                sha256_hex(normalized_pcb(&read(&file)).as_bytes()),
+            );
+        }
+    }
+    for dir in FAB_OUTPUT_DIRS {
+        let mut content = String::new();
+        for file in sorted_files(&export.join(dir)) {
+            // The PDF drill maps restate the drill files, with a timestamp in
+            // the binary.
+            if file.extension().is_some_and(|e| e == "pdf") {
+                continue;
+            }
+            content.push_str(&name(&file));
+            content.push('\n');
+            content.push_str(&normalized_fab_output(&name(&file), &read(&file)));
+            content.push('\n');
+        }
+        if !content.is_empty() {
+            hashes.insert(dir.to_string(), sha256_hex(content.as_bytes()));
+        }
+    }
+    hashes
+}
+
 /// Hashes of the schematic, board and BOM the manufacturing stage wrote.
 ///
 /// The pinned ones (see [`PINNED_ARTIFACTS`]) are compared against
-/// `expect_artifacts`; the `.kicad_pcb` is recorded for attribution only.
+/// `expect_artifacts`. The raw `.kicad_pcb` hash is recorded for attribution;
+/// [`normalized_artifacts`] is what guards the board.
 fn deterministic_artifacts(report: &serde_json::Value) -> BTreeMap<String, String> {
     const STABLE: [&str; 3] = [".kicad_sch", ".kicad_pcb", "bom.csv"];
     report["stages"]["manufacturing"]["artifacts"]
@@ -324,10 +601,21 @@ fn run_board(spec: &BoardSpec, fab: bool) -> BoardResult {
         board.display()
     );
 
+    // What CI uploads, so a failure can be inspected without re-running it. A
+    // previous run's files must not pass for this one's.
+    let kept = root
+        .join("target")
+        .join("qualification")
+        .join("boards")
+        .join(&spec.id);
+    let _ = std::fs::remove_dir_all(&kept);
+    std::fs::create_dir_all(&kept)
+        .unwrap_or_else(|e| panic!("{}: create {}: {e}", spec.id, kept.display()));
+
     let mut command = Command::new(SYNTH);
     command.arg("check").arg(&board).arg("--json");
     if fab {
-        command.arg("--fab");
+        command.arg("--fab").arg("--artifacts-dir").arg(&kept);
     }
     // Which engine routes the board. `synth check` defaults to freerouting,
     // which wants a JAR and a JVM; CI installs KiCadRoutingTools and selects
@@ -348,6 +636,8 @@ fn run_board(spec: &BoardSpec, fab: bool) -> BoardResult {
         .current_dir(&root)
         .output()
         .unwrap_or_else(|e| panic!("{}: run synth check: {e}", spec.id));
+    std::fs::write(kept.join("check.json"), &output.stdout)
+        .unwrap_or_else(|e| panic!("{}: write the check report: {e}", spec.id));
 
     let report: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap_or_else(|e| {
         panic!(
@@ -432,8 +722,10 @@ fn run_board(spec: &BoardSpec, fab: bool) -> BoardResult {
     // Only a fab run writes artifacts, so only a fab run can compare them. Both
     // directions are drift: a pinned file that changed or vanished, and a
     // pinned kind of file the board now produces that nobody declared.
+    let normalized = normalized_artifacts(&kept.join("release"));
     if fab {
         disagreements.extend(artifact_drift(&spec.expect_artifacts, &artifacts));
+        disagreements.extend(geometry_drift(&spec.expect_geometry, &normalized));
     }
 
     BoardResult {
@@ -451,6 +743,7 @@ fn run_board(spec: &BoardSpec, fab: bool) -> BoardResult {
         source_codes: codes,
         fixture_sha256: fixture,
         deterministic_artifacts: artifacts,
+        normalized_artifacts: normalized,
         agrees: disagreements.is_empty(),
         actual,
         gate,
@@ -479,6 +772,35 @@ fn artifact_drift(
         if is_pinned_artifact(path) && !expected.contains_key(path) {
             drift.push(format!(
                 "artifact {path} was written but is not pinned (its hash is {actual})"
+            ));
+        }
+    }
+    drift
+}
+
+/// How the normalized board and fabrication hashes a run produced differ from
+/// the ones declared. A board file that moves here has different copper,
+/// footprints or outline, not merely different bytes.
+fn geometry_drift(
+    expected: &BTreeMap<String, String>,
+    observed: &BTreeMap<String, String>,
+) -> Vec<String> {
+    let mut drift = Vec::new();
+    for (key, hash) in expected {
+        match observed.get(key) {
+            Some(actual) if actual == hash => {}
+            Some(actual) => drift.push(format!(
+                "geometry of {key} changed (expect_geometry has {hash}, the run produced {actual})"
+            )),
+            None => drift.push(format!(
+                "{key} is pinned in expect_geometry but the run did not write it"
+            )),
+        }
+    }
+    for (key, actual) in observed {
+        if !expected.contains_key(key) {
+            drift.push(format!(
+                "geometry of {key} is not pinned (its normalized hash is {actual})"
             ));
         }
     }
@@ -580,6 +902,22 @@ fn reference_boards_match_their_declared_qualification() {
     }
 
     let drifted: Vec<&BoardResult> = results.boards.iter().filter(|b| !b.agrees).collect();
+    // The row to write once a geometry change is understood to be intended.
+    for board in drifted
+        .iter()
+        .filter(|b| fab && !b.normalized_artifacts.is_empty())
+    {
+        let entries: Vec<String> = board
+            .normalized_artifacts
+            .iter()
+            .map(|(key, hash)| format!("\"{key}\" = \"{hash}\""))
+            .collect();
+        eprintln!(
+            "{}: expect_geometry = {{ {} }}",
+            board.id,
+            entries.join(", ")
+        );
+    }
     assert!(
         drifted.is_empty(),
         "the qualification matrix no longer matches reality. Every line below is \
@@ -673,6 +1011,19 @@ fn the_matrix_is_well_formed() {
                 spec.id
             );
         }
+        for (key, hash) in &spec.expect_geometry {
+            assert!(
+                is_geometry_key(key),
+                "{}: expect_geometry pins {key}, which is neither a .kicad_pcb nor one of \
+                 {FAB_OUTPUT_DIRS:?}",
+                spec.id
+            );
+            assert!(
+                hash.len() == 64 && hash.bytes().all(|b| b.is_ascii_hexdigit()),
+                "{}: expect_geometry has {hash} for {key}, which is not a SHA-256",
+                spec.id
+            );
+        }
         if let Some(fab) = spec.expect_fab.as_deref() {
             assert!(
                 ["pass", "fail", "unknown", "unestablished"].contains(&fab),
@@ -762,12 +1113,174 @@ fn a_missing_or_undeclared_pinned_artifact_is_drift() {
 
 #[test]
 fn an_unpinned_board_file_is_not_drift() {
-    // The routed board moves with the external engine; it is recorded, never
-    // compared.
+    // A routed board's raw bytes move with the external engine, so they are
+    // recorded and not compared here. `geometry_drift` is what guards the board.
     let observed = BTreeMap::from([
         ("b.kicad_sch".to_string(), "a".repeat(64)),
         ("b.kicad_pcb".to_string(), "b".repeat(64)),
     ]);
     let pinned = BTreeMap::from([("b.kicad_sch".to_string(), "a".repeat(64))]);
     assert!(artifact_drift(&pinned, &observed).is_empty());
+}
+
+const ROUTED: &str = r#"(kicad_pcb
+	(version 20260206)
+	(segment
+		(start 1 2)
+		(end 3 4)
+		(width 0.2)
+		(layer "F.Cu")
+		(net "A")
+		(uuid "11111111-1111-1111-1111-111111111111")
+	)
+	(via
+		(at 5 6)
+		(uuid "22222222-2222-2222-2222-222222222222")
+	)
+	(zone
+		(net "GND")
+		(polygon
+			(pts (xy 0 0) (xy 9 0) (xy 9 9))
+		)
+		(filled_polygon
+			(layer "F.Cu")
+			(pts (xy 1 1) (xy 8 1) (xy 8 8))
+		)
+		(uuid "33333333-3333-3333-3333-333333333333")
+	)
+)"#;
+
+#[test]
+fn board_churn_is_not_a_geometry_change() {
+    // The same board as `ROUTED`, as another run writes it: fresh UUIDs, items
+    // in another order, the track drawn the other way, and the fill listing an
+    // extra vertex along a straight edge.
+    let rewritten = r#"(kicad_pcb
+	(version 20260206)
+	(zone
+		(net "GND")
+		(polygon
+			(pts (xy 0 0) (xy 9 0) (xy 9 9))
+		)
+		(filled_polygon
+			(layer "F.Cu")
+			(pts (xy 1 1) (xy 4 1) (xy 8 1) (xy 8 8))
+		)
+		(uuid "66666666-6666-6666-6666-666666666666")
+	)
+	(via
+		(at 5 6)
+		(uuid "55555555-5555-5555-5555-555555555555")
+	)
+	(segment
+		(start 3 4)
+		(end 1 2)
+		(width 0.2)
+		(layer "F.Cu")
+		(net "A")
+		(uuid "44444444-4444-4444-4444-444444444444")
+	)
+)"#;
+    assert_eq!(normalized_pcb(ROUTED), normalized_pcb(rewritten));
+}
+
+#[test]
+fn moved_copper_is_a_geometry_change() {
+    let base = normalized_pcb(ROUTED);
+    for (from, to) in [
+        // A track end, a via, a track's net and width, a pour's outline.
+        ("(end 3 4)", "(end 3 5)"),
+        ("(at 5 6)", "(at 5 7)"),
+        ("(net \"A\")", "(net \"B\")"),
+        ("(width 0.2)", "(width 0.3)"),
+        ("(xy 9 9)", "(xy 9 8)"),
+    ] {
+        assert!(ROUTED.contains(from), "{from} is not in the fixture");
+        assert_ne!(
+            base,
+            normalized_pcb(&ROUTED.replace(from, to)),
+            "{from} -> {to} went unnoticed"
+        );
+    }
+}
+
+const GERBER: &str = "%TF.GenerationSoftware,KiCad,Pcbnew,10.0.7*%
+%TF.CreationDate,2026-11-05T15:22:45+03:00*%
+G04 Created by KiCad (PCBNEW 10.0.7) date 2026-11-05 15:22:45*
+D10*
+X1000000Y-1000000D02*
+X2000000Y-1000000D01*
+X5000000Y-5000000D03*
+G36*
+X0Y0D02*
+X100Y0D01*
+G37*
+M02*
+";
+
+#[test]
+fn gerber_churn_is_not_a_content_change() {
+    // Another run: a later stamp, a newer patch release, the track drawn the
+    // other way, an aperture selected again, a fill with an extra vertex.
+    let rerun = "%TF.GenerationSoftware,KiCad,Pcbnew,10.0.8*%
+%TF.CreationDate,2026-11-06T09:00:00+03:00*%
+G04 Created by KiCad (PCBNEW 10.0.8) date 2026-11-06 09:00:00*
+D10*
+X2000000Y-1000000D02*
+D10*
+X1000000Y-1000000D01*
+X5000000Y-5000000D03*
+G36*
+X0Y0D02*
+X50Y0D01*
+X100Y0D01*
+G37*
+M02*
+";
+    assert_eq!(
+        normalized_fab_output("b-F_Cu.gbr", GERBER),
+        normalized_fab_output("b-F_Cu.gbr", rerun)
+    );
+}
+
+#[test]
+fn moved_gerber_content_is_a_content_change() {
+    let base = normalized_fab_output("b-F_Cu.gbr", GERBER);
+    for (from, to) in [
+        ("X2000000Y-1000000D01*", "X2000000Y-1000001D01*"),
+        ("X5000000Y-5000000D03*", "X5000000Y-5000001D03*"),
+    ] {
+        assert_ne!(
+            base,
+            normalized_fab_output("b-F_Cu.gbr", &GERBER.replace(from, to)),
+            "{from} -> {to} went unnoticed"
+        );
+    }
+    // A region off a copper layer is footprint artwork rather than a zone fill.
+    assert_ne!(
+        normalized_fab_output("b-F_Mask.gbr", GERBER),
+        normalized_fab_output("b-F_Mask.gbr", &GERBER.replace("X100Y0D01*", "X101Y0D01*"))
+    );
+}
+
+#[test]
+fn geometry_drift_runs_in_both_directions() {
+    let pinned = BTreeMap::from([
+        ("b.kicad_pcb".to_string(), "a".repeat(64)),
+        ("drill".to_string(), "c".repeat(64)),
+    ]);
+    assert!(geometry_drift(&pinned, &pinned).is_empty());
+
+    let observed = BTreeMap::from([
+        ("b.kicad_pcb".to_string(), "b".repeat(64)),
+        ("gerbers".to_string(), "d".repeat(64)),
+    ]);
+    let drift = geometry_drift(&pinned, &observed);
+    assert_eq!(drift.len(), 3, "{drift:?}");
+    assert!(drift.iter().any(|d| d.contains("changed")), "{drift:?}");
+    assert!(
+        drift.iter().any(|d| d.contains("did not write")),
+        "{drift:?}"
+    );
+    assert!(drift.iter().any(|d| d.contains("not pinned")), "{drift:?}");
 }

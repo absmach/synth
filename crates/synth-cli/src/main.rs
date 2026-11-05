@@ -450,6 +450,12 @@ enum Command {
         /// kicad-routing-tools`.
         #[arg(long, value_name = "DIR")]
         kicad_routing_tools_repo: Option<PathBuf>,
+        /// Keep what the stages wrote in this directory instead of deleting it
+        /// with the scratch space: the export under `release/`, and the native
+        /// verification report beside it. A failed gate can only be reviewed
+        /// if its output survives the command.
+        #[arg(long, value_name = "DIR")]
+        artifacts_dir: Option<PathBuf>,
         /// Allow manufacturing output containing unverified registry parts.
         #[arg(long)]
         allow_unverified_parts: bool,
@@ -1125,6 +1131,7 @@ fn main() -> ExitCode {
             fab,
             router,
             kicad_routing_tools_repo,
+            artifacts_dir,
             allow_unverified_parts,
             override_exception,
             authorized_by,
@@ -1141,6 +1148,7 @@ fn main() -> ExitCode {
                         registry.as_deref(),
                         fab,
                         &routing,
+                        artifacts_dir.as_deref(),
                         allow_unverified_parts,
                         Some(&exception),
                         json,
@@ -1152,6 +1160,7 @@ fn main() -> ExitCode {
                     registry.as_deref(),
                     fab,
                     &routing,
+                    artifacts_dir.as_deref(),
                     allow_unverified_parts,
                     None,
                     json,
@@ -1564,6 +1573,7 @@ fn check(
     registry: Option<&Path>,
     fab: bool,
     routing: &CheckRouting<'_>,
+    artifacts_dir: Option<&Path>,
     allow_unverified_parts: bool,
     exception: Option<&release::Exception>,
     json: bool,
@@ -1776,7 +1786,9 @@ fn check(
         "model": "not_used",
         "stages": stages,
     });
+    let kept = artifacts_dir.map_or(Ok(()), |dir| copy_dir_all(&work, dir));
     let _ = std::fs::remove_dir_all(&work);
+    kept?;
 
     if json {
         println!("{}", serde_json::to_string_pretty(&report)?);
@@ -2043,6 +2055,22 @@ fn structural_refusal(board: &synth_ir::Board) -> Option<String> {
     }
     out.push_str("Fix the part definitions, or run `synth registry qualify` for the full report.");
     Some(out)
+}
+
+/// Copy a directory tree. Not a rename: the scratch space is usually on another
+/// filesystem from wherever the caller wants the output kept.
+fn copy_dir_all(from: &Path, to: &Path) -> anyhow::Result<()> {
+    std::fs::create_dir_all(to)?;
+    for entry in std::fs::read_dir(from)? {
+        let path = entry?.path();
+        let target = to.join(path.file_name().unwrap_or_default());
+        if path.is_dir() {
+            copy_dir_all(&path, &target)?;
+        } else {
+            std::fs::copy(&path, &target)?;
+        }
+    }
+    Ok(())
 }
 
 /// Wall-clock budget for one `synth check` stage, in seconds.
