@@ -76,7 +76,7 @@ board "rtd_afe" {
 
   group "MCU" color "#b45309" {
     component U2: mcu "rp2350"
-    component U4: ic "w25q128_flash"
+    component U4: ic "w25q128_flash_208mil"
     component Y1: crystal "ecs_120_20_33_tr" value "12MHz"
     component C_X1: capacitor "c_generic_0603" value "33pF" dielectric "C0G" voltage "50V" lcsc_pn "C1663" mpn "CL10C330JB8NNNC"
     component C_X2: capacitor "c_generic_0603" value "33pF" dielectric "C0G" voltage "50V" lcsc_pn "C1663" mpn "CL10C330JB8NNNC"

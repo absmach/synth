@@ -698,6 +698,14 @@ expression: board
           "max_current_ma": 150.0,
           "max_power_mw": 300.0,
           "thermal_resistance_c_per_w": 40.0
+        },
+        "provenance": {
+          "source": "seed",
+          "generator": null,
+          "datasheet_url": "https://datasheets.raspberrypi.com/rp2350/rp2350-datasheet.pdf",
+          "reviewed_by": "Steve Munene",
+          "reviewed_at": "2026-11-05",
+          "upstream_lcsc_pn": null
         }
       },
       "source_span": {
