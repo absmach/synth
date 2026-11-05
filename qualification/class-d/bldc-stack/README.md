@@ -3,9 +3,10 @@
 Status: two sources, two placement sidecars, one inter-board mapping file, four
 negative variants and a six-test acceptance suite. Both sources validate with
 zero errors. The multiboard check reports 20 of 20 J_B2B pins matched. No board
-was routed, fabricated or powered: the FreeRouting adapter crashes in this
-environment on a stock board too (see "Routing failure"), so the delivered
-KiCad projects carry an un-routed PCB and `release_ready` is false.
+was fabricated or powered. FreeRouting 2.4.1 on Temurin 25 routes the control
+board to 39 of 40 nets with 0 KiCad DRC errors; the one open is a +3V3
+decoupling island, so the delivered projects keep their un-routed PCBs and
+`release_ready` is false (see "Routing").
 
 Intended for a 24 V, 10 A motor bus and a 12 V logic rail. The control board
 takes 12 V through J_B2B, makes 3.3 V with an AMS1117-3.3, and runs an
@@ -35,9 +36,9 @@ amplifiers, and makes 12 V with an LMR38010 buck.
 ## Board size
 
 The J_B2B pinout and the four mounting holes need a common frame. Both sidecars
-place J_B2B at (57.21, 16) mm and the holes at (2, 2), (51, 2), (2, 30) and
-(51, 30) mm. The power sidecar is a placement record with the same interface;
-it has no exported PCB, so it is not a rendered board.
+place J_B2B at (56.88, 16) mm and the holes at (2, 2), (51, 2), (2, 30) and
+(51, 30) mm. The power sidecar uses the same interface; its PCB is exported
+un-routed for the 3D renders, like the control.
 
 The control board declares `outline 60mm x 32mm`, so Edge.Cuts is exactly
 **60 x 32 mm** with its origin at (0, 0) and no fitted margin. J_B2B is 25.4 mm
@@ -62,6 +63,36 @@ inductor sits on a 3.0 mm grid (the KiCad 0603 courtyard is 2.96 mm wide, so a
 The passive reference labels are hidden on the silkscreen (the sidecar `[labels]`
 table) so the auto-placed text does not collide; every part is still in the BOM
 and the pick-and-place.
+
+## Renders
+
+Both delivered PCBs are un-routed, so these show placement and 3D bodies, not
+copper. They were generated with `kicad-cli pcb render` from the delivered
+board files. Every part with a body in the installed KiCad 3D library renders
+with that body; the four mounting holes have no 3D model in the library and
+render as holes.
+
+### Control board
+
+3D top:
+![Control board 3D top](images/pcb-control-3d-top.png)
+
+3D angled:
+![Control board 3D angled](images/pcb-control-3d-angled.png)
+
+3D bottom:
+![Control board 3D bottom](images/pcb-control-3d-bottom.png)
+
+### Power board
+
+3D top:
+![Power board 3D top](images/pcb-power-3d-top.png)
+
+3D angled:
+![Power board 3D angled](images/pcb-power-3d-angled.png)
+
+3D bottom:
+![Power board 3D bottom](images/pcb-power-3d-bottom.png)
 
 ## Cross-board check: what Synth actually does
 
@@ -169,23 +200,29 @@ temperature; a real thermal review has to close it.
 The Firecrawl text extracts for the terminal blocks, the 2 x 10 connectors and the
 2N3904 are in `datasheets/`; the PDFs themselves are not committed.
 
-## Routing failure (recorded, not hidden)
+## Routing (recorded, not hidden)
 
 `synth export-kicad ... --router free-routing` hands the board to
-`tools/freeroute_autoroute.py`, which crashes in this environment before any
-copper is produced:
+`tools/freeroute_autoroute.py`. FreeRouting 2.4.1 is Java 25 bytecode: Java 21
+fails with `UnsupportedClassVersionError`, and some runs also hit a
+`PROPERTY_ENUM` assert in the adapter's `pcbnew` step.
 
-```
-tools/freeroute_autoroute.py exited 1:
-./kicad/include/properties/property.h(607): assert "m_choices.GetCount() > 0"
-failed in PROPERTY_ENUM(): No enum choices defined
-```
+The 2026-11-05 run with Temurin 25 completes for the control board: 39 of 40
+nets, 532 segments, 84 vias and 0 KiCad DRC errors. The one open is a +3V3
+decoupling island of six pads around `U_LDO.2`, not a missing trace. The
+candidate therefore fails independent connectivity and is not installed; the
+delivered control PCB stays un-routed. The power board is exported un-routed
+for the 3D renders. Its FreeRouting run exceeded the 30-minute cap and was
+stopped, so there is no power routing record. `release_ready` is false in the
+control project and `reports/control.routing.json` names the exact open.
 
-The same failure occurs on the committed `qualification/class-b/buck/buck.synth`,
-so it is not caused by this board. The committed control and power projects are
-therefore un-routed. `reports/release-*.json` say `release_ready: false` and
-`validation_failed`. `synth check <board> --json` and `--fab --json` were not
-run to a pass; see `agent-run/VERIFICATION_REPORT.md`.
+The power placement itself is not DRC-clean: the hand-pinned sidecar has
+overlapping courtyards around `J_MOTOR`/`U_CS1`/`R_SH_U`,
+`J_PWR`/`Q_REV` and `H3`/`C_BULK2`, and the TO-92 `Q_FAULT` pads are closer
+than the 0.3 mm `PWR` clearance. `kicad-cli pcb drc` reports 32 errors and 178
+unconnected pads on the un-routed board (`reports/power.drc.json`). It is
+rendered for review, not fabrication. `synth check <board> --json` and `--fab
+--json` were not run to a pass; see `agent-run/VERIFICATION_REPORT.md`.
 
 ## Not verified by Synth
 
@@ -213,11 +250,14 @@ B=qualification/class-d/bldc-stack
 synth validate $B/control.synth
 synth validate $B/power.synth
 cargo test -p synth-cli --test bldc_stack_board
-# The export reaches routing and then records the FreeRouting crash:
+# The control routes 39/40 and keeps its un-routed baseline; the power board
+# is exported un-routed for the renders:
 SYNTH_SOURCE_REVISION=$(git rev-parse HEAD) synth export-kicad $B/control.synth \
-  --out out/control --allow-unverified-parts --validate-erc --router free-routing
+  --out out/control --allow-unverified-parts --allow-incomplete --validate-erc \
+  --router free-routing
 SYNTH_SOURCE_REVISION=$(git rev-parse HEAD) synth export-kicad $B/power.synth \
-  --out out/power --allow-unverified-parts --validate-erc --router free-routing
+  --out out/power --allow-unverified-parts --allow-incomplete --validate-erc \
+  --router free-routing
 kicad-cli sch erc --severity-all --format json -o $B/reports/control.erc.json $B/kicad/control/bldc_control.kicad_sch
 kicad-cli sch erc --severity-all --format json -o $B/reports/power.erc.json $B/kicad/power/bldc_power.kicad_sch
 cd $B && grep -v '^#' SHA256SUMS | sha256sum -c -

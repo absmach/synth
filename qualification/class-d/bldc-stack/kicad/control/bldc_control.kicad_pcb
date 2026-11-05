@@ -398,18 +398,6 @@
 			(net 0 "")
 	 (uuid "28fe1e29-88e4-5ac5-a28f-cc82be350135"))
 	(embedded_fonts no)
-		(model
-			"${KICAD10_3DMODEL_DIR}/MountingHole.3dshapes/MountingHole_2.5mm.step"
-			(at
-				(xyz 0 0 0)
-			)
-			(scale
-				(xyz 1 1 1)
-			)
-			(rotate
-				(xyz 0 0 0)
-			)
-		)
 	)
 	(footprint
 		"MountingHole:MountingHole_2.5mm"
@@ -553,18 +541,6 @@
 			(net 0 "")
 	 (uuid "4ae58ed5-3ec6-56c2-a4dd-03b03206339e"))
 	(embedded_fonts no)
-		(model
-			"${KICAD10_3DMODEL_DIR}/MountingHole.3dshapes/MountingHole_2.5mm.step"
-			(at
-				(xyz 0 0 0)
-			)
-			(scale
-				(xyz 1 1 1)
-			)
-			(rotate
-				(xyz 0 0 0)
-			)
-		)
 	)
 	(footprint
 		"MountingHole:MountingHole_2.5mm"
@@ -708,18 +684,6 @@
 			(net 0 "")
 	 (uuid "54cac33e-262e-5b6c-9b24-93b788cc3438"))
 	(embedded_fonts no)
-		(model
-			"${KICAD10_3DMODEL_DIR}/MountingHole.3dshapes/MountingHole_2.5mm.step"
-			(at
-				(xyz 0 0 0)
-			)
-			(scale
-				(xyz 1 1 1)
-			)
-			(rotate
-				(xyz 0 0 0)
-			)
-		)
 	)
 	(footprint
 		"MountingHole:MountingHole_2.5mm"
@@ -863,18 +827,6 @@
 			(net 0 "")
 	 (uuid "eb5813ba-f46b-50ec-9591-febbf4eb227a"))
 	(embedded_fonts no)
-		(model
-			"${KICAD10_3DMODEL_DIR}/MountingHole.3dshapes/MountingHole_2.5mm.step"
-			(at
-				(xyz 0 0 0)
-			)
-			(scale
-				(xyz 1 1 1)
-			)
-			(rotate
-				(xyz 0 0 0)
-			)
-		)
 	)
 	(footprint
 		"Connector_PinHeader_2.54mm:PinHeader_2x10_P2.54mm_Vertical"

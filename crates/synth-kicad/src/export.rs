@@ -754,7 +754,18 @@ fn place_candidates_with_margins(
     // A declared outline fixes the frame and, in the sidecar-driven flow, the
     // floorplan too. Margin and seed sweeps only repack an auto-sized board,
     // so skip them: they cost one full solve each and cannot change the result.
-    if board.outline.is_none() {
+    // A sidecar that pins every component is the same kind of contract: the
+    // sweeps have no free part to repack, and on the 111-part power board they
+    // spent over twenty minutes rediscovering the author's floorplan.
+    let fully_pinned = sidecar
+        .and_then(synth_layout::sidecar::SidecarLayout::load_from_file)
+        .is_some_and(|sidecar| {
+            board
+                .components
+                .iter()
+                .all(|component| sidecar.components.contains_key(&component.refdes))
+        });
+    if board.outline.is_none() && !fully_pinned {
         // The hinted placement is not automatically the better one. A hint pins a
         // part where the author asked, which can be worse for routing than where
         // the solver would have put it; the export path has no router to ask, so
@@ -1363,6 +1374,23 @@ mod tests {
         assert_eq!(sanitize_filename("ok-name_42"), "ok-name_42");
         assert_eq!(sanitize_filename("../etc/passwd"), "___etc_passwd");
         assert_eq!(sanitize_filename(""), "untitled");
+    }
+
+    #[test]
+    fn a_fully_pinned_sidecar_needs_only_one_placement_candidate() {
+        let board = board_from(
+            "board \"pinned\" {\n  layers 2\n  component U1: mcu \"rp2350\"\n  component J1: connector \"header_1x3\"\n}\n",
+        );
+        let dir = tempfile::TempDir::new().unwrap();
+        let sidecar = dir.path().join("pinned.placement.layout.toml");
+        std::fs::write(
+            &sidecar,
+            "schema_version = 2\n\n[components.U1]\nx = 45.0\ny = 15.0\n\n[components.J1]\nx = 20.0\ny = 15.0\n",
+        )
+        .unwrap();
+        let candidates =
+            place_candidates_with_margins(&board, Some(&sidecar), &[1.25, 1.0], &[1, 2]).unwrap();
+        assert_eq!(candidates.len(), 1);
     }
 
     #[test]

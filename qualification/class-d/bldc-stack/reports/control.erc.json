@@ -1,7 +1,7 @@
 {
     "$schema": "https://schemas.kicad.org/erc.v1.json",
     "coordinate_units": "mm",
-    "date": "2026-11-05T12:34:07",
+    "date": "2026-11-05T14:21:43",
     "ignored_checks": [
         {
             "description": "Global label only appears once in the schematic",
@@ -100,7 +100,7 @@
                                 "x": 403.86,
                                 "y": 83.82
                             },
-                            "uuid": "1d24298a-2e7f-4cee-8460-ec291834e868"
+                            "uuid": "c9755ea4-4940-455a-a5a7-f745fd76c2c1"
                         },
                         {
                             "description": "Horizontal Wire, length 5.08 mm",
@@ -123,7 +123,7 @@
                                 "x": 403.86,
                                 "y": 86.36
                             },
-                            "uuid": "54d07cee-f230-4818-bb37-4b8d44287669"
+                            "uuid": "73a937d9-336c-4473-8c25-1a44b0e03ae9"
                         },
                         {
                             "description": "Horizontal Wire, length 5.08 mm",

@@ -1,20 +1,20 @@
-# Missing artifacts in this directory
+# Power board export state
 
-The power-board export did not finish. `synth export-kicad` wrote the schematic,
-project, symbol library, `.kicad_dru` and `sym-lib-table`, then spent more than
-40 minutes in the routing stage and was killed before it wrote:
+The power board now has `bldc_power.kicad_pcb`, `bom.csv` and `pnp.csv`. The
+export places the board, writes the un-routed baseline, and then hands it to
+FreeRouting. That routing run exceeded the 30-minute cap (53 nets on a
+72 x 48 mm board) and was stopped, so this directory has:
 
-- `bldc_power.kicad_pcb`
-- `bom.csv`
-- `pnp.csv`
-- `reports/release-power.json`
-- `reports/power.routing.json`
+- no routed candidate;
+- no `reports/power.routing.json` or `reports/release-power.json`;
+- no Gerbers, drill files or fab quote.
 
-The cause is the same FreeRouting adapter failure recorded for the control board
-in `../../agent-run/VERIFICATION_REPORT.md`: `tools/freeroute_autoroute.py`
-exits with a KiCad `PROPERTY_ENUM` assert. The same failure reproduces on the
-committed Class-B buck board.
+The delivered PCB is an **un-routed placement record**, not a fabrication
+artifact. `kicad-cli pcb drc` reports 178 unconnected items and 32 placement
+and clearance errors. The hand-pinned sidecar has overlapping courtyards in
+three clusters (`J_MOTOR`/`U_CS1`/`R_SH_U`, `J_PWR`/`Q_REV`, `H3`/`C_BULK2`)
+and the TO-92 `Q_FAULT` pads are closer than the 0.3 mm `PWR` clearance. The
+findings are in `../../reports/power.drc.json`; the board is rendered for
+review only.
 
-Do not treat the schematic as a routed or fabrication-ready artifact. The
-`BOM_sourcing.md` file at the board root lists the power-board parts; it is not
-a substitute for the missing `bom.csv`.
+`BOM_sourcing.md` at the board root remains the sourcing narrative.

@@ -37,9 +37,9 @@ KiCadRoutingTools is the fallback when its Python environment is set up.
 Tool versions used: KiCad 10.0.7, FreeRouting 2.4.1, Temurin 25.0.5,
 Synth 0.1.1. The tool rows below were rerun on 2026-11-05 against the revised
 control layout (`outline 60mm x 32mm`, 6-layer 1.6 mm stack, mounting holes on the edge, J_B2B flush,
-vertical Hall column). The FreeRouting adapter still fails before producing
-copper, but no route has yet passed the full gate (see A9); routing is
-therefore not evidence.
+vertical Hall column). FreeRouting now produces a 39/40 route on the
+control board, but no route has passed the full gate (see A9); routing is
+therefore still not evidence.
 
 ## A. Checked by tools
 
@@ -54,7 +54,7 @@ therefore not evidence.
 | A7 | A swapped source pin is rejected | `control_neg_swap.synth` | `warning`, `E-SYNTH-MULTIBOARD-003` |
 | A8 | Connector and mounting holes align | Sidecars, test `the_connector_and_mounting_holes_line_up` | J_B2B and H1-H4 are at identical coordinates on both boards, 0.000 mm and the same rotation |
 | A9 | Copper is routed | `synth export-kicad --router free-routing --freerouting-java <Java 25>`; `--router kicad-routing-tools` | **Partial, gate open.** The earlier failure was Java 21 running a Java 25 JAR. With Temurin 25, FreeRouting closes 39/40 nets with 0 DRC errors: the last "open" is a +3V3 decoupling island of 6 pads around U_LDO.2, not a missing trace. KiCadRoutingTools closes 39/40 with 0 DRC errors but places 13 vias inside U1 pads and fails its ground-return/plane-split gate. No engine yet returns a fully connected, fabrication-clean board. `release_ready: false`, `validation_failed` |
-| A10 | The exported projects load in KiCad | `kicad-cli sch erc` and `kicad-cli pcb drc` on the delivered files | Control: 0 ERC errors, 0 warnings. Power: 0 ERC errors, 0 warnings. DRC on the un-routed control PCB: 0 errors, 97 unconnected pads, 0 warnings; no routed copper exists |
+| A10 | The exported projects load in KiCad | `kicad-cli sch erc` and `kicad-cli pcb drc` on the delivered files | Both schematics: 0 ERC errors, 0 warnings. Control DRC (un-routed): 0 errors, 97 unconnected pads, 3 silk-edge warnings. Power DRC (un-routed placement): 32 errors, 178 unconnected pads, 338 warnings; the sidecar courtyards overlap around `J_MOTOR`/`U_CS1`/`R_SH_U`, `J_PWR`/`Q_REV` and `H3`/`C_BULK2`, recorded in `reports/power.drc.json`. No routed copper exists |
 | A11 | Every authored part has a datasheet, an MPN and a real KiCad footprint | `synth registry qualify --part <id>` | All authored parts pass pin/pad, symbol, dimension and provenance checks; each is blocked on `E-SYNTH-QUAL-008` "part has no reviewer", which is intentional: `reviewed_by = ""` |
 | A12 | The mapping file is the only cross-board source of truth | `interboard_mappings.json` and the test | The test loads that file; no pin mapping is duplicated in the sources |
 | A13 | The netlist matches the source | `synth dump-ir` / the exported netlist | Control: 61 components, 40 nets. Power: 111 components, 53 nets. Net names and members are in `agent-run/NETLIST.md` |
@@ -67,7 +67,7 @@ therefore not evidence.
 | # | Claim | Why it is not proven | Status |
 | --- | --- | --- | --- |
 | B1 | Gate-driver dead time, shoot-through and blanking | IR2101 has no internal dead time; the STM32 must insert it. No firmware exists and no rule checks it | Open |
-| B2 | Power-loop inductance, phase-node ringing and EMI | No loop-area, snubber or EMI analysis; the router never ran, so no copper geometry exists | Open |
+| B2 | Power-loop inductance, phase-node ringing and EMI | No loop-area, snubber or EMI analysis; no routed copper is delivered, so there is no geometry to analyse | Open |
 | B3 | Junction temperatures and copper area | Only the `W-SYNTH-THERMAL-001` estimate from declared figures. 2 oz outer copper and thermal vias are declared, not measured | Open |
 | B4 | Current-sense accuracy, bandwidth and common-mode range | Gain 40 and the 1.6 kHz input filter are hand calculations; offset, shunt tolerance and PWM sampling are not measured | Open |
 | B5 | Connector keying, stack height and 24 V creepage | The mapping is pin-to-pin; the mechanical test checks X/Y, not Z, keying or pollution degree | Open |

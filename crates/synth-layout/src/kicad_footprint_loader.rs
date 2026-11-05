@@ -159,7 +159,7 @@ const PROPERTY_OVERRIDES: &[&str] = &[
 /// "no body cached" warning rather than failing to open.
 /// Where KiCad's 3D models live on this machine; the root [`inline_body`]
 /// substitutes for KiCad's 3D-model variables.
-pub(crate) const MODEL_DIR: &str = "/usr/share/kicad/3dmodels";
+pub const MODEL_DIR: &str = "/usr/share/kicad/3dmodels";
 
 pub fn inline_body(lib_id: &str) -> Option<String> {
     let text = read_footprint(lib_id)?;

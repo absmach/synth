@@ -2565,8 +2565,21 @@ pub fn build_synthesized_footprint_module(
     Some(Sexp::list("footprint", children))
 }
 
+/// The `(model ...)` for a footprint whose inlined body declared none.
+///
+/// KiCad's own libraries leave the model out when the part has no 3D body (a
+/// mounting hole, for example), so only use the convention path when that file
+/// is installed. Naming a model that does not exist makes `kicad-cli pcb export
+/// step` warn for every instance and renders nothing either way.
 fn build_3d_model_sexp(lib_id: &str) -> Option<Sexp> {
     let (lib, name) = lib_id.split_once(':')?;
+    let installed = format!(
+        "{}/{lib}.3dshapes/{name}.step",
+        synth_layout::kicad_footprint_loader::MODEL_DIR
+    );
+    if !std::path::Path::new(&installed).exists() {
+        return None;
+    }
 
     let path = format!("${{KICAD10_3DMODEL_DIR}}/{lib}.3dshapes/{name}.step");
     Some(Sexp::list(
@@ -3049,6 +3062,11 @@ mod tests {
     use super::*;
     use synth_diagnostics::Span;
     use synth_registry::{ElectricalType, Lifecycle, Pin, PinNumber};
+
+    #[test]
+    fn a_model_that_is_not_installed_is_not_invented() {
+        assert!(build_3d_model_sexp("NoSuchLibrary:NoSuchPart").is_none());
+    }
 
     #[test]
     fn a_footprint_angle_is_added_to_every_pad_angle() {
