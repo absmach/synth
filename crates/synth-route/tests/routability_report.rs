@@ -152,6 +152,20 @@ fn small_designs_do_not_regress_unrouted_nets() {
 #[ignore = "release-mode gate; run by the routability-gate CI job"]
 fn unrouted_nets_do_not_regress() {
     // (design, max unrouted nets tolerated)
+    //
+    // `secure_tracker` was briefly 4, then 5, while the oscillator's
+    // corrected courtyard changed how the placer packed around it and the
+    // canvas choice in #158 flipped the outline between two near-equal
+    // arrangements. With `choose_canvas` keeping the square family unless a
+    // wider canvas is materially smaller, the board routes at 3 again —
+    // matching main, and the same count it had before the correction:
+    //
+    //   3 unrouted: net_18, net_14, net_16 | release mode
+    //
+    // The oscillator courtyard is a fact about the package, so the placer has
+    // to absorb it rather than the tolerance growing to hide it. Keep this
+    // number at main's: a higher count is a placement or routing regression,
+    // not a new property of the board.
     let expected = [
         ("../../examples/sensor_logger/sensor_logger.synth", 2_usize),
         ("../../examples/env_logger/env_logger.synth", 3_usize),

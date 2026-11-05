@@ -1800,24 +1800,23 @@ fn place_with_tuning_impl<S: ::std::hash::BuildHasher>(
 
     // The greedy packer wraps rows at the canvas width, so the canvas aspect
     // picks the arrangement it starts from. A square and a wider canvas of the
-    // same area are compared and the smaller finished outline kept; the fixed
-    // canvases stay as fallbacks for shapes the greedy search cannot fill.
+    // same area are compared and the finished outline kept by `choose_canvas`;
+    // the fixed canvases stay as fallbacks for shapes the greedy search cannot
+    // fill. A wider canvas must be materially smaller to displace the square,
+    // so a 0.2 mm change does not flip the board's aspect (#158).
     let wide_side = compact_side * WIDE_CANVAS_ASPECT;
     let candidates = [
-        (compact_side, compact_side),
-        (wide_side, compact_side / WIDE_CANVAS_ASPECT),
-        (100.0, 80.0),
-        (120.0, 100.0),
-        (160.0, 120.0),
+        (compact_side, compact_side, true),
+        (wide_side, compact_side / WIDE_CANVAS_ASPECT, false),
+        (100.0, 80.0, false),
+        (120.0, 100.0, false),
+        (160.0, 120.0, false),
     ];
 
-    let outline_area = |placement: &Placement| {
-        placement.board_outline.width_nm().max(0) * placement.board_outline.height_nm().max(0)
-    };
     let mut last_err = None;
-    let mut best: Option<Placement> = None;
+    let mut successes: Vec<(bool, Placement)> = Vec::new();
     let mut filled = 0;
-    for (board_w_mm, board_h_mm) in candidates {
+    for (board_w_mm, board_h_mm, square_family) in candidates {
         let board_outline = Rect::new(
             Point::new(0, 0),
             Point::new(mm_to_nm(board_w_mm), mm_to_nm(board_h_mm)),
@@ -1838,12 +1837,7 @@ fn place_with_tuning_impl<S: ::std::hash::BuildHasher>(
                     p
                 };
                 let candidate = refine_placement(board, &packed, rotation_overrides, pinned);
-                if best
-                    .as_ref()
-                    .is_none_or(|current| outline_area(&candidate) < outline_area(current))
-                {
-                    best = Some(candidate);
-                }
+                successes.push((square_family, candidate));
                 filled += 1;
                 if !compact || filled >= CANVAS_SHAPES_TRIED {
                     break;
@@ -1852,13 +1846,53 @@ fn place_with_tuning_impl<S: ::std::hash::BuildHasher>(
             Err(e) => last_err = Some(e),
         }
     }
-    if let Some(best) = best {
+    if let Some(best) = choose_canvas(successes) {
         return Ok(best);
     }
     Err(last_err.unwrap_or(PlaceError::AreaInsufficient {
         placed_mm2: total_courtyard_mm2,
         board_mm2: 230.0 * 230.0,
     }))
+}
+
+/// How much smaller a wider canvas must be before it displaces the square
+/// family's arrangement.
+///
+/// The two canvases often finish within a couple of percent of each other in
+/// area, while their outlines differ by 18 mm in width. Choosing the strictly
+/// smallest then flips the board's aspect when a part changes by 0.2 mm,
+/// which is the non-monotonic outline in #158. A wider canvas has to be at
+/// least this much smaller to win; beyond it the board really is smaller and
+/// the wider shape is kept.
+const OUTLINE_AREA_TIE_PERCENT: i128 = 3;
+
+/// Pick the finished outline to keep from the canvases a board packed on.
+///
+/// A square-family result within [`OUTLINE_AREA_TIE_PERCENT`] of the smallest
+/// wins, so the aspect does not flip for a marginal area change. If the square
+/// family is absent or materially larger, the smallest outline is returned.
+/// Areas are compared in integer nanometres: a 230 mm square is about 5.3e16
+/// nm2, which an `f64` mantissa cannot hold exactly.
+fn choose_canvas(successes: Vec<(bool, Placement)>) -> Option<Placement> {
+    let area = |placement: &Placement| {
+        i128::from(placement.board_outline.width_nm().max(0))
+            * i128::from(placement.board_outline.height_nm().max(0))
+    };
+    let smallest = successes
+        .iter()
+        .map(|(_, placement)| area(placement))
+        .min()?;
+    let threshold = smallest + smallest * OUTLINE_AREA_TIE_PERCENT / 100;
+    successes
+        .iter()
+        .position(|(square, placement)| *square && area(placement) <= threshold)
+        .map(|index| successes[index].1.clone())
+        .or_else(|| {
+            successes
+                .into_iter()
+                .min_by_key(|(_, placement)| area(placement))
+                .map(|(_, placement)| placement)
+        })
 }
 
 /// A board feature carrying no net: a mounting hole, a fiducial, or a test

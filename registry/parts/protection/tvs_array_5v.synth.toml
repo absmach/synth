@@ -1,19 +1,38 @@
 id = "tvs_array_5v"
 kind = "diode"
-description = "TVS diode array, 5V, 4 channels, SOIC-8"
-kicad_footprint = "Package_TO_SOT_SMD:SOT-363_SC-70-6"
-# kicad_symbol intentionally unmapped: the registry pin model
-# (pins 1-5 + 8) doesn't match any KiCad stock TVS-array symbol.
-# Falls back to a synthesized rectangle. Track in V1.1 cleanup.
+description = "onsemi SRV05-4 4-line surge/ESD protection array, 5 V working voltage, TSOP-6 (SOT-23-6 footprint compatible)"
+mpn = "SRV05-4MR6T1G"
+kicad_symbol = "Power_Protection:SRV05-4"
+kicad_footprint = "Package_TO_SOT_SMD:SOT-23-6"
+# Pins are the "Pin Configuration and Schematic" of onsemi SRV05-4/D, Rev. 4
+# (October 2024): 1 I/O, 2 VN, 3 I/O, 4 I/O, 5 VP, 6 I/O. The applications
+# section says the same: "Data lines are connected at pins 1, 3, 4 and 6. The
+# negative reference is connected at pin 2", and the positive reference (VCC)
+# at pin 5. The stock symbol numbers its pins IO1=1, VN=2, IO2=3, IO3=4, VP=5,
+# IO4=6, which this map follows pin for pin.
+#
+# The datasheet's TSOP-6 (case 318G) is "Footprint Compatible with SOT-23 6
+# Lead", the footprint the stock symbol names. It has six pads and no exposed
+# pad.
+#
+# The previous entry named no device and put `vcc` on pad 6 by elimination
+# over a SOT-363. The pin names keep their meaning, so a board that wired
+# ch1-ch4, gnd and vcc keeps working; the pads move to this device's.
+#
+# The procurement identifier (LCSC) is left out until it is checked against
+# the distributor listing for this exact MPN.
 
 [footprint_dimensions]
-width_mm = 5.0
-height_mm = 5.0
+# Courtyard extent of SOT-23-6, as the other SOT-23-6 parts here record it.
+width_mm = 4.1
+height_mm = 3.4
 courtyard_margin_mm = 0.25
 
+# max_voltage_v is the 5.0 V working peak reverse voltage (VRWM), not a clamp
+# or an absolute maximum, as for the other TVS parts here. No steady current is
+# recorded: the 12 A IPP (8 x 20 us) is a surge rating, not a draw.
 [operating_conditions]
-max_voltage_v = 100.0
-max_current_ma = 1000.0
+max_voltage_v = 5.0
 
 [[pins]]
 name = "ch1"
@@ -21,27 +40,35 @@ number = "1"
 electrical_type = "passive"
 
 [[pins]]
-name = "ch2"
+name = "gnd"
 number = "2"
 electrical_type = "passive"
 
 [[pins]]
-name = "ch3"
+name = "ch2"
 number = "3"
 electrical_type = "passive"
 
 [[pins]]
-name = "ch4"
-number = "5"
-electrical_type = "passive"
-
-[[pins]]
-name = "gnd"
+name = "ch3"
 number = "4"
 electrical_type = "passive"
 
 [[pins]]
 name = "vcc"
-number = "8"
+number = "5"
 electrical_type = "passive"
 
+[[pins]]
+name = "ch4"
+number = "6"
+electrical_type = "passive"
+
+# Reviewed against onsemi SRV05-4/D Rev. 4: the pin map above, the
+# TSOP-6 (case 318G) to SOT-23-6 footprint compatibility, the six pad
+# functions and the 5.0 V working peak reverse voltage.
+[provenance]
+source = "authored"
+datasheet_url = "https://www.onsemi.com/download/data-sheet/pdf/srv05-4-d.pdf"
+reviewed_by = "rodneyosodo"
+reviewed_at = "2026-11-05"
