@@ -456,6 +456,16 @@ impl Pad {
     }
 }
 
+/// A straight silkscreen stroke, in board coordinates.
+#[derive(Debug, Clone, PartialEq)]
+pub struct SilkLine {
+    /// The silkscreen layer, `F.SilkS` or `B.SilkS`.
+    pub layer: String,
+    pub start: Point,
+    pub end: Point,
+    pub width_nm: i64,
+}
+
 /// A footprint instance on the board.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Footprint {
@@ -465,6 +475,8 @@ pub struct Footprint {
     pub layer: String,
     pub rotation_deg: f64,
     pub pads: Vec<Pad>,
+    /// Silkscreen strokes the footprint carries, already in board coordinates.
+    pub silk: Vec<SilkLine>,
 }
 
 /// A track segment.
@@ -640,6 +652,8 @@ pub struct PcbBoard {
     pub zones: Vec<Zone>,
     /// `(start, end)` of every `Edge.Cuts` graphic.
     pub edge_cuts: Vec<(Point, Point)>,
+    /// Silkscreen strokes drawn on the board itself, not inside a footprint.
+    pub silk: Vec<SilkLine>,
 }
 
 impl PcbBoard {
@@ -671,6 +685,7 @@ impl PcbBoard {
             vias: Vec::new(),
             zones: Vec::new(),
             edge_cuts: Vec::new(),
+            silk: Vec::new(),
         };
 
         board.layers = root.layer_names();
@@ -744,6 +759,10 @@ impl PcbBoard {
         {
             collect_edge_cuts(graphic, &mut board.edge_cuts);
         }
+        board.silk = root
+            .find_all("gr_line")
+            .filter_map(|line| silk_line(line, |p| p))
+            .collect();
 
         board.expand_via_layer_spans();
         board.reconcile_name_only_nets();
@@ -877,6 +896,14 @@ impl PcbBoard {
         }
     }
 
+    /// Every silkscreen stroke on the board, whether it belongs to a
+    /// footprint or was drawn on the board itself.
+    pub fn silk_lines(&self) -> impl Iterator<Item = &SilkLine> {
+        self.silk
+            .iter()
+            .chain(self.footprints.iter().flat_map(|f| f.silk.iter()))
+    }
+
     /// Every pad on the board.
     pub fn pads(&self) -> impl Iterator<Item = &Pad> {
         self.footprints.iter().flat_map(|f| f.pads.iter())
@@ -935,6 +962,26 @@ fn segment_length_nm(segment: &Segment) -> i64 {
     estimate.round() as i64
 }
 
+/// A silkscreen line from a `gr_line` or `fp_line`, mapped to board
+/// coordinates by `to_board`. Lines on any other layer are not silk.
+fn silk_line(node: &Node, to_board: impl Fn(Point) -> Point) -> Option<SilkLine> {
+    let layer = node.child_atom("layer")?;
+    if !layer.ends_with(".SilkS") {
+        return None;
+    }
+    let width_mm = node
+        .find("stroke")
+        .and_then(|s| s.child_f64("width"))
+        .or_else(|| node.child_f64("width"))
+        .unwrap_or(0.0);
+    Some(SilkLine {
+        layer: layer.to_string(),
+        start: to_board(parse_point(node, "start")?),
+        end: to_board(parse_point(node, "end")?),
+        width_nm: mm_to_nm(width_mm),
+    })
+}
+
 fn parse_point(node: &Node, key: &str) -> Option<Point> {
     let at = node.find(key)?;
     let x = at
@@ -950,6 +997,14 @@ fn parse_point(node: &Node, key: &str) -> Option<Point> {
         .parse::<f64>()
         .ok()?;
     Some(Point::new(mm_to_nm(x), mm_to_nm(y)))
+}
+
+/// A point in a footprint's own frame, placed on the board: rotated by the
+/// footprint's angle (`sin`, `cos`) and offset by its position.
+fn local_to_board(origin: Point, sin: f64, cos: f64, p: Point) -> Point {
+    let x_nm = (p.x_nm as f64 * cos + p.y_nm as f64 * sin).round() as i64;
+    let y_nm = (p.y_nm as f64 * cos - p.x_nm as f64 * sin).round() as i64;
+    Point::new(origin.x_nm + x_nm, origin.y_nm + y_nm)
 }
 
 fn parse_footprint(node: &Node) -> Footprint {
@@ -977,6 +1032,8 @@ fn parse_footprint(node: &Node) -> Footprint {
     // quarter-turn twin of this.
     let cos = rotation_deg.to_radians().cos();
     let sin = rotation_deg.to_radians().sin();
+
+    let to_board = |p: Point| local_to_board(at, sin, cos, p);
 
     let pads = node
         .find_all("pad")
@@ -1009,8 +1066,6 @@ fn parse_footprint(node: &Node) -> Footprint {
                 } else {
                     0.0
                 });
-            let x_nm = (local.x_nm as f64 * cos + local.y_nm as f64 * sin).round() as i64;
-            let y_nm = (local.y_nm as f64 * cos - local.x_nm as f64 * sin).round() as i64;
             let size = pad.find("size");
             let size_nm = (
                 size.and_then(|s| s.body().first())
@@ -1032,7 +1087,7 @@ fn parse_footprint(node: &Node) -> Footprint {
                 number,
                 kind,
                 shape,
-                at: Point::new(at.x_nm + x_nm, at.y_nm + y_nm),
+                at: to_board(local),
                 size_nm,
                 angle_deg,
                 corner_ratio,
@@ -1047,6 +1102,11 @@ fn parse_footprint(node: &Node) -> Footprint {
         })
         .collect();
 
+    let silk = node
+        .find_all("fp_line")
+        .filter_map(|line| silk_line(line, to_board))
+        .collect();
+
     let reference = node.property("Reference").unwrap_or_default().to_string();
 
     Footprint {
@@ -1056,6 +1116,7 @@ fn parse_footprint(node: &Node) -> Footprint {
         layer,
         rotation_deg,
         pads,
+        silk,
     }
     .with_pad_references()
 }

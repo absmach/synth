@@ -100,7 +100,13 @@ impl Outcome {
 /// The gate is fail-closed on routing, so every run here gets a stub
 /// router. Without one the export stops at the routing gate and the test
 /// would pass or fail for a reason it is not about.
-fn run_export(dir: &Path, cli: &Path, extra: &[&str]) -> std::process::Output {
+fn run_export(
+    dir: &Path,
+    cli: &Path,
+    extra: &[&str],
+    design_file: &Path,
+    envs: &[(&str, &str)],
+) -> std::process::Output {
     let _lock = stub_router::serialised();
     let _router = stub_router::install(dir);
     let out = dir.join("out");
@@ -108,7 +114,7 @@ fn run_export(dir: &Path, cli: &Path, extra: &[&str]) -> std::process::Output {
     let mut command = Command::new(SYNTH);
     command
         .arg("export-kicad")
-        .arg(design())
+        .arg(design_file)
         .arg("--out")
         .arg(&out)
         .arg("--verification-report")
@@ -116,16 +122,29 @@ fn run_export(dir: &Path, cli: &Path, extra: &[&str]) -> std::process::Output {
         .args(extra)
         .env("KICAD_CLI", cli)
         .env("SYNTH_KICAD_CLI_TIMEOUT_SECS", "2");
+    for (key, value) in envs {
+        command.env(key, value);
+    }
     command.output().expect("run synth export-kicad")
 }
 
 fn export(label: &str, stub_script: &str, extra: &[&str]) -> Outcome {
+    export_design(label, stub_script, extra, &design(), &[])
+}
+
+fn export_design(
+    label: &str,
+    stub_script: &str,
+    extra: &[&str],
+    design_file: &Path,
+    envs: &[(&str, &str)],
+) -> Outcome {
     let dir = scratch(label);
     let cli = stub(&dir, stub_script);
     let out = dir.join("out");
     let report_path = dir.join("verification.json");
 
-    let output = run_export(&dir, &cli, extra);
+    let output = run_export(&dir, &cli, extra, design_file, envs);
     let report = std::fs::read_to_string(&report_path)
         .ok()
         .and_then(|s| serde_json::from_str(&s).ok());
@@ -697,9 +716,14 @@ mod release_gate {
             manufacturing["native"]["release_ready"], false,
             "{report:#}"
         );
-        let stages = manufacturing["native"]["stages"]
+        // The DFM stage reads the board file itself and needs no KiCad, so it
+        // is the one stage a missing tool cannot make unknown.
+        let stages: Vec<_> = manufacturing["native"]["stages"]
             .as_array()
-            .expect("native stages");
+            .expect("native stages")
+            .iter()
+            .filter(|s| s["stage"] != "dfm")
+            .collect();
         assert!(
             stages.iter().all(|s| s["status"] == "unknown"),
             "{report:#}"
@@ -837,4 +861,67 @@ exit 0"#
             "{stdout}"
         );
     }
+}
+
+/// Two resistors joined by one net: the smallest design with pads to route,
+/// so the stub router has copper to draw and silk to put on a pad.
+fn two_resistors() -> PathBuf {
+    let path = std::env::temp_dir().join(format!("synth_dfm_gate_{}.synth", std::process::id()));
+    std::fs::write(
+        &path,
+        "board \"dfm\" {\n  layers 2\n  component R1: resistor \"r_generic_0402\" value \"10k\"\n  \
+         component R2: resistor \"r_generic_0402\" value \"10k\"\n  connect R1.p1 -> R2.p1\n}\n",
+    )
+    .expect("write design");
+    path
+}
+
+const SILK_ON_PAD: (&str, &str) = ("STUB_ROUTER_SILK_ON_PAD", "1");
+
+#[test]
+fn a_board_with_nothing_to_flag_has_a_passing_dfm_stage() {
+    let run = export("dfm_clean", &clean_stub(), &[]);
+    assert_eq!(run.code, Some(0), "stderr:\n{}", run.stderr);
+    assert_eq!(run.status("dfm"), "pass");
+}
+
+#[test]
+fn silk_on_a_pad_is_recorded_without_blocking_a_plain_export() {
+    let run = export_design(
+        "dfm_plain",
+        &clean_stub(),
+        &[],
+        &two_resistors(),
+        &[SILK_ON_PAD],
+    );
+    assert_eq!(run.code, Some(0), "stderr:\n{}", run.stderr);
+    assert_eq!(run.status("dfm"), "fail");
+    assert!(
+        run.stage("dfm")["violations"].as_u64().unwrap_or(0) >= 1,
+        "{:#}",
+        run.stage("dfm")
+    );
+    assert_eq!(run.report.as_ref().expect("report")["release_ready"], false);
+}
+
+#[test]
+fn silk_on_a_pad_blocks_a_release_export_and_force_does_not_override() {
+    let run = export_design(
+        "dfm_release",
+        &clean_stub(),
+        &["--gerbers", "--force"],
+        &two_resistors(),
+        &[SILK_ON_PAD],
+    );
+    assert_eq!(run.code, Some(1), "stderr:\n{}", run.stderr);
+    assert_eq!(run.status("dfm"), "fail");
+    assert!(
+        run.stderr.contains("release export blocked")
+            && run.stderr.contains("silk_to_pad")
+            && run.stderr.contains("--force does not override this"),
+        "the block and the rule must be stated: {}",
+        run.stderr
+    );
+    let manifest = run.manifest();
+    assert_eq!(manifest["release_ready"], false, "{manifest:#}");
 }
