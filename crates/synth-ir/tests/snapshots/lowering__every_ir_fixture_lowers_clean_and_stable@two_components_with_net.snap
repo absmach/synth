@@ -672,13 +672,13 @@ expression: board
           {
             "net": "iovdd",
             "value": "100nf",
-            "count": 4,
+            "count": 7,
             "max_distance_mm": null
           },
           {
             "net": "dvdd",
             "value": "100nf",
-            "count": 2,
+            "count": 3,
             "max_distance_mm": null
           }
         ],
