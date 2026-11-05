@@ -404,9 +404,14 @@ capabilities = ["spi_cs"]
 [[required_decoupling]]
 net = "iovdd"
 value = "100nf"
-count = 4
+count = 7
 
 [[required_decoupling]]
 net = "dvdd"
 value = "100nf"
-count = 2
+count = 3
+
+[provenance]
+datasheet_url = "https://datasheets.raspberrypi.com/rp2350/rp2350-datasheet.pdf"
+reviewed_by = "Steve Munene"
+reviewed_at = "2026-11-05"
