@@ -179,7 +179,7 @@ fn run_rounds(
     // legal return via must be reported with the islands, or a candidate that
     // spent its rounds on island vias would leave with the return path missing.
     let declared = declared_vias(candidate, &board);
-    let islands = plan_ties(&board, &declared).vias.len();
+    let islands = plan_ties_and_pads(&board, ground, &declared).vias.len();
     let plan = plan_all_with(
         &board,
         return_via_window_mm(&text, &board),
@@ -488,6 +488,150 @@ pub fn plan_ties(board: &PcbBoard, declared: &ViaDeclarations) -> TiePlan {
     plan
 }
 
+/// The island ties plus the vias for pads the router left joined to nothing.
+fn plan_ties_and_pads(board: &PcbBoard, ground: &Ground, declared: &ViaDeclarations) -> TiePlan {
+    let mut plan = plan_ties(board, declared);
+    if let Some(in_pad) = ground.in_pad_via {
+        let pads = plan_pad_ties(board, in_pad, declared);
+        plan.vias.extend(pads.vias);
+        plan.unresolved.extend(pads.unresolved);
+    }
+    plan
+}
+
+/// A via in the pad of a plane net's SMD pad that nothing reaches.
+///
+/// A net poured on an inner layer reaches its pads through vias. The router
+/// can leave one pad of such a net with no via and no track: it sits on the
+/// outer layer, where the net has no pour, and the plane never sees it. The
+/// connectivity check then reports the pad as an island of one against the
+/// rest of the net. The plane via is what the pad needs, so it is put in the
+/// pad, at the land the process gives a filled and capped via, when the pad
+/// holds it and no other net's copper is within the gap of it.
+///
+/// A pad that a track or via of its net already touches is not judged here:
+/// that copper leads somewhere, and whether it reaches the plane is the
+/// connectivity check's question.
+#[allow(clippy::cast_precision_loss)]
+fn plan_pad_ties(board: &PcbBoard, in_pad: (i64, i64), declared: &ViaDeclarations) -> TiePlan {
+    let (size_nm, drill_nm) = in_pad;
+    let radius = nm_to_mm(size_nm) / 2.0;
+    let gap = declared.gap_mm();
+    let mut poured: BTreeMap<String, BTreeSet<String>> = BTreeMap::new();
+    for zone in &board.zones {
+        if let Some(net) = net_of(board, zone.net, zone.net_name.as_ref()) {
+            poured
+                .entry(net)
+                .or_default()
+                .extend(zone.layers.iter().cloned());
+        }
+    }
+    let mut plan = TiePlan::default();
+    for footprint in &board.footprints {
+        for pad in &footprint.pads {
+            if pad.kind != "smd" {
+                continue;
+            }
+            let mut copper = pad.layers.iter().filter(|l| l.ends_with(".Cu"));
+            let (Some(layer), None) = (copper.next(), copper.next()) else {
+                continue;
+            };
+            let Some(net) = net_of(board, pad.net, pad.net_name.as_ref()) else {
+                continue;
+            };
+            // A net with no pour has no plane to reach, and one poured on the
+            // pad's own layer takes the pad into the pour.
+            let Some(layers) = poured.get(&net) else {
+                continue;
+            };
+            if layers.contains(layer) {
+                continue;
+            }
+            let own = |code: Option<u32>, name: Option<&String>| {
+                net_of(board, code, name).as_deref() == Some(net.as_str())
+            };
+            let touched = board.vias.iter().any(|via| {
+                own(via.net, via.net_name.as_ref())
+                    && pad.signed_distance_nm(via.at) <= (via.size_nm / 2) as f64
+            }) || board.segments.iter().any(|segment| {
+                own(segment.net, segment.net_name.as_ref())
+                    && &segment.layer == layer
+                    && [segment.start, segment.end]
+                        .iter()
+                        .any(|end| pad.signed_distance_nm(*end) <= (segment.width_nm / 2) as f64)
+            });
+            if touched {
+                continue;
+            }
+            let at = (pad.at.x_mm(), pad.at.y_mm());
+            if pad.size_nm.0.min(pad.size_nm.1) < size_nm {
+                plan.unresolved.push(format!(
+                    "pad {}.{} of net {net} at ({:.2}, {:.2}) mm is joined to nothing, and a {} mm via does not fit in it",
+                    footprint.reference,
+                    pad.number,
+                    at.0,
+                    at.1,
+                    nm_to_mm(size_nm),
+                ));
+                continue;
+            }
+            let others_clear = footprint_free(board, footprint, pad, at, radius, gap, &net);
+            if others_clear {
+                plan.vias.push(TieVia {
+                    net: net.clone(),
+                    at: pad.at,
+                    size_nm,
+                    drill_nm,
+                });
+            } else {
+                plan.unresolved.push(format!(
+                    "pad {}.{} of net {net} at ({:.2}, {:.2}) mm is joined to nothing, and other copper is within {gap} mm of a {} mm via in it",
+                    footprint.reference,
+                    pad.number,
+                    at.0,
+                    at.1,
+                    nm_to_mm(size_nm),
+                ));
+            }
+        }
+    }
+    plan
+}
+
+/// Whether a via of `radius` mm at `at`, in `pad`, keeps `gap` mm of copper
+/// from every pad, track and via that is not the pad's own net.
+fn footprint_free(
+    board: &PcbBoard,
+    footprint: &crate::pcb_read::Footprint,
+    pad: &crate::pcb_read::Pad,
+    at: (f64, f64),
+    radius: f64,
+    gap: f64,
+    net: &str,
+) -> bool {
+    let need = radius + gap;
+    let pads_clear = board.footprints.iter().all(|other| {
+        other.pads.iter().all(|candidate| {
+            let same = other.reference == footprint.reference && candidate.number == pad.number;
+            same || PadBox::new(candidate).distance(at) >= need - EPS
+        })
+    });
+    let tracks_clear = board.segments.iter().all(|segment| {
+        net_of(board, segment.net, segment.net_name.as_ref()).as_deref() == Some(net)
+            || point_segment(
+                at,
+                (segment.start.x_mm(), segment.start.y_mm()),
+                (segment.end.x_mm(), segment.end.y_mm()),
+            ) >= need + nm_to_mm(segment.width_nm) / 2.0 - EPS
+    });
+    let vias_clear = board.vias.iter().all(|via| {
+        net_of(board, via.net, via.net_name.as_ref()).as_deref() == Some(net)
+            || (via.at.x_mm() - at.0).hypot(via.at.y_mm() - at.1)
+                >= need + nm_to_mm(via.size_nm) / 2.0 - EPS
+    });
+    pads_clear && tracks_clear && vias_clear
+}
+
 /// The island ties and the return vias for one fill. The return vias are
 /// planned knowing where the tie vias will go, so neither lands on the other.
 #[must_use]
@@ -503,7 +647,7 @@ pub fn plan_all_with(
     ground: &Ground,
     declared: &ViaDeclarations,
 ) -> TiePlan {
-    let mut plan = plan_ties(board, declared);
+    let mut plan = plan_ties_and_pads(board, ground, declared);
     let stitched = stitch(board, reach_mm, &plan.vias, ground, declared);
     plan.vias.extend(stitched.vias);
     plan.unresolved.extend(stitched.unresolved);
@@ -522,6 +666,10 @@ pub struct Ground {
     /// is the strict reading; `Some` lets any other net go without one as an
     /// advisory.
     critical: Option<BTreeSet<String>>,
+    /// The `(size, drill)` of a filled and capped via in a pad, in nanometres,
+    /// where the process offers one. `None` leaves a pad with no way to the
+    /// plane as it is.
+    in_pad_via: Option<(i64, i64)>,
 }
 
 impl Ground {
@@ -530,7 +678,16 @@ impl Ground {
         Self {
             named: names.iter().cloned().collect(),
             critical: None,
+            in_pad_via: None,
         }
+    }
+
+    /// A pad of a poured net that nothing reaches gets a via of this
+    /// `(size, drill)` in the pad, the way the process fills and caps one.
+    #[must_use]
+    pub fn with_in_pad_via(mut self, size_nm: i64, drill_nm: i64) -> Self {
+        self.in_pad_via = Some((size_nm, drill_nm));
+        self
     }
 
     /// Only `critical` nets are held to a return via: a layer change on any
@@ -2028,6 +2185,90 @@ mod tests {
             "the via must land in the island: {via:?}"
         );
         assert_eq!((via.size_nm, via.drill_nm), (600_000, 300_000));
+    }
+
+    /// A supply ball on the outer layer that the router left with no via and
+    /// no track is an island of one against a net poured on an inner layer.
+    fn lone_pad_board(extra: &str) -> PcbBoard {
+        let text = format!(
+            r#"(kicad_pcb
+              (layers (0 "F.Cu" signal) (4 "In1.Cu" signal) (2 "B.Cu" signal))
+              (net 0 "") (net 1 "+3V3") (net 2 "SIG")
+              (footprint "U" (at 0 0) (layer "F.Cu")
+                (pad "C10" smd circle (at 10 10) (size 0.35 0.35) (layers "F.Cu" "F.Paste" "F.Mask") (net 1 "+3V3"))
+                (pad "C11" smd circle (at 10.8 10) (size 0.35 0.35) (layers "F.Cu" "F.Paste" "F.Mask") (net 2 "SIG")))
+              {extra}
+              (zone (net 1) (net_name "+3V3") (layer "In1.Cu") (fill yes)
+                (polygon (pts (xy 0 0) (xy 40 0) (xy 40 20) (xy 0 20)))
+                (filled_polygon (layer "In1.Cu") (pts (xy 0 0) (xy 40 0) (xy 40 20) (xy 0 20)))))"#
+        );
+        PcbBoard::parse(&text).expect("board must parse")
+    }
+
+    /// JLCPCB's via-in-pad land for the 0.2 mm drill is 0.35 mm.
+    const IN_PAD: (i64, i64) = (350_000, 200_000);
+
+    #[test]
+    fn a_pad_the_router_left_joined_to_nothing_gets_the_plane_via_in_the_pad() {
+        let board = lone_pad_board("");
+        let plan = plan_pad_ties(&board, IN_PAD, &ViaDeclarations::new());
+        assert_eq!(plan.vias.len(), 1, "{plan:?}");
+        assert_eq!(plan.vias[0].net, "+3V3");
+        assert_eq!(plan.vias[0].at, Point::new(10_000_000, 10_000_000));
+        assert_eq!(
+            (plan.vias[0].size_nm, plan.vias[0].drill_nm),
+            (350_000, 200_000)
+        );
+        assert!(plan.unresolved.is_empty(), "{plan:?}");
+    }
+
+    #[test]
+    fn the_pad_via_is_only_planned_where_the_process_offers_one() {
+        let board = lone_pad_board("");
+        let without = plan_all_with(&board, REACH, &Ground::default(), &ViaDeclarations::new());
+        assert!(without.vias.is_empty(), "{without:?}");
+        let with = plan_all_with(
+            &board,
+            REACH,
+            &Ground::default().with_in_pad_via(IN_PAD.0, IN_PAD.1),
+            &ViaDeclarations::new(),
+        );
+        assert!(
+            with.vias.iter().any(|v| v.net == "+3V3"),
+            "the ground carries the via the process offers: {with:?}"
+        );
+    }
+
+    #[test]
+    fn a_pad_a_via_of_its_net_already_touches_is_left_alone() {
+        let board = lone_pad_board(
+            r#"(via (at 10 10) (size 0.35) (drill 0.2) (layers "F.Cu" "B.Cu") (net 1))"#,
+        );
+        let plan = plan_pad_ties(&board, IN_PAD, &ViaDeclarations::new());
+        assert!(
+            plan.vias.is_empty() && plan.unresolved.is_empty(),
+            "{plan:?}"
+        );
+    }
+
+    #[test]
+    fn a_pad_narrower_than_the_via_is_reported_not_given_one() {
+        let board = lone_pad_board("");
+        let plan = plan_pad_ties(&board, (450_000, 300_000), &ViaDeclarations::new());
+        assert!(plan.vias.is_empty());
+        assert_eq!(plan.unresolved.len(), 1, "{plan:?}");
+        assert!(plan.unresolved[0].contains("C10"), "{plan:?}");
+    }
+
+    #[test]
+    fn a_via_is_not_put_where_another_nets_copper_is_within_the_gap() {
+        // A track of SIG passes 0.1 mm from the pad's edge.
+        let board = lone_pad_board(
+            r#"(segment (start 9 10.3) (end 11 10.3) (width 0.1) (layer "F.Cu") (net 2))"#,
+        );
+        let plan = plan_pad_ties(&board, IN_PAD, &ViaDeclarations::new());
+        assert!(plan.vias.is_empty(), "{plan:?}");
+        assert_eq!(plan.unresolved.len(), 1, "{plan:?}");
     }
 
     #[test]

@@ -289,6 +289,11 @@ pub struct FabricationPolicy {
     /// existed, and absence reads as "not offered".
     #[serde(default)]
     pub process_fills_via_in_pad: bool,
+    /// How far a filled and capped via's land exceeds its drill, in
+    /// nanometres, from the manufacturer profile; `0` where the process does
+    /// not offer via-in-pad.
+    #[serde(default)]
+    pub via_in_pad_land_extra_nm: i64,
     /// Minimum acceptable copper width, in nanometres.
     pub min_track_width_nm: i64,
     /// Minimum acceptable copper clearance between distinct nets, in nm.
@@ -308,6 +313,7 @@ impl Default for FabricationPolicy {
         Self {
             allow_via_in_pad: false,
             process_fills_via_in_pad: false,
+            via_in_pad_land_extra_nm: 0,
             min_track_width_nm: 127_000,
             min_clearance_nm: 127_000,
             min_drill_diameter_nm: 300_000,
@@ -329,6 +335,7 @@ impl FabricationPolicy {
         Self {
             allow_via_in_pad: false,
             process_fills_via_in_pad: profile.via_in_pad,
+            via_in_pad_land_extra_nm: profile.via_in_pad_land_extra_nm,
             min_track_width_nm: profile.min_trace_width_nm,
             min_clearance_nm: profile.min_copper_clearance_nm,
             min_drill_diameter_nm: profile.min_drill_diameter_nm,

@@ -398,6 +398,13 @@ fn finalize(
     if let Some(critical) = &request.return_via_critical_nets {
         ground = ground.with_critical(critical);
     }
+    // Where the process fills and caps a via in a pad and the board may use
+    // one, a pad of a poured net that the router left joined to nothing gets
+    // its plane via in the pad.
+    if request.policy.allow_via_in_pad && request.policy.via_in_pad_land_extra_nm > 0 {
+        let drill = request.policy.min_drill_diameter_nm;
+        ground = ground.with_in_pad_via(drill + request.policy.via_in_pad_land_extra_nm, drill);
+    }
     match island_vias::tie_islands_for(&candidate.candidate_path, &ground) {
         Ok(outcome) => {
             repair_blocking = outcome.unresolved;
