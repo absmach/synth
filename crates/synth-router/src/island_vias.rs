@@ -56,6 +56,12 @@ const FINE_PITCH_MM: f64 = 0.5;
 /// How far from a fine-pitch pad a signal via still counts as in its breakout.
 const FINE_PITCH_BREAKOUT_MM: f64 = 2.5;
 
+/// The return via tried when the usual one has no room: a smaller pad and drill
+/// held off other copper by the board's own clearance, not the 0.2 mm margin.
+const COMPACT_VIA_SIZE_NM: i64 = 460_000;
+const COMPACT_VIA_DRILL_NM: i64 = 200_000;
+const COMPACT_GAP_MM: f64 = 0.13;
+
 /// Spacing of the points tried for a return via.
 const RETURN_STEP_MM: f64 = 0.1;
 
@@ -469,6 +475,8 @@ pub fn plan_ties(board: &PcbBoard, declared: &ViaDeclarations) -> TiePlan {
         );
         let need = nm_to_mm(size_nm) / 2.0 + EDGE_SLACK_MM;
         let keepout = Keepout::from_board(board, net, declared.gap_mm());
+        let compact_keepout =
+            Keepout::from_board(board, net, declared.clearance_mm.unwrap_or(COMPACT_GAP_MM));
 
         let via = TieVia {
             net: net.clone(),
@@ -483,8 +491,24 @@ pub fn plan_ties(board: &PcbBoard, declared: &ViaDeclarations) -> TiePlan {
             if !members.iter().any(|&i| attached[i]) {
                 continue;
             }
-            if let Some(at) = best_spot(regions, &members, &mains, need, &keepout) {
-                plan.vias.push(TieVia { at, ..via.clone() });
+            let usual = best_spot(regions, &members, &mains, need, &keepout)
+                .map(|at| TieVia { at, ..via.clone() });
+            let tie = usual.or_else(|| {
+                if size_nm <= COMPACT_VIA_SIZE_NM {
+                    return None;
+                }
+                let compact_need = nm_to_mm(COMPACT_VIA_SIZE_NM) / 2.0 + EDGE_SLACK_MM;
+                best_spot(regions, &members, &mains, compact_need, &compact_keepout).map(|at| {
+                    TieVia {
+                        at,
+                        size_nm: COMPACT_VIA_SIZE_NM,
+                        drill_nm: COMPACT_VIA_DRILL_NM,
+                        ..via.clone()
+                    }
+                })
+            });
+            if let Some(tie) = tie {
+                plan.vias.push(tie);
             } else {
                 let first = &regions[members[0]];
                 plan.unresolved.push(format!(
@@ -1609,7 +1633,7 @@ fn default_reach_mm(copper_layers: usize) -> f64 {
 /// interrupts it, so the return has to jump layers too. W-SYNTH-DRC-016 flags a
 /// via of any net that is not ground, and that has a net, with no ground via
 /// within `reach_mm` along either axis; this adds one for each, at the nearest
-/// point that lies inside the ground pour on the first and last layers and clears
+/// point that lies inside the ground pour on some layer and clears
 /// every pad, via and foreign track on every layer. A net named for ground is
 /// ground by the DRC's own rule, so `VSSA` is. A via with no net is not seen by
 /// the rule and is not given a return. A new via counts for the signal vias after
@@ -1780,6 +1804,9 @@ fn stitch(
             .any(|layer| !pad.layers.contains(layer) && room(layer, pad.at))
     };
     let fine_pads = fine_pitch_pads(board);
+    let compact_gap = declared.clearance_mm.unwrap_or(COMPACT_GAP_MM);
+    let compact_keepout = Keepout::from_board(board, net, compact_gap);
+    let compact_apart = nm_to_mm(COMPACT_VIA_SIZE_NM) + compact_gap;
     let mut out = Vec::new();
     let mut offsets_by_window: HashMap<u64, Vec<(f64, f64)>> = HashMap::new();
     let (mut unresolved, mut advisory) = (Vec::new(), Vec::new());
@@ -1791,12 +1818,10 @@ fn stitch(
         {
             continue;
         }
-        // A free spot first; with none, a ground pad within reach takes the via
-        // in the pad, the way the process fills and caps one.
         let offsets = offsets_by_window
             .entry(window.to_bits())
             .or_insert_with(|| return_offsets(window));
-        let spot = nearest_return_spot(
+        let usual = nearest_return_spot(
             (vx, vy),
             offsets,
             apart,
@@ -1805,8 +1830,23 @@ fn stitch(
             &keepout,
             radius,
         )
-        .map(|p| (p, size_nm, drill_nm))
-        .or_else(|| {
+        .map(|p| (p, size_nm, drill_nm));
+        let compact = || {
+            if size_nm <= COMPACT_VIA_SIZE_NM {
+                return None;
+            }
+            nearest_return_spot(
+                (vx, vy),
+                offsets,
+                compact_apart,
+                &ground,
+                &room_both,
+                &compact_keepout,
+                nm_to_mm(COMPACT_VIA_SIZE_NM) / 2.0,
+            )
+            .map(|p| (p, COMPACT_VIA_SIZE_NM, COMPACT_VIA_DRILL_NM))
+        };
+        let spot = usual.or_else(compact).or_else(|| {
             let spots = (&ground[..], &ground_pads[..]);
             in_pad_spot(
                 (vx, vy),
@@ -1954,7 +1994,7 @@ fn fine_pitch_pads(board: &PcbBoard) -> Vec<(f64, f64)> {
 }
 
 /// The point nearest the signal via `from`, on the search grid, that is clear of
-/// the ground vias, inside the pour on both outer layers and clear of every
+/// the ground vias, inside ground copper on any layer and clear of every
 /// obstacle.
 fn nearest_return_spot(
     from: (f64, f64),
@@ -2894,6 +2934,30 @@ mod tests {
     }
 
     #[test]
+    fn an_island_too_small_for_the_usual_via_gets_a_compact_one() {
+        // 1.2 x 0.62 mm: its widest circle has a radius of 0.31 mm, short of a
+        // 0.6 mm via with the slack (0.35 mm) but enough for a 0.46 mm one.
+        let text = r#"(kicad_pcb
+          (layers (0 "F.Cu" signal) (2 "B.Cu" signal))
+          (net 0 "") (net 1 "GND")
+          (segment (start 25.2 7) (end 25.4 7) (width 0.1) (layer "F.Cu") (net 1))
+          (via (at 5 5) (size 0.6) (drill 0.3) (layers "F.Cu" "B.Cu") (net 1))
+          (zone (net 1) (net_name "GND") (layer "F.Cu") (fill yes)
+            (polygon (pts (xy 0 0) (xy 40 0) (xy 40 20) (xy 0 20)))
+            (filled_polygon (layer "F.Cu") (pts (xy 0 0) (xy 20 0) (xy 20 20) (xy 0 20)))
+            (filled_polygon (layer "F.Cu") (pts (xy 25 6.69) (xy 26.2 6.69) (xy 26.2 7.31) (xy 25 7.31))))
+          (zone (net 1) (net_name "GND") (layer "B.Cu") (fill yes)
+            (polygon (pts (xy 0 0) (xy 40 0) (xy 40 20) (xy 0 20)))
+            (filled_polygon (layer "B.Cu") (pts (xy 0 0) (xy 40 0) (xy 40 20) (xy 0 20)))))"#;
+        let board = PcbBoard::parse(text).expect("board must parse");
+        let plan = plan_ties(&board, &ViaDeclarations::new());
+        assert!(plan.unresolved.is_empty(), "{plan:?}");
+        assert_eq!(plan.vias.len(), 1, "{plan:?}");
+        assert_eq!(plan.vias[0].size_nm, COMPACT_VIA_SIZE_NM);
+        assert_eq!(plan.vias[0].drill_nm, COMPACT_VIA_DRILL_NM);
+    }
+
+    #[test]
     fn an_island_a_hair_wider_than_the_via_still_gets_one() {
         // 1.5 x 0.75 mm: its widest circle has a radius of 0.375 mm, which a
         // 0.6 mm via (0.3 mm) fits with the 0.05 mm of slack but not with 0.1.
@@ -3265,7 +3329,7 @@ mod tests {
     }
 
     #[test]
-    fn no_return_via_is_added_where_one_layer_has_no_pour() {
+    fn a_return_via_is_added_where_one_outer_layer_has_no_pour() {
         let text = r#"(kicad_pcb
           (layers (0 "F.Cu" signal) (2 "B.Cu" signal))
           (net 0 "") (net 1 "GND") (net 2 "SIG")
@@ -3274,7 +3338,41 @@ mod tests {
             (polygon (pts (xy 0 0) (xy 40 0) (xy 40 20) (xy 0 20)))
             (filled_polygon (layer "B.Cu") (pts (xy 0 0) (xy 40 0) (xy 40 20) (xy 0 20)))))"#;
         let board = PcbBoard::parse(text).expect("parses");
-        assert!(stitch_vias(&board, REACH, &[]).is_empty());
+        assert_eq!(stitch_vias(&board, REACH, &[]).len(), 1);
+    }
+
+    /// Foreign pads leave a corridor round the signal via too narrow for the
+    /// usual 0.6 mm return via but wide enough for a compact one, which the
+    /// board's own 0.127 mm clearance still allows.
+    #[test]
+    fn a_compact_return_via_fits_where_the_usual_one_does_not() {
+        let frame = r#"(footprint "U" (at 0 0) (layer "F.Cu")
+            (pad "1" smd rect (at 10 11.475) (size 4 1.05) (layers "F.Cu") (net 3))
+            (pad "2" smd rect (at 10 8.525) (size 4 1.05) (layers "F.Cu") (net 3))
+            (pad "3" smd rect (at 8.525 10) (size 1.05 1.9) (layers "F.Cu") (net 3))
+            (pad "4" smd rect (at 11.475 10) (size 1.05 1.9) (layers "F.Cu") (net 3)))"#;
+        let vias = stitch_vias(&stitched_board(frame), REACH, &[]);
+        assert_eq!(vias.len(), 1, "{vias:?}");
+        assert_eq!(vias[0].net, "GND");
+        assert_eq!(vias[0].size_nm, 460_000);
+        assert_eq!(vias[0].drill_nm, 200_000);
+    }
+
+    /// A through via lands on every layer, so ground copper on an inner plane
+    /// is enough to tie it: the outer layers may be too cut up to hold a pour.
+    #[test]
+    fn a_return_via_is_added_where_only_an_inner_layer_has_ground_copper() {
+        let text = r#"(kicad_pcb
+          (layers (0 "F.Cu" signal) (4 "In1.Cu" signal) (2 "B.Cu" signal))
+          (net 0 "") (net 1 "GND") (net 2 "SIG")
+          (via (at 10 10) (size 0.6) (drill 0.3) (layers "F.Cu" "B.Cu") (net 2))
+          (zone (net 1) (net_name "GND") (layer "In1.Cu") (fill yes)
+            (polygon (pts (xy 0 0) (xy 40 0) (xy 40 20) (xy 0 20)))
+            (filled_polygon (layer "In1.Cu") (pts (xy 0 0) (xy 40 0) (xy 40 20) (xy 0 20)))))"#;
+        let board = PcbBoard::parse(text).expect("parses");
+        let vias = stitch_vias(&board, REACH, &[]);
+        assert_eq!(vias.len(), 1, "{vias:?}");
+        assert_eq!(vias[0].net, "GND");
     }
 
     /// Under a ball grid the outer layer holds no pour, but two inner planes do: the
@@ -3494,7 +3592,7 @@ mod tests {
     fn a_return_via_keeps_clear_of_pad_copper() {
         // Pad copper (10.3..11.1, 9.6..10.4), so no via closer than 0.5 mm to it.
         let pad = r#"(footprint "R" (at 0 0) (layer "F.Cu")
-            (pad "1" smd rect (at 10.7 10) (size 0.8 0.8) (layers "F.Cu") (net 1)))"#;
+            (pad "1" smd rect (at 10.7 10) (size 0.8 0.8) (layers "F.Cu") (net 3)))"#;
         let vias = stitch_vias(&stitched_board(pad), REACH, &[]);
         assert_eq!(vias.len(), 1, "{vias:?}");
         let (x, y) = at_mm(&vias[0]);
@@ -3503,6 +3601,21 @@ mod tests {
             (9.6 - y).max(y - 10.4).max(0.0),
         );
         assert!(dx.hypot(dy) >= 0.5 - 1e-6, "on or beside the pad: {x} {y}");
+    }
+
+    /// Ground pads fill the whole window round the signal via, as a QFN's
+    /// ground ring and exposed pad do. A return via may share ground copper, so
+    /// they are no reason to report the signal via as unresolved.
+    #[test]
+    fn ground_pads_round_a_signal_via_do_not_block_its_return_via() {
+        let ring = r#"(footprint "U" (at 0 0) (layer "F.Cu")
+            (pad "1" smd rect (at 10 11.15) (size 3.4 1.1) (layers "F.Cu") (net 1))
+            (pad "2" smd rect (at 10 8.85) (size 3.4 1.1) (layers "F.Cu") (net 1))
+            (pad "3" smd rect (at 8.85 10) (size 1.1 1.2) (layers "F.Cu") (net 1))
+            (pad "4" smd rect (at 11.15 10) (size 1.1 1.2) (layers "F.Cu") (net 1)))"#;
+        let vias = stitch_vias(&stitched_board(ring), REACH, &[]);
+        assert_eq!(vias.len(), 1, "{vias:?}");
+        assert_eq!(vias[0].net, "GND");
     }
 
     /// The via drills every layer, so a track of another net on an inner layer
