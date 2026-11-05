@@ -859,7 +859,7 @@ priority = "hard"
 timestamp = "2026-11-03T23:30:00+00:00"
 
 [components.J_B2B]
-x = 57.21
+x = 56.88
 y = 16
 rotation = 0
 source = "agent"

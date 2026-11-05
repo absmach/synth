@@ -3,7 +3,7 @@
 	(generator "synth-eda")
 	(generator_version "10.0")
 	(general
-		(thickness 1.44)
+		(thickness 1.6)
 		(legacy_teardrops no)
 	)
 	(paper "A4")
@@ -11,6 +11,8 @@
 		(0 "F.Cu" signal)
 		(4 "In1.Cu" power)
 		(6 "In2.Cu" power)
+		(8 "In3.Cu" power)
+		(10 "In4.Cu" power)
 		(2 "B.Cu" signal)
 		(32 "B.Adhes" user "B.Adhesive")
 		(33 "F.Adhes" user "F.Adhesive")
@@ -53,7 +55,7 @@
 			(layer
 				"dielectric 2"
 				(type "dielectric")
-				(thickness 0.9)
+				(thickness 0.33)
 				(material "FR4")
 				(epsilon_r 4.4)
 			)
@@ -64,6 +66,30 @@
 			)
 			(layer
 				"dielectric 3"
+				(type "dielectric")
+				(thickness 0.33)
+				(material "FR4")
+				(epsilon_r 4.4)
+			)
+			(layer
+				"In3.Cu"
+				(type "copper")
+				(thickness 0.035)
+			)
+			(layer
+				"dielectric 4"
+				(type "dielectric")
+				(thickness 0.33)
+				(material "FR4")
+				(epsilon_r 4.4)
+			)
+			(layer
+				"In4.Cu"
+				(type "copper")
+				(thickness 0.035)
+			)
+			(layer
+				"dielectric 5"
 				(type "dielectric")
 				(thickness 0.2)
 				(material "FR4")
@@ -170,7 +196,7 @@
 		"PWR"
 		"Synth netclass PWR"
 		(clearance 0.2)
-		(trace_width 0.5)
+		(trace_width 0.3)
 		(via_dia 0.6)
 		(via_drill 0.3)
 		(add_net "+12V_LOGIC")
@@ -854,7 +880,7 @@
 		"Connector_PinHeader_2.54mm:PinHeader_2x10_P2.54mm_Vertical"
 		(layer "F.Cu")
 		(uuid "18760bb3-9163-5a9c-9b11-bccdcd9dd5d2")
-		(at 55.935 4.57)
+		(at 56.105 4.07)
 		(property
 			"Reference"
 			"J_B2B"
@@ -2466,7 +2492,7 @@
 		(property
 			"Reference"
 			"U1"
-			(at -6.33 0 0)
+			(at 0 6.05 0)
 			(layer "F.SilkS")
 			(uuid "5773b0a5-fc60-5315-be9f-aaafa9038884")
 			(effects
@@ -3813,7 +3839,7 @@
 		"Button_Switch_SMD:SW_SPST_PTS645Sx43SMTR92"
 		(layer "F.Cu")
 		(uuid "0e73ea50-eaf4-5f52-a327-31c711b77ed9")
-		(at 28 22.2)
+		(at 28 24)
 		(property
 			"Reference"
 			"SW_BOOT"
@@ -7077,7 +7103,7 @@
 		"Capacitor_SMD:C_0603_1608Metric"
 		(layer "F.Cu")
 		(uuid "22072aba-1615-5b16-88cd-5e506a6b6f37")
-		(at 18 24.5)
+		(at 18 25)
 		(property
 			"Reference"
 			"C_HALL_W"
@@ -7257,7 +7283,7 @@
 		"Connector_PinHeader_2.54mm:PinHeader_1x04_P2.54mm_Vertical"
 		(layer "F.Cu")
 		(uuid "deb26ebd-dbeb-5add-b9c9-4e17cc731cec")
-		(at 10.69 28 90)
+		(at 11.19 29.5 90)
 		(property
 			"Reference"
 			"J_ENC"
@@ -7886,11 +7912,11 @@
 		"Capacitor_SMD:C_0603_1608Metric"
 		(layer "F.Cu")
 		(uuid "83067b0c-6d04-50cf-8f02-b404f704fbf8")
-		(at 18 17.5)
+		(at 18 17.5 180)
 		(property
 			"Reference"
 			"C_ENC_A"
-			(at 0 -4.23 0)
+			(at 0 4.23 180)
 			(layer "F.SilkS")
 			(uuid "ede15c86-a95e-544f-83e9-c9f524f765d4")
 			(hide yes)
@@ -7904,7 +7930,7 @@
 		(property
 			"Value"
 			"100nF"
-			(at 0 4.23 0)
+			(at 0 -4.23 180)
 			(layer "F.Fab")
 			(uuid "b102c63c-8d49-55cb-a194-c12ca86d3122")
 			(hide yes)
@@ -8036,14 +8062,14 @@
 		)
 	 (uuid "c4b141c3-acb3-5e8c-afd2-0e9479b0aa70"))
 	(pad "1" smd roundrect
-		(at -0.775 0)
+		(at -0.775 0 180)
 		(size 0.9 0.95)
 		(layers "F.Cu" "F.Mask" "F.Paste")
 		(roundrect_rratio 0.25)
 			(net 34 "ENC_A")
 	 (uuid "12b69b28-5778-5fbd-82d1-8f24e3652d1b"))
 	(pad "2" smd roundrect
-		(at 0.775 0)
+		(at 0.775 0 180)
 		(size 0.9 0.95)
 		(layers "F.Cu" "F.Mask" "F.Paste")
 		(roundrect_rratio 0.25)
@@ -9769,11 +9795,11 @@
 		"Connector_PinHeader_2.54mm:PinHeader_1x03_P2.54mm_Vertical"
 		(layer "F.Cu")
 		(uuid "31c42e43-a9be-5260-99a1-fb3ec4fa1e26")
-		(at 36.46 27.5 90)
+		(at 36.46 29.5 90)
 		(property
 			"Reference"
 			"J_RS485"
-			(at -2.64 2.54 0)
+			(at 2.64 2.54 0)
 			(layer "F.SilkS")
 			(uuid "a469d193-bbe6-58c9-b9e1-4f1e0a5ee402")
 			(effects
@@ -10029,7 +10055,7 @@
 		"Connector_PinHeader_2.54mm:PinHeader_1x04_P2.54mm_Vertical"
 		(layer "F.Cu")
 		(uuid "8636249e-a355-5c20-879b-2e277aa76608")
-		(at 23.19 27.5 90)
+		(at 23.19 29.5 90)
 		(property
 			"Reference"
 			"J_SWD"
@@ -13082,6 +13108,78 @@
 		)
 	)
 	)
+	(via
+		(at 5 10)
+		(size 0.6)
+		(drill 0.3)
+		(layers "F.Cu" "B.Cu")
+		(net 18)
+		(uuid "b6999708-ee9d-5298-9205-ea0638841058")
+	)
+	(via
+		(at 5 20)
+		(size 0.6)
+		(drill 0.3)
+		(layers "F.Cu" "B.Cu")
+		(net 18)
+		(uuid "32d95589-b943-5b8e-abe9-3040f2c7be2c")
+	)
+	(via
+		(at 25 15)
+		(size 0.6)
+		(drill 0.3)
+		(layers "F.Cu" "B.Cu")
+		(net 18)
+		(uuid "46f5d7a3-6b2a-5130-abf3-e13fd47c1e5a")
+	)
+	(via
+		(at 35 20)
+		(size 0.6)
+		(drill 0.3)
+		(layers "F.Cu" "B.Cu")
+		(net 18)
+		(uuid "14713aff-f2c5-553d-884f-96c5f5e09d30")
+	)
+	(via
+		(at 40 5)
+		(size 0.6)
+		(drill 0.3)
+		(layers "F.Cu" "B.Cu")
+		(net 18)
+		(uuid "ee1216da-2795-5dda-a8e0-b0a42da9d230")
+	)
+	(via
+		(at 45 5)
+		(size 0.6)
+		(drill 0.3)
+		(layers "F.Cu" "B.Cu")
+		(net 18)
+		(uuid "6730f16a-8a3c-5549-a30a-8dcd219d5d20")
+	)
+	(via
+		(at 45 25)
+		(size 0.6)
+		(drill 0.3)
+		(layers "F.Cu" "B.Cu")
+		(net 18)
+		(uuid "9c9e55aa-0354-51d7-a696-89938cca4165")
+	)
+	(via
+		(at 50 15)
+		(size 0.6)
+		(drill 0.3)
+		(layers "F.Cu" "B.Cu")
+		(net 18)
+		(uuid "e4e4006a-0283-5895-a811-82a6adfee6d7")
+	)
+	(via
+		(at 50 25)
+		(size 0.6)
+		(drill 0.3)
+		(layers "F.Cu" "B.Cu")
+		(net 18)
+		(uuid "05df1f0d-bacf-563c-96bb-9725a50b3fbf")
+	)
 	(zone
 		(net 18)
 		(net_name "GND")
@@ -13097,7 +13195,7 @@
 			yes
 			(thermal_gap 0.2)
 			(thermal_bridge_width 0.25)
-			(island_removal_mode 0)
+			(island_removal_mode 1)
 		)
 		(polygon
 			(pts
@@ -13123,7 +13221,7 @@
 			yes
 			(thermal_gap 0.2)
 			(thermal_bridge_width 0.25)
-			(island_removal_mode 0)
+			(island_removal_mode 1)
 		)
 		(polygon
 			(pts
@@ -13149,7 +13247,59 @@
 			yes
 			(thermal_gap 0.2)
 			(thermal_bridge_width 0.25)
-			(island_removal_mode 0)
+			(island_removal_mode 1)
+		)
+		(polygon
+			(pts
+				(xy 0.5 0.5)
+				(xy 59.5 0.5)
+				(xy 59.5 31.5)
+				(xy 0.5 31.5)
+			)
+		)
+	)
+	(zone
+		(net 18)
+		(net_name "GND")
+		(layer "In3.Cu")
+		(uuid "53123eda-ece8-51ea-aa24-83918972befb")
+		(priority 1)
+		(hatch edge 0.5)
+		(connect_pads
+			yes
+			(clearance 0.15)
+		)
+		(fill
+			yes
+			(thermal_gap 0.2)
+			(thermal_bridge_width 0.25)
+			(island_removal_mode 1)
+		)
+		(polygon
+			(pts
+				(xy 0.5 0.5)
+				(xy 59.5 0.5)
+				(xy 59.5 31.5)
+				(xy 0.5 31.5)
+			)
+		)
+	)
+	(zone
+		(net 18)
+		(net_name "GND")
+		(layer "In4.Cu")
+		(uuid "f6a43003-d20a-530d-a2f9-65f86af7111b")
+		(priority 1)
+		(hatch edge 0.5)
+		(connect_pads
+			yes
+			(clearance 0.15)
+		)
+		(fill
+			yes
+			(thermal_gap 0.2)
+			(thermal_bridge_width 0.25)
+			(island_removal_mode 1)
 		)
 		(polygon
 			(pts
@@ -13175,7 +13325,7 @@
 			yes
 			(thermal_gap 0.2)
 			(thermal_bridge_width 0.25)
-			(island_removal_mode 0)
+			(island_removal_mode 1)
 		)
 		(polygon
 			(pts
@@ -13187,7 +13337,7 @@
 		)
 	)
 	(via
-		(at 30 1.5)
+		(at 15 1.5)
 		(size 0.6)
 		(drill 0.3)
 		(layers "F.Cu" "B.Cu")
@@ -13195,17 +13345,33 @@
 		(uuid "b2f238df-0446-5da4-9f16-1a4006841bae")
 	)
 	(via
-		(at 30 30.5)
+		(at 45 1.5)
 		(size 0.6)
 		(drill 0.3)
 		(layers "F.Cu" "B.Cu")
 		(net 18)
 		(uuid "cef758d4-653e-536e-beb7-a4b7925707dd")
 	)
+	(via
+		(at 15 30.5)
+		(size 0.6)
+		(drill 0.3)
+		(layers "F.Cu" "B.Cu")
+		(net 18)
+		(uuid "0108df65-d211-5827-8492-d2818a8bb146")
+	)
+	(via
+		(at 45 30.5)
+		(size 0.6)
+		(drill 0.3)
+		(layers "F.Cu" "B.Cu")
+		(net 18)
+		(uuid "82ec3b9d-598a-521c-8bb0-97b4b20efa3d")
+	)
 	(zone
 		(net 0)
 		(net_name "")
-		(layers "F.Cu" "In1.Cu" "In2.Cu" "B.Cu")
+		(layers "F.Cu" "In1.Cu" "In2.Cu" "In3.Cu" "In4.Cu" "B.Cu")
 		(uuid "cb07073c-9983-5b97-a0f5-6513ad83dabe")
 		(name "H1 screw head")
 		(hatch edge 0.5)
@@ -13248,7 +13414,7 @@
 	(zone
 		(net 0)
 		(net_name "")
-		(layers "F.Cu" "In1.Cu" "In2.Cu" "B.Cu")
+		(layers "F.Cu" "In1.Cu" "In2.Cu" "In3.Cu" "In4.Cu" "B.Cu")
 		(uuid "30da5d7f-f073-5473-8682-a2d8f317a6a5")
 		(name "H2 screw head")
 		(hatch edge 0.5)
@@ -13291,7 +13457,7 @@
 	(zone
 		(net 0)
 		(net_name "")
-		(layers "F.Cu" "In1.Cu" "In2.Cu" "B.Cu")
+		(layers "F.Cu" "In1.Cu" "In2.Cu" "In3.Cu" "In4.Cu" "B.Cu")
 		(uuid "f4ac803f-3497-5d57-a6d0-cd99b684e324")
 		(name "H3 screw head")
 		(hatch edge 0.5)
@@ -13334,7 +13500,7 @@
 	(zone
 		(net 0)
 		(net_name "")
-		(layers "F.Cu" "In1.Cu" "In2.Cu" "B.Cu")
+		(layers "F.Cu" "In1.Cu" "In2.Cu" "In3.Cu" "In4.Cu" "B.Cu")
 		(uuid "2962825a-df23-5b87-aca8-b1d94781ce45")
 		(name "H4 screw head")
 		(hatch edge 0.5)

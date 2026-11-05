@@ -1085,22 +1085,19 @@ fn build_mounting_hole_keepout(
 }
 
 /// The through vias that stitch the ground planes into one network: one at
-/// the midpoint of the top edge and one at the midpoint of the bottom edge,
-/// inset 1.5 mm.
+/// each quarter point of the top and bottom edges, inset 1.5 mm. Four points
+/// keep the pour islands on both outer layers tied to the inner planes even
+/// when routing cuts a zone in two.
 ///
 /// They used to sit at the four corners, where a via lands beside a corner
-/// mounting hole and reads as a second hole in the 3D view. A midpoint is far
-/// from every corner, and one through via already ties every ground copper
-/// layer, so two points keep the planes connected. A midpoint that still
-/// lands in a mounting hole's keepout slides along its edge, away from the
-/// nearest hole, and never leaves the board.
-fn ground_fence_points(outline: Rect, inset_nm: i64, holes: &[(Point, i64)]) -> [Point; 2] {
-    let mid_x = outline.min.x_nm + (outline.max.x_nm - outline.min.x_nm) / 2;
-    // Slide away from the hole nearest the midpoint, not always to the right.
-    let inward = holes
-        .iter()
-        .min_by_key(|(centre, _)| (centre.x_nm - mid_x).abs())
-        .map_or(1, |(centre, _)| if centre.x_nm < mid_x { 1 } else { -1 });
+/// mounting hole and reads as a second hole in the 3D view. A quarter point is
+/// far from every corner. A point that still lands in a mounting hole's
+/// keepout slides along its edge, toward the board centre, and never leaves
+/// the board.
+fn ground_fence_points(outline: Rect, inset_nm: i64, holes: &[(Point, i64)]) -> [Point; 4] {
+    let width = outline.max.x_nm - outline.min.x_nm;
+    let left = outline.min.x_nm + width / 4;
+    let right = outline.min.x_nm + width * 3 / 4;
     let clamp_x = |point: Point| {
         Point::new(
             point
@@ -1111,13 +1108,23 @@ fn ground_fence_points(outline: Rect, inset_nm: i64, holes: &[(Point, i64)]) -> 
     };
     [
         clamp_x(clear_of_mounting_holes(
-            Point::new(mid_x, outline.min.y_nm + inset_nm),
-            inward,
+            Point::new(left, outline.min.y_nm + inset_nm),
+            1,
             holes,
         )),
         clamp_x(clear_of_mounting_holes(
-            Point::new(mid_x, outline.max.y_nm - inset_nm),
-            inward,
+            Point::new(right, outline.min.y_nm + inset_nm),
+            -1,
+            holes,
+        )),
+        clamp_x(clear_of_mounting_holes(
+            Point::new(left, outline.max.y_nm - inset_nm),
+            1,
+            holes,
+        )),
+        clamp_x(clear_of_mounting_holes(
+            Point::new(right, outline.max.y_nm - inset_nm),
+            -1,
             holes,
         )),
     ]
@@ -1397,8 +1404,9 @@ fn build_zone(
                     Sexp::list("thermal_bridge_width", vec![num(0.25)]),
                     // A pour can be cut into islands by traces and keepouts;
                     // an island touches no pad, so keeping it only adds copper
-                    // that KiCad reports as an unconnected zone.
-                    Sexp::list("island_removal_mode", vec![Sexp::atom("0")]),
+                    // that KiCad reports as an unconnected zone. Mode 1
+                    // removes every island, not only the ones below an area.
+                    Sexp::list("island_removal_mode", vec![Sexp::atom("1")]),
                 ],
             ),
             Sexp::list("polygon", vec![Sexp::list("pts", pts)]),
@@ -3175,21 +3183,23 @@ mod tests {
     }
 
     #[test]
-    fn the_ground_fence_sits_at_edge_midpoints_not_corners() {
+    fn the_ground_fence_sits_at_edge_quarters_not_corners() {
         let outline =
             synth_geometry::Rect::new(Point::new(0, 0), Point::new(mm_to_nm(60.0), mm_to_nm(30.0)));
         let points = ground_fence_points(outline, mm_to_nm(1.5), &[]);
-        assert_eq!(points[0], Point::new(mm_to_nm(30.0), mm_to_nm(1.5)));
-        assert_eq!(points[1], Point::new(mm_to_nm(30.0), mm_to_nm(28.5)));
+        assert_eq!(points[0], Point::new(mm_to_nm(15.0), mm_to_nm(1.5)));
+        assert_eq!(points[1], Point::new(mm_to_nm(45.0), mm_to_nm(1.5)));
+        assert_eq!(points[2], Point::new(mm_to_nm(15.0), mm_to_nm(28.5)));
+        assert_eq!(points[3], Point::new(mm_to_nm(45.0), mm_to_nm(28.5)));
     }
 
     #[test]
-    fn a_midpoint_fence_via_slides_off_a_mounting_hole() {
+    fn a_fence_via_slides_off_a_mounting_hole() {
         let outline =
             synth_geometry::Rect::new(Point::new(0, 0), Point::new(mm_to_nm(60.0), mm_to_nm(30.0)));
-        let hole = hole(30.0, 0.0, 1.25);
+        let hole = hole(15.0, 0.0, 1.25);
         let points = ground_fence_points(outline, mm_to_nm(1.5), &[hole]);
-        assert_ne!(points[0].x_nm, mm_to_nm(30.0), "{:?}", points[0]);
+        assert_ne!(points[0].x_nm, mm_to_nm(15.0), "{:?}", points[0]);
         assert!(
             points[0].x_nm >= outline.min.x_nm + mm_to_nm(1.5)
                 && points[0].x_nm <= outline.max.x_nm - mm_to_nm(1.5),

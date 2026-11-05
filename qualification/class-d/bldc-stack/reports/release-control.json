@@ -75,8 +75,8 @@
   "routing": {
     "engine": "freerouting",
     "state": "validation_failed",
-    "input_hash": "341a1525f43eadc84fbba233cc4295784cf9b0549a6a86dde3826dbc36f2e77b",
-    "run_record": "/tmp/opencode/ctl-grid6/bldc_control.routing.json",
+    "input_hash": "db1cc6f3753d79c3170c99407301e30553602eee551f4b41d4d02364151364c8",
+    "run_record": "/tmp/opencode/ctl-final6/bldc_control.routing.json",
     "reasons": [
       "inspect the retained session log for the engine's own error; the baseline export is unchanged"
     ]

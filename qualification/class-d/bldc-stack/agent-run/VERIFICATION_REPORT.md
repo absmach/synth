@@ -1,7 +1,7 @@
 # Verification report: BLDC stack (SYN-408)
 
 All commands below were rerun from the repository root on 2026-11-05 against
-the revised 60 x 32 mm control layout. The earlier run was on 2026-11-03. Both
+the revised 60 x 32 mm, 6-layer control layout. The earlier run was on 2026-11-03. Both
 used an empty `XDG_DATA_HOME` and
 `KICAD_SYMBOL_DIR=/usr/share/kicad/symbols`,
 `KICAD_FOOTPRINT_DIR=/usr/share/kicad/footprints`. KiCad 10.0.7, FreeRouting
@@ -92,7 +92,7 @@ The un-routed baseline still reports 0 DRC errors, 97 unconnected pads and
 
 The control source declares `outline 60mm x 32mm`, so Edge.Cuts is exactly
 0-60 x 0-32 mm; the mounting holes keep their sidecar coordinates on the edge
-and J_B2B is flush with the right edge. The three Hall connectors are vertical
+and J_B2B sits within 0.33 mm of the right edge. The three Hall connectors are vertical
 1x3 headers in a column on the left, and the three bottom headers share one
 pin-row height. The four corner ground-fence vias are gone; the two remaining
 plane-stitching vias sit at the top and bottom edge midpoints, clear of every

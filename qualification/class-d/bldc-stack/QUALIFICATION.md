@@ -36,7 +36,7 @@ KiCadRoutingTools is the fallback when its Python environment is set up.
 
 Tool versions used: KiCad 10.0.7, FreeRouting 2.4.1, Temurin 25.0.5,
 Synth 0.1.1. The tool rows below were rerun on 2026-11-05 against the revised
-control layout (`outline 60mm x 32mm`, mounting holes on the edge, J_B2B flush,
+control layout (`outline 60mm x 32mm`, 6-layer 1.6 mm stack, mounting holes on the edge, J_B2B flush,
 vertical Hall column). The FreeRouting adapter still fails before producing
 copper, but no route has yet passed the full gate (see A9); routing is
 therefore not evidence.
@@ -53,7 +53,7 @@ therefore not evidence.
 | A6 | A 12 V to 3.3 V exchange is rejected | `mappings_neg_voltage.json` | `warning`, `E-SYNTH-MULTIBOARD-003`/`005` |
 | A7 | A swapped source pin is rejected | `control_neg_swap.synth` | `warning`, `E-SYNTH-MULTIBOARD-003` |
 | A8 | Connector and mounting holes align | Sidecars, test `the_connector_and_mounting_holes_line_up` | J_B2B and H1-H4 are at identical coordinates on both boards, 0.000 mm and the same rotation |
-| A9 | Copper is routed | `synth export-kicad --router free-routing --freerouting-java <Java 25>`; `--router kicad-routing-tools` | **Partial, gate open.** The earlier failure was Java 21 running a Java 25 JAR. With Temurin 25, FreeRouting closes 39/40 nets with 0 DRC errors and one open pad (38/40 on the 3.0 mm passive grid). KiCadRoutingTools closes 39/40 with 0 DRC errors but places 13 vias inside U1 pads and fails its ground-return/plane-split gate. No engine yet returns a fully connected, fabrication-clean board. `release_ready: false`, `validation_failed` |
+| A9 | Copper is routed | `synth export-kicad --router free-routing --freerouting-java <Java 25>`; `--router kicad-routing-tools` | **Partial, gate open.** The earlier failure was Java 21 running a Java 25 JAR. With Temurin 25, FreeRouting closes 39/40 nets with 0 DRC errors: the last "open" is a +3V3 decoupling island of 6 pads around U_LDO.2, not a missing trace. KiCadRoutingTools closes 39/40 with 0 DRC errors but places 13 vias inside U1 pads and fails its ground-return/plane-split gate. No engine yet returns a fully connected, fabrication-clean board. `release_ready: false`, `validation_failed` |
 | A10 | The exported projects load in KiCad | `kicad-cli sch erc` and `kicad-cli pcb drc` on the delivered files | Control: 0 ERC errors, 0 warnings. Power: 0 ERC errors, 0 warnings. DRC on the un-routed control PCB: 0 errors, 97 unconnected pads, 0 warnings; no routed copper exists |
 | A11 | Every authored part has a datasheet, an MPN and a real KiCad footprint | `synth registry qualify --part <id>` | All authored parts pass pin/pad, symbol, dimension and provenance checks; each is blocked on `E-SYNTH-QUAL-008` "part has no reviewer", which is intentional: `reviewed_by = ""` |
 | A12 | The mapping file is the only cross-board source of truth | `interboard_mappings.json` and the test | The test loads that file; no pin mapping is duplicated in the sources |

@@ -16,7 +16,7 @@
     },
     "routing_and_drc": {
       "passed": false,
-      "evidence": "FreeRouting 2.4.1 is Java 25 bytecode; with Temurin 25 it closes 39 of 40 nets with 0 DRC errors and one open pad (38/40 on the 3.0 mm passive grid). KiCadRoutingTools closes 39 of 40 with 0 DRC errors but places 13 vias inside U1 pads and fails its ground-return/plane-split gate. No engine yet returns a fully connected, fabrication-clean board; the un-routed control PCB still reports 0 DRC errors, 97 unconnected pads and 0 warnings."
+      "evidence": "FreeRouting 2.4.1 with Temurin 25 closes 39 of 40 nets with 0 DRC errors. The last open is a +3V3 decoupling island of 6 pads around U_LDO.2, not a missing trace; the GND pour splits are stitched by 9 interior vias. KiCadRoutingTools closes 39 of 40 with 0 DRC errors but places 13 vias inside U1 pads and fails its ground-return/plane-split gate. No engine yet returns fully connected, fabrication-clean copper; the un-routed control PCB reports 0 DRC errors, 97 unconnected pads and 3 silk warnings."
     },
     "erc_dispositioned": {
       "passed": false,

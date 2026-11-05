@@ -17,8 +17,10 @@ amplifiers, and makes 12 V with an LMR38010 buck.
 ## What
 
 - `control.synth` (board `bldc_control`, 61 components, 40 nets),
-  `power.synth` (board `bldc_power`, 111 components, 53 nets), both
-  4-layer with a declared 0.07 mm outer-copper / 0.035 mm inner-copper stackup.
+  `power.synth` (board `bldc_power`, 111 components, 53 nets). The control is
+  a 6-layer, 1.6 mm stack with 0.035 mm copper on every layer; the power board
+  is 4-layer with a declared 0.07 mm outer-copper / 0.035 mm inner-copper
+  stackup.
 - `control.placement.layout.toml` and `power.placement.layout.toml`: every part
   is hand-pinned. J_B2B and H1-H4 sit at the same board coordinates on both
   boards; the mechanical test enforces 0.1 mm.
@@ -40,15 +42,16 @@ it has no exported PCB, so it is not a rendered board.
 The control board declares `outline 60mm x 32mm`, so Edge.Cuts is exactly
 **60 x 32 mm** with its origin at (0, 0) and no fitted margin. J_B2B is 25.4 mm
 long, so the board height is the connector plus 3.3 mm at each end, and the
-connector body is flush with the right edge. The holes sit on the edge: a 2 mm
+connector body sits within 0.33 mm of the right edge; the 0.5 mm
+edge-clearance rule keeps its inner pad row just inside the board. The holes sit on the edge: a 2 mm
 centre with a 1.25 mm drill leaves a 0.75 mm rim. The right-hand pair is on the
 top and bottom edges at x = 51 mm because the 25.4 mm connector owns the whole
 right edge; a hole cannot share that edge without sitting under the connector.
 
-The four-layer ground planes are stitched by two 0.6 mm vias at the top and
-bottom edge midpoints, away from every mounting hole. A copper zone on each
-layer is not an electrical connection between layers; without these vias the
-planes are unstitched before routing.
+The six-layer ground planes are stitched by four 0.6 mm vias at the quarter
+points of the top and bottom edges plus nine interior GND vias, away from every
+mounting hole. A copper zone on each layer is not an electrical connection
+between layers; without these vias the planes are unstitched before routing.
 
 The three Hall connectors are vertical 1x3 headers in a column on the left, with
 their filter parts in the same three rows. The three headers on the bottom edge

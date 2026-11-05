@@ -6,7 +6,7 @@
 // J_B2B carries the six gate-drive lines, three current-sense inputs,
 // the bus and 12 V sense lines, GATE_EN, FAULT_N, 3.3 V, 12 V and ground.
 board "bldc_control" {
-  layers 4
+  layers 6
   outline 60mm x 32mm
   manufacturer "jlcpcb"
   revision "A"
@@ -15,14 +15,18 @@ board "bldc_control" {
     copper 0.035mm
     insulator 0.2mm er 4.4 material "FR4"
     copper 0.035mm
-    insulator 0.9mm er 4.4 material "FR4"
+    insulator 0.33mm er 4.4 material "FR4"
+    copper 0.035mm
+    insulator 0.33mm er 4.4 material "FR4"
+    copper 0.035mm
+    insulator 0.33mm er 4.4 material "FR4"
     copper 0.035mm
     insulator 0.2mm er 4.4 material "FR4"
     copper 0.035mm
   }
 
   netclass "PWR" {
-    trace_width 0.5mm
+    trace_width 0.3mm
     clearance 0.2mm
   }
 
@@ -67,7 +71,7 @@ board "bldc_control" {
   }
 
   group "MCU" color "#0a7d4a" {
-    component U1: mcu "stm32g030k8_lqfp32" value "STM32G030K8T6"
+    component U1: mcu "stm32g030k8_lqfp32" value "STM32G030K8T6" { escape { method channel } }
     component C_VDD1: capacitor "c_generic_0603" value "100nF" dielectric "X7R" voltage "16V"
     component C_VDD2: capacitor "c_generic_0603" value "4.7uF" dielectric "X7R" voltage "16V"
     component R_NRST: resistor "r_generic_0603" value "10k"

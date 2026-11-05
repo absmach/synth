@@ -35,7 +35,7 @@ priority = "hard"
 timestamp = "2026-11-04T00:00:00+00:00"
 
 [components.J_B2B]
-x = 57.21
+x = 56.88
 y = 16
 rotation = 0
 source = "agent"
@@ -132,7 +132,7 @@ timestamp = "2026-11-04T00:00:00+00:00"
 
 [components.SW_BOOT]
 x = 28
-y = 22.2
+y = 24
 rotation = 0
 source = "agent"
 priority = "hard"
@@ -268,7 +268,7 @@ timestamp = "2026-11-04T00:00:00+00:00"
 
 [components.J_ENC]
 x = 15
-y = 27.5
+y = 29.5
 rotation = 90
 source = "agent"
 priority = "hard"
@@ -293,7 +293,7 @@ timestamp = "2026-11-04T00:00:00+00:00"
 [components.C_ENC_A]
 x = 18
 y = 17.5
-rotation = 0
+rotation = 180
 source = "agent"
 priority = "hard"
 timestamp = "2026-11-04T00:00:00+00:00"
@@ -356,7 +356,7 @@ timestamp = "2026-11-04T00:00:00+00:00"
 
 [components.J_RS485]
 x = 39
-y = 27.5
+y = 29.5
 rotation = 90
 source = "agent"
 priority = "hard"
@@ -364,7 +364,7 @@ timestamp = "2026-11-04T00:00:00+00:00"
 
 [components.J_SWD]
 x = 27
-y = 27.5
+y = 29.5
 rotation = 90
 source = "agent"
 priority = "hard"
@@ -685,3 +685,50 @@ priority = "hard"
 [labels.SW_BOOT]
 hide = true
 priority = "hard"
+
+[[vias]]
+x = 5.0
+y = 10.0
+net = "GND"
+
+[[vias]]
+x = 5.0
+y = 20.0
+net = "GND"
+
+[[vias]]
+x = 25.0
+y = 15.0
+net = "GND"
+
+[[vias]]
+x = 35.0
+y = 20.0
+net = "GND"
+
+[[vias]]
+x = 40.0
+y = 5.0
+net = "GND"
+
+[[vias]]
+x = 45.0
+y = 5.0
+net = "GND"
+
+[[vias]]
+x = 45.0
+y = 25.0
+net = "GND"
+
+[[vias]]
+x = 50.0
+y = 15.0
+net = "GND"
+
+[[vias]]
+x = 50.0
+y = 25.0
+net = "GND"
+
+
