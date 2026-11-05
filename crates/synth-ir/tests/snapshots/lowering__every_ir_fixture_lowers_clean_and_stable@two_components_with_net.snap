@@ -20,7 +20,7 @@ expression: board
         "signed_by": [],
         "substitutes": [],
         "mpn": "RP2350A",
-        "lcsc_pn": "C14663",
+        "lcsc_pn": "C42411118",
         "pins": [
           {
             "name": "iovdd",
@@ -77,7 +77,7 @@ expression: board
             "electrical_type": "bidirectional",
             "capabilities": [
               "gpio",
-              "spi_mosi",
+              "spi_miso",
               "uart_tx",
               "i2c_sda"
             ],
@@ -118,7 +118,7 @@ expression: board
             "electrical_type": "bidirectional",
             "capabilities": [
               "gpio",
-              "spi_miso",
+              "spi_mosi",
               "uart_rx"
             ],
             "required": false,

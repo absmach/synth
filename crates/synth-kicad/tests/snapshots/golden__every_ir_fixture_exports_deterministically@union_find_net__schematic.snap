@@ -1711,7 +1711,7 @@ expression: schematic
 		)
 		(property
 			"LCSC"
-			"C14663"
+			"C42411118"
 			(at 48.26 68.58 0)
 			(effects
 				(font
@@ -1878,7 +1878,7 @@ expression: schematic
 		(uuid "12803670-16eb-51d8-8dec-aee2572b5aea")
 	)
 	(global_label
-		"MOSI"
+		"MISO"
 		(shape output)
 		(at 78.74 30.48 0)
 		(effects
@@ -1903,7 +1903,7 @@ expression: schematic
 		(uuid "cfb5f9b8-19ac-5f8c-b5fc-5ba63c2680cd")
 	)
 	(global_label
-		"MOSI"
+		"MISO"
 		(shape output)
 		(at 93.98 60.96 180)
 		(effects
@@ -1928,7 +1928,7 @@ expression: schematic
 		(uuid "bed0b06f-284e-5cd9-a70b-fd0e85e58540")
 	)
 	(global_label
-		"MOSI"
+		"MISO"
 		(shape output)
 		(at 161.29 68.58 180)
 		(effects

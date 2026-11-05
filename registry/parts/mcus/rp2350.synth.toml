@@ -12,7 +12,7 @@ kind = "mcu"
 description = "Raspberry Pi RP2350 dual-core MCU, QFN-60"
 kicad_symbol = "MCU_RaspberryPi:RP2350A"
 kicad_footprint = "Package_DFN_QFN:QFN-60-1EP_7x7mm_P0.4mm_EP3.4x3.4mm"
-lcsc_pn = "C14663"
+lcsc_pn = "C42411118"
 mpn = "RP2350A"
 
 
@@ -81,7 +81,7 @@ capabilities = ["usb_dn"]
 name = "gp0"
 number = "2"
 electrical_type = "bidirectional"
-capabilities = ["gpio", "spi_mosi", "uart_tx", "i2c_sda"]
+capabilities = ["gpio", "spi_miso", "uart_tx", "i2c_sda"]
 
 [[pins]]
 name = "gp1"
@@ -99,7 +99,7 @@ capabilities = ["gpio", "spi_sck", "uart_tx"]
 name = "gp3"
 number = "5"
 electrical_type = "bidirectional"
-capabilities = ["gpio", "spi_miso", "uart_rx"]
+capabilities = ["gpio", "spi_mosi", "uart_rx"]
 
 [[pins]]
 name = "gp4"
