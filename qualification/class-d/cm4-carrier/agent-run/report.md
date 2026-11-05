@@ -20,7 +20,7 @@
 - `agent-run/` (this report, prompt, tool calls, design notes, pin map,
   netlist, power budget, assembly, bring-up, verification).
 - `kicad/` — four-sheet schematic, embedded symbols, project, DRC rules, routed 6-layer HDI PCB, unrouted baseline, BOM and PnP.
-- `fab/` — manual Gerbers, drill files/maps, BOM and PnP; not release evidence (see `fab/README.md`).
+- The manual fab package (Gerbers, drill files/maps, BOM and PnP) was generated locally and delivered to the user; it is not committed and not release evidence.
 - `reports/cm4_carrier.kicad-erc.json` — 1 error, 67 warnings; `reports/cm4_carrier.kicad-drc.json` — routed board, 0 violations / 0 unconnected.
 - `images/schematic/*.svg` — the four schematic sheets.
 - `qualification/matrix.toml` row, class "D", status "experimental".
@@ -30,7 +30,7 @@
 | Item | State | Proof |
 | --- | --- | --- |
 | `synth check` passes | **blocked** | `synth check --json` -> `source: fail` (validate timeout), `drc: unknown`; `synth validate` exits 124 at 600 s |
-| `--fab` recorded honestly | **blocked** | `synth check --fab --json` -> no manufacturing stage; a manual `fab/` package exists but is not release evidence |
+| `--fab` recorded honestly | **blocked** | `synth check --fab --json` -> no manufacturing stage; a manual package was generated locally and delivered; it is not committed/release evidence |
 | ERC zero errors with `kicad-cli` | **not met (1 error)** | 1 `RTC_BAT` power-flag error in `reports/cm4_carrier.kicad-erc.json`; Synth ERC is 0 errors |
 | DRC report committed | **done (routed)** | `reports/cm4_carrier.kicad-drc.json`; 0 violations / 0 unconnected on the routed 6-layer HDI board |
 | Every used CM4 pin traced to a datasheet row | **done** | `agent-run/PIN_MAPPING.md`, 143 used pins, Table 6 page per pin; test passes |
@@ -49,7 +49,7 @@ synth place cm4_carrier.synth                           exit 1 (null placement, 
 synth export-kicad ... --router free-routing            exit 124 (schematic written, no PCB)
 kicad-cli sch erc ...                                  68 violations: 1 error, 67 warnings
 synth check --json                                      fail, drc: unknown
-synth check --fab --json                                fail, no manufacturing stage; manual fab/ package not release evidence
+synth check --fab --json                                fail, no manufacturing stage; manual package delivered locally; not committed/release evidence
 cargo test -p synth-cli --test cm4_carrier_board        2 passed, 1 ignored
 ```
 
@@ -82,9 +82,9 @@ layout defects and are gone.
 2. **The automatic placer exits 1.** The placement sidecar pins every
    component.
 3. **No release fab package and no two-run determinism check.** Gerbers,
-   drill, BOM and PnP are in `fab/`, generated manually; they are not
-   uploaded or DFM-reviewed. The automated `synth check --fab` path is
-   blocked by `synth validate`.
+   drill, BOM and PnP were generated manually and delivered to the user;
+   they are not committed, uploaded or DFM-reviewed. The automated
+   `synth check --fab` path is blocked by `synth validate`.
 4. **KiCad ERC has 1 error, 67 warnings.** The error is the `RTC_BAT` power
    pin on the Peripherals sheet; the source netlist is correct.
 5. **The CM4 has no VBAT pin.** The issue's "diode to CM4 VBAT" is

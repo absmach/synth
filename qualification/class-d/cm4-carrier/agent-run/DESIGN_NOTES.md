@@ -207,8 +207,9 @@ board is routed with the HDI floors (0.1 mm track/clearance, 0.25 mm via,
 - `synth validate`/`synth check` still time out on the schematic layout
   (about 28 minutes); the schematic and routed PCB were produced from the
   `--pcb-only` baseline and the external router.
-- The automated `synth check --fab` path is blocked; a manual `fab/`
-  package exists but is not release evidence. No two-run determinism check.
+- The automated `synth check --fab` path is blocked; a manual package was
+  generated locally and delivered to the user (not committed, not release
+  evidence). No two-run determinism check.
 - No hardware, no firmware, no measurement.
 - The KiCad ERC has one `RTC_BAT` power-pin error and 67 warnings; the source
   netlist is correct.

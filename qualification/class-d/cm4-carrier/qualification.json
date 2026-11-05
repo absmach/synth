@@ -56,7 +56,7 @@
     },
     "jlcpcb_dfm": {
       "passed": false,
-      "evidence": "Gerbers, drill (PTH/NPTH plus maps), BOM and PnP generated locally in fab/; not uploaded to JLCPCB and not DFM-reviewed. The authored parts are unreviewed."
+      "evidence": "Gerbers, drill (PTH/NPTH plus maps), BOM and PnP generated locally and delivered to the user; not committed, not uploaded to JLCPCB and not DFM-reviewed. The authored parts are unreviewed."
     }
   }
 }
