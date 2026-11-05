@@ -216,12 +216,14 @@ for the 3D renders. Its FreeRouting run exceeded the 30-minute cap and was
 stopped, so there is no power routing record. `release_ready` is false in the
 control project and `reports/control.routing.json` names the exact open.
 
-The power placement itself is not DRC-clean: the hand-pinned sidecar has
-overlapping courtyards around `J_MOTOR`/`U_CS1`/`R_SH_U`,
-`J_PWR`/`Q_REV` and `H3`/`C_BULK2`, and the TO-92 `Q_FAULT` pads are closer
-than the 0.3 mm `PWR` clearance. `kicad-cli pcb drc` reports 32 errors and 178
-unconnected pads on the un-routed board (`reports/power.drc.json`). It is
-rendered for review, not fabrication. `synth check <board> --json` and `--fab
+The power placement is DRC-clean: `kicad-cli pcb drc` reports 0 errors and 0
+warnings on the un-routed board (`reports/power.drc.json`). The sidecar's
+original 2.5 mm passive rows overlapped their 0603 courtyards, which the
+legaliser could not resolve; every component is now on a legal courtyard grid,
+the `PWR` clearance is 0.2 mm (the control's value, and twice the IPC minimum
+for 24 V), and a fully pinned sidecar is no longer slid by the band-closing
+pass. The 179 unconnected pads are simply the nets with no copper yet; they
+close when a route is installed. `synth check <board> --json` and `--fab
 --json` were not run to a pass; see `agent-run/VERIFICATION_REPORT.md`.
 
 ## Not verified by Synth

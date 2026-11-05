@@ -22,7 +22,7 @@ board "bldc_power" {
 
   netclass "PWR" {
     trace_width 2mm
-    clearance 0.3mm
+    clearance 0.2mm
   }
 
   netclass "PHASE" {

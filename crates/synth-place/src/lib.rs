@@ -713,6 +713,34 @@ fn exported_outline(board: &Board, placement: &Placement) -> Option<Rect> {
     )
 }
 
+/// Whether the sidecar already fixes every component on the board.
+fn sidecar_pins_every_component(
+    board: &Board,
+    sidecar: &synth_layout::sidecar::SidecarLayout,
+) -> bool {
+    board
+        .components
+        .iter()
+        .all(|component| sidecar.components.contains_key(&component.refdes))
+}
+
+/// Whether the pinned-band slides may move this part.
+///
+/// A mounting hole is a mechanical datum, not a placeable part: sliding it
+/// breaks the hole pattern the other board in the stack was drilled to. An
+/// edge-flush connector is held still for the same reason.
+fn moves_with_pinned_bands(
+    board: &Board,
+    placed: &ComponentPlacement,
+    sidecar: &synth_layout::sidecar::SidecarLayout,
+) -> bool {
+    flush_edge_index(board, placed.id).is_none()
+        && board.component(placed.id).is_some_and(|component| {
+            component.kind != "mounting_hole"
+                && sidecar.components.contains_key(&component.refdes)
+        })
+}
+
 /// Close the empty bands a sidecar floorplan leaves between its parts.
 ///
 /// The pinned coordinates place every part relative to its neighbours, but
@@ -748,12 +776,7 @@ fn close_pinned_bands(
     let movable: Vec<bool> = placement
         .components
         .iter()
-        .map(|placed| {
-            flush_edge_index(board, placed.id).is_none()
-                && board
-                    .component(placed.id)
-                    .is_some_and(|component| sidecar.components.contains_key(&component.refdes))
-        })
+        .map(|placed| moves_with_pinned_bands(board, placed, sidecar))
         .collect();
     if movable.iter().filter(|movable| **movable).count() < 2 {
         return;
@@ -1682,7 +1705,9 @@ pub fn place_with_tuning_and_sidecar_seeded<S: ::std::hash::BuildHasher>(
         // The pinned coordinates are a floorplan, not a packing: they leave
         // bands no courtyard uses. Slide them shut before the outline is
         // fitted. A declared outline fixes the frame, so the floorplan stays.
-        if board.outline.is_none() {
+        // A sidecar that pins every component is the same kind of contract,
+        // and sliding it is how U_BUCK was once dragged into J_B2B.
+        if board.outline.is_none() && !sidecar_pins_every_component(board, sidecar) {
             close_pinned_bands(board, &mut placement, sidecar);
         }
     }
@@ -9703,6 +9728,42 @@ board "features_only" {
             (r4.x_nm - r1.x_nm, r4.y_nm - r1.y_nm)
         };
         assert_eq!(span(&packed), span(&loose));
+    }
+
+    #[test]
+    fn pinned_band_slides_leave_a_mounting_hole_alone() {
+        let components = r#"
+            component H1: mounting_hole "mounting_hole_m2_5"
+            component R1: resistor "r_generic_0603" value "10k"
+        "#;
+        let (board, placement) = row_board(components, &[2.0, 30.0]);
+        let mut sidecar = synth_layout::sidecar::SidecarLayout::default();
+        for component in &board.components {
+            sidecar.components.insert(
+                component.refdes.clone(),
+                synth_layout::sidecar::SidecarPlacement {
+                    x: 0.0,
+                    y: 0.0,
+                    rotation: 0,
+                    sheet: None,
+                    source: synth_layout::sidecar::OverrideSource::Agent,
+                    priority: synth_layout::sidecar::OverridePriority::Hard,
+                    timestamp: None,
+                    relative_to: None,
+                    dx: 0.0,
+                    dy: 0.0,
+                },
+            );
+        }
+        let placed = |refdes: &str| {
+            placement
+                .components
+                .iter()
+                .find(|placed| board.component(placed.id).unwrap().refdes == refdes)
+                .unwrap()
+        };
+        assert!(!moves_with_pinned_bands(&board, placed("H1"), &sidecar));
+        assert!(moves_with_pinned_bands(&board, placed("R1"), &sidecar));
     }
 
     /// Squeezing must not push a part into a keepout circle. With the antenna
