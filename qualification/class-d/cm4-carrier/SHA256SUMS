@@ -4,6 +4,7 @@
 0112385a18ad915a42199af053e503de1a44f2cbfd00aa168e8d564f7bfe8f20  ./cm4_carrier.placement.layout.toml
 351f63dbed4540a1d9849f33430855934679b34f3db303149b16b31dc52e7477  ./cm4_carrier.synth
 41c65ebfca08bbb731cd138ef5e0d45136524a39b1cd6665a09bdd819bb13693  ./fab/bom.csv
+3e63b1c59c501d6a2f4240e8ca6cb299351140c67880da39b38125a1a0afc76c  ./fab/cm4_carrier-gerbers.zip
 83e37f0a135c966eddb8df8da4a87c81cb4bd434aecd81adbec84c7dc951a507  ./fab/drill/cm4_carrier-NPTH-drl_map.pdf
 e7f29baf02f940e5aff3a0c55c254cd7aa5ffeb9d36c9f7f9c6c420cb180c621  ./fab/drill/cm4_carrier-NPTH.drl
 366b0d8e3fba85f2653775dc8885d14c417edf4d3dbf98b3613d1774ba8a5542  ./fab/drill/cm4_carrier-PTH-drl_map.pdf

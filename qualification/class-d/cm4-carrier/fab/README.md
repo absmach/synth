@@ -20,3 +20,20 @@ DFM review was done.
 - HDI process: 0.1 mm drill, 0.25 mm via, 0.075 mm annular ring, 0.1 mm
   track/clearance. The CM4 DF40 underpad vias require IPC-4761 Type VII
   (filled + capped + plated); state this on the fab drawing.
+
+## JLCPCB upload
+
+Upload `cm4_carrier-gerbers.zip` for the PCB quote. It contains the six
+copper layers, masks, silkscreen, paste, Edge.Cuts, the Gerber job file and
+the PTH/NPTH drill files. For assembly use `bom.csv` and `pnp.csv`.
+
+Board/process to select: 6 layers, 1.6 mm, HDI; 0.1 mm drill, 0.25 mm via,
+0.075 mm annular ring, 0.1 mm track/clearance; impedance control for the
+USB/HDMI/Ethernet pairs. The CM4 DF40 underpad vias need IPC-4761 Type VII
+(filled + capped + plated).
+
+DFM focus: the 0.4 mm DF40 fanout, the 0.25 mm via / 0.1 mm drill, the
+0.075 mm annular ring, the 0.1 mm trace/clearance, and the board-edge
+connectors. Record the JLCPCB result in `../QUALIFICATION.md` and
+`../qualification.json`; the `jlcpcb_dfm` gate stays false until it is
+reviewed and signed off.
