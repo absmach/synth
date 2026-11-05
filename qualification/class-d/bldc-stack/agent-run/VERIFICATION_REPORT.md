@@ -1,7 +1,9 @@
 # Verification report: BLDC stack (SYN-408)
 
-All commands were run from the repository root on 2026-11-03 with an empty
-`XDG_DATA_HOME` and `KICAD_SYMBOL_DIR=/usr/share/kicad/symbols`,
+All commands below were rerun from the repository root on 2026-11-05 against
+the revised 60 x 30 mm control layout. The earlier run was on 2026-11-03. Both
+used an empty `XDG_DATA_HOME` and
+`KICAD_SYMBOL_DIR=/usr/share/kicad/symbols`,
 `KICAD_FOOTPRINT_DIR=/usr/share/kicad/footprints`. KiCad 10.0.7, FreeRouting
 2.4.1, OpenJDK 21.0.12.1, Synth 0.1.1.
 
@@ -9,7 +11,7 @@ All commands were run from the repository root on 2026-11-03 with an empty
 
 ```
 $ synth validate qualification/class-d/bldc-stack/control.synth
-exit 0; 0 errors, 20 warningss
+exit 0; 0 errors, 21 warnings
   10 W-SYNTH-SUPPLY-002
    5 W-SYNTH-PART-UNVERIFIED
    2 E-SYNTH-SCHEM-005
@@ -80,9 +82,11 @@ wrote release.json
 
 The control source declares `outline 60mm x 30mm`, so Edge.Cuts is exactly
 0-60 x 0-30 mm; the mounting holes keep their sidecar coordinates on the edge
-and J_B2B is flush with the right edge. The four corner ground-fence vias are
-gone; the two remaining plane-stitching vias sit at the top and bottom edge
-midpoints, clear of every hole.
+and J_B2B is flush with the right edge. The three Hall connectors are vertical
+1x3 headers in a column on the left, and the three bottom headers share one
+pin-row height. The four corner ground-fence vias are gone; the two remaining
+plane-stitching vias sit at the top and bottom edge midpoints, clear of every
+hole.
 
 The same command on the committed `qualification/class-b/buck/buck.synth` fails
 with the identical assert, so the failure is environmental, not caused by this
@@ -101,13 +105,10 @@ $ kicad-cli sch erc --severity-all --format json ... control
 Found 0 violations: 0 errors, 0 warnings
 
 $ kicad-cli sch erc --severity-all --format json ... power
-Found 15 violations: 0 errors, 15 warnings
-  14 lib_symbol_mismatch (MCP6022, BSC030N08NS5, 2N3904)
-  1 label_multiple_wires (GATE_REV)
+Found 0 violations: 0 errors, 0 warnings
 ```
 
-The `lib_symbol_mismatch` warnings come from flattened `extends` symbols; the
-embedded copy is the one the project uses. They are recorded, not suppressed.
+The control and power schematics both load and check clean.
 
 ## 6. `synth check`
 

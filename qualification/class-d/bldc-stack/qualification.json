@@ -16,37 +16,12 @@
     },
     "routing_and_drc": {
       "passed": false,
-      "evidence": "No routed copper exists. `synth export-kicad --router free-routing` fails in tools/freeroute_autoroute.py with a KiCad PROPERTY_ENUM assert before the route stage; the same failure reproduces on the committed Class-B buck board. The un-routed control PCB reports 0 DRC errors, 97 unconnected pads and 0 warnings."
+      "evidence": "No routed copper exists. `synth export-kicad --router free-routing` fails in tools/freeroute_autoroute.py with a KiCad PROPERTY_ENUM assert before the route stage; `synth check` also returns fail because no kicad-routing-tools checkout is configured. The same FreeRouting failure reproduces on the committed Class-B buck board. The un-routed control PCB reports 0 DRC errors, 97 unconnected pads and 0 warnings."
     },
     "erc_dispositioned": {
       "passed": false,
-      "evidence": "kicad-cli sch erc reports 0 errors on both schematics: 6 warnings on control (4 isolated_pin_label, 2 no_connect_connected) and 15 on power (14 lib_symbol_mismatch, 1 label_multiple_wires). passed stays false until a human reviewer accepts the dispositions.",
-      "findings": [
-        {
-          "count": 4,
-          "severity": "warning",
-          "type": "isolated_pin_label",
-          "disposition": "The labels sit on one-pin stubs generated for the schematic; the PCB netlist still joins the source's nets. Not a design change."
-        },
-        {
-          "count": 2,
-          "severity": "warning",
-          "type": "no_connect_connected",
-          "disposition": "A pin marked no-connect is touched by a wire in the generated drawing. The source netlist is the authority; a reviewer should confirm the two pins."
-        },
-        {
-          "count": 14,
-          "severity": "warning",
-          "type": "lib_symbol_mismatch",
-          "disposition": "The embedded MCP6022, BSC030N08NS5 and 2N3904 symbols are flattened copies of library symbols that use `extends`; KiCad reports the copy differs from the library. The embedded copy is the one the project uses."
-        },
-        {
-          "count": 1,
-          "severity": "warning",
-          "type": "label_multiple_wires",
-          "disposition": "The GATE_REV label touches more than one wire segment of the same net."
-        }
-      ]
+      "evidence": "kicad-cli sch erc reports 0 errors and 0 warnings on both schematics after the 2026-11-05 rerun. The gate stays false until a human reviewer signs the ERC result; there are no machine warnings left to disposition.",
+      "findings": []
     },
     "part_review": {
       "passed": false,
@@ -70,7 +45,11 @@
     },
     "reproducible_hashes": {
       "passed": false,
-      "evidence": "SHA256SUMS was generated locally on 2026-11-03. No CI run has produced a golden set for this board, and the routed artifact does not exist."
+      "evidence": "SHA256SUMS was regenerated locally on 2026-11-05 and verifies. No CI run has produced a golden set for this board, and the routed artifact does not exist."
+    },
+    "board_outline": {
+      "passed": true,
+      "evidence": "crates/synth-cli/tests/board_outline.rs: Edge.Cuts is exactly (0, 0)-(60, 30) mm from the declared `outline`, a mounting hole keeps its sidecar edge coordinate with no via in its corner, and a sidecar part outside the rectangle is E-SYNTH-PLACE-003."
     }
   }
 }
