@@ -185,7 +185,6 @@ board "rtd_afe" {
   connect U1.refout -> C_RO.p1 as "REFOUT"
 
   // SPI0 on the RP2350 silicon: GPIO0 RX (MISO), GPIO1 CSn, GPIO2 SCK, GPIO3 TX (MOSI).
-  // The registry part lists gp0 as spi_mosi and gp3 as spi_miso, the other way round; the wiring follows the silicon.
   // SPI and ADC control
   connect U2.gp3 -> U1.din as "SPI_MOSI"
   connect U2.gp1 -> U1.cs_n as "SPI_CS"
