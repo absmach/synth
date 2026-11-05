@@ -44,7 +44,7 @@ board "rtd_afe" {
   }
 
   group "ADC" color "#0072b2" {
-    component U1: ic "ads124s08"
+    component U1: ic "ads124s08" lcsc_pn "C2871942" mpn "ADS124S08IRHBR"
     component C_AV1: capacitor "c_generic_0603" value "330nF" dielectric "X7R" voltage "10V" lcsc_pn "C188679" mpn "0603B334K500NT"
     component C_AV2: capacitor "c_generic_0805" value "10uF" dielectric "X7R" voltage "10V" lcsc_pn "C380347" mpn "TCC0805X7R106K160FT"
     component C_DV: capacitor "c_generic_0603" value "100nF" dielectric "X7R" voltage "10V" lcsc_pn "C14663" mpn "CC0603KRX7R9BB104"
@@ -59,7 +59,7 @@ board "rtd_afe" {
   }
 
   group "REFERENCE" color "#7c3aed" {
-    component U3: ic "ref5025"
+    component U3: ic "ref5025" lcsc_pn "C11341" mpn "REF5025AIDR"
     component C_RI: capacitor "c_generic_0603" value "1uF" dielectric "X7R" voltage "10V" lcsc_pn "C93816" mpn "0603B105K160NT"
     component C_RV: capacitor "c_generic_0603" value "1uF" dielectric "X7R" voltage "10V" lcsc_pn "C93816" mpn "0603B105K160NT"
     notes "" {
