@@ -283,7 +283,7 @@ board "irrigation_controller" {
     // milliseconds it takes to read, and the probe spends the rest of the
     // cycle unbiased.
     group "SOIL PROBES" color "#4d7c0f" {
-      component U7: regulator "tps22918_loadswitch" value "TPS22918"
+      component U7: regulator "tps22918_sot23_6" value "TPS22918"
       component C17: capacitor "c_generic_0603"     value "100nF"
       component C18: capacitor "c_generic_0603"     value "1uF"
       component R14: resistor "r_generic_0603"      value "10k"

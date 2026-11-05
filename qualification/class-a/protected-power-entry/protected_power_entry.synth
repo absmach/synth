@@ -71,7 +71,7 @@ board "protected_power_entry" {
     connect U1.ep   -> U1.gnd
 
     group "SWITCHED 5V OUTPUT" color "#7c3aed" {
-      component U2: regulator "tps22918_loadswitch"
+      component U2: regulator "tps22918_sot23_6"
       component R4: resistor  "r_generic_0603" value "100k"
       component C5: capacitor "c_generic_0603" value "10nF"
       component J2: connector "header_1x3"

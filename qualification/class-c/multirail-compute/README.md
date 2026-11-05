@@ -114,7 +114,7 @@ one: nothing here is below 1.27 mm pitch, so the router has room to work.
 | U1 | MPS MP2307 3 A buck | `mp2307_buck` |
 | U2 | AMS1117-3.3 LDO | `ams1117_3v3` |
 | U3 | TI LP5907 low-noise LDO | `lp5907_3v3` |
-| U4 | TI TPS22918 load switch | `tps22918_loadswitch` |
+| U4 | TI TPS22918 load switch | `tps22918_sot23_6` |
 | U5 | Espressif ESP32-WROOM-32 | `esp32_wroom_32` |
 | U7 | Microchip MCP23017 | `mcp23017_gpio` |
 

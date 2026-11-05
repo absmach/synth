@@ -3110,17 +3110,27 @@ fn place_with_outline<S: ::std::hash::BuildHasher>(
                 courtyard_offset,
                 pad_extra_nm,
             );
-            // Centre-only on purpose: the strict test here costs secure_tracker
-            // a routed net, and the strict gates in the passes after this one
-            // already keep a courtyard from entering a keepout.
-            if placed.iter().all(|(_, _, r)| !candidate.intersects(r))
-                && !intersects_keepout(candidate, id, board, board_outline, |pid| {
+            // A functional macro's whole courtyard must clear a keepout, not
+            // just its centre: a modem wired to the antenna otherwise parks
+            // its pads inside the antenna's no-route circle. Small parts keep
+            // the centre test, where the strict one costs secure_tracker a
+            // routed net without moving the part out anyway.
+            let in_keepout = if is_macro(id) {
+                overlaps_anchored_keepout(candidate, id, board, board_outline, |pid| {
                     placed
                         .iter()
                         .find(|(placed_id, _, _)| *placed_id == pid)
                         .map(|(_, _, r)| *r)
                 })
-            {
+            } else {
+                intersects_keepout(candidate, id, board, board_outline, |pid| {
+                    placed
+                        .iter()
+                        .find(|(placed_id, _, _)| *placed_id == pid)
+                        .map(|(_, _, r)| *r)
+                })
+            };
+            if placed.iter().all(|(_, _, r)| !candidate.intersects(r)) && !in_keepout {
                 found = Some(*pt);
                 grid_start_indices[order_idx] = cell_idx;
                 break;
@@ -3902,6 +3912,7 @@ fn keepout_circles(
     board: &Board,
     board_outline: Rect,
     lookup: impl Fn(ComponentId) -> Option<Rect>,
+    anchored_only: bool,
 ) -> Vec<(Point, i64)> {
     let mut circles = Vec::new();
     for keepout in &board.keepouts {
@@ -3931,6 +3942,12 @@ fn keepout_circles(
                         board_outline.max.y_nm / 2,
                     ))
                 })
+        } else if anchored_only {
+            // A keepout with no anchor sits at the board centre by
+            // convention; that is not a place a macro's courtyard can
+            // meaningfully be held out of. Only an anchored keepout (an
+            // antenna's no-route circle) is enforced for the whole courtyard.
+            continue;
         } else {
             Some(Point::new(
                 board_outline.max.x_nm / 2,
@@ -3957,7 +3974,7 @@ pub(crate) fn intersects_keepout(
         (candidate.min.x_nm + candidate.max.x_nm) / 2,
         (candidate.min.y_nm + candidate.max.y_nm) / 2,
     );
-    keepout_circles(id, board, board_outline, lookup)
+    keepout_circles(id, board, board_outline, lookup, false)
         .into_iter()
         .any(|(center, radius)| {
             let dx = candidate_center.x_nm - center.x_nm;
@@ -3978,7 +3995,30 @@ pub(crate) fn overlaps_keepout(
     board_outline: Rect,
     lookup: impl Fn(ComponentId) -> Option<Rect>,
 ) -> bool {
-    keepout_circles(id, board, board_outline, lookup)
+    keepout_circles(id, board, board_outline, lookup, false)
+        .into_iter()
+        .any(|(center, radius)| {
+            let nearest_x = center.x_nm.clamp(candidate.min.x_nm, candidate.max.x_nm);
+            let nearest_y = center.y_nm.clamp(candidate.min.y_nm, candidate.max.y_nm);
+            let dx = nearest_x - center.x_nm;
+            let dy = nearest_y - center.y_nm;
+            dx.saturating_mul(dx).saturating_add(dy.saturating_mul(dy))
+                < radius.saturating_mul(radius)
+        })
+}
+
+/// Like [`overlaps_keepout`], but only for keepouts anchored to a component
+/// (an antenna's no-route circle). An unanchored keepout sits at the board
+/// centre by convention, and holding every macro out of it distorts boards
+/// whose keepout is a generic RF note rather than a real part.
+fn overlaps_anchored_keepout(
+    candidate: Rect,
+    id: ComponentId,
+    board: &Board,
+    board_outline: Rect,
+    lookup: impl Fn(ComponentId) -> Option<Rect>,
+) -> bool {
+    keepout_circles(id, board, board_outline, lookup, true)
         .into_iter()
         .any(|(center, radius)| {
             let nearest_x = center.x_nm.clamp(candidate.min.x_nm, candidate.max.x_nm);

@@ -49,7 +49,7 @@ rationale = "USB-C power, an AMS1117 LDO, an MCU, a BME680 on I2C and a debug he
 [[board]]
 id = "sensor_logger"
 path = "examples/sensor_logger/sensor_logger.synth"
-fixture_sha256 = "6dad544533dcb92fe94d46a32ea64ae44f342c69996c70af73df734b761a8c4a"
+fixture_sha256 = "9f51f969cc6a72cb30d1806fa49f3e219682834204ff55995205a274301cae63"
 class = "A"
 status = "experimental"
 expect = "pass"
@@ -59,7 +59,7 @@ rationale = "Dual I2C sensors, SPI flash and status LEDs: a larger Class-A digit
 [[board]]
 id = "placement_and_diff_pair"
 path = "examples/placement_and_diff_pair/placement_and_diff_pair.synth"
-fixture_sha256 = "bfa9d000e2bd58a7fbbf595fba8459c2c6afc2a6168f6d943d06bdf88e7e6414"
+fixture_sha256 = "7afdadf42b3cf3f6cc93b0e485be6f51b82c6f7b2cbf00390def85e9b80e487d"
 class = "C"
 status = "experimental"
 expect = "pass"
@@ -129,7 +129,7 @@ rationale = "Negative test and the corpus's only Class-D entry: the largest impo
 [[board]]
 id = "i2c_sensor_node"
 path = "qualification/class-a/i2c-sensor-node/i2c_sensor_node.synth"
-fixture_sha256 = "47b6d03d282ccb3db9859a1dcd4df13eb1dfba4d5b5e4bb6bb94a7551670acbe"
+fixture_sha256 = "5789c5cb6d4ffbb020fa3f7a861e7d7fe7d5b98d172c5291e08f7a35d9be3fd6"
 class = "A"
 status = "experimental"
 expect = "pass"
@@ -139,7 +139,7 @@ rationale = "A JST-fed 5 V input, a 3V3 LDO, an STM32G030 reading an environment
 [[board]]
 id = "irrigation_controller"
 path = "qualification/class-a/irrigation-controller/irrigation_controller.synth"
-fixture_sha256 = "39e9dab85f7bf93b2ff80effa3be672d8d62dc74eb31744ef975c2b019c7928a"
+fixture_sha256 = "04d7d8f055228f860437158d5acef58a07c8d378e5a714fa8036f4cc95b9a0c6"
 class = "A"
 status = "experimental"
 expect = "pass"
@@ -160,7 +160,7 @@ rationale = "Negative test, written to be wrong on purpose so the diagnostics ca
 [[board]]
 id = "protected_power_entry"
 path = "qualification/class-a/protected-power-entry/protected_power_entry.synth"
-fixture_sha256 = "75267839b52a6ef7554233b09184b9713c9b53ec8904c5b143e0b1f0129b5194"
+fixture_sha256 = "16b90faf2d95699eaf642b834fb2eb939afe89cfa0eaa07946cd936eedf53272"
 class = "A"
 status = "experimental"
 expect = "pass"
@@ -200,7 +200,7 @@ rationale = "A Lattice iCE40 HX4K in a 121-ball 0.8 mm BGA driving an HDMI Type-
 [[board]]
 id = "multirail_compute"
 path = "qualification/class-c/multirail-compute/multirail_compute.synth"
-fixture_sha256 = "094f3346a20d901968f4b0ec1ee785d15e9291fd7a0ee2c86855ddae0c8eb1e3"
+fixture_sha256 = "f1a1c27a4b3e3723b1178cfac6b675385858f4c7b35647da8b4932599067bbec"
 class = "C"
 status = "experimental"
 expect = "fail"
@@ -220,7 +220,7 @@ rationale = "Two ISSI IS42S16400J SDRAM dice on four layers sharing one series-d
 [[board]]
 id = "buck"
 path = "qualification/class-b/buck/buck.synth"
-fixture_sha256 = "1ddfc86b649f25bc25465f82145a3d96baf623ff1fc32bfa3c830650cd100b14"
+fixture_sha256 = "309b4839f4ea0dc1f0d86608d2c731c5a9ff9ac725331360d5e7fb095609c8b0"
 class = "B"
 status = "experimental"
 expect = "pass"

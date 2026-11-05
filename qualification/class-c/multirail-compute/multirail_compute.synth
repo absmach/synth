@@ -208,7 +208,7 @@ board "multirail_compute" {
     }
 
     group "SWITCHED RAIL" color "#7c3aed" {
-      component U4: regulator "tps22918_loadswitch"
+      component U4: regulator "tps22918_sot23_6"
       component C9: capacitor "c_generic_0603" value "1uF"
       component R3: resistor  "r_generic_0603" value "100k"
       component R8: resistor  "r_generic_0603" value "100k"

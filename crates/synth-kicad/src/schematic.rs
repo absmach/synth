@@ -595,10 +595,31 @@ pub(crate) fn build_sheet_schematic(
             .flat_map(|w| w.points.windows(2))
             .max_by(|a, b| segment_len(a).total_cmp(&segment_len(b)));
         if let Some(seg) = longest {
-            let at = (
-                f64::midpoint(seg[0].0, seg[1].0),
-                f64::midpoint(seg[0].1, seg[1].1),
-            );
+            // Another net's flag stub is a wire too, and the label may not touch it.
+            let stubs: Vec<Vec<(f64, f64)>> = layout
+                .net_labels
+                .iter()
+                .filter(|l| l.net != net.id)
+                .filter_map(|l| {
+                    synth_layout::route::net_label_plan(
+                        board,
+                        l.component,
+                        l.pin,
+                        &placements,
+                        l.spot,
+                    )
+                })
+                .map(|plan| plan.wire)
+                .collect();
+            let others: Vec<&[(f64, f64)]> = layout
+                .wires
+                .iter()
+                .filter(|w| w.net != net.id)
+                .map(|w| &w.points)
+                .chain(&stubs)
+                .flat_map(|points| points.windows(2))
+                .collect();
+            let at = wire_name_label_at(seg, &others);
             let uuid = derive_entity_uuid(project, "wire_name_label", &net.name);
             children.push(build_local_label(&net.name, at, uuid));
         }
@@ -1294,19 +1315,10 @@ fn segment_len(seg: &[(f64, f64)]) -> f64 {
     (seg[1].0 - seg[0].0).hypot(seg[1].1 - seg[0].1)
 }
 
-#[allow(dead_code)]
-fn point_to_segment_mm(p: (f64, f64), a: (f64, f64), b: (f64, f64)) -> f64 {
-    let (dx, dy) = (b.0 - a.0, b.1 - a.1);
-    let len_sq = dx * dx + dy * dy;
-    let t = if len_sq == 0.0 {
-        0.0
-    } else {
-        (((p.0 - a.0) * dx + (p.1 - a.1) * dy) / len_sq).clamp(0.0, 1.0)
-    };
-    (p.0 - (a.0 + t * dx)).hypot(p.1 - (a.1 + t * dy))
-}
-
-#[allow(dead_code)]
+/// Where a net's name label sits on its wire segment `seg`: the midpoint, or
+/// the nearest point to it that is clear of every wire in `others`. KiCad joins
+/// a label to every wire under it, so a midpoint where another net crosses
+/// would merge the two nets.
 fn wire_name_label_at(seg: &[(f64, f64)], others: &[&[(f64, f64)]]) -> (f64, f64) {
     const STEP_MM: f64 = 1.27;
     const CLEAR_MM: f64 = 0.5;
@@ -1336,6 +1348,18 @@ fn wire_name_label_at(seg: &[(f64, f64)], others: &[&[(f64, f64)]]) -> (f64, f64
         }
     }
     at(0.5)
+}
+
+/// Distance in mm from `p` to the segment `a`-`b`.
+fn point_to_segment_mm(p: (f64, f64), a: (f64, f64), b: (f64, f64)) -> f64 {
+    let (dx, dy) = (b.0 - a.0, b.1 - a.1);
+    let len_sq = dx * dx + dy * dy;
+    let t = if len_sq == 0.0 {
+        0.0
+    } else {
+        (((p.0 - a.0) * dx + (p.1 - a.1) * dy) / len_sq).clamp(0.0, 1.0)
+    };
+    (p.0 - (a.0 + t * dx)).hypot(p.1 - (a.1 + t * dy))
 }
 
 /// A local label at `at_mm`, text anchored left. Same-named local

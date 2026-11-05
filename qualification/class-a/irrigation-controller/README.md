@@ -151,7 +151,7 @@ and the board routed at the defaults. True of every board in this corpus.
 | --- | --- | --- |
 | U3 | STM32G030K8T6 | `stm32g030` |
 | U2 | MP2307 | `mp2307_buck` |
-| U7 | TPS22918 | `tps22918_loadswitch` |
+| U7 | TPS22918 | `tps22918_sot23_6` |
 | U4 | HDC1080DMBR | `hdc1080_humidity` |
 | U5 | APDS-9301 | `apds9301_lux` |
 | U6 | 24LC256-I/SN | `24lc256_eeprom` |

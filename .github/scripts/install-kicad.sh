@@ -58,8 +58,9 @@ for pkg in "${packages[@]}"; do
     "$want_major_minor".*) echo "candidate ${pkg} ${candidate}" ;;
     *)
       apt-cache policy "$pkg"
-      die "the KiCad ${want_major_minor} PPA is unusable: apt would install ${pkg} ${candidate:-<none>}." \
-          "refusing to fall back to the Ubuntu archive, whose stock libraries number pins differently."
+      die "the KiCad ${want_major_minor} PPA is unusable on Ubuntu $(. /etc/os-release && echo "${VERSION_ID} (${VERSION_CODENAME})"): apt would install ${pkg} ${candidate:-<none>}." \
+          "refusing to fall back to the Ubuntu archive, whose stock libraries number pins differently." \
+          "if the runner image moved to a release the PPA does not build for, pin runs-on to one it does."
       ;;
   esac
 done
