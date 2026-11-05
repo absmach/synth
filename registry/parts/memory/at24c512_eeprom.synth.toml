@@ -14,6 +14,12 @@ min_voltage_v = 1.8
 max_voltage_v = 3.6
 max_current_ma = 50.0
 
+[provenance]
+source = "authored"
+datasheet_url = "https://ww1.microchip.com/downloads/en/DeviceDoc/Atmel-8720G-SEEPROM-AT24C512C-Datasheet.pdf"
+reviewed_by = "JeffMboya"
+reviewed_at = "2026-11-05"
+
 # Pin numbers follow the SOIC-8 pinout this I2C EEPROM family shares with the
 # 24LC256 (A0 A1 A2 GND SDA SCL WP VCC), cross-checked against the 8 pads of
 # the footprint. KiCad 10 ships no AT24C512 symbol; the 24LC512 it does ship

@@ -35,6 +35,12 @@ min_voltage_v = 3.0
 max_voltage_v = 3.6
 max_current_ma = 350.0
 
+[provenance]
+source = "authored"
+datasheet_url = "https://www.espressif.com/sites/default/files/documentation/esp32-c3-mini-1_datasheet_en.pdf"
+reviewed_by = "JeffMboya"
+reviewed_at = "2026-11-05"
+
 [[pins]]
 name = "gnd"
 number = "1"

@@ -13,6 +13,12 @@ min_voltage_v = 1.8
 max_voltage_v = 3.6
 max_current_ma = 50.0
 
+[provenance]
+source = "authored"
+datasheet_url = "https://www.st.com/resource/en/datasheet/m24m02-dr.pdf"
+reviewed_by = "JeffMboya"
+reviewed_at = "2026-11-05"
+
 # Pins are ST's SO8N pinout for the M24M02-DR (DS7025): 1 DU, 2 DU, 3 E2,
 # 4 VSS, 5 SDA, 6 SCL, 7 WC, 8 VCC, cross-checked against the 8 pads of the
 # footprint. A DU pin takes no signal and, if connected, goes to VSS; only E2

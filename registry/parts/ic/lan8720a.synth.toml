@@ -23,10 +23,11 @@ min_voltage_v = 3.0
 max_voltage_v = 3.6
 max_current_ma = 49.0
 
-# Not yet reviewed against the datasheet by a person: no `reviewed_by`, so
-# a fab export treats it as unverified until someone signs it off.
 [provenance]
+source = "authored"
 datasheet_url = "https://ww1.microchip.com/downloads/en/DeviceDoc/00002165B.pdf"
+reviewed_by = "JeffMboya"
+reviewed_at = "2026-11-05"
 
 # Pins are Table 2-8 of DS00002165B, and match the stock symbol pin for pin.
 # A pin whose name carries a strap (`led1_regoff`, `rxd0_mode0`) is sampled at

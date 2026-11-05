@@ -23,6 +23,12 @@ min_voltage_v = 2.375
 max_voltage_v = 3.46
 max_current_ma = 100.0
 
+[provenance]
+source = "authored"
+datasheet_url = "https://invensense.tdk.com/wp-content/uploads/2015/02/MPU-6000-Datasheet1.pdf"
+reviewed_by = "JeffMboya"
+reviewed_at = "2026-11-05"
+
 # Pin names and numbers come from the stock KiCad symbol this part names,
 # cross-checked against the footprint it names. Pads that the previous map
 # got wrong keep their old name where the name still denotes the same pin,

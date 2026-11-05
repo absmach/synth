@@ -19,10 +19,11 @@ min_voltage_v = 0.0
 max_voltage_v = 3.6
 max_current_ma = 100.0
 
-# Not yet reviewed against the datasheet by a person: no `reviewed_by`, so
-# a fab export treats it as unverified until someone signs it off.
 [provenance]
+source = "authored"
 datasheet_url = "https://www.hanrun.com/public/upload/down/2020/09-11/cc11be56d66bb63d5f1eeb85492439c0.pdf"
+reviewed_by = "JeffMboya"
+reviewed_at = "2026-11-05"
 
 # Pins are the chip-side pins of the HanRun HR911105A datasheet schematic
 # (rev A/3): the magnetics, 1CT:1CT, are inside the jack, so these are the
