@@ -3132,6 +3132,7 @@
 						)
 					)
 				)
+				(alternate "SPI_MISO" bidirectional line)
 			)
 			(pin bidirectional line
 				(at 25.4 35.56 180)
@@ -3188,6 +3189,7 @@
 						)
 					)
 				)
+				(alternate "SPI_MOSI" bidirectional line)
 			)
 			(pin bidirectional line
 				(at 25.4 27.94 180)
