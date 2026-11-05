@@ -667,6 +667,38 @@ impl PowerBudgetRule {
     }
 }
 
+/// Whether this part supplies a rail other components may draw from, so that
+/// `max_current_ma` is a budget to spend rather than a draw to count.
+///
+/// The field means opposite things depending on the part: on a regulator or a
+/// charger it is what the device can deliver, and on everything else it is
+/// what the device itself consumes. [`PowerBudgetRule`] read it as a budget
+/// for any part that had one and a `power_output` pin somewhere. Correcting
+/// the CH340G's `v3` to match the stock symbol therefore made it a 20 mA
+/// regulator -- that pin is its internal LDO's decoupling tap, there to be
+/// decoupled rather than loaded -- and
+/// `pass__power_004_sufficient_decoupling` reported two overruns on a board
+/// that is fine.
+fn part_supplies_a_rail(part: &synth_registry::Part) -> bool {
+    let Some(oc) = part.operating_conditions.as_ref() else {
+        return false;
+    };
+    let Some(_max_ma) = oc.max_current_ma else {
+        return false;
+    };
+    // An explicit answer wins over inference.
+    if let Some(budget) = oc.power_budget {
+        if !budget {
+            return false;
+        }
+    }
+    // Otherwise a part supplies a rail when it has a power_output pin,
+    // preserving the previous generic behaviour for any supply kind.
+    part.pins
+        .iter()
+        .any(|p| p.electrical_type == synth_registry::ElectricalType::PowerOutput)
+}
+
 impl ErcRule for PowerBudgetRule {
     fn code(&self) -> &'static str {
         "E-SYNTH-POWER-010"
@@ -682,6 +714,9 @@ impl ErcRule for PowerBudgetRule {
             let Some(part) = regulator.part.as_ref() else {
                 continue;
             };
+            if !part_supplies_a_rail(part) {
+                continue;
+            }
             let Some(max_ma) = part
                 .operating_conditions
                 .as_ref()
