@@ -1,0 +1,18 @@
+{
+  "board": "ble_node",
+  "diagnostics_count": 17,
+  "errors": 0,
+  "warnings": 17,
+  "diagnostics": [
+    "E-SYNTH-NAME-004: refdes prefix B unconventional for filter (balun)",
+    "E-SYNTH-NAME-004: refdes prefix ANT unconventional for antenna",
+    "E-SYNTH-RF-003: RF feed net missing impedance constraint",
+    "W-SYNTH-ANOMALY-001: statistically unusual design structure",
+    "W-SYNTH-SUPPLY-002: part has no distributor identity (x8)",
+    "W-SYNTH-PART-UNVERIFIED: component uses unverified part (x2)",
+    "E-SYNTH-ESD-001: connector-fed rail no reverse-polarity protection",
+    "E-SYNTH-ESD-001: external connector signal no ESD protection (x2)",
+    "E-SYNTH-SCHEM-003: decoupling capacitor separation",
+    "E-SYNTH-SCHEM-005: excessive junction fan-out"
+  ]
+}

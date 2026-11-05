@@ -1,0 +1,13 @@
+refdes,value,kind,description,kicad_symbol,kicad_footprint,lcsc_pn,mpn
+C_BULK,10uF,capacitor,"Generic 0805 MLCC, X7R/X5R, any value",Device:C,Capacitor_SMD:C_0805_2012Metric,,
+C_FILTER,100nF,capacitor,"Generic 0603 MLCC, X7R/X5R, any value",Device:C,Capacitor_SMD:C_0603_1608Metric,,
+C_PWR,100nF,capacitor,"Generic 0603 MLCC, X7R/X5R, any value",Device:C,Capacitor_SMD:C_0603_1608Metric,,
+J_OUT,ADC Out,connector,"1x2 through-hole pin header, 2.54mm pitch, for a jumper",Connector_Generic:Conn_01x02,Connector_PinHeader_2.54mm:PinHeader_1x02_P2.54mm_Vertical,C32713268,HX PZ2.54-1x2P ZZ
+J_PWR,3V3/GND,connector,"1x2 through-hole pin header, 2.54mm pitch, for a jumper",Connector_Generic:Conn_01x02,Connector_PinHeader_2.54mm:PinHeader_1x02_P2.54mm_Vertical,C32713268,HX PZ2.54-1x2P ZZ
+J_RTD,RTD Probe,connector,"1x2 through-hole pin header, 2.54mm pitch, for a jumper",Connector_Generic:Conn_01x02,Connector_PinHeader_2.54mm:PinHeader_1x02_P2.54mm_Vertical,C32713268,HX PZ2.54-1x2P ZZ
+R_FILTER,10k,resistor,"Generic 0603 thick-film resistor, any value",Device:R_US,Resistor_SMD:R_0603_1608Metric,,
+R_GAIN1,10k,resistor,"Generic 0603 thick-film resistor, any value",Device:R_US,Resistor_SMD:R_0603_1608Metric,,
+R_GAIN2,100k,resistor,"Generic 0603 thick-film resistor, any value",Device:R_US,Resistor_SMD:R_0603_1608Metric,,
+R_REF,1k,resistor,"Generic 0603 thick-film resistor, any value",Device:R_US,Resistor_SMD:R_0603_1608Metric,,
+R_RTD,100,resistor,"Generic 0603 thick-film resistor, any value",Device:R_US,Resistor_SMD:R_0603_1608Metric,,
+U1,LM358,opamp,"TI LM358 dual op-amp, SOIC-8",Amplifier_Operational:LM358,Package_DIP:DIP-8_W7.62mm,,

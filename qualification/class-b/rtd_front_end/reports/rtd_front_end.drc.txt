@@ -1,0 +1,34 @@
+** Drc report for rtd_front_end.kicad_pcb **
+** Created on 2026-10-29T18:09:16 **
+** Report includes: Errors, Warnings **
+
+** Found 4 DRC violations **
+[silk_overlap]: Silkscreen clearance
+    Rule: board setup constraints silk; warning
+    @(9.9900 mm, 20.7300 mm): Reference field of C_FILTER
+    @(1.3900 mm, 18.2250 mm): Segment of J_OUT on F.Silkscreen
+[silk_overlap]: Silkscreen clearance
+    Rule: board setup constraints silk; warning
+    @(1.3900 mm, 20.8750 mm): Segment of J_OUT on F.Silkscreen
+    @(9.9900 mm, 20.7300 mm): Reference field of C_FILTER
+[silk_overlap]: Silkscreen clearance
+    Rule: board setup constraints silk; warning
+    @(4.1500 mm, 18.2250 mm): Segment of J_OUT on F.Silkscreen
+    @(9.9900 mm, 20.7300 mm): Reference field of C_FILTER
+[silk_over_copper]: Silkscreen clipped by solder mask
+    Local override; warning
+    @(9.9900 mm, 20.7300 mm): Reference field of C_FILTER
+    @(2.7700 mm, 19.4950 mm): PTH pad 2 [GND] of J_OUT
+
+** Found 0 unconnected pads **
+
+** Found 0 Footprint errors **
+
+** Ignored checks **
+    - Footprint has no courtyard defined
+    - Track endpoint not centered on via
+    - Tuning profile track geometries
+    - Footprint doesn't match symbol's footprint filters
+    - Footprint component type doesn't match footprint pads
+
+** End of Report **

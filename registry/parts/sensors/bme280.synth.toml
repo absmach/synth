@@ -1,0 +1,81 @@
+id = "bme280"
+kind = "sensor"
+description = "Bosch BME280 temperature/humidity/pressure sensor, I2C/SPI"
+version = 0
+lifecycle = "active"
+signed_by = []
+substitutes = []
+mpn = "BME280"
+lcsc_pn = "C92489"
+kicad_symbol = "Sensor:BME280"
+kicad_footprint = "Package_LGA:Bosch_LGA-8_2.5x2.5mm_P0.65mm_ClockwisePinNumbering"
+
+[[pins]]
+name = "vdd"
+number = "8"
+electrical_type = "power_input"
+capabilities = []
+required = true
+
+[[pins]]
+name = "gnd"
+number = "1"
+electrical_type = "power_input"
+capabilities = []
+required = true
+
+[[pins]]
+name = "sda"
+number = "3"
+electrical_type = "bidirectional"
+capabilities = ["i2c_sda"]
+required = true
+
+[[pins]]
+name = "scl"
+number = "4"
+electrical_type = "bidirectional"
+capabilities = ["i2c_scl"]
+required = true
+
+[[pins]]
+name = "csb"
+number = "2"
+electrical_type = "input"
+capabilities = []
+required = true
+
+[[pins]]
+name = "sdo"
+number = "5"
+electrical_type = "input"
+capabilities = []
+required = true
+
+[[pins]]
+name = "vddio"
+number = "6"
+electrical_type = "power_input"
+capabilities = []
+required = false
+
+[[pins]]
+name = "gnd2"
+number = "7"
+electrical_type = "power_input"
+capabilities = []
+required = false
+
+[[required_decoupling]]
+net = "vdd"
+value = "100nf"
+count = 1
+
+[footprint_dimensions]
+width_mm = 2.32
+height_mm = 2.58
+courtyard_margin_mm = 0.25
+
+[provenance]
+source = "authored"
+generator = "synth_author_part"
