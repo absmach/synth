@@ -262,20 +262,20 @@ fn pad_to_pad(board: &PcbBoard, profile: &ManufacturerProfile) -> Vec<DfmFinding
                 continue;
             }
             let (gap_nm, at) = pad_gap(a, b);
-            if gap_nm < required_nm {
+            if let Some((severity, bound_nm)) = spacing_grade(gap_nm, profile) {
                 findings.push(DfmFinding {
                     rule: "pad_to_pad",
-                    severity: DfmSeverity::Danger,
+                    severity,
                     message: format!(
                         "pads {} and {} are {:.3} mm apart, under the {:.3} mm minimum",
                         a.id(),
                         b.id(),
                         gap_nm / NM_PER_MM,
-                        required_nm / NM_PER_MM
+                        bound_nm / NM_PER_MM
                     ),
                     at_mm: (at.x_mm(), at.y_mm()),
                     measured_mm: gap_nm / NM_PER_MM,
-                    required_mm: required_nm / NM_PER_MM,
+                    required_mm: bound_nm / NM_PER_MM,
                 });
             }
         }
@@ -298,6 +298,20 @@ fn via_as_pad(via: &Via) -> Pad {
         layers: via.layers.clone(),
         net: via.net,
         net_name: via.net_name.clone(),
+    }
+}
+
+/// How JLCDFM grades a copper spacing: Danger below the danger bound, Warning
+/// below the floor, nothing above it. Returns the grade and the bound crossed.
+fn spacing_grade(gap_nm: f64, profile: &ManufacturerProfile) -> Option<(DfmSeverity, f64)> {
+    let danger = profile.pad_to_pad_danger_nm as f64;
+    let floor = profile.min_pad_to_pad_nm as f64;
+    if gap_nm < danger {
+        Some((DfmSeverity::Danger, danger))
+    } else if gap_nm < floor {
+        Some((DfmSeverity::Warning, floor))
+    } else {
+        None
     }
 }
 
@@ -720,14 +734,26 @@ mod tests {
     }
 
     #[test]
-    fn pads_of_different_nets_closer_than_the_floor_are_a_danger() {
-        // The base pad spans x 9.7..10.3; this one spans 10.4..11.0: 0.1 mm.
-        let report = run(&pad_at(10.7, 20.0, 2, "rect", 0.6, "F.Cu"));
+    fn pads_of_different_nets_under_the_danger_bound_are_a_danger() {
+        // The base pad spans x 9.7..10.3; this one spans 10.37..10.97: 0.07 mm.
+        let report = run(&pad_at(10.67, 20.0, 2, "rect", 0.6, "F.Cu"));
         assert_eq!(count(&report, "pad_to_pad"), 1, "{report:?}");
         let finding = &report.findings[0];
         assert_eq!(finding.severity, DfmSeverity::Danger);
-        assert!((finding.measured_mm - 0.1).abs() < 0.005, "{finding:?}");
+        assert!((finding.measured_mm - 0.07).abs() < 0.005, "{finding:?}");
+        assert!((finding.required_mm - 0.10).abs() < 1e-9, "{finding:?}");
+    }
+
+    #[test]
+    fn pads_between_the_danger_bound_and_the_floor_are_a_warning() {
+        // JLCDFM's scale: Danger below 0.10 mm, Warning to 0.15 mm.
+        let report = run(&pad_at(10.72, 20.0, 2, "rect", 0.6, "F.Cu"));
+        assert_eq!(count(&report, "pad_to_pad"), 1, "{report:?}");
+        let finding = &report.findings[0];
+        assert_eq!(finding.severity, DfmSeverity::Warning);
+        assert!((finding.measured_mm - 0.12).abs() < 0.005, "{finding:?}");
         assert!((finding.required_mm - 0.15).abs() < 1e-9, "{finding:?}");
+        assert_eq!(report.danger_count(), 0);
     }
 
     #[test]
