@@ -89,12 +89,8 @@ board "rtd_afe" {
     component C_IO2: capacitor "c_generic_0603" value "100nF" dielectric "X7R" voltage "10V" lcsc_pn "C14663" mpn "CC0603KRX7R9BB104"
     component C_IO3: capacitor "c_generic_0603" value "100nF" dielectric "X7R" voltage "10V" lcsc_pn "C14663" mpn "CC0603KRX7R9BB104"
     component C_IO4: capacitor "c_generic_0603" value "100nF" dielectric "X7R" voltage "10V" lcsc_pn "C14663" mpn "CC0603KRX7R9BB104"
-    component C_IO5: capacitor "c_generic_0603" value "100nF" dielectric "X7R" voltage "10V" lcsc_pn "C14663" mpn "CC0603KRX7R9BB104"
-    component C_IO6: capacitor "c_generic_0603" value "100nF" dielectric "X7R" voltage "10V" lcsc_pn "C14663" mpn "CC0603KRX7R9BB104"
-    component C_IO7: capacitor "c_generic_0603" value "100nF" dielectric "X7R" voltage "10V" lcsc_pn "C14663" mpn "CC0603KRX7R9BB104"
     component C_DV1: capacitor "c_generic_0603" value "100nF" dielectric "X7R" voltage "10V" lcsc_pn "C14663" mpn "CC0603KRX7R9BB104"
     component C_DV2: capacitor "c_generic_0603" value "100nF" dielectric "X7R" voltage "10V" lcsc_pn "C14663" mpn "CC0603KRX7R9BB104"
-    component C_DV3: capacitor "c_generic_0603" value "100nF" dielectric "X7R" voltage "10V" lcsc_pn "C14663" mpn "CC0603KRX7R9BB104"
     component C_DVB: capacitor "c_generic_0805" value "4.7uF" dielectric "X7R" voltage "10V" lcsc_pn "C354262" mpn "CC0805KKX7R8BB475"
     component C_VI: capacitor "c_generic_0603" value "4.7uF" dielectric "X7R" voltage "10V" lcsc_pn "C18185770" mpn "TCC0603X7R475K100CT"
     component C_FL: capacitor "c_generic_0603" value "100nF" dielectric "X7R" voltage "10V" lcsc_pn "C14663" mpn "CC0603KRX7R9BB104"
@@ -133,7 +129,7 @@ board "rtd_afe" {
     U5.vout, C_L2.p1, L2.p1, R_AV.p1,
     U1.dvdd, C_DV.p1, U1.iovdd, C_IO.p1, R_RST.p1,
     U2.iovdd, U2.iovdd2, U2.iovdd3, U2.iovdd4, U2.iovdd5, U2.iovdd6,
-    C_IO1.p1, C_IO2.p1, C_IO3.p1, C_IO4.p1, C_IO5.p1, C_IO6.p1, C_IO7.p1,
+    C_IO1.p1, C_IO2.p1, C_IO3.p1, C_IO4.p1,
     U2.qspi_iovdd, U2.usb_otp_vdd, U2.vreg_vin, C_VI.p1,
     U4.vcc, C_FL.p1, R_RUN.p1
   }
@@ -148,7 +144,7 @@ board "rtd_afe" {
 
   net "DVDD_1V1" {
     L1.p2, U2.dvdd, U2.dvdd2, U2.dvdd3, U2.vreg_fb,
-    C_DV1.p1, C_DV2.p1, C_DV3.p1, C_DVB.p1
+    C_DV1.p1, C_DV2.p1, C_DVB.p1
   }
 
   net "VREG_LX" {
@@ -166,8 +162,8 @@ board "rtd_afe" {
     C_AV1.p2, C_AV2.p2,
     C_CM1.p2, C_CM2.p2, C_F.p2, R_BIAS.p2,
     U2.gnd, U2.vreg_pgnd,
-    C_IO1.p2, C_IO2.p2, C_IO3.p2, C_IO4.p2, C_IO5.p2, C_IO6.p2, C_IO7.p2,
-    C_DV1.p2, C_DV2.p2, C_DV3.p2, C_DVB.p2, C_VI.p2, C_AVF.p2,
+    C_IO1.p2, C_IO2.p2, C_IO3.p2, C_IO4.p2,
+    C_DV1.p2, C_DV2.p2, C_DVB.p2, C_VI.p2, C_AVF.p2,
     C_X1.p2, C_X2.p2, Y1.gnd_2, Y1.gnd_4, U4.gnd, C_FL.p2,
     J3.p3, U5.gnd, C_L1.p2, C_L2.p2,
     J1.gnd, J1.gnd_a12, J1.gnd_b1, J1.gnd_b12, J1.shld,

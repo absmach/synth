@@ -180,7 +180,7 @@ rotation = 0
 priority = "hard"
 
 [components.U4]
-x = 21.5
+x = 22.0
 y = 19.0
 rotation = 0
 priority = "hard"
@@ -247,7 +247,7 @@ rotation = 0
 priority = "hard"
 
 [components.L1]
-x = 34.0
+x = 34.4
 y = 21.0
 rotation = 90
 priority = "hard"
