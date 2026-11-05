@@ -1534,7 +1534,7 @@ expression: schematic
 		)
 		(property
 			"Datasheet"
-			""
+			"https://datasheets.raspberrypi.com/rp2350/rp2350-datasheet.pdf"
 			(at 48.26 68.58 0)
 			(effects
 				(font
