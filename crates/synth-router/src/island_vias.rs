@@ -48,6 +48,14 @@ const EPS: f64 = 1e-6;
 /// vias, and copper on layers where there is no pour.
 const VIA_GAP_MM: f64 = 0.2;
 
+/// A pad this close to a neighbour in its own footprint (centre to centre) is
+/// part of a fine-pitch row: a QFN or connector breakout, where the pads leave
+/// no room for a ground via between a signal via and the part.
+const FINE_PITCH_MM: f64 = 0.5;
+
+/// How far from a fine-pitch pad a signal via still counts as in its breakout.
+const FINE_PITCH_BREAKOUT_MM: f64 = 2.5;
+
 /// Spacing of the points tried for a return via.
 const RETURN_STEP_MM: f64 = 0.1;
 
@@ -1356,6 +1364,7 @@ pub fn stitch_vias(board: &PcbBoard, reach_mm: f64, planned: &[TieVia]) -> Vec<T
     .vias
 }
 
+#[allow(clippy::too_many_lines)]
 fn stitch(
     board: &PcbBoard,
     reach_mm: f64,
@@ -1424,6 +1433,7 @@ fn stitch(
         .collect();
 
     let apart = nm_to_mm(size_nm) + declared.gap_mm();
+    let fine_pads = fine_pitch_pads(board);
     let mut out = Vec::new();
     let mut unresolved = Vec::new();
     let mut advisory = Vec::new();
@@ -1452,9 +1462,17 @@ fn stitch(
                 size_nm,
                 drill_nm,
             });
-        } else if ground_nets.needs_return(signal_net) {
+        } else if ground_nets.needs_return(signal_net)
+            && !fine_pads
+                .iter()
+                .any(|p| (p.0 - vx).hypot(p.1 - vy) <= FINE_PITCH_BREAKOUT_MM)
+        {
             unresolved.push(format!(
                 "the signal via at ({vx:.2}, {vy:.2}) mm has no ground return via within {reach_mm:.2} mm, and no spot in the {net} pour holds one clear of the pads, vias and tracks beside it"
+            ));
+        } else if ground_nets.needs_return(signal_net) {
+            advisory.push(format!(
+                "net {signal_net} changes layers at ({vx:.2}, {vy:.2}) mm in a fine-pitch pad breakout with no ground return via within {reach_mm:.2} mm and no spot in the {net} pour for one; the pads leave no room, so the loop is left as an advisory for the signal-integrity review"
             ));
         } else {
             advisory.push(format!(
@@ -1467,6 +1485,28 @@ fn stitch(
         unresolved,
         advisory,
     }
+}
+
+/// The centres of the pads on `board` that sit in a fine-pitch row.
+fn fine_pitch_pads(board: &PcbBoard) -> Vec<(f64, f64)> {
+    let mut fine = Vec::new();
+    for footprint in &board.footprints {
+        let centres: Vec<(f64, f64)> = footprint
+            .pads
+            .iter()
+            .map(|pad| (pad.at.x_mm(), pad.at.y_mm()))
+            .collect();
+        for (i, a) in centres.iter().enumerate() {
+            let crowded = centres
+                .iter()
+                .enumerate()
+                .any(|(j, b)| j != i && (a.0 - b.0).hypot(a.1 - b.1) <= FINE_PITCH_MM + EPS);
+            if crowded {
+                fine.push(*a);
+            }
+        }
+    }
+    fine
 }
 
 /// The point nearest the signal via `from`, on the search grid, that is clear of
@@ -2261,6 +2301,22 @@ mod tests {
         );
         // The free board resolves it, so the finding is the blockage's.
         assert!(plan_all(&stitched_board(""), REACH).unresolved.is_empty());
+    }
+
+    /// Beside a fine-pitch pad row (a QFN breakout) the pads leave no room for a
+    /// return via, whatever the search tries, so a signal via there is listed
+    /// for the review instead of holding the board back.
+    #[test]
+    fn a_signal_via_in_a_fine_pitch_breakout_with_no_room_is_an_advisory() {
+        let breakout = r#"(footprint "U" (at 0 0) (layer "F.Cu")
+            (pad "1" smd rect (at 10 10) (size 6 6) (layers "F.Cu") (net 3))
+            (pad "2" smd rect (at 11.5 10) (size 0.2 0.8) (layers "F.Cu") (net 3))
+            (pad "3" smd rect (at 11.9 10) (size 0.2 0.8) (layers "F.Cu") (net 3)))"#;
+        let plan = plan_all(&stitched_board(breakout), REACH);
+        assert!(plan.vias.is_empty(), "{plan:?}");
+        assert!(plan.unresolved.is_empty(), "{plan:?}");
+        assert_eq!(plan.advisory.len(), 1, "{plan:?}");
+        assert!(plan.advisory[0].contains("fine-pitch"), "{plan:?}");
     }
 
     /// A ground net the DRC knows by topology, not by name, is ground here too.
