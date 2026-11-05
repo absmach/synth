@@ -56,7 +56,7 @@
     },
     "jlcpcb_dfm": {
       "passed": false,
-      "evidence": "No Gerber, BOM or CPL was generated or uploaded."
+      "evidence": "Gerbers, drill (PTH/NPTH plus maps), BOM and PnP generated locally in fab/; not uploaded to JLCPCB and not DFM-reviewed. The authored parts are unreviewed."
     }
   }
 }

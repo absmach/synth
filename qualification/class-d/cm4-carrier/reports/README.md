@@ -14,7 +14,8 @@ What is missing and why:
 
 - `cm4_carrier.routing.json`, `.connectivity.json`, `.drc.json` — no routing
   run.
-- `release.json`, `release-fab.json` — no release or fab package.
+- `release.json`, `release-fab.json` — no release or automated fab package;
+  a manual `fab/` package (not release evidence) is in `../fab/`.
 - `registry-qualify.txt` — each authored part was qualified individually;
   the only blocking finding is `E-SYNTH-QUAL-008` (no reviewer), which stays
   open by design.

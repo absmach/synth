@@ -44,7 +44,7 @@ cargo test -p synth-cli --test cm4_carrier_board
 | A9 | ERC on the exported schematic | `kicad-cli sch erc` | **Fail (1 error, 67 warnings)** in `reports/cm4_carrier.kicad-erc.json`. The single error is the `RTC_BAT` power pin on the Peripherals sheet. The source adds `power "RTC_BAT" 3v`; export16 is the re-run |
 | A10 | DRC on the exported PCB | `kicad-cli pcb drc` | **Routed**: 0 violations, 0 unconnected items on the 6-layer HDI `kicad/cm4_carrier.kicad_pcb`. The KRT route reached 359/360 pad pairs; a targeted `DSI_D1_N` re-route closed the last pair |
 | A11 | `synth check` | `synth check --json` | **Fail**: `source: fail` because the `validate` child times out at 120 s; `drc: unknown` |
-| A12 | `synth check --fab` | `synth check --fab --json` | **Fail**: `source: fail`, `drc: unknown`, `manufacturing: unknown` |
+| A12 | `synth check --fab` | `synth check --fab --json` | **Fail**: `source: fail`, `drc: unknown`, `manufacturing: unknown`. A manual `fab/` package exists but is not release evidence |
 | A13 | Determinism | two exports of the same inputs | Not run: no export completed |
 
 ## B. Not checked by any tool here
@@ -86,7 +86,7 @@ reviewer. No reviewer is invented.
 | Item | State | Evidence |
 | --- | --- | --- |
 | `synth check` passes | **blocked** | A11: `synth validate` does not finish; `check` reports `source: fail`, `drc: unknown` |
-| `--fab` recorded honestly | **blocked** | A12: same upstream block; no fab package exists |
+| `--fab` recorded honestly | **blocked** | A12: same upstream block; a manual `fab/` package exists but is not release evidence |
 | ERC zero errors with `kicad-cli` | **not met (1 error)** | A9: the only error is `RTC_BAT`; export16 is the re-run with the power declaration |
 | DRC report committed | **done (routed)** | A10: `reports/cm4_carrier.kicad-drc.json`, 0 violations / 0 unconnected on the routed 6-layer HDI board |
 | Every used CM4 pin traced to a datasheet row | **done** | `agent-run/PIN_MAPPING.md` (143 used pins, Table 6 page per pin); test A4 |
