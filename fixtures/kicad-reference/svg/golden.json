@@ -24,7 +24,7 @@
     "distinct_texts": 94
   },
   "ref_led_driver": {
-    "sha256": "f7ae93fff307f7fc0a5f78df0e792a889df8993191eceb2e118aad3582d62453",
+    "sha256": "5e033e2c6bc71f4d4dbf142db86e3cd46b3b9d26c541e9ffb04c97bd83ec9b6c",
     "width": "297.0022mm",
     "height": "210.0072mm",
     "paths": 8690,
@@ -32,7 +32,7 @@
     "distinct_texts": 188
   },
   "ref_secure_element": {
-    "sha256": "c9f7dadcd16dd90e8f1ab20cccfd3ac4c1580e92641c031c52f0f82960659fce",
+    "sha256": "ca802b814a459a4ba5256b95094e229a8d118b62a1614b70bae47bccdacc32d6",
     "width": "297.0022mm",
     "height": "210.0072mm",
     "paths": 9943,
@@ -48,7 +48,7 @@
     "distinct_texts": 204
   },
   "ref_uart_bridge": {
-    "sha256": "e0dfada9f41e566068a92e885321d444fc8fd89183a61a66f46ad15e88852cb8",
+    "sha256": "7e9e488de654ce53498141ccc80ecd744943e0a611635899dba8ba0b20ac2f62",
     "width": "419.9890mm",
     "height": "297.0022mm",
     "paths": 18170,
