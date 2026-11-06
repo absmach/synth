@@ -11,7 +11,7 @@ FreeRouting. That routing run hit the 1200 s router budget (53 nets on a
 - no Gerbers, drill files or fab quote.
 
 The delivered PCB is an **un-routed placement record**, not a fabrication
-artifact. Its placement is DRC-clean: 0 errors, 28 advisory warnings and 179
+artifact. Its placement is DRC-clean: 0 errors, 24 advisory warnings and 179
 unconnected pads (the pads that have no copper yet). The board declares
 `outline 72mm x 52mm`; J_B2B is flush at 3.12 mm from the right edge,
 J_PWR/J_MOTOR are flush and close together on the left edge, rotated 270° so

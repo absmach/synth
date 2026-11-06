@@ -41,7 +41,7 @@ place J_B2B at 3.12 mm from the right edge: (56.88, 16) on the 60 mm control
 and (68.88, 16) on the 72 mm power board. The control's holes are at (2, 2),
 (51, 2), (2, 30) and (51, 30) mm; the power board declares `outline 72mm x
 52mm` and puts its four at (2, 2), (62.4, 2), (2, 49) and (62.4, 49) mm. J_PWR
-and J_MOTOR sit flush on the left edge at (5.45, 12) and (5.45, 30), rotated
+and J_MOTOR sit flush on the left edge at (5.45, 15) and (5.45, 34), rotated
 270 degrees so the wire entry faces the left edge. The power
 PCB is exported un-routed for the 3D renders, like the control.
 
