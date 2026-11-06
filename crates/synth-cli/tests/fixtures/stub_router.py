@@ -193,12 +193,18 @@ def splice(board_text, segments):
         for start, end, code in segments
     ]
     if os.environ.get("STUB_ROUTER_SILK_ON_PAD"):
-        # Opt-in: print a silk stroke across the first pad, so a test can
+        # Opt-in: print a silk stroke across the first pad (and a text item), so a test can
         # exercise the manufacturability gate on a board that really has it.
         x, y = segments[0][0]
         rendered.append(
             '  (gr_line (start {:.4f} {:.4f}) (end {:.4f} {:.4f}) (stroke (width 0.12) (type solid)) (layer "F.SilkS"))'.format(
                 x, y, x + 0.5, y
+            )
+        )
+        # And one text item, which the DFM check counts but cannot measure.
+        rendered.append(
+            '  (gr_text "REV A" (at {:.4f} {:.4f}) (layer "F.SilkS") (effects (font (size 1 1) (thickness 0.15))))'.format(
+                x + 3, y + 3
             )
         )
     return "\n".join(body + rendered + [closer]) + "\n"
