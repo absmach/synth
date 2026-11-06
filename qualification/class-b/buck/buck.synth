@@ -106,7 +106,7 @@ board "buck" {
     component H1: mounting_hole "mounting_hole_m2_5" value "M2.5"
     component H2: mounting_hole "mounting_hole_m2_5" value "M2.5"
     notes "" {
-      "Two M2.5 non-plated holes in opposite corners; the board is fixed down through them."
+      "Two M2.5 non-plated holes, H1 in the top middle and H2 at the right edge below J2; the board is fixed down through them."
     }
   }
 
