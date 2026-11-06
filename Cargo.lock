@@ -2223,7 +2223,7 @@ dependencies = [
 
 [[package]]
 name = "synth-ast"
-version = "0.1.1"
+version = "0.1.2"
 dependencies = [
  "serde",
  "serde_json",
@@ -2232,7 +2232,7 @@ dependencies = [
 
 [[package]]
 name = "synth-cli"
-version = "0.1.1"
+version = "0.1.2"
 dependencies = [
  "anyhow",
  "clap",
@@ -2263,7 +2263,7 @@ dependencies = [
 
 [[package]]
 name = "synth-connectivity"
-version = "0.1.1"
+version = "0.1.2"
 dependencies = [
  "indexmap",
  "serde",
@@ -2278,7 +2278,7 @@ dependencies = [
 
 [[package]]
 name = "synth-cost"
-version = "0.1.1"
+version = "0.1.2"
 dependencies = [
  "serde",
  "serde_json",
@@ -2288,7 +2288,7 @@ dependencies = [
 
 [[package]]
 name = "synth-diagnostics"
-version = "0.1.1"
+version = "0.1.2"
 dependencies = [
  "insta",
  "schemars",
@@ -2304,7 +2304,7 @@ dependencies = [
 
 [[package]]
 name = "synth-drc"
-version = "0.1.1"
+version = "0.1.2"
 dependencies = [
  "rayon",
  "serde",
@@ -2324,7 +2324,7 @@ dependencies = [
 
 [[package]]
 name = "synth-geometry"
-version = "0.1.1"
+version = "0.1.2"
 dependencies = [
  "serde",
  "serde_json",
@@ -2334,7 +2334,7 @@ dependencies = [
 
 [[package]]
 name = "synth-ir"
-version = "0.1.1"
+version = "0.1.2"
 dependencies = [
  "insta",
  "proptest",
@@ -2348,7 +2348,7 @@ dependencies = [
 
 [[package]]
 name = "synth-kicad"
-version = "0.1.1"
+version = "0.1.2"
 dependencies = [
  "insta",
  "rayon",
@@ -2372,7 +2372,7 @@ dependencies = [
 
 [[package]]
 name = "synth-knowledge"
-version = "0.1.1"
+version = "0.1.2"
 dependencies = [
  "include_dir",
  "serde",
@@ -2384,7 +2384,7 @@ dependencies = [
 
 [[package]]
 name = "synth-layout"
-version = "0.1.1"
+version = "0.1.2"
 dependencies = [
  "insta",
  "proptest",
@@ -2400,7 +2400,7 @@ dependencies = [
 
 [[package]]
 name = "synth-mcp"
-version = "0.1.1"
+version = "0.1.2"
 dependencies = [
  "anyhow",
  "axum",
@@ -2438,7 +2438,7 @@ dependencies = [
 
 [[package]]
 name = "synth-parser"
-version = "0.1.1"
+version = "0.1.2"
 dependencies = [
  "insta",
  "proptest",
@@ -2452,7 +2452,7 @@ dependencies = [
 
 [[package]]
 name = "synth-pcb"
-version = "0.1.1"
+version = "0.1.2"
 dependencies = [
  "serde",
  "serde_json",
@@ -2463,7 +2463,7 @@ dependencies = [
 
 [[package]]
 name = "synth-place"
-version = "0.1.1"
+version = "0.1.2"
 dependencies = [
  "insta",
  "serde",
@@ -2479,7 +2479,7 @@ dependencies = [
 
 [[package]]
 name = "synth-registry"
-version = "0.1.1"
+version = "0.1.2"
 dependencies = [
  "anyhow",
  "serde",
@@ -2491,7 +2491,7 @@ dependencies = [
 
 [[package]]
 name = "synth-render"
-version = "0.1.1"
+version = "0.1.2"
 dependencies = [
  "image",
  "resvg",
@@ -2501,7 +2501,7 @@ dependencies = [
 
 [[package]]
 name = "synth-route"
-version = "0.1.1"
+version = "0.1.2"
 dependencies = [
  "anyhow",
  "insta",
@@ -2520,7 +2520,7 @@ dependencies = [
 
 [[package]]
 name = "synth-router"
-version = "0.1.1"
+version = "0.1.2"
 dependencies = [
  "serde",
  "serde_json",
@@ -2538,14 +2538,14 @@ dependencies = [
 
 [[package]]
 name = "synth-smt"
-version = "0.1.1"
+version = "0.1.2"
 dependencies = [
  "thiserror 2.0.21",
 ]
 
 [[package]]
 name = "synth-supply"
-version = "0.1.1"
+version = "0.1.2"
 dependencies = [
  "async-trait",
  "chrono",
@@ -2563,7 +2563,7 @@ dependencies = [
 
 [[package]]
 name = "synth-validate"
-version = "0.1.1"
+version = "0.1.2"
 dependencies = [
  "anyhow",
  "chrono",
