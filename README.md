@@ -9,7 +9,7 @@ Turn text-based circuit designs into KiCad schematics, PCB layouts, and bills of
 [![Continuous Integration](https://github.com/absmach/synth/actions/workflows/ci.yml/badge.svg)](https://github.com/absmach/synth/actions/workflows/ci.yml)
 [![License](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
 
-[Quick Start](#quick-start) · [Features](#features) · [Examples](#examples) · [Documentation](https://absmach.eu/docs/synth/user-guide/quick-start/) · [Contributing](#contributing)
+[Install](#install) · [Quick Start](#quick-start) · [Features](#features) · [Examples](#examples) · [Documentation](https://absmach.eu/docs/synth/user-guide/quick-start/) · [Contributing](#contributing)
 
 </div>
 
@@ -36,22 +36,72 @@ board "env_logger" {
 
 _An excerpt from the [environmental logger](examples/env_logger/env_logger.synth); the full design adds the MCU, sensor, CC pull-downs, and decoupling that the checks require._
 
-## Quick Start
+## Install
 
-Use a current stable Rust toolchain with Cargo. Run the following from a local checkout:
+### Prebuilt binary
+
+Every [release](https://github.com/absmach/synth/releases) ships a `synth` binary for five platforms, each with a SHA-256 checksum beside it.
+
+| Platform       | Asset                     |
+| -------------- | ------------------------- |
+| Linux x86-64   | `synth-linux-amd64`       |
+| Linux arm64    | `synth-linux-arm64`       |
+| macOS arm64    | `synth-darwin-arm64`      |
+| macOS x86-64   | `synth-darwin-amd64`      |
+| Windows x86-64 | `synth-windows-amd64.exe` |
+
+```bash
+base="https://github.com/absmach/synth/releases/latest/download"
+asset="synth-linux-amd64"          # pick your platform from the table above
+
+curl -LO "$base/$asset"
+curl -LO "$base/$asset.sha256"
+sha256sum -c "$asset.sha256"       # macOS: shasum -a 256 -c "$asset.sha256"
+
+sudo install -m 755 "$asset" /usr/local/bin/synth
+synth --version
+```
+
+Verify the checksum before running the binary. On Windows, check it with `certutil -hashfile synth-windows-amd64.exe SHA256` and compare against the `.sha256` file.
+
+The Linux binaries are built against glibc 2.35, so they run on Debian Bookworm, Ubuntu 22.04, and newer.
+
+> [!NOTE]
+> The component registry and example designs ship inside the repository and track `main`, which has moved ahead of the latest release. Pair a prebuilt binary with its own tag (`git checkout v0.1.1`, where the example paths differ from those below), or install from source to follow the Quick Start as written.
+
+### Cargo
+
+Synth is not on crates.io, so install it from Git. Requires Rust 1.85 or newer.
+
+```bash
+# Latest release
+cargo install --git https://github.com/absmach/synth --tag v0.1.1 --locked synth-cli
+
+# Current main
+cargo install --git https://github.com/absmach/synth --locked synth-cli
+```
+
+> [!WARNING]
+> Do not run `cargo install synth-cli`. The `synth-cli` crate on crates.io is an unrelated project — a WebAssembly-to-ARM compiler — not this one.
+
+### From source
 
 ```bash
 git clone https://github.com/absmach/synth.git
 cd synth
-cargo build -p synth-cli
-cargo run -p synth-cli -- --help
+cargo build -p synth-cli --release
+./target/release/synth --help
 ```
 
-Validate the minimal example and export a KiCad project:
+The repository pins its toolchain in `rust-toolchain.toml`, so rustup fetches the right version automatically.
+
+## Quick Start
+
+Validate the minimal example and export a KiCad project. The example designs come from a checkout, so clone the repository (or `cd` into it) first:
 
 ```bash
-cargo run -p synth-cli -- validate fixtures/designs/hello.synth
-cargo run -p synth-cli -- export-kicad fixtures/designs/hello.synth --out output/hello
+synth validate fixtures/designs/hello.synth
+synth export-kicad fixtures/designs/hello.synth --out output/hello
 ```
 
 The minimal example declares an empty two-layer board. Use the [example designs](#examples) to explore circuits with components and connections.
@@ -59,7 +109,7 @@ The minimal example declares an empty two-layer board. Use the [example designs]
 For machine-readable diagnostics:
 
 ```bash
-cargo run -p synth-cli -- validate examples/env_logger/env_logger.synth --format json
+synth validate examples/env_logger/env_logger.synth --format json
 ```
 
 Open exported projects in KiCad. Optional Gerber, drill, and STEP exports require `kicad-cli`; see the [KiCad workflow guide](docs/kicad-workflows.md) for export and review details.
@@ -71,7 +121,7 @@ For CI and release gates, `synth check DESIGN.synth --json` is the deterministic
 Start the MCP server over standard input and output:
 
 ```bash
-cargo run -p synth-cli -- mcp --stdio
+synth mcp --stdio
 ```
 
 Agents can retrieve the SynthSpec language reference, search the registry, validate designs, apply fixes, and invoke compiler stages. See the [MCP guide](crates/synth-mcp/README.md) for transports and tool details.
@@ -92,24 +142,24 @@ Synth resolves parts from a component registry and lowers the source into a type
 
 ## Features
 
-| Area               | Capabilities                                                                                                 |
-| ------------------ | ------------------------------------------------------------------------------------------------------------ |
-| Design language    | SynthSpec parser, typed board IR, components, connections, differential pairs, keepouts, and placement hints |
+| Area               | Capabilities                                                                                                                                    |
+| ------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------- |
+| Design language    | SynthSpec parser, typed board IR, components, connections, differential pairs, keepouts, and placement hints                                    |
 | Validation         | Electrical-rule checks, design-rule checks, structured diagnostics with source locations and suggested fixes, and SMT-backed quantitative fixes |
-| Layout and routing | Deterministic schematic layout, component placement, and multilayer routing, so generated artifacts are reproducible |
-| KiCad integration  | Project, schematic, PCB, and BOM export; optional fabrication outputs through `kicad-cli`                    |
-| Component registry | Versioned parts, project and user overlays, search, import, and authoring tools                              |
-| Developer tools    | CLI, JSON diagnostics, and an MCP server exposing validation, registry search, placement, routing, and export |
+| Layout and routing | Deterministic schematic layout, component placement, and multilayer routing, so generated artifacts are reproducible                            |
+| KiCad integration  | Project, schematic, PCB, and BOM export; optional fabrication outputs through `kicad-cli`                                                       |
+| Component registry | Versioned parts, project and user overlays, search, import, and authoring tools                                                                 |
+| Developer tools    | CLI, JSON diagnostics, and an MCP server exposing validation, registry search, placement, routing, and export                                   |
 
 ## Examples
 
-| Design                                                                     | What it demonstrates                                                          |
-| -------------------------------------------------------------------------- | ----------------------------------------------------------------------------- |
-| [Hello](fixtures/designs/hello.synth)                                      | The smallest board declaration                                                |
-| [Environmental logger](examples/env_logger/env_logger.synth)                          | USB-C power, a regulator, an MCU, an environmental sensor, and a debug header |
-| [Sensor logger](examples/sensor_logger/sensor_logger.synth)                              | A larger design with dual I²C sensors, SPI flash, and status LEDs             |
-| [Placement and differential pairs](examples/placement_and_diff_pair/placement_and_diff_pair.synth) | Placement hints, differential-pair constraints, and keepout regions           |
-| [RP2350 development board](examples/rp2350/)                               | Clean-netlist FreeRouting, zone refill, and compact outlines ([workflow](docs/rp2350-agent-workflow.md)) |
+| Design                                                                                             | What it demonstrates                                                                                     |
+| -------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------- |
+| [Hello](fixtures/designs/hello.synth)                                                              | The smallest board declaration                                                                           |
+| [Environmental logger](examples/env_logger/env_logger.synth)                                       | USB-C power, a regulator, an MCU, an environmental sensor, and a debug header                            |
+| [Sensor logger](examples/sensor_logger/sensor_logger.synth)                                        | A larger design with dual I²C sensors, SPI flash, and status LEDs                                        |
+| [Placement and differential pairs](examples/placement_and_diff_pair/placement_and_diff_pair.synth) | Placement hints, differential-pair constraints, and keepout regions                                      |
+| [RP2350 development board](examples/rp2350/)                                                       | Clean-netlist FreeRouting, zone refill, and compact outlines ([workflow](docs/rp2350-agent-workflow.md)) |
 
 Additional language and validation cases live in [fixtures](fixtures/designs/README.md). Part definitions live in the [component registry](registry/README.md).
 
