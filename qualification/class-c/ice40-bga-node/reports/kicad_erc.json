@@ -1,7 +1,7 @@
 {
     "$schema": "https://schemas.kicad.org/erc.v1.json",
     "coordinate_units": "mm",
-    "date": "2026-11-06T12:50:20",
+    "date": "2026-11-06T14:23:22",
     "ignored_checks": [
         {
             "description": "Global label only appears once in the schematic",
@@ -40,7 +40,7 @@
                                 "x": 5.1562,
                                 "y": 1.1938
                             },
-                            "uuid": "49cd3338-444a-4f96-83e4-29978b4c6352"
+                            "uuid": "0c04a6c3-466a-4993-a6a3-23a01ffd81c3"
                         }
                     ],
                     "severity": "error",
@@ -55,7 +55,7 @@
                                 "x": 5.1562,
                                 "y": 1.2192
                             },
-                            "uuid": "cfa86c37-3fef-4e7b-b83e-78fea3591b92"
+                            "uuid": "e24eebd3-864e-42b8-8e37-6bf4973b1d4f"
                         }
                     ],
                     "severity": "error",
@@ -70,7 +70,7 @@
                                 "x": 5.1562,
                                 "y": 1.2446
                             },
-                            "uuid": "a0f796ee-638f-4dd6-b4d4-308214a01730"
+                            "uuid": "b8dcfad4-2272-4d11-b6f6-44b72966e375"
                         }
                     ],
                     "severity": "error",
@@ -85,7 +85,7 @@
                                 "x": 5.1562,
                                 "y": 1.27
                             },
-                            "uuid": "bd089b57-8978-42e6-82f5-f1c323ffe05d"
+                            "uuid": "0973ca98-3e5e-48ad-9f8e-a50aae44ce73"
                         }
                     ],
                     "severity": "error",
@@ -100,7 +100,7 @@
                                 "x": 5.1562,
                                 "y": 1.2954
                             },
-                            "uuid": "e2c48405-a098-48ee-8fb4-9d8b8edabd21"
+                            "uuid": "f805a859-f426-4413-ae5c-3f5d0c81f442"
                         }
                     ],
                     "severity": "error",
@@ -115,7 +115,7 @@
                                 "x": 5.1562,
                                 "y": 1.3208
                             },
-                            "uuid": "b28addfb-3612-4074-91f1-ebfcbdcfd704"
+                            "uuid": "39907bcb-ee00-4b07-a146-804ad7ecbb6e"
                         }
                     ],
                     "severity": "error",
@@ -130,7 +130,7 @@
                                 "x": 5.1562,
                                 "y": 1.3462
                             },
-                            "uuid": "d2791a3d-5125-43ed-b682-d26a2a7c8367"
+                            "uuid": "e91e395e-a074-4765-9bb4-4e0935d485d3"
                         }
                     ],
                     "severity": "error",
@@ -145,7 +145,7 @@
                                 "x": 5.1816,
                                 "y": 1.3462
                             },
-                            "uuid": "790c8ec5-3907-4ab3-90d4-e5d3b6847408"
+                            "uuid": "ef7c56be-b8c3-4fc3-b9a9-31ed36e0bd0e"
                         }
                     ],
                     "severity": "error",
@@ -160,7 +160,7 @@
                                 "x": 5.1816,
                                 "y": 1.3716
                             },
-                            "uuid": "bd2e83b7-9f08-418d-b833-b9351af07754"
+                            "uuid": "4c84612a-fd31-488b-bd9b-58d49542380d"
                         }
                     ],
                     "severity": "error",
@@ -175,7 +175,7 @@
                                 "x": 5.1816,
                                 "y": 1.397
                             },
-                            "uuid": "f44d34e7-58b6-4ed2-bd33-9696278df8f9"
+                            "uuid": "c52b641d-ed0c-4eab-9806-6c5bfb0084e1"
                         }
                     ],
                     "severity": "error",
@@ -190,7 +190,7 @@
                                 "x": 5.1816,
                                 "y": 1.4224
                             },
-                            "uuid": "df29aa54-0cf3-4f0e-879a-566d71301095"
+                            "uuid": "478b8df2-7eeb-4d81-a514-05d80b17a75d"
                         }
                     ],
                     "severity": "error",
@@ -205,7 +205,7 @@
                                 "x": 5.1816,
                                 "y": 1.4478
                             },
-                            "uuid": "9cb5a983-6b8c-4f13-b031-dd98e6438221"
+                            "uuid": "b13c5d79-b8cc-4fc7-bce4-97d74bdeb271"
                         }
                     ],
                     "severity": "error",
@@ -220,7 +220,7 @@
                                 "x": 5.1816,
                                 "y": 1.4732
                             },
-                            "uuid": "256337dd-3ca6-49d1-8e33-dfe6de1a2f2f"
+                            "uuid": "9808183a-cf95-4f0d-85dd-e14c0e599cf5"
                         }
                     ],
                     "severity": "error",
@@ -235,7 +235,7 @@
                                 "x": 5.1816,
                                 "y": 1.4986
                             },
-                            "uuid": "205143eb-6177-4ecf-8428-2e48b6123260"
+                            "uuid": "161e043a-a2b8-4e0a-a8fb-13820eb780fb"
                         }
                     ],
                     "severity": "error",
@@ -250,7 +250,7 @@
                                 "x": 5.1816,
                                 "y": 1.524
                             },
-                            "uuid": "454ae24a-74b4-4dec-9530-654ebe435d32"
+                            "uuid": "423a3a2a-7e6d-47ed-939c-a3fcbb7478f6"
                         }
                     ],
                     "severity": "error",
@@ -265,7 +265,7 @@
                                 "x": 5.1816,
                                 "y": 1.5494
                             },
-                            "uuid": "7f735117-30eb-4f67-a3c1-8e21749e2241"
+                            "uuid": "47eed3bd-d368-4798-9171-db068f79e80c"
                         }
                     ],
                     "severity": "error",
@@ -280,7 +280,7 @@
                                 "x": 5.1816,
                                 "y": 1.5748
                             },
-                            "uuid": "a6ad6254-e18c-4e5e-882e-cf570a85ec8c"
+                            "uuid": "54be2579-3291-49e8-9435-b93a70d0d84f"
                         }
                     ],
                     "severity": "error",
@@ -295,7 +295,7 @@
                                 "x": 5.1816,
                                 "y": 1.6002
                             },
-                            "uuid": "a1bd8347-f66f-4787-a3fe-5dbe1dcfe9b9"
+                            "uuid": "df891db0-f563-4308-a71c-c55f9bf1764b"
                         }
                     ],
                     "severity": "error",
@@ -310,7 +310,7 @@
                                 "x": 5.1816,
                                 "y": 1.6256
                             },
-                            "uuid": "52accb82-1d81-48ed-8097-410e06a6b5a3"
+                            "uuid": "a310b03b-29ac-4215-9ea5-ba53b025b480"
                         }
                     ],
                     "severity": "error",
@@ -325,7 +325,7 @@
                                 "x": 5.2832,
                                 "y": 1.2192
                             },
-                            "uuid": "ab18f810-8b57-458e-9743-3af833ad61d0"
+                            "uuid": "c36e5618-8451-4d36-ac05-cacfd1b4a7a0"
                         }
                     ],
                     "severity": "error",
@@ -340,7 +340,7 @@
                                 "x": 5.2832,
                                 "y": 1.2192
                             },
-                            "uuid": "ab18f810-8b57-458e-9743-3af833ad61d0"
+                            "uuid": "c36e5618-8451-4d36-ac05-cacfd1b4a7a0"
                         }
                     ],
                     "severity": "error",
@@ -355,7 +355,7 @@
                                 "x": 5.4864,
                                 "y": 0.8128
                             },
-                            "uuid": "0c7b185a-f239-478c-8a8c-0899e7f7c1f9"
+                            "uuid": "18c91739-888a-4388-8989-1dcd974e9621"
                         }
                     ],
                     "severity": "error",
@@ -370,7 +370,7 @@
                                 "x": 6.8834,
                                 "y": 0.2413
                             },
-                            "uuid": "d25bf366-1196-4085-a491-84a24da6acd4"
+                            "uuid": "901dc22a-a8df-4966-9861-a79c0386dc5d"
                         }
                     ],
                     "severity": "error",
@@ -573,7 +573,7 @@
                                 "x": 5.1816,
                                 "y": 0.8128
                             },
-                            "uuid": "844db4fd-7afc-44e1-b6e8-2e9d55b9caea"
+                            "uuid": "196a728c-84d8-46e6-a3b2-9c8dc431f5b6"
                         },
                         {
                             "description": "No Connect",
@@ -596,7 +596,7 @@
                                 "x": 5.1816,
                                 "y": 0.8382
                             },
-                            "uuid": "04e9fec3-ce61-4ceb-86e3-cc479594ef66"
+                            "uuid": "68597790-516b-4c72-bad4-21f855307db7"
                         },
                         {
                             "description": "No Connect",
@@ -619,7 +619,7 @@
                                 "x": 5.1816,
                                 "y": 0.8636
                             },
-                            "uuid": "de2b2125-4b90-436a-afae-a6945bdab49b"
+                            "uuid": "0ce3d4c4-1e08-44e1-9e43-03ee3a1cdda2"
                         },
                         {
                             "description": "No Connect",
@@ -642,7 +642,7 @@
                                 "x": 5.1816,
                                 "y": 0.889
                             },
-                            "uuid": "d9f3134f-3dd6-467f-a3d3-e220f998311a"
+                            "uuid": "0d8dde1c-6d6f-46e8-9972-247511c3b676"
                         },
                         {
                             "description": "No Connect",
@@ -665,7 +665,7 @@
                                 "x": 5.1816,
                                 "y": 0.9144
                             },
-                            "uuid": "fb115a55-b0ed-4892-b8ef-b3b6dbe314b4"
+                            "uuid": "053df6fc-d41f-4ae3-b405-98028b650882"
                         },
                         {
                             "description": "No Connect",
@@ -688,7 +688,7 @@
                                 "x": 5.1816,
                                 "y": 0.9398
                             },
-                            "uuid": "fc5a941b-ac30-40b4-b391-6bad7abb2cd6"
+                            "uuid": "98aa9b1f-24d6-4d9a-9f84-6e2f34d8e2bd"
                         },
                         {
                             "description": "No Connect",
@@ -711,7 +711,7 @@
                                 "x": 5.1816,
                                 "y": 0.9652
                             },
-                            "uuid": "d4477f61-d551-4fea-8c1c-27ca4a875e2f"
+                            "uuid": "344c39eb-f24d-4637-bc57-5f3a87dc2038"
                         },
                         {
                             "description": "No Connect",
@@ -734,7 +734,7 @@
                                 "x": 5.1816,
                                 "y": 0.9906
                             },
-                            "uuid": "00b3927d-3b3a-4b7c-aa1f-b11991d2ea3d"
+                            "uuid": "03d8c5fb-2518-4235-be20-ade83775d2f6"
                         },
                         {
                             "description": "No Connect",
@@ -757,7 +757,7 @@
                                 "x": 5.1816,
                                 "y": 1.0668
                             },
-                            "uuid": "35385d89-99fc-45a6-b230-808b7a777008"
+                            "uuid": "a551260b-c61f-40c7-8990-cc46ab1d3583"
                         },
                         {
                             "description": "No Connect",
@@ -780,7 +780,7 @@
                                 "x": 5.1816,
                                 "y": 1.1176
                             },
-                            "uuid": "5fbd52e5-97bf-470a-886b-236b865b1e70"
+                            "uuid": "aec7e3c9-1a1f-44c2-ab12-be8422fbc324"
                         },
                         {
                             "description": "No Connect",
@@ -803,7 +803,7 @@
                                 "x": 5.1816,
                                 "y": 1.143
                             },
-                            "uuid": "c4841501-172b-4b5e-8136-1f3d9349fd99"
+                            "uuid": "9460f43c-8764-49a5-a279-32d789aefd4d"
                         },
                         {
                             "description": "No Connect",
@@ -826,7 +826,7 @@
                                 "x": 5.1816,
                                 "y": 1.1684
                             },
-                            "uuid": "9da0d689-9cfa-4673-9b0f-5f3b1ff8fc6a"
+                            "uuid": "7418eece-31b0-4578-a5de-79b296723442"
                         },
                         {
                             "description": "No Connect",
@@ -849,7 +849,7 @@
                                 "x": 5.1816,
                                 "y": 1.1938
                             },
-                            "uuid": "10df7d39-fb3f-4d38-9901-595d7c2cd150"
+                            "uuid": "16a1499a-82d6-415a-8a5f-9b52d9660787"
                         },
                         {
                             "description": "No Connect",
@@ -872,7 +872,7 @@
                                 "x": 5.1816,
                                 "y": 1.2192
                             },
-                            "uuid": "54416e6d-002a-4637-89e8-5b854c183e2e"
+                            "uuid": "6183b1a0-b731-40d2-8149-b7fd94b97dec"
                         },
                         {
                             "description": "No Connect",
