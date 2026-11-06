@@ -36,6 +36,38 @@ want_major_minor="10.0"
 # the registry.
 packages=(kicad kicad-symbols kicad-footprints)
 
+# apt keeps its package index and downloads in root-owned directories by
+# default, which a CI cache step cannot restore or save without sudo. Point
+# both at a user-owned cache so `actions/cache` can carry them between runs.
+#
+# This is a reliability fix, not a micro-optimisation: on 2026-11-06 one shard
+# spent 43 minutes in this step because GitHub's Azure archive mirror served
+# the ~130 MB dependency set at ~50 kB/s. A warm cache turns that download into
+# an offline unpack; a cold one still hits the mirror, but the timeouts below
+# keep a throttled mirror from holding the whole job.
+apt_cache="${SYNTH_APT_CACHE:-${XDG_CACHE_HOME:-$HOME/.cache}/synth-apt}"
+mkdir -p "${apt_cache}/lists/partial" "${apt_cache}/archives/partial"
+
+# apt normally drops to the _apt user to download; the cache lives under
+# $HOME, which _apt cannot write to. apt itself still runs through sudo.
+apt_cache_opts=(
+  -o "Dir::State::lists=${apt_cache}/lists"
+  -o "Dir::Cache::archives=${apt_cache}/archives"
+  -o "APT::Keep-Downloaded-Packages=true"
+  -o "APT::Sandbox::User=root"
+  # The runner is ephemeral, so skipping dpkg's fsync costs nothing and shaves
+  # real time off unpacking KiCad's ~200-package dependency tree.
+  -o "DPkg::Options::=--force-unsafe-io"
+)
+
+# A stalled mirror used to hold a shard for 43 minutes. Cap each request and
+# retry, so a bad mirror fails over instead of hanging the job.
+apt_net_opts=(
+  -o "Acquire::Retries=5"
+  -o "Acquire::http::Timeout=30"
+  -o "Acquire::https::Timeout=30"
+)
+
 die() {
   echo "::error::$1"
   shift
@@ -43,21 +75,34 @@ die() {
   exit 1
 }
 
-sudo add-apt-repository --yes ppa:kicad/kicad-10.0-releases
+# The cache step runs as the runner user, but apt (via sudo) creates root-owned
+# files in it, including 0700 `partial` directories. Hand them back on every
+# exit path so the post-job save can read the cache.
+restore_cache_ownership() {
+  sudo chown -R "$(id -u):$(id -g)" "$apt_cache" 2>/dev/null || true
+}
+trap restore_cache_ownership EXIT
+
+# add-apt-repository runs its own `apt-get update`; --no-update leaves the
+# single, cache-aware update below as the only one.
+sudo add-apt-repository --yes --no-update ppa:kicad/kicad-10.0-releases
 
 # Transient 503s from launchpadcontent.net are common enough to be worth a
-# retry rather than a failed run.
-sudo apt-get update -o Acquire::Retries=5
+# retry rather than a failed run. A cache hit leaves the index valid, so a
+# mirror outage that defeats the retries does not have to fail the job: the
+# candidate gate below still refuses anything that is not KiCad 10.0.
+sudo apt-get "${apt_cache_opts[@]}" "${apt_net_opts[@]}" update \
+  || echo "::warning::apt-get update failed; continuing with the cached package index"
 
 # The gate. `apt-cache policy` reports the version apt would install, so this
 # catches the archive fallback before it happens rather than after -- and it
 # is asked about each package separately, because they can diverge.
 for pkg in "${packages[@]}"; do
-  candidate="$(apt-cache policy "$pkg" | awk '/Candidate:/ { print $2 }')"
+  candidate="$(apt-cache "${apt_cache_opts[@]}" policy "$pkg" | awk '/Candidate:/ { print $2 }')"
   case "$candidate" in
     "$want_major_minor".*) echo "candidate ${pkg} ${candidate}" ;;
     *)
-      apt-cache policy "$pkg"
+      apt-cache "${apt_cache_opts[@]}" policy "$pkg"
       die "the KiCad ${want_major_minor} PPA is unusable on Ubuntu $(. /etc/os-release && echo "${VERSION_ID} (${VERSION_CODENAME})"): apt would install ${pkg} ${candidate:-<none>}." \
           "refusing to fall back to the Ubuntu archive, whose stock libraries number pins differently." \
           "if the runner image moved to a release the PPA does not build for, pin runs-on to one it does."
@@ -65,7 +110,8 @@ for pkg in "${packages[@]}"; do
   esac
 done
 
-sudo apt-get install --no-install-recommends -y "${packages[@]}"
+sudo apt-get "${apt_cache_opts[@]}" "${apt_net_opts[@]}" install \
+  --no-install-recommends -y "${packages[@]}"
 
 # And again on what was installed, because the candidate check proves what apt
 # intended rather than what ended up on disk.
