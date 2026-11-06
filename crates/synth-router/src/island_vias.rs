@@ -670,6 +670,9 @@ pub struct Ground {
     /// where the process offers one. `None` leaves a pad with no way to the
     /// plane as it is.
     in_pad_via: Option<(i64, i64)>,
+    /// The nets that declare a medium edge: they keep the return-via requirement
+    /// but look for the via in the wider window of `synth_drc::MEDIUM_EDGE_WINDOW_NM`.
+    medium: BTreeSet<String>,
 }
 
 impl Ground {
@@ -679,7 +682,28 @@ impl Ground {
             named: names.iter().cloned().collect(),
             critical: None,
             in_pad_via: None,
+            medium: BTreeSet::new(),
         }
+    }
+
+    /// Nets that declare `edge_rate medium`: their return via may sit in the wider
+    /// window of a medium edge.
+    #[must_use]
+    pub fn with_medium(mut self, medium: &[String]) -> Self {
+        self.medium = medium.iter().cloned().collect();
+        self
+    }
+
+    /// The reach in which `net` looks for a return via, and the search window inside
+    /// it: the stackup's `reach_mm`, or the medium-edge window where that is wider
+    /// and the net declares one.
+    fn reach_and_window(&self, net: &str, reach_mm: f64) -> (f64, f64) {
+        let reach = if self.medium.contains(net) {
+            reach_mm.max(nm_to_mm(synth_drc::MEDIUM_EDGE_WINDOW_NM))
+        } else {
+            reach_mm
+        };
+        (reach, (reach - REACH_MARGIN_MM).max(0.0))
     }
 
     /// A pad of a poured net that nothing reaches gets a via of this
@@ -1591,8 +1615,6 @@ fn stitch(
     let (size_nm, drill_nm) = usual_via(&sizes, (DEFAULT_VIA_SIZE_NM, DEFAULT_VIA_DRILL_NM));
     let need = nm_to_mm(size_nm) / 2.0 + EDGE_SLACK_MM;
     let radius = nm_to_mm(size_nm) / 2.0;
-    let window = (reach_mm - REACH_MARGIN_MM).max(0.0);
-
     let mut ground: Vec<(f64, f64)> = board
         .vias
         .iter()
@@ -1635,6 +1657,7 @@ fn stitch(
     let mut out = Vec::new();
     let (mut unresolved, mut advisory) = (Vec::new(), Vec::new());
     for &(vx, vy, ref signal_net) in &signals {
+        let (reach_mm, window) = ground_nets.reach_and_window(signal_net, reach_mm);
         if ground
             .iter()
             .any(|g| (g.0 - vx).abs() <= reach_mm && (g.1 - vy).abs() <= reach_mm)
@@ -1762,23 +1785,19 @@ fn nearest_return_spot(
         .map(|i| f64::from(i) * RETURN_STEP_MM)
         .chain([-window, window])
         .collect();
-    let mut best: Option<(f64, (f64, f64))> = None;
-    for &dx in &offsets {
-        for &dy in &offsets {
-            let p = (from.0 + dx, from.1 + dy);
-            let distance = (p.0 - from.0).hypot(p.1 - from.1);
-            if best.is_some_and(|(d, _)| distance >= d) {
-                continue;
-            }
-            if ground.iter().all(|g| (g.0 - p.0).hypot(g.1 - p.1) >= apart)
-                && room(p)
-                && keepout.clear(p, radius)
-            {
-                best = Some((distance, p));
-            }
-        }
-    }
-    best.map(|(_, p)| p)
+    // Nearest first, and the first that fits is the answer: a wide window holds
+    // thousands of points and most calls find one close by.
+    let mut candidates: Vec<(f64, (f64, f64))> = offsets
+        .iter()
+        .flat_map(|&dx| offsets.iter().map(move |&dy| (dx, dy)))
+        .map(|(dx, dy)| (dx.hypot(dy), (from.0 + dx, from.1 + dy)))
+        .collect();
+    candidates.sort_by(|a, b| a.0.partial_cmp(&b.0).unwrap_or(std::cmp::Ordering::Equal));
+    candidates.into_iter().map(|(_, p)| p).find(|p| {
+        ground.iter().all(|g| (g.0 - p.0).hypot(g.1 - p.1) >= apart)
+            && room(*p)
+            && keepout.clear(*p, radius)
+    })
 }
 
 #[allow(clippy::cast_precision_loss)]
@@ -2723,6 +2742,45 @@ mod tests {
         assert!((strict.return_gap_mm(600_000, 300_000) - 0.45).abs() < 1e-9);
         assert!((declared.return_gap_mm(460_000, 200_000) - 0.127).abs() < 1e-9);
         assert!((ViaDeclarations::new().return_gap_mm(600_000, 300_000) - VIA_GAP_MM).abs() < 1e-9);
+    }
+
+    /// A net that declares a medium edge looks for its return via in a wider window:
+    /// a ground via 3 mm away serves it, where a fast net gets a new one beside it.
+    #[test]
+    fn a_medium_edge_net_is_served_by_a_ground_via_in_the_wider_window() {
+        let board = stitched_board(
+            r#"(via (at 13 10) (size 0.6) (drill 0.3) (layers "F.Cu" "B.Cu") (net 1))"#,
+        );
+        let fast = stitch(
+            &board,
+            REACH,
+            &[],
+            &Ground::default(),
+            &ViaDeclarations::new(),
+        );
+        assert_eq!(
+            fast.vias.len(),
+            1,
+            "a fast net wants a ground via within a dielectric height: {:?}",
+            fast.vias
+        );
+        let medium = Ground::default().with_medium(&["SIG".to_string()]);
+        let served = stitch(&board, REACH, &[], &medium, &ViaDeclarations::new());
+        assert!(
+            served.vias.is_empty() && served.unresolved.is_empty(),
+            "a medium net accepts the ground via 3 mm away: {:?}",
+            served.vias
+        );
+        let far = stitched_board(
+            r#"(via (at 17 10) (size 0.6) (drill 0.3) (layers "F.Cu" "B.Cu") (net 1))"#,
+        );
+        let beyond = stitch(&far, REACH, &[], &medium, &ViaDeclarations::new());
+        assert_eq!(
+            beyond.vias.len(),
+            1,
+            "a ground via 7 mm away is outside the medium window: {:?}",
+            beyond.vias
+        );
     }
 
     #[test]

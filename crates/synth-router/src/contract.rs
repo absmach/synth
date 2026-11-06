@@ -520,6 +520,10 @@ pub struct RouteRequest {
     /// it; `Some` lists any other net's missing return via as an advisory.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub return_via_critical_nets: Option<Vec<String>>,
+    /// The nets that declare `edge_rate medium` and that nothing else proves fast:
+    /// they keep the return via, and look for it in the wider medium-edge window.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub return_via_medium_nets: Vec<String>,
     /// Nets the design pins to copper layers (`netclass { layers … }`), by
     /// name, with the layers each may use. An engine that supports the
     /// constraint routes these on their layers before anything else and the
@@ -721,6 +725,7 @@ impl RouteRequest {
             routing_order: Vec::new(),
             ground_nets: Vec::new(),
             return_via_critical_nets: None,
+            return_via_medium_nets: Vec::new(),
             net_layers: Vec::new(),
         }
     }

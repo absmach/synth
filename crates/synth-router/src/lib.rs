@@ -398,6 +398,7 @@ fn finalize(
     if let Some(critical) = &request.return_via_critical_nets {
         ground = ground.with_critical(critical);
     }
+    ground = ground.with_medium(&request.return_via_medium_nets);
     // Where the process fills and caps a via in a pad and the board may use
     // one, a pad of a poured net that the router left joined to nothing gets
     // its plane via in the pad.

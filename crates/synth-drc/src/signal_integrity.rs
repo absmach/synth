@@ -505,11 +505,17 @@ pub fn check_return_path_vias(
         .max()
         .unwrap_or_else(|| mm_to_nm(0.6));
     let radius_nm = return_via_window_nm(radius_nm, via_pad_nm);
+    let medium = medium_net_ids(board);
     let mut out = Vec::new();
     for via in &routing.vias {
         if is_ground(via.net) {
             continue;
         }
+        let radius_nm = if medium.contains(&via.net) {
+            radius_nm.max(MEDIUM_EDGE_WINDOW_NM)
+        } else {
+            radius_nm
+        };
         let has_return = ground_vias.iter().any(|ground| {
             (ground.x_nm - via.at.x_nm).abs() <= radius_nm
                 && (ground.y_nm - via.at.y_nm).abs() <= radius_nm
@@ -600,7 +606,65 @@ pub(crate) fn net_name_or_pin_is_ground(board: &Board, net: &Net) -> bool {
 /// construction.
 #[must_use]
 pub fn return_path_critical_net_names(board: &Board) -> Vec<String> {
+    let (critical, _) = return_path_net_classes(board);
+    board
+        .nets
+        .iter()
+        .filter(|net| critical.contains(&net.id))
+        .map(|net| net.name.clone())
+        .collect()
+}
+
+/// The least window, in nanometres, in which a net that declares `edge_rate
+/// medium` looks for its ground return via. Edges no faster than 0.3 ns have
+/// their knee at 0.35 / 0.3 ns, about 1.2 GHz; a wavelength there in FR4 of
+/// relative permittivity 4.3 is about 124 mm, and a return via within a twentieth
+/// of it, 6 mm, keeps the loop short against the edge. The stackup's dielectric
+/// still sets the floor: the window is never narrower than a fast net's.
+pub const MEDIUM_EDGE_WINDOW_NM: i64 = 6_000_000;
+
+/// Names of the nets that declare `edge_rate medium` and that nothing else
+/// proves fast. They keep the return-via requirement, and look for the via in
+/// [`MEDIUM_EDGE_WINDOW_NM`].
+#[must_use]
+pub fn return_path_medium_net_names(board: &Board) -> Vec<String> {
+    medium_net_ids(board)
+        .iter()
+        .filter_map(|id| board.net(*id).map(|net| net.name.clone()))
+        .collect()
+}
+
+fn medium_net_ids(board: &Board) -> std::collections::BTreeSet<NetId> {
+    let medium: std::collections::BTreeSet<&str> = board
+        .netclasses
+        .iter()
+        .filter(|class| class.edge_rate == Some(synth_ir::EdgeRate::Medium))
+        .map(|class| class.name.as_str())
+        .collect();
+    let (_, proven_fast) = return_path_net_classes(board);
+    board
+        .nets
+        .iter()
+        .filter(|net| !proven_fast.contains(&net.id))
+        .filter(|net| {
+            net.netclass
+                .as_deref()
+                .is_some_and(|name| medium.contains(name))
+        })
+        .map(|net| net.id)
+        .collect()
+}
+
+/// The nets held to a return via, and among them the ones the design's pins
+/// prove fast.
+fn return_path_net_classes(
+    board: &Board,
+) -> (
+    std::collections::BTreeSet<NetId>,
+    std::collections::BTreeSet<NetId>,
+) {
     use synth_registry::{ElectricalType, PinCapability};
+    let mut proven_fast: std::collections::BTreeSet<NetId> = std::collections::BTreeSet::new();
     let slow: std::collections::BTreeSet<&str> = board
         .netclasses
         .iter()
@@ -681,21 +745,18 @@ pub fn return_path_critical_net_names(board: &Board) -> Vec<String> {
             });
         if rides_fast {
             critical.insert(net.id);
+            proven_fast.insert(net.id);
         }
     }
     for pair in &board.diff_pairs {
         for (_, leg) in board.diff_pair_legs(pair) {
             if let Some(net) = leg {
                 critical.insert(net.id);
+                proven_fast.insert(net.id);
             }
         }
     }
-    board
-        .nets
-        .iter()
-        .filter(|net| critical.contains(&net.id))
-        .map(|net| net.name.clone())
-        .collect()
+    (critical, proven_fast)
 }
 
 /// Whether a net or pin name is a ground: it contains `gnd` or `vss`, or is

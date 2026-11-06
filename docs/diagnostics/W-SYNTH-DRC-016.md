@@ -26,6 +26,16 @@ edge and an unclassified net stays blocking. One that is slow by declaration is
 listed in the route report's `advisories`, with the net and the position, and
 does not block.
 
+A net class may instead declare `edge_rate medium`: edges no faster than 0.3 ns.
+The net keeps the return-via requirement, but looks for the ground via within
+6 mm of the signal via, not one dielectric height. The 6 mm is a twentieth of
+the wavelength at the knee of a 0.3 ns edge (0.35 / 0.3 ns, about 1.2 GHz, in
+FR4 of relative permittivity 4.3, about 124 mm), a rule of thumb that PCB design
+guides give as a tenth to a twentieth of the wavelength. The stackup's thickest
+dielectric still sets the floor. The declaration is the design's claim: back it
+with the datasheet figures of the drivers on the net. A net whose pins prove a
+fast edge is never medium.
+
 A `slow` declaration cannot downgrade a net whose own pins prove a fast edge: a
 differential or clock pin, an RF or analog pin, a bare crystal's terminal, a
 declared `diff_pair`, or a switching node at an inductor stays blocking.
