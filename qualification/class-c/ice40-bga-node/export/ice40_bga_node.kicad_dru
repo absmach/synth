@@ -10,3 +10,19 @@
   (constraint annular_width (min 0.075mm))
   (constraint via_diameter (min 0.35mm))
   (condition "A.Type == 'Via' && A.Diameter <= 0.35mm"))
+(rule "netclass USB stays off In1.Cu"
+  (layer "In1.Cu")
+  (condition "A.NetClass == 'USB'")
+  (constraint disallow track))
+(rule "netclass USB stays off In2.Cu"
+  (layer "In2.Cu")
+  (condition "A.NetClass == 'USB'")
+  (constraint disallow track))
+(rule "netclass USB stays off In3.Cu"
+  (layer "In3.Cu")
+  (condition "A.NetClass == 'USB'")
+  (constraint disallow track))
+(rule "netclass USB stays off In4.Cu"
+  (layer "In4.Cu")
+  (condition "A.NetClass == 'USB'")
+  (constraint disallow track))

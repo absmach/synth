@@ -111,8 +111,8 @@ required = false
 [[pins]]
 name = "iot_198_gbin0"
 number = "B6"
-electrical_type = "bidirectional"
-capabilities = []
+electrical_type = "clock"
+capabilities = ["clock_output"]
 required = false
 
 [[pins]]

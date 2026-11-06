@@ -1,7 +1,7 @@
 {
     "$schema": "https://schemas.kicad.org/erc.v1.json",
     "coordinate_units": "mm",
-    "date": "2026-11-05T21:12:23",
+    "date": "2026-11-06T12:50:20",
     "ignored_checks": [
         {
             "description": "Global label only appears once in the schematic",
@@ -37,10 +37,10 @@
                         {
                             "description": "Symbol U1 Pin K5 [IOB_79, Bidirectional, Line]",
                             "pos": {
-                                "x": 0.3302,
-                                "y": 1.9304
+                                "x": 5.1562,
+                                "y": 1.1938
                             },
-                            "uuid": "77406127-00bd-43ae-93b3-ca04a44f9947"
+                            "uuid": "49cd3338-444a-4f96-83e4-29978b4c6352"
                         }
                     ],
                     "severity": "error",
@@ -52,10 +52,10 @@
                         {
                             "description": "Symbol U1 Pin L5 [IOB_81_GBIN5, Bidirectional, Line]",
                             "pos": {
-                                "x": 0.3302,
-                                "y": 1.9558
+                                "x": 5.1562,
+                                "y": 1.2192
                             },
-                            "uuid": "76410dd3-835a-4562-aeaa-6a1025625a39"
+                            "uuid": "cfa86c37-3fef-4e7b-b83e-78fea3591b92"
                         }
                     ],
                     "severity": "error",
@@ -67,10 +67,10 @@
                         {
                             "description": "Symbol U1 Pin K6 [IOB_82_GBIN4, Bidirectional, Line]",
                             "pos": {
-                                "x": 0.3302,
-                                "y": 1.9812
+                                "x": 5.1562,
+                                "y": 1.2446
                             },
-                            "uuid": "afa5f6c4-f741-48e7-a127-c077887ab606"
+                            "uuid": "a0f796ee-638f-4dd6-b4d4-308214a01730"
                         }
                     ],
                     "severity": "error",
@@ -82,10 +82,10 @@
                         {
                             "description": "Symbol U1 Pin J7 [IOB_86, Bidirectional, Line]",
                             "pos": {
-                                "x": 0.3302,
-                                "y": 2.0066
+                                "x": 5.1562,
+                                "y": 1.27
                             },
-                            "uuid": "e124bf56-8e04-40d8-9ff9-40b094192b79"
+                            "uuid": "bd089b57-8978-42e6-82f5-f1c323ffe05d"
                         }
                     ],
                     "severity": "error",
@@ -97,10 +97,10 @@
                         {
                             "description": "Symbol U1 Pin H7 [IOB_87, Bidirectional, Line]",
                             "pos": {
-                                "x": 0.3302,
-                                "y": 2.032
+                                "x": 5.1562,
+                                "y": 1.2954
                             },
-                            "uuid": "8fc4deed-e1c1-42b6-a785-e5f88cf0e7e6"
+                            "uuid": "e2c48405-a098-48ee-8fb4-9d8b8edabd21"
                         }
                     ],
                     "severity": "error",
@@ -112,10 +112,10 @@
                         {
                             "description": "Symbol U1 Pin K7 [IOB_89, Bidirectional, Line]",
                             "pos": {
-                                "x": 0.3302,
-                                "y": 2.0574
+                                "x": 5.1562,
+                                "y": 1.3208
                             },
-                            "uuid": "1321c3f7-adb4-4e6b-ad13-9ac789cf589b"
+                            "uuid": "b28addfb-3612-4074-91f1-ebfcbdcfd704"
                         }
                     ],
                     "severity": "error",
@@ -127,10 +127,10 @@
                         {
                             "description": "Symbol U1 Pin J8 [IOB_91, Bidirectional, Line]",
                             "pos": {
-                                "x": 0.3302,
-                                "y": 2.0828
+                                "x": 5.1562,
+                                "y": 1.3462
                             },
-                            "uuid": "6964261b-7a47-4596-a532-cee86a2ea003"
+                            "uuid": "d2791a3d-5125-43ed-b682-d26a2a7c8367"
                         }
                     ],
                     "severity": "error",
@@ -142,10 +142,10 @@
                         {
                             "description": "Symbol U1 Pin F4 [IOL_13A, Bidirectional, Line]",
                             "pos": {
-                                "x": 0.3556,
-                                "y": 2.0828
+                                "x": 5.1816,
+                                "y": 1.3462
                             },
-                            "uuid": "ae5a0113-c0df-403c-9525-f05530fb875e"
+                            "uuid": "790c8ec5-3907-4ab3-90d4-e5d3b6847408"
                         }
                     ],
                     "severity": "error",
@@ -157,10 +157,10 @@
                         {
                             "description": "Symbol U1 Pin F3 [IOL_13B_GBIN7, Bidirectional, Line]",
                             "pos": {
-                                "x": 0.3556,
-                                "y": 2.1082
+                                "x": 5.1816,
+                                "y": 1.3716
                             },
-                            "uuid": "c4a08f7f-e39d-4d19-aea5-635077bf2e18"
+                            "uuid": "bd2e83b7-9f08-418d-b833-b9351af07754"
                         }
                     ],
                     "severity": "error",
@@ -172,10 +172,10 @@
                         {
                             "description": "Symbol U1 Pin G1 [IOL_14A_GBIN6, Bidirectional, Line]",
                             "pos": {
-                                "x": 0.3556,
-                                "y": 2.1336
+                                "x": 5.1816,
+                                "y": 1.397
                             },
-                            "uuid": "a0da4e6d-bd2d-4e1b-980f-21cbf90e744e"
+                            "uuid": "f44d34e7-58b6-4ed2-bd33-9696278df8f9"
                         }
                     ],
                     "severity": "error",
@@ -187,10 +187,10 @@
                         {
                             "description": "Symbol U1 Pin G2 [IOL_14B, Bidirectional, Line]",
                             "pos": {
-                                "x": 0.3556,
-                                "y": 2.159
+                                "x": 5.1816,
+                                "y": 1.4224
                             },
-                            "uuid": "761b53d4-02a0-4cc8-afc5-52935661605c"
+                            "uuid": "df29aa54-0cf3-4f0e-879a-566d71301095"
                         }
                     ],
                     "severity": "error",
@@ -202,10 +202,10 @@
                         {
                             "description": "Symbol U1 Pin G3 [IOL_17A, Bidirectional, Line]",
                             "pos": {
-                                "x": 0.3556,
-                                "y": 2.1844
+                                "x": 5.1816,
+                                "y": 1.4478
                             },
-                            "uuid": "59cc8078-71b5-40ad-961f-605eabaa9ee8"
+                            "uuid": "9cb5a983-6b8c-4f13-b031-dd98e6438221"
                         }
                     ],
                     "severity": "error",
@@ -217,10 +217,10 @@
                         {
                             "description": "Symbol U1 Pin H3 [IOL_17B, Bidirectional, Line]",
                             "pos": {
-                                "x": 0.3556,
-                                "y": 2.2098
+                                "x": 5.1816,
+                                "y": 1.4732
                             },
-                            "uuid": "c4306c07-e6cf-40f1-af8f-8bf28241ce43"
+                            "uuid": "256337dd-3ca6-49d1-8e33-dfe6de1a2f2f"
                         }
                     ],
                     "severity": "error",
@@ -232,10 +232,10 @@
                         {
                             "description": "Symbol U1 Pin H1 [IOL_18A, Bidirectional, Line]",
                             "pos": {
-                                "x": 0.3556,
-                                "y": 2.2352
+                                "x": 5.1816,
+                                "y": 1.4986
                             },
-                            "uuid": "dbf27556-0467-4933-9794-f66d34712ed3"
+                            "uuid": "205143eb-6177-4ecf-8428-2e48b6123260"
                         }
                     ],
                     "severity": "error",
@@ -247,10 +247,10 @@
                         {
                             "description": "Symbol U1 Pin H2 [IOL_18B, Bidirectional, Line]",
                             "pos": {
-                                "x": 0.3556,
-                                "y": 2.2606
+                                "x": 5.1816,
+                                "y": 1.524
                             },
-                            "uuid": "4c60f6ee-b6cc-49f2-b50f-73a7b9804a09"
+                            "uuid": "454ae24a-74b4-4dec-9530-654ebe435d32"
                         }
                     ],
                     "severity": "error",
@@ -262,10 +262,10 @@
                         {
                             "description": "Symbol U1 Pin J1 [IOL_23A, Bidirectional, Line]",
                             "pos": {
-                                "x": 0.3556,
-                                "y": 2.286
+                                "x": 5.1816,
+                                "y": 1.5494
                             },
-                            "uuid": "99ad8e2c-d277-490b-ab9e-9e521b5f0146"
+                            "uuid": "7f735117-30eb-4f67-a3c1-8e21749e2241"
                         }
                     ],
                     "severity": "error",
@@ -277,10 +277,10 @@
                         {
                             "description": "Symbol U1 Pin K1 [IOL_23B, Bidirectional, Line]",
                             "pos": {
-                                "x": 0.3556,
-                                "y": 2.3114
+                                "x": 5.1816,
+                                "y": 1.5748
                             },
-                            "uuid": "ab093759-68c5-4214-a811-1132b0b83b28"
+                            "uuid": "a6ad6254-e18c-4e5e-882e-cf570a85ec8c"
                         }
                     ],
                     "severity": "error",
@@ -292,10 +292,10 @@
                         {
                             "description": "Symbol U1 Pin K2 [IOL_25A, Bidirectional, Line]",
                             "pos": {
-                                "x": 0.3556,
-                                "y": 2.3368
+                                "x": 5.1816,
+                                "y": 1.6002
                             },
-                            "uuid": "0d07599b-2607-4ffd-9b65-5b3ef23c3e18"
+                            "uuid": "a1bd8347-f66f-4787-a3fe-5dbe1dcfe9b9"
                         }
                     ],
                     "severity": "error",
@@ -307,10 +307,10 @@
                         {
                             "description": "Symbol U1 Pin J2 [IOL_25B, Bidirectional, Line]",
                             "pos": {
-                                "x": 0.3556,
-                                "y": 2.3622
+                                "x": 5.1816,
+                                "y": 1.6256
                             },
-                            "uuid": "537019c2-5e7b-4e75-9027-b894eb71a6d0"
+                            "uuid": "52accb82-1d81-48ed-8097-410e06a6b5a3"
                         }
                     ],
                     "severity": "error",
@@ -322,10 +322,10 @@
                         {
                             "description": "Symbol U1 Pin B10 [VPP_FAST, Power input, Line]",
                             "pos": {
-                                "x": 0.4572,
-                                "y": 1.9558
+                                "x": 5.2832,
+                                "y": 1.2192
                             },
-                            "uuid": "2ee74e1b-baf5-44fe-b4a1-98a48bc38bdb"
+                            "uuid": "ab18f810-8b57-458e-9743-3af833ad61d0"
                         }
                     ],
                     "severity": "error",
@@ -337,10 +337,10 @@
                         {
                             "description": "Symbol U1 Pin B10 [VPP_FAST, Power input, Line]",
                             "pos": {
-                                "x": 0.4572,
-                                "y": 1.9558
+                                "x": 5.2832,
+                                "y": 1.2192
                             },
-                            "uuid": "2ee74e1b-baf5-44fe-b4a1-98a48bc38bdb"
+                            "uuid": "ab18f810-8b57-458e-9743-3af833ad61d0"
                         }
                     ],
                     "severity": "error",
@@ -350,12 +350,12 @@
                     "description": "Pin not connected",
                     "items": [
                         {
-                            "description": "Symbol #FLG9650 Pin 1 [Power output, Line]",
+                            "description": "Symbol #FLG8881 Pin 1 [Power output, Line]",
                             "pos": {
-                                "x": 0.6604,
-                                "y": 1.5494
+                                "x": 5.4864,
+                                "y": 0.8128
                             },
-                            "uuid": "827ef8f0-67d7-4bb5-b8af-595da4304045"
+                            "uuid": "0c7b185a-f239-478c-8a8c-0899e7f7c1f9"
                         }
                     ],
                     "severity": "error",
@@ -367,14 +367,29 @@
                         {
                             "description": "Symbol #PWR1727 Pin 1 [Power input, Line]",
                             "pos": {
-                                "x": 3.2766,
-                                "y": 0.9779
+                                "x": 6.8834,
+                                "y": 0.2413
                             },
-                            "uuid": "782501df-a13a-4fcf-bbb9-94254f2f6b3e"
+                            "uuid": "d25bf366-1196-4085-a491-84a24da6acd4"
                         }
                     ],
                     "severity": "error",
                     "type": "power_pin_not_driven"
+                },
+                {
+                    "description": "Symbol 'Si2301CDS' not found in symbol library 'Transistor_FET'",
+                    "items": [
+                        {
+                            "description": "Symbol Q1 [Si2301CDS]",
+                            "pos": {
+                                "x": 1.905,
+                                "y": 0.5588
+                            },
+                            "uuid": "200cbc40-f76d-585a-b863-a575cd35c76b"
+                        }
+                    ],
+                    "severity": "warning",
+                    "type": "lib_symbol_issues"
                 },
                 {
                     "description": "Both FA4 and LED_U2_R are attached to the same items; FA4 will be used in the netlist",
@@ -382,16 +397,16 @@
                         {
                             "description": "Global Label 'FA4'",
                             "pos": {
-                                "x": 0.3048,
-                                "y": 1.8288
+                                "x": 5.1308,
+                                "y": 1.0922
                             },
                             "uuid": "3283cbad-7f08-5eef-a3b3-e110d9b5b544"
                         },
                         {
                             "description": "Global Label 'LED_U2_R'",
                             "pos": {
-                                "x": 0.2794,
-                                "y": 1.8288
+                                "x": 5.1054,
+                                "y": 1.0922
                             },
                             "uuid": "4d348a72-043d-5686-bc43-996aa9aa281f"
                         }
@@ -405,8 +420,8 @@
                         {
                             "description": "No Connect",
                             "pos": {
-                                "x": 0.3302,
-                                "y": 1.4478
+                                "x": 5.1562,
+                                "y": 0.7112
                             },
                             "uuid": "0d1e07a4-050f-5620-824e-231c59ab6989"
                         }
@@ -420,8 +435,8 @@
                         {
                             "description": "No Connect",
                             "pos": {
-                                "x": 0.3302,
-                                "y": 1.4732
+                                "x": 5.1562,
+                                "y": 0.7366
                             },
                             "uuid": "57557918-9f7a-5c35-8b90-f563917af444"
                         }
@@ -435,8 +450,8 @@
                         {
                             "description": "No Connect",
                             "pos": {
-                                "x": 0.3302,
-                                "y": 1.4986
+                                "x": 5.1562,
+                                "y": 0.762
                             },
                             "uuid": "2499d842-09c7-5a25-a8ff-ec02d667a582"
                         }
@@ -450,8 +465,8 @@
                         {
                             "description": "No Connect",
                             "pos": {
-                                "x": 0.3302,
-                                "y": 1.524
+                                "x": 5.1562,
+                                "y": 0.7874
                             },
                             "uuid": "74c71abe-29be-53e3-8de2-1acca3d7732a"
                         }
@@ -465,8 +480,8 @@
                         {
                             "description": "No Connect",
                             "pos": {
-                                "x": 0.3302,
-                                "y": 1.5494
+                                "x": 5.1562,
+                                "y": 0.8128
                             },
                             "uuid": "d3faad0e-9a89-57ca-acb9-a94f1f3b50c0"
                         }
@@ -480,8 +495,8 @@
                         {
                             "description": "No Connect",
                             "pos": {
-                                "x": 0.3302,
-                                "y": 1.651
+                                "x": 5.1562,
+                                "y": 0.9144
                             },
                             "uuid": "75f228d0-6c59-59cb-9b66-a6ee4d90cc25"
                         }
@@ -495,8 +510,8 @@
                         {
                             "description": "No Connect",
                             "pos": {
-                                "x": 0.3302,
-                                "y": 1.6764
+                                "x": 5.1562,
+                                "y": 0.9398
                             },
                             "uuid": "dd409923-8e57-5fed-b245-9390ba029b63"
                         }
@@ -510,8 +525,8 @@
                         {
                             "description": "No Connect",
                             "pos": {
-                                "x": 0.3556,
-                                "y": 1.3462
+                                "x": 5.1816,
+                                "y": 0.6096
                             },
                             "uuid": "81dacc81-0ca1-589a-bd04-eeba2e1a5c02"
                         }
@@ -525,8 +540,8 @@
                         {
                             "description": "No Connect",
                             "pos": {
-                                "x": 0.3556,
-                                "y": 1.3716
+                                "x": 5.1816,
+                                "y": 0.635
                             },
                             "uuid": "6ae67dda-81d5-5d07-b2a8-1e162075d124"
                         }
@@ -540,8 +555,8 @@
                         {
                             "description": "No Connect",
                             "pos": {
-                                "x": 0.3556,
-                                "y": 1.397
+                                "x": 5.1816,
+                                "y": 0.6604
                             },
                             "uuid": "27a83c46-137c-5105-a8ef-a35a880ea186"
                         }
@@ -555,16 +570,16 @@
                         {
                             "description": "Symbol U1 Pin J11 [IOR_114, Bidirectional, Line]",
                             "pos": {
-                                "x": 0.3556,
-                                "y": 1.5494
+                                "x": 5.1816,
+                                "y": 0.8128
                             },
-                            "uuid": "2c156e99-8e46-423b-accf-340336062e47"
+                            "uuid": "844db4fd-7afc-44e1-b6e8-2e9d55b9caea"
                         },
                         {
                             "description": "No Connect",
                             "pos": {
-                                "x": 0.3556,
-                                "y": 1.5494
+                                "x": 5.1816,
+                                "y": 0.8128
                             },
                             "uuid": "46321d3a-d9f9-59fc-8f8e-598a6d3ad786"
                         }
@@ -578,16 +593,16 @@
                         {
                             "description": "Symbol U1 Pin K11 [IOR_115, Bidirectional, Line]",
                             "pos": {
-                                "x": 0.3556,
-                                "y": 1.5748
+                                "x": 5.1816,
+                                "y": 0.8382
                             },
-                            "uuid": "c0d27f0e-3034-4dbe-9a53-41edf05fb1e9"
+                            "uuid": "04e9fec3-ce61-4ceb-86e3-cc479594ef66"
                         },
                         {
                             "description": "No Connect",
                             "pos": {
-                                "x": 0.3556,
-                                "y": 1.5748
+                                "x": 5.1816,
+                                "y": 0.8382
                             },
                             "uuid": "4555399f-5178-5d62-8576-993740a21e28"
                         }
@@ -601,16 +616,16 @@
                         {
                             "description": "Symbol U1 Pin H10 [IOR_116, Bidirectional, Line]",
                             "pos": {
-                                "x": 0.3556,
-                                "y": 1.6002
+                                "x": 5.1816,
+                                "y": 0.8636
                             },
-                            "uuid": "99a18ab3-9e2a-4572-b8cd-101ef6116486"
+                            "uuid": "de2b2125-4b90-436a-afae-a6945bdab49b"
                         },
                         {
                             "description": "No Connect",
                             "pos": {
-                                "x": 0.3556,
-                                "y": 1.6002
+                                "x": 5.1816,
+                                "y": 0.8636
                             },
                             "uuid": "de28fb68-18ea-5c9a-9c5f-b76ab0e9de5e"
                         }
@@ -624,16 +639,16 @@
                         {
                             "description": "Symbol U1 Pin J10 [IOR_117, Bidirectional, Line]",
                             "pos": {
-                                "x": 0.3556,
-                                "y": 1.6256
+                                "x": 5.1816,
+                                "y": 0.889
                             },
-                            "uuid": "df4eaf97-ebea-46cd-99ec-d3626ac4ef43"
+                            "uuid": "d9f3134f-3dd6-467f-a3d3-e220f998311a"
                         },
                         {
                             "description": "No Connect",
                             "pos": {
-                                "x": 0.3556,
-                                "y": 1.6256
+                                "x": 5.1816,
+                                "y": 0.889
                             },
                             "uuid": "c132828e-dbde-59c9-abab-3b6630beca5f"
                         }
@@ -647,16 +662,16 @@
                         {
                             "description": "Symbol U1 Pin G8 [IOR_118, Bidirectional, Line]",
                             "pos": {
-                                "x": 0.3556,
-                                "y": 1.651
+                                "x": 5.1816,
+                                "y": 0.9144
                             },
-                            "uuid": "3afa522d-9d1a-4e23-9756-e7146db255ab"
+                            "uuid": "fb115a55-b0ed-4892-b8ef-b3b6dbe314b4"
                         },
                         {
                             "description": "No Connect",
                             "pos": {
-                                "x": 0.3556,
-                                "y": 1.651
+                                "x": 5.1816,
+                                "y": 0.9144
                             },
                             "uuid": "ae9c686c-66db-59c3-8eb7-cf1e3331c30b"
                         }
@@ -670,16 +685,16 @@
                         {
                             "description": "Symbol U1 Pin H11 [IOR_119, Bidirectional, Line]",
                             "pos": {
-                                "x": 0.3556,
-                                "y": 1.6764
+                                "x": 5.1816,
+                                "y": 0.9398
                             },
-                            "uuid": "9410264d-d6d7-4218-bb9f-dea12c67ec83"
+                            "uuid": "fc5a941b-ac30-40b4-b391-6bad7abb2cd6"
                         },
                         {
                             "description": "No Connect",
                             "pos": {
-                                "x": 0.3556,
-                                "y": 1.6764
+                                "x": 5.1816,
+                                "y": 0.9398
                             },
                             "uuid": "e116d5d8-a82e-504a-9f65-bb5cc4d9ec7d"
                         }
@@ -693,16 +708,16 @@
                         {
                             "description": "Symbol U1 Pin G10 [IOR_120, Bidirectional, Line]",
                             "pos": {
-                                "x": 0.3556,
-                                "y": 1.7018
+                                "x": 5.1816,
+                                "y": 0.9652
                             },
-                            "uuid": "34a11918-6164-4fc6-87b4-3e3a2730e086"
+                            "uuid": "d4477f61-d551-4fea-8c1c-27ca4a875e2f"
                         },
                         {
                             "description": "No Connect",
                             "pos": {
-                                "x": 0.3556,
-                                "y": 1.7018
+                                "x": 5.1816,
+                                "y": 0.9652
                             },
                             "uuid": "f8b7b9e6-ba41-557e-ac8c-532a6b97baec"
                         }
@@ -716,16 +731,16 @@
                         {
                             "description": "Symbol U1 Pin G9 [IOR_128, Bidirectional, Line]",
                             "pos": {
-                                "x": 0.3556,
-                                "y": 1.7272
+                                "x": 5.1816,
+                                "y": 0.9906
                             },
-                            "uuid": "e0ef2833-bbea-459c-8b71-14b53ae4bcd3"
+                            "uuid": "00b3927d-3b3a-4b7c-aa1f-b11991d2ea3d"
                         },
                         {
                             "description": "No Connect",
                             "pos": {
-                                "x": 0.3556,
-                                "y": 1.7272
+                                "x": 5.1816,
+                                "y": 0.9906
                             },
                             "uuid": "4fb0fc54-f766-5c31-8d81-e85ea4c7ee22"
                         }
@@ -739,16 +754,16 @@
                         {
                             "description": "Symbol U1 Pin F9 [IOR_137, Bidirectional, Line]",
                             "pos": {
-                                "x": 0.3556,
-                                "y": 1.8034
+                                "x": 5.1816,
+                                "y": 1.0668
                             },
-                            "uuid": "ecdbb50a-5230-4977-bf8b-3840a6b8c568"
+                            "uuid": "35385d89-99fc-45a6-b230-808b7a777008"
                         },
                         {
                             "description": "No Connect",
                             "pos": {
-                                "x": 0.3556,
-                                "y": 1.8034
+                                "x": 5.1816,
+                                "y": 1.0668
                             },
                             "uuid": "e8f21d8f-807d-5652-a7c0-af65fbaa13a9"
                         }
@@ -762,16 +777,16 @@
                         {
                             "description": "Symbol U1 Pin E10 [IOR_141_GBIN2, Bidirectional, Line]",
                             "pos": {
-                                "x": 0.3556,
-                                "y": 1.8542
+                                "x": 5.1816,
+                                "y": 1.1176
                             },
-                            "uuid": "f1869e42-7bf4-4211-81cd-e95fd491131d"
+                            "uuid": "5fbd52e5-97bf-470a-886b-236b865b1e70"
                         },
                         {
                             "description": "No Connect",
                             "pos": {
-                                "x": 0.3556,
-                                "y": 1.8542
+                                "x": 5.1816,
+                                "y": 1.1176
                             },
                             "uuid": "63f7231d-7122-54c5-bcb2-52cc422b5586"
                         }
@@ -785,16 +800,16 @@
                         {
                             "description": "Symbol U1 Pin E9 [IOR_144, Bidirectional, Line]",
                             "pos": {
-                                "x": 0.3556,
-                                "y": 1.8796
+                                "x": 5.1816,
+                                "y": 1.143
                             },
-                            "uuid": "6fac8edd-786e-4a6b-b199-1b44ee47b860"
+                            "uuid": "c4841501-172b-4b5e-8136-1f3d9349fd99"
                         },
                         {
                             "description": "No Connect",
                             "pos": {
-                                "x": 0.3556,
-                                "y": 1.8796
+                                "x": 5.1816,
+                                "y": 1.143
                             },
                             "uuid": "d9821df8-f1fd-5e1a-bfd7-6aa4952a5463"
                         }
@@ -808,16 +823,16 @@
                         {
                             "description": "Symbol U1 Pin E8 [IOR_146, Bidirectional, Line]",
                             "pos": {
-                                "x": 0.3556,
-                                "y": 1.905
+                                "x": 5.1816,
+                                "y": 1.1684
                             },
-                            "uuid": "c86296ff-bc36-4ed7-a2fc-688bceabd408"
+                            "uuid": "9da0d689-9cfa-4673-9b0f-5f3b1ff8fc6a"
                         },
                         {
                             "description": "No Connect",
                             "pos": {
-                                "x": 0.3556,
-                                "y": 1.905
+                                "x": 5.1816,
+                                "y": 1.1684
                             },
                             "uuid": "80051c0c-a8e5-54ef-9021-6a387ef2fa38"
                         }
@@ -831,16 +846,16 @@
                         {
                             "description": "Symbol U1 Pin D9 [IOR_147, Bidirectional, Line]",
                             "pos": {
-                                "x": 0.3556,
-                                "y": 1.9304
+                                "x": 5.1816,
+                                "y": 1.1938
                             },
-                            "uuid": "037ef87c-dfdd-48b5-90cd-8fd2ae0d8a55"
+                            "uuid": "10df7d39-fb3f-4d38-9901-595d7c2cd150"
                         },
                         {
                             "description": "No Connect",
                             "pos": {
-                                "x": 0.3556,
-                                "y": 1.9304
+                                "x": 5.1816,
+                                "y": 1.1938
                             },
                             "uuid": "83120da8-ec72-578c-83e4-bed7febdefe7"
                         }
@@ -854,16 +869,16 @@
                         {
                             "description": "Symbol U1 Pin E11 [IOR_148, Bidirectional, Line]",
                             "pos": {
-                                "x": 0.3556,
-                                "y": 1.9558
+                                "x": 5.1816,
+                                "y": 1.2192
                             },
-                            "uuid": "7c1edc02-abe6-4aca-a1cf-b96d81e50aa2"
+                            "uuid": "54416e6d-002a-4637-89e8-5b854c183e2e"
                         },
                         {
                             "description": "No Connect",
                             "pos": {
-                                "x": 0.3556,
-                                "y": 1.9558
+                                "x": 5.1816,
+                                "y": 1.2192
                             },
                             "uuid": "c48ccfe6-b4ae-50b1-9fca-68bc2d47e682"
                         }
@@ -877,8 +892,8 @@
                         {
                             "description": "Vertical Wire, length 0.0254 mm",
                             "pos": {
-                                "x": 0.4572,
-                                "y": 1.4478
+                                "x": 5.2832,
+                                "y": 0.7112
                             },
                             "uuid": "3c3dc30c-2441-5cd9-a8bd-5e003d4bdb4b"
                         }
@@ -892,8 +907,8 @@
                         {
                             "description": "Symbol U1 [ICE40HX4K-BG121]",
                             "pos": {
-                                "x": 0.4826,
-                                "y": 1.6256
+                                "x": 5.3086,
+                                "y": 0.889
                             },
                             "uuid": "360e8fb8-6688-5cbb-9d39-9b141e3fa320"
                         }
@@ -907,8 +922,8 @@
                         {
                             "description": "Symbol U1 [ICE40HX4K-BG121]",
                             "pos": {
-                                "x": 0.4826,
-                                "y": 1.7526
+                                "x": 5.3086,
+                                "y": 1.016
                             },
                             "uuid": "590cffad-7f94-50ef-a47d-6c8ee3978fc3"
                         }
@@ -922,8 +937,8 @@
                         {
                             "description": "Symbol U1 [ICE40HX4K-BG121]",
                             "pos": {
-                                "x": 0.4826,
-                                "y": 1.8796
+                                "x": 5.3086,
+                                "y": 1.143
                             },
                             "uuid": "99998c9e-539c-5a91-b650-9e4483afd013"
                         }
@@ -937,8 +952,8 @@
                         {
                             "description": "Symbol U1 [ICE40HX4K-BG121]",
                             "pos": {
-                                "x": 0.4826,
-                                "y": 2.0066
+                                "x": 5.3086,
+                                "y": 1.27
                             },
                             "uuid": "fe2f2ceb-79c4-5b14-91b9-ab5a97be68a1"
                         }
@@ -952,29 +967,14 @@
                         {
                             "description": "Symbol U1 [ICE40HX4K-BG121]",
                             "pos": {
-                                "x": 0.4826,
-                                "y": 2.1336
+                                "x": 5.3086,
+                                "y": 1.397
                             },
                             "uuid": "f46f0cb6-53b4-5f90-a71c-b275f1574e86"
                         }
                     ],
                     "severity": "warning",
                     "type": "lib_symbol_mismatch"
-                },
-                {
-                    "description": "Symbol 'Si2301CDS' not found in symbol library 'Transistor_FET'",
-                    "items": [
-                        {
-                            "description": "Symbol Q1 [Si2301CDS]",
-                            "pos": {
-                                "x": 1.7018,
-                                "y": 0.3048
-                            },
-                            "uuid": "200cbc40-f76d-585a-b863-a575cd35c76b"
-                        }
-                    ],
-                    "severity": "warning",
-                    "type": "lib_symbol_issues"
                 }
             ]
         }
