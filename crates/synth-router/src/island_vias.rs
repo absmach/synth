@@ -1797,20 +1797,72 @@ fn uuid_for(via: &TieVia) -> String {
 ///
 /// # Errors
 /// Returns why the board could not be read or written.
-#[allow(clippy::cast_precision_loss)]
 pub fn move_vias_off_pads(candidate: &Path) -> Result<usize, String> {
+    move_vias_off_pads_with(candidate, false)
+}
+
+/// [`move_vias_off_pads`] for a board that may use via-in-pad: a via in a pad of
+/// a ball grid is the pad's escape and stays, and a via in any other pad is moved
+/// off it, since only the ball grid's land is sized for the filled and capped via.
+///
+/// # Errors
+/// As [`move_vias_off_pads`].
+pub fn move_vias_off_component_pads(candidate: &Path) -> Result<usize, String> {
+    move_vias_off_pads_with(candidate, true)
+}
+
+/// The footprints that are a ball grid: eight or more pads in three or more rows
+/// and columns at a pitch of 1.3 mm or finer. The same test the escape stage uses.
+fn grid_footprints(board: &PcbBoard) -> BTreeSet<String> {
+    let mut by_footprint: BTreeMap<&str, Vec<(i64, i64)>> = BTreeMap::new();
+    for pad in board.pads() {
+        by_footprint
+            .entry(pad.footprint.as_str())
+            .or_default()
+            .push((pad.at.x_nm / 10_000, pad.at.y_nm / 10_000));
+    }
+    let pitch_ok = |values: &mut Vec<i64>| {
+        values.sort_unstable();
+        values.dedup();
+        values.len() >= 3
+            && values
+                .windows(2)
+                .map(|w| w[1] - w[0])
+                .filter(|gap| *gap > 5)
+                .min()
+                .is_some_and(|gap| gap <= 130)
+    };
+    by_footprint
+        .into_iter()
+        .filter(|(_, pads)| pads.len() >= 8)
+        .filter(|(_, pads)| {
+            pitch_ok(&mut pads.iter().map(|p| p.0).collect())
+                && pitch_ok(&mut pads.iter().map(|p| p.1).collect())
+        })
+        .map(|(name, _)| name.to_string())
+        .collect()
+}
+
+#[allow(clippy::cast_precision_loss)]
+fn move_vias_off_pads_with(candidate: &Path, spare_grids: bool) -> Result<usize, String> {
     let text = std::fs::read_to_string(candidate)
         .map_err(|e| format!("could not read {}: {e}", candidate.display()))?;
     let board = PcbBoard::parse(&text).map_err(|e| e.to_string())?;
     let mut out = text.clone();
     let mut moved = 0;
     let mut taken: Vec<((f64, f64), f64)> = Vec::new();
+    let grids = if spare_grids {
+        grid_footprints(&board)
+    } else {
+        BTreeSet::new()
+    };
     for via in &board.vias {
         let Some(net) = net_of(&board, via.net, via.net_name.as_ref()) else {
             continue;
         };
         let in_pad = board.pads().any(|pad| {
             pad.net == via.net
+                && !grids.contains(&pad.footprint)
                 && (pad.kind == "thru_hole" || pad.layers.iter().any(|l| via.layers.contains(l)))
                 && pad.signed_distance_nm(via.at) <= (via.drill_nm / 2) as f64
         });

@@ -515,7 +515,7 @@ fn repair_vias_in_pads(
     policy: &crate::contract::FabricationPolicy,
 ) -> Result<usize, String> {
     if policy.allow_via_in_pad {
-        return Ok(0);
+        return island_vias::move_vias_off_component_pads(candidate);
     }
     island_vias::move_vias_off_pads(candidate)
 }
@@ -860,17 +860,55 @@ mod via_in_pad_repair_tests {
         path
     }
 
-    /// Where the board may use via-in-pad the via is the pad's connection, so
-    /// it stays; moving it would leave the pad joined to nothing.
+    /// A ball grid's pad takes its via in the pad: the via is the pad's escape, so
+    /// it stays where via-in-pad is allowed.
     #[test]
-    fn a_via_in_a_pad_stays_where_via_in_pad_is_allowed() {
-        let path = board("allowed");
+    fn a_via_in_a_ball_grid_pad_stays_where_via_in_pad_is_allowed() {
+        let pads = (0..9)
+            .map(|i| {
+                let (row, col) = (i / 3, i % 3);
+                let centre = row == 1 && col == 1;
+                format!(
+                    "(pad \"{}\" smd circle (at {} {}) (size 0.35 0.35) (layers \"F.Cu\") (net {} \"{}\"))",
+                    i + 1,
+                    f64::from(col) * 0.8,
+                    f64::from(row) * 0.8,
+                    if centre { 1 } else { 2 },
+                    if centre { "GND" } else { "SIG" },
+                )
+            })
+            .collect::<Vec<String>>()
+            .concat();
+        let text = format!(
+            r#"(kicad_pcb
+              (layers (0 "F.Cu" signal) (2 "B.Cu" signal))
+              (net 0 "") (net 1 "GND") (net 2 "SIG")
+              (footprint "U" (at 10 10) (layer "F.Cu") {pads})
+              (via (at 10.8 10.8) (size 0.35) (drill 0.2) (layers "F.Cu" "B.Cu") (net 1))
+            )"#
+        );
+        let dir = std::env::temp_dir().join(format!("via-in-grid-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).expect("scratch");
+        let path = dir.join("board.kicad_pcb");
+        std::fs::write(&path, &text).expect("board");
         let policy = FabricationPolicy {
             allow_via_in_pad: true,
             ..FabricationPolicy::default()
         };
         assert_eq!(repair_vias_in_pads(&path, &policy), Ok(0));
-        assert_eq!(std::fs::read_to_string(&path).expect("read"), VIA_IN_PAD);
+        assert_eq!(std::fs::read_to_string(&path).expect("read"), text);
+    }
+
+    /// A via in an ordinary component pad is moved off it even where via-in-pad is
+    /// allowed: only a ball grid's land is sized for a filled and capped via.
+    #[test]
+    fn a_via_in_a_component_pad_is_moved_even_where_via_in_pad_is_allowed() {
+        let path = board("component");
+        let policy = FabricationPolicy {
+            allow_via_in_pad: true,
+            ..FabricationPolicy::default()
+        };
+        assert_eq!(repair_vias_in_pads(&path, &policy), Ok(1));
     }
 
     /// Where it may not, the gate refuses it and the repair still moves it.
