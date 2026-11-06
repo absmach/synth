@@ -1562,15 +1562,18 @@ fn stitch(
     ground.extend(planned.iter().map(|via| (via.at.x_mm(), via.at.y_mm())));
 
     let copper = board.copper_layers();
-    let (Some(first), Some(last)) = (copper.first(), copper.last()) else {
+    if copper.len() < 2 {
         return none();
-    };
+    }
     let room = |layer: &str, p: (f64, f64)| -> bool {
         regions
             .iter()
             .any(|r| r.layer == layer && r.contains(p) && r.edge_distance(p) >= need - EPS)
     };
-    let room_both = |p: (f64, f64)| room(first, p) && room(last, p);
+    // A return via carries the return current from one ground plane to another, so
+    // it needs ground copper on two layers, whichever they are. Under a ball grid
+    // the outer layer is all pads and holds no pour, while the inner planes do.
+    let room_both = |p: (f64, f64)| copper.iter().filter(|layer| room(layer, p)).count() >= 2;
     // Built once: the signal vias and the keep-out do not change over the loop.
     let keepout = Keepout::from_board(board, net, declared.gap_mm());
     let signals: Vec<(f64, f64, String)> = board
@@ -2543,6 +2546,30 @@ mod tests {
             (filled_polygon (layer "B.Cu") (pts (xy 0 0) (xy 40 0) (xy 40 20) (xy 0 20)))))"#;
         let board = PcbBoard::parse(text).expect("parses");
         assert!(stitch_vias(&board, REACH, &[]).is_empty());
+    }
+
+    /// Under a ball grid the outer layer holds no pour, but two inner planes do: the
+    /// return via lands in those, not in an outer pour.
+    #[test]
+    fn a_return_via_lands_in_two_inner_planes_when_the_outer_layers_hold_no_pour() {
+        let plane = |layer: &str| {
+            format!(
+                r#"(zone (net 1) (net_name "GND") (layer "{layer}") (fill yes)
+                  (polygon (pts (xy 0 0) (xy 40 0) (xy 40 20) (xy 0 20)))
+                  (filled_polygon (layer "{layer}") (pts (xy 0 0) (xy 40 0) (xy 40 20) (xy 0 20))))"#
+            )
+        };
+        let text = format!(
+            r#"(kicad_pcb
+              (layers (0 "F.Cu" signal) (1 "In1.Cu" signal) (2 "In2.Cu" signal) (31 "B.Cu" signal))
+              (net 0 "") (net 1 "GND") (net 2 "SIG")
+              (via (at 10 10) (size 0.6) (drill 0.3) (layers "F.Cu" "B.Cu") (net 2))
+              {} {})"#,
+            plane("In1.Cu"),
+            plane("In2.Cu")
+        );
+        let board = PcbBoard::parse(&text).expect("parses");
+        assert_eq!(stitch_vias(&board, REACH, &[]).len(), 1);
     }
 
     /// A pad sits where the nearest return via would go. Pad copper in the pour
