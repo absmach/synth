@@ -43,6 +43,18 @@ y = 14.64
 rotation = 180
 priority = "hard"
 
+[components.C10]
+x = 29.0
+y = 10.0
+rotation = 0
+priority = "hard"
+
+[components.C11]
+x = 33.8
+y = 10.0
+rotation = 0
+priority = "hard"
+
 [components.C1]
 x = 12
 y = 7.5

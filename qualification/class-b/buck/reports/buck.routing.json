@@ -41,22 +41,22 @@
       "threads": "4",
       "wall_clock_secs": "1200"
     },
-    "input_hash": "fbaffb39fb0695e502db8fbe5922adfbacdbab3ab8995e51842d891b57baea6d",
+    "input_hash": "dfcc168c6ce6e6190e364e9df4927c5c6ecdb5aa74c899b2ff7b7514ab66ac84",
     "output_hash": "",
-    "source_revision": "5acbbdb9db9ea55a3be7597b64fa8a94537005d7",
-    "duration_ms": 20253
+    "source_revision": "777399af90889e53b9696b2b67d2823bee98caa9",
+    "duration_ms": 29318
   },
   "statistics": {
     "connected_nets": 13,
     "open_nets": 0,
     "open_net_names": [],
-    "segments": 88,
-    "vias": 23,
-    "wire_length_mm": 179.771674,
+    "segments": 95,
+    "vias": 25,
+    "wire_length_mm": 192.604712,
     "pad_escape_rejections": 0,
     "engine_findings": {
-      "claimed_imported_segments": "88",
-      "claimed_imported_vias": "22"
+      "claimed_imported_segments": "95",
+      "claimed_imported_vias": "24"
     }
   },
   "artifacts": {
@@ -99,7 +99,7 @@
     "kicad_drc": {
       "errors": 0,
       "unconnected": 0,
-      "warnings": 23
+      "warnings": 25
     },
     "blocking_reasons": [],
     "unavailable_checks": []

@@ -1,12 +1,14 @@
 refdes,value,kind,description,kicad_symbol,kicad_footprint,lcsc_pn,mpn
 C1,47uF,capacitor,"Honor Elec RVT1H470M0810, 47 uF 50 V +/-20 % 105 C SMD aluminium electrolytic, 8 mm diameter x 10.2 mm, polarised (pin 1 is +); JLCPCB C2895739",Device:C_Polarized,Capacitor_SMD:CP_Elec_8x10,,RVT1H470M0810
-C2,10uF,capacitor,"Generic 1206 ceramic capacitor, any value",Device:C,Capacitor_SMD:C_1206_3216Metric,,
+C10,10uF,capacitor,"Samsung CL31B106KBHNNNE, 10 uF +/-10 % 50 V X7R 1206 MLCC, -55 to 125 C (distributor listing); JLCPCB C89632",Device:C,Capacitor_SMD:C_1206_3216Metric,C89632,CL31B106KBHNNNE
+C11,10uF,capacitor,"Samsung CL31B106KBHNNNE, 10 uF +/-10 % 50 V X7R 1206 MLCC, -55 to 125 C (distributor listing); JLCPCB C89632",Device:C,Capacitor_SMD:C_1206_3216Metric,C89632,CL31B106KBHNNNE
+C2,10uF,capacitor,"Samsung CL31B106KBHNNNE, 10 uF +/-10 % 50 V X7R 1206 MLCC, -55 to 125 C (distributor listing); JLCPCB C89632",Device:C,Capacitor_SMD:C_1206_3216Metric,C89632,CL31B106KBHNNNE
 C3,220nF,capacitor,"Generic 0603 MLCC, X7R/X5R, any value",Device:C,Capacitor_SMD:C_0603_1608Metric,,
 C4,100nF,capacitor,"Generic 0603 MLCC, X7R/X5R, any value",Device:C,Capacitor_SMD:C_0603_1608Metric,,
-C5,22uF,capacitor,"Generic 1206 ceramic capacitor, any value",Device:C,Capacitor_SMD:C_1206_3216Metric,,
-C6,22uF,capacitor,"Generic 1206 ceramic capacitor, any value",Device:C,Capacitor_SMD:C_1206_3216Metric,,
+C5,22uF,capacitor,"Samsung CL31A226KAHNNNE, 22 uF +/-10 % 25 V X5R 1206 MLCC, 1.60 mm max thickness, -55 to 85 C, +/-15 % over temperature; JLCPCB C12891",Device:C,Capacitor_SMD:C_1206_3216Metric,C12891,CL31A226KAHNNNE
+C6,22uF,capacitor,"Samsung CL31A226KAHNNNE, 22 uF +/-10 % 25 V X5R 1206 MLCC, 1.60 mm max thickness, -55 to 85 C, +/-15 % over temperature; JLCPCB C12891",Device:C,Capacitor_SMD:C_1206_3216Metric,C12891,CL31A226KAHNNNE
 C7,56pF,capacitor,"Generic 0603 MLCC, X7R/X5R, any value",Device:C,Capacitor_SMD:C_0603_1608Metric,,
-C9,22uF,capacitor,"Generic 1206 ceramic capacitor, any value",Device:C,Capacitor_SMD:C_1206_3216Metric,,
+C9,22uF,capacitor,"Samsung CL31A226KAHNNNE, 22 uF +/-10 % 25 V X5R 1206 MLCC, 1.60 mm max thickness, -55 to 85 C, +/-15 % over temperature; JLCPCB C12891",Device:C,Capacitor_SMD:C_1206_3216Metric,C12891,CL31A226KAHNNNE
 D1,SS36,diode,"Vishay SS36 60 V 3 A Schottky rectifier, SMC (DO-214AB), for reverse-polarity blocking",Device:D_Schottky,Diode_SMD:D_SMC,,SS36
 D2,SMBJ30A,diode,"Vishay SMBJ30A 600 W unidirectional TVS, SMB (DO-214AA). max_voltage_v is the 30 V standoff VWM, not a clamp or abs max: VBR 33.3-36.8 V at 1 mA, VC 48.4 V at 12.4 A",Device:D_Zener,Diode_SMD:D_SMB,,SMBJ30A
 D3,PWR,led,"Lite-On LTST-C190KGKT green AlInGaP LED, 0603, Vf 1.9 to 2.4V at 20mA",Device:LED,LED_SMD:LED_0603_1608Metric,,LTST-C190KGKT

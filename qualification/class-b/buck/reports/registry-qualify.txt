@@ -21,3 +21,7 @@ mf_msmf110_33x [pass]
 1 part(s): 1 qualified, 0 blocked, 0 unproven
 == ltst_c190kgkt
 1 part(s): 1 qualified, 0 blocked, 0 unproven
+== c_samsung_cl31b106kbhnnne
+1 part(s): 1 qualified, 0 blocked, 0 unproven
+== c_samsung_cl31a226kahnnne
+1 part(s): 1 qualified, 0 blocked, 0 unproven
