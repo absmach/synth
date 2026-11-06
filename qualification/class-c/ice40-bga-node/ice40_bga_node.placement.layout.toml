@@ -148,7 +148,7 @@ dy = 0.0
 
 [components.J4]
 x = 16.0
-y = 47.0
+y = 48.2
 rotation = 90
 source = "agent"
 priority = "hard"
@@ -598,7 +598,7 @@ dy = 0.0
 
 [components.FB2]
 x = 24.0
-y = 45.0
+y = 44.2
 rotation = 0
 source = "agent"
 priority = "hard"

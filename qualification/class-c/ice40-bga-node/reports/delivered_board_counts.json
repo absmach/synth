@@ -1,20 +1,20 @@
 {
   "board": "ice40_bga_node.kicad_pcb",
-  "board_sha256_10": "e51186cd74",
+  "board_sha256_10": "6fb44ac623",
   "delivered_board": {
-    "segments": 393,
-    "vias": 186,
+    "segments": 424,
+    "vias": 182,
     "via_size_drill_mm": {
-      "0.35/0.2": 22,
-      "0.46/0.2": 87,
-      "0.6/0.3": 77
+      "0.35/0.2": 18,
+      "0.46/0.2": 18,
+      "0.6/0.3": 146
     },
-    "wire_length_mm": 983.2
+    "wire_length_mm": 1025.6
   },
   "routing_report": {
-    "segments": 393,
-    "vias": 186,
-    "wire_length_mm": 983.2,
+    "segments": 424,
+    "vias": 182,
+    "wire_length_mm": 1025.6,
     "connected_nets": 42,
     "open_nets": 0,
     "note": "connected_nets and open_nets are refreshed from the delivered board's validation; the others are not"

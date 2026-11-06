@@ -2,7 +2,7 @@
 
 An iCE40HX4K FPGA in a 121-ball, 0.8 mm-pitch BGA with its supply chain, an SPI boot flash, one 12-pin header and four status LEDs, powered from a USB-C receptacle, with an STM32F103C8 companion MCU that programs the flash over USB, on six copper layers. It answers #328 under #40: a board with a BGA part, escaped under the pads, with via and fanout rules, made by an agent driving `synth mcp`. Jeff Mboya is the independent PCB reviewer as well as the author of this pull request.
 
-**Status:** the board is routed and released (42 of 42 nets; KiCad 10.0.6 reports 0 errors and 0 unconnected pads with the library tables), three fresh exports agree (the files listed below byte-identical, the routed board and the Gerbers equal after normalization), and the exported KiCad files, the DRC and ERC reports, a fabrication package and the STEP model are committed ([`export/`](export/), [`reports/`](reports/), [`fab/`](fab/)). The numbers, hashes and files below all come from one export, made with the Synth binary built from commit `3a7a596b` of branch `fix-bga-synth` (see [`PROVENANCE.md`](PROVENANCE.md)).
+**Status:** the board is routed and released (42 of 42 nets; KiCad 10.0.6 reports 0 errors and 0 unconnected pads with the library tables), three fresh exports agree (the files listed below byte-identical, the routed board and the Gerbers equal after normalization), and the exported KiCad files, the DRC and ERC reports, a fabrication package and the STEP model are committed ([`export/`](export/), [`reports/`](reports/), [`fab/`](fab/)). The numbers, hashes and files below all come from one export, made with the Synth binary built from commit `85e6fbe9` of branch `fix-bga-synth` (see [`PROVENANCE.md`](PROVENANCE.md)).
 
 ## What was measured
 
@@ -13,14 +13,14 @@ All figures come from the files of the first of the three exports (KiCad 10.0.6)
 | Outline | 56.0 x 45.0 mm, 2,519 mm2, 77 parts (70 excluding mounting holes and test points) |
 | Courtyard fill | **35.8 %** of the board area, measured on the exported board (`layout_metrics.py`) |
 | Stackup | six copper layers, `manufacturer "jlc-advanced"` (the JLCPCB tier that offers the 0.2 mm drill and via-in-pad on six layers), `requires via_in_pad`, 1.37 mm in the STEP model |
-| Routing | 42 of 42 nets, 393 segments, 186 vias (0.35/0.2 mm: 22, 0.46/0.2 mm: 87, 0.6/0.3 mm: 77), 983.2 mm of track; the router's report and the delivered board agree ([`reports/delivered_board_counts.json`](reports/delivered_board_counts.json)) |
+| Routing | 42 of 42 nets, 424 segments, 182 vias (0.35/0.2 mm: 18, 0.46/0.2 mm: 18, 0.6/0.3 mm: 146), 1025.6 mm of track; the router's report and the delivered board agree ([`reports/delivered_board_counts.json`](reports/delivered_board_counts.json)) |
 | Plane | `+3V3` is poured on the inner layers (`plane` on its net class); ground on the outer layers; the 1.2 V core rail, the PLL supply and the MCU supply `+3V3_MCU` are routed |
-| BGA escape | `escape { method underpad }` on `U1`; the board has 22 vias at the 0.35/0.2 mm size inside pads. A filled-and-capped via in a pad is the process JLCPCB's via-in-pad guide describes: land of the drill plus 0.15 mm |
+| BGA escape | `escape { method underpad }` on `U1`; the board has 18 vias at the 0.35/0.2 mm size inside pads. A filled-and-capped via in a pad is the process JLCPCB's via-in-pad guide describes: land of the drill plus 0.15 mm |
 | USB-C | `J1` sits on the left edge with its mating opening facing the edge (rotation 270, courtyard 0.05 mm from Edge.Cuts); `escape { off }` on `J1` and on the MCU `U5`, which are not ball grids |
-| USB pair | D+ and D- run from `J1` through 22 ohm series resistors `R25` and `R26` to `PA12` and `PA11`, declared as 90 ohm differential pairs (the connector side and the MCU side) in the `USB` class (0.12 mm tracks on `F.Cu` and `B.Cu`, `edge_rate fast`). Measured on the delivered board: D+ is 34.0 mm (28.2 mm to `R25`, 5.8 mm beyond) and D- is 44.2 mm (33.0 mm to `R26`, 11.2 mm beyond), a 10.2 mm difference; the pair is neither length-matched nor field-solved |
+| USB pair | D+ and D- run from `J1` through 22 ohm series resistors `R25` and `R26` to `PA12` and `PA11`, declared as 90 ohm differential pairs (the connector side and the MCU side) in the `USB` class (0.12 mm tracks on `F.Cu` and `B.Cu`, `edge_rate fast`). Measured on the delivered board: D+ is 34.3 mm (28.5 mm to `R25`, 5.8 mm beyond) and D- is 44.2 mm (33.0 mm to `R26`, 11.2 mm beyond), a 9.9 mm difference; the pair is neither length-matched nor field-solved |
 | DRC with the library tables | 0 errors, 0 unconnected, 74 warnings, all `lib_footprint_mismatch` (the exporter cuts silkscreen back from vias and pads, #425); 0 `silk_overlap` |
 | ERC with the library tables | 23 errors, 32 warnings. 21 errors are on `U1` (20 unused I/O balls and `VPP_FAST`) and 2 on power flags. Synth has no statement to declare a no-connect, and the multi-unit flattened symbol's no-connect crosses fall off its pins: #431 |
-| Return-via advisories | 46 non-blocking `W-SYNTH-DRC-016` findings on 18 slow nets (`+3V3` 12, `+1V2` 6, `VCCPLL` 3, `CFG_SDI` 3, `FA4` 3, and 19 more on the rest); each net class declares `edge_rate slow` except the `USB` class, which declares `edge_rate fast`, so a USB via that lacks a return via blocks the release; none does. They are listed in the routing report |
+| Return-via advisories | 63 non-blocking `W-SYNTH-DRC-016` findings on 19 slow nets (`+3V3` 19, `+1V2` 6, `VCCPLL` 5, `+3V3_MCU` 4, `CFG_SDI` 3, and 26 more on the rest); each net class declares `edge_rate slow` except the `USB` class, which declares `edge_rate fast`, so a USB via that lacks a return via blocks the release; none does. They are listed in the routing report |
 | Engine verdict | `engine_policy_verdict: rejected`: the routing engine runs with its strict-size policy, which rejects any via or track narrower than the width its net class declares. The delivered board is judged by Synth's own checks: connectivity (42 of 42), the process floor, KiCad DRC with the library tables, and the return-via rule |
 
 ## The board
@@ -53,13 +53,7 @@ Every BOM line of [`fab/ice40_bga_node_bom_orderable.csv`](fab/ice40_bga_node_bo
 
 ## Fabrication package
 
-[`fab/`](fab/): the Gerbers and drill file (15 files, including the four inner layers), the placement file, the orderable BOM and the STEP model, with [`fab/SHA256SUMS`](fab/SHA256SUMS). The Gerber content hash is `0729fcfd37` ([`fab/GERBER_CONTENT_SHA256`](fab/GERBER_CONTENT_SHA256)); the hash masks the creation time KiCad writes into the headers. [`agent-run/tools/step_export.sh`](agent-run/tools/step_export.sh) exports the STEP model with KiCad; [`reports/step_verify.txt`](reports/step_verify.txt) reopens it in OpenCASCADE and compares it with the PCB: 75 components with a body, 2 mounting holes drilled in the board solid, identities and positions match (worst difference 0.0000 mm), outline 55.99 x 44.99 mm against Edge.Cuts 55.99 x 44.99 mm, no body beyond its courtyard by more than 0.25 mm. The geometry hash is `39e9373f6b`. The USB-C body is the model KiCad's own `royalblue54L_feather` demo ships for this footprint, since the stock 3D library has none; the test points use [`agent-run/step-models/`](agent-run/step-models/).
-
-## JLCPCB
-
-BOM matching of this package in the JLCPCB assembly flow ([`reports/jlcpcb_assembly_bom_matching_2026-11-06.md`](reports/jlcpcb_assembly_bom_matching_2026-11-06.md), original [`.xlsx`](reports/jlcpcb_assembly_bom_matching_2026-11-06.xlsx)): 69 of 70 lines match a JLCPCB part; `U1` (Lattice ICE40HX4K-BG121, `C1552775`, 0 in stock against 5 needed) and `Y1` (3 in stock against 5) have stock below the quantity for 5 boards, and the 1x5 SWD header `J4` has no match and is hand-fitted. Quote with assembly ([`reports/jlcpcb_quote_2026-11-06.md`](reports/jlcpcb_quote_2026-11-06.md), Standard PCBA, no order placed): PCB $32.00 and PCBA $114.79, $146.79 in total.
-
-JLCDFM report of the package of this README (2026-11-06 13:03, Gerber content hash `0729fcfd37`, six layers, 5.6 x 4.5 cm): [`reports/`](reports/jlcdfm_pcb_dfm_2026-11-06_13-03_0729fcfd37.pdf). JLCPCB's via-in-pad specification for six layers and its plated-slot specification are quoted in [`reports/jlcpcb_via_in_pad_specification.md`](reports/jlcpcb_via_in_pad_specification.md) and [`reports/jlcpcb_slot_specification.md`](reports/jlcpcb_slot_specification.md).
+[`fab/`](fab/): the Gerbers and drill file (15 files, including the four inner layers), the placement file, the orderable BOM and the STEP model, with [`fab/SHA256SUMS`](fab/SHA256SUMS). The Gerber content hash is `99da25a419` ([`fab/GERBER_CONTENT_SHA256`](fab/GERBER_CONTENT_SHA256)); the hash masks the creation time KiCad writes into the headers. [`agent-run/tools/step_export.sh`](agent-run/tools/step_export.sh) exports the STEP model with KiCad; [`reports/step_verify.txt`](reports/step_verify.txt) reopens it in OpenCASCADE and compares it with the PCB: 75 components with a body, 2 mounting holes drilled in the board solid, identities and positions match (worst difference 0.0000 mm), outline 55.99 x 44.99 mm against Edge.Cuts 55.99 x 44.99 mm, no body beyond its courtyard by more than 0.25 mm. The geometry hash is `604ace35b8`. The USB-C body is the model KiCad's own `royalblue54L_feather` demo ships for this footprint, since the stock 3D library has none; the test points use [`agent-run/step-models/`](agent-run/step-models/).
 
 ## Reproducibility
 
@@ -71,10 +65,10 @@ The source and sidecar in this directory were exported three times through the S
 | `ice40_bga_node.kicad_pro` | b16abc366f | b16abc366f | b16abc366f | byte-identical |
 | `ice40_bga_node.kicad_sym` | 5103fb8457 | 5103fb8457 | 5103fb8457 | byte-identical |
 | `bom.csv` | 0153fda01c | 0153fda01c | 0153fda01c | byte-identical |
-| `pnp.csv` | e03f19f5ed | e03f19f5ed | e03f19f5ed | byte-identical |
-| `ice40_bga_node.synth.kicad_pcb` (un-routed) | 9177d7e2be | 9177d7e2be | 9177d7e2be | byte-identical |
-| `ice40_bga_node.kicad_pcb` | e51186cd74 | 3f35fe817c | ff7725265d | not byte-identical; identical after the router's and KiCad's random ids are masked (`2bd5d05c5b`) |
-| Gerber and drill content | 0729fcfd37 | 0729fcfd37 | 0729fcfd37 | identical after the creation time in the headers is masked |
+| `pnp.csv` | 96842926ac | 96842926ac | 96842926ac | byte-identical |
+| `ice40_bga_node.synth.kicad_pcb` (un-routed) | c16c3b6a9c | c16c3b6a9c | c16c3b6a9c | byte-identical |
+| `ice40_bga_node.kicad_pcb` | 6fb44ac623 | 06bd5bfdd6 | 23d9d3de2d | not byte-identical; identical after the router's and KiCad's random ids are masked (`6999321952`) |
+| Gerber and drill content | 99da25a419 | 99da25a419 | 99da25a419 | identical after the creation time in the headers is masked |
 
 Everything committed comes from export 1. The authoritative evidence of how the board was made is the prompts and the agent and MCP traces in [`agent-run/`](agent-run/) (see [`PROVENANCE.md`](PROVENANCE.md)).
 
