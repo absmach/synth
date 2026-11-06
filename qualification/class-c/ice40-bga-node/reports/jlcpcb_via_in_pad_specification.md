@@ -1,6 +1,6 @@
 # JLCPCB via-in-pad specification, quoted against the annular-ring and via-to-pad Danger items
 
-The JLCDFM report of this package ([`jlcdfm_pcb_dfm_2026-11-06_13-03_0729fcfd37.pdf`](jlcdfm_pcb_dfm_2026-11-06_13-03_0729fcfd37.pdf), Gerber content hash `0729fcfd37`) scores 25 annular rings of 0.07 mm as Danger. They are the 0.35/0.2 mm vias in the BGA pads of `U1`: a 0.2 mm drill in a 0.35 mm land, a ring of 0.075 mm. The report does not say which process it assumes; none of the JLCPCB pages read describes JLCDFM's annular-ring check or its thresholds.
+The JLCDFM report of this package ([`jlcdfm_pcb_dfm_2026-11-06_14-42_99da25a419.pdf`](jlcdfm_pcb_dfm_2026-11-06_14-42_99da25a419.pdf), Gerber content hash `99da25a419`) scores 19 annular rings of 0.08 mm as Danger. They are the 0.35/0.2 mm vias in the BGA pads of `U1`: a 0.2 mm drill in a 0.35 mm land, a ring of 0.075 mm. The report does not say which process it assumes; none of the JLCPCB pages read describes JLCDFM's annular-ring check or its thresholds.
 
 The board has six copper layers and `requires via_in_pad`, so JLCPCB's via-in-pad process for six layers applies. The pages below were read on 2026-11-06. Each quotation is the longest verbatim fragment the reader could return.
 
@@ -18,7 +18,7 @@ The capabilities page gives a different figure for ordinary plated holes: a PTH 
 
 The pages say nothing of a distance between a via and a plated through hole beyond the POFV page's "Should be placed more than 0.45 mm from regular PTHs or NPTHs".
 
-The decision to carry these 25 items with this specification attached is Jeff Mboya's.
+The decision to carry these 19 items with this specification attached is Jeff Mboya's.
 
 ## The 4 via-to-pad Danger items
 

@@ -1,6 +1,6 @@
 # JLCPCB plated-slot specification, quoted against the 4 slot-width Danger items
 
-The JLCDFM report of this package ([`jlcdfm_pcb_dfm_2026-11-06_13-03_0729fcfd37.pdf`](jlcdfm_pcb_dfm_2026-11-06_13-03_0729fcfd37.pdf), Gerber content hash `0729fcfd37`) scores 4 slots of 0.6 mm as Danger in its "Slot width check" of the drill file `ice40_bga_node.drl`. They are the four plated slots for the shield legs of the USB-C receptacle `J1` (Korean Hroparts TYPE-C-31-M-12, KiCad footprint `Connector_USB:USB_C_Receptacle_HRO_TYPE-C-31-M-12`).
+The JLCDFM report of this package ([`jlcdfm_pcb_dfm_2026-11-06_14-42_99da25a419.pdf`](jlcdfm_pcb_dfm_2026-11-06_14-42_99da25a419.pdf), Gerber content hash `99da25a419`) scores 4 slots of 0.6 mm as Danger in its "Slot width check" of the drill file `ice40_bga_node.drl`. They are the four plated slots for the shield legs of the USB-C receptacle `J1` (Korean Hroparts TYPE-C-31-M-12, KiCad footprint `Connector_USB:USB_C_Receptacle_HRO_TYPE-C-31-M-12`).
 
 The slots in the drill file of this package, cut with the 0.6 mm tool (`T3C0.600`, routed with `G85`): two of 1.2 x 0.6 mm (centres 0.6 mm apart) and two of 1.7 x 0.6 mm (centres 1.1 mm apart). The board has six copper layers.
 
