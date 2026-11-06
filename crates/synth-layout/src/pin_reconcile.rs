@@ -537,6 +537,11 @@ pub fn physical_terminal(
 ) -> Option<(f64, f64, f64, f64)> {
     let pos = crate::kicad_lib_loader::pin_positions(lib_id)?;
     let (px, py, pin_angle) = pos.get(pin_number)?;
+    // A multi-unit symbol draws its units as a stack, and the pin belongs to one
+    // of them: shift it by that unit's slot, as the router does for wire ends,
+    // or a marker lands on the pin of unit 1 that shares its coordinates.
+    let (ux, uy) = crate::kicad_lib_loader::pin_unit_offset(lib_id, pin_number);
+    let (px, py) = (px + ux, py - uy);
     let rad = total_deg.to_radians();
     let rot_x = px * rad.cos() - py * rad.sin();
     let rot_y = px * rad.sin() + py * rad.cos();
@@ -625,4 +630,36 @@ pub fn no_connect_position(
     let (x, y, _dx, _dy) =
         pin_terminal_xy(board, component.id, synth_ir::PinId(pin_idx), placements)?;
     Some((snap_grid_127(x), snap_grid_127(y)))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// A multi-unit symbol draws its units as a stack, so the terminal of a pin of
+    /// unit 2 sits one unit pitch below where its unit-local coordinates put it.
+    /// The no-connect marker and the fanned power legs use this terminal, and a
+    /// marker left at the unit-local spot lands on a pin of unit 1 instead.
+    #[test]
+    fn a_pin_of_a_later_unit_is_shifted_by_its_units_slot() {
+        let lib = "Amplifier_Operational:LM358";
+        // Skipped when KiCad's bundled libraries are not installed.
+        let Some(positions) = crate::kicad_lib_loader::pin_positions(lib) else {
+            return;
+        };
+        let (_, local_y, _) = positions["7"];
+        let center = (100.0, 100.0);
+        let (_, y1, _, _) = physical_terminal(lib, "1", center, 0.0).expect("pin 1");
+        let (_, y7, _, _) = physical_terminal(lib, "7", center, 0.0).expect("pin 7");
+        let (_, local_y1, _) = positions["1"];
+        let unshifted = snap_grid_127(100.0 - local_y);
+        assert!(
+            (y7 - unshifted - crate::kicad_lib_loader::UNIT_PITCH_MM).abs() < 0.2,
+            "pin 7 (unit 2) should sit one unit pitch below {unshifted}, found {y7}"
+        );
+        assert!(
+            (y1 - snap_grid_127(100.0 - local_y1)).abs() < 1e-9,
+            "pin 1 (unit 1) is not shifted"
+        );
+    }
 }
