@@ -1577,6 +1577,27 @@ pub fn stitch_vias(board: &PcbBoard, reach_mm: f64, planned: &[TieVia]) -> Vec<T
     .vias
 }
 
+/// Whether a via of `radius` at `p` has ground fill under it on `layer`: its centre
+/// is inside the fill, and its land stays inside the extent of the copper, which
+/// is the board edge inset by its own clearance. The land may reach into the
+/// clearance the fill keeps from foreign copper: the fill stands off by the zone's
+/// clearance, the board's class clearance is smaller, and the keep-out holds the
+/// via to that gap; the zone is refilled around the via.
+fn pour_room(regions: &[Region], layer: &str, p: (f64, f64), radius: f64) -> bool {
+    let here = || regions.iter().filter(|r| r.layer == layer);
+    let reach = radius + EDGE_SLACK_MM - EPS;
+    let (mut lo, mut hi) = ((f64::MAX, f64::MAX), (f64::MIN, f64::MIN));
+    for r in here() {
+        lo = (lo.0.min(r.min.0), lo.1.min(r.min.1));
+        hi = (hi.0.max(r.max.0), hi.1.max(r.max.1));
+    }
+    p.0 - lo.0 >= reach
+        && p.1 - lo.1 >= reach
+        && hi.0 - p.0 >= reach
+        && hi.1 - p.1 >= reach
+        && here().any(|r| r.contains(p) && r.edge_distance(p) >= EDGE_SLACK_MM - EPS)
+}
+
 fn stitch(
     board: &PcbBoard,
     reach_mm: f64,
@@ -1628,11 +1649,7 @@ fn stitch(
         return none();
     }
     let first = &copper[0];
-    let room = |layer: &str, p: (f64, f64)| -> bool {
-        regions
-            .iter()
-            .any(|r| r.layer == layer && r.contains(p) && r.edge_distance(p) >= need - EPS)
-    };
+    let room = |layer: &str, p: (f64, f64)| pour_room(regions, layer, p, need - EDGE_SLACK_MM);
     // A return via carries the return current from one ground plane to another, so
     // it needs ground copper on two layers, whichever they are. Under a ball grid
     // the outer layer is all pads and holds no pour, while the inner planes do.
@@ -2708,6 +2725,35 @@ mod tests {
 
     fn at_mm(via: &TieVia) -> (f64, f64) {
         (via.at.x_mm(), via.at.y_mm())
+    }
+
+    /// The land of a return via may reach into the clearance the fill keeps from
+    /// foreign copper, since the keep-out holds the board's own gap there, but it
+    /// may not leave the extent of the copper at the board edge.
+    #[test]
+    fn a_return_via_may_sit_close_to_a_cutout_in_the_fill_but_not_at_the_board_edge() {
+        let l_shape = [
+            (0.0, 0.0),
+            (20.0, 0.0),
+            (20.0, 10.0),
+            (10.0, 10.0),
+            (10.0, 20.0),
+            (0.0, 20.0),
+        ];
+        let points: Vec<Point> = l_shape
+            .iter()
+            .map(|&(x, y)| Point::new(mm_to_nm(x), mm_to_nm(y)))
+            .collect();
+        let region = Region::new("B.Cu", &points).expect("a region");
+        let regions = [region];
+        let radius = 0.23;
+        // 0.1 mm from the notch's wall: inside the fill, far from the board edge.
+        assert!(pour_room(&regions, "B.Cu", (9.9, 15.0), radius));
+        // 0.1 mm from the board edge: the land would leave the copper.
+        assert!(!pour_room(&regions, "B.Cu", (0.1, 5.0), radius));
+        // Outside the fill, or on another layer, there is no room.
+        assert!(!pour_room(&regions, "B.Cu", (15.0, 15.0), radius));
+        assert!(!pour_room(&regions, "F.Cu", (5.0, 5.0), radius));
     }
 
     /// A return via keeps the copper the board's own rules ask around it: the
