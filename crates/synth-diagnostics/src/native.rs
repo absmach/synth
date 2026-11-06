@@ -109,6 +109,10 @@ pub struct NativeCheckEvidence {
     pub stderr: Option<String>,
     #[serde(default)]
     pub violations: usize,
+    /// Checks this stage does not perform, or performs on an assumed
+    /// threshold. A `pass` is only a pass over what is not listed here.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub unsupported: Vec<String>,
 }
 
 pub const STDERR_CAPTURE_LIMIT: usize = 8 * 1024;
@@ -134,6 +138,7 @@ impl NativeCheckEvidence {
             detail: None,
             stderr: None,
             violations,
+            unsupported: Vec::new(),
         }
     }
 
@@ -154,7 +159,13 @@ impl NativeCheckEvidence {
             detail: Some(detail.into()),
             stderr: None,
             violations: 0,
+            unsupported: Vec::new(),
         }
+    }
+
+    pub fn with_unsupported(mut self, unsupported: Vec<String>) -> Self {
+        self.unsupported = unsupported;
+        self
     }
 
     pub fn with_version(mut self, version: Option<String>) -> Self {
