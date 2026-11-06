@@ -28,8 +28,8 @@ feedback, power-good and thermal copper, plus a negative variant that the feedba
 - Power-good: U1 pin 6 is open drain, pulled up to +3V3 through R_PG 100k and brought out on J2 pin 3. D4 (green, "PG FAULT") and R_PGLED 470 R run from +3V3 to PG, so the LED lights while PG is low and stays dark while power is good.
 - Thermal: U1 pin 9 is a 2.41 x 3.1 mm exposed pad soldered to the F.Cu GND pour, with a 2 x 3 array of six GND vias in the pad (see Thermal). The board is `manufacturer "jlc-filled-via"` with `requires via_in_pad` (resin-filled and capped vias).
 - Negative file: identical except R_FB_T and C7 hang from SW. It emits E-SYNTH-POWER-011 and the same 11 warnings as the good board.
-- Board: 70.99 x 33.99 mm (2413 mm2, Edge.Cuts line centres), 4 layers, GND pours on all layers. Power tracks 0.5 mm, signal 0.127 mm.
-- Two M2.5 non-plated mounting holes (H1, H2) in opposite corners.
+- Board: 64.99 x 24.99 mm (1624 mm2, Edge.Cuts line centres), 4 layers, GND pours on all layers. Power tracks 0.5 mm, signal 0.127 mm.
+- Two M2.5 non-plated mounting holes (H1, H2): H1 in the top middle, H2 below J2 at the right edge.
 
 ## Why LMR38010 and not LMR33640
 
@@ -73,15 +73,15 @@ the behaviour on a fault: Synth has no power-good rule (`synth capability list` 
 
 ## Thermal
 
-- U1's exposed pad (pin 9, 2.41 x 3.1 mm, centre (33.0, 16.0) mm) is soldered to the F.Cu GND pour and holds
+- U1's exposed pad (pin 9, 2.41 x 3.1 mm, centre (33.0, 14.0) mm) is soldered to the F.Cu GND pour and holds
   a 2 x 3 array of six GND vias (0.6 mm pad, 0.3 mm drill, 1.2 mm apart), declared in
   `buck.placement.layout.toml` as `[[vias]]`. The PCB export writes them before routing, so the router
   treats them as GND copper. TI asks for at least a 4 x 3 array of 10 mil vias (9.5.1.1); six vias is fewer.
 - Via-in-pad needs resin-filled and capped vias, so the board declares `manufacturer "jlc-filled-via"` and
   `requires via_in_pad`; `release.json` lists the six vias as fabrication notes.
 - Counts from `kicad/buck.kicad_pcb` (`vias.py`, GND vias, distance from the pad centre): inside the pad 6;
-  within 1 mm 2, within 2 mm 6, within 3 mm 6, within 4 mm 7. The board has 21 vias in total, all GND, all
-  0.3 mm drill and 0.6 mm pad. The other 15 were placed by the router.
+  within 1 mm 2, within 2 mm 2, within 3 mm 6, within 4 mm 7. The board has 23 vias in total, 22 GND and one on `PG`, all
+  0.3 mm drill and 0.6 mm pad. The other 16 GND vias were placed by the router (15) and the return-via pass (1).
 - Not estimated: TI's `RthetaJA` of 42.9 C/W is not valid for design (datasheet text near Eq 15), the LMR38010
   datasheet has no copper-area curve, and no efficiency curve was read. At 1 A out and an assumed 85% efficiency the loss
   would be 3.3/0.85 - 3.3 = 0.58 W; the junction temperature is left to the expert (B2).
@@ -178,14 +178,14 @@ The export routes with FreeRouting 2.4.1 on OpenJDK 25.0.4.1; the routed board i
 | --- | --- | --- |
 | validate, good board | exit 0, 0 errors, 11 warnings (3 E-SYNTH-SCHEM-003, 1 E-SYNTH-SCHEM-004, 4 E-SYNTH-SCHEM-005, 1 W-SYNTH-ANOMALY-001, 2 W-SYNTH-SUPPLY-002) | `synth validate $B/buck.synth 2>&1 \| grep -o '^warning: \[[A-Z0-9-]*\]' \| sort \| uniq -c` |
 | validate, negative | exit 1, 1 error (E-SYNTH-POWER-011), the same 11 warnings | same on `buck_neg_fb_sw.synth` |
-| routing | `routed`, 13 nets connected, 0 open, 97 segments (all F.Cu), 21 vias, 200.08 mm | `reports/buck.routing.json` `statistics`; the PCB file also holds 97 segments and 21 vias |
+| routing | `routed`, 13 nets connected, 0 open, 88 segments (85 F.Cu, 3 B.Cu on `PG`), 22 vias in the router statistics, 179.77 mm | `reports/buck.routing.json` `statistics`; the PCB file also holds 88 segments and 23 vias (the return-via pass adds one GND via beside the `PG` via) |
 | Synth routing check | kicad_drc 0 errors, 0 unconnected, 0 warnings | `reports/buck.routing.json` `validation` |
 | Release gate | `release_ready` true, `production_status` production, 0 signal-integrity findings (0 `W-SYNTH-DRC-016`); with `--gerbers --drill` the same board also reports `release_ready` true and `production`, and its `reviewer_state` lists `lmr38010` and `ltst_c190kgkt` as reviewed (Steve Munene, 2026-10-29) | `reports/release.json`, `reports/release-fab.json` |
-| DRC | 0 errors, 0 unconnected, 0 warnings | `kicad-cli pcb drc ... -o reports/buck.kicad-drc.json` |
+| DRC | 0 errors, 0 unconnected, 23 `lib_footprint_mismatch` warnings (the exporter cuts silkscreen back from pads and vias, so each footprint's silkscreen differs from the library copy; pads and courtyards were not diffed per footprint) | `kicad-cli pcb drc ... -o reports/buck.kicad-drc.json` |
 | ERC | 0 violations | `kicad-cli sch erc ... -o reports/buck.kicad-erc.json` |
 | Schematic netlist | 13 nets: the source's 7 `net` blocks plus the 6 further names its 10 `connect` statements create (`+3V3` joins an existing net), node for node | `kicad-cli sch export netlist --format kicadsexpr -o /tmp/buck.net $B/kicad/buck.kicad_sch` |
-| Outline | 70.99 x 33.99 mm (x 0.55 to 71.54, y 0.55 to 34.54), 2413 mm2 | `grep -A3 gr_line $B/kicad/buck.kicad_pcb \| grep -E 'start\|end'` |
-| Manufacturing exports | 22 Gerbers plus the job file (4 copper layers), PTH 27 holes (21 x 0.3 mm vias, 4 x 0.95 mm and 2 x 1.0 mm connector pins), NPTH 2 x 2.5 mm mounting holes | `ls $B/kicad/gerbers $B/kicad/drill`; `grep -c '^X' $B/kicad/drill/buck-PTH.drl` |
+| Outline | 64.99 x 24.99 mm (x 1.30 to 66.29, y 0.55 to 25.54), 1624 mm2 | `grep -A3 gr_line $B/kicad/buck.kicad_pcb \| grep -E 'start\|end'` |
+| Manufacturing exports | 22 Gerbers plus the job file (4 copper layers), PTH 29 holes (23 x 0.3 mm vias, 4 x 0.95 mm and 2 x 1.0 mm connector pins), NPTH 2 x 2.5 mm mounting holes | `ls $B/kicad/gerbers $B/kicad/drill`; `grep -c '^X' $B/kicad/drill/buck-PTH.drl` |
 | Hashes | full values in `SHA256SUMS` and `QUALIFICATION.md` | `cd $B && grep -v '^#' SHA256SUMS \| sha256sum -c -` |
 
 Pad-edge gaps in the placed, routed board, from `pad_gaps.py` (pcbnew pad bounding boxes, edge to edge):
@@ -193,19 +193,19 @@ Pad-edge gaps in the placed, routed board, from `pad_gaps.py` (pcbnew pad boundi
 | Pair | Gap mm |
 | --- | --- |
 | C3 (220 nF) to U1 VIN | 0.82 |
-| C2 (10 uF) to U1 VIN | 1.46 |
-| C3 / C2 ground pad to U1 GND | 2.69 / 5.35 |
+| C2 (10 uF) to U1 VIN | 4.07 |
+| C3 / C2 ground pad to U1 GND | 2.69 / 6.89 |
 | C4 to U1 BOOT / SW | 0.62 / 2.18 |
 | R_RT to U1 RT/SYNC | 1.22 |
 | L1 pad 1 to U1 SW | 3.80 |
-| C5, C6, C9 to L1 pad 2 | 0.83 / 2.29 / 0.70 |
-| D2 TVS to U1 VIN | 7.82 |
-| R_UV_T to U1 EN | 3.35 |
-| R_PG to U1 PG | 22.63 |
+| C5, C6, C9 to L1 pad 2 | 0.70 / 2.10 / 0.70 |
+| D2 TVS to U1 VIN | 11.95 |
+| R_UV_T to U1 EN | 1.87 |
+| R_PG to U1 PG | 16.65 |
 | R_FB_T / R_FB_B to U1 FB | 3.55 / 3.79 |
 | C7 to R_FB_T (FB side) | 0.55 |
 | R_FB_B ground pad to U1 GND | 11.31 |
-| R_FB_T FB pad to L1 pad 1 (SW) | 2.58 |
+| R_FB_T FB pad to L1 pad 1 (SW) | 3.58 |
 
 ## Placement
 
@@ -217,11 +217,23 @@ return-path warnings (a reviewer's finding). Choices:
 - C3 and C2 sit left of U1 at the VIN pad; C4 beside BOOT; R_RT beside RT/SYNC.
 - C5, C6 and C9 form a short column right of L1.
 - J2 is rotated 270 degrees so PG (pin 3) and +3V3 (pin 1) do not cross; R_PG and the PG LED chain sit beside J2.
-- R_PG is 22.63 mm from the PG pin: the pull-up serves J2, and the PG track is a signal.
+- R_PG is 16.65 mm from the PG pin: the pull-up serves J2, and the PG track is a signal.
 
 `pad_gaps.py` on the final routed file is the reference for gaps. The outline follows the pinned part
-positions and the two corner holes; it is larger than the earlier auto placement of the LMR33640 version
-(60.75 x 31.855 mm), and I did not isolate the cause of the 478 mm2 growth.
+positions and the two corner holes. The holes are not in the top corners, where a hole pushes the outline out by its
+keepout and left a band of about 6 mm over the parts. H1 sits in the empty top middle, above U1, and H2 sits
+below J2 at the right edge. C1 moved to the top left, the J1 / F1 / D1 input chain became one row, and the
+board is 64.99 x 24.99 mm (1624 mm2), 41 % smaller than the previous revision on this tool (73.99 x 36.99 mm,
+2737 mm2; the committed 70.99 x 33.99 mm figure was from an older exporter).
+
+The tighter board costs some placement quality, and the tables show it: C2 is now 4.07 mm from the VIN pad (was
+1.46 mm) with its ground pad 6.89 mm from U1 GND (was 5.35 mm), D2 11.95 mm (was 7.82 mm), C6 2.10 mm from
+L1 pad 2 (was 2.29 mm), R_UV_T 1.87 mm from EN (was 3.35 mm) and R_PG 16.65 mm (was 22.63 mm). Decoupling
+loop quality was not analysed (B5, B12).
+
+The compact layout routes with the router's existing return-via gap (`VIA_GAP_MM`, 0.2 mm, unchanged). An
+earlier revision of this branch lowered it to 0.15 mm; exporting this board and `usb-uart` at 0.2 mm and at 0.15 mm
+gave byte-identical PCB files, so the change was dropped.
 
 ## Negative case: feedback from the switch node
 
@@ -243,8 +255,8 @@ together with the `#38` checklist traceability for this board. Its row for the c
 
 - Not fabricable on this evidence: nothing was built and no surge test was run. The fab package's
   `release_ready: true` covers only Synth's routing and export gates (its `gate_scope`), not fabrication.
-- Layout: current loop area, return-current paths and EMI were not analysed. The layer changes are the 21 GND
-  vias; no signal net changes layer (all 97 segments are on F.Cu).
+- Layout: current loop area, return-current paths and EMI were not analysed. The layer changes are the 22 GND
+  vias and one `PG` via (3 of the 88 segments are on B.Cu, all on `PG`), which has a GND return via beside it.
 - Six thermal vias, where TI asks for at least 4 x 3 (9.5.1.1).
 - Silkscreen: the "PG FAULT" and "PWR" LED values are on the F.Fab layer only, so the board prints just the references D4 and D3. Synth has no silk text for a value here. KiCad DRC reports no silkscreen violation.
 - Schematic (rendered by `tools/schematic_quality.py`): 0 overlapping text pairs, 7 texts with a wire through them, 1 wire crossing, 1313.2 mm of wire; mean passive-to-pin distance 66.4 mm (max 172.8). No schematic sidecar is used.
