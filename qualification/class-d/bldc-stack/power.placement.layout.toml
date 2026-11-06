@@ -37,7 +37,7 @@ timestamp = "2026-11-03T23:30:00+00:00"
 [components.J_PWR]
 x = 5.45
 y = 12
-rotation = 90
+rotation = 270
 source = "agent"
 priority = "hard"
 timestamp = "2026-11-03T23:30:00+00:00"
@@ -869,7 +869,7 @@ timestamp = "2026-11-03T23:30:00+00:00"
 [components.J_MOTOR]
 x = 5.45
 y = 30
-rotation = 90
+rotation = 270
 source = "agent"
 priority = "hard"
 timestamp = "2026-11-03T23:30:00+00:00"

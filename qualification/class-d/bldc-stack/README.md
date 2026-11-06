@@ -42,7 +42,7 @@ and (68.88, 16) on the 72 mm power board. The control's holes are at (2, 2),
 (51, 2), (2, 30) and (51, 30) mm; the power board declares `outline 72mm x
 52mm` and puts its four at (2, 2), (62.4, 2), (2, 49) and (62.4, 49) mm. J_PWR
 and J_MOTOR sit flush on the left edge at (5.45, 12) and (5.45, 30), rotated
-90 degrees so the wire entry faces the edge. The power
+270 degrees so the wire entry faces the left edge. The power
 PCB is exported un-routed for the 3D renders, like the control.
 
 The control board declares `outline 60mm x 32mm`, so Edge.Cuts is exactly
@@ -230,7 +230,7 @@ grid, the `PWR` clearance is 0.2 mm (the control's value, and twice the IPC
 minimum for 24 V), and a fully pinned sidecar is no longer slid by the
 band-closing pass. The power board declares `outline 72mm x 52mm`; J_B2B is
 flush at 3.12 mm from the right edge, and J_PWR/J_MOTOR sit flush and close
-together on the left edge with their wire entries facing it. The four mounting holes are at (2,2), (62.4,2),
+together on the left edge with their wire entries facing the left edge. The four mounting holes are at (2,2), (62.4,2),
 (2,49) and (62.4,49). The board is 72 x 52 mm because 111 power parts need
 about 2200 mm2 of courtyards; it cannot shrink to the control's 60 x 32. The
 179 unconnected pads are simply the nets with no copper yet; they close when a
