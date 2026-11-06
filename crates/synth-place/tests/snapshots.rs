@@ -222,6 +222,49 @@ fn usb_c_orientation_is_derived_and_wrong_override_is_detected() {
     assert_eq!(issues[0].expected, synth_geometry::Rotation::OneEighty);
 }
 
+/// A connector whose hard `edge:` hint names its edge is checked against that
+/// edge wherever it sits. A pinned placement that leaves it far from the edge
+/// with its opening turned inward is reported, not skipped as an interior part.
+#[test]
+fn a_connector_with_an_edge_hint_is_checked_however_far_it_sits_from_the_edge() {
+    use synth_place::floorplan::{rotation_for_mating_edge, BoardEdge};
+
+    let board = load_board("fixtures/designs/edge_jst_connectors.synth");
+    let placement = synth_place::place(&board).expect("place");
+    let left = board
+        .components
+        .iter()
+        .find(|component| component.refdes == "J1")
+        .expect("J1 asks for the left edge");
+    let face = left
+        .part
+        .as_ref()
+        .and_then(|part| part.footprint_dimensions.as_ref())
+        .and_then(|dimensions| dimensions.mating_face)
+        .expect("J1 declares its mating face");
+    let mut pinned = placement.clone();
+    let part = pinned
+        .components
+        .iter_mut()
+        .find(|component| component.id == left.id)
+        .expect("J1 placement");
+    // Opening toward the right edge, and far from the left one.
+    part.rotation = rotation_for_mating_edge(face, BoardEdge::Right);
+    part.center = synth_geometry::Point::new(
+        pinned.board_outline.min.x_nm + synth_geometry::mm_to_nm(25.0),
+        part.center.y_nm,
+    );
+    let issues = synth_place::floorplan::connector_orientation_issues(
+        &board,
+        pinned.board_outline,
+        &pinned.components,
+    );
+    assert!(
+        issues.iter().any(|issue| issue.refdes == "J1"),
+        "{issues:?}"
+    );
+}
+
 /// A JST connector's plug opens outward on every edge, not only on the one the
 /// floorplan used to assume. Each connector here asks for a different edge; the
 /// rotation that points its declared mating face out of that edge is derived

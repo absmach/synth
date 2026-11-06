@@ -134,15 +134,23 @@ pub fn connector_orientation_issues(
                 BoardEdge::Left,
             ),
         ];
-        let Some(&(distance, tolerance, edge)) = candidates
-            .iter()
-            .min_by_key(|(distance, tolerance, _)| distance - tolerance)
-        else {
-            continue;
+        // A hard `edge:` hint names the edge the connector is for, so it is judged
+        // against that edge however far it sits from it. Without one, the nearest
+        // edge counts, and only a connector that is close enough to be on it.
+        let edge = if let Some(edge) = hard_hinted_edge(component) {
+            edge
+        } else {
+            let Some(&(distance, tolerance, edge)) = candidates
+                .iter()
+                .min_by_key(|(distance, tolerance, _)| distance - tolerance)
+            else {
+                continue;
+            };
+            if distance < 0 || distance > tolerance {
+                continue;
+            }
+            edge
         };
-        if distance < 0 || distance > tolerance {
-            continue;
-        }
         let expected = rotation_for_mating_edge(face, edge);
         if placement.rotation != expected {
             issues.push(ConnectorOrientationIssue {
@@ -154,6 +162,16 @@ pub fn connector_orientation_issues(
         }
     }
     issues
+}
+
+/// The edge a connector's hard `edge:` hint names, if it has one.
+fn hard_hinted_edge(comp: &synth_ir::Component) -> Option<BoardEdge> {
+    let hint = comp.placement_hint.as_ref()?;
+    if hint.priority != synth_ir::PlacementPriority::Hard {
+        return None;
+    }
+    hint.edge.as_ref()?;
+    hinted_edge(comp)
 }
 
 /// The board edge a component was asked to sit on: an explicit `edge`, or the
