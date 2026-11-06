@@ -23,10 +23,9 @@ amplifiers, and makes 12 V with an LMR38010 buck.
   is 4-layer with a declared 0.07 mm outer-copper / 0.035 mm inner-copper
   stackup.
 - `control.placement.layout.toml` and `power.placement.layout.toml`: every part
-  is hand-pinned. J_B2B sits at the same board coordinates on both boards; the
-  mechanical test enforces 0.1 mm. The mounting holes are board-local: the
-  control keeps its edge pattern and the power board puts its four at the
-  corners of its own outline.
+  is hand-pinned. J_B2B keeps the same 3.12 mm inset from each board's right
+  edge (56.88 mm on the 60 mm control, 68.88 mm on the 72 mm power board); the
+  mechanical test enforces 0.1 mm. The mounting holes are board-local.
 - `interboard_mappings.json`: the single source of truth for the 20 cross-board
   pins. `mappings_neg_swap.json`, `mappings_neg_drop.json`,
   `mappings_neg_voltage.json` and `control_neg_swap.synth` are the negatives.
@@ -38,10 +37,12 @@ amplifiers, and makes 12 V with an LMR38010 buck.
 ## Board size
 
 The J_B2B pinout and the four mounting holes need a common frame. Both sidecars
-place J_B2B at (56.88, 16) mm. The control's holes are at (2, 2), (51, 2),
-(2, 30) and (51, 30) mm; the power board declares `outline 72mm x 52mm` and
-puts its four at (2, 2), (69, 2), (2, 49) and (69, 49) mm. Its PCB is exported
-un-routed for the 3D renders, like the control.
+place J_B2B at 3.12 mm from the right edge: (56.88, 16) on the 60 mm control
+and (68.88, 16) on the 72 mm power board. The control's holes are at (2, 2),
+(51, 2), (2, 30) and (51, 30) mm; the power board declares `outline 72mm x
+52mm` and puts its four at (2, 2), (62.4, 2), (2, 49) and (62.4, 49) mm. J_PWR
+and J_MOTOR sit flush on the left edge at (5.63, 12) and (8.17, 30). The power
+PCB is exported un-routed for the 3D renders, like the control.
 
 The control board declares `outline 60mm x 32mm`, so Edge.Cuts is exactly
 **60 x 32 mm** with its origin at (0, 0) and no fitted margin. J_B2B is 25.4 mm
@@ -226,12 +227,13 @@ sidecar's original 2.5 mm passive rows overlapped their 0603 courtyards, which
 the legaliser could not resolve; every component is now on a legal courtyard
 grid, the `PWR` clearance is 0.2 mm (the control's value, and twice the IPC
 minimum for 24 V), and a fully pinned sidecar is no longer slid by the
-band-closing pass. The power board declares `outline 72mm x 52mm` and puts its
-four holes at the corners, (2,2), (69,2), (2,49) and (69,49); J_B2B stays at
-(56.88,16) so the connector still lines up with the control. The board is 72 x
-52 mm because 111 power parts need about 2200 mm2 of courtyards; it cannot
-shrink to the control's 60 x 32. The 179 unconnected pads are simply the nets
-with no copper yet; they close when a route is installed. `synth check <board> --json` and `--fab
+band-closing pass. The power board declares `outline 72mm x 52mm`; J_B2B is
+flush at 3.12 mm from the right edge, and J_PWR/J_MOTOR sit flush and close
+together on the left edge. The four mounting holes are at (2,2), (62.4,2),
+(2,49) and (62.4,49). The board is 72 x 52 mm because 111 power parts need
+about 2200 mm2 of courtyards; it cannot shrink to the control's 60 x 32. The
+179 unconnected pads are simply the nets with no copper yet; they close when a
+route is installed. `synth check <board> --json` and `--fab
 --json` were not run to a pass; see `agent-run/VERIFICATION_REPORT.md`.
 
 ## Not verified by Synth

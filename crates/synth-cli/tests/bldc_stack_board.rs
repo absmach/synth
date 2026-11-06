@@ -4,9 +4,8 @@
 //!
 //! The good mapping reports every one of the 20 pins matched, each negative
 //! variant is rejected, and the two placement sidecars put the J_B2B connector
-//! at the same board coordinates. The mounting holes are board-local: the
-//! control keeps its edge pattern and the power board puts its four at the
-//! corners of its own, larger outline.
+//! at the same inset from each board's right edge; the power board is wider,
+//! so the absolute x differs. The mounting holes are board-local.
 
 #![cfg(unix)]
 
@@ -121,7 +120,7 @@ fn a_control_source_with_swapped_connector_pins_is_rejected() {
 const MAX_MISMATCH_MM: f64 = 0.1;
 
 #[test]
-fn the_connector_lines_up() {
+fn the_connector_is_flush_on_both_boards() {
     let control = synth_layout::sidecar::SidecarLayout::load_from_file(
         &board_dir().join("control.placement.layout.toml"),
     )
@@ -131,22 +130,18 @@ fn the_connector_lines_up() {
     )
     .expect("power placement sidecar");
 
-    for refdes in ["J_B2B"] {
-        let a = control.components.get(refdes).expect("control placement");
-        let b = power.components.get(refdes).expect("power placement");
-        let dx = (a.x - b.x).abs();
-        let dy = (a.y - b.y).abs();
-        assert!(
-            dx <= MAX_MISMATCH_MM && dy <= MAX_MISMATCH_MM,
-            "{refdes} is at ({}, {}) on control and ({}, {}) on power ({dx:.3} mm, {dy:.3} mm apart)",
-            a.x,
-            a.y,
-            b.x,
-            b.y
-        );
-        assert_eq!(
-            a.rotation, b.rotation,
-            "{refdes} rotation differs between the boards"
-        );
-    }
+    // The power board is 12 mm wider, so the connector's absolute x differs;
+    // what matters is that it keeps the same inset from each right edge, so
+    // the two boards line up when those edges are flush.
+    const CONTROL_WIDTH_MM: f64 = 60.0;
+    const POWER_WIDTH_MM: f64 = 72.0;
+    let a = control.components.get("J_B2B").expect("control placement");
+    let b = power.components.get("J_B2B").expect("power placement");
+    let control_inset = CONTROL_WIDTH_MM - a.x;
+    let power_inset = POWER_WIDTH_MM - b.x;
+    assert!(
+        (control_inset - power_inset).abs() <= MAX_MISMATCH_MM,
+        "J_B2B is {control_inset:.3} mm from the control edge and {power_inset:.3} mm from the power edge"
+    );
+    assert_eq!(a.rotation, b.rotation, "J_B2B rotation differs");
 }
