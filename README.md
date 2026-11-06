@@ -36,6 +36,14 @@ board "env_logger" {
 
 _An excerpt from the [environmental logger](examples/env_logger/env_logger.synth); the full design adds the MCU, sensor, CC pull-downs, and decoupling that the checks require._
 
+<div align="center">
+
+[![asciicast](https://asciinema.org/a/0CN3lGs7SnY9QV7u.svg)](https://asciinema.org/a/0CN3lGs7SnY9QV7u)
+
+_An agent designing a two-layer NE555 LED blinker through the MCP server: searching the registry, authoring a missing part, setting placement overrides, and validating the board._
+
+</div>
+
 ## Install
 
 ### Prebuilt binary
