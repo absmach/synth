@@ -1811,15 +1811,24 @@ pub fn move_vias_off_component_pads(candidate: &Path) -> Result<usize, String> {
     move_vias_off_pads_with(candidate, true)
 }
 
-/// The footprints that are a ball grid: eight or more pads in three or more rows
-/// and columns at a pitch of 1.3 mm or finer. The same test the escape stage uses.
+/// The footprints that are a ball grid: a footprint of a BGA package (its library
+/// id names one) with eight or more pads in three or more rows and columns at a
+/// pitch of 1.3 mm or finer. The geometry alone is not enough: a QFN, an LGA or a
+/// connector can lay its pads out the same way, and only a BGA land is sized for
+/// the filled and capped via.
 fn grid_footprints(board: &PcbBoard) -> BTreeSet<String> {
     let mut by_footprint: BTreeMap<&str, Vec<(i64, i64)>> = BTreeMap::new();
-    for pad in board.pads() {
-        by_footprint
-            .entry(pad.footprint.as_str())
-            .or_default()
-            .push((pad.at.x_nm / 10_000, pad.at.y_nm / 10_000));
+    for footprint in board
+        .footprints
+        .iter()
+        .filter(|f| f.lib_id.to_ascii_uppercase().contains("BGA"))
+    {
+        for pad in board.pads().filter(|p| p.footprint == footprint.reference) {
+            by_footprint
+                .entry(footprint.reference.as_str())
+                .or_default()
+                .push((pad.at.x_nm / 10_000, pad.at.y_nm / 10_000));
+        }
     }
     let pitch_ok = |values: &mut Vec<i64>| {
         values.sort_unstable();

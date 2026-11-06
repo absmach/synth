@@ -298,7 +298,41 @@ pub fn check_min_drill_diameter(
 /// (`pad_diameter_nm < drill_nm`) yields a negative ring and is
 /// also flagged.
 #[must_use]
-pub fn check_min_annular_ring(routing: &Routing, profile: &ManufacturerProfile) -> Vec<Violation> {
+pub fn check_min_annular_ring(
+    board: &synth_ir::Board,
+    placement: &Placement,
+    routing: &Routing,
+    profile: &ManufacturerProfile,
+) -> Vec<Violation> {
+    let underpad = underpad_courtyards(board, placement);
+    check_min_annular_ring_in(routing, profile, |at| {
+        underpad.iter().any(|rect| rect.contains(at))
+    })
+}
+
+/// The courtyards of the components that declare `escape { method underpad }`:
+/// the only places a filled and capped via in a pad is declared.
+fn underpad_courtyards(board: &synth_ir::Board, placement: &Placement) -> Vec<Rect> {
+    placement
+        .components
+        .iter()
+        .filter_map(|cp| {
+            let component = board.component(cp.id)?;
+            let escape = component.escape.as_ref()?;
+            (!escape.off && escape.method == Some(synth_ir::EscapeMethod::Underpad))
+                .then(|| courtyard_rect(component, cp))
+                .flatten()
+        })
+        .collect()
+}
+
+/// [`check_min_annular_ring`] with the via-in-pad test given: `in_declared_pad`
+/// says whether a point lies where a filled and capped via is declared.
+fn check_min_annular_ring_in(
+    routing: &Routing,
+    profile: &ManufacturerProfile,
+    in_declared_pad: impl Fn(Point) -> bool,
+) -> Vec<Violation> {
     routing
         .vias
         .iter()
@@ -307,13 +341,17 @@ pub fn check_min_annular_ring(routing: &Routing, profile: &ManufacturerProfile) 
             if ring_nm >= profile.min_annular_ring_nm {
                 return None;
             }
-            // A via no wider than the process's via-in-pad land is a filled
-            // and capped via, judged by the land the manufacturer's guide
-            // gives (drill plus 0.15 mm) and not by the plated-barrel ring.
-            if profile.via_in_pad_land_nm().is_some_and(|land| {
-                v.pad_diameter_nm <= land
-                    && v.pad_diameter_nm >= v.drill_nm + profile.via_in_pad_land_extra_nm
-            }) {
+            // A via no wider than the process's via-in-pad land, inside the
+            // courtyard of a component that declares an under-pad escape, is a
+            // filled and capped via, judged by the land the manufacturer's
+            // guide gives (drill plus 0.15 mm) and not by the plated-barrel
+            // ring. An ordinary small via elsewhere keeps the floor.
+            if in_declared_pad(v.at)
+                && profile.via_in_pad_land_nm().is_some_and(|land| {
+                    v.pad_diameter_nm <= land
+                        && v.pad_diameter_nm >= v.drill_nm + profile.via_in_pad_land_extra_nm
+                })
+            {
                 return None;
             }
             Some(Violation {
@@ -977,7 +1015,7 @@ mod tests {
             drill_nm: mm_to_nm(0.3),
             pad_diameter_nm: mm_to_nm(0.5),
         });
-        let vs = check_min_annular_ring(&r, &jlc());
+        let vs = check_min_annular_ring_in(&r, &jlc(), |_| false);
         assert_eq!(vs.len(), 1);
         assert_eq!(vs[0].code, "E-SYNTH-DRC-005");
     }
@@ -992,7 +1030,7 @@ mod tests {
             drill_nm: mm_to_nm(0.3),
             pad_diameter_nm: mm_to_nm(0.6),
         });
-        assert!(check_min_annular_ring(&r, &jlc()).is_empty());
+        assert!(check_min_annular_ring_in(&r, &jlc(), |_| false).is_empty());
     }
 
     /// JLCPCB's via-in-pad guide gives a filled and capped via's land as the
@@ -1013,16 +1051,36 @@ mod tests {
             r
         };
         let advanced = ManufacturerProfile::jlc_advanced();
-        assert!(check_min_annular_ring(&via(0.35), &advanced).is_empty());
+        assert!(check_min_annular_ring_in(&via(0.35), &advanced, |_| true).is_empty());
         assert_eq!(
-            check_min_annular_ring(&via(0.35), &jlc()).len(),
+            check_min_annular_ring_in(&via(0.35), &jlc(), |_| true).len(),
             1,
             "the standard tier does not fill and cap, so it keeps the floor"
         );
         assert_eq!(
-            check_min_annular_ring(&via(0.40), &advanced).len(),
+            check_min_annular_ring_in(&via(0.40), &advanced, |_| true).len(),
             1,
             "a via wider than the land is an ordinary via"
+        );
+    }
+
+    /// The via-in-pad land exempts a via only where a filled and capped via is
+    /// declared: the same 0.35/0.20 mm via outside such a pad keeps the floor.
+    #[test]
+    fn an_ordinary_small_via_still_fails_the_annular_ring_floor() {
+        let mut r = empty_routing();
+        r.vias.push(Via {
+            net: NetId(2),
+            at: Point::new(0, 0),
+            drill_nm: mm_to_nm(0.2),
+            pad_diameter_nm: mm_to_nm(0.35),
+        });
+        let advanced = ManufacturerProfile::jlc_advanced();
+        assert!(check_min_annular_ring_in(&r, &advanced, |_| true).is_empty());
+        assert_eq!(
+            check_min_annular_ring_in(&r, &advanced, |_| false).len(),
+            1,
+            "outside a declared under-pad escape the via is an ordinary one"
         );
     }
 

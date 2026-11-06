@@ -1110,18 +1110,27 @@ fn design_rules(profile: &synth_drc::ManufacturerProfile, board: &Board) -> Stri
          (rule \"manufacturer copper to NPTH hole\"\n  (constraint edge_clearance (min {hole}mm))\n  (condition \"A.Pad_Type == 'NPTH, mechanical'\"))\n\
          (rule \"manufacturer copper to hole\"\n  (constraint hole_clearance (min {hole}mm)))\n"
     );
-    // A via no wider than the process's via-in-pad land is a filled and capped
-    // via: the manufacturer's guide gives its land as the drill plus 0.15 mm,
-    // which leaves less ring than the plain via floor the project states
-    // board-wide. KiCad applies the last matching rule, so it comes last.
+    // A via no wider than the process's via-in-pad land, inside the courtyard of
+    // a component that declares an under-pad escape, is a filled and capped via:
+    // the manufacturer's guide gives its land as the drill plus 0.15 mm, which
+    // leaves less ring than the plain via floor the project states board-wide.
+    // An ordinary small via elsewhere keeps the floor. KiCad applies the last
+    // matching rule, so these come last.
     if let Some(land_nm) = profile.via_in_pad_land_nm() {
         use std::fmt::Write as _;
         let land = synth_geometry::nm_to_mm(land_nm);
         let ring = synth_geometry::nm_to_mm(profile.via_in_pad_land_extra_nm / 2);
-        let _ = writeln!(
-            rules,
-            "(rule \"filled and capped via in pad\"\n  (constraint annular_width (min {ring}mm))\n  (constraint via_diameter (min {land}mm))\n  (condition \"A.Type == 'Via' && A.Diameter <= {land}mm\"))"
-        );
+        for component in board.components.iter().filter(|c| {
+            c.escape
+                .as_ref()
+                .is_some_and(|e| !e.off && e.method == Some(synth_ir::EscapeMethod::Underpad))
+        }) {
+            let refdes = &component.refdes;
+            let _ = writeln!(
+                rules,
+                "(rule \"filled and capped via in pad {refdes}\"\n  (constraint annular_width (min {ring}mm))\n  (constraint via_diameter (min {land}mm))\n  (condition \"A.Type == 'Via' && A.Diameter <= {land}mm && A.insideCourtyard('{refdes}')\"))"
+            );
+        }
     }
     rules.push_str(&layer_pin_rules(board));
     rules
@@ -1776,21 +1785,36 @@ mod tests {
     /// such rule.
     #[test]
     fn a_via_in_pad_tier_exports_the_filled_via_rule_and_a_plain_tier_does_not() {
+        let source = r#"board "b" { layers 6
+            component U1: fpga "ice40hx4k_bg121" { escape { method underpad } }
+            component U2: fpga "ice40hx4k_bg121" { escape { off } } }"#;
         let advanced = design_rules(
             &synth_drc::ManufacturerProfile::jlc_advanced(),
-            &board_from(r#"board "b" { layers 6 }"#),
+            &board_from(source),
         );
         assert!(
             advanced.contains("(constraint annular_width (min 0.075mm))"),
             "{advanced}"
         );
         assert!(
-            advanced.contains("A.Type == 'Via' && A.Diameter <= 0.35mm"),
+            advanced.contains("A.Type == 'Via' && A.Diameter <= 0.35mm && A.insideCourtyard('U1')"),
             "{advanced}"
+        );
+        assert!(
+            !advanced.contains("insideCourtyard('U2')"),
+            "a part that does not escape under its pads has no filled via: {advanced}"
+        );
+        let undeclared = design_rules(
+            &synth_drc::ManufacturerProfile::jlc_advanced(),
+            &board_from(r#"board "b" { layers 6 }"#),
+        );
+        assert!(
+            !undeclared.contains("annular_width"),
+            "a board that declares no under-pad escape keeps the plain floor: {undeclared}"
         );
         let standard = design_rules(
             &synth_drc::ManufacturerProfile::jlc_standard(),
-            &board_from(r#"board "b" { layers 6 }"#),
+            &board_from(source),
         );
         assert!(!standard.contains("annular_width"), "{standard}");
     }

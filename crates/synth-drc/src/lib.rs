@@ -287,7 +287,9 @@ fn evaluate(
     violations.extend(rules::check_min_copper_clearance(routing, profile));
     violations.extend(rules::check_copper_to_edge(routing, placement, profile));
     violations.extend(rules::check_min_drill_diameter(routing, profile));
-    violations.extend(rules::check_min_annular_ring(routing, profile));
+    violations.extend(rules::check_min_annular_ring(
+        board, placement, routing, profile,
+    ));
     violations.extend(rules::check_min_drill_to_copper(routing, profile));
     violations.extend(rules::check_courtyard_overlap(board, placement));
     violations.extend(rules::check_connector_orientation(board, placement));
