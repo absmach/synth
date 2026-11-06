@@ -3,8 +3,10 @@
 //! SYN-408: the two boards of the BLDC stack must agree through J_B2B.
 //!
 //! The good mapping reports every one of the 20 pins matched, each negative
-//! variant is rejected, and the two placement sidecars put the connector and
-//! the four mounting holes at the same board coordinates.
+//! variant is rejected, and the two placement sidecars put the J_B2B connector
+//! at the same board coordinates. The mounting holes are board-local: the
+//! control keeps its edge pattern and the power board puts its four at the
+//! corners of its own, larger outline.
 
 #![cfg(unix)]
 
@@ -119,7 +121,7 @@ fn a_control_source_with_swapped_connector_pins_is_rejected() {
 const MAX_MISMATCH_MM: f64 = 0.1;
 
 #[test]
-fn the_connector_and_mounting_holes_line_up() {
+fn the_connector_lines_up() {
     let control = synth_layout::sidecar::SidecarLayout::load_from_file(
         &board_dir().join("control.placement.layout.toml"),
     )
@@ -129,7 +131,7 @@ fn the_connector_and_mounting_holes_line_up() {
     )
     .expect("power placement sidecar");
 
-    for refdes in ["J_B2B", "H1", "H2", "H3", "H4"] {
+    for refdes in ["J_B2B"] {
         let a = control.components.get(refdes).expect("control placement");
         let b = power.components.get(refdes).expect("power placement");
         let dx = (a.x - b.x).abs();
