@@ -837,10 +837,23 @@ impl Keepout {
     /// The obstacles on `board` for a via of net `own`. Tracks of `own` are not
     /// obstacles, since a via may sit on its own net's copper.
     fn from_board(board: &PcbBoard, own: &str, gap_mm: f64) -> Self {
+        Self::build(board, own, gap_mm, false)
+    }
+
+    /// [`Self::from_board`] without the pads of `own`: a via of `own` filled and
+    /// capped in a pad of its own net touches no foreign copper there.
+    fn from_board_in_pad(board: &PcbBoard, own: &str, gap_mm: f64) -> Self {
+        Self::build(board, own, gap_mm, true)
+    }
+
+    fn build(board: &PcbBoard, own: &str, gap_mm: f64, skip_own_pads: bool) -> Self {
         let mut pads = Vec::new();
         for footprint in &board.footprints {
             for pad in &footprint.pads {
-                pads.push(PadBox::new(pad));
+                let own_pad = net_of(board, pad.net, pad.net_name.as_ref()).as_deref() == Some(own);
+                if !(skip_own_pads && own_pad) {
+                    pads.push(PadBox::new(pad));
+                }
             }
         }
         let tracks = board
@@ -1565,6 +1578,7 @@ fn stitch(
     if copper.len() < 2 {
         return none();
     }
+    let first = &copper[0];
     let room = |layer: &str, p: (f64, f64)| -> bool {
         regions
             .iter()
@@ -1584,18 +1598,25 @@ fn stitch(
         .collect();
 
     let apart = nm_to_mm(size_nm) + declared.gap_mm();
+    // Where the process fills and caps a via in a pad, a pad of the ground net
+    // that holds the via's land is a place for a return via too.
+    let in_pad = ground_nets.in_pad_via.unwrap_or((size_nm, drill_nm));
+    let in_pad_keepout = Keepout::from_board_in_pad(board, net, declared.gap_mm());
+    let ground_pads = ground_nets.in_pad_via.map_or_else(Vec::new, |(land, _)| {
+        ground_pad_spots(board, net, first, nm_to_mm(land))
+    });
     let mut out = Vec::new();
-    let mut unresolved = Vec::new();
-    let mut advisory = Vec::new();
-    for (vx, vy, signal_net) in &signals {
-        let (vx, vy) = (*vx, *vy);
+    let (mut unresolved, mut advisory) = (Vec::new(), Vec::new());
+    for &(vx, vy, ref signal_net) in &signals {
         if ground
             .iter()
             .any(|g| (g.0 - vx).abs() <= reach_mm && (g.1 - vy).abs() <= reach_mm)
         {
             continue;
         }
-        let best = nearest_return_spot(
+        // A free spot first; with none, a ground pad within reach takes the via
+        // in the pad, the way the process fills and caps one.
+        let spot = nearest_return_spot(
             (vx, vy),
             window,
             apart,
@@ -1603,23 +1624,20 @@ fn stitch(
             &room_both,
             &keepout,
             radius,
-        );
-        if let Some(p) = best {
+        )
+        .map(|p| (p, size_nm, drill_nm))
+        .or_else(|| {
+            let spots = (&ground[..], &ground_pads[..]);
+            in_pad_spot((vx, vy), (window, apart), spots, &in_pad_keepout, in_pad)
+                .map(|p| (p, in_pad.0, in_pad.1))
+        });
+        if let Some((p, size, drill)) = spot {
             ground.push(p);
-            out.push(TieVia {
-                net: net.clone(),
-                at: Point::new(mm_to_nm(p.0), mm_to_nm(p.1)),
-                size_nm,
-                drill_nm,
-            });
+            out.push(tie_via_at(net, p, size, drill));
         } else if ground_nets.needs_return(signal_net) {
-            unresolved.push(format!(
-                "the signal via at ({vx:.2}, {vy:.2}) mm has no ground return via within {reach_mm:.2} mm, and no spot in the {net} pour holds one clear of the pads, vias and tracks beside it"
-            ));
+            unresolved.push(missing_return((vx, vy), reach_mm, net, None));
         } else {
-            advisory.push(format!(
-                "net {signal_net} changes layers at ({vx:.2}, {vy:.2}) mm with no ground return via within {reach_mm:.2} mm and no spot in the {net} pour for one; the net carries no fast edge, so the loop is left as an advisory"
-            ));
+            advisory.push(missing_return((vx, vy), reach_mm, net, Some(signal_net)));
         }
     }
     Stitched {
@@ -1627,6 +1645,74 @@ fn stitch(
         unresolved,
         advisory,
     }
+}
+
+/// What the report says of a signal via at `at` that no ground via serves: a
+/// blocking finding, or, for a net that carries no fast edge (`advisory` names
+/// it), an advisory.
+fn missing_return(at: (f64, f64), reach_mm: f64, net: &str, advisory: Option<&str>) -> String {
+    let (x, y) = at;
+    match advisory {
+        None => format!(
+            "the signal via at ({x:.2}, {y:.2}) mm has no ground return via within {reach_mm:.2} mm, and no spot in the {net} pour holds one clear of the pads, vias and tracks beside it"
+        ),
+        Some(signal_net) => format!(
+            "net {signal_net} changes layers at ({x:.2}, {y:.2}) mm with no ground return via within {reach_mm:.2} mm and no spot in the {net} pour for one; the net carries no fast edge, so the loop is left as an advisory"
+        ),
+    }
+}
+
+/// The centres of the pads of `net` on `layer` that hold a via land of
+/// `land_mm`.
+fn ground_pad_spots(board: &PcbBoard, net: &str, layer: &str, land_mm: f64) -> Vec<(f64, f64)> {
+    board
+        .footprints
+        .iter()
+        .flat_map(|footprint| &footprint.pads)
+        .filter(|pad| {
+            net_of(board, pad.net, pad.net_name.as_ref()).as_deref() == Some(net)
+                && pad.layers.iter().any(|l| l == layer)
+                && nm_to_mm(pad.size_nm.0.min(pad.size_nm.1)) >= land_mm
+        })
+        .map(|pad| (pad.at.x_mm(), pad.at.y_mm()))
+        .collect()
+}
+
+/// A via of `net` at `p`, in millimetres.
+fn tie_via_at(net: &str, p: (f64, f64), size_nm: i64, drill_nm: i64) -> TieVia {
+    TieVia {
+        net: net.to_string(),
+        at: Point::new(mm_to_nm(p.0), mm_to_nm(p.1)),
+        size_nm,
+        drill_nm,
+    }
+}
+
+/// Points on the board, in millimetres.
+type Spots<'a> = &'a [(f64, f64)];
+
+/// The ground pad nearest the signal via `from`, within `window`, that takes a
+/// via of `in_pad` size: clear of the ground vias, and of every foreign pad,
+/// track and via.
+fn in_pad_spot(
+    from: (f64, f64),
+    (window, apart): (f64, f64),
+    (ground, pads): (Spots<'_>, Spots<'_>),
+    keepout: &Keepout,
+    in_pad: (i64, i64),
+) -> Option<(f64, f64)> {
+    let radius = nm_to_mm(in_pad.0) / 2.0;
+    pads.iter()
+        .copied()
+        .filter(|p| (p.0 - from.0).abs() <= window && (p.1 - from.1).abs() <= window)
+        .filter(|p| (p.0 - from.0).hypot(p.1 - from.1) >= apart)
+        .filter(|p| ground.iter().all(|g| (g.0 - p.0).hypot(g.1 - p.1) >= apart))
+        .filter(|p| keepout.clear(*p, radius))
+        .min_by(|a, b| {
+            let da = (a.0 - from.0).hypot(a.1 - from.1);
+            let db = (b.0 - from.0).hypot(b.1 - from.1);
+            da.partial_cmp(&db).unwrap_or(std::cmp::Ordering::Equal)
+        })
 }
 
 /// The point nearest the signal via `from`, on the search grid, that is clear of
@@ -2570,6 +2656,41 @@ mod tests {
         );
         let board = PcbBoard::parse(&text).expect("parses");
         assert_eq!(stitch_vias(&board, REACH, &[]).len(), 1);
+    }
+
+    /// With no free spot in reach, a ground pad within reach takes the return via
+    /// in the pad where the process fills and caps one, and is left alone where
+    /// it does not.
+    #[test]
+    fn a_return_via_goes_in_a_ground_pad_when_no_free_spot_is_in_reach() {
+        let text = r#"(kicad_pcb
+          (layers (0 "F.Cu" signal) (2 "B.Cu" signal))
+          (net 0 "") (net 1 "GND") (net 2 "SIG")
+          (footprint "C" (at 0 0) (layer "F.Cu")
+            (pad "1" smd rect (at 10.7 10.5) (size 0.5 0.5) (layers "F.Cu") (net 1)))
+          (via (at 10 10) (size 0.6) (drill 0.3) (layers "F.Cu" "B.Cu") (net 2))
+          (zone (net 1) (net_name "GND") (layer "B.Cu") (fill yes)
+            (polygon (pts (xy 0 0) (xy 40 0) (xy 40 20) (xy 0 20)))
+            (filled_polygon (layer "B.Cu") (pts (xy 0 0) (xy 40 0) (xy 40 20) (xy 0 20)))))"#;
+        let board = PcbBoard::parse(text).expect("parses");
+        let none = stitch(
+            &board,
+            REACH,
+            &[],
+            &Ground::default(),
+            &ViaDeclarations::new(),
+        );
+        assert!(
+            none.vias.is_empty(),
+            "no free spot, no in-pad process: {:?}",
+            none.vias
+        );
+        let ground = Ground::default().with_in_pad_via(350_000, 200_000);
+        let placed = stitch(&board, REACH, &[], &ground, &ViaDeclarations::new());
+        assert_eq!(placed.vias.len(), 1, "{:?}", placed.vias);
+        let via = &placed.vias[0];
+        assert_eq!(at_mm(via), (10.7, 10.5));
+        assert_eq!((via.size_nm, via.drill_nm), (350_000, 200_000));
     }
 
     /// A pad sits where the nearest return via would go. Pad copper in the pour
