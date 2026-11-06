@@ -1,0 +1,26 @@
+{
+  "board": "irrigation_controller.kicad_pcb",
+  "board_sha256_10": "7ed9ef4255",
+  "delivered_board": {
+    "segments": 698,
+    "vias": 152,
+    "via_size_drill_mm": {
+      "0.46/0.2": 1,
+      "0.6/0.2": 151
+    },
+    "wire_length_mm": 1434.0
+  },
+  "routing_report": {
+    "segments": 698,
+    "vias": 152,
+    "wire_length_mm": 1434.0,
+    "connected_nets": 45,
+    "open_nets": 0,
+    "note": "connected_nets and open_nets are refreshed from the delivered board's validation; the others are not"
+  },
+  "kicad_drc": {
+    "errors": 0,
+    "unconnected": 0,
+    "warnings": 121
+  }
+}
