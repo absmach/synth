@@ -931,8 +931,27 @@ fn silk_on_a_pad_is_recorded_without_blocking_a_plain_export() {
 }
 
 #[test]
-fn silk_on_a_pad_blocks_a_release_export_and_force_does_not_override() {
-    let run = export_dfm("dfm_release", &["--gerbers", "--force"]);
+fn silk_on_a_pad_does_not_block_a_release_export_without_dfm_gate() {
+    let run = export_dfm("dfm_release_ungated", &["--gerbers"]);
+    assert_eq!(run.code, Some(0), "stderr:\n{}", run.stderr);
+    assert_eq!(run.status("dfm"), "fail");
+    assert!(run.stderr.contains("--dfm-gate"), "{}", run.stderr);
+}
+
+#[test]
+fn a_passing_dfm_stage_lists_the_checks_it_does_not_make() {
+    let run = export("dfm_clean_coverage", &clean_stub(), &[]);
+    assert_eq!(run.status("dfm"), "pass");
+    let unsupported = run.stage("dfm")["unsupported"].to_string();
+    assert!(
+        unsupported.contains("plated_hole_to_trace") && unsupported.contains("silk_text"),
+        "{unsupported}"
+    );
+}
+
+#[test]
+fn silk_on_a_pad_blocks_a_gated_release_export_and_force_does_not_override() {
+    let run = export_dfm("dfm_release", &["--gerbers", "--dfm-gate", "--force"]);
     assert_eq!(run.code, Some(1), "stderr:\n{}", run.stderr);
     assert_eq!(run.status("dfm"), "fail");
     assert!(

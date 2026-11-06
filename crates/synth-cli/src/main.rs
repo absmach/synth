@@ -219,6 +219,11 @@ enum Command {
         /// placement found so far when the budget is spent.
         #[arg(long, default_value_t = 0)]
         place_route_budget_secs: u64,
+        /// Let a DFM Danger finding block a release export (`--gerbers` and
+        /// similar). Opt-in: the DFM rules are not yet calibrated against
+        /// JLCDFM, so by default findings are only recorded.
+        #[arg(long)]
+        dfm_gate: bool,
     },
 
     /// Apply the highest-confidence `suggested_fix` from every
@@ -970,6 +975,7 @@ fn main() -> ExitCode {
             allow_incomplete,
             place_route_iterate,
             place_route_budget_secs,
+            dfm_gate,
         } => export_kicad(
             &input,
             registry.as_deref(),
@@ -1004,6 +1010,7 @@ fn main() -> ExitCode {
             allow_incomplete,
             place_route_iterate,
             place_route_budget_secs,
+            dfm_gate,
         ),
         Command::Fix {
             input,
@@ -4025,6 +4032,7 @@ fn export_kicad(
     allow_incomplete: bool,
     place_route_iterate: bool,
     place_route_budget_secs: u64,
+    dfm_gate: bool,
 ) -> anyhow::Result<u8> {
     if autoroute {
         // Still parsed, so an existing script fails with something
@@ -4456,13 +4464,14 @@ fn export_kicad(
     native.push(drc.evidence);
 
     // Manufacturability is read from the board that ships. Every export
-    // records it; only a release export (fab files requested) is stopped by
-    // a Danger finding, since a Danger is something the fab will reject.
+    // records it; only a release export (fab files requested) run with
+    // `--dfm-gate` is stopped by a Danger finding. The gate is opt-in until
+    // the rules are calibrated against the fab's own tool.
     let (dfm_evidence, dfm_report) = dfm_stage(&delivered, &drc_profile);
     let dfm_danger = dfm_report
         .as_ref()
         .map_or(0, synth_drc::dfm::DfmReport::danger_count);
-    let release_dfm_blocked = production && dfm_danger > 0;
+    let release_dfm_blocked = production && dfm_gate && dfm_danger > 0;
     if let Some(report) = &dfm_report {
         if release_dfm_blocked {
             for finding in &report.findings {
@@ -4479,7 +4488,7 @@ fn export_kicad(
         } else if !report.findings.is_empty() {
             eprintln!(
                 "warning: DFM found {} finding(s) a fab would flag ({}); see the verification \
-                 report. A release export is blocked by Danger findings.",
+                 report. Pass --dfm-gate to let Danger findings block a release export.",
                 report.findings.len(),
                 dfm_evidence.detail.as_deref().unwrap_or_default()
             );
@@ -4809,6 +4818,12 @@ fn dfm_stage(
                 ));
             }
             let detail = parts.join(", ");
+            evidence = evidence.with_unsupported(vec![
+                "plated_hole_to_trace: not implemented".to_string(),
+                "silk_text_clearance: text is counted, not measured".to_string(),
+                "silk_to_hole: 0.15 mm floor assumed, not published by JLC".to_string(),
+                "copper_merge_tolerance: 0.07 mm uncalibrated".to_string(),
+            ]);
             if !detail.is_empty() {
                 evidence.detail = Some(detail);
             }
