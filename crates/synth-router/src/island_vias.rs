@@ -1860,15 +1860,22 @@ fn move_vias_off_pads_with(candidate: &Path, spare_grids: bool) -> Result<usize,
         let Some(net) = net_of(&board, via.net, via.net_name.as_ref()) else {
             continue;
         };
-        let in_pad = board.pads().any(|pad| {
+        let host = board.pads().find(|pad| {
             pad.net == via.net
                 && !grids.contains(&pad.footprint)
                 && (pad.kind == "thru_hole" || pad.layers.iter().any(|l| via.layers.contains(l)))
                 && pad.signed_distance_nm(via.at) <= (via.drill_nm / 2) as f64
         });
-        if !in_pad {
+        let Some(host) = host else {
             continue;
-        }
+        };
+        // A surface pad whose only link was the via keeps one: a short track from
+        // the pad's centre to where the via goes.
+        let stub_layer = (host.kind == "smd")
+            .then(|| host.layers.iter().find(|l| via.layers.contains(l)).cloned())
+            .flatten();
+        let pad_centre = (host.at.x_mm(), host.at.y_mm());
+        let stub_keepout = Keepout::from_board_in_pad(&board, &net, VIA_GAP_MM);
         let from = (via.at.x_mm(), via.at.y_mm());
         let radius = nm_to_mm(via.size_nm) / 2.0;
         let keepout = Keepout::from_board(&board, &net, VIA_GAP_MM);
@@ -1883,22 +1890,32 @@ fn move_vias_off_pads_with(candidate: &Path, spare_grids: bool) -> Result<usize,
             .collect();
         let others: Vec<((f64, f64), f64)> = taken.clone();
         let Some(to) = nearest_free_spot(from, radius, &keepout, &others, |p| {
-            attached.iter().all(|segment| {
-                let far = if near(segment.start, from) {
-                    segment.end
-                } else {
-                    segment.start
-                };
-                let far = (far.x_mm(), far.y_mm());
-                // The track from where it was to the new spot must also be clear.
-                let half = nm_to_mm(segment.width_nm) / 2.0;
-                let steps = 8_u32;
-                (0..=steps).all(|i| {
-                    let t = f64::from(i) / f64::from(steps);
-                    let at = (far.0 + (p.0 - far.0) * t, far.1 + (p.1 - far.1) * t);
-                    keepout.track_clear(at, half)
+            let stub_clear = stub_layer.is_none()
+                || (0..=8_u32).all(|i| {
+                    let t = f64::from(i) / 8.0;
+                    let at = (
+                        pad_centre.0 + (p.0 - pad_centre.0) * t,
+                        pad_centre.1 + (p.1 - pad_centre.1) * t,
+                    );
+                    stub_keepout.track_clear(at, STUB_WIDTH_MM / 2.0)
+                });
+            stub_clear
+                && attached.iter().all(|segment| {
+                    let far = if near(segment.start, from) {
+                        segment.end
+                    } else {
+                        segment.start
+                    };
+                    let far = (far.x_mm(), far.y_mm());
+                    // The track from where it was to the new spot must also be clear.
+                    let half = nm_to_mm(segment.width_nm) / 2.0;
+                    let steps = 8_u32;
+                    (0..=steps).all(|i| {
+                        let t = f64::from(i) / f64::from(steps);
+                        let at = (far.0 + (p.0 - far.0) * t, far.1 + (p.1 - far.1) * t);
+                        keepout.track_clear(at, half)
+                    })
                 })
-            })
         }) else {
             // Nowhere to put it. A via that carries no track and has a neighbour of
             // its net close by, one the pad does not swallow, only joins the pours
@@ -1921,6 +1938,9 @@ fn move_vias_off_pads_with(candidate: &Path, spare_grids: bool) -> Result<usize,
             continue;
         };
         out = move_via_in_text(&out, from, to);
+        if let Some(layer) = &stub_layer {
+            out = add_stub(&out, &board, &net, layer, pad_centre, to);
+        }
         taken.push((to, radius));
         moved += 1;
     }
@@ -1929,6 +1949,51 @@ fn move_vias_off_pads_with(candidate: &Path, spare_grids: bool) -> Result<usize,
             .map_err(|e| format!("could not write {}: {e}", candidate.display()))?;
     }
     Ok(moved)
+}
+
+/// The width of the track that keeps a pad joined to its moved via.
+const STUB_WIDTH_MM: f64 = 0.2;
+
+/// `text` with a track of net `net` on `layer` from `from` to `to` added.
+fn add_stub(
+    text: &str,
+    board: &PcbBoard,
+    net: &str,
+    layer: &str,
+    from: (f64, f64),
+    to: (f64, f64),
+) -> String {
+    let Some(close) = text.rfind(')') else {
+        return text.to_string();
+    };
+    let body_end = text[..close].trim_end().len();
+    let token = board
+        .nets
+        .iter()
+        .find(|(_, name)| name.as_str() == net)
+        .map_or_else(
+            || format!("\"{}\"", escape_net_name(net)),
+            |(code, _)| code.to_string(),
+        );
+    let id = uuid_for(&TieVia {
+        net: net.to_string(),
+        at: Point::new(mm_to_nm(to.0), mm_to_nm(to.1)),
+        size_nm: mm_to_nm(STUB_WIDTH_MM),
+        drill_nm: 0,
+    });
+    let mut out = String::with_capacity(text.len() + 200);
+    out.push_str(&text[..body_end]);
+    let _ = write!(
+        out,
+        "\n\t(segment\n\t\t(start {} {})\n\t\t(end {} {})\n\t\t(width {})\n\t\t(layer \"{layer}\")\n\t\t(net {token})\n\t\t(uuid \"{id}\")\n\t)",
+        mm(mm_to_nm(from.0)),
+        mm(mm_to_nm(from.1)),
+        mm(mm_to_nm(to.0)),
+        mm(mm_to_nm(to.1)),
+        mm(mm_to_nm(STUB_WIDTH_MM)),
+    );
+    out.push_str(&text[body_end..]);
+    out
 }
 
 fn near(p: Point, at: (f64, f64)) -> bool {
@@ -3171,6 +3236,35 @@ mod tests {
         assert!(
             (after.vias[0].at.x_mm() - 11.5).abs() < 0.01,
             "the other stays"
+        );
+    }
+
+    /// A surface pad whose only link was the via in it stays joined: the via moves
+    /// off the pad and a short track keeps the pad connected to it.
+    #[test]
+    fn a_pad_whose_via_moves_off_it_stays_joined_to_the_via() {
+        let text = r#"(kicad_pcb
+          (layers (0 "F.Cu" signal) (2 "B.Cu" signal))
+          (net 0 "") (net 1 "SIG")
+          (footprint "C" (at 0 0) (layer "F.Cu")
+            (pad "1" smd rect (at 10 10) (size 0.6 0.6) (layers "F.Cu") (net 1 "SIG")))
+          (via (at 10 10) (size 0.6) (drill 0.3) (layers "F.Cu" "B.Cu") (net 1))
+          (segment (start 10 10) (end 4 10) (width 0.25) (layer "B.Cu") (net 1))
+        )"#;
+        let dir = std::env::temp_dir().join(format!("stub-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("board.kicad_pcb");
+        std::fs::write(&path, text).unwrap();
+        assert_eq!(move_vias_off_pads(&path), Ok(1));
+        let after = PcbBoard::parse(&std::fs::read_to_string(&path).unwrap()).unwrap();
+        let via = &after.vias[0];
+        assert!(
+            after.segments.iter().any(|segment| {
+                segment.layer == "F.Cu"
+                    && near(segment.start, (10.0, 10.0))
+                    && near(segment.end, (via.at.x_mm(), via.at.y_mm()))
+            }),
+            "a track on the pad's layer joins the pad centre to the moved via"
         );
     }
 
