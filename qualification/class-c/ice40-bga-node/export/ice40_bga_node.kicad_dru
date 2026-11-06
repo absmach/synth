@@ -1,0 +1,28 @@
+(version 1)
+(rule "manufacturer copper to board edge"
+  (constraint edge_clearance (min 0.3mm)))
+(rule "manufacturer copper to NPTH hole"
+  (constraint edge_clearance (min 0.2mm))
+  (condition "A.Pad_Type == 'NPTH, mechanical'"))
+(rule "manufacturer copper to hole"
+  (constraint hole_clearance (min 0.2mm)))
+(rule "filled and capped via in pad"
+  (constraint annular_width (min 0.075mm))
+  (constraint via_diameter (min 0.35mm))
+  (condition "A.Type == 'Via' && A.Diameter <= 0.35mm"))
+(rule "netclass USB stays off In1.Cu"
+  (layer "In1.Cu")
+  (condition "A.NetClass == 'USB'")
+  (constraint disallow track))
+(rule "netclass USB stays off In2.Cu"
+  (layer "In2.Cu")
+  (condition "A.NetClass == 'USB'")
+  (constraint disallow track))
+(rule "netclass USB stays off In3.Cu"
+  (layer "In3.Cu")
+  (condition "A.NetClass == 'USB'")
+  (constraint disallow track))
+(rule "netclass USB stays off In4.Cu"
+  (layer "In4.Cu")
+  (condition "A.NetClass == 'USB'")
+  (constraint disallow track))
