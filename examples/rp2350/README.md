@@ -17,8 +17,7 @@ contains 14 ground-zone island items and two footprint-library warnings; this
 is not production sign-off until those items are reviewed.
 
 `rp2350_devboard_freerouting_clean.kicad_pcb` is a pre-generated compact KiCad
-review artifact associated with the workflow in
-[`docs/rp2350-agent-workflow.md`](../../docs/rp2350-agent-workflow.md).
+review artifact.
 
 Reference dimensions: approximately **84.5 × 73.1 mm**.
 

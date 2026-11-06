@@ -167,7 +167,7 @@ Synth resolves parts from a component registry and lowers the source into a type
 | [Environmental logger](examples/env_logger/env_logger.synth)                                       | USB-C power, a regulator, an MCU, an environmental sensor, and a debug header                            |
 | [Sensor logger](examples/sensor_logger/sensor_logger.synth)                                        | A larger design with dual I²C sensors, SPI flash, and status LEDs                                        |
 | [Placement and differential pairs](examples/placement_and_diff_pair/placement_and_diff_pair.synth) | Placement hints, differential-pair constraints, and keepout regions                                      |
-| [RP2350 development board](examples/rp2350/)                                                       | Clean-netlist FreeRouting, zone refill, and compact outlines ([workflow](docs/rp2350-agent-workflow.md)) |
+| [RP2350 development board](examples/rp2350/)                                                       | Clean-netlist FreeRouting, zone refill, and compact outlines |
 
 Additional language and validation cases live in [fixtures](fixtures/designs/README.md). Part definitions live in the [component registry](registry/README.md).
 
@@ -178,10 +178,8 @@ for an interactive review._
 
 ## Documentation
 
-- [Release notes](docs/release-notes.md) — what changed in each release, including new DSL and DRC codes.
 - [Release checks](docs/release-checks.md) — the `synth check` gate, tri-state native stages, and export overrides.
 - [KiCad workflows](docs/kicad-workflows.md) — exported projects, validation, BOMs, and fabrication outputs.
-- [RP2350 agent workflow](docs/rp2350-agent-workflow.md) — clean-netlist FreeRouting, compact outlines, agent setup, and review prompts.
 - [Schematic procedures](docs/schematic-procedures.md) — schematic generation and review.
 - [Diagnostic reference](docs/diagnostics/README.md) — diagnostic codes and repair guidance.
 - [Diagnostic protocol](docs/protocol-v1.0.md) — the machine-readable diagnostic format.
