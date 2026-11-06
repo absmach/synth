@@ -1,0 +1,113 @@
+{
+    "$schema": "https://schemas.kicad.org/erc.v1.json",
+    "coordinate_units": "mm",
+    "date": "2026-11-05T15:42:55",
+    "ignored_checks": [
+        {
+            "description": "Global label only appears once in the schematic",
+            "key": "single_global_label"
+        },
+        {
+            "description": "Four connection points are joined together",
+            "key": "four_way_junction"
+        },
+        {
+            "description": "SPICE model issue",
+            "key": "simulation_model_issue"
+        },
+        {
+            "description": "Assigned footprint doesn't match footprint filters",
+            "key": "footprint_filter"
+        }
+    ],
+    "included_severities": [
+        "error",
+        "warning",
+        "exclusion"
+    ],
+    "kicad_version": "10.0.6",
+    "sheets": [
+        {
+            "path": "/",
+            "uuid_path": "/33ebc9e3-0681-554a-ac8a-89a67d5a6adc",
+            "violations": [
+                {
+                    "description": "Symbol 'Si2301CDS' not found in symbol library 'Transistor_FET'",
+                    "items": [
+                        {
+                            "description": "Symbol Q1 [Si2301CDS]",
+                            "pos": {
+                                "x": 0.762,
+                                "y": 0.7366
+                            },
+                            "uuid": "ee38b0d0-c5c5-5ccd-9827-9f7ef56b9db7"
+                        }
+                    ],
+                    "severity": "warning",
+                    "type": "lib_symbol_issues"
+                },
+                {
+                    "description": "Symbol 'AO3400A' doesn't match copy in library 'Transistor_FET'",
+                    "items": [
+                        {
+                            "description": "Symbol Q_V1 [AO3400A]",
+                            "pos": {
+                                "x": 6.1976,
+                                "y": 1.5494
+                            },
+                            "uuid": "7ec2baaf-71c2-5f51-9f3a-c3823c5ec6c2"
+                        }
+                    ],
+                    "severity": "warning",
+                    "type": "lib_symbol_mismatch"
+                },
+                {
+                    "description": "Symbol 'AO3400A' doesn't match copy in library 'Transistor_FET'",
+                    "items": [
+                        {
+                            "description": "Symbol Q_V2 [AO3400A]",
+                            "pos": {
+                                "x": 6.223,
+                                "y": 2.7686
+                            },
+                            "uuid": "348aa4a7-1312-5ebb-b6b4-35f6fbfb8e18"
+                        }
+                    ],
+                    "severity": "warning",
+                    "type": "lib_symbol_mismatch"
+                },
+                {
+                    "description": "Symbol 'Si2301CDS' not found in symbol library 'Transistor_FET'",
+                    "items": [
+                        {
+                            "description": "Symbol Q_E1 [Si2301CDS]",
+                            "pos": {
+                                "x": 9.4488,
+                                "y": 1.016
+                            },
+                            "uuid": "d82992b0-3c44-56e3-9f86-77ece10731f0"
+                        }
+                    ],
+                    "severity": "warning",
+                    "type": "lib_symbol_issues"
+                },
+                {
+                    "description": "Symbol 'Si2301CDS' not found in symbol library 'Transistor_FET'",
+                    "items": [
+                        {
+                            "description": "Symbol Q_E2 [Si2301CDS]",
+                            "pos": {
+                                "x": 9.4488,
+                                "y": 3.0226
+                            },
+                            "uuid": "2a6ee754-78a5-5ed7-a4e0-525b5cf8a19a"
+                        }
+                    ],
+                    "severity": "warning",
+                    "type": "lib_symbol_issues"
+                }
+            ]
+        }
+    ],
+    "source": "irrigation_controller.kicad_sch"
+}
