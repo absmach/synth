@@ -1,5 +1,7 @@
 Designator,Val,Package,Mid X,Mid Y,Rotation,Layer
 "C1","47uF","Capacitor_SMD:CP_Elec_8x10",11.000,6.500,0,"Top"
+"C10","10uF","Capacitor_SMD:C_1206_3216Metric",29.000,10.000,0,"Top"
+"C11","10uF","Capacitor_SMD:C_1206_3216Metric",33.800,10.000,0,"Top"
 "C2","10uF","Capacitor_SMD:C_1206_3216Metric",28.500,19.900,180,"Top"
 "C3","220nF","Capacitor_SMD:C_0603_1608Metric",27.500,14.140,180,"Top"
 "C4","100nF","Capacitor_SMD:C_0603_1608Metric",38.300,13.000,0,"Top"

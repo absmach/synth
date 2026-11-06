@@ -20,8 +20,16 @@
       "reviewed": true
     },
     {
-      "part_id": "c_generic_1206",
-      "reviewed": false
+      "part_id": "c_samsung_cl31a226kahnnne",
+      "reviewed_by": "Steve Munene",
+      "reviewed_at": "2026-11-06",
+      "reviewed": true
+    },
+    {
+      "part_id": "c_samsung_cl31b106kbhnnne",
+      "reviewed_by": "Steve Munene",
+      "reviewed_at": "2026-11-06",
+      "reviewed": true
     },
     {
       "part_id": "jst_b2b_xh_a_2pin",
@@ -91,7 +99,7 @@
     "engine": "freerouting",
     "engine_version": "freerouting-2.4.1.jar",
     "state": "routed",
-    "input_hash": "fbaffb39fb0695e502db8fbe5922adfbacdbab3ab8995e51842d891b57baea6d",
+    "input_hash": "dfcc168c6ce6e6190e364e9df4927c5c6ecdb5aa74c899b2ff7b7514ab66ac84",
     "run_record": "out/buck-nofab/buck.routing.json",
     "fabrication_notes": [
       "via at (32.400, 12.800) mm U1.9: via-in-pad, order with filled and capped vias",
