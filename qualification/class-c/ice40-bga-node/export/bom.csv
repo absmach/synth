@@ -15,7 +15,16 @@ C20,100nF,capacitor,"Generic 0402 MLCC, X7R/X5R, any value",Device:C,Capacitor_S
 C21,100nF,capacitor,"Generic 0402 MLCC, X7R/X5R, any value",Device:C,Capacitor_SMD:C_0402_1005Metric,,
 C22,1uF,capacitor,"Generic 0603 MLCC, X7R/X5R, any value",Device:C,Capacitor_SMD:C_0603_1608Metric,,
 C26,100nF,capacitor,"Generic 0402 MLCC, X7R/X5R, any value",Device:C,Capacitor_SMD:C_0402_1005Metric,,
+C27,100nF,capacitor,"Generic 0402 MLCC, X7R/X5R, any value",Device:C,Capacitor_SMD:C_0402_1005Metric,,
+C28,100nF,capacitor,"Generic 0402 MLCC, X7R/X5R, any value",Device:C,Capacitor_SMD:C_0402_1005Metric,,
+C29,100nF,capacitor,"Generic 0402 MLCC, X7R/X5R, any value",Device:C,Capacitor_SMD:C_0402_1005Metric,,
 C3,10uF,capacitor,"Generic 0805 MLCC, X7R/X5R, any value",Device:C,Capacitor_SMD:C_0805_2012Metric,,
+C30,100nF,capacitor,"Generic 0402 MLCC, X7R/X5R, any value",Device:C,Capacitor_SMD:C_0402_1005Metric,,
+C31,100nF,capacitor,"Generic 0402 MLCC, X7R/X5R, any value",Device:C,Capacitor_SMD:C_0402_1005Metric,,
+C32,4.7uF,capacitor,"Generic 0603 MLCC, X7R/X5R, any value",Device:C,Capacitor_SMD:C_0603_1608Metric,,
+C33,100nF,capacitor,"Generic 0402 MLCC, X7R/X5R, any value",Device:C,Capacitor_SMD:C_0402_1005Metric,,
+C34,10pF,capacitor,"Generic 0402 MLCC, X7R/X5R, any value",Device:C,Capacitor_SMD:C_0402_1005Metric,,
+C35,10pF,capacitor,"Generic 0402 MLCC, X7R/X5R, any value",Device:C,Capacitor_SMD:C_0402_1005Metric,,
 C4,10uF,capacitor,"Generic 0805 MLCC, X7R/X5R, any value",Device:C,Capacitor_SMD:C_0805_2012Metric,,
 C5,10uF,capacitor,"Generic 0805 MLCC, X7R/X5R, any value",Device:C,Capacitor_SMD:C_0805_2012Metric,,
 C6,1uF,capacitor,"Generic 0603 MLCC, X7R/X5R, any value",Device:C,Capacitor_SMD:C_0603_1608Metric,,
@@ -29,10 +38,12 @@ D4,0603-RED,led,"Red LED, 0603 package, ~2.0V Vf",Device:LED,LED_SMD:LED_0603_16
 D6,0603-RED,led,"Red LED, 0603 package, ~2.0V Vf",Device:LED,LED_SMD:LED_0603_1608Metric,C2286,0603-RED
 F1,MF-NSMF050-2,fuse,"Bourns MF-NSMF050-2 resettable fuse, 0.5 A hold, 13.2 V, 1206",Device:Polyfuse,Fuse:Fuse_1206_3216Metric,C75464,MF-NSMF050-2
 FB1,(no value),inductor,"0603 ferrite bead, 600Ω @ 100MHz — EMI suppression",Device:FerriteBead,Inductor_SMD:L_0603_1608Metric,,
+FB2,(no value),inductor,"0603 ferrite bead, 600Ω @ 100MHz — EMI suppression",Device:FerriteBead,Inductor_SMD:L_0603_1608Metric,,
 H1,(no value),mounting_hole,M2.5 non-plated mounting hole (NPTH) for a board corner,Mechanical:MountingHole,MountingHole:MountingHole_2.5mm,,
 H2,(no value),mounting_hole,M2.5 non-plated mounting hole (NPTH) for a board corner,Mechanical:MountingHole,MountingHole:MountingHole_2.5mm,,
-J1,HX PZ2.54-1x2P ZZ,connector,"1x2 through-hole pin header, 2.54mm pitch, for a jumper",Connector_Generic:Conn_01x02,Connector_PinHeader_2.54mm:PinHeader_1x02_P2.54mm_Vertical,C32713268,HX PZ2.54-1x2P ZZ
+J1,TYPE-C-31-M-12,connector,"USB-C receptacle, 24-pin SMD. Modelled here with primary and mirrored power/ground/data pins for full pad coverage.",Connector:USB_C_Receptacle,Connector_USB:USB_C_Receptacle_HRO_TYPE-C-31-M-12,C165948,TYPE-C-31-M-12
 J3,(no value),connector,"1x12 through-hole pin header, 2.54 mm pitch (GPIO); datasheet_url is the product page of the Harwin M20 series, no manufacturer PDF link was verifiable",Connector_Generic:Conn_01x12,Connector_PinHeader_2.54mm:PinHeader_1x12_P2.54mm_Vertical,,
+J4,(no value),connector,"1x5 through-hole pin header, 2.54 mm pitch, vertical, for the SWD port. No current rating asserted.",Connector_Generic:Conn_01x05,Connector_PinHeader_2.54mm:PinHeader_1x05_P2.54mm_Vertical,,
 Q1,SI2301CDS-T1-GE3,transistor,"Vishay Si2301 P-channel power MOSFET, SOT-23",Transistor_FET:Si2301CDS,Package_TO_SOT_SMD:SOT-23,C10487,SI2301CDS-T1-GE3
 R10,1k,resistor,"Generic 0603 thick-film resistor, any value",Device:R_US,Resistor_SMD:R_0603_1608Metric,,
 R11,100,resistor,"Generic 0402 thick-film resistor, any value",Device:R_US,Resistor_SMD:R_0402_1005Metric,,
@@ -41,12 +52,19 @@ R15,100,resistor,"Generic 0402 thick-film resistor, any value",Device:R_US,Resis
 R16,100,resistor,"Generic 0402 thick-film resistor, any value",Device:R_US,Resistor_SMD:R_0402_1005Metric,,
 R19,10k,resistor,"Generic 0402 thick-film resistor, any value",Device:R_US,Resistor_SMD:R_0402_1005Metric,,
 R20,10k,resistor,"Generic 0402 thick-film resistor, any value",Device:R_US,Resistor_SMD:R_0402_1005Metric,,
+R21,10k,resistor,"Generic 0402 thick-film resistor, any value",Device:R_US,Resistor_SMD:R_0402_1005Metric,,
+R22,10k,resistor,"Generic 0402 thick-film resistor, any value",Device:R_US,Resistor_SMD:R_0402_1005Metric,,
+R25,22,resistor,"Generic 0402 thick-film resistor, any value",Device:R_US,Resistor_SMD:R_0402_1005Metric,,
+R26,22,resistor,"Generic 0402 thick-film resistor, any value",Device:R_US,Resistor_SMD:R_0402_1005Metric,,
 R3,100k,resistor,"Generic 0603 thick-film resistor, any value",Device:R_US,Resistor_SMD:R_0603_1608Metric,,
 R4,10k,resistor,"Generic 0402 thick-film resistor, any value",Device:R_US,Resistor_SMD:R_0402_1005Metric,,
 R5,10k,resistor,"Generic 0402 thick-film resistor, any value",Device:R_US,Resistor_SMD:R_0402_1005Metric,,
 R7,1k,resistor,"Generic 0603 thick-film resistor, any value",Device:R_US,Resistor_SMD:R_0603_1608Metric,,
 R8,1k,resistor,"Generic 0603 thick-film resistor, any value",Device:R_US,Resistor_SMD:R_0603_1608Metric,,
 R9,1k,resistor,"Generic 0603 thick-film resistor, any value",Device:R_US,Resistor_SMD:R_0603_1608Metric,,
+R_CC1,5.1k,resistor,"Generic 0402 thick-film resistor, any value",Device:R_US,Resistor_SMD:R_0402_1005Metric,,
+R_CC2,5.1k,resistor,"Generic 0402 thick-film resistor, any value",Device:R_US,Resistor_SMD:R_0402_1005Metric,,
+SW1,PTS645SM43SMTR92 LFS,switch,Generic SPST tactile button,Switch:SW_Push,Button_Switch_SMD:SW_SPST_PTS645Sx43SMTR92,C221880,PTS645SM43SMTR92 LFS
 TP1,(no value),testpoint,"SMD test point pad, 1.5 mm — probe point for a net",Connector:TestPoint,TestPoint:TestPoint_Pad_D1.5mm,,
 TP2,(no value),testpoint,"SMD test point pad, 1.5 mm — probe point for a net",Connector:TestPoint,TestPoint:TestPoint_Pad_D1.5mm,,
 TP3,(no value),testpoint,"SMD test point pad, 1.5 mm — probe point for a net",Connector:TestPoint,TestPoint:TestPoint_Pad_D1.5mm,,
@@ -56,3 +74,5 @@ U1,ICE40HX4K-BG121,fpga,"Lattice iCE40 HX4K FPGA, 121-ball 0.8mm BGA. Copy of re
 U2,W25Q128JVSIQ,memory,"Winbond W25Q128JVSIQ 128Mbit SPI NOR flash, SOIC-8 208 mil (5.3 mm body, 7.7 mm lead span, 1.27 mm pitch)",Memory_Flash:W25Q128JVS,Package_SO:SOIC-8_5.3x5.3mm_P1.27mm,C97521,W25Q128JVSIQ
 U3,AMS1117-3.3,regulator,"AMS1117-3.3 fixed 3.3V LDO regulator, SOT-223 — common JLC stock",Regulator_Linear:AMS1117-3.3,Package_TO_SOT_SMD:SOT-223-3_TabPin2,C6186,AMS1117-3.3
 U4,TLV70012-1.2,regulator,"TI TLV70012 1.2 V fixed LDO, 200 mA, 2.0 to 5.5 V input, SOT-23-THIN (DDC, TSOT-23-5). Pinout 1 IN, 2 GND, 3 EN, 4 NC, 5 OUT per TI TLV700xx datasheet SLVSA00; 1 uF input and output capacitors.",Regulator_Linear:TLV70012_SOT23-5,Package_TO_SOT_SMD:TSOT-23-5,,TLV70012DDCR
+U5,STM32F103C8T6,mcu,"STM32F103C8T6 Cortex-M3 72 MHz, LQFP-48. Copy of the registry stm32f103c8 pin map with capability tags added for the USB FS pins (PA11 USBDM, PA12 USBDP) and the SPI1/SPI2 pins (PA4 NSS, PA5 SCK, PA6 MISO, PA7 MOSI, PB12 NSS) so E-SYNTH-USB-001 and E-SYNTH-SPI-001 can check them",MCU_ST_STM32F1:STM32F103C8Tx,Package_QFP:LQFP-48_7x7mm_P0.5mm,C8734,STM32F103C8T6
+Y1,3TJ480000FYLBC,crystal,"JYJE 3TJ480000FYLBC 8 MHz crystal, 3.2x2.5 mm SMD, load capacitance 8 pF, ESR 150 ohm max, C0 5 pF max, +/-10 ppm, -40 to +85 C; pads 1 and 3 are the crystal, 2 and 4 are ground",Device:Crystal_GND24,Crystal:Crystal_SMD_3225-4Pin_3.2x2.5mm,,3TJ480000FYLBC
