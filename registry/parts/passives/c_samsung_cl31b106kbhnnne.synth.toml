@@ -1,0 +1,31 @@
+id = "c_samsung_cl31b106kbhnnne"
+kind = "capacitor"
+description = "Samsung CL31B106KBHNNNE, 10 uF +/-10 % 50 V X7R 1206 MLCC, -55 to 125 C (distributor listing); JLCPCB C89632"
+mpn = "CL31B106KBHNNNE"
+lcsc_pn = "C89632"
+kicad_symbol = "Device:C"
+kicad_footprint = "Capacitor_SMD:C_1206_3216Metric"
+
+[footprint_dimensions]
+width_mm = 4.6
+height_mm = 2.3
+courtyard_margin_mm = 0.25
+
+[operating_conditions]
+max_voltage_v = 50.0
+
+[[pins]]
+name = "p1"
+number = "1"
+electrical_type = "passive"
+
+[[pins]]
+name = "p2"
+number = "2"
+electrical_type = "passive"
+
+[provenance]
+source = "authored"
+datasheet_url = "https://www.lcsc.com/datasheet/lcsc_datasheet_1810221111_Samsung-Electro-Mechanics-CL31B106KBHNNNE_C89632.pdf"
+reviewed_by = "Steve Munene"
+reviewed_at = "2026-11-06"
