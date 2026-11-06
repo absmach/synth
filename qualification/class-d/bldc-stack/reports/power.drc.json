@@ -1,7 +1,7 @@
 {
     "$schema": "https://schemas.kicad.org/drc.v1.json",
     "coordinate_units": "mm",
-    "date": "2026-11-06T10:27:39",
+    "date": "2026-11-06T13:34:24",
     "ignored_checks": [
         {
             "description": "Footprint has no courtyard defined",
@@ -638,7 +638,7 @@
                     "description": "Pad 1 [BOOT_V] of C_BOOT_V on F.Cu",
                     "pos": {
                         "x": 11.725,
-                        "y": 3.5
+                        "y": 7.0
                     },
                     "uuid": "7119d655-af08-55c2-ab6e-53599b729aac"
                 },
@@ -669,7 +669,7 @@
                     "description": "Pad 1 [BOOT_V] of C_BOOT_V on F.Cu",
                     "pos": {
                         "x": 11.725,
-                        "y": 3.5
+                        "y": 7.0
                     },
                     "uuid": "7119d655-af08-55c2-ab6e-53599b729aac"
                 }
@@ -959,8 +959,8 @@
                 {
                     "description": "Pad 1 [ISENSE_U] of C_IS_OUT_U on F.Cu",
                     "pos": {
-                        "x": 2.725,
-                        "y": 23.5
+                        "x": 6.225,
+                        "y": 21.0
                     },
                     "uuid": "e4414477-186f-57b0-a05c-4e5435298dba"
                 },
@@ -1328,7 +1328,7 @@
                     "description": "Pad 2 [SW_BUCK] of C_BUCK_BOOT on F.Cu",
                     "pos": {
                         "x": 13.275,
-                        "y": 5.5
+                        "y": 8.5
                     },
                     "uuid": "d9f19df8-e2f2-5adf-830e-cea7faed6e8a"
                 },
@@ -1374,7 +1374,7 @@
                     "description": "Pad 1 [BOOT_BUCK] of C_BUCK_BOOT on F.Cu",
                     "pos": {
                         "x": 11.725,
-                        "y": 5.5
+                        "y": 8.5
                     },
                     "uuid": "e25621a0-40fe-525f-9de6-5bfb677ef227"
                 },
@@ -1488,8 +1488,8 @@
                 {
                     "description": "PTH pad 1 [+24V_IN] of J_PWR",
                     "pos": {
-                        "x": 3.085,
-                        "y": 12.305
+                        "x": 5.755,
+                        "y": 14.545
                     },
                     "uuid": "d2417c0f-91ec-56b8-bac7-127539b6cab2"
                 },
@@ -1580,18 +1580,41 @@
                 {
                     "description": "Pad 1 [VBUS] of C_BUCK_IN on F.Cu",
                     "pos": {
-                        "x": 1.525,
-                        "y": 37.0
+                        "x": 5.025,
+                        "y": 42.0
                     },
                     "uuid": "de242806-c2f0-5de1-9d73-b3a55f4dd639"
                 },
                 {
                     "description": "Pad 1 [VBUS] of C_IN2 on F.Cu",
                     "pos": {
-                        "x": 11.525,
-                        "y": 37.0
+                        "x": 12.025,
+                        "y": 36.5
                     },
                     "uuid": "9b4e4afd-e521-5d40-9e6d-b224d0aadbd3"
+                }
+            ],
+            "severity": "error",
+            "type": "unconnected_items"
+        },
+        {
+            "description": "Missing connection between items",
+            "items": [
+                {
+                    "description": "Pad 1 [VBUS] of C_IN2 on F.Cu",
+                    "pos": {
+                        "x": 12.025,
+                        "y": 36.5
+                    },
+                    "uuid": "9b4e4afd-e521-5d40-9e6d-b224d0aadbd3"
+                },
+                {
+                    "description": "PTH pad 1 [VBUS] of C_BULK2",
+                    "pos": {
+                        "x": 20.5,
+                        "y": 31.0
+                    },
+                    "uuid": "a8caabe7-f631-5320-af2e-725eb710a410"
                 }
             ],
             "severity": "error",
@@ -1647,29 +1670,6 @@
             "description": "Missing connection between items",
             "items": [
                 {
-                    "description": "PTH pad 1 [VBUS] of C_BULK2",
-                    "pos": {
-                        "x": 20.5,
-                        "y": 31.0
-                    },
-                    "uuid": "a8caabe7-f631-5320-af2e-725eb710a410"
-                },
-                {
-                    "description": "Pad 1 [VBUS] of C_IN2 on F.Cu",
-                    "pos": {
-                        "x": 11.525,
-                        "y": 37.0
-                    },
-                    "uuid": "9b4e4afd-e521-5d40-9e6d-b224d0aadbd3"
-                }
-            ],
-            "severity": "error",
-            "type": "unconnected_items"
-        },
-        {
-            "description": "Missing connection between items",
-            "items": [
-                {
                     "description": "Pad 1 [VBUS] of R_REV_G1 on F.Cu",
                     "pos": {
                         "x": 24.175,
@@ -1703,8 +1703,8 @@
                 {
                     "description": "Pad 1 [VBUS] of C_IN2 on F.Cu",
                     "pos": {
-                        "x": 11.525,
-                        "y": 37.0
+                        "x": 12.025,
+                        "y": 36.5
                     },
                     "uuid": "9b4e4afd-e521-5d40-9e6d-b224d0aadbd3"
                 }
@@ -1730,29 +1730,6 @@
                         "y": 31.0
                     },
                     "uuid": "a8caabe7-f631-5320-af2e-725eb710a410"
-                }
-            ],
-            "severity": "error",
-            "type": "unconnected_items"
-        },
-        {
-            "description": "Missing connection between items",
-            "items": [
-                {
-                    "description": "Pad 1 [VBUS] of C_IN3 on F.Cu",
-                    "pos": {
-                        "x": 29.225,
-                        "y": 13.5
-                    },
-                    "uuid": "9aaabe70-345c-5259-8e84-2056a3500c46"
-                },
-                {
-                    "description": "Pad 5 [PHASE_W] of Q_WL on F.Cu",
-                    "pos": {
-                        "x": 42.55,
-                        "y": 36.0
-                    },
-                    "uuid": "5e34a37c-c0b8-45f3-9b18-e6d17846a2aa"
                 }
             ],
             "severity": "error",
@@ -1793,6 +1770,29 @@
                     "uuid": "5e34a37c-c0b8-45f3-9b18-e6d17846a2aa"
                 },
                 {
+                    "description": "Pad 1 [VBUS] of C_IN3 on F.Cu",
+                    "pos": {
+                        "x": 29.225,
+                        "y": 13.5
+                    },
+                    "uuid": "9aaabe70-345c-5259-8e84-2056a3500c46"
+                }
+            ],
+            "severity": "error",
+            "type": "unconnected_items"
+        },
+        {
+            "description": "Missing connection between items",
+            "items": [
+                {
+                    "description": "Pad 5 [PHASE_W] of Q_WL on F.Cu",
+                    "pos": {
+                        "x": 42.55,
+                        "y": 36.0
+                    },
+                    "uuid": "5e34a37c-c0b8-45f3-9b18-e6d17846a2aa"
+                },
+                {
                     "description": "Pad 1 [BOOT_W] of D_BOOT_W on F.Cu",
                     "pos": {
                         "x": 27.85,
@@ -1854,20 +1854,20 @@
             "description": "Missing connection between items",
             "items": [
                 {
-                    "description": "Pad 5 [PHASE_W] of Q_WL on F.Cu",
-                    "pos": {
-                        "x": 42.55,
-                        "y": 36.0
-                    },
-                    "uuid": "5e34a37c-c0b8-45f3-9b18-e6d17846a2aa"
-                },
-                {
                     "description": "Pad 1 [VBUS] of C_BUCK_IN2 on F.Cu",
                     "pos": {
                         "x": 51.225,
                         "y": 23.5
                     },
                     "uuid": "19f05cb3-3d4b-5645-a5e3-ff21a4a8f95a"
+                },
+                {
+                    "description": "Pad 5 [PHASE_W] of Q_WL on F.Cu",
+                    "pos": {
+                        "x": 42.55,
+                        "y": 36.0
+                    },
+                    "uuid": "5e34a37c-c0b8-45f3-9b18-e6d17846a2aa"
                 }
             ],
             "severity": "error",
@@ -1946,66 +1946,66 @@
             "description": "Missing connection between items",
             "items": [
                 {
+                    "description": "PTH pad 1 [PHASE_U] of J_MOTOR",
+                    "pos": {
+                        "x": 5.755,
+                        "y": 35.085
+                    },
+                    "uuid": "1ea39967-1225-5265-9db1-df29ab378464"
+                },
+                {
+                    "description": "Pad 3 [SHUNT_W] of Q_WL on F.Cu",
+                    "pos": {
+                        "x": 38.6,
+                        "y": 36.635
+                    },
+                    "uuid": "14557808-5b05-4891-b067-6c369fc57561"
+                }
+            ],
+            "severity": "error",
+            "type": "unconnected_items"
+        },
+        {
+            "description": "Missing connection between items",
+            "items": [
+                {
+                    "description": "Pad 1 [SHUNT_W] of Q_WL on F.Cu",
+                    "pos": {
+                        "x": 38.6,
+                        "y": 34.095
+                    },
+                    "uuid": "e9ecc6e8-9911-474e-88a9-b1f5cc27bc01"
+                },
+                {
+                    "description": "Pad 2 [SHUNT_W] of Q_WL on F.Cu",
+                    "pos": {
+                        "x": 38.6,
+                        "y": 35.365
+                    },
+                    "uuid": "3cf59e9b-0b26-457e-a579-7a11f52095a7"
+                }
+            ],
+            "severity": "error",
+            "type": "unconnected_items"
+        },
+        {
+            "description": "Missing connection between items",
+            "items": [
+                {
+                    "description": "Pad 1 [SHUNT_W] of Q_WL on F.Cu",
+                    "pos": {
+                        "x": 38.6,
+                        "y": 34.095
+                    },
+                    "uuid": "e9ecc6e8-9911-474e-88a9-b1f5cc27bc01"
+                },
+                {
                     "description": "Pad 2 [PHASE_U] of C_BOOT_U on F.Cu",
                     "pos": {
                         "x": 13.275,
                         "y": 1.5
                     },
                     "uuid": "c76504dd-4e43-50f6-8e1a-7ec2994ff890"
-                },
-                {
-                    "description": "Pad 1 [SHUNT_W] of Q_WL on F.Cu",
-                    "pos": {
-                        "x": 38.6,
-                        "y": 34.095
-                    },
-                    "uuid": "e9ecc6e8-9911-474e-88a9-b1f5cc27bc01"
-                }
-            ],
-            "severity": "error",
-            "type": "unconnected_items"
-        },
-        {
-            "description": "Missing connection between items",
-            "items": [
-                {
-                    "description": "Pad 1 [SHUNT_W] of Q_WL on F.Cu",
-                    "pos": {
-                        "x": 38.6,
-                        "y": 34.095
-                    },
-                    "uuid": "e9ecc6e8-9911-474e-88a9-b1f5cc27bc01"
-                },
-                {
-                    "description": "Pad 2 [SHUNT_W] of Q_WL on F.Cu",
-                    "pos": {
-                        "x": 38.6,
-                        "y": 35.365
-                    },
-                    "uuid": "3cf59e9b-0b26-457e-a579-7a11f52095a7"
-                }
-            ],
-            "severity": "error",
-            "type": "unconnected_items"
-        },
-        {
-            "description": "Missing connection between items",
-            "items": [
-                {
-                    "description": "Pad 2 [SHUNT_W] of Q_WL on F.Cu",
-                    "pos": {
-                        "x": 38.6,
-                        "y": 35.365
-                    },
-                    "uuid": "3cf59e9b-0b26-457e-a579-7a11f52095a7"
-                },
-                {
-                    "description": "Pad 3 [SHUNT_W] of Q_WL on F.Cu",
-                    "pos": {
-                        "x": 38.6,
-                        "y": 36.635
-                    },
-                    "uuid": "14557808-5b05-4891-b067-6c369fc57561"
                 }
             ],
             "severity": "error",
@@ -2023,12 +2023,12 @@
                     "uuid": "14557808-5b05-4891-b067-6c369fc57561"
                 },
                 {
-                    "description": "PTH pad 1 [PHASE_U] of J_MOTOR",
+                    "description": "Pad 2 [SHUNT_W] of Q_WL on F.Cu",
                     "pos": {
-                        "x": 3.085,
-                        "y": 30.305
+                        "x": 38.6,
+                        "y": 35.365
                     },
-                    "uuid": "1ea39967-1225-5265-9db1-df29ab378464"
+                    "uuid": "3cf59e9b-0b26-457e-a579-7a11f52095a7"
                 }
             ],
             "severity": "error",
@@ -2107,20 +2107,43 @@
             "description": "Missing connection between items",
             "items": [
                 {
-                    "description": "PTH pad 2 [PHASE_V] of J_MOTOR",
+                    "description": "Pad 2 [PHASE_V] of C_BOOT_V on F.Cu",
                     "pos": {
-                        "x": 8.165,
-                        "y": 30.305
+                        "x": 13.275,
+                        "y": 7.0
                     },
-                    "uuid": "47024cbe-a1d4-598c-a9e9-3d3ea3da277f"
+                    "uuid": "25633652-5275-515b-b3cb-d77ecc014a1d"
                 },
                 {
-                    "description": "Pad 3 [SHUNT_W] of Q_WL on F.Cu",
+                    "description": "Pad 1 [SHUNT_W] of Q_WL on F.Cu",
                     "pos": {
                         "x": 38.6,
-                        "y": 36.635
+                        "y": 34.095
                     },
-                    "uuid": "14557808-5b05-4891-b067-6c369fc57561"
+                    "uuid": "e9ecc6e8-9911-474e-88a9-b1f5cc27bc01"
+                }
+            ],
+            "severity": "error",
+            "type": "unconnected_items"
+        },
+        {
+            "description": "Missing connection between items",
+            "items": [
+                {
+                    "description": "Pad 2 [PHASE_V] of C_BOOT_V on F.Cu",
+                    "pos": {
+                        "x": 13.275,
+                        "y": 7.0
+                    },
+                    "uuid": "25633652-5275-515b-b3cb-d77ecc014a1d"
+                },
+                {
+                    "description": "PTH pad 2 [PHASE_V] of J_MOTOR",
+                    "pos": {
+                        "x": 5.755,
+                        "y": 30.005
+                    },
+                    "uuid": "47024cbe-a1d4-598c-a9e9-3d3ea3da277f"
                 }
             ],
             "severity": "error",
@@ -2167,29 +2190,6 @@
                         "y": 10.135
                     },
                     "uuid": "5a0cd288-611f-511d-9a45-90df6b2c36e9"
-                }
-            ],
-            "severity": "error",
-            "type": "unconnected_items"
-        },
-        {
-            "description": "Missing connection between items",
-            "items": [
-                {
-                    "description": "Pad 1 [SHUNT_W] of Q_WL on F.Cu",
-                    "pos": {
-                        "x": 38.6,
-                        "y": 34.095
-                    },
-                    "uuid": "e9ecc6e8-9911-474e-88a9-b1f5cc27bc01"
-                },
-                {
-                    "description": "Pad 2 [PHASE_V] of C_BOOT_V on F.Cu",
-                    "pos": {
-                        "x": 13.275,
-                        "y": 3.5
-                    },
-                    "uuid": "25633652-5275-515b-b3cb-d77ecc014a1d"
                 }
             ],
             "severity": "error",
@@ -2268,29 +2268,6 @@
             "description": "Missing connection between items",
             "items": [
                 {
-                    "description": "PTH pad 3 [PHASE_W] of J_MOTOR",
-                    "pos": {
-                        "x": 13.245,
-                        "y": 30.305
-                    },
-                    "uuid": "9bf25e92-be85-5ccd-9d0b-67732bbe30ee"
-                },
-                {
-                    "description": "Pad 3 [SHUNT_W] of Q_WL on F.Cu",
-                    "pos": {
-                        "x": 38.6,
-                        "y": 36.635
-                    },
-                    "uuid": "14557808-5b05-4891-b067-6c369fc57561"
-                }
-            ],
-            "severity": "error",
-            "type": "unconnected_items"
-        },
-        {
-            "description": "Missing connection between items",
-            "items": [
-                {
                     "description": "Pad 2 [PHASE_W] of C_BOOT_W on F.Cu",
                     "pos": {
                         "x": 27.275,
@@ -2314,6 +2291,52 @@
             "description": "Missing connection between items",
             "items": [
                 {
+                    "description": "Pad 2 [PHASE_W] of C_BOOT_W on F.Cu",
+                    "pos": {
+                        "x": 27.275,
+                        "y": 1.5
+                    },
+                    "uuid": "8e37cb22-6171-55c8-a85a-93d504283419"
+                },
+                {
+                    "description": "PTH pad 3 [PHASE_W] of J_MOTOR",
+                    "pos": {
+                        "x": 5.755,
+                        "y": 24.925
+                    },
+                    "uuid": "9bf25e92-be85-5ccd-9d0b-67732bbe30ee"
+                }
+            ],
+            "severity": "error",
+            "type": "unconnected_items"
+        },
+        {
+            "description": "Missing connection between items",
+            "items": [
+                {
+                    "description": "Pad 1 [SHUNT_W] of Q_WL on F.Cu",
+                    "pos": {
+                        "x": 38.6,
+                        "y": 34.095
+                    },
+                    "uuid": "e9ecc6e8-9911-474e-88a9-b1f5cc27bc01"
+                },
+                {
+                    "description": "Pad 6 [PHASE_W] of U_GD_W on F.Cu",
+                    "pos": {
+                        "x": 46.475,
+                        "y": 4.135
+                    },
+                    "uuid": "402f6886-d34c-5e3a-8e8e-29edc227cc81"
+                }
+            ],
+            "severity": "error",
+            "type": "unconnected_items"
+        },
+        {
+            "description": "Missing connection between items",
+            "items": [
+                {
                     "description": "Pad 2 [SHUNT_W] of Q_WL on F.Cu",
                     "pos": {
                         "x": 38.6,
@@ -2360,20 +2383,20 @@
             "description": "Missing connection between items",
             "items": [
                 {
-                    "description": "Pad 5 [PHASE_W] of Q_WL on F.Cu",
-                    "pos": {
-                        "x": 42.55,
-                        "y": 36.0
-                    },
-                    "uuid": "5e34a37c-c0b8-45f3-9b18-e6d17846a2aa"
-                },
-                {
                     "description": "Pad 3 [SHUNT_W] of Q_WL on F.Cu",
                     "pos": {
                         "x": 38.6,
                         "y": 36.635
                     },
                     "uuid": "14557808-5b05-4891-b067-6c369fc57561"
+                },
+                {
+                    "description": "Pad 5 [PHASE_W] of Q_WL on F.Cu",
+                    "pos": {
+                        "x": 42.55,
+                        "y": 36.0
+                    },
+                    "uuid": "5e34a37c-c0b8-45f3-9b18-e6d17846a2aa"
                 }
             ],
             "severity": "error",
@@ -2397,29 +2420,6 @@
                         "y": 3.5
                     },
                     "uuid": "0244e330-333a-5b11-93bd-7f9be94881db"
-                }
-            ],
-            "severity": "error",
-            "type": "unconnected_items"
-        },
-        {
-            "description": "Missing connection between items",
-            "items": [
-                {
-                    "description": "Pad 6 [PHASE_W] of U_GD_W on F.Cu",
-                    "pos": {
-                        "x": 46.475,
-                        "y": 4.135
-                    },
-                    "uuid": "402f6886-d34c-5e3a-8e8e-29edc227cc81"
-                },
-                {
-                    "description": "Pad 1 [SHUNT_W] of Q_WL on F.Cu",
-                    "pos": {
-                        "x": 38.6,
-                        "y": 34.095
-                    },
-                    "uuid": "e9ecc6e8-9911-474e-88a9-b1f5cc27bc01"
                 }
             ],
             "severity": "error",
@@ -3512,8 +3512,8 @@
                 {
                     "description": "Pad 1 [+12V] of C_BUCK_OUT1 on F.Cu",
                     "pos": {
-                        "x": 6.025,
-                        "y": 23.0
+                        "x": 12.025,
+                        "y": 25.5
                     },
                     "uuid": "53c5406d-4509-579c-82c3-03efac4de4c6"
                 },
@@ -3533,20 +3533,20 @@
             "description": "Missing connection between items",
             "items": [
                 {
-                    "description": "PTH pad 3 [+12V] of Q_GE",
-                    "pos": {
-                        "x": 22.04,
-                        "y": 8.95
-                    },
-                    "uuid": "e1a1b36d-7693-5260-9c58-e086a23a82b8"
-                },
-                {
                     "description": "Pad 1 [+12V] of C_BUCK_OUT1 on F.Cu",
                     "pos": {
-                        "x": 6.025,
-                        "y": 23.0
+                        "x": 12.025,
+                        "y": 25.5
                     },
                     "uuid": "53c5406d-4509-579c-82c3-03efac4de4c6"
+                },
+                {
+                    "description": "PTH pad 3 [+12V] of Q_GE",
+                    "pos": {
+                        "x": 22.04,
+                        "y": 8.95
+                    },
+                    "uuid": "e1a1b36d-7693-5260-9c58-e086a23a82b8"
                 }
             ],
             "severity": "error",
@@ -3578,14 +3578,6 @@
         {
             "description": "Missing connection between items",
             "items": [
-                {
-                    "description": "Pad 1 [+12V] of R_BUCK_FB_T on F.Cu",
-                    "pos": {
-                        "x": 42.675,
-                        "y": 26.0
-                    },
-                    "uuid": "868d9fe8-57a3-5e89-b023-003f01510c50"
-                },
                 {
                     "description": "Pad 1 [+12V] of R_GE_PU on F.Cu",
                     "pos": {
@@ -3593,6 +3585,14 @@
                         "y": 23.5
                     },
                     "uuid": "031f79d1-bf7b-5ebc-b473-d0f21b3e0bd8"
+                },
+                {
+                    "description": "Pad 1 [+12V] of R_BUCK_FB_T on F.Cu",
+                    "pos": {
+                        "x": 42.675,
+                        "y": 26.0
+                    },
+                    "uuid": "868d9fe8-57a3-5e89-b023-003f01510c50"
                 }
             ],
             "severity": "error",
@@ -3601,14 +3601,6 @@
         {
             "description": "Missing connection between items",
             "items": [
-                {
-                    "description": "Pad 1 [+12V] of C_BUCK_FF on F.Cu",
-                    "pos": {
-                        "x": 51.225,
-                        "y": 25.5
-                    },
-                    "uuid": "5aeae430-42cb-56fa-8345-22b060416a8e"
-                },
                 {
                     "description": "Pad 1 [+12V] of C_BUCK_OUT3 on F.Cu",
                     "pos": {
@@ -3616,14 +3608,7 @@
                         "y": 21.5
                     },
                     "uuid": "ee47c93b-e768-5412-8905-4089b4143605"
-                }
-            ],
-            "severity": "error",
-            "type": "unconnected_items"
-        },
-        {
-            "description": "Missing connection between items",
-            "items": [
+                },
                 {
                     "description": "Pad 1 [+12V] of C_BUCK_FF on F.Cu",
                     "pos": {
@@ -3631,14 +3616,6 @@
                         "y": 25.5
                     },
                     "uuid": "5aeae430-42cb-56fa-8345-22b060416a8e"
-                },
-                {
-                    "description": "Pad 1 [+12V] of R_GE_PU on F.Cu",
-                    "pos": {
-                        "x": 47.175,
-                        "y": 23.5
-                    },
-                    "uuid": "031f79d1-bf7b-5ebc-b473-d0f21b3e0bd8"
                 }
             ],
             "severity": "error",
@@ -3647,6 +3624,14 @@
         {
             "description": "Missing connection between items",
             "items": [
+                {
+                    "description": "Pad 1 [+12V] of C_BUCK_OUT3 on F.Cu",
+                    "pos": {
+                        "x": 51.225,
+                        "y": 21.5
+                    },
+                    "uuid": "ee47c93b-e768-5412-8905-4089b4143605"
+                },
                 {
                     "description": "Pad 2 [+12V] of L_BUCK on F.Cu",
                     "pos": {
@@ -3654,14 +3639,29 @@
                         "y": 14.0
                     },
                     "uuid": "f70c9271-f509-461c-97db-c86d35258e33"
-                },
+                }
+            ],
+            "severity": "error",
+            "type": "unconnected_items"
+        },
+        {
+            "description": "Missing connection between items",
+            "items": [
                 {
-                    "description": "Pad 1 [+12V] of C_BUCK_OUT3 on F.Cu",
+                    "description": "Pad 1 [+12V] of C_BUCK_FF on F.Cu",
                     "pos": {
                         "x": 51.225,
-                        "y": 21.5
+                        "y": 25.5
                     },
-                    "uuid": "ee47c93b-e768-5412-8905-4089b4143605"
+                    "uuid": "5aeae430-42cb-56fa-8345-22b060416a8e"
+                },
+                {
+                    "description": "Pad 1 [+12V] of R_GE_PU on F.Cu",
+                    "pos": {
+                        "x": 47.175,
+                        "y": 23.5
+                    },
+                    "uuid": "031f79d1-bf7b-5ebc-b473-d0f21b3e0bd8"
                 }
             ],
             "severity": "error",
@@ -3681,8 +3681,8 @@
                 {
                     "description": "Pad 1 [+12V_GD] of C_GD_BULK on F.Cu",
                     "pos": {
-                        "x": 6.525,
-                        "y": 37.0
+                        "x": 9.525,
+                        "y": 39.5
                     },
                     "uuid": "9ae1a7cb-9719-5477-820c-4c36e4599edc"
                 }
@@ -4156,52 +4156,6 @@
             "description": "Silkscreen clearance",
             "items": [
                 {
-                    "description": "Segment of Q_GE on F.Silkscreen",
-                    "pos": {
-                        "x": 14.39,
-                        "y": 10.31
-                    },
-                    "uuid": "5fe8ba9e-24c0-5f81-848c-8bb424c709c0"
-                },
-                {
-                    "description": "Reference field of J_PWR",
-                    "pos": {
-                        "x": 13.565,
-                        "y": 7.3567
-                    },
-                    "uuid": "640050a3-1a29-5718-83a3-522ccc975487"
-                }
-            ],
-            "severity": "warning",
-            "type": "silk_overlap"
-        },
-        {
-            "description": "Silkscreen clearance",
-            "items": [
-                {
-                    "description": "Reference field of J_PWR",
-                    "pos": {
-                        "x": 13.565,
-                        "y": 7.3567
-                    },
-                    "uuid": "640050a3-1a29-5718-83a3-522ccc975487"
-                },
-                {
-                    "description": "Segment of Q_GE on F.Silkscreen",
-                    "pos": {
-                        "x": 14.39,
-                        "y": 7.07
-                    },
-                    "uuid": "cfa37c92-47e4-5682-abfc-33f7e8300a19"
-                }
-            ],
-            "severity": "warning",
-            "type": "silk_overlap"
-        },
-        {
-            "description": "Silkscreen clearance",
-            "items": [
-                {
                     "description": "Reference field of Q_UH",
                     "pos": {
                         "x": 24.55,
@@ -4216,29 +4170,6 @@
                         "y": 15.918
                     },
                     "uuid": "8539b099-f19c-5b7b-a7ba-91fb72fb644a"
-                }
-            ],
-            "severity": "warning",
-            "type": "silk_overlap"
-        },
-        {
-            "description": "Silkscreen clearance",
-            "items": [
-                {
-                    "description": "Segment of C_BULK1 on F.Silkscreen",
-                    "pos": {
-                        "x": 24.2,
-                        "y": 16.078
-                    },
-                    "uuid": "278427e9-cfed-564c-addb-6fde0a2b6690"
-                },
-                {
-                    "description": "Reference field of Q_UH",
-                    "pos": {
-                        "x": 24.55,
-                        "y": 17.5
-                    },
-                    "uuid": "6c7e5861-f440-572e-8b6c-8bc0d6269272"
                 }
             ],
             "severity": "warning",
@@ -4296,10 +4227,10 @@
                 {
                     "description": "Segment of C_BULK1 on F.Silkscreen",
                     "pos": {
-                        "x": 24.32,
-                        "y": 16.743
+                        "x": 24.2,
+                        "y": 16.078
                     },
-                    "uuid": "3516f962-61fd-519f-a5a9-fd2476dfd24e"
+                    "uuid": "278427e9-cfed-564c-addb-6fde0a2b6690"
                 },
                 {
                     "description": "Reference field of Q_UH",
@@ -4432,6 +4363,29 @@
             "description": "Silkscreen clearance",
             "items": [
                 {
+                    "description": "Segment of C_BULK1 on F.Silkscreen",
+                    "pos": {
+                        "x": 24.32,
+                        "y": 16.743
+                    },
+                    "uuid": "3516f962-61fd-519f-a5a9-fd2476dfd24e"
+                },
+                {
+                    "description": "Reference field of Q_UH",
+                    "pos": {
+                        "x": 24.55,
+                        "y": 17.5
+                    },
+                    "uuid": "6c7e5861-f440-572e-8b6c-8bc0d6269272"
+                }
+            ],
+            "severity": "warning",
+            "type": "silk_overlap"
+        },
+        {
+            "description": "Silkscreen clearance",
+            "items": [
+                {
                     "description": "Reference field of Q_UH",
                     "pos": {
                         "x": 24.55,
@@ -4455,20 +4409,112 @@
             "description": "Silkscreen clearance",
             "items": [
                 {
-                    "description": "Segment of Q_WL on F.Silkscreen",
+                    "description": "Reference field of J_PWR",
                     "pos": {
-                        "x": 44.56,
-                        "y": 38.685
+                        "x": 13.205,
+                        "y": 5.545
                     },
-                    "uuid": "4221ef13-3a7d-405a-bfef-210ece47529c"
+                    "uuid": "640050a3-1a29-5718-83a3-522ccc975487"
                 },
                 {
-                    "description": "Reference field of Q_UL",
+                    "description": "Reference field of Q_GE",
                     "pos": {
-                        "x": 39.03,
-                        "y": 26.3
+                        "x": 12.3,
+                        "y": 4.68
                     },
-                    "uuid": "ea769a43-cbe7-5904-8932-042e6ea8e41e"
+                    "uuid": "d40eb9f8-72d5-54a7-811c-62700b81caac"
+                }
+            ],
+            "severity": "warning",
+            "type": "silk_overlap"
+        },
+        {
+            "description": "Silkscreen clearance",
+            "items": [
+                {
+                    "description": "Segment of Q_GE on F.Silkscreen",
+                    "pos": {
+                        "x": 14.39,
+                        "y": 5.69
+                    },
+                    "uuid": "19492e5c-cb3f-5b8a-876b-1a9edaec15a3"
+                },
+                {
+                    "description": "Reference field of J_PWR",
+                    "pos": {
+                        "x": 13.205,
+                        "y": 5.545
+                    },
+                    "uuid": "640050a3-1a29-5718-83a3-522ccc975487"
+                }
+            ],
+            "severity": "warning",
+            "type": "silk_overlap"
+        },
+        {
+            "description": "Silkscreen clearance",
+            "items": [
+                {
+                    "description": "Segment of Q_GE on F.Silkscreen",
+                    "pos": {
+                        "x": 14.39,
+                        "y": 10.31
+                    },
+                    "uuid": "5fe8ba9e-24c0-5f81-848c-8bb424c709c0"
+                },
+                {
+                    "description": "Reference field of J_PWR",
+                    "pos": {
+                        "x": 13.205,
+                        "y": 5.545
+                    },
+                    "uuid": "640050a3-1a29-5718-83a3-522ccc975487"
+                }
+            ],
+            "severity": "warning",
+            "type": "silk_overlap"
+        },
+        {
+            "description": "Silkscreen clearance",
+            "items": [
+                {
+                    "description": "Reference field of J_PWR",
+                    "pos": {
+                        "x": 13.205,
+                        "y": 5.545
+                    },
+                    "uuid": "640050a3-1a29-5718-83a3-522ccc975487"
+                },
+                {
+                    "description": "Segment of D_TVS on F.Silkscreen",
+                    "pos": {
+                        "x": 14.34,
+                        "y": 0.85
+                    },
+                    "uuid": "6d2e083e-08e7-4695-a3bc-c7a6c372d157"
+                }
+            ],
+            "severity": "warning",
+            "type": "silk_overlap"
+        },
+        {
+            "description": "Silkscreen clearance",
+            "items": [
+                {
+                    "description": "Reference field of J_PWR",
+                    "pos": {
+                        "x": 13.205,
+                        "y": 5.545
+                    },
+                    "uuid": "640050a3-1a29-5718-83a3-522ccc975487"
+                },
+                {
+                    "description": "Segment of D_TVS on F.Silkscreen",
+                    "pos": {
+                        "x": 14.34,
+                        "y": 5.15
+                    },
+                    "uuid": "a8c3511f-c5ef-422a-bde2-a645c0a027c3"
                 }
             ],
             "severity": "warning",
@@ -4501,20 +4547,20 @@
             "description": "Silkscreen clearance",
             "items": [
                 {
-                    "description": "Reference field of Q_GE",
+                    "description": "Segment of Q_WL on F.Silkscreen",
                     "pos": {
-                        "x": 26.7,
-                        "y": 10.6733
+                        "x": 44.56,
+                        "y": 38.685
                     },
-                    "uuid": "d40eb9f8-72d5-54a7-811c-62700b81caac"
+                    "uuid": "4221ef13-3a7d-405a-bfef-210ece47529c"
                 },
                 {
-                    "description": "Segment of D_BOOT_W on F.Silkscreen",
+                    "description": "Reference field of Q_UL",
                     "pos": {
-                        "x": 27.14,
-                        "y": 10.0
+                        "x": 39.03,
+                        "y": 26.3
                     },
-                    "uuid": "de699020-a29a-4525-a22d-28ad5ded289c"
+                    "uuid": "ea769a43-cbe7-5904-8932-042e6ea8e41e"
                 }
             ],
             "severity": "warning",
@@ -4593,29 +4639,6 @@
             "description": "Silkscreen clipped by solder mask",
             "items": [
                 {
-                    "description": "Reference field of J_MOTOR",
-                    "pos": {
-                        "x": 3.085,
-                        "y": 21.805
-                    },
-                    "uuid": "05d994ab-705b-59d4-adf3-2007774d32ec"
-                },
-                {
-                    "description": "Pad 1 [+12V] of C_BUCK_OUT1 on F.Cu",
-                    "pos": {
-                        "x": 6.025,
-                        "y": 23.0
-                    },
-                    "uuid": "53c5406d-4509-579c-82c3-03efac4de4c6"
-                }
-            ],
-            "severity": "warning",
-            "type": "silk_over_copper"
-        },
-        {
-            "description": "Silkscreen clipped by solder mask",
-            "items": [
-                {
                     "description": "Reference field of U_GD_U",
                     "pos": {
                         "x": 32.8333,
@@ -4630,29 +4653,6 @@
                         "y": 11.0
                     },
                     "uuid": "6df6f7bc-2215-4f91-8920-244285a2df55"
-                }
-            ],
-            "severity": "warning",
-            "type": "silk_over_copper"
-        },
-        {
-            "description": "Silkscreen clipped by solder mask",
-            "items": [
-                {
-                    "description": "Reference field of Q_GE",
-                    "pos": {
-                        "x": 26.7,
-                        "y": 10.6733
-                    },
-                    "uuid": "d40eb9f8-72d5-54a7-811c-62700b81caac"
-                },
-                {
-                    "description": "Pad 1 [BOOT_W] of D_BOOT_W on F.Cu",
-                    "pos": {
-                        "x": 27.85,
-                        "y": 11.0
-                    },
-                    "uuid": "8ca7cf40-9887-436c-bea9-a303f4626eef"
                 }
             ],
             "severity": "warning",

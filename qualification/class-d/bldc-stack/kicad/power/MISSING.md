@@ -14,8 +14,8 @@ The delivered PCB is an **un-routed placement record**, not a fabrication
 artifact. Its placement is DRC-clean: 0 errors, 26 advisory warnings and 179
 unconnected pads (the pads that have no copper yet). The board declares
 `outline 72mm x 52mm`; J_B2B is flush at 3.12 mm from the right edge,
-J_PWR/J_MOTOR are flush and close together on the left edge, and the mounting
-holes are at `(2,2)`, `(62.4,2)`, `(2,49)` and `(62.4,49)`. The findings are in
+J_PWR/J_MOTOR are flush and close together on the left edge, rotated 90° so
+the wire entry faces the edge, and the mounting holes are at `(2,2)`, `(62.4,2)`, `(2,49)` and `(62.4,49)`. The findings are in
 `../../reports/power.drc.json`.
 
 `BOM_sourcing.md` at the board root remains the sourcing narrative.
