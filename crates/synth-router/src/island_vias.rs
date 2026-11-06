@@ -1162,6 +1162,9 @@ fn copper_gap(first: &PieceShape, second: &PieceShape) -> f64 {
 pub struct ViaDeclarations {
     vias: BTreeMap<String, (i64, i64)>,
     clearance_mm: Option<f64>,
+    /// The least distance from a via's hole to other copper the board's DRC rules
+    /// ask (`hole_clearance` in the `.kicad_dru` beside it), in mm.
+    hole_clearance_mm: Option<f64>,
 }
 
 impl ViaDeclarations {
@@ -1180,6 +1183,21 @@ impl ViaDeclarations {
     fn gap_mm(&self) -> f64 {
         self.clearance_mm.map_or(VIA_GAP_MM, |c| c.max(VIA_GAP_MM))
     }
+
+    /// The copper kept around a return via of `size_nm` and `drill_nm`: what the
+    /// board's own rules ask, not the fixed 0.2 mm. The declared class clearance
+    /// governs copper to copper, and the hole clearance, less the ring between
+    /// the hole and the land's edge, governs hole to copper; the larger holds.
+    /// Without a declared clearance the fixed [`VIA_GAP_MM`] stands. The router's
+    /// own KiCad DRC checks the result.
+    fn return_gap_mm(&self, size_nm: i64, drill_nm: i64) -> f64 {
+        let Some(clearance) = self.clearance_mm else {
+            return VIA_GAP_MM;
+        };
+        let ring = nm_to_mm((size_nm - drill_nm).max(0)) / 2.0;
+        let hole = self.hole_clearance_mm.map_or(0.0, |h| h - ring);
+        clearance.max(hole)
+    }
 }
 
 /// The via size each poured net's own class declares, read from the
@@ -1192,7 +1210,16 @@ fn declared_vias(candidate: &Path, board: &PcbBoard) -> ViaDeclarations {
             .filter_map(|net| declared_via_size(candidate, net).map(|via| (net.clone(), via)))
             .collect(),
         clearance_mm: declared_clearance_mm(candidate),
+        hole_clearance_mm: declared_hole_clearance_mm(candidate),
     }
+}
+
+/// The hole clearance the `.kicad_dru` beside a board states, in mm. None when
+/// the file or the rule is missing.
+fn declared_hole_clearance_mm(candidate: &Path) -> Option<f64> {
+    let text = std::fs::read_to_string(candidate.with_extension("kicad_dru")).ok()?;
+    let rest = text.split("hole_clearance (min ").nth(1)?;
+    rest.split("mm").next()?.trim().parse().ok()
 }
 
 /// The widest copper clearance any net class of the `.kicad_pro` beside a
@@ -1589,7 +1616,7 @@ fn stitch(
     // the outer layer is all pads and holds no pour, while the inner planes do.
     let room_both = |p: (f64, f64)| copper.iter().filter(|layer| room(layer, p)).count() >= 2;
     // Built once: the signal vias and the keep-out do not change over the loop.
-    let keepout = Keepout::from_board(board, net, declared.gap_mm());
+    let keepout = Keepout::from_board(board, net, declared.return_gap_mm(size_nm, drill_nm));
     let signals: Vec<(f64, f64, String)> = board
         .vias
         .iter()
@@ -1597,11 +1624,11 @@ fn stitch(
         .filter_map(|via| Some((via.at.x_mm(), via.at.y_mm(), net_of_via(via)?)))
         .collect();
 
-    let apart = nm_to_mm(size_nm) + declared.gap_mm();
+    let apart = nm_to_mm(size_nm) + keepout.gap_mm;
     // Where the process fills and caps a via in a pad, a pad of the ground net
     // that holds the via's land is a place for a return via too.
     let in_pad = ground_nets.in_pad_via.unwrap_or((size_nm, drill_nm));
-    let in_pad_keepout = Keepout::from_board_in_pad(board, net, declared.gap_mm());
+    let in_pad_keepout = Keepout::from_board_in_pad(board, net, keepout.gap_mm);
     let ground_pads = ground_nets.in_pad_via.map_or_else(Vec::new, |(land, _)| {
         ground_pad_spots(board, net, first, nm_to_mm(land))
     });
@@ -2662,6 +2689,40 @@ mod tests {
 
     fn at_mm(via: &TieVia) -> (f64, f64) {
         (via.at.x_mm(), via.at.y_mm())
+    }
+
+    /// A return via keeps the copper the board's own rules ask around it: the
+    /// declared class clearance, and the hole clearance less the ring. With a 0.127
+    /// mm class clearance that is closer than the fixed 0.2 mm, so the ground via
+    /// sits nearer the signal via it serves.
+    #[test]
+    fn a_return_via_follows_the_boards_declared_clearance_not_the_fixed_gap() {
+        let board = stitched_board("");
+        let nearest = |declared: &ViaDeclarations| {
+            let vias = stitch(&board, REACH, &[], &Ground::default(), declared).vias;
+            assert_eq!(vias.len(), 1, "{vias:?}");
+            let (x, y) = at_mm(&vias[0]);
+            (x - 10.0).hypot(y - 10.0)
+        };
+        let fixed = nearest(&ViaDeclarations::new());
+        let declared = ViaDeclarations {
+            clearance_mm: Some(0.127),
+            hole_clearance_mm: Some(0.2),
+            ..ViaDeclarations::new()
+        };
+        assert!(
+            nearest(&declared) < fixed - 0.01,
+            "a 0.127 mm clearance lets the ground via sit nearer than the fixed gap's {fixed}"
+        );
+        // The hole clearance still governs when it asks more than the class does.
+        let strict = ViaDeclarations {
+            clearance_mm: Some(0.127),
+            hole_clearance_mm: Some(0.6),
+            ..ViaDeclarations::new()
+        };
+        assert!((strict.return_gap_mm(600_000, 300_000) - 0.45).abs() < 1e-9);
+        assert!((declared.return_gap_mm(460_000, 200_000) - 0.127).abs() < 1e-9);
+        assert!((ViaDeclarations::new().return_gap_mm(600_000, 300_000) - VIA_GAP_MM).abs() < 1e-9);
     }
 
     #[test]
