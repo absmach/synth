@@ -1871,13 +1871,16 @@ fn move_vias_off_pads_with(candidate: &Path, spare_grids: bool) -> Result<usize,
         };
         // A surface pad whose only link was the via keeps one: a short track from
         // the pad's centre to where the via goes.
-        let stub_layer = (host.kind == "smd")
-            .then(|| host.layers.iter().find(|l| via.layers.contains(l)).cloned())
-            .flatten();
+        let stub_layer = stub_layer_of(host, via);
         let pad_centre = (host.at.x_mm(), host.at.y_mm());
         let stub_keepout = Keepout::from_board_in_pad(&board, &net, VIA_GAP_MM);
         let from = (via.at.x_mm(), via.at.y_mm());
         let radius = nm_to_mm(via.size_nm) / 2.0;
+        // A track of the net on any layer that meets the via's copper but not its
+        // centre would be left behind by a move: the via stays.
+        if touched_off_centre(&board, &net, from, radius) {
+            continue;
+        }
         let keepout = Keepout::from_board(&board, &net, VIA_GAP_MM);
         let attached: Vec<&crate::pcb_read::Segment> = board
             .segments
@@ -1949,6 +1952,26 @@ fn move_vias_off_pads_with(candidate: &Path, spare_grids: bool) -> Result<usize,
             .map_err(|e| format!("could not write {}: {e}", candidate.display()))?;
     }
     Ok(moved)
+}
+
+/// The layer a surface pad's stub track runs on: the pad's own layer that the via
+/// reaches. A through-hole pad needs none.
+fn stub_layer_of(pad: &crate::pcb_read::Pad, via: &crate::pcb_read::Via) -> Option<String> {
+    (pad.kind == "smd")
+        .then(|| pad.layers.iter().find(|l| via.layers.contains(l)).cloned())
+        .flatten()
+}
+
+/// Whether a track of `net`, on any layer, ends inside the copper of a via of
+/// `radius` at `from` without ending at its centre.
+fn touched_off_centre(board: &PcbBoard, net: &str, from: (f64, f64), radius: f64) -> bool {
+    board.segments.iter().any(|segment| {
+        net_of(board, segment.net, segment.net_name.as_ref()).as_deref() == Some(net)
+            && [segment.start, segment.end].iter().any(|end| {
+                let gap = (end.x_mm() - from.0).hypot(end.y_mm() - from.1);
+                gap >= 0.01 && gap <= radius
+            })
+    })
 }
 
 /// The width of the track that keeps a pad joined to its moved via.
@@ -3266,6 +3289,26 @@ mod tests {
             }),
             "a track on the pad's layer joins the pad centre to the moved via"
         );
+    }
+
+    /// A track that meets the via's copper off its centre would be left behind by a
+    /// move, so that via is not moved.
+    #[test]
+    fn a_via_touched_by_a_track_off_its_centre_is_not_moved() {
+        let text = r#"(kicad_pcb
+          (layers (0 "F.Cu" signal) (1 "In1.Cu" signal) (2 "B.Cu" signal))
+          (net 0 "") (net 1 "SIG")
+          (footprint "C" (at 0 0) (layer "F.Cu")
+            (pad "1" smd rect (at 10 10) (size 0.6 0.6) (layers "F.Cu") (net 1 "SIG")))
+          (via (at 10 10) (size 0.6) (drill 0.3) (layers "F.Cu" "B.Cu") (net 1))
+          (segment (start 4 10) (end 9.8 9.8) (width 0.25) (layer "In1.Cu") (net 1))
+        )"#;
+        let dir = std::env::temp_dir().join(format!("offcentre-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("board.kicad_pcb");
+        std::fs::write(&path, text).unwrap();
+        assert_eq!(move_vias_off_pads(&path), Ok(0));
+        assert_eq!(std::fs::read_to_string(&path).unwrap(), text);
     }
 
     /// An island that holds a pad or a track end is connected when a chain of its
