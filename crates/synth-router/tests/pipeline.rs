@@ -772,6 +772,58 @@ fn a_label_the_router_left_on_a_pad_is_moved_before_the_board_is_judged() {
     assert_eq!(on_pad.lines().count(), delivered.lines().count());
 }
 
+/// ROUTED_BOARD with a via just inside the left edge of R1's pad, on the pad's own net.
+fn via_in_pad_board() -> &'static str {
+    Box::leak(
+        ROUTED_BOARD
+            .replacen(
+                "  (segment ",
+                "  (via (at 8.7 20) (size 0.6) (drill 0.3) (layers \"F.Cu\" \"B.Cu\") (net 1))\n  (segment ",
+                1,
+            )
+            .into_boxed_str(),
+    )
+}
+
+fn delivered_via_in_pad(label: &str, allow_via_in_pad: bool) -> String {
+    let scratch = Scratch::new(label);
+    let router = StubRouter::new(
+        &format!("{label}_router"),
+        Behaviour::Write(via_in_pad_board()),
+    );
+    let (jar, java) = stub_engine_files(&scratch);
+    let _env = router.activate(&jar, &java);
+    let mut request = request_for(&scratch, 120);
+    request.policy.allow_via_in_pad = allow_via_in_pad;
+    let _ = synth_router::route(&request);
+    std::fs::read_to_string(scratch.file("demo.kicad_pcb"))
+        .or_else(|_| std::fs::read_to_string(scratch.file("demo.freerouting.kicad_pcb")))
+        .expect("a delivered or retained board")
+}
+
+#[test]
+fn a_via_in_a_pad_is_moved_off_it_unless_the_board_approves_via_in_pad() {
+    let refused = delivered_via_in_pad("via_in_pad_refused", false);
+    let via = refused
+        .lines()
+        .find(|line| line.trim_start().starts_with("(via"))
+        .map_or_else(String::new, str::to_string);
+    assert!(
+        !via.contains("(at 8.7 20)"),
+        "the via was left in the pad: {via}"
+    );
+}
+
+#[test]
+fn an_approved_via_in_pad_stays_where_the_design_put_it() {
+    let approved = delivered_via_in_pad("via_in_pad_approved", true);
+    let via = approved
+        .lines()
+        .find(|line| line.trim_start().starts_with("(via"))
+        .expect("the via is still on the board");
+    assert!(via.contains("(at 8.7 20)"), "{via}");
+}
+
 #[test]
 fn a_rejected_candidate_is_judged_with_its_labels_already_off_the_pads() {
     // The pass runs before the verdict, not after it, so even a board that is
