@@ -1,0 +1,165 @@
+{
+ "D0": {
+  "P": {
+   "src": 10.89,
+   "hdmi": 19.14,
+   "total": 30.03,
+   "vias": 4,
+   "widths": [
+    0.127,
+    0.13
+   ],
+   "layers": [
+    "F.Cu",
+    "In1.Cu",
+    "In2.Cu"
+   ]
+  },
+  "N": {
+   "src": 5.89,
+   "hdmi": 19.91,
+   "total": 25.8,
+   "vias": 2,
+   "widths": [
+    0.127,
+    0.13
+   ],
+   "layers": [
+    "B.Cu",
+    "F.Cu"
+   ]
+  },
+  "centre_gap_median": 3.399,
+  "centre_gap_min": 0.707,
+  "skew": 4.23,
+  "via_to_gnd_via": [
+   2.45,
+   2.85,
+   4.75,
+   0.63,
+   2.81,
+   3.37
+  ]
+ },
+ "D1": {
+  "P": {
+   "src": 27.04,
+   "hdmi": 21.57,
+   "total": 48.61,
+   "vias": 2,
+   "widths": [
+    0.13,
+    0.2
+   ],
+   "layers": [
+    "F.Cu",
+    "In4.Cu"
+   ]
+  },
+  "N": {
+   "src": 5.91,
+   "hdmi": 19.08,
+   "total": 25.0,
+   "vias": 0,
+   "widths": [
+    0.127,
+    0.13
+   ],
+   "layers": [
+    "F.Cu"
+   ]
+  },
+  "centre_gap_median": 1.574,
+  "centre_gap_min": 1.082,
+  "skew": 23.61,
+  "via_to_gnd_via": [
+   3.55,
+   3.91
+  ]
+ },
+ "D2": {
+  "P": {
+   "src": 7.97,
+   "hdmi": 22.1,
+   "total": 30.07,
+   "vias": 2,
+   "widths": [
+    0.127,
+    0.13
+   ],
+   "layers": [
+    "F.Cu",
+    "In1.Cu"
+   ]
+  },
+  "N": {
+   "src": 6.2,
+   "hdmi": 24.34,
+   "total": 30.55,
+   "vias": 2,
+   "widths": [
+    0.13,
+    0.2
+   ],
+   "layers": [
+    "B.Cu",
+    "F.Cu"
+   ]
+  },
+  "centre_gap_median": 1.0,
+  "centre_gap_min": 0.9,
+  "skew": 0.48,
+  "via_to_gnd_via": [
+   1.94,
+   6.63,
+   2.93,
+   5.78
+  ]
+ },
+ "CK": {
+  "P": {
+   "src": 15.07,
+   "hdmi": 21.37,
+   "total": 36.44,
+   "vias": 2,
+   "widths": [
+    0.127,
+    0.13
+   ],
+   "layers": [
+    "F.Cu",
+    "In2.Cu"
+   ]
+  },
+  "N": {
+   "src": 5.53,
+   "hdmi": 24.85,
+   "total": 30.38,
+   "vias": 2,
+   "widths": [
+    0.127,
+    0.13
+   ],
+   "layers": [
+    "F.Cu",
+    "In2.Cu"
+   ]
+  },
+  "centre_gap_median": 3.536,
+  "centre_gap_min": 1.105,
+  "skew": 6.06,
+  "via_to_gnd_via": [
+   1.18,
+   5.44,
+   2.61,
+   4.55
+  ]
+ },
+ "inter_pair_mean_len": {
+  "D0": 27.91,
+  "D1": 36.8,
+  "D2": 30.31,
+  "CK": 33.41
+ },
+ "inter_pair_mismatch": 8.89
+}
