@@ -1,0 +1,288 @@
+// iCE40HX4K + 64 Mbit SDR SDRAM node (Class C case 2, issue #329).
+// Memory interface: soft SDR controller in the FPGA fabric (no hard DDR PHY),
+// 16-bit data bus, 12-bit address, 2 bank bits, RAS/CAS/WE/CS/CKE, byte masks, clock.
+//
+// Stackup and impedance: JLCPCB's six-layer stackup JLC06161H-3313 (declared in the board block below).
+//   Outer microstrip over the first inner layer: 0.15 mm trace over 0.0994 mm of 3313 prepreg, er 4.1, t 35 um
+//   Z0 = 87/sqrt(er+1.41) * ln(5.98 h / (0.8 w + t)) = 87/2.347 * ln(0.5944/0.155) = 49.8 ohm (target 50 ohm).
+// Input: 5 V +/-5 % -> max 5.25 V. Fuse hold 1.1 A. TVS PTVS6V0S1UR standoff 6.0 V > 5.25 V.
+board "ice40_sdram_node" {
+  layers 6
+  manufacturer "jlc-advanced"
+  revision "A"
+
+  // JLCPCB's six-layer stackup JLC06161H-3313 (https://jlcpcb.com/impedance): prepreg 3313 4.1,
+  // prepreg 2116 4.16, core 4.6; outer copper 0.035 mm, inner copper 0.0152 mm.
+  stackup {
+    copper 0.035mm
+    insulator 0.0994mm er 4.1 material "3313"
+    copper 0.0152mm
+    insulator 0.55mm er 4.6 material "core"
+    copper 0.0152mm
+    insulator 0.1088mm er 4.16 material "2116"
+    copper 0.0152mm
+    insulator 0.55mm er 4.6 material "core"
+    copper 0.0152mm
+    insulator 0.0994mm er 4.1 material "3313"
+    copper 0.035mm
+  }
+
+
+  // ---- Net classes ---------------------------------------------------------
+  netclass "PWR5"   { trace_width 0.6mm clearance 0.127mm via_diameter 0.46mm via_drill 0.2mm edge_rate slow color "#d55e00" }
+  netclass "PWR33"  { trace_width 0.4mm clearance 0.127mm via_diameter 0.46mm via_drill 0.2mm edge_rate slow color "#e69f00" }
+  netclass "PWR12"  { trace_width 0.25mm clearance 0.127mm via_diameter 0.46mm via_drill 0.2mm edge_rate slow color "#cc79a7" }
+  netclass "PLLSUP" { trace_width 0.2mm clearance 0.127mm via_diameter 0.46mm via_drill 0.2mm edge_rate slow color "#f0e442" }
+  netclass "GNDC"   { trace_width 0.3mm clearance 0.127mm via_diameter 0.46mm via_drill 0.2mm edge_rate slow color "#444444" }
+  netclass "LOWSPD" { trace_width 0.15mm clearance 0.127mm via_diameter 0.46mm via_drill 0.2mm edge_rate slow color "#009e73" }
+  netclass "SDDATA" { trace_width 0.15mm clearance 0.127mm impedance 50ohm max_skew 10mm max_length 60mm via_diameter 0.46mm via_drill 0.2mm edge_rate fast color "#0072b2" }
+  // SDADDR is driven only by the FPGA, so its edge is the iCE40's: Lattice's IBIS model (ice40.ibs rev 2.5,
+  // lvc330io for banks 0-2, lvc330_b3io for bank 3) gives dV/dt_r and dV/dt_f 20-80 % times of at least 0.976 ns
+  // (banks 0-2) and 0.728 ns (bank 3) at the fast corner, so no edge here is faster than 0.3 ns: `medium`.
+  // SDDATA is bidirectional and the SDRAM drives it on a read; no output-edge figure for the IS42S16400J was
+  // found (ISSI publishes only the 0.3 to 1.2 ns input transition time), so it stays `fast`, as does the clock.
+  netclass "SDADDR" { trace_width 0.15mm clearance 0.127mm impedance 50ohm max_skew 10mm max_length 60mm via_diameter 0.46mm via_drill 0.2mm edge_rate medium color "#56b4e9" }
+  netclass "SDCLK"  { trace_width 0.15mm clearance 0.127mm impedance 50ohm max_length 40mm via_diameter 0.46mm via_drill 0.2mm edge_rate fast color "#d62728" }
+
+  // ---- Power input and protection -----------------------------------------
+  group "POWER INPUT" color "#c2410c" {
+    component J1: connector "usb_c_receptacle" { escape { off } placement_hint { edge: left priority: hard } }
+    component R2: resistor "r_generic_0603" value "5.1k"
+    component R3: resistor "r_generic_0603" value "5.1k"
+    component F1: fuse "polyfuse_1r1a"
+    component D1: diode "ptvs6v0s1ur" { placement_hint { near: "F1.p2" priority: hard } }
+    component Q1: transistor "p_mosfet_si2301"
+    component RPD1: resistor "r_generic_0603" value "10k"
+    component R1: resistor "r_generic_0603" value "10k"
+    component C1: capacitor "c_generic_0805" value "10uF"
+    notes "" {
+      "5 V in, max 5.25 V. F1 hold 1.1 A, 16 V."
+      "D1 standoff 6.0 V, above 5.25 V, before Q1."
+      "Q1 P-MOSFET reverse stage, gate to GND."
+    }
+  }
+
+  // ---- 3.3 V and 1.2 V rails ------------------------------------------------
+  group "3V3 RAIL" color "#b45309" {
+    component U1: regulator "ams1117_3v3" value "AMS1117-3.3"
+    component C2: capacitor "c_generic_0805" value "10uF" { placement_hint { near: "U1.vin" priority: hard } }
+    component C3: capacitor "c_generic_0805" value "10uF" { placement_hint { near: "U1.vin" priority: hard } }
+    component C4: capacitor "c_generic_0805" value "10uF" { placement_hint { near: "U1.vout" priority: hard } }
+    component C5: capacitor "c_generic_0805" value "10uF" { placement_hint { near: "U1.vout" priority: hard } }
+  }
+
+  group "1V2 CORE RAIL" color "#9d174d" {
+    component U2: regulator "tlv70012_ddc" value "TLV70012DDCR"
+    component C6: capacitor "c_generic_0603" value "1uF" { placement_hint { near: "U2.vin" priority: hard } }
+    component C7: capacitor "c_generic_0603" value "1uF" { placement_hint { near: "U2.vout" priority: hard } }
+  }
+
+  // ---- FPGA -----------------------------------------------------------------
+  group "FPGA" color "#0072b2" {
+    component U3: fpga "ice40hx4k_tq144" { escape { off } placement_hint { region: centre priority: hard } }
+    component C10: capacitor "c_generic_0402" value "100nF" { placement_hint { near: "U3" priority: hard } }
+    component C11: capacitor "c_generic_0402" value "100nF" { placement_hint { near: "U3" priority: hard } }
+    component C12: capacitor "c_generic_0402" value "100nF" { placement_hint { near: "U3" priority: hard } }
+    component C13: capacitor "c_generic_0402" value "100nF" { placement_hint { near: "U3" priority: hard } }
+    component C14: capacitor "c_generic_0402" value "100nF" { placement_hint { near: "U3" priority: hard } }
+    component C15: capacitor "c_generic_0402" value "100nF" { placement_hint { near: "U3" priority: hard } }
+    component C16: capacitor "c_generic_0402" value "100nF" { placement_hint { near: "U3" priority: hard } }
+    component C17: capacitor "c_generic_0402" value "100nF" { placement_hint { near: "U3" priority: hard } }
+    component C18: capacitor "c_generic_0402" value "100nF" { placement_hint { near: "U3" priority: hard } }
+    component C19: capacitor "c_generic_0402" value "100nF" { placement_hint { near: "U3" priority: hard } }
+    component L1: inductor "ferrite_bead_0603" { placement_hint { near: "U3" priority: hard } }
+    component C20: capacitor "c_generic_0402" value "100nF" { placement_hint { near: "U3" priority: hard } }
+    component C24: capacitor "c_generic_0402" value "100nF" { placement_hint { near: "U3" priority: hard } }
+    component C21: capacitor "c_generic_0402" value "100nF" { placement_hint { near: "U3" priority: hard } }
+    component C22: capacitor "c_generic_0402" value "100nF" { placement_hint { near: "U3" priority: hard } }
+    component C23: capacitor "c_generic_0603" value "1uF" { placement_hint { near: "U3" priority: hard } }
+    notes "" {
+      "Soft SDR controller, no hard DDR PHY. VPP_FAST (pin 109) left unconnected."
+      "VCCPLL0/1 from 1.2 V through ferrite L1, 100 nF each and 1 uF bulk."
+    }
+  }
+
+  // ---- SDRAM ----------------------------------------------------------------
+  group "SDRAM" color "#0a7d4a" {
+    component U4: memory "is42s16400j_sdram" { escape { off } placement_hint { near: "U3" priority: hard } }
+    component C30: capacitor "c_generic_0402" value "100nF" { placement_hint { near: "U4" priority: hard } }
+    component C31: capacitor "c_generic_0402" value "100nF" { placement_hint { near: "U4" priority: hard } }
+    component C32: capacitor "c_generic_0402" value "100nF" { placement_hint { near: "U4" priority: hard } }
+    component C33: capacitor "c_generic_0402" value "100nF" { placement_hint { near: "U4" priority: hard } }
+    component C34: capacitor "c_generic_0402" value "100nF" { placement_hint { near: "U4" priority: hard } }
+    component C35: capacitor "c_generic_0402" value "100nF" { placement_hint { near: "U4" priority: hard } }
+    component C36: capacitor "c_generic_0402" value "100nF" { placement_hint { near: "U4" priority: hard } }
+    component C37: capacitor "c_generic_0805" value "10uF" { placement_hint { near: "U4" priority: hard } }
+  }
+
+  group "SERIES TERMINATION" color "#7c3aed" {
+    component RS1: resistor "r_generic_0402" value "22" { placement_hint { near: "U3.iol_14a_gbin6" priority: hard } }
+    component RS2: resistor "r_generic_0402" value "22" { placement_hint { near: "U3.iol_18b" priority: hard } }
+    component RS3: resistor "r_generic_0402" value "22" { placement_hint { near: "U3.iol_18a" priority: hard } }
+    component RS4: resistor "r_generic_0402" value "22" { placement_hint { near: "U3.iol_17b" priority: hard } }
+    component RS5: resistor "r_generic_0402" value "22" { placement_hint { near: "U3.iol_17a" priority: hard } }
+    component RS6: resistor "r_generic_0402" value "22" { placement_hint { near: "U3.iol_24b" priority: hard } }
+    notes "" {
+      "22 ohm in series at the FPGA end of CLK, CS, RAS, CAS, WE and CKE."
+    }
+  }
+
+  // ---- Configuration flash --------------------------------------------------
+  group "CONFIGURATION" color "#1d4ed8" {
+    component J2: connector "header_1x6_prog" { placement_hint { near: "U5" edge: bottom priority: hard } }
+    component U5: memory "w25q128jvsiq_208mil" { escape { off } }
+    component C40: capacitor "c_generic_0603" value "100nF" { placement_hint { near: "U5.vcc" priority: hard } }
+    component R10: resistor "r_generic_0603" value "10k" { placement_hint { near: "U3.creset" priority: hard } }
+    component R11: resistor "r_generic_0603" value "10k" { placement_hint { near: "U3.cdone" priority: hard } }
+    component R12: resistor "r_generic_0603" value "10k" { placement_hint { near: "U5" priority: hard } }
+    component R13: resistor "r_generic_0603" value "10k" { placement_hint { near: "U5.io2" priority: hard } }
+    component R14: resistor "r_generic_0603" value "10k" { placement_hint { near: "U5" priority: hard } }
+    notes "" {
+      "Flash on the iCE40 master SPI pins SS_B, SCK, SDI, SDO."
+      "CRESET_B and CDONE pulled up 10 k. WP and HOLD pulled up 10 k."
+    }
+  }
+
+  // ---- Status LEDs -----------------------------------------------------------
+  group "STATUS LEDS" color "#be123c" {
+    component D2: diode "led_red_0603"
+    component R20: resistor "r_generic_0603" value "1k"
+    component D3: diode "led_green_0603"
+    component R21: resistor "r_generic_0603" value "1k"
+    component Q2: transistor "ao3400a_nmos"
+    component D4: diode "led_green_0603"
+    component R22: resistor "r_generic_0603" value "1k"
+    notes "" {
+      "D2 3.3 V present. D3 lit when CDONE is high (Q2 buffers the open-drain pin). D4 user LED."
+    }
+  }
+
+  group "TEST POINTS" color "#475569" {
+    component TP1: testpoint "testpoint_pad_1_5" { placement_hint { near: "Q1.s" priority: hard } }
+    component TP2: testpoint "testpoint_pad_1_5" { placement_hint { near: "U4.vddq_3" priority: hard } }
+    component TP3: testpoint "testpoint_pad_1_5" { placement_hint { near: "U2.vout" priority: hard } }
+    component TP4: testpoint "testpoint_pad_1_5" { placement_hint { near: "U5.gnd" priority: hard } }
+    component TP5: testpoint "testpoint_pad_1_5" { placement_hint { near: "U3.cdone" priority: hard } }
+    component TP6: testpoint "testpoint_pad_1_5" { placement_hint { near: "U3.creset" priority: hard } }
+    component TP7: testpoint "testpoint_pad_1_5" { placement_hint { near: "J1.gnd" priority: hard } }
+  }
+
+  group "MECHANICAL" color "#334155" {
+    component H1: mounting_hole "mounting_hole_m2_5"
+    component H2: mounting_hole "mounting_hole_m2_5"
+  }
+
+  // ---- Rails ------------------------------------------------------------------
+  power "GND" 0v class "GNDC" {
+    J1.gnd J1.gnd_b12 J1.gnd_a12 J1.gnd_b1 J1.shld R2.p2 R3.p2
+    D1.anode R1.p2 C1.p2 RPD1.p2
+    U1.gnd C2.p2 C3.p2 C4.p2 C5.p2
+    U2.gnd C6.p2 C7.p2
+    U3.gnd U3.gnd_2 U3.gnd_3 U3.gnd_4 U3.gnd_5 U3.gnd_6 U3.gnd_7 U3.gnd_8 U3.gnd_9 U3.gndpll0 U3.gndpll1
+    U3.iob_103_cbsel0 U3.iob_104_cbsel1
+    C10.p2 C11.p2 C12.p2 C13.p2 C14.p2 C15.p2 C16.p2 C17.p2 C18.p2 C19.p2 C20.p2 C21.p2 C22.p2 C23.p2 C24.p2
+    U4.gndq_0 U4.gndq_1 U4.gndq_2 U4.gndq_3 U4.gnd_0 U4.gnd_1 U4.gnd_2
+    C30.p2 C31.p2 C32.p2 C33.p2 C34.p2 C35.p2 C36.p2 C37.p2
+    U5.gnd C40.p2
+    D2.cathode D4.cathode Q2.s
+    TP4.p1 TP7.p1 J2.p6
+  }
+
+  net "VIN_RAW" class "PWR5" { J1.vbus J1.vbus_b4 J1.vbus_a9 J1.vbus_b9 F1.p1 }
+  // USB-C is a 5 V power sink only: 5.1 k pull-downs on CC1/CC2, D+/D-/SBU left open.
+  net "USB_CC1" class "LOWSPD" { J1.cc1 R2.p1 }
+  net "USB_CC2" class "LOWSPD" { J1.cc2 R3.p1 }
+  net "VIN_FUSED" class "PWR5" { F1.p2 D1.cathode Q1.d }
+  net "Q1_GATE" class "LOWSPD" { Q1.g R1.p1 }
+  power "+5V" 5v class "PWR5" { Q1.s C1.p1 U1.vin C2.p1 C3.p1 TP1.p1 }
+
+  power "+3V3" 3.3v class "PWR33" {
+    U1.vout C4.p1 C5.p1 U2.vin C6.p1 U2.en
+    U3.vccio_0 U3.vccio_0_2 U3.vccio_1 U3.vccio_1_2 U3.vccio_2 U3.vccio_2_2 U3.vccio_3 U3.vccio_3_2 U3.vcc_spi U3.vpp_2v5
+    C10.p1 C11.p1 C12.p1 C13.p1 C14.p1 C15.p1 C20.p1 C24.p1
+    U4.vdd_0 U4.vdd_1 U4.vdd_2 U4.vddq_0 U4.vddq_1 U4.vddq_2 U4.vddq_3
+    C30.p1 C31.p1 C32.p1 C33.p1 C34.p1 C35.p1 C36.p1 C37.p1
+    U5.vcc C40.p1
+    R10.p1 R11.p1 R12.p1 R13.p1 R14.p1 R20.p1 R21.p1
+    TP2.p1
+  }
+
+  power "+1V2" 1.2v class "PWR12" {
+    U2.vout C7.p1
+    U3.vcc U3.vcc_2 U3.vcc_3 U3.vcc_4
+    C16.p1 C17.p1 C18.p1 C19.p1
+    L1.p1 TP3.p1
+  }
+
+  power "VCCPLL" 1.2v class "PLLSUP" {
+    L1.p2 U3.vccpll0 U3.vccpll1 C21.p1 C22.p1 C23.p1
+  }
+
+  // ---- Configuration nets ----------------------------------------------------
+  // J2 programming header: 1 SPI_SS_B, 2 SPI_SCK, 3 SPI_SDI, 4 SPI_SDO, 5 CRESET_B, 6 GND.
+  net "SPI_SS_B" class "LOWSPD" { U3.iob_108_ss U5.cs R12.p2 J2.p1 }
+  net "SPI_SCK"  class "LOWSPD" { U3.iob_107_sck U5.clk J2.p2 }
+  net "SPI_SDO"  class "LOWSPD" { U3.iob_105_sdo U5.io0 J2.p4 }
+  net "SPI_SDI"  class "LOWSPD" { U3.iob_106_sdi U5.io1 J2.p3 }
+  net "FLASH_WP"   class "LOWSPD" { U5.io2 R13.p2 }
+  net "FLASH_HOLD" class "LOWSPD" { U5.io3 R14.p2 }
+  net "CRESET_B" class "LOWSPD" { U3.creset R10.p2 TP6.p1 J2.p5 }
+  net "CDONE"    class "LOWSPD" { U3.cdone R11.p2 Q2.g TP5.p1 }
+
+  // ---- LEDs ---------------------------------------------------------------------
+  net "LED_PWR"  class "LOWSPD" { R20.p2 D2.anode }
+  net "LED_DONE_A" class "LOWSPD" { R21.p2 D3.anode }
+  net "LED_DONE_K" class "LOWSPD" { D3.cathode Q2.d }
+  net "LED_USER_R" class "LOWSPD" { U3.ior_110 R22.p1 }
+  net "LED_USER_A" class "LOWSPD" { R22.p2 D4.anode }
+
+  // ---- SDRAM data bus ------------------------------------------------------------
+  // Data bus on the left-side IOL pads (pins 1 to 20, bus order), facing the SDRAM at the left.
+  net "SD_DQ8"  class "SDDATA" { U3.iol_10a U4.dq8 }
+  net "SD_DQ9"  class "SDDATA" { U3.iol_8b U4.dq9 }
+  net "SD_DQ10" class "SDDATA" { U3.iol_5b U4.dq10 }
+  net "SD_DQ11" class "SDDATA" { U3.iol_4a U4.dq11 }
+  net "SD_DQ12" class "SDDATA" { U3.iol_3b U4.dq12 }
+  net "SD_DQ13" class "SDDATA" { U3.iol_3a U4.dq13 }
+  net "SD_DQ14" class "SDDATA" { U3.iol_2b U4.dq14 }
+  net "SD_DQ15" class "SDDATA" { U3.iol_2a U4.dq15 }
+
+  // ---- SDRAM address, bank and byte masks ------------------------------------------------
+  // A0..A9 on the top-left pads 144 down to 134 (corner next to the left side), A10/A11 on
+  // the last two left pads (33, 34).
+  net "SD_A0"  class "SDADDR" { U3.iot_222 U4.a0 }
+  net "SD_A1"  class "SDADDR" { U3.iot_221 U4.a1 }
+  net "SD_A2"  class "SDADDR" { U3.iot_220 U4.a2 }
+  net "SD_A3"  class "SDADDR" { U3.iot_219 U4.a3 }
+  net "SD_A4"  class "SDADDR" { U3.iol_25b U4.a4 }
+  net "SD_A5"  class "SDADDR" { U3.iol_25a U4.a5 }
+  net "SD_A6"  class "SDADDR" { U3.iol_24b U4.a6 }
+  net "SD_A7"  class "SDADDR" { U3.iol_24a U4.a7 }
+  net "SD_A8"  class "SDADDR" { U3.iol_23b U4.a8 }
+  net "SD_A9"  class "SDADDR" { U3.iol_23a U4.a9 }
+  net "SD_A10" class "SDADDR" { U3.iot_206 U4.a10 }
+  net "SD_A11" class "SDADDR" { U3.iol_18b U4.a11 }
+  net "SD_BA0" class "SDADDR" { U3.iot_192 U4.ba0 }
+  net "SD_BA1" class "SDADDR" { U3.iot_191 U4.ba1 }
+  net "SD_LDQM" class "SDADDR" { U3.iot_190 U4.ldqm }
+  net "SD_UDQM" class "SDADDR" { U3.iol_13b_gbin7 U4.udqm }
+  // The board uses the upper data byte, the one on the SDRAM pin row that faces the FPGA: the FPGA holds SD_LDQM
+  // high, which masks the lower byte, and the eight lower data pins are tied to ground through one 10 k resistor
+  // (the IS42S16400J ignores a masked byte on a write and drives it high-impedance on a read), so they carry no signal.
+  net "SD_DQ_LO" class "LOWSPD" { U4.dq0 U4.dq1 U4.dq2 U4.dq3 U4.dq4 U4.dq5 U4.dq6 U4.dq7 RPD1.p1 }
+
+  // ---- SDRAM command group and clock (22 ohm at the FPGA end) -------------------------
+  // Command group on left pads 23 to 26 and 32; the clock on the global-buffer pad iol_14a_gbin6.
+  net "SD_CS_F"  class "SDADDR" { U3.iot_181 RS2.p1 }
+  net "SD_CS"    class "SDADDR" { RS2.p2 U4.cs }
+  net "SD_RAS_F" class "SDADDR" { U3.iot_179 RS3.p1 }
+  net "SD_RAS"   class "SDADDR" { RS3.p2 U4.ras }
+  net "SD_CAS_F" class "SDADDR" { U3.iot_178 RS4.p1 }
+  net "SD_CAS"   class "SDADDR" { RS4.p2 U4.cas }
+  net "SD_WE_F"  class "SDADDR" { U3.iot_177 RS5.p1 }
+  net "SD_WE"    class "SDADDR" { RS5.p2 U4.we }
+  net "SD_CKE_F" class "SDADDR" { U3.iol_17a RS6.p1 }
+  net "SD_CKE"   class "SDADDR" { RS6.p2 U4.cke }
+  net "SD_CK_F"  class "SDCLK"  { U3.iol_14a_gbin6 RS1.p1 }
+  net "SD_CK"    class "SDCLK"  { RS1.p2 U4.clk }
+}

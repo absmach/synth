@@ -1,0 +1,61 @@
+id = "header_1x6_prog"
+kind = "connector"
+description = "1x6 through-hole pin header, 2.54 mm pitch, vertical, hand-fitted iCE40 SPI programming port (SPI_SS_B, SPI_SCK, SPI_SDI, SPI_SDO, CRESET_B, GND). No current rating asserted; no MPN or LCSC number asserted."
+version = 0
+lifecycle = "active"
+signed_by = []
+substitutes = []
+required_decoupling = []
+kicad_symbol = "Connector_Generic:Conn_01x06"
+kicad_footprint = "Connector_PinHeader_2.54mm:PinHeader_1x06_P2.54mm_Vertical"
+
+[[pins]]
+name = "p1"
+number = "1"
+electrical_type = "passive"
+capabilities = []
+required = false
+
+[[pins]]
+name = "p2"
+number = "2"
+electrical_type = "passive"
+capabilities = []
+required = false
+
+[[pins]]
+name = "p3"
+number = "3"
+electrical_type = "passive"
+capabilities = []
+required = false
+
+[[pins]]
+name = "p4"
+number = "4"
+electrical_type = "passive"
+capabilities = []
+required = false
+
+[[pins]]
+name = "p5"
+number = "5"
+electrical_type = "passive"
+capabilities = []
+required = false
+
+[[pins]]
+name = "p6"
+number = "6"
+electrical_type = "passive"
+capabilities = []
+required = false
+
+[footprint_dimensions]
+width_mm = 3.04
+height_mm = 15.74
+courtyard_margin_mm = 0.25
+
+[provenance]
+source = "authored"
+generator = "synth_author_part"

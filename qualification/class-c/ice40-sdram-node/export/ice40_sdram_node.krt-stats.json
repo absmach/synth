@@ -1,0 +1,2890 @@
+{
+ "routed_single": [
+  "USB_CC2",
+  "VIN_RAW",
+  "VIN_FUSED",
+  "LED_PWR",
+  "LED_DONE_A",
+  "LED_USER_A",
+  "LED_DONE_K",
+  "FLASH_HOLD",
+  "LED_USER_R",
+  "FLASH_WP",
+  "SD_CK",
+  "SD_DQ8",
+  "SD_DQ10",
+  "SD_DQ11",
+  "SD_A7",
+  "SD_A11",
+  "SD_DQ9",
+  "SD_A8",
+  "SD_A9",
+  "SD_A6",
+  "SD_DQ13",
+  "SD_A5",
+  "SD_DQ12",
+  "SD_DQ14",
+  "SD_A4",
+  "SD_DQ15",
+  "CRESET_B",
+  "SD_CAS",
+  "SD_WE_F",
+  "USB_CC1",
+  "+5V",
+  "SD_CK_F",
+  "SD_CKE_F",
+  "CDONE",
+  "SPI_SS_B",
+  "+1V2",
+  "SD_CS_F",
+  "SD_A0",
+  "SD_A1",
+  "SD_A2",
+  "SD_A3",
+  "Q1_GATE",
+  "VCCPLL",
+  "SD_CKE",
+  "SD_UDQM",
+  "SPI_SDI",
+  "SD_WE",
+  "SPI_SCK",
+  "SD_RAS",
+  "SD_CS",
+  "SD_CAS_F",
+  "SD_LDQM",
+  "SPI_SDO",
+  "SD_RAS_F",
+  "SD_BA0",
+  "SD_BA1",
+  "+3V3",
+  "SD_DQ_LO",
+  "SD_A10"
+ ],
+ "failed_single": [],
+ "open_single": [],
+ "failed_multipoint": [],
+ "multipoint_nets": 1,
+ "multipoint_pads_connected": 186,
+ "multipoint_pads_total": 186,
+ "multipoint_edges_routed": 0,
+ "multipoint_edges_failed": 0,
+ "ripup_success_pairs": [],
+ "rerouted_pairs": [],
+ "single_ended_target_swaps": [],
+ "layer_swaps": 0,
+ "successful": 59,
+ "failed": 0,
+ "total_time": 23.360000000000003,
+ "total_iterations": 20242711,
+ "total_vias": 177,
+ "cleanup_disconnected": [],
+ "min_clearance_used": 0.127,
+ "design_rules": {
+  "escalation_policy": "board",
+  "fab_tier": "advanced",
+  "board_floors": {
+   "clearance": 0.127,
+   "track_width": 0.127,
+   "via_diameter": 0.46,
+   "via_drill": 0.2,
+   "annular": 0.13,
+   "board_edge": 0.3
+  },
+  "count": 279,
+  "nets": [
+   1,
+   34,
+   56,
+   58,
+   60
+  ],
+  "narrowed": [
+   {
+    "net": 1,
+    "net_name": null,
+    "kind": "track_width",
+    "requested": 0.6,
+    "delivered": 0.5458,
+    "site": "terminal neck",
+    "count": 1
+   },
+   {
+    "net": 58,
+    "net_name": null,
+    "kind": "track_width",
+    "requested": 0.4,
+    "delivered": 0.3458,
+    "site": "terminal neck",
+    "count": 1
+   },
+   {
+    "net": 58,
+    "net_name": null,
+    "kind": "track_width",
+    "requested": 0.4,
+    "delivered": 0.3458,
+    "site": "terminal neck",
+    "count": 1
+   },
+   {
+    "net": 58,
+    "net_name": null,
+    "kind": "via_diameter",
+    "requested": 0.6,
+    "delivered": 0.46,
+    "site": "via-in-pad clamp (floor)",
+    "count": 1
+   },
+   {
+    "net": 58,
+    "net_name": null,
+    "kind": "track_width",
+    "requested": 0.4,
+    "delivered": 0.2,
+    "site": "fine-pitch tap",
+    "count": 1
+   },
+   {
+    "net": 58,
+    "net_name": null,
+    "kind": "track_width",
+    "requested": 0.4,
+    "delivered": 0.2,
+    "site": "fine-pitch tap",
+    "count": 1
+   },
+   {
+    "net": 58,
+    "net_name": null,
+    "kind": "track_width",
+    "requested": 0.4,
+    "delivered": 0.3458,
+    "site": "terminal neck",
+    "count": 1
+   },
+   {
+    "net": 58,
+    "net_name": null,
+    "kind": "track_width",
+    "requested": 0.4,
+    "delivered": 0.3458,
+    "site": "terminal neck",
+    "count": 1
+   },
+   {
+    "net": 58,
+    "net_name": null,
+    "kind": "track_width",
+    "requested": 0.4,
+    "delivered": 0.3458,
+    "site": "terminal neck",
+    "count": 1
+   },
+   {
+    "net": 58,
+    "net_name": null,
+    "kind": "track_width",
+    "requested": 0.4,
+    "delivered": 0.3458,
+    "site": "terminal neck",
+    "count": 1
+   },
+   {
+    "net": 58,
+    "net_name": null,
+    "kind": "track_width",
+    "requested": 0.4,
+    "delivered": 0.3458,
+    "site": "terminal neck",
+    "count": 1
+   },
+   {
+    "net": 58,
+    "net_name": null,
+    "kind": "track_width",
+    "requested": 0.4,
+    "delivered": 0.3458,
+    "site": "terminal neck",
+    "count": 1
+   },
+   {
+    "net": 58,
+    "net_name": null,
+    "kind": "track_width",
+    "requested": 0.4,
+    "delivered": 0.3458,
+    "site": "terminal neck",
+    "count": 1
+   },
+   {
+    "net": 58,
+    "net_name": null,
+    "kind": "track_width",
+    "requested": 0.4,
+    "delivered": 0.3958,
+    "site": "terminal neck",
+    "count": 1
+   },
+   {
+    "net": 58,
+    "net_name": null,
+    "kind": "track_width",
+    "requested": 0.4,
+    "delivered": 0.3458,
+    "site": "terminal neck",
+    "count": 1
+   },
+   {
+    "net": 58,
+    "net_name": null,
+    "kind": "via_diameter",
+    "requested": 0.6,
+    "delivered": 0.46,
+    "site": "via-in-pad clamp (floor)",
+    "count": 1
+   },
+   {
+    "net": 58,
+    "net_name": null,
+    "kind": "track_width",
+    "requested": 0.4,
+    "delivered": 0.2,
+    "site": "fine-pitch tap",
+    "count": 1
+   },
+   {
+    "net": 58,
+    "net_name": null,
+    "kind": "track_width",
+    "requested": 0.4,
+    "delivered": 0.2,
+    "site": "fine-pitch tap",
+    "count": 1
+   },
+   {
+    "net": 58,
+    "net_name": null,
+    "kind": "track_width",
+    "requested": 0.4,
+    "delivered": 0.3458,
+    "site": "terminal neck",
+    "count": 1
+   },
+   {
+    "net": 58,
+    "net_name": null,
+    "kind": "track_width",
+    "requested": 0.4,
+    "delivered": 0.3458,
+    "site": "terminal neck",
+    "count": 1
+   },
+   {
+    "net": 58,
+    "net_name": null,
+    "kind": "track_width",
+    "requested": 0.4,
+    "delivered": 0.3458,
+    "site": "terminal neck",
+    "count": 1
+   },
+   {
+    "net": 58,
+    "net_name": null,
+    "kind": "track_width",
+    "requested": 0.4,
+    "delivered": 0.3458,
+    "site": "terminal neck",
+    "count": 1
+   },
+   {
+    "net": 58,
+    "net_name": null,
+    "kind": "track_width",
+    "requested": 0.4,
+    "delivered": 0.3458,
+    "site": "terminal neck",
+    "count": 1
+   },
+   {
+    "net": 58,
+    "net_name": null,
+    "kind": "track_width",
+    "requested": 0.4,
+    "delivered": 0.3458,
+    "site": "terminal neck",
+    "count": 1
+   },
+   {
+    "net": 58,
+    "net_name": null,
+    "kind": "track_width",
+    "requested": 0.4,
+    "delivered": 0.3458,
+    "site": "terminal neck",
+    "count": 1
+   },
+   {
+    "net": 58,
+    "net_name": null,
+    "kind": "track_width",
+    "requested": 0.4,
+    "delivered": 0.3458,
+    "site": "terminal neck",
+    "count": 1
+   },
+   {
+    "net": 58,
+    "net_name": null,
+    "kind": "track_width",
+    "requested": 0.4,
+    "delivered": 0.3458,
+    "site": "terminal neck",
+    "count": 1
+   },
+   {
+    "net": 58,
+    "net_name": null,
+    "kind": "track_width",
+    "requested": 0.4,
+    "delivered": 0.3458,
+    "site": "terminal neck",
+    "count": 1
+   },
+   {
+    "net": 58,
+    "net_name": null,
+    "kind": "track_width",
+    "requested": 0.4,
+    "delivered": 0.3458,
+    "site": "terminal neck",
+    "count": 1
+   },
+   {
+    "net": 58,
+    "net_name": null,
+    "kind": "track_width",
+    "requested": 0.4,
+    "delivered": 0.3458,
+    "site": "terminal neck",
+    "count": 1
+   },
+   {
+    "net": 58,
+    "net_name": null,
+    "kind": "track_width",
+    "requested": 0.4,
+    "delivered": 0.3458,
+    "site": "terminal neck",
+    "count": 1
+   },
+   {
+    "net": 58,
+    "net_name": null,
+    "kind": "track_width",
+    "requested": 0.4,
+    "delivered": 0.3958,
+    "site": "terminal neck",
+    "count": 1
+   },
+   {
+    "net": 58,
+    "net_name": null,
+    "kind": "track_width",
+    "requested": 0.4,
+    "delivered": 0.3458,
+    "site": "terminal neck",
+    "count": 1
+   },
+   {
+    "net": 58,
+    "net_name": null,
+    "kind": "track_width",
+    "requested": 0.4,
+    "delivered": 0.3458,
+    "site": "terminal neck",
+    "count": 1
+   },
+   {
+    "net": 58,
+    "net_name": null,
+    "kind": "track_width",
+    "requested": 0.4,
+    "delivered": 0.3458,
+    "site": "terminal neck",
+    "count": 1
+   },
+   {
+    "net": 58,
+    "net_name": null,
+    "kind": "track_width",
+    "requested": 0.4,
+    "delivered": 0.3458,
+    "site": "terminal neck",
+    "count": 1
+   },
+   {
+    "net": 58,
+    "net_name": null,
+    "kind": "track_width",
+    "requested": 0.4,
+    "delivered": 0.3458,
+    "site": "terminal neck",
+    "count": 1
+   },
+   {
+    "net": 58,
+    "net_name": null,
+    "kind": "track_width",
+    "requested": 0.4,
+    "delivered": 0.3458,
+    "site": "terminal neck",
+    "count": 1
+   },
+   {
+    "net": 58,
+    "net_name": null,
+    "kind": "track_width",
+    "requested": 0.4,
+    "delivered": 0.3458,
+    "site": "terminal neck",
+    "count": 1
+   },
+   {
+    "net": 1,
+    "net_name": null,
+    "kind": "track_width",
+    "requested": 0.6,
+    "delivered": 0.4458,
+    "site": "terminal neck",
+    "count": 1
+   },
+   {
+    "net": 1,
+    "net_name": null,
+    "kind": "track_width",
+    "requested": 0.6,
+    "delivered": 0.4458,
+    "site": "terminal neck",
+    "count": 1
+   },
+   {
+    "net": 1,
+    "net_name": null,
+    "kind": "track_width",
+    "requested": 0.6,
+    "delivered": 0.4458,
+    "site": "terminal neck",
+    "count": 1
+   },
+   {
+    "net": 60,
+    "net_name": null,
+    "kind": "via_diameter",
+    "requested": 0.6,
+    "delivered": 0.56,
+    "site": "via-in-pad clamp",
+    "count": 1
+   },
+   {
+    "net": 60,
+    "net_name": null,
+    "kind": "via_diameter",
+    "requested": 0.6,
+    "delivered": 0.46,
+    "site": "last-resort via-in-pad",
+    "count": 1
+   },
+   {
+    "net": 60,
+    "net_name": null,
+    "kind": "via_diameter",
+    "requested": 0.6,
+    "delivered": 0.46,
+    "site": "via-in-pad clamp (floor)",
+    "count": 1
+   },
+   {
+    "net": 60,
+    "net_name": null,
+    "kind": "via_diameter",
+    "requested": 0.6,
+    "delivered": 0.46,
+    "site": "via-in-pad clamp (floor)",
+    "count": 1
+   },
+   {
+    "net": 58,
+    "net_name": null,
+    "kind": "track_width",
+    "requested": 0.4,
+    "delivered": 0.3458,
+    "site": "terminal neck",
+    "count": 1
+   },
+   {
+    "net": 58,
+    "net_name": null,
+    "kind": "track_width",
+    "requested": 0.4,
+    "delivered": 0.3458,
+    "site": "terminal neck",
+    "count": 1
+   },
+   {
+    "net": 58,
+    "net_name": null,
+    "kind": "track_width",
+    "requested": 0.4,
+    "delivered": 0.3458,
+    "site": "terminal neck",
+    "count": 1
+   },
+   {
+    "net": 58,
+    "net_name": null,
+    "kind": "track_width",
+    "requested": 0.4,
+    "delivered": 0.3458,
+    "site": "terminal neck",
+    "count": 1
+   },
+   {
+    "net": 58,
+    "net_name": null,
+    "kind": "track_width",
+    "requested": 0.4,
+    "delivered": 0.3458,
+    "site": "terminal neck",
+    "count": 1
+   },
+   {
+    "net": 58,
+    "net_name": null,
+    "kind": "track_width",
+    "requested": 0.4,
+    "delivered": 0.3458,
+    "site": "terminal neck",
+    "count": 1
+   },
+   {
+    "net": 58,
+    "net_name": null,
+    "kind": "track_width",
+    "requested": 0.4,
+    "delivered": 0.3458,
+    "site": "terminal neck",
+    "count": 1
+   },
+   {
+    "net": 58,
+    "net_name": null,
+    "kind": "track_width",
+    "requested": 0.4,
+    "delivered": 0.3458,
+    "site": "terminal neck",
+    "count": 1
+   },
+   {
+    "net": 58,
+    "net_name": null,
+    "kind": "track_width",
+    "requested": 0.4,
+    "delivered": 0.3458,
+    "site": "terminal neck",
+    "count": 1
+   },
+   {
+    "net": 58,
+    "net_name": null,
+    "kind": "track_width",
+    "requested": 0.4,
+    "delivered": 0.3458,
+    "site": "terminal neck",
+    "count": 1
+   },
+   {
+    "net": 58,
+    "net_name": null,
+    "kind": "track_width",
+    "requested": 0.4,
+    "delivered": 0.3458,
+    "site": "terminal neck",
+    "count": 1
+   },
+   {
+    "net": 58,
+    "net_name": null,
+    "kind": "track_width",
+    "requested": 0.4,
+    "delivered": 0.3958,
+    "site": "terminal neck",
+    "count": 1
+   },
+   {
+    "net": 58,
+    "net_name": null,
+    "kind": "track_width",
+    "requested": 0.4,
+    "delivered": 0.3458,
+    "site": "terminal neck",
+    "count": 1
+   },
+   {
+    "net": 58,
+    "net_name": null,
+    "kind": "track_width",
+    "requested": 0.4,
+    "delivered": 0.3458,
+    "site": "terminal neck",
+    "count": 1
+   },
+   {
+    "net": 58,
+    "net_name": null,
+    "kind": "track_width",
+    "requested": 0.4,
+    "delivered": 0.3458,
+    "site": "terminal neck",
+    "count": 1
+   },
+   {
+    "net": 58,
+    "net_name": null,
+    "kind": "track_width",
+    "requested": 0.4,
+    "delivered": 0.3458,
+    "site": "terminal neck",
+    "count": 1
+   },
+   {
+    "net": 58,
+    "net_name": null,
+    "kind": "track_width",
+    "requested": 0.4,
+    "delivered": 0.3458,
+    "site": "terminal neck",
+    "count": 1
+   },
+   {
+    "net": 58,
+    "net_name": null,
+    "kind": "track_width",
+    "requested": 0.4,
+    "delivered": 0.3458,
+    "site": "terminal neck",
+    "count": 1
+   },
+   {
+    "net": 58,
+    "net_name": null,
+    "kind": "track_width",
+    "requested": 0.4,
+    "delivered": 0.3458,
+    "site": "terminal neck",
+    "count": 1
+   },
+   {
+    "net": 58,
+    "net_name": null,
+    "kind": "track_width",
+    "requested": 0.4,
+    "delivered": 0.3458,
+    "site": "terminal neck",
+    "count": 1
+   },
+   {
+    "net": 58,
+    "net_name": null,
+    "kind": "track_width",
+    "requested": 0.4,
+    "delivered": 0.3458,
+    "site": "terminal neck",
+    "count": 1
+   },
+   {
+    "net": 58,
+    "net_name": null,
+    "kind": "track_width",
+    "requested": 0.4,
+    "delivered": 0.3458,
+    "site": "terminal neck",
+    "count": 1
+   },
+   {
+    "net": 58,
+    "net_name": null,
+    "kind": "track_width",
+    "requested": 0.4,
+    "delivered": 0.3458,
+    "site": "terminal neck",
+    "count": 1
+   },
+   {
+    "net": 58,
+    "net_name": null,
+    "kind": "track_width",
+    "requested": 0.4,
+    "delivered": 0.3458,
+    "site": "terminal neck",
+    "count": 1
+   },
+   {
+    "net": 58,
+    "net_name": null,
+    "kind": "track_width",
+    "requested": 0.4,
+    "delivered": 0.3458,
+    "site": "terminal neck",
+    "count": 1
+   },
+   {
+    "net": 58,
+    "net_name": null,
+    "kind": "track_width",
+    "requested": 0.4,
+    "delivered": 0.3458,
+    "site": "terminal neck",
+    "count": 1
+   },
+   {
+    "net": 58,
+    "net_name": null,
+    "kind": "track_width",
+    "requested": 0.4,
+    "delivered": 0.3458,
+    "site": "terminal neck",
+    "count": 1
+   },
+   {
+    "net": 58,
+    "net_name": null,
+    "kind": "track_width",
+    "requested": 0.4,
+    "delivered": 0.3458,
+    "site": "terminal neck",
+    "count": 1
+   },
+   {
+    "net": 58,
+    "net_name": null,
+    "kind": "track_width",
+    "requested": 0.4,
+    "delivered": 0.3458,
+    "site": "terminal neck",
+    "count": 1
+   },
+   {
+    "net": 58,
+    "net_name": null,
+    "kind": "track_width",
+    "requested": 0.4,
+    "delivered": 0.3458,
+    "site": "terminal neck",
+    "count": 1
+   },
+   {
+    "net": 58,
+    "net_name": null,
+    "kind": "track_width",
+    "requested": 0.4,
+    "delivered": 0.3458,
+    "site": "terminal neck",
+    "count": 1
+   },
+   {
+    "net": 58,
+    "net_name": null,
+    "kind": "track_width",
+    "requested": 0.4,
+    "delivered": 0.3458,
+    "site": "terminal neck",
+    "count": 1
+   },
+   {
+    "net": 58,
+    "net_name": null,
+    "kind": "track_width",
+    "requested": 0.4,
+    "delivered": 0.3458,
+    "site": "terminal neck",
+    "count": 1
+   },
+   {
+    "net": 58,
+    "net_name": null,
+    "kind": "track_width",
+    "requested": 0.4,
+    "delivered": 0.3458,
+    "site": "terminal neck",
+    "count": 1
+   },
+   {
+    "net": 58,
+    "net_name": null,
+    "kind": "track_width",
+    "requested": 0.4,
+    "delivered": 0.3958,
+    "site": "terminal neck",
+    "count": 1
+   },
+   {
+    "net": 58,
+    "net_name": null,
+    "kind": "track_width",
+    "requested": 0.4,
+    "delivered": 0.3458,
+    "site": "terminal neck",
+    "count": 1
+   },
+   {
+    "net": 58,
+    "net_name": null,
+    "kind": "track_width",
+    "requested": 0.4,
+    "delivered": 0.3458,
+    "site": "terminal neck",
+    "count": 1
+   },
+   {
+    "net": 58,
+    "net_name": null,
+    "kind": "track_width",
+    "requested": 0.4,
+    "delivered": 0.3458,
+    "site": "terminal neck",
+    "count": 1
+   },
+   {
+    "net": 58,
+    "net_name": null,
+    "kind": "track_width",
+    "requested": 0.4,
+    "delivered": 0.3458,
+    "site": "terminal neck",
+    "count": 1
+   },
+   {
+    "net": 58,
+    "net_name": null,
+    "kind": "track_width",
+    "requested": 0.4,
+    "delivered": 0.3458,
+    "site": "terminal neck",
+    "count": 1
+   },
+   {
+    "net": 58,
+    "net_name": null,
+    "kind": "via_diameter",
+    "requested": 0.6,
+    "delivered": 0.46,
+    "site": "via-in-pad clamp (floor)",
+    "count": 1
+   },
+   {
+    "net": 58,
+    "net_name": null,
+    "kind": "track_width",
+    "requested": 0.4,
+    "delivered": 0.2,
+    "site": "fine-pitch tap",
+    "count": 1
+   },
+   {
+    "net": 56,
+    "net_name": null,
+    "kind": "via_diameter",
+    "requested": 0.6,
+    "delivered": 0.46,
+    "site": "via-in-pad clamp (floor)",
+    "count": 1
+   },
+   {
+    "net": 56,
+    "net_name": null,
+    "kind": "via_diameter",
+    "requested": 0.6,
+    "delivered": 0.46,
+    "site": "via-in-pad clamp (floor)",
+    "count": 1
+   },
+   {
+    "net": 56,
+    "net_name": null,
+    "kind": "via_diameter",
+    "requested": 0.6,
+    "delivered": 0.46,
+    "site": "via-in-pad clamp (floor)",
+    "count": 1
+   },
+   {
+    "net": 56,
+    "net_name": null,
+    "kind": "via_diameter",
+    "requested": 0.6,
+    "delivered": 0.46,
+    "site": "via-in-pad clamp (floor)",
+    "count": 1
+   },
+   {
+    "net": 56,
+    "net_name": null,
+    "kind": "via_diameter",
+    "requested": 0.6,
+    "delivered": 0.46,
+    "site": "via-in-pad clamp (floor)",
+    "count": 1
+   },
+   {
+    "net": 56,
+    "net_name": null,
+    "kind": "via_diameter",
+    "requested": 0.6,
+    "delivered": 0.46,
+    "site": "via-in-pad clamp (floor)",
+    "count": 1
+   },
+   {
+    "net": 56,
+    "net_name": null,
+    "kind": "via_diameter",
+    "requested": 0.6,
+    "delivered": 0.46,
+    "site": "via-in-pad clamp (floor)",
+    "count": 1
+   },
+   {
+    "net": 56,
+    "net_name": null,
+    "kind": "via_diameter",
+    "requested": 0.6,
+    "delivered": 0.46,
+    "site": "via-in-pad clamp (floor)",
+    "count": 1
+   },
+   {
+    "net": 56,
+    "net_name": null,
+    "kind": "via_diameter",
+    "requested": 0.6,
+    "delivered": 0.46,
+    "site": "via-in-pad clamp (floor)",
+    "count": 1
+   },
+   {
+    "net": 56,
+    "net_name": null,
+    "kind": "via_diameter",
+    "requested": 0.6,
+    "delivered": 0.46,
+    "site": "via-in-pad clamp (floor)",
+    "count": 1
+   },
+   {
+    "net": 56,
+    "net_name": null,
+    "kind": "via_diameter",
+    "requested": 0.6,
+    "delivered": 0.46,
+    "site": "via-in-pad clamp (floor)",
+    "count": 1
+   },
+   {
+    "net": 56,
+    "net_name": null,
+    "kind": "via_diameter",
+    "requested": 0.6,
+    "delivered": 0.46,
+    "site": "via-in-pad clamp (floor)",
+    "count": 1
+   },
+   {
+    "net": 56,
+    "net_name": null,
+    "kind": "via_diameter",
+    "requested": 0.6,
+    "delivered": 0.46,
+    "site": "via-in-pad clamp (floor)",
+    "count": 1
+   },
+   {
+    "net": 56,
+    "net_name": null,
+    "kind": "via_diameter",
+    "requested": 0.6,
+    "delivered": 0.46,
+    "site": "via-in-pad clamp (floor)",
+    "count": 1
+   },
+   {
+    "net": 56,
+    "net_name": null,
+    "kind": "via_diameter",
+    "requested": 0.6,
+    "delivered": 0.46,
+    "site": "via-in-pad clamp (floor)",
+    "count": 1
+   },
+   {
+    "net": 56,
+    "net_name": null,
+    "kind": "via_diameter",
+    "requested": 0.6,
+    "delivered": 0.46,
+    "site": "via-in-pad clamp (floor)",
+    "count": 1
+   },
+   {
+    "net": 56,
+    "net_name": null,
+    "kind": "via_diameter",
+    "requested": 0.6,
+    "delivered": 0.46,
+    "site": "via-in-pad clamp (floor)",
+    "count": 1
+   },
+   {
+    "net": 56,
+    "net_name": null,
+    "kind": "via_diameter",
+    "requested": 0.6,
+    "delivered": 0.46,
+    "site": "via-in-pad clamp (floor)",
+    "count": 1
+   },
+   {
+    "net": 56,
+    "net_name": null,
+    "kind": "via_diameter",
+    "requested": 0.6,
+    "delivered": 0.46,
+    "site": "via-in-pad clamp (floor)",
+    "count": 1
+   },
+   {
+    "net": 56,
+    "net_name": null,
+    "kind": "via_diameter",
+    "requested": 0.6,
+    "delivered": 0.46,
+    "site": "via-in-pad clamp (floor)",
+    "count": 1
+   },
+   {
+    "net": 56,
+    "net_name": null,
+    "kind": "via_diameter",
+    "requested": 0.6,
+    "delivered": 0.46,
+    "site": "via-in-pad clamp (floor)",
+    "count": 1
+   },
+   {
+    "net": 56,
+    "net_name": null,
+    "kind": "via_diameter",
+    "requested": 0.6,
+    "delivered": 0.46,
+    "site": "via-in-pad clamp (floor)",
+    "count": 1
+   },
+   {
+    "net": 56,
+    "net_name": null,
+    "kind": "via_diameter",
+    "requested": 0.6,
+    "delivered": 0.46,
+    "site": "via-in-pad clamp (floor)",
+    "count": 1
+   },
+   {
+    "net": 56,
+    "net_name": null,
+    "kind": "via_diameter",
+    "requested": 0.6,
+    "delivered": 0.46,
+    "site": "via-in-pad clamp (floor)",
+    "count": 1
+   },
+   {
+    "net": 56,
+    "net_name": null,
+    "kind": "via_diameter",
+    "requested": 0.6,
+    "delivered": 0.46,
+    "site": "via-in-pad clamp (floor)",
+    "count": 1
+   },
+   {
+    "net": 56,
+    "net_name": null,
+    "kind": "via_diameter",
+    "requested": 0.6,
+    "delivered": 0.46,
+    "site": "via-in-pad clamp (floor)",
+    "count": 1
+   },
+   {
+    "net": 56,
+    "net_name": null,
+    "kind": "via_diameter",
+    "requested": 0.6,
+    "delivered": 0.46,
+    "site": "via-in-pad clamp (floor)",
+    "count": 1
+   },
+   {
+    "net": 56,
+    "net_name": null,
+    "kind": "via_diameter",
+    "requested": 0.6,
+    "delivered": 0.46,
+    "site": "via-in-pad clamp (floor)",
+    "count": 1
+   },
+   {
+    "net": 56,
+    "net_name": null,
+    "kind": "via_diameter",
+    "requested": 0.6,
+    "delivered": 0.46,
+    "site": "via-in-pad clamp (floor)",
+    "count": 1
+   },
+   {
+    "net": 56,
+    "net_name": null,
+    "kind": "via_diameter",
+    "requested": 0.6,
+    "delivered": 0.46,
+    "site": "via-in-pad clamp (floor)",
+    "count": 1
+   },
+   {
+    "net": 56,
+    "net_name": null,
+    "kind": "via_diameter",
+    "requested": 0.6,
+    "delivered": 0.46,
+    "site": "via-in-pad clamp (floor)",
+    "count": 1
+   },
+   {
+    "net": 56,
+    "net_name": null,
+    "kind": "via_diameter",
+    "requested": 0.6,
+    "delivered": 0.46,
+    "site": "via-in-pad clamp (floor)",
+    "count": 1
+   },
+   {
+    "net": 56,
+    "net_name": null,
+    "kind": "via_diameter",
+    "requested": 0.6,
+    "delivered": 0.46,
+    "site": "via-in-pad clamp (floor)",
+    "count": 1
+   },
+   {
+    "net": 56,
+    "net_name": null,
+    "kind": "via_diameter",
+    "requested": 0.6,
+    "delivered": 0.46,
+    "site": "via-in-pad clamp (floor)",
+    "count": 1
+   },
+   {
+    "net": 56,
+    "net_name": null,
+    "kind": "via_diameter",
+    "requested": 0.6,
+    "delivered": 0.46,
+    "site": "via-in-pad clamp (floor)",
+    "count": 1
+   },
+   {
+    "net": 56,
+    "net_name": null,
+    "kind": "via_diameter",
+    "requested": 0.6,
+    "delivered": 0.46,
+    "site": "via-in-pad clamp (floor)",
+    "count": 1
+   },
+   {
+    "net": 56,
+    "net_name": null,
+    "kind": "via_diameter",
+    "requested": 0.6,
+    "delivered": 0.46,
+    "site": "via-in-pad clamp (floor)",
+    "count": 1
+   },
+   {
+    "net": 56,
+    "net_name": null,
+    "kind": "via_diameter",
+    "requested": 0.6,
+    "delivered": 0.46,
+    "site": "via-in-pad clamp (floor)",
+    "count": 1
+   },
+   {
+    "net": 56,
+    "net_name": null,
+    "kind": "via_diameter",
+    "requested": 0.6,
+    "delivered": 0.46,
+    "site": "via-in-pad clamp (floor)",
+    "count": 1
+   },
+   {
+    "net": 56,
+    "net_name": null,
+    "kind": "via_diameter",
+    "requested": 0.6,
+    "delivered": 0.46,
+    "site": "via-in-pad clamp (floor)",
+    "count": 1
+   },
+   {
+    "net": 56,
+    "net_name": null,
+    "kind": "via_diameter",
+    "requested": 0.6,
+    "delivered": 0.46,
+    "site": "via-in-pad clamp (floor)",
+    "count": 1
+   },
+   {
+    "net": 56,
+    "net_name": null,
+    "kind": "via_diameter",
+    "requested": 0.6,
+    "delivered": 0.46,
+    "site": "via-in-pad clamp (floor)",
+    "count": 1
+   },
+   {
+    "net": 56,
+    "net_name": null,
+    "kind": "via_diameter",
+    "requested": 0.6,
+    "delivered": 0.46,
+    "site": "via-in-pad clamp (floor)",
+    "count": 1
+   },
+   {
+    "net": 56,
+    "net_name": null,
+    "kind": "via_diameter",
+    "requested": 0.6,
+    "delivered": 0.46,
+    "site": "via-in-pad clamp (floor)",
+    "count": 1
+   },
+   {
+    "net": 56,
+    "net_name": null,
+    "kind": "via_diameter",
+    "requested": 0.6,
+    "delivered": 0.46,
+    "site": "via-in-pad clamp (floor)",
+    "count": 1
+   },
+   {
+    "net": 56,
+    "net_name": null,
+    "kind": "via_diameter",
+    "requested": 0.6,
+    "delivered": 0.46,
+    "site": "via-in-pad clamp (floor)",
+    "count": 1
+   },
+   {
+    "net": 56,
+    "net_name": null,
+    "kind": "via_diameter",
+    "requested": 0.6,
+    "delivered": 0.46,
+    "site": "via-in-pad clamp (floor)",
+    "count": 1
+   },
+   {
+    "net": 56,
+    "net_name": null,
+    "kind": "via_diameter",
+    "requested": 0.6,
+    "delivered": 0.46,
+    "site": "via-in-pad clamp (floor)",
+    "count": 1
+   },
+   {
+    "net": 56,
+    "net_name": null,
+    "kind": "via_diameter",
+    "requested": 0.6,
+    "delivered": 0.46,
+    "site": "via-in-pad clamp (floor)",
+    "count": 1
+   },
+   {
+    "net": 56,
+    "net_name": null,
+    "kind": "via_diameter",
+    "requested": 0.6,
+    "delivered": 0.46,
+    "site": "via-in-pad clamp (floor)",
+    "count": 1
+   },
+   {
+    "net": 56,
+    "net_name": null,
+    "kind": "via_diameter",
+    "requested": 0.6,
+    "delivered": 0.46,
+    "site": "via-in-pad clamp (floor)",
+    "count": 1
+   },
+   {
+    "net": 56,
+    "net_name": null,
+    "kind": "via_diameter",
+    "requested": 0.6,
+    "delivered": 0.46,
+    "site": "via-in-pad clamp (floor)",
+    "count": 1
+   },
+   {
+    "net": 56,
+    "net_name": null,
+    "kind": "via_diameter",
+    "requested": 0.6,
+    "delivered": 0.46,
+    "site": "via-in-pad clamp (floor)",
+    "count": 1
+   },
+   {
+    "net": 56,
+    "net_name": null,
+    "kind": "via_diameter",
+    "requested": 0.6,
+    "delivered": 0.46,
+    "site": "via-in-pad clamp (floor)",
+    "count": 1
+   },
+   {
+    "net": 56,
+    "net_name": null,
+    "kind": "via_diameter",
+    "requested": 0.6,
+    "delivered": 0.46,
+    "site": "via-in-pad clamp (floor)",
+    "count": 1
+   },
+   {
+    "net": 56,
+    "net_name": null,
+    "kind": "via_diameter",
+    "requested": 0.6,
+    "delivered": 0.46,
+    "site": "via-in-pad clamp (floor)",
+    "count": 1
+   },
+   {
+    "net": 56,
+    "net_name": null,
+    "kind": "via_diameter",
+    "requested": 0.6,
+    "delivered": 0.46,
+    "site": "via-in-pad clamp (floor)",
+    "count": 1
+   },
+   {
+    "net": 56,
+    "net_name": null,
+    "kind": "via_diameter",
+    "requested": 0.6,
+    "delivered": 0.46,
+    "site": "via-in-pad clamp (floor)",
+    "count": 1
+   },
+   {
+    "net": 56,
+    "net_name": null,
+    "kind": "via_diameter",
+    "requested": 0.6,
+    "delivered": 0.46,
+    "site": "via-in-pad clamp (floor)",
+    "count": 1
+   },
+   {
+    "net": 56,
+    "net_name": null,
+    "kind": "via_diameter",
+    "requested": 0.6,
+    "delivered": 0.46,
+    "site": "via-in-pad clamp (floor)",
+    "count": 1
+   },
+   {
+    "net": 56,
+    "net_name": null,
+    "kind": "via_diameter",
+    "requested": 0.6,
+    "delivered": 0.46,
+    "site": "via-in-pad clamp (floor)",
+    "count": 1
+   },
+   {
+    "net": 56,
+    "net_name": null,
+    "kind": "via_diameter",
+    "requested": 0.6,
+    "delivered": 0.46,
+    "site": "via-in-pad clamp (floor)",
+    "count": 1
+   },
+   {
+    "net": 56,
+    "net_name": null,
+    "kind": "via_diameter",
+    "requested": 0.6,
+    "delivered": 0.46,
+    "site": "via-in-pad clamp (floor)",
+    "count": 1
+   },
+   {
+    "net": 56,
+    "net_name": null,
+    "kind": "via_diameter",
+    "requested": 0.6,
+    "delivered": 0.46,
+    "site": "via-in-pad clamp (floor)",
+    "count": 1
+   },
+   {
+    "net": 56,
+    "net_name": null,
+    "kind": "via_diameter",
+    "requested": 0.6,
+    "delivered": 0.46,
+    "site": "via-in-pad clamp (floor)",
+    "count": 1
+   },
+   {
+    "net": 56,
+    "net_name": null,
+    "kind": "via_diameter",
+    "requested": 0.6,
+    "delivered": 0.46,
+    "site": "via-in-pad clamp (floor)",
+    "count": 1
+   },
+   {
+    "net": 56,
+    "net_name": null,
+    "kind": "via_diameter",
+    "requested": 0.6,
+    "delivered": 0.46,
+    "site": "via-in-pad clamp (floor)",
+    "count": 1
+   },
+   {
+    "net": 56,
+    "net_name": null,
+    "kind": "via_diameter",
+    "requested": 0.6,
+    "delivered": 0.46,
+    "site": "via-in-pad clamp (floor)",
+    "count": 1
+   },
+   {
+    "net": 56,
+    "net_name": null,
+    "kind": "via_diameter",
+    "requested": 0.6,
+    "delivered": 0.46,
+    "site": "via-in-pad clamp (floor)",
+    "count": 1
+   },
+   {
+    "net": 56,
+    "net_name": null,
+    "kind": "via_diameter",
+    "requested": 0.6,
+    "delivered": 0.46,
+    "site": "via-in-pad clamp (floor)",
+    "count": 1
+   },
+   {
+    "net": 56,
+    "net_name": null,
+    "kind": "via_diameter",
+    "requested": 0.6,
+    "delivered": 0.46,
+    "site": "via-in-pad clamp (floor)",
+    "count": 1
+   },
+   {
+    "net": 56,
+    "net_name": null,
+    "kind": "via_diameter",
+    "requested": 0.6,
+    "delivered": 0.46,
+    "site": "via-in-pad clamp (floor)",
+    "count": 1
+   },
+   {
+    "net": 56,
+    "net_name": null,
+    "kind": "via_diameter",
+    "requested": 0.6,
+    "delivered": 0.46,
+    "site": "via-in-pad clamp (floor)",
+    "count": 1
+   },
+   {
+    "net": 56,
+    "net_name": null,
+    "kind": "via_diameter",
+    "requested": 0.6,
+    "delivered": 0.46,
+    "site": "via-in-pad clamp (floor)",
+    "count": 1
+   },
+   {
+    "net": 56,
+    "net_name": null,
+    "kind": "via_diameter",
+    "requested": 0.6,
+    "delivered": 0.46,
+    "site": "via-in-pad clamp (floor)",
+    "count": 1
+   },
+   {
+    "net": 56,
+    "net_name": null,
+    "kind": "via_diameter",
+    "requested": 0.6,
+    "delivered": 0.46,
+    "site": "via-in-pad clamp (floor)",
+    "count": 1
+   },
+   {
+    "net": 56,
+    "net_name": null,
+    "kind": "via_diameter",
+    "requested": 0.6,
+    "delivered": 0.46,
+    "site": "via-in-pad clamp (floor)",
+    "count": 1
+   },
+   {
+    "net": 56,
+    "net_name": null,
+    "kind": "via_diameter",
+    "requested": 0.6,
+    "delivered": 0.46,
+    "site": "via-in-pad clamp (floor)",
+    "count": 1
+   },
+   {
+    "net": 58,
+    "net_name": "+3V3",
+    "kind": "track_width",
+    "requested": 0.4,
+    "delivered": 0.2,
+    "site": "net rescue",
+    "count": 1
+   },
+   {
+    "net": 56,
+    "net_name": null,
+    "kind": "via_diameter",
+    "requested": 0.6,
+    "delivered": 0.46,
+    "site": "via-in-pad clamp (floor)",
+    "count": 1
+   },
+   {
+    "net": 56,
+    "net_name": null,
+    "kind": "via_diameter",
+    "requested": 0.6,
+    "delivered": 0.46,
+    "site": "via-in-pad clamp (floor)",
+    "count": 1
+   },
+   {
+    "net": 56,
+    "net_name": null,
+    "kind": "via_diameter",
+    "requested": 0.6,
+    "delivered": 0.46,
+    "site": "via-in-pad clamp (floor)",
+    "count": 1
+   },
+   {
+    "net": 56,
+    "net_name": null,
+    "kind": "via_diameter",
+    "requested": 0.6,
+    "delivered": 0.46,
+    "site": "via-in-pad clamp (floor)",
+    "count": 1
+   },
+   {
+    "net": 56,
+    "net_name": null,
+    "kind": "via_diameter",
+    "requested": 0.6,
+    "delivered": 0.56,
+    "site": "via-in-pad clamp",
+    "count": 1
+   },
+   {
+    "net": 56,
+    "net_name": null,
+    "kind": "via_diameter",
+    "requested": 0.6,
+    "delivered": 0.56,
+    "site": "via-in-pad clamp",
+    "count": 1
+   },
+   {
+    "net": 56,
+    "net_name": null,
+    "kind": "via_diameter",
+    "requested": 0.6,
+    "delivered": 0.56,
+    "site": "via-in-pad clamp",
+    "count": 1
+   },
+   {
+    "net": 56,
+    "net_name": null,
+    "kind": "via_diameter",
+    "requested": 0.6,
+    "delivered": 0.46,
+    "site": "via-in-pad clamp (floor)",
+    "count": 1
+   },
+   {
+    "net": 56,
+    "net_name": null,
+    "kind": "via_diameter",
+    "requested": 0.6,
+    "delivered": 0.46,
+    "site": "via-in-pad clamp (floor)",
+    "count": 1
+   },
+   {
+    "net": 58,
+    "net_name": null,
+    "kind": "track_width",
+    "requested": 0.4,
+    "delivered": 0.3458,
+    "site": "terminal neck",
+    "count": 1
+   },
+   {
+    "net": 58,
+    "net_name": null,
+    "kind": "track_width",
+    "requested": 0.4,
+    "delivered": 0.3458,
+    "site": "terminal neck",
+    "count": 1
+   },
+   {
+    "net": 58,
+    "net_name": null,
+    "kind": "track_width",
+    "requested": 0.4,
+    "delivered": 0.3458,
+    "site": "terminal neck",
+    "count": 1
+   },
+   {
+    "net": 58,
+    "net_name": null,
+    "kind": "track_width",
+    "requested": 0.4,
+    "delivered": 0.3458,
+    "site": "terminal neck",
+    "count": 1
+   },
+   {
+    "net": 58,
+    "net_name": null,
+    "kind": "track_width",
+    "requested": 0.4,
+    "delivered": 0.3458,
+    "site": "terminal neck",
+    "count": 1
+   },
+   {
+    "net": 58,
+    "net_name": null,
+    "kind": "track_width",
+    "requested": 0.4,
+    "delivered": 0.3458,
+    "site": "terminal neck",
+    "count": 1
+   },
+   {
+    "net": 58,
+    "net_name": null,
+    "kind": "track_width",
+    "requested": 0.4,
+    "delivered": 0.3458,
+    "site": "terminal neck",
+    "count": 1
+   },
+   {
+    "net": 58,
+    "net_name": null,
+    "kind": "track_width",
+    "requested": 0.4,
+    "delivered": 0.3458,
+    "site": "terminal neck",
+    "count": 1
+   },
+   {
+    "net": 58,
+    "net_name": null,
+    "kind": "track_width",
+    "requested": 0.4,
+    "delivered": 0.3738,
+    "site": "terminal neck",
+    "count": 1
+   },
+   {
+    "net": 58,
+    "net_name": null,
+    "kind": "track_width",
+    "requested": 0.4,
+    "delivered": 0.3736,
+    "site": "terminal neck",
+    "count": 1
+   },
+   {
+    "net": 58,
+    "net_name": null,
+    "kind": "track_width",
+    "requested": 0.4,
+    "delivered": 0.3736,
+    "site": "terminal neck",
+    "count": 1
+   },
+   {
+    "net": 58,
+    "net_name": null,
+    "kind": "track_width",
+    "requested": 0.4,
+    "delivered": 0.3458,
+    "site": "terminal neck",
+    "count": 1
+   },
+   {
+    "net": 58,
+    "net_name": null,
+    "kind": "track_width",
+    "requested": 0.4,
+    "delivered": 0.3458,
+    "site": "terminal neck",
+    "count": 1
+   },
+   {
+    "net": 58,
+    "net_name": null,
+    "kind": "track_width",
+    "requested": 0.4,
+    "delivered": 0.3458,
+    "site": "terminal neck",
+    "count": 1
+   },
+   {
+    "net": 58,
+    "net_name": null,
+    "kind": "track_width",
+    "requested": 0.4,
+    "delivered": 0.3458,
+    "site": "terminal neck",
+    "count": 1
+   },
+   {
+    "net": 58,
+    "net_name": null,
+    "kind": "track_width",
+    "requested": 0.4,
+    "delivered": 0.3458,
+    "site": "terminal neck",
+    "count": 1
+   },
+   {
+    "net": 58,
+    "net_name": null,
+    "kind": "via_diameter",
+    "requested": 0.6,
+    "delivered": 0.46,
+    "site": "via-in-pad clamp (floor)",
+    "count": 1
+   },
+   {
+    "net": 58,
+    "net_name": null,
+    "kind": "track_width",
+    "requested": 0.4,
+    "delivered": 0.2,
+    "site": "fine-pitch tap",
+    "count": 1
+   },
+   {
+    "net": 58,
+    "net_name": null,
+    "kind": "track_width",
+    "requested": 0.4,
+    "delivered": 0.2,
+    "site": "fine-pitch tap",
+    "count": 1
+   },
+   {
+    "net": 58,
+    "net_name": null,
+    "kind": "track_width",
+    "requested": 0.4,
+    "delivered": 0.3458,
+    "site": "terminal neck",
+    "count": 1
+   },
+   {
+    "net": 58,
+    "net_name": null,
+    "kind": "track_width",
+    "requested": 0.4,
+    "delivered": 0.3458,
+    "site": "terminal neck",
+    "count": 1
+   },
+   {
+    "net": 58,
+    "net_name": null,
+    "kind": "track_width",
+    "requested": 0.4,
+    "delivered": 0.3458,
+    "site": "terminal neck",
+    "count": 1
+   },
+   {
+    "net": 58,
+    "net_name": null,
+    "kind": "track_width",
+    "requested": 0.4,
+    "delivered": 0.3458,
+    "site": "terminal neck",
+    "count": 1
+   },
+   {
+    "net": 58,
+    "net_name": null,
+    "kind": "track_width",
+    "requested": 0.4,
+    "delivered": 0.3458,
+    "site": "terminal neck",
+    "count": 1
+   },
+   {
+    "net": 58,
+    "net_name": null,
+    "kind": "track_width",
+    "requested": 0.4,
+    "delivered": 0.3458,
+    "site": "terminal neck",
+    "count": 1
+   },
+   {
+    "net": 58,
+    "net_name": null,
+    "kind": "track_width",
+    "requested": 0.4,
+    "delivered": 0.3458,
+    "site": "terminal neck",
+    "count": 1
+   },
+   {
+    "net": 58,
+    "net_name": null,
+    "kind": "track_width",
+    "requested": 0.4,
+    "delivered": 0.3458,
+    "site": "terminal neck",
+    "count": 1
+   },
+   {
+    "net": 58,
+    "net_name": null,
+    "kind": "track_width",
+    "requested": 0.4,
+    "delivered": 0.3738,
+    "site": "terminal neck",
+    "count": 1
+   },
+   {
+    "net": 58,
+    "net_name": null,
+    "kind": "track_width",
+    "requested": 0.4,
+    "delivered": 0.3736,
+    "site": "terminal neck",
+    "count": 1
+   },
+   {
+    "net": 58,
+    "net_name": null,
+    "kind": "track_width",
+    "requested": 0.4,
+    "delivered": 0.3736,
+    "site": "terminal neck",
+    "count": 1
+   },
+   {
+    "net": 58,
+    "net_name": null,
+    "kind": "track_width",
+    "requested": 0.4,
+    "delivered": 0.3458,
+    "site": "terminal neck",
+    "count": 1
+   },
+   {
+    "net": 58,
+    "net_name": null,
+    "kind": "track_width",
+    "requested": 0.4,
+    "delivered": 0.3458,
+    "site": "terminal neck",
+    "count": 1
+   },
+   {
+    "net": 58,
+    "net_name": null,
+    "kind": "track_width",
+    "requested": 0.4,
+    "delivered": 0.3458,
+    "site": "terminal neck",
+    "count": 1
+   },
+   {
+    "net": 58,
+    "net_name": null,
+    "kind": "track_width",
+    "requested": 0.4,
+    "delivered": 0.3458,
+    "site": "terminal neck",
+    "count": 1
+   },
+   {
+    "net": 58,
+    "net_name": null,
+    "kind": "track_width",
+    "requested": 0.4,
+    "delivered": 0.3458,
+    "site": "terminal neck",
+    "count": 1
+   },
+   {
+    "net": 58,
+    "net_name": null,
+    "kind": "track_width",
+    "requested": 0.4,
+    "delivered": 0.3458,
+    "site": "terminal neck",
+    "count": 1
+   },
+   {
+    "net": 58,
+    "net_name": null,
+    "kind": "track_width",
+    "requested": 0.4,
+    "delivered": 0.3458,
+    "site": "terminal neck",
+    "count": 1
+   },
+   {
+    "net": 58,
+    "net_name": null,
+    "kind": "via_diameter",
+    "requested": 0.6,
+    "delivered": 0.46,
+    "site": "via-in-pad clamp (floor)",
+    "count": 1
+   },
+   {
+    "net": 58,
+    "net_name": null,
+    "kind": "track_width",
+    "requested": 0.4,
+    "delivered": 0.2,
+    "site": "fine-pitch tap",
+    "count": 1
+   },
+   {
+    "net": 58,
+    "net_name": "+3V3",
+    "kind": "track_width",
+    "requested": 0.4,
+    "delivered": 0.2,
+    "site": "net rescue",
+    "count": 1
+   },
+   {
+    "net": 56,
+    "net_name": null,
+    "kind": "via_diameter",
+    "requested": 0.6,
+    "delivered": 0.56,
+    "site": "via-in-pad clamp",
+    "count": 1
+   },
+   {
+    "net": 58,
+    "net_name": null,
+    "kind": "track_width",
+    "requested": 0.4,
+    "delivered": 0.3458,
+    "site": "terminal neck",
+    "count": 1
+   },
+   {
+    "net": 58,
+    "net_name": null,
+    "kind": "track_width",
+    "requested": 0.4,
+    "delivered": 0.3458,
+    "site": "terminal neck",
+    "count": 1
+   },
+   {
+    "net": 58,
+    "net_name": null,
+    "kind": "track_width",
+    "requested": 0.4,
+    "delivered": 0.3458,
+    "site": "terminal neck",
+    "count": 1
+   },
+   {
+    "net": 58,
+    "net_name": null,
+    "kind": "track_width",
+    "requested": 0.4,
+    "delivered": 0.3458,
+    "site": "terminal neck",
+    "count": 1
+   },
+   {
+    "net": 58,
+    "net_name": null,
+    "kind": "track_width",
+    "requested": 0.4,
+    "delivered": 0.3458,
+    "site": "terminal neck",
+    "count": 1
+   },
+   {
+    "net": 58,
+    "net_name": null,
+    "kind": "track_width",
+    "requested": 0.4,
+    "delivered": 0.3458,
+    "site": "terminal neck",
+    "count": 1
+   },
+   {
+    "net": 58,
+    "net_name": null,
+    "kind": "track_width",
+    "requested": 0.4,
+    "delivered": 0.3458,
+    "site": "terminal neck",
+    "count": 1
+   },
+   {
+    "net": 58,
+    "net_name": null,
+    "kind": "track_width",
+    "requested": 0.4,
+    "delivered": 0.3458,
+    "site": "terminal neck",
+    "count": 1
+   },
+   {
+    "net": 58,
+    "net_name": null,
+    "kind": "track_width",
+    "requested": 0.4,
+    "delivered": 0.3738,
+    "site": "terminal neck",
+    "count": 1
+   },
+   {
+    "net": 58,
+    "net_name": null,
+    "kind": "track_width",
+    "requested": 0.4,
+    "delivered": 0.3736,
+    "site": "terminal neck",
+    "count": 1
+   },
+   {
+    "net": 58,
+    "net_name": null,
+    "kind": "track_width",
+    "requested": 0.4,
+    "delivered": 0.3736,
+    "site": "terminal neck",
+    "count": 1
+   },
+   {
+    "net": 58,
+    "net_name": null,
+    "kind": "track_width",
+    "requested": 0.4,
+    "delivered": 0.3458,
+    "site": "terminal neck",
+    "count": 1
+   },
+   {
+    "net": 58,
+    "net_name": null,
+    "kind": "track_width",
+    "requested": 0.4,
+    "delivered": 0.3458,
+    "site": "terminal neck",
+    "count": 1
+   },
+   {
+    "net": 58,
+    "net_name": null,
+    "kind": "track_width",
+    "requested": 0.4,
+    "delivered": 0.3458,
+    "site": "terminal neck",
+    "count": 1
+   },
+   {
+    "net": 58,
+    "net_name": null,
+    "kind": "track_width",
+    "requested": 0.4,
+    "delivered": 0.3458,
+    "site": "terminal neck",
+    "count": 1
+   },
+   {
+    "net": 58,
+    "net_name": null,
+    "kind": "track_width",
+    "requested": 0.4,
+    "delivered": 0.3458,
+    "site": "terminal neck",
+    "count": 1
+   },
+   {
+    "net": 58,
+    "net_name": null,
+    "kind": "via_diameter",
+    "requested": 0.6,
+    "delivered": 0.56,
+    "site": "via-in-pad clamp",
+    "count": 1
+   },
+   {
+    "net": 58,
+    "net_name": null,
+    "kind": "track_width",
+    "requested": 0.4,
+    "delivered": 0.2,
+    "site": "fine-pitch tap",
+    "count": 1
+   },
+   {
+    "net": 58,
+    "net_name": null,
+    "kind": "track_width",
+    "requested": 0.4,
+    "delivered": 0.2,
+    "site": "fine-pitch tap",
+    "count": 1
+   },
+   {
+    "net": 58,
+    "net_name": null,
+    "kind": "track_width",
+    "requested": 0.4,
+    "delivered": 0.3458,
+    "site": "terminal neck",
+    "count": 1
+   },
+   {
+    "net": 58,
+    "net_name": null,
+    "kind": "track_width",
+    "requested": 0.4,
+    "delivered": 0.3458,
+    "site": "terminal neck",
+    "count": 1
+   },
+   {
+    "net": 58,
+    "net_name": null,
+    "kind": "track_width",
+    "requested": 0.4,
+    "delivered": 0.3458,
+    "site": "terminal neck",
+    "count": 1
+   },
+   {
+    "net": 58,
+    "net_name": null,
+    "kind": "track_width",
+    "requested": 0.4,
+    "delivered": 0.3458,
+    "site": "terminal neck",
+    "count": 1
+   },
+   {
+    "net": 58,
+    "net_name": null,
+    "kind": "track_width",
+    "requested": 0.4,
+    "delivered": 0.3458,
+    "site": "terminal neck",
+    "count": 1
+   },
+   {
+    "net": 58,
+    "net_name": null,
+    "kind": "track_width",
+    "requested": 0.4,
+    "delivered": 0.3458,
+    "site": "terminal neck",
+    "count": 1
+   },
+   {
+    "net": 58,
+    "net_name": null,
+    "kind": "track_width",
+    "requested": 0.4,
+    "delivered": 0.3458,
+    "site": "terminal neck",
+    "count": 1
+   },
+   {
+    "net": 58,
+    "net_name": null,
+    "kind": "track_width",
+    "requested": 0.4,
+    "delivered": 0.3458,
+    "site": "terminal neck",
+    "count": 1
+   },
+   {
+    "net": 58,
+    "net_name": null,
+    "kind": "track_width",
+    "requested": 0.4,
+    "delivered": 0.3458,
+    "site": "terminal neck",
+    "count": 1
+   },
+   {
+    "net": 58,
+    "net_name": null,
+    "kind": "track_width",
+    "requested": 0.4,
+    "delivered": 0.3458,
+    "site": "terminal neck",
+    "count": 1
+   },
+   {
+    "net": 58,
+    "net_name": null,
+    "kind": "track_width",
+    "requested": 0.4,
+    "delivered": 0.3458,
+    "site": "terminal neck",
+    "count": 1
+   },
+   {
+    "net": 58,
+    "net_name": null,
+    "kind": "track_width",
+    "requested": 0.4,
+    "delivered": 0.3458,
+    "site": "terminal neck",
+    "count": 1
+   },
+   {
+    "net": 58,
+    "net_name": null,
+    "kind": "track_width",
+    "requested": 0.4,
+    "delivered": 0.3458,
+    "site": "terminal neck",
+    "count": 1
+   },
+   {
+    "net": 58,
+    "net_name": null,
+    "kind": "track_width",
+    "requested": 0.4,
+    "delivered": 0.3458,
+    "site": "terminal neck",
+    "count": 1
+   },
+   {
+    "net": 58,
+    "net_name": null,
+    "kind": "track_width",
+    "requested": 0.4,
+    "delivered": 0.3738,
+    "site": "terminal neck",
+    "count": 1
+   },
+   {
+    "net": 58,
+    "net_name": null,
+    "kind": "track_width",
+    "requested": 0.4,
+    "delivered": 0.3736,
+    "site": "terminal neck",
+    "count": 1
+   },
+   {
+    "net": 58,
+    "net_name": null,
+    "kind": "track_width",
+    "requested": 0.4,
+    "delivered": 0.3736,
+    "site": "terminal neck",
+    "count": 1
+   },
+   {
+    "net": 58,
+    "net_name": null,
+    "kind": "track_width",
+    "requested": 0.4,
+    "delivered": 0.3458,
+    "site": "terminal neck",
+    "count": 1
+   },
+   {
+    "net": 58,
+    "net_name": null,
+    "kind": "track_width",
+    "requested": 0.4,
+    "delivered": 0.3458,
+    "site": "terminal neck",
+    "count": 1
+   },
+   {
+    "net": 58,
+    "net_name": null,
+    "kind": "track_width",
+    "requested": 0.4,
+    "delivered": 0.3458,
+    "site": "terminal neck",
+    "count": 1
+   },
+   {
+    "net": 58,
+    "net_name": null,
+    "kind": "track_width",
+    "requested": 0.4,
+    "delivered": 0.3458,
+    "site": "terminal neck",
+    "count": 1
+   },
+   {
+    "net": 58,
+    "net_name": null,
+    "kind": "track_width",
+    "requested": 0.4,
+    "delivered": 0.3458,
+    "site": "terminal neck",
+    "count": 1
+   },
+   {
+    "net": 34,
+    "net_name": null,
+    "kind": "via_diameter",
+    "requested": 0.6,
+    "delivered": 0.46,
+    "site": "via-in-pad clamp (floor)",
+    "count": 1
+   },
+   {
+    "net": 58,
+    "net_name": null,
+    "kind": "track_width",
+    "requested": 0.4,
+    "delivered": 0.3458,
+    "site": "terminal neck",
+    "count": 1
+   },
+   {
+    "net": 58,
+    "net_name": null,
+    "kind": "track_width",
+    "requested": 0.4,
+    "delivered": 0.3458,
+    "site": "terminal neck",
+    "count": 1
+   },
+   {
+    "net": 58,
+    "net_name": null,
+    "kind": "track_width",
+    "requested": 0.4,
+    "delivered": 0.3458,
+    "site": "terminal neck",
+    "count": 1
+   },
+   {
+    "net": 58,
+    "net_name": null,
+    "kind": "track_width",
+    "requested": 0.4,
+    "delivered": 0.3458,
+    "site": "terminal neck",
+    "count": 1
+   },
+   {
+    "net": 58,
+    "net_name": null,
+    "kind": "track_width",
+    "requested": 0.4,
+    "delivered": 0.3458,
+    "site": "terminal neck",
+    "count": 1
+   },
+   {
+    "net": 58,
+    "net_name": null,
+    "kind": "track_width",
+    "requested": 0.4,
+    "delivered": 0.3458,
+    "site": "terminal neck",
+    "count": 1
+   },
+   {
+    "net": 58,
+    "net_name": null,
+    "kind": "track_width",
+    "requested": 0.4,
+    "delivered": 0.3458,
+    "site": "terminal neck",
+    "count": 1
+   },
+   {
+    "net": 58,
+    "net_name": null,
+    "kind": "track_width",
+    "requested": 0.4,
+    "delivered": 0.3458,
+    "site": "terminal neck",
+    "count": 1
+   },
+   {
+    "net": 58,
+    "net_name": null,
+    "kind": "track_width",
+    "requested": 0.4,
+    "delivered": 0.3458,
+    "site": "terminal neck",
+    "count": 1
+   },
+   {
+    "net": 58,
+    "net_name": null,
+    "kind": "track_width",
+    "requested": 0.4,
+    "delivered": 0.3458,
+    "site": "terminal neck",
+    "count": 1
+   },
+   {
+    "net": 58,
+    "net_name": null,
+    "kind": "track_width",
+    "requested": 0.4,
+    "delivered": 0.3458,
+    "site": "terminal neck",
+    "count": 1
+   },
+   {
+    "net": 58,
+    "net_name": null,
+    "kind": "track_width",
+    "requested": 0.4,
+    "delivered": 0.3458,
+    "site": "terminal neck",
+    "count": 1
+   },
+   {
+    "net": 58,
+    "net_name": null,
+    "kind": "track_width",
+    "requested": 0.4,
+    "delivered": 0.3738,
+    "site": "terminal neck",
+    "count": 1
+   },
+   {
+    "net": 58,
+    "net_name": null,
+    "kind": "track_width",
+    "requested": 0.4,
+    "delivered": 0.3736,
+    "site": "terminal neck",
+    "count": 1
+   },
+   {
+    "net": 58,
+    "net_name": null,
+    "kind": "track_width",
+    "requested": 0.4,
+    "delivered": 0.3736,
+    "site": "terminal neck",
+    "count": 1
+   },
+   {
+    "net": 58,
+    "net_name": null,
+    "kind": "track_width",
+    "requested": 0.4,
+    "delivered": 0.3458,
+    "site": "terminal neck",
+    "count": 1
+   },
+   {
+    "net": 58,
+    "net_name": null,
+    "kind": "track_width",
+    "requested": 0.4,
+    "delivered": 0.3458,
+    "site": "terminal neck",
+    "count": 1
+   },
+   {
+    "net": 58,
+    "net_name": null,
+    "kind": "track_width",
+    "requested": 0.4,
+    "delivered": 0.3458,
+    "site": "terminal neck",
+    "count": 1
+   },
+   {
+    "net": 58,
+    "net_name": null,
+    "kind": "track_width",
+    "requested": 0.4,
+    "delivered": 0.3458,
+    "site": "terminal neck",
+    "count": 1
+   },
+   {
+    "net": 58,
+    "net_name": null,
+    "kind": "track_width",
+    "requested": 0.4,
+    "delivered": 0.3458,
+    "site": "terminal neck",
+    "count": 1
+   }
+  ],
+  "min_delivered": {
+   "track_width": 0.2,
+   "via_diameter": 0.46
+  },
+  "fab_tier_escalations": 0,
+  "fab_tier_contexts": [],
+  "fab_tier_target": "board_floors",
+  "unsupported_rules": []
+ },
+ "plane_fragility": {
+  "source": "zone_outlines",
+  "islands": 0,
+  "refill_status": "no_kicad_python",
+  "why": "no python with pcbnew found; set KICAD_PYTHON to KiCad's bundled interpreter",
+  "machine_dependent": false
+ },
+ "stacked_copper": [
+  {
+   "category": "stacked-copper",
+   "net": "GND",
+   "layer": "F.Cu",
+   "x": 7.98,
+   "y": 11.4,
+   "detail": "2 duplicate segments stacked on (7.980, 11.400)-(8.000, 11.400)",
+   "size": 0.019999999999999574
+  },
+  {
+   "category": "stacked-copper",
+   "net": "GND",
+   "layer": "F.Cu",
+   "x": 10.58,
+   "y": 11.4,
+   "detail": "2 duplicate segments stacked on (10.580, 11.400)-(10.600, 11.400)",
+   "size": 0.019999999999999574
+  },
+  {
+   "category": "stacked-copper",
+   "net": "GND",
+   "layer": "F.Cu",
+   "x": 13.18,
+   "y": 11.4,
+   "detail": "2 duplicate segments stacked on (13.180, 11.400)-(13.200, 11.400)",
+   "size": 0.019999999999999574
+  },
+  {
+   "category": "stacked-copper",
+   "net": "GND",
+   "layer": "F.Cu",
+   "x": 17.75,
+   "y": 15.2,
+   "detail": "2 duplicate segments stacked on (17.750, 15.200)-(17.800, 15.200)",
+   "size": 0.05000000000000071
+  },
+  {
+   "category": "stacked-copper",
+   "net": "GND",
+   "layer": "F.Cu",
+   "x": 30.3,
+   "y": 22.8,
+   "detail": "2 duplicate segments stacked on (30.300, 22.800)-(30.400, 22.900)",
+   "size": 0.14142135623730648
+  },
+  {
+   "category": "stacked-copper",
+   "net": "GND",
+   "layer": "F.Cu",
+   "x": 30.4,
+   "y": 22.9,
+   "detail": "2 duplicate segments stacked on (30.400, 22.900)-(30.500, 23.000)",
+   "size": 0.1414213562373115
+  },
+  {
+   "category": "stacked-copper",
+   "net": "GND",
+   "layer": "F.Cu",
+   "x": 30.5,
+   "y": 23.0,
+   "detail": "2 duplicate segments stacked on (30.500, 23.000)-(30.600, 23.100)",
+   "size": 0.1414213562373115
+  },
+  {
+   "category": "stacked-copper",
+   "net": "GND",
+   "layer": "F.Cu",
+   "x": 37.25,
+   "y": 13.55,
+   "detail": "2 duplicate segments stacked on (37.250, 13.550)-(37.250, 13.600)",
+   "size": 0.049999999999998934
+  },
+  {
+   "category": "stacked-copper",
+   "net": "GND",
+   "layer": "F.Cu",
+   "x": 37.25,
+   "y": 13.6,
+   "detail": "2 duplicate segments stacked on (37.250, 13.600)-(37.250, 13.650)",
+   "size": 0.05000000000000071
+  },
+  {
+   "category": "stacked-copper",
+   "net": "GND",
+   "layer": "F.Cu",
+   "x": 37.25,
+   "y": 13.65,
+   "detail": "2 duplicate segments stacked on (37.250, 13.650)-(37.250, 13.700)",
+   "size": 0.049999999999998934
+  },
+  {
+   "category": "stacked-copper",
+   "net": "GND",
+   "layer": "F.Cu",
+   "x": 37.25,
+   "y": 13.7,
+   "detail": "2 duplicate segments stacked on (37.250, 13.700)-(37.250, 13.750)",
+   "size": 0.05000000000000071
+  },
+  {
+   "category": "stacked-copper",
+   "net": "GND",
+   "layer": "F.Cu",
+   "x": 37.25,
+   "y": 13.75,
+   "detail": "2 duplicate segments stacked on (37.250, 13.750)-(37.250, 13.800)",
+   "size": 0.05000000000000071
+  },
+  {
+   "category": "stacked-copper",
+   "net": "GND",
+   "layer": "F.Cu",
+   "x": 37.25,
+   "y": 13.8,
+   "detail": "2 duplicate segments stacked on (37.250, 13.800)-(37.250, 13.850)",
+   "size": 0.049999999999998934
+  },
+  {
+   "category": "stacked-copper",
+   "net": "GND",
+   "layer": "F.Cu",
+   "x": 37.25,
+   "y": 13.85,
+   "detail": "2 duplicate segments stacked on (37.250, 13.850)-(37.250, 13.900)",
+   "size": 0.05000000000000071
+  },
+  {
+   "category": "stacked-copper",
+   "net": "GND",
+   "layer": "F.Cu",
+   "x": 37.25,
+   "y": 13.9,
+   "detail": "2 duplicate segments stacked on (37.250, 13.900)-(37.250, 13.950)",
+   "size": 0.049999999999998934
+  },
+  {
+   "category": "stacked-copper",
+   "net": "GND",
+   "layer": "F.Cu",
+   "x": 37.25,
+   "y": 13.95,
+   "detail": "2 duplicate segments stacked on (37.250, 13.950)-(37.250, 14.000)",
+   "size": 0.05000000000000071
+  },
+  {
+   "category": "stacked-copper",
+   "net": "GND",
+   "layer": "F.Cu",
+   "x": 37.25,
+   "y": 14.0,
+   "detail": "2 duplicate segments stacked on (37.250, 14.000)-(37.250, 14.050)",
+   "size": 0.05000000000000071
+  },
+  {
+   "category": "stacked-copper",
+   "net": "GND",
+   "layer": "F.Cu",
+   "x": 37.25,
+   "y": 14.05,
+   "detail": "2 duplicate segments stacked on (37.250, 14.050)-(37.250, 14.100)",
+   "size": 0.049999999999998934
+  },
+  {
+   "category": "stacked-copper",
+   "net": "GND",
+   "layer": "F.Cu",
+   "x": 37.25,
+   "y": 14.1,
+   "detail": "2 duplicate segments stacked on (37.250, 14.100)-(37.250, 14.150)",
+   "size": 0.05000000000000071
+  },
+  {
+   "category": "stacked-copper",
+   "net": "GND",
+   "layer": "F.Cu",
+   "x": 37.25,
+   "y": 14.15,
+   "detail": "2 duplicate segments stacked on (37.250, 14.150)-(37.250, 14.200)",
+   "size": 0.049999999999998934
+  },
+  {
+   "category": "stacked-copper",
+   "net": "GND",
+   "layer": "F.Cu",
+   "x": 37.25,
+   "y": 14.2,
+   "detail": "2 duplicate segments stacked on (37.250, 14.200)-(37.250, 14.250)",
+   "size": 0.05000000000000071
+  },
+  {
+   "category": "stacked-copper",
+   "net": "GND",
+   "layer": "F.Cu",
+   "x": 37.25,
+   "y": 14.25,
+   "detail": "2 duplicate segments stacked on (37.250, 14.250)-(37.250, 14.300)",
+   "size": 0.05000000000000071
+  },
+  {
+   "category": "stacked-copper",
+   "net": "GND",
+   "layer": "F.Cu",
+   "x": 37.25,
+   "y": 14.3,
+   "detail": "2 duplicate segments stacked on (37.250, 14.300)-(37.250, 14.350)",
+   "size": 0.049999999999998934
+  },
+  {
+   "category": "stacked-copper",
+   "net": "GND",
+   "layer": "F.Cu",
+   "x": 37.25,
+   "y": 14.338,
+   "detail": "2 duplicate segments stacked on (37.250, 14.338)-(37.250, 14.350)",
+   "size": 0.012000000000000455
+  },
+  {
+   "category": "stacked-copper",
+   "net": "GND",
+   "layer": "F.Cu",
+   "x": 39.75,
+   "y": 14.338,
+   "detail": "2 duplicate segments stacked on (39.750, 14.338)-(39.750, 14.350)",
+   "size": 0.012000000000000455
+  }
+ ],
+ "oracle_check": "disabled",
+ "pad_pairs_connected": 146,
+ "pad_pairs_total": 146,
+ "scope": "merged",
+ "board_scoped_keys": [
+  "stacked_copper",
+  "min_clearance_used"
+ ],
+ "env_knobs": {
+  "KICAD_FOOTPRINT_DIR": "/home/jeff/.local/share/flatpak/runtime/org.kicad.KiCad.Library.Footprints/x86_64/stable/active/files/footprints",
+  "KICAD_ROUTING_TOOLS_REPO": "/home/jeff/synth-local/krt",
+  "KICAD_SYMBOL_DIR": "/home/jeff/.local/share/flatpak/runtime/org.kicad.KiCad.Library.Symbols/x86_64/stable/active/files/symbols",
+  "KRT_PYTHON": "/home/jeff/synth-local/krtvenv/bin/python"
+ },
+ "regrade": {
+  "board": "file",
+  "graded_nets": 60,
+  "seconds": 1.26,
+  "unowned_broken": [],
+  "recovered": [],
+  "broken_by_run": []
+ },
+ "via_in_pad": {
+  "count": 0,
+  "sites": [],
+  "stamped": 0,
+  "restored": 0,
+  "protected": 0,
+  "unstampable": 0,
+  "site_created": 0,
+  "unprotected": [],
+  "note": "via-in-pad requires IPC-4761 Type VII (filled + capped + plated); state it on the fab drawing or solder wicks into the barrel"
+ }
+}

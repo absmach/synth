@@ -1,0 +1,165 @@
+{
+    "$schema": "https://schemas.kicad.org/erc.v1.json",
+    "coordinate_units": "mm",
+    "date": "2026-11-07T09:28:59",
+    "ignored_checks": [
+        {
+            "description": "Global label only appears once in the schematic",
+            "key": "single_global_label"
+        },
+        {
+            "description": "Four connection points are joined together",
+            "key": "four_way_junction"
+        },
+        {
+            "description": "SPICE model issue",
+            "key": "simulation_model_issue"
+        },
+        {
+            "description": "Assigned footprint doesn't match footprint filters",
+            "key": "footprint_filter"
+        }
+    ],
+    "included_severities": [
+        "error",
+        "warning",
+        "exclusion"
+    ],
+    "kicad_version": "10.0.6",
+    "sheets": [
+        {
+            "path": "/",
+            "uuid_path": "/64b52a5a-e602-53d0-9993-23deccd4fed0",
+            "violations": [
+                {
+                    "description": "Symbol 'Si2301CDS' not found in symbol library 'Transistor_FET'",
+                    "items": [
+                        {
+                            "description": "Symbol Q1 [Si2301CDS]",
+                            "pos": {
+                                "x": 1.9939,
+                                "y": 0.5461
+                            },
+                            "uuid": "a4a1e963-30ca-5938-b586-4fb39294ade7"
+                        }
+                    ],
+                    "severity": "warning",
+                    "type": "lib_symbol_issues"
+                },
+                {
+                    "description": "Symbol 'AO3400A' doesn't match copy in library 'Transistor_FET'",
+                    "items": [
+                        {
+                            "description": "Symbol Q2 [AO3400A]",
+                            "pos": {
+                                "x": 1.1303,
+                                "y": 0.4445
+                            },
+                            "uuid": "29b5cb69-83cc-5371-ac06-98c651932757"
+                        }
+                    ],
+                    "severity": "warning",
+                    "type": "lib_symbol_mismatch"
+                }
+            ]
+        },
+        {
+            "path": "/POWER INPUT/",
+            "uuid_path": "/64b52a5a-e602-53d0-9993-23deccd4fed0/c0b5c801-7d3f-5e3d-acec-2c094b430b21",
+            "violations": []
+        },
+        {
+            "path": "/3V3 RAIL/",
+            "uuid_path": "/64b52a5a-e602-53d0-9993-23deccd4fed0/5ae927d9-d3dc-58a7-94c8-adf0537a586e",
+            "violations": []
+        },
+        {
+            "path": "/1V2 CORE RAIL/",
+            "uuid_path": "/64b52a5a-e602-53d0-9993-23deccd4fed0/e03dc864-48b6-5f5b-b5ee-f12f3773ef6f",
+            "violations": []
+        },
+        {
+            "path": "/FPGA/",
+            "uuid_path": "/64b52a5a-e602-53d0-9993-23deccd4fed0/9a6d78ef-a4dd-54f4-9062-bd2dc6088542",
+            "violations": [
+                {
+                    "description": "Pins of type Bidirectional and Power output are connected",
+                    "items": [
+                        {
+                            "description": "Symbol U3 Pin 63 [IOB_103_CBSEL0, Bidirectional, Line]",
+                            "pos": {
+                                "x": 0.3429,
+                                "y": 4.0894
+                            },
+                            "uuid": "d831f9d4-ce27-4a63-b2fd-3187a8e8ef05"
+                        },
+                        {
+                            "description": "Symbol #FLG3584 Pin 1 [Power output, Line]",
+                            "pos": {
+                                "x": 0.3683,
+                                "y": 0.9779
+                            },
+                            "uuid": "0fc3372b-61ca-41a9-a04e-244a169ebf62"
+                        }
+                    ],
+                    "severity": "warning",
+                    "type": "pin_to_pin"
+                },
+                {
+                    "description": "Pins of type Bidirectional and Power output are connected",
+                    "items": [
+                        {
+                            "description": "Symbol U3 Pin 64 [IOB_104_CBSEL1, Bidirectional, Line]",
+                            "pos": {
+                                "x": 0.3429,
+                                "y": 4.1148
+                            },
+                            "uuid": "2b5204c0-a41c-408e-aa6d-ce111c978f08"
+                        },
+                        {
+                            "description": "Symbol #FLG3584 Pin 1 [Power output, Line]",
+                            "pos": {
+                                "x": 0.3683,
+                                "y": 0.9779
+                            },
+                            "uuid": "0fc3372b-61ca-41a9-a04e-244a169ebf62"
+                        }
+                    ],
+                    "severity": "warning",
+                    "type": "pin_to_pin"
+                }
+            ]
+        },
+        {
+            "path": "/SDRAM/",
+            "uuid_path": "/64b52a5a-e602-53d0-9993-23deccd4fed0/f7597fb0-f16c-5741-9f19-52d7b9883624",
+            "violations": []
+        },
+        {
+            "path": "/SERIES TERMINATION/",
+            "uuid_path": "/64b52a5a-e602-53d0-9993-23deccd4fed0/484667aa-54c4-51ab-aecb-e0a749e46785",
+            "violations": []
+        },
+        {
+            "path": "/CONFIGURATION/",
+            "uuid_path": "/64b52a5a-e602-53d0-9993-23deccd4fed0/6b23e96e-fc87-5dbc-a270-653fe0ed28d2",
+            "violations": []
+        },
+        {
+            "path": "/STATUS LEDS/",
+            "uuid_path": "/64b52a5a-e602-53d0-9993-23deccd4fed0/e96ea4dc-f9c1-587c-831e-ddc11f46167f",
+            "violations": []
+        },
+        {
+            "path": "/TEST POINTS/",
+            "uuid_path": "/64b52a5a-e602-53d0-9993-23deccd4fed0/866ce529-7ff0-5cfd-a76f-4a30598a0213",
+            "violations": []
+        },
+        {
+            "path": "/MECHANICAL/",
+            "uuid_path": "/64b52a5a-e602-53d0-9993-23deccd4fed0/19779903-d12d-5ef0-b146-9b4dd4123505",
+            "violations": []
+        }
+    ],
+    "source": "ice40_sdram_node.kicad_sch"
+}
