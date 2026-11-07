@@ -20,7 +20,7 @@ use std::process::Command as ProcessCommand;
 use std::process::ExitCode;
 
 use clap::{Parser, Subcommand, ValueEnum};
-use synth_diagnostics::NativeCheckStatus;
+use synth_diagnostics::{NativeCheckEvidence, NativeCheckStatus, UnknownReason};
 
 const EXIT_SUCCESS: u8 = 0;
 const EXIT_VALIDATION_ERRORS: u8 = 1;
@@ -219,6 +219,11 @@ enum Command {
         /// placement found so far when the budget is spent.
         #[arg(long, default_value_t = 0)]
         place_route_budget_secs: u64,
+        /// Let a DFM Danger finding block a release export (`--gerbers` and
+        /// similar). Opt-in: the DFM rules are not yet calibrated against
+        /// JLCDFM, so by default findings are only recorded.
+        #[arg(long)]
+        dfm_gate: bool,
     },
 
     /// Apply the highest-confidence `suggested_fix` from every
@@ -970,6 +975,7 @@ fn main() -> ExitCode {
             allow_incomplete,
             place_route_iterate,
             place_route_budget_secs,
+            dfm_gate,
         } => export_kicad(
             &input,
             registry.as_deref(),
@@ -1004,6 +1010,7 @@ fn main() -> ExitCode {
             allow_incomplete,
             place_route_iterate,
             place_route_budget_secs,
+            dfm_gate,
         ),
         Command::Fix {
             input,
@@ -4025,6 +4032,7 @@ fn export_kicad(
     allow_incomplete: bool,
     place_route_iterate: bool,
     place_route_budget_secs: u64,
+    dfm_gate: bool,
 ) -> anyhow::Result<u8> {
     if autoroute {
         // Still parsed, so an existing script fails with something
@@ -4455,6 +4463,39 @@ fn export_kicad(
     }
     native.push(drc.evidence);
 
+    // Manufacturability is read from the board that ships. Every export
+    // records it; only a release export (fab files requested) run with
+    // `--dfm-gate` is stopped by a Danger finding. The gate is opt-in until
+    // the rules are calibrated against the fab's own tool.
+    let (dfm_evidence, dfm_report) = dfm_stage(&delivered, &drc_profile);
+    let dfm_danger = dfm_report
+        .as_ref()
+        .map_or(0, synth_drc::dfm::DfmReport::danger_count);
+    let release_dfm_blocked = production && dfm_gate && dfm_danger > 0;
+    if let Some(report) = &dfm_report {
+        if release_dfm_blocked {
+            for finding in &report.findings {
+                eprintln!(
+                    "[dfm] {:?}: [{}] {}",
+                    finding.severity, finding.rule, finding.message
+                );
+            }
+            eprintln!(
+                "error: release export blocked: DFM found {dfm_danger} Danger finding(s) ({}); \
+                 --force does not override this.",
+                dfm_evidence.detail.as_deref().unwrap_or_default()
+            );
+        } else if !report.findings.is_empty() {
+            eprintln!(
+                "warning: DFM found {} finding(s) a fab would flag ({}); see the verification \
+                 report. Pass --dfm-gate to let Danger findings block a release export.",
+                report.findings.len(),
+                dfm_evidence.detail.as_deref().unwrap_or_default()
+            );
+        }
+    }
+    native.push(dfm_evidence);
+
     let blocked_by_unknown: Vec<_> = native
         .iter()
         .filter(|e| e.status == NativeCheckStatus::Unknown)
@@ -4505,7 +4546,7 @@ fn export_kicad(
     )
     .with_synthetic_symbols(release::synthetic_symbol_parts(board))
     .with_signal_integrity(&synth_violations)
-    .with_release_blocked(release_drc_blocked)
+    .with_release_blocked(release_drc_blocked || release_dfm_blocked)
     .with_routing(Some(release::RoutingState::from_report(
         &routing,
         &run_record,
@@ -4559,6 +4600,7 @@ fn export_kicad(
         || (has_erc_errors && !force)
         || (has_kicad_drc_errors && !force)
         || release_drc_blocked
+        || release_dfm_blocked
         || has_kicad_erc_errs
         || !blocked_by_unknown.is_empty()
         // Fail-closed: an un-routed export is not fabricable, and neither
@@ -4724,6 +4766,69 @@ fn report_unavailable_check(evidence: &synth_diagnostics::NativeCheckEvidence) {
     }
     if let Some(stderr) = &evidence.stderr {
         eprintln!("  stderr: {}", stderr.replace('\n', "\n          "));
+    }
+}
+
+/// The manufacturability stage: what a fab's DFM tool would flag on the
+/// board that ships. A board that cannot be read is `unknown`, never clean.
+fn dfm_stage(
+    pcb: &Path,
+    profile: &synth_drc::ManufacturerProfile,
+) -> (NativeCheckEvidence, Option<synth_drc::dfm::DfmReport>) {
+    const STAGE: &str = "dfm";
+    const TOOL: &str = "synth-drc";
+    let text = match std::fs::read_to_string(pcb) {
+        Ok(text) => text,
+        Err(e) => {
+            let detail = format!("cannot read {}: {e}", pcb.display());
+            let evidence = NativeCheckEvidence::unknown(
+                STAGE,
+                TOOL,
+                Vec::new(),
+                UnknownReason::ReportUnreadable,
+                detail,
+            );
+            return (evidence, None);
+        }
+    };
+    match synth_drc::dfm::check_dfm(&text, profile) {
+        Err(e) => {
+            let evidence = NativeCheckEvidence::unknown(
+                STAGE,
+                TOOL,
+                Vec::new(),
+                UnknownReason::ReportMalformed,
+                e.to_string(),
+            );
+            (evidence, None)
+        }
+        Ok(report) => {
+            let mut evidence =
+                NativeCheckEvidence::concluded(STAGE, TOOL, Vec::new(), report.danger_count());
+            let counts: Vec<String> = report
+                .counts()
+                .iter()
+                .map(|((rule, severity), n)| format!("{rule} {severity:?} {n}").to_lowercase())
+                .collect();
+            let mut parts = counts;
+            if report.unchecked_silk_text > 0 {
+                parts.push(format!(
+                    "{} silk text item(s) not measured",
+                    report.unchecked_silk_text
+                ));
+            }
+            let detail = parts.join(", ");
+            evidence = evidence.with_unsupported(vec![
+                "plated_hole_to_trace: not implemented".to_string(),
+                "silk_text_clearance: text is counted, not measured".to_string(),
+                "silk_to_hole: 0.15 mm floor assumed, not published by JLC".to_string(),
+                "copper_merge_tolerance: 0.07 mm uncalibrated".to_string(),
+            ]);
+            if !detail.is_empty() {
+                evidence.detail = Some(detail);
+            }
+            (evidence, Some(report))
+        }
     }
 }
 

@@ -45,6 +45,37 @@ pub struct ManufacturerProfile {
     /// Minimum clearance from any drilled hole's edge to copper
     /// belonging to a different net, in nanometers.
     pub min_drill_to_copper_nm: i64,
+    /// Minimum gap between a silkscreen stroke's edge and a pad on the
+    /// same side, in nanometers. JLCPCB's published figure is 0.15 mm.
+    #[serde(default = "default_min_silk_to_pad_nm")]
+    pub min_silk_to_pad_nm: i64,
+    /// Minimum gap between a silkscreen stroke's edge and a drilled hole,
+    /// on either side of the board, in nanometers. JLCPCB does not publish
+    /// this figure; 0.15 mm is assumed, to be calibrated against its DFM tool.
+    #[serde(default = "default_min_silk_to_hole_nm")]
+    pub min_silk_to_hole_nm: i64,
+    /// Minimum silkscreen stroke width, in nanometers. JLCPCB's published
+    /// figure is 0.15 mm; its DFM tool grades thinner silk a Warning.
+    #[serde(default = "default_min_silk_width_nm")]
+    pub min_silk_width_nm: i64,
+    /// Minimum copper gap between pads (and vias) on the same side, in
+    /// nanometers, whatever their nets. JLCPCB's published figure is 0.15 mm.
+    #[serde(default = "default_min_pad_to_pad_nm")]
+    pub min_pad_to_pad_nm: i64,
+    /// Pad spacing below this is a Danger; from here up to `min_pad_to_pad_nm`
+    /// it is a Warning. JLCDFM's scale is 0.10 mm and 0.15 mm.
+    #[serde(default = "default_pad_to_pad_danger_nm")]
+    pub pad_to_pad_danger_nm: i64,
+    /// Copper of one net with a gap under this (`gap < value`) is treated as one
+    /// merged object, not as two objects with a gap. Different nets are never
+    /// merged. Read from JLCDFM on one board, which lists no
+    /// spacing under 0.07 mm; to be calibrated.
+    #[serde(default = "default_copper_merge_below_nm")]
+    pub copper_merge_below_nm: i64,
+    /// Minimum gap from a plated hole's edge to a trace of another net, in
+    /// nanometers. JLCPCB's published minimum is 0.28 mm.
+    #[serde(default = "default_min_pth_to_trace_nm")]
+    pub min_pth_to_trace_nm: i64,
     /// Dielectric heights of parallel run two traces must share before
     /// `W-SYNTH-DRC-013` calls it edge coupling. A process-neutral default;
     /// tighter than this and ordinary boards warn.
@@ -94,6 +125,62 @@ impl ManufacturerProfile {
     }
 }
 
+fn default_copper_merge_below_mm() -> f64 {
+    0.07
+}
+
+fn default_copper_merge_below_nm() -> i64 {
+    mm_to_nm(default_copper_merge_below_mm())
+}
+
+fn default_pad_to_pad_danger_mm() -> f64 {
+    0.10
+}
+
+fn default_pad_to_pad_danger_nm() -> i64 {
+    mm_to_nm(default_pad_to_pad_danger_mm())
+}
+
+fn default_min_pad_to_pad_mm() -> f64 {
+    0.15
+}
+
+fn default_min_pad_to_pad_nm() -> i64 {
+    mm_to_nm(default_min_pad_to_pad_mm())
+}
+
+fn default_min_pth_to_trace_mm() -> f64 {
+    0.28
+}
+
+fn default_min_pth_to_trace_nm() -> i64 {
+    mm_to_nm(default_min_pth_to_trace_mm())
+}
+
+fn default_min_silk_width_mm() -> f64 {
+    0.15
+}
+
+fn default_min_silk_width_nm() -> i64 {
+    mm_to_nm(default_min_silk_width_mm())
+}
+
+fn default_min_silk_to_pad_mm() -> f64 {
+    0.15
+}
+
+fn default_min_silk_to_hole_mm() -> f64 {
+    0.15
+}
+
+fn default_min_silk_to_hole_nm() -> i64 {
+    mm_to_nm(default_min_silk_to_hole_mm())
+}
+
+fn default_min_silk_to_pad_nm() -> i64 {
+    mm_to_nm(default_min_silk_to_pad_mm())
+}
+
 const fn default_crosstalk_run_multiple() -> i64 {
     10
 }
@@ -126,6 +213,13 @@ impl ManufacturerProfile {
             min_drill_diameter_nm: mm_to_nm(0.2),
             min_annular_ring_nm: mm_to_nm(0.13),
             min_drill_to_copper_nm: mm_to_nm(0.2),
+            min_silk_to_pad_nm: default_min_silk_to_pad_nm(),
+            min_silk_to_hole_nm: default_min_silk_to_hole_nm(),
+            min_silk_width_nm: default_min_silk_width_nm(),
+            min_pad_to_pad_nm: default_min_pad_to_pad_nm(),
+            pad_to_pad_danger_nm: default_pad_to_pad_danger_nm(),
+            copper_merge_below_nm: default_copper_merge_below_nm(),
+            min_pth_to_trace_nm: default_min_pth_to_trace_nm(),
             crosstalk_run_multiple: default_crosstalk_run_multiple(),
             ampacity_delta_t_milli_c: default_ampacity_delta_t_milli_c(),
             ir_drop_budget_mv: default_ir_drop_budget_mv(),
@@ -149,6 +243,13 @@ impl ManufacturerProfile {
             min_drill_diameter_nm: mm_to_nm(0.3),
             min_annular_ring_nm: mm_to_nm(0.15),
             min_drill_to_copper_nm: mm_to_nm(0.2),
+            min_silk_to_pad_nm: default_min_silk_to_pad_nm(),
+            min_silk_to_hole_nm: default_min_silk_to_hole_nm(),
+            min_silk_width_nm: default_min_silk_width_nm(),
+            min_pad_to_pad_nm: default_min_pad_to_pad_nm(),
+            pad_to_pad_danger_nm: default_pad_to_pad_danger_nm(),
+            copper_merge_below_nm: default_copper_merge_below_nm(),
+            min_pth_to_trace_nm: default_min_pth_to_trace_nm(),
             crosstalk_run_multiple: default_crosstalk_run_multiple(),
             ampacity_delta_t_milli_c: default_ampacity_delta_t_milli_c(),
             ir_drop_budget_mv: default_ir_drop_budget_mv(),
@@ -172,6 +273,13 @@ impl ManufacturerProfile {
             min_drill_diameter_nm: mm_to_nm(0.25),
             min_annular_ring_nm: mm_to_nm(0.125),
             min_drill_to_copper_nm: mm_to_nm(0.2),
+            min_silk_to_pad_nm: default_min_silk_to_pad_nm(),
+            min_silk_to_hole_nm: default_min_silk_to_hole_nm(),
+            min_silk_width_nm: default_min_silk_width_nm(),
+            min_pad_to_pad_nm: default_min_pad_to_pad_nm(),
+            pad_to_pad_danger_nm: default_pad_to_pad_danger_nm(),
+            copper_merge_below_nm: default_copper_merge_below_nm(),
+            min_pth_to_trace_nm: default_min_pth_to_trace_nm(),
             crosstalk_run_multiple: default_crosstalk_run_multiple(),
             ampacity_delta_t_milli_c: default_ampacity_delta_t_milli_c(),
             ir_drop_budget_mv: default_ir_drop_budget_mv(),
@@ -314,6 +422,13 @@ impl ManufacturerProfile {
             min_drill_diameter_nm: mm_to_nm(raw.min_drill_diameter_mm),
             min_annular_ring_nm: mm_to_nm(raw.min_annular_ring_mm),
             min_drill_to_copper_nm: mm_to_nm(raw.min_drill_to_copper_mm),
+            min_silk_to_pad_nm: mm_to_nm(raw.min_silk_to_pad_mm),
+            min_silk_to_hole_nm: mm_to_nm(raw.min_silk_to_hole_mm),
+            min_silk_width_nm: mm_to_nm(raw.min_silk_width_mm),
+            min_pad_to_pad_nm: mm_to_nm(raw.min_pad_to_pad_mm),
+            pad_to_pad_danger_nm: mm_to_nm(raw.pad_to_pad_danger_mm),
+            copper_merge_below_nm: mm_to_nm(raw.copper_merge_below_mm),
+            min_pth_to_trace_nm: mm_to_nm(raw.min_pth_to_trace_mm),
             crosstalk_run_multiple: raw.crosstalk_run_multiple,
             ampacity_delta_t_milli_c: raw.ampacity_delta_t_milli_c,
             ir_drop_budget_mv: raw.ir_drop_budget_mv,
@@ -331,6 +446,20 @@ struct TomlProfile {
     min_drill_diameter_mm: f64,
     min_annular_ring_mm: f64,
     min_drill_to_copper_mm: f64,
+    #[serde(default = "default_min_silk_to_pad_mm")]
+    min_silk_to_pad_mm: f64,
+    #[serde(default = "default_min_silk_to_hole_mm")]
+    min_silk_to_hole_mm: f64,
+    #[serde(default = "default_min_silk_width_mm")]
+    min_silk_width_mm: f64,
+    #[serde(default = "default_min_pad_to_pad_mm")]
+    min_pad_to_pad_mm: f64,
+    #[serde(default = "default_pad_to_pad_danger_mm")]
+    pad_to_pad_danger_mm: f64,
+    #[serde(default = "default_copper_merge_below_mm")]
+    copper_merge_below_mm: f64,
+    #[serde(default = "default_min_pth_to_trace_mm")]
+    min_pth_to_trace_mm: f64,
     #[serde(default = "default_crosstalk_run_multiple")]
     crosstalk_run_multiple: i64,
     #[serde(default = "default_ampacity_delta_t_milli_c")]
@@ -688,6 +817,29 @@ min_drill_to_copper_mm = 0.25
 "#;
         let p = ManufacturerProfile::from_toml_str(text).expect("parse");
         assert!(!p.via_in_pad);
+    }
+
+    /// A profile TOML that predates the DFM floors reads the JLCPCB figures
+    /// for them rather than failing to parse.
+    #[test]
+    fn a_profile_toml_without_the_dfm_floors_gets_the_jlc_defaults() {
+        let text = r#"
+name = "legacy"
+min_trace_width_mm = 0.15
+min_copper_clearance_mm = 0.2
+min_copper_to_edge_mm = 0.5
+min_drill_diameter_mm = 0.4
+min_annular_ring_mm = 0.15
+min_drill_to_copper_mm = 0.25
+"#;
+        let p = ManufacturerProfile::from_toml_str(text).expect("parse");
+        assert_eq!(p.min_silk_to_pad_nm, mm_to_nm(0.15));
+        assert_eq!(p.min_silk_to_hole_nm, mm_to_nm(0.15));
+        assert_eq!(p.min_silk_width_nm, mm_to_nm(0.15));
+        assert_eq!(p.min_pad_to_pad_nm, mm_to_nm(0.15));
+        assert_eq!(p.pad_to_pad_danger_nm, mm_to_nm(0.10));
+        assert_eq!(p.copper_merge_below_nm, mm_to_nm(0.07));
+        assert_eq!(p.min_pth_to_trace_nm, mm_to_nm(0.28));
     }
 
     #[test]

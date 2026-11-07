@@ -398,6 +398,9 @@ pub struct Pad {
     /// `roundrect_rratio`: corner radius as a share of the shorter side.
     /// Zero for a pad that is not a rounded rectangle.
     pub corner_ratio: f64,
+    /// Drill size in nanometres: `(diameter, diameter)` for a round hole,
+    /// `(width, height)` for an oval slot, `(0, 0)` for a pad with no hole.
+    pub drill_nm: (i64, i64),
     pub layers: Vec<String>,
     /// Net code as written in the file, if the pad carries one.
     pub net: Option<u32>,
@@ -433,14 +436,60 @@ impl Pad {
         let qx = (dx * cos - dy * sin).abs();
         let qy = (dx * sin + dy * cos).abs();
         let (hx, hy) = (self.size_nm.0 as f64 / 2.0, self.size_nm.1 as f64 / 2.0);
-        let short = hx.min(hy);
-        let radius = match self.shape.as_str() {
+        let radius = self.corner_radius_nm();
+        let (ex, ey) = (qx - (hx - radius), qy - (hy - radius));
+        ex.max(0.0).hypot(ey.max(0.0)) + ex.max(ey).min(0.0) - radius
+    }
+
+    /// Corner radius of the pad's rounded box, in nanometres: zero for a
+    /// rectangle, half the shorter side for a circle or oval.
+    fn corner_radius_nm(&self) -> f64 {
+        let short = (self.size_nm.0.min(self.size_nm.1)) as f64 / 2.0;
+        match self.shape.as_str() {
             "circle" | "oval" => short,
             "roundrect" => (self.corner_ratio * 2.0 * short).clamp(0.0, short),
             _ => 0.0,
-        };
-        let (ex, ey) = (qx - (hx - radius), qy - (hy - radius));
-        ex.max(0.0).hypot(ey.max(0.0)) + ex.max(ey).min(0.0) - radius
+        }
+    }
+
+    /// Points around the pad's copper outline, no further apart than
+    /// `step_nm`, in board coordinates.
+    #[must_use]
+    pub fn outline_points_nm(&self, step_nm: f64) -> Vec<Point> {
+        let (hx, hy) = (self.size_nm.0 as f64 / 2.0, self.size_nm.1 as f64 / 2.0);
+        let radius = self.corner_radius_nm();
+        let (cx, cy) = (hx - radius, hy - radius);
+        // Corner arcs, counter-clockwise from the +x,+y corner, joined by
+        // the straight edges between them.
+        let arc_steps = ((radius * std::f64::consts::FRAC_PI_2 / step_nm).ceil() as i64).max(1);
+        let mut key: Vec<(f64, f64)> = Vec::new();
+        for (corner, (sx, sy)) in [(1.0, 1.0), (-1.0, 1.0), (-1.0, -1.0), (1.0, -1.0)]
+            .into_iter()
+            .enumerate()
+        {
+            let from = corner as f64 * std::f64::consts::FRAC_PI_2;
+            for i in 0..=arc_steps {
+                let a = from + std::f64::consts::FRAC_PI_2 * i as f64 / arc_steps as f64;
+                key.push((sx * cx + radius * a.cos(), sy * cy + radius * a.sin()));
+            }
+        }
+        let (sin, cos) = self.angle_deg.to_radians().sin_cos();
+        let mut points = Vec::new();
+        for (i, &(x0, y0)) in key.iter().enumerate() {
+            let (x1, y1) = key[(i + 1) % key.len()];
+            let pieces = (((x1 - x0).hypot(y1 - y0) / step_nm).ceil() as i64).max(1);
+            for k in 0..pieces {
+                let f = k as f64 / pieces as f64;
+                let (qx, qy) = (x0 + (x1 - x0) * f, y0 + (y1 - y0) * f);
+                // Pad frame to board frame (the inverse of `signed_distance_nm`).
+                points.push(Point::new(
+                    self.at.x_nm + (qx * cos + qy * sin).round() as i64,
+                    self.at.y_nm + (qy * cos - qx * sin).round() as i64,
+                ));
+            }
+        }
+        points.dedup();
+        points
     }
 
     /// Whether this pad carries copper on `layer`.
@@ -456,6 +505,17 @@ impl Pad {
     }
 }
 
+/// One silkscreen shape (a line, arc, circle, rectangle or polygon) as the
+/// straight strokes that trace it, in board coordinates. A curve is many
+/// strokes but one shape, so a rule reports it once.
+#[derive(Debug, Clone, PartialEq)]
+pub struct SilkShape {
+    /// The silkscreen layer, `F.SilkS` or `B.SilkS`.
+    pub layer: String,
+    pub width_nm: i64,
+    pub strokes: Vec<(Point, Point)>,
+}
+
 /// A footprint instance on the board.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Footprint {
@@ -465,6 +525,11 @@ pub struct Footprint {
     pub layer: String,
     pub rotation_deg: f64,
     pub pads: Vec<Pad>,
+    /// Silkscreen shapes the footprint carries, already in board coordinates.
+    pub silk: Vec<SilkShape>,
+    /// Visible text on a silkscreen layer: reference designator and the like.
+    /// Counted, not measured: there is no glyph geometry to check.
+    pub silk_text: usize,
 }
 
 /// A track segment.
@@ -640,6 +705,10 @@ pub struct PcbBoard {
     pub zones: Vec<Zone>,
     /// `(start, end)` of every `Edge.Cuts` graphic.
     pub edge_cuts: Vec<(Point, Point)>,
+    /// Silkscreen shapes drawn on the board itself, not inside a footprint.
+    pub silk: Vec<SilkShape>,
+    /// Visible silkscreen text drawn on the board itself, counted not measured.
+    pub silk_text: usize,
 }
 
 impl PcbBoard {
@@ -671,6 +740,8 @@ impl PcbBoard {
             vias: Vec::new(),
             zones: Vec::new(),
             edge_cuts: Vec::new(),
+            silk: Vec::new(),
+            silk_text: 0,
         };
 
         board.layers = root.layer_names();
@@ -744,6 +815,12 @@ impl PcbBoard {
         {
             collect_edge_cuts(graphic, &mut board.edge_cuts);
         }
+        board.silk = root
+            .body()
+            .iter()
+            .filter_map(|shape| silk_shape(shape, |p| p))
+            .collect();
+        board.silk_text = count_silk_text(root.body());
 
         board.expand_via_layer_spans();
         board.reconcile_name_only_nets();
@@ -877,6 +954,20 @@ impl PcbBoard {
         }
     }
 
+    /// Every silkscreen shape on the board, whether it belongs to a
+    /// footprint or was drawn on the board itself.
+    pub fn silk_shapes(&self) -> impl Iterator<Item = &SilkShape> {
+        self.silk
+            .iter()
+            .chain(self.footprints.iter().flat_map(|f| f.silk.iter()))
+    }
+
+    /// Visible silkscreen text on the board and in its footprints.
+    #[must_use]
+    pub fn silk_text_count(&self) -> usize {
+        self.silk_text + self.footprints.iter().map(|f| f.silk_text).sum::<usize>()
+    }
+
     /// Every pad on the board.
     pub fn pads(&self) -> impl Iterator<Item = &Pad> {
         self.footprints.iter().flat_map(|f| f.pads.iter())
@@ -935,6 +1026,174 @@ fn segment_length_nm(segment: &Segment) -> i64 {
     estimate.round() as i64
 }
 
+/// Radians between the vertices that approximate a curved silk stroke. The
+/// chord error is `r * (1 - cos(step / 2))`, about 4 um on a 3 mm radius.
+const CURVE_STEP_RAD: f64 = 0.05;
+
+/// One silkscreen shape (`gr_*` on the board, `fp_*` in a footprint), mapped to board coordinates by `to_board`. Lines, arcs
+/// (start, mid, end), circles, rectangles and polygons are read; curves are
+/// approximated by chords. Text is not a stroke and is counted elsewhere.
+fn silk_shape(node: &Node, to_board: impl Fn(Point) -> Point) -> Option<SilkShape> {
+    let shape = node.head().and_then(|h| h.split_once('_'))?;
+    let layer = node.child_atom("layer").filter(|l| l.ends_with(".SilkS"))?;
+    let width_nm = mm_to_nm(
+        node.find("stroke")
+            .and_then(|s| s.child_f64("width"))
+            .or_else(|| node.child_f64("width"))
+            .unwrap_or(0.0),
+    );
+    let (path, closed) = match shape {
+        ("gr" | "fp", "line") => (
+            [parse_point(node, "start"), parse_point(node, "end")]
+                .into_iter()
+                .collect::<Option<Vec<_>>>(),
+            false,
+        ),
+        ("gr" | "fp", "rect") => (rect_corners(node), true),
+        ("gr" | "fp", "circle") => (circle_vertices(node), true),
+        ("gr" | "fp", "arc") => (arc_vertices(node), false),
+        ("gr" | "fp", "poly") => (polygon_vertices(node), true),
+        _ => return None,
+    };
+    let path = path?;
+    let mut strokes: Vec<(Point, Point)> = path
+        .windows(2)
+        .map(|pair| (to_board(pair[0]), to_board(pair[1])))
+        .collect();
+    if closed && path.len() > 2 {
+        strokes.push((to_board(path[path.len() - 1]), to_board(path[0])));
+    }
+    Some(SilkShape {
+        layer: layer.to_string(),
+        width_nm,
+        strokes,
+    })
+}
+
+fn rect_corners(node: &Node) -> Option<Vec<Point>> {
+    let (a, b) = (parse_point(node, "start")?, parse_point(node, "end")?);
+    Some(vec![
+        a,
+        Point::new(b.x_nm, a.y_nm),
+        b,
+        Point::new(a.x_nm, b.y_nm),
+    ])
+}
+
+fn polygon_vertices(node: &Node) -> Option<Vec<Point>> {
+    let points: Vec<Point> = node
+        .find("pts")?
+        .find_all("xy")
+        .filter_map(|xy| {
+            let x = xy.body().first()?.as_str()?.parse::<f64>().ok()?;
+            let y = xy.body().get(1)?.as_str()?.parse::<f64>().ok()?;
+            Some(Point::new(mm_to_nm(x), mm_to_nm(y)))
+        })
+        .collect();
+    (points.len() > 1).then_some(points)
+}
+
+fn circle_vertices(node: &Node) -> Option<Vec<Point>> {
+    let (c, e) = (parse_point(node, "center")?, parse_point(node, "end")?);
+    let radius = ((e.x_nm - c.x_nm) as f64).hypot((e.y_nm - c.y_nm) as f64);
+    Some(arc_points(
+        (c.x_nm as f64, c.y_nm as f64),
+        radius,
+        0.0,
+        std::f64::consts::TAU,
+    ))
+}
+
+/// A KiCad 8+ arc: three points on the curve. A legacy centre-and-angle arc,
+/// or three collinear points, is not read as a curve.
+fn arc_vertices(node: &Node) -> Option<Vec<Point>> {
+    let s = parse_point(node, "start")?;
+    let m = parse_point(node, "mid")?;
+    let e = parse_point(node, "end")?;
+    let (sx, sy) = (s.x_nm as f64, s.y_nm as f64);
+    let (mx, my) = (m.x_nm as f64, m.y_nm as f64);
+    let (ex, ey) = (e.x_nm as f64, e.y_nm as f64);
+    let d = 2.0 * (sx * (my - ey) + mx * (ey - sy) + ex * (sy - my));
+    if d.abs() < 1.0 {
+        return Some(vec![s, e]);
+    }
+    let (s2, m2, e2) = (sx * sx + sy * sy, mx * mx + my * my, ex * ex + ey * ey);
+    let ux = (s2 * (my - ey) + m2 * (ey - sy) + e2 * (sy - my)) / d;
+    let uy = (s2 * (ex - mx) + m2 * (sx - ex) + e2 * (mx - sx)) / d;
+    let radius = (sx - ux).hypot(sy - uy);
+    let angle = |x: f64, y: f64| (y - uy).atan2(x - ux);
+    let (a_s, a_m, a_e) = (angle(sx, sy), angle(mx, my), angle(ex, ey));
+    let tau = std::f64::consts::TAU;
+    let ccw_to_mid = (a_m - a_s).rem_euclid(tau);
+    let ccw_to_end = (a_e - a_s).rem_euclid(tau);
+    // Sweep counter-clockwise when that passes through the mid point,
+    // clockwise otherwise.
+    let sweep = if ccw_to_mid <= ccw_to_end {
+        ccw_to_end
+    } else {
+        ccw_to_end - tau
+    };
+    Some(arc_points((ux, uy), radius, a_s, sweep))
+}
+
+/// Points around a circle from `from` through `sweep` radians, a step of at
+/// most [`CURVE_STEP_RAD`], both ends included.
+fn arc_points(centre: (f64, f64), radius: f64, from: f64, sweep: f64) -> Vec<Point> {
+    let steps = ((sweep.abs() / CURVE_STEP_RAD).ceil() as i64).max(1);
+    (0..=steps)
+        .map(|i| {
+            let a = from + sweep * i as f64 / steps as f64;
+            Point::new(
+                (centre.0 + radius * a.cos()).round() as i64,
+                (centre.1 + radius * a.sin()).round() as i64,
+            )
+        })
+        .collect()
+}
+
+/// Visible text items on a silkscreen layer among `nodes`: board text, and in
+/// a footprint its `fp_text` and `property` text. Hidden text prints nothing.
+fn count_silk_text(nodes: &[Node]) -> usize {
+    nodes
+        .iter()
+        .filter(|n| {
+            matches!(
+                n.head(),
+                Some("gr_text" | "fp_text" | "gr_text_box" | "fp_text_box" | "property")
+            )
+        })
+        .filter(|n| n.child_atom("layer").is_some_and(|l| l.ends_with(".SilkS")))
+        .filter(|n| {
+            let hidden_in = |node: &Node| {
+                node.find("hide")
+                    .is_some_and(|h| h.body().first().and_then(Node::as_str) != Some("no"))
+                    || node.body().iter().any(|c| c.as_str() == Some("hide"))
+            };
+            !hidden_in(n) && !n.find("effects").is_some_and(hidden_in)
+        })
+        .count()
+}
+
+/// A pad's `(drill d)` or `(drill oval w h)`, in nanometres.
+fn pad_drill_nm(pad: &Node) -> (i64, i64) {
+    let Some(drill) = pad.find("drill") else {
+        return (0, 0);
+    };
+    let size = |i: usize| {
+        drill
+            .body()
+            .get(i)
+            .and_then(Node::as_str)
+            .and_then(|s| s.parse::<f64>().ok())
+            .map_or(0, mm_to_nm)
+    };
+    if drill.body().first().and_then(Node::as_str) == Some("oval") {
+        (size(1), size(2))
+    } else {
+        (size(0), size(0))
+    }
+}
+
 fn parse_point(node: &Node, key: &str) -> Option<Point> {
     let at = node.find(key)?;
     let x = at
@@ -950,6 +1209,22 @@ fn parse_point(node: &Node, key: &str) -> Option<Point> {
         .parse::<f64>()
         .ok()?;
     Some(Point::new(mm_to_nm(x), mm_to_nm(y)))
+}
+
+/// A point in a footprint's own frame, placed on the board: rotated by the
+/// footprint's angle (`sin`, `cos`) and offset by its position.
+fn local_to_board(origin: Point, sin: f64, cos: f64, p: Point) -> Point {
+    let x_nm = (p.x_nm as f64 * cos + p.y_nm as f64 * sin).round() as i64;
+    let y_nm = (p.y_nm as f64 * cos - p.x_nm as f64 * sin).round() as i64;
+    Point::new(origin.x_nm + x_nm, origin.y_nm + y_nm)
+}
+
+/// The silkscreen shapes a footprint carries, placed on the board.
+fn footprint_silk(node: &Node, to_board: impl Fn(Point) -> Point + Copy) -> Vec<SilkShape> {
+    node.body()
+        .iter()
+        .filter_map(|shape| silk_shape(shape, to_board))
+        .collect()
 }
 
 fn parse_footprint(node: &Node) -> Footprint {
@@ -977,6 +1252,8 @@ fn parse_footprint(node: &Node) -> Footprint {
     // quarter-turn twin of this.
     let cos = rotation_deg.to_radians().cos();
     let sin = rotation_deg.to_radians().sin();
+
+    let to_board = |p: Point| local_to_board(at, sin, cos, p);
 
     let pads = node
         .find_all("pad")
@@ -1009,8 +1286,6 @@ fn parse_footprint(node: &Node) -> Footprint {
                 } else {
                     0.0
                 });
-            let x_nm = (local.x_nm as f64 * cos + local.y_nm as f64 * sin).round() as i64;
-            let y_nm = (local.y_nm as f64 * cos - local.x_nm as f64 * sin).round() as i64;
             let size = pad.find("size");
             let size_nm = (
                 size.and_then(|s| s.body().first())
@@ -1032,10 +1307,11 @@ fn parse_footprint(node: &Node) -> Footprint {
                 number,
                 kind,
                 shape,
-                at: Point::new(at.x_nm + x_nm, at.y_nm + y_nm),
+                at: to_board(local),
                 size_nm,
                 angle_deg,
                 corner_ratio,
+                drill_nm: pad_drill_nm(pad),
                 layers,
                 net,
                 net_name,
@@ -1047,6 +1323,8 @@ fn parse_footprint(node: &Node) -> Footprint {
         })
         .collect();
 
+    let silk = footprint_silk(node, to_board);
+
     let reference = node.property("Reference").unwrap_or_default().to_string();
 
     Footprint {
@@ -1056,6 +1334,8 @@ fn parse_footprint(node: &Node) -> Footprint {
         layer,
         rotation_deg,
         pads,
+        silk,
+        silk_text: count_silk_text(node.body()),
     }
     .with_pad_references()
 }
@@ -1182,6 +1462,7 @@ mod tests {
             size_nm: (mm_to_nm(w_mm), mm_to_nm(h_mm)),
             angle_deg,
             corner_ratio: ratio,
+            drill_nm: (0, 0),
             layers: vec!["F.Cu".to_string()],
             net: None,
             net_name: None,
