@@ -1,0 +1,267 @@
+// iCE40HX4K HDMI node: DVI-style TMDS output (resistor-source), six layers.
+//   5 V terminal -> PTC fuse -> TVS -> Schottky reverse-polarity -> +5V
+//   +5V -> AMS1117-3.3 -> +3V3 -> TLV70012 -> +1V2 core; PLL supply via ferrite bead
+//   iCE40HX4K-TQ144 + W25Q128JVSIQ SPI boot flash, 25 MHz oscillator
+//   HDMI Type-A: 3 data pairs + clock pair, DDC (level-shifted), HPD, +5V through PTC fuse
+board "ice40_hdmi_node" {
+  layers 6
+  manufacturer "jlc-advanced"
+
+  // JLCPCB's six-layer stackup JLC06161H-3313 (https://jlcpcb.com/impedance): prepreg 3313 4.1,
+  // prepreg 2116 4.16, core 4.6; outer copper 0.035 mm, inner copper 0.0152 mm.
+  stackup {
+    copper 0.035mm
+    insulator 0.0994mm er 4.1 material "3313"
+    copper 0.0152mm
+    insulator 0.55mm er 4.6 material "core"
+    copper 0.0152mm
+    insulator 0.1088mm er 4.16 material "2116"
+    copper 0.0152mm
+    insulator 0.55mm er 4.6 material "core"
+    copper 0.0152mm
+    insulator 0.0994mm er 4.1 material "3313"
+    copper 0.035mm
+  }
+
+  // Differential 100 ohm on the outer layer over 0.0994 mm of 3313 prepreg (er 4.1, copper 35 um):
+  //   Z0 = 87/sqrt(er+1.41) x ln(5.98 h / (0.8 w + t)) = 87/2.347 x ln(0.5944/0.123) = 58.4 ohm at w = 0.11 mm,
+  //   Zdiff = 2 Z0 (1 - 0.48 exp(-0.96 s / h)) = 100.3 ohm at the pair gap s = 0.127 mm (the class clearance).
+  netclass "TMDS" {
+    // Driven only by the iCE40 through a 270 ohm series resistor: Lattice's IBIS model (ice40.ibs rev 2.5) gives
+    // 20-80 % rise and fall times of at least 0.976 ns (banks 0-2) and 0.728 ns (bank 3) at the fast corner,
+    // so no edge here is faster than 0.3 ns: `medium`. The sink (the HDMI connector) drives nothing.
+    edge_rate medium
+    trace_width 0.11mm
+    clearance 0.127mm
+    via_diameter 0.46mm
+    via_drill 0.2mm
+    color "#d55e00"
+  }
+  netclass "TMDS_SRC" {
+    // Driven only by the iCE40 through a 270 ohm series resistor: Lattice's IBIS model (ice40.ibs rev 2.5) gives
+    // 20-80 % rise and fall times of at least 0.976 ns (banks 0-2) and 0.728 ns (bank 3) at the fast corner,
+    // so no edge here is faster than 0.3 ns: `medium`. The sink (the HDMI connector) drives nothing.
+    edge_rate medium
+    trace_width 0.13mm
+    clearance 0.127mm
+    via_diameter 0.46mm
+    via_drill 0.2mm
+    color "#e69f00"
+  }
+  netclass "PWR" {
+    trace_width 0.4mm
+    clearance 0.127mm
+    via_diameter 0.46mm
+    via_drill 0.2mm
+    edge_rate slow
+    color "#cc0000"
+  }
+  netclass "SIG" {
+    trace_width 0.127mm
+    clearance 0.127mm
+    via_diameter 0.46mm
+    via_drill 0.2mm
+    edge_rate slow
+    color "#0072b2"
+  }
+  netclass "CLK" {
+    trace_width 0.127mm
+    clearance 0.15mm
+    via_diameter 0.46mm
+    via_drill 0.2mm
+    color "#009e73"
+  }
+
+  // ---- Power entry --------------------------------------------------------
+  group "POWER ENTRY" color "#c2410c" {
+    component J1: connector "jst_b2b_xh_a_2pin" { placement_hint { edge: right priority: hard } }
+    component F1: fuse "polyfuse_1r1a" { placement_hint { near: "J1" priority: hard } }
+    component D1: diode "ptvs6v0s1ur" { placement_hint { near: "F1" priority: hard } }
+    component D2: diode "ss36" { placement_hint { near: "D1" priority: hard } }
+    component C1: capacitor "c_generic_0805" value "10uF" { placement_hint { near: "D2" priority: hard } }
+    component TP1: testpoint "testpoint_pad_1_5" value "+5V" { placement_hint { near: "C1" priority: hard } }
+    notes "" {
+      "5 V in; PTC 1.1 A hold; TVS 6.0 V standoff above the 5.5 V maximum input."
+    }
+  }
+
+  // ---- 3.3 V and 1.2 V rails ----------------------------------------------
+  group "RAILS" color "#a16207" {
+    component U1: regulator "ams1117_3v3" value "AMS1117-3.3" { placement_hint { near: "D2" priority: hard } }
+    component C2: capacitor "c_generic_0805" value "10uF" { placement_hint { near: "U1" priority: hard } }
+    component C3: capacitor "c_generic_0805" value "10uF" { placement_hint { near: "U1" priority: hard } }
+    component C4: capacitor "c_generic_0805" value "10uF" { placement_hint { near: "U1" priority: hard } }
+    component C5: capacitor "c_generic_0805" value "10uF" { placement_hint { near: "U1" priority: hard } }
+    component U2: regulator "tlv70012_ddc" value "TLV70012DDCR" { placement_hint { near: "U1" priority: hard } }
+    component C6: capacitor "c_generic_0603" value "1uF" { placement_hint { near: "U2" priority: hard } }
+    component C7: capacitor "c_generic_0603" value "1uF" { placement_hint { near: "U2" priority: hard } }
+    component TP2: testpoint "testpoint_pad_1_5" value "+3V3" { placement_hint { near: "C4" priority: hard } }
+    component TP3: testpoint "testpoint_pad_1_5" value "+1V2" { placement_hint { near: "C7" priority: hard } }
+    component TP4: testpoint "testpoint_pad_1_5" value "GND" { placement_hint { near: "C5" priority: hard } }
+  }
+
+  // ---- FPGA ---------------------------------------------------------------
+  group "FPGA" color "#0072b2" {
+    component U3: fpga "ice40hx4k_tq144" { escape { off } placement_hint { region: centre priority: hard } }
+    // core 1.2 V, one 100 nF at each VCC ball
+    component C10: capacitor "c_generic_0402" value "100nF" { placement_hint { near: "U3.vcc" priority: hard } }
+    component C11: capacitor "c_generic_0402" value "100nF" { placement_hint { near: "U3.vcc_2" priority: hard } }
+    component C12: capacitor "c_generic_0402" value "100nF" { placement_hint { near: "U3.vcc_3" priority: hard } }
+    component C13: capacitor "c_generic_0402" value "100nF" { placement_hint { near: "U3.vcc_4" priority: hard } }
+    // VCCIO and VCC_SPI, VPP_2V5
+    component C14: capacitor "c_generic_0402" value "100nF" { placement_hint { near: "U3.vccio_0" priority: hard } }
+    component C15: capacitor "c_generic_0402" value "100nF" { placement_hint { near: "U3.vccio_1" priority: hard } }
+    component C16: capacitor "c_generic_0402" value "100nF" { placement_hint { near: "U3.vccio_2" priority: hard } }
+    component C17: capacitor "c_generic_0402" value "100nF" { placement_hint { near: "U3.vccio_3" priority: hard } }
+    component C18: capacitor "c_generic_0402" value "100nF" { placement_hint { near: "U3.vccio_3_2" priority: hard } }
+    component C19: capacitor "c_generic_0402" value "100nF" { placement_hint { near: "U3.vcc_spi" priority: hard } }
+    component C20: capacitor "c_generic_0402" value "100nF" { placement_hint { near: "U3.vpp_2v5" priority: hard } }
+    component C25: capacitor "c_generic_0402" value "100nF" { placement_hint { near: "U3.vccio_0_2" priority: hard } }
+    component C26: capacitor "c_generic_0402" value "100nF" { placement_hint { near: "U3.vccio_1_2" priority: hard } }
+    component C27: capacitor "c_generic_0402" value "100nF" { placement_hint { near: "U3.vccio_2_2" priority: hard } }
+    // PLL supplies, ferrite bead + 100 nF each
+    component L1: inductor "ferrite_bead_0603" { placement_hint { near: "U3.vccpll0" priority: hard } }
+    component L2: inductor "ferrite_bead_0603" { placement_hint { near: "U3.vccpll1" priority: hard } }
+    component C21: capacitor "c_generic_0402" value "100nF" { placement_hint { near: "U3.vccpll0" priority: hard } }
+    component C22: capacitor "c_generic_0402" value "100nF" { placement_hint { near: "U3.vccpll1" priority: hard } }
+    component R30: resistor "r_generic_0603" value "10k" { placement_hint { near: "U3.cdone" priority: hard } }
+    component R31: resistor "r_generic_0603" value "10k" { placement_hint { near: "U3.creset" priority: hard } }
+    component TP5: testpoint "testpoint_pad_1_5" value "CDONE" { placement_hint { near: "R30" priority: hard } }
+    component TP6: testpoint "testpoint_pad_1_5" value "CRESET_B" { placement_hint { near: "R31" priority: hard } }
+    component X1: crystal "osc_smd_25mhz" value "25MHz" { placement_hint { near: "U3" priority: hard } }
+    component C23: capacitor "c_generic_0402" value "100nF" { placement_hint { near: "X1.vcc" priority: hard } }
+  }
+
+  // ---- Configuration flash ------------------------------------------------
+  group "CONFIG FLASH" color "#7c3aed" {
+    component U4: memory "w25q128jvsiq_208mil" { placement_hint { near: "U3" priority: hard } }
+    component C24: capacitor "c_generic_0402" value "100nF" { placement_hint { near: "U4.vcc" priority: hard } }
+    component R32: resistor "r_generic_0603" value "10k" { placement_hint { near: "U4.io2" priority: hard } }
+    component R33: resistor "r_generic_0603" value "10k" { placement_hint { near: "U4.io3" priority: hard } }
+  }
+
+  // ---- HDMI output --------------------------------------------------------
+  group "HDMI" color "#0a7d4a" {
+    component J2: connector "hdmi_a_receptacle" { escape { off } placement_hint { edge: left priority: hard } }
+    component R1: resistor "r_generic_0603" value "270" { placement_hint { near: "U3.iol_3b" priority: hard } }
+    component R2: resistor "r_generic_0603" value "270" { placement_hint { near: "U3.iol_3a" priority: hard } }
+    component R3: resistor "r_generic_0603" value "270" { placement_hint { near: "U3.iol_4b" priority: hard } }
+    component R4: resistor "r_generic_0603" value "270" { placement_hint { near: "U3.iol_4a" priority: hard } }
+    component R5: resistor "r_generic_0603" value "270" { placement_hint { near: "U3.iol_5b" priority: hard } }
+    component R6: resistor "r_generic_0603" value "270" { placement_hint { near: "U3.iol_5a" priority: hard } }
+    component R7: resistor "r_generic_0603" value "270" { placement_hint { near: "U3.iol_2b" priority: hard } }
+    component R8: resistor "r_generic_0603" value "270" { placement_hint { near: "U3.iol_2a" priority: hard } }
+    component F2: fuse "polyfuse_500ma" { placement_hint { near: "J2.vcc_5v" priority: hard } }
+    component C8: capacitor "c_generic_0603" value "100nF" { placement_hint { near: "F2" priority: hard } }
+    component D3: diode "tvs_array_5v" { placement_hint { near: "J2.sda" priority: hard } }
+    component Q1: transistor "n_mosfet_irlml6244" { placement_hint { near: "D3" priority: hard } }
+    component Q2: transistor "n_mosfet_irlml6244" { placement_hint { near: "D3" priority: hard } }
+    component R9: resistor "r_generic_0603" value "2k" { placement_hint { near: "Q1" priority: hard } }
+    component R10: resistor "r_generic_0603" value "2k" { placement_hint { near: "Q2" priority: hard } }
+    component R11: resistor "r_generic_0603" value "10k" { placement_hint { near: "Q1" priority: hard } }
+    component R12: resistor "r_generic_0603" value "10k" { placement_hint { near: "Q2" priority: hard } }
+    component R13: resistor "r_generic_0603" value "10k" { placement_hint { near: "J2" priority: hard } }
+    component R14: resistor "r_generic_0603" value "20k" { placement_hint { near: "R13" priority: hard } }
+    component TP7: testpoint "testpoint_pad_1_5" value "+5V_HDMI" { placement_hint { near: "F2" priority: hard } }
+    notes "" {
+      "TMDS drive: FPGA LVCMOS33 output + 270 ohm into 50 ohm sink pull-up to 3.3 V."
+    }
+  }
+
+  // ---- LEDs and mounting --------------------------------------------------
+  group "STATUS" color "#be185d" {
+    component R20: resistor "r_generic_0603" value "470" { placement_hint { near: "D4" priority: hard } }
+    component R21: resistor "r_generic_0603" value "470" { placement_hint { near: "D5" priority: hard } }
+    component R22: resistor "r_generic_0603" value "470" { placement_hint { near: "D6" priority: hard } }
+    component R23: resistor "r_generic_0603" value "470" { placement_hint { near: "D7" priority: hard } }
+    component D4: led "led_green_0603" { placement_hint { edge: bottom priority: hard } }
+    component D5: led "led_green_0603" { placement_hint { edge: bottom priority: hard } }
+    component D6: led "led_red_0603" { placement_hint { edge: bottom priority: hard } }
+    component D7: led "led_red_0603" { placement_hint { edge: bottom priority: hard } }
+    component H1: mounting_hole "mounting_hole_m2_5" { placement_hint { region: top_left priority: hard } }
+    component H2: mounting_hole "mounting_hole_m2_5" { placement_hint { region: bottom_right priority: hard } }
+  }
+
+  // ---- Nets ---------------------------------------------------------------
+  net "+5V_IN" class "PWR" { J1.p1 F1.p1 }
+  net "VIN_FUSED" class "PWR" { F1.p2 D1.cathode D2.anode }
+  power "+5V" 5.0v class "PWR" { D2.cathode C1.p1 TP1.p1 U1.vin C2.p1 C3.p1 F2.p1 }
+  power "+3V3" 3.3v class "PWR" {
+    U1.vout C4.p1 C5.p1 TP2.p1 U2.vin U2.en C6.p1
+    U3.vccio_0 U3.vccio_1 U3.vccio_2 U3.vccio_3 U3.vccio_3_2 U3.vccio_0_2 U3.vccio_1_2 U3.vccio_2_2 U3.vcc_spi U3.vpp_2v5
+    C14.p1 C15.p1 C16.p1 C17.p1 C18.p1 C19.p1 C20.p1
+    U4.vcc C24.p1 C25.p1 C26.p1 C27.p1 R32.p1 R33.p1 R30.p1 R31.p1
+    X1.vcc X1.oe C23.p1
+    Q1.g Q2.g R11.p1 R12.p1 R20.p1
+  }
+  power "+1V2" 1.2v class "PWR" {
+    U2.vout C7.p1 TP3.p1
+    U3.vcc U3.vcc_2 U3.vcc_3 U3.vcc_4 C10.p1 C11.p1 C12.p1 C13.p1 L1.p1 L2.p1
+  }
+  net "+1V2_PLL0" class "PWR" { L1.p2 U3.vccpll0 C21.p1 }
+  net "+1V2_PLL1" class "PWR" { L2.p2 U3.vccpll1 C22.p1 }
+  net "+5V_HDMI" class "PWR" { F2.p2 J2.vcc_5v C8.p1 D3.vcc TP7.p1 R9.p1 R10.p1 }
+
+  // TMDS: FPGA ball -> 270 ohm source resistor -> connector. P/N of each lane.
+  net "D0_P_SRC" class "TMDS_SRC" { U3.iol_3b R1.p1 }
+  net "D0_N_SRC" class "TMDS_SRC" { U3.iol_3a R2.p1 }
+  net "D1_P_SRC" class "TMDS_SRC" { U3.iol_4b R3.p1 }
+  net "D1_N_SRC" class "TMDS_SRC" { U3.iol_4a R4.p1 }
+  net "D2_P_SRC" class "TMDS_SRC" { U3.iol_5b R5.p1 }
+  net "D2_N_SRC" class "TMDS_SRC" { U3.iol_5a R6.p1 }
+  net "CK_P_SRC" class "TMDS_SRC" { U3.iol_2b R7.p1 }
+  net "CK_N_SRC" class "TMDS_SRC" { U3.iol_2a R8.p1 }
+  net "HDMI_D0_P" class "TMDS" { R1.p2 J2.d0_p }
+  net "HDMI_D0_N" class "TMDS" { R2.p2 J2.d0_n }
+  net "HDMI_D1_P" class "TMDS" { R3.p2 J2.d1_p }
+  net "HDMI_D1_N" class "TMDS" { R4.p2 J2.d1_n }
+  net "HDMI_D2_P" class "TMDS" { R5.p2 J2.d2_p }
+  net "HDMI_D2_N" class "TMDS" { R6.p2 J2.d2_n }
+  net "HDMI_CK_P" class "TMDS" { R7.p2 J2.ck_p }
+  net "HDMI_CK_N" class "TMDS" { R8.p2 J2.ck_n }
+
+  diff_pair HDMI_D0_P HDMI_D0_N { impedance 100ohm max_skew 0.15mm }
+  diff_pair HDMI_D1_P HDMI_D1_N { impedance 100ohm max_skew 0.15mm }
+  diff_pair HDMI_D2_P HDMI_D2_N { impedance 100ohm max_skew 0.15mm }
+  diff_pair HDMI_CK_P HDMI_CK_N { impedance 100ohm max_skew 0.15mm }
+
+  // DDC level shifters (3.3 V FPGA side, 5 V connector side) and HPD divider
+  net "HDMI_SDA" class "SIG" { J2.sda D3.ch1 Q1.d R9.p2 }
+  net "HDMI_SCL" class "SIG" { J2.scl D3.ch2 Q2.d R10.p2 }
+  net "SDA_FPGA" class "SIG" { Q1.s U3.iol_17a R11.p2 }
+  net "SCL_FPGA" class "SIG" { Q2.s U3.iol_17b R12.p2 }
+  net "HDMI_HPD" class "SIG" { J2.hpd D3.ch3 R13.p1 }
+  net "HPD_FPGA" class "SIG" { R13.p2 R14.p1 U3.iol_13a }
+
+  // Configuration
+  net "SPI_SCK" class "SIG" { U3.iob_107_sck U4.clk }
+  net "SPI_SS" class "SIG" { U3.iob_108_ss U4.cs }
+  net "SPI_MOSI" class "SIG" { U3.iob_105_sdo U4.io0 }
+  net "SPI_MISO" class "SIG" { U3.iob_106_sdi U4.io1 }
+  net "FLASH_WP" class "SIG" { U4.io2 R32.p2 }
+  net "FLASH_HOLD" class "SIG" { U4.io3 R33.p2 }
+  net "CDONE" class "SIG" { U3.cdone R30.p2 TP5.p1 R21.p1 }
+  net "CRESET_B" class "SIG" { U3.creset R31.p2 TP6.p1 }
+  net "CLK25" class "CLK" { X1.out U3.iot_197_gbin1 }
+
+  // Status LEDs
+  net "LED_PWR" class "SIG" { R20.p2 D4.anode }
+  net "LED_DONE" class "SIG" { R21.p2 D5.anode }
+  net "LED_USER1" class "SIG" { U3.iob_56 R22.p1 }
+  net "LED_USER2" class "SIG" { U3.iob_61 R23.p1 }
+  net "LED1_A" class "SIG" { R22.p2 D6.anode }
+  net "LED2_A" class "SIG" { R23.p2 D7.anode }
+
+  net "GND" class "PWR" {
+    J1.p2 D1.anode C1.p2 TP4.p1
+    U1.gnd C2.p2 C3.p2 C4.p2 C5.p2
+    U2.gnd C6.p2 C7.p2
+    U3.gnd U3.gnd_2 U3.gnd_3 U3.gnd_4 U3.gnd_5 U3.gnd_6 U3.gnd_7 U3.gnd_8 U3.gnd_9
+    U3.gndpll0 U3.gndpll1 U3.iob_103_cbsel0 U3.iob_104_cbsel1
+    C10.p2 C11.p2 C12.p2 C13.p2 C14.p2 C15.p2 C16.p2 C17.p2 C18.p2 C19.p2 C20.p2 C25.p2 C26.p2 C27.p2 C21.p2 C22.p2 C23.p2 C24.p2 C8.p2
+    X1.gnd U4.gnd
+    J2.d2_shield J2.d1_shield J2.d0_shield J2.ck_shield J2.gnd J2.shield
+    D3.gnd R14.p2
+    D4.cathode D5.cathode D6.cathode D7.cathode
+  }
+}

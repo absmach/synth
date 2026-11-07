@@ -1,0 +1,296 @@
+{
+  "board": {
+    "design_settings": {
+      "defaults": {
+        "min_clearance": 0.127,
+        "min_copper_edge_clearance": 0.3,
+        "min_hole_clearance": 0.2,
+        "min_through_hole_diameter": 0.2,
+        "min_track_width": 0.127,
+        "min_via_annular_width": 0.13,
+        "min_via_diameter": 0.46
+      },
+      "rules": {
+        "min_clearance": 0.127,
+        "min_copper_edge_clearance": 0.3,
+        "min_hole_clearance": 0.2,
+        "min_through_hole_diameter": 0.2,
+        "min_track_width": 0.127,
+        "min_via_annular_width": 0.13,
+        "min_via_diameter": 0.46
+      }
+    }
+  },
+  "boards": [],
+  "meta": {
+    "filename": "ice40_hdmi_node.kicad_pro",
+    "uuid": "31a415d9-00b1-5f7b-898d-b9a4671845d4",
+    "version": 1
+  },
+  "net_settings": {
+    "classes": [
+      {
+        "bus_width": 12,
+        "clearance": 0.127,
+        "diff_pair_gap": 0.25,
+        "diff_pair_via_gap": 0.25,
+        "diff_pair_width": 0.2,
+        "line_style": 0,
+        "microvia_diameter": 0.3,
+        "microvia_drill": 0.1,
+        "name": "PWR",
+        "pcb_color": "rgba(204, 0, 0, 1.000)",
+        "priority": 0,
+        "schematic_color": "rgba(204, 0, 0, 1.000)",
+        "track_width": 0.4,
+        "via_diameter": 0.46,
+        "via_drill": 0.2,
+        "wire_width": 6
+      },
+      {
+        "bus_width": 12,
+        "clearance": 0.127,
+        "diff_pair_gap": 0.25,
+        "diff_pair_via_gap": 0.25,
+        "diff_pair_width": 0.2,
+        "line_style": 0,
+        "microvia_diameter": 0.3,
+        "microvia_drill": 0.1,
+        "name": "TMDS_SRC",
+        "pcb_color": "rgba(230, 159, 0, 1.000)",
+        "priority": 1,
+        "schematic_color": "rgba(230, 159, 0, 1.000)",
+        "track_width": 0.13,
+        "via_diameter": 0.46,
+        "via_drill": 0.2,
+        "wire_width": 6
+      },
+      {
+        "bus_width": 12,
+        "clearance": 0.127,
+        "diff_pair_gap": 0.127,
+        "diff_pair_via_gap": 0.25,
+        "diff_pair_width": 0.11,
+        "line_style": 0,
+        "microvia_diameter": 0.3,
+        "microvia_drill": 0.1,
+        "name": "TMDS",
+        "pcb_color": "rgba(213, 94, 0, 1.000)",
+        "priority": 2,
+        "schematic_color": "rgba(213, 94, 0, 1.000)",
+        "track_width": 0.11,
+        "via_diameter": 0.46,
+        "via_drill": 0.2,
+        "wire_width": 6
+      },
+      {
+        "bus_width": 12,
+        "clearance": 0.127,
+        "diff_pair_gap": 0.25,
+        "diff_pair_via_gap": 0.25,
+        "diff_pair_width": 0.2,
+        "line_style": 0,
+        "microvia_diameter": 0.3,
+        "microvia_drill": 0.1,
+        "name": "SIG",
+        "pcb_color": "rgba(0, 114, 178, 1.000)",
+        "priority": 3,
+        "schematic_color": "rgba(0, 114, 178, 1.000)",
+        "track_width": 0.127,
+        "via_diameter": 0.46,
+        "via_drill": 0.2,
+        "wire_width": 6
+      },
+      {
+        "bus_width": 12,
+        "clearance": 0.15,
+        "diff_pair_gap": 0.25,
+        "diff_pair_via_gap": 0.25,
+        "diff_pair_width": 0.2,
+        "line_style": 0,
+        "microvia_diameter": 0.3,
+        "microvia_drill": 0.1,
+        "name": "CLK",
+        "pcb_color": "rgba(0, 158, 115, 1.000)",
+        "priority": 4,
+        "schematic_color": "rgba(0, 158, 115, 1.000)",
+        "track_width": 0.127,
+        "via_diameter": 0.46,
+        "via_drill": 0.2,
+        "wire_width": 6
+      },
+      {
+        "bus_width": 12,
+        "clearance": 0.127,
+        "diff_pair_gap": 0.25,
+        "diff_pair_via_gap": 0.25,
+        "diff_pair_width": 0.2,
+        "line_style": 0,
+        "microvia_diameter": 0.3,
+        "microvia_drill": 0.1,
+        "name": "Default",
+        "pcb_color": "rgba(0, 0, 0, 1.000)",
+        "priority": 2147483647,
+        "schematic_color": "rgba(0, 0, 0, 1.000)",
+        "track_width": 0.2,
+        "via_diameter": 0.6,
+        "via_drill": 0.3,
+        "wire_width": 6
+      }
+    ],
+    "meta": {
+      "version": 4
+    },
+    "net_colors": null,
+    "netclass_assignments": {
+      "+1V2": "PWR",
+      "+1V2_PLL0": "PWR",
+      "+1V2_PLL1": "PWR",
+      "+3V3": "PWR",
+      "+5V": "PWR",
+      "+5V_HDMI": "PWR",
+      "+5V_IN": "PWR",
+      "/CLK25": "CLK",
+      "/CRESET_B": "SIG",
+      "/HDMI_CK_N": "TMDS",
+      "/HDMI_CK_P": "TMDS",
+      "/HDMI_D0_N": "TMDS",
+      "/HDMI_D0_P": "TMDS",
+      "/HDMI_D1_N": "TMDS",
+      "/HDMI_D1_P": "TMDS",
+      "/HDMI_D2_N": "TMDS",
+      "/HDMI_D2_P": "TMDS",
+      "/HDMI_HPD": "SIG",
+      "/HDMI_SCL": "SIG",
+      "/HDMI_SDA": "SIG",
+      "CDONE": "SIG",
+      "CK_N_SRC": "TMDS_SRC",
+      "CK_P_SRC": "TMDS_SRC",
+      "CLK25": "CLK",
+      "CRESET_B": "SIG",
+      "D0_N_SRC": "TMDS_SRC",
+      "D0_P_SRC": "TMDS_SRC",
+      "D1_N_SRC": "TMDS_SRC",
+      "D1_P_SRC": "TMDS_SRC",
+      "D2_N_SRC": "TMDS_SRC",
+      "D2_P_SRC": "TMDS_SRC",
+      "FLASH_HOLD": "SIG",
+      "FLASH_WP": "SIG",
+      "GND": "PWR",
+      "HDMI_CK_N": "TMDS",
+      "HDMI_CK_P": "TMDS",
+      "HDMI_D0_N": "TMDS",
+      "HDMI_D0_P": "TMDS",
+      "HDMI_D1_N": "TMDS",
+      "HDMI_D1_P": "TMDS",
+      "HDMI_D2_N": "TMDS",
+      "HDMI_D2_P": "TMDS",
+      "HDMI_HPD": "SIG",
+      "HDMI_SCL": "SIG",
+      "HDMI_SDA": "SIG",
+      "HPD_FPGA": "SIG",
+      "LED1_A": "SIG",
+      "LED2_A": "SIG",
+      "LED_DONE": "SIG",
+      "LED_PWR": "SIG",
+      "LED_USER1": "SIG",
+      "LED_USER2": "SIG",
+      "SCL_FPGA": "SIG",
+      "SDA_FPGA": "SIG",
+      "SPI_MISO": "SIG",
+      "SPI_MOSI": "SIG",
+      "SPI_SCK": "SIG",
+      "SPI_SS": "SIG",
+      "VIN_FUSED": "PWR"
+    },
+    "netclass_patterns": [
+      {
+        "netclass": "TMDS",
+        "pattern": "/*/HDMI_D0_P"
+      },
+      {
+        "netclass": "TMDS",
+        "pattern": "/*/HDMI_D0_N"
+      },
+      {
+        "netclass": "TMDS",
+        "pattern": "/*/HDMI_D1_P"
+      },
+      {
+        "netclass": "TMDS",
+        "pattern": "/*/HDMI_D1_N"
+      },
+      {
+        "netclass": "TMDS",
+        "pattern": "/*/HDMI_D2_P"
+      },
+      {
+        "netclass": "TMDS",
+        "pattern": "/*/HDMI_D2_N"
+      },
+      {
+        "netclass": "TMDS",
+        "pattern": "/*/HDMI_CK_P"
+      },
+      {
+        "netclass": "TMDS",
+        "pattern": "/*/HDMI_CK_N"
+      },
+      {
+        "netclass": "SIG",
+        "pattern": "/*/HDMI_SDA"
+      },
+      {
+        "netclass": "SIG",
+        "pattern": "/*/HDMI_SCL"
+      },
+      {
+        "netclass": "SIG",
+        "pattern": "/*/HDMI_HPD"
+      },
+      {
+        "netclass": "SIG",
+        "pattern": "/*/CRESET_B"
+      },
+      {
+        "netclass": "CLK",
+        "pattern": "/*/CLK25"
+      }
+    ]
+  },
+  "schematic": {
+    "annotate_start_num": 0,
+    "drawing": {},
+    "variants": []
+  },
+  "sheets": [
+    [
+      "0b6b772c-53f9-53b0-897f-51ccbff10026",
+      ""
+    ],
+    [
+      "afdcfb41-fab4-5a31-b6c0-309ea3544dcb",
+      "ice40_hdmi_node_POWER_ENTRY.kicad_sch"
+    ],
+    [
+      "92079840-f2b7-5aa3-97b6-73a5abb38a60",
+      "ice40_hdmi_node_RAILS.kicad_sch"
+    ],
+    [
+      "ad9fbdb7-bb14-58ae-a346-3ae36c62e1b9",
+      "ice40_hdmi_node_FPGA.kicad_sch"
+    ],
+    [
+      "c3aa9fe9-f4ab-57ae-8ff5-84bc15c69815",
+      "ice40_hdmi_node_CONFIG_FLASH.kicad_sch"
+    ],
+    [
+      "82b0e768-416f-580c-b153-2fadc3f5c986",
+      "ice40_hdmi_node_HDMI.kicad_sch"
+    ],
+    [
+      "773a654c-c054-5142-80ca-4e26d1498e51",
+      "ice40_hdmi_node_STATUS.kicad_sch"
+    ]
+  ]
+}

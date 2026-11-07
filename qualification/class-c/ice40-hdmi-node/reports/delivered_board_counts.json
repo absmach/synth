@@ -1,0 +1,26 @@
+{
+  "board": "ice40_hdmi_node.kicad_pcb",
+  "board_sha256_10": "8dbd23124e",
+  "delivered_board": {
+    "segments": 644,
+    "vias": 155,
+    "via_size_drill_mm": {
+      "0.46/0.2": 89,
+      "0.6/0.3": 66
+    },
+    "wire_length_mm": 1650.2
+  },
+  "routing_report": {
+    "segments": 644,
+    "vias": 155,
+    "wire_length_mm": 1650.2,
+    "connected_nets": 46,
+    "open_nets": 0,
+    "note": "connected_nets and open_nets are refreshed from the delivered board's validation; the others are not"
+  },
+  "kicad_drc": {
+    "errors": 0,
+    "unconnected": 0,
+    "warnings": 74
+  }
+}
