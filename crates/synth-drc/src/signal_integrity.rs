@@ -675,6 +675,17 @@ fn return_path_net_classes(
     // found by topology and pin name, not by the net's name: `POWER_RETURN`
     // says nothing.
     let ground = ground_net_ids(board);
+    // A differential pin or pair is fast unless the net's class says otherwise in as
+    // many words: `edge_rate medium` is a declared edge time of at least 0.3 ns, which
+    // the design answers for, so it stands in for what the differential pin or pair
+    // implies. A clock, RF or analog pin, a crystal or a switching node is physical
+    // evidence of a fast edge, and no declaration replaces it.
+    let medium: std::collections::BTreeSet<&str> = board
+        .netclasses
+        .iter()
+        .filter(|class| class.edge_rate == Some(synth_ir::EdgeRate::Medium))
+        .map(|class| class.name.as_str())
+        .collect();
     let mut critical: std::collections::BTreeSet<NetId> = board
         .nets
         .iter()
@@ -723,6 +734,10 @@ fn return_path_net_classes(
                                 .any(|e| e.component == endpoint.component)
                     })
             });
+        let declared_medium = net
+            .netclass
+            .as_deref()
+            .is_some_and(|name| medium.contains(name));
         let rides_fast = switch_pin
             || (on_inductor && !filtered_rail)
             || net.endpoints.iter().any(|endpoint| {
@@ -731,11 +746,10 @@ fn return_path_net_classes(
                 };
                 let crystal = component.kind == "crystal";
                 pin_of(endpoint).is_some_and(|pin| match pin.electrical_type {
-                    ElectricalType::DifferentialPositive
-                    | ElectricalType::DifferentialNegative
-                    | ElectricalType::Clock
-                    | ElectricalType::Rf
-                    | ElectricalType::Analog => true,
+                    ElectricalType::DifferentialPositive | ElectricalType::DifferentialNegative => {
+                        !declared_medium
+                    }
+                    ElectricalType::Clock | ElectricalType::Rf | ElectricalType::Analog => true,
                     // A bare crystal's terminals are passive, and the
                     // oscillator pins they meet are often typed plain input
                     // and output, so the crystal itself marks the net.
@@ -752,7 +766,13 @@ fn return_path_net_classes(
         for (_, leg) in board.diff_pair_legs(pair) {
             if let Some(net) = leg {
                 critical.insert(net.id);
-                proven_fast.insert(net.id);
+                let declared_medium = net
+                    .netclass
+                    .as_deref()
+                    .is_some_and(|name| medium.contains(name));
+                if !declared_medium {
+                    proven_fast.insert(net.id);
+                }
             }
         }
     }

@@ -34,11 +34,16 @@ FR4 of relative permittivity 4.3, about 124 mm), a rule of thumb that PCB design
 guides give as a tenth to a twentieth of the wavelength. The stackup's thickest
 dielectric still sets the floor. The declaration is the design's claim: back it
 with the datasheet figures of the drivers on the net. A net whose pins prove a
-fast edge is never medium.
+fast edge is never medium, with one exception: a declared `diff_pair` and a
+differential pin type are inferred fast, and a class that declares `edge_rate
+medium` replaces that inference for its nets. The declaration says the drivers
+have edges no faster than 0.3 ns, and the design answers for it with their
+datasheet figures. A clock, RF or analog pin, a crystal and a switching node are
+physical evidence of a fast edge, and no declaration replaces them.
 
 A `slow` declaration cannot downgrade a net whose own pins prove a fast edge: a
-differential or clock pin, an RF or analog pin, a bare crystal's terminal, a
-declared `diff_pair`, or a switching node at an inductor stays blocking.
+differential pin or declared `diff_pair` on a class that does not declare
+`medium`, a clock pin, an RF or analog pin, a bare crystal's terminal, or a switching node at an inductor stays blocking.
 
 The rule is advisory: whether a discontinuity matters depends on the edge rate
 and the signalling scheme, which geometry alone cannot decide. As a `W-` code it
