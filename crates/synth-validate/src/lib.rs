@@ -139,6 +139,7 @@ fn all_rules(config: &ErcConfig) -> Vec<Box<dyn ErcRule>> {
             via_in_pad_override: config.via_in_pad_override,
         }),
         Box::new(ProcessLayerApplicabilityRule),
+        Box::new(ManufacturerNameRecognisedRule),
         Box::new(DeclaredViaGeometryRule),
         Box::new(stackup::StackupLayerCountRule),
         Box::new(stackup::StackupAlternationRule),
@@ -2523,6 +2524,48 @@ impl ErcRule for ProcessLayerApplicabilityRule {
 }
 
 // -----------------------------------------------------------------------------
+// W-SYNTH-PROCESS-001 — the declared manufacturer is not a profile name
+// -----------------------------------------------------------------------------
+
+/// A `manufacturer` that no profile claims is judged against `jlc-standard`.
+///
+/// That is the safe floor, and it is also a silent one: a board that wrote
+/// `jlcpcb_advanced` for `jlc-advanced` is held to a 0.3 mm drill with no
+/// via-in-pad, so a ball-grid part's fanout is refused later, in the router,
+/// with no pointer back to the misspelt name. Saying so at the declaration
+/// costs nothing.
+struct ManufacturerNameRecognisedRule;
+
+impl ErcRule for ManufacturerNameRecognisedRule {
+    fn code(&self) -> &'static str {
+        "W-SYNTH-PROCESS-001"
+    }
+
+    fn category(&self) -> ErcCategory {
+        ErcCategory::Board
+    }
+
+    fn check(&self, board: &Board, file: &str) -> Vec<Diagnostic> {
+        let Some(declared) = board.manufacturer.as_deref() else {
+            return Vec::new();
+        };
+        if synth_drc::ManufacturerProfile::recognises_name(declared) {
+            return Vec::new();
+        }
+        vec![DiagnosticBuilder::new(
+            self.code(),
+            Severity::Warning,
+            "the declared manufacturer is not a known profile; `jlc-standard` floors apply",
+        )
+        .location(Location::from_span(file.to_string(), board.source_span))
+        .expected("`jlc-standard`, `jlc-filled-via`, `jlc-advanced`, `pcbway` or `oshpark`")
+        .found(format!("`manufacturer \"{declared}\"`"))
+        .explanation_url(format!("synth.docs/diagnostics/{}", self.code()))
+        .build()]
+    }
+}
+
+// -----------------------------------------------------------------------------
 // E-SYNTH-PROCESS-003 — declared via geometry is below the process floor
 // -----------------------------------------------------------------------------
 
@@ -4434,6 +4477,37 @@ mod tests {
             .required_processes
             .insert(synth_ir::ProcessRequirement::ViaInPad);
         board
+    }
+
+    /// `jlcpcb_advanced` is not `jlc-advanced`, and resolves to the standard
+    /// floor without a word; the declaration is where that gets said.
+    #[test]
+    fn a_misspelt_tier_is_warned_and_a_loose_vendor_name_is_not() {
+        let bad = bare_board(Some("jlcpcb_advanced"));
+        let found = ManufacturerNameRecognisedRule.check(&bad, "test.synth");
+        assert_eq!(found.len(), 1);
+        assert_eq!(found[0].code, "W-SYNTH-PROCESS-001");
+        assert_eq!(found[0].severity, Severity::Warning);
+
+        for ok in [
+            "jlc-advanced",
+            "jlc-filled-via",
+            "jlc-standard",
+            "jlcpcb",
+            "PCBWay standard",
+            "oshpark",
+        ] {
+            let board = bare_board(Some(ok));
+            assert!(
+                ManufacturerNameRecognisedRule
+                    .check(&board, "test.synth")
+                    .is_empty(),
+                "{ok} is a recognised name"
+            );
+        }
+        assert!(ManufacturerNameRecognisedRule
+            .check(&bare_board(None), "test.synth")
+            .is_empty());
     }
 
     /// A surcharged tier is quoted against a stackup. Without this, a

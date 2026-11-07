@@ -410,6 +410,7 @@ pub fn build_pcb(
     // The via is the process's own: its drill at least the minimum and its pad
     // the drill plus two minimum annular rings.
     let plane_via = PlaneVia::for_process(&process);
+    let pad_via = PlaneVia::for_via_in_pad(&process);
     // One rail per layer. Pouring every plane net on every power layer puts
     // two rails at the same priority on the same copper, which is the
     // starvation described above with ground swapped out for a second rail:
@@ -479,7 +480,7 @@ pub fn build_pcb(
                     Some(at) => Ok(at),
                     None if via_in_pad_allowed => plane_via_in_pad(
                         &target,
-                        &plane_via,
+                        &pad_via,
                         &InPadRules {
                             pads: &pad_rects,
                             vias: &placed_vias,
@@ -494,15 +495,16 @@ pub fn build_pcb(
                     Err(refusal) => {
                         return Err(PlaneFanoutError {
                             net: net.name.clone(),
-                            detail: plane_via_refusal(&refusal, pad, layer, &plane_via),
+                            detail: plane_via_refusal(&refusal, pad, layer, &pad_via),
                         });
                     }
                 };
-                placed_vias.push((via, plane_via.pad_radius_nm));
+                let used = if via == pad { pad_via } else { plane_via };
+                placed_vias.push((via, used.pad_radius_nm));
                 children.push(build_plane_via(
                     via.x_nm,
                     via.y_nm,
-                    &plane_via,
+                    &used,
                     pcb_net,
                     project,
                     plane_via_index,
@@ -694,6 +696,33 @@ impl PlaneVia {
         let ring_pad_nm = drill_nm + 2 * profile.min_annular_ring_nm;
         Self {
             pad_radius_nm: PLANE_VIA_RADIUS_NM.max((ring_pad_nm + 1) / 2),
+            drill_nm,
+        }
+    }
+}
+
+/// Land of a via placed in a pad, beyond its drill, in nanometres: JLCPCB's
+/// via-in-pad guide gives the minimum pad as the drill plus 0.15 mm. The
+/// beside-the-pad via uses two annular rings instead, which is the wider of
+/// the two and the reason a 0.35 mm ball pad refused every plane via.
+const VIA_IN_PAD_LAND_EXTRA_NM: i64 = 150_000;
+
+impl PlaneVia {
+    /// The via a plane stitching uses when it sits in the pad: the process's
+    /// own minimum drill (not the exporter's wider default) with the land the
+    /// manufacturer's via-in-pad guide gives for it. Filled and capped, the
+    /// via is the pad's own copper, so the ring comes from the cap rather than
+    /// from two annular rings around a bare hole.
+    fn for_via_in_pad(profile: &synth_drc::ManufacturerProfile) -> Self {
+        let drill_nm = profile.min_drill_diameter_nm;
+        let extra_nm = if profile.via_in_pad_land_extra_nm > 0 {
+            profile.via_in_pad_land_extra_nm
+        } else {
+            VIA_IN_PAD_LAND_EXTRA_NM
+        };
+        let land_nm = drill_nm + extra_nm;
+        Self {
+            pad_radius_nm: (land_nm + 1) / 2,
             drill_nm,
         }
     }
@@ -4201,6 +4230,45 @@ mod plane_via_in_pad_tests {
             Err(ViaRefusal::PadTooSmall {
                 pad_nm: (350_000, 350_000),
                 via_nm: 600_000
+            })
+        );
+    }
+
+    /// JLCPCB's via-in-pad guide gives the minimum land as the drill plus
+    /// 0.15 mm. On the tier with the 0.2 mm drill that is 0.35 mm, which a
+    /// 0.35 mm ball pad of a 0.8 mm BGA holds, so the supply ball takes its
+    /// plane via in the pad instead of being refused for a land sized by two
+    /// annular rings around a wider drill.
+    #[test]
+    fn a_ball_pad_takes_the_via_in_pad_land_of_the_fine_drill_tier() {
+        let pad = pad_at(350_000);
+        let rects = ring(pad.centre, 350_000);
+        let tier = synth_drc::ManufacturerProfile::jlc_advanced();
+        let in_pad = PlaneVia::for_via_in_pad(&tier);
+        assert_eq!(in_pad.drill_nm, 200_000);
+        assert_eq!(2 * in_pad.pad_radius_nm, 350_000);
+        assert_eq!(
+            plane_via_in_pad(&pad, &in_pad, &rules(&rects, &[])),
+            Ok(pad.centre)
+        );
+    }
+
+    /// A process whose minimum drill is 0.3 mm needs a 0.45 mm land: the same
+    /// ball pad is still refused, with both sizes in the report. The
+    /// relaxation is the manufacturer's formula, not a licence for any via in
+    /// any pad.
+    #[test]
+    fn a_ball_pad_is_still_refused_where_the_tier_drill_needs_a_wider_land() {
+        let pad = pad_at(350_000);
+        let rects = ring(pad.centre, 350_000);
+        let mut tier = synth_drc::ManufacturerProfile::jlc_filled_via();
+        tier.min_drill_diameter_nm = 300_000;
+        let in_pad = PlaneVia::for_via_in_pad(&tier);
+        assert_eq!(
+            plane_via_in_pad(&pad, &in_pad, &rules(&rects, &[])),
+            Err(ViaRefusal::PadTooSmall {
+                pad_nm: (350_000, 350_000),
+                via_nm: 450_000
             })
         );
     }

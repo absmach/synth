@@ -69,6 +69,16 @@ pub struct ManufacturerProfile {
     /// via-in-pad; this says whether the tier offers it.
     #[serde(default)]
     pub via_in_pad: bool,
+    /// How far a filled and capped via's land exceeds its drill, in
+    /// nanometers, or `0` where the process does not offer via-in-pad.
+    ///
+    /// JLCPCB's via-in-pad guide gives the minimum pad as the drill plus
+    /// 0.15 mm. A capped via is the pad's own copper, so the ring that rule
+    /// leaves (0.075 mm) is not the plated-barrel ring the plain via floor
+    /// [`Self::min_annular_ring_nm`] protects. The two floors are different
+    /// questions, and a via no wider than this land is judged by the guide.
+    #[serde(default)]
+    pub via_in_pad_land_extra_nm: i64,
     /// Layer counts this process is offered for, or empty for any.
     ///
     /// A surcharged tier is quoted against a stackup, not sold outright:
@@ -91,6 +101,16 @@ impl ManufacturerProfile {
     #[must_use]
     pub fn supports_layers(&self, layers: u32) -> bool {
         self.supported_layers.is_empty() || self.supported_layers.contains(&layers)
+    }
+
+    /// The widest via, in nanometers, that is judged as a filled and capped
+    /// via-in-pad rather than against the plain via ring floor: the minimum
+    /// drill plus the process's land allowance. `None` where the process
+    /// does not offer via-in-pad.
+    #[must_use]
+    pub fn via_in_pad_land_nm(&self) -> Option<i64> {
+        (self.via_in_pad && self.via_in_pad_land_extra_nm > 0)
+            .then_some(self.min_drill_diameter_nm + self.via_in_pad_land_extra_nm)
     }
 }
 
@@ -130,6 +150,7 @@ impl ManufacturerProfile {
             ampacity_delta_t_milli_c: default_ampacity_delta_t_milli_c(),
             ir_drop_budget_mv: default_ir_drop_budget_mv(),
             via_in_pad: false,
+            via_in_pad_land_extra_nm: 0,
         }
     }
 
@@ -153,6 +174,7 @@ impl ManufacturerProfile {
             ampacity_delta_t_milli_c: default_ampacity_delta_t_milli_c(),
             ir_drop_budget_mv: default_ir_drop_budget_mv(),
             via_in_pad: false,
+            via_in_pad_land_extra_nm: 0,
         }
     }
 
@@ -176,6 +198,7 @@ impl ManufacturerProfile {
             ampacity_delta_t_milli_c: default_ampacity_delta_t_milli_c(),
             ir_drop_budget_mv: default_ir_drop_budget_mv(),
             via_in_pad: false,
+            via_in_pad_land_extra_nm: 0,
         }
     }
 
@@ -193,6 +216,7 @@ impl ManufacturerProfile {
         Self {
             name: "jlc-filled-via".to_string(),
             via_in_pad: true,
+            via_in_pad_land_extra_nm: mm_to_nm(0.15),
             // JLCPCB offers the filled-via process on 2- and 4-layer builds.
             supported_layers: vec![2, 4],
             ..Self::jlc_standard()
@@ -259,6 +283,29 @@ impl ManufacturerProfile {
         }
     }
 
+    /// Whether [`Self::from_name`] resolves `name` on purpose.
+    ///
+    /// A name it does not recognise is not refused, it takes the
+    /// `jlc-standard` floor, so a misspelled tier (`jlcpcb_advanced` for
+    /// `jlc-advanced`) is judged against a floor the author did not choose
+    /// and nothing says so. This is the question a validator asks to say so.
+    /// A vendor written loosely (`jlcpcb`, `PCBWay standard`) is recognised:
+    /// that is the case the substring matching exists for.
+    #[must_use]
+    pub fn recognises_name(name: &str) -> bool {
+        let lower = name.to_ascii_lowercase();
+        [
+            Self::jlc_advanced().name,
+            Self::jlc_filled_via().name,
+            Self::jlc_standard().name,
+        ]
+        .contains(&lower)
+            || lower == "jlcpcb"
+            || lower == "jlc"
+            || lower.contains("pcbway")
+            || lower.contains("oshpark")
+    }
+
     /// Resolve a declared manufacturer for a board of `layers`, refusing to
     /// hand back a process the fabricator does not sell for that stackup.
     ///
@@ -318,6 +365,7 @@ impl ManufacturerProfile {
             ampacity_delta_t_milli_c: raw.ampacity_delta_t_milli_c,
             ir_drop_budget_mv: raw.ir_drop_budget_mv,
             via_in_pad: raw.via_in_pad,
+            via_in_pad_land_extra_nm: mm_to_nm(raw.via_in_pad_land_extra_mm),
         })
     }
 }
@@ -341,6 +389,9 @@ struct TomlProfile {
     /// existed, and absence means the process does not offer it.
     #[serde(default)]
     via_in_pad: bool,
+    /// Absent means no via-in-pad land allowance.
+    #[serde(default)]
+    via_in_pad_land_extra_mm: f64,
     /// Layer counts the process is offered for; absent means any, which is
     /// what every profile written before this field meant.
     #[serde(default)]
