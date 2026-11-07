@@ -1,0 +1,369 @@
+{
+ "routed_single": [
+  "VBUS_F",
+  "LED_3V6",
+  "LED_3V3",
+  "LED_A_K",
+  "LED_B_K",
+  "VCC_BUCK",
+  "CT",
+  "FL_WP",
+  "BOOT0",
+  "VBUS",
+  "DC_IN",
+  "FL_HOLD",
+  "CC1",
+  "CC2",
+  "VIN_RAW",
+  "SEQ_ON",
+  "PG_3V6",
+  "NRST",
+  "GPIO_B",
+  "GPIO_A",
+  "LED_B",
+  "LED_A",
+  "FB",
+  "VIN",
+  "V1V2",
+  "V3V6_SW",
+  "SWCLK",
+  "V1V8",
+  "V3V6",
+  "SWDIO",
+  "USB_DN",
+  "V3V3",
+  "USB_DP"
+ ],
+ "failed_single": [],
+ "open_single": [],
+ "failed_multipoint": [],
+ "multipoint_nets": 1,
+ "multipoint_pads_connected": 177,
+ "multipoint_pads_total": 177,
+ "multipoint_edges_routed": 1,
+ "multipoint_edges_failed": 0,
+ "ripup_success_pairs": [],
+ "rerouted_pairs": [],
+ "single_ended_target_swaps": [],
+ "layer_swaps": 0,
+ "successful": 33,
+ "failed": 0,
+ "total_time": 1.89,
+ "total_iterations": 226104,
+ "total_vias": 62,
+ "cleanup_disconnected": [],
+ "min_clearance_used": 0.127,
+ "design_rules": {
+  "escalation_policy": "board",
+  "fab_tier": "advanced",
+  "board_floors": {
+   "clearance": 0.127,
+   "track_width": 0.127,
+   "via_diameter": 0.46,
+   "via_drill": 0.2,
+   "hole_to_hole": 0.2,
+   "annular": 0.13,
+   "board_edge": 0.3
+  },
+  "count": 10,
+  "nets": [
+   6,
+   13,
+   42
+  ],
+  "narrowed": [
+   {
+    "net": 13,
+    "net_name": null,
+    "kind": "track_width",
+    "requested": 0.6,
+    "delivered": 0.5458,
+    "site": "terminal neck",
+    "count": 1
+   },
+   {
+    "net": 13,
+    "net_name": null,
+    "kind": "track_width",
+    "requested": 0.6,
+    "delivered": 0.3458,
+    "site": "terminal neck",
+    "count": 1
+   },
+   {
+    "net": 6,
+    "net_name": null,
+    "kind": "via_diameter",
+    "requested": 0.6,
+    "delivered": 0.46,
+    "site": "via-in-pad clamp (floor)",
+    "count": 1
+   },
+   {
+    "net": 6,
+    "net_name": null,
+    "kind": "via_diameter",
+    "requested": 0.6,
+    "delivered": 0.46,
+    "site": "via-in-pad clamp (floor)",
+    "count": 1
+   },
+   {
+    "net": 6,
+    "net_name": null,
+    "kind": "via_diameter",
+    "requested": 0.6,
+    "delivered": 0.46,
+    "site": "via-in-pad clamp (floor)",
+    "count": 1
+   },
+   {
+    "net": 6,
+    "net_name": null,
+    "kind": "via_diameter",
+    "requested": 0.6,
+    "delivered": 0.46,
+    "site": "via-in-pad clamp (floor)",
+    "count": 1
+   },
+   {
+    "net": 6,
+    "net_name": null,
+    "kind": "via_diameter",
+    "requested": 0.6,
+    "delivered": 0.46,
+    "site": "via-in-pad clamp (floor)",
+    "count": 1
+   },
+   {
+    "net": 6,
+    "net_name": null,
+    "kind": "via_diameter",
+    "requested": 0.6,
+    "delivered": 0.46,
+    "site": "via-in-pad clamp (floor)",
+    "count": 1
+   },
+   {
+    "net": 42,
+    "net_name": null,
+    "kind": "via_diameter",
+    "requested": 0.6,
+    "delivered": 0.46,
+    "site": "via-in-pad clamp (floor)",
+    "count": 1
+   },
+   {
+    "net": 42,
+    "net_name": null,
+    "kind": "via_diameter",
+    "requested": 0.6,
+    "delivered": 0.46,
+    "site": "via-in-pad clamp (floor)",
+    "count": 1
+   }
+  ],
+  "min_delivered": {
+   "track_width": 0.3458,
+   "via_diameter": 0.46
+  },
+  "fab_tier_escalations": 0,
+  "fab_tier_contexts": [],
+  "fab_tier_target": "board_floors",
+  "unsupported_rules": []
+ },
+ "plane_fragility": {
+  "source": "zone_outlines",
+  "islands": 0,
+  "refill_status": "no_kicad_python",
+  "why": "no python with pcbnew found; set KICAD_PYTHON to KiCad's bundled interpreter",
+  "machine_dependent": false
+ },
+ "stacked_copper": [
+  {
+   "category": "stacked-copper",
+   "net": "GND",
+   "layer": "F.Cu",
+   "x": 16.55,
+   "y": 43.0,
+   "detail": "2 duplicate segments stacked on (16.550, 43.000)-(16.600, 43.000)",
+   "size": 0.05000000000000071
+  },
+  {
+   "category": "stacked-copper",
+   "net": "GND",
+   "layer": "F.Cu",
+   "x": 50.6,
+   "y": 30.8,
+   "detail": "2 duplicate segments stacked on (50.600, 30.800)-(50.600, 30.850)",
+   "size": 0.05000000000000071
+  },
+  {
+   "category": "stacked-copper",
+   "net": "GND",
+   "layer": "F.Cu",
+   "x": 59.275,
+   "y": 21.5,
+   "detail": "2 duplicate segments stacked on (59.275, 21.500)-(59.300, 21.500)",
+   "size": 0.02499999999999858
+  }
+ ],
+ "oracle_check": "disabled",
+ "pad_pairs_connected": 105,
+ "pad_pairs_total": 105,
+ "scope": "merged",
+ "board_scoped_keys": [
+  "stacked_copper",
+  "min_clearance_used"
+ ],
+ "env_knobs": {
+  "KICAD_FOOTPRINT_DIR": "/home/jeff/.local/share/flatpak/runtime/org.kicad.KiCad.Library.Footprints/x86_64/stable/active/files/footprints",
+  "KICAD_ROUTING_TOOLS_REPO": "/home/jeff/synth-local/krt",
+  "KICAD_SYMBOL_DIR": "/home/jeff/.local/share/flatpak/runtime/org.kicad.KiCad.Library.Symbols/x86_64/stable/active/files/symbols",
+  "KRT_PYTHON": "/home/jeff/synth-local/krtvenv/bin/python"
+ },
+ "regrade": {
+  "board": "file",
+  "graded_nets": 34,
+  "seconds": 1.02,
+  "unowned_broken": [],
+  "recovered": [],
+  "broken_by_run": []
+ },
+ "via_in_pad": {
+  "count": 50,
+  "sites": [
+   "C10.1 F.Paste (pad)",
+   "C11.2 F.Paste (pad)",
+   "C12.2 F.Paste (pad)",
+   "C14.1 F.Paste (pad)",
+   "C15.2 F.Paste (pad)",
+   "C16.2 F.Paste (pad)",
+   "C17.1 F.Paste (pad)",
+   "C17.2 F.Paste (pad)",
+   "C20.1 F.Paste (pad)",
+   "C22.1 F.Paste (pad)",
+   "C23.1 F.Paste (pad)",
+   "C23.2 F.Paste (pad)",
+   "C25.1 F.Paste (pad)",
+   "C28.1 F.Paste (pad)",
+   "C7.1 F.Paste (pad)",
+   "C7.2 F.Paste (pad)",
+   "D12.1 F.Paste (pad)",
+   "D5.2 F.Paste (pad)",
+   "J1.A4 F.Paste (pad)",
+   "J1.A9 F.Paste (pad)",
+   "R12.2 F.Paste (pad)",
+   "R16.2 F.Paste (pad)",
+   "R2.1 F.Paste (pad)",
+   "R4.2 F.Paste (pad)",
+   "R9.2 F.Paste (pad)",
+   "TP3.1",
+   "U1 F.Paste (paste_only_pad)",
+   "U1.5 F.Paste (pad)",
+   "U1.6 F.Paste (pad)",
+   "U2.3 F.Paste (pad)",
+   "U3.1 F.Paste (pad)",
+   "U3.2 F.Paste (pad)",
+   "U4.1 F.Paste (pad)",
+   "U4.3 F.Paste (pad)",
+   "U5.1 F.Paste (pad)",
+   "U5.2 F.Paste (pad)",
+   "U6.1 F.Paste (pad)",
+   "U6.23 F.Paste (pad)",
+   "U6.24 F.Paste (pad)",
+   "U6.47 F.Paste (pad)",
+   "U7.7 F.Paste (pad)",
+   "U7.8 F.Paste (pad)",
+   "Y1.2 F.Paste (pad)",
+   "Y1.4 F.Paste (pad)"
+  ],
+  "stamped": 44,
+  "restored": 0,
+  "protected": 0,
+  "unstampable": 0,
+  "site_created": 0,
+  "unprotected": [
+   {
+    "site": "U1 F.Paste (paste_only_pad)",
+    "x": 35.4,
+    "y": 8.8,
+    "why": "at the spot of an input via, kept as the input had it"
+   },
+   {
+    "site": "U1 F.Paste (paste_only_pad)",
+    "x": 35.4,
+    "y": 10.0,
+    "why": "at the spot of an input via, kept as the input had it"
+   },
+   {
+    "site": "U1 F.Paste (paste_only_pad)",
+    "x": 35.4,
+    "y": 11.2,
+    "why": "at the spot of an input via, kept as the input had it"
+   },
+   {
+    "site": "U1 F.Paste (paste_only_pad)",
+    "x": 36.6,
+    "y": 8.8,
+    "why": "at the spot of an input via, kept as the input had it"
+   },
+   {
+    "site": "U1 F.Paste (paste_only_pad)",
+    "x": 36.6,
+    "y": 10.0,
+    "why": "at the spot of an input via, kept as the input had it"
+   },
+   {
+    "site": "U1 F.Paste (paste_only_pad)",
+    "x": 36.6,
+    "y": 11.2,
+    "why": "at the spot of an input via, kept as the input had it"
+   }
+  ],
+  "note": "via-in-pad requires IPC-4761 Type VII (filled + capped + plated); state it on the fab drawing or solder wicks into the barrel"
+ },
+ "improvement_gate": {
+  "lost": [],
+  "gained": [
+   "BOOT0",
+   "CC1",
+   "CC2",
+   "CT",
+   "DC_IN",
+   "FB",
+   "FL_HOLD",
+   "FL_WP",
+   "GPIO_A",
+   "GPIO_B",
+   "LED_3V3",
+   "LED_3V6",
+   "LED_A",
+   "LED_A_K",
+   "LED_B",
+   "LED_B_K",
+   "NRST",
+   "PG_3V6",
+   "SEQ_ON",
+   "SWCLK",
+   "SWDIO",
+   "USB_DN",
+   "USB_DP",
+   "V1V2",
+   "V1V8",
+   "V3V3",
+   "V3V6",
+   "V3V6_SW",
+   "VBUS",
+   "VBUS_F",
+   "VCC_BUCK",
+   "VIN",
+   "VIN_RAW"
+  ],
+  "worsened": [],
+  "disconnected_pads_before": 103,
+  "disconnected_pads_after": 0,
+  "nets_compared": 42,
+  "verdict": "accept"
+ }
+}
