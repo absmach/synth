@@ -15,3 +15,12 @@ status = "experimental"
 expect = "pass"
 expect_fab = "fail"
 rationale = "24 V in, 3.3 V out buck (LMR38010) with a PTC, reverse-block Schottky and TVS on the input, an EN divider, feedback, power-good and a thermal via array under the exposed pad. The FreeRouting copper is complete and `kicad-cli pcb drc` reports 0 errors and 0 warnings, so source and DRC pass. Every part with a registry record is reviewed. Manufacturing still fails under `synth check --fab`, which routes with KiCadRoutingTools: that copper leaves 11 signal vias without a ground return via (W-SYNTH-DRC-016), so the release is validation_failed. The board stays `experimental`: no human has signed off its artifacts."
+
+[[board]]
+id = "cm4-carrier"
+path = "qualification/class-d/cm4-carrier/cm4_carrier.synth"
+class = "D"
+status = "experimental"
+expect = "fail"
+expect_fab = "fail"
+rationale = "Class D board 1: Raspberry Pi CM4 carrier with two 100-pin DF40 connectors, 12 V in, 5 V/4 A and 3V3/1V8 bucks with PG sequencing, a 4-port USB2514B hub, UDE RB1-125B8G1A GbE magjack, HDMI0, microSD, two 22-pin FFCs, a 40-pin GPIO header and a PCF85063A RTC. The source lowers with no netlist errors and Synth ERC reports 0 blocking diagnostics, but the board is not releasable: `synth validate` does not finish its schematic layout in 10 minutes, `synth place` exits 1 with no placement, and `synth export-kicad` takes about 30 minutes to write the schematic and then times out before the PCB. `synth check` therefore reports `source: fail` (validate timeout) and `drc: unknown`, and `synth check --fab` cannot run. The corrected-source schematic has 1 KiCad ERC error (the RTC_BAT power flag); the 13 errors in the first schematic were schematic-layout defects, not netlist defects. No copper, DRC, Gerber or fab package exists. Every authored part is unreviewed."

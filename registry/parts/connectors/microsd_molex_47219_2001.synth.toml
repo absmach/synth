@@ -1,0 +1,73 @@
+id = "microsd_molex_47219_2001"
+kind = "connector"
+version = 0
+lifecycle = "active"
+description = "Molex 47219-2001 microSD card socket, 8 contacts, hinge type, surface mount, shielded"
+mpn = "47219-2001"
+lcsc_pn = "C164170"
+kicad_symbol = "Connector:Micro_SD_Card"
+kicad_footprint = "Connector_Card:microSD_HC_Molex_47219-2001"
+
+[footprint_dimensions]
+width_mm = 14.0
+height_mm = 15.0
+courtyard_margin_mm = 0.25
+mating_face = "bottom"
+
+[operating_conditions]
+min_voltage_v = 0.0
+max_voltage_v = 3.6
+max_current_ma = 500.0
+
+[[pins]]
+name = "dat2"
+number = "1"
+electrical_type = "bidirectional"
+
+[[pins]]
+name = "dat3_cd"
+number = "2"
+electrical_type = "bidirectional"
+
+[[pins]]
+name = "cmd"
+number = "3"
+electrical_type = "bidirectional"
+
+[[pins]]
+name = "vdd"
+number = "4"
+electrical_type = "power_input"
+required = true
+
+[[pins]]
+name = "clk"
+number = "5"
+electrical_type = "input"
+
+[[pins]]
+name = "vss"
+number = "6"
+electrical_type = "power_input"
+required = true
+
+[[pins]]
+name = "dat0"
+number = "7"
+electrical_type = "bidirectional"
+
+[[pins]]
+name = "dat1"
+number = "8"
+electrical_type = "bidirectional"
+
+[[pins]]
+name = "shield"
+number = "SH"
+electrical_type = "ground_reference"
+
+[provenance]
+source = "authored"
+datasheet_url = "https://www.farnell.com/datasheets/2213824.pdf"
+revision = "Molex SD-47219-001, 2016-08-31"
+reviewed_by = ""

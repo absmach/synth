@@ -29,7 +29,7 @@ expression: project
   "meta": {
     "filename": "docs_blocks.kicad_pro",
     "uuid": "8a48da60-ee2e-5682-9d62-9b88d66c2f1a",
-    "version": 1
+    "version": 3
   },
   "net_settings": {
     "classes": [

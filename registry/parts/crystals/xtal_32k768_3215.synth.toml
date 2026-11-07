@@ -1,0 +1,32 @@
+id = "xtal_32k768_3215"
+kind = "crystal"
+version = 0
+lifecycle = "active"
+description = "KDS DST310S 32.768 kHz tuning-fork crystal, 12.5 pF load, SMD3215-2P"
+mpn = "DST310S 32.768KHz"
+lcsc_pn = "C93232"
+kicad_symbol = "Device:Crystal"
+kicad_footprint = "Crystal:Crystal_SMD_3215-2Pin_3.2x1.5mm"
+
+[footprint_dimensions]
+width_mm = 3.2
+height_mm = 1.5
+courtyard_margin_mm = 0.25
+
+[[pins]]
+name = "p1"
+number = "1"
+electrical_type = "passive"
+required = true
+
+[[pins]]
+name = "p2"
+number = "2"
+electrical_type = "passive"
+required = true
+
+[provenance]
+source = "authored"
+datasheet_url = "https://www.lcsc.com/product-detail/C93232.html"
+revision = "LCSC product page, checked 2026-11-03"
+reviewed_by = ""

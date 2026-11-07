@@ -11,6 +11,7 @@ use std::path::{Path, PathBuf};
 use serde_json::json;
 use thiserror::Error;
 
+use synth_geometry::{mm_to_nm, Layer, Point, Rect, Rotation};
 use synth_ir::Board;
 
 use crate::bom;
@@ -254,6 +255,150 @@ pub fn placement_candidates(
         .map_err(|source| ExportError::Placement { source })
 }
 
+/// Build a placement directly from every absolute entry in the placement
+/// sidecar. No solver runs: the caller has already decided where every part
+/// goes. The outline is the board envelope the sidecar was written against.
+fn placement_from_sidecar(
+    board: &Board,
+    sidecar: &synth_layout::sidecar::SidecarLayout,
+) -> Option<synth_place::Placement> {
+    let mut components = Vec::with_capacity(board.components.len());
+    for comp in &board.components {
+        let sc = sidecar.components.get(&comp.refdes)?;
+        if sc.relative_to.is_some() {
+            return None;
+        }
+        components.push(synth_place::ComponentPlacement {
+            id: comp.id,
+            center: Point::new(mm_to_nm(sc.x), mm_to_nm(sc.y)),
+            rotation: match sc.rotation {
+                90 => Rotation::Ninety,
+                180 => Rotation::OneEighty,
+                270 => Rotation::TwoSeventy,
+                _ => Rotation::Zero,
+            },
+            layer: Layer::Top,
+        });
+    }
+    Some(synth_place::Placement {
+        board_outline: Rect::new(
+            Point::new(0, 0),
+            Point::new(mm_to_nm(100.0), mm_to_nm(80.0)),
+        ),
+        components,
+    })
+}
+
+/// Write the PCB-side artifacts only: project, DRC rules, `.kicad_pcb`, BOM
+/// and PnP. The schematic layout and `.kicad_sch` are skipped, so a board
+/// whose schematic layout is slow can still produce the copper and the
+/// fabrication-side files.
+///
+/// The `.kicad_pro` carries the board's DRC settings but no sheet list; the
+/// PCB opens standalone. `schematic_path` and `library_path` are returned for
+/// API compatibility and are not written.
+///
+/// # Errors
+/// Same I/O and placement-file errors as [`export`].
+pub fn export_pcb_only(
+    board: &Board,
+    out_dir: &Path,
+    sidecars: &Sidecars,
+) -> Result<ExportResult, ExportError> {
+    std::fs::create_dir_all(out_dir).map_err(|source| ExportError::CreateDir {
+        path: out_dir.to_path_buf(),
+        source,
+    })?;
+
+    let stem = sanitize_filename(&board.name);
+    let project_path = out_dir.join(format!("{stem}.kicad_pro"));
+    let schematic_path = out_dir.join(format!("{stem}.kicad_sch"));
+    let library_path = out_dir.join(format!("{stem}.kicad_sym"));
+    let pcb_path = out_dir.join(format!("{stem}.kicad_pcb"));
+    let bom_path = out_dir.join("bom.csv");
+    let project_namespace = uuid_v5::project_namespace(&board.name);
+
+    let project_doc = json!({
+        "board": design_settings(board),
+        "boards": [],
+        "meta": {
+            "filename": format!("{stem}.kicad_pro"),
+            "version": 3,
+            "uuid": project_namespace.to_string(),
+        },
+        // The classes carry the clearances and widths the router and
+        // `kicad-cli pcb drc` must agree on. There is no schematic layout on
+        // this path, but the classes come from the board, not the sheets.
+        "net_settings": build_net_settings(board, std::iter::empty()),
+        "schematic": {
+            "annotate_start_num": 0,
+            "drawing": {},
+            "variants": [],
+        },
+        "sheets": [[
+            uuid_v5::derive_entity_uuid(&project_namespace, "sheet", "root").to_string(),
+            "",
+        ]],
+    });
+    write_file(
+        &project_path,
+        &serde_json::to_string_pretty(&project_doc)
+            .map_err(|source| ExportError::SerializeProject { source })?,
+    )?;
+    write_file(
+        &out_dir.join(format!("{stem}.kicad_dru")),
+        &design_rules(&manufacturer_profile(board)),
+    )?;
+
+    let placement = sidecars
+        .placement_path()
+        .and_then(synth_layout::sidecar::SidecarLayout::load_from_file)
+        .and_then(|sidecar| placement_from_sidecar(board, &sidecar))
+        .map_or_else(|| place_for_export(board, sidecars.placement_path()), Ok)
+        .map_err(|source| ExportError::Placement { source })?;
+    let (label_overrides, fixed_vias) = sidecars
+        .placement_path()
+        .and_then(synth_layout::sidecar::SidecarLayout::load_from_file)
+        .map(|sidecar| (sidecar.labels, sidecar.vias))
+        .unwrap_or_default();
+    let pcb_text = pcb::build_pcb(
+        board,
+        &placement,
+        &synth_pcb::Routing::default(),
+        &project_namespace,
+        &label_overrides,
+        &fixed_vias,
+    )
+    .map_err(|error| ExportError::PlaneFanout {
+        net: error.net,
+        detail: error.detail,
+    })?
+    .to_string_pretty();
+    write_file(&pcb_path, &pcb_text)?;
+
+    write_file(&bom_path, &bom::build_bom_csv(board))?;
+    for variant in &board.variants {
+        let variant_path = out_dir.join(format!("bom.{}.csv", sanitize_filename(&variant.name)));
+        write_file(
+            &variant_path,
+            &bom::build_bom_csv_for_variant(board, variant),
+        )?;
+    }
+    write_file(
+        &out_dir.join("pnp.csv"),
+        &crate::pnp::build_pnp_csv(board, &placement),
+    )?;
+
+    Ok(ExportResult {
+        out_dir: out_dir.to_path_buf(),
+        project_path,
+        schematic_path,
+        library_path,
+        pcb_path,
+        bom_path,
+    })
+}
+
 fn export_inner(
     board: &Board,
     out_dir: &Path,
@@ -329,7 +474,7 @@ fn export_inner(
         "boards": [],
         "meta": {
             "filename": format!("{stem}.kicad_pro"),
-            "version": 1,
+            "version": 3,
             "uuid": project_namespace.to_string(),
         },
         "net_settings": net_settings,
@@ -590,7 +735,7 @@ pub fn export_schematic_only(
         "boards": [],
         "meta": {
             "filename": format!("{stem}.kicad_pro"),
-            "version": 1,
+            "version": 3,
             "uuid": project_namespace.to_string(),
         },
         "net_settings": net_settings,
@@ -1644,7 +1789,7 @@ mod tests {
         let sch_path = dir.join(format!("{stem}.kicad_sch"));
         std::fs::write(&sch_path, &sch).unwrap();
         let pro = serde_json::to_string_pretty(&json!({
-            "meta": { "filename": format!("{stem}.kicad_pro"), "version": 1,
+            "meta": { "filename": format!("{stem}.kicad_pro"), "version": 3,
                       "uuid": project.to_string() },
             "net_settings": build_net_settings(&board, std::iter::once(&synth_layout::layout(&board))),
             "sheets": [],

@@ -1,0 +1,143 @@
+id = "ffc_22p_hirose_fh12_22s_0_5sh"
+kind = "connector"
+version = 0
+lifecycle = "active"
+description = "Hirose FH12-22S-0.5SH(55) 22-pin 0.5 mm FFC/FPC connector, bottom contact, horizontal"
+mpn = "FH12-22S-0.5SH(55)"
+lcsc_pn = "C597981"
+kicad_footprint = "Connector_FFC-FPC:Hirose_FH12-22S-0.5SH_1x22-1MP_P0.50mm_Horizontal"
+
+[footprint_dimensions]
+width_mm = 15.1
+height_mm = 6.4
+courtyard_margin_mm = 0.25
+mating_face = "top"
+
+[operating_conditions]
+min_voltage_v = 0.0
+max_voltage_v = 3.6
+max_current_ma = 500.0
+
+[[pins]]
+name = "p1"
+number = "1"
+electrical_type = "passive"
+
+[[pins]]
+name = "p2"
+number = "2"
+electrical_type = "passive"
+
+[[pins]]
+name = "p3"
+number = "3"
+electrical_type = "passive"
+
+[[pins]]
+name = "p4"
+number = "4"
+electrical_type = "passive"
+
+[[pins]]
+name = "p5"
+number = "5"
+electrical_type = "passive"
+
+[[pins]]
+name = "p6"
+number = "6"
+electrical_type = "passive"
+
+[[pins]]
+name = "p7"
+number = "7"
+electrical_type = "passive"
+
+[[pins]]
+name = "p8"
+number = "8"
+electrical_type = "passive"
+
+[[pins]]
+name = "p9"
+number = "9"
+electrical_type = "passive"
+
+[[pins]]
+name = "p10"
+number = "10"
+electrical_type = "passive"
+
+[[pins]]
+name = "p11"
+number = "11"
+electrical_type = "passive"
+
+[[pins]]
+name = "p12"
+number = "12"
+electrical_type = "passive"
+
+[[pins]]
+name = "p13"
+number = "13"
+electrical_type = "passive"
+
+[[pins]]
+name = "p14"
+number = "14"
+electrical_type = "passive"
+
+[[pins]]
+name = "p15"
+number = "15"
+electrical_type = "passive"
+
+[[pins]]
+name = "p16"
+number = "16"
+electrical_type = "passive"
+
+[[pins]]
+name = "p17"
+number = "17"
+electrical_type = "passive"
+
+[[pins]]
+name = "p18"
+number = "18"
+electrical_type = "passive"
+
+[[pins]]
+name = "p19"
+number = "19"
+electrical_type = "passive"
+
+[[pins]]
+name = "p20"
+number = "20"
+electrical_type = "passive"
+capabilities = ["i2c_scl"]
+
+[[pins]]
+name = "p21"
+number = "21"
+electrical_type = "passive"
+capabilities = ["i2c_sda"]
+
+[[pins]]
+name = "p22"
+number = "22"
+electrical_type = "passive"
+
+
+[[pins]]
+name = "mp"
+number = "MP"
+electrical_type = "ground_reference"
+
+[provenance]
+source = "authored"
+datasheet_url = "https://www.hirose.com/en/product/p/CL0586-0532-7-55"
+revision = "FH12 series specification sheet, checked 2026-11-03"
+reviewed_by = ""

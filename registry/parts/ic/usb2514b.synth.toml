@@ -1,0 +1,218 @@
+id = "usb2514b"
+kind = "ic"
+version = 0
+lifecycle = "active"
+description = "Microchip USB2514B 4-port USB 2.0 hi-speed hub controller, 36-pin SQFN 6x6 with exposed pad, 24 MHz crystal, individual port power switching and over-current sensing"
+mpn = "USB2514B-AEZC"
+lcsc_pn = "C633338"
+kicad_symbol = "Interface_USB:USB2514B_Bi"
+kicad_footprint = "Package_DFN_QFN:QFN-36-1EP_6x6mm_P0.5mm_EP3.7x3.7mm"
+
+[footprint_dimensions]
+width_mm = 6.0
+height_mm = 6.0
+courtyard_margin_mm = 0.25
+
+[operating_conditions]
+min_voltage_v = 3.0
+max_voltage_v = 3.6
+max_current_ma = 100.0
+
+[[pins]]
+name = "usbdm_dn1"
+number = "1"
+electrical_type = "bidirectional"
+
+[[pins]]
+name = "usbdp_dn1"
+number = "2"
+electrical_type = "bidirectional"
+
+[[pins]]
+name = "usbdm_dn2"
+number = "3"
+electrical_type = "bidirectional"
+
+[[pins]]
+name = "usbdp_dn2"
+number = "4"
+electrical_type = "bidirectional"
+
+[[pins]]
+name = "vdda33"
+number = "5"
+electrical_type = "power_input"
+required = true
+
+[[pins]]
+name = "usbdm_dn3"
+number = "6"
+electrical_type = "bidirectional"
+
+[[pins]]
+name = "usbdp_dn3"
+number = "7"
+electrical_type = "bidirectional"
+
+[[pins]]
+name = "usbdm_dn4"
+number = "8"
+electrical_type = "bidirectional"
+
+[[pins]]
+name = "usbdp_dn4"
+number = "9"
+electrical_type = "bidirectional"
+
+[[pins]]
+name = "vdda33_2"
+number = "10"
+electrical_type = "power_input"
+required = true
+
+[[pins]]
+name = "test"
+number = "11"
+electrical_type = "input"
+
+[[pins]]
+name = "prtpwr1"
+number = "12"
+electrical_type = "output"
+
+[[pins]]
+name = "ocs_n1"
+number = "13"
+electrical_type = "input"
+
+[[pins]]
+name = "crfilt"
+number = "14"
+electrical_type = "passive"
+
+[[pins]]
+name = "vdd33"
+number = "15"
+electrical_type = "power_input"
+required = true
+
+[[pins]]
+name = "prtpwr2"
+number = "16"
+electrical_type = "output"
+
+[[pins]]
+name = "ocs_n2"
+number = "17"
+electrical_type = "input"
+
+[[pins]]
+name = "prtpwr3"
+number = "18"
+electrical_type = "output"
+
+[[pins]]
+name = "ocs_n3"
+number = "19"
+electrical_type = "input"
+
+[[pins]]
+name = "prtpwr4"
+number = "20"
+electrical_type = "output"
+
+[[pins]]
+name = "ocs_n4"
+number = "21"
+electrical_type = "input"
+
+[[pins]]
+name = "sda_smbdata_non_rem1"
+number = "22"
+electrical_type = "bidirectional"
+
+[[pins]]
+name = "vdd33_2"
+number = "23"
+electrical_type = "power_input"
+required = true
+
+[[pins]]
+name = "scl_smbclk_cfg_sel0"
+number = "24"
+electrical_type = "bidirectional"
+
+[[pins]]
+name = "hs_ind_cfg_sel1"
+number = "25"
+electrical_type = "bidirectional"
+
+[[pins]]
+name = "reset_n"
+number = "26"
+electrical_type = "input"
+
+[[pins]]
+name = "vbus_det"
+number = "27"
+electrical_type = "input"
+
+[[pins]]
+name = "susp_ind_local_pwr_non_rem0"
+number = "28"
+electrical_type = "bidirectional"
+
+[[pins]]
+name = "vdda33_3"
+number = "29"
+electrical_type = "power_input"
+required = true
+
+[[pins]]
+name = "usbdm_up"
+number = "30"
+electrical_type = "bidirectional"
+
+[[pins]]
+name = "usbdp_up"
+number = "31"
+electrical_type = "bidirectional"
+
+[[pins]]
+name = "xtalout"
+number = "32"
+electrical_type = "output"
+
+[[pins]]
+name = "xtalin_clkin"
+number = "33"
+electrical_type = "input"
+
+[[pins]]
+name = "pllfilt"
+number = "34"
+electrical_type = "passive"
+
+[[pins]]
+name = "rbias"
+number = "35"
+electrical_type = "input"
+
+[[pins]]
+name = "vdda33_4"
+number = "36"
+electrical_type = "power_input"
+required = true
+
+[[pins]]
+name = "vss"
+number = "37"
+electrical_type = "power_input"
+required = true
+
+
+[provenance]
+source = "authored"
+datasheet_url = "https://ww1.microchip.com/downloads/en/DeviceDoc/00001692C.pdf"
+revision = "DS00001692C"
+reviewed_by = ""

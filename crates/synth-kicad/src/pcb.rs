@@ -362,7 +362,7 @@ pub fn build_pcb(
         children.push(build_mounting_hole_keepout(
             placed.center,
             mm_to_nm(width_mm / 2.0),
-            &ground_plane_layers(board.layers),
+            &copper_layers(board.layers),
             project,
             &component.refdes,
         ));
@@ -537,6 +537,19 @@ pub fn build_pcb(
 fn ground_plane_layers(layer_count: u32) -> Vec<&'static str> {
     match layer_count {
         4 => vec!["F.Cu", "In1.Cu", "In2.Cu", "B.Cu"],
+        // A 6-layer board keeps In2/In3 free for signal routing; In1/In4 are
+        // the ground planes. Flooding all four inner layers would leave the
+        // fine-pitch escapes nowhere to go.
+        6 => vec!["F.Cu", "In1.Cu", "In4.Cu", "B.Cu"],
+        _ => vec!["F.Cu", "B.Cu"],
+    }
+}
+
+/// Every copper layer, for rules that must apply to signal inner layers too
+/// (the mounting-hole keepout is the one that matters).
+fn copper_layers(layer_count: u32) -> Vec<&'static str> {
+    match layer_count {
+        4 => vec!["F.Cu", "In1.Cu", "In2.Cu", "B.Cu"],
         6 => vec!["F.Cu", "In1.Cu", "In2.Cu", "In3.Cu", "In4.Cu", "B.Cu"],
         _ => vec!["F.Cu", "B.Cu"],
     }
@@ -546,6 +559,10 @@ fn ground_plane_layers(layer_count: u32) -> Vec<&'static str> {
 /// when a power plane is declared. Empty for a board with no inner layer.
 fn inner_plane_layers(layer_count: u32) -> Vec<&'static str> {
     match layer_count {
+        // A declared power plane takes the inner layers; a board with no
+        // power plane keeps In2/In3 free for signal (see
+        // `ground_plane_layers`). A 6-layer board with three rails needs three
+        // distinct inner layers, so all four are offered here.
         6 => vec!["In1.Cu", "In2.Cu", "In3.Cu", "In4.Cu"],
         4 => vec!["In1.Cu", "In2.Cu"],
         _ => Vec::new(),
@@ -1593,9 +1610,11 @@ fn build_layers(layer_count: u32) -> Sexp {
     let mut layers = vec![layer(0, "F.Cu", "signal", None)];
     if layer_count >= 6 {
         // KiCad 10 uses even IDs for copper layers in this stack model.
+        // In1/In4 carry the ground planes; In2/In3 are signal layers so a
+        // 0.4 mm-pitch package has somewhere to escape.
         layers.push(layer(4, "In1.Cu", "power", None));
-        layers.push(layer(6, "In2.Cu", "power", None));
-        layers.push(layer(8, "In3.Cu", "power", None));
+        layers.push(layer(6, "In2.Cu", "signal", None));
+        layers.push(layer(8, "In3.Cu", "signal", None));
         layers.push(layer(10, "In4.Cu", "power", None));
         layers.push(layer(2, "B.Cu", "signal", None));
     } else if layer_count == 4 {
@@ -1650,23 +1669,24 @@ fn build_setup(profile: &synth_drc::ManufacturerProfile) -> Sexp {
     let via_min_size =
         synth_geometry::nm_to_mm(profile.min_drill_diameter_nm + 2 * profile.min_annular_ring_nm);
     let via_min_drill = synth_geometry::nm_to_mm(profile.min_drill_diameter_nm);
+    let trace_min = synth_geometry::nm_to_mm(profile.min_trace_width_nm);
+    let clearance_min = synth_geometry::nm_to_mm(profile.min_copper_clearance_nm);
     Sexp::list(
         "setup",
         vec![
-            Sexp::list("last_trace_width", vec![num(0.127)]),
-            Sexp::list("trace_clearance", vec![num(0.127)]),
+            Sexp::list("last_trace_width", vec![num(trace_min)]),
+            Sexp::list("trace_clearance", vec![num(clearance_min)]),
             Sexp::list("pad_to_mask_clearance", vec![num(0.0)]),
             Sexp::list("solder_mask_min_width", vec![num(0.0)]),
             Sexp::list(
                 "allow_soldermask_bridges_in_footprints",
                 vec![Sexp::atom("yes")],
             ),
-            // Keep these minima aligned with the router's default signal
-            // width and the KiCad board defaults used during native DRC.
-            Sexp::list("trace_min", vec![num(0.127)]),
-            // 0.127 mm is the default profile's copper clearance; the
-            // router enforces this same value when choosing grid moves.
-            Sexp::list("clearance_min", vec![num(0.127)]),
+            // Keep these minima aligned with the profile the project file and
+            // the router resolve, so an HDI board is not judged against the
+            // standard 0.127 mm floor it did not buy.
+            Sexp::list("trace_min", vec![num(trace_min)]),
+            Sexp::list("clearance_min", vec![num(clearance_min)]),
             Sexp::list("via_min_size", vec![num(via_min_size)]),
             Sexp::list("via_min_drill", vec![num(via_min_drill)]),
         ],
@@ -3108,7 +3128,7 @@ mod tests {
     fn a_mounting_hole_gets_a_copper_keepout_the_size_of_its_screw_head() {
         let project = Uuid::nil();
         let (centre, radius) = hole(3.5, 3.45, 1.6);
-        let layers = ground_plane_layers(4);
+        let layers = copper_layers(4);
 
         let zone = build_mounting_hole_keepout(centre, radius, &layers, &project, "H1");
         let text = zone.to_string_pretty();
@@ -3145,7 +3165,7 @@ mod tests {
     fn the_same_hole_gives_the_same_keepout_bytes() {
         let project = Uuid::nil();
         let (centre, radius) = hole(47.0, 3.45, 1.6);
-        let layers = ground_plane_layers(4);
+        let layers = copper_layers(4);
         let a = build_mounting_hole_keepout(centre, radius, &layers, &project, "H2");
         let b = build_mounting_hole_keepout(centre, radius, &layers, &project, "H2");
         assert_eq!(a.to_string_pretty(), b.to_string_pretty());
@@ -3612,16 +3632,21 @@ mod tests {
     }
 
     #[test]
-    fn six_layer_ground_planes_cover_every_copper_layer() {
+    fn six_layer_ground_planes_leave_the_signal_inner_layers_free() {
         assert_eq!(
             ground_plane_layers(6),
-            vec!["F.Cu", "In1.Cu", "In2.Cu", "In3.Cu", "In4.Cu", "B.Cu"]
+            vec!["F.Cu", "In1.Cu", "In4.Cu", "B.Cu"]
         );
         assert_eq!(
             ground_plane_layers(4),
             vec!["F.Cu", "In1.Cu", "In2.Cu", "B.Cu"]
         );
         assert_eq!(ground_plane_layers(2), vec!["F.Cu", "B.Cu"]);
+        // The mounting-hole keepout still has to cover the signal inners.
+        assert_eq!(
+            copper_layers(6),
+            vec!["F.Cu", "In1.Cu", "In2.Cu", "In3.Cu", "In4.Cu", "B.Cu"]
+        );
     }
 
     #[test]
@@ -3644,6 +3669,18 @@ mod tests {
         let pcbway =
             build_setup(&synth_drc::ManufacturerProfile::pcbway_standard()).to_string_pretty();
         assert!(pcbway.contains("(via_min_size 0.6)"), "{pcbway}");
+    }
+
+    /// An HDI board must be judged against the microvia floor it bought, not
+    /// the 0.127 mm standard floor. The setup values are what `kicad-cli`
+    /// applies, so they have to move with the profile.
+    #[test]
+    fn the_hdi_setup_uses_the_microvia_floor() {
+        let hdi = build_setup(&synth_drc::ManufacturerProfile::jlc_hdi()).to_string_pretty();
+        assert!(hdi.contains("(trace_min 0.1)"), "{hdi}");
+        assert!(hdi.contains("(clearance_min 0.1)"), "{hdi}");
+        assert!(hdi.contains("(via_min_size 0.25)"), "{hdi}");
+        assert!(hdi.contains("(via_min_drill 0.1)"), "{hdi}");
     }
 
     #[test]

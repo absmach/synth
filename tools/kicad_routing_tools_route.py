@@ -141,8 +141,8 @@ def _verify_escape(refdes: str, origin: str, summary: dict | None,
 def _fanout(python: str, repo: Path, board: Path, components: list[str],
             method: str, clearance: float, via_size: float | None,
             via_drill: float | None, fab_tier: str, strict_sizes: bool,
-            escalation: str, allow_via_in_pad: bool,
-            required: set[str]) -> Path:
+            escalation: str, fab_overrides: str | None,
+            allow_via_in_pad: bool, required: set[str]) -> Path:
     """Escape every named package, returning the board to route next.
 
     Two stages, in the order KiCadRoutingTools documents (#562): pour the
@@ -264,6 +264,8 @@ def _fanout(python: str, repo: Path, board: Path, components: list[str],
         if via_size and via_drill:
             command.extend(("--via-size", str(via_size), "--via-drill", str(via_drill)))
         command.extend(("--fab-tier", fab_tier, "--escalation", escalation))
+        if fab_overrides:
+            command.extend(("--fab-overrides", str(fab_overrides)))
         if strict_sizes:
             command.append("--strict-sizes")
         print(f"escaping {refdes}:", " ".join(command), flush=True)
@@ -523,6 +525,7 @@ def main() -> int:
             args.fab_tier,
             args.strict_sizes,
             args.escalation,
+            args.fab_overrides,
             args.allow_via_in_pad,
             {r.split(":", 1)[0] for r in (args.escape_required or [])},
             )

@@ -27,6 +27,7 @@ max_current_ma = 50.0
 name = "a1"
 number = "1"
 electrical_type = "bidirectional"
+capabilities = ["i2c_sda"]
 
 [[pins]]
 name = "vcca"
@@ -37,6 +38,7 @@ electrical_type = "power_input"
 name = "a2"
 number = "3"
 electrical_type = "bidirectional"
+capabilities = ["i2c_scl"]
 
 [[pins]]
 name = "a3"
@@ -112,6 +114,7 @@ electrical_type = "bidirectional"
 name = "b2"
 number = "18"
 electrical_type = "bidirectional"
+capabilities = ["i2c_scl"]
 
 [[pins]]
 name = "vccb"
@@ -122,3 +125,4 @@ electrical_type = "power_input"
 name = "b1"
 number = "20"
 electrical_type = "bidirectional"
+capabilities = ["i2c_sda"]
