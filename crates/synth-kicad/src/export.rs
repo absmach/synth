@@ -440,7 +440,8 @@ fn export_inner(
     // agree on positions and power-flag label sets. One `.kicad_sch`
     // for small boards (§P26 splits large splittable boards only, so
     // this path stays byte-identical); one file per sheet otherwise.
-    let library_text = symbol_lib::build_library(board, &sheets[0].layout).to_string_pretty();
+    let library_text =
+        symbol_lib::build_library(board, &library_layout(&sheets)).to_string_pretty();
     write_file(&library_path, &library_text)?;
     if sheets.len() == 1 {
         let schematic_text =
@@ -610,7 +611,8 @@ pub fn export_schematic_only(
     );
     write_file(&out_dir.join("sym-lib-table"), &sym_table)?;
 
-    let library_text = symbol_lib::build_library(board, &sheets[0].layout).to_string_pretty();
+    let library_text =
+        symbol_lib::build_library(board, &library_layout(&sheets)).to_string_pretty();
     write_file(&library_path, &library_text)?;
     let sheet_count = sheets.len();
     if sheet_count == 1 {
@@ -1400,6 +1402,22 @@ fn build_net_settings<'a>(
     })
 }
 
+/// The layout the symbol library is built from: the first sheet's, with the power
+/// flags of every other sheet added. A board split over several sheets puts a rail
+/// label on one sheet only, and a library built from the first sheet alone would not
+/// define that label's symbol, so ERC would report its instances as missing.
+fn library_layout(sheets: &[synth_layout::sheets::SheetLayout]) -> synth_layout::Layout {
+    let mut merged = sheets[0].layout.clone();
+    for sheet in &sheets[1..] {
+        for flag in &sheet.layout.power_flags {
+            if !merged.power_flags.iter().any(|f| f.label == flag.label) {
+                merged.power_flags.push(flag.clone());
+            }
+        }
+    }
+    merged
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1502,6 +1520,50 @@ mod tests {
     /// A stranded hard edge connector is a contract violation, not a cheaper
     /// shape: the export must keep the connector on its declared edge even
     /// when the stranded arrangement leaves less dead space.
+    /// A board split over several sheets puts a power-rail label on one sheet only; the
+    /// symbol library is built from the labels of all of them, not the first sheet's.
+    #[test]
+    fn the_symbol_library_defines_a_rail_label_that_only_a_later_sheet_uses() {
+        let board = board_from(
+            r#"board "b" { layers 2
+                component U1: regulator "ams1117_3v3"
+                component C1: capacitor "c_generic_0805" value "10uF"
+                connect U1.vout -> C1.p1
+                connect U1.gnd -> C1.p2
+            }"#,
+        );
+        let layout = synth_layout::layout(&board);
+        let mut flag = layout
+            .power_flags
+            .first()
+            .expect("the regulator board has a power flag")
+            .clone();
+        flag.label = "ONLY_ON_SHEET_TWO".to_string();
+        let mut first = layout.clone();
+        first.power_flags.clear();
+        let mut second = layout;
+        second.power_flags = vec![flag];
+        let sheets = vec![
+            synth_layout::sheets::SheetLayout {
+                name: None,
+                layout: first,
+            },
+            synth_layout::sheets::SheetLayout {
+                name: Some("B".to_string()),
+                layout: second,
+            },
+        ];
+        let library =
+            symbol_lib::build_library(&board, &library_layout(&sheets)).to_string_pretty();
+        assert!(
+            library.contains("ONLY_ON_SHEET_TWO"),
+            "the library must define the label of a later sheet's power flag"
+        );
+        let first_sheet_only =
+            symbol_lib::build_library(&board, &sheets[0].layout).to_string_pretty();
+        assert!(!first_sheet_only.contains("ONLY_ON_SHEET_TWO"));
+    }
+
     #[test]
     fn a_stranded_edge_connector_loses_to_a_flush_one_despite_dead_cells() {
         let board = edge_candidate_board(true, true);
