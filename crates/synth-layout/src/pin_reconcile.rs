@@ -654,7 +654,7 @@ mod tests {
         let (_, local_y1, _) = positions["1"];
         let unshifted = snap_grid_127(100.0 - local_y);
         assert!(
-            (y7 - unshifted - crate::kicad_lib_loader::UNIT_PITCH_MM).abs() < 0.2,
+            (y7 - unshifted - crate::kicad_lib_loader::unit_offset_mm(lib, 2).1).abs() < 0.2,
             "pin 7 (unit 2) should sit one unit pitch below {unshifted}, found {y7}"
         );
         assert!(

@@ -166,17 +166,66 @@ fn extract_balanced_sub_block(text: &str) -> Option<String> {
     None
 }
 
-/// Vertical pitch between the units of one multi-unit symbol, in mm.
+/// Vertical pitch between the units of one multi-unit symbol, in mm, where the
+/// symbol's own pins cannot say how tall its units are.
 /// The placer keeps one placement per package, so the units are drawn
 /// as a stack anchored at that placement; the router and the schematic
 /// exporter must agree on this offset or the wires miss the pins.
 pub const UNIT_PITCH_MM: f64 = 12.7;
 
-/// Offset of unit `unit` (1-based) from the package anchor, in KiCad
-/// sheet coordinates (y grows downward, so units stack downward).
+/// Clear space kept between two stacked units, in mm: two grid squares.
+const UNIT_GAP_MM: f64 = 5.08;
+
+/// Offset of unit `unit` (1-based) of the symbol `lib_id` from the package
+/// anchor, in KiCad sheet coordinates (y grows downward, so units stack
+/// downward). Each unit is placed below the one before it by the height the
+/// unit's pins span, so no two units overlap and a label or wire of one never
+/// lands on a pin of another. A symbol whose pins cannot be read stacks at the
+/// fixed [`UNIT_PITCH_MM`].
 #[must_use]
-pub fn unit_offset_mm(unit: u32) -> (f64, f64) {
-    (0.0, f64::from(unit.saturating_sub(1)) * UNIT_PITCH_MM)
+pub fn unit_offset_mm(lib_id: &str, unit: u32) -> (f64, f64) {
+    let index = unit.saturating_sub(1) as usize;
+    let dy = unit_stack_offsets(lib_id)
+        .and_then(|offsets| offsets.get(index).copied())
+        .unwrap_or_else(|| f64::from(unit.saturating_sub(1)) * UNIT_PITCH_MM);
+    (0.0, dy)
+}
+
+/// The offset of every unit of `lib_id`, in order, from the pin extents of its
+/// units. `None` for a single-unit symbol or one whose pins cannot be read.
+fn unit_stack_offsets(lib_id: &str) -> Option<Vec<f64>> {
+    let (units, count) = symbol_units(lib_id)?;
+    if count < 2 {
+        return None;
+    }
+    let positions = pin_positions(lib_id)?;
+    let mut extent: Vec<Option<(f64, f64)>> = vec![None; count as usize];
+    for (number, unit) in &units {
+        let Some((_, y, _)) = positions.get(number) else {
+            continue;
+        };
+        let slot = &mut extent[(*unit as usize).saturating_sub(1).min(count as usize - 1)];
+        *slot = Some(slot.map_or((*y, *y), |(lo, hi)| (lo.min(*y), hi.max(*y))));
+    }
+    let grid = 2.54;
+    let mut offsets = vec![0.0];
+    let mut previous = extent[0]?;
+    for unit in &extent[1..] {
+        let current = (*unit).unwrap_or(previous);
+        // The unit's top, `max_y` above its origin, must clear the bottom of the
+        // one above it, `min_y` below its origin, by the gap.
+        let raw = offsets.last().copied().unwrap_or(0.0) + (current.1 - previous.0) + UNIT_GAP_MM;
+        offsets.push((raw / grid).ceil() * grid);
+        previous = current;
+    }
+    Some(offsets)
+}
+
+/// The height the stack of units of `lib_id` adds below its first unit, in mm.
+#[must_use]
+pub fn unit_stack_height_mm(lib_id: &str) -> f64 {
+    let count = symbol_units(lib_id).map_or(1, |(_, count)| count);
+    unit_offset_mm(lib_id, count).1
 }
 
 /// Sheet-space offset of the unit a pin belongs to, or `(0, 0)` for a
@@ -193,7 +242,7 @@ pub fn pin_unit_offset(lib_id: &str, number: &str) -> (f64, f64) {
                 None
             }
         })
-        .map_or((0.0, 0.0), unit_offset_mm)
+        .map_or((0.0, 0.0), |unit| unit_offset_mm(lib_id, unit))
 }
 
 /// Physical pin number -> KiCad unit number (1-based) for a stock
@@ -837,7 +886,40 @@ mod unit_tests {
 
     #[test]
     fn unit_offset_stacks_downward() {
-        assert_eq!(unit_offset_mm(1), (0.0, 0.0));
-        assert_eq!(unit_offset_mm(2), (0.0, UNIT_PITCH_MM));
+        // A symbol the pins of which cannot be read stacks at the fixed pitch.
+        assert_eq!(unit_offset_mm("Nope:Nothing", 1), (0.0, 0.0));
+        assert_eq!(unit_offset_mm("Nope:Nothing", 2), (0.0, UNIT_PITCH_MM));
+    }
+
+    /// Units are stacked by the height their pins span, so the five tall units of
+    /// the iCE40 FPGA never overlap: a unit starts below the pins of the one above.
+    #[test]
+    fn tall_units_are_stacked_clear_of_each_other() {
+        let lib = "FPGA_Lattice:ICE40HX4K-TQ144";
+        // Skipped when KiCad's bundled libraries are not installed.
+        let (Some((units, count)), Some(positions)) = (symbol_units(lib), pin_positions(lib))
+        else {
+            return;
+        };
+        assert!(count >= 2);
+        let mut spans = vec![(f64::MAX, f64::MIN); count as usize];
+        for (number, unit) in &units {
+            let (_, y, _) = positions[number];
+            let (_, dy) = unit_offset_mm(lib, *unit);
+            // Sheet y of the pin, relative to the anchor.
+            let sheet = -y + dy;
+            let slot = &mut spans[*unit as usize - 1];
+            *slot = (slot.0.min(sheet), slot.1.max(sheet));
+        }
+        for pair in spans.windows(2) {
+            assert!(
+                pair[1].0 > pair[0].1,
+                "unit spans overlap: {pair:?}: the pins of one unit sit among those of the next"
+            );
+        }
+        assert!(
+            unit_stack_height_mm(lib) > UNIT_PITCH_MM * 4.0,
+            "the stack is taller than the old pitch"
+        );
     }
 }
