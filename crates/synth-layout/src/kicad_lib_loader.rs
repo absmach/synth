@@ -193,7 +193,25 @@ pub fn unit_offset_mm(lib_id: &str, unit: u32) -> (f64, f64) {
 
 /// The offset of every unit of `lib_id`, in order, from the pin extents of its
 /// units. `None` for a single-unit symbol or one whose pins cannot be read.
+/// Cached per `lib_id`: every pin of a multi-unit symbol asks for its unit's
+/// offset, and the stack does not change within a run.
 fn unit_stack_offsets(lib_id: &str) -> Option<Vec<f64>> {
+    type Offsets = Option<Vec<f64>>;
+    static CACHE: OnceLock<std::sync::Mutex<std::collections::HashMap<String, Offsets>>> =
+        OnceLock::new();
+    let cache = CACHE.get_or_init(|| std::sync::Mutex::new(std::collections::HashMap::new()));
+    let mut guard = cache
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
+    if let Some(hit) = guard.get(lib_id) {
+        return hit.clone();
+    }
+    let computed = unit_stack_offsets_uncached(lib_id);
+    guard.insert(lib_id.to_string(), computed.clone());
+    computed
+}
+
+fn unit_stack_offsets_uncached(lib_id: &str) -> Option<Vec<f64>> {
     let (units, count) = symbol_units(lib_id)?;
     if count < 2 {
         return None;
@@ -224,8 +242,20 @@ fn unit_stack_offsets(lib_id: &str) -> Option<Vec<f64>> {
 /// The height the stack of units of `lib_id` adds below its first unit, in mm.
 #[must_use]
 pub fn unit_stack_height_mm(lib_id: &str) -> f64 {
+    // The body size of every component asks for this, so it is cached per symbol.
+    static CACHE: OnceLock<std::sync::Mutex<std::collections::HashMap<String, f64>>> =
+        OnceLock::new();
+    let cache = CACHE.get_or_init(|| std::sync::Mutex::new(std::collections::HashMap::new()));
+    let mut guard = cache
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
+    if let Some(hit) = guard.get(lib_id) {
+        return *hit;
+    }
     let count = symbol_units(lib_id).map_or(1, |(_, count)| count);
-    unit_offset_mm(lib_id, count).1
+    let height = unit_offset_mm(lib_id, count).1;
+    guard.insert(lib_id.to_string(), height);
+    height
 }
 
 /// Sheet-space offset of the unit a pin belongs to, or `(0, 0)` for a
