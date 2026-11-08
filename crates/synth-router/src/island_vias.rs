@@ -853,6 +853,8 @@ struct Keepout {
     tracks: Vec<Segment>,
     /// `(centre, radius)` of each via.
     vias: Vec<((f64, f64), f64)>,
+    /// The outline of each rule area that keeps vias out.
+    no_via_areas: Vec<Vec<(f64, f64)>>,
     /// The copper a via keeps between its pad and every obstacle.
     gap_mm: f64,
 }
@@ -899,10 +901,21 @@ impl Keepout {
             .iter()
             .map(|via| ((via.at.x_mm(), via.at.y_mm()), nm_to_mm(via.size_nm) / 2.0))
             .collect();
+        let mut no_via_areas: Vec<Vec<(f64, f64)>> = Vec::new();
+        for zone in board.zones.iter().filter(|zone| zone.keeps_vias_out) {
+            for (_, outline) in &zone.outlines {
+                let area: Vec<(f64, f64)> = outline.iter().map(|p| (p.x_mm(), p.y_mm())).collect();
+                // A zone on several layers repeats its outline once per layer.
+                if !no_via_areas.contains(&area) {
+                    no_via_areas.push(area);
+                }
+            }
+        }
         Self {
             pads,
             tracks,
             vias,
+            no_via_areas,
             gap_mm,
         }
     }
@@ -920,7 +933,41 @@ impl Keepout {
                 .vias
                 .iter()
                 .all(|(at, other)| (at.0 - p.0).hypot(at.1 - p.1) >= need + other - EPS)
+            && self
+                .no_via_areas
+                .iter()
+                .all(|area| !point_in_polygon(p, area) && polygon_distance(p, area) >= radius - EPS)
     }
+}
+
+/// Whether `p` lies inside the closed polygon `area`.
+fn point_in_polygon(p: (f64, f64), area: &[(f64, f64)]) -> bool {
+    let mut inside = false;
+    let mut previous = area.last().copied();
+    for &current in area {
+        if let Some(last) = previous {
+            if (current.1 > p.1) != (last.1 > p.1)
+                && p.0 < (last.0 - current.0) * (p.1 - current.1) / (last.1 - current.1) + current.0
+            {
+                inside = !inside;
+            }
+        }
+        previous = Some(current);
+    }
+    inside
+}
+
+/// The distance from `p` to the nearest edge of the closed polygon `area`.
+fn polygon_distance(p: (f64, f64), area: &[(f64, f64)]) -> f64 {
+    let mut nearest = f64::MAX;
+    let mut previous = area.last().copied();
+    for &current in area {
+        if let Some(last) = previous {
+            nearest = nearest.min(point_segment(p, last, current));
+        }
+        previous = Some(current);
+    }
+    nearest
 }
 
 /// The table names a coded net; a name alone is what a board written without a
@@ -2754,6 +2801,41 @@ mod tests {
         // Outside the fill, or on another layer, there is no room.
         assert!(!pour_room(&regions, "B.Cu", (15.0, 15.0), radius));
         assert!(!pour_room(&regions, "F.Cu", (5.0, 5.0), radius));
+    }
+
+    /// A rule area that keeps vias out, such as a mounting hole's screw-head keepout,
+    /// is an obstacle to a return via like a pad is: the ground via never sits in it.
+    #[test]
+    fn a_return_via_stays_out_of_a_keepout_that_refuses_vias() {
+        let board = stitched_board("");
+        let free = stitch(
+            &board,
+            REACH,
+            &[],
+            &Ground::default(),
+            &ViaDeclarations::new(),
+        )
+        .vias;
+        assert_eq!(free.len(), 1, "an unobstructed board takes one ground via");
+        let keepout = stitched_board(
+            r#"(zone (net 0) (net_name "") (layers "F.Cu" "B.Cu") (keepout (tracks not_allowed) (vias not_allowed) (pads allowed) (copperpour not_allowed))
+                 (polygon (pts (xy 6 6) (xy 14 6) (xy 14 14) (xy 6 14))))"#,
+        );
+        let placed = stitch(
+            &keepout,
+            REACH,
+            &[],
+            &Ground::default(),
+            &ViaDeclarations::new(),
+        )
+        .vias;
+        for via in &placed {
+            let (x, y) = at_mm(via);
+            assert!(
+                !(6.0..=14.0).contains(&x) || !(6.0..=14.0).contains(&y),
+                "a ground via at ({x}, {y}) sits in the keepout"
+            );
+        }
     }
 
     /// A return via keeps the copper the board's own rules ask around it: the
