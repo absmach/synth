@@ -30,7 +30,7 @@ board "rtd_afe" {
     component J2: connector "header_1x4" value "PT100"
     component R_S1: resistor "r_generic_0603" value "1k" tolerance "0.1%" lcsc_pn "C110776" mpn "RT0603BRD071KL"
     component R_S2: resistor "r_generic_0603" value "1k" tolerance "0.1%" lcsc_pn "C110776" mpn "RT0603BRD071KL"
-    component C_D: capacitor "c_generic_0603" value "100nF" dielectric "C0G" voltage "50V"
+    component C_D: capacitor "c_generic_0603" value "100nF" dielectric "X7R" voltage "50V" lcsc_pn "C14663" mpn "CC0603KRX7R9BB104"
     component C_CM1: capacitor "c_generic_0603" value "10nF" dielectric "C0G" voltage "50V" lcsc_pn "C2894187" mpn "0603N103J500CT"
     component C_CM2: capacitor "c_generic_0603" value "10nF" dielectric "C0G" voltage "50V" lcsc_pn "C2894187" mpn "0603N103J500CT"
     component C_F: capacitor "c_generic_0603" value "10nF" dielectric "C0G" voltage "50V" lcsc_pn "C2894187" mpn "0603N103J500CT"
@@ -38,7 +38,7 @@ board "rtd_afe" {
     notes "" {
       "J2 pin 1 F+, pin 2 S+, pin 3 S-, pin 4 F-. PT100 4-wire; force pair carries the 1 mA IDAC current, sense pair reads the RTD."
       "R_S1/R_S2 1k with C_D 100nF across the pair and C_CM1/C_CM2 10nF to GND: differential corner 1/(2pi*2k*110nF) about 720 Hz, common-mode corner about 16 kHz."
-      "C_D is 10x each C_CM so a capacitor mismatch turns into little differential error (TI input filter rule). C0G so the filter does not move the reading."
+      "C_D is 10x each C_CM so a capacitor mismatch turns into little differential error (TI input filter rule). No 100 nF C0G is stocked in 0603 at LCSC, so C_D is X7R; its DC-bias drift at the low differential level is small."
       "C_F 10nF decouples the force node F+ (IDAC output). R_BIAS 1k returns the IDAC current to GND and lifts the RTD common-mode to about 1.1 V."
     }
   }
@@ -77,12 +77,12 @@ board "rtd_afe" {
   group "MCU" color "#b45309" {
     component U2: mcu "rp2350"
     component U4: ic "w25q128_flash_208mil"
-    component Y1: crystal "ecs_120_20_33_tr" value "12MHz"
+    component Y1: crystal "ecs_120_20_33_tr" value "12MHz" lcsc_pn "C2449814" mpn "ECS-120-20-33-TR"
     component C_X1: capacitor "c_generic_0603" value "33pF" dielectric "C0G" voltage "50V" lcsc_pn "C1663" mpn "CL10C330JB8NNNC"
     component C_X2: capacitor "c_generic_0603" value "33pF" dielectric "C0G" voltage "50V" lcsc_pn "C1663" mpn "CL10C330JB8NNNC"
     component R_X: resistor "r_generic_0603" value "1k" lcsc_pn "C21190" mpn "0603WAF1001T5E"
     component R_RUN: resistor "r_generic_0603" value "10k" lcsc_pn "C25804" mpn "0603WAF1002T5E"
-    component L1: inductor "l_generic_0805" value "3.3uH"
+    component L1: inductor "l_generic_0805" value "3.3uH" lcsc_pn "C98331" mpn "MPL2012S3R3MHT"
     component R_AV: resistor "r_generic_0603" value "33" lcsc_pn "C2909394" mpn "FRC0603F33R0TS"
     component C_AVF: capacitor "c_generic_0603" value "4.7uF" dielectric "X7R" voltage "10V" lcsc_pn "C18185770" mpn "TCC0603X7R475K100CT"
     component C_IO1: capacitor "c_generic_0603" value "100nF" dielectric "X7R" voltage "10V" lcsc_pn "C14663" mpn "CC0603KRX7R9BB104"

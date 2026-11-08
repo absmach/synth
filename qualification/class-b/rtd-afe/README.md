@@ -17,7 +17,7 @@ QUALIFICATION.md are closed.
 - 4-wire PT100 input on J2 (1x4, 2.54 mm): pin 1 F+, pin 2 S+, pin 3 S-, pin 4
   F-. The force pair carries the excitation current; the sense pair reads the
   element.
-- Input filter: R_S1/R_S2 1k 0.1 %, C_D 100 nF C0G across the pair, C_CM1/C_CM2
+- Input filter: R_S1/R_S2 1k 0.1 %, C_D 100 nF X7R across the pair, C_CM1/C_CM2
   10 nF C0G to GND, C_F 10 nF C0G on F+.
 - U1 TI ADS124S08 24-bit delta-sigma ADC (VQFN-32, exposed pad) with the
   internal PGA and IDAC1. AIN0 is the force output, AIN1/AIN2 the differential
@@ -53,7 +53,7 @@ the 100 to 250 ohm PT100):
 | Common mode | R_S 1 k, C_CM 10 nF | about 15.9 kHz |
 
 C_D is ten times each C_CM, so capacitor mismatch turns into little differential
-error. All filter capacitors are C0G. The `.synth` notes say "about 720 Hz"; the
+error. C_CM and C_F are C0G; C_D is X7R because no 0603 C0G 100 nF is stocked. The `.synth` notes say "about 720 Hz"; the
 difference is only the equivalent capacitance assumed there (110 nF instead of
 105 nF). The ADC's digital filter and the chosen output data rate are firmware
 settings and are not in this repository.
@@ -224,14 +224,9 @@ component review.
   2.2.1) recommends one 100 nF per power pin, with pins 53/54 sharing one. Four
   more caps could not be placed without breaking routing; left for the SI/PI
   review.
-- L1 (3.3 uH, registry `l_generic_0805`) has no MPN. The Pi-recommended part is
-  Abracon AOTA-B201610S3R3-101-T (LCSC C42411119); its 2016 package does not fit
-  the 0805 footprint.
-- C_D (100 nF C0G 50 V 0603) has no sourced MPN or LCSC number; no 0603 C0G part
-  was found.
-- Y1 ECS-120-20-33-TR is not on LCSC. Candidates C133334 (TAE TAXM12M4RLBDDT2T)
-  and C9002 (YXC X322512MSB4SI, ESR 80 ohm) are unverified, and the Pi reference
-  crystal uses a 10 pF load.
+- L1 is pinned to Sunlord MPL2012S3R3MHT (C98331, 0805); its DCR and saturation current are not checked against the RP2350 datasheet. The Pi-recommended Abracon AOTA-B201610S3R3-101-T (C42411119) does not fit the 0805 footprint.
+- C_D is X7R 0603 (C14663), not C0G: no 0603 C0G 100 nF is stocked. A 1206 C0G part (C170182) broke routing and was reverted.
+- Y1 is pinned to C2449814 (exact MPN).
 - Issue #363 asked for an AGND/DGND split; this board uses one GND plane and the
   issue owner has not signed off on the deviation.
 - No GitHub issue numbers are linked for the Synth defects listed in

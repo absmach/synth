@@ -293,9 +293,9 @@ hole (previously 2.5 mm, no clearance).
 | U5 | TI LP5907MFX-3.3 (SOT-23-5) | TI SNVS798Q, https://www.ti.com/lit/ds/symlink/lp5907.pdf | VIN 1, GND 2, EN 3, VOUT 5; pin 4 modelled NC/open | C_L1 2.2 uF VIN, C_L2 2.2 uF VOUT | Reviewed, registry `lp5907_3v3` |
 | J1 | HRO TYPE-C-31-M-12 (USB-C) | None in the registry; LCSC C165948 | 16 signal/power pins plus 4 shield pads: A1/A12/B1/B12/SH GND, A4/A9/B4/B9 VBUS, A5 CC1, B5 CC2, A6/B6 DP, A7/B7 DN; SBU1/SBU2 open | 5.1k CC1/CC2; 27R DP/DN; D1/D2 TVS | Reviewed, registry `usb_c_receptacle` (2026-11-05) |
 | D1, D2 | `esd_usb`, ESD5V0B03-323 (SOD-323, LCSC C521915) | Tech Public datasheet (read as a scan) | IO to DP/DN, GND | — | Reviewed, registry `esd_usb` (2026-11-05) |
-| Y1 | ECS-120-20-33-TR, 12 MHz, CL 20 pF | https://ecsxtal.com/store/pdf/ecx-32.pdf | Pads 1/3 crystal, 2/4 ground, per the registry description; not re-read in this work | C_X1/C_X2 33 pF C0G; R_X 1k on XOUT | Reviewed, registry `ecs_120_20_33_tr` (2026-11-05); not on LCSC, see Sourcing pins |
+| Y1 | ECS-120-20-33-TR, 12 MHz, CL 20 pF | https://ecsxtal.com/store/pdf/ecx-32.pdf | Pads 1/3 crystal, 2/4 ground, per the registry description; not re-read in this work | C_X1/C_X2 33 pF C0G; R_X 1k on XOUT | Reviewed, registry `ecs_120_20_33_tr` (2026-11-05); LCSC C2449814 |
 | L2 | BLM18AG601SN1D, 0603 ferrite bead, 600 ohm at 100 MHz (C19330) | None | 2 pins | — | Reviewed, registry `ferrite_bead_0603` (2026-11-05) |
-| L1 | Generic 0805 3.3 uH, no MPN | None | 2 pins | — | Reviewed, registry `l_generic_0805` (2026-11-05) |
+| L1 | Sunlord MPL2012S3R3MHT 3.3 uH 0805 (LCSC C98331) | None | 2 pins | — | Reviewed, registry `l_generic_0805` (2026-11-05) |
 | R_S1/R_S2, R_BIAS, R_AV, R_RST, R_RUN, R_X, R_CC1/2, R_DP/DN | Generic 0603 | None | 2 pins | Values in the BOM; R_S1/R_S2 and R_BIAS are 0.1 % in the source | Reviewed upstream, `r_generic_0603` (JeffMboya, 2026-11-01) |
 | C_* | Generic 0603/0805 | None | 2 pins | C0G for the filter and crystal; X7R for the supply decoupling | Reviewed upstream, `c_generic_0603`/`c_generic_0805` (JeffMboya, 2026-11-01) |
 | J2, J3 | 2.54 mm headers (1x4, 1x3) | None | 4 and 3 pins | — | Reviewed, registry `header_1x4`/`header_1x3` (2026-11-05) |
@@ -320,11 +320,11 @@ reads only the BOM. Empty cells mean the source did not declare that attribute.
 
 ## Sourcing pins
 
-The listed passives, J3, U5 (C80670, TI LP5907MFX-3.3/NOPB), L2 (C19330, BLM18AG601SN1D), D1/D2 (C521915, ESD5V0B03-323), U1 (C2871942) and U3 (C11341) are pinned in `rtd_afe.synth` by explicit `lcsc_pn` and `mpn`, and `kicad/bom.csv` carries them (parts with different LCSC numbers stay on separate BOM lines). Unpinned and matched by JLCPCB by value, which is unsafe (JLCPCB matched the wrong dielectric and values in a DFM test):
+The listed passives, J3, U5 (C80670, TI LP5907MFX-3.3/NOPB), L2 (C19330, BLM18AG601SN1D), D1/D2 (C521915, ESD5V0B03-323), U1 (C2871942), U3 (C11341), Y1 (C2449814, ECS-ECS-120-20-33-TR), L1 (C98331, Sunlord MPL2012S3R3MHT) and C_D (C14663, Yageo CC0603KRX7R9BB104) are pinned in `rtd_afe.synth` by explicit `lcsc_pn` and `mpn`, and `kicad/bom.csv` carries them (parts with different LCSC numbers stay on separate BOM lines). Y1, L1 and C_D were pinned after the last export, so `kicad/bom.csv`, the gerbers and the reports do not carry those three numbers yet. A re-export on the current tree does not route this board (FreeRouting leaves +3V3 at U2-49/U2-53 and VREG_LX open with L1 at x = 34.4; moving L1 to (32.0, 22.0) routes it but leaves 1 to 3 return-via items), so the evidence stays at the earlier export until the board is re-laid out. Unpinned and matched by JLCPCB by value, which is unsafe (JLCPCB matched the wrong dielectric and values in a DFM test):
 
-- C_D (100 nF C0G 50 V 0603): no sourced MPN or LCSC number; no 0603 C0G part was found.
-- L1 (3.3 uH, `l_generic_0805`): no MPN. The Pi-recommended part is Abracon AOTA-B201610S3R3-101-T (LCSC C42411119); its 2016 package does not fit the 0805 footprint.
-- Y1 ECS-120-20-33-TR: not on LCSC. Candidates C133334 (TAE TAXM12M4RLBDDT2T) and C9002 (YXC X322512MSB4SI, ESR 80 ohm) are unverified, and the Pi reference crystal uses a 10 pF load.
+- C_D is X7R, not C0G: no 100 nF C0G 50 V part is stocked in 0603 at LCSC (only 1206, e.g. C170182). A 1206 C_D was tried and the router then failed to connect +3V3 and VREG_LX, so it was reverted. This is a deviation from the C0G filter intent; the X7R DC-bias drift at the low differential level was not measured.
+- L1 C98331 (Sunlord MPL2012S3R3MHT, 3.3 uH, 190 mOhm, 900 mA, 0805) is picked for the footprint; its DCR and saturation current were not checked against the RP2350 datasheet. The Pi-recommended part is Abracon AOTA-B201610S3R3-101-T (C42411119); its 2016 package does not fit the 0805 footprint.
+- Y1 C2449814 is an exact MPN match (49 in stock when checked 2026-11-06).
 - U2: the registry LCSC number is now C42411118 (see the review findings above); it was not checked against a stock listing.
 
 The registry LCSC number for `lp5907_3v3` (C83437) was wrong; the pinned C80670 is the TI LP5907MFX-3.3/NOPB. The part-level registry reviews are in the table above; nobody has signed off these pins against a fab-house BOM check.
