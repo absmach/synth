@@ -39,12 +39,12 @@
       "escalation": "board",
       "fab_tier": "auto",
       "strict_sizes": "true",
-      "wall_clock_secs": "1200"
+      "wall_clock_secs": "2700"
     },
     "input_hash": "28c6dd9da1256c9557be031b6712a4b2b7879998778a16afefce64302af4d912",
     "output_hash": "",
     "source_revision": null,
-    "duration_ms": 291507
+    "duration_ms": 532543
   },
   "statistics": {
     "connected_nets": 46,

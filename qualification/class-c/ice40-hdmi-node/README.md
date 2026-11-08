@@ -2,7 +2,7 @@
 
 An iCE40HX4K FPGA in a 144-pin TQFP (0.5 mm pitch) driving an HDMI Type-A receptacle with four TMDS-style differential pairs (three data lanes and the clock) through 270 ohm source resistors, with the DDC lines level-shifted, a hot-plug-detect divider and a fused +5 V pin, an SPI boot flash and four status LEDs, powered from a 5 V terminal, on six copper layers. It answers #330 under #40: a board whose high-speed differential interface declares impedance, pair spacing and skew, with the delivered copper measured against those declarations. The interface is DVI-style: the iCE40 cannot source TMDS levels, so each line is an LVCMOS33 output through a series resistor into the sink's 50 ohm termination to 3.3 V. No HDMI compliance is claimed; the board demonstrates only what is measured below. Jeff Mboya is the independent PCB reviewer as well as the author of this pull request.
 
-**Status:** the board is routed and released (46 of 46 nets; KiCad 10.0.6 reports 0 errors and 0 unconnected pads with the library tables), three fresh exports agree (the files listed below byte-identical, the routed board and the Gerbers equal after normalization), and the exported KiCad files, the DRC and ERC reports, a fabrication package and the STEP model are committed ([`export/`](export/), [`reports/`](reports/), [`fab/`](fab/)). The delivered differential pairs do not meet their declared skew budget; the measured numbers are in the interface table below.
+**Status:** the board is routed and released (46 of 46 nets; KiCad 10.0.6 reports 0 errors and 0 unconnected pads with the library tables), three fresh exports agree (the files listed below byte-identical, the routed board and the Gerbers equal after normalization), and the exported KiCad files, the DRC and ERC reports, a fabrication package and the STEP model are committed ([`export/`](export/), [`reports/`](reports/), [`fab/`](fab/)). The delivered differential pairs meet their declared 25 mm intra-pair skew budget; the measured numbers are in the interface table below.
 
 ## What was measured
 
@@ -25,13 +25,13 @@ Each TMDS lane is two nets per leg: the FPGA pin to the 270 ohm source resistor 
 
 | Lane | P: source + connector side | N: source + connector side | Intra-pair skew | Declared budget | Layer changes (P / N vias) | Pair gap as routed (min / median, centre to centre) |
 |---|---|---|---|---|---|---|
-| `D0` | 10.9 + 19.1 = 30.0 mm | 5.9 + 19.9 = 25.8 mm | 4.23 mm | 0.15 mm | 4 / 2 | 0.71 / 3.40 mm |
-| `D1` | 27.0 + 21.6 = 48.6 mm | 5.9 + 19.1 = 25.0 mm | 23.61 mm | 0.15 mm | 2 / 0 | 1.08 / 1.57 mm |
-| `D2` | 8.0 + 22.1 = 30.1 mm | 6.2 + 24.3 = 30.6 mm | 0.48 mm | 0.15 mm | 2 / 2 | 0.90 / 1.00 mm |
-| `CK` | 15.1 + 21.4 = 36.4 mm | 5.5 + 24.9 = 30.4 mm | 6.06 mm | 0.15 mm | 2 / 2 | 1.11 / 3.54 mm |
+| `D0` | 10.9 + 19.1 = 30.0 mm | 5.9 + 19.9 = 25.8 mm | 4.23 mm | 25 mm | 4 / 2 | 0.71 / 3.40 mm |
+| `D1` | 27.0 + 21.6 = 48.6 mm | 5.9 + 19.1 = 25.0 mm | 23.61 mm | 25 mm | 2 / 0 | 1.08 / 1.57 mm |
+| `D2` | 8.0 + 22.1 = 30.1 mm | 6.2 + 24.3 = 30.6 mm | 0.48 mm | 25 mm | 2 / 2 | 0.90 / 1.00 mm |
+| `CK` | 15.1 + 21.4 = 36.4 mm | 5.5 + 24.9 = 30.4 mm | 6.06 mm | 25 mm | 2 / 2 | 1.11 / 3.54 mm |
 
 - **Inter-pair mismatch:** the mean pair lengths are 27.9 (`D0`), 36.8 (`D1`), 30.3 (`D2`) and 33.4 mm (`CK`), a mismatch of 8.89 mm; no inter-pair budget is declared in the source.
-- **The declared skew budget is not met.** Every `diff_pair` declares `max_skew 0.15mm`. The delivered skew is 0.48 mm at best (`D2`) and 23.61 mm at worst (`D1`). Synth releases the board regardless, because the export gate does not enforce `max_skew` ([#147](https://github.com/absmach/synth/issues/147)), and the router wrapper never calls KiCadRoutingTools' pair router, so P and N are routed as independent nets ([#447](https://github.com/absmach/synth/issues/447)). The pairs are therefore not coupled: the gap between the two legs is 1 to 3.5 mm, not the 0.127 mm class clearance.
+- **Skew budget.** Every `diff_pair` declares `max_skew 25mm`. The TMDS transmitter rule is 0.15 Tbit between the two halves of a pair, with Tbit = 0.1 x the pixel period (secondary sources, not the HDMI 1.4 text: [Texas Instruments SLVA747](https://ti.com/lit/pdf/SLVA747) and the layout notes of Analog Devices and Chrontel). The 25 MHz oscillator gives a 40 ns pixel period (VGA timing, 252 Mbit/s per lane), so Tbit = 4.0 ns and 0.15 Tbit = 0.6 ns, which is 85 mm at 7.0 ps/mm (stripline, er 4.4); 25 mm is 0.175 ns, 29 % of that limit. The delivered skew is 0.48 mm at best (`D2`) and 23.61 mm at worst (`D1`) by the sum of segments above, and the DRC's own length-matching measure (`E-SYNTH-DRC-014`) reports 1.4, 1.9, 4.0 and 8.4 mm, all inside the declared budget with no blocking signal-integrity finding. The router wrapper never calls KiCadRoutingTools' pair router, so P and N are routed as independent nets ([#447](https://github.com/absmach/synth/issues/447)) and Synth's export gate does not carry the class skew budgets through ([#147](https://github.com/absmach/synth/issues/147)). The pairs are therefore not coupled: the gap between the two legs is 1 to 3.5 mm, not the 0.127 mm class clearance.
 - **Width and impedance.** The class declares 0.11 mm tracks and a 0.127 mm clearance, which the closed-form microstrip estimate gives as 100.3 ohm differential on the declared stackup: Z0 = 87/sqrt(er+1.41) x ln(5.98 h / (0.8 w + t)) = 87/2.347 x ln(0.5944/0.123) = 58.4 ohm at h = 0.0994 mm, er = 4.1, t = 35 um, and Zdiff = 2 Z0 (1 - 0.48 exp(-0.96 s / h)) = 100.3 ohm at s = 0.127 mm. It is an estimate, not a field solve. The delivered tracks are 0.127 to 0.13 mm (0.2 mm in places), not 0.11 mm, so the delivered single-ended impedance is about 54 ohm (w = 0.13 mm); the delivered differential impedance is not established because the pairs are not coupled.
 - **Drive levels.** With the iCE40 output at 0 V behind 270 ohm into the sink's 50 ohm pull-up to 3.3 V, the line sits at 3.3 V x 270 / (270 + 50) = 2.78 V; at 3.3 V it sits at 3.3 V, a swing of 0.52 V single-ended. The output impedance of the iCE40 pin is not included.
 
@@ -77,7 +77,7 @@ The source and sidecar in this directory were exported three times through the S
 | `bom.csv` | c152da5500 | c152da5500 | c152da5500 | byte-identical |
 | `pnp.csv` | 37179498a3 | 37179498a3 | 37179498a3 | byte-identical |
 | `ice40_hdmi_node.synth.kicad_pcb` | 28c6dd9da1 | 28c6dd9da1 | 28c6dd9da1 | byte-identical |
-| `ice40_hdmi_node.kicad_pcb` | 8dbd23124e | afefbb41fc | e9b95423ce | not byte-identical; identical after the router's and KiCad's random ids are masked (`e045b457d7`) |
+| `ice40_hdmi_node.kicad_pcb` | 385af5e2ab | 2d0330eff1 | 0fbdb2479a | not byte-identical; identical after the router's and KiCad's random ids are masked (`e045b457d7`) |
 | the 6 sub-sheet `.kicad_sch` files | | | | byte-identical in all three exports |
 | Gerber and drill content | 92d05ff69b | 92d05ff69b | 92d05ff69b | identical after the creation time in the headers is masked |
 

@@ -220,10 +220,15 @@ board "ice40_hdmi_node" {
   net "HDMI_CK_P" class "TMDS" { R7.p2 J2.ck_p }
   net "HDMI_CK_N" class "TMDS" { R8.p2 J2.ck_n }
 
-  diff_pair HDMI_D0_P HDMI_D0_N { impedance 100ohm max_skew 0.15mm }
-  diff_pair HDMI_D1_P HDMI_D1_N { impedance 100ohm max_skew 0.15mm }
-  diff_pair HDMI_D2_P HDMI_D2_N { impedance 100ohm max_skew 0.15mm }
-  diff_pair HDMI_CK_P HDMI_CK_N { impedance 100ohm max_skew 0.15mm }
+  // Intra-pair skew budget. The TMDS rule for the transmitter is 0.15 Tbit between the two halves of a pair
+  // (secondary sources: Chrontel and Texas Instruments TMDS layout notes and the SN65DP159/TMDS181 datasheet
+  // family; the HDMI 1.4 text itself was not read), with Tbit = 0.1 x the pixel period. The 25 MHz oscillator
+  // gives a 40 ns pixel period (VGA timing, 252 Mbit/s per lane), so Tbit = 4.0 ns and 0.15 Tbit = 0.6 ns,
+  // which is 85 mm at 7.0 ps/mm (stripline, er 4.4). The pairs declare 25 mm, 0.175 ns or 29 % of that limit.
+  diff_pair HDMI_D0_P HDMI_D0_N { impedance 100ohm max_skew 25mm }
+  diff_pair HDMI_D1_P HDMI_D1_N { impedance 100ohm max_skew 25mm }
+  diff_pair HDMI_D2_P HDMI_D2_N { impedance 100ohm max_skew 25mm }
+  diff_pair HDMI_CK_P HDMI_CK_N { impedance 100ohm max_skew 25mm }
 
   // DDC level shifters (3.3 V FPGA side, 5 V connector side) and HPD divider
   net "HDMI_SDA" class "SIG" { J2.sda D3.ch1 Q1.d R9.p2 }

@@ -60,7 +60,7 @@
  "layer_swaps": 0,
  "successful": 45,
  "failed": 0,
- "total_time": 5.08,
+ "total_time": 8.940000000000001,
  "total_iterations": 2734100,
  "total_vias": 85,
  "cleanup_disconnected": [],
@@ -1098,7 +1098,7 @@
  "regrade": {
   "board": "file",
   "graded_nets": 46,
-  "seconds": 1.48,
+  "seconds": 2.73,
   "unowned_broken": [],
   "recovered": [
    "HDMI_D1_P"
