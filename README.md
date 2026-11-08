@@ -6,96 +6,133 @@
 
 Turn text-based circuit designs into KiCad schematics, PCB layouts, and bills of materials.
 
-Open source. Built for engineers and AI agents.
+[![Continuous Integration](https://github.com/absmach/synth/actions/workflows/ci.yml/badge.svg)](https://github.com/absmach/synth/actions/workflows/ci.yml)
+[![License](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
 
-[Quick Start](#quick-start) · [Features](#features) · [Examples](#examples) · [Documentation](https://absmach.eu/docs/synth/user-guide/quick-start/) · [Contributing](#contributing)
+[Install](#install) · [Quick Start](#quick-start) · [Features](#features) · [Examples](#examples) · [Documentation](https://absmach.eu/docs/synth/user-guide/quick-start/) · [Contributing](#contributing)
 
 </div>
 
 ## Introduction
 
-Synth is an open-source compiler for electronic circuit boards. Describe your components, their connections, and board constraints in **SynthSpec**, a text-based design language. Synth checks the design and generates KiCad schematics, PCB layouts, and a bill of materials.
+Synth is an open-source compiler for electronic circuit boards. Describe components, connections, and board constraints in **SynthSpec**, a text-based design language; Synth checks the design and generates KiCad schematics, PCB layouts, and a bill of materials. Your `.synth` files hold the design intent, so you can edit them in your usual editor and review changes in Git. Engineers drive it from the command line, and AI agents drive the same compiler through its **Model Context Protocol (MCP)** server.
 
-This brings a software development workflow to hardware: edit designs in your usual editor, review changes in Git, and run automated checks. Your `.synth` files capture the design intent; the schematic and board layout are generated outputs you can inspect in KiCad.
+```synth
+board "env_logger" {
+    layers 2
+    manufacturer "jlcpcb"
 
-Engineers can use Synth from the command line. AI agents can use its **Model Context Protocol (MCP)** server to find components, validate circuits, and generate outputs through the same compiler, with structured diagnostics to guide corrections.
+    group "USB-C INPUT / 3V3 LDO" color "#c2410c" {
+      component J1: connector "usb_c_receptacle"
+      component U1: regulator "ams1117_3v3" value "AMS1117-3.3"
+      component C2: capacitor "c_generic_0805" value "22uF"
+    }
 
-## Release checks
-
-For CI and agent workflows, `synth check DESIGN.synth --json` is the single
-deterministic, model-free gate for compiler validation and DRC. Add `--fab` to
-require a complete KiCad manufacturing export and receive SHA-256 hashes for
-the emitted files. A timed-out or unavailable physical stage is reported as
-`unknown` and blocks the command; it is never treated as a pass.
-
-Stages that shell out to `kicad-cli` are tri-state, because a check that
-could not run is neither a pass nor a failure:
-
-| Status    | Meaning                                                                 |
-| --------- | ----------------------------------------------------------------------- |
-| `pass`    | The tool ran and reported no blocking violations.                       |
-| `fail`    | The tool ran and rejected the design.                                   |
-| `unknown` | No evidence. Missing or unsupported `kicad-cli`, a missing symbol/footprint library, a crash, a timeout, or an unreadable report. |
-
-`unknown` blocks exactly as `fail` does, and `--force` does not override it —
-it overrides Synth's own findings, not the absence of verification. Likewise,
-unconnected pads and KiCad DRC errors block a release export, and `--force`
-does not override that. Each
-`unknown` reports the tool, its version, the exact command, its stderr, and a
-machine-stable reason (`not_installed`, `timeout`, `command_failed`,
-`report_malformed`, `unsupported_version`, ...). `synth check --fab` embeds
-that evidence under `stages.manufacturing.native`; `synth export-kicad
---verification-report FILE` writes it directly.
-
-A plain `synth export-kicad` still works with no KiCad installed: it records
-the `unknown` and sets `release_ready: false`, but does not block, since
-nothing about that output claims to have been verified. Requesting
-verification — `--validate-erc`, or any of `--gerbers`/`--drill`/`--step` —
-makes an `unknown` blocking. Set `KICAD_CLI` to point at a specific build, and
-`SYNTH_KICAD_CLI_TIMEOUT_SECS` to change the per-run budget (default 300s).
-
-### Export overrides
-
-`--force` and `--allow-unverified-parts` let development proceed past
-findings that would otherwise stop an export. Every use is recorded in
-`<out>/release.json` with the exact flag, the diagnostic it suppressed, the
-affected parts, and the reviewer state of every part on the board:
-
-| Field | Meaning |
-| --- | --- |
-| `release_ready` | `false` whenever any override was used. Derived, not settable. |
-| `production_status` | `production` or `untrusted`. |
-| `overrides[]` | flag, code, affected parts, and the consequence in plain words. |
-| `reviewer_state[]` | per part: `reviewed_by`, `reviewed_at`, and whether it is reviewed. |
-
-Human output on these paths leads with `UNTRUSTED / NOT FOR FABRICATION`.
-
-`synth check --fab` reads that manifest and refuses a package carrying
-overrides. To proceed, record who authorized it and why:
-
-```bash
-synth check DESIGN.synth --fab \
-  --override-exception "prototype run, not customer hardware" \
-  --authorized-by "a release manager"
+    connect J1.vbus -> U1.vin
+    connect J1.gnd  -> U1.gnd
+    connect U1.vin  -> C2.p1
+}
 ```
 
-An exception authorizes the run; it does not clean the package.
-`release_ready` stays `false` and `production_status` stays `untrusted`,
-because an authorization is a decision about risk rather than evidence the
-risk is gone.
+_An excerpt from the [environmental logger](examples/env_logger/env_logger.synth); the full design adds the MCU, sensor, CC pull-downs, and decoupling that the checks require._
 
-For CI and release gates, `synth export-kicad --safe` is the mode with no
-override path: it refuses to sit beside `--force` or
-`--allow-unverified-parts`, and then checks that the package it produced is
-actually clean.
+<div align="center">
 
-## Why Synth?
+[![asciicast](https://asciinema.org/a/0CN3lGs7SnY9QV7u.svg)](https://asciinema.org/a/0CN3lGs7SnY9QV7u)
 
-- **Review hardware changes in Git.** Components, connections, and constraints are text, making design intent visible in diffs and pull requests.
-- **Check designs as you build.** Structured diagnostics identify problems and provide source locations and suggested fixes where available.
-- **Keep outputs reproducible.** A typed compiler pipeline and deterministic placement and routing make generated artifacts repeatable.
-- **Work with KiCad.** Export schematics, PCBs, and BOMs for inspection and downstream workflows.
-- **Give agents concrete tools.** Expose validation, registry search, placement, routing, and export through MCP.
+_An agent designing a two-layer NE555 LED blinker through the MCP server: searching the registry, authoring a missing part, setting placement overrides, and validating the board._
+
+</div>
+
+## Install
+
+### Prebuilt binary
+
+Every [release](https://github.com/absmach/synth/releases) ships a `synth` binary for five platforms, each with a SHA-256 checksum beside it.
+
+| Platform       | Asset                     |
+| -------------- | ------------------------- |
+| Linux x86-64   | `synth-linux-amd64`       |
+| Linux arm64    | `synth-linux-arm64`       |
+| macOS arm64    | `synth-darwin-arm64`      |
+| macOS x86-64   | `synth-darwin-amd64`      |
+| Windows x86-64 | `synth-windows-amd64.exe` |
+
+```bash
+base="https://github.com/absmach/synth/releases/latest/download"
+asset="synth-linux-amd64"          # pick your platform from the table above
+
+curl -LO "$base/$asset"
+curl -LO "$base/$asset.sha256"
+sha256sum -c "$asset.sha256"       # macOS: shasum -a 256 -c "$asset.sha256"
+
+sudo install -m 755 "$asset" /usr/local/bin/synth
+synth --version
+```
+
+Verify the checksum before running the binary. On Windows, check it with `certutil -hashfile synth-windows-amd64.exe SHA256` and compare against the `.sha256` file.
+
+The Linux binaries are built against glibc 2.35, so they run on Debian Bookworm, Ubuntu 22.04, and newer.
+
+> [!NOTE]
+> The component registry and example designs ship inside the repository and track `main`, which has moved ahead of the latest release. Pair a prebuilt binary with its own tag (`git checkout v0.1.1`, where the example paths differ from those below), or install from source to follow the Quick Start as written.
+
+### Cargo
+
+Synth is not on crates.io, so install it from Git. Requires Rust 1.85 or newer.
+
+```bash
+# Latest release
+cargo install --git https://github.com/absmach/synth --tag v0.1.1 --locked synth-cli
+
+# Current main
+cargo install --git https://github.com/absmach/synth --locked synth-cli
+```
+
+> [!WARNING]
+> Do not run `cargo install synth-cli`. The `synth-cli` crate on crates.io is an unrelated project — a WebAssembly-to-ARM compiler — not this one.
+
+### From source
+
+```bash
+git clone https://github.com/absmach/synth.git
+cd synth
+cargo build -p synth-cli --release
+./target/release/synth --help
+```
+
+The repository pins its toolchain in `rust-toolchain.toml`, so rustup fetches the right version automatically.
+
+## Quick Start
+
+Validate the minimal example and export a KiCad project. The example designs come from a checkout, so clone the repository (or `cd` into it) first:
+
+```bash
+synth validate fixtures/designs/hello.synth
+synth export-kicad fixtures/designs/hello.synth --out output/hello
+```
+
+The minimal example declares an empty two-layer board. Use the [example designs](#examples) to explore circuits with components and connections.
+
+For machine-readable diagnostics:
+
+```bash
+synth validate examples/env_logger/env_logger.synth --format json
+```
+
+Open exported projects in KiCad. Optional Gerber, drill, and STEP exports require `kicad-cli`; see the [KiCad workflow guide](docs/kicad-workflows.md) for export and review details.
+
+For CI and release gates, `synth check DESIGN.synth --json` is the deterministic, model-free gate for validation and DRC. A check that could not run is reported as `unknown` and blocks just as a failure does — see [release checks](docs/release-checks.md).
+
+### Agent Integration
+
+Start the MCP server over standard input and output:
+
+```bash
+synth mcp --stdio
+```
+
+Agents can retrieve the SynthSpec language reference, search the registry, validate designs, apply fixes, and invoke compiler stages. See the [MCP guide](crates/synth-mcp/README.md) for transports and tool details.
 
 ## How It Works
 
@@ -113,71 +150,26 @@ Synth resolves parts from a component registry and lowers the source into a type
 
 ## Features
 
-| Area               | Capabilities                                                                                                 |
-| ------------------ | ------------------------------------------------------------------------------------------------------------ |
-| Design language    | SynthSpec parser, typed board IR, components, connections, differential pairs, keepouts, and placement hints |
-| Validation         | Electrical-rule checks, design-rule checks, structured diagnostics, and SMT-backed quantitative fixes        |
-| Layout and routing | Deterministic schematic layout, component placement, and multilayer routing                                  |
-| KiCad integration  | Project, schematic, PCB, and BOM export; optional fabrication outputs through `kicad-cli`                    |
-| Component registry | Versioned parts, project and user overlays, search, import, and authoring tools                              |
-| Developer tools    | CLI, JSON diagnostics, and an MCP server for agent integration                         |
-
-## Quick Start
-
-Use a current stable Rust toolchain with Cargo. Run the following from a local checkout:
-
-```bash
-git clone https://github.com/absmach/synth.git
-cd synth
-cargo build -p synth-cli
-cargo run -p synth-cli -- --help
-```
-
-Validate the minimal example and export a KiCad project:
-
-```bash
-cargo run -p synth-cli -- validate fixtures/designs/hello.synth
-cargo run -p synth-cli -- export-kicad fixtures/designs/hello.synth --out output/hello
-```
-
-The minimal example declares an empty two-layer board. Use the [example designs](#examples) to explore circuits with components and connections.
-
-For machine-readable diagnostics:
-
-```bash
-cargo run -p synth-cli -- validate examples/env_logger/env_logger.synth --format json
-```
-
-Open exported projects in KiCad. Optional Gerber, drill, and STEP exports require `kicad-cli`; see the [KiCad workflow guide](docs/kicad-workflows.md) for export and review details.
-
-### Agent Integration
-
-Start the MCP server over standard input and output:
-
-```bash
-cargo run -p synth-cli -- mcp --stdio
-```
-
-Agents can retrieve the SynthSpec language reference, search the registry, validate designs, apply fixes, and invoke compiler stages. See the [MCP guide](crates/synth-mcp/README.md) for transports and tool details.
+| Area               | Capabilities                                                                                                                                    |
+| ------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------- |
+| Design language    | SynthSpec parser, typed board IR, components, connections, differential pairs, keepouts, and placement hints                                    |
+| Validation         | Electrical-rule checks, design-rule checks, structured diagnostics with source locations and suggested fixes, and SMT-backed quantitative fixes |
+| Layout and routing | Deterministic schematic layout, component placement, and multilayer routing, so generated artifacts are reproducible                            |
+| KiCad integration  | Project, schematic, PCB, and BOM export; optional fabrication outputs through `kicad-cli`                                                       |
+| Component registry | Versioned parts, project and user overlays, search, import, and authoring tools                                                                 |
+| Developer tools    | CLI, JSON diagnostics, and an MCP server exposing validation, registry search, placement, routing, and export                                   |
 
 ## Examples
 
-| Design                                                                     | What it demonstrates                                                          |
-| -------------------------------------------------------------------------- | ----------------------------------------------------------------------------- |
-| [Hello](fixtures/designs/hello.synth)                                      | The smallest board declaration                                                |
-| [Environmental logger](examples/env_logger/env_logger.synth)                          | USB-C power, a regulator, an MCU, an environmental sensor, and a debug header |
-| [Sensor logger](examples/sensor_logger/sensor_logger.synth)                              | A larger design with dual I²C sensors, SPI flash, and status LEDs             |
-| [Placement and differential pairs](examples/placement_and_diff_pair/placement_and_diff_pair.synth) | Placement hints, differential-pair constraints, and keepout regions           |
+| Design                                                                                             | What it demonstrates                                                                                     |
+| -------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------- |
+| [Hello](fixtures/designs/hello.synth)                                                              | The smallest board declaration                                                                           |
+| [Environmental logger](examples/env_logger/env_logger.synth)                                       | USB-C power, a regulator, an MCU, an environmental sensor, and a debug header                            |
+| [Sensor logger](examples/sensor_logger/sensor_logger.synth)                                        | A larger design with dual I²C sensors, SPI flash, and status LEDs                                        |
+| [Placement and differential pairs](examples/placement_and_diff_pair/placement_and_diff_pair.synth) | Placement hints, differential-pair constraints, and keepout regions                                      |
+| [RP2350 development board](examples/rp2350/)                                                       | Clean-netlist FreeRouting, zone refill, and compact outlines |
 
 Additional language and validation cases live in [fixtures](fixtures/designs/README.md). Part definitions live in the [component registry](registry/README.md).
-
-### RP2350 development-board agent workflow
-
-The repository includes the placement and FreeRouting workflow used to develop
-an RP2350-class board, including clean-netlist routing, zone refill, layer
-normalization, and compact-outline support. See the [RP2350 agent workflow](docs/rp2350-agent-workflow.md)
-for setup instructions, prompts, review commands, and the pre-generated review
-artifact in [examples/rp2350](examples/rp2350/).
 
 ![Rendered RP2350 routed example](examples/rp2350/rp2350_devboard_freerouting_clean.png)
 
@@ -186,9 +178,8 @@ for an interactive review._
 
 ## Documentation
 
-- [Release notes](docs/release-notes.md) — what changed in each release, including new DSL and DRC codes.
+- [Release checks](docs/release-checks.md) — the `synth check` gate, tri-state native stages, and export overrides.
 - [KiCad workflows](docs/kicad-workflows.md) — exported projects, validation, BOMs, and fabrication outputs.
-- [RP2350 agent workflow](docs/rp2350-agent-workflow.md) — clean-netlist FreeRouting, compact outlines, agent setup, and review prompts.
 - [Schematic procedures](docs/schematic-procedures.md) — schematic generation and review.
 - [Diagnostic reference](docs/diagnostics/README.md) — diagnostic codes and repair guidance.
 - [Diagnostic protocol](docs/protocol-v1.0.md) — the machine-readable diagnostic format.

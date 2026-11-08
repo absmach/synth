@@ -31,7 +31,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use serde::{Deserialize, Serialize};
 
 use crate::contract::{FabricationPolicy, RouteRequest};
-use crate::pcb_read::{Pad, PcbBoard, Point};
+use crate::pcb_read::{entry_is_copper, Pad, PcbBoard, Point};
 /// Distance tolerance, in nanometres, for copper that is *meant* to touch.
 ///
 /// Routers round to four decimal places when they write coordinates, so
@@ -947,17 +947,6 @@ fn items_touch(board: &PcbBoard, a: &Item, b: &Item, pads: &[&Pad]) -> bool {
     }
 }
 
-/// Whether a `(layers ...)` entry names copper.
-///
-/// KiCad spells through-hole pads `"*.Cu"`, which is a wildcard for every
-/// copper layer rather than a single layer name. Treating it as
-/// non-copper — because it does not literally end in `.Cu` — silently put
-/// every through-hole pad on no layer at all, so no track could ever touch
-/// one and each THT net read as unroutable no matter what the router drew.
-pub(crate) fn entry_is_copper(entry: &str) -> bool {
-    entry.ends_with(".Cu") || entry.ends_with(".CuIn") || entry == "*.Cu"
-}
-
 /// Whether one layer entry refers to the same layer as another.
 ///
 /// `*.Cu` matches any copper layer, so a through-hole pad and a track on
@@ -1086,17 +1075,6 @@ fn find_via_in_pad(board: &PcbBoard) -> Vec<String> {
     hits.sort();
     hits.dedup();
     hits
-}
-
-impl std::fmt::Display for crate::pcb_read::Via {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(
-            f,
-            "via at ({:.3}, {:.3}) mm",
-            self.at.x_mm(),
-            self.at.y_mm()
-        )
-    }
 }
 
 /// Disjoint-set forest with union by rank.

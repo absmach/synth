@@ -63,6 +63,7 @@
 mod emc;
 mod geometry;
 pub mod kicad_cli;
+pub mod pcb_read;
 mod profile;
 mod rules;
 mod signal_integrity;

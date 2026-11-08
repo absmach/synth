@@ -55,6 +55,17 @@ impl Point {
     }
 }
 
+/// Whether a `(layers ...)` entry names copper.
+///
+/// KiCad spells through-hole pads `"*.Cu"`, which is a wildcard for every
+/// copper layer rather than a single layer name. Treating it as
+/// non-copper — because it does not literally end in `.Cu` — silently put
+/// every through-hole pad on no layer at all, so no track could ever touch
+/// one and each THT net read as unroutable no matter what the router drew.
+pub fn entry_is_copper(entry: &str) -> bool {
+    entry.ends_with(".Cu") || entry.ends_with(".CuIn") || entry == "*.Cu"
+}
+
 /// Convert millimetres to integer nanometres.
 ///
 /// Rounding rather than truncation matters: a coordinate that lands a few
@@ -481,6 +492,17 @@ pub struct Via {
     pub layers: Vec<String>,
 }
 
+impl std::fmt::Display for Via {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "via at ({:.3}, {:.3}) mm",
+            self.at.x_mm(),
+            self.at.y_mm()
+        )
+    }
+}
+
 /// A copper zone.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Zone {
@@ -768,7 +790,7 @@ impl PcbBoard {
             .layers
             .iter()
             .map(String::as_str)
-            .filter(|layer| crate::validate::entry_is_copper(layer))
+            .filter(|layer| entry_is_copper(layer))
             .collect();
         if copper.len() < 3 {
             return;
