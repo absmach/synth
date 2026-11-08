@@ -1,19 +1,19 @@
 {
   "board": "ice40_sdram_node.kicad_pcb",
-  "board_sha256_10": "5a87f8e3bc",
+  "board_sha256_10": "4cc4551e41",
   "delivered_board": {
-    "segments": 1029,
-    "vias": 205,
+    "segments": 924,
+    "vias": 178,
     "via_size_drill_mm": {
-      "0.46/0.2": 68,
-      "0.6/0.3": 137
+      "0.46/0.2": 64,
+      "0.6/0.3": 114
     },
-    "wire_length_mm": 1838.4
+    "wire_length_mm": 1785.8
   },
   "routing_report": {
-    "segments": 1029,
-    "vias": 205,
-    "wire_length_mm": 1838.4,
+    "segments": 924,
+    "vias": 178,
+    "wire_length_mm": 1785.8,
     "connected_nets": 60,
     "open_nets": 0,
     "note": "connected_nets and open_nets are refreshed from the delivered board's validation; the others are not"

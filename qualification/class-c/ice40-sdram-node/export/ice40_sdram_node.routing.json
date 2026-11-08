@@ -18,14 +18,14 @@
     "command": [
       "/home/jeff/synth-local/krtvenv/bin/python",
       "/home/jeff/synth-local/wt-bga/tools/kicad_routing_tools_route.py",
-      "/home/jeff/synth-local/work/classc2p/ws/exp1/ice40_sdram_node.synth.kicad_pcb",
-      "/home/jeff/synth-local/work/classc2p/ws/exp1/ice40_sdram_node.kicadroutingtools.kicad_pcb",
+      "/home/jeff/synth-local/work/classc2p/ws-j2/exp1/ice40_sdram_node.synth.kicad_pcb",
+      "/home/jeff/synth-local/work/classc2p/ws-j2/exp1/ice40_sdram_node.kicadroutingtools.kicad_pcb",
       "--repo",
       "/home/jeff/synth-local/krt",
       "--python",
       "/home/jeff/synth-local/krtvenv/bin/python",
       "--stats",
-      "/home/jeff/synth-local/work/classc2p/ws/exp1/ice40_sdram_node.krt-stats.json",
+      "/home/jeff/synth-local/work/classc2p/ws-j2/exp1/ice40_sdram_node.krt-stats.json",
       "--escalation",
       "board",
       "--fab-tier",
@@ -41,34 +41,34 @@
       "strict_sizes": "true",
       "wall_clock_secs": "2700"
     },
-    "input_hash": "acd0ac47ceaa0c849e620c11142d1071f9f6f189660ca73a24f2101e25b22d7a",
+    "input_hash": "0921f5bc3755dd9183eddd7893cda022db5a94c25cdfd1eae6695c1f19fe9ce4",
     "output_hash": "",
     "source_revision": null,
-    "duration_ms": 1819574
+    "duration_ms": 1344642
   },
   "statistics": {
     "connected_nets": 60,
     "open_nets": 0,
     "open_net_names": [],
-    "segments": 1029,
-    "vias": 205,
-    "wire_length_mm": 1838.41763,
+    "segments": 924,
+    "vias": 178,
+    "wire_length_mm": 1785.841752,
     "pad_escape_rejections": 0,
     "engine_findings": {
       "claimed_successful": "59",
-      "claimed_total_vias": "177",
+      "claimed_total_vias": "137",
       "claimed_via_in_pad": "0",
       "engine_policy_verdict": "rejected",
       "rules_below_board_floor": "none reported"
     }
   },
   "artifacts": {
-    "baseline": "/home/jeff/synth-local/work/classc2p/ws/exp1/ice40_sdram_node.synth.kicad_pcb",
-    "candidate": "/home/jeff/synth-local/work/classc2p/ws/exp1/ice40_sdram_node.kicadroutingtools.kicad_pcb",
-    "delivered": "/home/jeff/synth-local/work/classc2p/ws/exp1/ice40_sdram_node.kicad_pcb",
-    "session_log": "/home/jeff/synth-local/work/classc2p/ws/exp1/ice40_sdram_node.kicadroutingtools.log",
+    "baseline": "/home/jeff/synth-local/work/classc2p/ws-j2/exp1/ice40_sdram_node.synth.kicad_pcb",
+    "candidate": "/home/jeff/synth-local/work/classc2p/ws-j2/exp1/ice40_sdram_node.kicadroutingtools.kicad_pcb",
+    "delivered": "/home/jeff/synth-local/work/classc2p/ws-j2/exp1/ice40_sdram_node.kicad_pcb",
+    "session_log": "/home/jeff/synth-local/work/classc2p/ws-j2/exp1/ice40_sdram_node.kicadroutingtools.log",
     "ses": null,
-    "router_report": "/home/jeff/synth-local/work/classc2p/ws/exp1/ice40_sdram_node.krt-stats.json",
+    "router_report": "/home/jeff/synth-local/work/classc2p/ws-j2/exp1/ice40_sdram_node.krt-stats.json",
     "connectivity_report": null,
     "drc_report": null
   },
@@ -101,13 +101,13 @@
     "unavailable_checks": [],
     "advisories": [
       "net +1V2 changes layers at (23.40, 30.20) mm with no ground return via within 0.80 mm and no spot in the GND pour for one; the net carries no fast edge, so the loop is left as an advisory",
-      "net SPI_SS_B changes layers at (47.90, 34.40) mm with no ground return via within 0.80 mm and no spot in the GND pour for one; the net carries no fast edge, so the loop is left as an advisory",
-      "net +3V3 changes layers at (49.40, 35.30) mm with no ground return via within 0.80 mm and no spot in the GND pour for one; the net carries no fast edge, so the loop is left as an advisory",
-      "net +3V3 changes layers at (51.90, 26.50) mm with no ground return via within 0.80 mm and no spot in the GND pour for one; the net carries no fast edge, so the loop is left as an advisory",
-      "net +3V3 changes layers at (27.30, 19.40) mm with no ground return via within 0.80 mm and no spot in the GND pour for one; the net carries no fast edge, so the loop is left as an advisory",
-      "net +3V3 changes layers at (20.90, 14.90) mm with no ground return via within 0.80 mm and no spot in the GND pour for one; the net carries no fast edge, so the loop is left as an advisory",
-      "net +3V3 changes layers at (16.20, 12.00) mm with no ground return via within 0.80 mm and no spot in the GND pour for one; the net carries no fast edge, so the loop is left as an advisory",
-      "net +3V3 changes layers at (58.40, 48.50) mm with no ground return via within 0.80 mm and no spot in the GND pour for one; the net carries no fast edge, so the loop is left as an advisory"
+      "net +1V2 changes layers at (33.00, 32.20) mm with no ground return via within 0.80 mm and no spot in the GND pour for one; the net carries no fast edge, so the loop is left as an advisory",
+      "net +3V3 changes layers at (49.40, 35.50) mm with no ground return via within 0.80 mm and no spot in the GND pour for one; the net carries no fast edge, so the loop is left as an advisory",
+      "net +3V3 changes layers at (48.10, 13.10) mm with no ground return via within 0.80 mm and no spot in the GND pour for one; the net carries no fast edge, so the loop is left as an advisory",
+      "net +3V3 changes layers at (31.80, 20.40) mm with no ground return via within 0.80 mm and no spot in the GND pour for one; the net carries no fast edge, so the loop is left as an advisory",
+      "net +3V3 changes layers at (26.20, 19.20) mm with no ground return via within 0.80 mm and no spot in the GND pour for one; the net carries no fast edge, so the loop is left as an advisory",
+      "net +3V3 changes layers at (4.70, 23.30) mm with no ground return via within 0.80 mm and no spot in the GND pour for one; the net carries no fast edge, so the loop is left as an advisory",
+      "net +3V3 changes layers at (5.00, 33.70) mm with no ground return via within 0.80 mm and no spot in the GND pour for one; the net carries no fast edge, so the loop is left as an advisory"
     ]
   },
   "failure": null,

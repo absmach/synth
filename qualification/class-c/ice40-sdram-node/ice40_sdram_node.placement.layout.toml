@@ -31,7 +31,7 @@ dy = 0.0
 
 [components.J2]
 x = 54.5
-y = 58.0
+y = 55.0
 rotation = 90
 source = "agent"
 priority = "hard"
