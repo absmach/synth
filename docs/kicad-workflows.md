@@ -479,4 +479,32 @@ Not yet applicable: revision-history page, table of contents, block diagram shee
 
 ---
 
+## DFM checks and `--dfm-gate`
+
+`export-kicad` reads the delivered `.kicad_pcb` and records JLCDFM-style
+findings in the `dfm` stage of the verification report. The stage lists the
+checks it does not make in its `unsupported` field, so a `pass` covers only
+what is not listed there.
+
+A Danger finding blocks a release export (`--gerbers` and similar) only when
+`--dfm-gate` is passed. Without it the findings are recorded and a warning is
+printed. `--force` does not override a gated block.
+
+Which findings are safe to gate on, against JLCDFM on the CM4 carrier board:
+
+| Rule | Grade here | Authority |
+| --- | --- | --- |
+| `silk_to_pad` | Danger below 0.15 mm | Same grade as JLCDFM where both report; counts differ (34 vs 22 Danger + 27 Warning), so it can over- or under-report |
+| `silk_to_hole` | Danger below 0.15 mm | **Assumed**: JLC does not publish the floor. Do not gate on it alone |
+| `silk_line_width` | Warning below 0.15 mm | Advisory; counts are far above JLCDFM's (560 vs 50) |
+| `pad_to_pad` | Danger below 0.10 mm, Warning below 0.15 mm | Same order of magnitude as JLCDFM (12 + 50 vs 5 + 40); the 0.07 mm same-net merge tolerance is uncalibrated |
+| plated hole to trace | Not implemented | JLCDFM finds 58 items on the same board; nothing here |
+
+Until these are calibrated, no rule is authoritative enough to block releases
+by default. Silk text is counted, not measured.
+
+`crates/synth-drc/tests/dfm_committed_boards.rs` pins the findings on the
+committed RP2350 example and checks that the buck board is blocked only by
+silk rules, so a rule change that moves a count is visible in review.
+
 _See also: [`schematic-procedures.md`](schematic-procedures.md) for the export pipeline internals, [`diagnostics/README.md`](diagnostics/README.md) for `E-SYNTH-*` meanings, and [`protocol-v1.0.md`](protocol-v1.0.md) for the MCP wire format._
