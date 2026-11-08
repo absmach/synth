@@ -10,7 +10,7 @@ The board is the output of agents driving `synth mcp` from prompts, followed by 
 | Stackup | JLCPCB's six-layer `JLC06161H-3313` stackup, from [jlcpcb.com/impedance](https://jlcpcb.com/impedance), declared in the source. | [`ice40_sdram_node.synth`](ice40_sdram_node.synth) |
 | Edge rate | The `SDADDR` class declares `edge_rate medium` on the strength of Lattice's IBIS model `ice40.ibs` rev 2.5 (see README); `SDDATA` and `SDCLK` stay `fast`. | [`ice40_sdram_node.synth`](ice40_sdram_node.synth) |
 | Placement | The orchestrator pinned the placement in the sidecar through sweeps of probe exports (translations of the SDRAM group by whole grid steps, pin-order assignments of the FPGA's memory pins to the SDRAM's near row). The pinned pose is the densest one that released; denser poses did not release. `synth_compact_layout` refused to start from this pose ("starting layout does not release" under its internal routing, although the MCP export releases). | [`ice40_sdram_node.placement.layout.toml`](ice40_sdram_node.placement.layout.toml) |
-| Final exports | Three fresh-directory exports through `synth mcp`, `synth_export`. | [`agent-run/traces/export-*.trace.json`](agent-run/traces/) |
+| Final exports | Three fresh-directory exports through `synth mcp`, `synth_export`, each with `router_timeout_secs` 2700 (the router needs about 1,800 s on the machine that made them; the default budget is 1,200 s). Each export returns no blocking signal-integrity finding. | [`agent-run/traces/export-*.trace.json`](agent-run/traces/) |
 
 | | |
 |---|---|

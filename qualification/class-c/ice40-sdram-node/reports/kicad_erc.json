@@ -1,7 +1,7 @@
 {
     "$schema": "https://schemas.kicad.org/erc.v1.json",
     "coordinate_units": "mm",
-    "date": "2026-11-07T09:28:59",
+    "date": "2026-11-08T13:57:10",
     "ignored_checks": [
         {
             "description": "Global label only appears once in the schematic",
@@ -91,7 +91,7 @@
                                 "x": 0.3429,
                                 "y": 4.0894
                             },
-                            "uuid": "d831f9d4-ce27-4a63-b2fd-3187a8e8ef05"
+                            "uuid": "1ffb74f2-5380-4792-b091-d6722a035b10"
                         },
                         {
                             "description": "Symbol #FLG3584 Pin 1 [Power output, Line]",
@@ -99,7 +99,7 @@
                                 "x": 0.3683,
                                 "y": 0.9779
                             },
-                            "uuid": "0fc3372b-61ca-41a9-a04e-244a169ebf62"
+                            "uuid": "e08f9be1-7b33-403a-9248-45f501065a60"
                         }
                     ],
                     "severity": "warning",
@@ -114,7 +114,7 @@
                                 "x": 0.3429,
                                 "y": 4.1148
                             },
-                            "uuid": "2b5204c0-a41c-408e-aa6d-ce111c978f08"
+                            "uuid": "1e74c5f3-cf60-43d8-a139-34f7c62d2fc1"
                         },
                         {
                             "description": "Symbol #FLG3584 Pin 1 [Power output, Line]",
@@ -122,7 +122,7 @@
                                 "x": 0.3683,
                                 "y": 0.9779
                             },
-                            "uuid": "0fc3372b-61ca-41a9-a04e-244a169ebf62"
+                            "uuid": "e08f9be1-7b33-403a-9248-45f501065a60"
                         }
                     ],
                     "severity": "warning",

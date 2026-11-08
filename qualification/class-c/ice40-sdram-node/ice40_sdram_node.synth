@@ -35,13 +35,17 @@ board "ice40_sdram_node" {
   netclass "PLLSUP" { trace_width 0.2mm clearance 0.127mm via_diameter 0.46mm via_drill 0.2mm edge_rate slow color "#f0e442" }
   netclass "GNDC"   { trace_width 0.3mm clearance 0.127mm via_diameter 0.46mm via_drill 0.2mm edge_rate slow color "#444444" }
   netclass "LOWSPD" { trace_width 0.15mm clearance 0.127mm via_diameter 0.46mm via_drill 0.2mm edge_rate slow color "#009e73" }
-  netclass "SDDATA" { trace_width 0.15mm clearance 0.127mm impedance 50ohm max_skew 10mm max_length 60mm via_diameter 0.46mm via_drill 0.2mm edge_rate fast color "#0072b2" }
+  netclass "SDDATA" { trace_width 0.15mm clearance 0.127mm max_skew 10mm max_length 60mm via_diameter 0.46mm via_drill 0.2mm edge_rate fast color "#0072b2" }
   // SDADDR is driven only by the FPGA, so its edge is the iCE40's: Lattice's IBIS model (ice40.ibs rev 2.5,
   // lvc330io for banks 0-2, lvc330_b3io for bank 3) gives dV/dt_r and dV/dt_f 20-80 % times of at least 0.976 ns
   // (banks 0-2) and 0.728 ns (bank 3) at the fast corner, so no edge here is faster than 0.3 ns: `medium`.
   // SDDATA is bidirectional and the SDRAM drives it on a read; no output-edge figure for the IS42S16400J was
   // found (ISSI publishes only the 0.3 to 1.2 ns input transition time), so it stays `fast`, as does the clock.
-  netclass "SDADDR" { trace_width 0.15mm clearance 0.127mm impedance 50ohm max_skew 10mm max_length 60mm via_diameter 0.46mm via_drill 0.2mm edge_rate medium color "#56b4e9" }
+  // SDADDR skew budget from the IS42S16400J-7 datasheet (ISSI, AC characteristics, CAS latency 3): clock cycle
+  // 7 ns minimum, address setup 1.5 ns and hold 0.8 ns, command setup 1.5 ns and hold 0.8 ns. At the 143 MHz grade
+  // limit the setup and hold windows leave 7 - 1.5 - 0.8 = 4.7 ns. A group skew of 60 mm is 0.42 ns at 7.0 ps/mm
+  // (stripline, er 4.4), 9 % of that window; the router's own length limit of 60 mm is the same figure.
+  netclass "SDADDR" { trace_width 0.15mm clearance 0.127mm max_skew 60mm max_length 80mm via_diameter 0.46mm via_drill 0.2mm edge_rate medium color "#56b4e9" }
   netclass "SDCLK"  { trace_width 0.15mm clearance 0.127mm impedance 50ohm max_length 40mm via_diameter 0.46mm via_drill 0.2mm edge_rate fast color "#d62728" }
 
   // ---- Power input and protection -----------------------------------------
