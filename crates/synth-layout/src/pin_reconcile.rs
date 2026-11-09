@@ -537,11 +537,6 @@ pub fn physical_terminal(
 ) -> Option<(f64, f64, f64, f64)> {
     let pos = crate::kicad_lib_loader::pin_positions(lib_id)?;
     let (px, py, pin_angle) = pos.get(pin_number)?;
-    // A multi-unit symbol draws its units as a stack, and the pin belongs to one
-    // of them: shift it by that unit's slot, as the router does for wire ends,
-    // or a marker lands on the pin of unit 1 that shares its coordinates.
-    let (ux, uy) = crate::kicad_lib_loader::pin_unit_offset(lib_id, pin_number);
-    let (px, py) = (px + ux, py - uy);
     let rad = total_deg.to_radians();
     let rot_x = px * rad.cos() - py * rad.sin();
     let rot_y = px * rad.sin() + py * rad.cos();
@@ -554,8 +549,13 @@ pub fn physical_terminal(
     // which KiCad reports as dangling-wire/off-grid warnings.
     let cx = snap_grid_127(center.0);
     let cy = snap_grid_127(center.1);
+    // A multi-unit symbol draws its units as a stack, and the pin belongs to one
+    // of them. The stack does not rotate, so the unit's slot is added in sheet
+    // space after the pin is rotated, as the router does for wire ends, or a
+    // marker lands on the pin of unit 1 that shares its coordinates.
+    let (_, unit_dy) = crate::kicad_lib_loader::pin_unit_offset(lib_id, pin_number);
     let term_x = snap_grid_127(cx + rot_x);
-    let term_y = snap_grid_127(cy - rot_y);
+    let term_y = snap_grid_127(cy - rot_y + unit_dy);
     // KiCad's pin `angle` points INWARD; the sheet is y-down, so the
     // outward stub direction is (-cos θ, +sin θ) with θ = pin_angle +
     // total_deg — mirroring `crate::route::pin_terminal_xy`.
@@ -661,5 +661,41 @@ mod tests {
             (y1 - snap_grid_127(100.0 - local_y1)).abs() < 1e-9,
             "pin 1 (unit 1) is not shifted"
         );
+    }
+
+    /// The unit stack does not rotate with the symbol: a unit 2 pin sits the same
+    /// slot below its rotated position whatever the placement turn, so the
+    /// terminal of pin 7 differs from pin 7 of the same symbol drawn as one unit
+    /// by the slot in Y alone, at every quarter turn.
+    #[test]
+    fn a_later_units_slot_is_added_in_sheet_space_at_every_turn() {
+        let lib = "Amplifier_Operational:LM358";
+        // Skipped when KiCad's bundled libraries are not installed.
+        if crate::kicad_lib_loader::pin_positions(lib).is_none() {
+            return;
+        }
+        let slot = crate::kicad_lib_loader::unit_offset_mm(lib, 2).1;
+        let center = (100.0, 100.0);
+        for deg in [0.0, 90.0, 180.0, 270.0] {
+            let (x, y, _, _) = physical_terminal(lib, "7", center, deg).expect("pin 7");
+            let (rx, ry) = rotated_local(lib, "7", center, deg);
+            assert!(
+                (x - rx).abs() < 0.2 && (y - ry - slot).abs() < 0.2,
+                "at {deg} degrees pin 7 should sit {slot} mm below its rotated spot \
+                 ({rx}, {ry}), found ({x}, {y})"
+            );
+        }
+    }
+
+    /// Where the pin of a symbol lands when the symbol turns by `deg`, with no
+    /// unit stack: the reference the stack's slot is measured from.
+    fn rotated_local(lib: &str, pin: &str, center: (f64, f64), deg: f64) -> (f64, f64) {
+        let positions = crate::kicad_lib_loader::pin_positions(lib).expect("library");
+        let (px, py, _) = positions[pin];
+        let rad = deg.to_radians();
+        (
+            snap_grid_127(snap_grid_127(center.0) + px * rad.cos() - py * rad.sin()),
+            snap_grid_127(snap_grid_127(center.1) - (px * rad.sin() + py * rad.cos())),
+        )
     }
 }
