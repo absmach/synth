@@ -174,7 +174,7 @@ datasheet.
 
 ## Measured results
 
-The export routes with FreeRouting 2.4.1 on OpenJDK 25.0.4.1; the routed board is written as `out/buck/buck.kicad_pcb` when Synth's gate passes (state `routed`). Numbers below are from the committed files, measured 2026-10-29. `reports/buck.routing.json` records `source_revision` 777399af90889e53b9696b2b67d2823bee98caa9, the branch HEAD the board was built on, with the C10 and C11 changes still uncommitted, so it is the parent of the commit that carries them.
+The export routes with FreeRouting 2.4.1 on OpenJDK 25.0.4.1; the routed board is written as `out/buck/buck.kicad_pcb` when Synth's gate passes (state `routed`). Numbers below are from the committed files, regenerated 2026-11-09 (measured 2026-10-29 for the parts review). `reports/buck.routing.json` records `source_revision` b4cbe5abcdf0f32f0cc0d8f8de86b2e84c1bb902, the head the reports were regenerated on; the evidence commit is its child. `release.json` and `release-fab.json` carry no revision field; they come from the same two runs on that revision.
 
 | Number | Value | Command |
 | --- | --- | --- |

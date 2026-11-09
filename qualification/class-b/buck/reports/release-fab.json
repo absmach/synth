@@ -1,6 +1,6 @@
 {
   "schema_version": "synth.release.v1",
-  "tool_version": "synth-cli 0.1.1",
+  "tool_version": "synth-cli 0.1.2",
   "input": "qualification/class-b/buck/buck.synth",
   "fab_requested": true,
   "production_status": "production",
