@@ -429,9 +429,10 @@ fn pad_gap(a: &Pad, b: &Pad) -> (f64, Point) {
 /// and a trace under the wall shorts or breaks. Plated holes are through-hole
 /// pad drills and via barrels; a hole goes through every layer, so a trace on
 /// any layer counts. One finding per hole, for its closest trace; the hole's
-/// own net may run up to it. Arc tracks are measured as sampled chords. Graded a Warning, not a Danger, so it never blocks a release.
-/// Measured against JLCDFM on one board it found 0 items where JLCDFM found 58
-/// (known not to match).
+/// own net may run up to it. Arc tracks are measured as sampled chords.
+/// Graded a Warning, not a Danger, so it never blocks a release. Measured
+/// against JLCDFM on one board before vias and arcs were read, it found 0
+/// items where JLCDFM found 58 (known not to match; not re-measured since).
 fn pth_to_trace(board: &PcbBoard, profile: &ManufacturerProfile) -> Vec<DfmFinding> {
     let required_nm = profile.min_pth_to_trace_nm as f64;
     let via_pads: Vec<Pad> = board.vias.iter().map(via_as_pad).collect();
