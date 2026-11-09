@@ -485,6 +485,9 @@ fn pth_to_trace(board: &PcbBoard, profile: &ManufacturerProfile) -> Vec<DfmFindi
     findings
 }
 
+/// Most samples taken along one stroke, so a malformed huge stroke cannot loop forever.
+const MAX_STROKE_SAMPLES: i64 = 100_000;
+
 /// The smallest distance from the pad's outline to a stroke's centreline,
 /// and the point on the stroke where it occurs. Negative inside the pad.
 fn nearest_sample(pad: &Pad, stroke: &(Point, Point)) -> (f64, Point) {
@@ -493,7 +496,7 @@ fn nearest_sample(pad: &Pad, stroke: &(Point, Point)) -> (f64, Point) {
         (end.x_nm - start.x_nm) as f64,
         (end.y_nm - start.y_nm) as f64,
     );
-    let steps = ((dx.hypot(dy) / SAMPLE_STEP_NM).ceil() as i64).max(1);
+    let steps = ((dx.hypot(dy) / SAMPLE_STEP_NM).ceil() as i64).clamp(1, MAX_STROKE_SAMPLES);
     let mut best = (f64::INFINITY, start);
     for i in 0..=steps {
         let f = i as f64 / steps as f64;

@@ -389,6 +389,18 @@ fn read_quoted(text: &str, start: usize) -> Result<(String, usize), PcbParseErro
     })
 }
 
+/// `size` widened by `delta` (x by its y part, y by its x part), saturating on huge input.
+fn widened_nm(size: (i64, i64), delta: Point) -> (i64, i64) {
+    (
+        size.0.saturating_add(delta.y_nm.saturating_abs()),
+        size.1.saturating_add(delta.x_nm.saturating_abs()),
+    )
+}
+
+/// Most samples `outline_points_nm` takes per arc or edge, so a malformed huge pad
+/// cannot ask for billions of points.
+const MAX_OUTLINE_STEPS: i64 = 256;
+
 /// KiCad's corner radius for a `roundrect` pad that gives no `roundrect_rratio`.
 const KICAD_DEFAULT_ROUNDRECT_RATIO: f64 = 0.25;
 
@@ -522,7 +534,8 @@ impl Pad {
         let (cx, cy) = (hx - radius, hy - radius);
         // Corner arcs, counter-clockwise from the +x,+y corner, joined by
         // the straight edges between them.
-        let arc_steps = ((radius * std::f64::consts::FRAC_PI_2 / step_nm).ceil() as i64).max(1);
+        let arc_steps = ((radius * std::f64::consts::FRAC_PI_2 / step_nm).ceil() as i64)
+            .clamp(1, MAX_OUTLINE_STEPS);
         let mut key: Vec<(f64, f64)> = Vec::new();
         for (corner, (sx, sy)) in [(1.0, 1.0), (-1.0, 1.0), (-1.0, -1.0), (1.0, -1.0)]
             .into_iter()
@@ -538,7 +551,8 @@ impl Pad {
         let mut points = Vec::new();
         for (i, &(x0, y0)) in key.iter().enumerate() {
             let (x1, y1) = key[(i + 1) % key.len()];
-            let pieces = (((x1 - x0).hypot(y1 - y0) / step_nm).ceil() as i64).max(1);
+            let pieces =
+                (((x1 - x0).hypot(y1 - y0) / step_nm).ceil() as i64).clamp(1, MAX_OUTLINE_STEPS);
             for k in 0..pieces {
                 let f = k as f64 / pieces as f64;
                 let (qx, qy) = (x0 + (x1 - x0) * f + offset.0, y0 + (y1 - y0) * f + offset.1);
@@ -1560,7 +1574,7 @@ fn parse_footprint(node: &Node) -> Footprint {
                 // KiCad's rect_delta.y widens the pad in X and .x heightens it in Y.
                 "trapezoid" => {
                     let d = parse_point(pad, "rect_delta").unwrap_or_default();
-                    Some(((0, 0), (size_nm.0 + d.y_nm.abs(), size_nm.1 + d.x_nm.abs())))
+                    Some(((0, 0), widened_nm(size_nm, d)))
                 }
                 _ => None,
             };
@@ -1764,6 +1778,14 @@ mod tests {
             net: None,
             net_name: None,
         }
+    }
+
+    #[test]
+    fn outline_of_a_huge_pad_stays_bounded() {
+        let pad = pad_at_origin("oval", 1e6, 1e6, 0.0, 0.0);
+        let points = pad.outline_points_nm(1.0);
+        let steps = MAX_OUTLINE_STEPS as usize;
+        assert!(points.len() <= 4 * (steps + 1) * steps);
     }
 
     #[test]
