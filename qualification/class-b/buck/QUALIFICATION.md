@@ -55,7 +55,7 @@ with `synth registry qualify --part <id>` (`lmr38010`, `l_bourns_srn6045ta_6r8m`
 `mf_msmf110_33x`, `jst_b2b_xh_a_2pin`, `jst_b4b_xh_a_4pin`, `c_electrolytic_smd_8x10`,
 `ltst_c190kgkt`, `c_samsung_cl31b106kbhnnne`, `c_samsung_cl31a226kahnnne`): all eleven qualify (`lmr38010` and `ltst_c190kgkt` were reviewed on 2026-10-29, the two capacitors on 2026-11-06).
 `python3 -I footprint_compare.py kicad/buck.kicad_pcb > reports/footprint-compare.txt` (run from this folder; needs KiCad's `pcbnew` module) compares every footprint with its library copy.
-The pictures in `images/` (and their hashes) are from the board before C10 and C11 were added; they were not regenerated.
+The pictures in `images/` were regenerated from the committed `kicad/buck.kicad_pcb` and `kicad/buck.kicad_sch` (head 6a9ff28c, with C10 and C11) with kicad-cli 10.0.7: `pcb render` for the three 3D views, `pcb export pdf --black-and-white` plus pdftoppm for the copper views, `sch export pdf` plus pdftoppm at 150 dpi for the schematic.
 
 ## Artifact hashes
 
@@ -152,7 +152,7 @@ My own measurement on the final files:
 | B12 | Decoupling placement | Gaps are in the table above. They are short for C3, C10, C11, C2, C4, C5, C6, C9 and C7, and long for R_PG (16.65 mm, a pull-up) and R_FB_B's ground (11.31 mm). Loop inductance was not computed | Unverified |
 | B13 | Stackup and impedance assumptions | The board uses the default 4-layer stackup with inner ground planes. No stackup block was declared, no controlled-impedance net exists, and the capability descriptor marks inner-layer impedance unsupported. The return-via window of 0.6377 mm comes from that default stackup | Not applicable to a single-ended power board |
 | B14 | What the Gerbers, drill files and BOM say about orderability | The files in `kicad/` were generated and hashed (A10), but nothing was fabricated, no fab accepted them, the BOM carries LCSC numbers for C1, C2, C10, C11, C5, C6 and C9 (`lcsc_pn` column) and none for the 0603 passives, which also have no MPN. Availability not checked. Whether a fab takes the six filled vias in the pad is not confirmed | Not done |
-| B15 | Schematic correctness and readability | ERC has 0 violations (A7) and the netlist matches the source (A8). The sheet was scored with `tools/schematic_quality.py`: 0 overlapping text pairs, 7 texts with a wire through them, 1 wire crossing, 1313.2 mm of wire, mean passive-to-pin distance 66.4 mm (max 172.8) | Readable, not tidy |
+| B15 | Schematic correctness and readability | ERC has 0 violations (A7) and the netlist matches the source (A8). The sheet was scored with `tools/schematic_quality.py`: 0 overlapping text pairs, 6 texts with a wire through them, 1 wire crossing, 1323.3 mm of wire, mean passive-to-pin distance 89.1 mm (max 219.3) | Readable, not tidy |
 | B16 | The other negative cases from #38 (missing pair constraints, invalid stackup assumptions) | This board has no differential pair and no stackup claim, so those cases do not apply here; the USB board (#103) carries them. Only the unsafe-feedback case is built here | Not applicable here |
 | B17 | Comparison with a human reference design | Only TI's datasheet equations were used. No reference layout was compared (#68) | Not done |
 | B18 | Function on real hardware | Nothing was powered, programmed or measured. Two M2.5 mounting holes exist, so the board can be fixed down | Not done |

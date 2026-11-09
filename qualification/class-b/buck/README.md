@@ -263,13 +263,13 @@ together with the `#38` checklist traceability for this board. Its row for the c
   vias and one `PG` via (3 of the 95 segments are on B.Cu, all on `PG`), which has a GND return via beside it.
 - Six thermal vias, where TI asks for at least 4 x 3 (9.5.1.1).
 - Silkscreen: the "PG FAULT" and "PWR" LED values are on the F.Fab layer only, so the board prints just the references D4 and D3. Synth has no silk text for a value here. KiCad DRC reports no silkscreen violation.
-- Schematic (rendered by `tools/schematic_quality.py`): 0 overlapping text pairs, 7 texts with a wire through them, 1 wire crossing, 1313.2 mm of wire; mean passive-to-pin distance 66.4 mm (max 172.8). No schematic sidecar is used.
+- Schematic (rendered by `tools/schematic_quality.py`): 0 overlapping text pairs, 6 texts with a wire through them, 1 wire crossing, 1323.3 mm of wire; mean passive-to-pin distance 89.1 mm (max 219.3). No schematic sidecar is used.
 - Routing used FreeRouting defaults, no length or coupling constraints.
 
 ## Not verified
 
 - Nothing powered, measured or thermally tested. Efficiency (85%) and the 0.58 W loss are assumptions.
-- After C10 and C11 were added the pictures in `images/` and the schematic figures above (`tools/schematic_quality.py`) were not regenerated; they show the board before the change.
+- The pictures in `images/` and the schematic figures above (`tools/schematic_quality.py`) were regenerated from the committed `kicad/buck.kicad_pcb` and `kicad/buck.kicad_sch` (head 6a9ff28c, with C10 and C11) with kicad-cli 10.0.7: `pcb render` for the three 3D views, `pcb export pdf --black-and-white` plus pdftoppm for the copper views, `sch export pdf` plus pdftoppm at 150 dpi for the schematic.
 - The MCP placement review (`synth_describe_placement`) was not rerun on the hand-pinned placement.
 - Availability, LCSC numbers and assembly not checked. The 0603 passives have no MPN or manufacturer sheet; the C2 manufacturer sheet could not be read (temperature range from a distributor listing only).
 - PTC behaviour with the TVS in a surge, and inrush into C1 and the output caps, are not analysed.
