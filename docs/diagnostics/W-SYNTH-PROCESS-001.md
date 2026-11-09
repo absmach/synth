@@ -10,9 +10,9 @@ against `jlc-standard`, the most conservative floor. Nothing else reports the
 fallback: the router and the exporter take the standard floor and carry on.
 
 The usual cause is a misspelt tier. `jlcpcb_advanced` is not `jlc-advanced`, so
-a six-layer board that meant to buy the 0.2 mm drill and via-in-pad is held to
-a 0.3 mm drill with none, and a ball-grid part's fanout fails later, in the
-router, with no pointer back to the name.
+a six-layer board that meant to use via-in-pad is held to the standard floor
+with no via-in-pad, and a ball-grid part's fanout fails later, in the router,
+with no pointer back to the name.
 
 ## Example
 

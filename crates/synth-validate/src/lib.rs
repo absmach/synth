@@ -2530,7 +2530,7 @@ impl ErcRule for ProcessLayerApplicabilityRule {
 /// A `manufacturer` that no profile claims is judged against `jlc-standard`.
 ///
 /// That is the safe floor, and it is also a silent one: a board that wrote
-/// `jlcpcb_advanced` for `jlc-advanced` is held to a 0.3 mm drill with no
+/// `jlcpcb_advanced` for `jlc-advanced` is held to the standard floor with no
 /// via-in-pad, so a ball-grid part's fanout is refused later, in the router,
 /// with no pointer back to the misspelt name. Saying so at the declaration
 /// costs nothing.

@@ -386,7 +386,8 @@ fn finalize(
     let mut repair_unavailable: Vec<String> = Vec::new();
     // A via the engine left in a pad of its own net is moved off it, with the tracks
     // that meet it, before the candidate is judged; the judging is unchanged.
-    match repair_vias_in_pads(&candidate.candidate_path, &request.policy) {
+    let underpad = underpad_components(request);
+    match repair_vias_in_pads(&candidate.candidate_path, &request.policy, &underpad) {
         Ok(0) => {}
         Ok(moved) => eprintln!("note: moved {moved} via(s) off the pads they sat in"),
         Err(detail) => {
@@ -401,6 +402,7 @@ fn finalize(
         ground = ground.with_critical(critical);
     }
     ground = ground.with_medium(&request.return_via_medium_nets);
+    ground = ground.with_underpad(&underpad.iter().cloned().collect::<Vec<String>>());
     // Where the process fills and caps a via in a pad and the board may use
     // one, a pad of a poured net that the router left joined to nothing gets
     // its plane via in the pad.
@@ -505,20 +507,35 @@ fn finalize(
     }
 }
 
-/// Move a via the engine left in a pad of its own net off that pad, unless the
-/// board may use one.
+/// The components that declare `escape { method underpad }` and are not declared
+/// `escape { off }`: the one definition, shared with the DRC and the exporter, of
+/// where a filled and capped via in a pad is allowed.
+fn underpad_components(request: &RouteRequest) -> std::collections::BTreeSet<String> {
+    request
+        .escapes
+        .iter()
+        .filter(|escape| escape.method.as_deref() == Some("underpad"))
+        .filter(|escape| !request.escapes_off.contains(&escape.refdes))
+        .map(|escape| escape.refdes.clone())
+        .collect()
+}
+
+/// Move a via the engine left in a pad of its own net off that pad, except in the
+/// pad of a component that declares the under-pad escape where the board may use
+/// via-in-pad.
 ///
 /// The release gate refuses a via in a pad only where via-in-pad is not
-/// allowed. Where the board requires it and the process fills and caps it, a
-/// via in a pad is what the escape was asked for, and moving it takes the pad's
-/// only connection with it: the track that met the via goes along and nothing
-/// joins the pad to the via's new spot.
+/// allowed. A via in the pad of a component that declares `escape { method
+/// underpad }` stays, because that land is sized for the filled and capped via
+/// and the DRC exempts its ring; any other in-pad via moves, and a stub rejoins
+/// it to the pad.
 fn repair_vias_in_pads(
     candidate: &Path,
     policy: &crate::contract::FabricationPolicy,
+    underpad: &std::collections::BTreeSet<String>,
 ) -> Result<usize, String> {
     if policy.allow_via_in_pad {
-        return island_vias::move_vias_off_component_pads(candidate);
+        return island_vias::move_vias_off_component_pads(candidate, underpad);
     }
     island_vias::move_vias_off_pads(candidate)
 }
@@ -863,10 +880,11 @@ mod via_in_pad_repair_tests {
         path
     }
 
-    /// A ball grid's pad takes its via in the pad: the via is the pad's escape, so
-    /// it stays where via-in-pad is allowed.
+    /// The pad of a component that declares the under-pad escape takes its via in
+    /// the pad: the via is the pad's escape, so it stays where via-in-pad is
+    /// allowed.
     #[test]
-    fn a_via_in_a_ball_grid_pad_stays_where_via_in_pad_is_allowed() {
+    fn a_via_in_a_declared_under_pad_escape_stays_where_via_in_pad_is_allowed() {
         let pads = (0..9)
             .map(|i| {
                 let (row, col) = (i / 3, i % 3);
@@ -886,7 +904,7 @@ mod via_in_pad_repair_tests {
             r#"(kicad_pcb
               (layers (0 "F.Cu" signal) (2 "B.Cu" signal))
               (net 0 "") (net 1 "GND") (net 2 "SIG")
-              (footprint "Package_BGA:BGA-9" (at 10 10) (layer "F.Cu") {pads})
+              (footprint "Package_BGA:BGA-9" (at 10 10) (layer "F.Cu") (property "Reference" "U1") {pads})
               (via (at 10.8 10.8) (size 0.35) (drill 0.2) (layers "F.Cu" "B.Cu") (net 1))
             )"#
         );
@@ -898,14 +916,17 @@ mod via_in_pad_repair_tests {
             allow_via_in_pad: true,
             ..FabricationPolicy::default()
         };
-        assert_eq!(repair_vias_in_pads(&path, &policy), Ok(0));
+        let declared = std::collections::BTreeSet::from(["U1".to_string()]);
+        assert_eq!(repair_vias_in_pads(&path, &policy, &declared), Ok(0));
         assert_eq!(std::fs::read_to_string(&path).expect("read"), text);
     }
 
-    /// A footprint that lays its pads out like a ball grid but is not a BGA package
-    /// is not one: its vias are moved off the pads like any other component's.
+    /// Whether a via stays in a pad is the design's declaration, not the package's
+    /// name: a BGA package whose component declares no under-pad escape has its vias
+    /// moved off the pads like any other component's, since the DRC exempts no ring
+    /// there.
     #[test]
-    fn a_grid_laid_footprint_that_is_not_a_bga_does_not_keep_a_via_in_its_pad() {
+    fn a_bga_package_that_declares_no_under_pad_escape_does_not_keep_a_via_in_its_pad() {
         let pads = (0..9)
             .map(|i| {
                 let (row, col) = (i / 3, i % 3);
@@ -925,11 +946,12 @@ mod via_in_pad_repair_tests {
             r#"(kicad_pcb
               (layers (0 "F.Cu" signal) (2 "B.Cu" signal))
               (net 0 "") (net 1 "GND") (net 2 "SIG")
-              (footprint "Package_LGA:LGA-9" (at 10 10) (layer "F.Cu") {pads})
+              (footprint "Package_BGA:BGA-9" (at 10 10) (layer "F.Cu") (property "Reference" "U1") {pads})
               (via (at 11.2 11.2) (size 0.35) (drill 0.2) (layers "F.Cu" "B.Cu") (net 1))
             )"#
         );
-        let dir = std::env::temp_dir().join(format!("via-in-lga-{}", std::process::id()));
+        let dir =
+            std::env::temp_dir().join(format!("via-in-undeclared-bga-{}", std::process::id()));
         std::fs::create_dir_all(&dir).expect("scratch");
         let path = dir.join("board.kicad_pcb");
         std::fs::write(&path, &text).expect("board");
@@ -937,11 +959,14 @@ mod via_in_pad_repair_tests {
             allow_via_in_pad: true,
             ..FabricationPolicy::default()
         };
-        assert_eq!(repair_vias_in_pads(&path, &policy), Ok(1));
+        assert_eq!(
+            repair_vias_in_pads(&path, &policy, &std::collections::BTreeSet::new()),
+            Ok(1)
+        );
     }
 
     /// A via in an ordinary component pad is moved off it even where via-in-pad is
-    /// allowed: only a ball grid's land is sized for a filled and capped via.
+    /// allowed: only an under-pad escape's land is sized for a filled and capped via.
     #[test]
     fn a_via_in_a_component_pad_is_moved_even_where_via_in_pad_is_allowed() {
         let path = board("component");
@@ -949,7 +974,10 @@ mod via_in_pad_repair_tests {
             allow_via_in_pad: true,
             ..FabricationPolicy::default()
         };
-        assert_eq!(repair_vias_in_pads(&path, &policy), Ok(1));
+        assert_eq!(
+            repair_vias_in_pads(&path, &policy, &std::collections::BTreeSet::new()),
+            Ok(1)
+        );
     }
 
     /// Where it may not, the gate refuses it and the repair still moves it.
@@ -957,7 +985,11 @@ mod via_in_pad_repair_tests {
     fn a_via_in_a_pad_is_moved_where_via_in_pad_is_not_allowed() {
         let path = board("refused");
         assert_eq!(
-            repair_vias_in_pads(&path, &FabricationPolicy::default()),
+            repair_vias_in_pads(
+                &path,
+                &FabricationPolicy::default(),
+                &std::collections::BTreeSet::new()
+            ),
             Ok(1)
         );
     }
