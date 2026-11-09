@@ -525,8 +525,11 @@ impl Pad {
         }
     }
 
-    /// Points around the pad's copper outline, no further apart than
-    /// `step_nm`, in board coordinates.
+    /// Points around the pad's copper outline in board coordinates, about
+    /// `step_nm` apart. Each corner arc and each straight edge is capped at
+    /// `MAX_OUTLINE_STEPS` pieces, so for huge pads arc chords take one piece
+    /// each and edge pieces are coarser than `step_nm`; the point count is
+    /// bounded by roughly `8 * MAX_OUTLINE_STEPS`.
     #[must_use]
     pub fn outline_points_nm(&self, step_nm: f64) -> Vec<Point> {
         let (offset, size) = self.frame();
@@ -1456,7 +1459,7 @@ fn pad_drill_offset_nm(pad: &Node) -> (i64, i64) {
 
 /// Midpoint of `lo..=hi` that cannot overflow.
 fn mid_nm(lo: i64, hi: i64) -> i64 {
-    lo / 2 + hi / 2
+    ((i128::from(lo) + i128::from(hi)) / 2) as i64
 }
 
 /// Bounding box `(centre offset, size)` of a custom pad's anchor and
@@ -1788,6 +1791,15 @@ pub const SAMPLE_BOARD: &str = r#"(kicad_pcb
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn mid_nm_is_exact_and_overflow_safe() {
+        assert_eq!(super::mid_nm(1, 3), 2);
+        assert_eq!(super::mid_nm(i64::MIN, i64::MAX), 0);
+        for (lo, hi) in [(-3, -1), (-3, 2), (-5, 4), (0, 7)] {
+            assert_eq!(super::mid_nm(lo, hi), (lo + hi) / 2);
+        }
+    }
+
     fn pad_at_origin(shape: &str, w_mm: f64, h_mm: f64, angle_deg: f64, ratio: f64) -> Pad {
         Pad {
             footprint: String::new(),

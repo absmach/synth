@@ -517,8 +517,8 @@ fn nearest_sample(pad: &Pad, stroke: &(Point, Point)) -> (f64, Point) {
 /// The smallest distance between two segments; zero if they cross.
 fn segment_distance_nm(a: (Point, Point), b: (Point, Point)) -> f64 {
     let side = |p: Point, q: Point, r: Point| {
-        ((q.x_nm - p.x_nm) as f64) * ((r.y_nm - p.y_nm) as f64)
-            - ((q.y_nm - p.y_nm) as f64) * ((r.x_nm - p.x_nm) as f64)
+        (q.x_nm.saturating_sub(p.x_nm) as f64) * (r.y_nm.saturating_sub(p.y_nm) as f64)
+            - (q.y_nm.saturating_sub(p.y_nm) as f64) * (r.x_nm.saturating_sub(p.x_nm) as f64)
     };
     let crosses = side(a.0, a.1, b.0) * side(a.0, a.1, b.1) < 0.0
         && side(b.0, b.1, a.0) * side(b.0, b.1, a.1) < 0.0;
@@ -553,6 +553,13 @@ fn distance_to_segment_nm(p: Point, stroke: &(Point, Point)) -> f64 {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn segment_distance_survives_extreme_coordinates() {
+        let seg = |a: i64, b: i64| (Point::new(a, b), Point::new(b, a));
+        let d = segment_distance_nm(seg(i64::MIN, i64::MAX), seg(i64::MAX, i64::MIN));
+        assert!(d >= 0.0);
+    }
 
     /// A board with one 0.6 mm square SMD pad at (10, 20) on `F.Cu`, plus the
     /// given extra items (silkscreen graphics) before the closing paren.
