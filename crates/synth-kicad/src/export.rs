@@ -440,7 +440,8 @@ fn export_inner(
     // agree on positions and power-flag label sets. One `.kicad_sch`
     // for small boards (§P26 splits large splittable boards only, so
     // this path stays byte-identical); one file per sheet otherwise.
-    let library_text = symbol_lib::build_library(board, &sheets[0].layout).to_string_pretty();
+    let library_text =
+        symbol_lib::build_library(board, &library_layout(&sheets)).to_string_pretty();
     write_file(&library_path, &library_text)?;
     if sheets.len() == 1 {
         let schematic_text =
@@ -610,7 +611,8 @@ pub fn export_schematic_only(
     );
     write_file(&out_dir.join("sym-lib-table"), &sym_table)?;
 
-    let library_text = symbol_lib::build_library(board, &sheets[0].layout).to_string_pretty();
+    let library_text =
+        symbol_lib::build_library(board, &library_layout(&sheets)).to_string_pretty();
     write_file(&library_path, &library_text)?;
     let sheet_count = sheets.len();
     if sheet_count == 1 {
@@ -1110,6 +1112,33 @@ fn design_rules(profile: &synth_drc::ManufacturerProfile, board: &Board) -> Stri
          (rule \"manufacturer copper to NPTH hole\"\n  (constraint edge_clearance (min {hole}mm))\n  (condition \"A.Pad_Type == 'NPTH, mechanical'\"))\n\
          (rule \"manufacturer copper to hole\"\n  (constraint hole_clearance (min {hole}mm)))\n"
     );
+    // A via no wider than the process's via-in-pad land, inside the courtyard of
+    // a component that declares an under-pad escape, is a filled and capped via:
+    // the manufacturer's guide gives its land as the drill plus 0.15 mm, which
+    // leaves less ring than the plain via floor the project states board-wide.
+    // An ordinary small via elsewhere keeps the floor. KiCad applies the last
+    // matching rule, so these come last.
+    // A filled and capped via is declared by the board's `requires via_in_pad` as
+    // well as by the component's escape, as the in-memory DRC reads it.
+    let via_in_pad_required = board
+        .required_processes
+        .contains(&synth_ir::ProcessRequirement::ViaInPad);
+    if let Some(land_nm) = profile.via_in_pad_land_nm().filter(|_| via_in_pad_required) {
+        use std::fmt::Write as _;
+        let land = synth_geometry::nm_to_mm(land_nm);
+        let ring = synth_geometry::nm_to_mm(profile.via_in_pad_land_extra_nm / 2);
+        for component in board.components.iter().filter(|c| {
+            c.escape
+                .as_ref()
+                .is_some_and(|e| !e.off && e.method == Some(synth_ir::EscapeMethod::Underpad))
+        }) {
+            let refdes = &component.refdes;
+            let _ = writeln!(
+                rules,
+                "(rule \"filled and capped via in pad {refdes}\"\n  (constraint annular_width (min {ring}mm))\n  (constraint via_diameter (min {land}mm))\n  (condition \"A.Type == 'Via' && A.Diameter <= {land}mm && A.insideCourtyard('{refdes}')\"))"
+            );
+        }
+    }
     rules.push_str(&layer_pin_rules(board));
     rules
 }
@@ -1378,6 +1407,22 @@ fn build_net_settings<'a>(
     })
 }
 
+/// The layout the symbol library is built from: the first sheet's, with the power
+/// flags of every other sheet added. A board split over several sheets puts a rail
+/// label on one sheet only, and a library built from the first sheet alone would not
+/// define that label's symbol, so ERC would report its instances as missing.
+fn library_layout(sheets: &[synth_layout::sheets::SheetLayout]) -> synth_layout::Layout {
+    let mut merged = sheets[0].layout.clone();
+    for sheet in &sheets[1..] {
+        for flag in &sheet.layout.power_flags {
+            if !merged.power_flags.iter().any(|f| f.label == flag.label) {
+                merged.power_flags.push(flag.clone());
+            }
+        }
+    }
+    merged
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1480,6 +1525,50 @@ mod tests {
     /// A stranded hard edge connector is a contract violation, not a cheaper
     /// shape: the export must keep the connector on its declared edge even
     /// when the stranded arrangement leaves less dead space.
+    /// A board split over several sheets puts a power-rail label on one sheet only; the
+    /// symbol library is built from the labels of all of them, not the first sheet's.
+    #[test]
+    fn the_symbol_library_defines_a_rail_label_that_only_a_later_sheet_uses() {
+        let board = board_from(
+            r#"board "b" { layers 2
+                component U1: regulator "ams1117_3v3"
+                component C1: capacitor "c_generic_0805" value "10uF"
+                connect U1.vout -> C1.p1
+                connect U1.gnd -> C1.p2
+            }"#,
+        );
+        let layout = synth_layout::layout(&board);
+        let mut flag = layout
+            .power_flags
+            .first()
+            .expect("the regulator board has a power flag")
+            .clone();
+        flag.label = "ONLY_ON_SHEET_TWO".to_string();
+        let mut first = layout.clone();
+        first.power_flags.clear();
+        let mut second = layout;
+        second.power_flags = vec![flag];
+        let sheets = vec![
+            synth_layout::sheets::SheetLayout {
+                name: None,
+                layout: first,
+            },
+            synth_layout::sheets::SheetLayout {
+                name: Some("B".to_string()),
+                layout: second,
+            },
+        ];
+        let library =
+            symbol_lib::build_library(&board, &library_layout(&sheets)).to_string_pretty();
+        assert!(
+            library.contains("ONLY_ON_SHEET_TWO"),
+            "the library must define the label of a later sheet's power flag"
+        );
+        let first_sheet_only =
+            symbol_lib::build_library(&board, &sheets[0].layout).to_string_pretty();
+        assert!(!first_sheet_only.contains("ONLY_ON_SHEET_TWO"));
+    }
+
     #[test]
     fn a_stranded_edge_connector_loses_to_a_flush_one_despite_dead_cells() {
         let board = edge_candidate_board(true, true);
@@ -1755,6 +1844,60 @@ mod tests {
             &board_from(r#"board "b" { layers 4 netclass "X" { } }"#),
         );
         assert!(!free.contains("netclass"), "{free}");
+    }
+
+    /// A via-in-pad tier states the guide's land for a filled and capped via
+    /// as a rule of its own, so KiCad does not hold it to the plain via ring
+    /// floor the project states board-wide. A tier without via-in-pad gets no
+    /// such rule.
+    #[test]
+    fn a_via_in_pad_tier_exports_the_filled_via_rule_and_a_plain_tier_does_not() {
+        let source = r#"board "b" { layers 6
+            requires via_in_pad
+            component U1: fpga "ice40hx4k_bg121" { escape { method underpad } }
+            component U2: fpga "ice40hx4k_bg121" { escape { off } } }"#;
+        let advanced = design_rules(
+            &synth_drc::ManufacturerProfile::jlc_advanced(),
+            &board_from(source),
+        );
+        assert!(
+            advanced.contains("(constraint annular_width (min 0.075mm))"),
+            "{advanced}"
+        );
+        assert!(
+            advanced.contains("A.Type == 'Via' && A.Diameter <= 0.35mm && A.insideCourtyard('U1')"),
+            "{advanced}"
+        );
+        assert!(
+            !advanced.contains("insideCourtyard('U2')"),
+            "a part that does not escape under its pads has no filled via: {advanced}"
+        );
+        let undeclared = design_rules(
+            &synth_drc::ManufacturerProfile::jlc_advanced(),
+            &board_from(r#"board "b" { layers 6 }"#),
+        );
+        assert!(
+            !undeclared.contains("annular_width"),
+            "a board that declares no under-pad escape keeps the plain floor: {undeclared}"
+        );
+        let standard = design_rules(
+            &synth_drc::ManufacturerProfile::jlc_standard(),
+            &board_from(source),
+        );
+        assert!(!standard.contains("annular_width"), "{standard}");
+        // An escape alone buys the process nothing: no one fills or caps a via the
+        // board did not require via-in-pad for, so the ring floor stands.
+        let no_requirement = design_rules(
+            &synth_drc::ManufacturerProfile::jlc_advanced(),
+            &board_from(
+                r#"board "b" { layers 6
+                component U1: fpga "ice40hx4k_bg121" { escape { method underpad } } }"#,
+            ),
+        );
+        assert!(
+            !no_requirement.contains("annular_width"),
+            "a board that does not require via-in-pad keeps the plain floor: {no_requirement}"
+        );
     }
 
     /// The router resolves the board's declared manufacturer, so the exported

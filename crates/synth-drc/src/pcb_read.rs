@@ -526,6 +526,9 @@ pub struct Zone {
     pub fills: Vec<(String, Vec<Vec<Point>>)>,
     /// Whether the zone is set to fill at all.
     pub filled: bool,
+    /// Whether the zone is a rule area that keeps vias out, `(keepout (vias
+    /// not_allowed))`, such as the one under a mounting hole's screw head.
+    pub keeps_vias_out: bool,
 }
 
 /// Read a zone's pour outlines, keyed by layer.
@@ -735,6 +738,10 @@ impl PcbBoard {
                 outlines: zone_outlines(zone),
                 fills: zone_fills(zone),
                 filled: zone_fill_enabled(zone),
+                keeps_vias_out: zone
+                    .find("keepout")
+                    .and_then(|keepout| keepout.child_atom("vias"))
+                    == Some("not_allowed"),
             });
         }
         for graphic in root
