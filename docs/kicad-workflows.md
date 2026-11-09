@@ -509,8 +509,7 @@ Until these are calibrated, no rule is authoritative enough to block releases
 by default. Silk text and silk curves are counted, not measured; custom and
 trapezoid pads are measured by their bounding box (a trapezoid's `rect_delta`
 included) and counted. `pth_to_trace` measures through-hole pad drills and via
-barrels against straight tracks; `(arc ...)` tracks are not read and are listed
-in `unsupported`. A `(drill ... (offset x y))` leaves the hole at the pad and
+barrels against tracks, arc tracks included. A `(drill ... (offset x y))` leaves the hole at the pad and
 moves the copper by the offset. A TOML profile that omits the DFM floors runs
 none of these rules (they read 0); only the built-in JLC profiles set them.
 `--dfm-gate` blocks a release export only: with no `--gerbers` or similar it

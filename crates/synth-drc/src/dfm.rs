@@ -429,8 +429,7 @@ fn pad_gap(a: &Pad, b: &Pad) -> (f64, Point) {
 /// and a trace under the wall shorts or breaks. Plated holes are through-hole
 /// pad drills and via barrels; a hole goes through every layer, so a trace on
 /// any layer counts. One finding per hole, for its closest trace; the hole's
-/// own net may run up to it. Straight tracks only: `(arc ...)` tracks are not
-/// read. Graded a Warning, not a Danger, so it never blocks a release.
+/// own net may run up to it. Arc tracks are measured as sampled chords. Graded a Warning, not a Danger, so it never blocks a release.
 /// Measured against JLCDFM on one board it found 0 items where JLCDFM found 58
 /// (known not to match).
 fn pth_to_trace(board: &PcbBoard, profile: &ManufacturerProfile) -> Vec<DfmFinding> {
@@ -454,6 +453,7 @@ fn pth_to_trace(board: &PcbBoard, profile: &ManufacturerProfile) -> Vec<DfmFindi
         let closest = board
             .segments
             .iter()
+            .chain(&board.arc_chords)
             .filter(|s| !(own_net.is_some() && own_net == s.net))
             .map(|s| {
                 let d = segment_distance_nm((hole.a, hole.b), (s.start, s.end));
@@ -988,6 +988,29 @@ mod tests {
         assert_eq!(report.danger_count(), 0);
         assert!((finding.measured_mm - 0.15).abs() < 0.005, "{finding:?}");
         assert!((finding.required_mm - 0.28).abs() < 1e-9, "{finding:?}");
+    }
+
+    fn arc_trace(mid_y: f64, net: u32) -> String {
+        format!(
+            r#"(arc (start 19 21) (mid 20 {mid_y}) (end 21 21) (width 0.2) (layer "F.Cu") (net {net}))"#
+        )
+    }
+
+    #[test]
+    fn an_arc_track_too_close_to_a_plated_hole_is_reported() {
+        // The arc's crown is 0.75 mm from the hole centre: a 0.15 mm gap.
+        let report = run(&format!("{PTH}\n  {}", arc_trace(20.75, 2)));
+        assert_eq!(count(&report, "pth_to_trace"), 1, "{report:?}");
+        let finding = report.findings.iter().find(|f| f.rule == "pth_to_trace");
+        assert!((finding.expect("finding").measured_mm - 0.15).abs() < 0.005);
+    }
+
+    #[test]
+    fn an_arc_track_on_the_holes_own_net_or_far_away_is_not_reported() {
+        let own = run(&format!("{PTH}\n  {}", arc_trace(20.75, 1)));
+        assert_eq!(count(&own, "pth_to_trace"), 0, "{own:?}");
+        let far = run(&format!("{PTH}\n  {}", arc_trace(22.0, 2)));
+        assert_eq!(count(&far, "pth_to_trace"), 0, "{far:?}");
     }
 
     #[test]

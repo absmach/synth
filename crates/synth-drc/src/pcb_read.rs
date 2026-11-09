@@ -847,6 +847,9 @@ pub struct PcbBoard {
     pub nets: BTreeMap<u32, String>,
     pub footprints: Vec<Footprint>,
     pub segments: Vec<Segment>,
+    /// Each `(arc ...)` track sampled into short chords. Kept apart from
+    /// `segments` so connectivity and length keep reading straight tracks only.
+    pub arc_chords: Vec<Segment>,
     pub vias: Vec<Via>,
     pub zones: Vec<Zone>,
     /// `(start, end)` of every `Edge.Cuts` graphic.
@@ -885,6 +888,7 @@ impl PcbBoard {
             nets: BTreeMap::new(),
             footprints: Vec::new(),
             segments: Vec::new(),
+            arc_chords: Vec::new(),
             vias: Vec::new(),
             zones: Vec::new(),
             edge_cuts: Vec::new(),
@@ -930,6 +934,9 @@ impl PcbBoard {
             if let Some(parsed) = parse_segment(segment) {
                 board.segments.push(parsed);
             }
+        }
+        for arc in root.find_all("arc") {
+            board.arc_chords.extend(parse_arc_track(arc));
         }
         for via in root.find_all("via") {
             if let Some(parsed) = parse_via(via) {
@@ -1085,7 +1092,7 @@ impl PcbBoard {
                 }
             }
         }
-        for segment in &mut self.segments {
+        for segment in self.segments.iter_mut().chain(&mut self.arc_chords) {
             if let Some(name) = &segment.net_name {
                 segment.net = codes.get(name).copied();
             }
@@ -1542,10 +1549,10 @@ fn parse_footprint(node: &Node) -> Footprint {
             let size_nm = pad_size_nm(pad);
             let bbox = match shape.as_str() {
                 "custom" => custom_pad_bbox(pad, size_nm),
-                // The wide end's corners reach `rect_delta / 2` past `size / 2`.
+                // The wide end's corners reach `rect_delta / 2` past `size / 2`;
+                // KiCad's rect_delta.y widens the pad in X and .x heightens it in Y.
                 "trapezoid" => {
                     let d = parse_point(pad, "rect_delta").unwrap_or_default();
-                    // KiCad's rect_delta.y widens the pad in X and .x heightens it in Y.
                     Some(((0, 0), (size_nm.0 + d.y_nm.abs(), size_nm.1 + d.x_nm.abs())))
                 }
                 _ => None,
@@ -1616,6 +1623,15 @@ impl From<Point> for (i64, i64) {
 
 fn parse_segment(node: &Node) -> Option<Segment> {
     Some(Segment {
+        start: parse_point(node, "start")?,
+        end: parse_point(node, "end")?,
+        ..parse_segment_attrs(node)
+    })
+}
+
+/// A track's net, layer and width; the caller supplies the geometry.
+fn parse_segment_attrs(node: &Node) -> Segment {
+    Segment {
         net: node.child_i64("net").and_then(|n| u32::try_from(n).ok()),
         net_name: node
             .find("net")
@@ -1625,10 +1641,24 @@ fn parse_segment(node: &Node) -> Option<Segment> {
         layer: node
             .child_atom("layer")
             .map_or_else(|| "F.Cu".to_string(), ToString::to_string),
-        start: parse_point(node, "start")?,
-        end: parse_point(node, "end")?,
+        start: Point::default(),
+        end: Point::default(),
         width_nm: node.child_f64("width").map_or(0, mm_to_nm),
-    })
+    }
+}
+
+/// An `(arc (start) (mid) (end) (width) (layer) (net))` track as chords.
+fn parse_arc_track(node: &Node) -> Vec<Segment> {
+    let template = parse_segment_attrs(node);
+    let points = arc_vertices(node).unwrap_or_default();
+    points
+        .windows(2)
+        .map(|w| Segment {
+            start: w[0],
+            end: w[1],
+            ..template.clone()
+        })
+        .collect()
 }
 
 fn parse_via(node: &Node) -> Option<Via> {
@@ -2072,6 +2102,34 @@ mod tests {
         let p = |y: f64| Point::new(0, mm_to_nm(y));
         assert!(pad.copper_distance_nm(p(0.7)).abs() < 1.0);
         assert!(pad.signed_distance_nm(p(0.7)) > 0.0);
+    }
+
+    #[test]
+    fn trapezoid_deltas_in_both_axes_and_negative_deltas() {
+        let board = PcbBoard::parse(
+            r#"(kicad_pcb (footprint "T:T" (layer "F.Cu") (at 0 0)
+  (pad "1" smd trapezoid (at 0 0) (size 1 1) (rect_delta 0.2 0.4) (layers "F.Cu"))
+  (pad "2" smd trapezoid (at 0 0) (size 1 1) (rect_delta -0.2 -0.4) (layers "F.Cu"))))"#,
+        )
+        .expect("parses");
+        for pad in board.pads() {
+            let (lo, hi) = pad.bbox.expect("bbox");
+            assert_eq!((hi.0 - lo.0, hi.1 - lo.1), (mm_to_nm(1.4), mm_to_nm(1.2)));
+        }
+    }
+
+    #[test]
+    fn a_rotated_trapezoid_reaches_its_wide_end_on_the_rotated_axis() {
+        // Wide in Y (reaches y = +-0.7) before a 90 degree turn, so +-0.7 in X after.
+        let board = PcbBoard::parse(
+            r#"(kicad_pcb (footprint "T:T" (layer "F.Cu") (at 0 0)
+  (pad "1" smd trapezoid (at 0 0 90) (size 1 1) (rect_delta 0.4 0) (layers "F.Cu"))))"#,
+        )
+        .expect("parses");
+        let pad = board.pads().next().expect("a pad");
+        let p = |x: f64| Point::new(mm_to_nm(x), 0);
+        assert!(pad.copper_distance_nm(p(0.7)).abs() < 1.0);
+        assert!(pad.copper_distance_nm(p(0.8)) > 0.0);
     }
 
     #[test]

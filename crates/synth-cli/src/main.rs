@@ -4897,11 +4897,6 @@ fn dfm_stage(
                     report.unchecked_silk_graphics
                 ));
             }
-            if profile.min_pth_to_trace_nm > 0 {
-                unsupported.push(
-                    "pth_to_trace: arc tracks are not measured, only straight segments".to_string(),
-                );
-            }
             if report.approximated_pads > 0 {
                 unsupported.push(format!(
                     "pad_shape: {} custom or trapezoid pad(s) measured by their bounding box, not their exact outline",
@@ -6149,10 +6144,20 @@ mod tests {
         std::fs::write(&path, "(kicad_pcb (via").expect("write board");
         let (ungated, _) = dfm_stage(&path, &profile, false);
         let (gated, _) = dfm_stage(&path, &profile, true);
-        let _ = std::fs::remove_file(&path);
         assert_eq!(ungated.status, NativeCheckStatus::Unknown);
         assert!(ungated.advisory, "an ungated unknown must not block");
         assert!(!gated.advisory, "a gated unknown must block");
+        // The same path export_kicad takes: stage -> blocked -> manifest.
+        let manifest = |gate: bool| {
+            let (_, report) = dfm_stage(&path, &profile, gate);
+            let blocked = dfm_blocks_release(true, gate, report.as_ref());
+            let m = release::ReleaseManifest::new("t", Path::new("b.synth"), true, vec![], vec![])
+                .with_release_blocked(blocked);
+            serde_json::to_value(&m).expect("manifest json")["release_ready"].clone()
+        };
+        assert_eq!(manifest(true), serde_json::json!(false));
+        assert_eq!(manifest(false), serde_json::json!(true));
+        let _ = std::fs::remove_file(&path);
     }
 
     #[test]
