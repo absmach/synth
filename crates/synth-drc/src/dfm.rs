@@ -1303,7 +1303,7 @@ mod tests {
     fn a_trapezoid_pad_reaches_its_wide_end() {
         // 1 x 1 mm with rect_delta (0 0.4): the corners reach y = +-0.7.
         let trap = pad_text(
-            r#"(pad "1" smd trapezoid (at 0 0) (size 1 1) (rect_delta 0 0.4) (layers "F.Cu") (net 1 "GND"))"#,
+            r#"(pad "1" smd trapezoid (at 0 0) (size 1 1) (rect_delta 0.4 0) (layers "F.Cu") (net 1 "GND"))"#,
         );
         // y = 20.76 is 0.06 - 0.075 from the wide corner: on it. Measured
         // from size alone the pad ends at 20.5 and this reads 0.185 clear.

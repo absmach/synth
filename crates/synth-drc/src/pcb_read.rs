@@ -1545,7 +1545,8 @@ fn parse_footprint(node: &Node) -> Footprint {
                 // The wide end's corners reach `rect_delta / 2` past `size / 2`.
                 "trapezoid" => {
                     let d = parse_point(pad, "rect_delta").unwrap_or_default();
-                    Some(((0, 0), (size_nm.0 + d.x_nm.abs(), size_nm.1 + d.y_nm.abs())))
+                    // KiCad's rect_delta.y widens the pad in X and .x heightens it in Y.
+                    Some(((0, 0), (size_nm.0 + d.y_nm.abs(), size_nm.1 + d.x_nm.abs())))
                 }
                 _ => None,
             };
@@ -2064,13 +2065,32 @@ mod tests {
     fn a_trapezoid_is_measured_out_to_its_wide_corners() {
         let board = PcbBoard::parse(
             r#"(kicad_pcb (footprint "T:T" (layer "F.Cu") (at 0 0)
-  (pad "1" smd trapezoid (at 0 0) (size 1 1) (rect_delta 0 0.4) (layers "F.Cu"))))"#,
+  (pad "1" smd trapezoid (at 0 0) (size 1 1) (rect_delta 0.4 0) (layers "F.Cu"))))"#,
         )
         .expect("parses");
         let pad = board.pads().next().expect("a pad");
         let p = |y: f64| Point::new(0, mm_to_nm(y));
         assert!(pad.copper_distance_nm(p(0.7)).abs() < 1.0);
         assert!(pad.signed_distance_nm(p(0.7)) > 0.0);
+    }
+
+    #[test]
+    fn trapezoid_bbox_matches_real_kicad_footprints() {
+        // Pad lines copied from Package_LGA AMS_LGA-10-1EP pad 11 and
+        // Diode_SMD D_SMA-SMB_Universal_Handsoldering pad 1.
+        let board = PcbBoard::parse(
+            r#"(kicad_pcb (footprint "T:T" (layer "F.Cu") (at 0 0)
+  (pad "11" smd trapezoid (at 0 -1.1) (size 1 0.3) (rect_delta 0 0.3) (layers "F.Cu" "F.Mask" "F.Paste"))
+  (pad "1" smd trapezoid (at -2.9 0) (size 3.6 1.7) (rect_delta 0.6 0) (layers "F.Cu" "F.Mask" "F.Paste"))))"#,
+        )
+        .expect("parses");
+        let pads: Vec<_> = board.pads().collect();
+        let size = |i: usize| {
+            let (lo, hi) = pads[i].bbox.expect("bbox");
+            (hi.0 - lo.0, hi.1 - lo.1)
+        };
+        assert_eq!(size(0), (mm_to_nm(1.3), mm_to_nm(0.3)));
+        assert_eq!(size(1), (mm_to_nm(3.6), mm_to_nm(2.3)));
     }
 
     #[test]
