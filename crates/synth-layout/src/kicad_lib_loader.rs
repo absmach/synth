@@ -231,8 +231,11 @@ fn unit_stack_offsets_uncached(lib_id: &str) -> Option<Vec<f64>> {
     for unit in &extent[1..] {
         let current = (*unit).unwrap_or(previous);
         // The unit's top, `max_y` above its origin, must clear the bottom of the
-        // one above it, `min_y` below its origin, by the gap.
-        let raw = offsets.last().copied().unwrap_or(0.0) + (current.1 - previous.0) + UNIT_GAP_MM;
+        // one above it, `min_y` below its origin, by the gap. The pins are not the
+        // body: a body reaches past them, so the step is never tighter than the
+        // fixed pitch the stack always had.
+        let step = ((current.1 - previous.0) + UNIT_GAP_MM).max(UNIT_PITCH_MM);
+        let raw = offsets.last().copied().unwrap_or(0.0) + step;
         offsets.push((raw / grid).ceil() * grid);
         previous = current;
     }
@@ -923,6 +926,22 @@ mod unit_tests {
 
     /// Units are stacked by the height their pins span, so the five tall units of
     /// the iCE40 FPGA never overlap: a unit starts below the pins of the one above.
+    #[test]
+    fn a_small_symbols_units_are_never_stacked_tighter_than_the_fixed_pitch() {
+        let lib = "Amplifier_Operational:LM358";
+        // Skipped when KiCad's bundled libraries are not installed.
+        if symbol_units(lib).is_none() {
+            return;
+        }
+        // The pins span 5.08 mm but the triangles reach 5.08 mm past them, so a step
+        // sized by the pins alone would leave the two bodies touching.
+        assert!(
+            unit_offset_mm(lib, 2).1 >= UNIT_PITCH_MM - 1e-9,
+            "units A and B sit {} mm apart, tighter than {UNIT_PITCH_MM}",
+            unit_offset_mm(lib, 2).1
+        );
+    }
+
     #[test]
     fn tall_units_are_stacked_clear_of_each_other() {
         let lib = "FPGA_Lattice:ICE40HX4K-TQ144";
