@@ -312,19 +312,13 @@ pub fn build_pcb(
                     Some((centre, mm_to_nm(width_mm / 2.0)))
                 })
                 .collect();
-            // Left corners slide right and right corners slide left.
-            let points = [
-                (outline.min.x_nm + inset, outline.min.y_nm + inset, 1),
-                (outline.max.x_nm - inset, outline.min.y_nm + inset, -1),
-                (outline.max.x_nm - inset, outline.max.y_nm - inset, -1),
-                (outline.min.x_nm + inset, outline.max.y_nm - inset, 1),
-            ];
-            for (stitch_index, (x_nm, y_nm, inward)) in points.into_iter().enumerate() {
-                let Point { x_nm, y_nm } =
-                    clear_of_mounting_holes(Point::new(x_nm, y_nm), inward, &holes);
+            for (stitch_index, point) in ground_fence_points(outline, inset, &holes)
+                .into_iter()
+                .enumerate()
+            {
                 children.push(build_ground_stitch_via(
-                    x_nm,
-                    y_nm,
+                    point.x_nm,
+                    point.y_nm,
                     *pcb_net,
                     project,
                     plane_index * 4 + stitch_index,
@@ -1106,8 +1100,54 @@ fn build_mounting_hole_keepout(
     )
 }
 
-/// Slide a corner fence via along the board edge, toward the inside (`inward`
-/// is +1 for a left-hand corner and -1 for a right-hand one), until it is out of
+/// The through vias that stitch the ground planes into one network: one at
+/// each quarter point of the top and bottom edges, inset 1.5 mm. Four points
+/// keep the pour islands on both outer layers tied to the inner planes even
+/// when routing cuts a zone in two.
+///
+/// They used to sit at the four corners, where a via lands beside a corner
+/// mounting hole and reads as a second hole in the 3D view. A quarter point is
+/// far from every corner. A point that still lands in a mounting hole's
+/// keepout slides along its edge, toward the board centre, and never leaves
+/// the board.
+fn ground_fence_points(outline: Rect, inset_nm: i64, holes: &[(Point, i64)]) -> [Point; 4] {
+    let width = outline.max.x_nm - outline.min.x_nm;
+    let left = outline.min.x_nm + width / 4;
+    let right = outline.min.x_nm + width * 3 / 4;
+    let clamp_x = |point: Point| {
+        Point::new(
+            point
+                .x_nm
+                .clamp(outline.min.x_nm + inset_nm, outline.max.x_nm - inset_nm),
+            point.y_nm,
+        )
+    };
+    [
+        clamp_x(clear_of_mounting_holes(
+            Point::new(left, outline.min.y_nm + inset_nm),
+            1,
+            holes,
+        )),
+        clamp_x(clear_of_mounting_holes(
+            Point::new(right, outline.min.y_nm + inset_nm),
+            -1,
+            holes,
+        )),
+        clamp_x(clear_of_mounting_holes(
+            Point::new(left, outline.max.y_nm - inset_nm),
+            1,
+            holes,
+        )),
+        clamp_x(clear_of_mounting_holes(
+            Point::new(right, outline.max.y_nm - inset_nm),
+            -1,
+            holes,
+        )),
+    ]
+}
+
+/// Slide a fence via along a horizontal board edge, toward the inside (`inward`
+/// is +1 toward increasing x and -1 toward decreasing x), until it is out of
 /// every mounting hole's zone: the hole's radius plus the keepout. A via that is
 /// already clear is returned as it is. `holes` are `(centre, radius)`.
 fn clear_of_mounting_holes(via: Point, inward: i64, holes: &[(Point, i64)]) -> Point {
@@ -1416,8 +1456,9 @@ fn build_zone(
                     Sexp::list("thermal_bridge_width", vec![num(0.25)]),
                     // A pour can be cut into islands by traces and keepouts;
                     // an island touches no pad, so keeping it only adds copper
-                    // that KiCad reports as an unconnected zone.
-                    Sexp::list("island_removal_mode", vec![Sexp::atom("0")]),
+                    // that KiCad reports as an unconnected zone. Mode 1
+                    // removes every island, not only the ones below an area.
+                    Sexp::list("island_removal_mode", vec![Sexp::atom("1")]),
                 ],
             ),
             Sexp::list("polygon", vec![Sexp::list("pts", pts)]),
@@ -2448,7 +2489,14 @@ fn build_footprint_instance(
         let body = strip_footprint_head(body);
         let body = add_footprint_angle_to_pads(&body, pad_angle);
         let body_with_nets = inject_pad_nets(&body, component.id, pad_net_lookup);
-        let body_with_nets = ensure_body_uuids(&body_with_nets, project, lib_id);
+        // `lib_id` alone is shared by every instance of the same footprint,
+        // so two mounting holes would mint the same pad UUIDs and confuse
+        // KiCad's DRC item identity. Scope the derivation to the instance.
+        let body_with_nets = ensure_body_uuids(
+            &body_with_nets,
+            project,
+            &format!("{lib_id}@{}", component.refdes),
+        );
         let has_model = body_with_nets.contains("(model ");
         children.push(Sexp::Raw(body_with_nets));
         has_model
@@ -2569,8 +2617,21 @@ pub fn build_synthesized_footprint_module(
     Some(Sexp::list("footprint", children))
 }
 
+/// The `(model ...)` for a footprint whose inlined body declared none.
+///
+/// KiCad's own libraries leave the model out when the part has no 3D body (a
+/// mounting hole, for example), so only use the convention path when that file
+/// is installed. Naming a model that does not exist makes `kicad-cli pcb export
+/// step` warn for every instance and renders nothing either way.
 fn build_3d_model_sexp(lib_id: &str) -> Option<Sexp> {
     let (lib, name) = lib_id.split_once(':')?;
+    let installed = format!(
+        "{}/{lib}.3dshapes/{name}.step",
+        synth_layout::kicad_footprint_loader::MODEL_DIR
+    );
+    if !std::path::Path::new(&installed).exists() {
+        return None;
+    }
 
     let path = format!("${{KICAD10_3DMODEL_DIR}}/{lib}.3dshapes/{name}.step");
     Some(Sexp::list(
@@ -3055,6 +3116,11 @@ mod tests {
     use synth_registry::{ElectricalType, Lifecycle, Pin, PinNumber};
 
     #[test]
+    fn a_model_that_is_not_installed_is_not_invented() {
+        assert!(build_3d_model_sexp("NoSuchLibrary:NoSuchPart").is_none());
+    }
+
+    #[test]
     fn a_footprint_angle_is_added_to_every_pad_angle() {
         let body = concat!(
             "(fp_text reference \"R\" (at 0 -1.2 90))\n",
@@ -3184,6 +3250,33 @@ mod tests {
         assert!(
             gap_mm(moved, hole.0) >= 1.6 + MOUNTING_HOLE_KEEPOUT_MM + GROUND_VIA_RADIUS_MM - 0.001
         );
+    }
+
+    #[test]
+    fn the_ground_fence_sits_at_edge_quarters_not_corners() {
+        let outline =
+            synth_geometry::Rect::new(Point::new(0, 0), Point::new(mm_to_nm(60.0), mm_to_nm(30.0)));
+        let points = ground_fence_points(outline, mm_to_nm(1.5), &[]);
+        assert_eq!(points[0], Point::new(mm_to_nm(15.0), mm_to_nm(1.5)));
+        assert_eq!(points[1], Point::new(mm_to_nm(45.0), mm_to_nm(1.5)));
+        assert_eq!(points[2], Point::new(mm_to_nm(15.0), mm_to_nm(28.5)));
+        assert_eq!(points[3], Point::new(mm_to_nm(45.0), mm_to_nm(28.5)));
+    }
+
+    #[test]
+    fn a_fence_via_slides_off_a_mounting_hole() {
+        let outline =
+            synth_geometry::Rect::new(Point::new(0, 0), Point::new(mm_to_nm(60.0), mm_to_nm(30.0)));
+        let hole = hole(15.0, 0.0, 1.25);
+        let points = ground_fence_points(outline, mm_to_nm(1.5), &[hole]);
+        assert_ne!(points[0].x_nm, mm_to_nm(15.0), "{:?}", points[0]);
+        assert!(
+            points[0].x_nm >= outline.min.x_nm + mm_to_nm(1.5)
+                && points[0].x_nm <= outline.max.x_nm - mm_to_nm(1.5),
+            "the slide stays on the board: {:?}",
+            points[0]
+        );
+        assert_eq!(points[0].y_nm, mm_to_nm(1.5));
     }
 
     #[test]
@@ -3678,6 +3771,7 @@ mod tests {
         // Build a minimal Board whose nets have semantic names so the power-domain
         // engine classifies them correctly (GND → Ground, VCC → Rail via name heuristic).
         let board = Board {
+            outline: None,
             schematic_overflow: None,
             schematic_paper: None,
             groups: Vec::new(),
@@ -3810,6 +3904,7 @@ mod tests {
     fn declared_netclass_emitted_with_joined_nets() {
         use synth_ir::Length;
         let board = Board {
+            outline: None,
             schematic_overflow: None,
             schematic_paper: None,
             groups: Vec::new(),
@@ -3894,6 +3989,7 @@ mod tests {
     /// on what the classes declare.
     fn plain_test_board() -> Board {
         Board {
+            outline: None,
             schematic_overflow: None,
             schematic_paper: None,
             groups: Vec::new(),
@@ -4035,6 +4131,7 @@ mod tests {
     #[test]
     fn test_kicad_cli_roundtrip_valid_board() {
         let board = Board {
+            outline: None,
             schematic_overflow: None,
             schematic_paper: None,
             groups: Vec::new(),

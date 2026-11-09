@@ -140,6 +140,7 @@ pub fn board(
         legends: false,
         keepouts: Vec::new(),
         stackup: None,
+        outline: None,
         netclasses: Vec::new(),
         buses: Vec::new(),
         modules: Vec::new(),

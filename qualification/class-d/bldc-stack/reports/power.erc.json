@@ -1,0 +1,271 @@
+{
+    "$schema": "https://schemas.kicad.org/erc.v1.json",
+    "coordinate_units": "mm",
+    "date": "2026-11-09T11:25:37",
+    "ignored_checks": [
+        {
+            "description": "Global label only appears once in the schematic",
+            "key": "single_global_label"
+        },
+        {
+            "description": "Four connection points are joined together",
+            "key": "four_way_junction"
+        },
+        {
+            "description": "SPICE model issue",
+            "key": "simulation_model_issue"
+        },
+        {
+            "description": "Assigned footprint doesn't match footprint filters",
+            "key": "footprint_filter"
+        }
+    ],
+    "included_severities": [
+        "error",
+        "warning",
+        "exclusion"
+    ],
+    "kicad_version": "10.0.7",
+    "sheets": [
+        {
+            "path": "/",
+            "uuid_path": "/ca0d249d-62ec-54f0-8a12-2dbdc97be7a6",
+            "violations": [
+                {
+                    "description": "Symbol 'MCP6022' doesn't match copy in library 'Amplifier_Operational'",
+                    "items": [
+                        {
+                            "description": "Symbol U_CS1 [MCP6022]",
+                            "pos": {
+                                "x": 45.72,
+                                "y": 218.44
+                            },
+                            "uuid": "c928341c-0b5b-59f7-a74b-98ad1b3bc38c"
+                        }
+                    ],
+                    "severity": "warning",
+                    "type": "lib_symbol_mismatch"
+                },
+                {
+                    "description": "Symbol 'MCP6022' doesn't match copy in library 'Amplifier_Operational'",
+                    "items": [
+                        {
+                            "description": "Symbol U_CS1 [MCP6022]",
+                            "pos": {
+                                "x": 45.72,
+                                "y": 231.14
+                            },
+                            "uuid": "40ceb1d2-4d83-56c6-b80c-cc395edddac7"
+                        }
+                    ],
+                    "severity": "warning",
+                    "type": "lib_symbol_mismatch"
+                },
+                {
+                    "description": "Symbol 'MCP6022' doesn't match copy in library 'Amplifier_Operational'",
+                    "items": [
+                        {
+                            "description": "Symbol U_CS1 [MCP6022]",
+                            "pos": {
+                                "x": 45.72,
+                                "y": 243.84
+                            },
+                            "uuid": "89d15e98-1bc8-58b8-af58-3b551e6d0a95"
+                        }
+                    ],
+                    "severity": "warning",
+                    "type": "lib_symbol_mismatch"
+                },
+                {
+                    "description": "Symbol 'MCP6022' doesn't match copy in library 'Amplifier_Operational'",
+                    "items": [
+                        {
+                            "description": "Symbol U_CS2 [MCP6022]",
+                            "pos": {
+                                "x": 45.72,
+                                "y": 279.4
+                            },
+                            "uuid": "8c94e003-b0bc-55b4-b624-ca046ba08101"
+                        }
+                    ],
+                    "severity": "warning",
+                    "type": "lib_symbol_mismatch"
+                },
+                {
+                    "description": "Symbol 'MCP6022' doesn't match copy in library 'Amplifier_Operational'",
+                    "items": [
+                        {
+                            "description": "Symbol U_CS2 [MCP6022]",
+                            "pos": {
+                                "x": 45.72,
+                                "y": 292.1
+                            },
+                            "uuid": "24772bc2-8391-51ac-9d53-824ed14c7501"
+                        }
+                    ],
+                    "severity": "warning",
+                    "type": "lib_symbol_mismatch"
+                },
+                {
+                    "description": "Symbol 'MCP6022' doesn't match copy in library 'Amplifier_Operational'",
+                    "items": [
+                        {
+                            "description": "Symbol U_CS2 [MCP6022]",
+                            "pos": {
+                                "x": 45.72,
+                                "y": 304.8
+                            },
+                            "uuid": "293e056b-f270-5119-b150-725165bbe603"
+                        }
+                    ],
+                    "severity": "warning",
+                    "type": "lib_symbol_mismatch"
+                },
+                {
+                    "description": "Label connects more than one wire at 609600, 952500",
+                    "items": [
+                        {
+                            "description": "Label 'GATE_REV'",
+                            "pos": {
+                                "x": 60.96,
+                                "y": 95.25
+                            },
+                            "uuid": "79588b93-bff2-54e7-a79e-113b88d08894"
+                        },
+                        {
+                            "description": "Vertical Wire, length 72.39 mm",
+                            "pos": {
+                                "x": 60.96,
+                                "y": 45.72
+                            },
+                            "uuid": "863e207b-311d-5ed1-a616-ddcb2d8aa8f0"
+                        }
+                    ],
+                    "severity": "warning",
+                    "type": "label_multiple_wires"
+                },
+                {
+                    "description": "Symbol 'BSC030N08NS5' doesn't match copy in library 'Transistor_FET'",
+                    "items": [
+                        {
+                            "description": "Symbol Q_UL [BSC030N08NS5]",
+                            "pos": {
+                                "x": 233.68,
+                                "y": 33.02
+                            },
+                            "uuid": "b2523e33-667a-5199-a7db-a5e43215ff8d"
+                        }
+                    ],
+                    "severity": "warning",
+                    "type": "lib_symbol_mismatch"
+                },
+                {
+                    "description": "Symbol 'BSC030N08NS5' doesn't match copy in library 'Transistor_FET'",
+                    "items": [
+                        {
+                            "description": "Symbol Q_VL [BSC030N08NS5]",
+                            "pos": {
+                                "x": 233.68,
+                                "y": 63.5
+                            },
+                            "uuid": "58363b91-0b53-5000-8a67-08c10b10ecf9"
+                        }
+                    ],
+                    "severity": "warning",
+                    "type": "lib_symbol_mismatch"
+                },
+                {
+                    "description": "Symbol 'BSC030N08NS5' doesn't match copy in library 'Transistor_FET'",
+                    "items": [
+                        {
+                            "description": "Symbol Q_UH [BSC030N08NS5]",
+                            "pos": {
+                                "x": 233.68,
+                                "y": 93.98
+                            },
+                            "uuid": "8c45eca8-515e-5c89-9a28-4477762636ef"
+                        }
+                    ],
+                    "severity": "warning",
+                    "type": "lib_symbol_mismatch"
+                },
+                {
+                    "description": "Symbol 'BSC030N08NS5' doesn't match copy in library 'Transistor_FET'",
+                    "items": [
+                        {
+                            "description": "Symbol Q_VH [BSC030N08NS5]",
+                            "pos": {
+                                "x": 233.68,
+                                "y": 124.46
+                            },
+                            "uuid": "daf375a6-44c3-5bd1-884f-7ff07d65f7be"
+                        }
+                    ],
+                    "severity": "warning",
+                    "type": "lib_symbol_mismatch"
+                },
+                {
+                    "description": "Symbol 'BSC030N08NS5' doesn't match copy in library 'Transistor_FET'",
+                    "items": [
+                        {
+                            "description": "Symbol Q_WL [BSC030N08NS5]",
+                            "pos": {
+                                "x": 274.32,
+                                "y": 93.98
+                            },
+                            "uuid": "98bde9e4-2c37-5d76-8ab7-29335addc9a1"
+                        }
+                    ],
+                    "severity": "warning",
+                    "type": "lib_symbol_mismatch"
+                },
+                {
+                    "description": "Symbol 'BSC030N08NS5' doesn't match copy in library 'Transistor_FET'",
+                    "items": [
+                        {
+                            "description": "Symbol Q_WH [BSC030N08NS5]",
+                            "pos": {
+                                "x": 274.32,
+                                "y": 124.46
+                            },
+                            "uuid": "b3a65695-3cc3-58a3-b630-8e39536b48bd"
+                        }
+                    ],
+                    "severity": "warning",
+                    "type": "lib_symbol_mismatch"
+                },
+                {
+                    "description": "Symbol '2N3904' doesn't match copy in library 'Transistor_BJT'",
+                    "items": [
+                        {
+                            "description": "Symbol Q_FAULT [2N3904]",
+                            "pos": {
+                                "x": 558.8,
+                                "y": 332.74
+                            },
+                            "uuid": "640c27f1-bc55-55c8-a384-af0adf45b1bd"
+                        }
+                    ],
+                    "severity": "warning",
+                    "type": "lib_symbol_mismatch"
+                },
+                {
+                    "description": "Symbol '2N3904' doesn't match copy in library 'Transistor_BJT'",
+                    "items": [
+                        {
+                            "description": "Symbol Q_GE_CTRL [2N3904]",
+                            "pos": {
+                                "x": 716.28,
+                                "y": 68.58
+                            },
+                            "uuid": "5a923d07-bc62-5f8a-9f78-9f415898eee0"
+                        }
+                    ],
+                    "severity": "warning",
+                    "type": "lib_symbol_mismatch"
+                }
+            ]
+        }
+    ],
+    "source": "bldc_power.kicad_sch"
+}

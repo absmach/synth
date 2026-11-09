@@ -1,0 +1,59 @@
+id = "mcp6022_soic"
+kind = "opamp"
+version = 0
+lifecycle = "active"
+description = "Microchip MCP6022-I/SN dual rail-to-rail input/output op-amp, 10 MHz GBW, 2.5-5.5 V supply, SOIC-8; 1 OUTA, 2 INA-, 3 INA+, 4 VSS, 5 INB+, 6 INB-, 7 OUTB, 8 VDD"
+mpn = "MCP6022-I/SN"
+lcsc_pn = "C34047"
+kicad_symbol = "Amplifier_Operational:MCP6022"
+kicad_footprint = "Package_SO:SOIC-8_3.9x4.9mm_P1.27mm"
+
+[footprint_dimensions]
+width_mm = 4.9
+height_mm = 3.9
+courtyard_margin_mm = 0.25
+
+[operating_conditions]
+min_voltage_v = 2.5
+max_voltage_v = 5.5
+max_current_ma = 25.0
+
+[[pins]]
+name = "out_a"
+number = "1"
+electrical_type = "output"
+[[pins]]
+name = "in_a_neg"
+number = "2"
+electrical_type = "input"
+[[pins]]
+name = "in_a_pos"
+number = "3"
+electrical_type = "input"
+[[pins]]
+name = "vss"
+number = "4"
+electrical_type = "power_input"
+required = true
+[[pins]]
+name = "in_b_pos"
+number = "5"
+electrical_type = "input"
+[[pins]]
+name = "in_b_neg"
+number = "6"
+electrical_type = "input"
+[[pins]]
+name = "out_b"
+number = "7"
+electrical_type = "output"
+[[pins]]
+name = "vdd"
+number = "8"
+electrical_type = "power_input"
+required = true
+
+[provenance]
+source = "authored"
+generator = "hand-written from the Microchip MCP6021/2/3/4 datasheet (DS20001685E)"
+datasheet_url = "https://ww1.microchip.com/downloads/en/DeviceDoc/20001685E.pdf"

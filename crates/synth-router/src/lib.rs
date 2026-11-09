@@ -421,6 +421,16 @@ fn finalize(
     if let Err(detail) = &silkscreen {
         repair_unavailable.push(format!("silkscreen repair did not run: {detail}"));
     }
+    // The delivered board is refilled, so the candidate has to be refilled
+    // before the DRC that judges it: a stale zone fill reports plane-connected
+    // pads as unconnected. A refill failure is an unavailable check, not a
+    // silent pass.
+    if let Err(detail) = zone_fill::refill_zones(&candidate.candidate_path) {
+        eprintln!("warning: zones were not filled before validation: {detail}");
+        repair_unavailable.push(format!(
+            "zone refill before validation did not run: {detail}"
+        ));
+    }
     // The candidate is final once the repairs are done; count what it holds
     // before `install` moves it.
     let delivered_board = std::fs::read_to_string(&candidate.candidate_path)

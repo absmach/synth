@@ -1,0 +1,135 @@
+{
+  "schema_version": "synth.release.v1",
+  "tool_version": "synth-cli 0.1.1",
+  "input": "qualification/class-d/bldc-stack/control.synth",
+  "fab_requested": false,
+  "production_status": "untrusted",
+  "release_ready": false,
+  "gate_scope": "production_status and release_ready cover only Synth's routing and export gates: override flags, route validation and signal integrity. They are not a fabrication approval, a qualification result or a component review.",
+  "reviewer_state": [
+    {
+      "part_id": "ams1117_3v3",
+      "reviewed": false
+    },
+    {
+      "part_id": "c_generic_0603",
+      "reviewed": false
+    },
+    {
+      "part_id": "c_generic_1206",
+      "reviewed": false
+    },
+    {
+      "part_id": "ferrite_bead_0603",
+      "reviewed": false
+    },
+    {
+      "part_id": "header_1x3",
+      "reviewed": false
+    },
+    {
+      "part_id": "header_1x4",
+      "reviewed": false
+    },
+    {
+      "part_id": "header_2x10",
+      "reviewed": false
+    },
+    {
+      "part_id": "ltst_c190kgkt",
+      "reviewed_by": "Steve Munene",
+      "reviewed_at": "2026-10-29",
+      "reviewed": true
+    },
+    {
+      "part_id": "ltst_c190krkt",
+      "reviewed": false
+    },
+    {
+      "part_id": "mounting_hole_m2_5",
+      "reviewed": false
+    },
+    {
+      "part_id": "ptvs6v0s1ur",
+      "reviewed": false
+    },
+    {
+      "part_id": "r_generic_0603",
+      "reviewed": false
+    },
+    {
+      "part_id": "spst_tactile",
+      "reviewed": false
+    },
+    {
+      "part_id": "stm32g030k8_lqfp32",
+      "reviewed_by": "JeffMboya",
+      "reviewed_at": "2026-10-28",
+      "reviewed": true
+    },
+    {
+      "part_id": "thvd1450d",
+      "reviewed": false
+    }
+  ],
+  "routing": {
+    "engine": "freerouting",
+    "engine_version": "freerouting-2.4.1.jar",
+    "state": "validation_failed",
+    "input_hash": "64242a11574a001d69f4c54899949ced93199fb17babb3c689c96d9c199786cb",
+    "run_record": "/tmp/opencode/ctl-new/bldc_control.routing.json",
+    "reasons": [
+      "net +3V3 is not fully connected: pad U_LDO.2 reaches only 6 of 26 pads",
+      "kicad-cli pcb drc reported 1 blocking violation(s): unconnected_items: Missing connection between items (Track [+3V3] on F.Cu, length 7.9600 mm / Track [+3V3] on F.Cu, length 3.0000 mm)",
+      "the signal via at (39.02, 8.12) mm has no ground return via within 0.80 mm, and no spot in the GND pour holds one clear of the pads, vias and tracks beside it",
+      "the signal via at (24.66, 11.14) mm has no ground return via within 0.80 mm, and no spot in the GND pour holds one clear of the pads, vias and tracks beside it",
+      "the signal via at (29.80, 16.03) mm has no ground return via within 0.80 mm, and no spot in the GND pour holds one clear of the pads, vias and tracks beside it",
+      "the signal via at (34.01, 17.76) mm has no ground return via within 0.80 mm, and no spot in the GND pour holds one clear of the pads, vias and tracks beside it",
+      "the signal via at (34.41, 16.13) mm has no ground return via within 0.80 mm, and no spot in the GND pour holds one clear of the pads, vias and tracks beside it",
+      "the signal via at (21.07, 14.87) mm has no ground return via within 0.80 mm, and no spot in the GND pour holds one clear of the pads, vias and tracks beside it",
+      "the signal via at (40.61, 14.04) mm has no ground return via within 0.80 mm, and no spot in the GND pour holds one clear of the pads, vias and tracks beside it",
+      "the signal via at (23.49, 18.11) mm has no ground return via within 0.80 mm, and no spot in the GND pour holds one clear of the pads, vias and tracks beside it",
+      "the signal via at (29.04, 15.70) mm has no ground return via within 0.80 mm, and no spot in the GND pour holds one clear of the pads, vias and tracks beside it",
+      "the signal via at (50.87, 18.19) mm has no ground return via within 0.80 mm, and no spot in the GND pour holds one clear of the pads, vias and tracks beside it",
+      "the signal via at (23.04, 9.99) mm has no ground return via within 0.80 mm, and no spot in the GND pour holds one clear of the pads, vias and tracks beside it",
+      "the signal via at (30.55, 9.68) mm has no ground return via within 0.80 mm, and no spot in the GND pour holds one clear of the pads, vias and tracks beside it",
+      "the signal via at (27.71, 11.74) mm has no ground return via within 0.80 mm, and no spot in the GND pour holds one clear of the pads, vias and tracks beside it",
+      "the signal via at (25.57, 11.74) mm has no ground return via within 0.80 mm, and no spot in the GND pour holds one clear of the pads, vias and tracks beside it",
+      "the signal via at (17.23, 23.43) mm has no ground return via within 0.80 mm, and no spot in the GND pour holds one clear of the pads, vias and tracks beside it",
+      "the signal via at (27.01, 10.80) mm has no ground return via within 0.80 mm, and no spot in the GND pour holds one clear of the pads, vias and tracks beside it",
+      "the signal via at (36.15, 18.81) mm has no ground return via within 0.80 mm, and no spot in the GND pour holds one clear of the pads, vias and tracks beside it",
+      "the signal via at (32.44, 9.86) mm has no ground return via within 0.80 mm, and no spot in the GND pour holds one clear of the pads, vias and tracks beside it",
+      "the signal via at (43.67, 20.16) mm has no ground return via within 0.80 mm, and no spot in the GND pour holds one clear of the pads, vias and tracks beside it",
+      "the signal via at (43.87, 25.56) mm has no ground return via within 0.80 mm, and no spot in the GND pour holds one clear of the pads, vias and tracks beside it",
+      "the signal via at (48.62, 20.76) mm has no ground return via within 0.80 mm, and no spot in the GND pour holds one clear of the pads, vias and tracks beside it",
+      "the signal via at (34.80, 10.00) mm has no ground return via within 0.80 mm, and no spot in the GND pour holds one clear of the pads, vias and tracks beside it",
+      "the signal via at (32.47, 12.16) mm has no ground return via within 0.80 mm, and no spot in the GND pour holds one clear of the pads, vias and tracks beside it",
+      "the signal via at (29.67, 7.56) mm has no ground return via within 0.80 mm, and no spot in the GND pour holds one clear of the pads, vias and tracks beside it",
+      "the signal via at (45.06, 6.83) mm has no ground return via within 0.80 mm, and no spot in the GND pour holds one clear of the pads, vias and tracks beside it",
+      "the signal via at (29.00, 7.05) mm has no ground return via within 0.80 mm, and no spot in the GND pour holds one clear of the pads, vias and tracks beside it",
+      "the signal via at (57.38, 17.77) mm has no ground return via within 0.80 mm, and no spot in the GND pour holds one clear of the pads, vias and tracks beside it",
+      "the signal via at (33.91, 9.05) mm has no ground return via within 0.80 mm, and no spot in the GND pour holds one clear of the pads, vias and tracks beside it",
+      "the signal via at (19.25, 11.06) mm has no ground return via within 0.80 mm, and no spot in the GND pour holds one clear of the pads, vias and tracks beside it",
+      "the signal via at (15.69, 20.94) mm has no ground return via within 0.80 mm, and no spot in the GND pour holds one clear of the pads, vias and tracks beside it",
+      "the signal via at (25.64, 16.26) mm has no ground return via within 0.80 mm, and no spot in the GND pour holds one clear of the pads, vias and tracks beside it",
+      "the signal via at (26.65, 11.99) mm has no ground return via within 0.80 mm, and no spot in the GND pour holds one clear of the pads, vias and tracks beside it",
+      "the signal via at (11.44, 21.50) mm has no ground return via within 0.80 mm, and no spot in the GND pour holds one clear of the pads, vias and tracks beside it",
+      "the signal via at (28.41, 7.86) mm has no ground return via within 0.80 mm, and no spot in the GND pour holds one clear of the pads, vias and tracks beside it",
+      "the signal via at (14.77, 18.57) mm has no ground return via within 0.80 mm, and no spot in the GND pour holds one clear of the pads, vias and tracks beside it",
+      "the signal via at (27.19, 12.71) mm has no ground return via within 0.80 mm, and no spot in the GND pour holds one clear of the pads, vias and tracks beside it",
+      "the signal via at (33.73, 21.99) mm has no ground return via within 0.80 mm, and no spot in the GND pour holds one clear of the pads, vias and tracks beside it",
+      "the signal via at (26.29, 11.27) mm has no ground return via within 0.80 mm, and no spot in the GND pour holds one clear of the pads, vias and tracks beside it",
+      "the signal via at (23.52, 9.08) mm has no ground return via within 0.80 mm, and no spot in the GND pour holds one clear of the pads, vias and tracks beside it",
+      "the signal via at (36.05, 20.17) mm has no ground return via within 0.80 mm, and no spot in the GND pour holds one clear of the pads, vias and tracks beside it",
+      "the signal via at (50.41, 16.11) mm has no ground return via within 0.80 mm, and no spot in the GND pour holds one clear of the pads, vias and tracks beside it",
+      "the signal via at (43.63, 14.07) mm has no ground return via within 0.80 mm, and no spot in the GND pour holds one clear of the pads, vias and tracks beside it",
+      "the signal via at (49.17, 16.82) mm has no ground return via within 0.80 mm, and no spot in the GND pour holds one clear of the pads, vias and tracks beside it",
+      "the signal via at (47.95, 13.07) mm has no ground return via within 0.80 mm, and no spot in the GND pour holds one clear of the pads, vias and tracks beside it"
+    ]
+  },
+  "signal_integrity": {
+    "blocking": 0,
+    "warnings": 0,
+    "findings": []
+  }
+}

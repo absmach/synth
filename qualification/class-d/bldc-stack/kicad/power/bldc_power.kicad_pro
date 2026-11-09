@@ -1,0 +1,191 @@
+{
+  "board": {
+    "design_settings": {
+      "defaults": {
+        "min_clearance": 0.127,
+        "min_copper_edge_clearance": 0.3,
+        "min_hole_clearance": 0.2,
+        "min_through_hole_diameter": 0.3,
+        "min_track_width": 0.127,
+        "min_via_annular_width": 0.13,
+        "min_via_diameter": 0.56
+      },
+      "rules": {
+        "min_clearance": 0.127,
+        "min_copper_edge_clearance": 0.3,
+        "min_hole_clearance": 0.2,
+        "min_through_hole_diameter": 0.3,
+        "min_track_width": 0.127,
+        "min_via_annular_width": 0.13,
+        "min_via_diameter": 0.56
+      }
+    }
+  },
+  "boards": [],
+  "meta": {
+    "filename": "bldc_power.kicad_pro",
+    "uuid": "683634e1-df6f-52c6-8278-157f335cbbf1",
+    "version": 1
+  },
+  "net_settings": {
+    "classes": [
+      {
+        "bus_width": 12,
+        "clearance": 0.127,
+        "diff_pair_gap": 0.25,
+        "diff_pair_via_gap": 0.25,
+        "diff_pair_width": 0.2,
+        "line_style": 0,
+        "microvia_diameter": 0.3,
+        "microvia_drill": 0.1,
+        "name": "Default",
+        "pcb_color": "rgba(0, 0, 0, 1.000)",
+        "priority": 2147483647,
+        "schematic_color": "rgba(0, 0, 0, 1.000)",
+        "track_width": 0.2,
+        "via_diameter": 0.6,
+        "via_drill": 0.3,
+        "wire_width": 6
+      },
+      {
+        "bus_width": 12,
+        "clearance": 0.2,
+        "diff_pair_gap": 0.25,
+        "diff_pair_via_gap": 0.25,
+        "diff_pair_width": 0.2,
+        "line_style": 0,
+        "microvia_diameter": 0.3,
+        "microvia_drill": 0.1,
+        "name": "PWR",
+        "pcb_color": "rgba(191, 67, 171, 1.000)",
+        "priority": 1,
+        "schematic_color": "rgba(191, 67, 171, 1.000)",
+        "track_width": 2.0,
+        "via_diameter": 0.6,
+        "via_drill": 0.3,
+        "wire_width": 6
+      },
+      {
+        "bus_width": 12,
+        "clearance": 0.3,
+        "diff_pair_gap": 0.25,
+        "diff_pair_via_gap": 0.25,
+        "diff_pair_width": 0.2,
+        "line_style": 0,
+        "microvia_diameter": 0.3,
+        "microvia_drill": 0.1,
+        "name": "PHASE",
+        "pcb_color": "rgba(191, 100, 67, 1.000)",
+        "priority": 2,
+        "schematic_color": "rgba(191, 100, 67, 1.000)",
+        "track_width": 2.0,
+        "via_diameter": 0.6,
+        "via_drill": 0.3,
+        "wire_width": 6
+      },
+      {
+        "bus_width": 12,
+        "clearance": 0.2,
+        "diff_pair_gap": 0.25,
+        "diff_pair_via_gap": 0.25,
+        "diff_pair_width": 0.2,
+        "line_style": 0,
+        "microvia_diameter": 0.3,
+        "microvia_drill": 0.1,
+        "name": "GATE",
+        "pcb_color": "rgba(137, 67, 191, 1.000)",
+        "priority": 3,
+        "schematic_color": "rgba(137, 67, 191, 1.000)",
+        "track_width": 0.3,
+        "via_diameter": 0.6,
+        "via_drill": 0.3,
+        "wire_width": 6
+      },
+      {
+        "bus_width": 12,
+        "clearance": 0.2,
+        "diff_pair_gap": 0.25,
+        "diff_pair_via_gap": 0.25,
+        "diff_pair_width": 0.2,
+        "line_style": 0,
+        "microvia_diameter": 0.3,
+        "microvia_drill": 0.1,
+        "name": "SENSE",
+        "pcb_color": "rgba(191, 67, 98, 1.000)",
+        "priority": 4,
+        "schematic_color": "rgba(191, 67, 98, 1.000)",
+        "track_width": 0.25,
+        "via_diameter": 0.6,
+        "via_drill": 0.3,
+        "wire_width": 6
+      }
+    ],
+    "meta": {
+      "version": 4
+    },
+    "net_colors": null,
+    "netclass_assignments": {
+      "+12V": "PWR",
+      "+12V_B2B": "PWR",
+      "+12V_GD": "PWR",
+      "+24V_IN": "PWR",
+      "+3V3": "PWR",
+      "/+12V": "PWR",
+      "/PHASE_U": "PHASE",
+      "/PHASE_V": "PHASE",
+      "/PHASE_W": "PHASE",
+      "/SHUNT_U": "PWR",
+      "/SHUNT_V": "PWR",
+      "/SHUNT_W": "PWR",
+      "GND": "PWR",
+      "PHASE_U": "PHASE",
+      "PHASE_V": "PHASE",
+      "PHASE_W": "PHASE",
+      "SHUNT_U": "PWR",
+      "SHUNT_V": "PWR",
+      "SHUNT_W": "PWR",
+      "VBUS": "PWR"
+    },
+    "netclass_patterns": [
+      {
+        "netclass": "PHASE",
+        "pattern": "/*/PHASE_U"
+      },
+      {
+        "netclass": "PHASE",
+        "pattern": "/*/PHASE_V"
+      },
+      {
+        "netclass": "PHASE",
+        "pattern": "/*/PHASE_W"
+      },
+      {
+        "netclass": "PWR",
+        "pattern": "/*/SHUNT_U"
+      },
+      {
+        "netclass": "PWR",
+        "pattern": "/*/SHUNT_V"
+      },
+      {
+        "netclass": "PWR",
+        "pattern": "/*/SHUNT_W"
+      },
+      {
+        "netclass": "PWR",
+        "pattern": "/*/+12V"
+      }
+    ]
+  },
+  "schematic": {
+    "annotate_start_num": 0,
+    "drawing": {},
+    "variants": []
+  },
+  "sheets": [
+    [
+      "ca0d249d-62ec-54f0-8a12-2dbdc97be7a6",
+      ""
+    ]
+  ]
+}

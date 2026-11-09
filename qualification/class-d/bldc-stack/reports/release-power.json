@@ -1,0 +1,114 @@
+{
+  "schema_version": "synth.release.v1",
+  "tool_version": "synth-cli 0.1.1",
+  "input": "qualification/class-d/bldc-stack/power.synth",
+  "fab_requested": false,
+  "production_status": "untrusted",
+  "release_ready": false,
+  "gate_scope": "production_status and release_ready cover only Synth's routing and export gates: override flags, route validation and signal integrity. They are not a fabrication approval, a qualification result or a component review.",
+  "reviewer_state": [
+    {
+      "part_id": "bsc030n08ns5",
+      "reviewed": false
+    },
+    {
+      "part_id": "bzt52c15",
+      "reviewed": false
+    },
+    {
+      "part_id": "c_electrolytic_470uf_50v",
+      "reviewed": false
+    },
+    {
+      "part_id": "c_generic_0603",
+      "reviewed": false
+    },
+    {
+      "part_id": "c_generic_1206",
+      "reviewed": false
+    },
+    {
+      "part_id": "d_schottky",
+      "reviewed": false
+    },
+    {
+      "part_id": "ferrite_bead_0603",
+      "reviewed": false
+    },
+    {
+      "part_id": "header_2x10_socket",
+      "reviewed": false
+    },
+    {
+      "part_id": "ir2101",
+      "reviewed": false
+    },
+    {
+      "part_id": "irf4905",
+      "reviewed": false
+    },
+    {
+      "part_id": "l_bourns_srn6045ta_6r8m",
+      "reviewed_by": "Steve Munene",
+      "reviewed_at": "2026-10-28",
+      "reviewed": true
+    },
+    {
+      "part_id": "lmr38010",
+      "reviewed_by": "Steve Munene",
+      "reviewed_at": "2026-10-29",
+      "reviewed": true
+    },
+    {
+      "part_id": "mcp6022_soic",
+      "reviewed": false
+    },
+    {
+      "part_id": "mounting_hole_m2_5",
+      "reviewed": false
+    },
+    {
+      "part_id": "npn_bjt_2n3904",
+      "reviewed": false
+    },
+    {
+      "part_id": "r_generic_0603",
+      "reviewed": false
+    },
+    {
+      "part_id": "r_generic_2512",
+      "reviewed": false
+    },
+    {
+      "part_id": "smbj30a",
+      "reviewed_by": "Steve Munene",
+      "reviewed_at": "2026-10-28",
+      "reviewed": true
+    },
+    {
+      "part_id": "terminal_block_mkds_2pin",
+      "reviewed": false
+    },
+    {
+      "part_id": "terminal_block_mkds_3pin",
+      "reviewed": false
+    }
+  ],
+  "synthetic_symbols": [
+    "lmr38010"
+  ],
+  "routing": {
+    "engine": "freerouting",
+    "state": "validation_failed",
+    "input_hash": "c7736ac18498370e66ce43e00b8e4f5951de3596caaae5084698334cc0d4b494",
+    "run_record": "/tmp/opencode/pwr-reframe/bldc_power.routing.json",
+    "reasons": [
+      "raise the router budget (--router-timeout) or reduce the design; the baseline export is preserved and no partial board was installed"
+    ]
+  },
+  "signal_integrity": {
+    "blocking": 0,
+    "warnings": 0,
+    "findings": []
+  }
+}

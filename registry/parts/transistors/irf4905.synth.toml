@@ -1,0 +1,40 @@
+id = "irf4905"
+kind = "transistor"
+version = 0
+lifecycle = "active"
+description = "Infineon IRF4905PBF P-channel HEXFET, -55 V VDS, -74 A, 20 mOhm max RDS(on) at VGS=-10 V, TO-220AB, pin 1 gate, 2 drain, 3 source"
+mpn = "IRF4905PBF"
+lcsc_pn = "C2564"
+kicad_symbol = "Transistor_FET:IRF4905"
+kicad_footprint = "Package_TO_SOT_THT:TO-220-3_Vertical"
+
+[footprint_dimensions]
+width_mm = 10.16
+height_mm = 4.57
+courtyard_margin_mm = 0.25
+
+[operating_conditions]
+max_voltage_v = 55.0
+max_current_ma = 74000.0
+max_power_mw = 200000
+
+[[pins]]
+name = "gate"
+number = "1"
+electrical_type = "input"
+required = true
+[[pins]]
+name = "drain"
+number = "2"
+electrical_type = "passive"
+required = true
+[[pins]]
+name = "source"
+number = "3"
+electrical_type = "passive"
+required = true
+
+[provenance]
+source = "authored"
+generator = "hand-written from the Infineon IRF4905 datasheet"
+datasheet_url = "https://www.infineon.com/assets/row/public/documents/24/49/infineon-irf4905-datasheet-en.pdf"

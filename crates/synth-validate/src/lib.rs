@@ -4403,6 +4403,7 @@ mod tests {
     fn bare_board(manufacturer: Option<&str>) -> Board {
         use synth_diagnostics::Span;
         Board {
+            outline: None,
             schematic_overflow: None,
             schematic_paper: None,
             groups: Vec::new(),
@@ -4746,6 +4747,7 @@ mod tests {
         let mut p = part(part_id, "mcu", pins);
         p.kicad_footprint = Some(footprint.into());
         Board {
+            outline: None,
             schematic_overflow: None,
             schematic_paper: None,
             groups: Vec::new(),
@@ -4899,6 +4901,7 @@ mod tests {
             source_span: Span::new(0, 0),
         };
         Board {
+            outline: None,
             schematic_overflow: None,
             schematic_paper: None,
             groups: Vec::new(),
@@ -4988,6 +4991,7 @@ mod tests {
             source_span: Span::new(0, 0),
         };
         Board {
+            outline: None,
             schematic_overflow: None,
             schematic_paper: None,
             groups: Vec::new(),
@@ -5083,6 +5087,7 @@ mod tests {
     fn identity_test_board(parts: Vec<(synth_registry::Part, &str)>) -> Board {
         use synth_diagnostics::Span;
         Board {
+            outline: None,
             schematic_overflow: None,
             schematic_paper: None,
             groups: Vec::new(),
@@ -5234,6 +5239,7 @@ mod tests {
             source_span: Span::new(0, 0),
         };
         Board {
+            outline: None,
             schematic_overflow: None,
             schematic_paper: None,
             groups: Vec::new(),
@@ -5386,6 +5392,7 @@ mod tests {
             }),
         };
         let board = Board {
+            outline: None,
             schematic_overflow: None,
             schematic_paper: None,
             groups: Vec::new(),
@@ -5453,6 +5460,7 @@ mod tests {
             }],
         );
         let board = Board {
+            outline: None,
             schematic_overflow: None,
             schematic_paper: None,
             groups: Vec::new(),

@@ -1,6 +1,6 @@
 id = "npn_bjt_2n3904"
 kind = "transistor"
-description = "2N3904 NPN BJT, general-purpose, TO-92"
+description = "2N3904 NPN BJT, 40 V VCEO, 200 mA continuous collector current, TO-92"
 mpn = "2N3904"
 lcsc_pn = "C20505"
 kicad_symbol = "Transistor_BJT:2N3904"
@@ -13,8 +13,8 @@ courtyard_margin_mm = 0.25
 
 [operating_conditions]
 min_voltage_v = 1.8
-max_voltage_v = 5.0
-max_current_ma = 100.0
+max_voltage_v = 40.0
+max_current_ma = 200.0
 
 [[pins]]
 name = "emitter"
@@ -30,3 +30,6 @@ electrical_type = "input"
 name = "collector"
 number = "3"
 electrical_type = "passive"
+
+# Datasheet: https://www.onsemi.com/pdf/datasheet/2n3903-d.pdf
+# (2N3903/2N3904, VCEO 40 V, IC 200 mA). Read 2026-11-03 via Firecrawl.

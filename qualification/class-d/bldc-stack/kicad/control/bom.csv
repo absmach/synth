@@ -1,0 +1,62 @@
+refdes,value,kind,description,kicad_symbol,kicad_footprint,lcsc_pn,mpn
+C_12V_S,100nF,capacitor,"Generic 0603 MLCC, X7R/X5R, any value",Device:C,Capacitor_SMD:C_0603_1608Metric,,
+C_B2B,100nF,capacitor,"Generic 0603 MLCC, X7R/X5R, any value",Device:C,Capacitor_SMD:C_0603_1608Metric,,
+C_ENC_A,100nF,capacitor,"Generic 0603 MLCC, X7R/X5R, any value",Device:C,Capacitor_SMD:C_0603_1608Metric,,
+C_ENC_B,100nF,capacitor,"Generic 0603 MLCC, X7R/X5R, any value",Device:C,Capacitor_SMD:C_0603_1608Metric,,
+C_FAULT,100nF,capacitor,"Generic 0603 MLCC, X7R/X5R, any value",Device:C,Capacitor_SMD:C_0603_1608Metric,,
+C_HALL_U,100nF,capacitor,"Generic 0603 MLCC, X7R/X5R, any value",Device:C,Capacitor_SMD:C_0603_1608Metric,,
+C_HALL_V,100nF,capacitor,"Generic 0603 MLCC, X7R/X5R, any value",Device:C,Capacitor_SMD:C_0603_1608Metric,,
+C_HALL_W,100nF,capacitor,"Generic 0603 MLCC, X7R/X5R, any value",Device:C,Capacitor_SMD:C_0603_1608Metric,,
+C_ISENSE_U,100nF,capacitor,"Generic 0603 MLCC, X7R/X5R, any value",Device:C,Capacitor_SMD:C_0603_1608Metric,,
+C_ISENSE_V,100nF,capacitor,"Generic 0603 MLCC, X7R/X5R, any value",Device:C,Capacitor_SMD:C_0603_1608Metric,,
+C_ISENSE_W,100nF,capacitor,"Generic 0603 MLCC, X7R/X5R, any value",Device:C,Capacitor_SMD:C_0603_1608Metric,,
+C_LDO_IN,10uF,capacitor,"Generic 1206 ceramic capacitor, any value",Device:C,Capacitor_SMD:C_1206_3216Metric,,
+C_LDO_IN2,100nF,capacitor,"Generic 0603 MLCC, X7R/X5R, any value",Device:C,Capacitor_SMD:C_0603_1608Metric,,
+C_LDO_OUT,10uF,capacitor,"Generic 0603 MLCC, X7R/X5R, any value",Device:C,Capacitor_SMD:C_0603_1608Metric,,
+C_NRST,100nF,capacitor,"Generic 0603 MLCC, X7R/X5R, any value",Device:C,Capacitor_SMD:C_0603_1608Metric,,
+C_RS485,100nF,capacitor,"Generic 0603 MLCC, X7R/X5R, any value",Device:C,Capacitor_SMD:C_0603_1608Metric,,
+C_VBUS_S,100nF,capacitor,"Generic 0603 MLCC, X7R/X5R, any value",Device:C,Capacitor_SMD:C_0603_1608Metric,,
+C_VDD1,100nF,capacitor,"Generic 0603 MLCC, X7R/X5R, any value",Device:C,Capacitor_SMD:C_0603_1608Metric,,
+C_VDD2,4.7uF,capacitor,"Generic 0603 MLCC, X7R/X5R, any value",Device:C,Capacitor_SMD:C_0603_1608Metric,,
+D_LED_FAULT,FAULT,led,"Lite-On LTST-C190KRKT red AlInGaP LED, 0603, Vf 1.6 to 2.4V at 20mA",Device:LED,LED_SMD:LED_0603_1608Metric,,LTST-C190KRKT
+D_LED_STATUS,STATUS,led,"Lite-On LTST-C190KGKT green AlInGaP LED, 0603, Vf 1.9 to 2.4V at 20mA",Device:LED,LED_SMD:LED_0603_1608Metric,,LTST-C190KGKT
+D_RS485_A,ESD_A,diode,"Nexperia PTVS6V0S1UR 400 W unidirectional TVS, 6.0 V standoff, SOD123W, for VBUS and CC",Device:D_Zener,Diode_SMD:Nexperia_CFP3_SOD-123W,,PTVS6V0S1UR
+D_RS485_B,ESD_B,diode,"Nexperia PTVS6V0S1UR 400 W unidirectional TVS, 6.0 V standoff, SOD123W, for VBUS and CC",Device:D_Zener,Diode_SMD:Nexperia_CFP3_SOD-123W,,PTVS6V0S1UR
+H1,(no value),mounting_hole,M2.5 non-plated mounting hole (NPTH) for a board corner,Mechanical:MountingHole,MountingHole:MountingHole_2.5mm,,
+H2,(no value),mounting_hole,M2.5 non-plated mounting hole (NPTH) for a board corner,Mechanical:MountingHole,MountingHole:MountingHole_2.5mm,,
+H3,(no value),mounting_hole,M2.5 non-plated mounting hole (NPTH) for a board corner,Mechanical:MountingHole,MountingHole:MountingHole_2.5mm,,
+H4,(no value),mounting_hole,M2.5 non-plated mounting hole (NPTH) for a board corner,Mechanical:MountingHole,MountingHole:MountingHole_2.5mm,,
+J_B2B,CTRL,connector,"ZHOURI 2.54-2*10 2x10 pin header, 2.54 mm pitch, 2.5 A per contact, 20 pins, vertical through-hole",Connector_Generic:Conn_02x10_Odd_Even,Connector_PinHeader_2.54mm:PinHeader_2x10_P2.54mm_Vertical,C5116480,2.54-2*10
+J_ENC,ENC,connector,"1x4 through-hole pin header, 2.54mm pitch",Connector_Generic:Conn_01x04,Connector_PinHeader_2.54mm:PinHeader_1x04_P2.54mm_Vertical,C492403,PZ254V-11-04P
+J_HALL_U,HALL_U,connector,"1x3 through-hole pin header, 2.54mm pitch",Connector_Generic:Conn_01x03,Connector_PinHeader_2.54mm:PinHeader_1x03_P2.54mm_Vertical,,
+J_HALL_V,HALL_V,connector,"1x3 through-hole pin header, 2.54mm pitch",Connector_Generic:Conn_01x03,Connector_PinHeader_2.54mm:PinHeader_1x03_P2.54mm_Vertical,,
+J_HALL_W,HALL_W,connector,"1x3 through-hole pin header, 2.54mm pitch",Connector_Generic:Conn_01x03,Connector_PinHeader_2.54mm:PinHeader_1x03_P2.54mm_Vertical,,
+J_RS485,RS485,connector,"1x3 through-hole pin header, 2.54mm pitch",Connector_Generic:Conn_01x03,Connector_PinHeader_2.54mm:PinHeader_1x03_P2.54mm_Vertical,,
+J_SWD,SWD,connector,"1x4 through-hole pin header, 2.54mm pitch",Connector_Generic:Conn_01x04,Connector_PinHeader_2.54mm:PinHeader_1x04_P2.54mm_Vertical,C492403,PZ254V-11-04P
+L_B3V3,600ohm@100MHz,inductor,"0603 ferrite bead, 600Ω @ 100MHz — EMI suppression",Device:FerriteBead,Inductor_SMD:L_0603_1608Metric,,
+R_12V_B,22k,resistor,"Generic 0603 thick-film resistor, any value",Device:R_US,Resistor_SMD:R_0603_1608Metric,,
+R_12V_T,100k,resistor,"Generic 0603 thick-film resistor, any value",Device:R_US,Resistor_SMD:R_0603_1608Metric,,
+R_BOOT,1k,resistor,"Generic 0603 thick-film resistor, any value",Device:R_US,Resistor_SMD:R_0603_1608Metric,,
+R_ENC_A,10k,resistor,"Generic 0603 thick-film resistor, any value",Device:R_US,Resistor_SMD:R_0603_1608Metric,,
+R_ENC_B,10k,resistor,"Generic 0603 thick-film resistor, any value",Device:R_US,Resistor_SMD:R_0603_1608Metric,,
+R_FAULT,10k,resistor,"Generic 0603 thick-film resistor, any value",Device:R_US,Resistor_SMD:R_0603_1608Metric,,
+R_GATE_EN,10k,resistor,"Generic 0603 thick-film resistor, any value",Device:R_US,Resistor_SMD:R_0603_1608Metric,,
+R_HALL_SU,1k,resistor,"Generic 0603 thick-film resistor, any value",Device:R_US,Resistor_SMD:R_0603_1608Metric,,
+R_HALL_SV,1k,resistor,"Generic 0603 thick-film resistor, any value",Device:R_US,Resistor_SMD:R_0603_1608Metric,,
+R_HALL_SW,1k,resistor,"Generic 0603 thick-film resistor, any value",Device:R_US,Resistor_SMD:R_0603_1608Metric,,
+R_HALL_U,10k,resistor,"Generic 0603 thick-film resistor, any value",Device:R_US,Resistor_SMD:R_0603_1608Metric,,
+R_HALL_V,10k,resistor,"Generic 0603 thick-film resistor, any value",Device:R_US,Resistor_SMD:R_0603_1608Metric,,
+R_HALL_W,10k,resistor,"Generic 0603 thick-film resistor, any value",Device:R_US,Resistor_SMD:R_0603_1608Metric,,
+R_ISENSE_U,1k,resistor,"Generic 0603 thick-film resistor, any value",Device:R_US,Resistor_SMD:R_0603_1608Metric,,
+R_ISENSE_V,1k,resistor,"Generic 0603 thick-film resistor, any value",Device:R_US,Resistor_SMD:R_0603_1608Metric,,
+R_ISENSE_W,1k,resistor,"Generic 0603 thick-film resistor, any value",Device:R_US,Resistor_SMD:R_0603_1608Metric,,
+R_LED_FAULT,470,resistor,"Generic 0603 thick-film resistor, any value",Device:R_US,Resistor_SMD:R_0603_1608Metric,,
+R_LED_STATUS,470,resistor,"Generic 0603 thick-film resistor, any value",Device:R_US,Resistor_SMD:R_0603_1608Metric,,
+R_NRST,10k,resistor,"Generic 0603 thick-film resistor, any value",Device:R_US,Resistor_SMD:R_0603_1608Metric,,
+R_RS485_RX,1k,resistor,"Generic 0603 thick-film resistor, any value",Device:R_US,Resistor_SMD:R_0603_1608Metric,,
+R_TERM,120ohm,resistor,"Generic 0603 thick-film resistor, any value",Device:R_US,Resistor_SMD:R_0603_1608Metric,,
+R_VBUS_S,1k,resistor,"Generic 0603 thick-film resistor, any value",Device:R_US,Resistor_SMD:R_0603_1608Metric,,
+SW_BOOT,BOOT,switch,Generic SPST tactile button,Switch:SW_Push,Button_Switch_SMD:SW_SPST_PTS645Sx43SMTR92,C221880,PTS645SM43SMTR92 LFS
+U1,STM32G030K8T6,mcu,"ST STM32G030K8T6 Cortex-M0+ MCU, 64 KB flash, LQFP-32; VDD 2.0 to 3.6 V per DS12991, 100 nF plus 4.7 uF on VDD",MCU_ST_STM32G0:STM32G030K8Tx,Package_QFP:LQFP-32_7x7mm_P0.8mm,,
+U_LDO,AMS1117-3.3,regulator,"AMS1117-3.3 fixed 3.3V LDO regulator, SOT-223 — common JLC stock",Regulator_Linear:AMS1117-3.3,Package_TO_SOT_SMD:SOT-223-3_TabPin2,C6186,AMS1117-3.3
+U_RS485,THVD1450D,ic,"TI THVD1450D RS-485 transceiver, 3.3-5 V, 50 Mbps, ±18 kV IEC 61000-4-2 contact ESD, SOIC-8",Interface_UART:THVD1450D,Package_SO:SOIC-8_3.9x4.9mm_P1.27mm,C2671361,THVD1450D

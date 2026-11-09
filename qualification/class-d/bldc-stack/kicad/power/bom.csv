@@ -1,0 +1,112 @@
+refdes,value,kind,description,kicad_symbol,kicad_footprint,lcsc_pn,mpn
+C_12B2B,100nF,capacitor,"Generic 0603 MLCC, X7R/X5R, any value",Device:C,Capacitor_SMD:C_0603_1608Metric,,
+C_3V3,100nF,capacitor,"Generic 0603 MLCC, X7R/X5R, any value",Device:C,Capacitor_SMD:C_0603_1608Metric,,
+C_3V3_2,10uF,capacitor,"Generic 1206 ceramic capacitor, any value",Device:C,Capacitor_SMD:C_1206_3216Metric,,
+C_BOOT_U,100nF,capacitor,"Generic 0603 MLCC, X7R/X5R, any value",Device:C,Capacitor_SMD:C_0603_1608Metric,,
+C_BOOT_V,100nF,capacitor,"Generic 0603 MLCC, X7R/X5R, any value",Device:C,Capacitor_SMD:C_0603_1608Metric,,
+C_BOOT_W,100nF,capacitor,"Generic 0603 MLCC, X7R/X5R, any value",Device:C,Capacitor_SMD:C_0603_1608Metric,,
+C_BUCK_BOOT,100nF,capacitor,"Generic 0603 MLCC, X7R/X5R, any value",Device:C,Capacitor_SMD:C_0603_1608Metric,,
+C_BUCK_FF,100pF,capacitor,"Generic 0603 MLCC, X7R/X5R, any value",Device:C,Capacitor_SMD:C_0603_1608Metric,,
+C_BUCK_IN,10uF,capacitor,"Generic 1206 ceramic capacitor, any value",Device:C,Capacitor_SMD:C_1206_3216Metric,,
+C_BUCK_IN2,220nF,capacitor,"Generic 0603 MLCC, X7R/X5R, any value",Device:C,Capacitor_SMD:C_0603_1608Metric,,
+C_BUCK_OUT1,22uF,capacitor,"Generic 1206 ceramic capacitor, any value",Device:C,Capacitor_SMD:C_1206_3216Metric,,
+C_BUCK_OUT2,22uF,capacitor,"Generic 1206 ceramic capacitor, any value",Device:C,Capacitor_SMD:C_1206_3216Metric,,
+C_BUCK_OUT3,100nF,capacitor,"Generic 0603 MLCC, X7R/X5R, any value",Device:C,Capacitor_SMD:C_0603_1608Metric,,
+C_BULK1,470uF,capacitor,"Panasonic EEU-FR1H471 470 uF 50 V +/-20 % 105 C radial aluminium electrolytic, 12.5 mm x 20 mm, 5 mm lead spacing, polarised (pin 1 is +)",Device:C_Polarized,Capacitor_THT:CP_Radial_D12.5mm_P5.00mm,C1589760,EEU-FR1H471
+C_BULK2,470uF,capacitor,"Panasonic EEU-FR1H471 470 uF 50 V +/-20 % 105 C radial aluminium electrolytic, 12.5 mm x 20 mm, 5 mm lead spacing, polarised (pin 1 is +)",Device:C_Polarized,Capacitor_THT:CP_Radial_D12.5mm_P5.00mm,C1589760,EEU-FR1H471
+C_CS_U_F,100pF,capacitor,"Generic 0603 MLCC, X7R/X5R, any value",Device:C,Capacitor_SMD:C_0603_1608Metric,,
+C_CS_U_IN,100nF,capacitor,"Generic 0603 MLCC, X7R/X5R, any value",Device:C,Capacitor_SMD:C_0603_1608Metric,,
+C_CS_V_F,100pF,capacitor,"Generic 0603 MLCC, X7R/X5R, any value",Device:C,Capacitor_SMD:C_0603_1608Metric,,
+C_CS_V_IN,100nF,capacitor,"Generic 0603 MLCC, X7R/X5R, any value",Device:C,Capacitor_SMD:C_0603_1608Metric,,
+C_CS_W_F,100pF,capacitor,"Generic 0603 MLCC, X7R/X5R, any value",Device:C,Capacitor_SMD:C_0603_1608Metric,,
+C_CS_W_IN,100nF,capacitor,"Generic 0603 MLCC, X7R/X5R, any value",Device:C,Capacitor_SMD:C_0603_1608Metric,,
+C_GD_BULK,10uF,capacitor,"Generic 1206 ceramic capacitor, any value",Device:C,Capacitor_SMD:C_1206_3216Metric,,
+C_GD_U,100nF,capacitor,"Generic 0603 MLCC, X7R/X5R, any value",Device:C,Capacitor_SMD:C_0603_1608Metric,,
+C_GD_V,100nF,capacitor,"Generic 0603 MLCC, X7R/X5R, any value",Device:C,Capacitor_SMD:C_0603_1608Metric,,
+C_GD_W,100nF,capacitor,"Generic 0603 MLCC, X7R/X5R, any value",Device:C,Capacitor_SMD:C_0603_1608Metric,,
+C_IN1,10uF,capacitor,"Generic 1206 ceramic capacitor, any value",Device:C,Capacitor_SMD:C_1206_3216Metric,,
+C_IN2,10uF,capacitor,"Generic 1206 ceramic capacitor, any value",Device:C,Capacitor_SMD:C_1206_3216Metric,,
+C_IN3,100nF,capacitor,"Generic 0603 MLCC, X7R/X5R, any value",Device:C,Capacitor_SMD:C_0603_1608Metric,,
+C_IS_OUT_U,100nF,capacitor,"Generic 0603 MLCC, X7R/X5R, any value",Device:C,Capacitor_SMD:C_0603_1608Metric,,
+C_IS_OUT_V,100nF,capacitor,"Generic 0603 MLCC, X7R/X5R, any value",Device:C,Capacitor_SMD:C_0603_1608Metric,,
+C_IS_OUT_W,100nF,capacitor,"Generic 0603 MLCC, X7R/X5R, any value",Device:C,Capacitor_SMD:C_0603_1608Metric,,
+C_REF,100nF,capacitor,"Generic 0603 MLCC, X7R/X5R, any value",Device:C,Capacitor_SMD:C_0603_1608Metric,,
+C_VBUS_S,100nF,capacitor,"Generic 0603 MLCC, X7R/X5R, any value",Device:C,Capacitor_SMD:C_0603_1608Metric,,
+D_BOOT_U,1N5819HW,diode,"Diodes Inc. 1N5819HW-7-F, 40 V 1 A Schottky diode, SOD-123, low forward voltage",Device:D_Schottky,Diode_SMD:D_SOD-123,C82544,1N5819HW-7-F
+D_BOOT_V,1N5819HW,diode,"Diodes Inc. 1N5819HW-7-F, 40 V 1 A Schottky diode, SOD-123, low forward voltage",Device:D_Schottky,Diode_SMD:D_SOD-123,C82544,1N5819HW-7-F
+D_BOOT_W,1N5819HW,diode,"Diodes Inc. 1N5819HW-7-F, 40 V 1 A Schottky diode, SOD-123, low forward voltage",Device:D_Schottky,Diode_SMD:D_SOD-123,C82544,1N5819HW-7-F
+D_REV_Z,15V,diode,"BZT52C15 15 V +/-5 % 500 mW zener diode, SOD-123 (gate-source clamp for the reverse-polarity P-FET). Vz 13.8 to 15.6 V at Izt 5 mA",Device:D_Zener,Diode_SMD:D_SOD-123,C2104,BZT52C15
+D_TVS,SMBJ30A,diode,"Vishay SMBJ30A 600 W unidirectional TVS, SMB (DO-214AA). max_voltage_v is the 30 V standoff VWM, not a clamp or abs max: VBR 33.3-36.8 V at 1 mA, VC 48.4 V at 12.4 A",Device:D_Zener,Diode_SMD:D_SMB,,SMBJ30A
+H1,(no value),mounting_hole,M2.5 non-plated mounting hole (NPTH) for a board corner,Mechanical:MountingHole,MountingHole:MountingHole_2.5mm,,
+H2,(no value),mounting_hole,M2.5 non-plated mounting hole (NPTH) for a board corner,Mechanical:MountingHole,MountingHole:MountingHole_2.5mm,,
+H3,(no value),mounting_hole,M2.5 non-plated mounting hole (NPTH) for a board corner,Mechanical:MountingHole,MountingHole:MountingHole_2.5mm,,
+H4,(no value),mounting_hole,M2.5 non-plated mounting hole (NPTH) for a board corner,Mechanical:MountingHole,MountingHole:MountingHole_2.5mm,,
+J_B2B,PWR,connector,"BOOMELE 2.54-2*10P 2x10 female socket, 2.54 mm pitch, 2.5 A per contact, 20 pins, vertical through-hole",Connector_Generic:Conn_02x10_Odd_Even,Connector_PinSocket_2.54mm:PinSocket_2x10_P2.54mm_Vertical,C30867,2.54-2*10P
+J_MOTOR,MOTOR,connector,"Phoenix Contact MKDS 1,5/3-5,08 screw terminal block, 3 positions, 5.08 mm pitch, 17.5 A, 400 V (III/2), 1.5 mm2, 0.9 x 0.9 mm solder pin, linear pinning, horizontal through-hole; LCSC C480520, DigiKey 277-1264-ND. The JLCPCB listing states 250 V, the Phoenix datasheet 400 V (III/2); the 24 V rail is below both",Connector:Screw_Terminal_01x03,"TerminalBlock_Phoenix:TerminalBlock_Phoenix_MKDS-1,5-3-5.08_1x03_P5.08mm_Horizontal",C480520,1715734
+J_PWR,24V_IN,connector,"Phoenix Contact MKDS 1,5/2-5,08 screw terminal block, 2 positions, 5.08 mm pitch, 17.5 A, 400 V (III/2), 1.5 mm2, 0.9 x 0.9 mm solder pin, linear pinning, horizontal through-hole; LCSC C480516, DigiKey 277-1263-ND. The JLCPCB listing states 250 V, the Phoenix datasheet 400 V (III/2); the 24 V rail is below both",Connector:Screw_Terminal_01x02,"TerminalBlock_Phoenix:TerminalBlock_Phoenix_MKDS-1,5-2-5.08_1x02_P5.08mm_Horizontal",C480516,1715721
+L_12B2B,600ohm@100MHz,inductor,"0603 ferrite bead, 600Ω @ 100MHz — EMI suppression",Device:FerriteBead,Inductor_SMD:L_0603_1608Metric,,
+L_BUCK,6.8uH,inductor,"Bourns SRN6045TA-6R8M 6.8 uH semi-shielded power inductor, 6.0 x 6.0 mm. Datasheet typ: Isat 5.7 A (L drops 30%), Irms 3.6 A (max_current_ma is Irms), DCR 34 mOhm +-20%",Device:L,Inductor_SMD:L_Bourns_SRN6045TA,,SRN6045TA-6R8M
+Q_FAULT,2N3904,transistor,"2N3904 NPN BJT, 40 V VCEO, 200 mA continuous collector current, TO-92",Transistor_BJT:2N3904,Package_TO_SOT_THT:TO-92_Inline,C20505,2N3904
+Q_GE,IRF4905,transistor,"Infineon IRF4905PBF P-channel HEXFET, -55 V VDS, -74 A, 20 mOhm max RDS(on) at VGS=-10 V, TO-220AB, pin 1 gate, 2 drain, 3 source",Transistor_FET:IRF4905,Package_TO_SOT_THT:TO-220-3_Vertical,C2564,IRF4905PBF
+Q_GE_CTRL,2N3904,transistor,"2N3904 NPN BJT, 40 V VCEO, 200 mA continuous collector current, TO-92",Transistor_BJT:2N3904,Package_TO_SOT_THT:TO-92_Inline,C20505,2N3904
+Q_REV,IRF4905,transistor,"Infineon IRF4905PBF P-channel HEXFET, -55 V VDS, -74 A, 20 mOhm max RDS(on) at VGS=-10 V, TO-220AB, pin 1 gate, 2 drain, 3 source",Transistor_FET:IRF4905,Package_TO_SOT_THT:TO-220-3_Vertical,C2564,IRF4905PBF
+Q_UH,80V 100A,transistor,"Infineon BSC030N08NS5 OptiMOS-5 N-channel MOSFET, 80 V VDS, 100 A, 3.0 mOhm max RDS(on) at VGS=10 V, PG-TDSON-8 (SuperSO8 5x6), pins 1-3 source, 4 gate, 5-8 drain",Transistor_FET:BSC030N08NS5,Package_TO_SOT_SMD:TDSON-8-1,C501507,BSC030N08NS5ATMA1
+Q_UL,80V 100A,transistor,"Infineon BSC030N08NS5 OptiMOS-5 N-channel MOSFET, 80 V VDS, 100 A, 3.0 mOhm max RDS(on) at VGS=10 V, PG-TDSON-8 (SuperSO8 5x6), pins 1-3 source, 4 gate, 5-8 drain",Transistor_FET:BSC030N08NS5,Package_TO_SOT_SMD:TDSON-8-1,C501507,BSC030N08NS5ATMA1
+Q_VH,80V 100A,transistor,"Infineon BSC030N08NS5 OptiMOS-5 N-channel MOSFET, 80 V VDS, 100 A, 3.0 mOhm max RDS(on) at VGS=10 V, PG-TDSON-8 (SuperSO8 5x6), pins 1-3 source, 4 gate, 5-8 drain",Transistor_FET:BSC030N08NS5,Package_TO_SOT_SMD:TDSON-8-1,C501507,BSC030N08NS5ATMA1
+Q_VL,80V 100A,transistor,"Infineon BSC030N08NS5 OptiMOS-5 N-channel MOSFET, 80 V VDS, 100 A, 3.0 mOhm max RDS(on) at VGS=10 V, PG-TDSON-8 (SuperSO8 5x6), pins 1-3 source, 4 gate, 5-8 drain",Transistor_FET:BSC030N08NS5,Package_TO_SOT_SMD:TDSON-8-1,C501507,BSC030N08NS5ATMA1
+Q_WH,80V 100A,transistor,"Infineon BSC030N08NS5 OptiMOS-5 N-channel MOSFET, 80 V VDS, 100 A, 3.0 mOhm max RDS(on) at VGS=10 V, PG-TDSON-8 (SuperSO8 5x6), pins 1-3 source, 4 gate, 5-8 drain",Transistor_FET:BSC030N08NS5,Package_TO_SOT_SMD:TDSON-8-1,C501507,BSC030N08NS5ATMA1
+Q_WL,80V 100A,transistor,"Infineon BSC030N08NS5 OptiMOS-5 N-channel MOSFET, 80 V VDS, 100 A, 3.0 mOhm max RDS(on) at VGS=10 V, PG-TDSON-8 (SuperSO8 5x6), pins 1-3 source, 4 gate, 5-8 drain",Transistor_FET:BSC030N08NS5,Package_TO_SOT_SMD:TDSON-8-1,C501507,BSC030N08NS5ATMA1
+R_BUCK_FB_B,10k,resistor,"Generic 0603 thick-film resistor, any value",Device:R_US,Resistor_SMD:R_0603_1608Metric,,
+R_BUCK_FB_T,110k,resistor,"Generic 0603 thick-film resistor, any value",Device:R_US,Resistor_SMD:R_0603_1608Metric,,
+R_BUCK_RT,33k,resistor,"Generic 0603 thick-film resistor, any value",Device:R_US,Resistor_SMD:R_0603_1608Metric,,
+R_CS_U_F,39k,resistor,"Generic 0603 thick-film resistor, any value",Device:R_US,Resistor_SMD:R_0603_1608Metric,,
+R_CS_U_G,1k,resistor,"Generic 0603 thick-film resistor, any value",Device:R_US,Resistor_SMD:R_0603_1608Metric,,
+R_CS_U_IN,1k,resistor,"Generic 0603 thick-film resistor, any value",Device:R_US,Resistor_SMD:R_0603_1608Metric,,
+R_CS_V_F,39k,resistor,"Generic 0603 thick-film resistor, any value",Device:R_US,Resistor_SMD:R_0603_1608Metric,,
+R_CS_V_G,1k,resistor,"Generic 0603 thick-film resistor, any value",Device:R_US,Resistor_SMD:R_0603_1608Metric,,
+R_CS_V_IN,1k,resistor,"Generic 0603 thick-film resistor, any value",Device:R_US,Resistor_SMD:R_0603_1608Metric,,
+R_CS_W_F,39k,resistor,"Generic 0603 thick-film resistor, any value",Device:R_US,Resistor_SMD:R_0603_1608Metric,,
+R_CS_W_G,1k,resistor,"Generic 0603 thick-film resistor, any value",Device:R_US,Resistor_SMD:R_0603_1608Metric,,
+R_CS_W_IN,1k,resistor,"Generic 0603 thick-film resistor, any value",Device:R_US,Resistor_SMD:R_0603_1608Metric,,
+R_FAULT_B,10k,resistor,"Generic 0603 thick-film resistor, any value",Device:R_US,Resistor_SMD:R_0603_1608Metric,,
+R_FAULT_PU,10k,resistor,"Generic 0603 thick-film resistor, any value",Device:R_US,Resistor_SMD:R_0603_1608Metric,,
+R_FAULT_SENSE,1k,resistor,"Generic 0603 thick-film resistor, any value",Device:R_US,Resistor_SMD:R_0603_1608Metric,,
+R_GE_B,10k,resistor,"Generic 0603 thick-film resistor, any value",Device:R_US,Resistor_SMD:R_0603_1608Metric,,
+R_GE_BD,10k,resistor,"Generic 0603 thick-film resistor, any value",Device:R_US,Resistor_SMD:R_0603_1608Metric,,
+R_GE_PU,10k,resistor,"Generic 0603 thick-film resistor, any value",Device:R_US,Resistor_SMD:R_0603_1608Metric,,
+R_GH_U,10R,resistor,"Generic 0603 thick-film resistor, any value",Device:R_US,Resistor_SMD:R_0603_1608Metric,,
+R_GH_V,10R,resistor,"Generic 0603 thick-film resistor, any value",Device:R_US,Resistor_SMD:R_0603_1608Metric,,
+R_GH_W,10R,resistor,"Generic 0603 thick-film resistor, any value",Device:R_US,Resistor_SMD:R_0603_1608Metric,,
+R_GL_U,10R,resistor,"Generic 0603 thick-film resistor, any value",Device:R_US,Resistor_SMD:R_0603_1608Metric,,
+R_GL_V,10R,resistor,"Generic 0603 thick-film resistor, any value",Device:R_US,Resistor_SMD:R_0603_1608Metric,,
+R_GL_W,10R,resistor,"Generic 0603 thick-film resistor, any value",Device:R_US,Resistor_SMD:R_0603_1608Metric,,
+R_GS_UH,10k,resistor,"Generic 0603 thick-film resistor, any value",Device:R_US,Resistor_SMD:R_0603_1608Metric,,
+R_GS_UL,10k,resistor,"Generic 0603 thick-film resistor, any value",Device:R_US,Resistor_SMD:R_0603_1608Metric,,
+R_GS_VH,10k,resistor,"Generic 0603 thick-film resistor, any value",Device:R_US,Resistor_SMD:R_0603_1608Metric,,
+R_GS_VL,10k,resistor,"Generic 0603 thick-film resistor, any value",Device:R_US,Resistor_SMD:R_0603_1608Metric,,
+R_GS_WH,10k,resistor,"Generic 0603 thick-film resistor, any value",Device:R_US,Resistor_SMD:R_0603_1608Metric,,
+R_GS_WL,10k,resistor,"Generic 0603 thick-film resistor, any value",Device:R_US,Resistor_SMD:R_0603_1608Metric,,
+R_HIN_U,10k,resistor,"Generic 0603 thick-film resistor, any value",Device:R_US,Resistor_SMD:R_0603_1608Metric,,
+R_HIN_V,10k,resistor,"Generic 0603 thick-film resistor, any value",Device:R_US,Resistor_SMD:R_0603_1608Metric,,
+R_HIN_W,10k,resistor,"Generic 0603 thick-film resistor, any value",Device:R_US,Resistor_SMD:R_0603_1608Metric,,
+R_IS_OUT_U,1k,resistor,"Generic 0603 thick-film resistor, any value",Device:R_US,Resistor_SMD:R_0603_1608Metric,,
+R_IS_OUT_V,1k,resistor,"Generic 0603 thick-film resistor, any value",Device:R_US,Resistor_SMD:R_0603_1608Metric,,
+R_IS_OUT_W,1k,resistor,"Generic 0603 thick-film resistor, any value",Device:R_US,Resistor_SMD:R_0603_1608Metric,,
+R_LIN_U,10k,resistor,"Generic 0603 thick-film resistor, any value",Device:R_US,Resistor_SMD:R_0603_1608Metric,,
+R_LIN_V,10k,resistor,"Generic 0603 thick-film resistor, any value",Device:R_US,Resistor_SMD:R_0603_1608Metric,,
+R_LIN_W,10k,resistor,"Generic 0603 thick-film resistor, any value",Device:R_US,Resistor_SMD:R_0603_1608Metric,,
+R_REF_B,10k,resistor,"Generic 0603 thick-film resistor, any value",Device:R_US,Resistor_SMD:R_0603_1608Metric,,
+R_REF_T,10k,resistor,"Generic 0603 thick-film resistor, any value",Device:R_US,Resistor_SMD:R_0603_1608Metric,,
+R_REV_G1,22k,resistor,"Generic 0603 thick-film resistor, any value",Device:R_US,Resistor_SMD:R_0603_1608Metric,,
+R_REV_G2,10k,resistor,"Generic 0603 thick-film resistor, any value",Device:R_US,Resistor_SMD:R_0603_1608Metric,,
+R_SH_U,5mR,resistor,"Generic 2512 thick-film resistor, any value",Device:R_US,Resistor_SMD:R_2512_6332Metric,,
+R_SH_V,5mR,resistor,"Generic 2512 thick-film resistor, any value",Device:R_US,Resistor_SMD:R_2512_6332Metric,,
+R_SH_W,5mR,resistor,"Generic 2512 thick-film resistor, any value",Device:R_US,Resistor_SMD:R_2512_6332Metric,,
+R_VBUS_S1,100k,resistor,"Generic 0603 thick-film resistor, any value",Device:R_US,Resistor_SMD:R_0603_1608Metric,,
+R_VBUS_S2,13k,resistor,"Generic 0603 thick-film resistor, any value",Device:R_US,Resistor_SMD:R_0603_1608Metric,,
+U_BUCK,LMR38010,regulator,"TI LMR38010SDDAR 4.2-80 V input, 1 A synchronous step-down converter, adjustable 400 kHz-2.2 MHz through RT, PFM with spread spectrum, HSOIC-8 (DDA) with exposed thermal pad and open-drain power-good. VFB 1.0 V; VIN abs max 85 V",,Package_SO:HSOP-8-1EP_3.9x4.9mm_P1.27mm_EP2.41x3.1mm,,LMR38010SDDAR
+U_CS1,MCP6022,opamp,"Microchip MCP6022-I/SN dual rail-to-rail input/output op-amp, 10 MHz GBW, 2.5-5.5 V supply, SOIC-8; 1 OUTA, 2 INA-, 3 INA+, 4 VSS, 5 INB+, 6 INB-, 7 OUTB, 8 VDD",Amplifier_Operational:MCP6022,Package_SO:SOIC-8_3.9x4.9mm_P1.27mm,C34047,MCP6022-I/SN
+U_CS2,MCP6022,opamp,"Microchip MCP6022-I/SN dual rail-to-rail input/output op-amp, 10 MHz GBW, 2.5-5.5 V supply, SOIC-8; 1 OUTA, 2 INA-, 3 INA+, 4 VSS, 5 INB+, 6 INB-, 7 OUTB, 8 VDD",Amplifier_Operational:MCP6022,Package_SO:SOIC-8_3.9x4.9mm_P1.27mm,C34047,MCP6022-I/SN
+U_GD_U,IR2101,ic,"Infineon IR2101S high- and low-side gate driver, 600 V high side, 210 mA source / 360 mA sink, VCC 10-20 V, SOIC-8; 1 VCC, 2 HIN, 3 LIN, 4 COM, 5 LO, 6 VS, 7 HO, 8 VB",Driver_FET:IR2101,Package_SO:SOIC-8_3.9x4.9mm_P1.27mm,C2956,IR2101STRPBF
+U_GD_V,IR2101,ic,"Infineon IR2101S high- and low-side gate driver, 600 V high side, 210 mA source / 360 mA sink, VCC 10-20 V, SOIC-8; 1 VCC, 2 HIN, 3 LIN, 4 COM, 5 LO, 6 VS, 7 HO, 8 VB",Driver_FET:IR2101,Package_SO:SOIC-8_3.9x4.9mm_P1.27mm,C2956,IR2101STRPBF
+U_GD_W,IR2101,ic,"Infineon IR2101S high- and low-side gate driver, 600 V high side, 210 mA source / 360 mA sink, VCC 10-20 V, SOIC-8; 1 VCC, 2 HIN, 3 LIN, 4 COM, 5 LO, 6 VS, 7 HO, 8 VB",Driver_FET:IR2101,Package_SO:SOIC-8_3.9x4.9mm_P1.27mm,C2956,IR2101STRPBF

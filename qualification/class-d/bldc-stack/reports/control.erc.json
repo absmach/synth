@@ -1,0 +1,144 @@
+{
+    "$schema": "https://schemas.kicad.org/erc.v1.json",
+    "coordinate_units": "mm",
+    "date": "2026-11-09T11:25:32",
+    "ignored_checks": [
+        {
+            "description": "Global label only appears once in the schematic",
+            "key": "single_global_label"
+        },
+        {
+            "description": "Four connection points are joined together",
+            "key": "four_way_junction"
+        },
+        {
+            "description": "SPICE model issue",
+            "key": "simulation_model_issue"
+        },
+        {
+            "description": "Assigned footprint doesn't match footprint filters",
+            "key": "footprint_filter"
+        }
+    ],
+    "included_severities": [
+        "error",
+        "warning",
+        "exclusion"
+    ],
+    "kicad_version": "10.0.7",
+    "sheets": [
+        {
+            "path": "/",
+            "uuid_path": "/7a8424a8-c1a3-5715-a678-72fec682647c",
+            "violations": [
+                {
+                    "description": "Label connected to only one pin",
+                    "items": [
+                        {
+                            "description": "Global Label 'PWM_VH'",
+                            "pos": {
+                                "x": 27.94,
+                                "y": 27.94
+                            },
+                            "uuid": "ac0f4549-6c18-5f11-804d-3d2a19bd968d"
+                        }
+                    ],
+                    "severity": "warning",
+                    "type": "isolated_pin_label"
+                },
+                {
+                    "description": "Label connected to only one pin",
+                    "items": [
+                        {
+                            "description": "Global Label 'PWM_UL'",
+                            "pos": {
+                                "x": 50.8,
+                                "y": 25.4
+                            },
+                            "uuid": "9e202ec8-bb13-53ae-9c73-68f60fe31ab6"
+                        }
+                    ],
+                    "severity": "warning",
+                    "type": "isolated_pin_label"
+                },
+                {
+                    "description": "Label connected to only one pin",
+                    "items": [
+                        {
+                            "description": "Global Label 'PWM_VH'",
+                            "pos": {
+                                "x": 398.78,
+                                "y": 83.82
+                            },
+                            "uuid": "e1c182a9-ca8f-5d1f-9ebd-3d8e7e021a07"
+                        }
+                    ],
+                    "severity": "warning",
+                    "type": "isolated_pin_label"
+                },
+                {
+                    "description": "Label connected to only one pin",
+                    "items": [
+                        {
+                            "description": "Global Label 'PWM_UL'",
+                            "pos": {
+                                "x": 398.78,
+                                "y": 86.36
+                            },
+                            "uuid": "cf46330a-106a-50d6-baf9-c4e0a5b58505"
+                        }
+                    ],
+                    "severity": "warning",
+                    "type": "isolated_pin_label"
+                },
+                {
+                    "description": "Pin with 'no connection' type is connected",
+                    "items": [
+                        {
+                            "description": "Symbol U1 Hidden pin 21 [NC/PA10, Unconnected, Line]",
+                            "pos": {
+                                "x": 403.86,
+                                "y": 83.82
+                            },
+                            "uuid": "851f15d4-56af-48b2-b493-283f5ebcf402"
+                        },
+                        {
+                            "description": "Horizontal Wire, length 5.08 mm",
+                            "pos": {
+                                "x": 403.86,
+                                "y": 83.82
+                            },
+                            "uuid": "108c5393-b7d4-5421-abb9-767b5c3ce030"
+                        }
+                    ],
+                    "severity": "warning",
+                    "type": "no_connect_connected"
+                },
+                {
+                    "description": "Pin with 'no connection' type is connected",
+                    "items": [
+                        {
+                            "description": "Symbol U1 Hidden pin 19 [NC/PA9, Unconnected, Line]",
+                            "pos": {
+                                "x": 403.86,
+                                "y": 86.36
+                            },
+                            "uuid": "e40cd758-ce3b-4d81-b1ca-e58fd6aa2c95"
+                        },
+                        {
+                            "description": "Horizontal Wire, length 5.08 mm",
+                            "pos": {
+                                "x": 403.86,
+                                "y": 86.36
+                            },
+                            "uuid": "d10af2e0-177b-54fa-b7fd-e5dfef6fd085"
+                        }
+                    ],
+                    "severity": "warning",
+                    "type": "no_connect_connected"
+                }
+            ]
+        }
+    ],
+    "source": "bldc_control.kicad_sch"
+}

@@ -37,6 +37,7 @@ fn create_dummy_board(name: &str, connector_refdes: &str) -> Board {
         notes: vec![],
         keepouts: Vec::new(),
         stackup: None,
+        outline: None,
         netclasses: vec![],
         buses: vec![],
         modules: vec![],

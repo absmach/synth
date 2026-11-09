@@ -46,6 +46,7 @@ pub struct BoardAst {
 #[non_exhaustive]
 pub enum StatementAst {
     Layers(LayersStmt),
+    Outline(OutlineStmt),
     Manufacturer(ManufacturerStmt),
     Revision(RevisionStmt),
     Company(CompanyStmt),
@@ -75,6 +76,7 @@ impl StatementAst {
     pub fn span(&self) -> Span {
         match self {
             StatementAst::Layers(s) => s.span,
+            StatementAst::Outline(s) => s.span,
             StatementAst::Manufacturer(s) => s.span,
             StatementAst::Revision(s) => s.span,
             StatementAst::Company(s) => s.span,
@@ -175,6 +177,15 @@ pub struct SchematicStmt {
     /// like `paper` so a bad value is reported where it was written.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub overflow: Option<SchematicOverflowAst>,
+    pub span: Span,
+}
+
+/// `outline 60mm x 30mm` — a fixed board rectangle, bottom-left at the board
+/// origin. Absent means the exporter fits Edge.Cuts round the placed parts.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct OutlineStmt {
+    pub width: ValueWithUnit,
+    pub height: ValueWithUnit,
     pub span: Span,
 }
 
