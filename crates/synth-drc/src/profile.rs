@@ -45,6 +45,9 @@ pub struct ManufacturerProfile {
     /// Minimum clearance from any drilled hole's edge to copper
     /// belonging to a different net, in nanometers.
     pub min_drill_to_copper_nm: i64,
+    /// For the five DFM floors below, 0 means the profile has no published
+    /// figure and the rule is not run.
+    ///
     /// Minimum gap between a silkscreen stroke's edge and a pad on the
     /// same side, in nanometers. JLCPCB's published figure is 0.15 mm.
     #[serde(default = "default_min_silk_to_pad_nm")]
@@ -243,13 +246,17 @@ impl ManufacturerProfile {
             min_drill_diameter_nm: mm_to_nm(0.3),
             min_annular_ring_nm: mm_to_nm(0.15),
             min_drill_to_copper_nm: mm_to_nm(0.2),
-            min_silk_to_pad_nm: default_min_silk_to_pad_nm(),
-            min_silk_to_hole_nm: default_min_silk_to_hole_nm(),
-            min_silk_width_nm: default_min_silk_width_nm(),
-            min_pad_to_pad_nm: default_min_pad_to_pad_nm(),
-            pad_to_pad_danger_nm: default_pad_to_pad_danger_nm(),
+            // The silk and pad-spacing figures are JLCPCB's and JLCDFM's. This
+            // fab's are not known here, so the DFM rules are not run (0) rather
+            // than graded against another fab's number. Plated hole to trace
+            // uses the fab's own drill-to-copper floor.
+            min_silk_to_pad_nm: 0,
+            min_silk_to_hole_nm: 0,
+            min_silk_width_nm: 0,
+            min_pad_to_pad_nm: 0,
+            pad_to_pad_danger_nm: 0,
             copper_merge_below_nm: default_copper_merge_below_nm(),
-            min_pth_to_trace_nm: default_min_pth_to_trace_nm(),
+            min_pth_to_trace_nm: mm_to_nm(0.2),
             crosstalk_run_multiple: default_crosstalk_run_multiple(),
             ampacity_delta_t_milli_c: default_ampacity_delta_t_milli_c(),
             ir_drop_budget_mv: default_ir_drop_budget_mv(),
@@ -273,13 +280,17 @@ impl ManufacturerProfile {
             min_drill_diameter_nm: mm_to_nm(0.25),
             min_annular_ring_nm: mm_to_nm(0.125),
             min_drill_to_copper_nm: mm_to_nm(0.2),
-            min_silk_to_pad_nm: default_min_silk_to_pad_nm(),
-            min_silk_to_hole_nm: default_min_silk_to_hole_nm(),
-            min_silk_width_nm: default_min_silk_width_nm(),
-            min_pad_to_pad_nm: default_min_pad_to_pad_nm(),
-            pad_to_pad_danger_nm: default_pad_to_pad_danger_nm(),
+            // The silk and pad-spacing figures are JLCPCB's and JLCDFM's. This
+            // fab's are not known here, so the DFM rules are not run (0) rather
+            // than graded against another fab's number. Plated hole to trace
+            // uses the fab's own drill-to-copper floor.
+            min_silk_to_pad_nm: 0,
+            min_silk_to_hole_nm: 0,
+            min_silk_width_nm: 0,
+            min_pad_to_pad_nm: 0,
+            pad_to_pad_danger_nm: 0,
             copper_merge_below_nm: default_copper_merge_below_nm(),
-            min_pth_to_trace_nm: default_min_pth_to_trace_nm(),
+            min_pth_to_trace_nm: mm_to_nm(0.2),
             crosstalk_run_multiple: default_crosstalk_run_multiple(),
             ampacity_delta_t_milli_c: default_ampacity_delta_t_milli_c(),
             ir_drop_budget_mv: default_ir_drop_budget_mv(),
@@ -856,5 +867,22 @@ via_in_pad = true
 "#;
         let p = ManufacturerProfile::from_toml_str(text).expect("parse");
         assert!(p.via_in_pad);
+    }
+
+    #[test]
+    fn other_fabs_do_not_inherit_jlc_dfm_floors() {
+        for p in [
+            ManufacturerProfile::pcbway_standard(),
+            ManufacturerProfile::oshpark_4layer(),
+        ] {
+            assert_eq!(p.min_silk_to_pad_nm, 0, "{}", p.name);
+            assert_eq!(p.min_pad_to_pad_nm, 0, "{}", p.name);
+            // Plated hole to trace follows the fab's own drill-to-copper floor.
+            assert_eq!(
+                p.min_pth_to_trace_nm, p.min_drill_to_copper_nm,
+                "{}",
+                p.name
+            );
+        }
     }
 }

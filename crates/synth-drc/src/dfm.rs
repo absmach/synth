@@ -17,7 +17,9 @@
 use std::collections::BTreeMap;
 
 use crate::pcb_read::NM_PER_MM;
-use crate::pcb_read::{entry_is_copper, Pad, PcbBoard, PcbParseError, Point, Via};
+use crate::pcb_read::{
+    entry_is_copper, layer_covers, Hole, Pad, PcbBoard, PcbParseError, Point, Via,
+};
 use crate::ManufacturerProfile;
 
 /// How a fab's DFM tool would grade a finding.
@@ -52,10 +54,19 @@ pub struct DfmReport {
     /// Visible silkscreen text the checks could not measure. A clean report
     /// does not cover these.
     pub unchecked_silk_text: usize,
+    /// Silkscreen curves and legacy arcs the reader does not understand.
+    pub unchecked_silk_graphics: usize,
+    /// `custom` and `trapezoid` pads, measured as a bounding rectangle.
+    pub approximated_pads: usize,
+    /// Rules the profile publishes no figure for: not run, so a clean report
+    /// says nothing about them.
+    pub unchecked_rules: Vec<&'static str>,
 }
 
 impl DfmReport {
-    /// Findings the fab will reject. These block a release.
+    /// Danger findings, the ones the fab will reject. They block a release
+    /// export only when the caller passes `--dfm-gate`; otherwise they are
+    /// recorded.
     #[must_use]
     pub fn danger_count(&self) -> usize {
         self.findings
@@ -86,16 +97,38 @@ pub fn check_dfm(
     profile: &ManufacturerProfile,
 ) -> Result<DfmReport, PcbParseError> {
     let board = PcbBoard::parse(pcb_text)?;
-    let mut findings = silk_to_pad(&board, profile);
-    findings.extend(silk_to_hole(&board, profile));
-    findings.extend(silk_line_width(&board, profile));
-    findings.extend(pad_to_pad(&board, profile));
-    findings.extend(pth_to_trace(&board, profile));
+    // A zero floor means the profile has no published figure: skip the rule
+    // rather than grade it against another fab's number.
+    let rules: [(&'static str, i64, RuleFn); 5] = [
+        ("silk_to_pad", profile.min_silk_to_pad_nm, silk_to_pad),
+        ("silk_to_hole", profile.min_silk_to_hole_nm, silk_to_hole),
+        (
+            "silk_line_width",
+            profile.min_silk_width_nm,
+            silk_line_width,
+        ),
+        ("pad_to_pad", profile.min_pad_to_pad_nm, pad_to_pad),
+        ("pth_to_trace", profile.min_pth_to_trace_nm, pth_to_trace),
+    ];
+    let mut findings = Vec::new();
+    let mut unchecked_rules = Vec::new();
+    for (name, floor_nm, rule) in rules {
+        if floor_nm > 0 {
+            findings.extend(rule(&board, profile));
+        } else {
+            unchecked_rules.push(name);
+        }
+    }
     Ok(DfmReport {
         findings,
         unchecked_silk_text: board.silk_text_count(),
+        unchecked_silk_graphics: board.silk_unread_count(),
+        approximated_pads: board.approximated_pad_count(),
+        unchecked_rules,
     })
 }
+
+type RuleFn = fn(&PcbBoard, &ManufacturerProfile) -> Vec<DfmFinding>;
 
 /// Spacing between samples taken along a silk stroke, in nanometres. Small
 /// against the 0.15 mm floors the rules check, so the error it adds is
@@ -115,22 +148,27 @@ fn silk_to_pad(board: &PcbBoard, profile: &ManufacturerProfile) -> Vec<DfmFindin
             "B.Cu"
         };
         let half_width = shape.width_nm as f64 / 2.0;
-        for pad in board
-            .pads()
-            .filter(|p| p.layers.iter().any(|l| l == copper || l == "*.Cu"))
-        {
-            let (hx, hy) = (pad.size_nm.0 as f64 / 2.0, pad.size_nm.1 as f64 / 2.0);
-            let reach = hx.hypot(hy) + half_width + required_nm;
+        for pad in board.pads() {
+            let reach = pad.reach_nm() + half_width + required_nm;
             let closest = shape
                 .strokes
                 .iter()
                 .filter(|stroke| distance_to_segment_nm(pad.at, stroke) <= reach)
                 .map(|stroke| nearest_sample(pad, stroke))
                 .min_by(|a, b| a.0.total_cmp(&b.0));
-            let Some((distance, at)) = closest else {
+            // Ink filling a shape that surrounds the pad covers it whole.
+            let covered = !shape.fill.is_empty() && shape.fill_contains(pad.at);
+            let Some((distance, at)) = closest.or(covered.then_some((0.0, pad.at))) else {
                 continue;
             };
-            let gap_nm = (distance - half_width).max(0.0);
+            if !pad.copper_on(copper) {
+                continue;
+            }
+            let gap_nm = if covered {
+                0.0
+            } else {
+                (distance - half_width).max(0.0)
+            };
             if gap_nm < required_nm {
                 findings.push(DfmFinding {
                     rule: "silk_to_pad",
@@ -152,41 +190,50 @@ fn silk_to_pad(board: &PcbBoard, profile: &ManufacturerProfile) -> Vec<DfmFindin
 }
 
 /// Silkscreen printed too close to a drilled hole, on either side: a hole
-/// goes through the board, so ink on the back reaches it too. The hole is a
-/// circle of the pad's larger drill dimension. One finding per shape and hole.
+/// goes through the board, so ink on the back reaches it too. A slot is the
+/// stadium around its long axis, not a circle of its longer dimension. One
+/// finding per shape and hole.
 fn silk_to_hole(board: &PcbBoard, profile: &ManufacturerProfile) -> Vec<DfmFinding> {
     let required_nm = profile.min_silk_to_hole_nm as f64;
-    let holes: Vec<(Point, f64, String)> = board
+    let holes: Vec<(Hole, String)> = board
         .vias
         .iter()
         .filter(|via| via.drill_nm > 0)
         .map(|via| {
-            let label = format!("via at ({:.3}, {:.3}) mm", via.at.x_mm(), via.at.y_mm());
-            (via.at, via.drill_nm as f64 / 2.0, label)
+            let hole = Hole {
+                a: via.at,
+                b: via.at,
+                radius_nm: via.drill_nm as f64 / 2.0,
+            };
+            (
+                hole,
+                format!("via at ({:.3}, {:.3}) mm", via.at.x_mm(), via.at.y_mm()),
+            )
         })
         .chain(
             board
                 .pads()
-                .filter(|pad| pad.drill_nm.0 > 0 || pad.drill_nm.1 > 0)
-                .map(|pad| {
-                    let radius = pad.drill_nm.0.max(pad.drill_nm.1) as f64 / 2.0;
-                    (pad.at, radius, format!("pad {}", pad.id()))
-                }),
+                .filter_map(|pad| Some((pad.hole()?, format!("pad {}", pad.id())))),
         )
         .collect();
     let mut findings = Vec::new();
     for shape in board.silk_shapes() {
         let half_width = shape.width_nm as f64 / 2.0;
-        for (centre, radius, label) in &holes {
+        for (hole, label) in &holes {
             let closest = shape
                 .strokes
                 .iter()
-                .map(|stroke| distance_to_segment_nm(*centre, stroke))
+                .map(|stroke| segment_distance_nm((hole.a, hole.b), *stroke))
                 .min_by(f64::total_cmp);
-            let Some(distance) = closest else {
+            let covered = !shape.fill.is_empty() && shape.fill_contains(hole.a);
+            let Some(distance) = closest.or(covered.then_some(0.0)) else {
                 continue;
             };
-            let gap_nm = (distance - radius - half_width).max(0.0);
+            let gap_nm = if covered {
+                0.0
+            } else {
+                (distance - hole.radius_nm - half_width).max(0.0)
+            };
             if gap_nm < required_nm {
                 findings.push(DfmFinding {
                     rule: "silk_to_hole",
@@ -196,7 +243,7 @@ fn silk_to_hole(board: &PcbBoard, profile: &ManufacturerProfile) -> Vec<DfmFindi
                         gap_nm / NM_PER_MM,
                         required_nm / NM_PER_MM
                     ),
-                    at_mm: (centre.x_mm(), centre.y_mm()),
+                    at_mm: (hole.a.x_mm(), hole.a.y_mm()),
                     measured_mm: gap_nm / NM_PER_MM,
                     required_mm: required_nm / NM_PER_MM,
                 });
@@ -247,18 +294,17 @@ fn pad_to_pad(board: &PcbBoard, profile: &ManufacturerProfile) -> Vec<DfmFinding
         .filter(|p| p.kind != "np_thru_hole" && p.layers.iter().any(|l| entry_is_copper(l)))
         .chain(via_pads.iter())
         .collect();
-    let reach = |p: &Pad| (p.size_nm.0 as f64 / 2.0).hypot(p.size_nm.1 as f64 / 2.0);
     let mut findings = Vec::new();
     for (i, a) in pads.iter().enumerate() {
         for b in &pads[i + 1..] {
-            if !share_copper_layer(a, b) {
-                continue;
-            }
             let (dx, dy) = (
                 (a.at.x_nm - b.at.x_nm) as f64,
                 (a.at.y_nm - b.at.y_nm) as f64,
             );
-            if dx.hypot(dy) > reach(a) + reach(b) + required_nm {
+            if dx.hypot(dy) > a.reach_nm() + b.reach_nm() + required_nm {
+                continue;
+            }
+            if !share_copper_layer(a, b) {
                 continue;
             }
             let (gap_nm, at) = pad_gap(a, b);
@@ -300,6 +346,8 @@ fn via_as_pad(via: &Via) -> Pad {
         angle_deg: 0.0,
         corner_ratio: 0.0,
         drill_nm: (via.drill_nm, via.drill_nm),
+        drill_offset_nm: (0, 0),
+        bbox: None,
         layers: via.layers.clone(),
         net: via.net,
         net_name: via.net_name.clone(),
@@ -328,11 +376,10 @@ fn connected_net(pad: &Pad) -> Option<u32> {
 
 /// Whether two pads have copper on a common layer; `*.Cu` is every layer.
 fn share_copper_layer(a: &Pad, b: &Pad) -> bool {
-    a.layers.iter().filter(|l| entry_is_copper(l)).any(|la| {
-        b.layers
-            .iter()
-            .any(|lb| la == lb || (la == "*.Cu" && entry_is_copper(lb)) || (lb == "*.Cu"))
-    })
+    a.layers
+        .iter()
+        .filter(|l| entry_is_copper(l))
+        .any(|la| b.layers.iter().any(|lb| layer_covers(lb, la)))
 }
 
 /// The gap between two pads' outlines and a point on it: the nearest an
@@ -350,25 +397,27 @@ fn pad_gap(a: &Pad, b: &Pad) -> (f64, Point) {
     (best.0.max(0.0), best.1)
 }
 
-/// A trace of another net too close to a plated hole's edge: drilling
-/// wanders, and a trace under the wall shorts or breaks. A hole goes through
-/// every layer, so a trace on any layer counts. One finding per hole, for its
-/// closest trace; the hole's own net may run up to it.
+/// A trace of another net close to a plated hole's edge: drilling wanders,
+/// and a trace under the wall shorts or breaks. A hole goes through every
+/// layer, so a trace on any layer counts. One finding per hole, for its
+/// closest trace; the hole's own net may run up to it. Graded a Warning, not
+/// a Danger: against JLCDFM on one board it found 0 items where JLCDFM found
+/// 58, so it must not block a release.
 fn pth_to_trace(board: &PcbBoard, profile: &ManufacturerProfile) -> Vec<DfmFinding> {
     let required_nm = profile.min_pth_to_trace_nm as f64;
     let mut findings = Vec::new();
-    for pad in board
-        .pads()
-        .filter(|p| p.kind == "thru_hole" && (p.drill_nm.0 > 0 || p.drill_nm.1 > 0))
-    {
-        let radius = pad.drill_nm.0.max(pad.drill_nm.1) as f64 / 2.0;
+    for pad in board.pads().filter(|p| p.kind == "thru_hole") {
+        let Some(hole) = pad.hole() else {
+            continue;
+        };
+        let own_net = connected_net(pad);
         let closest = board
             .segments
             .iter()
-            .filter(|s| !(pad.net.is_some() && pad.net == s.net))
+            .filter(|s| !(own_net.is_some() && own_net == s.net))
             .map(|s| {
-                let d = distance_to_segment_nm(pad.at, &(s.start, s.end));
-                (d - radius - s.width_nm as f64 / 2.0).max(0.0)
+                let d = segment_distance_nm((hole.a, hole.b), (s.start, s.end));
+                (d - hole.radius_nm - s.width_nm as f64 / 2.0).max(0.0)
             })
             .min_by(f64::total_cmp);
         let Some(gap_nm) = closest else {
@@ -377,14 +426,14 @@ fn pth_to_trace(board: &PcbBoard, profile: &ManufacturerProfile) -> Vec<DfmFindi
         if gap_nm < required_nm {
             findings.push(DfmFinding {
                 rule: "pth_to_trace",
-                severity: DfmSeverity::Danger,
+                severity: DfmSeverity::Warning,
                 message: format!(
                     "a trace is {:.3} mm from the plated hole of pad {}, under the {:.3} mm minimum",
                     gap_nm / NM_PER_MM,
                     pad.id(),
                     required_nm / NM_PER_MM
                 ),
-                at_mm: (pad.at.x_mm(), pad.at.y_mm()),
+                at_mm: (hole.a.x_mm(), hole.a.y_mm()),
                 measured_mm: gap_nm / NM_PER_MM,
                 required_mm: required_nm / NM_PER_MM,
             });
@@ -415,6 +464,27 @@ fn nearest_sample(pad: &Pad, stroke: &(Point, Point)) -> (f64, Point) {
         }
     }
     best
+}
+
+/// The smallest distance between two segments; zero if they cross.
+fn segment_distance_nm(a: (Point, Point), b: (Point, Point)) -> f64 {
+    let side = |p: Point, q: Point, r: Point| {
+        ((q.x_nm - p.x_nm) as f64) * ((r.y_nm - p.y_nm) as f64)
+            - ((q.y_nm - p.y_nm) as f64) * ((r.x_nm - p.x_nm) as f64)
+    };
+    let crosses = side(a.0, a.1, b.0) * side(a.0, a.1, b.1) < 0.0
+        && side(b.0, b.1, a.0) * side(b.0, b.1, a.1) < 0.0;
+    if crosses {
+        return 0.0;
+    }
+    [
+        distance_to_segment_nm(a.0, &b),
+        distance_to_segment_nm(a.1, &b),
+        distance_to_segment_nm(b.0, &a),
+        distance_to_segment_nm(b.1, &a),
+    ]
+    .into_iter()
+    .fold(f64::INFINITY, f64::min)
 }
 
 fn distance_to_segment_nm(p: Point, stroke: &(Point, Point)) -> f64 {
@@ -867,14 +937,16 @@ mod tests {
     }
 
     #[test]
-    fn a_trace_too_close_to_a_plated_hole_is_a_danger() {
+    fn a_trace_too_close_to_a_plated_hole_is_an_advisory_warning() {
         // Trace centre 0.75 mm from the hole centre, less its 0.5 mm radius
         // and the trace's 0.1 mm half width: a 0.15 mm gap against 0.28 mm.
         let report = run(&format!("{PTH}\n  {}", trace("F.Cu", 20.75, 2)));
         assert_eq!(count(&report, "pth_to_trace"), 1, "{report:?}");
         let finding = report.findings.iter().find(|f| f.rule == "pth_to_trace");
         let finding = finding.expect("finding");
-        assert_eq!(finding.severity, DfmSeverity::Danger);
+        // Known not to match JLCDFM, so it never blocks a release.
+        assert_eq!(finding.severity, DfmSeverity::Warning);
+        assert_eq!(report.danger_count(), 0);
         assert!((finding.measured_mm - 0.15).abs() < 0.005, "{finding:?}");
         assert!((finding.required_mm - 0.28).abs() < 1e-9, "{finding:?}");
     }
@@ -936,6 +1008,143 @@ mod tests {
         let short = run(&via_on_pad(2));
         assert_eq!(count(&short, "pad_to_pad"), 1, "{short:?}");
         assert_eq!(short.findings[0].severity, DfmSeverity::Danger);
+    }
+
+    fn pad_text(body: &str) -> String {
+        format!(r#"(footprint "Test:X" (layer "F.Cu") (at 20 20) {body})"#)
+    }
+
+    #[test]
+    fn a_non_plated_hole_is_a_silk_to_hole_finding_only() {
+        let npth = pad_text(
+            r#"(pad "" np_thru_hole circle (at 0 0) (size 1.0 1.0) (drill 1.0) (layers "*.Cu" "*.Mask"))"#,
+        );
+        let report = run(&format!(
+            "{npth}\n  {}",
+            silk("F.SilkS", 20.6, 19.0, 20.6, 21.0)
+        ));
+        assert_eq!(count(&report, "silk_to_hole"), 1, "{report:?}");
+        assert_eq!(count(&report, "silk_to_pad"), 0, "{report:?}");
+    }
+
+    #[test]
+    fn a_solid_filled_silk_shape_over_a_pad_is_a_danger() {
+        // 5 mm square around the 0.6 mm pad: every stroke is far from it.
+        let rect = |fill: &str| {
+            format!(
+                r#"(gr_rect (start 7.5 17.5) (end 12.5 22.5) (stroke (width 0.15) (type solid)) (fill {fill}) (layer "F.SilkS"))"#
+            )
+        };
+        assert_eq!(count(&run(&rect("none")), "silk_to_pad"), 0);
+        assert_eq!(count(&run(&rect("solid")), "silk_to_pad"), 1);
+    }
+
+    #[test]
+    fn a_solid_filled_silk_shape_over_a_hole_is_a_danger() {
+        let fill = r#"(gr_rect (start 17.5 17.5) (end 22.5 22.5) (stroke (width 0.15) (type solid)) (fill solid) (layer "F.SilkS"))"#;
+        let report = run(&format!("{PTH}\n  {fill}"));
+        assert_eq!(count(&report, "silk_to_hole"), 1, "{report:?}");
+    }
+
+    #[test]
+    fn a_slot_is_a_stadium_not_a_circle_of_its_longer_side() {
+        // 0.6 x 2.0 mm slot along x. A line 0.8 mm above its centre line is
+        // 0.8 - 0.3 - 0.075 = 0.425 mm clear: fine. A circle of the 2.0 mm
+        // dimension would have said zero.
+        let slot = pad_text(
+            r#"(pad "1" thru_hole oval (at 0 0) (size 3 1.6) (drill oval 2.0 0.6) (layers "*.Cu" "*.Mask") (net 1 "GND"))"#,
+        );
+        let across = run(&format!(
+            "{slot}\n  {}",
+            silk("F.SilkS", 19.0, 19.2, 21.0, 19.2)
+        ));
+        assert_eq!(count(&across, "silk_to_hole"), 0, "{across:?}");
+        // Past the rounded end along the axis: 1.3 mm from the centre is 0.3 mm
+        // beyond the slot end, still 0.225 mm clear of the stroke half-width.
+        let along = run(&format!(
+            "{slot}\n  {}",
+            silk("F.SilkS", 21.3, 19.0, 21.3, 21.0)
+        ));
+        assert_eq!(count(&along, "silk_to_hole"), 0, "{along:?}");
+        let close = run(&format!(
+            "{slot}\n  {}",
+            silk("F.SilkS", 21.2, 19.0, 21.2, 21.0)
+        ));
+        assert_eq!(count(&close, "silk_to_hole"), 1, "{close:?}");
+    }
+
+    #[test]
+    fn an_offset_drill_is_measured_where_it_is() {
+        let offset = pad_text(
+            r#"(pad "1" thru_hole circle (at 0 0) (size 3 3) (drill 1.0 (offset 1.0 0)) (layers "*.Cu" "*.Mask") (net 1 "GND"))"#,
+        );
+        // Hole centre (21, 20), radius 0.5. A line at x = 21.6 is 0.1 - 0.075.
+        let near = run(&format!(
+            "{offset}\n  {}",
+            silk("F.SilkS", 21.6, 19.0, 21.6, 21.0)
+        ));
+        assert_eq!(count(&near, "silk_to_hole"), 1, "{near:?}");
+        // The same line on the other side is 2.6 mm from the hole.
+        let far = run(&format!(
+            "{offset}\n  {}",
+            silk("F.SilkS", 18.4, 19.0, 18.4, 21.0)
+        ));
+        assert_eq!(count(&far, "silk_to_hole"), 0, "{far:?}");
+    }
+
+    #[test]
+    fn a_custom_pad_is_measured_by_its_primitives_and_counted_as_approximate() {
+        let custom = pad_text(
+            r#"(pad "1" smd custom (at 0 0) (size 0.2 0.2) (layers "F.Cu") (net 1 "GND")
+      (primitives (gr_poly (pts (xy -1 -1) (xy 3 -1) (xy 3 1) (xy -1 1)) (width 0) (fill yes)))"#,
+        ) + ")";
+        // The anchor is 0.2 mm; the copper reaches x = 23. Silk over it at x = 22.
+        let report = run(&format!(
+            "{custom}\n  {}",
+            silk("F.SilkS", 22.0, 19.0, 22.0, 21.0)
+        ));
+        assert_eq!(count(&report, "silk_to_pad"), 1, "{report:?}");
+        assert_eq!(report.approximated_pads, 1);
+    }
+
+    #[test]
+    fn silk_curves_and_legacy_arcs_are_counted_not_dropped() {
+        let report = run(
+            r#"(gr_curve (pts (xy 5 5) (xy 6 6) (xy 7 6) (xy 8 5)) (stroke (width 0.15) (type solid)) (layer "F.SilkS"))
+  (gr_arc (start 5 5) (end 6 5) (angle 90) (stroke (width 0.15) (type solid)) (layer "F.SilkS"))"#,
+        );
+        assert_eq!(report.unchecked_silk_graphics, 2, "{report:?}");
+        assert_eq!(run("").unchecked_silk_graphics, 0);
+    }
+
+    #[test]
+    fn an_f_and_b_pad_meets_a_pad_on_either_outer_layer() {
+        let both = r#"(footprint "Test:FB" (layer "F.Cu") (at 10.7 20)
+    (pad "1" smd rect (at 0 0) (size 0.6 0.6) (layers "F&B.Cu") (net 2 "SIG")))"#;
+        assert_eq!(count(&run(both), "pad_to_pad"), 1);
+        // And silk on the front sees it.
+        let report = run(&format!(
+            "{both}\n  {}",
+            silk("F.SilkS", 10.9, 19.0, 10.9, 21.0)
+        ));
+        assert_eq!(count(&report, "silk_to_pad"), 1, "{report:?}");
+    }
+
+    #[test]
+    fn a_net_zero_trace_is_not_the_net_of_a_net_zero_hole() {
+        let unconnected = PTH.replace(r#"(net 1 "GND")"#, r#"(net 0 "")"#);
+        let report = run(&format!("{unconnected}\n  {}", trace("F.Cu", 20.75, 0)));
+        assert_eq!(count(&report, "pth_to_trace"), 1, "{report:?}");
+    }
+
+    #[test]
+    fn a_profile_with_no_published_floor_skips_the_rule_and_says_so() {
+        let mut profile = ManufacturerProfile::jlc_standard();
+        profile.min_pad_to_pad_nm = 0;
+        let text = board(&pad_at(10.67, 20.0, 2, "rect", 0.6, "F.Cu"));
+        let report = check_dfm(&text, &profile).expect("parses");
+        assert_eq!(count(&report, "pad_to_pad"), 0);
+        assert_eq!(report.unchecked_rules, vec!["pad_to_pad"]);
     }
 
     #[test]
