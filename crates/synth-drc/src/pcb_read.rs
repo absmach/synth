@@ -1345,6 +1345,18 @@ fn pad_drill_nm(pad: &Node) -> (i64, i64) {
     }
 }
 
+/// A pad's `(size w h)`, in nanometres.
+fn pad_size_nm(pad: &Node) -> (i64, i64) {
+    let size = pad.find("size");
+    let axis = |i: usize| {
+        size.and_then(|s| s.body().get(i))
+            .and_then(Node::as_str)
+            .and_then(|s| s.parse::<f64>().ok())
+            .map_or(0, mm_to_nm)
+    };
+    (axis(0), axis(1))
+}
+
 /// A pad's `(drill ... (offset x y))`, in nanometres.
 fn pad_drill_offset_nm(pad: &Node) -> (i64, i64) {
     pad.find("drill")
@@ -1486,17 +1498,7 @@ fn parse_footprint(node: &Node) -> Footprint {
                 } else {
                     0.0
                 });
-            let size = pad.find("size");
-            let size_nm = (
-                size.and_then(|s| s.body().first())
-                    .and_then(Node::as_str)
-                    .and_then(|s| s.parse::<f64>().ok())
-                    .map_or(0, mm_to_nm),
-                size.and_then(|s| s.body().get(1))
-                    .and_then(Node::as_str)
-                    .and_then(|s| s.parse::<f64>().ok())
-                    .map_or(0, mm_to_nm),
-            );
+            let size_nm = pad_size_nm(pad);
             let bbox = if shape == "custom" {
                 custom_pad_bbox(pad, size_nm)
             } else {

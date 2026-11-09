@@ -1819,7 +1819,11 @@ fn manufacturing_status(
     }
     let native_unknown = native
         .and_then(|n| n["stages"].as_array())
-        .is_some_and(|stages| stages.iter().any(|s| s["status"] == "unknown"));
+        .is_some_and(|stages| {
+            stages
+                .iter()
+                .any(|s| s["status"] == "unknown" && s["advisory"] != true)
+        });
     if native_unknown {
         return "unknown";
     }
@@ -4467,7 +4471,7 @@ fn export_kicad(
     // records it; only a release export (fab files requested) run with
     // `--dfm-gate` is stopped by a Danger finding. The gate is opt-in until
     // the rules are calibrated against the fab's own tool.
-    let (dfm_evidence, dfm_report) = dfm_stage(&delivered, &drc_profile);
+    let (dfm_evidence, dfm_report) = dfm_stage(&delivered, &drc_profile, dfm_gate);
     let dfm_danger = dfm_report
         .as_ref()
         .map_or(0, synth_drc::dfm::DfmReport::danger_count);
@@ -4486,19 +4490,30 @@ fn export_kicad(
                 dfm_evidence.detail.as_deref().unwrap_or_default()
             );
         } else if !report.findings.is_empty() {
+            for line in &dfm_evidence.findings {
+                eprintln!("[dfm] {line}");
+            }
             eprintln!(
-                "warning: DFM found {} finding(s) a fab would flag ({}); see the verification \
-                 report. Pass --dfm-gate to let Danger findings block a release export.",
+                "warning: DFM found {} finding(s) a fab would flag ({}); each is listed above \
+                 and in the verification report. Pass --dfm-gate to let Danger findings block \
+                 a release export.",
                 report.findings.len(),
                 dfm_evidence.detail.as_deref().unwrap_or_default()
             );
         }
     }
+    if dfm_report.is_none() && dfm_evidence.advisory {
+        eprintln!(
+            "warning: the DFM check could not read the board ({}); it is recorded as unknown \
+             and does not block without --dfm-gate.",
+            dfm_evidence.detail.as_deref().unwrap_or_default()
+        );
+    }
     native.push(dfm_evidence);
 
     let blocked_by_unknown: Vec<_> = native
         .iter()
-        .filter(|e| e.status == NativeCheckStatus::Unknown)
+        .filter(|e| e.status == NativeCheckStatus::Unknown && !e.advisory)
         .filter(|e| production || e.stage == synth_kicad::ERC_STAGE)
         .collect();
     if !blocked_by_unknown.is_empty() {
@@ -4514,10 +4529,18 @@ fn export_kicad(
         for evidence in &blocked_by_unknown {
             eprintln!("  {}", evidence.summary_line());
         }
-        eprintln!(
-            "An unavailable check is not a pass. Install KiCad (or set KICAD_CLI), \
-             then re-run; --force does not override this."
-        );
+        if blocked_by_unknown.iter().any(|e| e.stage != DFM_STAGE) {
+            eprintln!(
+                "An unavailable check is not a pass. Install KiCad (or set KICAD_CLI), \
+                 then re-run; --force does not override this."
+            );
+        }
+        if blocked_by_unknown.iter().any(|e| e.stage == DFM_STAGE) {
+            eprintln!(
+                "The dfm check reads the board file itself and needs no KiCad: fix the board \
+                 file it could not read, or drop --dfm-gate; --force does not override this."
+            );
+        }
     }
 
     if let Some(path) = verification_report {
@@ -4738,6 +4761,7 @@ fn collect_bundle_files(
 }
 
 const FAB_STAGE: &str = "kicad_fab";
+const DFM_STAGE: &str = "dfm";
 
 fn report_drc_counts(counts: &synth_drc::DrcCounts) {
     let line = format!("kicad-cli pcb drc: {counts}");
@@ -4774,8 +4798,9 @@ fn report_unavailable_check(evidence: &synth_diagnostics::NativeCheckEvidence) {
 fn dfm_stage(
     pcb: &Path,
     profile: &synth_drc::ManufacturerProfile,
+    gate: bool,
 ) -> (NativeCheckEvidence, Option<synth_drc::dfm::DfmReport>) {
-    const STAGE: &str = "dfm";
+    const STAGE: &str = DFM_STAGE;
     const TOOL: &str = "synth-drc";
     let text = match std::fs::read_to_string(pcb) {
         Ok(text) => text,
@@ -4787,7 +4812,8 @@ fn dfm_stage(
                 Vec::new(),
                 UnknownReason::ReportUnreadable,
                 detail,
-            );
+            )
+            .with_advisory(!gate);
             return (evidence, None);
         }
     };
@@ -4799,7 +4825,8 @@ fn dfm_stage(
                 Vec::new(),
                 UnknownReason::ReportMalformed,
                 e.to_string(),
-            );
+            )
+            .with_advisory(!gate);
             (evidence, None)
         }
         Ok(report) => {
@@ -4817,13 +4844,51 @@ fn dfm_stage(
                     report.unchecked_silk_text
                 ));
             }
+            if report.unchecked_silk_graphics > 0 {
+                parts.push(format!(
+                    "{} silk curve(s) not measured",
+                    report.unchecked_silk_graphics
+                ));
+            }
             let detail = parts.join(", ");
-            evidence = evidence.with_unsupported(vec![
-                "plated_hole_to_trace: not implemented".to_string(),
+            let mut unsupported = vec![
+                "plated_hole_to_trace: graded Warning only, known not to match JLCDFM (0 vs 58 items on one board)".to_string(),
                 "silk_text_clearance: text is counted, not measured".to_string(),
                 "silk_to_hole: 0.15 mm floor assumed, not published by JLC".to_string(),
                 "copper_merge_tolerance: 0.07 mm uncalibrated".to_string(),
-            ]);
+            ];
+            if report.unchecked_silk_graphics > 0 {
+                unsupported.push(format!(
+                    "silk_curves: {} curve or legacy arc item(s) not measured",
+                    report.unchecked_silk_graphics
+                ));
+            }
+            if report.approximated_pads > 0 {
+                unsupported.push(format!(
+                    "pad_shape: {} custom or trapezoid pad(s) measured as a bounding rectangle",
+                    report.approximated_pads
+                ));
+            }
+            unsupported.extend(
+                report.unchecked_rules.iter().map(|rule| {
+                    format!("{rule}: {} publishes no figure, rule not run", profile.name)
+                }),
+            );
+            let findings = report
+                .findings
+                .iter()
+                .map(|f| {
+                    format!(
+                        "{:?} [{}] at ({:.3}, {:.3}) mm: {}",
+                        f.severity, f.rule, f.at_mm.0, f.at_mm.1, f.message
+                    )
+                })
+                .collect();
+            // Findings only decide the release when the gate is on.
+            evidence = evidence
+                .with_unsupported(unsupported)
+                .with_findings(findings)
+                .with_advisory(!gate);
             if !detail.is_empty() {
                 evidence.detail = Some(detail);
             }
@@ -4837,8 +4902,10 @@ fn write_verification_report(
     input: &Path,
     native: &[synth_diagnostics::NativeCheckEvidence],
 ) -> anyhow::Result<()> {
+    // An advisory stage is recorded but does not decide readiness.
     let release_ready = native
         .iter()
+        .filter(|e| !e.advisory)
         .all(synth_diagnostics::NativeCheckEvidence::is_trusted);
     let report = serde_json::json!({
         "schema_version": "synth.verification.v1",
@@ -6026,6 +6093,20 @@ fn render(
 
 #[cfg(test)]
 mod tests {
+
+    #[test]
+    fn an_unreadable_board_blocks_only_when_the_dfm_gate_is_on() {
+        let profile = synth_drc::ManufacturerProfile::jlc_standard();
+        let path =
+            std::env::temp_dir().join(format!("synth_dfm_bad_{}.kicad_pcb", std::process::id()));
+        std::fs::write(&path, "(kicad_pcb (via").expect("write board");
+        let (ungated, _) = dfm_stage(&path, &profile, false);
+        let (gated, _) = dfm_stage(&path, &profile, true);
+        let _ = std::fs::remove_file(&path);
+        assert_eq!(ungated.status, NativeCheckStatus::Unknown);
+        assert!(ungated.advisory, "an ungated unknown must not block");
+        assert!(!gated.advisory, "a gated unknown must block");
+    }
 
     #[test]
     fn the_capability_list_reports_each_profiles_own_minimums() {

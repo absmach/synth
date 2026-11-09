@@ -113,6 +113,14 @@ pub struct NativeCheckEvidence {
     /// threshold. A `pass` is only a pass over what is not listed here.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub unsupported: Vec<String>,
+    /// A stage that is recorded but does not decide release readiness: its
+    /// own status says what it found, and nothing is blocked on it.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub advisory: bool,
+    /// Each individual finding, one line with its rule and location, so a
+    /// reader can find what a count refers to.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub findings: Vec<String>,
 }
 
 pub const STDERR_CAPTURE_LIMIT: usize = 8 * 1024;
@@ -139,6 +147,8 @@ impl NativeCheckEvidence {
             stderr: None,
             violations,
             unsupported: Vec::new(),
+            advisory: false,
+            findings: Vec::new(),
         }
     }
 
@@ -160,11 +170,23 @@ impl NativeCheckEvidence {
             stderr: None,
             violations: 0,
             unsupported: Vec::new(),
+            advisory: false,
+            findings: Vec::new(),
         }
     }
 
     pub fn with_unsupported(mut self, unsupported: Vec<String>) -> Self {
         self.unsupported = unsupported;
+        self
+    }
+
+    pub fn with_advisory(mut self, advisory: bool) -> Self {
+        self.advisory = advisory;
+        self
+    }
+
+    pub fn with_findings(mut self, findings: Vec<String>) -> Self {
+        self.findings = findings;
         self
     }
 

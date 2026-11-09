@@ -865,8 +865,9 @@ exit 0"#
 
 /// Two resistors joined by one net: the smallest design with pads to route,
 /// so the stub router has copper to draw and silk to put on a pad.
-fn two_resistors() -> PathBuf {
-    let path = std::env::temp_dir().join(format!("synth_dfm_gate_{}.synth", std::process::id()));
+fn two_resistors(label: &str) -> PathBuf {
+    // A directory per test, so parallel tests never rewrite one file.
+    let path = scratch(&format!("{label}_design")).join("dfm.synth");
     std::fs::write(
         &path,
         "board \"dfm\" {\n  layers 2\n  component R1: resistor \"rel_reviewed\" value \"10k\"\n  \
@@ -891,7 +892,7 @@ fn export_dfm(label: &str, extra: &[&str]) -> Outcome {
         label,
         &clean_stub(),
         &args,
-        &two_resistors(),
+        &two_resistors(label),
         &[
             SILK_ON_PAD,
             (
@@ -914,6 +915,13 @@ fn silk_on_a_pad_is_recorded_without_blocking_a_plain_export() {
     let run = export_dfm("dfm_plain", &[]);
     assert_eq!(run.code, Some(0), "stderr:\n{}", run.stderr);
     assert_eq!(run.status("dfm"), "fail");
+    assert_eq!(run.stage("dfm")["advisory"], true);
+    // Each finding is recorded with its rule and board location.
+    let findings = run.stage("dfm")["findings"].to_string();
+    assert!(
+        findings.contains("[silk_to_pad]") && findings.contains(" mm: "),
+        "{findings}"
+    );
     assert!(
         run.stage("dfm")["violations"].as_u64().unwrap_or(0) >= 1,
         "{:#}",
@@ -927,7 +935,9 @@ fn silk_on_a_pad_is_recorded_without_blocking_a_plain_export() {
         detail.contains("silk_to_pad danger") && detail.contains("silk text item(s) not measured"),
         "the counts and what was not measured must be recorded: {detail}"
     );
-    assert_eq!(run.report.as_ref().expect("report")["release_ready"], false);
+    // Ungated findings are advisory: they do not flip release_ready.
+    let report = run.report.as_ref().expect("report");
+    assert_eq!(report["release_ready"], true, "{report:#}");
 }
 
 #[test]
@@ -936,6 +946,11 @@ fn silk_on_a_pad_does_not_block_a_release_export_without_dfm_gate() {
     assert_eq!(run.code, Some(0), "stderr:\n{}", run.stderr);
     assert_eq!(run.status("dfm"), "fail");
     assert!(run.stderr.contains("--dfm-gate"), "{}", run.stderr);
+    assert!(
+        run.stderr.contains("[dfm] Danger [silk_to_pad]"),
+        "{}",
+        run.stderr
+    );
 }
 
 #[test]
@@ -944,7 +959,9 @@ fn a_passing_dfm_stage_lists_the_checks_it_does_not_make() {
     assert_eq!(run.status("dfm"), "pass");
     let unsupported = run.stage("dfm")["unsupported"].to_string();
     assert!(
-        unsupported.contains("plated_hole_to_trace") && unsupported.contains("silk_text"),
+        unsupported.contains("plated_hole_to_trace")
+            && unsupported.contains("known not to match JLCDFM")
+            && unsupported.contains("silk_text"),
         "{unsupported}"
     );
 }
@@ -954,6 +971,7 @@ fn silk_on_a_pad_blocks_a_gated_release_export_and_force_does_not_override() {
     let run = export_dfm("dfm_release", &["--gerbers", "--dfm-gate", "--force"]);
     assert_eq!(run.code, Some(1), "stderr:\n{}", run.stderr);
     assert_eq!(run.status("dfm"), "fail");
+    assert_eq!(run.stage("dfm")["advisory"], serde_json::Value::Null);
     assert!(
         run.stderr.contains("release export blocked")
             && run.stderr.contains("silk_to_pad")
