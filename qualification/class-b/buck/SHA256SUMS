@@ -1,6 +1,6 @@
 # sha256 of the design artifacts. Check: grep -v "^#" SHA256SUMS | sha256sum -c -   (from this folder)
 # Written by: synth export-kicad buck.synth --allow-unverified-parts --validate-erc --router free-routing (see QUALIFICATION.md, Reproduce)
-fd6298e3eca76d955f53b93abe8b3e1528f66276411a4156d1b05a65770794c9  buck.placement.layout.toml
+5a9493d8299b00f143a219fbaf3cba7e0644a8bd57ce224fcb28cbf3e536c9e3  buck.placement.layout.toml
 2b22a64fcf7e5247f787aa08f763d336fbd5a44b16989445bf39f929d6d6cb49  buck.synth
 c0f7ef273bf90689ad805b09ec6e736099cadc59943eaeec53015f51edbe38f8  buck_neg_fb_sw.synth
 897ee8608939745177fb175baf4518be9ea9d27e1f523b3bc49a8bcb4a41e4b5  images/pcb-3d-angled.png

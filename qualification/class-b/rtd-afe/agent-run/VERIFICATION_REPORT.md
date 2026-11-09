@@ -1,5 +1,7 @@
 # VERIFICATION_REPORT: rtd-afe
 
+> Historical, agent-written, from an earlier revision. The committed `reports/release.json`, README.md and QUALIFICATION.md are authoritative. The PR status is untrusted / `release_ready: false` (crystal unreviewed); `release.json` itself is historical output from source 01a77d54.
+
 Copied from the committed `reports/` files and `QUALIFICATION.md`. Nothing was re-run for this document. Hardware: not run. The board is not fabricated, not powered, not measured.
 
 ## Gate verdicts
@@ -10,7 +12,7 @@ Copied from the committed `reports/` files and `QUALIFICATION.md`. Nothing was r
 | Connectivity | PASS: `fabrication_ready: true`, 40 connected nets, 0 open, no missing footprints/nets/pads, `blocking_reasons: []` | `reports/rtd_afe.connectivity.json` |
 | Routing | routed, FreeRouting 2.4.1, 371 segments, 67 vias recorded by the router (77 incl. source stitching per QUALIFICATION.md), 654.8 mm wire, 0 open nets | `reports/rtd_afe.routing.json` |
 | Synth release | FAIL/OPEN: `production_status: untrusted`, `release_ready: false` (override `--allow-unverified-parts` for `ecs_120_20_33_tr`). `gate_scope` says this is not a fabrication approval or component review | `reports/release.json` |
-| Synth signal integrity | 18 warnings, 0 blocking | `reports/release.json` |
+| Synth signal integrity | 12 findings, 0 blocking (11 return-via advisories, 1 parallel run) | `reports/release.json` |
 | pcbnew reopen / single GND plane | PASS per `check.sh` (`reopen ok; single GND plane`), recorded in QUALIFICATION.md; the script output itself is not a committed report | `check.sh`, QUALIFICATION.md |
 | Via-in-pad | 1 via at (16.500, 22.300) mm, C_DV.2; order with filled and capped vias | `reports/rtd_afe.connectivity.json`, `reports/release.json` |
 
@@ -18,8 +20,8 @@ Copied from the committed `reports/` files and `QUALIFICATION.md`. Nothing was r
 1. `lib_symbol_issues`: symbol `Ferrite_Bead` not found in library `Device` (L2). Registry uses the old name.
 2. `lib_symbol_mismatch`: `REF5025ID` differs from the library copy (U3). Cosmetic per QUALIFICATION.md.
 
-## SI warnings (non-blocking, open)
-15 layer changes with no ground-return via within 0.64 mm (SPI_MOSI/CS/MISO, ADC_DRDY, ADC_START, QSPI_SD0/SD1/SD3, +3V3_RP_A, DVDD_1V1, USB_DN_C and others listed in `release.json`) and 3 parallel runs: REFOUT/+3V3_RP_A 2.7 mm, ADC_START/VBUS 2.5 mm, +3V3/VREG_LX 4.6 mm at 0.147 mm. No RTD, AIN or VREF finding. USB path mismatch 7.09 mm (22.60 mm DP vs 29.69 mm DN), no controlled impedance. None simulated.
+## SI warnings (non-blocking only with --fine-pitch-return-via-advisory, which needs SI-review sign-off, not given; default settings: validation_failed, 12 blocking; open)
+11 layer changes with no ground-return via within 0.64 mm (SPI_MOSI/CS/MISO, ADC_DRDY, ADC_START, QSPI_SD0/SD1/SD3, +3V3_RP_A, DVDD_1V1, USB_DN_C and others listed in `release.json`) and 1 parallel run (see `reports/release.json` for the net pair and length). No RTD, AIN or VREF finding. USB path mismatch 1.31 mm, no controlled impedance. None simulated.
 
 ## Synth validate warnings (QUALIFICATION.md, not committed as a report)
 E-SYNTH-POWER-004 (VBUS 7 loads, 1 capacitor), W-SYNTH-ANOMALY-001, W-SYNTH-SUPPLY-002 x10, W-SYNTH-PART-UNVERIFIED (Y1), E-SYNTH-CONNECT-007 x2, E-SYNTH-ESD-001 x3 (no VBUS reverse protection, no CC TVS), E-SYNTH-SCHEM-003 x11, E-SYNTH-SCHEM-004/005.

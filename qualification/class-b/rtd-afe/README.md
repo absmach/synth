@@ -1,7 +1,10 @@
 # PT100 4-wire RTD analog front end (SYN-363)
 
-Status: design, placement and a FreeRouting route that passes Synth's routing and
-DRC gates. The board is **not fabricated and not tested on hardware**. The
+Status: design, placement and a FreeRouting route that is **untrusted and not
+release-ready**. The committed evidence is historical (source revision
+`01a77d54`); on default settings the export ends `validation_failed` with 12
+blocking return-via findings. The board is **not fabricated and not tested on
+hardware**. The
 SI/PI/RF review is being carried out by the designated reviewer; the automated
 evidence and the open items are in [QUALIFICATION.md](QUALIFICATION.md). The
 analog accuracy has not been measured, and several sourcing and decoupling items
@@ -78,7 +81,10 @@ QUALIFICATION.md for the SI review.
 
 Status: routed with FreeRouting 2.4.1 on Java 25, KiCad 10.0.7, Synth at the
 worktree this directory was exported from (source revision 01a77d54). The board
-passes Synth main's return-via gate with this branch's two router commits (see
+was produced with this branch's opt-in fine-pitch return-via relaxation
+(`--fine-pitch-return-via-advisory`, needs SI-review sign-off, not given). On
+default settings it ends `validation_failed` with 12 blocking return-via
+findings, so the board is untrusted and not release-ready (see
 QUALIFICATION.md). The route is under review by the designated reviewer.
 
 - Analog left, digital right, packed rather than spread. The input chain is J2
@@ -115,7 +121,8 @@ QUALIFICATION.md). The route is under review by the designated reviewer.
   copies; 1 `silk_edge_clearance`: the C_DVB reference label is clipped by the
   board edge at (41.05, 20.5) mm), 0 unconnected items. `pcbnew.LoadBoard` reopens the board and `check.sh` confirms
   one GND plane with no AGND or DGND net.
-- Synth's signal-integrity pass: 12 non-blocking findings, 11 `W-SYNTH-DRC-016`
+- Synth's signal-integrity pass, with the fine-pitch relaxation on (default
+  settings: 12 blocking return-via findings): 12 non-blocking findings, 11 `W-SYNTH-DRC-016`
   layer changes with no ground-return via within 0.80 mm (advisories, see
   QUALIFICATION.md) and 1 parallel-run finding (SPI_MISO and ADC_DRDY, 3.5 mm on
   B.Cu, 0.203 mm apart). No RTD, AIN or VREF net is flagged.
@@ -136,7 +143,11 @@ qualification/class-b/rtd-afe/check.sh
 `check.sh` exports and autoroutes the board into `kicad/`, then runs
 `kicad-cli pcb drc --severity-all --refill-zones` and `kicad-cli sch erc` on the
 result, renders the 3D views, and loads the board in pcbnew to check that it has
-one GND plane. It needs `tools/freerouting/freerouting-2.4.1.jar` and
+one GND plane. The relaxation is opt-in: `check.sh` passes
+`--fine-pitch-return-via-advisory` only when run with
+`FINE_PITCH_RETURN_VIA_ADVISORY=1`; the committed evidence was produced with it
+on (SI sign-off not given). Without it the script reports the blocking result
+and does not replace the evidence. It needs `tools/freerouting/freerouting-2.4.1.jar` and
 `tools/jre25/` (both git-excluded; symlink them from a configured Synth
 worktree).
 
@@ -173,6 +184,8 @@ netlist/PCB parity is clean. This disposition has not been reviewed by a human.
 - `rtd_afe.synth`, `rtd_afe.placement.layout.toml`: the design sources.
 - `check.sh`: the acceptance check above.
 - `SHA256SUMS`: hashes of the artifacts.
+
+The committed `kicad/`, `reports/`, `images/` and `SHA256SUMS` are historical output from source revision 01a77d54; the current tree does not route, so they are not reproducible from head (see QUALIFICATION.md, Reproducibility). `reports/release.json` (production, `release_ready: true`, reviewers all `reviewed`) is generated output from that revision and does not reflect the PR status (untrusted, `release_ready: false`, crystal unreviewed). `kicad/bom.csv` is historical and predates the source pins (C_D, L1, Y1).
 
 The reports are as the commands produce them, except that `check.sh` rewrites
 the checkout path in `release.json`, `rtd_afe.routing.json` and `rtd_afe.net` to

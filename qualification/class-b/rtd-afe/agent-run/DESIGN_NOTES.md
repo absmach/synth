@@ -1,11 +1,13 @@
 Design notes reconstructed from the committed files. The board was built by agents from the briefs in `prompt.md`, copied verbatim from the session transcripts. No tool-call log or report was saved.
 
+> Historical, agent-written. Reconstructed from the committed files (export from source 01a77d54), which predate the sourcing pins in `rtd_afe.synth` (C_D is now X7R C14663; L1 C98331; Y1 C2449814). See `QUALIFICATION.md` for status.
+
 # DESIGN_NOTES: PT100 4-wire RTD analog front end (rtd-afe, SYN-363)
 
 Sources: `rtd_afe.synth`, `README.md`, `QUALIFICATION.md`, `kicad/bom.csv`, `reports/*.json`, `registry/parts/**`. Anything not recorded there is marked "not verified".
 
 ## Purpose
-Bench or lab 4-wire PT100 front end with a USB readout. README: "a compact mixed-signal board on a single ground plane, not an instrument"; not for a product or safety function until the QUALIFICATION.md review items are closed. Status: design, placement and a FreeRouting route that passes Synth's routing and DRC gates; not fabricated, not tested on hardware.
+Bench or lab 4-wire PT100 front end with a USB readout. README: "a compact mixed-signal board on a single ground plane, not an instrument"; not for a product or safety function until the QUALIFICATION.md review items are closed. Status: design, placement and a FreeRouting route that is untrusted and not release-ready (default settings: validation_failed, 12 blocking return-via findings); not fabricated, not tested on hardware.
 
 ## Architecture
 | Block | Parts | Role (from `.synth` notes) |
@@ -21,8 +23,8 @@ Bench or lab 4-wire PT100 front end with a USB readout. README: "a compact mixed
 ## Signal chain and excitation
 - IDAC1 sources 1 mA out of AIN0 into F+, through the PT100 and F- into R_BIAS (1k) to GND. R_BIAS sets RTD common mode near 1.1 V (README: about 1.0 V plus the RTD drop; 1.1 V at 100 ohm, 1.25 V at 250 ohm).
 - REF5025 is the absolute reference (REFP0/REFN0), not ratiometric to the IDAC. README lists this as a deliberate trade and an open accuracy item.
-- Input filter: R_S1/R_S2 1k 0.1 %, C_D 100 nF C0G across the pair, C_CM1/C_CM2 10 nF C0G to GND, C_F 10 nF C0G on F+. The `.synth` note gives about 720 Hz differential and about 16 kHz common mode; README recomputes about 758 Hz (105 nF equivalent) and 15.9 kHz. The difference is the assumed equivalent capacitance (110 nF vs 105 nF).
-- C_D is 10x each C_CM so capacitor mismatch gives little differential error; all filter caps are C0G.
+- Input filter: R_S1/R_S2 1k 0.1 %, C_D 100 nF X7R (C14663) across the pair, C_CM1/C_CM2 10 nF C0G to GND, C_F 10 nF C0G on F+. The `.synth` note gives about 720 Hz differential and about 16 kHz common mode; README recomputes about 758 Hz (105 nF equivalent) and 15.9 kHz. The difference is the assumed equivalent capacitance (110 nF vs 105 nF).
+- C_D is 10x each C_CM so capacitor mismatch gives little differential error; C_CM1/C_CM2 and C_F are C0G, C_D is X7R.
 - The 1 mA IDAC setting, gain and data rate are firmware settings. No firmware exists in the repository: not verified.
 
 ## Decisions recorded in the sources

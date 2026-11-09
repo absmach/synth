@@ -42,6 +42,11 @@ struct Cli {
     #[arg(long, global = true, value_name = "N")]
     jobs: Option<usize>,
 
+    /// List a missing fast-edge return via beside a fine-pitch pad row as an
+    /// advisory instead of blocking. Needs signal-integrity review sign-off.
+    #[arg(long, global = true)]
+    fine_pitch_return_via_advisory: bool,
+
     #[command(subcommand)]
     command: Command,
 }
@@ -891,6 +896,9 @@ enum SchemaKind {
 
 fn main() -> ExitCode {
     let cli = Cli::parse();
+    if cli.fine_pitch_return_via_advisory {
+        std::env::set_var("SYNTH_FINE_PITCH_RETURN_VIA_ADVISORY", "1");
+    }
     let jobs = match cli.jobs {
         Some(0) => {
             // A zero-thread pool is a usage error, not a request for the
@@ -4766,6 +4774,7 @@ struct RouterOptions {
     fab_overrides: Option<PathBuf>,
     same_net_pad_clearance: f64,
     allow_via_in_pad: bool,
+    fine_pitch_return_via_advisory: bool,
     /// Wall-clock budget for the whole external run.
     timeout_secs: u64,
 }
@@ -4806,6 +4815,8 @@ fn router_options(
         fab_overrides: fab_overrides.map(Path::to_path_buf),
         same_net_pad_clearance,
         allow_via_in_pad,
+        fine_pitch_return_via_advisory: std::env::var("SYNTH_FINE_PITCH_RETURN_VIA_ADVISORY")
+            .is_ok_and(|v| v == "1" || v.eq_ignore_ascii_case("true")),
         timeout_secs: default_router_timeout_secs(),
     }
 }
@@ -4918,6 +4929,7 @@ fn build_route_request(
     request.ground_nets = synth_drc::ground_net_names(board);
     request.return_via_critical_nets = Some(synth_drc::return_path_critical_net_names(board));
     request.return_via_medium_nets = synth_drc::return_path_medium_net_names(board);
+    request.fine_pitch_return_via_advisory = options.fine_pitch_return_via_advisory;
     request.preserve_baseline()?;
     Ok(request)
 }
@@ -6006,6 +6018,7 @@ mod tests {
             fab_overrides: None,
             same_net_pad_clearance: 0.1,
             allow_via_in_pad: false,
+            fine_pitch_return_via_advisory: false,
             timeout_secs: 60,
         };
         let request = build_route_request(

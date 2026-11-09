@@ -1,5 +1,7 @@
 # ASSEMBLY: rtd-afe
 
+> Historical, agent-written. Derived from the committed `kicad/bom.csv` (export from source 01a77d54), which predates the sourcing pins in `rtd_afe.synth` (C_D is now X7R C14663; L1 C98331; Y1 C2449814). Do not use for assembly until the BOM is regenerated. See `QUALIFICATION.md` for status.
+
 Source: `kicad/bom.csv`, `kicad/pnp.csv`, `rtd_afe.synth`, README.md, QUALIFICATION.md. Nothing was sent to a fab house or assembled.
 
 ## Fabrication
@@ -13,7 +15,7 @@ Source: `kicad/bom.csv`, `kicad/pnp.csv`, `rtd_afe.synth`, README.md, QUALIFICAT
 | Refs | Value | Notes |
 | --- | --- | --- |
 | U1 | ADS124S08IRHBR | MPN only, no LCSC |
-| U2 | RP2350A | LCSC C14663 |
+| U2 | RP2350A | LCSC C42411118 |
 | U3 | REF5025AIDR | MPN only |
 | U4 | W25Q128JVSIQ | LCSC C97521 |
 | U5 | LP5907MFX-3.3 | LCSC C83437 |

@@ -6,6 +6,8 @@ qualification sign-off. `reports/release.json` now says `production_status: prod
 (override flags, route validation, signal integrity); its own `gate_scope` says
 so. Every review gate below that needs a human is still open.
 
+**Evidence status.** The committed `kicad/`, `reports/`, `images/` and `SHA256SUMS` are historical output from source revision 01a77d54. They are not reproducible from the current tree (see Reproducibility). `reports/release.json` (`source_revision` 01a77d54, `production_status: production`, `release_ready: true`, all reviewers `reviewed`) is generated output from that revision and does not reflect this PR's status: untrusted, `release_ready: false`, crystal unreviewed. `kicad/bom.csv` is likewise historical and predates the source sourcing pins.
+
 The board is not fabricated, not powered and not measured. The SI/PI/RF review
 is in progress with the designated reviewer; do not call it proven, clean or
 production-ready.
@@ -15,7 +17,7 @@ production-ready.
 - Outline: 40.1 x 44.2 mm rectangle, 1772 mm². A plain rectangular
   `[[outline]]` runs x 2.50 to 42.59 mm, y -0.01 to 44.21 mm; there is no notch
   and no post-export cut.
-- Four copper layers with an explicit 1.5862 mm FR4 stackup: 0.035 mm copper,
+- Four copper layers; the stackup below (1.5862 mm FR4) is a design note in `agent-run/DESIGN_NOTES.md`, not declared in `rtd_afe.synth` or `rtd_afe.kicad_pro`, and the exported board has `(thickness 1.6)`: 0.035 mm copper,
   0.2104 mm prepreg (er 4.4), 0.0152 mm copper, 1.065 mm core (er 4.6),
   0.0152 mm copper, 0.2104 mm prepreg (er 4.4), 0.035 mm copper. No
   controlled-impedance stackup was requested.
@@ -51,7 +53,9 @@ are open mechanical items.
 
 ## Check results
 
-Commands, from the repository root (`check.sh` does all of this):
+Commands, from the repository root (`check.sh` does all of this; it passes
+`--fine-pitch-return-via-advisory` only when `FINE_PITCH_RETURN_VIA_ADVISORY=1`
+is set, and the committed evidence was produced with it on):
 
 ```
 export XDG_DATA_HOME=$(mktemp -d)
@@ -77,7 +81,7 @@ Versions: KiCad 10.0.7, FreeRouting 2.4.1 on OpenJDK 25.0.4.1, Synth
 | Ground | one `GND` plane; `AGND` and `DGND` are absent | `check.sh` asserts it; see below |
 | KiCad ERC | 0 errors, 1 warning | `reports/rtd_afe.kicad-erc.json` |
 | Synth routing | routed, 40 connected nets, 0 open | `reports/rtd_afe.routing.json` |
-| Synth release | `production_status: production`, `release_ready: true` | `reports/release.json`; router and export gates only (see its `gate_scope`) |
+| Synth release (historical, source 01a77d54; PR status is untrusted, `release_ready: false`) | `production_status: production`, `release_ready: true` | `reports/release.json`; router and export gates only (see its `gate_scope`) |
 | Synth signal integrity | 12 findings, 0 blocking: 11 `W-SYNTH-DRC-016` advisories, 1 parallel run | `reports/release.json` |
 
 The delivered board is `kicad/rtd_afe.kicad_pcb`
@@ -185,15 +189,19 @@ shows the same warnings. These are not hidden: the `reports/` DRC file lists all
 
 ## Status against Synth main's return-via gate
 
-The board passes Synth main's return-via gate. The committed reports were
-regenerated at source revision `01a77d54` (`check.sh` exit 0, routing state
+The board does not pass Synth main's return-via gate on default settings. The
+committed evidence was produced with the opt-in fine-pitch relaxation
+(`--fine-pitch-return-via-advisory`, env `SYNTH_FINE_PITCH_RETURN_VIA_ADVISORY`),
+which needs signal-integrity review sign-off; that sign-off is not given. With
+the flag off the board ends `validation_failed` with 12 blocking return-via
+findings, so it stays untrusted and not release-ready. The committed reports
+were regenerated at source revision `01a77d54` (`check.sh` exit 0, routing state
 `routed`, 0 open nets, 0 blocking reasons). Main's router treats a layer change
 on a fast-edge net as blocking unless a ground-return via sits within 0.80 mm.
-Before this branch's router commits, a re-run ended in `validation_failed` with
-12 blocking return-via findings. This branch carries two router commits
-(`island_vias.rs`):
+Without the flag, a re-run ends in `validation_failed` with 12 blocking
+return-via findings. This branch carries two router commits (`island_vias.rs`):
 
-- (a) A return via with no legal spot inside a fine-pitch pad breakout (pads
+- (a) With the flag on only, a return via with no legal spot inside a fine-pitch pad breakout (pads
   0.5 mm or closer, signal via within 2.5 mm of such a pad) is reported as an
   advisory instead of blocking.
 - (b) When the usual 0.6 mm via has no room, a compact 0.46/0.20 mm via, held
@@ -203,7 +211,7 @@ Before this branch's router commits, a re-run ended in `validation_failed` with
 Placement tuning that was needed (sidecar): C_IO rotated to 270, L1 at x = 34.4
 and U4 at x = 22.0.
 
-Remaining advisories: 11 `W-SYNTH-DRC-016` (`reports/release.json`,
+Advisories (exist only with the flag on): 11 `W-SYNTH-DRC-016` (`reports/release.json`,
 `reports/rtd_afe.connectivity.json`). The return loop is left open in 11 layer
 changes, so they are for the SI review and are not closed:
 
@@ -301,9 +309,10 @@ hole (previously 2.5 mm, no clearance).
 | J2, J3 | 2.54 mm headers (1x4, 1x3) | None | 4 and 3 pins | — | Reviewed, registry `header_1x4`/`header_1x3` (2026-11-05) |
 | H1..H4 | M2.5 clearance NPTH (2.7 mm) | None | 1 hole | — | Reviewed, registry `mounting_hole_m2_5_clearance` (2026-11-05) |
 
-The registry's required decoupling is met: ADS124S08 AVDD 330 nF and DVDD
-100 nF; REF5025 VIN/VOUT 1 uF; LP5907 VIN/VOUT 1 uF (2.2 uF fitted); RP2350
-IOVDD 4 x 100 nF and DVDD 2 x 100 nF; W25Q128 VCC 100 nF. That is below
+The registry's required decoupling is met for ADS124S08 (AVDD 330 nF, DVDD
+100 nF), REF5025 (VIN/VOUT 1 uF), LP5907 (VIN/VOUT 1 uF, 2.2 uF fitted) and
+W25Q128 (VCC 100 nF). It is **unmet for the RP2350**: `parts/mcus/rp2350.synth.toml`
+requires 7 IOVDD and 3 DVDD 100 nF caps; the board has 4 IOVDD and 2 DVDD (plus C_DVB bulk). This is an open SI/PI gap. It is also below
 Raspberry Pi's per-pin recommendation: the board has 4 IOVDD caps (C_IO1..C_IO4)
 for 6 IOVDD pins, and 2 DVDD caps (C_DV1, C_DV2) plus C_DVB bulk for 3 DVDD pins,
 while the hardware design guide (section 2.2.1) recommends one 100 nF per power
@@ -416,7 +425,7 @@ Nothing below is signed off. The list is deliberately blunt.
   layout task.
 - **Fabrication/DFM**: no fab house has seen the Gerbers, drill, BOM or PnP.
   The 0.4 mm QFN-60, the 0.5 mm VQFN-32 and the 0.5 mm USB-C need a fab
-  capability check; the four-layer stackup is declared by the source, not a
+  capability check; the stackup is a design note, not in the exported board, and there is no
   controlled-impedance quote. The source declares `requires via_in_pad`
   (manufacturer `jlc-filled-via`); this route has no via inside a pad, but a
   re-route can bring one back and JLCPCB has not accepted that process. Assembly
@@ -425,8 +434,11 @@ Nothing below is signed off. The list is deliberately blunt.
 - **Firmware**: the RP2350 boot, QSPI flash, ADC gain/data-rate/IDAC registers,
   USB descriptors and the PT100 conversion/calibration do not exist in this
   repository. Nothing was powered.
-- **Sourcing**: C_D, L1 and Y1 have no sourced MPN/LCSC part (see Sourcing
-  pins). The RP2350 decoupling count is below the Pi recommendation.
+- **Sourcing**: C_D (C14663, X7R), L1 (C98331) and Y1 (C2449814) are pinned in
+  the source (see Sourcing pins), but the committed `kicad/bom.csv` predates the
+  pins (C_D C0G 50 V no LCSC; L1 and Y1 no LCSC) and must not be used for
+  assembly until regenerated. The RP2350 decoupling is below the registry
+  requirement (7 IOVDD, 3 DVDD) and the Pi recommendation.
 - **Independent sign-off**: the board review is with the designated reviewer.
   Part-level registry reviews exist for the parts in the table above; they are
   single-reviewer reviews. The issue owner has not signed off on the single
@@ -451,7 +463,7 @@ Nothing below is signed off. The list is deliberately blunt.
    left split-ground islands that the 0.6 mm stitching-via search could not tie,
    so the export refused them. The single-plane version has no islands, but a
    future placement change can bring them back; `check.sh` catches it. The
-   return-via half of this repair is now advisory (see item 7).
+   return-via half of this repair is advisory only with the opt-in flag (see item 7).
 3. **An all-absolute placement sidecar is silently re-packed (not fixed).**
    With every entry absolute, the export's `close_pinned_bands` pass slid the
    pinned parts to shut gaps; it moved U4 onto U2 and produced 91 mask and
@@ -476,7 +488,8 @@ Nothing below is signed off. The list is deliberately blunt.
 7. **Return-via misses blocked a whole candidate (fixed).** The island repair
    reported a signal via with no ground return as an unresolved island, so a
    route with clean connectivity could not be promoted. A missing return via is
-   the existing `W-SYNTH-DRC-016` SI warning, so it is now advisory; an untied
+   the existing `W-SYNTH-DRC-016` SI warning, so it is advisory (for fine-pitch breakouts only with the opt-in
+   `--fine-pitch-return-via-advisory`, which needs SI sign-off); an untied
    copper island still blocks. This branch adds two router commits on top of that
    (see the return-via gate section). The regression test is
    `an_unreturned_signal_via_is_advisory_not_blocking`.
@@ -502,14 +515,17 @@ grep -v '^#' SHA256SUMS | sha256sum -c -
 `release.json` and the routing provenance record it. It also rewrites the
 checkout path in `release.json`, `rtd_afe.routing.json` and `rtd_afe.net` to a
 repository-relative one, matching the usb-uart board's convention. The
-`source_revision` names the source commit; the later artifact commit only adds
-the regenerated files. All other reports are as the tools wrote them.
+`source_revision` (01a77d54) names the source commit that produced the evidence.
+The head source differs from it (C_D X7R, Y1/L1/C_D pins in `rtd_afe.synth`), so
+the evidence is not from the head source. All other reports are as the tools wrote them.
 `SHA256SUMS` covers all deliverables.
 
 The failed attempts described above did **not** route clean; the committed
 placement did. I did not run the final inputs three times to claim a
 byte-identical board, so the committed board is one successful run, not a
-proven reproducible one. FreeRouting 2.4.1 and KiCad 10.0.7 on another machine
+proven reproducible one. **Reproducibility is OPEN**: a re-export on the current
+tree does not route (+3V3 and VREG_LX open with L1 at x = 34.4), so the committed
+evidence is historical. FreeRouting 2.4.1 and KiCad 10.0.7 on another machine
 may produce a different route. `check.sh` is the repeatable acceptance check;
 it re-routes from the sources and fails on any DRC error, unconnected item, or
 ground violation.

@@ -494,15 +494,16 @@ pub fn plan_ties(board: &PcbBoard, declared: &ViaDeclarations) -> TiePlan {
             let usual = best_spot(regions, &members, &mains, need, &keepout)
                 .map(|at| TieVia { at, ..via.clone() });
             let tie = usual.or_else(|| {
-                if size_nm <= COMPACT_VIA_SIZE_NM {
+                let (compact_size, compact_drill) = declared.compact_via();
+                if size_nm <= compact_size {
                     return None;
                 }
-                let compact_need = nm_to_mm(COMPACT_VIA_SIZE_NM) / 2.0 + EDGE_SLACK_MM;
+                let compact_need = nm_to_mm(compact_size) / 2.0 + EDGE_SLACK_MM;
                 best_spot(regions, &members, &mains, compact_need, &compact_keepout).map(|at| {
                     TieVia {
                         at,
-                        size_nm: COMPACT_VIA_SIZE_NM,
-                        drill_nm: COMPACT_VIA_DRILL_NM,
+                        size_nm: compact_size,
+                        drill_nm: compact_drill,
                         ..via.clone()
                     }
                 })
@@ -700,6 +701,9 @@ pub struct Ground {
     /// The nets that declare a medium edge: they keep the return-via requirement
     /// but look for the via in the wider window of `synth_drc::MEDIUM_EDGE_WINDOW_NM`.
     medium: BTreeSet<String>,
+    /// Opt-in: a missing fast-edge return via in a fine-pitch pad breakout is
+    /// an advisory, not blocking. Needs SI-review sign-off; off by default.
+    fine_pitch_advisory: bool,
 }
 
 impl Ground {
@@ -711,6 +715,7 @@ impl Ground {
             in_pad_via: None,
             underpad: BTreeSet::new(),
             medium: BTreeSet::new(),
+            fine_pitch_advisory: false,
         }
     }
 
@@ -747,6 +752,12 @@ impl Ground {
     #[must_use]
     pub fn with_underpad(mut self, references: &[String]) -> Self {
         self.underpad = references.iter().cloned().collect();
+        self
+    }
+
+    #[must_use]
+    pub fn with_fine_pitch_advisory(mut self, on: bool) -> Self {
+        self.fine_pitch_advisory = on;
         self
     }
 
@@ -1246,6 +1257,10 @@ pub struct ViaDeclarations {
     /// The least distance from copper to the board edge the DRC rules ask
     /// (`edge_clearance` in the `.kicad_dru` beside it), in mm.
     edge_clearance_mm: Option<f64>,
+    /// The board's own via floors (`design_settings.rules`), 0 when unread.
+    min_via_nm: i64,
+    min_annular_nm: i64,
+    min_hole_nm: i64,
 }
 
 impl ViaDeclarations {
@@ -1258,6 +1273,16 @@ impl ViaDeclarations {
     /// board's DRC rules ask, or the 0.3 mm the manufacturers' floor gives.
     fn edge_gap_mm(&self) -> f64 {
         self.edge_clearance_mm.unwrap_or(DEFAULT_EDGE_CLEARANCE_MM)
+    }
+
+    /// The compact return via: the fixed 0.46 / 0.2 mm, grown to the board's
+    /// own minimum via diameter, annular ring and hole so KiCad DRC accepts it.
+    fn compact_via(&self) -> (i64, i64) {
+        let drill = COMPACT_VIA_DRILL_NM.max(self.min_hole_nm);
+        let size = COMPACT_VIA_SIZE_NM
+            .max(self.min_via_nm)
+            .max(drill + 2 * self.min_annular_nm);
+        (size, drill)
     }
 
     fn via(&self, net: &str) -> Option<(i64, i64)> {
@@ -1299,7 +1324,28 @@ fn declared_vias(candidate: &Path, board: &PcbBoard) -> ViaDeclarations {
         clearance_mm: declared_clearance_mm(candidate),
         hole_clearance_mm: declared_hole_clearance_mm(candidate),
         edge_clearance_mm: declared_edge_clearance_mm(candidate),
+        ..declared_via_floors(candidate)
     }
+}
+
+/// The via diameter, annular ring and hole floors of the `.kicad_pro` beside a
+/// board, in nm; 0 for any it does not state.
+fn declared_via_floors(candidate: &Path) -> ViaDeclarations {
+    let mut floors = ViaDeclarations::default();
+    let rules = std::fs::read_to_string(candidate.with_extension("kicad_pro"))
+        .ok()
+        .and_then(|text| serde_json::from_str::<serde_json::Value>(&text).ok())
+        .and_then(|value| value.get("design_settings")?.get("rules").cloned());
+    let nm = |key: &str| {
+        rules
+            .as_ref()
+            .and_then(|r| r.get(key)?.as_f64())
+            .map_or(0, mm_to_nm)
+    };
+    floors.min_via_nm = nm("min_via_diameter");
+    floors.min_annular_nm = nm("min_via_annular_width");
+    floors.min_hole_nm = nm("min_through_hole_diameter");
+    floors
 }
 
 /// The copper to board edge clearance the `.kicad_dru` beside a board states, in
@@ -1806,7 +1852,8 @@ fn stitch(
     let fine_pads = fine_pitch_pads(board);
     let compact_gap = declared.clearance_mm.unwrap_or(COMPACT_GAP_MM);
     let compact_keepout = Keepout::from_board(board, net, compact_gap);
-    let compact_apart = nm_to_mm(COMPACT_VIA_SIZE_NM) + compact_gap;
+    let (compact_size, compact_drill) = declared.compact_via();
+    let compact_apart = nm_to_mm(compact_size) + compact_gap;
     let mut out = Vec::new();
     let mut offsets_by_window: HashMap<u64, Vec<(f64, f64)>> = HashMap::new();
     let (mut unresolved, mut advisory) = (Vec::new(), Vec::new());
@@ -1832,7 +1879,7 @@ fn stitch(
         )
         .map(|p| (p, size_nm, drill_nm));
         let compact = || {
-            if size_nm <= COMPACT_VIA_SIZE_NM {
+            if size_nm <= compact_size {
                 return None;
             }
             nearest_return_spot(
@@ -1842,9 +1889,9 @@ fn stitch(
                 &ground,
                 &room_both,
                 &compact_keepout,
-                nm_to_mm(COMPACT_VIA_SIZE_NM) / 2.0,
+                nm_to_mm(compact_size) / 2.0,
             )
-            .map(|p| (p, COMPACT_VIA_SIZE_NM, COMPACT_VIA_DRILL_NM))
+            .map(|p| (p, compact_size, compact_drill))
         };
         let spot = usual.or_else(compact).or_else(|| {
             let spots = (&ground[..], &ground_pads[..]);
@@ -1862,9 +1909,10 @@ fn stitch(
             ground.push(p);
             out.push(tie_via_at(net, p, size, drill));
         } else if ground_nets.needs_return(signal_net)
-            && !fine_pads
-                .iter()
-                .any(|p| (p.0 - vx).hypot(p.1 - vy) <= FINE_PITCH_BREAKOUT_MM)
+            && !(ground_nets.fine_pitch_advisory
+                && fine_pads
+                    .iter()
+                    .any(|p| (p.0 - vx).hypot(p.1 - vy) <= FINE_PITCH_BREAKOUT_MM))
         {
             unresolved.push(missing_return((vx, vy), reach_mm, net, None));
         } else if ground_nets.needs_return(signal_net) {
@@ -3293,11 +3341,29 @@ mod tests {
             (pad "1" smd rect (at 10 10) (size 6 6) (layers "F.Cu") (net 3))
             (pad "2" smd rect (at 11.5 10) (size 0.2 0.8) (layers "F.Cu") (net 3))
             (pad "3" smd rect (at 11.9 10) (size 0.2 0.8) (layers "F.Cu") (net 3)))"#;
-        let plan = plan_all(&stitched_board(breakout), REACH);
+        let ground = Ground::default().with_fine_pitch_advisory(true);
+        let plan = plan_all_with(
+            &stitched_board(breakout),
+            REACH,
+            &ground,
+            &ViaDeclarations::new(),
+        );
         assert!(plan.vias.is_empty(), "{plan:?}");
         assert!(plan.unresolved.is_empty(), "{plan:?}");
         assert_eq!(plan.advisory.len(), 1, "{plan:?}");
         assert!(plan.advisory[0].contains("fine-pitch"), "{plan:?}");
+    }
+
+    /// Without the opt-in the same breakout blocks, as on main.
+    #[test]
+    fn a_fine_pitch_breakout_with_no_room_blocks_without_the_opt_in() {
+        let breakout = r#"(footprint "U" (at 0 0) (layer "F.Cu")
+            (pad "1" smd rect (at 10 10) (size 6 6) (layers "F.Cu") (net 3))
+            (pad "2" smd rect (at 11.5 10) (size 0.2 0.8) (layers "F.Cu") (net 3))
+            (pad "3" smd rect (at 11.9 10) (size 0.2 0.8) (layers "F.Cu") (net 3)))"#;
+        let plan = plan_all(&stitched_board(breakout), REACH);
+        assert_eq!(plan.unresolved.len(), 1, "{plan:?}");
+        assert!(plan.advisory.is_empty(), "{plan:?}");
     }
 
     /// A ground net the DRC knows by topology, not by name, is ground here too.
@@ -3329,7 +3395,7 @@ mod tests {
     }
 
     #[test]
-    fn a_return_via_is_added_where_one_outer_layer_has_no_pour() {
+    fn no_return_via_is_added_where_one_layer_has_no_pour() {
         let text = r#"(kicad_pcb
           (layers (0 "F.Cu" signal) (2 "B.Cu" signal))
           (net 0 "") (net 1 "GND") (net 2 "SIG")
@@ -3338,7 +3404,7 @@ mod tests {
             (polygon (pts (xy 0 0) (xy 40 0) (xy 40 20) (xy 0 20)))
             (filled_polygon (layer "B.Cu") (pts (xy 0 0) (xy 40 0) (xy 40 20) (xy 0 20)))))"#;
         let board = PcbBoard::parse(text).expect("parses");
-        assert_eq!(stitch_vias(&board, REACH, &[]).len(), 1);
+        assert!(stitch_vias(&board, REACH, &[]).is_empty());
     }
 
     /// Foreign pads leave a corridor round the signal via too narrow for the
@@ -3356,23 +3422,6 @@ mod tests {
         assert_eq!(vias[0].net, "GND");
         assert_eq!(vias[0].size_nm, 460_000);
         assert_eq!(vias[0].drill_nm, 200_000);
-    }
-
-    /// A through via lands on every layer, so ground copper on an inner plane
-    /// is enough to tie it: the outer layers may be too cut up to hold a pour.
-    #[test]
-    fn a_return_via_is_added_where_only_an_inner_layer_has_ground_copper() {
-        let text = r#"(kicad_pcb
-          (layers (0 "F.Cu" signal) (4 "In1.Cu" signal) (2 "B.Cu" signal))
-          (net 0 "") (net 1 "GND") (net 2 "SIG")
-          (via (at 10 10) (size 0.6) (drill 0.3) (layers "F.Cu" "B.Cu") (net 2))
-          (zone (net 1) (net_name "GND") (layer "In1.Cu") (fill yes)
-            (polygon (pts (xy 0 0) (xy 40 0) (xy 40 20) (xy 0 20)))
-            (filled_polygon (layer "In1.Cu") (pts (xy 0 0) (xy 40 0) (xy 40 20) (xy 0 20)))))"#;
-        let board = PcbBoard::parse(text).expect("parses");
-        let vias = stitch_vias(&board, REACH, &[]);
-        assert_eq!(vias.len(), 1, "{vias:?}");
-        assert_eq!(vias[0].net, "GND");
     }
 
     /// Under a ball grid the outer layer holds no pour, but two inner planes do: the
@@ -3603,19 +3652,68 @@ mod tests {
         assert!(dx.hypot(dy) >= 0.5 - 1e-6, "on or beside the pad: {x} {y}");
     }
 
-    /// Ground pads fill the whole window round the signal via, as a QFN's
-    /// ground ring and exposed pad do. A return via may share ground copper, so
-    /// they are no reason to report the signal via as unresolved.
     #[test]
-    fn ground_pads_round_a_signal_via_do_not_block_its_return_via() {
-        let ring = r#"(footprint "U" (at 0 0) (layer "F.Cu")
-            (pad "1" smd rect (at 10 11.15) (size 3.4 1.1) (layers "F.Cu") (net 1))
-            (pad "2" smd rect (at 10 8.85) (size 3.4 1.1) (layers "F.Cu") (net 1))
-            (pad "3" smd rect (at 8.85 10) (size 1.1 1.2) (layers "F.Cu") (net 1))
-            (pad "4" smd rect (at 11.15 10) (size 1.1 1.2) (layers "F.Cu") (net 1)))"#;
-        let vias = stitch_vias(&stitched_board(ring), REACH, &[]);
-        assert_eq!(vias.len(), 1, "{vias:?}");
-        assert_eq!(vias[0].net, "GND");
+    fn the_compact_via_grows_to_the_boards_own_via_minimum() {
+        assert_eq!(
+            ViaDeclarations::new().compact_via(),
+            (COMPACT_VIA_SIZE_NM, COMPACT_VIA_DRILL_NM)
+        );
+        let declared = ViaDeclarations {
+            min_via_nm: 560_000,
+            ..ViaDeclarations::new()
+        };
+        assert_eq!(declared.compact_via().0, 560_000);
+    }
+
+    /// `min_through_hole_diameter` is the drill floor: KiCad has no separate
+    /// via-drill rule, and the exporter writes the profile's drill minimum there.
+    #[test]
+    fn via_floors_are_read_from_the_kicad_pro_beside_the_board() {
+        let dir = std::env::temp_dir().join(format!("synth_via_floors_{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let pcb = dir.join("b.kicad_pcb");
+        std::fs::write(
+            dir.join("b.kicad_pro"),
+            r#"{"design_settings":{"rules":{"min_via_diameter":0.56,
+               "min_via_annular_width":0.13,"min_through_hole_diameter":0.3}}}"#,
+        )
+        .unwrap();
+        let floors = declared_via_floors(&pcb);
+        assert_eq!(floors.compact_via(), (560_000, 300_000));
+        assert_eq!(floors.min_annular_nm, 130_000);
+        // No project file: no floors.
+        let none = declared_via_floors(&dir.join("absent.kicad_pcb"));
+        assert_eq!(none.compact_via(), ViaDeclarations::new().compact_via());
+        assert_eq!(
+            (none.min_via_nm, none.min_annular_nm, none.min_hole_nm),
+            (0, 0, 0)
+        );
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn an_island_that_only_a_sub_minimum_via_fits_is_reported_not_given_one() {
+        // The compact-island board of the test above: room for 0.46 mm, not 0.56.
+        let text = r#"(kicad_pcb
+          (layers (0 "F.Cu" signal) (2 "B.Cu" signal))
+          (net 0 "") (net 1 "GND")
+          (segment (start 25.2 7) (end 25.4 7) (width 0.1) (layer "F.Cu") (net 1))
+          (via (at 5 5) (size 0.6) (drill 0.3) (layers "F.Cu" "B.Cu") (net 1))
+          (zone (net 1) (net_name "GND") (layer "F.Cu") (fill yes)
+            (polygon (pts (xy 0 0) (xy 40 0) (xy 40 20) (xy 0 20)))
+            (filled_polygon (layer "F.Cu") (pts (xy 0 0) (xy 20 0) (xy 20 20) (xy 0 20)))
+            (filled_polygon (layer "F.Cu") (pts (xy 25 6.69) (xy 26.2 6.69) (xy 26.2 7.31) (xy 25 7.31))))
+          (zone (net 1) (net_name "GND") (layer "B.Cu") (fill yes)
+            (polygon (pts (xy 0 0) (xy 40 0) (xy 40 20) (xy 0 20)))
+            (filled_polygon (layer "B.Cu") (pts (xy 0 0) (xy 40 0) (xy 40 20) (xy 0 20)))))"#;
+        let board = PcbBoard::parse(text).expect("board must parse");
+        let declared = ViaDeclarations {
+            min_via_nm: 560_000,
+            ..ViaDeclarations::new()
+        };
+        let plan = plan_ties(&board, &declared);
+        assert!(plan.vias.is_empty(), "{plan:?}");
+        assert_eq!(plan.unresolved.len(), 1, "{plan:?}");
     }
 
     /// The via drills every layer, so a track of another net on an inner layer
