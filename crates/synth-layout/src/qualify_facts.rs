@@ -1,7 +1,8 @@
 // SPDX-License-Identifier: Apache-2.0
 
 use std::collections::BTreeSet;
-use std::path::Path;
+use std::path::{Path, PathBuf};
+use std::sync::OnceLock;
 
 use synth_registry::qualify::{FootprintFacts, ModelFacts, PadFacts, PadSide, SymbolFacts};
 
@@ -30,6 +31,81 @@ fn model_facts(declared: &[&str], default_path: &str, exists: impl Fn(&str) -> b
     }
 }
 
+/// Colon-separated extra directories of model files, searched like a
+/// `step-models/` directory.
+const STEP_DIRS_ENV: &str = "SYNTH_STEP_MODEL_DIRS";
+
+/// Adds every file name under `dir`. Unreadable or missing dirs add nothing.
+fn collect_files(dir: &Path, out: &mut BTreeSet<String>) {
+    let Ok(entries) = std::fs::read_dir(dir) else {
+        return;
+    };
+    for entry in entries.flatten() {
+        // `file_type` does not follow symlinks, so a link cycle cannot loop.
+        match entry.file_type() {
+            Ok(t) if t.is_dir() => collect_files(&entry.path(), out),
+            Ok(t) if t.is_file() => {
+                out.insert(entry.file_name().to_string_lossy().into_owned());
+            }
+            _ => {}
+        }
+    }
+}
+
+/// Adds the files of every `step-models` directory at or below `dir`.
+fn collect_step_models(dir: &Path, out: &mut BTreeSet<String>) {
+    let Ok(entries) = std::fs::read_dir(dir) else {
+        return;
+    };
+    for entry in entries.flatten() {
+        if !entry.file_type().is_ok_and(|t| t.is_dir()) {
+            continue;
+        }
+        if entry.file_name() == "step-models" {
+            collect_files(&entry.path(), out);
+        } else {
+            collect_step_models(&entry.path(), out);
+        }
+    }
+}
+
+/// File names of the model files committed under `qualification_roots`
+/// (any `step-models/` directory) or placed in `extra_dirs`.
+fn step_model_names(qualification_roots: &[PathBuf], extra_dirs: &[PathBuf]) -> BTreeSet<String> {
+    let mut names = BTreeSet::new();
+    for root in qualification_roots {
+        collect_step_models(root, &mut names);
+    }
+    for dir in extra_dirs {
+        collect_files(dir, &mut names);
+    }
+    names
+}
+
+/// The repo's `qualification/` tree: the nearest ancestor of the working
+/// directory holding `qualification/` or `.git`.
+fn repo_qualification_root() -> Option<PathBuf> {
+    let cwd = std::env::current_dir().ok()?;
+    let root = cwd
+        .ancestors()
+        .find(|d| d.join("qualification").is_dir() || d.join(".git").exists())?;
+    Some(root.join("qualification"))
+}
+
+/// Scanned once per process, so qualifying a whole registry stays fast.
+fn committed_step_models() -> &'static BTreeSet<String> {
+    static NAMES: OnceLock<BTreeSet<String>> = OnceLock::new();
+    NAMES.get_or_init(|| {
+        let extra: Vec<PathBuf> = std::env::var_os(STEP_DIRS_ENV)
+            .map(|v| std::env::split_paths(&v).collect())
+            .unwrap_or_default();
+        step_model_names(
+            &repo_qualification_root().into_iter().collect::<Vec<_>>(),
+            &extra,
+        )
+    })
+}
+
 fn file_name(path: &str) -> String {
     Path::new(path)
         .file_name()
@@ -54,8 +130,9 @@ impl FootprintFacts for InstalledKicad {
         };
         let (lib, name) = lib_id.split_once(':')?;
         let default_path = format!("{MODEL_DIR}/{lib}.3dshapes/{name}.step");
+        // A committed qualification STEP file with the same name also counts.
         Some(model_facts(&declared_models(&body), &default_path, |p| {
-            Path::new(p).exists()
+            Path::new(p).exists() || committed_step_models().contains(&file_name(p))
         }))
     }
 
@@ -125,6 +202,48 @@ mod tests {
         assert_eq!(
             model_facts(&[], "/d/x.step", |_| false),
             ModelFacts::NoneDeclared
+        );
+    }
+
+    #[test]
+    fn committed_step_models_count_from_any_step_models_dir() {
+        let tmp = tempfile::tempdir().unwrap();
+        let (a, b) = (
+            tmp.path().join("q/a/step-models"),
+            tmp.path().join("q/b/x/step-models"),
+        );
+        std::fs::create_dir_all(&a).unwrap();
+        std::fs::create_dir_all(&b).unwrap();
+        std::fs::create_dir_all(tmp.path().join("q/other")).unwrap();
+        std::fs::write(a.join("Pico_A.step"), "").unwrap();
+        std::fs::write(a.join("Dup.step"), "").unwrap();
+        std::fs::write(b.join("Dup.step"), "").unwrap();
+        std::fs::write(tmp.path().join("q/other/Stray.step"), "").unwrap();
+        let names = step_model_names(
+            &[tmp.path().join("q"), tmp.path().join("nope")],
+            &[tmp.path().join("missing")],
+        );
+        assert_eq!(
+            names.iter().map(String::as_str).collect::<Vec<_>>(),
+            ["Dup.step", "Pico_A.step"]
+        );
+        let in_step = |p: &str| names.contains(&file_name(p));
+        assert_eq!(
+            model_facts(&declared_models(TWO_MODELS), "/d/x.step", in_step),
+            ModelFacts::Found
+        );
+        assert_eq!(model_facts(&[], "/d/Dup.step", in_step), ModelFacts::Found);
+        assert_eq!(
+            model_facts(&[], "/d/Gone.step", in_step),
+            ModelFacts::NoneDeclared
+        );
+        assert_eq!(
+            model_facts(
+                &declared_models("(model \"/m/Gone.step\")"),
+                "/d/x.step",
+                in_step
+            ),
+            ModelFacts::FileMissing("Gone.step".into())
         );
     }
 }

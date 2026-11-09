@@ -2394,6 +2394,7 @@ dependencies = [
  "synth-ir",
  "synth-parser",
  "synth-registry",
+ "tempfile",
  "toml",
  "zip",
 ]
