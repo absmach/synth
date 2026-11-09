@@ -410,6 +410,8 @@ pub fn build_pcb(
     // The via is the process's own: its drill at least the minimum and its pad
     // the drill plus two minimum annular rings.
     let plane_via = PlaneVia::for_process(&process);
+    // The land of a via filled and capped in a pad, where the process offers one
+    // and a component declares the under-pad escape that makes it legal.
     let pad_via = PlaneVia::for_via_in_pad(&process);
     // One rail per layer. Pouring every plane net on every power layer puts
     // two rails at the same priority on the same copper, which is the
@@ -476,30 +478,42 @@ pub fn build_pcb(
                     },
                     &plane_via,
                 );
-                let chosen = match beside {
-                    Some(at) => Ok(at),
-                    None if via_in_pad_allowed => plane_via_in_pad(
-                        &target,
-                        &pad_via,
-                        &InPadRules {
-                            pads: &pad_rects,
-                            vias: &placed_vias,
-                            clearance_nm: process.min_copper_clearance_nm,
-                            drill_to_copper_nm: process.min_drill_to_copper_nm,
-                        },
-                    ),
-                    None => Err(ViaRefusal::NoRoomBesidePad),
+                let in_pad_rules = InPadRules {
+                    pads: &pad_rects,
+                    vias: &placed_vias,
+                    clearance_nm: process.min_copper_clearance_nm,
+                    drill_to_copper_nm: process.min_drill_to_copper_nm,
+                };
+                // The plane via goes in the pad first, where it fits. Only a
+                // component that declares `escape { method underpad }` may take
+                // the smaller filled and capped via, the one the DRC exempts from
+                // the plain ring; a pad anywhere else that cannot hold the plane
+                // via is refused.
+                let (chosen, land) = match beside {
+                    Some(at) => (Ok(at), plane_via),
+                    None if via_in_pad_allowed => {
+                        match plane_via_in_pad(&target, &plane_via, &in_pad_rules) {
+                            Ok(at) => (Ok(at), plane_via),
+                            Err(refusal) => match pad_via {
+                                Some(small) if target.underpad => {
+                                    (plane_via_in_pad(&target, &small, &in_pad_rules), small)
+                                }
+                                _ => (Err(refusal), plane_via),
+                            },
+                        }
+                    }
+                    None => (Err(ViaRefusal::NoRoomBesidePad), plane_via),
                 };
                 let via = match chosen {
                     Ok(at) => at,
                     Err(refusal) => {
                         return Err(PlaneFanoutError {
                             net: net.name.clone(),
-                            detail: plane_via_refusal(&refusal, pad, layer, &pad_via),
+                            detail: plane_via_refusal(&refusal, pad, layer, &land),
                         });
                     }
                 };
-                let used = if via == pad { pad_via } else { plane_via };
+                let used = land;
                 placed_vias.push((via, used.pad_radius_nm));
                 children.push(build_plane_via(
                     via.x_nm,
@@ -615,6 +629,10 @@ struct PlanePad {
     layer: Layer,
     /// Width and height of the pad's copper in board axes, in nanometres.
     size_nm: (i64, i64),
+    /// Whether the pad's component declares `escape { method underpad }`: the
+    /// only place the filled and capped via, sized to the process's land, is
+    /// allowed.
+    underpad: bool,
 }
 
 /// Board-space targets for a declared power plane: one [`PlanePad`] per pad the
@@ -662,6 +680,9 @@ fn plane_pad_targets(board: &Board, placement: &Placement, net: &synth_ir::Net) 
                 centre: center,
                 origin,
                 layer: placed.layer,
+                underpad: component.escape.as_ref().is_some_and(|escape| {
+                    !escape.off && escape.method == Some(synth_ir::EscapeMethod::Underpad)
+                }),
                 size_nm: if placed.rotation.swaps_extents() {
                     (h_nm, w_nm)
                 } else {
@@ -701,30 +722,17 @@ impl PlaneVia {
     }
 }
 
-/// Land of a via placed in a pad, beyond its drill, in nanometres: JLCPCB's
-/// via-in-pad guide gives the minimum pad as the drill plus 0.15 mm. The
-/// beside-the-pad via uses two annular rings instead, which is the wider of
-/// the two and the reason a 0.35 mm ball pad refused every plane via.
-const VIA_IN_PAD_LAND_EXTRA_NM: i64 = 150_000;
-
 impl PlaneVia {
-    /// The via a plane stitching uses when it sits in the pad: the process's
-    /// own minimum drill (not the exporter's wider default) with the land the
-    /// manufacturer's via-in-pad guide gives for it. Filled and capped, the
-    /// via is the pad's own copper, so the ring comes from the cap rather than
-    /// from two annular rings around a bare hole.
-    fn for_via_in_pad(profile: &synth_drc::ManufacturerProfile) -> Self {
-        let drill_nm = profile.min_drill_diameter_nm;
-        let extra_nm = if profile.via_in_pad_land_extra_nm > 0 {
-            profile.via_in_pad_land_extra_nm
-        } else {
-            VIA_IN_PAD_LAND_EXTRA_NM
-        };
-        let land_nm = drill_nm + extra_nm;
-        Self {
+    /// The via a plane stitching uses when it is filled and capped in a pad: the
+    /// process's own minimum drill (not the exporter's wider default) with the
+    /// land the process gives for it, `via_in_pad_land_nm`, the one the DRC judges
+    /// it by. `None` where the process offers no such land, so the plane via is
+    /// the only via there is.
+    fn for_via_in_pad(profile: &synth_drc::ManufacturerProfile) -> Option<Self> {
+        profile.via_in_pad_land_nm().map(|land_nm| Self {
             pad_radius_nm: (land_nm + 1) / 2,
-            drill_nm,
-        }
+            drill_nm: profile.min_drill_diameter_nm,
+        })
     }
 }
 
@@ -770,8 +778,8 @@ fn plane_via_refusal(
              `requires via_in_pad` on a manufacturer that offers it, which lets the via go in the pad."
         ),
         ViaRefusal::PadTooSmall { pad_nm, via_nm } => format!(
-            "{at} is {:.2} x {:.2} mm and a stitching via needs a {:.2} mm pad (a {:.2} mm drill plus \
-             two annular rings) inside it, so via-in-pad cannot hold it on this process. Use a \
+            "{at} is {:.2} x {:.2} mm and a stitching via needs a {:.2} mm pad (a {:.2} mm drill plus the \
+             process's via-in-pad land allowance) inside it, so via-in-pad cannot hold it on this process. Use a \
              manufacturer tier with a finer drill, a larger pad, or another way to reach the plane.",
             nm_to_mm(pad_nm.0),
             nm_to_mm(pad_nm.1),
@@ -1008,7 +1016,8 @@ struct InPadRules<'a> {
 /// it suits, if the pad can hold it.
 ///
 /// A board that declared via-in-pad is allowed the process, not told that every
-/// pad suits it: the via's annulus (its drill plus the process's annular rings)
+/// pad suits it: the via's annulus (its drill plus the process's via-in-pad land
+/// allowance)
 /// has to fit inside the pad's copper, or the via would be wider than the pad it
 /// is meant to sit in; the pads and vias round it must stay the process's
 /// clearance from the via's copper and its hole's edge from their copper. A pad
@@ -4149,6 +4158,7 @@ mod plane_via_in_pad_tests {
             origin: Point::new(47_000_000, 47_000_000),
             layer: Layer::Top,
             size_nm: (size_nm, size_nm),
+            underpad: true,
         }
     }
 
@@ -4244,7 +4254,7 @@ mod plane_via_in_pad_tests {
         let pad = pad_at(350_000);
         let rects = ring(pad.centre, 350_000);
         let tier = synth_drc::ManufacturerProfile::jlc_advanced();
-        let in_pad = PlaneVia::for_via_in_pad(&tier);
+        let in_pad = PlaneVia::for_via_in_pad(&tier).expect("a via-in-pad land");
         assert_eq!(in_pad.drill_nm, 200_000);
         assert_eq!(2 * in_pad.pad_radius_nm, 350_000);
         assert_eq!(
@@ -4263,7 +4273,7 @@ mod plane_via_in_pad_tests {
         let rects = ring(pad.centre, 350_000);
         let mut tier = synth_drc::ManufacturerProfile::jlc_filled_via();
         tier.min_drill_diameter_nm = 300_000;
-        let in_pad = PlaneVia::for_via_in_pad(&tier);
+        let in_pad = PlaneVia::for_via_in_pad(&tier).expect("a via-in-pad land");
         assert_eq!(
             plane_via_in_pad(&pad, &in_pad, &rules(&rects, &[])),
             Err(ViaRefusal::PadTooSmall {
@@ -4271,6 +4281,16 @@ mod plane_via_in_pad_tests {
                 via_nm: 450_000
             })
         );
+    }
+
+    /// A process that allows via-in-pad but gives no land for it, a custom profile
+    /// that omits the allowance, has no filled and capped via: the plane via is the
+    /// only one, and the DRC would judge any smaller via by the plain ring.
+    #[test]
+    fn a_process_with_no_in_pad_land_has_no_filled_and_capped_via() {
+        let mut tier = synth_drc::ManufacturerProfile::jlc_advanced();
+        tier.via_in_pad_land_extra_nm = 0;
+        assert_eq!(PlaneVia::for_via_in_pad(&tier), None);
     }
 
     /// A rectangular pad is as wide as its narrow side.

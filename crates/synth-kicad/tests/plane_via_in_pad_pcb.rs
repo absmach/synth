@@ -101,9 +101,16 @@ fn source(with_via_in_pad: bool, interior: bool) -> String {
         "  connect U1.iot_225 -> U1.iot_168 as \"CORNERS\" class \"RAIL\"\n  \
            connect U1.iot_168 -> U1.iob_56\n  connect U1.iob_56 -> U1.vcc_spi\n"
     };
+    // Only a component that declares the under-pad escape may take the filled and
+    // capped via, the one sized to the process's land and exempt from the plain ring.
+    let escape = if with_via_in_pad {
+        " { escape { method underpad } }"
+    } else {
+        ""
+    };
     format!(
         "board \"bga_plane\" {{\n  layers 4\n{tier}  netclass \"RAIL\" {{\n    plane\n  }}\n  \
-         component U1: fpga \"ice40hx4k_bg121\"\n{connections}}}\n"
+         component U1: fpga \"ice40hx4k_bg121\"{escape}\n{connections}}}\n"
     )
 }
 
@@ -124,6 +131,28 @@ fn interior_supply_balls_take_the_via_in_pad_land_on_the_filled_via_tier() {
     assert!(
         pcb.contains("(size 0.35)"),
         "the plane vias are written at the via-in-pad land, not the 0.6 mm via"
+    );
+}
+
+/// A ball grid that does not declare the under-pad escape is not given the small
+/// via: the DRC would judge it against the plain ring, so the exporter refuses the
+/// supply ball its plane via in a 0.35 mm pad instead of writing one that fails.
+#[test]
+fn a_ball_pad_takes_no_small_via_without_the_under_pad_escape() {
+    if !kicad_ready(BGA_FOOTPRINT, false) {
+        return;
+    }
+    let undeclared = source(true, true).replace(" { escape { method underpad } }", "");
+    assert!(!undeclared.contains("underpad"), "{undeclared}");
+    let board = lower(&undeclared);
+    let out =
+        std::env::temp_dir().join(format!("synth-bga-plane-undeclared-{}", std::process::id()));
+    let _ = fs::remove_dir_all(&out);
+    let refusal = synth_kicad::export(&board, &out);
+    let _ = fs::remove_dir_all(&out);
+    assert!(
+        refusal.is_err(),
+        "a ball pad too small for the plane via must be refused without the escape"
     );
 }
 
