@@ -269,8 +269,10 @@ fn hole_probes(hole: &Hole) -> Vec<Point> {
         for k in 0..8 {
             let angle = f64::from(k) * std::f64::consts::FRAC_PI_4;
             probes.push(Point::new(
-                end.x_nm + (hole.radius_nm * angle.cos()).round() as i64,
-                end.y_nm + (hole.radius_nm * angle.sin()).round() as i64,
+                end.x_nm
+                    .saturating_add((hole.radius_nm * angle.cos()).round() as i64),
+                end.y_nm
+                    .saturating_add((hole.radius_nm * angle.sin()).round() as i64),
             ));
         }
     }
@@ -322,8 +324,8 @@ fn pad_to_pad(board: &PcbBoard, profile: &ManufacturerProfile) -> Vec<DfmFinding
     for (i, a) in pads.iter().enumerate() {
         for b in &pads[i + 1..] {
             let (dx, dy) = (
-                (a.at.x_nm - b.at.x_nm) as f64,
-                (a.at.y_nm - b.at.y_nm) as f64,
+                a.at.x_nm.saturating_sub(b.at.x_nm) as f64,
+                a.at.y_nm.saturating_sub(b.at.y_nm) as f64,
             );
             if dx.hypot(dy) > a.reach_nm() + b.reach_nm() + required_nm {
                 continue;
@@ -493,16 +495,16 @@ const MAX_STROKE_SAMPLES: i64 = 100_000;
 fn nearest_sample(pad: &Pad, stroke: &(Point, Point)) -> (f64, Point) {
     let (start, end) = *stroke;
     let (dx, dy) = (
-        (end.x_nm - start.x_nm) as f64,
-        (end.y_nm - start.y_nm) as f64,
+        end.x_nm.saturating_sub(start.x_nm) as f64,
+        end.y_nm.saturating_sub(start.y_nm) as f64,
     );
     let steps = ((dx.hypot(dy) / SAMPLE_STEP_NM).ceil() as i64).clamp(1, MAX_STROKE_SAMPLES);
     let mut best = (f64::INFINITY, start);
     for i in 0..=steps {
         let f = i as f64 / steps as f64;
         let p = Point::new(
-            start.x_nm + (dx * f).round() as i64,
-            start.y_nm + (dy * f).round() as i64,
+            start.x_nm.saturating_add((dx * f).round() as i64),
+            start.y_nm.saturating_add((dy * f).round() as i64),
         );
         let d = pad.copper_distance_nm(p);
         if d < best.0 {

@@ -398,8 +398,9 @@ fn widened_nm(size: (i64, i64), delta: Point) -> (i64, i64) {
 }
 
 /// Most samples `outline_points_nm` takes per arc or edge, so a malformed huge pad
-/// cannot ask for billions of points.
-const MAX_OUTLINE_STEPS: i64 = 256;
+/// cannot ask for billions of points. 4096 keeps a 50 mm edge sampled about every
+/// 12 um; a pad has at most 4 arcs and 4 edges, so under 33k points in all.
+const MAX_OUTLINE_STEPS: i64 = 4096;
 
 /// KiCad's corner radius for a `roundrect` pad that gives no `roundrect_rratio`.
 const KICAD_DEFAULT_ROUNDRECT_RATIO: f64 = 0.25;
@@ -480,8 +481,8 @@ impl Pad {
 
     fn distance_in_frame(&self, p: Point, offset: (f64, f64), size: (f64, f64)) -> f64 {
         let (sin, cos) = self.angle_deg.to_radians().sin_cos();
-        let dx = (p.x_nm - self.at.x_nm) as f64;
-        let dy = (p.y_nm - self.at.y_nm) as f64;
+        let dx = p.x_nm.saturating_sub(self.at.x_nm) as f64;
+        let dy = p.y_nm.saturating_sub(self.at.y_nm) as f64;
         // Board frame to pad frame (the inverse of the y-down rotation).
         let qx = (dx * cos - dy * sin - offset.0).abs();
         let qy = (dx * sin + dy * cos - offset.1).abs();
@@ -498,8 +499,8 @@ impl Pad {
         let (o, s) = self.bbox.unwrap_or(((0, 0), self.size_nm));
         (
             (
-                (o.0 + self.drill_offset_nm.0) as f64,
-                (o.1 + self.drill_offset_nm.1) as f64,
+                o.0.saturating_add(self.drill_offset_nm.0) as f64,
+                o.1.saturating_add(self.drill_offset_nm.1) as f64,
             ),
             (s.0 as f64, s.1 as f64),
         )
@@ -551,15 +552,25 @@ impl Pad {
         let mut points = Vec::new();
         for (i, &(x0, y0)) in key.iter().enumerate() {
             let (x1, y1) = key[(i + 1) % key.len()];
-            let pieces =
-                (((x1 - x0).hypot(y1 - y0) / step_nm).ceil() as i64).clamp(1, MAX_OUTLINE_STEPS);
+            // Only the straight edges between arcs need subdividing: an arc's own
+            // chords are already about one step long.
+            let is_edge = i as i64 % (arc_steps + 1) == arc_steps;
+            let pieces = if is_edge {
+                (((x1 - x0).hypot(y1 - y0) / step_nm).ceil() as i64).clamp(1, MAX_OUTLINE_STEPS)
+            } else {
+                1
+            };
             for k in 0..pieces {
                 let f = k as f64 / pieces as f64;
                 let (qx, qy) = (x0 + (x1 - x0) * f + offset.0, y0 + (y1 - y0) * f + offset.1);
                 // Pad frame to board frame (the inverse of `signed_distance_nm`).
                 points.push(Point::new(
-                    self.at.x_nm + (qx * cos + qy * sin).round() as i64,
-                    self.at.y_nm + (qy * cos - qx * sin).round() as i64,
+                    self.at
+                        .x_nm
+                        .saturating_add((qx * cos + qy * sin).round() as i64),
+                    self.at
+                        .y_nm
+                        .saturating_add((qy * cos - qx * sin).round() as i64),
                 ));
             }
         }
@@ -589,8 +600,12 @@ impl Pad {
         let (sin, cos) = self.angle_deg.to_radians().sin_cos();
         let to_board = |qx: f64, qy: f64| {
             Point::new(
-                self.at.x_nm + (qx * cos + qy * sin).round() as i64,
-                self.at.y_nm + (qy * cos - qx * sin).round() as i64,
+                self.at
+                    .x_nm
+                    .saturating_add((qx * cos + qy * sin).round() as i64),
+                self.at
+                    .y_nm
+                    .saturating_add((qy * cos - qx * sin).round() as i64),
             )
         };
         // The slot runs along the longer drill dimension of the pad's frame.
@@ -1208,8 +1223,8 @@ impl PcbBoard {
 }
 
 fn segment_length_nm(segment: &Segment) -> i64 {
-    let dx = segment.end.x_nm - segment.start.x_nm;
-    let dy = segment.end.y_nm - segment.start.y_nm;
+    let dx = segment.end.x_nm.saturating_sub(segment.start.x_nm);
+    let dy = segment.end.y_nm.saturating_sub(segment.start.y_nm);
     // Integer square root of a sum of squares, via Newton's method on the
     // f64 estimate. Board geometry is far inside the exactly-representable
     // range, so the estimate only needs to be close.
@@ -1321,7 +1336,7 @@ fn polygon_vertices(node: &Node) -> Option<Vec<Point>> {
 
 fn circle_vertices(node: &Node) -> Option<Vec<Point>> {
     let (c, e) = (parse_point(node, "center")?, parse_point(node, "end")?);
-    let radius = ((e.x_nm - c.x_nm) as f64).hypot((e.y_nm - c.y_nm) as f64);
+    let radius = (e.x_nm.saturating_sub(c.x_nm) as f64).hypot(e.y_nm.saturating_sub(c.y_nm) as f64);
     Some(arc_points(
         (c.x_nm as f64, c.y_nm as f64),
         radius,
@@ -1439,13 +1454,21 @@ fn pad_drill_offset_nm(pad: &Node) -> (i64, i64) {
         .map_or((0, 0), |p| (p.x_nm, p.y_nm))
 }
 
+/// Midpoint of `lo..=hi` that cannot overflow.
+fn mid_nm(lo: i64, hi: i64) -> i64 {
+    lo / 2 + hi / 2
+}
+
 /// Bounding box `(centre offset, size)` of a custom pad's anchor and
 /// `(primitives ...)`, in the pad's own frame.
 fn custom_pad_bbox(pad: &Node, anchor: (i64, i64)) -> Option<((i64, i64), (i64, i64))> {
-    let (mut lo, mut hi) = ((-anchor.0 / 2, -anchor.1 / 2), (anchor.0 / 2, anchor.1 / 2));
+    let (mut lo, mut hi) = (
+        (anchor.0.saturating_neg() / 2, anchor.1.saturating_neg() / 2),
+        (anchor.0 / 2, anchor.1 / 2),
+    );
     let mut grow = |x: i64, y: i64, r: i64| {
-        lo = (lo.0.min(x - r), lo.1.min(y - r));
-        hi = (hi.0.max(x + r), hi.1.max(y + r));
+        lo = (lo.0.min(x.saturating_sub(r)), lo.1.min(y.saturating_sub(r)));
+        hi = (hi.0.max(x.saturating_add(r)), hi.1.max(y.saturating_add(r)));
     };
     for prim in pad.find("primitives")?.body() {
         let half = mm_to_nm(
@@ -1461,8 +1484,9 @@ fn custom_pad_bbox(pad: &Node, anchor: (i64, i64)) -> Option<((i64, i64), (i64, 
         points.extend(polygon_vertices(prim).unwrap_or_default());
         // A circle's `end` is a point on it, so it reaches that far from the centre.
         if let (Some(c), Some(e)) = (parse_point(prim, "center"), parse_point(prim, "end")) {
-            let radius = ((e.x_nm - c.x_nm) as f64).hypot((e.y_nm - c.y_nm) as f64) as i64;
-            grow(c.x_nm, c.y_nm, radius + half);
+            let radius = (e.x_nm.saturating_sub(c.x_nm) as f64)
+                .hypot(e.y_nm.saturating_sub(c.y_nm) as f64) as i64;
+            grow(c.x_nm, c.y_nm, radius.saturating_add(half));
             continue;
         }
         for p in points {
@@ -1470,8 +1494,8 @@ fn custom_pad_bbox(pad: &Node, anchor: (i64, i64)) -> Option<((i64, i64), (i64, 
         }
     }
     Some((
-        ((lo.0 + hi.0) / 2, (lo.1 + hi.1) / 2),
-        (hi.0 - lo.0, hi.1 - lo.1),
+        (mid_nm(lo.0, hi.0), mid_nm(lo.1, hi.1)),
+        (hi.0.saturating_sub(lo.0), hi.1.saturating_sub(lo.1)),
     ))
 }
 
@@ -1497,7 +1521,10 @@ fn parse_point(node: &Node, key: &str) -> Option<Point> {
 fn local_to_board(origin: Point, sin: f64, cos: f64, p: Point) -> Point {
     let x_nm = (p.x_nm as f64 * cos + p.y_nm as f64 * sin).round() as i64;
     let y_nm = (p.y_nm as f64 * cos - p.x_nm as f64 * sin).round() as i64;
-    Point::new(origin.x_nm + x_nm, origin.y_nm + y_nm)
+    Point::new(
+        origin.x_nm.saturating_add(x_nm),
+        origin.y_nm.saturating_add(y_nm),
+    )
 }
 
 /// The silkscreen shapes a footprint carries, placed on the board.
@@ -1785,7 +1812,37 @@ mod tests {
         let pad = pad_at_origin("oval", 1e6, 1e6, 0.0, 0.0);
         let points = pad.outline_points_nm(1.0);
         let steps = MAX_OUTLINE_STEPS as usize;
-        assert!(points.len() <= 4 * (steps + 1) * steps);
+        // 4 arcs of `steps + 1` key points (one point per chord) and 4 edges of
+        // `steps` pieces; the joins between arcs coincide with an arc end.
+        assert!(points.len() <= 4 * (steps + 1) + 4 * steps);
+        assert!(points.len() >= 4 * steps);
+    }
+
+    #[test]
+    fn outline_of_a_normal_pad_is_not_coarsened_by_the_cap() {
+        // 1.6 x 0.8 mm roundrect, 20 um step: pinned from before the cap rose.
+        let pad = pad_at_origin("roundrect", 1.6, 0.8, 0.0, 0.25);
+        assert_eq!(pad.outline_points_nm(20_000.0).len(), 225);
+    }
+
+    #[test]
+    fn huge_and_extreme_pads_measure_without_overflow() {
+        let mut pad = pad_at_origin("rect", 1e30, 1e30, 0.0, 0.0);
+        pad.drill_offset_nm = (i64::MAX, i64::MIN);
+        pad.at = Point::new(i64::MAX, i64::MIN);
+        pad.bbox = Some(((i64::MAX, i64::MIN), (i64::MAX, i64::MAX)));
+        let _ = pad.reach_nm();
+        let _ = pad.signed_distance_nm(Point::new(i64::MIN, i64::MAX));
+        let _ = pad.outline_points_nm(20_000.0);
+    }
+
+    #[test]
+    fn a_custom_pad_with_extreme_sizes_has_a_bbox() {
+        let text = "(footprint \"F\" (layer \"F.Cu\") (at 0 0) (pad \"1\" smd custom (at 0 0) (size 1e30 1e30) (layers \"F.Cu\") (primitives (gr_line (start -1e30 1e30) (end 1e30 -1e30) (width 1e30)))))";
+        let root = parse_sexpr(text).expect("parses");
+        let pad = root.find("pad").expect("pad");
+        let (_, size) = custom_pad_bbox(pad, (i64::MAX, i64::MIN)).expect("bbox");
+        assert!(size.0 > 0 && size.1 > 0);
     }
 
     #[test]
