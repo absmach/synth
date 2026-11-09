@@ -509,7 +509,16 @@ pub fn build_pcb(
                     Err(refusal) => {
                         return Err(PlaneFanoutError {
                             net: net.name.clone(),
-                            detail: plane_via_refusal(&refusal, pad, layer, &land),
+                            detail: plane_via_refusal(
+                                &refusal,
+                                pad,
+                                layer,
+                                &ViaAttempt {
+                                    via: land,
+                                    filled_and_capped: target.underpad && pad_via == Some(land),
+                                    offered: pad_via.filter(|_| !target.underpad),
+                                },
+                            ),
                         });
                     }
                 };
@@ -736,6 +745,17 @@ impl PlaneVia {
     }
 }
 
+/// The via a pad was tried with, for the refusal that names it.
+struct ViaAttempt {
+    via: PlaneVia,
+    /// Whether it is the process's filled and capped via, whose land is the drill
+    /// plus the allowance, and not the plane via's two annular rings.
+    filled_and_capped: bool,
+    /// The filled and capped via the process offers, where the pad's component
+    /// does not declare the escape that would take it.
+    offered: Option<PlaneVia>,
+}
+
 /// Why no stitching via could be placed for a pad.
 #[derive(Debug, Clone, PartialEq, Eq)]
 enum ViaRefusal {
@@ -764,8 +784,9 @@ fn plane_via_refusal(
     refusal: &ViaRefusal,
     pad: synth_geometry::Point,
     layer: Layer,
-    via: &PlaneVia,
+    attempt: &ViaAttempt,
 ) -> String {
+    let via = attempt.via;
     let at = format!(
         "the pad at ({:.2}, {:.2}) mm on {layer:?}",
         nm_to_mm(pad.x_nm),
@@ -777,15 +798,31 @@ fn plane_via_refusal(
              within clearance of another pad or via. Move the part, widen the board, or declare \
              `requires via_in_pad` on a manufacturer that offers it, which lets the via go in the pad."
         ),
-        ViaRefusal::PadTooSmall { pad_nm, via_nm } => format!(
-            "{at} is {:.2} x {:.2} mm and a stitching via needs a {:.2} mm pad (a {:.2} mm drill plus the \
-             process's via-in-pad land allowance) inside it, so via-in-pad cannot hold it on this process. Use a \
-             manufacturer tier with a finer drill, a larger pad, or another way to reach the plane.",
-            nm_to_mm(pad_nm.0),
-            nm_to_mm(pad_nm.1),
-            nm_to_mm(*via_nm),
-            nm_to_mm(via.drill_nm),
-        ),
+        ViaRefusal::PadTooSmall { pad_nm, via_nm } => {
+            let ring = if attempt.filled_and_capped {
+                "the process's via-in-pad land allowance"
+            } else {
+                "two annular rings"
+            };
+            let advice = match attempt.offered {
+                Some(small) => format!(
+                    "Declare `escape {{ method underpad }}` on the component, which takes the process's \
+                     {:.2} mm filled and capped via, or use a larger pad or another way to reach the plane.",
+                    nm_to_mm(2 * small.pad_radius_nm)
+                ),
+                None => "Use a manufacturer tier with a finer drill, a larger pad, or another way to \
+                         reach the plane."
+                    .to_string(),
+            };
+            format!(
+                "{at} is {:.2} x {:.2} mm and a stitching via needs a {:.2} mm pad (a {:.2} mm drill plus \
+                 {ring}) inside it, so via-in-pad cannot hold it on this process. {advice}",
+                nm_to_mm(pad_nm.0),
+                nm_to_mm(pad_nm.1),
+                nm_to_mm(*via_nm),
+                nm_to_mm(via.drill_nm),
+            )
+        }
         ViaRefusal::Crowded => format!(
             "{at} can hold the stitching via, but copper of a neighbouring pad or via is within \
              the process's clearance of the via or of its hole. Move the part or widen the pitch."

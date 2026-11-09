@@ -150,10 +150,18 @@ fn a_ball_pad_takes_no_small_via_without_the_under_pad_escape() {
     let _ = fs::remove_dir_all(&out);
     let refusal = synth_kicad::export(&board, &out);
     let _ = fs::remove_dir_all(&out);
-    assert!(
-        refusal.is_err(),
-        "a ball pad too small for the plane via must be refused without the escape"
-    );
+    let text = match refusal {
+        Err(error) => format!("{error:?}"),
+        Ok(_) => {
+            panic!("a ball pad too small for the plane via must be refused without the escape")
+        }
+    };
+    // The refusal names the plane via's pad (the 0.3 mm drill plus two annular
+    // rings) and the one change that works.
+    assert!(text.contains("0.60 mm pad"), "{text}");
+    assert!(text.contains("two annular rings"), "{text}");
+    assert!(text.contains("escape { method underpad }"), "{text}");
+    assert!(text.contains("0.35 mm filled and capped via"), "{text}");
 }
 
 #[test]
