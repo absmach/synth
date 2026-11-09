@@ -2751,7 +2751,7 @@ impl ErcRule for UsbCcPullDownRule {
     }
 
     fn check(&self, board: &Board, file: &str) -> Vec<Diagnostic> {
-        let mut out = Vec::new();
+        let mut out = floating_cc_pins(board, file, self.code());
         for net in &board.nets {
             let has_cc = net.endpoints.iter().any(|e| {
                 endpoint_has_any_capability(board, e.component, e.pin, &[PinCapability::UsbCc])
@@ -2788,6 +2788,63 @@ impl ErcRule for UsbCcPullDownRule {
         }
         out
     }
+}
+
+/// A CC pin on no net at all.
+///
+/// The net loop above only sees CC pins some `connect` already mentions, so
+/// a receptacle whose CC1 and CC2 were never wired had nothing to inspect
+/// (absmach/synth#82). That is the worse case: with no Rd a compliant source
+/// never detects the sink and never turns VBUS on, so the board cannot be
+/// powered. An error, where the connected-but-no-resistor case stays a
+/// warning because a CC controller may be on the net.
+fn floating_cc_pins(board: &Board, file: &str, code: &'static str) -> Vec<Diagnostic> {
+    let wired: std::collections::BTreeSet<(ComponentId, PinId)> = board
+        .nets
+        .iter()
+        .flat_map(|net| net.endpoints.iter().map(|e| (e.component, e.pin)))
+        .collect();
+    let mut out = Vec::new();
+    for component in &board.components {
+        let Some(part) = component.part.as_ref() else {
+            continue;
+        };
+        let floating: Vec<&str> = part
+            .pins
+            .iter()
+            .enumerate()
+            .filter(|(_, pin)| pin.capabilities.contains(&PinCapability::UsbCc))
+            .filter(|(index, _)| {
+                let index = u32::try_from(*index).unwrap_or(u32::MAX);
+                !wired.contains(&(component.id, PinId(index)))
+            })
+            .map(|(_, pin)| pin.name.as_str())
+            .collect();
+        if floating.is_empty() {
+            continue;
+        }
+        out.push(
+            DiagnosticBuilder::new(code, Severity::Error, "USB-C CC pin left floating")
+                .location(Location::from_span(file.to_string(), component.source_span))
+                .expected(
+                    "each CC pin pulled down through 5.1 kOhm to ground (Rd) for a sink, or \
+                     wired to a CC controller",
+                )
+                .found(format!(
+                    "{} on `{}` connected to nothing; a compliant source never detects the \
+                     sink and never turns VBUS on",
+                    floating
+                        .iter()
+                        .map(|pin| component.describe_pin(pin))
+                        .collect::<Vec<_>>()
+                        .join(" and "),
+                    part.id,
+                ))
+                .explanation_url(format!("synth.docs/diagnostics/{code}"))
+                .build(),
+        );
+    }
+    out
 }
 
 // -----------------------------------------------------------------------------
@@ -4560,6 +4617,7 @@ mod tests {
             impedance: None,
             current: None,
             plane: false,
+            layers: Vec::new(),
             source_span: Span::new(0, 0),
         }];
         board
@@ -4567,9 +4625,21 @@ mod tests {
 
     #[test]
     fn a_via_at_the_tier_floor_is_accepted() {
-        // JLC standard: 0.3 mm drill, 0.13 mm ring. 0.56 over 0.30 is exactly
+        // JLC standard: 0.2 mm drill, 0.13 mm ring. 0.46 over 0.20 is exactly
         // the smallest via the tier permits, which the escape arithmetic uses.
-        let board = board_with_via(Some("jlcpcb"), Some(0.56), Some(0.30));
+        let board = board_with_via(Some("jlcpcb"), Some(0.46), Some(0.20));
+
+        assert!(DeclaredViaGeometryRule
+            .check(&board, "test.synth")
+            .is_empty());
+    }
+
+    #[test]
+    fn a_via_with_a_0_2_mm_drill_and_a_0_2_mm_ring_is_accepted() {
+        // JLC standard: 0.2 mm is its preferred minimum via hole, and a 0.6 mm
+        // pad over it leaves a 0.2 mm ring, which clears the 0.13 mm floor and
+        // the 0.20 mm ring its DFM check asks for.
+        let board = board_with_via(Some("jlcpcb"), Some(0.60), Some(0.20));
 
         assert!(DeclaredViaGeometryRule
             .check(&board, "test.synth")

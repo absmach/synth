@@ -19,7 +19,7 @@
 //!    never overwritten by a failed or partial run ([`RouteRequest::baseline`]);
 //! 2. the engine runs with a wall-clock budget, an output cap, and an
 //!    optional cancellation token ([`process`]);
-//! 3. the candidate board is re-read from disk ([`pcb_read`]) rather than
+//! 3. the candidate board is re-read from disk ([`pcb_read`], from `synth-drc`) rather than
 //!    trusted, and checked against the baseline it was routed from;
 //! 4. connectivity is re-derived from copper geometry — union-find over
 //!    pads, tracks, and vias — never read from the router's own bookkeeping
@@ -53,7 +53,6 @@ pub mod island_vias;
 pub mod kicad_routing_tools;
 pub mod label_vias;
 pub mod outcomes;
-pub mod pcb_read;
 pub mod process;
 pub mod result;
 pub mod search_budget;
@@ -64,13 +63,16 @@ use std::path::{Path, PathBuf};
 
 pub use capability::{discover, RouterCapability};
 pub use contract::{
-    FabricationPolicy, FreeroutingOptions, KiCadRoutingToolsOptions, KrtEscalation, RouteRequest,
-    RouterEngine, RouterLimits,
+    FabricationPolicy, FreeroutingOptions, KiCadRoutingToolsOptions, KrtEscalation, NetLayers,
+    RouteRequest, RouterEngine, RouterLimits,
 };
 pub use failure::{RouterFailure, RouterFailureReason, RouterStage};
 pub use result::{
     PortfolioRank, RouteReport, RouteState, RouteStatistics, RouterProvenance, ValidationSummary,
 };
+// The `.kicad_pcb` reader lives in `synth-drc`; this keeps the
+// `synth_router::pcb_read` path working for existing callers.
+pub use synth_drc::pcb_read;
 pub use validate::{
     validate_candidate, ConnectivityReport, FabricationVerdict, OpenConnection, TopologyReport,
 };
@@ -344,6 +346,23 @@ fn report_silkscreen_pass(result: Result<label_vias::LabelMoves, String>) {
     }
 }
 
+/// A sliver of track that ends in nothing carries nothing and only trips KiCad's
+/// unconnected-end check; it goes before the candidate is judged. A prune that
+/// did not run leaves such a sliver in the board, so it is an unavailable check.
+fn repair_dropped_stubs(candidate: &Path) -> Vec<String> {
+    match island_vias::drop_dangling_stubs(candidate) {
+        Ok(0) => Vec::new(),
+        Ok(dropped) => {
+            eprintln!("note: dropped {dropped} track stub(s) that ended in nothing");
+            Vec::new()
+        }
+        Err(detail) => {
+            eprintln!("warning: track stubs were not pruned: {detail}");
+            vec![format!("track stub prune did not run: {detail}")]
+        }
+    }
+}
+
 /// Promote a router-produced candidate into a report, installing it only if
 /// it survives independent validation.
 ///
@@ -352,6 +371,7 @@ fn report_silkscreen_pass(result: Result<label_vias::LabelMoves, String>) {
 /// over-reports its own success cannot promote itself. A candidate that
 /// fails validation is still retained on disk as review material — it is
 /// just never installed over the baseline.
+#[allow(clippy::too_many_lines)]
 fn finalize(
     request: &RouteRequest,
     capability: Option<&RouterCapability>,
@@ -374,6 +394,7 @@ fn finalize(
             repair_unavailable.push(format!("via-in-pad repair did not run: {detail}"));
         }
     }
+    repair_unavailable.extend(repair_dropped_stubs(&candidate.candidate_path));
     let mut repair_advisory: Vec<String> = Vec::new();
     let mut ground = island_vias::Ground::new(&request.ground_nets);
     if let Some(critical) = &request.return_via_critical_nets {
@@ -410,6 +431,11 @@ fn finalize(
             "zone refill before validation did not run: {detail}"
         ));
     }
+    // The candidate is final once the repairs are done; count what it holds
+    // before `install` moves it.
+    let delivered_board = std::fs::read_to_string(&candidate.candidate_path)
+        .ok()
+        .and_then(|text| pcb_read::PcbBoard::parse(&text).ok());
     let verdict = with_repair_findings(
         validate_candidate(request, &candidate),
         repair_blocking,
@@ -449,6 +475,9 @@ fn finalize(
     }
 
     let mut statistics = candidate.statistics.clone();
+    if let Some(board) = &delivered_board {
+        kicad_routing_tools::refresh_counts(&mut statistics, board);
+    }
     // The router's own open-net claim is kept for provenance, but the
     // connectivity pass is what fills the fields the report reports on.
     statistics.connected_nets = verdict.connectivity.connected_nets;

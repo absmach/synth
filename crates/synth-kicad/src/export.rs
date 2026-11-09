@@ -277,7 +277,8 @@ fn export_inner(
     // before) or one file per sheet boundary (large boards only).
     // The project file below lists every sheet, so it comes after.
     let global_layout = synth_layout::layout_with_sidecar(board, sidecars.schematic_path());
-    let sheets = synth_layout::sheets::layout_sheets(board, global_layout);
+    let sheets =
+        synth_layout::sheets::layout_sheets(board, global_layout, sidecars.schematic_path());
     let project_namespace = uuid_v5::project_namespace(&board.name);
     // Project file (.kicad_pro): minimal JSON. KiCad fills in the
     // rest on first open; the deterministic root keeps diffs stable.
@@ -344,7 +345,7 @@ fn export_inner(
     write_file(&project_path, &project_text)?;
     write_file(
         &out_dir.join(format!("{stem}.kicad_dru")),
-        &design_rules(&manufacturer_profile(board)),
+        &design_rules(&manufacturer_profile(board), board),
     )?;
 
     // Library file (.kicad_sym): self-contained symbol library
@@ -552,7 +553,7 @@ pub fn export_schematic_only(
     let library_path = out_dir.join(format!("{stem}.kicad_sym"));
 
     let global_layout = synth_layout::layout_with_sidecar(board, schematic_sidecar);
-    let sheets = synth_layout::sheets::layout_sheets(board, global_layout);
+    let sheets = synth_layout::sheets::layout_sheets(board, global_layout, schematic_sidecar);
     let project_namespace = uuid_v5::project_namespace(&board.name);
 
     let mut sheet_entries = vec![vec![
@@ -1123,15 +1124,51 @@ pub(crate) fn manufacturer_profile(board: &Board) -> synth_drc::ManufacturerProf
 /// `kicad-cli` does not read them from the project file. An NPTH hole is an
 /// edge to KiCad, so it gets its own rule at the hole-to-copper figure; KiCad
 /// applies the last matching rule, so it comes after the general one.
-fn design_rules(profile: &synth_drc::ManufacturerProfile) -> String {
+fn design_rules(profile: &synth_drc::ManufacturerProfile, board: &Board) -> String {
     let edge = synth_geometry::nm_to_mm(profile.min_copper_to_edge_nm);
     let hole = synth_geometry::nm_to_mm(profile.min_drill_to_copper_nm);
-    format!(
+    let mut rules = format!(
         "(version 1)\n\
          (rule \"manufacturer copper to board edge\"\n  (constraint edge_clearance (min {edge}mm)))\n\
          (rule \"manufacturer copper to NPTH hole\"\n  (constraint edge_clearance (min {hole}mm))\n  (condition \"A.Pad_Type == 'NPTH, mechanical'\"))\n\
          (rule \"manufacturer copper to hole\"\n  (constraint hole_clearance (min {hole}mm)))\n"
-    )
+    );
+    rules.push_str(&layer_pin_rules(board));
+    rules
+}
+
+/// A `netclass { layers … }` pin as KiCad custom rules, so `kicad-cli pcb
+/// drc` and a person editing the board both see it: a track of the class on
+/// any other copper layer is a violation, and a class held to one layer may
+/// not use a via, since a through via leaves that layer.
+fn layer_pin_rules(board: &Board) -> String {
+    use std::fmt::Write as _;
+    let copper: Vec<String> = match board.layers {
+        0 | 1 => Vec::new(),
+        count => std::iter::once("F.Cu".to_string())
+            .chain((1..count - 1).map(|inner| format!("In{inner}.Cu")))
+            .chain(std::iter::once("B.Cu".to_string()))
+            .collect(),
+    };
+    let mut rules = String::new();
+    for class in board.netclasses.iter().filter(|c| !c.layers.is_empty()) {
+        let name = &class.name;
+        for layer in copper.iter().filter(|l| !class.layers.contains(l)) {
+            let _ = write!(
+                rules,
+                "(rule \"netclass {name} stays off {layer}\"\n  (layer \"{layer}\")\n  \
+                 (condition \"A.NetClass == '{name}'\")\n  (constraint disallow track))\n"
+            );
+        }
+        if class.layers.len() == 1 {
+            let _ = write!(
+                rules,
+                "(rule \"netclass {name} changes no layer\"\n  \
+                 (condition \"A.NetClass == '{name}'\")\n  (constraint disallow via))\n"
+            );
+        }
+    }
+    rules
 }
 
 /// The `board.design_settings` block for a board's declared manufacturer.
@@ -1712,7 +1749,7 @@ mod tests {
              min_annular_ring_mm = 0.13\nmin_drill_to_copper_mm = 0.33\n",
         )
         .unwrap();
-        let rules = design_rules(&profile);
+        let rules = design_rules(&profile, &board_from(r#"board "b" { layers 2 }"#));
         for expected in [
             "(constraint edge_clearance (min 0.77mm))",
             "(constraint hole_clearance (min 0.33mm))",
@@ -1720,6 +1757,44 @@ mod tests {
         ] {
             assert!(rules.contains(expected), "{expected}\n{rules}");
         }
+    }
+
+    /// A `netclass { layers … }` pin becomes one rule per copper layer the
+    /// class may not use, plus a via ban when it keeps to a single layer.
+    #[test]
+    fn a_layer_pin_is_written_as_custom_rules() {
+        let profile = synth_drc::ManufacturerProfile::jlc_standard();
+        let one = design_rules(
+            &profile,
+            &board_from(r#"board "b" { layers 4 netclass "ETH" { layers "F.Cu" } }"#),
+        );
+        for layer in ["In1.Cu", "In2.Cu", "B.Cu"] {
+            assert!(
+                one.contains(&format!(
+                    "(rule \"netclass ETH stays off {layer}\"\n  (layer \"{layer}\")\n  \
+                     (condition \"A.NetClass == 'ETH'\")\n  (constraint disallow track))"
+                )),
+                "{layer}\n{one}"
+            );
+        }
+        assert!(!one.contains("stays off F.Cu"), "{one}");
+        assert!(one.contains("(constraint disallow via)"), "{one}");
+
+        let outer = design_rules(
+            &profile,
+            &board_from(r#"board "b" { layers 4 netclass "ETH" { layers "F.Cu", "B.Cu" } }"#),
+        );
+        assert!(outer.contains("stays off In1.Cu") && !outer.contains("stays off B.Cu"));
+        assert!(
+            !outer.contains("disallow via"),
+            "two layers may be joined: {outer}"
+        );
+
+        let free = design_rules(
+            &profile,
+            &board_from(r#"board "b" { layers 4 netclass "X" { } }"#),
+        );
+        assert!(!free.contains("netclass"), "{free}");
     }
 
     /// The router resolves the board's declared manufacturer, so the exported

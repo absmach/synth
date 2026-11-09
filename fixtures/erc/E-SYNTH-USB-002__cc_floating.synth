@@ -1,0 +1,6 @@
+// A USB-C sink whose CC pins are never wired: no net carries them, so the
+// net walk alone never saw them (absmach/synth#82).
+board "usb_cc_floating" {
+  layers 2
+  component J1: connector "usb_c_receptacle"
+}

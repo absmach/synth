@@ -1,0 +1,110 @@
+id = "rj45_hr911105a"
+kind = "connector"
+description = "HanRun HR911105A RJ45 MagJack, 10/100BASE-T magnetics, 2 LEDs, shielded, tab down, THT"
+mpn = "HR911105A"
+lcsc_pn = "C12074"
+kicad_symbol = "Connector:RJ45_Hanrun_HR911105A_Horizontal"
+kicad_footprint = "Connector_RJ:RJ45_Hanrun_HR911105A_Horizontal"
+
+[footprint_dimensions]
+width_mm = 16.04
+height_mm = 21.3
+courtyard_margin_mm = 0.5
+# The contacts sit at the rear (y = 0 and -2.54) and the housing runs forward
+# to y = +17.26, where the plug enters. Read from the footprint.
+mating_face = "bottom"
+
+[operating_conditions]
+min_voltage_v = 0.0
+max_voltage_v = 3.6
+max_current_ma = 100.0
+
+[provenance]
+source = "authored"
+datasheet_url = "https://www.hanrun.com/public/upload/down/2020/09-11/cc11be56d66bb63d5f1eeb85492439c0.pdf"
+reviewed_by = "JeffMboya"
+reviewed_at = "2026-11-05"
+
+# Pins are the chip-side pins of the HanRun HR911105A datasheet schematic
+# (rev A/3): the magnetics, 1CT:1CT, are inside the jack, so these are the
+# PHY's MDI pairs and the transformer centre taps, not the cable side.
+[[pins]]
+name = "td_p"
+number = "1"
+electrical_type = "differential_positive"
+capabilities = ["diff_pair_positive"]
+required = true
+
+[[pins]]
+name = "td_n"
+number = "2"
+electrical_type = "differential_negative"
+capabilities = ["diff_pair_negative"]
+required = true
+
+[[pins]]
+name = "rd_p"
+number = "3"
+electrical_type = "differential_positive"
+capabilities = ["diff_pair_positive"]
+required = true
+
+# Transmit and receive centre taps; the PHY biases them (2.5-3.3 V for the
+# LAN8720A).
+[[pins]]
+name = "tct"
+number = "4"
+electrical_type = "passive"
+required = true
+
+[[pins]]
+name = "rct"
+number = "5"
+electrical_type = "passive"
+required = true
+
+[[pins]]
+name = "rd_n"
+number = "6"
+electrical_type = "differential_negative"
+capabilities = ["diff_pair_negative"]
+required = true
+
+[[pins]]
+name = "nc"
+number = "7"
+electrical_type = "do_not_connect"
+
+# Bob Smith termination returns here through 1000 pF / 2 kV; the datasheet
+# says to connect it to PCB ground.
+[[pins]]
+name = "chs_gnd"
+number = "8"
+electrical_type = "power_input"
+required = true
+
+[[pins]]
+name = "led_green_a"
+number = "9"
+electrical_type = "passive"
+
+[[pins]]
+name = "led_green_k"
+number = "10"
+electrical_type = "passive"
+
+[[pins]]
+name = "led_yellow_k"
+number = "11"
+electrical_type = "passive"
+
+[[pins]]
+name = "led_yellow_a"
+number = "12"
+electrical_type = "passive"
+
+[[pins]]
+name = "shield"
+number = "SH"
+electrical_type = "passive"
+required = true

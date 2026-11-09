@@ -1310,6 +1310,24 @@ fn capability_limits(limits: &[CapabilityLimit]) -> Vec<serde_json::Value> {
         .collect()
 }
 
+/// One manufacturer profile as the capability list reports it. The minimums are
+/// read from the profile the validators and the exporter use, so the list cannot
+/// report a constraint the checks no longer apply.
+fn manufacturer_profile_entry(name: &str, layers: &[u32]) -> serde_json::Value {
+    let profile = synth_drc::ManufacturerProfile::from_name(name);
+    let mut entry = serde_json::json!({
+        "name": name,
+        "layers": layers,
+        "min_trace_width_mm": synth_geometry::nm_to_mm(profile.min_trace_width_nm),
+        "min_clearance_mm": synth_geometry::nm_to_mm(profile.min_copper_clearance_nm),
+        "min_drill_mm": synth_geometry::nm_to_mm(profile.min_drill_diameter_nm),
+    });
+    if synth_drc::ManufacturerProfile::OFFERING_VIA_IN_PAD.contains(&name) {
+        entry["offers"] = serde_json::json!(["via_in_pad"]);
+    }
+    entry
+}
+
 fn capability_descriptor() -> serde_json::Value {
     let board_families = synth_place::board_family::PROFILES
         .iter()
@@ -1343,11 +1361,11 @@ fn capability_descriptor() -> serde_json::Value {
             {"name": "kicad_export", "evidence": ["artifact_hashes", "archive_sha256"]}
         ],
         "manufacturer_profiles": [
-            {"name": "jlc-standard", "layers": [2, 4], "min_trace_width_mm": 0.127, "min_clearance_mm": 0.127, "min_drill_mm": 0.3},
-            {"name": "pcbway-standard", "layers": [2, 4], "min_trace_width_mm": 0.15, "min_clearance_mm": 0.15, "min_drill_mm": 0.3},
-            {"name": "oshpark-4layer", "layers": [4], "min_trace_width_mm": 0.125, "min_clearance_mm": 0.125, "min_drill_mm": 0.25},
-            {"name": "jlc-filled-via", "layers": [2, 4], "min_trace_width_mm": 0.127, "min_clearance_mm": 0.127, "min_drill_mm": 0.3, "offers": ["via_in_pad"]},
-            {"name": "jlc-advanced", "layers": [4, 6], "min_trace_width_mm": 0.127, "min_clearance_mm": 0.127, "min_drill_mm": 0.2, "offers": ["via_in_pad"]}
+            manufacturer_profile_entry("jlc-standard", &[2, 4]),
+            manufacturer_profile_entry("pcbway-standard", &[2, 4]),
+            manufacturer_profile_entry("oshpark-4layer", &[4]),
+            manufacturer_profile_entry("jlc-filled-via", &[2, 4]),
+            manufacturer_profile_entry("jlc-advanced", &[4, 6]),
         ],
         "language": {
             "syntax_version": "1.0",
@@ -1394,7 +1412,7 @@ fn capability_descriptor() -> serde_json::Value {
                 "notes": "No fabricator presets are shipped; every value is declared by the design. A diff_pair impedance derives its net class trace width (and, for a true pair, its gap) from the first copper and insulator layers."
             },
             "routing_constraints": {
-                "netclass": ["trace_width", "clearance", "color", "impedance", "current", "plane", "max_length", "max_skew", "via_diameter", "via_drill", "edge_rate"],
+                "netclass": ["trace_width", "clearance", "color", "impedance", "current", "plane", "max_length", "max_skew", "via_diameter", "via_drill", "edge_rate", "layers"],
                 "diff_pair": ["impedance", "max_skew", "couple"],
                 "keepout": ["radius"],
                 "component": ["placement_hint", "escape"],
@@ -3230,7 +3248,11 @@ fn validate(
                     // low fill for a drawing that is fine.
                     let global =
                         synth_layout::layout_with_sidecar(board, schematic_sidecar.as_deref());
-                    let sheets = synth_layout::sheets::layout_sheets(board, global);
+                    let sheets = synth_layout::sheets::layout_sheets(
+                        board,
+                        global,
+                        schematic_sidecar.as_deref(),
+                    );
                     let mut schem = synth_kicad::check_schem_erc_sheets(board, &sheets);
                     synth_kicad::attach_schem_erc_locations(&mut schem, board, &file);
                     diagnostics.extend(schem);
@@ -4165,7 +4187,7 @@ fn export_kicad(
     // Thresholds come from the design's `<design>.synth.erc.toml`
     // `[schematic]` section when present (Phase E), else the defaults.
     let pre_layout = synth_layout::layout_with_sidecar(board, sidecar);
-    let pre_sheets = synth_layout::sheets::layout_sheets(board, pre_layout.clone());
+    let pre_sheets = synth_layout::sheets::layout_sheets(board, pre_layout.clone(), sidecar);
     let mut schem_diags = synth_kicad::check_schem_erc_sheets_with_config(
         board,
         &pre_sheets,
@@ -4820,6 +4842,7 @@ fn build_route_request(
     request.kicad_routing_tools.same_net_pad_clearance_mm = options.same_net_pad_clearance;
     request.policy.allow_via_in_pad = options.allow_via_in_pad;
     request.use_board_escapes(board);
+    request.use_board_layer_pins(board);
     request.use_profile_floor(
         &board
             .manufacturer
@@ -5302,6 +5325,21 @@ fn route_externally(
                  un-routed baseline and is preserved for review.",
                 engine.as_str(),
                 request.baseline_path().display()
+            );
+        } else if report
+            .failure
+            .as_ref()
+            .is_some_and(|f| f.reason == synth_router::RouterFailureReason::Unsupported)
+        {
+            // No copper was produced: the engine refused a constraint it
+            // cannot honour. Saying "failed validation" would imply a board
+            // exists and was rejected.
+            eprintln!(
+                "error: {} cannot honour this routing request; the exported board at {} is the \
+                 un-routed baseline and is preserved for review. See {}.",
+                engine.as_str(),
+                request.baseline_path().display(),
+                request.report_path().display()
             );
         } else if report.state == synth_router::RouteState::ValidationFailed {
             eprintln!(
@@ -5883,6 +5921,42 @@ fn render(
 
 #[cfg(test)]
 mod tests {
+
+    #[test]
+    fn the_capability_list_reports_each_profiles_own_minimums() {
+        let descriptor = capability_descriptor();
+        let profiles = descriptor["manufacturer_profiles"]
+            .as_array()
+            .expect("a profile list");
+        assert_eq!(profiles.len(), 5);
+        for entry in profiles {
+            let name = entry["name"].as_str().expect("a name");
+            let profile = synth_drc::ManufacturerProfile::from_name(name);
+            let drill = synth_geometry::nm_to_mm(profile.min_drill_diameter_nm);
+            assert!(
+                (entry["min_drill_mm"].as_f64().unwrap() - drill).abs() < 1e-9,
+                "{name}: the list says {} mm, the profile {drill} mm",
+                entry["min_drill_mm"]
+            );
+        }
+        let jlc = profiles
+            .iter()
+            .find(|p| p["name"] == "jlc-standard")
+            .unwrap();
+        assert_eq!(
+            jlc["min_drill_mm"].as_f64(),
+            Some(0.2),
+            "JLCPCB's preferred hole"
+        );
+        for entry in profiles {
+            let name = entry["name"].as_str().expect("a name");
+            if synth_drc::ManufacturerProfile::OFFERING_VIA_IN_PAD.contains(&name) {
+                assert_eq!(entry["offers"], serde_json::json!(["via_in_pad"]), "{name}");
+            } else {
+                assert!(entry.get("offers").is_none(), "{name}");
+            }
+        }
+    }
     use super::*;
 
     /// The request every `route` caller builds carries the nets the DRC calls

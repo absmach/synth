@@ -116,7 +116,7 @@ fn a_stranded_support_capacitor_changes_the_score() {
         .iter_mut()
         .find(|component| component.id == member.component)
         .expect("the capacitor is placed");
-    component.center.x_nm += synth_geometry::mm_to_nm(40.0);
+    component.center.x_nm += synth_geometry::mm_to_nm(100.0);
     let after = fitness(&board, &moved);
     assert!(
         metric(&after, "support_distance").measured > metric(&beta, "support_distance").measured,

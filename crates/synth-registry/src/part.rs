@@ -221,6 +221,14 @@ pub struct OperatingConditions {
     pub max_voltage_v: Option<f64>,
     #[serde(default)]
     pub max_current_ma: Option<f64>,
+
+    /// Whether [`Self::max_current_ma`] is a budget for a rail this part
+    /// supplies, rather than a consumption limit. `None` (the default)
+    /// means "decide from the pin map": a part with a `power_output` pin
+    /// is treated as supplying a rail. `Some(false)` explicitly opts out,
+    /// e.g. an internal LDO decoupling tap. `Some(true)` forces it in.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub power_budget: Option<bool>,
     /// Worst-case power the part dissipates, in milliwatts. With
     /// [`Self::thermal_resistance_c_per_w`] this drives the thermal check.
     #[serde(default, skip_serializing_if = "Option::is_none")]

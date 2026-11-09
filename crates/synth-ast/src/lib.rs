@@ -730,6 +730,14 @@ pub enum NetclassAttr {
         rate: String,
         span: Span,
     },
+    /// Copper layers the class's nets may be routed on
+    /// (`layers "F.Cu", "B.Cu"`), KiCad names. Pins a controlled-impedance
+    /// pair to the outer layer its impedance was derived for. A struct
+    /// variant, since the enum is internally tagged and a tagged newtype
+    /// cannot hold a list.
+    Layers {
+        layers: Vec<String>,
+    },
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

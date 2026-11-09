@@ -244,6 +244,7 @@ def _fanout(python: str, repo: Path, board: Path, components: list[str],
             f"{repo}; the escape cannot run"
         )
 
+    asked = 0
     for index, (refdes, want_method, want_layers) in enumerate(plan):
         fanned = board.with_suffix(f".fanned{index}.kicad_pcb")
         fanned.unlink(missing_ok=True)
@@ -275,9 +276,102 @@ def _fanout(python: str, repo: Path, board: Path, components: list[str],
                 f"{origin} escape of {refdes} failed; the route fails rather "
                 "than handing the package to the general router unescaped"
             )
-        _verify_escape(refdes, origin, _escape_summary(done.stdout), current, fanned)
+        summary = _escape_summary(done.stdout)
+        _verify_escape(refdes, origin, summary, current, fanned)
+        asked += int((summary or {}).get("requested") or 0)
         current = fanned
 
+    # An inferred package the engine found nothing to escape (a SOIC with an
+    # exposed pad reads as a lattice) leaves no escape copper to keep. What the
+    # stage did write is the plane pour's stubs and the engine's rewrite of the
+    # project's clearances to its own 0.127 mm, and the board the general router
+    # then receives is judged against the classes it was exported with.
+    # Declared packages stay on the verified path above.
+    if not asked and not required:
+        print("the escape stage escaped nothing; routing the board as exported",
+              flush=True)
+        return board
+    return current
+
+
+def _perimeter(python: str, repo: Path, board: Path, components: list[str],
+               clearance: float) -> Path:
+    """Fan the pads of fine-pitch perimeter packages out, for a second routing attempt.
+
+    A TSSOP at 0.65 mm leaves a maze router a gap it finds on one pose of a
+    board and loses on a pose 3 % smaller. A stub on every pad gives it a
+    terminal on the grid instead. It is a retry, not a first step: the same
+    stubs turned a board that routed into one with a net open. This is
+    advisory where the grid-array stage is not: a package whose stubs cannot be written is routed as it was,
+    which is how these boards routed before the stage existed.
+
+    The engine rewrites the project's clearances to its own floor unless told
+    not to, so it is told not to: the board is judged against the classes it
+    was exported with.
+    """
+    fanout = repo / "py_router" / "qfn_fanout.py"
+    if not fanout.is_file():
+        print(f"warning: {fanout} is absent; perimeter packages are routed unescaped",
+              file=sys.stderr)
+        return board
+    current = board
+    for index, refdes in enumerate(components):
+        fanned = board.with_suffix(f".perimeter{index}.kicad_pcb")
+        fanned.unlink(missing_ok=True)
+        command = [
+            python, str(fanout), str(current),
+            "--component", refdes,
+            "--output", str(fanned),
+            "--clearance", str(clearance),
+            "--no-fix-drc-settings",
+        ]
+        print(f"escaping {refdes} (perimeter):", " ".join(command), flush=True)
+        done = subprocess.run(command, check=False, stdout=subprocess.PIPE, text=True)
+        sys.stdout.write(done.stdout)
+        sys.stdout.flush()
+        summary = _escape_summary(done.stdout)
+        if done.returncode != 0 or not fanned.is_file() or summary is None:
+            print(f"warning: perimeter escape of {refdes} did not complete; "
+                  "routing it unescaped", file=sys.stderr)
+            continue
+        if int(summary.get("failed") or 0):
+            print(f"warning: perimeter escape of {refdes} left "
+                  f"{summary.get('failed')} pad(s) unescaped", file=sys.stderr)
+        if int(summary.get("escaped") or 0):
+            current = fanned
+    return current
+
+
+def _route_pinned(python: str, route: Path, board: Path, output: Path,
+                  net_layers: list[str], base: list[str]) -> Path:
+    """Route each `NET=LAYER[,LAYER]` pin on its own layers, grouped by layer set.
+
+    The general pass that follows excludes these nets by name, so it neither
+    routes them nor rips them to make room. A pinned net this pass cannot
+    finish stays open and fails the route, rather than being finished on a
+    layer the design ruled out.
+    """
+    groups: dict[tuple[str, ...], list[str]] = {}
+    for spec in net_layers:
+        net, _, layers = spec.rpartition("=")
+        wanted = tuple(l for l in layers.split(",") if l)
+        if not net or not wanted:
+            print(f"warning: ignoring malformed --net-layers {spec!r}", file=sys.stderr)
+            continue
+        groups.setdefault(wanted, []).append(net)
+    current = board
+    for index, (layers, nets) in enumerate(sorted(groups.items())):
+        staged = output.with_name(f"{output.stem}.pinned{index}{output.suffix}")
+        staged.unlink(missing_ok=True)
+        command = [python, str(route), str(current), str(staged), "--nets", *nets,
+                   "--layers", *layers, *base]
+        print("routing pinned nets:", " ".join(command), flush=True)
+        completed = subprocess.run(command, check=False)
+        if staged.is_file():
+            current = staged
+        if completed.returncode:
+            print(f"warning: the pinned pass for {', '.join(nets)} on "
+                  f"{', '.join(layers)} exited {completed.returncode}", file=sys.stderr)
     return current
 
 
@@ -391,8 +485,17 @@ def main() -> int:
     # route either way; a declared one also may not be skipped for want of
     # via-in-pad, where a geometrically selected one is skipped with a warning.
     parser.add_argument("--escape-required", action="append", default=[])
+    parser.add_argument(
+        "--perimeter-component", action="append", default=[],
+        help="Fine-pitch perimeter package (QFN, QFP, TSSOP) to fan out with a "
+             "surface stub before routing; advisory, unlike --fanout-component.",
+    )
     parser.add_argument("--escape-via-size", type=float)
     parser.add_argument("--escape-via-drill", type=float)
+    # A net the design pinned to copper layers (`netclass { layers … }`),
+    # routed on those layers before the general pass. Repeatable.
+    parser.add_argument("--net-layers", action="append", default=[],
+                        metavar="NET=LAYER[,LAYER]")
     args = parser.parse_args()
 
     route = args.repo / "py_router" / "route.py"
@@ -426,6 +529,22 @@ def main() -> int:
         except RuntimeError as error:
             print(f"error: {error}", file=sys.stderr)
             return ESCAPE_FAILED
+    if args.net_layers:
+        pinned_base = [
+            "--ordering", args.ordering,
+            "--escalation", args.escalation,
+            "--same-net-pad-clearance",
+            str(-1 if args.allow_via_in_pad else args.same_net_pad_clearance),
+            "--fab-tier", args.fab_tier,
+        ]
+        if args.fab_overrides:
+            pinned_base.extend(("--fab-overrides", str(args.fab_overrides)))
+        if args.strict_sizes:
+            pinned_base.append("--strict-sizes")
+        board_to_route = _route_pinned(
+            args.python, route, board_to_route, args.output_board,
+            args.net_layers, pinned_base,
+        )
     command = [
         args.python,
         str(route),
@@ -433,6 +552,11 @@ def main() -> int:
         str(args.output_board),
         "--nets",
         "*",
+        # Hands off the pinned nets: KRT reads a '!'-negated name as neither
+        # routed nor a rip candidate, so the general pass cannot rip one and
+        # re-route it on a layer its class rules out. One the pinned pass
+        # could not finish stays open and fails the route.
+        *(f"!{spec.rpartition('=')[0]}" for spec in args.net_layers),
         "--ordering",
         args.ordering,
         "--stats",
@@ -468,6 +592,23 @@ def main() -> int:
         stats.unlink(missing_ok=True)
         args.output_board.unlink(missing_ok=True)
         completed = subprocess.run(command, check=False)
+    # A fine-pitch package whose pads the maze router could not leave is given
+    # a stub on every pad and the board is routed once more. Only after a plain
+    # route has failed: a stub commits each pad's first lane, and a board that
+    # routed without one came back from the stage with a net open and a via in
+    # a pad.
+    if (completed.returncode or _failed_nets(stats)) and args.perimeter_component:
+        fanned = _perimeter(
+            args.python, args.repo, board_to_route, args.perimeter_component,
+            args.escape_clearance,
+        )
+        if fanned != board_to_route:
+            print("retrying KiCadRoutingTools with the perimeter packages fanned out",
+                  flush=True)
+            stats.unlink(missing_ok=True)
+            args.output_board.unlink(missing_ok=True)
+            command[2] = str(fanned)
+            completed = subprocess.run(command, check=False)
 
     policy_ok = completed.returncode == 0
     if completed.returncode:

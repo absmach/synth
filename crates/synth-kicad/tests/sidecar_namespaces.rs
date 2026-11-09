@@ -63,7 +63,7 @@ fn sidecar_with(refdes: &str, x: f64, y: f64) -> SidecarLayout {
 
 /// The sheet a component ends up on, named by its group, or `root`.
 fn sheet_of(board: &synth_ir::Board, layout: &synth_layout::Layout) -> Option<String> {
-    let sheets = synth_layout::sheets::layout_sheets(board, layout.clone());
+    let sheets = synth_layout::sheets::layout_sheets(board, layout.clone(), None);
     sheets.iter().find_map(|s| {
         let n = s.name.clone()?;
         s.layout
@@ -230,7 +230,8 @@ fn export_honours_the_schematic_sidecar_the_render_did() {
             synth_layout::layout_with_sidecar(
                 &board,
                 synth_layout::schematic_sidecar_path(&design).as_deref()
-            )
+            ),
+            synth_layout::schematic_sidecar_path(&design).as_deref(),
         )
         .len(),
         "export sheet count must match the layout the render reviewed"

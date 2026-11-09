@@ -43,6 +43,55 @@ struct Geom {
     size: (f64, f64),
 }
 
+/// JLCPCB's DFM check reports a through-hole pad within 2.1 mm of an SMD pad as
+/// a Danger. Compaction keeps a through-hole part at least this far, courtyard to
+/// courtyard, from an SMD part, so a closer layout is never made by it.
+const THT_SMD_GAP_MM: f64 = 2.1;
+
+/// What a part's pads are: through-hole, SMD, or both.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+struct PadKinds {
+    through_hole: bool,
+    smd: bool,
+}
+
+impl PadKinds {
+    /// The gap two parts need between their courtyards: `base`, raised to the
+    /// through-hole limit when one has through-hole pads and the other SMD pads.
+    fn gap_mm(self, other: Self, base: f64) -> f64 {
+        if (self.through_hole && other.smd) || (self.smd && other.through_hole) {
+            base.max(THT_SMD_GAP_MM)
+        } else {
+            base
+        }
+    }
+}
+
+fn pad_kinds(board: &Board, placement: &Placement) -> Vec<PadKinds> {
+    placement
+        .components
+        .iter()
+        .map(|placed| {
+            let pads = board
+                .component(placed.id)
+                .and_then(|c| c.part.as_ref())
+                .and_then(|part| part.kicad_footprint.as_deref())
+                .and_then(synth_layout::kicad_footprint_loader::pads)
+                .unwrap_or_default();
+            let mut kinds = PadKinds::default();
+            for pad in pads.iter().filter(|pad| !pad.is_npth) {
+                match pad.copper_layers {
+                    synth_layout::kicad_footprint_loader::PadCopperLayers::Both => {
+                        kinds.through_hole = true;
+                    }
+                    _ => kinds.smd = true,
+                }
+            }
+            kinds
+        })
+        .collect()
+}
+
 /// The courtyard of the stock M2.5 mounting-hole footprint is a circle of
 /// 5.5 mm. Where the KiCad library is not installed the size falls back to the
 /// part's 2.5 mm hole, which would let a part sit inside the hole's keep-out.
@@ -268,6 +317,7 @@ fn slide_pass(
     geom: &[Geom],
     roles: &[Role],
     dense: &[bool],
+    kinds: &[PadKinds],
     spacing: GapSpacing,
     axis: Axis,
     toward: Toward,
@@ -377,6 +427,7 @@ fn slide_pass(
                 } else {
                     spacing.gap_mm
                 };
+                let want = kinds[p].gap_mm(kinds[q], want);
                 let had = low_v(&original[p]) - high_v(&original[q]);
                 let between = mm_to_nm(want).min(had);
                 let behind = match toward {
@@ -446,6 +497,7 @@ pub fn compact_by_gaps(
         .iter()
         .map(|p| is_dense_part(board, p.id))
         .collect();
+    let kinds = pad_kinds(board, &candidate);
     let original_outline = candidate.board_outline;
     let edge_gaps = edge_gaps_nm(&candidate, &geom, &roles, original_outline);
     let hole_offsets = hole_corner_offsets(&candidate, &roles, original_outline);
@@ -473,6 +525,7 @@ pub fn compact_by_gaps(
                 &geom,
                 &roles,
                 &dense,
+                &kinds,
                 spacing,
                 axis,
                 toward,
@@ -827,6 +880,26 @@ pub fn hpwl_probe(board: &Board, placement: &Placement) -> f64 {
 mod tests {
     use super::*;
     use crate::place;
+
+    #[test]
+    fn a_through_hole_part_keeps_the_dfm_distance_from_an_smd_part() {
+        let tht = PadKinds {
+            through_hole: true,
+            smd: false,
+        };
+        let smd = PadKinds {
+            through_hole: false,
+            smd: true,
+        };
+        // The gap between courtyards is raised to 2.1 mm for the pair, in either order.
+        assert!((tht.gap_mm(smd, 0.3) - THT_SMD_GAP_MM).abs() < 1e-9);
+        assert!((smd.gap_mm(tht, 0.3) - THT_SMD_GAP_MM).abs() < 1e-9);
+        // Two SMD parts, or two through-hole parts, keep the ordinary spacing.
+        assert!((smd.gap_mm(smd, 0.3) - 0.3).abs() < 1e-9);
+        assert!((tht.gap_mm(tht, 0.3) - 0.3).abs() < 1e-9);
+        // A wider ordinary spacing is kept.
+        assert!((tht.gap_mm(smd, 3.0) - 3.0).abs() < 1e-9);
+    }
 
     fn load_board(path: &str) -> Board {
         let source = std::fs::read_to_string(path).expect("read fixture");

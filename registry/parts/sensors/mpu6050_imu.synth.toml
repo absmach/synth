@@ -4,17 +4,30 @@ description = "InvenSense MPU-6050 6-axis IMU (accel+gyro), I²C"
 mpn = "MPU-6050"
 lcsc_pn = "C24116"
 kicad_symbol = "Sensor_Motion:MPU-6050"
-kicad_footprint = "Package_DFN_QFN:QFN-24-1EP_4x4mm_P0.5mm_EP2.7x2.7mm"
+# The InvenSense footprint, which the stock MPU-6050 symbol names: 24 pads
+# and a keepout over the die paddle, which is not soldered. The generic
+# QFN-24-1EP named before put a 25th pad under the package.
+kicad_footprint = "Sensor_Motion:InvenSense_QFN-24_4x4mm_P0.5mm"
 
 [footprint_dimensions]
 width_mm = 4.0
 height_mm = 4.0
 courtyard_margin_mm = 0.25
 
+# VDD 2.375-3.46 V (PS-MPU-6000A rev 3.1, section 3, "Primary Differences
+# between MPU-6000 and MPU-6050"); VLOGIC may go to
+# 1.71 V but never above VDD. The 5.0 V maximum recorded before would have
+# accepted a rail that damages the part.
 [operating_conditions]
-min_voltage_v = 1.8
-max_voltage_v = 5.0
+min_voltage_v = 2.375
+max_voltage_v = 3.46
 max_current_ma = 100.0
+
+[provenance]
+source = "authored"
+datasheet_url = "https://invensense.tdk.com/wp-content/uploads/2015/02/MPU-6000-Datasheet1.pdf"
+reviewed_by = "JeffMboya"
+reviewed_at = "2026-11-05"
 
 # Pin names and numbers come from the stock KiCad symbol this part names,
 # cross-checked against the footprint it names. Pads that the previous map
@@ -128,10 +141,13 @@ name = "resv_2"
 number = "21"
 electrical_type = "do_not_connect"
 
+# CLKOUT, the system clock output (PS-MPU-6000A rev 3.1, section 7.1). The
+# stock symbol marks pin 22 reserved, but the datasheet reserves only 19 and
+# 21; leaving it unconnected is still fine.
 [[pins]]
-name = "resv_3"
+name = "clkout"
 number = "22"
-electrical_type = "do_not_connect"
+electrical_type = "output"
 
 [[pins]]
 name = "scl"
@@ -146,12 +162,6 @@ number = "24"
 electrical_type = "bidirectional"
 capabilities = ["i2c_sda"]
 required = true
-
-[[pins]]
-name = "ep"
-number = "25"
-electrical_type = "ground_reference"
-footprint_only = true
 
 [[required_decoupling]]
 net = "vdd"

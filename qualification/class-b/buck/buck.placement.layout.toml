@@ -8,8 +8,8 @@ fit_sheet = false
 # x 30.35, pin 7 BOOT / 8 SW at x 35.65): the boot cap sits beside its pin.
 
 [components.J1]
-x = 7.0
-y = 22.0
+x = 5.75
+y = 21.475
 rotation = 0
 priority = "hard"
 
@@ -122,8 +122,8 @@ rotation = 90
 priority = "hard"
 
 [components.J2]
-x = 67.0
-y = 14.0
+x = 67.525
+y = 10.25
 rotation = 270
 priority = "hard"
 

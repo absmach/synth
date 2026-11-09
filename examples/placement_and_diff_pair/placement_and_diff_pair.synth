@@ -23,6 +23,15 @@ board "placement_and_diff_pair" {
 
   // USB D+/D- run from the connector straight to the MCU's native
   // USB pins, so the pair's endpoint on U1 fully identifies the net.
+  // USB-C sink: 5.1k Rd on each CC pin, or a compliant source never turns
+  // VBUS on.
+  component R1: resistor "r_generic_0603" value "5.1k"
+  component R2: resistor "r_generic_0603" value "5.1k"
+  connect J1.cc1 -> R1.p1
+  connect J1.gnd -> R1.p2
+  connect J1.cc2 -> R2.p1
+  connect J1.gnd -> R2.p2
+
   connect J1.dp -> U1.usb_dp
   connect J1.dn -> U1.usb_dn
 

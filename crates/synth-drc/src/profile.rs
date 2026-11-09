@@ -33,7 +33,7 @@ pub struct ManufacturerProfile {
     /// board outline, in nanometers.
     pub min_copper_to_edge_nm: i64,
     /// Minimum drilled hole diameter (vias + through-hole pad
-    /// drills), in nanometers. JLC's standard tier is 0.3 mm;
+    /// drills), in nanometers. JLC's standard tier is 0.2 mm;
     /// going below that incurs the "min hole size 0.2 mm"
     /// surcharge.
     pub min_drill_diameter_nm: i64,
@@ -109,8 +109,9 @@ const fn default_ir_drop_budget_mv() -> i64 {
 impl ManufacturerProfile {
     /// JLCPCB's standard hobbyist tier (no surcharge):
     /// 0.127 mm trace, 0.127 mm clearance, 0.3 mm board edge,
-    /// 0.3 mm drill, 0.13 mm annular ring, 0.2 mm drill-to-
-    /// copper. V1's default; the `synth drc` CLI uses this
+    /// 0.2 mm drill (JLCPCB's preferred minimum via hole on two layers; its
+    /// capabilities page allows 0.15 mm), 0.13 mm annular ring, 0.2 mm
+    /// drill-to-copper. V1's default; the `synth drc` CLI uses this
     /// when no `--profile <path>` flag is supplied.
     #[must_use]
     pub fn jlc_standard() -> Self {
@@ -122,7 +123,7 @@ impl ManufacturerProfile {
             min_trace_width_nm: mm_to_nm(0.127),
             min_copper_clearance_nm: mm_to_nm(0.127),
             min_copper_to_edge_nm: mm_to_nm(0.3),
-            min_drill_diameter_nm: mm_to_nm(0.3),
+            min_drill_diameter_nm: mm_to_nm(0.2),
             min_annular_ring_nm: mm_to_nm(0.13),
             min_drill_to_copper_nm: mm_to_nm(0.2),
             crosstalk_run_multiple: default_crosstalk_run_multiple(),
@@ -488,24 +489,28 @@ mod tests {
     }
 
     #[test]
-    fn the_esp32_module_paddle_vias_fit_the_advanced_tier_and_not_the_standard_one() {
+    fn the_esp32_module_paddle_vias_fit_both_jlc_tiers() {
         // Every KiCad ESP32-WROOM-32 variant drills twelve 0.2 mm holes in
-        // the ground paddle, on 0.6 mm pads.
+        // the ground paddle, on 0.6 mm pads. The standard tier takes the 0.2 mm
+        // drill its capabilities page prefers, so the paddle fits it too.
         let paddle_drill = mm_to_nm(0.2);
         let paddle_ring = mm_to_nm((0.6 - 0.2) / 2.0);
 
-        let standard = ManufacturerProfile::jlc_standard();
-        assert!(
-            paddle_drill < standard.min_drill_diameter_nm,
-            "the standard floor is what the board was violating"
-        );
-
-        let advanced = ManufacturerProfile::jlc_advanced();
-        assert!(paddle_drill >= advanced.min_drill_diameter_nm);
-        assert!(
-            paddle_ring >= advanced.min_annular_ring_nm,
-            "the ring was never the problem, so it did not move"
-        );
+        for profile in [
+            ManufacturerProfile::jlc_standard(),
+            ManufacturerProfile::jlc_advanced(),
+        ] {
+            assert!(
+                paddle_drill >= profile.min_drill_diameter_nm,
+                "{}",
+                profile.name
+            );
+            assert!(
+                paddle_ring >= profile.min_annular_ring_nm,
+                "{}",
+                profile.name
+            );
+        }
     }
 
     #[test]
@@ -526,7 +531,7 @@ mod tests {
             let p = ManufacturerProfile::from_name(loose);
             assert_eq!(p.name, "jlc-standard", "{loose} should not buy a tier");
             assert!(!p.via_in_pad);
-            assert_eq!(p.min_drill_diameter_nm, mm_to_nm(0.3));
+            assert_eq!(p.min_drill_diameter_nm, mm_to_nm(0.2));
         }
     }
 
@@ -536,7 +541,7 @@ mod tests {
         assert_eq!(p.min_trace_width_nm, mm_to_nm(0.127));
         assert_eq!(p.min_copper_clearance_nm, mm_to_nm(0.127));
         assert_eq!(p.min_copper_to_edge_nm, mm_to_nm(0.3));
-        assert_eq!(p.min_drill_diameter_nm, mm_to_nm(0.3));
+        assert_eq!(p.min_drill_diameter_nm, mm_to_nm(0.2));
         assert_eq!(p.min_annular_ring_nm, mm_to_nm(0.13));
         assert_eq!(p.min_drill_to_copper_nm, mm_to_nm(0.2));
     }

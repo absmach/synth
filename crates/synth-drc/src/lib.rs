@@ -63,6 +63,7 @@
 mod emc;
 mod geometry;
 pub mod kicad_cli;
+pub mod pcb_read;
 mod profile;
 mod rules;
 mod signal_integrity;
@@ -242,6 +243,7 @@ pub fn check_signal_integrity(
     ));
     violations.extend(signal_integrity::check_net_length(board, routing));
     violations.extend(signal_integrity::check_group_skew(board, routing));
+    violations.extend(signal_integrity::check_layer_pins(board, routing));
     violations.extend(signal_integrity::check_via_current(board, routing));
     violations
 }
@@ -318,6 +320,7 @@ fn evaluate(
     violations.extend(signal_integrity::check_diff_pair_skew(board, routing));
     violations.extend(signal_integrity::check_net_length(board, routing));
     violations.extend(signal_integrity::check_group_skew(board, routing));
+    violations.extend(signal_integrity::check_layer_pins(board, routing));
     violations.extend(signal_integrity::check_via_current(board, routing));
     violations.extend(signal_integrity::check_ampacity(
         board,
@@ -448,6 +451,47 @@ mod tests {
         ] {
             assert!(critical.iter().any(|n| n == net), "{net}: {critical:?}");
         }
+    }
+
+    /// The inductor marks the switching node, not the rail its output
+    /// capacitors hold: a net on the inductor's filtered side, with a capacitor
+    /// to ground and no switch pin, is a rail that a slow declaration may quiet,
+    /// and the node the regulator switches stays critical.
+    #[test]
+    fn the_filtered_side_of_an_inductor_is_a_rail_and_the_switching_node_is_not() {
+        let board = board_from_source(
+            r#"board "buck" { layers 2
+                netclass "QUIET" { edge_rate slow }
+                component L1: inductor "l_generic_1210" value "10uH"
+                component C1: capacitor "c_generic_0603" value "100nF"
+                component C2: capacitor "c_generic_0603" value "100nF"
+                component R1: resistor "r_generic_0603" value "10k"
+                net "SW_NODE" class "QUIET" { L1.p1 C2.p1 }
+                net "BOOT" class "QUIET" { C2.p2 R1.p1 }
+                net "VOUT" class "QUIET" { L1.p2 C1.p1 }
+                net "GND" { C1.p2 R1.p2 }
+            }"#,
+        );
+        let critical = return_path_critical_net_names(&board);
+        assert!(critical.iter().any(|n| n == "SW_NODE"), "{critical:?}");
+        assert!(!critical.iter().any(|n| n == "VOUT"), "{critical:?}");
+    }
+
+    /// An inductor net with no capacitor to ground is not a filtered rail: it
+    /// stays critical even under a slow declaration.
+    #[test]
+    fn an_inductor_net_with_no_capacitor_to_ground_stays_critical() {
+        let board = board_from_source(
+            r#"board "choke" { layers 2
+                netclass "QUIET" { edge_rate slow }
+                component L1: inductor "l_generic_1210" value "10uH"
+                component R1: resistor "r_generic_0603" value "10k"
+                net "CHOKE" class "QUIET" { L1.p1 R1.p1 }
+                net "GND" { R1.p2 }
+            }"#,
+        );
+        let critical = return_path_critical_net_names(&board);
+        assert!(critical.iter().any(|n| n == "CHOKE"), "{critical:?}");
     }
 
     /// A declared differential pair holds both legs critical even when the
@@ -783,6 +827,7 @@ mod tests {
             max_length: None,
             max_skew: None,
             edge_rate: None,
+            layers: Vec::new(),
             source_span: synth_diagnostics::Span::new(0, 0),
         });
         let net = board.nets[0].id;
@@ -829,6 +874,7 @@ mod tests {
             max_length: None,
             max_skew: None,
             edge_rate: None,
+            layers: Vec::new(),
             source_span: synth_diagnostics::Span::new(0, 0),
         });
         let stackup = StackupProfile::for_board(&board);
@@ -1088,6 +1134,7 @@ mod tests {
             max_length: None,
             max_skew: None,
             edge_rate: None,
+            layers: Vec::new(),
             source_span: synth_diagnostics::Span::new(0, 0),
         });
         let stackup = StackupProfile::for_board(&board);
@@ -1160,6 +1207,7 @@ mod tests {
             max_length: Some(synth_ir::Length::from_mm(10.0)),
             max_skew: None,
             edge_rate: None,
+            layers: Vec::new(),
             source_span: synth_diagnostics::Span::new(0, 0),
         });
         let net = board.nets[0].id;
@@ -1191,6 +1239,7 @@ mod tests {
             edge_rate: None,
             via_diameter: None,
             via_drill: None,
+            layers: Vec::new(),
             source_span: synth_diagnostics::Span::new(0, 0),
         }
     }
@@ -1222,6 +1271,109 @@ mod tests {
     }
 
     #[test]
+    fn a_net_routed_off_its_pinned_layers_blocks() {
+        let mut board = load_board("../../examples/env_logger/env_logger.synth");
+        let mut class = bus_class("ETH");
+        class.max_skew = None;
+        class.layers = vec!["F.Cu".to_string()];
+        board.netclasses.push(class);
+        board.nets[0].netclass = Some("ETH".to_string());
+        let net = board.nets[0].id;
+
+        let mut inner = straight(net, 127_000, 0, 10_000_000);
+        inner.layer = synth_geometry::Layer::Inner1;
+        let off = Routing {
+            segments: vec![straight(net, 127_000, 0, 5_000_000), inner],
+            ..Routing::default()
+        };
+        let flagged = super::signal_integrity::check_layer_pins(&board, &off);
+        assert_eq!(flagged.len(), 1, "{flagged:?}");
+        assert_eq!(flagged[0].code, "E-SYNTH-DRC-023");
+        assert!(flagged[0].is_blocking());
+        assert!(
+            flagged[0].message.contains("In1.Cu"),
+            "{}",
+            flagged[0].message
+        );
+
+        let on = Routing {
+            segments: vec![straight(net, 127_000, 0, 10_000_000)],
+            ..Routing::default()
+        };
+        assert!(super::signal_integrity::check_layer_pins(&board, &on).is_empty());
+    }
+
+    fn through_via(net: NetId) -> synth_pcb::Via {
+        synth_pcb::Via {
+            net,
+            at: synth_geometry::Point::new(5_000_000, 0),
+            drill_nm: 300_000,
+            pad_diameter_nm: 600_000,
+        }
+    }
+
+    /// A board whose first net is in class `ETH`, pinned to `layers`.
+    fn pinned_board(layers: &[&str]) -> (synth_ir::Board, NetId) {
+        let mut board = load_board("../../examples/env_logger/env_logger.synth");
+        let mut class = bus_class("ETH");
+        class.max_skew = None;
+        class.layers = layers.iter().map(|l| (*l).to_string()).collect();
+        board.netclasses.push(class);
+        board.nets[0].netclass = Some("ETH".to_string());
+        let net = board.nets[0].id;
+        (board, net)
+    }
+
+    #[test]
+    fn a_via_on_a_single_layer_class_blocks() {
+        let (board, net) = pinned_board(&["F.Cu"]);
+        // Every segment on F.Cu, so only the via is wrong.
+        let routing = Routing {
+            segments: vec![straight(net, 127_000, 0, 10_000_000)],
+            vias: vec![through_via(net)],
+            ..Routing::default()
+        };
+        let flagged = super::signal_integrity::check_layer_pins(&board, &routing);
+        assert_eq!(flagged.len(), 1, "{flagged:?}");
+        assert_eq!(flagged[0].code, "E-SYNTH-DRC-023");
+        assert!(flagged[0].is_blocking());
+        assert!(flagged[0].message.contains("via"), "{}", flagged[0].message);
+    }
+
+    #[test]
+    fn a_via_between_the_two_allowed_layers_passes() {
+        let (board, net) = pinned_board(&["F.Cu", "B.Cu"]);
+        let mut bottom = straight(net, 127_000, 0, 10_000_000);
+        bottom.layer = synth_geometry::Layer::Bottom;
+        let routing = Routing {
+            segments: vec![straight(net, 127_000, 0, 5_000_000), bottom],
+            vias: vec![through_via(net)],
+            ..Routing::default()
+        };
+        let flagged = super::signal_integrity::check_layer_pins(&board, &routing);
+        assert!(flagged.is_empty(), "{flagged:?}");
+    }
+
+    #[test]
+    fn an_off_layer_segment_on_a_two_layer_class_still_blocks() {
+        let (board, net) = pinned_board(&["F.Cu", "B.Cu"]);
+        let mut inner = straight(net, 127_000, 0, 10_000_000);
+        inner.layer = synth_geometry::Layer::Inner2;
+        let routing = Routing {
+            segments: vec![straight(net, 127_000, 0, 5_000_000), inner],
+            vias: vec![through_via(net)],
+            ..Routing::default()
+        };
+        let flagged = super::signal_integrity::check_layer_pins(&board, &routing);
+        assert_eq!(flagged.len(), 1, "{flagged:?}");
+        assert!(
+            flagged[0].message.contains("In2.Cu"),
+            "{}",
+            flagged[0].message
+        );
+    }
+
+    #[test]
     fn too_much_current_per_via_is_flagged() {
         let mut board = load_board("../../examples/env_logger/env_logger.synth");
         board.nets[0].netclass = Some("PWR".to_string());
@@ -1238,6 +1390,7 @@ mod tests {
             edge_rate: None,
             via_diameter: None,
             via_drill: None,
+            layers: Vec::new(),
             source_span: synth_diagnostics::Span::new(0, 0),
         });
         let net = board.nets[0].id;

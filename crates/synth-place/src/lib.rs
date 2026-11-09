@@ -173,6 +173,39 @@ pub fn footprint_origin(
     Point::new(placement.center.x_nm - rot_x, placement.center.y_nm - rot_y)
 }
 
+/// The internal courtyard centre for a footprint whose origin is `origin`:
+/// the inverse of [`footprint_origin`].
+///
+/// A PCB placement sidecar is written in the space every placement is
+/// published in — the footprint origin `synth place`, the MCP
+/// `component_placements` and the exported board's `(at x y)` all carry. It
+/// was read as a courtyard centre, so pinning a part at the position the last
+/// run reported moved it by its courtyard offset, and by the same offset again
+/// on every re-pin: a connector whose origin sits on a pin never reached a
+/// fixed point (absmach/synth#133).
+#[must_use]
+pub fn courtyard_center_from_origin(
+    part: Option<&synth_registry::Part>,
+    origin: Point,
+    rotation: Rotation,
+) -> Point {
+    let (offset_x_mm, offset_y_mm) = part.map_or((0.0, 0.0), |p| {
+        synth_layout::pcb_courtyard_geometry_for_part(p).0
+    });
+    let (rot_x, rot_y) = rotation.rotate_offset(mm_to_nm(offset_x_mm), mm_to_nm(offset_y_mm));
+    Point::new(origin.x_nm + rot_x, origin.y_nm + rot_y)
+}
+
+/// A sidecar entry's rotation in degrees as a [`Rotation`].
+fn sidecar_rotation(degrees: u32) -> Rotation {
+    match degrees {
+        90 => Rotation::Ninety,
+        180 => Rotation::OneEighty,
+        270 => Rotation::TwoSeventy,
+        _ => Rotation::Zero,
+    }
+}
+
 /// Convert an internal placement into the stable external coordinate space.
 ///
 /// Use this for every placement payload that leaves the process — the CLI's
@@ -529,13 +562,12 @@ pub fn apply_sidecar_overrides(
                 continue;
             }
             if let Some(p) = placement.components.iter_mut().find(|c| c.id == comp.id) {
-                p.center = Point::new(mm_to_nm(sidecar_comp.x), mm_to_nm(sidecar_comp.y));
-                p.rotation = match sidecar_comp.rotation {
-                    90 => Rotation::Ninety,
-                    180 => Rotation::OneEighty,
-                    270 => Rotation::TwoSeventy,
-                    _ => Rotation::Zero,
-                };
+                p.rotation = sidecar_rotation(sidecar_comp.rotation);
+                p.center = courtyard_center_from_origin(
+                    comp.part.as_ref(),
+                    Point::new(mm_to_nm(sidecar_comp.x), mm_to_nm(sidecar_comp.y)),
+                    p.rotation,
+                );
             }
         }
     }
@@ -543,6 +575,7 @@ pub fn apply_sidecar_overrides(
     // Resolve relative entries after absolute anchors. Repeated bounded
     // passes support short chains while leaving cyclic/missing anchors at
     // their automatic placement instead of producing invalid coordinates.
+    // `dx`/`dy` run between footprint origins, like the absolute entries.
     for _ in 0..sidecar.components.len() {
         let mut changed = false;
         for comp in &board.components {
@@ -552,37 +585,36 @@ pub fn apply_sidecar_overrides(
             let Some(anchor_refdes) = sidecar_comp.relative_to.as_deref() else {
                 continue;
             };
-            let Some(anchor_id) = board
+            let Some(anchor) = board
                 .components
                 .iter()
                 .find(|candidate| candidate.refdes == anchor_refdes)
-                .map(|candidate| candidate.id)
             else {
                 continue;
             };
-            let Some(anchor_center) = placement
+            let Some(anchor_origin) = placement
                 .components
                 .iter()
-                .find(|candidate| candidate.id == anchor_id)
-                .map(|candidate| candidate.center)
+                .find(|candidate| candidate.id == anchor.id)
+                .map(|candidate| footprint_origin(anchor.part.as_ref(), candidate))
             else {
                 continue;
             };
             if let Some(p) = placement.components.iter_mut().find(|c| c.id == comp.id) {
-                let center = Point::new(
-                    anchor_center.x_nm + mm_to_nm(sidecar_comp.dx),
-                    anchor_center.y_nm + mm_to_nm(sidecar_comp.dy),
+                let rotation = sidecar_rotation(sidecar_comp.rotation);
+                let center = courtyard_center_from_origin(
+                    comp.part.as_ref(),
+                    Point::new(
+                        anchor_origin.x_nm + mm_to_nm(sidecar_comp.dx),
+                        anchor_origin.y_nm + mm_to_nm(sidecar_comp.dy),
+                    ),
+                    rotation,
                 );
-                if p.center != center {
+                if p.center != center || p.rotation != rotation {
                     changed = true;
                 }
                 p.center = center;
-                p.rotation = match sidecar_comp.rotation {
-                    90 => Rotation::Ninety,
-                    180 => Rotation::OneEighty,
-                    270 => Rotation::TwoSeventy,
-                    _ => Rotation::Zero,
-                };
+                p.rotation = rotation;
             }
         }
         if !changed {
@@ -1299,15 +1331,22 @@ fn validate_sidecar_inside_outline(
         if entry.relative_to.is_some() {
             continue;
         }
+        let rotation = match entry.rotation {
+            90 => Rotation::Ninety,
+            180 => Rotation::OneEighty,
+            270 => Rotation::TwoSeventy,
+            _ => Rotation::Zero,
+        };
+        // The sidecar stores footprint origins; the courtyard test wants the
+        // centre the rest of the placer reasons about.
         let placed = ComponentPlacement {
             id: component.id,
-            center: Point::new(mm_to_nm(entry.x), mm_to_nm(entry.y)),
-            rotation: match entry.rotation {
-                90 => Rotation::Ninety,
-                180 => Rotation::OneEighty,
-                270 => Rotation::TwoSeventy,
-                _ => Rotation::Zero,
-            },
+            center: courtyard_center_from_origin(
+                component.part.as_ref(),
+                Point::new(mm_to_nm(entry.x), mm_to_nm(entry.y)),
+                rotation,
+            ),
+            rotation,
             layer: Layer::Top,
         };
         let courtyard = sidecar_courtyard_rect(board, component, &placed);
@@ -1552,7 +1591,8 @@ fn nearest_local_slot(
 
 /// Run placement with the optional PCB-placement sidecar.
 ///
-/// `sidecar_path` holds **board millimetres** and must come from
+/// `sidecar_path` holds **board millimetres at the footprint origin** (the
+/// space [`to_external`] publishes) and must come from
 /// `synth_layout::placement_sidecar_path` (or an explicit
 /// `layout_file_path`). The schematic sidecar is a different file in sheet
 /// millimetres and must not be passed here; see
@@ -1643,16 +1683,16 @@ pub fn place_with_tuning_and_sidecar_seeded<S: ::std::hash::BuildHasher>(
                     if entry.relative_to.is_some() {
                         return None;
                     }
+                    let rotation = sidecar_rotation(entry.rotation);
                     Some((
                         component.id,
                         (
-                            Point::new(mm_to_nm(entry.x), mm_to_nm(entry.y)),
-                            match entry.rotation {
-                                90 => Rotation::Ninety,
-                                180 => Rotation::OneEighty,
-                                270 => Rotation::TwoSeventy,
-                                _ => Rotation::Zero,
-                            },
+                            courtyard_center_from_origin(
+                                component.part.as_ref(),
+                                Point::new(mm_to_nm(entry.x), mm_to_nm(entry.y)),
+                                rotation,
+                            ),
+                            rotation,
                         ),
                     ))
                 })
@@ -1777,6 +1817,21 @@ pub fn place_with_dimensions(
     width_mm: f64,
     height_mm: f64,
 ) -> Result<Placement, PlaceError> {
+    place_with_dimensions_rotated(
+        board,
+        width_mm,
+        height_mm,
+        &std::collections::HashMap::new(),
+    )
+}
+
+/// [`place_with_dimensions`] with explicit per-component rotations.
+fn place_with_dimensions_rotated(
+    board: &Board,
+    width_mm: f64,
+    height_mm: f64,
+    rotation_overrides: &std::collections::HashMap<ComponentId, Rotation>,
+) -> Result<Placement, PlaceError> {
     use synth_layout::pcb_courtyard_geometry_for_part;
 
     if !width_mm.is_finite() || !height_mm.is_finite() || width_mm <= 0.0 || height_mm <= 0.0 {
@@ -1806,7 +1861,7 @@ pub fn place_with_dimensions(
         board,
         outline,
         &courtyards_mm,
-        &std::collections::HashMap::new(),
+        rotation_overrides,
         false,
         BOARD_MARGIN_MM,
         0,
@@ -2009,24 +2064,23 @@ fn place_with_tuning_impl<S: ::std::hash::BuildHasher>(
 
     // The greedy packer wraps rows at the canvas width, so the canvas aspect
     // picks the arrangement it starts from. A square and a wider canvas of the
-    // same area are compared and the smaller finished outline kept; the fixed
-    // canvases stay as fallbacks for shapes the greedy search cannot fill.
+    // same area are compared and the finished outline kept by `choose_canvas`;
+    // the fixed canvases stay as fallbacks for shapes the greedy search cannot
+    // fill. A wider canvas must be materially smaller to displace the square,
+    // so a 0.2 mm change does not flip the board's aspect (#158).
     let wide_side = compact_side * WIDE_CANVAS_ASPECT;
     let candidates = [
-        (compact_side, compact_side),
-        (wide_side, compact_side / WIDE_CANVAS_ASPECT),
-        (100.0, 80.0),
-        (120.0, 100.0),
-        (160.0, 120.0),
+        (compact_side, compact_side, true),
+        (wide_side, compact_side / WIDE_CANVAS_ASPECT, false),
+        (100.0, 80.0, false),
+        (120.0, 100.0, false),
+        (160.0, 120.0, false),
     ];
 
-    let outline_area = |placement: &Placement| {
-        placement.board_outline.width_nm().max(0) * placement.board_outline.height_nm().max(0)
-    };
     let mut last_err = None;
-    let mut best: Option<Placement> = None;
+    let mut successes: Vec<(bool, Placement)> = Vec::new();
     let mut filled = 0;
-    for (board_w_mm, board_h_mm) in candidates {
+    for (board_w_mm, board_h_mm, square_family) in candidates {
         let board_outline = Rect::new(
             Point::new(0, 0),
             Point::new(mm_to_nm(board_w_mm), mm_to_nm(board_h_mm)),
@@ -2048,12 +2102,7 @@ fn place_with_tuning_impl<S: ::std::hash::BuildHasher>(
                     p
                 };
                 let candidate = refine_placement(board, &packed, rotation_overrides, pinned);
-                if best
-                    .as_ref()
-                    .is_none_or(|current| outline_area(&candidate) < outline_area(current))
-                {
-                    best = Some(candidate);
-                }
+                successes.push((square_family, candidate));
                 filled += 1;
                 if !compact || filled >= CANVAS_SHAPES_TRIED {
                     break;
@@ -2062,13 +2111,53 @@ fn place_with_tuning_impl<S: ::std::hash::BuildHasher>(
             Err(e) => last_err = Some(e),
         }
     }
-    if let Some(best) = best {
+    if let Some(best) = choose_canvas(successes) {
         return Ok(best);
     }
     Err(last_err.unwrap_or(PlaceError::AreaInsufficient {
         placed_mm2: total_courtyard_mm2,
         board_mm2: 230.0 * 230.0,
     }))
+}
+
+/// How much smaller a wider canvas must be before it displaces the square
+/// family's arrangement.
+///
+/// The two canvases often finish within a couple of percent of each other in
+/// area, while their outlines differ by 18 mm in width. Choosing the strictly
+/// smallest then flips the board's aspect when a part changes by 0.2 mm,
+/// which is the non-monotonic outline in #158. A wider canvas has to be at
+/// least this much smaller to win; beyond it the board really is smaller and
+/// the wider shape is kept.
+const OUTLINE_AREA_TIE_PERCENT: i128 = 3;
+
+/// Pick the finished outline to keep from the canvases a board packed on.
+///
+/// A square-family result within [`OUTLINE_AREA_TIE_PERCENT`] of the smallest
+/// wins, so the aspect does not flip for a marginal area change. If the square
+/// family is absent or materially larger, the smallest outline is returned.
+/// Areas are compared in integer nanometres: a 230 mm square is about 5.3e16
+/// nm2, which an `f64` mantissa cannot hold exactly.
+fn choose_canvas(successes: Vec<(bool, Placement)>) -> Option<Placement> {
+    let area = |placement: &Placement| {
+        i128::from(placement.board_outline.width_nm().max(0))
+            * i128::from(placement.board_outline.height_nm().max(0))
+    };
+    let smallest = successes
+        .iter()
+        .map(|(_, placement)| area(placement))
+        .min()?;
+    let threshold = smallest + smallest * OUTLINE_AREA_TIE_PERCENT / 100;
+    successes
+        .iter()
+        .position(|(square, placement)| *square && area(placement) <= threshold)
+        .map(|index| successes[index].1.clone())
+        .or_else(|| {
+            successes
+                .into_iter()
+                .min_by_key(|(_, placement)| area(placement))
+                .map(|(_, placement)| placement)
+        })
 }
 
 /// A board feature carrying no net: a mounting hole, a fiducial, or a test
@@ -2860,7 +2949,11 @@ fn place_with_outline<S: ::std::hash::BuildHasher>(
                         ((0.0, 0.0), fallback_courtyard(&comp.kind)),
                         synth_layout::pcb_courtyard_geometry_for_part,
                     );
-                    rotation = if is_usb_footprint {
+                    rotation = if let Some(&asked) = rotation_overrides.get(&id) {
+                        // A rotation the caller stated (a hint's `rotation`)
+                        // is kept; the edge only chooses one when nobody did.
+                        asked
+                    } else if is_usb_footprint {
                         // USB-C is a dense connector too, but its mating face
                         // must point away from the selected board edge. Use
                         // the registry metadata so the contact row and shell
@@ -3863,6 +3956,7 @@ fn place_with_outline<S: ::std::hash::BuildHasher>(
         &mut placements,
         &courtyard_lookup,
         pinned,
+        rotation_overrides,
     );
 
     Ok(Placement {
@@ -3880,17 +3974,19 @@ fn place_with_outline<S: ::std::hash::BuildHasher>(
 /// which is what keeps the two from disagreeing.
 ///
 /// A pinned connector is left alone: a sidecar is a constraint, and the DRC
-/// reports it if it is wrong. So is a turn that would put the courtyard on top
+/// reports it if it is wrong. So is one whose rotation the caller asked for
+/// (`synth_place_with_hints` takes a `rotation`). So is a turn that would put the courtyard on top
 /// of another part, or take the courtyard or a copper pad outside the outline
 /// or inside the copper-to-edge clearance — a quarter turn changes its
 /// extents — since either is worse than a connector that faces sideways, and
 /// the DRC reports that too.
-fn face_edge_connectors_outward<S: ::std::hash::BuildHasher>(
+fn face_edge_connectors_outward<S: ::std::hash::BuildHasher, R: ::std::hash::BuildHasher>(
     board: &Board,
     outline: Rect,
     placements: &mut [ComponentPlacement],
     courtyard_lookup: &std::collections::HashMap<ComponentId, (f64, f64)>,
     pinned: &std::collections::HashMap<ComponentId, (Point, Rotation), S>,
+    rotation_overrides: &std::collections::HashMap<ComponentId, Rotation, R>,
 ) {
     for issue in floorplan::connector_orientation_issues(board, outline, placements) {
         let Some(index) = placements.iter().position(|placed| {
@@ -3900,7 +3996,8 @@ fn face_edge_connectors_outward<S: ::std::hash::BuildHasher>(
         }) else {
             continue;
         };
-        if pinned.contains_key(&placements[index].id) {
+        let id = placements[index].id;
+        if pinned.contains_key(&id) || rotation_overrides.contains_key(&id) {
             continue;
         }
         let mut turned = placements[index];
@@ -4549,6 +4646,12 @@ pub struct ExternalHint {
     pub near: Option<String>,
     pub side: Option<String>,
     pub priority: Option<String>,
+    /// Orientation in degrees (0, 90, 180 or 270), applied as an explicit
+    /// rotation the placer keeps, so the placement review's
+    /// `rotate_connector_parallel_to_edge` advice can be followed without a
+    /// layout override. `None` leaves the placer to choose.
+    #[serde(default)]
+    pub rotation: Option<u32>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -4872,7 +4975,14 @@ pub fn place_with_hints_compacting(
     compact: bool,
 ) -> Result<(Placement, HintSatisfactionReport), PlaceError> {
     let modified_board = board_with_external_hints(board, external_hints);
-    let placement = place_with_default_tuning(&modified_board, compact)?;
+    let placement = place_with_tuning_impl(
+        &modified_board,
+        DEFAULT_MARGIN_MM,
+        &hint_rotation_overrides(&modified_board, external_hints),
+        0,
+        compact,
+        &PinnedPlacements::new(),
+    )?;
     Ok((
         placement.clone(),
         hint_satisfaction(&modified_board, &placement),
@@ -4889,11 +4999,52 @@ pub fn place_with_hints_and_dimensions(
     height_mm: f64,
 ) -> Result<(Placement, HintSatisfactionReport), PlaceError> {
     let modified_board = board_with_external_hints(board, external_hints);
-    let placement = place_with_dimensions(&modified_board, width_mm, height_mm)?;
+    let placement = place_with_dimensions_rotated(
+        &modified_board,
+        width_mm,
+        height_mm,
+        &hint_rotations(&modified_board, external_hints),
+    )?;
     Ok((
         placement.clone(),
         hint_satisfaction(&modified_board, &placement),
     ))
+}
+
+/// The production rotation overrides with each hint's `rotation` on top.
+fn hint_rotation_overrides(
+    board: &Board,
+    external_hints: &[ExternalHint],
+) -> std::collections::HashMap<ComponentId, Rotation> {
+    let mut overrides = default_rotation_overrides(board);
+    overrides.extend(hint_rotations(board, external_hints));
+    overrides
+}
+
+/// Each hint's `rotation`, by component.
+///
+/// A value other than 0, 90, 180 or 270 is not a placement the grid can hold;
+/// the hint is still applied, without the turn.
+fn hint_rotations(
+    board: &Board,
+    external_hints: &[ExternalHint],
+) -> std::collections::HashMap<ComponentId, Rotation> {
+    let mut overrides = std::collections::HashMap::new();
+    for hint in external_hints {
+        let rotation = match hint.rotation {
+            Some(0) => Rotation::Zero,
+            Some(90) => Rotation::Ninety,
+            Some(180) => Rotation::OneEighty,
+            Some(270) => Rotation::TwoSeventy,
+            _ => continue,
+        };
+        for refdes in hint.component.iter().chain(&hint.components) {
+            if let Some(component) = board.components.iter().find(|c| &c.refdes == refdes) {
+                overrides.insert(component.id, rotation);
+            }
+        }
+    }
+    overrides
 }
 
 fn board_with_external_hints(board: &Board, external_hints: &[ExternalHint]) -> Board {
@@ -5749,6 +5900,51 @@ fn far_test_points(board: &Board, placement: &Placement) -> Vec<FarTestPoint> {
         }
     }
     found
+}
+
+/// [`describe_placement`] for a consumer outside the process.
+///
+/// A recommendation's `suggested_x_mm`/`suggested_y_mm` is a courtyard centre
+/// inside the placer, which applies its own advice in that space. An agent
+/// persists it as a placement-sidecar override, and a sidecar holds footprint
+/// origins, so each suggested position is moved to the origin the part has
+/// there at the suggested (or current) rotation. Without this, following the
+/// advice moved a connector by its courtyard offset (absmach/synth#133).
+#[must_use]
+pub fn describe_placement_external(board: &Board, placement: &Placement) -> PlacementDescription {
+    let mut description = describe_placement(board, placement);
+    for action in &mut description.visual_review.recommended_actions {
+        let (Some(x), Some(y)) = (action.suggested_x_mm, action.suggested_y_mm) else {
+            continue;
+        };
+        let Some(component) = board.components.iter().find(|c| c.refdes == action.refdes) else {
+            continue;
+        };
+        let current = placement
+            .components
+            .iter()
+            .find(|p| p.id == component.id)
+            .map_or(Rotation::Zero, |p| p.rotation);
+        let rotation = match action.suggested_rotation_deg {
+            Some(90) => Rotation::Ninety,
+            Some(180) => Rotation::OneEighty,
+            Some(270) => Rotation::TwoSeventy,
+            Some(_) => Rotation::Zero,
+            None => current,
+        };
+        let origin = footprint_origin(
+            component.part.as_ref(),
+            &ComponentPlacement {
+                id: component.id,
+                center: Point::new(mm_to_nm(x), mm_to_nm(y)),
+                rotation,
+                layer: Layer::Top,
+            },
+        );
+        action.suggested_x_mm = Some(synth_geometry::nm_to_mm(origin.x_nm));
+        action.suggested_y_mm = Some(synth_geometry::nm_to_mm(origin.y_nm));
+    }
+    description
 }
 
 // Area-ratio math in the body casts nanometer integers to f64.
@@ -9562,6 +9758,7 @@ board "features_only" {
                 outline,
                 &mut placements,
                 &lookup,
+                &std::collections::HashMap::new(),
                 &std::collections::HashMap::new(),
             );
             placements

@@ -19,4 +19,6 @@ board "power_011_divider_on_switch_node" {
   connect U1.fb -> R2.p1
   connect R2.p2 -> U1.gnd
   connect J1.p1 -> U1.en
+  // The exposed thermal pad is the ground path on this regulator.
+  connect U1.ep -> U1.gnd
 }

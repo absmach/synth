@@ -347,3 +347,90 @@ fn the_public_sidecar_api_places_a_fully_pinned_board_the_search_refuses() {
         assert!(inside_outline(&placement, got.center));
     }
 }
+
+/// A sidecar built from what a run reported, one `hard` entry per part.
+fn sidecar_from_published(board: &Board, placement: &synth_place::Placement, path: &Path) {
+    use std::fmt::Write as _;
+    let mut out = String::from("schema_version = 2\n");
+    for placed in synth_place::to_external(board, placement).components {
+        let refdes = &board.component(placed.id).expect("component").refdes;
+        let rotation = match placed.rotation {
+            synth_geometry::Rotation::Zero => 0,
+            synth_geometry::Rotation::Ninety => 90,
+            synth_geometry::Rotation::OneEighty => 180,
+            synth_geometry::Rotation::TwoSeventy => 270,
+        };
+        write!(
+            out,
+            "\n[components.{refdes}]\nx = {}\ny = {}\nrotation = {rotation}\npriority = \"hard\"\n",
+            synth_geometry::nm_to_mm(placed.center.x_nm),
+            synth_geometry::nm_to_mm(placed.center.y_nm),
+        )
+        .expect("write to String");
+    }
+    fs::write(path, out).expect("write sidecar");
+}
+
+/// Pinning every part where the last run put it reproduces that run.
+///
+/// The sidecar was read as courtyard centres while every placement is
+/// published as footprint origins (`synth place`, the MCP
+/// `component_placements`, the exported `(at x y)`). Re-pinning from the
+/// output moved each part by its courtyard offset, and by the same step again
+/// on every round: the USB-C receptacle here walked 0.56 mm in y per run and
+/// never settled (absmach/synth#133).
+#[test]
+fn a_board_pinned_from_its_own_output_is_a_fixed_point() {
+    let fixture = workspace_root()
+        .join("examples")
+        .join("placement_and_diff_pair")
+        .join("placement_and_diff_pair.synth");
+    let board = load_board(&fixture);
+
+    // The premise: the connector's origin is not its courtyard centre. With
+    // no offset the two spaces coincide and this test proves nothing.
+    let connector = board
+        .components
+        .iter()
+        .find(|c| c.refdes == "J1")
+        .expect("fixture has J1");
+    let offset = synth_place::courtyard_center_from_origin(
+        connector.part.as_ref(),
+        synth_geometry::Point::new(0, 0),
+        synth_geometry::Rotation::Zero,
+    );
+    assert_ne!(
+        (offset.x_nm, offset.y_nm),
+        (0, 0),
+        "J1 must have a courtyard offset for this test to mean anything"
+    );
+
+    let dir = scratch("fixed-point");
+    let sidecar = dir.join("placement_and_diff_pair.placement.layout.toml");
+
+    // Round one settles the automatic arrangement into a pinned floorplan; the
+    // band pass may compact it. From then on the output is the input.
+    let mut placement = synth_place::place(&board).expect("the example places");
+    sidecar_from_published(&board, &placement, &sidecar);
+    placement = synth_place::place_with_sidecar(&board, Some(&sidecar)).expect("pinned places");
+    for round in 2..=3 {
+        sidecar_from_published(&board, &placement, &sidecar);
+        let pinned = synth_place::to_external(&board, &placement);
+        let next = synth_place::place_with_sidecar(&board, Some(&sidecar)).expect("pinned places");
+        let produced = synth_place::to_external(&board, &next);
+        for want in &pinned.components {
+            let got = produced
+                .components
+                .iter()
+                .find(|c| c.id == want.id)
+                .expect("component placed");
+            assert_eq!(
+                (got.center, got.rotation),
+                (want.center, want.rotation),
+                "round {round}: {} moved from its pinned position",
+                board.component(want.id).expect("component").refdes,
+            );
+        }
+        placement = next;
+    }
+}

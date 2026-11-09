@@ -23,9 +23,9 @@ amplifiers, and makes 12 V with an LMR38010 buck.
   is 4-layer with a declared 0.07 mm outer-copper / 0.035 mm inner-copper
   stackup.
 - `control.placement.layout.toml` and `power.placement.layout.toml`: every part
-  is hand-pinned. J_B2B keeps the same 3.12 mm inset from each board's right
-  edge (56.88 mm on the 60 mm control, 68.88 mm on the 72 mm power board); the
-  mechanical test enforces 0.1 mm. The mounting holes are board-local.
+  is hand-pinned. J_B2B is pinned on each board's right edge. The sidecars hold
+  footprint origins: (56.105, 4.07) on the control and (70.15, 14.57) on the
+  power board. The mounting holes are board-local.
 - `interboard_mappings.json`: the single source of truth for the 20 cross-board
   pins. `mappings_neg_swap.json`, `mappings_neg_drop.json`,
   `mappings_neg_voltage.json` and `control_neg_swap.synth` are the negatives.
@@ -37,12 +37,12 @@ amplifiers, and makes 12 V with an LMR38010 buck.
 ## Board size
 
 The J_B2B pinout and the four mounting holes need a common frame. Both sidecars
-place J_B2B at 3.12 mm from the right edge: (56.88, 16) on the 60 mm control
-and (68.88, 16) on the 72 mm power board. The control's holes are at (2, 2),
+pin J_B2B at the right edge: sidecar origins (56.105, 4.07) on the control and
+(70.15, 14.57) on the power board. The control's holes are at (2, 2),
 (51, 2), (2, 30) and (51, 30) mm; the power board declares `outline 72mm x
 52mm` and puts its four at (2, 2), (62.4, 2), (2, 49) and (62.4, 49) mm. J_PWR
-and J_MOTOR sit flush on the left edge at (5.45, 15) and (5.45, 34), rotated
-270 degrees so the wire entry faces the left edge. The power
+and J_MOTOR sit flush on the left edge at sidecar origins (5.14, 12.46) and
+(5.14, 28.91), rotated 270 degrees so the wire entry faces the left edge. The power
 PCB is exported un-routed for the 3D renders, like the control.
 
 The control board declares `outline 60mm x 32mm`, so Edge.Cuts is exactly

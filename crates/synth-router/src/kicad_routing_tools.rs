@@ -183,6 +183,15 @@ pub fn build_command(
     if options.strict_sizes {
         args.push("--strict-sizes".to_string());
     }
+    // A pinned net is routed on its own layers before the general pass, so
+    // the general router meets it as finished copper rather than free to
+    // move it onto a layer the design ruled out.
+    for pin in &request.net_layers {
+        args.extend([
+            "--net-layers".to_string(),
+            format!("{}={}", pin.net, pin.layers.join(",")),
+        ]);
+    }
     // Hand every dense grid array to the escape engine before the general
     // router sees the board. Left to the maze router, a 0.8 mm ball grid comes
     // back with a stub on every lane rather than an escape under every pad.
@@ -193,7 +202,8 @@ pub fn build_command(
     // 0.8 mm clears the 0.687 mm two vias need between centres. Needing an
     // escape and failing one are different questions.
     let candidates = escape_plan(request);
-    if !candidates.is_empty() {
+    let escaping = !candidates.is_empty();
+    if escaping {
         // Escape with the smallest via the declared process permits, not with
         // the engine's default. Measured without this, the escape placed 11
         // vias under the fabrication minimum drill — the independent gate
@@ -237,6 +247,21 @@ pub fn build_command(
                 args.extend(["--escape-required".to_string(), escape.refdes.clone()]);
             }
         }
+    }
+    let perimeter = perimeter_plan(request);
+    if !perimeter.is_empty() && !escaping {
+        // The stub is routed to the board's clearance floor, not the adapter's
+        // own 0.1 mm default, for the reason the grid-array escape is.
+        args.extend([
+            "--escape-clearance".to_string(),
+            format!(
+                "{:.4}",
+                synth_ir::Length(request.policy.min_clearance_nm).to_mm()
+            ),
+        ]);
+    }
+    for refdes in perimeter {
+        args.extend(["--perimeter-component".to_string(), refdes]);
     }
     if let Some(ordering) = &options.ordering {
         args.extend(["--ordering".to_string(), ordering.clone()]);
@@ -292,6 +317,19 @@ fn escape_plan(request: &RouteRequest) -> Vec<String> {
         }
     }
     plan
+}
+
+/// Fine-pitch perimeter packages to give an escape stub before routing.
+///
+/// A package the design declared `escape { off }` on is left alone, and one
+/// that is a grid array is escaped by [`escape_plan`] instead.
+fn perimeter_plan(request: &RouteRequest) -> Vec<String> {
+    let off: std::collections::BTreeSet<&str> =
+        request.escapes_off.iter().map(String::as_str).collect();
+    crate::escape::fine_pitch_perimeter_in_baseline(request)
+        .into_iter()
+        .filter(|refdes| !off.contains(refdes.as_str()))
+        .collect()
 }
 
 /// Run KiCadRoutingTools over the request's baseline.
@@ -601,6 +639,18 @@ pub fn statistics_from(
     statistics
 }
 
+/// Replace the track and via counts with those of the board as it is now.
+///
+/// [`statistics_from`] reads the board the router wrote. Synth then repairs
+/// that candidate (it prunes dangling stubs and adds island ties and return
+/// vias), so the counts of the delivered board differ. The report describes
+/// the delivered board, so its counts are read again after the repairs.
+pub fn refresh_counts(statistics: &mut RouteStatistics, board: &crate::pcb_read::PcbBoard) {
+    statistics.segments = board.segments.len();
+    statistics.vias = board.vias.len();
+    statistics.wire_length_mm = board.wire_length_mm();
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -663,6 +713,21 @@ mod tests {
         }];
 
         assert_eq!(escape_plan(&request), vec!["U7"]);
+    }
+
+    #[test]
+    fn a_layer_pin_reaches_the_engine() {
+        let mut request = request();
+        request.net_layers = vec![crate::NetLayers {
+            net: "ETH_TXP".to_string(),
+            layers: vec!["F.Cu".to_string(), "B.Cu".to_string()],
+        }];
+        let joined = argv(&request);
+        assert!(
+            joined.contains("--net-layers ETH_TXP=F.Cu,B.Cu"),
+            "{joined}"
+        );
+        assert!(!argv(&super::tests::request()).contains("--net-layers"));
     }
 
     fn request() -> RouteRequest {
@@ -818,6 +883,45 @@ mod tests {
             y += pitch;
         }
         pads
+    }
+
+    /// A row of 0.65 mm pads in two rows' worth of pitch: a TSSOP-style body.
+    #[allow(clippy::cast_precision_loss)]
+    fn perimeter_pads(count: usize, pitch: f64) -> String {
+        use std::fmt::Write as _;
+        let mut pads = String::new();
+        for n in 1..=count {
+            let x = (n - 1) as f64 * pitch;
+            let _ = write!(
+                pads,
+                "    (pad \"{n}\" smd roundrect (at {x:.4} 0) (size 0.400 1.500)\n      \
+                 (layers \"F.Cu\" \"F.Paste\" \"F.Mask\") (net {n} \"N{n}\"))\n"
+            );
+        }
+        pads
+    }
+
+    /// A fine-pitch perimeter package is not a grid array, so the grid-array
+    /// stage never saw it and the maze router met its pads with no stub.
+    /// It is handed to the adapter's perimeter stage, routed to the board's
+    /// clearance floor rather than the adapter's own default, and a coarse
+    /// package is not.
+    #[test]
+    fn a_fine_pitch_perimeter_package_is_handed_to_the_perimeter_stage() {
+        let (request, dir) = with_baseline(&perimeter_pads(20, 0.65));
+        let joined = argv(&request);
+        std::fs::remove_dir_all(&dir).ok();
+        assert!(joined.contains("--perimeter-component U1"), "{joined}");
+        assert!(joined.contains("--escape-clearance"), "{joined}");
+        assert!(
+            !joined.contains("--fanout-component"),
+            "a row is not a grid array: {joined}"
+        );
+
+        let (request, dir) = with_baseline(&perimeter_pads(8, 1.27));
+        let joined = argv(&request);
+        std::fs::remove_dir_all(&dir).ok();
+        assert!(!joined.contains("--perimeter-component"), "{joined}");
     }
 
     /// The escape engine is driven from the baseline, so the flags only
@@ -1092,6 +1196,37 @@ mod tests {
             ..KrtReport::default()
         };
         assert!(report.below_floor().is_empty());
+    }
+
+    /// The repairs after the router add vias and drop stubs, so the counts of
+    /// the board the router wrote are not those of the board that is delivered.
+    #[test]
+    fn the_counts_are_those_of_the_board_after_the_repairs() {
+        let routed =
+            crate::pcb_read::PcbBoard::parse(crate::pcb_read::SAMPLE_BOARD).expect("parses");
+        let mut statistics = statistics_from(Some(&routed), None);
+        let (segments, vias) = (statistics.segments, statistics.vias);
+        assert_eq!((segments, vias), (routed.segments.len(), routed.vias.len()));
+
+        let repaired_text = crate::pcb_read::SAMPLE_BOARD
+            .replace(
+                "  (segment (start 15 20) (end 15 18) (width 0.25) (layer \"F.Cu\") (net 2))\n",
+                "",
+            )
+            .replace(
+                "  (via (at 15 18)",
+                "  (via (at 12 12) (size 0.8) (drill 0.4) (layers \"F.Cu\" \"B.Cu\") (net 1))\n  (via (at 15 18)",
+            );
+        let repaired = crate::pcb_read::PcbBoard::parse(&repaired_text).expect("parses");
+        refresh_counts(&mut statistics, &repaired);
+
+        assert_eq!(
+            statistics.segments,
+            segments - 1,
+            "the pruned stub is not counted"
+        );
+        assert_eq!(statistics.vias, vias + 1, "the added via is counted");
+        assert!((statistics.wire_length_mm - repaired.wire_length_mm()).abs() < 1e-9);
     }
 
     #[test]

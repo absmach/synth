@@ -31,7 +31,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use serde::{Deserialize, Serialize};
 
 use crate::contract::{FabricationPolicy, RouteRequest};
-use crate::pcb_read::{Pad, PcbBoard, Point};
+use crate::pcb_read::{entry_is_copper, Pad, PcbBoard, Point};
 /// Distance tolerance, in nanometres, for copper that is *meant* to touch.
 ///
 /// Routers round to four decimal places when they write coordinates, so
@@ -480,7 +480,11 @@ pub fn compare_topology(baseline: &PcbBoard, routed: &PcbBoard) -> TopologyRepor
 /// A copper item participating in the connectivity graph.
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
 enum Item {
-    Pad(String),
+    /// Index into the board's pads in [`PcbBoard::pads`] order. Not the
+    /// `<ref>.<number>` name: a footprint repeats a number for every copper
+    /// area of one pin (a SOT-223 tab, a split thermal pad), so the name
+    /// keyed only one of them and the rest vanished from the graph.
+    Pad(usize),
     Segment(usize),
     Via(usize),
 }
@@ -503,11 +507,12 @@ pub fn check_connectivity(board: &PcbBoard, policy: &FabricationPolicy) -> Conne
     // recorded separately rather than as a connected island. Whether they are
     // a *defect* is decided by the caller, which can compare against the
     // baseline: an unassigned pin in the design is not a routing failure.
+    let pads: Vec<&Pad> = board.pads().collect();
     let mut by_net: BTreeMap<u32, Vec<Item>> = BTreeMap::new();
-    for pad in board.pads() {
+    for (index, pad) in pads.iter().enumerate() {
         match pad.net {
             Some(0) | None => report.unconnected_pads.push(pad.id()),
-            Some(net) => by_net.entry(net).or_default().push(Item::Pad(pad.id())),
+            Some(net) => by_net.entry(net).or_default().push(Item::Pad(index)),
         }
     }
     for (idx, _) in board.segments.iter().enumerate() {
@@ -522,8 +527,7 @@ pub fn check_connectivity(board: &PcbBoard, policy: &FabricationPolicy) -> Conne
     }
 
     report.unconnected_pads.sort();
-
-    let pad_by_id: BTreeMap<String, &Pad> = board.pads().map(|p| (p.id(), p)).collect();
+    report.unconnected_pads.dedup();
 
     for (net, items) in by_net {
         let net_name = board
@@ -532,18 +536,29 @@ pub fn check_connectivity(board: &PcbBoard, policy: &FabricationPolicy) -> Conne
             .cloned()
             .unwrap_or_else(|| format!("net_{net}"));
         let mut islands = UnionFind::new(items.len());
-        let mut pad_indices: Vec<usize> = Vec::new();
 
+        // One entry per pin, not per copper area: the areas of one pin are a
+        // single node inside the package, so reaching the tab of a SOT-223
+        // reaches its pin 2. Each further area is joined to the pin's first.
+        let mut pin_first: BTreeMap<String, usize> = BTreeMap::new();
         for (idx, item) in items.iter().enumerate() {
-            if matches!(item, Item::Pad(_)) {
-                pad_indices.push(idx);
+            if let Item::Pad(pad) = item {
+                match pin_first.entry(pads[*pad].id()) {
+                    std::collections::btree_map::Entry::Vacant(slot) => {
+                        slot.insert(idx);
+                    }
+                    std::collections::btree_map::Entry::Occupied(first) => {
+                        islands.union(*first.get(), idx);
+                    }
+                }
             }
         }
+        let pad_indices: Vec<usize> = pin_first.into_values().collect();
 
-        union_touching_items(board, &items, &mut islands, &pad_by_id);
+        union_touching_items(board, &items, &mut islands, &pads);
 
         // Anything this net's own pour touches is one electrical island.
-        let pour_items = zone_copper_items(board, net, &items);
+        let pour_items = zone_copper_items(board, net, &items, &pads);
         if let Some((&anchor, rest)) = pour_items.split_first() {
             for &other in rest {
                 islands.union(anchor, other);
@@ -571,6 +586,7 @@ pub fn check_connectivity(board: &PcbBoard, policy: &FabricationPolicy) -> Conne
             report.open_nets += 1;
             report.open.push(stranded_connection(
                 &items,
+                &pads,
                 &mut islands,
                 &island_sizes,
                 &pad_indices,
@@ -721,6 +737,7 @@ fn describe_via(board: &PcbBoard, via: &crate::pcb_read::Via) -> String {
 /// is what makes the report actionable — "net GND is open" does not say where.
 fn stranded_connection(
     items: &[Item],
+    pads: &[&Pad],
     islands: &mut UnionFind,
     island_sizes: &BTreeMap<usize, usize>,
     pad_indices: &[usize],
@@ -735,7 +752,7 @@ fn stranded_connection(
         .iter()
         .find(|idx| islands.find(**idx) == root)
         .and_then(|idx| match &items[*idx] {
-            Item::Pad(id) => Some(id.clone()),
+            Item::Pad(pad) => Some(pads[*pad].id()),
             _ => None,
         })
         .unwrap_or_else(|| format!("net {net_name}"));
@@ -752,15 +769,10 @@ fn stranded_connection(
 /// Quadratic per net, which is fine at the scale a net reaches in practice
 /// and keeps the geometry check readable — an off-by-one in a spatial index
 /// would misreport opens, which is the failure this pass exists to prevent.
-fn union_touching_items(
-    board: &PcbBoard,
-    items: &[Item],
-    islands: &mut UnionFind,
-    pad_by_id: &BTreeMap<String, &Pad>,
-) {
+fn union_touching_items(board: &PcbBoard, items: &[Item], islands: &mut UnionFind, pads: &[&Pad]) {
     for i in 0..items.len() {
         for j in (i + 1)..items.len() {
-            if items_touch(board, &items[i], &items[j], pad_by_id) {
+            if items_touch(board, &items[i], &items[j], pads) {
                 islands.union(i, j);
             }
         }
@@ -773,7 +785,7 @@ fn union_touching_items(
 /// different conductor, and treating it as one would short nets together.
 /// Only zones set to fill are considered, and only on the layers each item
 /// actually occupies, so a pour on `In1.Cu` does not join a pad on `B.Cu`.
-fn zone_copper_items(board: &PcbBoard, net: u32, items: &[Item]) -> Vec<usize> {
+fn zone_copper_items(board: &PcbBoard, net: u32, items: &[Item], pads: &[&Pad]) -> Vec<usize> {
     let zones: Vec<_> = board
         .zones
         .iter()
@@ -784,15 +796,15 @@ fn zone_copper_items(board: &PcbBoard, net: u32, items: &[Item]) -> Vec<usize> {
         return Vec::new();
     }
 
-    let pads: BTreeMap<String, &Pad> = board.pads().map(|p| (p.id(), p)).collect();
     let mut reached = Vec::new();
     for (index, item) in items.iter().enumerate() {
         let touched = match item {
-            Item::Pad(id) => pads.get(id).is_some_and(|pad| {
+            Item::Pad(pad) => {
+                let pad = pads[*pad];
                 pad.layers
                     .iter()
                     .any(|layer| entry_is_copper(layer) && covered_by_zone(&zones, layer, &pad.at))
-            }),
+            }
             Item::Segment(idx) => {
                 let segment = &board.segments[*idx];
                 covered_by_zone(&zones, &segment.layer, &segment.start)
@@ -886,15 +898,11 @@ fn point_on_segment(point: &Point, a: &Point, b: &Point) -> bool {
     within_x && within_y
 }
 
-fn items_touch(board: &PcbBoard, a: &Item, b: &Item, pads: &BTreeMap<String, &Pad>) -> bool {
+fn items_touch(board: &PcbBoard, a: &Item, b: &Item, pads: &[&Pad]) -> bool {
     match (a, b) {
-        (Item::Pad(x), Item::Pad(y)) => {
-            matches!((pads.get(x), pads.get(y)), (Some(x), Some(y)) if pads_touch(x, y))
-        }
+        (Item::Pad(x), Item::Pad(y)) => pads_touch(pads[*x], pads[*y]),
         (Item::Pad(x), Item::Segment(s)) | (Item::Segment(s), Item::Pad(x)) => {
-            let Some(pad) = pads.get(x) else {
-                return false;
-            };
+            let pad = pads[*x];
             let segment = &board.segments[*s];
             // Matched by name with the wildcard rule, not by set membership:
             // a through-hole pad's `"*.Cu"` is in no `BTreeSet` alongside a
@@ -906,9 +914,7 @@ fn items_touch(board: &PcbBoard, a: &Item, b: &Item, pads: &BTreeMap<String, &Pa
                     <= pad.radius_nm() + segment.width_nm / 2 + TOUCH_TOLERANCE_NM
         }
         (Item::Pad(x), Item::Via(v)) | (Item::Via(v), Item::Pad(x)) => {
-            let Some(pad) = pads.get(x) else {
-                return false;
-            };
+            let pad = pads[*x];
             let via = &board.vias[*v];
             shares_layer(pad, &via.layers)
                 && point_distance(pad.at, via.at)
@@ -939,17 +945,6 @@ fn items_touch(board: &PcbBoard, a: &Item, b: &Item, pads: &BTreeMap<String, &Pa
                     <= board.vias[*x].size_nm / 2 + board.vias[*y].size_nm / 2 + TOUCH_TOLERANCE_NM
         }
     }
-}
-
-/// Whether a `(layers ...)` entry names copper.
-///
-/// KiCad spells through-hole pads `"*.Cu"`, which is a wildcard for every
-/// copper layer rather than a single layer name. Treating it as
-/// non-copper — because it does not literally end in `.Cu` — silently put
-/// every through-hole pad on no layer at all, so no track could ever touch
-/// one and each THT net read as unroutable no matter what the router drew.
-pub(crate) fn entry_is_copper(entry: &str) -> bool {
-    entry.ends_with(".Cu") || entry.ends_with(".CuIn") || entry == "*.Cu"
 }
 
 /// Whether one layer entry refers to the same layer as another.
@@ -1029,11 +1024,15 @@ fn segments_intersect(a0: Point, a1: Point, b0: Point, b1: Point) -> bool {
     let d3 = cross(b0, b1, a0);
     let d4 = cross(b0, b1, a1);
 
-    let opposite = |x: i64, y: i64| (x <= 0 && y >= 0) || (x >= 0 && y <= 0);
+    // A proper crossing needs strictly opposite signs. Accepting zero here
+    // made every collinear pair "cross" whatever the gap between them, since
+    // all four cross products of a collinear pair are zero (absmach/synth#123).
+    let opposite = |x: i64, y: i64| (x < 0 && y > 0) || (x > 0 && y < 0);
     if opposite(d1, d2) && opposite(d3, d4) {
         return true;
     }
-    // Collinear overlap: a zero cross product with the point on the span.
+    // Touching or collinear overlap: a zero cross product with the point on
+    // the span.
     (d1 == 0 && on_span(b0, a0, a1))
         || (d2 == 0 && on_span(b1, a0, a1))
         || (d3 == 0 && on_span(a0, b0, b1))
@@ -1076,17 +1075,6 @@ fn find_via_in_pad(board: &PcbBoard) -> Vec<String> {
     hits.sort();
     hits.dedup();
     hits
-}
-
-impl std::fmt::Display for crate::pcb_read::Via {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(
-            f,
-            "via at ({:.3}, {:.3}) mm",
-            self.at.x_mm(),
-            self.at.y_mm()
-        )
-    }
 }
 
 /// Disjoint-set forest with union by rank.
@@ -1827,6 +1815,123 @@ mod tests {
         let b0 = Point::new(mm_to_nm(5.0), mm_to_nm(-5.0));
         let b1 = Point::new(mm_to_nm(5.0), mm_to_nm(5.0));
         assert_eq!(segment_distance(a0, a1, b0, b1), 0);
+    }
+
+    /// Two pads 20 mm apart on one net, joined by `tracks`.
+    fn two_pads_with(tracks: &str) -> PcbBoard {
+        board(&format!(
+            r#"(kicad_pcb
+              (version 20260206)
+              (layers (0 "F.Cu" signal) (31 "B.Cu" signal))
+              (net 0 "")
+              (net 1 "SIG")
+              (footprint "a:1" (layer "F.Cu") (at 0 0)
+                (property "Reference" "R1" (at 0 0) (layer "F.SilkS"))
+                (pad "1" smd rect (at 0 0) (size 1 1) (layers "F.Cu") (net 1 "SIG")))
+              (footprint "a:1" (layer "F.Cu") (at 20 0)
+                (property "Reference" "R2" (at 0 0) (layer "F.SilkS"))
+                (pad "1" smd rect (at 0 0) (size 1 1) (layers "F.Cu") (net 1 "SIG")))
+              {tracks}
+            )"#
+        ))
+    }
+
+    #[test]
+    /// Every cross product of a collinear pair is zero, so a crossing test
+    /// that accepts zero on both sides joined any two tracks on one line,
+    /// however far apart (absmach/synth#123).
+    fn collinear_tracks_with_a_gap_between_them_do_not_touch() {
+        let a0 = Point::new(mm_to_nm(0.0), mm_to_nm(0.0));
+        let a1 = Point::new(mm_to_nm(7.0), mm_to_nm(0.0));
+        let b0 = Point::new(mm_to_nm(13.0), mm_to_nm(0.0));
+        let b1 = Point::new(mm_to_nm(20.0), mm_to_nm(0.0));
+        assert!(!segments_intersect(a0, a1, b0, b1));
+        assert_eq!(segment_distance(a0, a1, b0, b1), mm_to_nm(6.0));
+    }
+
+    #[test]
+    fn a_net_missing_a_collinear_span_is_reported_open() {
+        let board = two_pads_with(
+            r#"(segment (start 0 0) (end 7 0) (width 0.25) (layer "F.Cu") (net 1))
+               (segment (start 13 0) (end 20 0) (width 0.25) (layer "F.Cu") (net 1))"#,
+        );
+        let report = check_connectivity(&board, &FabricationPolicy::default());
+        assert_eq!(report.open_nets, 1, "a 6 mm gap is not copper: {report:?}");
+        assert_eq!(report.connected_nets, 0);
+    }
+
+    #[test]
+    fn overlapping_and_end_to_end_collinear_tracks_still_touch() {
+        let overlapping = two_pads_with(
+            r#"(segment (start 0 0) (end 12 0) (width 0.25) (layer "F.Cu") (net 1))
+               (segment (start 8 0) (end 20 0) (width 0.25) (layer "F.Cu") (net 1))"#,
+        );
+        let end_to_end = two_pads_with(
+            r#"(segment (start 0 0) (end 10 0) (width 0.25) (layer "F.Cu") (net 1))
+               (segment (start 10 0) (end 20 0) (width 0.25) (layer "F.Cu") (net 1))"#,
+        );
+        for board in [overlapping, end_to_end] {
+            let report = check_connectivity(&board, &FabricationPolicy::default());
+            assert_eq!(report.open_nets, 0, "{:?}", report.open);
+            assert_eq!(report.connected_nets, 1);
+        }
+    }
+
+    /// A SOT-223 whose pin 2 and tab are both numbered `2`, the tab far from
+    /// the pin, and a capacitor on the same net. The tab is written first, so
+    /// a map keyed by `<ref>.<number>` keeps the pin and drops the tab.
+    fn sot223_with(track: &str) -> PcbBoard {
+        board(&format!(
+            r#"(kicad_pcb
+              (version 20260206)
+              (layers (0 "F.Cu" signal) (31 "B.Cu" signal))
+              (net 0 "")
+              (net 1 "VOUT")
+              (footprint "Package_TO_SOT_SMD:SOT-223-3_TabPin2" (layer "F.Cu") (at 10 10)
+                (property "Reference" "U3" (at 0 0) (layer "F.SilkS"))
+                (pad "2" smd rect (at 0 -3.15) (size 3.5 2) (layers "F.Cu") (net 1 "VOUT"))
+                (pad "2" smd rect (at 0 3.15) (size 2 1.5) (layers "F.Cu") (net 1 "VOUT")))
+              (footprint "a:1" (layer "F.Cu") (at 10 0)
+                (property "Reference" "C1" (at 0 0) (layer "F.SilkS"))
+                (pad "1" smd rect (at 0 0) (size 1 1) (layers "F.Cu") (net 1 "VOUT")))
+              {track}
+            )"#
+        ))
+    }
+
+    #[test]
+    /// Reaching the tab reaches pin 2: the two copper areas share a number
+    /// and are one node inside the package. Keyed by `<ref>.<number>`, one
+    /// area was dropped and the net read open though DRC found no
+    /// unconnected pad.
+    fn a_track_to_the_tab_of_a_repeated_pad_number_reaches_the_pin() {
+        // C1 at (10, 0) to the tab at (10, 6.85).
+        let board = sot223_with(
+            r#"(segment (start 10 0) (end 10 6.85) (width 0.25) (layer "F.Cu") (net 1))"#,
+        );
+        let report = check_connectivity(&board, &FabricationPolicy::default());
+        assert_eq!(report.open_nets, 0, "{:?}", report.open);
+        assert_eq!(report.connected_nets, 1);
+    }
+
+    #[test]
+    fn every_copper_area_of_a_repeated_pad_number_is_in_the_graph() {
+        // The track lands only on the tab's copper at (10, 6.85), which is
+        // the area a name-keyed map dropped in favour of the pin at y 13.15.
+        let routed = sot223_with(
+            r#"(segment (start 10 0) (end 10 6.85) (width 0.25) (layer "F.Cu") (net 1))"#,
+        );
+        let unrouted = sot223_with("");
+        assert_eq!(
+            check_connectivity(&routed, &FabricationPolicy::default()).open_nets,
+            0
+        );
+        let open = check_connectivity(&unrouted, &FabricationPolicy::default());
+        assert_eq!(open.open_nets, 1, "no track: still open");
+        assert_eq!(
+            open.open[0].pad_count, 2,
+            "the pin counts once however many copper areas it has"
+        );
     }
 
     #[test]

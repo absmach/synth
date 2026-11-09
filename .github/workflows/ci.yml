@@ -43,6 +43,14 @@ jobs:
         with:
           shared-key: ${{ runner.os }}-${{ hashFiles('rust-toolchain.toml') }}
 
+      - name: Cache KiCad apt packages
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/synth-apt
+          key: ${{ runner.os }}-kicad-apt-${{ hashFiles('.github/scripts/install-kicad.sh') }}
+          restore-keys: |
+            ${{ runner.os }}-kicad-apt-
+
       - name: Install kicad-cli and the stock symbol/footprint libraries
         run: .github/scripts/install-kicad.sh
 
@@ -95,6 +103,14 @@ jobs:
         with:
           shared-key: ${{ runner.os }}-${{ hashFiles('rust-toolchain.toml') }}
 
+      - name: Cache KiCad apt packages
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/synth-apt
+          key: ${{ runner.os }}-kicad-apt-${{ hashFiles('.github/scripts/install-kicad.sh') }}
+          restore-keys: |
+            ${{ runner.os }}-kicad-apt-
+
       - name: Install kicad-cli and the stock symbol/footprint libraries
         run: .github/scripts/install-kicad.sh
 
@@ -135,6 +151,14 @@ jobs:
         uses: Swatinem/rust-cache@v2
         with:
           shared-key: ${{ runner.os }}-routability-${{ hashFiles('rust-toolchain.toml') }}
+
+      - name: Cache KiCad apt packages
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/synth-apt
+          key: ${{ runner.os }}-kicad-apt-${{ hashFiles('.github/scripts/install-kicad.sh') }}
+          restore-keys: |
+            ${{ runner.os }}-kicad-apt-
 
       - name: Install kicad-cli and the stock symbol/footprint libraries
         run: .github/scripts/install-kicad.sh
