@@ -59,6 +59,10 @@ const DEFAULT_REACH_MM: f64 = 1.53;
 /// lost to rounding.
 const REACH_MARGIN_MM: f64 = 0.05;
 
+/// The least copper to board edge the manufacturers ask, in mm, where the board
+/// states no rule of its own.
+const DEFAULT_EDGE_CLEARANCE_MM: f64 = 0.3;
+
 /// A via the pass wants added.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct TieVia {
@@ -521,7 +525,9 @@ fn plan_pad_ties(
 ) -> TiePlan {
     let (size_nm, drill_nm) = in_pad;
     let radius = nm_to_mm(size_nm) / 2.0;
-    let gap = declared.gap_mm();
+    // The in-pad via's own gap, as the return via keeps: its ring is the
+    // filled and capped land's, not two annular rings.
+    let gap = declared.return_gap_mm(size_nm, drill_nm);
     let mut poured: BTreeMap<String, BTreeSet<String>> = BTreeMap::new();
     for zone in &board.zones {
         if let Some(net) = net_of(board, zone.net, zone.net_name.as_ref()) {
@@ -852,7 +858,7 @@ struct Keepout {
     /// `(centre, radius)` of each via.
     vias: Vec<((f64, f64), f64)>,
     /// The outline of each rule area that keeps vias out.
-    no_via_areas: Vec<Vec<(f64, f64)>>,
+    no_via_areas: Vec<Region>,
     /// The copper a via keeps between its pad and every obstacle.
     gap_mm: f64,
 }
@@ -899,13 +905,14 @@ impl Keepout {
             .iter()
             .map(|via| ((via.at.x_mm(), via.at.y_mm()), nm_to_mm(via.size_nm) / 2.0))
             .collect();
-        let mut no_via_areas: Vec<Vec<(f64, f64)>> = Vec::new();
+        let mut no_via_areas: Vec<Region> = Vec::new();
+        let mut seen: BTreeSet<Vec<(i64, i64)>> = BTreeSet::new();
         for zone in board.zones.iter().filter(|zone| zone.keeps_vias_out) {
             for (_, outline) in &zone.outlines {
-                let area: Vec<(f64, f64)> = outline.iter().map(|p| (p.x_mm(), p.y_mm())).collect();
                 // A zone on several layers repeats its outline once per layer.
-                if !no_via_areas.contains(&area) {
-                    no_via_areas.push(area);
+                let key: Vec<(i64, i64)> = outline.iter().map(|p| (p.x_nm, p.y_nm)).collect();
+                if seen.insert(key) {
+                    no_via_areas.extend(Region::new("", outline));
                 }
             }
         }
@@ -934,38 +941,8 @@ impl Keepout {
             && self
                 .no_via_areas
                 .iter()
-                .all(|area| !point_in_polygon(p, area) && polygon_distance(p, area) >= radius - EPS)
+                .all(|area| !area.contains(p) && area.edge_distance(p) >= radius - EPS)
     }
-}
-
-/// Whether `p` lies inside the closed polygon `area`.
-fn point_in_polygon(p: (f64, f64), area: &[(f64, f64)]) -> bool {
-    let mut inside = false;
-    let mut previous = area.last().copied();
-    for &current in area {
-        if let Some(last) = previous {
-            if (current.1 > p.1) != (last.1 > p.1)
-                && p.0 < (last.0 - current.0) * (p.1 - current.1) / (last.1 - current.1) + current.0
-            {
-                inside = !inside;
-            }
-        }
-        previous = Some(current);
-    }
-    inside
-}
-
-/// The distance from `p` to the nearest edge of the closed polygon `area`.
-fn polygon_distance(p: (f64, f64), area: &[(f64, f64)]) -> f64 {
-    let mut nearest = f64::MAX;
-    let mut previous = area.last().copied();
-    for &current in area {
-        if let Some(last) = previous {
-            nearest = nearest.min(point_segment(p, last, current));
-        }
-        previous = Some(current);
-    }
-    nearest
 }
 
 /// The table names a coded net; a name alone is what a board written without a
@@ -1234,12 +1211,21 @@ pub struct ViaDeclarations {
     /// The least distance from a via's hole to other copper the board's DRC rules
     /// ask (`hole_clearance` in the `.kicad_dru` beside it), in mm.
     hole_clearance_mm: Option<f64>,
+    /// The least distance from copper to the board edge the DRC rules ask
+    /// (`edge_clearance` in the `.kicad_dru` beside it), in mm.
+    edge_clearance_mm: Option<f64>,
 }
 
 impl ViaDeclarations {
     #[must_use]
     pub fn new() -> Self {
         Self::default()
+    }
+
+    /// The copper kept between a via's land and the board outline: what the
+    /// board's DRC rules ask, or the 0.3 mm the manufacturers' floor gives.
+    fn edge_gap_mm(&self) -> f64 {
+        self.edge_clearance_mm.unwrap_or(DEFAULT_EDGE_CLEARANCE_MM)
     }
 
     fn via(&self, net: &str) -> Option<(i64, i64)> {
@@ -1280,7 +1266,17 @@ fn declared_vias(candidate: &Path, board: &PcbBoard) -> ViaDeclarations {
             .collect(),
         clearance_mm: declared_clearance_mm(candidate),
         hole_clearance_mm: declared_hole_clearance_mm(candidate),
+        edge_clearance_mm: declared_edge_clearance_mm(candidate),
     }
+}
+
+/// The copper to board edge clearance the `.kicad_dru` beside a board states, in
+/// mm. None when the file or the rule is missing.
+fn declared_edge_clearance_mm(candidate: &Path) -> Option<f64> {
+    let text = std::fs::read_to_string(candidate.with_extension("kicad_dru")).ok()?;
+    let rest = text.split("copper to board edge").nth(1)?;
+    let rest = rest.split("edge_clearance (min ").nth(1)?;
+    rest.split("mm").next()?.trim().parse().ok()
 }
 
 /// The hole clearance the `.kicad_dru` beside a board states, in mm. None when
@@ -1622,12 +1618,6 @@ pub fn stitch_vias(board: &PcbBoard, reach_mm: f64, planned: &[TieVia]) -> Vec<T
     .vias
 }
 
-/// Whether a via of `radius` at `p` has ground fill under it on `layer`: its centre
-/// is inside the fill, and its land stays inside the extent of the copper, which
-/// is the board edge inset by its own clearance. The land may reach into the
-/// clearance the fill keeps from foreign copper: the fill stands off by the zone's
-/// clearance, the board's class clearance is smaller, and the keep-out holds the
-/// via to that gap; the zone is refilled around the via.
 /// The corners of the box that holds every region of the fill on a layer.
 type Bounds = ((f64, f64), (f64, f64));
 
@@ -1640,8 +1630,14 @@ fn fill_bounds(regions: &[Region], layer: &str) -> Bounds {
     (lo, hi)
 }
 
-/// [`pour_room`] with the bounds of the fill on `layer` already known, so a
-/// search over thousands of points does not rescan the regions for each.
+/// Whether a via of `radius` at `p` has ground fill under it on `layer`: its centre
+/// is inside the fill, and its land stays inside the extent of the copper, which
+/// is the board edge inset by its own clearance. The land may reach into the
+/// clearance the fill keeps from foreign copper: the fill stands off by the zone's
+/// clearance, the board's class clearance is smaller, and the keep-out holds the
+/// via to that gap; the zone is refilled around the via. The bounds of the fill on
+/// `layer` are given, so a search over thousands of points does not rescan the
+/// regions for each.
 fn pour_room_within(
     regions: &[Region],
     layer: &str,
@@ -1658,13 +1654,14 @@ fn pour_room_within(
         && here().any(|r| r.contains(p) && r.edge_distance(p) >= EDGE_SLACK_MM - EPS)
 }
 
-/// Whether a via land of `radius` at `p` stays off every `Edge.Cuts` segment of
-/// the board, a notch or a cutout in the outline included. The fill's own extent
-/// holds a via off the outer edge only; a wall of the outline inside it counts
-/// as a gap in the fill unless the outline itself is checked.
-fn clear_of_outline(board: &PcbBoard, p: (f64, f64), radius: f64) -> bool {
+/// Whether a via land of `radius` at `p` stays `edge_gap` off every `Edge.Cuts`
+/// segment of the board, a notch or a cutout in the outline included. The fill's
+/// own extent holds a via off the outer edge only; a wall of the outline inside
+/// it counts as a gap in the fill unless the outline itself is checked, and the
+/// board's copper to edge rule, not the slack, is the distance it keeps.
+fn clear_of_outline(board: &PcbBoard, p: (f64, f64), radius: f64, edge_gap: f64) -> bool {
     board.edge_cuts.iter().all(|(a, b)| {
-        point_segment(p, (a.x_mm(), a.y_mm()), (b.x_mm(), b.y_mm())) >= radius + EDGE_SLACK_MM - EPS
+        point_segment(p, (a.x_mm(), a.y_mm()), (b.x_mm(), b.y_mm())) >= radius + edge_gap - EPS
     })
 }
 
@@ -1735,7 +1732,7 @@ fn stitch(
     // it needs ground copper on two layers, whichever they are. Under a ball grid
     // the outer layer is all pads and holds no pour, while the inner planes do.
     let room_both = |p: (f64, f64)| {
-        clear_of_outline(board, p, radius)
+        clear_of_outline(board, p, radius, declared.edge_gap_mm())
             && copper.iter().filter(|layer| room(layer, p)).count() >= 2
     };
     // Built once: the signal vias and the keep-out do not change over the loop.
@@ -1767,6 +1764,13 @@ fn stitch(
             nm_to_mm(land),
         )
     });
+    // A via in a ground pad joins a plane only where a layer other than the pad's
+    // own holds ground fill under it.
+    let filled_under = |pad: &GroundPad| {
+        copper
+            .iter()
+            .any(|layer| !pad.layers.contains(layer) && room(layer, pad.at))
+    };
     let mut out = Vec::new();
     let mut offsets_by_window: HashMap<u64, Vec<(f64, f64)>> = HashMap::new();
     let (mut unresolved, mut advisory) = (Vec::new(), Vec::new());
@@ -1800,6 +1804,7 @@ fn stitch(
                 (window, in_pad_apart),
                 spots,
                 &in_pad_keepout,
+                &filled_under,
                 in_pad,
             )
             .map(|p| (p, in_pad.0, in_pad.1))
@@ -1835,8 +1840,15 @@ fn missing_return(at: (f64, f64), reach_mm: f64, net: &str, advisory: Option<&st
     }
 }
 
-/// The centres of the pads of `net`, in components that declare an under-pad
-/// escape, on either outer layer, `outer`, that hold a via land of `land_mm`. A through via reaches either side, so a ball grid on
+/// A ground pad that can take a return via: where it is and the copper layers
+/// it is on.
+struct GroundPad {
+    at: (f64, f64),
+    layers: Vec<String>,
+}
+
+/// The pads of `net`, in components that declare an under-pad escape, on either
+/// outer layer, `outer`, that hold a via land of `land_mm`. A through via reaches either side, so a ball grid on
 /// the back is as good a place for a return via as one on the front.
 fn ground_pad_spots(
     board: &PcbBoard,
@@ -1844,7 +1856,7 @@ fn ground_pad_spots(
     outer: [&String; 2],
     underpad: &BTreeSet<String>,
     land_mm: f64,
-) -> Vec<(f64, f64)> {
+) -> Vec<GroundPad> {
     board
         .footprints
         .iter()
@@ -1855,7 +1867,10 @@ fn ground_pad_spots(
                 && pad.layers.iter().any(|l| outer.contains(&l))
                 && nm_to_mm(pad.size_nm.0.min(pad.size_nm.1)) >= land_mm
         })
-        .map(|pad| (pad.at.x_mm(), pad.at.y_mm()))
+        .map(|pad| GroundPad {
+            at: (pad.at.x_mm(), pad.at.y_mm()),
+            layers: pad.layers.clone(),
+        })
         .collect()
 }
 
@@ -1874,17 +1889,20 @@ type Spots<'a> = &'a [(f64, f64)];
 
 /// The ground pad nearest the signal via `from`, within `window`, that takes a
 /// via of `in_pad` size: clear of the ground vias, and of every foreign pad,
-/// track and via.
+/// track and via, and with ground fill under it on a layer other than its own, so
+/// the via joins a plane there.
 fn in_pad_spot(
     from: (f64, f64),
     (window, apart): (f64, f64),
-    (ground, pads): (Spots<'_>, Spots<'_>),
+    (ground, pads): (Spots<'_>, &[GroundPad]),
     keepout: &Keepout,
+    filled: &dyn Fn(&GroundPad) -> bool,
     in_pad: (i64, i64),
 ) -> Option<(f64, f64)> {
     let radius = nm_to_mm(in_pad.0) / 2.0;
     pads.iter()
-        .copied()
+        .filter(|pad| filled(pad))
+        .map(|pad| pad.at)
         .filter(|p| (p.0 - from.0).abs() <= window && (p.1 - from.1).abs() <= window)
         .filter(|p| (p.0 - from.0).hypot(p.1 - from.1) >= apart)
         .filter(|p| ground.iter().all(|g| (g.0 - p.0).hypot(g.1 - p.1) >= apart))
@@ -2050,6 +2068,13 @@ fn move_vias_off_pads_with(candidate: &Path, spare: &BTreeSet<String>) -> Result
             })
             .collect();
         let others: Vec<((f64, f64), f64)> = taken.clone();
+        // A via moved earlier in the pass is not in the parsed board where it now
+        // sits, so a track must keep off it as it keeps off any via.
+        let moved_clear = |q: (f64, f64), need: f64| {
+            others
+                .iter()
+                .all(|(at, r)| (at.0 - q.0).hypot(at.1 - q.1) >= need + r - EPS)
+        };
         let earlier =
             |q: (f64, f64), need: f64| added.iter().all(|track| track.clear_of(&net, q, need));
         let Some(to) = nearest_free_spot(from, radius, &keepout, &others, |p| {
@@ -2060,7 +2085,8 @@ fn move_vias_off_pads_with(candidate: &Path, spare: &BTreeSet<String>) -> Result
                         pad_centre.0 + (p.0 - pad_centre.0) * t,
                         pad_centre.1 + (p.1 - pad_centre.1) * t,
                     );
-                    stub_keepout.track_clear(at, STUB_WIDTH_MM / 2.0)
+                    stub_keepout.track_clear(at, STUB_WIDTH_MM / 2.0, from)
+                        && moved_clear(at, STUB_WIDTH_MM / 2.0 + TRACK_GAP_MM)
                         && earlier(at, STUB_WIDTH_MM / 2.0 + TRACK_GAP_MM)
                 });
             earlier(p, radius + VIA_GAP_MM)
@@ -2078,14 +2104,22 @@ fn move_vias_off_pads_with(candidate: &Path, spare: &BTreeSet<String>) -> Result
                     (0..=steps).all(|i| {
                         let t = f64::from(i) / f64::from(steps);
                         let at = (far.0 + (p.0 - far.0) * t, far.1 + (p.1 - far.1) * t);
-                        keepout.track_clear(at, half) && earlier(at, half + TRACK_GAP_MM)
+                        keepout.track_clear(at, half, from)
+                            && moved_clear(at, half + TRACK_GAP_MM)
+                            && earlier(at, half + TRACK_GAP_MM)
                     })
                 })
         }) else {
             // Nowhere to put it. A via that carries no track and has a neighbour of
             // its net close by, one the pad does not swallow, only joins the pours
             // that the neighbour joins as well, so it can simply go.
+            // A surface pad needs its via to stay joined unless something else
+            // reaches the pad.
+            let joined_otherwise = stub_layer
+                .as_ref()
+                .is_none_or(|layer| pad_otherwise_joined(&board, host, via, &net, layer));
             let spare = attached.is_empty()
+                && joined_otherwise
                 && board.vias.iter().any(|other| {
                     other != via
                         && net_of(&board, other.net, other.net_name.as_ref()).as_deref()
@@ -2128,6 +2162,36 @@ fn move_vias_off_pads_with(candidate: &Path, spare: &BTreeSet<String>) -> Result
             .map_err(|e| format!("could not write {}: {e}", candidate.display()))?;
     }
     Ok(moved)
+}
+
+/// Whether the surface pad `host`, which `via` sits in, is joined to its net by
+/// something other than that via: a track of the net on `layer` that ends in the
+/// pad away from the via, or another via of the net in the pad.
+#[allow(clippy::cast_precision_loss)]
+fn pad_otherwise_joined(
+    board: &PcbBoard,
+    host: &crate::pcb_read::Pad,
+    via: &crate::pcb_read::Via,
+    net: &str,
+    layer: &str,
+) -> bool {
+    let radius_nm = via.size_nm as f64 / 2.0;
+    let own = |code: Option<u32>, name: Option<&String>| {
+        net_of(board, code, name).as_deref() == Some(net)
+    };
+    board.segments.iter().any(|segment| {
+        own(segment.net, segment.net_name.as_ref())
+            && segment.layer == layer
+            && [segment.start, segment.end].iter().any(|end| {
+                host.signed_distance_nm(*end) <= (segment.width_nm / 2) as f64
+                    && ((end.x_nm - via.at.x_nm) as f64).hypot((end.y_nm - via.at.y_nm) as f64)
+                        > radius_nm
+            })
+    }) || board.vias.iter().any(|other| {
+        other != via
+            && own(other.net, other.net_name.as_ref())
+            && host.signed_distance_nm(other.at) <= (other.drill_nm / 2) as f64
+    })
 }
 
 /// A track this pass has laid, to be kept clear of by the vias and tracks that
@@ -2227,14 +2291,19 @@ fn near(p: Point, at: (f64, f64)) -> bool {
 
 impl Keepout {
     /// Whether a track of half width `half` passing through `p` keeps clear of
-    /// every pad, via and foreign track.
-    fn track_clear(&self, p: (f64, f64), half: f64) -> bool {
+    /// every pad, via and foreign track, other than the via at `ignore`, which is
+    /// the one being moved and sits where the track starts.
+    fn track_clear(&self, p: (f64, f64), half: f64, ignore: (f64, f64)) -> bool {
         let need = half + TRACK_GAP_MM;
         self.pads.iter().all(|pad| pad.distance(p) >= need - EPS)
             && self
                 .tracks
                 .iter()
                 .all(|(a, b, other)| point_segment(p, *a, *b) >= need + other - EPS)
+            && self.vias.iter().all(|(at, other)| {
+                (at.0 - ignore.0).hypot(at.1 - ignore.1) < 0.01
+                    || (at.0 - p.0).hypot(at.1 - p.1) >= need + other - EPS
+            })
     }
 }
 
@@ -2284,6 +2353,10 @@ impl Keepout {
                 (at.0 - ignore.0).hypot(at.1 - ignore.1) < 0.01
                     || (at.0 - p.0).hypot(at.1 - p.1) >= need + other - EPS
             })
+            && self
+                .no_via_areas
+                .iter()
+                .all(|area| !area.contains(p) && area.edge_distance(p) >= radius - EPS)
     }
 }
 
@@ -3216,14 +3289,14 @@ mod tests {
     #[test]
     fn a_return_via_goes_in_a_ground_pad_on_the_back_layer_too() {
         let text = r#"(kicad_pcb
-          (layers (0 "F.Cu" signal) (2 "B.Cu" signal))
+          (layers (0 "F.Cu" signal) (4 "In1.Cu" signal) (6 "In2.Cu" signal) (2 "B.Cu" signal))
           (net 0 "") (net 1 "GND") (net 2 "SIG")
           (footprint "C" (at 0 0) (layer "B.Cu") (property "Reference" "U1")
             (pad "1" smd rect (at 10.7 10.5) (size 0.5 0.5) (layers "B.Cu") (net 1)))
           (via (at 10 10) (size 0.6) (drill 0.3) (layers "F.Cu" "B.Cu") (net 2))
-          (zone (net 1) (net_name "GND") (layer "B.Cu") (fill yes)
+          (zone (net 1) (net_name "GND") (layer "In1.Cu") (fill yes)
             (polygon (pts (xy 0 0) (xy 40 0) (xy 40 20) (xy 0 20)))
-            (filled_polygon (layer "B.Cu") (pts (xy 0 0) (xy 40 0) (xy 40 20) (xy 0 20)))))"#;
+            (filled_polygon (layer "In1.Cu") (pts (xy 0 0) (xy 40 0) (xy 40 20) (xy 0 20)))))"#;
         let board = PcbBoard::parse(text).expect("parses");
         let ground = Ground::default()
             .with_in_pad_via(350_000, 200_000)
@@ -3305,25 +3378,25 @@ mod tests {
     /// via keeps its land off it, though the fill's own extent reaches the wall.
     #[test]
     fn a_return_via_keeps_off_a_wall_of_the_board_outline_inside_the_fill() {
-        // The signal via at (10, 10) stands inside a 2 mm square of outline walls, so
+        // The signal via at (10, 10) stands inside a 1.6 mm square of outline walls, so
         // the nearest whole-grid spot beside it is within the land of a wall.
-        let walls = r#"(gr_line (start 9 9) (end 11 9) (layer "Edge.Cuts") (width 0.1))
-                       (gr_line (start 11 9) (end 11 11) (layer "Edge.Cuts") (width 0.1))
-                       (gr_line (start 11 11) (end 9 11) (layer "Edge.Cuts") (width 0.1))
-                       (gr_line (start 9 11) (end 9 9) (layer "Edge.Cuts") (width 0.1))"#;
+        let walls = r#"(gr_line (start 9.2 9.2) (end 10.8 9.2) (layer "Edge.Cuts") (width 0.1))
+                       (gr_line (start 10.8 9.2) (end 10.8 10.8) (layer "Edge.Cuts") (width 0.1))
+                       (gr_line (start 10.8 10.8) (end 9.2 10.8) (layer "Edge.Cuts") (width 0.1))
+                       (gr_line (start 9.2 10.8) (end 9.2 9.2) (layer "Edge.Cuts") (width 0.1))"#;
         let board = stitched_board(walls);
         let vias = stitch_vias(&board, REACH, &[]);
         assert_eq!(vias.len(), 1, "{vias:?}");
         let (x, y) = at_mm(&vias[0]);
-        // Land radius 0.3 plus the edge slack.
+        // Land radius 0.3 plus the 0.3 mm copper to edge floor.
         for (a, b) in [
-            ((9.0, 9.0), (11.0, 9.0)),
-            ((11.0, 9.0), (11.0, 11.0)),
-            ((11.0, 11.0), (9.0, 11.0)),
-            ((9.0, 11.0), (9.0, 9.0)),
+            ((9.2, 9.2), (10.8, 9.2)),
+            ((10.8, 9.2), (10.8, 10.8)),
+            ((10.8, 10.8), (9.2, 10.8)),
+            ((9.2, 10.8), (9.2, 9.2)),
         ] {
             assert!(
-                point_segment((x, y), a, b) >= 0.35 - 1e-6,
+                point_segment((x, y), a, b) >= 0.6 - 1e-6,
                 "the land of a via at ({x}, {y}) reaches the outline wall {a:?}-{b:?}"
             );
         }
@@ -3762,8 +3835,9 @@ mod tests {
 
     #[test]
     fn a_via_with_no_room_to_move_is_dropped_when_a_neighbour_of_its_net_covers_for_it() {
-        // The via sits on a ground pad, boxed in by another net's pads, with a
-        // second ground via 1.5 mm away that is not in any pad.
+        // The via sits on a ground pad that a ground track also reaches, boxed in
+        // by another net's pads, with a second ground via 1.5 mm away that is not
+        // in any pad.
         let text = r#"(kicad_pcb
           (layers (0 "F.Cu" signal) (2 "B.Cu" signal))
           (net 0 "") (net 1 "GND") (net 2 "SIG")
@@ -3775,6 +3849,7 @@ mod tests {
             (pad "5" smd rect (at -1.6 0) (size 1.2 3.0) (layers "F.Cu") (net 2 "SIG")))
           (via (at 10.0 10.0) (size 0.6) (drill 0.3) (layers "F.Cu" "B.Cu") (net 1))
           (via (at 11.5 12.5) (size 0.6) (drill 0.3) (layers "F.Cu" "B.Cu") (net 1))
+          (segment (start 10.45 10.4) (end 10.45 13.0) (width 0.25) (layer "F.Cu") (net 1))
         )"#;
         let dir = std::env::temp_dir().join(format!("via-drop-{}", std::process::id()));
         std::fs::create_dir_all(&dir).unwrap();
@@ -3815,6 +3890,128 @@ mod tests {
                     && near(segment.end, (via.at.x_mm(), via.at.y_mm()))
             }),
             "a track on the pad's layer joins the pad centre to the moved via"
+        );
+    }
+
+    /// A stub track must keep off another net's via as it keeps off its pads and
+    /// tracks: one drawn across a via on the pad's layer is a short. The via being
+    /// moved is where the stub starts, so it is the one via the track ignores.
+    #[test]
+    fn a_stub_keeps_off_another_nets_via_but_not_off_the_one_it_starts_from() {
+        let board = PcbBoard::parse(
+            r#"(kicad_pcb
+              (layers (0 "F.Cu" signal) (2 "B.Cu" signal))
+              (net 0 "") (net 1 "SIG") (net 2 "OTHER")
+              (via (at 5 5) (size 0.6) (drill 0.3) (layers "F.Cu" "B.Cu") (net 2))
+              (via (at 8 8) (size 0.6) (drill 0.3) (layers "F.Cu" "B.Cu") (net 1)))"#,
+        )
+        .expect("parses");
+        let keepout = Keepout::from_board(&board, "SIG", VIA_GAP_MM);
+        assert!(
+            !keepout.track_clear((5.1, 5.0), STUB_WIDTH_MM / 2.0, (8.0, 8.0)),
+            "a track through another net's via is a short"
+        );
+        assert!(
+            keepout.track_clear((8.0, 8.0), STUB_WIDTH_MM / 2.0, (8.0, 8.0)),
+            "the via being moved is where the stub starts"
+        );
+    }
+
+    /// A via that is a surface pad's only link is not "spare": with no spot to move
+    /// to it stays, since deleting it opens the pad and nothing else joins it.
+    #[test]
+    fn a_surface_pads_only_via_is_kept_when_it_has_nowhere_to_go() {
+        let text = r#"(kicad_pcb
+          (layers (0 "F.Cu" signal) (2 "B.Cu" signal))
+          (net 0 "") (net 1 "SIG")
+          (footprint "C" (at 0 0) (layer "F.Cu")
+            (pad "1" smd rect (at 10 10) (size 0.6 0.6) (layers "F.Cu") (net 1 "SIG")))
+          (via (at 10 10) (size 0.6) (drill 0.3) (layers "F.Cu" "B.Cu") (net 1))
+          (via (at 12.5 10) (size 0.6) (drill 0.3) (layers "F.Cu" "B.Cu") (net 1))
+          (zone (net 0) (net_name "") (layers "F.Cu" "B.Cu") (keepout (tracks allowed) (vias not_allowed) (pads allowed) (copperpour allowed))
+            (polygon (pts (xy 6 6) (xy 14 6) (xy 14 14) (xy 6 14)))))"#;
+        let dir = std::env::temp_dir().join(format!("only-link-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("board.kicad_pcb");
+        std::fs::write(&path, text).unwrap();
+        assert_eq!(move_vias_off_pads(&path), Ok(0));
+        let after = PcbBoard::parse(&std::fs::read_to_string(&path).unwrap()).unwrap();
+        assert_eq!(after.vias.len(), 2, "the pad's only link stays");
+    }
+
+    /// The copper to board edge a `.kicad_dru` states is read for the return via's
+    /// distance from the outline, the rule for the board and not the NPTH one.
+    #[test]
+    fn the_declared_edge_clearance_is_read_from_the_boards_design_rules() {
+        let dir = std::env::temp_dir().join(format!("edge-rule-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("board.kicad_pcb");
+        std::fs::write(
+            dir.join("board.kicad_dru"),
+            "(version 1)\n(rule \"manufacturer copper to board edge\"\n  (constraint edge_clearance (min 0.45mm)))\n(rule \"manufacturer copper to NPTH hole\"\n  (constraint edge_clearance (min 0.33mm)))\n",
+        )
+        .unwrap();
+        assert_eq!(declared_edge_clearance_mm(&path), Some(0.45));
+        assert_eq!(
+            declared_edge_clearance_mm(&dir.join("none.kicad_pcb")),
+            None
+        );
+        assert!((ViaDeclarations::new().edge_gap_mm() - DEFAULT_EDGE_CLEARANCE_MM).abs() < 1e-9);
+    }
+
+    /// A pad tie keeps the in-pad via's own gap, as a return via in a pad does: the
+    /// board's 0.127 mm clearance lets a track 0.39 mm from the ball's centre stay,
+    /// where the fixed 0.2 mm gap would refuse the pad.
+    #[test]
+    fn a_pad_tie_keeps_the_in_pad_vias_own_gap_not_the_fixed_one() {
+        let board = lone_pad_board(
+            r#"(segment (start 9 10.39) (end 11 10.39) (width 0.1) (layer "F.Cu") (net 2))"#,
+        );
+        let class = ViaDeclarations {
+            clearance_mm: Some(0.127),
+            hole_clearance_mm: Some(0.2),
+            ..ViaDeclarations::new()
+        };
+        let plan = plan_pad_ties(&board, IN_PAD, &declared(), &class);
+        assert_eq!(plan.vias.len(), 1, "{plan:?}");
+        let fixed = plan_pad_ties(&board, IN_PAD, &declared(), &ViaDeclarations::new());
+        assert!(
+            fixed.vias.is_empty(),
+            "no declared gap, the fixed one holds: {fixed:?}"
+        );
+    }
+
+    /// A ground pad over a void in the plane takes no return via: it would join no
+    /// ground copper there, though it would count for the signal vias after it.
+    #[test]
+    fn a_return_via_does_not_go_in_a_ground_pad_over_a_void_in_the_plane() {
+        let text = |pour: &str| {
+            format!(
+                r#"(kicad_pcb
+              (layers (0 "F.Cu" signal) (4 "In1.Cu" signal) (6 "In2.Cu" signal) (2 "B.Cu" signal))
+              (net 0 "") (net 1 "GND") (net 2 "SIG")
+              (footprint "C" (at 0 0) (layer "F.Cu") (property "Reference" "U1")
+                (pad "1" smd rect (at 10.7 10.5) (size 0.5 0.5) (layers "F.Cu") (net 1)))
+              (via (at 10 10) (size 0.6) (drill 0.3) (layers "F.Cu" "B.Cu") (net 2))
+              (zone (net 1) (net_name "GND") (layer "In1.Cu") (fill yes)
+                (polygon (pts {pour}))
+                (filled_polygon (layer "In1.Cu") (pts {pour}))))"#
+            )
+        };
+        let ground = Ground::default()
+            .with_in_pad_via(350_000, 200_000)
+            .with_underpad(&["U1".to_string()]);
+        let place = |pour: &str| {
+            let board = PcbBoard::parse(&text(pour)).expect("parses");
+            stitch(&board, REACH, &[], &ground, &ViaDeclarations::new()).vias
+        };
+        let under = place("(xy 0 0) (xy 40 0) (xy 40 20) (xy 0 20)");
+        assert_eq!(under.len(), 1, "{under:?}");
+        assert_eq!(at_mm(&under[0]), (10.7, 10.5), "the plane is under the pad");
+        let void = place("(xy 0 0) (xy 5 0) (xy 5 20) (xy 0 20)");
+        assert!(
+            void.is_empty(),
+            "the plane is nowhere near the pad: {void:?}"
         );
     }
 

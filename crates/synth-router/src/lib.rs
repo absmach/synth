@@ -552,6 +552,14 @@ fn adopt_connectivity(
     statistics: &mut crate::result::RouteStatistics,
     connectivity: &crate::validate::ConnectivityReport,
 ) {
+    // The engine's claim is evidence even where the pass disagrees with it, so
+    // the names it gave are kept before the pass's own replace them.
+    if !statistics.open_net_names.is_empty() {
+        statistics.engine_findings.insert(
+            "claimed_open_net_names".to_string(),
+            statistics.open_net_names.join(", "),
+        );
+    }
     statistics.connected_nets = connectivity.connected_nets;
     statistics.open_nets = connectivity.open_nets;
     statistics.open_net_names = connectivity.open.iter().map(|o| o.net.clone()).collect();
@@ -838,6 +846,11 @@ mod connectivity_report_tests {
         };
         adopt_connectivity(&mut statistics, &connectivity);
         assert_eq!(statistics.open_net_names, vec!["+1V8".to_string()]);
+        assert_eq!(
+            statistics.engine_findings.get("claimed_open_net_names"),
+            Some(&"+3V3".to_string()),
+            "the engine's own claim is kept where the pass disagrees"
+        );
         assert_eq!(statistics.open_nets, 1);
         assert_eq!(statistics.connected_nets, 37);
     }
