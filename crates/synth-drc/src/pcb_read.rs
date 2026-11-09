@@ -541,9 +541,13 @@ impl Pad {
     /// coordinates, or `None` for a pad with no hole.
     #[must_use]
     pub fn hole(&self) -> Option<Hole> {
-        let (w, h) = (self.drill_nm.0 as f64, self.drill_nm.1 as f64);
+        let (mut w, mut h) = (self.drill_nm.0 as f64, self.drill_nm.1 as f64);
         if w <= 0.0 && h <= 0.0 {
             return None;
+        }
+        // One zero dimension is a malformed slot: read it as a round hole.
+        if w <= 0.0 || h <= 0.0 {
+            (w, h) = (w.max(h), w.max(h));
         }
         let (sin, cos) = self.angle_deg.to_radians().sin_cos();
         let to_board = |qx: f64, qy: f64| {
@@ -615,6 +619,20 @@ impl SilkShape {
             }
         }
         inside
+    }
+
+    /// Whether the filled ink covers any part of a shape: a probe point on
+    /// the shape's outline or centre lies in the fill, or a fill corner lies
+    /// inside the shape (`contains`).
+    #[must_use]
+    pub fn covers(
+        &self,
+        probes: impl IntoIterator<Item = Point>,
+        contains: impl Fn(Point) -> bool,
+    ) -> bool {
+        !self.fill.is_empty()
+            && (probes.into_iter().any(|p| self.fill_contains(p))
+                || self.fill.iter().any(|&p| contains(p)))
     }
 }
 
@@ -1679,6 +1697,47 @@ mod tests {
             net: None,
             net_name: None,
         }
+    }
+
+    #[test]
+    fn layer_covers_handles_wildcards_and_both_sides() {
+        assert!(layer_covers("F.Cu", "F.Cu"));
+        assert!(!layer_covers("F.Cu", "B.Cu"));
+        assert!(layer_covers("*.Cu", "B.Cu"));
+        assert!(layer_covers("F&B.Cu", "F.Cu") && layer_covers("F&B.Cu", "B.Cu"));
+        assert!(!layer_covers("F&B.Cu", "In1.Cu"));
+        assert!(layer_covers("In1.Cu", "*.Cu"));
+        assert!(layer_covers("F.Cu", "F&B.Cu") && !layer_covers("In1.Cu", "F&B.Cu"));
+        assert!(!layer_covers("F.Mask", "*.Cu"));
+    }
+
+    #[test]
+    fn fill_covering_only_the_edge_of_a_pad_counts() {
+        let pad = pad_at_origin("rect", 4.0, 4.0, 0.0, 0.0);
+        let square = |x0: i32, x1: i32| SilkShape {
+            layer: "F.SilkS".to_string(),
+            width_nm: 0,
+            strokes: Vec::new(),
+            fill: [(x0, -1), (x1, -1), (x1, 1), (x0, 1)]
+                .map(|(x, y)| Point::new(mm_to_nm(f64::from(x)), mm_to_nm(f64::from(y))))
+                .to_vec(),
+        };
+        let probes = || std::iter::once(pad.at).chain(pad.outline_points_nm(20_000.0));
+        let inside = |p| pad.signed_distance_nm(p) <= 0.0;
+        // Covers the right edge (x = 2) but not the centre.
+        assert!(square(1, 5).covers(probes(), inside));
+        // Sits wholly inside the pad, touching no outline point.
+        assert!(square(0, 1).covers(probes(), inside));
+        assert!(!square(3, 5).covers(probes(), inside));
+    }
+
+    #[test]
+    fn a_drill_with_one_zero_dimension_is_a_round_hole() {
+        let mut pad = pad_at_origin("oval", 2.0, 2.0, 0.0, 0.0);
+        pad.drill_nm = (mm_to_nm(1.0), 0);
+        let hole = pad.hole().expect("has a hole");
+        assert_eq!(hole.a, hole.b);
+        assert!((hole.radius_nm - 500_000.0).abs() < 1.0);
     }
 
     fn distance_mm(pad: &Pad, x_mm: f64, y_mm: f64) -> f64 {

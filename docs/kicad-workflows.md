@@ -503,7 +503,7 @@ Which findings are safe to gate on, against JLCDFM on the CM4 carrier board:
 | `silk_to_hole` | Danger below 0.15 mm | **Assumed**: JLC does not publish the floor. Do not gate on it alone |
 | `silk_line_width` | Warning below 0.15 mm | Advisory; counts are far above JLCDFM's (560 vs 50) |
 | `pad_to_pad` | Danger below 0.10 mm, Warning below 0.15 mm | Same order of magnitude as JLCDFM (12 + 50 vs 5 + 40); the 0.07 mm same-net merge tolerance is uncalibrated |
-| `pth_to_trace` | Warning below 0.28 mm (the fab's drill-to-copper floor on other profiles) | Implemented but **known not to match JLCDFM** (0 items here vs 58). Advisory only: it never blocks |
+| `pth_to_trace` | Warning below 0.28 mm on the JLC profiles (pcbway and oshpark use their own 0.2 mm drill-to-copper floor) | Implemented but **known not to match JLCDFM**. Advisory only: it never blocks |
 
 Until these are calibrated, no rule is authoritative enough to block releases
 by default. Silk text and silk curves are counted, not measured; custom and

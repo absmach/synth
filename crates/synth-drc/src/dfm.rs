@@ -156,8 +156,11 @@ fn silk_to_pad(board: &PcbBoard, profile: &ManufacturerProfile) -> Vec<DfmFindin
                 .filter(|stroke| distance_to_segment_nm(pad.at, stroke) <= reach)
                 .map(|stroke| nearest_sample(pad, stroke))
                 .min_by(|a, b| a.0.total_cmp(&b.0));
-            // Ink filling a shape that surrounds the pad covers it whole.
-            let covered = !shape.fill.is_empty() && shape.fill_contains(pad.at);
+            // Ink filling a shape that covers any part of the pad is on it.
+            let covered = shape.covers(
+                std::iter::once(pad.at).chain(pad.outline_points_nm(SAMPLE_STEP_NM)),
+                |p| pad.signed_distance_nm(p) <= 0.0,
+            );
             let Some((distance, at)) = closest.or(covered.then_some((0.0, pad.at))) else {
                 continue;
             };
@@ -225,7 +228,9 @@ fn silk_to_hole(board: &PcbBoard, profile: &ManufacturerProfile) -> Vec<DfmFindi
                 .iter()
                 .map(|stroke| segment_distance_nm((hole.a, hole.b), *stroke))
                 .min_by(f64::total_cmp);
-            let covered = !shape.fill.is_empty() && shape.fill_contains(hole.a);
+            let covered = shape.covers(hole_probes(hole), |p| {
+                distance_to_segment_nm(p, &(hole.a, hole.b)) <= hole.radius_nm
+            });
             let Some(distance) = closest.or(covered.then_some(0.0)) else {
                 continue;
             };
@@ -251,6 +256,22 @@ fn silk_to_hole(board: &PcbBoard, profile: &ManufacturerProfile) -> Vec<DfmFindi
         }
     }
     findings
+}
+
+/// Points on a hole to test against filled ink: both ends and eight points
+/// around each end's rim.
+fn hole_probes(hole: &Hole) -> Vec<Point> {
+    let mut probes = vec![hole.a, hole.b];
+    for end in [hole.a, hole.b] {
+        for k in 0..8 {
+            let angle = f64::from(k) * std::f64::consts::FRAC_PI_4;
+            probes.push(Point::new(
+                end.x_nm + (hole.radius_nm * angle.cos()).round() as i64,
+                end.y_nm + (hole.radius_nm * angle.sin()).round() as i64,
+            ));
+        }
+    }
+    probes
 }
 
 /// Silkscreen drawn thinner than the fab prints reliably. JLCDFM grades this a
@@ -401,8 +422,8 @@ fn pad_gap(a: &Pad, b: &Pad) -> (f64, Point) {
 /// and a trace under the wall shorts or breaks. A hole goes through every
 /// layer, so a trace on any layer counts. One finding per hole, for its
 /// closest trace; the hole's own net may run up to it. Graded a Warning, not
-/// a Danger: against JLCDFM on one board it found 0 items where JLCDFM found
-/// 58, so it must not block a release.
+/// a Danger, so it never blocks a release. Measured against JLCDFM on one board
+/// it found 0 items where JLCDFM found 58 (known not to match).
 fn pth_to_trace(board: &PcbBoard, profile: &ManufacturerProfile) -> Vec<DfmFinding> {
     let required_nm = profile.min_pth_to_trace_nm as f64;
     let mut findings = Vec::new();
@@ -1090,6 +1111,61 @@ mod tests {
             silk("F.SilkS", 18.4, 19.0, 18.4, 21.0)
         ));
         assert_eq!(count(&far, "silk_to_hole"), 0, "{far:?}");
+    }
+
+    #[test]
+    fn a_rotated_offset_drill_is_measured_where_it_ends_up() {
+        // Pad turned 90 degrees: the (1, 0) offset lands at (20, 19), not (21, 20).
+        let rotated = pad_text(
+            r#"(pad "1" thru_hole circle (at 0 0 90) (size 3 3) (drill 1.0 (offset 1.0 0)) (layers "*.Cu" "*.Mask") (net 1 "GND"))"#,
+        );
+        let near = run(&format!(
+            "{rotated}\n  {}",
+            silk("F.SilkS", 19.0, 19.6, 21.0, 19.6)
+        ));
+        assert_eq!(count(&near, "silk_to_hole"), 1, "{near:?}");
+        let unrotated_spot = run(&format!(
+            "{rotated}\n  {}",
+            silk("F.SilkS", 21.6, 19.0, 21.6, 21.0)
+        ));
+        assert_eq!(
+            count(&unrotated_spot, "silk_to_hole"),
+            0,
+            "{unrotated_spot:?}"
+        );
+    }
+
+    #[test]
+    fn a_fab_with_no_dfm_floors_skips_those_rules_and_says_so() {
+        // Silk over the pad, a thin line, and a second pad 0.07 mm away: each
+        // would be a finding under the JLC floors.
+        let extra = format!(
+            "{}\n  {}\n  {}",
+            silk("F.SilkS", 10.0, 19.0, 10.0, 21.0),
+            silk("F.SilkS", 12.0, 19.0, 12.0, 21.0),
+            pad_at(10.67, 20.0, 2, "rect", 0.6, "F.Cu")
+        );
+        let text = board(&format!("{PTH}\n  {extra}"));
+        for profile in [
+            ManufacturerProfile::pcbway_standard(),
+            ManufacturerProfile::oshpark_4layer(),
+        ] {
+            let report = check_dfm(&text, &profile).expect("parses");
+            for rule in [
+                "silk_to_pad",
+                "silk_to_hole",
+                "silk_line_width",
+                "pad_to_pad",
+            ] {
+                assert_eq!(count(&report, rule), 0, "{} {rule}", profile.name);
+                assert!(
+                    report.unchecked_rules.contains(&rule),
+                    "{} {rule}",
+                    profile.name
+                );
+            }
+            assert!(!report.unchecked_rules.contains(&"pth_to_trace"));
+        }
     }
 
     #[test]

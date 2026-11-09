@@ -235,6 +235,7 @@ impl ManufacturerProfile {
     /// 0.3 mm drill, 0.15 mm annular ring, 0.2 mm drill-to-copper.
     #[must_use]
     pub fn pcbway_standard() -> Self {
+        let drill_to_copper_nm = mm_to_nm(0.2);
         Self {
             name: "pcbway-standard".to_string(),
             // A stock tier is the fabricator's baseline and is offered on
@@ -245,7 +246,7 @@ impl ManufacturerProfile {
             min_copper_to_edge_nm: mm_to_nm(0.3),
             min_drill_diameter_nm: mm_to_nm(0.3),
             min_annular_ring_nm: mm_to_nm(0.15),
-            min_drill_to_copper_nm: mm_to_nm(0.2),
+            min_drill_to_copper_nm: drill_to_copper_nm,
             // The silk and pad-spacing figures are JLCPCB's and JLCDFM's. This
             // fab's are not known here, so the DFM rules are not run (0) rather
             // than graded against another fab's number. Plated hole to trace
@@ -256,7 +257,7 @@ impl ManufacturerProfile {
             min_pad_to_pad_nm: 0,
             pad_to_pad_danger_nm: 0,
             copper_merge_below_nm: default_copper_merge_below_nm(),
-            min_pth_to_trace_nm: mm_to_nm(0.2),
+            min_pth_to_trace_nm: drill_to_copper_nm,
             crosstalk_run_multiple: default_crosstalk_run_multiple(),
             ampacity_delta_t_milli_c: default_ampacity_delta_t_milli_c(),
             ir_drop_budget_mv: default_ir_drop_budget_mv(),
@@ -269,6 +270,7 @@ impl ManufacturerProfile {
     /// 0.25 mm drill, 0.125 mm annular ring, 0.2 mm drill-to-copper.
     #[must_use]
     pub fn oshpark_4layer() -> Self {
+        let drill_to_copper_nm = mm_to_nm(0.2);
         Self {
             name: "oshpark-4layer".to_string(),
             // A stock tier is the fabricator's baseline and is offered on
@@ -279,18 +281,15 @@ impl ManufacturerProfile {
             min_copper_to_edge_nm: mm_to_nm(0.3),
             min_drill_diameter_nm: mm_to_nm(0.25),
             min_annular_ring_nm: mm_to_nm(0.125),
-            min_drill_to_copper_nm: mm_to_nm(0.2),
-            // The silk and pad-spacing figures are JLCPCB's and JLCDFM's. This
-            // fab's are not known here, so the DFM rules are not run (0) rather
-            // than graded against another fab's number. Plated hole to trace
-            // uses the fab's own drill-to-copper floor.
+            min_drill_to_copper_nm: drill_to_copper_nm,
+            // DFM floors unknown for this fab: not run, as in pcbway_standard.
             min_silk_to_pad_nm: 0,
             min_silk_to_hole_nm: 0,
             min_silk_width_nm: 0,
             min_pad_to_pad_nm: 0,
             pad_to_pad_danger_nm: 0,
             copper_merge_below_nm: default_copper_merge_below_nm(),
-            min_pth_to_trace_nm: mm_to_nm(0.2),
+            min_pth_to_trace_nm: drill_to_copper_nm,
             crosstalk_run_multiple: default_crosstalk_run_multiple(),
             ampacity_delta_t_milli_c: default_ampacity_delta_t_milli_c(),
             ir_drop_budget_mv: default_ir_drop_budget_mv(),

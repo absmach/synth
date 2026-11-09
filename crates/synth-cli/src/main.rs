@@ -4800,14 +4800,13 @@ fn dfm_stage(
     profile: &synth_drc::ManufacturerProfile,
     gate: bool,
 ) -> (NativeCheckEvidence, Option<synth_drc::dfm::DfmReport>) {
-    const STAGE: &str = DFM_STAGE;
     const TOOL: &str = "synth-drc";
     let text = match std::fs::read_to_string(pcb) {
         Ok(text) => text,
         Err(e) => {
             let detail = format!("cannot read {}: {e}", pcb.display());
             let evidence = NativeCheckEvidence::unknown(
-                STAGE,
+                DFM_STAGE,
                 TOOL,
                 Vec::new(),
                 UnknownReason::ReportUnreadable,
@@ -4820,7 +4819,7 @@ fn dfm_stage(
     match synth_drc::dfm::check_dfm(&text, profile) {
         Err(e) => {
             let evidence = NativeCheckEvidence::unknown(
-                STAGE,
+                DFM_STAGE,
                 TOOL,
                 Vec::new(),
                 UnknownReason::ReportMalformed,
@@ -4831,7 +4830,7 @@ fn dfm_stage(
         }
         Ok(report) => {
             let mut evidence =
-                NativeCheckEvidence::concluded(STAGE, TOOL, Vec::new(), report.danger_count());
+                NativeCheckEvidence::concluded(DFM_STAGE, TOOL, Vec::new(), report.danger_count());
             let counts: Vec<String> = report
                 .counts()
                 .iter()
@@ -4852,11 +4851,23 @@ fn dfm_stage(
             }
             let detail = parts.join(", ");
             let mut unsupported = vec![
-                "plated_hole_to_trace: graded Warning only, known not to match JLCDFM (0 vs 58 items on one board)".to_string(),
+                "plated_hole_to_trace: graded Warning only, known not to match JLCDFM".to_string(),
                 "silk_text_clearance: text is counted, not measured".to_string(),
-                "silk_to_hole: 0.15 mm floor assumed, not published by JLC".to_string(),
-                "copper_merge_tolerance: 0.07 mm uncalibrated".to_string(),
+                "filled_silk: ink covering a pad or hole is tested at sampled points, not by exact area".to_string(),
             ];
+            // Assumed figures only matter when their rule ran on this profile.
+            if profile.min_silk_to_hole_nm > 0 {
+                unsupported.push(format!(
+                    "silk_to_hole: {} um floor assumed, not published by JLC",
+                    profile.min_silk_to_hole_nm / 1000
+                ));
+            }
+            if profile.min_pad_to_pad_nm > 0 {
+                unsupported.push(format!(
+                    "copper_merge_tolerance: {} um uncalibrated",
+                    profile.copper_merge_below_nm / 1000
+                ));
+            }
             if report.unchecked_silk_graphics > 0 {
                 unsupported.push(format!(
                     "silk_curves: {} curve or legacy arc item(s) not measured",
