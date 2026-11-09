@@ -32,14 +32,14 @@ rotation = 0
 priority = "hard"
 
 [components.C2]
-x = 28.0
-y = 17.9
+x = 28.5
+y = 19.9
 rotation = 180
 priority = "hard"
 
 [components.C3]
-x = 28.0
-y = 14.64
+x = 27.5
+y = 14.14
 rotation = 180
 priority = "hard"
 
@@ -176,8 +176,8 @@ rotation = 0
 priority = "hard"
 
 [components.H2]
-x = 62
-y = 21
+x = 61.5
+y = 21.5
 rotation = 0
 priority = "hard"
 

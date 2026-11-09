@@ -67,8 +67,9 @@ board "buck" {
       "R_RT 33k from RT/SYNC to GND sets 800 kHz (RT table under datasheet Figure 8-4); the pin must not float."
       "C4 100 nF boot capacitor between BOOT and SW."
       "L1 6.8 uH at 800 kHz gives about 0.5 A ripple at 26.4 V in (datasheet Eq 10 K about 0.5), above the 1.03 uH minimum of Eq 11 (0.25 x 3.3 V / 800 kHz); 3x 22 uF is unverified: Table 9-1 has no 3.3 V row."
-      "The exposed pad (pin 9) is soldered to the F.Cu GND pour. There are no vias in the pad:"
-      "the board's fabrication floor is a 0.3 mm drill and the KiCad thermal-via footprint ships 0.2 mm."
+      "The exposed pad (pin 9) is soldered to the F.Cu GND pour and carries six GND vias in the pad"
+      "(2 x 3, 0.6 mm pad, 0.3 mm drill, the board's fabrication floor; the 0.2 mm of the KiCad thermal-via footprint is below it)."
+      "The pad needs the filled-via process, declared by requires via_in_pad."
     }
   }
 
