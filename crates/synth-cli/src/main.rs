@@ -4897,6 +4897,12 @@ fn dfm_stage(
                     report.unchecked_silk_graphics
                 ));
             }
+            if report.unread_tracks > 0 {
+                unsupported.push(format!(
+                    "track_read: {} arc track(s) or segment(s) could not be read and were not measured",
+                    report.unread_tracks
+                ));
+            }
             if report.approximated_pads > 0 {
                 unsupported.push(format!(
                     "pad_shape: {} custom or trapezoid pad(s) measured by their bounding box, not their exact outline",
@@ -6158,6 +6164,27 @@ mod tests {
         assert_eq!(manifest(true), serde_json::json!(false));
         assert_eq!(manifest(false), serde_json::json!(true));
         let _ = std::fs::remove_file(&path);
+    }
+
+    #[test]
+    fn a_dfm_stage_lists_an_unreadable_arc_track_as_unsupported() {
+        let profile = synth_drc::ManufacturerProfile::jlc_standard();
+        let path =
+            std::env::temp_dir().join(format!("synth_dfm_arc_{}.kicad_pcb", std::process::id()));
+        std::fs::write(
+            &path,
+            r#"(kicad_pcb (arc (start 1 1) (end 2 2) (width 0.2) (layer "F.Cu") (net 1)))"#,
+        )
+        .expect("write board");
+        let (evidence, _) = dfm_stage(&path, &profile, false);
+        let _ = std::fs::remove_file(&path);
+        assert!(
+            evidence
+                .unsupported
+                .iter()
+                .any(|u| u.contains("1 arc track(s)")),
+            "{evidence:?}"
+        );
     }
 
     #[test]

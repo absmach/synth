@@ -860,6 +860,8 @@ pub struct PcbBoard {
     pub silk_text: usize,
     /// Silkscreen graphics on the board itself that were not read.
     pub silk_unread: usize,
+    /// Tracks (segments or arcs) missing a start, mid or end point; not measured.
+    pub track_unread: usize,
 }
 
 impl PcbBoard {
@@ -895,6 +897,7 @@ impl PcbBoard {
             silk: Vec::new(),
             silk_text: 0,
             silk_unread: 0,
+            track_unread: 0,
         };
 
         board.layers = root.layer_names();
@@ -931,12 +934,16 @@ impl PcbBoard {
             board.footprints.push(parse_footprint(footprint));
         }
         for segment in root.find_all("segment") {
-            if let Some(parsed) = parse_segment(segment) {
-                board.segments.push(parsed);
+            match parse_segment(segment) {
+                Some(parsed) => board.segments.push(parsed),
+                None => board.track_unread += 1,
             }
         }
         for arc in root.find_all("arc") {
-            board.arc_chords.extend(parse_arc_track(arc));
+            match parse_arc_track(arc) {
+                Some(chords) => board.arc_chords.extend(chords),
+                None => board.track_unread += 1,
+            }
         }
         for via in root.find_all("via") {
             if let Some(parsed) = parse_via(via) {
@@ -1648,17 +1655,19 @@ fn parse_segment_attrs(node: &Node) -> Segment {
 }
 
 /// An `(arc (start) (mid) (end) (width) (layer) (net))` track as chords.
-fn parse_arc_track(node: &Node) -> Vec<Segment> {
+fn parse_arc_track(node: &Node) -> Option<Vec<Segment>> {
     let template = parse_segment_attrs(node);
-    let points = arc_vertices(node).unwrap_or_default();
-    points
-        .windows(2)
-        .map(|w| Segment {
-            start: w[0],
-            end: w[1],
-            ..template.clone()
-        })
-        .collect()
+    let points = arc_vertices(node)?;
+    Some(
+        points
+            .windows(2)
+            .map(|w| Segment {
+                start: w[0],
+                end: w[1],
+                ..template.clone()
+            })
+            .collect(),
+    )
 }
 
 fn parse_via(node: &Node) -> Option<Via> {

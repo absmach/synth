@@ -56,6 +56,8 @@ pub struct DfmReport {
     pub unchecked_silk_text: usize,
     /// Silkscreen curves and legacy arcs the reader does not understand.
     pub unchecked_silk_graphics: usize,
+    /// Tracks missing a start, mid or end point: not measured.
+    pub unread_tracks: usize,
     /// `custom` and `trapezoid` pads, measured by their bounding box.
     pub approximated_pads: usize,
     /// Rules the profile publishes no figure for: not run, so a clean report
@@ -123,6 +125,7 @@ pub fn check_dfm(
         findings,
         unchecked_silk_text: board.silk_text_count(),
         unchecked_silk_graphics: board.silk_unread_count(),
+        unread_tracks: board.track_unread,
         approximated_pads: board.approximated_pad_count(),
         unchecked_rules,
     })
@@ -1004,6 +1007,52 @@ mod tests {
         assert_eq!(count(&report, "pth_to_trace"), 1, "{report:?}");
         let finding = report.findings.iter().find(|f| f.rule == "pth_to_trace");
         assert!((finding.expect("finding").measured_mm - 0.15).abs() < 0.005);
+    }
+
+    fn pth_gap_of(arc: &str) -> f64 {
+        let report = run(&format!("{PTH}\n  {arc}"));
+        assert_eq!(count(&report, "pth_to_trace"), 1, "{report:?}");
+        let finding = report.findings.iter().find(|f| f.rule == "pth_to_trace");
+        finding.expect("finding").measured_mm
+    }
+
+    #[test]
+    fn arc_direction_does_not_change_the_measured_distance() {
+        // Crown 0.75 mm above the hole centre; same arc written both ways.
+        let a =
+            r#"(arc (start 19 21) (mid 20 20.75) (end 21 21) (width 0.2) (layer "F.Cu") (net 2))"#;
+        let b =
+            r#"(arc (start 21 21) (mid 20 20.75) (end 19 21) (width 0.2) (layer "F.Cu") (net 2))"#;
+        assert!((pth_gap_of(a) - pth_gap_of(b)).abs() < 1e-9);
+        assert!((pth_gap_of(b) - 0.15).abs() < 0.005);
+    }
+
+    #[test]
+    fn an_arc_sweeping_over_180_degrees_is_measured_along_the_long_way() {
+        // Circle centre (20, 21.5), radius 0.75: 225 degrees from the east
+        // point through the crown (20, 20.75) to the south-west.
+        let major = r#"(arc (start 20.75 21.5) (mid 20 20.75) (end 19.4697 22.0303) (width 0.2) (layer "F.Cu") (net 2))"#;
+        assert!((pth_gap_of(major) - 0.15).abs() < 0.005);
+        // The same endpoints with the mid on the far side never nears the hole.
+        let far = r#"(arc (start 20.75 21.5) (mid 20 22.25) (end 19.4697 22.0303) (width 0.2) (layer "F.Cu") (net 2))"#;
+        let report = run(&format!("{PTH}\n  {far}"));
+        assert_eq!(count(&report, "pth_to_trace"), 0, "{report:?}");
+    }
+
+    #[test]
+    fn collinear_arc_points_are_measured_as_a_straight_track() {
+        let line = r#"(arc (start 19 20.75) (mid 20 20.75) (end 21 20.75) (width 0.2) (layer "F.Cu") (net 2))"#;
+        assert!((pth_gap_of(line) - 0.15).abs() < 0.005);
+    }
+
+    #[test]
+    fn malformed_tracks_are_counted_not_dropped() {
+        let report = run(
+            r#"(arc (start 19 21) (end 21 21) (width 0.2) (layer "F.Cu") (net 2))
+  (segment (start 19 21) (width 0.2) (layer "F.Cu") (net 2))"#,
+        );
+        assert_eq!(report.unread_tracks, 2, "{report:?}");
+        assert_eq!(run(&arc_trace(20.75, 2)).unread_tracks, 0);
     }
 
     #[test]
