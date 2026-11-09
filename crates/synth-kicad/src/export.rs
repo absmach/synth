@@ -1118,7 +1118,12 @@ fn design_rules(profile: &synth_drc::ManufacturerProfile, board: &Board) -> Stri
     // leaves less ring than the plain via floor the project states board-wide.
     // An ordinary small via elsewhere keeps the floor. KiCad applies the last
     // matching rule, so these come last.
-    if let Some(land_nm) = profile.via_in_pad_land_nm() {
+    // A filled and capped via is declared by the board's `requires via_in_pad` as
+    // well as by the component's escape, as the in-memory DRC reads it.
+    let via_in_pad_required = board
+        .required_processes
+        .contains(&synth_ir::ProcessRequirement::ViaInPad);
+    if let Some(land_nm) = profile.via_in_pad_land_nm().filter(|_| via_in_pad_required) {
         use std::fmt::Write as _;
         let land = synth_geometry::nm_to_mm(land_nm);
         let ring = synth_geometry::nm_to_mm(profile.via_in_pad_land_extra_nm / 2);
@@ -1848,6 +1853,7 @@ mod tests {
     #[test]
     fn a_via_in_pad_tier_exports_the_filled_via_rule_and_a_plain_tier_does_not() {
         let source = r#"board "b" { layers 6
+            requires via_in_pad
             component U1: fpga "ice40hx4k_bg121" { escape { method underpad } }
             component U2: fpga "ice40hx4k_bg121" { escape { off } } }"#;
         let advanced = design_rules(
@@ -1879,6 +1885,19 @@ mod tests {
             &board_from(source),
         );
         assert!(!standard.contains("annular_width"), "{standard}");
+        // An escape alone buys the process nothing: no one fills or caps a via the
+        // board did not require via-in-pad for, so the ring floor stands.
+        let no_requirement = design_rules(
+            &synth_drc::ManufacturerProfile::jlc_advanced(),
+            &board_from(
+                r#"board "b" { layers 6
+                component U1: fpga "ice40hx4k_bg121" { escape { method underpad } } }"#,
+            ),
+        );
+        assert!(
+            !no_requirement.contains("annular_width"),
+            "a board that does not require via-in-pad keeps the plain floor: {no_requirement}"
+        );
     }
 
     /// The router resolves the board's declared manufacturer, so the exported
