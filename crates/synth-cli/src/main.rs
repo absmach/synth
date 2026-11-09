@@ -44,6 +44,7 @@ struct Cli {
 
     /// List a missing fast-edge return via beside a fine-pitch pad row as an
     /// advisory instead of blocking. Needs signal-integrity review sign-off.
+    /// `SYNTH_FINE_PITCH_RETURN_VIA_ADVISORY=1` (or `true`) also enables it.
     #[arg(long, global = true)]
     fine_pitch_return_via_advisory: bool,
 
@@ -896,9 +897,9 @@ enum SchemaKind {
 
 fn main() -> ExitCode {
     let cli = Cli::parse();
-    if cli.fine_pitch_return_via_advisory {
-        std::env::set_var("SYNTH_FINE_PITCH_RETURN_VIA_ADVISORY", "1");
-    }
+    let fine_pitch_advisory = cli.fine_pitch_return_via_advisory
+        || std::env::var("SYNTH_FINE_PITCH_RETURN_VIA_ADVISORY")
+            .is_ok_and(|v| v == "1" || v.eq_ignore_ascii_case("true"));
     let jobs = match cli.jobs {
         Some(0) => {
             // A zero-thread pool is a usage error, not a request for the
@@ -1008,6 +1009,7 @@ fn main() -> ExitCode {
             krt_fab_overrides.as_deref(),
             krt_same_net_pad_clearance,
             krt_allow_via_in_pad,
+            fine_pitch_advisory,
             best_of,
             allow_incomplete,
             place_route_iterate,
@@ -1072,6 +1074,7 @@ fn main() -> ExitCode {
                 krt_fab_overrides.as_deref(),
                 krt_same_net_pad_clearance,
                 krt_allow_via_in_pad,
+                fine_pitch_advisory,
             )
             .with_timeout(router_timeout),
             best_of,
@@ -1107,6 +1110,7 @@ fn main() -> ExitCode {
                 krt_fab_overrides.as_deref(),
                 krt_same_net_pad_clearance,
                 krt_allow_via_in_pad,
+                fine_pitch_advisory,
             )
             .with_timeout(router_timeout),
             pretty,
@@ -4029,6 +4033,7 @@ fn export_kicad(
     krt_fab_overrides: Option<&Path>,
     krt_same_net_pad_clearance: f64,
     krt_allow_via_in_pad: bool,
+    fine_pitch_advisory: bool,
     best_of: bool,
     allow_incomplete: bool,
     place_route_iterate: bool,
@@ -4219,6 +4224,7 @@ fn export_kicad(
         krt_fab_overrides,
         krt_same_net_pad_clearance,
         krt_allow_via_in_pad,
+        fine_pitch_advisory,
     );
 
     // Opt-in place→route→re-place: route each candidate placement and keep
@@ -4804,6 +4810,7 @@ fn router_options(
     fab_overrides: Option<&Path>,
     same_net_pad_clearance: f64,
     allow_via_in_pad: bool,
+    fine_pitch_advisory: bool,
 ) -> RouterOptions {
     RouterOptions {
         freerouting_jar: freerouting_jar.map(Path::to_path_buf),
@@ -4815,8 +4822,7 @@ fn router_options(
         fab_overrides: fab_overrides.map(Path::to_path_buf),
         same_net_pad_clearance,
         allow_via_in_pad,
-        fine_pitch_return_via_advisory: std::env::var("SYNTH_FINE_PITCH_RETURN_VIA_ADVISORY")
-            .is_ok_and(|v| v == "1" || v.eq_ignore_ascii_case("true")),
+        fine_pitch_return_via_advisory: fine_pitch_advisory,
         timeout_secs: default_router_timeout_secs(),
     }
 }
