@@ -36,9 +36,13 @@ for name in sys.argv[2:]:
     path = pathlib.Path(name)
     path.write_text(path.read_text().replace(root, ""))
 PY
-for side in top bottom; do kicad-cli pcb render --side $side --width 1600 --height 1200 -o "$STAGE/images/pcb-3d-$side.png" "$PCB" >/dev/null; done
+# Render and STEP-export from a scratch copy naming the custom 3D models (same substitution as agent-run/tools/step_export.sh).
+M3D=$STAGE/model; mkdir -p "$M3D"
+sed -E "s#/usr/share/kicad/3dmodels/(Package_DFN_QFN|Connector_USB)\.3dshapes/#$B/agent-run/step-models/#" "$PCB" > "$M3D/rtd_afe.kicad_pcb"
+kicad-cli pcb export step --no-dnp -o "$KC/rtd_afe.step" "$M3D/rtd_afe.kicad_pcb" >/dev/null
+for side in top bottom; do kicad-cli pcb render --side $side --width 1600 --height 1200 -o "$STAGE/images/pcb-3d-$side.png" "$M3D/rtd_afe.kicad_pcb" >/dev/null; done
 kicad-cli pcb render --side top --rotate -45,0,45 --perspective \
-  --width 1600 --height 1200 -o "$STAGE/images/pcb-3d-angled.png" "$PCB" >/dev/null
+  --width 1600 --height 1200 -o "$STAGE/images/pcb-3d-angled.png" "$M3D/rtd_afe.kicad_pcb" >/dev/null
 SCHEMATIC_PDF=$(mktemp --suffix=.pdf)
 kicad-cli sch export pdf -o "$SCHEMATIC_PDF" "$KC/rtd_afe.kicad_sch" >/dev/null
 pdftoppm -png -r 150 -singlefile "$SCHEMATIC_PDF" "$STAGE/images/schematic" >/dev/null
