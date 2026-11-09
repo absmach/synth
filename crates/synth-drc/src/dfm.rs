@@ -56,7 +56,7 @@ pub struct DfmReport {
     pub unchecked_silk_text: usize,
     /// Silkscreen curves and legacy arcs the reader does not understand.
     pub unchecked_silk_graphics: usize,
-    /// `custom` and `trapezoid` pads, measured as a bounding rectangle.
+    /// `custom` and `trapezoid` pads, measured by their bounding box.
     pub approximated_pads: usize,
     /// Rules the profile publishes no figure for: not run, so a clean report
     /// says nothing about them.
@@ -159,7 +159,7 @@ fn silk_to_pad(board: &PcbBoard, profile: &ManufacturerProfile) -> Vec<DfmFindin
             // Ink filling a shape that covers any part of the pad is on it.
             let covered = shape.covers(
                 std::iter::once(pad.at).chain(pad.outline_points_nm(SAMPLE_STEP_NM)),
-                |p| pad.signed_distance_nm(p) <= 0.0,
+                |p| pad.copper_distance_nm(p) <= 0.0,
             );
             let Some((distance, at)) = closest.or(covered.then_some((0.0, pad.at))) else {
                 continue;
@@ -329,9 +329,15 @@ fn pad_to_pad(board: &PcbBoard, profile: &ManufacturerProfile) -> Vec<DfmFinding
                 continue;
             }
             let (gap_nm, at) = pad_gap(a, b);
+            let (net_a, net_b) = (connected_net(a), connected_net(b));
+            // Copper that touches is one object once etched, whatever its net
+            // status; only two real, different nets make that a short.
+            let different_nets = net_a.is_some() && net_b.is_some() && net_a != net_b;
+            if gap_nm == 0.0 && !different_nets {
+                continue;
+            }
             // Copper of one net this close is one object once etched.
-            let one_net = connected_net(a).is_some() && connected_net(a) == connected_net(b);
-            if one_net && gap_nm < profile.copper_merge_below_nm as f64 {
+            if net_a.is_some() && net_a == net_b && gap_nm < profile.copper_merge_below_nm as f64 {
                 continue;
             }
             if let Some((severity, bound_nm)) = spacing_grade(gap_nm, profile) {
@@ -378,8 +384,9 @@ fn via_as_pad(via: &Via) -> Pad {
 /// How JLCDFM grades a copper spacing: Danger below the danger bound, Warning
 /// below the floor, nothing above it. Returns the grade and the bound crossed.
 fn spacing_grade(gap_nm: f64, profile: &ManufacturerProfile) -> Option<(DfmSeverity, f64)> {
-    let danger = profile.pad_to_pad_danger_nm as f64;
     let floor = profile.min_pad_to_pad_nm as f64;
+    // A gap that meets the fab's own floor is never a Danger.
+    let danger = (profile.pad_to_pad_danger_nm as f64).min(floor);
     if gap_nm < danger {
         Some((DfmSeverity::Danger, danger))
     } else if gap_nm < floor {
@@ -409,7 +416,7 @@ fn pad_gap(a: &Pad, b: &Pad) -> (f64, Point) {
     let mut best = (f64::INFINITY, a.at);
     for (from, to) in [(a, b), (b, a)] {
         for p in from.outline_points_nm(SAMPLE_STEP_NM) {
-            let d = to.signed_distance_nm(p);
+            let d = to.copper_distance_nm(p);
             if d < best.0 {
                 best = (d, p);
             }
@@ -419,15 +426,27 @@ fn pad_gap(a: &Pad, b: &Pad) -> (f64, Point) {
 }
 
 /// A trace of another net close to a plated hole's edge: drilling wanders,
-/// and a trace under the wall shorts or breaks. A hole goes through every
-/// layer, so a trace on any layer counts. One finding per hole, for its
-/// closest trace; the hole's own net may run up to it. Graded a Warning, not
-/// a Danger, so it never blocks a release. Measured against JLCDFM on one board
-/// it found 0 items where JLCDFM found 58 (known not to match).
+/// and a trace under the wall shorts or breaks. Plated holes are through-hole
+/// pad drills and via barrels; a hole goes through every layer, so a trace on
+/// any layer counts. One finding per hole, for its closest trace; the hole's
+/// own net may run up to it. Straight tracks only: `(arc ...)` tracks are not
+/// read. Graded a Warning, not a Danger, so it never blocks a release.
+/// Measured against JLCDFM on one board it found 0 items where JLCDFM found 58
+/// (known not to match).
 fn pth_to_trace(board: &PcbBoard, profile: &ManufacturerProfile) -> Vec<DfmFinding> {
     let required_nm = profile.min_pth_to_trace_nm as f64;
+    let via_pads: Vec<Pad> = board.vias.iter().map(via_as_pad).collect();
     let mut findings = Vec::new();
-    for pad in board.pads().filter(|p| p.kind == "thru_hole") {
+    for (pad, label) in board
+        .pads()
+        .filter(|p| p.kind == "thru_hole")
+        .map(|p| (p, format!("pad {}", p.id())))
+        .chain(
+            via_pads
+                .iter()
+                .map(|p| (p, format!("via at ({})", p.number))),
+        )
+    {
         let Some(hole) = pad.hole() else {
             continue;
         };
@@ -449,9 +468,8 @@ fn pth_to_trace(board: &PcbBoard, profile: &ManufacturerProfile) -> Vec<DfmFindi
                 rule: "pth_to_trace",
                 severity: DfmSeverity::Warning,
                 message: format!(
-                    "a trace is {:.3} mm from the plated hole of pad {}, under the {:.3} mm minimum",
+                    "a trace is {:.3} mm from the plated hole of {label}, under the {:.3} mm minimum",
                     gap_nm / NM_PER_MM,
-                    pad.id(),
                     required_nm / NM_PER_MM
                 ),
                 at_mm: (hole.a.x_mm(), hole.a.y_mm()),
@@ -479,7 +497,7 @@ fn nearest_sample(pad: &Pad, stroke: &(Point, Point)) -> (f64, Point) {
             start.x_nm + (dx * f).round() as i64,
             start.y_nm + (dy * f).round() as i64,
         );
-        let d = pad.signed_distance_nm(p);
+        let d = pad.copper_distance_nm(p);
         if d < best.0 {
             best = (d, p);
         }
@@ -1095,41 +1113,43 @@ mod tests {
     }
 
     #[test]
-    fn an_offset_drill_is_measured_where_it_is() {
+    fn an_offset_drill_leaves_the_hole_at_the_pad_and_moves_the_copper() {
+        // KiCad: the hole stays at (20, 20); the 3 mm copper is centred at (21, 20).
         let offset = pad_text(
             r#"(pad "1" thru_hole circle (at 0 0) (size 3 3) (drill 1.0 (offset 1.0 0)) (layers "*.Cu" "*.Mask") (net 1 "GND"))"#,
         );
-        // Hole centre (21, 20), radius 0.5. A line at x = 21.6 is 0.1 - 0.075.
-        let near = run(&format!(
-            "{offset}\n  {}",
-            silk("F.SilkS", 21.6, 19.0, 21.6, 21.0)
-        ));
-        assert_eq!(count(&near, "silk_to_hole"), 1, "{near:?}");
-        // The same line on the other side is 2.6 mm from the hole.
-        let far = run(&format!(
-            "{offset}\n  {}",
-            silk("F.SilkS", 18.4, 19.0, 18.4, 21.0)
-        ));
-        assert_eq!(count(&far, "silk_to_hole"), 0, "{far:?}");
+        let run_with = |line: String| run(&format!("{offset}\n  {line}"));
+        // Hole edge at x = 20.5: a line at 20.6 is 0.1 - 0.075 clear of it.
+        let hole = run_with(silk("F.SilkS", 20.6, 19.0, 20.6, 21.0));
+        assert_eq!(count(&hole, "silk_to_hole"), 1, "{hole:?}");
+        // Where the hole would be if it moved with the offset: nothing there.
+        let moved = run_with(silk("F.SilkS", 21.6, 19.0, 21.6, 21.0));
+        assert_eq!(count(&moved, "silk_to_hole"), 0, "{moved:?}");
+        // Copper's right edge is at 22.5; centred on `at` it would end at 21.5.
+        let copper = run_with(silk("F.SilkS", 22.6, 19.0, 22.6, 21.0));
+        assert_eq!(count(&copper, "silk_to_pad"), 1, "{copper:?}");
     }
 
     #[test]
-    fn a_rotated_offset_drill_is_measured_where_it_ends_up() {
-        // Pad turned 90 degrees: the (1, 0) offset lands at (20, 19), not (21, 20).
+    fn a_rotated_offset_drill_moves_the_copper_with_the_pad() {
+        // Pad turned 90 degrees: the (1, 0) offset lands at (0, -1), so the
+        // copper is centred at (20, 19) and the hole stays at (20, 20).
         let rotated = pad_text(
             r#"(pad "1" thru_hole circle (at 0 0 90) (size 3 3) (drill 1.0 (offset 1.0 0)) (layers "*.Cu" "*.Mask") (net 1 "GND"))"#,
         );
+        // Copper top edge at y = 17.5: a line at 17.4 is 0.1 - 0.075 clear.
         let near = run(&format!(
             "{rotated}\n  {}",
-            silk("F.SilkS", 19.0, 19.6, 21.0, 19.6)
+            silk("F.SilkS", 19.0, 17.4, 21.0, 17.4)
         ));
-        assert_eq!(count(&near, "silk_to_hole"), 1, "{near:?}");
+        assert_eq!(count(&near, "silk_to_pad"), 1, "{near:?}");
+        // Unrotated, the copper would reach x = 22.5.
         let unrotated_spot = run(&format!(
             "{rotated}\n  {}",
-            silk("F.SilkS", 21.6, 19.0, 21.6, 21.0)
+            silk("F.SilkS", 22.6, 19.0, 22.6, 21.0)
         ));
         assert_eq!(
-            count(&unrotated_spot, "silk_to_hole"),
+            count(&unrotated_spot, "silk_to_pad"),
             0,
             "{unrotated_spot:?}"
         );
@@ -1226,5 +1246,81 @@ mod tests {
     #[test]
     fn an_unreadable_board_is_an_error_not_a_clean_result() {
         assert!(check_dfm("(kicad_pcb (via", &ManufacturerProfile::jlc_standard()).is_err());
+    }
+
+    #[test]
+    fn overlapping_unconnected_pads_are_one_object_not_a_zero_gap() {
+        // A split NC pin: two overlapping pads on net 0.
+        let report = run(&format!(
+            "{}\n  {}",
+            pad_at(20.0, 20.0, 0, "rect", 0.6, "F.Cu"),
+            pad_at(20.3, 20.0, 0, "rect", 0.6, "F.Cu")
+        ));
+        assert_eq!(count(&report, "pad_to_pad"), 0, "{report:?}");
+        // Overlapping copper of two real, different nets is a short.
+        let short = run(&format!(
+            "{}\n  {}",
+            pad_at(20.0, 20.0, 1, "rect", 0.6, "F.Cu"),
+            pad_at(20.3, 20.0, 2, "rect", 0.6, "F.Cu")
+        ));
+        assert_eq!(count(&short, "pad_to_pad"), 1, "{short:?}");
+        assert_eq!(short.findings[0].severity, DfmSeverity::Danger);
+    }
+
+    #[test]
+    fn a_gap_that_meets_the_profile_floor_is_never_a_danger() {
+        let mut profile = ManufacturerProfile::jlc_standard();
+        profile.min_pad_to_pad_nm = 80_000;
+        profile.pad_to_pad_danger_nm = 100_000;
+        assert_eq!(spacing_grade(90_000.0, &profile), None);
+        assert_eq!(
+            spacing_grade(70_000.0, &profile),
+            Some((DfmSeverity::Danger, 80_000.0))
+        );
+    }
+
+    #[test]
+    fn a_via_barrel_close_to_another_nets_trace_is_a_finding() {
+        // Via drill 0.2 at (12, 20); a 0.2 mm trace of net 2 along y = 20.3:
+        // 0.3 - 0.1 - 0.1 = 0.1 mm clear, under the 0.28 mm floor.
+        let trace = trace_at(12.0, 20.3, 2);
+        let report = run(&format!("{VIA}\n  {trace}"));
+        assert_eq!(count(&report, "pth_to_trace"), 1, "{report:?}");
+        // The via's own net may run up to it.
+        let own = run(&format!("{VIA}\n  {}", trace_at(12.0, 20.3, 1)));
+        assert_eq!(count(&own, "pth_to_trace"), 0, "{own:?}");
+    }
+
+    fn trace_at(x: f64, y: f64, net: u32) -> String {
+        format!(
+            r#"(segment (start {} {y}) (end {} {y}) (width 0.2) (layer "F.Cu") (net {net}))"#,
+            x - 1.0,
+            x + 1.0
+        )
+    }
+
+    #[test]
+    fn a_trapezoid_pad_reaches_its_wide_end() {
+        // 1 x 1 mm with rect_delta (0 0.4): the corners reach y = +-0.7.
+        let trap = pad_text(
+            r#"(pad "1" smd trapezoid (at 0 0) (size 1 1) (rect_delta 0 0.4) (layers "F.Cu") (net 1 "GND"))"#,
+        );
+        // y = 20.76 is 0.06 - 0.075 from the wide corner: on it. Measured
+        // from size alone the pad ends at 20.5 and this reads 0.185 clear.
+        let report = run(&format!(
+            "{trap}\n  {}",
+            silk("F.SilkS", 19.0, 20.76, 21.0, 20.76)
+        ));
+        assert_eq!(count(&report, "silk_to_pad"), 1, "{report:?}");
+    }
+
+    #[test]
+    fn silk_polygon_arcs_are_followed() {
+        // The arc bulges left to x = 10.4, 0.1 mm from the pad's right edge
+        // (10.3). Its chord stays at x = 12 and would read as far away.
+        let report = run(
+            r#"(gr_poly (pts (xy 12 19) (arc (start 12 19) (mid 10.4 20) (end 12 21)) (xy 13 21)) (stroke (width 0.15) (type solid)) (fill no) (layer "F.SilkS"))"#,
+        );
+        assert_eq!(count(&report, "silk_to_pad"), 1, "{report:?}");
     }
 }

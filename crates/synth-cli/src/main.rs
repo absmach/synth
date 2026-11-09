@@ -4475,7 +4475,7 @@ fn export_kicad(
     let dfm_danger = dfm_report
         .as_ref()
         .map_or(0, synth_drc::dfm::DfmReport::danger_count);
-    let release_dfm_blocked = production && dfm_gate && dfm_danger > 0;
+    let release_dfm_blocked = dfm_blocks_release(production, dfm_gate, dfm_report.as_ref());
     if let Some(report) = &dfm_report {
         if release_dfm_blocked {
             for finding in &report.findings {
@@ -4495,18 +4495,31 @@ fn export_kicad(
             }
             eprintln!(
                 "warning: DFM found {} finding(s) a fab would flag ({}); each is listed above \
-                 and in the verification report. Pass --dfm-gate to let Danger findings block \
-                 a release export.",
+                 and in the verification report.{}",
                 report.findings.len(),
-                dfm_evidence.detail.as_deref().unwrap_or_default()
+                dfm_evidence.detail.as_deref().unwrap_or_default(),
+                if !dfm_gate {
+                    " Pass --dfm-gate to let Danger findings block a release export."
+                } else if !production {
+                    " --dfm-gate blocks only a release export (--gerbers and similar); \
+                     this export is not one."
+                } else {
+                    ""
+                }
             );
         }
     }
-    if dfm_report.is_none() && dfm_evidence.advisory {
+    if dfm_report.is_none() && (dfm_evidence.advisory || !production) {
         eprintln!(
             "warning: the DFM check could not read the board ({}); it is recorded as unknown \
-             and does not block without --dfm-gate.",
-            dfm_evidence.detail.as_deref().unwrap_or_default()
+             and {}.",
+            dfm_evidence.detail.as_deref().unwrap_or_default(),
+            if dfm_gate {
+                "--dfm-gate blocks only a release export (--gerbers and similar), \
+                 which this export is not"
+            } else {
+                "does not block without --dfm-gate"
+            }
         );
     }
     native.push(dfm_evidence);
@@ -4793,6 +4806,16 @@ fn report_unavailable_check(evidence: &synth_diagnostics::NativeCheckEvidence) {
     }
 }
 
+/// Whether the DFM stage stops a release export: gated, and either a Danger
+/// finding or a board it could not read (`report` is `None`), which is never clean.
+fn dfm_blocks_release(
+    production: bool,
+    gate: bool,
+    report: Option<&synth_drc::dfm::DfmReport>,
+) -> bool {
+    production && gate && report.is_none_or(|r| r.danger_count() > 0)
+}
+
 /// The manufacturability stage: what a fab's DFM tool would flag on the
 /// board that ships. A board that cannot be read is `unknown`, never clean.
 fn dfm_stage(
@@ -4874,9 +4897,14 @@ fn dfm_stage(
                     report.unchecked_silk_graphics
                 ));
             }
+            if profile.min_pth_to_trace_nm > 0 {
+                unsupported.push(
+                    "pth_to_trace: arc tracks are not measured, only straight segments".to_string(),
+                );
+            }
             if report.approximated_pads > 0 {
                 unsupported.push(format!(
-                    "pad_shape: {} custom or trapezoid pad(s) measured as a bounding rectangle",
+                    "pad_shape: {} custom or trapezoid pad(s) measured by their bounding box, not their exact outline",
                     report.approximated_pads
                 ));
             }
@@ -6104,6 +6132,14 @@ fn render(
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn a_gated_dfm_stage_that_could_not_read_the_board_blocks_a_release() {
+        assert!(super::dfm_blocks_release(true, true, None));
+        assert!(!super::dfm_blocks_release(true, false, None));
+        assert!(!super::dfm_blocks_release(false, true, None));
+        let clean = synth_drc::dfm::DfmReport::default();
+        assert!(!super::dfm_blocks_release(true, true, Some(&clean)));
+    }
 
     #[test]
     fn an_unreadable_board_blocks_only_when_the_dfm_gate_is_on() {

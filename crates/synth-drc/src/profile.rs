@@ -45,29 +45,29 @@ pub struct ManufacturerProfile {
     /// Minimum clearance from any drilled hole's edge to copper
     /// belonging to a different net, in nanometers.
     pub min_drill_to_copper_nm: i64,
-    /// For the five DFM floors below, 0 means the profile has no published
-    /// figure and the rule is not run.
+    /// For the DFM floors below, 0 (also what a TOML profile that omits them
+    /// reads) means the profile has no published figure and the rule is not run.
     ///
     /// Minimum gap between a silkscreen stroke's edge and a pad on the
     /// same side, in nanometers. JLCPCB's published figure is 0.15 mm.
-    #[serde(default = "default_min_silk_to_pad_nm")]
+    #[serde(default)]
     pub min_silk_to_pad_nm: i64,
     /// Minimum gap between a silkscreen stroke's edge and a drilled hole,
     /// on either side of the board, in nanometers. JLCPCB does not publish
     /// this figure; 0.15 mm is assumed, to be calibrated against its DFM tool.
-    #[serde(default = "default_min_silk_to_hole_nm")]
+    #[serde(default)]
     pub min_silk_to_hole_nm: i64,
     /// Minimum silkscreen stroke width, in nanometers. JLCPCB's published
     /// figure is 0.15 mm; its DFM tool grades thinner silk a Warning.
-    #[serde(default = "default_min_silk_width_nm")]
+    #[serde(default)]
     pub min_silk_width_nm: i64,
     /// Minimum copper gap between pads (and vias) on the same side, in
     /// nanometers, whatever their nets. JLCPCB's published figure is 0.15 mm.
-    #[serde(default = "default_min_pad_to_pad_nm")]
+    #[serde(default)]
     pub min_pad_to_pad_nm: i64,
     /// Pad spacing below this is a Danger; from here up to `min_pad_to_pad_nm`
     /// it is a Warning. JLCDFM's scale is 0.10 mm and 0.15 mm.
-    #[serde(default = "default_pad_to_pad_danger_nm")]
+    #[serde(default)]
     pub pad_to_pad_danger_nm: i64,
     /// Copper of one net with a gap under this (`gap < value`) is treated as one
     /// merged object, not as two objects with a gap. Different nets are never
@@ -77,7 +77,7 @@ pub struct ManufacturerProfile {
     pub copper_merge_below_nm: i64,
     /// Minimum gap from a plated hole's edge to a trace of another net, in
     /// nanometers. JLCPCB's published minimum is 0.28 mm.
-    #[serde(default = "default_min_pth_to_trace_nm")]
+    #[serde(default)]
     pub min_pth_to_trace_nm: i64,
     /// Dielectric heights of parallel run two traces must share before
     /// `W-SYNTH-DRC-013` calls it edge coupling. A process-neutral default;
@@ -456,19 +456,19 @@ struct TomlProfile {
     min_drill_diameter_mm: f64,
     min_annular_ring_mm: f64,
     min_drill_to_copper_mm: f64,
-    #[serde(default = "default_min_silk_to_pad_mm")]
+    #[serde(default)]
     min_silk_to_pad_mm: f64,
-    #[serde(default = "default_min_silk_to_hole_mm")]
+    #[serde(default)]
     min_silk_to_hole_mm: f64,
-    #[serde(default = "default_min_silk_width_mm")]
+    #[serde(default)]
     min_silk_width_mm: f64,
-    #[serde(default = "default_min_pad_to_pad_mm")]
+    #[serde(default)]
     min_pad_to_pad_mm: f64,
-    #[serde(default = "default_pad_to_pad_danger_mm")]
+    #[serde(default)]
     pad_to_pad_danger_mm: f64,
     #[serde(default = "default_copper_merge_below_mm")]
     copper_merge_below_mm: f64,
-    #[serde(default = "default_min_pth_to_trace_mm")]
+    #[serde(default)]
     min_pth_to_trace_mm: f64,
     #[serde(default = "default_crosstalk_run_multiple")]
     crosstalk_run_multiple: i64,
@@ -829,10 +829,10 @@ min_drill_to_copper_mm = 0.25
         assert!(!p.via_in_pad);
     }
 
-    /// A profile TOML that predates the DFM floors reads the JLCPCB figures
-    /// for them rather than failing to parse.
+    /// A profile TOML that omits the DFM floors runs no DFM rule: another
+    /// fab's figures are never inherited from JLCPCB.
     #[test]
-    fn a_profile_toml_without_the_dfm_floors_gets_the_jlc_defaults() {
+    fn a_profile_toml_without_the_dfm_floors_runs_no_dfm_rule() {
         let text = r#"
 name = "legacy"
 min_trace_width_mm = 0.15
@@ -843,13 +843,16 @@ min_annular_ring_mm = 0.15
 min_drill_to_copper_mm = 0.25
 "#;
         let p = ManufacturerProfile::from_toml_str(text).expect("parse");
-        assert_eq!(p.min_silk_to_pad_nm, mm_to_nm(0.15));
-        assert_eq!(p.min_silk_to_hole_nm, mm_to_nm(0.15));
-        assert_eq!(p.min_silk_width_nm, mm_to_nm(0.15));
-        assert_eq!(p.min_pad_to_pad_nm, mm_to_nm(0.15));
-        assert_eq!(p.pad_to_pad_danger_nm, mm_to_nm(0.10));
-        assert_eq!(p.copper_merge_below_nm, mm_to_nm(0.07));
-        assert_eq!(p.min_pth_to_trace_nm, mm_to_nm(0.28));
+        assert_eq!(p.min_silk_to_pad_nm, 0);
+        assert_eq!(p.min_silk_to_hole_nm, 0);
+        assert_eq!(p.min_silk_width_nm, 0);
+        assert_eq!(p.min_pad_to_pad_nm, 0);
+        assert_eq!(p.pad_to_pad_danger_nm, 0);
+        assert_eq!(p.min_pth_to_trace_nm, 0);
+        // The JLC built-ins set their figures explicitly.
+        let jlc = ManufacturerProfile::jlc_standard();
+        assert_eq!(jlc.min_silk_to_pad_nm, mm_to_nm(0.15));
+        assert_eq!(jlc.min_pth_to_trace_nm, mm_to_nm(0.28));
     }
 
     #[test]

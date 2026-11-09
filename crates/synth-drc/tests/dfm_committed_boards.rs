@@ -37,6 +37,8 @@ fn rp2350_example_findings_are_pinned() {
         counts_for("examples/rp2350/rp2350_devboard_freerouting_clean.kicad_pcb");
     let expected: BTreeMap<String, usize> = [
         ("pad_to_pad warning", 3),
+        // Via barrels are plated holes too; before they were measured this was 0.
+        ("pth_to_trace warning", 22),
         ("silk_line_width warning", 173),
         ("silk_to_hole danger", 5),
         ("silk_to_pad danger", 64),

@@ -982,3 +982,15 @@ fn silk_on_a_pad_blocks_a_gated_release_export_and_force_does_not_override() {
     let manifest = run.manifest();
     assert_eq!(manifest["release_ready"], false, "{manifest:#}");
 }
+
+#[test]
+fn findings_under_dfm_gate_without_a_release_export_do_not_ask_for_the_flag() {
+    let run = export_dfm("dfm_gate_plain", &["--dfm-gate"]);
+    assert_eq!(run.code, Some(0), "stderr:\n{}", run.stderr);
+    assert!(!run.stderr.contains("Pass --dfm-gate"), "{}", run.stderr);
+    assert!(
+        run.stderr.contains("blocks only a release export"),
+        "{}",
+        run.stderr
+    );
+}

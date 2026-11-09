@@ -412,12 +412,15 @@ pub struct Pad {
     /// Drill size in nanometres: `(diameter, diameter)` for a round hole,
     /// `(width, height)` for an oval slot, `(0, 0)` for a pad with no hole.
     pub drill_nm: (i64, i64),
-    /// `(drill ... (offset x y))`: where the hole sits relative to the pad
-    /// centre, in the pad's own frame, in nanometres.
+    /// `(drill ... (offset x y))`: how far KiCad moves the pad's copper away
+    /// from its hole, in the pad's own frame, in nanometres. The hole stays at
+    /// the pad's `at`; the copper is centred at `at + offset`.
     pub drill_offset_nm: (i64, i64),
-    /// For a `custom` pad, the bounding box of its anchor and primitives as
-    /// `(centre offset, size)` in the pad's own frame. `None` for every other
-    /// shape, which is measured from `size_nm` alone.
+    /// For a `custom` pad, the bounding box of its anchor and primitives; for
+    /// a `trapezoid`, the box around its corners (`size` plus `rect_delta`);
+    /// as `(centre offset, size)` in the pad's own frame. `None` for every
+    /// other shape. Only the DFM distance ([`Pad::copper_distance_nm`]) uses
+    /// it; [`Pad::signed_distance_nm`] measures `size_nm` alone.
     pub bbox: Option<((i64, i64), (i64, i64))>,
     pub layers: Vec<String>,
     /// Net code as written in the file, if the pad carries one.
@@ -445,28 +448,49 @@ impl Pad {
     /// 0), a rounded rectangle, an oval (a stadium, radius half the shorter
     /// side) or a circle. Any other shape is read as its bounding rectangle.
     /// This is the exact distance to that outline, not to a disc around it.
+    ///
+    /// The router relies on this being the plain `at` + `size` pad; DFM
+    /// rules use [`Self::copper_distance_nm`].
     #[must_use]
     pub fn signed_distance_nm(&self, p: Point) -> f64 {
-        let (sin, cos) = self.angle_deg.to_radians().sin_cos();
+        let size = (self.size_nm.0 as f64, self.size_nm.1 as f64);
+        self.distance_in_frame(p, (0.0, 0.0), size)
+    }
+
+    /// Like [`Self::signed_distance_nm`] but to the copper a fab would etch:
+    /// shifted by a drill offset, and a custom or trapezoid pad measured by
+    /// its bounding box. For DFM rules only.
+    #[must_use]
+    pub fn copper_distance_nm(&self, p: Point) -> f64 {
         let (offset, size) = self.frame();
+        self.distance_in_frame(p, offset, size)
+    }
+
+    fn distance_in_frame(&self, p: Point, offset: (f64, f64), size: (f64, f64)) -> f64 {
+        let (sin, cos) = self.angle_deg.to_radians().sin_cos();
         let dx = (p.x_nm - self.at.x_nm) as f64;
         let dy = (p.y_nm - self.at.y_nm) as f64;
         // Board frame to pad frame (the inverse of the y-down rotation).
         let qx = (dx * cos - dy * sin - offset.0).abs();
         let qy = (dx * sin + dy * cos - offset.1).abs();
         let (hx, hy) = (size.0 / 2.0, size.1 / 2.0);
-        let radius = self.corner_radius_nm();
+        let radius = self.corner_radius_nm(size);
         let (ex, ey) = (qx - (hx - radius), qy - (hy - radius));
         ex.max(0.0).hypot(ey.max(0.0)) + ex.max(ey).min(0.0) - radius
     }
 
     /// The pad's copper box in its own frame: centre offset and size. A
-    /// custom pad's is the bounding box of its primitives.
+    /// custom or trapezoid pad's is its bounding box, and a drill offset
+    /// moves the copper away from the hole.
     fn frame(&self) -> ((f64, f64), (f64, f64)) {
-        match self.bbox {
-            Some((o, s)) => ((o.0 as f64, o.1 as f64), (s.0 as f64, s.1 as f64)),
-            None => ((0.0, 0.0), (self.size_nm.0 as f64, self.size_nm.1 as f64)),
-        }
+        let (o, s) = self.bbox.unwrap_or(((0, 0), self.size_nm));
+        (
+            (
+                (o.0 + self.drill_offset_nm.0) as f64,
+                (o.1 + self.drill_offset_nm.1) as f64,
+            ),
+            (s.0 as f64, s.1 as f64),
+        )
     }
 
     /// Distance from the pad's centre to the farthest point of its copper
@@ -479,8 +503,7 @@ impl Pad {
 
     /// Corner radius of the pad's rounded box, in nanometres: zero for a
     /// rectangle, half the shorter side for a circle or oval.
-    fn corner_radius_nm(&self) -> f64 {
-        let (_, size) = self.frame();
+    fn corner_radius_nm(&self, size: (f64, f64)) -> f64 {
         let short = size.0.min(size.1) / 2.0;
         match self.shape.as_str() {
             "circle" | "oval" => short,
@@ -495,7 +518,7 @@ impl Pad {
     pub fn outline_points_nm(&self, step_nm: f64) -> Vec<Point> {
         let (offset, size) = self.frame();
         let (hx, hy) = (size.0 / 2.0, size.1 / 2.0);
-        let radius = self.corner_radius_nm();
+        let radius = self.corner_radius_nm(size);
         let (cx, cy) = (hx - radius, hy - radius);
         // Corner arcs, counter-clockwise from the +x,+y corner, joined by
         // the straight edges between them.
@@ -556,13 +579,13 @@ impl Pad {
                 self.at.y_nm + (qy * cos - qx * sin).round() as i64,
             )
         };
-        let (ox, oy) = (self.drill_offset_nm.0 as f64, self.drill_offset_nm.1 as f64);
         // The slot runs along the longer drill dimension of the pad's frame.
+        // A drill offset moves the copper, not the hole.
         let half = (w - h).abs() / 2.0;
         let (ax, ay) = if w >= h { (half, 0.0) } else { (0.0, half) };
         Some(Hole {
-            a: to_board(ox - ax, oy - ay),
-            b: to_board(ox + ax, oy + ay),
+            a: to_board(-ax, -ay),
+            b: to_board(ax, ay),
             radius_nm: w.min(h) / 2.0,
         })
     }
@@ -1249,16 +1272,22 @@ fn rect_corners(node: &Node) -> Option<Vec<Point>> {
     ])
 }
 
+/// The outline of a `(pts ...)` list, in order: `(xy ..)` corners, with each
+/// `(arc (start) (mid) (end))` sampled into its chord points.
 fn polygon_vertices(node: &Node) -> Option<Vec<Point>> {
-    let points: Vec<Point> = node
-        .find("pts")?
-        .find_all("xy")
-        .filter_map(|xy| {
-            let x = xy.body().first()?.as_str()?.parse::<f64>().ok()?;
-            let y = xy.body().get(1)?.as_str()?.parse::<f64>().ok()?;
-            Some(Point::new(mm_to_nm(x), mm_to_nm(y)))
-        })
-        .collect();
+    let mut points: Vec<Point> = Vec::new();
+    for item in node.find("pts")?.body() {
+        match item.head() {
+            Some("xy") => {
+                let coord = |i: usize| item.body().get(i)?.as_str()?.parse::<f64>().ok();
+                if let (Some(x), Some(y)) = (coord(0), coord(1)) {
+                    points.push(Point::new(mm_to_nm(x), mm_to_nm(y)));
+                }
+            }
+            Some("arc") => points.extend(arc_vertices(item).unwrap_or_default()),
+            _ => {}
+        }
+    }
     (points.len() > 1).then_some(points)
 }
 
@@ -1401,13 +1430,7 @@ fn custom_pad_bbox(pad: &Node, anchor: (i64, i64)) -> Option<((i64, i64), (i64, 
             .iter()
             .filter_map(|k| parse_point(prim, k))
             .collect();
-        if let Some(pts) = prim.find("pts") {
-            points.extend(pts.find_all("xy").filter_map(|xy| {
-                let x = xy.body().first()?.as_str()?.parse::<f64>().ok()?;
-                let y = xy.body().get(1)?.as_str()?.parse::<f64>().ok()?;
-                Some(Point::new(mm_to_nm(x), mm_to_nm(y)))
-            }));
-        }
+        points.extend(polygon_vertices(prim).unwrap_or_default());
         // A circle's `end` is a point on it, so it reaches that far from the centre.
         if let (Some(c), Some(e)) = (parse_point(prim, "center"), parse_point(prim, "end")) {
             let radius = ((e.x_nm - c.x_nm) as f64).hypot((e.y_nm - c.y_nm) as f64) as i64;
@@ -1517,10 +1540,14 @@ fn parse_footprint(node: &Node) -> Footprint {
                     0.0
                 });
             let size_nm = pad_size_nm(pad);
-            let bbox = if shape == "custom" {
-                custom_pad_bbox(pad, size_nm)
-            } else {
-                None
+            let bbox = match shape.as_str() {
+                "custom" => custom_pad_bbox(pad, size_nm),
+                // The wide end's corners reach `rect_delta / 2` past `size / 2`.
+                "trapezoid" => {
+                    let d = parse_point(pad, "rect_delta").unwrap_or_default();
+                    Some(((0, 0), (size_nm.0 + d.x_nm.abs(), size_nm.1 + d.y_nm.abs())))
+                }
+                _ => None,
             };
             let layers = pad.layer_names();
             let (net, net_name) = match pad.net_binding("net") {
@@ -2000,5 +2027,66 @@ mod tests {
         assert_eq!(mm_to_nm(0.127), 127_000);
         assert_eq!(mm_to_nm(-0.5), -500_000);
         assert_eq!(mm_to_nm(f64::NAN), 0);
+    }
+
+    #[test]
+    fn a_drill_offset_moves_the_copper_not_the_hole() {
+        let mut pad = pad_at_origin("circle", 3.0, 3.0, 0.0, 0.0);
+        pad.at = Point::new(mm_to_nm(20.0), mm_to_nm(20.0));
+        pad.drill_nm = (mm_to_nm(1.0), mm_to_nm(1.0));
+        pad.drill_offset_nm = (mm_to_nm(1.0), 0);
+        assert_eq!(pad.hole().expect("hole").a, pad.at);
+        let at = |x: f64| Point::new(mm_to_nm(x), mm_to_nm(20.0));
+        // Copper centre (21, 20), radius 1.5: its edge is at 22.5, not 21.5.
+        assert!(pad.copper_distance_nm(at(22.5)).abs() < 1.0);
+        assert!(pad.copper_distance_nm(at(18.5)) > 0.0);
+        // The router's measure is untouched by the offset.
+        assert!(pad.signed_distance_nm(at(21.5)).abs() < 1.0);
+    }
+
+    #[test]
+    fn the_routers_distance_ignores_a_custom_pads_bounding_box() {
+        // An L: the box spans (-1,-1)..(3,1) but the empty corner is not copper.
+        let mut pad = pad_at_origin("custom", 0.2, 0.2, 0.0, 0.0);
+        pad.bbox = Some(((mm_to_nm(1.0), 0), (mm_to_nm(4.0), mm_to_nm(2.0))));
+        let corner = Point::new(mm_to_nm(2.5), mm_to_nm(0.8));
+        assert!(
+            pad.signed_distance_nm(corner) > 0.0,
+            "not on the pad for the router"
+        );
+        assert!(
+            pad.copper_distance_nm(corner) < 0.0,
+            "inside the box for DFM"
+        );
+    }
+
+    #[test]
+    fn a_trapezoid_is_measured_out_to_its_wide_corners() {
+        let board = PcbBoard::parse(
+            r#"(kicad_pcb (footprint "T:T" (layer "F.Cu") (at 0 0)
+  (pad "1" smd trapezoid (at 0 0) (size 1 1) (rect_delta 0 0.4) (layers "F.Cu"))))"#,
+        )
+        .expect("parses");
+        let pad = board.pads().next().expect("a pad");
+        let p = |y: f64| Point::new(0, mm_to_nm(y));
+        assert!(pad.copper_distance_nm(p(0.7)).abs() < 1.0);
+        assert!(pad.signed_distance_nm(p(0.7)) > 0.0);
+    }
+
+    #[test]
+    fn polygon_vertices_sample_arcs() {
+        let board = PcbBoard::parse(
+            r#"(kicad_pcb (gr_poly (pts (xy 0 0) (arc (start 0 0) (mid 1 1) (end 2 0)) (xy 2 -1)) (stroke (width 0.1) (type solid)) (fill no) (layer "F.SilkS")))"#,
+        )
+        .expect("parses");
+        let shape = board.silk_shapes().next().expect("a shape");
+        let top = shape
+            .strokes
+            .iter()
+            .map(|(a, _)| a.y_nm)
+            .max()
+            .expect("strokes");
+        assert!(top > mm_to_nm(0.9), "the bulge is traced, got {top}");
+        assert_eq!(board.silk_unread_count(), 0);
     }
 }
