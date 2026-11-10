@@ -726,6 +726,7 @@
 						)
 					)
 				)
+				(alternate "I2C_SCL" input line)
 			)
 			(pin bidirectional line
 				(at 10.16 2.54 180)
@@ -744,6 +745,7 @@
 						)
 					)
 				)
+				(alternate "I2C_SDA" bidirectional line)
 			)
 			(pin open_collector line
 				(at 10.16 -2.54 180)
@@ -4418,6 +4420,7 @@
 						)
 					)
 				)
+				(alternate "I2C_SCL" bidirectional line)
 				(alternate "I2C1_SCL" bidirectional line)
 				(alternate "SPI2_MISO" bidirectional line)
 				(alternate "TIM16_CH1N" bidirectional line)
@@ -4441,6 +4444,7 @@
 						)
 					)
 				)
+				(alternate "I2C_SDA" bidirectional line)
 				(alternate "ADC1_IN11" bidirectional line)
 				(alternate "I2C1_SDA" bidirectional line)
 				(alternate "SPI2_MOSI" bidirectional line)
@@ -5203,6 +5207,16 @@
 				)
 				(hide yes)
 			)
+		)
+		(pin
+			"4"
+			(alternate "I2C_SCL")
+			(uuid "6f1b4044-62f7-5d76-911c-ce6a28b2744f")
+		)
+		(pin
+			"5"
+			(alternate "I2C_SDA")
+			(uuid "3176c771-2114-51ca-a21a-902c14aede53")
 		)
 		(instances
 			(project

@@ -726,6 +726,7 @@
 						)
 					)
 				)
+				(alternate "I2C_SCL" input line)
 			)
 			(pin bidirectional line
 				(at 10.16 2.54 180)
@@ -744,6 +745,7 @@
 						)
 					)
 				)
+				(alternate "I2C_SDA" bidirectional line)
 			)
 			(pin open_collector line
 				(at 10.16 -2.54 180)
@@ -4418,6 +4420,7 @@
 						)
 					)
 				)
+				(alternate "I2C_SCL" bidirectional line)
 				(alternate "I2C1_SCL" bidirectional line)
 				(alternate "SPI2_MISO" bidirectional line)
 				(alternate "TIM16_CH1N" bidirectional line)
@@ -4441,6 +4444,7 @@
 						)
 					)
 				)
+				(alternate "I2C_SDA" bidirectional line)
 				(alternate "ADC1_IN11" bidirectional line)
 				(alternate "I2C1_SDA" bidirectional line)
 				(alternate "SPI2_MOSI" bidirectional line)
@@ -5267,7 +5271,7 @@
 		(property
 			"Value"
 			"(no value)"
-			(at 123.19 54.61 0)
+			(at 124.46 54.61 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -5319,6 +5323,16 @@
 				(hide yes)
 			)
 		)
+		(pin
+			"30"
+			(alternate "I2C_SCL")
+			(uuid "be33cb3b-e5fd-5c03-bda1-718e406043a7")
+		)
+		(pin
+			"31"
+			(alternate "I2C_SDA")
+			(uuid "30b56758-54f7-5e6c-a249-3fe31e21798f")
+		)
 		(instances
 			(project
 				"irrigation_controller"
@@ -5332,7 +5346,7 @@
 	)
 	(symbol
 		(lib_id "Device:C")
-		(at 163.83 68.58 0)
+		(at 158.75 68.58 0)
 		(unit 1)
 		(in_bom yes)
 		(on_board yes)
@@ -5340,7 +5354,7 @@
 		(property
 			"Reference"
 			"C_VDD1"
-			(at 168.37 67.31 0)
+			(at 163.29 67.31 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -5351,7 +5365,7 @@
 		(property
 			"Value"
 			"100nF"
-			(at 168.37 69.85 0)
+			(at 163.29 69.85 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -5362,7 +5376,7 @@
 		(property
 			"Footprint"
 			"Capacitor_SMD:C_0603_1608Metric"
-			(at 163.83 68.58 0)
+			(at 158.75 68.58 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -5373,7 +5387,7 @@
 		(property
 			"Datasheet"
 			""
-			(at 163.83 68.58 0)
+			(at 158.75 68.58 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -5384,7 +5398,7 @@
 		(property
 			"MPN"
 			""
-			(at 163.83 68.58 0)
+			(at 158.75 68.58 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -5395,7 +5409,7 @@
 		(property
 			"LCSC"
 			""
-			(at 163.83 68.58 0)
+			(at 158.75 68.58 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -5416,7 +5430,7 @@
 	)
 	(symbol
 		(lib_id "Device:C")
-		(at 184.15 68.58 0)
+		(at 179.07 68.58 0)
 		(unit 1)
 		(in_bom yes)
 		(on_board yes)
@@ -5424,7 +5438,7 @@
 		(property
 			"Reference"
 			"C_VDD2"
-			(at 188.69 67.31 0)
+			(at 183.61 67.31 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -5435,7 +5449,7 @@
 		(property
 			"Value"
 			"4.7uF"
-			(at 188.69 69.85 0)
+			(at 183.61 69.85 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -5446,7 +5460,7 @@
 		(property
 			"Footprint"
 			"Capacitor_SMD:C_0805_2012Metric"
-			(at 184.15 68.58 0)
+			(at 179.07 68.58 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -5457,7 +5471,7 @@
 		(property
 			"Datasheet"
 			""
-			(at 184.15 68.58 0)
+			(at 179.07 68.58 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -5468,7 +5482,7 @@
 		(property
 			"MPN"
 			""
-			(at 184.15 68.58 0)
+			(at 179.07 68.58 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -5479,7 +5493,7 @@
 		(property
 			"LCSC"
 			""
-			(at 184.15 68.58 0)
+			(at 179.07 68.58 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -5500,7 +5514,7 @@
 	)
 	(symbol
 		(lib_id "Device:Crystal_GND24")
-		(at 163.83 53.34 0)
+		(at 158.75 53.34 0)
 		(unit 1)
 		(in_bom yes)
 		(on_board yes)
@@ -5508,7 +5522,7 @@
 		(property
 			"Reference"
 			"Y1"
-			(at 163.83 48.26 0)
+			(at 158.75 48.26 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -5518,7 +5532,7 @@
 		(property
 			"Value"
 			"3TJ480000FYLBC"
-			(at 163.83 43.18 0)
+			(at 158.75 43.18 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -5528,7 +5542,7 @@
 		(property
 			"Footprint"
 			"Crystal:Crystal_SMD_3225-4Pin_3.2x2.5mm"
-			(at 163.83 53.34 0)
+			(at 158.75 53.34 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -5539,7 +5553,7 @@
 		(property
 			"Datasheet"
 			"https://www.lcsc.com/datasheet/lcsc_datasheet_2111301930_JYJE-3TJ480000FYLBC_C2924620.pdf"
-			(at 163.83 53.34 0)
+			(at 158.75 53.34 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -5550,7 +5564,7 @@
 		(property
 			"MPN"
 			"3TJ480000FYLBC"
-			(at 163.83 53.34 0)
+			(at 158.75 53.34 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -5561,7 +5575,7 @@
 		(property
 			"LCSC"
 			""
-			(at 163.83 53.34 0)
+			(at 158.75 53.34 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -5582,7 +5596,7 @@
 	)
 	(symbol
 		(lib_id "Device:C")
-		(at 204.47 68.58 0)
+		(at 199.39 68.58 0)
 		(unit 1)
 		(in_bom yes)
 		(on_board yes)
@@ -5590,7 +5604,7 @@
 		(property
 			"Reference"
 			"C_X1"
-			(at 209.01 67.31 0)
+			(at 203.93 67.31 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -5601,7 +5615,7 @@
 		(property
 			"Value"
 			"6.2pF"
-			(at 209.01 69.85 0)
+			(at 203.93 69.85 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -5612,7 +5626,7 @@
 		(property
 			"Footprint"
 			"Capacitor_SMD:C_0603_1608Metric"
-			(at 204.47 68.58 0)
+			(at 199.39 68.58 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -5623,7 +5637,7 @@
 		(property
 			"Datasheet"
 			""
-			(at 204.47 68.58 0)
+			(at 199.39 68.58 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -5634,7 +5648,7 @@
 		(property
 			"MPN"
 			""
-			(at 204.47 68.58 0)
+			(at 199.39 68.58 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -5645,7 +5659,7 @@
 		(property
 			"LCSC"
 			""
-			(at 204.47 68.58 0)
+			(at 199.39 68.58 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -5666,7 +5680,7 @@
 	)
 	(symbol
 		(lib_id "Device:C")
-		(at 224.79 68.58 0)
+		(at 219.71 68.58 0)
 		(unit 1)
 		(in_bom yes)
 		(on_board yes)
@@ -5674,7 +5688,7 @@
 		(property
 			"Reference"
 			"C_X2"
-			(at 229.33 67.31 0)
+			(at 224.25 67.31 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -5685,7 +5699,7 @@
 		(property
 			"Value"
 			"6.2pF"
-			(at 229.33 69.85 0)
+			(at 224.25 69.85 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -5696,7 +5710,7 @@
 		(property
 			"Footprint"
 			"Capacitor_SMD:C_0603_1608Metric"
-			(at 224.79 68.58 0)
+			(at 219.71 68.58 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -5707,7 +5721,7 @@
 		(property
 			"Datasheet"
 			""
-			(at 224.79 68.58 0)
+			(at 219.71 68.58 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -5718,7 +5732,7 @@
 		(property
 			"MPN"
 			""
-			(at 224.79 68.58 0)
+			(at 219.71 68.58 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -5729,7 +5743,7 @@
 		(property
 			"LCSC"
 			""
-			(at 224.79 68.58 0)
+			(at 219.71 68.58 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -5750,7 +5764,7 @@
 	)
 	(symbol
 		(lib_id "Device:R_US")
-		(at 54.61 33.02 0)
+		(at 52.07 43.18 0)
 		(unit 1)
 		(in_bom yes)
 		(on_board yes)
@@ -5758,7 +5772,7 @@
 		(property
 			"Reference"
 			"R_NRST"
-			(at 59.15 31.75 0)
+			(at 56.61 41.91 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -5769,7 +5783,7 @@
 		(property
 			"Value"
 			"10k"
-			(at 59.15 34.29 0)
+			(at 56.61 44.45 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -5780,7 +5794,7 @@
 		(property
 			"Footprint"
 			"Resistor_SMD:R_0603_1608Metric"
-			(at 54.61 33.02 0)
+			(at 52.07 43.18 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -5791,7 +5805,7 @@
 		(property
 			"Datasheet"
 			""
-			(at 54.61 33.02 0)
+			(at 52.07 43.18 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -5802,7 +5816,7 @@
 		(property
 			"MPN"
 			""
-			(at 54.61 33.02 0)
+			(at 52.07 43.18 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -5813,7 +5827,7 @@
 		(property
 			"LCSC"
 			""
-			(at 54.61 33.02 0)
+			(at 52.07 43.18 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -5834,7 +5848,7 @@
 	)
 	(symbol
 		(lib_id "Device:C")
-		(at 245.11 68.58 0)
+		(at 240.03 68.58 0)
 		(unit 1)
 		(in_bom yes)
 		(on_board yes)
@@ -5842,7 +5856,7 @@
 		(property
 			"Reference"
 			"C_NRST"
-			(at 249.65 67.31 0)
+			(at 244.57 67.31 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -5853,7 +5867,7 @@
 		(property
 			"Value"
 			"100nF"
-			(at 249.65 69.85 0)
+			(at 244.57 69.85 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -5864,7 +5878,7 @@
 		(property
 			"Footprint"
 			"Capacitor_SMD:C_0603_1608Metric"
-			(at 245.11 68.58 0)
+			(at 240.03 68.58 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -5875,7 +5889,7 @@
 		(property
 			"Datasheet"
 			""
-			(at 245.11 68.58 0)
+			(at 240.03 68.58 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -5886,7 +5900,7 @@
 		(property
 			"MPN"
 			""
-			(at 245.11 68.58 0)
+			(at 240.03 68.58 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -5897,7 +5911,7 @@
 		(property
 			"LCSC"
 			""
-			(at 245.11 68.58 0)
+			(at 240.03 68.58 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -5918,7 +5932,7 @@
 	)
 	(symbol
 		(lib_id "Switch:SW_Push")
-		(at 163.83 132.08 270)
+		(at 52.07 60.96 270)
 		(unit 1)
 		(in_bom yes)
 		(on_board yes)
@@ -5926,7 +5940,7 @@
 		(property
 			"Reference"
 			"SW_RESET"
-			(at 168.37 130.81 90)
+			(at 56.61 59.69 90)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -5937,18 +5951,18 @@
 		(property
 			"Value"
 			"PTS645SM43SMTR92 LFS"
-			(at 168.37 133.35 90)
+			(at 47.53 62.23 90)
 			(effects
 				(font
 					(size 1.27 1.27)
 				)
-				(justify left)
+				(justify right)
 			)
 		)
 		(property
 			"Footprint"
 			"Button_Switch_SMD:SW_SPST_PTS645Sx43SMTR92"
-			(at 163.83 132.08 0)
+			(at 52.07 60.96 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -5959,7 +5973,7 @@
 		(property
 			"Datasheet"
 			""
-			(at 163.83 132.08 0)
+			(at 52.07 60.96 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -5970,7 +5984,7 @@
 		(property
 			"MPN"
 			"PTS645SM43SMTR92 LFS"
-			(at 163.83 132.08 0)
+			(at 52.07 60.96 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -5981,7 +5995,7 @@
 		(property
 			"LCSC"
 			"C221880"
-			(at 163.83 132.08 0)
+			(at 52.07 60.96 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -6020,11 +6034,12 @@
 		(property
 			"Value"
 			"(no value)"
-			(at 34.29 62.23 0)
+			(at 38.1 54.61 0)
 			(effects
 				(font
 					(size 1.27 1.27)
 				)
+				(justify left)
 			)
 		)
 		(property
@@ -6084,7 +6099,7 @@
 	)
 	(symbol
 		(lib_id "Connector:TestPoint")
-		(at 212.09 53.34 0)
+		(at 158.75 132.08 0)
 		(unit 1)
 		(in_bom yes)
 		(on_board yes)
@@ -6092,7 +6107,7 @@
 		(property
 			"Reference"
 			"TP_NRST"
-			(at 214.63 52.07 0)
+			(at 161.29 130.81 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -6103,7 +6118,7 @@
 		(property
 			"Value"
 			"(no value)"
-			(at 208.28 54.61 0)
+			(at 154.94 133.35 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -6114,7 +6129,7 @@
 		(property
 			"Footprint"
 			"TestPoint:TestPoint_Pad_D1.5mm"
-			(at 212.09 53.34 0)
+			(at 158.75 132.08 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -6125,7 +6140,7 @@
 		(property
 			"Datasheet"
 			""
-			(at 212.09 53.34 0)
+			(at 158.75 132.08 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -6136,7 +6151,7 @@
 		(property
 			"MPN"
 			""
-			(at 212.09 53.34 0)
+			(at 158.75 132.08 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -6147,7 +6162,7 @@
 		(property
 			"LCSC"
 			""
-			(at 212.09 53.34 0)
+			(at 158.75 132.08 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -6168,7 +6183,7 @@
 	)
 	(symbol
 		(lib_id "Connector:TestPoint")
-		(at 212.09 132.08 0)
+		(at 204.47 53.34 0)
 		(unit 1)
 		(in_bom yes)
 		(on_board yes)
@@ -6176,7 +6191,7 @@
 		(property
 			"Reference"
 			"TP_SWDIO"
-			(at 214.63 130.81 0)
+			(at 207.01 52.07 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -6187,7 +6202,7 @@
 		(property
 			"Value"
 			"(no value)"
-			(at 208.28 133.35 0)
+			(at 200.66 54.61 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -6198,7 +6213,7 @@
 		(property
 			"Footprint"
 			"TestPoint:TestPoint_Pad_D1.5mm"
-			(at 212.09 132.08 0)
+			(at 204.47 53.34 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -6209,7 +6224,7 @@
 		(property
 			"Datasheet"
 			""
-			(at 212.09 132.08 0)
+			(at 204.47 53.34 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -6220,7 +6235,7 @@
 		(property
 			"MPN"
 			""
-			(at 212.09 132.08 0)
+			(at 204.47 53.34 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -6231,7 +6246,7 @@
 		(property
 			"LCSC"
 			""
-			(at 212.09 132.08 0)
+			(at 204.47 53.34 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -6252,7 +6267,7 @@
 	)
 	(symbol
 		(lib_id "Connector:TestPoint")
-		(at 255.27 53.34 0)
+		(at 204.47 132.08 0)
 		(unit 1)
 		(in_bom yes)
 		(on_board yes)
@@ -6260,7 +6275,7 @@
 		(property
 			"Reference"
 			"TP_SWCLK"
-			(at 257.81 52.07 0)
+			(at 207.01 130.81 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -6271,7 +6286,7 @@
 		(property
 			"Value"
 			"(no value)"
-			(at 251.46 54.61 0)
+			(at 200.66 133.35 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -6282,7 +6297,7 @@
 		(property
 			"Footprint"
 			"TestPoint:TestPoint_Pad_D1.5mm"
-			(at 255.27 53.34 0)
+			(at 204.47 132.08 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -6293,7 +6308,7 @@
 		(property
 			"Datasheet"
 			""
-			(at 255.27 53.34 0)
+			(at 204.47 132.08 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -6304,7 +6319,7 @@
 		(property
 			"MPN"
 			""
-			(at 255.27 53.34 0)
+			(at 204.47 132.08 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -6315,7 +6330,7 @@
 		(property
 			"LCSC"
 			""
-			(at 255.27 53.34 0)
+			(at 204.47 132.08 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -6376,8 +6391,8 @@
 	)
 	(wire
 		(pts
-			(xy 163.83 72.39)
-			(xy 163.83 74.93)
+			(xy 158.75 72.39)
+			(xy 158.75 74.93)
 		)
 		(stroke
 			(width 0)
@@ -6387,7 +6402,7 @@
 	)
 	(symbol
 		(lib_id "power:GND")
-		(at 163.83 74.93 0)
+		(at 158.75 74.93 0)
 		(unit 1)
 		(in_bom no)
 		(on_board no)
@@ -6395,7 +6410,7 @@
 		(property
 			"Reference"
 			"#PWR1855"
-			(at 163.83 74.93 0)
+			(at 158.75 74.93 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -6406,7 +6421,7 @@
 		(property
 			"Value"
 			"GND"
-			(at 163.83 78.74 0)
+			(at 158.75 78.74 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -6416,8 +6431,8 @@
 	)
 	(wire
 		(pts
-			(xy 184.15 72.39)
-			(xy 184.15 74.93)
+			(xy 179.07 72.39)
+			(xy 179.07 74.93)
 		)
 		(stroke
 			(width 0)
@@ -6427,7 +6442,7 @@
 	)
 	(symbol
 		(lib_id "power:GND")
-		(at 184.15 74.93 0)
+		(at 179.07 74.93 0)
 		(unit 1)
 		(in_bom no)
 		(on_board no)
@@ -6435,7 +6450,7 @@
 		(property
 			"Reference"
 			"#PWR9414"
-			(at 184.15 74.93 0)
+			(at 179.07 74.93 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -6446,7 +6461,7 @@
 		(property
 			"Value"
 			"GND"
-			(at 184.15 78.74 0)
+			(at 179.07 78.74 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -6456,8 +6471,8 @@
 	)
 	(wire
 		(pts
-			(xy 163.83 58.42)
-			(xy 163.83 60.96)
+			(xy 158.75 58.42)
+			(xy 158.75 60.96)
 		)
 		(stroke
 			(width 0)
@@ -6467,7 +6482,7 @@
 	)
 	(symbol
 		(lib_id "power:GND")
-		(at 163.83 60.96 0)
+		(at 158.75 60.96 0)
 		(unit 1)
 		(in_bom no)
 		(on_board no)
@@ -6475,7 +6490,7 @@
 		(property
 			"Reference"
 			"#PWR1789"
-			(at 163.83 60.96 0)
+			(at 158.75 60.96 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -6486,7 +6501,7 @@
 		(property
 			"Value"
 			"GND"
-			(at 168.27 63.5 0)
+			(at 163.19 63.5 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -6497,8 +6512,8 @@
 	)
 	(wire
 		(pts
-			(xy 163.83 58.42)
-			(xy 163.83 60.96)
+			(xy 158.75 58.42)
+			(xy 158.75 60.96)
 		)
 		(stroke
 			(width 0)
@@ -6508,7 +6523,7 @@
 	)
 	(symbol
 		(lib_id "power:GND")
-		(at 163.83 60.96 0)
+		(at 158.75 60.96 0)
 		(unit 1)
 		(in_bom no)
 		(on_board no)
@@ -6516,7 +6531,7 @@
 		(property
 			"Reference"
 			"#PWR2303"
-			(at 163.83 60.96 0)
+			(at 158.75 60.96 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -6527,7 +6542,7 @@
 		(property
 			"Value"
 			"GND"
-			(at 159.39 63.5 0)
+			(at 154.31 63.5 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -6538,8 +6553,8 @@
 	)
 	(wire
 		(pts
-			(xy 204.47 72.39)
-			(xy 204.47 74.93)
+			(xy 199.39 72.39)
+			(xy 199.39 74.93)
 		)
 		(stroke
 			(width 0)
@@ -6549,7 +6564,7 @@
 	)
 	(symbol
 		(lib_id "power:GND")
-		(at 204.47 74.93 0)
+		(at 199.39 74.93 0)
 		(unit 1)
 		(in_bom no)
 		(on_board no)
@@ -6557,7 +6572,7 @@
 		(property
 			"Reference"
 			"#PWR2118"
-			(at 204.47 74.93 0)
+			(at 199.39 74.93 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -6568,7 +6583,7 @@
 		(property
 			"Value"
 			"GND"
-			(at 204.47 78.74 0)
+			(at 199.39 78.74 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -6578,8 +6593,8 @@
 	)
 	(wire
 		(pts
-			(xy 224.79 72.39)
-			(xy 224.79 74.93)
+			(xy 219.71 72.39)
+			(xy 219.71 74.93)
 		)
 		(stroke
 			(width 0)
@@ -6589,7 +6604,7 @@
 	)
 	(symbol
 		(lib_id "power:GND")
-		(at 224.79 74.93 0)
+		(at 219.71 74.93 0)
 		(unit 1)
 		(in_bom no)
 		(on_board no)
@@ -6597,7 +6612,7 @@
 		(property
 			"Reference"
 			"#PWR2372"
-			(at 224.79 74.93 0)
+			(at 219.71 74.93 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -6608,7 +6623,7 @@
 		(property
 			"Value"
 			"GND"
-			(at 224.79 78.74 0)
+			(at 219.71 78.74 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -6618,8 +6633,8 @@
 	)
 	(wire
 		(pts
-			(xy 245.11 72.39)
-			(xy 245.11 74.93)
+			(xy 240.03 72.39)
+			(xy 240.03 74.93)
 		)
 		(stroke
 			(width 0)
@@ -6629,7 +6644,7 @@
 	)
 	(symbol
 		(lib_id "power:GND")
-		(at 245.11 74.93 0)
+		(at 240.03 74.93 0)
 		(unit 1)
 		(in_bom no)
 		(on_board no)
@@ -6637,7 +6652,7 @@
 		(property
 			"Reference"
 			"#PWR5377"
-			(at 245.11 74.93 0)
+			(at 240.03 74.93 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -6648,7 +6663,7 @@
 		(property
 			"Value"
 			"GND"
-			(at 245.11 78.74 0)
+			(at 240.03 78.74 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -6658,8 +6673,8 @@
 	)
 	(wire
 		(pts
-			(xy 163.83 137.16)
-			(xy 163.83 139.7)
+			(xy 52.07 66.04)
+			(xy 52.07 68.58)
 		)
 		(stroke
 			(width 0)
@@ -6669,7 +6684,7 @@
 	)
 	(symbol
 		(lib_id "power:GND")
-		(at 163.83 139.7 0)
+		(at 52.07 68.58 0)
 		(unit 1)
 		(in_bom no)
 		(on_board no)
@@ -6677,7 +6692,7 @@
 		(property
 			"Reference"
 			"#PWR6769"
-			(at 163.83 139.7 0)
+			(at 52.07 68.58 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -6688,7 +6703,7 @@
 		(property
 			"Value"
 			"GND"
-			(at 163.83 143.51 0)
+			(at 52.07 72.39 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -6779,8 +6794,8 @@
 	)
 	(wire
 		(pts
-			(xy 163.83 64.77)
-			(xy 163.83 62.23)
+			(xy 158.75 64.77)
+			(xy 158.75 62.23)
 		)
 		(stroke
 			(width 0)
@@ -6790,7 +6805,7 @@
 	)
 	(symbol
 		(lib_id "power:+3V3")
-		(at 163.83 62.23 0)
+		(at 158.75 62.23 0)
 		(unit 1)
 		(in_bom no)
 		(on_board no)
@@ -6798,7 +6813,7 @@
 		(property
 			"Reference"
 			"#PWR2961"
-			(at 163.83 62.23 0)
+			(at 158.75 62.23 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -6809,7 +6824,7 @@
 		(property
 			"Value"
 			"+3V3"
-			(at 165.73 59.69 0)
+			(at 160.65 59.69 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -6820,8 +6835,8 @@
 	)
 	(wire
 		(pts
-			(xy 184.15 64.77)
-			(xy 184.15 62.23)
+			(xy 179.07 64.77)
+			(xy 179.07 62.23)
 		)
 		(stroke
 			(width 0)
@@ -6831,7 +6846,7 @@
 	)
 	(symbol
 		(lib_id "power:+3V3")
-		(at 184.15 62.23 0)
+		(at 179.07 62.23 0)
 		(unit 1)
 		(in_bom no)
 		(on_board no)
@@ -6839,7 +6854,7 @@
 		(property
 			"Reference"
 			"#PWR9113"
-			(at 184.15 62.23 0)
+			(at 179.07 62.23 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -6850,7 +6865,7 @@
 		(property
 			"Value"
 			"+3V3"
-			(at 184.15 58.42 0)
+			(at 179.07 58.42 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -6860,8 +6875,8 @@
 	)
 	(wire
 		(pts
-			(xy 54.61 29.21)
-			(xy 54.61 26.67)
+			(xy 52.07 39.37)
+			(xy 52.07 36.83)
 		)
 		(stroke
 			(width 0)
@@ -6871,7 +6886,7 @@
 	)
 	(symbol
 		(lib_id "power:+3V3")
-		(at 54.61 26.67 0)
+		(at 52.07 36.83 0)
 		(unit 1)
 		(in_bom no)
 		(on_board no)
@@ -6879,7 +6894,7 @@
 		(property
 			"Reference"
 			"#PWR9947"
-			(at 54.61 26.67 0)
+			(at 52.07 36.83 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -6890,7 +6905,7 @@
 		(property
 			"Value"
 			"+3V3"
-			(at 54.61 22.86 0)
+			(at 52.07 33.02 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -6964,8 +6979,8 @@
 	)
 	(wire
 		(pts
-			(xy 54.61 36.83)
-			(xy 54.61 39.37)
+			(xy 52.07 46.99)
+			(xy 52.07 49.53)
 		)
 		(stroke
 			(width 0)
@@ -6976,8 +6991,8 @@
 	)
 	(wire
 		(pts
-			(xy 54.61 39.37)
-			(xy 59.69 39.37)
+			(xy 52.07 49.53)
+			(xy 57.15 49.53)
 		)
 		(stroke
 			(width 0)
@@ -6988,7 +7003,7 @@
 	)
 	(label
 		"NRST"
-		(at 59.69 39.37 0)
+		(at 57.15 49.53 0)
 		(effects
 			(font
 				(size 1.27 1.27)
@@ -7000,8 +7015,8 @@
 	)
 	(wire
 		(pts
-			(xy 245.11 64.77)
-			(xy 245.11 62.23)
+			(xy 240.03 64.77)
+			(xy 240.03 62.23)
 		)
 		(stroke
 			(width 0)
@@ -7012,8 +7027,8 @@
 	)
 	(wire
 		(pts
+			(xy 240.03 62.23)
 			(xy 245.11 62.23)
-			(xy 250.19 62.23)
 		)
 		(stroke
 			(width 0)
@@ -7024,7 +7039,7 @@
 	)
 	(label
 		"NRST"
-		(at 250.19 62.23 0)
+		(at 245.11 62.23 0)
 		(effects
 			(font
 				(size 1.27 1.27)
@@ -7036,8 +7051,8 @@
 	)
 	(wire
 		(pts
-			(xy 163.83 127)
-			(xy 163.83 124.46)
+			(xy 52.07 55.88)
+			(xy 52.07 53.34)
 		)
 		(stroke
 			(width 0)
@@ -7048,8 +7063,8 @@
 	)
 	(wire
 		(pts
-			(xy 163.83 124.46)
-			(xy 168.91 124.46)
+			(xy 52.07 53.34)
+			(xy 57.15 53.34)
 		)
 		(stroke
 			(width 0)
@@ -7060,7 +7075,7 @@
 	)
 	(label
 		"NRST"
-		(at 168.91 124.46 0)
+		(at 57.15 53.34 0)
 		(effects
 			(font
 				(size 1.27 1.27)
@@ -7096,8 +7111,8 @@
 	)
 	(wire
 		(pts
-			(xy 212.09 53.34)
-			(xy 212.09 55.88)
+			(xy 158.75 132.08)
+			(xy 158.75 134.62)
 		)
 		(stroke
 			(width 0)
@@ -7108,8 +7123,8 @@
 	)
 	(wire
 		(pts
-			(xy 212.09 55.88)
-			(xy 217.17 55.88)
+			(xy 158.75 134.62)
+			(xy 163.83 134.62)
 		)
 		(stroke
 			(width 0)
@@ -7120,7 +7135,7 @@
 	)
 	(label
 		"NRST"
-		(at 217.17 55.88 0)
+		(at 163.83 134.62 0)
 		(effects
 			(font
 				(size 1.27 1.27)
@@ -7156,8 +7171,8 @@
 	)
 	(wire
 		(pts
-			(xy 160.02 53.34)
 			(xy 154.94 53.34)
+			(xy 149.86 53.34)
 		)
 		(stroke
 			(width 0)
@@ -7168,7 +7183,7 @@
 	)
 	(label
 		"OSC_IN"
-		(at 154.94 53.34 180)
+		(at 149.86 53.34 180)
 		(effects
 			(font
 				(size 1.27 1.27)
@@ -7180,8 +7195,8 @@
 	)
 	(wire
 		(pts
-			(xy 204.47 64.77)
-			(xy 204.47 62.23)
+			(xy 199.39 64.77)
+			(xy 199.39 62.23)
 		)
 		(stroke
 			(width 0)
@@ -7192,8 +7207,8 @@
 	)
 	(wire
 		(pts
+			(xy 199.39 62.23)
 			(xy 204.47 62.23)
-			(xy 209.55 62.23)
 		)
 		(stroke
 			(width 0)
@@ -7204,7 +7219,7 @@
 	)
 	(label
 		"OSC_IN"
-		(at 209.55 62.23 0)
+		(at 204.47 62.23 0)
 		(effects
 			(font
 				(size 1.27 1.27)
@@ -7240,8 +7255,8 @@
 	)
 	(wire
 		(pts
+			(xy 162.56 53.34)
 			(xy 167.64 53.34)
-			(xy 172.72 53.34)
 		)
 		(stroke
 			(width 0)
@@ -7252,7 +7267,7 @@
 	)
 	(label
 		"OSC_OUT"
-		(at 172.72 53.34 0)
+		(at 167.64 53.34 0)
 		(effects
 			(font
 				(size 1.27 1.27)
@@ -7264,8 +7279,8 @@
 	)
 	(wire
 		(pts
-			(xy 224.79 64.77)
-			(xy 224.79 62.23)
+			(xy 219.71 64.77)
+			(xy 219.71 62.23)
 		)
 		(stroke
 			(width 0)
@@ -7276,8 +7291,8 @@
 	)
 	(wire
 		(pts
+			(xy 219.71 62.23)
 			(xy 224.79 62.23)
-			(xy 229.87 62.23)
 		)
 		(stroke
 			(width 0)
@@ -7288,7 +7303,7 @@
 	)
 	(label
 		"OSC_OUT"
-		(at 229.87 62.23 0)
+		(at 224.79 62.23 0)
 		(effects
 			(font
 				(size 1.27 1.27)
@@ -7348,8 +7363,8 @@
 	)
 	(wire
 		(pts
-			(xy 212.09 132.08)
-			(xy 212.09 134.62)
+			(xy 204.47 53.34)
+			(xy 204.47 55.88)
 		)
 		(stroke
 			(width 0)
@@ -7360,8 +7375,8 @@
 	)
 	(wire
 		(pts
-			(xy 212.09 134.62)
-			(xy 217.17 134.62)
+			(xy 204.47 55.88)
+			(xy 209.55 55.88)
 		)
 		(stroke
 			(width 0)
@@ -7372,7 +7387,7 @@
 	)
 	(label
 		"SWDIO"
-		(at 217.17 134.62 0)
+		(at 209.55 55.88 0)
 		(effects
 			(font
 				(size 1.27 1.27)
@@ -7432,8 +7447,8 @@
 	)
 	(wire
 		(pts
-			(xy 255.27 53.34)
-			(xy 255.27 55.88)
+			(xy 204.47 132.08)
+			(xy 204.47 134.62)
 		)
 		(stroke
 			(width 0)
@@ -7444,8 +7459,8 @@
 	)
 	(wire
 		(pts
-			(xy 255.27 55.88)
-			(xy 260.35 55.88)
+			(xy 204.47 134.62)
+			(xy 209.55 134.62)
 		)
 		(stroke
 			(width 0)
@@ -7456,7 +7471,7 @@
 	)
 	(label
 		"SWCLK"
-		(at 260.35 55.88 0)
+		(at 209.55 134.62 0)
 		(effects
 			(font
 				(size 1.27 1.27)
@@ -7698,7 +7713,7 @@
 	)
 	(text
 		"MCU"
-		(at 138.6355 15.81 0)
+		(at 131.7205 15.81 0)
 		(effects
 			(font
 				(size 2.54 2.54)
@@ -7710,8 +7725,8 @@
 	)
 	(polyline
 		(pts
-			(xy 271.92 12.27)
-			(xy 271.92 146.75)
+			(xy 258.09 12.27)
+			(xy 258.09 139.065)
 		)
 		(stroke
 			(width 0.254)
@@ -7722,8 +7737,8 @@
 	)
 	(polyline
 		(pts
-			(xy 12.59 146.75)
-			(xy 271.92 146.75)
+			(xy 12.59 139.065)
+			(xy 258.09 139.065)
 		)
 		(stroke
 			(width 0.254)
@@ -7735,7 +7750,7 @@
 	(polyline
 		(pts
 			(xy 12.59 12.27)
-			(xy 12.59 146.75)
+			(xy 12.59 139.065)
 		)
 		(stroke
 			(width 0.254)

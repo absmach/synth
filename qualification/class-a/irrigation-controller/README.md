@@ -194,13 +194,13 @@ The source and sidecar in this directory were exported three times through the S
 
 | file | export 1 | export 2 | export 3 | |
 |---|---|---|---|---|
-| `irrigation_controller.kicad_sch` (root sheet) | 293e9eb5e2 | 293e9eb5e2 | 293e9eb5e2 | byte-identical |
+| `irrigation_controller.kicad_sch` (root sheet) | 7bd5b95889 | 7bd5b95889 | 7bd5b95889 | byte-identical |
 | `irrigation_controller.kicad_pro` | a33f249cce | a33f249cce | a33f249cce | byte-identical |
-| `irrigation_controller.kicad_sym` | 2921b461ed | 2921b461ed | 2921b461ed | byte-identical |
+| `irrigation_controller.kicad_sym` | 97b086aaed | 97b086aaed | 97b086aaed | byte-identical |
 | `bom.csv` | 3e1f0ea17f | 3e1f0ea17f | 3e1f0ea17f | byte-identical |
 | `pnp.csv` | ce04cd53cc | ce04cd53cc | ce04cd53cc | byte-identical |
 | `irrigation_controller.synth.kicad_pcb` (un-routed) | ee150eecb6 | ee150eecb6 | ee150eecb6 | byte-identical |
-| `irrigation_controller.kicad_pcb` | 845947e135 | 179e7fe182 | 3edcc539ab | not byte-identical; identical after the router's and KiCad's random ids are masked (normalized) |
+| `irrigation_controller.kicad_pcb` | fddf1c4f41 | ab7dc8e6f3 | dcad63a7d0 | not byte-identical; identical after the router's and KiCad's random ids are masked (normalized) |
 | Gerber and drill content | 1c84c56d98 | 1c84c56d98 | 1c84c56d98 | identical after the creation time in the headers is masked (normalized) |
 
 Byte-identical across the three exports: `kicad_sch`, `kicad_pro`, `kicad_sym`, `bom.csv`, `pnp.csv` and the un-routed `synth.kicad_pcb`. Not byte-identical but equal after normalization: the routed PCB, which differs between runs only in the random ids the router gives its
@@ -209,8 +209,8 @@ tracks and vias and KiCad gives its zone fills (with those masked, all three are
 writes into every Gerber, the drill file and the job file, and leaves out the drill-map PDF.
 
 What is committed, from export 1 on the pinned binary: [`export/`](export/) (the routed board, the project, the root schematic sheet, the
-BOM and placement files, Synth's routing and DRC JSON). The 13 group-sheet schematics and `irrigation_controller.kicad_sym` (`4caef2d61f`) come from an export of the same source and
-user registry on the tree of `upstream/main` `fbfd8d60`: the pinned binary writes group sheets and a symbol library without the power symbols (27 more ERC `lib_symbol_issues`), which that tree includes; the root sheet is byte-identical between the two (`293e9eb5e2`), [`reports/kicad_drc.json`](reports/kicad_drc.json) and
+BOM and placement files, Synth's routing and DRC JSON). The 13 group-sheet schematics and `irrigation_controller.kicad_sym` (`267dcbd1d9`) come from an export of the same source and
+user registry on the tree of `upstream/main` `fbfd8d60`: the pinned binary writes group sheets and a symbol library without the power symbols (27 more ERC `lib_symbol_issues`), which that tree includes; the root sheet is byte-identical between the two (`7bd5b95889`), [`reports/kicad_drc.json`](reports/kicad_drc.json) and
 [`reports/kicad_erc.json`](reports/kicad_erc.json) (KiCad 10.0.6 with the library tables), [`fab/`](fab/), and
 [`reproduce/`](reproduce/): [`reproduce.sh`](reproduce/reproduce.sh) is supplemental tooling, not the evidence of how the board was made (see [`PROVENANCE.md`](PROVENANCE.md)); it builds the pinned Synth, KiCadRoutingTools and Python
 packages ([`pins.env`](reproduce/pins.env)), exports the source three times, compares the hashes and rebuilds the fabrication

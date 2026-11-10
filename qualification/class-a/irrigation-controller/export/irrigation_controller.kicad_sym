@@ -714,6 +714,7 @@
 						)
 					)
 				)
+				(alternate "I2C_SCL" input line)
 			)
 			(pin bidirectional line
 				(at 10.16 2.54 180)
@@ -732,6 +733,7 @@
 						)
 					)
 				)
+				(alternate "I2C_SDA" bidirectional line)
 			)
 			(pin open_collector line
 				(at 10.16 -2.54 180)
@@ -4406,6 +4408,7 @@
 						)
 					)
 				)
+				(alternate "I2C_SCL" bidirectional line)
 				(alternate "I2C1_SCL" bidirectional line)
 				(alternate "SPI2_MISO" bidirectional line)
 				(alternate "TIM16_CH1N" bidirectional line)
@@ -4429,6 +4432,7 @@
 						)
 					)
 				)
+				(alternate "I2C_SDA" bidirectional line)
 				(alternate "ADC1_IN11" bidirectional line)
 				(alternate "I2C1_SDA" bidirectional line)
 				(alternate "SPI2_MOSI" bidirectional line)

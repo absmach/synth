@@ -1,6 +1,6 @@
 {
   "board": "irrigation_controller.kicad_pcb",
-  "board_sha256_10": "845947e135",
+  "board_sha256_10": "fddf1c4f41",
   "delivered_board": {
     "segments": 698,
     "vias": 152,

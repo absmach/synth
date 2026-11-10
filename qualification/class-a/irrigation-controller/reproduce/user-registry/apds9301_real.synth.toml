@@ -39,11 +39,13 @@ electrical_type = "input"
 name = "SCL"
 number = "4"
 electrical_type = "input"
+capabilities = ["i2c_scl"]
 
 [[pins]]
 name = "SDA"
 number = "5"
 electrical_type = "bidirectional"
+capabilities = ["i2c_sda"]
 
 [[pins]]
 name = "INT"
