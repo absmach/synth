@@ -59,7 +59,7 @@ The placement is pinned in [`ice40_hdmi_node.placement.layout.toml`](ice40_hdmi_
 
 ## Sourcing
 
-Every BOM line of [`fab/ice40_hdmi_node_bom_orderable.csv`](fab/ice40_hdmi_node_bom_orderable.csv) has a manufacturer, MPN, package, rating, datasheet or page, distributor and order number from [`agent-run/tools/sourcing.csv`](agent-run/tools/sourcing.csv); 77 lines: 68 parts and 9 board features (2 mounting holes, 7 test points). `J1` is a hand-fit through-hole part. Two lines carry a sourcing note: the 2 k resistors (`R9`, `R10`, UNI-ROYAL 0603WAF2001T5E, LCSC `C22975`) showed 0 in stock on the LCSC page read, and the onsemi SRV05-4MR6T1G (`D3`) has no onsemi listing at LCSC, so it is sourced from DigiKey. The part pages were read in 2026-11 and the stock is not firm.
+[`fab/ice40_hdmi_node_bom_orderable.csv`](fab/ice40_hdmi_node_bom_orderable.csv) has 77 lines: 68 parts, each with a manufacturer, MPN, package, rating, datasheet or page, distributor and order number from [`agent-run/tools/sourcing.csv`](agent-run/tools/sourcing.csv), and 9 board features (2 mounting holes, 7 test points) that are not parts and carry no identity. `J1` is a hand-fit through-hole part. Two lines carry a sourcing note: the 2 k resistors (`R9`, `R10`, UNI-ROYAL 0603WAF2001T5E, LCSC `C22975`) showed 0 in stock on the LCSC page read, and the onsemi SRV05-4MR6T1G (`D3`) has no onsemi listing at LCSC, so it is sourced from DigiKey. The part pages were read in 2026-11 and the stock is not firm.
 
 ## Fabrication package
 
@@ -77,7 +77,7 @@ The source and sidecar in this directory were exported three times through the S
 | `bom.csv` | c152da5500 | c152da5500 | c152da5500 | byte-identical |
 | `pnp.csv` | 37179498a3 | 37179498a3 | 37179498a3 | byte-identical |
 | `ice40_hdmi_node.synth.kicad_pcb` | 28c6dd9da1 | 28c6dd9da1 | 28c6dd9da1 | byte-identical |
-| `ice40_hdmi_node.kicad_pcb` | 385af5e2ab | 2d0330eff1 | 0fbdb2479a | not byte-identical; identical after the router's and KiCad's random ids are masked (`e045b457d7`) |
+| `ice40_hdmi_node.kicad_pcb` | d8648ae55c | d607683b8d | ef5d807e5d | not byte-identical; identical after the router's and KiCad's random ids are masked (`e045b457d7`) |
 | the 6 sub-sheet `.kicad_sch` files | | | | byte-identical in all three exports |
 | Gerber and drill content | 92d05ff69b | 92d05ff69b | 92d05ff69b | identical after the creation time in the headers is masked |
 
@@ -89,7 +89,7 @@ Jeff Mboya is the independent PCB reviewer as well as the author of this pull re
 
 ### PCB review sign-off
 
-PCB review sign-off required by #39: JeffMboya, on the package in `fab/` (Gerber content hash `92d05ff69b`, STEP geometry hash `0ab9ee69cb`). The sign-off is JeffMboya's own: it is recorded per item as "verified and approved by JeffMboya" when Jeff states it.
+PCB review sign-off required by #40: JeffMboya, on the package in `fab/` (Gerber content hash `92d05ff69b`, STEP geometry hash `0ab9ee69cb`). The sign-off is JeffMboya's own: it is recorded per item as "verified and approved by JeffMboya" when Jeff states it.
 
 | Item | Signed off |
 |---|---|

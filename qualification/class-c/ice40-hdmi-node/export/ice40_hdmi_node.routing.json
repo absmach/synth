@@ -18,14 +18,14 @@
     "command": [
       "/home/jeff/synth-local/krtvenv/bin/python",
       "/home/jeff/synth-local/wt-bga/tools/kicad_routing_tools_route.py",
-      "/home/jeff/synth-local/work/classc3b/wsp3/exp1/ice40_hdmi_node.synth.kicad_pcb",
-      "/home/jeff/synth-local/work/classc3b/wsp3/exp1/ice40_hdmi_node.kicadroutingtools.kicad_pcb",
+      "/home/jeff/synth-local/work/classc3b/wsp3/exp_r1/ice40_hdmi_node.synth.kicad_pcb",
+      "/home/jeff/synth-local/work/classc3b/wsp3/exp_r1/ice40_hdmi_node.kicadroutingtools.kicad_pcb",
       "--repo",
       "/home/jeff/synth-local/krt",
       "--python",
       "/home/jeff/synth-local/krtvenv/bin/python",
       "--stats",
-      "/home/jeff/synth-local/work/classc3b/wsp3/exp1/ice40_hdmi_node.krt-stats.json",
+      "/home/jeff/synth-local/work/classc3b/wsp3/exp_r1/ice40_hdmi_node.krt-stats.json",
       "--escalation",
       "board",
       "--fab-tier",
@@ -39,12 +39,12 @@
       "escalation": "board",
       "fab_tier": "auto",
       "strict_sizes": "true",
-      "wall_clock_secs": "2700"
+      "wall_clock_secs": "1200"
     },
     "input_hash": "28c6dd9da1256c9557be031b6712a4b2b7879998778a16afefce64302af4d912",
     "output_hash": "",
-    "source_revision": null,
-    "duration_ms": 532543
+    "source_revision": "fbfd8d60239391d17cdd81b9337fc0ee4ee22cd9",
+    "duration_ms": 293037
   },
   "statistics": {
     "connected_nets": 46,
@@ -63,12 +63,12 @@
     }
   },
   "artifacts": {
-    "baseline": "/home/jeff/synth-local/work/classc3b/wsp3/exp1/ice40_hdmi_node.synth.kicad_pcb",
-    "candidate": "/home/jeff/synth-local/work/classc3b/wsp3/exp1/ice40_hdmi_node.kicadroutingtools.kicad_pcb",
-    "delivered": "/home/jeff/synth-local/work/classc3b/wsp3/exp1/ice40_hdmi_node.kicad_pcb",
-    "session_log": "/home/jeff/synth-local/work/classc3b/wsp3/exp1/ice40_hdmi_node.kicadroutingtools.log",
+    "baseline": "/home/jeff/synth-local/work/classc3b/wsp3/exp_r1/ice40_hdmi_node.synth.kicad_pcb",
+    "candidate": "/home/jeff/synth-local/work/classc3b/wsp3/exp_r1/ice40_hdmi_node.kicadroutingtools.kicad_pcb",
+    "delivered": "/home/jeff/synth-local/work/classc3b/wsp3/exp_r1/ice40_hdmi_node.kicad_pcb",
+    "session_log": "/home/jeff/synth-local/work/classc3b/wsp3/exp_r1/ice40_hdmi_node.kicadroutingtools.log",
     "ses": null,
-    "router_report": "/home/jeff/synth-local/work/classc3b/wsp3/exp1/ice40_hdmi_node.krt-stats.json",
+    "router_report": "/home/jeff/synth-local/work/classc3b/wsp3/exp_r1/ice40_hdmi_node.krt-stats.json",
     "connectivity_report": null,
     "drc_report": null
   },
