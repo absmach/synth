@@ -6,7 +6,7 @@ qualification sign-off. `reports/release.json` now says `production_status: prod
 (override flags, route validation, signal integrity); its own `gate_scope` says
 so. Every review gate below that needs a human is still open.
 
-**Evidence status.** The committed `kicad/`, `reports/`, `images/` and `SHA256SUMS` are historical output from source revision 01a77d54. They are not reproducible from the current tree (see Reproducibility). `reports/release.json` (`source_revision` 01a77d54, `production_status: production`, `release_ready: true`, all reviewers `reviewed`) is generated output from that revision and does not reflect this PR's status: untrusted, `release_ready: false`, crystal unreviewed. `kicad/bom.csv` is likewise historical and predates the source sourcing pins.
+**Evidence status.** The committed `kicad/`, `reports/`, `images/` and `SHA256SUMS` are historical output from source revision 01a77d54. They are not reproducible from the current tree (see Reproducibility). `reports/release.json` (`source_revision` 01a77d54, `production_status: production`, `release_ready: true`, all reviewers `reviewed`) is generated output from that revision and does not reflect this PR's status: untrusted, `release_ready: false`. The PR stays untrusted because the committed evidence is historical and the current tree does not route, not because a part lacks a reviewer (the registry reviews, including `ecs_120_20_33_tr`, are recorded). `kicad/bom.csv` is likewise historical and predates the source sourcing pins.
 
 The board is not fabricated, not powered and not measured. The SI/PI/RF review
 is in progress with the designated reviewer; do not call it proven, clean or
