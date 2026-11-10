@@ -519,7 +519,7 @@ is reported but nothing is stopped, and a board it cannot read blocks a gated
 release and marks the manifest `release_ready: false`.
 
 `crates/synth-drc/tests/dfm_committed_boards.rs` pins the findings on the
-committed RP2350 example and checks that the buck board is blocked only by
-silk rules, so a rule change that moves a count is visible in review.
+committed RP2350 example and checks that the buck board has no findings
+(it passes `--dfm-gate`), so a rule change that moves a count is visible in review.
 
 _See also: [`schematic-procedures.md`](schematic-procedures.md) for the export pipeline internals, [`diagnostics/README.md`](diagnostics/README.md) for `E-SYNTH-*` meanings, and [`protocol-v1.0.md`](protocol-v1.0.md) for the MCP wire format._
