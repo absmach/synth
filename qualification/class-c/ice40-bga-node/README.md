@@ -76,8 +76,18 @@ Everything committed comes from export 1. The authoritative evidence of how the 
 
 ## Human review
 
-Jeff Mboya is the independent PCB reviewer as well as the author of this pull request. The PCB review sign-off is JeffMboya's own and is recorded below when he states it.
+Jeff Mboya is the independent PCB reviewer as well as the author of this pull request. The PCB review sign-off is JeffMboya's own and is recorded below.
 
 ### PCB review sign-off
 
-Not yet recorded.
+PCB review sign-off required by #39: JeffMboya, 2026-11-10, on the package in `fab/` (Gerber content hash `ceeb7444dd`). The sign-off is JeffMboya's own: verified and approved by JeffMboya, per item.
+
+| Item | Signed off |
+|---|---|
+| PCB and Gerber package | verified and approved by JeffMboya: the Gerbers, drill, BOM and CPL of `fab/` and the exported KiCad board, hash `ceeb7444dd`, and the STEP model of `fab/` (geometry hash `604ace35b8`, check in `reports/step_verify.txt`) |
+| Return paths | verified and approved by JeffMboya: the 37 non-blocking `W-SYNTH-DRC-016` advisories of the routing report on the slow nets, as listed under "What was measured" |
+| ERC | verified and approved by JeffMboya: the 6 warnings of `reports/kicad_erc.json` |
+| DRC | verified and approved by JeffMboya: the 74 `lib_footprint_mismatch` warnings of `reports/kicad_drc.json`, each a footprint that differs from the library copy while 0 violations and 0 unconnected items remain |
+| JLCPCB BOM matching | verified and approved by JeffMboya: the BOM matching of `reports/` of 2026-11-06, made on a BOM and a CPL byte-identical to those of `fab/`, with the via-in-pad, slot and spacing specifications of `reports/` attached to the items they cover |
+| Placement | verified and approved by JeffMboya: the placement on 55.99 x 44.99 mm, 35.8 % courtyard fill, as pinned in `ice40_bga_node.placement.layout.toml` |
+| Parts and values | verified and approved by JeffMboya: the BOM identities of `fab/ice40_bga_node_bom_orderable.csv`, including `Y1` (JYJE 3TJ480000FYLBC, `C2924620`) and `U1` (Lattice ICE40HX4K-BG121, `C1552775`) |
