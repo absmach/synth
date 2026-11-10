@@ -1014,6 +1014,8 @@ courtyard_margin_mm = 0.25
 min_voltage_v = 1.8
 max_voltage_v = 3.6
 max_current_ma = 100.0
+forward_voltage_v = 2.0
+forward_current_ma = 20.0
 
 [[pins]]
 name = "vcc"
@@ -1040,6 +1042,8 @@ voltage_max_v = 5.0
         assert_eq!(op.min_voltage_v, Some(1.8));
         assert_eq!(op.max_voltage_v, Some(3.6));
         assert_eq!(op.max_current_ma, Some(100.0));
+        assert_eq!(op.forward_voltage_v, Some(2.0));
+        assert_eq!(op.forward_current_ma, Some(20.0));
 
         let pin_in = part.find_pin("in").unwrap();
         assert_eq!(pin_in.unit.as_deref(), Some("A"));

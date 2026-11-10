@@ -55,6 +55,82 @@ board "collision" {
 }
 "#;
 
+const LED: &str = r#"
+board "led" {
+  layers 2
+  component R1: resistor "r_generic_0805" value "150"
+  component LED1: led "led_red_0603"
+  net "VCC" { R1.p1 }
+  net "GND" { LED1.cathode }
+  connect R1.p2 -> LED1.anode as "MID"
+}
+"#;
+
+const SERIES_TB: &str = r#"
+ground = "GND"
+
+[[source]]
+net = "VCC"
+kind = "dc"
+dc = 5.0
+
+[analysis]
+op = true
+
+[[measure]]
+name = "va"
+kind = "node_voltage"
+node = "MID"
+"#;
+
+const DIODE: &str = r#"
+board "diode" {
+  layers 2
+  component R1: resistor "r_generic_0805" value "430"
+  component D1: diode "d_generic"
+  net "VCC" { R1.p1 }
+  net "GND" { D1.cathode }
+  connect R1.p2 -> D1.anode as "MID"
+}
+"#;
+
+const INDUCTOR: &str = r#"
+board "inductor" {
+  layers 2
+  component L1: inductor "l_generic_0805" value "10uH"
+  component R1: resistor "r_generic_0805" value "1k"
+  net "VCC" { L1.p1 }
+  net "GND" { R1.p2 }
+  connect L1.p2 -> R1.p1 as "MID"
+}
+"#;
+
+/// An IC, a zener and a bridge have no built-in model.
+const NO_MODELS: &str = r#"
+board "no-models" {
+  layers 2
+  component U1: mcu "rp2350"
+  component D1: diode "d_zener_3v3"
+  component D2: diode "d_tvs_5v"
+  component B1: diode "d_bridge_rectifier"
+  net "VCC" { D1.anode, D2.anode, B1.ac1, B1.pos }
+  net "GND" { D1.cathode, D2.cathode, B1.neg, B1.ac2 }
+}
+"#;
+
+/// The IC has no model; `ignore` is the escape hatch for a known gap.
+const IGNORED_IC: &str = r#"
+board "ignored-ic" {
+  layers 2
+  component U1: mcu "rp2350"
+  component R1: resistor "r_generic_0805" value "1k"
+  component R2: resistor "r_generic_0805" value "1k"
+  net "VCC" { R1.p1 }
+  net "GND" { R2.p2 }
+  connect R1.p2 -> R2.p1 as "MID"
+}
+"#;
+
 const UNCONNECTED: &str = r#"
 board "unconnected" {
   layers 2
@@ -254,6 +330,18 @@ fn assert_gone(pid: u32) {
     }
 }
 
+/// The real engine, when installed. CI installs it; local runs skip.
+fn real_ngspice() -> Option<PathBuf> {
+    let system = PathBuf::from("/usr/bin/ngspice");
+    if system.is_file() {
+        return Some(system);
+    }
+    let path = std::env::var_os("PATH")?;
+    std::env::split_paths(&path)
+        .map(|dir| dir.join("ngspice"))
+        .find(|candidate| candidate.is_file())
+}
+
 fn options(stub: &Path) -> synth_sim::SimOptions {
     synth_sim::SimOptions {
         ngspice: Some(stub.to_path_buf()),
@@ -297,6 +385,269 @@ fn emits_golden_divider_deck() {
     let expected = std::fs::read_to_string(fixture("divider-op.cir")).expect("golden deck");
 
     assert_eq!(deck, expected);
+}
+
+/// A 2.0 V / 20 mA LED behind 150 Ω from 5 V draws 20 mA. The built-in
+/// model is derived from the registry forward voltage and current.
+#[test]
+fn led_current_matches_the_forward_voltage_model() {
+    let board = board(LED);
+    let testbench = testbench(SERIES_TB);
+    let (stub, _dir) = stub_ngspice("led");
+
+    let report = synth_sim::simulate(&board, &testbench, &options(&stub));
+
+    assert!(report.passed(), "diagnostics: {:?}", report.diagnostics);
+    let anode = report.measures[0].value;
+    let current = (5.0 - anode) / 150.0;
+    let expected = (5.0 - 2.0) / 150.0;
+    assert!(
+        (current - expected).abs() / expected < 0.02,
+        "LED current {current} differs from {expected}"
+    );
+}
+
+#[test]
+fn led_matches_real_ngspice() {
+    let Some(ngspice) = real_ngspice() else {
+        eprintln!("skipping: ngspice is not installed (sudo apt install ngspice)");
+        return;
+    };
+    let board = board(LED);
+    let testbench = testbench(SERIES_TB);
+
+    let report = synth_sim::simulate(&board, &testbench, &options(&ngspice));
+
+    assert!(report.passed(), "diagnostics: {:?}", report.diagnostics);
+    let anode = report.measures[0].value;
+    assert!(
+        (anode - 2.0).abs() < 0.05,
+        "LED forward voltage {anode} should be about 2.0 V"
+    );
+    let current = (5.0 - anode) / 150.0;
+    let expected = (5.0 - 2.0) / 150.0;
+    assert!(
+        (current - expected).abs() / expected < 0.02,
+        "LED current {current} differs from {expected}"
+    );
+}
+
+#[test]
+fn diode_matches_real_ngspice() {
+    let Some(ngspice) = real_ngspice() else {
+        eprintln!("skipping: ngspice is not installed (sudo apt install ngspice)");
+        return;
+    };
+    let board = board(DIODE);
+    let testbench = testbench(SERIES_TB);
+
+    let report = synth_sim::simulate(&board, &testbench, &options(&ngspice));
+
+    assert!(report.passed(), "diagnostics: {:?}", report.diagnostics);
+    let anode = report.measures[0].value;
+    assert!(
+        (anode - 0.7).abs() < 0.02,
+        "diode forward voltage {anode} should be about 0.7 V"
+    );
+    let current = (5.0 - anode) / 430.0;
+    let expected = (5.0 - 0.7) / 430.0;
+    assert!(
+        (current - expected).abs() / expected < 0.02,
+        "diode current {current} differs from {expected}"
+    );
+}
+
+#[test]
+fn emits_golden_led_deck() {
+    let board = board(LED);
+    let testbench = testbench(SERIES_TB);
+
+    let deck = synth_sim::emit_netlist(&board, &testbench).expect("deck emits");
+    let expected = std::fs::read_to_string(fixture("led-op.cir")).expect("golden deck");
+
+    assert_eq!(deck, expected);
+    assert!(deck.contains("DLED1 n_MID 0 DLED1"), "deck:\n{deck}");
+    assert!(
+        !deck.contains("LLED1"),
+        "LED must not emit as an inductor:\n{deck}"
+    );
+}
+
+/// Some registry LEDs list the cathode first. The diode element must
+/// still put the anode net first.
+#[test]
+fn a_cathode_first_led_emits_anode_to_cathode() {
+    let board = board(&LED.replace("led_red_0603", "ltst_c190kgkt"));
+    let testbench = testbench(SERIES_TB);
+
+    let deck = synth_sim::emit_netlist(&board, &testbench).expect("deck emits");
+
+    assert!(deck.contains("DLED1 n_MID 0 DLED1"), "deck:\n{deck}");
+}
+
+#[test]
+fn emits_golden_diode_deck() {
+    let board = board(DIODE);
+    let testbench = testbench(SERIES_TB);
+
+    let deck = synth_sim::emit_netlist(&board, &testbench).expect("deck emits");
+    let expected = std::fs::read_to_string(fixture("diode-op.cir")).expect("golden deck");
+
+    assert_eq!(deck, expected);
+}
+
+/// The diode is quoted at 0.7 V / 10 mA, so 430 Ω from 5 V lands on
+/// 10 mA and 0.7 V.
+#[test]
+fn diode_current_matches_the_forward_voltage_model() {
+    let board = board(DIODE);
+    let testbench = testbench(SERIES_TB);
+    let (stub, _dir) = stub_ngspice("diode");
+
+    let report = synth_sim::simulate(&board, &testbench, &options(&stub));
+
+    assert!(report.passed(), "diagnostics: {:?}", report.diagnostics);
+    let anode = report.measures[0].value;
+    let current = (5.0 - anode) / 430.0;
+    let expected = (5.0 - 0.7) / 430.0;
+    assert!(
+        (current - expected).abs() / expected < 0.02,
+        "diode current {current} differs from {expected}"
+    );
+}
+
+#[test]
+fn emits_an_inductor_as_a_henry_value() {
+    let board = board(INDUCTOR);
+    let testbench = testbench(DIVIDER_TB);
+
+    let deck = synth_sim::emit_netlist(&board, &testbench).expect("deck emits");
+
+    assert!(deck.contains("LL1 n_VCC n_MID 1e-5"), "deck:\n{deck}");
+}
+
+#[test]
+fn unmodelled_parts_are_reported_by_reference_and_part_id() {
+    let board = board(NO_MODELS);
+    let testbench = testbench(DIVIDER_TB);
+
+    let diagnostics = synth_sim::emit_netlist(&board, &testbench).expect_err("no models");
+
+    assert_explained(&diagnostics);
+    for (refdes, part) in [
+        ("U1", "rp2350"),
+        ("D1", "d_zener_3v3"),
+        ("D2", "d_tvs_5v"),
+        ("B1", "d_bridge_rectifier"),
+    ] {
+        assert!(
+            diagnostics.iter().any(|diagnostic| {
+                diagnostic.code == synth_sim::E_SYNTH_SIM_002
+                    && diagnostic
+                        .message
+                        .as_deref()
+                        .is_some_and(|message| message.contains(refdes) && message.contains(part))
+            }),
+            "{refdes} (`{part}`) missing from {diagnostics:?}"
+        );
+    }
+}
+
+#[test]
+fn an_unparseable_or_absent_value_gives_002() {
+    let unparseable = board(&DIVIDER.replace("value \"10k\"", "value \"4k7\""));
+    let testbench = testbench(DIVIDER_TB);
+    let diagnostics = synth_sim::emit_netlist(&unparseable, &testbench).expect_err("4k7");
+    assert!(
+        diagnostics.iter().any(|diagnostic| {
+            diagnostic.code == synth_sim::E_SYNTH_SIM_002
+                && diagnostic
+                    .message
+                    .as_deref()
+                    .is_some_and(|message| message.contains("4k7"))
+        }),
+        "diagnostics: {diagnostics:?}"
+    );
+
+    let without_value = board(&DIVIDER.replace(" value \"10k\"", ""));
+    let diagnostics = synth_sim::emit_netlist(&without_value, &testbench).expect_err("no value");
+    assert!(
+        diagnostics.iter().any(|diagnostic| {
+            diagnostic.code == synth_sim::E_SYNTH_SIM_002
+                && diagnostic
+                    .message
+                    .as_deref()
+                    .is_some_and(|message| message.contains("no value"))
+        }),
+        "diagnostics: {diagnostics:?}"
+    );
+}
+
+#[test]
+fn an_ignored_part_is_not_reported_as_unmodelled() {
+    let board = board(IGNORED_IC);
+    let testbench = testbench(&DIVIDER_TB.replacen(
+        "ground = \"GND\"\n",
+        "ground = \"GND\"\nignore = [\"U1\"]\n",
+        1,
+    ));
+    let (stub, _dir) = stub_ngspice("ok");
+
+    let report = synth_sim::simulate(&board, &testbench, &options(&stub));
+
+    assert!(report.passed(), "diagnostics: {:?}", report.diagnostics);
+    let deck = synth_sim::emit_netlist(&board, &testbench).expect("ignored deck");
+    assert!(
+        !deck.contains("U1"),
+        "ignored U1 is still in the deck:\n{deck}"
+    );
+}
+
+#[test]
+fn ignoring_a_part_reruns_the_topology_check() {
+    let board = board(LED);
+    let testbench = testbench(&SERIES_TB.replacen(
+        "ground = \"GND\"\n",
+        "ground = \"GND\"\nignore = [\"R1\"]\n",
+        1,
+    ));
+
+    let diagnostics = synth_sim::emit_netlist(&board, &testbench).expect_err("R1 removed");
+
+    assert_explained(&diagnostics);
+    assert!(
+        diagnostics.iter().any(|diagnostic| {
+            diagnostic.code == synth_sim::E_SYNTH_SIM_008
+                && diagnostic
+                    .message
+                    .as_deref()
+                    .is_some_and(|message| message.contains("MID"))
+        }),
+        "diagnostics: {diagnostics:?}"
+    );
+}
+
+#[test]
+fn an_unknown_ignore_name_gives_007() {
+    let board = board(LED);
+    let testbench = testbench(&SERIES_TB.replacen(
+        "ground = \"GND\"\n",
+        "ground = \"GND\"\nignore = [\"NOPE\"]\n",
+        1,
+    ));
+
+    let diagnostics = synth_sim::emit_netlist(&board, &testbench).expect_err("typo");
+
+    assert!(
+        diagnostics.iter().any(|diagnostic| {
+            diagnostic.code == synth_sim::E_SYNTH_SIM_007
+                && diagnostic
+                    .message
+                    .as_deref()
+                    .is_some_and(|message| message.contains("NOPE"))
+        }),
+        "diagnostics: {diagnostics:?}"
+    );
 }
 
 #[test]

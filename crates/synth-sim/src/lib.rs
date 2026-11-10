@@ -53,6 +53,9 @@ pub struct Testbench {
     pub measure: Vec<Measure>,
     #[serde(default)]
     pub options: TestbenchOptions,
+    /// Placed parts to leave out of the deck and its topology check.
+    #[serde(default)]
+    pub ignore: Vec<String>,
 }
 
 /// Run-wide knobs; a missing `[options]` table keeps the defaults.
@@ -168,6 +171,16 @@ impl Testbench {
         }
         if self.measure.is_empty() {
             return Err(testbench_error("testbench has no [[measure]]"));
+        }
+
+        let mut ignored = HashSet::new();
+        for refdes in &self.ignore {
+            if refdes.trim().is_empty() {
+                return Err(testbench_error("ignore has an empty reference"));
+            }
+            if !ignored.insert(refdes.as_str()) {
+                return Err(testbench_error(format!("ignore lists `{refdes}` twice")));
+            }
         }
 
         let mut names = HashSet::new();
@@ -834,6 +847,22 @@ fn emit_netlist_at(
         ));
     }
 
+    let mut ignored_ids: HashSet<ComponentId> = HashSet::new();
+    for refdes in &testbench.ignore {
+        match design
+            .components
+            .iter()
+            .find(|component| &component.refdes == refdes)
+        {
+            Some(component) => {
+                ignored_ids.insert(component.id);
+            }
+            None => diagnostics.push(tb_error(format!(
+                "ignore lists `{refdes}`, which is not a placed part"
+            ))),
+        }
+    }
+
     let mut pin_net: HashMap<(ComponentId, PinId), NetId> = HashMap::new();
     for net in &design.nets {
         for endpoint in &net.endpoints {
@@ -845,15 +874,20 @@ fn emit_netlist_at(
         design,
         testbench,
         ground.id,
+        &ignored_ids,
         &pin_net,
         design_path,
         &mut diagnostics,
     );
 
     let mut element_lines = Vec::new();
+    let mut model_lines = Vec::new();
     let mut seen_elements: HashMap<String, String> = HashMap::new();
     for component in &design.components {
-        let (letter, value) = match model_for(component) {
+        if ignored_ids.contains(&component.id) {
+            continue;
+        }
+        let model = match model_for(component) {
             Ok(model) => model,
             Err(message) => {
                 diagnostics.push(no_model_error(component, &message, design_path));
@@ -869,9 +903,10 @@ fn emit_netlist_at(
             ));
             continue;
         }
+        let [first, second] = model.pins();
         let mut nodes = Vec::with_capacity(2);
         let mut connected = true;
-        for index in 0..2u32 {
+        for index in [first, second] {
             if let Some(net_id) = pin_net.get(&(component.id, PinId(index))) {
                 nodes.push(node_by_net[net_id].clone());
             } else {
@@ -901,6 +936,7 @@ fn emit_netlist_at(
             continue;
         }
 
+        let letter = model.letter();
         let name = format!("{letter}{}", sanitize(&component.refdes));
         if name.len() == letter.len() {
             diagnostics.push(tb_error(format!(
@@ -919,12 +955,24 @@ fn emit_netlist_at(
                 continue;
             }
         }
-        element_lines.push(format!(
-            "{name} {} {} {}",
-            nodes[0],
-            nodes[1],
-            exponent(value)
-        ));
+        match model {
+            Model::Value { value, .. } => element_lines.push(format!(
+                "{name} {} {} {}",
+                nodes[0],
+                nodes[1],
+                exponent(value)
+            )),
+            Model::Diode {
+                saturation_current, ..
+            } => {
+                element_lines.push(format!("{name} {} {} {name}", nodes[0], nodes[1]));
+                model_lines.push(format!(
+                    ".model {name} D(IS={} N={})",
+                    model_parameter(saturation_current),
+                    DIODE_EMISSION_COEFFICIENT
+                ));
+            }
+        }
     }
 
     let mut measure_lines = Vec::new();
@@ -954,6 +1002,9 @@ fn emit_netlist_at(
         let _ = writeln!(deck, "{line}");
     }
     for line in element_lines {
+        let _ = writeln!(deck, "{line}");
+    }
+    for line in model_lines {
         let _ = writeln!(deck, "{line}");
     }
     deck.push_str(".control\nop\n");
@@ -987,6 +1038,7 @@ fn check_topology(
     design: &Board,
     testbench: &Testbench,
     ground: NetId,
+    ignored_ids: &HashSet<ComponentId>,
     pin_net: &HashMap<(ComponentId, PinId), NetId>,
     design_path: Option<&Path>,
     diagnostics: &mut Vec<Diagnostic>,
@@ -994,7 +1046,14 @@ fn check_topology(
     let mut connections: HashMap<NetId, usize> = design
         .nets
         .iter()
-        .map(|net| (net.id, net.endpoints.len()))
+        .map(|net| {
+            let count = net
+                .endpoints
+                .iter()
+                .filter(|endpoint| !ignored_ids.contains(&endpoint.component))
+                .count();
+            (net.id, count)
+        })
         .collect();
     let mut adjacency: HashMap<NetId, Vec<NetId>> = HashMap::new();
 
@@ -1011,20 +1070,29 @@ fn check_topology(
     }
 
     for component in &design.components {
-        if component.kind == "capacitor" {
+        if component.kind == "capacitor" || ignored_ids.contains(&component.id) {
             continue;
         }
-        // ponytail: adjacency links only pins 0 and 1. Extend when
-        // multi-terminal models land (ticket 03).
-        let (Some(first), Some(second)) = (
-            pin_net.get(&(component.id, PinId(0))),
-            pin_net.get(&(component.id, PinId(1))),
-        ) else {
-            continue;
+        // Every connected pin of a modelled part belongs to the same DC
+        // island; capacitors are the only open circuit at DC. An
+        // unmodelled multi-pin part keeps the pins 0/1 heuristic rather
+        // than pretending its internals are a short — it already fails
+        // `-002`, so the topology check should not invent paths through it.
+        let pin_count = if model_for(component).is_ok() {
+            component.part.as_ref().map_or(0, |part| part.pins.len())
+        } else {
+            2
         };
-        if first != second {
-            adjacency.entry(*first).or_default().push(*second);
-            adjacency.entry(*second).or_default().push(*first);
+        let nets: Vec<NetId> = (0..pin_count as u32)
+            .filter_map(|index| pin_net.get(&(component.id, PinId(index))).copied())
+            .collect();
+        if let Some((&first, rest)) = nets.split_first() {
+            for net in rest {
+                if *net != first {
+                    adjacency.entry(first).or_default().push(*net);
+                    adjacency.entry(*net).or_default().push(first);
+                }
+            }
         }
     }
 
@@ -1069,23 +1137,126 @@ fn check_topology(
     }
 }
 
-fn model_for(component: &Component) -> Result<(&'static str, f64), String> {
-    let raw = component
-        .value
-        .as_deref()
-        .ok_or_else(|| "part has no value".to_string())?;
-    let (letter, value) = match component.kind.as_str() {
-        "resistor" => ("R", synth_validate::parse_resistance(raw)),
-        "capacitor" => ("C", synth_validate::parse_capacitance(raw)),
+/// The built-in SPICE model for a placed part.
+enum Model {
+    /// A two-terminal primitive whose value is the third element field.
+    Value { letter: &'static str, value: f64 },
+    /// A diode with a Shockley model derived from the registry's forward
+    /// voltage and current, plus the anode/cathode pin order.
+    Diode {
+        saturation_current: f64,
+        pins: [u32; 2],
+    },
+}
+
+impl Model {
+    fn letter(&self) -> &'static str {
+        match self {
+            Self::Value { letter, .. } => letter,
+            Self::Diode { .. } => "D",
+        }
+    }
+
+    fn pins(&self) -> [u32; 2] {
+        match self {
+            Self::Value { .. } => [0, 1],
+            Self::Diode { pins, .. } => *pins,
+        }
+    }
+}
+
+/// Shockley emission coefficient. LEDs are not ideal diodes; a fixed
+/// value of 2 keeps the derived IS above ngspice's lower clamp.
+const DIODE_EMISSION_COEFFICIENT: f64 = 2.0;
+/// kT/q at ngspice's default 27 °C, in volts.
+const THERMAL_VOLTAGE_27C: f64 = 0.025_864_925_786_328_753;
+
+fn model_for(component: &Component) -> Result<Model, String> {
+    let (letter, parse) = match component.kind.as_str() {
+        "diode" | "led" => return diode_model(component),
+        "resistor" => (
+            "R",
+            synth_validate::parse_resistance as fn(&str) -> Option<f64>,
+        ),
+        "capacitor" => (
+            "C",
+            synth_validate::parse_capacitance as fn(&str) -> Option<f64>,
+        ),
+        "inductor" => (
+            "L",
+            synth_validate::parse_inductance as fn(&str) -> Option<f64>,
+        ),
         other => {
             return Err(format!("part kind `{other}` has no built-in SPICE model"));
         }
     };
-    let value = value.ok_or_else(|| format!("value `{raw}` is not a valid {letter} value"))?;
+    let raw = component
+        .value
+        .as_deref()
+        .ok_or_else(|| "part has no value".to_string())?;
+    let value = parse(raw).ok_or_else(|| format!("value `{raw}` is not a valid {letter} value"))?;
     if !value.is_finite() || value <= 0.0 {
         return Err(format!("value `{raw}` is not a positive finite number"));
     }
-    Ok((letter, value))
+    Ok(Model::Value { letter, value })
+}
+
+fn diode_model(component: &Component) -> Result<Model, String> {
+    let part = component
+        .part
+        .as_ref()
+        .ok_or_else(|| "diode part is not in the registry".to_string())?;
+    let pins = match (
+        part.pins
+            .iter()
+            .position(|pin| pin.name.eq_ignore_ascii_case("anode")),
+        part.pins
+            .iter()
+            .position(|pin| pin.name.eq_ignore_ascii_case("cathode")),
+    ) {
+        (Some(anode), Some(cathode)) => [anode as u32, cathode as u32],
+        // ponytail: unnamed two-pin diodes assume pin 1 is the anode;
+        // require explicit names if a part needs the other order.
+        _ if part.pins.len() == 2 => [0, 1],
+        _ => return Err("diode model needs pins named `anode` and `cathode`".to_string()),
+    };
+    let (forward_voltage, forward_current) = part
+        .operating_conditions
+        .as_ref()
+        .and_then(|conditions| {
+            Some((
+                conditions.forward_voltage_v?,
+                conditions.forward_current_ma?,
+            ))
+        })
+        .ok_or_else(|| {
+            "diode part needs `[operating_conditions] forward_voltage_v` and \
+             `forward_current_ma`, or a registry `[spice]` model"
+                .to_string()
+        })?;
+    if !forward_voltage.is_finite()
+        || forward_voltage <= 0.0
+        || !forward_current.is_finite()
+        || forward_current <= 0.0
+    {
+        return Err(format!(
+            "forward voltage {forward_voltage} V and current {forward_current} mA \
+             must be positive and finite"
+        ));
+    }
+    let saturation_current = forward_current
+        / 1000.0
+        / ((forward_voltage / (DIODE_EMISSION_COEFFICIENT * THERMAL_VOLTAGE_27C)).exp() - 1.0);
+    if !saturation_current.is_finite() || saturation_current <= 0.0 {
+        return Err(format!(
+            "forward voltage {forward_voltage} V at {forward_current} mA \
+             does not give a usable diode model"
+        ));
+    }
+    Ok(Model::Diode {
+        saturation_current,
+        pins,
+    })
 }
 
 fn no_model_error(component: &Component, message: &str, design_path: Option<&Path>) -> Diagnostic {
@@ -1159,6 +1330,19 @@ fn sanitize(name: &str) -> String {
 }
 
 /// Synth values are decimal; SPICE's `M` is milli, so emit exponents.
+/// Thirteen significant digits hide binary noise (`10uH` is
+/// `9.999999999999999e-6`) without losing component tolerances.
 fn exponent(value: f64) -> String {
-    format!("{value:e}")
+    let formatted = format!("{value:.12e}");
+    let (mantissa, exponent) = formatted
+        .split_once('e')
+        .expect("`{:e}` always has an exponent");
+    let mantissa = mantissa.trim_end_matches('0').trim_end_matches('.');
+    format!("{mantissa}e{exponent}")
+}
+
+/// Model parameters need stability in golden decks; nine significant
+/// digits carry more than ngspice's six-digit print precision.
+fn model_parameter(value: f64) -> String {
+    format!("{value:.8e}")
 }

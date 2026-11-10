@@ -55,7 +55,7 @@ pub use anomaly::{extract_features, BoardFeatureVec, GraphAnomalyDetectorRule};
 pub use config::{ErcConfig, PinConflictTable};
 
 pub mod value;
-pub use value::{parse_capacitance, parse_resistance, parse_voltage};
+pub use value::{parse_capacitance, parse_inductance, parse_resistance, parse_voltage};
 
 mod impedance;
 pub mod patch_mlp;

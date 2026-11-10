@@ -51,6 +51,8 @@ fn main() {
             let _ = std::io::stdout().flush();
         }
         "ok" => replay(&fixtures, "divider-op", 0),
+        "led" => replay(&fixtures, "led-op", 0),
+        "diode" => replay(&fixtures, "diode-op", 0),
         "failed-meas" => replay(&fixtures, "divider-meas-failed", 0),
         "missing-meas" => replay(&fixtures, "divider-missing-value", 0),
         "missing-done" => replay(&fixtures, "divider-missing-done", 0),

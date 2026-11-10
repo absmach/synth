@@ -1335,6 +1335,13 @@ fn plausible_vf(v: f64) -> bool {
 /// next to `Vf` wins; otherwise the colour family decides. `None` when
 /// neither is available, so the rule declines to check that part.
 fn forward_voltage_v(part: &Part) -> Option<f64> {
+    if let Some(vf) = part
+        .operating_conditions
+        .as_ref()
+        .and_then(|conditions| conditions.forward_voltage_v)
+    {
+        return Some(vf);
+    }
     let hay = format!(
         "{} {}",
         part.id.as_str(),
@@ -2323,6 +2330,21 @@ mod tests {
         assert_eq!(forward_voltage_v(&part), Some(1.9), "red fallback");
         part.id = synth_registry::PartId("led_blue_0603".into());
         assert_eq!(forward_voltage_v(&part), Some(3.2));
+
+        part.operating_conditions = Some(synth_registry::OperatingConditions {
+            min_voltage_v: None,
+            max_voltage_v: None,
+            max_current_ma: None,
+            forward_voltage_v: Some(2.1),
+            forward_current_ma: Some(20.0),
+            max_power_mw: None,
+            thermal_resistance_c_per_w: None,
+        });
+        assert_eq!(
+            forward_voltage_v(&part),
+            Some(2.1),
+            "the structured field wins over the description"
+        );
     }
 
     #[test]

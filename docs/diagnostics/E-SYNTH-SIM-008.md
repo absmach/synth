@@ -11,6 +11,9 @@ capacitors in series leave the middle net with no path; so does a net with a
 single pin, or an unconnected part that leaves its neighbour dangling. The
 message names the net.
 
+A part listed under `ignore` in the testbench is removed before this check, so
+ignoring the only part that connects a net reports the now-floating net.
+
 Synth never turns on `rshunt` silently to hide the problem: a floating node is
 a design error, not a solver setting.
 

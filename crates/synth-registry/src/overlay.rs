@@ -83,6 +83,12 @@ pub fn part_to_toml(part: &Part, header: &[&str]) -> String {
                 let _ = writeln!(out, "{key} = {v}");
             }
         }
+        if let Some(v) = c.forward_voltage_v {
+            let _ = writeln!(out, "forward_voltage_v = {v}");
+        }
+        if let Some(v) = c.forward_current_ma {
+            let _ = writeln!(out, "forward_current_ma = {v}");
+        }
     }
     for pin in &part.pins {
         write_pin(&mut out, pin);

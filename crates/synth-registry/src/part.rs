@@ -229,6 +229,15 @@ pub struct OperatingConditions {
     /// e.g. an internal LDO decoupling tap. `Some(true)` forces it in.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub power_budget: Option<bool>,
+    /// Forward voltage at [`Self::forward_current_ma`], in volts. A
+    /// diode or LED with both fields gets a built-in SPICE model;
+    /// without them it needs a registry `[spice]` model.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub forward_voltage_v: Option<f64>,
+    /// Forward current at which [`Self::forward_voltage_v`] is quoted,
+    /// in milliamps.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub forward_current_ma: Option<f64>,
     /// Worst-case power the part dissipates, in milliwatts. With
     /// [`Self::thermal_resistance_c_per_w`] this drives the thermal check.
     #[serde(default, skip_serializing_if = "Option::is_none")]
