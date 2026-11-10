@@ -1,6 +1,6 @@
 {
   "board": "ice40_bga_node.kicad_pcb",
-  "board_sha256_10": "b992e8a1a6",
+  "board_sha256_10": "f55d4b5313",
   "delivered_board": {
     "segments": 424,
     "vias": 208,
