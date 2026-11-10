@@ -20,7 +20,7 @@ use std::process::Command as ProcessCommand;
 use std::process::ExitCode;
 
 use clap::{Parser, Subcommand, ValueEnum};
-use synth_diagnostics::NativeCheckStatus;
+use synth_diagnostics::{NativeCheckEvidence, NativeCheckStatus, UnknownReason};
 
 const EXIT_SUCCESS: u8 = 0;
 const EXIT_VALIDATION_ERRORS: u8 = 1;
@@ -219,6 +219,11 @@ enum Command {
         /// placement found so far when the budget is spent.
         #[arg(long, default_value_t = 0)]
         place_route_budget_secs: u64,
+        /// Let a DFM Danger finding block a release export (`--gerbers` and
+        /// similar). Opt-in: the DFM rules are not yet calibrated against
+        /// JLCDFM, so by default findings are only recorded.
+        #[arg(long)]
+        dfm_gate: bool,
     },
 
     /// Apply the highest-confidence `suggested_fix` from every
@@ -970,6 +975,7 @@ fn main() -> ExitCode {
             allow_incomplete,
             place_route_iterate,
             place_route_budget_secs,
+            dfm_gate,
         } => export_kicad(
             &input,
             registry.as_deref(),
@@ -1004,6 +1010,7 @@ fn main() -> ExitCode {
             allow_incomplete,
             place_route_iterate,
             place_route_budget_secs,
+            dfm_gate,
         ),
         Command::Fix {
             input,
@@ -1812,7 +1819,11 @@ fn manufacturing_status(
     }
     let native_unknown = native
         .and_then(|n| n["stages"].as_array())
-        .is_some_and(|stages| stages.iter().any(|s| s["status"] == "unknown"));
+        .is_some_and(|stages| {
+            stages
+                .iter()
+                .any(|s| s["status"] == "unknown" && s["advisory"] != true)
+        });
     if native_unknown {
         return "unknown";
     }
@@ -4025,6 +4036,7 @@ fn export_kicad(
     allow_incomplete: bool,
     place_route_iterate: bool,
     place_route_budget_secs: u64,
+    dfm_gate: bool,
 ) -> anyhow::Result<u8> {
     if autoroute {
         // Still parsed, so an existing script fails with something
@@ -4455,9 +4467,66 @@ fn export_kicad(
     }
     native.push(drc.evidence);
 
+    // Manufacturability is read from the board that ships. Every export
+    // records it; only a release export (fab files requested) run with
+    // `--dfm-gate` is stopped by a Danger finding. The gate is opt-in until
+    // the rules are calibrated against the fab's own tool.
+    let (dfm_evidence, dfm_report) = dfm_stage(&delivered, &drc_profile, dfm_gate);
+    let dfm_danger = dfm_report
+        .as_ref()
+        .map_or(0, synth_drc::dfm::DfmReport::danger_count);
+    let release_dfm_blocked = dfm_blocks_release(production, dfm_gate, dfm_report.as_ref());
+    if let Some(report) = &dfm_report {
+        if release_dfm_blocked {
+            for finding in &report.findings {
+                eprintln!(
+                    "[dfm] {:?}: [{}] {}",
+                    finding.severity, finding.rule, finding.message
+                );
+            }
+            eprintln!(
+                "error: release export blocked: DFM found {dfm_danger} Danger finding(s) ({}); \
+                 --force does not override this.",
+                dfm_evidence.detail.as_deref().unwrap_or_default()
+            );
+        } else if !report.findings.is_empty() {
+            for line in &dfm_evidence.findings {
+                eprintln!("[dfm] {line}");
+            }
+            eprintln!(
+                "warning: DFM found {} finding(s) a fab would flag ({}); each is listed above \
+                 and in the verification report.{}",
+                report.findings.len(),
+                dfm_evidence.detail.as_deref().unwrap_or_default(),
+                if !dfm_gate {
+                    " Pass --dfm-gate to let Danger findings block a release export."
+                } else if !production {
+                    " --dfm-gate blocks only a release export (--gerbers and similar); \
+                     this export is not one."
+                } else {
+                    ""
+                }
+            );
+        }
+    }
+    if dfm_report.is_none() && (dfm_evidence.advisory || !production) {
+        eprintln!(
+            "warning: the DFM check could not read the board ({}); it is recorded as unknown \
+             and {}.",
+            dfm_evidence.detail.as_deref().unwrap_or_default(),
+            if dfm_gate {
+                "--dfm-gate blocks only a release export (--gerbers and similar), \
+                 which this export is not"
+            } else {
+                "does not block without --dfm-gate"
+            }
+        );
+    }
+    native.push(dfm_evidence);
+
     let blocked_by_unknown: Vec<_> = native
         .iter()
-        .filter(|e| e.status == NativeCheckStatus::Unknown)
+        .filter(|e| e.status == NativeCheckStatus::Unknown && !e.advisory)
         .filter(|e| production || e.stage == synth_kicad::ERC_STAGE)
         .collect();
     if !blocked_by_unknown.is_empty() {
@@ -4473,10 +4542,18 @@ fn export_kicad(
         for evidence in &blocked_by_unknown {
             eprintln!("  {}", evidence.summary_line());
         }
-        eprintln!(
-            "An unavailable check is not a pass. Install KiCad (or set KICAD_CLI), \
-             then re-run; --force does not override this."
-        );
+        if blocked_by_unknown.iter().any(|e| e.stage != DFM_STAGE) {
+            eprintln!(
+                "An unavailable check is not a pass. Install KiCad (or set KICAD_CLI), \
+                 then re-run; --force does not override this."
+            );
+        }
+        if blocked_by_unknown.iter().any(|e| e.stage == DFM_STAGE) {
+            eprintln!(
+                "The dfm check reads the board file itself and needs no KiCad: fix the board \
+                 file it could not read, or drop --dfm-gate; --force does not override this."
+            );
+        }
     }
 
     if let Some(path) = verification_report {
@@ -4505,7 +4582,7 @@ fn export_kicad(
     )
     .with_synthetic_symbols(release::synthetic_symbol_parts(board))
     .with_signal_integrity(&synth_violations)
-    .with_release_blocked(release_drc_blocked)
+    .with_release_blocked(release_drc_blocked || release_dfm_blocked)
     .with_routing(Some(release::RoutingState::from_report(
         &routing,
         &run_record,
@@ -4559,6 +4636,7 @@ fn export_kicad(
         || (has_erc_errors && !force)
         || (has_kicad_drc_errors && !force)
         || release_drc_blocked
+        || release_dfm_blocked
         || has_kicad_erc_errs
         || !blocked_by_unknown.is_empty()
         // Fail-closed: an un-routed export is not fabricable, and neither
@@ -4696,6 +4774,7 @@ fn collect_bundle_files(
 }
 
 const FAB_STAGE: &str = "kicad_fab";
+const DFM_STAGE: &str = "dfm";
 
 fn report_drc_counts(counts: &synth_drc::DrcCounts) {
     let line = format!("kicad-cli pcb drc: {counts}");
@@ -4727,13 +4806,146 @@ fn report_unavailable_check(evidence: &synth_diagnostics::NativeCheckEvidence) {
     }
 }
 
+/// Whether the DFM stage stops a release export: gated, and either a Danger
+/// finding or a board it could not read (`report` is `None`), which is never clean.
+fn dfm_blocks_release(
+    production: bool,
+    gate: bool,
+    report: Option<&synth_drc::dfm::DfmReport>,
+) -> bool {
+    production && gate && report.is_none_or(|r| r.danger_count() > 0)
+}
+
+/// The manufacturability stage: what a fab's DFM tool would flag on the
+/// board that ships. A board that cannot be read is `unknown`, never clean.
+fn dfm_stage(
+    pcb: &Path,
+    profile: &synth_drc::ManufacturerProfile,
+    gate: bool,
+) -> (NativeCheckEvidence, Option<synth_drc::dfm::DfmReport>) {
+    const TOOL: &str = "synth-drc";
+    let text = match std::fs::read_to_string(pcb) {
+        Ok(text) => text,
+        Err(e) => {
+            let detail = format!("cannot read {}: {e}", pcb.display());
+            let evidence = NativeCheckEvidence::unknown(
+                DFM_STAGE,
+                TOOL,
+                Vec::new(),
+                UnknownReason::ReportUnreadable,
+                detail,
+            )
+            .with_advisory(!gate);
+            return (evidence, None);
+        }
+    };
+    match synth_drc::dfm::check_dfm(&text, profile) {
+        Err(e) => {
+            let evidence = NativeCheckEvidence::unknown(
+                DFM_STAGE,
+                TOOL,
+                Vec::new(),
+                UnknownReason::ReportMalformed,
+                e.to_string(),
+            )
+            .with_advisory(!gate);
+            (evidence, None)
+        }
+        Ok(report) => {
+            let mut evidence =
+                NativeCheckEvidence::concluded(DFM_STAGE, TOOL, Vec::new(), report.danger_count());
+            let counts: Vec<String> = report
+                .counts()
+                .iter()
+                .map(|((rule, severity), n)| format!("{rule} {severity:?} {n}").to_lowercase())
+                .collect();
+            let mut parts = counts;
+            if report.unchecked_silk_text > 0 {
+                parts.push(format!(
+                    "{} silk text item(s) not measured",
+                    report.unchecked_silk_text
+                ));
+            }
+            if report.unchecked_silk_graphics > 0 {
+                parts.push(format!(
+                    "{} silk curve(s) not measured",
+                    report.unchecked_silk_graphics
+                ));
+            }
+            let detail = parts.join(", ");
+            let mut unsupported = vec![
+                "pth_to_trace: graded Warning only, known not to match JLCDFM".to_string(),
+                "silk_text_clearance: text is counted, not measured".to_string(),
+                "filled_silk: ink covering a pad or hole is tested at sampled points, not by exact area".to_string(),
+            ];
+            // Assumed figures only matter when their rule ran on this profile.
+            if profile.min_silk_to_hole_nm > 0 {
+                unsupported.push(format!(
+                    "silk_to_hole: {} um floor assumed, not published by JLC",
+                    profile.min_silk_to_hole_nm / 1000
+                ));
+            }
+            if profile.min_pad_to_pad_nm > 0 {
+                unsupported.push(format!(
+                    "copper_merge_tolerance: {} um uncalibrated",
+                    profile.copper_merge_below_nm / 1000
+                ));
+            }
+            if report.unchecked_silk_graphics > 0 {
+                unsupported.push(format!(
+                    "silk_curves: {} curve or legacy arc item(s) not measured",
+                    report.unchecked_silk_graphics
+                ));
+            }
+            if report.unread_tracks > 0 {
+                unsupported.push(format!(
+                    "track_read: {} arc track(s) or segment(s) could not be read and were not measured",
+                    report.unread_tracks
+                ));
+            }
+            if report.approximated_pads > 0 {
+                unsupported.push(format!(
+                    "pad_shape: {} custom or trapezoid pad(s) measured by their bounding box, not their exact outline",
+                    report.approximated_pads
+                ));
+            }
+            unsupported.extend(
+                report.unchecked_rules.iter().map(|rule| {
+                    format!("{rule}: {} publishes no figure, rule not run", profile.name)
+                }),
+            );
+            let findings = report
+                .findings
+                .iter()
+                .map(|f| {
+                    format!(
+                        "{:?} [{}] at ({:.3}, {:.3}) mm: {}",
+                        f.severity, f.rule, f.at_mm.0, f.at_mm.1, f.message
+                    )
+                })
+                .collect();
+            // Findings only decide the release when the gate is on.
+            evidence = evidence
+                .with_unsupported(unsupported)
+                .with_findings(findings)
+                .with_advisory(!gate);
+            if !detail.is_empty() {
+                evidence.detail = Some(detail);
+            }
+            (evidence, Some(report))
+        }
+    }
+}
+
 fn write_verification_report(
     path: &Path,
     input: &Path,
     native: &[synth_diagnostics::NativeCheckEvidence],
 ) -> anyhow::Result<()> {
+    // An advisory stage is recorded but does not decide readiness.
     let release_ready = native
         .iter()
+        .filter(|e| !e.advisory)
         .all(synth_diagnostics::NativeCheckEvidence::is_trusted);
     let report = serde_json::json!({
         "schema_version": "synth.verification.v1",
@@ -4917,6 +5129,7 @@ fn build_route_request(
     request.routing_order = routing_order.to_vec();
     request.ground_nets = synth_drc::ground_net_names(board);
     request.return_via_critical_nets = Some(synth_drc::return_path_critical_net_names(board));
+    request.return_via_medium_nets = synth_drc::return_path_medium_net_names(board);
     request.preserve_baseline()?;
     Ok(request)
 }
@@ -5921,6 +6134,59 @@ fn render(
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn a_gated_dfm_stage_that_could_not_read_the_board_blocks_a_release() {
+        assert!(super::dfm_blocks_release(true, true, None));
+        assert!(!super::dfm_blocks_release(true, false, None));
+        assert!(!super::dfm_blocks_release(false, true, None));
+        let clean = synth_drc::dfm::DfmReport::default();
+        assert!(!super::dfm_blocks_release(true, true, Some(&clean)));
+    }
+
+    #[test]
+    fn an_unreadable_board_blocks_only_when_the_dfm_gate_is_on() {
+        let profile = synth_drc::ManufacturerProfile::jlc_standard();
+        let path =
+            std::env::temp_dir().join(format!("synth_dfm_bad_{}.kicad_pcb", std::process::id()));
+        std::fs::write(&path, "(kicad_pcb (via").expect("write board");
+        let (ungated, _) = dfm_stage(&path, &profile, false);
+        let (gated, _) = dfm_stage(&path, &profile, true);
+        assert_eq!(ungated.status, NativeCheckStatus::Unknown);
+        assert!(ungated.advisory, "an ungated unknown must not block");
+        assert!(!gated.advisory, "a gated unknown must block");
+        // The same path export_kicad takes: stage -> blocked -> manifest.
+        let manifest = |gate: bool| {
+            let (_, report) = dfm_stage(&path, &profile, gate);
+            let blocked = dfm_blocks_release(true, gate, report.as_ref());
+            let m = release::ReleaseManifest::new("t", Path::new("b.synth"), true, vec![], vec![])
+                .with_release_blocked(blocked);
+            serde_json::to_value(&m).expect("manifest json")["release_ready"].clone()
+        };
+        assert_eq!(manifest(true), serde_json::json!(false));
+        assert_eq!(manifest(false), serde_json::json!(true));
+        let _ = std::fs::remove_file(&path);
+    }
+
+    #[test]
+    fn a_dfm_stage_lists_an_unreadable_arc_track_as_unsupported() {
+        let profile = synth_drc::ManufacturerProfile::jlc_standard();
+        let path =
+            std::env::temp_dir().join(format!("synth_dfm_arc_{}.kicad_pcb", std::process::id()));
+        std::fs::write(
+            &path,
+            r#"(kicad_pcb (arc (start 1 1) (end 2 2) (width 0.2) (layer "F.Cu") (net 1)))"#,
+        )
+        .expect("write board");
+        let (evidence, _) = dfm_stage(&path, &profile, false);
+        let _ = std::fs::remove_file(&path);
+        assert!(
+            evidence
+                .unsupported
+                .iter()
+                .any(|u| u.contains("1 arc track(s)")),
+            "{evidence:?}"
+        );
+    }
 
     #[test]
     fn the_capability_list_reports_each_profiles_own_minimums() {

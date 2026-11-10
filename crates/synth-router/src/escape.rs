@@ -684,6 +684,7 @@ mod tests {
             min_annular_ring_nm: 130_000,
             allow_via_in_pad: true,
             process_fills_via_in_pad: true,
+            via_in_pad_land_extra_nm: 150_000,
         };
         assert!(
             analyse(&board, &relaxed).is_empty(),

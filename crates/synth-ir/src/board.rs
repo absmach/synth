@@ -597,20 +597,25 @@ pub struct NetClass {
     pub source_span: Span,
 }
 
-/// The edge rate a netclass declares (`edge_rate slow` / `edge_rate fast`).
+/// The edge rate a netclass declares (`edge_rate slow`, `medium` or `fast`).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum EdgeRate {
     Fast,
+    /// Edges no faster than the 0.3 ns the declaration is made against, so the
+    /// return-via window is a fraction of the wavelength at the edge's knee and
+    /// not one dielectric height. The net still needs a return via.
+    Medium,
     Slow,
 }
 
 impl EdgeRate {
-    /// Parse `slow` or `fast`, case-insensitively.
+    /// Parse `slow`, `medium` or `fast`, case-insensitively.
     #[must_use]
     pub fn parse(text: &str) -> Option<Self> {
         match text.to_ascii_lowercase().as_str() {
             "fast" => Some(Self::Fast),
+            "medium" => Some(Self::Medium),
             "slow" => Some(Self::Slow),
             _ => None,
         }

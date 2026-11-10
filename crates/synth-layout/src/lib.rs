@@ -3367,7 +3367,12 @@ pub fn body_size_for_part(part: &synth_registry::Part) -> (f64, f64) {
             // A multi-unit symbol is drawn as a stack anchored at one
             // placement, so its reserved box is taller than one unit.
             let units = kicad_lib_loader::symbol_units(lib_id).map_or(1, |(_, count)| count);
-            let h = bbox.1 + f64::from(units.saturating_sub(1)) * kicad_lib_loader::UNIT_PITCH_MM;
+            let h = bbox.1
+                + if units > 1 {
+                    kicad_lib_loader::unit_stack_height_mm(lib_id)
+                } else {
+                    0.0
+                };
             return (bbox.0, h);
         }
     }

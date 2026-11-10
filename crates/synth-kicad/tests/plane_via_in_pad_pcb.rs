@@ -101,29 +101,67 @@ fn source(with_via_in_pad: bool, interior: bool) -> String {
         "  connect U1.iot_225 -> U1.iot_168 as \"CORNERS\" class \"RAIL\"\n  \
            connect U1.iot_168 -> U1.iob_56\n  connect U1.iob_56 -> U1.vcc_spi\n"
     };
+    // Only a component that declares the under-pad escape may take the filled and
+    // capped via, the one sized to the process's land and exempt from the plain ring.
+    let escape = if with_via_in_pad {
+        " { escape { method underpad } }"
+    } else {
+        ""
+    };
     format!(
         "board \"bga_plane\" {{\n  layers 4\n{tier}  netclass \"RAIL\" {{\n    plane\n  }}\n  \
-         component U1: fpga \"ice40hx4k_bg121\"\n{connections}}}\n"
+         component U1: fpga \"ice40hx4k_bg121\"{escape}\n{connections}}}\n"
     )
 }
 
 #[test]
-fn a_ball_pad_narrower_than_the_via_is_refused_with_the_sizes_named() {
+fn interior_supply_balls_take_the_via_in_pad_land_on_the_filled_via_tier() {
     if !kicad_ready(BGA_FOOTPRINT, false) {
         return;
     }
     let board = lower(&source(true, true));
-    let out = std::env::temp_dir().join(format!("synth-bga-plane-refused-{}", std::process::id()));
+    let out = std::env::temp_dir().join(format!("synth-bga-plane-interior-{}", std::process::id()));
     let _ = fs::remove_dir_all(&out);
-    let error = synth_kicad::export(&board, &out).expect_err(
-        "interior supply balls are boxed in, and 0.35 mm pads cannot hold a 0.6 mm via",
-    );
-    let text = error.to_string();
+    // The tier's drill is 0.2 mm, so the via-in-pad land is 0.35 mm: the 0.35 mm
+    // ball pad holds it, and the interior supply balls are not refused.
+    let result = synth_kicad::export(&board, &out)
+        .expect("a 0.35 mm ball pad holds the 0.35 mm via-in-pad land of the 0.2 mm drill tier");
+    let pcb = fs::read_to_string(&result.pcb_path).expect("pcb");
     let _ = fs::remove_dir_all(&out);
     assert!(
-        text.contains("0.35 x 0.35 mm") && text.contains("0.60 mm pad"),
-        "the error names the pad and the via it cannot hold: {text}"
+        pcb.contains("(size 0.35)"),
+        "the plane vias are written at the via-in-pad land, not the 0.6 mm via"
     );
+}
+
+/// A ball grid that does not declare the under-pad escape is not given the small
+/// via: the DRC would judge it against the plain ring, so the exporter refuses the
+/// supply ball its plane via in a 0.35 mm pad instead of writing one that fails.
+#[test]
+fn a_ball_pad_takes_no_small_via_without_the_under_pad_escape() {
+    if !kicad_ready(BGA_FOOTPRINT, false) {
+        return;
+    }
+    let undeclared = source(true, true).replace(" { escape { method underpad } }", "");
+    assert!(!undeclared.contains("underpad"), "{undeclared}");
+    let board = lower(&undeclared);
+    let out =
+        std::env::temp_dir().join(format!("synth-bga-plane-undeclared-{}", std::process::id()));
+    let _ = fs::remove_dir_all(&out);
+    let refusal = synth_kicad::export(&board, &out);
+    let _ = fs::remove_dir_all(&out);
+    let text = match refusal {
+        Err(error) => format!("{error:?}"),
+        Ok(_) => {
+            panic!("a ball pad too small for the plane via must be refused without the escape")
+        }
+    };
+    // The refusal names the plane via's pad (the 0.3 mm drill plus two annular
+    // rings) and the one change that works.
+    assert!(text.contains("0.60 mm pad"), "{text}");
+    assert!(text.contains("two annular rings"), "{text}");
+    assert!(text.contains("escape { method underpad }"), "{text}");
+    assert!(text.contains("0.35 mm filled and capped via"), "{text}");
 }
 
 #[test]
