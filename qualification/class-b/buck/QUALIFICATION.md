@@ -19,11 +19,7 @@ Section C maps every `#38` checklist item to a row here, including the ones that
 
 ## Reproduce
 
-Run from the repository root with the Synth code of this branch. Base: `git merge-base HEAD upstream/main`
-is `2390cc9` (upstream `main` when this branch was rebased on 2026-11-06). The Synth changes this
-board needs are the commits `e0c8ecd` (sidecar vias, return-via window matched to the DRC rule, rails flagged
-on generated symbols, `SYNTH_SOURCE_REVISION`), `bb78235` (the LMR38010 part, SS36 drawn as `Device:D_Schottky`)
-`32dcd43` (the board itself) and `a9c7546` (the corrected notes in the source) on top of that base. Use an empty `XDG_DATA_HOME` so a user registry cannot
+Run from the repository root with the Synth code of this branch. Base: `git merge-base HEAD upstream/main` is `fbfd8d60` (the #440 merge). This branch has no `crates` changes (`git diff upstream/main -- crates` is empty), so it needs no Synth code changes beyond `main`. Use an empty `XDG_DATA_HOME` so a user registry cannot
 shadow parts.
 
 ```
@@ -65,17 +61,17 @@ BOM, pick-and-place, pictures, routing, DRC and ERC reports, footprint compariso
 
 | Artifact | SHA-256 |
 | --- | --- |
-| `buck.synth` | `c8d516f8c67d7f8cb2b3fbcf8b82568090c049fded81622285673113df88a0b2` |
+| `buck.synth` | `f3939fb7b5685e7d89d2a47544326cce41032e9c1d9bb1a74e07fc6a613ba7bf` |
 | `buck_neg_fb_sw.synth` | `e7c4bd4b409c0c67d996ec4e9310fa5f70f122a5d8ecf10d273f470d1fdf2863` |
-| `buck.placement.layout.toml` | `f5266a861777b904b185442ffc7d8afd5fe56591c597d65c86197cab4da77843` |
-| `kicad/buck.kicad_pcb` | `fa7d6414c10f79c2fe3b21756b218511b7f59a87ddae39aac66d1f441d07b447` |
-| `kicad/buck.kicad_sch` | `902d5e03cc6d9abd627aa06d5e50dbc3cbff8a8bac768cda9babd1e5507c57a9` |
+| `buck.placement.layout.toml` | `e19f2dc350edc1432056d30cbda637c0d36f1b33652e3e9868b8cee35a30830f` |
+| `kicad/buck.kicad_pcb` | `669f204d379aae07209c20e01624d34c130eaa50a8ce41dc30a05618adf71b70` |
+| `kicad/buck.kicad_sch` | `078fb98137d1d2de70e459ae6eab2fd7c4025e97345a3db2e79aa44a9f9a6c9e` |
 | `kicad/bom.csv` | `41b77b5c34930618e888d7f02bb1633abd911ed2011d965bd58cbb71a9c2eda2` |
-| `reports/release.json` | `47431c5485ff1f790d45f19a1c9c9fa97744f890f62c8217c4574000a8629b93` |
-| `reports/release-fab.json` | `30a4afa1d250f625efb9476ddc581a41858fc4323e3d54b7009e8f0369c5a42f` |
-| `reports/buck.routing.json` | `cbd32cdf0ed3f9d75eeb142e3f2ec06cbe02e14e9cf8494ac50b5b8e0c43d782` |
-| `reports/buck.kicad-drc.json` | `869eb58e1f8064c5fef6f47c9d07608afc4d9dc8a69bd299042fcf2ce0be604e` |
-| `reports/buck.kicad-erc.json` | `ca017d14fbab532984dafb6175931c79ed0d645a9f15df5df8bcf10ab73fc956` |
+| `reports/release.json` | `2e37ff28dbe424f1e99bb337002c883eef8bc7e690f43ad29aa19d5bb928c36b` |
+| `reports/release-fab.json` | `6c8855390d6d09e8011f724d38c24abf0e020bb35c4daa289764bf2bcffa34bf` |
+| `reports/buck.routing.json` | `777bd4b4479bea422d9de994c327db80aac0c79058a185ac413c301d25bbe39a` |
+| `reports/buck.kicad-drc.json` | `fac05a5397f90b488ef7ec0e455abee06bd13a905c5b51db3d952eb565438a1c` |
+| `reports/buck.kicad-erc.json` | `509913dc5a4a9fffee2681c6bdfffc46d97e455f392d6469e60593d41926091f` |
 
 Datasheet values used for the part values are in `README.md` ("Parts and datasheets"). The
 datasheets are not committed, so the figures taken from them cannot be checked from this
@@ -100,7 +96,7 @@ repository.
 | A13 | The placement is the hand-pinned sidecar and it held | `buck.placement.layout.toml`, `kicad/buck.kicad_pcb`, `pad_gaps.py` | All 29 parts are pinned with hard priority (C10 and C11 are the two added; the sidecar holds the exported positions, including C2 at 28.5 / 19.9, C3 at 27.5 / 14.14 and H2 at 61.5 / 21.5, and re-exporting from it reproduces the committed board byte for byte); the only other entries are one label offset for R_FB_T and the six thermal vias. Reason: the unassisted auto placement left C3 19.8 mm from VIN, the output capacitors 12.9 to 19.3 mm from L1 and 8 `W-SYNTH-DRC-016` warnings (reviewer's finding). Gaps in the final file are in the table below |
 | A14 | The placement passes Synth's structural review | MCP `synth_describe_placement` | Not rerun on the hand-pinned placement. The earlier score 100 was for the auto placement and no longer applies |
 | A15 | Power-good reaches the connector | `kicad-cli sch export netlist` (A8) | Net `PG` has exactly four nodes: `U1.pg` (pin 6, open drain), `R_PG.p1` (100k to `+3V3`), `J2.p3` and `D4.cathode` (A17). The connection and the pull-up are proven; the behaviour is B3 |
-| A16 | Thermal copper and vias exist under the converter | `kicad/buck.kicad_pcb`, `reports/buck.connectivity.json` | U1 pin 9 is a 2.41 x 3.1 mm exposed pad in the `GND` net, soldered to the F.Cu pour, with 6 GND vias inside it (2 x 3, 0.6 mm pad, 0.3 mm drill). GND vias within 1 / 2 / 3 / 4 mm of the pad centre: 2 / 6 / 6 / 7 (unchanged by C10 and C11). The router no longer moves these vias: it leaves a via in a pad alone when the board approves via-in-pad (`requires via_in_pad`); before that the post-route via mover pushed four of the six out of the pad. The board has 25 vias: 24 GND and one on `PG`. The board is `jlc-filled-via` with `requires via_in_pad`. The copper is proven; the temperature is B2 |
+| A16 | Thermal copper and vias exist under the converter | `kicad/buck.kicad_pcb`, `reports/buck.connectivity.json` | U1 pin 9 is a 2.41 x 3.1 mm exposed pad in the `GND` net, soldered to the F.Cu pour, with 6 GND vias inside it (2 x 3, 0.6 mm pad, 0.3 mm drill). GND vias within 1 / 2 / 3 / 4 mm of the pad centre: 2 / 6 / 6 / 7 (unchanged by C10 and C11). The router no longer moves these vias: it keeps a via in a pad only inside a component that declares `escape { method underpad }` (U1 does; `requires via_in_pad` alone is not enough); before that the post-route via mover pushed four of the six out of the pad. The board has 25 vias: 24 GND and one on `PG`. The board is `jlc-filled-via` with `requires via_in_pad`. The copper is proven; the temperature is B2 |
 | A17 | The power-good fault LED is wired as designed | `kicad-cli sch export netlist` (A8), `kicad/bom.csv`, `kicad/buck.kicad_pcb` | `D4` (`ltst_c190kgkt`, value "PG FAULT") has its anode on net `LED_PG` and its cathode on `PG`; `R_PGLED` (470 R) joins `+3V3` to `LED_PG`. Both are in the BOM. The LED current is a hand figure: (3.3 - 2.1) / 470 = 2.55 mA, taking Vf 2.1 V from the 1.9 to 2.4 V range, with `PG` held low by U1's 92 ohm typ on-resistance, so about 0.2 V. "PG FAULT" is the value field on F.Fab and is not printed on the silkscreen; only the reference D4 is. That the LED lights on a fault is B3 |
 | A18 | `synth check` verdict from the matrix row | `synth check <board> --json` and `--fab --json` (KiCadRoutingTools `61bde44`) | Release: pass. `--fab`: source, DRC and native KiCad verification pass; manufacturing `fail` because the KiCadRoutingTools copper has 11 vias without a ground return via within 0.64 mm. Matches `expect = "pass"`, `expect_fab = "fail"` |
 
