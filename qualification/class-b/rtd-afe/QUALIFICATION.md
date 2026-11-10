@@ -101,8 +101,8 @@ split with one GND plane removed the islands. The route then closed after three
 placement moves that opened tight pockets: C_DV2 to (44.5, 26.5), L1 to
 (43.5, 20.0) and C_VI to (45.0, 24.2), with the related R_RST/C_DV and L2
 positions adjusted at the same time. That layout is historical. The delivered board has
-0 errors and 0 unconnected items; its 48 warnings (47 library comparison, 1
-silkscreen edge clip) are dispositioned below.
+0 errors and 0 unconnected items; its 47 warnings (all library comparison) are
+dispositioned below.
 
 A 12-test-point variant was then placed on the earlier notched outline: VREF,
 GND, +3V3A, VBUS, +3V3, +3V3_RP_A, DVDD_1V1, RUN, USB_DP, USB_DN, SWDIO and
@@ -127,7 +127,7 @@ hid 25 passives/TVS and H1/H2/H3/J1; the delivered board had 0 silk warnings.
 This rework fits the outline to the placement instead of spreading the parts
 over a fixed 50.1 x 44.1 mm rectangle. The board is now 40.1 x 44.2 mm
 (1772 mm²) and routes with 0 open nets, 0 DRC errors, 0 unconnected items
-(48 warnings, see the table above). That does not prove it is the densest arrangement; it is one
+(47 warnings, see the table above). That does not prove it is the densest arrangement; it is one
 successful FreeRouting run, and `check.sh` re-routes from scratch.
 
 The largest bare rectangle inside the outline was 7 x 8 mm (56 mm²) on the earlier route (not re-measured after the C_IO, L1 and U4 moves), down from

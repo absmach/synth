@@ -116,17 +116,15 @@ QUALIFICATION.md). The route is under review by the designated reviewer.
   router-imported (source stitching and repair vias).
 - One via sits inside a pad (C_DV.2, at (16.138, 22.835) mm). `release.json`
   lists it as a fabrication note: order with filled and capped vias.
-- `kicad-cli pcb drc --severity-all --refill-zones`: 0 errors, 48 warnings (47
-  `lib_footprint_mismatch`: the exported footprints differ from KiCad 10's library
-  copies; 1 `silk_edge_clearance`: the C_DVB reference label is clipped by the
-  board edge at (41.05, 20.5) mm), 0 unconnected items. `pcbnew.LoadBoard` reopens the board and `check.sh` confirms
+- `kicad-cli pcb drc --severity-all --refill-zones`: 0 errors, 47 warnings (all `lib_footprint_mismatch`: the exported footprints differ from KiCad 10's library
+  copies), 0 unconnected items. `pcbnew.LoadBoard` reopens the board and `check.sh` confirms
   one GND plane with no AGND or DGND net.
 - Synth's signal-integrity pass, with the fine-pitch relaxation on (default
   settings: 12 blocking return-via findings): 12 non-blocking findings, 11 `W-SYNTH-DRC-016`
   layer changes with no ground-return via within 0.80 mm (advisories, see
   QUALIFICATION.md) and 1 parallel-run finding (SPI_MISO and ADC_DRDY, 3.5 mm on
   B.Cu, 0.203 mm apart). No RTD, AIN or VREF net is flagged.
-- Silkscreen: 1 DRC warning (the C_DVB label at the board edge, above). U1 has a hard label override at (16, 30.6) mm;
+- Silkscreen: no DRC warning (the C_DVB label was moved inboard by hand, see `QUALIFICATION.md`). U1 has a hard label override at (16, 30.6) mm;
   29 passives/TVS and H1/H2/H3/J1/J3 have their reference label hidden because
   the compact refdes field has no clear spot. Their refdes remain in the BOM, PnP and
   schematic; the full list is in QUALIFICATION.md.
@@ -155,7 +153,7 @@ Current result:
 
 | Check | Result |
 | --- | --- |
-| KiCad DRC (errors / warnings / unconnected) | 0 / 48 / 0 |
+| KiCad DRC (errors / warnings / unconnected) | 0 / 47 / 0 |
 | pcbnew reopen | OK |
 | Ground | one GND plane; no AGND or DGND net |
 | KiCad ERC (errors / warnings) | 0 / 1 |
@@ -163,7 +161,7 @@ Current result:
 | Synth release | `production_status: production`, `release_ready: true` (router/export gates only; not a fab approval, see `gate_scope`) |
 | Synth SI findings | 12, none blocking (11 `W-SYNTH-DRC-016` advisories, 1 parallel run) |
 
-The ERC warning and 47 of the 48 DRC warnings are library-comparison warnings,
+The ERC warning and all 47 DRC warnings are library-comparison warnings,
 not connectivity errors. The embedded REF5025ID symbol differs from the installed
 library copy. The 47 are `lib_footprint_mismatch`: Synth's exporter
 now redraws each footprint's reference label at 0.8 mm with an 0.18 mm stroke
