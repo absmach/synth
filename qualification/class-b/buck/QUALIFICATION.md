@@ -47,15 +47,15 @@ kicad-cli sch export netlist --format kicadsexpr -o /tmp/buck.net $B/kicad/buck.
 
 There is no `--place-route-iterate`: the sidecar `buck.placement.layout.toml` decides placement.
 Tool versions used: KiCad 10.0.7, FreeRouting 2.4.1 on OpenJDK 25.0.4.1 (from `reports/buck.routing.json`),
-Synth 0.1.2, on 2026-11-09. `SYNTH_SOURCE_REVISION` makes `buck.routing.json` record `source_revision`: it holds
-`b4cbe5abcdf0f32f0cc0d8f8de86b2e84c1bb902` (`b4cbe5ab`), the head the reports were regenerated on; the evidence commit is its child, so the recorded revision is the parent of the commit that carries these files. `release.json` and `release-fab.json` do not record a revision; they were generated in the same two runs, from the same revision. Re-exporting from the committed sidecar gives a byte-identical `kicad/buck.kicad_pcb` (95 segments, 25 vias, six of them thermal vias in the U1 pad). The JSON reports were generated with a relative board path and the
+Synth 0.1.2, on 2026-11-10. `SYNTH_SOURCE_REVISION` makes `buck.routing.json` record `source_revision`: it holds
+`7ec692c396fab2f157d5af3354199e4b0ff68a76` (`7ec692c3`), the head the reports were regenerated on; the evidence commit is its child, so the recorded revision is the parent of the commit that carries these files. `release.json` and `release-fab.json` do not record a revision; they were generated in the same two runs, from the same revision. Re-exporting from the committed sidecar gives a byte-identical `kicad/buck.kicad_pcb` (95 segments, 25 vias, six of them thermal vias in the U1 pad). The JSON reports were generated with a relative board path and the
 repository root prefix was stripped with `sed`; `out/` is a scratch directory and is not committed. A different
 router version can give different copper. `reports/registry-qualify.txt` was regenerated for the 11 registry parts on the board
 with `synth registry qualify --part <id>` (`lmr38010`, `l_bourns_srn6045ta_6r8m`, `ss36`, `smbj30a`,
 `mf_msmf110_33x`, `jst_b2b_xh_a_2pin`, `jst_b4b_xh_a_4pin`, `c_electrolytic_smd_8x10`,
 `ltst_c190kgkt`, `c_samsung_cl31b106kbhnnne`, `c_samsung_cl31a226kahnnne`): all eleven qualify (`lmr38010` and `ltst_c190kgkt` were reviewed on 2026-10-29, the two capacitors on 2026-11-06).
 `python3 -I footprint_compare.py kicad/buck.kicad_pcb > reports/footprint-compare.txt` (run from this folder; needs KiCad's `pcbnew` module) compares every footprint with its library copy.
-The pictures in `images/` were regenerated from the committed `kicad/buck.kicad_pcb` and `kicad/buck.kicad_sch` (head 6a9ff28c, with C10 and C11) with kicad-cli 10.0.7: `pcb render` for the three 3D views, `pcb export pdf --black-and-white` plus pdftoppm for the copper views, `sch export pdf` plus pdftoppm at 150 dpi for the schematic.
+The pictures in `images/` were regenerated from the committed `kicad/buck.kicad_pcb` and `kicad/buck.kicad_sch` (head 7ec692c3, with C10 and C11; the 3D views use the Fuse model in `step-models/` through a scratch copy, as in `step_export.sh`) with kicad-cli 10.0.7: `pcb render` for the three 3D views, `pcb export pdf --black-and-white` plus pdftoppm for the copper views, `sch export pdf` plus pdftoppm at 150 dpi for the schematic.
 
 ## Artifact hashes
 

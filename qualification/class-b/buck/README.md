@@ -26,7 +26,7 @@ feedback, power-good and thermal copper, plus a negative variant that the feedba
 - Feedback: R_FB_T 100k from the output node (L1 pad 2 side), R_FB_B 43.2k, C7 56 pF across R_FB_T.
   Vout = 1.0 x (1 + 100k/43.2k) = 3.315 V typical, 3.26 to 3.36 V over Vref 0.985 to 1.015 V (ideal resistors).
 - Power-good: U1 pin 6 is open drain, pulled up to +3V3 through R_PG 100k and brought out on J2 pin 3. D4 (green, "PG FAULT") and R_PGLED 470 R run from +3V3 to PG, so the LED lights while PG is low and stays dark while power is good.
-- Thermal: U1 pin 9 is a 2.41 x 3.1 mm exposed pad soldered to the F.Cu GND pour, with a 2 x 3 array of six GND vias in the pad (see Thermal). The board is `manufacturer "jlc-filled-via"` with `requires via_in_pad` (resin-filled and capped vias).
+- Thermal: U1 pin 9 is a 2.41 x 3.1 mm exposed pad soldered to the F.Cu GND pour, with a 2 x 3 array of six GND vias in the pad (see Thermal). U1 declares `escape { method underpad }` in `buck.synth`, which is what keeps the router from moving those vias off the pad. The board is `manufacturer "jlc-filled-via"` with `requires via_in_pad` (resin-filled and capped vias).
 - Negative file: identical except R_FB_T and C7 hang from SW. It emits E-SYNTH-POWER-011 and the same 11 warnings as the good board.
 - Board: 64.99 x 24.99 mm (1624 mm2, Edge.Cuts line centres), 4 layers, GND pours on all layers. Power tracks 0.5 mm, signal 0.127 mm.
 - Two M2.5 non-plated mounting holes (H1, H2): H1 in the top middle, H2 below J2 at the right edge.
@@ -80,7 +80,7 @@ the behaviour on a fault: Synth has no power-good rule (`synth capability list` 
 - Via-in-pad needs resin-filled and capped vias, so the board declares `manufacturer "jlc-filled-via"` and
   `requires via_in_pad`; `release.json` lists the six vias as fabrication notes.
 - Counts from `kicad/buck.kicad_pcb` (`vias.py`, GND vias, distance from the pad centre): inside the pad 6;
-  within 1 mm 2, within 2 mm 2, within 3 mm 6, within 4 mm 7. The board has 25 vias in total, 24 GND and one on `PG`, all
+  within 1 mm 2, within 2 mm 6, within 3 mm 6, within 4 mm 7. The board has 25 vias in total, 24 GND and one on `PG`, all
   0.3 mm drill and 0.6 mm pad. The other 18 GND vias were placed by the router and the return-via pass (the report does not split them).
 - Not estimated: TI's `RthetaJA` of 42.9 C/W is not valid for design (datasheet text near Eq 15), the LMR38010
   datasheet has no copper-area curve, and no efficiency curve was read. At 1 A out and an assumed 85% efficiency the loss
@@ -174,7 +174,7 @@ datasheet.
 
 ## Measured results
 
-The export routes with FreeRouting 2.4.1 on OpenJDK 25.0.4.1; the routed board is written as `out/buck/buck.kicad_pcb` when Synth's gate passes (state `routed`). Numbers below are from the committed files, regenerated 2026-11-09 (measured 2026-10-29 for the parts review). `reports/buck.routing.json` records `source_revision` b4cbe5abcdf0f32f0cc0d8f8de86b2e84c1bb902, the head the reports were regenerated on; the evidence commit is its child. `release.json` and `release-fab.json` carry no revision field; they come from the same two runs on that revision.
+The export routes with FreeRouting 2.4.1 on OpenJDK 25.0.4.1; the routed board is written as `out/buck/buck.kicad_pcb` when Synth's gate passes (state `routed`). Numbers below are from the committed files, regenerated 2026-11-10 (measured 2026-10-29 for the parts review). `reports/buck.routing.json` records `source_revision` 7ec692c396fab2f157d5af3354199e4b0ff68a76, the head the reports were regenerated on; the evidence commit is its child. `release.json` and `release-fab.json` carry no revision field; they come from the same two runs on that revision.
 
 | Number | Value | Command |
 | --- | --- | --- |
@@ -269,7 +269,7 @@ together with the `#38` checklist traceability for this board. Its row for the c
 ## Not verified
 
 - Nothing powered, measured or thermally tested. Efficiency (85%) and the 0.58 W loss are assumptions.
-- The pictures in `images/` and the schematic figures above (`tools/schematic_quality.py`) were regenerated from the committed `kicad/buck.kicad_pcb` and `kicad/buck.kicad_sch` (head 6a9ff28c, with C10 and C11) with kicad-cli 10.0.7: `pcb render` for the three 3D views, `pcb export pdf --black-and-white` plus pdftoppm for the copper views, `sch export pdf` plus pdftoppm at 150 dpi for the schematic.
+- The pictures in `images/` and the schematic figures above (`tools/schematic_quality.py`) were regenerated from the committed `kicad/buck.kicad_pcb` and `kicad/buck.kicad_sch` (head 7ec692c3, with C10 and C11; the 3D views use the Fuse model in `step-models/` through a scratch copy, as in `step_export.sh`) with kicad-cli 10.0.7: `pcb render` for the three 3D views, `pcb export pdf --black-and-white` plus pdftoppm for the copper views, `sch export pdf` plus pdftoppm at 150 dpi for the schematic.
 - The MCP placement review (`synth_describe_placement`) was not rerun on the hand-pinned placement.
 - Availability, LCSC numbers and assembly not checked. The 0603 passives have no MPN or manufacturer sheet; the C2 manufacturer sheet could not be read (temperature range from a distributor listing only).
 - PTC behaviour with the TVS in a surge, and inrush into C1 and the output caps, are not analysed.
