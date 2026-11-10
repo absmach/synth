@@ -1825,3 +1825,124 @@ fn a_shared_model_file_is_included_once() {
     assert!(deck.contains("XU1 "), "deck:\n{deck}");
     assert!(deck.contains("XU2 "), "deck:\n{deck}");
 }
+
+/// A nested include could smuggle `.control`/`shell` past the model checks,
+/// so v1 rejects the directive itself and never starts ngspice.
+#[test]
+fn a_model_with_a_nested_include_is_rejected_without_running() {
+    let scratch = Scratch::new("nested-include");
+    model_file(
+        scratch.path(),
+        "inner.lib",
+        ".subckt ams1117_3v3 vin gnd vout\n.control\nshell echo escaped\n.endc\n.ends\n",
+    );
+    model_file(
+        scratch.path(),
+        "outer.lib",
+        ".subckt ams1117_3v3 vin gnd vout\n.include \"inner.lib\"\n.ends\n",
+    );
+    let board = patched_ams1117(|spice| spice.file = "outer.lib".to_string());
+    let testbench = testbench(LDO_TB);
+    let options = synth_sim::SimOptions {
+        // A missing binary proves the emitter failed before any run.
+        ngspice: Some(scratch.path().join("must-not-run")),
+        design_path: Some(PathBuf::from("ldo.synth")),
+        testbench_path: Some(PathBuf::from("ldo.sim.toml")),
+        registry_dirs: vec![scratch.path().to_path_buf()],
+    };
+
+    let report = synth_sim::simulate(&board, &testbench, &options);
+
+    assert!(
+        report.diagnostics.iter().any(|diagnostic| {
+            diagnostic.code == synth_sim::E_SYNTH_SIM_002
+                && diagnostic
+                    .message
+                    .as_deref()
+                    .is_some_and(|message| message.contains(".include"))
+        }),
+        "diagnostics: {:?}",
+        report.diagnostics
+    );
+    assert!(
+        !report
+            .diagnostics
+            .iter()
+            .any(|diagnostic| diagnostic.code == synth_sim::E_SYNTH_SIM_001),
+        "ngspice must not run: {:?}",
+        report.diagnostics
+    );
+}
+
+/// The loader merges user parts over seed parts, so the user registry's copy
+/// of a relative model path must win too.
+#[test]
+fn the_last_registry_dir_wins_for_a_shared_relative_model_path() {
+    let seed = Scratch::new("precedence-seed");
+    let user = Scratch::new("precedence-user");
+    let seed_model = seed.path().join("spice");
+    let user_model = user.path().join("spice");
+    std::fs::create_dir_all(&seed_model).expect("seed model dir");
+    std::fs::create_dir_all(&user_model).expect("user model dir");
+    model_file(
+        &seed_model,
+        "ams1117_3v3.lib",
+        ".subckt ams1117_3v3 vin gnd vout params: rout=50m\nVref vout int 3.3\n\
+         Rout int gnd {rout}\n.ends\n",
+    );
+    model_file(
+        &user_model,
+        "ams1117_3v3.lib",
+        ".subckt ams1117_3v3 vin gnd vout params: rout=50m\nVref vout int 3.0\n\
+         Rout int gnd {rout}\n.ends\n",
+    );
+    let board = board(LDO);
+    let testbench = testbench(LDO_TB);
+
+    let deck = synth_sim::emit_netlist_with_registry_dirs(
+        &board,
+        &testbench,
+        &[seed.path().to_path_buf(), user.path().to_path_buf()],
+    )
+    .expect("deck emits");
+
+    let expected = user_model
+        .canonicalize()
+        .expect("canonical user model")
+        .join("ams1117_3v3.lib");
+    assert!(
+        deck.contains(&format!(".include \"{}\"", expected.display())),
+        "deck must include the user copy:\n{deck}"
+    );
+    let seed_path = seed_model
+        .canonicalize()
+        .expect("canonical seed model")
+        .join("ams1117_3v3.lib");
+    assert!(
+        !deck.contains(&format!(".include \"{}\"", seed_path.display())),
+        "deck must not include the seed copy:\n{deck}"
+    );
+}
+
+/// `dialect = "ps"` writes `ngbehavior=ps` into `.spiceinit`; the model must
+/// still produce the same operating point under real ngspice.
+#[test]
+fn a_ps_dialect_spice_part_matches_real_ngspice() {
+    let Some(ngspice) = real_ngspice() else {
+        eprintln!("skipping: ngspice is not installed (sudo apt install ngspice)");
+        return;
+    };
+    let board = patched_ams1117(|spice| {
+        spice.dialect = Some(synth_registry::SpiceDialect::Ps);
+    });
+    let testbench = testbench(LDO_TB);
+
+    let report = synth_sim::simulate(&board, &testbench, &ldo_options(&ngspice));
+
+    assert!(report.passed(), "diagnostics: {:?}", report.diagnostics);
+    let vout = report.measures[0].value;
+    assert!(
+        (vout - 3.29967).abs() < 5e-4,
+        "vout {vout} should be about 3.29967 V"
+    );
+}

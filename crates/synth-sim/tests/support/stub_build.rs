@@ -18,7 +18,11 @@ pub fn build_stub(source: &Path) -> PathBuf {
     static BINARY: OnceLock<PathBuf> = OnceLock::new();
     BINARY
         .get_or_init(|| {
-            let dir = Path::new(env!("CARGO_TARGET_TMPDIR")).join("synth_stub_bin");
+            // Fixed per test crate: no pid accumulation, but the synth-sim
+            // and synth-cli test binaries must not share (and race on) one
+            // directory when the workspace suite runs in parallel.
+            let dir = Path::new(env!("CARGO_TARGET_TMPDIR"))
+                .join(format!("synth_stub_bin_{}", env!("CARGO_PKG_NAME")));
             let _ = std::fs::remove_dir_all(&dir);
             std::fs::create_dir_all(&dir).expect("stub binary dir");
             let binary = dir.join(format!("stub{}", std::env::consts::EXE_SUFFIX));

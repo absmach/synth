@@ -50,9 +50,10 @@ A missing file or subcircuit is reported only when a simulation runs, so
 
 When a deck runs, the model file is checked: `.control`, `.endc`, `shell` and
 `system` lines are rejected, as are Verilog-A models and encrypted vendor
-files. All parts in one run must use the same `dialect`, because ngspice has a
-single `ngbehavior` setting per run; a conflict is reported here naming both
-parts.
+files. v1 also rejects nested `.include`, `.inc` and `.lib` directives, so a
+model must be self-contained. All parts in one run must use the same `dialect`,
+because ngspice has a single `ngbehavior` setting per run; a conflict is
+reported here naming both parts.
 
 ## Minimal reproduction
 

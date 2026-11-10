@@ -85,6 +85,8 @@ checked at load; the model file and subckt are checked only when a simulation
 runs, so `validate` and `export` never fail on a missing file. Model files are
 resolved from the registry directories (the project `registry/parts` and the
 user registry); absolute paths are accepted only when they stay inside one.
+Model files live on disk, so the embedded seed registry cannot resolve them:
+run from a checkout or point `--registry`/`SYNTH_REGISTRY` at a registry.
 Every part in one run must use the same `dialect`, because ngspice applies one
 `ngbehavior` setting per run.
 

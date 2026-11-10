@@ -1116,7 +1116,7 @@ fn emit_deck(
                 topology_error(
                     &net.name,
                     format!(
-                        "measure `{}` reads net `{}`, but every part on it is ignored",
+                        "measure `{}` reads net `{}`, which has no simulated parts",
                         measure.name, net.name
                     ),
                 ),
@@ -1210,7 +1210,10 @@ fn resolve_spice_model(spice: &SpiceModel, roots: &[PathBuf]) -> Result<PathBuf,
         return Ok(canonical);
     }
     let mut found_outside = false;
-    for root in roots {
+    // Last registry directory wins, matching the loader's user-over-seed
+    // overlay precedence, so a shadowing part cannot silently use the seed
+    // copy of the same relative model path.
+    for root in roots.iter().rev() {
         let candidate = root.join(configured);
         if !candidate.exists() {
             continue;
@@ -1278,7 +1281,11 @@ fn check_model_file(path: &Path, subckt: &str) -> Result<(), String> {
             continue;
         }
         let directive = trimmed.to_ascii_lowercase();
-        for forbidden in [".control", ".endc", "shell", "system"] {
+        // v1 has no vendor models: a nested include could smuggle in
+        // `.control`/`shell`, which the checks below would never see.
+        for forbidden in [
+            ".control", ".endc", "shell", "system", ".include", ".inc", ".lib",
+        ] {
             if directive.starts_with(forbidden) {
                 return Err(format!(
                     "model file `{}` contains `{forbidden}`, which is not allowed in a model",

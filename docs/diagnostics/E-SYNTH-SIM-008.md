@@ -20,6 +20,10 @@ net is reported here, because the measurement would otherwise reach ngspice as
 a missing vector (`E-SYNTH-SIM-003`) with no useful location. Ground and nets
 driven by a testbench source remain valid measurement targets.
 
+For a `[spice]` subcircuit part this check assumes the model conducts between
+every pin; a model that leaves a pin open may surface as a singular-matrix
+`E-SYNTH-SIM-006` instead of this code.
+
 Synth never turns on `rshunt` silently to hide the problem: a floating node is
 a design error, not a solver setting.
 

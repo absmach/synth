@@ -82,6 +82,19 @@ expression: board
           "max_power_mw": 1200.0,
           "thermal_resistance_c_per_w": 90.0
         },
+        "spice": {
+          "file": "spice/ams1117_3v3.lib",
+          "subckt": "ams1117_3v3",
+          "pin_order": [
+            "vin",
+            "gnd",
+            "vout"
+          ],
+          "params": {
+            "rout": "100m"
+          },
+          "dialect": null
+        },
         "provenance": {
           "source": "seed",
           "generator": null,
