@@ -37,7 +37,7 @@ board "irrigation_controller" {
     }
   }
   group "BUCK 3V3" color "#b45309" {
-    component U1: regulator "mp2307dn_buck_ep" { escape { off } }
+    component U1: regulator "mp2307_buck_ep" { escape { off } }
     component C_IN1: capacitor "c_generic_0805" value "10uF 25V"
     component C_IN2: capacitor "c_generic_0805" value "10uF 25V"
     component C_BS: capacitor "c_generic_0603" value "10nF"
@@ -156,7 +156,7 @@ board "irrigation_controller" {
   // ---- I2C ------------------------------------------------------------------------------------
   group "I2C SENSORS" color "#a16207" {
     component U4: sensor "apds9301_real"
-    component U5: memory "eeprom_24lc256_sn"
+    component U5: memory "24lc256_soic8"
     component C_U4: capacitor "c_generic_0603" value "100nF"
     component C_U5: capacitor "c_generic_0603" value "100nF"
     component R_SDA: resistor "r_generic_0603" value "4.7k"
@@ -242,13 +242,13 @@ board "irrigation_controller" {
 
   // ================= nets =====================================================================
   net "GND" {
-    J1.p2 D_TVS.anode C_BULK.p2 R_QG.p2 C_IN1.p2 C_IN2.p2 U1.gnd U1.ep C_OUT1.p2 C_OUT2.p2 R_FBB.p2 C_COMP.p2 C_SS.p2
+    J1.p2 D_TVS.anode C_BULK.p2 R_QG.p2 C_IN1.p2 C_IN2.p2 U1.gnd U1.gnd_ep C_OUT1.p2 C_OUT2.p2 R_FBB.p2 C_COMP.p2 C_SS.p2
     TP_GND.p1
     U2.VSS C_VDD1.p2 C_VDD2.p2 Y1.gnd_2 Y1.gnd_4 C_X1.p2 C_X2.p2 C_NRST.p2 SW_RESET.p2 J_SWD.p3
     Q_V1.s Q_V2.s R_PD1.p2 R_PD2.p2
     J_SOIL1.p3 R_D1.p2 C_F1.p2 J_SOIL2.p3 R_D2.p2 C_F2.p2
     J_FLOW.p2 C_FL.p2 D_FZ.anode
-    U4.GND U4.ADR_SEL C_U4.p2 U5.GND U5.A0 U5.A1 U5.A2 U5.WP C_U5.p2 J_I2C.p1
+    U4.GND U4.ADR_SEL C_U4.p2 U5.vss U5.a0 U5.a1 U5.a2 U5.wp C_U5.p2 J_I2C.p1
     D_PWR.cathode D_VALVE.cathode
     C_N1.p2 C_N2.p2 C_N3.p2 C_N4.p2 C_N5.p2 C_N6.p2 R_N1.p2 R_N2.p2
     D_N1.cathode D_N2.cathode C_N7.p2 R_N5.p2
@@ -282,7 +282,7 @@ board "irrigation_controller" {
     L1.p2 C_OUT1.p1 C_OUT2.p1 R_FBT.p1 TP_3V3.p1
     U2.VDD C_VDD1.p1 C_VDD2.p1 R_NRST.p1 J_SWD.p1
     R_EPU1.p1 Q_E1.s R_EPU2.p1 Q_E2.s R_FPU.p1
-    U4.VDD C_U4.p1 U5.VCC C_U5.p1 R_SDA.p1 R_SCL.p1 J_I2C.p2
+    U4.VDD C_U4.p1 U5.vcc C_U5.p1 R_SDA.p1 R_SCL.p1 J_I2C.p2
     R_PWR.p1
     C_N1.p1 C_N2.p1 C_N3.p1 C_N4.p1 C_N5.p1 C_N6.p1 R_N1.p1 R_N2.p1 R_N4.p1 C_N8.p1 C_N10.p1
     C_N11.p1 C_N12.p1 C_N13.p1 C_N14.p1 TP_N1.p1
@@ -322,8 +322,8 @@ board "irrigation_controller" {
   net "FLOW_PULSE" class "SIG" { R_FS.p2 D_FZ.cathode C_FL.p1 U2.PA6 TP_FLOW.p1 }
 
   // I2C
-  net "I2C_SDA" class "SIG" { U2.PB7 U4.SDA U5.SDA R_SDA.p2 J_I2C.p3 TP_SDA.p1 }
-  net "I2C_SCL" class "SIG" { U2.PB6 U4.SCL U5.SCL R_SCL.p2 J_I2C.p4 TP_SCL.p1 }
+  net "I2C_SDA" class "SIG" { U2.PB7 U4.SDA U5.sda R_SDA.p2 J_I2C.p3 TP_SDA.p1 }
+  net "I2C_SCL" class "SIG" { U2.PB6 U4.SCL U5.scl R_SCL.p2 J_I2C.p4 TP_SCL.p1 }
 
   // LEDs
   net "LED_PWR_A" class "SIG" { R_PWR.p2 D_PWR.anode }

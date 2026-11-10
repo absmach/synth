@@ -123,5 +123,5 @@ Designator,Val,Package,Mid X,Mid Y,Rotation,Layer
 "U1","MP2307DN-LF-Z","Package_SO:SOIC-8-1EP_3.9x4.9mm_P1.27mm_EP2.41x3.3mm",31.000,17.500,0,"Top"
 "U2","mcu","Package_QFP:LQFP-32_7x7mm_P0.8mm",32.500,35.500,0,"Top"
 "U4","sensor","OptoDevice:Broadcom_APDS-9301",50.500,45.000,0,"Top"
-"U5","memory","Package_SO:SOIC-8_3.9x4.9mm_P1.27mm",54.000,52.500,0,"Top"
+"U5","24LC256-I/SN","Package_SO:SOIC-8_3.9x4.9mm_P1.27mm",54.000,52.500,0,"Top"
 "Y1","3TJ480000FYLBC","Crystal:Crystal_SMD_3225-4Pin_3.2x2.5mm",25.000,30.500,0,"Top"

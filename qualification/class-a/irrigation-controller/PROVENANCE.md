@@ -18,6 +18,7 @@ The board is the output of an agent driving `synth mcp` from a prompt, followed 
 | | |
 |---|---|
 | Synth, final exports | commit `a12aa289b7b001e8d5a197b15d20302e4718da5c` of `absmach/synth` (`upstream/main`: the merge of Synth pull request #269, which carries the router fix that counts the routing report's statistics after the repair passes, on top of `0ceb7b80`, the merge of #388 with #370 and #394 before it). `synth --version` prints `synth-cli 0.1.1`; `synth mcp --stdio` is the same binary |
+| Synth, schematic and symbols | the 13 group-sheet schematics and `irrigation_controller.kicad_sym` come from an export of the same source and user registry on the tree of `upstream/main` `fbfd8d60` (pull request #440 merged); the pinned binary writes group sheets and a symbol library without the power symbols. The root sheet is byte-identical between the two binaries. The routed board, project, BOM and placement files are from export 1 on the pinned binary |
 | Synth, earlier agent stages | the binary of the day, built from the layout and silkscreen branches listed in `HOW_THIS_BOARD_WAS_MADE.md` |
 | KiCadRoutingTools | `9399bfb29e072bfe60b10d9cdae20c274fc2a17a` |
 | KiCad | 10.0.6 (library tables for DRC and ERC) |

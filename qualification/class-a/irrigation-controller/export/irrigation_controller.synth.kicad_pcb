@@ -19050,7 +19050,7 @@
 		)
 		(property
 			"Value"
-			"(no value)"
+			"24LC256-I/SN"
 			(at 0 6.2 0)
 			(layer "F.Fab")
 			(uuid "99120562-0fcb-51c8-8bf4-3ba3379f8cdb")
@@ -19089,7 +19089,7 @@
 		)
 		(property
 			"MPN"
-			""
+			"24LC256-I/SN"
 			(at 0 0 0)
 			(layer "F.Fab")
 			(hide yes)
@@ -19102,7 +19102,7 @@
 		)
 		(property
 			"LCSC"
-			""
+			"C411625"
 			(at 0 0 0)
 			(layer "F.Fab")
 			(hide yes)

@@ -47,9 +47,7 @@ and `l_1210_10uh`, which are not in the registry on `main`. `smaj13a_tvs` and
 `p_mosfet_ao3401a` were authored for this board and are in `registry/parts/`;
 the repository owner (`JeffMboya`) reviewed both on 2026-10-31, recorded under `[provenance]`
 (`reviewed_by`, `reviewed_at`); the copies in `reproduce/user-registry/` are the ones the exports ran with. They differ from the
-records in `registry/parts/` in the review date (2026-11-02 there, 2026-10-31 here), in the `datasheet_url` of
-`smaj13a_tvs`, and in the lifecycle of `mp2307dn_buck_ep`: `active` with no substitutes in the user registry,
-`obsolete` with `substitutes = ["mp2307_buck_ep"]` in `registry/parts/`.
+records in `registry/parts/` in the review date (2026-11-02 there, 2026-10-31 here), and in the `datasheet_url` of `smaj13a_tvs`. The EEPROM `U5` and the regulator `U1` are the registry's `24lc256_soic8` and `mp2307_buck_ep`, whose copies in `reproduce/user-registry/` equal the records in `registry/parts/`.
 
 The agent stages ran on KiCad 10.0.7 and the Synth binary of the day; the final exports were made on KiCad 10.0.6 with commit `a12aa289b7b001e8d5a197b15d20302e4718da5c` of `absmach/synth` (`upstream/main`: the merge of Synth pull request #269, which carries the router fix that counts the routing report's statistics after the repair passes, on top of `0ceb7b80`, the merge of #388 with #370 and #394 before it). `allow_incomplete` was never set, in any run log or
 script.
