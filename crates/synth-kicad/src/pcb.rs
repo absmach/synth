@@ -410,6 +410,9 @@ pub fn build_pcb(
     // The via is the process's own: its drill at least the minimum and its pad
     // the drill plus two minimum annular rings.
     let plane_via = PlaneVia::for_process(&process);
+    // The land of a via filled and capped in a pad, where the process offers one
+    // and a component declares the under-pad escape that makes it legal.
+    let pad_via = PlaneVia::for_via_in_pad(&process);
     // One rail per layer. Pouring every plane net on every power layer puts
     // two rails at the same priority on the same copper, which is the
     // starvation described above with ground swapped out for a second rail:
@@ -475,34 +478,56 @@ pub fn build_pcb(
                     },
                     &plane_via,
                 );
-                let chosen = match beside {
-                    Some(at) => Ok(at),
-                    None if via_in_pad_allowed => plane_via_in_pad(
-                        &target,
-                        &plane_via,
-                        &InPadRules {
-                            pads: &pad_rects,
-                            vias: &placed_vias,
-                            clearance_nm: process.min_copper_clearance_nm,
-                            drill_to_copper_nm: process.min_drill_to_copper_nm,
-                        },
-                    ),
-                    None => Err(ViaRefusal::NoRoomBesidePad),
+                let in_pad_rules = InPadRules {
+                    pads: &pad_rects,
+                    vias: &placed_vias,
+                    clearance_nm: process.min_copper_clearance_nm,
+                    drill_to_copper_nm: process.min_drill_to_copper_nm,
+                };
+                // The plane via goes in the pad first, where it fits. Only a
+                // component that declares `escape { method underpad }` may take
+                // the smaller filled and capped via, the one the DRC exempts from
+                // the plain ring; a pad anywhere else that cannot hold the plane
+                // via is refused.
+                let (chosen, land) = match beside {
+                    Some(at) => (Ok(at), plane_via),
+                    None if via_in_pad_allowed => {
+                        match plane_via_in_pad(&target, &plane_via, &in_pad_rules) {
+                            Ok(at) => (Ok(at), plane_via),
+                            Err(refusal) => match pad_via {
+                                Some(small) if target.underpad => {
+                                    (plane_via_in_pad(&target, &small, &in_pad_rules), small)
+                                }
+                                _ => (Err(refusal), plane_via),
+                            },
+                        }
+                    }
+                    None => (Err(ViaRefusal::NoRoomBesidePad), plane_via),
                 };
                 let via = match chosen {
                     Ok(at) => at,
                     Err(refusal) => {
                         return Err(PlaneFanoutError {
                             net: net.name.clone(),
-                            detail: plane_via_refusal(&refusal, pad, layer, &plane_via),
+                            detail: plane_via_refusal(
+                                &refusal,
+                                pad,
+                                layer,
+                                &ViaAttempt {
+                                    via: land,
+                                    filled_and_capped: target.underpad && pad_via == Some(land),
+                                    offered: pad_via.filter(|_| !target.underpad),
+                                },
+                            ),
                         });
                     }
                 };
-                placed_vias.push((via, plane_via.pad_radius_nm));
+                let used = land;
+                placed_vias.push((via, used.pad_radius_nm));
                 children.push(build_plane_via(
                     via.x_nm,
                     via.y_nm,
-                    &plane_via,
+                    &used,
                     pcb_net,
                     project,
                     plane_via_index,
@@ -613,6 +638,10 @@ struct PlanePad {
     layer: Layer,
     /// Width and height of the pad's copper in board axes, in nanometres.
     size_nm: (i64, i64),
+    /// Whether the pad's component declares `escape { method underpad }`: the
+    /// only place the filled and capped via, sized to the process's land, is
+    /// allowed.
+    underpad: bool,
 }
 
 /// Board-space targets for a declared power plane: one [`PlanePad`] per pad the
@@ -660,6 +689,9 @@ fn plane_pad_targets(board: &Board, placement: &Placement, net: &synth_ir::Net) 
                 centre: center,
                 origin,
                 layer: placed.layer,
+                underpad: component.escape.as_ref().is_some_and(|escape| {
+                    !escape.off && escape.method == Some(synth_ir::EscapeMethod::Underpad)
+                }),
                 size_nm: if placed.rotation.swaps_extents() {
                     (h_nm, w_nm)
                 } else {
@@ -699,6 +731,31 @@ impl PlaneVia {
     }
 }
 
+impl PlaneVia {
+    /// The via a plane stitching uses when it is filled and capped in a pad: the
+    /// process's own minimum drill (not the exporter's wider default) with the
+    /// land the process gives for it, `via_in_pad_land_nm`, the one the DRC judges
+    /// it by. `None` where the process offers no such land, so the plane via is
+    /// the only via there is.
+    fn for_via_in_pad(profile: &synth_drc::ManufacturerProfile) -> Option<Self> {
+        profile.via_in_pad_land_nm().map(|land_nm| Self {
+            pad_radius_nm: (land_nm + 1) / 2,
+            drill_nm: profile.min_drill_diameter_nm,
+        })
+    }
+}
+
+/// The via a pad was tried with, for the refusal that names it.
+struct ViaAttempt {
+    via: PlaneVia,
+    /// Whether it is the process's filled and capped via, whose land is the drill
+    /// plus the allowance, and not the plane via's two annular rings.
+    filled_and_capped: bool,
+    /// The filled and capped via the process offers, where the pad's component
+    /// does not declare the escape that would take it.
+    offered: Option<PlaneVia>,
+}
+
 /// Why no stitching via could be placed for a pad.
 #[derive(Debug, Clone, PartialEq, Eq)]
 enum ViaRefusal {
@@ -727,8 +784,9 @@ fn plane_via_refusal(
     refusal: &ViaRefusal,
     pad: synth_geometry::Point,
     layer: Layer,
-    via: &PlaneVia,
+    attempt: &ViaAttempt,
 ) -> String {
+    let via = attempt.via;
     let at = format!(
         "the pad at ({:.2}, {:.2}) mm on {layer:?}",
         nm_to_mm(pad.x_nm),
@@ -740,15 +798,31 @@ fn plane_via_refusal(
              within clearance of another pad or via. Move the part, widen the board, or declare \
              `requires via_in_pad` on a manufacturer that offers it, which lets the via go in the pad."
         ),
-        ViaRefusal::PadTooSmall { pad_nm, via_nm } => format!(
-            "{at} is {:.2} x {:.2} mm and a stitching via needs a {:.2} mm pad (a {:.2} mm drill plus \
-             two annular rings) inside it, so via-in-pad cannot hold it on this process. Use a \
-             manufacturer tier with a finer drill, a larger pad, or another way to reach the plane.",
-            nm_to_mm(pad_nm.0),
-            nm_to_mm(pad_nm.1),
-            nm_to_mm(*via_nm),
-            nm_to_mm(via.drill_nm),
-        ),
+        ViaRefusal::PadTooSmall { pad_nm, via_nm } => {
+            let ring = if attempt.filled_and_capped {
+                "the process's via-in-pad land allowance"
+            } else {
+                "two annular rings"
+            };
+            let advice = match attempt.offered {
+                Some(small) => format!(
+                    "Declare `escape {{ method underpad }}` on the component, which takes the process's \
+                     {:.2} mm filled and capped via, or use a larger pad or another way to reach the plane.",
+                    nm_to_mm(2 * small.pad_radius_nm)
+                ),
+                None => "Use a manufacturer tier with a finer drill, a larger pad, or another way to \
+                         reach the plane."
+                    .to_string(),
+            };
+            format!(
+                "{at} is {:.2} x {:.2} mm and a stitching via needs a {:.2} mm pad (a {:.2} mm drill plus \
+                 {ring}) inside it, so via-in-pad cannot hold it on this process. {advice}",
+                nm_to_mm(pad_nm.0),
+                nm_to_mm(pad_nm.1),
+                nm_to_mm(*via_nm),
+                nm_to_mm(via.drill_nm),
+            )
+        }
         ViaRefusal::Crowded => format!(
             "{at} can hold the stitching via, but copper of a neighbouring pad or via is within \
              the process's clearance of the via or of its hole. Move the part or widen the pitch."
@@ -979,7 +1053,8 @@ struct InPadRules<'a> {
 /// it suits, if the pad can hold it.
 ///
 /// A board that declared via-in-pad is allowed the process, not told that every
-/// pad suits it: the via's annulus (its drill plus the process's annular rings)
+/// pad suits it: the via's annulus (its drill plus the process's via-in-pad land
+/// allowance)
 /// has to fit inside the pad's copper, or the via would be wider than the pad it
 /// is meant to sit in; the pads and vias round it must stay the process's
 /// clearance from the via's copper and its hole's edge from their copper. A pad
@@ -4120,6 +4195,7 @@ mod plane_via_in_pad_tests {
             origin: Point::new(47_000_000, 47_000_000),
             layer: Layer::Top,
             size_nm: (size_nm, size_nm),
+            underpad: true,
         }
     }
 
@@ -4203,6 +4279,55 @@ mod plane_via_in_pad_tests {
                 via_nm: 600_000
             })
         );
+    }
+
+    /// JLCPCB's via-in-pad guide gives the minimum land as the drill plus
+    /// 0.15 mm. On the tier with the 0.2 mm drill that is 0.35 mm, which a
+    /// 0.35 mm ball pad of a 0.8 mm BGA holds, so the supply ball takes its
+    /// plane via in the pad instead of being refused for a land sized by two
+    /// annular rings around a wider drill.
+    #[test]
+    fn a_ball_pad_takes_the_via_in_pad_land_of_the_fine_drill_tier() {
+        let pad = pad_at(350_000);
+        let rects = ring(pad.centre, 350_000);
+        let tier = synth_drc::ManufacturerProfile::jlc_advanced();
+        let in_pad = PlaneVia::for_via_in_pad(&tier).expect("a via-in-pad land");
+        assert_eq!(in_pad.drill_nm, 200_000);
+        assert_eq!(2 * in_pad.pad_radius_nm, 350_000);
+        assert_eq!(
+            plane_via_in_pad(&pad, &in_pad, &rules(&rects, &[])),
+            Ok(pad.centre)
+        );
+    }
+
+    /// A process whose minimum drill is 0.3 mm needs a 0.45 mm land: the same
+    /// ball pad is still refused, with both sizes in the report. The
+    /// relaxation is the manufacturer's formula, not a licence for any via in
+    /// any pad.
+    #[test]
+    fn a_ball_pad_is_still_refused_where_the_tier_drill_needs_a_wider_land() {
+        let pad = pad_at(350_000);
+        let rects = ring(pad.centre, 350_000);
+        let mut tier = synth_drc::ManufacturerProfile::jlc_filled_via();
+        tier.min_drill_diameter_nm = 300_000;
+        let in_pad = PlaneVia::for_via_in_pad(&tier).expect("a via-in-pad land");
+        assert_eq!(
+            plane_via_in_pad(&pad, &in_pad, &rules(&rects, &[])),
+            Err(ViaRefusal::PadTooSmall {
+                pad_nm: (350_000, 350_000),
+                via_nm: 450_000
+            })
+        );
+    }
+
+    /// A process that allows via-in-pad but gives no land for it, a custom profile
+    /// that omits the allowance, has no filled and capped via: the plane via is the
+    /// only one, and the DRC would judge any smaller via by the plain ring.
+    #[test]
+    fn a_process_with_no_in_pad_land_has_no_filled_and_capped_via() {
+        let mut tier = synth_drc::ManufacturerProfile::jlc_advanced();
+        tier.via_in_pad_land_extra_nm = 0;
+        assert_eq!(PlaneVia::for_via_in_pad(&tier), None);
     }
 
     /// A rectangular pad is as wide as its narrow side.

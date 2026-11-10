@@ -1,16 +1,12 @@
-# KiCad Workflow Knowledge Base
+# Working with the KiCad projects Synth exports
 
-**Scope:** how to work with the KiCad projects Synth exports — validation
-gates, parts and BOM discipline, symbols and footprints, PCB review,
-fabrication outputs, Gerber inspection, panelization, and product renders.
+Synth hands you a complete KiCad project. This guide covers what to do with it: the validation gates to run, how parts and BOM data stay trustworthy, reviewing the PCB, generating fabrication outputs, inspecting Gerbers, panelizing, and producing product renders.
 
-**Audience:** human engineers and coding agents driving Synth through the
-CLI (`synth validate`, `synth export-kicad`, …) or the MCP server
-(`synth_validate`, `synth_apply_patch`, `synth_export`, …).
+It is written for engineers and for coding agents, whether you drive Synth through the CLI (`synth validate`, `synth export-kicad`, …) or the MCP server (`synth_validate`, `synth_apply_patch`, `synth_export`, …).
 
----
+## Before you touch anything: what you own and what Synth owns
 
-## 0. Ownership doctrine (read this first)
+This is the one section to read even if you skip the rest. Almost every confusing problem downstream traces back to editing a file Synth regenerates.
 
 ```
 board.synth   ← the ONLY thing you edit
@@ -18,70 +14,70 @@ board.synth   ← the ONLY thing you edit
    ├── board.kicad_sch / .kicad_sym / .kicad_pro   ← build artifacts
    ├── board.kicad_pcb                             ← build artifacts
    └── bom.csv                                     ← build artifact
-board.synth.layout.toml   ← optional visual drag offsets (sidecar)
+board.schematic.layout.toml   ← optional sheet-position overrides (sidecar)
+board.placement.layout.toml   ← optional board-position overrides (sidecar)
 ```
 
-1. **Never hand-edit generated files.** They are byte-deterministic
-   re-exports; any manual edit is silently destroyed on the next
-   export and breaks the stable-diff guarantee. Connectivity, values,
-   part numbers, DNP decisions: change the `.synth` source.
-2. **Electrical-rule tuning goes through the ERC sidecar.** Add
-   `board.synth.erc.toml` beside the design to override the pin-type
-   conflict table and the deeper-check thresholds; leave it absent for
-   the defaults.
-3. **Visual tuning goes through the sidecar.** Edit
-   `<design>.synth.layout.toml` directly or use `synth_mutate_layout` — never nudge symbol coordinates inside the `.kicad_sch`.
-4. **Sourcing data lives in the registry**, not in the drawing. Each
-   `registry/parts/*.synth.toml` carries `mpn`, `lcsc_pn`, footprint,
-   and provenance; the exporter stamps hidden `MPN` / `LCSC` fields
-   onto every schematic instance and mirrors them into `bom.csv`.
-   Fix a part number in the registry (or the `value` statement), not
-   on the symbol.
-5. **The compiler's ERC is the first gate, KiCad's ERC is the second.**
-   Synth's 80+ `E-SYNTH-*` rules run before export; `kicad-cli sch
-erc` validates the exported artifact after. Both must be clean
-   before anything ships (see §1).
-6. **A check that could not run is not a check that passed.** When
-   `kicad-cli` is missing, unsupported, too slow, or writes a report
-   Synth cannot read, that stage is reported as `unknown` with the
-   tool, version, command, stderr, and a machine-stable reason.
-   `unknown` blocks any command that asked for verification, and
-   `--force` does not override it. A plain `synth export-kicad` is the
-   one exception: it records the `unknown` and still writes the
-   project, because that output claims nothing about being verified.
-   Use `--verification-report FILE` to capture the evidence, or read
-   `stages.manufacturing.native` from `synth check --fab --json`.
-7. **A DRC run that finished is reported by its real counts.** After the
-   export, `synth export-kicad` reads KiCad's DRC report and prints
-   `errors N, unconnected pads N, warnings N`. _errors_ are KiCad rule
-   violations and are listed one by one; _unconnected pads_ are the
-   report's separate `unconnected_items` list, pads that belong to a net
-   but have no copper path yet (an incomplete route, which still
-   exports so it can be finished by hand); _warnings_ are advisory
-   findings that are not rule violations. The line ends with
-   `Zero-DRC gate clean` only when all three are zero. Errors and
-   unconnected pads make the `kicad_drc` stage `fail`, with the counts in
-   its `detail`; its `violations` count is errors plus unconnected pads,
-   while `NativeDrcOutcome.violations` stays errors only. Warnings alone
-   do not fail it. In release mode (`export-kicad
-   --gerbers`/`--drill`/`--step`, or `synth check --fab`) a failed
-   `kicad_drc` stage exits non-zero and `--force` does not override it. A
-   plain export still writes the board and exits 0 on unconnected pads;
-   only errors fail it, as before.
-8. **The exporter emits plane copper, and it is not a layering violation.**
-   For every ground net it floods a zone on the plane layers, and for a
-   `netclass` that declares `plane` it floods the power net too, adding a
-   stitching via beside each of that net's pads reached by a short fanout
-   stub. That stub is the one signal-layer trace the exporter draws; it is a
-   plane connection, it is regenerated on every export, and it is not signal
-   routing to be "fixed" by hand. Change the plane at the source —
-   `netclass "PWR" { plane }` — not in the generated `.kicad_pcb`.
+> [!IMPORTANT]
+> There are **two** layout sidecars, with the same schema but different coordinate spaces, and mixing them silently misplaces parts: `<design>.schematic.layout.toml` holds sheet millimetres (where a part sits on the page), and `<design>.placement.layout.toml` holds board millimetres (where a footprint sits on the PCB). The older shared `<design>.synth.layout.toml` is deprecated — it is still _read_ as a fallback for placement, so pre-split boards keep their positions, but new overrides are never written there. Do not create one.
+
+> [!CAUTION]
+> **Never hand-edit generated files.** They are byte-deterministic re-exports, so any manual edit is silently destroyed on the next export — and it breaks the stable-diff guarantee in the meantime. Connectivity, values, part numbers, DNP decisions: all of these belong in the `.synth` source.
+
+So when you want to change something, here is where that change goes:
+
+| To change…                                | Edit this                                                          | Not this                        |
+| ----------------------------------------- | ------------------------------------------------------------------ | ------------------------------- |
+| Connectivity, values, part numbers, DNP   | the `.synth` source                                                | the `.kicad_sch`                |
+| Electrical-rule severities and thresholds | `board.synth.erc.toml`                                             | rule code                       |
+| Symbol positions on the sheet             | `<design>.schematic.layout.toml`, or `synth_mutate_layout`         | coordinates in the `.kicad_sch` |
+| Footprint positions on the board          | `<design>.placement.layout.toml`, or `synth_write_layout_override` | coordinates in the `.kicad_pcb` |
+| A part's MPN, LCSC code, or footprint     | `registry/parts/*.synth.toml`, or the `value` statement            | fields on the symbol            |
+| Whether a power net gets a plane          | `netclass "PWR" { plane }` in the source                           | zones in the `.kicad_pcb`       |
+
+A few notes on the rows above:
+
+- **The ERC sidecar is optional.** Add `board.synth.erc.toml` beside the design to override the pin-type conflict table and the deeper-check thresholds. Leave it absent and you get the defaults.
+- **Sourcing data lives in the registry, not in the drawing.** Each `registry/parts/*.synth.toml` carries `mpn`, `lcsc_pn`, footprint and provenance. The exporter stamps hidden `MPN` and `LCSC` fields onto every schematic instance and mirrors them into `bom.csv`, so fixing the registry fixes every downstream artifact at once.
+
+### Two gates, not one
+
+Synth's 80+ `E-SYNTH-*` rules run **before** export. `kicad-cli sch erc` validates the exported artifact **after**. Both must be clean before anything ships — see the gate order in §1.
+
+> [!IMPORTANT]
+> **A check that could not run is not a check that passed.** When `kicad-cli` is missing, unsupported, too slow, or writes a report Synth cannot read, that stage is reported as `unknown`, together with the tool, its version, the exact command, its stderr, and a machine-stable reason. `unknown` blocks any command that asked for verification, and `--force` does not override it.
+
+A plain `synth export-kicad` is the one exception: it records the `unknown` and still writes the project, because that output claims nothing about having been verified. To capture the evidence, use `--verification-report FILE`, or read `stages.manufacturing.native` from `synth check --fab --json`.
+
+### Reading the DRC line
+
+A DRC run that finished is reported by its real counts. After the export, `synth export-kicad` prints `errors N, unconnected pads N, warnings N`. The three mean different things:
+
+| Count                | What it is                                                                                                                                                                     | Does it fail the export? |
+| -------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------ |
+| **errors**           | KiCad rule violations, listed one by one                                                                                                                                       | Yes                      |
+| **unconnected pads** | The report's separate `unconnected_items` list: pads that belong to a net but have no copper path yet — an incomplete route, which still exports so it can be finished by hand | Only in release mode     |
+| **warnings**         | Advisory findings that are not rule violations                                                                                                                                 | No                       |
+
+The line ends with `Zero-DRC gate clean` only when all three are zero.
+
+Errors and unconnected pads both make the `kicad_drc` stage `fail`, with the counts in its `detail`. Note one asymmetry worth knowing if you consume the JSON: that stage's `violations` count is errors **plus** unconnected pads, while `NativeDrcOutcome.violations` stays errors only.
+
+> [!WARNING]
+> In release mode — `export-kicad --gerbers`/`--drill`/`--step`, or `synth check --fab` — a failed `kicad_drc` stage exits non-zero, and `--force` does not override it. A plain export is more permissive: it still writes the board and exits 0 on unconnected pads, and only errors fail it.
+
+### Plane copper is generated on purpose
+
+> [!NOTE]
+> **The exporter emits plane copper, and that is not a layering violation.** For every ground net it floods a zone on the plane layers, and for a `netclass` that declares `plane` it floods the power net too, adding a stitching via beside each of that net's pads reached by a short fanout stub.
+
+That stub is the one signal-layer trace the exporter draws. It is a plane connection, it is regenerated on every export, and it is **not** signal routing for you to "fix" by hand. Change the plane at the source — `netclass "PWR" { plane }` — never in the generated `.kicad_pcb`. 8. **The exporter emits plane copper, and it is not a layering violation.** For every ground net it floods a zone on the plane layers, and for a `netclass` that declares `plane` it floods the power net too, adding a stitching via beside each of that net's pads reached by a short fanout stub. That stub is the one signal-layer trace the exporter draws; it is a plane connection, it is regenerated on every export, and it is not signal routing to be "fixed" by hand. Change the plane at the source — `netclass "PWR" { plane }` — not in the generated `.kicad_pcb`.
 
 ---
 
-## 1. Schematic review and electrical validation
+## 1. Validating the schematic
 
-### Gate order
+Work through these gates in order. Each one assumes the previous one is clean, so there is little point running gate 4 while gate 1 is still failing.
 
 | #   | Gate                                                                                     | Command                                                                                                        | Bar                                     |
 | --- | ---------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------- | --------------------------------------- |
@@ -91,93 +87,75 @@ erc` validates the exported artifact after. Both must be clean
 | 4   | KiCad ERC on the artifact                                                                | `kicad-cli sch erc --format report --severity-error --severity-warning --exit-code-violations board.kicad_sch` | **zero errors, zero warnings**          |
 | 5   | Aesthetic ERC (power-symbol orientation, crossings, decoupling distance, net-name style) | built into Synth (`E-SYNTH-SCHEM-001..010`)                                                                    | warnings triaged, not ignored           |
 
-Store gates 1–5 in a project `build.sh` (or Makefile) and re-run the
-whole chain after every source change — determinism makes this cheap
-and re-runs diff-stable.
+Once that chain passes, put it in a project `build.sh` or Makefile and re-run the whole thing after every source change. Because the export is deterministic, this is cheap and the re-runs stay diff-stable — so you get the benefit of a full re-check without the noise.
 
 ### Routing is always external
 
-Copper is never generated by Synth. Every export routes through an external
-engine — KiCadRoutingTools by default, FreeRouting on request — and then checks
-the result independently of what the engine reported about itself. The
-un-routed export is preserved as `<name>.synth.kicad_pcb` for review.
+Copper is never generated by Synth. Every export routes through an external engine — KiCadRoutingTools by default, FreeRouting on request — and then checks the result independently of what the engine reported about itself. The un-routed export is preserved as `<name>.synth.kicad_pcb` for review.
 
-Placement normally picks the best of a few candidates by a route-free estimate.
-`synth export-kicad --place-route-iterate` instead routes each candidate and
-keeps the one that routes best, judged by the independent checks rather than by
-either engine's report. It is opt-in (one extra route per candidate) and falls
-back to the normal choice when there is only one candidate or the engine is
-unavailable.
+Placement normally picks the best of a few candidates by a route-free estimate. `synth export-kicad --place-route-iterate` instead routes each candidate and keeps the one that routes best, judged by the independent checks rather than by either engine's report. It is opt-in (one extra route per candidate) and falls back to the normal choice when there is only one candidate or the engine is unavailable.
 
 ```text
 synth export-kicad board.synth --out output/board
 ```
 
-`--autoroute` no longer exists. It used to opt in to the external router; the
-router is now the only path, and passing it is an error that points here.
+`--autoroute` no longer exists. It used to opt in to the external router; the router is now the only path, and passing it is an error that points here.
 
-#### Prerequisites
+#### Setting up the routing engines
 
-Install both engines, idempotently and without root:
+**Step 1 — run the setup script.** It needs no root and is safe to re-run:
 
 ```text
 scripts/setup-routing-engines.sh
 ```
 
-It downloads the pinned FreeRouting JAR into `tools/freerouting/`, clones
-KiCadRoutingTools under `~/.local/share/synth/`, layers a virtualenv over an
-interpreter that imports `pcbnew` so its Python dependencies install without
-touching the system packages, builds KRT's Rust router, and prints the
-environment Synth needs. Re-run it any time; it skips what is already there.
-`--check` reports what is installed without changing anything.
+It downloads the pinned FreeRouting JAR into `tools/freerouting/`, clones KiCadRoutingTools under `~/.local/share/synth/`, layers a virtualenv over an interpreter that can import `pcbnew` so the Python dependencies install without touching your system packages, builds KRT's Rust router, and prints the environment Synth needs. Re-run it whenever you like — it skips whatever is already in place.
 
-FreeRouting needs a Java runtime and a FreeRouting JAR; both are found
-automatically, and a missing one is reported as `router_unavailable` with the
-paths that were searched. The helper that drives FreeRouting also imports
-KiCad's `pcbnew` module, which ships with **KiCad's own Python** and is often
-absent from the `python3` first on `PATH`. Point the pipeline at the right
-interpreter when that happens:
+**Step 2 — confirm what you have.**
 
 ```text
-SYNTH_FREEROUTING_PYTHON=/usr/bin/python3.14 synth export-kicad board.synth --out output/board
+scripts/setup-routing-engines.sh --check
+synth routers
 ```
 
-The failure is named `python_bindings_missing` and says so, rather than
-surfacing a Python traceback as an engine crash. `synth routers` reports what
-is installed and usable.
+`--check` reports what is installed without changing anything, and `synth routers` tells you which engines Synth can actually use, with the reason for each one that it cannot.
+
+**If an engine is missing**, Synth reports `router_unavailable` along with the paths it searched. FreeRouting needs a Java runtime and the JAR; both are found automatically.
+
+> [!TIP]
+> There is one failure that catches almost everyone. The helper that drives FreeRouting imports KiCad's `pcbnew` module, which ships with **KiCad's own Python** — and that is usually _not_ the `python3` first on your `PATH`. When that happens, point the pipeline at the right interpreter:
+>
+> ```text
+> SYNTH_FREEROUTING_PYTHON=/usr/bin/python3.14 synth export-kicad board.synth --out output/board
+> ```
+
+This failure is named `python_bindings_missing` and reported as such, rather than surfacing a raw Python traceback that looks like an engine crash.
 
 The four terminal states are distinct, and only one is fabricable:
 
-| State               | Meaning                                                  |
-| ------------------- | -------------------------------------------------------- |
-| `routed`            | Independently validated, fabrication-profile compliant   |
-| `validation_failed` | Copper was rejected: topology loss, open nets, DRC errors |
-| `review_required`   | Copper exists but a required check could not be performed |
-| `router_unavailable`| The engine is not installed or failed to start           |
+| State                | Meaning                                                   |
+| -------------------- | --------------------------------------------------------- |
+| `routed`             | Independently validated, fabrication-profile compliant    |
+| `validation_failed`  | Copper was rejected: topology loss, open nets, DRC errors |
+| `review_required`    | Copper exists but a required check could not be performed |
+| `router_unavailable` | The engine is not installed or failed to start            |
 
-Only `routed` can pass the release gate. The other three leave the board in
-place for review and return exit status 1; `--force` does not override any of
-them, for the same reason it does not override a KiCad DRC error. A check that
-could not be performed is never treated as a clean check.
+Only `routed` can pass the release gate. The other three leave the board in place for review and return exit status 1; `--force` does not override any of them, for the same reason it does not override a KiCad DRC error. A check that could not be performed is never treated as a clean check.
 
 Every run writes a record next to the board:
 
-| File                          | Contents                                         |
-| ----------------------------- | ------------------------------------------------ |
-| `<name>.routing.json`         | Run record: state, provenance, statistics, verdict |
-| `<name>.<engine>.log`         | Engine session log                               |
-| `<name>.freerouting.json`     | Engine's own provenance report                   |
-| `<name>.freerouting.ses`      | FreeRouting's Specctra session result            |
-| `<name>.connectivity.json`    | Independent connectivity and topology findings   |
-| `<name>.drc.json`             | `kicad-cli pcb drc` result over the routed board  |
+| File                       | Contents                                           |
+| -------------------------- | -------------------------------------------------- |
+| `<name>.routing.json`      | Run record: state, provenance, statistics, verdict |
+| `<name>.<engine>.log`      | Engine session log                                 |
+| `<name>.freerouting.json`  | Engine's own provenance report                     |
+| `<name>.freerouting.ses`   | FreeRouting's Specctra session result              |
+| `<name>.connectivity.json` | Independent connectivity and topology findings     |
+| `<name>.drc.json`          | `kicad-cli pcb drc` result over the routed board   |
 
 #### Escape feasibility (before routing)
 
-A fine-pitch package can be unescapable at the chosen process long before a
-router runs, and the failure arrives as mysterious necked-down vias rather
-than as an answer. Every run therefore reports the dense packages whose pads
-cannot be fanned out at the fabrication floor, in the run record's `escape`
-field and on the terminal:
+A fine-pitch package can be unescapable at the chosen process long before a router runs, and the failure arrives as mysterious necked-down vias rather than as an answer. Every run therefore reports the dense packages whose pads cannot be fanned out at the fabrication floor, in the run record's `escape` field and on the terminal:
 
 ```text
 escape: U2 (Package_QFP:LQFP-48_7x7mm_P0.5mm, 48 pads, 0.500 mm pitch):
@@ -188,36 +166,22 @@ escape: U2 (Package_QFP:LQFP-48_7x7mm_P0.5mm, 48 pads, 0.500 mm pitch):
   allows, or choose a coarser-pitch part
 ```
 
-It is advisory, not a gate: a router can still complete such a board by
-staggering vias or necking tracks. What it cannot change is the arithmetic,
-so the finding states it — the pitch the package offers, the via the floor
-requires, and the drill that would actually fit. (Idea borrowed from
-[TraceMaker](https://github.com/DingoOz/TraceMaker)'s `escape` command.)
+It is advisory, not a gate: a router can still complete such a board by staggering vias or necking tracks. What it cannot change is the arithmetic, so the finding states it — the pitch the package offers, the via the floor requires, and the drill that would actually fit. (Idea borrowed from [TraceMaker](https://github.com/DingoOz/TraceMaker)'s `escape` command.)
 
 #### Trying every engine at once
 
-Engines disagree on the same board — one completes a net the other cannot, or
-uses far fewer vias. `--best-of` runs every installed engine, validates each
-result independently, and keeps the best attempt:
+Engines disagree on the same board — one completes a net the other cannot, or uses far fewer vias. `--best-of` runs every installed engine, validates each result independently, and keeps the best attempt:
 
 ```text
 synth export-kicad board.synth --out output/board --best-of
 synth route board.synth --best-of
 ```
 
-The winner is chosen by the independent verdict, never by an engine's own
-report: validated state first, then fewer blocking findings, fewer vias, and
-shorter copper. Each attempt gets its own subdirectory, so every result
-survives for inspection, and an engine that is not installed simply does not
-win — the run degrades to the engines present rather than failing.
+The winner is chosen by the independent verdict, never by an engine's own report: validated state first, then fewer blocking findings, fewer vias, and shorter copper. Each attempt gets its own subdirectory, so every result survives for inspection, and an engine that is not installed simply does not win — the run degrades to the engines present rather than failing.
 
 #### Learning from earlier runs
 
-Set `SYNTH_ROUTING_OUTCOMES_DIR` (or pass `log_routing_outcomes` over MCP) and
-every run appends a record — board hash, engine, state, open nets, vias,
-copper length, and the retry order it recommends. A later run on the same
-board reads the best prior attempt back and prints the order that worked
-best *before* routing, so a retry starts from where the last one left off:
+Set `SYNTH_ROUTING_OUTCOMES_DIR` (or pass `log_routing_outcomes` over MCP) and every run appends a record — board hash, engine, state, open nets, vias, copper length, and the retry order it recommends. A later run on the same board reads the best prior attempt back and prints the order that worked best _before_ routing, so a retry starts from where the last one left off:
 
 ```text
 SYNTH_ROUTING_OUTCOMES_DIR=~/.local/share/synth/outcomes \
@@ -228,53 +192,13 @@ Unset, nothing is written: logging is opt-in.
 
 #### The fabrication floor follows the board's process
 
-The minimums the gate enforces — trace width, clearance, drill, annular ring —
-come from the board's `manufacturer` (`jlcpcb`, `pcbway`, `oshpark`) via the
-same profiles `synth drc` uses, not from a built-in default. A design that
-declares a finer process as its manufacturer is judged against that process.
+The minimums the gate enforces — trace width, clearance, drill, annular ring — come from the board's `manufacturer` (`jlcpcb`, `pcbway`, `oshpark`) via the same profiles `synth drc` uses, not from a built-in default. A design that declares a finer process as its manufacturer is judged against that process.
 
-The independent check re-reads the routed board and compares it to the
-baseline: footprint, pad and net topology must be unchanged, each net must be
-continuous through real copper, and track/via geometry must meet the
-fabrication floor. A net completed through a filled zone — a ground plane
-reached by stitching vias — counts as connected; counting only tracks would
-report every plane-backed net as open however correctly it was routed. Zones
-are refilled before DRC so clearances are checked against copper that actually
-exists.
+The independent check re-reads the routed board and compares it to the baseline: footprint, pad and net topology must be unchanged, each net must be continuous through real copper, and track/via geometry must meet the fabrication floor. A net completed through a filled zone — a ground plane reached by stitching vias — counts as connected; counting only tracks would report every plane-backed net as open however correctly it was routed. Zones are refilled before DRC so clearances are checked against copper that actually exists.
 
-After FreeRouting, two steps add ground vias where the pour alone is not enough.
-The first rescues a pour piece that no via ties to the rest of the net (a piece
-holding only SMD pads is cut off). The second gives every outer ground pad a via
-(only on pours of nets named like ground: `GND`, `AGND`, `DGND`, `PGND`, `SGND`,
-`GNDA`, `VSS`, with or without a sheet path; power and signal pours are left
-alone) within 2 mm of its edge, in the same pour piece, at the nearest legal spot and
-never inside a pad and never inside the disc the release gate reads a pad as
-(its larger half-dimension), which the gate would report as a via-in-pad: a
-decoupling capacitor or protection part whose only ground
-path is a long run of pour has a long return loop. "Within 2 mm" is a straight
-line, so a narrow neck in the pour can still make the copper path longer. A pad
-with no legal spot within 2 mm is
-reported in the router log (`ground pad C4.2 has no via within 2.0 mm and no
-room for one`) and counted as `ground_unresolved` in the run record; the fix is
-a layout change.
+After FreeRouting, two steps add ground vias where the pour alone is not enough. The first rescues a pour piece that no via ties to the rest of the net (a piece holding only SMD pads is cut off). The second gives every outer ground pad a via (only on pours of nets named like ground: `GND`, `AGND`, `DGND`, `PGND`, `SGND`, `GNDA`, `VSS`, with or without a sheet path; power and signal pours are left alone) within 2 mm of its edge, in the same pour piece, at the nearest legal spot and never inside a pad and never inside the disc the release gate reads a pad as (its larger half-dimension), which the gate would report as a via-in-pad: a decoupling capacitor or protection part whose only ground path is a long run of pour has a long return loop. "Within 2 mm" is a straight line, so a narrow neck in the pour can still make the copper path longer. A pad with no legal spot within 2 mm is reported in the router log (`ground pad C4.2 has no via within 2.0 mm and no room for one`) and counted as `ground_unresolved` in the run record; the fix is a layout change.
 
-The delivered board has those same fills saved into it (the router's board,
-plus KiCad's `filled_polygon` copper and nothing else), so KiCad opens it showing
-the connectivity the gate validated rather than unrouted plane pads until you
-press B. The fills are computed by the installed `kicad-cli pcb drc
---refill-zones --save-board` and stored in the file until someone refills. Fills
-already in a board are never trusted: every export discards them and refills all
-the pour zones, so a stale or half-filled board cannot be delivered. They
-were verified on KiCad 10.0.4 only. Synth accepts `kicad-cli` 8 and later, and
-`--save-board` there could not be checked against the KiCad 8 or 9 documentation
-from this environment, so a version that lacks it takes the failure path below.
-The stored fills grow the file by about 1.6x against the unfilled routed board
-(129 KiB against 80 KiB on the buck board with KiCad 10.0.4; it varies with the
-routing), and Gerber export from the delivered board now finds the pour copper
-in the file without a refill. A board is filled completely or not at all:
-if `kicad-cli` cannot fill every zone, the routed board is delivered unfilled and
-Synth prints a stderr warning. That failure is not recorded in `routing.json` or
-`release.json`.
+The delivered board has those same fills saved into it (the router's board, plus KiCad's `filled_polygon` copper and nothing else), so KiCad opens it showing the connectivity the gate validated rather than unrouted plane pads until you press B. The fills are computed by the installed `kicad-cli pcb drc --refill-zones --save-board` and stored in the file until someone refills. Fills already in a board are never trusted: every export discards them and refills all the pour zones, so a stale or half-filled board cannot be delivered. They were verified on KiCad 10.0.4 only. Synth accepts `kicad-cli` 8 and later, and `--save-board` there could not be checked against the KiCad 8 or 9 documentation from this environment, so a version that lacks it takes the failure path below. The stored fills grow the file by about 1.6x against the unfilled routed board (129 KiB against 80 KiB on the buck board with KiCad 10.0.4; it varies with the routing), and Gerber export from the delivered board now finds the pour copper in the file without a refill. A board is filled completely or not at all: if `kicad-cli` cannot fill every zone, the routed board is delivered unfilled and Synth prints a stderr warning. That failure is not recorded in `routing.json` or `release.json`.
 
 To compare two engines by hand, route each and run the same check over both:
 
@@ -286,16 +210,11 @@ kicad-cli pcb drc --output /tmp/fr-drc.rpt /tmp/fr/fr/board.kicad_pcb
 kicad-cli pcb drc --output /tmp/krt-drc.rpt /tmp/krt/krt/board.kicad_pcb
 ```
 
-Compare signal connectivity, KiCad DRC violations, zone-island reports,
-runtime, via count, minimum clearance, and via-in-pad usage.
+Compare signal connectivity, KiCad DRC violations, zone-island reports, runtime, via count, minimum clearance, and via-in-pad usage.
 
 #### KiCadRoutingTools comparison router
 
-[KiCadRoutingTools](https://github.com/drandyhaas/KiCadRoutingTools) is an
-optional external Rust-accelerated A* router with rip-up/reroute, multi-layer
-routing, plane handling, and connectivity checkers. Synth does not vendor it;
-install it in a separate checkout and Python environment, then use the adapter
-in `tools/kicad_routing_tools_route.py`:
+[KiCadRoutingTools](https://github.com/drandyhaas/KiCadRoutingTools) is an optional external Rust-accelerated A* router with rip-up/reroute, multi-layer routing, plane handling, and connectivity checkers. Synth does not vendor it; install it in a separate checkout and Python environment, then use the adapter in `tools/kicad_routing_tools_route.py`:
 
 ```text
 scripts/setup-routing-engines.sh            # installs the checkout and its Python
@@ -307,11 +226,7 @@ python3 tools/kicad_routing_tools_route.py \
   --python /usr/bin/python3.14
 ```
 
-The same path is available directly from Synth. KiCadRoutingTools is the
-default; it needs its checkout and a dependency-aware Python interpreter, which
-Synth discovers — from `KICAD_ROUTING_TOOLS_REPO` / `SYNTH_KRT_PYTHON`, then
-the `~/…/synth/kicad-routing-tools` checkout `scripts/setup-routing-engines.sh`
-installs, and a `python3` that imports `pcbnew`:
+The same path is available directly from Synth. KiCadRoutingTools is the default; it needs its checkout and a dependency-aware Python interpreter, which Synth discovers — from `KICAD_ROUTING_TOOLS_REPO` / `SYNTH_KRT_PYTHON`, then the `~/…/synth/kicad-routing-tools` checkout `scripts/setup-routing-engines.sh` installs, and a `python3` that imports `pcbnew`:
 
 ```text
 synth export-kicad board.synth --out output/board
@@ -323,59 +238,27 @@ Select FreeRouting on request:
 synth export-kicad board.synth --out output/board --router free-routing
 ```
 
-Synth runs KRT in conservative production-review mode by default: it uses
-`--escalation board --strict-sizes`, keeps vias 0.1 mm away from same-net SMD
-pads and paste openings, and runs KRT's independent connectivity checker.
-Synth still writes the routed board when routing is incomplete, but returns
-exit status 1 and labels the result review-only. KRT's own report is written
-next to the board as `<name>.krt-stats.json`.
+Synth runs KRT in conservative production-review mode by default: it uses `--escalation board --strict-sizes`, keeps vias 0.1 mm away from same-net SMD pads and paste openings, and runs KRT's independent connectivity checker. Synth still writes the routed board when routing is incomplete, but returns exit status 1 and labels the result review-only. KRT's own report is written next to the board as `<name>.krt-stats.json`.
 
-Use `--krt-escalation fab` only when the selected fabrication process has been
-explicitly approved to relax the board's declared rules. Use
-`--krt-allow-via-in-pad` only when filled-and-capped via-in-pad is part of the
-fabrication specification. The production gate rejects open connection groups,
-delivered dimensions below the board floor, and unapproved via-in-pad sites.
-`--krt-fab-tier standard|advanced|auto` and `--krt-fab-overrides FILE` expose
-KRT's fabrication capability floor when a manufacturer-specific override is
-needed.
+Use `--krt-escalation fab` only when the selected fabrication process has been explicitly approved to relax the board's declared rules. Use `--krt-allow-via-in-pad` only when filled-and-capped via-in-pad is part of the fabrication specification. The production gate rejects open connection groups, delivered dimensions below the board floor, and unapproved via-in-pad sites. `--krt-fab-tier standard|advanced|auto` and `--krt-fab-overrides FILE` expose KRT's fabrication capability floor when a manufacturer-specific override is needed.
 
-On a routed board, each approved via-in-pad site is listed under
-`routing.fabrication_notes` in `release.json` and printed as a
-`fabrication note:` line, so the order can carry the filled-and-capped
-requirement. A board that is not routed gets no such note.
+On a routed board, each approved via-in-pad site is listed under `routing.fabrication_notes` in `release.json` and printed as a `fabrication note:` line, so the order can carry the filled-and-capped requirement. A board that is not routed gets no such note.
 
-KRT may adapt to
-fabrication floors and may write project DRC settings; review those changes
-explicitly rather than treating a zero-unconnected result as automatic
-production approval.
+KRT may adapt to fabrication floors and may write project DRC settings; review those changes explicitly rather than treating a zero-unconnected result as automatic production approval.
 
 ### Professional review checklist (per sheet)
 
-- Every pin either connected or explicitly no-connect (Synth's pin
-  reconciliation handles this; confirm `kicad-cli sch erc` agrees).
-- Power symbols point the right way: `+3V3`/`VDD` arrows up, `GND`
-  triangles down; `PWR_FLAG` only at supply sources.
-- Net labels uppercase, ≤ 16 chars, differential pairs suffixed
-  `_P`/`_N` or `+_`/`_-`.
-- Title block carries name, revision, and fab target (Synth emits
-  these from the `board` statement automatically).
-- Reference/Value fields must not collide with wires or each other
-  (Synth auto-places them; check visually in an exported PDF).
+- Every pin either connected or explicitly no-connect (Synth's pin reconciliation handles this; confirm `kicad-cli sch erc` agrees).
+- Power symbols point the right way: `+3V3`/`VDD` arrows up, `GND` triangles down; `PWR_FLAG` only at supply sources.
+- Net labels uppercase, ≤ 16 chars, differential pairs suffixed `_P`/`_N` or `+_`/`_-`.
+- Title block carries name, revision, and fab target (Synth emits these from the `board` statement automatically).
+- Reference/Value fields must not collide with wires or each other (Synth auto-places them; check visually in an exported PDF).
 
 ### Schematic quality score
 
-`python3 tools/schematic_quality.py board.kicad_sch` (needs `kicad-cli`)
-counts what the checklist above asks you to look for. It plots the schematic,
-takes the text boxes from the plot and the wires from the `.kicad_sch`, and
-prints: text pairs that overlap, texts with a wire through them, wire
-crossings, total wire length, how much of the rectangle the group boxes span
-they cover, and the share of 10 mm cells in the used area that hold a wire or
-text. `--json` prints the same as JSON.
+`python3 tools/schematic_quality.py board.kicad_sch` (needs `kicad-cli`) counts what the checklist above asks you to look for. It plots the schematic, takes the text boxes from the plot and the wires from the `.kicad_sch`, and prints: text pairs that overlap, texts with a wire through them, wire crossings, total wire length, how much of the rectangle the group boxes span they cover, and the share of 10 mm cells in the used area that hold a wire or text. `--json` prints the same as JSON.
 
-It is a floor, not a grade. A schematic can score zero on every count and still
-be badly grouped: it does not measure grouping, alignment, how far a part sits
-from its pin, or reading order. The numbers for the USB-C dual UART board
-(absmach/synth#103) are in the pull request that added the tool.
+It is a floor, not a grade. A schematic can score zero on every count and still be badly grouped: it does not measure grouping, alignment, how far a part sits from its pin, or reading order. The numbers for the USB-C dual UART board (absmach/synth#103) are in the pull request that added the tool.
 
 ---
 
@@ -383,196 +266,80 @@ from its pin, or reading order. The numbers for the USB-C dual UART board
 
 ### Where part decisions live
 
-- **Registry first.** A part number change is a registry (or `.synth`
-  `value`) edit followed by re-export — never a BOM-file edit.
-- **Never edit `bom.csv` or the generated BOM presets.** If a part
-  number must change, the change happens upstream in the source, or
-  it does not happen.
-- Synth instances already carry `MPN` and `LCSC` hidden fields (KiCad
-  BOM tooling and the JLCPCB plugin ecosystem read exactly these
-  field names). Do not invent alternative field spellings.
+- **Registry first.** A part number change is a registry (or `.synth` `value`) edit followed by re-export — never a BOM-file edit.
+- **Never edit `bom.csv` or the generated BOM presets.** If a part number must change, the change happens upstream in the source, or it does not happen.
+- Synth instances already carry `MPN` and `LCSC` hidden fields (KiCad BOM tooling and the JLCPCB plugin ecosystem read exactly these field names). Do not invent alternative field spellings.
 
 ### Component-class selection rules
 
-- **Ceramic capacitors:** derate for applied DC bias (an X7R "10 µF"
-  at 80 % rated bias may deliver a fraction of nominal); check the
-  dielectric temperature spec; respect the package size the design
-  assumed; avoid microphonic dielectrics in audio paths. This is
-  checked automatically when the capacitor carries `dielectric` and
-  `voltage` structured values — see `E-SYNTH-CAP-001` and
-  [`variants-and-bom.md`](variants-and-bom.md).
-- **Resistors:** verify power rating against dissipated power with
-  margin; prefer thin-film for low-noise/sensitive analog nodes.
-- **Inductors:** non-standard packages are the risk — prefer parts
-  whose footprint already exists in KiCad's libraries; pin down
-  value, rated current, saturation current, and DCR before layout.
+- **Ceramic capacitors:** derate for applied DC bias (an X7R "10 µF" at 80 % rated bias may deliver a fraction of nominal); check the dielectric temperature spec; respect the package size the design assumed; avoid microphonic dielectrics in audio paths. This is checked automatically when the capacitor carries `dielectric` and `voltage` structured values — see `E-SYNTH-CAP-001` and [`variants-and-bom.md`](variants-and-bom.md).
+- **Resistors:** verify power rating against dissipated power with margin; prefer thin-film for low-noise/sensitive analog nodes.
+- **Inductors:** non-standard packages are the risk — prefer parts whose footprint already exists in KiCad's libraries; pin down value, rated current, saturation current, and DCR before layout.
 - **RF matching:** C0G/NP0 capacitors and high-Q inductors only.
-- **ICs:** the schematic `value` must carry the _full_ manufacturer
-  part number; a partial snippet is a sourcing defect. Synth's
-  registry `mpn` field is the authoritative spelling.
+- **ICs:** the schematic `value` must carry the _full_ manufacturer part number; a partial snippet is a sourcing defect. Synth's registry `mpn` field is the authoritative spelling.
 
 ### Fab-house BOM formats
 
-JLCPCB / PCBWay / NextPCB expect their own column mappings (Comment,
-Designator, MPN, LCSC, DNP, …). Generate them from the exported
-`.kicad_sch` with `kicad-cli sch export bom --preset <fab>
---format-preset CSV` (see §5). Treat the fab BOM as a build output:
-regenerate, don't maintain.
+JLCPCB / PCBWay / NextPCB expect their own column mappings (Comment, Designator, MPN, LCSC, DNP, …). Generate them from the exported `.kicad_sch` with `kicad-cli sch export bom --preset <fab> --format-preset CSV` (see §5). Treat the fab BOM as a build output: regenerate, don't maintain.
 
 ### Schematic documentation source
 
 Design documentation lives in the `.synth` source, not in KiCad:
 
-- `component R7: resistor "r_generic_0603" dnp` marks do-not-populate:
-  the symbol exports `(dnp yes)`, the part is left out of `bom.csv`
-  and `pnp.csv`, and ERC still checks it like any other part.
-- `notes "Title" { "line one" … }` renders a titled text block —
-  under the group's outline box when written inside a `group`, else
-  stacked at the sheet's bottom-left.
-- Every `group` gets a caption plus an outline box, and every
-  connector gets a `pin: net` legend generated from the netlist.
+- `component R7: resistor "r_generic_0603" dnp` marks do-not-populate: the symbol exports `(dnp yes)`, the part is left out of `bom.csv` and `pnp.csv`, and ERC still checks it like any other part.
+- `notes "Title" { "line one" … }` renders a titled text block — under the group's outline box when written inside a `group`, else stacked at the sheet's bottom-left.
+- Every `group` gets a caption plus an outline box, and every connector gets a `pin: net` legend generated from the netlist.
 
 ### Multi-sheet export (`sheet` blocks)
 
-`sheet "Power" { … }` blocks (and `import`ed files, which lower to a
-sheet named after the file stem) are split boundaries. A board whose
-single-sheet content still fits A2 exports as one `.kicad_sch`,
-byte-identical to before — the split is a large-board repair, not a
-restructuring of small ones. Past A2, with two or more boundaries, the
-export becomes a hierarchy:
+`sheet "Power" { … }` blocks (and `import`ed files, which lower to a sheet named after the file stem) are split boundaries. A board whose single-sheet content still fits A2 exports as one `.kicad_sch`, byte-identical to before — the split is a large-board repair, not a restructuring of small ones. Past A2, with two or more boundaries, the export becomes a hierarchy:
 
-- one `<board>_<sheet>.kicad_sch` per boundary, plus the root
-  `<board>.kicad_sch` carrying the components declared outside any
-  sheet and one sheet instance per sub-sheet;
-- cross-sheet **signal** nets join through hierarchical labels on
-  sub-sheets and same-named local labels on the root (one per sheet
-  pin and per root endpoint); cross-sheet **power** nets need no
-  labels at all — power symbols connect globally by value;
-- a dragged component's sidecar override records the sheet it was
-  placed on, so moving it to another sheet invalidates the stale
-  (sheet-local) coordinates instead of misplacing it.
+- one `<board>_<sheet>.kicad_sch` per boundary, plus the root `<board>.kicad_sch` carrying the components declared outside any sheet and one sheet instance per sub-sheet;
+- cross-sheet **signal** nets join through hierarchical labels on sub-sheets and same-named local labels on the root (one per sheet pin and per root endpoint); cross-sheet **power** nets need no labels at all — power symbols connect globally by value;
+- a dragged component's sidecar override records the sheet it was placed on, so moving it to another sheet invalidates the stale (sheet-local) coordinates instead of misplacing it.
 
-Verify with `kicad-cli sch erc <board>.kicad_sch` on the root: the
-whole hierarchy resolves from there.
+Verify with `kicad-cli sch erc <board>.kicad_sch` on the root: the whole hierarchy resolves from there.
 
 ---
 
 ## 3. Symbols and footprints
 
-Synth already prefers KiCad stock symbols/footprints via the
-registry's `kicad_symbol` / `kicad_footprint` fields (e.g.
-`Device:R`, `Regulator_Linear:AMS1117-3.3`). Author new library
-entries only when stock does not cover the part:
+Synth already prefers KiCad stock symbols/footprints via the registry's `kicad_symbol` / `kicad_footprint` fields (e.g. `Device:R`, `Regulator_Linear:AMS1117-3.3`). Author new library entries only when stock does not cover the part:
 
-- **Reuse check first** — the stock library almost certainly has the
-  0603 resistor, the SOIC-8, the SOT-23. Do not synthesize what
-  already exists.
-- **Symbols:** keep inputs left, outputs right, grounds bottom,
-  power top; merge duplicated pins into proper pin groups; use real
-  electrical pin types (`power_in`, `passive`, …) — wrong types flood
-  ERC with false positives that train everyone to ignore ERC.
-  Validate against the KLC standard
-  (<https://gitlab.com/kicad/libraries/klc>); `kicad-library-tools`
-  can generate and lint. Ground-truth the pin table against the
-  datasheet (or easyeda2kicad by LCSC number) and have a human review
-  the pin table before trusting the part.
-- **Footprints:** prefer the generators in
-  `kicad-library-tools` (QFN/LGA/etc. YAML-driven); describe a
-  datasheet land pattern in words before encoding it; always request
-  the 3D model. Flag non-standard pad shapes and missing generator
-  categories for human review rather than improvising.
-- **Symbol-integrity gate:** after any registry symbol change,
-  re-export and diff — pin numbers and names must be identical to the
-  previous export. Synth's deterministic UUIDs make this diff
-  mechanical.
-- **3D model coverage:** `synth registry qualify` reports, per part,
-  whether the footprint's 3D model resolves (`E-SYNTH-QUAL-016`, review
-  level, never blocking: a model is not needed to fabricate a board). It
-  names a model file that is not installed (a footprint that lists several
-  models passes if any one is installed), a footprint that declares no
-  model, a footprint that is not in KiCad's library, and a part with no
-  KiCad footprint. Expect the mechanical parts (mounting hole, test
-  point, fiducial) to show "no model". A model file missing for a stock
-  footprint usually means `kicad-packages3d` is older than
-  `kicad-footprints`: update both to the same version before treating it
-  as a gap in the registry.
+- **Reuse check first** — the stock library almost certainly has the 0603 resistor, the SOIC-8, the SOT-23. Do not synthesize what already exists.
+- **Symbols:** keep inputs left, outputs right, grounds bottom, power top; merge duplicated pins into proper pin groups; use real electrical pin types (`power_in`, `passive`, …) — wrong types flood ERC with false positives that train everyone to ignore ERC. Validate against the KLC standard (<https://gitlab.com/kicad/libraries/klc>); `kicad-library-tools` can generate and lint. Ground-truth the pin table against the datasheet (or easyeda2kicad by LCSC number) and have a human review the pin table before trusting the part.
+- **Footprints:** prefer the generators in `kicad-library-tools` (QFN/LGA/etc. YAML-driven); describe a datasheet land pattern in words before encoding it; always request the 3D model. Flag non-standard pad shapes and missing generator categories for human review rather than improvising.
+- **Symbol-integrity gate:** after any registry symbol change, re-export and diff — pin numbers and names must be identical to the previous export. Synth's deterministic UUIDs make this diff mechanical.
+- **3D model coverage:** `synth registry qualify` reports, per part, whether the footprint's 3D model resolves (`E-SYNTH-QUAL-016`, review level, never blocking: a model is not needed to fabricate a board). It names a model file that is not installed (a footprint that lists several models passes if any one is installed), a footprint that declares no model, a footprint that is not in KiCad's library, and a part with no KiCad footprint. Expect the mechanical parts (mounting hole, test point, fiducial) to show "no model". A model file missing for a stock footprint usually means `kicad-packages3d` is older than `kicad-footprints`: update both to the same version before treating it as a gap in the registry.
 
 ---
 
 ## 4. PCB review
 
-- **DRC is a gate, not a suggestion:** `kicad-cli pcb drc --format
-report --severity-error --severity-warning --refill-zones
---schematic-parity --exit-code-violations board.kicad_pcb` must be
-  clean before handoff. `--schematic-parity` catches drift between
-  the schematic and the board — with Synth both come from one IR, so
-  any parity error is a bug worth escalating.
-- **Placement doctrine** (already partially encoded in Synth's
-  thematic clusters — `IcBlock`, `LdoBlock`, `Crystal`): decoupling
-  capacitors belong at the IC pins, oriented to minimize ground loop
-  area and trace inductance; horizontal connectors live near board
-  edges; keep packages aligned. Optimize placement for _engineer
-  modifiability_, not a one-shot perfect floorplan.
-- **Review by rendering, not by imagination:** export board-layer
-  SVGs/PNGs (`kicad-cli pcb export svg`, `pcb render`) and actually
-  look; render specific regions to check 3D-model interference.
-- **Board outline:** rounded or chamfered corners by default;
-  confirm with the engineer. Double-sided assembly is an explicit
-  engineer decision, never a default.
+- **DRC is a gate, not a suggestion:** `kicad-cli pcb drc --format report --severity-error --severity-warning --refill-zones --schematic-parity --exit-code-violations board.kicad_pcb` must be clean before handoff. `--schematic-parity` catches drift between the schematic and the board — with Synth both come from one IR, so any parity error is a bug worth escalating.
+- **Placement doctrine** (already partially encoded in Synth's thematic clusters — `IcBlock`, `LdoBlock`, `Crystal`): decoupling capacitors belong at the IC pins, oriented to minimize ground loop area and trace inductance; horizontal connectors live near board edges; keep packages aligned. Optimize placement for _engineer modifiability_, not a one-shot perfect floorplan.
+- **Review by rendering, not by imagination:** export board-layer SVGs/PNGs (`kicad-cli pcb export svg`, `pcb render`) and actually look; render specific regions to check 3D-model interference.
+- **Board outline:** rounded or chamfered corners by default; confirm with the engineer. Double-sided assembly is an explicit engineer decision, never a default.
 
 ### Placement JSON coordinate contract
 
-The placement payload that leaves Synth — the MCP
-`synth_place_with_hints` `component_placements` field and the CLI
-`synth place` document — is in **footprint-origin coordinates**. Each
-component's `center` is the point KiCad writes as the footprint's
-`(at x y)`: the physical origin of the footprint on the board, in
-nanometres. An overlay of the JSON on the exported `.kicad_pcb`
-therefore needs no correction.
+The placement payload that leaves Synth — the MCP `synth_place_with_hints` `component_placements` field and the CLI `synth place` document — is in **footprint-origin coordinates**. Each component's `center` is the point KiCad writes as the footprint's `(at x y)`: the physical origin of the footprint on the board, in nanometres. An overlay of the JSON on the exported `.kicad_pcb` therefore needs no correction.
 
-This is deliberately **not** the same as the internal
-`synth_place::ComponentPlacement::center`, which is the courtyard-bbox
-centre the placer, DRC and router reason about. The two differ by the
-footprint's courtyard offset for asymmetric footprints (USB
-receptacles, DIP headers):
+This is deliberately **not** the same as the internal `synth_place::ComponentPlacement::center`, which is the courtyard-bbox centre the placer, DRC and router reason about. The two differ by the footprint's courtyard offset for asymmetric footprints (USB receptacles, DIP headers):
 
 ```
 published_center = courtyard_center - rot(courtyard_offset)
 ```
 
-Serialize internal placements only through `synth_place::to_external`;
-the KiCad exporter and `to_external` both derive `(at x y)` from the
-shared `synth_place::footprint_origin` helper, so the board and the
-published placement cannot drift apart. Emitting the internal courtyard
-centre here shifts every downstream consumer — notably the synth-ee
-placement visualisation — relative to the exported board.
+Serialize internal placements only through `synth_place::to_external`; the KiCad exporter and `to_external` both derive `(at x y)` from the shared `synth_place::footprint_origin` helper, so the board and the published placement cannot drift apart. Emitting the internal courtyard centre here shifts every downstream consumer — notably the synth-ee placement visualisation — relative to the exported board.
 
-The persisted `<design>.placement.layout.toml` sidecar is written in the same
-space: board millimetres at each footprint's origin, the `(at x y)` the
-exported board and `component_placements` report. A position copied from a
-run's output pins the part exactly there, so a sidecar pinned from the last run
-reproduces it. (It used to be read as the courtyard centre, which moved every
-part whose origin is off-centre — a connector whose origin sits on a pin — by
-its courtyard offset on each re-pin, so a fully pinned board never reached a
-fixed point.) A `relative_to` entry's `dx`/`dy` likewise run between footprint
-origins.
+The persisted `<design>.placement.layout.toml` sidecar is written in the same space: board millimetres at each footprint's origin, the `(at x y)` the exported board and `component_placements` report. A position copied from a run's output pins the part exactly there, so a sidecar pinned from the last run reproduces it. (It used to be read as the courtyard centre, which moved every part whose origin is off-centre — a connector whose origin sits on a pin — by its courtyard offset on each re-pin, so a fully pinned board never reached a fixed point.) A `relative_to` entry's `dx`/`dy` likewise run between footprint origins.
 
-Run the automatic placer first and read the outline it produces; use a
-placement sidecar only to fix specific parts. A sidecar entry gives that part
-its starting slot: the placer keeps the entry's rotation and the order of the
-pinned parts, then slides them toward the board edge to close bands no
-courtyard uses, so the finished board is no larger than the floorplan the pins
-describe. `priority = "hard"` entries win over soft ones; a fully pinned
-floorplan skips the automatic search but still gets the band pass. A floorplan
-that uses a `relative_to` entry keeps its pinned coordinates exactly, because
-the band pass moves one part at a time.
+Run the automatic placer first and read the outline it produces; use a placement sidecar only to fix specific parts. A sidecar entry gives that part its starting slot: the placer keeps the entry's rotation and the order of the pinned parts, then slides them toward the board edge to close bands no courtyard uses, so the finished board is no larger than the floorplan the pins describe. `priority = "hard"` entries win over soft ones; a fully pinned floorplan skips the automatic search but still gets the band pass. A floorplan that uses a `relative_to` entry keeps its pinned coordinates exactly, because the band pass moves one part at a time.
 
 ### Silkscreen reference labels
 
-The export keeps each part's reference label on the board and clear of other
-parts and labels: it tries the long-standing offset first, then the other
-three sides of the part, and keeps the offset if nothing fits. Two optional
-schemas steer it.
+The export keeps each part's reference label on the board and clear of other parts and labels: it tries the long-standing offset first, then the other three sides of the part, and keeps the offset if nothing fits. Two optional schemas steer it.
 
 A part file can state a preference in its `[footprint_dimensions]` table:
 
@@ -584,8 +351,7 @@ label_side = "below"   # above | below | left | right, tried first
 label_hidden = true    # leave the label off the silkscreen
 ```
 
-A design can override one label in `<design>.placement.layout.toml`, keyed by
-designator (this file is board millimetres, and so are these offsets):
+A design can override one label in `<design>.placement.layout.toml`, keyed by designator (this file is board millimetres, and so are these offsets):
 
 ```toml
 [labels.R9]
@@ -598,22 +364,13 @@ priority = "hard" # hard: use it as given, kept on the board; soft (default): tr
 hide = true       # hide it; `hide = false` shows a part file's hidden label
 ```
 
-A hidden label takes no room. A sidecar entry beats the part file, and a hard
-offset is not checked for collisions but is pulled back inside the board edge.
-`angle` and `priority` apply to an offset: without `dx` or `dy` they do
-nothing, and if only one of the two is given the other counts as 0. A
-designator that names no part is ignored. A sidecar that does not parse is
-ignored as a whole, so a typo in one entry (for example `priority = "firm"`)
-drops every label entry and every part position in that file. The sidecar
-schema version is unchanged: the `labels` table is optional, and an older
-file without it loads as before.
+A hidden label takes no room. A sidecar entry beats the part file, and a hard offset is not checked for collisions but is pulled back inside the board edge. `angle` and `priority` apply to an offset: without `dx` or `dy` they do nothing, and if only one of the two is given the other counts as 0. A designator that names no part is ignored. A sidecar that does not parse is ignored as a whole, so a typo in one entry (for example `priority = "firm"`) drops every label entry and every part position in that file. The sidecar schema version is unchanged: the `labels` table is optional, and an older file without it loads as before.
 
 ---
 
 ## 5. Fabrication exports
 
-Standard export chain (adapt per fab; keep it scripted in the
-project's `build.sh`):
+Standard export chain (adapt per fab; keep it scripted in the project's `build.sh`):
 
 ```bash
 kicad-cli version
@@ -632,49 +389,33 @@ kicad-cli pcb export gerbers --output build/gerbers/ board.kicad_pcb
 kicad-cli pcb export drill  --output build/gerbers/ board.kicad_pcb
 ```
 
-- **Position files:** JLCPCB and NextPCB want a 5-column CSV
-  (Designator, Mid X, Mid Y, Layer `T|B`, Rotation). KiCad's native
-  `.pos` output doesn't match; convert it.
-- **Everything lands in `build/`.** Versioned outputs, never
-  overwriting sources.
-- BOM presets per fab are configuration, checked into the project —
-  regenerate from them, never hand-patch the CSVs.
+- **Position files:** JLCPCB and NextPCB want a 5-column CSV (Designator, Mid X, Mid Y, Layer `T|B`, Rotation). KiCad's native `.pos` output doesn't match; convert it.
+- **Everything lands in `build/`.** Versioned outputs, never overwriting sources.
+- BOM presets per fab are configuration, checked into the project — regenerate from them, never hand-patch the CSVs.
 
 ---
 
 ## 6. Gerber review
 
-Generate Gerbers for _review_ into a scratch directory if they don't
-already exist, then render and **look** at them:
+Generate Gerbers for _review_ into a scratch directory if they don't already exist, then render and **look** at them:
 
 ```bash
 uv pip install pygerber
 pygerber gerber convert png build/gerbers/F_Cu.gbr -o f_cu.png -d 600
 ```
 
-Check for: unexpected shorts between nets, vias intersecting traces
-or pads, annular-ring violations, silkscreen over pads, and overall
-fabricability. A DRC pass is necessary but not sufficient — the
-render is where silly layer-stack mistakes become visible.
+Check for: unexpected shorts between nets, vias intersecting traces or pads, annular-ring violations, silkscreen over pads, and overall fabricability. A DRC pass is necessary but not sufficient — the render is where silly layer-stack mistakes become visible.
 
 ---
 
 ## 7. Panelization (KiKit)
 
 - Verify `kikit --version` before starting.
-- Inspect the source board for edge hazards first: castellations,
-  edge connectors, antennas, plated edges, components overhanging
-  `Edge.Cuts`.
-- Resolve grid size, routing gap, tabs, frame, and the fab's panel
-  limits _before_ generating; position tooling holes and fiducials
-  relative to the panel outline.
-- Emit strict JSON presets; generate versioned panels into a
-  `build/` subdirectory without touching the source board; render
-  and inspect the panel before reporting done.
+- Inspect the source board for edge hazards first: castellations, edge connectors, antennas, plated edges, components overhanging `Edge.Cuts`.
+- Resolve grid size, routing gap, tabs, frame, and the fab's panel limits _before_ generating; position tooling holes and fiducials relative to the panel outline.
+- Emit strict JSON presets; generate versioned panels into a `build/` subdirectory without touching the source board; render and inspect the panel before reporting done.
 
-Sensible starting values: 2 mm routing gap · 3 mm tabs · 0.5 mm
-mouse-bite drill at 0.8 mm spacing · 5 mm full frame · 2 mm
-frame-to-array clearance · no frame break cuts.
+Sensible starting values: 2 mm routing gap · 3 mm tabs · 0.5 mm mouse-bite drill at 0.8 mm spacing · 5 mm full frame · 2 mm frame-to-array clearance · no frame break cuts.
 
 ---
 
@@ -682,25 +423,14 @@ frame-to-array clearance · no frame break cuts.
 
 For realistic product imagery from a KiCad project:
 
-1. Regenerate the STEP/GLB for "latest" — never trust a stale GLB by
-   filename (`kicad-cli pcb export step|glb --force --no-dnp
---subst-models`, including tracks/pads/zones/silkscreen/mask and
-   `--cut-vias-in-body` where supported).
-2. **DRC first.** Stop on violations unless the engineer explicitly
-   authorized proceeding, and record that decision in the handoff.
-3. Inspect the exported scene (outline, holes, mounting cutouts)
-   before rendering; replace missing vendor models with a stated
-   deterministic fallback.
+1. Regenerate the STEP/GLB for "latest" — never trust a stale GLB by filename (`kicad-cli pcb export step|glb --force --no-dnp --subst-models`, including tracks/pads/zones/silkscreen/mask and `--cut-vias-in-body` where supported).
+2. **DRC first.** Stop on violations unless the engineer explicitly authorized proceeding, and record that decision in the handoff.
+3. Inspect the exported scene (outline, holes, mounting cutouts) before rendering; replace missing vendor models with a stated deterministic fallback.
 4. Render hero / near-overhead top / detail / back views with Cycles
-   - denoising and **inspect the actual PNGs** — a clean exit code is
-     not a render review.
-5. Handoff names: output directory, gallery URL, DRC status, missing
-   -model fallbacks, and remaining geometry simplifications.
+- denoising and **inspect the actual PNGs** — a clean exit code is not a render review.
+5. Handoff names: output directory, gallery URL, DRC status, missing -model fallbacks, and remaining geometry simplifications.
 
-Material targets that read as real hardware: deep royal-blue LPI
-soldermask (moderately glossy, low coat roughness), warm translucent
-FR4 edges, pale metallic-gold ENIG (not orange), subdued silver SAC
-solder fillets on dry passives, matte nylon connector bodies.
+Material targets that read as real hardware: deep royal-blue LPI soldermask (moderately glossy, low coat roughness), warm translucent FR4 edges, pale metallic-gold ENIG (not orange), subdued silver SAC solder fillets on dry passives, matte nylon connector bodies.
 
 ---
 
@@ -711,24 +441,16 @@ Before declaring any Synth-exported design "ready":
 - [ ] `synth validate` — zero blocking diagnostics
 - [ ] `kicad-cli sch erc` — zero errors, zero warnings
 - [ ] `kicad-cli pcb drc` (with `--schematic-parity`) — clean
-- [ ] Re-export is byte-identical (determinism intact; no
-      hand-edits lurking in generated files)
-- [ ] Every instance carries `MPN`/`LCSC`; `bom.csv` regenerated, not
-      edited
-- [ ] Visual pass done on the schematic (title block, field
-      collisions, power-symbol orientation) and on Gerber/board
-      renders
-- [ ] Liberties taken (value substitutions, footprint substitutions,
-      unreviewed parts) reported explicitly to the engineer
+- [ ] Re-export is byte-identical (determinism intact; no hand-edits lurking in generated files)
+- [ ] Every instance carries `MPN`/`LCSC`; `bom.csv` regenerated, not edited
+- [ ] Visual pass done on the schematic (title block, field collisions, power-symbol orientation) and on Gerber/board renders
+- [ ] Liberties taken (value substitutions, footprint substitutions, unreviewed parts) reported explicitly to the engineer
 
 ---
 
 ## 10. Standards coverage map
 
-Where the published schematic guidelines land in Synth — so a
-reviewer can check coverage, not folklore. The guidelines below are
-the ones common to standard schematic design-rule practice, resting
-on IEEE reference-designator conventions and IPC-2221/IPC-2612-1.
+Where the published schematic guidelines land in Synth — so a reviewer can check coverage, not folklore. The guidelines below are the ones common to standard schematic design-rule practice, resting on IEEE reference-designator conventions and IPC-2221/IPC-2612-1.
 
 | Guideline                                           | Synth mechanism                                                                                                     |
 | --------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------- |
@@ -753,17 +475,51 @@ on IEEE reference-designator conventions and IPC-2221/IPC-2612-1.
 | Decoupling on all ICs                               | `E-SYNTH-POWER-001` (manifest) + KG `ic_decoupling` (undeclared)                                                    |
 | Test points + expected voltages (advanced practice) | KG `rail_test_points` — catalog entry until a test-point part exists                                                |
 
-Not yet applicable: revision-history page, table of contents, block
-diagram sheet. Hierarchical sheets **are** emitted
-(§P26): a board whose single-sheet content overflows A2 and whose
-components span two or more `sheet` blocks (or imported files) exports
-as one `.kicad_sch` per sheet plus a root carrying sheet instances, with
-cross-sheet signal nets on hierarchical labels. Small boards stay a
-single sheet.
+Not yet applicable: revision-history page, table of contents, block diagram sheet. Hierarchical sheets **are** emitted (§P26): a board whose single-sheet content overflows A2 and whose components span two or more `sheet` blocks (or imported files) exports as one `.kicad_sch` per sheet plus a root carrying sheet instances, with cross-sheet signal nets on hierarchical labels. Small boards stay a single sheet.
 
 ---
 
-_See also: [`schematic-procedures.md`](schematic-procedures.md) for the
-export pipeline internals, [`diagnostics/README.md`](diagnostics/README.md)
-for `E-SYNTH-*` meanings, and [`protocol-v1.0.md`](protocol-v1.0.md) for
-the MCP wire format._
+## DFM checks and `--dfm-gate`
+
+`export-kicad` reads the delivered `.kicad_pcb` and records JLCDFM-style
+findings in the `dfm` stage of the verification report. The stage lists the
+checks it does not make in its `unsupported` field, so a `pass` covers only
+what is not listed there.
+
+A Danger finding blocks a release export (`--gerbers` and similar) only when
+`--dfm-gate` is passed. Without it the stage is advisory: each finding is
+recorded in the report's `findings` list and printed with its rule and board
+location, and `release_ready` ignores the stage, including when the board
+cannot be read. `--force` does not override a gated block. Only the SMD/hole
+rules below are graded for JLCPCB; the PCBWay and OSH Park profiles publish no
+silk or pad-spacing figure here, so those rules are not run for them and are
+listed in `unsupported`.
+
+Which findings are safe to gate on, against JLCDFM on the CM4 carrier board:
+
+| Rule | Grade here | Authority |
+| --- | --- | --- |
+| `silk_to_pad` | Danger below 0.15 mm | Same grade as JLCDFM where both report; counts differ (34 vs 22 Danger + 27 Warning), so it can over- or under-report |
+| `silk_to_hole` | Danger below 0.15 mm | **Assumed**: JLC does not publish the floor. Do not gate on it alone |
+| `silk_line_width` | Warning below 0.15 mm | Advisory; counts are far above JLCDFM's (560 vs 50) |
+| `pad_to_pad` | Danger below 0.10 mm, Warning below 0.15 mm | Same order of magnitude as JLCDFM (12 + 50 vs 5 + 40); the 0.07 mm same-net merge tolerance is uncalibrated |
+| `pth_to_trace` | Warning below 0.28 mm (pads and vias) on the JLC profiles (pcbway and oshpark use their own 0.2 mm drill-to-copper floor) | Implemented but **known not to match JLCDFM**. Advisory only: it never blocks |
+
+Until these are calibrated, no rule is authoritative enough to block releases
+by default. Silk text and silk curves are counted, not measured; custom and
+trapezoid pads are measured by their bounding box (a trapezoid's `rect_delta`
+included) and counted. `pth_to_trace` measures through-hole pad drills and via
+barrels against tracks, arc tracks included. A track
+missing its start, mid or end point cannot be measured and is listed under
+`unsupported` as `track_read`. A `(drill ... (offset x y))` leaves the hole at the pad and
+moves the copper by the offset. A TOML profile that omits the DFM floors runs
+none of these rules (they read 0); only the built-in JLC profiles set them.
+`--dfm-gate` blocks a release export only: with no `--gerbers` or similar it
+is reported but nothing is stopped, and a board it cannot read blocks a gated
+release and marks the manifest `release_ready: false`.
+
+`crates/synth-drc/tests/dfm_committed_boards.rs` pins the findings on the
+committed RP2350 example and checks that the buck board is blocked only by
+silk rules, so a rule change that moves a count is visible in review.
+
+_See also: [`schematic-procedures.md`](schematic-procedures.md) for the export pipeline internals, [`diagnostics/README.md`](diagnostics/README.md) for `E-SYNTH-*` meanings, and [`protocol-v1.0.md`](protocol-v1.0.md) for the MCP wire format._
