@@ -397,6 +397,19 @@ measurement was made; this is the main item for the analog/SI review.
 
 Nothing below is signed off. The list is deliberately blunt.
 
+- **USB-C 3D model is a placeholder (review comment, open)**: J1's model in the
+  committed `kicad/rtd_afe.step` and `images/` is the 29 KB block in
+  `agent-run/step-models/` (sha256 `8f6a49a9…`), built from datasheet
+  dimensions, not the vendor CAD of the HRO TYPE-C-31-M-12 (LCSC C165948).
+  KiCad's stock library has no model for this part. Fix: take the vendor STEP,
+  put it in the repository, re-export and re-render. Not done, because
+  regenerating the package needs a tree that routes (see Reproducibility).
+- **C_DVB reference label is cut by the board edge (review comment, open)**:
+  C_DVB sits at x = 37.0 and its label at +4.05 mm, so the text spans about
+  x = 39 to 43 against an edge at 42.5 (the review image reads it as "C_DVE").
+  Fix: a `[labels.C_DVB]` entry in `rtd_afe.placement.layout.toml` that moves it
+  inboard or hides it, then re-export. Not done for the same reason.
+
 - **SI/PI/RF review (designated reviewer)**: the 24-bit analog layout, the
   single ground plane, the 37.85 mm of VREF track from U3 to C_RV, the RC filter
   against the chosen ADC data rate, the IDAC output's 10 nF load and settling,

@@ -111,7 +111,7 @@ Routing (FreeRouting 2.4.1, `router: "freerouting"`, `allow_via_in_pad: true`), 
 - `qualification.json`: the qualification gate. `qualified` stays false until every review gate in it is true.
 - `dfm/`: the gerber zip, CPL and screenshots from the JLCPCB quote and DFM flow on 2026-10-27 (no order placed). It is partial: see `jlcpcb_dfm` in `qualification.json`.
 - `images/`: 3D top, bottom and angled, top and bottom copper, and the schematic. The 3D and copper pictures were rendered with `kicad-cli pcb render` and `pcb export pdf` from the committed board.
-- `kicad/usb_uart.step`: board STEP with 3D models (`kicad-cli pcb export step --no-dnp`); the 3D views use the same models. All are stock KiCad models; the mounting holes have no model (the KiCad MountingHole step files are not installed).
+- `kicad/usb_uart.step`: board STEP with 3D models (`kicad-cli pcb export step --no-dnp`); the 3D views use the same models. All are stock KiCad models except the USB-C receptacle (J1, TYPE-C-31-M-12): KiCad has no model for it, and the one used is the simplified placeholder block from `qualification/class-b/rtd-afe/agent-run/step-models/` (not vendor CAD). The mounting holes have no model (the KiCad MountingHole step files are not installed).
 - `dfm/`: regenerated Gerbers, drill and CPL for this board. The JLCPCB screenshots there are from the previous revision and were not redone; see `qualification.json`.
 - `SHA256SUMS`: hashes of the artifacts above.
 
