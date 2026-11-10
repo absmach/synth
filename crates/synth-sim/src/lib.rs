@@ -21,7 +21,7 @@ use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use serde::Deserialize;
 use synth_diagnostics::{Diagnostic, DiagnosticBuilder, EntityRef, Location, Severity, Span};
 use synth_ir::{Board, Component, ComponentId, Net, NetId, PinId};
-use synth_router::process::{run_cancellable, Invocation};
+use synth_router::process::{run_cancellable, Invocation, KillScope};
 
 /// ngspice could not be found or started.
 pub const E_SYNTH_SIM_001: &str = "E-SYNTH-SIM-001";
@@ -142,10 +142,6 @@ impl Testbench {
         Ok(testbench)
     }
 
-    fn validate(&self) -> Result<(), Diagnostic> {
-        self.validate_at(None)
-    }
-
     fn validate_at(&self, path: Option<&Path>) -> Result<(), Diagnostic> {
         self.validate_inner()
             .map_err(|diagnostic| with_location(diagnostic, path))
@@ -240,6 +236,10 @@ impl Testbench {
 pub struct SimOptions {
     /// Path to the ngspice binary. `None` uses `NGSPICE`, then `PATH`.
     pub ngspice: Option<PathBuf>,
+    /// Design source file, used to anchor `-002` and `-008`.
+    pub design_path: Option<PathBuf>,
+    /// `<design>.sim.toml`, used to anchor run-level diagnostics.
+    pub testbench_path: Option<PathBuf>,
 }
 
 impl SimOptions {
@@ -328,9 +328,14 @@ pub fn sidecar_path(design: &Path) -> PathBuf {
 /// A missing measurement, a failed run or an out-of-limit value is an error
 /// diagnostic, never a silent pass.
 pub fn simulate(design: &Board, testbench: &Testbench, options: &SimOptions) -> SimReport {
-    let deck = match emit_netlist(design, testbench) {
+    let deck = match emit_netlist_at(
+        design,
+        testbench,
+        options.design_path.as_deref(),
+        options.testbench_path.as_deref(),
+    ) {
         Ok(deck) => deck,
-        Err(diagnostics) => return failed(diagnostics),
+        Err(diagnostics) => return failed(diagnostics, options.testbench_path.as_deref()),
     };
 
     let timeout = testbench
@@ -339,14 +344,26 @@ pub fn simulate(design: &Board, testbench: &Testbench, options: &SimOptions) -> 
         .map_or(DEFAULT_TIMEOUT, Duration::from_secs_f64);
     let run = match run_ngspice(&deck, options, timeout) {
         Ok(run) => run,
-        Err(diagnostic) => return failed(vec![diagnostic]),
+        Err(diagnostic) => return failed(vec![diagnostic], options.testbench_path.as_deref()),
     };
 
-    // `Error: measure ...` is a measurement failure even when ngspice exits
-    // 0, so it must classify before the exit status is considered.
-    if let Some(diagnostic) = measure_error_from_stderr(&run.stderr) {
-        return failed(vec![diagnostic]);
+    // A capped log can hide the singular-matrix warning that would have
+    // failed the run, so a partial capture is never trusted.
+    if run.output_truncated {
+        return failed(
+            vec![ngspice_error(format!(
+                "ngspice output exceeded the {MAX_OUTPUT_BYTES}-byte cap; refusing to trust a truncated log"
+            ))],
+            options.testbench_path.as_deref(),
+        );
     }
+
+    // `Error: measure ...` is a measurement failure even when ngspice exits
+    // 0. Check it before the stderr error scan so it keeps `-003`.
+    if let Some(diagnostic) = measurement_failure_from_stderr(&run.stderr) {
+        return failed(vec![diagnostic], options.testbench_path.as_deref());
+    }
+
     if run.exit_code != Some(0) {
         let status = run
             .exit_code
@@ -356,21 +373,25 @@ pub fn simulate(design: &Board, testbench: &Testbench, options: &SimOptions) -> 
         } else {
             excerpt(&run.stderr)
         };
-        return failed(vec![ngspice_error(format!(
-            "ngspice exited with status {status}: {detail}"
-        ))]);
+        return failed(
+            vec![ngspice_error(format!(
+                "ngspice exited with status {status}: {detail}"
+            ))],
+            options.testbench_path.as_deref(),
+        );
+    }
+
+    // Other stderr errors, including a singular matrix with a missing
+    // SYNTH_DONE, must classify as `-006` before sentinel parsing turns the
+    // same run into a missing measurement.
+    if let Some(diagnostic) = stderr_error(&run.stderr) {
+        return failed(vec![diagnostic], options.testbench_path.as_deref());
     }
 
     let values = match parse_sentinels(&run.stdout, testbench) {
         Ok(values) => values,
-        Err(diagnostics) => return failed(diagnostics),
+        Err(diagnostics) => return failed(diagnostics, options.testbench_path.as_deref()),
     };
-
-    // A singular matrix or a failed source/gmin step can still exit 0 and
-    // print a number. The warning is the only evidence the run is wrong.
-    if let Some(diagnostic) = stderr_error(&run.stderr) {
-        return failed(vec![diagnostic]);
-    }
 
     let mut measures = Vec::new();
     let mut diagnostics = Vec::new();
@@ -402,16 +423,32 @@ pub fn simulate(design: &Board, testbench: &Testbench, options: &SimOptions) -> 
         measures.push(result);
     }
 
+    locate(&mut diagnostics, options.testbench_path.as_deref());
     SimReport {
         measures,
         diagnostics,
     }
 }
 
-fn failed(diagnostics: Vec<Diagnostic>) -> SimReport {
+fn failed(mut diagnostics: Vec<Diagnostic>, path: Option<&Path>) -> SimReport {
+    locate(&mut diagnostics, path);
     SimReport {
         measures: Vec::new(),
         diagnostics,
+    }
+}
+
+/// Anchor diagnostics that have no source location of their own to the
+/// sidecar. Design-anchored diagnostics already carry their component span.
+fn locate(diagnostics: &mut [Diagnostic], path: Option<&Path>) {
+    let Some(path) = path else {
+        return;
+    };
+    let file = path.display().to_string();
+    for diagnostic in diagnostics {
+        if diagnostic.location.is_none() {
+            diagnostic.location = Some(Location::from_span(file.clone(), Span::new(0, 0)));
+        }
     }
 }
 
@@ -445,6 +482,7 @@ fn run_ngspice(
         MAX_OUTPUT_BYTES,
         None,
         Some(dir.path()),
+        KillScope::ProcessTree,
     )
     .map_err(|error| {
         if error.not_found {
@@ -638,11 +676,16 @@ fn timeout_error(seconds: f64) -> Diagnostic {
         .build()
 }
 
-fn measure_error_from_stderr(stderr: &str) -> Option<Diagnostic> {
+/// A failed measurement prints either `Error: measure ...` or, for the
+/// generated `let mN` vector, `Error: &mN: no such variable`.
+fn measurement_failure_from_stderr(stderr: &str) -> Option<Diagnostic> {
     let failed: Vec<&str> = stderr
         .lines()
         .map(str::trim)
-        .filter(|line| line.to_ascii_lowercase().contains("error: measure"))
+        .filter(|line| {
+            let lower = line.to_ascii_lowercase();
+            lower.contains("error: measure") || lower.contains("no such variable")
+        })
         .collect();
     if failed.is_empty() {
         return None;
@@ -708,15 +751,25 @@ fn excerpt(text: &str) -> String {
 
 /// Emit the SPICE deck for a design and testbench. Stable order, no
 /// timestamps; every failure is returned as a diagnostic.
-#[allow(clippy::too_many_lines)]
 pub fn emit_netlist(design: &Board, testbench: &Testbench) -> Result<String, Vec<Diagnostic>> {
-    if let Err(diagnostic) = testbench.validate() {
+    emit_netlist_at(design, testbench, None, None)
+}
+
+#[allow(clippy::too_many_lines)]
+fn emit_netlist_at(
+    design: &Board,
+    testbench: &Testbench,
+    design_path: Option<&Path>,
+    testbench_path: Option<&Path>,
+) -> Result<String, Vec<Diagnostic>> {
+    if let Err(diagnostic) = testbench.validate_at(testbench_path) {
         return Err(vec![diagnostic]);
     }
     let mut diagnostics = Vec::new();
+    let tb_error = |message: String| testbench_error_at(testbench_path, message);
 
     let Some(ground) = design.nets.iter().find(|net| net.name == testbench.ground) else {
-        return Err(vec![testbench_error(format!(
+        return Err(vec![tb_error(format!(
             "ground net `{}` not found in design",
             testbench.ground
         ))]);
@@ -740,7 +793,7 @@ pub fn emit_netlist(design: &Board, testbench: &Testbench) -> Result<String, Vec
             let key = node.to_ascii_lowercase();
             if let Some(previous) = seen_nodes.insert(key, net.name.clone()) {
                 if previous != net.name {
-                    diagnostics.push(testbench_error(format!(
+                    diagnostics.push(tb_error(format!(
                         "nets `{previous}` and `{}` both emit as `{node}`",
                         net.name
                     )));
@@ -753,21 +806,21 @@ pub fn emit_netlist(design: &Board, testbench: &Testbench) -> Result<String, Vec
     let mut source_lines = Vec::new();
     for (index, source) in testbench.source.iter().enumerate() {
         let Some(net) = net_by_name.get(source.net.as_str()) else {
-            diagnostics.push(testbench_error(format!(
+            diagnostics.push(tb_error(format!(
                 "source net `{}` not found in design",
                 source.net
             )));
             continue;
         };
         if net.id == ground.id {
-            diagnostics.push(testbench_error(format!(
+            diagnostics.push(tb_error(format!(
                 "source net `{}` is the ground net",
                 source.net
             )));
             continue;
         }
         let Some(dc) = source.dc else {
-            diagnostics.push(testbench_error(format!(
+            diagnostics.push(tb_error(format!(
                 "source on net `{}` has no `dc` value",
                 source.net
             )));
@@ -788,7 +841,14 @@ pub fn emit_netlist(design: &Board, testbench: &Testbench) -> Result<String, Vec
         }
     }
 
-    check_topology(design, testbench, ground.id, &pin_net, &mut diagnostics);
+    check_topology(
+        design,
+        testbench,
+        ground.id,
+        &pin_net,
+        design_path,
+        &mut diagnostics,
+    );
 
     let mut element_lines = Vec::new();
     let mut seen_elements: HashMap<String, String> = HashMap::new();
@@ -796,7 +856,7 @@ pub fn emit_netlist(design: &Board, testbench: &Testbench) -> Result<String, Vec
         let (letter, value) = match model_for(component) {
             Ok(model) => model,
             Err(message) => {
-                diagnostics.push(no_model_error(component, &message));
+                diagnostics.push(no_model_error(component, &message, design_path));
                 continue;
             }
         };
@@ -805,6 +865,7 @@ pub fn emit_netlist(design: &Board, testbench: &Testbench) -> Result<String, Vec
             diagnostics.push(no_model_error(
                 component,
                 &format!("a two-terminal model needs 2 pins, part has {pin_count}"),
+                design_path,
             ));
             continue;
         }
@@ -814,7 +875,7 @@ pub fn emit_netlist(design: &Board, testbench: &Testbench) -> Result<String, Vec
             if let Some(net_id) = pin_net.get(&(component.id, PinId(index))) {
                 nodes.push(node_by_net[net_id].clone());
             } else {
-                diagnostics.push(
+                diagnostics.push(with_location_span(
                     sim_builder(
                         E_SYNTH_SIM_008,
                         Severity::Error,
@@ -829,7 +890,9 @@ pub fn emit_netlist(design: &Board, testbench: &Testbench) -> Result<String, Vec
                         id: component.refdes.clone(),
                     })
                     .build(),
-                );
+                    design_path,
+                    component.source_span,
+                ));
                 connected = false;
                 break;
             }
@@ -840,7 +903,7 @@ pub fn emit_netlist(design: &Board, testbench: &Testbench) -> Result<String, Vec
 
         let name = format!("{letter}{}", sanitize(&component.refdes));
         if name.len() == letter.len() {
-            diagnostics.push(testbench_error(format!(
+            diagnostics.push(tb_error(format!(
                 "component `{}` has an empty reference",
                 component.refdes
             )));
@@ -849,7 +912,7 @@ pub fn emit_netlist(design: &Board, testbench: &Testbench) -> Result<String, Vec
         let key = name.to_ascii_lowercase();
         if let Some(previous) = seen_elements.insert(key, component.refdes.clone()) {
             if previous != component.refdes {
-                diagnostics.push(testbench_error(format!(
+                diagnostics.push(tb_error(format!(
                     "references `{previous}` and `{}` both emit as `{name}`",
                     component.refdes
                 )));
@@ -867,7 +930,7 @@ pub fn emit_netlist(design: &Board, testbench: &Testbench) -> Result<String, Vec
     let mut measure_lines = Vec::new();
     for (index, measure) in testbench.measure.iter().enumerate() {
         let Some(net) = net_by_name.get(measure.node.as_str()) else {
-            diagnostics.push(testbench_error(format!(
+            diagnostics.push(tb_error(format!(
                 "measure `{}` node `{}` not found in design",
                 measure.name, measure.node
             )));
@@ -908,11 +971,24 @@ pub fn emit_netlist(design: &Board, testbench: &Testbench) -> Result<String, Vec
 /// matrix with a transient op) and calling it a pass. Capacitors are the only
 /// parts that break a DC path; every other part is treated as conducting so
 /// an unmodelled IC does not also look floating.
+fn net_span(design: &Board, net: &Net) -> Span {
+    net.endpoints
+        .first()
+        .and_then(|endpoint| {
+            design
+                .components
+                .iter()
+                .find(|component| component.id == endpoint.component)
+        })
+        .map_or(design.source_span, |component| component.source_span)
+}
+
 fn check_topology(
     design: &Board,
     testbench: &Testbench,
     ground: NetId,
     pin_net: &HashMap<(ComponentId, PinId), NetId>,
+    design_path: Option<&Path>,
     diagnostics: &mut Vec<Diagnostic>,
 ) {
     let mut connections: HashMap<NetId, usize> = design
@@ -938,6 +1014,8 @@ fn check_topology(
         if component.kind == "capacitor" {
             continue;
         }
+        // ponytail: adjacency links only pins 0 and 1. Extend when
+        // multi-terminal models land (ticket 03).
         let (Some(first), Some(second)) = (
             pin_net.get(&(component.id, PinId(0))),
             pin_net.get(&(component.id, PinId(1))),
@@ -964,20 +1042,28 @@ fn check_topology(
     for net in &design.nets {
         let count = connections.get(&net.id).copied().unwrap_or(0);
         if count < 2 {
-            diagnostics.push(topology_error(
-                &net.name,
-                format!(
-                    "net `{}` has {count} connection(s); a simulated net needs at least two",
-                    net.name
+            diagnostics.push(with_location_span(
+                topology_error(
+                    &net.name,
+                    format!(
+                        "net `{}` has {count} connection(s); a simulated net needs at least two",
+                        net.name
+                    ),
                 ),
+                design_path,
+                net_span(design, net),
             ));
         } else if !reachable.contains(&net.id) {
-            diagnostics.push(topology_error(
-                &net.name,
-                format!(
-                    "net `{}` has no DC path to ground; check for a series capacitor or an unconnected part",
-                    net.name
+            diagnostics.push(with_location_span(
+                topology_error(
+                    &net.name,
+                    format!(
+                        "net `{}` has no DC path to ground; check for a series capacitor or an unconnected part",
+                        net.name
+                    ),
                 ),
+                design_path,
+                net_span(design, net),
             ));
         }
     }
@@ -1002,17 +1088,21 @@ fn model_for(component: &Component) -> Result<(&'static str, f64), String> {
     Ok((letter, value))
 }
 
-fn no_model_error(component: &Component, message: &str) -> Diagnostic {
+fn no_model_error(component: &Component, message: &str, design_path: Option<&Path>) -> Diagnostic {
     let part = component
         .part
         .as_ref()
         .map_or(component.kind.as_str(), |part| part.id.as_str());
-    sim_builder(E_SYNTH_SIM_002, Severity::Error, "part has no SPICE model")
-        .message(format!("{} (`{part}`): {message}", component.refdes))
-        .primary_entity(EntityRef::Component {
-            id: component.refdes.clone(),
-        })
-        .build()
+    with_location_span(
+        sim_builder(E_SYNTH_SIM_002, Severity::Error, "part has no SPICE model")
+            .message(format!("{} (`{part}`): {message}", component.refdes))
+            .primary_entity(EntityRef::Component {
+                id: component.refdes.clone(),
+            })
+            .build(),
+        design_path,
+        component.source_span,
+    )
 }
 
 fn testbench_error(message: impl Into<String>) -> Diagnostic {

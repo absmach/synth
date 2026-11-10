@@ -3,9 +3,9 @@
 //! Replays a captured ngspice log for the `synth-sim` tests.
 //!
 //! The tests link (or copy on Windows) this binary to
-//! `<scratch>/<label>[.exe]`, so the file stem selects the behaviour. That
-//! keeps test selection out of a process-wide environment variable, which
-//! parallel tests would race on.
+//! `<scratch>/<label>[.exe]`, so the file stem selects the behaviour. The
+//! scratch directory also carries `fixtures.path`, so the same source works
+//! from either test crate without a compile-time crate path.
 
 use std::io::Write;
 use std::path::{Path, PathBuf};
@@ -13,20 +13,42 @@ use std::time::Duration;
 
 fn main() {
     let exe = std::path::absolute(std::env::args().next().expect("argv0")).expect("absolute argv0");
+    let dir = exe.parent().expect("stub dir");
+    if std::env::args().any(|arg| arg == "--hang-child") {
+        let _ = std::fs::write(dir.join("hang-child.pid"), std::process::id().to_string());
+        std::thread::sleep(Duration::from_secs(60));
+        return;
+    }
+
     let label = exe
         .file_stem()
         .map(|stem| stem.to_string_lossy().into_owned())
         .unwrap_or_default();
-    let fixtures = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .join("tests")
-        .join("fixtures");
+    let fixtures = std::fs::read_to_string(dir.join("fixtures.path"))
+        .map(PathBuf::from)
+        .unwrap_or_else(|error| fail(&format!("could not read fixtures.path: {error}")));
 
     match label.as_str() {
         "hang" => {
-            let dir = exe.parent().expect("stub dir");
-            let _ = std::fs::write(dir.join("hang-started"), b"started\n");
+            let _ = std::fs::write(dir.join("hang.pid"), std::process::id().to_string());
+            #[cfg(unix)]
+            {
+                let _ = std::process::Command::new(&exe)
+                    .arg("--hang-child")
+                    .spawn();
+            }
             std::thread::sleep(Duration::from_secs(60));
-            let _ = std::fs::write(dir.join("hang-finished"), b"finished\n");
+        }
+        "truncated" => {
+            // 2 MiB, comfortably above synth-sim's 1 MiB output cap.
+            let chunk = vec![b'e'; 8192];
+            let mut stderr = std::io::stderr();
+            for _ in 0..256 {
+                let _ = stderr.write_all(&chunk);
+            }
+            let _ = stderr.flush();
+            print!("SYNTH_MEAS vmid 6\nSYNTH_DONE\n");
+            let _ = std::io::stdout().flush();
         }
         "ok" => replay(&fixtures, "divider-op", 0),
         "failed-meas" => replay(&fixtures, "divider-meas-failed", 0),
@@ -35,6 +57,7 @@ fn main() {
         "nan" => replay(&fixtures, "divider-nan", 0),
         "error" => replay(&fixtures, "divider-error", 1),
         "singular" => replay(&fixtures, "divider-singular", 0),
+        "singular-no-done" => replay(&fixtures, "divider-singular-no-done", 0),
         other => {
             eprintln!("stub_ngspice: unknown label `{other}`");
             std::process::exit(2);

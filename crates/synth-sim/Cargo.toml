@@ -22,8 +22,3 @@ toml = { workspace = true }
 [dev-dependencies]
 synth-parser = { workspace = true }
 synth-registry = { workspace = true }
-
-[[bin]]
-name = "synth_sim_stub"
-path = "tests/support/stub_ngspice.rs"
-test = false

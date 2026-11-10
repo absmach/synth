@@ -8,8 +8,9 @@
 The generated deck promised a measurement but ngspice did not produce a
 usable value. The causes are a missing `SYNTH_MEAS` sentinel, a sentinel with
 no value, `nan` or `inf`, an unparseable number, a duplicated measurement, a
-missing `SYNTH_DONE` terminator, or an `Error: measure ...` line on stderr.
-ngspice commonly exits 0 for all of these. A value is never defaulted to 0.
+missing `SYNTH_DONE` terminator, an `Error: measure ...` line on stderr, or an
+`Error: &m0: no such variable` from the generated `let`. ngspice commonly
+exits 0 for all of these. A value is never defaulted to 0.
 
 ## Minimal reproduction
 

@@ -6,10 +6,11 @@
 ## What this means
 
 ngspice exited unsuccessfully, or it printed an error or a convergence warning
-even though it exited 0. The diagnostic message carries the exit status and an
-excerpt of ngspice's stderr. A run that exits non-zero, or that reports a
-singular matrix, a failed gmin step or a failed source step, is never treated
-as a pass: ngspice can recover just enough to print a plausible number.
+even though it exited 0, or Synth refused a log truncated at the output cap.
+The diagnostic message carries the exit status or the warning and an excerpt
+of ngspice's output. A run that exits non-zero, or that reports a singular
+matrix, a failed gmin step or a failed source step, is never treated as a
+pass: ngspice can recover just enough to print a plausible number.
 
 ## Minimal reproduction
 

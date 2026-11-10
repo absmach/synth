@@ -1274,6 +1274,8 @@ const CAPABILITY_COMMANDS: [&str; 20] = [
 type CapabilityLimit = (&'static str, Option<&'static str>, &'static str);
 
 const UNSUPPORTED: &[CapabilityLimit] = &[
+    // A command-level limit, not a language constraint: `constraint` is
+    // reserved for netclass/diff_pair/keepout attribute names.
     (
         "spice_simulation",
         None,
@@ -3302,7 +3304,15 @@ fn sim(input: &Path, registry_dir: Option<&Path>) -> anyhow::Result<u8> {
         }
     };
 
-    let report = synth_sim::simulate(&board, &testbench, &synth_sim::SimOptions::default());
+    let report = synth_sim::simulate(
+        &board,
+        &testbench,
+        &synth_sim::SimOptions {
+            design_path: Some(input.to_path_buf()),
+            testbench_path: Some(sidecar.clone()),
+            ..synth_sim::SimOptions::default()
+        },
+    );
 
     let stdout = std::io::stdout();
     let mut out = stdout.lock();

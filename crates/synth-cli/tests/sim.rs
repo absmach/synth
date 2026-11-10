@@ -7,6 +7,9 @@ use std::path::{Path, PathBuf};
 use std::process::{Command, Output};
 use std::sync::atomic::{AtomicU64, Ordering};
 
+#[path = "../../synth-sim/tests/support/stub_build.rs"]
+mod stub_build;
+
 fn workspace_root() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("..")
@@ -64,8 +67,25 @@ fn scratch(label: &str) -> Scratch {
     Scratch::new(label)
 }
 
+fn stub_source() -> PathBuf {
+    Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("..")
+        .join("synth-sim")
+        .join("tests")
+        .join("support")
+        .join("stub_ngspice.rs")
+}
+
+fn fixtures_dir() -> PathBuf {
+    Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("..")
+        .join("synth-sim")
+        .join("tests")
+        .join("fixtures")
+}
+
 fn stub_ngspice(dir: &Path) -> PathBuf {
-    let built = PathBuf::from(env!("CARGO_BIN_EXE_synth_cli_stub"));
+    let built = stub_build::build_stub(&stub_source());
     let mut path = dir.join("ok");
     if let Some(extension) = built.extension() {
         path.set_extension(extension);
@@ -74,6 +94,11 @@ fn stub_ngspice(dir: &Path) -> PathBuf {
     std::os::unix::fs::symlink(&built, &path).expect("link stub");
     #[cfg(not(unix))]
     std::fs::copy(&built, &path).expect("copy stub");
+    std::fs::write(
+        dir.join("fixtures.path"),
+        fixtures_dir().display().to_string(),
+    )
+    .expect("write fixtures.path");
     path
 }
 
@@ -121,6 +146,8 @@ fn out_of_limit_exits_nonzero_with_004() {
     assert!(stdout.contains("FAIL vmid = 6"), "{stdout}");
     let stderr = String::from_utf8_lossy(&output.stderr);
     assert!(stderr.contains("E-SYNTH-SIM-004"), "{stderr}");
+    assert!(!stderr.contains("(?)"), "{stderr}");
+    assert!(stderr.contains("divider.sim.toml"), "{stderr}");
 }
 
 #[test]

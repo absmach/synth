@@ -7,6 +7,9 @@ use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::{Duration, Instant};
 
+#[path = "support/stub_build.rs"]
+mod stub_build;
+
 const DIVIDER: &str = r#"
 board "divider" {
   layers 2
@@ -92,6 +95,18 @@ board "floating" {
 }
 "#;
 
+/// `R1` has an unparseable value, so it has no built-in model.
+const NO_MODEL: &str = r#"
+board "no-model" {
+  layers 2
+  component R1: resistor "r_generic_0805" value "nope"
+  component R2: resistor "r_generic_0805" value "10k"
+  net "VCC" { R1.p1 }
+  net "GND" { R2.p2 }
+  connect R1.p2 -> R2.p1 as "MID"
+}
+"#;
+
 fn fixture(name: &str) -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("tests")
@@ -168,12 +183,25 @@ impl Drop for Scratch {
     }
 }
 
+fn fixtures_dir() -> PathBuf {
+    Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("tests")
+        .join("fixtures")
+}
+
+fn stub_source() -> PathBuf {
+    Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("tests")
+        .join("support")
+        .join("stub_ngspice.rs")
+}
+
 /// Link the stub binary into a scratch directory under `label`, which the
 /// stub reads from its own file name. The directory is unique per call so
-/// parallel tests never share a stub or its hang marker.
+/// parallel tests never share a stub or its hang markers.
 fn stub_ngspice(label: &str) -> (PathBuf, Scratch) {
     let scratch = Scratch::new(label);
-    let built = PathBuf::from(env!("CARGO_BIN_EXE_synth_sim_stub"));
+    let built = stub_build::build_stub(&stub_source());
     let mut path = scratch.path().join(label);
     if let Some(extension) = built.extension() {
         path.set_extension(extension);
@@ -182,12 +210,55 @@ fn stub_ngspice(label: &str) -> (PathBuf, Scratch) {
     std::os::unix::fs::symlink(&built, &path).expect("link stub");
     #[cfg(not(unix))]
     std::fs::copy(&built, &path).expect("copy stub");
+    std::fs::write(
+        scratch.path().join("fixtures.path"),
+        fixtures_dir().display().to_string(),
+    )
+    .expect("write fixtures.path");
     (path, scratch)
+}
+
+fn read_pid(path: &Path) -> u32 {
+    let deadline = Instant::now() + Duration::from_secs(2);
+    loop {
+        if let Ok(text) = std::fs::read_to_string(path) {
+            if let Ok(pid) = text.trim().parse() {
+                return pid;
+            }
+        }
+        assert!(
+            Instant::now() < deadline,
+            "no pid in {} after 2s",
+            path.display()
+        );
+        std::thread::sleep(Duration::from_millis(10));
+    }
+}
+
+#[cfg(unix)]
+fn pid_exists(pid: u32) -> bool {
+    std::process::Command::new("kill")
+        .args(["-0", &pid.to_string()])
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null())
+        .status()
+        .is_ok_and(|status| status.success())
+}
+
+#[cfg(unix)]
+fn assert_gone(pid: u32) {
+    let deadline = Instant::now() + Duration::from_secs(2);
+    while pid_exists(pid) {
+        assert!(Instant::now() < deadline, "pid {pid} survived the timeout");
+        std::thread::sleep(Duration::from_millis(25));
+    }
 }
 
 fn options(stub: &Path) -> synth_sim::SimOptions {
     synth_sim::SimOptions {
         ngspice: Some(stub.to_path_buf()),
+        design_path: Some(PathBuf::from("divider.synth")),
+        testbench_path: Some(PathBuf::from("divider.sim.toml")),
     }
 }
 
@@ -198,6 +269,21 @@ fn assert_explained(diagnostics: &[synth_diagnostics::Diagnostic]) {
             Some(format!("synth.docs/diagnostics/{}", diagnostic.code).as_str()),
             "diagnostic {} has no documentation link",
             diagnostic.code
+        );
+    }
+}
+
+fn assert_located(diagnostics: &[synth_diagnostics::Diagnostic], file: &str) {
+    for diagnostic in diagnostics {
+        assert_eq!(
+            diagnostic
+                .location
+                .as_ref()
+                .map(|location| location.file.as_str()),
+            Some(file),
+            "diagnostic {} is not located in {file}: {:?}",
+            diagnostic.code,
+            diagnostic.location
         );
     }
 }
@@ -223,6 +309,7 @@ fn divider_measures_pass() {
 
     assert!(report.passed(), "diagnostics: {:?}", report.diagnostics);
     assert_explained(&report.diagnostics);
+    assert_located(&report.diagnostics, "divider.sim.toml");
     assert!(
         report
             .diagnostics
@@ -345,6 +432,100 @@ fn a_single_connection_net_gives_008_naming_the_net() {
 }
 
 #[test]
+fn a_missing_model_carries_the_component_span() {
+    let board = board(NO_MODEL);
+    let testbench = testbench(DIVIDER_TB);
+    let options = synth_sim::SimOptions {
+        design_path: Some(PathBuf::from("no-model.synth")),
+        testbench_path: Some(PathBuf::from("no-model.sim.toml")),
+        ..synth_sim::SimOptions::default()
+    };
+
+    let report = synth_sim::simulate(&board, &testbench, &options);
+
+    let r1 = board
+        .components
+        .iter()
+        .find(|component| component.refdes == "R1")
+        .expect("R1");
+    let diagnostic = report
+        .diagnostics
+        .iter()
+        .find(|diagnostic| diagnostic.code == synth_sim::E_SYNTH_SIM_002)
+        .expect("missing model");
+    let location = diagnostic.location.as_ref().expect("location");
+    assert_eq!(location.file, "no-model.synth");
+    assert_eq!(location.span, r1.source_span);
+}
+
+#[test]
+fn a_floating_net_carries_the_net_span() {
+    let board = board(SERIES_CAPACITOR);
+    let testbench = testbench(DIVIDER_TB);
+    let options = synth_sim::SimOptions {
+        design_path: Some(PathBuf::from("series.synth")),
+        testbench_path: Some(PathBuf::from("series.sim.toml")),
+        ..synth_sim::SimOptions::default()
+    };
+
+    let report = synth_sim::simulate(&board, &testbench, &options);
+
+    let mid = board
+        .nets
+        .iter()
+        .find(|net| net.name == "MID")
+        .expect("MID");
+    let component = mid
+        .endpoints
+        .first()
+        .and_then(|endpoint| {
+            board
+                .components
+                .iter()
+                .find(|component| component.id == endpoint.component)
+        })
+        .expect("MID endpoint component");
+    let diagnostic = report
+        .diagnostics
+        .iter()
+        .find(|diagnostic| {
+            diagnostic.code == synth_sim::E_SYNTH_SIM_008
+                && diagnostic
+                    .message
+                    .as_deref()
+                    .is_some_and(|message| message.contains("MID"))
+        })
+        .expect("floating MID");
+    let location = diagnostic.location.as_ref().expect("location");
+    assert_eq!(location.file, "series.synth");
+    assert_eq!(location.span, component.source_span);
+}
+
+#[test]
+fn a_name_collision_is_located_in_the_sidecar() {
+    let board = board(COLLISION);
+    let testbench = testbench(DIVIDER_TB);
+    let options = synth_sim::SimOptions {
+        testbench_path: Some(PathBuf::from("collision.sim.toml")),
+        ..synth_sim::SimOptions::default()
+    };
+
+    let report = synth_sim::simulate(&board, &testbench, &options);
+
+    assert!(
+        report.diagnostics.iter().any(|diagnostic| {
+            diagnostic.code == synth_sim::E_SYNTH_SIM_007
+                && diagnostic
+                    .location
+                    .as_ref()
+                    .is_some_and(|location| location.file == "collision.sim.toml")
+        }),
+        "diagnostics: {:?}",
+        report.diagnostics
+    );
+}
+
+#[test]
 fn a_megaohm_resistor_emits_an_exponent() {
     let board = board(&DIVIDER.replace("value \"10k\"", "value \"1M\""));
     let testbench = testbench(DIVIDER_TB);
@@ -371,6 +552,7 @@ fn out_of_limit_value_gives_004() {
 
     assert!(!report.passed());
     assert_explained(&report.diagnostics);
+    assert_located(&report.diagnostics, "divider.sim.toml");
     assert!((report.measures[0].value - 6.0).abs() < 1e-9);
     assert!(!report.measures[0].passed());
     assert!(
@@ -409,6 +591,7 @@ fn missing_measurement_value_gives_003() {
 
     assert!(!report.passed());
     assert_explained(&report.diagnostics);
+    assert_located(&report.diagnostics, "divider.sim.toml");
     assert!(
         report
             .diagnostics
@@ -429,6 +612,7 @@ fn failed_measurement_gives_003() {
 
     assert!(!report.passed());
     assert_explained(&report.diagnostics);
+    assert_located(&report.diagnostics, "divider.sim.toml");
     assert!(
         report
             .diagnostics
@@ -453,6 +637,7 @@ fn missing_done_sentinel_gives_003() {
 
     assert!(!report.passed());
     assert_explained(&report.diagnostics);
+    assert_located(&report.diagnostics, "divider.sim.toml");
     assert!(
         report
             .diagnostics
@@ -477,6 +662,7 @@ fn non_finite_measurement_gives_003() {
 
     assert!(!report.passed());
     assert_explained(&report.diagnostics);
+    assert_located(&report.diagnostics, "divider.sim.toml");
     assert!(
         report
             .diagnostics
@@ -501,12 +687,13 @@ fn ngspice_error_gives_006() {
 
     assert!(!report.passed());
     assert_explained(&report.diagnostics);
+    assert_located(&report.diagnostics, "divider.sim.toml");
     assert!(
         report.diagnostics.iter().any(|d| {
             d.code == synth_sim::E_SYNTH_SIM_006
-                && d.message
-                    .as_deref()
-                    .is_some_and(|m| m.contains("unknown subckt"))
+                && d.message.as_deref().is_some_and(|m| {
+                    m.contains("exited with status 1") && m.contains("unknown subckt")
+                })
         }),
         "diagnostics: {:?}",
         report.diagnostics
@@ -525,12 +712,60 @@ fn singular_matrix_with_exit_zero_gives_006() {
 
     assert!(!report.passed());
     assert_explained(&report.diagnostics);
+    assert_located(&report.diagnostics, "divider.sim.toml");
     assert!(
         report.diagnostics.iter().any(|d| {
             d.code == synth_sim::E_SYNTH_SIM_006
                 && d.message
                     .as_deref()
                     .is_some_and(|m| m.contains("singular matrix"))
+        }),
+        "diagnostics: {:?}",
+        report.diagnostics
+    );
+}
+
+/// A capped stderr can drop the singular warning; a partial log is never a pass.
+#[test]
+fn truncated_output_gives_006() {
+    let board = board(DIVIDER);
+    let testbench = testbench(DIVIDER_TB);
+    let (stub, _dir) = stub_ngspice("truncated");
+
+    let report = synth_sim::simulate(&board, &testbench, &options(&stub));
+
+    assert!(!report.passed());
+    assert!(
+        report.diagnostics.iter().any(|diagnostic| {
+            diagnostic.code == synth_sim::E_SYNTH_SIM_006
+                && diagnostic
+                    .message
+                    .as_deref()
+                    .is_some_and(|message| message.contains("truncated log"))
+        }),
+        "diagnostics: {:?}",
+        report.diagnostics
+    );
+}
+
+/// The singular warning is evidence of a broken run even when the missing
+/// SYNTH_DONE would otherwise classify as a measurement failure.
+#[test]
+fn singular_matrix_without_done_gives_006() {
+    let board = board(DIVIDER);
+    let testbench = testbench(DIVIDER_TB);
+    let (stub, _dir) = stub_ngspice("singular-no-done");
+
+    let report = synth_sim::simulate(&board, &testbench, &options(&stub));
+
+    assert!(!report.passed());
+    assert!(
+        report.diagnostics.iter().any(|diagnostic| {
+            diagnostic.code == synth_sim::E_SYNTH_SIM_006
+                && diagnostic
+                    .message
+                    .as_deref()
+                    .is_some_and(|message| message.contains("singular matrix"))
         }),
         "diagnostics: {:?}",
         report.diagnostics
@@ -544,16 +779,11 @@ fn missing_binary_gives_001() {
     let scratch = Scratch::new("missing-binary");
     let missing = scratch.path().join("ngspice-does-not-exist");
 
-    let report = synth_sim::simulate(
-        &board,
-        &testbench,
-        &synth_sim::SimOptions {
-            ngspice: Some(missing),
-        },
-    );
+    let report = synth_sim::simulate(&board, &testbench, &options(&missing));
 
     assert!(!report.passed());
     assert_explained(&report.diagnostics);
+    assert_located(&report.diagnostics, "divider.sim.toml");
     assert!(
         report.diagnostics.iter().any(|d| {
             d.code == synth_sim::E_SYNTH_SIM_001
@@ -565,7 +795,7 @@ fn missing_binary_gives_001() {
 }
 
 #[test]
-fn timeout_gives_005_and_kills_the_process() {
+fn timeout_gives_005_and_kills_the_process_and_grandchild() {
     let board = board(DIVIDER);
     let testbench =
         testbench(&DIVIDER_TB.replace("[analysis]", "[options]\ntimeout = 1.0\n\n[analysis]"));
@@ -577,6 +807,7 @@ fn timeout_gives_005_and_kills_the_process() {
 
     assert!(!report.passed());
     assert_explained(&report.diagnostics);
+    assert_located(&report.diagnostics, "divider.sim.toml");
     assert!(
         report
             .diagnostics
@@ -586,15 +817,73 @@ fn timeout_gives_005_and_kills_the_process() {
         report.diagnostics
     );
     assert!(
-        elapsed < Duration::from_secs(5),
-        "timeout took {elapsed:?}, expected about 1s"
+        elapsed < Duration::from_secs(3),
+        "timeout took {elapsed:?}, expected about 1s (not timeout + drain grace)"
+    );
+
+    let hang = read_pid(&scratch.path().join("hang.pid"));
+    #[cfg(unix)]
+    {
+        let child = read_pid(&scratch.path().join("hang-child.pid"));
+        assert_gone(hang);
+        assert_gone(child);
+    }
+    #[cfg(not(unix))]
+    let _ = hang;
+}
+
+/// The review repro: a wrapper that starts ngspice without `exec` leaves
+/// ngspice in the wrapper's process group, not as the direct child.
+#[cfg(unix)]
+#[test]
+fn timeout_kills_a_non_exec_wrapper_and_its_grandchild() {
+    use std::os::unix::fs::PermissionsExt as _;
+
+    let board = board(DIVIDER);
+    let testbench =
+        testbench(&DIVIDER_TB.replace("[analysis]", "[options]\ntimeout = 1.0\n\n[analysis]"));
+    let (hang, scratch) = stub_ngspice("hang");
+    let wrapper = scratch.path().join("ngspice-wrapper.sh");
+    let wrapper_pid_file = scratch.path().join("wrapper.pid");
+    let child_pid_file = scratch.path().join("wrapper-child.pid");
+    std::fs::write(
+        &wrapper,
+        format!(
+            "#!/bin/sh\necho $$ > '{}'\n'{}' -b deck.cir &\necho $! > '{}'\nwait\n",
+            wrapper_pid_file.display(),
+            hang.display(),
+            child_pid_file.display()
+        ),
+    )
+    .expect("write wrapper");
+    let mut permissions = std::fs::metadata(&wrapper)
+        .expect("stat wrapper")
+        .permissions();
+    permissions.set_mode(0o755);
+    std::fs::set_permissions(&wrapper, permissions).expect("chmod wrapper");
+
+    let started = Instant::now();
+    let report = synth_sim::simulate(&board, &testbench, &options(&wrapper));
+    let elapsed = started.elapsed();
+
+    assert!(!report.passed());
+    assert!(
+        report
+            .diagnostics
+            .iter()
+            .any(|d| d.code == synth_sim::E_SYNTH_SIM_005),
+        "diagnostics: {:?}",
+        report.diagnostics
     );
     assert!(
-        scratch.path().join("hang-started").exists(),
-        "the stub never started"
+        elapsed < Duration::from_secs(3),
+        "wrapper timeout took {elapsed:?}, expected about 1s (not timeout + drain grace)"
     );
-    assert!(
-        !scratch.path().join("hang-finished").exists(),
-        "the process survived the timeout"
-    );
+
+    let wrapper_pid = read_pid(&wrapper_pid_file);
+    let child_pid = read_pid(&child_pid_file);
+    let grandchild_pid = read_pid(&scratch.path().join("hang-child.pid"));
+    assert_gone(wrapper_pid);
+    assert_gone(child_pid);
+    assert_gone(grandchild_pid);
 }

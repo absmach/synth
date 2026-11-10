@@ -13,22 +13,16 @@ deadline.
 
 ## Minimal reproduction
 
-A control block that never ends, or a switching circuit whose time step
-collapses below the budget:
+A testbench whose analysis cannot finish in the configured budget. Lower the
+budget to make the timeout easy to observe:
 
 ```toml
 [options]
 timeout = 1.0
 ```
 
-```spice
-.control
-let i = 0
-while i < 1
-  let i = i
-end
-.endc
-```
+A switching-converter transient is the usual cause: the default 10 second
+budget covers only a few milliseconds of simulation time.
 
 ## Suggested fix
 
