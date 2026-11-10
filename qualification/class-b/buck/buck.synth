@@ -55,7 +55,9 @@ board "buck" {
   }
 
   group "BUCK" color "#0072b2" {
-    component U1: regulator "lmr38010"
+    component U1: regulator "lmr38010" {
+      escape { method underpad }
+    }
     component C4: capacitor "c_generic_0603" value "100nF" dielectric "X7R" voltage "16V"
     component R_RT: resistor "r_generic_0603" value "33k" tolerance "1%"
     component L1: inductor "l_bourns_srn6045ta_6r8m" value "6.8uH"
