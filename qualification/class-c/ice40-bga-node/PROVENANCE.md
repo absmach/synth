@@ -12,7 +12,7 @@ The board is the output of agents driving `synth mcp` from prompts, followed by 
 
 | | |
 |---|---|
-| Synth, final exports | the binary built from commit `85e6fbe9` of branch `fix-bga-synth` of `JeffMboya/synth`, on `upstream/main` `2390cc98`. The branch is pull request #440 and carries the commits that are not in `upstream/main`: the filled-via land for a plane via in a pad, the filled-via ring rule, the repair for an isolated plane-net pad, the router's open-net names from the connectivity pass, the warning for an unknown manufacturer name, the repair that leaves a via in a pad where via-in-pad is allowed, the return-via rule that needs ground copper on two layers, the return via in a ground pad, the check that judges a connector with a hard edge hint against that edge, and the repair that moves a via off a component pad (keeping the pad joined by a short track) except where a track meets its copper off the centre |
+| Synth, final exports | the binary built from `upstream/main` `fbfd8d60`, the merge of pull request #440 (the return-via, via-in-pad, plane-via, multi-unit symbol and `edge_rate medium` changes this board needed are all in it). `synth --version` prints `synth 0.1.1`; `synth mcp --stdio` is the same binary |
 | KiCadRoutingTools | `9399bfb2` |
 | KiCad | 10.0.6 |
 | Registry inputs | [`reproduce/user-registry/`](reproduce/user-registry/): `ice40hx4k_bg121_nc`, `tlv70012_ddc`, `w25q128jvsiq_208mil`, `header_1x5_swd`, `tlv70012_1v2`, `stm32f103c8_usb`, `xtal_8mhz_3225_4p` |
