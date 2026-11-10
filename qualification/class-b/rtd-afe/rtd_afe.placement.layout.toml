@@ -467,3 +467,9 @@ hide = true
 
 [labels.J1]
 hide = true
+
+[labels.C_DVB]
+dx = 1.5
+dy = -2.2
+angle = 0.0
+priority = "hard"

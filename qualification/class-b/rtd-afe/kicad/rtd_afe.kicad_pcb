@@ -8342,7 +8342,7 @@
 		(property
 			"Reference"
 			"C_DVB"
-			(at 4.05 0 0)
+			(at 1.5 -2.2 0)
 			(layer "F.SilkS")
 			(uuid "01e73f26-4f2d-5279-bdbb-d33d7212804b")
 			(effects

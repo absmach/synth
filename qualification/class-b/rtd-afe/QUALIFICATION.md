@@ -404,12 +404,16 @@ Nothing below is signed off. The list is deliberately blunt.
   `/usr/share/kicad/...` (the exporter has no custom-model path), and the website PR
   has no USB-C body at all. The placeholder block in `agent-run/step-models/` is
   historical.
-- **C_DVB reference label is cut by the board edge (review comment, open)**:
-  C_DVB sits at x = 37.0 and its label at +4.05 mm, so the text spans about
-  x = 39 to 43 against an edge at 42.5 (the review image reads it as "C_DVE").
-  Fix: a `[labels.C_DVB]` entry in `rtd_afe.placement.layout.toml` that moves it
-  inboard or hides it, then re-export. Not done for the same reason.
-
+- **C_DVB reference label was cut by the board edge (review comment, fixed by hand)**:
+  the label sat at +4.05 mm from C_DVB (x = 37.0), spanning about x = 39 to 43 against an
+  edge at 42.5 (the review image reads it as "C_DVE"). It is now at (+1.5, -2.2) mm, set by
+  `[labels.C_DVB]` in `rtd_afe.placement.layout.toml` and written into the committed
+  `kicad/rtd_afe.kicad_pcb` by editing that one reference-label `(at …)`; no other line of the
+  board changed. This is a hand edit: the tree does not route, so the package could not be
+  regenerated (a re-export on 2026-11-10 left +3V3 and VREG_LX open). A fresh `kicad-cli pcb drc`
+  on the edited board shows only the 47 `lib_footprint_mismatch` entries; the committed
+  `reports/rtd_afe.kicad-drc.json` still lists the earlier `silk_edge_clearance` warning, which
+  is not re-recorded. The three `images/pcb-3d-*.png` were re-rendered from the edited board.
 - **SI/PI/RF review (designated reviewer)**: the 24-bit analog layout, the
   single ground plane, the 37.85 mm of VREF track from U3 to C_RV, the RC filter
   against the chosen ADC data rate, the IDAC output's 10 nF load and settling,
