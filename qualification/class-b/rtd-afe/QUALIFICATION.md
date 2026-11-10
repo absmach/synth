@@ -402,8 +402,10 @@ Nothing below is signed off. The list is deliberately blunt.
   `agent-run/step-models/` (sha256 `8f6a49a9…`), built from datasheet
   dimensions, not the vendor CAD of the HRO TYPE-C-31-M-12 (LCSC C165948).
   KiCad's stock library has no model for this part. Fix: take the vendor STEP,
-  put it in the repository, re-export and re-render. Not done, because
-  regenerating the package needs a tree that routes (see Reproducibility).
+  put it in the repository, re-export and re-render. The vendor-style STEP is now in
+  `../models/` (GrabCAD, offset and source in `../models/README.md`), but the committed
+  board, STEP and images still carry the placeholder, because regenerating the package
+  needs a tree that routes (see Reproducibility).
 - **C_DVB reference label is cut by the board edge (review comment, open)**:
   C_DVB sits at x = 37.0 and its label at +4.05 mm, so the text spans about
   x = 39 to 43 against an edge at 42.5 (the review image reads it as "C_DVE").
