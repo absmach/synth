@@ -479,4 +479,47 @@ Not yet applicable: revision-history page, table of contents, block diagram shee
 
 ---
 
+## DFM checks and `--dfm-gate`
+
+`export-kicad` reads the delivered `.kicad_pcb` and records JLCDFM-style
+findings in the `dfm` stage of the verification report. The stage lists the
+checks it does not make in its `unsupported` field, so a `pass` covers only
+what is not listed there.
+
+A Danger finding blocks a release export (`--gerbers` and similar) only when
+`--dfm-gate` is passed. Without it the stage is advisory: each finding is
+recorded in the report's `findings` list and printed with its rule and board
+location, and `release_ready` ignores the stage, including when the board
+cannot be read. `--force` does not override a gated block. Only the SMD/hole
+rules below are graded for JLCPCB; the PCBWay and OSH Park profiles publish no
+silk or pad-spacing figure here, so those rules are not run for them and are
+listed in `unsupported`.
+
+Which findings are safe to gate on, against JLCDFM on the CM4 carrier board:
+
+| Rule | Grade here | Authority |
+| --- | --- | --- |
+| `silk_to_pad` | Danger below 0.15 mm | Same grade as JLCDFM where both report; counts differ (34 vs 22 Danger + 27 Warning), so it can over- or under-report |
+| `silk_to_hole` | Danger below 0.15 mm | **Assumed**: JLC does not publish the floor. Do not gate on it alone |
+| `silk_line_width` | Warning below 0.15 mm | Advisory; counts are far above JLCDFM's (560 vs 50) |
+| `pad_to_pad` | Danger below 0.10 mm, Warning below 0.15 mm | Same order of magnitude as JLCDFM (12 + 50 vs 5 + 40); the 0.07 mm same-net merge tolerance is uncalibrated |
+| `pth_to_trace` | Warning below 0.28 mm (pads and vias) on the JLC profiles (pcbway and oshpark use their own 0.2 mm drill-to-copper floor) | Implemented but **known not to match JLCDFM**. Advisory only: it never blocks |
+
+Until these are calibrated, no rule is authoritative enough to block releases
+by default. Silk text and silk curves are counted, not measured; custom and
+trapezoid pads are measured by their bounding box (a trapezoid's `rect_delta`
+included) and counted. `pth_to_trace` measures through-hole pad drills and via
+barrels against tracks, arc tracks included. A track
+missing its start, mid or end point cannot be measured and is listed under
+`unsupported` as `track_read`. A `(drill ... (offset x y))` leaves the hole at the pad and
+moves the copper by the offset. A TOML profile that omits the DFM floors runs
+none of these rules (they read 0); only the built-in JLC profiles set them.
+`--dfm-gate` blocks a release export only: with no `--gerbers` or similar it
+is reported but nothing is stopped, and a board it cannot read blocks a gated
+release and marks the manifest `release_ready: false`.
+
+`crates/synth-drc/tests/dfm_committed_boards.rs` pins the findings on the
+committed RP2350 example and checks that the buck board is blocked only by
+silk rules, so a rule change that moves a count is visible in review.
+
 _See also: [`schematic-procedures.md`](schematic-procedures.md) for the export pipeline internals, [`diagnostics/README.md`](diagnostics/README.md) for `E-SYNTH-*` meanings, and [`protocol-v1.0.md`](protocol-v1.0.md) for the MCP wire format._
