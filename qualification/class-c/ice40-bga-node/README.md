@@ -49,7 +49,7 @@ The placement is pinned in [`ice40_bga_node.placement.layout.toml`](ice40_bga_no
 
 ## Sourcing
 
-Every BOM line of [`fab/ice40_bga_node_bom_orderable.csv`](fab/ice40_bga_node_bom_orderable.csv) has a manufacturer, MPN, package, rating, datasheet or page, distributor and order number from [`agent-run/tools/sourcing.csv`](agent-run/tools/sourcing.csv); 77 lines: 70 parts and 7 board features (2 mounting holes, 5 test points). Several LCSC pages show different stock figures between snapshots and are noted in the table; the part pages were read in 2026-11 and the stock is not firm. `J3` and `J4` are hand-fit through-hole parts.
+[`fab/ice40_bga_node_bom_orderable.csv`](fab/ice40_bga_node_bom_orderable.csv) has 77 lines: 70 parts, each with a manufacturer, MPN, package, rating, datasheet or page, distributor and order number from [`agent-run/tools/sourcing.csv`](agent-run/tools/sourcing.csv), and 7 board features (2 mounting holes, 5 test points) that are not parts and carry no identity. Several LCSC pages show different stock figures between snapshots and are noted in the table; the part pages were read in 2026-11 and the stock is not firm. `J3` and `J4` are hand-fit through-hole parts. The BOM-matching findings (`U1` and `Y1` below the 5-board quantity, `J4` without a match) are dispositioned in [`reports/assembly_dispositions_ceeb7444dd.md`](reports/assembly_dispositions_ceeb7444dd.md).
 
 ## Fabrication package
 
