@@ -1,6 +1,6 @@
 # JLCPCB spacing specification, quoted against the pad-spacing Danger item
 
-The JLCDFM report of this package ([`jlcdfm_pcb_dfm_2026-11-06_14-42_99da25a419.pdf`](jlcdfm_pcb_dfm_2026-11-06_14-42_99da25a419.pdf), Gerber content hash `99da25a419`) scores one "Pad spacing" measurement of 0.1 mm as Danger on the copper layers.
+The JLCDFM reports of this package ([`jlcdfm_pcb_dfm_2026-11-10_20-30_ceeb7444dd.pdf`](jlcdfm_pcb_dfm_2026-11-10_20-30_ceeb7444dd.pdf), Gerber content hash `ceeb7444dd`) and of the earlier one ([`jlcdfm_pcb_dfm_2026-11-06_14-42_99da25a419.pdf`](jlcdfm_pcb_dfm_2026-11-06_14-42_99da25a419.pdf), hash `99da25a419`) score one "Pad spacing" measurement of 0.1 mm as Danger on the copper layers.
 
 Measured on the delivered board (`export/ice40_bga_node.kicad_pcb`, the board the Gerbers come from): the closest pair is pad 14 of `U5` and a 0.6/0.3 mm via at (17.80, 42.30) mm, with a copper gap of 0.100 mm. Both are on net `CFG_SS_B`: the via is the layer change of the pad's own connection. The next closest gaps are 0.125 mm (pads of `J1` and `U5`, each against a via of another net) and 0.126 mm (`C1` pad 2 against a via).
 
