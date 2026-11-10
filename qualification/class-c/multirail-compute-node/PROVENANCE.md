@@ -12,9 +12,13 @@ The board is the output of an agent driving `synth mcp` from a prompt, followed 
 
 | | |
 |---|---|
-| Synth, final exports | the binary built from `upstream/main` `fbfd8d60`, which contains pull request #440. The final exports were made on commit `70717050` of that pull request's branch; the pull request merged after review fixes, and one fresh export of the committed source on `fbfd8d60` gives a PCB identical to the committed one after masking ids. The merged changes include `edge_rate medium` replacing the fast inference from a differential pin (a clock, RF or analog pin, a crystal and a switching node still prove a fast edge) |
+| Synth, final exports | the binary built from `upstream/main` `fbfd8d60`, the merge of pull request #440; the three final exports are made on it, and the routing record carries `source_revision` `fbfd8d60239391d17cdd81b9337fc0ee4ee22cd9`. The merged changes include `edge_rate medium` replacing the fast inference from a differential pin (a clock, RF or analog pin, a crystal and a switching node still prove a fast edge) |
 | KiCadRoutingTools | `9399bfb2` |
 | KiCad | 10.0.6 |
 | Registry inputs | [`reproduce/user-registry/`](reproduce/user-registry/): `stm32f103c8_usb`, `header_1x5_swd`, `tlv70012_ddc`, `w25q128jvsiq_208mil`, `xtal_8mhz_3225_4p` |
 
 Synth findings from this board: #425 (silkscreen), #428 (flattened symbol), #445 (the `edge_rate medium` tier), #449 (a keepout cannot be anchored to a part).
+
+## How an export is run
+
+`agent-run/tools/mcp_export.py <workspace> <synth binary> <out dir> <trace.json>` calls the `synth_export` tool of `synth mcp --stdio` on the workspace's `.synth`, its placement sidecar and `user-registry/`. It reads `KICAD_ROUTING_TOOLS_REPO` and `SYNTH_KRT_PYTHON` (KiCadRoutingTools `9399bfb2` and the Python of its virtual environment; the defaults in the file are the author's earlier machine), sets `SYNTH_USER_REGISTRY_DIR` to the workspace's `user-registry/`, and sets `SYNTH_SOURCE_REVISION`, which the routing record carries as `source_revision`. The workspace holds a `registry/parts` link to the build's registry. Each export goes into an empty directory. The routing record and the export traces carry paths of the machine the exports ran on.

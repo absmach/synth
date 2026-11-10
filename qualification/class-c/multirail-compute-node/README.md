@@ -72,7 +72,7 @@ The net classes set the widths (all declare `edge_rate slow` except `BUCK_SW`, `
 
 ## Sourcing
 
-Every BOM line of [`fab/multirail_compute_node_bom_orderable.csv`](fab/multirail_compute_node_bom_orderable.csv) has a manufacturer, MPN, package, rating, datasheet or page, distributor and order number from [`agent-run/tools/sourcing.csv`](agent-run/tools/sourcing.csv); 86 lines: 72 parts and 14 board features (2 mounting holes, 3 fiducials, 9 test points). Notes that carry a decision: the registry's LCSC number for the LP5907 pointed at a different part, so the table names `C80670`; `C6188`, the registry's number for the AMS1117-1.8, is the adjustable AMS1117-ADJ, so the table names the UMW AMS1117-1.8 (`C347220`), whose pinout against its own datasheet was not read; LCSC has no UNI-ROYAL 3.83 k, so the table names a Yageo (`C482840`); the Bourns inductor is listed by one distributor as being discontinued; the two registry "amber" LEDs are the yellow KENTO KT-0603Y (584 to 594 nm); the PESD5V0S1BA junction capacitance on the USB lines was not read; `J2`, `J3` and `J4` are through-hole hand-fit parts, and `J4` (Harwin) has no LCSC listing, so it is sourced from DigiKey. The part pages were read in 2026-11 and the stock is not firm.
+[`fab/multirail_compute_node_bom_orderable.csv`](fab/multirail_compute_node_bom_orderable.csv) has 86 lines: 72 parts, each with a manufacturer, MPN, package, rating, datasheet or page, distributor and order number from [`agent-run/tools/sourcing.csv`](agent-run/tools/sourcing.csv), and 14 board features (2 mounting holes, 3 fiducials, 9 test points) that are not parts and carry no identity. Notes that carry a decision: the registry's LCSC number for the LP5907 pointed at a different part, so the table names `C80670`; `C6188`, the registry's number for the AMS1117-1.8, is the adjustable AMS1117-ADJ, so the table names the UMW AMS1117-1.8 (`C347220`), whose pinout against its own datasheet was not read; LCSC has no UNI-ROYAL 3.83 k, so the table names a Yageo (`C482840`); the Bourns inductor is listed by one distributor as being discontinued; the two registry "amber" LEDs are the yellow KENTO KT-0603Y (584 to 594 nm); the PESD5V0S1BA junction capacitance on the USB lines was not read; `J2`, `J3` and `J4` are through-hole hand-fit parts, and `J4` (Harwin) has no LCSC listing, so it is sourced from DigiKey. The part pages were read in 2026-11 and the stock is not firm.
 
 ## Fabrication package
 
@@ -90,7 +90,7 @@ The source and sidecar in this directory were exported three times through the S
 | `bom.csv` | 3c09c9ee8b | 3c09c9ee8b | 3c09c9ee8b | byte-identical |
 | `pnp.csv` | c9336f28ac | c9336f28ac | c9336f28ac | byte-identical |
 | `multirail_compute_node.synth.kicad_pcb` | 1ddeac5ca3 | 1ddeac5ca3 | 1ddeac5ca3 | byte-identical |
-| `multirail_compute_node.kicad_pcb` | ee6880b1a4 | 9fb3bf0dff | 3e81581f51 | not byte-identical; identical after the router's and KiCad's random ids are masked (`639faf6090`) |
+| `multirail_compute_node.kicad_pcb` | 37f474efeb | 89094a8305 | 1ba9ed1c4a | not byte-identical; identical after the router's and KiCad's random ids are masked (`639faf6090`) |
 | Gerber and drill content | 89d4497fd0 | 89d4497fd0 | 89d4497fd0 | identical after the creation time in the headers is masked |
 
 Everything committed comes from export 1. The authoritative evidence of how the board was made is the prompts and the agent and MCP traces in [`agent-run/`](agent-run/) (see [`PROVENANCE.md`](PROVENANCE.md)).
@@ -101,7 +101,7 @@ Jeff Mboya is the independent PCB reviewer as well as the author of this pull re
 
 ### PCB review sign-off
 
-PCB review sign-off required by #39: JeffMboya, on the package in `fab/` (Gerber content hash `89d4497fd0`, STEP geometry hash `f5fe2d3c18`). The sign-off is JeffMboya's own: it is recorded per item as "verified and approved by JeffMboya" when Jeff states it.
+PCB review sign-off required by #40: JeffMboya, on the package in `fab/` (Gerber content hash `89d4497fd0`, STEP geometry hash `f5fe2d3c18`). The sign-off is JeffMboya's own: it is recorded per item as "verified and approved by JeffMboya" when Jeff states it.
 
 | Item | Signed off |
 |---|---|

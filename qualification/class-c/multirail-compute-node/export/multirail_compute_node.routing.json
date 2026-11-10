@@ -18,14 +18,14 @@
     "command": [
       "/home/jeff/synth-local/krtvenv/bin/python",
       "/home/jeff/synth-local/wt-bga/tools/kicad_routing_tools_route.py",
-      "/home/jeff/synth-local/work/classc4b/wsp5/exp1/multirail_compute_node.synth.kicad_pcb",
-      "/home/jeff/synth-local/work/classc4b/wsp5/exp1/multirail_compute_node.kicadroutingtools.kicad_pcb",
+      "/home/jeff/synth-local/work/classc4b/wsp5/exp_r1/multirail_compute_node.synth.kicad_pcb",
+      "/home/jeff/synth-local/work/classc4b/wsp5/exp_r1/multirail_compute_node.kicadroutingtools.kicad_pcb",
       "--repo",
       "/home/jeff/synth-local/krt",
       "--python",
       "/home/jeff/synth-local/krtvenv/bin/python",
       "--stats",
-      "/home/jeff/synth-local/work/classc4b/wsp5/exp1/multirail_compute_node.krt-stats.json",
+      "/home/jeff/synth-local/work/classc4b/wsp5/exp_r1/multirail_compute_node.krt-stats.json",
       "--escalation",
       "board",
       "--fab-tier",
@@ -60,8 +60,8 @@
     },
     "input_hash": "1ddeac5ca31f1fc0c09f541b119948d4a9c1215fea7db40ba1c977f2fc19befe",
     "output_hash": "",
-    "source_revision": null,
-    "duration_ms": 154333
+    "source_revision": "fbfd8d60239391d17cdd81b9337fc0ee4ee22cd9",
+    "duration_ms": 156160
   },
   "statistics": {
     "connected_nets": 42,
@@ -80,12 +80,12 @@
     }
   },
   "artifacts": {
-    "baseline": "/home/jeff/synth-local/work/classc4b/wsp5/exp1/multirail_compute_node.synth.kicad_pcb",
-    "candidate": "/home/jeff/synth-local/work/classc4b/wsp5/exp1/multirail_compute_node.kicadroutingtools.kicad_pcb",
-    "delivered": "/home/jeff/synth-local/work/classc4b/wsp5/exp1/multirail_compute_node.kicad_pcb",
-    "session_log": "/home/jeff/synth-local/work/classc4b/wsp5/exp1/multirail_compute_node.kicadroutingtools.log",
+    "baseline": "/home/jeff/synth-local/work/classc4b/wsp5/exp_r1/multirail_compute_node.synth.kicad_pcb",
+    "candidate": "/home/jeff/synth-local/work/classc4b/wsp5/exp_r1/multirail_compute_node.kicadroutingtools.kicad_pcb",
+    "delivered": "/home/jeff/synth-local/work/classc4b/wsp5/exp_r1/multirail_compute_node.kicad_pcb",
+    "session_log": "/home/jeff/synth-local/work/classc4b/wsp5/exp_r1/multirail_compute_node.kicadroutingtools.log",
     "ses": null,
-    "router_report": "/home/jeff/synth-local/work/classc4b/wsp5/exp1/multirail_compute_node.krt-stats.json",
+    "router_report": "/home/jeff/synth-local/work/classc4b/wsp5/exp_r1/multirail_compute_node.krt-stats.json",
     "connectivity_report": null,
     "drc_report": null
   },
