@@ -12,6 +12,8 @@ env = dict(os.environ)  # run under `. ~/env.sh` so the router, KiCad and Python
 # the server config an agent run uses names these two explicitly
 env.setdefault("KICAD_ROUTING_TOOLS_REPO", "/home/synth/krt")
 env.setdefault("SYNTH_KRT_PYTHON", "/home/synth/krtvenv/bin/python")
+# the routing record names the revision the binary was built from; the export call cannot know it
+env.setdefault("SYNTH_SOURCE_REVISION", "fbfd8d60239391d17cdd81b9337fc0ee4ee22cd9")
 env["SYNTH_USER_REGISTRY_DIR"] = os.path.join(ws, "user-registry")
 env["SYNTH_ROUTER_TIMEOUT_SECS"] = env.get("SYNTH_ROUTER_TIMEOUT_SECS", "900")
 rel = lambda path: os.path.relpath(path, ws)
