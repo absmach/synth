@@ -181,7 +181,7 @@ netlist/PCB parity is clean. This disposition has not been reviewed by a human.
 - `images/`: 3D top, bottom and angled views and the schematic. The 3D views
   are rendered with `kicad-cli pcb render`, the schematic with
   `kicad-cli sch export pdf` and `pdftoppm`.
-- `kicad/rtd_afe.step`: board STEP with 3D models, exported by `kicad-cli pcb export step --no-dnp`; the 3D views use the same models. Stock KiCad models, except the ADS124S08, RP2350 and USB-C receptacle, which use the simplified models in `agent-run/step-models/` (from datasheet dimensions, not vendor CAD). The mounting holes have no model (the KiCad MountingHole step files are not installed).
+- `kicad/rtd_afe.step`: board STEP with 3D models, exported by `kicad-cli pcb export step --no-dnp`; the 3D views use the same models. Stock KiCad models, except the ADS124S08 and RP2350, which use the simplified models in `agent-run/step-models/` (from datasheet dimensions, not vendor CAD), and the USB-C receptacle, which uses the GrabCAD model in `../models/` (see its README for source and offset). The STEP and the 3D images are made from a scratch copy of the board that names these models; the committed `kicad_pcb` still names KiCad's library path for the USB-C file, because the exporter has no custom-model path yet. The mounting holes have no model (the KiCad MountingHole step files are not installed).
 - `rtd_afe.synth`, `rtd_afe.placement.layout.toml`: the design sources.
 - `check.sh`: the acceptance check above.
 - `SHA256SUMS`: hashes of the artifacts.
