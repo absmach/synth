@@ -39,7 +39,7 @@ pub use loader::{
 };
 pub use part::{
     FootprintDimensions, LabelSide, Lifecycle, MatingFace, OperatingConditions, Part, PartId, Pin,
-    PinNumber, Provenance, ProvenanceSource, RequiredDecoupling,
+    PinNumber, Provenance, ProvenanceSource, RequiredDecoupling, SpiceDialect, SpiceModel,
 };
 
 /// Clean-room EasyEDA → KiCad footprint converter (Phase 15, R15.4).

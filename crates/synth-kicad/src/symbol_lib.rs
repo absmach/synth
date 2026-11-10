@@ -779,6 +779,7 @@ mod tests {
             ],
             required_decoupling: vec![],
             provenance: None,
+            spice: None,
         }
     }
 

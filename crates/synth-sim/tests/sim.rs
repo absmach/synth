@@ -212,6 +212,51 @@ board "no-model" {
 }
 "#;
 
+/// The AMS1117 part carries a `[spice]` model whose pin order is
+/// `vin, gnd, vout`, while the registry pins are `gnd, vout, vin`.
+const LDO: &str = r#"
+board "ldo" {
+  layers 2
+  component U1: regulator "ams1117_3v3"
+  component R1: resistor "r_generic_0805" value "1k"
+  net "VIN" { U1.vin }
+  net "GND" { U1.gnd, R1.p2 }
+  net "VOUT" { U1.vout, R1.p1 }
+}
+"#;
+
+const LDO_TB: &str = r#"
+ground = "GND"
+
+[[source]]
+net = "VIN"
+kind = "dc"
+dc = 5.0
+
+[analysis]
+op = true
+
+[[measure]]
+name = "vout"
+kind = "node_voltage"
+node = "VOUT"
+min = 3.25
+max = 3.35
+"#;
+
+/// Two regulators, each modelled, with conflicting vendor dialects.
+const LDO_MIXED: &str = r#"
+board "ldo-mixed" {
+  layers 2
+  component U1: regulator "ams1117_3v3"
+  component U2: regulator "ams1117_3v3_lt"
+  component R1: resistor "r_generic_0805" value "1k"
+  net "VIN" { U1.vin, U2.vin }
+  net "GND" { U1.gnd, U2.gnd, R1.p2 }
+  net "VOUT" { U1.vout, U2.vout, R1.p1 }
+}
+"#;
+
 fn fixture(name: &str) -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("tests")
@@ -381,7 +426,39 @@ fn options(stub: &Path) -> synth_sim::SimOptions {
         ngspice: Some(stub.to_path_buf()),
         design_path: Some(PathBuf::from("divider.synth")),
         testbench_path: Some(PathBuf::from("divider.sim.toml")),
+        registry_dirs: Vec::new(),
     }
+}
+
+fn registry_parts_dir() -> PathBuf {
+    Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("..")
+        .join("..")
+        .join("registry")
+        .join("parts")
+        .canonicalize()
+        .expect("workspace registry/parts")
+}
+
+fn ldo_options(stub: &Path) -> synth_sim::SimOptions {
+    synth_sim::SimOptions {
+        ngspice: Some(stub.to_path_buf()),
+        design_path: Some(PathBuf::from("ldo.synth")),
+        testbench_path: Some(PathBuf::from("ldo.sim.toml")),
+        registry_dirs: vec![registry_parts_dir()],
+    }
+}
+
+fn model_file(registry: &Path, name: &str, text: &str) {
+    std::fs::write(registry.join(name), text).expect("write model file");
+}
+
+fn patched_ams1117(patch: impl FnOnce(&mut synth_registry::SpiceModel)) -> synth_ir::Board {
+    board_with_registry(LDO, |registry| {
+        let mut part = registry.lookup("ams1117_3v3").expect("ams1117_3v3").clone();
+        patch(part.spice.as_mut().expect("[spice] model"));
+        registry.insert(part);
+    })
 }
 
 fn assert_explained(diagnostics: &[synth_diagnostics::Diagnostic]) {
@@ -1391,4 +1468,360 @@ fn timeout_kills_a_non_exec_wrapper_and_its_grandchild() {
     assert_gone(wrapper_pid);
     assert_gone(child_pid);
     assert_gone(grandchild_pid);
+}
+
+/// The model path is absolute and quoted; the `X` line follows
+/// `pin_order`, not the registry pin order.
+#[test]
+fn emits_golden_ldo_deck_with_registry_include() {
+    let board = board(LDO);
+    let testbench = testbench(LDO_TB);
+    let dirs = vec![registry_parts_dir()];
+
+    let deck =
+        synth_sim::emit_netlist_with_registry_dirs(&board, &testbench, &dirs).expect("deck emits");
+    let model = registry_parts_dir().join("spice").join("ams1117_3v3.lib");
+    let expected = std::fs::read_to_string(fixture("ldo-op.cir"))
+        .expect("golden deck")
+        .replace("{{MODEL}}", &model.display().to_string());
+
+    assert_eq!(deck, expected);
+    assert!(
+        deck.contains("XU1 n_VIN 0 n_VOUT ams1117_3v3 rout=100m"),
+        "deck:\n{deck}"
+    );
+}
+
+#[test]
+fn ldo_simulates_through_the_stub() {
+    let board = board(LDO);
+    let testbench = testbench(LDO_TB);
+    let (stub, _dir) = stub_ngspice("ldo");
+
+    let report = synth_sim::simulate(&board, &testbench, &ldo_options(&stub));
+
+    assert!(report.passed(), "diagnostics: {:?}", report.diagnostics);
+    let vout = report.measures[0].value;
+    assert!(
+        (vout - 3.29967).abs() < 5e-4,
+        "vout {vout} should be about 3.29967 V"
+    );
+}
+
+#[test]
+fn ldo_matches_real_ngspice() {
+    let Some(ngspice) = real_ngspice() else {
+        eprintln!("skipping: ngspice is not installed (sudo apt install ngspice)");
+        return;
+    };
+    let board = board(LDO);
+    let testbench = testbench(LDO_TB);
+
+    let report = synth_sim::simulate(&board, &testbench, &ldo_options(&ngspice));
+
+    assert!(report.passed(), "diagnostics: {:?}", report.diagnostics);
+    let vout = report.measures[0].value;
+    assert!(
+        (vout - 3.29967).abs() < 5e-4,
+        "vout {vout} should be about 3.29967 V"
+    );
+}
+
+#[test]
+fn a_bad_spice_pin_order_gives_002_naming_the_part() {
+    for pin_order in [
+        vec!["vin".to_string(), "gnd".to_string(), "nope".to_string()],
+        vec!["vin".to_string(), "gnd".to_string(), "vin".to_string()],
+        vec!["vin".to_string(), "gnd".to_string()],
+    ] {
+        let board = patched_ams1117(|spice| spice.pin_order = pin_order.clone());
+        let testbench = testbench(LDO_TB);
+
+        let diagnostics =
+            synth_sim::emit_netlist_with_registry_dirs(&board, &testbench, &[registry_parts_dir()])
+                .expect_err("bad pin_order");
+
+        assert!(
+            diagnostics.iter().any(|diagnostic| {
+                diagnostic.code == synth_sim::E_SYNTH_SIM_002
+                    && diagnostic.message.as_deref().is_some_and(|message| {
+                        message.contains("U1") && message.contains("ams1117_3v3")
+                    })
+            }),
+            "pin_order {pin_order:?}: {diagnostics:?}"
+        );
+    }
+}
+
+#[test]
+fn a_missing_spice_subckt_gives_002_naming_the_part() {
+    let board = patched_ams1117(|spice| spice.subckt = "no_such_subckt".to_string());
+    let testbench = testbench(LDO_TB);
+
+    let diagnostics =
+        synth_sim::emit_netlist_with_registry_dirs(&board, &testbench, &[registry_parts_dir()])
+            .expect_err("missing subckt");
+
+    assert!(
+        diagnostics.iter().any(|diagnostic| {
+            diagnostic.code == synth_sim::E_SYNTH_SIM_002
+                && diagnostic.message.as_deref().is_some_and(|message| {
+                    message.contains("U1")
+                        && message.contains("ams1117_3v3")
+                        && message.contains("no_such_subckt")
+                })
+        }),
+        "diagnostics: {diagnostics:?}"
+    );
+}
+
+/// A missing model file must not fail lowering; only the simulation reports it.
+#[test]
+fn a_missing_spice_model_file_gives_002_naming_the_part() {
+    let board = patched_ams1117(|spice| spice.file = "spice/does_not_exist.lib".to_string());
+    let testbench = testbench(LDO_TB);
+    let (stub, _dir) = stub_ngspice("ldo");
+
+    let report = synth_sim::simulate(&board, &testbench, &ldo_options(&stub));
+
+    assert!(!report.passed());
+    assert!(
+        report.diagnostics.iter().any(|diagnostic| {
+            diagnostic.code == synth_sim::E_SYNTH_SIM_002
+                && diagnostic.message.as_deref().is_some_and(|message| {
+                    message.contains("U1") && message.contains("ams1117_3v3")
+                })
+        }),
+        "diagnostics: {:?}",
+        report.diagnostics
+    );
+}
+
+#[test]
+fn mixed_spice_dialects_give_002_naming_both_parts() {
+    let board = board_with_registry(LDO_MIXED, |registry| {
+        let mut ps = registry.lookup("ams1117_3v3").expect("ams1117_3v3").clone();
+        ps.spice.as_mut().expect("[spice] model").dialect = Some(synth_registry::SpiceDialect::Ps);
+        registry.insert(ps.clone());
+        let mut lt = ps;
+        lt.id = synth_registry::PartId("ams1117_3v3_lt".to_string());
+        lt.spice.as_mut().expect("[spice] model").dialect = Some(synth_registry::SpiceDialect::Lt);
+        registry.insert(lt);
+    });
+    let testbench = testbench(LDO_TB);
+
+    let diagnostics =
+        synth_sim::emit_netlist_with_registry_dirs(&board, &testbench, &[registry_parts_dir()])
+            .expect_err("mixed dialects");
+
+    assert!(
+        diagnostics.iter().any(|diagnostic| {
+            diagnostic.code == synth_sim::E_SYNTH_SIM_002
+                && diagnostic.message.as_deref().is_some_and(|message| {
+                    ["U1", "ams1117_3v3", "U2", "ams1117_3v3_lt"]
+                        .iter()
+                        .all(|needle| message.contains(needle))
+                })
+        }),
+        "diagnostics: {diagnostics:?}"
+    );
+}
+
+#[test]
+fn control_and_shell_model_files_are_rejected() {
+    for (label, text) in [
+        (
+            "control.lib",
+            ".subckt ams1117_3v3 vin gnd vout\n.control\nop\n.endc\n.ends\n",
+        ),
+        (
+            "shell.lib",
+            ".subckt ams1117_3v3 vin gnd vout\nshell echo escaped\n.ends\n",
+        ),
+    ] {
+        let scratch = Scratch::new(label);
+        model_file(scratch.path(), label, text);
+        let board = patched_ams1117(|spice| spice.file = label.to_string());
+        let testbench = testbench(LDO_TB);
+
+        let diagnostics = synth_sim::emit_netlist_with_registry_dirs(
+            &board,
+            &testbench,
+            &[scratch.path().to_path_buf()],
+        )
+        .expect_err("forbidden directive");
+
+        assert!(
+            diagnostics.iter().any(|diagnostic| {
+                diagnostic.code == synth_sim::E_SYNTH_SIM_002
+                    && diagnostic
+                        .message
+                        .as_deref()
+                        .is_some_and(|message| message.contains("U1") && message.contains(label))
+            }),
+            "{label}: {diagnostics:?}"
+        );
+    }
+}
+
+#[test]
+fn verilog_a_and_encrypted_models_are_rejected() {
+    for (label, text) in [
+        (
+            "analog.va",
+            ".subckt ams1117_3v3 vin gnd vout\nanalog begin\nend\n.ends\n",
+        ),
+        (
+            "encrypted.lib",
+            "* $CDNENCSTART\n.subckt ams1117_3v3 vin gnd vout\n.ends\n",
+        ),
+    ] {
+        let scratch = Scratch::new(label);
+        model_file(scratch.path(), label, text);
+        let board = patched_ams1117(|spice| spice.file = label.to_string());
+        let testbench = testbench(LDO_TB);
+
+        let diagnostics = synth_sim::emit_netlist_with_registry_dirs(
+            &board,
+            &testbench,
+            &[scratch.path().to_path_buf()],
+        )
+        .expect_err("unsupported model format");
+
+        assert!(
+            diagnostics.iter().any(|diagnostic| {
+                diagnostic.code == synth_sim::E_SYNTH_SIM_002
+                    && diagnostic
+                        .message
+                        .as_deref()
+                        .is_some_and(|message| message.contains("U1"))
+            }),
+            "{label}: {diagnostics:?}"
+        );
+    }
+}
+
+#[test]
+fn a_model_file_outside_the_registry_dirs_is_rejected() {
+    let scratch = Scratch::new("outside");
+    let inside = scratch.path().join("inside");
+    let outside = scratch.path().join("outside");
+    std::fs::create_dir_all(&inside).expect("inside dir");
+    std::fs::create_dir_all(&outside).expect("outside dir");
+    let text = ".subckt ams1117_3v3 vin gnd vout\n.ends\n";
+    model_file(&outside, "escape.lib", text);
+    let absolute = outside.join("escape.lib").display().to_string();
+
+    for file in ["../outside/escape.lib".to_string(), absolute] {
+        let board = patched_ams1117(|spice| spice.file = file.clone());
+        let testbench = testbench(LDO_TB);
+
+        let diagnostics = synth_sim::emit_netlist_with_registry_dirs(
+            &board,
+            &testbench,
+            std::slice::from_ref(&inside),
+        )
+        .expect_err("outside the registry");
+
+        assert!(
+            diagnostics.iter().any(|diagnostic| {
+                diagnostic.code == synth_sim::E_SYNTH_SIM_002
+                    && diagnostic.message.as_deref().is_some_and(|message| {
+                        message.contains("U1") && message.contains("outside")
+                    })
+            }),
+            "file {file}: {diagnostics:?}"
+        );
+    }
+}
+
+/// Every endpoint of XIN is ignored, so the net is dropped from the deck.
+/// A measure on it must be a topology error at the design span, never a
+/// `v(n_XIN)` that fails later as `-003` at 0-0.
+#[test]
+fn a_measure_on_a_fully_ignored_net_gives_008_with_the_net_span() {
+    let board = board(IGNORED_CLOCK);
+    let testbench = testbench(
+        &DIVIDER_TB
+            .replacen(
+                "ground = \"GND\"\n",
+                "ground = \"GND\"\nignore = [\"U1\", \"Y1\"]\n",
+                1,
+            )
+            .replace(
+                "max = 6.3\n",
+                "max = 6.3\n\n[[measure]]\nname = \"xin\"\nkind = \"node_voltage\"\nnode = \"XIN\"\n",
+            ),
+    );
+    let options = synth_sim::SimOptions {
+        design_path: Some(PathBuf::from("ignored.synth")),
+        testbench_path: Some(PathBuf::from("ignored.sim.toml")),
+        ..synth_sim::SimOptions::default()
+    };
+
+    let report = synth_sim::simulate(&board, &testbench, &options);
+
+    let u1 = board
+        .components
+        .iter()
+        .find(|component| component.refdes == "U1")
+        .expect("U1");
+    let diagnostic = report
+        .diagnostics
+        .iter()
+        .find(|diagnostic| diagnostic.code == synth_sim::E_SYNTH_SIM_008)
+        .expect("ignored-net measure must be -008");
+    let location = diagnostic.location.as_ref().expect("location");
+    assert_eq!(location.file, "ignored.synth");
+    assert_eq!(location.span, u1.source_span);
+    assert!(
+        diagnostic
+            .message
+            .as_deref()
+            .is_some_and(|message| message.contains("xin") && message.contains("XIN")),
+        "{diagnostic:?}"
+    );
+    assert!(
+        !report
+            .diagnostics
+            .iter()
+            .any(|diagnostic| diagnostic.code == synth_sim::E_SYNTH_SIM_003),
+        "diagnostics: {:?}",
+        report.diagnostics
+    );
+}
+
+/// Ground and a net driven by a testbench source are real deck nodes even
+/// when no placed part supplies them.
+#[test]
+fn a_measure_on_ground_or_a_sourced_net_is_allowed() {
+    let board = board(DIVIDER);
+    let testbench = testbench(&DIVIDER_TB.replace(
+        "max = 6.3\n",
+        "max = 6.3\n\n[[measure]]\nname = \"vcc\"\nkind = \"node_voltage\"\nnode = \"VCC\"\n\n\
+             [[measure]]\nname = \"vgnd\"\nkind = \"node_voltage\"\nnode = \"GND\"\n",
+    ));
+
+    let deck = synth_sim::emit_netlist(&board, &testbench).expect("ground and VCC are nodes");
+
+    assert!(deck.contains("let m1 = v(n_VCC)"), "deck:\n{deck}");
+    assert!(deck.contains("let m2 = v(0)"), "deck:\n{deck}");
+}
+
+#[test]
+fn a_shared_model_file_is_included_once() {
+    let board = board_with_registry(LDO_MIXED, |registry| {
+        let mut second = registry.lookup("ams1117_3v3").expect("ams1117_3v3").clone();
+        second.id = synth_registry::PartId("ams1117_3v3_lt".to_string());
+        registry.insert(second);
+    });
+    let testbench = testbench(LDO_TB);
+
+    let deck =
+        synth_sim::emit_netlist_with_registry_dirs(&board, &testbench, &[registry_parts_dir()])
+            .expect("deck emits");
+
+    assert_eq!(deck.matches(".include ").count(), 1, "deck:\n{deck}");
+    assert!(deck.contains("XU1 "), "deck:\n{deck}");
+    assert!(deck.contains("XU2 "), "deck:\n{deck}");
 }

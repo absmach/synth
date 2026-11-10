@@ -2660,6 +2660,7 @@ mod channel_router_tests {
             kicad_footprint: None,
             footprint_dimensions: None,
             operating_conditions: None,
+            spice: None,
         }
     }
 
@@ -2949,6 +2950,7 @@ mod drc_tests {
             kicad_footprint: None,
             footprint_dimensions: None,
             operating_conditions: None,
+            spice: None,
         }
     }
 
@@ -3180,6 +3182,7 @@ mod net_termination_tests {
             kicad_footprint: None,
             footprint_dimensions: None,
             operating_conditions: None,
+            spice: None,
         }
     }
 

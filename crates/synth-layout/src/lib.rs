@@ -6696,6 +6696,7 @@ mod semantic_weights_tests {
             kicad_footprint: None,
             footprint_dimensions: None,
             operating_conditions: None,
+            spice: None,
         }
     }
 
@@ -7032,6 +7033,7 @@ mod soft_pin_swap_tests {
             kicad_footprint: None,
             footprint_dimensions: None,
             operating_conditions: None,
+            spice: None,
         }
     }
 
@@ -7282,6 +7284,7 @@ mod patterns_tests {
             kicad_footprint: None,
             footprint_dimensions: None,
             operating_conditions: None,
+            spice: None,
         }
     }
 
@@ -8041,6 +8044,7 @@ mod text_width_tests {
             kicad_footprint: None,
             footprint_dimensions: None,
             operating_conditions: None,
+            spice: None,
         }
     }
 
@@ -8625,6 +8629,7 @@ mod naming_tests {
             kicad_footprint: None,
             footprint_dimensions: None,
             operating_conditions: None,
+            spice: None,
         }
     }
 
@@ -8930,6 +8935,7 @@ mod documentation_tests {
             kicad_footprint: None,
             footprint_dimensions: None,
             operating_conditions: None,
+            spice: None,
         }
     }
 

@@ -3502,6 +3502,7 @@ mod tests {
             footprint_dimensions: None,
             operating_conditions: None,
             provenance: None,
+            spice: None,
         }
     }
 

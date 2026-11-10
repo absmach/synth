@@ -3304,12 +3304,23 @@ fn sim(input: &Path, registry_dir: Option<&Path>) -> anyhow::Result<u8> {
         }
     };
 
+    let mut registry_dirs = Vec::new();
+    if let Tier1Source::Dir(dir) = resolve_tier1(registry_dir) {
+        registry_dirs.push(dir);
+    }
+    if let Some(user) = synth_registry::user_registry_dir() {
+        if user.is_dir() && !registry_dirs.contains(&user) {
+            registry_dirs.push(user);
+        }
+    }
+
     let report = synth_sim::simulate(
         &board,
         &testbench,
         &synth_sim::SimOptions {
             design_path: Some(input.to_path_buf()),
             testbench_path: Some(sidecar.clone()),
+            registry_dirs,
             ..synth_sim::SimOptions::default()
         },
     );

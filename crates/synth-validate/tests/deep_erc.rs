@@ -1076,6 +1076,7 @@ fn multi_unit_rails_split_is_an_error() {
         footprint_dimensions: None,
         operating_conditions: None,
         provenance: None,
+        spice: None,
     };
     let board = Board {
         schematic_overflow: None,

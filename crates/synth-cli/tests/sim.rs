@@ -84,9 +84,9 @@ fn fixtures_dir() -> PathBuf {
         .join("fixtures")
 }
 
-fn stub_ngspice(dir: &Path) -> PathBuf {
+fn stub_ngspice(dir: &Path, label: &str) -> PathBuf {
     let built = stub_build::build_stub(&stub_source());
-    let mut path = dir.join("ok");
+    let mut path = dir.join(label);
     if let Some(extension) = built.extension() {
         path.set_extension(extension);
     }
@@ -114,7 +114,7 @@ fn run_sim(design: &Path, stub: &Path) -> Output {
 #[test]
 fn divider_example_prints_pass() {
     let dir = scratch("pass");
-    let stub = stub_ngspice(&dir);
+    let stub = stub_ngspice(&dir, "ok");
 
     let output = run_sim(&example_design(), &stub);
 
@@ -130,7 +130,7 @@ fn divider_example_prints_pass() {
 #[test]
 fn out_of_limit_exits_nonzero_with_004() {
     let dir = scratch("limit");
-    let stub = stub_ngspice(&dir);
+    let stub = stub_ngspice(&dir, "ok");
     let design = dir.join("divider.synth");
     std::fs::copy(example_design(), &design).expect("copy design");
     let sidecar = std::fs::read_to_string(example_sidecar())
@@ -153,7 +153,7 @@ fn out_of_limit_exits_nonzero_with_004() {
 #[test]
 fn malformed_sidecar_exits_nonzero_with_007() {
     let dir = scratch("malformed");
-    let stub = stub_ngspice(&dir);
+    let stub = stub_ngspice(&dir, "ok");
     let design = dir.join("divider.synth");
     std::fs::copy(example_design(), &design).expect("copy design");
     std::fs::write(dir.join("divider.sim.toml"), "gronud = \"GND\"\n").expect("write sidecar");
@@ -168,7 +168,7 @@ fn malformed_sidecar_exits_nonzero_with_007() {
 #[test]
 fn missing_sidecar_exits_nonzero_with_007() {
     let dir = scratch("no-sidecar");
-    let stub = stub_ngspice(&dir);
+    let stub = stub_ngspice(&dir, "ok");
     let design = dir.join("divider.synth");
     std::fs::copy(example_design(), &design).expect("copy design");
 
@@ -183,7 +183,7 @@ fn missing_sidecar_exits_nonzero_with_007() {
 #[test]
 fn a_measure_without_limits_prints_measured() {
     let dir = scratch("measured");
-    let stub = stub_ngspice(&dir);
+    let stub = stub_ngspice(&dir, "ok");
     let design = dir.join("divider.synth");
     std::fs::copy(example_design(), &design).expect("copy design");
     let sidecar = std::fs::read_to_string(example_sidecar())
@@ -207,4 +207,59 @@ fn a_measure_without_limits_prints_measured() {
     let stdout = String::from_utf8_lossy(&output.stdout);
     assert!(stdout.contains("MEASURED vmid = 6"), "{stdout}");
     assert!(!stdout.contains("PASS vmid"), "{stdout}");
+}
+
+/// The LDO part only simulates when `synth sim` passes the discovered
+/// registry directory through to model resolution.
+#[test]
+fn an_ldo_board_resolves_its_registry_model() {
+    let dir = scratch("ldo");
+    let stub = stub_ngspice(&dir, "ldo");
+    let design = dir.join("ldo.synth");
+    std::fs::write(
+        &design,
+        r#"
+board "ldo" {
+  layers 2
+  component U1: regulator "ams1117_3v3"
+  component R1: resistor "r_generic_0805" value "1k"
+  net "VIN" { U1.vin }
+  net "GND" { U1.gnd, R1.p2 }
+  net "VOUT" { U1.vout, R1.p1 }
+}
+"#,
+    )
+    .expect("write design");
+    std::fs::write(
+        dir.join("ldo.sim.toml"),
+        r#"
+ground = "GND"
+
+[[source]]
+net = "VIN"
+kind = "dc"
+dc = 5.0
+
+[analysis]
+op = true
+
+[[measure]]
+name = "vout"
+kind = "node_voltage"
+node = "VOUT"
+min = 3.25
+max = 3.35
+"#,
+    )
+    .expect("write sidecar");
+
+    let output = run_sim(&design, &stub);
+
+    assert!(
+        output.status.success(),
+        "stderr: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(stdout.contains("PASS vout = 3.29967"), "{stdout}");
 }

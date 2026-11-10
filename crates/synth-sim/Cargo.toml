@@ -14,6 +14,7 @@ workspace = true
 [dependencies]
 synth-diagnostics = { workspace = true }
 synth-ir = { workspace = true }
+synth-registry = { workspace = true }
 synth-router = { workspace = true }
 synth-validate = { workspace = true }
 serde = { workspace = true }
@@ -21,4 +22,3 @@ toml = { workspace = true }
 
 [dev-dependencies]
 synth-parser = { workspace = true }
-synth-registry = { workspace = true }

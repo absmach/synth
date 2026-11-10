@@ -4929,6 +4929,7 @@ mod tests {
             footprint_dimensions: None,
             operating_conditions: None,
             provenance: None,
+            spice: None,
         }
     }
 
@@ -5151,6 +5152,7 @@ mod tests {
             footprint_dimensions: None,
             operating_conditions: None,
             provenance: None,
+            spice: None,
         }
     }
 
@@ -5458,6 +5460,7 @@ mod tests {
                 reviewed_by: None,
                 ..Default::default()
             }),
+            spice: None,
         };
         let board = Board {
             schematic_overflow: None,

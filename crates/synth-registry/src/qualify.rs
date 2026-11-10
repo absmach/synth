@@ -1135,6 +1135,7 @@ mod tests {
                 label_hidden: None,
             }),
             operating_conditions: None,
+            spice: None,
         }
     }
 

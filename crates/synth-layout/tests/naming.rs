@@ -54,6 +54,7 @@ fn part(kind: &str, pins: Vec<RegPin>) -> Part {
         kicad_footprint: None,
         footprint_dimensions: None,
         operating_conditions: None,
+        spice: None,
     }
 }
 

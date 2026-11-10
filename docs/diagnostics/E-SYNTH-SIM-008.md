@@ -14,6 +14,12 @@ message names the net.
 A part listed under `ignore` in the testbench is removed before this check, so
 ignoring the only part that connects a net reports the now-floating net.
 
+A net whose endpoints are *all* ignored never becomes a deck node at all, so it
+is dropped rather than reported as floating. A `[[measure]]` that reads such a
+net is reported here, because the measurement would otherwise reach ngspice as
+a missing vector (`E-SYNTH-SIM-003`) with no useful location. Ground and nets
+driven by a testbench source remain valid measurement targets.
+
 Synth never turns on `rshunt` silently to hide the problem: a floating node is
 a design error, not a solver setting.
 

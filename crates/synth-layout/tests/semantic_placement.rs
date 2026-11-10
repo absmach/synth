@@ -57,6 +57,7 @@ fn part(kind: &str, pins: Vec<Pin>) -> Part {
         kicad_footprint: None,
         footprint_dimensions: None,
         operating_conditions: None,
+        spice: None,
     }
 }
 

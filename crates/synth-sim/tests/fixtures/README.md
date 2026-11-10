@@ -11,6 +11,7 @@ edit them by hand.
 | `divider-op` | 12 V across two 10 kΩ resistors, `op`, sane sentinels | 0 |
 | `led-op` | 5 V through 150 Ω into a 2.0 V / 20 mA LED, `op` | 0 |
 | `diode-op` | 5 V through 430 Ω into a 0.7 V / 10 mA diode, `op` | 0 |
+| `ldo-op` | 5 V into the AMS1117-3.3 `[spice]` model with a 1 kΩ load, `op` | 0 |
 | `divider-meas-failed` | `.meas tran vmax max v(ghost)` fails with `Error: measure ...` | 0 |
 | `divider-missing-value` | `let m0 = v(ghost)`, so `SYNTH_MEAS vmid` has no value | 0 |
 | `divider-missing-done` | control block ends without `echo SYNTH_DONE` | 0 |

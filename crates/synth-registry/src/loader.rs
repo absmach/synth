@@ -98,6 +98,9 @@ pub enum LoadError {
          a rule on a missing pin is never checked"
     )]
     UnknownDecouplingPin { path: PathBuf, pin: String },
+
+    #[error("part {path}: invalid [spice] model ({message})")]
+    InvalidSpiceModel { path: PathBuf, message: String },
 }
 
 /// Recursively load every `*.synth.toml` file under `root` into a
@@ -607,6 +610,10 @@ fn validate_part(path: &Path, part: &Part) -> Result<(), LoadError> {
         }
     }
 
+    if let Some(ref spice) = part.spice {
+        validate_spice_model(path, spice)?;
+    }
+
     let _ = PartId(part.id.as_str().to_string());
     Ok(())
 }
@@ -651,6 +658,59 @@ fn check_kicad_pin_roles(part: &Part, path: &Path) -> Result<(), LoadError> {
                 pin.name, pin.electrical_type, types, carries
             ),
         });
+    }
+    Ok(())
+}
+
+/// Shape checks only: whether the model file exists or defines the subcircuit
+/// is checked when a simulation runs, so `validate` and `export` never fail on
+/// a missing model.
+fn validate_spice_model(path: &Path, spice: &crate::part::SpiceModel) -> Result<(), LoadError> {
+    let invalid = |message: String| LoadError::InvalidSpiceModel {
+        path: path.to_path_buf(),
+        message,
+    };
+    if spice.file.trim().is_empty() {
+        return Err(invalid("`file` is empty".to_string()));
+    }
+    if spice.subckt.trim().is_empty() {
+        return Err(invalid("`subckt` is empty".to_string()));
+    }
+    if spice.pin_order.is_empty() {
+        return Err(invalid("`pin_order` is empty".to_string()));
+    }
+    let mut seen = HashSet::new();
+    for pin in &spice.pin_order {
+        if pin.trim().is_empty() {
+            return Err(invalid(
+                "`pin_order` contains an empty pin name".to_string(),
+            ));
+        }
+        if !seen.insert(pin) {
+            return Err(invalid(format!("`pin_order` lists pin `{pin}` twice")));
+        }
+    }
+    for (name, value) in &spice.params {
+        if name.is_empty() {
+            return Err(invalid("`params` contains an empty name".to_string()));
+        }
+        let mut chars = name.chars();
+        let valid_start = chars
+            .next()
+            .is_some_and(|c| c.is_ascii_alphabetic() || c == '_');
+        if !valid_start || !chars.all(|c| c.is_ascii_alphanumeric() || c == '_') {
+            return Err(invalid(format!(
+                "parameter name `{name}` must match `[A-Za-z_][A-Za-z0-9_]*`"
+            )));
+        }
+        if value.trim().is_empty() {
+            return Err(invalid(format!("parameter `{name}` has an empty value")));
+        }
+        if value.chars().any(char::is_whitespace) {
+            return Err(invalid(format!(
+                "parameter `{name}` value `{value}` must not contain whitespace"
+            )));
+        }
     }
     Ok(())
 }
@@ -1261,5 +1321,117 @@ label_side = "inside"
         let got = user_registry_dir().expect("override honoured");
         assert_eq!(got, PathBuf::from("/tmp/synth_user_test"));
         std::env::remove_var("SYNTH_USER_REGISTRY_DIR");
+    }
+
+    fn part_with_spice(spice: &str) -> String {
+        format!(
+            "id = \"spicey\"\nkind = \"regulator\"\n\
+             [[pins]]\nname = \"vin\"\nnumber = \"1\"\nelectrical_type = \"power_input\"\n\
+             [[pins]]\nname = \"vout\"\nnumber = \"2\"\nelectrical_type = \"power_output\"\n\
+             [[pins]]\nname = \"gnd\"\nnumber = \"3\"\nelectrical_type = \"power_input\"\n\
+             {spice}"
+        )
+    }
+
+    #[test]
+    fn a_spice_typo_fails_at_load_naming_the_file() {
+        let toml = part_with_spice(
+            "[spcie]\nfile = \"spice/spicey.lib\"\nsubckt = \"spicey\"\npin_order = [\"vin\"]\n",
+        );
+        let err = load_from_strs(&[("spicey.synth.toml", &toml)])
+            .expect_err("`spcie` is not a Part field");
+        assert!(
+            err.to_string().contains("spicey.synth.toml"),
+            "error must name the file: {err}"
+        );
+    }
+
+    #[test]
+    fn a_malformed_spice_table_fails_at_load() {
+        let toml = part_with_spice("[spice]\nsubckt = \"spicey\"\npin_order = [\"vin\"]\n");
+        let err =
+            load_from_strs(&[("spicey.synth.toml", &toml)]).expect_err("missing `file` field");
+        assert!(
+            err.to_string().contains("spicey.synth.toml"),
+            "error must name the file: {err}"
+        );
+    }
+
+    /// The model file is resolved only when a simulation runs, so `validate`
+    /// and `export` must not require it to exist.
+    #[test]
+    fn a_spice_model_with_a_missing_file_still_loads() {
+        let toml = part_with_spice(
+            "[spice]\nfile = \"spice/does_not_exist.lib\"\nsubckt = \"spicey\"\n\
+             pin_order = [\"vin\", \"gnd\", \"vout\"]\n\n[spice.params]\nrout = \"100m\"\n",
+        );
+        let reg = load_from_strs(&[("spicey.synth.toml", &toml)]).expect("shape is valid");
+        let spice = reg
+            .lookup("spicey")
+            .expect("spicey")
+            .spice
+            .as_ref()
+            .expect("spice table");
+        assert_eq!(spice.file, "spice/does_not_exist.lib");
+        assert_eq!(spice.params.get("rout").map(String::as_str), Some("100m"));
+    }
+
+    #[test]
+    fn malformed_spice_model_shapes_are_rejected_at_load() {
+        let cases = [
+            (
+                "empty file",
+                "[spice]\nfile = \"\"\nsubckt = \"s\"\npin_order = [\"vin\"]\n",
+            ),
+            (
+                "empty subckt",
+                "[spice]\nfile = \"m.lib\"\nsubckt = \"\"\npin_order = [\"vin\"]\n",
+            ),
+            (
+                "empty pin_order",
+                "[spice]\nfile = \"m.lib\"\nsubckt = \"s\"\npin_order = []\n",
+            ),
+            (
+                "empty pin name",
+                "[spice]\nfile = \"m.lib\"\nsubckt = \"s\"\npin_order = [\"vin\", \"\"]\n",
+            ),
+            (
+                "duplicate pin",
+                "[spice]\nfile = \"m.lib\"\nsubckt = \"s\"\npin_order = [\"vin\", \"vin\"]\n",
+            ),
+            (
+                "empty param name",
+                "[spice]\nfile = \"m.lib\"\nsubckt = \"s\"\npin_order = [\"vin\"]\n\
+                 [spice.params]\n\"\" = \"1\"\n",
+            ),
+            (
+                "invalid param name",
+                "[spice]\nfile = \"m.lib\"\nsubckt = \"s\"\npin_order = [\"vin\"]\n\
+                 [spice.params]\n\"1bad\" = \"1\"\n",
+            ),
+            (
+                "empty param value",
+                "[spice]\nfile = \"m.lib\"\nsubckt = \"s\"\npin_order = [\"vin\"]\n\
+                 [spice.params]\nrout = \"\"\n",
+            ),
+            (
+                "whitespace in param value",
+                "[spice]\nfile = \"m.lib\"\nsubckt = \"s\"\npin_order = [\"vin\"]\n\
+                 [spice.params]\nrout = \"1 0m\"\n",
+            ),
+        ];
+        for (label, spice) in cases {
+            let toml = part_with_spice(spice);
+            let err = load_from_strs(&[("spicey.synth.toml", &toml)])
+                .expect_err(&format!("{label} must fail"));
+            assert!(
+                err.to_string().contains("spicey.synth.toml"),
+                "{label}: error must name the file: {err}"
+            );
+            assert!(
+                matches!(err, LoadError::InvalidSpiceModel { .. }),
+                "{label}: expected InvalidSpiceModel, got {err:?}"
+            );
+        }
     }
 }

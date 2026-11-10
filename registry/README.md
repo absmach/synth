@@ -65,6 +65,29 @@ The `capabilities` list is the _semantic_ layer. A capability like
 [`PinCapability::required_electrical_type`](../crates/synth-registry/src/capability.rs));
 the loader rejects parts that violate this.
 
+### SPICE models
+
+A part can attach a SPICE subcircuit with an optional `[spice]` table:
+
+```toml
+[spice]
+file = "spice/ams1117_3v3.lib"      # relative to a registry directory
+subckt = "ams1117_3v3"
+pin_order = ["vin", "gnd", "vout"]  # part pin names in subckt terminal order
+dialect = "ps"                      # optional: ps | lt | ltps
+
+[spice.params]
+rout = "100m"
+```
+
+`pin_order` must name every pin of the part exactly once. The table's shape is
+checked at load; the model file and subckt are checked only when a simulation
+runs, so `validate` and `export` never fail on a missing file. Model files are
+resolved from the registry directories (the project `registry/parts` and the
+user registry); absolute paths are accepted only when they stay inside one.
+Every part in one run must use the same `dialect`, because ngspice applies one
+`ngbehavior` setting per run.
+
 ## Seed corpus
 
 The V1 seed corpus is intentionally small — three parts covering the

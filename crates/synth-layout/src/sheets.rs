@@ -746,6 +746,7 @@ mod tests {
             kicad_footprint: None,
             footprint_dimensions: None,
             operating_conditions: None,
+            spice: None,
         }
     }
 

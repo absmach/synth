@@ -21,6 +21,7 @@ use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use serde::Deserialize;
 use synth_diagnostics::{Diagnostic, DiagnosticBuilder, EntityRef, Location, Severity, Span};
 use synth_ir::{Board, Component, ComponentId, Net, NetId, PinId};
+use synth_registry::{SpiceDialect, SpiceModel};
 use synth_router::process::{run_cancellable, Invocation, KillScope};
 
 /// ngspice could not be found or started.
@@ -253,6 +254,8 @@ pub struct SimOptions {
     pub design_path: Option<PathBuf>,
     /// `<design>.sim.toml`, used to anchor run-level diagnostics.
     pub testbench_path: Option<PathBuf>,
+    /// Registry directories a `[spice]` model file may be resolved from.
+    pub registry_dirs: Vec<PathBuf>,
 }
 
 impl SimOptions {
@@ -341,11 +344,12 @@ pub fn sidecar_path(design: &Path) -> PathBuf {
 /// A missing measurement, a failed run or an out-of-limit value is an error
 /// diagnostic, never a silent pass.
 pub fn simulate(design: &Board, testbench: &Testbench, options: &SimOptions) -> SimReport {
-    let deck = match emit_netlist_at(
+    let (deck, dialect) = match emit_deck(
         design,
         testbench,
         options.design_path.as_deref(),
         options.testbench_path.as_deref(),
+        &options.registry_dirs,
     ) {
         Ok(deck) => deck,
         Err(diagnostics) => return failed(diagnostics, options.testbench_path.as_deref()),
@@ -355,7 +359,7 @@ pub fn simulate(design: &Board, testbench: &Testbench, options: &SimOptions) -> 
         .options
         .timeout
         .map_or(DEFAULT_TIMEOUT, Duration::from_secs_f64);
-    let run = match run_ngspice(&deck, options, timeout) {
+    let run = match run_ngspice(&deck, dialect, options, timeout) {
         Ok(run) => run,
         Err(diagnostic) => return failed(vec![diagnostic], options.testbench_path.as_deref()),
     };
@@ -482,12 +486,17 @@ const MAX_OUTPUT_BYTES: usize = 1 << 20;
 /// user's `~/.spiceinit` and concurrent runs cannot interfere.
 fn run_ngspice(
     deck: &str,
+    dialect: Option<SpiceDialect>,
     options: &SimOptions,
     timeout: Duration,
 ) -> Result<Invocation, Diagnostic> {
     let dir = TempDir::create()
         .map_err(|e| ngspice_error(format!("could not create a temporary directory: {e}")))?;
-    std::fs::write(dir.path().join(".spiceinit"), "set strict_errorhandling\n")
+    let mut spiceinit = String::from("set strict_errorhandling\n");
+    if let Some(dialect) = dialect {
+        let _ = writeln!(spiceinit, "set ngbehavior={}", dialect.name());
+    }
+    std::fs::write(dir.path().join(".spiceinit"), spiceinit)
         .map_err(|e| ngspice_error(format!("could not write .spiceinit: {e}")))?;
     std::fs::write(dir.path().join("deck.cir"), deck)
         .map_err(|e| ngspice_error(format!("could not write deck.cir: {e}")))?;
@@ -783,16 +792,27 @@ fn excerpt(text: &str) -> String {
 /// Emit the SPICE deck for a design and testbench. Stable order, no
 /// timestamps; every failure is returned as a diagnostic.
 pub fn emit_netlist(design: &Board, testbench: &Testbench) -> Result<String, Vec<Diagnostic>> {
-    emit_netlist_at(design, testbench, None, None)
+    emit_netlist_with_registry_dirs(design, testbench, &[])
+}
+
+/// Like [`emit_netlist`], but resolves `[spice]` model files under
+/// `registry_dirs`.
+pub fn emit_netlist_with_registry_dirs(
+    design: &Board,
+    testbench: &Testbench,
+    registry_dirs: &[PathBuf],
+) -> Result<String, Vec<Diagnostic>> {
+    emit_deck(design, testbench, None, None, registry_dirs).map(|(deck, _)| deck)
 }
 
 #[allow(clippy::too_many_lines)]
-fn emit_netlist_at(
+fn emit_deck(
     design: &Board,
     testbench: &Testbench,
     design_path: Option<&Path>,
     testbench_path: Option<&Path>,
-) -> Result<String, Vec<Diagnostic>> {
+    registry_dirs: &[PathBuf],
+) -> Result<(String, Option<SpiceDialect>), Vec<Diagnostic>> {
     if let Err(diagnostic) = testbench.validate_at(testbench_path) {
         return Err(vec![diagnostic]);
     }
@@ -898,6 +918,13 @@ fn emit_netlist_at(
         &mut diagnostics,
     );
 
+    let roots: Vec<PathBuf> = registry_dirs
+        .iter()
+        .filter_map(|dir| dir.canonicalize().ok())
+        .collect();
+    let mut include_lines = Vec::new();
+    let mut included_files: HashSet<PathBuf> = HashSet::new();
+    let mut dialects: Vec<(SpiceDialect, String, String)> = Vec::new();
     let mut element_lines = Vec::new();
     let mut model_lines = Vec::new();
     let mut seen_elements: HashMap<String, String> = HashMap::new();
@@ -912,47 +939,104 @@ fn emit_netlist_at(
                 continue;
             }
         };
-        let pin_count = component.part.as_ref().map_or(0, |part| part.pins.len());
-        if pin_count != 2 {
-            diagnostics.push(no_model_error(
-                component,
-                &format!("a two-terminal model needs 2 pins, part has {pin_count}"),
-                design_path,
-            ));
-            continue;
-        }
-        let [first, second] = model.pins();
-        let mut nodes = Vec::with_capacity(2);
-        let mut connected = true;
-        for index in [first, second] {
-            if let Some(net_id) = pin_net.get(&(component.id, PinId(index))) {
-                nodes.push(node_by_net[net_id].clone());
-            } else {
-                diagnostics.push(with_location_span(
-                    sim_builder(
-                        E_SYNTH_SIM_008,
-                        Severity::Error,
-                        "floating node or no DC path",
-                    )
-                    .message(format!(
-                        "component `{}` pin {} is not connected to a net",
-                        component.refdes,
-                        index + 1
-                    ))
-                    .primary_entity(EntityRef::Component {
-                        id: component.refdes.clone(),
-                    })
-                    .build(),
-                    design_path,
-                    component.source_span,
-                ));
-                connected = false;
-                break;
+        let nodes = if let Model::Subckt = &model {
+            let part = component
+                .part
+                .as_ref()
+                .expect("a subcircuit model comes from a registry part");
+            let spice = part
+                .spice
+                .as_ref()
+                .expect("a subcircuit model comes from `[spice]`");
+            let indexes = match subckt_pin_indexes(part, spice) {
+                Ok(indexes) => indexes,
+                Err(message) => {
+                    diagnostics.push(no_model_error(component, &message, design_path));
+                    continue;
+                }
+            };
+            let file = match resolve_spice_model(spice, &roots) {
+                Ok(file) => file,
+                Err(message) => {
+                    diagnostics.push(no_model_error(component, &message, design_path));
+                    continue;
+                }
+            };
+            if included_files.insert(file.clone()) {
+                let Some(path) = file.to_str() else {
+                    diagnostics.push(no_model_error(
+                        component,
+                        "model file path is not valid UTF-8",
+                        design_path,
+                    ));
+                    continue;
+                };
+                if path.contains('"') || path.contains(['\n', '\r']) {
+                    diagnostics.push(no_model_error(
+                        component,
+                        &format!("model file path `{path}` cannot be quoted in an `.include`"),
+                        design_path,
+                    ));
+                    continue;
+                }
+                include_lines.push(format!(".include \"{path}\""));
             }
-        }
-        if !connected {
-            continue;
-        }
+            if let Some(dialect) = spice.dialect {
+                if let Some((known, known_refdes, known_part)) = dialects.first() {
+                    if *known != dialect {
+                        diagnostics.push(no_model_error(
+                            component,
+                            &format!(
+                                "SPICE dialect `{}` conflicts with `{known_refdes}` \
+                                 (`{known_part}`) using `{}`; all parts in one run must agree",
+                                dialect.name(),
+                                known.name()
+                            ),
+                            design_path,
+                        ));
+                    }
+                }
+                if !dialects.iter().any(|(known, _, _)| *known == dialect) {
+                    dialects.push((
+                        dialect,
+                        component.refdes.clone(),
+                        part.id.as_str().to_string(),
+                    ));
+                }
+            }
+            match connected_nodes(
+                component,
+                &indexes,
+                &pin_net,
+                &node_by_net,
+                design_path,
+                &mut diagnostics,
+            ) {
+                Some(nodes) => nodes,
+                None => continue,
+            }
+        } else {
+            let pin_count = component.part.as_ref().map_or(0, |part| part.pins.len());
+            if pin_count != 2 {
+                diagnostics.push(no_model_error(
+                    component,
+                    &format!("a two-terminal model needs 2 pins, part has {pin_count}"),
+                    design_path,
+                ));
+                continue;
+            }
+            match connected_nodes(
+                component,
+                &model.pins(),
+                &pin_net,
+                &node_by_net,
+                design_path,
+                &mut diagnostics,
+            ) {
+                Some(nodes) => nodes,
+                None => continue,
+            }
+        };
 
         let letter = model.letter();
         let name = format!("{letter}{}", sanitize(&component.refdes));
@@ -990,9 +1074,30 @@ fn emit_netlist_at(
                     DIODE_EMISSION_COEFFICIENT
                 ));
             }
+            Model::Subckt => {
+                let spice = component
+                    .part
+                    .as_ref()
+                    .and_then(|part| part.spice.as_ref())
+                    .expect("a subcircuit model comes from `[spice]`");
+                let mut params = String::new();
+                for (name, value) in &spice.params {
+                    let _ = write!(params, " {name}={value}");
+                }
+                element_lines.push(format!(
+                    "{name} {} {}{params}",
+                    nodes.join(" "),
+                    spice.subckt
+                ));
+            }
         }
     }
 
+    let sourced: HashSet<&str> = testbench
+        .source
+        .iter()
+        .map(|source| source.net.as_str())
+        .collect();
     let mut measure_lines = Vec::new();
     for (index, measure) in testbench.measure.iter().enumerate() {
         let Some(net) = net_by_name.get(measure.node.as_str()) else {
@@ -1002,6 +1107,24 @@ fn emit_netlist_at(
             )));
             continue;
         };
+        let simulated = net
+            .endpoints
+            .iter()
+            .any(|endpoint| !ignored_ids.contains(&endpoint.component));
+        if !simulated && net.id != ground.id && !sourced.contains(net.name.as_str()) {
+            diagnostics.push(with_location_span(
+                topology_error(
+                    &net.name,
+                    format!(
+                        "measure `{}` reads net `{}`, but every part on it is ignored",
+                        measure.name, net.name
+                    ),
+                ),
+                design_path,
+                net_span(design, net),
+            ));
+            continue;
+        }
         let node = &node_by_net[&net.id];
         measure_lines.push(format!(
             "let m{index} = v({node})\necho SYNTH_MEAS {} $&m{index}",
@@ -1019,6 +1142,9 @@ fn emit_netlist_at(
     for line in source_lines {
         let _ = writeln!(deck, "{line}");
     }
+    for line in include_lines {
+        let _ = writeln!(deck, "{line}");
+    }
     for line in element_lines {
         let _ = writeln!(deck, "{line}");
     }
@@ -1030,7 +1156,193 @@ fn emit_netlist_at(
         let _ = writeln!(deck, "{line}");
     }
     deck.push_str("echo SYNTH_DONE\n.endc\n.end\n");
-    Ok(deck)
+    let dialect = dialects.first().map(|(dialect, _, _)| *dialect);
+    Ok((deck, dialect))
+}
+
+/// Map a part's `[spice] pin_order` to pin indexes, in subcircuit terminal
+/// order. Every pin of the part must appear exactly once.
+fn subckt_pin_indexes(part: &synth_registry::Part, spice: &SpiceModel) -> Result<Vec<u32>, String> {
+    let mut seen = HashSet::new();
+    let mut indexes = Vec::with_capacity(spice.pin_order.len());
+    for name in &spice.pin_order {
+        if !seen.insert(name.as_str()) {
+            return Err(format!("`[spice] pin_order` lists pin `{name}` twice"));
+        }
+        let Some(index) = part.pins.iter().position(|pin| &pin.name == name) else {
+            return Err(format!(
+                "`[spice] pin_order` names pin `{name}`, which the part does not have"
+            ));
+        };
+        indexes.push(index as u32);
+    }
+    for pin in &part.pins {
+        if !seen.contains(pin.name.as_str()) {
+            return Err(format!(
+                "`[spice] pin_order` omits pin `{}`; list every pin in subcircuit terminal order",
+                pin.name
+            ));
+        }
+    }
+    Ok(indexes)
+}
+
+/// Resolve and check a model file under the canonical registry directories.
+fn resolve_spice_model(spice: &SpiceModel, roots: &[PathBuf]) -> Result<PathBuf, String> {
+    if roots.is_empty() {
+        return Err(format!(
+            "model file `{}` cannot be resolved because no registry directory is available",
+            spice.file
+        ));
+    }
+    let configured = Path::new(&spice.file);
+    if configured.is_absolute() {
+        let canonical = configured
+            .canonicalize()
+            .map_err(|error| format!("model file `{}` is not readable: {error}", spice.file))?;
+        if !roots.iter().any(|root| canonical.starts_with(root)) {
+            return Err(format!(
+                "model file `{}` is outside the registry directories",
+                spice.file
+            ));
+        }
+        check_model_file(&canonical, &spice.subckt)?;
+        return Ok(canonical);
+    }
+    let mut found_outside = false;
+    for root in roots {
+        let candidate = root.join(configured);
+        if !candidate.exists() {
+            continue;
+        }
+        let canonical = candidate
+            .canonicalize()
+            .map_err(|error| format!("model file `{}` is not readable: {error}", spice.file))?;
+        if roots.iter().any(|root| canonical.starts_with(root)) {
+            check_model_file(&canonical, &spice.subckt)?;
+            return Ok(canonical);
+        }
+        found_outside = true;
+    }
+    if found_outside {
+        Err(format!(
+            "model file `{}` resolves outside the registry directories",
+            spice.file
+        ))
+    } else {
+        Err(format!(
+            "model file `{}` was not found under the registry directories",
+            spice.file
+        ))
+    }
+}
+
+/// Reject model files ngspice cannot safely run, and require the named
+/// subcircuit to be present.
+fn check_model_file(path: &Path, subckt: &str) -> Result<(), String> {
+    let verilog_a = path
+        .extension()
+        .and_then(|extension| extension.to_str())
+        .is_some_and(|extension| {
+            matches!(
+                extension.to_ascii_lowercase().as_str(),
+                "va" | "vams" | "vhd" | "vhdl"
+            )
+        });
+    if verilog_a {
+        return Err(format!(
+            "model file `{}` is a Verilog-A/HDL model, which ngspice cannot run",
+            path.display()
+        ));
+    }
+    let text = std::fs::read_to_string(path)
+        .map_err(|error| format!("model file `{}` is not readable: {error}", path.display()))?;
+    let lower = text.to_ascii_lowercase();
+    if lower.contains("analog begin") {
+        return Err(format!(
+            "model file `{}` is a Verilog-A model, which ngspice cannot run",
+            path.display()
+        ));
+    }
+    for marker in ["$cdnencstart", "$encrypted_lib", "ltspice encrypted file"] {
+        if lower.contains(marker) {
+            return Err(format!(
+                "model file `{}` is encrypted, which ngspice cannot run",
+                path.display()
+            ));
+        }
+    }
+    for line in text.lines() {
+        let trimmed = line.trim_start();
+        if trimmed.is_empty() || trimmed.starts_with('*') {
+            continue;
+        }
+        let directive = trimmed.to_ascii_lowercase();
+        for forbidden in [".control", ".endc", "shell", "system"] {
+            if directive.starts_with(forbidden) {
+                return Err(format!(
+                    "model file `{}` contains `{forbidden}`, which is not allowed in a model",
+                    path.display()
+                ));
+            }
+        }
+    }
+    let found = text.lines().any(|line| {
+        let trimmed = line.trim_start();
+        if trimmed.starts_with('*') {
+            return false;
+        }
+        let mut tokens = trimmed.split_whitespace();
+        tokens
+            .next()
+            .is_some_and(|token| token.eq_ignore_ascii_case(".subckt"))
+            && tokens
+                .next()
+                .is_some_and(|token| token.eq_ignore_ascii_case(subckt))
+    });
+    if !found {
+        return Err(format!(
+            "model file `{}` does not define `.subckt {subckt}`",
+            path.display()
+        ));
+    }
+    Ok(())
+}
+
+fn connected_nodes(
+    component: &Component,
+    pin_indexes: &[u32],
+    pin_net: &HashMap<(ComponentId, PinId), NetId>,
+    node_by_net: &HashMap<NetId, String>,
+    design_path: Option<&Path>,
+    diagnostics: &mut Vec<Diagnostic>,
+) -> Option<Vec<String>> {
+    let mut nodes = Vec::with_capacity(pin_indexes.len());
+    for &index in pin_indexes {
+        let Some(net_id) = pin_net.get(&(component.id, PinId(index))) else {
+            diagnostics.push(with_location_span(
+                sim_builder(
+                    E_SYNTH_SIM_008,
+                    Severity::Error,
+                    "floating node or no DC path",
+                )
+                .message(format!(
+                    "component `{}` pin {} is not connected to a net",
+                    component.refdes,
+                    index + 1
+                ))
+                .primary_entity(EntityRef::Component {
+                    id: component.refdes.clone(),
+                })
+                .build(),
+                design_path,
+                component.source_span,
+            ));
+            return None;
+        };
+        nodes.push(node_by_net[net_id].clone());
+    }
+    Some(nodes)
 }
 
 fn net_span(design: &Board, net: &Net) -> Span {
@@ -1171,6 +1483,8 @@ enum Model {
         saturation_current: f64,
         pins: [u32; 2],
     },
+    /// A registry `[spice]` subcircuit; its terminals come from `pin_order`.
+    Subckt,
 }
 
 impl Model {
@@ -1178,6 +1492,7 @@ impl Model {
         match self {
             Self::Value { letter, .. } => letter,
             Self::Diode { .. } => "D",
+            Self::Subckt => "X",
         }
     }
 
@@ -1185,6 +1500,7 @@ impl Model {
         match self {
             Self::Value { .. } => [0, 1],
             Self::Diode { pins, .. } => *pins,
+            Self::Subckt => unreachable!("subcircuit pins come from pin_order"),
         }
     }
 }
@@ -1196,6 +1512,15 @@ const DIODE_EMISSION_COEFFICIENT: f64 = 2.0;
 const THERMAL_VOLTAGE_27C: f64 = 0.025_864_925_786_328_753;
 
 fn model_for(component: &Component) -> Result<Model, String> {
+    // A registry `[spice]` table wins over every built-in model, so any
+    // kind (a diode, a regulator) can carry a real subcircuit.
+    if component
+        .part
+        .as_ref()
+        .is_some_and(|part| part.spice.is_some())
+    {
+        return Ok(Model::Subckt);
+    }
     let (letter, parse) = match component.kind.as_str() {
         "diode" | "led" => return diode_model(component),
         "resistor" => (
