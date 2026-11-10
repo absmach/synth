@@ -366,6 +366,14 @@ hide = true       # hide it; `hide = false` shows a part file's hidden label
 
 A hidden label takes no room. A sidecar entry beats the part file, and a hard offset is not checked for collisions but is pulled back inside the board edge. `angle` and `priority` apply to an offset: without `dx` or `dy` they do nothing, and if only one of the two is given the other counts as 0. A designator that names no part is ignored. A sidecar that does not parse is ignored as a whole, so a typo in one entry (for example `priority = "firm"`) drops every label entry and every part position in that file. The sidecar schema version is unchanged: the `labels` table is optional, and an older file without it loads as before.
 
+### Fine-pitch return-via advisory (opt-in)
+
+`--fine-pitch-return-via-advisory` (env `SYNTH_FINE_PITCH_RETURN_VIA_ADVISORY=1`,
+MCP `fine_pitch_return_via_advisory`) lists a missing fast-edge return via
+beside a fine-pitch pad row as an advisory instead of a blocking finding.
+Default off. It relaxes a signal-integrity gate, so use it only with
+signal-integrity review sign-off and record that sign-off with the board.
+
 ---
 
 ## 5. Fabrication exports

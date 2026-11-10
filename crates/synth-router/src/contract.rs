@@ -524,6 +524,10 @@ pub struct RouteRequest {
     /// they keep the return via, and look for it in the wider medium-edge window.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub return_via_medium_nets: Vec<String>,
+    /// Opt-in: a missing fast-edge return via beside a fine-pitch pad row is an
+    /// advisory instead of blocking. Off by default; needs SI-review sign-off.
+    #[serde(default)]
+    pub fine_pitch_return_via_advisory: bool,
     /// Nets the design pins to copper layers (`netclass { layers … }`), by
     /// name, with the layers each may use. An engine that supports the
     /// constraint routes these on their layers before anything else and the
@@ -726,6 +730,7 @@ impl RouteRequest {
             ground_nets: Vec::new(),
             return_via_critical_nets: None,
             return_via_medium_nets: Vec::new(),
+            fine_pitch_return_via_advisory: false,
             net_layers: Vec::new(),
         }
     }

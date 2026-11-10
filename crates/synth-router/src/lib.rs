@@ -397,7 +397,8 @@ fn finalize(
     }
     repair_unavailable.extend(repair_dropped_stubs(&candidate.candidate_path));
     let mut repair_advisory: Vec<String> = Vec::new();
-    let mut ground = island_vias::Ground::new(&request.ground_nets);
+    let mut ground = island_vias::Ground::new(&request.ground_nets)
+        .with_fine_pitch_advisory(request.fine_pitch_return_via_advisory);
     if let Some(critical) = &request.return_via_critical_nets {
         ground = ground.with_critical(critical);
     }

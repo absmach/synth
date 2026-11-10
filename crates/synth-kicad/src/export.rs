@@ -467,11 +467,16 @@ fn export_inner(
     // external router, which reads this file and writes its own candidate
     // back; Synth does not synthesize traces here, so nothing downstream
     // can mistake them for router output.
-    let (label_overrides, fixed_vias) = sidecars
+    let placement_sidecar = sidecars
         .placement_path()
-        .and_then(synth_layout::sidecar::SidecarLayout::load_from_file)
-        .map(|sidecar| (sidecar.labels, sidecar.vias))
+        .and_then(synth_layout::sidecar::SidecarLayout::load_from_file);
+    let (label_overrides, fixed_vias) = placement_sidecar
+        .as_ref()
+        .map(|sidecar| (sidecar.labels.clone(), sidecar.vias.clone()))
         .unwrap_or_default();
+    let outline: &[synth_layout::sidecar::SidecarPoint] = placement_sidecar
+        .as_ref()
+        .map_or(&[], |sidecar| sidecar.outline.as_slice());
     let pcb_text = pcb::build_pcb(
         board,
         &placement,
@@ -479,6 +484,7 @@ fn export_inner(
         &project_namespace,
         &label_overrides,
         &fixed_vias,
+        outline,
     )
     .map_err(|error| ExportError::PlaneFanout {
         net: error.net,
