@@ -75,7 +75,7 @@ Versions: KiCad 10.0.7, FreeRouting 2.4.1 on OpenJDK 25.0.4.1, Synth
 
 | Check | Result | Evidence |
 | --- | --- | --- |
-| KiCad DRC, all severities | 0 errors, 48 warnings, 0 unconnected items | `reports/rtd_afe.kicad-drc.json` (47 `lib_footprint_mismatch`, 1 `silk_edge_clearance` on C_DVB's label at (41.05, 20.5) mm; `unconnected_items: []`) |
+| KiCad DRC, all severities | 0 errors, 47 warnings, 0 unconnected items | `reports/rtd_afe.kicad-drc.json` (47 `lib_footprint_mismatch`; `unconnected_items: []`; re-recorded 2026-11-10 from the edited board) |
 | Schematic/PCB parity | empty | same DRC report |
 | pcbnew reopen | OK | `check.sh` loads the board with `pcbnew.LoadBoard` |
 | Ground | one `GND` plane; `AGND` and `DGND` are absent | `check.sh` asserts it; see below |
@@ -164,11 +164,11 @@ It is a library-comparison warning from an embedded-symbol export, not a
 connectivity finding. The registry now uses `Device:FerriteBead`, so the earlier
 `Ferrite_Bead` warning is gone.
 
-### KiCad DRC: 47 `lib_footprint_mismatch` warnings and 1 silkscreen warning
+### KiCad DRC: 47 `lib_footprint_mismatch` warnings
 
-`reports/rtd_afe.kicad-drc.json` has 0 errors, 0 unconnected items and 48
-warnings: 47 `lib_footprint_mismatch` and one `silk_edge_clearance` (the C_DVB
-reference field at (41.05, 20.5) mm is clipped by the board edge at x = 42.5).
+`reports/rtd_afe.kicad-drc.json` has 0 errors, 0 unconnected items and 47
+warnings, all `lib_footprint_mismatch`. The earlier `silk_edge_clearance` warning
+(the C_DVB reference field clipped by the board edge) is gone after the label move.
 The `lib_footprint_mismatch` warnings:
 
 | Footprint | Count | Disposition |
@@ -412,8 +412,11 @@ Nothing below is signed off. The list is deliberately blunt.
   board changed. This is a hand edit: the tree does not route, so the package could not be
   regenerated (a re-export on 2026-11-10 left +3V3 and VREG_LX open). A fresh `kicad-cli pcb drc`
   on the edited board shows only the 47 `lib_footprint_mismatch` entries; the committed
-  `reports/rtd_afe.kicad-drc.json` still lists the earlier `silk_edge_clearance` warning, which
-  is not re-recorded. The three `images/pcb-3d-*.png` were re-rendered from the edited board.
+  `reports/rtd_afe.kicad-drc.json` and `kicad/gerbers/rtd_afe-F_Silkscreen.gbr` were
+  re-recorded from the edited board on 2026-11-10 (`kicad-cli pcb drc`, and `pcb export gerbers`
+  with the exporter's flags `--no-protel-ext --subtract-soldermask`); a re-export of the parent
+  board with the same flags reproduced every other committed Gerber and drill file, so only
+  F.Silkscreen changed (the others keep their original timestamps). The three `images/pcb-3d-*.png` were re-rendered from the edited board.
 - **SI/PI/RF review (designated reviewer)**: the 24-bit analog layout, the
   single ground plane, the 37.85 mm of VREF track from U3 to C_RV, the RC filter
   against the chosen ADC data rate, the IDAC output's 10 nF load and settling,
