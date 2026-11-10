@@ -959,7 +959,7 @@ fn a_passing_dfm_stage_lists_the_checks_it_does_not_make() {
     assert_eq!(run.status("dfm"), "pass");
     let unsupported = run.stage("dfm")["unsupported"].to_string();
     assert!(
-        unsupported.contains("plated_hole_to_trace")
+        unsupported.contains("pth_to_trace")
             && unsupported.contains("known not to match JLCDFM")
             && unsupported.contains("silk_text"),
         "{unsupported}"

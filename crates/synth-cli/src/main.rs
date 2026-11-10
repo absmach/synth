@@ -4874,7 +4874,7 @@ fn dfm_stage(
             }
             let detail = parts.join(", ");
             let mut unsupported = vec![
-                "plated_hole_to_trace: graded Warning only, known not to match JLCDFM".to_string(),
+                "pth_to_trace: graded Warning only, known not to match JLCDFM".to_string(),
                 "silk_text_clearance: text is counted, not measured".to_string(),
                 "filled_silk: ink covering a pad or hole is tested at sampled points, not by exact area".to_string(),
             ];
