@@ -13,7 +13,7 @@ The board is the output of an agent driving `synth mcp` from a prompt, followed 
 
 | | |
 |---|---|
-| Synth, final exports | the binary built from commit `70717050` of branch `fix-bga-synth` of `JeffMboya/synth`, on `upstream/main` `301c1b75`. The branch is pull request #440; the commits of this board that are not in `upstream/main` include the return-via changes of the other Class C boards and, for this one, `edge_rate medium` replacing the fast inference from a `diff_pair` or a differential pin (a clock, RF or analog pin, a crystal and a switching node still prove a fast edge) |
+| Synth, final exports | the binary built from `upstream/main` `fbfd8d60`, which contains pull request #440. The final exports were made on commit `70717050` of that pull request's branch; the pull request merged after review fixes, and one fresh export of the committed source on `fbfd8d60` gives a PCB identical to the committed one after masking ids. The merged changes include `edge_rate medium` replacing the fast inference from a `diff_pair` or a differential pin (a clock, RF or analog pin, a crystal and a switching node still prove a fast edge) |
 | KiCadRoutingTools | `9399bfb2` |
 | KiCad | 10.0.6 |
 | Registry inputs | [`reproduce/user-registry/`](reproduce/user-registry/): `ice40hx4k_tq144`, `w25q128jvsiq_208mil`, `tlv70012_ddc` |
