@@ -89,5 +89,6 @@ PCB review sign-off required by #40: JeffMboya, 2026-11-10, on the package in `f
 | ERC | verified and approved by JeffMboya: the 6 warnings of `reports/kicad_erc.json` |
 | DRC | verified and approved by JeffMboya: the 74 `lib_footprint_mismatch` warnings of `reports/kicad_drc.json`, each a footprint that differs from the library copy while 0 violations and 0 unconnected items remain |
 | JLCPCB BOM matching | verified and approved by JeffMboya: the BOM matching of `reports/` of 2026-11-06, made on a BOM and a CPL byte-identical to those of `fab/`, with the via-in-pad, slot and spacing specifications of `reports/` attached to the items they cover |
+| JLCDFM PCB DFM | verified and approved by JeffMboya: the JLCDFM report of 2026-11-10 for Gerber hash `ceeb7444dd` in `reports/`, with its 27 Danger items (pad spacing 1, annular ring 19, via to pad 3, slot width 4) as dispositioned in `reports/pcb_dfm_dispositions_ceeb7444dd.md` against the specifications of `reports/` |
 | Placement | verified and approved by JeffMboya: the placement on 55.99 x 44.99 mm, 35.8 % courtyard fill, as pinned in `ice40_bga_node.placement.layout.toml` |
 | Parts and values | verified and approved by JeffMboya: the BOM identities of `fab/ice40_bga_node_bom_orderable.csv`, including `Y1` (JYJE 3TJ480000FYLBC, `C2924620`) and `U1` (Lattice ICE40HX4K-BG121, `C1552775`) |
