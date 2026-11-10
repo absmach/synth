@@ -1,0 +1,17 @@
+# Testbench for examples/divider/divider.synth.
+ground = "GND"
+
+[[source]]
+net = "VCC"
+kind = "dc"
+dc = 12.0
+
+[analysis]
+op = true
+
+[[measure]]
+name = "vmid"
+kind = "node_voltage"
+node = "MID"
+min = 5.7
+max = 6.3

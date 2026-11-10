@@ -1,0 +1,11 @@
+* Synth simulation: divider
+V1 n_VCC 0 DC 1.2e1
+RR1 n_VCC n_MID 1e4
+RR2 n_MID 0 1e4
+.control
+op
+let m0 = v(n_MID)
+echo SYNTH_MEAS vmid $&m0
+echo SYNTH_DONE
+.endc
+.end

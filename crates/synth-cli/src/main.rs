@@ -100,6 +100,17 @@ enum Command {
         parse_only: bool,
     },
 
+    /// Simulate a design against its `<design>.sim.toml` testbench
+    /// sidecar. Exits 0 only when every measured limit passes.
+    Sim {
+        /// Path to a `.synth` source file.
+        input: PathBuf,
+
+        /// Path to the component registry. Auto-discovered: `--registry`, else `$SYNTH_REGISTRY`, else `./registry/parts` (or an ancestor directory), else the embedded seed registry.
+        #[arg(long, value_name = "DIR")]
+        registry: Option<PathBuf>,
+    },
+
     /// Parse a SynthSpec file and dump the AST as JSON to stdout.
     /// Diagnostics, if any, are written to stderr.
     DumpAst {
@@ -964,6 +975,7 @@ fn main() -> ExitCode {
             strict_registry,
             parse_only,
         ),
+        Command::Sim { input, registry } => sim(&input, registry.as_deref()),
         Command::DumpAst { input, pretty } => dump_ast(&input, pretty),
         Command::DumpIr {
             input,
@@ -1236,8 +1248,9 @@ fn main() -> ExitCode {
     }
 }
 
-const CAPABILITY_COMMANDS: [&str; 19] = [
+const CAPABILITY_COMMANDS: [&str; 20] = [
     "validate",
+    "sim",
     "dump-ast",
     "dump-ir",
     "export-kicad",
@@ -1261,6 +1274,13 @@ const CAPABILITY_COMMANDS: [&str; 19] = [
 type CapabilityLimit = (&'static str, Option<&'static str>, &'static str);
 
 const UNSUPPORTED: &[CapabilityLimit] = &[
+    (
+        "spice_simulation",
+        Some("sim"),
+        "`synth sim` supports only an operating-point analysis with resistor and capacitor \
+         models; transient, AC, LED/diode models, registry subcircuits and waveform output are \
+         not implemented yet.",
+    ),
     (
         "coupled_diff_pair_routing",
         Some("diff_pair.couple"),
@@ -3234,6 +3254,83 @@ fn is_flat_user_registry(dir: &Path) -> bool {
         }
     }
     has_toml && !has_subdirectory
+}
+
+fn sim(input: &Path, registry_dir: Option<&Path>) -> anyhow::Result<u8> {
+    let (source, file) = read_source(input)?;
+    let parse = synth_parser::parse(&source, file.clone());
+    write_sim_diagnostics(&parse.diagnostics)?;
+    if parse.has_errors() {
+        return Ok(EXIT_VALIDATION_ERRORS);
+    }
+    let Some(ast) = parse.ast else {
+        return Ok(EXIT_VALIDATION_ERRORS);
+    };
+
+    let import_root = input
+        .parent()
+        .map_or_else(|| PathBuf::from("."), Path::to_path_buf);
+    let loader = synth_ir::FsImportLoader { root: import_root };
+    let resolved = synth_ir::resolve_imports(&ast, &loader, &file);
+    write_sim_diagnostics(&resolved.diagnostics)?;
+    if resolved
+        .diagnostics
+        .iter()
+        .any(|d| d.severity.is_blocking())
+    {
+        return Ok(EXIT_VALIDATION_ERRORS);
+    }
+
+    let Some(registry) = load_registry(registry_dir) else {
+        anyhow::bail!("could not load the component registry");
+    };
+    let lowered = synth_ir::lower(&resolved.program, &registry, &file);
+    write_sim_diagnostics(&lowered.diagnostics)?;
+    if lowered.diagnostics.iter().any(|d| d.severity.is_blocking()) {
+        return Ok(EXIT_VALIDATION_ERRORS);
+    }
+    let Some(board) = lowered.board else {
+        return Ok(EXIT_VALIDATION_ERRORS);
+    };
+
+    let sidecar = synth_sim::sidecar_path(input);
+    let text = std::fs::read_to_string(&sidecar)
+        .map_err(|e| anyhow::anyhow!("could not read {}: {e}", sidecar.display()))?;
+    let testbench = match synth_sim::Testbench::from_toml(&text) {
+        Ok(testbench) => testbench,
+        Err(diagnostic) => {
+            write_sim_diagnostics(&[diagnostic])?;
+            return Ok(EXIT_VALIDATION_ERRORS);
+        }
+    };
+
+    let report = synth_sim::simulate(&board, &testbench, &synth_sim::SimOptions::default());
+
+    let stdout = std::io::stdout();
+    let mut out = stdout.lock();
+    for measure in &report.measures {
+        let status = if measure.passed() { "PASS" } else { "FAIL" };
+        let limits = match (measure.min, measure.max) {
+            (Some(min), Some(max)) => format!(" (min {min}, max {max})"),
+            (Some(min), None) => format!(" (min {min})"),
+            (None, Some(max)) => format!(" (max {max})"),
+            (None, None) => String::new(),
+        };
+        writeln!(out, "{status} {} = {}{limits}", measure.name, measure.value)?;
+    }
+    let blocking: Vec<_> = report
+        .diagnostics
+        .iter()
+        .filter(|diagnostic| diagnostic.severity.is_blocking())
+        .cloned()
+        .collect();
+    write_sim_diagnostics(&blocking)?;
+
+    Ok(if report.passed() {
+        EXIT_SUCCESS
+    } else {
+        EXIT_VALIDATION_ERRORS
+    })
 }
 
 fn validate(
@@ -5880,6 +5977,19 @@ fn schema(kind: SchemaKind) -> anyhow::Result<u8> {
 fn write_diagnostics_to_stderr(
     diagnostics: &[synth_diagnostics::Diagnostic],
 ) -> anyhow::Result<()> {
+    write_diagnostics(diagnostics, false)
+}
+
+/// `sim` diagnostics carry the actionable detail (the TOML error, the
+/// measured value, the missing install) in `message`, so print it too.
+fn write_sim_diagnostics(diagnostics: &[synth_diagnostics::Diagnostic]) -> anyhow::Result<()> {
+    write_diagnostics(diagnostics, true)
+}
+
+fn write_diagnostics(
+    diagnostics: &[synth_diagnostics::Diagnostic],
+    include_message: bool,
+) -> anyhow::Result<()> {
     let stderr = std::io::stderr();
     let mut err = stderr.lock();
     for d in diagnostics {
@@ -5892,6 +6002,11 @@ fn write_diagnostics_to_stderr(
             "{}: [{}] {} ({})",
             d.severity, d.code, d.title, where_
         )?;
+        if include_message {
+            if let Some(message) = &d.message {
+                writeln!(&mut err, "  {message}")?;
+            }
+        }
     }
     Ok(())
 }

@@ -1,0 +1,28 @@
+# E-SYNTH-SIM-003 — measurement failed
+
+**Severity:** error
+**Stage:** sim
+
+## What this means
+
+The generated deck promised a measurement but ngspice did not produce a
+usable value. The causes are a missing `SYNTH_MEAS` sentinel, a sentinel with
+no value, `nan` or `inf`, an unparseable number, a duplicated measurement, or
+a missing `SYNTH_DONE` terminator. A value is never defaulted to 0.
+
+## Minimal reproduction
+
+A measure whose vector cannot be evaluated:
+
+```
+echo SYNTH_MEAS vmid $&ghost
+echo SYNTH_DONE
+```
+
+ngspice prints `SYNTH_MEAS vmid` with no value and still exits 0; Synth
+reports this code.
+
+## Suggested fix
+
+Fix the testbench node name or the circuit so the measured vector exists, then
+rerun. Never suppress the missing measurement.

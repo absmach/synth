@@ -23,6 +23,7 @@ members = [
   "crates/synth-connectivity",
   "crates/synth-supply",
   "crates/synth-cost",
+  "crates/synth-sim",
 ]
 
 [workspace.package]
@@ -120,6 +121,7 @@ synth-smt = { path = "crates/synth-smt", version = "0.1.2" }
 synth-connectivity = { path = "crates/synth-connectivity", version = "0.1.2" }
 synth-supply = { path = "crates/synth-supply", version = "0.1.2" }
 synth-cost = { path = "crates/synth-cost", version = "0.1.2" }
+synth-sim = { path = "crates/synth-sim", version = "0.1.2" }
 
 [profile.release]
 lto = "thin"

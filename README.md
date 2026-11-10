@@ -173,6 +173,7 @@ Synth resolves parts from a component registry and lowers the source into a type
 | Design                                                                                             | What it demonstrates                                                          |
 | -------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------- |
 | [Hello](fixtures/designs/hello.synth)                                                              | The smallest board declaration                                                |
+| [Resistor divider](examples/divider/divider.synth)                                                 | A DC operating-point simulation with `synth sim`                              |
 | [Environmental logger](examples/env_logger/env_logger.synth)                                       | USB-C power, a regulator, an MCU, an environmental sensor, and a debug header |
 | [Sensor logger](examples/sensor_logger/sensor_logger.synth)                                        | A larger design with dual I²C sensors, SPI flash, and status LEDs             |
 | [Placement and differential pairs](examples/placement_and_diff_pair/placement_and_diff_pair.synth) | Placement hints, differential-pair constraints, and keepout regions           |
