@@ -21,11 +21,10 @@ budget to make the timeout easy to observe:
 timeout = 1.0
 ```
 
-A switching-converter transient is the usual cause: the default 10 second
-budget covers only a few milliseconds of simulation time.
+A long transient analysis is the usual cause: simulation time is not wall-clock
+time, and a switching converter can need a much larger budget.
 
 ## Suggested fix
 
 Raise `[options] timeout`, shorten the analysis window, or simplify the
-circuit. A 10 second budget covers only a few milliseconds of a switching
-converter, so heavy transient work needs a larger explicit timeout.
+circuit. Heavy transient work usually needs a larger explicit timeout.

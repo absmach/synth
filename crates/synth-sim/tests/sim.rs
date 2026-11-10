@@ -66,6 +66,19 @@ board "led" {
 }
 "#;
 
+/// A board for the registry-patched LED whose pins are named `K` and `A`,
+/// with the cathode first.
+const K_FIRST_LED: &str = r#"
+board "k-first-led" {
+  layers 2
+  component R1: resistor "r_generic_0805" value "150"
+  component LED1: led "led_red_0603"
+  net "VCC" { R1.p1 }
+  net "GND" { LED1.K }
+  connect R1.p2 -> LED1.A as "MID"
+}
+"#;
+
 const SERIES_TB: &str = r#"
 ground = "GND"
 
@@ -131,6 +144,22 @@ board "ignored-ic" {
 }
 "#;
 
+/// Ignoring both ends of a clock net leaves it with no deck node at all.
+const IGNORED_CLOCK: &str = r#"
+board "ignored-clock" {
+  layers 2
+  component U1: mcu "rp2350"
+  component Y1: crystal "xtal_8mhz"
+  component R1: resistor "r_generic_0805" value "1k"
+  component R2: resistor "r_generic_0805" value "1k"
+  net "VCC" { R1.p1 }
+  net "GND" { R2.p2 }
+  connect R1.p2 -> R2.p1 as "MID"
+  net "XIN" { U1.xin, Y1.p1 }
+  net "XOUT" { U1.xout, Y1.p2 }
+}
+"#;
+
 const UNCONNECTED: &str = r#"
 board "unconnected" {
   layers 2
@@ -191,6 +220,13 @@ fn fixture(name: &str) -> PathBuf {
 }
 
 fn board(source: &str) -> synth_ir::Board {
+    board_with_registry(source, |_| {})
+}
+
+fn board_with_registry(
+    source: &str,
+    patch: impl FnOnce(&mut synth_registry::Registry),
+) -> synth_ir::Board {
     let file = "divider.synth".to_string();
     let parsed = synth_parser::parse(source, file.clone());
     assert!(
@@ -214,11 +250,9 @@ fn board(source: &str) -> synth_ir::Board {
         "imports: {:?}",
         resolved.diagnostics
     );
-    let lowered = synth_ir::lower(
-        &resolved.program,
-        synth_registry::embedded_registry(),
-        &file,
-    );
+    let mut registry = synth_registry::embedded_registry().clone();
+    patch(&mut registry);
+    let lowered = synth_ir::lower(&resolved.program, &registry, &file);
     assert!(
         lowered
             .diagnostics
@@ -432,6 +466,27 @@ fn led_matches_real_ngspice() {
     );
 }
 
+/// The design point alone cannot catch a wrong IS or N: the model was fitted
+/// at 20 mA. At 1 kΩ real ngspice 42 measures 1.9035 V.
+#[test]
+fn led_matches_real_ngspice_at_an_off_point() {
+    let Some(ngspice) = real_ngspice() else {
+        eprintln!("skipping: ngspice is not installed (sudo apt install ngspice)");
+        return;
+    };
+    let board = board(&LED.replace("value \"150\"", "value \"1k\""));
+    let testbench = testbench(SERIES_TB);
+
+    let report = synth_sim::simulate(&board, &testbench, &options(&ngspice));
+
+    assert!(report.passed(), "diagnostics: {:?}", report.diagnostics);
+    let anode = report.measures[0].value;
+    assert!(
+        (anode - 1.9035).abs() / 1.9035 < 0.03,
+        "LED forward voltage at 1 kΩ is {anode}, expected about 1.9035 V"
+    );
+}
+
 #[test]
 fn diode_matches_real_ngspice() {
     let Some(ngspice) = real_ngspice() else {
@@ -483,6 +538,35 @@ fn a_cathode_first_led_emits_anode_to_cathode() {
     let deck = synth_sim::emit_netlist(&board, &testbench).expect("deck emits");
 
     assert!(deck.contains("DLED1 n_MID 0 DLED1"), "deck:\n{deck}");
+}
+
+/// Pin names are the only evidence of polarity. A part that names them `K`
+/// and `A` must fail loudly, never emit a possibly reversed diode.
+#[test]
+fn a_led_without_anode_and_cathode_pin_names_gives_002() {
+    let board = board_with_registry(K_FIRST_LED, |registry| {
+        let mut led = registry
+            .lookup("led_red_0603")
+            .expect("led_red_0603")
+            .clone();
+        led.pins[0].name = "K".to_string();
+        led.pins[1].name = "A".to_string();
+        registry.insert(led);
+    });
+    let testbench = testbench(SERIES_TB);
+
+    let diagnostics = synth_sim::emit_netlist(&board, &testbench).expect_err("K-first LED");
+
+    assert_explained(&diagnostics);
+    assert!(
+        diagnostics.iter().any(|diagnostic| {
+            diagnostic.code == synth_sim::E_SYNTH_SIM_002
+                && diagnostic.message.as_deref().is_some_and(|message| {
+                    message.contains("LED1") && message.contains("pins named `anode` and `cathode`")
+                })
+        }),
+        "diagnostics: {diagnostics:?}"
+    );
 }
 
 #[test]
@@ -625,6 +709,21 @@ fn ignoring_a_part_reruns_the_topology_check() {
         }),
         "diagnostics: {diagnostics:?}"
     );
+}
+
+#[test]
+fn an_ignored_mcu_and_crystal_are_left_out_of_the_deck() {
+    let board = board(IGNORED_CLOCK);
+    let testbench = testbench(&DIVIDER_TB.replacen(
+        "ground = \"GND\"\n",
+        "ground = \"GND\"\nignore = [\"U1\", \"Y1\"]\n",
+        1,
+    ));
+
+    let deck = synth_sim::emit_netlist(&board, &testbench).expect("ignored clock parts");
+
+    assert!(!deck.contains("U1"), "ignored U1 is in the deck:\n{deck}");
+    assert!(!deck.contains("Y1"), "ignored Y1 is in the deck:\n{deck}");
 }
 
 #[test]
@@ -889,6 +988,26 @@ fn a_megaohm_resistor_emits_an_exponent() {
     );
 }
 
+/// SPICE reads `meg` as mega, Synth reads `M` as mega. The error must say so.
+#[test]
+fn a_meg_value_hints_that_synth_uses_m_for_mega() {
+    let board = board(&DIVIDER.replace("value \"10k\"", "value \"1meg\""));
+    let testbench = testbench(DIVIDER_TB);
+
+    let diagnostics = synth_sim::emit_netlist(&board, &testbench).expect_err("1meg");
+
+    assert!(
+        diagnostics.iter().any(|diagnostic| {
+            diagnostic.code == synth_sim::E_SYNTH_SIM_002
+                && diagnostic
+                    .message
+                    .as_deref()
+                    .is_some_and(|message| message.contains("Synth uses `M` for mega"))
+        }),
+        "diagnostics: {diagnostics:?}"
+    );
+}
+
 #[test]
 fn out_of_limit_value_gives_004() {
     let board = board(DIVIDER);
@@ -1118,6 +1237,41 @@ fn singular_matrix_without_done_gives_006() {
                     .as_deref()
                     .is_some_and(|message| message.contains("singular matrix"))
         }),
+        "diagnostics: {:?}",
+        report.diagnostics
+    );
+}
+
+/// The singular warning is evidence of a broken run even when stderr also
+/// says `no such variable`, which the measurement scan would otherwise
+/// claim as `-003`.
+#[test]
+fn singular_matrix_with_a_missing_vector_gives_006() {
+    let board = board(DIVIDER);
+    let testbench = testbench(DIVIDER_TB);
+    let (stub, _dir) = stub_ngspice("singular-missing-value");
+
+    let report = synth_sim::simulate(&board, &testbench, &options(&stub));
+
+    assert!(!report.passed());
+    assert_explained(&report.diagnostics);
+    assert_located(&report.diagnostics, "divider.sim.toml");
+    assert!(
+        report.diagnostics.iter().any(|diagnostic| {
+            diagnostic.code == synth_sim::E_SYNTH_SIM_006
+                && diagnostic
+                    .message
+                    .as_deref()
+                    .is_some_and(|message| message.contains("singular matrix"))
+        }),
+        "diagnostics: {:?}",
+        report.diagnostics
+    );
+    assert!(
+        !report
+            .diagnostics
+            .iter()
+            .any(|diagnostic| diagnostic.code == synth_sim::E_SYNTH_SIM_003),
         "diagnostics: {:?}",
         report.diagnostics
     );

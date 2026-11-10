@@ -9,9 +9,14 @@ A placed part cannot be represented in the generated SPICE deck. Synth names
 the reference and part id, so the uncovered part is visible in the report.
 
 Built-in models exist for resistors, capacitors, inductors, and diodes/LEDs
-that declare a forward voltage and current. Zener, TVS, bridge-rectifier and
-other diode kinds need those forward fields or a registry `[spice]` model;
-Synth does not guess a diode behaviour for them.
+that declare a forward voltage and current. A diode or LED must also name its
+pins `anode` and `cathode`; a two-pin part with any other pin names is reported
+here instead of guessing which way round it goes.
+
+Detection is by `kind` only. A zener, TVS, bridge rectifier and other non-LED
+diode are `kind = "diode"` parts, so they get the plain built-in diode model
+when they declare the forward fields. They should carry a registry `[spice]`
+model instead; requiring `[spice]` for them is ticket 04 work.
 
 The value is part of the model: an absent, unparseable, zero or negative
 resistor/capacitor/inductor value is reported here too. `4k7` is not accepted;
@@ -34,5 +39,6 @@ board "x" {
 
 Use a part kind with a built-in model and give it a value, add
 `forward_voltage_v` and `forward_current_ma` to the part's
-`[operating_conditions]`, add a registry `[spice]` model, or mark the part
-`ignore` in the testbench when the gap is deliberate.
+`[operating_conditions]` (and name its pins `anode` and `cathode`), add a
+registry `[spice]` model, or mark the part `ignore` in the testbench when the
+gap is deliberate.

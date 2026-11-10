@@ -371,12 +371,6 @@ pub fn simulate(design: &Board, testbench: &Testbench, options: &SimOptions) -> 
         );
     }
 
-    // `Error: measure ...` is a measurement failure even when ngspice exits
-    // 0. Check it before the stderr error scan so it keeps `-003`.
-    if let Some(diagnostic) = measurement_failure_from_stderr(&run.stderr) {
-        return failed(vec![diagnostic], options.testbench_path.as_deref());
-    }
-
     if run.exit_code != Some(0) {
         let status = run
             .exit_code
@@ -394,9 +388,21 @@ pub fn simulate(design: &Board, testbench: &Testbench, options: &SimOptions) -> 
         );
     }
 
-    // Other stderr errors, including a singular matrix with a missing
-    // SYNTH_DONE, must classify as `-006` before sentinel parsing turns the
-    // same run into a missing measurement.
+    // A singular matrix, including one with a missing SYNTH_DONE, is a
+    // broken run and must classify as `-006` before measurement parsing.
+    if let Some(diagnostic) = convergence_stderr_error(&run.stderr) {
+        return failed(vec![diagnostic], options.testbench_path.as_deref());
+    }
+
+    // `Error: measure ...` is a measurement failure even when ngspice exits
+    // 0. It runs after the singular check so a failed op that also drops a
+    // vector is `-006`, not a measurement failure.
+    if let Some(diagnostic) = measurement_failure_from_stderr(&run.stderr) {
+        return failed(vec![diagnostic], options.testbench_path.as_deref());
+    }
+
+    // Other stderr errors must classify as `-006` before sentinel parsing
+    // turns the same run into a missing measurement.
     if let Some(diagnostic) = stderr_error(&run.stderr) {
         return failed(vec![diagnostic], options.testbench_path.as_deref());
     }
@@ -689,17 +695,21 @@ fn timeout_error(seconds: f64) -> Diagnostic {
         .build()
 }
 
+/// Trimmed stderr lines whose lowercased form matches `predicate`.
+fn stderr_offenders(stderr: &str, predicate: impl Fn(&str) -> bool) -> Vec<&str> {
+    stderr
+        .lines()
+        .map(str::trim)
+        .filter(|line| predicate(&line.to_ascii_lowercase()))
+        .collect()
+}
+
 /// A failed measurement prints either `Error: measure ...` or, for the
 /// generated `let mN` vector, `Error: &mN: no such variable`.
 fn measurement_failure_from_stderr(stderr: &str) -> Option<Diagnostic> {
-    let failed: Vec<&str> = stderr
-        .lines()
-        .map(str::trim)
-        .filter(|line| {
-            let lower = line.to_ascii_lowercase();
-            lower.contains("error: measure") || lower.contains("no such variable")
-        })
-        .collect();
+    let failed = stderr_offenders(stderr, |line| {
+        line.contains("error: measure") || line.contains("no such variable")
+    });
     if failed.is_empty() {
         return None;
     }
@@ -709,20 +719,28 @@ fn measurement_failure_from_stderr(stderr: &str) -> Option<Diagnostic> {
     )))
 }
 
+/// A singular matrix, or the convergence failure it causes, makes the
+/// operating point wrong even when ngspice recovers and exits 0.
+fn convergence_stderr_error(stderr: &str) -> Option<Diagnostic> {
+    let offenders = stderr_offenders(stderr, |line| {
+        line.contains("singular matrix")
+            || line.contains("gmin stepping failed")
+            || line.contains("source stepping failed")
+    });
+    if offenders.is_empty() {
+        return None;
+    }
+    Some(ngspice_error(format!(
+        "ngspice reported a singular matrix or failed convergence even though it exited 0: {}",
+        excerpt(&offenders.join("\n"))
+    )))
+}
+
 /// ngspice can exit 0 with a wrong result and say so only on stderr.
 fn stderr_error(stderr: &str) -> Option<Diagnostic> {
-    let offenders: Vec<&str> = stderr
-        .lines()
-        .map(str::trim)
-        .filter(|line| {
-            let lower = line.to_ascii_lowercase();
-            lower.contains("singular matrix")
-                || lower.contains("gmin stepping failed")
-                || lower.contains("source stepping failed")
-                || lower.starts_with("error:")
-                || lower.contains("no such subckt")
-        })
-        .collect();
+    let offenders = stderr_offenders(stderr, |line| {
+        line.starts_with("error:") || line.contains("no such subckt")
+    });
     if offenders.is_empty() {
         return None;
     }
@@ -1015,13 +1033,6 @@ fn emit_netlist_at(
     Ok(deck)
 }
 
-/// Every net needs at least two connections and a DC path to ground.
-///
-/// This is the check that keeps a series capacitor from producing a
-/// plausible-looking operating point (ngspice recovers from the singular
-/// matrix with a transient op) and calling it a pass. Capacitors are the only
-/// parts that break a DC path; every other part is treated as conducting so
-/// an unmodelled IC does not also look floating.
 fn net_span(design: &Board, net: &Net) -> Span {
     net.endpoints
         .first()
@@ -1034,6 +1045,15 @@ fn net_span(design: &Board, net: &Net) -> Span {
         .map_or(design.source_span, |component| component.source_span)
 }
 
+/// Every net needs at least two connections and a DC path to ground.
+///
+/// This is the check that keeps a series capacitor from producing a
+/// plausible-looking operating point (ngspice recovers from the singular
+/// matrix with a transient op) and calling it a pass. Capacitors are the only
+/// modelled part that breaks a DC path; every other modelled part conducts
+/// across all of its connected pins. An unmodelled part is checked across pins
+/// 0 and 1 only: it already fails `-002`, so its internals should not decide
+/// whether some unrelated net looks floating.
 fn check_topology(
     design: &Board,
     testbench: &Testbench,
@@ -1109,6 +1129,10 @@ fn check_topology(
 
     for net in &design.nets {
         let count = connections.get(&net.id).copied().unwrap_or(0);
+        // Every endpoint is ignored, so the net never becomes a deck node.
+        if count == 0 {
+            continue;
+        }
         if count < 2 {
             diagnostics.push(with_location_span(
                 topology_error(
@@ -1194,7 +1218,14 @@ fn model_for(component: &Component) -> Result<Model, String> {
         .value
         .as_deref()
         .ok_or_else(|| "part has no value".to_string())?;
-    let value = parse(raw).ok_or_else(|| format!("value `{raw}` is not a valid {letter} value"))?;
+    let value = parse(raw).ok_or_else(|| {
+        let hint = if raw.to_ascii_lowercase().contains("meg") {
+            "; Synth uses `M` for mega (`1M`), not `meg`"
+        } else {
+            ""
+        };
+        format!("value `{raw}` is not a valid {letter} value{hint}")
+    })?;
     if !value.is_finite() || value <= 0.0 {
         return Err(format!("value `{raw}` is not a positive finite number"));
     }
@@ -1215,9 +1246,6 @@ fn diode_model(component: &Component) -> Result<Model, String> {
             .position(|pin| pin.name.eq_ignore_ascii_case("cathode")),
     ) {
         (Some(anode), Some(cathode)) => [anode as u32, cathode as u32],
-        // ponytail: unnamed two-pin diodes assume pin 1 is the anode;
-        // require explicit names if a part needs the other order.
-        _ if part.pins.len() == 2 => [0, 1],
         _ => return Err("diode model needs pins named `anode` and `cathode`".to_string()),
     };
     let (forward_voltage, forward_current) = part

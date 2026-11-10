@@ -18,7 +18,8 @@ pub fn build_stub(source: &Path) -> PathBuf {
     static BINARY: OnceLock<PathBuf> = OnceLock::new();
     BINARY
         .get_or_init(|| {
-            let dir = std::env::temp_dir().join(format!("synth_stub_bin_{}", std::process::id()));
+            let dir = Path::new(env!("CARGO_TARGET_TMPDIR"))
+                .join(format!("synth_stub_bin_{}", std::process::id()));
             let _ = std::fs::remove_dir_all(&dir);
             std::fs::create_dir_all(&dir).expect("stub binary dir");
             let binary = dir.join(format!("stub{}", std::env::consts::EXE_SUFFIX));

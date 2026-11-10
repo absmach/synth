@@ -18,6 +18,7 @@ edit them by hand.
 | `divider-error` | `X1 in 0 nosuchsub` — unknown subcircuit | 1 |
 | `divider-singular` | two series capacitors; singular matrix warnings but exit 0 and a value | 0 |
 | `divider-singular-no-done` | the same singular run without `echo SYNTH_DONE` | 0 |
+| `divider-singular-missing-value` | singular matrix plus a `let` on a missing vector, so stderr has both warnings | 0 |
 
 `hang.cir` is a real ngspice deck whose control loop never ends. The stub
 sleeps instead of replaying a log, so the runner's timeout and kill can be
