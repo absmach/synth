@@ -91,7 +91,7 @@ Status: compact placement done and routed with FreeRouting. The route passes Syn
 - D2 is over 2 mm: four protection parts do not fit side by side under the 7 mm of J1 pads any closer.
 - R1 and R2 are in the top corners; the remaining passives are placed by hand. The DRC checks their courtyards, not placement quality.
 
-Routing (FreeRouting 2.4.1, `router: "freerouting"`, `allow_via_in_pad: true`), with the Synth sources at `08b917b` (`source_revision` in `reports/release.json`):
+Routing (FreeRouting 2.4.1, `router: "freerouting"`, `allow_via_in_pad: true`), with the Synth sources at `e6455e13` (`source_revision` in `reports/release.json`):
 - Result: routed. `release.json` has `release_ready` true and `routing.state` "routed", with no open net. `kicad-cli pcb drc --severity-all --refill-zones`: 0 errors, 0 warnings and no `unconnected_items`. Synth's gate no longer accepts a GND zone that KiCad lists against itself, and the delivered board has none. pcbnew's connectivity puts every GND pad and via in one cluster, so the pour is connected. (The earlier revision's 36 library-link warnings came from a run without the KiCad libraries.)
 - 273 track segments, 43 vias, 515.4 mm of copper.
 - The routed board is 40.99 x 32.23 mm.
