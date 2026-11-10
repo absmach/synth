@@ -1276,7 +1276,7 @@ type CapabilityLimit = (&'static str, Option<&'static str>, &'static str);
 const UNSUPPORTED: &[CapabilityLimit] = &[
     (
         "spice_simulation",
-        Some("sim"),
+        None,
         "`synth sim` supports only an operating-point analysis with resistor and capacitor \
          models; transient, AC, LED/diode models, registry subcircuits and waveform output are \
          not implemented yet.",
@@ -3294,9 +3294,7 @@ fn sim(input: &Path, registry_dir: Option<&Path>) -> anyhow::Result<u8> {
     };
 
     let sidecar = synth_sim::sidecar_path(input);
-    let text = std::fs::read_to_string(&sidecar)
-        .map_err(|e| anyhow::anyhow!("could not read {}: {e}", sidecar.display()))?;
-    let testbench = match synth_sim::Testbench::from_toml(&text) {
+    let testbench = match synth_sim::Testbench::from_path(&sidecar) {
         Ok(testbench) => testbench,
         Err(diagnostic) => {
             write_sim_diagnostics(&[diagnostic])?;
@@ -3309,7 +3307,11 @@ fn sim(input: &Path, registry_dir: Option<&Path>) -> anyhow::Result<u8> {
     let stdout = std::io::stdout();
     let mut out = stdout.lock();
     for measure in &report.measures {
-        let status = if measure.passed() { "PASS" } else { "FAIL" };
+        let status = match (measure.min, measure.max) {
+            (None, None) => "MEASURED",
+            _ if measure.passed() => "PASS",
+            _ => "FAIL",
+        };
         let limits = match (measure.min, measure.max) {
             (Some(min), Some(max)) => format!(" (min {min}, max {max})"),
             (Some(min), None) => format!(" (min {min})"),

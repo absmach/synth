@@ -5,29 +5,31 @@
 
 ## What this means
 
-A node has no usable DC path. Synth currently reports an unconnected
-two-terminal pin because there is no net to emit for it. The full floating-node
-and no-DC-path sweep is a separate check; Synth never turns on `rshunt`
-silently to hide the problem.
+Every net in the simulated circuit needs at least two connections and a DC
+path to the ground net. A capacitor is an open circuit at DC, so two
+capacitors in series leave the middle net with no path; so does a net with a
+single pin, or an unconnected part that leaves its neighbour dangling. The
+message names the net.
+
+Synth never turns on `rshunt` silently to hide the problem: a floating node is
+a design error, not a solver setting.
 
 ## Minimal reproduction
 
 ```synth
 board "x" {
-  component R1: resistor "r_generic_0805" value "10k"
-  component R2: resistor "r_generic_0805" value "10k"
-  component R3: resistor "r_generic_0805" value "10k"
-  net "VCC" { R1.p1 }
-  net "GND" { R2.p2 }
-  connect R1.p2 -> R2.p1 as "MID"
-  net "MID" { R3.p1 }
+  component C1: capacitor "c_generic_0805" value "1u"
+  component C2: capacitor "c_generic_0805" value "1u"
+  net "VCC" { C1.p1 }
+  net "GND" { C2.p2 }
+  connect C1.p2 -> C2.p1 as "MID"
 }
 ```
 
-`R3.p2` is on no net.
+`MID` has two connections but no DC path to `GND`.
 
 ## Suggested fix
 
-Wire the pin to a net, or remove the part from the simulated circuit. A
-series capacitor or a removed `ignore` part that leaves a node floating is the
-same class of error.
+Add a resistor or another DC path across the floating net, wire the dangling
+pin, or remove the part from the simulated circuit. A series capacitor is the
+same class of error when the node has no other path to ground.

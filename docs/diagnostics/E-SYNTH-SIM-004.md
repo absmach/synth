@@ -1,13 +1,21 @@
 # E-SYNTH-SIM-004 — measurement limit
 
-**Severity:** info when inside the declared limit, error when outside
+**Severity:** error
 **Stage:** sim
 
 ## What this means
 
-A measurement was compared with its optional `min` and `max`. Inside the
-limits is an informational diagnostic; outside is a blocking error that makes
-`synth sim` exit non-zero. Limits are inclusive.
+A measurement was compared with its optional `min` and `max`. Outside the
+limits is a blocking error that makes `synth sim` exit non-zero; inside is an
+informational diagnostic with the same code, so a passing check is still
+visible in the report. Limits are inclusive. A measure with neither `min` nor
+`max` is only reported as `MEASURED`; it has nothing to pass or fail.
+
+ngspice prints measured values with six significant digits, so the printed
+value can differ from the true circuit value by up to half a unit in its last
+printed digit. Synth compares at that print precision: a value that differs
+from a limit by no more than that half-unit is treated as on the limit, and a
+difference of one printed step or more is still an out-of-limit error.
 
 ## Minimal reproduction
 

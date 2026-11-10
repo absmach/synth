@@ -15,13 +15,13 @@
 use std::collections::{HashMap, HashSet};
 use std::fmt::Write as _;
 use std::path::{Path, PathBuf};
-use std::process::Command;
 use std::sync::atomic::{AtomicU64, Ordering};
-use std::time::{SystemTime, UNIX_EPOCH};
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use serde::Deserialize;
-use synth_diagnostics::{Diagnostic, DiagnosticBuilder, EntityRef, Severity};
+use synth_diagnostics::{Diagnostic, DiagnosticBuilder, EntityRef, Location, Severity, Span};
 use synth_ir::{Board, Component, ComponentId, Net, NetId, PinId};
+use synth_router::process::{run_cancellable, Invocation};
 
 /// ngspice could not be found or started.
 pub const E_SYNTH_SIM_001: &str = "E-SYNTH-SIM-001";
@@ -31,6 +31,8 @@ pub const E_SYNTH_SIM_002: &str = "E-SYNTH-SIM-002";
 pub const E_SYNTH_SIM_003: &str = "E-SYNTH-SIM-003";
 /// A measurement's declared limit check (info when inside, error when outside).
 pub const E_SYNTH_SIM_004: &str = "E-SYNTH-SIM-004";
+/// ngspice exceeded the time budget and was killed.
+pub const E_SYNTH_SIM_005: &str = "E-SYNTH-SIM-005";
 /// ngspice reported an error unrelated to a measurement.
 pub const E_SYNTH_SIM_006: &str = "E-SYNTH-SIM-006";
 /// The testbench is malformed or a name collides after sanitizing.
@@ -49,6 +51,17 @@ pub struct Testbench {
     pub analysis: Analysis,
     #[serde(default)]
     pub measure: Vec<Measure>,
+    #[serde(default)]
+    pub options: TestbenchOptions,
+}
+
+/// Run-wide knobs; a missing `[options]` table keeps the defaults.
+#[derive(Debug, Clone, Default, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct TestbenchOptions {
+    /// Wall-clock budget in seconds. Defaults to 10.
+    #[serde(default)]
+    pub timeout: Option<f64>,
 }
 
 /// An independent source added by the testbench.
@@ -98,17 +111,56 @@ pub enum MeasureKind {
 }
 
 impl Testbench {
-    /// Parse and validate a sidecar. Every failure is `E-SYNTH-SIM-007`.
+    /// Parse and validate a sidecar from text. Every failure is `E-SYNTH-SIM-007`.
     pub fn from_toml(text: &str) -> Result<Self, Diagnostic> {
-        let testbench: Self =
-            toml::from_str(text).map_err(|e| testbench_error(format!("could not parse: {e}")))?;
-        testbench.validate()?;
+        Self::parse(text, None)
+    }
+
+    /// Read, parse and validate a `<design>.sim.toml` sidecar. A missing or
+    /// unreadable file is `E-SYNTH-SIM-007` too.
+    pub fn from_path(path: &Path) -> Result<Self, Diagnostic> {
+        let text = std::fs::read_to_string(path).map_err(|error| {
+            testbench_error_at(
+                Some(path),
+                format!("could not read {}: {error}", path.display()),
+            )
+        })?;
+        Self::parse(&text, Some(path))
+    }
+
+    fn parse(text: &str, path: Option<&Path>) -> Result<Self, Diagnostic> {
+        let testbench: Self = toml::from_str(text).map_err(|error| {
+            let span = error.span().map_or(Span::new(0, 0), |range| {
+                Span::new(
+                    u32::try_from(range.start).unwrap_or(u32::MAX),
+                    u32::try_from(range.end).unwrap_or(u32::MAX),
+                )
+            });
+            testbench_error_at_span(path, span, format!("could not parse: {error}"))
+        })?;
+        testbench.validate_at(path)?;
         Ok(testbench)
     }
 
     fn validate(&self) -> Result<(), Diagnostic> {
+        self.validate_at(None)
+    }
+
+    fn validate_at(&self, path: Option<&Path>) -> Result<(), Diagnostic> {
+        self.validate_inner()
+            .map_err(|diagnostic| with_location(diagnostic, path))
+    }
+
+    fn validate_inner(&self) -> Result<(), Diagnostic> {
         if self.ground.trim().is_empty() {
             return Err(testbench_error("ground net is empty"));
+        }
+        if let Some(timeout) = self.options.timeout {
+            if !timeout.is_finite() || timeout <= 0.0 || timeout > MAX_TIMEOUT_SECONDS {
+                return Err(testbench_error(format!(
+                    "`[options] timeout` must be greater than 0 and at most {MAX_TIMEOUT_SECONDS} seconds"
+                )));
+            }
         }
         if !self.analysis.op {
             return Err(testbench_error(
@@ -217,6 +269,17 @@ impl MeasureResult {
     }
 }
 
+/// ngspice prints measured values with six significant digits. Half a unit
+/// in the last printed digit is the most the true value can differ from the
+/// printed one, so a limit inside that band is treated as equal.
+fn print_half_ulp(value: f64) -> f64 {
+    if value == 0.0 {
+        return 0.0;
+    }
+    let exponent = value.abs().log10().floor();
+    0.5 * 10f64.powf(exponent - 5.0)
+}
+
 /// One comparison used by both the public pass predicate and the diagnostic.
 enum LimitOutcome {
     Pass,
@@ -224,14 +287,18 @@ enum LimitOutcome {
     Above(f64),
 }
 
+fn at_print_precision(value: f64, limit: f64) -> bool {
+    (value - limit).abs() <= print_half_ulp(value)
+}
+
 fn limit_outcome(min: Option<f64>, max: Option<f64>, value: f64) -> LimitOutcome {
     if let Some(min) = min {
-        if value < min {
+        if value < min && !at_print_precision(value, min) {
             return LimitOutcome::Below(min);
         }
     }
     if let Some(max) = max {
-        if value > max {
+        if value > max && !at_print_precision(value, max) {
             return LimitOutcome::Above(max);
         }
     }
@@ -263,33 +330,47 @@ pub fn sidecar_path(design: &Path) -> PathBuf {
 pub fn simulate(design: &Board, testbench: &Testbench, options: &SimOptions) -> SimReport {
     let deck = match emit_netlist(design, testbench) {
         Ok(deck) => deck,
-        Err(diagnostics) => {
-            return SimReport {
-                measures: Vec::new(),
-                diagnostics,
-            }
-        }
+        Err(diagnostics) => return failed(diagnostics),
     };
 
-    let stdout = match run_ngspice(&deck, options) {
-        Ok(stdout) => stdout,
-        Err(diagnostic) => {
-            return SimReport {
-                measures: Vec::new(),
-                diagnostics: vec![diagnostic],
-            }
-        }
+    let timeout = testbench
+        .options
+        .timeout
+        .map_or(DEFAULT_TIMEOUT, Duration::from_secs_f64);
+    let run = match run_ngspice(&deck, options, timeout) {
+        Ok(run) => run,
+        Err(diagnostic) => return failed(vec![diagnostic]),
     };
 
-    let values = match parse_sentinels(&stdout, testbench) {
+    // `Error: measure ...` is a measurement failure even when ngspice exits
+    // 0, so it must classify before the exit status is considered.
+    if let Some(diagnostic) = measure_error_from_stderr(&run.stderr) {
+        return failed(vec![diagnostic]);
+    }
+    if run.exit_code != Some(0) {
+        let status = run
+            .exit_code
+            .map_or_else(|| "signal".to_string(), |code| code.to_string());
+        let detail = if run.stderr.trim().is_empty() {
+            excerpt(&run.stdout)
+        } else {
+            excerpt(&run.stderr)
+        };
+        return failed(vec![ngspice_error(format!(
+            "ngspice exited with status {status}: {detail}"
+        ))]);
+    }
+
+    let values = match parse_sentinels(&run.stdout, testbench) {
         Ok(values) => values,
-        Err(diagnostics) => {
-            return SimReport {
-                measures: Vec::new(),
-                diagnostics,
-            }
-        }
+        Err(diagnostics) => return failed(diagnostics),
     };
+
+    // A singular matrix or a failed source/gmin step can still exit 0 and
+    // print a number. The warning is the only evidence the run is wrong.
+    if let Some(diagnostic) = stderr_error(&run.stderr) {
+        return failed(vec![diagnostic]);
+    }
 
     let mut measures = Vec::new();
     let mut diagnostics = Vec::new();
@@ -327,9 +408,27 @@ pub fn simulate(design: &Board, testbench: &Testbench, options: &SimOptions) -> 
     }
 }
 
+fn failed(diagnostics: Vec<Diagnostic>) -> SimReport {
+    SimReport {
+        measures: Vec::new(),
+        diagnostics,
+    }
+}
+
+/// Default wall-clock budget, overridable with `[options] timeout`.
+const DEFAULT_TIMEOUT: Duration = Duration::from_secs(10);
+/// Upper bound on `[options] timeout`; `Instant + Duration` must not overflow.
+const MAX_TIMEOUT_SECONDS: f64 = 3600.0;
+/// ngspice logs are small; this only bounds a runaway `.print` or `.plot`.
+const MAX_OUTPUT_BYTES: usize = 1 << 20;
+
 /// Run ngspice in a fresh temp directory with its own `.spiceinit`, so a
 /// user's `~/.spiceinit` and concurrent runs cannot interfere.
-fn run_ngspice(deck: &str, options: &SimOptions) -> Result<String, Diagnostic> {
+fn run_ngspice(
+    deck: &str,
+    options: &SimOptions,
+    timeout: Duration,
+) -> Result<Invocation, Diagnostic> {
     let dir = TempDir::create()
         .map_err(|e| ngspice_error(format!("could not create a temporary directory: {e}")))?;
     std::fs::write(dir.path().join(".spiceinit"), "set strict_errorhandling\n")
@@ -338,46 +437,52 @@ fn run_ngspice(deck: &str, options: &SimOptions) -> Result<String, Diagnostic> {
         .map_err(|e| ngspice_error(format!("could not write deck.cir: {e}")))?;
 
     let binary = options.binary();
-    let output = Command::new(&binary)
-        .arg("-b")
-        .arg("deck.cir")
-        .current_dir(dir.path())
-        .output();
-    let output = match output {
-        Ok(output) => output,
-        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
-            return Err(DiagnosticBuilder::new(
-                E_SYNTH_SIM_001,
-                Severity::Error,
-                "ngspice not found",
-            )
-            .message(format!(
-                "could not start `{}`; install ngspice or point `NGSPICE` at the binary",
-                binary.display()
-            ))
-            .build())
+    let args = ["-b".to_string(), "deck.cir".to_string()];
+    let run = run_cancellable(
+        &binary,
+        &args,
+        timeout,
+        MAX_OUTPUT_BYTES,
+        None,
+        Some(dir.path()),
+    )
+    .map_err(|error| {
+        if error.not_found {
+            sim_builder(E_SYNTH_SIM_001, Severity::Error, "ngspice not found")
+                .message(format!(
+                    "could not start `{}`; install ngspice ({}), or point `NGSPICE` at the binary",
+                    binary.display(),
+                    install_hint()
+                ))
+                .build()
+        } else {
+            ngspice_error(error.detail)
         }
-        Err(error) => {
-            return Err(ngspice_error(format!(
-                "could not run `{}`: {error}",
-                binary.display()
-            )))
-        }
-    };
+    })?;
 
-    if !output.status.success() {
-        let stderr = String::from_utf8_lossy(&output.stderr);
-        let status = output
-            .status
-            .code()
-            .map_or_else(|| "signal".to_string(), |code| code.to_string());
-        return Err(ngspice_error(format!(
-            "ngspice exited with status {status}: {}",
-            excerpt(&stderr)
-        )));
+    if run.timed_out {
+        return Err(timeout_error(timeout.as_secs_f64()));
     }
+    Ok(run)
+}
 
-    Ok(String::from_utf8_lossy(&output.stdout).into_owned())
+fn install_hint() -> &'static str {
+    #[cfg(target_os = "linux")]
+    {
+        "Debian/Ubuntu: sudo apt install ngspice"
+    }
+    #[cfg(target_os = "macos")]
+    {
+        "macOS: brew install ngspice"
+    }
+    #[cfg(windows)]
+    {
+        "Windows: choco install ngspice"
+    }
+    #[cfg(not(any(target_os = "linux", target_os = "macos", windows)))]
+    {
+        "https://ngspice.sourceforge.io/download.html"
+    }
 }
 
 fn parse_sentinels(
@@ -497,38 +602,95 @@ impl Drop for TempDir {
     }
 }
 
+fn sim_builder(code: &str, severity: Severity, title: &str) -> DiagnosticBuilder {
+    DiagnosticBuilder::new(code, severity, title)
+        .explanation_url(format!("synth.docs/diagnostics/{code}"))
+}
+
 fn measure_error(message: impl Into<String>) -> Diagnostic {
-    DiagnosticBuilder::new(E_SYNTH_SIM_003, Severity::Error, "measurement failed")
+    sim_builder(E_SYNTH_SIM_003, Severity::Error, "measurement failed")
         .message(message)
         .build()
 }
 
 fn limit_error(name: &str, value: f64, direction: &str) -> Diagnostic {
-    DiagnosticBuilder::new(E_SYNTH_SIM_004, Severity::Error, "measurement limit")
-        .message(format!("measure `{name}` = {value} is {direction}"))
-        .build()
-}
-
-fn limit_info(name: &str, value: f64) -> Diagnostic {
-    DiagnosticBuilder::new(E_SYNTH_SIM_004, Severity::Info, "measurement limit")
+    sim_builder(E_SYNTH_SIM_004, Severity::Error, "measurement limit")
         .message(format!(
-            "measure `{name}` = {value} is within its declared limits"
+            "measure `{name}` = {value} is {direction} (ngspice prints 6 significant digits)"
         ))
         .build()
 }
 
-fn topology_error(message: impl Into<String>) -> Diagnostic {
-    DiagnosticBuilder::new(
+fn limit_info(name: &str, value: f64) -> Diagnostic {
+    sim_builder(E_SYNTH_SIM_004, Severity::Info, "measurement limit")
+        .message(format!(
+            "measure `{name}` = {value} is within its declared limits (ngspice prints 6 significant digits)"
+        ))
+        .build()
+}
+
+fn timeout_error(seconds: f64) -> Diagnostic {
+    sim_builder(E_SYNTH_SIM_005, Severity::Error, "ngspice timed out")
+        .message(format!(
+            "ngspice was killed after {seconds}s. \
+             Raise `[options] timeout` or shorten the analysis."
+        ))
+        .build()
+}
+
+fn measure_error_from_stderr(stderr: &str) -> Option<Diagnostic> {
+    let failed: Vec<&str> = stderr
+        .lines()
+        .map(str::trim)
+        .filter(|line| line.to_ascii_lowercase().contains("error: measure"))
+        .collect();
+    if failed.is_empty() {
+        return None;
+    }
+    Some(measure_error(format!(
+        "ngspice reported a failed measurement: {}",
+        excerpt(&failed.join("\n"))
+    )))
+}
+
+/// ngspice can exit 0 with a wrong result and say so only on stderr.
+fn stderr_error(stderr: &str) -> Option<Diagnostic> {
+    let offenders: Vec<&str> = stderr
+        .lines()
+        .map(str::trim)
+        .filter(|line| {
+            let lower = line.to_ascii_lowercase();
+            lower.contains("singular matrix")
+                || lower.contains("gmin stepping failed")
+                || lower.contains("source stepping failed")
+                || lower.starts_with("error:")
+                || lower.contains("no such subckt")
+        })
+        .collect();
+    if offenders.is_empty() {
+        return None;
+    }
+    Some(ngspice_error(format!(
+        "ngspice reported an error even though it exited 0: {}",
+        excerpt(&offenders.join("\n"))
+    )))
+}
+
+fn topology_error(net: &str, message: impl Into<String>) -> Diagnostic {
+    sim_builder(
         E_SYNTH_SIM_008,
         Severity::Error,
         "floating node or no DC path",
     )
     .message(message)
+    .primary_entity(EntityRef::Net {
+        name: net.to_string(),
+    })
     .build()
 }
 
 fn ngspice_error(message: impl Into<String>) -> Diagnostic {
-    DiagnosticBuilder::new(E_SYNTH_SIM_006, Severity::Error, "ngspice error")
+    sim_builder(E_SYNTH_SIM_006, Severity::Error, "ngspice error")
         .message(message)
         .build()
 }
@@ -626,6 +788,8 @@ pub fn emit_netlist(design: &Board, testbench: &Testbench) -> Result<String, Vec
         }
     }
 
+    check_topology(design, testbench, ground.id, &pin_net, &mut diagnostics);
+
     let mut element_lines = Vec::new();
     let mut seen_elements: HashMap<String, String> = HashMap::new();
     for component in &design.components {
@@ -650,11 +814,22 @@ pub fn emit_netlist(design: &Board, testbench: &Testbench) -> Result<String, Vec
             if let Some(net_id) = pin_net.get(&(component.id, PinId(index))) {
                 nodes.push(node_by_net[net_id].clone());
             } else {
-                diagnostics.push(topology_error(format!(
-                    "component `{}` pin {} is not connected to a net",
-                    component.refdes,
-                    index + 1
-                )));
+                diagnostics.push(
+                    sim_builder(
+                        E_SYNTH_SIM_008,
+                        Severity::Error,
+                        "floating node or no DC path",
+                    )
+                    .message(format!(
+                        "component `{}` pin {} is not connected to a net",
+                        component.refdes,
+                        index + 1
+                    ))
+                    .primary_entity(EntityRef::Component {
+                        id: component.refdes.clone(),
+                    })
+                    .build(),
+                );
                 connected = false;
                 break;
             }
@@ -726,6 +901,88 @@ pub fn emit_netlist(design: &Board, testbench: &Testbench) -> Result<String, Vec
     Ok(deck)
 }
 
+/// Every net needs at least two connections and a DC path to ground.
+///
+/// This is the check that keeps a series capacitor from producing a
+/// plausible-looking operating point (ngspice recovers from the singular
+/// matrix with a transient op) and calling it a pass. Capacitors are the only
+/// parts that break a DC path; every other part is treated as conducting so
+/// an unmodelled IC does not also look floating.
+fn check_topology(
+    design: &Board,
+    testbench: &Testbench,
+    ground: NetId,
+    pin_net: &HashMap<(ComponentId, PinId), NetId>,
+    diagnostics: &mut Vec<Diagnostic>,
+) {
+    let mut connections: HashMap<NetId, usize> = design
+        .nets
+        .iter()
+        .map(|net| (net.id, net.endpoints.len()))
+        .collect();
+    let mut adjacency: HashMap<NetId, Vec<NetId>> = HashMap::new();
+
+    for source in &testbench.source {
+        let Some(net) = design.nets.iter().find(|net| net.name == source.net) else {
+            continue;
+        };
+        *connections.entry(net.id).or_default() += 1;
+        *connections.entry(ground).or_default() += 1;
+        if net.id != ground {
+            adjacency.entry(net.id).or_default().push(ground);
+            adjacency.entry(ground).or_default().push(net.id);
+        }
+    }
+
+    for component in &design.components {
+        if component.kind == "capacitor" {
+            continue;
+        }
+        let (Some(first), Some(second)) = (
+            pin_net.get(&(component.id, PinId(0))),
+            pin_net.get(&(component.id, PinId(1))),
+        ) else {
+            continue;
+        };
+        if first != second {
+            adjacency.entry(*first).or_default().push(*second);
+            adjacency.entry(*second).or_default().push(*first);
+        }
+    }
+
+    let mut reachable = HashSet::new();
+    let mut pending = vec![ground];
+    while let Some(net) = pending.pop() {
+        if !reachable.insert(net) {
+            continue;
+        }
+        if let Some(neighbours) = adjacency.get(&net) {
+            pending.extend(neighbours.iter().copied());
+        }
+    }
+
+    for net in &design.nets {
+        let count = connections.get(&net.id).copied().unwrap_or(0);
+        if count < 2 {
+            diagnostics.push(topology_error(
+                &net.name,
+                format!(
+                    "net `{}` has {count} connection(s); a simulated net needs at least two",
+                    net.name
+                ),
+            ));
+        } else if !reachable.contains(&net.id) {
+            diagnostics.push(topology_error(
+                &net.name,
+                format!(
+                    "net `{}` has no DC path to ground; check for a series capacitor or an unconnected part",
+                    net.name
+                ),
+            ));
+        }
+    }
+}
+
 fn model_for(component: &Component) -> Result<(&'static str, f64), String> {
     let raw = component
         .value
@@ -750,7 +1007,7 @@ fn no_model_error(component: &Component, message: &str) -> Diagnostic {
         .part
         .as_ref()
         .map_or(component.kind.as_str(), |part| part.id.as_str());
-    DiagnosticBuilder::new(E_SYNTH_SIM_002, Severity::Error, "part has no SPICE model")
+    sim_builder(E_SYNTH_SIM_002, Severity::Error, "part has no SPICE model")
         .message(format!("{} (`{part}`): {message}", component.refdes))
         .primary_entity(EntityRef::Component {
             id: component.refdes.clone(),
@@ -759,13 +1016,36 @@ fn no_model_error(component: &Component, message: &str) -> Diagnostic {
 }
 
 fn testbench_error(message: impl Into<String>) -> Diagnostic {
-    DiagnosticBuilder::new(
+    sim_builder(
         E_SYNTH_SIM_007,
         Severity::Error,
         "malformed testbench or name collision",
     )
     .message(message)
     .build()
+}
+
+fn testbench_error_at(path: Option<&Path>, message: impl Into<String>) -> Diagnostic {
+    with_location(testbench_error(message), path)
+}
+
+fn testbench_error_at_span(
+    path: Option<&Path>,
+    span: Span,
+    message: impl Into<String>,
+) -> Diagnostic {
+    with_location_span(testbench_error(message), path, span)
+}
+
+fn with_location(diagnostic: Diagnostic, path: Option<&Path>) -> Diagnostic {
+    with_location_span(diagnostic, path, Span::new(0, 0))
+}
+
+fn with_location_span(mut diagnostic: Diagnostic, path: Option<&Path>, span: Span) -> Diagnostic {
+    if let Some(path) = path {
+        diagnostic.location = Some(Location::from_span(path.display().to_string(), span));
+    }
+    diagnostic
 }
 
 fn valid_sentinel_name(name: &str) -> bool {

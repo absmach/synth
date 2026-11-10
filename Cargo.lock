@@ -2577,6 +2577,7 @@ dependencies = [
  "synth-ir",
  "synth-parser",
  "synth-registry",
+ "synth-router",
  "synth-validate",
  "toml",
 ]

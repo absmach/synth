@@ -14,6 +14,7 @@ workspace = true
 [dependencies]
 synth-diagnostics = { workspace = true }
 synth-ir = { workspace = true }
+synth-router = { workspace = true }
 synth-validate = { workspace = true }
 serde = { workspace = true }
 toml = { workspace = true }
@@ -21,3 +22,8 @@ toml = { workspace = true }
 [dev-dependencies]
 synth-parser = { workspace = true }
 synth-registry = { workspace = true }
+
+[[bin]]
+name = "synth_sim_stub"
+path = "tests/support/stub_ngspice.rs"
+test = false

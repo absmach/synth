@@ -1,13 +1,11 @@
 // SPDX-License-Identifier: Apache-2.0
 
 //! `synth sim` is a thin wrapper over `synth_sim::simulate`; these tests
-//! drive the command with a stub ngspice that replays a real captured log.
+//! drive the command with a Rust stub ngspice that replays a real captured log.
 
-#![cfg(unix)]
-
-use std::os::unix::fs::PermissionsExt;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Output};
+use std::sync::atomic::{AtomicU64, Ordering};
 
 fn workspace_root() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR"))
@@ -31,29 +29,51 @@ fn example_sidecar() -> PathBuf {
         .join("divider.sim.toml")
 }
 
-fn fixture() -> PathBuf {
-    workspace_root()
-        .join("crates")
-        .join("synth-sim")
-        .join("tests")
-        .join("fixtures")
-        .join("divider-op.out")
+/// A scratch directory removed when the guard drops.
+struct Scratch(PathBuf);
+
+impl Scratch {
+    fn new(label: &str) -> Self {
+        static NEXT: AtomicU64 = AtomicU64::new(0);
+        let nonce = NEXT.fetch_add(1, Ordering::Relaxed);
+        let path = std::env::temp_dir().join(format!(
+            "synth_cli_sim_{label}_{}_{nonce}",
+            std::process::id()
+        ));
+        let _ = std::fs::remove_dir_all(&path);
+        std::fs::create_dir_all(&path).expect("scratch dir");
+        Self(path)
+    }
 }
 
-fn scratch(label: &str) -> PathBuf {
-    let dir = std::env::temp_dir().join(format!("synth_cli_sim_{label}_{}", std::process::id()));
-    let _ = std::fs::remove_dir_all(&dir);
-    std::fs::create_dir_all(&dir).expect("scratch dir");
-    dir
+impl std::ops::Deref for Scratch {
+    type Target = Path;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+impl Drop for Scratch {
+    fn drop(&mut self) {
+        let _ = std::fs::remove_dir_all(&self.0);
+    }
+}
+
+fn scratch(label: &str) -> Scratch {
+    Scratch::new(label)
 }
 
 fn stub_ngspice(dir: &Path) -> PathBuf {
-    let path = dir.join("ngspice");
-    std::fs::write(&path, format!("#!/bin/sh\ncat '{}'\n", fixture().display()))
-        .expect("write stub");
-    let mut permissions = std::fs::metadata(&path).expect("stat stub").permissions();
-    permissions.set_mode(0o755);
-    std::fs::set_permissions(&path, permissions).expect("chmod stub");
+    let built = PathBuf::from(env!("CARGO_BIN_EXE_synth_cli_stub"));
+    let mut path = dir.join("ok");
+    if let Some(extension) = built.extension() {
+        path.set_extension(extension);
+    }
+    #[cfg(unix)]
+    std::os::unix::fs::symlink(&built, &path).expect("link stub");
+    #[cfg(not(unix))]
+    std::fs::copy(&built, &path).expect("copy stub");
     path
 }
 
@@ -116,4 +136,48 @@ fn malformed_sidecar_exits_nonzero_with_007() {
     assert_eq!(output.status.code(), Some(1));
     let stderr = String::from_utf8_lossy(&output.stderr);
     assert!(stderr.contains("E-SYNTH-SIM-007"), "{stderr}");
+}
+
+#[test]
+fn missing_sidecar_exits_nonzero_with_007() {
+    let dir = scratch("no-sidecar");
+    let stub = stub_ngspice(&dir);
+    let design = dir.join("divider.synth");
+    std::fs::copy(example_design(), &design).expect("copy design");
+
+    let output = run_sim(&design, &stub);
+
+    assert_eq!(output.status.code(), Some(1));
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(stderr.contains("E-SYNTH-SIM-007"), "{stderr}");
+    assert!(stderr.contains("divider.sim.toml"), "{stderr}");
+}
+
+#[test]
+fn a_measure_without_limits_prints_measured() {
+    let dir = scratch("measured");
+    let stub = stub_ngspice(&dir);
+    let design = dir.join("divider.synth");
+    std::fs::copy(example_design(), &design).expect("copy design");
+    let sidecar = std::fs::read_to_string(example_sidecar())
+        .expect("read example sidecar")
+        .lines()
+        .filter(|line| {
+            let line = line.trim_start();
+            !line.starts_with("min =") && !line.starts_with("max =")
+        })
+        .collect::<Vec<_>>()
+        .join("\n");
+    std::fs::write(dir.join("divider.sim.toml"), format!("{sidecar}\n")).expect("write sidecar");
+
+    let output = run_sim(&design, &stub);
+
+    assert!(
+        output.status.success(),
+        "stderr: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(stdout.contains("MEASURED vmid = 6"), "{stdout}");
+    assert!(!stdout.contains("PASS vmid"), "{stdout}");
 }

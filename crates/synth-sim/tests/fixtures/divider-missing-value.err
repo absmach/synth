@@ -1,0 +1,4 @@
+Using SPARSE 1.3 as Direct Linear Solver
+Warning from checkvalid: vector ghost is not available or has zero length.
+Error: RHS "v(ghost)" invalid
+Error: &m0: no such variable.
