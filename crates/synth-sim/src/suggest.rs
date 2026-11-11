@@ -64,6 +64,9 @@ pub fn suggest_testbench(design: &Board) -> TestbenchSuggestion {
     draft.detect_dividers();
     draft.detect_rcs();
     draft.report_unused();
+    // A retained modelled regulator needs its input rail driven; add that
+    // source before the dead-rail sweep so its decoupling caps stay live.
+    draft.source_regulator_inputs();
     // `report_unused` is what ignores a connector; run the dead-rail sweep
     // after it so the cap sees every ignored neighbour.
     draft.ignore_orphan_passives();
@@ -132,6 +135,9 @@ struct Draft<'a> {
     todo_nets: BTreeSet<NetId>,
     names: HashSet<String>,
     measures: Vec<DraftMeasure>,
+    /// Rails that must be driven for a retained model but are not a measure's
+    /// own supply, such as the input of an unignored regulator.
+    extra_sources: Vec<(NetId, Supply)>,
     ignored: BTreeMap<ComponentId, String>,
 }
 
@@ -146,6 +152,7 @@ impl<'a> Draft<'a> {
             todo_nets: BTreeSet::new(),
             names: HashSet::new(),
             measures: Vec::new(),
+            extra_sources: Vec::new(),
             ignored: BTreeMap::new(),
         }
     }
@@ -472,6 +479,13 @@ impl<'a> Draft<'a> {
             let [first, second] = resistors.as_slice() else {
                 return;
             };
+            // Two parallel legs feeding a load is not a divider; without one
+            // leg on ground there is no divider shape to report.
+            let grounded = self.other_net_of(*first, net_id) == Some(self.ground)
+                || self.other_net_of(*second, net_id) == Some(self.ground);
+            if !grounded {
+                return;
+            }
             let mut drivers = Vec::new();
             for endpoint in &net.endpoints {
                 let Some(component) = design.component(endpoint.component) else {
@@ -962,67 +976,190 @@ impl<'a> Draft<'a> {
         });
     }
 
-    /// A passive left on a node whose other parts are all ignored would be
-    /// the only live connection there (`-008 net VIN has 1 connection(s)`).
-    /// Ignore it too, with a reason; a passive that shares a net with a live
-    /// part stays in the deck. Repeat so a chain of dead-rail passives falls
-    /// together.
-    ///
-    /// ponytail: two passives sharing one dead net keep each other "live";
-    /// handle that pair when a real board needs it.
+    /// A passive left on a net whose other parts are all ignored would be the
+    /// only live connection there (`-008 net VIN has 1 connection(s)`).
+    /// Ignore it too, with a reason. Nets are judged as a group: two caps on
+    /// one dead rail keep each other "live" in a per-part check.
     fn ignore_orphan_passives(&mut self) {
+        let candidates: Vec<ComponentId> = self
+            .design
+            .components
+            .iter()
+            .filter(|component| {
+                !self.used.contains(&component.id)
+                    && !self.ignored.contains_key(&component.id)
+                    && is_passive(component)
+                    // A bad value is a hard -002; ignoring it would hide the typo.
+                    && !matches!(
+                        crate::model_for(component),
+                        Err(crate::ModelError::BadValue(_))
+                    )
+            })
+            .map(|component| component.id)
+            .collect();
+        let sourced: HashSet<NetId> = self
+            .measures
+            .iter()
+            .map(|measure| measure.supply_net)
+            .chain(self.extra_sources.iter().map(|(net, _)| *net))
+            .collect();
+        // A used part or any unignored non-passive is in the deck and makes
+        // its nets live; propagate that until no more candidates are live.
+        let mut live: HashSet<ComponentId> = self
+            .design
+            .components
+            .iter()
+            .filter(|component| {
+                !self.ignored.contains_key(&component.id)
+                    && (self.used.contains(&component.id) || !is_passive(component))
+            })
+            .map(|component| component.id)
+            .collect();
         loop {
-            let mut newly_ignored = Vec::new();
-            for component in &self.design.components {
-                if self.used.contains(&component.id)
-                    || self.ignored.contains_key(&component.id)
-                    || !is_passive(component)
-                {
-                    continue;
-                }
-                let nets: Vec<NetId> = self
-                    .design
-                    .nets
-                    .iter()
-                    .filter(|net| net.id != self.ground)
-                    .filter(|net| {
-                        net.endpoints
-                            .iter()
-                            .any(|endpoint| endpoint.component == component.id)
-                    })
-                    .map(|net| net.id)
-                    .collect();
-                if nets.is_empty() {
-                    continue;
-                }
-                let only_ignored = nets.iter().all(|net_id| {
-                    self.design.net(*net_id).is_some_and(|net| {
-                        let mut others = net
+            let live_nets: HashSet<NetId> = self
+                .design
+                .nets
+                .iter()
+                .filter(|net| {
+                    net.id == self.ground
+                        || sourced.contains(&net.id)
+                        || net
                             .endpoints
                             .iter()
-                            .filter(|endpoint| endpoint.component != component.id);
-                        let Some(first) = others.next() else {
-                            // A dangling part has no ignored driver to blame;
-                            // leave it in the deck so topology fails loudly.
-                            return false;
-                        };
-                        self.ignored.contains_key(&first.component)
-                            && others.all(|endpoint| self.ignored.contains_key(&endpoint.component))
-                    })
-                });
-                if only_ignored {
-                    newly_ignored.push(component.id);
-                }
-            }
-            if newly_ignored.is_empty() {
+                            .any(|endpoint| live.contains(&endpoint.component))
+                })
+                .map(|net| net.id)
+                .collect();
+            let newly: Vec<ComponentId> = candidates
+                .iter()
+                .copied()
+                .filter(|id| {
+                    !live.contains(id)
+                        && self
+                            .component_nets(*id)
+                            .iter()
+                            .any(|net| *net != self.ground && live_nets.contains(net))
+                })
+                .collect();
+            if newly.is_empty() {
                 break;
             }
-            for id in newly_ignored {
-                self.ignored.entry(id).or_insert_with(|| {
-                    "every net it connects to is driven only by ignored parts".to_string()
-                });
+            live.extend(newly);
+        }
+        let reason = "every net it connects to is driven only by ignored parts".to_string();
+        for id in candidates {
+            if live.contains(&id) {
+                continue;
+            }
+            let nets = self.component_nets(id);
+            let nets: Vec<NetId> = nets.into_iter().filter(|net| *net != self.ground).collect();
+            if nets.is_empty() {
+                continue;
+            }
+            let orphan = nets.iter().all(|net_id| {
+                self.design.net(*net_id).is_some_and(|net| {
+                    // A dangling part has no ignored driver to blame; leave it
+                    // in the deck so topology fails loudly.
+                    net.endpoints.len() >= 2
+                        && net.endpoints.iter().all(|endpoint| {
+                            self.ignored.contains_key(&endpoint.component)
+                                || !live.contains(&endpoint.component)
+                        })
+                })
+            });
+            if orphan {
+                self.ignored.entry(id).or_insert_with(|| reason.clone());
             }
         }
+    }
+
+    /// A modelled regulator that stays in the deck has only its subcircuit
+    /// pins to hold its input node; an undriven input is a singular matrix.
+    /// Source it from the declared `power` voltage, or write a TODO.
+    ///
+    /// ponytail: an AC draft keeps the current behaviour because its sources
+    /// all carry the 1 V excitation; handle a bias-only source when needed.
+    fn source_regulator_inputs(&mut self) {
+        if self.measures.is_empty()
+            || self
+                .measures
+                .iter()
+                .any(|measure| measure.analysis == AnalysisKind::Ac)
+        {
+            return;
+        }
+        let sourced: HashSet<NetId> = self
+            .measures
+            .iter()
+            .map(|measure| measure.supply_net)
+            .collect();
+        let mut rail_sources = Vec::new();
+        let mut missing = Vec::new();
+        for net in &self.design.nets {
+            if net.id == self.ground || sourced.contains(&net.id) {
+                continue;
+            }
+            let needed = net.endpoints.iter().any(|endpoint| {
+                let Some(component) = self.design.component(endpoint.component) else {
+                    return false;
+                };
+                if self.ignored.contains_key(&component.id) {
+                    return false;
+                }
+                let Some(part) = component.part.as_ref() else {
+                    return false;
+                };
+                part.kind == "regulator"
+                    && part.spice.is_some()
+                    && self
+                        .design
+                        .pin(endpoint.component, endpoint.pin)
+                        .is_some_and(|pin| pin.electrical_type == ElectricalType::PowerInput)
+            });
+            if !needed || self.has_retained_power_output(net) {
+                continue;
+            }
+            match self.supply(net.id) {
+                Some(mut supply) => {
+                    supply.note = format!(
+                        "{}; it is the input of a modelled regulator and is sourced so the \
+                         model has a DC path",
+                        supply.note
+                    );
+                    rail_sources.push((net.id, supply));
+                }
+                None => missing.push(net.id),
+            }
+        }
+        self.extra_sources.extend(rail_sources);
+        for net_id in missing {
+            self.todo_nets.insert(net_id);
+        }
+    }
+
+    fn component_nets(&self, component: ComponentId) -> Vec<NetId> {
+        self.design
+            .nets
+            .iter()
+            .filter(|net| {
+                net.endpoints
+                    .iter()
+                    .any(|endpoint| endpoint.component == component)
+            })
+            .map(|net| net.id)
+            .collect()
+    }
+
+    /// A net already held by a part that stays in the deck needs no
+    /// testbench source, and a second ideal source would fight it.
+    fn has_retained_power_output(&self, net: &Net) -> bool {
+        net.endpoints.iter().any(|endpoint| {
+            !self.ignored.contains_key(&endpoint.component)
+                && self
+                    .design
+                    .pin(endpoint.component, endpoint.pin)
+                    .is_some_and(|pin| pin.electrical_type == ElectricalType::PowerOutput)
+        })
     }
 
     fn report_unused(&mut self) {
@@ -1102,6 +1239,9 @@ impl<'a> Draft<'a> {
         for measure in &self.measures {
             sources.entry(measure.supply_net).or_insert(&measure.supply);
         }
+        for (net_id, supply) in &self.extra_sources {
+            sources.entry(*net_id).or_insert(supply);
+        }
         for (net_id, supply) in sources {
             let name = self.design.net(net_id).map_or("", |net| net.name.as_str());
             let _ = writeln!(out);
@@ -1115,7 +1255,9 @@ impl<'a> Draft<'a> {
             if ac {
                 let _ = writeln!(out, "ac = 1.0");
             } else {
-                let _ = writeln!(out, "dc = {}", float(supply.volts));
+                // The limits use the full supply; a rounded source would move
+                // the measurement away from them.
+                let _ = writeln!(out, "dc = {:?}", supply.volts);
             }
         }
 
@@ -1503,6 +1645,9 @@ fn round_sig(value: f64, digits: i32) -> f64 {
     if !value.is_finite() || value == 0.0 || digits < 1 {
         return value;
     }
-    let precision = usize::try_from(digits - 1).unwrap_or(0);
+    // `digits >= 1` is guaranteed above, so this conversion cannot fail.
+    let Ok(precision) = usize::try_from(digits - 1) else {
+        return value;
+    };
     format!("{value:.precision$e}").parse().unwrap_or(value)
 }

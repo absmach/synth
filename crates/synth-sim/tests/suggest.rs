@@ -20,6 +20,16 @@ fn example_dir(name: &str) -> PathBuf {
         .join(name)
 }
 
+fn registry_parts_dir() -> PathBuf {
+    Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("..")
+        .join("..")
+        .join("registry")
+        .join("parts")
+        .canonicalize()
+        .expect("workspace registry/parts")
+}
+
 /// Compile a design from its real path, with imports rooted at its folder.
 fn board_from_file(path: &Path) -> synth_ir::Board {
     let source = std::fs::read_to_string(path).expect("read design");
@@ -642,6 +652,122 @@ board "connector-input-cap" {
     assert!(report.passed(), "diagnostics: {:?}", report.diagnostics);
 }
 
+/// Two caps on one dead rail keep each other "live" in a one-part-at-a-time
+/// sweep. Treat the whole net as dead, or the suggested sidecar fails `-008`.
+#[test]
+fn a_suggested_sidecar_ignores_two_caps_together_on_a_dead_rail() {
+    let Some(ngspice) = real_ngspice() else {
+        eprintln!("{}", real_ngspice_support::SKIP_MESSAGE);
+        return;
+    };
+    let board = board(
+        r#"
+board "two-input-caps" {
+  layers 2
+  component U1: regulator "ams1117_5v"
+  component C1: capacitor "c_generic_0805" value "10u"
+  component C2: capacitor "c_generic_0603" value "100n"
+  component R1: resistor "r_generic_0805" value "150"
+  component D1: led "ltst_c190krkt"
+  power "VIN" 12v
+  net "VIN" { U1.vin, C1.p1, C2.p1 }
+  net "GND" { U1.gnd, C1.p2, C2.p2, D1.cathode }
+  connect U1.vout -> R1.p1 as "VOUT"
+  connect R1.p2 -> D1.anode as "MID"
+}
+"#,
+    );
+    let (toml, _) = suggestion(&board);
+    assert!(toml.contains("ignore = [\"C1\", \"C2\", \"U1\"]"), "{toml}");
+    let testbench = synth_sim::Testbench::from_toml(&toml).expect("suggested sidecar");
+
+    let report = simulate_suggested(&board, &testbench, &ngspice);
+
+    assert!(report.passed(), "diagnostics: {:?}", report.diagnostics);
+}
+
+/// A bad value is a hard `-002`, even on a rail the dead-rail sweep would
+/// otherwise drop. Ignoring it would hide the typo behind a PASS.
+#[test]
+fn a_bad_value_on_a_dead_rail_is_not_ignored_and_fails_002() {
+    let board = board(
+        r#"
+board "dead-rail-bad-cap" {
+  layers 2
+  component U1: regulator "ams1117_5v"
+  component C1: capacitor "c_generic_0805" value "10uu"
+  component R1: resistor "r_generic_0805" value "150"
+  component D1: led "ltst_c190krkt"
+  power "VIN" 12v
+  net "VIN" { U1.vin, C1.p1 }
+  net "GND" { U1.gnd, C1.p2, D1.cathode }
+  connect U1.vout -> R1.p1 as "VOUT"
+  connect R1.p2 -> D1.anode as "MID"
+}
+"#,
+    );
+    let (toml, _) = suggestion(&board);
+    assert!(!toml.contains("\"C1\""), "{toml}");
+    let testbench = synth_sim::Testbench::from_toml(&toml).expect("suggested sidecar");
+
+    let report = synth_sim::simulate(
+        &board,
+        &testbench,
+        &synth_sim::SimOptions {
+            ngspice: Some(PathBuf::from("/nonexistent/ngspice")),
+            ..synth_sim::SimOptions::default()
+        },
+    );
+
+    assert!(!report.passed(), "{:?}", report.measures);
+    let message = report
+        .diagnostics
+        .iter()
+        .find(|diagnostic| diagnostic.code == synth_sim::E_SYNTH_SIM_002)
+        .and_then(|diagnostic| diagnostic.message.as_deref())
+        .unwrap_or_else(|| panic!("no -002 in {:?}", report.diagnostics));
+    assert!(
+        message.contains("C1") && message.contains("10uu"),
+        "{message}"
+    );
+}
+
+/// A modelled LDO stays in the deck when its output rail is declared, so its
+/// input rail must be driven too; otherwise ngspice sees a singular n_vin.
+#[test]
+fn a_suggested_sidecar_sources_a_modelled_regulators_input_rail() {
+    let Some(ngspice) = real_ngspice() else {
+        eprintln!("{}", real_ngspice_support::SKIP_MESSAGE);
+        return;
+    };
+    let board = board(
+        r#"
+board "ldo-modelled" {
+  layers 2
+  component U1: regulator "ams1117_3v3"
+  component C1: capacitor "c_generic_0805" value "10u"
+  component R1: resistor "r_generic_0805" value "150"
+  component D1: led "ltst_c190krkt"
+  power "VIN" 12v
+  power "VOUT" 3.3v
+  net "VIN" { U1.vin, C1.p1 }
+  net "GND" { U1.gnd, C1.p2, D1.cathode }
+  net "VOUT" { U1.vout, R1.p1 }
+  connect R1.p2 -> D1.anode as "MID"
+}
+"#,
+    );
+    let (toml, _) = suggestion(&board);
+    assert!(toml.contains("net = \"VIN\""), "{toml}");
+    assert!(toml.contains("dc = 12.0"), "{toml}");
+    assert!(!toml.contains("\"U1\""), "{toml}");
+    let testbench = synth_sim::Testbench::from_toml(&toml).expect("suggested sidecar");
+
+    let report = simulate_suggested(&board, &testbench, &ngspice);
+
+    assert!(report.passed(), "diagnostics: {:?}", report.diagnostics);
+}
+
 /// A feedback divider's mid net also drives the regulator's `fb` pin. That is
 /// the canonical shape; it must be named, not silently skipped.
 #[test]
@@ -677,6 +803,39 @@ board "feedback-divider" {
             .not_covered
             .iter()
             .any(|line| line.contains("R1") && line.contains("not a recognised shape")),
+        "{:?}",
+        suggestion.not_covered
+    );
+}
+
+/// Two parallel resistors feeding an LED are not a divider: without a leg to
+/// ground there is no divider message to print.
+#[test]
+fn parallel_resistors_feeding_an_led_are_not_called_a_divider() {
+    let board = board(
+        r#"
+board "parallel-feed" {
+  layers 2
+  component R1: resistor "r_generic_0805" value "150"
+  component R2: resistor "r_generic_0805" value "150"
+  component D1: led "ltst_c190krkt"
+  power "VCC" 5v
+  net "VCC" { R1.p1, R2.p1 }
+  net "GND" { D1.cathode }
+  connect R1.p2 -> R2.p2 as "MID"
+  connect R1.p2 -> D1.anode as "MID"
+}
+"#,
+    );
+
+    let suggestion = synth_sim::suggest_testbench(&board);
+
+    assert!(suggestion.toml.is_none(), "{:?}", suggestion.toml);
+    assert!(
+        !suggestion
+            .not_covered
+            .iter()
+            .any(|line| line.contains("divider")),
         "{:?}",
         suggestion.not_covered
     );
@@ -725,7 +884,7 @@ fn simulate_suggested(
             ngspice: Some(ngspice.to_path_buf()),
             design_path: Some(PathBuf::from("suggested.synth")),
             testbench_path: Some(PathBuf::from("suggested.sim.toml")),
-            registry_dirs: Vec::new(),
+            registry_dirs: vec![registry_parts_dir()],
         },
     )
 }
@@ -1538,6 +1697,30 @@ board "rc-noise" {
     assert!(toml.contains("min = 15600000.0"), "{toml}");
     assert!(toml.contains("max = 16200000.0"), "{toml}");
     assert!(!toml.contains("15599999.999999998"), "{toml}");
+}
+
+/// The limits are computed from the full supply value; the source must carry
+/// that same value or the simulation is off by the rounding.
+#[test]
+fn a_drafted_source_keeps_the_declared_supply_value() {
+    let board = board(
+        r#"
+board "precise-supply" {
+  layers 2
+  component R1: resistor "r_generic_0805" value "10k"
+  component R2: resistor "r_generic_0805" value "10k"
+  power "VCC" 1.23456v
+  net "VCC" { R1.p1 }
+  net "GND" { R2.p2 }
+  connect R1.p2 -> R2.p1 as "MID"
+}
+"#,
+    );
+
+    let (toml, _) = suggestion(&board);
+
+    assert!(toml.contains("dc = 1.23456"), "{toml}");
+    assert!(!toml.contains("dc = 1.235"), "{toml}");
 }
 
 /// Synth's mega is `M`; SPICE's `meg` is not accepted in a design value.

@@ -185,17 +185,9 @@ where
 /// `toml::Spanned` starts each measure at its header; extend the span to the
 /// next measure header or table so a diagnostic underlines the whole block.
 fn expand_measure_spans(testbench: &mut Testbench, text: &str) {
-    let starts: Vec<usize> = testbench
-        .measure
-        .iter()
-        .map(|measure| measure.span.byte_start as usize)
-        .collect();
-    for (index, measure) in testbench.measure.iter_mut().enumerate() {
-        let start = starts[index];
-        let end = starts
-            .get(index + 1)
-            .copied()
-            .unwrap_or_else(|| next_table_start(text, start));
+    for measure in &mut testbench.measure {
+        let start = measure.span.byte_start as usize;
+        let end = next_table_start(text, start);
         measure.span = Span::new(
             u32::try_from(start).unwrap_or(u32::MAX),
             u32::try_from(end).unwrap_or(u32::MAX),
@@ -501,12 +493,14 @@ impl Testbench {
                     ));
                 }
                 if let Some(ac) = &self.analysis.ac {
-                    if at_frequency < ac.start || at_frequency > ac.stop {
+                    // ngspice cannot interpolate at the last sweep point
+                    // (`find(AT) : out of interval`), so stop itself is out.
+                    if at_frequency < ac.start || at_frequency >= ac.stop {
                         return Err(invalid_measure(
                             measure,
                             format!(
                                 "measure `{}` reads at {at_frequency} Hz, outside the ac sweep \
-                                 {}-{} Hz",
+                                 {}-{} Hz (the stop point has no interval)",
                                 measure.name, ac.start, ac.stop
                             ),
                         ));
@@ -1144,11 +1138,12 @@ fn measurement_failure_from_stderr(stderr: &str, testbench: &Testbench) -> Optio
         return Some(diagnostic);
     }
     let excerpt = excerpt(&failed.join("\n"));
-    // `let m<N>` is emitted per measure, so a missing variable identifies it.
+    // `let m<N>` is emitted per measure, so a missing variable identifies it;
+    // an `at_frequency` gain names `synth_gain<N>` instead.
     Some(
         match stderr
             .lines()
-            .find_map(let_measure_index)
+            .find_map(|line| gain_measure_index(line).or_else(|| let_measure_index(line)))
             .and_then(|index| testbench.measure.get(index))
         {
             Some(measure) => at_measure(
@@ -1166,6 +1161,14 @@ fn measurement_failure_from_stderr(stderr: &str, testbench: &Testbench) -> Optio
 /// The index in a generated `m<N>` vector on a line, when it carries one.
 fn let_measure_index(line: &str) -> Option<usize> {
     let rest = line.split_once("&m")?.1;
+    let digits: String = rest.chars().take_while(char::is_ascii_digit).collect();
+    digits.parse().ok()
+}
+
+/// The index in a generated `synth_gain<N>` vector on a line, when it carries
+/// one; a failed `at_frequency` measure names that vector, not `m<N>`.
+fn gain_measure_index(line: &str) -> Option<usize> {
+    let rest = line.split_once("synth_gain")?.1;
     let digits: String = rest.chars().take_while(char::is_ascii_digit).collect();
     digits.parse().ok()
 }

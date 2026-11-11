@@ -1277,6 +1277,24 @@ fn a_limit_diagnostic_points_at_its_measure_block() {
     }
 }
 
+/// A table between two measures must not be swallowed by the earlier span.
+#[test]
+fn a_measure_span_ends_at_the_next_table_not_the_next_measure() {
+    let source = format!(
+        "{DIVIDER_TB}\n[[source]]\nnet = \"MID\"\nkind = \"dc\"\ndc = 0.0\n\n\
+         [[measure]]\nname = \"other\"\nkind = \"node_voltage\"\nnode = \"MID\"\n\
+         min = 0.0\nmax = 10.0\n"
+    );
+    let testbench = testbench(&source);
+    let measure = &testbench.measure[0];
+    let block = &source[measure.span.byte_start as usize..measure.span.byte_end as usize];
+
+    assert!(block.starts_with("[[measure]]"), "{block}");
+    assert!(block.contains("name = \"vmid\""), "{block}");
+    assert!(!block.contains("[[source]]"), "{block}");
+    assert!(!block.contains("name = \"other\""), "{block}");
+}
+
 /// `[[ measure ]]` with spaces is valid TOML; the span must still cover the
 /// block, and a per-measure `-003` must point at it.
 #[test]
@@ -2496,11 +2514,17 @@ fn an_at_frequency_measure_is_validated() {
 }
 
 /// ngspice only reports an out-of-range `at` as `find(AT) : out of interval`.
-/// Catch it at load time and name the measure and the sweep instead.
+/// The stop point itself has no interval, so it is out too. Catch both at load
+/// time and name the measure and the sweep instead.
 #[test]
 fn an_at_frequency_outside_the_sweep_gives_007() {
     let ac = "[analysis.ac]\nstart = 10\nstop = 1000";
-    for (label, frequency) in [("above stop", 2000.0), ("below start", 1.0)] {
+    for (label, frequency) in [
+        ("above stop", 2000.0),
+        ("below start", 1.0),
+        ("exactly stop", 1000.0),
+        ("just outside", 1000.001),
+    ] {
         let text = tb_with(
             ac,
             &format!(
@@ -2519,6 +2543,27 @@ fn an_at_frequency_outside_the_sweep_gives_007() {
                     && message.contains("outside the ac sweep 10-1000 Hz")),
             "{label}: {error:?}"
         );
+    }
+}
+
+/// The sweep start and any interior point have an interval, so they load.
+#[test]
+fn an_at_frequency_inside_the_sweep_loads() {
+    let ac = "[analysis.ac]\nstart = 10\nstop = 1000";
+    for (label, frequency) in [
+        ("exactly start", 10.0),
+        ("just inside", 999.999),
+        ("mid sweep", 159.0),
+    ] {
+        let text = tb_with(
+            ac,
+            &format!(
+                "[[measure]]\nname = \"g\"\nkind = \"node_voltage\"\nnode = \"MID\"\n\
+                 at_frequency = {frequency}"
+            ),
+        )
+        .replace("dc = 5.0", "dc = 5.0\nac = 1.0");
+        synth_sim::Testbench::from_toml(&text).unwrap_or_else(|error| panic!("{label}: {error:?}"));
     }
 }
 
