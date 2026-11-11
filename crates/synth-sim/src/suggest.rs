@@ -225,20 +225,20 @@ impl<'a> Draft<'a> {
         }
 
         self.use_components(&[id, resistor]);
+        let part_id = part.id.as_str();
+        let Some(datasheet) = datasheet_url(part) else {
+            self.not_covered.push(format!(
+                "{} ({part_id}), no datasheet_url",
+                component.refdes
+            ));
+            return;
+        };
         let Some(supply) = self.supply(supply_net) else {
             self.todo_nets.insert(supply_net);
             self.not_covered.push(format!(
                 "{}, no declared supply on net {}",
                 self.describe(id),
                 toml_string(&supply_name)
-            ));
-            return;
-        };
-        let part_id = part.id.as_str();
-        let Some(datasheet) = datasheet_url(part) else {
-            self.not_covered.push(format!(
-                "{} ({part_id}), no datasheet_url",
-                component.refdes
             ));
             return;
         };
@@ -256,22 +256,63 @@ impl<'a> Draft<'a> {
             ));
             return;
         };
-        let nominal = forward_current_ma / 1000.0;
-        let min = round_sig(nominal * 0.95, 3);
-        let uncapped_max = round_sig(nominal * 1.05, 3);
+        let Some(forward_voltage_v) = conditions.forward_voltage_v else {
+            self.not_covered.push(format!(
+                "{} ({part_id}), no operating_conditions.forward_voltage_v",
+                component.refdes
+            ));
+            return;
+        };
+        let Some(resistance) = self.resistance(resistor) else {
+            self.not_covered.push(format!(
+                "{}, no parseable `value` for the LED series resistor",
+                self.describe(resistor)
+            ));
+            return;
+        };
+        let expected = (supply.volts - forward_voltage_v) / resistance;
+        if supply.volts <= forward_voltage_v || !expected.is_finite() || expected <= 0.0 {
+            self.not_covered.push(format!(
+                "{}, (Vs - Vf)/R gives no forward current: Vs {} V, Vf {} V, R {}",
+                self.describe(id),
+                number(supply.volts),
+                number(forward_voltage_v),
+                number(resistance)
+            ));
+            return;
+        }
+        let band_min = round_sig(expected * 0.95, 3);
+        let uncapped_max = round_sig(expected * 1.05, 3);
+        let mut min = band_min;
         let mut max = uncapped_max;
-        let cap_note = conditions.max_current_ma.map_or_else(
-            || "not declared (no cap applied)".to_string(),
-            |cap| {
-                let cap_amps = round_sig(cap / 1000.0, 3);
-                if cap_amps < uncapped_max {
-                    max = cap_amps;
-                    format!("{} mA (binds; tightens the upper limit)", number(cap))
-                } else {
-                    format!("{} mA (does not bind; the ±5% band is lower)", number(cap))
-                }
-            },
-        );
+        let cap_note = if let Some(cap) = conditions.max_current_ma {
+            let cap_amps = cap / 1000.0;
+            if cap_amps < uncapped_max {
+                max = round_sig(cap_amps, 3);
+                format!("{} mA (binds; tightens the upper limit)", number(cap))
+            } else {
+                format!("{} mA (does not bind; the ±5% band is lower)", number(cap))
+            }
+        } else {
+            "not declared (no cap applied)".to_string()
+        };
+        if let Some(cap) = conditions.max_current_ma {
+            if expected > cap / 1000.0 {
+                min = round_sig(cap / 1000.0, 3);
+                max = min;
+                self.not_covered.push(format!(
+                    "{} ({part_id}), overdrive: (Vs - Vf)/R = ({} - {})/{} = {} A \
+                     exceeds max_current_ma {} mA; the drafted band is pinned to the cap \
+                     so the simulation fails",
+                    component.refdes,
+                    number(supply.volts),
+                    number(forward_voltage_v),
+                    number(resistance),
+                    number(expected),
+                    number(cap)
+                ));
+            }
+        }
         if !min.is_finite() || !max.is_finite() || min <= 0.0 || min > max {
             self.not_covered.push(format!(
                 "{} ({part_id}), operating_conditions give no usable current band",
@@ -280,22 +321,27 @@ impl<'a> Draft<'a> {
             return;
         }
 
-        let forward_voltage = conditions
-            .forward_voltage_v
-            .map_or_else(|| "not declared".to_string(), number);
         let mut comment = String::new();
         let _ = writeln!(
             comment,
-            "# measure: {} ({part_id}) forward current, derived only from the datasheet.",
+            "# measure: {} ({part_id}) forward current, from the design series resistor and the datasheet.",
             component.refdes
         );
         let _ = writeln!(
             comment,
-            "#   operating_conditions.forward_voltage_v = {forward_voltage} V"
+            "#   {} ({}) value {} (design series resistor)",
+            self.refdes(resistor),
+            self.part_id(resistor),
+            self.value(resistor)
         );
         let _ = writeln!(
             comment,
-            "#   operating_conditions.forward_current_ma = {} mA (nominal)",
+            "#   operating_conditions.forward_voltage_v = {} V (registry Vf)",
+            number(forward_voltage_v)
+        );
+        let _ = writeln!(
+            comment,
+            "#   operating_conditions.forward_current_ma = {} mA (datasheet rating)",
             number(forward_current_ma)
         );
         let _ = writeln!(
@@ -305,8 +351,12 @@ impl<'a> Draft<'a> {
         let _ = writeln!(comment, "#   datasheet: {datasheet}");
         let _ = writeln!(
             comment,
-            "#   policy: forward_current_ma ±5%, rounded to 3 significant digits: \
-             {min} A..{uncapped_max} A; final band {min} A..{max} A."
+            "#   policy: (Vs - Vf)/R = ({} - {})/{} = {} A; ±5% rounded to 3 significant \
+             digits: {band_min} A..{uncapped_max} A; final band {min} A..{max} A.",
+            number(supply.volts),
+            number(forward_voltage_v),
+            number(resistance),
+            number(expected)
         );
         if reversed {
             let _ = writeln!(
@@ -315,7 +365,7 @@ impl<'a> Draft<'a> {
                 toml_string(&other.name)
             );
         }
-        if part.is_unverified() {
+        if needs_review(part) {
             let _ = writeln!(
                 comment,
                 "# UNREVIEWED: the part has no reviewed_by; check the datasheet before use."
@@ -404,19 +454,25 @@ impl<'a> Draft<'a> {
 
         self.use_components(&[top, bottom]);
         let Some(supply) = self.supply(supply_net) else {
-            self.todo_nets.insert(supply_net);
-            self.not_covered.push(format!(
-                "{}, no declared supply on net {}",
-                self.describe(top),
-                toml_string(&supply_name)
-            ));
+            // A net driven by another part is an internal node of a longer
+            // chain, not a missing `power` declaration.
+            if !self.driven_by_other_part(supply_net, top) {
+                self.todo_nets.insert(supply_net);
+                self.not_covered.push(format!(
+                    "{}, no declared supply on net {}",
+                    self.describe(top),
+                    toml_string(&supply_name)
+                ));
+            }
             return;
         };
-        let (Some(top_ohms), Some(bottom_ohms)) = (self.resistance(top), self.resistance(bottom))
-        else {
+        let top_ohms = self.resistance(top);
+        let bottom_ohms = self.resistance(bottom);
+        let (Some(top_ohms), Some(bottom_ohms)) = (top_ohms, bottom_ohms) else {
+            let failing = if top_ohms.is_none() { top } else { bottom };
             self.not_covered.push(format!(
                 "{}, no parseable `value` for the divider",
-                self.describe(top)
+                self.describe(failing)
             ));
             return;
         };
@@ -437,6 +493,10 @@ impl<'a> Draft<'a> {
             comment,
             "# measure: divider at net {}, V = Vsupply * Rbottom/(Rtop+Rbottom).",
             toml_string(&net.name)
+        );
+        let _ = writeln!(
+            comment,
+            "#   derived from this design's values; checks wiring and model, not the value choice."
         );
         let _ = writeln!(
             comment,
@@ -616,6 +676,10 @@ impl<'a> Draft<'a> {
         );
         let _ = writeln!(
             comment,
+            "#   derived from this design's values; checks wiring and model, not the value choice."
+        );
+        let _ = writeln!(
+            comment,
             "#   {} ({}) value {}; datasheet: {}",
             self.refdes(resistor),
             self.part_id(resistor),
@@ -633,7 +697,8 @@ impl<'a> Draft<'a> {
         self.unreviewed_notes(&[resistor, capacitor], &mut comment);
         let _ = writeln!(
             comment,
-            "#   1/(2*pi*{resistance_value}*{capacitance_value}) = {corner:.2} Hz; ≈±2% rounded to 3 significant digits: {min} Hz..{max} Hz."
+            "#   1/(2*pi*{resistance_value}*{capacitance_value}) = {} Hz; ≈±2% rounded to 3 significant digits: {min} Hz..{max} Hz.",
+            number(corner)
         );
 
         let name = self.unique("corner");
@@ -802,7 +867,7 @@ impl<'a> Draft<'a> {
                 .design
                 .component(component)
                 .and_then(|component| component.part.as_ref())
-                .is_some_and(synth_registry::Part::is_unverified);
+                .is_some_and(needs_review);
             if unverified {
                 let _ = writeln!(
                     comment,
@@ -892,6 +957,21 @@ impl<'a> Draft<'a> {
         })
     }
 
+    /// True when a part other than `exclude` connects to `net` without being a
+    /// supply source; such a net is an internal node of a longer chain.
+    fn driven_by_other_part(&self, net: NetId, exclude: ComponentId) -> bool {
+        let Some(net) = self.design.net(net) else {
+            return false;
+        };
+        net.endpoints.iter().any(|endpoint| {
+            endpoint.component != exclude
+                && !self
+                    .design
+                    .pin(endpoint.component, endpoint.pin)
+                    .is_some_and(|pin| pin.electrical_type == ElectricalType::PowerOutput)
+        })
+    }
+
     /// The one other net a two-pin part is connected to.
     fn other_net_of(&self, component: ComponentId, net: NetId) -> Option<NetId> {
         let part = self.design.component(component)?.part.as_ref()?;
@@ -952,6 +1032,15 @@ fn datasheet_url(part: &synth_registry::Part) -> Option<&str> {
         .filter(|url| !url.trim().is_empty())
 }
 
+/// No reviewer means unreviewed, including a part with no `[provenance]` block.
+fn needs_review(part: &synth_registry::Part) -> bool {
+    part.provenance
+        .as_ref()
+        .and_then(|provenance| provenance.reviewed_by.as_deref())
+        .unwrap_or("")
+        .is_empty()
+}
+
 /// A net name must not smuggle a new TOML line into the sidecar. The loader
 /// rejects these names too, so a shape that uses one is not drafted.
 fn has_line_break(value: &str) -> bool {
@@ -994,8 +1083,10 @@ fn toml_string(value: &str) -> String {
     out
 }
 
+/// A number for a comment: 4 significant digits for the reader. Limits keep
+/// their own precision through [`float`].
 fn number(value: f64) -> String {
-    value.to_string()
+    round_sig(value, 4).to_string()
 }
 
 /// A TOML float. `Debug` keeps `6.0` a float and never emits a bare integer.

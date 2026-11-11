@@ -462,6 +462,271 @@ fn assert_out_of_limit(report: &synth_sim::SimReport, name: &str, direction: &st
     );
 }
 
+const LED_BOARD: &str = r#"
+board "led-board" {
+  layers 2
+  component R1: resistor "r_generic_0805" value "330"
+  component LED1: led "ltst_c190krkt"
+  power "VCC" 5v
+  net "VCC" { R1.p1 }
+  net "GND" { LED1.cathode }
+  connect R1.p2 -> LED1.anode as "MID"
+}
+"#;
+
+/// The band comes from the design resistor and the registry forward voltage,
+/// so a board that is not the reference 150 ohm one still passes.
+#[test]
+fn a_suggested_led_testbench_passes_a_330_ohm_5v_board() {
+    let Some(ngspice) = real_ngspice() else {
+        eprintln!("{}", real_ngspice_support::SKIP_MESSAGE);
+        return;
+    };
+    let board = board(LED_BOARD);
+    let (toml, not_covered) = suggestion(&board);
+    assert!(not_covered.is_empty(), "{not_covered:?}");
+    let testbench = synth_sim::Testbench::from_toml(&toml).expect("suggested sidecar");
+
+    let report = simulate_suggested(&board, &testbench, &ngspice);
+
+    assert!(report.passed(), "{:?}", report.measures);
+}
+
+#[test]
+fn a_suggested_led_testbench_passes_a_1k_12v_board() {
+    let Some(ngspice) = real_ngspice() else {
+        eprintln!("{}", real_ngspice_support::SKIP_MESSAGE);
+        return;
+    };
+    let source = LED_BOARD
+        .replace("value \"330\"", "value \"1k\"")
+        .replace("power \"VCC\" 5v", "power \"VCC\" 12v");
+    assert_ne!(source, LED_BOARD);
+    let board = board(&source);
+    let (toml, not_covered) = suggestion(&board);
+    assert!(not_covered.is_empty(), "{not_covered:?}");
+    let testbench = synth_sim::Testbench::from_toml(&toml).expect("suggested sidecar");
+
+    let report = simulate_suggested(&board, &testbench, &ngspice);
+
+    assert!(report.passed(), "{:?}", report.measures);
+}
+
+#[test]
+fn an_overdriven_led_drafts_a_band_that_fails_and_says_overdrive() {
+    let Some(ngspice) = real_ngspice() else {
+        eprintln!("{}", real_ngspice_support::SKIP_MESSAGE);
+        return;
+    };
+    let source = LED_BOARD
+        .replace("value \"330\"", "value \"10\"")
+        .replace("power \"VCC\" 5v", "power \"VCC\" 24v");
+    assert_ne!(source, LED_BOARD);
+    let board = board(&source);
+    let (toml, not_covered) = suggestion(&board);
+    let testbench = synth_sim::Testbench::from_toml(&toml).expect("suggested sidecar");
+    let iled = measure(&testbench, "iled");
+    assert_eq!(iled.min, Some(0.025), "{toml}");
+    assert_eq!(iled.max, Some(0.025), "{toml}");
+    // The comment must still cite the real ±5% band, not the pinned limit.
+    assert!(toml.contains("2.09 A..2.31 A"), "{toml}");
+    assert!(
+        not_covered
+            .iter()
+            .any(|line| line.contains("overdrive") && line.contains("LED1")),
+        "{not_covered:?}"
+    );
+
+    let report = simulate_suggested(&board, &testbench, &ngspice);
+
+    assert_out_of_limit(&report, "iled", "above max");
+}
+
+#[test]
+fn a_missing_forward_voltage_gives_no_measure_and_says_why() {
+    let board = board_with_registry(LED_BOARD, |registry| {
+        let mut part = registry
+            .lookup("ltst_c190krkt")
+            .expect("ltst_c190krkt")
+            .clone();
+        part.operating_conditions
+            .as_mut()
+            .expect("operating conditions")
+            .forward_voltage_v = None;
+        registry.insert(part);
+    });
+
+    let suggestion = synth_sim::suggest_testbench(&board);
+
+    assert!(suggestion.toml.is_none(), "{:?}", suggestion.toml);
+    assert!(
+        suggestion
+            .not_covered
+            .iter()
+            .any(|line| line.contains("LED1")
+                && line.contains("ltst_c190krkt")
+                && line.contains("forward_voltage_v")),
+        "{:?}",
+        suggestion.not_covered
+    );
+}
+
+/// The divider and RC limits are computed from the same values they check, so
+/// the generated comment says what the pass actually proves.
+#[test]
+fn the_divider_and_rc_drafts_say_the_limits_come_from_the_design() {
+    const NOTE: &str =
+        "#   derived from this design's values; checks wiring and model, not the value choice.";
+
+    let divider = board_from_file(&example_dir("divider").join("divider.synth"));
+    let (toml, _) = suggestion(&divider);
+    assert!(toml.contains(NOTE), "{toml}");
+
+    let rc = board_from_file(&example_dir("rc_filter").join("rc_filter.synth"));
+    let (toml, _) = suggestion(&rc);
+    assert!(toml.contains(NOTE), "{toml}");
+}
+
+/// The picked supply net may be an internal node of a longer chain; it is not
+/// a missing `power` declaration, so no TODO belongs on it.
+#[test]
+fn a_three_resistor_chain_writes_no_todo_for_its_internal_node() {
+    let board = board(
+        r#"
+board "chain" {
+  layers 2
+  component R1: resistor "r_generic_0805" value "10k"
+  component R2: resistor "r_generic_0805" value "10k"
+  component R3: resistor "r_generic_0805" value "10k"
+  power "VCC" 12v
+  net "VCC" { R1.p1 }
+  net "GND" { R3.p2 }
+  connect R1.p2 -> R2.p1 as "MID1"
+  connect R2.p2 -> R3.p1 as "MID2"
+}
+"#,
+    );
+
+    let suggestion = synth_sim::suggest_testbench(&board);
+
+    assert!(suggestion.toml.is_none(), "{:?}", suggestion.toml);
+    assert!(
+        !suggestion
+            .not_covered
+            .iter()
+            .any(|line| line.contains("no declared supply")),
+        "{:?}",
+        suggestion.not_covered
+    );
+}
+
+/// The ticket rule is "no `reviewed_by` means UNREVIEWED", so a part with no
+/// `[provenance]` block at all is marked too.
+#[test]
+fn parts_without_a_provenance_block_are_marked_unreviewed() {
+    let board = board_from_file(&example_dir("divider").join("divider.synth"));
+    let (toml, _) = suggestion(&board);
+
+    assert!(toml.contains("# UNREVIEWED: R1 (r_generic_0805)"), "{toml}");
+    assert!(toml.contains("# UNREVIEWED: R2 (r_generic_0805)"), "{toml}");
+}
+
+/// The datasheet gap is the more specific reason; it wins over the missing
+/// supply in the report.
+#[test]
+fn an_led_without_a_datasheet_reports_that_before_the_missing_supply() {
+    let board = board(
+        r#"
+board "no-datasheet-no-supply" {
+  layers 2
+  component R1: resistor "r_generic_0805" value "150"
+  component LED1: led "led_red_0603"
+  net "VCC" { R1.p1 }
+  net "GND" { LED1.cathode }
+  connect R1.p2 -> LED1.anode as "MID"
+}
+"#,
+    );
+
+    let suggestion = synth_sim::suggest_testbench(&board);
+
+    assert!(suggestion.toml.is_none(), "{:?}", suggestion.toml);
+    assert!(
+        suggestion
+            .not_covered
+            .iter()
+            .any(|line| line.contains("no datasheet")),
+        "{:?}",
+        suggestion.not_covered
+    );
+    assert!(
+        !suggestion
+            .not_covered
+            .iter()
+            .any(|line| line.contains("no declared supply")),
+        "{:?}",
+        suggestion.not_covered
+    );
+}
+
+/// The unparseable value belongs to the bottom resistor here; the message must
+/// not blame the top one.
+#[test]
+fn a_divider_with_one_bad_value_names_that_resistor() {
+    let board = board(
+        r#"
+board "bad-value" {
+  layers 2
+  component R1: resistor "r_generic_0805" value "4.7k"
+  component R2: resistor "r_generic_0805" value "2k2"
+  power "VCC" 12v
+  net "VCC" { R1.p1 }
+  net "GND" { R2.p2 }
+  connect R1.p2 -> R2.p1 as "MID"
+}
+"#,
+    );
+
+    let suggestion = synth_sim::suggest_testbench(&board);
+
+    assert!(suggestion.toml.is_none(), "{:?}", suggestion.toml);
+    let line = suggestion
+        .not_covered
+        .iter()
+        .find(|line| line.contains("no parseable"))
+        .unwrap_or_else(|| panic!("no parseable line in {:?}", suggestion.not_covered));
+    assert!(line.contains("R2 (r_generic_0805)"), "{line}");
+    assert!(!line.contains("R1"), "{line}");
+}
+
+/// Comment numbers are rounded for display; the limits keep 3 significant
+/// digits.
+#[test]
+fn generated_comments_round_only_the_displayed_numbers() {
+    let board = board(
+        r#"
+board "rounding" {
+  layers 2
+  component R1: resistor "r_generic_0805" value "4.7k"
+  component R2: resistor "r_generic_0805" value "2.2k"
+  power "VCC" 3.3v
+  net "VCC" { R1.p1 }
+  net "GND" { R2.p2 }
+  connect R1.p2 -> R2.p1 as "MID"
+}
+"#,
+    );
+
+    let (toml, _) = suggestion(&board);
+
+    assert!(toml.contains("= 1.052 V"), "{toml}");
+    assert!(!toml.contains("1.0521739130434782"), "{toml}");
+    let testbench = synth_sim::Testbench::from_toml(&toml).expect("suggested sidecar");
+    let vmid = measure(&testbench, "vmid");
+    assert_eq!(vmid.min, Some(1.0));
+    assert_eq!(vmid.max, Some(1.1));
+}
+
 /// The suggested limits catch the classic divider mistake: R2 ten times too
 /// large moves the midpoint far above its band.
 #[test]

@@ -60,20 +60,27 @@ synth sim --suggest --force /tmp/divider.synth
 
 The v1 shapes are:
 
-- **LED plus series resistor.** The current band is
-  `operating_conditions.forward_current_ma` ±5%, with the upper limit capped by
-  `max_current_ma` when the part declares it. The LED part must carry a
-  non-empty `[provenance].datasheet_url`; otherwise no measure is drafted. The
-  measure comment names the part id, the operating conditions and the datasheet
-  URL. A part without `reviewed_by` gets a `# UNREVIEWED` comment, because the
-  registry entry itself has not been reviewed.
+- **LED plus series resistor.** The current band is `(Vs - Vf) / R` ±5%,
+  where `Vs` is the supply net voltage, `Vf` is
+  `operating_conditions.forward_voltage_v` and `R` is the design series
+  resistor's `value`, with the upper limit capped by `max_current_ma` when the
+  part declares it. A part without `forward_voltage_v` gets no measure. When
+  the expected current is above `max_current_ma`, the drafted band is pinned to
+  the cap so the simulation fails, and the stderr line contains `overdrive`.
+  The LED part must carry a non-empty `[provenance].datasheet_url`; otherwise
+  no measure is drafted. The measure comment names the resistor, the part id,
+  the operating conditions and the datasheet URL. A part without `reviewed_by`
+  gets a `# UNREVIEWED` comment, including a part with no `[provenance]` block,
+  because the registry entry itself has not been reviewed.
 - **Resistor divider.** The midpoint is measured against
   `Vsupply * Rbottom/(Rtop+Rbottom)` from the two design `value` fields, ±5%.
   No datasheet is required for a design `value`, and the comment names both
-  references, part ids and values.
+  references, part ids and values. Derived from this design's values; checks
+  wiring and model, not the value choice.
 - **RC low-pass.** The `relative_db` corner is measured at
   `fc = 1/(2*pi*R*C)` from the design `value` fields, ±2%, with the default
-  3 dB drop. The AC sweep is `fc/100 .. fc*100`.
+  3 dB drop. The AC sweep is `fc/100 .. fc*100`. Derived from this design's
+  values; checks wiring and model, not the value choice.
 
 Shape names come from the compiled `Board`: exactly one net must be classified
 as ground. Every TOML number cites its source in the comment above it. A supply
@@ -88,7 +95,8 @@ missing model is a known gap.
 When a net has no declared supply, the number is never defaulted. If another
 shape drafts at least one measure, the file carries a `# TODO` naming that net
 and the `power "<net>" <voltage>` line to add. If no measure can be drafted at
-all, no file is written and the `not covered` line explains why.
+all, no file is written, the reason goes to stderr as a `not covered` line and
+the command still exits 0; callers must check that the file exists.
 
 A supply used for an `ac` shape is the AC magnitude too; the corner is
 independent of the drive level. Anything the draft does not cover is printed

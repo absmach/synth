@@ -362,6 +362,45 @@ board "none" {
 }
 
 #[test]
+fn suggest_prints_the_overdrive_line_and_writes_a_failing_band() {
+    let dir = scratch("suggest-overdrive");
+    let design = dir.join("overdrive.synth");
+    std::fs::write(
+        &design,
+        r#"
+board "overdrive" {
+  layers 2
+  component R1: resistor "r_generic_0805" value "10"
+  component LED1: led "ltst_c190krkt"
+  power "VCC" 24v
+  net "VCC" { R1.p1 }
+  net "GND" { LED1.cathode }
+  connect R1.p2 -> LED1.anode as "MID"
+}
+"#,
+    )
+    .expect("write design");
+
+    let output = run_suggest(&design, false);
+
+    assert!(
+        output.status.success(),
+        "stderr: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(stderr.contains("overdrive"), "{stderr}");
+    let testbench = synth_sim::Testbench::from_path(&dir.join("overdrive.sim.toml"))
+        .expect("the suggested sidecar parses");
+    let iled = testbench
+        .measure
+        .iter()
+        .find(|measure| measure.name == "iled")
+        .expect("iled");
+    assert_eq!(iled.max, Some(0.025));
+}
+
+#[test]
 fn suggest_reports_a_part_without_a_datasheet() {
     let dir = scratch("suggest-no-datasheet");
     let design = dir.join("no_datasheet.synth");
