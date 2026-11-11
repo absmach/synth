@@ -1512,7 +1512,7 @@ fn resolve_spice_model(spice: &SpiceModel, roots: &[PathBuf]) -> Result<PathBuf,
                 spice.file
             ));
         }
-        check_model_file(&canonical, &spice.subckt)?;
+        check_model_file(&canonical, spice)?;
         return Ok(canonical);
     }
     let mut found_outside = false;
@@ -1528,7 +1528,7 @@ fn resolve_spice_model(spice: &SpiceModel, roots: &[PathBuf]) -> Result<PathBuf,
             .canonicalize()
             .map_err(|error| format!("model file `{}` is not readable: {error}", spice.file))?;
         if roots.iter().any(|root| canonical.starts_with(root)) {
-            check_model_file(&canonical, &spice.subckt)?;
+            check_model_file(&canonical, spice)?;
             return Ok(canonical);
         }
         found_outside = true;
@@ -1547,8 +1547,9 @@ fn resolve_spice_model(spice: &SpiceModel, roots: &[PathBuf]) -> Result<PathBuf,
 }
 
 /// Reject model files ngspice cannot safely run, and require the named
-/// subcircuit to be present.
-fn check_model_file(path: &Path, subckt: &str) -> Result<(), String> {
+/// subcircuit to be present with exactly the terminals `pin_order` binds.
+fn check_model_file(path: &Path, spice: &SpiceModel) -> Result<(), String> {
+    let subckt = spice.subckt.as_str();
     let verilog_a = path
         .extension()
         .and_then(|extension| extension.to_str())
@@ -1600,26 +1601,78 @@ fn check_model_file(path: &Path, subckt: &str) -> Result<(), String> {
             }
         }
     }
-    let found = text.lines().any(|line| {
-        let trimmed = line.trim_start();
-        if trimmed.starts_with('*') {
-            return false;
-        }
-        let mut tokens = trimmed.split_whitespace();
-        tokens
-            .next()
-            .is_some_and(|token| token.eq_ignore_ascii_case(".subckt"))
-            && tokens
-                .next()
-                .is_some_and(|token| token.eq_ignore_ascii_case(subckt))
-    });
-    if !found {
+    let Some(terminal_count) = subckt_terminal_count(&text, subckt) else {
         return Err(format!(
             "model file `{}` does not define `.subckt {subckt}`",
             path.display()
         ));
+    };
+    if terminal_count != spice.pin_order.len() {
+        return Err(format!(
+            "model file `{}` defines `.subckt {subckt}` with {terminal_count} terminals, \
+             but `[spice] pin_order` lists {} pins",
+            path.display(),
+            spice.pin_order.len()
+        ));
     }
     Ok(())
+}
+
+/// Count the terminal names on a `.subckt` declaration. Terminals end at an
+/// explicit `params:` or the first `name=value` parameter, and a `+` line
+/// continues the declaration. `None` means the subcircuit is not defined.
+fn subckt_terminal_count(text: &str, subckt: &str) -> Option<usize> {
+    let mut lines = text.lines();
+    while let Some(line) = lines.next() {
+        let trimmed = line.trim_start();
+        if trimmed.starts_with('*') {
+            continue;
+        }
+        let mut tokens = trimmed.split_whitespace();
+        if !tokens
+            .next()
+            .is_some_and(|token| token.eq_ignore_ascii_case(".subckt"))
+        {
+            continue;
+        }
+        if !tokens
+            .next()
+            .is_some_and(|token| token.eq_ignore_ascii_case(subckt))
+        {
+            continue;
+        }
+        let mut count = 0;
+        let mut terminal = |token: &str| {
+            if token.eq_ignore_ascii_case("params:") || token.contains('=') {
+                return false;
+            }
+            count += 1;
+            true
+        };
+        let mut finished = false;
+        for token in tokens {
+            if !terminal(token) {
+                finished = true;
+                break;
+            }
+        }
+        while !finished {
+            let Some(continuation) = lines.next() else {
+                break;
+            };
+            let Some(rest) = continuation.trim_start().strip_prefix('+') else {
+                break;
+            };
+            for token in rest.split_whitespace() {
+                if !terminal(token) {
+                    finished = true;
+                    break;
+                }
+            }
+        }
+        return Some(count);
+    }
+    None
 }
 
 fn connected_nodes(

@@ -1575,6 +1575,71 @@ fn a_missing_spice_subckt_gives_002_naming_the_part() {
     );
 }
 
+/// `.subckt` terminals must match `pin_order`. ngspice binds the extra nodes
+/// silently, so a mismatch otherwise reports a plausible operating point.
+#[test]
+fn a_subckt_terminal_count_must_match_pin_order() {
+    for (label, text) in [
+        ("two_terminals.lib", ".subckt ams1117_3v3 vin gnd\n.ends\n"),
+        (
+            "four_terminals.lib",
+            ".subckt ams1117_3v3 vin gnd vout extra\n.ends\n",
+        ),
+    ] {
+        let scratch = Scratch::new(label);
+        model_file(scratch.path(), label, text);
+        let board = patched_ams1117(|spice| spice.file = label.to_string());
+        let testbench = testbench(LDO_TB);
+
+        let diagnostics = synth_sim::emit_netlist_with_registry_dirs(
+            &board,
+            &testbench,
+            &[scratch.path().to_path_buf()],
+        )
+        .expect_err("terminal count mismatch");
+
+        assert!(
+            diagnostics.iter().any(|diagnostic| {
+                diagnostic.code == synth_sim::E_SYNTH_SIM_002
+                    && diagnostic.message.as_deref().is_some_and(|message| {
+                        message.contains("U1") && message.contains("ams1117_3v3")
+                    })
+            }),
+            "{label}: {diagnostics:?}"
+        );
+    }
+}
+
+/// `params:` and `name=value` are not terminals; a wrapped `.subckt` line is
+/// still one declaration.
+#[test]
+fn subckt_params_and_continuation_lines_are_not_terminals() {
+    for (label, text) in [
+        (
+            "params.lib",
+            ".subckt ams1117_3v3 vin gnd vout params: rout=50m\nVref vout int 3.3\n\
+             Rout int gnd {rout}\n.ends\n",
+        ),
+        (
+            "continuation.lib",
+            ".subckt ams1117_3v3 vin gnd\n+ vout params: rout=50m\nVref vout int 3.3\n\
+             Rout int gnd {rout}\n.ends\n",
+        ),
+    ] {
+        let scratch = Scratch::new(label);
+        model_file(scratch.path(), label, text);
+        let board = patched_ams1117(|spice| spice.file = label.to_string());
+        let testbench = testbench(LDO_TB);
+
+        synth_sim::emit_netlist_with_registry_dirs(
+            &board,
+            &testbench,
+            &[scratch.path().to_path_buf()],
+        )
+        .expect("terminal count matches pin_order");
+    }
+}
+
 /// A missing model file must not fail lowering; only the simulation reports it.
 #[test]
 fn a_missing_spice_model_file_gives_002_naming_the_part() {
