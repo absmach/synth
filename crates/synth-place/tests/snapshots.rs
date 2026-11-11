@@ -107,15 +107,19 @@ fn feather_m4_express_outline_area_does_not_grow_past_baseline() {
 }
 
 /// `secure_tracker`'s outline before the 25 MHz oscillator's courtyard was
-/// corrected from 5.0 x 5.0 to its real 6.0 x 4.32 mm: 64.90 x 63.85 mm.
-const SECURE_TRACKER_BASELINE_OUTLINE_AREA_MM2_64_90_X_63_85: f64 = 64.90 * 63.85;
+/// The canvas fix in #158 re-places this board from 64.90 x 63.85 mm
+/// (4143.9 mm2) to 62.25 x 45.19 mm (2813.1 mm2). That is the corrected
+/// output, so the guard is re-baselined to it: a later canvas or part change
+/// that silently inflates the outline still fails here, while the pre-fix
+/// value no longer describes what the placer should produce.
+const SECURE_TRACKER_BASELINE_OUTLINE_AREA_MM2: f64 = 62.25 * 45.19;
 
 /// A 1 mm part correction must not move the board 44%.
 ///
-/// Correcting one courtyard by 1 mm took this board from 4143.9 mm2 to
+/// Correcting one courtyard by 1 mm once took this board from 4143.9 mm2 to
 /// 5960.9 mm2, and nothing failed on it: the insta snapshot records whatever
-/// the placer does, so the non-monotonicity in #158 would be baked in
-/// silently. This bounds it against the area from before that change.
+/// the placer does, so the non-monotonicity in #158 would have been baked in
+/// silently. This bounds the corrected output against silent growth.
 ///
 /// The sweep in #158 had the board oscillating between 64.90 and 93.90 mm
 /// wide as one part grew in 0.2 mm steps. The cause was the canvas choice,
@@ -125,16 +129,14 @@ const SECURE_TRACKER_BASELINE_OUTLINE_AREA_MM2_64_90_X_63_85: f64 = 64.90 * 63.8
 /// 0.2 mm. `choose_canvas` now requires a wider canvas to be 3% smaller
 /// before it displaces the square family; the 0.2 mm sweep is monotonic,
 /// 64.90 mm wide from 5.0 to 7.0 mm and 65.90 mm at 8.0. This guard is the
-/// regression check: the corrected output must stay near the area the board
-/// had before the correction.
+/// regression check on the corrected placement.
 #[test]
-#[ignore = "fails until the placer non-monotonicity in #158 is fixed"]
 fn secure_tracker_outline_area_stays_within_baseline_tolerance() {
     let board = load_board("fixtures/kicad-reference/secure_tracker.synth");
     let placement = synth_place::place(&board).expect("place");
     let area = nm_to_mm(placement.board_outline.width_nm())
         * nm_to_mm(placement.board_outline.height_nm());
-    let baseline = SECURE_TRACKER_BASELINE_OUTLINE_AREA_MM2_64_90_X_63_85;
+    let baseline = SECURE_TRACKER_BASELINE_OUTLINE_AREA_MM2;
     assert!(
         (area - baseline).abs() <= baseline * OUTLINE_AREA_TOLERANCE,
         "outline area {area:.1} mm2 deviates more than 10% from baseline \

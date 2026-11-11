@@ -186,12 +186,24 @@ fn stage_status(report: &serde_json::Value, stage: &str) -> String {
 ///
 /// `synth check` computes its overall status as `source && drc && (!fab ||
 /// manufacturing)`, so under `--fab` the overall status answers a different
-/// question from the one `expect` asks. Both stages must pass here, and
-/// `unknown` is not a pass: a DRC that could not be performed has not cleared
-/// the board.
+/// question from the one `expect` asks. A stage that could not run is
+/// `unknown`, which is neither a pass nor a failure of the board: reporting it
+/// as `fail` collapses "the router was missing" and "the board violates its
+/// rules" into one state, and lets a whole matrix declare failure for a reason
+/// nobody can act on. `unknown` therefore has its own verdict here.
 fn gate_verdict(report: &serde_json::Value) -> String {
-    let passed = stage_status(report, "source") == "pass" && stage_status(report, "drc") == "pass";
-    if passed { "pass" } else { "fail" }.to_string()
+    let source = stage_status(report, "source");
+    let drc = stage_status(report, "drc");
+    // A source failure is a failure even when the DRC never ran: the board
+    // has already been judged. `unknown` is for the case where the source is
+    // clean (or could not be read) and the DRC could not produce a verdict.
+    if source == "unknown" || (source == "pass" && drc == "unknown") {
+        "unknown".to_string()
+    } else if source == "pass" && drc == "pass" {
+        "pass".to_string()
+    } else {
+        "fail".to_string()
+    }
 }
 
 fn source_codes(report: &serde_json::Value) -> Vec<String> {
@@ -573,8 +585,8 @@ fn the_matrix_is_well_formed() {
             spec.id
         );
         assert!(
-            ["pass", "fail", "unestablished"].contains(&spec.expect.as_str()),
-            "{}: expect must be pass, fail or unestablished, found {}",
+            ["pass", "fail", "unknown", "unestablished"].contains(&spec.expect.as_str()),
+            "{}: expect must be pass, fail, unknown or unestablished, found {}",
             spec.id,
             spec.expect
         );
@@ -634,13 +646,16 @@ fn the_matrix_is_well_formed() {
             "class {class} has no board in the corpus"
         );
     }
+    // A matrix in which nothing can pass cannot tell a regression from a
+    // broken environment: that is what happened while the runner silently
+    // installed KiCad 9, and every row fell to `fail` for the same reason.
+    // At least one measured board must clear the source/DRC gate.
+    assert!(
+        matrix.board.iter().any(|b| b.expect == "pass"),
+        "at least one board must declare expect = \"pass\"; a corpus where every row fails cannot catch a regression"
+    );
     // Positive and negative are claims about why a board is in the corpus, so
-    // they are read off `status`, not off `expect`. `expect` is a measurement:
-    // a positive board whose copper is complete can still fail at DRC, and
-    // requiring some board to declare `expect = "pass"` would force the matrix
-    // to claim a pass nobody had observed — which is the one thing a gate must
-    // never be made to do. Today every board in the corpus declares
-    // `expect = "fail"`, and the corpus is still well formed.
+    // they are read off `status`, not off `expect`.
     assert!(
         matrix.board.iter().any(|b| b.status != "unsupported"),
         "the corpus needs at least one positive case"

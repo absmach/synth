@@ -70,6 +70,11 @@ board "i2c_sensor_node" {
     connect U1.gnd  -> U4.gnd
     connect U4.vdd  -> C6.p1
     connect U4.gnd  -> C6.p2
+    // Address 0x50 and write-enabled: all three address straps and WP to GND.
+    connect U1.gnd  -> U4.a0
+    connect U1.gnd  -> U4.a1
+    connect U1.gnd  -> U4.a2
+    connect U1.gnd  -> U4.wp
 
     connect U2.pa10 -> U3.sda
     connect U2.pa10 -> U4.sda

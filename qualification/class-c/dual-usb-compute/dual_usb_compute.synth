@@ -170,6 +170,11 @@ board "dual_usb_compute" {
       component R3: resistor  "r_generic_0603" value "10k"
       component U3: memory    "w25q128_flash" { placement_hint { near: "U2" priority: hard } }
       component C9: capacitor "c_generic_0603" value "100nF" { placement_hint { near: "U3" priority: hard } }
+      component R5: resistor  "r_generic_0603" value "27"
+      component R6: resistor  "r_generic_0603" value "27"
+      component Y1: crystal   "xtal_generic" value "12MHz"
+      component C13: capacitor "c_generic_0603" value "15pF"
+      component C14: capacitor "c_generic_0603" value "15pF"
       notes "" {
         "QSPI runs at speed, so the flash is pinned next to the MCU with a"
         "hard hint and the bus has its own netclass."
@@ -196,6 +201,14 @@ board "dual_usb_compute" {
     connect U2.vreg_avdd  -> C7.p1
     connect U2.gnd        -> C7.p2
 
+    connect U2.xin -> Y1.p1
+    connect U2.xout -> Y1.p2
+    connect Y1.p1 -> C13.p1
+    connect U1.gnd -> C13.p2
+    connect Y1.p2 -> C14.p1
+    connect U1.gnd -> C14.p2
+    connect U1.gnd -> Y1.case_1
+    connect U1.gnd -> Y1.case_2
     connect U2.vreg_lx -> L1.p1
     connect L1.p2      -> U2.dvdd
     connect U2.dvdd    -> U2.vreg_fb
@@ -217,8 +230,10 @@ board "dual_usb_compute" {
     connect U2.qspi_sd1  -> U3.io1 class "QSPI"
     connect U2.qspi_sd2  -> U3.io2 class "QSPI"
     connect U2.qspi_sd3  -> U3.io3 class "QSPI"
-    connect J1.dp -> U2.usb_dp class "USB"
-    connect J1.dn -> U2.usb_dn class "USB"
+    connect J1.dp -> R5.p1
+    connect R5.p2 -> U2.usb_dp class "USB"
+    connect J1.dn -> R6.p1
+    connect R6.p2 -> U2.usb_dn class "USB"
 
     group "RP2350 DEVICE" color "#0a7d4a" {
       // A second RP2350 rather than the ESP32-C3 this board was first
@@ -230,6 +245,13 @@ board "dual_usb_compute" {
       component C10: capacitor "c_generic_0805" value "10uF" { placement_hint { near: "U4" priority: hard } }
       component C11: capacitor "c_generic_0603" value "100nF" { placement_hint { near: "U4" priority: hard } }
       component R4: resistor  "r_generic_0603" value "10k"
+      component L2: inductor  "l_generic_0603" value "3.3uH" { placement_hint { near: "U4" priority: hard } }
+      component C12: capacitor "c_generic_0805" value "4.7uF" { placement_hint { near: "U4" priority: hard } }
+      component R7: resistor  "r_generic_0603" value "27"
+      component R8: resistor  "r_generic_0603" value "27"
+      component Y2: crystal   "xtal_generic" value "12MHz"
+      component C15: capacitor "c_generic_0603" value "15pF"
+      component C16: capacitor "c_generic_0603" value "15pF"
     }
 
     connect U1.vout -> U4.iovdd
@@ -240,9 +262,23 @@ board "dual_usb_compute" {
     connect U1.vout -> U4.adc_avdd
     connect U1.vout -> U4.vreg_avdd
     connect U1.vout -> U4.vreg_vin
-    connect U1.vout -> U4.dvdd3
     connect U1.gnd  -> U4.gnd
     connect U1.gnd  -> U4.vreg_pgnd
+    connect U4.xin -> Y2.p1
+    connect U4.xout -> Y2.p2
+    connect Y2.p1 -> C15.p1
+    connect U1.gnd -> C15.p2
+    connect Y2.p2 -> C16.p1
+    connect U1.gnd -> C16.p2
+    connect U1.gnd -> Y2.case_1
+    connect U1.gnd -> Y2.case_2
+    connect U4.vreg_lx -> L2.p1
+    connect L2.p2      -> U4.dvdd
+    connect U4.dvdd    -> U4.dvdd2
+    connect U4.dvdd2   -> U4.dvdd3
+    connect U4.dvdd    -> U4.vreg_fb
+    connect U4.dvdd    -> C12.p1
+    connect U4.gnd     -> C12.p2
     connect U4.iovdd -> C10.p1
     connect U4.gnd   -> C10.p2
     connect U4.iovdd -> C11.p1
@@ -250,8 +286,10 @@ board "dual_usb_compute" {
     connect U1.vout -> R4.p1
     connect R4.p2   -> U4.run
 
-    connect J2.dp -> U4.usb_dp class "USB"
-    connect J2.dn -> U4.usb_dn class "USB"
+    connect J2.dp -> R7.p1
+    connect R7.p2 -> U4.usb_dp class "USB"
+    connect J2.dn -> R8.p1
+    connect R8.p2 -> U4.usb_dn class "USB"
 
     group "EXPANSION" color "#334155" {
       component J3: connector "header_1x20"

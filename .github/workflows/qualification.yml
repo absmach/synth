@@ -5,19 +5,7 @@ on:
     branches:
       - main
     paths: &qualification_paths
-      - "crates/synth-ast/**"
-      - "crates/synth-cli/**"
-      - "crates/synth-connectivity/**"
-      - "crates/synth-drc/**"
-      - "crates/synth-geometry/**"
-      - "crates/synth-ir/**"
-      - "crates/synth-kicad/**"
-      - "crates/synth-layout/**"
-      - "crates/synth-parser/**"
-      - "crates/synth-place/**"
-      - "crates/synth-registry/**"
-      - "crates/synth-route/**"
-      - "crates/synth-validate/**"
+      - "crates/**"
       - "registry/**"
       - "qualification/**"
       - "examples/**"
@@ -56,7 +44,7 @@ jobs:
   # grow without someone declaring it.
   matrix:
     name: Qualification matrix
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
 
     steps:
       - name: Checkout Code
@@ -70,16 +58,23 @@ jobs:
         with:
           shared-key: ${{ runner.os }}-qualification-${{ hashFiles('rust-toolchain.toml') }}
 
+      # Pinned runner and script: `ubuntu-latest` is moving to 26.04, whose apt
+      # offers the archive's KiCad 9, and the inline PPA install silently took
+      # it, so every board's DRC reported `unknown` for a reason that was not
+      # about the board. The script asserts the 10.0 packages and libraries.
+      - name: Cache the KiCad apt packages
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/synth-apt
+          key: ${{ runner.os }}-kicad-apt-${{ hashFiles('.github/scripts/install-kicad.sh') }}
+          restore-keys: |
+            ${{ runner.os }}-kicad-apt-
+
       - name: Install kicad-cli and the stock symbol/footprint libraries
-        run: |
-          sudo add-apt-repository --yes ppa:kicad/kicad-10.0-releases
-          sudo apt-get update
-          sudo apt-get install --yes --no-install-recommends \
-            kicad kicad-symbols kicad-footprints
-          kicad-cli version
-          mkdir -p "$HOME/.config/kicad/10.0"
-          cp /usr/share/kicad/template/sym-lib-table "$HOME/.config/kicad/10.0/sym-lib-table"
-          cp /usr/share/kicad/template/fp-lib-table "$HOME/.config/kicad/10.0/fp-lib-table"
+        run: .github/scripts/install-kicad.sh
+
+      - name: Assert the KiCad version
+        run: kicad-cli version | tee /dev/stderr | grep -q '^10\.0\.'
 
       # Without an engine, `synth drc` refuses to route and emits no DRC
       # counts, so the DRC stage reports `unknown` and every board's gate
@@ -141,7 +136,7 @@ jobs:
   # blocks on real drift without asserting a guess.
   fab:
     name: Qualification matrix (manufacturing)
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
 
     steps:
       - name: Checkout Code
@@ -155,16 +150,23 @@ jobs:
         with:
           shared-key: ${{ runner.os }}-qualification-${{ hashFiles('rust-toolchain.toml') }}
 
+      # Pinned runner and script: `ubuntu-latest` is moving to 26.04, whose apt
+      # offers the archive's KiCad 9, and the inline PPA install silently took
+      # it, so every board's DRC reported `unknown` for a reason that was not
+      # about the board. The script asserts the 10.0 packages and libraries.
+      - name: Cache the KiCad apt packages
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/synth-apt
+          key: ${{ runner.os }}-kicad-apt-${{ hashFiles('.github/scripts/install-kicad.sh') }}
+          restore-keys: |
+            ${{ runner.os }}-kicad-apt-
+
       - name: Install kicad-cli and the stock symbol/footprint libraries
-        run: |
-          sudo add-apt-repository --yes ppa:kicad/kicad-10.0-releases
-          sudo apt-get update
-          sudo apt-get install --yes --no-install-recommends \
-            kicad kicad-symbols kicad-footprints
-          kicad-cli version
-          mkdir -p "$HOME/.config/kicad/10.0"
-          cp /usr/share/kicad/template/sym-lib-table "$HOME/.config/kicad/10.0/sym-lib-table"
-          cp /usr/share/kicad/template/fp-lib-table "$HOME/.config/kicad/10.0/fp-lib-table"
+        run: .github/scripts/install-kicad.sh
+
+      - name: Assert the KiCad version
+        run: kicad-cli version | tee /dev/stderr | grep -q '^10\.0\.'
 
       # Without an engine, `synth drc` refuses to route and emits no DRC
       # counts, so the DRC stage reports `unknown` and every board's gate

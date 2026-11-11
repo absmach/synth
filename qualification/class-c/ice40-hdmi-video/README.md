@@ -7,6 +7,14 @@ inner-layer planes from a single 5 V USB-C input.
 Design rationale is in the source comments next to the circuits it explains;
 this file is the specification.
 
+## Evidence status
+
+This board is a declaration, not a release: the `.synth` source and its layout
+sidecars are committed, and the qualification matrix records the measured
+source/DRC result. No export, fabrication package, or DRC/ERC report is
+committed in this PR; those are owed before the board is promoted from
+`experimental`.
+
 ## Board
 
 | | |
@@ -212,7 +220,7 @@ bill of materials; this table is the actives and omits 39 generic passives.
 ## Reproducibility
 
 The sidecar pins all 49 components, and three consecutive exports produce a
-byte-identical board.
+byte-identical schematic and BOM.
 
 Two of those coordinates describe the request rather than the result. Edge
 legalisation runs after a `hard` override and moves J1 by −0.56 mm in y and J2

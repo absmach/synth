@@ -10,6 +10,14 @@ most of it does not.
 Design rationale is in the source comments next to the circuits it explains;
 this file is the specification.
 
+## Evidence status
+
+This board is a declaration, not a release: the `.synth` source and its layout
+sidecars are committed, and the qualification matrix records the measured
+source/DRC result. No export, fabrication package, or DRC/ERC report is
+committed in this PR; those are owed before the board is promoted from
+`experimental`.
+
 ## Board
 
 | | |

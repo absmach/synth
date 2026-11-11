@@ -55,7 +55,7 @@ One local run of the export and the external router.
 | Vias below the 0.3 mm drill or 0.13 mm ring | **0** |
 | `kicad-cli pcb drc` | 9 errors, 0 unconnected items, 10 warnings |
 
-Three consecutive exports produce a byte-identical board and schematic.
+Three consecutive exports produce a byte-identical schematic and BOM.
 
 ### DRC detail
 

@@ -7,6 +7,14 @@ rails are inner-layer planes.
 Design rationale is in the source comments next to the circuits it explains;
 this file is the specification.
 
+## Evidence status
+
+This board is a declaration, not a release: the `.synth` source and its layout
+sidecars are committed, and the qualification matrix records the measured
+source/DRC result. No export, fabrication package, or DRC/ERC report is
+committed in this PR; those are owed before the board is promoted from
+`experimental`.
+
 ## Board
 
 | | |
@@ -42,8 +50,9 @@ Total 1.5862 mm.
 | V3V3_A | U3 LP5907 behind FB1 | 3.3 V | trace | the analog header |
 | V5_SW | U4 TPS22918 load switch | 5 V | trace | the peripheral header |
 
-Reverse polarity is caught by D1 before the fuse; the TVS clamps after it, so
-the fuse limits the current the clamp conducts.
+Reverse polarity is caught by D1 before the fuse. This revision has no
+transient clamp: the 5 V array that used to sit on the 12 V rail conducts
+continuously there, so it was removed until a part rated above 12 V is chosen.
 
 ## Thermal
 
