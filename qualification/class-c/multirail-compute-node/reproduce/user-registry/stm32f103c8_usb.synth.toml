@@ -10,6 +10,8 @@ lcsc_pn = "C8734"
 required_decoupling = []
 kicad_symbol = "MCU_ST_STM32F1:STM32F103C8Tx"
 kicad_footprint = "Package_QFP:LQFP-48_7x7mm_P0.5mm"
+reviewed_at = "2026-11-11"
+datasheet_url = "https://www.lcsc.com/product-detail/C8734.html"
 
 [[pins]]
 name = "vbat"
@@ -354,4 +356,4 @@ courtyard_margin_mm = 0.25
 
 [provenance]
 source = "authored"
-reviewed_by = ""
+reviewed_by = "JeffMboya"

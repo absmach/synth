@@ -9,6 +9,7 @@ mpn = "3TJ480000FYLBC"
 required_decoupling = []
 kicad_symbol = "Device:Crystal_GND24"
 kicad_footprint = "Crystal:Crystal_SMD_3225-4Pin_3.2x2.5mm"
+lcsc_pn = "C2924620"
 
 [[pins]]
 name = "xtal_a"
