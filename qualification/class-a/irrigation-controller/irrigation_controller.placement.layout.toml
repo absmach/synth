@@ -120,7 +120,7 @@ dx = 0.0
 dy = 0.0
 
 [components.C_B4]
-x = 54.5
+x = 53.8
 y = 34.5
 rotation = 0
 source = "agent"
@@ -221,7 +221,7 @@ dy = 0.0
 [components.C_BS]
 x = 25.10
 y = 15.50
-rotation = 0
+rotation = 180
 source = "agent"
 priority = "hard"
 dx = 0.0
