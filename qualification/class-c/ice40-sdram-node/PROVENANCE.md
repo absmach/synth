@@ -14,7 +14,7 @@ The board is the output of agents driving `synth mcp` from prompts, followed by 
 
 | | |
 |---|---|
-| Synth, final exports | the binary built from commit `1c9cab27` of branch `fix-bga-synth` of `JeffMboya/synth`, on `upstream/main` `301c1b75`. The branch is pull request #440; the commits of this board that are not in `upstream/main` are the return via's land taken from the board's own declared clearance rather than a fixed 0.2 mm, the `edge_rate medium` tier and its 6 mm window, the return via's land reaching into the fill's stand-off, the multi-unit symbol units stacked by the height their pins span, and the symbol library built from the power flags of every sheet |
+| Synth, final exports | the binary built from commit `48a0a490b2c3dde076a90e55ba05b82ce4137605` (pull request #455, `refs/pull/455/head`, branch `fix-451-edge-tracks` of `JeffMboya/synth`), on `upstream/main` `3e59acdf`. The pull request adds one pass: a ground track whose copper comes nearer the board outline than the board's edge rule is dropped before the candidate is judged (issue #451). `upstream/main` carries the rest of the router, DRC, exporter and symbol-layout work of pull request #440. The exports set `SYNTH_SOURCE_REVISION` to that commit, and the routing record of each export carries it as `source_revision` |
 | KiCadRoutingTools | `9399bfb2` |
 | KiCad | 10.0.6 |
 | Registry inputs | [`reproduce/user-registry/`](reproduce/user-registry/): `ice40hx4k_tq144`, `header_1x6_prog`, `w25q128jvsiq_208mil`, `tlv70012_ddc` |
