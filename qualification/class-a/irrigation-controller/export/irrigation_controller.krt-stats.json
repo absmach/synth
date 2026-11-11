@@ -1,0 +1,216 @@
+{
+ "routed_single": [
+  "BUCK_COMPC",
+  "SNUB2",
+  "BUCK_SS",
+  "BUCK_COMP",
+  "BUCK_BS",
+  "SNUB1",
+  "BUCK_SW",
+  "BUCK_EN",
+  "SOIL2_EXC",
+  "SOIL1_EXC",
+  "LED_VALVE_A",
+  "LED_N12_A",
+  "LED_N33_A",
+  "Q1_GATE",
+  "LED_PWR_A",
+  "BUCK_FB",
+  "VALVE2_GATE_Q",
+  "VALVE1_GATE_Q",
+  "SOIL1_PROBE",
+  "OSC_OUT",
+  "SOIL2_PROBE",
+  "FLOW_IN",
+  "ID_VCAP",
+  "SOIL1_SENSE",
+  "SOIL2_SENSE",
+  "SOIL2_ADC",
+  "VIN_12V_RAW",
+  "SOIL1_EXC_EN",
+  "VALVE1_GATE",
+  "NRST",
+  "LED_VALVE_DRV",
+  "SWDIO",
+  "VIN_FUSED",
+  "OSC_IN",
+  "VALVE1_SW",
+  "SOIL2_EXC_EN",
+  "VALVE2_SW",
+  "VALVE2_GATE",
+  "SWCLK",
+  "SOIL1_ADC",
+  "+12V_VALVE",
+  "I2C_SCL",
+  "FLOW_PULSE",
+  "I2C_SDA",
+  "+3V3"
+ ],
+ "failed_single": [],
+ "open_single": [],
+ "failed_multipoint": [],
+ "multipoint_nets": 1,
+ "multipoint_pads_connected": 242,
+ "multipoint_pads_total": 242,
+ "multipoint_edges_routed": 0,
+ "multipoint_edges_failed": 0,
+ "ripup_success_pairs": [],
+ "rerouted_pairs": [],
+ "single_ended_target_swaps": [],
+ "layer_swaps": 0,
+ "successful": 45,
+ "failed": 0,
+ "total_time": 1.41,
+ "total_iterations": 340395,
+ "total_vias": 88,
+ "cleanup_disconnected": [],
+ "min_clearance_used": 0.127,
+ "design_rules": {
+  "escalation_policy": "board",
+  "fab_tier": "advanced",
+  "board_floors": {
+   "clearance": 0.127,
+   "track_width": 0.127,
+   "via_diameter": 0.46,
+   "via_drill": 0.2,
+   "annular": 0.13,
+   "board_edge": 0.3
+  },
+  "count": 9,
+  "nets": [
+   7,
+   10,
+   12,
+   18
+  ],
+  "narrowed": [
+   {
+    "net": 10,
+    "net_name": null,
+    "kind": "track_width",
+    "requested": 0.8,
+    "delivered": 0.4219,
+    "site": "terminal neck",
+    "count": 1
+   },
+   {
+    "net": 18,
+    "net_name": null,
+    "kind": "track_width",
+    "requested": 0.4,
+    "delivered": 0.1998,
+    "site": "terminal neck",
+    "count": 1
+   },
+   {
+    "net": 18,
+    "net_name": null,
+    "kind": "track_width",
+    "requested": 0.4,
+    "delivered": 0.1998,
+    "site": "terminal neck",
+    "count": 1
+   },
+   {
+    "net": 7,
+    "net_name": null,
+    "kind": "track_width",
+    "requested": 0.8,
+    "delivered": 0.4298,
+    "site": "terminal neck",
+    "count": 1
+   },
+   {
+    "net": 7,
+    "net_name": null,
+    "kind": "track_width",
+    "requested": 0.8,
+    "delivered": 0.3798,
+    "site": "terminal neck",
+    "count": 1
+   },
+   {
+    "net": 7,
+    "net_name": null,
+    "kind": "track_width",
+    "requested": 0.8,
+    "delivered": 0.4298,
+    "site": "terminal neck",
+    "count": 1
+   },
+   {
+    "net": 7,
+    "net_name": null,
+    "kind": "track_width",
+    "requested": 0.8,
+    "delivered": 0.3798,
+    "site": "terminal neck",
+    "count": 1
+   },
+   {
+    "net": 12,
+    "net_name": null,
+    "kind": "track_width",
+    "requested": 0.8,
+    "delivered": 0.7098,
+    "site": "terminal neck",
+    "count": 1
+   },
+   {
+    "net": 12,
+    "net_name": null,
+    "kind": "track_width",
+    "requested": 0.8,
+    "delivered": 0.7098,
+    "site": "terminal neck",
+    "count": 1
+   }
+  ],
+  "min_delivered": {
+   "track_width": 0.1998
+  },
+  "fab_tier_escalations": 0,
+  "fab_tier_contexts": [],
+  "fab_tier_target": "board_floors",
+  "unsupported_rules": []
+ },
+ "plane_fragility": {
+  "source": "zone_outlines",
+  "islands": 0,
+  "refill_status": "no_kicad_python",
+  "why": "no python with pcbnew found; set KICAD_PYTHON to KiCad's bundled interpreter",
+  "machine_dependent": false
+ },
+ "oracle_check": "disabled",
+ "pad_pairs_connected": 157,
+ "pad_pairs_total": 157,
+ "scope": "merged",
+ "board_scoped_keys": [
+  "min_clearance_used"
+ ],
+ "env_knobs": {
+  "KICAD_FOOTPRINT_DIR": "/home/jeff/.local/share/flatpak/runtime/org.kicad.KiCad.Library.Footprints/x86_64/stable/active/files/footprints",
+  "KICAD_ROUTING_TOOLS_REPO": "/home/jeff/synth-local/krt",
+  "KICAD_SYMBOL_DIR": "/home/jeff/.local/share/flatpak/runtime/org.kicad.KiCad.Library.Symbols/x86_64/stable/active/files/symbols",
+  "KRT_PYTHON": "/home/jeff/synth-local/krtvenv/bin/python"
+ },
+ "regrade": {
+  "board": "file",
+  "graded_nets": 46,
+  "seconds": 0.8,
+  "unowned_broken": [],
+  "recovered": [],
+  "broken_by_run": []
+ },
+ "via_in_pad": {
+  "count": 0,
+  "sites": [],
+  "stamped": 0,
+  "restored": 0,
+  "protected": 0,
+  "unstampable": 0,
+  "site_created": 0,
+  "unprotected": [],
+  "note": "via-in-pad requires IPC-4761 Type VII (filled + capped + plated); state it on the fab drawing or solder wicks into the barrel"
+ }
+}

@@ -17,15 +17,15 @@
     "profile": "jlcpcb",
     "command": [
       "/home/jeff/synth-local/krtvenv/bin/python",
-      "/home/jeff/synth-local/wt-a12/tools/kicad_routing_tools_route.py",
-      "/home/jeff/synth-local/work/irr_final/exp1/irrigation_controller.synth.kicad_pcb",
-      "/home/jeff/synth-local/work/irr_final/exp1/irrigation_controller.kicadroutingtools.kicad_pcb",
+      "/home/jeff/synth-local/wt-bga/tools/kicad_routing_tools_route.py",
+      "/home/jeff/synth-local/work/irr_r4/g1/irrigation_controller.synth.kicad_pcb",
+      "/home/jeff/synth-local/work/irr_r4/g1/irrigation_controller.kicadroutingtools.kicad_pcb",
       "--repo",
       "/home/jeff/synth-local/krt",
       "--python",
       "/home/jeff/synth-local/krtvenv/bin/python",
       "--stats",
-      "/home/jeff/synth-local/work/irr_final/exp1/irrigation_controller.krt-stats.json",
+      "/home/jeff/synth-local/work/irr_r4/g1/irrigation_controller.krt-stats.json",
       "--escalation",
       "board",
       "--fab-tier",
@@ -39,36 +39,36 @@
       "escalation": "board",
       "fab_tier": "auto",
       "strict_sizes": "true",
-      "wall_clock_secs": "1200"
+      "wall_clock_secs": "5400"
     },
-    "input_hash": "ee150eecb69998eb34d72d6377b23b2c2b2d7ad72f21e7d82133ce61a093c84c",
+    "input_hash": "dca5e2ce73c4646b71e3a013b2e939475553627d485bda5f094baac27d17e111",
     "output_hash": "",
     "source_revision": null,
-    "duration_ms": 416811
+    "duration_ms": 221207
   },
   "statistics": {
-    "connected_nets": 45,
+    "connected_nets": 46,
     "open_nets": 0,
     "open_net_names": [],
-    "segments": 698,
-    "vias": 152,
-    "wire_length_mm": 1434.008784,
+    "segments": 579,
+    "vias": 171,
+    "wire_length_mm": 1399.695362,
     "pad_escape_rejections": 0,
     "engine_findings": {
-      "claimed_successful": "44",
-      "claimed_total_vias": "77",
+      "claimed_successful": "45",
+      "claimed_total_vias": "88",
       "claimed_via_in_pad": "0",
       "engine_policy_verdict": "rejected",
       "rules_below_board_floor": "none reported"
     }
   },
   "artifacts": {
-    "baseline": "/home/jeff/synth-local/work/irr_final/exp1/irrigation_controller.synth.kicad_pcb",
-    "candidate": "/home/jeff/synth-local/work/irr_final/exp1/irrigation_controller.kicadroutingtools.kicad_pcb",
-    "delivered": "/home/jeff/synth-local/work/irr_final/exp1/irrigation_controller.kicad_pcb",
-    "session_log": "/home/jeff/synth-local/work/irr_final/exp1/irrigation_controller.kicadroutingtools.log",
+    "baseline": "/home/jeff/synth-local/work/irr_r4/g1/irrigation_controller.synth.kicad_pcb",
+    "candidate": "/home/jeff/synth-local/work/irr_r4/g1/irrigation_controller.kicadroutingtools.kicad_pcb",
+    "delivered": "/home/jeff/synth-local/work/irr_r4/g1/irrigation_controller.kicad_pcb",
+    "session_log": "/home/jeff/synth-local/work/irr_r4/g1/irrigation_controller.kicadroutingtools.log",
     "ses": null,
-    "router_report": "/home/jeff/synth-local/work/irr_final/exp1/irrigation_controller.krt-stats.json",
+    "router_report": "/home/jeff/synth-local/work/irr_r4/g1/irrigation_controller.krt-stats.json",
     "connectivity_report": null,
     "drc_report": null
   },
@@ -84,7 +84,7 @@
       "outline_present": true
     },
     "connectivity": {
-      "connected_nets": 45,
+      "connected_nets": 46,
       "open_nets": 0,
       "open": [],
       "unconnected_pads": [],
@@ -100,12 +100,9 @@
     "blocking_reasons": [],
     "unavailable_checks": [],
     "advisories": [
-      "net I2C_SDA changes layers at (53.50, 38.10) mm with no ground return via within 1.53 mm and no spot in the GND pour for one; the net carries no fast edge, so the loop is left as an advisory",
-      "net I2C_SDA changes layers at (51.90, 42.90) mm with no ground return via within 1.53 mm and no spot in the GND pour for one; the net carries no fast edge, so the loop is left as an advisory",
-      "net +3V3 changes layers at (56.50, 47.50) mm with no ground return via within 1.53 mm and no spot in the GND pour for one; the net carries no fast edge, so the loop is left as an advisory",
-      "net SWCLK changes layers at (37.60, 29.60) mm with no ground return via within 1.53 mm and no spot in the GND pour for one; the net carries no fast edge, so the loop is left as an advisory",
-      "net +12V_VALVE changes layers at (24.60, 14.10) mm with no ground return via within 1.53 mm and no spot in the GND pour for one; the net carries no fast edge, so the loop is left as an advisory",
-      "net +12V_VALVE changes layers at (27.10, 16.30) mm with no ground return via within 1.53 mm and no spot in the GND pour for one; the net carries no fast edge, so the loop is left as an advisory"
+      "net NRST changes layers at (38.00, 37.10) mm with no ground return via within 1.53 mm and no spot in the GND pour for one; the net carries no fast edge, so the loop is left as an advisory",
+      "net I2C_SCL changes layers at (38.20, 28.40) mm with no ground return via within 1.53 mm and no spot in the GND pour for one; the net carries no fast edge, so the loop is left as an advisory",
+      "net +3V3 changes layers at (47.70, 34.00) mm with no ground return via within 1.53 mm and no spot in the GND pour for one; the net carries no fast edge, so the loop is left as an advisory"
     ]
   },
   "failure": null

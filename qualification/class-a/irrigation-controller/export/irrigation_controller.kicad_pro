@@ -92,9 +92,27 @@
         "line_style": 0,
         "microvia_diameter": 0.3,
         "microvia_drill": 0.1,
+        "name": "PWR12_IN",
+        "pcb_color": "rgba(164, 191, 67, 1.000)",
+        "priority": 3,
+        "schematic_color": "rgba(164, 191, 67, 1.000)",
+        "track_width": 0.8,
+        "via_diameter": 0.6,
+        "via_drill": 0.2,
+        "wire_width": 6
+      },
+      {
+        "bus_width": 12,
+        "clearance": 0.2,
+        "diff_pair_gap": 0.25,
+        "diff_pair_via_gap": 0.25,
+        "diff_pair_width": 0.2,
+        "line_style": 0,
+        "microvia_diameter": 0.3,
+        "microvia_drill": 0.1,
         "name": "PWR33",
         "pcb_color": "rgba(191, 142, 67, 1.000)",
-        "priority": 3,
+        "priority": 4,
         "schematic_color": "rgba(191, 142, 67, 1.000)",
         "track_width": 0.4,
         "via_diameter": 0.6,
@@ -148,6 +166,7 @@
       "GND": "Ground",
       "I2C_SCL": "SIG",
       "I2C_SDA": "SIG",
+      "ID_VCAP": "SIG",
       "LED_N12_A": "SIG",
       "LED_N33_A": "SIG",
       "LED_PWR_A": "SIG",
@@ -178,7 +197,7 @@
       "VALVE2_GATE_Q": "SIG",
       "VALVE2_SW": "PWR12",
       "VIN_12V_RAW": "PWR12",
-      "VIN_FUSED": "PWR12"
+      "VIN_FUSED": "PWR12_IN"
     },
     "netclass_patterns": [
       {

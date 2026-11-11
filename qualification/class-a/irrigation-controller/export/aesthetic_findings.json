@@ -1,0 +1,128 @@
+[
+  {
+    "schema_version": "1.3",
+    "code": "E-SYNTH-SCHEM-007",
+    "severity": "warning",
+    "title": "[root] content overflows the selected sheet size",
+    "message": "content reaches (697.5, 144.8) mm but the sheet is only 297 × 210 mm (origin at the top-left corner); move it onto the page or resize the sheet",
+    "expected": "all content within 297 × 210 mm",
+    "found": "content extends to (697.5, 144.8) mm",
+    "explanation_url": "synth.docs/diagnostics/E-SYNTH-SCHEM-007"
+  },
+  {
+    "schema_version": "1.3",
+    "code": "E-SYNTH-SCHEM-003",
+    "severity": "warning",
+    "title": "[MCU] decoupling capacitor separation",
+    "message": "decoupling capacitor `C_VDD1` (group \"MCU\") is 34.3 mm from its target IC `U2` (group \"MCU\") (rail net \"+3V3\"), exceeding the 25 mm limit",
+    "location": {
+      "file": "/home/jeff/synth-local/work/irr_r4/irrigation_controller.synth",
+      "byte_start": 6526,
+      "byte_end": 6583,
+      "line_start": 0,
+      "col_start": 0,
+      "line_end": 0,
+      "col_end": 0
+    },
+    "entities": [
+      {
+        "kind": "component",
+        "id": "U2"
+      }
+    ],
+    "expected": "decoupling capacitor within 25 mm of the IC",
+    "found": "34.3 mm separation",
+    "explanation_url": "synth.docs/diagnostics/E-SYNTH-SCHEM-003"
+  },
+  {
+    "schema_version": "1.3",
+    "code": "E-SYNTH-SCHEM-003",
+    "severity": "warning",
+    "title": "[MCU] decoupling capacitor separation",
+    "message": "decoupling capacitor `C_VDD2` (group \"MCU\") is 54.6 mm from its target IC `U2` (group \"MCU\") (rail net \"+3V3\"), exceeding the 25 mm limit",
+    "location": {
+      "file": "/home/jeff/synth-local/work/irr_r4/irrigation_controller.synth",
+      "byte_start": 6526,
+      "byte_end": 6583,
+      "line_start": 0,
+      "col_start": 0,
+      "line_end": 0,
+      "col_end": 0
+    },
+    "entities": [
+      {
+        "kind": "component",
+        "id": "U2"
+      }
+    ],
+    "expected": "decoupling capacitor within 25 mm of the IC",
+    "found": "54.6 mm separation",
+    "explanation_url": "synth.docs/diagnostics/E-SYNTH-SCHEM-003"
+  },
+  {
+    "schema_version": "1.3",
+    "code": "E-SYNTH-SCHEM-004",
+    "severity": "warning",
+    "title": "[SOIL 1] long explicit net without net-label truncation",
+    "message": "net 32 spans 101.6 mm as a drawn wire, exceeding the 100 mm limit; truncate it to net labels instead",
+    "entities": [
+      {
+        "kind": "net",
+        "name": "net_32"
+      }
+    ],
+    "expected": "net span at most 100 mm (or a net-label break)",
+    "found": "101.6 mm",
+    "explanation_url": "synth.docs/diagnostics/E-SYNTH-SCHEM-004"
+  },
+  {
+    "schema_version": "1.3",
+    "code": "E-SYNTH-SCHEM-004",
+    "severity": "warning",
+    "title": "[SOIL 2] long explicit net without net-label truncation",
+    "message": "net 37 spans 101.6 mm as a drawn wire, exceeding the 100 mm limit; truncate it to net labels instead",
+    "entities": [
+      {
+        "kind": "net",
+        "name": "net_37"
+      }
+    ],
+    "expected": "net span at most 100 mm (or a net-label break)",
+    "found": "101.6 mm",
+    "explanation_url": "synth.docs/diagnostics/E-SYNTH-SCHEM-004"
+  },
+  {
+    "schema_version": "1.3",
+    "code": "E-SYNTH-SCHEM-001",
+    "severity": "warning",
+    "title": "[LEDS] inverted power symbol",
+    "message": "GND power flag on component 86 pin 1 points up; a GND symbol should point down",
+    "entities": [
+      {
+        "kind": "pin",
+        "component": "86",
+        "pin": "1"
+      }
+    ],
+    "expected": "GND power symbol pointing down",
+    "found": "points up",
+    "explanation_url": "synth.docs/diagnostics/E-SYNTH-SCHEM-001"
+  },
+  {
+    "schema_version": "1.3",
+    "code": "E-SYNTH-SCHEM-001",
+    "severity": "warning",
+    "title": "[LEDS] inverted power symbol",
+    "message": "GND power flag on component 89 pin 1 points up; a GND symbol should point down",
+    "entities": [
+      {
+        "kind": "pin",
+        "component": "89",
+        "pin": "1"
+      }
+    ],
+    "expected": "GND power symbol pointing down",
+    "found": "points up",
+    "explanation_url": "synth.docs/diagnostics/E-SYNTH-SCHEM-001"
+  }
+]

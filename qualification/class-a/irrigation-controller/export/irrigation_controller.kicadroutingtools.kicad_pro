@@ -1,0 +1,317 @@
+{
+  "board": {
+    "design_settings": {
+      "defaults": {
+        "min_clearance": 0.127,
+        "min_copper_edge_clearance": 0.3,
+        "min_hole_clearance": 0.2,
+        "min_through_hole_diameter": 0.2,
+        "min_track_width": 0.127,
+        "min_via_annular_width": 0.13,
+        "min_via_diameter": 0.46
+      },
+      "rules": {
+        "min_clearance": 0.127,
+        "min_copper_edge_clearance": 0.3,
+        "min_hole_clearance": 0.127,
+        "min_through_hole_diameter": 0.2,
+        "min_track_width": 0.127,
+        "min_via_annular_width": 0.13,
+        "min_via_diameter": 0.46,
+        "min_hole_to_hole": 0.2,
+        "min_via_drill": 0.2
+      },
+      "rule_severities": {}
+    }
+  },
+  "boards": [],
+  "meta": {
+    "filename": "irrigation_controller.kicad_pro",
+    "uuid": "3e0e3aa2-ae55-5160-b936-bda058b96cdb",
+    "version": 1
+  },
+  "net_settings": {
+    "classes": [
+      {
+        "bus_width": 12,
+        "clearance": 0.127,
+        "diff_pair_gap": 0.25,
+        "diff_pair_via_gap": 0.25,
+        "diff_pair_width": 0.2,
+        "line_style": 0,
+        "microvia_diameter": 0.3,
+        "microvia_drill": 0.1,
+        "name": "Ground",
+        "pcb_color": "rgba(51, 51, 51, 1.000)",
+        "priority": 0,
+        "schematic_color": "rgba(51, 51, 51, 1.000)",
+        "track_width": 0.2,
+        "via_diameter": 0.6,
+        "via_drill": 0.3,
+        "wire_width": 6
+      },
+      {
+        "bus_width": 12,
+        "clearance": 0.127,
+        "diff_pair_gap": 0.25,
+        "diff_pair_via_gap": 0.25,
+        "diff_pair_width": 0.2,
+        "line_style": 0,
+        "microvia_diameter": 0.3,
+        "microvia_drill": 0.1,
+        "name": "SIG",
+        "pcb_color": "rgba(154, 67, 191, 1.000)",
+        "priority": 1,
+        "schematic_color": "rgba(154, 67, 191, 1.000)",
+        "track_width": 0.2,
+        "via_diameter": 0.6,
+        "via_drill": 0.2,
+        "wire_width": 6
+      },
+      {
+        "bus_width": 12,
+        "clearance": 0.25,
+        "diff_pair_gap": 0.25,
+        "diff_pair_via_gap": 0.25,
+        "diff_pair_width": 0.2,
+        "line_style": 0,
+        "microvia_diameter": 0.3,
+        "microvia_drill": 0.1,
+        "name": "PWR12",
+        "pcb_color": "rgba(144, 67, 191, 1.000)",
+        "priority": 2,
+        "schematic_color": "rgba(144, 67, 191, 1.000)",
+        "track_width": 0.8,
+        "via_diameter": 0.6,
+        "via_drill": 0.2,
+        "wire_width": 6
+      },
+      {
+        "bus_width": 12,
+        "clearance": 0.2,
+        "diff_pair_gap": 0.25,
+        "diff_pair_via_gap": 0.25,
+        "diff_pair_width": 0.2,
+        "line_style": 0,
+        "microvia_diameter": 0.3,
+        "microvia_drill": 0.1,
+        "name": "PWR12_IN",
+        "pcb_color": "rgba(164, 191, 67, 1.000)",
+        "priority": 3,
+        "schematic_color": "rgba(164, 191, 67, 1.000)",
+        "track_width": 0.8,
+        "via_diameter": 0.6,
+        "via_drill": 0.2,
+        "wire_width": 6
+      },
+      {
+        "bus_width": 12,
+        "clearance": 0.2,
+        "diff_pair_gap": 0.25,
+        "diff_pair_via_gap": 0.25,
+        "diff_pair_width": 0.2,
+        "line_style": 0,
+        "microvia_diameter": 0.3,
+        "microvia_drill": 0.1,
+        "name": "PWR33",
+        "pcb_color": "rgba(191, 142, 67, 1.000)",
+        "priority": 4,
+        "schematic_color": "rgba(191, 142, 67, 1.000)",
+        "track_width": 0.4,
+        "via_diameter": 0.6,
+        "via_drill": 0.2,
+        "wire_width": 6
+      },
+      {
+        "bus_width": 12,
+        "clearance": 0.127,
+        "diff_pair_gap": 0.25,
+        "diff_pair_via_gap": 0.25,
+        "diff_pair_width": 0.2,
+        "line_style": 0,
+        "microvia_diameter": 0.3,
+        "microvia_drill": 0.1,
+        "name": "Default",
+        "pcb_color": "rgba(0, 0, 0, 1.000)",
+        "priority": 2147483647,
+        "schematic_color": "rgba(0, 0, 0, 1.000)",
+        "track_width": 0.2,
+        "via_diameter": 0.6,
+        "via_drill": 0.2,
+        "wire_width": 6
+      }
+    ],
+    "meta": {
+      "version": 4
+    },
+    "net_colors": null,
+    "netclass_assignments": {
+      "+12V_VALVE": "PWR12",
+      "+3V3": "PWR33",
+      "/BUCK_BS": "SIG",
+      "/BUCK_COMPC": "SIG",
+      "/BUCK_SW": "PWR12",
+      "/NRST": "SIG",
+      "/OSC_IN": "SIG",
+      "/OSC_OUT": "SIG",
+      "/SWCLK": "SIG",
+      "/SWDIO": "SIG",
+      "/VALVE2_SW": "PWR12",
+      "BUCK_BS": "SIG",
+      "BUCK_COMP": "SIG",
+      "BUCK_COMPC": "SIG",
+      "BUCK_EN": "SIG",
+      "BUCK_FB": "SIG",
+      "BUCK_SS": "SIG",
+      "BUCK_SW": "PWR12",
+      "FLOW_IN": "SIG",
+      "FLOW_PULSE": "SIG",
+      "GND": "Ground",
+      "I2C_SCL": "SIG",
+      "I2C_SDA": "SIG",
+      "ID_VCAP": "SIG",
+      "LED_N12_A": "SIG",
+      "LED_N33_A": "SIG",
+      "LED_PWR_A": "SIG",
+      "LED_VALVE_A": "SIG",
+      "LED_VALVE_DRV": "SIG",
+      "NRST": "SIG",
+      "OSC_IN": "SIG",
+      "OSC_OUT": "SIG",
+      "Q1_GATE": "SIG",
+      "SNUB1": "SIG",
+      "SNUB2": "SIG",
+      "SOIL1_ADC": "SIG",
+      "SOIL1_EXC": "SIG",
+      "SOIL1_EXC_EN": "SIG",
+      "SOIL1_PROBE": "SIG",
+      "SOIL1_SENSE": "SIG",
+      "SOIL2_ADC": "SIG",
+      "SOIL2_EXC": "SIG",
+      "SOIL2_EXC_EN": "SIG",
+      "SOIL2_PROBE": "SIG",
+      "SOIL2_SENSE": "SIG",
+      "SWCLK": "SIG",
+      "SWDIO": "SIG",
+      "VALVE1_GATE": "SIG",
+      "VALVE1_GATE_Q": "SIG",
+      "VALVE1_SW": "PWR12",
+      "VALVE2_GATE": "SIG",
+      "VALVE2_GATE_Q": "SIG",
+      "VALVE2_SW": "PWR12",
+      "VIN_12V_RAW": "PWR12",
+      "VIN_FUSED": "PWR12_IN"
+    },
+    "netclass_patterns": [
+      {
+        "netclass": "PWR12",
+        "pattern": "/*/BUCK_SW"
+      },
+      {
+        "netclass": "SIG",
+        "pattern": "/*/BUCK_BS"
+      },
+      {
+        "netclass": "SIG",
+        "pattern": "/*/BUCK_COMPC"
+      },
+      {
+        "netclass": "SIG",
+        "pattern": "/*/NRST"
+      },
+      {
+        "netclass": "SIG",
+        "pattern": "/*/OSC_IN"
+      },
+      {
+        "netclass": "SIG",
+        "pattern": "/*/OSC_OUT"
+      },
+      {
+        "netclass": "SIG",
+        "pattern": "/*/SWDIO"
+      },
+      {
+        "netclass": "SIG",
+        "pattern": "/*/SWCLK"
+      },
+      {
+        "netclass": "PWR12",
+        "pattern": "/*/VALVE2_SW"
+      }
+    ]
+  },
+  "schematic": {
+    "annotate_start_num": 0,
+    "drawing": {},
+    "variants": []
+  },
+  "sheets": [
+    [
+      "33ebc9e3-0681-554a-ac8a-89a67d5a6adc",
+      ""
+    ],
+    [
+      "3659adec-be84-5346-baed-95cb9701f184",
+      "irrigation_controller_POWER_INPUT.kicad_sch"
+    ],
+    [
+      "a365cb74-ad70-5a28-8f87-b4e0801147d3",
+      "irrigation_controller_BUCK_3V3.kicad_sch"
+    ],
+    [
+      "41ebd2d7-5f31-57d8-9428-38f1a3502c7d",
+      "irrigation_controller_MCU.kicad_sch"
+    ],
+    [
+      "d2f419c8-7a80-53ee-9b39-921b0a16c905",
+      "irrigation_controller_VALVE_1.kicad_sch"
+    ],
+    [
+      "b578bf6e-5403-5b89-8c71-ba1250d113ea",
+      "irrigation_controller_VALVE_2.kicad_sch"
+    ],
+    [
+      "2769874e-3cd6-5ee7-8714-9dc2329a265d",
+      "irrigation_controller_SOIL_1.kicad_sch"
+    ],
+    [
+      "eb7b3459-a320-57e4-9fb2-814f6ad548e1",
+      "irrigation_controller_SOIL_2.kicad_sch"
+    ],
+    [
+      "897de5ba-4de1-5489-ad2a-9bcd4df2a3d9",
+      "irrigation_controller_FLOW.kicad_sch"
+    ],
+    [
+      "7d597d94-c00f-590a-98bc-d3576a2e0fd2",
+      "irrigation_controller_I2C_SENSORS.kicad_sch"
+    ],
+    [
+      "9b48410e-bbdd-5589-be21-31a0bbf2519e",
+      "irrigation_controller_LEDS.kicad_sch"
+    ],
+    [
+      "3a16d184-a2bb-5db1-afd7-2f158057c85f",
+      "irrigation_controller_3V3_RAIL_DECOUPLING.kicad_sch"
+    ],
+    [
+      "f4f64e0d-0c96-570c-a589-7b501a86f1ac",
+      "irrigation_controller_12V_RAIL_DECOUPLING.kicad_sch"
+    ],
+    [
+      "646407be-44d9-599f-adfc-e60b5df40aa9",
+      "irrigation_controller_TEST_POINTS_AND_MOUNTING.kicad_sch"
+    ]
+  ],
+  "kicad_routing_tools": {
+    "fab_floor_origin": {
+      "min_hole_clearance": 0.2,
+      "min_through_hole_diameter": 0.2,
+      "min_track_width": 0.127,
+      "min_via_annular_width": 0.13,
+      "min_via_diameter": 0.46
+    },
+    "same_net_pad_clearance": 0.1
+  }
+}

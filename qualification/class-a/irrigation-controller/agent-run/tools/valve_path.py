@@ -32,6 +32,26 @@ for m in re.finditer(r'\(segment\s+\(start ([\d.-]+) ([\d.-]+)\)\s*\(end ([\d.-]
         x1, y1, x2, y2, w = map(float, m.groups()[:5])
         if (x1, y1) != (x2, y2):
             raw.append([x1, y1, x2, y2, w, m.group(6)])
+# A via whose centre lies on the body of a track splits that track there, so the via joins the track at that point.
+_vias_early = []
+for _b in re.findall(r"\(via\b(.*?)\n\s*\)", t, re.S):
+    _n = re.search(r"\(net (\d+)\)", _b)
+    _at = re.search(r"\(at ([\d.-]+) ([\d.-]+)\)", _b)
+    if _n and int(_n.group(1)) == nid and _at:
+        _vias_early.append((float(_at.group(1)), float(_at.group(2))))
+for _vx, _vy in _vias_early:
+    _k = 0
+    while _k < len(raw):
+        _x1, _y1, _x2, _y2, _w, _l = raw[_k]
+        _dx, _dy = _x2 - _x1, _y2 - _y1
+        _u = ((_vx - _x1) * _dx + (_vy - _y1) * _dy) / (_dx * _dx + _dy * _dy)
+        if 0.02 < _u < 0.98:
+            _px, _py = _x1 + _u * _dx, _y1 + _u * _dy
+            if math.hypot(_px - _vx, _py - _vy) <= _w / 2 and math.hypot(_px - _x1, _py - _y1) > 0.02 and math.hypot(_px - _x2, _py - _y2) > 0.02:
+                raw[_k] = [_x1, _y1, _px, _py, _w, _l]
+                raw.append([_px, _py, _x2, _y2, _w, _l])
+                continue
+        _k += 1
 # Copper that overlaps connects. A track end that lands on the body of another track of the same layer, within half
 # the sum of the widths, splits that track there and joins at the split; two ends that overlap join directly.
 joins = []
@@ -48,7 +68,7 @@ while changed:
                 u = ((end[0] - x1) * dx + (end[1] - y1) * dy) / (dx * dx + dy * dy)
                 if 0.02 < u < 0.98:
                     px_, py_ = x1 + u * dx, y1 + u * dy
-                    if math.hypot(px_ - end[0], py_ - end[1]) <= (ra[4] + wb) / 2 - 0.01 and (round(px_, 3), round(py_, 3)) not in {(round(r[0], 3), round(r[1], 3)) for r in raw} | {(round(r[2], 3), round(r[3], 3)) for r in raw}:
+                    if math.hypot(px_ - end[0], py_ - end[1]) <= (ra[4] + wb) / 2 - 0.01 and (round(px_, 3), round(py_, 3)) not in {(round(x1, 3), round(y1, 3)), (round(x2, 3), round(y2, 3))}:
                         raw[kb] = [x1, y1, px_, py_, wb, layer]
                         raw.append([px_, py_, x2, y2, wb, layer])
                         joins.append(((px_, py_, layer), (end[0], end[1], layer)))
@@ -135,6 +155,13 @@ for name, (px, py, kind, pw, ph, prot, fpl) in pads.items():
             if abs(u) <= pw / 2 + w / 2 and abs(v) <= ph / 2 + w / 2:
                 inside.extend([a, b])
                 break
+    # A via inside the pad (via-in-pad) is the pad's own connection to the other layer, with or without a track end on it.
+    for (vx, vy, vsize) in vias:
+        dx, dy = vx - px, vy - py
+        u = dx * math.cos(prot) - dy * math.sin(prot)
+        v = dx * math.sin(prot) + dy * math.cos(prot)
+        if abs(u) <= pw / 2 and abs(v) <= ph / 2:
+            inside.extend(i for (x, y, l), i in nodes.items() if math.hypot(x - vx, y - vy) <= vsize / 2 + 0.02)
     if inside:
         pad_node[name] = inside[0]
         for i in inside[1:]:
