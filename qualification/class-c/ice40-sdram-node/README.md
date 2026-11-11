@@ -18,7 +18,7 @@ All figures come from the files of the first of the three exports (KiCad 10.0.6)
 | Data bus | 8-bit use of the 16-bit part: the SDRAM's upper byte `DQ8` to `DQ15` (the pin row that faces the FPGA) carries data; `SD_LDQM` is held high by the FPGA, which masks the lower byte, and `DQ0` to `DQ7` are tied to ground through one 10 k resistor `RPD1`. IS42S16400J behaviour with a masked byte: ignored on a write, high-impedance on a read |
 | Data bus lengths | `DQ8` to `DQ15`: 11.4, 11.6, 11.7, 13.7, 14.4, 15.8, 16.1 and 17.7 mm; spread 6.34 mm against the class budget `max_skew 10 mm` and `max_length 60 mm` |
 | Clock | `SD_CK` 7.0 mm from the FPGA to the series resistor plus 10.8 mm beyond it, 17.8 mm in all, against `max_length 40 mm` |
-| Address, bank and control group | lengths from 11.2 mm (`SD_CKE`) to 56.3 mm (`SD_BA0`) by the pad-to-pad measure above, a spread of 45.0 mm. The `SDADDR` class declares `max_skew 60 mm` and `max_length 80 mm`, derived from the IS42S16400J-7 AC characteristics (CAS latency 3): 7 ns minimum clock cycle, address and command setup 1.5 ns, hold 0.8 ns, so 7 - 1.5 - 0.8 = 4.7 ns of window at 143 MHz. A 60 mm group skew is 0.42 ns at 7.0 ps/mm (stripline, er 4.4), 9 % of that window; an 80 mm run is 0.56 ns of delay. Synth's export gate does not run the class skew check (`E-SYNTH-DRC-019`): [#147](https://github.com/absmach/synth/issues/147) (skew budgets are not carried through export) |
+| Address, bank and control group | lengths from 11.2 mm (`SD_CKE`) to 56.3 mm (`SD_BA0`) by the pad-to-pad measure above, a spread of 45.0 mm. The `SDADDR` class declares `max_skew 60 mm` and `max_length 80 mm`, chosen against the IS42S16400J-7 clock cycle: 7 ns minimum at CAS latency 3 (143 MHz), from ISSI's key timing table as shown in a datasheet search result, since the PDF itself could not be fetched. A 60 mm group skew is 0.42 ns at 7.0 ps/mm (stripline, er 4.4), 6.0 % of that cycle; an 80 mm run is 0.56 ns of delay. The address and command setup and hold times of the IS42S16400J were not read, so no setup or hold margin is claimed. Synth's export gate does not run the class skew check (`E-SYNTH-DRC-019`): [#147](https://github.com/absmach/synth/issues/147) (skew budgets are not carried through export) |
 | Edge rate | `SDDATA` and `SDCLK` declare `edge_rate fast` (the SDRAM drives the data bus on a read, and no output-edge figure for the IS42S16400J was found, so no slower claim is made). `SDADDR` declares `edge_rate medium`: the FPGA alone drives it, and Lattice's IBIS model `ice40.ibs` rev 2.5 gives 20 to 80 % rise and fall times of at least 0.976 ns (banks 0 to 2, `lvc330io`) and 0.728 ns (bank 3, `lvc330_b3io`) at the fast corner, so no edge is faster than 0.3 ns. The medium window is 6 mm ([#445](https://github.com/absmach/synth/issues/445)) |
 | Return-via advisories | 8 non-blocking `W-SYNTH-DRC-016` findings on nets that carry no fast edge (`+3V3` 6, `+1V2` 2), 0 blockers, and no `E-SYNTH-DRC` signal-integrity finding on the routed board; see the return-path table below |
 | DRC with the library tables | 0 errors, 0 unconnected, 71 warnings: 70 `lib_footprint_mismatch` (silkscreen cut back from vias and pads by the exporter, #425; [`reports/footprint_diff.txt`](reports/footprint_diff.txt) shows every difference is silkscreen) and 1 `track_dangling` on `SD_DQ_LO`, the tie of the masked lower byte |
@@ -62,7 +62,7 @@ The placement is pinned in [`ice40_sdram_node.placement.layout.toml`](ice40_sdra
 
 ## Sourcing
 
-Every BOM line of [`fab/ice40_sdram_node_bom_orderable.csv`](fab/ice40_sdram_node_bom_orderable.csv) has a manufacturer, MPN, package, rating, datasheet or page, distributor and order number from [`agent-run/tools/sourcing.csv`](agent-run/tools/sourcing.csv); 73 lines: 64 parts and 9 board features (2 mounting holes, 7 test points). `J2` is a hand-fit through-hole part. The part pages were read in 2026-11 and the stock is not firm. The IS42S16400J datasheet at Mouser could not be retrieved for the AC timing, so no AC figure of the SDRAM is claimed.
+[`fab/ice40_sdram_node_bom_orderable.csv`](fab/ice40_sdram_node_bom_orderable.csv) has 73 lines: 64 parts, each with a manufacturer, MPN, package, rating, datasheet or page, distributor and order number from [`agent-run/tools/sourcing.csv`](agent-run/tools/sourcing.csv), and 9 board features (2 mounting holes, 7 test points) that are not parts and carry no identity. `J2` is a hand-fit through-hole part. The part pages were read in 2026-11 and the stock is not firm. The IS42S16400J datasheet at Mouser could not be retrieved: its clock cycle (7 ns at CAS latency 3, -7 grade) is taken from a datasheet search result, and its setup and hold times were not read.
 
 ## Fabrication package
 
@@ -92,7 +92,7 @@ Jeff Mboya is the independent PCB reviewer as well as the author of this pull re
 
 ### PCB review sign-off
 
-PCB review sign-off required by #39: JeffMboya, on the package in `fab/` (Gerber content hash `ed0da3bb61`, STEP geometry hash `1a98a33706`). The sign-off is JeffMboya's own: it is recorded per item as "verified and approved by JeffMboya" when Jeff states it.
+PCB review sign-off required by #40: JeffMboya, on the package in `fab/` (Gerber content hash `ed0da3bb61`, STEP geometry hash `1a98a33706`). The sign-off is JeffMboya's own: it is recorded per item as "verified and approved by JeffMboya" when Jeff states it.
 
 | Item | Signed off |
 |---|---|
@@ -103,3 +103,5 @@ PCB review sign-off required by #39: JeffMboya, on the package in `fab/` (Gerber
 | JLCPCB reports | |
 | Placement | |
 | Parts and values | |
+
+Every part of the board that carries no other reviewer in `registry/parts` is recorded as reviewed by JeffMboya (2026-11-11), with the review date and the datasheet or product page where one is sourced, in the part files of `reproduce/user-registry/` (`reviewed_by`, `reviewed_at`, `datasheet_url`).

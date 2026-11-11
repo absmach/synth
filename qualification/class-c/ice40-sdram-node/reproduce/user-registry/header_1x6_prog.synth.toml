@@ -8,6 +8,8 @@ substitutes = []
 required_decoupling = []
 kicad_symbol = "Connector_Generic:Conn_01x06"
 kicad_footprint = "Connector_PinHeader_2.54mm:PinHeader_1x06_P2.54mm_Vertical"
+reviewed_at = "2026-11-11"
+reviewed_by = "JeffMboya"
 
 [[pins]]
 name = "p1"
