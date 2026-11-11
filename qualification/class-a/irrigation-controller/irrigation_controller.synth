@@ -21,19 +21,20 @@ board "irrigation_controller" {
   group "POWER INPUT" color "#c2410c" {
     component J1: connector "jst_xh_2pin" { placement_hint { edge: left priority: hard } }
     component F1: fuse "polyfuse_1r5a"
-    component Q1: transistor "p_mosfet_ao3401a"
-    component R_QG: resistor "r_generic_0603" value "10k"
-    component D_QG: diode "d_zener_5v1"
+    component Q1: transistor "dmt6007lfg"
+    component U_IDEAL: regulator "lm74700_q1" { placement_hint { near: "Q1" priority: hard } }
+    component C_VCAP: capacitor "c_generic_0603" value "100nF" { placement_hint { near: "U_IDEAL" priority: hard } }
+    component C_VIN: capacitor "c_generic_0603" value "100nF" { placement_hint { near: "U_IDEAL" priority: hard } }
     component D_TVS: diode "smaj13a_tvs"
     component C_BULK: capacitor "c_electrolytic_100uf" value "100uF 25V"
     component TP_VIN: testpoint "testpoint_pad_1_5"
     component TP_12V: testpoint "testpoint_pad_1_5"
     notes "" {
       "J1 JST XH S2B-XH-A: pin1 VIN_12V_RAW, pin2 GND. Mate with XHP-2 housing.  Pin 1 is the +12 V pin."
-      "F1 1.5 A hold PPTC, then Q1 AO3401A P-FET (30 V Vds, 12 V Vgs max, 4 A) reverse-polarity switch (body diode to start, Vgs clamped to -5.1 V by D_QG)."
-      "Q1 gate check: the 5.1 V zener D_QG across source and gate limits Vgs to about 5.1 V, within the AO3401A 12 V gate-source rating. The drain sees at most the TVS clamp of 21.5 V (D_TVS is upstream of Q1), below the AO3401A 30 V drain-source rating by 8.5 V."
+      "F1 1.5 A hold PPTC, then the ideal-diode reverse-polarity stage: U_IDEAL (TI LM74700-Q1, SNOSD17G) drives Q1 (Diodes DMT6007LFG, 60 V, +/-20 V, RDS(on) 8.5 mOhm max at 4.5 V). U_IDEAL ANODE and EN sit on VIN_FUSED with the Q1 sources, CATHODE on +12V_VALVE with the Q1 drain, GATE on the Q1 gate; C_VCAP (100 nF, at least 10 x the 2.09 nF Ciss and the 0.1 uF minimum) joins VCAP to ANODE, C_VIN (100 nF, minimum 22 nF) sits at ANODE and C_BULK (100 uF, minimum 100 nF) at CATHODE."
+      "Q1 check: a reversed input drives the LM74700-Q1 ANODE below CATHODE and the controller pulls the gate to the source, so Q1 blocks even with C_BULK charged (a hot-plug reversal); the controller tolerates -65 V on ANODE and the clamp keeps the reversed input at about -0.7 V through D_TVS. Q1 drain-source rating 60 V and gate-source rating 20 V are above the TVS clamp of 21.5 V and the 15 V the controller can put between GATE and ANODE; at 1.18 A the forward drop is 10 mV at the 8.5 mOhm maximum, the controller regulates it to about 20 mV."
       "D_TVS SMAJ13A (Littelfuse, 400 W, VR 13.0 V, VBR 14.40 to 15.90 V at 1 mA, IR 1 uA maximum at VR, VC 21.5 V at IPP 18.6 A) sits on VIN_FUSED, before Q1: its cathode joins the fused input net on the Q1 drain side and its anode is on GND, so a surge is clamped before it reaches Q1, the buck or any capacitor. A reversed supply forward-biases D_TVS, which conducts and opens F1; Q1 then isolates the protected rail."
-      "TVS check: the supply is 12 V +/-5 % (10.8 to 12.6 V in operation), 0.4 V (3.2 %) below the 13.0 V standoff VR; at 13.0 V, the upper bound the checks use, leakage is the datasheet IR of 1 uA maximum and 13.0 V is 1.4 V below the 14.40 V minimum breakdown. Surge requirement: a source with impedance R_s keeps the TVS current at or below 14 A (10/1000 us), 75 % of its rated 18.6 A (400 W rated pulse power, which 18.6 A x 21.5 V = 399.9 W uses in full, so the rating alone leaves no margin; 14 A x 21.5 V = 301 W) while the open-circuit surge is at most 21.5 V + 14 A x R_s, which is 35.5 V at 1 ohm and 49.5 V at 2 ohm; the clamp at 14 A is at most the 21.5 V it has at 18.6 A, which the margins below use. Worst-case clamp 21.5 V is below the MP2307 recommended input maximum 23 V by 1.5 V and its absolute maximum 26 V by 4.5 V, below the AO3401A 30 V Vds by 8.5 V, and below the 25 V rating of C_BULK, C_IN1, C_IN2 and C_N7 by 3.5 V."
+      "TVS check: the supply is 12 V +/-5 % (10.8 to 12.6 V in operation), 0.4 V (3.2 %) below the 13.0 V standoff VR; at 13.0 V, the upper bound the checks use, leakage is the datasheet IR of 1 uA maximum and 13.0 V is 1.4 V below the 14.40 V minimum breakdown. Surge requirement: a source with impedance R_s keeps the TVS current at or below 14 A (10/1000 us), 75 % of its rated 18.6 A (400 W rated pulse power, which 18.6 A x 21.5 V = 399.9 W uses in full, so the rating alone leaves no margin; 14 A x 21.5 V = 301 W) while the open-circuit surge is at most 21.5 V + 14 A x R_s, which is 35.5 V at 1 ohm and 49.5 V at 2 ohm; the clamp at 14 A is at most the 21.5 V it has at 18.6 A, which the margins below use. Worst-case clamp 21.5 V is below the MP2307 recommended input maximum 23 V by 1.5 V and its absolute maximum 26 V by 4.5 V, below the DMT6007LFG 60 V Vds by 38.5 V, and below the 25 V rating of C_BULK, C_IN1, C_IN2 and C_N7 by 3.5 V."
     }
   }
   group "BUCK 3V3" color "#b45309" {
@@ -242,7 +243,7 @@ board "irrigation_controller" {
 
   // ================= nets =====================================================================
   net "GND" {
-    J1.p2 D_TVS.anode C_BULK.p2 R_QG.p2 C_IN1.p2 C_IN2.p2 U1.gnd U1.gnd_ep C_OUT1.p2 C_OUT2.p2 R_FBB.p2 C_COMP.p2 C_SS.p2
+    J1.p2 D_TVS.anode C_BULK.p2 U_IDEAL.gnd C_VIN.p2 C_IN1.p2 C_IN2.p2 U1.gnd U1.gnd_ep C_OUT1.p2 C_OUT2.p2 R_FBB.p2 C_COMP.p2 C_SS.p2
     TP_GND.p1
     U2.VSS C_VDD1.p2 C_VDD2.p2 Y1.gnd_2 Y1.gnd_4 C_X1.p2 C_X2.p2 C_NRST.p2 SW_RESET.p2 J_SWD.p3
     Q_V1.s Q_V2.s R_PD1.p2 R_PD2.p2
@@ -262,10 +263,11 @@ board "irrigation_controller" {
   net "LED_N12_A" class "SIG" { R_N3.p2 D_N1.anode }
   net "LED_N33_A" class "SIG" { R_N4.p2 D_N2.anode }
   net "VIN_12V_RAW" class "PWR12" { J1.p1 F1.p1 }
-  net "VIN_FUSED" class "PWR12" { F1.p2 Q1.d D_TVS.cathode TP_VIN.p1 }
-  net "Q1_GATE" class "SIG" { Q1.g R_QG.p1 D_QG.anode }
+  net "VIN_FUSED" class "PWR12" { F1.p2 Q1.s1 Q1.s2 Q1.s3 U_IDEAL.anode U_IDEAL.en C_VCAP.p2 C_VIN.p1 D_TVS.cathode TP_VIN.p1 }
+  net "Q1_GATE" class "SIG" { Q1.g U_IDEAL.gate }
+  net "ID_VCAP" class "SIG" { U_IDEAL.vcap C_VCAP.p1 }
   net "+12V_VALVE" class "PWR12" {
-    Q1.s D_QG.cathode C_BULK.p1 TP_12V.p1
+    Q1.d U_IDEAL.cathode C_BULK.p1 TP_12V.p1
     C_IN1.p1 C_IN2.p1 U1.in R_EN.p1
     J_VALVE1.p1 D_FLY1.cathode J_VALVE2.p1 D_FLY2.cathode J_FLOW.p1
     R_N3.p1 C_N7.p1 R_N5.p1 C_N9.p1 R_N6.p1

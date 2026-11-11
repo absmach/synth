@@ -1,0 +1,70 @@
+id = "lm74700_q1"
+kind = "regulator"
+description = "TI LM74700-Q1 ideal diode controller for an external N-channel MOSFET, SOT-23-6 (DBV). Pinout per datasheet SNOSD17G: 1 VCAP, 2 GND, 3 EN, 4 CATHODE, 5 GATE, 6 ANODE. ANODE is the input and the FET source, CATHODE the output and the FET drain; EN may be tied to ANODE; VCAP needs at least 0.1 uF to ANODE and 10 x the FET's Ciss; at least 22 nF at ANODE and 100 nF at CATHODE. Input 4 to 60 V, 65 V absolute maximum ANODE to GND."
+version = 0
+lifecycle = "active"
+signed_by = []
+substitutes = []
+mpn = "LM74700QDBVRQ1"
+lcsc_pn = "C2941042"
+kicad_footprint = "Package_TO_SOT_SMD:SOT-23-6"
+kicad_symbol = "Power_Management:LM74700"
+
+[[pins]]
+name = "vcap"
+number = "1"
+electrical_type = "passive"
+capabilities = []
+required = true
+
+[[pins]]
+name = "gnd"
+number = "2"
+electrical_type = "power_input"
+capabilities = []
+required = true
+
+[[pins]]
+name = "en"
+number = "3"
+electrical_type = "input"
+capabilities = []
+required = true
+
+[[pins]]
+name = "cathode"
+number = "4"
+electrical_type = "input"
+capabilities = []
+required = true
+
+[[pins]]
+name = "gate"
+number = "5"
+electrical_type = "output"
+capabilities = []
+required = true
+
+[[pins]]
+name = "anode"
+number = "6"
+electrical_type = "power_input"
+capabilities = []
+required = true
+
+[operating_conditions]
+min_voltage_v = 4.0
+max_voltage_v = 60.0
+max_power_mw = 100
+thermal_resistance_c_per_w = 189.8
+
+[footprint_dimensions]
+width_mm = 3.2
+height_mm = 3.3
+courtyard_margin_mm = 0.25
+
+[provenance]
+source = "authored"
+datasheet_url = "https://www.ti.com/lit/ds/symlink/lm74700-q1.pdf"
+reviewed_by = "JeffMboya"
+reviewed_at = "2026-11-11"

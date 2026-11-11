@@ -164,15 +164,6 @@ priority = "hard"
 dx = 0.0
 dy = 0.0
 
-[components.D_QG]
-x = 24.0
-y = 11.0
-rotation = 0
-source = "agent"
-priority = "hard"
-dx = 0.0
-dy = 0.0
-
 [components.R_COMP]
 x = 36.5
 y = 19.5
@@ -1067,15 +1058,6 @@ dy = 0.0
 [components.R_N4]
 x = 57.5
 y = 63.5
-rotation = 0
-source = "agent"
-priority = "hard"
-dx = 0.0
-dy = 0.0
-
-[components.R_QG]
-x = 19.0
-y = 11.0
 rotation = 0
 source = "agent"
 priority = "hard"
