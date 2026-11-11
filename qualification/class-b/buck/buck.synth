@@ -2,7 +2,7 @@
 // Intended for 24 V +10% in and 1 A out.
 //
 // Input chain: J1 -> F1 (PTC) -> D1 (Schottky reverse block) -> VIN node.
-// VIN node: D2 (TVS), C1 (bulk), C2 (10 uF), C3 (220 nF, on the VIN pin), U1 VIN, R_UV_T.
+// VIN node: D2 (TVS), C1 (bulk), C2, C10, C11 (3 x 10 uF), C3 (220 nF, on the VIN pin), U1 VIN, R_UV_T.
 // LMR38010: 4.2-80 V input (85 V absolute maximum), 1 A, 800 kHz set by RT, internal compensation, exposed thermal pad, open-drain PG.
 // The SMBJ30A (VBR 33.3-36.8 V, clamp 48.4 V) clamps surges at the VIN node; its clamp is below U1's 85 V absolute maximum.
 // Feedback divider is tapped from the output node (L1.p2), never from SW.
@@ -34,11 +34,14 @@ board "buck" {
 
   group "INPUT FILTER" color "#7c3aed" {
     component C1: capacitor "c_electrolytic_smd_8x10" value "47uF" voltage "50V"
-    component C2: capacitor "c_generic_1206" value "10uF" dielectric "X7R" voltage "50V"
+    component C2: capacitor "c_samsung_cl31b106kbhnnne" value "10uF" dielectric "X7R" voltage "50V"
+    component C10: capacitor "c_samsung_cl31b106kbhnnne" value "10uF" dielectric "X7R" voltage "50V"
+    component C11: capacitor "c_samsung_cl31b106kbhnnne" value "10uF" dielectric "X7R" voltage "50V"
     component C3: capacitor "c_generic_0603" value "220nF" dielectric "X7R" voltage "50V"
     notes "" {
-      "C1 bulk, C2 ceramic, C3 high-frequency next to the VIN pin (LMR38010 section 9.2.2.6: at least 4.7 uF + 100 to 220 nF)."
-      "50 V parts for a 24 V rail; DC-bias derating of C2 is not known."
+      "C1 bulk, C2, C10 and C11 ceramic, C3 high-frequency next to the VIN pin (LMR38010 section 9.2.2.6: at least 4.7 uF + 100 to 220 nF)."
+      "C2, C10 and C11 are three 10 uF 50 V X7R in parallel, about 2 uF each at 24 V bias (Samsung library data-sheet plot, approximate), about 6 uF effective, against the datasheet minimum of 4.7 uF (LMR38010 section 9.2.2.6)."
+      "50 V parts for a 24 V rail."
     }
   }
 
@@ -52,20 +55,23 @@ board "buck" {
   }
 
   group "BUCK" color "#0072b2" {
-    component U1: regulator "lmr38010"
+    component U1: regulator "lmr38010" {
+      escape { method underpad }
+    }
     component C4: capacitor "c_generic_0603" value "100nF" dielectric "X7R" voltage "16V"
     component R_RT: resistor "r_generic_0603" value "33k" tolerance "1%"
     component L1: inductor "l_bourns_srn6045ta_6r8m" value "6.8uH"
-    component C5: capacitor "c_generic_1206" value "22uF" dielectric "X7R" voltage "25V"
-    component C6: capacitor "c_generic_1206" value "22uF" dielectric "X7R" voltage "25V"
-    component C9: capacitor "c_generic_1206" value "22uF" dielectric "X7R" voltage "25V"
+    component C5: capacitor "c_samsung_cl31a226kahnnne" value "22uF" dielectric "X5R" voltage "25V"
+    component C6: capacitor "c_samsung_cl31a226kahnnne" value "22uF" dielectric "X5R" voltage "25V"
+    component C9: capacitor "c_samsung_cl31a226kahnnne" value "22uF" dielectric "X5R" voltage "25V"
     notes "" {
       "LMR38010SDDAR: internal compensation, exposed pad (pin 9) on GND, open-drain PG, PFM with spread spectrum."
       "R_RT 33k from RT/SYNC to GND sets 800 kHz (RT table under datasheet Figure 8-4); the pin must not float."
       "C4 100 nF boot capacitor between BOOT and SW."
       "L1 6.8 uH at 800 kHz gives about 0.5 A ripple at 26.4 V in (datasheet Eq 10 K about 0.5), above the 1.03 uH minimum of Eq 11 (0.25 x 3.3 V / 800 kHz); 3x 22 uF is unverified: Table 9-1 has no 3.3 V row."
-      "The exposed pad (pin 9) is soldered to the F.Cu GND pour. There are no vias in the pad:"
-      "the board's fabrication floor is a 0.3 mm drill and the KiCad thermal-via footprint ships 0.2 mm."
+      "The exposed pad (pin 9) is soldered to the F.Cu GND pour and carries six GND vias in the pad"
+      "(2 x 3, 0.6 mm pad, 0.3 mm drill, the board's fabrication floor; the 0.2 mm of the KiCad thermal-via footprint is below it)."
+      "The pad needs the filled-via process, declared by requires via_in_pad."
     }
   }
 
@@ -106,7 +112,7 @@ board "buck" {
     component H1: mounting_hole "mounting_hole_m2_5" value "M2.5"
     component H2: mounting_hole "mounting_hole_m2_5" value "M2.5"
     notes "" {
-      "Two M2.5 non-plated holes in opposite corners; the board is fixed down through them."
+      "Two M2.5 non-plated holes, H1 in the top middle and H2 at the right edge below J2; the board is fixed down through them."
     }
   }
 
@@ -120,13 +126,13 @@ board "buck" {
 
   net "VIN" class "PWR" {
     D1.cathode, D2.cathode,
-    C1.p1, C2.p1, C3.p1,
+    C1.p1, C2.p1, C10.p1, C11.p1, C3.p1,
     U1.vin, R_UV_T.p1
   }
 
   net "GND" class "PWR" {
     J1.p2, D2.anode,
-    C1.p2, C2.p2, C3.p2,
+    C1.p2, C2.p2, C10.p2, C11.p2, C3.p2,
     U1.gnd, U1.pad, R_UV_B.p2,
     C5.p2, C6.p2, C9.p2, R_FB_B.p2, R_RT.p2,
     J2.p2, J2.p4, D3.cathode
