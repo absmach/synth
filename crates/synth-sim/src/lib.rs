@@ -1305,11 +1305,19 @@ fn emit_deck(
                     )));
                     continue;
                 };
+                if net.id == ground.id {
+                    diagnostics.push(tb_error(format!(
+                        "measure `{}` reads ground net `{}`; ground is 0 V by definition \
+                         and ngspice has no vector for it",
+                        measure.name, net.name
+                    )));
+                    continue;
+                }
                 let simulated = net
                     .endpoints
                     .iter()
                     .any(|endpoint| !ignored_ids.contains(&endpoint.component));
-                if !simulated && net.id != ground.id && !sourced.contains(net.name.as_str()) {
+                if !simulated && !sourced.contains(net.name.as_str()) {
                     diagnostics.push(with_location_span(
                         topology_error(
                             &net.name,

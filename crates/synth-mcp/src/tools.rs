@@ -4,9 +4,23 @@
 
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
+use std::cell::RefCell;
 use std::cmp::Ordering;
 use std::path::{Path, PathBuf};
 use synth_supply::Distributor;
+
+thread_local! {
+    /// Test-only override for the ngspice binary. The MCP schema deliberately
+    /// has no such argument, so a remote caller cannot choose a command.
+    static TEST_NGSPICE: RefCell<Option<PathBuf>> = const { RefCell::new(None) };
+}
+
+/// Point `synth_simulate` at a specific binary for this test thread. Test
+/// hook only: it is not part of the tool schema.
+#[doc(hidden)]
+pub fn set_test_ngspice(path: Option<PathBuf>) {
+    TEST_NGSPICE.with(|slot| *slot.borrow_mut() = path);
+}
 
 /// Tool description metadata exposed in `tools/list`.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -618,7 +632,6 @@ pub fn list_tools() -> Vec<McpToolInfo> {
                 "properties": {
                     "file_path": { "type": "string", "description": "Path to the .synth design file; its testbench sidecar is `<design>.sim.toml` beside it" },
                     "testbench_path": { "type": "string", "description": "Optional explicit testbench sidecar path (defaults to `<design>.sim.toml`)" },
-                    "ngspice_path": { "type": "string", "description": "Path to the ngspice binary (defaults to the NGSPICE environment variable, then PATH)" },
                     "registry_path": { "type": "string", "description": "Optional custom component registry path" },
                     "workspace_root": { "type": "string", "description": "Optional workspace root path for auto-resolving registry" }
                 },
@@ -2249,13 +2262,13 @@ fn execute_simulate(args: &Value, default_registry: Option<&Path>) -> Result<Val
          must sit beside the design file"
             .to_string()
     })?);
-    let compiled = compile_design(args, default_registry)?;
-    if compiled
-        .diagnostics
-        .iter()
-        .any(|d| d.severity.is_blocking())
-    {
-        return Ok(sim_json(false, &[], &compiled.diagnostics));
+    let CompiledDesign {
+        board,
+        diagnostics: mut compile_diagnostics,
+        ..
+    } = compile_design(args, default_registry)?;
+    if compile_diagnostics.iter().any(|d| d.severity.is_blocking()) {
+        return Ok(sim_json(false, &[], &compile_diagnostics));
     }
 
     let testbench_path = args["testbench_path"]
@@ -2278,20 +2291,18 @@ fn execute_simulate(args: &Value, default_registry: Option<&Path>) -> Result<Val
     }
 
     let report = synth_sim::simulate(
-        &compiled.board,
+        &board,
         &testbench,
         &synth_sim::SimOptions {
-            ngspice: args["ngspice_path"].as_str().map(PathBuf::from),
+            ngspice: TEST_NGSPICE.with(|slot| slot.borrow().clone()),
             design_path: Some(design_path),
             testbench_path: Some(testbench_path),
             registry_dirs,
         },
     );
-    Ok(sim_json(
-        report.passed(),
-        &report.measures,
-        &report.diagnostics,
-    ))
+    let passed = report.passed();
+    compile_diagnostics.extend(report.diagnostics);
+    Ok(sim_json(passed, &report.measures, &compile_diagnostics))
 }
 
 /// The one JSON shape `synth_simulate` returns, so the pass path and every

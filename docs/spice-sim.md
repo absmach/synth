@@ -46,8 +46,9 @@ carries it as an informational `E-SYNTH-SIM-004` diagnostic.
 
 `synth_simulate` is a thin wrapper over the same seam. It requires
 `file_path` because the sidecar sits beside the design; inline `source` is not
-supported. Optional fields are `testbench_path`, `ngspice_path`,
-`registry_path` and `workspace_root`.
+supported. Optional fields are `testbench_path`, `registry_path` and
+`workspace_root`. The ngspice binary is taken from `NGSPICE`, then `PATH`;
+the tool has no argument for it, so a remote caller cannot choose a command.
 
 ```jsonrpc
 --> { "jsonrpc": "2.0", "id": 4, "method": "tools/call",

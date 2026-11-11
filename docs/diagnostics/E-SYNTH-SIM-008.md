@@ -17,8 +17,10 @@ ignoring the only part that connects a net reports the now-floating net.
 A net whose endpoints are *all* ignored never becomes a deck node at all, so it
 is dropped rather than reported as floating. A `[[measure]]` that reads such a
 net is reported here, because the measurement would otherwise reach ngspice as
-a missing vector (`E-SYNTH-SIM-003`) with no useful location. Ground and nets
-driven by a testbench source remain valid measurement targets.
+a missing vector (`E-SYNTH-SIM-003`) with no useful location. Nets driven by a
+testbench source remain valid measurement targets. The ground net is not one:
+its node is `0`, which ngspice has no vector for, so a measure on ground is
+rejected up front as `E-SYNTH-SIM-007`.
 
 For a `[spice]` subcircuit part this check assumes the model conducts between
 every pin; a model that leaves a pin open may surface as a singular-matrix

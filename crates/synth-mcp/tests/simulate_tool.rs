@@ -39,6 +39,21 @@ min = 5.7
 max = 6.3
 "#;
 
+/// A valid divider whose group colour is invalid: lowering reports a warning,
+/// the board still compiles and the simulation passes.
+const WARNED_DIVIDER: &str = r##"
+board "divider" {
+  layers 2
+  group "power" color "#zzzzzz" {
+    component R1: resistor "r_generic_0805" value "10k"
+    component R2: resistor "r_generic_0805" value "10k"
+  }
+  net "VCC" { R1.p1 }
+  net "GND" { R2.p2 }
+  connect R1.p2 -> R2.p1 as "MID"
+}
+"##;
+
 fn fixtures_dir() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("..")
@@ -89,16 +104,25 @@ fn stub_ngspice(label: &str) -> (PathBuf, tempfile::TempDir) {
 
 /// A design directory with the divider and its `<design>.sim.toml` sidecar.
 fn design_dir(testbench: &str) -> tempfile::TempDir {
+    design_dir_with(DIVIDER, testbench)
+}
+
+fn design_dir_with(design: &str, testbench: &str) -> tempfile::TempDir {
     let dir = tempfile::tempdir().expect("design dir");
-    std::fs::write(dir.path().join("divider.synth"), DIVIDER).expect("write design");
+    std::fs::write(dir.path().join("divider.synth"), design).expect("write design");
     std::fs::write(dir.path().join("divider.sim.toml"), testbench).expect("write sidecar");
     dir
 }
 
-fn args(design: &Path, ngspice: &Path) -> Value {
+/// Point the tool at a stub for this test. The schema deliberately has no
+/// argument for this, so a remote caller cannot choose the executable.
+fn use_ngspice(ngspice: &Path) {
+    synth_mcp::set_test_ngspice(Some(ngspice.to_path_buf()));
+}
+
+fn args(design: &Path) -> Value {
     json!({
         "file_path": design.join("divider.synth").display().to_string(),
-        "ngspice_path": ngspice.display().to_string(),
         "registry_path": registry_parts().display().to_string(),
     })
 }
@@ -115,8 +139,9 @@ fn has_code(result: &Value, code: &str) -> bool {
 fn a_passing_measurement_returns_passed() {
     let design = design_dir(DIVIDER_TB);
     let (stub, _stub_dir) = stub_ngspice("ok");
+    use_ngspice(&stub);
 
-    let result = synth_mcp::call_tool("synth_simulate", &args(design.path(), &stub), None)
+    let result = synth_mcp::call_tool("synth_simulate", &args(design.path()), None)
         .expect("the tool returns a result");
 
     assert_eq!(result["passed"], true, "{result}");
@@ -133,8 +158,9 @@ fn an_out_of_limit_measurement_fails_with_004() {
             .replace("max = 6.3", "max = 5.0"),
     );
     let (stub, _stub_dir) = stub_ngspice("ok");
+    use_ngspice(&stub);
 
-    let result = synth_mcp::call_tool("synth_simulate", &args(design.path(), &stub), None)
+    let result = synth_mcp::call_tool("synth_simulate", &args(design.path()), None)
         .expect("the tool returns a result");
 
     assert_eq!(result["passed"], false, "{result}");
@@ -146,8 +172,9 @@ fn an_out_of_limit_measurement_fails_with_004() {
 fn a_missing_ngspice_is_a_tool_result_with_001() {
     let design = design_dir(DIVIDER_TB);
     let missing = design.path().join("ngspice-does-not-exist");
+    use_ngspice(&missing);
 
-    let result = synth_mcp::call_tool("synth_simulate", &args(design.path(), &missing), None)
+    let result = synth_mcp::call_tool("synth_simulate", &args(design.path()), None)
         .expect("a missing binary is a result, not a transport error");
 
     assert_eq!(result["passed"], false, "{result}");
@@ -173,8 +200,9 @@ fn a_newline_in_a_measured_node_gives_007() {
     let design =
         design_dir(&DIVIDER_TB.replace("node = \"MID\"", "node = \"MID\\n.SHELL echo pwned\""));
     let (stub, _stub_dir) = stub_ngspice("ok");
+    use_ngspice(&stub);
 
-    let result = synth_mcp::call_tool("synth_simulate", &args(design.path(), &stub), None)
+    let result = synth_mcp::call_tool("synth_simulate", &args(design.path()), None)
         .expect("a malformed sidecar is a result, not a transport error");
 
     assert_eq!(result["passed"], false, "{result}");
@@ -195,10 +223,11 @@ fn a_newline_in_a_measured_node_gives_007() {
 fn an_explicit_testbench_path_is_used() {
     let design = design_dir(DIVIDER_TB);
     let (stub, _stub_dir) = stub_ngspice("ok");
+    use_ngspice(&stub);
     let explicit = design.path().join("elsewhere.toml");
     std::fs::rename(design.path().join("divider.sim.toml"), &explicit)
         .expect("move the sidecar away from its default location");
-    let mut arguments = args(design.path(), &stub);
+    let mut arguments = args(design.path());
     arguments["testbench_path"] = json!(explicit.display().to_string());
 
     let result = synth_mcp::call_tool("synth_simulate", &arguments, None)
@@ -215,8 +244,9 @@ fn an_unbounded_measurement_reports_measured_not_passed() {
         .replace("max = 6.3\n", "");
     let design = design_dir(&sidecar);
     let (stub, _stub_dir) = stub_ngspice("ok");
+    use_ngspice(&stub);
 
-    let result = synth_mcp::call_tool("synth_simulate", &args(design.path(), &stub), None)
+    let result = synth_mcp::call_tool("synth_simulate", &args(design.path()), None)
         .expect("the tool returns a result");
 
     assert_eq!(result["passed"], true, "{result}");
@@ -228,6 +258,34 @@ fn an_unbounded_measurement_reports_measured_not_passed() {
 }
 
 #[test]
+fn the_schema_does_not_let_a_caller_choose_the_executable() {
+    let tool = synth_mcp::list_tools()
+        .into_iter()
+        .find(|tool| tool.name == "synth_simulate")
+        .expect("synth_simulate is listed");
+    assert!(
+        tool.input_schema["properties"]
+            .get("ngspice_path")
+            .is_none(),
+        "a remote caller must not choose the binary: {}",
+        tool.input_schema
+    );
+}
+
+#[test]
+fn compile_warnings_are_returned_with_a_passing_simulation() {
+    let design = design_dir_with(WARNED_DIVIDER, DIVIDER_TB);
+    let (stub, _stub_dir) = stub_ngspice("ok");
+    use_ngspice(&stub);
+
+    let result = synth_mcp::call_tool("synth_simulate", &args(design.path()), None)
+        .expect("the tool returns a result");
+
+    assert_eq!(result["passed"], true, "{result}");
+    assert!(has_code(&result, "E-SYNTH-NAME-011"), "{result}");
+}
+
+#[test]
 fn a_divider_matches_real_ngspice() {
     let ngspice = PathBuf::from("/usr/bin/ngspice");
     if !ngspice.is_file() {
@@ -235,8 +293,9 @@ fn a_divider_matches_real_ngspice() {
         return;
     }
     let design = design_dir(DIVIDER_TB);
+    use_ngspice(&ngspice);
 
-    let result = synth_mcp::call_tool("synth_simulate", &args(design.path(), &ngspice), None)
+    let result = synth_mcp::call_tool("synth_simulate", &args(design.path()), None)
         .expect("the tool returns a result");
 
     assert_eq!(result["passed"], true, "{result}");

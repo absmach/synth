@@ -63,7 +63,7 @@ testbench sidecar through ngspice.
 
 | Tool             | Purpose                                                                                                                                                                                                                                                                                                                                                            |
 | ---------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `synth_simulate` | Simulate a design and return each measured value, its limits and structured diagnostics. Requires `file_path`: the sidecar sits beside the design, so inline `source` is not supported. Optional `testbench_path` and `ngspice_path` (defaults to `NGSPICE`, then `PATH`). A missing or failed measurement, a missing SPICE model, missing ngspice or a timeout is a blocking `E-SYNTH-SIM-*` diagnostic, never a silent pass. |
+| `synth_simulate` | Simulate a design and return each measured value, its limits and structured diagnostics. Requires `file_path`: the sidecar sits beside the design, so inline `source` is not supported. Optional `testbench_path`. The binary comes from `NGSPICE`, then `PATH`. A missing or failed measurement, a missing SPICE model, missing ngspice or a timeout is a blocking `E-SYNTH-SIM-*` diagnostic, never a silent pass. |
 
 ```jsonrpc
 --> { "jsonrpc": "2.0", "id": 4, "method": "tools/call",

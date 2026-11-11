@@ -40,7 +40,9 @@ and it requires the `ac` analysis; the path is emitted single-quoted into the
 deck.
 
 Synth also rejects a source on the ground net and a measure node that names
-no design net. A newline in a testbench string value (ground, a source net, a
+no design net. A measure on the ground net itself is rejected because the
+node is `0` and ngspice has no vector for it; ground is 0 V by definition.
+A newline in a testbench string value (ground, a source net, a
 measure node, a measure element, a plot path or an `ignore` reference) is
 rejected as well: a newline ends a SPICE line, so it could inject deck
 commands.

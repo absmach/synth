@@ -1856,21 +1856,54 @@ fn a_measure_on_a_fully_ignored_net_gives_008_with_the_net_span() {
     );
 }
 
-/// Ground and a net driven by a testbench source are real deck nodes even
-/// when no placed part supplies them.
+/// A net driven by a testbench source is a real deck node even when no placed
+/// part supplies it.
 #[test]
-fn a_measure_on_ground_or_a_sourced_net_is_allowed() {
+fn a_measure_on_a_sourced_net_is_allowed() {
     let board = board(DIVIDER);
     let testbench = testbench(&DIVIDER_TB.replace(
         "max = 6.3\n",
-        "max = 6.3\n\n[[measure]]\nname = \"vcc\"\nkind = \"node_voltage\"\nnode = \"VCC\"\n\n\
-             [[measure]]\nname = \"vgnd\"\nkind = \"node_voltage\"\nnode = \"GND\"\n",
+        "max = 6.3\n\n[[measure]]\nname = \"vcc\"\nkind = \"node_voltage\"\nnode = \"VCC\"\n",
     ));
 
-    let deck = synth_sim::emit_netlist(&board, &testbench).expect("ground and VCC are nodes");
+    let deck = synth_sim::emit_netlist(&board, &testbench).expect("VCC is a node");
 
     assert!(deck.contains("let m1 = v(n_VCC)"), "deck:\n{deck}");
-    assert!(deck.contains("let m2 = v(0)"), "deck:\n{deck}");
+}
+
+/// ngspice has no vector for node 0, so a ground measure is rejected up front
+/// instead of surfacing as a missing-measurement error after the run.
+#[test]
+fn a_measure_on_ground_is_rejected_with_007() {
+    let divider = board(DIVIDER);
+    let divider_tb = testbench(&DIVIDER_TB.replace(
+        "max = 6.3\n",
+        "max = 6.3\n\n[[measure]]\nname = \"vgnd\"\nkind = \"node_voltage\"\nnode = \"GND\"\n",
+    ));
+    let diagnostics =
+        synth_sim::emit_netlist(&divider, &divider_tb).expect_err("v(0) has no vector");
+    assert_ground_measure_rejected(&diagnostics);
+
+    let rc = board(RC);
+    let rc_tb = testbench(&RC_TB.replace(
+        "max = 1620.0\n",
+        "max = 1620.0\n\n[[measure]]\nname = \"fgnd\"\nkind = \"relative_db\"\nnode = \"GND\"\n",
+    ));
+    let diagnostics = synth_sim::emit_netlist(&rc, &rc_tb).expect_err("vdb(0) has no vector");
+    assert_ground_measure_rejected(&diagnostics);
+}
+
+fn assert_ground_measure_rejected(diagnostics: &[synth_diagnostics::Diagnostic]) {
+    assert!(
+        diagnostics.iter().any(|diagnostic| {
+            diagnostic.code == synth_sim::E_SYNTH_SIM_007
+                && diagnostic
+                    .message
+                    .as_deref()
+                    .is_some_and(|message| message.contains("ground is 0 V by definition"))
+        }),
+        "{diagnostics:?}"
+    );
 }
 
 #[test]

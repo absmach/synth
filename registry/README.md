@@ -55,6 +55,11 @@ value = "100nf"
 count = 4
 ```
 
+Unknown keys are rejected, not ignored: a typo such as `[spcie]` or a
+misspelled field fails the load instead of silently dropping data. This is
+deliberate, and it applies to every part file, including `synth_author_part`
+input.
+
 The `electrical_type` values mirror the standard EDA categorization
 (passive, power_input, power_output, bidirectional, input, output,
 open_drain, analog, rf, differential_positive, differential_negative,
