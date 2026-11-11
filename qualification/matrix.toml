@@ -5,7 +5,8 @@ release_command = "synth check <board> --json"
 fab_command = "synth check <board> --fab --json"
 
 # Every `expect` and `expect_fab` that names a gate result below was measured,
-# not assumed. The run: KiCad 10.0.7, KiCadRoutingTools v0.23.0 (grid_router
+# not assumed. The run: KiCad 10.0 (installed by
+# `.github/scripts/install-kicad.sh`), KiCadRoutingTools v0.23.0 (grid_router
 # 9399bfb), release build,
 # `synth check <board> --json [--fab] --router kicad-routing-tools`.
 #
@@ -14,10 +15,11 @@ fab_command = "synth check <board> --fab --json"
 # what it observes for those and compares nothing, so a row can never pass for
 # a reason nobody checked.
 #
-# The rows below record the current KRT/main measurement. Several boards that
-# previously cleared the source/DRC gate now report the DRC stage failing with
-# the current router; their `expect` values follow that measurement rather
-# than the earlier run.
+# The rows below record the current KRT/main measurement. An earlier run on
+# `ubuntu-latest` silently installed KiCad 9 from the Ubuntu archive, and every
+# board's DRC reported `unknown` there; the workflow now pins `ubuntu-24.04`
+# and installs KiCad 10 through the checked script, so `unknown` here means the
+# stage could not run rather than the runner carried the wrong KiCad.
 #
 # `status` is unmoved by any of that. Clearing the gate is a measurement;
 # promotion to `qualified` takes the human review in
@@ -127,7 +129,7 @@ rationale = "Negative test and the corpus's only Class-D entry: the largest impo
 [[board]]
 id = "i2c_sensor_node"
 path = "qualification/class-a/i2c-sensor-node/i2c_sensor_node.synth"
-fixture_sha256 = "5789c5cb6d4ffbb020fa3f7a861e7d7fe7d5b98d172c5291e08f7a35d9be3fd6"
+fixture_sha256 = "b48d1eaaafe6de004197ba49d192c07660b4c564d58e656320aa3c64f578f4c0"
 class = "A"
 status = "experimental"
 expect = "fail"
@@ -137,7 +139,7 @@ rationale = "A JST-fed 5 V input, a 3V3 LDO, an STM32G030 reading an environment
 [[board]]
 id = "irrigation_controller"
 path = "qualification/class-a/irrigation-controller/irrigation_controller.synth"
-fixture_sha256 = "04d7d8f055228f860437158d5acef58a07c8d378e5a714fa8036f4cc95b9a0c6"
+fixture_sha256 = "9e4a87d7ed7f4830940917a55ac0a77403ee537859c0b2b3ffe512a627957b95"
 class = "A"
 status = "experimental"
 expect = "fail"
@@ -158,7 +160,7 @@ rationale = "Negative test, written to be wrong on purpose so the diagnostics ca
 [[board]]
 id = "protected_power_entry"
 path = "qualification/class-a/protected-power-entry/protected_power_entry.synth"
-fixture_sha256 = "16b90faf2d95699eaf642b834fb2eb939afe89cfa0eaa07946cd936eedf53272"
+fixture_sha256 = "9412db6609bb8a18afd0935e98c0597a961a61c2c790803fcea2919c69916909"
 class = "A"
 status = "experimental"
 expect = "fail"
@@ -168,7 +170,7 @@ rationale = "12 V in, a reverse-polarity P-FET, resettable over-current, a TVS c
 [[board]]
 id = "rp2350_debug_target"
 path = "qualification/class-a/rp2350-debug-target/rp2350_debug_target.synth"
-fixture_sha256 = "8b7d19192928a5ba1cbb290dda4cc389d2668976976b3346fcfdc381ad1ef7ee"
+fixture_sha256 = "63f245630d105866cec461d1139bce4f795db810ea3d95910c3b13e9ba034cb0"
 class = "A"
 status = "experimental"
 expect = "fail"
@@ -178,7 +180,7 @@ rationale = "USB-C power into a 3V3 LDO, the RP2350's own crystal, a tactile res
 [[board]]
 id = "dual_usb_compute"
 path = "qualification/class-c/dual-usb-compute/dual_usb_compute.synth"
-fixture_sha256 = "b0d1b229bab388e2ed4c749b3c479b6447bd6f9aeecea1d9ed58cc8ad25cc434"
+fixture_sha256 = "5d4d7c07547ac9056bc17365617a8c740656cc77b833aa97da8745cb9c6cc95d"
 class = "C"
 status = "experimental"
 expect = "fail"
@@ -188,7 +190,7 @@ rationale = "Two RP2350s on their own USB 2.0 pairs, a shared QSPI boot flash, a
 [[board]]
 id = "ice40_hdmi_video"
 path = "qualification/class-c/ice40-hdmi-video/ice40_hdmi_video.synth"
-fixture_sha256 = "c42dae61398123f6a58749a588ad1049c8698a100100f43d78d4910ab867e2ac"
+fixture_sha256 = "6e5559632a60cd7116ae852c2ee0ee332c2ad039f3f55ab57e45fc93cc8e522d"
 class = "C"
 status = "experimental"
 expect = "fail"
@@ -198,7 +200,7 @@ rationale = "A Lattice iCE40 HX4K in a 121-ball 0.8 mm BGA driving an HDMI Type-
 [[board]]
 id = "multirail_compute"
 path = "qualification/class-c/multirail-compute/multirail_compute.synth"
-fixture_sha256 = "f1a1c27a4b3e3723b1178cfac6b675385858f4c7b35647da8b4932599067bbec"
+fixture_sha256 = "fca5dc6a97656b4d1d08c2db3cf1411bb4c7d1eef95431f5bea4d2badd866ace"
 class = "C"
 status = "experimental"
 expect = "fail"

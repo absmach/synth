@@ -7,6 +7,14 @@ No USB data path — that belongs to a faster class.
 Design rationale is in the source comments next to the circuits it explains;
 this file is the specification.
 
+## Evidence status
+
+This board is a declaration, not a release: the `.synth` source and its layout
+sidecars are committed, and the qualification matrix records the measured
+source/DRC result. No export, fabrication package, or DRC/ERC report is
+committed in this PR; those are owed before the board is promoted from
+`experimental`.
+
 ## Board
 
 | | |
@@ -49,7 +57,7 @@ anywhere else.
 | Vias below the 0.3 mm drill or 0.13 mm ring | **0** |
 | `kicad-cli pcb drc` | 14 errors, 1 unconnected item, 8 warnings |
 
-Three consecutive exports produce a byte-identical board and schematic.
+Three consecutive exports produce a byte-identical schematic and BOM.
 
 ### DRC detail
 

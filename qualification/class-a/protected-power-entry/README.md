@@ -23,9 +23,9 @@ this file is the specification.
 
 | Stage | Part | Against |
 | --- | --- | --- |
-| 1 | Q1 Si2301 P-FET, R1 100k, D1 12 V zener | reverse polarity — the FET blocks before anything downstream sees it |
+| 1 | Q1 Si2301 P-FET, R1 100k, D1 5.1 V zener | reverse polarity — the FET blocks before anything downstream sees it |
 | 2 | F1 polyfuse, 1.5 A | over-current, resettable |
-| 3 | D2 TVS array, SMAJ15A | transients, clamped after the fuse so the fuse limits what the TVS conducts |
+| 3 | D2 SMAJ15A TVS | transients, clamped after the fuse so the fuse limits what the TVS conducts |
 
 A TVS in front of the fuse has nothing to limit the fault current it conducts,
 which is why the order is the order.
@@ -35,7 +35,7 @@ which is why the order is the order.
 | Rail | Source | Feeds |
 | --- | --- | --- |
 | 12 V | J1, 2-pin JST XH, through the chain above | the buck |
-| 5 V | U1 MP2307, L1 6.8 µH, 10k/3.16k divider | the load switch |
+| 5 V | U1 MP2307, L1 6.8 µH, 44.2k/10k divider, C8 bootstrap, R6/C9 COMP | the load switch |
 | 5 V switched | U2 TPS22918, R4 100k, C5 10 nF soft-start | J2 |
 | 3V3 | U3 AMS1117-3.3 | the status LED, and logic a carrier would add |
 
@@ -64,7 +64,7 @@ One local run of the export and the external router.
 | Vias inside pads | **0** |
 | `kicad-cli pcb drc` | **1 error**, 1 unconnected item, 1 warning |
 
-Three consecutive exports produce a byte-identical board and schematic.
+Three consecutive exports produce a byte-identical schematic and BOM.
 
 The single error is one clearance violation. This is the cleanest routed
 board of the four.

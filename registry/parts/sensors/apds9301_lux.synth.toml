@@ -3,12 +3,14 @@ kind = "sensor"
 description = "Broadcom APDS-9301 ambient light sensor, I²C"
 kicad_symbol = "Sensor_Optical:APDS-9301"
 kicad_footprint = "OptoDevice:Broadcom_APDS-9301"
+# No LCSC listing for this exact part was found; the APDS-9300-020 (C691994) is a different device.
+mpn = "APDS-9301-020"
 
 # Body from the footprint's F.Fab outline; its courtyard is 3.1 x 3.8 mm.
 [footprint_dimensions]
 width_mm = 2.2
 height_mm = 2.6
-courtyard_margin_mm = 0.45
+courtyard_margin_mm = 0.6
 
 [operating_conditions]
 min_voltage_v = 2.7
@@ -30,13 +32,13 @@ number = "2"
 electrical_type = "power_input"
 required = true
 
-# Address select: low 0x29, float 0x39, high 0x49. An input, so it has to be
-# strapped; left floating the device has no defined address.
+# Address select: low 0x29, float 0x39, high 0x49. Floating is one of the
+# three documented addresses, not an undefined state, so the pin is not
+# `required`; a board that wants 0x29 or 0x49 straps it.
 [[pins]]
 name = "adr_sel"
 number = "3"
 electrical_type = "input"
-required = true
 
 [[pins]]
 name = "scl"
@@ -63,3 +65,10 @@ electrical_type = "open_drain_low"
 net = "vdd"
 value = "100nf"
 count = 1
+
+[provenance]
+source = "authored"
+generator = "synth_author_part"
+datasheet_url = "https://docs.broadcom.com/doc/AV02-2315EN"
+reviewed_by = "JeffMboya"
+reviewed_at = "2026-10-23"

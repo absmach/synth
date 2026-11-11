@@ -69,6 +69,12 @@ name = "add0"
 number = "4"
 electrical_type = "input"
 
+[[pins]]
+name = "ep"
+number = "7"
+electrical_type = "passive"
+footprint_only = true
+
 [[required_decoupling]]
 net = "vdd"
 value = "100nf"

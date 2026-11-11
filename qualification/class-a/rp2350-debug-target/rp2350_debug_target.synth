@@ -57,6 +57,9 @@ board "rp2350_debug_target" {
     connect U1.vout -> U2.iovdd
     connect U1.vout -> U2.iovdd2
     connect U1.vout -> U2.iovdd3
+    connect U1.vout -> U2.iovdd4
+    connect U1.vout -> U2.iovdd5
+    connect U1.vout -> U2.iovdd6
     connect U1.vout -> U2.qspi_iovdd
     connect U1.vout -> U2.usb_otp_vdd
     connect U1.vout -> U2.adc_avdd

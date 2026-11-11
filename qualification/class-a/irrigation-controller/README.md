@@ -6,6 +6,14 @@ solenoid valve outputs, and ambient temperature, humidity and light.
 Design rationale is in the source comments next to the circuits it explains;
 this file is the specification.
 
+## Evidence status
+
+This board is a declaration, not a release: the `.synth` source and its layout
+sidecars are committed, and the qualification matrix records the measured
+source/DRC result. No export, fabrication package, or DRC/ERC report is
+committed in this PR; those are owed before the board is promoted from
+`experimental`.
+
 ## Board
 
 | | |
@@ -99,12 +107,17 @@ STM32G030K8T6, LQFP-32. Thirteen of its pins are used.
 | PB0 | digital out | Probe excitation enable (U7 ON) |
 | PB6 | I²C | SCL |
 | PB7 | I²C | SDA |
-| PC14 | OSC | Crystal Y1 |
-| PC15 | OSC | Crystal Y1 |
+| PC14 | LSE | Unused: the LQFP-32 has no HSE pins |
+| PC15 | LSE | Unused: the LQFP-32 has no HSE pins |
 | NRST | reset | SW1, pulled up 10 kΩ, debounced 100 Ω / 100 nF |
 
 Every other GPIO is unconnected. On an LQFP-32 with this function set there
 is no header budget for them.
+
+The prompt asks for an 8 MHz crystal. The LQFP-32 package exposes PC14/PC15 as
+the 32.768 kHz LSE pins and has no PF0/PF1 HSE pins, so an 8 MHz HSE crystal
+cannot be fitted; the MCU runs from its internal 16 MHz HSI. A 32.768 kHz
+crystal on PC14/PC15 would be the correct part if an RTC is needed.
 
 ## I²C bus
 
@@ -155,10 +168,9 @@ and the board routed at the defaults. True of every board in this corpus.
 | U4 | HDC1080DMBR | `hdc1080_humidity` |
 | U5 | APDS-9301 | `apds9301_lux` |
 | U6 | 24LC256-I/SN | `24lc256_eeprom` |
-| Y1 | 8 MHz crystal | `xtal_8mhz` |
 | Q1 | Si2301 | `p_mosfet_si2301` |
 | Q2, Q3 | IRLML6244 | `n_mosfet_irlml6244` |
-| D2 | TVS array SOT-363 | `tvs_array_5v` |
+| D2 | SMAJ15A TVS | `smaj15a_tvs` |
 | D3, D6 | 1N5819 | `d_schottky` |
 
 The generated `bom.csv` is the bill of materials; this table is the actives
@@ -179,7 +191,7 @@ anywhere else.
 | Vias below the 0.3 mm drill or 0.13 mm ring | **0** |
 | `kicad-cli pcb drc` | **0 errors**, 0 unconnected items, 19 warnings |
 
-Three consecutive exports produce a byte-identical board and schematic.
+Three consecutive exports produce a byte-identical schematic and BOM.
 
 This is the largest board in the Class-A set and the only one that routes with
 no DRC error at all. Size is not what decides it: every package here escapes

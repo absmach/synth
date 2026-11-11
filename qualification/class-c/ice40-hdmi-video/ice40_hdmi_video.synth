@@ -343,6 +343,9 @@ board "ice40_hdmi_video" {
       component R15: resistor "r_generic_0603" value "270"
       component R16: resistor "r_generic_0603" value "47k"
       component R17: resistor "r_generic_0603" value "47k"
+      // 5 V HPD from the sink divided to the FPGA's 3.3 V input range.
+      component R20: resistor "r_generic_0603" value "10k"
+      component R21: resistor "r_generic_0603" value "20k"
       component C16: capacitor "c_generic_0603" value "100nF"
       notes "" {
         "Four lanes out of bank 0 through 270R series termination. R16/R17"
@@ -413,7 +416,10 @@ board "ice40_hdmi_video" {
     connect U3.vout -> R16.p2
     connect J2.sda -> R17.p1
     connect U3.vout -> R17.p2
-    connect J2.hpd -> U1.iob_87
+    connect J2.hpd  -> R20.p1
+    connect R20.p2  -> U1.iob_87
+    connect U1.iob_87 -> R21.p1
+    connect R21.p2  -> J1.gnd
 
     // The sink's 5 V comes from the board's own input, decoupled locally.
     connect J1.vbus -> J2.vcc_5v

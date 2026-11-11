@@ -4,6 +4,14 @@ Two RP2350s on their own USB 2.0 pairs, a shared QSPI boot flash, and a
 USB 3.0 Type-A receptacle whose two SuperSpeed lanes are carried at 90 Ω to a
 20-pin expansion header, on a six-layer stackup.
 
+## Evidence status
+
+This board is a declaration, not a release: the `.synth` source and its layout
+sidecars are committed, and the qualification matrix records the measured
+source/DRC result. No export, fabrication package, or DRC/ERC report is
+committed in this PR; those are owed before the board is promoted from
+`experimental`.
+
 ## Board
 
 | Parameter    | Value                      |
