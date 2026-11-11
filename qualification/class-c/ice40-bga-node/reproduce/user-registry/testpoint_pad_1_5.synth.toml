@@ -1,0 +1,18 @@
+id = "testpoint_pad_1_5"
+kind = "testpoint"
+description = "SMD test point pad, 1.5 mm — probe point for a net"
+kicad_symbol = "Connector:TestPoint"
+kicad_footprint = "TestPoint:TestPoint_Pad_D1.5mm"
+reviewed_at = "2026-11-10"
+reviewed_by = "JeffMboya"
+
+# 1.5 mm is the pad. The F.CrtYd circle is radius 1.25 mm, so 0.5 mm a side.
+[footprint_dimensions]
+width_mm = 1.5
+height_mm = 1.5
+courtyard_margin_mm = 0.5
+
+[[pins]]
+name = "p1"
+number = "1"
+electrical_type = "passive"

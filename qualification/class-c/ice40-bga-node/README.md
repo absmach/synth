@@ -1,6 +1,6 @@
 # iCE40HX4K BGA node with a USB-C input and an MCU (Class C, case 1)
 
-An iCE40HX4K FPGA in a 121-ball, 0.8 mm-pitch BGA with its supply chain, an SPI boot flash, one 12-pin header and four status LEDs, powered from a USB-C receptacle, with an STM32F103C8 companion MCU that programs the flash over USB, on six copper layers. It answers #328 under #40: a board with a BGA part, escaped under the pads, with via and fanout rules, made by an agent driving `synth mcp`. Jeff Mboya is the independent PCB reviewer as well as the author of this pull request.
+An iCE40HX4K FPGA in a 121-ball, 0.8 mm-pitch BGA with its supply chain, an SPI boot flash, one 12-pin header and four status LEDs, powered from a USB-C receptacle, with an STM32F103C8 companion MCU that programs the flash over USB, on six copper layers. It answers #328 under #40: a board with a BGA part, escaped under the pads, with via and fanout rules, made by an agent driving `synth mcp`.
 
 **Status:** the board is routed and released (42 of 42 nets; KiCad 10.0.6 reports 0 errors and 0 unconnected pads with the library tables), three fresh exports agree (the files listed below byte-identical, the routed board and the Gerbers equal after normalization), and the exported KiCad files, the DRC and ERC reports, a fabrication package and the STEP model are committed ([`export/`](export/), [`reports/`](reports/), [`fab/`](fab/)). The numbers, hashes and files below all come from one export, made with the Synth binary built from `upstream/main` `fbfd8d60`, the merge of pull request #440 (see [`PROVENANCE.md`](PROVENANCE.md)). [`agent-run/REPORT-session13.md`](agent-run/REPORT-session13.md) is the report of an earlier agent session (398 segments, 212 vias, not released), not of the final board. The routing record and the export traces carry paths of the machine the exports ran on (`/home/jeff/synth-local/...`).
 
@@ -43,6 +43,24 @@ The crystal `Y1` is the JYJE 3TJ480000FYLBC (LCSC `C2924620`): 8 MHz, load capac
 
 The flash's package was checked against the manufacturer listings (LCSC, Arrow, RS, JITX): the W25Q128JVSIQ is an 8-pin SOIC of 208 mil, and the board's footprint is `Package_SO:SOIC-8_5.3x5.3mm_P1.27mm`. The TLV70012 is listed at LCSC only in the DDC (thin) package, which the board's footprint `TSOT-23-5` matches; its pinout is the same as the DBV package (1 IN, 2 GND, 3 EN, 4 NC, 5 OUT).
 
+## 3.3 V regulator thermal budget
+
+`U3` (AMS1117-3.3, SOT-223) drops 5 V to 3.3 V, so it dissipates `P = (5.0 - 3.3) x I` and its junction sits at `Tj = TA + P x RθJA`, which the datasheet limits to 125 &deg;C ([Advanced Monolithic Systems AMS1117 datasheet](https://files.waveshare.com/upload/b/b8/AMS1117-datasheet.pdf), a third-party print of the manufacturer's document: "Maximum junction temperature must not exceed 125 °C"; SOT-223 `RθJA = 90 °C/W`, which "can vary from 46 °C/W to >90 °C/W depending on the size of the copper area"). The board uses 90 °C/W, the top of that range. The Synth warning `W-SYNTH-THERMAL-001` comes from the registry part's declared 1200 mW rating at 90 °C/W (25 + 1.2 x 90 = 133 °C); it is the package limit, not this board's load.
+
+| Load on `+3V3` | Current used | Source |
+|---|---|---|
+| `U4` TLV70012 1.2 V core regulator | 200 mA (its rated output current; a linear regulator draws its output current from the input) | TI TLV700 datasheet SBVS173, recommended operating conditions IOUT 0 to 200 mA |
+| `U5` STM32F103C8 | 50 mA (72 MHz, all peripherals on, maximum run-mode supply current) | ST DS5319 as listed on a mirror ([radiolocman](https://www.radiolocman.com/datasheet/pdf.html?di=184185)); not read on st.com |
+| `U2` W25Q128JV | 25 mA (page program and erase, `ICC5` and `ICC7` maximum) | Winbond W25Q128JV datasheet, DC Electrical Characteristics |
+| Four LEDs with 1 k resistors | 1.3 mA | the design's own arithmetic in the source |
+| Total | 276 mA | |
+
+At 276 mA the regulator dissipates 1.7 V x 0.276 A = 0.47 W, a 42 &deg;C rise: Tj is 67 &deg;C at 25 &deg;C ambient and 112 &deg;C at 70 &deg;C ambient, under the 125 &deg;C limit. The 3.3 V of `J3` can feed an external load: with that load Tj reaches 125 &deg;C at 25 &deg;C ambient at `(125 - 25) / 90 / 1.7 = 0.65 A` in total and at 70 &deg;C ambient at `(125 - 70) / 90 / 1.7 = 0.36 A`, so `J3` can supply about 0.37 A and 0.08 A respectively on top of the 276 mA. The input fuse `F1` holds 0.5 A, which bounds the sustained 5 V current and with it the regulator's dissipation at 0.85 W (Tj 101 &deg;C at 25 &deg;C ambient). The load currents are datasheet maxima added together, which no operating state reaches at once.
+
+## ESD on the connector signals
+
+`E-SYNTH-ESD-001` reports the four USB-C data pins (`D+` and `D-` on both receptacle rows). The board has no ESD protection device on them: they reach `U5` through the 22 ohm series resistors `R25` and `R26`, and `D1` (a 6.0 V standoff TVS) protects only `VBUS`. The MCU's own pins are rated 2 kV human-body-model (class 2) and 500 V charge-device-model according to ST DS5319, section 5.3.11, as listed on mirrors ([example](https://www.alldatasheet.net/html-pdf/516843/STMICROELECTRONICS/STM32F103C8T7/117354/60/STM32F103C8T7.html)); the datasheet itself was not read on st.com. The board is a bench programming node, and no IEC 61000-4-2 level is claimed for it. The 12-pin header `J3` carries FPGA I/O through 100 ohm series resistors and carries no protection device either.
+
 ## Layout and fill
 
 The placement is pinned in [`ice40_bga_node.placement.layout.toml`](ice40_bga_node.placement.layout.toml): the USB-C receptacle on the left edge with its opening facing out, the MCU group between the receptacle and the FPGA, the 12-pin header `J3` on the top edge with nothing beyond it, the two mounting holes at opposite corners, and the power parts along the bottom. The courtyard fill of 35.8 % and the outline are measured on the exported board.
@@ -76,19 +94,19 @@ Everything committed comes from export 1. The authoritative evidence of how the 
 
 ## Human review
 
-Jeff Mboya is the independent PCB reviewer as well as the author of this pull request. The PCB review sign-off is JeffMboya's own and is recorded below.
-
 ### PCB review sign-off
 
-PCB review sign-off required by #40: JeffMboya, 2026-11-10, on the package in `fab/` (Gerber content hash `ceeb7444dd`). The sign-off is JeffMboya's own: verified and approved by JeffMboya, per item.
+PCB review sign-off required by #40: JeffMboya, 2026-11-10, on the package in `fab/` (Gerber content hash `ceeb7444dd`). The sign-off is JeffMboya's own. Jeff Mboya is the independent PCB reviewer as well as the author of this pull request. It covers, each verified and approved by JeffMboya:
 
 | Item | Signed off |
 |---|---|
-| PCB and Gerber package | verified and approved by JeffMboya: the Gerbers, drill, BOM and CPL of `fab/` and the exported KiCad board, hash `ceeb7444dd`, and the STEP model of `fab/` (geometry hash `604ace35b8`, check in `reports/step_verify.txt`) |
-| Return paths | verified and approved by JeffMboya: the 37 non-blocking `W-SYNTH-DRC-016` advisories of the routing report on the slow nets, as listed under "What was measured" |
-| ERC | verified and approved by JeffMboya: the 6 warnings of `reports/kicad_erc.json` |
-| DRC | verified and approved by JeffMboya: the 74 `lib_footprint_mismatch` warnings of `reports/kicad_drc.json`, each a footprint that differs from the library copy while 0 violations and 0 unconnected items remain |
-| JLCPCB BOM matching | verified and approved by JeffMboya: the BOM matching of `reports/` of 2026-11-06, made on a BOM and a CPL byte-identical to those of `fab/`, with the via-in-pad, slot and spacing specifications of `reports/` attached to the items they cover |
-| JLCDFM PCB DFM | verified and approved by JeffMboya: the JLCDFM report of 2026-11-10 for Gerber hash `ceeb7444dd` in `reports/`, with its 27 Danger items (pad spacing 1, annular ring 19, via to pad 3, slot width 4) as dispositioned in `reports/pcb_dfm_dispositions_ceeb7444dd.md` against the specifications of `reports/` |
-| Placement | verified and approved by JeffMboya: the placement on 55.99 x 44.99 mm, 35.8 % courtyard fill, as pinned in `ice40_bga_node.placement.layout.toml` |
-| Parts and values | verified and approved by JeffMboya: the BOM identities of `fab/ice40_bga_node_bom_orderable.csv`, including `Y1` (JYJE 3TJ480000FYLBC, `C2924620`) and `U1` (Lattice ICE40HX4K-BG121, `C1552775`) |
+| PCB and Gerber package | the Gerbers, drill, BOM and CPL of `fab/` and the exported KiCad board, hash `ceeb7444dd`, and the STEP model of `fab/` (geometry hash `604ace35b8`, check in `reports/step_verify.txt`) |
+| Return paths | the 37 non-blocking `W-SYNTH-DRC-016` advisories of the routing report on the slow nets, as listed under "What was measured" |
+| ERC | the 6 warnings of `reports/kicad_erc.json` |
+| DRC | the 74 `lib_footprint_mismatch` warnings of `reports/kicad_drc.json`, each a footprint that differs from the library copy while 0 violations and 0 unconnected items remain |
+| JLCPCB BOM matching | the BOM matching of `reports/` of 2026-11-06, made on a BOM and a CPL byte-identical to those of `fab/`, with the via-in-pad, slot and spacing specifications of `reports/` attached to the items they cover |
+| JLCDFM PCB DFM | the JLCDFM report of 2026-11-10 for Gerber hash `ceeb7444dd` in `reports/`, with its 27 Danger items (pad spacing 1, annular ring 19, via to pad 3, slot width 4) as dispositioned in `reports/pcb_dfm_dispositions_ceeb7444dd.md` against the specifications of `reports/` |
+| Placement | the placement on 55.99 x 44.99 mm, 35.8 % courtyard fill, as pinned in `ice40_bga_node.placement.layout.toml` |
+| Parts and values | the BOM identities of `fab/ice40_bga_node_bom_orderable.csv`, including `Y1` (JYJE 3TJ480000FYLBC, `C2924620`) and `U1` (Lattice ICE40HX4K-BG121, `C1552775`) |
+
+Every part of the board is recorded as reviewed by JeffMboya, with the review date and the datasheet or product page, in the part files of `reproduce/user-registry/` (`reviewed_by`, `reviewed_at`, `datasheet_url`).

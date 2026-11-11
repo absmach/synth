@@ -15,7 +15,7 @@ The board is the output of agents driving `synth mcp` from prompts, followed by 
 | Synth, final exports | the binary built from `upstream/main` `fbfd8d60`, the merge of pull request #440 (the return-via, via-in-pad, plane-via, multi-unit symbol and `edge_rate medium` changes this board needed are all in it). `synth --version` prints `synth 0.1.1`; `synth mcp --stdio` is the same binary |
 | KiCadRoutingTools | `9399bfb2` |
 | KiCad | 10.0.6 |
-| Registry inputs | [`reproduce/user-registry/`](reproduce/user-registry/): `ice40hx4k_bg121_nc`, `tlv70012_ddc`, `w25q128jvsiq_208mil`, `header_1x5_swd`, `tlv70012_1v2`, `stm32f103c8_usb`, `xtal_8mhz_3225_4p` |
+| Registry inputs | [`reproduce/user-registry/`](reproduce/user-registry/): `ice40hx4k_bg121_nc`, `tlv70012_ddc`, `w25q128jvsiq_208mil`, `header_1x5_swd`, `tlv70012_1v2`, `stm32f103c8_usb`, `xtal_8mhz_3225_4p`, and the copies `c_generic_0402`, `r_generic_0402`, `led_amber_0603`, `led_green_0603`, `led_red_0603`, `testpoint_pad_1_5`, `p_mosfet_si2301`, `polyfuse_500ma`, `usb_c_receptacle`, `ferrite_bead_0603` that carry the review record |
 
 Synth findings from this board: #424 (report counts), #425 (silkscreen), #426, #428, #429 (the annular ring floor and the via-in-pad land), #430 (plane rails take every inner layer), #431 (no-connect declarations and the multi-unit symbol).
 
