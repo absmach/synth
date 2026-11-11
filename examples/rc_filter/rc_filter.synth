@@ -7,6 +7,7 @@ board "rc_filter" {
   component R1: resistor "r_generic_0805" value "1k"
   component C1: capacitor "c_generic_0805" value "100n"
 
+  power "IN" 1v
   net "IN" { R1.p1 }
   net "GND" { C1.p2 }
   connect R1.p2 -> C1.p1 as "OUT"

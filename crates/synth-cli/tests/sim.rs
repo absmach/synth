@@ -263,3 +263,135 @@ max = 3.35
     let stdout = String::from_utf8_lossy(&output.stdout);
     assert!(stdout.contains("PASS vout = 3.29967"), "{stdout}");
 }
+
+fn run_suggest(design: &Path, force: bool) -> Output {
+    let mut command = Command::new(env!("CARGO_BIN_EXE_synth"));
+    command.arg("sim").arg("--suggest").arg(design);
+    if force {
+        command.arg("--force");
+    }
+    command.output().expect("run synth sim --suggest")
+}
+
+#[test]
+fn suggest_writes_a_parseable_sidecar() {
+    let dir = scratch("suggest");
+    let design = dir.join("divider.synth");
+    std::fs::copy(example_design(), &design).expect("copy design");
+
+    let output = run_suggest(&design, false);
+
+    assert!(
+        output.status.success(),
+        "stderr: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(stderr.contains("wrote"), "{stderr}");
+    let sidecar = dir.join("divider.sim.toml");
+    let testbench =
+        synth_sim::Testbench::from_path(&sidecar).expect("the suggested sidecar parses");
+    let vmid = testbench
+        .measure
+        .iter()
+        .find(|measure| measure.name == "vmid")
+        .expect("vmid");
+    assert_eq!(vmid.min, Some(5.7));
+    assert_eq!(vmid.max, Some(6.3));
+}
+
+#[test]
+fn suggest_refuses_to_overwrite_without_force() {
+    let dir = scratch("suggest-overwrite");
+    let design = dir.join("divider.synth");
+    std::fs::copy(example_design(), &design).expect("copy design");
+    let sidecar = dir.join("divider.sim.toml");
+    std::fs::write(&sidecar, "sentinel = true\n").expect("write sentinel");
+
+    let refused = run_suggest(&design, false);
+
+    assert_eq!(refused.status.code(), Some(1));
+    let stderr = String::from_utf8_lossy(&refused.stderr);
+    assert!(stderr.contains("refusing to overwrite"), "{stderr}");
+    assert!(stderr.contains("--force"), "{stderr}");
+    assert_eq!(
+        std::fs::read_to_string(&sidecar).expect("sentinel"),
+        "sentinel = true\n"
+    );
+
+    let forced = run_suggest(&design, true);
+
+    assert!(
+        forced.status.success(),
+        "stderr: {}",
+        String::from_utf8_lossy(&forced.stderr)
+    );
+    let written = std::fs::read_to_string(&sidecar).expect("overwritten sidecar");
+    assert_ne!(written, "sentinel = true\n");
+    synth_sim::Testbench::from_path(&sidecar).expect("the overwritten sidecar parses");
+}
+
+#[test]
+fn suggest_with_no_shape_writes_nothing_and_says_so() {
+    let dir = scratch("suggest-none");
+    let design = dir.join("none.synth");
+    std::fs::write(
+        &design,
+        r#"
+board "none" {
+  layers 2
+  component R1: resistor "r_generic_0805" value "10k"
+  power "VCC" 12v
+  net "VCC" { R1.p1 }
+  net "GND" { R1.p2 }
+}
+"#,
+    )
+    .expect("write design");
+
+    let output = run_suggest(&design, false);
+
+    assert!(
+        output.status.success(),
+        "stderr: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert!(!dir.join("none.sim.toml").exists(), "no file is written");
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(stderr.contains("nothing written"), "{stderr}");
+}
+
+#[test]
+fn suggest_reports_a_part_without_a_datasheet() {
+    let dir = scratch("suggest-no-datasheet");
+    let design = dir.join("no_datasheet.synth");
+    std::fs::write(
+        &design,
+        r#"
+board "no-datasheet" {
+  layers 2
+  component R1: resistor "r_generic_0805" value "150"
+  component LED1: led "led_red_0603"
+  power "VCC" 5v
+  net "VCC" { R1.p1 }
+  net "GND" { LED1.cathode }
+  connect R1.p2 -> LED1.anode as "MID"
+}
+"#,
+    )
+    .expect("write design");
+
+    let output = run_suggest(&design, false);
+
+    assert!(
+        output.status.success(),
+        "stderr: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert!(!dir.join("no_datasheet.sim.toml").exists());
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stderr.contains("not covered: LED1 (led_red_0603), no datasheet"),
+        "{stderr}"
+    );
+}

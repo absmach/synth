@@ -109,6 +109,15 @@ enum Command {
         /// Path to the component registry. Auto-discovered: `--registry`, else `$SYNTH_REGISTRY`, else `./registry/parts` (or an ancestor directory), else the embedded seed registry.
         #[arg(long, value_name = "DIR")]
         registry: Option<PathBuf>,
+
+        /// Draft `<design>.sim.toml` from the shapes in the design instead of
+        /// running a simulation.
+        #[arg(long)]
+        suggest: bool,
+
+        /// Overwrite an existing `<design>.sim.toml` when drafting.
+        #[arg(long, requires = "suggest")]
+        force: bool,
     },
 
     /// Parse a SynthSpec file and dump the AST as JSON to stdout.
@@ -975,7 +984,12 @@ fn main() -> ExitCode {
             strict_registry,
             parse_only,
         ),
-        Command::Sim { input, registry } => sim(&input, registry.as_deref()),
+        Command::Sim {
+            input,
+            registry,
+            suggest,
+            force,
+        } => sim(&input, registry.as_deref(), suggest, force),
         Command::DumpAst { input, pretty } => dump_ast(&input, pretty),
         Command::DumpIr {
             input,
@@ -3258,7 +3272,12 @@ fn is_flat_user_registry(dir: &Path) -> bool {
     has_toml && !has_subdirectory
 }
 
-fn sim(input: &Path, registry_dir: Option<&Path>) -> anyhow::Result<u8> {
+fn sim(
+    input: &Path,
+    registry_dir: Option<&Path>,
+    suggest: bool,
+    force: bool,
+) -> anyhow::Result<u8> {
     let (source, file) = read_source(input)?;
     let parse = synth_parser::parse(&source, file.clone());
     write_sim_diagnostics(&parse.diagnostics)?;
@@ -3294,6 +3313,10 @@ fn sim(input: &Path, registry_dir: Option<&Path>) -> anyhow::Result<u8> {
     let Some(board) = lowered.board else {
         return Ok(EXIT_VALIDATION_ERRORS);
     };
+
+    if suggest {
+        return Ok(draft_testbench(&board, input, force));
+    }
 
     let sidecar = synth_sim::sidecar_path(input);
     let testbench = match synth_sim::Testbench::from_path(&sidecar) {
@@ -3354,6 +3377,35 @@ fn sim(input: &Path, registry_dir: Option<&Path>) -> anyhow::Result<u8> {
     } else {
         EXIT_VALIDATION_ERRORS
     })
+}
+
+/// Draft the sidecar from the compiled board and write it unless an existing
+/// file would be lost. All progress lines go to stderr so a caller can pipe
+/// them without mixing in a future stdout report.
+fn draft_testbench(board: &synth_ir::Board, input: &Path, force: bool) -> u8 {
+    let suggestion = synth_sim::suggest_testbench(board);
+    for reason in &suggestion.not_covered {
+        eprintln!("not covered: {reason}");
+    }
+    let Some(toml) = suggestion.toml else {
+        eprintln!(
+            "no testbench shapes found in {}; nothing written",
+            input.display()
+        );
+        return EXIT_SUCCESS;
+    };
+
+    let sidecar = synth_sim::sidecar_path(input);
+    if sidecar.exists() && !force {
+        eprintln!("refusing to overwrite {}; pass --force", sidecar.display());
+        return EXIT_VALIDATION_ERRORS;
+    }
+    if let Err(error) = std::fs::write(&sidecar, toml) {
+        eprintln!("error: could not write {}: {error}", sidecar.display());
+        return EXIT_VALIDATION_ERRORS;
+    }
+    eprintln!("wrote {}", sidecar.display());
+    EXIT_SUCCESS
 }
 
 fn validate(

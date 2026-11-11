@@ -1,0 +1,532 @@
+// SPDX-License-Identifier: Apache-2.0
+
+//! `suggest_testbench` drafts a sidecar from the shapes in a compiled board.
+//! Every generated value carries its source; nothing is guessed.
+
+use std::path::{Path, PathBuf};
+
+#[path = "support/real_ngspice.rs"]
+mod real_ngspice_support;
+
+fn real_ngspice() -> Option<PathBuf> {
+    real_ngspice_support::real_ngspice()
+}
+
+fn example_dir(name: &str) -> PathBuf {
+    Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("..")
+        .join("..")
+        .join("examples")
+        .join(name)
+}
+
+/// Compile a design from its real path, with imports rooted at its folder.
+fn board_from_file(path: &Path) -> synth_ir::Board {
+    let source = std::fs::read_to_string(path).expect("read design");
+    board(&source)
+}
+
+fn board(source: &str) -> synth_ir::Board {
+    board_with_registry(source, |_| {})
+}
+
+fn board_with_registry(
+    source: &str,
+    patch: impl FnOnce(&mut synth_registry::Registry),
+) -> synth_ir::Board {
+    let file = "suggest.synth".to_string();
+    let parsed = synth_parser::parse(source, file.clone());
+    assert!(
+        parsed.diagnostics.is_empty(),
+        "parse: {:?}",
+        parsed.diagnostics
+    );
+    let ast = parsed.ast.expect("ast");
+    let resolved = synth_ir::resolve_imports(
+        &ast,
+        &synth_ir::FsImportLoader {
+            root: PathBuf::from("."),
+        },
+        &file,
+    );
+    assert!(
+        resolved
+            .diagnostics
+            .iter()
+            .all(|d| !d.severity.is_blocking()),
+        "imports: {:?}",
+        resolved.diagnostics
+    );
+    let mut registry = synth_registry::embedded_registry().clone();
+    patch(&mut registry);
+    let lowered = synth_ir::lower(&resolved.program, &registry, &file);
+    assert!(
+        lowered
+            .diagnostics
+            .iter()
+            .all(|d| !d.severity.is_blocking()),
+        "lower: {:?}",
+        lowered.diagnostics
+    );
+    lowered.board.expect("board")
+}
+
+fn suggestion(board: &synth_ir::Board) -> (String, Vec<String>) {
+    let suggestion = synth_sim::suggest_testbench(board);
+    let toml = suggestion.toml.expect("a testbench was suggested");
+    (toml, suggestion.not_covered)
+}
+
+fn hand_written(example: &str) -> (synth_sim::Testbench, String) {
+    let design = example_dir(example).join(format!("{example}.synth"));
+    let sidecar = synth_sim::sidecar_path(&design);
+    let text = std::fs::read_to_string(&sidecar).expect("hand-written sidecar");
+    (
+        synth_sim::Testbench::from_path(&sidecar).expect("hand-written sidecar parses"),
+        text,
+    )
+}
+
+fn measure<'a>(testbench: &'a synth_sim::Testbench, name: &str) -> &'a synth_sim::Measure {
+    testbench
+        .measure
+        .iter()
+        .find(|measure| measure.name == name)
+        .unwrap_or_else(|| panic!("measure `{name}` not found"))
+}
+
+/// The generated limits must match the hand-written reference sidecars.
+fn assert_same_limits(example: &str, generated: &synth_sim::Testbench) {
+    let (reference, _) = hand_written(example);
+    for reference in &reference.measure {
+        let generated = measure(generated, &reference.name);
+        assert_eq!(generated.kind, reference.kind, "{} kind", reference.name);
+        assert_eq!(generated.node, reference.node, "{} node", reference.name);
+        assert_eq!(
+            generated.element, reference.element,
+            "{} element",
+            reference.name
+        );
+        assert_eq!(
+            generated.min, reference.min,
+            "{} min in the suggested testbench",
+            reference.name
+        );
+        assert_eq!(
+            generated.max, reference.max,
+            "{} max in the suggested testbench",
+            reference.name
+        );
+    }
+    assert_eq!(
+        generated.measure.len(),
+        reference.measure.len(),
+        "suggested shape count"
+    );
+}
+
+#[test]
+fn the_divider_example_gets_its_hand_written_limits() {
+    let design = example_dir("divider").join("divider.synth");
+    let board = board_from_file(&design);
+    let (toml, not_covered) = suggestion(&board);
+
+    let testbench = synth_sim::Testbench::from_toml(&toml).expect("generated sidecar parses");
+    assert_eq!(testbench.ground, "GND");
+    assert!(testbench.analysis.op);
+    assert_eq!(testbench.source.len(), 1);
+    assert_eq!(testbench.source[0].net, "VCC");
+    assert_eq!(testbench.source[0].dc, Some(12.0));
+    assert_same_limits("divider", &testbench);
+    assert!(
+        not_covered.is_empty(),
+        "nothing is left out: {not_covered:?}"
+    );
+
+    // Every generated measure names its source.
+    assert!(toml.contains("R1"), "{toml}");
+    assert!(toml.contains("R2"), "{toml}");
+    assert!(toml.contains("value"), "{toml}");
+}
+
+#[test]
+fn the_led_example_gets_its_hand_written_limits_and_cites_the_datasheet() {
+    let design = example_dir("led").join("led.synth");
+    let board = board_from_file(&design);
+    let (toml, not_covered) = suggestion(&board);
+
+    let testbench = synth_sim::Testbench::from_toml(&toml).expect("generated sidecar parses");
+    assert_eq!(testbench.ground, "GND");
+    assert!(testbench.analysis.op);
+    assert_eq!(testbench.source[0].net, "VCC");
+    assert_eq!(testbench.source[0].dc, Some(5.0));
+    assert_same_limits("led", &testbench);
+    let iled = measure(&testbench, "iled");
+    assert_eq!(iled.kind, synth_sim::MeasureKind::Current);
+    assert_eq!(iled.element.as_deref(), Some("LED1"));
+    assert!(
+        not_covered.is_empty(),
+        "nothing is left out: {not_covered:?}"
+    );
+
+    let datasheet = board
+        .components
+        .iter()
+        .find(|component| component.refdes == "LED1")
+        .and_then(|component| component.part.as_ref())
+        .and_then(|part| part.provenance.as_ref())
+        .and_then(|provenance| provenance.datasheet_url.as_deref())
+        .expect("the reference LED carries a datasheet");
+    assert!(toml.contains("ltst_c190krkt"), "{toml}");
+    assert!(toml.contains("forward_current_ma"), "{toml}");
+    assert!(toml.contains(datasheet), "{toml}");
+    assert!(toml.contains("# UNREVIEWED"), "{toml}");
+    // 25 mA is above the 21 mA band, so the comment must not claim it binds.
+    assert!(toml.contains("does not bind"), "{toml}");
+    assert!(!toml.contains("caps the upper limit"), "{toml}");
+}
+
+#[test]
+fn the_rc_example_gets_its_hand_written_limits() {
+    let design = example_dir("rc_filter").join("rc_filter.synth");
+    let board = board_from_file(&design);
+    let (toml, not_covered) = suggestion(&board);
+
+    let testbench = synth_sim::Testbench::from_toml(&toml).expect("generated sidecar parses");
+    assert_eq!(testbench.ground, "GND");
+    let ac = testbench.analysis.ac.expect("ac analysis");
+    assert!(testbench.source[0].ac.is_some_and(|ac| ac > 0.0));
+    assert_eq!(testbench.source[0].ac, Some(1.0));
+    assert_same_limits("rc_filter", &testbench);
+    assert_eq!(
+        measure(&testbench, "corner").drop_db,
+        None,
+        "the 3 dB default is not re-emitted as a guessed value"
+    );
+    let corner = 1.0 / (2.0 * std::f64::consts::PI * 1e3 * 100e-9);
+    assert!(
+        ac.start < corner && corner < ac.stop,
+        "sweep {}..{} must bracket {corner}",
+        ac.start,
+        ac.stop
+    );
+    assert!(
+        not_covered.is_empty(),
+        "nothing is left out: {not_covered:?}"
+    );
+    assert!(toml.contains("1/(2*pi*R*C)"), "{toml}");
+}
+
+#[test]
+fn a_part_without_a_datasheet_gives_no_measure_and_says_why() {
+    let board = board(
+        r#"
+board "no-datasheet" {
+  layers 2
+  component R1: resistor "r_generic_0805" value "150"
+  component LED1: led "led_red_0603"
+  power "VCC" 5v
+  net "VCC" { R1.p1 }
+  net "GND" { LED1.cathode }
+  connect R1.p2 -> LED1.anode as "MID"
+}
+"#,
+    );
+
+    let suggestion = synth_sim::suggest_testbench(&board);
+
+    assert!(suggestion.toml.is_none(), "{:?}", suggestion.toml);
+    assert!(
+        suggestion
+            .not_covered
+            .iter()
+            .any(|line| line.contains("LED1")
+                && line.contains("led_red_0603")
+                && line.contains("no datasheet")),
+        "{:?}",
+        suggestion.not_covered
+    );
+}
+
+#[test]
+fn a_missing_supply_writes_a_todo_instead_of_a_guess() {
+    let board = board(
+        r#"
+board "mixed-divider" {
+  layers 2
+  component R1: resistor "r_generic_0805" value "10k"
+  component R2: resistor "r_generic_0805" value "10k"
+  component R3: resistor "r_generic_0805" value "10k"
+  component R4: resistor "r_generic_0805" value "10k"
+  power "VCC" 12v
+  net "VCC" { R1.p1 }
+  net "GND" { R2.p2, R4.p2 }
+  connect R1.p2 -> R2.p1 as "MID"
+  net "VCC2" { R3.p1 }
+  connect R3.p2 -> R4.p1 as "MID2"
+}
+"#,
+    );
+
+    let (toml, not_covered) = suggestion(&board);
+
+    assert!(toml.contains("# TODO"), "{toml}");
+    assert!(toml.contains("VCC2"), "{toml}");
+    assert!(
+        not_covered
+            .iter()
+            .any(|line| line.contains("VCC2") && line.contains("no declared supply")),
+        "{not_covered:?}"
+    );
+    let testbench = synth_sim::Testbench::from_toml(&toml).expect("still parses");
+    assert_eq!(testbench.measure.len(), 1, "{toml}");
+    measure(&testbench, "vmid");
+}
+
+#[test]
+fn a_board_with_no_shape_suggests_nothing() {
+    let board = board(
+        r#"
+board "no-shape" {
+  layers 2
+  component R1: resistor "r_generic_0805" value "10k"
+  power "VCC" 12v
+  net "VCC" { R1.p1 }
+  net "GND" { R1.p2 }
+}
+"#,
+    );
+
+    let suggestion = synth_sim::suggest_testbench(&board);
+
+    assert!(suggestion.toml.is_none(), "{:?}", suggestion.toml);
+    assert!(
+        suggestion
+            .not_covered
+            .iter()
+            .any(|line| line.contains("R1") && line.contains("recognised shape")),
+        "{:?}",
+        suggestion.not_covered
+    );
+}
+
+/// A board name reaches the generated header as a comment, so it must not be
+/// able to smuggle a new TOML line into the file.
+#[test]
+fn a_board_name_cannot_inject_toml() {
+    let mut board = board_from_file(&example_dir("divider").join("divider.synth"));
+    board.name = "evil\n[[measure]]\nname = \"x\"".to_string();
+
+    let (toml, not_covered) = suggestion(&board);
+
+    let testbench = synth_sim::Testbench::from_toml(&toml).expect("sanitized header parses");
+    assert_eq!(testbench.measure.len(), 1);
+    assert_eq!(testbench.measure[0].name, "vmid");
+    assert!(not_covered.is_empty(), "{not_covered:?}");
+}
+
+/// The loader rejects a carriage return in a net name, so the draft must not
+/// emit one either.
+#[test]
+fn a_carriage_return_in_a_net_name_is_not_drafted() {
+    let mut board = board_from_file(&example_dir("divider").join("divider.synth"));
+    let mid = board
+        .nets
+        .iter_mut()
+        .find(|net| net.name == "MID")
+        .expect("MID");
+    mid.name = "MI\rD".to_string();
+
+    let suggestion = synth_sim::suggest_testbench(&board);
+
+    assert!(suggestion.toml.is_none(), "{:?}", suggestion.toml);
+    assert!(
+        suggestion
+            .not_covered
+            .iter()
+            .any(|line| line.contains("newline")),
+        "{:?}",
+        suggestion.not_covered
+    );
+}
+
+/// No measure means no file, even when the shape itself was recognised; the
+/// stderr line is the only place the missing supply can be reported.
+#[test]
+fn a_single_shape_without_a_supply_writes_nothing() {
+    let source = std::fs::read_to_string(example_dir("led").join("led.synth")).expect("read led");
+    let source = source.replace("  power \"VCC\" 5v\n", "");
+    assert!(!source.contains("power"), "{source}");
+    let board = board(&source);
+
+    let suggestion = synth_sim::suggest_testbench(&board);
+
+    assert!(suggestion.toml.is_none(), "{:?}", suggestion.toml);
+    assert!(
+        suggestion
+            .not_covered
+            .iter()
+            .any(|line| line.contains("no declared supply")),
+        "{:?}",
+        suggestion.not_covered
+    );
+}
+
+const LDO_DIVIDER: &str = r#"
+board "ldo-divider" {
+  layers 2
+  component U1: regulator "ams1117_3v3"
+  component R1: resistor "r_generic_0805" value "10k"
+  component R2: resistor "r_generic_0805" value "10k"
+  net "VIN" { U1.vin }
+  net "GND" { U1.gnd, R2.p2 }
+  net "VOUT" { U1.vout, R1.p1 }
+  connect R1.p2 -> R2.p1 as "MID"
+}
+"#;
+
+#[test]
+fn a_supply_may_come_from_a_power_output_pin() {
+    let board = board(LDO_DIVIDER);
+
+    let (toml, not_covered) = suggestion(&board);
+
+    let testbench = synth_sim::Testbench::from_toml(&toml).expect("suggested sidecar parses");
+    assert_eq!(testbench.source[0].net, "VOUT");
+    assert_eq!(testbench.source[0].dc, Some(3.3));
+    assert!(toml.contains("power output that declares 3.3 V"), "{toml}");
+    assert!(
+        not_covered
+            .iter()
+            .any(|line| line.contains("U1") && line.contains("recognised shape")),
+        "{not_covered:?}"
+    );
+}
+
+/// A `voltage_max_v` rating is not a nominal supply.
+#[test]
+fn a_max_rating_is_not_a_supply() {
+    let board = board_with_registry(LDO_DIVIDER, |registry| {
+        let mut part = registry.lookup("ams1117_3v3").expect("ams1117_3v3").clone();
+        let vout = part
+            .pins
+            .iter_mut()
+            .find(|pin| pin.name == "vout")
+            .expect("vout");
+        vout.voltage_nominal_v = None;
+        vout.voltage_max_v = Some(5.0);
+        registry.insert(part);
+    });
+
+    let suggestion = synth_sim::suggest_testbench(&board);
+
+    assert!(suggestion.toml.is_none(), "{:?}", suggestion.toml);
+    assert!(
+        suggestion
+            .not_covered
+            .iter()
+            .any(|line| line.contains("VOUT") && line.contains("no declared supply")),
+        "{:?}",
+        suggestion.not_covered
+    );
+}
+
+fn simulate_suggested(
+    board: &synth_ir::Board,
+    testbench: &synth_sim::Testbench,
+    ngspice: &Path,
+) -> synth_sim::SimReport {
+    synth_sim::simulate(
+        board,
+        testbench,
+        &synth_sim::SimOptions {
+            ngspice: Some(ngspice.to_path_buf()),
+            design_path: Some(PathBuf::from("suggested.synth")),
+            testbench_path: Some(PathBuf::from("suggested.sim.toml")),
+            registry_dirs: Vec::new(),
+        },
+    )
+}
+
+fn assert_out_of_limit(report: &synth_sim::SimReport, name: &str, direction: &str) {
+    assert!(!report.passed(), "report passed: {:?}", report.measures);
+    let diagnostic = report
+        .diagnostics
+        .iter()
+        .find(|diagnostic| diagnostic.code == synth_sim::E_SYNTH_SIM_004)
+        .unwrap_or_else(|| panic!("no -004 in {:?}", report.diagnostics));
+    let message = diagnostic.message.as_deref().unwrap_or_default();
+    assert!(
+        message.contains(name) && message.contains(direction),
+        "expected {name} {direction}, got: {message}"
+    );
+}
+
+/// The suggested limits catch the classic divider mistake: R2 ten times too
+/// large moves the midpoint far above its band.
+#[test]
+fn a_suggested_divider_testbench_fails_the_wrong_r2() {
+    let Some(ngspice) = real_ngspice() else {
+        eprintln!("{}", real_ngspice_support::SKIP_MESSAGE);
+        return;
+    };
+    let design = example_dir("divider").join("divider.synth");
+    let source = std::fs::read_to_string(&design).expect("read design");
+    let (toml, _) = suggestion(&board(&source));
+    let testbench = synth_sim::Testbench::from_toml(&toml).expect("suggested sidecar");
+
+    let mutated = source.replace(
+        "component R2: resistor \"r_generic_0805\" value \"10k\"",
+        "component R2: resistor \"r_generic_0805\" value \"100k\"",
+    );
+    assert_ne!(mutated, source, "the fixture must have two 10k resistors");
+    let report = simulate_suggested(&board(&mutated), &testbench, &ngspice);
+
+    assert_out_of_limit(&report, "vmid", "above max");
+}
+
+/// A ten-times smaller series resistor overdrives the LED.
+#[test]
+fn a_suggested_led_testbench_fails_the_wrong_resistor() {
+    let Some(ngspice) = real_ngspice() else {
+        eprintln!("{}", real_ngspice_support::SKIP_MESSAGE);
+        return;
+    };
+    let design = example_dir("led").join("led.synth");
+    let source = std::fs::read_to_string(&design).expect("read design");
+    let (toml, _) = suggestion(&board(&source));
+    let testbench = synth_sim::Testbench::from_toml(&toml).expect("suggested sidecar");
+
+    let mutated = source.replace("value \"150\"", "value \"15\"");
+    assert_ne!(
+        mutated, source,
+        "the fixture must have the 150 ohm resistor"
+    );
+    let report = simulate_suggested(&board(&mutated), &testbench, &ngspice);
+
+    assert_out_of_limit(&report, "iled", "above max");
+}
+
+/// A reversed LED draws no forward current, so the suggested minimum fails.
+#[test]
+fn a_suggested_led_testbench_fails_a_reversed_led() {
+    let Some(ngspice) = real_ngspice() else {
+        eprintln!("{}", real_ngspice_support::SKIP_MESSAGE);
+        return;
+    };
+    let design = example_dir("led").join("led.synth");
+    let source = std::fs::read_to_string(&design).expect("read design");
+    let (toml, _) = suggestion(&board(&source));
+    let testbench = synth_sim::Testbench::from_toml(&toml).expect("suggested sidecar");
+
+    let mutated = source
+        .replace("net \"GND\" { LED1.cathode }", "net \"GND\" { LED1.anode }")
+        .replace(
+            "connect R1.p2 -> LED1.anode as \"MID\"",
+            "connect R1.p2 -> LED1.cathode as \"MID\"",
+        );
+    assert_ne!(mutated, source, "the fixture must point the LED at ground");
+    let report = simulate_suggested(&board(&mutated), &testbench, &ngspice);
+
+    assert_out_of_limit(&report, "iled", "below min");
+}

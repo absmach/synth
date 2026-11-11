@@ -42,6 +42,65 @@ missing ngspice, a timeout, a malformed testbench, …) makes the command exit
 non-zero. A passing limit is visible as a `PASS` line; the MCP report also
 carries it as an informational `E-SYNTH-SIM-004` diagnostic.
 
+### Drafting a testbench (`--suggest`)
+
+```sh
+cp examples/divider/divider.synth /tmp/divider.synth
+synth sim --suggest /tmp/divider.synth
+```
+
+`--suggest` compiles the design, recognises a few circuit shapes, and writes
+`<design>.sim.toml` from values that carry a source. It never runs ngspice and
+never guesses a voltage. An existing sidecar is left alone unless `--force` is
+passed (the shipped examples already have hand-written sidecars):
+
+```sh
+synth sim --suggest --force /tmp/divider.synth
+```
+
+The v1 shapes are:
+
+- **LED plus series resistor.** The current band is
+  `operating_conditions.forward_current_ma` ±5%, with the upper limit capped by
+  `max_current_ma` when the part declares it. The LED part must carry a
+  non-empty `[provenance].datasheet_url`; otherwise no measure is drafted. The
+  measure comment names the part id, the operating conditions and the datasheet
+  URL. A part without `reviewed_by` gets a `# UNREVIEWED` comment, because the
+  registry entry itself has not been reviewed.
+- **Resistor divider.** The midpoint is measured against
+  `Vsupply * Rbottom/(Rtop+Rbottom)` from the two design `value` fields, ±5%.
+  No datasheet is required for a design `value`, and the comment names both
+  references, part ids and values.
+- **RC low-pass.** The `relative_db` corner is measured at
+  `fc = 1/(2*pi*R*C)` from the design `value` fields, ±2%, with the default
+  3 dB drop. The AC sweep is `fc/100 .. fc*100`.
+
+Shape names come from the compiled `Board`: exactly one net must be classified
+as ground. Every TOML number cites its source in the comment above it. A supply
+is the net's declared `power` voltage, or a `PowerOutput` pin that declares an
+explicit `voltage_nominal_v`. A `voltage_max_v` rating is never used as a
+nominal, and `[operating_conditions]` min/max values are ratings rather than a
+rail. A part whose output pin supplies the testbench is replaced by an ideal
+source; if its other nets then have no DC path, `synth sim` reports
+`E-SYNTH-SIM-008`, and adding the part to `[ignore]` is the usual fix when the
+missing model is a known gap.
+
+When a net has no declared supply, the number is never defaulted. If another
+shape drafts at least one measure, the file carries a `# TODO` naming that net
+and the `power "<net>" <voltage>` line to add. If no measure can be drafted at
+all, no file is written and the `not covered` line explains why.
+
+A supply used for an `ac` shape is the AC magnitude too; the corner is
+independent of the drive level. Anything the draft does not cover is printed
+to stderr as `not covered: <reason>` (a part with no datasheet, a part that is
+not one of the shapes, an RC corner that cannot share the file, …). A design
+with none of the shapes writes no file and says so. One analysis is selected
+per testbench: op shapes (LED, divider) win, and an RC shape is then listed as
+not covered because an `op` and an `ac` measure cannot share one file.
+
+The generated values are a starting point. Review every limit against the
+datasheet before relying on a passing simulation.
+
 ## MCP
 
 `synth_simulate` is a thin wrapper over the same seam. It requires
@@ -116,8 +175,10 @@ An independent voltage source from the net to ground.
 | `ac`   | AC magnitude in volts for an `ac` analysis.                       |
 
 A source must have at least one of `dc` or `ac`; each present value must be
-finite, and `ac` must be non-negative. A source with `ac` but no `dc` emits
-`V<N> <node> 0 AC <value>`; the DC operating point then has no source drive.
+finite. `ac` must be non-negative, but a `relative_db` measure needs a source
+with `ac` **greater than 0** (`ac = 0` gives the sweep nothing to excite). A
+source with `ac` but no `dc` emits `V<N> <node> 0 AC <value>`; the DC operating
+point then has no source drive.
 
 ### `[analysis]` and `[analysis.ac]`
 

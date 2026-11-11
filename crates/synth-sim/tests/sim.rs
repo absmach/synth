@@ -1582,6 +1582,22 @@ fn a_subckt_with_an_inline_dollar_comment_matches_real_ngspice() {
     assert_ldo_vout(&report);
 }
 
+/// `$` in column 0 is a comment line in ngspice, so a wrapped `.subckt` line
+/// must skip it rather than treat it as the end of the declaration.
+#[test]
+fn a_subckt_with_a_column_zero_dollar_comment_before_continuation_matches_real_ngspice() {
+    let Some(report) = ldo_model_report(
+        "dollar_column_zero.lib",
+        &format!(
+            ".subckt ams1117_3v3 vin gnd\n$ comment\n+ vout params: rout=50m\n{LDO_MODEL_BODY}"
+        ),
+    ) else {
+        eprintln!("{}", real_ngspice_support::SKIP_MESSAGE);
+        return;
+    };
+    assert_ldo_vout(&report);
+}
+
 #[test]
 fn a_subckt_with_a_star_comment_before_continuation_matches_real_ngspice() {
     let Some(report) = ldo_model_report(

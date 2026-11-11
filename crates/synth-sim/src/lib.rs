@@ -24,6 +24,9 @@ use synth_ir::{Board, Component, ComponentId, Net, NetId, PinId};
 use synth_registry::{SpiceDialect, SpiceModel};
 use synth_router::process::{run_cancellable, Invocation, KillScope};
 
+mod suggest;
+pub use suggest::{suggest_testbench, TestbenchSuggestion};
+
 /// ngspice could not be found or started.
 pub const E_SYNTH_SIM_001: &str = "E-SYNTH-SIM-001";
 /// A part has no SPICE model.
@@ -1646,9 +1649,9 @@ fn check_model_file(path: &Path, spice: &SpiceModel) -> Result<(), String> {
 }
 
 /// Strip a SPICE inline comment: from `;` anywhere, or from `$` that follows
-/// whitespace.
+/// whitespace or starts the line.
 fn strip_inline_comment(line: &str) -> &str {
-    let mut after_whitespace = false;
+    let mut after_whitespace = true;
     for (index, character) in line.char_indices() {
         if character == ';' || (character == '$' && after_whitespace) {
             return &line[..index];
