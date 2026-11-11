@@ -1,15 +1,134 @@
 schema_version = "synth.qualification.v1"
 
-# Only the Class-B buck board (SYN-67) is declared here. The full reference
-# matrix and its harness are in #247; this file uses #247's schema so the row
-# moves over unchanged when that lands.
+# Pinned so that a part edit fails the pull request that made it: every board
+# compiles against the registry, so any of the verdicts or artifacts below can
+# move with it. `synth registry manifest | sha256sum`.
+[baseline]
+registry_manifest_sha256 = "0b3786a15a9e87ae8024d2f69c365724de207fabf468ed1a86730089fe0f0b33"
+
 [matrix]
 release_command = "synth check <board> --json"
 fab_command = "synth check <board> --fab --json"
 
+# Every `expect` and `expect_fab` below was measured, not assumed. The run:
+# KiCad 10.0.8, KiCadRoutingTools v0.23.0 (grid_router 9399bfb), release build,
+# `synth check <board> --json [--fab] --router kicad-routing-tools`.
+#
+# No board in the corpus currently clears the gate. That is the finding, not a
+# gap in the corpus: `status` says what each board is here to demonstrate and
+# `expect` says what the release command does today, so the two disagreeing is
+# exactly the state this file exists to make visible.
+
+[[board]]
+id = "hello"
+path = "fixtures/designs/hello.synth"
+fixture_sha256 = "a1047d5b79020d3b100c389ff4e97ebce5d15cf9badad9b15b41ab6d2b474706"
+expect_artifacts = { "bom.csv" = "9ad8239fa3db9939c350c38e50ed1882b2852568e60b5202404ce06d526b6d18", "hello.kicad_sch" = "fe346fc3e44404875d97955d0ec0e0bbf52afe9a41df4a1bf54278548d2a9972" }
+expect_geometry = { "drill" = "f2fdb18e17327dbb598a888e518839aee7f82f951c80c0d8931b82cef6d2d1de", "gerbers" = "8d296f8a79f9805aee8a5d2f977a852b64c1be8b1e2b770cd3d199307e8eca25", "hello.kicad_pcb" = "0b9afaa04d7b0bd13adae81598ea99d8178c3e7f3b6fe4d8173162da5044d998", "hello.synth.kicad_pcb" = "0b9afaa04d7b0bd13adae81598ea99d8178c3e7f3b6fe4d8173162da5044d998" }
+class = "A"
+status = "experimental"
+expect = "fail"
+expect_fab = "fail"
+rationale = "`board \"hello\" { layers 2 }` — no components, no nets. It is here to prove the release command itself runs end to end, which it does: the source stage passes. The route stage then exits 1 on a board with nothing to route, so the DRC stage reports `unknown`, which is not a pass, and manufacturing fails carrying that routing failure. A board with nothing to route should route trivially; see #98."
+
+[[board]]
+id = "env_logger"
+path = "examples/env_logger/env_logger.synth"
+fixture_sha256 = "b89025f6eb05df789c317eb875f0efb6df86a85c61d48bf708b76972ec0f50d1"
+expect_artifacts = { "bom.csv" = "f370dec99c97f8a3a13439d4ca05b2c5d8233b0a4f69a43c400abf50f2c68bba", "env_logger.kicad_sch" = "086e8ae14f4520da5a25e8c272552e5bb31a8f8a6dd14e163d9a7ac4ca0cccbf" }
+expect_geometry = { "drill" = "7875075ddd41bc05bf69345d8b7e2aef260dc61af43ed360fc6ac702a502548d", "env_logger.kicad_pcb" = "c2d29d309e54fc22bb815eb98dc840a7edb8c3f24574e8064d37aa649e44a9c9", "env_logger.kicadroutingtools.kicad_pcb" = "5b4fb18909c10acbc9a60902700af17581dfa8cabc82ec302739d718b10eb347", "env_logger.synth.fanned0.kicad_pcb" = "49dbe66645172cf795a732f105ca8a51bb679b25db558ea08c408c68beeb78d5", "env_logger.synth.fanned1.kicad_pcb" = "19ef2c0425e12537b4c2f62f4430d2ece7bfc5199a290874ff02292ba38df00a", "env_logger.synth.kicad_pcb" = "c2d29d309e54fc22bb815eb98dc840a7edb8c3f24574e8064d37aa649e44a9c9", "env_logger.synth.poured.kicad_pcb" = "9cce322673868e432caf360c489cdeaedbcc52206fdec1ee6879b22f6d01aaae", "gerbers" = "1f7467c8d9036cd8695384b68f0150cb319af4e06aeb685c620f12477ebcfe15" }
+class = "A"
+status = "experimental"
+expect = "fail"
+expect_fab = "fail"
+rationale = "USB-C power, an AMS1117 LDO, an MCU, a BME680 on I2C and a debug header: the Class-A envelope. Source passes. On the 10.0.6 baseline this board routed clean; under KiCad 10.0.8 with KiCadRoutingTools 9399bfb the routed board leaves 35 pads with no copper path, so independent validation reports validation_failed and the DRC stage reports `unknown`, which is not a pass. Manufacturing fails for the same routing failure. That is a routing regression against the previous baseline, recorded here so the corpus states it instead of hiding it."
+
+[[board]]
+id = "sensor_logger"
+path = "examples/sensor_logger/sensor_logger.synth"
+fixture_sha256 = "9f51f969cc6a72cb30d1806fa49f3e219682834204ff55995205a274301cae63"
+expect_artifacts = { "bom.csv" = "afff033b12a939b16cc645b611c5b42ce9fd3acdd42561eb743525ca49aa40e3", "sensor_logger.kicad_sch" = "362af7f00bb542a9cf4a8740a12f7b6132c6abec2be65a4bdcef64fbbf491a81" }
+expect_geometry = { "drill" = "16578c0e7e53a38b4f48d354fb02a14c356a9af2b1415d93d395748ec9de13c7", "gerbers" = "b1c6f505acda3c6a98baa221e3e82dc424c13f194d9518676f53cf5f4a998388", "sensor_logger.kicad_pcb" = "674a66494eee9dd1f2508c5c0c36001b0dd41f0a2599a4f41e1bd9828c7be9b7", "sensor_logger.kicadroutingtools.kicad_pcb" = "5459efb0a459872d70bda68b1f251e9d6f5be3cbe35c86e0389d198d93a255d7", "sensor_logger.synth.fanned0.kicad_pcb" = "2cc23418fd7e2b27082f326025885d31b13d7c3dc4e1f98430f75b9388fe9053", "sensor_logger.synth.fanned0.perimeter0.kicad_pcb" = "679c8cedda041f4584d2978172d75b3056316148670fd9c2e180ed84e6da9566", "sensor_logger.synth.fanned0.perimeter1.kicad_pcb" = "a5009a8db0316d0422c5be6af679ad96a4fda1d71ee70b74d94111b803947cb6", "sensor_logger.synth.kicad_pcb" = "674a66494eee9dd1f2508c5c0c36001b0dd41f0a2599a4f41e1bd9828c7be9b7", "sensor_logger.synth.poured.kicad_pcb" = "0ef66995bf8ae069f2e362a2ace61e00b07fafddb3a202326bf5e719bb235efd" }
+class = "A"
+status = "experimental"
+expect = "fail"
+expect_fab = "fail"
+rationale = "Dual I2C sensors, SPI flash and status LEDs: a larger Class-A digital board. Source passes. On the 10.0.6 baseline this board routed clean; under KiCad 10.0.8 with KiCadRoutingTools 9399bfb the routed board leaves 50 pads with no copper path and 4 warnings, so independent validation reports validation_failed and the DRC stage reports `unknown`. Manufacturing fails for the same routing failure."
+
+[[board]]
+id = "placement_and_diff_pair"
+path = "examples/placement_and_diff_pair/placement_and_diff_pair.synth"
+fixture_sha256 = "7afdadf42b3cf3f6cc93b0e485be6f51b82c6f7b2cbf00390def85e9b80e487d"
+expect_artifacts = { "bom.csv" = "01feb002007a8a85fefe88d7da219251d7cc48f722e38e9a2f06e1e38c925f3c", "placement_and_diff_pair.kicad_sch" = "c1eb2fab709a9e95e32863a76ce98f167802c7584ddad348bb6433c6a3fc2614" }
+expect_geometry = { "drill" = "823a9dbbd5de710c80866db534e19c28a8e07b5da337fd0d84b9b77c09a357d9", "gerbers" = "1adbb5b169369d7f3d9b01d1f65726436a34cf34a495532790626fc0d94d605b", "placement_and_diff_pair.kicad_pcb" = "b772044f35f3fa8a54ed3ffc5f1391c463338c036061161f640ea00c33caaa16", "placement_and_diff_pair.synth.fanned0.kicad_pcb" = "188a0c8bda1011fd5cc709842429ee8a2a0ffd9a318a4fb1ca177f634f29741c", "placement_and_diff_pair.synth.kicad_pcb" = "b772044f35f3fa8a54ed3ffc5f1391c463338c036061161f640ea00c33caaa16", "placement_and_diff_pair.synth.poured.kicad_pcb" = "3ff8a21b95c87ddbedbde4a18932617dac7f5bc3aa4e9729d1940a8f3b089e4a" }
+class = "C"
+status = "experimental"
+expect = "fail"
+expect_fab = "fail"
+rationale = "Differential-pair constraints, placement hints and keepouts: the Class-C constraint surface. Source passes. On the 10.0.6 baseline this board routed clean; under KiCad 10.0.8 with KiCadRoutingTools 9399bfb the routed board leaves 17 pads with no copper path, so independent validation reports validation_failed and the DRC stage reports `unknown`. Manufacturing fails for the same routing failure."
+
+[[board]]
+id = "ref_ldo_sensor"
+path = "fixtures/kicad-reference/ref_ldo_sensor.synth"
+fixture_sha256 = "b437a5bc4946514aebf9934d3e4bc50d1b91845270613d184c0ee4fa38b68ba7"
+class = "A"
+status = "unsupported"
+expect = "fail"
+expect_fab = "unknown"
+expect_source_codes = ["E-SYNTH-VALUE-001"]
+rationale = "Negative test, imported from a KiCad reference project. Four generic passives carry no `value`, so the BOM would not be orderable. The source stage fails, so manufacturing is never reached and reports `unknown`."
+
+[[board]]
+id = "ref_crystal_mcu"
+path = "fixtures/kicad-reference/ref_crystal_mcu.synth"
+fixture_sha256 = "58a4c49a16c15d0df9f07329bfdad81ecab9fccd6070db7be27ccd3d77b07f6c"
+class = "A"
+status = "unsupported"
+expect = "fail"
+expect_fab = "unknown"
+expect_source_codes = [
+  "E-SYNTH-COMP-002",
+  "E-SYNTH-CONNECT-001",
+  "E-SYNTH-VALUE-001",
+]
+rationale = "Negative test. Two connections name pins their part does not declare, two required pins are left unconnected, and four passives carry no `value`. An imported design is held to the same rules as a written one."
+
+[[board]]
+id = "ref_usb_cdc"
+path = "fixtures/kicad-reference/ref_usb_cdc.synth"
+fixture_sha256 = "e8d47b6b67991eee715919ac18bd7c94757958c754c33f1eb9c697a3888f07b0"
+class = "B"
+status = "unsupported"
+expect = "fail"
+expect_fab = "unknown"
+expect_source_codes = [
+  "E-SYNTH-COMP-002",
+  "E-SYNTH-CONNECT-001",
+  "E-SYNTH-VALUE-001",
+]
+rationale = "Negative test at the Class-B interface envelope: a USB CDC bridge. Six undefined pins, two required pins unconnected and nine valueless passives. It is the corpus's evidence that an unsupported board at this class fails loudly rather than exporting something unbuildable."
+
+[[board]]
+id = "secure_tracker"
+path = "fixtures/kicad-reference/secure_tracker.synth"
+fixture_sha256 = "1f7e2153d26790713cf073ab6bcc953ef8f18e8c0ed013fd60533168ec393935"
+class = "D"
+status = "unsupported"
+expect = "fail"
+expect_fab = "unknown"
+expect_source_codes = [
+  "E-SYNTH-COMP-002",
+  "E-SYNTH-CONNECT-001",
+  "E-SYNTH-VALUE-001",
+]
+rationale = "Negative test and the corpus's only Class-D entry: the largest imported design, with eight undefined pins, two required pins unconnected and seventeen valueless passives. Class D's obligation is an auditable result and a stated limitation, and this is the stated limitation."
+
 [[board]]
 id = "buck"
 path = "qualification/class-b/buck/buck.synth"
+fixture_sha256 = "309b4839f4ea0dc1f0d86608d2c731c5a9ff9ac725331360d5e7fb095609c8b0"
+expect_artifacts = { "bom.csv" = "2a4faa316306140a1e6178fcf388840e6913b05edd23a92547fcd7f0b80dadce", "buck.kicad_sch" = "0c4bf60be83892bc186e555484b0b65c9c6ab9aa0d2b5c99a2e6fcc7bb77bc45" }
+expect_geometry = { "buck.kicad_pcb" = "b01ba9cc01ebc8c71d17627c12981b7d5c439ddd26a3f15f7b3e259a8586247b", "buck.synth.fanned0.kicad_pcb" = "5931a85a37f618470d5f4387fbc7c5e331dac20bfb637f92e181ce3795018dda", "buck.synth.kicad_pcb" = "36fde1ba7050ecd8524f9ce7ca413f80094a1d97019dea9d57bbe0323370cbcf", "buck.synth.poured.kicad_pcb" = "5931a85a37f618470d5f4387fbc7c5e331dac20bfb637f92e181ce3795018dda", "drill" = "d5eebcbd758709a16391594553b8c1568fecccf2d7b659b6b54ee6d27b0c9350", "gerbers" = "fb7aeafd44f0ab041216c8891662ea797eae540d6a7582f875f6912701b402d9" }
 class = "B"
 status = "experimental"
 expect = "pass"
