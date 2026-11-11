@@ -44,7 +44,7 @@ impl PadFacts {
 
 /// Whether a footprint carries a 3D model file that exists.
 ///
-/// A model committed under a `qualification/**/step-models/` directory counts,
+/// A model committed under a `qualification/**/models/` (or `step-models/`) directory counts,
 /// but the exported PCB still points KiCad at the system 3D library, so such a
 /// file is only used once the board's 3D export step maps it in.
 #[derive(Debug, Clone, PartialEq, Eq)]
