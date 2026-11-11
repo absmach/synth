@@ -87,7 +87,7 @@ The first command verifies every file below `SHA256SUMS`; the Gerber content has
 
 ### PCB review sign-off
 
-PCB review sign-off required by #40: JeffMboya, 2026-11-10, on the package in `fab/` (Gerber content hash `ceeb7444dd`). The sign-off is JeffMboya's own. Jeff Mboya is the independent PCB reviewer as well as the author of this pull request. It covers, each verified and approved by JeffMboya:
+PCB review sign-off required by #40: JeffMboya, 2026-11-10, on the package in `fab/` (Gerber content hash `ceeb7444dd`). The sign-off is JeffMboya's own. Jeff Mboya is the author of this pull request, so the table below is the author's self-review. The independent PCB expert sign-off required by #40 is open. The self-review covers, each verified and approved by JeffMboya:
 
 | Item | Signed off |
 |---|---|
