@@ -93,7 +93,13 @@ user registry); absolute paths are accepted only when they stay inside one.
 Model files live on disk, so the embedded seed registry cannot resolve them:
 run from a checkout or point `--registry`/`SYNTH_REGISTRY` at a registry.
 Every part in one run must use the same `dialect`, because ngspice applies one
-`ngbehavior` setting per run.
+`ngbehavior` setting per run; a part with no `dialect` counts as its own
+native mode, so it conflicts with a `ps`/`lt`/`ltps` part.
+
+`[spice.params]` values are emitted into the deck exactly as written. SPICE's
+own suffixes therefore apply there: `M` is milli, so write mega as `meg`.
+Synth's "`M` is mega" rule applies to component values, not to these
+parameters.
 
 ## Seed corpus
 

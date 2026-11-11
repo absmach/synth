@@ -28,7 +28,7 @@ The target fields depend on the measure kind:
   requires the `op` analysis.
 - `relative_db` needs a non-empty `node` and rejects `element`. Its `drop_db`
   defaults to 3.0 and must be finite and greater than 0. It requires the `ac`
-  analysis.
+  analysis, and at least one source must carry an `ac` magnitude.
 
 A `current` measure `element` that names no placed part is reported here.
 So is an element listed under `ignore`, and a current measure on a registry

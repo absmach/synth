@@ -9,6 +9,9 @@ use serde_json::{json, Value};
 #[path = "../../synth-sim/tests/support/stub_build.rs"]
 mod stub_build;
 
+#[path = "../../synth-sim/tests/support/real_ngspice.rs"]
+mod real_ngspice_support;
+
 const DIVIDER: &str = r#"
 board "divider" {
   layers 2
@@ -287,11 +290,10 @@ fn compile_warnings_are_returned_with_a_passing_simulation() {
 
 #[test]
 fn a_divider_matches_real_ngspice() {
-    let ngspice = PathBuf::from("/usr/bin/ngspice");
-    if !ngspice.is_file() {
-        eprintln!("skipping: ngspice is not installed (sudo apt install ngspice)");
+    let Some(ngspice) = real_ngspice_support::real_ngspice() else {
+        eprintln!("{}", real_ngspice_support::SKIP_MESSAGE);
         return;
-    }
+    };
     let design = design_dir(DIVIDER_TB);
     use_ngspice(&ngspice);
 

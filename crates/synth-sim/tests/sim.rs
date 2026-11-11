@@ -10,6 +10,9 @@ use std::time::{Duration, Instant};
 #[path = "support/stub_build.rs"]
 mod stub_build;
 
+#[path = "support/real_ngspice.rs"]
+mod real_ngspice_support;
+
 const DIVIDER: &str = r#"
 board "divider" {
   layers 2
@@ -411,14 +414,7 @@ fn assert_gone(pid: u32) {
 
 /// The real engine, when installed. CI installs it; local runs skip.
 fn real_ngspice() -> Option<PathBuf> {
-    let system = PathBuf::from("/usr/bin/ngspice");
-    if system.is_file() {
-        return Some(system);
-    }
-    let path = std::env::var_os("PATH")?;
-    std::env::split_paths(&path)
-        .map(|dir| dir.join("ngspice"))
-        .find(|candidate| candidate.is_file())
+    real_ngspice_support::real_ngspice()
 }
 
 fn options(stub: &Path) -> synth_sim::SimOptions {
@@ -521,7 +517,7 @@ fn led_current_matches_the_forward_voltage_model() {
 #[test]
 fn led_matches_real_ngspice() {
     let Some(ngspice) = real_ngspice() else {
-        eprintln!("skipping: ngspice is not installed (sudo apt install ngspice)");
+        eprintln!("{}", real_ngspice_support::SKIP_MESSAGE);
         return;
     };
     let board = board(LED);
@@ -548,7 +544,7 @@ fn led_matches_real_ngspice() {
 #[test]
 fn led_matches_real_ngspice_at_an_off_point() {
     let Some(ngspice) = real_ngspice() else {
-        eprintln!("skipping: ngspice is not installed (sudo apt install ngspice)");
+        eprintln!("{}", real_ngspice_support::SKIP_MESSAGE);
         return;
     };
     let board = board(&LED.replace("value \"150\"", "value \"1k\""));
@@ -567,7 +563,7 @@ fn led_matches_real_ngspice_at_an_off_point() {
 #[test]
 fn diode_matches_real_ngspice() {
     let Some(ngspice) = real_ngspice() else {
-        eprintln!("skipping: ngspice is not installed (sudo apt install ngspice)");
+        eprintln!("{}", real_ngspice_support::SKIP_MESSAGE);
         return;
     };
     let board = board(DIODE);
@@ -1511,7 +1507,7 @@ fn ldo_simulates_through_the_stub() {
 #[test]
 fn ldo_matches_real_ngspice() {
     let Some(ngspice) = real_ngspice() else {
-        eprintln!("skipping: ngspice is not installed (sudo apt install ngspice)");
+        eprintln!("{}", real_ngspice_support::SKIP_MESSAGE);
         return;
     };
     let board = board(LDO);
@@ -1664,32 +1660,36 @@ fn a_missing_spice_model_file_gives_002_naming_the_part() {
 
 #[test]
 fn mixed_spice_dialects_give_002_naming_both_parts() {
-    let board = board_with_registry(LDO_MIXED, |registry| {
-        let mut ps = registry.lookup("ams1117_3v3").expect("ams1117_3v3").clone();
-        ps.spice.as_mut().expect("[spice] model").dialect = Some(synth_registry::SpiceDialect::Ps);
-        registry.insert(ps.clone());
-        let mut lt = ps;
-        lt.id = synth_registry::PartId("ams1117_3v3_lt".to_string());
-        lt.spice.as_mut().expect("[spice] model").dialect = Some(synth_registry::SpiceDialect::Lt);
-        registry.insert(lt);
-    });
-    let testbench = testbench(LDO_TB);
+    use synth_registry::SpiceDialect::{Lt, Ps};
 
-    let diagnostics =
-        synth_sim::emit_netlist_with_registry_dirs(&board, &testbench, &[registry_parts_dir()])
-            .expect_err("mixed dialects");
+    for (first, second) in [(Some(Ps), Some(Lt)), (None, Some(Ps)), (Some(Ps), None)] {
+        let board = board_with_registry(LDO_MIXED, |registry| {
+            let mut first_part = registry.lookup("ams1117_3v3").expect("ams1117_3v3").clone();
+            first_part.spice.as_mut().expect("[spice] model").dialect = first;
+            registry.insert(first_part.clone());
+            let mut second_part = first_part;
+            second_part.id = synth_registry::PartId("ams1117_3v3_lt".to_string());
+            second_part.spice.as_mut().expect("[spice] model").dialect = second;
+            registry.insert(second_part);
+        });
+        let testbench = testbench(LDO_TB);
 
-    assert!(
-        diagnostics.iter().any(|diagnostic| {
-            diagnostic.code == synth_sim::E_SYNTH_SIM_002
-                && diagnostic.message.as_deref().is_some_and(|message| {
-                    ["U1", "ams1117_3v3", "U2", "ams1117_3v3_lt"]
-                        .iter()
-                        .all(|needle| message.contains(needle))
-                })
-        }),
-        "diagnostics: {diagnostics:?}"
-    );
+        let diagnostics =
+            synth_sim::emit_netlist_with_registry_dirs(&board, &testbench, &[registry_parts_dir()])
+                .expect_err("mixed dialects");
+
+        assert!(
+            diagnostics.iter().any(|diagnostic| {
+                diagnostic.code == synth_sim::E_SYNTH_SIM_002
+                    && diagnostic.message.as_deref().is_some_and(|message| {
+                        ["U1", "ams1117_3v3", "U2", "ams1117_3v3_lt"]
+                            .iter()
+                            .all(|needle| message.contains(needle))
+                    })
+            }),
+            "{first:?} + {second:?}: {diagnostics:?}"
+        );
+    }
 }
 
 #[test]
@@ -2027,7 +2027,7 @@ fn the_last_registry_dir_wins_for_a_shared_relative_model_path() {
 #[test]
 fn a_ps_dialect_spice_part_matches_real_ngspice() {
     let Some(ngspice) = real_ngspice() else {
-        eprintln!("skipping: ngspice is not installed (sudo apt install ngspice)");
+        eprintln!("{}", real_ngspice_support::SKIP_MESSAGE);
         return;
     };
     let board = patched_ams1117(|spice| {
@@ -2161,7 +2161,6 @@ fn a_relative_db_measure_requires_the_ac_analysis() {
             .is_some_and(|message| message.contains("ac")),
         "{error:?}"
     );
-
     let error = synth_sim::Testbench::from_toml(&tb_with(
         "[analysis.ac]\nstart = 10\nstop = 1000",
         "[[measure]]\nname = \"v\"\nkind = \"node_voltage\"\nnode = \"MID\"",
@@ -2173,6 +2172,25 @@ fn a_relative_db_measure_requires_the_ac_analysis() {
             .message
             .as_deref()
             .is_some_and(|message| message.contains("op")),
+        "{error:?}"
+    );
+}
+
+/// Without an AC source there is nothing to sweep; say so before the run
+/// instead of reporting a missing measurement afterwards.
+#[test]
+fn a_relative_db_measure_requires_a_source_with_ac() {
+    let error = synth_sim::Testbench::from_toml(&tb_with(
+        "[analysis.ac]\nstart = 10\nstop = 1000",
+        "[[measure]]\nname = \"f\"\nkind = \"relative_db\"\nnode = \"MID\"",
+    ))
+    .expect_err("relative_db needs an ac source");
+    assert_eq!(error.code, synth_sim::E_SYNTH_SIM_007);
+    assert!(
+        error
+            .message
+            .as_deref()
+            .is_some_and(|message| message.contains("relative_db needs a source with `ac`")),
         "{error:?}"
     );
 }
@@ -2468,7 +2486,7 @@ fn example_options(design: &Path, testbench: &Path, ngspice: &Path) -> synth_sim
 #[test]
 fn divider_example_matches_real_ngspice() {
     let Some(ngspice) = real_ngspice() else {
-        eprintln!("skipping: ngspice is not installed (sudo apt install ngspice)");
+        eprintln!("{}", real_ngspice_support::SKIP_MESSAGE);
         return;
     };
     let design = example_dir("divider").join("divider.synth");
@@ -2500,7 +2518,7 @@ fn divider_example_matches_real_ngspice() {
 #[test]
 fn rc_filter_example_matches_real_ngspice() {
     let Some(ngspice) = real_ngspice() else {
-        eprintln!("skipping: ngspice is not installed (sudo apt install ngspice)");
+        eprintln!("{}", real_ngspice_support::SKIP_MESSAGE);
         return;
     };
     let design = example_dir("rc_filter").join("rc_filter.synth");
@@ -2532,7 +2550,7 @@ fn rc_filter_example_matches_real_ngspice() {
 #[test]
 fn led_example_matches_real_ngspice() {
     let Some(ngspice) = real_ngspice() else {
-        eprintln!("skipping: ngspice is not installed (sudo apt install ngspice)");
+        eprintln!("{}", real_ngspice_support::SKIP_MESSAGE);
         return;
     };
     let design = example_dir("led").join("led.synth");
@@ -2565,7 +2583,7 @@ fn led_example_matches_real_ngspice() {
 #[test]
 fn a_real_ngspice_run_writes_a_non_empty_plot() {
     let Some(ngspice) = real_ngspice() else {
-        eprintln!("skipping: ngspice is not installed (sudo apt install ngspice)");
+        eprintln!("{}", real_ngspice_support::SKIP_MESSAGE);
         return;
     };
     let scratch = Scratch::new("rc-plot");

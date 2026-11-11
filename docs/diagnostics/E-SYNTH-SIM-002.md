@@ -13,10 +13,10 @@ that declare a forward voltage and current. A diode or LED must also name its
 pins `anode` and `cathode`; a two-pin part with any other pin names is reported
 here instead of guessing which way round it goes.
 
-A part whose `kind` is `diode` but which is not an LED (any diode-kind part,
-zener/TVS included) should carry a registry `[spice]` model. Without one it uses
-the plain built-in diode model when it declares the forward fields, which does
-not represent zener or TVS behaviour.
+A part whose `kind` is `diode` (any diode-kind part, zener/TVS included) should
+carry a registry `[spice]` model. Without one it uses the plain built-in diode
+model when it declares the forward fields, which does not represent zener or
+TVS behaviour.
 
 The value is part of the model: an absent, unparseable, zero or negative
 resistor/capacitor/inductor value is reported here too. `4k7` is not accepted;
@@ -44,9 +44,10 @@ A `[spice]` table wins over every built-in model, so a part of any kind uses
 its subcircuit. `pin_order` lists the part's pin names in subcircuit terminal
 order; it must name every pin exactly once, or the deck is rejected here.
 `file` is resolved relative to a registry directory (an absolute path is
-accepted only inside one), and the model file must define the named `.subckt`.
-A missing file or subcircuit is reported only when a simulation runs, so
-`validate` and `export` do not fail on it.
+accepted only inside one), and the model file must define the named `.subckt`
+with exactly as many terminals as `pin_order` lists. A mismatch, a missing file
+or a missing subcircuit is reported only when a simulation runs, so `validate`
+and `export` do not fail on it.
 
 When a deck runs, the model file is checked: `.control`, `.endc`, `shell` and
 `system` lines are rejected, as are Verilog-A models and encrypted vendor

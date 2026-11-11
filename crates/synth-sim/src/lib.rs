@@ -378,6 +378,12 @@ impl Testbench {
                     measure.name
                 )));
             }
+            if requires_ac && !self.source.iter().any(|source| source.ac.is_some()) {
+                return Err(testbench_error(format!(
+                    "measure `{}`: relative_db needs a source with `ac`",
+                    measure.name
+                )));
+            }
             if !requires_ac && !self.analysis.op {
                 return Err(testbench_error(format!(
                     "measure `{}` requires the `op` analysis",
@@ -1115,7 +1121,7 @@ fn emit_deck(
         .collect();
     let mut include_lines = Vec::new();
     let mut included_files: HashSet<PathBuf> = HashSet::new();
-    let mut dialects: Vec<(SpiceDialect, String, String)> = Vec::new();
+    let mut dialects: Vec<(Option<SpiceDialect>, String, String)> = Vec::new();
     let mut element_lines = Vec::new();
     let mut model_lines = Vec::new();
     let mut seen_elements: HashMap<String, String> = HashMap::new();
@@ -1172,28 +1178,27 @@ fn emit_deck(
                 }
                 include_lines.push(format!(".include \"{path}\""));
             }
-            if let Some(dialect) = spice.dialect {
-                if let Some((known, known_refdes, known_part)) = dialects.first() {
-                    if *known != dialect {
-                        diagnostics.push(no_model_error(
-                            component,
-                            &format!(
-                                "SPICE dialect `{}` conflicts with `{known_refdes}` \
-                                 (`{known_part}`) using `{}`; all parts in one run must agree",
-                                dialect.name(),
-                                known.name()
-                            ),
-                            design_path,
-                        ));
-                    }
-                }
-                if !dialects.iter().any(|(known, _, _)| *known == dialect) {
-                    dialects.push((
-                        dialect,
-                        component.refdes.clone(),
-                        part.id.as_str().to_string(),
+            let dialect = spice.dialect;
+            if let Some((known, known_refdes, known_part)) = dialects.first() {
+                if *known != dialect {
+                    diagnostics.push(no_model_error(
+                        component,
+                        &format!(
+                            "SPICE dialect `{}` conflicts with `{known_refdes}` \
+                             (`{known_part}`) using `{}`; all parts in one run must agree",
+                            dialect_name(dialect),
+                            dialect_name(*known)
+                        ),
+                        design_path,
                     ));
                 }
+            }
+            if !dialects.iter().any(|(known, _, _)| *known == dialect) {
+                dialects.push((
+                    dialect,
+                    component.refdes.clone(),
+                    part.id.as_str().to_string(),
+                ));
             }
             match connected_nodes(
                 component,
@@ -1457,7 +1462,7 @@ fn emit_deck(
         let _ = writeln!(deck, "wrdata '{}' allv", plot.display());
     }
     deck.push_str("echo SYNTH_DONE\n.endc\n.end\n");
-    let dialect = dialects.first().map(|(dialect, _, _)| *dialect);
+    let dialect = dialects.first().and_then(|(dialect, _, _)| *dialect);
     Ok((deck, dialect, plot_path))
 }
 
@@ -1472,6 +1477,11 @@ fn resolve_plot_path(plot: &str, testbench_path: Option<&Path>) -> Result<PathBu
             "could not resolve `[options] plot` path `{plot}`: {error}"
         ))
     })
+}
+
+/// The dialect's TOML spelling; a part without one is its own (native) mode.
+fn dialect_name(dialect: Option<SpiceDialect>) -> &'static str {
+    dialect.map_or("none", SpiceDialect::name)
 }
 
 /// Map a part's `[spice] pin_order` to pin indexes, in subcircuit terminal
