@@ -401,6 +401,20 @@ fn polygon_hugs_copper(
         })
 }
 
+/// Each footprint's own silkscreen segments, by the byte offset its block
+/// starts at, so a moved marker can keep off other parts' silkscreen.
+fn silk_by_footprint(text: &str) -> Vec<(usize, Vec<Seg>)> {
+    let mut all = Vec::new();
+    let mut at = 0;
+    while let Some(i) = text[at..].find("(footprint") {
+        let start = at + i;
+        let len = block_len(&text[start..]).unwrap_or(text.len() - start);
+        all.push((start, silk_segments(&text[start..start + len])));
+        at = start + len.max(1);
+    }
+    all
+}
+
 /// How far a pin-1 marker may move to clear copper and still sit by its pin.
 const MARKER_REACH_MM: f64 = 1.5;
 
@@ -439,14 +453,80 @@ fn shift_shape(shape: &str, (dx, dy): (f64, f64)) -> String {
     out
 }
 
+/// Points along a silkscreen polygon's edges or a circle's ring, in board
+/// millimetres, as the shape sits after `to_board`.
+fn shape_points(
+    shape: &str,
+    polygon: bool,
+    to_board: &dyn Fn((f64, f64)) -> (f64, f64),
+) -> Vec<(f64, f64)> {
+    if polygon {
+        let mut corners: Vec<(f64, f64)> = Vec::new();
+        let mut rest = shape;
+        while let Some(i) = rest.find("(xy ") {
+            rest = &rest[i + "(xy ".len()..];
+            let Some(close) = rest.find(')') else { break };
+            let nums: Vec<f64> = rest[..close]
+                .split_whitespace()
+                .filter_map(|n| n.parse().ok())
+                .collect();
+            if let (Some(&x), Some(&y)) = (nums.first(), nums.get(1)) {
+                corners.push((x, y));
+            }
+        }
+        corners
+            .iter()
+            .zip(corners.iter().cycle().skip(1))
+            .flat_map(|(&a, &b)| {
+                let steps = (((b.0 - a.0).hypot(b.1 - a.1) / PAD_SAMPLE_MM).ceil() as u32).max(1);
+                (0..=steps).map(move |k| {
+                    let t = f64::from(k) / f64::from(steps);
+                    (a.0 + (b.0 - a.0) * t, a.1 + (b.1 - a.1) * t)
+                })
+            })
+            .map(to_board)
+            .collect()
+    } else {
+        let (Some(c), Some(e)) = (block_point(shape, "(center"), block_point(shape, "(end")) else {
+            return Vec::new();
+        };
+        let radius = (e.0 - c.0).hypot(e.1 - c.1);
+        (0..64)
+            .map(|k| {
+                let a = f64::from(k) * std::f64::consts::TAU / 64.0;
+                to_board((c.0 + radius * a.cos(), c.1 + radius * a.sin()))
+            })
+            .collect()
+    }
+}
+
+/// Whether any of `points` is within the silkscreen clearance of a segment of
+/// another part's silkscreen.
+fn near_other_silk(points: &[(f64, f64)], others: &[Seg]) -> bool {
+    points.iter().any(|&p| {
+        others.iter().any(|&(a, b)| {
+            let (dx, dy) = (b.0 - a.0, b.1 - a.1);
+            let len2 = dx * dx + dy * dy;
+            let t = if len2 == 0.0 {
+                0.0
+            } else {
+                (((p.0 - a.0) * dx + (p.1 - a.1) * dy) / len2).clamp(0.0, 1.0)
+            };
+            (p.0 - (a.0 + t * dx)).hypot(p.1 - (a.1 + t * dy)) < CLEARANCE_MM
+        })
+    })
+}
+
 /// The nearest shift, in board millimetres and within [`MARKER_REACH_MM`], that
 /// takes a pin-1 marker clear of copper; `None` for a ring round its own pad,
-/// which is dropped, or when no shift clears it.
+/// which is dropped, or when no shift clears it. The spot is also clear of the
+/// silkscreen of other parts (`others`), which KiCad's `silk_overlap` checks.
 fn marker_clear_spot(
     shape: &str,
     polygon: bool,
     board: &PcbBoard,
     vias: &[((f64, f64), f64)],
+    others: &[Seg],
     to_board: &dyn Fn((f64, f64)) -> (f64, f64),
 ) -> Option<(f64, f64)> {
     let rings_a_pad = !polygon
@@ -463,11 +543,11 @@ fn marker_clear_spot(
             let b = to_board(p);
             (b.0 + dx, b.1 + dy)
         };
-        !if polygon {
+        !(if polygon {
             polygon_hugs_copper(shape, board, vias, &shifted)
         } else {
             circle_hugs_copper(shape, board, vias, &shifted)
-        }
+        } || near_other_silk(&shape_points(shape, polygon, &shifted), others))
     })
 }
 
@@ -486,6 +566,7 @@ fn drop_shapes_off_copper(
 ) -> (String, usize, usize) {
     let mut ranges: Vec<std::ops::Range<usize>> = Vec::new();
     let mut moved: Vec<(std::ops::Range<usize>, String)> = Vec::new();
+    let footprint_silk = silk_by_footprint(text);
     let mut base = 0;
     while let Some(i) = text[base..].find("(footprint") {
         let start = base + i;
@@ -532,7 +613,12 @@ fn drop_shapes_off_copper(
                     continue;
                 }
                 let range = start + shape_start..start + shape_start + end;
-                let clear_spot = marker_clear_spot(shape, polygon, board, vias, &to_board);
+                let others: Vec<Seg> = footprint_silk
+                    .iter()
+                    .filter(|(owner, _)| *owner != start)
+                    .flat_map(|(_, segs)| segs.iter().copied())
+                    .collect();
+                let clear_spot = marker_clear_spot(shape, polygon, board, vias, &others, &to_board);
                 match clear_spot {
                     Some((dx, dy)) => {
                         let (lx, ly) = inverse.rotate_offset(mm_to_nm(dx), mm_to_nm(dy));
@@ -1541,6 +1627,45 @@ mod tests {
         let (out, moves) = run(&distant);
         assert_eq!((moves.relocated, moves.dropped), (0, 0), "{out}");
         assert!(out.contains("(fp_poly"));
+    }
+
+    /// A moved marker also keeps off another part's silkscreen.
+    #[test]
+    fn a_pin_1_triangle_is_not_moved_onto_another_parts_outline() {
+        // Another part's outline runs along board y = 19, where the nearest
+        // spot clear of the pad would put the triangle.
+        let outline = r#"  (footprint "Connector:J"
+    (layer "F.Cu")
+    (at 0 0)
+    (property "Reference" "J1" (at 0 -2) (layer "F.SilkS"))
+    (fp_line (start 18 19) (end 22 19) (stroke (width 0.12) (type solid)) (layer "F.SilkS") (uuid "00000000-0000-0000-0000-000000000041"))
+  )"#;
+        let triangle = "    (fp_poly (pts (xy -1.225 -0.6) (xy -0.425 -0.6) (xy -0.825 -1.0)) (stroke (width 0.12) (type solid)) (fill solid) (layer \"F.SilkS\") (uuid \"00000000-0000-0000-0000-000000000032\"))\n    (pad \"1\"";
+        let text = board_text(outline).replacen("    (pad \"1\"", triangle, 1);
+        let (out, moves) = run(&text);
+        assert_eq!(moves.relocated, 1, "{out}");
+        let poly = &out[out.find("(fp_poly").expect("marker kept")..];
+        let poly = &poly[..poly.find("(stroke").unwrap()];
+        let ys: Vec<f64> = poly
+            .split("(xy ")
+            .skip(1)
+            .filter_map(|p| {
+                p.split_whitespace()
+                    .nth(1)?
+                    .trim_end_matches(')')
+                    .parse()
+                    .ok()
+            })
+            .collect();
+        assert_eq!(ys.len(), 3, "{poly}");
+        // R1 sits at (20, 20): board y is 20 + local y.
+        for y in ys {
+            assert!(
+                (20.0 + y - 19.0).abs() >= 0.25,
+                "marker at board y {}",
+                20.0 + y
+            );
+        }
     }
 
     /// A marker with no clear spot within reach is dropped, as before.
