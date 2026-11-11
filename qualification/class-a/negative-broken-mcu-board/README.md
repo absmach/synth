@@ -29,10 +29,6 @@ the compiler had let it through.
 Five error-level diagnostics in total. Each names the component and the pin or
 designator at fault, and each points at a line in the source.
 
-`crates/synth-cli/tests/class_a_negative_board.rs` compares that set against
-`synth validate --format json` in both directions, so a finding cannot vanish
-quietly and a sixth cannot arrive undeclared.
-
 ## Why this shape
 
 A negative case is worth having only if it fails the way a real mistake fails.
@@ -54,5 +50,5 @@ Three things would make it worthless:
   caught at export rather than validation, and this board never reaches
   export. The check exists — `E-SYNTH-EXPORT-001` — and several shipped parts
   trip it, but it is not exercised here.
-- The six warnings this board also reports are not part of the exercise, and
-  nothing asserts them. A new warning is free to appear.
+- The diagnostics are not asserted by a test. Nothing stops a future change
+  from reducing these five to four without anyone noticing.
