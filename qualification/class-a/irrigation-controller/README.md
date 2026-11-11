@@ -75,6 +75,7 @@ SammyOina's review of 2026-10-29 (13:51), then the earlier ones, point by point:
 | Valve current | stated in the source as a 12 V solenoid at most 0.5 A: the `PWR12` class is 0.8 mm; the AO3400A (5.7 A on its listing) and the 1N5819HW flyback diode (1 A) are above it. Calculated from listing figures, not measured. |
 | Schematic references and groups | every part is in a named group; the `OTHER` region is gone. |
 | MP2307 divider | VFB 0.925 V (0.900 to 0.950 V, MPS datasheet); the divider and compensation are calculated from it. |
+| MP2307 compensation | MPS MP2307 datasheet Rev. 1.7, "Compensation Components": `R3 < 2 pi C2 (0.1 fS) VOUT / (GEA GCS VFB)` with GEA 820 uA/V, GCS 5.2 A/V, fS 340 kHz (300 to 380 kHz) and VFB 0.925 V puts the crossover below one tenth of the switching frequency. The output capacitance is 2 x 22 uF, 44 uF nominal and about 31 uF with the DC-bias derating of an X5R 1206 at 3.3 V (an assumption, not a measurement): `R3` below 7.9 kΩ and 5.5 kΩ respectively. `R_COMP` is 5.6 kΩ, giving a crossover of 24 kHz at 44 uF and 34 kHz at 31 uF, 0.07 and 0.10 of fS. `C3 > 4 / (2 pi R3 fC)` is 4.7 nF at the 34 kHz crossover (3.3 nF), so `C_COMP` is 4.7 nF. The second capacitor `C6` is not fitted: the ESR zero of a ceramic output capacitor is far above fS / 2. |
 
 ### Input protection margins
 
