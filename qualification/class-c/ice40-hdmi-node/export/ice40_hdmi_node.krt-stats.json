@@ -1087,10 +1087,10 @@
   "min_clearance_used"
  ],
  "env_knobs": {
-  "KICAD_FOOTPRINT_DIR": "/home/jeff/.local/share/flatpak/runtime/org.kicad.KiCad.Library.Footprints/x86_64/stable/active/files/footprints",
-  "KICAD_ROUTING_TOOLS_REPO": "/home/jeff/synth-local/krt",
-  "KICAD_SYMBOL_DIR": "/home/jeff/.local/share/flatpak/runtime/org.kicad.KiCad.Library.Symbols/x86_64/stable/active/files/symbols",
-  "KRT_PYTHON": "/home/jeff/synth-local/krtvenv/bin/python"
+  "KICAD_FOOTPRINT_DIR": "<kicad-library>",
+  "KICAD_ROUTING_TOOLS_REPO": "<synth-local>/krt",
+  "KICAD_SYMBOL_DIR": "<kicad-library>",
+  "KRT_PYTHON": "<synth-local>/krtvenv/bin/python"
  },
  "blockers": [],
  "boxed_in": [],
