@@ -1,6 +1,6 @@
 id = "xtal_generic"
 kind = "crystal"
-description = "Generic quartz crystal, 4-pad SMD3225"
+description = "Generic quartz crystal, 2-pin SMD"
 # `Device:Crystal` is the two-pin symbol, but this is the four-pad SMD3225
 # package: pads 1 and 3 are the crystal, diagonally opposite each other, and
 # pads 2 and 4 are the grounded case. `Device:Crystal_GND24` is the symbol that

@@ -1,0 +1,380 @@
+schema_version = 2
+# Hand floorplan for the x32 SDRAM card, applied after the solver.
+#
+# The card is laid out the way a memory module is: the command connector on
+# one edge with its twenty-four damping resistors in two columns beside the
+# pins they damp, the data connector on the other, the two dice stacked
+# between them so each faces its own half of the data bus, one decoupling
+# column per rail per die, and the sideband — presence detect, thermal and
+# the supply entry — filling the space beside the dice that the bus does not
+# need.
+
+[components.C1]
+x = 20.5
+y = 11.5
+rotation = 0
+
+[components.C10]
+x = 20.5
+y = 42.5
+rotation = 0
+
+[components.C11]
+x = 20.5
+y = 47.0
+rotation = 0
+
+[components.C12]
+x = 42.5
+y = 38.0
+rotation = 0
+
+[components.C13]
+x = 42.5
+y = 42.5
+rotation = 0
+
+[components.C14]
+x = 42.5
+y = 47.0
+rotation = 0
+
+[components.C15]
+x = 42.5
+y = 51.5
+rotation = 0
+
+[components.C16]
+x = 42.5
+y = 56.0
+rotation = 0
+
+[components.C17]
+x = 58.0
+y = 49.0
+rotation = 0
+
+[components.C18]
+x = 58.0
+y = 53.0
+rotation = 0
+
+[components.C19]
+x = 55.5
+y = 57.5
+rotation = 0
+
+[components.C2]
+x = 20.5
+y = 16.0
+rotation = 0
+
+[components.C20]
+x = 52.0
+y = 17.5
+rotation = 0
+
+[components.C21]
+x = 57.0
+y = 39.0
+rotation = 0
+
+[components.C3]
+x = 20.5
+y = 20.5
+rotation = 0
+
+[components.C4]
+x = 42.5
+y = 11.5
+rotation = 0
+
+[components.C5]
+x = 42.5
+y = 16.0
+rotation = 0
+
+[components.C6]
+x = 42.5
+y = 20.5
+rotation = 0
+
+[components.C7]
+x = 42.5
+y = 25.0
+rotation = 0
+
+[components.C8]
+x = 42.5
+y = 29.5
+rotation = 0
+
+[components.C9]
+x = 20.5
+y = 38.0
+rotation = 0
+
+[components.D1]
+x = 58.2
+y = 17.43
+rotation = 0
+
+[components.F1]
+x = 50.55
+y = 53.6
+rotation = 0
+
+[components.FID1]
+x = 9.0
+y = 3.5
+rotation = 0
+
+[components.FID2]
+x = 61.0
+y = 63.0
+rotation = 0
+
+[components.H1]
+x = 18.0
+y = 3.5
+rotation = 0
+
+[components.H2]
+x = 52.0
+y = 3.5
+rotation = 0
+
+[components.H3]
+x = 18.0
+y = 63.0
+rotation = 0
+
+[components.H4]
+x = 52.0
+y = 63.0
+rotation = 0
+
+[components.J1]
+x = 66.775
+y = 33.625
+rotation = 0
+
+[components.J2]
+x = 3.775
+y = 33.625
+rotation = 0
+
+[components.L1]
+x = 48.5
+y = 57.5
+rotation = 0
+
+[components.R1]
+x = 20.5
+y = 24.0
+rotation = 0
+
+[components.R10]
+x = 9.8
+y = 17.12
+rotation = 0
+
+[components.R11]
+x = 12.4
+y = 17.12
+rotation = 0
+
+[components.R12]
+x = 9.8
+y = 19.66
+rotation = 0
+
+[components.R13]
+x = 9.8
+y = 22.2
+rotation = 0
+
+[components.R14]
+x = 12.4
+y = 22.2
+rotation = 0
+
+[components.R15]
+x = 9.8
+y = 24.74
+rotation = 0
+
+[components.R16]
+x = 12.4
+y = 24.74
+rotation = 0
+
+[components.R17]
+x = 12.4
+y = 27.28
+rotation = 0
+
+[components.R18]
+x = 9.8
+y = 29.82
+rotation = 0
+
+[components.R19]
+x = 12.4
+y = 29.82
+rotation = 0
+
+[components.R2]
+x = 20.5
+y = 27.0
+rotation = 0
+
+[components.R20]
+x = 9.8
+y = 32.36
+rotation = 0
+
+[components.R21]
+x = 9.8
+y = 34.9
+rotation = 0
+
+[components.R22]
+x = 12.4
+y = 34.9
+rotation = 0
+
+[components.R23]
+x = 9.8
+y = 37.44
+rotation = 0
+
+[components.R24]
+x = 12.4
+y = 37.44
+rotation = 0
+
+[components.R25]
+x = 12.4
+y = 39.98
+rotation = 0
+
+[components.R26]
+x = 9.8
+y = 42.52
+rotation = 0
+
+[components.R27]
+x = 12.4
+y = 42.52
+rotation = 0
+
+[components.R28]
+x = 9.8
+y = 45.06
+rotation = 0
+
+[components.R29]
+x = 9.8
+y = 47.6
+rotation = 0
+
+[components.R3]
+x = 57.8
+y = 10.5
+rotation = 0
+
+[components.R30]
+x = 12.4
+y = 47.6
+rotation = 0
+
+[components.R31]
+x = 50.0
+y = 46.5
+rotation = 0
+
+[components.R32]
+x = 50.0
+y = 42.0
+rotation = 0
+
+[components.R4]
+x = 57.8
+y = 13.5
+rotation = 0
+
+[components.R5]
+x = 28.5
+y = 34.25
+rotation = 0
+
+[components.R6]
+x = 34.5
+y = 34.25
+rotation = 0
+
+[components.R7]
+x = 12.4
+y = 9.5
+rotation = 0
+
+[components.R8]
+x = 12.4
+y = 12.04
+rotation = 0
+
+[components.R9]
+x = 9.8
+y = 14.58
+rotation = 0
+
+[components.TP1]
+x = 61.5
+y = 22.0
+rotation = 0
+
+[components.TP2]
+x = 61.5
+y = 25.0
+rotation = 0
+
+[components.TP3]
+x = 61.5
+y = 28.0
+rotation = 0
+
+[components.TP4]
+x = 61.5
+y = 31.0
+rotation = 0
+
+[components.TP5]
+x = 61.5
+y = 34.0
+rotation = 0
+
+[components.TP6]
+x = 61.5
+y = 37.0
+rotation = 0
+
+[components.U1]
+x = 31.5
+y = 21.0
+rotation = 0
+
+[components.U2]
+x = 31.5
+y = 47.5
+rotation = 0
+
+[components.U3]
+x = 52.0
+y = 12.95
+rotation = 0
+
+[components.U4]
+x = 57.33
+y = 44.0
+rotation = 0

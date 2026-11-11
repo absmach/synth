@@ -1,0 +1,450 @@
+schema_version = 2
+forced_net_labels = []
+fit_sheet = false
+
+# All 49 components are pinned and the exported board is byte-identical across
+# runs. Two entries are not reproduced verbatim: edge legalisation runs after a
+# hard override and moves J1 by -0.56 mm in y and J2 by +0.725 mm in x, the same
+# step every time (#133). The offset is constant, so the board is deterministic;
+# it just means these two coordinates describe the request, not the result.
+
+[components.C1]
+x = 38.6999
+y = 27.1405
+rotation = 0
+source = "agent"
+priority = "hard"
+dx = 0.0
+dy = 0.0
+
+[components.C2]
+x = 48.5447
+y = 27.1231
+rotation = 0
+source = "agent"
+priority = "hard"
+dx = 0.0
+dy = 0.0
+
+[components.C3]
+x = 10.0083
+y = 36.5717
+rotation = 0
+source = "agent"
+priority = "hard"
+dx = 0.0
+dy = 0.0
+
+[components.C4]
+x = 9.425
+y = 41.22
+rotation = 0
+source = "agent"
+priority = "hard"
+dx = 0.0
+dy = 0.0
+
+[components.C5]
+x = 33.685
+y = 39.6211
+rotation = 0
+source = "agent"
+priority = "hard"
+dx = 0.0
+dy = 0.0
+
+[components.C6]
+x = 41.2958
+y = 17.015
+rotation = 0
+source = "agent"
+priority = "hard"
+dx = 0.0
+dy = 0.0
+
+[components.C7]
+x = 55.5708
+y = 17.0301
+rotation = 0
+source = "agent"
+priority = "hard"
+dx = 0.0
+dy = 0.0
+
+[components.C8]
+x = 25.6093
+y = 46.9916
+rotation = 0
+source = "agent"
+priority = "hard"
+dx = 0.0
+dy = 0.0
+
+[components.C9]
+x = 58.7982
+y = 47.5863
+rotation = 0
+source = "agent"
+priority = "hard"
+dx = 0.0
+dy = 0.0
+
+[components.C10]
+x = 41.9017
+y = 49.1897
+rotation = 0
+source = "agent"
+priority = "hard"
+dx = 0.0
+dy = 0.0
+
+[components.C11]
+x = 43.1094
+y = 22.0231
+rotation = 0
+source = "agent"
+priority = "hard"
+dx = 0.0
+dy = 0.0
+
+[components.C12]
+x = 32.342
+y = 31.7201
+rotation = 0
+source = "agent"
+priority = "hard"
+dx = 0.0
+dy = 0.0
+
+[components.C13]
+x = 41.7577
+y = 12.3132
+rotation = 0
+source = "agent"
+priority = "hard"
+dx = 0.0
+dy = 0.0
+
+[components.C14]
+x = 62.9763
+y = 52.3947
+rotation = 0
+source = "agent"
+priority = "hard"
+dx = 0.0
+dy = 0.0
+
+[components.C15]
+x = 43.3695
+y = 53.707
+rotation = 0
+source = "agent"
+priority = "hard"
+dx = 0.0
+dy = 0.0
+
+[components.C16]
+x = 39.6893
+y = 7.4559
+rotation = 0
+source = "agent"
+priority = "hard"
+dx = 0.0
+dy = 0.0
+
+[components.C17]
+x = 60.2577
+y = 12.21
+rotation = 0
+source = "agent"
+priority = "hard"
+dx = 0.0
+dy = 0.0
+
+[components.C18]
+x = 20.8269
+y = 51.6408
+rotation = 0
+source = "agent"
+priority = "hard"
+dx = 0.0
+dy = 0.0
+
+[components.C19]
+x = 33.1094
+y = 22.0231
+rotation = 0
+source = "agent"
+priority = "hard"
+dx = 0.0
+dy = 0.0
+
+[components.C20]
+x = 50.6903
+y = 22.0957
+rotation = 0
+source = "agent"
+priority = "hard"
+dx = 0.0
+dy = 0.0
+
+[components.D1]
+x = 18.7
+y = 20.35
+rotation = 0
+source = "agent"
+priority = "hard"
+dx = 0.0
+dy = 0.0
+
+[components.D2]
+x = 34.5
+y = 44.5
+rotation = 0
+source = "agent"
+priority = "hard"
+dx = 0.0
+dy = 0.0
+
+[components.J1]
+x = 19.07
+y = 8.9
+rotation = 180
+source = "agent"
+priority = "hard"
+dx = 0.0
+dy = 0.0
+
+[components.J2]
+x = 80.3637
+y = 38.475
+rotation = 90
+source = "agent"
+priority = "hard"
+dx = 0.0
+dy = 0.0
+
+[components.L1]
+x = 16.975
+y = 36.585
+rotation = 0
+source = "agent"
+priority = "hard"
+dx = 0.0
+dy = 0.0
+
+[components.R1]
+x = 29.5912
+y = 26.8225
+rotation = 0
+source = "agent"
+priority = "hard"
+dx = 0.0
+dy = 0.0
+
+[components.R2]
+x = 30.5912
+y = 16.6475
+rotation = 0
+source = "agent"
+priority = "hard"
+dx = 0.0
+dy = 0.0
+
+[components.R3]
+x = 22.2875
+y = 42.2875
+rotation = 0
+source = "agent"
+priority = "hard"
+dx = 0.0
+dy = 0.0
+
+[components.R4]
+x = 23.8958
+y = 37.6208
+rotation = 0
+source = "agent"
+priority = "hard"
+dx = 0.0
+dy = 0.0
+
+[components.R5]
+x = 49.65
+y = 49.25
+rotation = 0
+source = "agent"
+priority = "hard"
+dx = 0.0
+dy = 0.0
+
+[components.R6]
+x = 58.85
+y = 41.45
+rotation = 0
+source = "agent"
+priority = "hard"
+dx = 0.0
+dy = 0.0
+
+[components.R7]
+x = 56.8625
+y = 52.4667
+rotation = 0
+source = "agent"
+priority = "hard"
+dx = 0.0
+dy = 0.0
+
+[components.R8]
+x = 58.75
+y = 36.5
+rotation = 0
+source = "agent"
+priority = "hard"
+dx = 0.0
+dy = 0.0
+
+[components.R9]
+x = 69.15
+y = 50.0
+rotation = 0
+source = "agent"
+priority = "hard"
+dx = 0.0
+dy = 0.0
+
+[components.R10]
+x = 74.3
+y = 54.5
+rotation = 0
+source = "agent"
+priority = "hard"
+dx = 0.0
+dy = 0.0
+
+[components.R11]
+x = 76.7
+y = 21.0
+rotation = 0
+source = "agent"
+priority = "hard"
+dx = 0.0
+dy = 0.0
+
+[components.R12]
+x = 59.85
+y = 57.0
+rotation = 0
+source = "agent"
+priority = "hard"
+dx = 0.0
+dy = 0.0
+
+[components.R13]
+x = 80.75
+y = 58.5
+rotation = 0
+source = "agent"
+priority = "hard"
+dx = 0.0
+dy = 0.0
+
+[components.R14]
+x = 41.4
+y = 58.5
+rotation = 0
+source = "agent"
+priority = "hard"
+dx = 0.0
+dy = 0.0
+
+[components.R15]
+x = 62.3
+y = 18.5
+rotation = 0
+source = "agent"
+priority = "hard"
+dx = 0.0
+dy = 0.0
+
+[components.R16]
+x = 50.55
+y = 55.0
+rotation = 0
+source = "agent"
+priority = "hard"
+dx = 0.0
+dy = 0.0
+
+[components.R17]
+x = 82.7
+y = 22.3
+rotation = 0
+source = "agent"
+priority = "hard"
+dx = 0.0
+dy = 0.0
+
+[components.R18]
+x = 69.975
+y = 18.085
+rotation = 0
+source = "agent"
+priority = "hard"
+dx = 0.0
+dy = 0.0
+
+[components.R19]
+x = 73.425
+y = 25.815
+rotation = 0
+source = "agent"
+priority = "hard"
+dx = 0.0
+dy = 0.0
+
+[components.U1]
+x = 47.25
+y = 38.25
+rotation = 0
+source = "agent"
+priority = "hard"
+dx = 0.0
+dy = 0.0
+
+[components.U2]
+x = 19.45
+y = 27.45
+rotation = 0
+source = "agent"
+priority = "hard"
+dx = 0.0
+dy = 0.0
+
+[components.U3]
+x = 9.15
+y = 23.35
+rotation = 0
+source = "agent"
+priority = "hard"
+dx = 0.0
+dy = 0.0
+
+[components.U4]
+x = 63.45
+y = 26.45
+rotation = 0
+source = "agent"
+priority = "hard"
+dx = 0.0
+dy = 0.0
+
+[components.Y1]
+x = 8.75
+y = 8.91
+rotation = 0
+source = "agent"
+priority = "hard"
+dx = 0.0
+dy = 0.0
