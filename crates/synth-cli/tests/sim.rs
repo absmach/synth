@@ -389,7 +389,11 @@ board "overdrive" {
         String::from_utf8_lossy(&output.stderr)
     );
     let stderr = String::from_utf8_lossy(&output.stderr);
-    assert!(stderr.contains("overdrive"), "{stderr}");
+    assert!(
+        stderr.lines().any(|line| line.starts_with("overdrive:")),
+        "{stderr}"
+    );
+    assert!(!stderr.contains("not covered:"), "{stderr}");
     let testbench = synth_sim::Testbench::from_path(&dir.join("overdrive.sim.toml"))
         .expect("the suggested sidecar parses");
     let iled = testbench

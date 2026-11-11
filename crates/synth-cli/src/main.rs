@@ -3387,6 +3387,9 @@ fn draft_testbench(board: &synth_ir::Board, input: &Path, force: bool) -> u8 {
     for reason in &suggestion.not_covered {
         eprintln!("not covered: {reason}");
     }
+    for warning in &suggestion.warnings {
+        eprintln!("{warning}");
+    }
     let Some(toml) = suggestion.toml else {
         eprintln!(
             "no testbench shapes found in {}; nothing written",

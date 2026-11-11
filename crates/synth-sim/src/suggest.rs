@@ -21,6 +21,9 @@ pub struct TestbenchSuggestion {
     pub toml: Option<String>,
     /// Human-readable reasons parts/shapes were left out.
     pub not_covered: Vec<String>,
+    /// Problems the draft worked around, such as an overdriven LED whose
+    /// measure is deliberately pinned to the current cap.
+    pub warnings: Vec<String>,
 }
 
 /// Draft a testbench from the shapes in `design`.
@@ -44,6 +47,7 @@ pub fn suggest_testbench(design: &Board) -> TestbenchSuggestion {
         return TestbenchSuggestion {
             toml: None,
             not_covered: vec![reason],
+            warnings: Vec::new(),
         };
     }
     let ground = grounds[0];
@@ -51,6 +55,7 @@ pub fn suggest_testbench(design: &Board) -> TestbenchSuggestion {
         return TestbenchSuggestion {
             toml: None,
             not_covered: vec!["the ground net name contains a newline".to_string()],
+            warnings: Vec::new(),
         };
     }
 
@@ -77,6 +82,7 @@ pub fn suggest_testbench(design: &Board) -> TestbenchSuggestion {
     TestbenchSuggestion {
         toml,
         not_covered: draft.not_covered,
+        warnings: draft.warnings,
     }
 }
 
@@ -116,6 +122,7 @@ struct Draft<'a> {
     ground: NetId,
     used: HashSet<ComponentId>,
     not_covered: Vec<String>,
+    warnings: Vec<String>,
     todo_nets: BTreeSet<NetId>,
     names: HashSet<String>,
     measures: Vec<DraftMeasure>,
@@ -128,6 +135,7 @@ impl<'a> Draft<'a> {
             ground,
             used: HashSet::new(),
             not_covered: Vec::new(),
+            warnings: Vec::new(),
             todo_nets: BTreeSet::new(),
             names: HashSet::new(),
             measures: Vec::new(),
@@ -181,6 +189,12 @@ impl<'a> Draft<'a> {
             return;
         };
         if other_net == self.ground {
+            return;
+        }
+        // The series resistor must carry the whole LED current. A third
+        // endpoint (two LEDs sharing one resistor) splits it, so a single-LED
+        // band would fail a valid board.
+        if other.endpoints.len() != 2 {
             return;
         }
         if has_line_break(&other.name) {
@@ -263,15 +277,27 @@ impl<'a> Draft<'a> {
             ));
             return;
         };
-        let Some(resistance) = self.resistance(resistor) else {
-            self.not_covered.push(format!(
-                "{}, no parseable `value` for the LED series resistor",
-                self.describe(resistor)
-            ));
-            return;
+        let resistance = match self.resistance(resistor) {
+            Ok(value) => value,
+            Err(reason) => {
+                self.not_covered.push(format!(
+                    "{}, {reason} for the LED series resistor",
+                    self.describe(resistor)
+                ));
+                return;
+            }
         };
-        let expected = (supply.volts - forward_voltage_v) / resistance;
-        if supply.volts <= forward_voltage_v || !expected.is_finite() || expected <= 0.0 {
+        let expected = if supply.volts <= forward_voltage_v {
+            None
+        } else {
+            crate::diode_forward_current(
+                supply.volts,
+                resistance,
+                forward_voltage_v,
+                forward_current_ma,
+            )
+        };
+        let Some(expected) = expected else {
             self.not_covered.push(format!(
                 "{}, (Vs - Vf)/R gives no forward current: Vs {} V, Vf {} V, R {}",
                 self.describe(id),
@@ -280,38 +306,43 @@ impl<'a> Draft<'a> {
                 number(resistance)
             ));
             return;
-        }
+        };
         let band_min = round_sig(expected * 0.95, 3);
         let uncapped_max = round_sig(expected * 1.05, 3);
         let mut min = band_min;
         let mut max = uncapped_max;
-        let cap_note = if let Some(cap) = conditions.max_current_ma {
-            let cap_amps = cap / 1000.0;
-            if cap_amps < uncapped_max {
-                max = round_sig(cap_amps, 3);
-                format!("{} mA (binds; tightens the upper limit)", number(cap))
-            } else {
-                format!("{} mA (does not bind; the ±5% band is lower)", number(cap))
-            }
+        // The datasheet forward current is the rating the Vf is specified at,
+        // so it caps the band when the part declares no separate maximum.
+        let cap = conditions.max_current_ma.unwrap_or(forward_current_ma);
+        let cap_source = if conditions.max_current_ma.is_some() {
+            "operating_conditions.max_current_ma"
         } else {
-            "not declared (no cap applied)".to_string()
+            "operating_conditions.forward_current_ma (no max_current_ma declared)"
         };
-        if let Some(cap) = conditions.max_current_ma {
-            if expected > cap / 1000.0 {
-                min = round_sig(cap / 1000.0, 3);
-                max = min;
-                self.not_covered.push(format!(
-                    "{} ({part_id}), overdrive: (Vs - Vf)/R = ({} - {})/{} = {} A \
-                     exceeds max_current_ma {} mA; the drafted band is pinned to the cap \
-                     so the simulation fails",
-                    component.refdes,
-                    number(supply.volts),
-                    number(forward_voltage_v),
-                    number(resistance),
-                    number(expected),
-                    number(cap)
-                ));
-            }
+        let cap_amps = cap / 1000.0;
+        let cap_note = if cap_amps < uncapped_max {
+            max = round_sig(cap_amps, 3);
+            format!(
+                "{} mA from {cap_source} (binds; tightens the upper limit)",
+                number(cap)
+            )
+        } else {
+            format!(
+                "{} mA from {cap_source} (does not bind; the ±5% band is lower)",
+                number(cap)
+            )
+        };
+        if expected > cap_amps {
+            min = round_sig(cap_amps, 3);
+            max = min;
+            self.warnings.push(format!(
+                "overdrive: {} ({part_id}), I*R + Vf(I) = Vs gives {} A, above the {} mA \
+                 cap from {cap_source}; the drafted band is pinned to the cap so the \
+                 simulation fails",
+                component.refdes,
+                number(expected),
+                number(cap)
+            ));
         }
         if !min.is_finite() || !max.is_finite() || min <= 0.0 || min > max {
             self.not_covered.push(format!(
@@ -344,18 +375,12 @@ impl<'a> Draft<'a> {
             "#   operating_conditions.forward_current_ma = {} mA (datasheet rating)",
             number(forward_current_ma)
         );
-        let _ = writeln!(
-            comment,
-            "#   operating_conditions.max_current_ma = {cap_note}"
-        );
+        let _ = writeln!(comment, "#   current cap: {cap_note}");
         let _ = writeln!(comment, "#   datasheet: {datasheet}");
         let _ = writeln!(
             comment,
-            "#   policy: (Vs - Vf)/R = ({} - {})/{} = {} A; ±5% rounded to 3 significant \
-             digits: {band_min} A..{uncapped_max} A; final band {min} A..{max} A.",
-            number(supply.volts),
-            number(forward_voltage_v),
-            number(resistance),
+            "#   policy: I*R + Vf0 + N*Vt*ln(I/If0) = Vs gives {} A; ±5% rounded to 3 \
+             significant digits: {band_min} A..{uncapped_max} A; final band {min} A..{max} A.",
             number(expected)
         );
         if reversed {
@@ -454,27 +479,41 @@ impl<'a> Draft<'a> {
 
         self.use_components(&[top, bottom]);
         let Some(supply) = self.supply(supply_net) else {
-            // A net driven by another part is an internal node of a longer
-            // chain, not a missing `power` declaration.
-            if !self.driven_by_other_part(supply_net, top) {
+            // A net driven by another resistor is an internal node of a
+            // longer chain, not a missing `power` declaration.
+            if self.internal_chain_node(supply_net, top) {
+                self.not_covered.push(format!(
+                    "the divider {} + {}, net {} is an internal node of a longer \
+                     resistor chain; no divider measure is drafted",
+                    self.describe(top),
+                    self.describe(bottom),
+                    toml_string(&supply_name)
+                ));
+            } else {
                 self.todo_nets.insert(supply_net);
                 self.not_covered.push(format!(
-                    "{}, no declared supply on net {}",
+                    "the divider {} + {}, no declared supply on net {}",
                     self.describe(top),
+                    self.describe(bottom),
                     toml_string(&supply_name)
                 ));
             }
             return;
         };
-        let top_ohms = self.resistance(top);
-        let bottom_ohms = self.resistance(bottom);
-        let (Some(top_ohms), Some(bottom_ohms)) = (top_ohms, bottom_ohms) else {
-            let failing = if top_ohms.is_none() { top } else { bottom };
-            self.not_covered.push(format!(
-                "{}, no parseable `value` for the divider",
-                self.describe(failing)
-            ));
-            return;
+        let (top_ohms, bottom_ohms) = match (self.resistance(top), self.resistance(bottom)) {
+            (Ok(top_ohms), Ok(bottom_ohms)) => (top_ohms, bottom_ohms),
+            (Err(reason), _) => {
+                self.not_covered
+                    .push(format!("{}, {reason} for the divider", self.describe(top)));
+                return;
+            }
+            (_, Err(reason)) => {
+                self.not_covered.push(format!(
+                    "{}, {reason} for the divider",
+                    self.describe(bottom)
+                ));
+                return;
+            }
         };
         let expected = supply.volts * bottom_ohms / (top_ohms + bottom_ohms);
         let min = round_sig(expected * 0.95, 3);
@@ -639,9 +678,17 @@ impl<'a> Draft<'a> {
             ));
             return;
         }
-        let (Some(resistance), Some(capacitance)) =
-            (self.resistance(resistor), self.capacitance(capacitor))
-        else {
+        let resistance = match self.resistance(resistor) {
+            Ok(value) => value,
+            Err(reason) => {
+                self.not_covered.push(format!(
+                    "{}, {reason} for the RC filter",
+                    self.describe(resistor)
+                ));
+                return;
+            }
+        };
+        let Some(capacitance) = self.capacitance(capacitor) else {
             self.not_covered.push(format!(
                 "{}, no parseable `value` for the RC filter",
                 self.describe(resistor)
@@ -957,18 +1004,20 @@ impl<'a> Draft<'a> {
         })
     }
 
-    /// True when a part other than `exclude` connects to `net` without being a
-    /// supply source; such a net is an internal node of a longer chain.
-    fn driven_by_other_part(&self, net: NetId, exclude: ComponentId) -> bool {
+    /// True when another resistor connects to `net`; such a net is an internal
+    /// node of a longer chain, not a missing `power` declaration. A connector
+    /// or an IC pin is not a supply either, but it is not silently assumed to
+    /// be one.
+    fn internal_chain_node(&self, net: NetId, exclude: ComponentId) -> bool {
         let Some(net) = self.design.net(net) else {
             return false;
         };
         net.endpoints.iter().any(|endpoint| {
             endpoint.component != exclude
-                && !self
+                && self
                     .design
-                    .pin(endpoint.component, endpoint.pin)
-                    .is_some_and(|pin| pin.electrical_type == ElectricalType::PowerOutput)
+                    .component(endpoint.component)
+                    .is_some_and(|component| is_kind(component, "resistor"))
         })
     }
 
@@ -1000,9 +1049,14 @@ impl<'a> Draft<'a> {
             .unwrap_or("")
     }
 
-    fn resistance(&self, component: ComponentId) -> Option<f64> {
-        let value = parse_resistance(self.value(component))?;
-        (value.is_finite() && value > 0.0).then_some(value)
+    fn resistance(&self, component: ComponentId) -> Result<f64, &'static str> {
+        let Some(value) = parse_resistance(self.value(component)) else {
+            return Err("no parseable `value`");
+        };
+        if !value.is_finite() || value <= 0.0 {
+            return Err("the value must be positive and finite");
+        }
+        Ok(value)
     }
 
     fn capacitance(&self, component: ComponentId) -> Option<f64> {

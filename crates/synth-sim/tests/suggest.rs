@@ -474,6 +474,22 @@ board "led-board" {
 }
 "#;
 
+fn led_board_with(volts: &str, resistor: &str) -> synth_ir::Board {
+    board(&format!(
+        r#"
+board "led-board" {{
+  layers 2
+  component R1: resistor "r_generic_0805" value "{resistor}"
+  component LED1: led "ltst_c190krkt"
+  power "VCC" {volts}
+  net "VCC" {{ R1.p1 }}
+  net "GND" {{ LED1.cathode }}
+  connect R1.p2 -> LED1.anode as "MID"
+}}
+"#
+    ))
+}
+
 /// The band comes from the design resistor and the registry forward voltage,
 /// so a board that is not the reference 150 ohm one still passes.
 #[test]
@@ -513,6 +529,40 @@ fn a_suggested_led_testbench_passes_a_1k_12v_board() {
 }
 
 #[test]
+fn a_suggested_led_testbench_passes_every_good_board_on_real_ngspice() {
+    let Some(ngspice) = real_ngspice() else {
+        eprintln!("{}", real_ngspice_support::SKIP_MESSAGE);
+        return;
+    };
+    // The registry Vf is the value at `forward_current_ma`; the model's Vf is
+    // lower at low current, so the band must come from the diode equation.
+    for (volts, resistor) in [
+        ("5v", "3.3k"),
+        ("5v", "10k"),
+        ("3.3v", "1k"),
+        ("2.5v", "1k"),
+        ("5v", "330"),
+        ("12v", "1k"),
+    ] {
+        let board = led_board_with(volts, resistor);
+        let (toml, not_covered) = suggestion(&board);
+        assert!(
+            not_covered.is_empty(),
+            "{volts}/{resistor}: {not_covered:?}"
+        );
+        let testbench = synth_sim::Testbench::from_toml(&toml).expect("suggested sidecar");
+
+        let report = simulate_suggested(&board, &testbench, &ngspice);
+
+        assert!(
+            report.passed(),
+            "{volts}/{resistor} should pass: {:?}",
+            report.measures
+        );
+    }
+}
+
+#[test]
 fn an_overdriven_led_drafts_a_band_that_fails_and_says_overdrive() {
     let Some(ngspice) = real_ngspice() else {
         eprintln!("{}", real_ngspice_support::SKIP_MESSAGE);
@@ -523,18 +573,21 @@ fn an_overdriven_led_drafts_a_band_that_fails_and_says_overdrive() {
         .replace("power \"VCC\" 5v", "power \"VCC\" 24v");
     assert_ne!(source, LED_BOARD);
     let board = board(&source);
-    let (toml, not_covered) = suggestion(&board);
+    let suggestion = synth_sim::suggest_testbench(&board);
+    let toml = suggestion.toml.expect("a testbench was suggested");
     let testbench = synth_sim::Testbench::from_toml(&toml).expect("suggested sidecar");
     let iled = measure(&testbench, "iled");
     assert_eq!(iled.min, Some(0.025), "{toml}");
     assert_eq!(iled.max, Some(0.025), "{toml}");
     // The comment must still cite the real ±5% band, not the pinned limit.
-    assert!(toml.contains("2.09 A..2.31 A"), "{toml}");
+    assert!(toml.contains("2.07 A..2.28 A"), "{toml}");
     assert!(
-        not_covered
+        suggestion
+            .warnings
             .iter()
             .any(|line| line.contains("overdrive") && line.contains("LED1")),
-        "{not_covered:?}"
+        "{:?}",
+        suggestion.warnings
     );
 
     let report = simulate_suggested(&board, &testbench, &ngspice);
@@ -618,6 +671,166 @@ board "chain" {
         "{:?}",
         suggestion.not_covered
     );
+    assert!(
+        suggestion.not_covered.iter().any(|line| line.contains("R2")
+            && line.contains("R3")
+            && line.contains("MID1")
+            && line.contains("internal node")),
+        "{:?}",
+        suggestion.not_covered
+    );
+}
+
+/// A connector is not a declared supply: the divider fed from it must be
+/// reported, never dropped silently.
+#[test]
+fn a_divider_fed_from_a_connector_is_reported_not_dropped_silently() {
+    let board = board(
+        r#"
+board "connector-divider" {
+  layers 2
+  component J1: connector "jst_xh_2pin"
+  component R1: resistor "r_generic_0805" value "10k"
+  component R2: resistor "r_generic_0805" value "10k"
+  net "VIN" { J1.p1, R1.p1 }
+  net "GND" { J1.p2, R2.p2 }
+  connect R1.p2 -> R2.p1 as "MID"
+}
+"#,
+    );
+
+    let suggestion = synth_sim::suggest_testbench(&board);
+
+    assert!(suggestion.toml.is_none(), "{:?}", suggestion.toml);
+    assert!(
+        suggestion
+            .not_covered
+            .iter()
+            .any(|line| line.contains("VIN")
+                && line.contains("R1")
+                && line.contains("R2")
+                && line.contains("no declared supply")),
+        "{:?}",
+        suggestion.not_covered
+    );
+}
+
+/// Without `max_current_ma` the datasheet forward current is the cap, so an
+/// overdriven board still fails its own draft.
+#[test]
+fn without_max_current_the_forward_current_caps_the_band() {
+    let source = LED_BOARD
+        .replace("value \"330\"", "value \"10\"")
+        .replace("power \"VCC\" 5v", "power \"VCC\" 24v");
+    let board = board_with_registry(&source, |registry| {
+        let mut part = registry
+            .lookup("ltst_c190krkt")
+            .expect("ltst_c190krkt")
+            .clone();
+        part.operating_conditions
+            .as_mut()
+            .expect("operating conditions")
+            .max_current_ma = None;
+        registry.insert(part);
+    });
+
+    let suggestion = synth_sim::suggest_testbench(&board);
+    let toml = suggestion.toml.expect("a testbench was suggested");
+    let testbench = synth_sim::Testbench::from_toml(&toml).expect("suggested sidecar");
+    let iled = measure(&testbench, "iled");
+    assert_eq!(iled.min, Some(0.02), "{toml}");
+    assert_eq!(iled.max, Some(0.02), "{toml}");
+    assert!(
+        suggestion
+            .warnings
+            .iter()
+            .any(|line| line.contains("overdrive") && line.contains("LED1")),
+        "{:?}",
+        suggestion.warnings
+    );
+}
+
+#[test]
+fn without_a_forward_current_the_led_is_not_covered() {
+    let board = board_with_registry(LED_BOARD, |registry| {
+        let mut part = registry
+            .lookup("ltst_c190krkt")
+            .expect("ltst_c190krkt")
+            .clone();
+        let conditions = part
+            .operating_conditions
+            .as_mut()
+            .expect("operating conditions");
+        conditions.forward_current_ma = None;
+        conditions.max_current_ma = None;
+        registry.insert(part);
+    });
+
+    let suggestion = synth_sim::suggest_testbench(&board);
+
+    assert!(suggestion.toml.is_none(), "{:?}", suggestion.toml);
+    assert!(
+        suggestion
+            .not_covered
+            .iter()
+            .any(|line| line.contains("LED1") && line.contains("forward_current_ma")),
+        "{:?}",
+        suggestion.not_covered
+    );
+}
+
+/// Two LEDs sharing a resistor split its current; a single-LED band would
+/// fail a valid board, so neither is drafted.
+#[test]
+fn two_leds_sharing_a_resistor_are_not_covered() {
+    let board = board(
+        r#"
+board "shared-resistor" {
+  layers 2
+  component R1: resistor "r_generic_0805" value "150"
+  component LED1: led "ltst_c190krkt"
+  component LED2: led "ltst_c190krkt"
+  power "VCC" 5v
+  net "VCC" { R1.p1 }
+  net "GND" { LED1.cathode, LED2.cathode }
+  connect R1.p2 -> LED1.anode as "MID"
+  connect R1.p2 -> LED2.anode as "MID"
+}
+"#,
+    );
+
+    let suggestion = synth_sim::suggest_testbench(&board);
+
+    assert!(suggestion.toml.is_none(), "{:?}", suggestion.toml);
+    for led in ["LED1", "LED2"] {
+        assert!(
+            suggestion.not_covered.iter().any(|line| line.contains(led)),
+            "{led} is not mentioned: {:?}",
+            suggestion.not_covered
+        );
+    }
+}
+
+/// A value that parses but is zero or negative is a different problem from an
+/// unparseable one, and the message must say which.
+#[test]
+fn a_zero_or_negative_series_resistor_says_the_value_must_be_positive() {
+    for value in ["0", "-10"] {
+        let source = LED_BOARD.replace("value \"330\"", &format!("value \"{value}\""));
+        assert_ne!(source, LED_BOARD);
+        let board = board(&source);
+
+        let suggestion = synth_sim::suggest_testbench(&board);
+
+        assert!(suggestion.toml.is_none(), "{value}: {:?}", suggestion.toml);
+        let line = suggestion
+            .not_covered
+            .iter()
+            .find(|line| line.contains("LED series resistor"))
+            .unwrap_or_else(|| panic!("{value}: no resistor line in {:?}", suggestion.not_covered));
+        assert!(line.contains("value must be positive"), "{line}");
+        assert!(!line.contains("no parseable"), "{line}");
+    }
 }
 
 /// The ticket rule is "no `reviewed_by` means UNREVIEWED", so a part with no
@@ -770,6 +983,35 @@ fn a_suggested_led_testbench_fails_the_wrong_resistor() {
     let report = simulate_suggested(&board(&mutated), &testbench, &ngspice);
 
     assert_out_of_limit(&report, "iled", "above max");
+}
+
+/// The four fault injections from the review: 33 ohm, 2x R and R/2 all move
+/// the current outside the band (the reversed LED is a separate test).
+#[test]
+fn suggested_led_limits_still_catch_33_ohm_2x_and_half_the_resistor() {
+    let Some(ngspice) = real_ngspice() else {
+        eprintln!("{}", real_ngspice_support::SKIP_MESSAGE);
+        return;
+    };
+    let design = example_dir("led").join("led.synth");
+    let source = std::fs::read_to_string(&design).expect("read design");
+    let (toml, _) = suggestion(&board(&source));
+    let testbench = synth_sim::Testbench::from_toml(&toml).expect("suggested sidecar");
+
+    for (fault, value) in [("33 ohm", "33"), ("2x R", "300"), ("R/2", "75")] {
+        let mutated = source.replace("value \"150\"", &format!("value \"{value}\""));
+        assert_ne!(
+            mutated, source,
+            "the fixture must have the 150 ohm resistor"
+        );
+        let report = simulate_suggested(&board(&mutated), &testbench, &ngspice);
+
+        assert!(
+            !report.passed(),
+            "{fault} should fail: {:?}",
+            report.measures
+        );
+    }
 }
 
 /// A reversed LED draws no forward current, so the suggested minimum fails.

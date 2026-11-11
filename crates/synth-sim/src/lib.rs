@@ -1924,6 +1924,48 @@ const DIODE_EMISSION_COEFFICIENT: f64 = 2.0;
 /// kT/q at ngspice's default 27 °C, in volts.
 const THERMAL_VOLTAGE_27C: f64 = 0.025_864_925_786_328_753;
 
+/// The forward current the built-in diode model draws when `supply` volts drive
+/// `resistance` into a diode specified by its registry forward point.
+///
+/// Solves `I*R + Vf0 + N*Vt*ln(I/If0) = Vs` by bisection. The fixed-point form
+/// of this equation diverges when the resistor is tiny; sharing the lookup
+/// keeps `suggest` and the emitted model on the same constants.
+pub(crate) fn diode_forward_current(
+    supply: f64,
+    resistance: f64,
+    forward_voltage: f64,
+    forward_current_ma: f64,
+) -> Option<f64> {
+    let forward_current = forward_current_ma / 1000.0;
+    if !(supply.is_finite()
+        && supply > 0.0
+        && resistance.is_finite()
+        && resistance > 0.0
+        && forward_voltage.is_finite()
+        && forward_voltage > 0.0
+        && forward_current.is_finite()
+        && forward_current > 0.0)
+    {
+        return None;
+    }
+    let thermal = DIODE_EMISSION_COEFFICIENT * THERMAL_VOLTAGE_27C;
+    // The diode voltage rises with the log of the current, so the equation is
+    // monotone: the root lies in 0 .. Vs/R, where Vs/R is the short-circuit
+    // current and the diode drop is positive.
+    let mut low = 0.0;
+    let mut high = supply / resistance;
+    for _ in 0..100 {
+        let mid = f64::midpoint(low, high);
+        if mid * resistance + forward_voltage + thermal * (mid / forward_current).ln() > supply {
+            high = mid;
+        } else {
+            low = mid;
+        }
+    }
+    let current = f64::midpoint(low, high);
+    (current.is_finite() && current > 0.0).then_some(current)
+}
+
 fn model_for(component: &Component) -> Result<Model, String> {
     // A registry `[spice]` table wins over every built-in model, so any
     // kind (a diode, a regulator) can carry a real subcircuit.

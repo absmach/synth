@@ -60,13 +60,17 @@ synth sim --suggest --force /tmp/divider.synth
 
 The v1 shapes are:
 
-- **LED plus series resistor.** The current band is `(Vs - Vf) / R` ±5%,
-  where `Vs` is the supply net voltage, `Vf` is
-  `operating_conditions.forward_voltage_v` and `R` is the design series
-  resistor's `value`, with the upper limit capped by `max_current_ma` when the
-  part declares it. A part without `forward_voltage_v` gets no measure. When
-  the expected current is above `max_current_ma`, the drafted band is pinned to
-  the cap so the simulation fails, and the stderr line contains `overdrive`.
+- **LED plus series resistor.** The current band is the built-in diode
+  equation `I*R + Vf0 + N*Vt*ln(I/If0) = Vs` ±5%, where `Vs` is the supply net
+  voltage, `Vf0`/`If0` are `operating_conditions.forward_voltage_v`/`_current_ma`
+  and `R` is the design series resistor's `value`. The registry Vf is the value
+  at `If0`, while the model's Vf is lower at low current, so a fixed
+  `(Vs - Vf)/R` band would sit too low. The
+  upper limit is capped by `max_current_ma`, or by `forward_current_ma` when the
+  part declares no separate maximum. A part without `forward_voltage_v` or
+  `forward_current_ma` gets no measure (the built-in model needs both). When the
+  expected current is above the cap, the drafted band is pinned to the cap so
+  the simulation fails, and the stderr line starts with `overdrive:`.
   The LED part must carry a non-empty `[provenance].datasheet_url`; otherwise
   no measure is drafted. The measure comment names the resistor, the part id,
   the operating conditions and the datasheet URL. A part without `reviewed_by`
@@ -94,17 +98,20 @@ missing model is a known gap.
 
 When a net has no declared supply, the number is never defaulted. If another
 shape drafts at least one measure, the file carries a `# TODO` naming that net
-and the `power "<net>" <voltage>` line to add. If no measure can be drafted at
-all, no file is written, the reason goes to stderr as a `not covered` line and
-the command still exits 0; callers must check that the file exists.
+and the `power "<net>" <voltage>` line to add. A net driven by another resistor
+is an internal node of a longer chain: it gets no TODO, but the divider is
+reported as not covered. If no measure can be drafted at all, no file is
+written, the reason goes to stderr as a `not covered` line and the command still
+exits 0; callers must check that the file exists.
 
 A supply used for an `ac` shape is the AC magnitude too; the corner is
 independent of the drive level. Anything the draft does not cover is printed
 to stderr as `not covered: <reason>` (a part with no datasheet, a part that is
-not one of the shapes, an RC corner that cannot share the file, …). A design
-with none of the shapes writes no file and says so. One analysis is selected
-per testbench: op shapes (LED, divider) win, and an RC shape is then listed as
-not covered because an `op` and an `ac` measure cannot share one file.
+not one of the shapes, an RC corner that cannot share the file, …). A drafted
+overdriven LED is a warning printed as `overdrive:`, not a not-covered line. A
+design with none of the shapes writes no file and says so. One analysis is
+selected per testbench: op shapes (LED, divider) win, and an RC shape is then
+listed as not covered because an `op` and an `ac` measure cannot share one file.
 
 The generated values are a starting point. Review every limit against the
 datasheet before relying on a passing simulation.
