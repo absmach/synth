@@ -1,8 +1,9 @@
 // SPDX-License-Identifier: Apache-2.0
 
 //! The one lookup used by tests that need the real engine: `NGSPICE`, then
-//! `PATH`, then `/usr/bin/ngspice`. Tests use the same order the tool does,
-//! so a failing lookup names every place that was searched.
+//! `PATH`, then `/usr/bin/ngspice`. The tests add that last fallback; the tool
+//! uses only `NGSPICE`, then `PATH`, so a failing lookup names every place the
+//! tests searched.
 
 use std::path::{Path, PathBuf};
 

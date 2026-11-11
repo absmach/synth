@@ -51,6 +51,12 @@ fn main() {
             let _ = std::io::stdout().flush();
         }
         "ok" => replay(&fixtures, "divider-op", 0),
+        // Named `marker.ran`, not `marker`: the stub itself is the executable
+        // `marker`, so a marker at that path would always exist.
+        "marker" => {
+            let _ = std::fs::write(dir.join("marker.ran"), "");
+            replay(&fixtures, "divider-op", 0)
+        }
         "led" => replay(&fixtures, "led-op", 0),
         "diode" => replay(&fixtures, "diode-op", 0),
         "ldo" => replay(&fixtures, "ldo-op", 0),

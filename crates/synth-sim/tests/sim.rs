@@ -1523,6 +1523,91 @@ fn ldo_matches_real_ngspice() {
     );
 }
 
+const LDO_MODEL_BODY: &str = "Vref vout int 3.3\nRout int gnd {rout}\n.ends\n";
+
+/// Run the LDO board against a scratch registry model written in `text`.
+/// `None` when real ngspice is not installed.
+fn ldo_model_report(label: &str, text: &str) -> Option<synth_sim::SimReport> {
+    let ngspice = real_ngspice()?;
+    let scratch = Scratch::new(label);
+    model_file(scratch.path(), label, text);
+    let board = patched_ams1117(|spice| spice.file = label.to_string());
+    let testbench = testbench(LDO_TB);
+    Some(synth_sim::simulate(
+        &board,
+        &testbench,
+        &synth_sim::SimOptions {
+            ngspice: Some(ngspice),
+            design_path: Some(PathBuf::from("ldo.synth")),
+            testbench_path: Some(PathBuf::from("ldo.sim.toml")),
+            registry_dirs: vec![scratch.path().to_path_buf()],
+        },
+    ))
+}
+
+fn assert_ldo_vout(report: &synth_sim::SimReport) {
+    assert!(report.passed(), "diagnostics: {:?}", report.diagnostics);
+    let vout = report.measures[0].value;
+    assert!(
+        (vout - 3.29967).abs() < 5e-4,
+        "vout {vout} should be about 3.29967 V"
+    );
+}
+
+#[test]
+fn a_subckt_with_an_inline_semicolon_comment_matches_real_ngspice() {
+    let Some(report) = ldo_model_report(
+        "semicolon.lib",
+        &format!(
+            ".subckt ams1117_3v3 vin gnd vout ; comment\n+ params: rout=50m\n{LDO_MODEL_BODY}"
+        ),
+    ) else {
+        eprintln!("{}", real_ngspice_support::SKIP_MESSAGE);
+        return;
+    };
+    assert_ldo_vout(&report);
+}
+
+#[test]
+fn a_subckt_with_an_inline_dollar_comment_matches_real_ngspice() {
+    let Some(report) = ldo_model_report(
+        "dollar.lib",
+        &format!(
+            ".subckt ams1117_3v3 vin gnd vout $ comment\n+ params: rout=50m\n{LDO_MODEL_BODY}"
+        ),
+    ) else {
+        eprintln!("{}", real_ngspice_support::SKIP_MESSAGE);
+        return;
+    };
+    assert_ldo_vout(&report);
+}
+
+#[test]
+fn a_subckt_with_a_star_comment_before_continuation_matches_real_ngspice() {
+    let Some(report) = ldo_model_report(
+        "star_comment.lib",
+        &format!(
+            ".subckt ams1117_3v3 vin gnd\n* comment\n+ vout params: rout=50m\n{LDO_MODEL_BODY}"
+        ),
+    ) else {
+        eprintln!("{}", real_ngspice_support::SKIP_MESSAGE);
+        return;
+    };
+    assert_ldo_vout(&report);
+}
+
+#[test]
+fn a_subckt_with_a_blank_line_before_continuation_matches_real_ngspice() {
+    let Some(report) = ldo_model_report(
+        "blank_line.lib",
+        &format!(".subckt ams1117_3v3 vin gnd\n\n+ vout params: rout=50m\n{LDO_MODEL_BODY}"),
+    ) else {
+        eprintln!("{}", real_ngspice_support::SKIP_MESSAGE);
+        return;
+    };
+    assert_ldo_vout(&report);
+}
+
 #[test]
 fn a_bad_spice_pin_order_gives_002_naming_the_part() {
     for pin_order in [
@@ -1689,6 +1774,15 @@ fn mixed_spice_dialects_give_002_naming_both_parts() {
             }),
             "{first:?} + {second:?}: {diagnostics:?}"
         );
+        let conflict = diagnostics
+            .iter()
+            .find(|diagnostic| diagnostic.code == synth_sim::E_SYNTH_SIM_002)
+            .and_then(|diagnostic| diagnostic.message.as_deref())
+            .expect("dialect conflict message");
+        if first.is_none() || second.is_none() {
+            assert!(conflict.contains("uses no `dialect`"), "{conflict}");
+            assert!(!conflict.contains("`none`"), "{conflict}");
+        }
     }
 }
 
@@ -2187,10 +2281,26 @@ fn a_relative_db_measure_requires_a_source_with_ac() {
     .expect_err("relative_db needs an ac source");
     assert_eq!(error.code, synth_sim::E_SYNTH_SIM_007);
     assert!(
-        error
-            .message
-            .as_deref()
-            .is_some_and(|message| message.contains("relative_db needs a source with `ac`")),
+        error.message.as_deref().is_some_and(
+            |message| message.contains("relative_db needs a source with a non-zero `ac`")
+        ),
+        "{error:?}"
+    );
+}
+
+#[test]
+fn a_relative_db_measure_requires_a_non_zero_ac_source() {
+    let testbench = tb_with(
+        "[analysis.ac]\nstart = 10\nstop = 1000",
+        "[[measure]]\nname = \"f\"\nkind = \"relative_db\"\nnode = \"MID\"",
+    )
+    .replace("dc = 5.0", "dc = 5.0\nac = 0.0");
+    let error = synth_sim::Testbench::from_toml(&testbench).expect_err("ac = 0 is no sweep");
+    assert_eq!(error.code, synth_sim::E_SYNTH_SIM_007);
+    assert!(
+        error.message.as_deref().is_some_and(
+            |message| message.contains("relative_db needs a source with a non-zero `ac`")
+        ),
         "{error:?}"
     );
 }

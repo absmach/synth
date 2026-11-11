@@ -276,6 +276,26 @@ fn the_schema_does_not_let_a_caller_choose_the_executable() {
 }
 
 #[test]
+fn an_ngspice_path_argument_cannot_choose_the_executable() {
+    if real_ngspice_support::real_ngspice().is_none() {
+        eprintln!("{}", real_ngspice_support::SKIP_MESSAGE);
+        return;
+    }
+    let design = design_dir(DIVIDER_TB);
+    let (stub, stub_dir) = stub_ngspice("marker");
+    let marker = stub_dir.path().join("marker.ran");
+    synth_mcp::set_test_ngspice(None);
+    let mut arguments = args(design.path());
+    arguments["ngspice_path"] = json!(stub.display().to_string());
+
+    let result = synth_mcp::call_tool("synth_simulate", &arguments, None)
+        .expect("the tool returns a result");
+
+    assert_eq!(result["passed"], true, "{result}");
+    assert!(!marker.exists(), "the tool ran the ngspice_path argument");
+}
+
+#[test]
 fn compile_warnings_are_returned_with_a_passing_simulation() {
     let design = design_dir_with(WARNED_DIVIDER, DIVIDER_TB);
     let (stub, _stub_dir) = stub_ngspice("ok");

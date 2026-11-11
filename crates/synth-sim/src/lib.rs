@@ -378,9 +378,14 @@ impl Testbench {
                     measure.name
                 )));
             }
-            if requires_ac && !self.source.iter().any(|source| source.ac.is_some()) {
+            if requires_ac
+                && !self
+                    .source
+                    .iter()
+                    .any(|source| source.ac.is_some_and(|ac| ac > 0.0))
+            {
                 return Err(testbench_error(format!(
-                    "measure `{}`: relative_db needs a source with `ac`",
+                    "measure `{}`: relative_db needs a source with a non-zero `ac`",
                     measure.name
                 )));
             }
@@ -1184,8 +1189,9 @@ fn emit_deck(
                     diagnostics.push(no_model_error(
                         component,
                         &format!(
-                            "SPICE dialect `{}` conflicts with `{known_refdes}` \
-                             (`{known_part}`) using `{}`; all parts in one run must agree",
+                            "SPICE dialect conflict: `{}` uses {}, `{known_refdes}` \
+                             (`{known_part}`) uses {}; all parts in one run must agree",
+                            component.refdes,
                             dialect_name(dialect),
                             dialect_name(*known)
                         ),
@@ -1480,8 +1486,11 @@ fn resolve_plot_path(plot: &str, testbench_path: Option<&Path>) -> Result<PathBu
 }
 
 /// The dialect's TOML spelling; a part without one is its own (native) mode.
-fn dialect_name(dialect: Option<SpiceDialect>) -> &'static str {
-    dialect.map_or("none", SpiceDialect::name)
+fn dialect_name(dialect: Option<SpiceDialect>) -> String {
+    dialect.map_or_else(
+        || "no `dialect`".to_string(),
+        |dialect| format!("`{}`", dialect.name()),
+    )
 }
 
 /// Map a part's `[spice] pin_order` to pin indexes, in subcircuit terminal
@@ -1636,14 +1645,27 @@ fn check_model_file(path: &Path, spice: &SpiceModel) -> Result<(), String> {
     Ok(())
 }
 
+/// Strip a SPICE inline comment: from `;` anywhere, or from `$` that follows
+/// whitespace.
+fn strip_inline_comment(line: &str) -> &str {
+    let mut after_whitespace = false;
+    for (index, character) in line.char_indices() {
+        if character == ';' || (character == '$' && after_whitespace) {
+            return &line[..index];
+        }
+        after_whitespace = character.is_whitespace();
+    }
+    line
+}
+
 /// Count the terminal names on a `.subckt` declaration. Terminals end at an
 /// explicit `params:` or the first `name=value` parameter, and a `+` line
 /// continues the declaration. `None` means the subcircuit is not defined.
 fn subckt_terminal_count(text: &str, subckt: &str) -> Option<usize> {
     let mut lines = text.lines();
     while let Some(line) = lines.next() {
-        let trimmed = line.trim_start();
-        if trimmed.starts_with('*') {
+        let trimmed = strip_inline_comment(line).trim_start();
+        if trimmed.is_empty() || trimmed.starts_with('*') {
             continue;
         }
         let mut tokens = trimmed.split_whitespace();
@@ -1678,7 +1700,11 @@ fn subckt_terminal_count(text: &str, subckt: &str) -> Option<usize> {
             let Some(continuation) = lines.next() else {
                 break;
             };
-            let Some(rest) = continuation.trim_start().strip_prefix('+') else {
+            let continuation = strip_inline_comment(continuation).trim_start();
+            if continuation.is_empty() || continuation.starts_with('*') {
+                continue;
+            }
+            let Some(rest) = continuation.strip_prefix('+') else {
                 break;
             };
             for token in rest.split_whitespace() {
