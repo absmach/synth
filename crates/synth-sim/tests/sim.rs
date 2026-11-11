@@ -1277,6 +1277,83 @@ fn a_limit_diagnostic_points_at_its_measure_block() {
     }
 }
 
+/// `[[ measure ]]` with spaces is valid TOML; the span must still cover the
+/// block, and a per-measure `-003` must point at it.
+#[test]
+fn a_spaced_measure_header_gets_its_span_and_003_points_at_it() {
+    // The first, spaced header must own its block; the second header is the
+    // exact spelling that the old text scan matched, so a slip would point the
+    // first measure at the second block.
+    let source = format!(
+        "{}\n[[measure]]\nname = \"other\"\nkind = \"node_voltage\"\nnode = \"MID\"\n\
+         min = 0.0\nmax = 10.0\n",
+        DIVIDER_TB.replace("[[measure]]", "[[ measure ]]")
+    );
+    let board = board(DIVIDER);
+    let testbench = testbench(&source);
+    let measure = &testbench.measure[0];
+    assert!(!measure.span.is_empty(), "span: {:?}", measure.span);
+    let block = &source[measure.span.byte_start as usize..measure.span.byte_end as usize];
+    assert!(block.starts_with("[[ measure ]]"), "{block}");
+    assert!(block.contains("name = \"vmid\""), "{block}");
+    assert!(!block.contains("name = \"other\""), "{block}");
+
+    let (stub, _dir) = stub_ngspice("missing-meas");
+    let options = synth_sim::SimOptions {
+        testbench_path: Some(PathBuf::from("spaced.sim.toml")),
+        ..options(&stub)
+    };
+    let report = synth_sim::simulate(&board, &testbench, &options);
+
+    let diagnostic = report
+        .diagnostics
+        .iter()
+        .find(|diagnostic| {
+            diagnostic.code == synth_sim::E_SYNTH_SIM_003
+                && diagnostic
+                    .message
+                    .as_deref()
+                    .is_some_and(|message| message.contains("vmid"))
+        })
+        .unwrap_or_else(|| panic!("no per-measure -003 in {:?}", report.diagnostics));
+    let location = diagnostic.location.as_ref().expect("location");
+    assert_eq!(location.file, "spaced.sim.toml");
+    assert_eq!(location.span, measure.span);
+}
+
+/// A `-007` about one measure points at that `[[measure]]` block, not 0-0.
+#[test]
+fn a_per_measure_007_points_at_its_measure_block() {
+    let source = DIVIDER_TB.replace("node = \"MID\"", "node = \"MISSING\"");
+    assert_ne!(source, DIVIDER_TB);
+    let board = board(DIVIDER);
+    let testbench = testbench(&source);
+    let options = synth_sim::SimOptions {
+        design_path: Some(PathBuf::from("spanned.synth")),
+        testbench_path: Some(PathBuf::from("spanned.sim.toml")),
+        ..synth_sim::SimOptions::default()
+    };
+
+    let report = synth_sim::simulate(&board, &testbench, &options);
+
+    let diagnostic = report
+        .diagnostics
+        .iter()
+        .find(|diagnostic| {
+            diagnostic.code == synth_sim::E_SYNTH_SIM_007
+                && diagnostic
+                    .message
+                    .as_deref()
+                    .is_some_and(|message| message.contains("MISSING"))
+        })
+        .unwrap_or_else(|| panic!("no -007 in {:?}", report.diagnostics));
+    let location = diagnostic.location.as_ref().expect("location");
+    assert_eq!(location.file, "spanned.sim.toml");
+    let block = &source[location.span.byte_start as usize..location.span.byte_end as usize];
+    assert!(block.starts_with("[[measure]]"), "{block}");
+    assert!(block.contains("name = \"vmid\""), "{block}");
+}
+
 #[test]
 fn missing_done_sentinel_gives_003() {
     let board = board(DIVIDER);
@@ -2416,6 +2493,33 @@ fn an_at_frequency_measure_is_validated() {
             .is_some_and(|message| message.contains("non-zero `ac`")),
         "{error:?}"
     );
+}
+
+/// ngspice only reports an out-of-range `at` as `find(AT) : out of interval`.
+/// Catch it at load time and name the measure and the sweep instead.
+#[test]
+fn an_at_frequency_outside_the_sweep_gives_007() {
+    let ac = "[analysis.ac]\nstart = 10\nstop = 1000";
+    for (label, frequency) in [("above stop", 2000.0), ("below start", 1.0)] {
+        let text = tb_with(
+            ac,
+            &format!(
+                "[[measure]]\nname = \"g\"\nkind = \"node_voltage\"\nnode = \"MID\"\n\
+                 at_frequency = {frequency}"
+            ),
+        )
+        .replace("dc = 5.0", "dc = 5.0\nac = 1.0");
+        let error = synth_sim::Testbench::from_toml(&text).expect_err(label);
+        assert_eq!(error.code, synth_sim::E_SYNTH_SIM_007, "{label}");
+        assert!(
+            error
+                .message
+                .as_deref()
+                .is_some_and(|message| message.contains("`g`")
+                    && message.contains("outside the ac sweep 10-1000 Hz")),
+            "{label}: {error:?}"
+        );
+    }
 }
 
 /// A current measure names the Synth part; the deck saves and reads the

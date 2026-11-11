@@ -517,6 +517,202 @@ board "led_indicator" {
     assert!(report.passed(), "diagnostics: {:?}", report.diagnostics);
 }
 
+/// A value typo is not a missing model: ignoring the part would hide the
+/// broken value, so `--suggest` must leave it in the deck and `sim` must fail
+/// `-002`, naming the part and the value.
+#[test]
+fn a_capacitor_value_typo_is_not_ignored_and_fails_002() {
+    let board = board(
+        r#"
+board "bad-cap" {
+  layers 2
+  component R1: resistor "r_generic_0805" value "330"
+  component LED1: led "ltst_c190krkt"
+  component C1: capacitor "c_generic_0805" value "10uu"
+  power "VCC" 5v
+  net "VCC" { R1.p1, C1.p1 }
+  net "GND" { LED1.cathode, C1.p2 }
+  connect R1.p2 -> LED1.anode as "MID"
+}
+"#,
+    );
+    let (toml, _) = suggestion(&board);
+    assert!(!toml.contains("ignore ="), "{toml}");
+    let testbench = synth_sim::Testbench::from_toml(&toml).expect("suggested sidecar");
+
+    let report = synth_sim::simulate(
+        &board,
+        &testbench,
+        &synth_sim::SimOptions {
+            ngspice: Some(PathBuf::from("/nonexistent/ngspice")),
+            ..synth_sim::SimOptions::default()
+        },
+    );
+
+    assert!(!report.passed(), "{:?}", report.measures);
+    let message = report
+        .diagnostics
+        .iter()
+        .find(|diagnostic| diagnostic.code == synth_sim::E_SYNTH_SIM_002)
+        .and_then(|diagnostic| diagnostic.message.as_deref())
+        .unwrap_or_else(|| panic!("no -002 in {:?}", report.diagnostics));
+    assert!(
+        message.contains("C1") && message.contains("10uu"),
+        "{message}"
+    );
+    assert!(!message.contains("ignore"), "{message}");
+}
+
+const REGULATOR_INPUT_CAP_BOARD: &str = r#"
+board "regulator-input-cap" {
+  layers 2
+  component U1: regulator "ams1117_5v"
+  component C1: capacitor "c_generic_0805" value "10u"
+  component R1: resistor "r_generic_0805" value "150"
+  component D1: led "ltst_c190krkt"
+  power "VIN" 12v
+  net "VIN" { U1.vin, C1.p1 }
+  net "GND" { U1.gnd, C1.p2, D1.cathode }
+  connect U1.vout -> R1.p1 as "VOUT"
+  connect R1.p2 -> D1.anode as "MID"
+}
+"#;
+
+/// The regulator is replaced by the testbench source, which leaves its input
+/// cap alone on a dead `VIN` node. The draft must ignore that cap too, with a
+/// reason, so the suggested file runs straight away.
+#[test]
+fn a_suggested_sidecar_ignores_an_input_cap_on_the_ignored_regulator_rail() {
+    let Some(ngspice) = real_ngspice() else {
+        eprintln!("{}", real_ngspice_support::SKIP_MESSAGE);
+        return;
+    };
+    let board = board(REGULATOR_INPUT_CAP_BOARD);
+    let (toml, _) = suggestion(&board);
+    assert!(toml.contains("ignore = [\"C1\", \"U1\"]"), "{toml}");
+    assert!(
+        toml.contains(
+            "# ignore: C1 (c_generic_0805): every net it connects to is driven only by ignored parts."
+        ),
+        "{toml}"
+    );
+    let testbench = synth_sim::Testbench::from_toml(&toml).expect("suggested sidecar");
+
+    let report = simulate_suggested(&board, &testbench, &ngspice);
+
+    assert!(report.passed(), "diagnostics: {:?}", report.diagnostics);
+}
+
+/// The same dead-rail cap appears when a connector is the ignored part.
+#[test]
+fn a_suggested_sidecar_ignores_an_input_cap_next_to_an_ignored_connector() {
+    let Some(ngspice) = real_ngspice() else {
+        eprintln!("{}", real_ngspice_support::SKIP_MESSAGE);
+        return;
+    };
+    let board = board(
+        r#"
+board "connector-input-cap" {
+  layers 2
+  component J1: connector "jst_ph_2pin"
+  component C1: capacitor "c_generic_0805" value "10u"
+  component U1: regulator "ams1117_5v"
+  component R1: resistor "r_generic_0805" value "150"
+  component D1: led "ltst_c190krkt"
+  power "VIN" 12v
+  net "VIN" { J1.p1, C1.p1, U1.vin }
+  net "GND" { J1.p2, C1.p2, U1.gnd, D1.cathode }
+  connect U1.vout -> R1.p1 as "VOUT"
+  connect R1.p2 -> D1.anode as "MID"
+}
+"#,
+    );
+    let (toml, _) = suggestion(&board);
+    assert!(toml.contains("ignore = [\"C1\", \"J1\", \"U1\"]"), "{toml}");
+    assert!(
+        toml.contains(
+            "# ignore: C1 (c_generic_0805): every net it connects to is driven only by ignored parts."
+        ),
+        "{toml}"
+    );
+    let testbench = synth_sim::Testbench::from_toml(&toml).expect("suggested sidecar");
+
+    let report = simulate_suggested(&board, &testbench, &ngspice);
+
+    assert!(report.passed(), "diagnostics: {:?}", report.diagnostics);
+}
+
+/// A feedback divider's mid net also drives the regulator's `fb` pin. That is
+/// the canonical shape; it must be named, not silently skipped.
+#[test]
+fn a_feedback_divider_names_the_pin_that_also_drives_its_mid_net() {
+    let board = board(
+        r#"
+board "feedback-divider" {
+  layers 2
+  component U1: regulator "mp2307_buck"
+  component R1: resistor "r_generic_0805" value "10k"
+  component R2: resistor "r_generic_0805" value "10k"
+  net "VIN" { U1.in }
+  net "GND" { U1.gnd, R2.p2 }
+  net "VOUT" { R1.p1 }
+  connect R1.p2 -> R2.p1 as "MID"
+  connect R1.p2 -> U1.fb as "MID"
+}
+"#,
+    );
+
+    let suggestion = synth_sim::suggest_testbench(&board);
+
+    assert!(suggestion.toml.is_none(), "{:?}", suggestion.toml);
+    let line = suggestion
+        .not_covered
+        .iter()
+        .find(|line| line.contains("divider"))
+        .unwrap_or_else(|| panic!("no divider line in {:?}", suggestion.not_covered));
+    assert!(line.contains("divider R1/R2"), "{line}");
+    assert!(line.contains("mid net also drives U1.fb"), "{line}");
+    assert!(
+        !suggestion
+            .not_covered
+            .iter()
+            .any(|line| line.contains("R1") && line.contains("not a recognised shape")),
+        "{:?}",
+        suggestion.not_covered
+    );
+}
+
+/// A passive on a live rail is part of the simulated circuit; it must never
+/// be dropped just because some other part on that rail is ignored.
+#[test]
+fn a_passive_on_a_live_measured_net_is_never_ignored() {
+    let Some(ngspice) = real_ngspice() else {
+        eprintln!("{}", real_ngspice_support::SKIP_MESSAGE);
+        return;
+    };
+    let board = board(
+        r#"
+board "divider-with-decoupling" {
+  layers 2
+  component R1: resistor "r_generic_0805" value "10k"
+  component R2: resistor "r_generic_0805" value "10k"
+  component C1: capacitor "c_generic_0805" value "10u"
+  power "VCC" 12v
+  net "VCC" { R1.p1, C1.p1 }
+  net "GND" { R2.p2, C1.p2 }
+  connect R1.p2 -> R2.p1 as "MID"
+}
+"#,
+    );
+    let (toml, _) = suggestion(&board);
+    assert!(!toml.contains("ignore ="), "{toml}");
+    let testbench = synth_sim::Testbench::from_toml(&toml).expect("suggested sidecar");
+
+    let report = simulate_suggested(&board, &testbench, &ngspice);
+
+    assert!(report.passed(), "diagnostics: {:?}", report.diagnostics);
+}
+
 fn simulate_suggested(
     board: &synth_ir::Board,
     testbench: &synth_sim::Testbench,
@@ -1229,6 +1425,39 @@ board "three-leg-powered" {
     );
 }
 
+/// The real blocker for an unpowered three-leg divider is the third leg; the
+/// missing supply must not hide it.
+#[test]
+fn a_three_leg_divider_reports_three_legs_before_the_top_net() {
+    let board = board(
+        r#"
+board "three-leg-unpowered" {
+  layers 2
+  component R1: resistor "r_generic_0805" value "10k"
+  component R2: resistor "r_generic_0805" value "10k"
+  component R3: resistor "r_generic_0805" value "10k"
+  net "TOP" { R1.p1 }
+  net "GND" { R2.p2, R3.p2 }
+  connect R1.p2 -> R2.p1 as "MID"
+  connect R1.p2 -> R3.p1 as "MID"
+}
+"#,
+    );
+
+    let suggestion = synth_sim::suggest_testbench(&board);
+
+    assert!(suggestion.toml.is_none(), "{:?}", suggestion.toml);
+    let line = suggestion
+        .not_covered
+        .iter()
+        .find(|line| line.contains("divider"))
+        .unwrap_or_else(|| panic!("no divider line in {:?}", suggestion.not_covered));
+    assert!(
+        line.contains("3 resistor legs") && line.contains("top net"),
+        "{line}"
+    );
+}
+
 /// A three-resistor star with no ground leg is not a divider; it must keep the
 /// plain "not a recognised shape" report rather than invent a divider shape.
 #[test]
@@ -1285,6 +1514,90 @@ fn a_suggested_led_testbench_fails_the_wrong_resistor() {
     let report = simulate_suggested(&board(&mutated), &testbench, &ngspice);
 
     assert_out_of_limit(&report, "iled", "above max");
+}
+
+/// A three-significant-digit limit must not leak binary noise into the TOML.
+#[test]
+fn a_drafted_limit_has_no_binary_noise() {
+    let board = board(
+        r#"
+board "rc-noise" {
+  layers 2
+  component R1: resistor "r_generic_0805" value "100"
+  component C1: capacitor "c_generic_0805" value "100p"
+  power "IN" 5v
+  net "IN" { R1.p1 }
+  net "GND" { C1.p2 }
+  connect R1.p2 -> C1.p1 as "OUT"
+}
+"#,
+    );
+
+    let (toml, _) = suggestion(&board);
+
+    assert!(toml.contains("min = 15600000.0"), "{toml}");
+    assert!(toml.contains("max = 16200000.0"), "{toml}");
+    assert!(!toml.contains("15599999.999999998"), "{toml}");
+}
+
+/// Synth's mega is `M`; SPICE's `meg` is not accepted in a design value.
+#[test]
+fn a_meg_value_in_suggest_says_to_use_m_for_mega() {
+    let board = board(
+        r#"
+board "meg-resistor" {
+  layers 2
+  component R1: resistor "r_generic_0805" value "1meg"
+  component R2: resistor "r_generic_0805" value "10k"
+  power "VCC" 12v
+  net "VCC" { R1.p1 }
+  net "GND" { R2.p2 }
+  connect R1.p2 -> R2.p1 as "MID"
+}
+"#,
+    );
+
+    let suggestion = synth_sim::suggest_testbench(&board);
+
+    assert!(suggestion.toml.is_none(), "{:?}", suggestion.toml);
+    let line = suggestion
+        .not_covered
+        .iter()
+        .find(|line| line.contains("R1"))
+        .unwrap_or_else(|| panic!("no R1 line in {:?}", suggestion.not_covered));
+    assert!(line.contains("use \"1M\""), "{line}");
+    assert!(line.contains("meg"), "{line}");
+}
+
+/// The RC capacitor takes the same `meg` hint, and the message names the
+/// capacitor rather than blaming the resistor.
+#[test]
+fn a_meg_capacitor_in_an_rc_says_to_use_m_for_mega() {
+    let board = board(
+        r#"
+board "meg-cap" {
+  layers 2
+  component R1: resistor "r_generic_0805" value "1k"
+  component C1: capacitor "c_generic_0805" value "1meg"
+  power "IN" 5v
+  net "IN" { R1.p1 }
+  net "GND" { C1.p2 }
+  connect R1.p2 -> C1.p1 as "OUT"
+}
+"#,
+    );
+
+    let suggestion = synth_sim::suggest_testbench(&board);
+
+    assert!(suggestion.toml.is_none(), "{:?}", suggestion.toml);
+    let line = suggestion
+        .not_covered
+        .iter()
+        .find(|line| line.contains("C1"))
+        .unwrap_or_else(|| panic!("no C1 line in {:?}", suggestion.not_covered));
+    assert!(line.contains("use \"1M\""), "{line}");
+    assert!(line.contains("meg"), "{line}");
+    assert!(!line.contains("R1"), "{line}");
 }
 
 /// The four fault injections from the review: 33 ohm, 2x R and R/2 all move

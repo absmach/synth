@@ -64,6 +64,9 @@ pub fn suggest_testbench(design: &Board) -> TestbenchSuggestion {
     draft.detect_dividers();
     draft.detect_rcs();
     draft.report_unused();
+    // `report_unused` is what ignores a connector; run the dead-rail sweep
+    // after it so the cap sees every ignored neighbour.
+    draft.ignore_orphan_passives();
     let toml = draft.render().and_then(|text| {
         // The generated file is a trust boundary too: never write something
         // the loader would reject. This catches a name or value that escaped
@@ -466,6 +469,40 @@ impl<'a> Draft<'a> {
             return;
         }
         if others > 0 {
+            let [first, second] = resistors.as_slice() else {
+                return;
+            };
+            let mut drivers = Vec::new();
+            for endpoint in &net.endpoints {
+                let Some(component) = design.component(endpoint.component) else {
+                    return;
+                };
+                if is_kind(component, "resistor") {
+                    continue;
+                }
+                let pin = design
+                    .pin(endpoint.component, endpoint.pin)
+                    .map_or("", |pin| pin.name.as_str());
+                let label = if pin.is_empty() {
+                    component.refdes.clone()
+                } else {
+                    format!("{}.{pin}", component.refdes)
+                };
+                if !drivers.contains(&label) {
+                    drivers.push(label);
+                }
+            }
+            if drivers.is_empty() {
+                return;
+            }
+            self.use_components(&[*first, *second]);
+            let mut refs = [self.refdes(*first), self.refdes(*second)];
+            refs.sort_unstable();
+            self.not_covered.push(format!(
+                "divider {}: mid net also drives {}",
+                refs.join("/"),
+                drivers.join(", ")
+            ));
             return;
         }
         let [first, second] = resistors.as_slice() else {
@@ -663,7 +700,8 @@ impl<'a> Draft<'a> {
         }
         let top_name = self.design.net(top_net).map_or("", |net| net.name.as_str());
         self.not_covered.push(format!(
-            "divider {label}: top net {} is not a declared supply",
+            "divider {label}: the mid net has {legs} resistor legs; only a two-resistor \
+             divider is drafted (top net {} is not a declared supply)",
             toml_string(top_name)
         ));
     }
@@ -774,12 +812,15 @@ impl<'a> Draft<'a> {
                 return;
             }
         };
-        let Some(capacitance) = self.capacitance(capacitor) else {
-            self.not_covered.push(format!(
-                "{}, no parseable `value` for the RC filter",
-                self.describe(resistor)
-            ));
-            return;
+        let capacitance = match self.capacitance(capacitor) {
+            Ok(value) => value,
+            Err(reason) => {
+                self.not_covered.push(format!(
+                    "{}, {reason} for the RC filter",
+                    self.describe(capacitor)
+                ));
+                return;
+            }
         };
         let corner = 1.0 / (2.0 * std::f64::consts::PI * resistance * capacitance);
         let start = round_sig(corner / 100.0, 3);
@@ -921,10 +962,75 @@ impl<'a> Draft<'a> {
         });
     }
 
+    /// A passive left on a node whose other parts are all ignored would be
+    /// the only live connection there (`-008 net VIN has 1 connection(s)`).
+    /// Ignore it too, with a reason; a passive that shares a net with a live
+    /// part stays in the deck. Repeat so a chain of dead-rail passives falls
+    /// together.
+    ///
+    /// ponytail: two passives sharing one dead net keep each other "live";
+    /// handle that pair when a real board needs it.
+    fn ignore_orphan_passives(&mut self) {
+        loop {
+            let mut newly_ignored = Vec::new();
+            for component in &self.design.components {
+                if self.used.contains(&component.id)
+                    || self.ignored.contains_key(&component.id)
+                    || !is_passive(component)
+                {
+                    continue;
+                }
+                let nets: Vec<NetId> = self
+                    .design
+                    .nets
+                    .iter()
+                    .filter(|net| net.id != self.ground)
+                    .filter(|net| {
+                        net.endpoints
+                            .iter()
+                            .any(|endpoint| endpoint.component == component.id)
+                    })
+                    .map(|net| net.id)
+                    .collect();
+                if nets.is_empty() {
+                    continue;
+                }
+                let only_ignored = nets.iter().all(|net_id| {
+                    self.design.net(*net_id).is_some_and(|net| {
+                        let mut others = net
+                            .endpoints
+                            .iter()
+                            .filter(|endpoint| endpoint.component != component.id);
+                        let Some(first) = others.next() else {
+                            // A dangling part has no ignored driver to blame;
+                            // leave it in the deck so topology fails loudly.
+                            return false;
+                        };
+                        self.ignored.contains_key(&first.component)
+                            && others.all(|endpoint| self.ignored.contains_key(&endpoint.component))
+                    })
+                });
+                if only_ignored {
+                    newly_ignored.push(component.id);
+                }
+            }
+            if newly_ignored.is_empty() {
+                break;
+            }
+            for id in newly_ignored {
+                self.ignored.entry(id).or_insert_with(|| {
+                    "every net it connects to is driven only by ignored parts".to_string()
+                });
+            }
+        }
+    }
+
     fn report_unused(&mut self) {
         for component in &self.design.components {
             if !self.used.contains(&component.id) {
-                if crate::model_for(component).is_err() {
+                // A bad value is not a missing model: ignoring it would hide
+                // the typo, so leave it in the deck for -002 to report.
+                if crate::model_for(component).is_err_and(|error| error.is_missing_model()) {
                     self.ignored
                         .entry(component.id)
                         .or_insert_with(|| "no built-in SPICE model".to_string());
@@ -1270,8 +1376,13 @@ impl<'a> Draft<'a> {
     }
 
     fn resistance(&self, component: ComponentId) -> Result<f64, &'static str> {
-        let Some(value) = parse_resistance(self.value(component)) else {
-            return Err("no parseable `value`");
+        let raw = self.value(component);
+        let Some(value) = parse_resistance(raw) else {
+            return Err(if raw.to_ascii_lowercase().contains("meg") {
+                "use \"1M\" (`meg` is not Synth syntax)"
+            } else {
+                "no parseable `value`"
+            });
         };
         if !value.is_finite() || value <= 0.0 {
             return Err("the value must be positive and finite");
@@ -1279,10 +1390,27 @@ impl<'a> Draft<'a> {
         Ok(value)
     }
 
-    fn capacitance(&self, component: ComponentId) -> Option<f64> {
-        let value = parse_capacitance(self.value(component))?;
-        (value.is_finite() && value > 0.0).then_some(value)
+    fn capacitance(&self, component: ComponentId) -> Result<f64, &'static str> {
+        let raw = self.value(component);
+        let Some(value) = parse_capacitance(raw) else {
+            return Err(if raw.to_ascii_lowercase().contains("meg") {
+                "use \"1M\" (`meg` is not Synth syntax)"
+            } else {
+                "no parseable `value`"
+            });
+        };
+        if !value.is_finite() || value <= 0.0 {
+            return Err("the value must be positive and finite");
+        }
+        Ok(value)
     }
+}
+
+fn is_passive(component: &Component) -> bool {
+    matches!(
+        component.kind.as_str(),
+        "resistor" | "capacitor" | "inductor"
+    )
 }
 
 fn is_kind(component: &Component, kind: &str) -> bool {
@@ -1363,21 +1491,18 @@ fn number(value: f64) -> String {
     round_sig(value, 4).to_string()
 }
 
-/// A TOML float. `Debug` keeps `6.0` a float and never emits a bare integer.
+/// A TOML float, rounded to four significant digits so a three-digit limit
+/// never prints as `15599999.999999998`. `Debug` keeps `6.0` a float.
 fn float(value: f64) -> String {
-    format!("{value:?}")
+    format!("{:?}", round_sig(value, 4))
 }
 
-/// Round to `digits` significant digits so a generated limit matches the
-/// hand-written testbench a human would write.
+/// Round to `digits` significant digits through decimal text; arithmetic on
+/// powers of ten reintroduces binary noise (`1560 / 1e-4`).
 fn round_sig(value: f64, digits: i32) -> f64 {
-    if !value.is_finite() || value == 0.0 {
+    if !value.is_finite() || value == 0.0 || digits < 1 {
         return value;
     }
-    let magnitude = value.abs().log10().floor() as i32;
-    let factor = 10f64.powi(digits - 1 - magnitude);
-    if !factor.is_finite() {
-        return value;
-    }
-    (value * factor).round() / factor
+    let precision = usize::try_from(digits - 1).unwrap_or(0);
+    format!("{value:.precision$e}").parse().unwrap_or(value)
 }

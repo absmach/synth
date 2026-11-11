@@ -53,7 +53,8 @@ pub struct Testbench {
     #[serde(default)]
     pub source: Vec<Source>,
     pub analysis: Analysis,
-    #[serde(default)]
+    /// Parsed through `toml::Spanned` so each measure carries its own block.
+    #[serde(default, deserialize_with = "spanned_measures")]
     pub measure: Vec<Measure>,
     #[serde(default)]
     pub options: TestbenchOptions,
@@ -162,6 +163,61 @@ fn empty_span() -> Span {
     Span::new(0, 0)
 }
 
+fn spanned_measures<'de, D>(deserializer: D) -> Result<Vec<Measure>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    let measures = Vec::<toml::Spanned<Measure>>::deserialize(deserializer)?;
+    Ok(measures
+        .into_iter()
+        .map(|spanned| {
+            let span = spanned.span();
+            let mut measure = spanned.into_inner();
+            measure.span = Span::new(
+                u32::try_from(span.start).unwrap_or(u32::MAX),
+                u32::try_from(span.end).unwrap_or(u32::MAX),
+            );
+            measure
+        })
+        .collect())
+}
+
+/// `toml::Spanned` starts each measure at its header; extend the span to the
+/// next measure header or table so a diagnostic underlines the whole block.
+fn expand_measure_spans(testbench: &mut Testbench, text: &str) {
+    let starts: Vec<usize> = testbench
+        .measure
+        .iter()
+        .map(|measure| measure.span.byte_start as usize)
+        .collect();
+    for (index, measure) in testbench.measure.iter_mut().enumerate() {
+        let start = starts[index];
+        let end = starts
+            .get(index + 1)
+            .copied()
+            .unwrap_or_else(|| next_table_start(text, start));
+        measure.span = Span::new(
+            u32::try_from(start).unwrap_or(u32::MAX),
+            u32::try_from(end).unwrap_or(u32::MAX),
+        );
+    }
+}
+
+fn next_table_start(text: &str, after: usize) -> usize {
+    let mut offset = 0usize;
+    for line in text.split_inclusive('\n') {
+        let start = offset;
+        offset = offset.saturating_add(line.len());
+        if start <= after {
+            continue;
+        }
+        if line.trim_start().starts_with('[') {
+            return start;
+        }
+    }
+    text.len()
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum MeasureKind {
@@ -198,14 +254,21 @@ impl Testbench {
             });
             testbench_error_at_span(path, span, format!("could not parse: {error}"))
         })?;
-        assign_measure_spans(&mut testbench, text);
+        expand_measure_spans(&mut testbench, text);
         testbench.validate_at(path)?;
         Ok(testbench)
     }
 
     fn validate_at(&self, path: Option<&Path>) -> Result<(), Diagnostic> {
-        self.validate_inner()
-            .map_err(|diagnostic| with_location(diagnostic, path))
+        self.validate_inner().map_err(|mut diagnostic| {
+            let span = diagnostic
+                .location
+                .as_ref()
+                .map_or(Span::new(0, 0), |location| location.span);
+            diagnostic.location =
+                path.map(|path| Location::from_span(path.display().to_string(), span));
+            diagnostic
+        })
     }
 
     #[allow(clippy::too_many_lines)]
@@ -316,110 +379,159 @@ impl Testbench {
 
         for measure in &self.measure {
             if !valid_sentinel_name(&measure.name) {
-                return Err(testbench_error(format!(
-                    "measure name `{}` must be letters, digits, `_`, `-` or `.`",
-                    measure.name
-                )));
+                return Err(invalid_measure(
+                    measure,
+                    format!(
+                        "measure name `{}` must be letters, digits, `_`, `-` or `.`",
+                        measure.name
+                    ),
+                ));
             }
             if !names.insert(measure.name.as_str()) {
-                return Err(testbench_error(format!(
-                    "measure name `{}` is declared twice",
-                    measure.name
-                )));
+                return Err(invalid_measure(
+                    measure,
+                    format!("measure name `{}` is declared twice", measure.name),
+                ));
             }
             match measure.kind {
                 MeasureKind::NodeVoltage | MeasureKind::RelativeDb => {
                     match measure.node.as_deref() {
                         Some(node) if !node.trim().is_empty() => {
-                            reject_newline("node", node)?;
+                            if let Err(diagnostic) = reject_newline("node", node) {
+                                return Err(at_measure(diagnostic, measure));
+                            }
                         }
                         _ => {
-                            return Err(testbench_error(format!(
-                                "measure `{}` has an empty node",
-                                measure.name
-                            )));
+                            return Err(invalid_measure(
+                                measure,
+                                format!("measure `{}` has an empty node", measure.name),
+                            ));
                         }
                     }
                     if measure.element.is_some() {
-                        return Err(testbench_error(format!(
-                            "measure `{}` reads a node and must not have an `element`",
-                            measure.name
-                        )));
+                        return Err(invalid_measure(
+                            measure,
+                            format!(
+                                "measure `{}` reads a node and must not have an `element`",
+                                measure.name
+                            ),
+                        ));
                     }
                     if measure.kind == MeasureKind::NodeVoltage && measure.drop_db.is_some() {
-                        return Err(testbench_error(format!(
-                            "measure `{}` is a node_voltage measure and must not have `drop_db`",
-                            measure.name
-                        )));
+                        return Err(invalid_measure(
+                            measure,
+                            format!(
+                                "measure `{}` is a node_voltage measure and must not have `drop_db`",
+                                measure.name
+                            ),
+                        ));
                     }
                     if measure.kind == MeasureKind::RelativeDb && measure.at_frequency.is_some() {
-                        return Err(testbench_error(format!(
-                            "measure `{}` is a relative_db measure and must not have `at_frequency`",
-                            measure.name
-                        )));
+                        return Err(invalid_measure(
+                            measure,
+                            format!(
+                                "measure `{}` is a relative_db measure and must not have `at_frequency`",
+                                measure.name
+                            ),
+                        ));
                     }
                     if let Some(drop_db) = measure.drop_db {
                         if !drop_db.is_finite() || drop_db <= 0.0 {
-                            return Err(testbench_error(format!(
-                                "measure `{}` has a `drop_db` that must be finite and greater than 0",
-                                measure.name
-                            )));
+                            return Err(invalid_measure(
+                                measure,
+                                format!(
+                                    "measure `{}` has a `drop_db` that must be finite and greater than 0",
+                                    measure.name
+                                ),
+                            ));
                         }
                     }
                 }
                 MeasureKind::Current => {
                     match measure.element.as_deref() {
                         Some(element) if !element.trim().is_empty() => {
-                            reject_newline("element", element)?;
+                            if let Err(diagnostic) = reject_newline("element", element) {
+                                return Err(at_measure(diagnostic, measure));
+                            }
                         }
                         _ => {
-                            return Err(testbench_error(format!(
-                                "measure `{}` has an empty element",
-                                measure.name
-                            )));
+                            return Err(invalid_measure(
+                                measure,
+                                format!("measure `{}` has an empty element", measure.name),
+                            ));
                         }
                     }
                     if measure.node.is_some() {
-                        return Err(testbench_error(format!(
-                            "measure `{}` is a current measure and must not have a `node`",
-                            measure.name
-                        )));
+                        return Err(invalid_measure(
+                            measure,
+                            format!(
+                                "measure `{}` is a current measure and must not have a `node`",
+                                measure.name
+                            ),
+                        ));
                     }
                     if measure.drop_db.is_some() {
-                        return Err(testbench_error(format!(
-                            "measure `{}` is a current measure and must not have `drop_db`",
-                            measure.name
-                        )));
+                        return Err(invalid_measure(
+                            measure,
+                            format!(
+                                "measure `{}` is a current measure and must not have `drop_db`",
+                                measure.name
+                            ),
+                        ));
                     }
                     if measure.at_frequency.is_some() {
-                        return Err(testbench_error(format!(
-                            "measure `{}` is a current measure and must not have `at_frequency`",
-                            measure.name
-                        )));
+                        return Err(invalid_measure(
+                            measure,
+                            format!(
+                                "measure `{}` is a current measure and must not have `at_frequency`",
+                                measure.name
+                            ),
+                        ));
                     }
                 }
             }
             if let Some(at_frequency) = measure.at_frequency {
                 if !at_frequency.is_finite() || at_frequency <= 0.0 {
-                    return Err(testbench_error(format!(
-                        "measure `{}` has an `at_frequency` that must be a positive finite frequency",
-                        measure.name
-                    )));
+                    return Err(invalid_measure(
+                        measure,
+                        format!(
+                            "measure `{}` has an `at_frequency` that must be a positive finite frequency",
+                            measure.name
+                        ),
+                    ));
+                }
+                if let Some(ac) = &self.analysis.ac {
+                    if at_frequency < ac.start || at_frequency > ac.stop {
+                        return Err(invalid_measure(
+                            measure,
+                            format!(
+                                "measure `{}` reads at {at_frequency} Hz, outside the ac sweep \
+                                 {}-{} Hz",
+                                measure.name, ac.start, ac.stop
+                            ),
+                        ));
+                    }
                 }
             }
             let requires_ac = measure.kind == MeasureKind::RelativeDb
                 || (measure.kind == MeasureKind::NodeVoltage && measure.at_frequency.is_some());
             if requires_ac && self.analysis.ac.is_none() {
                 if measure.kind == MeasureKind::RelativeDb {
-                    return Err(testbench_error(format!(
-                        "measure `{}` is a relative_db measure and requires the `ac` analysis",
-                        measure.name
-                    )));
+                    return Err(invalid_measure(
+                        measure,
+                        format!(
+                            "measure `{}` is a relative_db measure and requires the `ac` analysis",
+                            measure.name
+                        ),
+                    ));
                 }
-                return Err(testbench_error(format!(
-                    "measure `{}` reads a gain at a fixed frequency and requires the `ac` analysis",
-                    measure.name
-                )));
+                return Err(invalid_measure(
+                    measure,
+                    format!(
+                        "measure `{}` reads a gain at a fixed frequency and requires the `ac` analysis",
+                        measure.name
+                    ),
+                ));
             }
             if requires_ac
                 && !self
@@ -428,38 +540,47 @@ impl Testbench {
                     .any(|source| source.ac.is_some_and(|ac| ac > 0.0))
             {
                 if measure.kind == MeasureKind::RelativeDb {
-                    return Err(testbench_error(format!(
-                        "measure `{}`: relative_db needs a source with a non-zero `ac`",
-                        measure.name
-                    )));
+                    return Err(invalid_measure(
+                        measure,
+                        format!(
+                            "measure `{}`: relative_db needs a source with a non-zero `ac`",
+                            measure.name
+                        ),
+                    ));
                 }
-                return Err(testbench_error(format!(
-                    "measure `{}`: at_frequency needs a source with a non-zero `ac`",
-                    measure.name
-                )));
+                return Err(invalid_measure(
+                    measure,
+                    format!(
+                        "measure `{}`: at_frequency needs a source with a non-zero `ac`",
+                        measure.name
+                    ),
+                ));
             }
             if !requires_ac && !self.analysis.op {
-                return Err(testbench_error(format!(
-                    "measure `{}` requires the `op` analysis",
-                    measure.name
-                )));
+                return Err(invalid_measure(
+                    measure,
+                    format!("measure `{}` requires the `op` analysis", measure.name),
+                ));
             }
             for (label, value) in [("min", measure.min), ("max", measure.max)] {
                 if let Some(value) = value {
                     if !value.is_finite() {
-                        return Err(testbench_error(format!(
-                            "measure `{}` has a non-finite `{label}`",
-                            measure.name
-                        )));
+                        return Err(invalid_measure(
+                            measure,
+                            format!("measure `{}` has a non-finite `{label}`", measure.name),
+                        ));
                     }
                 }
             }
             if let (Some(min), Some(max)) = (measure.min, measure.max) {
                 if min > max {
-                    return Err(testbench_error(format!(
-                        "measure `{}` has min {min} greater than max {max}",
-                        measure.name
-                    )));
+                    return Err(invalid_measure(
+                        measure,
+                        format!(
+                            "measure `{}` has min {min} greater than max {max}",
+                            measure.name
+                        ),
+                    ));
                 }
             }
         }
@@ -467,34 +588,26 @@ impl Testbench {
     }
 }
 
-/// Byte range of each `[[measure]]` block, in file order. A block ends at the
-/// next table header or EOF.
-fn measure_spans(text: &str) -> Vec<Span> {
-    let mut spans = Vec::new();
-    let mut open: Option<u32> = None;
-    let mut offset = 0u32;
-    for line in text.split_inclusive('\n') {
-        let start = offset;
-        offset = offset.saturating_add(u32::try_from(line.len()).unwrap_or(u32::MAX));
-        let trimmed = line.trim_start();
-        if trimmed.starts_with("[[measure]]") || trimmed.starts_with('[') {
-            if let Some(open) = open.take() {
-                spans.push(Span::new(open, start));
-            }
-            if trimmed.starts_with("[[measure]]") {
-                open = Some(start);
-            }
-        }
-    }
-    if let Some(open) = open {
-        spans.push(Span::new(open, offset));
-    }
-    spans
+fn invalid_measure(measure: &Measure, message: impl Into<String>) -> Diagnostic {
+    at_measure(testbench_error(message), measure)
 }
 
-fn assign_measure_spans(testbench: &mut Testbench, text: &str) {
-    for (measure, span) in testbench.measure.iter_mut().zip(measure_spans(text)) {
-        measure.span = span;
+/// Mark a diagnostic as belonging to one `[[measure]]` block.
+fn at_measure(mut diagnostic: Diagnostic, measure: &Measure) -> Diagnostic {
+    if !measure.span.is_empty() {
+        diagnostic.location = Some(Location::from_span(String::new(), measure.span));
+    }
+    diagnostic
+}
+
+fn at_named_measure(diagnostic: Diagnostic, testbench: &Testbench, name: &str) -> Diagnostic {
+    match testbench
+        .measure
+        .iter()
+        .find(|measure| measure.name == name)
+    {
+        Some(measure) => at_measure(diagnostic, measure),
+        None => diagnostic,
     }
 }
 
@@ -742,12 +855,27 @@ fn failed(mut diagnostics: Vec<Diagnostic>, path: Option<&Path>) -> SimReport {
 /// sidecar. Design-anchored diagnostics already carry their component span.
 fn locate(diagnostics: &mut [Diagnostic], path: Option<&Path>) {
     let Some(path) = path else {
+        // A measure span with no sidecar path cannot be shown; keep run-level
+        // diagnostics only.
+        for diagnostic in diagnostics {
+            if diagnostic
+                .location
+                .as_ref()
+                .is_some_and(|location| location.file.is_empty())
+            {
+                diagnostic.location = None;
+            }
+        }
         return;
     };
     let file = path.display().to_string();
     for diagnostic in diagnostics {
-        if diagnostic.location.is_none() {
-            diagnostic.location = Some(Location::from_span(file.clone(), Span::new(0, 0)));
+        match &mut diagnostic.location {
+            None => {
+                diagnostic.location = Some(Location::from_span(file.clone(), Span::new(0, 0)));
+            }
+            Some(location) if location.file.is_empty() => location.file.clone_from(&file),
+            Some(_) => {}
         }
     }
 }
@@ -857,9 +985,11 @@ fn parse_sentinels(
             reported.insert(name.to_string());
         }
         let (Some(name), Some(raw), None) = (name, parts.next(), parts.next()) else {
-            diagnostics.push(measure_error(format!(
-                "malformed measurement sentinel `{line}`"
-            )));
+            let diagnostic = measure_error(format!("malformed measurement sentinel `{line}`"));
+            diagnostics.push(match name {
+                Some(name) => at_named_measure(diagnostic, testbench, name),
+                None => diagnostic,
+            });
             continue;
         };
         if !expected.contains(name) {
@@ -869,21 +999,29 @@ fn parse_sentinels(
             continue;
         }
         if values.contains_key(name) {
-            diagnostics.push(measure_error(format!(
-                "measurement `{name}` was printed twice"
-            )));
+            diagnostics.push(at_named_measure(
+                measure_error(format!("measurement `{name}` was printed twice")),
+                testbench,
+                name,
+            ));
             continue;
         }
         let Ok(value) = raw.parse::<f64>() else {
-            diagnostics.push(measure_error(format!(
-                "measurement `{name}` has unparseable value `{raw}`"
-            )));
+            diagnostics.push(at_named_measure(
+                measure_error(format!(
+                    "measurement `{name}` has unparseable value `{raw}`"
+                )),
+                testbench,
+                name,
+            ));
             continue;
         };
         if !value.is_finite() {
-            diagnostics.push(measure_error(format!(
-                "measurement `{name}` is not finite: `{raw}`"
-            )));
+            diagnostics.push(at_named_measure(
+                measure_error(format!("measurement `{name}` is not finite: `{raw}`")),
+                testbench,
+                name,
+            ));
             continue;
         }
         values.insert(name.to_string(), value);
@@ -894,10 +1032,10 @@ fn parse_sentinels(
     }
     for measure in &testbench.measure {
         if !values.contains_key(&measure.name) && !reported.contains(&measure.name) {
-            diagnostics.push(measure_error(format!(
-                "measurement `{}` was not printed",
-                measure.name
-            )));
+            diagnostics.push(at_measure(
+                measure_error(format!("measurement `{}` was not printed", measure.name)),
+                measure,
+            ));
         }
     }
 
@@ -1005,10 +1143,31 @@ fn measurement_failure_from_stderr(stderr: &str, testbench: &Testbench) -> Optio
     if let Some(diagnostic) = relative_db_failure(stderr, testbench) {
         return Some(diagnostic);
     }
-    Some(measure_error(format!(
-        "ngspice reported a failed measurement: {}",
-        excerpt(&failed.join("\n"))
-    )))
+    let excerpt = excerpt(&failed.join("\n"));
+    // `let m<N>` is emitted per measure, so a missing variable identifies it.
+    Some(
+        match stderr
+            .lines()
+            .find_map(let_measure_index)
+            .and_then(|index| testbench.measure.get(index))
+        {
+            Some(measure) => at_measure(
+                measure_error(format!(
+                    "measure `{}` failed: ngspice reported a failed measurement: {excerpt}",
+                    measure.name
+                )),
+                measure,
+            ),
+            None => measure_error(format!("ngspice reported a failed measurement: {excerpt}")),
+        },
+    )
+}
+
+/// The index in a generated `m<N>` vector on a line, when it carries one.
+fn let_measure_index(line: &str) -> Option<usize> {
+    let rest = line.split_once("&m")?.1;
+    let digits: String = rest.chars().take_while(char::is_ascii_digit).collect();
+    digits.parse().ok()
 }
 
 /// The index in `synth_corner<N>` on a line, when it carries one.
@@ -1027,10 +1186,13 @@ fn relative_db_failure(stderr: &str, testbench: &Testbench) -> Option<Diagnostic
     }
     let node = measure.node.as_deref()?;
     let drop_db = measure.drop_db.unwrap_or(3.0);
-    Some(measure_error(format!(
-        "measure `{}` at node `{}` failed: no -{drop_db} dB crossing in {}-{} Hz",
-        measure.name, node, ac.start, ac.stop
-    )))
+    Some(at_measure(
+        measure_error(format!(
+            "measure `{}` at node `{}` failed: no -{drop_db} dB crossing in {}-{} Hz",
+            measure.name, node, ac.start, ac.stop
+        )),
+        measure,
+    ))
 }
 
 /// A singular matrix, or the convergence failure it causes, makes the
@@ -1265,30 +1427,32 @@ fn emit_deck(
             let indexes = match subckt_pin_indexes(part, spice) {
                 Ok(indexes) => indexes,
                 Err(message) => {
-                    diagnostics.push(no_model_error(component, &message, design_path));
+                    diagnostics.push(model_error(component, &message, true, design_path));
                     continue;
                 }
             };
             let file = match resolve_spice_model(spice, &roots) {
                 Ok(file) => file,
                 Err(message) => {
-                    diagnostics.push(no_model_error(component, &message, design_path));
+                    diagnostics.push(model_error(component, &message, true, design_path));
                     continue;
                 }
             };
             if included_files.insert(file.clone()) {
                 let Some(path) = file.to_str() else {
-                    diagnostics.push(no_model_error(
+                    diagnostics.push(model_error(
                         component,
                         "model file path is not valid UTF-8",
+                        true,
                         design_path,
                     ));
                     continue;
                 };
                 if path.contains('"') || path.contains(['\n', '\r']) {
-                    diagnostics.push(no_model_error(
+                    diagnostics.push(model_error(
                         component,
                         &format!("model file path `{path}` cannot be quoted in an `.include`"),
+                        true,
                         design_path,
                     ));
                     continue;
@@ -1298,7 +1462,7 @@ fn emit_deck(
             let dialect = spice.dialect;
             if let Some((known, known_refdes, known_part)) = dialects.first() {
                 if *known != dialect {
-                    diagnostics.push(no_model_error(
+                    diagnostics.push(model_error(
                         component,
                         &format!(
                             "SPICE dialect conflict: `{}` uses {}, `{known_refdes}` \
@@ -1307,6 +1471,7 @@ fn emit_deck(
                             dialect_name(dialect),
                             dialect_name(*known)
                         ),
+                        true,
                         design_path,
                     ));
                 }
@@ -1332,9 +1497,10 @@ fn emit_deck(
         } else {
             let pin_count = component.part.as_ref().map_or(0, |part| part.pins.len());
             if pin_count != 2 {
-                diagnostics.push(no_model_error(
+                diagnostics.push(model_error(
                     component,
                     &format!("a two-terminal model needs 2 pins, part has {pin_count}"),
+                    true,
                     design_path,
                 ));
                 continue;
@@ -1422,18 +1588,26 @@ fn emit_deck(
                     .as_deref()
                     .expect("a validated node measure has a node");
                 let Some(net) = net_by_name.get(node_name) else {
-                    diagnostics.push(tb_error(format!(
-                        "measure `{}` node `{node_name}` not found in design",
-                        measure.name
-                    )));
+                    diagnostics.push(tb_error_measure(
+                        testbench_path,
+                        measure,
+                        format!(
+                            "measure `{}` node `{node_name}` not found in design",
+                            measure.name
+                        ),
+                    ));
                     continue;
                 };
                 if net.id == ground.id {
-                    diagnostics.push(tb_error(format!(
-                        "measure `{}` reads ground net `{}`; ground is 0 V by definition \
-                         and ngspice has no vector for it",
-                        measure.name, net.name
-                    )));
+                    diagnostics.push(tb_error_measure(
+                        testbench_path,
+                        measure,
+                        format!(
+                            "measure `{}` reads ground net `{}`; ground is 0 V by definition \
+                             and ngspice has no vector for it",
+                            measure.name, net.name
+                        ),
+                    ));
                     continue;
                 }
                 let simulated = net
@@ -1492,37 +1666,53 @@ fn emit_deck(
                     .iter()
                     .find(|component| component.refdes == refdes)
                 else {
-                    diagnostics.push(tb_error(format!(
-                        "measure `{}` element `{refdes}` is not a placed part",
-                        measure.name
-                    )));
+                    diagnostics.push(tb_error_measure(
+                        testbench_path,
+                        measure,
+                        format!(
+                            "measure `{}` element `{refdes}` is not a placed part",
+                            measure.name
+                        ),
+                    ));
                     continue;
                 };
                 if ignored_ids.contains(&component.id) {
-                    diagnostics.push(tb_error(format!(
-                        "measure `{}` element `{refdes}` is ignored by the testbench \
-                         and cannot be measured",
-                        measure.name
-                    )));
+                    diagnostics.push(tb_error_measure(
+                        testbench_path,
+                        measure,
+                        format!(
+                            "measure `{}` element `{refdes}` is ignored by the testbench \
+                             and cannot be measured",
+                            measure.name
+                        ),
+                    ));
                     continue;
                 }
                 let Ok(model) = model_for(component) else {
-                    diagnostics.push(tb_error(format!(
-                        "measure `{}` element `{refdes}` has no built-in model; \
-                         a current measure is not supported there",
-                        measure.name
-                    )));
+                    diagnostics.push(tb_error_measure(
+                        testbench_path,
+                        measure,
+                        format!(
+                            "measure `{}` element `{refdes}` has no built-in model; \
+                             a current measure is not supported there",
+                            measure.name
+                        ),
+                    ));
                     continue;
                 };
                 let (letter, parameter) = match &model {
                     Model::Value { letter, .. } => (*letter, "i"),
                     Model::Diode { .. } => ("D", "id"),
                     Model::Subckt => {
-                        diagnostics.push(tb_error(format!(
-                            "measure `{}` element `{refdes}` is a registry subcircuit; \
-                             a current measure is not supported there",
-                            measure.name
-                        )));
+                        diagnostics.push(tb_error_measure(
+                            testbench_path,
+                            measure,
+                            format!(
+                                "measure `{}` element `{refdes}` is a registry subcircuit; \
+                                 a current measure is not supported there",
+                                measure.name
+                            ),
+                        ));
                         continue;
                     }
                 };
@@ -2082,7 +2272,30 @@ pub(crate) fn diode_forward_current(
     (current.is_finite() && current > 0.0).then_some(current)
 }
 
-fn model_for(component: &Component) -> Result<Model, String> {
+/// Why a part has no built-in SPICE model.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) enum ModelError {
+    /// The kind, pins or registry data cannot make a model. Ignoring the part
+    /// is a valid testbench fix.
+    NoModelForKind(String),
+    /// The part has a value that cannot be used. Ignoring it would hide the
+    /// typo, so this stays a hard error.
+    BadValue(String),
+}
+
+impl ModelError {
+    pub(crate) fn message(&self) -> &str {
+        match self {
+            Self::NoModelForKind(message) | Self::BadValue(message) => message,
+        }
+    }
+
+    pub(crate) fn is_missing_model(&self) -> bool {
+        matches!(self, Self::NoModelForKind(_))
+    }
+}
+
+fn model_for(component: &Component) -> Result<Model, ModelError> {
     // A registry `[spice]` table wins over every built-in model, so any
     // kind (a diode, a regulator) can carry a real subcircuit.
     if component
@@ -2107,32 +2320,35 @@ fn model_for(component: &Component) -> Result<Model, String> {
             synth_validate::parse_inductance as fn(&str) -> Option<f64>,
         ),
         other => {
-            return Err(format!("part kind `{other}` has no built-in SPICE model"));
+            return Err(ModelError::NoModelForKind(format!(
+                "part kind `{other}` has no built-in SPICE model"
+            )));
         }
     };
     let raw = component
         .value
         .as_deref()
-        .ok_or_else(|| "part has no value".to_string())?;
+        .ok_or_else(|| ModelError::BadValue("part has no value".to_string()))?;
     let value = parse(raw).ok_or_else(|| {
         let hint = if raw.to_ascii_lowercase().contains("meg") {
             "; Synth uses `M` for mega (`1M`), not `meg`"
         } else {
             ""
         };
-        format!("value `{raw}` is not a valid {letter} value{hint}")
+        ModelError::BadValue(format!("value `{raw}` is not a valid {letter} value{hint}"))
     })?;
     if !value.is_finite() || value <= 0.0 {
-        return Err(format!("value `{raw}` is not a positive finite number"));
+        return Err(ModelError::BadValue(format!(
+            "value `{raw}` is not a positive finite number"
+        )));
     }
     Ok(Model::Value { letter, value })
 }
 
-fn diode_model(component: &Component) -> Result<Model, String> {
-    let part = component
-        .part
-        .as_ref()
-        .ok_or_else(|| "diode part is not in the registry".to_string())?;
+fn diode_model(component: &Component) -> Result<Model, ModelError> {
+    let part = component.part.as_ref().ok_or_else(|| {
+        ModelError::NoModelForKind("diode part is not in the registry".to_string())
+    })?;
     let pins = match (
         part.pins
             .iter()
@@ -2142,7 +2358,11 @@ fn diode_model(component: &Component) -> Result<Model, String> {
             .position(|pin| pin.name.eq_ignore_ascii_case("cathode")),
     ) {
         (Some(anode), Some(cathode)) => [anode as u32, cathode as u32],
-        _ => return Err("diode model needs pins named `anode` and `cathode`".to_string()),
+        _ => {
+            return Err(ModelError::NoModelForKind(
+                "diode model needs pins named `anode` and `cathode`".to_string(),
+            ));
+        }
     };
     let (forward_voltage, forward_current) = part
         .operating_conditions
@@ -2154,28 +2374,30 @@ fn diode_model(component: &Component) -> Result<Model, String> {
             ))
         })
         .ok_or_else(|| {
-            "diode part needs `[operating_conditions] forward_voltage_v` and \
-             `forward_current_ma`, or a registry `[spice]` model"
-                .to_string()
+            ModelError::NoModelForKind(
+                "diode part needs `[operating_conditions] forward_voltage_v` and \
+                 `forward_current_ma`, or a registry `[spice]` model"
+                    .to_string(),
+            )
         })?;
     if !forward_voltage.is_finite()
         || forward_voltage <= 0.0
         || !forward_current.is_finite()
         || forward_current <= 0.0
     {
-        return Err(format!(
+        return Err(ModelError::BadValue(format!(
             "forward voltage {forward_voltage} V and current {forward_current} mA \
              must be positive and finite"
-        ));
+        )));
     }
     let saturation_current = forward_current
         / 1000.0
         / ((forward_voltage / (DIODE_EMISSION_COEFFICIENT * THERMAL_VOLTAGE_27C)).exp() - 1.0);
     if !saturation_current.is_finite() || saturation_current <= 0.0 {
-        return Err(format!(
+        return Err(ModelError::BadValue(format!(
             "forward voltage {forward_voltage} V at {forward_current} mA \
              does not give a usable diode model"
-        ));
+        )));
     }
     Ok(Model::Diode {
         saturation_current,
@@ -2183,17 +2405,36 @@ fn diode_model(component: &Component) -> Result<Model, String> {
     })
 }
 
-fn no_model_error(component: &Component, message: &str, design_path: Option<&Path>) -> Diagnostic {
+fn no_model_error(
+    component: &Component,
+    error: &ModelError,
+    design_path: Option<&Path>,
+) -> Diagnostic {
+    model_error(
+        component,
+        error.message(),
+        error.is_missing_model(),
+        design_path,
+    )
+}
+
+fn model_error(
+    component: &Component,
+    message: &str,
+    ignorable: bool,
+    design_path: Option<&Path>,
+) -> Diagnostic {
     let part = component
         .part
         .as_ref()
         .map_or(component.kind.as_str(), |part| part.id.as_str());
+    let mut message = format!("{} (`{part}`): {message}", component.refdes);
+    if ignorable {
+        message.push_str("; add it to `ignore` in the testbench or give it a `[spice]` model");
+    }
     with_location_span(
         sim_builder(E_SYNTH_SIM_002, Severity::Error, "part has no SPICE model")
-            .message(format!(
-                "{} (`{part}`): {message}; add it to `ignore` in the testbench or give it a `[spice]` model",
-                component.refdes
-            ))
+            .message(message)
             .primary_entity(EntityRef::Component {
                 id: component.refdes.clone(),
             })
@@ -2226,6 +2467,14 @@ fn testbench_error(message: impl Into<String>) -> Diagnostic {
 
 fn testbench_error_at(path: Option<&Path>, message: impl Into<String>) -> Diagnostic {
     with_location(testbench_error(message), path)
+}
+
+fn tb_error_measure(
+    path: Option<&Path>,
+    measure: &Measure,
+    message: impl Into<String>,
+) -> Diagnostic {
+    with_location_span(testbench_error(message), path, measure.span)
 }
 
 fn testbench_error_at_span(
