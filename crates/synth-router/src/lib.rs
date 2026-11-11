@@ -399,11 +399,11 @@ fn finalize(
     }
     match island_vias::drop_edge_tracks(&candidate.candidate_path, &request.ground_nets) {
         Ok(0) => {}
-        Ok(dropped) => eprintln!(
-            "note: dropped {dropped} ground track(s) whose copper came nearer the outline than the board's edge rule"
+        Ok(dropped) => info!(
+            "dropped {dropped} ground track(s) whose copper came nearer the outline than the board's edge rule"
         ),
         Err(detail) => {
-            eprintln!("warning: edge tracks were not checked: {detail}");
+            warn!("edge tracks were not checked: {detail}");
             repair_unavailable.push(format!("edge track prune did not run: {detail}"));
         }
     }
