@@ -8,14 +8,14 @@ mpn = "PTS645SM43SMTR92 LFS"
 lcsc_pn = "C221880"
 
 [footprint_dimensions]
-width_mm = 5.0
-height_mm = 5.0
+width_mm = 6.0
+height_mm = 6.0
 courtyard_margin_mm = 0.25
 
 [operating_conditions]
-min_voltage_v = 1.8
-max_voltage_v = 5.0
-max_current_ma = 100.0
+min_voltage_v = 0.0
+max_voltage_v = 12.0
+max_current_ma = 50.0
 
 [[pins]]
 name = "p1"
@@ -29,5 +29,6 @@ electrical_type = "passive"
 
 [provenance]
 source = "seed"
+datasheet_url = "https://www.ckswitches.com/media/1471/pts645.pdf"
 reviewed_by = "JeffMboya"
 reviewed_at = "2026-11-01"

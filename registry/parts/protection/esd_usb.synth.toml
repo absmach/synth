@@ -25,6 +25,7 @@ number = "2"
 electrical_type = "passive"
 
 [provenance]
-datasheet_url = "https://datasheet.lcsc.com/datasheet/pdf/a868537aef07f89b854d39bc70b9a4b4.pdf"
+source = "seed"
+datasheet_url = "https://assets.nexperia.com/documents/data-sheet/PESD5V0S1BA.pdf"
 reviewed_by = "Steve Munene"
 reviewed_at = "2026-11-05"
