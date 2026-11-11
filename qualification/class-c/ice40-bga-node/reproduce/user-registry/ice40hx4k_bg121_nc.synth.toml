@@ -9,6 +9,10 @@ mpn = "ICE40HX4K-BG121"
 required_decoupling = []
 kicad_symbol = "FPGA_Lattice:ICE40HX4K-BG121"
 kicad_footprint = "Package_BGA:BGA-121_9.0x9.0mm_Layout11x11_P0.8mm_Ball0.4mm_Pad0.35mm_NSMD"
+reviewed_at = "2026-11-10"
+reviewed_by = "JeffMboya"
+datasheet_url = "https://lcsc.com/datasheet/lcsc_datasheet_2304140030_Lattice-ICE40HX4K-BG121_C1552775.pdf"
+lcsc_pn = "C1552775"
 
 [[pins]]
 name = "iot_225"

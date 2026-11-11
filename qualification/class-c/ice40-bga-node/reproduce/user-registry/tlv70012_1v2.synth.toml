@@ -8,6 +8,9 @@ substitutes = []
 mpn = "TLV70012DBVR"
 kicad_symbol = "Regulator_Linear:TLV70012_SOT23-5"
 kicad_footprint = "Package_TO_SOT_SMD:SOT-23-5"
+reviewed_at = "2026-11-10"
+reviewed_by = "JeffMboya"
+datasheet_url = "https://www.ti.com/lit/ds/symlink/tlv700.pdf"
 
 [[pins]]
 name = "vin"

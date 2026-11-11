@@ -8,6 +8,10 @@ substitutes = []
 required_decoupling = []
 kicad_symbol = "Connector_Generic:Conn_01x05"
 kicad_footprint = "Connector_PinHeader_2.54mm:PinHeader_1x05_P2.54mm_Vertical"
+reviewed_at = "2026-11-10"
+reviewed_by = "JeffMboya"
+datasheet_url = "https://azcus.digikey.com/en/products/detail/harwin-inc/M20-9990546/3728232"
+mpn = "M20-9990546"
 
 [[pins]]
 name = "p1"
