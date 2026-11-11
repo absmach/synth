@@ -49,6 +49,9 @@ jobs:
       image: kicad/kicad:10.0.8-full
       options: --user root
     env:
+      # GitHub mounts /github/home for the step user; the container runs as
+      # root, so rustup otherwise refuses with "$HOME differs from euid home".
+      HOME: /root
       KICAD_FOOTPRINT_DIR: /usr/share/kicad/footprints
       KICAD_SYMBOL_DIR: /usr/share/kicad/symbols
 
@@ -59,7 +62,7 @@ jobs:
         run: |
           apt-get update
           apt-get install -y --no-install-recommends \
-            git curl ca-certificates python3 python3-pip build-essential pkg-config libssl-dev
+            git curl ca-certificates python3 python3-pip build-essential pkg-config libssl-dev default-jre-headless
 
       - name: Checkout Code
         uses: actions/checkout@v7
@@ -82,7 +85,7 @@ jobs:
         run: |
           git clone --depth 1 --branch v0.23.0 \
             https://github.com/drandyhaas/KiCadRoutingTools "$RUNNER_TEMP/krt"
-          python3 -m pip install --quiet -r "$RUNNER_TEMP/krt/requirements.txt"
+          python3 -m pip install --quiet --break-system-packages -r "$RUNNER_TEMP/krt/requirements.txt"
           python3 "$RUNNER_TEMP/krt/build_router.py"
           echo "KICAD_ROUTING_TOOLS_REPO=$RUNNER_TEMP/krt" >> "$GITHUB_ENV"
           echo "SYNTH_QUALIFY_ROUTER=kicad-routing-tools" >> "$GITHUB_ENV"
@@ -134,6 +137,9 @@ jobs:
       image: kicad/kicad:10.0.8-full
       options: --user root
     env:
+      # GitHub mounts /github/home for the step user; the container runs as
+      # root, so rustup otherwise refuses with "$HOME differs from euid home".
+      HOME: /root
       KICAD_FOOTPRINT_DIR: /usr/share/kicad/footprints
       KICAD_SYMBOL_DIR: /usr/share/kicad/symbols
 
@@ -144,7 +150,7 @@ jobs:
         run: |
           apt-get update
           apt-get install -y --no-install-recommends \
-            git curl ca-certificates python3 python3-pip build-essential pkg-config libssl-dev
+            git curl ca-certificates python3 python3-pip build-essential pkg-config libssl-dev default-jre-headless
 
       - name: Checkout Code
         uses: actions/checkout@v7
@@ -167,7 +173,7 @@ jobs:
         run: |
           git clone --depth 1 --branch v0.23.0 \
             https://github.com/drandyhaas/KiCadRoutingTools "$RUNNER_TEMP/krt"
-          python3 -m pip install --quiet -r "$RUNNER_TEMP/krt/requirements.txt"
+          python3 -m pip install --quiet --break-system-packages -r "$RUNNER_TEMP/krt/requirements.txt"
           python3 "$RUNNER_TEMP/krt/build_router.py"
           echo "KICAD_ROUTING_TOOLS_REPO=$RUNNER_TEMP/krt" >> "$GITHUB_ENV"
           echo "SYNTH_QUALIFY_ROUTER=kicad-routing-tools" >> "$GITHUB_ENV"
