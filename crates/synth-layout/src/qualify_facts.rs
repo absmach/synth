@@ -35,7 +35,19 @@ fn model_facts(declared: &[&str], default_path: &str, exists: impl Fn(&str) -> b
 /// `step-models/` directory.
 const STEP_DIRS_ENV: &str = "SYNTH_STEP_MODEL_DIRS";
 
-/// Adds every file name under `dir`. Unreadable or missing dirs add nothing.
+/// Whether `name` is a 3D model file (STEP, STP or WRL, any case).
+fn is_model_file(name: &str) -> bool {
+    Path::new(name)
+        .extension()
+        .and_then(|e| e.to_str())
+        .is_some_and(|e| {
+            ["step", "stp", "wrl"]
+                .iter()
+                .any(|m| e.eq_ignore_ascii_case(m))
+        })
+}
+
+/// Adds every model file name under `dir`. Unreadable or missing dirs add nothing.
 fn collect_files(dir: &Path, out: &mut BTreeSet<String>) {
     let Ok(entries) = std::fs::read_dir(dir) else {
         return;
@@ -45,7 +57,10 @@ fn collect_files(dir: &Path, out: &mut BTreeSet<String>) {
         match entry.file_type() {
             Ok(t) if t.is_dir() => collect_files(&entry.path(), out),
             Ok(t) if t.is_file() => {
-                out.insert(entry.file_name().to_string_lossy().into_owned());
+                let name = entry.file_name().to_string_lossy().into_owned();
+                if is_model_file(&name) {
+                    out.insert(name);
+                }
             }
             _ => {}
         }
@@ -219,13 +234,15 @@ mod tests {
         std::fs::write(a.join("Dup.step"), "").unwrap();
         std::fs::write(b.join("Dup.step"), "").unwrap();
         std::fs::write(tmp.path().join("q/other/Stray.step"), "").unwrap();
+        std::fs::write(a.join("notes.txt"), "").unwrap();
+        std::fs::write(a.join("Upper.STP"), "").unwrap();
         let names = step_model_names(
             &[tmp.path().join("q"), tmp.path().join("nope")],
             &[tmp.path().join("missing")],
         );
         assert_eq!(
             names.iter().map(String::as_str).collect::<Vec<_>>(),
-            ["Dup.step", "Pico_A.step"]
+            ["Dup.step", "Pico_A.step", "Upper.STP"]
         );
         let in_step = |p: &str| names.contains(&file_name(p));
         assert_eq!(
