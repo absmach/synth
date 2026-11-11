@@ -144,7 +144,7 @@ Every part of the board is recorded as reviewed by JeffMboya, with the review da
 
 ### PCB review sign-off
 
-PCB review sign-off required by #39: JeffMboya, 2026-11-04, on the package in `fab/` (Gerber content hash `1c84c56d98`). The sign-off is JeffMboya's own. Jeff Mboya is the independent PCB reviewer as well as the author of this pull request. It covers, each verified and approved by JeffMboya:
+PCB review sign-off required by #39: JeffMboya, 2026-11-04, on the package in `fab/` (Gerber content hash `1c84c56d98`). The sign-off is JeffMboya's own. Jeff Mboya is the author of this pull request, so the table below is the author's self-review; the independent PCB expert sign-off required by #39 is open. It covers, each verified and approved by JeffMboya:
 
 | Item | Signed off |
 |---|---|
