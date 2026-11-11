@@ -2456,6 +2456,7 @@ dependencies = [
  "synth-registry",
  "synth-render",
  "synth-router",
+ "synth-sim",
  "synth-supply",
  "synth-validate",
  "tempfile",

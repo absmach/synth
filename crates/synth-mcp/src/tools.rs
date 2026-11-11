@@ -610,6 +610,21 @@ pub fn list_tools() -> Vec<McpToolInfo> {
                 }
             }),
         },
+        McpToolInfo {
+            name: "synth_simulate".into(),
+            description: "Compile a design and run its `<design>.sim.toml` testbench sidecar through ngspice, returning measured values, their limits and structured diagnostics. A design path is required because the sidecar sits beside it; inline `source` is not supported. A missing measurement, a failed measurement, a missing SPICE model, missing ngspice or a timeout is a blocking E-SYNTH-SIM-* diagnostic with `passed: false`, never a silent pass.".into(),
+            input_schema: serde_json::json!({
+                "type": "object",
+                "properties": {
+                    "file_path": { "type": "string", "description": "Path to the .synth design file; its testbench sidecar is `<design>.sim.toml` beside it" },
+                    "testbench_path": { "type": "string", "description": "Optional explicit testbench sidecar path (defaults to `<design>.sim.toml`)" },
+                    "ngspice_path": { "type": "string", "description": "Path to the ngspice binary (defaults to the NGSPICE environment variable, then PATH)" },
+                    "registry_path": { "type": "string", "description": "Optional custom component registry path" },
+                    "workspace_root": { "type": "string", "description": "Optional workspace root path for auto-resolving registry" }
+                },
+                "required": ["file_path"]
+            }),
+        },
     ]
 }
 
@@ -656,6 +671,7 @@ pub fn call_tool(
         "synth_author_part" => execute_author_part(args, default_registry),
         "synth_search_registry_web" => execute_search_registry_web(args, default_registry),
         "synth_export_multiboard" => execute_export_multiboard(args),
+        "synth_simulate" => execute_simulate(args, default_registry),
         "synth_multi_agent_synthesize" => Ok(serde_json::json!({
             "status": "dev_stub",
             "message": format!("Tool '{name}' is under active local development.")
@@ -2214,6 +2230,89 @@ fn compile_design(args: &Value, default_registry: Option<&Path>) -> Result<Compi
         board,
         file_name,
         diagnostics,
+    })
+}
+
+/// `synth_simulate`: a thin wrapper over [`synth_sim::simulate`]. Deck
+/// emission, process control and sentinel parsing stay in `synth-sim`; this
+/// only maps MCP arguments onto that seam.
+fn execute_simulate(args: &Value, default_registry: Option<&Path>) -> Result<Value, String> {
+    if args["source"].as_str().is_some() {
+        return Err(
+            "synth_simulate needs a `file_path`; inline `source` is not supported because the \
+             `<design>.sim.toml` testbench sidecar must sit beside the design file"
+                .to_string(),
+        );
+    }
+    let design_path = PathBuf::from(args["file_path"].as_str().ok_or_else(|| {
+        "synth_simulate needs a `file_path`; its `<design>.sim.toml` testbench sidecar \
+         must sit beside the design file"
+            .to_string()
+    })?);
+    let compiled = compile_design(args, default_registry)?;
+    if compiled
+        .diagnostics
+        .iter()
+        .any(|d| d.severity.is_blocking())
+    {
+        return Ok(sim_json(false, &[], &compiled.diagnostics));
+    }
+
+    let testbench_path = args["testbench_path"]
+        .as_str()
+        .map_or_else(|| synth_sim::sidecar_path(&design_path), PathBuf::from);
+    let testbench = match synth_sim::Testbench::from_path(&testbench_path) {
+        Ok(testbench) => testbench,
+        Err(diagnostic) => return Ok(sim_json(false, &[], &[diagnostic])),
+    };
+
+    let mut registry_dirs = Vec::new();
+    let tier1 = resolve_registry(args, default_registry);
+    if tier1.is_dir() {
+        registry_dirs.push(tier1);
+    }
+    if let Some(user) = resolve_user_registry_opt(args) {
+        if user.is_dir() && !registry_dirs.contains(&user) {
+            registry_dirs.push(user);
+        }
+    }
+
+    let report = synth_sim::simulate(
+        &compiled.board,
+        &testbench,
+        &synth_sim::SimOptions {
+            ngspice: args["ngspice_path"].as_str().map(PathBuf::from),
+            design_path: Some(design_path),
+            testbench_path: Some(testbench_path),
+            registry_dirs,
+        },
+    );
+    Ok(sim_json(
+        report.passed(),
+        &report.measures,
+        &report.diagnostics,
+    ))
+}
+
+/// The one JSON shape `synth_simulate` returns, so the pass path and every
+/// error path stay identical.
+fn sim_json(
+    passed: bool,
+    measures: &[synth_sim::MeasureResult],
+    diagnostics: &[synth_diagnostics::Diagnostic],
+) -> Value {
+    serde_json::json!({
+        "passed": passed,
+        "measures": measures.iter().map(|measure| serde_json::json!({
+            "name": &measure.name,
+            "value": measure.value,
+            "min": measure.min,
+            "max": measure.max,
+            // A measure with no limits has nothing to pass or fail; the CLI
+            // prints MEASURED, so `null` keeps agents from reading it as a pass.
+            "passed": (measure.min.is_some() || measure.max.is_some()).then(|| measure.passed()),
+        })).collect::<Vec<_>>(),
+        "diagnostics": diagnostics,
     })
 }
 

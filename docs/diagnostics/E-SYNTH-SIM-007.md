@@ -14,7 +14,10 @@ offending field or pair.
 Validation also rejects an absent ground, no sources, no measures, unknown
 fields, non-finite numbers, a non-positive or oversized `[options] timeout`,
 `min` greater than `max`, and a measure with no node. Synth also rejects a
-source on the ground net and a measure node that names no design net.
+source on the ground net and a measure node that names no design net. A
+newline in a testbench string value (ground, a source net, a measure node or
+an `ignore` reference) is rejected as well: a newline ends a SPICE line, so
+it could inject deck commands.
 
 ## Minimal reproduction
 

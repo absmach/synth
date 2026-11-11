@@ -56,6 +56,27 @@ they can't silently drift from what the parser accepts):
                                 { "file": "examples/placement_and_diff_pair/placement_and_diff_pair.synth", "source": "..." } ] } }
 ```
 
+## Simulation
+
+`synth_simulate` compiles a design and runs its `<design>.sim.toml`
+testbench sidecar through ngspice.
+
+| Tool             | Purpose                                                                                                                                                                                                                                                                                                                                                            |
+| ---------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `synth_simulate` | Simulate a design and return each measured value, its limits and structured diagnostics. Requires `file_path`: the sidecar sits beside the design, so inline `source` is not supported. Optional `testbench_path` and `ngspice_path` (defaults to `NGSPICE`, then `PATH`). A missing or failed measurement, a missing SPICE model, missing ngspice or a timeout is a blocking `E-SYNTH-SIM-*` diagnostic, never a silent pass. |
+
+```jsonrpc
+--> { "jsonrpc": "2.0", "id": 4, "method": "tools/call",
+      "params": { "name": "synth_simulate",
+                  "arguments": { "file_path": "examples/divider/divider.synth" } } }
+
+<-- { "jsonrpc": "2.0", "id": 4,
+      "result": { "passed": true,
+                  "measures": [ { "name": "vmid", "value": 6.0,
+                                  "min": 5.7, "max": 6.3, "passed": true } ],
+                  "diagnostics": [ ... ] } }
+```
+
 ## Part-import & authoring tools
 
 | Tool                        | Purpose                                                                                                                                                                                                                                                                                                                                                                                                                                                    |

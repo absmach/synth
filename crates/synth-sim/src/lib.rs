@@ -155,6 +155,7 @@ impl Testbench {
         if self.ground.trim().is_empty() {
             return Err(testbench_error("ground net is empty"));
         }
+        reject_newline("ground", &self.ground)?;
         if let Some(timeout) = self.options.timeout {
             if !timeout.is_finite() || timeout <= 0.0 || timeout > MAX_TIMEOUT_SECONDS {
                 return Err(testbench_error(format!(
@@ -179,6 +180,7 @@ impl Testbench {
             if refdes.trim().is_empty() {
                 return Err(testbench_error("ignore has an empty reference"));
             }
+            reject_newline("ignore", refdes)?;
             if !ignored.insert(refdes.as_str()) {
                 return Err(testbench_error(format!("ignore lists `{refdes}` twice")));
             }
@@ -189,6 +191,7 @@ impl Testbench {
             if source.net.trim().is_empty() {
                 return Err(testbench_error("source net is empty"));
             }
+            reject_newline("net", &source.net)?;
             let Some(dc) = source.dc else {
                 return Err(testbench_error(format!(
                     "source on net `{}` has no `dc` value",
@@ -222,6 +225,7 @@ impl Testbench {
                     measure.name
                 )));
             }
+            reject_newline("node", &measure.node)?;
             for (label, value) in [("min", measure.min), ("max", measure.max)] {
                 if let Some(value) = value {
                     if !value.is_finite() {
@@ -1634,6 +1638,17 @@ fn no_model_error(component: &Component, message: &str, design_path: Option<&Pat
         design_path,
         component.source_span,
     )
+}
+
+/// Newlines end a SPICE line, so a testbench value carrying one could inject
+/// deck commands. The sidecar is a trust boundary.
+fn reject_newline(field: &str, value: &str) -> Result<(), Diagnostic> {
+    if value.contains(['\n', '\r']) {
+        return Err(testbench_error(format!(
+            "testbench expression `{field}` must not contain a newline; it is emitted into the SPICE deck"
+        )));
+    }
+    Ok(())
 }
 
 fn testbench_error(message: impl Into<String>) -> Diagnostic {
