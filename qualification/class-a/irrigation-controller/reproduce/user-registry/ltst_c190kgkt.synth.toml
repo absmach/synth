@@ -28,5 +28,5 @@ electrical_type = "passive"
 [provenance]
 datasheet_url = "https://optoelectronics.liteon.com/upload/download/DS22-2000-074/LTST-C190KGKT.PDF"
 
-reviewed_by = "JeffMboya"
-reviewed_at = "2026-11-02"
+reviewed_by = "Steve Munene"
+reviewed_at = "2026-10-29"
