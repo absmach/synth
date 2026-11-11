@@ -22,38 +22,36 @@ and edit `matrix.toml` second.
 
 ### Where the corpus stands
 
-The corpus is 17 boards. **Six clear the source/DRC gate** —
-`env_logger`, `sensor_logger`, `placement_and_diff_pair`, `i2c_sensor_node`,
-`irrigation_controller` and `protected_power_entry` — and four of those clear
-manufacturing too. `irrigation_controller` and `protected_power_entry` are the
-two that do not: their copper is complete and their rules are met, and the
-manufacturing stage fails because no shipped part records a reviewer, which is
-#51 rather than anything about those boards.
+The corpus is 18 boards. **Two clear the source/DRC gate** — `buck` and
+`protected_power_entry` — on the pinned environment (KiCad 10.0 with
+KiCadRoutingTools v0.23.0). Clearing the gate is a measurement, not an
+approval: both are still `experimental`, and the table further down is what a
+human still has to judge before either becomes `qualified`.
 
-Clearing the gate is a measurement, not an approval. Every one of the six is
-still `experimental`, and the table further down is what a human still has to
-judge before any of them becomes `qualified`.
+The rows record what the current engine found, not what an earlier one did. A
+run on `ubuntu-latest` silently installed KiCad 9, so every DRC was `unknown`
+and every row was `fail`; the workflow now pins `ubuntu-24.04` and installs
+KiCad 10 through the checked script.
 
-The first three had been failing on their own declared rules: the exported
-project carried only the manufacturer edge and hole clearances, so the
-per-netclass clearance and the minimum via diameter never reached the external
-engine, which routed to the global floor instead. Writing the via geometry
-into the project file the router reads closed that, and the gate announced it
-by failing in the other direction — three rows declared `fail` that had
-started passing — which is the half of the contract that is easy to forget
-exists.
+What still fails, and why it is not one cause:
 
-What still fails, and why it is not one cause but several: `hello` has nothing
-to route and the engine exits 1 on an empty board. Four boards route and then
-fail `kicad-cli pcb drc` on the copper that came back. `irrigation_controller`
-does not finish routing at all, so DRC reports `unknown`, which is not a pass.
-The `ref_*` boards and `negative_broken_mcu_board` are negative tests and fail
-at source by design. `sdram_memory` is `unestablished` because the release
-command cannot read its source stage: `synth check` runs that stage as a child
-process without draining its pipes, so a board emitting more than the 64 KiB a
-pipe holds deadlocks and is reported as a parse error it does not have.
-Manufacturing fails on most boards whose source passes, because no shipped
-part carries a recorded reviewer.
+- `hello` has nothing to route and the engine exits 1 on an empty board, so its
+  DRC is `unknown`.
+- `env_logger`, `sensor_logger` and `i2c_sensor_node` clear the source stage and
+  fail `kicad-cli pcb drc` on the copper that came back.
+- `placement_and_diff_pair`, `rp2350_debug_target`, `ice40_hdmi_video`,
+  `irrigation_controller` and `sdram_memory` clear source and report `unknown`
+  for DRC: the stage could not produce a verdict, which is not a pass.
+- `dual_usb_compute` and `multirail_compute` fail at source with
+  `E-SYNTH-POWER-010`: the expansion header's declared 1 A draw exceeds the
+  800 mA main and 250 mA analog regulators that feed it. Splitting the header
+  rail or choosing a higher-current regulator is the fix, not a matrix edit.
+- The `ref_*` boards and `negative_broken_mcu_board` are negative tests and
+  fail at source by design.
+
+Manufacturing baselines are `unestablished` until they are re-measured on the
+pinned runner. The artifact records the observed value per board, so the next
+revision can pin them rather than asserting the KiCad 9 output.
 
 Nothing above is a reason to soften a declaration. A matrix that names its
 distinct causes is doing its job, and each cause fixed is one more row the
