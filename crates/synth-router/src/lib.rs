@@ -397,6 +397,16 @@ fn finalize(
             repair_unavailable.push(format!("via-in-pad repair did not run: {detail}"));
         }
     }
+    match island_vias::drop_edge_tracks(&candidate.candidate_path, &request.ground_nets) {
+        Ok(0) => {}
+        Ok(dropped) => eprintln!(
+            "note: dropped {dropped} ground track(s) whose copper came nearer the outline than the board's edge rule"
+        ),
+        Err(detail) => {
+            eprintln!("warning: edge tracks were not checked: {detail}");
+            repair_unavailable.push(format!("edge track prune did not run: {detail}"));
+        }
+    }
     repair_unavailable.extend(repair_dropped_stubs(&candidate.candidate_path));
     let mut repair_advisory: Vec<String> = Vec::new();
     let mut ground = island_vias::Ground::new(&request.ground_nets)

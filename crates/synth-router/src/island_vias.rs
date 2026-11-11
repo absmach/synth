@@ -2660,6 +2660,48 @@ pub fn drop_dangling_stubs(candidate: &Path) -> Result<usize, String> {
     Ok(count)
 }
 
+/// A track of a ground net whose copper comes closer to the board outline than the
+/// board's copper to edge rule is dropped. The plane repair of the router joins a
+/// via in a corner pocket of the pour with a track as wide as the net's class, and
+/// the track's centre, not its copper, is what it keeps off the edge; the pour
+/// still reaches whatever the track served, and the candidate is judged after.
+/// Returns how many tracks it dropped.
+pub fn drop_edge_tracks(candidate: &Path, nets: &[String]) -> Result<usize, String> {
+    let text = std::fs::read_to_string(candidate)
+        .map_err(|e| format!("could not read {}: {e}", candidate.display()))?;
+    let board = PcbBoard::parse(&text).map_err(|e| e.to_string())?;
+    let floor = declared_edge_clearance_mm(candidate).unwrap_or(DEFAULT_EDGE_CLEARANCE_MM);
+    let mut out = text.clone();
+    let mut count = 0;
+    for segment in &board.segments {
+        let named = net_of(&board, segment.net, segment.net_name.as_ref());
+        if !named.is_some_and(|net| nets.contains(&net)) {
+            continue;
+        }
+        let (a, b) = (
+            (segment.start.x_mm(), segment.start.y_mm()),
+            (segment.end.x_mm(), segment.end.y_mm()),
+        );
+        let half = nm_to_mm(segment.width_nm) / 2.0;
+        let near = board.edge_cuts.iter().any(|(p, q)| {
+            segment_distance(a, b, (p.x_mm(), p.y_mm()), (q.x_mm(), q.y_mm())) - half < floor - EPS
+        });
+        if !near {
+            continue;
+        }
+        let next = remove_segment_in_text(&out, (a, b), &segment.layer);
+        if next != out {
+            out = next;
+            count += 1;
+        }
+    }
+    if count > 0 {
+        std::fs::write(candidate, out)
+            .map_err(|e| format!("could not write {}: {e}", candidate.display()))?;
+    }
+    Ok(count)
+}
+
 /// Whether the end of track `index` at `p` touches copper of its own net: the end
 /// of another live track on the layer, a via, a pad, or a pour that covers the point.
 #[allow(clippy::cast_precision_loss)]
@@ -4564,6 +4606,34 @@ mod tests {
         let dropped = drop_dangling_stubs(&path).unwrap();
         let after = PcbBoard::parse(&std::fs::read_to_string(&path).unwrap()).unwrap();
         (dropped, after.segments.len())
+    }
+
+    /// A ground track whose copper is 0.05 mm from the outline breaks the 0.3 mm
+    /// copper to edge rule although its centre line is 0.45 mm in; it is dropped,
+    /// and a track of the same width that keeps the rule, or of another net, stays.
+    #[test]
+    fn a_ground_track_whose_copper_is_too_near_the_outline_is_dropped() {
+        let text = r#"(kicad_pcb
+          (layers (0 "F.Cu" signal) (2 "B.Cu" signal))
+          (net 0 "")
+          (net 1 "GND")
+          (net 2 "SIG")
+          (gr_line (start 0 0) (end 20 0) (layer "Edge.Cuts"))
+          (gr_line (start 20 0) (end 20 20) (layer "Edge.Cuts"))
+          (gr_line (start 20 20) (end 0 20) (layer "Edge.Cuts"))
+          (gr_line (start 0 20) (end 0 0) (layer "Edge.Cuts"))
+          (segment (start 0.45 5) (end 0.45 8) (width 0.8) (layer "F.Cu") (net 1))
+          (segment (start 2 5) (end 2 8) (width 0.8) (layer "F.Cu") (net 1))
+          (segment (start 0.45 10) (end 0.45 12) (width 0.2) (layer "F.Cu") (net 2))
+        )"#;
+        let dir = std::env::temp_dir().join(format!("edge-tracks-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("board.kicad_pcb");
+        std::fs::write(&path, text).unwrap();
+        let dropped = drop_edge_tracks(&path, &["GND".to_string()]).unwrap();
+        let after = PcbBoard::parse(&std::fs::read_to_string(&path).unwrap()).unwrap();
+        assert_eq!(dropped, 1, "only the wide ground track at the edge goes");
+        assert_eq!(after.segments.len(), 2);
     }
 
     /// A sliver shorter than its own width that leaves a junction and ends in nothing
