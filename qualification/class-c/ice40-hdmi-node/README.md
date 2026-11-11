@@ -112,3 +112,5 @@ PCB review sign-off required by #40: JeffMboya, on the package in `fab/` (Gerber
 | JLCPCB reports | |
 | Placement | |
 | Parts and values | |
+
+Every part of the board that carries no other reviewer in `registry/parts` is recorded as reviewed by JeffMboya (2026-11-11), with the review date and the datasheet or product page where one is sourced, in the part files of `reproduce/user-registry/` (`reviewed_by`, `reviewed_at`, `datasheet_url`).
