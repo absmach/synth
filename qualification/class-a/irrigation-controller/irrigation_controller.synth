@@ -41,7 +41,7 @@ board "irrigation_controller" {
     component C_IN1: capacitor "c_generic_0805" value "10uF 25V"
     component C_IN2: capacitor "c_generic_0805" value "10uF 25V"
     component C_BS: capacitor "c_generic_0603" value "10nF"
-    component L1: inductor "l_1210_10uh"
+    component L1: inductor "l_power_10uh_6045"
     component C_OUT1: capacitor "c_generic_1206" value "22uF 10V"
     component C_OUT2: capacitor "c_generic_1206" value "22uF 10V"
     component R_FBT: resistor "r_generic_0603" value "26.1k"
@@ -54,7 +54,7 @@ board "irrigation_controller" {
     component TP_GND: testpoint "testpoint_pad_1_5"
     notes "" {
       "MP2307 (internal sync rectifier, 340 kHz). Vout = 0.925 V x (1 + 26.1k/10k) = 3.34 V."
-      "L1 10 uH: ripple about 0.7 A p-p at 12 V in; confirm L1 saturation current against its datasheet."
+      "L1 Bourns SRN6045TA-100M, 10 uH: ripple about 0.7 A p-p at 12 V in (L = VOUT / (fS dIL) x (1 - VOUT / VIN), MP2307 datasheet), peak 0.96 A at the 0.6 A load; Isat 4.6 A (30 % inductance drop, Bourns datasheet) is above the MP2307 4.0 A minimum switch current limit, so L1 does not saturate before the converter limits."
     }
   }
 

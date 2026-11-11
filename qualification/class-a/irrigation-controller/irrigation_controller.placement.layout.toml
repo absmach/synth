@@ -759,9 +759,9 @@ dx = 0.0
 dy = 0.0
 
 [components.L1]
-x = 25.0
-y = 20.3
-rotation = 0
+x = 23.7
+y = 20.5
+rotation = 180
 source = "agent"
 priority = "hard"
 dx = 0.0
