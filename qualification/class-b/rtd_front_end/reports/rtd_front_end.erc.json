@@ -1,0 +1,9 @@
+{
+  "board": "rtd_front_end",
+  "diagnostics_count": 1,
+  "errors": 0,
+  "warnings": 1,
+  "diagnostics": [
+    "W-SYNTH-SUPPLY-002: part has no distributor identity"
+  ]
+}
