@@ -97,11 +97,9 @@ Everything committed comes from export 1. The authoritative evidence of how the 
 
 ## Human review
 
-Jeff Mboya is the independent PCB reviewer as well as the author of this pull request. The PCB review sign-off is JeffMboya's own and is recorded below once given.
-
 ### PCB review sign-off
 
-PCB review sign-off required by #40: JeffMboya, on the package in `fab/` (Gerber content hash `89d4497fd0`, STEP geometry hash `f5fe2d3c18`). The sign-off is JeffMboya's own: it is recorded per item as "verified and approved by JeffMboya" when Jeff states it.
+PCB review sign-off required by #40: JeffMboya, on the package in `fab/` (Gerber content hash `89d4497fd0`, STEP geometry hash `f5fe2d3c18`). The sign-off is JeffMboya's own. Jeff Mboya is the independent PCB reviewer as well as the author of this pull request. It covers, each verified and approved by JeffMboya, once Jeff states it:
 
 | Item | Signed off |
 |---|---|
