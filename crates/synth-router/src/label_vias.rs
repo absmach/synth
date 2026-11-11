@@ -81,6 +81,9 @@ pub struct LabelMoves {
     /// Silkscreen circles that came within the clearance of a pad or a via, such
     /// as the ring a test point draws round its own pad, dropped.
     pub dropped: usize,
+    /// Pin-1 markers (a silkscreen polygon or a circle that rings no pad) moved
+    /// to the nearest spot clear of copper, so the part keeps its pin-1 mark.
+    pub relocated: usize,
 }
 
 /// A label's box in board millimetres: `(min_x, min_y, max_x, max_y)`.
@@ -242,8 +245,9 @@ fn keep_labels_off_copper_with(
     moves.widened = widened;
     let (out, trimmed) = trim_outlines_off_copper(&out, board, &scene.vias);
     moves.trimmed = trimmed;
-    let (out, dropped) = drop_shapes_off_copper(&out, board, &scene.vias);
+    let (out, dropped, relocated) = drop_shapes_off_copper(&out, board, &scene.vias);
     moves.dropped = dropped;
+    moves.relocated = relocated;
     (out, moves)
 }
 
@@ -397,17 +401,91 @@ fn polygon_hugs_copper(
         })
 }
 
+/// How far a pin-1 marker may move to clear copper and still sit by its pin.
+const MARKER_REACH_MM: f64 = 1.5;
+
+/// A silkscreen polygon or circle shifted by `(dx, dy)` in its footprint's own
+/// axes: every `(xy ..)` point of a polygon, the `(center ..)` and `(end ..)`
+/// of a circle.
+fn shift_shape(shape: &str, (dx, dy): (f64, f64)) -> String {
+    let mut out = String::with_capacity(shape.len() + 16);
+    let mut rest = shape;
+    while let Some(i) = ["(xy ", "(center ", "(end "]
+        .iter()
+        .filter_map(|key| rest.find(key).map(|at| (at, key.len())))
+        .min()
+    {
+        let (at, key_len) = i;
+        let (head, tail) = rest.split_at(at + key_len);
+        out.push_str(head);
+        let Some(close) = tail.find(')') else {
+            rest = tail;
+            break;
+        };
+        let nums: Vec<f64> = tail[..close]
+            .split_whitespace()
+            .filter_map(|n| n.parse().ok())
+            .collect();
+        if let (Some(&x), Some(&y)) = (nums.first(), nums.get(1)) {
+            out.push_str(&number(x + dx));
+            out.push(' ');
+            out.push_str(&number(y + dy));
+        } else {
+            out.push_str(&tail[..close]);
+        }
+        rest = &tail[close..];
+    }
+    out.push_str(rest);
+    out
+}
+
+/// The nearest shift, in board millimetres and within [`MARKER_REACH_MM`], that
+/// takes a pin-1 marker clear of copper; `None` for a ring round its own pad,
+/// which is dropped, or when no shift clears it.
+fn marker_clear_spot(
+    shape: &str,
+    polygon: bool,
+    board: &PcbBoard,
+    vias: &[((f64, f64), f64)],
+    to_board: &dyn Fn((f64, f64)) -> (f64, f64),
+) -> Option<(f64, f64)> {
+    let rings_a_pad = !polygon
+        && block_point(shape, "(center").is_some_and(|c| {
+            let at = to_board(c);
+            let at = Point::new(mm_to_nm(at.0), mm_to_nm(at.1));
+            board.pads().any(|p| p.signed_distance_nm(at) <= 0.0)
+        });
+    if rings_a_pad {
+        return None;
+    }
+    candidate_shifts(MARKER_REACH_MM).skip(1).find(|&(dx, dy)| {
+        let shifted = |p: (f64, f64)| {
+            let b = to_board(p);
+            (b.0 + dx, b.1 + dy)
+        };
+        !if polygon {
+            polygon_hugs_copper(shape, board, vias, &shifted)
+        } else {
+            circle_hugs_copper(shape, board, vias, &shifted)
+        }
+    })
+}
+
 /// Drop every silkscreen circle and polygon of a footprint that comes within the
 /// silkscreen clearance of a pad or a via. A circle is not cut like a line: the ring a test
 /// point draws round its own pad sits a tenth of a millimetre off it, closer
 /// than any fabricator prints, and without the ring the pad and its reference
-/// still mark the point. Returns the new text and the number of circles dropped.
+/// still mark the point. A pin-1 marker (a polygon, or a circle that does not
+/// ring a pad) is moved to the nearest clear spot within reach instead, so the
+/// part still shows which pin is 1; only one with no clear spot is dropped.
+/// Returns the new text and the numbers of shapes dropped and moved.
 fn drop_shapes_off_copper(
     text: &str,
     board: &PcbBoard,
     vias: &[((f64, f64), f64)],
-) -> (String, usize) {
+) -> (String, usize, usize) {
     let mut ranges: Vec<std::ops::Range<usize>> = Vec::new();
+    let mut moved: Vec<(std::ops::Range<usize>, String)> = Vec::new();
     let mut base = 0;
     while let Some(i) = text[base..].find("(footprint") {
         let start = base + i;
@@ -428,7 +506,9 @@ fn drop_shapes_off_copper(
         let (Some(&ox), Some(&oy)) = (nums.first(), nums.get(1)) else {
             continue;
         };
-        let rotation = quarter_turn(nums.get(2).copied().unwrap_or(0.0));
+        let angle = nums.get(2).copied().unwrap_or(0.0);
+        let rotation = quarter_turn(angle);
+        let inverse = quarter_turn(-angle);
         let to_board = |(x, y): (f64, f64)| {
             let (dx, dy) = rotation.rotate_offset(mm_to_nm(x), mm_to_nm(y));
             (ox + dx as f64 / NM_PER_MM, oy + dy as f64 / NM_PER_MM)
@@ -448,16 +528,39 @@ fn drop_shapes_off_copper(
                 } else {
                     circle_hugs_copper(shape, board, vias, &to_board)
                 };
-                if hugs {
-                    ranges.push(start + shape_start..start + shape_start + end);
+                if !hugs {
+                    continue;
+                }
+                let range = start + shape_start..start + shape_start + end;
+                let clear_spot = marker_clear_spot(shape, polygon, board, vias, &to_board);
+                match clear_spot {
+                    Some((dx, dy)) => {
+                        let (lx, ly) = inverse.rotate_offset(mm_to_nm(dx), mm_to_nm(dy));
+                        let local = (lx as f64 / NM_PER_MM, ly as f64 / NM_PER_MM);
+                        moved.push((range, shift_shape(shape, local)));
+                    }
+                    None => ranges.push(range),
                 }
             }
         }
     }
     ranges.sort_by_key(|range| range.start);
     let count = ranges.len();
+    let relocated = moved.len();
     let mut out = text.to_string();
-    for range in ranges.into_iter().rev() {
+    // Moves first, from the back, so the dropped ranges stay valid (a shape is
+    // in one list or the other; each replacement is applied to its own range).
+    let mut edits: Vec<(std::ops::Range<usize>, Option<String>)> = ranges
+        .into_iter()
+        .map(|r| (r, None))
+        .chain(moved.into_iter().map(|(r, text)| (r, Some(text))))
+        .collect();
+    edits.sort_by_key(|(range, _)| range.start);
+    for (range, replacement) in edits.into_iter().rev() {
+        if let Some(replacement) = replacement {
+            out.replace_range(range, &replacement);
+            continue;
+        }
         // Take the tab that indented the shape with it, so no blank line stays.
         let begin = out[..range.start]
             .rfind(|ch: char| ch != '\t' && ch != ' ')
@@ -472,7 +575,7 @@ fn drop_shapes_off_copper(
         };
         out.replace_range(from..range.end, "");
     }
-    (out, count)
+    (out, count, relocated)
 }
 
 /// The parameters `[t0, t1]` along `a`..`b` that lie within a via's clearance
@@ -1132,7 +1235,8 @@ mod tests {
                 hidden: 0,
                 trimmed: 0,
                 widened: 0,
-                dropped: 0
+                dropped: 0,
+                relocated: 0
             }
         );
         let reread = PcbBoard::parse(&out).expect("still parses");
@@ -1410,9 +1514,10 @@ mod tests {
         assert!(out.contains("(fp_circle"));
     }
 
-    /// A pin-1 triangle drawn over a pad is dropped; one clear of every pad stays.
+    /// A pin-1 triangle drawn over a pad is moved to the nearest clear spot, so
+    /// the part keeps its pin-1 mark; one clear of every pad stays where it is.
     #[test]
-    fn a_silkscreen_polygon_on_a_pad_is_dropped_and_a_distant_one_is_kept() {
+    fn a_pin_1_triangle_on_a_pad_is_moved_clear_and_a_distant_one_is_kept() {
         let triangle = |dx: f64| {
             format!(
                 "    (fp_poly (pts (xy {a} -0.6) (xy {b} -0.6) (xy {c} -1.0)) (stroke (width 0.12) (type solid)) (fill solid) (layer \"F.SilkS\") (uuid \"00000000-0000-0000-0000-000000000030\"))\n    (pad \"1\"",
@@ -1423,12 +1528,30 @@ mod tests {
         };
         let on_pad = board_text("").replacen("    (pad \"1\"", &triangle(-0.825), 1);
         let (out, moves) = run(&on_pad);
-        assert_eq!(moves.dropped, 1, "{out}");
-        assert!(!out.contains("(fp_poly"), "{out}");
+        assert_eq!(moves.relocated, 1, "{out}");
+        assert_eq!(moves.dropped, 0, "{out}");
+        assert!(out.contains("(fp_poly"), "the marker is kept: {out}");
+        assert!(!out.contains("(xy -1.225 -0.6)"), "and it has moved: {out}");
+        let (again, moves) = run(&out);
+        assert_eq!(
+            moves.relocated, 0,
+            "a moved marker is clear of copper: {again}"
+        );
         let distant = board_text("").replacen("    (pad \"1\"", &triangle(3.0), 1);
         let (out, moves) = run(&distant);
-        assert_eq!(moves.dropped, 0, "{out}");
+        assert_eq!((moves.relocated, moves.dropped), (0, 0), "{out}");
         assert!(out.contains("(fp_poly"));
+    }
+
+    /// A marker with no clear spot within reach is dropped, as before.
+    #[test]
+    fn a_pin_1_triangle_with_no_clear_spot_within_reach_is_dropped() {
+        // A stroke 6 mm wide reaches further than any shift within reach.
+        let wide = "    (fp_poly (pts (xy -0.4 -0.6) (xy 0.4 -0.6) (xy 0 -1.0)) (stroke (width 6) (type solid)) (fill solid) (layer \"F.SilkS\") (uuid \"00000000-0000-0000-0000-000000000031\"))\n    (pad \"1\"";
+        let text = board_text("").replacen("    (pad \"1\"", wide, 1);
+        let (out, moves) = run(&text);
+        assert_eq!((moves.relocated, moves.dropped), (0, 1), "{out}");
+        assert!(!out.contains("(fp_poly"), "{out}");
     }
 
     /// A second resistor one millimetre to the right, whose reference lands on
