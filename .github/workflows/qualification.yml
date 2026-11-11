@@ -193,7 +193,9 @@ jobs:
         env:
           SYNTH_QUALIFY_FAB: "1"
           SYNTH_CHECK_FAB_TIMEOUT_SECS: "900"
-          SYNTH_CHECK_DRC_TIMEOUT_SECS: "300"
+          # The test defaults DRC to 600 s; leave it there in both jobs so a
+          # board cannot pass the source job and time out to `unknown` here.
+          SYNTH_CHECK_DRC_TIMEOUT_SECS: "600"
         run: cargo test --release -p synth-cli --test qualification_matrix -- --ignored --nocapture
 
       - name: Upload manufacturing baseline
