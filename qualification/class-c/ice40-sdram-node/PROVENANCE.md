@@ -14,7 +14,7 @@ The board is the output of agents driving `synth mcp` from prompts, followed by 
 
 | | |
 |---|---|
-| Synth, final exports | the binary built from commit `48a0a490b2c3dde076a90e55ba05b82ce4137605` (pull request #455, `refs/pull/455/head`, branch `fix-451-edge-tracks` of `JeffMboya/synth`), on `upstream/main` `3e59acdf`. The pull request adds one pass: a ground track whose copper comes nearer the board outline than the board's edge rule is dropped before the candidate is judged (issue #451). `upstream/main` carries the rest of the router, DRC, exporter and symbol-layout work of pull request #440. The exports set `SYNTH_SOURCE_REVISION` to that commit, and the routing record of each export carries it as `source_revision` |
+| Synth, final exports | the binary built from commit `48a0a490b2c3dde076a90e55ba05b82ce4137605` (pull request #455, `refs/pull/455/head`, branch `fix-451-edge-tracks` of `JeffMboya/synth`), on `upstream/main` `3e59acdf`. The pull request adds one pass: a ground track whose copper comes nearer the board outline than the board's edge rule does not reach the candidate that is judged (issue #451). `upstream/main` carries the rest of the router, DRC, exporter and symbol-layout work of pull request #440. The exports set `SYNTH_SOURCE_REVISION` to that commit, and the routing record of each export carries it as `source_revision` |
 | KiCadRoutingTools | `9399bfb2` |
 | KiCad | 10.0.6 |
 | Registry inputs | [`reproduce/user-registry/`](reproduce/user-registry/): `ice40hx4k_tq144`, `header_1x6_prog`, `w25q128jvsiq_208mil`, `tlv70012_ddc` |
