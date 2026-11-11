@@ -32,7 +32,7 @@ fn model_facts(declared: &[&str], default_path: &str, exists: impl Fn(&str) -> b
 }
 
 /// Colon-separated extra directories of model files, searched like a
-/// `step-models/` directory.
+/// model directory.
 const STEP_DIRS_ENV: &str = "SYNTH_STEP_MODEL_DIRS";
 
 /// Whether `name` is a 3D model file (STEP, STP or WRL, any case).
@@ -67,7 +67,12 @@ fn collect_files(dir: &Path, out: &mut BTreeSet<String>) {
     }
 }
 
-/// Adds the files of every `step-models` directory at or below `dir`.
+/// Directory names that hold a qualification package's 3D models: `models/` is
+/// the standard package layout and `step-models/` is the one earlier packages use.
+const MODEL_DIR_NAMES: [&str; 2] = ["models", "step-models"];
+
+/// Adds the files of every model directory (`models` or `step-models`) at or
+/// below `dir`.
 fn collect_step_models(dir: &Path, out: &mut BTreeSet<String>) {
     let Ok(entries) = std::fs::read_dir(dir) else {
         return;
@@ -76,7 +81,10 @@ fn collect_step_models(dir: &Path, out: &mut BTreeSet<String>) {
         if !entry.file_type().is_ok_and(|t| t.is_dir()) {
             continue;
         }
-        if entry.file_name() == "step-models" {
+        if MODEL_DIR_NAMES
+            .iter()
+            .any(|name| entry.file_name() == *name)
+        {
             collect_files(&entry.path(), out);
         } else {
             collect_step_models(&entry.path(), out);
@@ -85,7 +93,7 @@ fn collect_step_models(dir: &Path, out: &mut BTreeSet<String>) {
 }
 
 /// File names of the model files committed under `qualification_roots`
-/// (any `step-models/` directory) or placed in `extra_dirs`.
+/// (any `models/` or `step-models/` directory) or placed in `extra_dirs`.
 fn step_model_names(qualification_roots: &[PathBuf], extra_dirs: &[PathBuf]) -> BTreeSet<String> {
     let mut names = BTreeSet::new();
     for root in qualification_roots {
@@ -223,12 +231,14 @@ mod tests {
     #[test]
     fn committed_step_models_count_from_any_step_models_dir() {
         let tmp = tempfile::tempdir().unwrap();
-        let (a, b) = (
+        let (a, b, c) = (
             tmp.path().join("q/a/step-models"),
             tmp.path().join("q/b/x/step-models"),
+            tmp.path().join("q/c/models"),
         );
         std::fs::create_dir_all(&a).unwrap();
         std::fs::create_dir_all(&b).unwrap();
+        std::fs::create_dir_all(&c).unwrap();
         std::fs::create_dir_all(tmp.path().join("q/other")).unwrap();
         std::fs::write(a.join("Pico_A.step"), "").unwrap();
         std::fs::write(a.join("Dup.step"), "").unwrap();
@@ -236,13 +246,15 @@ mod tests {
         std::fs::write(tmp.path().join("q/other/Stray.step"), "").unwrap();
         std::fs::write(a.join("notes.txt"), "").unwrap();
         std::fs::write(a.join("Upper.STP"), "").unwrap();
+        // The standard package layout keeps 3D files in `models/`.
+        std::fs::write(c.join("Std.step"), "").unwrap();
         let names = step_model_names(
             &[tmp.path().join("q"), tmp.path().join("nope")],
             &[tmp.path().join("missing")],
         );
         assert_eq!(
             names.iter().map(String::as_str).collect::<Vec<_>>(),
-            ["Dup.step", "Pico_A.step", "Upper.STP"]
+            ["Dup.step", "Pico_A.step", "Std.step", "Upper.STP"]
         );
         let in_step = |p: &str| names.contains(&file_name(p));
         assert_eq!(
