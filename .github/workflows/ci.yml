@@ -23,13 +23,25 @@ concurrency:
 jobs:
   lint-and-build:
     name: Lint and Build
-    # Pinned, not ubuntu-latest: that label is moving to 26.04 (resolute), whose
-    # apt reads the KiCad 10 PPA through its amd64v3 index, which carries no
-    # KiCad, so it offers the archive's 9.0 and install-kicad.sh rightly
-    # refuses it. Move once 26.04 resolves KiCad 10 from the PPA.
+    # The container is the toolchain pin: KiCad 10.0.8, the version the
+    # matrix was measured on, with no PPA or archive in the path.
     runs-on: ubuntu-24.04
+    container:
+      image: kicad/kicad:10.0.8-full
+      options: --user root
+    env:
+      KICAD_FOOTPRINT_DIR: /usr/share/kicad/footprints
+      KICAD_SYMBOL_DIR: /usr/share/kicad/symbols
 
     steps:
+      # The image is pinned to the KiCad version the matrix was measured on, so
+      # no PPA, Launchpad API or apt archive can change the tool under us.
+      - name: Install checkout and build prerequisites
+        run: |
+          apt-get update
+          apt-get install -y --no-install-recommends \
+            git curl ca-certificates python3 python3-pip build-essential pkg-config libssl-dev
+
       - name: Checkout Code
         uses: actions/checkout@v7
 
@@ -43,17 +55,12 @@ jobs:
         with:
           shared-key: ${{ runner.os }}-${{ hashFiles('rust-toolchain.toml') }}
 
-      - name: Cache KiCad apt packages
-        uses: actions/cache@v4
-        with:
-          path: ~/.cache/synth-apt
-          key: ${{ runner.os }}-kicad-apt-${{ hashFiles('.github/scripts/install-kicad.sh') }}
-          restore-keys: |
-            ${{ runner.os }}-kicad-apt-
-
-      - name: Install kicad-cli and the stock symbol/footprint libraries
-        run: .github/scripts/install-kicad.sh
-
+      - name: Assert the KiCad version and library tables
+        run: |
+          test "$(kicad-cli version)" = "10.0.8"
+          mkdir -p "$HOME/.config/kicad/10.0"
+          cp /usr/share/kicad/template/sym-lib-table "$HOME/.config/kicad/10.0/sym-lib-table"
+          cp /usr/share/kicad/template/fp-lib-table "$HOME/.config/kicad/10.0/fp-lib-table"
       - name: Check formatting
         run: cargo fmt --all -- --check
 
@@ -80,11 +87,15 @@ jobs:
 
   test:
     name: Test shard ${{ matrix.shard }}/3
-    # Pinned, not ubuntu-latest: that label is moving to 26.04 (resolute), whose
-    # apt reads the KiCad 10 PPA through its amd64v3 index, which carries no
-    # KiCad, so it offers the archive's 9.0 and install-kicad.sh rightly
-    # refuses it. Move once 26.04 resolves KiCad 10 from the PPA.
+    # The container is the toolchain pin: KiCad 10.0.8, the version the
+    # matrix was measured on, with no PPA or archive in the path.
     runs-on: ubuntu-24.04
+    container:
+      image: kicad/kicad:10.0.8-full
+      options: --user root
+    env:
+      KICAD_FOOTPRINT_DIR: /usr/share/kicad/footprints
+      KICAD_SYMBOL_DIR: /usr/share/kicad/symbols
 
     strategy:
       fail-fast: false
@@ -92,6 +103,14 @@ jobs:
         shard: [1, 2, 3]
 
     steps:
+      # The image is pinned to the KiCad version the matrix was measured on, so
+      # no PPA, Launchpad API or apt archive can change the tool under us.
+      - name: Install checkout and build prerequisites
+        run: |
+          apt-get update
+          apt-get install -y --no-install-recommends \
+            git curl ca-certificates python3 python3-pip build-essential pkg-config libssl-dev
+
       - name: Checkout Code
         uses: actions/checkout@v7
 
@@ -103,17 +122,12 @@ jobs:
         with:
           shared-key: ${{ runner.os }}-${{ hashFiles('rust-toolchain.toml') }}
 
-      - name: Cache KiCad apt packages
-        uses: actions/cache@v4
-        with:
-          path: ~/.cache/synth-apt
-          key: ${{ runner.os }}-kicad-apt-${{ hashFiles('.github/scripts/install-kicad.sh') }}
-          restore-keys: |
-            ${{ runner.os }}-kicad-apt-
-
-      - name: Install kicad-cli and the stock symbol/footprint libraries
-        run: .github/scripts/install-kicad.sh
-
+      - name: Assert the KiCad version and library tables
+        run: |
+          test "$(kicad-cli version)" = "10.0.8"
+          mkdir -p "$HOME/.config/kicad/10.0"
+          cp /usr/share/kicad/template/sym-lib-table "$HOME/.config/kicad/10.0/sym-lib-table"
+          cp /usr/share/kicad/template/fp-lib-table "$HOME/.config/kicad/10.0/fp-lib-table"
       - name: Install cargo-nextest
         uses: taiki-e/install-action@nextest
 
@@ -134,13 +148,25 @@ jobs:
   # `crates/synth-route/tests/routability_report.rs` runs in the matrix above.
   routability-gate:
     name: Routability Gate (release)
-    # Pinned, not ubuntu-latest: that label is moving to 26.04 (resolute), whose
-    # apt reads the KiCad 10 PPA through its amd64v3 index, which carries no
-    # KiCad, so it offers the archive's 9.0 and install-kicad.sh rightly
-    # refuses it. Move once 26.04 resolves KiCad 10 from the PPA.
+    # The container is the toolchain pin: KiCad 10.0.8, the version the
+    # matrix was measured on, with no PPA or archive in the path.
     runs-on: ubuntu-24.04
+    container:
+      image: kicad/kicad:10.0.8-full
+      options: --user root
+    env:
+      KICAD_FOOTPRINT_DIR: /usr/share/kicad/footprints
+      KICAD_SYMBOL_DIR: /usr/share/kicad/symbols
 
     steps:
+      # The image is pinned to the KiCad version the matrix was measured on, so
+      # no PPA, Launchpad API or apt archive can change the tool under us.
+      - name: Install checkout and build prerequisites
+        run: |
+          apt-get update
+          apt-get install -y --no-install-recommends \
+            git curl ca-certificates python3 python3-pip build-essential pkg-config libssl-dev
+
       - name: Checkout Code
         uses: actions/checkout@v7
 
@@ -152,17 +178,12 @@ jobs:
         with:
           shared-key: ${{ runner.os }}-routability-${{ hashFiles('rust-toolchain.toml') }}
 
-      - name: Cache KiCad apt packages
-        uses: actions/cache@v4
-        with:
-          path: ~/.cache/synth-apt
-          key: ${{ runner.os }}-kicad-apt-${{ hashFiles('.github/scripts/install-kicad.sh') }}
-          restore-keys: |
-            ${{ runner.os }}-kicad-apt-
-
-      - name: Install kicad-cli and the stock symbol/footprint libraries
-        run: .github/scripts/install-kicad.sh
-
+      - name: Assert the KiCad version and library tables
+        run: |
+          test "$(kicad-cli version)" = "10.0.8"
+          mkdir -p "$HOME/.config/kicad/10.0"
+          cp /usr/share/kicad/template/sym-lib-table "$HOME/.config/kicad/10.0/sym-lib-table"
+          cp /usr/share/kicad/template/fp-lib-table "$HOME/.config/kicad/10.0/fp-lib-table"
       - name: Run unrouted-net no-regression gate
         run: |
           cargo test --release -p synth-route --test routability_report \
