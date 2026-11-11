@@ -1,6 +1,6 @@
 # iCE40HX4K HDMI (DVI-style TMDS) node (Class C, case 3)
 
-An iCE40HX4K FPGA in a 144-pin TQFP (0.5 mm pitch) driving an HDMI Type-A receptacle with four TMDS-style differential pairs (three data lanes and the clock) through 270 ohm source resistors, with the DDC lines level-shifted, a hot-plug-detect divider and a fused +5 V pin, an SPI boot flash and four status LEDs, powered from a 5 V terminal, on six copper layers. It answers #330 under #40: a board whose high-speed differential interface declares impedance, pair spacing and skew, with the delivered copper measured against those declarations. The interface is DVI-style: the iCE40 cannot source TMDS levels, so each line is an LVCMOS33 output through a series resistor into the sink's 50 ohm termination to 3.3 V. No HDMI compliance is claimed; the board demonstrates only what is measured below. Jeff Mboya is the independent PCB reviewer as well as the author of this pull request.
+An iCE40HX4K FPGA in a 144-pin TQFP (0.5 mm pitch) driving an HDMI Type-A receptacle with four TMDS-style differential pairs (three data lanes and the clock) through 270 ohm source resistors, with the DDC lines level-shifted, a hot-plug-detect divider and a fused +5 V pin, an SPI boot flash and four status LEDs, powered from a 5 V terminal, on six copper layers. It answers #330 under #40: a board whose high-speed differential interface declares impedance, pair spacing and skew, with the delivered copper measured against those declarations. The interface is DVI-style: the iCE40 cannot source TMDS levels, so each line is an LVCMOS33 output through a series resistor into the sink's 50 ohm termination to 3.3 V. No HDMI compliance is claimed; the board demonstrates only what is measured below.
 
 **Status:** the board is routed and released (46 of 46 nets; KiCad 10.0.6 reports 0 errors and 0 unconnected pads with the library tables), three fresh exports agree (the files listed below byte-identical, the routed board and the Gerbers equal after normalization), and the exported KiCad files, the DRC and ERC reports, a fabrication package and the STEP model are committed ([`export/`](export/), [`reports/`](reports/), [`fab/`](fab/)). The delivered differential pairs meet their declared 25 mm intra-pair skew budget; the measured numbers are in the interface table below.
 
@@ -53,6 +53,19 @@ The rule `W-SYNTH-DRC-016` asks that a layer-change via on a fast net have a gro
 
 The iCE40HX4K-TQ144 has 107 user I/O (Lattice DS1040); the part model in [`reproduce/user-registry/ice40hx4k_tq144.synth.toml`](reproduce/user-registry/ice40hx4k_tq144.synth.toml) is built from KiCad's `FPGA_Lattice:ICE40HX4K-TQ144` symbol with the pin functions of that datasheet. The four lanes use the four adjacent pin pairs on the FPGA's left side (pins 1 and 2, 3 and 4, 7 and 8, 9 and 10), in the same top-to-bottom order as the connector's lanes, so no pair crosses another; the eight source resistors sit in one column between the FPGA and the connector.
 
+## 3.3 V regulator thermal budget
+
+`U1` (AMS1117-3.3, SOT-223) drops at most 5 V to 3.3 V, so it dissipates `P = (5.0 - 3.3) x I` and its junction sits at `Tj = TA + P x RθJA`, limited to 125 &deg;C ([Advanced Monolithic Systems AMS1117 datasheet](https://files.waveshare.com/upload/b/b8/AMS1117-datasheet.pdf), a third-party print of the manufacturer's document: "Maximum junction temperature must not exceed 125 °C"; SOT-223 `RθJA = 90 °C/W`, which "can vary from 46 °C/W to >90 °C/W depending on the size of the copper area"). The board uses 90 °C/W. `W-SYNTH-THERMAL-001` comes from the registry part's declared 1200 mW rating at 90 °C/W (25 + 1.2 x 90 = 133 °C), the package limit, not this board's load.
+
+| Load on `+3V3` | Current used | Source |
+|---|---|---|
+| `U2` TLV70012 1.2 V core regulator | 200 mA (its rated output current; a linear regulator draws its output current from the input) | TI TLV700 datasheet SBVS173, recommended operating conditions IOUT 0 to 200 mA |
+| `U4` W25Q128JV | 25 mA (page program and erase, `ICC5` and `ICC7` maximum) | Winbond W25Q128JV datasheet, DC Electrical Characteristics |
+| Four LEDs, 470 ohm | 28 mA (3.3 V / 470 ohm each, which ignores the LED forward drop) | the design's own arithmetic |
+| Total | 253 mA | |
+
+At 253 mA the regulator dissipates 1.7 V x 0.253 A = 0.43 W, a 39 &deg;C rise: Tj is 64 &deg;C at 25 &deg;C ambient and 109 &deg;C at 70 &deg;C ambient, under 125 &deg;C. Tj reaches 125 &deg;C at `(125 - 25) / 90 / 1.7 = 0.65 A` in total at 25 &deg;C ambient and at `(125 - 70) / 90 / 1.7 = 0.36 A` at 70 &deg;C ambient, which leaves about 0.40 A and 0.11 A for the FPGA's 3.3 V I/O banks, whose current depends on the design and is not counted above. The HDMI 5 V output is fed from the 5 V rail through `F2`, not through `U1`. The load currents are datasheet maxima added together, which no operating state reaches at once.
+
 ## Layout and fill
 
 The placement is pinned in [`ice40_hdmi_node.placement.layout.toml`](ice40_hdmi_node.placement.layout.toml): the HDMI receptacle on the left edge, the eight source resistors in one column beside the FPGA's left pins, the power entry on the right edge. The courtyard fill of 22.7 % and the outline are measured on the exported board; the parts occupy an 80.3 x 69.0 mm box (96 % of the board), with 2 of the 56 10 x 10 mm cells empty and a mean nearest-neighbour gap of 2.9 mm.
@@ -85,11 +98,9 @@ Everything committed comes from export 1. The authoritative evidence of how the 
 
 ## Human review
 
-Jeff Mboya is the independent PCB reviewer as well as the author of this pull request. The PCB review sign-off is JeffMboya's own and is recorded below once given.
-
 ### PCB review sign-off
 
-PCB review sign-off required by #40: JeffMboya, on the package in `fab/` (Gerber content hash `92d05ff69b`, STEP geometry hash `0ab9ee69cb`). The sign-off is JeffMboya's own: it is recorded per item as "verified and approved by JeffMboya" when Jeff states it.
+PCB review sign-off required by #40: JeffMboya, on the package in `fab/` (Gerber content hash `92d05ff69b`, STEP geometry hash `0ab9ee69cb`). The sign-off is JeffMboya's own. Jeff Mboya is the independent PCB reviewer as well as the author of this pull request. It covers, each verified and approved by JeffMboya, once Jeff states it:
 
 | Item | Signed off |
 |---|---|
