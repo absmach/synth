@@ -1,0 +1,27 @@
+id = "d_tvs_5v"
+kind = "diode"
+description = "5V unidirectional TVS diode, SOD-123 — ESD protection"
+kicad_symbol = "Device:D_TVS"
+kicad_footprint = "Diode_SMD:D_SOD-323"
+reviewed_at = "2026-11-11"
+reviewed_by = "JeffMboya"
+
+[footprint_dimensions]
+width_mm = 2.7
+height_mm = 0.45
+courtyard_margin_mm = 0.25
+
+[operating_conditions]
+max_voltage_v = 100.0
+max_current_ma = 1000.0
+
+[[pins]]
+name = "anode"
+number = "2"
+electrical_type = "passive"
+
+[[pins]]
+name = "cathode"
+number = "1"
+electrical_type = "passive"
+
