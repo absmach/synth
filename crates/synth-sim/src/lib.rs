@@ -144,10 +144,22 @@ pub struct Measure {
     /// Relative-dB drop for `relative_db`. Defaults to 3.0.
     #[serde(default)]
     pub drop_db: Option<f64>,
+    /// Frequency in Hz for an absolute `vdb` gain on a `node_voltage`
+    /// measure; requires the `ac` analysis.
+    #[serde(default)]
+    pub at_frequency: Option<f64>,
     #[serde(default)]
     pub min: Option<f64>,
     #[serde(default)]
     pub max: Option<f64>,
+    /// Byte range of this `[[measure]]` block in the sidecar; filled after
+    /// parsing and never read from TOML.
+    #[serde(skip, default = "empty_span")]
+    pub span: Span,
+}
+
+fn empty_span() -> Span {
+    Span::new(0, 0)
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize)]
@@ -177,7 +189,7 @@ impl Testbench {
     }
 
     fn parse(text: &str, path: Option<&Path>) -> Result<Self, Diagnostic> {
-        let testbench: Self = toml::from_str(text).map_err(|error| {
+        let mut testbench: Self = toml::from_str(text).map_err(|error| {
             let span = error.span().map_or(Span::new(0, 0), |range| {
                 Span::new(
                     u32::try_from(range.start).unwrap_or(u32::MAX),
@@ -186,6 +198,7 @@ impl Testbench {
             });
             testbench_error_at_span(path, span, format!("could not parse: {error}"))
         })?;
+        assign_measure_spans(&mut testbench, text);
         testbench.validate_at(path)?;
         Ok(testbench)
     }
@@ -339,6 +352,12 @@ impl Testbench {
                             measure.name
                         )));
                     }
+                    if measure.kind == MeasureKind::RelativeDb && measure.at_frequency.is_some() {
+                        return Err(testbench_error(format!(
+                            "measure `{}` is a relative_db measure and must not have `at_frequency`",
+                            measure.name
+                        )));
+                    }
                     if let Some(drop_db) = measure.drop_db {
                         if !drop_db.is_finite() || drop_db <= 0.0 {
                             return Err(testbench_error(format!(
@@ -372,12 +391,33 @@ impl Testbench {
                             measure.name
                         )));
                     }
+                    if measure.at_frequency.is_some() {
+                        return Err(testbench_error(format!(
+                            "measure `{}` is a current measure and must not have `at_frequency`",
+                            measure.name
+                        )));
+                    }
                 }
             }
-            let requires_ac = measure.kind == MeasureKind::RelativeDb;
+            if let Some(at_frequency) = measure.at_frequency {
+                if !at_frequency.is_finite() || at_frequency <= 0.0 {
+                    return Err(testbench_error(format!(
+                        "measure `{}` has an `at_frequency` that must be a positive finite frequency",
+                        measure.name
+                    )));
+                }
+            }
+            let requires_ac = measure.kind == MeasureKind::RelativeDb
+                || (measure.kind == MeasureKind::NodeVoltage && measure.at_frequency.is_some());
             if requires_ac && self.analysis.ac.is_none() {
+                if measure.kind == MeasureKind::RelativeDb {
+                    return Err(testbench_error(format!(
+                        "measure `{}` is a relative_db measure and requires the `ac` analysis",
+                        measure.name
+                    )));
+                }
                 return Err(testbench_error(format!(
-                    "measure `{}` is a relative_db measure and requires the `ac` analysis",
+                    "measure `{}` reads a gain at a fixed frequency and requires the `ac` analysis",
                     measure.name
                 )));
             }
@@ -387,8 +427,14 @@ impl Testbench {
                     .iter()
                     .any(|source| source.ac.is_some_and(|ac| ac > 0.0))
             {
+                if measure.kind == MeasureKind::RelativeDb {
+                    return Err(testbench_error(format!(
+                        "measure `{}`: relative_db needs a source with a non-zero `ac`",
+                        measure.name
+                    )));
+                }
                 return Err(testbench_error(format!(
-                    "measure `{}`: relative_db needs a source with a non-zero `ac`",
+                    "measure `{}`: at_frequency needs a source with a non-zero `ac`",
                     measure.name
                 )));
             }
@@ -418,6 +464,37 @@ impl Testbench {
             }
         }
         Ok(())
+    }
+}
+
+/// Byte range of each `[[measure]]` block, in file order. A block ends at the
+/// next table header or EOF.
+fn measure_spans(text: &str) -> Vec<Span> {
+    let mut spans = Vec::new();
+    let mut open: Option<u32> = None;
+    let mut offset = 0u32;
+    for line in text.split_inclusive('\n') {
+        let start = offset;
+        offset = offset.saturating_add(u32::try_from(line.len()).unwrap_or(u32::MAX));
+        let trimmed = line.trim_start();
+        if trimmed.starts_with("[[measure]]") || trimmed.starts_with('[') {
+            if let Some(open) = open.take() {
+                spans.push(Span::new(open, start));
+            }
+            if trimmed.starts_with("[[measure]]") {
+                open = Some(start);
+            }
+        }
+    }
+    if let Some(open) = open {
+        spans.push(Span::new(open, offset));
+    }
+    spans
+}
+
+fn assign_measure_spans(testbench: &mut Testbench, text: &str) {
+    for (measure, span) in testbench.measure.iter_mut().zip(measure_spans(text)) {
+        measure.span = span;
     }
 }
 
@@ -597,7 +674,7 @@ pub fn simulate(design: &Board, testbench: &Testbench, options: &SimOptions) -> 
     // `Error: measure ...` is a measurement failure even when ngspice exits
     // 0. It runs after the singular check so a failed op that also drops a
     // vector is `-006`, not a measurement failure.
-    if let Some(diagnostic) = measurement_failure_from_stderr(&run.stderr) {
+    if let Some(diagnostic) = measurement_failure_from_stderr(&run.stderr, testbench) {
         return failed(vec![diagnostic], options.testbench_path.as_deref());
     }
 
@@ -625,18 +702,22 @@ pub fn simulate(design: &Board, testbench: &Testbench, options: &SimOptions) -> 
         match limit_outcome(measure.min, measure.max, value) {
             LimitOutcome::Pass => {
                 if measure.min.is_some() || measure.max.is_some() {
-                    diagnostics.push(limit_info(&measure.name, value));
+                    diagnostics.push(with_location_span(
+                        limit_info(&measure.name, value),
+                        options.testbench_path.as_deref(),
+                        measure.span,
+                    ));
                 }
             }
-            LimitOutcome::Below(min) => diagnostics.push(limit_error(
-                &measure.name,
-                value,
-                &format!("below min {min}"),
+            LimitOutcome::Below(min) => diagnostics.push(with_location_span(
+                limit_error(&measure.name, value, &format!("below min {min}")),
+                options.testbench_path.as_deref(),
+                measure.span,
             )),
-            LimitOutcome::Above(max) => diagnostics.push(limit_error(
-                &measure.name,
-                value,
-                &format!("above max {max}"),
+            LimitOutcome::Above(max) => diagnostics.push(with_location_span(
+                limit_error(&measure.name, value, &format!("above max {max}")),
+                options.testbench_path.as_deref(),
+                measure.span,
             )),
         }
         measures.push(result);
@@ -911,16 +992,44 @@ fn stderr_offenders(stderr: &str, predicate: impl Fn(&str) -> bool) -> Vec<&str>
 
 /// A failed measurement prints either `Error: measure ...` or, for the
 /// generated `let mN` vector, `Error: &mN: no such variable`.
-fn measurement_failure_from_stderr(stderr: &str) -> Option<Diagnostic> {
+///
+/// A failed corner names the generated `synth_corner<N>` vector; map it back
+/// to the Synth measure so the message names what the author wrote.
+fn measurement_failure_from_stderr(stderr: &str, testbench: &Testbench) -> Option<Diagnostic> {
     let failed = stderr_offenders(stderr, |line| {
         line.contains("error: measure") || line.contains("no such variable")
     });
     if failed.is_empty() {
         return None;
     }
+    if let Some(diagnostic) = relative_db_failure(stderr, testbench) {
+        return Some(diagnostic);
+    }
     Some(measure_error(format!(
         "ngspice reported a failed measurement: {}",
         excerpt(&failed.join("\n"))
+    )))
+}
+
+/// The index in `synth_corner<N>` on a line, when it carries one.
+fn corner_measure_index(line: &str) -> Option<usize> {
+    let rest = line.split_once("synth_corner")?.1;
+    let digits: String = rest.chars().take_while(char::is_ascii_digit).collect();
+    digits.parse().ok()
+}
+
+fn relative_db_failure(stderr: &str, testbench: &Testbench) -> Option<Diagnostic> {
+    let ac = testbench.analysis.ac.as_ref()?;
+    let index = stderr.lines().find_map(corner_measure_index)?;
+    let measure = testbench.measure.get(index)?;
+    if measure.kind != MeasureKind::RelativeDb {
+        return None;
+    }
+    let node = measure.node.as_deref()?;
+    let drop_db = measure.drop_db.unwrap_or(3.0);
+    Some(measure_error(format!(
+        "measure `{}` at node `{}` failed: no -{drop_db} dB crossing in {}-{} Hz",
+        measure.name, node, ac.start, ac.stop
     )))
 }
 
@@ -1359,6 +1468,13 @@ fn emit_deck(
                         measure.name
                     );
                     measure_lines.push(lines);
+                } else if let Some(at_frequency) = measure.at_frequency {
+                    measure_lines.push(format!(
+                        "meas ac synth_gain{index} find vdb({node}) at={}\n\
+                         echo SYNTH_MEAS {} $&synth_gain{index}",
+                        exponent(at_frequency),
+                        measure.name
+                    ));
                 } else {
                     measure_lines.push(format!(
                         "let m{index} = v({node})\necho SYNTH_MEAS {} $&m{index}",
@@ -2074,7 +2190,10 @@ fn no_model_error(component: &Component, message: &str, design_path: Option<&Pat
         .map_or(component.kind.as_str(), |part| part.id.as_str());
     with_location_span(
         sim_builder(E_SYNTH_SIM_002, Severity::Error, "part has no SPICE model")
-            .message(format!("{} (`{part}`): {message}", component.refdes))
+            .message(format!(
+                "{} (`{part}`): {message}; add it to `ignore` in the testbench or give it a `[spice]` model",
+                component.refdes
+            ))
             .primary_entity(EntityRef::Component {
                 id: component.refdes.clone(),
             })

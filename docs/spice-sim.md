@@ -83,8 +83,13 @@ The v1 shapes are:
   wiring and model, not the value choice.
 - **RC low-pass.** The `relative_db` corner is measured at
   `fc = 1/(2*pi*R*C)` from the design `value` fields, ±2%, with the default
-  3 dB drop. The AC sweep is `fc/100 .. fc*100`. Derived from this design's
-  values; checks wiring and model, not the value choice.
+  3 dB drop. The AC sweep is `fc/100 .. fc*100`. Two `node_voltage` measures
+  also pin the absolute gain at `fc/10` (-0.5..0 dB) and `10*fc`
+  (-23..-17 dB): a single pole gives -0.043 dB and -20.04 dB there, while a
+  swapped R/C (a high-pass with the same corner) does not. The draft drives
+  the AC sweep at 1 V for every source, so `vdb(node)` is an absolute gain in
+  dB. Derived from this design's values; checks wiring and model, not the
+  value choice.
 
 Shape names come from the compiled `Board`: exactly one net must be classified
 as ground. Every TOML number cites its source in the comment above it. A supply
@@ -92,9 +97,10 @@ is the net's declared `power` voltage, or a `PowerOutput` pin that declares an
 explicit `voltage_nominal_v`. A `voltage_max_v` rating is never used as a
 nominal, and `[operating_conditions]` min/max values are ratings rather than a
 rail. A part whose output pin supplies the testbench is replaced by an ideal
-source; if its other nets then have no DC path, `synth sim` reports
-`E-SYNTH-SIM-008`, and adding the part to `[ignore]` is the usual fix when the
-missing model is a known gap.
+source, and the draft adds it to `ignore` with a comment saying why. Any other
+unused part with no built-in model is also added to `ignore` (still reported on
+stderr as not covered); if an ignored part leaves a net with no DC path,
+`synth sim` reports `E-SYNTH-SIM-008`.
 
 When a net has no declared supply, the number is never defaulted. If another
 shape drafts at least one measure, the file carries a `# TODO` naming that net
@@ -104,8 +110,9 @@ reported as not covered. If no measure can be drafted at all, no file is
 written, the reason goes to stderr as a `not covered` line and the command still
 exits 0; callers must check that the file exists.
 
-A supply used for an `ac` shape is the AC magnitude too; the corner is
-independent of the drive level. Anything the draft does not cover is printed
+A supply used for an `op` shape is that net's DC value. An `ac` draft drives
+the source at 1 V regardless of the declared supply, so an absolute `vdb`
+measure reads gain in dB. Anything the draft does not cover is printed
 to stderr as `not covered: <reason>` (a part with no datasheet, a part that is
 not one of the shapes, an RC corner that cannot share the file, …). A drafted
 overdriven LED is a warning printed as `overdrive:`, not a not-covered line. A
@@ -231,20 +238,33 @@ exponents.
 | `node`    | Synth net name. Required by `node_voltage` and `relative_db`.    |
 | `element` | Synth reference. Required by `current`.                          |
 | `drop_db` | Relative drop in dB for `relative_db`. Defaults to `3.0`.        |
+| `at_frequency` | Frequency in Hz for an absolute gain on `node_voltage`.     |
 | `min`     | Inclusive lower limit. Optional.                                 |
 | `max`     | Inclusive upper limit. Optional.                                 |
 
 Rules per kind:
 
 - `node_voltage` reads `v(<node>)` after an `op` analysis. It rejects
-  `element` and `drop_db`.
+  `element` and `drop_db`. With `at_frequency` it instead reads an absolute
+  gain during an `ac` analysis:
+
+  ```
+  meas ac synth_gain0 find vdb(n_OUT) at=1.59e2
+  echo SYNTH_MEAS passband $&synth_gain0
+  ```
+
+  `at_frequency` must be positive and finite, requires the `ac` analysis and a
+  source with `ac` greater than 0, and is rejected on `relative_db` and
+  `current`. The result is `20*log10(|V(node)|)` in dB relative to a 1 V
+  source, so a draft drives the AC source at 1 V.
 - `current` reads a device current after an `op` analysis. It requires
-  `element` and rejects `node` and `drop_db`. The part must have a built-in
-  model: resistors, capacitors and inductors emit `@<element>[i]`, diodes and
-  LEDs emit `@<element>[id]`. The emitted element name is the model's type
-  letter plus the sanitized reference (`LED1` becomes `DLED1`). An ignored
-  part, an unknown reference, a registry subcircuit or an unmodelled part is
-  `E-SYNTH-SIM-007`, because there is no built-in device current to read.
+  `element` and rejects `node`, `drop_db` and `at_frequency`. The part must
+  have a built-in model: resistors, capacitors and inductors emit
+  `@<element>[i]`, diodes and LEDs emit `@<element>[id]`. The emitted element
+  name is the model's type letter plus the sanitized reference (`LED1`
+  becomes `DLED1`). An ignored part, an unknown reference, a registry
+  subcircuit or an unmodelled part is `E-SYNTH-SIM-007`, because there is no
+  built-in device current to read.
 - `relative_db` measures a corner in an `ac` analysis:
 
   ```
@@ -255,8 +275,9 @@ Rules per kind:
   ```
 
   `drop_db` defaults to 3.0 and must be finite and greater than 0. It rejects
-  `element`. If the crossing cannot be found, ngspice reports
-  `Error: measure ...` and the measure fails as `E-SYNTH-SIM-003`.
+  `element` and `at_frequency`. If the crossing cannot be found, ngspice
+  reports `Error: measure ...` and the measure fails as `E-SYNTH-SIM-003` with
+  a message naming the Synth measure, node and drop band.
 
 `min` must not exceed `max`. Limits are inclusive and compared at ngspice's
 print precision (see below).
@@ -322,7 +343,7 @@ is the printed value.
 | Example | What it checks |
 | ------- | -------------- |
 | [divider](../examples/divider/divider.synth) | `V_MID = 12 × 10k/(10k+10k) = 6 V` with an `op` analysis. |
-| [rc_filter](../examples/rc_filter/rc_filter.synth) | `fc = 1/(2π·1k·100n) = 1591.55 Hz`; the -3 dB crossing is 1587.8 Hz. |
+| [rc_filter](../examples/rc_filter/rc_filter.synth) | `fc = 1/(2π·1k·100n) = 1591.55 Hz`; the -3 dB crossing is 1587.8 Hz, with gain -0.04 dB at 159 Hz and -20.0 dB at 15.9 kHz. |
 | [led](../examples/led/led.synth) | `I = (5 − 2.0)/150 = 20 mA`, measured as the `LED1` branch current. |
 
 ```sh

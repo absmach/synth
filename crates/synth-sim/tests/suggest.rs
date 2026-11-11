@@ -108,6 +108,11 @@ fn assert_same_limits(example: &str, generated: &synth_sim::Testbench) {
             reference.name
         );
         assert_eq!(
+            generated.at_frequency, reference.at_frequency,
+            "{} at_frequency",
+            reference.name
+        );
+        assert_eq!(
             generated.min, reference.min,
             "{} min in the suggested testbench",
             reference.name
@@ -431,6 +436,87 @@ fn a_max_rating_is_not_a_supply() {
     );
 }
 
+const REGULATOR_LED_BOARD: &str = r#"
+board "regulator-led" {
+  layers 2
+  component U1: regulator "ams1117_5v"
+  component D1: led "ltst_c190krkt"
+  component R1: resistor "r_generic_0603" value "150"
+  component C1: capacitor "c_generic_0805" value "10u"
+  component C2: capacitor "c_generic_0805" value "10u"
+  connect U1.vout -> R1.p2
+  connect R1.p1 -> D1.anode
+  connect D1.cathode -> U1.gnd
+  connect U1.vout -> C1.p1
+  connect U1.gnd -> C1.p2
+  connect U1.vout -> C2.p1
+  connect U1.gnd -> C2.p2
+  net "GND" { U1.gnd D1.cathode C1.p2 C2.p2 }
+  net "VOUT" { U1.vout R1.p2 C1.p1 C2.p1 }
+}
+"#;
+
+/// The regulator pin is replaced by the testbench source, so the draft must
+/// ignore the part it cannot model; otherwise the suggested file cannot run.
+#[test]
+fn a_suggested_sidecar_ignores_the_regulator_that_supplied_the_source() {
+    let Some(ngspice) = real_ngspice() else {
+        eprintln!("{}", real_ngspice_support::SKIP_MESSAGE);
+        return;
+    };
+    let board = board(REGULATOR_LED_BOARD);
+    let (toml, _) = suggestion(&board);
+    assert!(toml.contains("ignore = [\"U1\"]"), "{toml}");
+    assert!(
+        toml.contains(
+            "# ignore: U1 (ams1117_5v): replaced by the testbench source on net \"VOUT\"."
+        ),
+        "{toml}"
+    );
+    let testbench = synth_sim::Testbench::from_toml(&toml).expect("suggested sidecar");
+
+    let report = simulate_suggested(&board, &testbench, &ngspice);
+
+    assert!(report.passed(), "diagnostics: {:?}", report.diagnostics);
+}
+
+/// A connector is not modelled either; the draft must leave it out so the
+/// suggested file runs straight away.
+#[test]
+fn a_suggested_sidecar_ignores_a_connector_with_no_model() {
+    let Some(ngspice) = real_ngspice() else {
+        eprintln!("{}", real_ngspice_support::SKIP_MESSAGE);
+        return;
+    };
+    let board = board(
+        r#"
+board "led_indicator" {
+  layers 2
+  component J1: connector "jst_ph_2pin"
+  component D1: led "ltst_c190krkt"
+  component R1: resistor "r_generic_0603" value "150"
+  connect J1.p1 -> R1.p1
+  connect R1.p2 -> D1.anode
+  connect D1.cathode -> J1.p2
+  power "VCC" 5v
+  net "VCC" { J1.p1 R1.p1 }
+  net "GND" { J1.p2 D1.cathode }
+}
+"#,
+    );
+    let (toml, _) = suggestion(&board);
+    assert!(toml.contains("ignore = [\"J1\"]"), "{toml}");
+    assert!(
+        toml.contains("# ignore: J1 (jst_ph_2pin): no built-in SPICE model."),
+        "{toml}"
+    );
+    let testbench = synth_sim::Testbench::from_toml(&toml).expect("suggested sidecar");
+
+    let report = simulate_suggested(&board, &testbench, &ngspice);
+
+    assert!(report.passed(), "diagnostics: {:?}", report.diagnostics);
+}
+
 fn simulate_suggested(
     board: &synth_ir::Board,
     testbench: &synth_sim::Testbench,
@@ -621,6 +707,25 @@ fn a_missing_forward_voltage_gives_no_measure_and_says_why() {
                 && line.contains("forward_voltage_v")),
         "{:?}",
         suggestion.not_covered
+    );
+}
+
+/// The zero-width overdrive band is a tripwire for the current resistor; after
+/// fixing it, the sidecar must be drafted again.
+#[test]
+fn an_overdrive_draft_says_to_regenerate_after_fixing_the_resistor() {
+    let source = LED_BOARD
+        .replace("value \"330\"", "value \"10\"")
+        .replace("power \"VCC\" 5v", "power \"VCC\" 24v");
+    assert_ne!(source, LED_BOARD);
+    let board = board(&source);
+
+    let suggestion = synth_sim::suggest_testbench(&board);
+
+    let toml = suggestion.toml.expect("a testbench was suggested");
+    assert!(
+        toml.contains("# tripwire: regenerate with --suggest --force after fixing the resistor"),
+        "{toml}"
     );
 }
 
@@ -961,6 +1066,203 @@ fn a_suggested_divider_testbench_fails_the_wrong_r2() {
     let report = simulate_suggested(&board(&mutated), &testbench, &ngspice);
 
     assert_out_of_limit(&report, "vmid", "above max");
+}
+
+const RC_5V: &str = r#"
+board "rc-5v" {
+  layers 2
+  component R1: resistor "r_generic_0805" value "1k"
+  component C1: capacitor "c_generic_0805" value "100n"
+  power "IN" 5v
+  net "IN" { R1.p1 }
+  net "GND" { C1.p2 }
+  connect R1.p2 -> C1.p1 as "OUT"
+}
+"#;
+
+/// The passband and stopband checks must read an absolute gain: the draft
+/// drives the AC sweep at 1 V even though the board declares a 5 V supply.
+/// A single pole is -0.043 dB at fc/10 and -20.04 dB at 10*fc.
+#[test]
+fn a_suggested_rc_testbench_passes_a_5v_board_and_measures_the_slope() {
+    let Some(ngspice) = real_ngspice() else {
+        eprintln!("{}", real_ngspice_support::SKIP_MESSAGE);
+        return;
+    };
+    let board = board(RC_5V);
+    let (toml, not_covered) = suggestion(&board);
+    assert!(not_covered.is_empty(), "{not_covered:?}");
+    let testbench = synth_sim::Testbench::from_toml(&toml).expect("suggested sidecar");
+    assert_eq!(testbench.source[0].ac, Some(1.0));
+
+    let report = simulate_suggested(&board, &testbench, &ngspice);
+    assert!(report.passed(), "{:?}", report.measures);
+
+    let fc = 1.0 / (2.0 * std::f64::consts::PI * 1e3 * 100e-9);
+    for name in ["passband", "stopband"] {
+        let frequency = measure(&testbench, name)
+            .at_frequency
+            .expect("an at_frequency measure");
+        let expected: f64 = -10.0 * (1.0 + (frequency / fc).powi(2)).log10();
+        let measured = report
+            .measures
+            .iter()
+            .find(|measure| measure.name == name)
+            .unwrap_or_else(|| panic!("{name} not measured"))
+            .value;
+        assert!(
+            (measured - expected).abs() < 0.01,
+            "{name} at {frequency} Hz is {measured} dB, expected {expected} dB"
+        );
+    }
+}
+
+/// Swapping R and C keeps the corner and turns the low-pass into a high-pass;
+/// the passband check must catch it.
+#[test]
+fn a_suggested_rc_testbench_fails_the_swapped_r_and_c() {
+    let Some(ngspice) = real_ngspice() else {
+        eprintln!("{}", real_ngspice_support::SKIP_MESSAGE);
+        return;
+    };
+    let design = example_dir("rc_filter").join("rc_filter.synth");
+    let source = std::fs::read_to_string(&design).expect("read design");
+    let (toml, _) = suggestion(&board(&source));
+    let testbench = synth_sim::Testbench::from_toml(&toml).expect("suggested sidecar");
+
+    let swapped = source
+        .replace("net \"IN\" { R1.p1 }", "net \"IN\" { C1.p1 }")
+        .replace("net \"GND\" { C1.p2 }", "net \"GND\" { R1.p2 }")
+        .replace(
+            "connect R1.p2 -> C1.p1 as \"OUT\"",
+            "connect C1.p2 -> R1.p1 as \"OUT\"",
+        );
+    assert_ne!(swapped, source, "the fixture must be the RC low-pass");
+    let report = simulate_suggested(&board(&swapped), &testbench, &ngspice);
+
+    assert!(!report.passed(), "{:?}", report.measures);
+    let diagnostic = report
+        .diagnostics
+        .iter()
+        .find(|diagnostic| {
+            diagnostic.code == synth_sim::E_SYNTH_SIM_004
+                && diagnostic.severity.is_blocking()
+                && diagnostic
+                    .message
+                    .as_deref()
+                    .is_some_and(|message| message.contains("passband"))
+        })
+        .unwrap_or_else(|| panic!("no passband -004 in {:?}", report.diagnostics));
+    assert!(
+        diagnostic
+            .message
+            .as_deref()
+            .is_some_and(|message| message.contains("below min")),
+        "{diagnostic:?}"
+    );
+}
+
+/// A three-leg resistor net is divider-like but cannot be drafted; it must be
+/// named, not reported as three unclassified parts.
+#[test]
+fn a_three_leg_divider_names_its_top_net_and_parts() {
+    let unpowered = board(
+        r#"
+board "three-leg" {
+  layers 2
+  component R1: resistor "r_generic_0805" value "10k"
+  component R2: resistor "r_generic_0805" value "10k"
+  component R3: resistor "r_generic_0805" value "10k"
+  net "TOP" { R1.p1 }
+  net "GND" { R2.p2, R3.p2 }
+  connect R1.p2 -> R2.p1 as "MID"
+  connect R1.p2 -> R3.p1 as "MID"
+}
+"#,
+    );
+
+    let suggestion = synth_sim::suggest_testbench(&unpowered);
+
+    assert!(suggestion.toml.is_none(), "{:?}", suggestion.toml);
+    let line = suggestion
+        .not_covered
+        .iter()
+        .find(|line| line.contains("divider"))
+        .unwrap_or_else(|| panic!("no divider line in {:?}", suggestion.not_covered));
+    for needle in ["R1", "R2/R3", "top net", "\"TOP\"", "not a declared supply"] {
+        assert!(line.contains(needle), "`{needle}` missing from `{line}`");
+    }
+    assert!(
+        !suggestion
+            .not_covered
+            .iter()
+            .any(|line| line.contains("not a recognised shape")),
+        "{:?}",
+        suggestion.not_covered
+    );
+
+    let powered = board(
+        r#"
+board "three-leg-powered" {
+  layers 2
+  component R1: resistor "r_generic_0805" value "10k"
+  component R2: resistor "r_generic_0805" value "10k"
+  component R3: resistor "r_generic_0805" value "10k"
+  power "TOP" 12v
+  net "TOP" { R1.p1 }
+  net "GND" { R2.p2, R3.p2 }
+  connect R1.p2 -> R2.p1 as "MID"
+  connect R1.p2 -> R3.p1 as "MID"
+}
+"#,
+    );
+    let suggestion = synth_sim::suggest_testbench(&powered);
+    assert!(suggestion.toml.is_none(), "{:?}", suggestion.toml);
+    let line = suggestion
+        .not_covered
+        .iter()
+        .find(|line| line.contains("divider"))
+        .unwrap_or_else(|| panic!("no divider line in {:?}", suggestion.not_covered));
+    assert!(
+        line.contains("3 resistor legs") && line.contains("only a two-resistor divider is drafted"),
+        "{line}"
+    );
+}
+
+/// A three-resistor star with no ground leg is not a divider; it must keep the
+/// plain "not a recognised shape" report rather than invent a divider shape.
+#[test]
+fn a_three_resistor_star_without_a_ground_leg_is_not_called_a_divider() {
+    let board = board(
+        r#"
+board "star" {
+  layers 2
+  component R1: resistor "r_generic_0805" value "10k"
+  component R2: resistor "r_generic_0805" value "10k"
+  component R3: resistor "r_generic_0805" value "10k"
+  component R4: resistor "r_generic_0805" value "10k"
+  net "A" { R1.p1 }
+  net "B" { R2.p1 }
+  net "C" { R3.p1 }
+  net "X" { R4.p1 }
+  net "GND" { R4.p2 }
+  connect R1.p2 -> R2.p2 as "MID"
+  connect R1.p2 -> R3.p2 as "MID"
+}
+"#,
+    );
+
+    let suggestion = synth_sim::suggest_testbench(&board);
+
+    assert!(suggestion.toml.is_none(), "{:?}", suggestion.toml);
+    assert!(
+        !suggestion
+            .not_covered
+            .iter()
+            .any(|line| line.contains("divider")),
+        "{:?}",
+        suggestion.not_covered
+    );
 }
 
 /// A ten-times smaller series resistor overdrives the LED.

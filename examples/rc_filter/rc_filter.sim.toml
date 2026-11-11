@@ -18,3 +18,19 @@ kind = "relative_db"
 node = "OUT"
 min = 1560.0
 max = 1620.0
+
+[[measure]]
+name = "passband"
+kind = "node_voltage"
+node = "OUT"
+at_frequency = 159.0
+min = -0.5
+max = 0.0
+
+[[measure]]
+name = "stopband"
+kind = "node_voltage"
+node = "OUT"
+at_frequency = 15900.0
+min = -23.0
+max = -17.0

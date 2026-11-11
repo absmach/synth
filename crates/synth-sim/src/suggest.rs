@@ -98,6 +98,8 @@ struct Supply {
     volts: f64,
     /// The `# source:` comment, naming where the number came from.
     note: String,
+    /// Power-output parts whose pin supplied the net; replaced by the source.
+    drivers: Vec<ComponentId>,
 }
 
 #[derive(Debug)]
@@ -109,6 +111,7 @@ struct DraftMeasure {
     element: Option<String>,
     min: f64,
     max: f64,
+    at_frequency: Option<f64>,
     comment: String,
     supply_net: NetId,
     supply: Supply,
@@ -126,6 +129,7 @@ struct Draft<'a> {
     todo_nets: BTreeSet<NetId>,
     names: HashSet<String>,
     measures: Vec<DraftMeasure>,
+    ignored: BTreeMap<ComponentId, String>,
 }
 
 impl<'a> Draft<'a> {
@@ -139,6 +143,7 @@ impl<'a> Draft<'a> {
             todo_nets: BTreeSet::new(),
             names: HashSet::new(),
             measures: Vec::new(),
+            ignored: BTreeMap::new(),
         }
     }
 
@@ -332,7 +337,8 @@ impl<'a> Draft<'a> {
                 number(cap)
             )
         };
-        if expected > cap_amps {
+        let overdrive = expected > cap_amps;
+        if overdrive {
             min = round_sig(cap_amps, 3);
             max = min;
             self.warnings.push(format!(
@@ -383,6 +389,12 @@ impl<'a> Draft<'a> {
              significant digits: {band_min} A..{uncapped_max} A; final band {min} A..{max} A.",
             number(expected)
         );
+        if overdrive {
+            let _ = writeln!(
+                comment,
+                "# tripwire: regenerate with --suggest --force after fixing the resistor"
+            );
+        }
         if reversed {
             let _ = writeln!(
                 comment,
@@ -398,6 +410,7 @@ impl<'a> Draft<'a> {
         }
 
         let name = self.unique("iled");
+        self.ignore_driver(supply_net, &supply);
         self.measures.push(DraftMeasure {
             analysis: AnalysisKind::Op,
             name,
@@ -406,6 +419,7 @@ impl<'a> Draft<'a> {
             element: Some(component.refdes.clone()),
             min,
             max,
+            at_frequency: None,
             comment,
             supply_net,
             supply,
@@ -429,21 +443,30 @@ impl<'a> Draft<'a> {
         let Some(net) = design.net(net_id) else {
             return;
         };
-        if net.endpoints.len() != 2 {
-            return;
-        }
         let mut resistors = Vec::new();
+        let mut others = 0;
         for endpoint in &net.endpoints {
             let Some(component) = design.component(endpoint.component) else {
                 return;
             };
-            if !is_kind(component, "resistor")
-                || self.used.contains(&component.id)
-                || resistors.contains(&component.id)
-            {
+            if self.used.contains(&component.id) {
                 return;
             }
-            resistors.push(component.id);
+            if is_kind(component, "resistor") {
+                if resistors.contains(&component.id) {
+                    return;
+                }
+                resistors.push(component.id);
+            } else {
+                others += 1;
+            }
+        }
+        if resistors.len() >= 3 {
+            self.report_wide_divider(net, &resistors);
+            return;
+        }
+        if others > 0 {
+            return;
         }
         let [first, second] = resistors.as_slice() else {
             return;
@@ -567,6 +590,7 @@ impl<'a> Draft<'a> {
         );
 
         let name = self.unique("vmid");
+        self.ignore_driver(supply_net, &supply);
         self.measures.push(DraftMeasure {
             analysis: AnalysisKind::Op,
             name,
@@ -575,11 +599,73 @@ impl<'a> Draft<'a> {
             element: None,
             min,
             max,
+            at_frequency: None,
             comment,
             supply_net,
             supply,
             sweep: None,
         });
+    }
+
+    /// A mid net with three or more resistor legs is divider-like but cannot
+    /// be drafted. Name the shape so it does not look like unrelated parts;
+    /// never draft a two-leg measure through a parallel bottom.
+    fn report_wide_divider(&mut self, net: &Net, resistors: &[ComponentId]) {
+        let mut top = None;
+        let mut bottoms = Vec::new();
+        for &resistor in resistors {
+            match self.other_net_of(resistor, net.id) {
+                Some(other) if other == self.ground => bottoms.push(resistor),
+                Some(_) if top.is_none() => top = Some(resistor),
+                _ => {
+                    top = None;
+                    bottoms.clear();
+                    break;
+                }
+            }
+        }
+        // Without a leg to ground this is a resistor star, not a divider; the
+        // parts stay in the plain "not a recognised shape" report.
+        if bottoms.is_empty() {
+            return;
+        }
+        self.use_components(resistors);
+        let mut refdes: Vec<&str> = resistors.iter().map(|&id| self.refdes(id)).collect();
+        refdes.sort_unstable();
+        let label = match top {
+            Some(top) if bottoms.len() >= 2 => {
+                let mut bottoms: Vec<&str> = bottoms.iter().map(|&id| self.refdes(id)).collect();
+                bottoms.sort_unstable();
+                format!("{} + {}", self.refdes(top), bottoms.join("/"))
+            }
+            _ => refdes.join("/"),
+        };
+        let legs = resistors.len();
+        let Some(top) = top else {
+            self.not_covered.push(format!(
+                "divider {label}: the mid net has {legs} resistor legs; only a two-resistor divider is drafted"
+            ));
+            return;
+        };
+        let Some(top_net) = self.other_net_of(top, net.id) else {
+            return;
+        };
+        if self.supply(top_net).is_some() {
+            self.not_covered.push(format!(
+                "divider {label}: the mid net has {legs} resistor legs; only a two-resistor divider is drafted"
+            ));
+            return;
+        }
+        // A net driven by another resistor is an internal chain node, not a
+        // missing `power` declaration.
+        if !self.internal_chain_node(top_net, top) {
+            self.todo_nets.insert(top_net);
+        }
+        let top_name = self.design.net(top_net).map_or("", |net| net.name.as_str());
+        self.not_covered.push(format!(
+            "divider {label}: top net {} is not a declared supply",
+            toml_string(top_name)
+        ));
     }
 
     fn detect_rcs(&mut self) {
@@ -714,7 +800,10 @@ impl<'a> Draft<'a> {
             return;
         }
 
-        let (resistance_value, capacitance_value) = (self.value(resistor), self.value(capacitor));
+        let (resistance_value, capacitance_value) = (
+            self.value(resistor).to_string(),
+            self.value(capacitor).to_string(),
+        );
         let mut comment = String::new();
         let _ = writeln!(
             comment,
@@ -749,6 +838,7 @@ impl<'a> Draft<'a> {
         );
 
         let name = self.unique("corner");
+        self.ignore_driver(input_net, &supply);
         self.measures.push(DraftMeasure {
             analysis: AnalysisKind::Ac,
             name,
@@ -757,16 +847,88 @@ impl<'a> Draft<'a> {
             element: None,
             min,
             max,
+            at_frequency: None,
             comment,
             supply_net: input_net,
-            supply,
+            supply: supply.clone(),
             sweep: Some((start, stop)),
+        });
+
+        // The corner cannot tell a low-pass from a high-pass with the same
+        // R*C, so pin the gain one decade either side of it.
+        let passband_frequency = round_sig(corner / 10.0, 3);
+        let mut passband_comment = String::new();
+        let _ = writeln!(
+            passband_comment,
+            "# measure: RC low-pass passband at net {}, gain one decade below fc.",
+            toml_string(&net.name)
+        );
+        let _ = writeln!(
+            passband_comment,
+            "#   a single pole gives 20*log10(1/sqrt(1+0.1^2)) = -0.043 dB at fc/10; a swapped R/C turns this into a high-pass and lands near -20 dB."
+        );
+        let _ = writeln!(
+            passband_comment,
+            "#   1/(2*pi*{resistance_value}*{capacitance_value}) = {} Hz; fc/10 = {passband_frequency} Hz rounded to 3 significant digits.",
+            number(corner)
+        );
+        let name = self.unique("passband");
+        self.measures.push(DraftMeasure {
+            analysis: AnalysisKind::Ac,
+            name,
+            kind: "node_voltage",
+            node: Some(net.name.clone()),
+            element: None,
+            min: -0.5,
+            max: 0.0,
+            at_frequency: Some(passband_frequency),
+            comment: passband_comment,
+            supply_net: input_net,
+            supply: supply.clone(),
+            sweep: None,
+        });
+
+        let stopband_frequency = round_sig(corner * 10.0, 3);
+        let mut stopband_comment = String::new();
+        let _ = writeln!(
+            stopband_comment,
+            "# measure: RC low-pass stopband at net {}, gain one decade above fc.",
+            toml_string(&net.name)
+        );
+        let _ = writeln!(
+            stopband_comment,
+            "#   a single pole gives 20*log10(1/sqrt(1+10^2)) = -20.04 dB at 10*fc; ±3 dB covers component tolerance."
+        );
+        let _ = writeln!(
+            stopband_comment,
+            "#   1/(2*pi*{resistance_value}*{capacitance_value}) = {} Hz; 10*fc = {stopband_frequency} Hz rounded to 3 significant digits.",
+            number(corner)
+        );
+        let name = self.unique("stopband");
+        self.measures.push(DraftMeasure {
+            analysis: AnalysisKind::Ac,
+            name,
+            kind: "node_voltage",
+            node: Some(net.name.clone()),
+            element: None,
+            min: -23.0,
+            max: -17.0,
+            at_frequency: Some(stopband_frequency),
+            comment: stopband_comment,
+            supply_net: input_net,
+            supply,
+            sweep: None,
         });
     }
 
     fn report_unused(&mut self) {
         for component in &self.design.components {
             if !self.used.contains(&component.id) {
+                if crate::model_for(component).is_err() {
+                    self.ignored
+                        .entry(component.id)
+                        .or_insert_with(|| "no built-in SPICE model".to_string());
+                }
                 self.not_covered.push(format!(
                     "{} ({}), not a recognised shape",
                     component.refdes,
@@ -776,6 +938,7 @@ impl<'a> Draft<'a> {
         }
     }
 
+    #[allow(clippy::too_many_lines)]
     fn render(&self) -> Option<String> {
         let first = self.measures.first()?;
         let ac = first.analysis == AnalysisKind::Ac;
@@ -803,6 +966,32 @@ impl<'a> Draft<'a> {
         let _ = writeln!(out);
         let _ = writeln!(out, "ground = {}", toml_string(self.ground_name()));
 
+        let mut ignored: Vec<(&str, &str, &str)> = self
+            .ignored
+            .iter()
+            .filter_map(|(id, reason)| {
+                self.design.component(*id).map(|component| {
+                    (
+                        component.refdes.as_str(),
+                        component_part_id(component),
+                        reason.as_str(),
+                    )
+                })
+            })
+            .collect();
+        if !ignored.is_empty() {
+            ignored.sort_by(|left, right| left.0.cmp(right.0));
+            let _ = writeln!(out);
+            for (refdes, part, reason) in &ignored {
+                let _ = writeln!(out, "# ignore: {refdes} ({part}): {reason}.");
+            }
+            let list: Vec<String> = ignored
+                .iter()
+                .map(|(refdes, _, _)| toml_string(refdes))
+                .collect();
+            let _ = writeln!(out, "ignore = [{}]", list.join(", "));
+        }
+
         let mut sources: BTreeMap<NetId, &Supply> = BTreeMap::new();
         for measure in &self.measures {
             sources.entry(measure.supply_net).or_insert(&measure.supply);
@@ -811,11 +1000,14 @@ impl<'a> Draft<'a> {
             let name = self.design.net(net_id).map_or("", |net| net.name.as_str());
             let _ = writeln!(out);
             let _ = writeln!(out, "# source: {}", supply.note);
+            if ac {
+                let _ = writeln!(out, "#   ac drive: 1 V, so vdb(node) is gain in dB.");
+            }
             let _ = writeln!(out, "[[source]]");
             let _ = writeln!(out, "net = {}", toml_string(name));
             let _ = writeln!(out, "kind = \"dc\"");
             if ac {
-                let _ = writeln!(out, "ac = {}", float(supply.volts));
+                let _ = writeln!(out, "ac = 1.0");
             } else {
                 let _ = writeln!(out, "dc = {}", float(supply.volts));
             }
@@ -856,6 +1048,9 @@ impl<'a> Draft<'a> {
             }
             if let Some(element) = &measure.element {
                 let _ = writeln!(out, "element = {}", toml_string(element));
+            }
+            if let Some(at_frequency) = measure.at_frequency {
+                let _ = writeln!(out, "at_frequency = {}", float(at_frequency));
             }
             let _ = writeln!(out, "min = {}", float(measure.min));
             let _ = writeln!(out, "max = {}", float(measure.max));
@@ -947,6 +1142,7 @@ impl<'a> Draft<'a> {
                     toml_string(&net.name),
                     number(volts)
                 ),
+                drivers: Vec::new(),
             });
         }
 
@@ -971,6 +1167,12 @@ impl<'a> Draft<'a> {
         if candidates.iter().any(|candidate| candidate.0 != first.0) {
             return None;
         }
+        let mut drivers = Vec::new();
+        for candidate in &candidates {
+            if !drivers.contains(&candidate.1) {
+                drivers.push(candidate.1);
+            }
+        }
         let component = design.component(first.1)?;
         let pin = design.pin(first.1, first.2)?;
         Some(Supply {
@@ -983,7 +1185,25 @@ impl<'a> Draft<'a> {
                 pin.name,
                 number(first.0)
             ),
+            drivers,
         })
+    }
+
+    /// A part whose pin supplied the testbench source is replaced by that
+    /// source, so it must be left out of the deck once a measure uses the
+    /// supply.
+    fn ignore_driver(&mut self, supply_net: NetId, supply: &Supply) {
+        let net = self
+            .design
+            .net(supply_net)
+            .map_or("", |net| net.name.as_str());
+        let reason = format!(
+            "replaced by the testbench source on net {}",
+            toml_string(net)
+        );
+        for &driver in &supply.drivers {
+            self.ignored.entry(driver).or_insert_with(|| reason.clone());
+        }
     }
 
     fn pin_net(&self, component: ComponentId, pin: PinId) -> Option<NetId> {

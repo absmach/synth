@@ -683,6 +683,24 @@ fn emits_an_inductor_as_a_henry_value() {
     assert!(deck.contains("LL1 n_VCC n_MID 1e-5"), "deck:\n{deck}");
 }
 
+/// The `-002` message must offer the two ways out: a testbench `ignore`
+/// entry, or a registry `[spice]` model.
+#[test]
+fn a_missing_model_error_says_how_to_ignore_or_model_it() {
+    let board = board(IGNORED_IC);
+    let testbench = testbench(DIVIDER_TB);
+
+    let diagnostics = synth_sim::emit_netlist(&board, &testbench).expect_err("U1 has no model");
+
+    let message = diagnostics
+        .iter()
+        .find(|diagnostic| diagnostic.code == synth_sim::E_SYNTH_SIM_002)
+        .and_then(|diagnostic| diagnostic.message.as_deref())
+        .expect("a -002 for U1");
+    assert!(message.contains("ignore"), "{message}");
+    assert!(message.contains("[spice]"), "{message}");
+}
+
 #[test]
 fn unmodelled_parts_are_reported_by_reference_and_part_id() {
     let board = board(NO_MODELS);
@@ -1168,6 +1186,95 @@ fn failed_measurement_gives_003() {
         "diagnostics: {:?}",
         report.diagnostics
     );
+}
+
+/// A flat response never crosses the -3 dB target. The message must name the
+/// Synth measure and node, not the generated `synth_corner<N>` vector.
+#[test]
+fn a_failed_relative_db_names_the_measure_and_the_band_on_real_ngspice() {
+    let Some(ngspice) = real_ngspice() else {
+        eprintln!("{}", real_ngspice_support::SKIP_MESSAGE);
+        return;
+    };
+    let board = board(DIVIDER);
+    let testbench = testbench(
+        r#"
+ground = "GND"
+
+[[source]]
+net = "VCC"
+kind = "dc"
+dc = 0.0
+ac = 1.0
+
+[analysis.ac]
+start = 10.0
+stop = 100000.0
+points_per_decade = 100
+
+[[measure]]
+name = "corner"
+kind = "relative_db"
+node = "MID"
+min = 100.0
+max = 1000.0
+"#,
+    );
+
+    let report = synth_sim::simulate(&board, &testbench, &options(&ngspice));
+
+    assert!(!report.passed());
+    let message = report
+        .diagnostics
+        .iter()
+        .find(|diagnostic| diagnostic.code == synth_sim::E_SYNTH_SIM_003)
+        .and_then(|diagnostic| diagnostic.message.as_deref())
+        .expect("a -003 for the failed corner");
+    assert!(message.contains("corner"), "{message}");
+    assert!(message.contains("MID"), "{message}");
+    assert!(
+        message.contains("no -3 dB crossing in 10-100000 Hz"),
+        "{message}"
+    );
+    assert!(!message.contains("synth_corner"), "{message}");
+}
+
+/// A limit diagnostic points at the `[[measure]]` block that declared it, not
+/// at the start of the sidecar.
+#[test]
+fn a_limit_diagnostic_points_at_its_measure_block() {
+    let board = board(DIVIDER);
+    let (stub, _dir) = stub_ngspice("ok");
+    for (label, min, max, blocking) in [
+        ("passing", "5.8", "6.1", false),
+        ("failing", "6.2", "6.4", true),
+    ] {
+        let source = DIVIDER_TB
+            .replace("min = 5.7", &format!("min = {min}"))
+            .replace("max = 6.3", &format!("max = {max}"));
+        let testbench = testbench(&source);
+
+        let report = synth_sim::simulate(&board, &testbench, &options(&stub));
+
+        let diagnostic = report
+            .diagnostics
+            .iter()
+            .find(|diagnostic| {
+                diagnostic.code == synth_sim::E_SYNTH_SIM_004
+                    && diagnostic.severity.is_blocking() == blocking
+            })
+            .unwrap_or_else(|| panic!("{label}: no -004 in {:?}", report.diagnostics));
+        let location = diagnostic.location.as_ref().expect("location");
+        assert_eq!(location.file, "divider.sim.toml");
+        assert!(
+            !location.span.is_empty(),
+            "{label}: {}",
+            location.span.byte_start
+        );
+        let block = &source[location.span.byte_start as usize..location.span.byte_end as usize];
+        assert!(block.starts_with("[[measure]]"), "{label}: {block}");
+        assert!(block.contains("name = \"vmid\""), "{label}: {block}");
+    }
 }
 
 #[test]
@@ -2233,6 +2340,81 @@ fn emits_an_ac_source_and_a_relative_db_corner_measure() {
     assert!(
         deck.contains("echo SYNTH_MEAS corner $&synth_corner0"),
         "deck:\n{deck}"
+    );
+}
+
+/// A fixed-frequency node voltage reads the AC gain directly, so an absolute
+/// dB limit can check the passband or the slope of a filter.
+#[test]
+fn emits_an_at_frequency_gain_measure() {
+    let board = board(RC);
+    let testbench = testbench(&RC_TB.replace(
+        "max = 1620.0\n",
+        "max = 1620.0\n\n[[measure]]\nname = \"passband\"\nkind = \"node_voltage\"\n\
+         node = \"OUT\"\nat_frequency = 159.0\nmin = -0.5\nmax = 0.0\n",
+    ));
+
+    let deck = synth_sim::emit_netlist(&board, &testbench).expect("deck emits");
+
+    assert!(
+        deck.contains("meas ac synth_gain1 find vdb(n_OUT) at=1.59e2"),
+        "deck:\n{deck}"
+    );
+    assert!(
+        deck.contains("echo SYNTH_MEAS passband $&synth_gain1"),
+        "deck:\n{deck}"
+    );
+}
+
+/// `at_frequency` only makes sense for a node voltage during an AC sweep with
+/// a non-zero drive, and the value must be a positive frequency.
+#[test]
+fn an_at_frequency_measure_is_validated() {
+    let ac = "[analysis.ac]\nstart = 10\nstop = 1000";
+    let op = "[analysis]\nop = true";
+    for (label, analysis, measure) in [
+        (
+            "node_voltage under op",
+            op,
+            "[[measure]]\nname = \"g\"\nkind = \"node_voltage\"\nnode = \"MID\"\nat_frequency = 100.0",
+        ),
+        (
+            "relative_db",
+            ac,
+            "[[measure]]\nname = \"f\"\nkind = \"relative_db\"\nnode = \"MID\"\nat_frequency = 100.0",
+        ),
+        (
+            "current",
+            op,
+            "[[measure]]\nname = \"i\"\nkind = \"current\"\nelement = \"R1\"\nat_frequency = 100.0",
+        ),
+        (
+            "zero frequency",
+            ac,
+            "[[measure]]\nname = \"g\"\nkind = \"node_voltage\"\nnode = \"MID\"\nat_frequency = 0.0",
+        ),
+        (
+            "negative frequency",
+            ac,
+            "[[measure]]\nname = \"g\"\nkind = \"node_voltage\"\nnode = \"MID\"\nat_frequency = -1.0",
+        ),
+    ] {
+        let error = synth_sim::Testbench::from_toml(&tb_with(analysis, measure)).expect_err(label);
+        assert_eq!(error.code, synth_sim::E_SYNTH_SIM_007, "{label}");
+    }
+
+    let no_drive = tb_with(
+        ac,
+        "[[measure]]\nname = \"g\"\nkind = \"node_voltage\"\nnode = \"MID\"\nat_frequency = 100.0",
+    );
+    let error = synth_sim::Testbench::from_toml(&no_drive).expect_err("an AC drive is required");
+    assert_eq!(error.code, synth_sim::E_SYNTH_SIM_007);
+    assert!(
+        error
+            .message
+            .as_deref()
+            .is_some_and(|message| message.contains("non-zero `ac`")),
+        "{error:?}"
     );
 }
 
