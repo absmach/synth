@@ -1946,3 +1946,589 @@ fn a_ps_dialect_spice_part_matches_real_ngspice() {
         "vout {vout} should be about 3.29967 V"
     );
 }
+
+const RC: &str = r#"
+board "rc-filter" {
+  layers 2
+  component R1: resistor "r_generic_0805" value "1k"
+  component C1: capacitor "c_generic_0805" value "100n"
+  net "IN" { R1.p1 }
+  net "GND" { C1.p2 }
+  connect R1.p2 -> C1.p1 as "OUT"
+}
+"#;
+
+const RC_TB: &str = r#"
+ground = "GND"
+
+[[source]]
+net = "IN"
+kind = "dc"
+dc = 0.0
+ac = 1.0
+
+[analysis.ac]
+start = 10.0
+stop = 100000.0
+points_per_decade = 100
+
+[[measure]]
+name = "corner"
+kind = "relative_db"
+node = "OUT"
+min = 1560.0
+max = 1620.0
+"#;
+
+const CURRENT_TB: &str = r#"
+ground = "GND"
+
+[[source]]
+net = "VCC"
+kind = "dc"
+dc = 5.0
+
+[analysis]
+op = true
+
+[[measure]]
+name = "iled"
+kind = "current"
+element = "LED1"
+min = 0.019
+max = 0.021
+"#;
+
+/// A source can carry DC and an AC magnitude, and a relative-dB measure is
+/// emitted as max, target and crossing in that order.
+#[test]
+fn emits_an_ac_source_and_a_relative_db_corner_measure() {
+    let board = board(RC);
+    let testbench = testbench(RC_TB);
+
+    let deck = synth_sim::emit_netlist(&board, &testbench).expect("deck emits");
+
+    assert!(deck.contains("V1 n_IN 0 DC 0e0 AC 1e0"), "deck:\n{deck}");
+    assert!(deck.contains("ac dec 100 1e1 1e5"), "deck:\n{deck}");
+    assert!(
+        deck.contains("meas ac synth_max0 max vdb(n_OUT)"),
+        "deck:\n{deck}"
+    );
+    assert!(
+        deck.contains("let synth_target0 = synth_max0 - 3e0"),
+        "deck:\n{deck}"
+    );
+    assert!(
+        deck.contains("meas ac synth_corner0 when vdb(n_OUT) = synth_target0"),
+        "deck:\n{deck}"
+    );
+    assert!(
+        deck.contains("echo SYNTH_MEAS corner $&synth_corner0"),
+        "deck:\n{deck}"
+    );
+}
+
+/// A current measure names the Synth part; the deck saves and reads the
+/// emitted device current vector.
+#[test]
+fn emits_a_device_current_measure() {
+    let board = board(LED);
+    let testbench = testbench(CURRENT_TB);
+
+    let deck = synth_sim::emit_netlist(&board, &testbench).expect("deck emits");
+
+    assert!(deck.contains("save all @DLED1[id]"), "deck:\n{deck}");
+    assert!(deck.contains("let m0 = @DLED1[id]"), "deck:\n{deck}");
+    assert!(deck.contains("echo SYNTH_MEAS iled $&m0"), "deck:\n{deck}");
+}
+
+fn tb_with(analysis: &str, measure: &str) -> String {
+    format!(
+        "ground = \"GND\"\n\n[[source]]\nnet = \"VCC\"\nkind = \"dc\"\ndc = 5.0\n\n{analysis}\n\n{measure}\n"
+    )
+}
+
+#[test]
+fn a_relative_db_measure_requires_the_ac_analysis() {
+    let error = synth_sim::Testbench::from_toml(&tb_with(
+        "[analysis]\nop = true",
+        "[[measure]]\nname = \"f\"\nkind = \"relative_db\"\nnode = \"MID\"",
+    ))
+    .expect_err("relative_db needs ac");
+    assert_eq!(error.code, synth_sim::E_SYNTH_SIM_007);
+    assert!(
+        error
+            .message
+            .as_deref()
+            .is_some_and(|message| message.contains("ac")),
+        "{error:?}"
+    );
+
+    let error = synth_sim::Testbench::from_toml(&tb_with(
+        "[analysis.ac]\nstart = 10\nstop = 1000",
+        "[[measure]]\nname = \"v\"\nkind = \"node_voltage\"\nnode = \"MID\"",
+    ))
+    .expect_err("node_voltage needs op");
+    assert_eq!(error.code, synth_sim::E_SYNTH_SIM_007);
+    assert!(
+        error
+            .message
+            .as_deref()
+            .is_some_and(|message| message.contains("op")),
+        "{error:?}"
+    );
+}
+
+#[test]
+fn a_measure_target_must_match_its_kind() {
+    let op = "[analysis]\nop = true";
+    let ac = "[analysis.ac]\nstart = 10\nstop = 1000";
+    for (label, analysis, measure) in [
+        (
+            "node_voltage with element",
+            op,
+            "[[measure]]\nname = \"m\"\nkind = \"node_voltage\"\nnode = \"MID\"\nelement = \"R1\"",
+        ),
+        (
+            "node_voltage with drop_db",
+            op,
+            "[[measure]]\nname = \"m\"\nkind = \"node_voltage\"\nnode = \"MID\"\ndrop_db = 3.0",
+        ),
+        (
+            "node_voltage without node",
+            op,
+            "[[measure]]\nname = \"m\"\nkind = \"node_voltage\"",
+        ),
+        (
+            "relative_db with element",
+            ac,
+            "[[measure]]\nname = \"m\"\nkind = \"relative_db\"\nnode = \"MID\"\nelement = \"R1\"",
+        ),
+        (
+            "relative_db with zero drop",
+            ac,
+            "[[measure]]\nname = \"m\"\nkind = \"relative_db\"\nnode = \"MID\"\ndrop_db = 0.0",
+        ),
+        (
+            "current without element",
+            op,
+            "[[measure]]\nname = \"m\"\nkind = \"current\"",
+        ),
+        (
+            "current with node",
+            op,
+            "[[measure]]\nname = \"m\"\nkind = \"current\"\nelement = \"R1\"\nnode = \"MID\"",
+        ),
+        (
+            "current with drop_db",
+            op,
+            "[[measure]]\nname = \"m\"\nkind = \"current\"\nelement = \"R1\"\ndrop_db = 3.0",
+        ),
+    ] {
+        let error = synth_sim::Testbench::from_toml(&tb_with(analysis, measure)).expect_err(label);
+        assert_eq!(error.code, synth_sim::E_SYNTH_SIM_007, "{label}");
+    }
+}
+
+#[test]
+fn ac_analysis_and_source_values_are_validated() {
+    for (label, analysis) in [
+        ("ac start zero", "[analysis.ac]\nstart = 0\nstop = 1000"),
+        (
+            "ac stop before start",
+            "[analysis.ac]\nstart = 1000\nstop = 100",
+        ),
+        (
+            "ac zero points",
+            "[analysis.ac]\nstart = 10\nstop = 1000\npoints_per_decade = 0",
+        ),
+        (
+            "ac too many points",
+            "[analysis.ac]\nstart = 10\nstop = 1000\npoints_per_decade = 1001",
+        ),
+        ("both analyses", "[analysis]\nop = true\nac = {}"),
+        ("no analysis", "[analysis]"),
+    ] {
+        let error = synth_sim::Testbench::from_toml(&tb_with(
+            analysis,
+            "[[measure]]\nname = \"v\"\nkind = \"node_voltage\"\nnode = \"MID\"",
+        ))
+        .expect_err(label);
+        assert_eq!(error.code, synth_sim::E_SYNTH_SIM_007, "{label}");
+    }
+
+    for (label, source) in [
+        (
+            "no dc or ac",
+            "[[source]]\nnet = \"VCC\"\nkind = \"dc\"\n\n[analysis]\nop = true\n\n[[measure]]\nname = \"v\"\nkind = \"node_voltage\"\nnode = \"MID\"",
+        ),
+        (
+            "negative ac",
+            "[[source]]\nnet = \"VCC\"\nkind = \"dc\"\nac = -1\n\n[analysis.ac]\nstart = 10\nstop = 1000\n\n[[measure]]\nname = \"f\"\nkind = \"relative_db\"\nnode = \"MID\"",
+        ),
+    ] {
+        let text = format!("ground = \"GND\"\n\n{source}\n");
+        let error = synth_sim::Testbench::from_toml(&text)
+            .expect_err(label);
+        assert_eq!(error.code, synth_sim::E_SYNTH_SIM_007, "{label}");
+    }
+}
+
+#[test]
+fn a_current_measure_rejects_an_ignored_unknown_or_subcircuit_element() {
+    let unknown = testbench(&CURRENT_TB.replace("element = \"LED1\"", "element = \"LED2\""));
+    let diagnostics = synth_sim::emit_netlist(&board(LED), &unknown).expect_err("unknown refdes");
+    assert!(
+        diagnostics.iter().any(|diagnostic| {
+            diagnostic.code == synth_sim::E_SYNTH_SIM_007
+                && diagnostic
+                    .message
+                    .as_deref()
+                    .is_some_and(|message| message.contains("LED2"))
+        }),
+        "diagnostics: {diagnostics:?}"
+    );
+
+    let ignored = testbench(&CURRENT_TB.replacen(
+        "ground = \"GND\"\n",
+        "ground = \"GND\"\nignore = [\"LED1\"]\n",
+        1,
+    ));
+    let diagnostics = synth_sim::emit_netlist(&board(LED), &ignored).expect_err("ignored element");
+    assert!(
+        diagnostics.iter().any(|diagnostic| {
+            diagnostic.code == synth_sim::E_SYNTH_SIM_007
+                && diagnostic
+                    .message
+                    .as_deref()
+                    .is_some_and(|message| message.contains("LED1") && message.contains("ignore"))
+        }),
+        "diagnostics: {diagnostics:?}"
+    );
+
+    let ldo = testbench(&CURRENT_TB.replace("element = \"LED1\"", "element = \"U1\""));
+    let diagnostics =
+        synth_sim::emit_netlist_with_registry_dirs(&board(LDO), &ldo, &[registry_parts_dir()])
+            .expect_err("subcircuit element");
+    assert!(
+        diagnostics.iter().any(|diagnostic| {
+            diagnostic.code == synth_sim::E_SYNTH_SIM_007
+                && diagnostic.message.as_deref().is_some_and(|message| {
+                    message.contains("U1") && message.contains("not supported")
+                })
+        }),
+        "diagnostics: {diagnostics:?}"
+    );
+}
+
+fn rc_with_plot(plot: &str) -> String {
+    RC_TB.replacen(
+        "ground = \"GND\"\n",
+        &format!("ground = \"GND\"\n\n[options]\nplot = \"{plot}\"\n"),
+        1,
+    )
+}
+
+#[test]
+fn emits_a_single_quoted_wrdata_line_before_the_done_sentinel() {
+    let scratch = Scratch::new("plot-deck");
+    let plot = scratch.path().join("nested/wave.dat");
+    let testbench = testbench(&rc_with_plot(&plot.display().to_string()));
+
+    let deck = synth_sim::emit_netlist(&board(RC), &testbench).expect("deck emits");
+
+    let line = format!("wrdata '{}' allv", plot.display());
+    let position = deck.find(&line).unwrap_or_else(|| {
+        panic!("deck has no `{line}`:\n{deck}");
+    });
+    assert!(
+        deck.find("echo SYNTH_MEAS corner").expect("measure") < position,
+        "wrdata must follow the measures:\n{deck}"
+    );
+    assert!(
+        position < deck.find("echo SYNTH_DONE").expect("done"),
+        "wrdata must precede SYNTH_DONE:\n{deck}"
+    );
+}
+
+/// The output directory is created before ngspice starts; a missing binary
+/// still leaves the resolved relative directory in place.
+#[test]
+fn simulate_creates_the_plot_directory_before_running_ngspice() {
+    let scratch = Scratch::new("plot-dir");
+    let sidecar = scratch.path().join("rc.sim.toml");
+    std::fs::write(&sidecar, rc_with_plot("deep/nested/wave.dat")).expect("write sidecar");
+    let testbench = synth_sim::Testbench::from_path(&sidecar).expect("sidecar parses");
+    let options = synth_sim::SimOptions {
+        ngspice: Some(scratch.path().join("ngspice-does-not-exist")),
+        design_path: Some(PathBuf::from("rc.synth")),
+        testbench_path: Some(sidecar),
+        registry_dirs: Vec::new(),
+    };
+
+    let report = synth_sim::simulate(&board(RC), &testbench, &options);
+
+    assert!(!report.passed());
+    assert!(
+        report
+            .diagnostics
+            .iter()
+            .any(|diagnostic| diagnostic.code == synth_sim::E_SYNTH_SIM_001),
+        "diagnostics: {:?}",
+        report.diagnostics
+    );
+    assert!(
+        scratch.path().join("deep/nested").is_dir(),
+        "the plot directory must exist before ngspice runs"
+    );
+}
+
+#[test]
+fn plot_validation_gives_007() {
+    for (label, plot) in [
+        ("empty", String::new()),
+        ("single quote", "it's/wave.dat".to_string()),
+        ("newline", "a\nb".to_string()),
+    ] {
+        let error =
+            synth_sim::Testbench::from_toml(&rc_with_plot(&plot)).expect_err("invalid plot path");
+        assert_eq!(error.code, synth_sim::E_SYNTH_SIM_007, "{label}");
+    }
+
+    let op = tb_with(
+        "[analysis]\nop = true",
+        "[[measure]]\nname = \"v\"\nkind = \"node_voltage\"\nnode = \"MID\"",
+    )
+    .replacen(
+        "ground = \"GND\"\n",
+        "ground = \"GND\"\n\n[options]\nplot = \"wave.dat\"\n",
+        1,
+    );
+    let error = synth_sim::Testbench::from_toml(&op).expect_err("plot needs ac");
+    assert_eq!(error.code, synth_sim::E_SYNTH_SIM_007);
+    assert!(
+        error
+            .message
+            .as_deref()
+            .is_some_and(|message| message.contains("ac")),
+        "{error:?}"
+    );
+}
+
+fn example_dir(name: &str) -> PathBuf {
+    Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("..")
+        .join("..")
+        .join("examples")
+        .join(name)
+}
+
+/// Compile a design from its real path, with imports rooted at its folder.
+fn board_from_file(path: &Path) -> synth_ir::Board {
+    let source = std::fs::read_to_string(path).expect("read design");
+    let file = path.display().to_string();
+    let parsed = synth_parser::parse(&source, file.clone());
+    assert!(
+        parsed.diagnostics.is_empty(),
+        "parse: {:?}",
+        parsed.diagnostics
+    );
+    let ast = parsed.ast.expect("ast");
+    let root = path.parent().expect("design parent").to_path_buf();
+    let resolved = synth_ir::resolve_imports(&ast, &synth_ir::FsImportLoader { root }, &file);
+    assert!(
+        resolved
+            .diagnostics
+            .iter()
+            .all(|d| !d.severity.is_blocking()),
+        "imports: {:?}",
+        resolved.diagnostics
+    );
+    let registry = synth_registry::embedded_registry().clone();
+    let lowered = synth_ir::lower(&resolved.program, &registry, &file);
+    assert!(
+        lowered
+            .diagnostics
+            .iter()
+            .all(|d| !d.severity.is_blocking()),
+        "lower: {:?}",
+        lowered.diagnostics
+    );
+    lowered.board.expect("board")
+}
+
+fn example_options(design: &Path, testbench: &Path, ngspice: &Path) -> synth_sim::SimOptions {
+    synth_sim::SimOptions {
+        ngspice: Some(ngspice.to_path_buf()),
+        design_path: Some(design.to_path_buf()),
+        testbench_path: Some(testbench.to_path_buf()),
+        registry_dirs: Vec::new(),
+    }
+}
+
+/// V_MID = VCC * R2/(R1+R2) = 12 * 10k/(10k+10k) = 6 V.
+#[test]
+fn divider_example_matches_real_ngspice() {
+    let Some(ngspice) = real_ngspice() else {
+        eprintln!("skipping: ngspice is not installed (sudo apt install ngspice)");
+        return;
+    };
+    let design = example_dir("divider").join("divider.synth");
+    let sidecar = synth_sim::sidecar_path(&design);
+    let board = board_from_file(&design);
+    let testbench = synth_sim::Testbench::from_path(&sidecar).expect("example sidecar");
+
+    let report = synth_sim::simulate(
+        &board,
+        &testbench,
+        &example_options(&design, &sidecar, &ngspice),
+    );
+
+    assert!(report.passed(), "diagnostics: {:?}", report.diagnostics);
+    let vmid = report
+        .measures
+        .iter()
+        .find(|measure| measure.name == "vmid")
+        .expect("vmid")
+        .value;
+    assert!(
+        (vmid - 6.0).abs() < 1e-3,
+        "divider midpoint {vmid} should be 6 V"
+    );
+}
+
+/// fc = 1/(2*pi*R*C) = 1/(2*pi*1k*100n) = 1591.55 Hz; the -3.0 dB point of
+/// this single pole is 1587.8 Hz, so the measured corner is within 2% of fc.
+#[test]
+fn rc_filter_example_matches_real_ngspice() {
+    let Some(ngspice) = real_ngspice() else {
+        eprintln!("skipping: ngspice is not installed (sudo apt install ngspice)");
+        return;
+    };
+    let design = example_dir("rc_filter").join("rc_filter.synth");
+    let sidecar = synth_sim::sidecar_path(&design);
+    let board = board_from_file(&design);
+    let testbench = synth_sim::Testbench::from_path(&sidecar).expect("example sidecar");
+
+    let report = synth_sim::simulate(
+        &board,
+        &testbench,
+        &example_options(&design, &sidecar, &ngspice),
+    );
+
+    assert!(report.passed(), "diagnostics: {:?}", report.diagnostics);
+    let corner = report
+        .measures
+        .iter()
+        .find(|measure| measure.name == "corner")
+        .expect("corner")
+        .value;
+    let fc = 1.0 / (2.0 * std::f64::consts::PI * 1e3 * 100e-9);
+    assert!(
+        (corner - fc).abs() / fc < 0.02,
+        "RC corner {corner} Hz differs from fc {fc} Hz by more than 2%"
+    );
+}
+
+/// I = (Vs - Vf)/R = (5 - 2.0)/150 = 20 mA.
+#[test]
+fn led_example_matches_real_ngspice() {
+    let Some(ngspice) = real_ngspice() else {
+        eprintln!("skipping: ngspice is not installed (sudo apt install ngspice)");
+        return;
+    };
+    let design = example_dir("led").join("led.synth");
+    let sidecar = synth_sim::sidecar_path(&design);
+    let board = board_from_file(&design);
+    let testbench = synth_sim::Testbench::from_path(&sidecar).expect("example sidecar");
+
+    let report = synth_sim::simulate(
+        &board,
+        &testbench,
+        &example_options(&design, &sidecar, &ngspice),
+    );
+
+    assert!(report.passed(), "diagnostics: {:?}", report.diagnostics);
+    let iled = report
+        .measures
+        .iter()
+        .find(|measure| measure.name == "iled")
+        .expect("iled")
+        .value;
+    let expected = (5.0 - 2.0) / 150.0;
+    assert!(
+        (iled - expected).abs() / expected < 0.02,
+        "LED current {iled} A differs from {expected} A by more than 2%"
+    );
+}
+
+/// The RC example, copied to scratch with a plot option, writes a real
+/// waveform file next to its sidecar.
+#[test]
+fn a_real_ngspice_run_writes_a_non_empty_plot() {
+    let Some(ngspice) = real_ngspice() else {
+        eprintln!("skipping: ngspice is not installed (sudo apt install ngspice)");
+        return;
+    };
+    let scratch = Scratch::new("rc-plot");
+    let design = scratch.path().join("rc_filter.synth");
+    std::fs::copy(example_dir("rc_filter").join("rc_filter.synth"), &design).expect("copy design");
+    let sidecar_text = std::fs::read_to_string(synth_sim::sidecar_path(
+        &example_dir("rc_filter").join("rc_filter.synth"),
+    ))
+    .expect("example sidecar");
+    let sidecar = scratch.path().join("rc_filter.sim.toml");
+    std::fs::write(
+        &sidecar,
+        sidecar_text.replacen(
+            "ground = \"GND\"\n",
+            "ground = \"GND\"\n\n[options]\nplot = \"wave.dat\"\n",
+            1,
+        ),
+    )
+    .expect("write sidecar");
+    let board = board_from_file(&design);
+    let testbench = synth_sim::Testbench::from_path(&sidecar).expect("copied sidecar");
+
+    let report = synth_sim::simulate(
+        &board,
+        &testbench,
+        &example_options(&design, &sidecar, &ngspice),
+    );
+
+    assert!(report.passed(), "diagnostics: {:?}", report.diagnostics);
+    let plot = scratch.path().join("wave.dat");
+    let size = std::fs::metadata(&plot).expect("plot file exists").len();
+    assert!(size > 0, "plot file is empty");
+}
+
+#[test]
+fn simulate_creates_an_absolute_plot_directory_before_the_run() {
+    let scratch = Scratch::new("plot-abs-dir");
+    let plot = scratch.path().join("absolute/nested/wave.dat");
+    let sidecar = scratch.path().join("rc.sim.toml");
+    std::fs::write(&sidecar, rc_with_plot(&plot.display().to_string())).expect("write sidecar");
+    let testbench = synth_sim::Testbench::from_path(&sidecar).expect("sidecar parses");
+    let options = synth_sim::SimOptions {
+        ngspice: Some(scratch.path().join("ngspice-does-not-exist")),
+        design_path: Some(PathBuf::from("rc.synth")),
+        testbench_path: Some(sidecar),
+        registry_dirs: Vec::new(),
+    };
+
+    let report = synth_sim::simulate(&board(RC), &testbench, &options);
+
+    assert!(!report.passed());
+    assert!(
+        report
+            .diagnostics
+            .iter()
+            .any(|diagnostic| diagnostic.code == synth_sim::E_SYNTH_SIM_001),
+        "diagnostics: {:?}",
+        report.diagnostics
+    );
+    assert!(
+        plot.parent().expect("plot parent").is_dir(),
+        "the absolute plot directory must exist before ngspice runs"
+    );
+}

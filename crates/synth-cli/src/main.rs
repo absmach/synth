@@ -1279,9 +1279,9 @@ const UNSUPPORTED: &[CapabilityLimit] = &[
     (
         "spice_simulation",
         None,
-        "`synth sim` supports only an operating-point analysis with resistor and capacitor \
-         models; transient, AC, LED/diode models, registry subcircuits and waveform output are \
-         not implemented yet.",
+        "`synth sim` runs an operating point or an AC decade sweep only; transient and DC-sweep \
+         analyses, pulse/pwl/sin sources, expression measures and vendor model import are not \
+         implemented yet.",
     ),
     (
         "coupled_diff_pair_routing",

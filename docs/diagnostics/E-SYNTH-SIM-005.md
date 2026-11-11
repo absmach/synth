@@ -21,10 +21,11 @@ budget to make the timeout easy to observe:
 timeout = 1.0
 ```
 
-A long transient analysis is the usual cause: simulation time is not wall-clock
-time, and a switching converter can need a much larger budget.
+A dense AC sweep on a large circuit, or a slow subcircuit model, is the usual
+cause. A switching converter in transient would need a much larger budget,
+but transient analysis itself is not implemented yet.
 
 ## Suggested fix
 
 Raise `[options] timeout`, shorten the analysis window, or simplify the
-circuit. Heavy transient work usually needs a larger explicit timeout.
+circuit. A large circuit or a slow model may need a larger explicit timeout.

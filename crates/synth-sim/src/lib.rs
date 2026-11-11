@@ -12,7 +12,7 @@
 // boxing it in every private helper would only move the allocation.
 #![allow(clippy::result_large_err)]
 
-use std::collections::{HashMap, HashSet};
+use std::collections::{BTreeSet, HashMap, HashSet};
 use std::fmt::Write as _;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
@@ -66,6 +66,9 @@ pub struct TestbenchOptions {
     /// Wall-clock budget in seconds. Defaults to 10.
     #[serde(default)]
     pub timeout: Option<f64>,
+    /// `wrdata` output path, resolved beside the sidecar. Requires `ac`.
+    #[serde(default)]
+    pub plot: Option<String>,
 }
 
 /// An independent source added by the testbench.
@@ -78,6 +81,9 @@ pub struct Source {
     /// DC value in volts.
     #[serde(default)]
     pub dc: Option<f64>,
+    /// AC magnitude in volts.
+    #[serde(default)]
+    pub ac: Option<f64>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize)]
@@ -92,6 +98,32 @@ pub enum SourceKind {
 pub struct Analysis {
     #[serde(default)]
     pub op: bool,
+    #[serde(default)]
+    pub ac: Option<AcAnalysis>,
+}
+
+/// A decade sweep for `ac dec <points> <start> <stop>`.
+#[derive(Debug, Clone, Copy, PartialEq, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct AcAnalysis {
+    #[serde(default = "default_ac_start")]
+    pub start: f64,
+    #[serde(default = "default_ac_stop")]
+    pub stop: f64,
+    #[serde(default = "default_ac_points_per_decade")]
+    pub points_per_decade: u32,
+}
+
+fn default_ac_start() -> f64 {
+    1.0
+}
+
+fn default_ac_stop() -> f64 {
+    1e6
+}
+
+fn default_ac_points_per_decade() -> u32 {
+    100
 }
 
 /// A named measurement with optional pass/fail limits.
@@ -101,7 +133,14 @@ pub struct Measure {
     pub name: String,
     pub kind: MeasureKind,
     /// Synth net name whose voltage is measured.
-    pub node: String,
+    #[serde(default)]
+    pub node: Option<String>,
+    /// Synth reference of the part whose current is measured.
+    #[serde(default)]
+    pub element: Option<String>,
+    /// Relative-dB drop for `relative_db`. Defaults to 3.0.
+    #[serde(default)]
+    pub drop_db: Option<f64>,
     #[serde(default)]
     pub min: Option<f64>,
     #[serde(default)]
@@ -112,6 +151,8 @@ pub struct Measure {
 #[serde(rename_all = "snake_case")]
 pub enum MeasureKind {
     NodeVoltage,
+    Current,
+    RelativeDb,
 }
 
 impl Testbench {
@@ -151,6 +192,7 @@ impl Testbench {
             .map_err(|diagnostic| with_location(diagnostic, path))
     }
 
+    #[allow(clippy::too_many_lines)]
     fn validate_inner(&self) -> Result<(), Diagnostic> {
         if self.ground.trim().is_empty() {
             return Err(testbench_error("ground net is empty"));
@@ -163,10 +205,44 @@ impl Testbench {
                 )));
             }
         }
-        if !self.analysis.op {
+        if self.analysis.op == self.analysis.ac.is_some() {
             return Err(testbench_error(
-                "testbench must select exactly one analysis; only `op` is supported",
+                "testbench must select exactly one analysis: `op` or `ac`",
             ));
+        }
+        if let Some(ac) = &self.analysis.ac {
+            if !ac.start.is_finite() || ac.start <= 0.0 {
+                return Err(testbench_error(
+                    "`[analysis.ac] start` must be a positive finite frequency",
+                ));
+            }
+            if !ac.stop.is_finite() || ac.stop <= ac.start {
+                return Err(testbench_error(format!(
+                    "`[analysis.ac] stop` must be finite and greater than start {}",
+                    ac.start
+                )));
+            }
+            if !(1..=1000).contains(&ac.points_per_decade) {
+                return Err(testbench_error(
+                    "`[analysis.ac] points_per_decade` must be between 1 and 1000",
+                ));
+            }
+        }
+        if let Some(plot) = &self.options.plot {
+            if plot.trim().is_empty() {
+                return Err(testbench_error("`[options] plot` path is empty"));
+            }
+            reject_newline("plot", plot)?;
+            if plot.contains('\'') {
+                return Err(testbench_error(
+                    "`[options] plot` path must not contain a single quote; it is emitted single-quoted",
+                ));
+            }
+            if self.analysis.ac.is_none() {
+                return Err(testbench_error(
+                    "`[options] plot` requires the `ac` analysis",
+                ));
+            }
         }
         if self.source.is_empty() {
             return Err(testbench_error("testbench has no [[source]]"));
@@ -192,17 +268,33 @@ impl Testbench {
                 return Err(testbench_error("source net is empty"));
             }
             reject_newline("net", &source.net)?;
-            let Some(dc) = source.dc else {
+            if source.dc.is_none() && source.ac.is_none() {
                 return Err(testbench_error(format!(
-                    "source on net `{}` has no `dc` value",
+                    "source on net `{}` has neither a `dc` nor an `ac` value",
                     source.net
                 )));
-            };
-            if !dc.is_finite() {
-                return Err(testbench_error(format!(
-                    "source on net `{}` has a non-finite `dc` value",
-                    source.net
-                )));
+            }
+            if let Some(dc) = source.dc {
+                if !dc.is_finite() {
+                    return Err(testbench_error(format!(
+                        "source on net `{}` has a non-finite `dc` value",
+                        source.net
+                    )));
+                }
+            }
+            if let Some(ac) = source.ac {
+                if !ac.is_finite() {
+                    return Err(testbench_error(format!(
+                        "source on net `{}` has a non-finite `ac` value",
+                        source.net
+                    )));
+                }
+                if ac < 0.0 {
+                    return Err(testbench_error(format!(
+                        "source on net `{}` has a negative `ac` value",
+                        source.net
+                    )));
+                }
             }
         }
 
@@ -219,13 +311,79 @@ impl Testbench {
                     measure.name
                 )));
             }
-            if measure.node.trim().is_empty() {
+            match measure.kind {
+                MeasureKind::NodeVoltage | MeasureKind::RelativeDb => {
+                    match measure.node.as_deref() {
+                        Some(node) if !node.trim().is_empty() => {
+                            reject_newline("node", node)?;
+                        }
+                        _ => {
+                            return Err(testbench_error(format!(
+                                "measure `{}` has an empty node",
+                                measure.name
+                            )));
+                        }
+                    }
+                    if measure.element.is_some() {
+                        return Err(testbench_error(format!(
+                            "measure `{}` reads a node and must not have an `element`",
+                            measure.name
+                        )));
+                    }
+                    if measure.kind == MeasureKind::NodeVoltage && measure.drop_db.is_some() {
+                        return Err(testbench_error(format!(
+                            "measure `{}` is a node_voltage measure and must not have `drop_db`",
+                            measure.name
+                        )));
+                    }
+                    if let Some(drop_db) = measure.drop_db {
+                        if !drop_db.is_finite() || drop_db <= 0.0 {
+                            return Err(testbench_error(format!(
+                                "measure `{}` has a `drop_db` that must be finite and greater than 0",
+                                measure.name
+                            )));
+                        }
+                    }
+                }
+                MeasureKind::Current => {
+                    match measure.element.as_deref() {
+                        Some(element) if !element.trim().is_empty() => {
+                            reject_newline("element", element)?;
+                        }
+                        _ => {
+                            return Err(testbench_error(format!(
+                                "measure `{}` has an empty element",
+                                measure.name
+                            )));
+                        }
+                    }
+                    if measure.node.is_some() {
+                        return Err(testbench_error(format!(
+                            "measure `{}` is a current measure and must not have a `node`",
+                            measure.name
+                        )));
+                    }
+                    if measure.drop_db.is_some() {
+                        return Err(testbench_error(format!(
+                            "measure `{}` is a current measure and must not have `drop_db`",
+                            measure.name
+                        )));
+                    }
+                }
+            }
+            let requires_ac = measure.kind == MeasureKind::RelativeDb;
+            if requires_ac && self.analysis.ac.is_none() {
                 return Err(testbench_error(format!(
-                    "measure `{}` has an empty node",
+                    "measure `{}` is a relative_db measure and requires the `ac` analysis",
                     measure.name
                 )));
             }
-            reject_newline("node", &measure.node)?;
+            if !requires_ac && !self.analysis.op {
+                return Err(testbench_error(format!(
+                    "measure `{}` requires the `op` analysis",
+                    measure.name
+                )));
+            }
             for (label, value) in [("min", measure.min), ("max", measure.max)] {
                 if let Some(value) = value {
                     if !value.is_finite() {
@@ -347,17 +505,37 @@ pub fn sidecar_path(design: &Path) -> PathBuf {
 ///
 /// A missing measurement, a failed run or an out-of-limit value is an error
 /// diagnostic, never a silent pass.
+#[allow(clippy::too_many_lines)]
 pub fn simulate(design: &Board, testbench: &Testbench, options: &SimOptions) -> SimReport {
-    let (deck, dialect) = match emit_deck(
+    let (deck, dialect, plot) = match emit_deck(
         design,
         testbench,
         options.design_path.as_deref(),
         options.testbench_path.as_deref(),
         &options.registry_dirs,
     ) {
-        Ok(deck) => deck,
+        Ok(emitted) => emitted,
         Err(diagnostics) => return failed(diagnostics, options.testbench_path.as_deref()),
     };
+
+    // `wrdata` fails when the output directory is absent; create it before
+    // ngspice starts so the failure is a start-up error, not a lost plot.
+    if let Some(plot) = &plot {
+        if let Some(parent) = plot.parent() {
+            if let Err(error) = std::fs::create_dir_all(parent) {
+                return failed(
+                    vec![testbench_error_at(
+                        options.testbench_path.as_deref(),
+                        format!(
+                            "could not create the plot directory `{}`: {error}",
+                            parent.display()
+                        ),
+                    )],
+                    options.testbench_path.as_deref(),
+                );
+            }
+        }
+    }
 
     let timeout = testbench
         .options
@@ -806,7 +984,7 @@ pub fn emit_netlist_with_registry_dirs(
     testbench: &Testbench,
     registry_dirs: &[PathBuf],
 ) -> Result<String, Vec<Diagnostic>> {
-    emit_deck(design, testbench, None, None, registry_dirs).map(|(deck, _)| deck)
+    emit_deck(design, testbench, None, None, registry_dirs).map(|(deck, _, _)| deck)
 }
 
 #[allow(clippy::too_many_lines)]
@@ -816,10 +994,17 @@ fn emit_deck(
     design_path: Option<&Path>,
     testbench_path: Option<&Path>,
     registry_dirs: &[PathBuf],
-) -> Result<(String, Option<SpiceDialect>), Vec<Diagnostic>> {
+) -> Result<(String, Option<SpiceDialect>, Option<PathBuf>), Vec<Diagnostic>> {
     if let Err(diagnostic) = testbench.validate_at(testbench_path) {
         return Err(vec![diagnostic]);
     }
+    let plot_path = match &testbench.options.plot {
+        Some(plot) => match resolve_plot_path(plot, testbench_path) {
+            Ok(path) => Some(path),
+            Err(diagnostic) => return Err(vec![diagnostic]),
+        },
+        None => None,
+    };
     let mut diagnostics = Vec::new();
     let tb_error = |message: String| testbench_error_at(testbench_path, message);
 
@@ -874,19 +1059,21 @@ fn emit_deck(
             )));
             continue;
         }
-        let Some(dc) = source.dc else {
+        if source.dc.is_none() && source.ac.is_none() {
             diagnostics.push(tb_error(format!(
-                "source on net `{}` has no `dc` value",
+                "source on net `{}` has neither a `dc` nor an `ac` value",
                 source.net
             )));
             continue;
-        };
-        source_lines.push(format!(
-            "V{} {} 0 DC {}",
-            index + 1,
-            node_by_net[&net.id],
-            exponent(dc)
-        ));
+        }
+        let mut line = format!("V{} {} 0", index + 1, node_by_net[&net.id]);
+        if let Some(dc) = source.dc {
+            let _ = write!(line, " DC {}", exponent(dc));
+        }
+        if let Some(ac) = source.ac {
+            let _ = write!(line, " AC {}", exponent(ac));
+        }
+        source_lines.push(line);
     }
 
     let mut ignored_ids: HashSet<ComponentId> = HashSet::new();
@@ -1103,37 +1290,112 @@ fn emit_deck(
         .map(|source| source.net.as_str())
         .collect();
     let mut measure_lines = Vec::new();
+    let mut current_saves = BTreeSet::new();
     for (index, measure) in testbench.measure.iter().enumerate() {
-        let Some(net) = net_by_name.get(measure.node.as_str()) else {
-            diagnostics.push(tb_error(format!(
-                "measure `{}` node `{}` not found in design",
-                measure.name, measure.node
-            )));
-            continue;
-        };
-        let simulated = net
-            .endpoints
-            .iter()
-            .any(|endpoint| !ignored_ids.contains(&endpoint.component));
-        if !simulated && net.id != ground.id && !sourced.contains(net.name.as_str()) {
-            diagnostics.push(with_location_span(
-                topology_error(
-                    &net.name,
-                    format!(
-                        "measure `{}` reads net `{}`, which has no simulated parts",
-                        measure.name, net.name
-                    ),
-                ),
-                design_path,
-                net_span(design, net),
-            ));
-            continue;
+        match measure.kind {
+            MeasureKind::NodeVoltage | MeasureKind::RelativeDb => {
+                let node_name = measure
+                    .node
+                    .as_deref()
+                    .expect("a validated node measure has a node");
+                let Some(net) = net_by_name.get(node_name) else {
+                    diagnostics.push(tb_error(format!(
+                        "measure `{}` node `{node_name}` not found in design",
+                        measure.name
+                    )));
+                    continue;
+                };
+                let simulated = net
+                    .endpoints
+                    .iter()
+                    .any(|endpoint| !ignored_ids.contains(&endpoint.component));
+                if !simulated && net.id != ground.id && !sourced.contains(net.name.as_str()) {
+                    diagnostics.push(with_location_span(
+                        topology_error(
+                            &net.name,
+                            format!(
+                                "measure `{}` reads net `{}`, which has no simulated parts",
+                                measure.name, net.name
+                            ),
+                        ),
+                        design_path,
+                        net_span(design, net),
+                    ));
+                    continue;
+                }
+                let node = &node_by_net[&net.id];
+                if measure.kind == MeasureKind::RelativeDb {
+                    let drop_db = measure.drop_db.unwrap_or(3.0);
+                    let mut lines = String::new();
+                    let _ = write!(
+                        lines,
+                        "meas ac synth_max{index} max vdb({node})\n\
+                         let synth_target{index} = synth_max{index} - {}\n\
+                         meas ac synth_corner{index} when vdb({node}) = synth_target{index}\n\
+                         echo SYNTH_MEAS {} $&synth_corner{index}",
+                        exponent(drop_db),
+                        measure.name
+                    );
+                    measure_lines.push(lines);
+                } else {
+                    measure_lines.push(format!(
+                        "let m{index} = v({node})\necho SYNTH_MEAS {} $&m{index}",
+                        measure.name
+                    ));
+                }
+            }
+            MeasureKind::Current => {
+                let refdes = measure
+                    .element
+                    .as_deref()
+                    .expect("a validated current measure has an element");
+                let Some(component) = design
+                    .components
+                    .iter()
+                    .find(|component| component.refdes == refdes)
+                else {
+                    diagnostics.push(tb_error(format!(
+                        "measure `{}` element `{refdes}` is not a placed part",
+                        measure.name
+                    )));
+                    continue;
+                };
+                if ignored_ids.contains(&component.id) {
+                    diagnostics.push(tb_error(format!(
+                        "measure `{}` element `{refdes}` is ignored by the testbench \
+                         and cannot be measured",
+                        measure.name
+                    )));
+                    continue;
+                }
+                let Ok(model) = model_for(component) else {
+                    diagnostics.push(tb_error(format!(
+                        "measure `{}` element `{refdes}` has no built-in model; \
+                         a current measure is not supported there",
+                        measure.name
+                    )));
+                    continue;
+                };
+                let (letter, parameter) = match &model {
+                    Model::Value { letter, .. } => (*letter, "i"),
+                    Model::Diode { .. } => ("D", "id"),
+                    Model::Subckt => {
+                        diagnostics.push(tb_error(format!(
+                            "measure `{}` element `{refdes}` is a registry subcircuit; \
+                             a current measure is not supported there",
+                            measure.name
+                        )));
+                        continue;
+                    }
+                };
+                let vector = format!("@{}{}[{parameter}]", letter, sanitize(refdes));
+                current_saves.insert(vector.clone());
+                measure_lines.push(format!(
+                    "let m{index} = {vector}\necho SYNTH_MEAS {} $&m{index}",
+                    measure.name
+                ));
+            }
         }
-        let node = &node_by_net[&net.id];
-        measure_lines.push(format!(
-            "let m{index} = v({node})\necho SYNTH_MEAS {} $&m{index}",
-            measure.name
-        ));
     }
 
     if !diagnostics.is_empty() {
@@ -1155,13 +1417,53 @@ fn emit_deck(
     for line in model_lines {
         let _ = writeln!(deck, "{line}");
     }
-    deck.push_str(".control\nop\n");
+    deck.push_str(".control\n");
+    if !current_saves.is_empty() {
+        let _ = writeln!(
+            deck,
+            "save all {}",
+            current_saves.into_iter().collect::<Vec<_>>().join(" ")
+        );
+    }
+    if testbench.analysis.op {
+        deck.push_str("op\n");
+    } else {
+        let ac = testbench
+            .analysis
+            .ac
+            .as_ref()
+            .expect("a validated testbench selects one analysis");
+        let _ = writeln!(
+            deck,
+            "ac dec {} {} {}",
+            ac.points_per_decade,
+            exponent(ac.start),
+            exponent(ac.stop)
+        );
+    }
     for line in measure_lines {
         let _ = writeln!(deck, "{line}");
     }
+    if let Some(plot) = &plot_path {
+        // ngspice 42 rejects double quotes here; single quotes work.
+        let _ = writeln!(deck, "wrdata '{}' allv", plot.display());
+    }
     deck.push_str("echo SYNTH_DONE\n.endc\n.end\n");
     let dialect = dialects.first().map(|(dialect, _, _)| *dialect);
-    Ok((deck, dialect))
+    Ok((deck, dialect, plot_path))
+}
+
+/// Resolve `[options] plot` relative to the sidecar's directory, or the
+/// working directory when no sidecar path is known.
+fn resolve_plot_path(plot: &str, testbench_path: Option<&Path>) -> Result<PathBuf, Diagnostic> {
+    let base = testbench_path
+        .and_then(Path::parent)
+        .unwrap_or_else(|| Path::new(""));
+    std::path::absolute(base.join(plot)).map_err(|error| {
+        testbench_error(format!(
+            "could not resolve `[options] plot` path `{plot}`: {error}"
+        ))
+    })
 }
 
 /// Map a part's `[spice] pin_order` to pin indexes, in subcircuit terminal

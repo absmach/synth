@@ -1,0 +1,20 @@
+# Testbench for examples/rc_filter/rc_filter.synth.
+ground = "GND"
+
+[[source]]
+net = "IN"
+kind = "dc"
+dc = 0.0
+ac = 1.0
+
+[analysis.ac]
+start = 10.0
+stop = 100000.0
+points_per_decade = 100
+
+[[measure]]
+name = "corner"
+kind = "relative_db"
+node = "OUT"
+min = 1560.0
+max = 1620.0

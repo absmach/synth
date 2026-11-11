@@ -278,7 +278,7 @@ The commands you will reach for most, roughly in the order you need them:
 | `synth fix <file>`          | Apply the highest-confidence suggested patches, including auto-inserted decoupling.                                                                      |
 | `synth export-kicad <file>` | Run auto-layout and export the full KiCad project (§3).                                                                                                  |
 | `synth check <file>`        | The deterministic release gate: validation + DRC, and with `--fab` a complete manufacturing export. See [`release-checks.md`](release-checks.md).        |
-| `synth mcp`                 | Start the stdio/SSE MCP server, exposing `synth_validate`, `synth_apply_patch`, `synth_preview_schematic`, `synth_export`, and the review tools in §6.1. |
+| `synth mcp`                 | Start the stdio/SSE MCP server, exposing `synth_validate`, `synth_apply_patch`, `synth_preview_schematic`, `synth_export`, `synth_simulate`, and the review tools in §6.1. |
 
 For inspecting the pipeline stage by stage, usually when something looks wrong:
 
