@@ -22,8 +22,8 @@ and edit `matrix.toml` second.
 
 ### Where the corpus stands
 
-The corpus is 18 boards. **Two clear the source/DRC gate** — `buck` and
-`protected_power_entry` — on the pinned environment (KiCad 10.0 with
+The corpus is 18 boards. **Three clear the source/DRC gate** — `buck`,
+`protected_power_entry` and `multirail_compute` — on the pinned environment (KiCad 10.0 with
 KiCadRoutingTools v0.23.0). Clearing the gate is a measurement, not an
 approval: both are still `experimental`, and the table further down is what a
 human still has to judge before either becomes `qualified`.
@@ -37,15 +37,13 @@ What still fails, and why it is not one cause:
 
 - `hello` has nothing to route and the engine exits 1 on an empty board, so its
   DRC is `unknown`.
-- `env_logger`, `sensor_logger` and `i2c_sensor_node` clear the source stage and
-  fail `kicad-cli pcb drc` on the copper that came back.
-- `placement_and_diff_pair`, `rp2350_debug_target`, `ice40_hdmi_video`,
-  `irrigation_controller` and `sdram_memory` clear source and report `unknown`
-  for DRC: the stage could not produce a verdict, which is not a pass.
-- `dual_usb_compute` and `multirail_compute` fail at source with
-  `E-SYNTH-POWER-010`: the expansion header's declared 1 A draw exceeds the
-  800 mA main and 250 mA analog regulators that feed it. Splitting the header
-  rail or choosing a higher-current regulator is the fix, not a matrix edit.
+- `env_logger`, `sensor_logger`, `i2c_sensor_node` and
+  `irrigation_controller` clear the source stage and fail `kicad-cli pcb drc`
+  on the copper that came back.
+- `hello`, `placement_and_diff_pair`, `rp2350_debug_target`,
+  `dual_usb_compute`, `ice40_hdmi_video` and `sdram_memory` clear source and
+  report `unknown` for DRC: the stage could not produce a verdict, which is not
+  a pass.
 - The `ref_*` boards and `negative_broken_mcu_board` are negative tests and
   fail at source by design.
 

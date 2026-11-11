@@ -130,9 +130,9 @@ path = "qualification/class-a/irrigation-controller/irrigation_controller.synth"
 fixture_sha256 = "9e4a87d7ed7f4830940917a55ac0a77403ee537859c0b2b3ffe512a627957b95"
 class = "A"
 status = "experimental"
-expect = "unknown"
+expect = "fail"
 expect_fab = "unestablished"
-rationale = "Two soil-moisture probes, a flow meter, two solenoid outputs and ambient temperature, humidity and light: a Class-A board wide enough to exercise mixed sensing and switched loads. Source passes; the DRC stage could not produce a verdict on the pinned run (`unknown`). The LQFP-32 has no HSE pins, so the 8 MHz crystal is removed and the MCU runs from HSI; the 15 V TVS and the 3.3 V divider are corrected."
+rationale = "Two soil-moisture probes, a flow meter, two solenoid outputs and ambient temperature, humidity and light: a Class-A board wide enough to exercise mixed sensing and switched loads. Source passes; the pinned KiCad 10.0.8 run completes routing and `kicad-cli pcb drc` reports violations, so the gate is `fail`. The LQFP-32 has no HSE pins, so the 8 MHz crystal is removed and the MCU runs from HSI; the 15 V TVS and the 3.3 V divider are corrected."
 
 [[board]]
 id = "negative_broken_mcu_board"
@@ -171,10 +171,9 @@ path = "qualification/class-c/dual-usb-compute/dual_usb_compute.synth"
 fixture_sha256 = "5d4d7c07547ac9056bc17365617a8c740656cc77b833aa97da8745cb9c6cc95d"
 class = "C"
 status = "experimental"
-expect = "fail"
+expect = "unknown"
 expect_fab = "unknown"
-expect_source_codes = ["E-SYNTH-POWER-010"]
-rationale = "Two RP2350s on their own USB 2.0 pairs, a shared QSPI boot flash, and a USB 3.0 Type-A receptacle whose SuperSpeed lanes reach a 20-pin header, on six layers: Class-C case 3. Source fails with `E-SYNTH-POWER-010`: the expansion header's declared 1 A draw exceeds the 800 mA 3V3 regulator. The core supply, 27 ohm series resistors and 12 MHz crystals are now wired as the review asked; the header rail is the remaining fault."
+rationale = "Two RP2350s on their own USB 2.0 pairs, a shared QSPI boot flash, and a USB 3.0 Type-A receptacle whose SuperSpeed lanes reach a 20-pin header, on six layers: Class-C case 3. Source passes on the pinned run; the DRC stage could not produce a verdict (`unknown`). The U4 core supply, 27 ohm series resistors and 12 MHz crystals are wired as the review asked."
 
 [[board]]
 id = "ice40_hdmi_video"
@@ -192,10 +191,9 @@ path = "qualification/class-c/multirail-compute/multirail_compute.synth"
 fixture_sha256 = "fca5dc6a97656b4d1d08c2db3cf1411bb4c7d1eef95431f5bea4d2badd866ace"
 class = "C"
 status = "experimental"
-expect = "fail"
+expect = "pass"
 expect_fab = "unknown"
-expect_source_codes = ["E-SYNTH-POWER-010"]
-rationale = "An ESP32-WROOM-32 on four supply rails from one 12 V input, with an I2C GPIO expander and two expansion headers, on four layers: Class-C case 4. Source fails with `E-SYNTH-POWER-010`: the expansion header's declared 1 A draw exceeds the 250 mA analog 3.3 V regulator. Split the header rail or choose a higher-current regulator."
+rationale = "An ESP32-WROOM-32 on four supply rails from one 12 V input, with an I2C GPIO expander and two expansion headers, on four layers: Class-C case 4. Source and DRC pass on the pinned run, so the board clears the gate; manufacturing is unestablished until it is measured on the pinned runner."
 
 [[board]]
 id = "sdram_memory"
