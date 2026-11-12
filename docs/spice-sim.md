@@ -418,8 +418,9 @@ after the value and the MCP JSON carries it as `unit`.
 | `plot`    | `wrdata` output file. Requires the `ac` analysis.                |
 
 `plot` must be non-empty and must not contain a newline or a single quote.
-A relative path is resolved against the sidecar's directory; an absolute path
-is used as is. Synth creates the output directory before ngspice starts, so a
+The path must be relative and stay inside the sidecar's directory: an absolute
+path, a `..` component, or a symlink that leads out is refused (`E-SYNTH-SIM-007`)
+before anything is created. Synth creates the output directory before ngspice starts, so a
 missing directory cannot silently lose the plot. The deck emits
 `wrdata '<absolute path>' allv` after the measures and before `SYNTH_DONE`.
 ngspice 42 does not accept a double-quoted `wrdata` path; single quotes do.
@@ -446,9 +447,10 @@ those sentinel lines are parsed; `.meas` text is used only for the
 - The run happens in a fresh temporary directory with its own `.spiceinit`
   (`set strict_errorhandling`, plus the registry model dialect when one is
   used), so a user's `~/.spiceinit` and concurrent runs cannot interfere.
-- Model `.include` paths are absolute and quoted. Model files may not contain
-  `.control`, `.endc`, `shell`, `system`, nested `.include`/`.inc`/`.lib`, or
-  Verilog-A/encrypted content.
+- A model file may contain only `.subckt`, `.ends`, `.model`, `.param`,
+  comments and element lines; any other directive (`.control`, `.include`,
+  `.lib`, `.end`, ...) is refused, as is Verilog-A/encrypted content. The deck
+  carries the checked text itself, so ngspice never re-opens the file.
 - The default timeout is 10 seconds. On timeout the process tree is killed and
   the run fails with `E-SYNTH-SIM-005`.
 - Every node needs at least two connections and a DC path to ground before
