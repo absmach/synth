@@ -214,3 +214,5 @@ status = "experimental"
 expect = "pass"
 expect_fab = "unestablished"
 rationale = "24 V in, 3.3 V out buck (LMR38010) with a PTC, reverse-block Schottky and TVS on the input, an EN divider, feedback, power-good and a thermal via array. Source and DRC pass on the pinned run, so the gate is `pass`; manufacturing is unestablished until it is measured on the pinned runner."
+
+# Retriggered after the Actions queue stalled; no measurement changed here.
