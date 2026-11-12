@@ -124,6 +124,7 @@ fn board() -> Board {
         diff_pairs: Vec::new(),
         notes: vec![],
         keepouts: Vec::new(),
+        no_connects: Vec::new(),
         stackup: None,
         netclasses: vec![],
         buses: vec![],

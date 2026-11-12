@@ -879,6 +879,13 @@ impl ErcRule for FloatingCmosInputRule {
                 if board.nets_containing(component.id, pid).next().is_some() {
                     continue;
                 }
+                if board.no_connects.iter().any(|declared| {
+                    declared.refdes.eq_ignore_ascii_case(&component.refdes)
+                        && (declared.pin.eq_ignore_ascii_case(&pin.name)
+                            || declared.pin.eq_ignore_ascii_case(&pin.number.0))
+                }) {
+                    continue;
+                }
                 out.push(
                     DiagnosticBuilder::new(
                         self.code(),

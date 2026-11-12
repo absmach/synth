@@ -141,6 +141,7 @@ pub fn board(
         notes: Vec::new(),
         legends: false,
         keepouts: Vec::new(),
+        no_connects: Vec::new(),
         stackup: None,
         outline: None,
         netclasses: Vec::new(),

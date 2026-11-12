@@ -917,6 +917,12 @@ impl PlaneVia {
     /// it by. `None` where the process offers no such land, so the plane via is
     /// the only via there is.
     fn for_via_in_pad(profile: &synth_drc::ManufacturerProfile) -> Option<Self> {
+        if profile.microvia_diameter_nm > 0 && profile.microvia_drill_nm > 0 {
+            return Some(Self {
+                pad_radius_nm: (profile.microvia_diameter_nm + 1) / 2,
+                drill_nm: profile.microvia_drill_nm,
+            });
+        }
         profile.via_in_pad_land_nm().map(|land_nm| Self {
             pad_radius_nm: (land_nm + 1) / 2,
             drill_nm: profile.min_drill_diameter_nm,
@@ -4196,6 +4202,7 @@ mod tests {
             diff_pairs: vec![],
             notes: vec![],
             keepouts: vec![],
+            no_connects: Vec::new(),
             stackup: None,
             netclasses: vec![],
             buses: vec![],
@@ -4313,6 +4320,7 @@ mod tests {
             diff_pairs: vec![],
             notes: vec![],
             keepouts: vec![],
+            no_connects: Vec::new(),
             stackup: None,
             netclasses: vec![synth_ir::NetClass {
                 name: "PWR".to_string(),
@@ -4381,6 +4389,7 @@ mod tests {
             diff_pairs: vec![],
             notes: vec![],
             keepouts: vec![],
+            no_connects: Vec::new(),
             stackup: None,
             netclasses: vec![],
             buses: vec![],
@@ -4528,6 +4537,7 @@ mod tests {
             diff_pairs: vec![],
             notes: vec![],
             keepouts: vec![],
+            no_connects: Vec::new(),
             stackup: None,
             netclasses: vec![],
             buses: vec![],
@@ -4704,8 +4714,8 @@ mod plane_via_in_pad_tests {
         let rects = ring(pad.centre, 350_000);
         let tier = synth_drc::ManufacturerProfile::jlc_advanced();
         let in_pad = PlaneVia::for_via_in_pad(&tier).expect("a via-in-pad land");
-        assert_eq!(in_pad.drill_nm, 200_000);
-        assert_eq!(2 * in_pad.pad_radius_nm, 350_000);
+        assert_eq!(in_pad.drill_nm, 100_000);
+        assert_eq!(2 * in_pad.pad_radius_nm, 250_000);
         assert_eq!(
             plane_via_in_pad(&pad, &in_pad, &rules(&rects, &[])),
             Ok(pad.centre)
@@ -4739,6 +4749,8 @@ mod plane_via_in_pad_tests {
     fn a_process_with_no_in_pad_land_has_no_filled_and_capped_via() {
         let mut tier = synth_drc::ManufacturerProfile::jlc_advanced();
         tier.via_in_pad_land_extra_nm = 0;
+        tier.microvia_drill_nm = 0;
+        tier.microvia_diameter_nm = 0;
         assert_eq!(PlaneVia::for_via_in_pad(&tier), None);
     }
 
