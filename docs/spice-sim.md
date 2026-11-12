@@ -82,9 +82,10 @@ The v1 shapes are:
   a second `pin_current` measure for the pin's `max_source_ma`. The comments
   cite the pin, `high_v`, `output_resistance_ohm` when present, and the
   `datasheet_ref`. The IC is ignored as the supply driver. A pin with no drive
-  data, drive data without `datasheet_ref`, or several driven pins on the net
-  gets no draft and a not-covered line containing `pin has no drive data` (or
-  naming the ambiguity); no value is guessed and no TODO is written for it.
+  data, drive data without `datasheet_ref`, a second output-capable pin on the
+  net, or several driven pins gets no draft and a not-covered line naming the
+  missing data or the ambiguity; no value is guessed and no TODO is written
+  for it.
 - **Resistor divider.** The midpoint is measured against
   `Vsupply * Rbottom/(Rtop+Rbottom)` from the two design `value` fields, ±5%.
   No datasheet is required for a design `value`, and the comment names both
@@ -108,10 +109,10 @@ is the net's declared `power` voltage, a `PowerOutput` pin that declares an
 explicit `voltage_nominal_v`, or exactly one output-capable pin (`output`,
 `three_statable`, an open-drain type or `bidirectional`) that carries
 `[pins.drive]`; the pin supply uses `high_v` and, when present,
-`output_resistance_ohm`. If more than one driven pin sits on the net, the
-supply is ambiguous and none is guessed. A `voltage_max_v` rating is never used
-as a nominal, and `[operating_conditions]` min/max values are ratings rather
-than a rail. A part whose output pin supplies the testbench is replaced by an
+`output_resistance_ohm`. If more than one output-capable pin sits on the net,
+the supply is ambiguous and none is guessed. A `voltage_max_v` rating is never
+used as a nominal, and `[operating_conditions]` min/max values are ratings
+rather than a rail. A part whose output pin supplies the testbench is replaced by an
 ideal source, and the draft adds it to `ignore` with a comment saying why. Any
 other unused part with no built-in model is also added to `ignore` (still
 reported on stderr as not covered); if an ignored part leaves a net with no DC
@@ -296,11 +297,14 @@ pin = "U1.gpio5"
 There is no `min`, `max`, `node`, `element`, `drop_db` or `at_frequency` on
 this measure: the limit comes from the registry and the source level —
 `max_source_ma` for `level = "high"`, `max_sink_ma` for `level = "low"`. The
-deck saves `@V<N>[i]` and computes `abs(@V<N>[i]) * 1000`. A passing check is
-an informational `E-SYNTH-SIM-004`; a failure is blocking `E-SYNTH-SIM-004`
-naming the pin, the measured milliamps, the datasheet field, the limit and the
-`datasheet_ref`. The measure requires the `op` analysis and a `[[source]]` with
-the same pin; a missing source is `E-SYNTH-SIM-007`.
+deck saves `@V<N>[i]` and applies the level's sign, so a positive value is the
+current in the pin's declared direction (sourcing for `high`, sinking for
+`low`); a negative value means the circuit drives the pin against its level
+and is always a blocking failure. A passing check is an informational
+`E-SYNTH-SIM-004`; a failure is blocking `E-SYNTH-SIM-004` naming the pin, the
+measured milliamps, the datasheet field, the limit and the `datasheet_ref`.
+The measure requires the `op` analysis and a `[[source]]` with the same pin;
+a missing source is `E-SYNTH-SIM-007`.
 
 ### `[analysis]` and `[analysis.ac]`
 

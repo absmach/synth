@@ -94,8 +94,9 @@ All four numeric fields are required. `output_resistance_ohm` is optional: when
 absent the simulation treats the pin as an ideal source; when present it is a
 series resistance. `datasheet_ref` is required whenever the block is present,
 and a drive block without one is a load error naming the pin. The loader also
-rejects non-finite levels, non-positive current limits and a non-positive
-`output_resistance_ohm`. A missing value is never defaulted.
+rejects drive data on a pin that cannot output, negative levels, `high_v` not
+greater than `low_v`, non-finite levels, non-positive current limits and a
+non-positive `output_resistance_ohm`. A missing value is never defaulted.
 
 Every value must come from the part's datasheet, with the page or table
 recorded in `datasheet_ref`. Do not guess, and do not copy another part's
