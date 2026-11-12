@@ -12,6 +12,7 @@
 //! - `2` — usage error (bad arguments, file not found)
 //! - `3` — internal compiler error (a bug — should never happen)
 
+mod logging;
 mod release;
 
 use std::io::Write;
@@ -20,7 +21,8 @@ use std::process::Command as ProcessCommand;
 use std::process::ExitCode;
 
 use clap::{Parser, Subcommand, ValueEnum};
-use synth_diagnostics::NativeCheckStatus;
+use synth_diagnostics::{NativeCheckEvidence, NativeCheckStatus, UnknownReason};
+use tracing::{debug, error, info, warn};
 
 const EXIT_SUCCESS: u8 = 0;
 const EXIT_VALIDATION_ERRORS: u8 = 1;
@@ -41,6 +43,28 @@ struct Cli {
     /// only how long they take.
     #[arg(long, global = true, value_name = "N")]
     jobs: Option<usize>,
+
+    /// List a missing fast-edge return via beside a fine-pitch pad row as an
+    /// advisory instead of blocking. Needs signal-integrity review sign-off.
+    /// `SYNTH_FINE_PITCH_RETURN_VIA_ADVISORY=1` (or `true`) also enables it.
+    #[arg(long, global = true)]
+    fine_pitch_return_via_advisory: bool,
+
+    /// Raise the log level: `-v` is debug, `-vv`/`-vvv` is trace. Default
+    /// is info. Diagnostics go to stderr; stdout carries only the
+    /// command's own output. `SYNTH_LOG` overrides this when set.
+    #[arg(
+        long,
+        short,
+        global = true,
+        action = clap::ArgAction::Count,
+        conflicts_with = "quiet"
+    )]
+    verbose: u8,
+
+    /// Log errors only: hide progress and warnings.
+    #[arg(long, short, global = true, conflicts_with = "verbose")]
+    quiet: bool,
 
     #[command(subcommand)]
     command: Command,
@@ -219,6 +243,11 @@ enum Command {
         /// placement found so far when the budget is spent.
         #[arg(long, default_value_t = 0)]
         place_route_budget_secs: u64,
+        /// Let a DFM Danger finding block a release export (`--gerbers` and
+        /// similar). Opt-in: the DFM rules are not yet calibrated against
+        /// JLCDFM, so by default findings are only recorded.
+        #[arg(long)]
+        dfm_gate: bool,
     },
 
     /// Apply the highest-confidence `suggested_fix` from every
@@ -891,11 +920,15 @@ enum SchemaKind {
 
 fn main() -> ExitCode {
     let cli = Cli::parse();
+    logging::init(cli.verbose, cli.quiet);
+    let fine_pitch_advisory = cli.fine_pitch_return_via_advisory
+        || std::env::var("SYNTH_FINE_PITCH_RETURN_VIA_ADVISORY")
+            .is_ok_and(|v| v == "1" || v.eq_ignore_ascii_case("true"));
     let jobs = match cli.jobs {
         Some(0) => {
             // A zero-thread pool is a usage error, not a request for the
             // default: silently running on every core would hide the typo.
-            eprintln!("error: --jobs must be at least 1");
+            error!("--jobs must be at least 1");
             return ExitCode::from(EXIT_USAGE);
         }
         Some(n) => {
@@ -903,7 +936,7 @@ fn main() -> ExitCode {
                 .num_threads(n)
                 .build_global()
             {
-                eprintln!("error: could not configure {n} worker threads: {err}");
+                error!("could not configure {n} worker threads: {err}");
                 return ExitCode::from(EXIT_USAGE);
             }
             n
@@ -914,7 +947,7 @@ fn main() -> ExitCode {
     // Size the repair waves identically to the pool so every core gets a
     // distinct candidate instead of queueing (or idling).
     synth_kicad::set_worker_threads(jobs);
-    eprintln!("synth: using {jobs} worker threads");
+    debug!(threads = jobs, "configured worker thread pool");
     let result = match cli.command {
         Command::Validate {
             input,
@@ -970,6 +1003,7 @@ fn main() -> ExitCode {
             allow_incomplete,
             place_route_iterate,
             place_route_budget_secs,
+            dfm_gate,
         } => export_kicad(
             &input,
             registry.as_deref(),
@@ -1000,10 +1034,12 @@ fn main() -> ExitCode {
             krt_fab_overrides.as_deref(),
             krt_same_net_pad_clearance,
             krt_allow_via_in_pad,
+            fine_pitch_advisory,
             best_of,
             allow_incomplete,
             place_route_iterate,
             place_route_budget_secs,
+            dfm_gate,
         ),
         Command::Fix {
             input,
@@ -1064,6 +1100,7 @@ fn main() -> ExitCode {
                 krt_fab_overrides.as_deref(),
                 krt_same_net_pad_clearance,
                 krt_allow_via_in_pad,
+                fine_pitch_advisory,
             )
             .with_timeout(router_timeout),
             best_of,
@@ -1099,6 +1136,7 @@ fn main() -> ExitCode {
                 krt_fab_overrides.as_deref(),
                 krt_same_net_pad_clearance,
                 krt_allow_via_in_pad,
+                fine_pitch_advisory,
             )
             .with_timeout(router_timeout),
             pretty,
@@ -1192,7 +1230,7 @@ fn main() -> ExitCode {
     match result {
         Ok(code) => ExitCode::from(code),
         Err(e) => {
-            eprintln!("synth: {e}");
+            error!("{e}");
             ExitCode::from(EXIT_USAGE)
         }
     }
@@ -1812,7 +1850,11 @@ fn manufacturing_status(
     }
     let native_unknown = native
         .and_then(|n| n["stages"].as_array())
-        .is_some_and(|stages| stages.iter().any(|s| s["status"] == "unknown"));
+        .is_some_and(|stages| {
+            stages
+                .iter()
+                .any(|s| s["status"] == "unknown" && s["advisory"] != true)
+        });
     if native_unknown {
         return "unknown";
     }
@@ -1857,7 +1899,7 @@ fn registry_qualify(
             }
         }
         std::fs::write(path, serde_json::to_string_pretty(&report)?)?;
-        eprintln!("wrote {}", path.display());
+        info!("wrote {}", path.display());
     } else if json {
         println!("{}", serde_json::to_string_pretty(&report)?);
     } else {
@@ -2313,7 +2355,7 @@ fn registry_manifest(
             let expected_lines: std::collections::BTreeSet<&str> = expected.lines().collect();
             let actual_lines: std::collections::BTreeSet<&str> = actual.lines().collect();
             for line in expected_lines.symmetric_difference(&actual_lines) {
-                eprintln!("manifest mismatch: {line}");
+                warn!("manifest mismatch: {line}");
             }
             anyhow::bail!(
                 "Tier-1 registry does not match manifest {}",
@@ -2358,11 +2400,11 @@ fn parts_unverified(board: &synth_ir::Board) -> Vec<String> {
 /// hallucinating pinouts.
 fn part_stub(id: &str, pins: usize, user_registry: Option<&Path>) -> anyhow::Result<u8> {
     if id.is_empty() {
-        eprintln!("error: part id must not be empty");
+        error!("part id must not be empty");
         return Ok(1);
     }
     if pins == 0 {
-        eprintln!("error: --pins must be at least 1");
+        error!("--pins must be at least 1");
         return Ok(1);
     }
     let dir = user_registry
@@ -2981,8 +3023,8 @@ fn schem_erc_config_for(design: &Path) -> synth_kicad::SchemErcConfig {
         Ok(Some(config)) => config.schematic,
         Ok(None) => synth_validate::config::SchematicSettings::default(),
         Err(e) => {
-            eprintln!(
-                "warning: ignoring schematic ERC config for {}: {e}",
+            warn!(
+                "ignoring schematic ERC config for {}: {e}",
                 design.display()
             );
             synth_validate::config::SchematicSettings::default()
@@ -3057,8 +3099,8 @@ fn discover_registry_dir() -> Option<PathBuf> {
 fn emit_registry_warnings(warnings: &[synth_registry::LoadWarning]) {
     for w in warnings {
         let synth_registry::LoadWarning::Shadow { id, user_path } = w;
-        eprintln!(
-            "synth: W-SYNTH-REG-001: user part `{}` (at {}) shadows a shipped part",
+        warn!(
+            "W-SYNTH-REG-001: user part `{}` (at {}) shadows a shipped part",
             id,
             user_path.display()
         );
@@ -3104,7 +3146,7 @@ fn load_registry_strict(
                         res.registry
                     }
                     Err(e) => {
-                        eprintln!("synth: registry load failed (strict): {e}");
+                        error!("registry load failed (strict): {e}");
                         return None;
                     }
                 };
@@ -3116,7 +3158,7 @@ fn load_registry_strict(
                                 Some(res.registry)
                             }
                             Err(e) => {
-                                eprintln!("synth: registry load failed (strict): {e}");
+                                error!("registry load failed (strict): {e}");
                                 None
                             }
                         }
@@ -3131,10 +3173,10 @@ fn load_registry_strict(
                         Some(res.registry)
                     }
                     Err(e) => {
-                        eprintln!("synth: registry load failed (strict): {e}");
-                        eprintln!(
-                            "synth: hint: check --registry, set SYNTH_REGISTRY, or run from a \
-                         synth checkout"
+                        error!("registry load failed (strict): {e}");
+                        info!(
+                            "hint: check --registry, set SYNTH_REGISTRY, or run from a \
+                             synth checkout"
                         );
                         None
                     }
@@ -3142,15 +3184,15 @@ fn load_registry_strict(
                 _ => match synth_registry::load_dir(&dir) {
                     Ok(r) => Some(r),
                     Err(e) => {
-                        eprintln!("synth: could not load registry from {}: {e}", dir.display());
+                        error!("could not load registry from {}: {e}", dir.display());
                         None
                     }
                 },
             }
         }
         Tier1Source::Embedded => {
-            eprintln!(
-                "synth: no registry/parts found — using the embedded seed registry \
+            debug!(
+                "no registry/parts found — using the embedded seed registry \
                  (hint: pass --registry, set SYNTH_REGISTRY, or run from a synth checkout \
                  to pick up local parts)"
             );
@@ -3166,7 +3208,7 @@ fn load_registry_strict(
                             Some(res.registry)
                         }
                         Err(e) => {
-                            eprintln!("synth: registry load failed (strict): {e}");
+                            error!("registry load failed (strict): {e}");
                             None
                         }
                     }
@@ -3609,17 +3651,10 @@ fn print_signal_integrity(violations: &[synth_drc::Violation]) -> usize {
     for violation in violations {
         if violation.is_blocking() {
             blocking += 1;
+            error!("{} {}", violation.code, violation.message);
+        } else {
+            warn!("{} {}", violation.code, violation.message);
         }
-        eprintln!(
-            "{} {} {}",
-            if violation.is_blocking() {
-                "error:"
-            } else {
-                "warning:"
-            },
-            violation.code,
-            violation.message
-        );
     }
     blocking
 }
@@ -3793,13 +3828,13 @@ fn repair_unresolvable_footprints(
     // Report every gap, whether or not it can be repaired, so the reason for
     // a `--force` export is always visible.
     for gap in &gaps {
-        eprintln!(
-            "warning: [E-SYNTH-FP-001] part `{}` ({}) references footprint `{}`, which is not installed",
+        warn!(
+            "[E-SYNTH-FP-001] part `{}` ({}) references footprint `{}`, which is not installed",
             gap.part_id, gap.refdes, gap.wanted
         );
         if gap.candidates.is_empty() {
-            eprintln!(
-                "         no candidate found in {} footprint(s) under {:?}; \
+            warn!(
+                "no candidate found in {} footprint(s) under {:?}; \
                  import one (`synth part import-lcsc <C-code>`) or author it (`synth part stub`)",
                 index.entries.len(),
                 fr::search_roots()
@@ -3807,8 +3842,8 @@ fn repair_unresolvable_footprints(
             continue;
         }
         for (i, c) in gap.candidates.iter().enumerate() {
-            eprintln!("         [{:.2}] {}", c.score, c.lib_id);
-            eprintln!("                {}", c.reason);
+            debug!("[{:.2}] {}", c.score, c.lib_id);
+            debug!("       {}", c.reason);
             if i == 0 {
                 break;
             }
@@ -3820,8 +3855,8 @@ fn repair_unresolvable_footprints(
     for gap in &gaps {
         let Some(best) = fr::resolve_one(&index, &gap.wanted, &[]) else {
             if gap.candidates.len() > 1 {
-                eprintln!(
-                    "warning: part `{}` left un-repaired: the top two candidates are within \
+                warn!(
+                    "part `{}` left un-repaired: the top two candidates are within \
                      {:.2} of each other, which is too close to call. Set `kicad_footprint` \
                      on the part by hand.",
                     gap.part_id,
@@ -3845,8 +3880,8 @@ fn repair_unresolvable_footprints(
         });
         match write_user_part_overlay(&fixed, user_registry, registry_dir) {
             Ok(path) => {
-                eprintln!(
-                    "         auto-repaired: `{}` -> `{}` (written to {})",
+                info!(
+                    "auto-repaired: `{}` -> `{}` (written to {})",
                     gap.wanted,
                     best.lib_id,
                     path.display()
@@ -3854,8 +3889,8 @@ fn repair_unresolvable_footprints(
                 repaired = true;
             }
             Err(e) => {
-                eprintln!(
-                    "warning: could not write repair for part `{}` into the user registry: {e}",
+                warn!(
+                    "could not write repair for part `{}` into the user registry: {e}",
                     gap.part_id
                 );
             }
@@ -3906,6 +3941,11 @@ fn sanitize_part_id(id: &str) -> String {
 }
 
 /// Handler for `synth part resolve-footprint`.
+///
+/// The listing below is the command's result, not a log record: it is
+/// written directly to stderr (stdout stays machine-readable) and is not
+/// filtered, because `-q` must not hide the report the command exists to
+/// print. Progress and failures inside the pipeline use `tracing` instead.
 fn part_resolve_footprint(
     registry_dir: Option<&Path>,
     user_registry: Option<&Path>,
@@ -4021,10 +4061,12 @@ fn export_kicad(
     krt_fab_overrides: Option<&Path>,
     krt_same_net_pad_clearance: f64,
     krt_allow_via_in_pad: bool,
+    fine_pitch_advisory: bool,
     best_of: bool,
     allow_incomplete: bool,
     place_route_iterate: bool,
     place_route_budget_secs: u64,
+    dfm_gate: bool,
 ) -> anyhow::Result<u8> {
     if autoroute {
         // Still parsed, so an existing script fails with something
@@ -4150,8 +4192,8 @@ fn export_kicad(
     if !unfootprinted.is_empty() {
         let list = unfootprinted.join(", ");
         if force {
-            eprintln!(
-                "error: {banner} [E-SYNTH-EXPORT-001] exporting with synthesized \
+            error!(
+                "{banner} [E-SYNTH-EXPORT-001] exporting with synthesized \
                  bounding-box footprints for: {list} (--force). Pad geometry is a guess, \
                  not the manufacturer's land pattern.",
                 banner = release::UNTRUSTED_BANNER
@@ -4165,8 +4207,8 @@ fn export_kicad(
                 ),
             ));
         } else {
-            eprintln!(
-                "error: [E-SYNTH-EXPORT-001] the following parts have no real `.kicad_mod` \
+            error!(
+                "[E-SYNTH-EXPORT-001] the following parts have no real `.kicad_mod` \
                  footprint and would export with a synthesized bounding-box fallback: {list}. \
                  Import real footprints (`synth part import lcsc` / `synth part import kicad`), \
                  ship them in the registry, or re-run with --force to export anyway."
@@ -4197,7 +4239,7 @@ fn export_kicad(
     write_diagnostics_to_stderr(&schem_diags)?;
 
     if let Some(notice) = synth_layout::SidecarKind::Schematic.migration_notice(input) {
-        eprintln!("warning: {notice}");
+        warn!("{notice}");
     }
 
     let options = router_options(
@@ -4211,6 +4253,7 @@ fn export_kicad(
         krt_fab_overrides,
         krt_same_net_pad_clearance,
         krt_allow_via_in_pad,
+        fine_pitch_advisory,
     );
 
     // Opt-in place→route→re-place: route each candidate placement and keep
@@ -4287,8 +4330,8 @@ fn export_kicad(
     let synth_violations = synth_drc_on_routed(board, &delivered, &drc_profile);
     let blocking = print_signal_integrity(&synth_violations);
     if blocking > 0 && !force {
-        eprintln!(
-            "error: the routed board has {blocking} blocking signal/power-integrity finding(s); \
+        error!(
+            "the routed board has {blocking} blocking signal/power-integrity finding(s); \
              fix the routing or use --force to export anyway."
         );
         return Ok(1);
@@ -4307,11 +4350,11 @@ fn export_kicad(
         )?;
     }
 
-    eprintln!("wrote {}", result.project_path.display());
-    eprintln!("wrote {}", result.schematic_path.display());
-    eprintln!("wrote {}", result.library_path.display());
-    eprintln!("wrote {}", result.pcb_path.display());
-    eprintln!("wrote {}", result.bom_path.display());
+    info!("wrote {}", result.project_path.display());
+    info!("wrote {}", result.schematic_path.display());
+    info!("wrote {}", result.library_path.display());
+    info!("wrote {}", result.pcb_path.display());
+    info!("wrote {}", result.bom_path.display());
 
     let mut fab_evidence = None;
     if !fab.is_empty() {
@@ -4321,23 +4364,23 @@ fn export_kicad(
         // is a warning there); manufacturing export is where it becomes a
         // hard gate, per §18.8.2.
         if let Some(refusal) = structural_refusal(board) {
-            eprintln!("{refusal}");
+            error!("{refusal}");
             return Ok(1);
         }
         let unverified = parts_unverified(board);
         if !unverified.is_empty() {
             let list = unverified.join(", ");
             if !allow_unverified_parts {
-                eprintln!(
-                    "error: [W-SYNTH-PART-UNVERIFIED] refusing fab export: the following parts \
+                error!(
+                    "[W-SYNTH-PART-UNVERIFIED] refusing fab export: the following parts \
                      have no reviewer (`[provenance].reviewed_by` empty): {list}. Review them \
                      and set `reviewed_by`, or re-run with --allow-unverified-parts to submit \
                      anyway."
                 );
                 return Ok(1);
             }
-            eprintln!(
-                "error: {banner} [W-SYNTH-PART-UNVERIFIED] fab export includes parts no one \
+            error!(
+                "{banner} [W-SYNTH-PART-UNVERIFIED] fab export includes parts no one \
                  has reviewed: {list} (--allow-unverified-parts).",
                 banner = release::UNTRUSTED_BANNER
             );
@@ -4350,13 +4393,13 @@ fn export_kicad(
         match synth_kicad::run_fab(&result.pcb_path, out_dir, &fab) {
             Ok(artifacts) => {
                 if let Some(dir) = artifacts.gerbers_dir {
-                    eprintln!("wrote gerbers into {}", dir.display());
+                    info!("wrote gerbers into {}", dir.display());
                 }
                 if let Some(dir) = artifacts.drill_dir {
-                    eprintln!("wrote drill files into {}", dir.display());
+                    info!("wrote drill files into {}", dir.display());
                 }
                 if let Some(path) = artifacts.step_path {
-                    eprintln!("wrote {}", path.display());
+                    info!("wrote {}", path.display());
                 }
                 fab_evidence = Some(synth_diagnostics::NativeCheckEvidence::concluded(
                     FAB_STAGE,
@@ -4394,7 +4437,7 @@ fn export_kicad(
     // Slice 3: Run KiCad ERC if requested
     let mut has_kicad_erc_errs = false;
     if validate_erc {
-        eprintln!(
+        info!(
             "running kicad-cli sch erc on {}",
             result.schematic_path.display()
         );
@@ -4403,13 +4446,20 @@ fn export_kicad(
             report_unavailable_check(&erc.evidence);
         } else {
             if erc.violations.is_empty() {
-                eprintln!("kicad-cli sch erc: 0 violations found");
+                info!("kicad-cli sch erc: 0 violations found");
             } else {
                 for v in &erc.violations {
-                    eprintln!(
-                        "[kicad-erc] {}: [{}] {}",
-                        v.severity, v.violation_type, v.description
-                    );
+                    if v.is_error() {
+                        error!(
+                            "[kicad-erc] {}: [{}] {}",
+                            v.severity, v.violation_type, v.description
+                        );
+                    } else {
+                        warn!(
+                            "[kicad-erc] {}: [{}] {}",
+                            v.severity, v.violation_type, v.description
+                        );
+                    }
                 }
             }
             has_kicad_erc_errs = erc.errors().next().is_some();
@@ -4440,43 +4490,114 @@ fn export_kicad(
         report_unavailable_check(&drc.evidence);
     } else {
         for v in &drc.violations {
-            eprintln!("[kicad-drc] error: [{}] {}", v.code, v.message);
+            error!("[kicad-drc] [{}] {}", v.code, v.message);
         }
         has_kicad_drc_errors = !drc.violations.is_empty();
         report_drc_counts(&drc.counts);
     }
     let release_drc_blocked = production && drc.counts.blocking_count() > 0;
     if release_drc_blocked {
-        eprintln!(
-            "error: release export blocked: KiCad DRC is not clean ({}); \
+        error!(
+            "release export blocked: KiCad DRC is not clean ({}); \
              --force does not override this.",
             drc.counts
         );
     }
     native.push(drc.evidence);
 
+    // Manufacturability is read from the board that ships. Every export
+    // records it; only a release export (fab files requested) run with
+    // `--dfm-gate` is stopped by a Danger finding. The gate is opt-in until
+    // the rules are calibrated against the fab's own tool.
+    let (dfm_evidence, dfm_report) = dfm_stage(&delivered, &drc_profile, dfm_gate);
+    let dfm_danger = dfm_report
+        .as_ref()
+        .map_or(0, synth_drc::dfm::DfmReport::danger_count);
+    let release_dfm_blocked = dfm_blocks_release(production, dfm_gate, dfm_report.as_ref());
+    if let Some(report) = &dfm_report {
+        if release_dfm_blocked {
+            for finding in &report.findings {
+                if matches!(finding.severity, synth_drc::dfm::DfmSeverity::Danger) {
+                    error!(
+                        "[dfm] {:?}: [{}] {}",
+                        finding.severity, finding.rule, finding.message
+                    );
+                } else {
+                    warn!(
+                        "[dfm] {:?}: [{}] {}",
+                        finding.severity, finding.rule, finding.message
+                    );
+                }
+            }
+            error!(
+                "release export blocked: DFM found {dfm_danger} Danger finding(s) ({}); \
+                 --force does not override this.",
+                dfm_evidence.detail.as_deref().unwrap_or_default()
+            );
+        } else if !report.findings.is_empty() {
+            for line in &dfm_evidence.findings {
+                warn!("[dfm] {line}");
+            }
+            warn!(
+                "DFM found {} finding(s) a fab would flag ({}); each is listed above \
+                 and in the verification report.{}",
+                report.findings.len(),
+                dfm_evidence.detail.as_deref().unwrap_or_default(),
+                if !dfm_gate {
+                    " Pass --dfm-gate to let Danger findings block a release export."
+                } else if !production {
+                    " --dfm-gate blocks only a release export (--gerbers and similar); \
+                     this export is not one."
+                } else {
+                    ""
+                }
+            );
+        }
+    }
+    if dfm_report.is_none() && (dfm_evidence.advisory || !production) {
+        warn!(
+            "the DFM check could not read the board ({}); it is recorded as unknown \
+             and {}.",
+            dfm_evidence.detail.as_deref().unwrap_or_default(),
+            if dfm_gate {
+                "--dfm-gate blocks only a release export (--gerbers and similar), \
+                 which this export is not"
+            } else {
+                "does not block without --dfm-gate"
+            }
+        );
+    }
+    native.push(dfm_evidence);
+
     let blocked_by_unknown: Vec<_> = native
         .iter()
-        .filter(|e| e.status == NativeCheckStatus::Unknown)
+        .filter(|e| e.status == NativeCheckStatus::Unknown && !e.advisory)
         .filter(|e| production || e.stage == synth_kicad::ERC_STAGE)
         .collect();
     if !blocked_by_unknown.is_empty() {
-        eprintln!();
         if production {
-            eprintln!(
-                "error: UNTRUSTED / NOT FOR FABRICATION — this export has no native \
+            error!(
+                "UNTRUSTED / NOT FOR FABRICATION — this export has no native \
                  verification evidence:"
             );
         } else {
-            eprintln!("error: requested native verification could not be performed:");
+            error!("requested native verification could not be performed:");
         }
         for evidence in &blocked_by_unknown {
-            eprintln!("  {}", evidence.summary_line());
+            warn!("{}", evidence.summary_line());
         }
-        eprintln!(
-            "An unavailable check is not a pass. Install KiCad (or set KICAD_CLI), \
-             then re-run; --force does not override this."
-        );
+        if blocked_by_unknown.iter().any(|e| e.stage != DFM_STAGE) {
+            warn!(
+                "An unavailable check is not a pass. Install KiCad (or set KICAD_CLI), \
+                 then re-run; --force does not override this."
+            );
+        }
+        if blocked_by_unknown.iter().any(|e| e.stage == DFM_STAGE) {
+            warn!(
+                "The dfm check reads the board file itself and needs no KiCad: fix the board \
+                 file it could not read, or drop --dfm-gate; --force does not override this."
+            );
+        }
     }
 
     if let Some(path) = verification_report {
@@ -4505,7 +4626,7 @@ fn export_kicad(
     )
     .with_synthetic_symbols(release::synthetic_symbol_parts(board))
     .with_signal_integrity(&synth_violations)
-    .with_release_blocked(release_drc_blocked)
+    .with_release_blocked(release_drc_blocked || release_dfm_blocked)
     .with_routing(Some(release::RoutingState::from_report(
         &routing,
         &run_record,
@@ -4513,17 +4634,16 @@ fn export_kicad(
     let manifest_path = manifest
         .write_to(out_dir)
         .map_err(|e| anyhow::anyhow!("could not write the release manifest: {e}"))?;
-    eprintln!("wrote {}", manifest_path.display());
+    info!("wrote {}", manifest_path.display());
     for note in manifest
         .routing
         .iter()
         .flat_map(|r| r.fabrication_notes.iter())
     {
-        eprintln!("fabrication note: {note}");
+        info!("fabrication note: {note}");
     }
     if let Some(banner) = manifest.banner() {
-        eprintln!();
-        eprintln!("{banner}");
+        warn!("{banner}");
     }
 
     // --safe conflicts with the override flags at parse time; this is the
@@ -4531,8 +4651,8 @@ fn export_kicad(
     // is actually clean, so a path that records an override without a flag
     // behind it cannot slip through a release gate either.
     if safe && manifest.has_overrides() {
-        eprintln!(
-            "error: --safe was requested but the export recorded {} override(s); see {}",
+        error!(
+            "--safe was requested but the export recorded {} override(s); see {}",
             manifest.overrides.len(),
             manifest_path.display()
         );
@@ -4544,12 +4664,12 @@ fn export_kicad(
     // loudly, because the artifacts it writes are otherwise indistinguishable
     // from a release.
     if allow_incomplete && !routing.is_fabrication_ready() {
-        eprintln!(
-            "warning: DRAFT / NOT FOR FABRICATION — exporting an un-routed board: {}",
+        warn!(
+            "DRAFT / NOT FOR FABRICATION — exporting an un-routed board: {}",
             routing.summary()
         );
-        eprintln!(
-            "  the un-routed baseline is preserved beside the export for review or \
+        warn!(
+            "the un-routed baseline is preserved beside the export for review or \
              for an external router to complete; the routing run record names it."
         );
     }
@@ -4559,6 +4679,7 @@ fn export_kicad(
         || (has_erc_errors && !force)
         || (has_kicad_drc_errors && !force)
         || release_drc_blocked
+        || release_dfm_blocked
         || has_kicad_erc_errs
         || !blocked_by_unknown.is_empty()
         // Fail-closed: an un-routed export is not fabricable, and neither
@@ -4667,7 +4788,7 @@ fn write_jlcpcb_bundle(
         result.out_dir.join("manifest.json"),
         serde_json::to_vec_pretty(&manifest)?,
     )?;
-    eprintln!(
+    info!(
         "wrote JLCPCB manufacturing bundle to {}",
         result.out_dir.display()
     );
@@ -4696,34 +4817,166 @@ fn collect_bundle_files(
 }
 
 const FAB_STAGE: &str = "kicad_fab";
+const DFM_STAGE: &str = "dfm";
 
 fn report_drc_counts(counts: &synth_drc::DrcCounts) {
     let line = format!("kicad-cli pcb drc: {counts}");
     if counts.is_clean() {
-        eprintln!("{line} (Phase 13 Zero-DRC gate clean)");
+        info!("{line} (Phase 13 Zero-DRC gate clean)");
     } else {
-        eprintln!("{line}");
-        eprintln!(
-            "  note: unconnected pads belong to a net but have no copper path yet; \
+        info!("{line}");
+        debug!(
+            "unconnected pads belong to a net but have no copper path yet; \
              warnings are advisory, not rule violations"
         );
     }
 }
 
 fn report_unavailable_check(evidence: &synth_diagnostics::NativeCheckEvidence) {
-    eprintln!("warning: {}", evidence.summary_line());
-    eprintln!("  tool: {}", evidence.tool);
+    warn!("{}", evidence.summary_line());
+    debug!("tool: {}", evidence.tool);
     if let Some(version) = &evidence.tool_version {
-        eprintln!("  version: {version}");
+        debug!("version: {version}");
     }
     if !evidence.command.is_empty() {
-        eprintln!("  command: {}", evidence.command.join(" "));
+        debug!("command: {}", evidence.command.join(" "));
     }
     if let Some(detail) = &evidence.detail {
-        eprintln!("  detail: {detail}");
+        debug!("detail: {detail}");
     }
     if let Some(stderr) = &evidence.stderr {
-        eprintln!("  stderr: {}", stderr.replace('\n', "\n          "));
+        debug!("stderr: {}", stderr.replace('\n', "\n          "));
+    }
+}
+
+/// Whether the DFM stage stops a release export: gated, and either a Danger
+/// finding or a board it could not read (`report` is `None`), which is never clean.
+fn dfm_blocks_release(
+    production: bool,
+    gate: bool,
+    report: Option<&synth_drc::dfm::DfmReport>,
+) -> bool {
+    production && gate && report.is_none_or(|r| r.danger_count() > 0)
+}
+
+/// The manufacturability stage: what a fab's DFM tool would flag on the
+/// board that ships. A board that cannot be read is `unknown`, never clean.
+fn dfm_stage(
+    pcb: &Path,
+    profile: &synth_drc::ManufacturerProfile,
+    gate: bool,
+) -> (NativeCheckEvidence, Option<synth_drc::dfm::DfmReport>) {
+    const TOOL: &str = "synth-drc";
+    let text = match std::fs::read_to_string(pcb) {
+        Ok(text) => text,
+        Err(e) => {
+            let detail = format!("cannot read {}: {e}", pcb.display());
+            let evidence = NativeCheckEvidence::unknown(
+                DFM_STAGE,
+                TOOL,
+                Vec::new(),
+                UnknownReason::ReportUnreadable,
+                detail,
+            )
+            .with_advisory(!gate);
+            return (evidence, None);
+        }
+    };
+    match synth_drc::dfm::check_dfm(&text, profile) {
+        Err(e) => {
+            let evidence = NativeCheckEvidence::unknown(
+                DFM_STAGE,
+                TOOL,
+                Vec::new(),
+                UnknownReason::ReportMalformed,
+                e.to_string(),
+            )
+            .with_advisory(!gate);
+            (evidence, None)
+        }
+        Ok(report) => {
+            let mut evidence =
+                NativeCheckEvidence::concluded(DFM_STAGE, TOOL, Vec::new(), report.danger_count());
+            let counts: Vec<String> = report
+                .counts()
+                .iter()
+                .map(|((rule, severity), n)| format!("{rule} {severity:?} {n}").to_lowercase())
+                .collect();
+            let mut parts = counts;
+            if report.unchecked_silk_text > 0 {
+                parts.push(format!(
+                    "{} silk text item(s) not measured",
+                    report.unchecked_silk_text
+                ));
+            }
+            if report.unchecked_silk_graphics > 0 {
+                parts.push(format!(
+                    "{} silk curve(s) not measured",
+                    report.unchecked_silk_graphics
+                ));
+            }
+            let detail = parts.join(", ");
+            let mut unsupported = vec![
+                "pth_to_trace: graded Warning only, known not to match JLCDFM".to_string(),
+                "silk_text_clearance: text is counted, not measured".to_string(),
+                "filled_silk: ink covering a pad or hole is tested at sampled points, not by exact area".to_string(),
+            ];
+            // Assumed figures only matter when their rule ran on this profile.
+            if profile.min_silk_to_hole_nm > 0 {
+                unsupported.push(format!(
+                    "silk_to_hole: {} um floor assumed, not published by JLC",
+                    profile.min_silk_to_hole_nm / 1000
+                ));
+            }
+            if profile.min_pad_to_pad_nm > 0 {
+                unsupported.push(format!(
+                    "copper_merge_tolerance: {} um uncalibrated",
+                    profile.copper_merge_below_nm / 1000
+                ));
+            }
+            if report.unchecked_silk_graphics > 0 {
+                unsupported.push(format!(
+                    "silk_curves: {} curve or legacy arc item(s) not measured",
+                    report.unchecked_silk_graphics
+                ));
+            }
+            if report.unread_tracks > 0 {
+                unsupported.push(format!(
+                    "track_read: {} arc track(s) or segment(s) could not be read and were not measured",
+                    report.unread_tracks
+                ));
+            }
+            if report.approximated_pads > 0 {
+                unsupported.push(format!(
+                    "pad_shape: {} custom or trapezoid pad(s) measured by their bounding box, not their exact outline",
+                    report.approximated_pads
+                ));
+            }
+            unsupported.extend(
+                report.unchecked_rules.iter().map(|rule| {
+                    format!("{rule}: {} publishes no figure, rule not run", profile.name)
+                }),
+            );
+            let findings = report
+                .findings
+                .iter()
+                .map(|f| {
+                    format!(
+                        "{:?} [{}] at ({:.3}, {:.3}) mm: {}",
+                        f.severity, f.rule, f.at_mm.0, f.at_mm.1, f.message
+                    )
+                })
+                .collect();
+            // Findings only decide the release when the gate is on.
+            evidence = evidence
+                .with_unsupported(unsupported)
+                .with_findings(findings)
+                .with_advisory(!gate);
+            if !detail.is_empty() {
+                evidence.detail = Some(detail);
+            }
+            (evidence, Some(report))
+        }
     }
 }
 
@@ -4732,8 +4985,10 @@ fn write_verification_report(
     input: &Path,
     native: &[synth_diagnostics::NativeCheckEvidence],
 ) -> anyhow::Result<()> {
+    // An advisory stage is recorded but does not decide readiness.
     let release_ready = native
         .iter()
+        .filter(|e| !e.advisory)
         .all(synth_diagnostics::NativeCheckEvidence::is_trusted);
     let report = serde_json::json!({
         "schema_version": "synth.verification.v1",
@@ -4766,6 +5021,7 @@ struct RouterOptions {
     fab_overrides: Option<PathBuf>,
     same_net_pad_clearance: f64,
     allow_via_in_pad: bool,
+    fine_pitch_return_via_advisory: bool,
     /// Wall-clock budget for the whole external run.
     timeout_secs: u64,
 }
@@ -4795,6 +5051,7 @@ fn router_options(
     fab_overrides: Option<&Path>,
     same_net_pad_clearance: f64,
     allow_via_in_pad: bool,
+    fine_pitch_advisory: bool,
 ) -> RouterOptions {
     RouterOptions {
         freerouting_jar: freerouting_jar.map(Path::to_path_buf),
@@ -4806,6 +5063,7 @@ fn router_options(
         fab_overrides: fab_overrides.map(Path::to_path_buf),
         same_net_pad_clearance,
         allow_via_in_pad,
+        fine_pitch_return_via_advisory: fine_pitch_advisory,
         timeout_secs: default_router_timeout_secs(),
     }
 }
@@ -4879,8 +5137,8 @@ fn build_route_request(
             .collect::<Vec<_>>()
             .join("`, `");
         if request.policy.allow_via_in_pad {
-            eprintln!(
-                "warning: board requires `{named}`, which profile `{}` does not offer; \
+            warn!(
+                "board requires `{named}`, which profile `{}` does not offer; \
                  proceeding on the operator override [E-SYNTH-PROCESS-002]",
                 request.profile_name
             );
@@ -4917,6 +5175,8 @@ fn build_route_request(
     request.routing_order = routing_order.to_vec();
     request.ground_nets = synth_drc::ground_net_names(board);
     request.return_via_critical_nets = Some(synth_drc::return_path_critical_net_names(board));
+    request.return_via_medium_nets = synth_drc::return_path_medium_net_names(board);
+    request.fine_pitch_return_via_advisory = options.fine_pitch_return_via_advisory;
     request.preserve_baseline()?;
     Ok(request)
 }
@@ -4965,7 +5225,7 @@ fn select_placement_for_routing(
     if candidates.len() < 2 {
         return Ok(None);
     }
-    eprintln!(
+    info!(
         "placement feedback: routing {} candidate placements to choose between them, within {} s",
         candidates.len(),
         budget.total().as_secs()
@@ -4983,20 +5243,18 @@ fn select_placement_for_routing(
             )? {
                 CliAttempt::Routed(cost, report) => (cost, report),
                 CliAttempt::NoTime => {
-                    eprintln!(
-                        "placement feedback: candidate {index} used its time preparing; skipped"
-                    );
+                    info!("placement feedback: candidate {index} used its time preparing; skipped");
                     return Ok::<_, anyhow::Error>(synth_router::search_budget::Attempt::NoTime);
                 }
                 CliAttempt::EngineUnavailable => {
-                    eprintln!(
+                    warn!(
                         "placement feedback: {} is unavailable; keeping the export's own placement",
                         engine.as_str()
                     );
                     return Ok(synth_router::search_budget::Attempt::EngineUnavailable);
                 }
             };
-            eprintln!(
+            info!(
                 "placement feedback: candidate {index} -> {} (open nets {}, blocking {}, vias {}, \
                  segments {})",
                 report.state.as_str(),
@@ -5017,7 +5275,7 @@ fn select_placement_for_routing(
         return Ok(None);
     };
     if search.cut_short {
-        eprintln!(
+        info!(
             "placement feedback: the {} s budget ended the search after {} of {} candidates; \
              keeping the best found",
             budget.total().as_secs(),
@@ -5037,9 +5295,7 @@ fn select_placement_for_routing(
             let hints = synth_place::hard_net_proximity_hints(board, &order);
             if !hints.is_empty() {
                 let Some(limit) = budget.candidate_limit(requested) else {
-                    eprintln!(
-                        "placement feedback: no budget left for the hardest-net grouping run"
-                    );
+                    info!("placement feedback: no budget left for the hardest-net grouping run");
                     return Ok(best.map(|(_, placement, order)| (placement, order)));
                 };
                 let hinted = synth_place::with_hard_net_hints(board, &hints);
@@ -5058,12 +5314,12 @@ fn select_placement_for_routing(
                         )?;
                         budget.note_run(began.elapsed());
                         if matches!(evaluated, CliAttempt::NoTime) {
-                            eprintln!(
+                            info!(
                                 "placement feedback: the hardest-net grouping run used its time preparing; skipped"
                             );
                         }
                         if let CliAttempt::Routed(cost, report) = evaluated {
-                            eprintln!(
+                            info!(
                                 "placement feedback: hardest-net grouping -> {cost:?} \
                                  (was {best_cost:?})"
                             );
@@ -5087,7 +5343,7 @@ fn select_placement_for_routing(
 
     if let Some((_, _, order)) = &best {
         if !order.is_empty() {
-            eprintln!(
+            info!(
                 "placement feedback: hardest nets first on a retry: {}",
                 order.join(", ")
             );
@@ -5274,7 +5530,7 @@ fn route_externally(
     } else {
         routing_order.to_vec()
     };
-    eprintln!(
+    info!(
         "routing {} with {}",
         request.router_input_path().display(),
         if best_of {
@@ -5284,8 +5540,8 @@ fn route_externally(
         }
     );
     if !request.routing_order.is_empty() {
-        eprintln!(
-            "  reserving routes for the hardest nets first: {}",
+        info!(
+            "reserving routes for the hardest nets first: {}",
             request.routing_order.join(", ")
         );
     }
@@ -5293,9 +5549,9 @@ fn route_externally(
         let base_out = request.out_dir.clone();
         let portfolio = synth_router::route_best_of(&request, &synth_router::RouterEngine::all());
         for attempt in &portfolio.attempts {
-            eprintln!("  attempt: {}", attempt.summary());
+            info!("attempt: {}", attempt.summary());
         }
-        eprintln!("  winner: {}", portfolio.winner.as_str());
+        info!("winner: {}", portfolio.winner.as_str());
         // The winner's artifacts live in its own subdirectory; point the
         // request there so the reports below reference the board that won.
         request.engine = portfolio.winner;
@@ -5320,8 +5576,8 @@ fn route_externally(
     // look deliverable.
     if !report.is_fabrication_ready() {
         if report.state == synth_router::RouteState::RouterUnavailable {
-            eprintln!(
-                "error: {} is not available; the exported board at {} is the \
+            error!(
+                "{} is not available; the exported board at {} is the \
                  un-routed baseline and is preserved for review.",
                 engine.as_str(),
                 request.baseline_path().display()
@@ -5334,30 +5590,35 @@ fn route_externally(
             // No copper was produced: the engine refused a constraint it
             // cannot honour. Saying "failed validation" would imply a board
             // exists and was rejected.
-            eprintln!(
-                "error: {} cannot honour this routing request; the exported board at {} is the \
+            error!(
+                "{} cannot honour this routing request; the exported board at {} is the \
                  un-routed baseline and is preserved for review. See {}.",
                 engine.as_str(),
                 request.baseline_path().display(),
                 request.report_path().display()
             );
         } else if report.state == synth_router::RouteState::ValidationFailed {
-            eprintln!(
-                "error: the routed board failed independent validation; see {}.",
+            error!(
+                "the routed board failed independent validation; see {}.",
                 request.report_path().display()
             );
         } else {
-            eprintln!(
-                "warning: the routed board is review-only — a required check could \
+            warn!(
+                "the routed board is review-only — a required check could \
                  not be performed, which is not the same as a clean result. See {}.",
                 request.report_path().display()
             );
         }
-        eprintln!("(design: {})", input.display());
+        info!("(design: {})", input.display());
     }
     Ok(report)
 }
 
+/// Print the routing run's verdict.
+///
+/// This is the command's result, not a log record: it goes to stderr
+/// because stdout belongs to the JSON run record, and it is deliberately
+/// unfiltered so `-q` cannot suppress the verdict.
 fn print_route_report(report: &synth_router::RouteReport) {
     eprintln!("{}", report.summary());
     if let Some(provenance) = Some(&report.provenance) {
@@ -5427,6 +5688,10 @@ fn request_run_record_path(board: &synth_ir::Board, result: &synth_kicad::Export
 }
 
 /// Print the availability of every supported routing engine.
+///
+/// This is the command's result, not a log record: it goes straight to
+/// stderr (stdout is reserved for machine-readable output) and is never
+/// filtered, so `-q` cannot hide an answer the operator asked for.
 fn dump_routers(pretty: bool) -> anyhow::Result<u8> {
     let out_dir = std::env::temp_dir().join(format!("synth-routers-{}", std::process::id()));
     std::fs::create_dir_all(&out_dir).map_err(|e| anyhow::anyhow!("{e}"))?;
@@ -5517,7 +5782,7 @@ fn fix(input: &Path, registry_dir: Option<&Path>, smt: bool, dry_run: bool) -> a
             .collect();
 
     if diag_patches.is_empty() {
-        eprintln!(
+        info!(
             "synth fix: no machine-applicable patches in {} diagnostics",
             diagnostics.len()
         );
@@ -5540,7 +5805,7 @@ fn fix(input: &Path, registry_dir: Option<&Path>, smt: bool, dry_run: bool) -> a
                 if smt {
                     patch.apply(&current)
                 } else {
-                    eprintln!("synth fix: skipping SMT patch ({constraint}); pass --smt to solve");
+                    warn!("synth fix: skipping SMT patch ({constraint}); pass --smt to solve");
                     Err(synth_diagnostics::PatchError::Unsupported(
                         "smt disabled".into(),
                     ))
@@ -5555,13 +5820,13 @@ fn fix(input: &Path, registry_dir: Option<&Path>, smt: bool, dry_run: bool) -> a
                 applied += 1;
             }
             Err(e) => {
-                eprintln!("synth fix: skipping patch ({e})");
+                warn!("synth fix: skipping patch ({e})");
                 skipped += 1;
             }
         }
     }
 
-    eprintln!(
+    info!(
         "synth fix: applied {applied} / {total} patch(es), skipped {skipped}",
         total = diag_patches.len(),
     );
@@ -5571,7 +5836,7 @@ fn fix(input: &Path, registry_dir: Option<&Path>, smt: bool, dry_run: bool) -> a
     } else if current != source {
         std::fs::write(input, &current)
             .map_err(|e| anyhow::anyhow!("could not write {}: {e}", input.display()))?;
-        eprintln!("synth fix: wrote {}", input.display());
+        info!("synth fix: wrote {}", input.display());
     }
     Ok(EXIT_SUCCESS)
 }
@@ -5887,7 +6152,7 @@ fn render(
         anyhow::bail!("kicad-cli pcb render failed with status: {status}");
     }
 
-    eprintln!("rendered 3D PCB image -> {}", out_path.display());
+    info!("rendered 3D PCB image -> {}", out_path.display());
 
     if svg {
         let svg_out = out_path.with_extension("svg");
@@ -5909,9 +6174,9 @@ fn render(
             .map_err(|e| anyhow::anyhow!("failed to execute {kicad_cli} for svg: {e}"))?;
 
         if svg_status.success() {
-            eprintln!("rendered 2D copper SVG -> {}", svg_out.display());
+            info!("rendered 2D copper SVG -> {}", svg_out.display());
         } else {
-            eprintln!("warning: kicad-cli pcb export svg returned failure: {svg_status}");
+            warn!("kicad-cli pcb export svg returned failure: {svg_status}");
         }
     }
 
@@ -5921,6 +6186,59 @@ fn render(
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn a_gated_dfm_stage_that_could_not_read_the_board_blocks_a_release() {
+        assert!(super::dfm_blocks_release(true, true, None));
+        assert!(!super::dfm_blocks_release(true, false, None));
+        assert!(!super::dfm_blocks_release(false, true, None));
+        let clean = synth_drc::dfm::DfmReport::default();
+        assert!(!super::dfm_blocks_release(true, true, Some(&clean)));
+    }
+
+    #[test]
+    fn an_unreadable_board_blocks_only_when_the_dfm_gate_is_on() {
+        let profile = synth_drc::ManufacturerProfile::jlc_standard();
+        let path =
+            std::env::temp_dir().join(format!("synth_dfm_bad_{}.kicad_pcb", std::process::id()));
+        std::fs::write(&path, "(kicad_pcb (via").expect("write board");
+        let (ungated, _) = dfm_stage(&path, &profile, false);
+        let (gated, _) = dfm_stage(&path, &profile, true);
+        assert_eq!(ungated.status, NativeCheckStatus::Unknown);
+        assert!(ungated.advisory, "an ungated unknown must not block");
+        assert!(!gated.advisory, "a gated unknown must block");
+        // The same path export_kicad takes: stage -> blocked -> manifest.
+        let manifest = |gate: bool| {
+            let (_, report) = dfm_stage(&path, &profile, gate);
+            let blocked = dfm_blocks_release(true, gate, report.as_ref());
+            let m = release::ReleaseManifest::new("t", Path::new("b.synth"), true, vec![], vec![])
+                .with_release_blocked(blocked);
+            serde_json::to_value(&m).expect("manifest json")["release_ready"].clone()
+        };
+        assert_eq!(manifest(true), serde_json::json!(false));
+        assert_eq!(manifest(false), serde_json::json!(true));
+        let _ = std::fs::remove_file(&path);
+    }
+
+    #[test]
+    fn a_dfm_stage_lists_an_unreadable_arc_track_as_unsupported() {
+        let profile = synth_drc::ManufacturerProfile::jlc_standard();
+        let path =
+            std::env::temp_dir().join(format!("synth_dfm_arc_{}.kicad_pcb", std::process::id()));
+        std::fs::write(
+            &path,
+            r#"(kicad_pcb (arc (start 1 1) (end 2 2) (width 0.2) (layer "F.Cu") (net 1)))"#,
+        )
+        .expect("write board");
+        let (evidence, _) = dfm_stage(&path, &profile, false);
+        let _ = std::fs::remove_file(&path);
+        assert!(
+            evidence
+                .unsupported
+                .iter()
+                .any(|u| u.contains("1 arc track(s)")),
+            "{evidence:?}"
+        );
+    }
 
     #[test]
     fn the_capability_list_reports_each_profiles_own_minimums() {
@@ -6005,6 +6323,7 @@ mod tests {
             fab_overrides: None,
             same_net_pad_clearance: 0.1,
             allow_via_in_pad: false,
+            fine_pitch_return_via_advisory: false,
             timeout_secs: 60,
         };
         let request = build_route_request(

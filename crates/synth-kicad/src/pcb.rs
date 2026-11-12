@@ -83,6 +83,7 @@ pub fn build_pcb(
     project: &Uuid,
     label_overrides: &HashMap<String, synth_layout::sidecar::SidecarLabel>,
     fixed_vias: &[synth_layout::sidecar::SidecarVia],
+    outline: &[synth_layout::sidecar::SidecarPoint],
 ) -> Result<Sexp, PlaneFanoutError> {
     let placements_by_id: HashMap<ComponentId, &ComponentPlacement> =
         placement.components.iter().map(|p| (p.id, p)).collect();
@@ -128,10 +129,9 @@ pub fn build_pcb(
     }
     children.extend(build_netclasses(&net_table, board));
 
-    // Edge.Cuts board outline. Four gr_line segments tracing
-    // `placement.board_outline`. Slice 1B uses an axis-aligned
-    // rectangle; later slices accept user-defined outlines.
-    children.extend(build_edge_cuts(placement, project));
+    // Edge.Cuts board outline. A sidecar outline replaces the fitted
+    // rectangle, so a non-rectangular board is part of the design source.
+    children.extend(build_edge_cuts(placement, outline, project));
 
     // Footprint instances. Components with a real `kicad_footprint`
     // reference it directly; components without one (e.g. a brand-new
@@ -294,8 +294,29 @@ pub fn build_pcb(
         // through vias so the planes form one physical ground network. The
         // external routers preserve these source vias while replacing their
         // own routed segments and vias.
-        if board.layers >= 4 && plane_index == 0 {
-            let outline = placement.board_outline;
+        // Each ground fences only the corners inside its own pour region: a corner via
+        // in another split ground's half is a dangling island of the wrong net.
+        if board.layers >= 4 {
+            // The source fence follows the delivered outline, not the placer's
+            // fitted rectangle: a sidecar notch moves the edge inward and
+            // would leave these vias on (or outside) Edge.Cuts.
+            let outline_points = outline;
+            let fence_outline = if outline_points.len() >= 3 {
+                let (mut min_x, mut min_y) = (i64::MAX, i64::MAX);
+                let (mut max_x, mut max_y) = (i64::MIN, i64::MIN);
+                for point in outline_points {
+                    let x = mm_to_nm(point.x);
+                    let y = mm_to_nm(point.y);
+                    min_x = min_x.min(x);
+                    min_y = min_y.min(y);
+                    max_x = max_x.max(x);
+                    max_y = max_y.max(y);
+                }
+                synth_geometry::Rect::new(Point::new(min_x, min_y), Point::new(max_x, max_y))
+            } else {
+                placement.board_outline
+            };
+            let outline = fence_outline;
             let inset = mm_to_nm(1.5);
             let holes: Vec<(Point, i64)> = board
                 .components
@@ -322,6 +343,17 @@ pub fn build_pcb(
             for (stitch_index, (x_nm, y_nm, inward)) in points.into_iter().enumerate() {
                 let Point { x_nm, y_nm } =
                     clear_of_mounting_holes(Point::new(x_nm, y_nm), inward, &holes);
+                if region
+                    .as_deref()
+                    .is_some_and(|polygon| !convex_contains(polygon, Point::new(x_nm, y_nm)))
+                {
+                    continue;
+                }
+                if !outline_points.is_empty()
+                    && !custom_outline_contains(outline_points, Point::new(x_nm, y_nm))
+                {
+                    continue;
+                }
                 children.push(build_ground_stitch_via(
                     x_nm,
                     y_nm,
@@ -410,6 +442,9 @@ pub fn build_pcb(
     // The via is the process's own: its drill at least the minimum and its pad
     // the drill plus two minimum annular rings.
     let plane_via = PlaneVia::for_process(&process);
+    // The land of a via filled and capped in a pad, where the process offers one
+    // and a component declares the under-pad escape that makes it legal.
+    let pad_via = PlaneVia::for_via_in_pad(&process);
     // One rail per layer. Pouring every plane net on every power layer puts
     // two rails at the same priority on the same copper, which is the
     // starvation described above with ground swapped out for a second rail:
@@ -475,34 +510,56 @@ pub fn build_pcb(
                     },
                     &plane_via,
                 );
-                let chosen = match beside {
-                    Some(at) => Ok(at),
-                    None if via_in_pad_allowed => plane_via_in_pad(
-                        &target,
-                        &plane_via,
-                        &InPadRules {
-                            pads: &pad_rects,
-                            vias: &placed_vias,
-                            clearance_nm: process.min_copper_clearance_nm,
-                            drill_to_copper_nm: process.min_drill_to_copper_nm,
-                        },
-                    ),
-                    None => Err(ViaRefusal::NoRoomBesidePad),
+                let in_pad_rules = InPadRules {
+                    pads: &pad_rects,
+                    vias: &placed_vias,
+                    clearance_nm: process.min_copper_clearance_nm,
+                    drill_to_copper_nm: process.min_drill_to_copper_nm,
+                };
+                // The plane via goes in the pad first, where it fits. Only a
+                // component that declares `escape { method underpad }` may take
+                // the smaller filled and capped via, the one the DRC exempts from
+                // the plain ring; a pad anywhere else that cannot hold the plane
+                // via is refused.
+                let (chosen, land) = match beside {
+                    Some(at) => (Ok(at), plane_via),
+                    None if via_in_pad_allowed => {
+                        match plane_via_in_pad(&target, &plane_via, &in_pad_rules) {
+                            Ok(at) => (Ok(at), plane_via),
+                            Err(refusal) => match pad_via {
+                                Some(small) if target.underpad => {
+                                    (plane_via_in_pad(&target, &small, &in_pad_rules), small)
+                                }
+                                _ => (Err(refusal), plane_via),
+                            },
+                        }
+                    }
+                    None => (Err(ViaRefusal::NoRoomBesidePad), plane_via),
                 };
                 let via = match chosen {
                     Ok(at) => at,
                     Err(refusal) => {
                         return Err(PlaneFanoutError {
                             net: net.name.clone(),
-                            detail: plane_via_refusal(&refusal, pad, layer, &plane_via),
+                            detail: plane_via_refusal(
+                                &refusal,
+                                pad,
+                                layer,
+                                &ViaAttempt {
+                                    via: land,
+                                    filled_and_capped: target.underpad && pad_via == Some(land),
+                                    offered: pad_via.filter(|_| !target.underpad),
+                                },
+                            ),
                         });
                     }
                 };
-                placed_vias.push((via, plane_via.pad_radius_nm));
+                let used = land;
+                placed_vias.push((via, used.pad_radius_nm));
                 children.push(build_plane_via(
                     via.x_nm,
                     via.y_nm,
-                    &plane_via,
+                    &used,
                     pcb_net,
                     project,
                     plane_via_index,
@@ -613,6 +670,10 @@ struct PlanePad {
     layer: Layer,
     /// Width and height of the pad's copper in board axes, in nanometres.
     size_nm: (i64, i64),
+    /// Whether the pad's component declares `escape { method underpad }`: the
+    /// only place the filled and capped via, sized to the process's land, is
+    /// allowed.
+    underpad: bool,
 }
 
 /// Board-space targets for a declared power plane: one [`PlanePad`] per pad the
@@ -660,6 +721,9 @@ fn plane_pad_targets(board: &Board, placement: &Placement, net: &synth_ir::Net) 
                 centre: center,
                 origin,
                 layer: placed.layer,
+                underpad: component.escape.as_ref().is_some_and(|escape| {
+                    !escape.off && escape.method == Some(synth_ir::EscapeMethod::Underpad)
+                }),
                 size_nm: if placed.rotation.swaps_extents() {
                     (h_nm, w_nm)
                 } else {
@@ -699,6 +763,31 @@ impl PlaneVia {
     }
 }
 
+impl PlaneVia {
+    /// The via a plane stitching uses when it is filled and capped in a pad: the
+    /// process's own minimum drill (not the exporter's wider default) with the
+    /// land the process gives for it, `via_in_pad_land_nm`, the one the DRC judges
+    /// it by. `None` where the process offers no such land, so the plane via is
+    /// the only via there is.
+    fn for_via_in_pad(profile: &synth_drc::ManufacturerProfile) -> Option<Self> {
+        profile.via_in_pad_land_nm().map(|land_nm| Self {
+            pad_radius_nm: (land_nm + 1) / 2,
+            drill_nm: profile.min_drill_diameter_nm,
+        })
+    }
+}
+
+/// The via a pad was tried with, for the refusal that names it.
+struct ViaAttempt {
+    via: PlaneVia,
+    /// Whether it is the process's filled and capped via, whose land is the drill
+    /// plus the allowance, and not the plane via's two annular rings.
+    filled_and_capped: bool,
+    /// The filled and capped via the process offers, where the pad's component
+    /// does not declare the escape that would take it.
+    offered: Option<PlaneVia>,
+}
+
 /// Why no stitching via could be placed for a pad.
 #[derive(Debug, Clone, PartialEq, Eq)]
 enum ViaRefusal {
@@ -727,8 +816,9 @@ fn plane_via_refusal(
     refusal: &ViaRefusal,
     pad: synth_geometry::Point,
     layer: Layer,
-    via: &PlaneVia,
+    attempt: &ViaAttempt,
 ) -> String {
+    let via = attempt.via;
     let at = format!(
         "the pad at ({:.2}, {:.2}) mm on {layer:?}",
         nm_to_mm(pad.x_nm),
@@ -740,15 +830,31 @@ fn plane_via_refusal(
              within clearance of another pad or via. Move the part, widen the board, or declare \
              `requires via_in_pad` on a manufacturer that offers it, which lets the via go in the pad."
         ),
-        ViaRefusal::PadTooSmall { pad_nm, via_nm } => format!(
-            "{at} is {:.2} x {:.2} mm and a stitching via needs a {:.2} mm pad (a {:.2} mm drill plus \
-             two annular rings) inside it, so via-in-pad cannot hold it on this process. Use a \
-             manufacturer tier with a finer drill, a larger pad, or another way to reach the plane.",
-            nm_to_mm(pad_nm.0),
-            nm_to_mm(pad_nm.1),
-            nm_to_mm(*via_nm),
-            nm_to_mm(via.drill_nm),
-        ),
+        ViaRefusal::PadTooSmall { pad_nm, via_nm } => {
+            let ring = if attempt.filled_and_capped {
+                "the process's via-in-pad land allowance"
+            } else {
+                "two annular rings"
+            };
+            let advice = match attempt.offered {
+                Some(small) => format!(
+                    "Declare `escape {{ method underpad }}` on the component, which takes the process's \
+                     {:.2} mm filled and capped via, or use a larger pad or another way to reach the plane.",
+                    nm_to_mm(2 * small.pad_radius_nm)
+                ),
+                None => "Use a manufacturer tier with a finer drill, a larger pad, or another way to \
+                         reach the plane."
+                    .to_string(),
+            };
+            format!(
+                "{at} is {:.2} x {:.2} mm and a stitching via needs a {:.2} mm pad (a {:.2} mm drill plus \
+                 {ring}) inside it, so via-in-pad cannot hold it on this process. {advice}",
+                nm_to_mm(pad_nm.0),
+                nm_to_mm(pad_nm.1),
+                nm_to_mm(*via_nm),
+                nm_to_mm(via.drill_nm),
+            )
+        }
         ViaRefusal::Crowded => format!(
             "{at} can hold the stitching via, but copper of a neighbouring pad or via is within \
              the process's clearance of the via or of its hole. Move the part or widen the pitch."
@@ -979,7 +1085,8 @@ struct InPadRules<'a> {
 /// it suits, if the pad can hold it.
 ///
 /// A board that declared via-in-pad is allowed the process, not told that every
-/// pad suits it: the via's annulus (its drill plus the process's annular rings)
+/// pad suits it: the via's annulus (its drill plus the process's via-in-pad land
+/// allowance)
 /// has to fit inside the pad's copper, or the via would be wider than the pad it
 /// is meant to sit in; the pads and vias round it must stay the process's
 /// clearance from the via's copper and its hole's edge from their copper. A pad
@@ -1302,6 +1409,36 @@ fn net_centroid(
     #[allow(clippy::cast_possible_wrap)] // a board has far fewer pads than i64::MAX
     let count = centres.len() as i64;
     Some(synth_geometry::Point::new(sx / count, sy / count))
+}
+
+/// Whether `point` lies inside (or on) a convex polygon of either winding.
+fn convex_contains(polygon: &[synth_geometry::Point], point: synth_geometry::Point) -> bool {
+    let (mut pos, mut neg) = (false, false);
+    for i in 0..polygon.len() {
+        let (a, b) = (polygon[i], polygon[(i + 1) % polygon.len()]);
+        let cross = i128::from(b.x_nm - a.x_nm) * i128::from(point.y_nm - a.y_nm)
+            - i128::from(b.y_nm - a.y_nm) * i128::from(point.x_nm - a.x_nm);
+        pos |= cross > 0;
+        neg |= cross < 0;
+    }
+    !(pos && neg)
+}
+
+/// Whether `point` lies inside the closed sidecar outline, including a notch.
+fn custom_outline_contains(points: &[synth_layout::sidecar::SidecarPoint], point: Point) -> bool {
+    let x = nm_to_mm(point.x_nm);
+    let y = nm_to_mm(point.y_nm);
+    let mut inside = false;
+    let mut j = points.len() - 1;
+    for i in 0..points.len() {
+        let (xi, yi) = (points[i].x, points[i].y);
+        let (xj, yj) = (points[j].x, points[j].y);
+        if (yi > y) != (yj > y) && x < (xj - xi) * (y - yi) / (yj - yi) + xi {
+            inside = !inside;
+        }
+        j = i;
+    }
+    inside
 }
 
 /// Sutherland–Hodgman clip of a convex polygon by the half-plane
@@ -2081,7 +2218,42 @@ fn build_netclasses(net_table: &[(u32, String)], board: &Board) -> Vec<Sexp> {
     classes
 }
 
-fn build_edge_cuts(placement: &Placement, project: &Uuid) -> Vec<Sexp> {
+fn build_edge_cuts(
+    placement: &Placement,
+    outline: &[synth_layout::sidecar::SidecarPoint],
+    project: &Uuid,
+) -> Vec<Sexp> {
+    let line = |start: (f64, f64), end: (f64, f64), tag: &str, segment: usize| {
+        let line_uuid = derive_entity_uuid(project, "edge_cut", &format!("{tag}/{segment}"));
+        Sexp::list(
+            "gr_line",
+            vec![
+                Sexp::list("start", vec![num(start.0), num(start.1)]),
+                Sexp::list("end", vec![num(end.0), num(end.1)]),
+                Sexp::list(
+                    "stroke",
+                    vec![
+                        Sexp::list("width", vec![num(EDGE_CUT_WIDTH_MM)]),
+                        Sexp::list("type", vec![Sexp::atom("solid")]),
+                    ],
+                ),
+                Sexp::list("layer", vec![Sexp::str("Edge.Cuts")]),
+                str_pair("uuid", line_uuid.to_string()),
+            ],
+        )
+    };
+
+    if outline.len() >= 3 {
+        return outline
+            .iter()
+            .enumerate()
+            .map(|(i, start)| {
+                let end = &outline[(i + 1) % outline.len()];
+                line((start.x, start.y), (end.x, end.y), "outline", i)
+            })
+            .collect();
+    }
+
     let r = placement.board_outline;
     let min_x = nm_to_mm(r.min.x_nm);
     let min_y = nm_to_mm(r.min.y_nm);
@@ -2095,25 +2267,8 @@ fn build_edge_cuts(placement: &Placement, project: &Uuid) -> Vec<Sexp> {
     ];
     corners
         .iter()
-        .map(|(start, end, tag)| {
-            let line_uuid = derive_entity_uuid(project, "edge_cut", tag);
-            Sexp::list(
-                "gr_line",
-                vec![
-                    Sexp::list("start", vec![num(start.0), num(start.1)]),
-                    Sexp::list("end", vec![num(end.0), num(end.1)]),
-                    Sexp::list(
-                        "stroke",
-                        vec![
-                            Sexp::list("width", vec![num(EDGE_CUT_WIDTH_MM)]),
-                            Sexp::list("type", vec![Sexp::atom("solid")]),
-                        ],
-                    ),
-                    Sexp::list("layer", vec![Sexp::str("Edge.Cuts")]),
-                    str_pair("uuid", line_uuid.to_string()),
-                ],
-            )
-        })
+        .enumerate()
+        .map(|(i, (start, end, tag))| line(*start, *end, tag, i))
         .collect()
 }
 
@@ -2448,7 +2603,7 @@ fn build_footprint_instance(
         let body = strip_footprint_head(body);
         let body = add_footprint_angle_to_pads(&body, pad_angle);
         let body_with_nets = inject_pad_nets(&body, component.id, pad_net_lookup);
-        let body_with_nets = ensure_body_uuids(&body_with_nets, project, lib_id);
+        let body_with_nets = ensure_body_uuids(&body_with_nets, project, lib_id, &component.refdes);
         let has_model = body_with_nets.contains("(model ");
         children.push(Sexp::Raw(body_with_nets));
         has_model
@@ -2620,27 +2775,29 @@ const BODY_UUID_HEADS: &[&str] = &[
     "fp_curve",
 ];
 
-/// Fill in deterministic UUIDs for inlined footprint-body blocks that
-/// lack them (stock-library drawing primitives, pads and properties
-/// predate mandatory UUIDs).
+/// Fill in deterministic, per-instance UUIDs for inlined footprint-body
+/// blocks.
 ///
 /// Without this, KiCad's `--save-board` DRC gate assigns a fresh random v4
 /// UUID to every such block on each export, so two exports of the same
-/// board differ and the plan §6.2 byte-identical guarantee breaks. UUIDs
-/// are v5 over `(project, "fp_body:{lib_id}:{kind}:{key}#{n}")`, hence
-/// stable across runs, thread counts, and machines. Blocks that already
-/// carry `(uuid ...)` are left untouched.
-fn ensure_body_uuids(body: &str, project: &Uuid, lib_id: &str) -> String {
+/// board differ and the plan §6.2 byte-identical guarantee breaks. KiCad
+/// also keys board items by UUID, so the stock ids that KiCad 10 footprints
+/// ship with must not be shared by two placed instances: its DRC would then
+/// attribute a collision to the wrong footprint. UUIDs are v5 over
+/// `(project, "fp_body:{instance}:{lib_id}:{kind}:{key}#{n}")`, hence
+/// stable across runs, thread counts, and machines, and unique per instance.
+fn ensure_body_uuids(body: &str, project: &Uuid, lib_id: &str, instance: &str) -> String {
     let mut seen: std::collections::HashMap<String, usize> = std::collections::HashMap::new();
-    ensure_level(body, project, lib_id, "", &mut seen, false)
+    ensure_level(body, project, lib_id, instance, "", &mut seen, false)
 }
 
 /// One level of [`ensure_body_uuids`]: walk the top-level blocks of `text`,
-/// add deterministic UUIDs where missing, and recurse into each block's
-/// children (footprint `fp_text` nests a `(point ...)` designator lock that
-/// KiCad fills the same way). `path` is the `/`-joined ancestor chain so
-/// nested names cannot collide with top-level ones; `seen` counts each
-/// full path for duplicate siblings.
+/// set a deterministic UUID on every whitelisted block (replacing a stock
+/// library one), and recurse into each block's children (footprint
+/// `fp_text` nests a `(point ...)` designator lock that KiCad fills the same
+/// way). `path` is the `/`-joined ancestor chain so nested names cannot
+/// collide with top-level ones; `seen` counts each full path for duplicate
+/// siblings.
 ///
 /// Nested levels only ever gain UUIDs on `point`: pad-nested `(property
 /// pad_prop_mechanical)` must stay exactly as the stock library ships it —
@@ -2649,6 +2806,7 @@ fn ensure_level(
     text: &str,
     project: &Uuid,
     lib_id: &str,
+    instance: &str,
     path: &str,
     seen: &mut std::collections::HashMap<String, usize>,
     nested: bool,
@@ -2688,17 +2846,15 @@ fn ensure_level(
         // suppress the parent's own UUID.
         let whitelisted =
             (!nested && BODY_UUID_HEADS.contains(&head)) || NESTED_UUID_HEADS.contains(&head);
-        if whitelisted && !has_direct_uuid(&block) {
+        if whitelisted {
             let counter = seen.entry(full_path.clone()).or_insert(0);
             let uuid = derive_entity_uuid(
                 project,
                 "fp_body",
-                &format!("{lib_id}:{full_path}#{counter}"),
+                &format!("{instance}:{lib_id}:{full_path}#{counter}"),
             );
             *counter += 1;
-            block.pop();
-            let _ = write!(block, " (uuid \"{uuid}\")");
-            block.push(')');
+            block = set_direct_uuid(block, &uuid.to_string());
         }
         // Recurse into children: everything between the `(head ...args`
         // opener and the final `)`. Leaf blocks (no inner `(`) come back
@@ -2708,6 +2864,7 @@ fn ensure_level(
                 &block[range.clone()],
                 project,
                 lib_id,
+                instance,
                 &full_path,
                 seen,
                 true,
@@ -2723,14 +2880,25 @@ fn ensure_level(
     out
 }
 
-/// True when `block`'s direct children include a `(uuid ...)` node.
-/// (A plain substring search would false-positive on a *nested* UUID, e.g.
-/// an fp_text whose `point` child already has one while it does not.)
-fn has_direct_uuid(block: &str) -> bool {
-    let Some(range) = inner_range(block) else {
-        return false;
-    };
-    let inner = &block[range];
+/// Set the value of the block's direct `(uuid "...")` child, adding one
+/// when the block has none. The stock library ids are replaced so two
+/// instances of the same footprint do not share item UUIDs.
+fn set_direct_uuid(mut block: String, uuid: &str) -> String {
+    if let Some((start, end)) = direct_uuid_span(&block) {
+        block.replace_range(start..end, &format!("\"{uuid}\""));
+        return block;
+    }
+    block.pop();
+    let _ = write!(block, " (uuid \"{uuid}\")");
+    block.push(')');
+    block
+}
+
+/// Byte range of the string literal inside `block`'s direct `(uuid ...)`
+/// child, if it has one.
+fn direct_uuid_span(block: &str) -> Option<(usize, usize)> {
+    let range = inner_range(block)?;
+    let inner = &block[range.clone()];
     let bytes = inner.as_bytes();
     let mut i = 0;
     while i < bytes.len() {
@@ -2742,19 +2910,19 @@ fn has_direct_uuid(block: &str) -> bool {
             i += 1;
             continue;
         }
-        let Some(end) = matching_close_quoted(inner, i + 1) else {
-            return false;
-        };
+        let end = matching_close_quoted(inner, i + 1)?;
         let head = inner[i + 1..=end]
             .split(|c: char| c.is_ascii_whitespace() || c == '(' || c == ')')
             .next()
             .unwrap_or("");
         if head == "uuid" {
-            return true;
+            let q1 = i + inner[i..].find('"')?;
+            let q2 = skip_string(bytes, q1);
+            return Some((range.start + q1, range.start + q2));
         }
         i = end + 1;
     }
-    false
+    None
 }
 
 /// Byte index just past the string literal opening at `i` (which must be
@@ -3353,22 +3521,53 @@ mod tests {
     /// every uuid-bearing footprint-body block must carry a deterministic
     /// UUID before KiCad sees the file, or the gate fills random v4 UUIDs
     /// and re-exports stop being byte-identical (plan §6.2).
+    ///
+    /// KiCad 10's stock footprints ship their own child UUIDs, and inlining
+    /// the body verbatim made every instance of a part share them. KiCad
+    /// keys board items by UUID, so its DRC attributed silk/pad collisions
+    /// to the wrong footprint. Each instance must get its own ids.
     #[test]
-    fn inlined_body_blocks_carry_deterministic_uuids() {
-        let body = "(property \"Datasheet\" \"\" (at 0 0 0) (layer \"F.Fab\") (hide yes) (effects (font (size 1.27 1.27)))) (pad \"1\" smd rect (at 0 0) (size 1 1) (layers \"F.Cu\")) (fp_line (start 0 0) (end 1 1) (stroke (width 0.1)) (layer \"F.SilkS\")) (fp_text user \"REF\" (at 0 0) (layer \"F.SilkS\") (effects (font (size 1 1))) (point (at 0 0) (size 1) (layer \"F.SilkS\")))";
+    fn inlined_body_blocks_carry_unique_deterministic_uuids() {
+        let body = "(property \"Datasheet\" \"\" (at 0 0 0) (layer \"F.Fab\") (hide yes) (effects (font (size 1.27 1.27)))) (pad \"1\" smd rect (at 0 0) (size 1 1) (layers \"F.Cu\") (uuid \"11111111-1111-5111-8111-111111111111\")) (fp_line (start 0 0) (end 1 1) (stroke (width 0.1)) (layer \"F.SilkS\")) (fp_text user \"REF\" (at 0 0) (layer \"F.SilkS\") (effects (font (size 1 1))) (point (at 0 0) (size 1) (layer \"F.SilkS\")))";
+        let uuids = |s: &str| -> Vec<String> {
+            s.match_indices("(uuid \"")
+                .map(|(i, _)| {
+                    let rest = &s[i + "(uuid \"".len()..];
+                    rest[..rest.find('"').unwrap()].to_string()
+                })
+                .collect()
+        };
         let project = Uuid::nil();
-        let once = super::ensure_body_uuids(body, &project, "lib:part");
+        let r1 = super::ensure_body_uuids(body, &project, "lib:part", "R1");
+        let r2 = super::ensure_body_uuids(body, &project, "lib:part", "R2");
         assert_eq!(
-            once.matches("(uuid \"").count(),
+            r1.matches("(uuid \"").count(),
             5,
-            "one uuid per block: {once}"
+            "one uuid per block: {r1}"
         );
-        // Idempotent and deterministic: a second pass changes nothing, and
-        // pre-uuid'd blocks are preserved verbatim.
-        let twice = super::ensure_body_uuids(&once, &project, "lib:part");
-        assert_eq!(once, twice, "uuid pass must be idempotent");
-        let again = super::ensure_body_uuids(body, &project, "lib:part");
-        assert_eq!(once, again, "uuid pass must be deterministic");
+        let ids: std::collections::HashSet<String> = uuids(&r1).into_iter().collect();
+        assert_eq!(ids.len(), 5, "duplicate ids in one instance: {r1}");
+        assert!(
+            !ids.contains("11111111-1111-5111-8111-111111111111"),
+            "the stock library uuid survived: {r1}"
+        );
+        assert_ne!(r1, r2, "two instances share body uuids");
+        assert_eq!(uuids(&r2).len(), 5);
+        assert!(
+            uuids(&r1).iter().all(|id| !uuids(&r2).contains(id)),
+            "instances share a uuid"
+        );
+        // Idempotent and deterministic for the same instance.
+        assert_eq!(
+            r1,
+            super::ensure_body_uuids(&r1, &project, "lib:part", "R1"),
+            "uuid pass must be idempotent"
+        );
+        assert_eq!(
+            r1,
+            super::ensure_body_uuids(body, &project, "lib:part", "R1"),
+            "uuid pass must be deterministic"
+        );
     }
 
     #[test]
@@ -4003,6 +4202,7 @@ mod tests {
             &Uuid::nil(),
             &HashMap::new(),
             &vias,
+            &[],
         )
         .expect("export")
         .to_string_pretty();
@@ -4027,6 +4227,7 @@ mod tests {
             &Uuid::nil(),
             &HashMap::new(),
             &unknown,
+            &[],
         )
         .expect_err("an unknown net is refused");
         assert_eq!(error.net, "NOPE");
@@ -4074,8 +4275,16 @@ mod tests {
             pad_escape_rejections: 0,
         };
         let project = Uuid::nil();
-        let pcb_sexp = build_pcb(&board, &placement, &routing, &project, &HashMap::new(), &[])
-            .expect("plane fanout");
+        let pcb_sexp = build_pcb(
+            &board,
+            &placement,
+            &routing,
+            &project,
+            &HashMap::new(),
+            &[],
+            &[],
+        )
+        .expect("plane fanout");
         let pcb_str = pcb_sexp.to_string_pretty();
 
         let tmp_path =
@@ -4120,6 +4329,7 @@ mod plane_via_in_pad_tests {
             origin: Point::new(47_000_000, 47_000_000),
             layer: Layer::Top,
             size_nm: (size_nm, size_nm),
+            underpad: true,
         }
     }
 
@@ -4203,6 +4413,55 @@ mod plane_via_in_pad_tests {
                 via_nm: 600_000
             })
         );
+    }
+
+    /// JLCPCB's via-in-pad guide gives the minimum land as the drill plus
+    /// 0.15 mm. On the tier with the 0.2 mm drill that is 0.35 mm, which a
+    /// 0.35 mm ball pad of a 0.8 mm BGA holds, so the supply ball takes its
+    /// plane via in the pad instead of being refused for a land sized by two
+    /// annular rings around a wider drill.
+    #[test]
+    fn a_ball_pad_takes_the_via_in_pad_land_of_the_fine_drill_tier() {
+        let pad = pad_at(350_000);
+        let rects = ring(pad.centre, 350_000);
+        let tier = synth_drc::ManufacturerProfile::jlc_advanced();
+        let in_pad = PlaneVia::for_via_in_pad(&tier).expect("a via-in-pad land");
+        assert_eq!(in_pad.drill_nm, 200_000);
+        assert_eq!(2 * in_pad.pad_radius_nm, 350_000);
+        assert_eq!(
+            plane_via_in_pad(&pad, &in_pad, &rules(&rects, &[])),
+            Ok(pad.centre)
+        );
+    }
+
+    /// A process whose minimum drill is 0.3 mm needs a 0.45 mm land: the same
+    /// ball pad is still refused, with both sizes in the report. The
+    /// relaxation is the manufacturer's formula, not a licence for any via in
+    /// any pad.
+    #[test]
+    fn a_ball_pad_is_still_refused_where_the_tier_drill_needs_a_wider_land() {
+        let pad = pad_at(350_000);
+        let rects = ring(pad.centre, 350_000);
+        let mut tier = synth_drc::ManufacturerProfile::jlc_filled_via();
+        tier.min_drill_diameter_nm = 300_000;
+        let in_pad = PlaneVia::for_via_in_pad(&tier).expect("a via-in-pad land");
+        assert_eq!(
+            plane_via_in_pad(&pad, &in_pad, &rules(&rects, &[])),
+            Err(ViaRefusal::PadTooSmall {
+                pad_nm: (350_000, 350_000),
+                via_nm: 450_000
+            })
+        );
+    }
+
+    /// A process that allows via-in-pad but gives no land for it, a custom profile
+    /// that omits the allowance, has no filled and capped via: the plane via is the
+    /// only one, and the DRC would judge any smaller via by the plain ring.
+    #[test]
+    fn a_process_with_no_in_pad_land_has_no_filled_and_capped_via() {
+        let mut tier = synth_drc::ManufacturerProfile::jlc_advanced();
+        tier.via_in_pad_land_extra_nm = 0;
+        assert_eq!(PlaneVia::for_via_in_pad(&tier), None);
     }
 
     /// A rectangular pad is as wide as its narrow side.
