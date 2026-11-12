@@ -1824,7 +1824,7 @@ fn emit_deck(
         .iter()
         .filter_map(|dir| dir.canonicalize().ok())
         .collect();
-    let mut include_lines = Vec::new();
+    let mut model_text: Vec<String> = Vec::new();
     let mut included_files: HashSet<PathBuf> = HashSet::new();
     let mut dialects: Vec<(Option<SpiceDialect>, String, String)> = Vec::new();
     let mut element_lines = Vec::new();
@@ -1856,33 +1856,17 @@ fn emit_deck(
                     continue;
                 }
             };
-            let file = match resolve_spice_model(spice, &roots) {
-                Ok(file) => file,
+            let (file, text) = match resolve_spice_model(spice, &roots) {
+                Ok(resolved) => resolved,
                 Err(message) => {
                     diagnostics.push(model_error(component, &message, true, design_path));
                     continue;
                 }
             };
-            if included_files.insert(file.clone()) {
-                let Some(path) = file.to_str() else {
-                    diagnostics.push(model_error(
-                        component,
-                        "model file path is not valid UTF-8",
-                        true,
-                        design_path,
-                    ));
-                    continue;
-                };
-                if path.contains('"') || path.contains(['\n', '\r']) {
-                    diagnostics.push(model_error(
-                        component,
-                        &format!("model file path `{path}` cannot be quoted in an `.include`"),
-                        true,
-                        design_path,
-                    ));
-                    continue;
-                }
-                include_lines.push(format!(".include \"{path}\""));
+            // The checked text goes into the deck itself, so ngspice never
+            // re-opens the file after the check.
+            if included_files.insert(file) {
+                model_text.push(text);
             }
             let dialect = spice.dialect;
             if let Some((known, known_refdes, known_part)) = dialects.first() {
@@ -2186,8 +2170,8 @@ fn emit_deck(
     for line in source_lines {
         let _ = writeln!(deck, "{line}");
     }
-    for line in include_lines {
-        let _ = writeln!(deck, "{line}");
+    for text in model_text {
+        let _ = writeln!(deck, "{}", text.trim_end());
     }
     for line in element_lines {
         let _ = writeln!(deck, "{line}");
@@ -2236,17 +2220,53 @@ fn emit_deck(
     })
 }
 
-/// Resolve `[options] plot` relative to the sidecar's directory, or the
-/// working directory when no sidecar path is known.
+/// Resolve `[options] plot` inside the sidecar's directory, or the working
+/// directory when no sidecar path is known.
+///
+/// The value must be a relative path of plain components: an absolute path or
+/// a `..` would let a sidecar write or create directories anywhere. A symlink
+/// already on the path is followed before the check, so it cannot lead out of
+/// the base either.
 fn resolve_plot_path(plot: &str, testbench_path: Option<&Path>) -> Result<PathBuf, Diagnostic> {
+    let relative = Path::new(plot);
+    if relative.is_absolute()
+        || relative.components().any(|part| {
+            !matches!(
+                part,
+                std::path::Component::Normal(_) | std::path::Component::CurDir
+            )
+        })
+    {
+        return Err(testbench_error(format!(
+            "`[options] plot` path `{plot}` must be relative and stay inside the sidecar's \
+             directory (no absolute path, no `..`)"
+        )));
+    }
     let base = testbench_path
         .and_then(Path::parent)
-        .unwrap_or_else(|| Path::new(""));
-    std::path::absolute(base.join(plot)).map_err(|error| {
+        .filter(|parent| !parent.as_os_str().is_empty())
+        .unwrap_or_else(|| Path::new("."));
+    let unresolved = |error: std::io::Error| {
         testbench_error(format!(
             "could not resolve `[options] plot` path `{plot}`: {error}"
         ))
-    })
+    };
+    let base = base.canonicalize().map_err(unresolved)?;
+    let target = base.join(relative);
+    // The nearest part of the path that already exists decides where it
+    // really lands; everything below it is created later, by plain names.
+    if let Some(existing) = target
+        .ancestors()
+        .find(|ancestor| std::fs::symlink_metadata(ancestor).is_ok())
+    {
+        let real = existing.canonicalize().map_err(unresolved)?;
+        if !real.starts_with(&base) {
+            return Err(testbench_error(format!(
+                "`[options] plot` path `{plot}` resolves outside the sidecar's directory"
+            )));
+        }
+    }
+    Ok(target)
 }
 
 /// The dialect's TOML spelling; a part without one is its own (native) mode.
@@ -2285,7 +2305,9 @@ fn subckt_pin_indexes(part: &synth_registry::Part, spice: &SpiceModel) -> Result
 }
 
 /// Resolve and check a model file under the canonical registry directories.
-fn resolve_spice_model(spice: &SpiceModel, roots: &[PathBuf]) -> Result<PathBuf, String> {
+/// Returns the checked text, which is what the deck must carry: ngspice never
+/// re-opens the path, so the file cannot change after the check.
+fn resolve_spice_model(spice: &SpiceModel, roots: &[PathBuf]) -> Result<(PathBuf, String), String> {
     if roots.is_empty() {
         return Err(format!(
             "model file `{}` cannot be resolved because no registry directory is available",
@@ -2303,8 +2325,8 @@ fn resolve_spice_model(spice: &SpiceModel, roots: &[PathBuf]) -> Result<PathBuf,
                 spice.file
             ));
         }
-        check_model_file(&canonical, spice)?;
-        return Ok(canonical);
+        let text = check_model_file(&canonical, spice)?;
+        return Ok((canonical, text));
     }
     let mut found_outside = false;
     // Last registry directory wins, matching the loader's user-over-seed
@@ -2319,8 +2341,8 @@ fn resolve_spice_model(spice: &SpiceModel, roots: &[PathBuf]) -> Result<PathBuf,
             .canonicalize()
             .map_err(|error| format!("model file `{}` is not readable: {error}", spice.file))?;
         if roots.iter().any(|root| canonical.starts_with(root)) {
-            check_model_file(&canonical, spice)?;
-            return Ok(canonical);
+            let text = check_model_file(&canonical, spice)?;
+            return Ok((canonical, text));
         }
         found_outside = true;
     }
@@ -2339,7 +2361,7 @@ fn resolve_spice_model(spice: &SpiceModel, roots: &[PathBuf]) -> Result<PathBuf,
 
 /// Reject model files ngspice cannot safely run, and require the named
 /// subcircuit to be present with exactly the terminals `pin_order` binds.
-fn check_model_file(path: &Path, spice: &SpiceModel) -> Result<(), String> {
+fn check_model_file(path: &Path, spice: &SpiceModel) -> Result<String, String> {
     let subckt = spice.subckt.as_str();
     let verilog_a = path
         .extension()
@@ -2373,23 +2395,30 @@ fn check_model_file(path: &Path, spice: &SpiceModel) -> Result<(), String> {
             ));
         }
     }
+    // Allowlist, not denylist: anything ngspice could act on that is not
+    // named here (`.control`, `.include`, `.lib`, `.end`, `.csparam`, ...) is
+    // rejected, so a new directive is refused by default.
     for line in text.lines() {
-        let trimmed = line.trim_start();
-        if trimmed.is_empty() || trimmed.starts_with('*') {
+        let trimmed = strip_inline_comment(line).trim_start();
+        // Blank, comment, and `+` continuation lines extend a line already
+        // checked.
+        if trimmed.is_empty() || trimmed.starts_with(['*', '+']) {
             continue;
         }
-        let directive = trimmed.to_ascii_lowercase();
-        // v1 has no vendor models: a nested include could smuggle in
-        // `.control`/`shell`, which the checks below would never see.
-        for forbidden in [
-            ".control", ".endc", "shell", "system", ".include", ".inc", ".lib",
-        ] {
-            if directive.starts_with(forbidden) {
-                return Err(format!(
-                    "model file `{}` contains `{forbidden}`, which is not allowed in a model",
-                    path.display()
-                ));
-            }
+        let first = trimmed.split_whitespace().next().unwrap_or_default();
+        let lower = first.to_ascii_lowercase();
+        let allowed = if lower.starts_with('.') {
+            matches!(lower.as_str(), ".subckt" | ".ends" | ".model" | ".param")
+        } else {
+            // A device/element line: its first letter names the element type.
+            lower.starts_with(|c: char| c.is_ascii_alphabetic())
+        };
+        if !allowed {
+            return Err(format!(
+                "model file `{}` contains `{first}`, which is not allowed in a model \
+                 (only `.subckt`, `.ends`, `.model`, `.param`, comments and element lines)",
+                path.display()
+            ));
         }
     }
     let Some(terminal_count) = subckt_terminal_count(&text, subckt) else {
@@ -2406,7 +2435,7 @@ fn check_model_file(path: &Path, spice: &SpiceModel) -> Result<(), String> {
             spice.pin_order.len()
         ));
     }
-    Ok(())
+    Ok(text)
 }
 
 /// Strip a SPICE inline comment: from `;` anywhere, or from `$` that follows

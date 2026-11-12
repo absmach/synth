@@ -2279,8 +2279,8 @@ fn timeout_kills_a_non_exec_wrapper_and_its_grandchild() {
     assert_gone(grandchild_pid);
 }
 
-/// The model path is absolute and quoted; the `X` line follows
-/// `pin_order`, not the registry pin order.
+/// The checked model text is carried in the deck, not `.include`d; the `X`
+/// line follows `pin_order`, not the registry pin order.
 #[test]
 fn emits_golden_ldo_deck_with_registry_include() {
     let board = board(LDO);
@@ -2292,7 +2292,12 @@ fn emits_golden_ldo_deck_with_registry_include() {
     let model = registry_parts_dir().join("spice").join("ams1117_3v3.lib");
     let expected = std::fs::read_to_string(fixture("ldo-op.cir"))
         .expect("golden deck")
-        .replace("{{MODEL}}", &model.display().to_string());
+        .replace(
+            "{{MODEL}}",
+            std::fs::read_to_string(&model)
+                .expect("registry model")
+                .trim_end(),
+        );
 
     assert_eq!(deck, expected);
     assert!(
@@ -2624,7 +2629,7 @@ fn control_and_shell_model_files_are_rejected() {
         ),
         (
             "shell.lib",
-            ".subckt ams1117_3v3 vin gnd vout\nshell echo escaped\n.ends\n",
+            ".subckt ams1117_3v3 vin gnd vout\n.control\nshell echo escaped\n.endc\n.ends\n",
         ),
     ] {
         let scratch = Scratch::new(label);
@@ -2842,7 +2847,12 @@ fn a_shared_model_file_is_included_once() {
         synth_sim::emit_netlist_with_registry_dirs(&board, &testbench, &[registry_parts_dir()])
             .expect("deck emits");
 
-    assert_eq!(deck.matches(".include ").count(), 1, "deck:\n{deck}");
+    assert_eq!(
+        deck.matches(".subckt ams1117_3v3 ").count(),
+        1,
+        "the shared model is carried once:\n{deck}"
+    );
+    assert!(!deck.contains(".include"), "deck:\n{deck}");
     assert!(deck.contains("XU1 "), "deck:\n{deck}");
     assert!(deck.contains("XU2 "), "deck:\n{deck}");
 }
@@ -2895,6 +2905,37 @@ fn a_model_with_a_nested_include_is_rejected_without_running() {
     );
 }
 
+/// The model check is an allowlist: a directive that is not named is refused,
+/// whatever its spelling, and the deck carries the checked text, not a path.
+#[test]
+fn a_model_directive_outside_the_allowlist_is_rejected() {
+    for directive in [
+        ".csparam x=1",
+        ".INCLUDE \"x.lib\"",
+        ".lib x.lib typ",
+        ".end",
+        ".func f(x) {x}",
+    ] {
+        let scratch = Scratch::new("model-allowlist");
+        model_file(
+            scratch.path(),
+            "m.lib",
+            &format!(".subckt ams1117_3v3 vin gnd vout\n{directive}\n.ends\n"),
+        );
+        let board = patched_ams1117(|spice| spice.file = "m.lib".to_string());
+        let error = synth_sim::emit_netlist_with_registry_dirs(
+            &board,
+            &testbench(LDO_TB),
+            &[scratch.path().to_path_buf()],
+        )
+        .expect_err("directive must be refused");
+        assert!(
+            error.iter().any(|d| d.code == synth_sim::E_SYNTH_SIM_002),
+            "`{directive}`: {error:?}"
+        );
+    }
+}
+
 /// The loader merges user parts over seed parts, so the user registry's copy
 /// of a relative model path must win too.
 #[test]
@@ -2927,21 +2968,13 @@ fn the_last_registry_dir_wins_for_a_shared_relative_model_path() {
     )
     .expect("deck emits");
 
-    let expected = user_model
-        .canonicalize()
-        .expect("canonical user model")
-        .join("ams1117_3v3.lib");
     assert!(
-        deck.contains(&format!(".include \"{}\"", expected.display())),
-        "deck must include the user copy:\n{deck}"
+        deck.contains("Vref vout int 3.0"),
+        "deck must carry the user copy:\n{deck}"
     );
-    let seed_path = seed_model
-        .canonicalize()
-        .expect("canonical seed model")
-        .join("ams1117_3v3.lib");
     assert!(
-        !deck.contains(&format!(".include \"{}\"", seed_path.display())),
-        "deck must not include the seed copy:\n{deck}"
+        !deck.contains("Vref vout int 3.3"),
+        "deck must not carry the seed copy:\n{deck}"
     );
 }
 
@@ -3645,16 +3678,15 @@ fn rc_with_plot(plot: &str) -> String {
 
 #[test]
 fn emits_a_single_quoted_wrdata_line_before_the_done_sentinel() {
-    let scratch = Scratch::new("plot-deck");
-    let plot = scratch.path().join("nested/wave.dat");
-    let testbench = testbench(&rc_with_plot(&plot.display().to_string()));
+    let testbench = testbench(&rc_with_plot("nested/wave.dat"));
 
     let deck = synth_sim::emit_netlist(&board(RC), &testbench).expect("deck emits");
 
-    let line = format!("wrdata '{}' allv", plot.display());
-    let position = deck.find(&line).unwrap_or_else(|| {
-        panic!("deck has no `{line}`:\n{deck}");
-    });
+    let line = deck
+        .lines()
+        .find(|line| line.starts_with("wrdata '") && line.ends_with("nested/wave.dat' allv"))
+        .unwrap_or_else(|| panic!("deck has no wrdata line for nested/wave.dat:\n{deck}"));
+    let position = deck.find(line).expect("line is in the deck");
     assert!(
         deck.find("echo SYNTH_MEAS corner").expect("measure") < position,
         "wrdata must follow the measures:\n{deck}"
@@ -3916,15 +3948,15 @@ fn a_real_ngspice_run_writes_a_non_empty_plot() {
     assert!(size > 0, "plot file is empty");
 }
 
-#[test]
-fn simulate_creates_an_absolute_plot_directory_before_the_run() {
-    let scratch = Scratch::new("plot-abs-dir");
-    let plot = scratch.path().join("absolute/nested/wave.dat");
+/// A `plot` that leaves the sidecar's directory is refused before anything is
+/// created or written, so a sidecar cannot touch files outside its own folder.
+fn assert_plot_refused(plot: &str, scratch: &Scratch, outside: &Path) {
     let sidecar = scratch.path().join("rc.sim.toml");
-    std::fs::write(&sidecar, rc_with_plot(&plot.display().to_string())).expect("write sidecar");
+    std::fs::write(&sidecar, rc_with_plot(plot)).expect("write sidecar");
     let testbench = synth_sim::Testbench::from_path(&sidecar).expect("sidecar parses");
     let options = synth_sim::SimOptions {
-        ngspice: Some(scratch.path().join("ngspice-does-not-exist")),
+        // A missing binary proves the emitter refused before any run.
+        ngspice: Some(scratch.path().join("must-not-run")),
         design_path: Some(PathBuf::from("rc.synth")),
         testbench_path: Some(sidecar),
         registry_dirs: Vec::new(),
@@ -3932,17 +3964,56 @@ fn simulate_creates_an_absolute_plot_directory_before_the_run() {
 
     let report = synth_sim::simulate(&board(RC), &testbench, &options);
 
-    assert!(!report.passed());
     assert!(
-        report
-            .diagnostics
-            .iter()
-            .any(|diagnostic| diagnostic.code == synth_sim::E_SYNTH_SIM_001),
-        "diagnostics: {:?}",
+        report.diagnostics.iter().any(|diagnostic| {
+            diagnostic.code == synth_sim::E_SYNTH_SIM_007
+                && diagnostic
+                    .message
+                    .as_deref()
+                    .is_some_and(|message| message.contains("plot"))
+        }),
+        "`{plot}`: {:?}",
         report.diagnostics
     );
     assert!(
-        plot.parent().expect("plot parent").is_dir(),
-        "the absolute plot directory must exist before ngspice runs"
+        !report
+            .diagnostics
+            .iter()
+            .any(|diagnostic| diagnostic.code == synth_sim::E_SYNTH_SIM_001),
+        "ngspice must not run for `{plot}`: {:?}",
+        report.diagnostics
     );
+    assert!(!outside.exists(), "`{plot}` created {}", outside.display());
+}
+
+#[test]
+fn a_parent_dir_plot_is_refused_and_creates_nothing() {
+    let scratch = Scratch::new("plot-dotdot");
+    let outside = scratch
+        .path()
+        .parent()
+        .expect("parent")
+        .join("synth-escape");
+    assert_plot_refused("../synth-escape/wave.dat", &scratch, &outside);
+}
+
+#[test]
+fn an_absolute_plot_is_refused_and_creates_nothing() {
+    let scratch = Scratch::new("plot-abs");
+    let outside = Scratch::new("plot-abs-target");
+    let target = outside.path().join("made/wave.dat");
+    assert_plot_refused(
+        &target.display().to_string(),
+        &scratch,
+        target.parent().unwrap(),
+    );
+}
+
+#[cfg(unix)]
+#[test]
+fn a_plot_through_a_symlink_out_of_the_sidecar_dir_is_refused() {
+    let scratch = Scratch::new("plot-symlink");
+    let outside = Scratch::new("plot-symlink-target");
+    std::os::unix::fs::symlink(outside.path(), scratch.path().join("link")).expect("symlink");
+    assert_plot_refused("link/made/wave.dat", &scratch, &outside.path().join("made"));
 }

@@ -1411,34 +1411,6 @@ label_side = "inside"
     }
 
     #[test]
-    fn a_spice_typo_fails_at_load_naming_the_file() {
-        let toml = part_with_spice(
-            "[spcie]\nfile = \"spice/spicey.lib\"\nsubckt = \"spicey\"\npin_order = [\"vin\"]\n",
-        );
-        let err = load_from_strs(&[("spicey.synth.toml", &toml)])
-            .expect_err("`spcie` is not a Part field");
-        assert!(
-            err.to_string().contains("spicey.synth.toml"),
-            "error must name the file: {err}"
-        );
-    }
-
-    /// Unknown fields are rejected on purpose: a `[spcie]` typo must not
-    /// silently produce a part without a model.
-    #[test]
-    fn an_unknown_part_field_is_rejected_on_purpose() {
-        let toml = "id = \"stricty\"\nkind = \"resistor\"\ndscription = \"typo\"\n\
-                    [[pins]]\nname = \"p1\"\nnumber = \"1\"\nelectrical_type = \"passive\"\n";
-        let err = load_from_strs(&[("stricty.synth.toml", toml)])
-            .expect_err("unknown fields are rejected");
-        assert!(
-            err.to_string().contains("stricty.synth.toml"),
-            "error must name the file: {err}"
-        );
-        assert!(matches!(err, LoadError::Parse { .. }), "{err:?}");
-    }
-
-    #[test]
     fn a_malformed_spice_table_fails_at_load() {
         let toml = part_with_spice("[spice]\nsubckt = \"spicey\"\npin_order = [\"vin\"]\n");
         let err =

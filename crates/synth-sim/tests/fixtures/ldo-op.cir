@@ -1,6 +1,6 @@
 * Synth simulation: ldo
 V1 n_VIN 0 DC 5e0
-.include "{{MODEL}}"
+{{MODEL}}
 XU1 n_VIN 0 n_VOUT ams1117_3v3 rout=100m
 RR1 n_VOUT 0 1e3
 .control
