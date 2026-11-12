@@ -101,6 +101,13 @@ pub enum LoadError {
 
     #[error("part {path}: invalid [spice] model ({message})")]
     InvalidSpiceModel { path: PathBuf, message: String },
+
+    #[error("part {path}: invalid [pins.drive] on pin `{pin}` ({message})")]
+    InvalidPinDrive {
+        path: PathBuf,
+        pin: String,
+        message: String,
+    },
 }
 
 /// Recursively load every `*.synth.toml` file under `root` into a
@@ -540,6 +547,9 @@ fn validate_part(path: &Path, part: &Part) -> Result<(), LoadError> {
                 }
             }
         }
+        if let Some(drive) = &pin.drive {
+            validate_pin_drive(path, &pin.name, drive)?;
+        }
     }
 
     // Pin-number invariant: if the part references a KiCad stock
@@ -658,6 +668,55 @@ fn check_kicad_pin_roles(part: &Part, path: &Path) -> Result<(), LoadError> {
                 pin.name, pin.electrical_type, types, carries
             ),
         });
+    }
+    Ok(())
+}
+
+/// A drive block is datasheet data: every number must be usable, and the
+/// reference it came from must be recorded.
+fn validate_pin_drive(
+    path: &Path,
+    pin: &str,
+    drive: &crate::part::PinDrive,
+) -> Result<(), LoadError> {
+    let invalid = |message: String| LoadError::InvalidPinDrive {
+        path: path.to_path_buf(),
+        pin: pin.to_string(),
+        message,
+    };
+    if drive
+        .datasheet_ref
+        .as_deref()
+        .is_none_or(|reference| reference.trim().is_empty())
+    {
+        return Err(invalid(
+            "`datasheet_ref` is required; record the datasheet page or table".to_string(),
+        ));
+    }
+    for (label, value) in [
+        ("high_v", drive.high_v),
+        ("low_v", drive.low_v),
+        ("max_source_ma", drive.max_source_ma),
+        ("max_sink_ma", drive.max_sink_ma),
+    ] {
+        if !value.is_finite() {
+            return Err(invalid(format!("`{label}` must be finite")));
+        }
+    }
+    for (label, value) in [
+        ("max_source_ma", drive.max_source_ma),
+        ("max_sink_ma", drive.max_sink_ma),
+    ] {
+        if value <= 0.0 {
+            return Err(invalid(format!("`{label}` must be greater than 0")));
+        }
+    }
+    if let Some(resistance) = drive.output_resistance_ohm {
+        if !resistance.is_finite() || resistance <= 0.0 {
+            return Err(invalid(
+                "`output_resistance_ohm` must be a positive finite number".to_string(),
+            ));
+        }
     }
     Ok(())
 }
@@ -1389,6 +1448,88 @@ label_side = "inside"
             .expect("spice table");
         assert_eq!(spice.file, "spice/does_not_exist.lib");
         assert_eq!(spice.params.get("rout").map(String::as_str), Some("100m"));
+    }
+
+    fn drive_part(drive: &str) -> String {
+        format!(
+            "id = \"drive_ic\"\nkind = \"ic\"\n\
+             [[pins]]\nname = \"gpio5\"\nnumber = \"1\"\nelectrical_type = \"bidirectional\"\n\
+             {drive}"
+        )
+    }
+
+    const COMPLETE_DRIVE: &str = "[pins.drive]\nhigh_v = 3.3\nlow_v = 0.0\n\
+         max_source_ma = 4.0\nmax_sink_ma = 4.0\noutput_resistance_ohm = 25.0\n\
+         datasheet_ref = \"Table 5-1\"\n";
+
+    #[test]
+    fn a_pin_drive_without_datasheet_ref_is_a_load_error_naming_the_pin() {
+        let toml = drive_part(
+            "[pins.drive]\nhigh_v = 3.3\nlow_v = 0.0\nmax_source_ma = 4.0\nmax_sink_ma = 4.0\n",
+        );
+        let error = load_from_strs(&[("drive_ic.synth.toml", &toml)])
+            .expect_err("datasheet_ref is required with drive data");
+        assert!(
+            matches!(&error, LoadError::InvalidPinDrive { pin, .. } if pin == "gpio5"),
+            "{error:?}"
+        );
+        assert!(
+            error.to_string().contains("gpio5") && error.to_string().contains("datasheet_ref"),
+            "{error}"
+        );
+    }
+
+    #[test]
+    fn a_complete_pin_drive_loads_and_preserves_its_values() {
+        let toml = drive_part(COMPLETE_DRIVE);
+        let registry = load_from_strs(&[("drive_ic.synth.toml", &toml)]).expect("valid drive");
+        let drive = registry
+            .lookup("drive_ic")
+            .expect("drive_ic")
+            .find_pin("gpio5")
+            .expect("gpio5")
+            .drive
+            .as_ref()
+            .expect("drive block");
+        assert_eq!(drive.high_v, 3.3);
+        assert_eq!(drive.low_v, 0.0);
+        assert_eq!(drive.max_source_ma, 4.0);
+        assert_eq!(drive.max_sink_ma, 4.0);
+        assert_eq!(drive.output_resistance_ohm, Some(25.0));
+        assert_eq!(drive.datasheet_ref.as_deref(), Some("Table 5-1"));
+    }
+
+    #[test]
+    fn a_pin_drive_with_unusable_numbers_is_a_load_error() {
+        for (label, drive) in [
+            (
+                "non-finite high",
+                COMPLETE_DRIVE.replace("high_v = 3.3", "high_v = nan"),
+            ),
+            (
+                "zero source limit",
+                COMPLETE_DRIVE.replace("max_source_ma = 4.0", "max_source_ma = 0.0"),
+            ),
+            (
+                "negative sink limit",
+                COMPLETE_DRIVE.replace("max_sink_ma = 4.0", "max_sink_ma = -1.0"),
+            ),
+            (
+                "zero output resistance",
+                COMPLETE_DRIVE.replace(
+                    "output_resistance_ohm = 25.0",
+                    "output_resistance_ohm = 0.0",
+                ),
+            ),
+        ] {
+            let toml = drive_part(&drive);
+            let error = load_from_strs(&[("drive_ic.synth.toml", &toml)])
+                .expect_err(&format!("{label} must fail"));
+            assert!(
+                matches!(&error, LoadError::InvalidPinDrive { pin, .. } if pin == "gpio5"),
+                "{label}: {error:?}"
+            );
+        }
     }
 
     #[test]

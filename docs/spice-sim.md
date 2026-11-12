@@ -76,6 +76,15 @@ The v1 shapes are:
   the operating conditions and the datasheet URL. A part without `reviewed_by`
   gets a `# UNREVIEWED` comment, including a part with no `[provenance]` block,
   because the registry entry itself has not been reviewed.
+  When the supply is an output-capable IC pin carrying `[pins.drive]`, the
+  draft writes a `pin` source at `level = "high"` instead of a net source, adds
+  `output_resistance_ohm` to the series resistance in the hand-check, and adds
+  a second `pin_current` measure for the pin's `max_source_ma`. The comments
+  cite the pin, `high_v`, `output_resistance_ohm` when present, and the
+  `datasheet_ref`. The IC is ignored as the supply driver. A pin with no drive
+  data, drive data without `datasheet_ref`, or several driven pins on the net
+  gets no draft and a not-covered line containing `pin has no drive data` (or
+  naming the ambiguity); no value is guessed and no TODO is written for it.
 - **Resistor divider.** The midpoint is measured against
   `Vsupply * Rbottom/(Rtop+Rbottom)` from the two design `value` fields, ±5%.
   No datasheet is required for a design `value`, and the comment names both
@@ -89,18 +98,33 @@ The v1 shapes are:
   swapped R/C (a high-pass with the same corner) does not. The draft drives
   the AC sweep at 1 V for every source, so `vdb(node)` is an absolute gain in
   dB. Derived from this design's values; checks wiring and model, not the
-  value choice.
+  value choice. Every `at_frequency` sits at or above the sweep `start` and
+  below `stop`; the stop point itself is rejected because ngspice cannot
+  interpolate there.
 
 Shape names come from the compiled `Board`: exactly one net must be classified
 as ground. Every TOML number cites its source in the comment above it. A supply
-is the net's declared `power` voltage, or a `PowerOutput` pin that declares an
-explicit `voltage_nominal_v`. A `voltage_max_v` rating is never used as a
-nominal, and `[operating_conditions]` min/max values are ratings rather than a
-rail. A part whose output pin supplies the testbench is replaced by an ideal
-source, and the draft adds it to `ignore` with a comment saying why. Any other
-unused part with no built-in model is also added to `ignore` (still reported on
-stderr as not covered); if an ignored part leaves a net with no DC path,
-`synth sim` reports `E-SYNTH-SIM-008`.
+is the net's declared `power` voltage, a `PowerOutput` pin that declares an
+explicit `voltage_nominal_v`, or exactly one output-capable pin (`output`,
+`three_statable`, an open-drain type or `bidirectional`) that carries
+`[pins.drive]`; the pin supply uses `high_v` and, when present,
+`output_resistance_ohm`. If more than one driven pin sits on the net, the
+supply is ambiguous and none is guessed. A `voltage_max_v` rating is never used
+as a nominal, and `[operating_conditions]` min/max values are ratings rather
+than a rail. A part whose output pin supplies the testbench is replaced by an
+ideal source, and the draft adds it to `ignore` with a comment saying why. Any
+other unused part with no built-in model is also added to `ignore` (still
+reported on stderr as not covered); if an ignored part leaves a net with no DC
+path, `synth sim` reports `E-SYNTH-SIM-008`.
+
+A part with a bad value (an unparseable `value`, or a zero/negative passive) is
+never added to `ignore`: hiding the typo would turn a hard `E-SYNTH-SIM-002`
+into a tempting green run. When an ignored part kills a rail, every passive
+that would otherwise keep that dead rail alive is ignored as a group, so two
+decoupling capacitors on the same dead rail do not keep each other "live". A
+modelled regulator that stays in the deck needs its input driven: when its
+input net has no source and a `power` declaration exists, the draft sources it
+from that voltage; otherwise it writes a `# TODO` for the net.
 
 When a net has no declared supply, the number is never defaulted. If another
 shape drafts at least one measure, the file carries a `# TODO` naming that net
@@ -187,20 +211,95 @@ plot = "wave.dat"
 
 ### `[[source]]`
 
-An independent voltage source from the net to ground.
+A source drives exactly one target: a net with `dc`/`ac`, or an IC pin's
+output with `level`. Mixing the two forms, giving a pin `dc`/`ac`, or giving a
+net a `level` is `E-SYNTH-SIM-007`.
 
-| Field  | Meaning                                                          |
-| ------ | ---------------------------------------------------------------- |
-| `net`  | Synth net to drive. Must exist and must not be the ground net.    |
-| `kind` | Source kind. Only `dc` is accepted today.                         |
-| `dc`   | DC value in volts.                                                |
-| `ac`   | AC magnitude in volts for an `ac` analysis.                       |
+| Field   | Meaning                                                          |
+| ------- | ---------------------------------------------------------------- |
+| `net`   | Synth net to drive. Must exist and must not be the ground net.    |
+| `pin`   | `REF.PIN` of an output pin carrying `[pins.drive]`.              |
+| `level` | `high` or `low` for a pin source. Required with `pin`.            |
+| `kind`  | Source kind. Only `dc` is accepted today; defaults to `dc`.      |
+| `dc`    | DC value in volts. Required for a net source unless `ac` is set.  |
+| `ac`    | AC magnitude in volts for an `ac` analysis.                       |
 
-A source must have at least one of `dc` or `ac`; each present value must be
-finite. `ac` must be non-negative, but a `relative_db` measure needs a source
-with `ac` **greater than 0** (`ac = 0` gives the sweep nothing to excite). A
-source with `ac` but no `dc` emits `V<N> <node> 0 AC <value>`; the DC operating
-point then has no source drive.
+A net source must have at least one of `dc` or `ac`; each present value must
+be finite. `ac` must be non-negative, but a `relative_db` measure needs a
+source with `ac` **greater than 0** (`ac = 0` gives the sweep nothing to
+excite). A source with `ac` but no `dc` emits `V<N> <node> 0 AC <value>`; the
+DC operating point then has no source drive.
+
+A net may be declared by only one source. Two sources that resolve to the same
+design net (net plus pin, or two pins) are `E-SYNTH-SIM-007` naming both source
+descriptions and the net; the second is left out of the deck.
+
+### Driving an IC pin
+
+A registry pin may carry the datasheet's output-drive data:
+
+```toml
+[[pins]]
+name = "gpio5"
+number = "8"
+electrical_type = "bidirectional"
+
+[pins.drive]
+high_v = 3.3                     # output level at no load
+low_v = 0.0
+max_source_ma = 4.0              # datasheet current limits
+max_sink_ma = 4.0
+output_resistance_ohm = 25.0     # optional; absent means an ideal source
+datasheet_ref = "Table 5-1"      # required
+```
+
+The testbench then drives that pin's net at a chosen level:
+
+```toml
+[[source]]
+pin = "U1.gpio5"
+level = "high"
+```
+
+Synth finds the placed part by reference and the pin by name, finds the one net
+the pin is on, and emits a voltage source at `high_v` (or `low_v`). When
+`output_resistance_ohm` is present it emits an internal node plus a series
+resistor (`V<N> vpin_<N> 0 DC …` and `Rpin<N> n_<net> vpin_<N> <rout>`); the
+generated resistor joins the element-name collision check, so a design
+reference that would emit as the same name is an error rather than a silent
+short. Without it the source is ideal: `V<N> n_<net> 0 DC <level voltage>`.
+
+The pin source is treated exactly like a net source by the topology check: it
+is a DC path from its net to ground. An unknown reference, an unknown pin, a
+pin on no net, a pin on the ground net and two sources on one net are all
+`E-SYNTH-SIM-007`. A pin with no `[pins.drive]` block, or a drive block without
+a non-empty `datasheet_ref`, is `E-SYNTH-SIM-002` naming the pin; a missing
+value is never defaulted. The IC that owns the pin must still be listed under
+`ignore` (or carry a `[spice]` model): drive data says what the pin does, not
+how the rest of the IC behaves.
+
+PWM, transient output changes and firmware behaviour are **not** simulated:
+this is one DC operating point at the chosen level. A GPIO that toggles, a
+pin whose level is set by software, and any switching waveform need a future
+transient source; do not read a passing DC check as a timing guarantee.
+
+The matching measure reads the current out of that source in milliamps:
+
+```toml
+[[measure]]
+name = "pin_current"
+kind = "pin_current"
+pin = "U1.gpio5"
+```
+
+There is no `min`, `max`, `node`, `element`, `drop_db` or `at_frequency` on
+this measure: the limit comes from the registry and the source level —
+`max_source_ma` for `level = "high"`, `max_sink_ma` for `level = "low"`. The
+deck saves `@V<N>[i]` and computes `abs(@V<N>[i]) * 1000`. A passing check is
+an informational `E-SYNTH-SIM-004`; a failure is blocking `E-SYNTH-SIM-004`
+naming the pin, the measured milliamps, the datasheet field, the limit and the
+`datasheet_ref`. The measure requires the `op` analysis and a `[[source]]` with
+the same pin; a missing source is `E-SYNTH-SIM-007`.
 
 ### `[analysis]` and `[analysis.ac]`
 
@@ -227,16 +326,21 @@ points_per_decade = 100
 | `points_per_decade` | `100`   | integer from 1 to 1000                |
 
 The emitted command is `ac dec <points> <start> <stop>`, with values as plain
-exponents.
+exponents. The sweep must contain at least two points:
+`points_per_decade * log10(stop/start) >= 1`. A smaller sweep (for example
+`.ac dec 1 10 55`) makes real ngspice 42 hang until the timeout, so it is
+`E-SYNTH-SIM-007` naming the range and telling you to widen the sweep or raise
+`points_per_decade` before any process starts.
 
 ### `[[measure]]`
 
 | Field     | Meaning                                                          |
 | --------- | ---------------------------------------------------------------- |
 | `name`    | Sentinel name: letters, digits, `_`, `-` or `.`. Unique.         |
-| `kind`    | `node_voltage`, `current` or `relative_db`.                      |
+| `kind`    | `node_voltage`, `current`, `relative_db` or `pin_current`.       |
 | `node`    | Synth net name. Required by `node_voltage` and `relative_db`.    |
 | `element` | Synth reference. Required by `current`.                          |
+| `pin`     | `REF.PIN`. Required by `pin_current`.                            |
 | `drop_db` | Relative drop in dB for `relative_db`. Defaults to `3.0`.        |
 | `at_frequency` | Frequency in Hz for an absolute gain on `node_voltage`.     |
 | `min`     | Inclusive lower limit. Optional.                                 |
@@ -253,10 +357,12 @@ Rules per kind:
   echo SYNTH_MEAS passband $&synth_gain0
   ```
 
-  `at_frequency` must be positive and finite, requires the `ac` analysis and a
-  source with `ac` greater than 0, and is rejected on `relative_db` and
-  `current`. The result is `20*log10(|V(node)|)` in dB relative to a 1 V
-  source, so a draft drives the AC source at 1 V.
+  `at_frequency` must be positive and finite, must be at least `start` and less
+  than `stop` (the stop point has no interval, so ngspice cannot interpolate
+  there), requires the `ac` analysis and a source with `ac` greater than 0, and
+  is rejected on `relative_db`, `current` and `pin_current`. The result is
+  `20*log10(|V(node)|)` in dB relative to a 1 V source, so a draft drives the
+  AC source at 1 V.
 - `current` reads a device current after an `op` analysis. It requires
   `element` and rejects `node`, `drop_db` and `at_frequency`. The part must
   have a built-in model: resistors, capacitors and inductors emit
@@ -265,6 +371,16 @@ Rules per kind:
   becomes `DLED1`). An ignored part, an unknown reference, a registry
   subcircuit or an unmodelled part is `E-SYNTH-SIM-007`, because there is no
   built-in device current to read.
+- `pin_current` reads the current out of an IC pin source, in milliamps, after
+  an `op` analysis. It requires a non-empty `pin` (`REF.PIN`) and rejects
+  `node`, `element`, `drop_db`, `at_frequency`, `min` and `max`: the limit is
+  the pin's datasheet `max_source_ma` (level `high`) or `max_sink_ma` (level
+  `low`), never a number in the sidecar. The pin must have a matching
+  `[[source]]`; otherwise the measure is `E-SYNTH-SIM-007`. The deck emits
+  `save all @V<N>[i]` and `let m<index> = abs(@V<N>[i]) * 1000`, so the reported
+  value and the `E-SYNTH-SIM-004` message are milliamps. The failure names the
+  pin, the measured current, the datasheet field and limit, and the
+  `datasheet_ref`; a pass is informational.
 - `relative_db` measures a corner in an `ac` analysis:
 
   ```
@@ -370,6 +486,8 @@ Each simulation failure is a stable code with a page under
 
 ## Not covered
 
+- PWM, GPIO firmware and transient behaviour of an IC pin source: the pin
+  drive is one DC operating point at the chosen level.
 - Verilog-A and encrypted vendor models (ngspice cannot run them; Synth
   reports an error instead of guessing).
 - RF, S-parameter and EMC simulation.
@@ -380,3 +498,11 @@ Each simulation failure is a stable code with a page under
   `[spice] dialect`, because ngspice has one `ngbehavior` setting per run.
 - Transient and DC-sweep analyses, pulse/pwl/sin sources, and expression
   measures.
+
+## Known limits
+
+- A header-looking line inside a `"""` string can cut a measure span short.
+- A kept bad-value part can add extra `E-SYNTH-SIM-008` noise from its ignored
+  neighbours.
+- A ferrite with no value is a hard `E-SYNTH-SIM-002`.
+- An AC draft whose supply is a modelled regulator is skipped.

@@ -689,6 +689,7 @@ mod tests {
             voltage_max_v: None,
             voltage_min_v: None,
             voltage_nominal_v: None,
+            drive: None,
         }
     }
 
@@ -763,6 +764,7 @@ mod tests {
                     voltage_max_v: None,
                     voltage_min_v: None,
                     voltage_nominal_v: None,
+                    drive: None,
                 },
                 Pin {
                     name: "p2".into(),
@@ -775,6 +777,7 @@ mod tests {
                     voltage_max_v: None,
                     voltage_min_v: None,
                     voltage_nominal_v: None,
+                    drive: None,
                 },
             ],
             required_decoupling: vec![],
@@ -892,6 +895,7 @@ mod tests {
             voltage_max_v: None,
             voltage_min_v: None,
             voltage_nominal_v: None,
+            drive: None,
         };
         part.pins = vec![
             power("vdd"),

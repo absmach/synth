@@ -11,7 +11,7 @@ use std::fmt::Write as _;
 
 use synth_ir::PowerDomainKind;
 use synth_ir::{infer_power_domains, Board, Component, ComponentId, Net, NetId, PinId};
-use synth_registry::ElectricalType;
+use synth_registry::{ElectricalType, PinDrive};
 use synth_validate::{parse_capacitance, parse_resistance};
 
 /// A drafted `<design>.sim.toml`, plus everything the draft could not cover.
@@ -106,6 +106,17 @@ struct Supply {
     note: String,
     /// Power-output parts whose pin supplied the net; replaced by the source.
     drivers: Vec<ComponentId>,
+    /// Set when the supply is an IC output pin driven at its high level.
+    pin_drive: Option<PinSupply>,
+}
+
+/// A pin whose `[pins.drive]` data supplies a net in the draft.
+#[derive(Debug, Clone)]
+struct PinSupply {
+    /// `REF.PIN`, e.g. `U1.gpio5`.
+    pin: String,
+    drive: PinDrive,
+    datasheet_ref: String,
 }
 
 #[derive(Debug)]
@@ -115,8 +126,10 @@ struct DraftMeasure {
     kind: &'static str,
     node: Option<String>,
     element: Option<String>,
-    min: f64,
-    max: f64,
+    /// `REF.PIN` for a `pin_current` measure.
+    pin: Option<String>,
+    min: Option<f64>,
+    max: Option<f64>,
     at_frequency: Option<f64>,
     comment: String,
     supply_net: NetId,
@@ -263,12 +276,17 @@ impl<'a> Draft<'a> {
             return;
         };
         let Some(supply) = self.supply(supply_net) else {
-            self.todo_nets.insert(supply_net);
-            self.not_covered.push(format!(
-                "{}, no declared supply on net {}",
-                self.describe(id),
-                toml_string(&supply_name)
-            ));
+            if let Some(reason) = self.pin_supply_issue(supply_net) {
+                self.not_covered
+                    .push(format!("{}, {reason}", self.describe(id)));
+            } else {
+                self.todo_nets.insert(supply_net);
+                self.not_covered.push(format!(
+                    "{}, no declared supply on net {}",
+                    self.describe(id),
+                    toml_string(&supply_name)
+                ));
+            }
             return;
         };
         let Some(conditions) = part.operating_conditions.as_ref() else {
@@ -302,12 +320,20 @@ impl<'a> Draft<'a> {
                 return;
             }
         };
+        // A pin's output resistance is in series with the design resistor, so
+        // the hand-check is I*(R + Rout) + Vf(I) = Vh.
+        let output_resistance = supply
+            .pin_drive
+            .as_ref()
+            .and_then(|pin| pin.drive.output_resistance_ohm)
+            .unwrap_or(0.0);
+        let total_resistance = resistance + output_resistance;
         let expected = if supply.volts <= forward_voltage_v {
             None
         } else {
             crate::diode_forward_current(
                 supply.volts,
-                resistance,
+                total_resistance,
                 forward_voltage_v,
                 forward_current_ma,
             )
@@ -318,7 +344,7 @@ impl<'a> Draft<'a> {
                 self.describe(id),
                 number(supply.volts),
                 number(forward_voltage_v),
-                number(resistance)
+                number(total_resistance)
             ));
             return;
         };
@@ -393,6 +419,28 @@ impl<'a> Draft<'a> {
         );
         let _ = writeln!(comment, "#   current cap: {cap_note}");
         let _ = writeln!(comment, "#   datasheet: {datasheet}");
+        if let Some(pin_supply) = &supply.pin_drive {
+            let _ = writeln!(
+                comment,
+                "#   supply: `{}` high_v = {} V{} (datasheet: {})",
+                pin_supply.pin,
+                number(pin_supply.drive.high_v),
+                pin_supply
+                    .drive
+                    .output_resistance_ohm
+                    .map_or_else(String::new, |r| {
+                        format!(", output_resistance_ohm = {}", number(r))
+                    }),
+                pin_supply.datasheet_ref
+            );
+            let _ = writeln!(
+                comment,
+                "#   hand-check: I*({} + {}) + Vf(I) = {} V.",
+                number(resistance),
+                number(output_resistance),
+                number(supply.volts)
+            );
+        }
         let _ = writeln!(
             comment,
             "#   policy: I*R + Vf0 + N*Vt*ln(I/If0) = Vs gives {} A; ±5% rounded to 3 \
@@ -421,20 +469,81 @@ impl<'a> Draft<'a> {
 
         let name = self.unique("iled");
         self.ignore_driver(supply_net, &supply);
+        let pin_supply = supply.pin_drive.clone();
+        let pin_measure_supply = supply.clone();
         self.measures.push(DraftMeasure {
             analysis: AnalysisKind::Op,
             name,
             kind: "current",
             node: None,
             element: Some(component.refdes.clone()),
-            min,
-            max,
+            pin: None,
+            min: Some(min),
+            max: Some(max),
             at_frequency: None,
             comment,
             supply_net,
             supply,
             sweep: None,
         });
+
+        if let Some(pin_supply) = pin_supply {
+            // One current check per pin, even when several shapes share it.
+            if self.measures.iter().any(|measure| {
+                measure.kind == "pin_current"
+                    && measure.pin.as_deref() == Some(pin_supply.pin.as_str())
+            }) {
+                return;
+            }
+            let mut comment = String::new();
+            let _ = writeln!(
+                comment,
+                "# measure: `{}` output current against its datasheet drive limit.",
+                pin_supply.pin
+            );
+            let _ = writeln!(
+                comment,
+                "#   `[pins.drive]` high_v = {} V, max_source_ma = {} mA{}{}.",
+                number(pin_supply.drive.high_v),
+                number(pin_supply.drive.max_source_ma),
+                pin_supply
+                    .drive
+                    .output_resistance_ohm
+                    .map_or_else(String::new, |r| {
+                        format!(", output_resistance_ohm = {}", number(r))
+                    }),
+                pin_supply
+                    .drive
+                    .output_resistance_ohm
+                    .map_or_else(String::new, |r| format!(
+                        "; I*({} + {}) + Vf(I) = {} V",
+                        number(resistance),
+                        number(r),
+                        number(pin_supply.drive.high_v)
+                    ))
+            );
+            let _ = writeln!(
+                comment,
+                "#   datasheet: {}; the limit and drive levels come from the registry.",
+                pin_supply.datasheet_ref
+            );
+            let name = self.unique("pin_current");
+            self.measures.push(DraftMeasure {
+                analysis: AnalysisKind::Op,
+                name,
+                kind: "pin_current",
+                node: None,
+                element: None,
+                pin: Some(pin_supply.pin),
+                min: None,
+                max: None,
+                at_frequency: None,
+                comment,
+                supply_net,
+                supply: pin_measure_supply.clone(),
+                sweep: None,
+            });
+        }
     }
 
     fn detect_dividers(&mut self) {
@@ -479,11 +588,12 @@ impl<'a> Draft<'a> {
             let [first, second] = resistors.as_slice() else {
                 return;
             };
-            // Two parallel legs feeding a load is not a divider; without one
-            // leg on ground there is no divider shape to report.
-            let grounded = self.other_net_of(*first, net_id) == Some(self.ground)
-                || self.other_net_of(*second, net_id) == Some(self.ground);
-            if !grounded {
+            // Exactly one leg to ground makes a divider; two pull-downs on
+            // one driven net are not a divider and must not be reported as
+            // one.
+            let first_ground = self.other_net_of(*first, net_id) == Some(self.ground);
+            let second_ground = self.other_net_of(*second, net_id) == Some(self.ground);
+            if first_ground == second_ground {
                 return;
             }
             let mut drivers = Vec::new();
@@ -648,8 +758,9 @@ impl<'a> Draft<'a> {
             kind: "node_voltage",
             node: Some(net.name.clone()),
             element: None,
-            min,
-            max,
+            pin: None,
+            min: Some(min),
+            max: Some(max),
             at_frequency: None,
             comment,
             supply_net,
@@ -808,6 +919,13 @@ impl<'a> Draft<'a> {
             ));
             return;
         };
+        if supply.pin_drive.is_some() {
+            self.not_covered.push(format!(
+                "{}, an AC sweep from an IC pin source is not drafted",
+                self.describe(resistor)
+            ));
+            return;
+        }
         if supply.volts <= 0.0 {
             self.not_covered.push(format!(
                 "{}, no positive declared supply on net {}",
@@ -900,8 +1018,9 @@ impl<'a> Draft<'a> {
             kind: "relative_db",
             node: Some(net.name.clone()),
             element: None,
-            min,
-            max,
+            pin: None,
+            min: Some(min),
+            max: Some(max),
             at_frequency: None,
             comment,
             supply_net: input_net,
@@ -934,8 +1053,9 @@ impl<'a> Draft<'a> {
             kind: "node_voltage",
             node: Some(net.name.clone()),
             element: None,
-            min: -0.5,
-            max: 0.0,
+            pin: None,
+            min: Some(-0.5),
+            max: Some(0.0),
             at_frequency: Some(passband_frequency),
             comment: passband_comment,
             supply_net: input_net,
@@ -966,8 +1086,9 @@ impl<'a> Draft<'a> {
             kind: "node_voltage",
             node: Some(net.name.clone()),
             element: None,
-            min: -23.0,
-            max: -17.0,
+            pin: None,
+            min: Some(-23.0),
+            max: Some(-17.0),
             at_frequency: Some(stopband_frequency),
             comment: stopband_comment,
             supply_net: input_net,
@@ -1246,13 +1367,16 @@ impl<'a> Draft<'a> {
             let name = self.design.net(net_id).map_or("", |net| net.name.as_str());
             let _ = writeln!(out);
             let _ = writeln!(out, "# source: {}", supply.note);
-            if ac {
-                let _ = writeln!(out, "#   ac drive: 1 V, so vdb(node) is gain in dB.");
-            }
             let _ = writeln!(out, "[[source]]");
+            if let Some(pin_supply) = &supply.pin_drive {
+                let _ = writeln!(out, "pin = {}", toml_string(&pin_supply.pin));
+                let _ = writeln!(out, "level = \"high\"");
+                continue;
+            }
             let _ = writeln!(out, "net = {}", toml_string(name));
             let _ = writeln!(out, "kind = \"dc\"");
             if ac {
+                let _ = writeln!(out, "#   ac drive: 1 V, so vdb(node) is gain in dB.");
                 let _ = writeln!(out, "ac = 1.0");
             } else {
                 // The limits use the full supply; a rounded source would move
@@ -1297,11 +1421,18 @@ impl<'a> Draft<'a> {
             if let Some(element) = &measure.element {
                 let _ = writeln!(out, "element = {}", toml_string(element));
             }
+            if let Some(pin) = &measure.pin {
+                let _ = writeln!(out, "pin = {}", toml_string(pin));
+            }
             if let Some(at_frequency) = measure.at_frequency {
                 let _ = writeln!(out, "at_frequency = {}", float(at_frequency));
             }
-            let _ = writeln!(out, "min = {}", float(measure.min));
-            let _ = writeln!(out, "max = {}", float(measure.max));
+            if let Some(min) = measure.min {
+                let _ = writeln!(out, "min = {}", float(min));
+            }
+            if let Some(max) = measure.max {
+                let _ = writeln!(out, "max = {}", float(max));
+            }
         }
         Some(out)
     }
@@ -1375,6 +1506,10 @@ impl<'a> Draft<'a> {
             .map_or("", |net| net.name.as_str())
     }
 
+    /// The declared or pin-derived supply on a net, in precedence order: the
+    /// net's `power` voltage, a `PowerOutput` nominal, then exactly one
+    /// output-capable pin carrying `[pins.drive]`.
+    #[allow(clippy::too_many_lines)]
     fn supply(&self, net_id: NetId) -> Option<Supply> {
         let design = self.design;
         let net = design.net(net_id)?;
@@ -1391,6 +1526,7 @@ impl<'a> Draft<'a> {
                     number(volts)
                 ),
                 drivers: Vec::new(),
+                pin_drive: None,
             });
         }
 
@@ -1411,29 +1547,151 @@ impl<'a> Draft<'a> {
                 candidates.push((volts, endpoint.component, endpoint.pin));
             }
         }
-        let first = *candidates.first()?;
-        if candidates.iter().any(|candidate| candidate.0 != first.0) {
-            return None;
+        if let Some(&first) = candidates.first() {
+            if candidates.iter().any(|candidate| candidate.0 != first.0) {
+                return None;
+            }
+            let mut drivers = Vec::new();
+            for candidate in &candidates {
+                if !drivers.contains(&candidate.1) {
+                    drivers.push(candidate.1);
+                }
+            }
+            let component = design.component(first.1)?;
+            let pin = design.pin(first.1, first.2)?;
+            return Some(Supply {
+                volts: first.0,
+                note: format!(
+                    "net {} is driven by `{}.{}`, a power output that declares {} V; \
+                     the part is modelled as an ideal source here",
+                    toml_string(&net.name),
+                    component.refdes,
+                    pin.name,
+                    number(first.0)
+                ),
+                drivers,
+                pin_drive: None,
+            });
         }
-        let mut drivers = Vec::new();
-        for candidate in &candidates {
-            if !drivers.contains(&candidate.1) {
-                drivers.push(candidate.1);
+
+        let mut driven = Vec::new();
+        for endpoint in &net.endpoints {
+            let Some(component) = design.component(endpoint.component) else {
+                continue;
+            };
+            let Some(pin) = design.pin(endpoint.component, endpoint.pin) else {
+                continue;
+            };
+            if !(pin.electrical_type.is_output_driver()
+                || pin.electrical_type == ElectricalType::Bidirectional)
+            {
+                continue;
+            }
+            let Some(drive) = pin.drive.as_ref() else {
+                continue;
+            };
+            driven.push((
+                component.id,
+                format!("{}.{}", component.refdes, pin.name),
+                drive.clone(),
+            ));
+        }
+        // Several driven pins on one net are ambiguous; never guess one.
+        let (component, pin, drive) = match driven.as_slice() {
+            [only] => (only.0, only.1.clone(), only.2.clone()),
+            _ => return None,
+        };
+        let datasheet_ref = drive
+            .datasheet_ref
+            .as_deref()
+            .map(str::trim)
+            .filter(|reference| !reference.is_empty())?
+            .to_string();
+        Some(Supply {
+            volts: drive.high_v,
+            note: format!(
+                "net {} is driven by `{pin}`, an output pin with `[pins.drive]` high_v = {} V{} \
+                 (datasheet: {}); the pin is replaced by the testbench source here",
+                toml_string(&net.name),
+                number(drive.high_v),
+                drive
+                    .output_resistance_ohm
+                    .map_or_else(String::new, |r| format!(
+                        " and output_resistance_ohm = {}",
+                        number(r)
+                    )),
+                datasheet_ref
+            ),
+            drivers: vec![component],
+            pin_drive: Some(PinSupply {
+                pin,
+                drive,
+                datasheet_ref,
+            }),
+        })
+    }
+
+    /// Why a supply net that looks pin-driven has no usable supply. The LED
+    /// shape reports this instead of writing a TODO, because the fix is
+    /// registry drive data, not a `power` declaration.
+    fn pin_supply_issue(&self, net_id: NetId) -> Option<String> {
+        let design = self.design;
+        let net = design.net(net_id)?;
+        let mut driven = Vec::new();
+        let mut missing_datasheet = Vec::new();
+        let mut output_pin = None;
+        for endpoint in &net.endpoints {
+            let Some(component) = design.component(endpoint.component) else {
+                continue;
+            };
+            let Some(pin) = design.pin(endpoint.component, endpoint.pin) else {
+                continue;
+            };
+            if !(pin.electrical_type.is_output_driver()
+                || pin.electrical_type == ElectricalType::Bidirectional)
+            {
+                continue;
+            }
+            let label = format!("{}.{}", component.refdes, pin.name);
+            match pin.drive.as_ref() {
+                Some(drive)
+                    if drive
+                        .datasheet_ref
+                        .as_deref()
+                        .map(str::trim)
+                        .is_some_and(|reference| !reference.is_empty()) =>
+                {
+                    driven.push(label);
+                }
+                Some(_) => missing_datasheet.push(label),
+                None => {
+                    if output_pin.is_none() {
+                        output_pin = Some(label);
+                    }
+                }
             }
         }
-        let component = design.component(first.1)?;
-        let pin = design.pin(first.1, first.2)?;
-        Some(Supply {
-            volts: first.0,
-            note: format!(
-                "net {} is driven by `{}.{}`, a power output that declares {} V; \
-                 the part is modelled as an ideal source here",
+        if driven.len() > 1 {
+            return Some(format!(
+                "more than one output pin on net {} carries `[pins.drive]` ({}); the supply \
+                 is ambiguous",
                 toml_string(&net.name),
-                component.refdes,
-                pin.name,
-                number(first.0)
-            ),
-            drivers,
+                driven.join(", ")
+            ));
+        }
+        if let Some(label) = missing_datasheet.first() {
+            return Some(format!(
+                "pin has no drive data for `{label}` on net {}: its `[pins.drive]` block has \
+                 no `datasheet_ref`",
+                toml_string(&net.name)
+            ));
+        }
+        output_pin.map(|label| {
+            format!(
+                "pin has no drive data for `{label}` on net {}; add a `[pins.drive]` block \
+                 with the datasheet levels, limits and `datasheet_ref`",
+                toml_string(&net.name)
+            )
         })
     }
 

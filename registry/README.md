@@ -70,6 +70,40 @@ The `capabilities` list is the _semantic_ layer. A capability like
 [`PinCapability::required_electrical_type`](../crates/synth-registry/src/capability.rs));
 the loader rejects parts that violate this.
 
+### Pin drive data
+
+An output-capable pin (output, three-statable, open-drain, bidirectional) may
+carry the datasheet's DC output-drive data:
+
+```toml
+[[pins]]
+name = "gpio5"
+number = "8"
+electrical_type = "bidirectional"
+
+[pins.drive]
+high_v = 3.3                     # volts, output level at no load
+low_v = 0.0                      # volts, output level at no load
+max_source_ma = 4.0              # milliamps, datasheet source limit
+max_sink_ma = 4.0                # milliamps, datasheet sink limit
+output_resistance_ohm = 25.0     # ohms, optional
+datasheet_ref = "Table 5-1"      # required, page or table
+```
+
+All four numeric fields are required. `output_resistance_ohm` is optional: when
+absent the simulation treats the pin as an ideal source; when present it is a
+series resistance. `datasheet_ref` is required whenever the block is present,
+and a drive block without one is a load error naming the pin. The loader also
+rejects non-finite levels, non-positive current limits and a non-positive
+`output_resistance_ohm`. A missing value is never defaulted.
+
+Every value must come from the part's datasheet, with the page or table
+recorded in `datasheet_ref`. Do not guess, and do not copy another part's
+numbers. Only DC drive is modelled: PWM, transient output changes and firmware
+behaviour are not simulated (see [`docs/spice-sim.md`](../docs/spice-sim.md)).
+Adding drive data to a shipped part is a data task done with the datasheet in
+hand; tests use fixture parts with made-up numbers.
+
 ### SPICE models
 
 A part can attach a SPICE subcircuit with an optional `[spice]` table:

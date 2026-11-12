@@ -18,6 +18,14 @@ carry a registry `[spice]` model. Without one it uses the plain built-in diode
 model when it declares the forward fields, which does not represent zener or
 TVS behaviour.
 
+A testbench `[[source]]` with `pin = "U1.gpio5"` is also reported here when the
+pin has no usable drive data. The title is `pin has no drive data` and the
+message names the pin. Either the part has no `[pins.drive]` block on that pin,
+or the block has no non-empty `datasheet_ref`; a missing value is never
+defaulted. Add the datasheet `high_v`, `low_v`, `max_source_ma`, `max_sink_ma`,
+optional `output_resistance_ohm` and the `datasheet_ref` to the registry part
+(see [`registry/README.md`](../../registry/README.md#pin-drive-data)).
+
 The value is part of the model: an absent, unparseable, zero or negative
 resistor/capacitor/inductor value is reported here too. `4k7` is not accepted;
 write `4.7k`. Inductance values are in henries (`10uH`, `4.7nH`).

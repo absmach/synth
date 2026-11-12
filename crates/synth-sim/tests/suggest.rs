@@ -150,7 +150,7 @@ fn the_divider_example_gets_its_hand_written_limits() {
     assert_eq!(testbench.ground, "GND");
     assert!(testbench.analysis.op);
     assert_eq!(testbench.source.len(), 1);
-    assert_eq!(testbench.source[0].net, "VCC");
+    assert_eq!(testbench.source[0].net.as_deref(), Some("VCC"));
     assert_eq!(testbench.source[0].dc, Some(12.0));
     assert_same_limits("divider", &testbench);
     assert!(
@@ -173,7 +173,7 @@ fn the_led_example_gets_its_hand_written_limits_and_cites_the_datasheet() {
     let testbench = synth_sim::Testbench::from_toml(&toml).expect("generated sidecar parses");
     assert_eq!(testbench.ground, "GND");
     assert!(testbench.analysis.op);
-    assert_eq!(testbench.source[0].net, "VCC");
+    assert_eq!(testbench.source[0].net.as_deref(), Some("VCC"));
     assert_eq!(testbench.source[0].dc, Some(5.0));
     assert_same_limits("led", &testbench);
     let iled = measure(&testbench, "iled");
@@ -407,7 +407,7 @@ fn a_supply_may_come_from_a_power_output_pin() {
     let (toml, not_covered) = suggestion(&board);
 
     let testbench = synth_sim::Testbench::from_toml(&toml).expect("suggested sidecar parses");
-    assert_eq!(testbench.source[0].net, "VOUT");
+    assert_eq!(testbench.source[0].net.as_deref(), Some("VOUT"));
     assert_eq!(testbench.source[0].dc, Some(3.3));
     assert!(toml.contains("power output that declares 3.3 V"), "{toml}");
     assert!(
@@ -915,6 +915,64 @@ board "led-board" {
 }
 "#;
 
+/// A GPIO drives the LED through its series resistor; there is no `power`
+/// declaration on the driven net.
+const GPIO_LED_BOARD: &str = r#"
+board "gpio-led" {
+  layers 2
+  component U1: mcu "rp2350"
+  component R1: resistor "r_generic_0805" value "330"
+  component LED1: led "ltst_c190krkt"
+  net "VCC" { U1.gpio5, R1.p1 }
+  net "GND" { U1.gnd, LED1.cathode }
+  connect R1.p2 -> LED1.anode as "MID"
+}
+"#;
+
+fn fixture_led(registry: &mut synth_registry::Registry) {
+    let mut led = registry
+        .lookup("ltst_c190krkt")
+        .expect("ltst_c190krkt")
+        .clone();
+    let conditions = led
+        .operating_conditions
+        .as_mut()
+        .expect("operating conditions");
+    conditions.forward_voltage_v = Some(2.9);
+    conditions.forward_current_ma = Some(5.0);
+    registry.insert(led);
+}
+
+fn fixture_drive() -> synth_registry::PinDrive {
+    synth_registry::PinDrive {
+        high_v: 3.3,
+        low_v: 0.0,
+        max_source_ma: 4.0,
+        max_sink_ma: 4.0,
+        output_resistance_ohm: Some(25.0),
+        datasheet_ref: Some("Table 5-1".to_string()),
+    }
+}
+
+fn fixture_mcu(registry: &mut synth_registry::Registry, drive: Option<synth_registry::PinDrive>) {
+    let mut mcu = registry.lookup("rp2350").expect("rp2350").clone();
+    let pin = mcu
+        .pins
+        .iter_mut()
+        .find(|pin| pin.name == "gp5")
+        .expect("gp5");
+    pin.name = "gpio5".to_string();
+    pin.drive = drive;
+    registry.insert(mcu);
+}
+
+fn gpio_led_board(drive: Option<synth_registry::PinDrive>) -> synth_ir::Board {
+    board_with_registry(GPIO_LED_BOARD, |registry| {
+        fixture_led(registry);
+        fixture_mcu(registry, drive);
+    })
+}
+
 fn led_board_with(volts: &str, resistor: &str) -> synth_ir::Board {
     board(&format!(
         r#"
@@ -947,6 +1005,244 @@ fn a_suggested_led_testbench_passes_a_330_ohm_5v_board() {
     let report = simulate_suggested(&board, &testbench, &ngspice);
 
     assert!(report.passed(), "{:?}", report.measures);
+}
+
+/// A GPIO with drive data becomes a `pin` source at its high level, and the
+/// draft adds the pin's current limit as a second measure.
+#[test]
+fn a_gpio_driven_led_drafts_a_pin_source_and_pin_current_check() {
+    let board = gpio_led_board(Some(fixture_drive()));
+
+    let (toml, not_covered) = suggestion(&board);
+
+    assert!(toml.contains("pin = \"U1.gpio5\""), "{toml}");
+    assert!(toml.contains("level = \"high\""), "{toml}");
+    assert!(toml.contains("U1.gpio5"), "{toml}");
+    assert!(toml.contains("high_v"), "{toml}");
+    assert!(toml.contains("max_source_ma"), "{toml}");
+    assert!(toml.contains("output_resistance_ohm"), "{toml}");
+    assert!(toml.contains("Table 5-1"), "{toml}");
+    assert!(toml.contains("kind = \"pin_current\""), "{toml}");
+    assert!(toml.contains("ignore = [\"U1\"]"), "{toml}");
+    assert!(
+        !toml.contains("net = \"VCC\"\nkind"),
+        "a pin source must not also emit a net source:\n{toml}"
+    );
+
+    let testbench = synth_sim::Testbench::from_toml(&toml).expect("generated sidecar parses");
+    let source = &testbench.source[0];
+    assert_eq!(source.pin.as_deref(), Some("U1.gpio5"));
+    assert_eq!(source.level, Some(synth_sim::SourceLevel::High));
+    assert_eq!(source.net, None);
+    assert_eq!(source.dc, None);
+    let pin_current = measure(&testbench, "pin_current");
+    assert_eq!(pin_current.kind, synth_sim::MeasureKind::PinCurrent);
+    assert_eq!(pin_current.pin.as_deref(), Some("U1.gpio5"));
+    assert_eq!(pin_current.min, None);
+    assert_eq!(pin_current.max, None);
+    assert!(
+        not_covered.iter().any(|line| line.contains("U1")),
+        "{not_covered:?}"
+    );
+
+    let Some(ngspice) = real_ngspice() else {
+        eprintln!("{}", real_ngspice_support::SKIP_MESSAGE);
+        return;
+    };
+    let report = simulate_suggested(&board, &testbench, &ngspice);
+    assert!(report.passed(), "diagnostics: {:?}", report.diagnostics);
+    let pin_current = report
+        .measures
+        .iter()
+        .find(|measure| measure.name == "pin_current")
+        .expect("pin_current result");
+    assert_eq!(pin_current.max, Some(4.0));
+    assert!(
+        (0.8..1.8).contains(&pin_current.value),
+        "drafted pin current {} should be about 1.3 mA",
+        pin_current.value
+    );
+}
+
+/// 33 ohms draws about 6.6 mA from the same pin, so the drafted testbench
+/// fails on its own pin limit.
+#[test]
+fn a_gpio_driven_led_with_33_ohms_fails_its_pin_current_check() {
+    let Some(ngspice) = real_ngspice() else {
+        eprintln!("{}", real_ngspice_support::SKIP_MESSAGE);
+        return;
+    };
+    let board = board_with_registry(
+        &GPIO_LED_BOARD.replace("value \"330\"", "value \"33\""),
+        |registry| {
+            fixture_led(registry);
+            fixture_mcu(registry, Some(fixture_drive()));
+        },
+    );
+    let (toml, _) = suggestion(&board);
+    let testbench = synth_sim::Testbench::from_toml(&toml).expect("generated sidecar parses");
+
+    let report = simulate_suggested(&board, &testbench, &ngspice);
+
+    assert!(!report.passed(), "{:?}", report.measures);
+    let message = report
+        .diagnostics
+        .iter()
+        .find(|diagnostic| {
+            diagnostic.code == synth_sim::E_SYNTH_SIM_004
+                && diagnostic
+                    .message
+                    .as_deref()
+                    .is_some_and(|message| message.contains("pin limit"))
+        })
+        .and_then(|diagnostic| diagnostic.message.as_deref())
+        .unwrap_or_default();
+    assert!(message.contains("U1.gpio5"), "{message}");
+    assert!(message.contains("max_source_ma"), "{message}");
+    assert!(message.contains("Table 5-1"), "{message}");
+    assert!(message.contains("above"), "{message}");
+}
+
+/// Two LEDs sharing one GPIO net get one `pin_current` check, not two.
+#[test]
+fn one_pin_supplies_two_leds_but_only_one_pin_current_check() {
+    let board = board_with_registry(
+        r#"
+board "two-led-gpio" {
+  layers 2
+  component U1: mcu "rp2350"
+  component R1: resistor "r_generic_0805" value "330"
+  component R2: resistor "r_generic_0805" value "330"
+  component LED1: led "ltst_c190krkt"
+  component LED2: led "ltst_c190krkt"
+  net "VCC" { U1.gpio5, R1.p1, R2.p1 }
+  net "GND" { U1.gnd, LED1.cathode, LED2.cathode }
+  connect R1.p2 -> LED1.anode as "MID1"
+  connect R2.p2 -> LED2.anode as "MID2"
+}
+"#,
+        |registry| {
+            fixture_led(registry);
+            fixture_mcu(registry, Some(fixture_drive()));
+        },
+    );
+
+    let (toml, _) = suggestion(&board);
+    let testbench = synth_sim::Testbench::from_toml(&toml).expect("generated sidecar parses");
+
+    assert_eq!(
+        testbench
+            .measure
+            .iter()
+            .filter(|measure| measure.kind == synth_sim::MeasureKind::PinCurrent)
+            .count(),
+        1,
+        "{toml}"
+    );
+}
+
+#[test]
+fn a_pin_supply_without_drive_data_is_reported_not_defaulted() {
+    let board = gpio_led_board(None);
+
+    let suggestion = synth_sim::suggest_testbench(&board);
+
+    assert!(suggestion.toml.is_none(), "{:?}", suggestion.toml);
+    let line = suggestion
+        .not_covered
+        .iter()
+        .find(|line| line.contains("pin has no drive data"))
+        .unwrap_or_else(|| panic!("no drive-data line in {:?}", suggestion.not_covered));
+    assert!(line.contains("U1.gpio5"), "{line}");
+}
+
+#[test]
+fn a_pin_supply_without_a_datasheet_ref_is_reported_not_defaulted() {
+    let mut drive = fixture_drive();
+    drive.datasheet_ref = None;
+    let board = gpio_led_board(Some(drive));
+
+    let suggestion = synth_sim::suggest_testbench(&board);
+
+    assert!(suggestion.toml.is_none(), "{:?}", suggestion.toml);
+    let line = suggestion
+        .not_covered
+        .iter()
+        .find(|line| line.contains("pin has no drive data"))
+        .unwrap_or_else(|| panic!("no drive-data line in {:?}", suggestion.not_covered));
+    assert!(
+        line.contains("U1.gpio5") && line.contains("datasheet_ref"),
+        "{line}"
+    );
+}
+
+/// Two driven pins on the supply net are ambiguous; the draft names both and
+/// never guesses one.
+#[test]
+fn two_driven_pins_on_the_supply_net_are_reported_as_ambiguous() {
+    let board = board_with_registry(
+        &GPIO_LED_BOARD.replace(
+            "net \"VCC\" { U1.gpio5, R1.p1 }",
+            "net \"VCC\" { U1.gpio5, U1.gpio6, R1.p1 }",
+        ),
+        |registry| {
+            fixture_led(registry);
+            let mut mcu = registry.lookup("rp2350").expect("rp2350").clone();
+            for (from, to) in [("gp5", "gpio5"), ("gp6", "gpio6")] {
+                let pin = mcu
+                    .pins
+                    .iter_mut()
+                    .find(|pin| pin.name == from)
+                    .expect(from);
+                pin.name = to.to_string();
+                pin.drive = Some(fixture_drive());
+            }
+            registry.insert(mcu);
+        },
+    );
+
+    let suggestion = synth_sim::suggest_testbench(&board);
+
+    assert!(suggestion.toml.is_none(), "{:?}", suggestion.toml);
+    let line = suggestion
+        .not_covered
+        .iter()
+        .find(|line| line.contains("ambiguous"))
+        .unwrap_or_else(|| panic!("no ambiguity line in {:?}", suggestion.not_covered));
+    assert!(
+        line.contains("U1.gpio5") && line.contains("U1.gpio6"),
+        "{line}"
+    );
+}
+
+/// Two pull-downs on a regulator output are not a divider, so they must not
+/// be reported as "divider R1/R2".
+#[test]
+fn two_pull_downs_on_a_regulator_output_are_not_a_divider() {
+    let board = board(
+        r#"
+board "two-pull-downs" {
+  layers 2
+  component U1: regulator "ams1117_3v3"
+  component R1: resistor "r_generic_0805" value "10k"
+  component R2: resistor "r_generic_0805" value "10k"
+  net "VIN" { U1.vin }
+  net "GND" { U1.gnd, R1.p2, R2.p2 }
+  net "VOUT" { U1.vout, R1.p1, R2.p1 }
+}
+"#,
+    );
+
+    let suggestion = synth_sim::suggest_testbench(&board);
+
+    assert!(
+        !suggestion
+            .not_covered
+            .iter()
+            .any(|line| line.contains("divider")),
+        "{:?}",
+        suggestion.not_covered
+    );
 }
 
 #[test]

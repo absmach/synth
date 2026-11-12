@@ -2641,6 +2641,7 @@ mod channel_router_tests {
                     voltage_max_v: None,
                     voltage_min_v: None,
                     voltage_nominal_v: None,
+                    drive: None,
                 },
                 Pin {
                     name: "p2".to_string(),
@@ -2653,6 +2654,7 @@ mod channel_router_tests {
                     voltage_max_v: None,
                     voltage_min_v: None,
                     voltage_nominal_v: None,
+                    drive: None,
                 },
             ],
             required_decoupling: Vec::new(),
@@ -2931,6 +2933,7 @@ mod drc_tests {
                     voltage_max_v: None,
                     voltage_min_v: None,
                     voltage_nominal_v: None,
+                    drive: None,
                 },
                 Pin {
                     name: "p2".to_string(),
@@ -2943,6 +2946,7 @@ mod drc_tests {
                     voltage_max_v: None,
                     voltage_min_v: None,
                     voltage_nominal_v: None,
+                    drive: None,
                 },
             ],
             required_decoupling: Vec::new(),
@@ -3163,6 +3167,7 @@ mod net_termination_tests {
                     voltage_max_v: None,
                     voltage_min_v: None,
                     voltage_nominal_v: None,
+                    drive: None,
                 },
                 Pin {
                     name: "p2".to_string(),
@@ -3175,6 +3180,7 @@ mod net_termination_tests {
                     voltage_max_v: None,
                     voltage_min_v: None,
                     voltage_nominal_v: None,
+                    drive: None,
                 },
             ],
             required_decoupling: Vec::new(),

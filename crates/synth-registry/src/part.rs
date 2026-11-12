@@ -355,6 +355,32 @@ pub struct Pin {
     /// Nominal operating voltage for this pin (e.g., `3.3` or `5.0`).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub voltage_nominal_v: Option<f64>,
+
+    /// Datasheet output-drive levels and current limits, for an output pin
+    /// the simulation may drive as a DC source.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub drive: Option<PinDrive>,
+}
+
+/// Datasheet output-drive data for an IC pin. Every numeric field is required;
+/// `datasheet_ref` is required whenever the block is present.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct PinDrive {
+    /// High output level at no load, in volts.
+    pub high_v: f64,
+    /// Low output level at no load, in volts.
+    pub low_v: f64,
+    /// Maximum current the pin may source, in milliamps.
+    pub max_source_ma: f64,
+    /// Maximum current the pin may sink, in milliamps.
+    pub max_sink_ma: f64,
+    /// Series output resistance, in ohms. Absent means an ideal source.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub output_resistance_ohm: Option<f64>,
+    /// Datasheet page or table the values came from.
+    #[serde(default)]
+    pub datasheet_ref: Option<String>,
 }
 
 impl Pin {

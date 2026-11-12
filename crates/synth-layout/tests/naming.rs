@@ -33,6 +33,7 @@ fn pin(name: &str, caps: &[PinCapability]) -> RegPin {
         voltage_max_v: None,
         voltage_min_v: None,
         voltage_nominal_v: None,
+        drive: None,
     }
 }
 

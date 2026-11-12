@@ -1051,6 +1051,7 @@ fn multi_unit_rails_split_is_an_error() {
             voltage_max_v: None,
             voltage_min_v: None,
             voltage_nominal_v: None,
+            drive: None,
         }
     }
 

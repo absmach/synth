@@ -457,6 +457,115 @@ fn patched_ams1117(patch: impl FnOnce(&mut synth_registry::SpiceModel)) -> synth
     })
 }
 
+/// A GPIO drives an LED through a series resistor; the MCU itself is ignored.
+const GPIO_LED: &str = r#"
+board "gpio-led" {
+  layers 2
+  component U1: mcu "rp2350"
+  component R1: resistor "r_generic_0805" value "330"
+  component LED1: led "ltst_c190krkt"
+  net "VCC" { U1.gpio5, R1.p1 }
+  net "GND" { U1.gnd, LED1.cathode }
+  connect R1.p2 -> LED1.anode as "MID"
+}
+"#;
+
+/// A GPIO sinks current from a 3.3 V rail through a resistor.
+const GPIO_SINK: &str = r#"
+board "gpio-sink" {
+  layers 2
+  component U1: mcu "rp2350"
+  component R1: resistor "r_generic_0805" value "1k"
+  net "RAIL" { R1.p1 }
+  net "DRIVE" { R1.p2, U1.gpio5 }
+  net "GND" { U1.gnd }
+}
+"#;
+
+const PIN_CURRENT_TB: &str = r#"
+ground = "GND"
+ignore = ["U1"]
+
+[[source]]
+pin = "U1.gpio5"
+level = "high"
+
+[analysis]
+op = true
+
+[[measure]]
+name = "pin_current"
+kind = "pin_current"
+pin = "U1.gpio5"
+"#;
+
+const PIN_SINK_TB: &str = r#"
+ground = "GND"
+ignore = ["U1"]
+
+[[source]]
+net = "RAIL"
+kind = "dc"
+dc = 3.3
+
+[[source]]
+pin = "U1.gpio5"
+level = "low"
+
+[analysis]
+op = true
+
+[[measure]]
+name = "pin_current"
+kind = "pin_current"
+pin = "U1.gpio5"
+"#;
+
+fn fixture_led(registry: &mut synth_registry::Registry) {
+    let mut led = registry
+        .lookup("ltst_c190krkt")
+        .expect("ltst_c190krkt")
+        .clone();
+    let conditions = led
+        .operating_conditions
+        .as_mut()
+        .expect("operating conditions");
+    conditions.forward_voltage_v = Some(2.9);
+    conditions.forward_current_ma = Some(5.0);
+    registry.insert(led);
+}
+
+fn fixture_drive() -> synth_registry::PinDrive {
+    synth_registry::PinDrive {
+        high_v: 3.3,
+        low_v: 0.0,
+        max_source_ma: 4.0,
+        max_sink_ma: 4.0,
+        output_resistance_ohm: Some(25.0),
+        datasheet_ref: Some("Table 5-1".to_string()),
+    }
+}
+
+/// Rename the fixture MCU's `gp5` to `gpio5` and attach the given drive data.
+fn fixture_mcu(registry: &mut synth_registry::Registry, drive: Option<synth_registry::PinDrive>) {
+    let mut mcu = registry.lookup("rp2350").expect("rp2350").clone();
+    let pin = mcu
+        .pins
+        .iter_mut()
+        .find(|pin| pin.name == "gp5")
+        .expect("gp5");
+    pin.name = "gpio5".to_string();
+    pin.drive = drive;
+    registry.insert(mcu);
+}
+
+fn gpio_led_board(drive: Option<synth_registry::PinDrive>) -> synth_ir::Board {
+    board_with_registry(GPIO_LED, |registry| {
+        fixture_led(registry);
+        fixture_mcu(registry, drive);
+    })
+}
+
 fn assert_explained(diagnostics: &[synth_diagnostics::Diagnostic]) {
     for diagnostic in diagnostics {
         assert_eq!(
@@ -536,6 +645,343 @@ fn led_matches_real_ngspice() {
     assert!(
         (current - expected).abs() / expected < 0.02,
         "LED current {current} differs from {expected}"
+    );
+}
+
+/// A pin source is a voltage source at the pin's level, in series with the
+/// datasheet output resistance when the drive block declares one.
+#[test]
+fn a_pin_source_emits_its_level_and_output_resistance() {
+    let board = gpio_led_board(Some(fixture_drive()));
+    let testbench = testbench(PIN_CURRENT_TB);
+
+    let deck = synth_sim::emit_netlist(&board, &testbench).expect("deck emits");
+
+    assert!(deck.contains("V1 vpin_1 0 DC 3.3e0"), "deck:\n{deck}");
+    assert!(deck.contains("Rpin1 n_VCC vpin_1 2.5e1"), "deck:\n{deck}");
+    assert!(deck.contains("save all @V1[i]"), "deck:\n{deck}");
+    assert!(
+        deck.contains("let m0 = abs(@V1[i]) * 1000"),
+        "deck:\n{deck}"
+    );
+    assert!(
+        deck.contains("echo SYNTH_MEAS pin_current $&m0"),
+        "deck:\n{deck}"
+    );
+}
+
+#[test]
+fn a_pin_source_without_output_resistance_is_an_ideal_source() {
+    let mut drive = fixture_drive();
+    drive.output_resistance_ohm = None;
+    let board = gpio_led_board(Some(drive));
+    let testbench = testbench(PIN_CURRENT_TB);
+
+    let deck = synth_sim::emit_netlist(&board, &testbench).expect("deck emits");
+
+    assert!(deck.contains("V1 n_VCC 0 DC 3.3e0"), "deck:\n{deck}");
+    assert!(!deck.contains("Rpin"), "deck:\n{deck}");
+}
+
+#[test]
+fn a_generated_pin_resistor_cannot_collide_with_a_design_refdes() {
+    let board = board_with_registry(
+        r#"
+board "pin-collision" {
+  layers 2
+  component U1: mcu "rp2350"
+  component pin1: resistor "r_generic_0805" value "1k"
+  net "VCC" { U1.gpio5, pin1.p1 }
+  net "GND" { U1.gnd, pin1.p2 }
+}
+"#,
+        |registry| fixture_mcu(registry, Some(fixture_drive())),
+    );
+    let testbench = testbench(PIN_CURRENT_TB);
+
+    let diagnostics = synth_sim::emit_netlist(&board, &testbench).expect_err("element collision");
+
+    assert!(
+        diagnostics.iter().any(|diagnostic| {
+            diagnostic.code == synth_sim::E_SYNTH_SIM_007
+                && diagnostic.message.as_deref().is_some_and(|message| {
+                    message.contains("Rpin1")
+                        && (message.contains("collide") || message.contains("both emit as `Rpin1`"))
+                })
+        }),
+        "{diagnostics:?}"
+    );
+}
+
+/// The fixture LED is quoted at 2.9 V / 5 mA; 3.3 V through 330 + 25 ohms
+/// lands near 1.3 mA, inside the 4 mA source limit.
+#[test]
+fn a_pin_current_measure_passes_on_real_ngspice() {
+    let Some(ngspice) = real_ngspice() else {
+        eprintln!("{}", real_ngspice_support::SKIP_MESSAGE);
+        return;
+    };
+    let board = gpio_led_board(Some(fixture_drive()));
+    let testbench = testbench(PIN_CURRENT_TB);
+
+    let report = synth_sim::simulate(&board, &testbench, &options(&ngspice));
+
+    assert!(report.passed(), "diagnostics: {:?}", report.diagnostics);
+    let pin_current = report
+        .measures
+        .iter()
+        .find(|measure| measure.name == "pin_current")
+        .expect("pin_current result");
+    assert_eq!(pin_current.max, Some(4.0));
+    assert_eq!(pin_current.min, None);
+    assert!(
+        (0.8..1.8).contains(&pin_current.value),
+        "pin current {} should be about 1.3 mA",
+        pin_current.value
+    );
+}
+
+/// 33 + 25 ohms draws about 6.6 mA, so the same pin limit fails with `-004`
+/// naming the pin, the measured current, the datasheet field and reference.
+#[test]
+fn an_overdriven_pin_current_fails_on_real_ngspice() {
+    let Some(ngspice) = real_ngspice() else {
+        eprintln!("{}", real_ngspice_support::SKIP_MESSAGE);
+        return;
+    };
+    let board = board_with_registry(
+        &GPIO_LED.replace("value \"330\"", "value \"33\""),
+        |registry| {
+            fixture_led(registry);
+            fixture_mcu(registry, Some(fixture_drive()));
+        },
+    );
+    assert_eq!(board.components.len(), 3);
+    let testbench = testbench(PIN_CURRENT_TB);
+
+    let report = synth_sim::simulate(&board, &testbench, &options(&ngspice));
+
+    assert!(!report.passed(), "{:?}", report.measures);
+    let diagnostic = report
+        .diagnostics
+        .iter()
+        .find(|diagnostic| diagnostic.code == synth_sim::E_SYNTH_SIM_004)
+        .expect("-004");
+    let message = diagnostic.message.as_deref().unwrap_or_default();
+    for expected in ["U1.gpio5", "max_source_ma", "Table 5-1", "6."] {
+        assert!(message.contains(expected), "{message}");
+    }
+    assert!(message.contains("above"), "{message}");
+}
+
+/// A low level sinks current to ground: 3.3 V through 1 k + 25 ohms is
+/// about 3.2 mA, inside the 4 mA sink limit.
+#[test]
+fn a_low_pin_source_sinks_current_on_real_ngspice() {
+    let Some(ngspice) = real_ngspice() else {
+        eprintln!("{}", real_ngspice_support::SKIP_MESSAGE);
+        return;
+    };
+    let board = board_with_registry(GPIO_SINK, |registry| {
+        fixture_mcu(registry, Some(fixture_drive()));
+    });
+    let testbench = testbench(PIN_SINK_TB);
+
+    let report = synth_sim::simulate(&board, &testbench, &options(&ngspice));
+
+    assert!(report.passed(), "diagnostics: {:?}", report.diagnostics);
+    let pin_current = report
+        .measures
+        .iter()
+        .find(|measure| measure.name == "pin_current")
+        .expect("pin_current result");
+    assert_eq!(pin_current.max, Some(4.0));
+    assert!(
+        (2.5..3.5).contains(&pin_current.value),
+        "pin sink current {} should be about 3.2 mA",
+        pin_current.value
+    );
+}
+
+#[test]
+fn a_low_pin_source_reports_the_sink_limit_on_real_ngspice() {
+    let Some(ngspice) = real_ngspice() else {
+        eprintln!("{}", real_ngspice_support::SKIP_MESSAGE);
+        return;
+    };
+    let board = board_with_registry(
+        &GPIO_SINK.replace("value \"1k\"", "value \"330\""),
+        |registry| {
+            fixture_mcu(registry, Some(fixture_drive()));
+        },
+    );
+    let testbench = testbench(PIN_SINK_TB);
+
+    let report = synth_sim::simulate(&board, &testbench, &options(&ngspice));
+
+    assert!(!report.passed(), "{:?}", report.measures);
+    let message = report
+        .diagnostics
+        .iter()
+        .find(|diagnostic| diagnostic.code == synth_sim::E_SYNTH_SIM_004)
+        .and_then(|diagnostic| diagnostic.message.as_deref())
+        .unwrap_or_default();
+    assert!(message.contains("U1.gpio5"), "{message}");
+    assert!(message.contains("max_sink_ma"), "{message}");
+    assert!(message.contains("Table 5-1"), "{message}");
+    assert!(message.contains("above"), "{message}");
+}
+
+#[test]
+fn a_pin_source_without_drive_data_gives_002() {
+    let board = gpio_led_board(None);
+    let testbench = testbench(PIN_CURRENT_TB);
+
+    let diagnostics = synth_sim::emit_netlist(&board, &testbench).expect_err("no drive data");
+
+    assert_explained(&diagnostics);
+    let diagnostic = diagnostics
+        .iter()
+        .find(|diagnostic| diagnostic.code == synth_sim::E_SYNTH_SIM_002)
+        .expect("-002");
+    assert_eq!(diagnostic.title, "pin has no drive data", "{diagnostic:?}");
+    let message = diagnostic.message.as_deref().unwrap_or_default();
+    assert!(message.contains("U1.gpio5"), "{message}");
+    assert!(
+        message.contains("pin has no drive data in the registry"),
+        "{message}"
+    );
+    assert!(message.contains("[pins.drive]"), "{message}");
+}
+
+#[test]
+fn a_pin_source_without_a_datasheet_ref_gives_002() {
+    let mut drive = fixture_drive();
+    drive.datasheet_ref = None;
+    let board = gpio_led_board(Some(drive));
+    let testbench = testbench(PIN_CURRENT_TB);
+
+    let diagnostics = synth_sim::emit_netlist(&board, &testbench).expect_err("no datasheet_ref");
+
+    let message = diagnostics
+        .iter()
+        .find(|diagnostic| diagnostic.code == synth_sim::E_SYNTH_SIM_002)
+        .and_then(|diagnostic| diagnostic.message.as_deref())
+        .unwrap_or_default();
+    assert!(message.contains("U1.gpio5"), "{message}");
+    assert!(message.contains("datasheet_ref"), "{message}");
+}
+
+#[test]
+fn an_unknown_pin_source_refdes_or_pin_gives_007() {
+    let board = gpio_led_board(Some(fixture_drive()));
+    for (label, pin) in [("unknown part", "U9.gpio5"), ("unknown pin", "U1.gpio9")] {
+        let testbench = testbench(&PIN_CURRENT_TB.replace("U1.gpio5", pin));
+        let diagnostics = synth_sim::emit_netlist(&board, &testbench).expect_err(label);
+        assert!(
+            diagnostics.iter().any(|diagnostic| {
+                diagnostic.code == synth_sim::E_SYNTH_SIM_007
+                    && diagnostic
+                        .message
+                        .as_deref()
+                        .is_some_and(|message| message.contains(pin))
+            }),
+            "{label}: {diagnostics:?}"
+        );
+    }
+}
+
+#[test]
+fn a_pin_source_on_an_unconnected_pin_gives_007() {
+    let board = board_with_registry(&GPIO_LED.replace("U1.gpio5, ", ""), |registry| {
+        fixture_led(registry);
+        fixture_mcu(registry, Some(fixture_drive()));
+    });
+    let testbench = testbench(PIN_CURRENT_TB);
+
+    let diagnostics = synth_sim::emit_netlist(&board, &testbench).expect_err("unconnected pin");
+
+    assert!(
+        diagnostics.iter().any(|diagnostic| {
+            diagnostic.code == synth_sim::E_SYNTH_SIM_007
+                && diagnostic.message.as_deref().is_some_and(|message| {
+                    message.contains("U1.gpio5") && message.contains("not connected to a net")
+                })
+        }),
+        "{diagnostics:?}"
+    );
+}
+
+/// Two sources that resolve to the same net would fight each other in the
+/// deck, so the second is dropped and both are named.
+#[test]
+fn two_sources_on_one_net_give_007_naming_both_and_the_net() {
+    let board = gpio_led_board(Some(fixture_drive()));
+    let net_and_pin = PIN_CURRENT_TB.replace(
+        "[[source]]\npin = \"U1.gpio5\"\nlevel = \"high\"",
+        "[[source]]\nnet = \"VCC\"\nkind = \"dc\"\ndc = 5.0\n\n\
+         [[source]]\npin = \"U1.gpio5\"\nlevel = \"high\"",
+    );
+    let diagnostics =
+        synth_sim::emit_netlist(&board, &testbench(&net_and_pin)).expect_err("net + pin");
+    assert!(
+        diagnostics.iter().any(|diagnostic| {
+            diagnostic.code == synth_sim::E_SYNTH_SIM_007
+                && diagnostic.message.as_deref().is_some_and(|message| {
+                    message.contains("net `VCC`")
+                        && message.contains("pin `U1.gpio5`")
+                        && message.contains("both resolve to net `VCC`")
+                })
+        }),
+        "{diagnostics:?}"
+    );
+
+    // A duplicate net source is already a validation error before emission;
+    // the emission check covers two different source targets resolving to one
+    // deck net (net + pin, pin + pin).
+}
+
+/// Two driven pins on one net are ambiguous too.
+#[test]
+fn two_pin_sources_on_one_net_give_007() {
+    let board = board_with_registry(
+        &GPIO_LED.replace(
+            "net \"VCC\" { U1.gpio5, R1.p1 }",
+            "net \"VCC\" { U1.gpio5, U1.gpio6, R1.p1 }",
+        ),
+        |registry| {
+            fixture_led(registry);
+            let mut mcu = registry.lookup("rp2350").expect("rp2350").clone();
+            for (from, to) in [("gp5", "gpio5"), ("gp6", "gpio6")] {
+                let pin = mcu
+                    .pins
+                    .iter_mut()
+                    .find(|pin| pin.name == from)
+                    .expect(from);
+                pin.name = to.to_string();
+                pin.drive = Some(fixture_drive());
+            }
+            registry.insert(mcu);
+        },
+    );
+    let testbench = testbench(&PIN_CURRENT_TB.replace(
+        "[[source]]\npin = \"U1.gpio5\"\nlevel = \"high\"",
+        "[[source]]\npin = \"U1.gpio5\"\nlevel = \"high\"\n\n\
+         [[source]]\npin = \"U1.gpio6\"\nlevel = \"high\"",
+    ));
+
+    let diagnostics = synth_sim::emit_netlist(&board, &testbench).expect_err("pin + pin");
+
+    assert!(
+        diagnostics.iter().any(|diagnostic| {
+            diagnostic.code == synth_sim::E_SYNTH_SIM_007
+                && diagnostic.message.as_deref().is_some_and(|message| {
+                    message.contains("pin `U1.gpio5`")
+                        && message.contains("pin `U1.gpio6`")
+                        && message.contains("both resolve to net `VCC`")
+                })
+        }),
+        "{diagnostics:?}"
     );
 }
 
@@ -2587,6 +3033,165 @@ fn tb_with(analysis: &str, measure: &str) -> String {
     )
 }
 
+fn source_tb(sources: &str) -> String {
+    format!(
+        "ground = \"GND\"\n\n{sources}\n[analysis]\nop = true\n\n\
+         [[measure]]\nname = \"v\"\nkind = \"node_voltage\"\nnode = \"MID\"\n"
+    )
+}
+
+/// A source drives exactly one target: a net with `dc`/`ac`, or a pin with a
+/// `level`. The drive levels come from the registry, never from the sidecar.
+#[test]
+fn a_source_drives_either_a_net_or_a_pin() {
+    for (label, sources) in [
+        (
+            "pin without level",
+            "[[source]]\npin = \"U1.gpio5\"",
+        ),
+        (
+            "level without a pin",
+            "[[source]]\nnet = \"VCC\"\nkind = \"dc\"\ndc = 5.0\nlevel = \"high\"",
+        ),
+        (
+            "net and pin",
+            "[[source]]\nnet = \"VCC\"\npin = \"U1.gpio5\"\nkind = \"dc\"\ndc = 5.0\nlevel = \"high\"",
+        ),
+        (
+            "pin with dc",
+            "[[source]]\npin = \"U1.gpio5\"\nlevel = \"high\"\ndc = 3.3",
+        ),
+        (
+            "pin with ac",
+            "[[source]]\npin = \"U1.gpio5\"\nlevel = \"high\"\nac = 1.0",
+        ),
+        (
+            "neither net nor pin",
+            "[[source]]\nkind = \"dc\"\ndc = 5.0",
+        ),
+        (
+            "empty pin",
+            "[[source]]\npin = \"\"\nlevel = \"high\"",
+        ),
+        (
+            "pin without a dot",
+            "[[source]]\npin = \"U1\"\nlevel = \"high\"",
+        ),
+        (
+            "empty refdes",
+            "[[source]]\npin = \".gpio5\"\nlevel = \"high\"",
+        ),
+        (
+            "empty pin name",
+            "[[source]]\npin = \"U1.\"\nlevel = \"high\"",
+        ),
+        (
+            "duplicate pin",
+            "[[source]]\npin = \"U1.gpio5\"\nlevel = \"high\"\n\n\
+             [[source]]\npin = \"U1.gpio5\"\nlevel = \"low\"",
+        ),
+        (
+            "duplicate net",
+            "[[source]]\nnet = \"VCC\"\nkind = \"dc\"\ndc = 5.0\n\n\
+             [[source]]\nnet = \"VCC\"\nkind = \"dc\"\ndc = 3.3",
+        ),
+    ] {
+        let error = synth_sim::Testbench::from_toml(&source_tb(sources)).expect_err(label);
+        assert_eq!(error.code, synth_sim::E_SYNTH_SIM_007, "{label}: {error:?}");
+    }
+
+    let duplicate = synth_sim::Testbench::from_toml(&source_tb(
+        "[[source]]\nnet = \"VCC\"\nkind = \"dc\"\ndc = 5.0\n\n\
+         [[source]]\nnet = \"VCC\"\nkind = \"dc\"\ndc = 3.3",
+    ))
+    .expect_err("duplicate net");
+    assert!(
+        duplicate
+            .message
+            .as_deref()
+            .is_some_and(|message| message.contains("VCC") && message.contains("declared twice")),
+        "{duplicate:?}"
+    );
+
+    let pin = synth_sim::Testbench::from_toml(&source_tb(
+        "[[source]]\npin = \"U1.gpio5\"\nkind = \"dc\"\nlevel = \"high\"\ndc = 3.3",
+    ))
+    .expect_err("pin with dc");
+    assert!(
+        pin.message
+            .as_deref()
+            .is_some_and(|message| message.contains("U1.gpio5") && message.contains("dc")),
+        "{pin:?}"
+    );
+
+    let valid = source_tb("[[source]]\npin = \"U1.gpio5\"\nlevel = \"high\"");
+    synth_sim::Testbench::from_toml(&valid).expect("a pin source with a level is valid");
+}
+
+/// The stop point itself has no interval; a point below the sweep start does,
+/// so only the at-or-above-stop message carries the hint.
+#[test]
+fn the_stop_point_hint_only_applies_at_or_above_stop() {
+    let ac = "[analysis.ac]\nstart = 10\nstop = 1000";
+    for (label, frequency, has_hint) in [
+        ("below start", 1.0, false),
+        ("exactly stop", 1000.0, true),
+        ("above stop", 2000.0, true),
+    ] {
+        let text = tb_with(
+            ac,
+            &format!(
+                "[[measure]]\nname = \"g\"\nkind = \"node_voltage\"\nnode = \"MID\"\n\
+                 at_frequency = {frequency}"
+            ),
+        )
+        .replace("dc = 5.0", "dc = 5.0\nac = 1.0");
+        let error = synth_sim::Testbench::from_toml(&text).expect_err(label);
+        let message = error.message.as_deref().unwrap_or_default();
+        assert_eq!(
+            message.contains("(the stop point has no interval)"),
+            has_hint,
+            "{label}: {message}"
+        );
+    }
+}
+
+/// Less than one sweep point makes real ngspice 42 hang until the timeout.
+/// Reject it at load time with the range, before starting the process.
+#[test]
+fn an_ac_sweep_with_fewer_than_two_points_is_rejected() {
+    for (label, analysis, range) in [
+        (
+            "one point in a decade and a half",
+            "[analysis.ac]\nstart = 10\nstop = 55\npoints_per_decade = 1",
+            "10 to 55",
+        ),
+        (
+            "ten points over a tenth of a decade",
+            "[analysis.ac]\nstart = 10\nstop = 11\npoints_per_decade = 10",
+            "10 to 11",
+        ),
+    ] {
+        let text = tb_with(
+            analysis,
+            "[[measure]]\nname = \"f\"\nkind = \"relative_db\"\nnode = \"MID\"",
+        )
+        .replace("dc = 5.0", "dc = 5.0\nac = 1.0");
+        let error = synth_sim::Testbench::from_toml(&text).expect_err(label);
+        assert_eq!(error.code, synth_sim::E_SYNTH_SIM_007, "{label}");
+        let message = error.message.as_deref().unwrap_or_default();
+        assert!(message.contains(range), "{label}: {message}");
+        assert!(message.contains("ngspice hangs"), "{label}: {message}");
+    }
+
+    let valid = tb_with(
+        "[analysis.ac]\nstart = 10\nstop = 100\npoints_per_decade = 1",
+        "[[measure]]\nname = \"f\"\nkind = \"relative_db\"\nnode = \"MID\"",
+    )
+    .replace("dc = 5.0", "dc = 5.0\nac = 1.0");
+    synth_sim::Testbench::from_toml(&valid).expect("one full decade has two points");
+}
+
 #[test]
 fn a_relative_db_measure_requires_the_ac_analysis() {
     let error = synth_sim::Testbench::from_toml(&tb_with(
@@ -2673,9 +3278,19 @@ fn a_measure_target_must_match_its_kind() {
             "[[measure]]\nname = \"m\"\nkind = \"node_voltage\"",
         ),
         (
+            "node_voltage with pin",
+            op,
+            "[[measure]]\nname = \"m\"\nkind = \"node_voltage\"\nnode = \"MID\"\npin = \"U1.gpio5\"",
+        ),
+        (
             "relative_db with element",
             ac,
             "[[measure]]\nname = \"m\"\nkind = \"relative_db\"\nnode = \"MID\"\nelement = \"R1\"",
+        ),
+        (
+            "relative_db with pin",
+            ac,
+            "[[measure]]\nname = \"m\"\nkind = \"relative_db\"\nnode = \"MID\"\npin = \"U1.gpio5\"",
         ),
         (
             "relative_db with zero drop",
@@ -2696,6 +3311,41 @@ fn a_measure_target_must_match_its_kind() {
             "current with drop_db",
             op,
             "[[measure]]\nname = \"m\"\nkind = \"current\"\nelement = \"R1\"\ndrop_db = 3.0",
+        ),
+        (
+            "current with pin",
+            op,
+            "[[measure]]\nname = \"m\"\nkind = \"current\"\nelement = \"R1\"\npin = \"U1.gpio5\"",
+        ),
+        (
+            "pin_current without pin",
+            op,
+            "[[measure]]\nname = \"m\"\nkind = \"pin_current\"",
+        ),
+        (
+            "pin_current with node",
+            op,
+            "[[measure]]\nname = \"m\"\nkind = \"pin_current\"\npin = \"U1.gpio5\"\nnode = \"MID\"",
+        ),
+        (
+            "pin_current with min",
+            op,
+            "[[measure]]\nname = \"m\"\nkind = \"pin_current\"\npin = \"U1.gpio5\"\nmin = 0.0",
+        ),
+        (
+            "pin_current with max",
+            op,
+            "[[measure]]\nname = \"m\"\nkind = \"pin_current\"\npin = \"U1.gpio5\"\nmax = 4.0",
+        ),
+        (
+            "pin_current with at_frequency",
+            op,
+            "[[measure]]\nname = \"m\"\nkind = \"pin_current\"\npin = \"U1.gpio5\"\nat_frequency = 100.0",
+        ),
+        (
+            "pin_current on ac",
+            ac,
+            "[[measure]]\nname = \"m\"\nkind = \"pin_current\"\npin = \"U1.gpio5\"",
         ),
     ] {
         let error = synth_sim::Testbench::from_toml(&tb_with(analysis, measure)).expect_err(label);

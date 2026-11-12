@@ -75,12 +75,22 @@ pub struct TestbenchOptions {
     pub plot: Option<String>,
 }
 
-/// An independent source added by the testbench.
+/// An independent source added by the testbench. It drives either a net
+/// (`dc`/`ac`) or an IC pin's output level (`level`, with the voltage coming
+/// from the pin's `[pins.drive]` data).
 #[derive(Debug, Clone, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Source {
     /// Synth net name the source drives.
-    pub net: String,
+    #[serde(default)]
+    pub net: Option<String>,
+    /// `REF.PIN` whose output drive supplies the net, e.g. `U1.gpio5`.
+    #[serde(default)]
+    pub pin: Option<String>,
+    /// Output level for a pin source.
+    #[serde(default)]
+    pub level: Option<SourceLevel>,
+    #[serde(default)]
     pub kind: SourceKind,
     /// DC value in volts.
     #[serde(default)]
@@ -90,10 +100,28 @@ pub struct Source {
     pub ac: Option<f64>,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum SourceKind {
+    #[default]
     Dc,
+}
+
+/// The output level a pin source drives.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum SourceLevel {
+    High,
+    Low,
+}
+
+impl SourceLevel {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::High => "high",
+            Self::Low => "low",
+        }
+    }
 }
 
 /// The analysis the deck runs.
@@ -142,6 +170,9 @@ pub struct Measure {
     /// Synth reference of the part whose current is measured.
     #[serde(default)]
     pub element: Option<String>,
+    /// `REF.PIN` whose output current is measured by `pin_current`.
+    #[serde(default)]
+    pub pin: Option<String>,
     /// Relative-dB drop for `relative_db`. Defaults to 3.0.
     #[serde(default)]
     pub drop_db: Option<f64>,
@@ -216,6 +247,9 @@ pub enum MeasureKind {
     NodeVoltage,
     Current,
     RelativeDb,
+    /// The current out of an IC pin, against its `[pins.drive]` limit.
+    #[serde(alias = "pin_current_limit")]
+    PinCurrent,
 }
 
 impl Testbench {
@@ -298,6 +332,16 @@ impl Testbench {
                     "`[analysis.ac] points_per_decade` must be between 1 and 1000",
                 ));
             }
+            // ngspice hangs on a sweep with less than one point in it, e.g.
+            // `.ac dec 1 10 55`. Reject it before starting the run.
+            if f64::from(ac.points_per_decade) * (ac.stop / ac.start).log10() < 1.0 {
+                return Err(testbench_error(format!(
+                    "`[analysis.ac]` sweep {} to {} with {} points per decade has fewer than \
+                     two points; ngspice hangs on it. Widen the sweep or raise \
+                     `points_per_decade`.",
+                    ac.start, ac.stop, ac.points_per_decade
+                )));
+            }
         }
         if let Some(plot) = &self.options.plot {
             if plot.trim().is_empty() {
@@ -334,37 +378,92 @@ impl Testbench {
         }
 
         let mut names = HashSet::new();
+        let mut source_nets = HashSet::new();
+        let mut source_pins = HashSet::new();
         for source in &self.source {
-            if source.net.trim().is_empty() {
-                return Err(testbench_error("source net is empty"));
-            }
-            reject_newline("net", &source.net)?;
-            if source.dc.is_none() && source.ac.is_none() {
-                return Err(testbench_error(format!(
-                    "source on net `{}` has neither a `dc` nor an `ac` value",
-                    source.net
-                )));
-            }
-            if let Some(dc) = source.dc {
-                if !dc.is_finite() {
+            match (source.net.as_deref(), source.pin.as_deref()) {
+                (Some(net), None) => {
+                    if net.trim().is_empty() {
+                        return Err(testbench_error("source net is empty"));
+                    }
+                    reject_newline("net", net)?;
+                    if source.level.is_some() {
+                        return Err(testbench_error(format!(
+                            "source on net `{net}` has a `level` but no `pin`; `level` only \
+                             applies to a pin source"
+                        )));
+                    }
+                    if !source_nets.insert(net) {
+                        return Err(testbench_error(format!(
+                            "source net `{net}` is declared twice"
+                        )));
+                    }
+                    if source.dc.is_none() && source.ac.is_none() {
+                        return Err(testbench_error(format!(
+                            "source on net `{net}` has neither a `dc` nor an `ac` value"
+                        )));
+                    }
+                    if let Some(dc) = source.dc {
+                        if !dc.is_finite() {
+                            return Err(testbench_error(format!(
+                                "source on net `{net}` has a non-finite `dc` value"
+                            )));
+                        }
+                    }
+                    if let Some(ac) = source.ac {
+                        if !ac.is_finite() {
+                            return Err(testbench_error(format!(
+                                "source on net `{net}` has a non-finite `ac` value"
+                            )));
+                        }
+                        if ac < 0.0 {
+                            return Err(testbench_error(format!(
+                                "source on net `{net}` has a negative `ac` value"
+                            )));
+                        }
+                    }
+                }
+                (None, Some(pin)) => {
+                    if pin.trim().is_empty() {
+                        return Err(testbench_error("source pin is empty"));
+                    }
+                    reject_newline("pin", pin)?;
+                    let Some((refdes, pin_name)) = pin.split_once('.') else {
+                        return Err(testbench_error(format!(
+                            "source pin `{pin}` must be `REF.PIN`, for example `U1.gpio5`"
+                        )));
+                    };
+                    if refdes.is_empty() || pin_name.is_empty() {
+                        return Err(testbench_error(format!(
+                            "source pin `{pin}` must be `REF.PIN` with both halves non-empty"
+                        )));
+                    }
+                    if source.level.is_none() {
+                        return Err(testbench_error(format!(
+                            "source pin `{pin}` has no `level`; use `level = \"high\"` or \
+                             `level = \"low\"`"
+                        )));
+                    }
+                    if source.dc.is_some() || source.ac.is_some() {
+                        return Err(testbench_error(format!(
+                            "source pin `{pin}` must not have a `dc` or `ac` value; the \
+                             voltage comes from the pin's `[pins.drive]` data"
+                        )));
+                    }
+                    if !source_pins.insert(pin) {
+                        return Err(testbench_error(format!(
+                            "source pin `{pin}` is declared twice"
+                        )));
+                    }
+                }
+                (Some(net), Some(pin)) => {
                     return Err(testbench_error(format!(
-                        "source on net `{}` has a non-finite `dc` value",
-                        source.net
+                        "source has both `net` (`{net}`) and `pin` (`{pin}`); a source drives \
+                         exactly one"
                     )));
                 }
-            }
-            if let Some(ac) = source.ac {
-                if !ac.is_finite() {
-                    return Err(testbench_error(format!(
-                        "source on net `{}` has a non-finite `ac` value",
-                        source.net
-                    )));
-                }
-                if ac < 0.0 {
-                    return Err(testbench_error(format!(
-                        "source on net `{}` has a negative `ac` value",
-                        source.net
-                    )));
+                (None, None) => {
+                    return Err(testbench_error("source must have a `net` or a `pin`"));
                 }
             }
         }
@@ -405,6 +504,15 @@ impl Testbench {
                             measure,
                             format!(
                                 "measure `{}` reads a node and must not have an `element`",
+                                measure.name
+                            ),
+                        ));
+                    }
+                    if measure.pin.is_some() {
+                        return Err(invalid_measure(
+                            measure,
+                            format!(
+                                "measure `{}` reads a node and must not have a `pin`",
                                 measure.name
                             ),
                         ));
@@ -462,6 +570,15 @@ impl Testbench {
                             ),
                         ));
                     }
+                    if measure.pin.is_some() {
+                        return Err(invalid_measure(
+                            measure,
+                            format!(
+                                "measure `{}` is a current measure and must not have a `pin`",
+                                measure.name
+                            ),
+                        ));
+                    }
                     if measure.drop_db.is_some() {
                         return Err(invalid_measure(
                             measure,
@@ -481,6 +598,41 @@ impl Testbench {
                         ));
                     }
                 }
+                MeasureKind::PinCurrent => {
+                    match measure.pin.as_deref() {
+                        Some(pin) if !pin.trim().is_empty() => {
+                            if let Err(diagnostic) = reject_newline("pin", pin) {
+                                return Err(at_measure(diagnostic, measure));
+                            }
+                        }
+                        _ => {
+                            return Err(invalid_measure(
+                                measure,
+                                format!("measure `{}` has an empty pin", measure.name),
+                            ));
+                        }
+                    }
+                    for (field, present) in [
+                        ("node", measure.node.is_some()),
+                        ("element", measure.element.is_some()),
+                        ("drop_db", measure.drop_db.is_some()),
+                        ("at_frequency", measure.at_frequency.is_some()),
+                        ("min", measure.min.is_some()),
+                        ("max", measure.max.is_some()),
+                    ] {
+                        if present {
+                            return Err(invalid_measure(
+                                measure,
+                                format!(
+                                    "measure `{}` is a pin_current measure and must not have \
+                                     `{field}`; its limit comes from the pin's \
+                                     `[pins.drive]` data",
+                                    measure.name
+                                ),
+                            ));
+                        }
+                    }
+                }
             }
             if let Some(at_frequency) = measure.at_frequency {
                 if !at_frequency.is_finite() || at_frequency <= 0.0 {
@@ -496,11 +648,16 @@ impl Testbench {
                     // ngspice cannot interpolate at the last sweep point
                     // (`find(AT) : out of interval`), so stop itself is out.
                     if at_frequency < ac.start || at_frequency >= ac.stop {
+                        let suffix = if at_frequency >= ac.stop {
+                            " (the stop point has no interval)"
+                        } else {
+                            ""
+                        };
                         return Err(invalid_measure(
                             measure,
                             format!(
                                 "measure `{}` reads at {at_frequency} Hz, outside the ac sweep \
-                                 {}-{} Hz (the stop point has no interval)",
+                                 {}-{} Hz{suffix}",
                                 measure.name, ac.start, ac.stop
                             ),
                         ));
@@ -705,7 +862,12 @@ pub fn sidecar_path(design: &Path) -> PathBuf {
 /// diagnostic, never a silent pass.
 #[allow(clippy::too_many_lines)]
 pub fn simulate(design: &Board, testbench: &Testbench, options: &SimOptions) -> SimReport {
-    let (deck, dialect, plot) = match emit_deck(
+    let EmittedDeck {
+        deck,
+        dialect,
+        plot,
+        pin_limits,
+    } = match emit_deck(
         design,
         testbench,
         options.design_path.as_deref(),
@@ -800,6 +962,42 @@ pub fn simulate(design: &Board, testbench: &Testbench, options: &SimOptions) -> 
     let mut diagnostics = Vec::new();
     for measure in &testbench.measure {
         let value = values[measure.name.as_str()];
+        if measure.kind == MeasureKind::PinCurrent {
+            let pin = measure.pin.as_deref().unwrap_or_default();
+            let Some(limit) = pin_limits.get(pin) else {
+                // Emission already checked every pin_current against its
+                // source; keep a report instead of panicking if that changes.
+                diagnostics.push(with_location_span(
+                    testbench_error(format!(
+                        "measure `{}` pin `{pin}` has no matching `[[source]]`",
+                        measure.name
+                    )),
+                    options.testbench_path.as_deref(),
+                    measure.span,
+                ));
+                continue;
+            };
+            measures.push(MeasureResult {
+                name: measure.name.clone(),
+                value,
+                min: None,
+                max: Some(limit.limit_ma),
+            });
+            let diagnostic = if matches!(
+                limit_outcome(None, Some(limit.limit_ma), value),
+                LimitOutcome::Pass
+            ) {
+                pin_current_info(&measure.name, value, limit)
+            } else {
+                pin_current_error(&measure.name, value, limit)
+            };
+            diagnostics.push(with_location_span(
+                diagnostic,
+                options.testbench_path.as_deref(),
+                measure.span,
+            ));
+            continue;
+        }
         let result = MeasureResult {
             name: measure.name.clone(),
             value,
@@ -1104,6 +1302,42 @@ fn limit_info(name: &str, value: f64) -> Diagnostic {
         .build()
 }
 
+/// A pin source's derived current limit. The sidecar never declares it; the
+/// registry's drive data and the source level do.
+struct PinDriveLimit {
+    pin: String,
+    level: SourceLevel,
+    limit_ma: f64,
+    field: &'static str,
+    datasheet_ref: String,
+    /// The generated voltage-source element, e.g. `V1`.
+    element: String,
+}
+
+fn pin_current_message(name: &str, value: f64, direction: &str, limit: &PinDriveLimit) -> String {
+    format!(
+        "measure `{name}` = {value} mA {direction} the `{}` {} pin limit {} = {} mA \
+         (datasheet: {}); ngspice prints 6 significant digits",
+        limit.pin,
+        limit.level.as_str(),
+        limit.field,
+        limit.limit_ma,
+        limit.datasheet_ref
+    )
+}
+
+fn pin_current_info(name: &str, value: f64, limit: &PinDriveLimit) -> Diagnostic {
+    sim_builder(E_SYNTH_SIM_004, Severity::Info, "measurement limit")
+        .message(pin_current_message(name, value, "is within", limit))
+        .build()
+}
+
+fn pin_current_error(name: &str, value: f64, limit: &PinDriveLimit) -> Diagnostic {
+    sim_builder(E_SYNTH_SIM_004, Severity::Error, "measurement limit")
+        .message(pin_current_message(name, value, "is above", limit))
+        .build()
+}
+
 fn timeout_error(seconds: f64) -> Diagnostic {
     sim_builder(E_SYNTH_SIM_005, Severity::Error, "ngspice timed out")
         .message(format!(
@@ -1272,7 +1506,16 @@ pub fn emit_netlist_with_registry_dirs(
     testbench: &Testbench,
     registry_dirs: &[PathBuf],
 ) -> Result<String, Vec<Diagnostic>> {
-    emit_deck(design, testbench, None, None, registry_dirs).map(|(deck, _, _)| deck)
+    emit_deck(design, testbench, None, None, registry_dirs).map(|emitted| emitted.deck)
+}
+
+/// The emitted deck plus the data `simulate` needs after ngspice runs.
+struct EmittedDeck {
+    deck: String,
+    dialect: Option<SpiceDialect>,
+    plot: Option<PathBuf>,
+    /// Pin-source current limits, keyed by the source's `REF.PIN` string.
+    pin_limits: HashMap<String, PinDriveLimit>,
 }
 
 #[allow(clippy::too_many_lines)]
@@ -1282,7 +1525,7 @@ fn emit_deck(
     design_path: Option<&Path>,
     testbench_path: Option<&Path>,
     registry_dirs: &[PathBuf],
-) -> Result<(String, Option<SpiceDialect>, Option<PathBuf>), Vec<Diagnostic>> {
+) -> Result<EmittedDeck, Vec<Diagnostic>> {
     if let Err(diagnostic) = testbench.validate_at(testbench_path) {
         return Err(vec![diagnostic]);
     }
@@ -1331,37 +1574,187 @@ fn emit_deck(
         node_by_net.insert(net.id, node);
     }
 
+    let mut pin_net: HashMap<(ComponentId, PinId), NetId> = HashMap::new();
+    for net in &design.nets {
+        for endpoint in &net.endpoints {
+            pin_net.insert((endpoint.component, endpoint.pin), net.id);
+        }
+    }
+    let mut seen_elements: HashMap<String, String> = HashMap::new();
     let mut source_lines = Vec::new();
+    let mut sourced_nets: HashSet<NetId> = HashSet::new();
+    let mut first_source_on_net: HashMap<NetId, String> = HashMap::new();
+    let mut pin_limits: HashMap<String, PinDriveLimit> = HashMap::new();
     for (index, source) in testbench.source.iter().enumerate() {
-        let Some(net) = net_by_name.get(source.net.as_str()) else {
-            diagnostics.push(tb_error(format!(
-                "source net `{}` not found in design",
-                source.net
-            )));
-            continue;
+        let element = format!("V{}", index + 1);
+        // Build the source's deck lines first; a source that loses the
+        // one-source-per-net check must leave no lines behind.
+        let mut pending_lines: Vec<String> = Vec::new();
+        let mut pending_limit: Option<(String, PinDriveLimit)> = None;
+        let mut pending_resistor: Option<(String, String)> = None;
+        let (net_id, description) = match (source.net.as_deref(), source.pin.as_deref()) {
+            (Some(net_name), None) => {
+                let Some(net) = net_by_name.get(net_name) else {
+                    diagnostics.push(tb_error(format!(
+                        "source net `{net_name}` not found in design"
+                    )));
+                    continue;
+                };
+                if net.id == ground.id {
+                    diagnostics.push(tb_error(format!(
+                        "source net `{net_name}` is the ground net"
+                    )));
+                    continue;
+                }
+                if source.dc.is_none() && source.ac.is_none() {
+                    diagnostics.push(tb_error(format!(
+                        "source on net `{net_name}` has neither a `dc` nor an `ac` value"
+                    )));
+                    continue;
+                }
+                let mut line = format!("{element} {} 0", node_by_net[&net.id]);
+                if let Some(dc) = source.dc {
+                    let _ = write!(line, " DC {}", exponent(dc));
+                }
+                if let Some(ac) = source.ac {
+                    let _ = write!(line, " AC {}", exponent(ac));
+                }
+                pending_lines.push(line);
+                (net.id, format!("net `{net_name}`"))
+            }
+            (None, Some(pin_ref)) => {
+                let (refdes, pin_name) = pin_ref
+                    .split_once('.')
+                    .expect("a validated pin source is REF.PIN");
+                let Some(component) = design
+                    .components
+                    .iter()
+                    .find(|component| component.refdes == refdes)
+                else {
+                    diagnostics.push(tb_error(format!(
+                        "pin source `{pin_ref}` names reference `{refdes}`, which is not a \
+                         placed part"
+                    )));
+                    continue;
+                };
+                let Some((pin_id, pin)) = component.find_pin(pin_name) else {
+                    diagnostics.push(tb_error(format!(
+                        "pin source `{pin_ref}`: part `{refdes}` has no pin `{pin_name}`"
+                    )));
+                    continue;
+                };
+                let Some(&net_id) = pin_net.get(&(component.id, pin_id)) else {
+                    diagnostics.push(tb_error(format!(
+                        "pin source `{pin_ref}`: pin is not connected to a net"
+                    )));
+                    continue;
+                };
+                if net_id == ground.id {
+                    diagnostics.push(tb_error(format!(
+                        "pin source `{pin_ref}`: pin is on the ground net"
+                    )));
+                    continue;
+                }
+                let Some(drive) = pin.drive.as_ref() else {
+                    diagnostics.push(pin_drive_error(
+                        component,
+                        pin_ref,
+                        "pin has no drive data in the registry; add a `[pins.drive]` block \
+                         with the datasheet `high_v`, `low_v`, `max_source_ma`, `max_sink_ma` \
+                         and `datasheet_ref`",
+                        design_path,
+                    ));
+                    continue;
+                };
+                let Some(datasheet_ref) = drive
+                    .datasheet_ref
+                    .as_deref()
+                    .map(str::trim)
+                    .filter(|reference| !reference.is_empty())
+                else {
+                    diagnostics.push(pin_drive_error(
+                        component,
+                        pin_ref,
+                        "pin has no `datasheet_ref` in its `[pins.drive]` block; record the \
+                         datasheet page or table before simulating it",
+                        design_path,
+                    ));
+                    continue;
+                };
+                let level = source.level.expect("a validated pin source has a level");
+                let voltage = match level {
+                    SourceLevel::High => drive.high_v,
+                    SourceLevel::Low => drive.low_v,
+                };
+                let (limit_ma, field) = match level {
+                    SourceLevel::High => (drive.max_source_ma, "max_source_ma"),
+                    SourceLevel::Low => (drive.max_sink_ma, "max_sink_ma"),
+                };
+                let net_node = &node_by_net[&net_id];
+                if let Some(resistance) = drive.output_resistance_ohm {
+                    let internal_node = format!("vpin_{}", index + 1);
+                    let resistor = format!("Rpin{}", index + 1);
+                    let key = resistor.to_ascii_lowercase();
+                    if let Some(previous) = seen_elements.get(&key) {
+                        diagnostics.push(tb_error(format!(
+                            "pin source `{pin_ref}` generates element `{resistor}`, which \
+                             collides with `{previous}`"
+                        )));
+                        continue;
+                    }
+                    pending_resistor = Some((key, format!("pin source {pin_ref}")));
+                    pending_lines.push(format!(
+                        "{element} {internal_node} 0 DC {}",
+                        exponent(voltage)
+                    ));
+                    pending_lines.push(format!(
+                        "{resistor} {net_node} {internal_node} {}",
+                        exponent(resistance)
+                    ));
+                } else {
+                    pending_lines.push(format!("{element} {net_node} 0 DC {}", exponent(voltage)));
+                }
+                pending_limit = Some((
+                    pin_ref.to_string(),
+                    PinDriveLimit {
+                        pin: pin_ref.to_string(),
+                        level,
+                        limit_ma,
+                        field,
+                        datasheet_ref: datasheet_ref.to_string(),
+                        element,
+                    },
+                ));
+                (net_id, format!("pin `{pin_ref}`"))
+            }
+            (Some(net), Some(pin)) => {
+                diagnostics.push(tb_error(format!(
+                    "source has both `net` (`{net}`) and `pin` (`{pin}`); a source drives \
+                     exactly one"
+                )));
+                continue;
+            }
+            (None, None) => {
+                diagnostics.push(tb_error("source must have a `net` or a `pin`".to_string()));
+                continue;
+            }
         };
-        if net.id == ground.id {
+        if let Some(previous) = first_source_on_net.insert(net_id, description.clone()) {
+            let net_name = design.net(net_id).map_or("", |net| net.name.as_str());
             diagnostics.push(tb_error(format!(
-                "source net `{}` is the ground net",
-                source.net
+                "sources {previous} and {description} both resolve to net `{net_name}`; \
+                 only one source may drive a net"
             )));
             continue;
         }
-        if source.dc.is_none() && source.ac.is_none() {
-            diagnostics.push(tb_error(format!(
-                "source on net `{}` has neither a `dc` nor an `ac` value",
-                source.net
-            )));
-            continue;
+        source_lines.extend(pending_lines);
+        if let Some((key, owner)) = pending_resistor {
+            seen_elements.insert(key, owner);
         }
-        let mut line = format!("V{} {} 0", index + 1, node_by_net[&net.id]);
-        if let Some(dc) = source.dc {
-            let _ = write!(line, " DC {}", exponent(dc));
+        if let Some((pin, limit)) = pending_limit {
+            pin_limits.insert(pin, limit);
         }
-        if let Some(ac) = source.ac {
-            let _ = write!(line, " AC {}", exponent(ac));
-        }
-        source_lines.push(line);
+        sourced_nets.insert(net_id);
     }
 
     let mut ignored_ids: HashSet<ComponentId> = HashSet::new();
@@ -1380,19 +1773,12 @@ fn emit_deck(
         }
     }
 
-    let mut pin_net: HashMap<(ComponentId, PinId), NetId> = HashMap::new();
-    for net in &design.nets {
-        for endpoint in &net.endpoints {
-            pin_net.insert((endpoint.component, endpoint.pin), net.id);
-        }
-    }
-
     check_topology(
         design,
-        testbench,
         ground.id,
         &ignored_ids,
         &pin_net,
+        &sourced_nets,
         design_path,
         &mut diagnostics,
     );
@@ -1406,7 +1792,6 @@ fn emit_deck(
     let mut dialects: Vec<(Option<SpiceDialect>, String, String)> = Vec::new();
     let mut element_lines = Vec::new();
     let mut model_lines = Vec::new();
-    let mut seen_elements: HashMap<String, String> = HashMap::new();
     for component in &design.components {
         if ignored_ids.contains(&component.id) {
             continue;
@@ -1576,11 +1961,6 @@ fn emit_deck(
         }
     }
 
-    let sourced: HashSet<&str> = testbench
-        .source
-        .iter()
-        .map(|source| source.net.as_str())
-        .collect();
     let mut measure_lines = Vec::new();
     let mut current_saves = BTreeSet::new();
     for (index, measure) in testbench.measure.iter().enumerate() {
@@ -1617,7 +1997,7 @@ fn emit_deck(
                     .endpoints
                     .iter()
                     .any(|endpoint| !ignored_ids.contains(&endpoint.component));
-                if !simulated && !sourced.contains(net.name.as_str()) {
+                if !simulated && !sourced_nets.contains(&net.id) {
                     diagnostics.push(with_location_span(
                         topology_error(
                             &net.name,
@@ -1726,6 +2106,29 @@ fn emit_deck(
                     measure.name
                 ));
             }
+            MeasureKind::PinCurrent => {
+                let pin_ref = measure
+                    .pin
+                    .as_deref()
+                    .expect("a validated pin_current measure has a pin");
+                let Some(limit) = pin_limits.get(pin_ref) else {
+                    diagnostics.push(tb_error_measure(
+                        testbench_path,
+                        measure,
+                        format!(
+                            "measure `{}` pin `{pin_ref}` has no `[[source]]` with that pin",
+                            measure.name
+                        ),
+                    ));
+                    continue;
+                };
+                let vector = format!("@{}[i]", limit.element);
+                current_saves.insert(vector.clone());
+                measure_lines.push(format!(
+                    "let m{index} = abs({vector}) * 1000\necho SYNTH_MEAS {} $&m{index}",
+                    measure.name
+                ));
+            }
         }
     }
 
@@ -1781,7 +2184,12 @@ fn emit_deck(
     }
     deck.push_str("echo SYNTH_DONE\n.endc\n.end\n");
     let dialect = dialects.first().and_then(|(dialect, _, _)| *dialect);
-    Ok((deck, dialect, plot_path))
+    Ok(EmittedDeck {
+        deck,
+        dialect,
+        plot: plot_path,
+        pin_limits,
+    })
 }
 
 /// Resolve `[options] plot` relative to the sidecar's directory, or the
@@ -2090,10 +2498,10 @@ fn net_span(design: &Board, net: &Net) -> Span {
 /// whether some unrelated net looks floating.
 fn check_topology(
     design: &Board,
-    testbench: &Testbench,
     ground: NetId,
     ignored_ids: &HashSet<ComponentId>,
     pin_net: &HashMap<(ComponentId, PinId), NetId>,
+    sourced_nets: &HashSet<NetId>,
     design_path: Option<&Path>,
     diagnostics: &mut Vec<Diagnostic>,
 ) {
@@ -2111,15 +2519,14 @@ fn check_topology(
         .collect();
     let mut adjacency: HashMap<NetId, Vec<NetId>> = HashMap::new();
 
-    for source in &testbench.source {
-        let Some(net) = design.nets.iter().find(|net| net.name == source.net) else {
-            continue;
-        };
-        *connections.entry(net.id).or_default() += 1;
+    // A resolved source is a DC path from its net to ground, whether it was
+    // written as a net source or a pin drive.
+    for &net in sourced_nets {
+        *connections.entry(net).or_default() += 1;
         *connections.entry(ground).or_default() += 1;
-        if net.id != ground {
-            adjacency.entry(net.id).or_default().push(ground);
-            adjacency.entry(ground).or_default().push(net.id);
+        if net != ground {
+            adjacency.entry(net).or_default().push(ground);
+            adjacency.entry(ground).or_default().push(net);
         }
     }
 
@@ -2418,6 +2825,34 @@ fn no_model_error(
         error.message(),
         error.is_missing_model(),
         design_path,
+    )
+}
+
+/// A pin source cannot be driven because the registry has no usable
+/// `[pins.drive]` data. It is `-002` because the fix is registry data, not a
+/// malformed testbench, and a missing value is never defaulted.
+fn pin_drive_error(
+    component: &Component,
+    pin_ref: &str,
+    message: &str,
+    design_path: Option<&Path>,
+) -> Diagnostic {
+    with_location_span(
+        sim_builder(E_SYNTH_SIM_002, Severity::Error, "pin has no drive data")
+            .message(format!(
+                "{} (`{}`): pin source `{pin_ref}`: {message}",
+                component.refdes,
+                component
+                    .part
+                    .as_ref()
+                    .map_or(component.kind.as_str(), |part| part.id.as_str())
+            ))
+            .primary_entity(EntityRef::Component {
+                id: component.refdes.clone(),
+            })
+            .build(),
+        design_path,
+        component.source_span,
     )
 }
 
