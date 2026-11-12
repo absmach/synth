@@ -74,7 +74,7 @@ board "ice40_bga_node" {
     component C33: capacitor "c_generic_0402" value "100nF" { placement_hint { near: "U5.nrst" priority: hard } }
     component SW1: switch "spst_tactile" { placement_hint { near: "U5.nrst" priority: hard } }
     component R22: resistor "r_generic_0402" value "10k" { placement_hint { near: "U5.boot0" priority: hard } }
-    component Y1: crystal "xtal_8mhz_3225_4p" { placement_hint { near: "U5.pd0" priority: hard } }
+    component Y1: crystal "xtal_8mhz_3225_jyje_4p" { placement_hint { near: "U5.pd0" priority: hard } }
     component C34: capacitor "c_generic_0402" value "10pF" { placement_hint { near: "Y1" priority: hard } }
     component C35: capacitor "c_generic_0402" value "10pF" { placement_hint { near: "Y1" priority: hard } }
     component J4: connector "header_1x5_swd"

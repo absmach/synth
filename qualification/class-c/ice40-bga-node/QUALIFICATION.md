@@ -78,10 +78,10 @@ From this directory, with the KiCad 10 footprint and symbol library tables confi
 sha256sum -c SHA256SUMS
 kicad-cli pcb drc --severity-error kicad/ice40_bga_node.kicad_pcb
 kicad-cli sch erc kicad/ice40_bga_node.kicad_sch
-SYNTH_USER_REGISTRY_DIR=registry synth validate ice40_bga_node.synth
+synth validate ice40_bga_node.synth
 ```
 
-The first command verifies every file below `SHA256SUMS`; the Gerber content hash is in `fab/GERBER_CONTENT_SHA256` and the STEP geometry hash is stated in the sign-off table. `registry/` holds the parts this board needs that the shipped registry does not carry.
+The first command verifies every file below `SHA256SUMS`; the Gerber content hash is in `fab/GERBER_CONTENT_SHA256` and the STEP geometry hash is stated in the sign-off table. The parts this board adds to the registry are in `registry/parts/` of the repository.
 
 ## Human review
 
@@ -100,7 +100,7 @@ PCB review sign-off required by #40: JeffMboya, 2026-11-10, on the package in `f
 | Placement | the placement on 55.99 x 44.99 mm, 35.8 % courtyard fill, as pinned in `ice40_bga_node.placement.layout.toml` |
 | Parts and values | the BOM identities of `fab/ice40_bga_node_bom_orderable.csv`, including `Y1` (JYJE 3TJ480000FYLBC, `C2924620`) and `U1` (Lattice ICE40HX4K-BG121, `C1552775`) |
 
-Every part of the board is recorded as reviewed by JeffMboya, with the review date and the datasheet or product page, in the part files of `registry/` (`reviewed_by`, `reviewed_at`, `datasheet_url`).
+The parts this board adds to `registry/parts/` (`ice40hx4k_bg121_nc`, `tlv70012_ddc`, `tlv70012_1v2`, `w25q128jvsiq_208mil`, `header_1x5_swd`, `stm32f103c8_usb`, `xtal_8mhz_3225_jyje_4p`) carry the author's review record (`reviewed_by`, `reviewed_at`, `datasheet_url`); every other part keeps its registry record.
 
 ## USB pair: supported speed, impedance estimate and skew
 
