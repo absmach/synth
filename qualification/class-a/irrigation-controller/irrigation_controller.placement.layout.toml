@@ -318,8 +318,8 @@ dx = 0.0
 dy = 0.0
 
 [components.C_N12]
-x = 73.5
-y = 40.0
+x = 70.0
+y = 38.0
 rotation = 0
 source = "agent"
 priority = "hard"
@@ -525,7 +525,7 @@ dx = 0.0
 dy = 0.0
 
 [components.R_N3]
-x = 49.5
+x = 50.0
 y = 63.5
 rotation = 0
 source = "agent"
@@ -643,7 +643,7 @@ dy = 0.0
 
 [components.J_VALVE2]
 x = 62.0
-y = 8.5
+y = 7.15
 rotation = 180
 source = "agent"
 priority = "hard"
@@ -742,7 +742,7 @@ dy = 0.0
 
 [components.J_VALVE1]
 x = 50.0
-y = 8.5
+y = 7.15
 rotation = 180
 source = "agent"
 priority = "hard"
@@ -868,7 +868,7 @@ dy = 0.0
 
 [components.J_SOIL1]
 x = 42.5
-y = 63.0
+y = 63.5
 rotation = 0
 source = "agent"
 priority = "hard"
@@ -1111,7 +1111,25 @@ dy = 0.0
 
 [components.R_SN1]
 x = 42.3
-y = 10.2
+y = 11.0
+rotation = 0
+source = "agent"
+priority = "hard"
+dx = 0.0
+dy = 0.0
+
+[components.C_VCAP]
+x = 18.1
+y = 20.9
+rotation = 0
+source = "agent"
+priority = "hard"
+dx = 0.0
+dy = 0.0
+
+[components.C_VIN]
+x = 14.6
+y = 20.9
 rotation = 0
 source = "agent"
 priority = "hard"
