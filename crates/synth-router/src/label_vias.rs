@@ -81,8 +81,8 @@ pub struct LabelMoves {
     /// Silkscreen circles that came within the clearance of a pad or a via, such
     /// as the ring a test point draws round its own pad, dropped.
     pub dropped: usize,
-    /// Pin-1 markers (a silkscreen polygon or a circle that rings no pad) moved
-    /// to the nearest spot clear of copper, so the part keeps its pin-1 mark.
+    /// Silkscreen polygons and circles that ring no pad (a pin-1 marker, for one)
+    /// moved to the nearest spot clear of copper, so the part keeps its mark.
     pub relocated: usize,
 }
 
@@ -415,8 +415,8 @@ fn silk_by_footprint(text: &str) -> Vec<(usize, Vec<Seg>)> {
     all
 }
 
-/// How far a pin-1 marker may move to clear copper and still sit by its pin.
-const MARKER_REACH_MM: f64 = 1.5;
+/// How far a silkscreen marker may move to clear copper and still sit by its pin.
+const MARKER_REACH_MM: f64 = 1.2;
 
 /// A silkscreen polygon or circle shifted by `(dx, dy)` in its footprint's own
 /// axes: every `(xy ..)` point of a polygon, the `(center ..)` and `(end ..)`
@@ -517,10 +517,45 @@ fn near_other_silk(points: &[(f64, f64)], others: &[Seg]) -> bool {
     })
 }
 
+/// The index, in `board.pads()`, of the pad nearest `at` (board millimetres).
+fn nearest_pad(board: &PcbBoard, at: (f64, f64)) -> Option<usize> {
+    let at = Point::new(mm_to_nm(at.0), mm_to_nm(at.1));
+    board
+        .pads()
+        .enumerate()
+        .min_by(|(_, a), (_, b)| {
+            a.signed_distance_nm(at)
+                .total_cmp(&b.signed_distance_nm(at))
+        })
+        .map(|(i, _)| i)
+}
+
+/// The mean of `points`, or `None` when there are none.
+fn centroid(points: &[(f64, f64)]) -> Option<(f64, f64)> {
+    if points.is_empty() {
+        return None;
+    }
+    let n = points.len() as f64;
+    Some((
+        points.iter().map(|p| p.0).sum::<f64>() / n,
+        points.iter().map(|p| p.1).sum::<f64>() / n,
+    ))
+}
+
+/// The box of `points`.
+fn points_box(points: &[(f64, f64)]) -> Box2 {
+    points.iter().fold(
+        (f64::MAX, f64::MAX, f64::MIN, f64::MIN),
+        |(x0, y0, x1, y1), p| (x0.min(p.0), y0.min(p.1), x1.max(p.0), y1.max(p.1)),
+    )
+}
+
 /// The nearest shift, in board millimetres and within [`MARKER_REACH_MM`], that
 /// takes a pin-1 marker clear of copper; `None` for a ring round its own pad,
 /// which is dropped, or when no shift clears it. The spot is also clear of the
-/// silkscreen of other parts (`others`), which KiCad's `silk_overlap` checks.
+/// silkscreen of other parts (`others`), which KiCad's `silk_overlap` checks,
+/// inside the board outline, and still nearest the pad the marker started
+/// beside, so a moved mark never points at a different pin.
 fn marker_clear_spot(
     shape: &str,
     polygon: bool,
@@ -538,16 +573,24 @@ fn marker_clear_spot(
     if rings_a_pad {
         return None;
     }
+    let home =
+        centroid(&shape_points(shape, polygon, to_board)).and_then(|c| nearest_pad(board, c));
+    let edge = board_bounds(board);
     candidate_shifts(MARKER_REACH_MM).skip(1).find(|&(dx, dy)| {
         let shifted = |p: (f64, f64)| {
             let b = to_board(p);
             (b.0 + dx, b.1 + dy)
         };
-        !(if polygon {
+        let points = shape_points(shape, polygon, &shifted);
+        let hugs = if polygon {
             polygon_hugs_copper(shape, board, vias, &shifted)
         } else {
             circle_hugs_copper(shape, board, vias, &shifted)
-        } || near_other_silk(&shape_points(shape, polygon, &shifted), others))
+        };
+        !hugs
+            && !near_other_silk(&points, others)
+            && edge.is_none_or(|e| inside(e, points_box(&points)))
+            && centroid(&points).and_then(|c| nearest_pad(board, c)) == home
     })
 }
 
@@ -589,6 +632,8 @@ fn drop_shapes_off_copper(
         };
         let angle = nums.get(2).copied().unwrap_or(0.0);
         let rotation = quarter_turn(angle);
+        // Footprint angles are quarter turns, as the hug checks above already assume;
+        // the inverse turn takes a board shift back into the footprint's own axes.
         let inverse = quarter_turn(-angle);
         let to_board = |(x, y): (f64, f64)| {
             let (dx, dy) = rotation.rotate_offset(mm_to_nm(x), mm_to_nm(y));
@@ -930,7 +975,7 @@ fn candidate_shifts(reach_mm: f64) -> impl Iterator<Item = (f64, f64)> {
         (1.0, -1.0),
         (-1.0, -1.0),
     ];
-    let rings = (reach_mm / STEP_MM).round() as u32;
+    let rings = (reach_mm / STEP_MM + 1e-9).floor() as u32;
     std::iter::once((0.0, 0.0)).chain((1..=rings).flat_map(|ring| {
         let r = f64::from(ring) * STEP_MM;
         DIRECTIONS.iter().map(move |(ux, uy)| {
@@ -1666,6 +1711,145 @@ mod tests {
                 20.0 + y
             );
         }
+    }
+
+    /// A marker is never moved off the board: with the inward spots blocked it
+    /// is dropped, not placed past the outline.
+    #[test]
+    fn a_marker_is_not_moved_past_the_board_edge() {
+        let pcb = |vias: &str| {
+            format!(
+                r#"(kicad_pcb
+  (version 20260206)
+  (layers (0 "F.Cu" signal) (31 "B.Cu" signal) (44 "Edge.Cuts" user))
+  (net 0 "")
+  (net 1 "N1")
+  (footprint "Test:One"
+    (layer "F.Cu")
+    (at 39.6 20)
+    (property "Reference" "U1" (at 0 -2) (layer "F.SilkS"))
+    (fp_poly (pts (xy -0.2 -0.25) (xy 0.2 -0.25) (xy 0 -0.45)) (stroke (width 0.12) (type solid)) (fill solid) (layer "F.SilkS") (uuid "00000000-0000-0000-0000-000000000050"))
+    (pad "1" smd circle (at 0 0) (size 0.3 0.3) (layers "F.Cu" "F.Paste" "F.Mask") (net 1 "N1"))
+  )
+{vias}
+  (gr_line (start 0 0) (end 40 0) (layer "Edge.Cuts") (width 0.1))
+  (gr_line (start 40 0) (end 40 40) (layer "Edge.Cuts") (width 0.1))
+  (gr_line (start 40 40) (end 0 40) (layer "Edge.Cuts") (width 0.1))
+  (gr_line (start 0 40) (end 0 0) (layer "Edge.Cuts") (width 0.1))
+)
+"#
+            )
+        };
+        let blockers = r#"  (via (at 39.0 20.0) (size 0.6) (drill 0.3) (layers "F.Cu" "B.Cu") (net 1))
+  (via (at 39.6 19.0) (size 0.6) (drill 0.3) (layers "F.Cu" "B.Cu") (net 1))
+  (via (at 39.0 19.2) (size 0.6) (drill 0.3) (layers "F.Cu" "B.Cu") (net 1))"#;
+        // Room inboard: the marker moves, and stays inside the 40 mm board.
+        let (out, moves) = run(&pcb(""));
+        assert_eq!(moves.relocated, 1, "{out}");
+        // Inward spots blocked: the only clear spots are past the edge, so the
+        // marker is dropped rather than relocated outside.
+        let (out, moves) = run(&pcb(blockers));
+        assert_eq!((moves.relocated, moves.dropped), (0, 1), "{out}");
+        assert!(!out.contains("(fp_poly"), "{out}");
+    }
+
+    /// A three-pad row 0.5 mm apart, with `extra` footprint graphics, at `rot`.
+    fn pad_row(extra: &str, rot: &str) -> String {
+        format!(
+            r#"(kicad_pcb
+  (version 20260206)
+  (layers (0 "F.Cu" signal) (31 "B.Cu" signal) (44 "Edge.Cuts" user))
+  (net 0 "")
+  (net 1 "N1")
+  (footprint "Test:Row"
+    (layer "F.Cu")
+    (at 20 20{rot})
+    (property "Reference" "U1" (at 0 -4) (layer "F.SilkS"))
+{extra}
+    (pad "1" smd rect (at 0 0) (size 0.3 0.8) (layers "F.Cu" "F.Paste" "F.Mask") (net 1 "N1"))
+    (pad "2" smd rect (at 0.5 0) (size 0.3 0.8) (layers "F.Cu" "F.Paste" "F.Mask") (net 1 "N1"))
+    (pad "3" smd rect (at 1.0 0) (size 0.3 0.8) (layers "F.Cu" "F.Paste" "F.Mask") (net 1 "N1"))
+  )
+  (gr_line (start 0 0) (end 40 0) (layer "Edge.Cuts") (width 0.1))
+  (gr_line (start 40 0) (end 40 40) (layer "Edge.Cuts") (width 0.1))
+  (gr_line (start 40 40) (end 0 40) (layer "Edge.Cuts") (width 0.1))
+  (gr_line (start 0 40) (end 0 0) (layer "Edge.Cuts") (width 0.1))
+)
+"#
+        )
+    }
+
+    const ROW_TRIANGLE: &str = r#"    (fp_poly (pts (xy 0.0 -0.5) (xy 0.2 -0.5) (xy 0.1 -0.7)) (stroke (width 0.12) (type solid)) (fill solid) (layer "F.SilkS") (uuid "00000000-0000-0000-0000-000000000060"))"#;
+
+    /// The corners of the first silkscreen polygon in `text`, as footprint-local points.
+    fn first_polygon(text: &str) -> Vec<(f64, f64)> {
+        let at = text.find("(fp_poly").expect("a polygon");
+        let end = at + block_len(&text[at..]).expect("a block");
+        text[at..end]
+            .split("(xy ")
+            .skip(1)
+            .filter_map(|p| {
+                let mut n = p.split(')').next()?.split_whitespace();
+                Some((n.next()?.parse().ok()?, n.next()?.parse().ok()?))
+            })
+            .collect()
+    }
+
+    /// A moved marker still sits nearest the pad it started beside.
+    #[test]
+    fn a_moved_marker_stays_nearest_its_own_pad() {
+        let text = pad_row(ROW_TRIANGLE, "");
+        let board = PcbBoard::parse(&text).expect("parse");
+        let (out, moves) = run(&text);
+        assert_eq!(moves.relocated, 1, "{out}");
+        let corners = first_polygon(&out);
+        let at = centroid(
+            &corners
+                .iter()
+                .map(|p| (20.0 + p.0, 20.0 + p.1))
+                .collect::<Vec<_>>(),
+        )
+        .expect("a centroid");
+        let own = board.pads().position(|p| p.number == "1").expect("pad 1");
+        assert_eq!(nearest_pad(&board, at), Some(own), "centroid {at:?}: {out}");
+    }
+
+    #[test]
+    fn the_nearest_pad_is_the_closer_of_two() {
+        let board = PcbBoard::parse(&pad_row("", "")).expect("parse");
+        let one = board.pads().position(|p| p.number == "1").expect("pad 1");
+        let two = board.pads().position(|p| p.number == "2").expect("pad 2");
+        assert_eq!(nearest_pad(&board, (20.1, 19.2)), Some(one));
+        assert_eq!(nearest_pad(&board, (20.4, 19.2)), Some(two));
+    }
+
+    /// A circle that rings no pad is moved clear like a polygon.
+    #[test]
+    fn a_circle_that_rings_no_pad_is_moved_clear() {
+        let circle = r#"    (fp_circle (center 0 -0.75) (end 0.2 -0.75) (stroke (width 0.12) (type solid)) (layer "F.SilkS") (fill none) (uuid "00000000-0000-0000-0000-000000000061"))"#;
+        let text = pad_row(circle, "");
+        let (out, moves) = run(&text);
+        assert_eq!((moves.relocated, moves.dropped), (1, 0), "{out}");
+        let (again, moves) = run(&out);
+        assert_eq!(
+            (moves.relocated, moves.dropped),
+            (0, 0),
+            "clear after the move: {again}"
+        );
+    }
+
+    /// A marker on a footprint turned half way round is moved in the footprint's own axes.
+    #[test]
+    fn a_marker_on_a_turned_footprint_is_moved_clear() {
+        let text = pad_row(ROW_TRIANGLE, " 180");
+        let (out, moves) = run(&text);
+        assert_eq!(moves.relocated, 1, "{out}");
+        let (again, moves) = run(&out);
+        assert_eq!(
+            (moves.relocated, moves.dropped),
+            (0, 0),
+            "clear after the move: {again}"
+        );
     }
 
     /// A marker with no clear spot within reach is dropped, as before.

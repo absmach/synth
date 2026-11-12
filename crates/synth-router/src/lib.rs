@@ -344,7 +344,7 @@ fn report_silkscreen_pass(result: Result<label_vias::LabelMoves, String>) {
             dropped,
             relocated,
         }) => info!(
-            "moved {moved} reference label(s) off vias and pads; {hidden} hidden because no clear spot was within reach; {trimmed} outline line(s) cut back from vias and pads; {relocated} pin-1 marker(s) moved clear of copper; {dropped} silkscreen circle(s) and polygon(s) dropped; {widened} silkscreen stroke(s) widened to 0.18 mm"
+            "moved {moved} reference label(s) off vias and pads; {hidden} hidden because no clear spot was within reach; {trimmed} outline line(s) cut back from vias and pads; {relocated} silkscreen polygon(s) and circle(s) moved clear of copper; {dropped} silkscreen circle(s) and polygon(s) dropped; {widened} silkscreen stroke(s) widened to 0.18 mm"
         ),
         Err(detail) => warn!("reference labels were not checked: {detail}"),
     }
