@@ -2207,7 +2207,9 @@ fn build_symbol_instance(
     let mut out = Vec::with_capacity(count as usize);
     for unit in 1..=count {
         let dy = if count > 1 {
-            synth_layout::kicad_lib_loader::unit_offset_mm(unit).1
+            part.kicad_symbol.as_deref().map_or(0.0, |lib_id| {
+                synth_layout::kicad_lib_loader::unit_offset_mm(lib_id, unit).1
+            })
         } else {
             0.0
         };

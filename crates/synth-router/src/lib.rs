@@ -61,6 +61,8 @@ pub mod zone_fill;
 
 use std::path::{Path, PathBuf};
 
+use tracing::{debug, info, warn};
+
 pub use capability::{discover, RouterCapability};
 pub use contract::{
     FabricationPolicy, FreeroutingOptions, KiCadRoutingToolsOptions, KrtEscalation, NetLayers,
@@ -105,8 +107,8 @@ pub fn route(request: &RouteRequest) -> RouteReport {
         if report.state != result::RouteState::ValidationFailed {
             break;
         }
-        eprintln!(
-            "note: the routed board was rejected ({} blocking); routing again with the {ordering} net order",
+        info!(
+            "the routed board was rejected ({} blocking); routing again with the {ordering} net order",
             report
                 .validation
                 .as_ref()
@@ -295,8 +297,8 @@ pub fn sanitize_stem(name: &str) -> String {
 /// failure.
 fn write_report(report: &RouteReport, request: &RouteRequest) {
     if let Err(error) = report.write_to(&request.report_path()) {
-        eprintln!(
-            "warning: routing run record could not be written to {}: {error}",
+        warn!(
+            "routing run record could not be written to {}: {error}",
             request.report_path().display()
         );
     }
@@ -332,6 +334,7 @@ fn report_silkscreen_pass(result: Result<label_vias::LabelMoves, String>) {
             trimmed: 0,
             widened: 0,
             dropped: 0,
+            relocated: 0,
         }) => {}
         Ok(label_vias::LabelMoves {
             moved,
@@ -339,10 +342,11 @@ fn report_silkscreen_pass(result: Result<label_vias::LabelMoves, String>) {
             trimmed,
             widened,
             dropped,
-        }) => eprintln!(
-            "note: moved {moved} reference label(s) off vias and pads; {hidden} hidden because no clear spot was within reach; {trimmed} outline line(s) cut back from vias and pads; {dropped} silkscreen circle(s) and polygon(s) dropped; {widened} silkscreen stroke(s) widened to 0.18 mm"
+            relocated,
+        }) => info!(
+            "moved {moved} reference label(s) off vias and pads; {hidden} hidden because no clear spot was within reach; {trimmed} outline line(s) cut back from vias and pads; {relocated} silkscreen polygon(s) and circle(s) moved clear of copper; {dropped} silkscreen circle(s) and polygon(s) dropped; {widened} silkscreen stroke(s) widened to 0.18 mm"
         ),
-        Err(detail) => eprintln!("warning: reference labels were not checked: {detail}"),
+        Err(detail) => warn!("reference labels were not checked: {detail}"),
     }
 }
 
@@ -353,11 +357,11 @@ fn repair_dropped_stubs(candidate: &Path) -> Vec<String> {
     match island_vias::drop_dangling_stubs(candidate) {
         Ok(0) => Vec::new(),
         Ok(dropped) => {
-            eprintln!("note: dropped {dropped} track stub(s) that ended in nothing");
+            debug!("dropped {dropped} track stub(s) that ended in nothing");
             Vec::new()
         }
         Err(detail) => {
-            eprintln!("warning: track stubs were not pruned: {detail}");
+            warn!("track stubs were not pruned: {detail}");
             vec![format!("track stub prune did not run: {detail}")]
         }
     }
@@ -386,19 +390,40 @@ fn finalize(
     let mut repair_unavailable: Vec<String> = Vec::new();
     // A via the engine left in a pad of its own net is moved off it, with the tracks
     // that meet it, before the candidate is judged; the judging is unchanged.
-    match island_vias::move_vias_off_pads(&candidate.candidate_path) {
+    let underpad = underpad_components(request);
+    match repair_vias_in_pads(&candidate.candidate_path, &request.policy, &underpad) {
         Ok(0) => {}
-        Ok(moved) => eprintln!("note: moved {moved} via(s) off the pads they sat in"),
+        Ok(moved) => info!("moved {moved} via(s) off the pads they sat in"),
         Err(detail) => {
-            eprintln!("warning: vias in pads were not repaired: {detail}");
+            warn!("vias in pads were not repaired: {detail}");
             repair_unavailable.push(format!("via-in-pad repair did not run: {detail}"));
+        }
+    }
+    match island_vias::drop_edge_tracks(&candidate.candidate_path, &request.ground_nets) {
+        Ok(0) => {}
+        Ok(dropped) => info!(
+            "dropped {dropped} ground track(s) whose copper came nearer the outline than the board's edge rule"
+        ),
+        Err(detail) => {
+            warn!("edge tracks were not checked: {detail}");
+            repair_unavailable.push(format!("edge track prune did not run: {detail}"));
         }
     }
     repair_unavailable.extend(repair_dropped_stubs(&candidate.candidate_path));
     let mut repair_advisory: Vec<String> = Vec::new();
-    let mut ground = island_vias::Ground::new(&request.ground_nets);
+    let mut ground = island_vias::Ground::new(&request.ground_nets)
+        .with_fine_pitch_advisory(request.fine_pitch_return_via_advisory);
     if let Some(critical) = &request.return_via_critical_nets {
         ground = ground.with_critical(critical);
+    }
+    ground = ground.with_medium(&request.return_via_medium_nets);
+    ground = ground.with_underpad(&underpad.iter().cloned().collect::<Vec<String>>());
+    // Where the process fills and caps a via in a pad and the board may use
+    // one, a pad of a poured net that the router left joined to nothing gets
+    // its plane via in the pad.
+    if request.policy.allow_via_in_pad && request.policy.via_in_pad_land_extra_nm > 0 {
+        let drill = request.policy.min_drill_diameter_nm;
+        ground = ground.with_in_pad_via(drill + request.policy.via_in_pad_land_extra_nm, drill);
     }
     match island_vias::tie_islands_for(&candidate.candidate_path, &ground) {
         Ok(outcome) => {
@@ -406,8 +431,8 @@ fn finalize(
             repair_advisory = outcome.advisory;
         }
         Err(detail) => {
-            eprintln!(
-                "warning: pour islands were not checked in {}: {detail}",
+            warn!(
+                "pour islands were not checked in {}: {detail}",
                 candidate.candidate_path.display()
             );
             repair_unavailable.push(format!("pour island repair did not run: {detail}"));
@@ -444,8 +469,8 @@ fn finalize(
         // connectivity it was validated with. A refill that fails leaves
         // the routed, unfilled board in place.
         if let Err(detail) = zone_fill::refill_zones(&candidate.candidate_path) {
-            eprintln!(
-                "warning: zones were not filled in {}: {detail}; KiCad will show \
+            warn!(
+                "zones were not filled in {}: {detail}; KiCad will show \
                  plane-connected pads as unrouted until zones are filled (press B)",
                 request.board_path.display()
             );
@@ -470,16 +495,7 @@ fn finalize(
     }
     // The router's own open-net claim is kept for provenance, but the
     // connectivity pass is what fills the fields the report reports on.
-    statistics.connected_nets = verdict.connectivity.connected_nets;
-    statistics.open_nets = verdict.connectivity.open_nets;
-    if statistics.open_net_names.is_empty() {
-        statistics.open_net_names = verdict
-            .connectivity
-            .open
-            .iter()
-            .map(|o| o.net.clone())
-            .collect();
-    }
+    adopt_connectivity(&mut statistics, &verdict.connectivity);
 
     let recommended_routing_order = recommended_order(&verdict.connectivity.open);
 
@@ -504,6 +520,64 @@ fn finalize(
         escape: Vec::new(),
         recommended_routing_order,
     }
+}
+
+/// The components that declare `escape { method underpad }` and are not declared
+/// `escape { off }`: the one definition, shared with the DRC and the exporter, of
+/// where a filled and capped via in a pad is allowed.
+fn underpad_components(request: &RouteRequest) -> std::collections::BTreeSet<String> {
+    request
+        .escapes
+        .iter()
+        .filter(|escape| escape.method.as_deref() == Some("underpad"))
+        .filter(|escape| !request.escapes_off.contains(&escape.refdes))
+        .map(|escape| escape.refdes.clone())
+        .collect()
+}
+
+/// Move a via the engine left in a pad of its own net off that pad, except in the
+/// pad of a component that declares the under-pad escape where the board may use
+/// via-in-pad.
+///
+/// The release gate refuses a via in a pad only where via-in-pad is not
+/// allowed. A via in the pad of a component that declares `escape { method
+/// underpad }` stays, because that land is sized for the filled and capped via
+/// and the DRC exempts its ring; any other in-pad via moves, and a stub rejoins
+/// it to the pad.
+fn repair_vias_in_pads(
+    candidate: &Path,
+    policy: &crate::contract::FabricationPolicy,
+    underpad: &std::collections::BTreeSet<String>,
+) -> Result<usize, String> {
+    if policy.allow_via_in_pad {
+        return island_vias::move_vias_off_component_pads(candidate, underpad);
+    }
+    island_vias::move_vias_off_pads(candidate)
+}
+
+/// Take the open-net figures from the connectivity pass of the delivered
+/// board, names included.
+///
+/// The engine's own list is a claim, and it is kept under `engine_findings`.
+/// Keeping it as the names while the counts came from the pass made the report
+/// disagree with itself: a router that named one net open while the pass found
+/// another left the count, the names and the validation pointing at different
+/// nets.
+fn adopt_connectivity(
+    statistics: &mut crate::result::RouteStatistics,
+    connectivity: &crate::validate::ConnectivityReport,
+) {
+    // The engine's claim is evidence even where the pass disagrees with it, so
+    // the names it gave are kept before the pass's own replace them.
+    if !statistics.open_net_names.is_empty() {
+        statistics.engine_findings.insert(
+            "claimed_open_net_names".to_string(),
+            statistics.open_net_names.join(", "),
+        );
+    }
+    statistics.connected_nets = connectivity.connected_nets;
+    statistics.open_nets = connectivity.open_nets;
+    statistics.open_net_names = connectivity.open.iter().map(|o| o.net.clone()).collect();
 }
 
 /// Net names to try first on a retry, hardest first.
@@ -756,5 +830,195 @@ mod order_tests {
         request.kicad_routing_tools.ordering = None;
         request.engine = RouterEngine::Freerouting;
         assert!(retry_orderings(&request).is_empty());
+    }
+}
+
+#[cfg(test)]
+mod connectivity_report_tests {
+    use super::*;
+    use crate::result::RouteStatistics;
+    use crate::validate::{ConnectivityReport, OpenConnection};
+
+    /// The engine said `+3V3` was open; the delivered board's connectivity
+    /// pass found `+1V8`. The report names the net the pass found.
+    #[test]
+    fn the_open_net_names_are_those_of_the_connectivity_pass() {
+        let mut statistics = RouteStatistics {
+            open_nets: 1,
+            open_net_names: vec!["+3V3".to_string()],
+            ..RouteStatistics::default()
+        };
+        let connectivity = ConnectivityReport {
+            connected_nets: 37,
+            open_nets: 1,
+            open: vec![OpenConnection {
+                net: "+1V8".to_string(),
+                pad: "C13.1".to_string(),
+                island_size: 3,
+                pad_count: 8,
+            }],
+            ..ConnectivityReport::default()
+        };
+        adopt_connectivity(&mut statistics, &connectivity);
+        assert_eq!(statistics.open_net_names, vec!["+1V8".to_string()]);
+        assert_eq!(
+            statistics.engine_findings.get("claimed_open_net_names"),
+            Some(&"+3V3".to_string()),
+            "the engine's own claim is kept where the pass disagrees"
+        );
+        assert_eq!(statistics.open_nets, 1);
+        assert_eq!(statistics.connected_nets, 37);
+    }
+
+    /// A router that claims an open net the pass finds connected must not
+    /// leave the name behind with a count of zero.
+    #[test]
+    fn a_claim_the_pass_does_not_confirm_leaves_no_name() {
+        let mut statistics = RouteStatistics {
+            open_nets: 1,
+            open_net_names: vec!["+3V3".to_string()],
+            ..RouteStatistics::default()
+        };
+        adopt_connectivity(&mut statistics, &ConnectivityReport::default());
+        assert!(statistics.open_net_names.is_empty());
+        assert_eq!(statistics.open_nets, 0);
+    }
+}
+
+#[cfg(test)]
+mod via_in_pad_repair_tests {
+    use super::*;
+    use crate::contract::FabricationPolicy;
+
+    /// A via in the pad of its own net, with a track that meets it.
+    const VIA_IN_PAD: &str = r#"(kicad_pcb
+      (layers (0 "F.Cu" signal) (2 "B.Cu" signal))
+      (net 0 "") (net 1 "GND")
+      (footprint "J" (at 10 10) (layer "F.Cu")
+        (pad "1" smd rect (at 0 0) (size 0.6 0.6) (layers "F.Cu") (net 1 "GND")))
+      (via (at 10 10) (size 0.6) (drill 0.3) (layers "F.Cu" "B.Cu") (net 1))
+      (segment (start 10 10) (end 4 10) (width 0.25) (layer "F.Cu") (net 1))
+    )"#;
+
+    fn board(name: &str) -> std::path::PathBuf {
+        let dir = std::env::temp_dir().join(format!("via-in-pad-{name}-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).expect("scratch");
+        let path = dir.join("board.kicad_pcb");
+        std::fs::write(&path, VIA_IN_PAD).expect("board");
+        path
+    }
+
+    /// The pad of a component that declares the under-pad escape takes its via in
+    /// the pad: the via is the pad's escape, so it stays where via-in-pad is
+    /// allowed.
+    #[test]
+    fn a_via_in_a_declared_under_pad_escape_stays_where_via_in_pad_is_allowed() {
+        let pads = (0..9)
+            .map(|i| {
+                let (row, col) = (i / 3, i % 3);
+                let centre = row == 1 && col == 1;
+                format!(
+                    "(pad \"{}\" smd circle (at {} {}) (size 0.35 0.35) (layers \"F.Cu\") (net {} \"{}\"))",
+                    i + 1,
+                    f64::from(col) * 0.8,
+                    f64::from(row) * 0.8,
+                    if centre { 1 } else { 2 },
+                    if centre { "GND" } else { "SIG" },
+                )
+            })
+            .collect::<Vec<String>>()
+            .concat();
+        let text = format!(
+            r#"(kicad_pcb
+              (layers (0 "F.Cu" signal) (2 "B.Cu" signal))
+              (net 0 "") (net 1 "GND") (net 2 "SIG")
+              (footprint "Package_BGA:BGA-9" (at 10 10) (layer "F.Cu") (property "Reference" "U1") {pads})
+              (via (at 10.8 10.8) (size 0.35) (drill 0.2) (layers "F.Cu" "B.Cu") (net 1))
+            )"#
+        );
+        let dir = std::env::temp_dir().join(format!("via-in-grid-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).expect("scratch");
+        let path = dir.join("board.kicad_pcb");
+        std::fs::write(&path, &text).expect("board");
+        let policy = FabricationPolicy {
+            allow_via_in_pad: true,
+            ..FabricationPolicy::default()
+        };
+        let declared = std::collections::BTreeSet::from(["U1".to_string()]);
+        assert_eq!(repair_vias_in_pads(&path, &policy, &declared), Ok(0));
+        assert_eq!(std::fs::read_to_string(&path).expect("read"), text);
+    }
+
+    /// Whether a via stays in a pad is the design's declaration, not the package's
+    /// name: a BGA package whose component declares no under-pad escape has its vias
+    /// moved off the pads like any other component's, since the DRC exempts no ring
+    /// there.
+    #[test]
+    fn a_bga_package_that_declares_no_under_pad_escape_does_not_keep_a_via_in_its_pad() {
+        let pads = (0..9)
+            .map(|i| {
+                let (row, col) = (i / 3, i % 3);
+                let centre = row == 1 && col == 1;
+                format!(
+                    "(pad \"{}\" smd circle (at {} {}) (size 0.35 0.35) (layers \"F.Cu\") (net {} \"{}\"))",
+                    i + 1,
+                    f64::from(col) * 1.2,
+                    f64::from(row) * 1.2,
+                    if centre { 1 } else { 2 },
+                    if centre { "GND" } else { "SIG" },
+                )
+            })
+            .collect::<Vec<String>>()
+            .concat();
+        let text = format!(
+            r#"(kicad_pcb
+              (layers (0 "F.Cu" signal) (2 "B.Cu" signal))
+              (net 0 "") (net 1 "GND") (net 2 "SIG")
+              (footprint "Package_BGA:BGA-9" (at 10 10) (layer "F.Cu") (property "Reference" "U1") {pads})
+              (via (at 11.2 11.2) (size 0.35) (drill 0.2) (layers "F.Cu" "B.Cu") (net 1))
+            )"#
+        );
+        let dir =
+            std::env::temp_dir().join(format!("via-in-undeclared-bga-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).expect("scratch");
+        let path = dir.join("board.kicad_pcb");
+        std::fs::write(&path, &text).expect("board");
+        let policy = FabricationPolicy {
+            allow_via_in_pad: true,
+            ..FabricationPolicy::default()
+        };
+        assert_eq!(
+            repair_vias_in_pads(&path, &policy, &std::collections::BTreeSet::new()),
+            Ok(1)
+        );
+    }
+
+    /// A via in an ordinary component pad is moved off it even where via-in-pad is
+    /// allowed: only an under-pad escape's land is sized for a filled and capped via.
+    #[test]
+    fn a_via_in_a_component_pad_is_moved_even_where_via_in_pad_is_allowed() {
+        let path = board("component");
+        let policy = FabricationPolicy {
+            allow_via_in_pad: true,
+            ..FabricationPolicy::default()
+        };
+        assert_eq!(
+            repair_vias_in_pads(&path, &policy, &std::collections::BTreeSet::new()),
+            Ok(1)
+        );
+    }
+
+    /// Where it may not, the gate refuses it and the repair still moves it.
+    #[test]
+    fn a_via_in_a_pad_is_moved_where_via_in_pad_is_not_allowed() {
+        let path = board("refused");
+        assert_eq!(
+            repair_vias_in_pads(
+                &path,
+                &FabricationPolicy::default(),
+                &std::collections::BTreeSet::new()
+            ),
+            Ok(1)
+        );
     }
 }

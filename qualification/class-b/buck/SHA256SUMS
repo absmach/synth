@@ -1,11 +1,11 @@
 # sha256 of the design artifacts. Check: grep -v "^#" SHA256SUMS | sha256sum -c -   (from this folder)
 # Written by: synth export-kicad buck.synth --allow-unverified-parts --validate-erc --router free-routing (see QUALIFICATION.md, Reproduce)
-fd6298e3eca76d955f53b93abe8b3e1528f66276411a4156d1b05a65770794c9  buck.placement.layout.toml
+5a9493d8299b00f143a219fbaf3cba7e0644a8bd57ce224fcb28cbf3e536c9e3  buck.placement.layout.toml
 2b22a64fcf7e5247f787aa08f763d336fbd5a44b16989445bf39f929d6d6cb49  buck.synth
 c0f7ef273bf90689ad805b09ec6e736099cadc59943eaeec53015f51edbe38f8  buck_neg_fb_sw.synth
-897ee8608939745177fb175baf4518be9ea9d27e1f523b3bc49a8bcb4a41e4b5  images/pcb-3d-angled.png
-a7b60a7c8504cb77789ee1f8147245471b73eaaad03e7012b1317e6924547305  images/pcb-3d-bottom.png
-ab1a9a6a2f07149f05efedada3db9bcac3781182dc18f8694df48a310fdd3822  images/pcb-3d-top.png
+daeb8346ff419ddadea0a5cfc10fd175edaff66804cfe4e49757cac5bfba1fd4  images/pcb-3d-angled.png
+82a08310bf387f1dd1c7289c361c74a6a8ee3a5c10499506fafd6eac1f69802b  images/pcb-3d-bottom.png
+7c2a54c297d189cf9e87b0e54c0fc23601d0e8f215c0e097534579f7bf42fc8f  images/pcb-3d-top.png
 3b10e3530592a7dac2e1e213fd7d0d443c5b6be059762829783d2bafb783ced7  images/pcb-bottom-copper.png
 ac32b90d04be8dfff7152ec0c6efa2d70ece44ee22067e8b7605e58c986f1dd9  images/pcb-top-copper.png
 3bc3dff99ef1f94e30e095aeb93b7a623c5485cb7faacfaab105412c2c22e9ac  images/schematic.png
@@ -53,3 +53,4 @@ ad9091137e7be2f3a8cbe14d1a9b4f066f2f5c44ea276658b288c9d3b23c2726  reports/buck.k
 8e5c713640bfd347440e3055876dfa7c39c0b9399a577adf5c0c911d0500fd92  reports/registry-qualify.txt
 a88da875adeac3b2dfbcdb5465b8881e2ea3c1f50e5aa2d547524611f56655aa  reports/release-fab.json
 b84d5f6f9a1bc4905c96b6ca5358ca62c09a73e180c5af22b85f4e2cb90bc0e4  reports/release.json
+d3587f921a06c99e5d943bb4f41e2757acf3aef10665e6454a8094c1bbccfb60  kicad/buck.step

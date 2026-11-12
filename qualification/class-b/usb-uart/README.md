@@ -91,7 +91,7 @@ Status: compact placement done and routed with FreeRouting. The route passes Syn
 - D2 is over 2 mm: four protection parts do not fit side by side under the 7 mm of J1 pads any closer.
 - R1 and R2 are in the top corners; the remaining passives are placed by hand. The DRC checks their courtyards, not placement quality.
 
-Routing (FreeRouting 2.4.1, `router: "freerouting"`, `allow_via_in_pad: true`), with the Synth sources at `08b917b` (`source_revision` in `reports/release.json`):
+Routing (FreeRouting 2.4.1, `router: "freerouting"`, `allow_via_in_pad: true`), with the Synth sources at `e6455e13` (`source_revision` in `reports/release.json`):
 - Result: routed. `release.json` has `release_ready` true and `routing.state` "routed", with no open net. `kicad-cli pcb drc --severity-all --refill-zones`: 0 errors, 0 warnings and no `unconnected_items`. Synth's gate no longer accepts a GND zone that KiCad lists against itself, and the delivered board has none. pcbnew's connectivity puts every GND pad and via in one cluster, so the pour is connected. (The earlier revision's 36 library-link warnings came from a run without the KiCad libraries.)
 - 273 track segments, 43 vias, 515.4 mm of copper.
 - The routed board is 40.99 x 32.23 mm.
@@ -110,7 +110,8 @@ Routing (FreeRouting 2.4.1, `router: "freerouting"`, `allow_via_in_pad: true`), 
 - `reports/`: `release.json`, the delivered DRC, ERC and the routing record. Its `production_status` and `release_ready` fields only mean the route passed Synth's router and DRC gates, and its `gate_scope` field says so. Neither is a fabrication approval.
 - `qualification.json`: the qualification gate. `qualified` stays false until every review gate in it is true.
 - `dfm/`: the gerber zip, CPL and screenshots from the JLCPCB quote and DFM flow on 2026-10-27 (no order placed). It is partial: see `jlcpcb_dfm` in `qualification.json`.
-- `images/`: 3D top and angled, top and bottom copper, and the schematic. The 3D and copper pictures were rendered with `kicad-cli pcb render` and `pcb export pdf` from the committed board.
+- `images/`: 3D top, bottom and angled, top and bottom copper, and the schematic. The 3D and copper pictures were rendered with `kicad-cli pcb render` and `pcb export pdf` from the committed board.
+- `kicad/usb_uart.step`: board STEP with 3D models (`kicad-cli pcb export step --no-dnp`); the 3D views use the same models. All are stock KiCad models except the USB-C receptacle (J1, TYPE-C-31-M-12): KiCad has no model for it, so the STEP and the 3D images use the GrabCAD model in `qualification/class-b/models/` (source and offset in its README), rendered from a scratch copy of the board; the committed `kicad_pcb` still names KiCad's library path for that file. The mounting holes have no model (the KiCad MountingHole step files are not installed).
 - `dfm/`: regenerated Gerbers, drill and CPL for this board. The JLCPCB screenshots there are from the previous revision and were not redone; see `qualification.json`.
 - `SHA256SUMS`: hashes of the artifacts above.
 

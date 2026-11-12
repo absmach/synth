@@ -9,6 +9,7 @@ use axum::{
 };
 use serde_json::Value;
 use tokio::io::{AsyncBufReadExt, BufReader};
+use tracing::{info, warn};
 
 use std::collections::HashMap;
 use std::io::Write as _;
@@ -327,7 +328,7 @@ async fn serve<R, W, H>(
         let req_val: Value = match serde_json::from_str(trimmed) {
             Ok(v) => v,
             Err(e) => {
-                eprintln!("synth-mcp: json parse error: {e}");
+                warn!("synth-mcp: json parse error: {e}");
                 let err_resp = serde_json::json!({
                     "jsonrpc": "2.0",
                     "id": Value::Null,
@@ -422,7 +423,7 @@ pub async fn run_sse_server(port: u16, default_registry: Option<PathBuf>) -> any
 
     let addr = format!("127.0.0.1:{port}");
     let listener = tokio::net::TcpListener::bind(&addr).await?;
-    eprintln!("Synth MCP Server listening on http://{addr}");
+    info!("Synth MCP Server listening on http://{addr}");
     axum::serve(listener, app).await?;
     Ok(())
 }

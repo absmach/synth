@@ -34,6 +34,9 @@ pub struct ParseResult {
     pub diagnostics: Vec<Diagnostic>,
 }
 
+/// The values `edge_rate` accepts inside a netclass.
+const EDGE_RATES: [&str; 3] = ["slow", "medium", "fast"];
+
 impl std::fmt::Debug for ParseResult {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("ParseResult")
@@ -1468,7 +1471,7 @@ impl Parser {
                 self.bump();
                 let span = self.peek().span;
                 match self.expect_ident("E-SYNTH-PARSE-028", "expected `edge_rate` value") {
-                    Some(rate) if matches!(rate.to_ascii_lowercase().as_str(), "slow" | "fast") => {
+                    Some(rate) if EDGE_RATES.contains(&rate.to_ascii_lowercase().as_str()) => {
                         return Some(NetclassAttr::EdgeRate {
                             rate: rate.to_ascii_lowercase(),
                             span,
@@ -1478,7 +1481,7 @@ impl Parser {
                         span,
                         "E-SYNTH-PARSE-019",
                         "unexpected value for `edge_rate` inside netclass",
-                        "`slow` or `fast`",
+                        "`slow`, `medium` or `fast`",
                         format!("`{rate}`"),
                         None,
                     ),
@@ -1505,7 +1508,7 @@ impl Parser {
                     self.peek().span,
                     "E-SYNTH-PARSE-019",
                     "unexpected attribute inside netclass",
-                    "`trace_width <value><unit>`, `clearance <value><unit>`, `impedance <value><unit>`, `current <value><unit>`, `max_length <value><unit>`, `max_skew <value><unit>`, `via_diameter <value><unit>`, `via_drill <value><unit>`, `edge_rate slow|fast`, `layers \"<layer>\", …`, `plane`, or `color \"#rrggbb\"`",
+                    "`trace_width <value><unit>`, `clearance <value><unit>`, `impedance <value><unit>`, `current <value><unit>`, `max_length <value><unit>`, `max_skew <value><unit>`, `via_diameter <value><unit>`, `via_drill <value><unit>`, `edge_rate slow|medium|fast`, `layers \"<layer>\", …`, `plane`, or `color \"#rrggbb\"`",
                     self.describe_current(),
                     None,
                 );
@@ -3518,6 +3521,33 @@ mod tests {
             n.attrs.iter().any(|a| matches!(a, NetclassAttr::Plane)),
             "plane attr must parse: {:?}",
             n.attrs
+        );
+    }
+
+    #[test]
+    fn parse_netclass_edge_rate_medium() {
+        let src = r#"board "b" {
+            netclass "SDRAM" {
+                edge_rate medium
+            }
+        }"#;
+        let res = parse(lex(src), "test.synth".into());
+        assert!(
+            res.diagnostics.is_empty(),
+            "Diagnostics should be empty: {:?}",
+            res.diagnostics
+        );
+        let ast = res.ast.unwrap();
+        let StatementAst::Netclass(class) = &ast.board.statements[0] else {
+            panic!("Expected netclass statement")
+        };
+        assert!(
+            class
+                .attrs
+                .iter()
+                .any(|a| matches!(a, NetclassAttr::EdgeRate { rate, .. } if rate == "medium")),
+            "edge_rate medium must parse: {:?}",
+            class.attrs
         );
     }
 

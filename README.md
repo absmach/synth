@@ -124,6 +124,15 @@ Open exported projects in KiCad. Optional Gerber, drill, and STEP exports requir
 
 For CI and release gates, `synth check DESIGN.synth --json` is the deterministic, model-free gate for validation and DRC. A check that could not run is reported as `unknown` and blocks just as a failure does — see [release checks](docs/release-checks.md).
 
+### Logging
+
+Progress, retries, and degraded-check notices go to stderr as structured log events; stdout carries only the command's own output (JSON, reports, listings), so a pipeline can parse it without stripping prefixes. The default level is info. `-v` raises it to debug, `-vv` to trace, and `-q` shows errors only. `SYNTH_LOG` overrides both when one stage needs more detail:
+
+```bash
+synth -v export-kicad board.synth --out output/board
+SYNTH_LOG=synth_router=debug,synth=info synth route board.synth
+```
+
 ### Agent Integration
 
 Start the MCP server over standard input and output:
@@ -161,13 +170,13 @@ Synth resolves parts from a component registry and lowers the source into a type
 
 ## Examples
 
-| Design                                                                                             | What it demonstrates                                                                                     |
-| -------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------- |
-| [Hello](fixtures/designs/hello.synth)                                                              | The smallest board declaration                                                                           |
-| [Environmental logger](examples/env_logger/env_logger.synth)                                       | USB-C power, a regulator, an MCU, an environmental sensor, and a debug header                            |
-| [Sensor logger](examples/sensor_logger/sensor_logger.synth)                                        | A larger design with dual I²C sensors, SPI flash, and status LEDs                                        |
-| [Placement and differential pairs](examples/placement_and_diff_pair/placement_and_diff_pair.synth) | Placement hints, differential-pair constraints, and keepout regions                                      |
-| [RP2350 development board](examples/rp2350/)                                                       | Clean-netlist FreeRouting, zone refill, and compact outlines |
+| Design                                                                                             | What it demonstrates                                                          |
+| -------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------- |
+| [Hello](fixtures/designs/hello.synth)                                                              | The smallest board declaration                                                |
+| [Environmental logger](examples/env_logger/env_logger.synth)                                       | USB-C power, a regulator, an MCU, an environmental sensor, and a debug header |
+| [Sensor logger](examples/sensor_logger/sensor_logger.synth)                                        | A larger design with dual I²C sensors, SPI flash, and status LEDs             |
+| [Placement and differential pairs](examples/placement_and_diff_pair/placement_and_diff_pair.synth) | Placement hints, differential-pair constraints, and keepout regions           |
+| [RP2350 development board](examples/rp2350/)                                                       | Clean-netlist FreeRouting, zone refill, and compact outlines                  |
 
 Additional language and validation cases live in [fixtures](fixtures/designs/README.md). Part definitions live in the [component registry](registry/README.md).
 

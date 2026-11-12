@@ -11451,6 +11451,7 @@ board "features_only" {
             .collect(),
             forced_net_labels: Vec::new(),
             labels: std::collections::HashMap::new(),
+            outline: Vec::new(),
             vias: Vec::new(),
             fit_sheet: false,
         };
@@ -11514,6 +11515,7 @@ board "features_only" {
                 .collect(),
             forced_net_labels: Vec::new(),
             labels: std::collections::HashMap::new(),
+            outline: Vec::new(),
             vias: Vec::new(),
             fit_sheet: false,
         };

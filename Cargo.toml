@@ -65,6 +65,12 @@ thiserror = "2.0"
 anyhow = "1.0"
 rayon = "1.12"
 
+# Structured logging. Library crates only emit events; the binary installs
+# the subscriber, so the same diagnostics can be filtered, captured by a
+# host, or silenced without changing what is printed where.
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+
 # Deterministic rasterization for the schematic visual-feedback loop
 # (synth-render). Pinned exactly: a resvg bump that moves one antialiased
 # edge would read as visual drift in a stored baseline.
