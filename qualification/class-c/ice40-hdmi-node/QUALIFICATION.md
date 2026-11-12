@@ -88,10 +88,10 @@ From this directory, with the KiCad 10 footprint and symbol library tables confi
 sha256sum -c SHA256SUMS
 kicad-cli pcb drc --severity-error kicad/ice40_hdmi_node.kicad_pcb
 kicad-cli sch erc kicad/ice40_hdmi_node.kicad_sch
-SYNTH_USER_REGISTRY_DIR=registry synth validate ice40_hdmi_node.synth
+synth validate ice40_hdmi_node.synth
 ```
 
-The first command verifies every file below `SHA256SUMS`; the Gerber content hash is in `fab/GERBER_CONTENT_SHA256` and the STEP geometry hash is stated in the sign-off table. `registry/` holds the parts this board needs that the shipped registry does not carry.
+The first command verifies every file below `SHA256SUMS`; the Gerber content hash is in `fab/GERBER_CONTENT_SHA256` and the STEP geometry hash is stated in the sign-off table. The parts this board adds to the registry are in `registry/parts/` of the repository.
 
 ## Human review
 
@@ -110,4 +110,4 @@ PCB review sign-off required by #40: JeffMboya, on the package in `fab/` (Gerber
 | Placement | |
 | Parts and values | |
 
-Every part of the board that carries no other reviewer in `registry/parts` is recorded as reviewed by JeffMboya (2026-11-11), with the review date and the datasheet or product page where one is sourced, in the part files of `registry/` (`reviewed_by`, `reviewed_at`, `datasheet_url`).
+The parts this board adds to `registry/parts/` (`ice40hx4k_tq144`, `w25q128jvsiq_208mil`, `tlv70012_ddc`) carry the author's review record (`reviewed_by`, `reviewed_at`, `datasheet_url`); every other part keeps its registry record.
