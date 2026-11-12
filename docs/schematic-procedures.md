@@ -192,7 +192,7 @@ User drag offsets are stored in a `<design>.schematic.layout.toml` beside the `.
 | `<name>.kicad_sch`    | `schematic.rs`                                           | the schematic (`kicad_sch` version 20260306)                                                                |
 | `<name>.kicad_pcb`    | `synth_place` + external router + independent validation | routed board, installed only when the state is `routed`                                                     |
 | `<name>.routing.json` | external routing run                                     | run record: state, provenance, statistics, independent verdict                                              |
-| `bom.csv`             | `bom.rs`                                                 | refdes, value, kind, description, symbol, footprint, `lcsc_pn`, `mpn`                                       |
+| `bom.csv`             | `bom.rs`                                                 | refdes, value, kind, description, symbol, footprint, `lcsc_pn`, `mpn`, `dielectric`, `voltage`, `tolerance`, `power` |
 
 `schematic.rs` emits:
 

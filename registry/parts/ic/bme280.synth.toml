@@ -1,0 +1,87 @@
+id = "bme280"
+kind = "sensor"
+version = 0
+lifecycle = "active"
+description = "Bosch BME280 combined humidity, pressure and temperature sensor, I2C/SPI, LGA-8 2.5 x 2.5 mm"
+mpn = "BME280"
+kicad_symbol = "Sensor:BME280"
+kicad_footprint = "Package_LGA:Bosch_LGA-8_2.5x2.5mm_P0.65mm_ClockwisePinNumbering"
+
+[footprint_dimensions]
+width_mm = 2.5
+height_mm = 2.5
+courtyard_margin_mm = 0.25
+
+# VDD 1.71-3.6 V, VDDIO 1.2-3.6 V (datasheet table 1, electrical specification).
+[operating_conditions]
+min_voltage_v = 1.71
+max_voltage_v = 3.6
+
+[[pins]]
+name = "gnd_1"
+number = "1"
+electrical_type = "power_input"
+required = true
+
+# I2C mode: CSB tied to VDDIO.
+[[pins]]
+name = "csb"
+number = "2"
+electrical_type = "input"
+required = true
+
+[[pins]]
+name = "sda"
+number = "3"
+electrical_type = "bidirectional"
+capabilities = ["i2c_sda"]
+required = true
+
+[[pins]]
+name = "scl"
+number = "4"
+electrical_type = "input"
+capabilities = ["i2c_scl"]
+required = true
+
+# I2C address select: GND = 0x76, VDDIO = 0x77.
+[[pins]]
+name = "sdo"
+number = "5"
+electrical_type = "input"
+required = true
+
+[[pins]]
+name = "vddio"
+number = "6"
+electrical_type = "power_input"
+required = true
+
+[[pins]]
+name = "gnd_7"
+number = "7"
+electrical_type = "power_input"
+required = true
+
+[[pins]]
+name = "vdd"
+number = "8"
+electrical_type = "power_input"
+required = true
+
+[[required_decoupling]]
+net = "vdd"
+value = "100nf"
+count = 1
+
+[[required_decoupling]]
+net = "vddio"
+value = "100nf"
+count = 1
+
+[provenance]
+source = "imported"
+generator = "synth-part-import-kicad 0.1"
+datasheet_url = "https://www.bosch-sensortec.com/media/boschsensortec/downloads/datasheets/bst-bme280-ds002.pdf"
+reviewed_by = "Steve Munene"
+reviewed_at = "2026-10-27"

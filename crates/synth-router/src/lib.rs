@@ -61,6 +61,8 @@ pub mod zone_fill;
 
 use std::path::{Path, PathBuf};
 
+use tracing::{debug, info, warn};
+
 pub use capability::{discover, RouterCapability};
 pub use contract::{
     FabricationPolicy, FreeroutingOptions, KiCadRoutingToolsOptions, KrtEscalation, NetLayers,
@@ -105,8 +107,8 @@ pub fn route(request: &RouteRequest) -> RouteReport {
         if report.state != result::RouteState::ValidationFailed {
             break;
         }
-        eprintln!(
-            "note: the routed board was rejected ({} blocking); routing again with the {ordering} net order",
+        info!(
+            "the routed board was rejected ({} blocking); routing again with the {ordering} net order",
             report
                 .validation
                 .as_ref()
@@ -295,8 +297,8 @@ pub fn sanitize_stem(name: &str) -> String {
 /// failure.
 fn write_report(report: &RouteReport, request: &RouteRequest) {
     if let Err(error) = report.write_to(&request.report_path()) {
-        eprintln!(
-            "warning: routing run record could not be written to {}: {error}",
+        warn!(
+            "routing run record could not be written to {}: {error}",
             request.report_path().display()
         );
     }
@@ -332,6 +334,7 @@ fn report_silkscreen_pass(result: Result<label_vias::LabelMoves, String>) {
             trimmed: 0,
             widened: 0,
             dropped: 0,
+            relocated: 0,
         }) => {}
         Ok(label_vias::LabelMoves {
             moved,
@@ -339,10 +342,11 @@ fn report_silkscreen_pass(result: Result<label_vias::LabelMoves, String>) {
             trimmed,
             widened,
             dropped,
-        }) => eprintln!(
-            "note: moved {moved} reference label(s) off vias and pads; {hidden} hidden because no clear spot was within reach; {trimmed} outline line(s) cut back from vias and pads; {dropped} silkscreen circle(s) and polygon(s) dropped; {widened} silkscreen stroke(s) widened to 0.18 mm"
+            relocated,
+        }) => info!(
+            "moved {moved} reference label(s) off vias and pads; {hidden} hidden because no clear spot was within reach; {trimmed} outline line(s) cut back from vias and pads; {relocated} silkscreen polygon(s) and circle(s) moved clear of copper; {dropped} silkscreen circle(s) and polygon(s) dropped; {widened} silkscreen stroke(s) widened to 0.18 mm"
         ),
-        Err(detail) => eprintln!("warning: reference labels were not checked: {detail}"),
+        Err(detail) => warn!("reference labels were not checked: {detail}"),
     }
 }
 
@@ -353,11 +357,11 @@ fn repair_dropped_stubs(candidate: &Path) -> Vec<String> {
     match island_vias::drop_dangling_stubs(candidate) {
         Ok(0) => Vec::new(),
         Ok(dropped) => {
-            eprintln!("note: dropped {dropped} track stub(s) that ended in nothing");
+            debug!("dropped {dropped} track stub(s) that ended in nothing");
             Vec::new()
         }
         Err(detail) => {
-            eprintln!("warning: track stubs were not pruned: {detail}");
+            warn!("track stubs were not pruned: {detail}");
             vec![format!("track stub prune did not run: {detail}")]
         }
     }
@@ -389,15 +393,26 @@ fn finalize(
     let underpad = underpad_components(request);
     match repair_vias_in_pads(&candidate.candidate_path, &request.policy, &underpad) {
         Ok(0) => {}
-        Ok(moved) => eprintln!("note: moved {moved} via(s) off the pads they sat in"),
+        Ok(moved) => info!("moved {moved} via(s) off the pads they sat in"),
         Err(detail) => {
-            eprintln!("warning: vias in pads were not repaired: {detail}");
+            warn!("vias in pads were not repaired: {detail}");
             repair_unavailable.push(format!("via-in-pad repair did not run: {detail}"));
+        }
+    }
+    match island_vias::drop_edge_tracks(&candidate.candidate_path, &request.ground_nets) {
+        Ok(0) => {}
+        Ok(dropped) => info!(
+            "dropped {dropped} ground track(s) whose copper came nearer the outline than the board's edge rule"
+        ),
+        Err(detail) => {
+            warn!("edge tracks were not checked: {detail}");
+            repair_unavailable.push(format!("edge track prune did not run: {detail}"));
         }
     }
     repair_unavailable.extend(repair_dropped_stubs(&candidate.candidate_path));
     let mut repair_advisory: Vec<String> = Vec::new();
-    let mut ground = island_vias::Ground::new(&request.ground_nets);
+    let mut ground = island_vias::Ground::new(&request.ground_nets)
+        .with_fine_pitch_advisory(request.fine_pitch_return_via_advisory);
     if let Some(critical) = &request.return_via_critical_nets {
         ground = ground.with_critical(critical);
     }
@@ -416,8 +431,8 @@ fn finalize(
             repair_advisory = outcome.advisory;
         }
         Err(detail) => {
-            eprintln!(
-                "warning: pour islands were not checked in {}: {detail}",
+            warn!(
+                "pour islands were not checked in {}: {detail}",
                 candidate.candidate_path.display()
             );
             repair_unavailable.push(format!("pour island repair did not run: {detail}"));
@@ -454,8 +469,8 @@ fn finalize(
         // connectivity it was validated with. A refill that fails leaves
         // the routed, unfilled board in place.
         if let Err(detail) = zone_fill::refill_zones(&candidate.candidate_path) {
-            eprintln!(
-                "warning: zones were not filled in {}: {detail}; KiCad will show \
+            warn!(
+                "zones were not filled in {}: {detail}; KiCad will show \
                  plane-connected pads as unrouted until zones are filled (press B)",
                 request.board_path.display()
             );

@@ -17,7 +17,7 @@ feedback, power-good and thermal copper, plus a negative variant that the feedba
 
 ## What
 
-- `buck.synth`, negative `buck_neg_fb_sw.synth`, the placement sidecar `buck.placement.layout.toml`, hashes in `SHA256SUMS`, matrix and `#38` traceability in `QUALIFICATION.md`, evidence in `kicad/`, `reports/`, `images/`.
+- `buck.synth`, negative `buck_neg_fb_sw.synth`, the placement sidecar `buck.placement.layout.toml`, hashes in `SHA256SUMS`, matrix and `#38` traceability in `QUALIFICATION.md`, evidence in `kicad/`, `reports/`, `images/`. `kicad/buck.step` is the board STEP with 3D models (`kicad-cli pcb export step --no-dnp`); the 3D views use the same stock KiCad models. The mounting holes have no model (the KiCad MountingHole step files are not installed).
 - `kicad/`: the KiCad project, BOM, pick-and-place, `gerbers/` (22 Gerbers plus the job file, 4 copper layers) and `drill/` (PTH and NPTH). `reports/`: `release.json` (source/DRC gate) and `release-fab.json` (fab package), DRC, ERC, routing and connectivity.
 - Chain: J1 (JST XH) -> F1 PTC -> D1 SS36 Schottky (reverse block) -> VIN node.
   VIN node: D2 SMBJ30A TVS, C1 47 uF bulk, C2 10 uF, C3 220 nF (on the U1 VIN pin), U1 LMR38010, UVLO divider.
