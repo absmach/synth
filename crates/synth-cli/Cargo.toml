@@ -46,3 +46,4 @@ tokio = { workspace = true }
 
 [dev-dependencies]
 synth-ast = { workspace = true }
+toml = { workspace = true }
