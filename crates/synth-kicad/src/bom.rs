@@ -244,6 +244,7 @@ mod tests {
             legends: false,
             name: "b".to_string(),
             layers: 2,
+            outline: None,
             manufacturer: None,
             revision: None,
             company: None,

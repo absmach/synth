@@ -151,8 +151,8 @@ fn the_ground_stitching_vias_follow_a_declared_default_drill() {
 "#,
     );
     assert!(
-        vias.len() >= 4,
-        "a four-layer ground pour is stitched at the four corners: {vias:?}"
+        vias.len() >= 2,
+        "a four-layer ground pour is stitched at the top and bottom edge midpoints: {vias:?}"
     );
     assert!(
         vias.iter()
@@ -164,7 +164,7 @@ fn the_ground_stitching_vias_follow_a_declared_default_drill() {
 #[test]
 fn the_ground_stitching_vias_keep_the_default_when_nothing_is_declared() {
     let vias = ground_vias("");
-    assert!(vias.len() >= 4, "{vias:?}");
+    assert!(vias.len() >= 2, "{vias:?}");
     assert!(
         vias.iter()
             .all(|(size, drill)| size == "0.6" && drill == "0.3"),

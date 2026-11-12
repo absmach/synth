@@ -477,6 +477,15 @@ pub struct Note {
 pub struct Keepout {
     pub name: String,
     pub radius: Option<Length>,
+    /// Component refdes whose placed centre anchors the zone.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub anchor: Option<String>,
+    /// Explicit board coordinate, in millimetres.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub at: Option<(Length, Length)>,
+    /// Copper layers the rule area covers; empty means every copper layer.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub layers: Vec<String>,
     pub source_span: Span,
 }
 

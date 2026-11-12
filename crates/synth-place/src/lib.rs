@@ -1303,15 +1303,21 @@ fn validate_sidecar_inside_outline(
         if entry.relative_to.is_some() {
             continue;
         }
+        let rotation = match entry.rotation {
+            90 => Rotation::Ninety,
+            180 => Rotation::OneEighty,
+            270 => Rotation::TwoSeventy,
+            _ => Rotation::Zero,
+        };
+        // The sidecar stores the footprint origin, not the courtyard centre.
         let placed = ComponentPlacement {
             id: component.id,
-            center: Point::new(mm_to_nm(entry.x), mm_to_nm(entry.y)),
-            rotation: match entry.rotation {
-                90 => Rotation::Ninety,
-                180 => Rotation::OneEighty,
-                270 => Rotation::TwoSeventy,
-                _ => Rotation::Zero,
-            },
+            center: courtyard_center_from_origin(
+                component.part.as_ref(),
+                Point::new(mm_to_nm(entry.x), mm_to_nm(entry.y)),
+                rotation,
+            ),
+            rotation,
             layer: Layer::Top,
         };
         let courtyard = sidecar_courtyard_rect(board, component, &placed);
@@ -6383,8 +6389,41 @@ pub fn describe_placement(board: &Board, placement: &Placement) -> PlacementDesc
             continue;
         };
         if gap_nm > mm_to_nm(FLUSH_CONNECTOR_TOLERANCE_MM) {
+            // Name the part whose courtyard actually reaches that edge first.
+            // Adding an edge hint to the connector cannot help when a corner
+            // mounting hole is what keeps the fitted outline out.
+            let edge_gap = |rect: &synth_geometry::Rect| match edge {
+                "left" => rect.min.x_nm - outline.min.x_nm,
+                "top" => rect.min.y_nm - outline.min.y_nm,
+                "right" => outline.max.x_nm - rect.max.x_nm,
+                _ => outline.max.y_nm - rect.max.y_nm,
+            };
+            let blocker = courtyard_rects
+                .iter()
+                .filter(|(refdes, _)| *refdes != connector.refdes.as_str())
+                .map(|(refdes, rect)| (edge_gap(rect), *refdes))
+                .min_by_key(|(gap, _)| *gap);
+            let (reason, fix) = match blocker {
+                Some((blocker_gap, refdes)) if blocker_gap < gap_nm => (
+                    format!(
+                        ", but {refdes} reaches {:.1} mm from that edge and holds it out",
+                        synth_geometry::nm_to_mm(blocker_gap)
+                    ),
+                    format!(
+                        "move {refdes} inboard through its placement sidecar, or pin {}",
+                        connector.refdes
+                    ),
+                ),
+                _ => (
+                    String::new(),
+                    format!(
+                        "add a hard `edge: {edge}` placement hint to {}",
+                        connector.refdes
+                    ),
+                ),
+            };
             functional_warnings.push(format!(
-                "{} sits {:.1} mm inside the {edge} edge; an external connector must be flush with the board edge",
+                "{} sits {:.1} mm inside the {edge} edge; an external connector must be flush with the board edge{reason}",
                 connector.refdes,
                 synth_geometry::nm_to_mm(gap_nm)
             ));
@@ -6395,10 +6434,7 @@ pub fn describe_placement(board: &Board, placement: &Placement) -> PlacementDesc
                 suggested_x_mm: None,
                 suggested_y_mm: None,
                 suggested_rotation_deg: None,
-                rationale: format!(
-                    "add a hard `edge: {edge}` placement hint to {}",
-                    connector.refdes
-                ),
+                rationale: fix,
             });
         }
     }
@@ -10473,9 +10509,43 @@ board "features_only" {
             .iter()
             .any(|w| w.starts_with("J2 sits ")));
         assert!(desc.visual_review.recommended_actions.iter().any(|a| {
-            a.action == "place_connector_flush" && a.refdes == "J1" && a.rationale.contains("edge:")
+            a.action == "place_connector_flush"
+                && a.refdes == "J1"
+                && (a.rationale.contains("edge:") || a.rationale.contains("move "))
         }));
         assert!(!desc.visual_review.requires_revision);
+    }
+
+    /// When another part's courtyard reaches the edge first, the advice names
+    /// that part and points at moving it, not at adding a hint to the connector.
+    #[test]
+    fn a_connector_kept_inside_the_edge_names_the_part_that_holds_it_out() {
+        let components = r#"component J1: connector "jst_xh_2pin"
+               component H1: mounting_hole "mounting_hole_m2_5_clearance"
+               component R1: resistor "r_generic_0603" value "10k""#;
+        let (board, mut placement) = row_board(components, &[0.0; 3]);
+        move_part(&mut placement, &board, "J1", 40.0, 20.0);
+        move_part(&mut placement, &board, "H1", 52.0, 32.0);
+        move_part(&mut placement, &board, "R1", 10.0, 10.0);
+        tighten_outline_after_sidecar(&board, &mut placement);
+        let desc = describe_placement(&board, &placement);
+        let warning = desc
+            .functional_warnings
+            .iter()
+            .find(|w| w.starts_with("J1 sits "))
+            .unwrap_or_else(|| panic!("{:?}", desc.functional_warnings));
+        assert!(
+            warning.contains("reaches") && warning.contains("holds it out"),
+            "the warning must name the blocker: {warning}"
+        );
+        assert!(
+            desc.visual_review
+                .recommended_actions
+                .iter()
+                .any(|a| { a.action == "place_connector_flush" && a.rationale.contains("move ") }),
+            "{:?}",
+            desc.visual_review.recommended_actions
+        );
     }
 
     #[test]

@@ -2123,6 +2123,38 @@ impl Parser {
                         attrs.push(KeepoutAttr::Radius(v));
                     }
                 }
+                TokenKind::Ident(name) if name == "anchor" => {
+                    self.bump();
+                    if let Some(anchor) = self.expect_string(
+                        "E-SYNTH-PARSE-043",
+                        "expected a component refdes after `anchor`",
+                    ) {
+                        attrs.push(KeepoutAttr::Anchor(anchor));
+                    }
+                }
+                TokenKind::Ident(name) if name == "at" => {
+                    self.bump();
+                    let Some(x) = self.expect_value() else {
+                        continue;
+                    };
+                    let Some(y) = self.expect_value() else {
+                        continue;
+                    };
+                    attrs.push(KeepoutAttr::At { x, y });
+                }
+                TokenKind::KwLayers => {
+                    self.bump();
+                    let mut layers = Vec::new();
+                    while let Some(layer) = self.expect_string_optional() {
+                        layers.push(layer);
+                        if matches!(self.peek_kind(), TokenKind::Comma) {
+                            self.bump();
+                        } else {
+                            break;
+                        }
+                    }
+                    attrs.push(KeepoutAttr::Layers(layers));
+                }
                 _ => {
                     self.emit(
                         self.peek().span,
@@ -2648,6 +2680,17 @@ impl Parser {
                 self.describe_current(),
                 None,
             );
+            None
+        }
+    }
+
+    fn expect_string_optional(&mut self) -> Option<String> {
+        if let TokenKind::StringLit(_) = self.peek_kind() {
+            let TokenKind::StringLit(s) = self.bump().kind.clone() else {
+                unreachable!()
+            };
+            Some(s)
+        } else {
             None
         }
     }

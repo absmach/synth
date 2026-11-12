@@ -1074,17 +1074,36 @@ impl<'a> LowerCtx<'a> {
 
     fn lower_keepout(&mut self, k: &KeepoutStmt) -> Keepout {
         let mut radius: Option<Length> = None;
+        let mut anchor: Option<String> = None;
+        let mut at: Option<(Length, Length)> = None;
+        let mut layers: Vec<String> = Vec::new();
         for attr in &k.attrs {
-            if let KeepoutAttr::Radius(v) = attr {
-                match Length::try_from(v) {
+            match attr {
+                KeepoutAttr::Radius(v) => match Length::try_from(v) {
                     Ok(l) => radius = Some(l),
                     Err(e) => self.emit_unit_error(&e, "keepout radius"),
+                },
+                KeepoutAttr::Anchor(name) => anchor = Some(name.clone()),
+                KeepoutAttr::At { x, y } => {
+                    let x = Length::try_from(x);
+                    let y = Length::try_from(y);
+                    match (x, y) {
+                        (Ok(x), Ok(y)) => at = Some((x, y)),
+                        (Err(e), _) | (_, Err(e)) => self.emit_unit_error(&e, "keepout at"),
+                    }
                 }
+                KeepoutAttr::Layers(names) => layers.extend(names.iter().cloned()),
+                // Non-exhaustive: a future keepout attribute is ignored here
+                // until lowering learns what it means.
+                _ => {}
             }
         }
         Keepout {
             name: k.name.clone(),
             radius,
+            anchor,
+            at,
+            layers,
             source_span: k.span,
         }
     }

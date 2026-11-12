@@ -68,6 +68,8 @@ fn parts_that_named_missing_libraries_qualify_against_the_stock_ones() {
         "at24c512_eeprom",
         "m24m02_eeprom",
         "mpu6050_imu",
+        // #87: a six-pad balun declared only pads 1-4.
+        "balun_2g4",
     ] {
         let part = registry
             .lookup(id)

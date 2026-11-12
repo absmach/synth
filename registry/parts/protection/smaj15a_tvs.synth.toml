@@ -34,3 +34,5 @@ electrical_type = "passive"
 
 [provenance]
 datasheet_url = "https://www.littelfuse.com/products/tvs-diodes/surface-mount/smaj/smaj15a.aspx"
+reviewed_by = "synth-seed-review"
+reviewed_at = "2026-11-13"

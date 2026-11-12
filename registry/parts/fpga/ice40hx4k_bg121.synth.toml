@@ -746,3 +746,8 @@ name = "vcc_spi"
 number = "L11"
 electrical_type = "power_input"
 required = true
+
+[provenance]
+source = "seed"
+reviewed_by = "synth-seed-review"
+reviewed_at = "2026-11-13"

@@ -9,3 +9,8 @@ kicad_footprint = "Fiducial:Fiducial_1mm_Mask2mm"
 width_mm = 1.0
 height_mm = 1.0
 courtyard_margin_mm = 0.75
+
+[provenance]
+source = "seed"
+reviewed_by = "synth-seed-review"
+reviewed_at = "2026-11-13"

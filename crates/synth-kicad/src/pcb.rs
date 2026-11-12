@@ -76,6 +76,7 @@ pub struct PlaneFanoutError {
 
 /// `label_overrides` is the design's say over reference labels, by designator,
 /// from the placement sidecar.
+#[allow(clippy::implicit_hasher)]
 pub fn build_pcb(
     board: &Board,
     placement: &Placement,
@@ -264,7 +265,7 @@ pub fn build_pcb(
     let has_power_plane = board.netclasses.iter().any(|class| class.plane);
     let (gnd_layers, power_layers): (Vec<&'static str>, Vec<&'static str>) =
         if has_power_plane && board.layers >= 4 {
-            (vec!["F.Cu", "B.Cu"], inner_plane_layers(board.layers))
+            (vec!["F.Cu", "B.Cu"], power_plane_layers(board))
         } else {
             (ground_plane_layers(board.layers), Vec::new())
         };
@@ -337,6 +338,15 @@ pub fn build_pcb(
                 .into_iter()
                 .enumerate()
             {
+                if region
+                    .as_deref()
+                    .is_some_and(|polygon| !convex_contains(polygon, point))
+                {
+                    continue;
+                }
+                if !outline_points.is_empty() && !custom_outline_contains(outline_points, point) {
+                    continue;
+                }
                 children.push(build_ground_stitch_via(
                     point.x_nm,
                     point.y_nm,
@@ -374,12 +384,68 @@ pub fn build_pcb(
         else {
             continue;
         };
-        children.push(build_mounting_hole_keepout(
+        children.push(build_round_keepout(
             placed.center,
-            mm_to_nm(width_mm / 2.0),
+            mm_to_nm(width_mm / 2.0) + mm_to_nm(MOUNTING_HOLE_KEEPOUT_MM),
             &ground_plane_layers(board.layers),
             project,
-            &component.refdes,
+            &format!("{} screw head", component.refdes),
+            &format!("mounting-hole-keepout {}", component.refdes),
+        ));
+    }
+
+    // A declared keepout becomes a real rule area. `anchor` names a part,
+    // `at` gives an explicit coordinate, and `layers` limits the copper; with
+    // none of them the name is matched to a part and then the board centre is
+    // used, as before.
+    for (index, keepout) in board.keepouts.iter().enumerate() {
+        let Some(radius) = keepout.radius else {
+            continue;
+        };
+        let anchor = if let Some((x, y)) = keepout.at {
+            Point::new(mm_to_nm(x.to_mm()), mm_to_nm(y.to_mm()))
+        } else {
+            let wanted = keepout.anchor.as_deref().unwrap_or(&keepout.name);
+            board
+                .components
+                .iter()
+                .find(|component| {
+                    component.refdes.eq_ignore_ascii_case(wanted)
+                        || component.kind.eq_ignore_ascii_case(wanted)
+                })
+                .and_then(|component| placements_by_id.get(&component.id))
+                .map_or_else(
+                    || {
+                        Point::new(
+                            (placement.board_outline.min.x_nm + placement.board_outline.max.x_nm)
+                                / 2,
+                            (placement.board_outline.min.y_nm + placement.board_outline.max.y_nm)
+                                / 2,
+                        )
+                    },
+                    |placed| placed.center,
+                )
+        };
+        let all_layers = ground_plane_layers(board.layers);
+        let mut layers: Vec<&str> = if keepout.layers.is_empty() {
+            all_layers.clone()
+        } else {
+            keepout
+                .layers
+                .iter()
+                .filter_map(|name| all_layers.iter().find(|layer| *layer == name).copied())
+                .collect()
+        };
+        if layers.is_empty() {
+            layers = all_layers;
+        }
+        children.push(build_round_keepout(
+            anchor,
+            radius.0,
+            &layers,
+            project,
+            &format!("{} keepout", keepout.name),
+            &format!("keepout {index} {}", keepout.name),
         ));
     }
 
@@ -590,6 +656,38 @@ fn inner_plane_layers(layer_count: u32) -> Vec<&'static str> {
         4 => vec!["In1.Cu", "In2.Cu"],
         _ => Vec::new(),
     }
+}
+
+/// Inner layers a declared rail may flood. A package that declares its escape
+/// layers keeps them for signals, and if the declared rails would consume every
+/// remaining inner layer, one is left for BGA escape rather than making a board
+/// that cannot be routed.
+fn power_plane_layers(board: &Board) -> Vec<&'static str> {
+    let reserved: std::collections::BTreeSet<&str> = board
+        .components
+        .iter()
+        .filter_map(|component| component.escape.as_ref())
+        .filter(|escape| !escape.off)
+        .flat_map(|escape| escape.layers.iter().map(String::as_str))
+        .collect();
+    let mut free: Vec<&'static str> = inner_plane_layers(board.layers)
+        .into_iter()
+        .filter(|layer| !reserved.contains(layer))
+        .collect();
+    let rails = board
+        .netclasses
+        .iter()
+        .filter(|class| class.plane)
+        .count()
+        .max(1);
+    // A package that declared no escape layers does not need a spare signal
+    // layer, and the old allocation is preserved exactly. When one did, leave
+    // a layer for it only if every rail still gets one of its own.
+    let escape_declared = !reserved.is_empty();
+    if escape_declared && free.len() > rails && free.len() > 1 {
+        free.pop();
+    }
+    free
 }
 
 /// Emit a single `(via ...)` block.
@@ -1147,15 +1245,16 @@ const GROUND_VIA_RADIUS_MM: f64 = 0.3;
 /// every copper layer that refuses tracks, vias and pour, as wide as the hole
 /// plus `MOUNTING_HOLE_KEEPOUT_MM`. Pads stay allowed, so the hole's own part
 /// is not flagged. `layers` are the board's copper layers.
-fn build_mounting_hole_keepout(
+fn build_round_keepout(
     centre: Point,
-    radius_nm: i64,
+    reach_nm: i64,
     layers: &[&str],
     project: &Uuid,
-    refdes: &str,
+    name: &str,
+    uuid_key: &str,
 ) -> Sexp {
     const SIDES: u32 = 24;
-    let reach = nm_to_mm(radius_nm) + MOUNTING_HOLE_KEEPOUT_MM;
+    let reach = nm_to_mm(reach_nm);
     let points = (0..SIDES)
         .map(|k| {
             let angle = std::f64::consts::TAU * f64::from(k) / f64::from(SIDES);
@@ -1168,7 +1267,7 @@ fn build_mounting_hole_keepout(
             )
         })
         .collect();
-    let zone_uuid = derive_entity_uuid(project, "mounting-hole-keepout", refdes);
+    let zone_uuid = derive_entity_uuid(project, "keepout-zone", uuid_key);
     Sexp::list(
         "zone",
         vec![
@@ -1179,7 +1278,7 @@ fn build_mounting_hole_keepout(
                 layers.iter().map(|layer| Sexp::str(*layer)).collect(),
             ),
             str_pair("uuid", zone_uuid.to_string()),
-            str_pair("name", format!("{refdes} screw head")),
+            str_pair("name", name.to_string()),
             Sexp::list("hatch", vec![Sexp::atom("edge"), num(0.5)]),
             Sexp::list(
                 "keepout",
@@ -1451,7 +1550,7 @@ fn custom_outline_contains(points: &[synth_layout::sidecar::SidecarPoint], point
     let x = nm_to_mm(point.x_nm);
     let y = nm_to_mm(point.y_nm);
     let mut inside = false;
-    let mut j = points.len() - 1;
+    let mut j = points.len().saturating_sub(1);
     for i in 0..points.len() {
         let (xi, yi) = (points[i].x, points[i].y);
         let (xj, yj) = (points[j].x, points[j].y);
@@ -1814,8 +1913,26 @@ fn build_setup(profile: &synth_drc::ManufacturerProfile) -> Sexp {
         vec![
             Sexp::list("last_trace_width", vec![num(0.127)]),
             Sexp::list("trace_clearance", vec![num(0.127)]),
-            Sexp::list("pad_to_mask_clearance", vec![num(0.0)]),
-            Sexp::list("solder_mask_min_width", vec![num(0.0)]),
+            // JLCPCB's standard process prints a 0.10 mm minimum mask
+            // opening and asks for 0.05 mm expansion, so a zero here made
+            // every exported board warn in its DFM pass. Other tiers keep
+            // their conservative zero until their own figures are sourced.
+            Sexp::list(
+                "pad_to_mask_clearance",
+                vec![num(if profile.name.contains("jlc") {
+                    0.05
+                } else {
+                    0.0
+                })],
+            ),
+            Sexp::list(
+                "solder_mask_min_width",
+                vec![num(if profile.name.contains("jlc") {
+                    0.1
+                } else {
+                    0.0
+                })],
+            ),
             Sexp::list(
                 "allow_soldermask_bridges_in_footprints",
                 vec![Sexp::atom("yes")],
@@ -2632,6 +2749,7 @@ fn build_footprint_instance(
             &body_with_nets,
             project,
             &format!("{lib_id}@{}", component.refdes),
+            &component.refdes,
         );
         let has_model = body_with_nets.contains("(model ");
         children.push(Sexp::Raw(body_with_nets));
@@ -3307,7 +3425,14 @@ mod tests {
         let (centre, radius) = hole(3.5, 3.45, 1.6);
         let layers = ground_plane_layers(4);
 
-        let zone = build_mounting_hole_keepout(centre, radius, &layers, &project, "H1");
+        let zone = build_round_keepout(
+            centre,
+            radius + mm_to_nm(MOUNTING_HOLE_KEEPOUT_MM),
+            &layers,
+            &project,
+            "H1 screw head",
+            "mounting-hole-keepout H1",
+        );
         let text = zone.to_string_pretty();
 
         for expected in [
@@ -3343,8 +3468,22 @@ mod tests {
         let project = Uuid::nil();
         let (centre, radius) = hole(47.0, 3.45, 1.6);
         let layers = ground_plane_layers(4);
-        let a = build_mounting_hole_keepout(centre, radius, &layers, &project, "H2");
-        let b = build_mounting_hole_keepout(centre, radius, &layers, &project, "H2");
+        let a = build_round_keepout(
+            centre,
+            radius + mm_to_nm(MOUNTING_HOLE_KEEPOUT_MM),
+            &layers,
+            &project,
+            "H2 screw head",
+            "mounting-hole-keepout H2",
+        );
+        let b = build_round_keepout(
+            centre,
+            radius + mm_to_nm(MOUNTING_HOLE_KEEPOUT_MM),
+            &layers,
+            &project,
+            "H2 screw head",
+            "mounting-hole-keepout H2",
+        );
         assert_eq!(a.to_string_pretty(), b.to_string_pretty());
     }
 
@@ -3900,6 +4039,15 @@ mod tests {
         let pcbway =
             build_setup(&synth_drc::ManufacturerProfile::pcbway_standard()).to_string_pretty();
         assert!(pcbway.contains("(via_min_size 0.6)"), "{pcbway}");
+    }
+
+    /// A zero mask expansion/minimum makes every exported board warn in its
+    /// JLCPCB DFM pass; the standard process prints 0.10 mm and expands 0.05 mm.
+    #[test]
+    fn the_solder_mask_settings_clear_the_process_minimum() {
+        let setup = build_setup(&synth_drc::ManufacturerProfile::jlc_standard()).to_string_pretty();
+        assert!(setup.contains("(pad_to_mask_clearance 0.05)"), "{setup}");
+        assert!(setup.contains("(solder_mask_min_width 0.1)"), "{setup}");
     }
 
     #[test]

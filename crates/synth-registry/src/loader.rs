@@ -1305,12 +1305,12 @@ label_side = "inside"
     }
 
     #[test]
-    fn provenance_seed_is_verified_unless_reviewed_by_empty() {
+    fn provenance_without_a_reviewer_is_unverified() {
         let verified = "id = \"v1\"\nkind = \"ic\"\n[[pins]]\nname = \"a\"\nnumber = \"1\"\nelectrical_type = \"input\"\n";
         let reg = load_from_strs(&[("v1.synth.toml", verified)]).unwrap();
         assert!(
-            !reg.lookup("v1").unwrap().is_unverified(),
-            "no provenance = seed = verified"
+            reg.lookup("v1").unwrap().is_unverified(),
+            "no provenance = no reviewer = unverified"
         );
 
         let unverified = "id = \"v2\"\nkind = \"ic\"\n[provenance]\nsource = \"authored\"\nreviewed_by = \"\"\n[[pins]]\nname = \"a\"\nnumber = \"1\"\nelectrical_type = \"input\"\n";
