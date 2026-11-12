@@ -71,6 +71,9 @@ pub struct Board {
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub legends: bool,
     pub keepouts: Vec<Keepout>,
+    /// Pins declared intentionally unused (`no_connect U1.L9`).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub no_connects: Vec<NoConnect>,
     /// Declared physical layer stack (`stackup { … }`). `None` when the
     /// design does not declare one; the exported board then keeps its fixed
     /// default thickness and carries no stackup section.
@@ -470,6 +473,14 @@ pub struct Note {
     pub group: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub sheet: Option<String>,
+    pub source_span: Span,
+}
+
+/// A pin the design declares intentionally unused (`no_connect U1.L9`).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct NoConnect {
+    pub refdes: String,
+    pub pin: String,
     pub source_span: Span,
 }
 

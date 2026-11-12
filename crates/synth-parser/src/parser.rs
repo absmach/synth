@@ -17,7 +17,7 @@ use synth_ast::{
     BindStmt, BoardAst, BusDeclStmt, CompanyStmt, ComponentDeclAst, ConnectionAst, DiffPairAttr,
     DiffPairStmt, EndpointAst, EscapeAst, GroupAttr, GroupStmt, ImportAst, InterfaceDeclStmt,
     KeepoutAttr, KeepoutStmt, LayersStmt, LegendsStmt, ManufacturerStmt, ModuleDeclStmt,
-    NetDeclAst, NetclassAttr, NetclassStmt, NotesDeclAst, OutlineStmt, ParamDeclAst,
+    NetDeclAst, NetclassAttr, NetclassStmt, NoConnectStmt, NotesDeclAst, OutlineStmt, ParamDeclAst,
     PlacementHintAst, PlacementHintAttr, PortBindingAst, PortDeclAst, PowerDeclAst, ProgramAst,
     RequiresStmt, RevisionStmt, SchematicOverflowAst, SchematicPaperAst, SchematicStmt, SheetStmt,
     StackupLayerAst, StackupStmt, StatementAst, UseStmt, ValueWithUnit, VariantDeclStmt,
@@ -329,6 +329,9 @@ impl Parser {
             TokenKind::KwSchematic => self.parse_schematic().map(StatementAst::Schematic),
             TokenKind::KwStackup => self.parse_stackup().map(StatementAst::Stackup),
             TokenKind::KwRequires => self.parse_requires().map(StatementAst::Requires),
+            TokenKind::Ident(name) if name == "no_connect" => {
+                Some(StatementAst::NoConnect(self.parse_no_connect()))
+            }
             _ => {
                 self.emit(
                     self.peek().span,
@@ -2094,6 +2097,39 @@ impl Parser {
             statements,
             span: Span::new(start, end),
         })
+    }
+
+    fn parse_no_connect(&mut self) -> NoConnectStmt {
+        let start = self.peek().span.byte_start;
+        self.bump(); // consume `no_connect`
+        let mut pins = Vec::new();
+        loop {
+            let Some(pin) = self.parse_endpoint(false) else {
+                self.synchronize();
+                break;
+            };
+            pins.push(pin);
+            if matches!(self.peek_kind(), TokenKind::Comma) {
+                self.bump();
+            } else {
+                break;
+            }
+        }
+        if pins.is_empty() {
+            self.emit(
+                self.peek().span,
+                "E-SYNTH-PARSE-044",
+                "`no_connect` names no pin",
+                "one or more `REFDES.PIN` endpoints",
+                self.describe_current(),
+                None,
+            );
+        }
+        let end = self.last_offset();
+        NoConnectStmt {
+            pins,
+            span: Span::new(start, end),
+        }
     }
 
     fn parse_keepout(&mut self) -> Option<KeepoutStmt> {

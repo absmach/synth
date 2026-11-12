@@ -70,6 +70,7 @@ pub enum StatementAst {
     Schematic(SchematicStmt),
     Stackup(StackupStmt),
     Requires(RequiresStmt),
+    NoConnect(NoConnectStmt),
 }
 
 impl StatementAst {
@@ -100,6 +101,7 @@ impl StatementAst {
             StatementAst::Schematic(s) => s.span,
             StatementAst::Stackup(s) => s.span,
             StatementAst::Requires(s) => s.span,
+            StatementAst::NoConnect(s) => s.span,
         }
     }
 }
@@ -738,6 +740,15 @@ pub enum NetclassAttr {
     Layers {
         layers: Vec<String>,
     },
+}
+
+/// `no_connect U1.L9, U1.J10`: pins that are intentionally unused. The
+/// exporter already draws a cross on every unreached pin; this statement is
+/// how the design says the cross is intended rather than an omission.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct NoConnectStmt {
+    pub pins: Vec<EndpointAst>,
+    pub span: Span,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
