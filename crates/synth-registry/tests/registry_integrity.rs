@@ -160,3 +160,25 @@ fn no_two_active_parts_share_a_manufacturer_part_number() {
         "one canonical active id per physical part; mark the others obsolete with a substitute: {duplicates:?}"
     );
 }
+
+/// An obsolete entry is a retired name for a part, not a part to buy: it must
+/// point at an active substitute, so the procurement identity lives on an
+/// entry that is still offered.
+#[test]
+fn every_obsolete_part_names_an_active_substitute() {
+    let dir = workspace_root().join("registry").join("parts");
+    let registry = synth_registry::load_dir(&dir).expect("seed registry must load without errors");
+    for (_, part) in registry.iter() {
+        if part.lifecycle != synth_registry::Lifecycle::Obsolete {
+            continue;
+        }
+        assert!(
+            part.substitutes.iter().any(|id| registry
+                .lookup(id.as_str())
+                .is_some_and(|s| s.lifecycle == synth_registry::Lifecycle::Active)),
+            "obsolete part {} names no active substitute: {:?}",
+            part.id,
+            part.substitutes
+        );
+    }
+}
