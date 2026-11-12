@@ -100,7 +100,7 @@ PCB review sign-off required by #40: JeffMboya, 2026-11-10, on the package in `f
 | Placement | the placement on 55.99 x 44.99 mm, 35.8 % courtyard fill, as pinned in `ice40_bga_node.placement.layout.toml` |
 | Parts and values | the BOM identities of `fab/ice40_bga_node_bom_orderable.csv`, including `Y1` (JYJE 3TJ480000FYLBC, `C2924620`) and `U1` (Lattice ICE40HX4K-BG121, `C1552775`) |
 
-The parts this board adds to `registry/parts/` (`ice40hx4k_bg121_nc`, `tlv70012_ddc`, `tlv70012_1v2`, `w25q128jvsiq_208mil`, `header_1x5_swd`, `stm32f103c8_usb`, `xtal_8mhz_3225_jyje_4p`) carry the author's review record (`reviewed_by`, `reviewed_at`, `datasheet_url`); every other part keeps its registry record.
+The parts this board adds to `registry/parts/` (`tlv70012_ddc`, `tlv70012_1v2`, `w25q128jvsiq_208mil`, `xtal_8mhz_3225_jyje_4p`) carry the author's review record (`reviewed_by`, `reviewed_at`, `datasheet_url`); `stm32f103c8` gains the `usb_dn`, `usb_dp` and `spi_cs` capability tags the board's checks read, with PA11 and PA12 typed as the differential USB pair; `ice40hx4k_bg121` types `VPP_FAST` (B10) as a passive pin that is not required, so it can stay unconnected; every other part keeps its registry record.
 
 ## USB pair: supported speed, impedance estimate and skew
 

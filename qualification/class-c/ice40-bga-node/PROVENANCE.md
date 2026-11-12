@@ -15,7 +15,7 @@ The board is the output of agents driving `synth mcp` from prompts, followed by 
 | Synth, final exports | the binary built from `upstream/main` `fbfd8d60`, the merge of pull request #440 (the return-via, via-in-pad, plane-via, multi-unit symbol and `edge_rate medium` changes this board needed are all in it). `synth --version` prints `synth 0.1.1`; `synth mcp --stdio` is the same binary |
 | KiCadRoutingTools | `9399bfb2` |
 | KiCad | 10.0.6 |
-| Registry inputs | `registry/parts/` of the repository: `ice40hx4k_bg121_nc`, `tlv70012_ddc`, `w25q128jvsiq_208mil`, `header_1x5_swd`, `tlv70012_1v2`, `stm32f103c8_usb`, `xtal_8mhz_3225_jyje_4p` |
+| Registry inputs | `registry/parts/` of the repository: `ice40hx4k_bg121` (`VPP_FAST` not required), `stm32f103c8` (USB and SPI capability tags), `tlv70012_ddc`, `tlv70012_1v2`, `w25q128jvsiq_208mil`, `xtal_8mhz_3225_jyje_4p` |
 
 Synth findings from this board: #424 (report counts), #425 (silkscreen), #426, #428, #429 (the annular ring floor and the via-in-pad land), #430 (plane rails take every inner layer), #431 (no-connect declarations and the multi-unit symbol).
 

@@ -63,7 +63,7 @@ board "ice40_bga_node" {
 
   // ---- Companion MCU ---------------------------------------------------------
   group "MCU" color "#0072b2" {
-    component U5: mcu "stm32f103c8_usb" { escape { off } placement_hint { near: "J1" priority: soft } }
+    component U5: mcu "stm32f103c8" { escape { off } placement_hint { near: "J1" priority: soft } }
     component C27: capacitor "c_generic_0402" value "100nF" { placement_hint { near: "U5.vdd" priority: hard } }
     component C28: capacitor "c_generic_0402" value "100nF" { placement_hint { near: "U5.vdd_2" priority: hard } }
     component C29: capacitor "c_generic_0402" value "100nF" { placement_hint { near: "U5.vdd_3" priority: hard } }
@@ -77,7 +77,7 @@ board "ice40_bga_node" {
     component Y1: crystal "xtal_8mhz_3225_jyje_4p" { placement_hint { near: "U5.pd0" priority: hard } }
     component C34: capacitor "c_generic_0402" value "10pF" { placement_hint { near: "Y1" priority: hard } }
     component C35: capacitor "c_generic_0402" value "10pF" { placement_hint { near: "Y1" priority: hard } }
-    component J4: connector "header_1x5_swd"
+    component J4: connector "header_1x5"
     component FB2: inductor "ferrite_bead_0603" { placement_hint { near: "U5.vdd" priority: hard } }
     notes "" {
       "STM32F103C8T6 on 3V3. Streams the bitstream to flash U2 over SPI1 (135,183 byte bitstream > 64 KB MCU flash)."
@@ -110,7 +110,7 @@ board "ice40_bga_node" {
 
   // ---- FPGA ----------------------------------------------------------------
   group "FPGA" color "#6d28d9" {
-    component U1: fpga "ice40hx4k_bg121_nc" { escape { method underpad } }
+    component U1: fpga "ice40hx4k_bg121" { escape { method underpad } }
     notes "" {
       "VPP_FAST (B10) left unconnected. Core 1.2 V, I/O banks and VPP_2V5 on 3.3 V."
     }

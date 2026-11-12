@@ -600,8 +600,8 @@ capabilities = ["gpio", "i2c_scl", "i2c_sda"]
 [[pins]]
 name = "vpp_fast"
 number = "B10"
-electrical_type = "power_input"
-required = true
+electrical_type = "passive"
+required = false
 
 [[pins]]
 name = "gndpll1"
