@@ -14,6 +14,11 @@ reviewed_by = "JeffMboya"
 lcsc_pn = "C1521989"
 datasheet_url = "https://www.latticesemi.com/~/media/latticesemi/documents/datasheets/ice/ice40lphxfamilydatasheet.pdf"
 
+[footprint_dimensions]
+width_mm = 23.3
+height_mm = 23.3
+courtyard_margin_mm = 0.25
+
 [[pins]]
 name = "iol_2a"
 number = "1"
