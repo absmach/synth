@@ -167,7 +167,7 @@ fn unrouted_nets_do_not_regress() {
     // number at main's: a higher count is a placement or routing regression,
     // not a new property of the board.
     let expected = [
-        ("../../examples/sensor_logger/sensor_logger.synth", 2_usize),
+        ("../../examples/sensor_logger/sensor_logger.synth", 1_usize),
         ("../../examples/env_logger/env_logger.synth", 3_usize),
         ("../../fixtures/designs/secure_tracker.synth", 3_usize),
     ];
