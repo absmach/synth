@@ -17,4 +17,4 @@ A two-zone irrigation controller powered from 12 V DC: an input fuse, a TVS and 
 | Rail decoupling and bleeders | the `+3V3` decoupling group (22 parts: capacitors from 100 nF to 10 uF and the bleeders `R_N1` and `R_N2`) and the 12 V decoupling group (7 parts, with the bleeder `R_B1`) |
 | Mechanical | four M2.5 mounting holes, one in each corner; test points on the nets listed above |
 
-The qualification verdict, measurements, evidence and sign-off are in [`QUALIFICATION.md`](QUALIFICATION.md); how the board was made is in [`PROVENANCE.md`](PROVENANCE.md). Gerber content hash `7ea1e90ec1`.
+The qualification verdict, measurements, evidence and sign-off are in [`QUALIFICATION.md`](QUALIFICATION.md); how the board was made is in [`PROVENANCE.md`](PROVENANCE.md). Gerber content hash `a26463bd09`.
