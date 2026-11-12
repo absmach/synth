@@ -6,6 +6,7 @@ kicad_footprint = "Package_TO_SOT_SMD:SOT-23"
 # Vishay, 20 V P-channel, Vgs +/-8 V.
 mpn = "SI2301CDS-T1-GE3"
 lcsc_pn = "C10487"
+datasheet_url = "https://www.lcsc.com/datasheet/C10487.pdf"
 
 [footprint_dimensions]
 width_mm = 3.35

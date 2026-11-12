@@ -17,6 +17,6 @@ The board is the output of agents driving `synth mcp` from prompts, followed by 
 | Synth, final exports | the binary built from commit `48a0a490b2c3dde076a90e55ba05b82ce4137605` (pull request #455, branch `fix-451-edge-tracks` of `JeffMboya/synth`), which `upstream/main` contains as the merge `be8a5b5a`, on top of `upstream/main` `3e59acdf`. The pull request adds one pass: a ground track whose copper comes nearer the board outline than the board's edge rule does not reach the candidate that is judged (issue #451). `upstream/main` carries the rest of the router, DRC, exporter and symbol-layout work of pull request #440. The exports set `SYNTH_SOURCE_REVISION` to that commit, and the routing record of each export carries it as `source_revision` |
 | KiCadRoutingTools | `9399bfb2` |
 | KiCad | 10.0.6 |
-| Registry inputs | [`registry/`](registry/): `ice40hx4k_tq144`, `header_1x6_prog`, `w25q128jvsiq_208mil`, `tlv70012_ddc` |
+| Registry inputs | `registry/parts/` of the repository: `ice40hx4k_tq144`, `header_1x6_prog`, `w25q128jvsiq_208mil`, `tlv70012_ddc` |
 
 Synth findings from this board: #425 (silkscreen), #428 (flattened symbol), #445 (the `edge_rate medium` tier), #147 (class skew budgets are not enforced at export).
