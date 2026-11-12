@@ -113,4 +113,4 @@ PCB review sign-off required by #40: JeffMboya, on the package in `fab/` (Gerber
 | Placement | |
 | Parts and values | |
 
-The parts this board adds to `registry/parts/` (`stm32f103c8_usb`, `header_1x5_swd`, `tlv70012_ddc`, `w25q128jvsiq_208mil`, `xtal_8mhz_3225_jyje_4p`) carry the author's review record (`reviewed_by`, `reviewed_at`, `datasheet_url`); every other part keeps its registry record.
+The parts this board adds to `registry/parts/` (`tlv70012_ddc`, `w25q128jvsiq_208mil`, `xtal_8mhz_3225_jyje_4p`) carry the author's review record (`reviewed_by`, `reviewed_at`, `datasheet_url`); `stm32f103c8` gains the `usb_dn`, `usb_dp` and `spi_cs` capability tags the board's checks read, with PA11 and PA12 typed as the differential USB pair; every other part keeps its registry record.

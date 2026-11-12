@@ -95,7 +95,7 @@ board "multirail_compute_node" {
 
   // ---- Processor, memory, clock, debug ----------------------------------
   group "COMPUTE CORE" color "#0072b2" {
-    component U6: mcu "stm32f103c8_usb" { escape { off } }
+    component U6: mcu "stm32f103c8" { escape { off } }
     component C20: capacitor "c_generic_0603" value "100nF" { placement_hint { near: "U6" priority: hard } }
     component C21: capacitor "c_generic_0603" value "100nF" { placement_hint { near: "U6" priority: hard } }
     component C22: capacitor "c_generic_0603" value "100nF" { placement_hint { near: "U6" priority: hard } }
@@ -110,7 +110,7 @@ board "multirail_compute_node" {
     component R13: resistor "r_generic_0603" value "1.5k" { placement_hint { near: "U6" priority: hard } }
     component C28: capacitor "c_generic_0603" value "100nF" { placement_hint { near: "U6" priority: hard } }
     component SW1: switch "spst_tactile" { placement_hint { near: "U6" priority: hard } }
-    component J3: connector "header_1x5_swd" { placement_hint { near: "U6" priority: soft } }
+    component J3: connector "header_1x5" { placement_hint { near: "U6" priority: soft } }
     component U7: memory "w25q128jvsiq_208mil" { escape { off } placement_hint { near: "U6" priority: hard } }
     component C29: capacitor "c_generic_0603" value "100nF" { placement_hint { near: "U7" priority: hard } }
     component R14: resistor "r_generic_0603" value "10k" { placement_hint { near: "U7" priority: hard } }

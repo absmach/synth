@@ -15,7 +15,7 @@ The board is the output of an agent driving `synth mcp` from a prompt, followed 
 | Synth, final exports | the binary built from `upstream/main` `fbfd8d60`, the merge of pull request #440; the three final exports are made on it, and the routing record carries `source_revision` `fbfd8d60239391d17cdd81b9337fc0ee4ee22cd9`. The merged changes include `edge_rate medium` replacing the fast inference from a differential pin (a clock, RF or analog pin, a crystal and a switching node still prove a fast edge) |
 | KiCadRoutingTools | `9399bfb2` |
 | KiCad | 10.0.6 |
-| Registry inputs | `registry/parts/` of the repository: `stm32f103c8_usb`, `header_1x5_swd`, `tlv70012_ddc`, `w25q128jvsiq_208mil`, `xtal_8mhz_3225_4p` |
+| Registry inputs | `registry/parts/` of the repository: `tlv70012_ddc`, `w25q128jvsiq_208mil`, `xtal_8mhz_3225_4p` |
 
 Synth findings from this board: #425 (silkscreen), #428 (flattened symbol), #445 (the `edge_rate medium` tier), #449 (a keepout cannot be anchored to a part).
 
