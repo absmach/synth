@@ -1,4 +1,4 @@
-id = "xtal_8mhz_3225_4p"
+id = "xtal_8mhz_3225_jyje_4p"
 kind = "crystal"
 description = "JYJE 3TJ480000FYLBC 8 MHz crystal, 3.2x2.5 mm SMD, load capacitance 8 pF, ESR 150 ohm max, C0 5 pF max, +/-10 ppm, -40 to +85 C; pads 1 and 3 are the crystal, 2 and 4 are ground"
 version = 0
