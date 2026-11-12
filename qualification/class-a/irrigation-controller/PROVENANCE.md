@@ -31,6 +31,6 @@ The first ten characters of SHA-256 of the exported files for the three exports 
 | Command | Result |
 |---|---|
 | The `synth_export` tool of `synth mcp --stdio` on the source and sidecar, three times into empty directories | [`kicad/`](kicad/), with `irrigation_controller.routing.json` |
-| `kicad-cli pcb drc --refill-zones --severity-all` and `kicad-cli sch erc --severity-all` with the footprint and symbol library tables configured | [`kicad/drc_with_library_tables.json`](kicad/drc_with_library_tables.json), [`kicad/erc_with_library_tables.json`](kicad/erc_with_library_tables.json); the tables are [`kicad/fp-lib-table.library-check`](kicad/fp-lib-table.library-check) and [`kicad/sym-lib-table.library-check`](kicad/sym-lib-table.library-check) |
+| `kicad-cli pcb drc --refill-zones --severity-all` and `kicad-cli sch erc --severity-all` with the footprint and symbol library tables configured | results stated in [`QUALIFICATION.md`](QUALIFICATION.md) |
 | The Gerbers, drill file, placement file and orderable BOM built from export 1 with KiCad's own CLI | [`fab/`](fab/) |
 | The STEP model exported with `kicad-cli pcb export step` and reopened in OpenCASCADE against the PCB | [`models/irrigation_controller.step`](models/irrigation_controller.step); the results are stated in [`QUALIFICATION.md`](QUALIFICATION.md) |
