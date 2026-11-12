@@ -1675,7 +1675,18 @@ fn a_zero_or_negative_series_resistor_says_the_value_must_be_positive() {
 /// `[provenance]` block at all is marked too.
 #[test]
 fn parts_without_a_provenance_block_are_marked_unreviewed() {
-    let board = board_from_file(&example_dir("divider").join("divider.synth"));
+    let source = std::fs::read_to_string(example_dir("divider").join("divider.synth"))
+        .expect("read divider");
+    // Upstream now records a reviewer on the generic resistor; clear it so the
+    // test still exercises the "no provenance block" rule.
+    let board = board_with_registry(&source, |registry| {
+        let mut part = registry
+            .lookup("r_generic_0805")
+            .expect("r_generic_0805")
+            .clone();
+        part.provenance = None;
+        registry.insert(part);
+    });
     let (toml, _) = suggestion(&board);
 
     assert!(toml.contains("# UNREVIEWED: R1 (r_generic_0805)"), "{toml}");
