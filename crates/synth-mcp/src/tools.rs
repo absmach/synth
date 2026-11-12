@@ -147,6 +147,7 @@ pub fn list_tools() -> Vec<McpToolInfo> {
                     "kicad_routing_tools_python": { "type": "string", "description": "Python interpreter with KiCadRoutingTools dependencies" },
                     "router_timeout_secs": { "type": "number", "description": "Wall-clock budget for the whole external run" },
                     "allow_via_in_pad": { "type": "boolean", "description": "Permit via-in-pad in the fabrication gate (default false)" },
+                    "fine_pitch_return_via_advisory": { "type": "boolean", "description": "List a missing fast-edge return via beside a fine-pitch pad row as an advisory instead of blocking (default false; needs signal-integrity review sign-off)" },
                     "log_routing_outcomes": { "type": "string", "description": "Optional directory to append a Dataset 6 routing outcome record to; a later run on the same board reads it back as retry advice" },
                     "registry_path": { "type": "string", "description": "Optional custom component registry path" },
                     "workspace_root": { "type": "string", "description": "Optional workspace root path for auto-resolving registry" }
@@ -230,6 +231,7 @@ pub fn list_tools() -> Vec<McpToolInfo> {
                     "kicad_routing_tools_python": { "type": "string", "description": "Python interpreter with KiCadRoutingTools dependencies" },
                     "router_timeout_secs": { "type": "number", "description": "Wall-clock budget for the whole external run" },
                     "allow_via_in_pad": { "type": "boolean", "description": "Permit via-in-pad in the fabrication gate (default false)" },
+                    "fine_pitch_return_via_advisory": { "type": "boolean", "description": "List a missing fast-edge return via beside a fine-pitch pad row as an advisory instead of blocking (default false; needs signal-integrity review sign-off)" },
                     "log_routing_outcomes": { "type": "string", "description": "Optional directory to append a Dataset 6 routing outcome record to; a later run on the same board reads it back as retry advice" },
                     "registry_path": { "type": "string", "description": "Optional custom component registry path" },
                     "workspace_root": { "type": "string", "description": "Optional workspace root path for auto-resolving registry" }
@@ -1393,6 +1395,9 @@ fn routing_request(args: &Value, engine: synth_router::RouterEngine) -> synth_ro
         request.limits = request.limits.with_wall_clock(secs);
     }
     request.policy.allow_via_in_pad = args["allow_via_in_pad"].as_bool().unwrap_or(false);
+    request.fine_pitch_return_via_advisory = args["fine_pitch_return_via_advisory"]
+        .as_bool()
+        .unwrap_or(false);
     request
 }
 
@@ -1568,6 +1573,7 @@ fn route_design_externally_with(
     let mut request = prepared.unwrap_or_else(|| routing_request(args, engine));
     request.ground_nets = synth_drc::ground_net_names(&board);
     request.return_via_critical_nets = Some(synth_drc::return_path_critical_net_names(&board));
+    request.return_via_medium_nets = synth_drc::return_path_medium_net_names(&board);
     request.engine = engine;
     request.board_path.clone_from(&res.pcb_path);
     request.out_dir.clone_from(&res.out_dir);
@@ -2966,6 +2972,7 @@ fn evaluate_candidate_mcp(
     let mut request = routing_request(args, engine);
     request.ground_nets = synth_drc::ground_net_names(board);
     request.return_via_critical_nets = Some(synth_drc::return_path_critical_net_names(board));
+    request.return_via_medium_nets = synth_drc::return_path_medium_net_names(board);
     request.limits = request.limits.with_wall_clock(router_secs);
     request.board_path.clone_from(&res.pcb_path);
     request.out_dir.clone_from(&res.out_dir);
@@ -3191,6 +3198,7 @@ fn execute_export(args: &Value, default_registry: Option<&Path>) -> Result<Value
     let mut request = routing_request(args, engine);
     request.ground_nets = synth_drc::ground_net_names(&board);
     request.return_via_critical_nets = Some(synth_drc::return_path_critical_net_names(&board));
+    request.return_via_medium_nets = synth_drc::return_path_medium_net_names(&board);
     // The final route counts against the search budget: it gets what is left, or
     // is not started when nothing is.
     if let Some(budget) = &search_budget {
@@ -4456,6 +4464,7 @@ fn execute_route_with_constraints(
     let mut routed = routing_request(args, engine);
     routed.ground_nets = synth_drc::ground_net_names(&board);
     routed.return_via_critical_nets = Some(synth_drc::return_path_critical_net_names(&board));
+    routed.return_via_medium_nets = synth_drc::return_path_medium_net_names(&board);
     // The tightest requested width and clearance become the floor the
     // independent check enforces, so an engine that routed below them is
     // rejected rather than trusted.

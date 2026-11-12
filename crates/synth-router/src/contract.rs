@@ -289,6 +289,11 @@ pub struct FabricationPolicy {
     /// existed, and absence reads as "not offered".
     #[serde(default)]
     pub process_fills_via_in_pad: bool,
+    /// How far a filled and capped via's land exceeds its drill, in
+    /// nanometres, from the manufacturer profile; `0` where the process does
+    /// not offer via-in-pad.
+    #[serde(default)]
+    pub via_in_pad_land_extra_nm: i64,
     /// Minimum acceptable copper width, in nanometres.
     pub min_track_width_nm: i64,
     /// Minimum acceptable copper clearance between distinct nets, in nm.
@@ -308,6 +313,7 @@ impl Default for FabricationPolicy {
         Self {
             allow_via_in_pad: false,
             process_fills_via_in_pad: false,
+            via_in_pad_land_extra_nm: 0,
             min_track_width_nm: 127_000,
             min_clearance_nm: 127_000,
             min_drill_diameter_nm: 300_000,
@@ -329,6 +335,7 @@ impl FabricationPolicy {
         Self {
             allow_via_in_pad: false,
             process_fills_via_in_pad: profile.via_in_pad,
+            via_in_pad_land_extra_nm: profile.via_in_pad_land_extra_nm,
             min_track_width_nm: profile.min_trace_width_nm,
             min_clearance_nm: profile.min_copper_clearance_nm,
             min_drill_diameter_nm: profile.min_drill_diameter_nm,
@@ -513,6 +520,14 @@ pub struct RouteRequest {
     /// it; `Some` lists any other net's missing return via as an advisory.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub return_via_critical_nets: Option<Vec<String>>,
+    /// The nets that declare `edge_rate medium` and that nothing else proves fast:
+    /// they keep the return via, and look for it in the wider medium-edge window.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub return_via_medium_nets: Vec<String>,
+    /// Opt-in: a missing fast-edge return via beside a fine-pitch pad row is an
+    /// advisory instead of blocking. Off by default; needs SI-review sign-off.
+    #[serde(default)]
+    pub fine_pitch_return_via_advisory: bool,
     /// Nets the design pins to copper layers (`netclass { layers … }`), by
     /// name, with the layers each may use. An engine that supports the
     /// constraint routes these on their layers before anything else and the
@@ -714,6 +729,8 @@ impl RouteRequest {
             routing_order: Vec::new(),
             ground_nets: Vec::new(),
             return_via_critical_nets: None,
+            return_via_medium_nets: Vec::new(),
+            fine_pitch_return_via_advisory: false,
             net_layers: Vec::new(),
         }
     }

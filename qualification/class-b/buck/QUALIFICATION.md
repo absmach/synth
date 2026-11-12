@@ -43,7 +43,15 @@ Tool versions used: KiCad 10.0.7, FreeRouting 2.4.1 on OpenJDK 25.0.4.1 (from `r
 Synth 0.1.1, on 2026-10-29. `SYNTH_SOURCE_REVISION` makes `buck.routing.json` record `source_revision`: it holds
 `a79570cd84d7c9dcc67931593a42fc3836b76065`, the commit the reports were regenerated from (the copper is byte-identical to the previous run, whose revision was `a9c7546`). The JSON reports were generated with a relative board path and the
 repository root prefix was stripped with `sed`; `out/` is a scratch directory and is not committed. A different
-router version can give different copper. `reports/registry-qualify.txt` was regenerated for the 9 registry parts on the board
+router version can give different copper.
+
+**Pinned Synth commit.** `SHA256SUMS` was measured with the Synth code of commit
+`a79570cd84d7c9dcc67931593a42fc3836b76065` (`a9c7546e` for the copper; byte-identical). Exports from any
+other Synth revision will differ: later exporter changes (per-instance footprint UUIDs in the PCB, the 12-column
+BOM, the relative release revision) alter every export, so a fresh export will not match `SHA256SUMS`.
+Check out that commit to reproduce it.
+
+`reports/registry-qualify.txt` was regenerated for the 9 registry parts on the board
 with `synth registry qualify --part <id>` (`lmr38010`, `l_bourns_srn6045ta_6r8m`, `ss36`, `smbj30a`,
 `mf_msmf110_33x`, `jst_b2b_xh_a_2pin`, `jst_b4b_xh_a_4pin`, `c_electrolytic_smd_8x10`,
 `ltst_c190kgkt`): all nine qualify (`lmr38010` and `ltst_c190kgkt` were reviewed on 2026-10-29).

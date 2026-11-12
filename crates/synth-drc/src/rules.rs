@@ -298,13 +298,99 @@ pub fn check_min_drill_diameter(
 /// (`pad_diameter_nm < drill_nm`) yields a negative ring and is
 /// also flagged.
 #[must_use]
-pub fn check_min_annular_ring(routing: &Routing, profile: &ManufacturerProfile) -> Vec<Violation> {
+pub fn check_min_annular_ring(
+    board: &synth_ir::Board,
+    placement: &Placement,
+    routing: &Routing,
+    profile: &ManufacturerProfile,
+) -> Vec<Violation> {
+    // The filled and capped via is declared by the board's `requires via_in_pad`
+    // as well as by the component's escape: an escape alone buys the process
+    // nothing, and no one fills or caps a via the board did not ask to.
+    let underpad = if board
+        .required_processes
+        .contains(&synth_ir::ProcessRequirement::ViaInPad)
+    {
+        underpad_pads(board, placement)
+    } else {
+        Vec::new()
+    };
+    check_min_annular_ring_in(routing, profile, |at| {
+        underpad.iter().any(|rect| rect.contains(at))
+    })
+}
+
+/// The pads of the components that declare `escape { method underpad }`: the only
+/// places a filled and capped via in a pad is declared, on a board that requires
+/// via-in-pad. A via is in a pad when its centre is in the copper of one, not when
+/// it is merely under the part's courtyard, where a dog-bone via sits too.
+fn underpad_pads(board: &synth_ir::Board, placement: &Placement) -> Vec<Rect> {
+    let mut out = Vec::new();
+    for cp in &placement.components {
+        let Some(component) = board.component(cp.id) else {
+            continue;
+        };
+        let declared = component.escape.as_ref().is_some_and(|escape| {
+            !escape.off && escape.method == Some(synth_ir::EscapeMethod::Underpad)
+        });
+        let Some(part) = component.part.as_ref().filter(|_| declared) else {
+            continue;
+        };
+        let Some(pads) = part
+            .kicad_footprint
+            .as_deref()
+            .and_then(synth_layout::kicad_footprint_loader::pads)
+            .filter(|pads| !pads.is_empty())
+            .or_else(|| synth_layout::kicad_footprint_loader::synth_part_pads(part))
+        else {
+            continue;
+        };
+        // The footprint's origin, the point its pad offsets are measured from.
+        let origin = synth_place::footprint_origin(Some(part), cp);
+        for pad in pads.iter().filter(|pad| !pad.is_npth) {
+            let (dx, dy) = cp
+                .rotation
+                .rotate_offset(mm_to_nm(pad.center_mm.0), mm_to_nm(pad.center_mm.1));
+            let (w, h) = match cp.rotation {
+                Rotation::Zero | Rotation::OneEighty => pad.size_mm,
+                Rotation::Ninety | Rotation::TwoSeventy => (pad.size_mm.1, pad.size_mm.0),
+            };
+            out.push(Rect::from_center_half_extents(
+                Point::new(origin.x_nm + dx, origin.y_nm + dy),
+                mm_to_nm(w) / 2,
+                mm_to_nm(h) / 2,
+            ));
+        }
+    }
+    out
+}
+
+/// [`check_min_annular_ring`] with the via-in-pad test given: `in_declared_pad`
+/// says whether a point lies where a filled and capped via is declared.
+fn check_min_annular_ring_in(
+    routing: &Routing,
+    profile: &ManufacturerProfile,
+    in_declared_pad: impl Fn(Point) -> bool,
+) -> Vec<Violation> {
     routing
         .vias
         .iter()
         .filter_map(|v| {
             let ring_nm = (v.pad_diameter_nm - v.drill_nm) / 2;
             if ring_nm >= profile.min_annular_ring_nm {
+                return None;
+            }
+            // A via no wider than the process's via-in-pad land, inside the
+            // courtyard of a component that declares an under-pad escape, is a
+            // filled and capped via, judged by the land the manufacturer's
+            // guide gives (drill plus 0.15 mm) and not by the plated-barrel
+            // ring. An ordinary small via elsewhere keeps the floor.
+            if in_declared_pad(v.at)
+                && profile.via_in_pad_land_nm().is_some_and(|land| {
+                    v.pad_diameter_nm <= land
+                        && v.pad_diameter_nm >= v.drill_nm + profile.via_in_pad_land_extra_nm
+                })
+            {
                 return None;
             }
             Some(Violation {
@@ -931,6 +1017,95 @@ mod tests {
         }
     }
 
+    /// The ring exemption belongs to a via in a pad of a component that declares the
+    /// under-pad escape, on a board that requires via-in-pad: the same 0.35/0.2 mm via
+    /// between the balls, or on a board that never asked for via-in-pad, keeps the floor.
+    #[test]
+    fn the_ring_exemption_needs_a_via_in_a_declared_pad_on_a_board_that_requires_it() {
+        use synth_place::{ComponentPlacement, Placement};
+        let registry = synth_registry::load_dir(
+            &std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+                .join("..")
+                .join("..")
+                .join("registry")
+                .join("parts"),
+        )
+        .expect("seed registry must load");
+        let board_for = |requires: &str| {
+            let source = format!(
+                "board \"b\" {{\n  layers 6\n  manufacturer \"jlc-advanced\"\n  {requires}\n  \
+                 component U1: fpga \"ice40hx4k_bg121\" {{ escape {{ method underpad }} }}\n}}\n"
+            );
+            let parsed = synth_parser::parse(&source, "ring.synth");
+            synth_ir::lower(&parsed.ast.expect("ast"), &registry, "ring.synth")
+                .board
+                .expect("board")
+        };
+        let board = board_for("requires via_in_pad");
+        let component = board.components.first().expect("U1");
+        let cp = ComponentPlacement {
+            id: component.id,
+            center: Point::new(mm_to_nm(50.0), mm_to_nm(50.0)),
+            rotation: Rotation::Zero,
+            layer: Layer::Top,
+        };
+        let placement = Placement {
+            board_outline: Rect::from_center_half_extents(
+                Point::new(mm_to_nm(50.0), mm_to_nm(50.0)),
+                mm_to_nm(20.0),
+                mm_to_nm(20.0),
+            ),
+            components: vec![cp],
+        };
+        let part = component.part.as_ref().expect("part");
+        // Skipped when KiCad's bundled libraries are not installed.
+        let Some(pads) = part
+            .kicad_footprint
+            .as_deref()
+            .and_then(synth_layout::kicad_footprint_loader::pads)
+        else {
+            return;
+        };
+        let origin = synth_place::footprint_origin(Some(part), &cp);
+        let ball = pads.iter().find(|pad| !pad.is_npth).expect("a ball");
+        let on_ball = Point::new(
+            origin.x_nm + mm_to_nm(ball.center_mm.0),
+            origin.y_nm + mm_to_nm(ball.center_mm.1),
+        );
+        let between = Point::new(on_ball.x_nm + mm_to_nm(0.4), on_ball.y_nm + mm_to_nm(0.4));
+        let violations = |board: &synth_ir::Board, at: Point| {
+            let mut routing = empty_routing();
+            routing.vias.push(Via {
+                net: NetId(2),
+                at,
+                drill_nm: mm_to_nm(0.2),
+                pad_diameter_nm: mm_to_nm(0.35),
+            });
+            check_min_annular_ring(
+                board,
+                &placement,
+                &routing,
+                &ManufacturerProfile::jlc_advanced(),
+            )
+            .len()
+        };
+        assert_eq!(
+            violations(&board, on_ball),
+            0,
+            "a filled via in a ball's pad"
+        );
+        assert_eq!(
+            violations(&board, between),
+            1,
+            "a via between the balls, under the courtyard, is an ordinary one"
+        );
+        assert_eq!(
+            violations(&board_for(""), on_ball),
+            1,
+            "a board that never required via-in-pad keeps the floor"
+        );
+    }
+
     #[test]
     fn drill_diameter_flags_undersized_via() {
         let mut r = empty_routing();
@@ -968,7 +1143,7 @@ mod tests {
             drill_nm: mm_to_nm(0.3),
             pad_diameter_nm: mm_to_nm(0.5),
         });
-        let vs = check_min_annular_ring(&r, &jlc());
+        let vs = check_min_annular_ring_in(&r, &jlc(), |_| false);
         assert_eq!(vs.len(), 1);
         assert_eq!(vs[0].code, "E-SYNTH-DRC-005");
     }
@@ -983,7 +1158,58 @@ mod tests {
             drill_nm: mm_to_nm(0.3),
             pad_diameter_nm: mm_to_nm(0.6),
         });
-        assert!(check_min_annular_ring(&r, &jlc()).is_empty());
+        assert!(check_min_annular_ring_in(&r, &jlc(), |_| false).is_empty());
+    }
+
+    /// JLCPCB's via-in-pad guide gives a filled and capped via's land as the
+    /// drill plus 0.15 mm, a 0.075 mm ring. On a tier that offers via-in-pad a
+    /// via at exactly that land is judged by the guide; on the standard tier,
+    /// and for a via wider than the land but short of the plain floor, the
+    /// plain ring floor still applies.
+    #[test]
+    fn a_via_at_the_via_in_pad_land_is_judged_by_the_guide_not_the_barrel_ring() {
+        let via = |pad_mm: f64| {
+            let mut r = empty_routing();
+            r.vias.push(Via {
+                net: NetId(2),
+                at: Point::new(0, 0),
+                drill_nm: mm_to_nm(0.2),
+                pad_diameter_nm: mm_to_nm(pad_mm),
+            });
+            r
+        };
+        let advanced = ManufacturerProfile::jlc_advanced();
+        assert!(check_min_annular_ring_in(&via(0.35), &advanced, |_| true).is_empty());
+        assert_eq!(
+            check_min_annular_ring_in(&via(0.35), &jlc(), |_| true).len(),
+            1,
+            "the standard tier does not fill and cap, so it keeps the floor"
+        );
+        assert_eq!(
+            check_min_annular_ring_in(&via(0.40), &advanced, |_| true).len(),
+            1,
+            "a via wider than the land is an ordinary via"
+        );
+    }
+
+    /// The via-in-pad land exempts a via only where a filled and capped via is
+    /// declared: the same 0.35/0.20 mm via outside such a pad keeps the floor.
+    #[test]
+    fn an_ordinary_small_via_still_fails_the_annular_ring_floor() {
+        let mut r = empty_routing();
+        r.vias.push(Via {
+            net: NetId(2),
+            at: Point::new(0, 0),
+            drill_nm: mm_to_nm(0.2),
+            pad_diameter_nm: mm_to_nm(0.35),
+        });
+        let advanced = ManufacturerProfile::jlc_advanced();
+        assert!(check_min_annular_ring_in(&r, &advanced, |_| true).is_empty());
+        assert_eq!(
+            check_min_annular_ring_in(&r, &advanced, |_| false).len(),
+            1,
+            "outside a declared under-pad escape the via is an ordinary one"
+        );
     }
 
     #[test]

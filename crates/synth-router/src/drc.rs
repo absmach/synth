@@ -17,6 +17,7 @@
 use std::path::{Path, PathBuf};
 
 use serde::{Deserialize, Serialize};
+use tracing::warn;
 
 use crate::contract::RouteRequest;
 
@@ -316,8 +317,8 @@ impl Drop for StagedProject {
             if let Err(error) = std::fs::rename(aside, original) {
                 // Never drop this silently: the original is still on disk
                 // under the aside name.
-                eprintln!(
-                    "warning: could not move {} back to {}: {error}",
+                warn!(
+                    "could not move {} back to {}: {error}",
                     aside.display(),
                     original.display()
                 );
