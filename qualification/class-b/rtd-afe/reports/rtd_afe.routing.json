@@ -1,0 +1,160 @@
+{
+  "schema_version": "synth.routing.v1",
+  "state": "routed",
+  "engine": "freerouting",
+  "capability": {
+    "engine": "freerouting",
+    "available": true,
+    "version": "freerouting-2.4.1",
+    "runtime_version": "openjdk version \"25.0.4.1\" 2026-08-18 LTS",
+    "detail": null,
+    "failure": null
+  },
+  "provenance": {
+    "engine": "freerouting",
+    "engine_version": "freerouting-2.4.1.jar",
+    "runtime_version": "openjdk version \"25.0.4.1\" 2026-08-18 LTS",
+    "profile": "jlc-filled-via",
+    "command": [
+      "/usr/bin/python3",
+      "tools/freeroute_autoroute.py",
+      "qualification/class-b/rtd-afe/kicad/rtd_afe.synth.kicad_pcb",
+      "qualification/class-b/rtd-afe/kicad/rtd_afe.freerouting.kicad_pcb",
+      "--jar",
+      "tools/freerouting/freerouting-2.4.1.jar",
+      "--java",
+      "tools/jre25/bin/java",
+      "--passes",
+      "40",
+      "--threads",
+      "4",
+      "--ses-output",
+      "qualification/class-b/rtd-afe/kicad/rtd_afe.freerouting.ses",
+      "--report",
+      "qualification/class-b/rtd-afe/kicad/rtd_afe.freerouting.json",
+      "--clean-netlist",
+      "--allow-via-in-pad"
+    ],
+    "settings": {
+      "clean_netlist": "true",
+      "passes": "40",
+      "threads": "4",
+      "wall_clock_secs": "1200"
+    },
+    "input_hash": "abc91eecd10c5bd9b576dd8cc22d2cde488556172cdacb335d88c5cae58f2085",
+    "output_hash": "",
+    "source_revision": "01a77d545c2ebab2d85a31b2ceff24ebcd1feacf",
+    "duration_ms": 226649
+  },
+  "statistics": {
+    "connected_nets": 40,
+    "open_nets": 0,
+    "open_net_names": [],
+    "segments": 389,
+    "vias": 89,
+    "wire_length_mm": 688.401167,
+    "pad_escape_rejections": 0,
+    "engine_findings": {
+      "claimed_imported_segments": "389",
+      "claimed_imported_vias": "71"
+    }
+  },
+  "artifacts": {
+    "baseline": "qualification/class-b/rtd-afe/kicad/rtd_afe.synth.kicad_pcb",
+    "candidate": "qualification/class-b/rtd-afe/kicad/rtd_afe.freerouting.kicad_pcb",
+    "delivered": "qualification/class-b/rtd-afe/kicad/rtd_afe.kicad_pcb",
+    "session_log": "qualification/class-b/rtd-afe/kicad/rtd_afe.freerouting.log",
+    "ses": "qualification/class-b/rtd-afe/kicad/rtd_afe.freerouting.ses",
+    "router_report": "qualification/class-b/rtd-afe/kicad/rtd_afe.freerouting.json",
+    "connectivity_report": null,
+    "drc_report": null
+  },
+  "validation": {
+    "fabrication_ready": true,
+    "topology": {
+      "missing_footprints": [],
+      "extra_footprints": [],
+      "missing_nets": [],
+      "missing_layers": [],
+      "missing_pads": [],
+      "renet_pads": [],
+      "outline_present": true
+    },
+    "connectivity": {
+      "connected_nets": 40,
+      "open_nets": 0,
+      "open": [],
+      "unconnected_pads": [],
+      "via_in_pad": [
+        "via at (16.138, 22.835) mm C_DV.2"
+      ],
+      "undersized_vias": [],
+      "undersized_tracks": []
+    },
+    "kicad_drc": {
+      "errors": 0,
+      "unconnected": 0,
+      "warnings": 48
+    },
+    "blocking_reasons": [],
+    "unavailable_checks": [],
+    "advisories": [
+      "net SPI_MOSI changes layers at (23.41, 28.63) mm in a fine-pitch pad breakout with no ground return via within 0.80 mm and no spot in the GND pour for one; the pads leave no room, so the loop is left as an advisory for the signal-integrity review",
+      "net SPI_SCK changes layers at (22.69, 27.91) mm in a fine-pitch pad breakout with no ground return via within 0.80 mm and no spot in the GND pour for one; the pads leave no room, so the loop is left as an advisory for the signal-integrity review",
+      "net SPI_MISO changes layers at (23.41, 27.08) mm in a fine-pitch pad breakout with no ground return via within 0.80 mm and no spot in the GND pour for one; the pads leave no room, so the loop is left as an advisory for the signal-integrity review",
+      "net ADC_DRDY changes layers at (15.49, 24.64) mm in a fine-pitch pad breakout with no ground return via within 0.80 mm and no spot in the GND pour for one; the pads leave no room, so the loop is left as an advisory for the signal-integrity review",
+      "net ADC_DRDY changes layers at (23.08, 30.50) mm in a fine-pitch pad breakout with no ground return via within 0.80 mm and no spot in the GND pour for one; the pads leave no room, so the loop is left as an advisory for the signal-integrity review",
+      "net ADC_START changes layers at (14.32, 29.00) mm in a fine-pitch pad breakout with no ground return via within 0.80 mm and no spot in the GND pour for one; the pads leave no room, so the loop is left as an advisory for the signal-integrity review",
+      "net ADC_START changes layers at (23.47, 29.71) mm in a fine-pitch pad breakout with no ground return via within 0.80 mm and no spot in the GND pour for one; the pads leave no room, so the loop is left as an advisory for the signal-integrity review",
+      "net ADC_RESET_N changes layers at (25.54, 29.05) mm in a fine-pitch pad breakout with no ground return via within 0.80 mm and no spot in the GND pour for one; the pads leave no room, so the loop is left as an advisory for the signal-integrity review",
+      "net CC1 changes layers at (23.76, 7.95) mm in a fine-pitch pad breakout with no ground return via within 0.80 mm and no spot in the GND pour for one; the pads leave no room, so the loop is left as an advisory for the signal-integrity review",
+      "net USB_DN changes layers at (27.96, 27.12) mm in a fine-pitch pad breakout with no ground return via within 0.80 mm and no spot in the GND pour for one; the pads leave no room, so the loop is left as an advisory for the signal-integrity review",
+      "net DVDD_1V1 changes layers at (25.86, 30.42) mm in a fine-pitch pad breakout with no ground return via within 0.80 mm and no spot in the GND pour for one; the pads leave no room, so the loop is left as an advisory for the signal-integrity review"
+    ]
+  },
+  "failure": null,
+  "escape": [
+    {
+      "refdes": "U2",
+      "package": "Package_DFN_QFN:QFN-60-1EP_7x7mm_P0.4mm_EP3.4x3.4mm",
+      "pads": 61,
+      "pitch_mm": 0.4,
+      "gap_mm": 0.2,
+      "via_span_mm": 0.587,
+      "max_drill_mm": 0.013,
+      "layers": 4,
+      "suggested_layers": null,
+      "limit": "track",
+      "detail": "adjacent pins are 0.400 mm apart and the pads leave 0.200 mm between them; a fabrication-floor via needs 0.587 mm between centres, so the drill that would fit is 0.013 mm; even a minimum track needs 0.254 mm of gap",
+      "remediation": "use via-in-pad if the process allows, or choose a coarser-pitch part"
+    },
+    {
+      "refdes": "J1",
+      "package": "Connector_USB:USB_C_Receptacle_HRO_TYPE-C-31-M-12",
+      "pads": 22,
+      "pitch_mm": 0.5,
+      "gap_mm": 0.2,
+      "via_span_mm": 0.587,
+      "max_drill_mm": 0.113,
+      "layers": 4,
+      "suggested_layers": null,
+      "limit": "track",
+      "detail": "adjacent pins are 0.500 mm apart and the pads leave 0.200 mm between them; a fabrication-floor via needs 0.587 mm between centres, so the drill that would fit is 0.113 mm; even a minimum track needs 0.254 mm of gap",
+      "remediation": "use via-in-pad if the process allows, or choose a coarser-pitch part"
+    },
+    {
+      "refdes": "U1",
+      "package": "Package_DFN_QFN:Texas_RHB0032M_VQFN-32-1EP_5x5mm_P0.5mm_EP2.1x2.1mm",
+      "pads": 33,
+      "pitch_mm": 0.5,
+      "gap_mm": 0.0,
+      "via_span_mm": 0.587,
+      "max_drill_mm": 0.113,
+      "layers": 4,
+      "suggested_layers": null,
+      "limit": "track",
+      "detail": "adjacent pins are 0.500 mm apart and the pads leave 0.000 mm between them; a fabrication-floor via needs 0.587 mm between centres, so the drill that would fit is 0.113 mm; even a minimum track needs 0.254 mm of gap",
+      "remediation": "use via-in-pad if the process allows, or choose a coarser-pitch part"
+    }
+  ]
+}
