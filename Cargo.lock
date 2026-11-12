@@ -2286,6 +2286,7 @@ dependencies = [
  "synth-supply",
  "synth-validate",
  "tokio",
+ "toml",
  "tracing",
  "tracing-subscriber",
 ]

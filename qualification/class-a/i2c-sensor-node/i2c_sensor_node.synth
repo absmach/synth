@@ -1,244 +1,106 @@
-// i2c_sensor_node: STM32G030F6P6 + BME680 + 24LC256 field sensor node.
+// A low-speed I2C sensor board: a regulator, decoupling, bus pull-ups and an
+// external connector.
 //
-// Powered from J1 only. Programmed and debugged over the SWD header
-// (J-Link/ST-LINK, 3.3 V logic, NRST on the header). Serial console on the
-// J3 UART pins with an external USB-UART adapter.
-//
-// Programming: connect a J-Link or ST-LINK to the SWD header J4 (pin 1 3V3_REF
-// sense, 2 SWDIO, 3 SWCLK, 4 GND, 5 NRST). Flash and debug go over SWD only; the
-// reset button SW1 and the NRST line on J4 give a hardware reset.
-// PA9 and PA10 (pins 16, 17) are unconnected. BOOT0 shares PA14/SWCLK with no
-// external strap (default option bytes ignore the pin).
-//
-// Power path:  J1 (JST XH, 5 V) -> F1 polyfuse -> D1 Schottky -> +5V_PROT
-//              +5V_PROT -> U1 AMS1117-3.3 -> +3V3
-//
-// MCU pin plan (STM32G030F6P6, TSSOP-20; pin map checked against the KiCad
-// symbol MCU_ST_STM32G0:STM32G030F6Px):
-//  pin  1 PB7  I2C1_SDA  AF6        -> I2C_SDA        (shared: BME680, 24LC256, pull-up)
-//  pin  2 PB9            GPIO       -> J5.12 via 330R + clamp
-//  pin  3 PC15           unused
-//  pin  4 VDD/VDDA                  -> +3V3, 100nF + 4.7uF
-//  pin  5 VSS                       -> GND
-//  pin  6 NRST                      -> NRST (10k pull-up, 100nF, SW1, J4.5)
-//  pin  7 PA0  ADC_IN0              -> J5.3
-//  pin  8 PA1  ADC_IN1              -> J5.4
-//  pin  9 PA2  USART2_TX AF1        -> UART_TX via 330R (J3.2)
-//  pin 10 PA3  USART2_RX AF1        -> UART_RX via 1k   (J3.3)
-//  pin 11 PA4  ADC_IN4              -> J5.5
-//  pin 12 PA5  ADC_IN5 / SPI1_SCK   -> J5.7
-//  pin 13 PA6  ADC_IN6 / SPI1_MISO / TIM3_CH1 -> J5.8
-//  pin 14 PA7  ADC_IN7 / SPI1_MOSI / TIM3_CH2 -> J5.9
-//  pin 15 PB0  ADC_IN8 / TIM3_CH3 (pad also PA8/PB1/PB2: those stay unused) -> J5.11
-//  pin 16 PA9                       unused
-//  pin 17 PA10                      unused
-//  pin 18 PA13 SWDIO                -> SWDIO via 100R (J4.2)
-//  pin 19 PA14 SWCLK / BOOT0        -> SWCLK via 100R (J4.3)
-//  pin 20 PB6  I2C1_SCL AF6         -> I2C_SCL        (pad also PB3/PB4/PB5: unused)
-// Pins 16 and 17 are left unconnected (no-connect); the rest are used.
-
+// A field sensor node: JST-fed 5 V into a low-noise 3V3 LDO, an STM32G030
+// reading two I2C devices (environmental sensor and a config EEPROM), with a
+// 4-pin JST break-out for the host UART. One I2C bus, one set of pull-ups.
 board "i2c_sensor_node" {
-  layers 2
-  manufacturer "jlcpcb"
-  revision "A"
+    layers 2
+    manufacturer "jlcpcb"
 
-  // ---- net classes (widths from current, see design notes) ------------------
-  netclass "PWR"  { trace_width 0.5mm clearance 0.2mm via_diameter 0.6mm via_drill 0.2mm edge_rate slow color "#d55e00" }
-  netclass "V33"  { trace_width 0.4mm clearance 0.2mm via_diameter 0.6mm via_drill 0.2mm edge_rate slow color "#e69f00" }
-  netclass "GNDC" { trace_width 0.4mm clearance 0.2mm via_diameter 0.6mm via_drill 0.2mm color "#000000" }
-  netclass "SIG"  { trace_width 0.25mm clearance 0.2mm via_diameter 0.6mm via_drill 0.2mm edge_rate slow color "#0072b2" }
-  netclass "Default" { via_diameter 0.6mm via_drill 0.2mm }
-
-  // ---- A1: JST 5 V input and its protection chain --------------------------
-  group "5V INPUT: FUSE THEN DIODE" color "#c2410c" {
-    component J1: connector "jst_xh_2pin" value "JST S2B-XH-A-1" { placement_hint { edge: left priority: hard } }
-    component F1: fuse      "polyfuse_500ma" value "0.5A hold" { placement_hint { near: "J1" priority: soft } }
-    component D1: diode     "d_schottky" value "1N5819" { placement_hint { near: "F1" priority: soft } }
-    component D4: diode     "ptvs6v0s1ur" value "PTVS6V0S1UR" { placement_hint { near: "D1" priority: soft } }
-    notes "" {
-      "J1 pin 1 = +5 V, pin 2 = GND (JST XHP-2). Fuse first, then the"
-      "reverse-polarity diode D1."
-      "D4 clamps transients on +5V_PROT, behind D1 so a reversed supply never"
-      "forward-biases it."
+    group "POWER" color "#c2410c" {
+      component J1: connector "jst_ph_2pin"
+      component F1: fuse      "polyfuse" value "500mA"
+      component D1: diode     "d_schottky" value "SS14"
+      component U1: regulator "ams1117_3v3" value "AMS1117-3.3"
+      component C1: capacitor "c_generic_0805" value "10uF"
+      component C2: capacitor "c_generic_0603" value "1uF"
+      notes "" {
+        "Polyfuse then series Schottky: resettable over-current plus reverse-polarity."
+        "AMS1117 sized for the ~400 mA budget: MCU, two I2C devices and the breakout."
+      }
     }
-  }
 
-  // ---- B: 3.3 V regulator ----------------------------------------------------
-  group "3V3 REGULATOR" color "#b91c1c" {
-    component U1: regulator  "ams1117_3v3" value "AMS1117-3.3"
-    component C1: capacitor  "c_generic_0805" value "10uF" { placement_hint { near: "U1.vin" priority: hard } }
-    component C2: capacitor  "c_generic_0805" value "10uF" { placement_hint { near: "U1.vin" priority: hard } }
-    component C3: capacitor  "c_tantalum_47uf" value "47uF" { placement_hint { near: "U1.vout" priority: hard } }
-    component C4: capacitor  "c_generic_0805" value "10uF" { placement_hint { near: "U1.vout" priority: hard } }
-    component C5: capacitor  "c_generic_0603" value "100nF" { placement_hint { near: "U1" priority: soft } }
-    component D15: diode     "ltst_c190kgkt" value "GREEN" { placement_hint { near: "U2" priority: soft } }
-    component R24: resistor  "r_generic_0603" value "680" { placement_hint { near: "D15" priority: soft } }
-    notes "" {
-      "AMS1117 tab is VOUT. Load budget 100 mA: P = (5.0 - 3.3) x 0.1 A ="
-      "0.17 W, thetaJA 90 C/W gives a 15 C rise (125 C limit)."
-      "LED (VF 1.9 to 2.4 V): 1.3 to 2.1 mA through 680 R. C3 is 47 uF"
-      "tantalum (22 uF required)."
+    connect J1.p1 -> F1.p1
+    connect F1.p2 -> D1.anode
+    connect D1.cathode -> U1.vin
+    connect J1.p2 -> U1.gnd
+    connect U1.vin  -> C1.p1
+    connect U1.gnd  -> C1.p2
+    connect U1.vout -> C2.p1
+    connect U1.gnd  -> C2.p2
+
+    group "MCU" color "#0072b2" {
+      component U2: mcu       "stm32g030"
+      component C3: capacitor "c_generic_0603" value "100nF" { placement_hint { near: "U2" priority: hard } }
+      component R1: resistor  "r_generic_0603" value "10k"   { placement_hint { near: "U2" priority: hard } }
+      component C4: capacitor "c_generic_0603" value "100nF" { placement_hint { near: "U2" priority: hard } }
     }
-  }
 
-  // ---- C: MCU, reset, boot and SWD ------------------------------------------
-  group "STM32G030 MCU" color "#0072b2" {
-    component U2: mcu "stm32g030f6p6" value "STM32G030F6P6"
-    component C6: capacitor "c_generic_0603" value "100nF" { placement_hint { near: "U2" priority: hard } }
-    component C7: capacitor "c_generic_0603" value "4.7uF" { placement_hint { near: "U2" priority: hard } }
-    component R3: resistor  "r_generic_0603" value "10k" { placement_hint { near: "U2" priority: soft } }
-    component C8: capacitor "c_generic_0603" value "100nF" { placement_hint { near: "U2" priority: soft } }
-    component SW1: switch   "spst_tactile" value "RESET" { placement_hint { near: "U2.nrst" priority: hard } }
-    component J4: connector "header_1x5" value "SWD" { placement_hint { edge: bottom priority: hard } }
-    component R13: resistor "r_generic_0603" value "100" { placement_hint { near: "J4" priority: soft } }
-    component R14: resistor "r_generic_0603" value "100" { placement_hint { near: "J4" priority: soft } }
-    component D8: diode "d_zener_3v3" value "3.3V zener" { placement_hint { near: "J4" priority: soft } }
-    component D9: diode "d_zener_3v3" value "3.3V zener" { placement_hint { near: "J4" priority: soft } }
-    component D19: diode "d_zener_3v3" value "3.3V zener" { placement_hint { near: "J4" priority: soft } }
-    notes "" {
-      "J4: 1 = 3V3_REF, 2 = SWDIO, 3 = SWCLK, 4 = GND, 5 = NRST. PA14 is"
-      "SWCLK and BOOT0."
-      "D8, D9, D19 are 3.3 V zeners; a 5 V fault through 100 R is (5 - 3.3) /"
-      "100 = 17 mA, 56 mW."
+    connect U1.vout -> U2.vdd
+    connect U1.gnd  -> U2.vss
+    connect U2.vdd  -> C3.p1
+    connect U2.vss  -> C3.p2
+    connect U1.vout -> R1.p1
+    connect R1.p2   -> U2.nrst
+    connect U2.nrst -> C4.p1
+    connect U2.vss  -> C4.p2
+
+    group "I2C BUS" color "#0a7d4a" {
+      component U3: sensor    "bme680_env"
+      component U4: memory    "24lc256_eeprom"
+      component R2: resistor  "r_generic_0603" value "4.7k"
+      component R3: resistor  "r_generic_0603" value "4.7k"
+      component C5: capacitor "c_generic_0603" value "100nF" { placement_hint { near: "U3" priority: hard } }
+      component C6: capacitor "c_generic_0603" value "100nF" { placement_hint { near: "U4" priority: hard } }
+      notes "" {
+        "One bus, one pair of 4.7k pull-ups sized for 400 kHz at 3V3."
+        "BME680 at 0x76: CSB high selects I2C, SDO low selects the low address."
+      }
     }
-  }
 
-  // ---- E: I2C sensing -------------------------------------------------------
-  group "I2C SENSING" color "#0f766e" {
-    component U3: sensor "bme680_lga8" value "BME680"
-    component U5: memory "24lc256_soic8" value "24LC256-I/SN"
-    component C10: capacitor "c_generic_0603" value "100nF" { placement_hint { near: "U3" priority: hard } }
-    component C11: capacitor "c_generic_0603" value "100nF" { placement_hint { near: "U3" priority: hard } }
-    component C12: capacitor "c_generic_0603" value "100nF" { placement_hint { near: "U5" priority: hard } }
-    component R9:  resistor  "r_generic_0603" value "4.7k" { placement_hint { near: "U5" priority: soft } }
-    component R10: resistor  "r_generic_0603" value "4.7k" { placement_hint { near: "U5" priority: soft } }
-    notes "" {
-      "BME680 SDO low = 0x76, CSB high = I2C. 24LC256 A2:A0 low = 0x50. No"
-      "collision."
-      "One pull-up pair, 4.7k each, for the whole bus."
+    connect U1.vout -> U3.vdd
+    connect U1.gnd  -> U3.gnd
+    connect U3.vdd  -> C5.p1
+    connect U3.gnd  -> C5.p2
+    connect U3.csb  -> U1.vout
+    connect U3.sdo  -> U1.gnd
+
+    connect U1.vout -> U4.vdd
+    connect U1.gnd  -> U4.gnd
+    connect U4.vdd  -> C6.p1
+    connect U4.gnd  -> C6.p2
+    // Address 0x50 and write-enabled: all three address straps and WP to GND.
+    connect U1.gnd  -> U4.a0
+    connect U1.gnd  -> U4.a1
+    connect U1.gnd  -> U4.a2
+    connect U1.gnd  -> U4.wp
+
+    connect U2.pa10 -> U3.sda
+    connect U2.pa10 -> U4.sda
+    connect U2.pa9  -> U3.scl
+    connect U2.pa9  -> U4.scl
+    connect U2.pa10 -> R2.p1
+    connect R2.p2   -> U1.vout
+    connect U2.pa9  -> R3.p1
+    connect R3.p2   -> U1.vout
+
+    group "HOST BREAKOUT" color "#b45309" {
+      component J2: connector "jst_ph_4pin"
+      component D2: diode     "esd_usb"
+      component D3: diode     "esd_usb"
+      notes "" {
+        "3V3 / TX / RX / GND in pin order. One ESD clamp per exposed line,"
+        "referenced to ground rather than to the rail."
+      }
     }
+
+    connect U1.vout -> J2.p1
+    connect U2.pa2  -> J2.p2
+    connect U2.pa3  -> J2.p3
+    connect U1.gnd  -> J2.p4
+    connect J2.p2   -> D2.io
+    connect U1.gnd  -> D2.gnd
+    connect J2.p3   -> D3.io
+    connect U1.gnd  -> D3.gnd
   }
-
-  // ---- F: UART break-out ----------------------------------------------------
-  group "UART BREAKOUT" color "#9333ea" {
-    component J3: connector "jst_ph_4pin" value "JST S4B-PH-K-S" { placement_hint { edge: left priority: hard } }    component R11: resistor "r_generic_0603" value "330" { placement_hint { near: "J3" priority: soft } }
-    component R12: resistor "r_generic_0603" value "1k" { placement_hint { near: "J3" priority: soft } }
-    component D7: diode "d_zener_3v3" value "3.3V zener" { placement_hint { near: "R11" priority: soft } }
-    component D24: diode "d_zener_3v3" value "3.3V zener" { placement_hint { near: "R12" priority: soft } }
-    notes "" {
-      "J3: 1 GND, 2 UART_TX, 3 UART_RX, 4 3V3_REF (3 mA max). Host logic 3.3"
-      "V to 5 V."
-      "D7, D24 are 3.3 V zeners behind 330 R and 1 k: a 5 V fault is 5.2 mA"
-      "(17 mW) and 1.7 mA (5.6 mW)."
-    }
-  }
-
-  // ---- G: GPIO header and 3V3_REF output ------------------------------------
-  group "GPIO HEADER" color "#a16207" {
-    component J5: connector "header_1x12" value "GPIO" { placement_hint { edge: top priority: hard } }
-    component R15: resistor "r_generic_0603" value "330" { placement_hint { near: "J5" priority: soft } }
-    component R16: resistor "r_generic_0603" value "330" { placement_hint { near: "J5" priority: soft } }
-    component R17: resistor "r_generic_0603" value "330" { placement_hint { near: "J5" priority: soft } }
-    component R18: resistor "r_generic_0603" value "330" { placement_hint { near: "J5" priority: soft } }
-    component R19: resistor "r_generic_0603" value "330" { placement_hint { near: "J5" priority: soft } }
-    component R20: resistor "r_generic_0603" value "330" { placement_hint { near: "J5" priority: soft } }
-    component R21: resistor "r_generic_0603" value "330" { placement_hint { near: "J5" priority: soft } }
-    component R22: resistor "r_generic_0603" value "330" { placement_hint { near: "J5" priority: soft } }
-    component D10: diode "d_zener_3v3" value "3.3V zener" { placement_hint { near: "R15" priority: soft } }
-    component D20: diode "d_zener_3v3" value "3.3V zener" { placement_hint { near: "R16" priority: soft } }
-    component D11: diode "d_zener_3v3" value "3.3V zener" { placement_hint { near: "R17" priority: soft } }
-    component D21: diode "d_zener_3v3" value "3.3V zener" { placement_hint { near: "R18" priority: soft } }
-    component D12: diode "d_zener_3v3" value "3.3V zener" { placement_hint { near: "R19" priority: soft } }
-    component D22: diode "d_zener_3v3" value "3.3V zener" { placement_hint { near: "R20" priority: soft } }
-    component D13: diode "d_zener_3v3" value "3.3V zener" { placement_hint { near: "R21" priority: soft } }
-    component D23: diode "d_zener_3v3" value "3.3V zener" { placement_hint { near: "R22" priority: soft } }
-    component D14: diode "d_schottky" value "1N5819" { placement_hint { near: "J5" priority: soft } }
-    component R23: resistor "r_generic_0805" value "100" { placement_hint { near: "D14" priority: soft } }
-    notes "" {
-      "J5: 1 3V3_REF, 2 GND, 3 PA0, 4 PA1, 5 PA4, 6 GND, 7 PA5, 8 PA6, 9 PA7,"
-      "10 GND, 11 PB0, 12 PB9."
-      "D10..D13, D20..D23: one 3.3 V zener per line behind 330 R; a 5 V fault"
-      "is 5.2 mA, 17 mW. 3V3_REF is +3V3 through D14 and 100 R, 3 mA max."
-    }
-  }
-
-  // ---- H: mounting ------------------------------------------
-  group "MOUNTING" color "#475569" {
-    component H2: mounting_hole "mounting_hole_m2_5"
-    component H3: mounting_hole "mounting_hole_m2_5"
-    notes "" {
-      "H2, H3: two M2.5 non-plated mounting holes at opposite (diagonal)"
-      "corners."
-    }
-  }
-
-  // ======================= NETS =============================================
-  power "GND" 0v class "GNDC" {
-    J1.p2
-    D4.anode
-    D7.anode D24.anode D10.anode D20.anode D11.anode D21.anode D12.anode D22.anode D13.anode D23.anode
-    U1.gnd C1.p2 C2.p2 C3.p2 C4.p2 C5.p2 D15.cathode
-    U2.vss C6.p2 C7.p2 C8.p2 SW1.p2 D8.anode D9.anode D19.anode
-    U3.gnd U3.gnd2 U3.sdo C10.p2 C11.p2
-    U5.a0 U5.a1 U5.a2 U5.vss U5.wp C12.p2
-    J3.p1 J4.p4 J5.p2 J5.p6 J5.p10
-  }
-
-  power "+5V_PROT" 5v class "PWR" {
-    D1.cathode D4.cathode U1.vin C1.p1 C2.p1
-  }
-
-  power "+3V3" 3.3v class "V33" {
-    U1.vout C3.p1 C4.p1 C5.p1 R24.p1
-    U2.vdd C6.p1 C7.p1 R3.p1
-    U3.vdd U3.vddio U3.csb C10.p1 C11.p1
-    U5.vcc C12.p1 R9.p1 R10.p1
-    D14.anode
-  }
-
-  // ---- 5 V input chain ----
-  net "VIN_5V_RAW"   class "PWR" { J1.p1 F1.p1 }
-  net "VIN_5V_FUSED" class "PWR" { F1.p2 D1.anode }
-
-  // ---- LEDs ----
-  net "LED_PWR"      class "SIG" { R24.p2 D15.anode }
-
-  // ---- reset, boot, SWD ----
-  net "NRST"        class "SIG" { U2.nrst R3.p2 C8.p1 SW1.p1 J4.p5 D19.cathode }
-  net "SWCLK_MCU"   class "SIG" { U2.pa14_pa15 R14.p1 }
-  net "SWCLK"       class "SIG" { R14.p2 J4.p3 D9.cathode }
-  net "SWDIO_MCU"   class "SIG" { U2.pa13 R13.p1 }
-  net "SWDIO"       class "SIG" { R13.p2 J4.p2 D8.cathode }
-
-  // ---- I2C ----
-  net "I2C_SDA" class "SIG" { U2.pb7_pb8 U3.sda U5.sda R9.p2 }
-  net "I2C_SCL" class "SIG" { U2.pb3_pb4_pb5_pb6 U3.scl U5.scl R10.p2 }
-
-  // ---- UART break-out ----
-  net "U2_TX"    class "SIG" { U2.pa2 R11.p1 D7.cathode }
-  net "UART_TX"  class "SIG" { R11.p2 J3.p2 }
-  net "U2_RX"    class "SIG" { U2.pa3 R12.p1 D24.cathode }
-  net "UART_RX"  class "SIG" { R12.p2 J3.p3 }
-
-  // ---- 3V3_REF (current-limited, back-drive-blocked reference output) ----
-  net "REF_D"   class "V33" { D14.cathode R23.p1 }
-  net "3V3_REF" class "V33" { R23.p2 J3.p4 J4.p1 J5.p1 }
-
-  // ---- GPIO header ----
-  net "GPIO_PA0_MCU" class "SIG" { U2.pa0 R15.p1 D10.cathode }
-  net "GPIO_PA0"     class "SIG" { R15.p2 J5.p3 }
-  net "GPIO_PA1_MCU" class "SIG" { U2.pa1 R16.p1 D20.cathode }
-  net "GPIO_PA1"     class "SIG" { R16.p2 J5.p4 }
-  net "GPIO_PA4_MCU" class "SIG" { U2.pa4 R17.p1 D11.cathode }
-  net "GPIO_PA4"     class "SIG" { R17.p2 J5.p5 }
-  net "GPIO_PA5_MCU" class "SIG" { U2.pa5 R18.p1 D21.cathode }
-  net "GPIO_PA5"     class "SIG" { R18.p2 J5.p7 }
-  net "GPIO_PA6_MCU" class "SIG" { U2.pa6 R19.p1 D12.cathode }
-  net "GPIO_PA6"     class "SIG" { R19.p2 J5.p8 }
-  net "GPIO_PA7_MCU" class "SIG" { U2.pa7 R20.p1 D22.cathode }
-  net "GPIO_PA7"     class "SIG" { R20.p2 J5.p9 }
-  net "GPIO_PB0_MCU" class "SIG" { U2.pa8_pb0_pb1_pb2 R21.p1 D13.cathode }
-  net "GPIO_PB0"     class "SIG" { R21.p2 J5.p11 }
-  net "GPIO_PB9_MCU" class "SIG" { U2.pb9_pc14 R22.p1 D23.cathode }
-  net "GPIO_PB9"     class "SIG" { R22.p2 J5.p12 }
-}
