@@ -172,7 +172,7 @@ fixture_sha256 = "5d4d7c07547ac9056bc17365617a8c740656cc77b833aa97da8745cb9c6cc9
 class = "C"
 status = "experimental"
 expect = "unknown"
-expect_fab = "unknown"
+expect_fab = "unestablished"
 rationale = "Two RP2350s on their own USB 2.0 pairs, a shared QSPI boot flash, and a USB 3.0 Type-A receptacle whose SuperSpeed lanes reach a 20-pin header, on six layers: Class-C case 3. Source passes on the pinned run; the DRC stage could not produce a verdict (`unknown`). The U4 core supply, 27 ohm series resistors and 12 MHz crystals are wired as the review asked."
 
 [[board]]
@@ -192,7 +192,7 @@ fixture_sha256 = "fca5dc6a97656b4d1d08c2db3cf1411bb4c7d1eef95431f5bea4d2badd866a
 class = "C"
 status = "experimental"
 expect = "pass"
-expect_fab = "unknown"
+expect_fab = "unestablished"
 rationale = "An ESP32-WROOM-32 on four supply rails from one 12 V input, with an I2C GPIO expander and two expansion headers, on four layers: Class-C case 4. Source and DRC pass on the pinned run, so the board clears the gate; manufacturing is unestablished until it is measured on the pinned runner."
 
 [[board]]
