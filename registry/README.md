@@ -55,6 +55,11 @@ value = "100nf"
 count = 4
 ```
 
+Unknown keys are rejected, not ignored: a typo such as `[spcie]` or a
+misspelled field fails the load instead of silently dropping data. This is
+deliberate, and it applies to every part file, including `synth_author_part`
+input.
+
 The `electrical_type` values mirror the standard EDA categorization
 (passive, power_input, power_output, bidirectional, input, output,
 open_drain, analog, rf, differential_positive, differential_negative,
@@ -64,6 +69,72 @@ The `capabilities` list is the _semantic_ layer. A capability like
 `usb_dp` may require a specific electrical type (see
 [`PinCapability::required_electrical_type`](../crates/synth-registry/src/capability.rs));
 the loader rejects parts that violate this.
+
+### Pin drive data
+
+An output-capable pin (output, three-statable, open-drain, bidirectional) may
+carry the datasheet's DC output-drive data:
+
+```toml
+[[pins]]
+name = "gpio5"
+number = "8"
+electrical_type = "bidirectional"
+
+[pins.drive]
+high_v = 3.3                     # volts, output level at no load
+low_v = 0.0                      # volts, output level at no load
+max_source_ma = 4.0              # milliamps, datasheet source limit
+max_sink_ma = 4.0                # milliamps, datasheet sink limit
+output_resistance_ohm = 25.0     # ohms, optional
+datasheet_ref = "Table 5-1"      # required, page or table
+```
+
+All four numeric fields are required. `output_resistance_ohm` is optional: when
+absent the simulation treats the pin as an ideal source; when present it is a
+series resistance. `datasheet_ref` is required whenever the block is present,
+and a drive block without one is a load error naming the pin. The loader also
+rejects drive data on a pin that cannot output, negative levels, `high_v` not
+greater than `low_v`, non-finite levels, non-positive current limits and a
+non-positive `output_resistance_ohm`. A missing value is never defaulted.
+
+Every value must come from the part's datasheet, with the page or table
+recorded in `datasheet_ref`. Do not guess, and do not copy another part's
+numbers. Only DC drive is modelled: PWM, transient output changes and firmware
+behaviour are not simulated (see [`docs/spice-sim.md`](../docs/spice-sim.md)).
+Adding drive data to a shipped part is a data task done with the datasheet in
+hand; tests use fixture parts with made-up numbers.
+
+### SPICE models
+
+A part can attach a SPICE subcircuit with an optional `[spice]` table:
+
+```toml
+[spice]
+file = "spice/ams1117_3v3.lib"      # relative to a registry directory
+subckt = "ams1117_3v3"
+pin_order = ["vin", "gnd", "vout"]  # part pin names in subckt terminal order
+dialect = "ps"                      # optional: ps | lt | ltps
+
+[spice.params]
+rout = "100m"
+```
+
+`pin_order` must name every pin of the part exactly once. The table's shape is
+checked at load; the model file and subckt are checked only when a simulation
+runs, so `validate` and `export` never fail on a missing file. Model files are
+resolved from the registry directories (the project `registry/parts` and the
+user registry); absolute paths are accepted only when they stay inside one.
+Model files live on disk, so the embedded seed registry cannot resolve them:
+run from a checkout or point `--registry`/`SYNTH_REGISTRY` at a registry.
+Every part in one run must use the same `dialect`, because ngspice applies one
+`ngbehavior` setting per run; a part with no `dialect` counts as its own
+native mode, so it conflicts with a `ps`/`lt`/`ltps` part.
+
+`[spice.params]` values are emitted into the deck exactly as written. SPICE's
+own suffixes therefore apply there: `M` is milli, so write mega as `meg`.
+Synth's "`M` is mega" rule applies to component values, not to these
+parameters.
 
 ## Seed corpus
 

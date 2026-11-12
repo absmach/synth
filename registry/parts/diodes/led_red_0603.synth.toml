@@ -15,6 +15,8 @@ courtyard_margin_mm = 0.25
 min_voltage_v = 1.8
 max_voltage_v = 3.3
 max_current_ma = 20.0
+forward_voltage_v = 2.0
+forward_current_ma = 20.0
 
 [[pins]]
 name = "anode"

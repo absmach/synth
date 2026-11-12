@@ -100,6 +100,26 @@ enum Command {
         parse_only: bool,
     },
 
+    /// Simulate a design against its `<design>.sim.toml` testbench
+    /// sidecar. Exits 0 only when every measured limit passes.
+    Sim {
+        /// Path to a `.synth` source file.
+        input: PathBuf,
+
+        /// Path to the component registry. Auto-discovered: `--registry`, else `$SYNTH_REGISTRY`, else `./registry/parts` (or an ancestor directory), else the embedded seed registry.
+        #[arg(long, value_name = "DIR")]
+        registry: Option<PathBuf>,
+
+        /// Draft `<design>.sim.toml` from the shapes in the design instead of
+        /// running a simulation.
+        #[arg(long)]
+        suggest: bool,
+
+        /// Overwrite an existing `<design>.sim.toml` when drafting.
+        #[arg(long, requires = "suggest")]
+        force: bool,
+    },
+
     /// Parse a SynthSpec file and dump the AST as JSON to stdout.
     /// Diagnostics, if any, are written to stderr.
     DumpAst {
@@ -964,6 +984,12 @@ fn main() -> ExitCode {
             strict_registry,
             parse_only,
         ),
+        Command::Sim {
+            input,
+            registry,
+            suggest,
+            force,
+        } => sim(&input, registry.as_deref(), suggest, force),
         Command::DumpAst { input, pretty } => dump_ast(&input, pretty),
         Command::DumpIr {
             input,
@@ -1236,8 +1262,9 @@ fn main() -> ExitCode {
     }
 }
 
-const CAPABILITY_COMMANDS: [&str; 19] = [
+const CAPABILITY_COMMANDS: [&str; 20] = [
     "validate",
+    "sim",
     "dump-ast",
     "dump-ir",
     "export-kicad",
@@ -1261,6 +1288,15 @@ const CAPABILITY_COMMANDS: [&str; 19] = [
 type CapabilityLimit = (&'static str, Option<&'static str>, &'static str);
 
 const UNSUPPORTED: &[CapabilityLimit] = &[
+    // A command-level limit, not a language constraint: `constraint` is
+    // reserved for netclass/diff_pair/keepout attribute names.
+    (
+        "spice_simulation",
+        None,
+        "`synth sim` runs an operating point or an AC decade sweep only; transient and DC-sweep \
+         analyses, pulse/pwl/sin sources, expression measures and vendor model import are not \
+         implemented yet.",
+    ),
     (
         "coupled_diff_pair_routing",
         Some("diff_pair.couple"),
@@ -3234,6 +3270,149 @@ fn is_flat_user_registry(dir: &Path) -> bool {
         }
     }
     has_toml && !has_subdirectory
+}
+
+fn sim(
+    input: &Path,
+    registry_dir: Option<&Path>,
+    suggest: bool,
+    force: bool,
+) -> anyhow::Result<u8> {
+    let (source, file) = read_source(input)?;
+    let parse = synth_parser::parse(&source, file.clone());
+    write_sim_diagnostics(&parse.diagnostics)?;
+    if parse.has_errors() {
+        return Ok(EXIT_VALIDATION_ERRORS);
+    }
+    let Some(ast) = parse.ast else {
+        return Ok(EXIT_VALIDATION_ERRORS);
+    };
+
+    let import_root = input
+        .parent()
+        .map_or_else(|| PathBuf::from("."), Path::to_path_buf);
+    let loader = synth_ir::FsImportLoader { root: import_root };
+    let resolved = synth_ir::resolve_imports(&ast, &loader, &file);
+    write_sim_diagnostics(&resolved.diagnostics)?;
+    if resolved
+        .diagnostics
+        .iter()
+        .any(|d| d.severity.is_blocking())
+    {
+        return Ok(EXIT_VALIDATION_ERRORS);
+    }
+
+    let Some(registry) = load_registry(registry_dir) else {
+        anyhow::bail!("could not load the component registry");
+    };
+    let lowered = synth_ir::lower(&resolved.program, &registry, &file);
+    write_sim_diagnostics(&lowered.diagnostics)?;
+    if lowered.diagnostics.iter().any(|d| d.severity.is_blocking()) {
+        return Ok(EXIT_VALIDATION_ERRORS);
+    }
+    let Some(board) = lowered.board else {
+        return Ok(EXIT_VALIDATION_ERRORS);
+    };
+
+    if suggest {
+        return Ok(draft_testbench(&board, input, force));
+    }
+
+    let sidecar = synth_sim::sidecar_path(input);
+    let testbench = match synth_sim::Testbench::from_path(&sidecar) {
+        Ok(testbench) => testbench,
+        Err(diagnostic) => {
+            write_sim_diagnostics(&[diagnostic])?;
+            return Ok(EXIT_VALIDATION_ERRORS);
+        }
+    };
+
+    let mut registry_dirs = Vec::new();
+    if let Tier1Source::Dir(dir) = resolve_tier1(registry_dir) {
+        registry_dirs.push(dir);
+    }
+    if let Some(user) = synth_registry::user_registry_dir() {
+        if user.is_dir() && !registry_dirs.contains(&user) {
+            registry_dirs.push(user);
+        }
+    }
+
+    let report = synth_sim::simulate(
+        &board,
+        &testbench,
+        &synth_sim::SimOptions {
+            design_path: Some(input.to_path_buf()),
+            testbench_path: Some(sidecar.clone()),
+            registry_dirs,
+            ..synth_sim::SimOptions::default()
+        },
+    );
+
+    let stdout = std::io::stdout();
+    let mut out = stdout.lock();
+    for measure in &report.measures {
+        let status = match (measure.min, measure.max) {
+            (None, None) => "MEASURED",
+            _ if measure.passed() => "PASS",
+            _ => "FAIL",
+        };
+        let limits = match (measure.min, measure.max) {
+            (Some(min), Some(max)) => format!(" (min {min}, max {max})"),
+            (Some(min), None) => format!(" (min {min})"),
+            (None, Some(max)) => format!(" (max {max})"),
+            (None, None) => String::new(),
+        };
+        writeln!(
+            out,
+            "{status} {} = {} {}{limits}",
+            measure.name, measure.value, measure.unit
+        )?;
+    }
+    let blocking: Vec<_> = report
+        .diagnostics
+        .iter()
+        .filter(|diagnostic| diagnostic.severity.is_blocking())
+        .cloned()
+        .collect();
+    write_sim_diagnostics(&blocking)?;
+
+    Ok(if report.passed() {
+        EXIT_SUCCESS
+    } else {
+        EXIT_VALIDATION_ERRORS
+    })
+}
+
+/// Draft the sidecar from the compiled board and write it unless an existing
+/// file would be lost. All progress lines go to stderr so a caller can pipe
+/// them without mixing in a future stdout report.
+fn draft_testbench(board: &synth_ir::Board, input: &Path, force: bool) -> u8 {
+    let suggestion = synth_sim::suggest_testbench(board);
+    for reason in &suggestion.not_covered {
+        eprintln!("not covered: {reason}");
+    }
+    for warning in &suggestion.warnings {
+        eprintln!("{warning}");
+    }
+    let Some(toml) = suggestion.toml else {
+        eprintln!(
+            "no testbench shapes found in {}; nothing written",
+            input.display()
+        );
+        return EXIT_SUCCESS;
+    };
+
+    let sidecar = synth_sim::sidecar_path(input);
+    if sidecar.exists() && !force {
+        eprintln!("refusing to overwrite {}; pass --force", sidecar.display());
+        return EXIT_VALIDATION_ERRORS;
+    }
+    if let Err(error) = std::fs::write(&sidecar, toml) {
+        eprintln!("error: could not write {}: {error}", sidecar.display());
+        return EXIT_VALIDATION_ERRORS;
+    }
+    eprintln!("wrote {}", sidecar.display());
+    EXIT_SUCCESS
 }
 
 fn validate(
@@ -5880,6 +6059,19 @@ fn schema(kind: SchemaKind) -> anyhow::Result<u8> {
 fn write_diagnostics_to_stderr(
     diagnostics: &[synth_diagnostics::Diagnostic],
 ) -> anyhow::Result<()> {
+    write_diagnostics(diagnostics, false)
+}
+
+/// `sim` diagnostics carry the actionable detail (the TOML error, the
+/// measured value, the missing install) in `message`, so print it too.
+fn write_sim_diagnostics(diagnostics: &[synth_diagnostics::Diagnostic]) -> anyhow::Result<()> {
+    write_diagnostics(diagnostics, true)
+}
+
+fn write_diagnostics(
+    diagnostics: &[synth_diagnostics::Diagnostic],
+    include_message: bool,
+) -> anyhow::Result<()> {
     let stderr = std::io::stderr();
     let mut err = stderr.lock();
     for d in diagnostics {
@@ -5892,6 +6084,11 @@ fn write_diagnostics_to_stderr(
             "{}: [{}] {} ({})",
             d.severity, d.code, d.title, where_
         )?;
+        if include_message {
+            if let Some(message) = &d.message {
+                writeln!(&mut err, "  {message}")?;
+            }
+        }
     }
     Ok(())
 }

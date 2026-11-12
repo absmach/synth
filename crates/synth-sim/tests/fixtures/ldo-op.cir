@@ -1,0 +1,12 @@
+* Synth simulation: ldo
+V1 n_VIN 0 DC 5e0
+{{MODEL}}
+XU1 n_VIN 0 n_VOUT ams1117_3v3 rout=100m
+RR1 n_VOUT 0 1e3
+.control
+op
+let m0 = v(n_VOUT)
+echo SYNTH_MEAS vout $&m0
+echo SYNTH_DONE
+.endc
+.end

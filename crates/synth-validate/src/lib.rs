@@ -55,7 +55,7 @@ pub use anomaly::{extract_features, BoardFeatureVec, GraphAnomalyDetectorRule};
 pub use config::{ErcConfig, PinConflictTable};
 
 pub mod value;
-pub use value::{parse_capacitance, parse_resistance, parse_voltage};
+pub use value::{parse_capacitance, parse_inductance, parse_resistance, parse_voltage};
 
 mod impedance;
 pub mod patch_mlp;
@@ -4795,6 +4795,7 @@ mod tests {
             voltage_max_v: None,
             voltage_min_v: None,
             voltage_nominal_v: None,
+            drive: None,
         }
     }
 
@@ -4815,6 +4816,7 @@ mod tests {
                 voltage_max_v: None,
                 voltage_min_v: None,
                 voltage_nominal_v: None,
+                drive: None,
             })
             .collect();
         let mut p = part(part_id, "mcu", pins);
@@ -4929,6 +4931,7 @@ mod tests {
             footprint_dimensions: None,
             operating_conditions: None,
             provenance: None,
+            spice: None,
         }
     }
 
@@ -5151,6 +5154,7 @@ mod tests {
             footprint_dimensions: None,
             operating_conditions: None,
             provenance: None,
+            spice: None,
         }
     }
 
@@ -5447,6 +5451,7 @@ mod tests {
                 voltage_max_v: None,
                 voltage_min_v: None,
                 voltage_nominal_v: None,
+                drive: None,
             }],
             required_decoupling: vec![],
             kicad_symbol: None,
@@ -5458,6 +5463,7 @@ mod tests {
                 reviewed_by: None,
                 ..Default::default()
             }),
+            spice: None,
         };
         let board = Board {
             schematic_overflow: None,
@@ -5524,6 +5530,7 @@ mod tests {
                 voltage_max_v: None,
                 voltage_min_v: None,
                 voltage_nominal_v: None,
+                drive: None,
             }],
         );
         let board = Board {

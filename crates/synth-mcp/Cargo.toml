@@ -34,6 +34,7 @@ synth-layout = { workspace = true }
 synth-place = { workspace = true }
 synth-pcb = { workspace = true }
 synth-router = { workspace = true }
+synth-sim = { workspace = true }
 synth-drc = { workspace = true }
 synth-kicad = { workspace = true }
 synth-render = { workspace = true }

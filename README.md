@@ -173,6 +173,9 @@ Synth resolves parts from a component registry and lowers the source into a type
 | Design                                                                                             | What it demonstrates                                                          |
 | -------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------- |
 | [Hello](fixtures/designs/hello.synth)                                                              | The smallest board declaration                                                |
+| [Resistor divider](examples/divider/divider.synth)                                                 | A DC operating-point simulation with `synth sim`                              |
+| [RC filter](examples/rc_filter/rc_filter.synth)                                                    | An AC sweep measuring the -3 dB corner with `synth sim`                       |
+| [LED current](examples/led/led.synth)                                                              | A branch-current measure checked against a limit with `synth sim`             |
 | [Environmental logger](examples/env_logger/env_logger.synth)                                       | USB-C power, a regulator, an MCU, an environmental sensor, and a debug header |
 | [Sensor logger](examples/sensor_logger/sensor_logger.synth)                                        | A larger design with dual I²C sensors, SPI flash, and status LEDs             |
 | [Placement and differential pairs](examples/placement_and_diff_pair/placement_and_diff_pair.synth) | Placement hints, differential-pair constraints, and keepout regions           |
@@ -189,6 +192,7 @@ for an interactive review._
 
 - [Release checks](docs/release-checks.md) — the `synth check` gate, tri-state native stages, and export overrides.
 - [KiCad workflows](docs/kicad-workflows.md) — exported projects, validation, BOMs, and fabrication outputs.
+- [SPICE simulation](docs/spice-sim.md) — `synth sim` testbenches, analyses, measures and ngspice setup.
 - [Schematic procedures](docs/schematic-procedures.md) — schematic generation and review.
 - [Diagnostic reference](docs/diagnostics/README.md) — diagnostic codes and repair guidance.
 - [Diagnostic protocol](docs/protocol-v1.0.md) — the machine-readable diagnostic format.

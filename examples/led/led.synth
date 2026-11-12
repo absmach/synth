@@ -1,0 +1,14 @@
+// LED current tracer for `synth sim`.
+// The sidecar `led.sim.toml` drives 5 V through 150 Ω and measures the
+// LED1 branch current.
+board "led" {
+  layers 2
+
+  component R1: resistor "r_generic_0805" value "150"
+  component LED1: led "ltst_c190krkt"
+
+  power "VCC" 5v
+  net "VCC" { R1.p1 }
+  net "GND" { LED1.cathode }
+  connect R1.p2 -> LED1.anode as "MID"
+}

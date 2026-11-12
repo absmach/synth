@@ -32,6 +32,7 @@ synth-mcp = { workspace = true }
 synth-smt = { workspace = true }
 synth-supply = { workspace = true }
 synth-cost = { workspace = true }
+synth-sim = { workspace = true }
 clap = { workspace = true }
 rayon = { workspace = true }
 tracing = { workspace = true }

@@ -4,9 +4,23 @@
 
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
+use std::cell::RefCell;
 use std::cmp::Ordering;
 use std::path::{Path, PathBuf};
 use synth_supply::Distributor;
+
+thread_local! {
+    /// Test-only override for the ngspice binary. The MCP schema deliberately
+    /// has no such argument, so a remote caller cannot choose a command.
+    static TEST_NGSPICE: RefCell<Option<PathBuf>> = const { RefCell::new(None) };
+}
+
+/// Point `synth_simulate` at a specific binary for this test thread. Test
+/// hook only: it is not part of the tool schema.
+#[doc(hidden)]
+pub fn set_test_ngspice(path: Option<PathBuf>) {
+    TEST_NGSPICE.with(|slot| *slot.borrow_mut() = path);
+}
 
 /// Tool description metadata exposed in `tools/list`.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -610,6 +624,20 @@ pub fn list_tools() -> Vec<McpToolInfo> {
                 }
             }),
         },
+        McpToolInfo {
+            name: "synth_simulate".into(),
+            description: "Compile a design and run its `<design>.sim.toml` testbench sidecar through ngspice, returning measured values, their limits and structured diagnostics. A design path is required because the sidecar sits beside it; inline `source` is not supported. A missing measurement, a failed measurement, a missing SPICE model, missing ngspice or a timeout is a blocking E-SYNTH-SIM-* diagnostic with `passed: false`, never a silent pass.".into(),
+            input_schema: serde_json::json!({
+                "type": "object",
+                "properties": {
+                    "file_path": { "type": "string", "description": "Path to the .synth design file; its testbench sidecar is `<design>.sim.toml` beside it" },
+                    "testbench_path": { "type": "string", "description": "Optional explicit testbench sidecar path (defaults to `<design>.sim.toml`)" },
+                    "registry_path": { "type": "string", "description": "Optional custom component registry path" },
+                    "workspace_root": { "type": "string", "description": "Optional workspace root path for auto-resolving registry" }
+                },
+                "required": ["file_path"]
+            }),
+        },
     ]
 }
 
@@ -656,6 +684,7 @@ pub fn call_tool(
         "synth_author_part" => execute_author_part(args, default_registry),
         "synth_search_registry_web" => execute_search_registry_web(args, default_registry),
         "synth_export_multiboard" => execute_export_multiboard(args),
+        "synth_simulate" => execute_simulate(args, default_registry),
         "synth_multi_agent_synthesize" => Ok(serde_json::json!({
             "status": "dev_stub",
             "message": format!("Tool '{name}' is under active local development.")
@@ -2214,6 +2243,88 @@ fn compile_design(args: &Value, default_registry: Option<&Path>) -> Result<Compi
         board,
         file_name,
         diagnostics,
+    })
+}
+
+/// `synth_simulate`: a thin wrapper over [`synth_sim::simulate`]. Deck
+/// emission, process control and sentinel parsing stay in `synth-sim`; this
+/// only maps MCP arguments onto that seam.
+fn execute_simulate(args: &Value, default_registry: Option<&Path>) -> Result<Value, String> {
+    if args["source"].as_str().is_some() {
+        return Err(
+            "synth_simulate needs a `file_path`; inline `source` is not supported because the \
+             `<design>.sim.toml` testbench sidecar must sit beside the design file"
+                .to_string(),
+        );
+    }
+    let design_path = PathBuf::from(args["file_path"].as_str().ok_or_else(|| {
+        "synth_simulate needs a `file_path`; its `<design>.sim.toml` testbench sidecar \
+         must sit beside the design file"
+            .to_string()
+    })?);
+    let CompiledDesign {
+        board,
+        diagnostics: mut compile_diagnostics,
+        ..
+    } = compile_design(args, default_registry)?;
+    if compile_diagnostics.iter().any(|d| d.severity.is_blocking()) {
+        return Ok(sim_json(false, &[], &compile_diagnostics));
+    }
+
+    let testbench_path = args["testbench_path"]
+        .as_str()
+        .map_or_else(|| synth_sim::sidecar_path(&design_path), PathBuf::from);
+    let testbench = match synth_sim::Testbench::from_path(&testbench_path) {
+        Ok(testbench) => testbench,
+        Err(diagnostic) => return Ok(sim_json(false, &[], &[diagnostic])),
+    };
+
+    let mut registry_dirs = Vec::new();
+    let tier1 = resolve_registry(args, default_registry);
+    if tier1.is_dir() {
+        registry_dirs.push(tier1);
+    }
+    if let Some(user) = resolve_user_registry_opt(args) {
+        if user.is_dir() && !registry_dirs.contains(&user) {
+            registry_dirs.push(user);
+        }
+    }
+
+    let report = synth_sim::simulate(
+        &board,
+        &testbench,
+        &synth_sim::SimOptions {
+            ngspice: TEST_NGSPICE.with(|slot| slot.borrow().clone()),
+            design_path: Some(design_path),
+            testbench_path: Some(testbench_path),
+            registry_dirs,
+        },
+    );
+    let passed = report.passed();
+    compile_diagnostics.extend(report.diagnostics);
+    Ok(sim_json(passed, &report.measures, &compile_diagnostics))
+}
+
+/// The one JSON shape `synth_simulate` returns, so the pass path and every
+/// error path stay identical.
+fn sim_json(
+    passed: bool,
+    measures: &[synth_sim::MeasureResult],
+    diagnostics: &[synth_diagnostics::Diagnostic],
+) -> Value {
+    serde_json::json!({
+        "passed": passed,
+        "measures": measures.iter().map(|measure| serde_json::json!({
+            "name": &measure.name,
+            "value": measure.value,
+            "unit": measure.unit,
+            "min": measure.min,
+            "max": measure.max,
+            // A measure with no limits has nothing to pass or fail; the CLI
+            // prints MEASURED, so `null` keeps agents from reading it as a pass.
+            "passed": (measure.min.is_some() || measure.max.is_some()).then(|| measure.passed()),
+        })).collect::<Vec<_>>(),
+        "diagnostics": diagnostics,
     })
 }
 
@@ -5128,11 +5239,17 @@ fn execute_author_part(args: &Value, _default_registry: Option<&Path>) -> Result
     // author who names a stock footprint has no reason to measure it.
     ensure_footprint_dimensions(&mut part)?;
 
+    let serialized = toml::to_string_pretty(&part).map_err(|e| e.to_string())?;
+    // Reuse the registry loader's post-parse checks so the tool cannot write
+    // a part that every later registry load rejects.
+    let filename = format!("{}.synth.toml", part.id.as_str());
+    synth_registry::load_from_strs(&[(&filename, &serialized)])
+        .map_err(|e| format!("invalid part TOML: {e}"))?;
+
     let user_dir = resolve_user_registry(args)?;
     std::fs::create_dir_all(&user_dir).map_err(|e| format!("cannot create user registry: {e}"))?;
 
-    let serialized = toml::to_string_pretty(&part).map_err(|e| e.to_string())?;
-    let path = user_dir.join(format!("{}.synth.toml", part.id.as_str()));
+    let path = user_dir.join(filename);
     std::fs::write(&path, serialized).map_err(|e| e.to_string())?;
 
     Ok(serde_json::json!({
@@ -5527,6 +5644,100 @@ electrical_type = "input"
             dims.courtyard_margin_mm,
             Some(synth_registry::footprint_svg::COURTYARD_MARGIN_MM)
         );
+    }
+
+    /// A drive block without `datasheet_ref` parses but would break every
+    /// subsequent registry load. The tool must run the loader checks before
+    /// it creates the user registry or writes anything.
+    #[test]
+    fn author_part_rejects_an_invalid_drive_block_before_writing() {
+        let dir = scratch("author_bad_drive");
+        let user = dir.join("user_registry");
+        let toml_src = r#"
+id = "test_bad_drive_ic"
+kind = "ic"
+
+[footprint_dimensions]
+width_mm = 2.0
+height_mm = 2.0
+
+[[pins]]
+name = "gpio5"
+number = "1"
+electrical_type = "bidirectional"
+[pins.drive]
+high_v = 3.3
+low_v = 0.0
+max_source_ma = 4.0
+max_sink_ma = 4.0
+"#;
+        let res = call_tool(
+            "synth_author_part",
+            &json!({ "part_toml": toml_src, "user_registry": user.to_str().unwrap() }),
+            None,
+        );
+
+        assert!(
+            res.is_err(),
+            "a drive block without datasheet_ref must fail"
+        );
+        assert!(
+            res.unwrap_err().contains("datasheet_ref"),
+            "the loader error should name datasheet_ref"
+        );
+        assert!(
+            !user.exists(),
+            "the user registry must not be created before validation"
+        );
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// The loader checks also accept a valid drive block, and the written
+    /// part reloads through the same path `synth registry list` uses.
+    #[test]
+    fn author_part_writes_valid_drive_data_that_reloads() {
+        let dir = scratch("author_drive");
+        let toml_src = r#"
+id = "test_drive_ic"
+kind = "ic"
+
+[footprint_dimensions]
+width_mm = 2.0
+height_mm = 2.0
+
+[[pins]]
+name = "gpio5"
+number = "1"
+electrical_type = "bidirectional"
+[pins.drive]
+high_v = 3.3
+low_v = 0.0
+max_source_ma = 4.0
+max_sink_ma = 4.0
+output_resistance_ohm = 25.0
+datasheet_ref = "Table 5-1"
+"#;
+        let res = call_tool(
+            "synth_author_part",
+            &json!({ "part_toml": toml_src, "user_registry": dir.to_str().unwrap() }),
+            None,
+        )
+        .expect("a valid drive block should be authored");
+
+        assert_eq!(res["status"], "authored");
+        let registry = synth_registry::load_dir(&dir).expect("the written part reloads");
+        let drive = registry
+            .lookup("test_drive_ic")
+            .expect("test_drive_ic")
+            .find_pin("gpio5")
+            .expect("gpio5")
+            .drive
+            .as_ref()
+            .expect("drive block");
+        assert_eq!(drive.high_v, 3.3);
+        assert_eq!(drive.max_source_ma, 4.0);
+        assert_eq!(drive.datasheet_ref.as_deref(), Some("Table 5-1"));
+        let _ = std::fs::remove_dir_all(&dir);
     }
 
     #[test]

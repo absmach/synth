@@ -1051,6 +1051,7 @@ fn multi_unit_rails_split_is_an_error() {
             voltage_max_v: None,
             voltage_min_v: None,
             voltage_nominal_v: None,
+            drive: None,
         }
     }
 
@@ -1076,6 +1077,7 @@ fn multi_unit_rails_split_is_an_error() {
         footprint_dimensions: None,
         operating_conditions: None,
         provenance: None,
+        spice: None,
     };
     let board = Board {
         schematic_overflow: None,

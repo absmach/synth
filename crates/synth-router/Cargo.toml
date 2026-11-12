@@ -23,6 +23,9 @@ synth-geometry = { workspace = true }
 synth-ir = { workspace = true }
 synth-place = { workspace = true }
 
+[target.'cfg(unix)'.dependencies]
+nix = { version = "0.31", features = ["signal"] }
+
 [dev-dependencies]
 sha2 = { workspace = true }
 synth-kicad = { workspace = true }

@@ -1,0 +1,10 @@
+* a control loop that never ends
+V1 in 0 DC 1
+R1 in 0 1k
+.control
+let i = 0
+while i < 1
+  let i = i
+end
+.endc
+.end

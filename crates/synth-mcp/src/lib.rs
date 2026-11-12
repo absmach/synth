@@ -17,4 +17,4 @@ pub mod tools;
 pub use audit::{AuditEvent, AuditLogger};
 pub use cloud_endpoint::{CloudMcpServer, RateLimiter};
 pub use server::{handle_jsonrpc_request, run_sse_server, run_stdio_server, SERVER_INSTRUCTIONS};
-pub use tools::{call_tool, list_tools, McpToolInfo};
+pub use tools::{call_tool, list_tools, set_test_ngspice, McpToolInfo};

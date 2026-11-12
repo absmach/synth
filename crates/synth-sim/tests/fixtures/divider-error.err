@@ -1,0 +1,4 @@
+Error: unknown subckt: x1 in 0 nosuchsub
+    Simulation interrupted due to error!
+
+Note: No ".plot", ".print", or ".fourier" lines; no simulations run

@@ -34,6 +34,7 @@ fn pin(name: &str) -> Pin {
         voltage_max_v: None,
         voltage_min_v: None,
         voltage_nominal_v: None,
+        drive: None,
     }
 }
 
@@ -55,6 +56,7 @@ fn part(kind: &str, pins: &[&str]) -> Part {
         kicad_footprint: None,
         footprint_dimensions: None,
         operating_conditions: None,
+        spice: None,
     }
 }
 

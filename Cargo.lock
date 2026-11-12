@@ -2282,6 +2282,7 @@ dependencies = [
  "synth-place",
  "synth-registry",
  "synth-router",
+ "synth-sim",
  "synth-smt",
  "synth-supply",
  "synth-validate",
@@ -2455,6 +2456,7 @@ dependencies = [
  "synth-registry",
  "synth-render",
  "synth-router",
+ "synth-sim",
  "synth-supply",
  "synth-validate",
  "tempfile",
@@ -2552,6 +2554,7 @@ dependencies = [
 name = "synth-router"
 version = "0.1.2"
 dependencies = [
+ "nix",
  "serde",
  "serde_json",
  "sha2",
@@ -2565,6 +2568,20 @@ dependencies = [
  "synth-registry",
  "thiserror 2.0.21",
  "tracing",
+]
+
+[[package]]
+name = "synth-sim"
+version = "0.1.2"
+dependencies = [
+ "serde",
+ "synth-diagnostics",
+ "synth-ir",
+ "synth-parser",
+ "synth-registry",
+ "synth-router",
+ "synth-validate",
+ "toml",
 ]
 
 [[package]]

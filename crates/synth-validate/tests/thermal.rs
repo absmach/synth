@@ -40,6 +40,8 @@ fn diagnostics_with_power(power_mw: f64, theta_c_per_w: f64) -> Vec<Diagnostic> 
                 min_voltage_v: None,
                 max_voltage_v: None,
                 max_current_ma: None,
+                forward_voltage_v: None,
+                forward_current_ma: None,
                 max_power_mw: Some(power_mw),
                 thermal_resistance_c_per_w: Some(theta_c_per_w),
                 ..Default::default()

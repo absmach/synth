@@ -98,6 +98,16 @@ pub enum LoadError {
          a rule on a missing pin is never checked"
     )]
     UnknownDecouplingPin { path: PathBuf, pin: String },
+
+    #[error("part {path}: invalid [spice] model ({message})")]
+    InvalidSpiceModel { path: PathBuf, message: String },
+
+    #[error("part {path}: invalid [pins.drive] on pin `{pin}` ({message})")]
+    InvalidPinDrive {
+        path: PathBuf,
+        pin: String,
+        message: String,
+    },
 }
 
 /// Recursively load every `*.synth.toml` file under `root` into a
@@ -537,6 +547,9 @@ fn validate_part(path: &Path, part: &Part) -> Result<(), LoadError> {
                 }
             }
         }
+        if let Some(drive) = &pin.drive {
+            validate_pin_drive(path, &pin.name, pin.electrical_type, drive)?;
+        }
     }
 
     // Pin-number invariant: if the part references a KiCad stock
@@ -607,6 +620,10 @@ fn validate_part(path: &Path, part: &Part) -> Result<(), LoadError> {
         }
     }
 
+    if let Some(ref spice) = part.spice {
+        validate_spice_model(path, spice)?;
+    }
+
     let _ = PartId(part.id.as_str().to_string());
     Ok(())
 }
@@ -651,6 +668,126 @@ fn check_kicad_pin_roles(part: &Part, path: &Path) -> Result<(), LoadError> {
                 pin.name, pin.electrical_type, types, carries
             ),
         });
+    }
+    Ok(())
+}
+
+/// A drive block is datasheet data: every number must be usable, and the
+/// reference it came from must be recorded.
+fn validate_pin_drive(
+    path: &Path,
+    pin: &str,
+    electrical_type: crate::ElectricalType,
+    drive: &crate::part::PinDrive,
+) -> Result<(), LoadError> {
+    let invalid = |message: String| LoadError::InvalidPinDrive {
+        path: path.to_path_buf(),
+        pin: pin.to_string(),
+        message,
+    };
+    if !electrical_type.can_output() {
+        return Err(invalid(format!(
+            "`[pins.drive]` requires an output-capable electrical type, not `{electrical_type:?}`"
+        )));
+    }
+    if drive
+        .datasheet_ref
+        .as_deref()
+        .is_none_or(|reference| reference.trim().is_empty())
+    {
+        return Err(invalid(
+            "`datasheet_ref` is required; record the datasheet page or table".to_string(),
+        ));
+    }
+    for (label, value) in [
+        ("high_v", drive.high_v),
+        ("low_v", drive.low_v),
+        ("max_source_ma", drive.max_source_ma),
+        ("max_sink_ma", drive.max_sink_ma),
+    ] {
+        if !value.is_finite() {
+            return Err(invalid(format!("`{label}` must be finite")));
+        }
+    }
+    if drive.high_v < 0.0 {
+        return Err(invalid("`high_v` must not be negative".to_string()));
+    }
+    if drive.low_v < 0.0 {
+        return Err(invalid("`low_v` must not be negative".to_string()));
+    }
+    if drive.high_v <= drive.low_v {
+        return Err(invalid(format!(
+            "`high_v` ({}) must be greater than `low_v` ({})",
+            drive.high_v, drive.low_v
+        )));
+    }
+    for (label, value) in [
+        ("max_source_ma", drive.max_source_ma),
+        ("max_sink_ma", drive.max_sink_ma),
+    ] {
+        if value <= 0.0 {
+            return Err(invalid(format!("`{label}` must be greater than 0")));
+        }
+    }
+    if let Some(resistance) = drive.output_resistance_ohm {
+        if !resistance.is_finite() || resistance <= 0.0 {
+            return Err(invalid(
+                "`output_resistance_ohm` must be a positive finite number".to_string(),
+            ));
+        }
+    }
+    Ok(())
+}
+
+/// Shape checks only: whether the model file exists or defines the subcircuit
+/// is checked when a simulation runs, so `validate` and `export` never fail on
+/// a missing model.
+fn validate_spice_model(path: &Path, spice: &crate::part::SpiceModel) -> Result<(), LoadError> {
+    let invalid = |message: String| LoadError::InvalidSpiceModel {
+        path: path.to_path_buf(),
+        message,
+    };
+    if spice.file.trim().is_empty() {
+        return Err(invalid("`file` is empty".to_string()));
+    }
+    if spice.subckt.trim().is_empty() {
+        return Err(invalid("`subckt` is empty".to_string()));
+    }
+    if spice.pin_order.is_empty() {
+        return Err(invalid("`pin_order` is empty".to_string()));
+    }
+    let mut seen = HashSet::new();
+    for pin in &spice.pin_order {
+        if pin.trim().is_empty() {
+            return Err(invalid(
+                "`pin_order` contains an empty pin name".to_string(),
+            ));
+        }
+        if !seen.insert(pin) {
+            return Err(invalid(format!("`pin_order` lists pin `{pin}` twice")));
+        }
+    }
+    for (name, value) in &spice.params {
+        if name.is_empty() {
+            return Err(invalid("`params` contains an empty name".to_string()));
+        }
+        let mut chars = name.chars();
+        let valid_start = chars
+            .next()
+            .is_some_and(|c| c.is_ascii_alphabetic() || c == '_');
+        if !valid_start || !chars.all(|c| c.is_ascii_alphanumeric() || c == '_') {
+            return Err(invalid(format!(
+                "parameter name `{name}` must match `[A-Za-z_][A-Za-z0-9_]*`"
+            )));
+        }
+        if value.trim().is_empty() {
+            return Err(invalid(format!("parameter `{name}` has an empty value")));
+        }
+        if value.chars().any(char::is_whitespace) {
+            return Err(invalid(format!(
+                "parameter `{name}` value `{value}` must not contain whitespace"
+            )));
+        }
     }
     Ok(())
 }
@@ -1014,6 +1151,8 @@ courtyard_margin_mm = 0.25
 min_voltage_v = 1.8
 max_voltage_v = 3.6
 max_current_ma = 100.0
+forward_voltage_v = 2.0
+forward_current_ma = 20.0
 
 [[pins]]
 name = "vcc"
@@ -1040,6 +1179,8 @@ voltage_max_v = 5.0
         assert_eq!(op.min_voltage_v, Some(1.8));
         assert_eq!(op.max_voltage_v, Some(3.6));
         assert_eq!(op.max_current_ma, Some(100.0));
+        assert_eq!(op.forward_voltage_v, Some(2.0));
+        assert_eq!(op.forward_current_ma, Some(20.0));
 
         let pin_in = part.find_pin("in").unwrap();
         assert_eq!(pin_in.unit.as_deref(), Some("A"));
@@ -1257,5 +1398,254 @@ label_side = "inside"
         let got = user_registry_dir().expect("override honoured");
         assert_eq!(got, PathBuf::from("/tmp/synth_user_test"));
         std::env::remove_var("SYNTH_USER_REGISTRY_DIR");
+    }
+
+    fn part_with_spice(spice: &str) -> String {
+        format!(
+            "id = \"spicey\"\nkind = \"regulator\"\n\
+             [[pins]]\nname = \"vin\"\nnumber = \"1\"\nelectrical_type = \"power_input\"\n\
+             [[pins]]\nname = \"vout\"\nnumber = \"2\"\nelectrical_type = \"power_output\"\n\
+             [[pins]]\nname = \"gnd\"\nnumber = \"3\"\nelectrical_type = \"power_input\"\n\
+             {spice}"
+        )
+    }
+
+    #[test]
+    fn a_malformed_spice_table_fails_at_load() {
+        let toml = part_with_spice("[spice]\nsubckt = \"spicey\"\npin_order = [\"vin\"]\n");
+        let err =
+            load_from_strs(&[("spicey.synth.toml", &toml)]).expect_err("missing `file` field");
+        assert!(
+            err.to_string().contains("spicey.synth.toml"),
+            "error must name the file: {err}"
+        );
+    }
+
+    /// The model file is resolved only when a simulation runs, so `validate`
+    /// and `export` must not require it to exist.
+    #[test]
+    fn a_spice_model_with_a_missing_file_still_loads() {
+        let toml = part_with_spice(
+            "[spice]\nfile = \"spice/does_not_exist.lib\"\nsubckt = \"spicey\"\n\
+             pin_order = [\"vin\", \"gnd\", \"vout\"]\n\n[spice.params]\nrout = \"100m\"\n",
+        );
+        let reg = load_from_strs(&[("spicey.synth.toml", &toml)]).expect("shape is valid");
+        let spice = reg
+            .lookup("spicey")
+            .expect("spicey")
+            .spice
+            .as_ref()
+            .expect("spice table");
+        assert_eq!(spice.file, "spice/does_not_exist.lib");
+        assert_eq!(spice.params.get("rout").map(String::as_str), Some("100m"));
+    }
+
+    fn drive_part(drive: &str) -> String {
+        format!(
+            "id = \"drive_ic\"\nkind = \"ic\"\n\
+             [[pins]]\nname = \"gpio5\"\nnumber = \"1\"\nelectrical_type = \"bidirectional\"\n\
+             {drive}"
+        )
+    }
+
+    const COMPLETE_DRIVE: &str = "[pins.drive]\nhigh_v = 3.3\nlow_v = 0.0\n\
+         max_source_ma = 4.0\nmax_sink_ma = 4.0\noutput_resistance_ohm = 25.0\n\
+         datasheet_ref = \"Table 5-1\"\n";
+
+    #[test]
+    fn a_pin_drive_without_datasheet_ref_is_a_load_error_naming_the_pin() {
+        let toml = drive_part(
+            "[pins.drive]\nhigh_v = 3.3\nlow_v = 0.0\nmax_source_ma = 4.0\nmax_sink_ma = 4.0\n",
+        );
+        let error = load_from_strs(&[("drive_ic.synth.toml", &toml)])
+            .expect_err("datasheet_ref is required with drive data");
+        assert!(
+            matches!(&error, LoadError::InvalidPinDrive { pin, .. } if pin == "gpio5"),
+            "{error:?}"
+        );
+        assert!(
+            error.to_string().contains("gpio5") && error.to_string().contains("datasheet_ref"),
+            "{error}"
+        );
+    }
+
+    #[test]
+    fn a_complete_pin_drive_loads_and_preserves_its_values() {
+        let toml = drive_part(COMPLETE_DRIVE);
+        let registry = load_from_strs(&[("drive_ic.synth.toml", &toml)]).expect("valid drive");
+        let drive = registry
+            .lookup("drive_ic")
+            .expect("drive_ic")
+            .find_pin("gpio5")
+            .expect("gpio5")
+            .drive
+            .as_ref()
+            .expect("drive block");
+        assert_eq!(drive.high_v, 3.3);
+        assert_eq!(drive.low_v, 0.0);
+        assert_eq!(drive.max_source_ma, 4.0);
+        assert_eq!(drive.max_sink_ma, 4.0);
+        assert_eq!(drive.output_resistance_ohm, Some(25.0));
+        assert_eq!(drive.datasheet_ref.as_deref(), Some("Table 5-1"));
+    }
+
+    #[test]
+    fn a_pin_drive_with_unusable_numbers_is_a_load_error() {
+        for (label, drive) in [
+            (
+                "non-finite high",
+                COMPLETE_DRIVE.replace("high_v = 3.3", "high_v = nan"),
+            ),
+            (
+                "zero source limit",
+                COMPLETE_DRIVE.replace("max_source_ma = 4.0", "max_source_ma = 0.0"),
+            ),
+            (
+                "negative sink limit",
+                COMPLETE_DRIVE.replace("max_sink_ma = 4.0", "max_sink_ma = -1.0"),
+            ),
+            (
+                "zero output resistance",
+                COMPLETE_DRIVE.replace(
+                    "output_resistance_ohm = 25.0",
+                    "output_resistance_ohm = 0.0",
+                ),
+            ),
+        ] {
+            let toml = drive_part(&drive);
+            let error = load_from_strs(&[("drive_ic.synth.toml", &toml)])
+                .expect_err(&format!("{label} must fail"));
+            assert!(
+                matches!(&error, LoadError::InvalidPinDrive { pin, .. } if pin == "gpio5"),
+                "{label}: {error:?}"
+            );
+        }
+    }
+
+    fn drive_part_with_type(electrical_type: &str, drive: &str) -> String {
+        drive_part(drive).replace(
+            "electrical_type = \"bidirectional\"",
+            &format!("electrical_type = \"{electrical_type}\""),
+        )
+    }
+
+    /// Only pins that can drive a net may carry datasheet drive data: the
+    /// registry README lists output, three-statable, open-drain and
+    /// bidirectional, never an input or passive terminal.
+    #[test]
+    fn a_pin_drive_requires_an_output_capable_electrical_type() {
+        for electrical_type in ["input", "power_input", "passive", "unclassified"] {
+            let toml = drive_part_with_type(electrical_type, COMPLETE_DRIVE);
+            let error = load_from_strs(&[("drive_ic.synth.toml", &toml)])
+                .expect_err(&format!("drive on a {electrical_type} pin must fail"));
+            assert!(
+                matches!(&error, LoadError::InvalidPinDrive { pin, .. } if pin == "gpio5"),
+                "{electrical_type}: {error:?}"
+            );
+            assert!(
+                error.to_string().contains("output-capable"),
+                "{electrical_type}: {error}"
+            );
+        }
+        for electrical_type in [
+            "output",
+            "three_statable",
+            "open_drain_low",
+            "open_drain_high",
+            "bidirectional",
+        ] {
+            let toml = drive_part_with_type(electrical_type, COMPLETE_DRIVE);
+            load_from_strs(&[("drive_ic.synth.toml", &toml)])
+                .unwrap_or_else(|error| panic!("drive on a {electrical_type} pin: {error}"));
+        }
+    }
+
+    #[test]
+    fn a_pin_drive_rejects_non_positive_level_order_and_negative_levels() {
+        for (label, drive) in [
+            (
+                "high equal to low",
+                COMPLETE_DRIVE.replace("low_v = 0.0", "low_v = 3.3"),
+            ),
+            (
+                "high below low",
+                COMPLETE_DRIVE.replace("low_v = 0.0", "low_v = 5.0"),
+            ),
+            (
+                "negative high",
+                COMPLETE_DRIVE.replace("high_v = 3.3", "high_v = -0.1"),
+            ),
+            (
+                "negative low",
+                COMPLETE_DRIVE.replace("low_v = 0.0", "low_v = -0.1"),
+            ),
+        ] {
+            let toml = drive_part(&drive);
+            let error = load_from_strs(&[("drive_ic.synth.toml", &toml)])
+                .expect_err(&format!("{label} must fail"));
+            assert!(
+                matches!(&error, LoadError::InvalidPinDrive { pin, .. } if pin == "gpio5"),
+                "{label}: {error:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn malformed_spice_model_shapes_are_rejected_at_load() {
+        let cases = [
+            (
+                "empty file",
+                "[spice]\nfile = \"\"\nsubckt = \"s\"\npin_order = [\"vin\"]\n",
+            ),
+            (
+                "empty subckt",
+                "[spice]\nfile = \"m.lib\"\nsubckt = \"\"\npin_order = [\"vin\"]\n",
+            ),
+            (
+                "empty pin_order",
+                "[spice]\nfile = \"m.lib\"\nsubckt = \"s\"\npin_order = []\n",
+            ),
+            (
+                "empty pin name",
+                "[spice]\nfile = \"m.lib\"\nsubckt = \"s\"\npin_order = [\"vin\", \"\"]\n",
+            ),
+            (
+                "duplicate pin",
+                "[spice]\nfile = \"m.lib\"\nsubckt = \"s\"\npin_order = [\"vin\", \"vin\"]\n",
+            ),
+            (
+                "empty param name",
+                "[spice]\nfile = \"m.lib\"\nsubckt = \"s\"\npin_order = [\"vin\"]\n\
+                 [spice.params]\n\"\" = \"1\"\n",
+            ),
+            (
+                "invalid param name",
+                "[spice]\nfile = \"m.lib\"\nsubckt = \"s\"\npin_order = [\"vin\"]\n\
+                 [spice.params]\n\"1bad\" = \"1\"\n",
+            ),
+            (
+                "empty param value",
+                "[spice]\nfile = \"m.lib\"\nsubckt = \"s\"\npin_order = [\"vin\"]\n\
+                 [spice.params]\nrout = \"\"\n",
+            ),
+            (
+                "whitespace in param value",
+                "[spice]\nfile = \"m.lib\"\nsubckt = \"s\"\npin_order = [\"vin\"]\n\
+                 [spice.params]\nrout = \"1 0m\"\n",
+            ),
+        ];
+        for (label, spice) in cases {
+            let toml = part_with_spice(spice);
+            let err = load_from_strs(&[("spicey.synth.toml", &toml)])
+                .expect_err(&format!("{label} must fail"));
+            assert!(
+                err.to_string().contains("spicey.synth.toml"),
+                "{label}: error must name the file: {err}"
+            );
+            assert!(
+                matches!(err, LoadError::InvalidSpiceModel { .. }),
+                "{label}: expected InvalidSpiceModel, got {err:?}"
+            );
+        }
     }
 }

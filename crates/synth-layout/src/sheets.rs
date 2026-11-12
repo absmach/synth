@@ -725,6 +725,7 @@ mod tests {
             voltage_max_v: None,
             voltage_min_v: None,
             voltage_nominal_v: None,
+            drive: None,
         }
     }
 
@@ -746,6 +747,7 @@ mod tests {
             kicad_footprint: None,
             footprint_dimensions: None,
             operating_conditions: None,
+            spice: None,
         }
     }
 
@@ -1525,6 +1527,7 @@ mod tests {
             voltage_max_v: None,
             voltage_min_v: None,
             voltage_nominal_v: None,
+            drive: None,
         };
         let b = board(
             vec![
@@ -1562,6 +1565,7 @@ mod tests {
             voltage_max_v: None,
             voltage_min_v: None,
             voltage_nominal_v: None,
+            drive: None,
         };
         let b = board(
             vec![

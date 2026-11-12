@@ -14,6 +14,8 @@ courtyard_margin_mm = 0.25
 
 [operating_conditions]
 max_current_ma = 30.0
+forward_voltage_v = 2.0
+forward_current_ma = 20.0
 
 [[pins]]
 name = "cathode"

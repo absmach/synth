@@ -122,6 +122,7 @@ fn part(kind: &str) -> Part {
                 voltage_max_v: None,
                 voltage_min_v: None,
                 voltage_nominal_v: None,
+                drive: None,
             },
             Pin {
                 name: "2".to_string(),
@@ -134,6 +135,7 @@ fn part(kind: &str) -> Part {
                 voltage_max_v: None,
                 voltage_min_v: None,
                 voltage_nominal_v: None,
+                drive: None,
             },
         ],
         required_decoupling: Vec::new(),
@@ -142,6 +144,7 @@ fn part(kind: &str) -> Part {
         footprint_dimensions: None,
         operating_conditions: None,
         provenance: None,
+        spice: None,
     }
 }
 

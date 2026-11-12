@@ -2641,6 +2641,7 @@ mod channel_router_tests {
                     voltage_max_v: None,
                     voltage_min_v: None,
                     voltage_nominal_v: None,
+                    drive: None,
                 },
                 Pin {
                     name: "p2".to_string(),
@@ -2653,6 +2654,7 @@ mod channel_router_tests {
                     voltage_max_v: None,
                     voltage_min_v: None,
                     voltage_nominal_v: None,
+                    drive: None,
                 },
             ],
             required_decoupling: Vec::new(),
@@ -2660,6 +2662,7 @@ mod channel_router_tests {
             kicad_footprint: None,
             footprint_dimensions: None,
             operating_conditions: None,
+            spice: None,
         }
     }
 
@@ -2930,6 +2933,7 @@ mod drc_tests {
                     voltage_max_v: None,
                     voltage_min_v: None,
                     voltage_nominal_v: None,
+                    drive: None,
                 },
                 Pin {
                     name: "p2".to_string(),
@@ -2942,6 +2946,7 @@ mod drc_tests {
                     voltage_max_v: None,
                     voltage_min_v: None,
                     voltage_nominal_v: None,
+                    drive: None,
                 },
             ],
             required_decoupling: Vec::new(),
@@ -2949,6 +2954,7 @@ mod drc_tests {
             kicad_footprint: None,
             footprint_dimensions: None,
             operating_conditions: None,
+            spice: None,
         }
     }
 
@@ -3161,6 +3167,7 @@ mod net_termination_tests {
                     voltage_max_v: None,
                     voltage_min_v: None,
                     voltage_nominal_v: None,
+                    drive: None,
                 },
                 Pin {
                     name: "p2".to_string(),
@@ -3173,6 +3180,7 @@ mod net_termination_tests {
                     voltage_max_v: None,
                     voltage_min_v: None,
                     voltage_nominal_v: None,
+                    drive: None,
                 },
             ],
             required_decoupling: Vec::new(),
@@ -3180,6 +3188,7 @@ mod net_termination_tests {
             kicad_footprint: None,
             footprint_dimensions: None,
             operating_conditions: None,
+            spice: None,
         }
     }
 

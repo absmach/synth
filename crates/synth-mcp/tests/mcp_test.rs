@@ -70,6 +70,7 @@ fn test_mcp_list_tools() {
     assert!(tools.iter().any(|t| t.name == "synth_apply_patch"));
     assert!(tools.iter().any(|t| t.name == "synth_preview_schematic"));
     assert!(tools.iter().any(|t| t.name == "synth_export"));
+    assert!(tools.iter().any(|t| t.name == "synth_simulate"));
 
     let req = json!({
         "jsonrpc": "2.0",

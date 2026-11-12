@@ -117,6 +117,9 @@ jobs:
       - name: Install cargo-nextest
         uses: taiki-e/install-action@nextest
 
+      - name: Install ngspice
+        run: sudo apt-get update && sudo apt-get install -y ngspice
+
       - name: Run tests (shard ${{ matrix.shard }})
         run: |
           cargo nextest run --workspace --locked \
