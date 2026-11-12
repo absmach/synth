@@ -436,11 +436,13 @@ mod tests {
         let r = route(&board, &placement);
         // The maze router is DRC-correct but not complete on dense connector
         // fanout: the USB-C VBUS pads sit on a 0.5 mm row, so the exact-pad
-        // escape cannot clear the neighbouring pins. Assert the router keeps
-        // its documented coverage (19 routable nets, at most the VBUS net to
-        // a stranded pad) and never emits DRC-invalid copper.
+        // escape cannot clear the neighbouring pins. The reviewed BME680's
+        // VDDIO cap and the flash's /HOLD pull-up name their pins in their
+        // `near` hints, so the placer seats them against those pads and both
+        // nets route; only the USB-C escape remains. Never emit DRC-invalid
+        // copper.
         assert!(
-            r.unrouted_nets.len() <= 2,
+            r.unrouted_nets.len() <= 1,
             "sensor_logger routing coverage regressed: {} unrouted nets: {:?}",
             r.unrouted_nets.len(),
             r.unrouted_nets

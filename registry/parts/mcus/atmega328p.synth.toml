@@ -1,8 +1,8 @@
 id = "atmega328p"
 kind = "mcu"
 description = "Microchip ATmega328P AVR @ 20MHz, 32KB flash — the Arduino Uno MCU"
-mpn = "ATMEGA328P-AU"
-lcsc_pn = "C14877"
+mpn = "ATMEGA328P-PU"
+lcsc_pn = "C33901"
 kicad_symbol = "MCU_Microchip_ATmega:ATmega328P-P"
 kicad_footprint = "Package_DIP:DIP-28_W7.62mm"
 
@@ -204,3 +204,9 @@ capabilities = ["gpio"]
 net = "vcc"
 value = "100nf"
 count = 1
+
+[provenance]
+source = "seed"
+datasheet_url = "https://ww1.microchip.com/downloads/aemDocuments/documents/MCU08/ProductDocuments/DataSheets/ATmega48A-PA-88A-PA-168A-PA-328-P-DS-DS40002061B.pdf"
+reviewed_by = "Steve Munene"
+reviewed_at = "2026-11-05"

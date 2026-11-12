@@ -1,4 +1,6 @@
 id = "led_blue_0603"
+mpn = "19-217/BHC-ZL1M2RY/6T"
+lcsc_pn = "C2986058"
 kind = "diode"
 description = "Blue surface-mount LED, 0603"
 kicad_symbol = "Device:LED"
@@ -12,7 +14,7 @@ courtyard_margin_mm = 0.25
 [operating_conditions]
 min_voltage_v = 1.8
 max_voltage_v = 3.3
-max_current_ma = 20.0
+max_current_ma = 10.0
 forward_voltage_v = 3.0
 forward_current_ma = 20.0
 
@@ -26,3 +28,8 @@ name = "cathode"
 number = "1"
 electrical_type = "passive"
 
+[provenance]
+source = "seed"
+datasheet_url = "https://www.everlighteurope.com/custom/files/datasheets/DSE-0014124.pdf"
+reviewed_by = "Steve Munene"
+reviewed_at = "2026-11-05"
