@@ -65,7 +65,7 @@ board "irrigation_controller" {
     component U2: mcu "stm32g030k8_lqfp32" { escape { off } }
     component C_VDD1: capacitor "c_generic_0603" value "100nF"
     component C_VDD2: capacitor "c_generic_0805" value "4.7uF"
-    component Y1: crystal "xtal_8mhz_3225_4p"
+    component Y1: crystal "xtal_8mhz_3225_jyje_4p"
     component C_X1: capacitor "c_generic_0603" value "6.2pF"
     component C_X2: capacitor "c_generic_0603" value "6.2pF"
     component R_NRST: resistor "r_generic_0603" value "10k"

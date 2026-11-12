@@ -149,14 +149,14 @@ From this directory, with the KiCad 10 footprint and symbol library tables confi
 sha256sum -c SHA256SUMS
 kicad-cli pcb drc --severity-error kicad/irrigation_controller.kicad_pcb
 kicad-cli sch erc kicad/irrigation_controller.kicad_sch
-SYNTH_USER_REGISTRY_DIR=registry synth validate irrigation_controller.synth
+synth validate irrigation_controller.synth
 ```
 
-The first command verifies every file below `SHA256SUMS`; the Gerber content hash is in `fab/GERBER_CONTENT_SHA256` and the STEP geometry hash is stated above. `registry/` holds the parts this board needs that the shipped registry does not carry.
+The first command verifies every file below `SHA256SUMS`; the Gerber content hash is in `fab/GERBER_CONTENT_SHA256` and the STEP geometry hash is stated above. The parts this board adds to the registry are in `registry/parts/` of the repository.
 
 ## Human review
 
-Every part of the board is recorded as reviewed, with the review date and the datasheet or product page, in the part files of [`registry/`](registry/) (`reviewed_by`, `reviewed_at`, `datasheet_url`): JeffMboya for every part except `ltst_c190kgkt`, which keeps its registry record (Steve Munene, 2026-10-29).
+The parts this board adds to `registry/parts/` (`lm74700_q1`, `dmt6007lfg`, `xtal_8mhz_3225_jyje_4p`) carry the author's review record (`reviewed_by`, `reviewed_at`, `datasheet_url`); every other part keeps its registry record.
 
 ### PCB review sign-off
 
